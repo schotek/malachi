@@ -538,10 +538,15 @@ public struct MessageDownloadResult: Codable, Sendable, Equatable {
 public struct MessageUnsubscribeParams: Codable, Sendable, Equatable {
     public var accountId: AccountID
     public var messageId: MessageID
+    /// Absent for the offer's own method, or `.mailto` for the message's
+    /// mailto: alternative after an `.unverified` answer (the user
+    /// confirmed it); any other value is invalidArgument.
+    public var method: UnsubscribeMethod?
 
-    public init(accountId: AccountID, messageId: MessageID) {
+    public init(accountId: AccountID, messageId: MessageID, method: UnsubscribeMethod? = nil) {
         self.accountId = accountId
         self.messageId = messageId
+        self.method = method
     }
 }
 
@@ -554,9 +559,13 @@ public struct UnsubscribeOutcome: WireEnum {
     public static let unsubscribed: UnsubscribeOutcome = "unsubscribed"
     /// The unsubscribe message is in the outbox.
     public static let queued: UnsubscribeOutcome = "queued"
-    /// Nothing was sent; the client offers to open `url` in a browser (Go
-    /// `UnsubscribeOpenURL`).
+    /// Nothing was sent; the offer is a web page (method url) the client
+    /// opens in a browser (Go `UnsubscribeOpenURL`).
     public static let openUrl: UnsubscribeOutcome = "openUrl"
+    /// Nothing was sent; the one-click request could not be verified
+    /// (`mailto` names the message's mailto: alternative, if any). A
+    /// one-click URL is never handed out (Go `UnsubscribeUnverified`).
+    public static let unverified: UnsubscribeOutcome = "unverified"
 }
 
 /// api.MessageUnsubscribeResult.
@@ -564,16 +573,16 @@ public struct MessageUnsubscribeResult: Codable, Sendable, Equatable {
     public var outcome: UnsubscribeOutcome
     /// The https page for `.openUrl`.
     public var url: String?
-    /// True when a one-click offer fell back to `.openUrl` because the DKIM
-    /// check failed.
-    public var unverified: Bool?
+    /// The address of the mailto: alternative for `.unverified`; absent
+    /// when the message offers none.
+    public var mailto: String?
     /// Set for `.unsubscribed` and `.queued`.
     public var unsubscribedAt: Date?
 
-    public init(outcome: UnsubscribeOutcome, url: String? = nil, unverified: Bool? = nil, unsubscribedAt: Date? = nil) {
+    public init(outcome: UnsubscribeOutcome, url: String? = nil, mailto: String? = nil, unsubscribedAt: Date? = nil) {
         self.outcome = outcome
         self.url = url
-        self.unverified = unverified
+        self.mailto = mailto
         self.unsubscribedAt = unsubscribedAt
     }
 }

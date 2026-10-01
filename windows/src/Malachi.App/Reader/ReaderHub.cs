@@ -22,6 +22,7 @@ using Malachi.App.Commands;
 using Malachi.App.MessageWindows;
 using Malachi.App.Shell;
 using Malachi.Core.Api;
+using Malachi.Core.Bulk;
 using Malachi.Core.Controllers;
 using Malachi.Core.I18n;
 using Malachi.Core.Presentation;
@@ -105,6 +106,8 @@ public sealed class ReaderHub : IDisposable
         Window? Open(object? window) => window is Window w && state.Windows.Find(w) is not null ? w : null;
         integration.Bulk.Confirm = (window, c) =>
             state.Alerts.ConfirmAsync(Open(window), c.Heading, c.Body, c.Confirm, L10n.T("_Cancel"));
+        integration.Bulk.Inform = (window, c) =>
+            state.Alerts.InformAsync(Open(window), c.Heading, c.Body, BulkMail.Close());
         integration.Bulk.OpenPage = (window, url) => links.OpenPageAsync(url, Open(window));
         integration.Bulk.Changed += (_, e) =>
         {

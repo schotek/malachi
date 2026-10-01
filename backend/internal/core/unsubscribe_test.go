@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -222,7 +223,7 @@ func TestUnsubscribeOneClickVerified(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Outcome != api.UnsubscribeDone || res.UnsubscribedAt == nil || res.URL != "" || res.Unverified {
+	if res.Outcome != api.UnsubscribeDone || res.UnsubscribedAt == nil || res.URL != "" || res.Mailto != "" {
 		t.Fatalf("result %+v", res)
 	}
 	if got := e.postedURLs(); len(got) != 1 || got[0] != "https://news.example/u/abc" {
@@ -275,9 +276,8 @@ func TestUnsubscribeOneClickUnverified(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 			continue
 		}
-		// The page handed back is whatever the message says: it opens only
-		// after the user sees it and is never fetched.
-		if res.Outcome != api.UnsubscribeOpenURL || !res.Unverified || !strings.HasPrefix(res.URL, "https://") || res.UnsubscribedAt != nil {
+		// The one-click URL is never handed back; the mailto address is.
+		if res.Outcome != api.UnsubscribeUnverified || res.URL != "" || (res.Mailto != "unsub@news.example" && !strings.Contains(name, "in front")) || res.UnsubscribedAt != nil {
 			t.Errorf("%s: result %+v", name, res)
 		}
 	}
@@ -304,7 +304,7 @@ func TestUnsubscribeDKIMAlignment(t *testing.T) {
 	// A From in another organisation is not.
 	other := strings.Replace(raw(hdrOneClickURL, hdrOneClickPost), "news@news.example", "news@other.example", 1)
 	res, err = e.unsubscribe(e.store("INBOX", e.sign(other, "news.example")))
-	if err != nil || res.Outcome != api.UnsubscribeOpenURL || !res.Unverified {
+	if err != nil || res.Outcome != api.UnsubscribeUnverified || res.URL != "" {
 		t.Fatalf("%+v %v", res, err)
 	}
 }
@@ -333,7 +333,7 @@ func TestUnsubscribeDKIMLookupFailures(t *testing.T) {
 			defer cancel()
 		}
 		res, err := e.b.Messages().Unsubscribe(ctx, api.MessageUnsubscribeParams{AccountID: e.acc, MessageID: id})
-		if err != nil || res.Outcome != api.UnsubscribeOpenURL || !res.Unverified {
+		if err != nil || res.Outcome != api.UnsubscribeUnverified || res.URL != "" {
 			t.Errorf("%s: %+v %v", name, res, err)
 		}
 	}
@@ -351,7 +351,7 @@ func TestUnsubscribeAtMostFiveSignaturesAreChecked(t *testing.T) {
 		message = e.sign(message, "other"+fmt.Sprint(i)+".example")
 	}
 	res, err := e.unsubscribe(e.store("INBOX", message))
-	if err != nil || !res.Unverified {
+	if err != nil || res.Outcome != api.UnsubscribeUnverified {
 		t.Fatalf("%+v %v", res, err)
 	}
 	e.mu.Lock()
@@ -507,7 +507,7 @@ func TestUnsubscribePageIsOnlyHandedBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Outcome != api.UnsubscribeOpenURL || res.URL != "https://news.example/leave?id=7" || res.Unverified || res.UnsubscribedAt != nil {
+	if res.Outcome != api.UnsubscribeOpenURL || res.URL != "https://news.example/leave?id=7" || res.UnsubscribedAt != nil {
 		t.Fatalf("%+v", res)
 	}
 	if len(e.postedURLs()) != 0 || len(e.lookups) != 0 || e.outboxCount() != 0 {
@@ -617,7 +617,7 @@ func TestUnsubscribeReducedMessageIsNeverSent(t *testing.T) {
 		t.Fatal(err)
 	}
 	res, err := e.unsubscribe(id)
-	if err == nil && (res.Outcome != api.UnsubscribeOpenURL || !res.Unverified) {
+	if err == nil && (res.Outcome != api.UnsubscribeUnverified || res.URL != "") {
 		t.Errorf("%+v", res)
 	}
 	if len(e.postedURLs()) != 0 {
@@ -760,5 +760,163 @@ func TestUnsubscribeInFlightConflict(t *testing.T) {
 	// Released: the repeat is answered from the record.
 	if res, err := e.unsubscribe(id); err != nil || res.Outcome != api.UnsubscribeDone {
 		t.Errorf("after: %+v %v", res, err)
+	}
+}
+
+// graphAccount adds a Microsoft 365 account with an inbox to the
+// environment and returns its id and inbox.
+func (e *unsubEnv) graphAccount() (api.AccountID, store.Folder) {
+	e.t.Helper()
+	acct := store.Account{ID: "graph1", Name: "M365", Enabled: true,
+		Config: api.AccountConfig{Name: "M365", Email: "me@m365.example", Kind: api.AccountGraph, Graph: &api.GraphConfig{Source: "goa", GOAAccountID: "g1"}}}
+	if err := e.b.store.AddAccount(context.Background(), &acct); err != nil {
+		e.t.Fatal(err)
+	}
+	f := seedFolders(e.t, e.b, "graph1", []store.Folder{{Mailbox: "inbox", Name: "Inbox", Path: "Inbox", Role: api.RoleInbox, Subscribed: true, Selectable: true}})["inbox"]
+	return "graph1", f
+}
+
+func (e *unsubEnv) storeIn(acc api.AccountID, f store.Folder, uid uint32, message string) api.MessageID {
+	e.t.Helper()
+	ctx := context.Background()
+	parsed, err := mime.Parse(strings.NewReader(message), mime.DefaultLimits())
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	m := &store.Message{AccountID: string(acc), FolderID: f.ID, RemoteID: fmt.Sprintf("r%d", uid), Subject: parsed.Subject, From: parsed.From,
+		Date: time.Now(), RFCMessageID: parsed.MessageID, Size: int64(len(message))}
+	if err := e.b.store.UpsertMessages(ctx, []*store.Message{m}); err != nil {
+		e.t.Fatal(err)
+	}
+	if _, err := e.b.store.WriteMessageRaw(ctx, string(acc), m.ID, strings.NewReader(message), 1<<20); err != nil {
+		e.t.Fatal(err)
+	}
+	if err := e.b.store.SetMessageBody(ctx, m.ID, store.BodyUpdate{Text: parsed.Text, Headers: parsed.Headers, State: store.BodyFetched, Size: int64(len(message))}); err != nil {
+		e.t.Fatal(err)
+	}
+	return api.MessageID(m.ID)
+}
+
+func graphFixture(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile("../../testdata/mime/bulk-graph-exchange.eml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// A Graph account trusts the Authentication-Results Exchange prepended: its
+// rebuilt MIME fails DKIM here, and the request is sent anyway.
+func TestUnsubscribeGraphTrustsExchange(t *testing.T) {
+	e := newUnsubEnv(t)
+	acc, inbox := e.graphAccount()
+	fixture := graphFixture(t)
+	call := func(id api.MessageID) (*api.MessageUnsubscribeResult, error) {
+		return e.b.Messages().Unsubscribe(context.Background(), api.MessageUnsubscribeParams{AccountID: acc, MessageID: id})
+	}
+	res, err := call(e.storeIn(acc, inbox, 1, fixture))
+	if err != nil || res.Outcome != api.UnsubscribeDone || res.URL != "" {
+		t.Fatalf("%+v %v", res, err)
+	}
+	if got := e.postedURLs(); len(got) != 1 || got[0] != "https://unsubscribe.example-esp.test/u/abc123" {
+		t.Fatalf("posts %v", got)
+	}
+	// No DNS lookup: the verdict is Exchange's.
+	if len(e.lookups) != 0 {
+		t.Errorf("lookups %v", e.lookups)
+	}
+
+	// Each of these is not verified, and the mailto address is offered.
+	bad := map[string]string{
+		"dkim fail on top":        strings.Replace(fixture, "dkim=pass (signature was verified)\r\n header.d=news.example", "dkim=fail (body hash did not verify)\r\n header.d=news.example", 1),
+		"header.d of another org": strings.Replace(fixture, "header.d=news.example;dmarc", "header.d=other.example;dmarc", 1),
+		"no header.d":             strings.Replace(fixture, "\r\n header.d=news.example;dmarc", ";dmarc", 1),
+		"signature of another d":  strings.Replace(fixture, "d=news.example; s=mail1", "d=other.example; s=mail1", 1),
+		"post not signed":         strings.Replace(fixture, ":List-Unsubscribe-Post:", ":", 1),
+		"forged field on top":     "Authentication-Results: dkim=fail header.d=news.example\r\n" + fixture,
+		"repeated list header":    "List-Unsubscribe: <https://evil.example/x>\r\n" + fixture,
+		"no Exchange field":       strings.Replace(fixture, fixture[:strings.Index(fixture, "Received-SPF")], "", 1),
+	}
+	uid := uint32(2)
+	for name, message := range bad {
+		uid++
+		// Another sender each time, or the repeat rule would answer.
+		message = strings.Replace(message, "From: News <news@news.example>", fmt.Sprintf("From: News <n%d@news.example>", uid), 1)
+		res, err := call(e.storeIn(acc, inbox, uid, message))
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if res.Outcome != api.UnsubscribeUnverified || res.URL != "" || res.UnsubscribedAt != nil {
+			t.Errorf("%s: %+v", name, res)
+		}
+	}
+	if len(e.postedURLs()) != 1 {
+		t.Errorf("posts %v", e.postedURLs())
+	}
+}
+
+// An IMAP account never trusts an Authentication-Results field, whoever
+// wrote it.
+func TestUnsubscribeIMAPIgnoresAuthenticationResults(t *testing.T) {
+	e := newUnsubEnv(t)
+	id := e.store("INBOX", graphFixture(t))
+	res, err := e.unsubscribe(id)
+	if err != nil || res.Outcome != api.UnsubscribeUnverified || res.URL != "" || res.Mailto != "unsubscribe@unsub.example-esp.test" {
+		t.Fatalf("%+v %v", res, err)
+	}
+	if len(e.postedURLs()) != 0 {
+		t.Error("posted")
+	}
+}
+
+// After an unverified outcome the client may ask for the mailto
+// alternative; nothing else is accepted as a method.
+func TestUnsubscribeMethodMailto(t *testing.T) {
+	ctx := context.Background()
+	e := newUnsubEnv(t)
+	id := e.store("INBOX", graphFixture(t))
+	for _, m := range []api.UnsubscribeMethod{api.UnsubscribeOneClick, api.UnsubscribeURL, "bogus"} {
+		_, err := e.b.Messages().Unsubscribe(ctx, api.MessageUnsubscribeParams{AccountID: e.acc, MessageID: id, Method: m})
+		if errCode(t, err) != api.CodeInvalidArgument {
+			t.Errorf("method %q: %v", m, err)
+		}
+	}
+	e.out.reset()
+	res, err := e.b.Messages().Unsubscribe(ctx, api.MessageUnsubscribeParams{AccountID: e.acc, MessageID: id, Method: api.UnsubscribeMailto})
+	if err != nil || res.Outcome != api.UnsubscribeQueued || res.UnsubscribedAt == nil {
+		t.Fatalf("%+v %v", res, err)
+	}
+	if e.outboxCount() != 1 || len(e.postedURLs()) != 0 {
+		t.Errorf("outbox %d posts %v", e.outboxCount(), e.postedURLs())
+	}
+	of, _ := outboxFolder(t, e.b, e.acc)
+	list, err := e.b.Messages().List(ctx, api.MessageListParams{AccountID: e.acc, FolderID: of.ID})
+	if err != nil || len(list.Messages) != 1 || list.Messages[0].Subject != "unsubscribe:abc123" || list.Messages[0].To[0].Address != "unsubscribe@unsub.example-esp.test" {
+		t.Fatalf("%+v %v", list, err)
+	}
+	// Remembered, and a repeat within a minute queues nothing more.
+	if m := e.get(id); m.Unsubscribe == nil || m.Unsubscribe.UnsubscribedAt == nil {
+		t.Errorf("offer after: %+v", m.Unsubscribe)
+	}
+	if res, err := e.b.Messages().Unsubscribe(ctx, api.MessageUnsubscribeParams{AccountID: e.acc, MessageID: id, Method: api.UnsubscribeMailto}); err != nil || res.Outcome != api.UnsubscribeQueued {
+		t.Fatalf("repeat: %+v %v", res, err)
+	}
+	if e.outboxCount() != 1 {
+		t.Errorf("%d queued", e.outboxCount())
+	}
+
+	// No mailto alternative: refused, also for a page-only message.
+	for _, m := range []string{raw("List-Unsubscribe: <https://news.example/leave>"), e.sign(raw("List-Unsubscribe: <https://other.example/u>", hdrOneClickPost), "news.example")} {
+		_, err := e.b.Messages().Unsubscribe(ctx, api.MessageUnsubscribeParams{AccountID: e.acc, MessageID: e.store("INBOX", m), Method: api.UnsubscribeMailto})
+		if errCode(t, err) != api.CodeInvalidArgument {
+			t.Errorf("no mailto: %v", err)
+		}
+	}
+	// Junk is refused as before.
+	_, err = e.b.Messages().Unsubscribe(ctx, api.MessageUnsubscribeParams{AccountID: e.acc, MessageID: e.store("Junk", graphFixture(t)), Method: api.UnsubscribeMailto})
+	if errCode(t, err) != api.CodeInvalidArgument {
+		t.Errorf("junk: %v", err)
 	}
 }

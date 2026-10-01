@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-01 13:00+0000\n"
+"POT-Creation-Date: 2026-10-01 13:36+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -922,7 +922,7 @@ msgid ""
 "will appear in Sent."
 msgstr ""
 
-#: ui/internal/bulkmail/bulkmail.go:198
+#: ui/internal/bulkmail/bulkmail.go:198 ui/internal/bulkmail/bulkmail.go:237
 msgid "_Send Request"
 msgstr ""
 
@@ -938,31 +938,42 @@ msgid ""
 "%s"
 msgstr ""
 
-#: ui/internal/bulkmail/bulkmail.go:204 ui/internal/bulkmail/bulkmail.go:230
+#: ui/internal/bulkmail/bulkmail.go:204
 msgid "_Open in Browser"
 msgstr ""
 
-#: ui/internal/bulkmail/bulkmail.go:228
+#: ui/internal/bulkmail/bulkmail.go:231
 msgid "The sender could not be verified"
 msgstr ""
 
-#: ui/internal/bulkmail/bulkmail.go:229
+#: ui/internal/bulkmail/bulkmail.go:233
 #, c-format
 msgid ""
-"Malachi Mail sent nothing because the message is not signed by %s. You can "
-"unsubscribe on the sender's page instead:\n"
-"%s"
+"Malachi Mail sent nothing because the one-click request is not signed by %s. "
+"Use the unsubscribe link in the message instead."
 msgstr ""
 
-#: ui/internal/bulkmail/bulkmail.go:253
+#: ui/internal/bulkmail/bulkmail.go:236
+#, c-format
+msgid ""
+"Malachi Mail sent nothing because the one-click request is not signed by %s. "
+"It can send an unsubscribe request to %s from your account instead. It will "
+"appear in Sent."
+msgstr ""
+
+#: ui/internal/bulkmail/bulkmail.go:242
+msgid "_Close"
+msgstr ""
+
+#: ui/internal/bulkmail/bulkmail.go:263
 msgid "Unsubscribe request queued"
 msgstr ""
 
-#: ui/internal/bulkmail/bulkmail.go:257
+#: ui/internal/bulkmail/bulkmail.go:267
 msgid "Unsubscribing"
 msgstr ""
 
-#: ui/internal/bulkmail/bulkmail.go:261
+#: ui/internal/bulkmail/bulkmail.go:271
 msgid "The sender's server refused the request."
 msgstr ""
 

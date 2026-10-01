@@ -189,7 +189,7 @@ func (w *Window) unsubscribe(parent *gtk.Window, id api.MessageID, say func(stri
 			w.openBulkPage(parent, offer.URL)
 			return
 		}
-		w.callUnsubscribe(parent, acc, id, lm, say)
+		w.callUnsubscribe(parent, acc, id, lm, "", say)
 	})
 }
 
@@ -222,7 +222,7 @@ func (w *Window) openBulkPage(parent *gtk.Window, raw string) {
 
 // callUnsubscribe runs message.unsubscribe for message id, whose cache
 // entry is lm, and shows what came of it.
-func (w *Window) callUnsubscribe(parent *gtk.Window, acc api.AccountID, id api.MessageID, lm *loadedMessage, say func(string)) {
+func (w *Window) callUnsubscribe(parent *gtk.Window, acc api.AccountID, id api.MessageID, lm *loadedMessage, method api.UnsubscribeMethod, say func(string)) {
 	lm.unsubscribing = true
 	w.refreshBulk(id, lm)
 	go func() {
@@ -230,7 +230,7 @@ func (w *Window) callUnsubscribe(parent *gtk.Window, acc api.AccountID, id api.M
 		defer cancel()
 		var res api.MessageUnsubscribeResult
 		err := w.client.Call(ctx, api.MethodMessageUnsubscribe,
-			api.MessageUnsubscribeParams{AccountID: acc, MessageID: id}, &res)
+			api.MessageUnsubscribeParams{AccountID: acc, MessageID: id, Method: method}, &res)
 		glib.IdleAdd(func() {
 			lm.unsubscribing = false
 			// message.get may have replaced the cache entry meanwhile; the
@@ -258,24 +258,40 @@ func (w *Window) callUnsubscribe(parent *gtk.Window, acc api.AccountID, id api.M
 				if res.Outcome == api.UnsubscribeQueued {
 					say(bulkmail.Queued(i18n.Tr))
 				}
+			case api.UnsubscribeUnverified:
+				w.bulkUnverified(parent, acc, id, lm, res, say)
 			case api.UnsubscribeOpenURL:
-				w.bulkFallback(parent, lm, res)
+				// Only for a web-page offer, confirmed already.
+				w.openBulkPage(parent, res.URL)
 			}
 			w.refreshBulk(id, lm)
 		})
 	}()
 }
 
-// bulkFallback is the dialog after the daemon sent nothing and offers the
-// sender's page instead (a one-click offer that could not be verified, or
-// an answer that only names a page).
-func (w *Window) bulkFallback(parent *gtk.Window, lm *loadedMessage, res api.MessageUnsubscribeResult) {
-	if _, ok := bulkmail.OpenableURL(res.URL); !ok {
-		return
-	}
+// bulkUnverified is the dialog after the daemon sent nothing because it
+// could not verify the one-click request. With a mailto: alternative the
+// user may confirm sending the request by mail (message.unsubscribe again
+// with that method); without, the dialog only informs.
+func (w *Window) bulkUnverified(parent *gtk.Window, acc api.AccountID, id api.MessageID, lm *loadedMessage, res api.MessageUnsubscribeResult, say func(string)) {
 	var m *api.Message
 	if lm != nil {
 		m = lm.msg
 	}
-	w.bulkDialog(parent, bulkmail.Fallback(m, res, i18n.Tr), func() { w.openBulkPage(parent, res.URL) })
+	conf := bulkmail.Unverified(m, res, i18n.Tr)
+	if conf.Confirm != "" {
+		w.bulkDialog(parent, conf, func() {
+			if lm != nil && !lm.unsubscribing {
+				w.callUnsubscribe(parent, acc, id, lm, api.UnsubscribeMailto, say)
+			}
+		})
+		return
+	}
+	d := adw.NewAlertDialog(conf.Heading, conf.Body)
+	d.SetHeadingUseMarkup(false)
+	d.SetBodyUseMarkup(false)
+	d.AddResponse("close", bulkmail.Close(i18n.Tr))
+	d.SetDefaultResponse("close")
+	d.SetCloseResponse("close")
+	d.Present(parent)
 }

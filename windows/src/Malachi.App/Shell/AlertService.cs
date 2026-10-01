@@ -103,6 +103,16 @@ internal sealed partial class AlertService : IAlerts
     }
 
     /// <inheritdoc/>
+    public async Task InformAsync(Window? window, string heading, string body, string closeLabel) =>
+        await ShowAsync(window, () => new ContentDialog
+        {
+            Title = Heading(heading),
+            Content = body.Length == 0 ? null : Body(body),
+            CloseButtonText = Mnemonic.Strip(closeLabel),
+            DefaultButton = ContentDialogButton.Close,
+        });
+
+    /// <inheritdoc/>
     public async Task<DraftCloseAnswer> SaveDraftQuestionAsync(Window? window)
     {
         var result = await ShowAsync(window, () => new ContentDialog

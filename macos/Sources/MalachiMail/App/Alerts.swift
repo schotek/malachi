@@ -68,6 +68,16 @@ final class AppAlerts: Alerts {
         return await run(alert, on: window) == .alertFirstButtonReturn
     }
 
+    func inform(on window: NSWindow?, heading: String, body: String, closeLabel: String) async {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = heading
+        alert.informativeText = body
+        let close = alert.addButton(withTitle: mn(closeLabel))
+        close.keyEquivalent = "\r"
+        _ = await run(alert, on: window)
+    }
+
     func openLinkQuestion(on window: NSWindow?, text: String, href: String) async -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .warning

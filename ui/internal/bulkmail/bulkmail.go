@@ -216,20 +216,30 @@ func subject(b *api.BulkInfo, offer *api.UnsubscribeOffer) string {
 	return senderName(b, offer)
 }
 
-// Fallback is the dialog after the daemon answered openUrl for a one-click
-// offer it could not verify: it sent nothing and offers the sender's page.
-func Fallback(m *api.Message, res api.MessageUnsubscribeResult, tr Translator) Confirmation {
+// Unverified is the dialog after the daemon answered unverified: it sent
+// nothing because the one-click request is not signed by the sender's
+// domain. With res.Mailto the user may let it send an unsubscribe request
+// to that address instead (Confirm is the button); without, Confirm is ""
+// and the dialog only informs, with a single Close button (Close).
+func Unverified(m *api.Message, res api.MessageUnsubscribeResult, tr Translator) Confirmation {
 	var b *api.BulkInfo
 	var offer *api.UnsubscribeOffer
 	if m != nil {
 		b, offer = m.Bulk, m.Unsubscribe
 	}
-	return Confirmation{
-		Heading: tr.T("The sender could not be verified"),
-		Body:    fmt.Sprintf(tr.T("Malachi Mail sent nothing because the message is not signed by %s. You can unsubscribe on the sender's page instead:\n%s"), senderName(b, offer), res.URL),
-		Confirm: tr.T("_Open in Browser"),
+	domain := senderName(b, offer)
+	c := Confirmation{Heading: tr.T("The sender could not be verified")}
+	if res.Mailto == "" {
+		c.Body = fmt.Sprintf(tr.T("Malachi Mail sent nothing because the one-click request is not signed by %s. Use the unsubscribe link in the message instead."), domain)
+		return c
 	}
+	c.Body = fmt.Sprintf(tr.T("Malachi Mail sent nothing because the one-click request is not signed by %s. It can send an unsubscribe request to %s from your account instead. It will appear in Sent."), domain, res.Mailto)
+	c.Confirm = tr.T("_Send Request")
+	return c
 }
+
+// Close is the label of the single button of an information dialog.
+func Close(tr Translator) string { return tr.T("_Close") }
 
 // Applied is the offer of a message after message.unsubscribe answered res:
 // a copy with the time the daemon remembered for unsubscribed and queued,

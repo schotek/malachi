@@ -1623,11 +1623,14 @@ message is held in memory too; one the preference stores whole anyway
 held.
 
 #### `message.unsubscribe`
-- params: `{ "accountId", "messageId" }`
-- result: `{ "outcome": "unsubscribed|queued|openUrl", "url": "https://…" (opt),
-  "unverified": true (opt), "unsubscribedAt": Time (opt) }`
+- params: `{ "accountId", "messageId", "method": "mailto" (opt) }`
+- result: `{ "outcome": "unsubscribed|queued|openUrl|unverified",
+  "url": "https://…" (opt, `openUrl` only), "mailto": "address" (opt,
+  `unverified` only), "unsubscribedAt": Time (opt) }`
 - errors: invalidArgument (an `issue-tracker` account, a message in the
-  junk folder or flagged `junk`, a message that offers nothing usable),
+  junk folder or flagged `junk`, a message that offers nothing usable, a
+  `method` other than `mailto`, `mailto` for a message without a
+  `mailto:` address),
   accountNotFound, messageNotFound, unsubscribeFailed (1505), networkError
   (the sender's server could not be reached), storageError; and the errors
   of `message.download` when the message has to be fetched first
@@ -1636,23 +1639,36 @@ held.
 
 Acts on the unsubscribe offer of `message.get`. The client sends only the
 message: the daemon reads the headers again from the stored message and
-never takes a method, URL or address from the caller. It is never
-automatic; a client asks the user first (what is sent, and to whom,
+never takes a URL or address from the caller; `method`, when given, can
+only be `mailto`: the message's `mailto:` alternative, which a client asks
+for after the user confirmed an `unverified` outcome (empty = the offer's
+own method). It is never automatic; a client asks the user first (what is sent, and to whom,
 `target`), and never calls it for a `url` offer, which it opens itself.
 
 - `url`: nothing is sent, nothing is remembered; `outcome: "openUrl"` with
-  the page in `url` (https only).
-- `oneClick`: the daemon needs the whole message (it downloads it like
-  `message.download` when it is not stored whole; under
+  the page in `url` (https only). Only this method ever yields `openUrl`.
+- `oneClick`: the request is verified first, by the rule of the account's
+  kind. **IMAP and Gmail accounts:** the daemon needs the whole message (it
+  downloads it like `message.download` when it is not stored whole; under
   `neverStoreAttachments` from the copy it holds in memory) and verifies
   its DKIM signatures (at most five, 10 s for the DNS lookups): a
   signature counts only when it is valid, its `d=` domain belongs to the
   same organisation (public suffix + 1) as the `From` domain, and it
-  signs `From`, `List-Unsubscribe` and `List-Unsubscribe-Post`; a message
-  with more than one `From`, `List-Unsubscribe` or
-  `List-Unsubscribe-Post` field is not verified. Without such a signature
-  nothing is sent and the result is `outcome: "openUrl"`, `unverified:
-  true` and the page in `url`. With it the daemon POSTs
+  signs `From`, `List-Unsubscribe` and `List-Unsubscribe-Post`.
+  **Microsoft 365 (Graph) accounts:** Exchange serves the message rebuilt,
+  so its signatures no longer verify here; the request counts as verified
+  when the topmost `Authentication-Results` field (the one Exchange
+  prepends; any below it is ignored) has `dkim=pass` with a `header.d` of
+  the `From` domain's organisation and the message has a `DKIM-Signature`
+  with that same `d=` whose `h=` lists `From`, `List-Unsubscribe` and
+  `List-Unsubscribe-Post`; only the headers are needed. For either kind a
+  message with more than one `From`, `List-Unsubscribe` or
+  `List-Unsubscribe-Post` field is not verified. Without verification
+  nothing is sent and the result is `outcome: "unverified"` with, when the
+  message also has a `mailto:` address, that address in `mailto`; **the
+  one-click URL is never returned** (a one-click endpoint need not answer
+  a browser's GET). The client may then ask the user and call again with
+  `method: "mailto"`. When verified the daemon POSTs
   `List-Unsubscribe=One-Click` (`application/x-www-form-urlencoded`) to
   the https URI and answers `outcome: "unsubscribed"` with
   `unsubscribedAt` after a 2xx status. Redirects are not followed (a 3xx
@@ -1661,7 +1677,7 @@ automatic; a client asks the user first (what is sent, and to whom,
   multicast or carrier-grade-NAT addresses (`docs/security.md` §7.2). Any
   other status is unsubscribeFailed, a connection that could not be made
   networkError.
-- `mailto`: the daemon queues a plain-text message in the outbox of the
+- `mailto` (the offer's method, or `method: "mailto"`): the daemon queues a plain-text message in the outbox of the
   account the message arrived in, from that account's address, to the
   first address of the `mailto:` URI with its `subject` (default
   `unsubscribe`) and `body`; no draft is left behind, and it is delivered
@@ -2960,6 +2976,11 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   `List-Id`, `List-Post`, `List-Unsubscribe`, `Precedence` and
   `Auto-Submitted` (`List-Post` is now among the curated `headers`);
   `Message.unsubscribe` (`UnsubscribeOffer`) in `message.get`; new
-  `message.unsubscribe` (§4.3), a one-click POST after a DKIM check, a
-  `mailto:` request queued in the outbox, or a page for the client to
-  open; new error code 1505 `unsubscribeFailed`. `ProtocolVersion` stays 2.
+  `message.unsubscribe` (§4.3), a one-click POST after a check (the
+  daemon's own DKIM verification, or for a Graph account Exchange's
+  `Authentication-Results`), a `mailto:` request queued in the outbox, or a
+  page for the client to open; an unverified one-click request sends
+  nothing and answers `outcome: "unverified"` with the message's `mailto`
+  address, never the one-click URL, and the client may repeat the call with
+  `method: "mailto"`; new error code 1505 `unsubscribeFailed`.
+  `ProtocolVersion` stays 2.

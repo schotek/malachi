@@ -50,6 +50,10 @@ protocol Alerts: AnyObject {
     /// "Register with Claude" (`ClaudeDesktopController`).
     func confirm(on window: NSWindow?, heading: String, body: String, confirmLabel: String, declineLabel: String) async -> Bool
 
+    /// An information dialog with a single button (`closeLabel`, with its
+    /// mnemonic), also the answer to Escape and Return.
+    func inform(on window: NSWindow?, heading: String, body: String, closeLabel: String) async
+
     /// "Open This Link?" for a link whose text says one site and whose
     /// target is another (`text` is the visible text, `href` the target).
     /// True when the user wants it opened.

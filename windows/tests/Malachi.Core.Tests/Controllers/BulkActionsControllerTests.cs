@@ -3,7 +3,7 @@
 
 // Windows-only test: the Unsubscribe button's controller over a fake
 // daemon (ui/internal/window/bulk.go has no Go test of its own; its flow is
-// unsubscribe, bulkDialog, openBulkPage, callUnsubscribe and bulkFallback).
+// unsubscribe, bulkDialog, openBulkPage, callUnsubscribe and bulkUnverified).
 // Nothing happens without the answer to the question; a web-page offer opens
 // the page and calls nothing; a one-click or mailto offer calls
 // message.unsubscribe and turns the cached message's offer into "unsubscribed
@@ -12,6 +12,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Malachi.Core.Api;
 using Malachi.Core.Bulk;
@@ -49,8 +50,8 @@ public sealed class BulkActionsControllerTests
         Unsubscribe = offer,
     };
 
-    private static string Answer(string outcome, string? url = null, bool? unverified = null, DateTimeOffset? at = null) =>
-        JsonCoding.EncodeToString(new MessageUnsubscribeResult { Outcome = outcome, Url = url, Unverified = unverified, UnsubscribedAt = at });
+    private static string Answer(string outcome, string? url = null, string? mailto = null, DateTimeOffset? at = null) =>
+        JsonCoding.EncodeToString(new MessageUnsubscribeResult { Outcome = outcome, Url = url, Mailto = mailto, UnsubscribedAt = at });
 
     [Fact]
     public async Task OneClickAsksThenUnsubscribesAndRemembers()
@@ -141,33 +142,66 @@ public sealed class BulkActionsControllerTests
     }
 
     [Fact]
-    public async Task AnUnverifiedOneClickOffersThePage()
+    public async Task AnUnverifiedOneClickOffersTheMailtoAlternative()
     {
         await using var h = await Harness.StartAsync(OneClick);
-        h.Reply = _ => Answer(UnsubscribeOutcome.OpenUrl, "https://shop.example/unsub", unverified: true);
+        h.Reply = p => p.Contains("\"method\":\"mailto\"", StringComparison.Ordinal)
+            ? Answer(UnsubscribeOutcome.Queued, at: Remembered)
+            : Answer(UnsubscribeOutcome.Unverified, mailto: "u@shop.example");
         await h.ClickAsync();
         await h.IdleAsync();
         Assert.Equal(2, h.Asked.Count);
         Assert.Equal("The sender could not be verified", h.Asked[1].Heading);
-        Assert.Contains("https://shop.example/unsub", h.Asked[1].Body, StringComparison.Ordinal);
-        Assert.Equal(["https://shop.example/unsub"], h.Opened);
-        Assert.True(h.Entry.Msg!.Unsubscribe!.UnsubscribedAt is null && !h.Entry.Unsubscribing); // nothing was sent, nothing is remembered
+        Assert.Equal("_Send Request", h.Asked[1].Confirm);
+        Assert.Contains("u@shop.example", h.Asked[1].Body, StringComparison.Ordinal);
+        var calls = h.Daemon.Params.All<MessageUnsubscribeParams>(API.MessageUnsubscribe.Name);
+        Assert.Equal<UnsubscribeMethod?>([null, UnsubscribeMethod.Mailto], [.. calls.Select(c => c.Method)]);
+        Assert.Equal(["Unsubscribe request queued"], h.Says);
+        Assert.Equal(Remembered, h.Entry.Msg!.Unsubscribe!.UnsubscribedAt);
+        Assert.Empty(h.Opened); // no page is ever opened for a one-click offer
+        Assert.Empty(h.Informed);
+    }
 
-        // Declined: the page stays shut.
-        h.Opened.Clear();
-        h.Answers.Clear();
+    [Fact]
+    public async Task DecliningTheMailtoAlternativeSendsNothingMore()
+    {
+        await using var h = await Harness.StartAsync(OneClick);
+        h.Reply = _ => Answer(UnsubscribeOutcome.Unverified, mailto: "u@shop.example");
         h.Answers.AddRange([true, false]);
         await h.ClickAsync();
         await h.IdleAsync();
-        Assert.Empty(h.Opened);
+        Assert.Equal(1, h.Daemon.Params.Count(API.MessageUnsubscribe.Name));
+        Assert.True(h.Entry.Msg!.Unsubscribe!.UnsubscribedAt is null && !h.Entry.Unsubscribing);
+    }
 
-        // An address that is no https page is not even offered.
-        h.Reply = _ => Answer(UnsubscribeOutcome.OpenUrl, "javascript:alert(1)", unverified: true);
-        var asked = h.Asked.Count;
-        h.Answers.Clear();
+    [Fact]
+    public async Task AnUnverifiedOneClickWithoutAlternativeOnlyInforms()
+    {
+        await using var h = await Harness.StartAsync(OneClick);
+        h.Reply = _ => Answer(UnsubscribeOutcome.Unverified);
         await h.ClickAsync();
         await h.IdleAsync();
-        Assert.Equal(asked + 1, h.Asked.Count);
+        Assert.Single(h.Asked); // the first question only
+        var info = Assert.Single(h.Informed);
+        Assert.True(info.Confirm.Length == 0 && info.Body.Contains("Use the unsubscribe link in the message instead.", StringComparison.Ordinal));
+        Assert.Equal(1, h.Daemon.Params.Count(API.MessageUnsubscribe.Name));
+        Assert.Empty(h.Opened);
+    }
+
+    [Fact]
+    public async Task AnOpenUrlAnswerOpensTheHttpsPageWithoutAskingAgain()
+    {
+        await using var h = await Harness.StartAsync(OneClick);
+        h.Reply = _ => Answer(UnsubscribeOutcome.OpenUrl, "https://shop.example/unsub");
+        await h.ClickAsync();
+        await h.IdleAsync();
+        Assert.Single(h.Asked);
+        Assert.Equal(["https://shop.example/unsub"], h.Opened);
+
+        h.Opened.Clear();
+        h.Reply = _ => Answer(UnsubscribeOutcome.OpenUrl, "javascript:alert(1)");
+        await h.ClickAsync();
+        await h.IdleAsync();
         Assert.Empty(h.Opened);
     }
 
@@ -263,6 +297,8 @@ public sealed class BulkActionsControllerTests
 
         public List<string> Opened { get; } = [];
 
+        public List<UnsubscribeConfirmation> Informed { get; } = [];
+
         public List<string> Says { get; } = [];
 
         public List<(bool Busy, DateTimeOffset? At)> Changes { get; } = [];
@@ -296,6 +332,11 @@ public sealed class BulkActionsControllerTests
                             h.Answers.RemoveAt(0);
                         }
                         return Task.FromResult(answer);
+                    },
+                    Inform = (_, conf) =>
+                    {
+                        h.Informed.Add(conf);
+                        return Task.CompletedTask;
                     },
                     OpenPage = (_, url) =>
                     {

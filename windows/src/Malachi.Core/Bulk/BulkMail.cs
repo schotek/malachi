@@ -3,7 +3,7 @@
 
 // Port of macos/Sources/MalachiCore/Bulk/BulkMail.swift; GTK:
 // ui/internal/bulkmail/bulkmail.go (Tag, StripFor, senderName, listName,
-// Confirm, subject, Fallback, Applied, Queued, ErrorWhat, Refused,
+// Confirm, subject, Unverified, Close, Applied, Queued, ErrorWhat, Refused,
 // OpenableURL).
 //
 // The view logic of bulk mail: the tag a newsletter, mailing-list or
@@ -189,24 +189,37 @@ public static class BulkMail
         b?.Kind.Value == BulkKind.List ? ListName(b, offer) : SenderName(b, offer);
 
     /// <summary>
-    /// bulkmail.Fallback: the dialog after the daemon answered openUrl for a
-    /// one-click offer it could not verify: it sent nothing and offers the
-    /// sender's page.
+    /// bulkmail.Unverified: the dialog after the daemon answered unverified:
+    /// it sent nothing because the one-click request is not signed by the
+    /// sender's domain. With <c>res.Mailto</c> the user may let it send an
+    /// unsubscribe request to that address instead (<c>Confirm</c> is the
+    /// button); without, <c>Confirm</c> is "" and the dialog only informs,
+    /// with a single Close button (<see cref="Close"/>).
     /// </summary>
-    public static UnsubscribeConfirmation Fallback(Message? m, MessageUnsubscribeResult res)
+    public static UnsubscribeConfirmation Unverified(Message? m, MessageUnsubscribeResult res)
     {
         ArgumentNullException.ThrowIfNull(res);
-        var b = m?.Summary.Bulk;
-        var offer = m?.Unsubscribe;
-        var page = res.Url ?? "";
+        var domain = SenderName(m?.Summary.Bulk, m?.Unsubscribe);
+        var heading = L10n.T("The sender could not be verified");
+        var mailto = res.Mailto ?? "";
+        if (mailto.Length == 0)
+        {
+            return new UnsubscribeConfirmation(
+                heading,
+                L10n.T("Malachi Mail sent nothing because the one-click request is not signed by %s. Use the unsubscribe link in the message instead.", domain),
+                "");
+        }
         return new UnsubscribeConfirmation(
-            L10n.T("The sender could not be verified"),
+            heading,
             L10n.T(
-                "Malachi Mail sent nothing because the message is not signed by %s. You can unsubscribe on the sender's page instead:\n%s",
-                SenderName(b, offer),
-                page),
-            L10n.T("_Open in Browser"));
+                "Malachi Mail sent nothing because the one-click request is not signed by %s. It can send an unsubscribe request to %s from your account instead. It will appear in Sent.",
+                domain,
+                mailto),
+            L10n.T("_Send Request"));
     }
+
+    /// <summary>bulkmail.Close: the label of the single button of an information dialog.</summary>
+    public static string Close() => L10n.T("_Close");
 
     /// <summary>
     /// bulkmail.Applied: the offer of a message after

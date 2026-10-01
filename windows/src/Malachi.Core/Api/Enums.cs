@@ -739,8 +739,14 @@ public readonly record struct UnsubscribeOutcome(string Value) : IWireEnumeratio
     /// <summary>The unsubscribe message is in the outbox.</summary>
     public const string Queued = "queued";
 
-    /// <summary>Nothing was sent; the client offers the page (Go <c>UnsubscribeOpenURL</c>).</summary>
+    /// <summary>Nothing was sent; the offer is a web page the client opens (Go <c>UnsubscribeOpenURL</c>).</summary>
     public const string OpenUrl = "openUrl";
+
+    /// <summary>
+    /// Nothing was sent; the one-click request could not be verified. The
+    /// result's mailto names the message's mailto: alternative, if any.
+    /// </summary>
+    public const string Unverified = "unverified";
 
     /// <summary>The value of a wire string.</summary>
     public static implicit operator UnsubscribeOutcome(string value) => new(value);

@@ -329,14 +329,19 @@ public sealed partial class ApiCodingTests
     {
         var parameters = EncodeObject(new MessageUnsubscribeParams { AccountId = "acc_1", MessageId = "m_123" });
         Assert.Equal(["accountId", "messageId"], parameters.EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal));
+        var viaMail = EncodeObject(new MessageUnsubscribeParams { AccountId = "acc_1", MessageId = "m_123", Method = UnsubscribeMethod.Mailto });
+        Assert.Equal("mailto", viaMail.GetProperty("method").GetString());
         var done = Decode<MessageUnsubscribeResult>("""{"outcome":"unsubscribed","unsubscribedAt":"2026-09-30T12:00:00Z"}""");
         Assert.Equal(UnsubscribeOutcome.Unsubscribed, done.Outcome.Value);
         Assert.Equal(Rfc3339.Parse("2026-09-30T12:00:00Z"), done.UnsubscribedAt);
-        Assert.True(done.Url is null && done.Unverified is null, "absent members stay absent");
-        var open = Decode<MessageUnsubscribeResult>("""{"outcome":"openUrl","url":"https://shop.example/u","unverified":true}""");
+        Assert.True(done.Url is null && done.Mailto is null, "absent members stay absent");
+        var open = Decode<MessageUnsubscribeResult>("""{"outcome":"openUrl","url":"https://shop.example/u"}""");
         Assert.Equal(UnsubscribeOutcome.OpenUrl, open.Outcome.Value);
         Assert.Equal("https://shop.example/u", open.Url);
-        Assert.True(open.Unverified);
+        var unverified = Decode<MessageUnsubscribeResult>("""{"outcome":"unverified","mailto":"u@shop.example"}""");
+        Assert.Equal(UnsubscribeOutcome.Unverified, unverified.Outcome.Value);
+        Assert.Equal("u@shop.example", unverified.Mailto);
+        Assert.Null(unverified.Url); // a one-click URL is never handed out
         Assert.Equal(UnsubscribeOutcome.Queued, Decode<MessageUnsubscribeResult>("""{"outcome":"queued"}""").Outcome.Value);
         // A value a newer daemon adds decodes as itself.
         Assert.Equal("later", Decode<MessageUnsubscribeResult>("""{"outcome":"later"}""").Outcome.Value);

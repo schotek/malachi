@@ -753,25 +753,33 @@ public sealed record MessageUnsubscribeParams
     /// <summary>The message.</summary>
     [JsonPropertyName("messageId")]
     public required MessageId MessageId { get; init; }
+
+    /// <summary>
+    /// Absent for the offer's own method; <c>mailto</c> for the message's
+    /// mailto: alternative after an <c>unverified</c> answer (the user
+    /// confirmed it); any other value is invalidArgument.
+    /// </summary>
+    [JsonPropertyName("method")]
+    public UnsubscribeMethod? Method { get; init; }
 }
 
-/// <summary>api.MessageUnsubscribeResult: what <c>message.unsubscribe</c> did.</summary>
+/// <summary>api.MessageUnsubscribeResult: what <c>message.unsubscribe</c> did. A one-click URL is never handed out.</summary>
 public sealed record MessageUnsubscribeResult
 {
     /// <summary>unsubscribed, queued or openUrl.</summary>
     [JsonPropertyName("outcome")]
     public required UnsubscribeOutcome Outcome { get; init; }
 
-    /// <summary>The https page for openUrl.</summary>
+    /// <summary>The https page for openUrl (a web-page offer only).</summary>
     [JsonPropertyName("url")]
     public string? Url { get; init; }
 
     /// <summary>
-    /// True when a one-click offer fell back to openUrl because the DKIM check
-    /// failed; absent means false.
+    /// The address of the mailto: alternative for <c>unverified</c>; absent
+    /// when the message offers none.
     /// </summary>
-    [JsonPropertyName("unverified")]
-    public bool? Unverified { get; init; }
+    [JsonPropertyName("mailto")]
+    public string? Mailto { get; init; }
 
     /// <summary>Set for unsubscribed and queued.</summary>
     [JsonPropertyName("unsubscribedAt")]

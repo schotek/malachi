@@ -1201,6 +1201,10 @@ type MessageDownloadResult struct {
 type MessageUnsubscribeParams struct {
 	AccountID AccountID `json:"accountId"`
 	MessageID MessageID `json:"messageId"`
+	// Method is empty for the offer's own method, or UnsubscribeMailto
+	// for the message's mailto: alternative after an UnsubscribeUnverified
+	// answer (the user confirmed it); any other value is invalidArgument.
+	Method UnsubscribeMethod `json:"method,omitempty"`
 }
 
 // UnsubscribeOutcome is what message.unsubscribe did.
@@ -1211,19 +1215,23 @@ const (
 	UnsubscribeDone UnsubscribeOutcome = "unsubscribed"
 	// UnsubscribeQueued: the unsubscribe message is in the outbox.
 	UnsubscribeQueued UnsubscribeOutcome = "queued"
-	// UnsubscribeOpenURL: nothing was sent; the client should offer to
-	// open URL in a browser (the method is url, or the one-click request
-	// could not be verified by DKIM).
+	// UnsubscribeOpenURL: nothing was sent; the offer is a web page
+	// (method url) the client opens in a browser.
 	UnsubscribeOpenURL UnsubscribeOutcome = "openUrl"
+	// UnsubscribeUnverified: nothing was sent; the one-click request could
+	// not be verified. Mailto names the message's mailto: alternative, if
+	// any, which the client may offer (Method UnsubscribeMailto). A
+	// one-click URL is never handed out: it need not answer a browser.
+	UnsubscribeUnverified UnsubscribeOutcome = "unverified"
 )
 
 type MessageUnsubscribeResult struct {
 	Outcome UnsubscribeOutcome `json:"outcome"`
 	// URL is the https page for UnsubscribeOpenURL.
 	URL string `json:"url,omitempty"`
-	// Unverified is true when a one-click offer fell back to UnsubscribeOpenURL
-	// because the DKIM check failed.
-	Unverified bool `json:"unverified,omitempty"`
+	// Mailto is the address of the mailto: alternative for
+	// UnsubscribeUnverified; empty when the message offers none.
+	Mailto string `json:"mailto,omitempty"`
 	// UnsubscribedAt is set for UnsubscribeDone and UnsubscribeQueued.
 	UnsubscribedAt *time.Time `json:"unsubscribedAt,omitempty"`
 }

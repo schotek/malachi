@@ -3,7 +3,7 @@
 
 // Port of macos/Tests/MalachiCoreTests/BulkMailTests.swift, the counterpart
 // of ui/internal/bulkmail/bulkmail_test.go (TestTag, TestStripFor,
-// TestConfirm, TestFallback, TestApplied, TestTexts, TestOpenableURL,
+// TestConfirm, TestUnverified, TestApplied, TestTexts, TestOpenableURL,
 // TestHostileStrings). Go passes a translator; the process-wide catalogue is
 // English here, so every msgid is its own translation (the Czech side is in
 // BulkMailTranslationTests). Go's invalid UTF-8 is a lone surrogate in a C#
@@ -150,21 +150,34 @@ public sealed class BulkMailTests
     }
 
     [Fact]
-    public void FallbackTest()
+    public void UnverifiedTest()
     {
         var m = Msg(
             new BulkInfo { Kind = BulkKind.Newsletter, Domain = "shop.example" },
             new UnsubscribeOffer { Method = UnsubscribeMethod.OneClick, Target = "t.example" });
-        var res = new MessageUnsubscribeResult { Outcome = UnsubscribeOutcome.OpenUrl, Url = "https://shop.example/u", Unverified = true };
-        var want = new UnsubscribeConfirmation(
-            "The sender could not be verified",
-            "Malachi Mail sent nothing because the message is not signed by shop.example. You can unsubscribe on the sender's page instead:\nhttps://shop.example/u",
-            "_Open in Browser");
-        Assert.Equal(want, BulkMail.Fallback(m, res));
-        // Without a domain the offer's target stands in; a missing message is safe.
+        var res = new MessageUnsubscribeResult { Outcome = UnsubscribeOutcome.Unverified, Mailto = "u@shop.example" };
+        Assert.Equal(
+            new UnsubscribeConfirmation(
+                "The sender could not be verified",
+                "Malachi Mail sent nothing because the one-click request is not signed by shop.example. It can send an unsubscribe request to u@shop.example from your account instead. It will appear in Sent.",
+                "_Send Request"),
+            BulkMail.Unverified(m, res));
+        // Without an alternative the dialog only informs: no confirming button.
+        res = new MessageUnsubscribeResult { Outcome = UnsubscribeOutcome.Unverified };
+        Assert.Equal(
+            new UnsubscribeConfirmation(
+                "The sender could not be verified",
+                "Malachi Mail sent nothing because the one-click request is not signed by shop.example. Use the unsubscribe link in the message instead.",
+                ""),
+            BulkMail.Unverified(m, res));
+        // Without a domain the list id, then the offer's target stand in; a missing message is safe.
+        var listOnly = Msg(new BulkInfo { Kind = BulkKind.Newsletter, ListId = "l.example" }, m.Unsubscribe);
+        Assert.Contains("signed by l.example.", BulkMail.Unverified(listOnly, res).Body, StringComparison.Ordinal);
         var noBulk = Msg(null, m.Unsubscribe);
-        Assert.Contains("signed by t.example.", BulkMail.Fallback(noBulk, res).Body, StringComparison.Ordinal);
-        Assert.NotEqual("", BulkMail.Fallback(null, res).Heading);
+        Assert.Contains("signed by t.example.", BulkMail.Unverified(noBulk, res).Body, StringComparison.Ordinal);
+        var nothing = BulkMail.Unverified(null, res);
+        Assert.True(nothing.Heading.Length > 0 && nothing.Confirm.Length == 0);
+        Assert.Equal("_Close", BulkMail.Close());
     }
 
     [Fact]
@@ -244,7 +257,7 @@ public sealed class BulkMailTests
             var strip = BulkMail.StripFor(m, FolderRole.Inbox, Date);
             Assert.True(s.Length == 0 || strip.Text.Contains(s, StringComparison.Ordinal), "the list id was rewritten");
             _ = BulkMail.Confirm(m);
-            _ = BulkMail.Fallback(m, new MessageUnsubscribeResult { Outcome = UnsubscribeOutcome.OpenUrl, Url = s });
+            _ = BulkMail.Unverified(m, new MessageUnsubscribeResult { Outcome = UnsubscribeOutcome.Unverified, Mailto = s });
             _ = BulkMail.Tag(b);
         }
     }

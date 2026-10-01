@@ -222,9 +222,9 @@ public sealed class ApiRoundTripTests
         [nameof(MessageDownloadResult)] = Case<MessageDownloadResult>("""{"message":@message@}"""),
         [nameof(BulkInfo)] = Case<BulkInfo>(Bulk),
         [nameof(UnsubscribeOffer)] = Case<UnsubscribeOffer>(Unsubscribe),
-        [nameof(MessageUnsubscribeParams)] = Case<MessageUnsubscribeParams>("""{"accountId":"acc_1","messageId":"m_1"}"""),
+        [nameof(MessageUnsubscribeParams)] = Case<MessageUnsubscribeParams>("""{"accountId":"acc_1","messageId":"m_1","method":"mailto"}"""),
         [nameof(MessageUnsubscribeResult)] = Case<MessageUnsubscribeResult>(
-            """{"outcome":"openUrl","url":"https://shop.example/u","unverified":true,"unsubscribedAt":"2026-09-30T12:00:00Z"}"""),
+            """{"outcome":"unverified","url":"https://shop.example/u","mailto":"u@shop.example","unsubscribedAt":"2026-09-30T12:00:00Z"}"""),
         [nameof(MessageFlagParams)] = Case<MessageFlagParams>("""{"accountId":"acc_1","messageIds":["m_1","m_2"],"set":["seen"],"clear":["flagged"]}"""),
         [nameof(MessageMoveParams)] = Case<MessageMoveParams>("""{"accountId":"acc_1","messageIds":["m_1"],"targetFolderId":"f_archive"}"""),
         [nameof(MessageDeleteParams)] = Case<MessageDeleteParams>("""{"accountId":"acc_1","messageIds":["m_1"],"permanent":true}"""),

@@ -1068,19 +1068,44 @@ sender gains nothing beyond what the message itself offers.
   the user can see exactly what went out. A web page is never fetched by
   the daemon; the client opens it in the user's browser after showing the
   address.
-- **DKIM before the POST.** RFC 8058 requires the one-click URL to come
-  from the sender, and a header can be added on the way. The daemon
-  therefore sends only when a signature of the message verifies
-  (`go-msgauth`, at most five signatures, DNS answered within 10 s), is by
-  the same organisation as the `From` domain (public suffix + 1, so a
-  signature of `example.com` serves `mail.example.com`, not `example.org`)
-  and signs `From`, `List-Unsubscribe` and `List-Unsubscribe-Post`. A
-  message with a repeated `From`, `List-Unsubscribe` or
-  `List-Unsubscribe-Post` field is not verified (the shown field would not
-  be the signed one), and so is one that is not at hand whole (too big, or
-  reduced and not held). Not verified means nothing is sent: the result is
-  `openUrl` with `unverified`, and the client offers the page in the
-  browser, where the user decides.
+- **Verification before the POST.** RFC 8058 requires the one-click URL to
+  come from the sender, and a header can be added on the way. For IMAP and
+  Gmail accounts the daemon therefore sends only when a signature of the
+  message verifies (`go-msgauth`, at most five signatures, DNS answered
+  within 10 s), is by the same organisation as the `From` domain (public
+  suffix + 1, so a signature of `example.com` serves `mail.example.com`,
+  not `example.org`) and signs `From`, `List-Unsubscribe` and
+  `List-Unsubscribe-Post`. A message with a repeated `From`,
+  `List-Unsubscribe` or `List-Unsubscribe-Post` field is not verified (the
+  shown field would not be the signed one), and so is one that is not at
+  hand whole (too big, or reduced and not held).
+- **Exchange's verdict for Graph accounts only.** Microsoft 365 serves a
+  message as MIME it rebuilt, so the sender's DKIM signature no longer
+  matches the bytes the daemon has (in the field it said "body hash did not
+  verify" for a newsletter Exchange itself had marked `dkim=pass`). For a
+  Graph account the daemon therefore trusts what Exchange wrote when the
+  message arrived: the **topmost** `Authentication-Results` field must say
+  `dkim=pass` for a `header.d` of the `From` domain's organisation, and a
+  `DKIM-Signature` of that same domain must sign `From`, `List-Unsubscribe`
+  and `List-Unsubscribe-Post` (so the pass is about the headers the offer
+  is read from). Both fields are parsed strictly and within bounds (comments
+  removed, an unbalanced or odd field is "not verified", a repeated
+  `header.d` too). Why this is acceptable there: Exchange prepends its own
+  field on delivery, so any field a sender or a relay wrote is below it and
+  is ignored; the daemon has no other copy of the original bytes to check;
+  and the connection to the Graph service is the account's own, over TLS,
+  so the message came from the user's tenant. Why only there: an IMAP
+  server's `Authentication-Results` is whatever the provider (or a relay)
+  put there with no common rule about which field is the trusted one, and
+  trust in it would let a sender who controls an unsigned relay claim a
+  pass; IMAP accounts keep verifying the message themselves. What is not
+  defended: a tenant or Exchange that stamps a wrong verdict. Not verified
+  means nothing is sent: the result is `unverified`, carrying the
+  message's `mailto:` address if it has one, and **the one-click URL is
+  never returned for opening** (an endpoint need not answer a browser's
+  GET; and the page would not be the sender's verified one). The client
+  asks the user and may repeat the call with `method: "mailto"`, which
+  queues the mail alternative; the MCP tool never falls back by itself.
 - **Dial guard, no redirects.** The request is one connection to a public
   address: at the moment of dialling, so also for a name that resolves or
   is rebound to one, the daemon refuses loopback, private (RFC 1918 and

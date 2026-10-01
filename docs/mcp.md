@@ -466,16 +466,21 @@ own process:
 - input: `accountId`, `messageId`
 - calls `message.unsubscribe` ([api.md §4.3](api.md#messageunsubscribe)):
   the daemon reads the offer from the stored message, so the model passes
-  no URL or address. A one-click offer is sent only when the message
-  carries a valid DKIM signature of the sender's own domain over the
-  unsubscribe headers; a `mailto:` offer is queued as an e-mail in the
+  no URL or address. A one-click offer is sent only when it is verified
+  (an IMAP account: a valid DKIM signature of the sender's own domain over
+  the unsubscribe headers; a Microsoft 365 account: Exchange's
+  `Authentication-Results`, [security.md §7.2](security.md)); a `mailto:` offer is queued as an e-mail in the
   outbox of the account the message arrived in (it appears in Sent); a
-  web-page offer, or a sender that could not be verified, sends nothing.
+  web-page offer, or a one-click request that could not be verified, sends
+  nothing, and the tool never falls back to the `mailto:` alternative by
+  itself (the model has no parameter for it; only the user can confirm it
+  in Malachi Mail).
   Messages in the junk folder are refused.
 - output: one trusted line: `unsubscribed` (one-click accepted), `queued`
-  (in the outbox), or `nothing was sent` with the reason, and that the
-  user can unsubscribe from the message in Malachi Mail; the page is never
-  given to the model. A server that refused the request is the error
+  (in the outbox), `not verified, nothing was sent` (no address, no URL), or
+  `nothing was sent` for a page-only offer, and that the user can
+  unsubscribe from the message in Malachi Mail; the page is never given to
+  the model. A server that refused the request is the error
   `unsubscribeFailed (1505)`.
 - A `mailto` offer queues real outgoing mail, which is `-allow-send`'s
   capability: before calling the daemon the tool reads the message

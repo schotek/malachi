@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of ui/internal/window/bulk.go (unsubscribe, bulkDialog, openBulkPage,
-// callUnsubscribe, bulkFallback, refreshBulk); macOS keeps the same flow in
+// callUnsubscribe, bulkUnverified, refreshBulk); macOS keeps the same flow in
 // the message actions (Actions/MessageActionsController.swift) over
 // macos/Sources/MalachiCore/Bulk/BulkMail.swift.
 //
@@ -34,8 +34,8 @@ namespace Malachi.Core.Controllers;
 /// nothing happens without the answer), then opens the sender's page for a
 /// web-page offer or calls <c>message.unsubscribe</c>, and shows what came
 /// of it: the cached message's offer turns into "Unsubscribed on …"
-/// (<see cref="BulkMail.Applied"/>), a queued request toasts, a page the
-/// daemon could not verify a one-click request for is offered in a dialog.
+/// (<see cref="BulkMail.Applied"/>), a queued request toasts, an unverified one-click request offers the mailto: alternative in a
+/// dialog, or only informs when there is none.
 /// Every view showing the message follows <see cref="Changed"/>.
 /// </summary>
 /// <remarks>
@@ -90,6 +90,13 @@ public sealed partial class BulkActionsController : IDisposable
     /// the default. True when confirmed. Without it nothing is done.
     /// </summary>
     public Func<object?, UnsubscribeConfirmation, Task<bool>>? Confirm { get; set; }
+
+    /// <summary>
+    /// The information dialog with a single button (<see cref="BulkMail.Close"/>)
+    /// of an unverified one-click request that has no mailto: alternative;
+    /// same window rules as <see cref="Confirm"/>. Without it nothing is shown.
+    /// </summary>
+    public Func<object?, UnsubscribeConfirmation, Task>? Inform { get; set; }
 
     /// <summary>Opens the sender's page in the browser (bulk.go <c>openBulkPage</c>), given an https address <see cref="BulkMail.OpenableUrl"/> passed.</summary>
     public Func<object?, string, Task>? OpenPage { get; set; }
@@ -155,7 +162,7 @@ public sealed partial class BulkActionsController : IDisposable
         {
             return; // another click was confirmed first
         }
-        Call(r);
+        Call(r, null);
     }
 
     // Shows the dialog; a dialog that cannot be shown (another one is open)
@@ -197,11 +204,11 @@ public sealed partial class BulkActionsController : IDisposable
     }
 
     // callUnsubscribe: message.unsubscribe, and what came of it on display.
-    private void Call(Request r)
+    private void Call(Request r, UnsubscribeMethod? method)
     {
         r.Entry.Unsubscribing = true;
         scope.Raise(Changed, this, new MessageCacheEntry(r.Id, r.Entry));
-        var parameters = new MessageUnsubscribeParams { AccountId = r.Account, MessageId = r.Id };
+        var parameters = new MessageUnsubscribeParams { AccountId = r.Account, MessageId = r.Id, Method = method };
         scope.Perform(client, API.MessageUnsubscribe, parameters, outcome =>
         {
             r.Entry.Unsubscribing = false;
@@ -230,9 +237,13 @@ public sealed partial class BulkActionsController : IDisposable
                         r.Say(BulkMail.Queued());
                     }
                     break;
-                case UnsubscribeOutcome.OpenUrl:
+                case UnsubscribeOutcome.Unverified:
                     var shown = r with { Entry = entry };
-                    scope.Run(ct => FallbackAsync(shown, res, ct));
+                    scope.Run(ct => UnverifiedAsync(shown, res, ct));
+                    break;
+                case UnsubscribeOutcome.OpenUrl:
+                    // Only for a web-page offer, confirmed already: no second dialog.
+                    scope.Run(_ => OpenAsync(r.Parent, res.Url));
                     break;
                 default:
                     break;
@@ -241,19 +252,39 @@ public sealed partial class BulkActionsController : IDisposable
         });
     }
 
-    // bulkFallback: the daemon sent nothing and offers the sender's page
-    // instead (a one-click offer that could not be verified, or an answer
-    // that only names a page).
-    private async Task FallbackAsync(Request r, MessageUnsubscribeResult res, CancellationToken cancellationToken)
+    // bulkUnverified: the daemon sent nothing because it could not verify
+    // the one-click request. With a mailto: alternative the user may confirm
+    // sending the request by mail (message.unsubscribe again with that
+    // method); without, the dialog only informs.
+    private async Task UnverifiedAsync(Request r, MessageUnsubscribeResult res, CancellationToken cancellationToken)
     {
-        if (BulkMail.OpenableUrl(res.Url) is null)
+        var conf = BulkMail.Unverified(r.Entry.Msg, res);
+        if (conf.Confirm.Length == 0)
         {
+            await InformAsync(r.Parent, conf);
             return;
         }
-        var conf = BulkMail.Fallback(r.Entry.Msg, res);
-        if (await ConfirmedAsync(r.Parent, conf) && !scope.IsClosed && !cancellationToken.IsCancellationRequested)
+        if (await ConfirmedAsync(r.Parent, conf) && !scope.IsClosed && !cancellationToken.IsCancellationRequested && !r.Entry.Unsubscribing)
         {
-            await OpenAsync(r.Parent, res.Url);
+            Call(r, UnsubscribeMethod.Mailto);
+        }
+    }
+
+    // A dialog that cannot be shown is only logged.
+    private async Task InformAsync(object? parent, UnsubscribeConfirmation conf)
+    {
+        if (Inform is not { } inform)
+        {
+            LogNoConfirmationHook(logger);
+            return;
+        }
+        try
+        {
+            await inform(parent, conf);
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            LogConfirmationFailed(logger, e.GetType().Name);
         }
     }
 

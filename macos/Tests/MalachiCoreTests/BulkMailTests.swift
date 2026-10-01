@@ -130,19 +130,30 @@ private func bulkScalar(_ v: UInt32) -> String {
         }
     }
 
-    @Test func fallback() {
+    @Test func unverified() {
         var m = bulkMsg(
             BulkInfo(kind: .newsletter, domain: "shop.example"), UnsubscribeOffer(method: .oneClick, target: "t.example"))
-        let res = MessageUnsubscribeResult(outcome: .openUrl, url: "https://shop.example/u", unverified: true)
-        let want = Bulk.Confirmation(
+        var res = MessageUnsubscribeResult(outcome: .unverified, mailto: "u@shop.example")
+        var want = Bulk.Confirmation(
             heading: "The sender could not be verified",
-            body: "Malachi Mail sent nothing because the message is not signed by shop.example. You can unsubscribe on the sender's page instead:\nhttps://shop.example/u",
-            confirm: "_Open in Browser")
-        #expect(Bulk.fallback(m, res) == want)
-        // Without a domain the offer's target stands in; a nil message is safe.
+            body: "Malachi Mail sent nothing because the one-click request is not signed by shop.example. It can send an unsubscribe request to u@shop.example from your account instead. It will appear in Sent.",
+            confirm: "_Send Request")
+        #expect(Bulk.unverified(m, res) == want, "with mailto")
+        res.mailto = nil
+        want = Bulk.Confirmation(
+            heading: "The sender could not be verified",
+            body: "Malachi Mail sent nothing because the one-click request is not signed by shop.example. Use the unsubscribe link in the message instead.")
+        #expect(Bulk.unverified(m, res) == want, "without mailto")
+        res.mailto = ""
+        #expect(Bulk.unverified(m, res) == want, "an empty address is none")
+        // Without a domain the list id, then the target stand in; nil is safe.
+        m.summary.bulk = BulkInfo(kind: .newsletter, listId: "l.example")
+        #expect(Bulk.unverified(m, res).body.contains("signed by l.example."))
         m.summary.bulk = nil
-        #expect(Bulk.fallback(m, res).body.contains("signed by t.example."))
-        #expect(!Bulk.fallback(nil, res).heading.isEmpty)
+        #expect(Bulk.unverified(m, res).body.contains("signed by t.example."))
+        let none = Bulk.unverified(nil, res)
+        #expect(!none.heading.isEmpty && none.confirm.isEmpty)
+        #expect(Bulk.close() == "_Close")
     }
 
     @Test func applied() {
@@ -216,7 +227,7 @@ private func bulkScalar(_ v: UInt32) -> String {
             let st = Bulk.stripFor(m, role: .inbox, date: bulkDate)
             #expect(s.isEmpty || st.text.contains(s), "list id was rewritten for \(s.prefix(20))")
             _ = Bulk.confirm(m)
-            _ = Bulk.fallback(m, MessageUnsubscribeResult(outcome: .openUrl, url: s))
+            _ = Bulk.unverified(m, MessageUnsubscribeResult(outcome: .unverified, mailto: s))
             _ = Bulk.tag(b)
         }
     }

@@ -76,16 +76,16 @@ func TestUnsubscribeTool(t *testing.T) {
 	out = h.ok(t, "unsubscribe", args)
 	mustContain(t, out, "queued:", "outbox of account a1", "Sent")
 
-	// A page, or a sender that could not be verified: nothing was sent, and
-	// the URL stays with the user.
-	for _, unverified := range []bool{false, true} {
-		h.fb.unsubscribeResult = &api.MessageUnsubscribeResult{Outcome: api.UnsubscribeOpenURL, URL: fxBulkURL, Unverified: unverified}
-		out = h.ok(t, "unsubscribe", args)
-		mustContain(t, out, "nothing was sent", "unsubscribe from this message in Malachi Mail")
-		mustNotContain(t, out, "SECRET-TOKEN", "https://", "token=")
-	}
-	h.fb.unsubscribeResult = &api.MessageUnsubscribeResult{Outcome: api.UnsubscribeOpenURL, Unverified: true}
-	mustContain(t, h.ok(t, "unsubscribe", args), "could not be verified")
+	// A page, or a request that could not be verified: nothing was sent,
+	// the model gets neither URL nor address and no fallback.
+	h.fb.unsubscribeResult = &api.MessageUnsubscribeResult{Outcome: api.UnsubscribeOpenURL, URL: fxBulkURL}
+	out = h.ok(t, "unsubscribe", args)
+	mustContain(t, out, "nothing was sent", "only a web page", "in Malachi Mail")
+	mustNotContain(t, out, "SECRET-TOKEN", "https://", "token=")
+	h.fb.unsubscribeResult = &api.MessageUnsubscribeResult{Outcome: api.UnsubscribeUnverified, Mailto: "leave@news.example"}
+	out = h.ok(t, "unsubscribe", args)
+	mustContain(t, out, "not verified, nothing was sent", "in Malachi Mail")
+	mustNotContain(t, out, "leave@news.example", "https://", "mailto")
 
 	h.fb.unsubscribeResult = &api.MessageUnsubscribeResult{Outcome: "bogus" + api.UnsubscribeOutcome(rtlOverride)}
 	h.fail(t, "unsubscribe", args, "unknown outcome")
@@ -104,7 +104,7 @@ func TestUnsubscribeTool(t *testing.T) {
 			t.Errorf("call %+v", c)
 		}
 	}
-	if len(h.fb.unsubscribeCalls) < 8 {
+	if len(h.fb.unsubscribeCalls) < 5 {
 		t.Errorf("%d calls", len(h.fb.unsubscribeCalls))
 	}
 }

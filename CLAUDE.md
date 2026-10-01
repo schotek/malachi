@@ -983,8 +983,13 @@ s obálkou, backfill pod `bulk.classified`, jira nikdy), `MessageSummary.bulk`,
 `Message.unsubscribe` (oneClick / mailto / url, `unsubscribedAt`, v nevyžádané
 nikdy) a `message.unsubscribe` (`core/unsubscribe.go`): oneClick jen po DKIM
 podpisu organizace odesílatele přes `List-Unsubscribe` i `-Post`
-(`go-msgauth`), POST z `internal/oneclick` (bez přesměrování, bez neveřejných
-adres i s proxy, do logu jen třída chyby), jinak `openUrl` s `unverified`;
+(`go-msgauth`; u účtů Graph, kde Exchange vydává přestavěné MIME a tělo
+podpisu nesedí, horní `Authentication-Results` od Exchange s `dkim=pass`
+téže organizace + `h=` podpisu té domény, `bulk.ExchangeVerified`), POST
+z `internal/oneclick` (bez přesměrování, bez neveřejných adres i s proxy,
+do logu jen třída chyby), jinak výsledek `unverified` s adresou `mailto`
+alternativy (klient ji po potvrzení pošle s `method: mailto`; URL pro jeden
+klik se nikdy neotevírá v prohlížeči, POST endpointy na GET neodpovídají);
 mailto jako prostý mail přes outbox bez konceptu; url jen vrací stránku;
 opakování do 60 s vrátí uložený výsledek, souběh `conflict`; chyba 1505
 `unsubscribeFailed` (`docs/security.md` §7.2). MCP: `bulk` v souhrnech,

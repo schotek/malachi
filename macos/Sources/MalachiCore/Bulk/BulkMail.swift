@@ -203,17 +203,31 @@ public enum Bulk {
         }
     }
 
-    /// bulkmail.Fallback: the dialog after the daemon answered openUrl for a
-    /// one-click offer it could not verify: it sent nothing and offers the
-    /// sender's page.
-    public static func fallback(_ m: Message?, _ res: MessageUnsubscribeResult) -> Confirmation {
-        Confirmation(
-            heading: L10n.T("The sender could not be verified"),
-            body: L10n.T(
-                "Malachi Mail sent nothing because the message is not signed by %s. You can unsubscribe on the sender's page instead:\n%s",
-                senderName(m?.summary.bulk, m?.unsubscribe), res.url ?? ""),
-            confirm: L10n.T("_Open in Browser"))
+    /// bulkmail.Unverified: the dialog after the daemon answered
+    /// unverified: it sent nothing because the one-click request is not
+    /// signed by the sender's domain. With `res.mailto` the user may let it
+    /// send an unsubscribe request to that address instead (`confirm` is
+    /// the button); without, `confirm` is "" and the dialog only informs,
+    /// with a single Close button (`close`).
+    public static func unverified(_ m: Message?, _ res: MessageUnsubscribeResult) -> Confirmation {
+        let domain = senderName(m?.summary.bulk, m?.unsubscribe)
+        var c = Confirmation(heading: L10n.T("The sender could not be verified"))
+        guard let mailto = res.mailto, !mailto.isEmpty else {
+            c.body = L10n.T(
+                "Malachi Mail sent nothing because the one-click request is not signed by %s. Use the unsubscribe link in the message instead.",
+                domain)
+            return c
+        }
+        c.body = L10n.T(
+            "Malachi Mail sent nothing because the one-click request is not signed by %s. It can send an unsubscribe request to %s from your account instead. It will appear in Sent.",
+            domain, mailto)
+        c.confirm = L10n.T("_Send Request")
+        return c
     }
+
+    /// bulkmail.Close: the label of the single button of an information
+    /// dialog.
+    public static func close() -> String { L10n.T("_Close") }
 
     /// bulkmail.Applied: the offer of a message after `message.unsubscribe`
     /// answered `res`: a copy with the time the daemon remembered for

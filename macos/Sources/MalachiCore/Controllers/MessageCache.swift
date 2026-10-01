@@ -490,12 +490,14 @@ public final class MessageCache {
     /// (`Bulk.applied`) and the strip turns into "Unsubscribed on …" (a
     /// queued one toasts as well); a failure is toasted through `toast`
     /// (the window the click came from; the cache's own when nil) and the
-    /// button is back. `then` gets the answer after the strip was redrawn,
-    /// for the caller to offer the sender's page on `.openUrl`. A request
+    /// button is back. `method` is nil for the offer's own method, or
+    /// `.mailto` after the user confirmed the unverified dialog. `then` gets
+    /// the answer after the strip was redrawn, for the caller to show the
+    /// unverified dialog or open the page on `.openUrl`. A request
     /// already running, or a message without its offer, is left alone and
     /// `then` is not called.
     public func unsubscribe(
-        _ s: MessageSummary, toast: (@MainActor (String) -> Void)? = nil,
+        _ s: MessageSummary, method: UnsubscribeMethod? = nil, toast: (@MainActor (String) -> Void)? = nil,
         _ then: @escaping @MainActor (Result<MessageUnsubscribeResult, any Error>, LoadedMessage) -> Void
     ) {
         let id = s.id
@@ -503,7 +505,7 @@ public final class MessageCache {
         lm.unsubscribing = true
         onBulk?(id, lm)
         let client = client
-        let params = MessageUnsubscribeParams(accountId: s.accountId, messageId: id)
+        let params = MessageUnsubscribeParams(accountId: s.accountId, messageId: id, method: method)
         Task { [weak self] in
             let outcome: Result<MessageUnsubscribeResult, any Error>
             do {

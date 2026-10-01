@@ -323,6 +323,26 @@ func CountHeaderFields(r io.Reader, limits Limits, names ...string) map[string]i
 	return out
 }
 
+// HeaderValues reads a header block like ParseHeaderFields and returns,
+// per requested name (canonical form), the raw values of every field of
+// that name in document order, topmost first, each at most
+// limits.MaxHeaderBytes long. Nothing is cleaned or decoded: the caller
+// parses them (internal/bulk, Authentication-Results and DKIM-Signature).
+func HeaderValues(r io.Reader, limits Limits, names ...string) map[string][]string {
+	limits = limits.withDefaults()
+	h, err := textproto.ReadHeader(bufio.NewReader(io.LimitReader(r, limits.MaxHeaderBytes)))
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return nil
+	}
+	out := make(map[string][]string, len(names))
+	for _, n := range names {
+		if v := h.Values(n); len(v) > 0 {
+			out[n] = v
+		}
+	}
+	return out
+}
+
 // firstMsgID extracts the first identifier from a raw Message-ID value
 // that the strict parser rejected.
 func firstMsgID(raw string) string {

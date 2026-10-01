@@ -274,9 +274,26 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
                 self.openBulkPage(offer.url ?? "", from: window)
                 return
             }
-            self.cache.unsubscribe(summary, toast: { [weak self] text in self?.toast(text, in: window) }) { [weak self] outcome, lm in
-                guard let self, case .success(let res) = outcome, res.outcome == .openUrl else { return }
-                self.bulkFallback(lm, res, on: window)
+            self.callUnsubscribe(summary, method: nil, on: window)
+        }
+    }
+
+    /// window/bulk.go `callUnsubscribe`: `message.unsubscribe` through the
+    /// cache and what to do with the answer. `unverified` asks whether the
+    /// request may go by mail instead (the call again with `.mailto`), or
+    /// only informs when the message offers no such address; `openUrl`
+    /// (a web-page offer, confirmed already) opens the page without a
+    /// second question.
+    private func callUnsubscribe(_ summary: MessageSummary, method: UnsubscribeMethod?, on window: NSWindow?) {
+        cache.unsubscribe(summary, method: method, toast: { [weak self] text in self?.toast(text, in: window) }) { [weak self] outcome, lm in
+            guard let self, case .success(let res) = outcome else { return }
+            switch res.outcome {
+            case .unverified:
+                self.bulkUnverified(summary, lm, res, on: window)
+            case .openUrl:
+                self.openBulkPage(res.url ?? "", from: window)
+            default:
+                break
             }
         }
     }
@@ -289,14 +306,23 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
             declineLabel: L10n.T("_Cancel"))
     }
 
-    /// window/bulk.go `bulkFallback`: the daemon sent nothing and offers the
-    /// sender's page instead; asked about once more, then opened.
-    private func bulkFallback(_ lm: LoadedMessage, _ res: MessageUnsubscribeResult, on window: NSWindow?) {
-        guard let url = res.url, Bulk.openableURL(url) != nil else { return }
-        let conf = Bulk.fallback(lm.msg, res)
+    /// window/bulk.go `bulkUnverified`: the daemon sent nothing because it
+    /// could not verify the one-click request. With a mailto: alternative
+    /// the user may confirm sending the request by mail; without, the
+    /// dialog only informs.
+    private func bulkUnverified(
+        _ summary: MessageSummary, _ lm: LoadedMessage, _ res: MessageUnsubscribeResult, on window: NSWindow?
+    ) {
+        let conf = Bulk.unverified(lm.msg, res)
         Task { @MainActor [weak self] in
-            guard let self, await self.askBulk(conf, on: window) else { return }
-            self.openBulkPage(url, from: window)
+            guard let self else { return }
+            guard !conf.confirm.isEmpty else {
+                await self.state.alerts.inform(
+                    on: window, heading: conf.heading, body: conf.body, closeLabel: Bulk.close())
+                return
+            }
+            guard await self.askBulk(conf, on: window), !lm.unsubscribing else { return }
+            self.callUnsubscribe(summary, method: .mailto, on: window)
         }
     }
 

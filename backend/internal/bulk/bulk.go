@@ -352,6 +352,18 @@ func Choose(h map[string]string, kind api.BulkKind) *Offer {
 	return nil
 }
 
+// MailtoAlternative is the first usable mailto: URI of the headers as an
+// Offer (method mailto), whatever method Choose prefers; nil when there is
+// none.
+func MailtoAlternative(h map[string]string) *Offer {
+	for _, u := range UnsubscribeURIs(get(h, HeaderListUnsubscribe)) {
+		if u.Kind == KindMailto {
+			return &Offer{Method: api.UnsubscribeMailto, Target: u.Target, URI: u.Raw}
+		}
+	}
+	return nil
+}
+
 // RememberKey is the key of the remembered unsubscription of a message:
 // the list when it has a List-Id, else the sender address.
 func RememberKey(listID, fromAddress string) string {

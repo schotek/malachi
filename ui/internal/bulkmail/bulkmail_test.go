@@ -152,25 +152,40 @@ func TestConfirm(t *testing.T) {
 	}
 }
 
-func TestFallback(t *testing.T) {
+func TestUnverified(t *testing.T) {
 	m := msg(&api.BulkInfo{Kind: api.BulkNewsletter, Domain: "shop.example"},
 		&api.UnsubscribeOffer{Method: api.UnsubscribeOneClick, Target: "t.example"})
-	res := api.MessageUnsubscribeResult{Outcome: api.UnsubscribeOpenURL, URL: "https://shop.example/u", Unverified: true}
+	res := api.MessageUnsubscribeResult{Outcome: api.UnsubscribeUnverified, Mailto: "u@shop.example"}
 	want := Confirmation{
 		Heading: "The sender could not be verified",
-		Body:    "Malachi Mail sent nothing because the message is not signed by shop.example. You can unsubscribe on the sender's page instead:\nhttps://shop.example/u",
-		Confirm: "_Open in Browser",
+		Body:    "Malachi Mail sent nothing because the one-click request is not signed by shop.example. It can send an unsubscribe request to u@shop.example from your account instead. It will appear in Sent.",
+		Confirm: "_Send Request",
 	}
-	if got := Fallback(m, res, tr); got != want {
-		t.Errorf("got %+v", got)
+	if got := Unverified(m, res, tr); got != want {
+		t.Errorf("with mailto: %+v", got)
 	}
-	// Without a domain the offer's target stands in; nil message is safe.
+	res.Mailto = ""
+	want = Confirmation{
+		Heading: "The sender could not be verified",
+		Body:    "Malachi Mail sent nothing because the one-click request is not signed by shop.example. Use the unsubscribe link in the message instead.",
+	}
+	if got := Unverified(m, res, tr); got != want {
+		t.Errorf("without mailto: %+v", got)
+	}
+	// Without a domain the list id, then the target stand in; nil is safe.
+	m.Bulk = &api.BulkInfo{Kind: api.BulkNewsletter, ListID: "l.example"}
+	if got := Unverified(m, res, tr); !strings.Contains(got.Body, "signed by l.example.") {
+		t.Errorf("list id fallback: %q", got.Body)
+	}
 	m.Bulk = nil
-	if got := Fallback(m, res, tr); !strings.Contains(got.Body, "signed by t.example.") {
+	if got := Unverified(m, res, tr); !strings.Contains(got.Body, "signed by t.example.") {
 		t.Errorf("target fallback: %q", got.Body)
 	}
-	if got := Fallback(nil, res, tr); got.Heading == "" {
-		t.Error("nil message: no heading")
+	if got := Unverified(nil, res, tr); got.Heading == "" || got.Confirm != "" {
+		t.Errorf("nil message: %+v", got)
+	}
+	if Close(tr) != "_Close" {
+		t.Error("close label")
 	}
 }
 
@@ -243,7 +258,7 @@ func TestHostileStrings(t *testing.T) {
 			t.Errorf("list id was rewritten for %.20q", s)
 		}
 		Confirm(m, tr)
-		Fallback(m, api.MessageUnsubscribeResult{URL: s}, tr)
+		Unverified(m, api.MessageUnsubscribeResult{Mailto: s}, tr)
 		Tag(b, tr)
 	}
 }

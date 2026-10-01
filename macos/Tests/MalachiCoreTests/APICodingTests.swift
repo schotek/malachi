@@ -597,12 +597,17 @@ import Testing
     @Test func messageUnsubscribeExample() throws {
         let params = try encodeObject(MessageUnsubscribeParams(accountId: "acc_1", messageId: "m_123"))
         #expect(params.keys.sorted() == ["accountId", "messageId"], "the client sends no URL or address")
+        let viaMail = try encodeObject(MessageUnsubscribeParams(accountId: "acc_1", messageId: "m_123", method: .mailto))
+        #expect(viaMail.keys.sorted() == ["accountId", "messageId", "method"] && viaMail["method"] as? String == "mailto")
 
         let done = try decode(MessageUnsubscribeResult.self, #"{"outcome":"unsubscribed","unsubscribedAt":"2026-09-30T12:00:00Z"}"#)
         #expect(done.outcome == .unsubscribed && done.unsubscribedAt == Date(timeIntervalSince1970: 1_790_769_600))
-        #expect(done.url == nil && done.unverified == nil)
-        let open = try decode(MessageUnsubscribeResult.self, #"{"outcome":"openUrl","url":"https://shop.example/u","unverified":true}"#)
-        #expect(open.outcome == .openUrl && open.url == "https://shop.example/u" && open.unverified == true)
+        #expect(done.url == nil && done.mailto == nil)
+        let open = try decode(MessageUnsubscribeResult.self, #"{"outcome":"openUrl","url":"https://shop.example/u"}"#)
+        #expect(open.outcome == .openUrl && open.url == "https://shop.example/u" && open.mailto == nil)
+        let unverified = try decode(MessageUnsubscribeResult.self, #"{"outcome":"unverified","mailto":"u@shop.example"}"#)
+        #expect(unverified.outcome == .unverified && unverified.mailto == "u@shop.example" && unverified.url == nil)
+        #expect(try decode(MessageUnsubscribeResult.self, #"{"outcome":"unverified"}"#).mailto == nil)
         #expect(try decode(MessageUnsubscribeResult.self, #"{"outcome":"queued"}"#).outcome == .queued)
         // An outcome a newer daemon adds still decodes.
         #expect(try decode(MessageUnsubscribeResult.self, #"{"outcome":"later"}"#).outcome == UnsubscribeOutcome(rawValue: "later"))

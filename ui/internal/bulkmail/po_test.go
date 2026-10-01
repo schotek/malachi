@@ -57,11 +57,13 @@ func exercise(tr Translator) {
 				StripFor(m, role, date, tr)
 			}
 			Confirm(m, tr)
-			Fallback(m, api.MessageUnsubscribeResult{URL: "https://t"}, tr)
+			Unverified(m, api.MessageUnsubscribeResult{Mailto: "u@t"}, tr)
+			Unverified(m, api.MessageUnsubscribeResult{}, tr)
 		}
 	}
 	Queued(tr)
 	ErrorWhat(tr)
+	Close(tr)
 	Refused(tr)
 }
 

@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-01 12:59+0000\n"
+"POT-Creation-Date: 2026-10-01 13:35+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -966,7 +966,9 @@ msgstr "Odhlásit odběr od %s?"
 msgid ""
 "Malachi Mail will ask %s to stop sending these messages. The sender may "
 "still send a few more over the next days."
-msgstr "Malachi Mail požádá %s, aby vám tyto zprávy přestal posílat. Odesílatel může ještě několik dní posílat zprávy."
+msgstr ""
+"Malachi Mail požádá %s, aby vám tyto zprávy přestal posílat. Odesílatel může "
+"ještě několik dní posílat zprávy."
 
 #: ui/internal/bulkmail/bulkmail.go:193
 #, c-format
@@ -978,9 +980,11 @@ msgstr "Opustit konferenci %s?"
 msgid ""
 "Malachi Mail will send an unsubscribe request to %s from your account. It "
 "will appear in Sent."
-msgstr "Malachi Mail odešle z vašeho účtu žádost o odhlášení na %s. Objeví se v Odeslaných."
+msgstr ""
+"Malachi Mail odešle z vašeho účtu žádost o odhlášení na %s. Objeví se v "
+"Odeslaných."
 
-#: ui/internal/bulkmail/bulkmail.go:198
+#: ui/internal/bulkmail/bulkmail.go:198 ui/internal/bulkmail/bulkmail.go:237
 msgid "_Send Request"
 msgstr "_Odeslat žádost"
 
@@ -994,33 +998,47 @@ msgid ""
 "The sender does not offer unsubscribing in one step. This page opens in your "
 "browser:\n"
 "%s"
-msgstr "Odesílatel nenabízí odhlášení jedním krokem. Tato stránka se otevře v prohlížeči:\n%s"
+msgstr ""
+"Odesílatel nenabízí odhlášení jedním krokem. Tato stránka se otevře v "
+"prohlížeči:\n"
+"%s"
 
-#: ui/internal/bulkmail/bulkmail.go:204 ui/internal/bulkmail/bulkmail.go:230
+#: ui/internal/bulkmail/bulkmail.go:204
 msgid "_Open in Browser"
 msgstr "_Otevřít v prohlížeči"
 
-#: ui/internal/bulkmail/bulkmail.go:228
+#: ui/internal/bulkmail/bulkmail.go:231
 msgid "The sender could not be verified"
 msgstr "Odesílatele se nepodařilo ověřit"
 
-#: ui/internal/bulkmail/bulkmail.go:229
+#: ui/internal/bulkmail/bulkmail.go:233
 #, c-format
 msgid ""
-"Malachi Mail sent nothing because the message is not signed by %s. You can "
-"unsubscribe on the sender's page instead:\n"
-"%s"
-msgstr "Malachi Mail nic neodeslalo, protože zpráva není podepsaná doménou %s. Odhlásit se můžete na stránce odesílatele:\n%s"
+"Malachi Mail sent nothing because the one-click request is not signed by %s. "
+"Use the unsubscribe link in the message instead."
+msgstr "Malachi Mail nic neodeslalo, protože žádost o odhlášení jedním klikem není podepsaná doménou %s. Odhlaste se odkazem ve zprávě."
 
-#: ui/internal/bulkmail/bulkmail.go:253
+#: ui/internal/bulkmail/bulkmail.go:236
+#, c-format
+msgid ""
+"Malachi Mail sent nothing because the one-click request is not signed by %s. "
+"It can send an unsubscribe request to %s from your account instead. It will "
+"appear in Sent."
+msgstr "Malachi Mail nic neodeslalo, protože žádost o odhlášení jedním klikem není podepsaná doménou %s. Místo toho může z vašeho účtu odeslat žádost o odhlášení na %s. Objeví se v Odeslaných."
+
+#: ui/internal/bulkmail/bulkmail.go:242
+msgid "_Close"
+msgstr "_Zavřít"
+
+#: ui/internal/bulkmail/bulkmail.go:263
 msgid "Unsubscribe request queued"
 msgstr "Žádost o odhlášení čeká ve frontě k odeslání"
 
-#: ui/internal/bulkmail/bulkmail.go:257
+#: ui/internal/bulkmail/bulkmail.go:267
 msgid "Unsubscribing"
 msgstr "Odhlášení"
 
-#: ui/internal/bulkmail/bulkmail.go:261
+#: ui/internal/bulkmail/bulkmail.go:271
 msgid "The sender's server refused the request."
 msgstr "Server odesílatele žádost odmítl."
 

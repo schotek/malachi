@@ -123,13 +123,24 @@ func (b *Backend) isJunk(ctx context.Context, m store.Message) (bool, error) {
 // §4.3, message.unsubscribe). The client names only the message: the
 // method, the URL and the address are read again from the stored message,
 // never taken from the caller. A page (method url) is only handed back; a
-// one-click request is sent only when a DKIM signature of the sender's
-// own domain covers List-Unsubscribe and List-Unsubscribe-Post, else the
-// page is handed back as unverified; a mailto: request is queued in the
-// outbox of the account the message arrived in.
+// one-click request is sent only when it is verified (below), else the
+// outcome is unverified and nothing is sent, the one-click URL is never
+// handed back; a mailto: request is queued in the outbox of the account
+// the message arrived in. p.Method mailto asks for the message's mailto:
+// alternative (after the user confirmed an unverified outcome).
+//
+// Verified: for an IMAP account a DKIM signature of the sender's own
+// organisation, checked here, covers List-Unsubscribe and
+// List-Unsubscribe-Post; for a Graph account, whose MIME Exchange rebuilt,
+// the topmost Authentication-Results field (Exchange's own) says dkim=pass
+// for such a domain and the message has a DKIM-Signature of it signing
+// both fields.
 func (s *messageService) Unsubscribe(ctx context.Context, p api.MessageUnsubscribeParams) (*api.MessageUnsubscribeResult, error) {
 	if p.AccountID == "" || p.MessageID == "" {
 		return nil, api.NewError(api.CodeInvalidArgument, "accountId and messageId are required")
+	}
+	if p.Method != "" && p.Method != api.UnsubscribeMailto {
+		return nil, api.NewError(api.CodeInvalidArgument, "method must be empty or mailto")
 	}
 	a, err := s.b.requireAccount(ctx, string(p.AccountID))
 	if err != nil {
@@ -153,7 +164,11 @@ func (s *messageService) Unsubscribe(ctx context.Context, p api.MessageUnsubscri
 		return nil, api.NewError(api.CodeInvalidArgument, "the message offers no way to unsubscribe")
 	}
 
-	if stored.Method != api.UnsubscribeURL {
+	wantMailto := p.Method == api.UnsubscribeMailto
+	if wantMailto && bulk.MailtoAlternative(m.Headers) == nil {
+		return nil, api.NewError(api.CodeInvalidArgument, "the message has no mailto: address to unsubscribe at")
+	}
+	if wantMailto || stored.Method != api.UnsubscribeURL {
 		// One request at a time per list or sender, and a repeat within
 		// unsubscribeRepeat (a double click, a retrying agent) is answered
 		// with what the first one did.
@@ -176,16 +191,22 @@ func (s *messageService) Unsubscribe(ctx context.Context, p api.MessageUnsubscri
 		}
 	}
 
-	src, err := s.b.unsubscribeSource(ctx, a, m, stored.Method == api.UnsubscribeOneClick)
+	choose := func(h map[string]string) *bulk.Offer {
+		if wantMailto {
+			return bulk.MailtoAlternative(h)
+		}
+		return bulk.Choose(h, kind)
+	}
+	src, err := s.b.unsubscribeSource(ctx, a, m, !wantMailto && stored.Method == api.UnsubscribeOneClick)
 	if err != nil {
 		return nil, err
 	}
-	offer := bulk.Choose(src.headers, kind)
+	offer := choose(src.headers)
 	if offer != nil && offer.Method == api.UnsubscribeOneClick && !src.triedWhole {
 		if src, err = s.b.unsubscribeSource(ctx, a, m, true); err != nil {
 			return nil, err
 		}
-		offer = bulk.Choose(src.headers, kind)
+		offer = choose(src.headers)
 	}
 	if offer == nil {
 		return nil, api.NewError(api.CodeInvalidArgument, "the message offers no way to unsubscribe")
@@ -215,6 +236,9 @@ type unsubSource struct {
 	// available); triedWhole says it was asked for.
 	whole      []byte
 	triedWhole bool
+	// head is the beginning of the message (its header block), nil when
+	// the message is not stored.
+	head []byte
 }
 
 var guardedHeaders = []string{"From", "List-Unsubscribe", "List-Unsubscribe-Post"}
@@ -225,24 +249,33 @@ var guardedHeaders = []string{"From", "List-Unsubscribe", "List-Unsubscribe-Post
 // held in memory only) and keeps the complete bytes for the DKIM check;
 // a message too big to hold, or one the daemon cannot make whole, leaves
 // whole nil and the check fails closed.
-func (b *Backend) unsubscribeSource(ctx context.Context, a store.Account, m store.Message, needWhole bool) (unsubSource, error) {
-	src := unsubSource{triedWhole: needWhole}
+func (b *Backend) unsubscribeSource(ctx context.Context, a store.Account, m store.Message, verify bool) (unsubSource, error) {
+	src := unsubSource{triedWhole: verify}
 	var head []byte
-	if needWhole {
+	graph := a.Config.Protocol() == api.AccountGraph
+	if verify && graph {
+		// Exchange's verdict is in the headers: the stored file's head
+		// will do, and the whole message is fetched only when there is
+		// none yet.
+		head = b.localHead(ctx, m)
+	}
+	if verify && head == nil {
 		whole, err := b.wholeMessage(ctx, a, m)
 		if err != nil {
 			return src, err
 		}
-		src.whole = whole
-		if len(whole) > headBytes {
-			head = whole[:headBytes]
-		} else {
-			head = whole
+		if !graph {
+			src.whole = whole
+		}
+		head = whole[:min(len(whole), headBytes)]
+		if whole == nil {
+			head = nil
 		}
 	}
 	if head == nil {
 		head = b.localHead(ctx, m)
 	}
+	src.head = head
 	if head == nil {
 		src.headers = m.Headers
 		return src, nil
@@ -317,8 +350,15 @@ func (b *Backend) wholeMessage(ctx context.Context, a store.Account, m store.Mes
 // unsubscribeOneClick verifies the message and sends the RFC 8058
 // request.
 func (b *Backend) unsubscribeOneClick(ctx context.Context, a store.Account, m store.Message, offer *bulk.Offer, src unsubSource) (*api.MessageUnsubscribeResult, error) {
-	if !b.dkimVerified(ctx, m, src) {
-		return &api.MessageUnsubscribeResult{Outcome: api.UnsubscribeOpenURL, URL: offer.URI, Unverified: true}, nil
+	if !b.oneClickVerified(ctx, a, m, src) {
+		// Nothing is sent and the one-click URL is never handed back (a
+		// one-click endpoint need not answer a GET); the message's mailto:
+		// address, if it has one, is what the client may offer instead.
+		res := &api.MessageUnsubscribeResult{Outcome: api.UnsubscribeUnverified}
+		if alt := bulk.MailtoAlternative(src.headers); alt != nil {
+			res.Mailto = alt.Target
+		}
+		return res, nil
 	}
 	post := b.OneClickPost
 	if post == nil {
@@ -413,6 +453,19 @@ func (b *Backend) unsubscribeMailto(ctx context.Context, a store.Account, m stor
 	}
 	b.log.Info("unsubscribe request queued", "account", a.ID, "message", queued.ID)
 	return &api.MessageUnsubscribeResult{Outcome: api.UnsubscribeQueued, UnsubscribedAt: &at}, nil
+}
+
+// oneClickVerified applies the verification rule of the account's kind.
+func (b *Backend) oneClickVerified(ctx context.Context, a store.Account, m store.Message, src unsubSource) bool {
+	if a.Config.Protocol() != api.AccountGraph {
+		return b.dkimVerified(ctx, m, src)
+	}
+	if src.head == nil || src.repeated || len(m.From) == 0 {
+		return false
+	}
+	fromDomain := bulk.Domain(m.From[0].Address)
+	v := mime.HeaderValues(bytes.NewReader(src.head), mime.DefaultLimits(), "Authentication-Results", "DKIM-Signature")
+	return bulk.ExchangeVerified(v["Authentication-Results"], v["DKIM-Signature"], fromDomain)
 }
 
 // dkimVerified says whether the complete message carries a valid DKIM

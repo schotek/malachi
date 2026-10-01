@@ -44,6 +44,13 @@ public interface IAlerts
     /// </summary>
     Task<bool> ConfirmAsync(Window? window, string heading, string body, string confirmLabel, string declineLabel);
 
+    /// <summary>
+    /// A message with a single button, <paramref name="closeLabel"/> (the
+    /// default and Escape): the bulk strip's "The sender could not be
+    /// verified" when there is no alternative to offer.
+    /// </summary>
+    Task InformAsync(Window? window, string heading, string body, string closeLabel);
+
     /// <summary>"Save changes to this draft?": Save Draft (the default) / Discard / Cancel.</summary>
     Task<DraftCloseAnswer> SaveDraftQuestionAsync(Window? window);
 
