@@ -476,6 +476,11 @@ and the notifications above are the same. What differs:
   mail; a window that shrank prunes incrementally), and a folder no pass
   has enumerated for a week. Without that, every start re-read every folder
   and the inbox waited behind them.
+  The inbox has a shorter backstop: after an incremental pass, at most
+  every ten minutes, its message count within the retention window is
+  compared with the server's (`$count`, or `totalItemCount` without a
+  window), and a mismatch makes the next inbox pass enumerate (at most once
+  an hour, `internal/graph/inbox_check.go`).
 - **Polling.** Graph offers no push a desktop can receive (change
   notifications need a public webhook), so the inbox is polled every minute
   and every folder at the sync interval; triggers interrupt the wait.

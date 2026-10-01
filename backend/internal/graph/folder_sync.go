@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"net/url"
+	"sort"
 	"sync"
 	"time"
 
@@ -24,12 +25,12 @@ import (
 // (MoveByRemoteID) rather than deleted and re-created.
 //
 // Without a stored delta cursor (first pass, a full resync, a cursor the
-// service rejected, or a folder no pass has enumerated for reconcileAfter)
-// the query enumerates the whole window; rows the server did not mention
-// are then gone as well.
+// service rejected, a folder no pass has enumerated for reconcileAfter, or
+// an inbox whose count check failed, checkInbox) the query enumerates the
+// whole window; rows the server did not mention are then gone as well.
 func (s *Syncer) syncFolder(ctx context.Context, f store.Folder, since time.Time, full bool, progress func(float64)) ([]string, error) {
 	initial := full || f.DeltaLink == "" || f.LastSyncAt.IsZero() ||
-		s.now().Sub(f.LastSyncAt) > reconcileAfter
+		s.now().Sub(f.LastSyncAt) > reconcileAfter || s.forceEnumerate[f.ID]
 	link := f.DeltaLink
 	if initial {
 		link = s.initialDeltaURL(f, since)
@@ -45,7 +46,10 @@ func (s *Syncer) syncFolder(ctx context.Context, f store.Folder, since time.Time
 
 	seen := map[string]bool{}
 	created := map[string]bool{}
-	var tombstones []string
+	// removed holds the ids whose last state in the stream is "removed":
+	// Graph may report an item more than once (moved out and back), and the
+	// latest report wins.
+	removed := map[string]bool{}
 	var deltaLink string
 	pages := 0
 	for next := link; next != ""; {
@@ -55,7 +59,7 @@ func (s *Syncer) syncFolder(ctx context.Context, f store.Folder, since time.Time
 			// The cursor is stale: start over for this folder.
 			s.log.Info("delta cursor rejected, resynchronising folder", "folder", f.ID)
 			initial, pages = true, 0
-			seen, created, tombstones = map[string]bool{}, map[string]bool{}, nil
+			seen, created, removed = map[string]bool{}, map[string]bool{}, map[string]bool{}
 			next = s.initialDeltaURL(f, since)
 			continue
 		}
@@ -69,10 +73,12 @@ func (s *Syncer) syncFolder(ctx context.Context, f store.Folder, since time.Time
 				continue
 			}
 			if m.Removed != nil {
-				tombstones = append(tombstones, m.ID)
+				removed[m.ID] = true
 				delete(seen, m.ID)
+				delete(created, m.ID)
 				continue
 			}
+			delete(removed, m.ID)
 			seen[m.ID] = true
 			exists := known[m.ID]
 			if !exists {
@@ -109,7 +115,7 @@ func (s *Syncer) syncFolder(ctx context.Context, f store.Folder, since time.Time
 		// the window.
 		for id := range known {
 			if !seen[id] {
-				tombstones = append(tombstones, id)
+				removed[id] = true
 			}
 		}
 	} else if !since.IsZero() {
@@ -117,8 +123,15 @@ func (s *Syncer) syncFolder(ctx context.Context, f store.Folder, since time.Time
 		if err != nil {
 			return nil, storageError(err)
 		}
-		tombstones = append(tombstones, old...)
+		for _, id := range old {
+			removed[id] = true
+		}
 	}
+	tombstones := make([]string, 0, len(removed))
+	for id := range removed {
+		tombstones = append(tombstones, id)
+	}
+	sort.Strings(tombstones)
 	// The counts come from the listing the caller put on f: committing them
 	// here, and only here, is what makes them a baseline a later pass can
 	// compare against (skippable).
@@ -126,6 +139,11 @@ func (s *Syncer) syncFolder(ctx context.Context, f store.Folder, since time.Time
 		DeltaLink: deltaLink, ServerMessages: f.ServerMessages, ServerUnseen: f.ServerUnseen, LastSyncAt: s.now(),
 	}); err != nil && !errors.Is(err, store.ErrNotFound) {
 		return nil, storageError(err)
+	}
+	if initial {
+		delete(s.forceEnumerate, f.ID)
+	} else if f.Role == api.RoleInbox {
+		s.inboxCheck = &f
 	}
 	progress(0.3)
 	// Bodies of messages created before this pass ran the first time are
@@ -150,7 +168,8 @@ func (s *Syncer) syncFolder(ctx context.Context, f store.Folder, since time.Time
 // one arrived) and it is the folder the user is looking at. The same hole
 // exists for the others — Graph's mailFolder carries no monotonic counter
 // to close it with, the way IMAP's UIDNEXT does — which is what
-// reconcileAfter is the backstop for.
+// reconcileAfter is the backstop for the others. For the inbox the count
+// check (checkInbox) is a much shorter one.
 func (s *Syncer) skippable(ctx context.Context, f, listed store.Folder) (bool, error) {
 	if f.Role == api.RoleInbox || f.DeltaLink == "" || f.LastSyncAt.IsZero() {
 		return false, nil

@@ -47,6 +47,9 @@ type fakeGraph struct {
 	staleTokens    bool // reject every delta token with 410
 	noPermanentDel bool // permanentDelete is unsupported (400)
 	failValue      map[string]int
+	deltaBlind     map[string]bool // ids an incremental delta never reports
+	countQueries   int             // $count requests answered
+	countExtra     int             // added to every $count answer
 }
 
 type fakeFolder struct {
@@ -69,7 +72,7 @@ type removal struct {
 
 func newFakeGraph(t *testing.T) *fakeGraph {
 	f := &fakeGraph{t: t, token: "tok-1", me: "me@contoso.invalid", pageSize: 2, messages: map[string]*fakeMsg{},
-		failValue: map[string]int{}, enumerations: map[string]int{}}
+		failValue: map[string]int{}, deltaBlind: map[string]bool{}, enumerations: map[string]int{}}
 	f.folders = []*fakeFolder{
 		// Listed before the inbox on purpose: the service answers in this
 		// order and the batch must not come out inbox-first by accident.
@@ -146,6 +149,25 @@ func (f *fakeGraph) edit(id string) {
 	f.messages[id].modified = time.Now().Add(time.Hour)
 }
 
+// reportRemoved makes the delta stream report the id as removed from the
+// folder although the message is still there, the way Graph reports an item
+// it also lists later (moved out and back). Where the report falls in the
+// stream follows the order of the calls: a message changed afterwards is
+// listed after it, one changed before is listed first.
+func (f *fakeGraph) reportRemoved(folder, id string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.removed = append(f.removed, removal{folder: folder, id: id, seq: f.bump()})
+}
+
+// blind makes incremental delta queries skip the message, as if the
+// service had never reported it; enumerations and counts still see it.
+func (f *fakeGraph) blind(id string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.deltaBlind[id] = true
+}
+
 func (f *fakeGraph) remove(id string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -214,6 +236,8 @@ func (f *fakeGraph) handle(w http.ResponseWriter, r *http.Request) {
 		f.listFolders(w, r, strings.TrimSuffix(strings.TrimPrefix(p, "/mailFolders/"), "/childFolders"))
 	case r.Method == "GET" && strings.HasPrefix(p, "/mailFolders/") && strings.HasSuffix(p, "/messages/delta"):
 		f.delta(w, r, strings.TrimSuffix(strings.TrimPrefix(p, "/mailFolders/"), "/messages/delta"))
+	case r.Method == "GET" && strings.HasPrefix(p, "/mailFolders/") && strings.HasSuffix(p, "/messages"):
+		f.countMessages(w, r, strings.TrimSuffix(strings.TrimPrefix(p, "/mailFolders/"), "/messages"))
 	case r.Method == "GET" && strings.HasPrefix(p, "/mailFolders/"):
 		name := strings.TrimPrefix(p, "/mailFolders/")
 		for _, fo := range f.folders {
@@ -373,6 +397,32 @@ func (f *fakeGraph) listFolders(w http.ResponseWriter, r *http.Request, parent s
 	f.reply(w, map[string]any{"value": out})
 }
 
+// countMessages answers the $count query: the number of messages of the
+// folder received at or after the $filter cutoff.
+func (f *fakeGraph) countMessages(w http.ResponseWriter, r *http.Request, folder string) {
+	q := r.URL.Query()
+	if q.Get("$count") != "true" {
+		f.fail(w, http.StatusBadRequest, "BadRequest", "only $count is handled")
+		return
+	}
+	var since time.Time
+	if flt := q.Get("$filter"); flt != "" {
+		var err error
+		if since, err = time.Parse(time.RFC3339, strings.TrimPrefix(flt, "receivedDateTime ge ")); err != nil {
+			f.fail(w, http.StatusBadRequest, "BadFilter", flt)
+			return
+		}
+	}
+	f.countQueries++
+	n := f.countExtra
+	for _, m := range f.messages {
+		if m.folder == folder && (since.IsZero() || !m.received.Before(since)) {
+			n++
+		}
+	}
+	f.reply(w, map[string]any{"@odata.count": n, "value": []any{}})
+}
+
 func (f *fakeGraph) delta(w http.ResponseWriter, r *http.Request, folder string) {
 	q := r.URL.Query()
 	sinceSeq := -1
@@ -409,7 +459,12 @@ func (f *fakeGraph) delta(w http.ResponseWriter, r *http.Request, folder string)
 		}
 	}
 	// Build the full change list, then page it.
-	var items []map[string]any
+	// The stream is in the order the changes happened.
+	type entry struct {
+		seq  int
+		item map[string]any
+	}
+	var entries []entry
 	var ids []string
 	for id := range f.messages {
 		ids = append(ids, id)
@@ -417,7 +472,7 @@ func (f *fakeGraph) delta(w http.ResponseWriter, r *http.Request, folder string)
 	sort.Strings(ids)
 	for _, id := range ids {
 		m := f.messages[id]
-		if m.folder != folder || m.version <= sinceSeq || (!since.IsZero() && m.received.Before(since)) {
+		if m.folder != folder || m.version <= sinceSeq || (sinceSeq >= 0 && f.deltaBlind[id]) || (!since.IsZero() && m.received.Before(since)) {
 			continue
 		}
 		item := map[string]any{
@@ -428,14 +483,19 @@ func (f *fakeGraph) delta(w http.ResponseWriter, r *http.Request, folder string)
 			"isRead": m.isRead, "isDraft": m.isDraft, "hasAttachments": false, "conversationId": m.conversation, "parentFolderId": m.folder,
 			"flag": map[string]string{"flagStatus": map[bool]string{true: "flagged", false: "notFlagged"}[m.flagged]},
 		}
-		items = append(items, item)
+		entries = append(entries, entry{m.version, item})
 	}
 	if sinceSeq >= 0 {
 		for _, rm := range f.removed {
 			if rm.folder == folder && rm.seq > sinceSeq {
-				items = append(items, map[string]any{"id": rm.id, "@removed": map[string]string{"reason": "deleted"}})
+				entries = append(entries, entry{rm.seq, map[string]any{"id": rm.id, "@removed": map[string]string{"reason": "deleted"}}})
 			}
 		}
+	}
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].seq < entries[j].seq })
+	items := make([]map[string]any, len(entries))
+	for i, e := range entries {
+		items[i] = e.item
 	}
 	end := min(len(items), skip+f.pageSize)
 	pg := map[string]any{"value": items[skip:end]}
@@ -462,4 +522,19 @@ func (f *fakeGraph) fail(w http.ResponseWriter, status int, code, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"code": code, "message": msg}})
+}
+
+// countQueried is how many $count requests the service answered.
+func (f *fakeGraph) countQueried() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.countQueries
+}
+
+// skewCounts makes every $count answer n too high, a mailbox whose count
+// no enumeration can reconcile.
+func (f *fakeGraph) skewCounts(n int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.countExtra = n
 }

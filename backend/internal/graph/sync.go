@@ -29,6 +29,8 @@ const (
 	// honour comes back as 410 and restarts the folder — so this only
 	// repairs drift the delta stream cannot report (an interrupted pass, a
 	// local bug) and must stay rare: it costs one enumeration per folder.
+	// The inbox has a shorter backstop of its own, the count check
+	// (checkInbox).
 	reconcileAfter = 7 * 24 * time.Hour
 
 	backoffMin    = 5 * time.Second // first retry delay after a failure
@@ -123,6 +125,13 @@ type Syncer struct {
 	lastSince time.Time
 	passes    int
 	inboxID   string
+
+	// The inbox count check (inbox_check.go).
+	inboxCheck     *store.Folder   // inbox this pass read incrementally
+	forceEnumerate map[string]bool // folder id → next pass enumerates
+	checkedAt      map[string]time.Time
+	forcedAt       map[string]time.Time
+	gaveUp         map[string]bool
 }
 
 // NewSyncer prepares a syncer; nothing runs until Run.
@@ -142,6 +151,11 @@ func NewSyncer(account store.Account, deps Deps) *Syncer {
 		log:     deps.Log.With("component", "graph", "account", account.ID),
 		wake:    make(chan struct{}, 1),
 		state:   api.SyncState{AccountID: api.AccountID(account.ID), Status: api.SyncIdle, Progress: -1},
+
+		forceEnumerate: map[string]bool{},
+		checkedAt:      map[string]time.Time{},
+		forcedAt:       map[string]time.Time{},
+		gaveUp:         map[string]bool{},
 	}
 	s.client = NewClient(Options{
 		BaseURL: deps.BaseURL, HTTP: deps.HTTP, Token: deps.Token, Invalidate: deps.Invalidate,
@@ -297,6 +311,7 @@ func (s *Syncer) Run(ctx context.Context) error {
 func (s *Syncer) cycle(ctx context.Context, req request) error {
 	prefs := s.prefs()
 	since := s.windowSince(prefs.OfflineDays)
+	s.inboxCheck = nil
 	// The retention window can only change while the daemon runs (it takes
 	// config.set), so the first pass of a process has nothing to compare
 	// with: the stored delta cursors are still good and are kept.
@@ -436,6 +451,10 @@ func (s *Syncer) cycle(ctx context.Context, req request) error {
 		if _, _, err := s.deps.Store.RecountFolder(ctx, folderID); err != nil && !errors.Is(err, store.ErrNotFound) {
 			return storageError(err)
 		}
+	}
+	if s.inboxCheck != nil {
+		s.checkInbox(ctx, *s.inboxCheck, since)
+		s.inboxCheck = nil
 	}
 	s.lastSince = since
 	s.passes++

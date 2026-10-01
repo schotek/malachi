@@ -450,6 +450,23 @@ func (s *Store) ListRemoteIDsOlderThan(ctx context.Context, folderID string, bef
 		folderID, before.UTC().Format(timeLayout))
 }
 
+// CountMessagesSince counts the messages of a folder whose internal date
+// (the server's received time) is at or after the cutoff; a zero cutoff
+// counts them all. It is the local side of a retention-window comparison
+// with a server count.
+func (s *Store) CountMessagesSince(ctx context.Context, folderID string, since time.Time) (int, error) {
+	query, args := `SELECT COUNT(*) FROM messages WHERE folder_id = ?`, []any{folderID}
+	if !since.IsZero() {
+		query += ` AND internal_date >= ?`
+		args = append(args, since.UTC().Format(timeLayout))
+	}
+	var n int
+	if err := s.db.QueryRowContext(ctx, query, args...).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count messages: %w", err)
+	}
+	return n, nil
+}
+
 func (s *Store) listRemoteIDs(ctx context.Context, query string, args ...any) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {

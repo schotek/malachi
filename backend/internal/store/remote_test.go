@@ -129,6 +129,19 @@ func TestRemoteFlagsMoveAndDelete(t *testing.T) {
 	if ids, _ := s.ListRemoteIDs(ctx, inbox.ID); fmt.Sprint(ids) != "[AAkA0 AAkA1]" {
 		t.Fatalf("remote ids = %v", ids)
 	}
+	// The window count: bounded by the cutoff, everything without one.
+	if n, err := s.CountMessagesSince(ctx, inbox.ID, day.AddDate(0, 0, -30)); err != nil || n != 1 {
+		t.Fatalf("count in window = %d, %v", n, err)
+	}
+	if n, err := s.CountMessagesSince(ctx, inbox.ID, day); err != nil || n != 1 {
+		t.Fatalf("count at the cutoff = %d, %v", n, err)
+	}
+	if n, err := s.CountMessagesSince(ctx, inbox.ID, time.Time{}); err != nil || n != 2 {
+		t.Fatalf("count unbounded = %d, %v", n, err)
+	}
+	if n, err := s.CountMessagesSince(ctx, archive.ID, time.Time{}); err != nil || n != 0 {
+		t.Fatalf("count of another folder = %d, %v", n, err)
+	}
 
 	// A server-side move keeps the local id and recounts both folders.
 	moved, err := s.MoveByRemoteID(ctx, "acc", "AAkA1", archive.ID)
