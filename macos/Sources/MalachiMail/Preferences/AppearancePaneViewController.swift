@@ -19,6 +19,8 @@ import MalachiCore
 final class AppearancePaneViewController: PreferencesPaneViewController {
     // Theme
     let colorScheme = NSPopUpButton(frame: .zero, pullsDown: false)
+    /// macOS only: `ui-text-size`, read at launch.
+    let textSize = NSPopUpButton(frame: .zero, pullsDown: false)
     // Message List
     let density = NSPopUpButton(frame: .zero, pullsDown: false)
     let groupByConversation = NSSwitch()
@@ -35,12 +37,16 @@ final class AppearancePaneViewController: PreferencesPaneViewController {
         set {
             if newValue {
                 bindings.close()
+                textSizeToken?.cancel()
+                textSizeToken = nil
             }
         }
     }
 
     private var settings: Settings?
     private let bindings = PreferenceBindingSet()
+    /// The text size changed here: the restart is offered (macOS only).
+    private var textSizeToken: Settings.ChangeToken?
     private var bound = false
 
     init(settings: Settings? = nil) {
@@ -66,8 +72,16 @@ final class AppearancePaneViewController: PreferencesPaneViewController {
 
         let theme = PreferencesGroupView(title: L10n.T("Theme"))
         colorScheme.addItems(withTitles: [L10n.T("Follow System"), L10n.T("Light"), L10n.T("Dark")])
+        textSize.addItems(withTitles: [
+            "Standard", // macOS-only string
+            "Larger", // macOS-only string
+        ])
         theme.setRows([
             PreferenceRowView(title: L10n.T("Color Scheme"), trailing: colorScheme),
+            PreferenceRowView(
+                title: "Text Size", // macOS-only string
+                subtitle: "Applies after Malachi Mail is restarted", // macOS-only string
+                trailing: textSize),
         ])
         addGroup(theme)
 
@@ -103,12 +117,35 @@ final class AppearancePaneViewController: PreferencesPaneViewController {
         bindings.watch(view.window)
     }
 
+    // MARK: Restart
+
+    /// A text size other than this run's applies after a restart: the
+    /// sheet offers it at once; Later keeps the choice for the next launch.
+    private func offerRestart() {
+        guard !closed, let settings, settings.uiTextSize != Typo.size,
+              Relaunch.available, let window = view.window, window.attachedSheet == nil else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "Restart Malachi Mail now?" // macOS-only string
+        alert.informativeText = "The new text size applies after a restart." // macOS-only string
+        let restart = alert.addButton(withTitle: "Restart Now") // macOS-only string
+        restart.keyEquivalent = "\r"
+        let later = alert.addButton(withTitle: "Later") // macOS-only string
+        later.keyEquivalent = "\u{1b}"
+        alert.beginSheetModal(for: window) { response in
+            guard response == .alertFirstButtonReturn else { return }
+            MainActor.assumeIsolated { Relaunch.now() }
+        }
+    }
+
     // MARK: Bindings
 
     private func bindIfReady() {
         guard !bound, isViewLoaded, !closed, let settings else { return }
         bound = true
         bindings.add(.bind(colorScheme, to: settings, .colorScheme, choices: colorSchemeChoices, \.colorScheme))
+        bindings.add(.bind(textSize, to: settings, .uiTextSize, choices: textSizeChoices, \.uiTextSize))
+        textSizeToken = settings.onChange(.uiTextSize) { [weak self] in self?.offerRestart() }
         bindings.add(.bind(density, to: settings, .density, choices: densityChoices, \.density))
         bindings.add(.bind(groupByConversation, to: settings, .groupByConversation, \.groupByConversation))
         bindings.add(.bind(showPreviewLine, to: settings, .showPreviewLine, \.showPreviewLine))

@@ -14,7 +14,7 @@ import MalachiCore
 @MainActor
 final class AssistantInputView: NSView, NSTextViewDelegate {
     static let maxLines = 5
-    static let fontSize: CGFloat = 13
+    static var fontSize: CGFloat { Typo.bodySize }
     static let textInset = NSSize(width: 4, height: 5)
     static let cornerRadius: CGFloat = 8
 

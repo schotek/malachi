@@ -65,7 +65,7 @@ final class ConversationCardHeader: NSView {
         setContentHuggingPriority(.required, for: .vertical)
         setContentCompressionResistancePriority(.required, for: .vertical)
 
-        senderLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        senderLabel.font = Typo.bodyMedium
         senderLabel.textColor = .labelColor
         dateLabel.font = Typo.caption
         dateLabel.textColor = Tint.secondary

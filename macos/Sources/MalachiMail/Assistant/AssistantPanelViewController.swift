@@ -157,7 +157,7 @@ final class AssistantPanelViewController: NSViewController {
         transcript.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
 
         // The waiting action over the field, with a button that drops it.
-        pendingLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        pendingLabel.font = .systemFont(ofSize: Typo.small, weight: .medium)
         pendingLabel.textColor = .secondaryLabelColor
         pendingLabel.lineBreakMode = .byTruncatingTail
         pendingLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -412,7 +412,7 @@ final class AssistantContextChip: NSView {
         symbol.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         label.translatesAutoresizingMaskIntoConstraints = false
-        label.font = .systemFont(ofSize: 11)
+        label.font = .systemFont(ofSize: Typo.small)
         label.lineBreakMode = .byTruncatingTail
         label.maximumNumberOfLines = 1
         // Above the stack's hugging, below the row's edge: a subject is cut

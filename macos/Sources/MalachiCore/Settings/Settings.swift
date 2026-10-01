@@ -5,7 +5,8 @@ import Foundation
 
 /// UI-only preferences over `UserDefaults`, the counterpart of
 /// ui/internal/settings (GSettings). The keys and defaults are those of
-/// data/io.github.schotek.Malachi.gschema.xml; `command-r` is macOS-only.
+/// data/io.github.schotek.Malachi.gschema.xml; `command-r` and
+/// `ui-text-size` are macOS-only.
 /// Only presentation options belong here; anything that affects mail
 /// handling is the daemon's and goes through config.get/config.set.
 ///
@@ -45,6 +46,9 @@ public final class Settings {
         case assistantConsent = "assistant-consent"
         /// macOS only: what ⌘R does (Settings → General → Keyboard).
         case commandR = "command-r"
+        /// macOS only: the size of the window text (`Typo`, Settings →
+        /// Appearance → Theme), read once at launch.
+        case uiTextSize = "ui-text-size"
     }
 
     public enum ColorScheme: String, Sendable, CaseIterable {
@@ -65,6 +69,13 @@ public final class Settings {
     /// `refresh` follows the GTK UI (⌘R checks for mail, ⌥⌘R replies).
     public enum CommandR: String, Sendable, CaseIterable {
         case reply, refresh
+    }
+
+    /// `standard` is the original port of libadwaita's sizes (13 pt body,
+    /// 10 pt captions); `larger` raises the small text toward what GTK draws
+    /// (its points are at 96 DPI) and what other Mac mail clients use.
+    public enum TextSize: String, Sendable, CaseIterable {
+        case standard, larger
     }
 
     /// Bounds of the numeric keys; must match the gschema's `<range>`.
@@ -100,6 +111,7 @@ public final class Settings {
             Key.assistantClaudePath.rawValue: "",
             Key.assistantConsent.rawValue: false,
             Key.commandR.rawValue: CommandR.reply.rawValue,
+            Key.uiTextSize.rawValue: TextSize.larger.rawValue,
         ]
     }
 
@@ -187,6 +199,12 @@ public final class Settings {
     }
 
     // MARK: Appearance
+
+    /// The window text size; the app reads it at launch only.
+    public var uiTextSize: TextSize {
+        get { TextSize(rawValue: string(.uiTextSize)) ?? .larger }
+        set { set(.uiTextSize, newValue.rawValue) }
+    }
 
     public var colorScheme: ColorScheme {
         get { ColorScheme(rawValue: string(.colorScheme)) ?? .system }

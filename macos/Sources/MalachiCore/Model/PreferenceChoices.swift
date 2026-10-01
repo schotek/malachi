@@ -13,6 +13,9 @@ public let colorSchemeChoices: [Settings.ColorScheme] = [.system, .light, .dark]
 /// Density entries, in pop-up order.
 public let densityChoices: [Settings.Density] = [.comfortable, .compact]
 
+/// Text size entries (macOS only), in pop-up order.
+public let textSizeChoices: [Settings.TextSize] = [.standard, .larger]
+
 /// Check for New Mail: Manually, 5, 15, 30 minutes, in seconds.
 public let intervalChoices: [Int] = [0, 300, 900, 1800]
 

@@ -47,7 +47,7 @@ final class IssueCardView: NSView {
 
     /// The key's font: the size of a message's subject (Typo.title2Bold),
     /// which the card stands in for.
-    private static let keyFont = NSFont.monospacedDigitSystemFont(ofSize: Typo.title2Bold.pointSize, weight: .bold)
+    private static var keyFont: NSFont { NSFont.monospacedDigitSystemFont(ofSize: Typo.title2Bold.pointSize, weight: .bold) }
 
     /// The widest a field's value gets before it is truncated: a name from
     /// the site can be long, and the flow never truncates by itself.

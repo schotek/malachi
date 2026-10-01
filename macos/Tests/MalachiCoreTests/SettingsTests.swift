@@ -42,6 +42,7 @@ private final class Scratch {
         #expect(!s.notificationSound)
         #expect(s.markReadDelay == 2)
         #expect(s.commandR == .reply)
+        #expect(s.uiTextSize == .larger)
         #expect(s.collapsedFolders.isEmpty)
         #expect(s.collapsedAccounts.isEmpty)
         #expect(s.favouriteFolders.isEmpty)
@@ -53,7 +54,7 @@ private final class Scratch {
         #expect(s.assistantModel == .sonnet)
         #expect(s.assistantClaudePath == "")
         #expect(!s.assistantConsent)
-        #expect(Settings.Key.allCases.count == 24)
+        #expect(Settings.Key.allCases.count == 25)
         #expect(Set(Settings.registrationDefaults().keys) == Set(Settings.Key.allCases.map(\.rawValue)))
     }
 
@@ -139,6 +140,10 @@ private final class Scratch {
         #expect(s.commandR == .reply)
         s.commandR = .refresh
         #expect(s.commandR == .refresh)
+        scratch.defaults.set("huge", forKey: "ui-text-size")
+        #expect(s.uiTextSize == .larger)
+        s.uiTextSize = .standard
+        #expect(s.uiTextSize == .standard)
     }
 
     @Test func handlerMayRemoveItself() {

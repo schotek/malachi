@@ -45,20 +45,21 @@ enum SidebarIcons {
 /// The sidebar's sizes, from window.blp and ui/internal/style/style.go
 /// (`.folder-list`, `.folder-row`, `.folder-twisty`, `.folder-star`).
 enum SidebarMetrics {
-    /// `row.folder-row { min-height: 24px }`.
-    static let rowHeight: CGFloat = 24
+    /// `row.folder-row { min-height: 24px }`; 26 for the larger text
+    /// (`Typo.size`).
+    @MainActor static var rowHeight: CGFloat { Typo.size == .larger ? 26 : 24 }
     /// A pinned folder's row with the account under its name.
-    static let subtitleRowHeight: CGFloat = 34
+    @MainActor static var subtitleRowHeight: CGFloat { Typo.size == .larger ? 38 : 34 }
     /// A heading: a row plus the gap above it (folders.go `folderHeadingGap`).
-    static let headerRowHeight: CGFloat = 27
+    @MainActor static var headerRowHeight: CGFloat { Typo.size == .larger ? 29 : 27 }
     /// folders.go `folderIndent`.
     static let indentPerLevel: CGFloat = 12
     /// `list.folder-list image { -gtk-icon-size: 14px }`: a 12 pt symbol.
-    static let iconPointSize: CGFloat = 12
-    /// The title box at 88 % of the 13 pt body.
-    static let titleFontSize: CGFloat = 11.5
+    @MainActor static var iconPointSize: CGFloat { Typo.size == .larger ? 13 : 12 }
+    /// The title box at 88 % of the body (`Typo.sidebarTitleSize`).
+    @MainActor static var titleFontSize: CGFloat { Typo.sidebarTitleSize }
     /// `.caption` for the subtitle and the badge.
-    static let captionFontSize: CGFloat = 10
+    @MainActor static var captionFontSize: CGFloat { Typo.sidebarCaptionSize }
     /// `button.folder-star { min-width: 18px; min-height: 18px }`.
     static let starSize: CGFloat = 18
     /// The horizontal spacing inside a row.

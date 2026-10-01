@@ -185,13 +185,13 @@ final class SidebarHeaderCellView: NSTableCellView {
     init() {
         super.init(frame: .zero)
         identifier = SidebarHeaderCellView.reuseIdentifier
-        label.font = .systemFont(ofSize: 11, weight: .bold)
+        label.font = Typo.sidebarHeading
         label.textColor = .secondaryLabelColor
         label.lineBreakMode = .byTruncatingTail
         label.maximumNumberOfLines = 1
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         textField = label
-        kindBadge.font = .systemFont(ofSize: 9, weight: .semibold)
+        kindBadge.font = Typo.sidebarKindBadge
         kindBadge.textColor = .secondaryLabelColor
         kindBadge.isHidden = true
         let row = NSStackView(views: [label, kindBadge])

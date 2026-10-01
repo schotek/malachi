@@ -36,8 +36,10 @@ enum RowMetrics {
     static let memberIndent: CGFloat = 24
     static let avatarComfortable: CGFloat = 40
     static let avatarCompact: CGFloat = 28
-    static let marginComfortable: CGFloat = 8
-    static let marginCompact: CGFloat = 3
+    /// The space above and below a row's text; more with the larger text
+    /// (`Typo.size`, macOS only).
+    @MainActor static var marginComfortable: CGFloat { Typo.size == .larger ? 13 : 8 }
+    @MainActor static var marginCompact: CGFloat { Typo.size == .larger ? 6 : 3 }
     /// `content_box` spacing, the column's spacing, the first line's.
     static let contentSpacing: CGFloat = 12
     static let columnSpacing: CGFloat = 2

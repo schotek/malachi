@@ -25,7 +25,7 @@ enum AssistantMarkdownRenderer {
     /// Joins the lines of one block without starting a new paragraph.
     static let lineSeparator = String(Character(Unicode.Scalar(UInt32(0x2028)) ?? "\n"))
 
-    static let bodySize: CGFloat = 13
+    static var bodySize: CGFloat { Typo.bodySize }
     /// The indentation of one list level, and of the text after a marker.
     static let listIndent: CGFloat = 14
 
@@ -50,7 +50,7 @@ enum AssistantMarkdownRenderer {
         case .paragraph:
             break
         case .heading:
-            base = .systemFont(ofSize: b.level == 1 ? 16 : b.level == 2 ? 14.5 : bodySize, weight: .bold)
+            base = .systemFont(ofSize: b.level == 1 ? bodySize + 3 : b.level == 2 ? bodySize + 1.5 : bodySize, weight: .bold)
             para.paragraphSpacingBefore = 4
             para.paragraphSpacing = 4
         case .bullet, .numbered:

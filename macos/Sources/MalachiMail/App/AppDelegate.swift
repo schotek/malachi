@@ -30,6 +30,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         L10n.catalogue = Catalogue.default()
         // Settings() registers the gschema defaults with UserDefaults.standard.
         let settings = Settings()
+        // The text size of this run, before any view exists; a change in
+        // Settings applies at the next launch (Typo).
+        Typo.size = settings.uiTextSize
         // Attachments a previous run wrote for opening (docs/security.md §8).
         purgeOpenDir()
 

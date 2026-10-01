@@ -18,11 +18,11 @@ final class SidebarStatusView: NSView {
         icon.imageScaling = .scaleNone
         icon.contentTintColor = .secondaryLabelColor
 
-        title.font = .systemFont(ofSize: 15, weight: .bold)
+        title.font = Typo.sidebarStatusTitle
         title.alignment = .center
         title.isSelectable = false
 
-        details.font = .systemFont(ofSize: 12)
+        details.font = Typo.sidebarStatusDetails
         details.textColor = .secondaryLabelColor
         details.alignment = .center
         details.isSelectable = false
