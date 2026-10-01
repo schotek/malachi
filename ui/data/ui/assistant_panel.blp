@@ -16,6 +16,14 @@ Adw.ToolbarView assistant_panel {
   Adw.HeaderBar {
     title-widget: Adw.WindowTitle assistant_title {};
 
+    // Folds the panel; tooltip from Go. While the panel is folded the
+    // message pane's assistant_panel_button (window.blp) stands in its
+    // place at the window's edge.
+    [start]
+    Button assistant_panel_hide {
+      icon-name: "sidebar-show-right-symbolic";
+    }
+
     [end]
     Button assistant_new {
       icon-name: "document-edit-symbolic";

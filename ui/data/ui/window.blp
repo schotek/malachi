@@ -44,7 +44,8 @@ Adw.ApplicationWindow main_window {
   // The assistant panel (ui/internal/assistant, the In App target) on the
   // right: window/assistant_panel.go puts assistant_panel.blp into
   // assistant_panel_bin and shows it while the Assistant is on and In
-  // App chosen; the message pane's toggle opens and folds it.
+  // App chosen; the message pane's toggle opens it and the panel's own
+  // Hide button folds it.
   content: Adw.OverlaySplitView assistant_split {
     sidebar-position: end;
     show-sidebar: false;
@@ -484,6 +485,21 @@ Adw.ApplicationWindow main_window {
 
                 // [end] packs right to left: the first child is rightmost.
 
+                // Opens the assistant panel: the header bar's end, in a
+                // group of its own (the margin), as the inspector toggle of
+                // the macOS toolbar. Shown only while the panel may be
+                // shown and is folded (window/assistant_panel.go); an open
+                // panel has the Hide button in its own header bar
+                // (assistant_panel.blp), over the panel, not among the
+                // message actions.
+                [end]
+                ToggleButton assistant_panel_button {
+                  icon-name: "sidebar-show-right-symbolic";
+                  visible: false;
+                  margin-start: 12;
+                  active: bind assistant_split.show-sidebar bidirectional;
+                }
+
                 [end]
                 MenuButton message_menu {
                   icon-name: "view-more-symbolic";
@@ -496,15 +512,6 @@ Adw.ApplicationWindow main_window {
                 [end]
                 MenuButton assistant_button {
                   visible: false;
-                }
-
-                // Opens and folds the assistant panel; tooltip and visibility
-                // from Go (window/assistant_panel.go).
-                [end]
-                ToggleButton assistant_panel_button {
-                  icon-name: "sidebar-show-right-symbolic";
-                  visible: false;
-                  active: bind assistant_split.show-sidebar bidirectional;
                 }
 
                 [end]

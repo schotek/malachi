@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-01 13:31+0200\n"
+"POT-Creation-Date: 2026-10-01 13:40+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -896,7 +896,7 @@ msgid "Attaching %s"
 msgstr ""
 
 #: ui/internal/compose/compose.go:622 ui/internal/jira/settings.go:123
-#: ui/internal/window/assistant_panel.go:176
+#: ui/internal/window/assistant_panel.go:182
 msgid "Remove"
 msgstr ""
 
@@ -962,7 +962,7 @@ msgid "Save changes to this draft?"
 msgstr ""
 
 #: ui/internal/compose/draft.go:499 ui/internal/widget/consent.go:23
-#: ui/internal/widget/rpc.go:193 ui/internal/window/assistant_panel.go:195
+#: ui/internal/widget/rpc.go:193 ui/internal/window/assistant_panel.go:201
 #: ui/internal/window/remote.go:266 ui/internal/window/remote.go:292
 #: ui/data/ui/account_wizard.ui:401 ui/data/ui/jira_account.ui:25
 msgid "_Cancel"
@@ -1178,7 +1178,7 @@ msgstr ""
 
 #. TRANSLATORS: menu item; "Jira" is a product name.
 #: ui/internal/jira/wizard.go:78 ui/data/ui/preferences.ui:366
-#: ui/data/ui/window.ui:627
+#: ui/data/ui/window.ui:628
 msgid "Add _Jira Account…"
 msgstr ""
 
@@ -1527,7 +1527,7 @@ msgstr ""
 
 #. TRANSLATORS: menu of the status changes a Jira issue allows.
 #: ui/internal/jira/transitions.go:87 ui/data/ui/message_window.ui:435
-#: ui/data/ui/window.ui:959
+#: ui/data/ui/window.ui:960
 msgid "Change Status"
 msgstr ""
 
@@ -2008,7 +2008,7 @@ msgid "Unstar"
 msgstr ""
 
 #: ui/internal/window/actions.go:64 ui/data/ui/message_window.ui:68
-#: ui/data/ui/window.ui:482
+#: ui/data/ui/window.ui:483
 msgid "Star"
 msgstr ""
 
@@ -2121,7 +2121,7 @@ msgstr ""
 msgid "_Copy Address"
 msgstr ""
 
-#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:911
+#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:912
 msgid "_New Message"
 msgstr ""
 
@@ -2134,16 +2134,16 @@ msgid_plural "+%d more"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/assistant_panel.go:406 ui/data/ui/compose.ui:66
+#: ui/internal/window/assistant_panel.go:412 ui/data/ui/compose.ui:66
 msgid "_Send"
 msgstr ""
 
-#: ui/internal/window/assistant_panel.go:647 ui/internal/window/status.go:321
+#: ui/internal/window/assistant_panel.go:653 ui/internal/window/status.go:321
 #: ui/data/ui/window.ui:411
 msgid "Try Again"
 msgstr ""
 
-#: ui/internal/window/assistant_panel.go:939 ui/internal/window/drafts.go:77
+#: ui/internal/window/assistant_panel.go:945 ui/internal/window/drafts.go:77
 msgid "Opening the draft"
 msgstr ""
 
@@ -2152,7 +2152,7 @@ msgid "Files inside an attached message cannot be opened or saved yet."
 msgstr ""
 
 #: ui/internal/window/attachments.go:185 ui/data/ui/message_window.ui:56
-#: ui/data/ui/window.ui:463
+#: ui/data/ui/window.ui:471
 msgid "More Actions"
 msgstr ""
 
@@ -2272,19 +2272,19 @@ msgstr ""
 
 #: ui/internal/window/conversation_card.go:507 ui/data/ui/compose.ui:110
 #: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:195
-#: ui/data/ui/window.ui:681
+#: ui/data/ui/window.ui:682
 msgid "From"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:507 ui/data/ui/compose.ui:138
 #: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:221
-#: ui/data/ui/window.ui:707
+#: ui/data/ui/window.ui:708
 msgid "To"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:507 ui/data/ui/compose.ui:176
 #: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:249
-#: ui/data/ui/window.ui:735
+#: ui/data/ui/window.ui:736
 msgid "Cc"
 msgstr ""
 
@@ -2302,22 +2302,22 @@ msgstr ""
 
 #: ui/internal/window/conversation_card.go:691 ui/data/ui/embedded_window.ui:61
 #: ui/data/ui/message_window.ui:115 ui/data/ui/message_window.ui:425
-#: ui/data/ui/window.ui:540 ui/data/ui/window.ui:949
+#: ui/data/ui/window.ui:541 ui/data/ui/window.ui:950
 msgid "Load _Images"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:692 ui/data/ui/message_window.ui:121
-#: ui/data/ui/window.ui:546
+#: ui/data/ui/window.ui:547
 msgid "Always From This _Sender"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:693 ui/data/ui/message_window.ui:123
-#: ui/data/ui/window.ui:548
+#: ui/data/ui/window.ui:549
 msgid "Load remote images now and whenever this sender writes"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:713 ui/data/ui/message_window.ui:152
-#: ui/data/ui/window.ui:577
+#: ui/data/ui/window.ui:578
 msgid "_Download Pictures"
 msgstr ""
 
@@ -2416,7 +2416,7 @@ msgid_plural "%d unread of %d"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/folders.go:414 ui/data/ui/window.ui:606
+#: ui/internal/window/folders.go:414 ui/data/ui/window.ui:607
 msgid "No Accounts"
 msgstr ""
 
@@ -2555,7 +2555,7 @@ msgid "Cancel Sending"
 msgstr ""
 
 #: ui/internal/window/outbox.go:242 ui/data/ui/message_window.ui:74
-#: ui/data/ui/window.ui:489
+#: ui/data/ui/window.ui:490
 msgid "Move to Trash"
 msgstr ""
 
@@ -3240,7 +3240,7 @@ msgid "Right"
 msgstr ""
 
 #: ui/data/ui/conversation_view.ui:77 ui/data/ui/embedded_window.ui:267
-#: ui/data/ui/message_window.ui:358 ui/data/ui/window.ui:843
+#: ui/data/ui/message_window.ui:358 ui/data/ui/window.ui:844
 msgctxt "accessibility"
 msgid "Loading the message"
 msgstr ""
@@ -3253,23 +3253,23 @@ msgstr ""
 msgid "Message"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:81 ui/data/ui/window.ui:497
+#: ui/data/ui/message_window.ui:81 ui/data/ui/window.ui:498
 msgid "Archive"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:409 ui/data/ui/window.ui:933
+#: ui/data/ui/message_window.ui:409 ui/data/ui/window.ui:934
 msgid "Mark as Junk"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:415 ui/data/ui/window.ui:939
+#: ui/data/ui/message_window.ui:415 ui/data/ui/window.ui:940
 msgid "Mark as _Unread"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:419 ui/data/ui/window.ui:943
+#: ui/data/ui/message_window.ui:419 ui/data/ui/window.ui:944
 msgid "Mark as _Read"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:429 ui/data/ui/window.ui:953
+#: ui/data/ui/message_window.ui:429 ui/data/ui/window.ui:954
 msgid "Always Load Images From This _Sender"
 msgstr ""
 
@@ -3550,7 +3550,7 @@ msgid ""
 "computer"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:362 ui/data/ui/window.ui:615
+#: ui/data/ui/preferences.ui:362 ui/data/ui/window.ui:616
 msgid "_Add Account…"
 msgstr ""
 
@@ -3605,35 +3605,35 @@ msgstr ""
 msgid "Load More"
 msgstr ""
 
-#: ui/data/ui/window.ui:510
+#: ui/data/ui/window.ui:511
 msgid "This message is a draft"
 msgstr ""
 
-#: ui/data/ui/window.ui:511
+#: ui/data/ui/window.ui:512
 msgid "Edit"
 msgstr ""
 
-#: ui/data/ui/window.ui:594
+#: ui/data/ui/window.ui:595
 msgid "No Message Selected"
 msgstr ""
 
-#: ui/data/ui/window.ui:595
+#: ui/data/ui/window.ui:596
 msgid "Select a message to read it here."
 msgstr ""
 
-#: ui/data/ui/window.ui:607
+#: ui/data/ui/window.ui:608
 msgid "Add a mail account to start reading and sending mail."
 msgstr ""
 
-#: ui/data/ui/window.ui:917
+#: ui/data/ui/window.ui:918
 msgid "_Preferences"
 msgstr ""
 
-#: ui/data/ui/window.ui:921
+#: ui/data/ui/window.ui:922
 msgid "_Keyboard Shortcuts"
 msgstr ""
 
-#: ui/data/ui/window.ui:925
+#: ui/data/ui/window.ui:926
 msgid "_About Malachi Mail"
 msgstr ""
 

@@ -98,7 +98,10 @@ type assistantPanel struct {
 	w      *Window
 	ctl    *assistantpanel.Controller
 	split  *adw.OverlaySplitView
+	// toggle opens the panel from the message pane's header bar; hide
+	// folds it from the panel's own.
 	toggle *gtk.ToggleButton
+	hide   *gtk.Button
 
 	title        *adw.WindowTitle
 	newButton    *gtk.Button
@@ -130,6 +133,7 @@ func newAssistantPanel(w *Window, b *gtk.Builder) *assistantPanel {
 		w:            w,
 		split:        b.GetObject("assistant_split").Cast().(*adw.OverlaySplitView),
 		toggle:       b.GetObject("assistant_panel_button").Cast().(*gtk.ToggleButton),
+		hide:         pb.GetObject("assistant_panel_hide").Cast().(*gtk.Button),
 		title:        pb.GetObject("assistant_title").Cast().(*adw.WindowTitle),
 		newButton:    pb.GetObject("assistant_new").Cast().(*gtk.Button),
 		chipIcon:     pb.GetObject("assistant_chip_icon").Cast().(*gtk.Image),
@@ -173,6 +177,8 @@ func newAssistantPanel(w *Window, b *gtk.Builder) *assistantPanel {
 	p.title.SetTitle(texts.Assistant)
 	p.newButton.SetTooltipText(panel.NewConversation)
 	p.newButton.ConnectClicked(p.ctl.NewConversation)
+	p.hide.SetTooltipText(panel.Hide)
+	p.hide.ConnectClicked(func() { p.split.SetShowSidebar(false) })
 	p.chipRemove.SetTooltipText(i18n.T("Remove"))
 	p.chipRemove.ConnectClicked(p.ctl.RemoveContext)
 	actions := pb.GetObject("assistant_actions").Cast().(*adw.WrapBox)
@@ -214,23 +220,23 @@ func (p *assistantPanel) close() {
 	p.ctl.Close()
 }
 
-// syncShown shows the toggle while the panel may be shown, and folds the
-// panel when it may not.
+// syncShown folds the panel when it may not be shown and brings the
+// toggle up to date.
 func (p *assistantPanel) syncShown() {
-	shown := p.w.assist.panelShown()
-	p.toggle.SetVisible(shown)
-	if !shown {
+	if !p.w.assist.panelShown() {
 		p.split.SetShowSidebar(false)
 	}
+	p.updateToggle()
 }
 
+// updateToggle shows the toggle at the end of the message pane's header
+// bar while the panel may be shown and is folded; an open panel has the
+// Hide button in its own header bar instead, over the panel at the
+// window's edge, as the inspector toggle of the macOS toolbar.
 func (p *assistantPanel) updateToggle() {
 	t := assistant.PanelTexts(tr)
-	if p.toggle.Active() {
-		p.toggle.SetTooltipText(t.Hide)
-	} else {
-		p.toggle.SetTooltipText(t.Show)
-	}
+	p.toggle.SetTooltipText(t.Show)
+	p.toggle.SetVisible(p.w.assist.panelShown() && !p.toggle.Active())
 }
 
 // reveal unfolds the panel, the main window brought forward.
