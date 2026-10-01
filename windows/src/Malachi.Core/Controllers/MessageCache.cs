@@ -223,11 +223,49 @@ public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCa
         Wait(lm, done);
         if (lm.Msg is null && !lm.Getting)
         {
-            StartGet(s, lm);
+            StartGet(s.AccountId, s.Id, lm);
         }
         if (lm.Body is null && !lm.Fetching)
         {
             StartBody(s, lm);
+        }
+    }
+
+    /// <summary>
+    /// The summary of message <paramref name="id"/> of account
+    /// <paramref name="accountId"/> for a caller that has nothing but the
+    /// ids, a clicked desktop notification (notify_open.go
+    /// <c>OpenNotifiedMessage</c>, Swift <c>lookUp</c>): the cached one at
+    /// once, else <c>message.get</c>, whose answer the cache keeps as
+    /// <see cref="Fetch"/>'s first half does. <paramref name="done"/> gets
+    /// null when the daemon no longer has the message (or cannot say).
+    /// </summary>
+    public void LookUp(AccountId accountId, MessageId id, Action<MessageSummary?> done)
+    {
+        ArgumentNullException.ThrowIfNull(done);
+        scope.VerifyAccess();
+        if (Summary(id) is { } known)
+        {
+            done(known);
+            return;
+        }
+        var lm = Cache.LoadedFor(id);
+        lm.AccountId ??= accountId;
+        // The waiters hear about each half as it arrives, and maybe again
+        // later: only the answer of message.get decides, once.
+        var decided = false;
+        Wait(lm, entry =>
+        {
+            if (decided || entry.Getting)
+            {
+                return;
+            }
+            decided = true;
+            done(entry.Msg?.Summary);
+        });
+        if (!lm.Getting)
+        {
+            StartGet(accountId, id, lm);
         }
     }
 
@@ -293,12 +331,12 @@ public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCa
         list.Add(done);
     }
 
-    // message.get for s into lm (the first half of Fetch).
-    private void StartGet(MessageSummary s, LoadedMessage lm)
+    // message.get for message id of account accountId into lm (the first
+    // half of Fetch).
+    private void StartGet(AccountId accountId, MessageId id, LoadedMessage lm)
     {
-        var id = s.Id;
         lm.Getting = true;
-        scope.Perform(Client, API.MessageGet, new MessageGetParams { AccountId = s.AccountId, MessageId = id }, outcome =>
+        scope.Perform(Client, API.MessageGet, new MessageGetParams { AccountId = accountId, MessageId = id }, outcome =>
         {
             lm.Getting = false;
             if (outcome.TryGetValue(out var res, out var err))

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-01 13:40+0200\n"
+"POT-Creation-Date: 2026-10-01 11:59+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,7 +18,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: ui/main.go:205
+#: ui/main.go:230
 msgid "A native mail client for the GNOME desktop."
 msgstr ""
 
@@ -2980,15 +2980,15 @@ msgstr ""
 msgid "Loading the conversation"
 msgstr ""
 
-#: ui/internal/window/window.go:685
+#: ui/internal/window/window.go:688
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:755 ui/data/ui/window.ui:222
+#: ui/internal/window/window.go:759 ui/data/ui/window.ui:222
 msgid "Search"
 msgstr ""
 
-#: ui/internal/window/window.go:761 ui/data/ui/window.ui:192
+#: ui/internal/window/window.go:765 ui/data/ui/window.ui:192
 msgid "Messages"
 msgstr ""
 

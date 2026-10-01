@@ -49,6 +49,9 @@ final class Integration {
     /// Whether the message pane shows the "No Accounts" page (window.blp
     /// `no-accounts`) instead of the reader.
     private var showingNoAccounts = false
+    /// The message of a notification clicked before the connection to the
+    /// daemon was up (`Integration+Notifications.swift`).
+    var notifiedPending: (account: AccountID, message: MessageID)?
 
     init(state: AppState, mainWindow: MainWindowController) {
         self.state = state
@@ -72,7 +75,6 @@ final class Integration {
         notifications = NotificationService(settings: state.settings) { [weak mainWindow] in
             mainWindow?.window?.isKeyWindow ?? false
         }
-        notifications.onActivate = { [weak state] in state?.showMainWindow() }
 
         list = ListController(mailbox: mailbox, settings: state.settings)
         listView = MessageListViewController(
@@ -168,6 +170,9 @@ final class Integration {
         tokens.append(hub.addConnectionState { [weak self] s in
             guard let self else { return }
             self.mailbox.handleConnection(s)
+            if case .connected = s {
+                self.openPendingNotified()
+            }
             // After the mailbox: the list's banner and its own reaction
             // (collapse loading rows, drop late replies) follow the model.
             self.listView.showConnectionState(s)
@@ -357,6 +362,14 @@ final class Integration {
         }
         mainWindow?.onBecomeKey = { [weak self] in
             self?.mailbox.withdrawViewedNotifications()
+        }
+        notifications.onActivate = { [weak self] target in
+            guard let self else { return }
+            guard let target else {
+                self.state.showMainWindow()
+                return
+            }
+            self.openNotifiedMessage(account: target.account, id: target.message)
         }
         tokens.append(hub.addSyncState { [weak self] s in
             self?.mailbox.handleSyncState(s)

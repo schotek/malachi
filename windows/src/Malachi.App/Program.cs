@@ -166,7 +166,8 @@ public static partial class Program
                 var line = (activation.Data as Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs)?.Arguments;
                 return ActivationRequest.FromCommandLine(ActivationKind.Launch, line, redirected);
             case ExtendedActivationKind.AppNotification:
-                return ActivationRequest.FromArguments(ActivationKind.Notification, [], redirected);
+                var clicked = PlatformServices.NotificationActivationFrom(activation);
+                return ActivationRequest.FromNotification(clicked?.AccountId, clicked?.MessageId, redirected);
             case ExtendedActivationKind.Protocol:
                 var uri = (activation.Data as Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs)?.Uri?.AbsoluteUri;
                 return ActivationRequest.FromArguments(ActivationKind.Protocol, uri is null ? [] : [uri], redirected);
@@ -239,12 +240,12 @@ public static partial class Program
 
     // A notification clicked while the app runs (PlatformServices), on any thread.
     // The argument is the notification's own (message, account): the
-    // click shows the main window, as GTK's app.show; its length only is
-    // logged.
+    // click opens the message in its own window, as GTK's app.open-message;
+    // whether it named one only is logged.
     private static void OnNotificationInvoked(NotificationActivation activation)
     {
         LogNotificationInvoked(logger, activation.MessageId is not null);
-        OnApp(a => a.Activate(ActivationRequest.FromArguments(ActivationKind.Notification, [], redirected: true)));
+        OnApp(a => a.Activate(ActivationRequest.FromNotification(activation.AccountId, activation.MessageId, redirected: true)));
     }
 
     // The terminal's control events, on a thread of the system (ConsoleAttachment).

@@ -3,8 +3,8 @@
 
 // Port of macos/Sources/MalachiMail/Notifications/NotificationService.swift
 // (post, the delegate's didReceive), the Windows side of
-// ui/internal/window/notify.go (SendNotification with app.show as the
-// default action): desktop notifications through the Windows App SDK's
+// ui/internal/window/notify.go (SendNotification with app.open-message as
+// the default action): desktop notifications through the Windows App SDK's
 // AppNotificationManager, for an unpackaged app (docs/windows-port.md §10,
 // measured in APP-SPIKES §1).
 //

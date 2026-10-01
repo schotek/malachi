@@ -9,8 +9,11 @@
 // LoginItemService.launchedAsLoginItem). The first launch and every
 // redirected one go through here:
 //
-// - a launch without arguments, a click on a notification, or any other
-//   kind shows the main window;
+// - a launch without arguments, or any other kind shows the main window;
+// - a click on a notification (FromNotification) opens its message in its
+//   own window (ui/internal/window/notify_open.go, app.open-message) and
+//   leaves the main window as it is, but for a click that started the app,
+//   which shows it too; a click without a message shows the main window;
 // - a mailto: argument opens a compose window and nothing else, as the GTK
 //   open signal does (a cold start shows no main window). Only the first
 //   one of an activation does: the ProgID's "%1" passes one link, and a
@@ -29,6 +32,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Malachi.Core.Api;
 
 namespace Malachi.Core.Presentation;
 
@@ -63,6 +67,16 @@ public sealed record ActivationRequest
     /// activation's first (<see cref="FromArguments"/>).
     /// </summary>
     public IReadOnlyList<string> MailtoUris { get; init => field = value ?? []; } = [];
+
+    /// <summary>
+    /// The account of the message a clicked notification announced: with
+    /// <see cref="NotifiedMessage"/>, the message to open in its own window
+    /// (<see cref="FromNotification"/>).
+    /// </summary>
+    public AccountId? NotifiedAccount { get; init; }
+
+    /// <summary>The message a clicked notification announced, with <see cref="NotifiedAccount"/>.</summary>
+    public MessageId? NotifiedMessage { get; init; }
 
     /// <summary>
     /// The arguments nothing here knows, and the <c>mailto:</c> URIs after
@@ -138,6 +152,24 @@ public sealed record ActivationRequest
             MailtoUris = mailto,
             Ignored = ignored,
         };
+    }
+
+    /// <summary>
+    /// The request of a click on a notification about message
+    /// <paramref name="message"/> of account <paramref name="account"/>: the
+    /// message opens in its own window, and the main window shows only for
+    /// a click that started the app (not <paramref name="redirected"/>), so
+    /// that closing the message window does not leave it running unseen. A
+    /// click without both ids (or with an empty one) shows the main window.
+    /// </summary>
+    public static ActivationRequest FromNotification(AccountId? account, MessageId? message, bool redirected)
+    {
+        var request = FromArguments(ActivationKind.Notification, [], redirected);
+        if (account is not { Value.Length: > 0 } a || message is not { Value.Length: > 0 } m)
+        {
+            return request;
+        }
+        return request with { NotifiedAccount = a, NotifiedMessage = m, ShowMainWindow = !redirected };
     }
 
     // The first word of an unpackaged app's activation arguments is the

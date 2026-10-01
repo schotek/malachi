@@ -24,7 +24,7 @@ public static class NotificationArguments
     /// <summary>The key of what a click does.</summary>
     public const string ActionKey = "action";
 
-    /// <summary>The only action: show the main window.</summary>
+    /// <summary>The only action: open the message (the main window without one).</summary>
     public const string OpenAction = "open";
 
     /// <summary>The key of the message's account.</summary>
@@ -47,8 +47,8 @@ public static class NotificationArguments
 
     /// <summary>
     /// The activation of a click with <paramref name="arguments"/>, the
-    /// pairs as the platform split them. Every click shows the main window,
-    /// whatever else it carries; the ids are kept when present and not empty.
+    /// pairs as the platform split them. The ids are kept when present and
+    /// not empty; a click without them shows the main window.
     /// </summary>
     public static NotificationActivation Parse(IEnumerable<KeyValuePair<string, string>>? arguments)
     {

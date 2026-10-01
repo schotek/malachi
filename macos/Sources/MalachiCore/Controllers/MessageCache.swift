@@ -99,6 +99,21 @@ public final class MessageCache {
         cache[id]?.msg?.summary
     }
 
+    /// Applies a flag change to the cached full messages of `ids`
+    /// (`ActionsController.setSeen`): a message window of a message no
+    /// list shows, opened from a notification, reads its flags from here
+    /// (`ActionsController.summary`). An entry without its message.get
+    /// answer is left alone.
+    public func applyFlags(_ ids: [MessageID], set: [Flag] = [], clear: [Flag] = []) {
+        for id in ids {
+            guard let lm = cache[id], let msg = lm.msg else { continue }
+            let (flags, did) = applyFlagChange(msg.summary.flags, set: set, clear: clear)
+            if did {
+                lm.msg?.summary.flags = flags
+            }
+        }
+    }
+
     /// Forgets `id` (an entry in flight is put back when its half arrives).
     /// For tests.
     func evict(_ id: MessageID) {
@@ -147,10 +162,38 @@ public final class MessageCache {
         }
         waiters[ObjectIdentifier(lm), default: []].append(then)
         if lm.msg == nil, !lm.getting {
-            startGet(s, lm)
+            startGet(s.accountId, id, lm)
         }
         if lm.body == nil, !lm.fetching {
             startBody(s, lm)
+        }
+    }
+
+    /// The summary of message `id` of account `accountId` for a caller that
+    /// has nothing but the ids, a clicked desktop notification
+    /// (notify_open.go `OpenNotifiedMessage`): the cached one at once, else
+    /// message.get, whose answer the cache keeps as `fetch`'s first half
+    /// does. `then` gets nil when the daemon no longer has the message (or
+    /// cannot say).
+    public func lookUp(accountId: AccountID, id: MessageID, _ then: @escaping @MainActor (MessageSummary?) -> Void) {
+        if let s = summary(id) {
+            then(s)
+            return
+        }
+        let lm = cache.loadedFor(id)
+        if lm.accountId == nil {
+            lm.accountId = accountId
+        }
+        // The waiters hear about each half as it arrives, and maybe again
+        // later: only the answer of message.get decides, once.
+        var decided = false
+        waiters[ObjectIdentifier(lm), default: []].append { lm in
+            guard !decided, !lm.getting else { return }
+            decided = true
+            then(lm.msg?.summary)
+        }
+        if !lm.getting {
+            startGet(accountId, id, lm)
         }
     }
 
@@ -194,16 +237,16 @@ public final class MessageCache {
         MessageBodyParams(accountId: s.accountId, messageId: s.id, remoteContent: remoteContent, trimQuoted: !quoted)
     }
 
-    /// message.get for `s` into `lm` (the first half of `fetch`).
-    private func startGet(_ s: MessageSummary, _ lm: LoadedMessage) {
-        let id = s.id
+    /// message.get for message `id` of account `accountId` into `lm` (the
+    /// first half of `fetch`).
+    private func startGet(_ accountId: AccountID, _ id: MessageID, _ lm: LoadedMessage) {
         let client = client
         lm.getting = true
         Task { [weak self] in
             let outcome: Result<MessageGetResult, any Error>
             do {
                 outcome = .success(try await client.call(
-                    API.MessageGet.self, MessageGetParams(accountId: s.accountId, messageId: id), timeout: RPCTimeouts.default))
+                    API.MessageGet.self, MessageGetParams(accountId: accountId, messageId: id), timeout: RPCTimeouts.default))
             } catch {
                 outcome = .failure(error)
             }

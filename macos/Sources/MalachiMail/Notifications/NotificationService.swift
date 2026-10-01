@@ -13,7 +13,8 @@ import os
 /// (`swift run`) the service logs once and skips the notification; the
 /// sound still plays. A notification is skipped while the main window is
 /// key (the GTK `IsActive` check) and for a message read elsewhere before it
-/// arrived. Clicking one calls `onActivate`. Which notifications may still
+/// arrived. Clicking one calls `onActivate` with the message it announced.
+/// Which notifications may still
 /// show, and when they are outdated, the mailbox controller keeps
 /// (`MailboxController+Notifications.swift`); `withdraw` removes them.
 @MainActor
@@ -24,8 +25,10 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     private var warnedUnbundled = false
     private var center: UNUserNotificationCenter?
 
-    /// The user clicked a notification: activate and show the main window.
-    var onActivate: (@MainActor () -> Void)?
+    /// The user clicked a notification: open its message, given by its
+    /// account and id (nil for a notification without them: show the main
+    /// window). notify.go's default action `app.open-message`.
+    var onActivate: (@MainActor ((account: AccountID, message: MessageID)?) -> Void)?
 
     /// - Parameter isMainWindowKey: whether the user is looking at the main
     ///   window right now; nothing is shown then.
@@ -134,8 +137,19 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         let action = response.actionIdentifier
         guard action == UNNotificationDefaultActionIdentifier else { return }
+        let target = NotificationService.target(response.notification.request.content.userInfo)
         await MainActor.run {
-            self.onActivate?()
+            self.onActivate?(target)
         }
+    }
+
+    /// The account and message `post` put into a notification's userInfo;
+    /// nil unless both are non-empty strings (window/notify_open.go
+    /// `ParseNotificationTarget`).
+    nonisolated static func target(_ userInfo: [AnyHashable: Any]) -> (account: AccountID, message: MessageID)? {
+        guard let account = userInfo["accountId"] as? String, !account.isEmpty,
+              let message = userInfo["messageId"] as? String, !message.isEmpty
+        else { return nil }
+        return (AccountID(rawValue: account), MessageID(rawValue: message))
     }
 }

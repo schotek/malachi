@@ -89,6 +89,9 @@ type Window struct {
 	// openMessages tracks stand-alone message windows so a second
 	// double-click raises the existing window instead of opening another.
 	openMessages map[api.MessageID]*MessageWindow
+	// notifiedPending is the message of a notification clicked before
+	// the connection to the daemon was up (notify_open.go).
+	notifiedPending *notifiedTarget
 
 	// openEmbedded tracks the windows of attached messages (embedded.go),
 	// by containing message and part, for the same reason.
@@ -727,6 +730,7 @@ func (w *Window) showConnectionState(s client.State, err error) {
 		// (an issue tracker alone writes no mail), may have changed with
 		// the daemon.
 		w.compose.Invalidate()
+		w.openPendingNotified()
 	default:
 		// A daemon of another protocol version does run (the status line
 		// names it): the banner saying that none does would be wrong.

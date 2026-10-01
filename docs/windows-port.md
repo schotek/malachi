@@ -1407,7 +1407,14 @@ new process); `Register("Malachi Mail", <icon>)` with no explicit AUMID;
 while running raises `NotificationInvoked`; a cold click starts the app
 with `----AppNotificationActivated: -Embedding`, which the argument parser
 ignores, and arrives through `GetActivatedEventArgs()` as kind
-`AppNotification`. As `notify.go`: nothing while the main window is
+`AppNotification`. Either way the toast's arguments (`account`,
+`message`) open the message in its own window
+(`ActivationRequest.FromNotification`, `Integration.OpenNotifiedMessage`,
+GTK `app.open-message` in `window/notify_open.go`): the summary from the
+list or the cache, else `message.get` (`MessageCache.LookUp`), marked read
+as a double-click does; a click before the connection waits for it, one
+that started the app shows the main window too, and a message the daemon
+no longer has shows the main window instead. As `notify.go`: nothing while the main window is
 the active window (`AppState.IsMainWindowActive`: shown and holding the
 activation, false while another window of the app or another application
 has it, as GTK's `IsActive()`; Core's `WindowActivation` keeps it apart
@@ -1552,7 +1559,8 @@ window up instead; only the activation's first link opens one, the others
 are logged by count with the unknown arguments, since the ProgID passes
 one link and a caller that splits a quoted link into several arguments
 would otherwise open a window, with its WebView2 editor, for every
-piece), a notification (the window), `--background` (nothing;
+piece), a notification (its message's window; the main window too on a
+start), `--background` (nothing;
 the first launch holds the app without a window, GTK's service hold),
 `----AppNotificationActivated:` and `-Embedding` ignored, anything else
 logged by count and ignored.

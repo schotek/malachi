@@ -158,6 +158,8 @@ public final class ActionsController {
             guard let self else { return }
             let change = flagChange(.seen, on: on)
             let changed = self.list.applyFlags(changing, set: change.set ?? [], clear: change.clear ?? [])
+            // A window may show one no list does (notify_open.go).
+            self.cache.applyFlags(changing, set: change.set ?? [], clear: change.clear ?? [])
             if changed.isEmpty {
                 return
             }

@@ -90,6 +90,40 @@ public sealed class ActivationRequestTests
     }
 
     [Fact]
+    public void ANotificationClickOpensItsMessageAndShowsTheMainWindowOnlyOnAStart()
+    {
+        // Clicked while the app runs: the message window alone.
+        var running = ActivationRequest.FromNotification("acc_1", "msg_1", redirected: true);
+        Assert.Equal(ActivationKind.Notification, running.Kind);
+        Assert.Equal("acc_1", running.NotifiedAccount?.Value);
+        Assert.Equal("msg_1", running.NotifiedMessage?.Value);
+        Assert.False(running.ShowMainWindow);
+        Assert.False(running.StartHidden);
+
+        // A click that started the app shows the main window too.
+        var started = ActivationRequest.FromNotification("acc_1", "msg_1", redirected: false);
+        Assert.Equal("msg_1", started.NotifiedMessage?.Value);
+        Assert.True(started.ShowMainWindow);
+        Assert.False(started.StartHidden);
+    }
+
+    [Theory]
+    [InlineData(null, "msg_1")]
+    [InlineData("acc_1", null)]
+    [InlineData("", "msg_1")]
+    [InlineData("acc_1", "")]
+    public void ANotificationClickWithoutBothIdsShowsTheMainWindow(string? account, string? message)
+    {
+        var r = ActivationRequest.FromNotification(
+            account is null ? null : new Malachi.Core.Api.AccountId(account),
+            message is null ? null : new Malachi.Core.Api.MessageId(message),
+            redirected: true);
+        Assert.True(r.ShowMainWindow);
+        Assert.Null(r.NotifiedAccount);
+        Assert.Null(r.NotifiedMessage);
+    }
+
+    [Fact]
     public void TheComArgumentsAreIgnoredWhateverTheirCase()
     {
         var r = ActivationRequest.FromArguments(ActivationKind.Launch, ["----appnotificationactivated:", "-EMBEDDING"], redirected: false);

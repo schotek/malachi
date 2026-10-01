@@ -80,12 +80,12 @@ public static partial class PlatformServices
     /// a notification of an app that is not running starts it through COM,
     /// and the handler has to exist before registering). The handler runs
     /// on the UI thread; clicks that arrive before <see cref="Start"/> are
-    /// handed over by it, in order. A click only ever means: show the main
-    /// window. Idempotent. Never throws but for a null handler: whatever the
+    /// handed over by it, in order. A click opens its message (the main
+    /// window without one). Idempotent. Never throws but for a null handler: whatever the
     /// notification platform throws is logged, and the app then starts
     /// without notifications or without their clicks.
     /// </summary>
-    /// <param name="activated">Shows the main window for a click; the activation names the message.</param>
+    /// <param name="activated">Opens the message of a click; the activation names it.</param>
     /// <param name="loggerFactory">Where the services log; nothing when null.</param>
     /// <exception cref="ArgumentNullException"><paramref name="activated"/> is null.</exception>
     public static void InitializeEarly(Action<NotificationActivation> activated, ILoggerFactory? loggerFactory = null)

@@ -289,6 +289,48 @@ private final class Harness {
         #expect(await h.calls(API.MessageBody.name) == 1)
     }
 
+    // A clicked notification (notify_open.go `OpenNotifiedMessage`): the
+    // ids alone find the summary, by message.get once, and the cache keeps
+    // it; a message the daemon lacks answers nil.
+    @Test func lookUpGetsTheSummaryOnceAndKeepsIt() async throws {
+        let h = try await Harness()
+        try await h.serve("m9", delay: .milliseconds(40))
+        try await h.start()
+        defer { Task { await h.stop() } }
+        var found: [MessageSummary?] = []
+        h.cache.lookUp(accountId: account, id: MessageID("m9")) { found.append($0) }
+        // A second click while the first runs joins it.
+        h.cache.lookUp(accountId: account, id: MessageID("m9")) { found.append($0) }
+        try await waitUntil { found.count == 2 }
+        #expect(found.map { $0?.subject } == ["Hello m9", "Hello m9"])
+        #expect(await h.calls(API.MessageGet.name) == 1)
+        #expect(await h.calls(API.MessageBody.name) == 0)
+        #expect(h.cache.summary(MessageID("m9"))?.subject == "Hello m9")
+
+        // Known now: answered at once.
+        var again: MessageSummary?
+        h.cache.lookUp(accountId: account, id: MessageID("m9")) { again = $0 }
+        #expect(again?.id == MessageID("m9"))
+        #expect(await h.calls(API.MessageGet.name) == 1)
+
+        // Marked read while no list shows it: the window's flags follow.
+        h.cache.applyFlags([MessageID("m9"), MessageID("nowhere")], set: [.seen])
+        #expect(h.cache.summary(MessageID("m9")).map { hasFlag($0.flags, .seen) } == true)
+        h.cache.applyFlags([MessageID("m9")], clear: [.seen])
+        #expect(h.cache.summary(MessageID("m9")).map { hasFlag($0.flags, .seen) } == false)
+
+        try await h.serve("m8", getFails: true)
+        var gone: [MessageSummary?] = []
+        h.cache.lookUp(accountId: account, id: MessageID("m8")) { gone.append($0) }
+        try await waitUntil { gone.count == 1 }
+        #expect(gone.first! == nil)
+        // A fetch after it still asks for the headers.
+        var answers = 0
+        h.cache.fetch(summary("m8")) { _ in answers += 1 }
+        try await waitUntil { answers == 2 }
+        #expect(await h.calls(API.MessageGet.name) == 3)
+    }
+
     @Test func evictedEntryIsStoredBackWhenItsHalfArrives() async throws {
         let h = try await Harness()
         try await h.serve("m4", delay: .milliseconds(60))

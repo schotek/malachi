@@ -79,8 +79,8 @@ func (w *Window) notifyNewMessage(n api.NewMessageNotification) {
 		note := gio.NewNotification(title)
 		note.SetBody(body)
 		note.SetIcon(gio.NewThemedIcon("mail-unread-symbolic"))
-		// TODO(phase-1): target the message once the list selects by ID.
-		note.SetDefaultAction("app.show")
+		// A click opens the message in its own window (notify_open.go).
+		note.SetDefaultActionAndTarget("app."+OpenMessageAction, NotificationTarget(n.AccountID, n.Message.ID))
 		w.app.SendNotification(notificationID(n.Message.ID), note)
 		w.withdraw(w.notified.add(n.Message.ID, folderKey{Account: n.AccountID, Folder: n.FolderID}))
 	}

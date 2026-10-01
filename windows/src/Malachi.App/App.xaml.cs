@@ -100,6 +100,11 @@ public partial class App : Application
             // A mailto: nobody could open still brings the app up.
             state.ShowMainWindow();
         }
+        if (request is { NotifiedAccount: { } account, NotifiedMessage: { } message })
+        {
+            // A clicked notification: its message in its own window.
+            state.Integration?.OpenNotifiedMessage(account, message);
+        }
     }
 
     /// <summary>

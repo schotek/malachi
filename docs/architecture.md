@@ -1271,7 +1271,10 @@ activation bring it back); *Launch at Login* asks the Background portal
 first activation; the mark-as-read delay is a timer around `message.flag`;
 deleting confirms with an `Adw.AlertDialog` before `message.delete`; new
 mail arrives as `notify.newMessage` and becomes a `GNotification` whose
-default action is `app.show`. The *Mail* group is daemon-owned
+default action is `app.open-message` with the account and message: the
+click opens the message in its own window and marks it read
+(`window/notify_open.go`; the summary from the list, else `message.get`,
+and the main window instead for a message the daemon no longer has). The *Mail* group is daemon-owned
 (`config.get`/`config.set`): check interval, remote content, *Keep
 Mail Offline For* (`offlineDays`; 1 week, 1 month, 3 months, 1 year or
 everything, an arbitrary stored value snapping to the nearest row), *Keep

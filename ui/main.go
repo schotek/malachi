@@ -17,6 +17,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/accountwizard"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/compose"
@@ -125,6 +126,16 @@ func main() {
 		}
 	}
 	app.ConnectActivate(show)
+	// openNotified opens the message of a clicked notification in its own
+	// window. A click that started the application (no main window yet)
+	// presents the main window too, so that closing the message window
+	// does not leave the application running with no window to see.
+	openNotified := func(acc api.AccountID, id api.MessageID) {
+		if mainWin == nil {
+			show()
+		}
+		mainWin.OpenNotifiedMessage(acc, id)
+	}
 	// mailto: handling. The UI only splits the URI (compose.ParseMailto);
 	// everything else about the message is the backend's business.
 	app.ConnectOpen(func(files []gio.Filer, hint string) {
@@ -152,7 +163,7 @@ func main() {
 		sup.Stop()
 	})
 
-	newMessage = addActions(app, rpc, log, func() *settings.Store { return prefs }, func() *window.Assistant { return assist }, show, func() *compose.Manager { return mgr })
+	newMessage = addActions(app, rpc, log, func() *settings.Store { return prefs }, func() *window.Assistant { return assist }, show, func() *compose.Manager { return mgr }, openNotified)
 	os.Exit(app.Run(os.Args))
 }
 
@@ -180,7 +191,7 @@ func addUninstalledIconPath() {
 // settings store and the Assistant state, which exist only after startup
 // has run; show presents the main window. It returns app.compose, which
 // follows the accounts that write mail.
-func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, store func() *settings.Store, assist func() *window.Assistant, show func(), composer func() *compose.Manager) *gio.SimpleAction {
+func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, store func() *settings.Store, assist func() *window.Assistant, show func(), composer func() *compose.Manager, openNotified func(api.AccountID, api.MessageID)) *gio.SimpleAction {
 	newMessage := gio.NewSimpleAction("compose", nil)
 	newMessage.ConnectActivate(func(*glib.Variant) { composer().Open(compose.Params{}) })
 	app.AddAction(newMessage)
@@ -191,6 +202,20 @@ func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, stor
 	showAction := gio.NewSimpleAction("show", nil)
 	showAction.ConnectActivate(func(*glib.Variant) { show() })
 	app.AddAction(showAction)
+
+	// app.open-message is the default action of a new-message notification
+	// (window/notify_open.go); a parameter it cannot read shows the main
+	// window, as app.show.
+	openMessage := gio.NewSimpleAction(window.OpenMessageAction, window.NotificationTargetType())
+	openMessage.ConnectActivate(func(p *glib.Variant) {
+		acc, id, ok := window.ParseNotificationTarget(p)
+		if !ok {
+			show()
+			return
+		}
+		openNotified(acc, id)
+	})
+	app.AddAction(openMessage)
 
 	about := gio.NewSimpleAction("about", nil)
 	about.ConnectActivate(func(*glib.Variant) {

@@ -168,13 +168,13 @@ func (w *Window) setSeenIDs(ids []api.MessageID, seen bool) {
 	apply := func(on bool) {
 		set, clear := flagChange(api.FlagSeen, on)
 		changed := w.model.applyFlags(todo, set, clear)
+		for _, id := range todo { // a window may show one no list does
+			w.refreshSeen(id, on)
+		}
 		if len(changed) == 0 {
 			return
 		}
 		w.refreshRows(changed)
-		for _, id := range changed {
-			w.refreshSeen(id, on)
-		}
 		delta := len(changed) // marking unread raises the unread count
 		if on {
 			delta = -delta

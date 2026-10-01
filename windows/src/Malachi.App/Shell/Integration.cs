@@ -148,6 +148,10 @@ public sealed partial class Integration : IDisposable
         {
             Mailbox.HandleConnection(s);
             List.HandleConnection(s);
+            if (s is ConnectionState.Connected)
+            {
+                OpenPendingNotified();
+            }
         }));
     }
 

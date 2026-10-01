@@ -138,6 +138,52 @@ public sealed class MessageCacheTests
         Assert.Equal(2, h.Calls(API.MessageBody.Name));
     }
 
+    // A clicked notification (notify_open.go OpenNotifiedMessage, Swift
+    // lookUpGetsTheSummaryOnceAndKeepsIt): the ids alone find the summary,
+    // by message.get once, and the cache keeps it; a message the daemon
+    // lacks answers null.
+    [Fact]
+    public async Task LookUpGetsTheSummaryOnceAndKeepsIt()
+    {
+        await using var h = await Harness.CreateAsync();
+        h.Serve("m9", held: true);
+        await h.StartAsync();
+        var found = new List<MessageSummary?>();
+        await h.Ui.RunAsync(() =>
+        {
+            h.Cache.LookUp(Account, "m9", found.Add);
+            // A second click while the first runs joins it.
+            h.Cache.LookUp(Account, "m9", found.Add);
+            Assert.True(h.Cache.Loaded("m9")?.Getting);
+        });
+        h.Release();
+        await h.IdleAsync();
+        await h.Ui.RunAsync(() =>
+        {
+            Assert.Equal(["Hello m9", "Hello m9"], found.Select(f => f?.Subject).ToList());
+            Assert.Equal("Hello m9", h.Cache.Summary("m9")?.Subject);
+
+            // Known now: answered at once.
+            MessageSummary? again = null;
+            h.Cache.LookUp(Account, "m9", f => again = f);
+            Assert.Equal("m9", again?.Id.Value);
+        });
+        Assert.Equal(1, h.Calls(API.MessageGet.Name));
+        Assert.Equal(0, h.Calls(API.MessageBody.Name));
+
+        h.Serve("m8", getFails: true);
+        var gone = new List<MessageSummary?>();
+        await h.Ui.RunAsync(() => h.Cache.LookUp(Account, "m8", gone.Add));
+        await h.IdleAsync();
+        await h.Ui.RunAsync(() => Assert.Null(Assert.Single(gone)));
+        // A fetch after it still asks for the headers.
+        var answers = 0;
+        await h.Ui.RunAsync(() => h.Cache.Fetch(Summary("m8"), _ => answers++));
+        await h.IdleAsync();
+        await h.Ui.RunAsync(() => Assert.Equal(2, answers));
+        Assert.Equal(3, h.Calls(API.MessageGet.Name));
+    }
+
     [Fact]
     public async Task GetFailureKeepsTheBodyAndRetriesTheHeaders()
     {
