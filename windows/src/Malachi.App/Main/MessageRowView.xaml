@@ -10,7 +10,8 @@ of the message list, element by element: content_box (spacing 12, margins
 the fold arrow, its spinner, the avatar of 40 or 28), and the column
 (spacing 2) of line 1 (spacing 6: the sender, the member count pill, the
 attachment and star icons, the origin of a search result, the date, the
-unread dot), the subject line and the preview. A row of a Jira account
+unread dot), the subject line (with the neutral tag of a bulk message
+after the subject, bulk_pill) and the preview. A row of a Jira account
 has the issue's key before the subject and its status and Internal pills
 after it (subject_line), and an event row the change after its actor
 (event_label), set small, without a preview. The hairline under every row
@@ -206,6 +207,7 @@ result as bold runs built in code (never markup).
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBlock
                         x:Name="IssueKeyLabel"
@@ -222,15 +224,23 @@ result as bold runs built in code (never markup).
                         Text="{x:Bind Row.Subject, Mode=OneWay}"
                         TextTrimming="CharacterEllipsis"
                         TextWrapping="NoWrap" />
+                    <!-- bulk_pill: the neutral tag of a bulk message, before the
+                         status of an issue (a row of an issue has none). -->
+                    <controls:IssuePill
+                        x:Name="BulkPill"
+                        Grid.Column="2"
+                        AutomationProperties.AccessibilityView="Raw"
+                        IsBulk="True"
+                        Text="{x:Bind Row.BulkText, Mode=OneWay}" />
                     <controls:IssuePill
                         x:Name="StatusPill"
-                        Grid.Column="2"
+                        Grid.Column="3"
                         AutomationProperties.AccessibilityView="Raw"
                         StatusStyle="{x:Bind Row.StatusStyle, Mode=OneWay}"
                         Text="{x:Bind Row.StatusText, Mode=OneWay}" />
                     <controls:IssuePill
                         x:Name="InternalPill"
-                        Grid.Column="3"
+                        Grid.Column="4"
                         AutomationProperties.AccessibilityView="Raw"
                         IsInternal="True"
                         Text="{x:Bind Row.InternalText, Mode=OneWay}" />

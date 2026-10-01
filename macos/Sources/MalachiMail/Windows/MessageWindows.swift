@@ -61,6 +61,7 @@ final class MessageWindows {
         cache.onLoaded = { [weak self] id, lm in self?.showLoaded(id, lm) }
         cache.onRemoteBar = { [weak self] id, lm in self?.refreshRemoteBar(id, lm) }
         cache.onChips = { [weak self] id, lm in self?.refreshChips(id, lm) }
+        cache.onBulk = { [weak self] id, lm in self?.refreshBulk(id, lm) }
     }
 
     // MARK: Views
@@ -219,6 +220,20 @@ final class MessageWindows {
         }
         for d in displays where d.displays(id) {
             d.refreshRemoteBar(id, lm)
+        }
+    }
+
+    /// Redraws the bulk strip of message `id` wherever it is on display and
+    /// leaves the body alone (window/bulk.go `refreshBulk`). An attached
+    /// message's view has none.
+    func refreshBulk(_ id: MessageID, _ lm: LoadedMessage) {
+        for v in views where v.mode != .embedded {
+            if let s = v.current, s.id == id {
+                v.refreshBulk(lm)
+            }
+        }
+        for d in displays where d.displays(id) {
+            d.refreshBulk(id, lm)
         }
     }
 

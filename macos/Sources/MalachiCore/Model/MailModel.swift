@@ -22,11 +22,14 @@ public struct RowMessage: Sendable, Equatable {
     /// The issue's key, summary and status, and whether the row is an
     /// event (a status or assignee change); nil for a mail message.
     public var issue: Jira.IssueRow?
+    /// The neutral pill of a bulk message (`Bulk.tag`): "Bulk", "Mailing
+    /// List", "Automated"; empty for personal mail.
+    public var tag: String
 
     public init(
         from: [Address], subject: String, snippet: String, date: Date, unread: Bool, flagged: Bool,
         hasAttachments: Bool, origin: String = "", originTooltip: String = "", highlights: [MatchRange] = [],
-        issue: Jira.IssueRow? = nil
+        issue: Jira.IssueRow? = nil, tag: String = ""
     ) {
         self.from = from
         self.subject = subject
@@ -39,6 +42,7 @@ public struct RowMessage: Sendable, Equatable {
         self.originTooltip = originTooltip
         self.highlights = highlights
         self.issue = issue
+        self.tag = tag
     }
 }
 
@@ -50,7 +54,7 @@ public func summaryMessage(_ s: MessageSummary) -> RowMessage {
     return RowMessage(
         from: s.from, subject: s.subject, snippet: s.snippet, date: s.date,
         unread: issue?.unread ?? !hasFlag(s.flags, .seen), flagged: hasFlag(s.flags, .flagged),
-        hasAttachments: s.hasAttachments, issue: issue
+        hasAttachments: s.hasAttachments, issue: issue, tag: Bulk.tag(s.bulk)
     )
 }
 

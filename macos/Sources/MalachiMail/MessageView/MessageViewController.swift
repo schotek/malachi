@@ -85,6 +85,10 @@ final class MessageViewController: NSViewController {
     private let draftBanner = BannerView(
         title: L10n.T("This message is a draft"), buttonTitle: L10n.T("Edit"), symbol: "square.and.pencil"
     )
+    /// What kind of bulk message this is, and the button that unsubscribes
+    /// (window.blp `bulk_bar`; not for an attached message), after the draft
+    /// banner and before the remote-image bar.
+    private let bulkBanner = BannerView()
     private let remoteBar: RemoteBarView
     /// The pictures kept on the mail server only (window.blp
     /// `pictures_bar`), below the remote-image bar; both may show.
@@ -205,6 +209,10 @@ final class MessageViewController: NSViewController {
             guard let self, let id = self.current?.id else { return }
             self.delegate?.editDraft(id)
         }
+        bulkBanner.onButton = { [weak self] in
+            guard let self, let id = self.current?.id else { return }
+            self.delegate?.unsubscribe(id, from: self.view.window)
+        }
         remoteBar.onLoad = { [weak self] in self?.loadImages() }
         picturesBar.onLoad = { [weak self] in self?.downloadPictures() }
         header.addresses.onCopy = { [weak self] address in self?.copyAddress(address) }
@@ -225,6 +233,9 @@ final class MessageViewController: NSViewController {
         }
         if mode == .pane {
             root.addArrangedSubview(draftBanner)
+        }
+        if mode != .embedded {
+            root.addArrangedSubview(bulkBanner)
         }
         root.addArrangedSubview(remoteBar)
         if mode != .embedded {
@@ -325,6 +336,7 @@ final class MessageViewController: NSViewController {
         cancelSpinner()
         banner.reveal(false)
         draftBanner.reveal(false)
+        bulkBanner.reveal(false)
         hideBars()
         webView?.clear() // drop the pictures of the message before
         setPage(message: false)
@@ -351,6 +363,7 @@ final class MessageViewController: NSViewController {
     func render(_ s: MessageSummary, _ lm: LoadedMessage?) {
         _ = view
         shownLoaded = lm
+        renderBulk(s, lm)
         let issue = renderHeaders(s, lm?.msg)
         if let text = issue?.eventBody {
             renderEvent(text)
@@ -386,6 +399,23 @@ final class MessageViewController: NSViewController {
     func refreshRemoteBar(_ lm: LoadedMessage) {
         renderRemoteBar(lm)
         renderPicturesBar(lm)
+    }
+
+    /// Redraws the bulk strip of the message on display from `lm` and
+    /// leaves the rest alone: a request to unsubscribe began or ended, or
+    /// its answer is in the message (window/bulk.go `refreshBulk`).
+    func refreshBulk(_ lm: LoadedMessage?) {
+        guard mode != .embedded, let s = current else { return }
+        renderBulk(s, lm ?? shownLoaded)
+    }
+
+    /// The bulk strip of `s` as `lm` holds it, from the folder it lies in
+    /// (window/bulk.go `renderBulk`); an attached message has none.
+    private func renderBulk(_ s: MessageSummary, _ lm: LoadedMessage?) {
+        guard mode != .embedded else { return }
+        let role = delegate?.folderRole(of: s) ?? .none
+        let strip = Bulk.stripFor(Bulk.message(s, lm), role: role, date: { formatDateTime($0) })
+        bulkBanner.showBulk(strip, busy: lm?.unsubscribing == true)
     }
 
     /// Redraws the attachment chips of the message on display from `lm`

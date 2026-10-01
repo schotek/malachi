@@ -25,6 +25,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Malachi.Core.Api;
+using Malachi.Core.Bulk;
 using Malachi.Core.IssueTrackers;
 
 namespace Malachi.Core.Model;
@@ -85,6 +86,7 @@ public sealed partial class MailModel
         return new RowThread
         {
             Issue = Jira.ThreadRowIssue(t),
+            Tag = BulkMail.Tag(t.Latest.Bulk),
             Participants = t.Participants,
             Subject = t.Subject,
             Snippet = t.Snippet,

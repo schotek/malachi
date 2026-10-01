@@ -153,6 +153,17 @@ public sealed class MessageActionRouter
         return actions.Mailbox.Model.InDrafts(summary);
     }
 
+    /// <summary>
+    /// The role of the folder <paramref name="summary"/> lies in (the bulk
+    /// strip changes in the junk folder; window/bulk.go <c>bulkStripFor</c>);
+    /// <see cref="FolderRole.None"/> for a folder the model does not know.
+    /// </summary>
+    public FolderRole FolderRoleOf(MessageSummary summary)
+    {
+        ArgumentNullException.ThrowIfNull(summary);
+        return actions.Mailbox.Model.FolderRole(new FolderKey(summary.AccountId, summary.FolderId));
+    }
+
     /// <summary>The draft banner's Edit (drafts.go <c>openDraft</c>).</summary>
     public void EditDraft(MessageId id) => actions.OpenDraft(id);
 

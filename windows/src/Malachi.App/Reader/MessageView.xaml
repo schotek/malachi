@@ -12,7 +12,8 @@ in three modes (Core's ReaderController, docs/windows-port.md §11.3), from
 the top: the command row of the pane or window (the Adw.HeaderBar: Reply,
 Reply All, Forward at the start; Archive and Trash, then Star, Assistant and
 More at the end, GTK packing [end] from the right), the outbox and draft banners
-(InfoBars), the remote-image bar (a bar of its own, as in GTK: two
+(InfoBars), the bulk-mail strip (BulkStripView: what the message is and
+the Unsubscribe button), the remote-image bar (a bar of its own, as in GTK: two
 buttons, reachable by Tab), the pictures bar under it (pictures of the
 HTML kept on the mail server only, Download Pictures; not in an attached
 message's window, whose pictures arrive inlined), and the message stack:
@@ -89,6 +90,7 @@ gets the sanitiser's output only.
     </UserControl.Resources>
     <Grid x:Name="Root" Background="{ThemeResource LayerFillColorDefaultBrush}">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -266,13 +268,24 @@ gets the sanitiser's output only.
             </InfoBar.ActionButton>
         </InfoBar>
 
+        <!-- bulk_bar (window/bulk.go): what kind of bulk message this is
+             (a newsletter, a mailing list, an automated message), and the
+             button that unsubscribes; the warm tint in the junk folder. Not
+             in an attached message's window (embedded_window.blp has none).
+             Drawn by the code from Reader.Bulk (OnReaderChanged), plain
+             text. -->
+        <local:BulkStripView
+            x:Name="BulkBar"
+            Grid.Row="3"
+            ActionClicked="OnBulkClick" />
+
         <!-- remote_bar (window/remote.go): the count of the remote images
              the sanitiser removed and the two ways of loading them; the
              spinner in their place while they load. Adw.Banner has room for
              one button, hence a bar of its own. -->
         <Border
             x:Name="RemoteBar"
-            Grid.Row="3"
+            Grid.Row="4"
             Padding="12,6"
             AutomationProperties.AutomationId="RemoteBar"
             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
@@ -326,7 +339,7 @@ gets the sanitiser's output only.
              attached message's window (embedded_window.blp has none). -->
         <Border
             x:Name="PicturesBar"
-            Grid.Row="4"
+            Grid.Row="5"
             Padding="12,6"
             AutomationProperties.AutomationId="PicturesBar"
             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
@@ -363,7 +376,7 @@ gets the sanitiser's output only.
         </Border>
 
         <!-- message_stack. -->
-        <Grid x:Name="Pages" Grid.Row="5">
+        <Grid x:Name="Pages" Grid.Row="6">
             <!-- "empty". -->
             <StackPanel
                 x:Name="EmptyPage"

@@ -223,6 +223,20 @@ public sealed partial class MessageWindowRegistry
     }
 
     /// <summary>
+    /// Redraws the bulk strip of message <paramref name="id"/> in every view
+    /// showing it (bulk.go <c>refreshBulk</c>): a request began or ended, or
+    /// its offer was applied.
+    /// </summary>
+    public void RefreshBulk(MessageId id, LoadedMessage lm)
+    {
+        ArgumentNullException.ThrowIfNull(lm);
+        foreach (var v in Showing(id))
+        {
+            v.RefreshBulk(lm);
+        }
+    }
+
+    /// <summary>
     /// Redraws the remote-image bar of message <paramref name="id"/> wherever
     /// it is on display and leaves the body alone (remote.go
     /// <c>refreshRemoteBar</c>).

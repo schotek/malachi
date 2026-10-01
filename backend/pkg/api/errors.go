@@ -80,6 +80,10 @@ const (
 	// CodePartNotDownloaded: the part's data is not stored on this device
 	// (Attachment.Remote); message.download fetches it from the server.
 	CodePartNotDownloaded ErrorCode = 1504
+	// CodeUnsubscribeFailed: message.unsubscribe reached the sender's
+	// server, which refused or did not answer the one-click request
+	// (Error.Message carries the status, never shown verbatim).
+	CodeUnsubscribeFailed ErrorCode = 1505
 )
 
 // String returns the stable symbolic name of the code.
@@ -125,6 +129,7 @@ var codeNames = map[ErrorCode]string{
 	CodeAttachmentTooBig:   "attachmentTooBig",
 	CodePartNotFound:       "partNotFound",
 	CodePartNotDownloaded:  "partNotDownloaded",
+	CodeUnsubscribeFailed:  "unsubscribeFailed",
 }
 
 // Error is the JSON-RPC error object. It implements the Go error interface so

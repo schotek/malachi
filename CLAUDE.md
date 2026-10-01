@@ -970,6 +970,30 @@ se posouvá, změna se hlásí jen při skutečné změně textu. Zbývá:
 `AddressList.format` nedává jméno s dvojtečkou do uvozovek (starší chyba,
 týká se předvyplnění odpovědi).
 
+Hromadná pošta a odhlášení (2026-10-01, všechny tři klienty; necommitnuté,
+macOS sestavený a cílené testy zelené, GTK jen `gopls` + Blueprint v Dockeru,
+Windows napsané bez překladu — čeká `make build`/`go test ./internal/window/...`/
+`make lint` v Toolbxu a `build.ps1 app`/`test`/`lint` na Windows). Démon
+klasifikuje zprávy z hlaviček (`internal/bulk`, pravidla verze 1:
+`newsletter`, `list` = List-Id + List-Post, `automated` (od verze 2 i podle
+stop rozesílacích služeb, `bulk.SenderFingerprints`, např. Kickstarter přes
+SendGrid bez `List-Unsubscribe`); migrace 0016
+`messages.bulk`/`list_id` + `unsubscriptions`, IMAP bere hlavičky už
+s obálkou, backfill pod `bulk.classified`, jira nikdy), `MessageSummary.bulk`,
+`Message.unsubscribe` (oneClick / mailto / url, `unsubscribedAt`, v nevyžádané
+nikdy) a `message.unsubscribe` (`core/unsubscribe.go`): oneClick jen po DKIM
+podpisu organizace odesílatele přes `List-Unsubscribe` i `-Post`
+(`go-msgauth`), POST z `internal/oneclick` (bez přesměrování, bez neveřejných
+adres i s proxy, do logu jen třída chyby), jinak `openUrl` s `unverified`;
+mailto jako prostý mail přes outbox bez konceptu; url jen vrací stránku;
+opakování do 60 s vrátí uložený výsledek, souběh `conflict`; chyba 1505
+`unsubscribeFailed` (`docs/security.md` §7.2). MCP: `bulk` v souhrnech,
+`unsubscribe` za `--allow-modify`, mailto navíc jen s `--allow-send`. UI:
+reference `ui/internal/bulkmail` (štítek v seznamu, pruh nad zprávou,
+potvrzení, `Fallback` po neověřeném odesílateli, `OpenableURL` jen https),
+port `MalachiCore/Bulk` a `Malachi.Core/Bulk`; pruh v panelu, okně zprávy
+a kartách konverzace, ne v přiložené zprávě.
+
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně
 komprese a příloh na vyžádání, Microsoft účty).

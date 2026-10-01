@@ -23,6 +23,9 @@ protocol MessageDisplay: AnyObject {
     func showLoaded(_ id: MessageID, _ lm: LoadedMessage)
     /// Only the bars of message `id` changed.
     func refreshRemoteBar(_ id: MessageID, _ lm: LoadedMessage)
+    /// Only the bulk strip of message `id` changed (a request to unsubscribe
+    /// began or ended, or its answer is in the message).
+    func refreshBulk(_ id: MessageID, _ lm: LoadedMessage)
     /// The chips of message `id` are drawn again (a download began to show
     /// its spinner, or ended); nil when the cache no longer holds it.
     func refreshChips(_ id: MessageID, _ lm: LoadedMessage?)

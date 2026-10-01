@@ -90,6 +90,9 @@ final class MessageCellView: NSTableCellView {
     /// row after the actor.
     private let issueKey = NSTextField(labelWithString: "")
     private let statusPill = PillLabel()
+    /// The tag of a bulk message (message_row.blp `bulk_pill`): neutral,
+    /// next to the subject; never on a row of an issue.
+    private let bulkPill = PillLabel()
     private let internalPill = PillLabel()
     private let eventLabel = NSTextField(labelWithString: "")
     private let subjectLine = NSStackView()
@@ -117,6 +120,8 @@ final class MessageCellView: NSTableCellView {
     /// row, the status pill's colour, and whether the row is selected (the
     /// colours follow `backgroundStyle`).
     private var issue: Jira.IssueRow?
+    /// The bulk tag of the row (`Bulk.tag`); "" for personal mail.
+    private var bulkTag = ""
     private var event = false
     private var statusStyle = Jira.StatusStyle.plain
     private var emphasized = false
@@ -184,7 +189,7 @@ final class MessageCellView: NSTableCellView {
         issueKey.isHidden = true
         issueKey.setContentHuggingPriority(.required, for: .horizontal)
         issueKey.setContentCompressionResistancePriority(.required, for: .horizontal)
-        for pill in [statusPill, internalPill] {
+        for pill in [statusPill, bulkPill, internalPill] {
             pill.font = Typo.caption
             pill.isHidden = true
         }
@@ -241,7 +246,7 @@ final class MessageCellView: NSTableCellView {
         line.alignment = .centerY
         line.spacing = RowMetrics.lineSpacing
 
-        for v in [issueKey, subject, statusPill, internalPill] {
+        for v in [issueKey, subject, bulkPill, statusPill, internalPill] {
             subjectLine.addArrangedSubview(v)
         }
         subjectLine.orientation = .horizontal
@@ -310,6 +315,7 @@ final class MessageCellView: NSTableCellView {
         origin.isHidden = m.origin.isEmpty
         badge.isHidden = true
         issue = m.issue
+        bulkTag = m.tag
         thread = false
         loading = false
         applyLead()
@@ -330,6 +336,7 @@ final class MessageCellView: NSTableCellView {
         badge.toolTip = L10n.N("%d message", "%d messages", t.count)
         badge.isHidden = t.count < 2
         issue = t.issue
+        bulkTag = t.tag
         thread = true
         loading = t.loading
         reserve = false
@@ -387,6 +394,11 @@ final class MessageCellView: NSTableCellView {
     /// conversation without the subject line either (one line). A mail row
     /// hides all of it.
     private func applyIssue() {
+        // The neutral tag of a bulk message (widget.SetBulkPill): its text
+        // is its own tooltip, as a long one is cut; none on an issue's row.
+        bulkPill.setText(bulkTag, maxCharacters: PillLabel.statusCharacters)
+        bulkPill.toolTip = bulkTag.isEmpty ? nil : bulkTag
+        bulkPill.isHidden = issue != nil || bulkTag.isEmpty
         guard let issue else {
             event = false
             issueKey.isHidden = true
@@ -513,6 +525,7 @@ final class MessageCellView: NSTableCellView {
         issueKey.textColor = secondary
         eventLabel.textColor = secondary
         IssuePill.paint(statusPill, IssuePill.colours(statusStyle), emphasized: emphasized)
+        IssuePill.paint(bulkPill, IssuePill.bulkColours, emphasized: emphasized)
         IssuePill.paint(internalPill, IssuePill.internalColours, emphasized: emphasized)
         date.textColor = secondary
         origin.textColor = secondary

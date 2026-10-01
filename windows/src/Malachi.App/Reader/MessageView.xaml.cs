@@ -105,6 +105,7 @@ public sealed partial class MessageView : UserControl
             mode, services.Cache, services.FileTypes, logger: services.State.Logs.CreateLogger<ReaderController>())
         {
             IsDraft = mode == ReaderMode.Pane ? services.Router.IsDraft : null,
+            FolderRoleOf = services.Router.FolderRoleOf,
             IssueSite = services.IssueSite,
             CanTransition = services.Issues.CanTransition,
             IssueBusy = services.Issues.IsBusy,
@@ -331,6 +332,10 @@ public sealed partial class MessageView : UserControl
                     web?.Clear(); // drop the pictures of the message before
                 }
                 break;
+            case nameof(ReaderController.Bulk):
+            case nameof(ReaderController.BulkBusy):
+                ShowBulk();
+                break;
             case nameof(ReaderController.RemoteBarVisible) when !Reader.RemoteBarVisible:
             case nameof(ReaderController.RemoteBarLoading) when Reader.RemoteBarLoading:
                 // Hiding the button that has the focus would hand it on to
@@ -373,6 +378,34 @@ public sealed partial class MessageView : UserControl
                 });
                 break;
         }
+    }
+
+    // The bulk strip (bulk.go showBulk): the focus leaves the button before
+    // it or the strip goes away, for the reason given at the remote bar.
+    private void ShowBulk()
+    {
+        if (Reader.Mode == ReaderMode.Embedded)
+        {
+            return;
+        }
+        if (BulkStripView.LosesButton(Reader.Bulk) && BulkBar.OwnsFocus)
+        {
+            FocusBody();
+        }
+        BulkBar.Show(Reader.Bulk, Reader.BulkBusy);
+    }
+
+    // The strip's Unsubscribe (bulk.go unsubscribe over this view's message):
+    // the question, then the daemon or the sender's page; what comes of it
+    // is said in this view's window.
+    private void OnBulkClick(object? sender, EventArgs e)
+    {
+        if (Reader.Mode == ReaderMode.Embedded || Reader.Current is not { } s)
+        {
+            return;
+        }
+        var window = HostWindow;
+        services.Bulk.Unsubscribe(s.Id, window, text => services.ToastIn(window, text));
     }
 
     // The "•••" under the body: its quoted history shows, or goes again

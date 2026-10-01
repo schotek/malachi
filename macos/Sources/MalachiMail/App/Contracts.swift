@@ -137,6 +137,15 @@ protocol MessageActionDelegate: AnyObject {
     func isDraft(_ summary: MessageSummary) -> Bool
     /// drafts.go `openDraft`: the draft banner's Edit button.
     func editDraft(_ id: MessageID)
+    /// The special-use role of the folder `summary` lies in (`.none` when
+    /// unknown): the bulk strip of a message in Junk warns instead of
+    /// offering to unsubscribe (window/bulk.go `bulkStripFor`).
+    func folderRole(of summary: MessageSummary) -> FolderRole
+    /// window/bulk.go `unsubscribe`, the bulk strip's button: the
+    /// confirmation first on `window` (nothing happens without it), then the
+    /// sender's page in the browser for a web-page offer, otherwise
+    /// `message.unsubscribe`.
+    func unsubscribe(_ id: MessageID, from window: NSWindow?)
     /// remote.go `openLink`: allow-list, mailto → compose, masked-link
     /// alert on `window`, then the browser.
     func openLink(_ href: String, links: [Link], from window: NSWindow?)

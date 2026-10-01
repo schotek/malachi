@@ -25,7 +25,7 @@ public sealed class GoContractTests
         var source = GoContract.ApiSource("methods.go");
         var constants = GoContract.StringConstants(source);
         var goMethods = GoContract.SliceIdentifiers(source, "AllMethods").Select(name => constants[name]).ToArray();
-        Assert.Equal(53, goMethods.Length);
+        Assert.Equal(54, goMethods.Length);
         Assert.Equal(goMethods, API.AllMethods);
         Assert.Equal(goMethods, API.Methods.Select(m => m.Name));
         Assert.Equal(ApiCodingTests.GoMethods, goMethods); // the Swift test's copy is current
@@ -103,6 +103,9 @@ public sealed class GoContractTests
         { nameof(IssueItemKind), "types.go", "IssueItemKind" },
         { nameof(CommentVisibility), "types.go", "CommentVisibility" },
         { nameof(IssueField), "types.go", "IssueField" },
+        { nameof(BulkKind), "types.go", "BulkKind" },
+        { nameof(UnsubscribeMethod), "types.go", "UnsubscribeMethod" },
+        { nameof(UnsubscribeOutcome), "types.go", "UnsubscribeOutcome" },
         { nameof(TlsErrorReason), "tls.go", "TLSErrorReason" },
     };
 
@@ -202,6 +205,8 @@ public sealed class GoContractTests
         var issue = GoContract.Source("ui", "internal", "window", "issue_actions.go");
         Assert.Equal(GoContract.Seconds(issue, "issueTimeout"), RpcTimeouts.Transition);
         Assert.Equal(GoContract.Seconds(issue, "issueTimeout"), RpcTimeouts.Transitions);
+        // The unsubscribe request (bulk.go unsubscribeTimeout).
+        Assert.Equal(GoContract.Seconds(GoContract.Source("ui", "internal", "window", "bulk.go"), "unsubscribeTimeout"), RpcTimeouts.Unsubscribe);
     }
 
     /// <summary>
@@ -283,6 +288,7 @@ public sealed class GoContractTests
                 ("cc", nameof(Message.Cc)), ("bcc", nameof(Message.Bcc)), ("replyTo", nameof(Message.ReplyTo)),
                 ("rfcMessageId", nameof(Message.RfcMessageId)), ("inReplyTo", nameof(Message.InReplyTo)),
                 ("references", nameof(Message.References)), ("attachments", nameof(Message.Attachments)), ("headers", nameof(Message.Headers)),
+                ("unsubscribe", nameof(Message.Unsubscribe)),
             })
             {
                 yield return (json, typeof(Message).GetProperty(property)!.PropertyType);

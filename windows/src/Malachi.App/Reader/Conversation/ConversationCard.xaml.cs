@@ -4,7 +4,7 @@
 // Port of ui/internal/window/conversation_card.go (convCard: update, setFold,
 // setFolded, showFoldState, setCompact, refreshActions, toggleDetails,
 // renderDetails, render, renderBody, showText, showHTML, setHint,
-// renderBars, renderChips, refreshChips, setLive, loadWebView,
+// renderBars, renderBulk, renderChips, refreshChips, setLive, loadWebView,
 // releaseWebView, sizeReported, setWebHeight, setZoom, forwardScroll);
 // macOS: MessageView/ConversationCardView.swift. One message of the
 // conversation view (ConversationItemKind.Message). Headers are plain text;
@@ -34,6 +34,7 @@ using System.Collections.Generic;
 using Malachi.App.Resources;
 using Malachi.App.WebViews;
 using Malachi.Core.Api;
+using Malachi.Core.Bulk;
 using Malachi.Core.Compose;
 using Malachi.Core.I18n;
 using Malachi.Core.IssueTrackers;
@@ -276,6 +277,7 @@ internal sealed partial class ConversationCard : UserControl
     /// <summary>renderBars: redraws the remote-image and pictures bars of an HTML body and leaves the body alone; the bars are made when first shown.</summary>
     public void RenderBars(LoadedMessage? lm)
     {
+        RenderBulk(lm);
         if (!IsHtml || lm is null)
         {
             if (RemoteBar is not null)
@@ -298,6 +300,24 @@ internal sealed partial class ConversationCard : UserControl
         {
             ShowPicturesBar(pictures);
         }
+    }
+
+    // renderBulk: the strip of bulk mail, from the summary alone until
+    // message.get brought the offer; the bar is made when first needed
+    // (makeBulkBar). The focus leaves it before its button goes.
+    private void RenderBulk(LoadedMessage? lm)
+    {
+        var strip = BulkReading.StripFor(s, lm, pane.RoleOf(s));
+        if (!strip.Visible && BulkBar is null)
+        {
+            return;
+        }
+        FindName(nameof(BulkBar));
+        if (BulkStripView.LosesButton(strip) && BulkBar!.OwnsFocus)
+        {
+            pane.FocusList();
+        }
+        BulkBar!.Show(strip, lm?.Unsubscribing == true);
     }
 
     /// <summary>refreshChips: redraws the chips (a download started or ended): from <paramref name="lm"/>, or from the entry they last showed.</summary>
@@ -601,6 +621,13 @@ internal sealed partial class ConversationCard : UserControl
         PicturesSpinner.Visibility = st.Loading ? Visibility.Visible : Visibility.Collapsed;
         PicturesDownload.Visibility = st.Loading ? Visibility.Collapsed : Visibility.Visible;
         PicturesBar!.Visibility = st.Visible ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // The strip's Unsubscribe (bulk.go unsubscribe over this card's message).
+    private void OnBulkClick(object? sender, EventArgs e)
+    {
+        var window = pane.HostWindow;
+        pane.Services.Bulk.Unsubscribe(Id, window, text => pane.Services.ToastIn(window, text));
     }
 
     private void OnLoadImagesClick(object sender, RoutedEventArgs e) => pane.Services.Router.LoadImages(Id);

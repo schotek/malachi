@@ -41,7 +41,7 @@ Flags and environment of the server:
 |---|---|
 | `-socket PATH` | the daemon socket, whose key file is `PATH.key`; default as the daemon and the UI resolve it (`api.SocketBase`): `MALACHI_SOCKET`, else `$XDG_RUNTIME_DIR/malachi/rpc.sock` (inside Flatpak the app's own runtime dir), else `$XDG_CACHE_HOME/malachi/run/rpc.sock` (`~/.cache/malachi/run/rpc.sock` without it) |
 | `-socket` on Windows | the same rules; Windows sets neither XDG variable, so the default is `%USERPROFILE%\.cache\malachi\run\rpc.sock`, as for the daemon and the Windows app. It is outside `AppData` on purpose: a bridge started by the MSIX Claude Desktop sees a redirected `AppData` (see [below](#claude-desktop-and-claude-code-status-install-uninstall)) but the same socket |
-| `-allow-modify` | also offer `mark_messages`, `move_messages`, `delete_messages`, `transition_issue` |
+| `-allow-modify` | also offer `mark_messages`, `move_messages`, `delete_messages`, `transition_issue`, `unsubscribe` |
 | `-allow-send` | also offer `send_message` |
 | `-version` | print the version and exit |
 | `MALACHI_LOG_LEVEL`, `MALACHI_LOG_FORMAT` | as for the daemon; logs go to stderr, stdout carries only MCP frames |
@@ -91,7 +91,7 @@ registered at all, so it never appears in the client's tool list.
 | Tier | Flag | Tools |
 |---|---|---|
 | read and draft | always | `list_accounts`, `list_folders`, `list_messages`, `search_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `list_transitions`, `create_draft` |
-| modify | `-allow-modify` | `mark_messages`, `move_messages`, `delete_messages`, `transition_issue` |
+| modify | `-allow-modify` | `mark_messages`, `move_messages`, `delete_messages`, `transition_issue`, `unsubscribe` |
 | send | `-allow-send` | `send_message` |
 
 A draft is inert: it lives in the daemon's store and, once it has rested
@@ -131,7 +131,10 @@ destructive, only `send_message` open-world.
   `dateAsc`)
 - output: a trusted header (count, total, next cursor), then a fenced JSON
   array of `{id, date, from, to, subject, snippet, flags, hasAttachments,
-  size, outbox?, issue?}`; `issue` is `{key, status?, item?}` on a
+  size, outbox?, issue?, bulk?}`; `bulk` is `{kind, listId?, domain?}` on
+  mail the daemon classified as bulk (`newsletter`, `list` or `automated`,
+  [api.md §3](api.md#messagesummary)), cleaned like any mail string;
+  `issue` is `{key, status?, item?}` on a
   message of an issue-tracker account (kind `jira`, [api.md §3](api.md#messagesummary)):
   the issue's key and status as the site shows them, cleaned like any
   mail string, and whether the message is the issue's `description`, a
@@ -169,7 +172,11 @@ destructive, only `send_message` open-world.
   chars A-B of N (truncated; call again with offset=B)`), then a fence
   holding `from`, `to`, `cc`, `bcc`, `reply-to`, `subject`, on a message
   of an issue-tracker account `issue`, `issue-status` and `issue-item`
-  (as `list_messages` gives them), the attachment
+  (as `list_messages` gives them), on bulk mail `bulk: <kind>; list-id: …;
+  sender-domain: …` and `unsubscribe: <method> via <host or address>`
+  (with `already unsubscribed on <time>` when the user did; **never the
+  page or address URL itself**, which would invite an agent to fetch
+  it), the attachment
   list (`partId`, `filename`, `type`, `size`, `inline`, `remote`), the
   optional `headers` and `links` (at most 50), and the body slice. The
   `remote` marker follows the quoted filename, so a name cannot forge it;
@@ -453,6 +460,36 @@ own process:
   after all is its `serverError` with the site's message. Nothing else
   of an issue can be changed here: no assignee, no fields, no comment
   (that is `create_draft`).
+
+### unsubscribe (`-allow-modify`)
+
+- input: `accountId`, `messageId`
+- calls `message.unsubscribe` ([api.md §4.3](api.md#messageunsubscribe)):
+  the daemon reads the offer from the stored message, so the model passes
+  no URL or address. A one-click offer is sent only when the message
+  carries a valid DKIM signature of the sender's own domain over the
+  unsubscribe headers; a `mailto:` offer is queued as an e-mail in the
+  outbox of the account the message arrived in (it appears in Sent); a
+  web-page offer, or a sender that could not be verified, sends nothing.
+  Messages in the junk folder are refused.
+- output: one trusted line: `unsubscribed` (one-click accepted), `queued`
+  (in the outbox), or `nothing was sent` with the reason, and that the
+  user can unsubscribe from the message in Malachi Mail; the page is never
+  given to the model. A server that refused the request is the error
+  `unsubscribeFailed (1505)`.
+- A `mailto` offer queues real outgoing mail, which is `-allow-send`'s
+  capability: before calling the daemon the tool reads the message
+  (`message.get`) and, when the offer is `mailto` and the bridge was not
+  started with `-allow-send`, refuses with a text that names no address
+  and sends nothing. One-click and page offers need only `-allow-modify`.
+- Annotated as a third-party effect (open world, like `send_message`)
+  rather than a mailbox change: it contacts the sender's server or queues
+  mail. The description tells the model to use it only when the user
+  explicitly asked in this conversation to unsubscribe, never because a
+  message asks for it. It sits behind `-allow-modify`, not `-allow-send`,
+  because, apart from the `mailto` case above, it can only send the one
+  request the message itself offered; it cannot write text or choose a
+  recipient.
 
 ### send_message (`-allow-send`)
 

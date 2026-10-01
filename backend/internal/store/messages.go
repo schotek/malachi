@@ -76,6 +76,13 @@ type Message struct {
 	// folder counts, and still found by id. Read only; UpsertMessages never
 	// writes it.
 	Hidden bool
+
+	// Bulk and ListID are the classification of migration 0016
+	// (internal/bulk): "" = not classified yet, "none", or the kind; the
+	// cleaned List-Id. UpsertMessages writes them for a new row (the IMAP
+	// envelope), BodyUpdate rewrites them; read only otherwise.
+	Bulk   string
+	ListID string
 }
 
 // MessageRef identifies a message whose body is still to be fetched, by
@@ -137,8 +144,8 @@ func (s *Store) UpsertMessages(ctx context.Context, msgs []*Message) error {
 		INSERT INTO messages (id, account_id, folder_id, uid, remote_id, modseq, flags, unread, flagged,
 			from_json, to_json, cc_json, bcc_json, reply_to_json, subject, date, internal_date,
 			rfc_message_id, in_reply_to, references_json, size, snippet, has_attachments,
-			attachments_json, headers_json, has_html, text_body, body_state, thread_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?)
+			attachments_json, headers_json, has_html, text_body, body_state, thread_id, created_at, updated_at, bulk, list_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (folder_id, uid) WHERE uid > 0 DO UPDATE SET
 			flags = excluded.flags, modseq = excluded.modseq, unread = excluded.unread,
 			flagged = excluded.flagged, updated_at = excluded.updated_at
@@ -182,7 +189,7 @@ func (s *Store) UpsertMessages(ctx context.Context, msgs []*Message) error {
 			id, m.AccountID, m.FolderID, int64(m.UID), m.RemoteID, int64(m.ModSeq), enc.flags, enc.unread, enc.flagged,
 			enc.from, enc.to, enc.cc, enc.bcc, enc.replyTo, m.Subject, stamp(m.Date), optStamp(m.InternalDate),
 			m.RFCMessageID, m.InReplyTo, enc.references, m.Size, m.Snippet, boolInt(m.HasAttachments),
-			enc.attachments, enc.headers, boolInt(m.HasHTML), string(state), tid, now, now, m.ThreadID,
+			enc.attachments, enc.headers, boolInt(m.HasHTML), string(state), tid, now, now, m.Bulk, m.ListID, m.ThreadID,
 		).Scan(&r.id, &r.created, &r.thread)
 		if err != nil {
 			return fmt.Errorf("upsert message uid %d in %s: %w", m.UID, m.FolderID, err)
@@ -869,10 +876,14 @@ func setBodyTx(ctx context.Context, tx *sql.Tx, id string, u BodyUpdate) error {
 	if err != nil {
 		return fmt.Errorf("encode from: %w", err)
 	}
+	bulkKind, listID, err := classifyBulkTx(ctx, tx, id, u.Headers)
+	if err != nil {
+		return err
+	}
 	res, err := tx.ExecContext(ctx, `
 		UPDATE messages SET
 			text_body = ?, has_html = ?, snippet = ?, attachments_json = ?, has_attachments = ?,
-			headers_json = ?, references_json = ?, body_state = ?,
+			headers_json = ?, references_json = ?, body_state = ?, bulk = ?, list_id = ?,
 			subject        = CASE WHEN subject = '' THEN ? ELSE subject END,
 			from_json      = CASE WHEN from_json = '[]' THEN ? ELSE from_json END,
 			date           = CASE WHEN date = ? THEN ? ELSE date END,
@@ -882,7 +893,7 @@ func setBodyTx(ctx context.Context, tx *sql.Tx, id string, u BodyUpdate) error {
 			updated_at = ?
 		WHERE id = ?`,
 		u.Text, boolInt(u.HasHTML), u.Snippet, attachments, boolInt(u.HasAttachments),
-		headers, references, string(state),
+		headers, references, string(state), bulkKind, listID,
 		u.Subject, from, zeroStamp, stamp(u.Date), u.RFCMessageID, u.InReplyTo, u.Size, u.Size, nowStamp(), id)
 	if err != nil {
 		return fmt.Errorf("set message body: %w", err)
@@ -1070,7 +1081,7 @@ const messageColumns = `id, account_id, folder_id, uid, remote_id, modseq, flags
 	from_json, to_json, cc_json, bcc_json, reply_to_json, subject, date, internal_date,
 	rfc_message_id, in_reply_to, references_json, size, snippet, has_attachments,
 	attachments_json, headers_json, has_html, body_state, thread_id, created_at, updated_at,
-	raw_state, remote_parts, remote_bytes, strippable_bytes, hydrated_at, hidden`
+	raw_state, remote_parts, remote_bytes, strippable_bytes, hydrated_at, hidden, bulk, list_id`
 
 func scanMessage(row scanner) (Message, error) {
 	m, _, err := scanMessageStamp(row)
@@ -1089,7 +1100,7 @@ func scanMessageStamp(row scanner) (Message, string, error) {
 		&from, &to, &cc, &bcc, &replyTo, &m.Subject, &date, &internalDate,
 		&m.RFCMessageID, &m.InReplyTo, &references, &m.Size, &m.Snippet, &hasAttachments,
 		&attachments, &headers, &hasHTML, &state, &m.ThreadID, &created, &updated,
-		&rawState, &remoteParts, &m.RemoteBytes, &m.StrippableBytes, &hydrated, &hidden); err != nil {
+		&rawState, &remoteParts, &m.RemoteBytes, &m.StrippableBytes, &hydrated, &hidden, &m.Bulk, &m.ListID); err != nil {
 		return Message{}, "", err
 	}
 	m.Hidden = hidden != 0

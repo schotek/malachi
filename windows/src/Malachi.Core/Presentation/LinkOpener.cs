@@ -21,6 +21,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Malachi.Core.Api;
+using Malachi.Core.Bulk;
 using Malachi.Core.Compose;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
@@ -102,6 +103,20 @@ public sealed partial class LinkOpener
             default:
                 // Not http(s) or mailto: nothing happens.
                 return;
+        }
+    }
+
+    /// <summary>
+    /// The sender's unsubscribe page (bulk.go <c>openBulkPage</c>), opened
+    /// in <paramref name="window"/>'s name: an https address only
+    /// (<see cref="BulkMail.OpenableUrl"/>), never anything else the mail
+    /// carries; a failure is a toast, as for a link.
+    /// </summary>
+    public async Task OpenPageAsync(string raw, object? window)
+    {
+        if (BulkMail.OpenableUrl(raw) is { } uri)
+        {
+            await LaunchAsync(uri, window);
         }
     }
 

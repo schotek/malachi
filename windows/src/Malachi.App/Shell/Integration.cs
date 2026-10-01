@@ -60,6 +60,10 @@ public sealed partial class Integration : IDisposable
         // toasts over the main window.
         Issues = new IssueActionsController(state.Client, id => Mailbox.Model.Account(id), logs.CreateLogger<IssueActionsController>());
         Issues.ToastRequested += (_, text) => mainToast(text);
+        // The Unsubscribe buttons of the bulk-mail strips of every view
+        // (window/bulk.go): their toasts over the main window, their
+        // dialogs and the browser hooked up by the reader (ReaderHub).
+        Bulk = new BulkActionsController(state.Client, Cache, mainToast, logs.CreateLogger<BulkActionsController>());
         // The conversation view of the reading pane (conversation_controller.go):
         // it follows the list's members and holds the cards' entries.
         Conversation = new ConversationController(List, Cache);
@@ -116,6 +120,9 @@ public sealed partial class Integration : IDisposable
     /// <summary>The Change Status menus of Jira issues, shared by every view of the window.</summary>
     public IssueActionsController Issues { get; }
 
+    /// <summary>The Unsubscribe buttons of the bulk-mail strips, shared by every view of the window.</summary>
+    public BulkActionsController Bulk { get; }
+
     /// <summary>Stops the controllers' work; the daemon has been stopped by then.</summary>
     public void Dispose()
     {
@@ -125,6 +132,7 @@ public sealed partial class Integration : IDisposable
         }
         tokens.Clear();
         Conversation.Dispose();
+        Bulk.Dispose();
         Issues.Dispose();
         Compose.Dispose();
         Cache.Dispose();

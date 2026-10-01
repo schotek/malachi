@@ -593,6 +593,37 @@ import Testing
         #expect(r.message.attachments.allSatisfy { !$0.isRemote }, "nothing is remote after a download")
     }
 
+    /// docs/api.md `message.unsubscribe`, `MessageSummary.bulk`, `Message.unsubscribe`.
+    @Test func messageUnsubscribeExample() throws {
+        let params = try encodeObject(MessageUnsubscribeParams(accountId: "acc_1", messageId: "m_123"))
+        #expect(params.keys.sorted() == ["accountId", "messageId"], "the client sends no URL or address")
+
+        let done = try decode(MessageUnsubscribeResult.self, #"{"outcome":"unsubscribed","unsubscribedAt":"2026-09-30T12:00:00Z"}"#)
+        #expect(done.outcome == .unsubscribed && done.unsubscribedAt == Date(timeIntervalSince1970: 1_790_769_600))
+        #expect(done.url == nil && done.unverified == nil)
+        let open = try decode(MessageUnsubscribeResult.self, #"{"outcome":"openUrl","url":"https://shop.example/u","unverified":true}"#)
+        #expect(open.outcome == .openUrl && open.url == "https://shop.example/u" && open.unverified == true)
+        #expect(try decode(MessageUnsubscribeResult.self, #"{"outcome":"queued"}"#).outcome == .queued)
+        // An outcome a newer daemon adds still decodes.
+        #expect(try decode(MessageUnsubscribeResult.self, #"{"outcome":"later"}"#).outcome == UnsubscribeOutcome(rawValue: "later"))
+
+        // The summary's bulk info and the message's offer, flat in the message.
+        var json = Self.messageJSON
+        json.removeLast()
+        json += #","bulk":{"kind":"newsletter","listId":"news.shop.example","domain":"shop.example"},"unsubscribe":{"method":"oneClick","target":"shop.example","unsubscribedAt":"2026-09-30T12:00:00Z"}}"#
+        let m = try decode(Message.self, json)
+        #expect(m.summary.bulk == BulkInfo(kind: .newsletter, listId: "news.shop.example", domain: "shop.example"))
+        #expect(m.unsubscribe?.method == .oneClick && m.unsubscribe?.target == "shop.example")
+        #expect(m.unsubscribe?.url == nil && m.unsubscribe?.unsubscribedAt != nil)
+        let again = try JSONCoding.decoder().decode(Message.self, from: JSONCoding.encoder().encode(m))
+        #expect(again == m)
+        // Absent means personal mail, no offer.
+        let plain = try decode(Message.self, Self.messageJSON)
+        #expect(plain.summary.bulk == nil && plain.unsubscribe == nil)
+        let obj = try #require(JSONSerialization.jsonObject(with: JSONCoding.encoder().encode(plain)) as? [String: Any])
+        #expect(obj["bulk"] == nil && obj["unsubscribe"] == nil)
+    }
+
     @Test func contactSearchExample() throws {
         let r = try decode(ContactSearchResult.self, #"""
         {"contacts":[{"name":"Alice Example","address":"alice@example.org","source":"addressBook","book":"Contacts"},
@@ -1180,11 +1211,11 @@ import Testing
         (1305, "messageGone"),
         (1400, "storageError"), (1401, "migrationFailed"),
         (1500, "malformedMessage"), (1501, "sanitizeFailed"), (1502, "attachmentTooBig"), (1503, "partNotFound"),
-        (1504, "partNotDownloaded"),
+        (1504, "partNotDownloaded"), (1505, "unsubscribeFailed"),
     ]
 
     @Test func errorCodesAreNamed() {
-        #expect(ErrorCode.all.count == 34 && Set(ErrorCode.all).count == 34)
+        #expect(ErrorCode.all.count == 35 && Set(ErrorCode.all).count == 35)
         #expect(ErrorCode.all.map(\.rawValue) == Self.goCodes.map { $0.0 })
         #expect(ErrorCode.all.map(\.name) == Self.goCodes.map { $0.1 })
         for code in ErrorCode.all {
@@ -1202,6 +1233,7 @@ import Testing
         #expect(code == .messageNotFound)
         #expect(ErrorCode.messageGone.rawValue == 1305 && ErrorCode(rawValue: 1305).name == "messageGone")
         #expect(ErrorCode.partNotDownloaded.rawValue == 1504 && ErrorCode(rawValue: 1504).name == "partNotDownloaded")
+        #expect(ErrorCode.unsubscribeFailed.rawValue == 1505 && ErrorCode(rawValue: 1505).name == "unsubscribeFailed")
     }
 
     // MARK: Params encoding
@@ -1261,7 +1293,7 @@ import Testing
         "folder.list", "folder.subscribe",
         "message.list", "message.get", "message.body", "message.part",
         "message.embedded", "message.download", "message.flag", "message.move", "message.delete",
-        "message.send",
+        "message.send", "message.unsubscribe",
         "outbox.retry",
         "thread.list", "thread.get",
         "draft.save", "draft.list", "draft.delete", "draft.create", "draft.open",
@@ -1276,8 +1308,8 @@ import Testing
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 53)
-        #expect(Set(API.allMethods).count == 53, "no duplicates")
+        #expect(API.allMethods.count == 54)
+        #expect(Set(API.allMethods).count == 54, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)
@@ -1306,6 +1338,8 @@ import Testing
         // The daemon's download budget is 4 minutes; the client waits 5.
         #expect(RPCTimeouts.download == .seconds(300) && API.MessageDownload.timeout == RPCTimeouts.download)
         #expect(API.SystemStorage.timeout == .seconds(5))
+        // The daemon may verify the message and call the sender's server (15 s).
+        #expect(RPCTimeouts.unsubscribe == .seconds(30) && API.MessageUnsubscribe.timeout == RPCTimeouts.unsubscribe)
         // Like account.discover and account.test: a site lookup, a sign-in with listing.
         #expect(API.AccountDetectSite.timeout == .seconds(15) && RPCTimeouts.detectSite == .seconds(15))
         #expect(API.AccountListSpaces.timeout == .seconds(45) && RPCTimeouts.listSpaces == .seconds(45))
@@ -1318,7 +1352,8 @@ import Testing
                                     "message.part", "attachment.get", "message.embedded", "draft.create", "draft.open",
                                     "account.add", "account.update", "account.discover", "account.test",
                                     "account.oauthStart", "account.oauthWait", "message.download",
-                                    "account.detectSite", "account.listSpaces", "issue.transitions", "issue.transition"]
+                                    "account.detectSite", "account.listSpaces", "issue.transitions", "issue.transition",
+                                    "message.unsubscribe"]
         for m in API.methods where !special.contains(m.name) {
             #expect(m.timeout == RPCTimeouts.default, "\(m.name) should use the default timeout")
         }

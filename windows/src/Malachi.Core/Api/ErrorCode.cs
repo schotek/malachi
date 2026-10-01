@@ -151,6 +151,12 @@ public readonly record struct ErrorCode(int Value)
     /// </summary>
     public const int PartNotDownloaded = 1504;
 
+    /// <summary>
+    /// <c>message.unsubscribe</c> reached the sender's server, which refused
+    /// or did not answer the one-click request.
+    /// </summary>
+    public const int UnsubscribeFailed = 1505;
+
     private static readonly Dictionary<int, string> Names = new()
     {
         [ParseError] = "parseError",
@@ -187,6 +193,7 @@ public readonly record struct ErrorCode(int Value)
         [AttachmentTooBig] = "attachmentTooBig",
         [PartNotFound] = "partNotFound",
         [PartNotDownloaded] = "partNotDownloaded",
+        [UnsubscribeFailed] = "unsubscribeFailed",
     };
 
     /// <summary>
@@ -202,6 +209,7 @@ public readonly record struct ErrorCode(int Value)
         Offline, NetworkError, ServerError, TlsError, ServerTimeout, MessageGone,
         StorageError, MigrationFailed,
         MalformedMessage, SanitizeFailed, AttachmentTooBig, PartNotFound, PartNotDownloaded,
+        UnsubscribeFailed,
     ];
 
     /// <summary>

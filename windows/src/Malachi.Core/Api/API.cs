@@ -231,6 +231,14 @@ public static class API
     public static readonly RpcMethod<MessageDownloadParams, MessageDownloadResult> MessageDownload =
         new("message.download", RpcTimeouts.Download, Wire.MessageDownloadParams, Wire.MessageDownloadResult);
 
+    /// <summary>
+    /// <c>message.unsubscribe</c>: acts on the sender's unsubscribe offer
+    /// (the daemon may verify the message and ask the sender's server, 15 s,
+    /// first).
+    /// </summary>
+    public static readonly RpcMethod<MessageUnsubscribeParams, MessageUnsubscribeResult> MessageUnsubscribe =
+        new("message.unsubscribe", RpcTimeouts.Unsubscribe, Wire.MessageUnsubscribeParams, Wire.MessageUnsubscribeResult);
+
     /// <summary><c>message.flag</c>.</summary>
     public static readonly RpcMethod<MessageFlagParams, EmptyResult> MessageFlag =
         new("message.flag", RpcTimeouts.Default, Wire.MessageFlagParams, Wire.EmptyResult);
@@ -372,7 +380,7 @@ public static class API
         FolderList, FolderSubscribe,
         MessageList, MessageGet, MessageBody, MessagePart,
         MessageEmbedded, MessageDownload, MessageFlag, MessageMove, MessageDelete,
-        MessageSend,
+        MessageSend, MessageUnsubscribe,
         OutboxRetry,
         ThreadList, ThreadGet,
         DraftSave, DraftList, DraftDelete, DraftCreate, DraftOpen,

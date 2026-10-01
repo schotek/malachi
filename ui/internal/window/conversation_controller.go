@@ -445,7 +445,7 @@ func (c *conversationController) needsBody(id api.MessageID, details bool) {
 	if !ok || jira.IsEvent(s.Issue) {
 		return
 	}
-	full := (details || s.HasAttachments) && !c.noGet[id]
+	full := (details || s.HasAttachments || wantsOffer(s)) && !c.noGet[id]
 	reveal := c.quoted.IsRevealed(id)
 	if lm := c.loaded[id]; lm != nil && lm.quotedShown == reveal && lm.bodySettled() && (!full || lm.msg != nil) {
 		return

@@ -13,6 +13,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/bulkmail"
 	"github.com/schotek/malachi/ui/internal/certtrust"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
@@ -80,6 +81,8 @@ func RPCErrorText(what string, err error) string {
 			return fmt.Sprintf(i18n.T("%s failed: try again in a moment"), what)
 		case api.CodePartNotDownloaded:
 			return fmt.Sprintf(i18n.T("%s failed: the attachment is not on this computer"), what)
+		case api.CodeUnsubscribeFailed:
+			return bulkmail.Refused(i18n.Tr)
 		case api.CodeMessageGone:
 			return fmt.Sprintf(i18n.T("%s failed: the message is no longer on the server"), what)
 		}

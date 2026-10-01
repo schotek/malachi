@@ -146,6 +146,9 @@ func (stubMessages) Embedded(context.Context, api.MessageEmbeddedParams) (*api.M
 func (stubMessages) Download(context.Context, api.MessageDownloadParams) (*api.MessageDownloadResult, error) {
 	return nil, api.ErrNotImplemented
 }
+func (stubMessages) Unsubscribe(context.Context, api.MessageUnsubscribeParams) (*api.MessageUnsubscribeResult, error) {
+	return nil, api.ErrNotImplemented
+}
 func (stubMessages) Flag(context.Context, api.MessageFlagParams) (*api.MessageFlagResult, error) {
 	return nil, api.ErrNotImplemented
 }

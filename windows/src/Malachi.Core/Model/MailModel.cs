@@ -25,6 +25,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Malachi.Core.Api;
+using Malachi.Core.Bulk;
 using Malachi.Core.IssueTrackers;
 
 namespace Malachi.Core.Model;
@@ -168,6 +169,7 @@ public sealed partial class MailModel
             Flagged = FolderTree.HasFlag(s.Flags, Flag.Flagged),
             HasAttachments = s.HasAttachments,
             Issue = issue,
+            Tag = BulkMail.Tag(s.Bulk),
         };
     }
 

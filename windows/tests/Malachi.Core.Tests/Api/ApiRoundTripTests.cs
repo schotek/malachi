@@ -46,13 +46,17 @@ public sealed class ApiRoundTripTests
     private const string Outbox = """{"state":"failed","attempts":3,"nextAttemptAt":"2026-09-02T12:00:00.5Z","error":@error@}""";
 
     private const string Summary =
-        """{"id":"m_1","accountId":"acc_1","folderId":"f_outbox","threadId":"t_9","from":[@address@],"to":[{"address":"me@example.org"}],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen","pinned"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"issue":@itemissue@}""";
+        """{"id":"m_1","accountId":"acc_1","folderId":"f_outbox","threadId":"t_9","from":[@address@],"to":[{"address":"me@example.org"}],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen","pinned"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"issue":@itemissue@,"bulk":@bulk@}""";
+
+    private const string Bulk = """{"kind":"list","listId":"golang-nuts.googlegroups.com","domain":"googlegroups.com"}""";
+
+    private const string Unsubscribe = """{"method":"url","target":"shop.example","url":"https://shop.example/u?x=1","unsubscribedAt":"2026-09-30T12:00:00Z"}""";
 
     private const string Attachment =
         """{"partId":"2.1","filename":"image001.png","contentType":"image/png","size":100,"inline":true,"contentId":"image001@example.org","remote":true}""";
 
     private const string Message =
-        """{"id":"m_1","accountId":"acc_1","folderId":"f_inbox","threadId":"t_9","from":[@address@],"to":[@address@],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"issue":@itemissue@,"cc":[@address@],"bcc":[@address@],"replyTo":[@address@],"rfcMessageId":"<x@example.org>","inReplyTo":"<w@example.org>","references":["<v@example.org>","<w@example.org>"],"attachments":[@attachment@],"headers":{"Auto-Submitted":"no"}}""";
+        """{"id":"m_1","accountId":"acc_1","folderId":"f_inbox","threadId":"t_9","from":[@address@],"to":[@address@],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"issue":@itemissue@,"cc":[@address@],"bcc":[@address@],"replyTo":[@address@],"rfcMessageId":"<x@example.org>","inReplyTo":"<w@example.org>","references":["<v@example.org>","<w@example.org>"],"attachments":[@attachment@],"headers":{"Auto-Submitted":"no"},"bulk":@bulk@,"unsubscribe":@unsubscribe@}""";
 
     private const string Blocked =
         """{"remoteImages":3,"remoteStyles":1,"remoteFonts":0,"scripts":1,"forms":0,"eventHandlers":2,"dangerousUrls":0,"embeddedFrames":0,"trackingPixels":1}""";
@@ -216,6 +220,11 @@ public sealed class ApiRoundTripTests
         [nameof(MessageEmbeddedResult)] = Case<MessageEmbeddedResult>("""{"partId":"3","message":@message@,"body":@body@}"""),
         [nameof(MessageDownloadParams)] = Case<MessageDownloadParams>("""{"accountId":"acc_1","messageId":"m_1"}"""),
         [nameof(MessageDownloadResult)] = Case<MessageDownloadResult>("""{"message":@message@}"""),
+        [nameof(BulkInfo)] = Case<BulkInfo>(Bulk),
+        [nameof(UnsubscribeOffer)] = Case<UnsubscribeOffer>(Unsubscribe),
+        [nameof(MessageUnsubscribeParams)] = Case<MessageUnsubscribeParams>("""{"accountId":"acc_1","messageId":"m_1"}"""),
+        [nameof(MessageUnsubscribeResult)] = Case<MessageUnsubscribeResult>(
+            """{"outcome":"openUrl","url":"https://shop.example/u","unverified":true,"unsubscribedAt":"2026-09-30T12:00:00Z"}"""),
         [nameof(MessageFlagParams)] = Case<MessageFlagParams>("""{"accountId":"acc_1","messageIds":["m_1","m_2"],"set":["seen"],"clear":["flagged"]}"""),
         [nameof(MessageMoveParams)] = Case<MessageMoveParams>("""{"accountId":"acc_1","messageIds":["m_1"],"targetFolderId":"f_archive"}"""),
         [nameof(MessageDeleteParams)] = Case<MessageDeleteParams>("""{"accountId":"acc_1","messageIds":["m_1"],"permanent":true}"""),
@@ -364,7 +373,7 @@ public sealed class ApiRoundTripTests
         var sample = ApiJson.Parse(Samples[type].Json);
         var names = type == nameof(Malachi.Core.Api.Message)
             ? [.. WireNames(TypeInfo(nameof(MessageSummary))),
-                "cc", "bcc", "replyTo", "rfcMessageId", "inReplyTo", "references", "attachments", "headers"]
+                "cc", "bcc", "replyTo", "rfcMessageId", "inReplyTo", "references", "attachments", "headers", "unsubscribe"]
             : WireNames(info);
         Assert.Equal(names.Order(StringComparer.Ordinal), ApiJson.Keys(sample));
     }
@@ -537,6 +546,7 @@ public sealed class ApiRoundTripTests
             ("@oauth2@", OAuth2), ("@state@", State), ("@error@", Error), ("@address@", Address),
             ("@pageinfo@", PageInfo), ("@page@", Page), ("@pin@", Pin),
             ("@jira@", Jira), ("@itemissue@", ItemIssue), ("@issue@", Issue),
+            ("@bulk@", Bulk), ("@unsubscribe@", Unsubscribe),
         };
         string previous;
         do

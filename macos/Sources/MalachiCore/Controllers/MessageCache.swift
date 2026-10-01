@@ -42,6 +42,12 @@ public final class MessageCache {
     /// `refreshRemoteBar`, which avoids reloading the web view).
     public var onRemoteBar: (@MainActor (MessageID, LoadedMessage) -> Void)?
 
+    /// Fired when only the bulk strip of a message changed (a request to
+    /// unsubscribe began or ended, or its answer is in the cached message):
+    /// the views redraw the strip and leave the body alone (window/bulk.go
+    /// `refreshBulk`).
+    public var onBulk: (@MainActor (MessageID, LoadedMessage) -> Void)?
+
     /// Fired when the attachment chips of a message have to be drawn again:
     /// its download began to show the spinner, or ended (download.go
     /// `refreshChips`, the pane and the open windows). The entry is nil
@@ -472,6 +478,66 @@ public final class MessageCache {
                 self.onLoaded?(id, lm)
                 then(.success(lm))
             }
+        }
+    }
+
+    // MARK: Unsubscribing
+
+    /// Runs `message.unsubscribe` for `s`, whose entry holds its offer, and
+    /// shows what came of it (window/bulk.go `callUnsubscribe`): the button
+    /// waits from the call on (`onBulk`); an answer that unsubscribed or
+    /// queued the request puts the time in the cached offer
+    /// (`Bulk.applied`) and the strip turns into "Unsubscribed on …" (a
+    /// queued one toasts as well); a failure is toasted through `toast`
+    /// (the window the click came from; the cache's own when nil) and the
+    /// button is back. `then` gets the answer after the strip was redrawn,
+    /// for the caller to offer the sender's page on `.openUrl`. A request
+    /// already running, or a message without its offer, is left alone and
+    /// `then` is not called.
+    public func unsubscribe(
+        _ s: MessageSummary, toast: (@MainActor (String) -> Void)? = nil,
+        _ then: @escaping @MainActor (Result<MessageUnsubscribeResult, any Error>, LoadedMessage) -> Void
+    ) {
+        let id = s.id
+        guard let lm = cache[id], lm.msg?.unsubscribe != nil, !lm.unsubscribing else { return }
+        lm.unsubscribing = true
+        onBulk?(id, lm)
+        let client = client
+        let params = MessageUnsubscribeParams(accountId: s.accountId, messageId: id)
+        Task { [weak self] in
+            let outcome: Result<MessageUnsubscribeResult, any Error>
+            do {
+                outcome = .success(try await client.call(API.MessageUnsubscribe.self, params))
+            } catch {
+                outcome = .failure(error)
+            }
+            guard let self else { return }
+            lm.unsubscribing = false
+            // message.get may have replaced the cache entry meanwhile; the
+            // answer belongs to the entry on display now (bulk.go
+            // `callUnsubscribe`).
+            var lm = lm
+            if let cur = self.cache[id], cur !== lm {
+                cur.unsubscribing = false
+                lm = cur
+            }
+            let say = toast ?? self.toast
+            switch outcome {
+            case .failure(let err):
+                // Method and error only: the offer's target stays out of the log.
+                self.log.warning("message.unsubscribe: \(String(describing: err), privacy: .public)")
+                say(rpcErrorText(Bulk.errorWhat(), err))
+            case .success(let res):
+                if res.outcome == .unsubscribed || res.outcome == .queued {
+                    let offer = Bulk.applied(lm.msg?.unsubscribe, res)
+                    lm.msg?.unsubscribe = offer
+                    if res.outcome == .queued {
+                        say(Bulk.queued())
+                    }
+                }
+            }
+            self.onBulk?(id, lm)
+            then(outcome, lm)
         }
     }
 

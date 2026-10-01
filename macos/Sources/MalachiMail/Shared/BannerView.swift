@@ -26,6 +26,13 @@ final class BannerView: NSView {
         }
     }
 
+    /// Whether the button can be clicked (the bulk strip's waits for its
+    /// request).
+    var buttonEnabled: Bool {
+        get { button.isEnabled }
+        set { button.isEnabled = newValue }
+    }
+
     /// Called when the button is clicked.
     var onButton: (@MainActor () -> Void)?
 

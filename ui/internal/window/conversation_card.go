@@ -208,6 +208,7 @@ func newConvCard(cv *conversationView, item conversation.Item, compact bool) *co
 	c.root.Append(c.body)
 
 	c.mv = &messageView{win: w, parent: &w.ApplicationWindow.Window, stack: c.body, toast: w.Toast, shown: item.Message}
+	c.mv.bulk = func() { w.unsubscribe(c.mv.parent, c.id, w.Toast) }
 	c.mv.load = func() { w.loadRemoteImages(c.id) }
 	c.mv.trust = func() { w.trustSender(c.id) }
 	c.mv.pictures = func() { w.downloadPictures(c.id, w.Toast) }
@@ -663,6 +664,7 @@ func (c *convCard) setHint(on bool) {
 // renderBars redraws the remote-image and pictures bars of an HTML body
 // and leaves the body alone; the bars are made when first shown.
 func (c *convCard) renderBars(lm *loadedMessage) {
+	c.renderBulk(lm)
 	if !c.isHTML || lm == nil {
 		if c.mv.bar != nil {
 			c.mv.setBarVisible(false)

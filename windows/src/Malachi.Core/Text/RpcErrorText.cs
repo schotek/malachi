@@ -3,7 +3,8 @@
 
 // Port of macos/Sources/MalachiCore/Text/RPCErrorText.swift (rpcErrorText,
 // endpointErrorText, tlsReasonText); GTK: ui/internal/widget/rpc.go
-// (RPCErrorText, EndpointErrorText, tlsReasonText).
+// (RPCErrorText, EndpointErrorText, tlsReasonText; unsubscribeFailed's
+// sentence is ui/internal/bulkmail's, Bulk/BulkMail.cs).
 //
 // The sentences for failed calls. The daemon's message is technical English
 // and only ever shown as a trailing detail; the daemon itself stays
@@ -20,6 +21,7 @@
 
 using System;
 using Malachi.Core.Api;
+using Malachi.Core.Bulk;
 using Malachi.Core.I18n;
 using Malachi.Core.Wizard;
 
@@ -140,6 +142,9 @@ public static class RpcErrorText
                 return L10n.T("%s failed: the attachment is not on this computer", what);
             case ErrorCode.MessageGone:
                 return L10n.T("%s failed: the message is no longer on the server", what);
+            case ErrorCode.UnsubscribeFailed:
+                // The sentence stands on its own (widget.RPCErrorText).
+                return BulkMail.Refused();
             default:
                 return L10n.T("%s failed", what);
         }

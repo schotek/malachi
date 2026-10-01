@@ -26,6 +26,12 @@ enum IssuePill {
         }
     }
 
+    /// The tag of a bulk message: the grey of a status to do, the text a
+    /// little stronger (style.go `bulk-pill`).
+    static var bulkColours: Colours {
+        (NSColor.labelColor.withAlphaComponent(0.75), Tint.fg(alpha: 0.1))
+    }
+
     static var internalColours: Colours {
         (.systemOrange, NSColor.systemOrange.withAlphaComponent(0.15))
     }

@@ -387,6 +387,50 @@ public sealed class ConversationControllerTests
         Assert.Empty(c.Conversation.Loaded);
     }
 
+    // The strip of a newsletter or a mailing list has its offer in
+    // message.get: the card asks for it with the body, as it does for
+    // attachments, and an automated message or personal mail does not
+    // (conversation_controller.go needsBody, wantsOffer).
+    [Fact]
+    public async Task BulkCardsAskForTheirOfferToo()
+    {
+        MessageSummary[] messages =
+        [
+            Msg("n1", 1, "t1") with { Bulk = new BulkInfo { Kind = BulkKind.Newsletter, Domain = "shop.example" } },
+            Msg("l1", 2, "t1") with { Bulk = new BulkInfo { Kind = BulkKind.List, ListId = "l.example" } },
+            Msg("r1", 3, "t1") with { Bulk = new BulkInfo { Kind = BulkKind.Automated, Domain = "bank.example" } },
+            Msg("p1", 4, "t1"),
+        ];
+        await using var c = await Conv.StartAsync(messages);
+        var h = c.H;
+        await c.SelectAsync(new ListKey(Thread: "t1"));
+
+        await h.On(() => c.Conversation.NeedsBody("n1"));
+        await h.IdleAsync();
+        Assert.True(c.Conversation.Loaded["n1"].Complete);
+        Assert.Equal(1, h.Fixture.CallCount(API.MessageGet.Name));
+
+        await h.On(() => c.Conversation.NeedsBody("l1"));
+        await h.IdleAsync();
+        Assert.NotNull(c.Conversation.Loaded["l1"].Msg);
+        Assert.Equal(2, h.Fixture.CallCount(API.MessageGet.Name));
+
+        // Automated mail has no offer, personal mail no strip: the body alone.
+        await h.On(() =>
+        {
+            c.Conversation.NeedsBody("r1");
+            c.Conversation.NeedsBody("p1");
+        });
+        await h.IdleAsync();
+        Assert.Null(c.Conversation.Loaded["r1"].Msg);
+        Assert.Null(c.Conversation.Loaded["p1"].Msg);
+        Assert.Equal(2, h.Fixture.CallCount(API.MessageGet.Name));
+
+        // The folder a card's message lies in tells the strip its role.
+        Assert.Equal<FolderRole>(FolderRole.Inbox, c.Conversation.FolderRoleOf(messages[0]));
+        Assert.Equal<FolderRole>(FolderRole.None, c.Conversation.FolderRoleOf(messages[0] with { FolderId = "gone" }));
+    }
+
     // The user's replies in Sent stand among the members by date as sent
     // cards: never marked read, never among what the conversation's actions
     // take; one message and the user's reply to it are a conversation row.

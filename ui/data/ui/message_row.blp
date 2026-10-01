@@ -170,6 +170,19 @@ ListBoxRow message_row {
           hexpand: true;
         }
 
+        // Tag of a bulk message (widget/message_row.go, bulkmail.Tag).
+        Label bulk_pill {
+          visible: false;
+          valign: center;
+          ellipsize: end;
+          max-width-chars: 24;
+
+          styles [
+            "issue-pill",
+            "bulk-pill",
+          ]
+        }
+
         Label status_pill {
           visible: false;
           valign: center;

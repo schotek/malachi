@@ -47,6 +47,7 @@ type MessageService interface {
 	Part(ctx context.Context, p MessagePartParams) (*MessagePartResult, error)
 	Embedded(ctx context.Context, p MessageEmbeddedParams) (*MessageEmbeddedResult, error)
 	Download(ctx context.Context, p MessageDownloadParams) (*MessageDownloadResult, error)
+	Unsubscribe(ctx context.Context, p MessageUnsubscribeParams) (*MessageUnsubscribeResult, error)
 	Flag(ctx context.Context, p MessageFlagParams) (*MessageFlagResult, error)
 	Move(ctx context.Context, p MessageMoveParams) (*MessageMoveResult, error)
 	Delete(ctx context.Context, p MessageDeleteParams) (*MessageDeleteResult, error)

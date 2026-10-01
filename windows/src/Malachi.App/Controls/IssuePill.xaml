@@ -4,9 +4,10 @@ SPDX-FileCopyrightText: 2026 Vladislav Janeček
 SPDX-License-Identifier: GPL-3.0-or-later
 
 Port of ui/internal/widget/pill.go (NewPill, SetStatusPill,
-SetInternalPill); macOS: Shared/PillLabel and IssuePill.swift. A pill of an
-issue: its status in the colour of its category, or the Internal badge of
-a service-desk comment; hidden while its text is empty. The fill is a
+SetInternalPill, SetBulkPill); macOS: Shared/PillLabel and IssuePill.swift. A
+pill of an issue: its status in the colour of its category, or the Internal
+badge of a service-desk comment, or the neutral tag of a bulk message in the
+list; hidden while its text is empty. The fill is a
 visual state's ThemeResource (Resources/Pills.xaml), so it follows the
 theme. The status is its own tooltip, since a long one is cut; the text is
 the site's, shown as plain text.
@@ -29,6 +30,12 @@ the site's, shown as plain text.
                 <VisualState x:Name="Done">
                     <VisualState.Setters>
                         <Setter Target="Fill.Background" Value="{ThemeResource IssuePillDoneBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <!-- issue-pill.bulk-pill: the plain fill, the text at 75 %. -->
+                <VisualState x:Name="Bulk">
+                    <VisualState.Setters>
+                        <Setter Target="Label.Foreground" Value="{ThemeResource BulkPillForegroundBrush}" />
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="Internal">

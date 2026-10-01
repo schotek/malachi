@@ -14,6 +14,7 @@ import (
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
 
+	"github.com/schotek/malachi/backend/internal/bulk"
 	"github.com/schotek/malachi/backend/internal/ingest"
 	"github.com/schotek/malachi/backend/internal/mime"
 	"github.com/schotek/malachi/backend/internal/store"
@@ -343,24 +344,44 @@ func diffUIDs(local, server []uint32) (gone, fresh, common []uint32) {
 
 // envelopeOptions is the header fetch of a new message: the envelope plus
 // the References field, which the envelope does not carry and which
-// threading links on before the body is downloaded.
+// threading links on before the body is downloaded, and the headers bulk
+// mail is recognised by (internal/bulk), so that the list shows its tag and
+// message.get its unsubscribe offer before the body is downloaded.
 var envelopeOptions = imap.FetchOptions{
 	UID: true, Flags: true, InternalDate: true, RFC822Size: true, Envelope: true,
 	BodyStructure: &imap.FetchItemBodyStructure{Extended: true},
-	BodySection:   []*imap.FetchItemBodySection{{Specifier: imap.PartSpecifierHeader, HeaderFields: []string{"References"}, Peek: true}},
+	BodySection:   []*imap.FetchItemBodySection{{Specifier: imap.PartSpecifierHeader, HeaderFields: envelopeFields, Peek: true}},
 }
 
-// maxReferencesHeaderBytes bounds what referencesFromHeader reads of a
-// HEADER.FIELDS literal; a References field is a few hundred bytes, and
-// the parser keeps 50 identifiers anyway.
-const maxReferencesHeaderBytes = 64 << 10
+// envelopeFields are the header fields of the HEADER.FIELDS fetch.
+var envelopeFields = append([]string{"References", bulk.HeaderListID, bulk.HeaderListPost, bulk.HeaderListUnsubscribe,
+	bulk.HeaderListUnsubscribePost, bulk.HeaderPrecedence, bulk.HeaderAutoSubmitted}, bulk.SenderFingerprints...)
 
-// referencesFromHeader parses the References field out of a header-fields
-// literal and drains the rest.
-func referencesFromHeader(r io.Reader) []string {
-	refs := mime.ParseReferences(io.LimitReader(r, maxReferencesHeaderBytes), mime.DefaultLimits())
+// maxHeaderFieldsBytes bounds what envelopeHeaders reads of a HEADER.FIELDS
+// literal; a References field is a few hundred bytes (the parser keeps 50
+// identifiers) and List-Unsubscribe is capped at 17 KiB.
+const maxHeaderFieldsBytes = 64 << 10
+
+// bulkFields are the curated headers the envelope fetch asks for; only
+// these are stored from it (headers_json is replaced by the whole curated
+// set when the body arrives).
+var bulkFields = envelopeFields[1:]
+
+// envelopeHeaders parses a header-fields literal: the References and the
+// bulk headers present, bounded by maxHeaderFieldsBytes, and drains the
+// rest.
+func envelopeHeaders(r io.Reader) (refs []string, headers map[string]string) {
+	refs, curated := mime.ParseHeaderFields(io.LimitReader(r, maxHeaderFieldsBytes), mime.DefaultLimits())
 	io.Copy(io.Discard, r)
-	return refs
+	for _, name := range bulkFields {
+		if v, ok := curated[name]; ok {
+			if headers == nil {
+				headers = map[string]string{}
+			}
+			headers[name] = v
+		}
+	}
+	return refs, headers
 }
 
 // fetchEnvelopes stores headers of the UIDs the store does not have yet.
@@ -450,7 +471,7 @@ func (s *Syncer) messageFromFetch(md *imapclient.FetchMessageData, f store.Folde
 			// The References field asked for by envelopeOptions; the
 			// items of a FETCH reply come in the server's order.
 			if it.Section != nil && it.Section.Specifier == imap.PartSpecifierHeader && len(it.Section.HeaderFields) > 0 {
-				m.References = referencesFromHeader(it.Literal)
+				m.References, m.Headers = envelopeHeaders(it.Literal)
 			} else {
 				io.Copy(io.Discard, it.Literal)
 			}
@@ -463,6 +484,8 @@ func (s *Syncer) messageFromFetch(md *imapclient.FetchMessageData, f store.Folde
 	if m.Date.IsZero() {
 		m.Date = m.InternalDate
 	}
+	res := bulk.Classify(m.Headers)
+	m.Bulk, m.ListID = res.Stored(), res.ListID
 	return m
 }
 
@@ -796,6 +819,12 @@ func summaryOf(m store.Message) api.MessageSummary {
 	if sum.Date.IsZero() {
 		sum.Date = m.InternalDate
 	}
+	// Classified at envelope time (messageFromFetch); "" or "none" give nil.
+	var from string
+	if len(m.From) > 0 {
+		from = m.From[0].Address
+	}
+	sum.Bulk = bulk.Info(m.Bulk, m.ListID, from)
 	return sum
 }
 

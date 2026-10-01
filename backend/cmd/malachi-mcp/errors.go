@@ -73,6 +73,8 @@ func errorText(err error) string {
 			msg += "; the attachment is kept on the mail server only and was not downloaded: call get_attachment again"
 		case api.CodeMessageGone:
 			msg += "; the mail server no longer has this message (another client deleted or moved it); the next sync removes it here"
+		case api.CodeUnsubscribeFailed:
+			msg += "; the sender's server did not accept the request and nothing changed: the user can unsubscribe from the message in Malachi Mail"
 		case api.CodeOffline:
 			msg += "; there is no network connection: try again later"
 		case api.CodeUnavailable:

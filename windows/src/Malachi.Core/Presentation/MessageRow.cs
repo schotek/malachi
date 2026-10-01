@@ -3,7 +3,8 @@
 
 // Port of ui/internal/widget/message_row.go (MessageRow: SetMessage,
 // SetThread, SetReserveExpander, fill, SetExpanded, SetMember, applyLead,
-// applyIssue, SetCompact, SetShowPreview, SetShowAvatar; the margins and sizes of
+// applyIssue, SetBulkPill (widget/pill.go), SetCompact, SetShowPreview,
+// SetShowAvatar; the margins and sizes of
 // message_row.blp), threads.go (the row a listRow becomes: newMessageRow,
 // syncRows) and widget/highlight.go (the matched words in bold); macOS:
 // MessageList/MessageCellView.swift, which keeps this in AppKit and Windows
@@ -79,6 +80,7 @@ public sealed partial class MessageRow : ObservableObject
         ExpanderTooltip = "";
         IssueKey = "";
         StatusText = "";
+        BulkText = "";
         InternalText = "";
         EventText = "";
         EventTooltip = "";
@@ -232,6 +234,15 @@ public sealed partial class MessageRow : ObservableObject
     [ObservableProperty]
     public partial string StatusText { get; private set; }
 
+    /// <summary>
+    /// The neutral pill of a bulk message after the subject ("Bulk",
+    /// "Mailing List", "Automated"; <see cref="Malachi.Core.Bulk.BulkMail.Tag"/>, a
+    /// conversation's is its latest member's); "" hides it, and a row of an
+    /// issue never shows it (message_row.go <c>applyIssue</c>).
+    /// </summary>
+    [ObservableProperty]
+    public partial string BulkText { get; private set; }
+
     /// <summary>The colour of the status pill.</summary>
     [ObservableProperty]
     public partial JiraStatusStyle StatusStyle { get; private set; }
@@ -275,6 +286,7 @@ public sealed partial class MessageRow : ObservableObject
         bool thread;
         bool loading;
         JiraIssueRow? issue;
+        string tag;
         if (row.Thread && row.Summary is { } summary)
         {
             // SetThread: the participants where the sender goes, the member
@@ -295,6 +307,7 @@ public sealed partial class MessageRow : ObservableObject
             loading = t.Loading;
             Expanded = t.Expanded;
             issue = t.Issue;
+            tag = t.Tag;
         }
         else
         {
@@ -315,12 +328,13 @@ public sealed partial class MessageRow : ObservableObject
             loading = false;
             Expanded = false;
             issue = message.Issue;
+            tag = message.Tag;
         }
         IsThread = thread;
         Loading = thread && loading;
         IsMember = row.Member;
         Monochrome = look.Monochrome;
-        ApplyIssue(issue, thread, look.ShowPreview);
+        ApplyIssue(issue, tag, thread, look.ShowPreview);
         // SetCompact.
         MarginTop = look.Compact ? MarginCompact : MarginComfortable;
         MarginBottom = MarginTop;
@@ -346,6 +360,7 @@ public sealed partial class MessageRow : ObservableObject
             parts.Add(IssueKey);
             parts.Add(Subject);
             parts.Add(StatusText);
+            parts.Add(BulkText);
             parts.Add(InternalText);
         }
         if (Unread)
@@ -380,9 +395,12 @@ public sealed partial class MessageRow : ObservableObject
     // change on its first line, without a preview or an unread dot, and under
     // its conversation without the subject line either (one line). A mail
     // row hides all of it. Every text is the site's, plain.
-    private void ApplyIssue(JiraIssueRow? issue, bool thread, bool showPreview)
+    private void ApplyIssue(JiraIssueRow? issue, string tag, bool thread, bool showPreview)
     {
         IsEventRow = issue is { Event: true } && !thread;
+        // The bulk pill (message_row.go SetBulkPill): the tag of a mail row,
+        // never on a row of an issue.
+        BulkText = issue is null ? tag : "";
         if (issue is null)
         {
             IssueKey = "";

@@ -1,0 +1,10 @@
+From: News <news@news.example.com>
+To: bob@example.net
+Subject: Bulk sample 5
+Date: Tue, 2 Sep 2026 10:15:00 +0200
+Message-ID: <bulk-5@news.example.com>
+List-Unsubscribe: <javascript:alert(1)>, <http://news.example.com/plain-http>, <data:text/html;base64,AAAA>, <ftp://news.example.com/x>, <https://user:pw@news.example.com/creds>, <https://>, <https://exa‮mple.com/rtl>, <https://bücher.example/idn>, <https://news.example.com/with space>, <https://news.example.com/n1>, <https://news.example.com/n2>, <https://news.example.com/n3>, <https://news.example.com/n4>, <https://news.example.com/n5>, <https://news.example.com/n6>, <https://news.example.com/n7>, <https://news.example.com/n8>, <https://news.example.com/n9>, <https://news.example.com/n10>, <https://news.example.com/n11>
+ <mailto:late@news.example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body.

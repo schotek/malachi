@@ -1,0 +1,11 @@
+From: News <news@news.example.com>
+To: bob@example.net
+Subject: Bulk sample 1
+Date: Tue, 2 Sep 2026 10:15:00 +0200
+Message-ID: <bulk-1@news.example.com>
+List-Unsubscribe: <mailto:unsub@news.example.com?subject=unsubscribe>, <https://news.example.com/u/abc123>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+Precedence: bulk
+Content-Type: text/plain; charset=utf-8
+
+Body.

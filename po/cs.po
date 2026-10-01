@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-01 12:09+0000\n"
+"POT-Creation-Date: 2026-10-01 12:59+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -182,7 +182,7 @@ msgstr "Připojeno za %d ms"
 msgid "No password is stored for this account. Enter it to continue."
 msgstr "Pro tento účet není uložené heslo. Zadejte ho a pokračujte."
 
-#: ui/internal/accountwizard/results.go:88 ui/internal/widget/rpc.go:100
+#: ui/internal/accountwizard/results.go:88 ui/internal/widget/rpc.go:103
 msgid "The server rejected the user name or password"
 msgstr "Server odmítl uživatelské jméno nebo heslo"
 
@@ -900,6 +900,130 @@ msgstr "Přihlášení selhalo: %s"
 msgid "Check for new mail and show notifications in the background"
 msgstr "Kontrolovat novou poštu a zobrazovat oznámení na pozadí"
 
+#: ui/internal/bulkmail/bulkmail.go:50
+msgctxt "message tag"
+msgid "Bulk"
+msgstr "Hromadná"
+
+#. TRANSLATORS: tag of a message from a discussion mailing list
+#: ui/internal/bulkmail/bulkmail.go:53
+msgctxt "message tag"
+msgid "Mailing List"
+msgstr "Konference"
+
+#. TRANSLATORS: tag of a machine-sent message (receipt, ticket)
+#: ui/internal/bulkmail/bulkmail.go:56
+msgctxt "message tag"
+msgid "Automated"
+msgstr "Automatická"
+
+#: ui/internal/bulkmail/bulkmail.go:106
+msgid "Unsubscribing would confirm to the sender that your address exists."
+msgstr "Odhlášením byste odesílateli potvrdili, že adresa existuje."
+
+#: ui/internal/bulkmail/bulkmail.go:111
+msgid "Automated message"
+msgstr "Automatická zpráva"
+
+#: ui/internal/bulkmail/bulkmail.go:118
+#, c-format
+msgid "Unsubscribed on %s"
+msgstr "Odhlášeno %s"
+
+#: ui/internal/bulkmail/bulkmail.go:123
+#, c-format
+msgid "Message from mailing list %s"
+msgstr "Zpráva z konference %s"
+
+#: ui/internal/bulkmail/bulkmail.go:126
+msgid "_Leave List…"
+msgstr "_Opustit konferenci…"
+
+#: ui/internal/bulkmail/bulkmail.go:128
+msgid "_Leave List"
+msgstr "_Opustit konferenci"
+
+#: ui/internal/bulkmail/bulkmail.go:133
+#, c-format
+msgid "Bulk message from %s"
+msgstr "Hromadná zpráva od %s"
+
+#: ui/internal/bulkmail/bulkmail.go:136
+msgid "_Unsubscribe…"
+msgstr "_Odhlásit odběr…"
+
+#: ui/internal/bulkmail/bulkmail.go:138 ui/internal/bulkmail/bulkmail.go:188
+msgid "_Unsubscribe"
+msgstr "_Odhlásit odběr"
+
+#: ui/internal/bulkmail/bulkmail.go:186 ui/internal/bulkmail/bulkmail.go:191
+#, c-format
+msgid "Unsubscribe from %s?"
+msgstr "Odhlásit odběr od %s?"
+
+#: ui/internal/bulkmail/bulkmail.go:187
+#, c-format
+msgid ""
+"Malachi Mail will ask %s to stop sending these messages. The sender may "
+"still send a few more over the next days."
+msgstr "Malachi Mail požádá %s, aby vám tyto zprávy přestal posílat. Odesílatel může ještě několik dní posílat zprávy."
+
+#: ui/internal/bulkmail/bulkmail.go:193
+#, c-format
+msgid "Leave the mailing list %s?"
+msgstr "Opustit konferenci %s?"
+
+#: ui/internal/bulkmail/bulkmail.go:197
+#, c-format
+msgid ""
+"Malachi Mail will send an unsubscribe request to %s from your account. It "
+"will appear in Sent."
+msgstr "Malachi Mail odešle z vašeho účtu žádost o odhlášení na %s. Objeví se v Odeslaných."
+
+#: ui/internal/bulkmail/bulkmail.go:198
+msgid "_Send Request"
+msgstr "_Odeslat žádost"
+
+#: ui/internal/bulkmail/bulkmail.go:202
+msgid "Open the unsubscribe page?"
+msgstr "Otevřít stránku pro odhlášení?"
+
+#: ui/internal/bulkmail/bulkmail.go:203
+#, c-format
+msgid ""
+"The sender does not offer unsubscribing in one step. This page opens in your "
+"browser:\n"
+"%s"
+msgstr "Odesílatel nenabízí odhlášení jedním krokem. Tato stránka se otevře v prohlížeči:\n%s"
+
+#: ui/internal/bulkmail/bulkmail.go:204 ui/internal/bulkmail/bulkmail.go:230
+msgid "_Open in Browser"
+msgstr "_Otevřít v prohlížeči"
+
+#: ui/internal/bulkmail/bulkmail.go:228
+msgid "The sender could not be verified"
+msgstr "Odesílatele se nepodařilo ověřit"
+
+#: ui/internal/bulkmail/bulkmail.go:229
+#, c-format
+msgid ""
+"Malachi Mail sent nothing because the message is not signed by %s. You can "
+"unsubscribe on the sender's page instead:\n"
+"%s"
+msgstr "Malachi Mail nic neodeslalo, protože zpráva není podepsaná doménou %s. Odhlásit se můžete na stránce odesílatele:\n%s"
+
+#: ui/internal/bulkmail/bulkmail.go:253
+msgid "Unsubscribe request queued"
+msgstr "Žádost o odhlášení čeká ve frontě k odeslání"
+
+#: ui/internal/bulkmail/bulkmail.go:257
+msgid "Unsubscribing"
+msgstr "Odhlášení"
+
+#: ui/internal/bulkmail/bulkmail.go:261
+msgid "The sender's server refused the request."
+msgstr "Server odesílatele žádost odmítl."
+
 #: ui/internal/compose/compose.go:108 ui/internal/compose/compose.go:631
 #: ui/internal/jira/settings.go:123 ui/internal/window/assistant_panel.go:182
 msgid "Remove"
@@ -1021,7 +1145,7 @@ msgid "Save changes to this draft?"
 msgstr "Uložit změny v tomto konceptu?"
 
 #: ui/internal/compose/draft.go:503 ui/internal/widget/consent.go:23
-#: ui/internal/widget/rpc.go:193 ui/internal/window/assistant_panel.go:201
+#: ui/internal/widget/rpc.go:196 ui/internal/window/assistant_panel.go:201
 #: ui/internal/window/remote.go:266 ui/internal/window/remote.go:292
 #: ui/data/ui/account_wizard.ui:401 ui/data/ui/jira_account.ui:25
 msgid "_Cancel"
@@ -1125,7 +1249,7 @@ msgstr "Komentář byl zařazen k odeslání"
 msgid "Comment"
 msgstr "Komentovat"
 
-#: ui/internal/jira/compose.go:164 ui/internal/window/conversation_card.go:280
+#: ui/internal/jira/compose.go:164 ui/internal/window/conversation_card.go:281
 #: ui/data/ui/message_window.ui:38 ui/data/ui/window.ui:442
 msgid "Reply"
 msgstr "Odpovědět"
@@ -1239,7 +1363,7 @@ msgstr "Web Jira odmítl token účtu %s"
 
 #. TRANSLATORS: menu item; "Jira" is a product name.
 #: ui/internal/jira/wizard.go:78 ui/data/ui/preferences.ui:366
-#: ui/data/ui/window.ui:628
+#: ui/data/ui/window.ui:660
 msgid "Add _Jira Account…"
 msgstr "Přidat účet _Jira…"
 
@@ -1597,8 +1721,8 @@ msgid "Add %s"
 msgstr "Přidat %s"
 
 #. TRANSLATORS: menu of the status changes a Jira issue allows.
-#: ui/internal/jira/transitions.go:87 ui/data/ui/message_window.ui:435
-#: ui/data/ui/window.ui:960
+#: ui/internal/jira/transitions.go:87 ui/data/ui/message_window.ui:467
+#: ui/data/ui/window.ui:992
 msgid "Change Status"
 msgstr "Změnit stav"
 
@@ -1729,7 +1853,7 @@ msgstr "%d B"
 #. TRANSLATORS: tooltip of the member count of a conversation row.
 #. TRANSLATORS: subtitle of the message list; %d is the number of
 #. messages in the folder.
-#: ui/internal/widget/message_row.go:210 ui/internal/window/folders.go:340
+#: ui/internal/widget/message_row.go:221 ui/internal/window/folders.go:340
 #, c-format
 msgid "%d message"
 msgid_plural "%d messages"
@@ -1737,222 +1861,222 @@ msgstr[0] "%d zpráva"
 msgstr[1] "%d zprávy"
 msgstr[2] "%d zpráv"
 
-#: ui/internal/widget/message_row.go:294 ui/internal/window/message_view.go:552
+#: ui/internal/widget/message_row.go:307 ui/internal/window/message_view.go:575
 #: ui/internal/window/notify.go:111
 msgid "(No subject)"
 msgstr "(Bez předmětu)"
 
-#: ui/internal/widget/message_row.go:314
-#: ui/internal/window/conversation_card.go:417 ui/internal/window/folders.go:62
+#: ui/internal/widget/message_row.go:327
+#: ui/internal/window/conversation_card.go:418 ui/internal/window/folders.go:62
 msgid "Collapse"
 msgstr "Sbalit"
 
-#: ui/internal/widget/message_row.go:318
-#: ui/internal/window/conversation_card.go:419 ui/internal/window/folders.go:65
+#: ui/internal/widget/message_row.go:331
+#: ui/internal/window/conversation_card.go:420 ui/internal/window/folders.go:65
 msgid "Expand"
 msgstr "Rozbalit"
 
-#: ui/internal/widget/rpc.go:34
+#: ui/internal/widget/rpc.go:35
 #, c-format
 msgid "%s needs a running mail backend"
 msgstr "%s vyžaduje běžící poštovní démon"
 
-#: ui/internal/widget/rpc.go:36
+#: ui/internal/widget/rpc.go:37
 #, c-format
 msgid "%s timed out"
 msgstr "%s vypršelo"
 
-#: ui/internal/widget/rpc.go:40
+#: ui/internal/widget/rpc.go:41
 #, c-format
 msgid "%s is not available yet"
 msgstr "%s zatím není k dispozici"
 
-#: ui/internal/widget/rpc.go:42
+#: ui/internal/widget/rpc.go:43
 #, c-format
 msgid "%s conflicted with another change"
 msgstr "%s se střetlo s jinou změnou"
 
-#: ui/internal/widget/rpc.go:44
+#: ui/internal/widget/rpc.go:45
 #, c-format
 msgid "%s was rejected: %s"
 msgstr "%s bylo odmítnuto: %s"
 
-#: ui/internal/widget/rpc.go:46
+#: ui/internal/widget/rpc.go:47
 msgid "The draft no longer exists"
 msgstr "Koncept už neexistuje"
 
-#: ui/internal/widget/rpc.go:48
+#: ui/internal/widget/rpc.go:49
 msgid "The attachment no longer exists"
 msgstr "Příloha už neexistuje"
 
-#: ui/internal/widget/rpc.go:50
+#: ui/internal/widget/rpc.go:51
 msgid "The attachment is too big"
 msgstr "Příloha je příliš velká"
 
-#: ui/internal/widget/rpc.go:52
+#: ui/internal/widget/rpc.go:53
 #, c-format
 msgid "%s failed: formatted text cannot be saved yet"
 msgstr "%s selhalo: formátovaný text zatím nelze uložit"
 
-#: ui/internal/widget/rpc.go:54
+#: ui/internal/widget/rpc.go:55
 #, c-format
 msgid "%s failed: unknown account"
 msgstr "%s selhalo: neznámý účet"
 
-#: ui/internal/widget/rpc.go:56
+#: ui/internal/widget/rpc.go:57
 #, c-format
 msgid "%s failed: the system keyring is unavailable"
 msgstr "%s selhalo: systémová klíčenka není dostupná"
 
-#: ui/internal/widget/rpc.go:58
+#: ui/internal/widget/rpc.go:59
 #, c-format
 msgid "%s failed: the server rejected the user name or password"
 msgstr "%s selhalo: server odmítl uživatelské jméno nebo heslo"
 
 #. TRANSLATORS: %s is an action such as "Testing the connection".
-#: ui/internal/widget/rpc.go:61
+#: ui/internal/widget/rpc.go:62
 #, c-format
 msgid "%s failed: sign-in required"
 msgstr "%s selhalo: je nutné se přihlásit"
 
-#: ui/internal/widget/rpc.go:63
+#: ui/internal/widget/rpc.go:64
 #, c-format
 msgid "%s failed: the server could not be reached"
 msgstr "%s selhalo: server je nedostupný"
 
-#: ui/internal/widget/rpc.go:65
+#: ui/internal/widget/rpc.go:66
 #, c-format
 msgid "%s failed: the server returned an error"
 msgstr "%s selhalo: server vrátil chybu"
 
-#: ui/internal/widget/rpc.go:72
+#: ui/internal/widget/rpc.go:73
 #, c-format
 msgid "%s failed: the secure connection could not be established"
 msgstr "%s selhalo: zabezpečené spojení se nepodařilo navázat"
 
-#: ui/internal/widget/rpc.go:74
+#: ui/internal/widget/rpc.go:75
 #, c-format
 msgid "%s failed: the server did not respond in time"
 msgstr "%s selhalo: server včas neodpověděl"
 
 #. TRANSLATORS: %s is an action such as "Opening the attachment".
-#: ui/internal/widget/rpc.go:77
+#: ui/internal/widget/rpc.go:78
 #, c-format
 msgid "%s failed: no network connection"
 msgstr "%s selhalo: není připojení k síti"
 
-#: ui/internal/widget/rpc.go:80
+#: ui/internal/widget/rpc.go:81
 #, c-format
 msgid "%s failed: try again in a moment"
 msgstr "%s selhalo: zkuste to za chvíli znovu"
 
-#: ui/internal/widget/rpc.go:82
+#: ui/internal/widget/rpc.go:83
 #, c-format
 msgid "%s failed: the attachment is not on this computer"
 msgstr "%s selhalo: příloha není v tomto počítači"
 
-#: ui/internal/widget/rpc.go:84
+#: ui/internal/widget/rpc.go:87
 #, c-format
 msgid "%s failed: the message is no longer on the server"
 msgstr "%s selhalo: zpráva už na serveru není"
 
-#: ui/internal/widget/rpc.go:87
+#: ui/internal/widget/rpc.go:90
 #, c-format
 msgid "%s failed"
 msgstr "%s selhalo"
 
-#: ui/internal/widget/rpc.go:96
+#: ui/internal/widget/rpc.go:99
 msgid "Failed"
 msgstr "Selhalo"
 
-#: ui/internal/widget/rpc.go:102
+#: ui/internal/widget/rpc.go:105
 msgid "The server could not be reached"
 msgstr "Server je nedostupný"
 
-#: ui/internal/widget/rpc.go:104
+#: ui/internal/widget/rpc.go:107
 msgid "The server returned an error"
 msgstr "Server vrátil chybu"
 
-#: ui/internal/widget/rpc.go:109
+#: ui/internal/widget/rpc.go:112
 msgid "The secure connection could not be established"
 msgstr "Zabezpečené spojení se nepodařilo navázat"
 
-#: ui/internal/widget/rpc.go:111
+#: ui/internal/widget/rpc.go:114
 msgid "The server did not respond in time"
 msgstr "Server včas neodpověděl"
 
-#: ui/internal/widget/rpc.go:113
+#: ui/internal/widget/rpc.go:116
 msgid "Not supported yet"
 msgstr "Zatím není podporováno"
 
 #
-#: ui/internal/widget/rpc.go:115
+#: ui/internal/widget/rpc.go:118
 msgid "Sign in to this account again"
 msgstr "Přihlaste se k tomuto účtu znovu"
 
 #
-#: ui/internal/widget/rpc.go:117
+#: ui/internal/widget/rpc.go:120
 msgid "The sign-in service is not available"
 msgstr "Přihlašovací služba není dostupná"
 
 #. TRANSLATORS: why an endpoint or an account failed
-#: ui/internal/widget/rpc.go:120
+#: ui/internal/widget/rpc.go:123
 msgid "The system keyring is unavailable"
 msgstr "Systémová klíčenka není dostupná"
 
 #. TRANSLATORS: why an endpoint or an account failed
-#: ui/internal/widget/rpc.go:123
+#: ui/internal/widget/rpc.go:126
 msgid "No network connection"
 msgstr "Není připojení k síti"
 
 #. TRANSLATORS: %s is a technical message from the mail backend.
-#: ui/internal/widget/rpc.go:126
+#: ui/internal/widget/rpc.go:129
 #, c-format
 msgid "Rejected: %s"
 msgstr "Odmítnuto: %s"
 
 #. TRANSLATORS: %s is a technical message from the mail backend.
-#: ui/internal/widget/rpc.go:129
+#: ui/internal/widget/rpc.go:132
 #, c-format
 msgid "Failed: %s"
 msgstr "Selhalo: %s"
 
-#: ui/internal/widget/rpc.go:143
+#: ui/internal/widget/rpc.go:146
 msgid "The server's certificate is not from a trusted authority"
 msgstr "Certifikát serveru nepochází od důvěryhodné autority"
 
-#: ui/internal/widget/rpc.go:145
+#: ui/internal/widget/rpc.go:148
 msgid "The server's certificate is for another name"
 msgstr "Certifikát serveru je vystaven pro jiné jméno"
 
-#: ui/internal/widget/rpc.go:147
+#: ui/internal/widget/rpc.go:150
 msgid "The server's certificate has expired"
 msgstr "Platnost certifikátu serveru vypršela"
 
-#: ui/internal/widget/rpc.go:149
+#: ui/internal/widget/rpc.go:152
 msgid "The server's certificate is not valid yet"
 msgstr "Certifikát serveru ještě není platný"
 
-#: ui/internal/widget/rpc.go:151
+#: ui/internal/widget/rpc.go:154
 msgid "The server's certificate is not valid"
 msgstr "Certifikát serveru není platný"
 
-#: ui/internal/widget/rpc.go:153
+#: ui/internal/widget/rpc.go:156
 msgid "The server presented a different certificate than the one you trust"
 msgstr "Server předložil jiný certifikát než ten, kterému důvěřujete"
 
-#: ui/internal/widget/rpc.go:155
+#: ui/internal/widget/rpc.go:158
 msgid "The server does not offer STARTTLS"
 msgstr "Server nenabízí STARTTLS"
 
-#: ui/internal/widget/rpc.go:157
+#: ui/internal/widget/rpc.go:160
 msgid "The server requires TLS before signing in"
 msgstr "Server vyžaduje TLS před přihlášením"
 
 #. TRANSLATORS: the system's certificate check refused the server's
 #. certificate for a reason it does not name (e.g. "not standards
 #. compliant" on macOS).
-#: ui/internal/widget/rpc.go:164
+#: ui/internal/widget/rpc.go:167
 msgid "The system does not accept the server's certificate"
 msgstr "Systém certifikát serveru nepřijímá"
 
@@ -2208,7 +2332,7 @@ msgstr "Adresa zkopírována"
 msgid "_Copy Address"
 msgstr "_Kopírovat adresu"
 
-#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:912
+#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:944
 msgid "_New Message"
 msgstr "_Nová zpráva"
 
@@ -2267,11 +2391,11 @@ msgstr "Uložit _jako…"
 msgid "Save _All"
 msgstr "Uložit _vše"
 
-#: ui/internal/window/attachments.go:335 ui/internal/window/message_view.go:564
+#: ui/internal/window/attachments.go:335 ui/internal/window/message_view.go:587
 msgid "This message is too large to download."
 msgstr "Tato zpráva je příliš velká ke stažení."
 
-#: ui/internal/window/attachments.go:337 ui/internal/window/message_view.go:566
+#: ui/internal/window/attachments.go:337 ui/internal/window/message_view.go:589
 msgid "This message could not be read."
 msgstr "Tuto zprávu se nepodařilo přečíst."
 
@@ -2350,41 +2474,41 @@ msgstr "Příprava přeposílané zprávy"
 msgid "Preparing the reply"
 msgstr "Příprava odpovědi"
 
-#: ui/internal/window/conversation_card.go:281 ui/data/ui/message_window.ui:44
+#: ui/internal/window/conversation_card.go:282 ui/data/ui/message_window.ui:44
 #: ui/data/ui/window.ui:449
 msgid "Reply All"
 msgstr "Odpovědět všem"
 
-#: ui/internal/window/conversation_card.go:282 ui/data/ui/message_window.ui:50
+#: ui/internal/window/conversation_card.go:283 ui/data/ui/message_window.ui:50
 #: ui/data/ui/window.ui:456
 msgid "Forward"
 msgstr "Přeposlat"
 
-#: ui/internal/window/conversation_card.go:507 ui/data/ui/compose.ui:109
-#: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:195
-#: ui/data/ui/window.ui:682
+#: ui/internal/window/conversation_card.go:508 ui/data/ui/compose.ui:109
+#: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:227
+#: ui/data/ui/window.ui:714
 msgid "From"
 msgstr "Od"
 
-#: ui/internal/window/conversation_card.go:507 ui/data/ui/compose.ui:137
-#: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:221
-#: ui/data/ui/window.ui:708
+#: ui/internal/window/conversation_card.go:508 ui/data/ui/compose.ui:137
+#: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:253
+#: ui/data/ui/window.ui:740
 msgid "To"
 msgstr "Komu"
 
-#: ui/internal/window/conversation_card.go:507 ui/data/ui/compose.ui:183
-#: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:249
-#: ui/data/ui/window.ui:736
+#: ui/internal/window/conversation_card.go:508 ui/data/ui/compose.ui:183
+#: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:281
+#: ui/data/ui/window.ui:768
 msgid "Cc"
 msgstr "Kopie"
 
-#: ui/internal/window/conversation_card.go:599
-#: ui/internal/window/message_view.go:473
+#: ui/internal/window/conversation_card.go:600
+#: ui/internal/window/message_view.go:495
 msgid "Loading the message"
 msgstr "Načtení zprávy"
 
-#: ui/internal/window/conversation_card.go:654
-#: ui/internal/window/message_view.go:285
+#: ui/internal/window/conversation_card.go:655
+#: ui/internal/window/message_view.go:299
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
@@ -2392,24 +2516,24 @@ msgstr ""
 "Formátovanou podobu této zprávy nešlo bezpečně zobrazit; toto je její prostý "
 "text."
 
-#: ui/internal/window/conversation_card.go:691 ui/data/ui/embedded_window.ui:61
-#: ui/data/ui/message_window.ui:115 ui/data/ui/message_window.ui:425
-#: ui/data/ui/window.ui:541 ui/data/ui/window.ui:950
+#: ui/internal/window/conversation_card.go:693 ui/data/ui/embedded_window.ui:61
+#: ui/data/ui/message_window.ui:147 ui/data/ui/message_window.ui:457
+#: ui/data/ui/window.ui:573 ui/data/ui/window.ui:982
 msgid "Load _Images"
 msgstr "Načíst _obrázky"
 
-#: ui/internal/window/conversation_card.go:692 ui/data/ui/message_window.ui:121
-#: ui/data/ui/window.ui:547
+#: ui/internal/window/conversation_card.go:694 ui/data/ui/message_window.ui:153
+#: ui/data/ui/window.ui:579
 msgid "Always From This _Sender"
 msgstr "Vždy od tohoto _odesílatele"
 
-#: ui/internal/window/conversation_card.go:693 ui/data/ui/message_window.ui:123
-#: ui/data/ui/window.ui:549
+#: ui/internal/window/conversation_card.go:695 ui/data/ui/message_window.ui:155
+#: ui/data/ui/window.ui:581
 msgid "Load remote images now and whenever this sender writes"
 msgstr "Načíst vzdálené obrázky teď a vždy, když tento odesílatel napíše"
 
-#: ui/internal/window/conversation_card.go:713 ui/data/ui/message_window.ui:152
-#: ui/data/ui/window.ui:578
+#: ui/internal/window/conversation_card.go:715 ui/data/ui/message_window.ui:184
+#: ui/data/ui/window.ui:610
 msgid "_Download Pictures"
 msgstr "_Stáhnout obrázky"
 
@@ -2510,7 +2634,7 @@ msgstr[0] "%d nepřečtená z %d"
 msgstr[1] "%d nepřečtené z %d"
 msgstr[2] "%d nepřečtených z %d"
 
-#: ui/internal/window/folders.go:414 ui/data/ui/window.ui:607
+#: ui/internal/window/folders.go:414 ui/data/ui/window.ui:639
 msgid "No Accounts"
 msgstr "Žádné účty"
 
@@ -2534,12 +2658,12 @@ msgstr "Zatím žádné složky"
 msgid "Folders appear after the first synchronisation."
 msgstr "Složky se objeví po první synchronizaci."
 
-#: ui/internal/window/message_view.go:558
-#: ui/internal/window/message_view.go:570
+#: ui/internal/window/message_view.go:581
+#: ui/internal/window/message_view.go:593
 msgid "(Empty message)"
 msgstr "(Prázdná zpráva)"
 
-#: ui/internal/window/message_view.go:562
+#: ui/internal/window/message_view.go:585
 msgid "Downloading…"
 msgstr "Stahuje se…"
 
@@ -3350,7 +3474,7 @@ msgid "Right"
 msgstr "Vpravo"
 
 #: ui/data/ui/conversation_view.ui:77 ui/data/ui/embedded_window.ui:267
-#: ui/data/ui/message_window.ui:358 ui/data/ui/window.ui:844
+#: ui/data/ui/message_window.ui:390 ui/data/ui/window.ui:876
 msgctxt "accessibility"
 msgid "Loading the message"
 msgstr "Načítání zprávy"
@@ -3367,19 +3491,19 @@ msgstr "Zpráva"
 msgid "Archive"
 msgstr "Archivovat"
 
-#: ui/data/ui/message_window.ui:409 ui/data/ui/window.ui:934
+#: ui/data/ui/message_window.ui:441 ui/data/ui/window.ui:966
 msgid "Mark as Junk"
 msgstr "Označit jako nevyžádanou"
 
-#: ui/data/ui/message_window.ui:415 ui/data/ui/window.ui:940
+#: ui/data/ui/message_window.ui:447 ui/data/ui/window.ui:972
 msgid "Mark as _Unread"
 msgstr "Označit jako _nepřečtené"
 
-#: ui/data/ui/message_window.ui:419 ui/data/ui/window.ui:944
+#: ui/data/ui/message_window.ui:451 ui/data/ui/window.ui:976
 msgid "Mark as _Read"
 msgstr "Označit jako _přečtené"
 
-#: ui/data/ui/message_window.ui:429 ui/data/ui/window.ui:954
+#: ui/data/ui/message_window.ui:461 ui/data/ui/window.ui:986
 msgid "Always Load Images From This _Sender"
 msgstr "Vždy načítat obrázky od tohoto _odesílatele"
 
@@ -3668,7 +3792,7 @@ msgid ""
 msgstr ""
 "Přidá most malachi-mcp do Claude Desktop a Claude Code na tomto počítači"
 
-#: ui/data/ui/preferences.ui:362 ui/data/ui/window.ui:616
+#: ui/data/ui/preferences.ui:362 ui/data/ui/window.ui:648
 msgid "_Add Account…"
 msgstr "_Přidat účet…"
 
@@ -3731,27 +3855,27 @@ msgstr "Tato zpráva je koncept"
 msgid "Edit"
 msgstr "Upravit"
 
-#: ui/data/ui/window.ui:595
+#: ui/data/ui/window.ui:627
 msgid "No Message Selected"
 msgstr "Není vybrána žádná zpráva"
 
-#: ui/data/ui/window.ui:596
+#: ui/data/ui/window.ui:628
 msgid "Select a message to read it here."
 msgstr "Vyberte zprávu a přečtěte si ji zde."
 
-#: ui/data/ui/window.ui:608
+#: ui/data/ui/window.ui:640
 msgid "Add a mail account to start reading and sending mail."
 msgstr "Přidejte poštovní účet a začněte číst a posílat poštu."
 
-#: ui/data/ui/window.ui:918
+#: ui/data/ui/window.ui:950
 msgid "_Preferences"
 msgstr "_Předvolby"
 
-#: ui/data/ui/window.ui:922
+#: ui/data/ui/window.ui:954
 msgid "_Keyboard Shortcuts"
 msgstr "_Klávesové zkratky"
 
-#: ui/data/ui/window.ui:926
+#: ui/data/ui/window.ui:958
 msgid "_About Malachi Mail"
 msgstr "_O aplikaci Malachi Mail"
 

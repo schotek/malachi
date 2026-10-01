@@ -73,6 +73,9 @@ public func rpcErrorText(_ what: String, _ error: (any Error)?) -> String {
             return L10n.T("%s failed: try again in a moment", what)
         case .partNotDownloaded:
             return L10n.T("%s failed: the attachment is not on this computer", what)
+        case .unsubscribeFailed:
+            // widget/rpc.go: the sentence of Bulk.refused; `what` is not used.
+            return Bulk.refused()
         case .messageGone:
             return L10n.T("%s failed: the message is no longer on the server", what)
         default:

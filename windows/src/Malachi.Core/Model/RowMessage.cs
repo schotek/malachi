@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Model/MailModel.swift (RowMessage); GTK:
-// ui/internal/widget/message_row.go (Message). Immutable; the model builds
+// ui/internal/widget/message_row.go (Message, with its Tag). Immutable; the model builds
 // a row's variant with `with`. Its equality compares the lists by
 // reference, as every record's does.
 
@@ -59,4 +59,10 @@ public sealed record RowMessage
     /// (a status or assignee change); null for a mail message.
     /// </summary>
     public JiraIssueRow? Issue { get; init; }
+
+    /// <summary>
+    /// The neutral pill of a bulk message (<see cref="Malachi.Core.Bulk.BulkMail.Tag"/>:
+    /// "Bulk", "Mailing List", "Automated"); empty for personal mail.
+    /// </summary>
+    public string Tag { get; init; } = "";
 }

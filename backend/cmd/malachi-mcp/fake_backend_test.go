@@ -81,6 +81,11 @@ type fakeBackend struct {
 	transitions     map[api.MessageID][]api.IssueTransition
 	transitionCalls []api.IssueTransitionParams
 
+	// unsubscribeCalls is what message.unsubscribe was asked, and
+	// unsubscribeResult what it answers (nil = unsubscribed).
+	unsubscribeCalls  []api.MessageUnsubscribeParams
+	unsubscribeResult *api.MessageUnsubscribeResult
+
 	searchResults []api.SearchResult // what every search.query answers
 	searchCalls   []api.SearchQueryParams
 }
@@ -278,6 +283,19 @@ func (s fakeMessages) Get(_ context.Context, p api.MessageGetParams) (*api.Messa
 		return nil, api.NewError(api.CodeMessageNotFound, "message %s not found", p.MessageID)
 	}
 	return &api.MessageGetResult{Message: m}, nil
+}
+
+func (s fakeMessages) Unsubscribe(_ context.Context, p api.MessageUnsubscribeParams) (*api.MessageUnsubscribeResult, error) {
+	s.f.record(func() { s.f.unsubscribeCalls = append(s.f.unsubscribeCalls, p) })
+	if err := s.f.gate(api.MethodMessageUnsubscribe); err != nil {
+		return nil, err
+	}
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+	if res := s.f.unsubscribeResult; res != nil {
+		return res, nil
+	}
+	return &api.MessageUnsubscribeResult{Outcome: api.UnsubscribeDone}, nil
 }
 
 // Download makes the message whole as the daemon does: no attachment is

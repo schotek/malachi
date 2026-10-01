@@ -1,0 +1,12 @@
+From: Gopher <gopher@example.org>
+To: bob@example.net
+Subject: Bulk sample 2
+Date: Tue, 2 Sep 2026 10:15:00 +0200
+Message-ID: <bulk-2@news.example.com>
+List-Id: Go Nuts <Golang-Nuts.googlegroups.com>
+List-Post: <mailto:golang-nuts@googlegroups.com>
+List-Unsubscribe: <mailto:golang-nuts+unsubscribe@googlegroups.com>
+Precedence: list
+Content-Type: text/plain; charset=utf-8
+
+Body.

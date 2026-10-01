@@ -47,4 +47,8 @@ public enum RPCTimeouts {
     /// `issue.transition`: the request, then the daemon refreshes the
     /// issue from the site for up to 30 s.
     public static let transition: Duration = .seconds(45)
+    /// `message.unsubscribe`: the daemon may verify the message by DKIM and
+    /// talk to the sender's server (15 s) before it answers
+    /// (window/bulk.go `unsubscribeTimeout`).
+    public static let unsubscribe: Duration = .seconds(30)
 }

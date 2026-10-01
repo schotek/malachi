@@ -193,29 +193,37 @@ func (s *messageService) Download(ctx context.Context, p api.MessageDownloadPara
 	if err != nil {
 		return nil, err
 	}
-	need, err := s.b.needsFetch(m)
-	switch {
-	case err != nil:
+	if err := s.b.ensureWhole(ctx, a, m); err != nil {
 		return nil, err
-	case need && !a.Enabled:
-		return nil, api.NewError(api.CodeUnavailable, "account %s is paused", a.ID)
-	case need:
-		accountID, id := a.ID, m.ID
-		f := s.b.dl.start(accountID, id, func(ctx context.Context) error { return s.b.runDownload(ctx, accountID, id) })
-		select {
-		case <-f.done:
-		case <-ctx.Done():
-			return nil, api.NewError(api.CodeCancelled, "the call ended; the download goes on")
-		}
-		if f.err != nil {
-			return nil, f.err
-		}
 	}
 	got, err := s.Get(ctx, api.MessageGetParams{AccountID: p.AccountID, MessageID: p.MessageID})
 	if err != nil {
 		return nil, err
 	}
 	return &api.MessageDownloadResult{Message: got.Message}, nil
+}
+
+// ensureWhole makes the stored message m whole the way message.download
+// does (see Download): nothing to do when nothing is missing, otherwise it
+// joins or starts the message's download and waits for it.
+func (b *Backend) ensureWhole(ctx context.Context, a store.Account, m store.Message) error {
+	need, err := b.needsFetch(m)
+	switch {
+	case err != nil:
+		return err
+	case need && !a.Enabled:
+		return api.NewError(api.CodeUnavailable, "account %s is paused", a.ID)
+	case need:
+		accountID, id := a.ID, m.ID
+		f := b.dl.start(accountID, id, func(ctx context.Context) error { return b.runDownload(ctx, accountID, id) })
+		select {
+		case <-f.done:
+		case <-ctx.Done():
+			return api.NewError(api.CodeCancelled, "the call ended; the download goes on")
+		}
+		return f.err
+	}
+	return nil
 }
 
 // needsDownload says whether message.download has anything to fetch for a

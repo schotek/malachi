@@ -10,6 +10,7 @@ ui/internal/accountwizard/trust.go
 ui/internal/accountwizard/wizard.go
 ui/internal/assistant/assistant.go
 ui/internal/background/background.go
+ui/internal/bulkmail/bulkmail.go
 ui/internal/compose/compose.go
 ui/internal/compose/draft.go
 ui/internal/compose/prefill.go

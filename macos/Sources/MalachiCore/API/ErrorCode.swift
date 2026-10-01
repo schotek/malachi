@@ -77,6 +77,10 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     /// The part's data is not stored on this device (`Attachment.remote`);
     /// `message.download` fetches it.
     public static let partNotDownloaded: ErrorCode = 1504
+    /// `message.unsubscribe` reached the sender's server, which refused or
+    /// did not answer the one-click request (`message` carries the status,
+    /// never shown verbatim).
+    public static let unsubscribeFailed: ErrorCode = 1505
 
     /// The stable symbolic name (api.ErrorCode.String): `"attachmentTooBig"`,
     /// or `"unknown(1234)"` for a code this client does not know.
@@ -96,6 +100,7 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .offline, .networkError, .serverError, .tlsError, .serverTimeout, .messageGone,
         .storageError, .migrationFailed,
         .malformedMessage, .sanitizeFailed, .attachmentTooBig, .partNotFound, .partNotDownloaded,
+        .unsubscribeFailed,
     ]
 
     private static let names: [ErrorCode: String] = [
@@ -133,6 +138,7 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .attachmentTooBig: "attachmentTooBig",
         .partNotFound: "partNotFound",
         .partNotDownloaded: "partNotDownloaded",
+        .unsubscribeFailed: "unsubscribeFailed",
     ]
 }
 

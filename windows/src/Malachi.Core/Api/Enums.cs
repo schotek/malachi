@@ -688,3 +688,63 @@ public readonly record struct IssueField(string Value) : IWireEnumeration<IssueF
     /// <summary>The wire string.</summary>
     public override string ToString() => Value ?? "";
 }
+
+/// <summary>api.BulkKind: what kind of bulk mail a message is.</summary>
+[JsonConverter(typeof(StringWireValueConverter<BulkKind>))]
+public readonly record struct BulkKind(string Value) : IWireEnumeration<BulkKind>
+{
+    /// <summary>Marketing or newsletter mail.</summary>
+    public const string Newsletter = "newsletter";
+
+    /// <summary>A discussion mailing list.</summary>
+    public const string List = "list";
+
+    /// <summary>Machine-sent mail without an unsubscribe offer.</summary>
+    public const string Automated = "automated";
+
+    /// <summary>The value of a wire string.</summary>
+    public static implicit operator BulkKind(string value) => new(value);
+
+    /// <summary>The wire string.</summary>
+    public override string ToString() => Value ?? "";
+}
+
+/// <summary>api.UnsubscribeMethod: how <c>message.unsubscribe</c> would act.</summary>
+[JsonConverter(typeof(StringWireValueConverter<UnsubscribeMethod>))]
+public readonly record struct UnsubscribeMethod(string Value) : IWireEnumeration<UnsubscribeMethod>
+{
+    /// <summary>RFC 8058 one-click POST by the daemon, after a DKIM check.</summary>
+    public const string OneClick = "oneClick";
+
+    /// <summary>The daemon queues an unsubscribe message in the outbox.</summary>
+    public const string Mailto = "mailto";
+
+    /// <summary>Only a web page; the client opens it after asking.</summary>
+    public const string Url = "url";
+
+    /// <summary>The value of a wire string.</summary>
+    public static implicit operator UnsubscribeMethod(string value) => new(value);
+
+    /// <summary>The wire string.</summary>
+    public override string ToString() => Value ?? "";
+}
+
+/// <summary>api.UnsubscribeOutcome: what <c>message.unsubscribe</c> did.</summary>
+[JsonConverter(typeof(StringWireValueConverter<UnsubscribeOutcome>))]
+public readonly record struct UnsubscribeOutcome(string Value) : IWireEnumeration<UnsubscribeOutcome>
+{
+    /// <summary>The one-click POST was accepted (Go <c>UnsubscribeDone</c>).</summary>
+    public const string Unsubscribed = "unsubscribed";
+
+    /// <summary>The unsubscribe message is in the outbox.</summary>
+    public const string Queued = "queued";
+
+    /// <summary>Nothing was sent; the client offers the page (Go <c>UnsubscribeOpenURL</c>).</summary>
+    public const string OpenUrl = "openUrl";
+
+    /// <summary>The value of a wire string.</summary>
+    public static implicit operator UnsubscribeOutcome(string value) => new(value);
+
+    /// <summary>The wire string.</summary>
+    public override string ToString() => Value ?? "";
+}

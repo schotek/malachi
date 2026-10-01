@@ -19,6 +19,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Malachi.Core.Api;
+using Malachi.Core.Bulk;
 using Malachi.Core.Model;
 
 namespace Malachi.Core.Controllers;
@@ -33,8 +34,8 @@ namespace Malachi.Core.Controllers;
 /// members the actions take), the bodies from the message cache, one card at a time and
 /// only for the cards the pane asks for (<see cref="NeedsBody"/>):
 /// <c>message.body</c> alone, and <c>message.get</c> too only for a card that
-/// needs what it adds to the summary (attachments, the Cc of the recipients'
-/// disclosure). The entries of the cards are held here
+/// needs what it adds to the summary (attachments, the unsubscribe offer of a
+/// bulk message, the Cc of the recipients' disclosure). The entries of the cards are held here
 /// (<see cref="Loaded"/>), so a long conversation does not lose them to the
 /// cache's caps while it is shown.
 /// </summary>
@@ -420,7 +421,8 @@ public sealed partial class ConversationController : IDisposable
     /// The card of member <paramref name="id"/> is near the viewport: its
     /// body is fetched unless held already (<c>message.body</c>;
     /// <c>message.get</c> as well when <paramref name="details"/>, or when the
-    /// message has attachments, whose chips need it, unless it failed for
+    /// message has attachments, whose chips need it, or is a newsletter or a
+    /// mailing list, whose strip needs its offer, unless it failed for
     /// this member before). An event has no body. The entry is held in
     /// <see cref="Loaded"/> and announced through <see cref="EntryLoaded"/>
     /// whenever a half of it arrives. The body is the variant the user chose
@@ -433,7 +435,7 @@ public sealed partial class ConversationController : IDisposable
         {
             return;
         }
-        var full = (details || s.HasAttachments) && !noGet.Contains(id);
+        var full = (details || s.HasAttachments || BulkReading.WantsOffer(s)) && !noGet.Contains(id);
         var reveal = quoted.IsRevealed(id);
         if (loaded.TryGetValue(id, out var held) && held.QuotedShown == reveal && held.BodySettled && (!full || held.Msg is not null))
         {
@@ -472,6 +474,17 @@ public sealed partial class ConversationController : IDisposable
         {
             Cache.FetchBody(s, Then, reveal);
         }
+    }
+
+    /// <summary>
+    /// The role of the folder <paramref name="s"/> lies in (the bulk strip of
+    /// a card changes in the junk folder); <see cref="FolderRole.None"/> for
+    /// a folder the model does not know.
+    /// </summary>
+    public FolderRole FolderRoleOf(MessageSummary s)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        return Mail.FolderRole(new FolderKey(s.AccountId, s.FolderId));
     }
 
     /// <summary>Whether the quoted history of the card of member <paramref name="id"/> shows.</summary>

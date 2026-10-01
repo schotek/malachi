@@ -1039,6 +1039,83 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   password stops all attempts for the account until it is edited, so a
   wrong password cannot lock the account out through repeated logins.
 
+### 7.2 Unsubscribing
+
+`message.unsubscribe` ([api.md §4.3](api.md#messageunsubscribe)) makes the
+daemon act on a header written by the sender, so it is built so that the
+sender gains nothing beyond what the message itself offers.
+
+- **Never automatic.** Nothing unsubscribes, fetches an unsubscribe URL or
+  sends an unsubscribe mail because a message arrived or was opened. The
+  clients ask first and show where the request goes; the MCP tool exists
+  only behind `-allow-modify` and tells the model to act only on the
+  user's explicit request (§10).
+- **Refused in the junk folder** (and for a message flagged junk): a reply
+  to spam, even a one-click request, confirms that the address is read.
+  `message.get` offers nothing there and `message.unsubscribe` answers
+  invalidArgument; the clients show a warning instead. An issue-tracker
+  account is never classified or offered anything.
+- **The client names the message only.** The daemon reads the headers
+  again from the stored message (the whole message, held in memory under
+  `neverStoreAttachments`); a client cannot make it POST to or mail an
+  address of its choosing.
+- **What is sent, to whom.** One-click: a single `https:` POST of
+  `List-Unsubscribe=One-Click` to the URI of the message, with a fixed
+  `User-Agent` and nothing else about the user (no cookies, no `Referer`,
+  no account data). `mailto:`: a plain-text message from the account's
+  own address to the first address of the URI, with its `subject` and
+  `body` (no `cc`, no `bcc`), queued in the outbox and copied to Sent, so
+  the user can see exactly what went out. A web page is never fetched by
+  the daemon; the client opens it in the user's browser after showing the
+  address.
+- **DKIM before the POST.** RFC 8058 requires the one-click URL to come
+  from the sender, and a header can be added on the way. The daemon
+  therefore sends only when a signature of the message verifies
+  (`go-msgauth`, at most five signatures, DNS answered within 10 s), is by
+  the same organisation as the `From` domain (public suffix + 1, so a
+  signature of `example.com` serves `mail.example.com`, not `example.org`)
+  and signs `From`, `List-Unsubscribe` and `List-Unsubscribe-Post`. A
+  message with a repeated `From`, `List-Unsubscribe` or
+  `List-Unsubscribe-Post` field is not verified (the shown field would not
+  be the signed one), and so is one that is not at hand whole (too big, or
+  reduced and not held). Not verified means nothing is sent: the result is
+  `openUrl` with `unverified`, and the client offers the page in the
+  browser, where the user decides.
+- **Dial guard, no redirects.** The request is one connection to a public
+  address: at the moment of dialling, so also for a name that resolves or
+  is rebound to one, the daemon refuses loopback, private (RFC 1918 and
+  fc00::/7), link-local, unspecified, multicast and carrier-grade-NAT
+  addresses and the reserved blocks of `0.0.0.0/8`, `198.18.0.0/15` and
+  `240.0.0.0/4`. The URL is `https:` with a host, no credentials, ASCII
+  only (an internationalised host must be written as punycode). A
+  redirect is never followed (a 3xx answer is a failure), the answer is
+  read to 64 KiB and discarded, the request ends after 15 s. With an HTTP
+  proxy in the environment the request goes to the proxy (the user's
+  choice), which the guard does not cover. NAT64 and 6to4 addresses that
+  embed a private IPv4 address are not recognised.
+- **No repeats.** One request at a time per list or sender (a second
+  concurrent call is `conflict`), and a repeat within 60 seconds is
+  answered from the record without a new POST or mail.
+- **Hosts refused before a transport is chosen.** A literal address the
+  guard would block, a single-label name and names under `.local`,
+  `.localhost`, `.internal` and `.home.arpa` are refused first, so a
+  configured proxy (which resolves and connects for the daemon) cannot be
+  used to reach them.
+- **Privacy in the log.** The URL, the address and the sender are never
+  logged, nor the error of a failed request (a DNS or TLS error names the
+  host): only the account, the outcome and a status or error class (`dns`,
+  `tls`, `timeout`, `refused`, `blocked`, `status`, `other`).
+- **Hostile headers** (`internal/bulk`, tests with pathological
+  fixtures): at most eight bracketed URIs of 2048 bytes are read from a
+  field, only `https:` and `mailto:` with usable content count (`http:`,
+  `javascript:`, `data:`, unclosed brackets, control, bidirectional or
+  non-ASCII characters are ignored), and the `List-Id`, the sender's
+  domain and the target are cleaned of control and format characters
+  before any client shows them. The clients show them as plain text only.
+- **Remembered unsubscriptions** record only that the user unsubscribed
+  from a list or sender through the daemon (not a page opened in the
+  browser) and when; they go with the account.
+
 ## 8. Local storage
 
 - One daemon per store: before it touches the store or the socket, the
@@ -1415,6 +1492,10 @@ Defences:
   `delete_messages` only moves to Trash and refuses messages already in
   Trash or in the Outbox; `transition_issue` performs only a status
   transition the site lists for the user and never one that needs input;
+  `unsubscribe` is refused for a `mailto` offer without `-allow-send` (it
+  would queue mail) and passes no URL or address (the daemon reads the offer from
+  the stored message and applies §7.2) and never returns the offer's page
+  to the model;
   `send_message` accepts only drafts created by the same process, at the
   recorded version;
 - no account management, no configuration, no credentials or server

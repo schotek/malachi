@@ -338,14 +338,16 @@ public final class ConversationController {
     /// The card of member `id` is near the viewport: its body is fetched
     /// unless held already (message.body; message.get as well when
     /// `details`, or when the message has attachments, whose chips need
-    /// it, unless it failed for this member before). An event has no body.
+    /// it, or when it is a newsletter or list message, whose strip needs its
+    /// unsubscribe offer, unless it failed for this member before). An event
+    /// has no body.
     /// The entry is held in `loaded` and announced through `onLoaded`
     /// whenever a half of it arrives. The body is the variant the user
     /// chose for the card: without its quoted history unless revealed
     /// (`setQuoted`).
     public func needsBody(_ id: MessageID, details: Bool = false) {
         guard let s = member(id), !readsWithoutBody(s) else { return }
-        let full = (details || s.hasAttachments) && !noGet.contains(id)
+        let full = (details || s.hasAttachments || Bulk.wantsOffer(s)) && !noGet.contains(id)
         let reveal = quoted.isRevealed(id)
         if let lm = loaded[id], lm.quotedShown == reveal, lm.bodySettled, !full || lm.msg != nil {
             return

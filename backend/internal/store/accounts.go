@@ -396,6 +396,7 @@ func (s *Store) DeleteAccount(ctx context.Context, id string, deleteLocalData bo
 		`DELETE FROM issue_items WHERE account_id = ?`,
 		`DELETE FROM issues WHERE account_id = ?`,
 		`DELETE FROM issue_spaces WHERE account_id = ?`,
+		`DELETE FROM unsubscriptions WHERE account_id = ?`,
 		`DELETE FROM meta WHERE key = '` + MetaIssueMePrefix + `' || ?`,
 		`DELETE FROM meta WHERE key = '` + MetaIssueMailPrefix + `' || ?`,
 	} {

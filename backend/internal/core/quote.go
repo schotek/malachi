@@ -9,7 +9,6 @@ import (
 	"errors"
 	"html"
 	"net/mail"
-	"net/url"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -197,60 +196,23 @@ func escapeLines(s string) string {
 // unusable addresses are dropped, the rest is capped like a draft, and
 // the body goes through the sanitiser so the first save is the identity.
 func newDraft(b *Backend, a store.Account, mailto string) (api.Draft, error) {
-	bad := func(format string, args ...any) error {
-		return api.NewError(api.CodeInvalidArgument, format, args...)
-	}
 	d := api.Draft{AccountID: api.AccountID(a.ID)}
 	if mailto == "" {
 		return d, nil
 	}
-	u, err := url.Parse(mailto)
-	if err != nil || !strings.EqualFold(u.Scheme, "mailto") {
-		return d, bad("mailto must be a mailto: URI")
+	f, err := parseMailto(mailto)
+	if err != nil {
+		return d, err
 	}
-	if to, err := url.PathUnescape(u.Opaque); err == nil {
-		d.To = mailtoAddresses(to)
-	}
-	for key, values := range u.Query() {
-		if len(values) == 0 {
-			continue
-		}
-		v := values[0]
-		switch strings.ToLower(key) {
-		case "to":
-			d.To = append(d.To, mailtoAddresses(v)...)
-		case "cc":
-			d.CC = mailtoAddresses(v)
-		case "bcc":
-			d.BCC = mailtoAddresses(v)
-		case "subject":
-			d.Subject = capSubject(strings.TrimSpace(cleanSubject(v)))
-		case "body":
-			v = strings.ReplaceAll(strings.ToValidUTF8(v, "�"), "\r\n", "\n")
-			v = strings.Map(func(r rune) rune {
-				if (r < 0x20 && r != '\n' && r != '\t') || r == 0x7f {
-					return -1
-				}
-				return r
-			}, v)
-			if len(v) > api.MaxDraftBodyBytes {
-				return d, bad("mailto body too long (limit %d bytes)", api.MaxDraftBodyBytes)
-			}
-			d.TextBody = v
-			if v == "" {
-				continue
-			}
-			out, err := b.Sanitize(sanitize.Input{HTML: escapeLines(v), Mode: sanitize.ModeCompose,
-				Policy: api.RemoteBlock, MaxOutputSize: api.MaxDraftBodyBytes})
-			if err != nil {
-				b.log.Warn("mailto body refused, keeping the text", "err", err)
-				continue
-			}
+	d.To, d.CC, d.BCC, d.Subject, d.TextBody = f.To, f.CC, f.BCC, f.Subject, f.Body
+	if f.Body != "" {
+		out, err := b.Sanitize(sanitize.Input{HTML: escapeLines(f.Body), Mode: sanitize.ModeCompose,
+			Policy: api.RemoteBlock, MaxOutputSize: api.MaxDraftBodyBytes})
+		if err != nil {
+			b.log.Warn("mailto body refused, keeping the text", "err", err)
+		} else {
 			d.HTMLBody, d.TextBody = out.HTML, out.Text
 		}
-	}
-	if len(d.To)+len(d.CC)+len(d.BCC) > api.MaxDraftRecipients {
-		return d, bad("too many recipients (limit %d)", api.MaxDraftRecipients)
 	}
 	return d, nil
 }

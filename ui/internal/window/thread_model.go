@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/bulkmail"
 	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
@@ -759,6 +760,7 @@ func (m *mailModel) setOutbox(id api.MessageID, o *api.OutboxInfo) {
 func summaryThread(t api.ThreadSummary, expanded, loading bool) widget.Thread {
 	return widget.Thread{
 		Issue:          jira.ThreadRowIssue(t, i18n.Tr),
+		Tag:            bulkmail.Tag(t.Latest.Bulk, i18n.Tr),
 		Participants:   t.Participants,
 		Subject:        t.Subject,
 		Snippet:        t.Snippet,

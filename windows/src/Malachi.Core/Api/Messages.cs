@@ -123,6 +123,64 @@ public sealed record MessageSummary
     /// </summary>
     [JsonPropertyName("issue")]
     public MessageIssue? Issue { get; init; }
+
+    /// <summary>
+    /// Present only for a message the daemon classified as bulk mail from its
+    /// headers (newsletter, mailing list, automated); absent for personal
+    /// mail, issue-tracker items and rows not classified yet.
+    /// </summary>
+    [JsonPropertyName("bulk")]
+    public BulkInfo? Bulk { get; init; }
+}
+
+/// <summary>
+/// api.BulkInfo: classifies a bulk message. Every string is cleaned by the
+/// daemon (no control or bidi characters) but still comes from the mail:
+/// display it as plain text.
+/// </summary>
+public sealed record BulkInfo
+{
+    /// <summary>newsletter, list or automated.</summary>
+    [JsonPropertyName("kind")]
+    public required BulkKind Kind { get; init; }
+
+    /// <summary>
+    /// The List-Id identifier, lower case, without the angle brackets and the
+    /// phrase; set for a list and, when the header exists, for a newsletter.
+    /// </summary>
+    [JsonPropertyName("listId")]
+    public string? ListId { get; init; }
+
+    /// <summary>The lower-case domain of the From address, for display.</summary>
+    [JsonPropertyName("domain")]
+    public string? Domain { get; init; }
+}
+
+/// <summary>
+/// api.UnsubscribeOffer: the best unsubscribe method of a message. Present
+/// only when the List-Unsubscribe header offers a method the daemon can use,
+/// and never for a message in the junk folder.
+/// </summary>
+public sealed record UnsubscribeOffer
+{
+    /// <summary>oneClick, mailto or url.</summary>
+    [JsonPropertyName("method")]
+    public required UnsubscribeMethod Method { get; init; }
+
+    /// <summary>What the confirmation shows: the host of the URL, or the mailto address.</summary>
+    [JsonPropertyName("target")]
+    public required string Target { get; init; }
+
+    /// <summary>The https page to open; only for the url method.</summary>
+    [JsonPropertyName("url")]
+    public string? Url { get; init; }
+
+    /// <summary>
+    /// Set when the user already unsubscribed from this list or sender
+    /// through <c>message.unsubscribe</c> (oneClick or mailto).
+    /// </summary>
+    [JsonPropertyName("unsubscribedAt")]
+    public DateTimeOffset? UnsubscribedAt { get; init; }
 }
 
 /// <summary>
@@ -211,6 +269,13 @@ public sealed record Message
     /// Auto-Submitted, …); never the raw header block.
     /// </summary>
     public IReadOnlyDictionary<string, string>? Headers { get; init; }
+
+    /// <summary>
+    /// The unsubscribe offer of a bulk message (<c>message.get</c> only);
+    /// absent when the headers offer no usable method, in the junk folder
+    /// and for issue-tracker accounts.
+    /// </summary>
+    public UnsubscribeOffer? Unsubscribe { get; init; }
 }
 
 /// <summary>
@@ -228,6 +293,7 @@ public sealed class MessageConverter : JsonConverter<Message>
     private const string ReferencesKey = "references";
     private const string AttachmentsKey = "attachments";
     private const string HeadersKey = "headers";
+    private const string UnsubscribeKey = "unsubscribe";
 
     /// <inheritdoc/>
     public override Message Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
@@ -250,6 +316,7 @@ public sealed class MessageConverter : JsonConverter<Message>
             References = Member<IReadOnlyList<string>>(root, ReferencesKey, options),
             Attachments = Member<IReadOnlyList<Attachment>>(root, AttachmentsKey, options) ?? [],
             Headers = Member<IReadOnlyDictionary<string, string>>(root, HeadersKey, options),
+            Unsubscribe = Member<UnsubscribeOffer>(root, UnsubscribeKey, options),
         };
     }
 
@@ -271,6 +338,7 @@ public sealed class MessageConverter : JsonConverter<Message>
         WriteMember(writer, ReferencesKey, value.References, options);
         WriteMember(writer, AttachmentsKey, value.Attachments ?? [], options);
         WriteMember(writer, HeadersKey, value.Headers, options);
+        WriteMember(writer, UnsubscribeKey, value.Unsubscribe, options);
         writer.WriteEndObject();
     }
 
@@ -669,6 +737,45 @@ public sealed record MessageDownloadResult
     /// <summary>The message after the download.</summary>
     [JsonPropertyName("message")]
     public required Message Message { get; init; }
+}
+
+/// <summary>
+/// api.MessageUnsubscribeParams: names the message whose unsubscribe offer to
+/// use. The daemon re-reads the headers from the stored message; the client
+/// sends no URL or address.
+/// </summary>
+public sealed record MessageUnsubscribeParams
+{
+    /// <summary>The account.</summary>
+    [JsonPropertyName("accountId")]
+    public required AccountId AccountId { get; init; }
+
+    /// <summary>The message.</summary>
+    [JsonPropertyName("messageId")]
+    public required MessageId MessageId { get; init; }
+}
+
+/// <summary>api.MessageUnsubscribeResult: what <c>message.unsubscribe</c> did.</summary>
+public sealed record MessageUnsubscribeResult
+{
+    /// <summary>unsubscribed, queued or openUrl.</summary>
+    [JsonPropertyName("outcome")]
+    public required UnsubscribeOutcome Outcome { get; init; }
+
+    /// <summary>The https page for openUrl.</summary>
+    [JsonPropertyName("url")]
+    public string? Url { get; init; }
+
+    /// <summary>
+    /// True when a one-click offer fell back to openUrl because the DKIM check
+    /// failed; absent means false.
+    /// </summary>
+    [JsonPropertyName("unverified")]
+    public bool? Unverified { get; init; }
+
+    /// <summary>Set for unsubscribed and queued.</summary>
+    [JsonPropertyName("unsubscribedAt")]
+    public DateTimeOffset? UnsubscribedAt { get; init; }
 }
 
 /// <summary>

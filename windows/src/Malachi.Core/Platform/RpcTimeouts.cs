@@ -8,7 +8,8 @@
 // ui/internal/accountwizard/wizard.go (discoverTimeout,
 // testTimeout, addTimeout, oauthStartTimeout, oauthWaitCallTimeout),
 // accountwizard/jira_flow.go (detectSiteTimeout, listSpacesTimeout),
-// window/issue_actions.go (issueTimeout), backend/pkg/api/auth.go
+// window/issue_actions.go (issueTimeout), window/bulk.go (unsubscribeTimeout),
+// backend/pkg/api/auth.go
 // (HandshakeTimeout).
 
 using System;
@@ -91,4 +92,10 @@ public static class RpcTimeouts
 
     /// <summary><c>issue.transition</c>: the transition, then the issue's refresh (up to 30 s).</summary>
     public static readonly TimeSpan Transition = TimeSpan.FromSeconds(45);
+
+    /// <summary>
+    /// <c>message.unsubscribe</c>: the daemon may verify the message and talk
+    /// to the sender's server (15 s) first (bulk.go <c>unsubscribeTimeout</c>).
+    /// </summary>
+    public static readonly TimeSpan Unsubscribe = TimeSpan.FromSeconds(30);
 }

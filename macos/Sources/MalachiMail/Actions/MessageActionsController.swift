@@ -250,6 +250,65 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
         actions.openDraft(id)
     }
 
+    func folderRole(of summary: MessageSummary) -> FolderRole {
+        actions.mailbox.model.folderRole(FolderKey(account: summary.accountId, folder: summary.folderId))
+    }
+
+    // MARK: Unsubscribing (window/bulk.go)
+
+    /// The bulk strip's button for message `id`: the confirmation first
+    /// (nothing happens without it; the texts are plain text, they come
+    /// from the mail), then the page in the browser for a web-page offer,
+    /// otherwise `message.unsubscribe` through the cache. The answer
+    /// `openUrl` (a one-click offer the daemon could not verify) asks again
+    /// before it opens the sender's page. Toasts go over `window`.
+    func unsubscribe(_ id: MessageID, from window: NSWindow?) {
+        guard let lm = cache.loaded(id), !lm.unsubscribing, let m = lm.msg,
+              let offer = m.unsubscribe, offer.unsubscribedAt == nil,
+              let conf = Bulk.confirm(Bulk.message(m.summary, lm)) else { return }
+        let summary = m.summary
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard await self.askBulk(conf, on: window) else { return }
+            if offer.method == .url {
+                self.openBulkPage(offer.url ?? "", from: window)
+                return
+            }
+            self.cache.unsubscribe(summary, toast: { [weak self] text in self?.toast(text, in: window) }) { [weak self] outcome, lm in
+                guard let self, case .success(let res) = outcome, res.outcome == .openUrl else { return }
+                self.bulkFallback(lm, res, on: window)
+            }
+        }
+    }
+
+    /// window/bulk.go `bulkDialog`: Cancel and the suggested confirmation;
+    /// true on confirm only.
+    private func askBulk(_ conf: Bulk.Confirmation, on window: NSWindow?) async -> Bool {
+        await state.alerts.confirm(
+            on: window, heading: conf.heading, body: conf.body, confirmLabel: conf.confirm,
+            declineLabel: L10n.T("_Cancel"))
+    }
+
+    /// window/bulk.go `bulkFallback`: the daemon sent nothing and offers the
+    /// sender's page instead; asked about once more, then opened.
+    private func bulkFallback(_ lm: LoadedMessage, _ res: MessageUnsubscribeResult, on window: NSWindow?) {
+        guard let url = res.url, Bulk.openableURL(url) != nil else { return }
+        let conf = Bulk.fallback(lm.msg, res)
+        Task { @MainActor [weak self] in
+            guard let self, await self.askBulk(conf, on: window) else { return }
+            self.openBulkPage(url, from: window)
+        }
+    }
+
+    /// window/bulk.go `openBulkPage`: the sender's unsubscribe page in the
+    /// browser, https only, never anything else the mail carries.
+    private func openBulkPage(_ raw: String, from window: NSWindow?) {
+        guard let uri = Bulk.openableURL(raw) else { return }
+        openInBrowser(uri) { [weak self] text in
+            self?.toast(text, in: window)
+        }
+    }
+
     // MARK: Links (remote.go `openLink`)
 
     /// A link the user activated in a message: mailto: opens a new message,

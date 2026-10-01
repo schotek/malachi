@@ -125,6 +125,7 @@ final class ConversationCardView: NSView {
     private var details: AddressHeaderView?
     private var chips: FlowView?
     private var hintLabel: NSTextField?
+    private var bulkBar: BannerView?
     private var banner: BannerView?
     private var remoteBar: RemoteBarView?
     private var picturesBar: RemoteBarView?
@@ -155,7 +156,7 @@ final class ConversationCardView: NSView {
 
     /// The places in `content`, under the header and the preview.
     private enum Slot: Int, CaseIterable {
-        case banner, remote, pictures, text, body, quoted
+        case bulk, banner, remote, pictures, text, body, quoted
     }
 
     /// The hairline around the card. What the card holds keeps inside it:
@@ -588,6 +589,7 @@ final class ConversationCardView: NSView {
     /// one moves none.
     func renderBars(_ lm: LoadedMessage?) {
         guard !folded else { return }
+        renderBulk(lm)
         guard isHTML, let lm else {
             remoteBar?.isHidden = true
             picturesBar?.isHidden = true
@@ -607,6 +609,32 @@ final class ConversationCardView: NSView {
             bar.setLoading(pictures.loading)
             bar.isHidden = !pictures.visible
         }
+    }
+
+    /// The bulk strip of the card's message as `lm` holds it (the summary
+    /// alone while it is nil), from the folder it lies in (conversation_card.go
+    /// `renderBulk`); the bar is made when first needed, and not at all for
+    /// personal mail.
+    func renderBulk(_ lm: LoadedMessage?) {
+        guard !folded else { return }
+        let role = host?.delegate?.folderRole(of: summary) ?? .none
+        let strip = Bulk.stripFor(Bulk.message(summary, lm), role: role, date: { formatDateTime($0) })
+        guard strip.visible || bulkBar != nil else { return }
+        changingHeight {
+            let bar = bulkBar ?? makeBulkBar()
+            bar.showBulk(strip, busy: lm?.unsubscribing == true)
+        }
+    }
+
+    private func makeBulkBar() -> BannerView {
+        let b = BannerView()
+        b.onButton = { [weak self] in
+            guard let self else { return }
+            self.host?.delegate?.unsubscribe(self.id, from: self.window)
+        }
+        bulkBar = b
+        install(b, .bulk)
+        return b
     }
 
     private func makeRemoteBar() -> RemoteBarView {

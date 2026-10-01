@@ -201,6 +201,9 @@ internal sealed partial class ConversationView : UserControl
     /// <summary>The entry held for the card of member <paramref name="id"/>.</summary>
     public LoadedMessage? Held(MessageId id) => ctrl.Loaded.GetValueOrDefault(id);
 
+    /// <summary>The role of the folder <paramref name="s"/> lies in (the bulk strip of its card changes in the junk folder).</summary>
+    public FolderRole RoleOf(MessageSummary s) => ctrl.FolderRoleOf(s);
+
     /// <summary>The buttons the card of <paramref name="s"/> offers.</summary>
     public CapabilityActions Actions(MessageSummary s) => ctrl.Actions(s);
 

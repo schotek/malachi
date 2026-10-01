@@ -557,6 +557,39 @@ Adw.ApplicationWindow main_window {
                 revealed: false;
               }
 
+              // Bulk mail strip (window/bulk.go, ui/internal/bulkmail): what kind of
+              // bulk message this is, and the button that unsubscribes. A warning
+              // style in the junk folder. Plain text only.
+              [top]
+              Box bulk_bar {
+                orientation: horizontal;
+                spacing: 12;
+                visible: false;
+
+                styles [
+                  "toolbar",
+                  "remote-bar",
+                  "bulk-bar",
+                ]
+
+                Image bulk_icon {
+                  icon-name: "mail-send-symbolic";
+                  valign: center;
+                }
+
+                Label bulk_label {
+                  xalign: 0;
+                  wrap: true;
+                  wrap-mode: word_char;
+                  hexpand: true;
+                }
+
+                Button bulk_action {
+                  use-underline: true;
+                  visible: false;
+                }
+              }
+
               // Remote images the sanitiser removed from an HTML message
               // (window/remote.go): the count, a button that loads them
               // through the daemon for this message, and one that trusts the

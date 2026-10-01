@@ -11,8 +11,10 @@ status in the message list, on the issue card and in the conversation view
 blue, a done one in green: GTK's alpha(@blue_3, 0.3) and alpha(@green_4,
 0.3)), the Internal badge of a service-desk comment (alpha(@orange_3,
 0.35)), and the kind capsule after an account's heading in the sidebar
-(alpha(@window_fg_color, 0.1), its text at 75 %, bold, 70 %). The text is
-the window's; high contrast keeps the system's button face. Merged into
+(alpha(@window_fg_color, 0.1), its text at 75 %, bold, 70 %), and the
+neutral tag of a bulk message in the message list (label.issue-pill.bulk-pill:
+the plain fill, its text at 75 %). The text is the window's; high contrast
+keeps the system's button face. Merged into
 App.xaml; Controls/IssuePill switches between the fills with its visual
 states, so a change of theme repaints them.
 -->
@@ -27,6 +29,7 @@ states, so a change of theme repaints them.
             <SolidColorBrush x:Key="IssuePillDoneBrush" Color="#4D2EC27E" />
             <SolidColorBrush x:Key="IssuePillInternalBrush" Color="#59FFA348" />
             <SolidColorBrush x:Key="KindBadgeForegroundBrush" Color="#BFFFFFFF" />
+            <SolidColorBrush x:Key="BulkPillForegroundBrush" Color="#BFFFFFFF" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
             <SolidColorBrush x:Key="IssuePillPlainBrush" Color="#1A000000" />
@@ -34,6 +37,7 @@ states, so a change of theme repaints them.
             <SolidColorBrush x:Key="IssuePillDoneBrush" Color="#4D2EC27E" />
             <SolidColorBrush x:Key="IssuePillInternalBrush" Color="#59FFA348" />
             <SolidColorBrush x:Key="KindBadgeForegroundBrush" Color="#BF000000" />
+            <SolidColorBrush x:Key="BulkPillForegroundBrush" Color="#BF000000" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
             <SolidColorBrush x:Key="IssuePillPlainBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
@@ -41,6 +45,7 @@ states, so a change of theme repaints them.
             <SolidColorBrush x:Key="IssuePillDoneBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
             <SolidColorBrush x:Key="IssuePillInternalBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
             <SolidColorBrush x:Key="KindBadgeForegroundBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
+            <SolidColorBrush x:Key="BulkPillForegroundBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 

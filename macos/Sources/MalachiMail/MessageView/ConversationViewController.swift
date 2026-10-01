@@ -831,6 +831,10 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         cards[id]?.renderBars(lm)
     }
 
+    func refreshBulk(_ id: MessageID, _ lm: LoadedMessage) {
+        cards[id]?.renderBulk(lm)
+    }
+
     func refreshChips(_ id: MessageID, _ lm: LoadedMessage?) {
         cards[id]?.renderChips(lm ?? controller.loaded[id])
     }

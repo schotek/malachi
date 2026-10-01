@@ -44,6 +44,8 @@ const (
 	MethodMessageMove     = "message.move"
 	MethodMessageDelete   = "message.delete"
 	MethodMessageSend     = "message.send"
+	// MethodMessageUnsubscribe acts on the sender's unsubscribe offer.
+	MethodMessageUnsubscribe = "message.unsubscribe"
 
 	// Outbox.
 	MethodOutboxRetry = "outbox.retry"
@@ -109,7 +111,7 @@ var AllMethods = []string{
 	MethodFolderList, MethodFolderSubscribe,
 	MethodMessageList, MethodMessageGet, MethodMessageBody, MethodMessagePart,
 	MethodMessageEmbedded, MethodMessageDownload, MethodMessageFlag, MethodMessageMove, MethodMessageDelete,
-	MethodMessageSend,
+	MethodMessageSend, MethodMessageUnsubscribe,
 	MethodOutboxRetry,
 	MethodThreadList, MethodThreadGet,
 	MethodDraftSave, MethodDraftList, MethodDraftDelete, MethodDraftCreate, MethodDraftOpen,

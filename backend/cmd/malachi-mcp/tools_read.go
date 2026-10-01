@@ -215,6 +215,7 @@ type messageOut struct {
 	Size           int64      `json:"size"`
 	Outbox         *outboxOut `json:"outbox,omitempty"`
 	Issue          *issueOut  `json:"issue,omitempty"`
+	Bulk           *bulkOut   `json:"bulk,omitempty"`
 }
 
 func (b *bridge) listMessages(ctx context.Context, _ *mcp.CallToolRequest, in listMessagesIn) (*mcp.CallToolResult, any, error) {
@@ -355,6 +356,7 @@ func summaryOut(m api.MessageSummary) messageOut {
 		}
 	}
 	out.Issue = issueOf(m.Issue)
+	out.Bulk = bulkOf(m.Bulk)
 	return out
 }
 
@@ -455,6 +457,7 @@ func (b *bridge) readMessage(ctx context.Context, _ *mcp.CallToolRequest, in rea
 	if is := issueOf(m.Issue); is != nil {
 		fmt.Fprintf(&u, "issue: %s\nissue-status: %s\nissue-item: %s\n", is.Key, is.Status, is.Item)
 	}
+	bulkLines(&u, m)
 	if len(m.Attachments) == 0 {
 		u.WriteString("attachments: none\n")
 	} else {

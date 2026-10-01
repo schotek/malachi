@@ -70,6 +70,11 @@ public final class LoadedMessage {
     /// (`recheckPictures`): never more than once in between.
     public var picturesRechecked: Bool
 
+    /// Set from the click on the bulk strip's button until
+    /// `message.unsubscribe` has answered (window/bulk.go `unsubscribing`);
+    /// the button waits.
+    public var unsubscribing = false
+
     public init(
         msg: Message? = nil, body: MessageBodyResult? = nil, err: (any Error)? = nil, seq: UInt64 = 0,
         getting: Bool = false, fetching: Bool = false, loadingImages: Bool = false, loadingPictures: Bool = false,

@@ -25,9 +25,9 @@ func TestToolGatingByFlags(t *testing.T) {
 		want         []string
 	}{
 		{false, false, readTools},
-		{true, false, append(append([]string{}, readTools...), "delete_messages", "mark_messages", "move_messages", "transition_issue")},
+		{true, false, append(append([]string{}, readTools...), "delete_messages", "mark_messages", "move_messages", "transition_issue", "unsubscribe")},
 		{false, true, append(append([]string{}, readTools...), "send_message")},
-		{true, true, append(append([]string{}, readTools...), "delete_messages", "mark_messages", "move_messages", "send_message", "transition_issue")},
+		{true, true, append(append([]string{}, readTools...), "delete_messages", "mark_messages", "move_messages", "send_message", "transition_issue", "unsubscribe")},
 	}
 	for _, c := range cases {
 		sock := tempSocket(t)
@@ -60,6 +60,7 @@ func TestAnnotations(t *testing.T) {
 		"create_draft":  {false, false, false, false},
 		"mark_messages": {false, false, true, false}, "move_messages": {false, false, true, false},
 		"transition_issue": {false, false, true, false},
+		"unsubscribe":      {false, true, true, true},
 		"delete_messages":  {false, true, true, false},
 		"send_message":     {false, true, true, true},
 	}

@@ -240,6 +240,7 @@ can read the key file.
 | 1502 | attachmentTooBig | over a documented limit; `data` = `{ "limit": bytes, "size": bytes }` |
 | 1503 | partNotFound | `message.part` named a part the message does not have, or its content is no longer stored |
 | 1504 | partNotDownloaded | the part's data is not stored on this device (`Attachment.remote`); `message.download` fetches it |
+| 1505 | unsubscribeFailed | `message.unsubscribe` reached the sender's server, which refused the one-click request (any answer but 2xx, a redirect included), or the daemon refused to connect to the address of the URL (not a public one: loopback, private, link-local, a single-label or local-network name); `message` carries the reason and is not for display |
 
 `tlsError` from an IMAP or SMTP endpoint (in `account.test` results and in a
 `SyncState`) carries:
@@ -299,7 +300,8 @@ Time      RFC 3339 string, UTC
   "snippet": "plain text, ≤ ~200 chars, derived by the backend",
   "flags": ["seen"], "hasAttachments": false, "size": 4321,
   "outbox": OutboxInfo (opt),
-  "issue": MessageIssue (opt)
+  "issue": MessageIssue (opt),
+  "bulk": BulkInfo (opt)
 }
 ```
 
@@ -365,12 +367,71 @@ IssueChange { "field": "status|assignee", "from": "To Do" (opt), "to": "In Progr
   account's own user wrote the item on the site (never set together with
   `via`), so a client can tell the user's own comments apart.
 
+`bulk` is present only for a message the daemon recognised as bulk mail
+from its headers (rule version `"1"`, `internal/bulk`); absent for
+personal mail, for every message of an `issue-tracker` account and for a
+row not classified yet:
+
+```jsonc
+BulkInfo { "kind": "newsletter|list|automated",
+           "listId": "golang-nuts.googlegroups.com" (opt),
+           "domain": "news.example" (opt) }
+```
+
+- `list`: a discussion list (`List-Id` together with a `List-Post` that
+  has a `mailto:` address). `newsletter`: otherwise, a `List-Unsubscribe`
+  with at least one usable URI, or `Precedence: bulk` together with
+  `List-Id`. `automated`: otherwise, `Auto-Submitted` other than `no`, or
+  `Precedence` `bulk`, `junk` or `list`, or a field that bulk-sending
+  services add to what they relay (`Feedback-ID`, `X-CSA-Complaints`,
+  `X-MSFBL`, `X-SG-EID`, `X-Mailgun-Sid`, `X-SES-Outgoing`, `X-MC-User`,
+  `X-Mandrill-User`, `X-PM-Message-Id`, `X-SFMC-Stack`; receipts, tickets,
+  notifications; no unsubscribe offer). A client treats an unknown `kind`
+  as absent.
+- A URI of `List-Unsubscribe` is usable only when it is `https:` with a
+  host, no credentials and ASCII only, or `mailto:` with an address; at
+  most eight bracketed items of at most 2048 bytes are read, anything
+  else (`http:`, `javascript:`, `data:`, broken brackets) is ignored.
+- `listId` is the identifier inside `<…>` of `List-Id`, lower case, at
+  most 255 bytes, without control or bidirectional characters; `domain`
+  is the lower-case domain of the first `From` address. Both are text from
+  the mail and are shown as plain text.
+- The classification is made when the headers are known: from the header
+  fields the IMAP sync fetches with the envelope, again when the body is
+  ingested, and for rows stored earlier by a background pass. Listings
+  (`message.list`, `thread.list`, `thread.get`, `search.query`) carry it;
+  the attached message of `message.embedded` does not. `notify.newMessage`
+  carries it when the row was classified when its envelope arrived (IMAP
+  accounts); a Graph message, whose headers come with the body, does not
+  until a listing.
+
 ### Message (message.get)
 
 `MessageSummary` plus `cc`, `bcc`, `replyTo`, `rfcMessageId`, `inReplyTo`,
-`references`, `attachments: [Attachment]`, and `headers`, a curated
-map of a few interesting headers (`List-Unsubscribe`, `Auto-Submitted`, …).
-The raw header block is never returned.
+`references`, `attachments: [Attachment]`, `headers`, a curated
+map of a few interesting headers (`List-Unsubscribe`, `Auto-Submitted`, …),
+and `unsubscribe` (below). The raw header block is never returned.
+
+```jsonc
+UnsubscribeOffer { "method": "oneClick|mailto|url",
+                   "target": "news.example" | "unsub@news.example",
+                   "url": "https://…" (opt, method url only),
+                   "unsubscribedAt": Time (opt) }
+```
+
+`unsubscribe` is set by `message.get` and `message.download` (the same
+message) only, not by listings or `message.embedded`, when the message's headers
+offer a usable method, and never for an `issue-tracker` account, for a
+message in a folder of role `junk` or flagged `junk`. The method is chosen
+from the headers: for a `list` the `mailto:` address, else one-click, else
+the page; for anything else `oneClick` when there is an `https:` URI and
+`List-Unsubscribe-Post` is `List-Unsubscribe=One-Click` (RFC 8058; case
+and surrounding space ignored), else `mailto`, else `url`. `target` is
+what a confirmation shows: the host of the URL, or the address. `url` is
+the page to open, for `url` only. `unsubscribedAt` is set when the user
+already unsubscribed from this list (`list:<List-Id>`) or sender
+(`from:<address>`) of this account through `message.unsubscribe` with
+`oneClick` or `mailto`; a page opened in the browser is never remembered.
 
 ```jsonc
 Attachment { "partId": "2.1", "filename": "safe-name.pdf", "contentType": "application/pdf",
@@ -1560,6 +1621,63 @@ too: a reduced message moved there is held, not stored whole. A body still
 message is held in memory too; one the preference stores whole anyway
 (§4.8: Drafts, Outbox, signed or encrypted, …) is stored whole and not
 held.
+
+#### `message.unsubscribe`
+- params: `{ "accountId", "messageId" }`
+- result: `{ "outcome": "unsubscribed|queued|openUrl", "url": "https://…" (opt),
+  "unverified": true (opt), "unsubscribedAt": Time (opt) }`
+- errors: invalidArgument (an `issue-tracker` account, a message in the
+  junk folder or flagged `junk`, a message that offers nothing usable),
+  accountNotFound, messageNotFound, unsubscribeFailed (1505), networkError
+  (the sender's server could not be reached), storageError; and the errors
+  of `message.download` when the message has to be fetched first
+  (messageGone, unavailable, …), conflict (another `message.unsubscribe`
+  for the same list or sender of the account is running)
+
+Acts on the unsubscribe offer of `message.get`. The client sends only the
+message: the daemon reads the headers again from the stored message and
+never takes a method, URL or address from the caller. It is never
+automatic; a client asks the user first (what is sent, and to whom,
+`target`), and never calls it for a `url` offer, which it opens itself.
+
+- `url`: nothing is sent, nothing is remembered; `outcome: "openUrl"` with
+  the page in `url` (https only).
+- `oneClick`: the daemon needs the whole message (it downloads it like
+  `message.download` when it is not stored whole; under
+  `neverStoreAttachments` from the copy it holds in memory) and verifies
+  its DKIM signatures (at most five, 10 s for the DNS lookups): a
+  signature counts only when it is valid, its `d=` domain belongs to the
+  same organisation (public suffix + 1) as the `From` domain, and it
+  signs `From`, `List-Unsubscribe` and `List-Unsubscribe-Post`; a message
+  with more than one `From`, `List-Unsubscribe` or
+  `List-Unsubscribe-Post` field is not verified. Without such a signature
+  nothing is sent and the result is `outcome: "openUrl"`, `unverified:
+  true` and the page in `url`. With it the daemon POSTs
+  `List-Unsubscribe=One-Click` (`application/x-www-form-urlencoded`) to
+  the https URI and answers `outcome: "unsubscribed"` with
+  `unsubscribedAt` after a 2xx status. Redirects are not followed (a 3xx
+  status is a failure), the request has a 15 s timeout, no cookies, and it
+  refuses to connect to loopback, private, link-local, unspecified,
+  multicast or carrier-grade-NAT addresses (`docs/security.md` §7.2). Any
+  other status is unsubscribeFailed, a connection that could not be made
+  networkError.
+- `mailto`: the daemon queues a plain-text message in the outbox of the
+  account the message arrived in, from that account's address, to the
+  first address of the `mailto:` URI with its `subject` (default
+  `unsubscribe`) and `body`; no draft is left behind, and it is delivered
+  and copied to Sent like any outbox message. `outcome: "queued"` with
+  `unsubscribedAt`.
+
+A repeat for the same list or sender within 60 seconds of an
+unsubscription is answered with that outcome (`unsubscribed` for
+`oneClick`, `queued` for `mailto`) and its `unsubscribedAt`, without a
+second request or mail. Before the request the daemon also refuses a URL
+whose host is a literal address it does not connect to, a single-label
+name, or one ending in `.local`, `.localhost`, `.internal` or
+`.home.arpa`, so that a configured proxy cannot be used to reach them.
+
+`unsubscribedAt` is remembered (`unsubscribed` and `queued` only) for the
+list or sender; `message.get` then reports it in the offer.
 
 #### `message.flag`
 - params: `{ "accountId", "messageIds": [..], "set": [Flag] (opt), "clear": [Flag] (opt) }`
@@ -2832,3 +2950,12 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   something was cut; `html`, `text`, `blocked`, `links`, `inlineParts`
   and `remotePictures` then describe the trimmed body. Without the
   parameter the result is unchanged; no new error codes.
+- **2** (2026-10-01, compatible addition: bulk mail and unsubscribing):
+  `MessageSummary.bulk` (`BulkInfo`: `newsletter`, `list` or `automated`,
+  the `List-Id` and the sender's domain), classified by the daemon from
+  `List-Id`, `List-Post`, `List-Unsubscribe`, `Precedence` and
+  `Auto-Submitted` (`List-Post` is now among the curated `headers`);
+  `Message.unsubscribe` (`UnsubscribeOffer`) in `message.get`; new
+  `message.unsubscribe` (§4.3), a one-click POST after a DKIM check, a
+  `mailto:` request queued in the outbox, or a page for the client to
+  open; new error code 1505 `unsubscribeFailed`. `ProtocolVersion` stays 2.

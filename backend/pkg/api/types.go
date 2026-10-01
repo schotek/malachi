@@ -819,6 +819,39 @@ type MessageSummary struct {
 	// Issue is present only for a message of an issue-tracker account:
 	// the issue it belongs to and what part of it the message is.
 	Issue *MessageIssue `json:"issue,omitempty"`
+	// Bulk is present only for a message the daemon classified as bulk
+	// mail from its headers (newsletter, mailing list, automated); absent
+	// for personal mail, issue-tracker items and rows not classified yet.
+	Bulk *BulkInfo `json:"bulk,omitempty"`
+}
+
+// BulkKind is what kind of bulk mail a message is.
+type BulkKind string
+
+const (
+	// BulkNewsletter: marketing or newsletter mail (List-Unsubscribe
+	// without a discussion list's List-Post).
+	BulkNewsletter BulkKind = "newsletter"
+	// BulkList: a discussion mailing list (List-Id with a List-Post
+	// address).
+	BulkList BulkKind = "list"
+	// BulkAutomated: machine-sent mail without an unsubscribe offer
+	// (Auto-Submitted, Precedence bulk/junk/list, or a bulk-sending
+	// service's fields such as Feedback-ID or X-SG-EID): receipts,
+	// tickets, notifications.
+	BulkAutomated BulkKind = "automated"
+)
+
+// BulkInfo classifies a bulk message. Every string is cleaned by the
+// daemon (no control or bidi characters) but still comes from the mail.
+type BulkInfo struct {
+	Kind BulkKind `json:"kind"`
+	// ListID is the List-Id identifier (e.g. "golang-nuts.googlegroups.com"),
+	// lower case, without the angle brackets and the phrase; set for
+	// BulkList and, when the header exists, for BulkNewsletter.
+	ListID string `json:"listId,omitempty"`
+	// Domain is the lower-case domain of the From address, for display.
+	Domain string `json:"domain,omitempty"`
 }
 
 // OutboxState is the delivery state of a queued message.
@@ -884,6 +917,38 @@ type Message struct {
 	// Headers is a curated subset of headers (List-Unsubscribe, Precedence,
 	// Auto-Submitted, …) chosen by the backend. Never the raw header block.
 	Headers map[string]string `json:"headers,omitempty"`
+	// Unsubscribe is present only when the message's List-Unsubscribe
+	// header offers a method the daemon can use (see message.unsubscribe),
+	// and never for a message in the junk folder.
+	Unsubscribe *UnsubscribeOffer `json:"unsubscribe,omitempty"`
+}
+
+// UnsubscribeMethod is how message.unsubscribe would act.
+type UnsubscribeMethod string
+
+const (
+	// UnsubscribeOneClick: RFC 8058 one-click POST by the daemon to an
+	// https URL, after a DKIM check of the message.
+	UnsubscribeOneClick UnsubscribeMethod = "oneClick"
+	// UnsubscribeMailto: the daemon queues an unsubscribe message in the
+	// outbox of the account the message arrived in.
+	UnsubscribeMailto UnsubscribeMethod = "mailto"
+	// UnsubscribeURL: only a web page; the client opens it in a browser
+	// after asking the user. The daemon never fetches it.
+	UnsubscribeURL UnsubscribeMethod = "url"
+)
+
+// UnsubscribeOffer describes the best unsubscribe method of a message.
+type UnsubscribeOffer struct {
+	Method UnsubscribeMethod `json:"method"`
+	// Target is what the confirmation shows: the host of the URL for
+	// oneClick and url, the address for mailto.
+	Target string `json:"target"`
+	// URL is the https page to open; only for UnsubscribeURL.
+	URL string `json:"url,omitempty"`
+	// UnsubscribedAt is set when the user already unsubscribed from this
+	// list or sender through message.unsubscribe (oneClick or mailto).
+	UnsubscribedAt *time.Time `json:"unsubscribedAt,omitempty"`
 }
 
 // SortOrder for message and thread lists.
@@ -1128,6 +1193,39 @@ type MessageDownloadParams struct {
 // the MIME.
 type MessageDownloadResult struct {
 	Message Message `json:"message"`
+}
+
+// MessageUnsubscribeParams names the message whose unsubscribe offer to
+// use. The daemon re-reads the headers from the stored message; the client
+// sends no URL or address.
+type MessageUnsubscribeParams struct {
+	AccountID AccountID `json:"accountId"`
+	MessageID MessageID `json:"messageId"`
+}
+
+// UnsubscribeOutcome is what message.unsubscribe did.
+type UnsubscribeOutcome string
+
+const (
+	// UnsubscribeDone: the one-click POST was accepted.
+	UnsubscribeDone UnsubscribeOutcome = "unsubscribed"
+	// UnsubscribeQueued: the unsubscribe message is in the outbox.
+	UnsubscribeQueued UnsubscribeOutcome = "queued"
+	// UnsubscribeOpenURL: nothing was sent; the client should offer to
+	// open URL in a browser (the method is url, or the one-click request
+	// could not be verified by DKIM).
+	UnsubscribeOpenURL UnsubscribeOutcome = "openUrl"
+)
+
+type MessageUnsubscribeResult struct {
+	Outcome UnsubscribeOutcome `json:"outcome"`
+	// URL is the https page for UnsubscribeOpenURL.
+	URL string `json:"url,omitempty"`
+	// Unverified is true when a one-click offer fell back to UnsubscribeOpenURL
+	// because the DKIM check failed.
+	Unverified bool `json:"unverified,omitempty"`
+	// UnsubscribedAt is set for UnsubscribeDone and UnsubscribeQueued.
+	UnsubscribedAt *time.Time `json:"unsubscribedAt,omitempty"`
 }
 
 type MessageFlagParams struct {

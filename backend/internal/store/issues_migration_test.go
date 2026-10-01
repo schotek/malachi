@@ -98,8 +98,12 @@ func TestMigration0015Issues(t *testing.T) {
 		t.Errorf("folder: %+v %v", f, err)
 	}
 	m, err := s.GetMessage(ctx, "acc_work", "m1")
-	if err != nil || m.Hidden || m.Subject != "hello" {
+	if err != nil || m.Hidden || m.Subject != "hello" || m.Bulk != "" || m.ListID != "" {
 		t.Errorf("message: %+v %v", m, err)
+	}
+	// Migration 0016: the old row waits for the classification pass.
+	if todo, err := s.ListUnclassified(ctx, 10); err != nil || len(todo) != 1 || todo[0].ID != "m1" {
+		t.Errorf("unclassified: %+v %v", todo, err)
 	}
 	d, err := s.GetDraft(ctx, "acc_work", "d1")
 	if err != nil || d.CommentVisibility != "" {
@@ -149,7 +153,7 @@ func TestMigration0015Issues(t *testing.T) {
 	}
 	rows.Close()
 	var version int
-	if err := s.DB().QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 15 {
+	if err := s.DB().QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version < 15 {
 		t.Errorf("schema version %d %v", version, err)
 	}
 }

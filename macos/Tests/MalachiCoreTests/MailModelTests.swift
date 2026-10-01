@@ -118,6 +118,12 @@ let errTest = RPCError(code: .internalError, message: "test")
         #expect(!m.unread)
         #expect(!m.flagged)
         #expect(m.from.isEmpty)
+        // The bulk tag of the row (bulkmail.Tag): empty for personal mail.
+        #expect(m.tag == "")
+        s.bulk = BulkInfo(kind: .newsletter, domain: "shop.example")
+        #expect(summaryMessage(s).tag == "Bulk")
+        s.bulk = BulkInfo(kind: .automated)
+        #expect(summaryMessage(s).tag == "Automated")
     }
 
     @Test func setAppendMessages() throws {

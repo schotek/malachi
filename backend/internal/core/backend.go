@@ -58,6 +58,18 @@ type Backend struct {
 	// the network.
 	FetchRemoteImages func(ctx context.Context, urls []string) map[string]remoteimg.Image
 
+	// LookupTXT resolves the DKIM key records of message.unsubscribe; nil
+	// = the system resolver. OneClickPost sends the RFC 8058 request; nil
+	// = internal/oneclick's strict client. Both are fields so tests never
+	// touch the network.
+	LookupTXT    func(ctx context.Context, domain string) ([]string, error)
+	OneClickPost func(ctx context.Context, rawURL string) error
+
+	// unsubBusy are the unsubscriptions in flight (account + key), under
+	// unsubMu (unsubscribe.go).
+	unsubMu   sync.Mutex
+	unsubBusy map[string]bool
+
 	// Keyring stores account secrets. It defaults to the not-implemented
 	// placeholder and is a field so tests can substitute an in-memory one.
 	Keyring auth.Keyring
@@ -553,8 +565,9 @@ func (b *Backend) Search() api.SearchService          { return &searchService{b}
 func (b *Backend) Sync() api.SyncService              { return &syncService{b} }
 
 // Maintain runs periodic housekeeping until ctx is cancelled: the one-off
-// seeding of recipient completion, the upgrade passes that link and index
-// the messages stored before threading and search existed, then the raw
+// seeding of recipient completion, the upgrade passes that link, index and
+// classify (bulk mail) the messages stored before threading, search and
+// bulk mail existed, then the raw
 // maintenance loop (maintainRaw) beside the orphan attachment sweep and
 // the evaluation of the notification mail of issue-tracker accounts
 // (reevaluateIssueMail) at start and hourly. It returns once all of it has
@@ -568,6 +581,9 @@ func (b *Backend) Maintain(ctx context.Context) {
 	}
 	if err := b.backfillSearch(ctx); err != nil && !isCancelled(err) {
 		b.log.Warn("backfill search index", "err", err)
+	}
+	if err := b.backfillBulk(ctx); err != nil && !isCancelled(err) {
+		b.log.Warn("backfill bulk classification", "err", err)
 	}
 	// The raw maintenance loop runs beside the attachment sweep; Maintain
 	// returns once it has stopped too.

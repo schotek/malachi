@@ -67,6 +67,9 @@ internal sealed class FakeReaderCache : IReaderCache
         return lm;
     }
 
+    /// <summary>Puts <paramref name="lm"/> in place of the entry of <paramref name="id"/> (a newer message.get replaced it).</summary>
+    public void Replace(MessageId id, LoadedMessage lm) => entries[id] = lm;
+
     /// <summary>The variant every fetch asked for, in order (null: the entry's).</summary>
     public List<bool?> FetchQuoted { get; } = [];
 

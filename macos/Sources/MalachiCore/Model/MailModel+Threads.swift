@@ -133,10 +133,13 @@ public struct RowThread: Sendable, Equatable {
     /// The issue's key, summary and status, and the change its latest
     /// member stands for when that is an event; nil for mail.
     public var issue: Jira.IssueRow?
+    /// The tag of the latest member (`Bulk.tag`).
+    public var tag: String
 
     public init(
         participants: [Address], subject: String, snippet: String, date: Date, count: Int, unread: Int,
-        flagged: Bool, hasAttachments: Bool, expanded: Bool, loading: Bool, issue: Jira.IssueRow? = nil
+        flagged: Bool, hasAttachments: Bool, expanded: Bool, loading: Bool, issue: Jira.IssueRow? = nil,
+        tag: String = ""
     ) {
         self.participants = participants
         self.subject = subject
@@ -149,6 +152,7 @@ public struct RowThread: Sendable, Equatable {
         self.expanded = expanded
         self.loading = loading
         self.issue = issue
+        self.tag = tag
     }
 }
 
@@ -158,7 +162,8 @@ public func summaryThread(_ t: ThreadSummary, expanded: Bool, loading: Bool) -> 
     RowThread(
         participants: t.participants, subject: t.subject, snippet: t.snippet, date: t.latestDate,
         count: t.messageCount, unread: t.unreadCount, flagged: hasFlag(t.flags, .flagged),
-        hasAttachments: t.hasAttachments, expanded: expanded, loading: loading, issue: Jira.threadRowIssue(t)
+        hasAttachments: t.hasAttachments, expanded: expanded, loading: loading, issue: Jira.threadRowIssue(t),
+        tag: Bulk.tag(t.latest.bulk)
     )
 }
 

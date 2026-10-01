@@ -94,6 +94,8 @@ public static class IconGlyphs
         ["avatar-default"] = G(0xE77B),
         ["sidebar-show"] = G(0xE8A0),
         ["preferences-system"] = G(0xE713),
+        // The strip of an automated message (bulk mail): the same gear.
+        ["applications-system"] = G(0xE713),
         ["applications-graphics"] = G(0xE790),
         ["applications-science"] = G(0xF196),
         // The Assistant (ui/internal/assistant): its own sparkle is

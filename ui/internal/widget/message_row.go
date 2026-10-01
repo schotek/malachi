@@ -38,6 +38,10 @@ type Message struct {
 	// and status, and whether the row is an event (a status or assignee
 	// change); nil for a mail message.
 	Issue *jira.IssueRow
+
+	// Tag is the neutral pill of a bulk message (bulkmail.Tag): "Bulk",
+	// "Mailing List", "Automated"; empty for personal mail.
+	Tag string
 }
 
 // Thread is what a conversation row displays; a projection of
@@ -58,6 +62,9 @@ type Thread struct {
 	// change its latest member stands for when that is an event; nil for
 	// mail.
 	Issue *jira.IssueRow
+
+	// Tag is the tag of the latest member (bulkmail.Tag).
+	Tag string
 }
 
 // Start margins of the row content: the plain one (message_row.blp), the
@@ -109,6 +116,7 @@ type MessageRow struct {
 	subjectLine  *gtk.Box
 	issueKey     *gtk.Label
 	statusPill   *gtk.Label
+	bulkPill     *gtk.Label
 	internalPill *gtk.Label
 	event        *gtk.Label
 
@@ -127,6 +135,7 @@ type MessageRow struct {
 	// issue is what the row shows of an issue (nil for mail); eventRow
 	// says the row is an event message (not a conversation).
 	issue    *jira.IssueRow
+	tag      string // bulk tag; never shown on a row of an issue
 	eventRow bool
 }
 
@@ -152,6 +161,7 @@ func NewMessageRow() *MessageRow {
 		subjectLine:  b.GetObject("subject_line").Cast().(*gtk.Box),
 		issueKey:     b.GetObject("issue_key").Cast().(*gtk.Label),
 		statusPill:   b.GetObject("status_pill").Cast().(*gtk.Label),
+		bulkPill:     b.GetObject("bulk_pill").Cast().(*gtk.Label),
 		internalPill: b.GetObject("internal_pill").Cast().(*gtk.Label),
 		event:        b.GetObject("event_label").Cast().(*gtk.Label),
 
@@ -183,6 +193,7 @@ func (r *MessageRow) SetMessage(m Message) {
 	r.RemoveCSSClass("thread-expanded")
 	r.thread, r.loading = false, false
 	r.issue = m.Issue
+	r.tag = m.Tag
 	r.applyLead()
 	r.applyIssue()
 }
@@ -212,6 +223,7 @@ func (r *MessageRow) SetThread(t Thread) {
 	r.AddCSSClass("thread-row")
 	r.thread, r.loading = true, t.Loading
 	r.issue = t.Issue
+	r.tag = t.Tag
 	r.applyLead()
 	r.applyIssue()
 	r.SetExpanded(t.Expanded)
@@ -228,6 +240,7 @@ func (r *MessageRow) SetThread(t Thread) {
 func (r *MessageRow) applyIssue() {
 	issue := r.issue
 	r.eventRow = issue != nil && issue.Event && !r.thread
+	SetBulkPill(r.bulkPill, r.tag, issue == nil)
 	if issue == nil {
 		r.issueKey.SetVisible(false)
 		r.statusPill.SetVisible(false)

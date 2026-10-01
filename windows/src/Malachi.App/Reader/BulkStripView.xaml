@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of the bulk_bar of ui/data/ui/window.blp and message_window.blp with
+ui/internal/window/bulk.go (showBulk, makeBulkBar, bindBulk); macOS: the
+strip of MessageView/ (the Swift side is the other client's port of the same
+Go reference). The strip
+above a bulk message: an icon for what it is, a sentence, and the button
+that unsubscribes (or leaves the list), in the look of the remote-image bar
+beside it and in a warm tint in the junk folder. Every text of it comes
+from the mail (a domain, a list id): TextBlock.Text only, never markup.
+-->
+<UserControl
+    x:Class="Malachi.App.Reader.BulkStripView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Malachi.App.Reader"
+    IsTabStop="False"
+    Visibility="Collapsed">
+    <Border
+        x:Name="Bar"
+        Padding="12,6"
+        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+        BorderThickness="0,0,0,1">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="Looks">
+                <VisualState x:Name="Quiet" />
+                <!-- bulk-bar.bulk-warning: alpha(@orange_3, 0.25). -->
+                <VisualState x:Name="Warning">
+                    <VisualState.Setters>
+                        <Setter Target="Bar.Background" Value="{ThemeResource SystemFillColorCautionBackgroundBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+        <!-- The button goes under the sentence when the pane is too narrow
+             for both (BarPanel). -->
+        <local:BarPanel LineSpacing="6" Spacing="12">
+            <FontIcon
+                x:Name="KindIcon"
+                VerticalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                FontSize="16" />
+            <TextBlock
+                x:Name="Label"
+                VerticalAlignment="Center"
+                AutomationProperties.AutomationId="BulkLabel"
+                Style="{StaticResource BodyLabelStyle}"
+                TextWrapping="Wrap" />
+            <Button
+                x:Name="ActionButton"
+                VerticalAlignment="Center"
+                AllowFocusOnInteraction="False"
+                AutomationProperties.AutomationId="UnsubscribeButton"
+                Click="OnActionClick"
+                Visibility="Collapsed" />
+        </local:BarPanel>
+    </Border>
+</UserControl>

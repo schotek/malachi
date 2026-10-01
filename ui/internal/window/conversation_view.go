@@ -14,6 +14,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
+	"github.com/schotek/malachi/ui/internal/bulkmail"
 	"github.com/schotek/malachi/ui/internal/capabilities"
 	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/htmlview"
@@ -326,6 +327,7 @@ func (v *messageView) leaveForConversation() {
 	v.hint.SetVisible(false)
 	v.setBarVisible(false)
 	v.showPicturesBar(picturesBarState{})
+	v.showBulk(bulkmail.Strip{}, false)
 	v.showText("")
 	v.renderAttachments(api.MessageSummary{}, nil)
 	v.showQuotedButton(conversation.QuotedNone)

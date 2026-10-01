@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Model/MailModel+Threads.swift
-// (RowThread); GTK: ui/internal/widget/message_row.go (Thread). Immutable.
+// (RowThread); GTK: ui/internal/widget/message_row.go (Thread, with its
+// Tag). Immutable.
 
 using System;
 using System.Collections.Generic;
@@ -54,4 +55,7 @@ public sealed record RowThread
     /// made (an event's text); null for a conversation of a mail account.
     /// </summary>
     public JiraIssueRow? Issue { get; init; }
+
+    /// <summary>The tag of the latest member (<see cref="Malachi.Core.Bulk.BulkMail.Tag"/>); empty for personal mail.</summary>
+    public string Tag { get; init; } = "";
 }

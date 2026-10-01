@@ -3,7 +3,7 @@
 
 // Port of macos/Sources/MalachiCore/Model/LoadedMessage.swift (LoadedMessage);
 // GTK: ui/internal/window/message_view.go (loadedMessage, complete,
-// bodySettled, size). LoadedCache, the pane's text helpers
+// bodySettled, size, unsubscribing). LoadedCache, the pane's text helpers
 // (LoadedMessageText) and the quoted-text button (QuotedTextOffer) are the
 // other types of that Swift file. The two variants of the body (with and
 // without its quoted history: showQuoted, store) are Swift-first; GTK has
@@ -114,6 +114,13 @@ public sealed class LoadedMessage
     /// between.
     /// </summary>
     public bool PicturesRechecked { get; set; }
+
+    /// <summary>
+    /// Set from the click on the bulk strip's button until
+    /// <c>message.unsubscribe</c> has answered (message_view.go
+    /// <c>loadedMessage.unsubscribing</c>); the button waits.
+    /// </summary>
+    public bool Unsubscribing { get; set; }
 
     /// <summary>Nothing is left to fetch.</summary>
     public bool Complete => Msg is not null && Body is not null;

@@ -97,6 +97,10 @@ type loadedMessage struct {
 	// the body was asked for again, until the next download of the message
 	// (recheckPictures in remote.go): never more than once in between.
 	picturesRechecked bool
+
+	// unsubscribing is set from the click on the bulk strip's button until
+	// message.unsubscribe has answered (bulk.go); the button waits.
+	unsubscribing bool
 }
 
 // complete reports whether nothing is left to fetch.
@@ -237,6 +241,15 @@ type messageView struct {
 	picturesDownload *gtk.Button
 	pictures         func()
 
+	// The bulk strip (bulk.go): the bar, its icon, text and button, whose
+	// work the owner supplies as bulk. bulkBar is nil on the view of an
+	// attached message, and on a conversation card until it needs one.
+	bulkBar    *gtk.Box
+	bulkIcon   *gtk.Image
+	bulkLabel  *gtk.Label
+	bulkAction *gtk.Button
+	bulk       func()
+
 	// toast shows a message in the owning window, when it wired one.
 	toast func(string)
 
@@ -257,7 +270,8 @@ type messageView struct {
 
 // newMessageView binds the widgets of one message display from a builder;
 // the object IDs are the same in window.blp, message_window.blp and
-// embedded_window.blp, except pictures_bar, which the last one lacks.
+// embedded_window.blp, except pictures_bar and bulk_bar, which the last
+// one lacks.
 func newMessageView(w *Window, parent *gtk.Window, b *gtk.Builder) *messageView {
 	v := &messageView{
 		win:         w,
@@ -304,6 +318,14 @@ func newMessageView(w *Window, parent *gtk.Window, b *gtk.Builder) *messageView 
 	// care of the keyboard, which has to focus the button to press it.
 	load.SetFocusOnClick(false)
 	trust.SetFocusOnClick(false)
+	if bar := b.GetObject("bulk_bar"); bar != nil {
+		v.bulkBar = bar.Cast().(*gtk.Box)
+		v.bulkIcon = b.GetObject("bulk_icon").Cast().(*gtk.Image)
+		v.bulkLabel = b.GetObject("bulk_label").Cast().(*gtk.Label)
+		v.bulkAction = b.GetObject("bulk_action").Cast().(*gtk.Button)
+		v.bindBulk()
+		v.bulk = func() { w.unsubscribe(v.parent, v.shown.ID, v.bulkSay) }
+	}
 	if bar := b.GetObject("pictures_bar"); bar != nil {
 		v.picturesBar = bar.Cast().(*gtk.Box)
 		v.picturesLabel = b.GetObject("pictures_label").Cast().(*gtk.Label)
@@ -494,6 +516,7 @@ func (v *messageView) renderBody(lm *loadedMessage) {
 // shows). A nil lm shows the summary and the loading placeholder.
 func (v *messageView) render(s api.MessageSummary, lm *loadedMessage) {
 	v.shown, v.shownLoaded = s, lm
+	v.renderBulk(s, lm)
 	if lm == nil {
 		if issue := v.renderHeaders(s, nil); issue != nil && issue.event {
 			v.renderEvent(issue.eventBody)

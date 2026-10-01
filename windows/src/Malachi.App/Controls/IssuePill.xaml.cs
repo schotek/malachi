@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Port of ui/internal/widget/pill.go (SetStatusPill, SetInternalPill);
+// Port of ui/internal/widget/pill.go (SetStatusPill, SetInternalPill,
+// SetBulkPill);
 // macOS: Shared/IssuePill.swift (colours, paint). The pill's text and kind
 // as dependency properties, for x:Bind from a row or a card; the kind picks
 // the visual state (IssuePill.xaml).
@@ -12,7 +13,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace Malachi.App.Controls;
 
-/// <summary>A status pill or the Internal badge of an issue.</summary>
+/// <summary>A status pill or the Internal badge of an issue, or the neutral tag of a bulk message.</summary>
 public sealed partial class IssuePill : UserControl
 {
     /// <summary>The pill's text; empty hides it.</summary>
@@ -26,6 +27,13 @@ public sealed partial class IssuePill : UserControl
     /// <summary>The Internal badge of a service-desk comment instead of a status.</summary>
     public static readonly DependencyProperty IsInternalProperty = DependencyProperty.Register(
         nameof(IsInternal), typeof(bool), typeof(IssuePill), new PropertyMetadata(false, OnChanged));
+
+    /// <summary>
+    /// The neutral tag of a bulk message ("Bulk", "Mailing List", "Automated")
+    /// instead of a status; its text is its own tooltip, as a status's is.
+    /// </summary>
+    public static readonly DependencyProperty IsBulkProperty = DependencyProperty.Register(
+        nameof(IsBulk), typeof(bool), typeof(IssuePill), new PropertyMetadata(false, OnChanged));
 
     /// <summary>An empty, hidden pill.</summary>
     public IssuePill()
@@ -55,6 +63,13 @@ public sealed partial class IssuePill : UserControl
         set => SetValue(IsInternalProperty, value);
     }
 
+    /// <summary>The neutral tag of a bulk message instead of a status.</summary>
+    public bool IsBulk
+    {
+        get => (bool)GetValue(IsBulkProperty);
+        set => SetValue(IsBulkProperty, value);
+    }
+
     private static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) => ((IssuePill)d).Apply();
 
     // SetStatusPill / SetInternalPill: the text, its tooltip (a status's
@@ -65,7 +80,7 @@ public sealed partial class IssuePill : UserControl
         Label.Text = text;
         Visibility = text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         ToolTipService.SetToolTip(this, IsInternal || text.Length == 0 ? null : text);
-        var state = IsInternal ? "Internal" : StatusStyle switch
+        var state = IsInternal ? "Internal" : IsBulk ? "Bulk" : StatusStyle switch
         {
             JiraStatusStyle.InProgress => "InProgress",
             JiraStatusStyle.Done => "Done",

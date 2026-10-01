@@ -99,6 +99,9 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// The remote-image bar above a message: a neutral tint that reads as a
 	// notice in light and dark alike (Adw.Banner has room for one button).
 	b.WriteString("box.remote-bar { background-color: alpha(@window_fg_color, 0.06); padding: 6px 12px; }\n")
+	// The strip above a bulk message (window/bulk.go): the remote-bar tint,
+	// a warm one in the junk folder.
+	b.WriteString("box.bulk-bar.bulk-warning { background-color: alpha(@orange_3, 0.25); }\n")
 	// Compose header fields (compose.blp): one line each, so the entries
 	// and the account drop-down lose the height a stand-alone input would
 	// claim and the card supplies the padding the rows no longer have.
@@ -203,6 +206,7 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// capsule after the account's name in the sidebar. Tints of the palette
 	// under the default text colour, so they read in light and dark alike.
 	b.WriteString("label.issue-pill { padding: 0 7px; border-radius: 99px; font-size: 80%; background-color: alpha(@window_fg_color, 0.1); }\n")
+	b.WriteString("label.issue-pill.bulk-pill { color: alpha(@window_fg_color, 0.75); }\n")
 	b.WriteString("label.issue-pill.status-in-progress { background-color: alpha(@blue_3, 0.3); }\n")
 	b.WriteString("label.issue-pill.status-done { background-color: alpha(@green_4, 0.3); }\n")
 	b.WriteString("label.issue-pill.internal-pill { background-color: alpha(@orange_3, 0.35); }\n")

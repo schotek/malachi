@@ -72,3 +72,12 @@ func NewKindBadge(text string) *gtk.Label {
 	l.SetVisible(text != "")
 	return l
 }
+
+// SetBulkPill shows tag in the neutral pill of a bulk message (the text is
+// its own tooltip, as a long one is cut); an empty tag, or show false (a
+// row of an issue), hides it.
+func SetBulkPill(l *gtk.Label, tag string, show bool) {
+	l.SetText(tag)
+	l.SetTooltipText(tag)
+	l.SetVisible(show && tag != "")
+}

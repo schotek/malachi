@@ -80,6 +80,7 @@ func (s *Server) registerBackend(b api.Backend) {
 	s.handlers[api.MethodMessagePart] = wrap(msg.Part)
 	s.handlers[api.MethodMessageEmbedded] = wrap(msg.Embedded)
 	s.handlers[api.MethodMessageDownload] = wrap(msg.Download)
+	s.handlers[api.MethodMessageUnsubscribe] = wrap(msg.Unsubscribe)
 	s.handlers[api.MethodMessageFlag] = wrap(msg.Flag)
 	s.handlers[api.MethodMessageMove] = wrap(msg.Move)
 	s.handlers[api.MethodMessageDelete] = wrap(msg.Delete)

@@ -255,6 +255,27 @@ the synthesised rows are built from, `issue_mail_links` (a notification
 mail to its issue), and the columns `drafts` and `outbox` need for a
 comment (`comment_visibility`, `issue_id`).
 
+Migration 0016 is bulk mail: `messages.bulk` (`newsletter`, `list`,
+`automated`, `none`, `''` for a row not classified yet) and
+`messages.list_id`, written by the pure `internal/bulk` from the curated
+`List-Id`, `List-Post`, `List-Unsubscribe`, `Precedence` and
+`Auto-Submitted` headers and the fields of bulk-sending services
+(`bulk.SenderFingerprints`, rule version 2: they only ever make a message
+`automated`; a new rule version reclassifies every row in `core.Maintain`) and never for an issue-tracker account. The IMAP
+syncer fetches those fields with the envelope (`HEADER.FIELDS`, bounded
+like `References`) and classifies a new row at once, keeping the headers in
+`headers_json` so `message.get` has its unsubscribe offer before the body
+exists; `ingest` classifies again from the parsed message
+(`store.SetMessageBody`), and `core.Maintain` classifies the rows stored
+before the migration in batches from the raw file's header block (`meta`
+key `bulk.classified`, `<rule version>:done` when finished, over again
+when the rule version changes). The table `unsubscriptions` remembers per
+account which list (`list:<List-Id>`) or sender (`from:<address>`) the
+user left through `message.unsubscribe` (`core/unsubscribe.go`:
+DKIM-verified one-click through `internal/oneclick`, or a plain-text
+request queued in the outbox without a draft, `EnqueueInput.DraftID` empty);
+`DeleteAccount` removes its rows. See `docs/security.md` §7.2.
+
 A raw message is `<account>/<id>`, the bytes as received, or
 `<account>/<id>.zst`, the same bytes as one zstd frame
 (`github.com/klauspost/compress`, pure Go; level 3 with a 4 MiB window and

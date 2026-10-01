@@ -60,6 +60,9 @@ type OutboxComment struct {
 // message.
 type EnqueueInput struct {
 	// The draft must exist for Message.AccountID with exactly this version.
+	// An empty DraftID queues a message that came from no draft (the
+	// unsubscribe request of message.unsubscribe): nothing is checked or
+	// removed besides the queueing itself.
 	DraftID      string
 	DraftVersion int
 
@@ -163,8 +166,10 @@ func (s *Store) EnqueueOutbox(ctx context.Context, in EnqueueInput) (Message, er
 	}
 	// A cheap pre-check spares building a message for a draft that is
 	// already gone or stale; the transaction below is the authority.
-	if err := s.checkDraftVersion(ctx, s.db, accountID, in.DraftID, in.DraftVersion); err != nil {
-		return Message{}, err
+	if in.DraftID != "" {
+		if err := s.checkDraftVersion(ctx, s.db, accountID, in.DraftID, in.DraftVersion); err != nil {
+			return Message{}, err
+		}
 	}
 	limit := in.Limit
 	if limit <= 0 {
@@ -207,8 +212,10 @@ func (s *Store) enqueueOutboxTx(ctx context.Context, in EnqueueInput, id string,
 	}
 	defer tx.Rollback()
 
-	if err := s.checkDraftVersion(ctx, tx, accountID, in.DraftID, in.DraftVersion); err != nil {
-		return Message{}, nil, nil, err
+	if in.DraftID != "" {
+		if err := s.checkDraftVersion(ctx, tx, accountID, in.DraftID, in.DraftVersion); err != nil {
+			return Message{}, nil, nil, err
+		}
 	}
 	folder, err := outboxFolderTx(ctx, tx, accountID)
 	if err != nil {
@@ -270,43 +277,46 @@ func (s *Store) enqueueOutboxTx(ctx context.Context, in EnqueueInput, id string,
 		return Message{}, nil, nil, fmt.Errorf("insert outbox entry: %w", err)
 	}
 
-	rows, err := tx.QueryContext(ctx, `SELECT id FROM attachments WHERE draft_id = ?`, in.DraftID)
-	if err != nil {
-		return Message{}, nil, nil, fmt.Errorf("list draft attachments: %w", err)
-	}
 	var attachments []string
-	for rows.Next() {
-		var aid string
-		if err := rows.Scan(&aid); err != nil {
-			rows.Close()
-			return Message{}, nil, nil, fmt.Errorf("scan attachment: %w", err)
+	var gone []messageFile
+	if in.DraftID != "" {
+		rows, err := tx.QueryContext(ctx, `SELECT id FROM attachments WHERE draft_id = ?`, in.DraftID)
+		if err != nil {
+			return Message{}, nil, nil, fmt.Errorf("list draft attachments: %w", err)
 		}
-		attachments = append(attachments, aid)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return Message{}, nil, nil, fmt.Errorf("list draft attachments: %w", err)
-	}
-	// The draft's copy in the Drafts folder goes with it.
-	var draftCopy DraftCopy
-	var uidValidity, uid int64
-	if err := tx.QueryRowContext(ctx, `SELECT rfc_message_id, server_folder_id, server_uidvalidity, server_uid, server_remote_id
-		FROM drafts WHERE id = ? AND account_id = ?`, in.DraftID, accountID).Scan(
-		&draftCopy.RFCMessageID, &draftCopy.FolderID, &uidValidity, &uid, &draftCopy.RemoteID); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return Message{}, nil, nil, fmt.Errorf("load draft copy: %w", err)
-	}
-	draftCopy.UIDValidity, draftCopy.UID = uint32(uidValidity), uint32(uid)
-	gone, err := dropCopyTx(ctx, tx, accountID, draftCopy)
-	if err != nil {
-		return Message{}, nil, nil, err
-	}
-	res, err := tx.ExecContext(ctx, `DELETE FROM drafts WHERE id = ? AND account_id = ? AND version = ?`,
-		in.DraftID, accountID, in.DraftVersion)
-	if err != nil {
-		return Message{}, nil, nil, fmt.Errorf("delete draft: %w", err)
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return Message{}, nil, nil, ErrVersionConflict
+		for rows.Next() {
+			var aid string
+			if err := rows.Scan(&aid); err != nil {
+				rows.Close()
+				return Message{}, nil, nil, fmt.Errorf("scan attachment: %w", err)
+			}
+			attachments = append(attachments, aid)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return Message{}, nil, nil, fmt.Errorf("list draft attachments: %w", err)
+		}
+		// The draft's copy in the Drafts folder goes with it.
+		var draftCopy DraftCopy
+		var uidValidity, uid int64
+		if err := tx.QueryRowContext(ctx, `SELECT rfc_message_id, server_folder_id, server_uidvalidity, server_uid, server_remote_id
+			FROM drafts WHERE id = ? AND account_id = ?`, in.DraftID, accountID).Scan(
+			&draftCopy.RFCMessageID, &draftCopy.FolderID, &uidValidity, &uid, &draftCopy.RemoteID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return Message{}, nil, nil, fmt.Errorf("load draft copy: %w", err)
+		}
+		draftCopy.UIDValidity, draftCopy.UID = uint32(uidValidity), uint32(uid)
+		gone, err = dropCopyTx(ctx, tx, accountID, draftCopy)
+		if err != nil {
+			return Message{}, nil, nil, err
+		}
+		res, err := tx.ExecContext(ctx, `DELETE FROM drafts WHERE id = ? AND account_id = ? AND version = ?`,
+			in.DraftID, accountID, in.DraftVersion)
+		if err != nil {
+			return Message{}, nil, nil, fmt.Errorf("delete draft: %w", err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return Message{}, nil, nil, ErrVersionConflict
+		}
 	}
 	if _, _, err := recountFolderTx(ctx, tx, folder.ID); err != nil {
 		return Message{}, nil, nil, err

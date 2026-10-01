@@ -37,7 +37,8 @@
 // under the body (QuotedOffer, ToggleQuoted) shows or hides the quoted
 // history the daemon cut from it, the choice held until the view shows
 // another message (QuotedReveal; macOS quotedButton, toggleQuoted;
-// Swift-first). UI-thread-affine.
+// Swift-first). A bulk message has a strip above its body (Bulk, BulkBusy;
+// ReaderController.Bulk.cs). UI-thread-affine.
 
 using System;
 using System.Collections.Generic;
@@ -354,6 +355,7 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
         OutboxVisible = false;
         DraftVisible = false;
         IssueCard = null;
+        HideBulk();
         HideBars();
         Html = null; // drop the pictures of the message before
         Page = hasAccounts ? ReaderPage.Empty : ReaderPage.NoAccounts;
@@ -494,6 +496,7 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
         if (Mode != ReaderMode.Embedded)
         {
             RenderOutboxBanner(lm?.Msg);
+            RenderBulk(s, lm);
         }
         QuotedOffer = Mode == ReaderMode.Embedded || issue is { EventBody: not null } ? null : LoadedMessageText.QuotedTextOfferFor(lm);
         Rendered?.Invoke(this, new ReaderRender(s, lm));

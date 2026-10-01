@@ -368,5 +368,9 @@ func keys(_ m: MailModel) -> [ListKey] {
         #expect(got.snippet == "p-a2")
         #expect(got.date == a2.date)
         #expect(got.participants.count == 1)
+        // The tag is the latest member's (widget.Thread.Tag).
+        #expect(got.tag == "")
+        a2.bulk = BulkInfo(kind: .list, listId: "l.example")
+        #expect(summaryThread(thr("t_a", 3, 1, a2, .flagged), expanded: false, loading: false).tag == "Mailing List")
     }
 }

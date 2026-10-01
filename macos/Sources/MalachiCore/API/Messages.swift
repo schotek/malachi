@@ -58,11 +58,16 @@ public struct MessageSummary: Codable, Sendable, Equatable {
     /// Present only for a message of a jira account: the issue and which
     /// part of it the message is (the subject is "KEY: Summary").
     public var issue: MessageIssue?
+    /// Present only for a message the daemon classified as bulk mail from
+    /// its headers (newsletter, mailing list, automated); absent for
+    /// personal mail, issue-tracker items and rows not classified yet.
+    public var bulk: BulkInfo?
 
     public init(
         id: MessageID, accountId: AccountID, folderId: FolderID, threadId: ThreadID? = nil,
         from: [Address], to: [Address]? = nil, subject: String, date: Date, snippet: String,
-        flags: [Flag], hasAttachments: Bool, size: Int, outbox: OutboxInfo? = nil, issue: MessageIssue? = nil
+        flags: [Flag], hasAttachments: Bool, size: Int, outbox: OutboxInfo? = nil, issue: MessageIssue? = nil,
+        bulk: BulkInfo? = nil
     ) {
         self.id = id
         self.accountId = accountId
@@ -78,6 +83,71 @@ public struct MessageSummary: Codable, Sendable, Equatable {
         self.size = size
         self.outbox = outbox
         self.issue = issue
+        self.bulk = bulk
+    }
+}
+
+/// api.BulkKind: what kind of bulk mail a message is (an open enum).
+public struct BulkKind: WireEnum {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+
+    /// Marketing or newsletter mail (List-Unsubscribe without a discussion
+    /// list's List-Post).
+    public static let newsletter: BulkKind = "newsletter"
+    /// A discussion mailing list (List-Id with a List-Post address).
+    public static let list: BulkKind = "list"
+    /// Machine-sent mail without an unsubscribe offer (Auto-Submitted,
+    /// Precedence bulk/junk/list): receipts, tickets, notifications.
+    public static let automated: BulkKind = "automated"
+}
+
+/// api.BulkInfo: classifies a bulk message. Every string is cleaned by the
+/// daemon (no control or bidi characters) but still comes from the mail.
+public struct BulkInfo: Codable, Sendable, Equatable {
+    public var kind: BulkKind
+    /// The List-Id identifier, lower case, without the angle brackets;
+    /// set for lists and, when the header exists, for newsletters.
+    public var listId: String?
+    /// The lower-case domain of the From address, for display.
+    public var domain: String?
+
+    public init(kind: BulkKind, listId: String? = nil, domain: String? = nil) {
+        self.kind = kind
+        self.listId = listId
+        self.domain = domain
+    }
+}
+
+/// api.UnsubscribeMethod: how `message.unsubscribe` would act.
+public struct UnsubscribeMethod: WireEnum {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+
+    /// RFC 8058 one-click POST by the daemon after a DKIM check.
+    public static let oneClick: UnsubscribeMethod = "oneClick"
+    /// The daemon queues an unsubscribe message in the account's outbox.
+    public static let mailto: UnsubscribeMethod = "mailto"
+    /// Only a web page; the client opens it after asking the user.
+    public static let url: UnsubscribeMethod = "url"
+}
+
+/// api.UnsubscribeOffer: the best unsubscribe method of a message.
+public struct UnsubscribeOffer: Codable, Sendable, Equatable {
+    public var method: UnsubscribeMethod
+    /// What the confirmation shows: the host of the URL (oneClick, url) or
+    /// the address (mailto).
+    public var target: String
+    /// The https page to open; only for `.url`.
+    public var url: String?
+    /// Set when the user already unsubscribed from this list or sender.
+    public var unsubscribedAt: Date?
+
+    public init(method: UnsubscribeMethod, target: String, url: String? = nil, unsubscribedAt: Date? = nil) {
+        self.method = method
+        self.target = target
+        self.url = url
+        self.unsubscribedAt = unsubscribedAt
     }
 }
 
@@ -132,11 +202,14 @@ public struct Message: Codable, Sendable, Equatable {
     /// A curated subset chosen by the daemon (List-Unsubscribe, Precedence,
     /// Auto-Submitted, …); never the raw header block.
     public var headers: [String: String]?
+    /// Present only when the List-Unsubscribe header offers a method the
+    /// daemon can use (`message.unsubscribe`); never in the junk folder.
+    public var unsubscribe: UnsubscribeOffer?
 
     public init(
         summary: MessageSummary, cc: [Address]? = nil, bcc: [Address]? = nil, replyTo: [Address]? = nil,
         rfcMessageId: String? = nil, inReplyTo: String? = nil, references: [String]? = nil,
-        attachments: [Attachment] = [], headers: [String: String]? = nil
+        attachments: [Attachment] = [], headers: [String: String]? = nil, unsubscribe: UnsubscribeOffer? = nil
     ) {
         self.summary = summary
         self.cc = cc
@@ -147,10 +220,11 @@ public struct Message: Codable, Sendable, Equatable {
         self.references = references
         self.attachments = attachments
         self.headers = headers
+        self.unsubscribe = unsubscribe
     }
 
     private enum CodingKeys: String, CodingKey {
-        case cc, bcc, replyTo, rfcMessageId, inReplyTo, references, attachments, headers
+        case cc, bcc, replyTo, rfcMessageId, inReplyTo, references, attachments, headers, unsubscribe
     }
 
     public init(from decoder: any Decoder) throws {
@@ -164,6 +238,7 @@ public struct Message: Codable, Sendable, Equatable {
         references = try c.decodeIfPresent([String].self, forKey: .references)
         attachments = try c.decodeIfPresent([Attachment].self, forKey: .attachments) ?? []
         headers = try c.decodeIfPresent([String: String].self, forKey: .headers)
+        unsubscribe = try c.decodeIfPresent(UnsubscribeOffer.self, forKey: .unsubscribe)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -177,6 +252,7 @@ public struct Message: Codable, Sendable, Equatable {
         try c.encodeIfPresent(references, forKey: .references)
         try c.encode(attachments, forKey: .attachments)
         try c.encodeIfPresent(headers, forKey: .headers)
+        try c.encodeIfPresent(unsubscribe, forKey: .unsubscribe)
     }
 }
 
@@ -454,6 +530,51 @@ public struct MessageDownloadResult: Codable, Sendable, Equatable {
 
     public init(message: Message) {
         self.message = message
+    }
+}
+
+/// api.MessageUnsubscribeParams: the daemon re-reads the headers from the
+/// stored message; the client sends no URL or address.
+public struct MessageUnsubscribeParams: Codable, Sendable, Equatable {
+    public var accountId: AccountID
+    public var messageId: MessageID
+
+    public init(accountId: AccountID, messageId: MessageID) {
+        self.accountId = accountId
+        self.messageId = messageId
+    }
+}
+
+/// api.UnsubscribeOutcome: what `message.unsubscribe` did (an open enum).
+public struct UnsubscribeOutcome: WireEnum {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+
+    /// The one-click POST was accepted (Go `UnsubscribeDone`).
+    public static let unsubscribed: UnsubscribeOutcome = "unsubscribed"
+    /// The unsubscribe message is in the outbox.
+    public static let queued: UnsubscribeOutcome = "queued"
+    /// Nothing was sent; the client offers to open `url` in a browser (Go
+    /// `UnsubscribeOpenURL`).
+    public static let openUrl: UnsubscribeOutcome = "openUrl"
+}
+
+/// api.MessageUnsubscribeResult.
+public struct MessageUnsubscribeResult: Codable, Sendable, Equatable {
+    public var outcome: UnsubscribeOutcome
+    /// The https page for `.openUrl`.
+    public var url: String?
+    /// True when a one-click offer fell back to `.openUrl` because the DKIM
+    /// check failed.
+    public var unverified: Bool?
+    /// Set for `.unsubscribed` and `.queued`.
+    public var unsubscribedAt: Date?
+
+    public init(outcome: UnsubscribeOutcome, url: String? = nil, unverified: Bool? = nil, unsubscribedAt: Date? = nil) {
+        self.outcome = outcome
+        self.url = url
+        self.unverified = unverified
+        self.unsubscribedAt = unsubscribedAt
     }
 }
 

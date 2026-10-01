@@ -233,6 +233,15 @@ public enum API {
         public static let timeout = RPCTimeouts.download
     }
 
+    /// Acts on the sender's unsubscribe offer; the daemon may verify the
+    /// message and call the sender's server, 30 s in all.
+    public enum MessageUnsubscribe: RPCMethod {
+        public typealias Params = MessageUnsubscribeParams
+        public typealias Result = MessageUnsubscribeResult
+        public static let name = "message.unsubscribe"
+        public static let timeout = RPCTimeouts.unsubscribe
+    }
+
     public enum MessageFlag: RPCMethod {
         public typealias Params = MessageFlagParams
         public typealias Result = EmptyResult
@@ -437,7 +446,7 @@ public enum API {
         FolderList.self, FolderSubscribe.self,
         MessageList.self, MessageGet.self, MessageBody.self, MessagePart.self,
         MessageEmbedded.self, MessageDownload.self, MessageFlag.self, MessageMove.self, MessageDelete.self,
-        MessageSend.self,
+        MessageSend.self, MessageUnsubscribe.self,
         OutboxRetry.self,
         ThreadList.self, ThreadGet.self,
         DraftSave.self, DraftList.self, DraftDelete.self, DraftCreate.self, DraftOpen.self,

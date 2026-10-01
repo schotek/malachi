@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/bulkmail"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/signin"
@@ -526,6 +527,7 @@ func summaryMessage(s api.MessageSummary) widget.Message {
 		Flagged:        hasFlag(s.Flags, api.FlagFlagged),
 		HasAttachments: s.HasAttachments,
 		Issue:          jira.RowIssue(s, i18n.Tr),
+		Tag:            bulkmail.Tag(s.Bulk, i18n.Tr),
 	}
 	if m.Issue != nil {
 		m.Unread = m.Issue.Unread

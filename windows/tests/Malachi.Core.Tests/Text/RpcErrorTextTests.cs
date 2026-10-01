@@ -73,6 +73,14 @@ public sealed class RpcErrorTextTests
         Assert.Equal(
             "Downloading the attachments failed: the message is no longer on the server",
             RpcErrorText.Text("Downloading the attachments", new RpcError { Code = ErrorCode.MessageGone, Message = "x" }));
+        // The sender's server refused the one-click request (bulkmail.Refused): the
+        // sentence stands on its own, whatever the action was.
+        Assert.Equal(
+            "The sender's server refused the request.",
+            RpcErrorText.Text("Unsubscribing", new RpcError { Code = ErrorCode.UnsubscribeFailed, Message = "status 403" }));
+        Assert.Equal(
+            "The sender's server refused the request.",
+            RpcErrorText.Text("Unsubscribing", RpcErrorTextFailureException.Daemon(new RpcError { Code = ErrorCode.UnsubscribeFailed, Message = "x" })));
         // An older daemon without the method reads like one with a stub.
         foreach (var code in new[] { ErrorCode.NotImplemented, ErrorCode.MethodNotFound })
         {

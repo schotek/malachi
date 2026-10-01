@@ -323,6 +323,48 @@ public sealed partial class ApiCodingTests
         Assert.All(r.Message.Attachments, a => Assert.False(a.IsRemote)); // nothing is remote after a download
     }
 
+    /// <summary>docs/api.md §4.3 <c>message.unsubscribe</c>, and the bulk members of a summary and of a message.</summary>
+    [Fact]
+    public void MessageUnsubscribeExample()
+    {
+        var parameters = EncodeObject(new MessageUnsubscribeParams { AccountId = "acc_1", MessageId = "m_123" });
+        Assert.Equal(["accountId", "messageId"], parameters.EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal));
+        var done = Decode<MessageUnsubscribeResult>("""{"outcome":"unsubscribed","unsubscribedAt":"2026-09-30T12:00:00Z"}""");
+        Assert.Equal(UnsubscribeOutcome.Unsubscribed, done.Outcome.Value);
+        Assert.Equal(Rfc3339.Parse("2026-09-30T12:00:00Z"), done.UnsubscribedAt);
+        Assert.True(done.Url is null && done.Unverified is null, "absent members stay absent");
+        var open = Decode<MessageUnsubscribeResult>("""{"outcome":"openUrl","url":"https://shop.example/u","unverified":true}""");
+        Assert.Equal(UnsubscribeOutcome.OpenUrl, open.Outcome.Value);
+        Assert.Equal("https://shop.example/u", open.Url);
+        Assert.True(open.Unverified);
+        Assert.Equal(UnsubscribeOutcome.Queued, Decode<MessageUnsubscribeResult>("""{"outcome":"queued"}""").Outcome.Value);
+        // A value a newer daemon adds decodes as itself.
+        Assert.Equal("later", Decode<MessageUnsubscribeResult>("""{"outcome":"later"}""").Outcome.Value);
+
+        // The summary's classification and the message's offer.
+        var m = Decode<Message>(MessageJson.Replace(
+            "\"subject\":\"Lunch\"",
+            """
+            "subject":"Lunch","bulk":{"kind":"newsletter","listId":"news.shop.example","domain":"shop.example"}
+            """.Trim(),
+            StringComparison.Ordinal).Replace(
+            "\"headers\"",
+            """
+            "unsubscribe":{"method":"oneClick","target":"shop.example"},"headers"
+            """.Trim(),
+            StringComparison.Ordinal));
+        Assert.Equal(new BulkInfo { Kind = BulkKind.Newsletter, ListId = "news.shop.example", Domain = "shop.example" }, m.Summary.Bulk);
+        Assert.Equal(new UnsubscribeOffer { Method = UnsubscribeMethod.OneClick, Target = "shop.example" }, m.Unsubscribe);
+        // Personal mail has neither, and neither is written.
+        var plain = Decode<Message>(MessageJson);
+        Assert.True(plain.Summary.Bulk is null && plain.Unsubscribe is null);
+        var written = EncodeObject(plain);
+        Assert.False(written.TryGetProperty("bulk", out _) || written.TryGetProperty("unsubscribe", out _));
+        var again = EncodeObject(m);
+        Assert.Equal("newsletter", again.GetProperty("bulk").GetProperty("kind").GetString());
+        Assert.Equal("oneClick", again.GetProperty("unsubscribe").GetProperty("method").GetString());
+    }
+
     internal const string ThreadJson = $$$"""
         {"id":"t_9","accountId":"acc_1","subject":"Lunch",
          "participants":[{"name":"Alice","address":"alice@example.org"},{"address":"me@example.org"}],
@@ -1063,14 +1105,14 @@ public sealed partial class ApiCodingTests
         (1305, "messageGone"),
         (1400, "storageError"), (1401, "migrationFailed"),
         (1500, "malformedMessage"), (1501, "sanitizeFailed"), (1502, "attachmentTooBig"), (1503, "partNotFound"),
-        (1504, "partNotDownloaded"),
+        (1504, "partNotDownloaded"), (1505, "unsubscribeFailed"),
     ];
 
     [Fact]
     public void ErrorCodesAreNamed()
     {
-        Assert.Equal(34, ErrorCode.All.Count);
-        Assert.Equal(34, ErrorCode.All.Distinct().Count());
+        Assert.Equal(35, ErrorCode.All.Count);
+        Assert.Equal(35, ErrorCode.All.Distinct().Count());
         Assert.Equal(GoCodes.Select(c => c.Code), ErrorCode.All.Select(c => c.Value));
         Assert.Equal(GoCodes.Select(c => c.Name), ErrorCode.All.Select(c => c.Name));
         foreach (var code in ErrorCode.All)
@@ -1097,6 +1139,7 @@ public sealed partial class ApiCodingTests
         Assert.Equal(ErrorCode.MessageNotFound, code1102);
         Assert.True(ErrorCode.MessageGone == 1305 && new ErrorCode(1305).Name == "messageGone");
         Assert.True(ErrorCode.PartNotDownloaded == 1504 && new ErrorCode(1504).Name == "partNotDownloaded");
+        Assert.True(ErrorCode.UnsubscribeFailed == 1505 && new ErrorCode(1505).Name == "unsubscribeFailed");
     }
 
     // MARK: Params encoding
@@ -1190,7 +1233,7 @@ public sealed partial class ApiCodingTests
         "folder.list", "folder.subscribe",
         "message.list", "message.get", "message.body", "message.part",
         "message.embedded", "message.download", "message.flag", "message.move", "message.delete",
-        "message.send",
+        "message.send", "message.unsubscribe",
         "outbox.retry",
         "thread.list", "thread.get",
         "draft.save", "draft.list", "draft.delete", "draft.create", "draft.open",
@@ -1207,8 +1250,8 @@ public sealed partial class ApiCodingTests
     [Fact]
     public void MethodTableMatchesGo()
     {
-        Assert.Equal(53, API.AllMethods.Count);
-        Assert.Equal(53, API.AllMethods.Distinct().Count()); // no duplicates
+        Assert.Equal(54, API.AllMethods.Count);
+        Assert.Equal(54, API.AllMethods.Distinct().Count()); // no duplicates
         Assert.Equal(GoMethods, API.AllMethods);
         Assert.Equal(API.AllMethods.Count, API.Methods.Count);
         Assert.Equal(API.SystemInfoName, API.SystemInfo.Name);
@@ -1245,6 +1288,9 @@ public sealed partial class ApiCodingTests
         // The daemon's download budget is 4 minutes; the client waits 5.
         Assert.Equal(TimeSpan.FromSeconds(300), RpcTimeouts.Download);
         Assert.Equal(RpcTimeouts.Download, API.MessageDownload.Timeout);
+        // The daemon may verify the message and ask the sender's server (15 s) first.
+        Assert.Equal(TimeSpan.FromSeconds(30), RpcTimeouts.Unsubscribe);
+        Assert.Equal(RpcTimeouts.Unsubscribe, API.MessageUnsubscribe.Timeout);
         Assert.Equal(TimeSpan.FromSeconds(15), API.AccountDetectSite.Timeout);
         Assert.Equal(TimeSpan.FromSeconds(45), API.AccountListSpaces.Timeout);
         // One value for both, as in the GTK UI (issue_actions.go issueTimeout).
@@ -1257,6 +1303,7 @@ public sealed partial class ApiCodingTests
             "account.add", "account.update", "account.discover", "account.test",
             "account.oauthStart", "account.oauthWait", "message.download",
             "account.detectSite", "account.listSpaces", "issue.transitions", "issue.transition",
+            "message.unsubscribe",
         };
         foreach (var m in API.Methods.Where(m => !special.Contains(m.Name)))
         {

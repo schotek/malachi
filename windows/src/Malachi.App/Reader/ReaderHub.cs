@@ -23,6 +23,7 @@ using Malachi.App.MessageWindows;
 using Malachi.App.Shell;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers;
+using Malachi.Core.I18n;
 using Malachi.Core.Presentation;
 using Malachi.Platform.Windows.Attachments;
 using Malachi.Platform.Windows.Files;
@@ -89,7 +90,26 @@ public sealed class ReaderHub : IDisposable
             FileTypes = policy,
             Icons = new ChipIcons(new ShellFileTypes()),
             Issues = integration.Issues,
+            Bulk = integration.Bulk,
             IssueSite = id => integration.Mailbox.Model.Account(id)?.Config.Jira?.SiteUrl ?? "",
+        };
+        // The strip's Unsubscribe (window/bulk.go): the question over the
+        // window of the click (not a destructive one: the button that sends
+        // is the default), the sender's page through the same launcher as a
+        // link, and every view showing the message redraws its strip
+        // (refreshBulk: the panes, the message windows, the conversation's
+        // cards).
+        // An answer can arrive after the window of the click has closed: its
+        // dialog then goes on the main window (null), and the browser is
+        // started for no window.
+        Window? Open(object? window) => window is Window w && state.Windows.Find(w) is not null ? w : null;
+        integration.Bulk.Confirm = (window, c) =>
+            state.Alerts.ConfirmAsync(Open(window), c.Heading, c.Body, c.Confirm, L10n.T("_Cancel"));
+        integration.Bulk.OpenPage = (window, url) => links.OpenPageAsync(url, Open(window));
+        integration.Bulk.Changed += (_, e) =>
+        {
+            registry.RefreshBulk(e.Id, e.Loaded);
+            Conversation?.RefreshBars(e.Id, e.Loaded);
         };
         // issueActions onBusy and onIssue: every card showing the issue
         // follows (window.go setIssueBusy, applyIssue).

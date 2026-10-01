@@ -30,6 +30,7 @@ var curatedHeaders = []string{
 	"List-Unsubscribe",
 	"List-Unsubscribe-Post",
 	"List-Id",
+	"List-Post",
 	"Auto-Submitted",
 	"Precedence",
 	"X-Priority",
@@ -38,6 +39,18 @@ var curatedHeaders = []string{
 	"Return-Path",
 	"X-Mailer",
 	"User-Agent",
+	// The bulk-sending services' fields of internal/bulk
+	// SenderFingerprints (kept in step by a test there).
+	"Feedback-ID",
+	"X-CSA-Complaints",
+	"X-MSFBL",
+	"X-SG-EID",
+	"X-Mailgun-Sid",
+	"X-SES-Outgoing",
+	"X-MC-User",
+	"X-Mandrill-User",
+	"X-PM-Message-Id",
+	"X-SFMC-Stack",
 }
 
 // lenientDateLayouts are tried after net/mail.ParseDate fails, with any
@@ -98,6 +111,17 @@ func (p *parser) envelope(h message.Header) {
 	}
 	out.References = p.msgIDs(&mh, "References", p.limits.MaxReferences, true)
 
+	p.curated(h, out.Headers)
+}
+
+// maxListUnsubscribeBytes is the cap of a List-Unsubscribe value: up to
+// eight URIs of 2048 bytes (internal/bulk), where the other curated
+// fields keep MaxFieldBytes. A URI cut by a lower cap would be a wrong one.
+const maxListUnsubscribeBytes = 17 << 10
+
+// curated copies the curatedHeaders present in h into dst, cleaned and
+// capped.
+func (p *parser) curated(h message.Header, dst map[string]string) {
 	for _, name := range curatedHeaders {
 		if !h.Has(name) {
 			continue
@@ -106,8 +130,12 @@ func (p *parser) envelope(h message.Header) {
 		if err != nil {
 			p.problem(strings.ToLower(name) + ": " + err.Error())
 		}
+		max := p.limits.MaxFieldBytes
+		if name == "List-Unsubscribe" && max > 0 && max < maxListUnsubscribeBytes {
+			max = maxListUnsubscribeBytes
+		}
 		if v = cleanField(v, max); v != "" {
-			out.Headers[name] = v
+			dst[name] = v
 		}
 	}
 }
@@ -257,6 +285,42 @@ func ParseReferences(r io.Reader, limits Limits) []string {
 	mh := msgmail.Header{Header: message.Header{Header: h}}
 	p := &parser{limits: limits, out: &Parsed{}}
 	return p.msgIDs(&mh, "References", limits.MaxReferences, true)
+}
+
+// ParseHeaderFields reads a header block (a HEADER.FIELDS literal or the
+// top of a raw message, up to the blank line) and returns the cleaned
+// identifiers of its References field and the curated headers present
+// (curatedHeaders, as Parse reports them in Parsed.Headers). At most
+// limits.MaxHeaderBytes are consumed from r; an unreadable block yields
+// nothing.
+func ParseHeaderFields(r io.Reader, limits Limits) (references []string, headers map[string]string) {
+	limits = limits.withDefaults()
+	h, err := textproto.ReadHeader(bufio.NewReader(io.LimitReader(r, limits.MaxHeaderBytes)))
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return nil, nil
+	}
+	mh := msgmail.Header{Header: message.Header{Header: h}}
+	p := &parser{limits: limits, out: &Parsed{}}
+	headers = map[string]string{}
+	p.curated(message.Header{Header: h}, headers)
+	return p.msgIDs(&mh, "References", limits.MaxReferences, true), headers
+}
+
+// CountHeaderFields reads a header block like ParseHeaderFields and
+// returns, per requested name (canonical form), how many fields of that
+// name the block holds. A name that is repeated is one of which the
+// curated value (the first) may not be the one a signature covers.
+func CountHeaderFields(r io.Reader, limits Limits, names ...string) map[string]int {
+	limits = limits.withDefaults()
+	h, err := textproto.ReadHeader(bufio.NewReader(io.LimitReader(r, limits.MaxHeaderBytes)))
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return nil
+	}
+	out := make(map[string]int, len(names))
+	for _, n := range names {
+		out[n] = len(h.Values(n))
+	}
+	return out
 }
 
 // firstMsgID extracts the first identifier from a raw Message-ID value

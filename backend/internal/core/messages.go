@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/schotek/malachi/backend/internal/bulk"
 	"github.com/schotek/malachi/backend/internal/sanitize"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/pkg/api"
@@ -130,6 +131,9 @@ func (s *messageService) Get(ctx context.Context, p api.MessageGetParams) (*api.
 		return nil, err
 	}
 	out.MessageSummary = sums[0]
+	if out.Unsubscribe, err = s.b.unsubscribeOffer(ctx, a, m); err != nil {
+		return nil, err
+	}
 	return &api.MessageGetResult{Message: out}, nil
 }
 
@@ -430,7 +434,12 @@ func validateFlagLists(set, clear []api.Flag) error {
 }
 
 func toAPISummary(m store.Message) api.MessageSummary {
+	var from string
+	if len(m.From) > 0 {
+		from = m.From[0].Address
+	}
 	return api.MessageSummary{
+		Bulk:           bulk.Info(m.Bulk, m.ListID, from),
 		ID:             api.MessageID(m.ID),
 		AccountID:      api.AccountID(m.AccountID),
 		FolderID:       api.FolderID(m.FolderID),
