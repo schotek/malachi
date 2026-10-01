@@ -105,10 +105,16 @@ type convCard struct {
 	quotedButton *gtk.Button
 	quotedNow    conversation.QuotedOffer
 
-	// The body: "wait", "text" or "html".
+	// The body: "wait", "text" or "html". The web view is an overlay of
+	// host, which is as tall as its size request and nothing else: WebKit
+	// asks for the height of whatever it last laid out, never less than the
+	// view's own height, so as a child of a box a card could grow but never
+	// shrink (a body shown again without its quoted history, or after a
+	// taller document in a reused view, kept the taller height). An overlay
+	// counts none of its overlays' sizes.
 	body *gtk.Stack
 	text *gtk.Label
-	host *gtk.Box
+	host *gtk.Overlay
 
 	// The web view while the card is live, the height the HTML body last
 	// had (kept while no view is live), and what governs it.
@@ -170,7 +176,7 @@ func newConvCard(cv *conversationView, item conversation.Item, compact bool) *co
 	c.text.SetMarginTop(2)
 	c.text.SetMarginBottom(convCardPaddingV - 1)
 	c.body.AddNamed(c.text, "text")
-	c.host = gtk.NewBox(gtk.OrientationVertical, 0)
+	c.host = gtk.NewOverlay()
 	c.host.AddCSSClass("conversation-paper")
 	c.host.SetSizeRequest(-1, c.webHeight)
 	c.body.AddNamed(c.host, "html")
@@ -790,7 +796,7 @@ func (c *convCard) loadWebView() {
 		c.web.OnHover = c.cv.hover
 		c.web.OnSize = c.sizeReported
 		c.web.SetHeight(c.webHeight)
-		c.host.Append(c.web.Widget())
+		c.host.AddOverlay(c.web.Widget())
 		c.webDoc = ""
 	}
 	if c.webDoc != c.html || c.reload {
@@ -809,7 +815,7 @@ func (c *convCard) releaseWebView() {
 	}
 	web := c.web
 	c.web = nil
-	c.host.Remove(web.Widget())
+	c.host.RemoveOverlay(web.Widget())
 	c.cv.returnWebView(web)
 	c.cv.hover("")
 }

@@ -129,6 +129,11 @@ func newConvRow(content gtk.Widgetter, marker convMarker) *convRow {
 	cw.SetHExpand(true)
 	r.Append(gutter)
 	r.Append(content)
+	// The line under the marker fills the row, but the row is as tall as
+	// its item: without this the line's expand would reach the column,
+	// which shares the pane's spare height out among the rows of a short
+	// conversation, every card (folded too) taller than its content.
+	r.SetVExpand(false)
 	return r
 }
 

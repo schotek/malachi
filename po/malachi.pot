@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-01 11:06+0000\n"
+"POT-Creation-Date: 2026-10-01 13:31+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1064,7 +1064,7 @@ msgstr ""
 msgid "Comment"
 msgstr ""
 
-#: ui/internal/jira/compose.go:164 ui/internal/window/conversation_card.go:274
+#: ui/internal/jira/compose.go:164 ui/internal/window/conversation_card.go:280
 #: ui/data/ui/message_window.ui:38 ui/data/ui/window.ui:442
 msgid "Reply"
 msgstr ""
@@ -1537,7 +1537,7 @@ msgid "Needs fields in Jira"
 msgstr ""
 
 #: ui/internal/jira/transitions.go:98
-#: ui/internal/window/conversation_card.go:155 ui/internal/window/folders.go:89
+#: ui/internal/window/conversation_card.go:161 ui/internal/window/folders.go:89
 #: ui/internal/window/messages.go:264
 msgid "Loading…"
 msgstr ""
@@ -1670,12 +1670,12 @@ msgid "(No subject)"
 msgstr ""
 
 #: ui/internal/widget/message_row.go:314
-#: ui/internal/window/conversation_card.go:411 ui/internal/window/folders.go:62
+#: ui/internal/window/conversation_card.go:417 ui/internal/window/folders.go:62
 msgid "Collapse"
 msgstr ""
 
 #: ui/internal/widget/message_row.go:318
-#: ui/internal/window/conversation_card.go:413 ui/internal/window/folders.go:65
+#: ui/internal/window/conversation_card.go:419 ui/internal/window/folders.go:65
 msgid "Expand"
 msgstr ""
 
@@ -2260,63 +2260,63 @@ msgstr ""
 msgid "Preparing the reply"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:275 ui/data/ui/message_window.ui:44
+#: ui/internal/window/conversation_card.go:281 ui/data/ui/message_window.ui:44
 #: ui/data/ui/window.ui:449
 msgid "Reply All"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:276 ui/data/ui/message_window.ui:50
+#: ui/internal/window/conversation_card.go:282 ui/data/ui/message_window.ui:50
 #: ui/data/ui/window.ui:456
 msgid "Forward"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:501 ui/data/ui/compose.ui:110
+#: ui/internal/window/conversation_card.go:507 ui/data/ui/compose.ui:110
 #: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:195
 #: ui/data/ui/window.ui:681
 msgid "From"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:501 ui/data/ui/compose.ui:138
+#: ui/internal/window/conversation_card.go:507 ui/data/ui/compose.ui:138
 #: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:221
 #: ui/data/ui/window.ui:707
 msgid "To"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:501 ui/data/ui/compose.ui:176
+#: ui/internal/window/conversation_card.go:507 ui/data/ui/compose.ui:176
 #: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:249
 #: ui/data/ui/window.ui:735
 msgid "Cc"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:593
+#: ui/internal/window/conversation_card.go:599
 #: ui/internal/window/message_view.go:473
 msgid "Loading the message"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:648
+#: ui/internal/window/conversation_card.go:654
 #: ui/internal/window/message_view.go:285
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:685 ui/data/ui/embedded_window.ui:61
+#: ui/internal/window/conversation_card.go:691 ui/data/ui/embedded_window.ui:61
 #: ui/data/ui/message_window.ui:115 ui/data/ui/message_window.ui:425
 #: ui/data/ui/window.ui:540 ui/data/ui/window.ui:949
 msgid "Load _Images"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:686 ui/data/ui/message_window.ui:121
+#: ui/internal/window/conversation_card.go:692 ui/data/ui/message_window.ui:121
 #: ui/data/ui/window.ui:546
 msgid "Always From This _Sender"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:687 ui/data/ui/message_window.ui:123
+#: ui/internal/window/conversation_card.go:693 ui/data/ui/message_window.ui:123
 #: ui/data/ui/window.ui:548
 msgid "Load remote images now and whenever this sender writes"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:707 ui/data/ui/message_window.ui:152
+#: ui/internal/window/conversation_card.go:713 ui/data/ui/message_window.ui:152
 #: ui/data/ui/window.ui:577
 msgid "_Download Pictures"
 msgstr ""
