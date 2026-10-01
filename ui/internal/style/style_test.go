@@ -33,6 +33,7 @@ func TestCSS(t *testing.T) {
 	for _, want := range []string{
 		"list.folder-list row.folder-row { min-height: 24px;",
 		"row.folder-row > box.header > box.title { margin-top: 2px;",
+		"label.unread-badge {",
 		"button.folder-twisty",
 		"button.folder-star",
 		"row.folder-row:hover button.folder-star",

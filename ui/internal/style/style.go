@@ -74,6 +74,10 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// Every icon of the sidebar at once: the folder icons, the fold arrows of
 	// rows and headings alike, and the stars.
 	b.WriteString("list.folder-list image { -gtk-icon-size: 14px; }\n")
+	// The unread count of a sidebar row is a disc in the accent colour, 16px
+	// across at one digit (8px of text box and 4px either side) and a
+	// capsule with more; bold, so the small caption still reads at a glance.
+	b.WriteString("label.unread-badge { min-width: 8px; min-height: 16px; padding: 0 4px; border-radius: 99px; font-weight: bold; background-color: @accent_bg_color; color: @accent_fg_color; }\n")
 	// The status line at the bottom of the sidebar (window.blp) is a menu
 	// button that opens the accounts' states, but it reads as a line of
 	// text: the button loses the height and padding a stand-alone one

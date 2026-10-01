@@ -18,7 +18,7 @@ final class FolderCellView: NSTableCellView {
     private let icon = NSImageView()
     private let title = NSTextField(labelWithString: "")
     private let subtitle = NSTextField(labelWithString: "")
-    private let badge = NSTextField(labelWithString: "")
+    private let badge = UnreadBadgeView()
     private let star = NSButton()
     /// The star stays visible: a filled star in the tree is what says the
     /// folder is pinned (`.folder-star.starred` outside `.favourite`).
@@ -64,11 +64,8 @@ final class FolderCellView: NSTableCellView {
         text.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         text.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
-        badge.font = .monospacedDigitSystemFont(ofSize: SidebarMetrics.captionFontSize, weight: .regular)
-        badge.textColor = .secondaryLabelColor
-        badge.alignment = .right
-        badge.setContentHuggingPriority(.required, for: .horizontal)
-        badge.setContentCompressionResistancePriority(.required, for: .horizontal)
+        badge.font = .monospacedDigitSystemFont(ofSize: SidebarMetrics.captionFontSize, weight: .bold)
+        applyBadgeColours()
 
         star.isBordered = false
         star.setButtonType(.momentaryChange)
@@ -134,7 +131,19 @@ final class FolderCellView: NSTableCellView {
     /// Shows `n` on the badge, hiding it at zero (folders.go `setUnread`).
     func setUnread(_ n: Int) {
         badge.isHidden = n <= 0
-        badge.stringValue = String(n)
+        badge.text = String(n)
+    }
+
+    /// On an emphasized selection, which is itself drawn in the accent
+    /// colour, the capsule turns white with the count in the accent colour.
+    override var backgroundStyle: NSView.BackgroundStyle {
+        didSet { applyBadgeColours() }
+    }
+
+    private func applyBadgeColours() {
+        let emphasized = backgroundStyle == .emphasized
+        badge.fill = emphasized ? .white : .controlAccentColor
+        badge.textColor = emphasized ? .controlAccentColor : .white
     }
 
     /// The pointer or the selection arrived on the row, or left it
@@ -167,6 +176,68 @@ final class FolderCellView: NSTableCellView {
 
     @objc private func starClicked() {
         onToggleFavourite?()
+    }
+}
+
+/// `label.unread-badge`: the unread count, bold, in a disc of the accent
+/// colour that grows into a capsule with more digits. Drawn by hand rather
+/// than as a text field, whose line box would sit the digits off centre:
+/// the cap height is what is centred.
+@MainActor
+final class UnreadBadgeView: NSView {
+    var text = "" {
+        didSet { invalidateIntrinsicContentSize(); needsDisplay = true }
+    }
+    var font: NSFont = .systemFont(ofSize: 10, weight: .bold) {
+        didSet { invalidateIntrinsicContentSize(); needsDisplay = true }
+    }
+    var fill: NSColor = .controlAccentColor {
+        didSet { needsDisplay = true }
+    }
+    var textColor: NSColor = .white {
+        didSet { needsDisplay = true }
+    }
+
+    /// The space left and right of the digits once they outgrow the disc.
+    private static let padding: CGFloat = 4
+
+    init() {
+        super.init(frame: .zero)
+        setContentHuggingPriority(.required, for: .horizontal)
+        setContentHuggingPriority(.required, for: .vertical)
+        setContentCompressionResistancePriority(.required, for: .horizontal)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
+
+    private var attributes: [NSAttributedString.Key: Any] {
+        [.font: font, .foregroundColor: textColor]
+    }
+
+    /// The disc's diameter: the font's line height and a point of air.
+    private var diameter: CGFloat {
+        ceil(font.ascender - font.descender) + 2
+    }
+
+    override var intrinsicContentSize: NSSize {
+        let width = ceil((text as NSString).size(withAttributes: attributes).width) + 2 * Self.padding
+        return NSSize(width: max(diameter, width), height: diameter)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let radius = bounds.height / 2
+        fill.setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
+        let string = text as NSString
+        let width = string.size(withAttributes: attributes).width
+        // draw(at:) puts the bottom of the line box at the point; the
+        // baseline is the descender above it.
+        let baseline = (bounds.midY - font.capHeight / 2).rounded()
+        let origin = NSPoint(x: bounds.midX - width / 2, y: baseline + font.descender)
+        string.draw(at: origin, withAttributes: attributes)
     }
 }
 

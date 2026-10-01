@@ -383,7 +383,7 @@ func newFolderRow(e folderEntry, subtitle string) *folderRow {
 	badge.SetUseMarkup(false)
 	badge.AddCSSClass("caption")
 	badge.AddCSSClass("numeric")
-	badge.AddCSSClass("dim-label")
+	badge.AddCSSClass("unread-badge")
 	badge.SetVAlign(gtk.AlignCenter)
 	row.AddSuffix(badge)
 

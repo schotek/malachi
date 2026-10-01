@@ -110,13 +110,28 @@ row shows is Core's SidebarRow; every text is plain.
                 Visibility="{x:Bind res:Bind.VisibleIfText(Row.Subtitle), Mode=OneWay}" />
         </StackPanel>
 
-        <TextBlock
+        <!-- label.unread-badge: a bold count in an accent disc 16 across,
+             a capsule with more digits; tight line bounds centre the digits
+             rather than the line box. -->
+        <Border
             x:Name="Badge"
             Grid.Column="3"
+            Height="16"
+            MinWidth="16"
+            Padding="4,0"
             VerticalAlignment="Center"
-            Style="{StaticResource DimCaptionLabelStyle}"
-            Text="{x:Bind Row.Badge, Mode=OneWay}"
-            Visibility="{x:Bind res:Bind.VisibleIfText(Row.Badge), Mode=OneWay}" />
+            Background="{ThemeResource AccentFillColorDefaultBrush}"
+            CornerRadius="8"
+            Visibility="{x:Bind res:Bind.VisibleIfText(Row.Badge), Mode=OneWay}">
+            <TextBlock
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                FontWeight="Bold"
+                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="{x:Bind Row.Badge, Mode=OneWay}"
+                TextLineBounds="Tight" />
+        </Border>
 
         <!-- newStar: Add to / Remove from Favourites; waits for the pointer,
              the selection or the keyboard, but a filled star in the tree. -->
