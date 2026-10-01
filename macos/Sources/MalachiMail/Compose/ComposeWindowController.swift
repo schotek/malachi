@@ -278,6 +278,14 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
                 self.importFile(path: url.path, name: url.lastPathComponent, inline: false, then: nil)
             }
         }
+        // Pasted text that looks like Markdown: the daemon renders it
+        // (draft.markdown); without an answer the text goes in as it is.
+        let client = state.client
+        editor.onPaste = { text, answer in
+            Task { @MainActor in
+                answer(await markdownPaste(text, client: client))
+            }
+        }
     }
 
     /// compose.go `wireRows`.

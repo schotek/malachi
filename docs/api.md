@@ -2035,6 +2035,35 @@ for the newer copy of a saved draft, which carries that draft's `id` and
 kept. Without it, saving the draft leaves the message where it is next to
 the new copy.
 
+#### `draft.markdown`
+
+```jsonc
+→ { "text": "# Agenda\n- **one**\n- two" }
+← { "markdown": true, "html": "<h1>Agenda</h1><ul><li><strong>one</strong></li>…</ul>" }
+← { "markdown": false }
+```
+
+Text pasted into the compose editor (a message or a comment), rendered as
+HTML when it reads as Markdown. The editors call it for a paste of plain
+text that looks like Markdown, with no rich HTML on the clipboard, and
+insert `html` in place of the text; with `markdown: false`, any error or a
+daemon without the method (`methodNotFound`) they paste the text as it is.
+Nothing is stored.
+
+- Markdown is CommonMark with GitHub tables, strikethrough and bare-URL
+  links; every line break of the text is a line break of the HTML. The
+  text reads as Markdown when it has a heading, a list, emphasis, code, a
+  quote, a link, an image, a rule, a table or strikethrough; an indented
+  block or a bare address alone does not count.
+- Raw HTML in the text stays text, an image becomes a link to its
+  address, and tables, code and quotes carry inline styles. `html` is the
+  sanitiser's output in compose mode, as for `draft.save` (§4.5), and
+  `draft.save` sanitises it again with the rest of the editor's HTML.
+- Text nested deeper than 32 levels, or whose HTML the sanitiser refuses,
+  gives `markdown: false`.
+- `text` ≤ 1 MiB (`api.MaxDraftBodyBytes`) and valid UTF-8, otherwise
+  `invalidArgument`.
+
 ### 4.6 search
 
 #### `search.query`
@@ -2721,3 +2750,6 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   by its id followed by a refresh of the issue; new limit
   `api.MaxIssueTransitions`; no new error codes (a transition the site
   refuses is serverError, an issue it no longer shows messageGone).
+- **2** (2026-10-01, compatible addition: Markdown pasted into compose):
+  new `draft.markdown` (§4.5), text pasted into the compose editor rendered
+  as sanitised HTML when it reads as Markdown; no new error codes.

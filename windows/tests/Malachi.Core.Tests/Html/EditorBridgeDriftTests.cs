@@ -63,14 +63,14 @@ public sealed class EditorBridgeDriftTests
             "2: Node.parentElement and Element.closest through the prototypes"),
         ("document.getSelection().anchorNode.parentElement", "parent(selection().anchorNode)", 1,
             "2: Node.parentElement through the prototype"),
-        ("document.getSelection()", "selection()", 4, "2: Document.getSelection captured"),
-        ("document.body", "body()", 10, "2: the Document.body getter captured"),
+        ("document.getSelection()", "selection()", 6, "2: Document.getSelection captured"),
+        ("document.body", "body()", 11, "2: the Document.body getter captured"),
         ("document.queryCommandState(c)", "queryCommandState.call(document, c)", 1, "2: Document.queryCommandState captured"),
         ("document.queryCommandValue('formatBlock')", "queryCommandValue.call(document, 'formatBlock')", 1,
             "2: Document.queryCommandValue captured"),
-        ("document.execCommand(", "execCommand.call(document, ", 3, "2: Document.execCommand captured"),
+        ("document.execCommand(", "execCommand.call(document, ", 4, "2: Document.execCommand captured"),
         ("document.createRange()", "createRange.call(document)", 2, "2: Document.createRange captured"),
-        ("document.addEventListener(", "on(", 3, "2: EventTarget.addEventListener captured"),
+        ("document.addEventListener(", "on(", 4, "2: EventTarget.addEventListener captured"),
         // The rewrite walks from the attribution's div up and back through
         // nodes of the content, any of which may be a <form>, whose named
         // controls override its own properties as the document's do.

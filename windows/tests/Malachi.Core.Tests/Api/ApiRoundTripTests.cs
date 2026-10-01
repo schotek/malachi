@@ -160,6 +160,8 @@ public sealed class ApiRoundTripTests
         [nameof(DraftCreateResult)] = Case<DraftCreateResult>("""{"draft":@draft@,"quoted":"html","blocked":@blocked@,"skipped":[@attachment@]}"""),
         [nameof(DraftOpenParams)] = Case<DraftOpenParams>("""{"accountId":"acc_1","messageId":"m_1"}"""),
         [nameof(DraftOpenResult)] = Case<DraftOpenResult>("""{"draft":@draft@,"blocked":@blocked@,"skipped":[@attachment@]}"""),
+        [nameof(DraftMarkdownParams)] = Case<DraftMarkdownParams>("""{"text":"# Plan\n\n- **one**\n- two"}"""),
+        [nameof(DraftMarkdownResult)] = Case<DraftMarkdownResult>("""{"markdown":true,"html":"<h1>Plan</h1><ul><li><b>one</b></li><li>two</li></ul>"}"""),
         [nameof(MessageSendParams)] = Case<MessageSendParams>("""{"accountId":"acc_1","draftId":"d_1","version":3}"""),
         [nameof(MessageSendResult)] = Case<MessageSendResult>("""{"outboxId":"m_7"}"""),
         [nameof(OutboxRetryParams)] = Case<OutboxRetryParams>("""{"accountId":"acc_1","messageId":"m_7"}"""),

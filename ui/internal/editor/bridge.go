@@ -26,6 +26,13 @@ import (
 // passage again (its end when below) and runs one editing command there
 // (RewriteInsertion), which the page's undo takes back as one step, and
 // reports the change as typing does.
+//
+// A paste of plain text that looks like Markdown (markdownHint), with no
+// rich HTML on the clipboard (richHTML), is held back and posted to Go
+// ("paste": id, text), which asks the daemon (draft.markdown) and answers
+// with pasted(id, html) to insert the rendered HTML where the paste went,
+// or pasted(id, null) to paste the text as it is. Every other paste is
+// WebKit's own. The regexes write the backtick as \x60.
 const bridgeJS = `(() => {
   const post = m => window.webkit.messageHandlers.malachi.postMessage(JSON.stringify(m));
   let seq = 0, timer = null;
@@ -52,6 +59,19 @@ const bridgeJS = `(() => {
     if (!e.ctrlKey || e.altKey || e.metaKey) return;
     const cmd = {b: 'bold', i: 'italic', u: 'underline'}[e.key.toLowerCase()];
     if (cmd) { e.preventDefault(); document.execCommand(cmd); state(); }
+  });
+  let pending = null, pasteSeq = 0;
+  const markdownHint = /^ {0,3}(#{1,6} |[-*+] |\d{1,9}[.)] |>|\x60{3}|~~~|\|)|\*\*|__|~~|\x60[^\x60\n]+\x60|\]\(|^ {0,3}(-{3,}|\*{3,}|_{3,}) *$/m;
+  const richHTML = /<(h[1-6]|ul|ol|li|b|strong|i|em|a|table|blockquote)[\s>]/i;
+  document.addEventListener('paste', e => {
+    const d = e.clipboardData;
+    if (!d || Array.from(d.types || []).includes('Files')) return;
+    const text = d.getData('text/plain');
+    if (!text || !markdownHint.test(text) || richHTML.test(d.getData('text/html') || '')) return;
+    e.preventDefault();
+    const sel = document.getSelection();
+    pending = {id: ++pasteSeq, text, range: sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null};
+    post({type: 'paste', id: pending.id, text});
   });
   let passage = null;
   const collapsed = s => String(s || '').replace(/\s+/g, ' ').trim();
@@ -107,6 +127,17 @@ const bridgeJS = `(() => {
       document.execCommand(c, false, a);
       schedule();
       state();
+    },
+    pasted(id, h) {
+      if (!pending || pending.id !== id) return;
+      const p = pending;
+      pending = null;
+      document.body.focus();
+      const sel = document.getSelection();
+      if (p.range) { sel.removeAllRanges(); sel.addRange(p.range); }
+      document.execCommand(h ? 'insertHTML' : 'insertText', false, h || p.text);
+      schedule();
+      state();
     }
   };
   post({type: 'ready'});
@@ -116,6 +147,8 @@ const bridgeJS = `(() => {
 type bridgeMessage struct {
 	Type string `json:"type"`
 	Seq  int    `json:"seq"`
+	// ID is the "paste" message's: what pasted() answers to.
+	ID   int    `json:"id"`
 	HTML string `json:"html"`
 	Text string `json:"text"`
 	// Selected is the "rewrite" message's: the passage is the selection.

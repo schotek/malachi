@@ -5,7 +5,8 @@
 // GTK: ui/internal/editor/bridge.go (bridgeMessage, decodeMessage).
 //
 // The "rewrite" message is GTK's (its selected and text); macOS has none,
-// its bridge returns the passage instead (RewriteTarget).
+// its bridge returns the passage instead (RewriteTarget). So is "paste" (its
+// id and text): plain text that looks like Markdown, for draft.markdown.
 //
 // Decoded as encoding/json and Swift's decoding read it: a missing or null
 // member is its zero value, an unknown one is ignored, a mistyped one fails
@@ -37,9 +38,10 @@ namespace Malachi.Core.Html;
 /// (with <see cref="Seq"/>, <see cref="Html"/>, <see cref="Text"/>),
 /// <c>state</c> (the formatting, flattened into the same object as Go embeds
 /// it), <c>rewrite</c> (with <see cref="Selected"/> and <see cref="Text"/>),
-/// and on Windows <c>key</c> (with <see cref="Key"/>) and <c>drop</c> (the
-/// files travel beside the message). A kind this client does not know
-/// decodes, and the channel ignores it.
+/// <c>paste</c> (with <see cref="Id"/> and <see cref="Text"/>), and on
+/// Windows <c>key</c> (with <see cref="Key"/>) and <c>drop</c> (the files
+/// travel beside the message). A kind this client does not know decodes, and
+/// the channel ignores it.
 /// </summary>
 public sealed record BridgeMessage
 {
@@ -52,8 +54,11 @@ public sealed record BridgeMessage
     /// <summary>A <c>changed</c>'s <c>body.innerHTML</c>.</summary>
     public string Html { get; init => field = value ?? ""; } = "";
 
-    /// <summary>A <c>changed</c>'s <c>body.innerText</c>; a <c>rewrite</c>'s passage.</summary>
+    /// <summary>A <c>changed</c>'s <c>body.innerText</c>; a <c>rewrite</c>'s passage; a <c>paste</c>'s text.</summary>
     public string Text { get; init => field = value ?? ""; } = "";
+
+    /// <summary>A <c>paste</c>'s number, per document, from 1: what <c>pasted</c> answers.</summary>
+    public long Id { get; init; }
 
     /// <summary>A <c>rewrite</c>'s: the passage is the selection.</summary>
     public bool Selected { get; init; }
@@ -91,7 +96,7 @@ public sealed record BridgeMessage
                 throw new FormatException("bridge message: not an object");
             }
             string type = "", html = "", text = "", key = "", block = "", align = "";
-            long seq = 0;
+            long seq = 0, id = 0;
             bool selected = false, bold = false, italic = false, underline = false, strike = false, ul = false, ol = false, link = false;
             foreach (var member in root.EnumerateObject())
             {
@@ -102,7 +107,10 @@ public sealed record BridgeMessage
                         type = ReadString(v, "type");
                         break;
                     case "seq":
-                        seq = ReadInteger(v);
+                        seq = ReadInteger(v, "seq");
+                        break;
+                    case "id":
+                        id = ReadInteger(v, "id");
                         break;
                     case "html":
                         html = ReadString(v, "html");
@@ -151,6 +159,7 @@ public sealed record BridgeMessage
             {
                 Type = type,
                 Seq = seq,
+                Id = id,
                 Html = html,
                 Text = text,
                 Selected = selected,
@@ -197,7 +206,7 @@ public sealed record BridgeMessage
     {
         var kind = Type switch
         {
-            Kinds.Ready or Kinds.Changed or Kinds.State or Kinds.Rewrite or Kinds.Key or Kinds.Drop => Type,
+            Kinds.Ready or Kinds.Changed or Kinds.State or Kinds.Rewrite or Kinds.Paste or Kinds.Key or Kinds.Drop => Type,
             "" => "\"\"",
             _ => "<other>",
         };
@@ -314,11 +323,11 @@ public sealed record BridgeMessage
         _ => throw new FormatException("bridge message: " + name + " is not a boolean"),
     };
 
-    private static long ReadInteger(JsonElement v) => v.ValueKind switch
+    private static long ReadInteger(JsonElement v, string name) => v.ValueKind switch
     {
         JsonValueKind.Number when v.TryGetInt64(out var n) => n,
         JsonValueKind.Null => 0,
-        _ => throw new FormatException("bridge message: seq is not an integer"),
+        _ => throw new FormatException("bridge message: " + name + " is not an integer"),
     };
 
     /// <summary>The kinds of messages the bridge posts.</summary>
@@ -335,6 +344,9 @@ public sealed record BridgeMessage
 
         /// <summary>The passage of the assistant's rewrite, once per <c>rewriteTarget</c>.</summary>
         public const string Rewrite = "rewrite";
+
+        /// <summary>Plain text that looks like Markdown pasted into the page, held for <c>pasted</c>.</summary>
+        public const string Paste = "paste";
 
         /// <summary>Escape or Ctrl+K in the page (Windows).</summary>
         public const string Key = "key";

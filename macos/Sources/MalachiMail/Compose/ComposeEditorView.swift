@@ -16,7 +16,9 @@ import WebKit
 ///
 /// The bridge posts `ready` once per document, `changed{seq, html, text}`
 /// after edits (debounced) and on `flush`, and `state` when the formatting
-/// at the caret changed. `flush(_:)` evaluates `window.malachi.flush()`,
+/// at the caret changed, and `paste{id, text}` when plain text that looks
+/// like Markdown was pasted, which `onPaste` answers with the HTML to
+/// insert or nil (`pastedScript`). `flush(_:)` evaluates `window.malachi.flush()`,
 /// which posts a fresh `changed` and returns its `seq`; the callback runs
 /// once the `changed` with that `seq` (or a later one) has been seen, so a
 /// save reads content at least as new as the moment it asked. GTK's
@@ -35,6 +37,7 @@ final class ComposeEditorView: NSView, EditorView {
         set { web.onDropFiles = newValue }
     }
     var onCrashed: (@MainActor () -> Void)?
+    var onPaste: (@MainActor (_ text: String, _ answer: @escaping @MainActor (String?) -> Void) -> Void)?
 
     private let web: ComposeWebView
     private let registry: CIDRegistry
@@ -228,8 +231,23 @@ final class ComposeEditorView: NSView, EditorView {
             onChanged?()
         case "state":
             onState?(message.state)
+        case "paste":
+            pasted(message.id, text: message.text)
         default:
             log.debug("bad bridge message")
+        }
+    }
+
+    /// The bridge kept a paste of plain text that looks like Markdown:
+    /// `onPaste` decides what goes in (the text as it is without one), and
+    /// the page inserts it where the paste was. The text is never logged.
+    private func pasted(_ id: Int, text: String) {
+        guard let onPaste else {
+            web.run(pastedScript(id: id, html: nil))
+            return
+        }
+        onPaste(text) { [weak self] html in
+            self?.web.run(pastedScript(id: id, html: html))
         }
     }
 

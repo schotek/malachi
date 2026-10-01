@@ -1088,6 +1088,46 @@ public sealed class DraftStateTests
         Assert.Equal([(LogLevel.Warning, "the discard confirmation failed; nothing was discarded")], h.Logger.Entries);
     }
 
+    // The paste of Markdown (the editor's "paste"): draft.markdown's HTML
+    // when the text reads as Markdown; null, the text as it is, when it does
+    // not, when the daemon refuses it, when an older daemon does not know the
+    // method, when there is no daemon, and for text too long to ask about,
+    // which is never sent.
+    [Fact]
+    public async Task PasteMarkdownAnswersWithTheHtmlOrNull()
+    {
+        await using var h = await Harness.StartAsync();
+        h.Fake.On(API.DraftMarkdown.Name, (Func<string, string>)(p => JsonCoding.Decode<DraftMarkdownParams>(p).Text switch
+        {
+            "# Plan" => JsonCoding.EncodeToString(new DraftMarkdownResult { Markdown = true, Html = "<h1>Plan</h1>" }),
+            "**empty**" => JsonCoding.EncodeToString(new DraftMarkdownResult { Markdown = true, Html = "" }),
+            "boom" => throw new RpcException(new RpcError { Code = ErrorCode.InvalidArgument, Message = "text" }),
+            _ => JsonCoding.EncodeToString(new DraftMarkdownResult { Markdown = false }),
+        }));
+        Assert.Equal("<h1>Plan</h1>", await PasteAsync(h, "# Plan"));
+        Assert.Null(await PasteAsync(h, "plain"));
+        Assert.Null(await PasteAsync(h, "**empty**"));
+        Assert.Null(await PasteAsync(h, "boom"));
+        var calls = h.Fake.Calls.Count;
+        Assert.Null(await PasteAsync(h, new string('a', API.Limits.MaxDraftBodyBytes + 1)));
+        Assert.Equal(calls, h.Fake.Calls.Count);
+
+        await using var older = await Harness.StartAsync();
+        Assert.Null(await PasteAsync(older, "# Plan"));
+
+        await using var none = await Harness.StartAsync(connect: false);
+        Assert.Null(await PasteAsync(none, "# Plan"));
+    }
+
+    private static async Task<string?> PasteAsync(Harness h, string text)
+    {
+        var done = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await h.Run(() => h.Draft.PasteMarkdown(text, html => done.TrySetResult(html)));
+        var html = await done.Task;
+        await h.IdleAsync();
+        return html;
+    }
+
     // Helpers
 
     private static DraftAttachment Att(string id, bool inline = false, string? cid = null) =>

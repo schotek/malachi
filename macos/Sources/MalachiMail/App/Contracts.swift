@@ -227,6 +227,11 @@ protocol EditorView: AnyObject {
     /// Files dropped onto the editor (the window imports them as
     /// attachments; WebKit never inserts `file:` URLs).
     var onDropFiles: (@MainActor ([URL]) -> Void)? { get set }
+    /// Plain text that looks like Markdown was pasted (the bridge's
+    /// "paste"): the window answers with the HTML to insert (draft.markdown)
+    /// or nil for the text as it is. Without a handler the text is pasted
+    /// as it is.
+    var onPaste: (@MainActor (_ text: String, _ answer: @escaping @MainActor (String?) -> Void) -> Void)? { get set }
     /// The web content process died; the window may reload the last
     /// content on request.
     var onCrashed: (@MainActor () -> Void)? { get set }

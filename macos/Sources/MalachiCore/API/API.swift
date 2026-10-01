@@ -313,6 +313,13 @@ public enum API {
         public static let timeout = RPCTimeouts.compose
     }
 
+    /// Pasted plain text rendered as HTML when it reads as Markdown.
+    public enum DraftMarkdown: RPCMethod {
+        public typealias Params = DraftMarkdownParams
+        public typealias Result = DraftMarkdownResult
+        public static let name = "draft.markdown"
+    }
+
     // MARK: Attachments
 
     public enum AttachmentImport: RPCMethod {
@@ -434,6 +441,7 @@ public enum API {
         OutboxRetry.self,
         ThreadList.self, ThreadGet.self,
         DraftSave.self, DraftList.self, DraftDelete.self, DraftCreate.self, DraftOpen.self,
+        DraftMarkdown.self,
         AttachmentImport.self, AttachmentRemove.self, AttachmentGet.self,
         SearchQuery.self,
         SyncStatus.self, SyncTrigger.self,

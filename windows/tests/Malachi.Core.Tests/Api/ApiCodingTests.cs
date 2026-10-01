@@ -1169,6 +1169,7 @@ public sealed partial class ApiCodingTests
         "outbox.retry",
         "thread.list", "thread.get",
         "draft.save", "draft.list", "draft.delete", "draft.create", "draft.open",
+        "draft.markdown",
         "attachment.import", "attachment.remove", "attachment.get",
         "search.query",
         "sync.status", "sync.trigger",
@@ -1181,8 +1182,8 @@ public sealed partial class ApiCodingTests
     [Fact]
     public void MethodTableMatchesGo()
     {
-        Assert.Equal(52, API.AllMethods.Count);
-        Assert.Equal(52, API.AllMethods.Distinct().Count()); // no duplicates
+        Assert.Equal(53, API.AllMethods.Count);
+        Assert.Equal(53, API.AllMethods.Distinct().Count()); // no duplicates
         Assert.Equal(GoMethods, API.AllMethods);
         Assert.Equal(API.AllMethods.Count, API.Methods.Count);
         Assert.Equal(API.SystemInfoName, API.SystemInfo.Name);

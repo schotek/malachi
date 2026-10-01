@@ -191,6 +191,9 @@ func (stubDrafts) Create(context.Context, api.DraftCreateParams) (*api.DraftCrea
 func (stubDrafts) Open(context.Context, api.DraftOpenParams) (*api.DraftOpenResult, error) {
 	return nil, api.ErrNotImplemented
 }
+func (stubDrafts) Markdown(context.Context, api.DraftMarkdownParams) (*api.DraftMarkdownResult, error) {
+	return nil, api.ErrNotImplemented
+}
 
 type stubAttachments struct{}
 

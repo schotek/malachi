@@ -153,7 +153,7 @@ func newWindow(m *Manager, p Params) *Window {
 	w.editorSlot.Append(w.editor)
 	w.editor.OnState = w.applyState
 	w.editor.OnChanged = w.editorChanged
-	w.editor.OnDropFiles = w.attachGioFiles
+	w.editor.OnDropFiles, w.editor.OnPaste = w.attachGioFiles, w.pasteMarkdown
 	w.editor.OnReady = func() {
 		if p.Kind != KindNew && p.Kind != KindEdit {
 			w.editor.FocusStart()

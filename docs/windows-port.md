@@ -942,8 +942,10 @@ named controls override its own properties as named elements do the
 document's (reasoned from the HTML specification, not measured). `WebMessageReceived` accepts only strings whose
 `Source` is the current document and whose shape parses; they go to Core's
 `EditorChannel` (`Channel`: `Ready`, `Changed`, `StateChanged`,
-`KeyPressed`, `Html`, `Text`, and the rewrite's passage from its
-`rewrite` message). Host to page is `ExecuteScriptAsync`:
+`KeyPressed`, `Html`, `Text`, the rewrite's passage from its
+`rewrite` message, and `PasteRequested` for GTK's `paste` of plain text
+that looks like Markdown, which the compose window answers with
+`Pasted(id, html)` after `draft.markdown`, or null for the text as it is). Host to page is `ExecuteScriptAsync`:
 `Flush(done)` (the flush script, its `seq` handed back to the channel),
 `Exec(command, argument)`, `FocusStart()`, and the assistant's rewrite
 (`RewriteTarget(attribution, done)`, whose passage comes back as GTK's

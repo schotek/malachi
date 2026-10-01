@@ -42,6 +42,9 @@ struct EditorBridgeTests {
         let ready = try BridgeMessage.decode("{\"type\":\"ready\"}")
         #expect(ready == BridgeMessage(type: "ready"))
 
+        let paste = try BridgeMessage.decode(##"{"type":"paste","id":7,"text":"# Plan\n- a"}"##)
+        #expect(paste == BridgeMessage(type: "paste", text: "# Plan\n- a", id: 7))
+
         #expect(throws: (any Error).self) {
             try BridgeMessage.decode("not json")
         }
@@ -98,6 +101,19 @@ struct EditorBridgeTests {
             const cmd = {b: 'bold', i: 'italic', u: 'underline'}[e.key.toLowerCase()];
             if (cmd) { e.preventDefault(); document.execCommand(cmd); state(); }
           });
+          let pending = null, pasteSeq = 0;
+          const markdownHint = /^ {0,3}(#{1,6} |[-*+] |\d{1,9}[.)] |>|\x60{3}|~~~|\|)|\*\*|__|~~|\x60[^\x60\n]+\x60|\]\(|^ {0,3}(-{3,}|\*{3,}|_{3,}) *$/m;
+          const richHTML = /<(h[1-6]|ul|ol|li|b|strong|i|em|a|table|blockquote)[\s>]/i;
+          document.addEventListener('paste', e => {
+            const d = e.clipboardData;
+            if (!d || Array.from(d.types || []).includes('Files')) return;
+            const text = d.getData('text/plain');
+            if (!text || !markdownHint.test(text) || richHTML.test(d.getData('text/html') || '')) return;
+            e.preventDefault();
+            const sel = document.getSelection();
+            pending = {id: ++pasteSeq, text, range: sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null};
+            post({type: 'paste', id: pending.id, text});
+          });
           window.malachi = {
             flush,
             focusStart() {
@@ -127,11 +143,13 @@ struct EditorBridgeTests {
             }
         }
         #expect(i == gtk.split(separator: "\n", omittingEmptySubsequences: false).count, "a GTK line is missing or out of order")
-        // The additions: exec, then the rewrite's two functions.
+        // The additions: exec, then the rewrite's two functions and the
+        // paste's answer (members of GTK's `window.malachi` object).
         #expect(extra.first == "  window.malachi.exec = (c, a) => { document.execCommand(c, false, a == null ? null : a); state(); };")
         #expect(extra.dropFirst().first == "  let passage = null;")
         #expect(extra.contains("  window.malachi.rewriteTarget = attribution => {"))
         #expect(extra.contains("  window.malachi.rewriteApply = (below, c, a) => {"))
+        #expect(extra.contains("  window.malachi.pasted = (id, h) => {"))
         #expect(extra.last == "  };")
     }
 
@@ -159,6 +177,23 @@ struct EditorBridgeTests {
         #expect(bridgeJS.contains("if (below) r.collapse(false);"))
         #expect(bridgeJS.contains("document.execCommand(c, false, a);\n    schedule();\n    state();"))
         #expect(!bridgeJS.contains("innerHTML ="), "the page's HTML is never written by the bridge")
+        // The paste: only plain text that looks like Markdown, without
+        // files or rich HTML on the clipboard, goes to the app; the answer
+        // goes in where the paste was, the HTML or the kept text.
+        #expect(bridgeJS.contains(#"\x60{3}"#), "the backtick stays an escape, as in GTK")
+        #expect(bridgeJS.contains("if (!d || Array.from(d.types || []).includes('Files')) return;"))
+        #expect(bridgeJS.contains("post({type: 'paste', id: pending.id, text});"))
+        #expect(bridgeJS.contains("if (!pending || pending.id !== id) return;"))
+        #expect(bridgeJS.contains("document.execCommand(h ? 'insertHTML' : 'insertText', false, h || p.text);"))
+    }
+
+    /// The answer to a paste: the daemon's HTML as a string literal, or
+    /// null for the plain text.
+    @Test func pastedScripts() {
+        #expect(pastedScript(id: 3, html: "<h1>Plan</h1>") == "window.malachi.pasted(3, \"\\u003ch1\\u003ePlan\\u003c/h1\\u003e\")")
+        #expect(pastedScript(id: 4, html: nil) == "window.malachi.pasted(4, null)")
+        #expect(pastedScript(id: 5, html: "") == "window.malachi.pasted(5, null)")
+        #expect(pastedScript(id: 6, html: "a\")</script>\u{2028}") == "window.malachi.pasted(6, \"a\\\")\\u003c/script\\u003e\\u2028\")")
     }
 
     /// The answer goes in as plain text: one line with insertText, several
@@ -181,6 +216,41 @@ struct EditorBridgeTests {
         #expect(RewriteTarget.script(attribution: "a\")</script>\n") == "window.malachi.rewriteTarget(\"a\\\")\\u003c/script\\u003e\\n\")")
         #expect(rewriteApplyScript("Hi", below: false) == "window.malachi.rewriteApply(false, \"insertText\", \"Hi\")")
         #expect(rewriteApplyScript("a\nb", below: true) == "window.malachi.rewriteApply(true, \"insertHTML\", \"\\u003cbr\\u003ea\\u003cbr\\u003eb\\u003cbr\\u003e\")")
+    }
+
+    /// draft.markdown decides what a paste puts in: its HTML when the text
+    /// is Markdown, otherwise (plain text, an error, a daemon without the
+    /// method, text over the limit) nil for the text as it is.
+    @Test func markdownPasteAsksTheDaemon() async throws {
+        let fake = try FakeDaemon()
+        await fake.on(API.DraftMarkdown.name) { params in
+            let p = try JSONDecoder().decode(DraftMarkdownParams.self, from: params)
+            switch p.text {
+            case "# Plan": return json(#"{"markdown":true,"html":"<h1>Plan</h1>"}"#)
+            case "boom": throw RPCError(code: .invalidArgument, message: "too big")
+            default: return json(#"{"markdown":false}"#)
+            }
+        }
+        try await fake.start()
+        let client = RPCClient(socketPath: fake.path)
+        try await client.connect()
+        #expect(await markdownPaste("# Plan", client: client) == "<h1>Plan</h1>")
+        #expect(await markdownPaste("just text", client: client) == nil)
+        #expect(await markdownPaste("boom", client: client) == nil)
+        #expect(await markdownPaste("", client: client) == nil)
+        #expect(await markdownPaste(String(repeating: "#", count: API.Limits.maxDraftBodyBytes + 1), client: client) == nil)
+        #expect(await fake.calls.filter { $0 == API.DraftMarkdown.name }.count == 3, "nothing sent for empty or oversized text")
+        await client.close()
+        await fake.stop()
+
+        // An older daemon answers methodNotFound.
+        let old = try FakeDaemon()
+        try await old.start()
+        let oldClient = RPCClient(socketPath: old.path)
+        try await oldClient.connect()
+        #expect(await markdownPaste("# Plan", client: oldClient) == nil)
+        await oldClient.close()
+        await old.stop()
     }
 
     @Test func rewriteTargetDecode() {

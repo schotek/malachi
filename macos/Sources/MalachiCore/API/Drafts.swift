@@ -228,6 +228,37 @@ public struct DraftOpenResult: Codable, Sendable, Equatable {
     }
 }
 
+/// api.DraftMarkdownParams: plain text pasted into the compose editor
+/// (`draft.markdown`), at most `API.Limits.maxDraftBodyBytes`.
+public struct DraftMarkdownParams: Codable, Sendable, Equatable {
+    public var text: String
+
+    public init(text: String) {
+        self.text = text
+    }
+}
+
+/// api.DraftMarkdownResult: whether the text reads as Markdown and, when
+/// it does, the text rendered as compose-mode sanitised HTML for the editor
+/// to insert. `markdown` false: the editor pastes the text as it is.
+public struct DraftMarkdownResult: Codable, Sendable, Equatable {
+    public var markdown: Bool
+    /// Absent (nil) unless `markdown`.
+    public var html: String?
+
+    public init(markdown: Bool, html: String? = nil) {
+        self.markdown = markdown
+        self.html = html
+    }
+
+    /// What the editor inserts as HTML: `html` when the text is Markdown
+    /// and it is not empty; nil pastes the text as it is.
+    public var insertion: String? {
+        guard markdown, let html, !html.isEmpty else { return nil }
+        return html
+    }
+}
+
 /// api.MessageSendParams: queues a saved draft. The result only confirms
 /// enqueueing; the queued message lives in the outbox folder.
 public struct MessageSendParams: Codable, Sendable, Equatable {

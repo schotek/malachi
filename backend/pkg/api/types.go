@@ -1537,6 +1537,20 @@ type DraftOpenResult struct {
 	Skipped []Attachment `json:"skipped,omitempty"`
 }
 
+// DraftMarkdownParams carries text pasted into the compose editor
+// (draft.markdown): plain text, at most MaxDraftBodyBytes, valid UTF-8.
+type DraftMarkdownParams struct {
+	Text string `json:"text"`
+}
+
+// DraftMarkdownResult says whether Text reads as Markdown and, when it
+// does, carries it rendered as compose-mode sanitised HTML for the editor
+// to insert. Markdown false: the editor pastes the text as it is.
+type DraftMarkdownResult struct {
+	Markdown bool   `json:"markdown"`
+	HTML     string `json:"html,omitempty"`
+}
+
 // MessageSendParams queues a saved draft for delivery. Delivery is
 // asynchronous: the result only confirms enqueueing. The queued message
 // lives in the account's outbox folder; SyncState.PendingOutbox counts it

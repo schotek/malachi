@@ -53,11 +53,12 @@ const (
 	MethodThreadGet  = "thread.get"
 
 	// Drafts.
-	MethodDraftSave   = "draft.save"
-	MethodDraftList   = "draft.list"
-	MethodDraftDelete = "draft.delete"
-	MethodDraftCreate = "draft.create"
-	MethodDraftOpen   = "draft.open"
+	MethodDraftSave     = "draft.save"
+	MethodDraftList     = "draft.list"
+	MethodDraftDelete   = "draft.delete"
+	MethodDraftCreate   = "draft.create"
+	MethodDraftOpen     = "draft.open"
+	MethodDraftMarkdown = "draft.markdown"
 
 	// Attachments (compose-side store).
 	MethodAttachmentImport = "attachment.import"
@@ -112,6 +113,7 @@ var AllMethods = []string{
 	MethodOutboxRetry,
 	MethodThreadList, MethodThreadGet,
 	MethodDraftSave, MethodDraftList, MethodDraftDelete, MethodDraftCreate, MethodDraftOpen,
+	MethodDraftMarkdown,
 	MethodAttachmentImport, MethodAttachmentRemove, MethodAttachmentGet,
 	MethodSearchQuery,
 	MethodSyncStatus, MethodSyncTrigger,

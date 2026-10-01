@@ -33,6 +33,13 @@
 // process ends, the rewrites waiting are answered with the empty target
 // when the document goes (Load), when the page died (Crashed) and when the
 // evaluation failed (RewriteFailed): a rewrite must never hang.
+//
+// The paste of Markdown is GTK's too: the page holds a paste of plain text
+// that looks like Markdown and posts it as "paste" (PasteRequested); the
+// compose window asks the daemon (ComposeDraftController.PasteMarkdown:
+// draft.markdown) and the view evaluates PastedScript, with the HTML or null
+// for the text as it is. The page answers only its latest paste, so an
+// answer that comes late or for another document does nothing.
 
 using System;
 using System.Collections.Generic;
@@ -63,6 +70,14 @@ public sealed class EditorChannel
 
     /// <summary>Fires for Escape (<c>escape</c>) and Ctrl+K (<c>link</c>) in the page.</summary>
     public event EventHandler<string>? KeyPressed;
+
+    /// <summary>
+    /// Fires for a <c>paste</c>: plain text that looks like Markdown, which
+    /// the page holds until <see cref="PastedScript"/> answers its
+    /// <see cref="BridgeMessage.Id"/> (the message's <see cref="BridgeMessage.Text"/>
+    /// is the pasted text).
+    /// </summary>
+    public event EventHandler<BridgeMessage>? PasteRequested;
 
     /// <summary>editor.Ready: whether the bridge runs in the current document.</summary>
     public bool IsReady { get; private set; }
@@ -132,6 +147,9 @@ public sealed class EditorChannel
                 return message;
             case BridgeMessage.Kinds.Rewrite:
                 AnswerRewrites(new RewriteTarget { Selected = message.Selected, Text = message.Text });
+                return message;
+            case BridgeMessage.Kinds.Paste:
+                PasteRequested?.Invoke(this, message);
                 return message;
             case BridgeMessage.Kinds.Key:
                 KeyPressed?.Invoke(this, message.Key);
@@ -260,6 +278,15 @@ public sealed class EditorChannel
         ArgumentNullException.ThrowIfNull(text);
         return IsReady ? EditorBridge.RewriteApplyScript(text, below) : null;
     }
+
+    /// <summary>
+    /// The answer to the page's <c>paste</c> <paramref name="id"/>
+    /// (<see cref="EditorBridge.PastedScript"/>): <paramref name="html"/>,
+    /// the daemon's rendering of the Markdown, or the pasted text as it is
+    /// when null or empty. Null until the bridge runs in the current
+    /// document, which has no paste waiting then.
+    /// </summary>
+    public string? PastedScript(long id, string? html) => IsReady ? EditorBridge.PastedScript(id, html) : null;
 
     /// <summary>
     /// The page's process died, or its document was refused; the view is

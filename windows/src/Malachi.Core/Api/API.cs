@@ -285,6 +285,10 @@ public static class API
     public static readonly RpcMethod<DraftOpenParams, DraftOpenResult> DraftOpen =
         new("draft.open", RpcTimeouts.Compose, Wire.DraftOpenParams, Wire.DraftOpenResult);
 
+    /// <summary><c>draft.markdown</c>: pasted text rendered as sanitised HTML when it reads as Markdown.</summary>
+    public static readonly RpcMethod<DraftMarkdownParams, DraftMarkdownResult> DraftMarkdown =
+        new("draft.markdown", RpcTimeouts.Default, Wire.DraftMarkdownParams, Wire.DraftMarkdownResult);
+
     // Attachments
 
     /// <summary><c>attachment.import</c>.</summary>
@@ -372,6 +376,7 @@ public static class API
         OutboxRetry,
         ThreadList, ThreadGet,
         DraftSave, DraftList, DraftDelete, DraftCreate, DraftOpen,
+        DraftMarkdown,
         AttachmentImport, AttachmentRemove, AttachmentGet,
         SearchQuery,
         SyncStatus, SyncTrigger,

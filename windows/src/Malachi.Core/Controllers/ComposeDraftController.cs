@@ -25,7 +25,8 @@
 // already reported, when the flush reports it unchanged.
 //
 // The window's part (phase E): it forwards the editor's Ready and Changed
-// to EditorReady and EditorChanged, runs CloseRequestAsync on a close, and
+// to EditorReady and EditorChanged, and its paste of Markdown to
+// PasteMarkdown (draft.markdown), runs CloseRequestAsync on a close, and
 // once it really closes (Cleanup has run) calls ComposeController.Remove
 // with its handle, as GTK's cleanup calls Manager.remove.
 //
@@ -247,6 +248,42 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
             {
                 flushed.Record(form.EditorHtml());
             }
+        });
+    }
+
+    /// <summary>
+    /// The editor's <c>paste</c> (<see cref="EditorChannel.PasteRequested"/>):
+    /// plain text that looks like Markdown, which the page holds. The daemon
+    /// renders it (<c>draft.markdown</c>) and <paramref name="done"/> gets
+    /// its sanitised HTML on the UI thread, or null for the text as it is:
+    /// no Markdown after all, too long to ask (<see cref="EditorBridge.AsksForMarkdown"/>),
+    /// refused, a method an older daemon does not know, no daemon. The
+    /// window hands the answer to the page (<see cref="EditorChannel.PastedScript"/>),
+    /// which reports it as typing; nothing is answered once the window closed.
+    /// </summary>
+    public void PasteMarkdown(string text, Action<string?> done)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(done);
+        scope.VerifyAccess();
+        if (Draft.Closed)
+        {
+            return;
+        }
+        if (!EditorBridge.AsksForMarkdown(text))
+        {
+            done(null);
+            return;
+        }
+        scope.Perform(client, API.DraftMarkdown, new DraftMarkdownParams { Text = text }, outcome =>
+        {
+            if (!outcome.TryGetValue(out var result, out var error))
+            {
+                LogCallFailed(logger, API.DraftMarkdown.Name, error!);
+                done(null);
+                return;
+            }
+            done(EditorBridge.PastedHtml(result));
         });
     }
 

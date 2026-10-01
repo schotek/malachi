@@ -27,6 +27,12 @@ import Foundation
 /// formatting) and handles the Ctrl/Cmd+B/I/U keys; every other formatting
 /// command comes from Swift. Messages to Swift are JSON strings posted to
 /// the "malachi" script message handler.
+///
+/// A paste of plain text that looks like Markdown, with no rich HTML
+/// flavour on the clipboard, goes to the app as "paste" {id, text} (as in
+/// GTK's bridge); the app asks the daemon (draft.markdown) and answers with
+/// `window.malachi.pasted(id, html)`, or `pasted(id, null)` for the plain
+/// text (`pastedScript`); everything else is WebKit's own paste.
 public let bridgeJS = #"""
 (() => {
   const post = m => window.webkit.messageHandlers.malachi.postMessage(JSON.stringify(m));
@@ -54,6 +60,19 @@ public let bridgeJS = #"""
     if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
     const cmd = {b: 'bold', i: 'italic', u: 'underline'}[e.key.toLowerCase()];
     if (cmd) { e.preventDefault(); document.execCommand(cmd); state(); }
+  });
+  let pending = null, pasteSeq = 0;
+  const markdownHint = /^ {0,3}(#{1,6} |[-*+] |\d{1,9}[.)] |>|\x60{3}|~~~|\|)|\*\*|__|~~|\x60[^\x60\n]+\x60|\]\(|^ {0,3}(-{3,}|\*{3,}|_{3,}) *$/m;
+  const richHTML = /<(h[1-6]|ul|ol|li|b|strong|i|em|a|table|blockquote)[\s>]/i;
+  document.addEventListener('paste', e => {
+    const d = e.clipboardData;
+    if (!d || Array.from(d.types || []).includes('Files')) return;
+    const text = d.getData('text/plain');
+    if (!text || !markdownHint.test(text) || richHTML.test(d.getData('text/html') || '')) return;
+    e.preventDefault();
+    const sel = document.getSelection();
+    pending = {id: ++pasteSeq, text, range: sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null};
+    post({type: 'paste', id: pending.id, text});
   });
   window.malachi = {
     flush,
@@ -111,6 +130,17 @@ public let bridgeJS = #"""
     schedule();
     state();
     return true;
+  };
+  window.malachi.pasted = (id, h) => {
+    if (!pending || pending.id !== id) return;
+    const p = pending;
+    pending = null;
+    document.body.focus();
+    const sel = document.getSelection();
+    if (p.range) { sel.removeAllRanges(); sel.addRange(p.range); }
+    document.execCommand(h ? 'insertHTML' : 'insertText', false, h || p.text);
+    schedule();
+    state();
   };
   post({type: 'ready'});
 })();
@@ -228,26 +258,46 @@ public func rewriteApplyScript(_ text: String, below: Bool) -> String {
         + jsString(argument) + ")"
 }
 
+/// The script that answers the bridge's "paste" `id`: `html` (the
+/// daemon's draft.markdown rendering, sanitised in compose mode) goes in
+/// with `insertHTML`; nil or "" pastes the text the bridge kept as plain
+/// text. A paste the page no longer waits for is ignored there.
+public func pastedScript(id: Int, html: String?) -> String {
+    let arg: String
+    if let html, !html.isEmpty {
+        arg = jsString(html)
+    } else {
+        arg = "null"
+    }
+    return "window.malachi.pasted(" + String(id) + ", " + arg + ")"
+}
+
 /// editor.bridgeMessage: what the page posts: `ready`, `changed` (with
-/// `seq`, `html`, `text`) or `state` (with the formatting, flattened into
-/// the same object as Go embeds it).
+/// `seq`, `html`, `text`), `state` (with the formatting, flattened into
+/// the same object as Go embeds it) or `paste` (with `id` and the pasted
+/// `text`).
 public struct BridgeMessage: Sendable, Equatable, Codable {
     public var type: String
     public var seq: Int
     public var html: String
     public var text: String
+    /// A `paste`'s id, for `pastedScript`.
+    public var id: Int
     public var state: EditorState
 
-    public init(type: String, seq: Int = 0, html: String = "", text: String = "", state: EditorState = EditorState()) {
+    public init(
+        type: String, seq: Int = 0, html: String = "", text: String = "", id: Int = 0, state: EditorState = EditorState()
+    ) {
         self.type = type
         self.seq = seq
         self.html = html
         self.text = text
+        self.id = id
         self.state = state
     }
 
     private enum CodingKeys: String, CodingKey {
-        case type, seq, html, text
+        case type, seq, html, text, id
     }
 
     public init(from decoder: any Decoder) throws {
@@ -256,6 +306,7 @@ public struct BridgeMessage: Sendable, Equatable, Codable {
         seq = try c.decodeIfPresent(Int.self, forKey: .seq) ?? 0
         html = try c.decodeIfPresent(String.self, forKey: .html) ?? ""
         text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
+        id = try c.decodeIfPresent(Int.self, forKey: .id) ?? 0
         state = try EditorState(from: decoder)
     }
 
@@ -265,6 +316,7 @@ public struct BridgeMessage: Sendable, Equatable, Codable {
         try c.encode(seq, forKey: .seq)
         try c.encode(html, forKey: .html)
         try c.encode(text, forKey: .text)
+        try c.encode(id, forKey: .id)
         try state.encode(to: encoder)
     }
 

@@ -302,6 +302,17 @@ import Testing
         #expect(draft["updatedAt"] as? String == "0001-01-01T00:00:00Z")
     }
 
+    @Test func draftMarkdownExample() throws {
+        let md = try decode(DraftMarkdownResult.self, #"{"markdown":true,"html":"<h1>Plan</h1>"}"#)
+        #expect(md == DraftMarkdownResult(markdown: true, html: "<h1>Plan</h1>") && md.insertion == "<h1>Plan</h1>")
+        let plain = try decode(DraftMarkdownResult.self, #"{"markdown":false}"#)
+        #expect(plain.html == nil && plain.insertion == nil)
+        #expect(DraftMarkdownResult(markdown: true, html: "").insertion == nil)
+        #expect(DraftMarkdownResult(markdown: false, html: "<p>x</p>").insertion == nil)
+        #expect(try encodeObject(DraftMarkdownParams(text: "# x")).keys.sorted() == ["text"])
+        #expect(API.DraftMarkdown.name == "draft.markdown")
+    }
+
     @Test func draftOpenExample() throws {
         let r = try decode(DraftOpenResult.self, #"""
         {"draft":{"accountId":"acc_1","version":0,"to":[{"address":"alice@example.org"}],
@@ -1231,6 +1242,7 @@ import Testing
         "outbox.retry",
         "thread.list", "thread.get",
         "draft.save", "draft.list", "draft.delete", "draft.create", "draft.open",
+        "draft.markdown",
         "attachment.import", "attachment.remove", "attachment.get",
         "search.query",
         "sync.status", "sync.trigger",
@@ -1241,8 +1253,8 @@ import Testing
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 52)
-        #expect(Set(API.allMethods).count == 52, "no duplicates")
+        #expect(API.allMethods.count == 53)
+        #expect(Set(API.allMethods).count == 53, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)

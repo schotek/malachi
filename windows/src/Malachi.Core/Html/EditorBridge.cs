@@ -13,8 +13,10 @@
 // rewrite (rewriteTarget, rewriteApply) is GTK's: the passage is posted as a
 // "rewrite" message. WebView2's ExecuteScriptAsync could return it, as
 // macOS's bridge does, but staying in GTK's shape keeps the drift from
-// bridge.go to the deltas below. It is GTK's script with these deltas, each
-// checked by EditorBridgeDriftTests against ui/internal/editor/bridge.go:
+// bridge.go to the deltas below. So is the paste of Markdown: the page posts
+// a "paste" message, the host answers with pasted(id, html | null). It is
+// GTK's script with these deltas, each checked by EditorBridgeDriftTests
+// against ui/internal/editor/bridge.go:
 //   1. It is injected with AddScriptToExecuteOnDocumentCreatedAsync, so it
 //      runs in every frame and on every navigation, before the document
 //      exists: it returns unless it is the top frame on a document under
@@ -55,6 +57,7 @@
 using System;
 using System.Globalization;
 using System.Text;
+using Malachi.Core.Api;
 using Malachi.Core.Compose;
 
 namespace Malachi.Core.Html;
@@ -98,6 +101,13 @@ public static class EditorBridge
     /// end when <c>below</c>) and runs one editing command there
     /// (<see cref="RewriteInsertion"/>), which the page's undo takes back as
     /// one step, and reports the change as typing does.
+    /// A paste of plain text that looks like Markdown, with no rich HTML
+    /// flavour beside it (and no files), is taken from Chromium and posted as
+    /// <c>paste</c> (<c>id</c>, <c>text</c>); the host asks the daemon
+    /// (<c>draft.markdown</c>) and answers with <c>pasted(id, html)</c>, or
+    /// <c>pasted(id, null)</c> for the plain text (<see cref="PastedScript"/>),
+    /// which inserts it where the caret was, as typing is reported. Only the
+    /// latest paste is answered.
     /// </summary>
     public const string Script = """
         (() => {
@@ -147,6 +157,19 @@ public static class EditorBridge
               if (e.key.toLowerCase() === 'k' && !e.shiftKey) { e.preventDefault(); post({type: 'key', key: 'link'}); return; }
               const cmd = {b: 'bold', i: 'italic', u: 'underline'}[e.key.toLowerCase()];
               if (cmd) { e.preventDefault(); execCommand.call(document, cmd); state(); }
+            });
+            let pending = null, pasteSeq = 0;
+            const markdownHint = /^ {0,3}(#{1,6} |[-*+] |\d{1,9}[.)] |>|\x60{3}|~~~|\|)|\*\*|__|~~|\x60[^\x60\n]+\x60|\]\(|^ {0,3}(-{3,}|\*{3,}|_{3,}) *$/m;
+            const richHTML = /<(h[1-6]|ul|ol|li|b|strong|i|em|a|table|blockquote)[\s>]/i;
+            on('paste', e => {
+              const d = e.clipboardData;
+              if (!d || Array.from(d.types || []).includes('Files')) return;
+              const text = d.getData('text/plain');
+              if (!text || !markdownHint.test(text) || richHTML.test(d.getData('text/html') || '')) return;
+              e.preventDefault();
+              const sel = selection();
+              pending = {id: ++pasteSeq, text, range: sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null};
+              post({type: 'paste', id: pending.id, text});
             });
             let passage = null;
             const collapsed = s => String(s || '').replace(/\s+/g, ' ').trim();
@@ -207,6 +230,17 @@ public static class EditorBridge
                 sel.removeAllRanges();
                 sel.addRange(r);
                 execCommand.call(document, c, false, a);
+                schedule();
+                state();
+              },
+              pasted(id, h) {
+                if (!pending || pending.id !== id) return;
+                const p = pending;
+                pending = null;
+                body().focus();
+                const sel = selection();
+                if (p.range) { sel.removeAllRanges(); sel.addRange(p.range); }
+                execCommand.call(document, h ? 'insertHTML' : 'insertText', false, h || p.text);
                 schedule();
                 state();
               }
@@ -279,6 +313,41 @@ public static class EditorBridge
     {
         var (command, argument) = RewriteInsertion(text, below);
         return "window.malachi.rewriteApply(" + (below ? "true" : "false") + ", " + JsString(command) + ", " + JsString(argument) + ")";
+    }
+
+    /// <summary>
+    /// The answer to the page's <c>paste</c> <paramref name="id"/>: the
+    /// script that inserts <paramref name="html"/> (the daemon's sanitised
+    /// rendering of the pasted Markdown) where the caret was, or the pasted
+    /// text as it is when <paramref name="html"/> is null or empty. The HTML
+    /// goes in as a string literal; a paste the page no longer waits for (a
+    /// later one, a new document) is ignored by the page.
+    /// </summary>
+    public static string PastedScript(long id, string? html)
+    {
+        var argument = string.IsNullOrEmpty(html) ? "null" : JsString(html);
+        return "window.malachi.pasted(" + id.ToString(CultureInfo.InvariantCulture) + ", " + argument + ")";
+    }
+
+    /// <summary>
+    /// What <c>draft.markdown</c> answered, as <see cref="PastedScript"/>
+    /// takes it: the HTML when the text reads as Markdown and the rendering
+    /// is not empty; null (paste the text as it is) otherwise, and for no
+    /// answer at all (an error, an older daemon, none running).
+    /// </summary>
+    public static string? PastedHtml(DraftMarkdownResult? result) =>
+        result is { Markdown: true, Html: { Length: > 0 } html } ? html : null;
+
+    /// <summary>
+    /// Whether the pasted <paramref name="text"/> goes to <c>draft.markdown</c>
+    /// at all: the daemon refuses more than
+    /// <see cref="API.Limits.MaxDraftBodyBytes"/> of UTF-8, and the empty
+    /// text has nothing to convert.
+    /// </summary>
+    public static bool AsksForMarkdown(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        return text.Length > 0 && Encoding.UTF8.GetByteCount(text) <= API.Limits.MaxDraftBodyBytes;
     }
 
     /// <summary>

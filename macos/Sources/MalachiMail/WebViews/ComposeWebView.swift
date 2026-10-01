@@ -60,7 +60,9 @@ import WebKit
 ///   picture with `checkInline` (never SVG, within the cap).
 /// - No context menu (`willOpenMenu` empties it): WebKit's would offer
 ///   Reload and Open Link. Paste is left to WebKit: the backend sanitises
-///   on draft.save.
+///   on draft.save. Only plain text that looks like Markdown is taken by
+///   the bridge's paste listener and comes back as HTML the daemon
+///   sanitised (draft.markdown) or as the plain text.
 @MainActor
 final class ComposeWebView: WKWebView {
     /// The body of a message the bridge posted to the `malachi` handler

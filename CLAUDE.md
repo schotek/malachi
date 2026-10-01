@@ -207,7 +207,11 @@ WebView2), Otevřít a Uložit jako jsou v menu chipu. UI je vykresluje ve WebKi
 bez JavaScriptu (`ui/internal/htmlview`, CSP, síť odříznutá), lišta nabízí
 načtení obrázků a důvěru odesílateli. Compose posílá formátovaný text
 (`richText = true`), odchozí zprávy jsou `multipart/alternative`
-(+ `related` pro vložené obrázky, + `mixed` pro přílohy). Odpověď a
+(+ `related` pro vložené obrázky, + `mixed` pro přílohy). Vložený prostý
+text, který vypadá jako Markdown (bez bohatého HTML ve schránce), převede
+démon (`draft.markdown`, `internal/markdown` nad goldmarkem, výstup
+sanitizovaný v compose režimu) a editor ho vloží jako HTML, ve všech
+třech UI ve zprávě i v komentáři Jira (bridge `paste`/`pasted`). Odpověď a
 přeposlání připravuje backend (`draft.create`, `internal/core/quote.go`):
 adresáti, `Re:`/`Fwd:`, originál citovaný jako sanitizované HTML v compose
 režimu (první `draft.save` je identita), jeho `cid:` obrázky zkopírované do

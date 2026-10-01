@@ -293,6 +293,26 @@ public sealed class EditorChannelTests
         Assert.Throws<ArgumentNullException>(() => channel.ExecScript(null!, null));
     }
 
+    // The paste of Markdown: the page's "paste" (its id and text) goes to
+    // PasteRequested, a mistyped one nowhere; the answer is a script only
+    // while the bridge runs in the current document.
+    [Fact]
+    public void PasteIsAnsweredWhileTheBridgeRuns()
+    {
+        var channel = new EditorChannel();
+        var pastes = new List<(long Id, string Text)>();
+        channel.PasteRequested += (_, m) => pastes.Add((m.Id, m.Text));
+        Assert.Null(channel.PastedScript(1, "<p>x</p>"));
+        channel.Receive("""{"type":"ready"}""");
+        Assert.NotNull(channel.Receive("""{"type":"paste","id":2,"text":"# Plan"}"""));
+        Assert.Null(channel.Receive("""{"type":"paste","id":"3","text":"# Plan"}"""));
+        Assert.Equal((2L, "# Plan"), Assert.Single(pastes));
+        Assert.Equal("window.malachi.pasted(2, null)", channel.PastedScript(2, null));
+        Assert.Equal(EditorBridge.PastedScript(2, "<h1>Plan</h1>"), channel.PastedScript(2, "<h1>Plan</h1>"));
+        channel.Load("<p>x</p>");
+        Assert.Null(channel.PastedScript(2, null));
+    }
+
     // editor.go RewriteTarget, ApplyRewrite and answerRewrites: without the
     // bridge a rewrite is answered at once with the empty target and nothing
     // is evaluated; the page's "rewrite" answers every rewrite waiting, in

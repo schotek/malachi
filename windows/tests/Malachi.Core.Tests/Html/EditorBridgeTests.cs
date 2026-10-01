@@ -12,6 +12,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
+using Malachi.Core.Api;
 using Malachi.Core.Html;
 using Xunit;
 
@@ -338,6 +339,45 @@ public sealed class EditorBridgeTests
         Assert.Equal(
             "BridgeMessage(type: rewrite, seq: 0, html: 0 chars, text: 3 chars, key: 0 chars)",
             m.ToString());
+    }
+
+    // The paste of Markdown (GTK's "paste" and pasted): the message decodes
+    // with its id and text, which is never printed; the answer carries the
+    // daemon's HTML as a string literal, or null for the text as it is, which
+    // is also what no answer, no Markdown and an empty rendering mean; text
+    // the daemon would refuse for its size is not sent.
+    [Fact]
+    public void PasteScripts()
+    {
+        var m = BridgeMessage.Decode("""{"type":"paste","id":7,"text":"**secret**"}""");
+        Assert.Equal((BridgeMessage.Kinds.Paste, 7L, "**secret**"), (m.Type, m.Id, m.Text));
+        Assert.Equal("BridgeMessage(type: paste, seq: 0, html: 0 chars, text: 10 chars, key: 0 chars)", m.ToString());
+        Assert.Null(BridgeMessage.TryDecode("""{"type":"paste","id":1.5,"text":"x"}"""));
+        Assert.Null(BridgeMessage.TryDecode("""{"type":"paste","id":"1","text":"x"}"""));
+
+        Assert.Equal("window.malachi.pasted(7, null)", EditorBridge.PastedScript(7, null));
+        Assert.Equal("window.malachi.pasted(7, null)", EditorBridge.PastedScript(7, ""));
+        Assert.Equal(
+            "window.malachi.pasted(12, \"" + Escape("003c") + "h1" + Escape("003e") + "a" + Backslash + "\"" + Escape("003c") + "/h1" + Escape("003e") + "\")",
+            EditorBridge.PastedScript(12, "<h1>a\"</h1>"));
+
+        Assert.Null(EditorBridge.PastedHtml(null));
+        Assert.Null(EditorBridge.PastedHtml(new DraftMarkdownResult { Markdown = false }));
+        Assert.Null(EditorBridge.PastedHtml(new DraftMarkdownResult { Markdown = false, Html = "<p>x</p>" }));
+        Assert.Null(EditorBridge.PastedHtml(new DraftMarkdownResult { Markdown = true, Html = "" }));
+        Assert.Null(EditorBridge.PastedHtml(new DraftMarkdownResult { Markdown = true }));
+        Assert.Equal("<p>x</p>", EditorBridge.PastedHtml(new DraftMarkdownResult { Markdown = true, Html = "<p>x</p>" }));
+
+        Assert.True(EditorBridge.AsksForMarkdown("# a"));
+        Assert.False(EditorBridge.AsksForMarkdown(""));
+        Assert.True(EditorBridge.AsksForMarkdown(new string('a', API.Limits.MaxDraftBodyBytes)));
+        Assert.False(EditorBridge.AsksForMarkdown(new string('a', API.Limits.MaxDraftBodyBytes + 1)));
+        Assert.False(EditorBridge.AsksForMarkdown(new string('é', (API.Limits.MaxDraftBodyBytes / 2) + 1)));
+
+        foreach (var fn in new[] { "pasted(id, h)", "on('paste', e => {", "post({type: 'paste', id: pending.id, text});", "const sel = selection();\n      pending = {" })
+        {
+            Assert.True(EditorBridge.Script.Contains(fn, StringComparison.Ordinal), $"the bridge lacks {fn}");
+        }
     }
 
     // A JSON escape of the code point hex as the script holds it.

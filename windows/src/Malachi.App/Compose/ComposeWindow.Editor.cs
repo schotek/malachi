@@ -12,7 +12,11 @@
 // attachment.import, and a failed page to the toast and a reload of the
 // last text (the view reloads a text once; ComposeWebView). The WebView2 is
 // marked as the editor for the window's keys and named for Narrator, again
-// whenever a failed browser process gave the view a new one.
+// whenever a failed browser process gave the view a new one. Plain text
+// that looks like Markdown, pasted into the page, goes to the draft
+// controller (PasteMarkdown: draft.markdown) and comes back to the page as
+// the daemon's sanitised HTML, or as the text it was; a comment is no
+// different.
 
 using Malachi.App.Commands;
 using Malachi.Core.Compose;
@@ -34,6 +38,7 @@ public sealed partial class ComposeWindow
         editor.Channel.Changed += (_, _) => draft.EditorChanged();
         editor.Channel.StateChanged += (_, st) => FormatBar.ApplyState(FormatBarState.From(st));
         editor.Channel.KeyPressed += (_, key) => OnEditorKey(key);
+        editor.Channel.PasteRequested += (_, paste) => draft.PasteMarkdown(paste.Text, html => editor.Pasted(paste.Id, html));
         editor.FilesDropped += (_, paths) =>
         {
             // A comment has no attachments: what is dropped is refused.

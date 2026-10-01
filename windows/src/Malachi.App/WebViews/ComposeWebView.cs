@@ -35,6 +35,11 @@
 // - Files dropped on the page go to FilesDropped (the bridge takes the drop
 //   in the capture phase and posts it with postMessageWithAdditionalObjects;
 //   WebView2 hands over each file's path), never into the page.
+// - A paste stays Chromium's (the view intercepts no clipboard key or
+//   command), except that the bridge holds plain text that looks like
+//   Markdown, with no files and no rich HTML beside it, and posts it as
+//   "paste"; the compose window answers through Pasted with the daemon's
+//   sanitised HTML (draft.markdown) or the text as it is.
 //
 // Keys (docs/windows-port.md §11.5): with the WebView2 focused no XAML key
 // event fires; every key passes the window's pre-translate handler first.
@@ -108,7 +113,7 @@ public sealed partial class ComposeWebView : HardenedWebView
 
     /// <summary>
     /// The bridge's state and events: <c>Ready</c>, <c>Changed</c>,
-    /// <c>StateChanged</c>, <c>KeyPressed</c>.
+    /// <c>StateChanged</c>, <c>KeyPressed</c>, <c>PasteRequested</c>.
     /// </summary>
     public EditorChannel Channel { get; } = new();
 
@@ -185,6 +190,21 @@ public sealed partial class ComposeWebView : HardenedWebView
     public void ApplyRewrite(string text, bool below)
     {
         if (Channel.ApplyRewriteScript(text, below) is { } script)
+        {
+            Run(script);
+        }
+    }
+
+    /// <summary>
+    /// Answers the page's <c>paste</c> <paramref name="id"/>
+    /// (<see cref="EditorChannel.PasteRequested"/>): inserts
+    /// <paramref name="html"/> where the caret was, the pasted text as it is
+    /// when null or empty; ignored until the bridge runs, and by the page
+    /// when it no longer waits for that paste.
+    /// </summary>
+    public void Pasted(long id, string? html)
+    {
+        if (Channel.PastedScript(id, html) is { } script)
         {
             Run(script);
         }

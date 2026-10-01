@@ -306,6 +306,34 @@ public sealed record DraftOpenResult
 }
 
 /// <summary>
+/// api.DraftMarkdownParams: text pasted into the compose editor
+/// (<c>draft.markdown</c>): plain text, at most
+/// <see cref="API.Limits.MaxDraftBodyBytes"/>, valid UTF-8.
+/// </summary>
+public sealed record DraftMarkdownParams
+{
+    /// <summary>The pasted text.</summary>
+    [JsonPropertyName("text")]
+    public required string Text { get; init; }
+}
+
+/// <summary>
+/// api.DraftMarkdownResult: whether the text reads as Markdown and, when it
+/// does, the text rendered as compose-mode sanitised HTML for the editor to
+/// insert. <see cref="Markdown"/> false: the editor pastes the text as it is.
+/// </summary>
+public sealed record DraftMarkdownResult
+{
+    /// <summary>The text reads as Markdown.</summary>
+    [JsonPropertyName("markdown")]
+    public required bool Markdown { get; init; }
+
+    /// <summary>The rendering, sanitised by the daemon; absent when <see cref="Markdown"/> is false.</summary>
+    [JsonPropertyName("html")]
+    public string? Html { get; init; }
+}
+
+/// <summary>
 /// api.MessageSendParams: queues a saved draft. The result only confirms
 /// enqueueing; the queued message lives in the outbox folder.
 /// </summary>

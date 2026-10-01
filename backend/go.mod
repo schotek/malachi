@@ -11,6 +11,7 @@ require (
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/klauspost/compress v1.18.2
 	github.com/modelcontextprotocol/go-sdk v1.7.0
+	github.com/yuin/goldmark v1.8.6
 	golang.org/x/net v0.58.0
 	golang.org/x/oauth2 v0.35.0
 	golang.org/x/text v0.41.0

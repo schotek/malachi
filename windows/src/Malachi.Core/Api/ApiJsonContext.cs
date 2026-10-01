@@ -97,6 +97,8 @@ namespace Malachi.Core.Api;
 [JsonSerializable(typeof(DraftCreateResult))]
 [JsonSerializable(typeof(DraftOpenParams))]
 [JsonSerializable(typeof(DraftOpenResult))]
+[JsonSerializable(typeof(DraftMarkdownParams))]
+[JsonSerializable(typeof(DraftMarkdownResult))]
 [JsonSerializable(typeof(MessageSendParams))]
 [JsonSerializable(typeof(MessageSendResult))]
 [JsonSerializable(typeof(OutboxRetryParams))]

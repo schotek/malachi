@@ -12,6 +12,7 @@ package editor
 
 import (
 	"log/slog"
+	"strconv"
 
 	"github.com/diamondburned/gotk4-webkitgtk/pkg/javascriptcore/v6"
 	"github.com/diamondburned/gotk4-webkitgtk/pkg/webkit/v6"
@@ -51,6 +52,10 @@ type Editor struct {
 	// OnDropFiles receives files dropped onto the view; WebKit never sees
 	// them. Other drops (text, a picture from a page) are WebKit's editing.
 	OnDropFiles func(files []*gio.File)
+	// OnPaste receives pasted plain text that looks like Markdown (bridgeJS)
+	// and must call answer once, on the main loop, with the HTML to insert
+	// in its place or "" for the text as it is. Unset: the text is pasted.
+	OnPaste func(text string, answer func(html string))
 }
 
 // New builds an editor from data/ui/editor.blp. Call Load to show content.
@@ -118,7 +123,7 @@ func New(log *slog.Logger) *Editor {
 // pile processes up until the sandbox cannot start another one. The
 // editor is dead afterwards.
 func (e *Editor) Close() {
-	e.OnCrashed, e.OnChanged, e.OnState, e.OnReady, e.OnDropFiles = nil, nil, nil, nil, nil
+	e.OnCrashed, e.OnChanged, e.OnState, e.OnReady, e.OnDropFiles, e.OnPaste = nil, nil, nil, nil, nil, nil
 	e.ready = false
 	e.waiters = nil
 	e.StopLoading()
@@ -250,7 +255,29 @@ func (e *Editor) onMessage(v *javascriptcore.Value) {
 		}
 	case "rewrite":
 		e.answerRewrites(RewriteTarget{Selected: msg.Selected, Text: msg.Text})
+	case "paste":
+		e.paste(msg.ID, msg.Text)
 	}
+}
+
+// paste hands a held-back paste to OnPaste and its answer to the page; a
+// page loaded meanwhile ignores the id.
+func (e *Editor) paste(id int, text string) {
+	answer := func(html string) {
+		if !e.ready {
+			return
+		}
+		arg := "null"
+		if html != "" {
+			arg = jsString(html)
+		}
+		e.eval("window.malachi.pasted(" + strconv.Itoa(id) + ", " + arg + ")")
+	}
+	if e.OnPaste == nil {
+		answer("")
+		return
+	}
+	e.OnPaste(text, answer)
 }
 
 // decidePolicy allows only our own document load; every other navigation
