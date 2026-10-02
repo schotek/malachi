@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-01 13:35+0000\n"
+"POT-Creation-Date: 2026-10-02 09:31+0200\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -1016,7 +1016,9 @@ msgstr "Odesílatele se nepodařilo ověřit"
 msgid ""
 "Malachi Mail sent nothing because the one-click request is not signed by %s. "
 "Use the unsubscribe link in the message instead."
-msgstr "Malachi Mail nic neodeslalo, protože žádost o odhlášení jedním klikem není podepsaná doménou %s. Odhlaste se odkazem ve zprávě."
+msgstr ""
+"Malachi Mail nic neodeslalo, protože žádost o odhlášení jedním klikem není "
+"podepsaná doménou %s. Odhlaste se odkazem ve zprávě."
 
 #: ui/internal/bulkmail/bulkmail.go:236
 #, c-format
@@ -1024,7 +1026,10 @@ msgid ""
 "Malachi Mail sent nothing because the one-click request is not signed by %s. "
 "It can send an unsubscribe request to %s from your account instead. It will "
 "appear in Sent."
-msgstr "Malachi Mail nic neodeslalo, protože žádost o odhlášení jedním klikem není podepsaná doménou %s. Místo toho může z vašeho účtu odeslat žádost o odhlášení na %s. Objeví se v Odeslaných."
+msgstr ""
+"Malachi Mail nic neodeslalo, protože žádost o odhlášení jedním klikem není "
+"podepsaná doménou %s. Místo toho může z vašeho účtu odeslat žádost o "
+"odhlášení na %s. Objeví se v Odeslaných."
 
 #: ui/internal/bulkmail/bulkmail.go:242
 msgid "_Close"
@@ -1267,7 +1272,7 @@ msgstr "Komentář byl zařazen k odeslání"
 msgid "Comment"
 msgstr "Komentovat"
 
-#: ui/internal/jira/compose.go:164 ui/internal/window/conversation_card.go:281
+#: ui/internal/jira/compose.go:164 ui/internal/window/conversation_card.go:284
 #: ui/data/ui/message_window.ui:38 ui/data/ui/window.ui:442
 msgid "Reply"
 msgstr "Odpovědět"
@@ -1750,7 +1755,7 @@ msgid "Needs fields in Jira"
 msgstr "Vyžaduje pole v Jiře"
 
 #: ui/internal/jira/transitions.go:98
-#: ui/internal/window/conversation_card.go:161 ui/internal/window/folders.go:89
+#: ui/internal/window/conversation_card.go:164 ui/internal/window/folders.go:89
 #: ui/internal/window/messages.go:264
 msgid "Loading…"
 msgstr "Načítá se…"
@@ -1885,12 +1890,12 @@ msgid "(No subject)"
 msgstr "(Bez předmětu)"
 
 #: ui/internal/widget/message_row.go:327
-#: ui/internal/window/conversation_card.go:418 ui/internal/window/folders.go:62
+#: ui/internal/window/conversation_card.go:462 ui/internal/window/folders.go:62
 msgid "Collapse"
 msgstr "Sbalit"
 
 #: ui/internal/widget/message_row.go:331
-#: ui/internal/window/conversation_card.go:420 ui/internal/window/folders.go:65
+#: ui/internal/window/conversation_card.go:464 ui/internal/window/folders.go:65
 msgid "Expand"
 msgstr "Rozbalit"
 
@@ -2492,40 +2497,40 @@ msgstr "Příprava přeposílané zprávy"
 msgid "Preparing the reply"
 msgstr "Příprava odpovědi"
 
-#: ui/internal/window/conversation_card.go:282 ui/data/ui/message_window.ui:44
+#: ui/internal/window/conversation_card.go:285 ui/data/ui/message_window.ui:44
 #: ui/data/ui/window.ui:449
 msgid "Reply All"
 msgstr "Odpovědět všem"
 
-#: ui/internal/window/conversation_card.go:283 ui/data/ui/message_window.ui:50
+#: ui/internal/window/conversation_card.go:286 ui/data/ui/message_window.ui:50
 #: ui/data/ui/window.ui:456
 msgid "Forward"
 msgstr "Přeposlat"
 
-#: ui/internal/window/conversation_card.go:508 ui/data/ui/compose.ui:109
+#: ui/internal/window/conversation_card.go:552 ui/data/ui/compose.ui:109
 #: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:227
 #: ui/data/ui/window.ui:714
 msgid "From"
 msgstr "Od"
 
-#: ui/internal/window/conversation_card.go:508 ui/data/ui/compose.ui:137
+#: ui/internal/window/conversation_card.go:552 ui/data/ui/compose.ui:137
 #: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:253
 #: ui/data/ui/window.ui:740
 msgid "To"
 msgstr "Komu"
 
-#: ui/internal/window/conversation_card.go:508 ui/data/ui/compose.ui:183
+#: ui/internal/window/conversation_card.go:552 ui/data/ui/compose.ui:183
 #: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:281
 #: ui/data/ui/window.ui:768
 msgid "Cc"
 msgstr "Kopie"
 
-#: ui/internal/window/conversation_card.go:600
+#: ui/internal/window/conversation_card.go:644
 #: ui/internal/window/message_view.go:495
 msgid "Loading the message"
 msgstr "Načtení zprávy"
 
-#: ui/internal/window/conversation_card.go:655
+#: ui/internal/window/conversation_card.go:699
 #: ui/internal/window/message_view.go:299
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
@@ -2534,23 +2539,23 @@ msgstr ""
 "Formátovanou podobu této zprávy nešlo bezpečně zobrazit; toto je její prostý "
 "text."
 
-#: ui/internal/window/conversation_card.go:693 ui/data/ui/embedded_window.ui:61
+#: ui/internal/window/conversation_card.go:737 ui/data/ui/embedded_window.ui:61
 #: ui/data/ui/message_window.ui:147 ui/data/ui/message_window.ui:457
 #: ui/data/ui/window.ui:573 ui/data/ui/window.ui:982
 msgid "Load _Images"
 msgstr "Načíst _obrázky"
 
-#: ui/internal/window/conversation_card.go:694 ui/data/ui/message_window.ui:153
+#: ui/internal/window/conversation_card.go:738 ui/data/ui/message_window.ui:153
 #: ui/data/ui/window.ui:579
 msgid "Always From This _Sender"
 msgstr "Vždy od tohoto _odesílatele"
 
-#: ui/internal/window/conversation_card.go:695 ui/data/ui/message_window.ui:155
+#: ui/internal/window/conversation_card.go:739 ui/data/ui/message_window.ui:155
 #: ui/data/ui/window.ui:581
 msgid "Load remote images now and whenever this sender writes"
 msgstr "Načíst vzdálené obrázky teď a vždy, když tento odesílatel napíše"
 
-#: ui/internal/window/conversation_card.go:715 ui/data/ui/message_window.ui:184
+#: ui/internal/window/conversation_card.go:759 ui/data/ui/message_window.ui:184
 #: ui/data/ui/window.ui:610
 msgid "_Download Pictures"
 msgstr "_Stáhnout obrázky"
@@ -3229,15 +3234,15 @@ msgstr "Účet %s vyžaduje pozornost"
 msgid "Loading the conversation"
 msgstr "Načtení konverzace"
 
-#: ui/internal/window/window.go:688
+#: ui/internal/window/window.go:685
 msgid "New mail"
 msgstr "Nová pošta"
 
-#: ui/internal/window/window.go:759 ui/data/ui/window.ui:222
+#: ui/internal/window/window.go:756 ui/data/ui/window.ui:222
 msgid "Search"
 msgstr "Hledat"
 
-#: ui/internal/window/window.go:765 ui/data/ui/window.ui:192
+#: ui/internal/window/window.go:762 ui/data/ui/window.ui:192
 msgid "Messages"
 msgstr "Zprávy"
 

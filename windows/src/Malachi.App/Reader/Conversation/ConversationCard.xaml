@@ -15,7 +15,9 @@ the date), the recipients, the attachment chips and the hint; the folded
 card's preview; the bulk-mail, remote-image and pictures bars; and the body: the wait,
 plain text, or the HTML host, white, in which the card's web view sits
 while the card is live; and under it the "•••" that shows or hides the
-quoted history the daemon cut (ConversationCardView.swift quotedButton). Every text is set in code, plain (Text properties
+quoted history the daemon cut (ConversationCardView.swift quotedButton). A
+double click on the header, the padding above it included, opens the
+message as one on its row in the list does (openOnDoubleClick). Every text is set in code, plain (Text properties
 only); the web view gets the sanitiser's output only.
 -->
 <UserControl
@@ -39,7 +41,8 @@ only); the web view gets the sanitiser's output only.
         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
         BorderThickness="1"
-        CornerRadius="10">
+        CornerRadius="10"
+        DoubleTapped="OnFrameDoubleTapped">
         <StackPanel x:Name="Root">
             <StackPanel
                 x:Name="Top"

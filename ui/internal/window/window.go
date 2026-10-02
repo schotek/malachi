@@ -430,13 +430,10 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	// draft in the compose window.
 	w.messageList.ConnectRowActivated(func(row *gtk.ListBoxRow) {
 		if r, ok := w.model.rowAt(row.Index()); ok {
-			switch {
-			case r.Thread:
+			if r.Thread {
 				w.toggleThread(r.Key.Thread)
-			case w.model.inDrafts(r.Message):
-				w.openDraft(r.Message.ID)
-			default:
-				w.openMessageWindow(r.Message.ID)
+			} else {
+				w.openMessage(r.Message)
 			}
 		}
 	})

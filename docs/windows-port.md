@@ -2551,7 +2551,10 @@ tested against the fake daemon. The app is thin over them:
   status and assignee changes, `ConversationEventRow`). A card has the
   fold arrow, the unread dot, the sender, the recipients' disclosure, the
   Jira badges and the hover buttons (Reply or Comment, Reply All,
-  Forward; also shown while one has the keyboard focus), and below the
+  Forward; also shown while one has the keyboard focus; a double click
+  on the header outside its buttons opens the message in a window of its
+  own, a draft in the compose window, `ActionsController.OpenMessage`),
+  and below the
   single-message pane's own recipients, chips (`MessageChips`, shared with
   `MessageView` and its `ChipStyles.xaml`), hint and bars. Bodies are
   fetched only for the cards near the viewport (`NeedsBody`); an HTML body

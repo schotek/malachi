@@ -168,6 +168,13 @@ public sealed class MessageActionRouter
     public void EditDraft(MessageId id) => actions.OpenDraft(id);
 
     /// <summary>
+    /// A double click on the header of a conversation's card (message_view.go
+    /// <c>openMessage</c>): the message opens as one on its row in the list
+    /// does, in a window of its own, a draft in the compose window.
+    /// </summary>
+    public void OpenMessage(MessageSummary summary) => actions.OpenMessage(summary);
+
+    /// <summary>
     /// An address chip's New Message (addresses.go <c>chip</c>): a new
     /// message to <paramref name="to"/>, from <paramref name="account"/>, the
     /// account of the message the chip sits on.

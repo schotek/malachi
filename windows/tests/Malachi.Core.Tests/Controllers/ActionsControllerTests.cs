@@ -952,6 +952,50 @@ public sealed class ActionsControllerTests
     }
 
     /// <summary>
+    /// message_view.go <c>openMessage</c>: what a double click opens, on a
+    /// row of the list or on the header of a conversation's card. A message
+    /// opens in a window of its own, as given (the user's reply in Sent,
+    /// which the list does not hold, too); one of a Drafts folder opens for
+    /// editing.
+    /// </summary>
+    [Fact]
+    public async Task DoubleClickOpensAWindowOrTheDraft()
+    {
+        var d1 = Msg("d1", 1, flags: Seen) with { FolderId = Drafts.Folder };
+        var m1 = Msg("m1", 2);
+        await using var h = await StartAsync(
+            folders: [.. TestFolders(), MailModelTests.TestFolder("dr", "Drafts", FolderRole.Drafts)],
+            messages: new Dictionary<FolderKey, MessageSummary[]> { [Inbox] = [m1], [Drafts] = [d1] });
+        await h.SelectAsync(Drafts);
+        var opened = JsonCoding.EncodeToString(new DraftOpenResult
+        {
+            Draft = new Draft { Id = "d_1", AccountId = "a", Version = 3, Subject = "s-d1", TextBody = "x" },
+        });
+        var requests = new List<DraftOpenParams>();
+        h.Fixture.On(API.DraftOpen.Name, p =>
+        {
+            lock (requests)
+            {
+                requests.Add(JsonCoding.Decode<DraftOpenParams>(p));
+            }
+            return Task.FromResult(opened);
+        });
+
+        await h.Run(() => h.Actions.OpenMessage(m1));
+        await h.IdleAsync();
+        Assert.Equal(["m1"], IdsOf(h.Log.MessageWindows));
+        Assert.Empty(h.Log.Composed);
+
+        await h.Run(() => h.Actions.OpenMessage(d1));
+        await h.IdleAsync();
+        var composed = Assert.Single(h.Log.Composed);
+        Assert.True(composed.Kind == ComposeKind.Edit && composed.DraftId?.Value == "d_1");
+        Assert.Equal(["m1"], IdsOf(h.Log.MessageWindows));
+        var request = Assert.Single(Locked(requests));
+        Assert.Equal(("a", "d1"), (request.AccountId.Value, request.MessageId.Value));
+    }
+
+    /// <summary>
     /// The assistant panel's Open Draft (ui/internal/assistant, the In App
     /// target): the draft is looked up with draft.list, page after page, and
     /// opens for editing, or its window comes to the front; one that is not

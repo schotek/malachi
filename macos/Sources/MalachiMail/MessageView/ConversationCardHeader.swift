@@ -113,6 +113,14 @@ final class ConversationCardHeader: NSView {
         fatalError("not used")
     }
 
+    /// Whether `view`, what a click on the header hit, is one of its
+    /// buttons or lies in one: the fold arrow, the recipients' disclosure,
+    /// the hover buttons and what they lie on. A click there is the
+    /// button's own.
+    func isButton(_ view: NSView) -> Bool {
+        ([foldButton, disclosure, buttonsBox] as [NSView]).contains { view.isDescendant(of: $0) }
+    }
+
     /// A text, or which parts show, changed.
     func contentChanged() {
         invalidateIntrinsicContentSize()

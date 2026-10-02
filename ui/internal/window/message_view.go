@@ -793,6 +793,17 @@ func (w *Window) summary(id api.MessageID) (api.MessageSummary, bool) {
 	return w.model.sentMessage(id)
 }
 
+// openMessage opens message s as a double click does, on its row in the
+// list or on the header of its card in a conversation: a message of a
+// Drafts folder in the compose window, any other in a window of its own.
+func (w *Window) openMessage(s api.MessageSummary) {
+	if w.model.inDrafts(s) {
+		w.openDraft(s.ID)
+		return
+	}
+	w.openMessageWindow(s.ID)
+}
+
 // openMessageWindow opens message id in its own window, or raises the
 // window that already shows it (w.openMessages).
 func (w *Window) openMessageWindow(id api.MessageID) {
