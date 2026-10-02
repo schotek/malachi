@@ -289,7 +289,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     /// The panel and its toolbar toggle exist while the Assistant is shown
     /// and In App is chosen; otherwise the panel folds.
+    private var providerGeneration = -1
     private func updateAssistantPanel() {
+        if providerGeneration != state.assistant.providerGeneration {
+            providerGeneration = state.assistant.providerGeneration
+            cancelSearchInOwnWords()
+        }
         let allowed = state.assistant.panelShown
         split.assistantAllowed = allowed
         toolbarDelegate.setAssistantPanel(visible: allowed, in: mailToolbar)
@@ -348,12 +353,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
             return conversion
         }
         let request = AssistantRequest(settings: state.settings, locator: state.claudeCode)
-        let alerts = state.alerts
+        state.configureRequest(request)
         request.consent = { [weak self] in
-            let t = Assistant.panelTexts()
-            return await alerts.confirm(
-                on: self?.window, heading: t.consentHeading, body: t.consentBody, confirmLabel: t.allow,
-                declineLabel: t.cancel)
+            guard let self else { return false }
+            return await self.state.assistantConsent(on: self.window)
         }
         let c = SearchConversion(request: request)
         conversion = c

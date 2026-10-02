@@ -357,7 +357,7 @@ public sealed class RecipientTokensTests
         var multi = new RecipientTokens();
         multi.Paste(new string('é', 1 << 20));
         Assert.Equal(RecipientTokens.MaxInput, Encoding.UTF8.GetByteCount(multi.Pending));
-        Assert.DoesNotContain((char)0xFFFD, multi.Pending, StringComparison.Ordinal);
+        Assert.DoesNotContain("\uFFFD", multi.Pending, StringComparison.Ordinal);
         var astral = new RecipientTokens();
         astral.Paste(string.Concat(Enumerable.Repeat(char.ConvertFromUtf32(0x1F600), 1 << 18)));
         Assert.Equal(RecipientTokens.MaxInput, Encoding.UTF8.GetByteCount(astral.Pending));

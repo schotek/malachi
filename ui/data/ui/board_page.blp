@@ -23,6 +23,8 @@ Adw.BreakpointBin board_page_root {
     setters {
       board_nav_split.collapsed: true;
       board_today_split.orientation: vertical;
+      board_today_side_scroller.width-request: 320;
+      board_today_side_scroller.min-content-width: 320;
     }
   }
 
@@ -32,6 +34,11 @@ Adw.BreakpointBin board_page_root {
     setters {
       board_nav_split.collapsed: true;
       board_list_split.collapsed: true;
+      board_today_split.orientation: vertical;
+      board_today_side_scroller.width-request: 320;
+      board_today_side_scroller.min-content-width: 320;
+      board_header.show-title: false;
+      board_triage_progress.visible: false;
     }
   }
 
@@ -80,10 +87,76 @@ Adw.BreakpointBin board_page_root {
     }
 
     [end]
+    Box board_triage_activity {
+      visible: false;
+      spacing: 6;
+      valign: center;
+
+      Adw.Spinner {
+        width-request: 16;
+        height-request: 16;
+      }
+
+      Label board_triage_progress {
+        use-markup: false;
+        ellipsize: end;
+        max-width-chars: 28;
+
+        styles ["caption"]
+      }
+    }
+
+    [end]
     Button board_triage_button {
       visible: false;
       margin-end: 6;
     }
+  }
+
+  // Status for the whole board, independent of style or folded panes.
+  // Mirrors window.blp's status_button:
+  // the one popover moves here while the board is shown
+  // (window/status.go).
+  [bottom]
+  MenuButton board_status_button {
+    direction: up;
+    margin-start: 6;
+    margin-end: 6;
+    margin-top: 6;
+    margin-bottom: 6;
+
+    accessibility {
+      labelled-by: board_sync_label;
+    }
+
+    styles [
+      "flat",
+      "status-line",
+    ]
+
+    child: Box {
+      spacing: 8;
+
+      Adw.Spinner board_sync_spinner {
+        visible: false;
+        valign: center;
+      }
+
+      Image board_connection_icon {
+        visible: false;
+      }
+
+      Label board_sync_label {
+        ellipsize: end;
+        xalign: 0;
+        hexpand: true;
+
+        styles [
+          "caption",
+          "dim-label",
+        ]
+      }
+    };
   }
 
   content: Adw.OverlaySplitView board_panel_split {
@@ -156,51 +229,6 @@ Adw.BreakpointBin board_page_root {
                       ]
                     };
                   };
-
-                  // The status strip, mirroring window.blp's status_button:
-                  // the one popover moves here while the board is shown
-                  // (window/status.go).
-                  [bottom]
-                  MenuButton board_status_button {
-                    direction: up;
-                    margin-start: 6;
-                    margin-end: 6;
-                    margin-top: 6;
-                    margin-bottom: 6;
-
-                    accessibility {
-                      labelled-by: board_sync_label;
-                    }
-
-                    styles [
-                      "flat",
-                      "status-line",
-                    ]
-
-                    child: Box {
-                      spacing: 8;
-
-                      Adw.Spinner board_sync_spinner {
-                        visible: false;
-                        valign: center;
-                      }
-
-                      Image board_connection_icon {
-                        visible: false;
-                      }
-
-                      Label board_sync_label {
-                        ellipsize: end;
-                        xalign: 0;
-                        hexpand: true;
-
-                        styles [
-                          "caption",
-                          "dim-label",
-                        ]
-                      }
-                    };
-                  }
                 };
               };
 
@@ -406,8 +434,8 @@ Adw.BreakpointBin board_page_root {
 
         // Today: a main column (greeting, the count tiles, what is hot,
         // the top of what waits for the user, the user's commitments, one
-        // ListBox, board_today.go) and beside it the deadlines and a
-        // calendar placeholder; the root Adw.Breakpoint above flips
+        // ListBox, board_today.go) and beside it the deadlines;
+        // the root Adw.Breakpoint above flips
         // board_today_split to vertical (stacked) under 900sp.
         StackPage {
           name: "today";
@@ -424,6 +452,10 @@ Adw.BreakpointBin board_page_root {
               styles [
                 "board-surface",
               ]
+
+              child: Adw.Clamp {
+                maximum-size: 1000;
+                tightening-threshold: 800;
 
               child: Box board_today_main {
                 orientation: vertical;
@@ -471,13 +503,15 @@ Adw.BreakpointBin board_page_root {
                   ]
                 }
               };
+              };
             }
 
             ScrolledWindow board_today_side_scroller {
+              width-request: 440;
               hscrollbar-policy: never;
               vscrollbar-policy: automatic;
-              min-content-width: 280;
-              max-content-width: 420;
+              min-content-width: 440;
+              max-content-width: 440;
               min-content-height: 220;
 
               styles [
@@ -504,34 +538,6 @@ Adw.BreakpointBin board_page_root {
                   ]
                 }
 
-                // The calendar placeholder: static widgets, Go only sets
-                // their text (CalendarTitle/CalendarBody).
-                Box {
-                  orientation: vertical;
-                  spacing: 4;
-
-                  styles [
-                    "board-today-card",
-                    "board-today-card-dashed",
-                  ]
-
-                  Label board_today_calendar_title {
-                    xalign: 0;
-
-                    styles [
-                      "heading",
-                    ]
-                  }
-
-                  Label board_today_calendar_body {
-                    xalign: 0;
-                    wrap: true;
-
-                    styles [
-                      "dim-label",
-                    ]
-                  }
-                }
               };
             }
           };

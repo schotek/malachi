@@ -5,6 +5,7 @@ package widget
 
 import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
+	"github.com/diamondburned/gotk4/pkg/pango"
 
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/jira"
@@ -69,6 +70,7 @@ type BoardRowData struct {
 	Snippet     string
 	Date        string
 	Due         string
+	DueOverdue  bool
 	IssueKey    string
 	IssueStatus string
 	IssueStyle  jira.StatusStyle
@@ -88,10 +90,8 @@ func (r *BoardRow) SetRow(d BoardRowData) {
 	}
 	r.person.SetText(d.Person)
 	if d.Unread {
-		r.person.AddCSSClass("heading")
 		r.title.AddCSSClass("heading")
 	} else {
-		r.person.RemoveCSSClass("heading")
 		r.title.RemoveCSSClass("heading")
 	}
 	r.title.SetText(d.Title)
@@ -100,6 +100,11 @@ func (r *BoardRow) SetRow(d BoardRowData) {
 	r.date.SetText(d.Date)
 	r.due.SetText(d.Due)
 	r.due.SetVisible(d.Due != "")
+	if d.DueOverdue {
+		r.due.AddCSSClass("board-due-overdue")
+	} else {
+		r.due.RemoveCSSClass("board-due-overdue")
+	}
 	r.issueKey.SetText(d.IssueKey)
 	r.issueKey.SetVisible(d.IssueKey != "")
 	SetStatusPill(r.statusPill, d.IssueStatus, d.IssueStyle)
@@ -107,4 +112,14 @@ func (r *BoardRow) SetRow(d BoardRowData) {
 	r.badge.SetText(d.CountText)
 	r.badge.SetVisible(d.CountText != "")
 	r.unreadDot.SetVisible(d.Unread)
+}
+
+// SetCardPresentation gives a column's card up to two lines for its title
+// and summary; the other board lists retain compact, single-line labels.
+func (r *BoardRow) SetCardPresentation() {
+	for _, label := range []*gtk.Label{r.title, r.snippet} {
+		label.SetWrap(true)
+		label.SetWrapMode(pango.WrapWordChar)
+		label.SetLines(2)
+	}
 }

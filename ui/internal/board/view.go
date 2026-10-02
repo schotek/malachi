@@ -113,6 +113,8 @@ type Row struct {
 	IssueStyle  jira.StatusStyle
 	// Due is "" without a due date.
 	Due string
+	// DueOverdue compares calendar dates in the display timezone.
+	DueOverdue bool
 	// Remind is when a snoozed case comes back ("Tomorrow 09:00"); ""
 	// otherwise.
 	Remind      string
@@ -851,8 +853,10 @@ func (ctx viewContext) row(c Case) Row {
 		issueStyle = c.Issue.Style
 	}
 	due := ""
+	dueOverdue := false
 	if a != nil && a.Due != nil {
 		due = ctx.dueLabel(*a.Due)
+		dueOverdue = DueGroupOf(*a.Due, ctx.now, ctx.loc) == DueOverdue
 	}
 	n := max(1, c.MessageCount)
 	remind := ""
@@ -887,7 +891,7 @@ func (ctx viewContext) row(c Case) Row {
 		ID: c.ID, State: st, Person: person, Time: ctx.dates.Date(c.Date, ctx.now), Title: t.text,
 		TitleIsAssistant: t.assistant, Snippet: snippet, SnippetIsAssistant: snippetIsAssistant,
 		Account: ctx.accountName(c.Account), IssueKey: issueKey, IssueStatus: issueStatus, IssueStyle: issueStyle,
-		Due: due, Remind: remind, Attachments: c.HasAttachments, CountText: countText(n), Unread: c.Unread,
+		Due: due, DueOverdue: dueOverdue, Remind: remind, Attachments: c.HasAttachments, CountText: countText(n), Unread: c.Unread,
 		Spoken: sentences(spoken),
 	}
 }

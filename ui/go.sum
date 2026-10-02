@@ -6,6 +6,8 @@ github.com/diamondburned/gotk4-webkitgtk/pkg v0.0.0-20240108031600-dee1973cf440 
 github.com/diamondburned/gotk4-webkitgtk/pkg v0.0.0-20240108031600-dee1973cf440/go.mod h1:OhRc0/WmTlhfqotY57+oySYNtG2LBvl6KIkf2kzEcn4=
 github.com/diamondburned/gotk4/pkg v0.3.2-0.20250703063411-16654385f59a h1:dN2jYYZ71hFhoKFSn24pQdKWLZb/XDydBt8pEIkFjJo=
 github.com/diamondburned/gotk4/pkg v0.3.2-0.20250703063411-16654385f59a/go.mod h1:O9K8+PGNFGJpAu8+u5D2Sn5Wae4hxWzHB+AeZNbV/2Q=
+github.com/godbus/dbus/v5 v5.1.0 h1:4KLkAxT3aOY8Li4FRJe/KvhoNFFxo0m6fNuFUO8QJUk=
+github.com/godbus/dbus/v5 v5.1.0/go.mod h1:xhWf0FNVPg57R7Z0UbKHbJfkEywrmjJnf7w5xrFpKfA=
 go4.org/unsafe/assume-no-moving-gc v0.0.0-20231121144256-b99613f794b6 h1:lGdhQUN/cnWdSH3291CUuxSEqc+AsGTiDxPP3r2J0l4=
 go4.org/unsafe/assume-no-moving-gc v0.0.0-20231121144256-b99613f794b6/go.mod h1:FftLjUGFEDu5k8lt0ddY+HcrH/qU/0qk+H8j9/nTl3E=
 golang.org/x/sync v0.22.0 h1:SZjpbeLmrCk4xhRSZFNZW5gFUeCeFgjekvI/+gfScek=

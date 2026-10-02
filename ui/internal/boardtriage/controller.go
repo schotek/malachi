@@ -201,6 +201,10 @@ type Config struct {
 // shown state or assistant-target changed, and BoardChanged with every
 // board.list. Main loop only.
 type Controller struct {
+	// Provider metadata is captured at the start of each run/consent.
+	Source          func() string
+	ModelID         func() string
+	ConsentIdentity func() int
 	// Consent asks the user whether the board's mail may go to the
 	// assistant (the sheet: board.TriageConsentHeading,
 	// board.TriageConsentBody, the panel's Allow and Cancel) and calls
@@ -623,6 +627,11 @@ func (c *Controller) WantsBoardData() bool {
 // refusal is reported through the preferences' OnError unless quiet (a run
 // reports its own failure).
 func (c *Controller) GiveConsent(quiet bool, done func(stored bool)) {
+	identity := 0
+	if c.ConsentIdentity != nil {
+		identity = c.ConsentIdentity()
+	}
+	current := func() bool { return c.ConsentIdentity == nil || c.ConsentIdentity() == identity }
 	c.granting = true
 	keep := func() {
 		c.settings.SetAssistantConsent(true)
@@ -633,6 +642,9 @@ func (c *Controller) GiveConsent(quiet bool, done func(stored bool)) {
 		if done != nil {
 			done(stored)
 		}
+		if !current() {
+			c.repairAssistantPreference()
+		}
 	}
 	if p, ok := c.prefs.Current(); ok && p.Assistant && !c.prefs.Writing() {
 		keep()
@@ -640,6 +652,7 @@ func (c *Controller) GiveConsent(quiet bool, done func(stored bool)) {
 		return
 	}
 	c.prefs.Update(quiet, func(p *api.BoardPreferences) { p.Assistant = true }, func(stored bool) {
+		stored = stored && current()
 		if stored {
 			keep()
 		}
@@ -947,9 +960,13 @@ func (c *Controller) permit(my int, t Trigger, limit int) {
 // startRun is step 2: the daemon's run, then step 3.
 func (c *Controller) startRun(my int, t Trigger, limit int, queueKnown bool) {
 	caller := c.caller
+	source := assistant.TriageSource
+	if c.Source != nil {
+		source = c.Source()
+	}
 	go func() {
 		var r api.BoardRunStartResult
-		err := callWith(caller, api.MethodBoardRunStart, api.BoardRunStartParams{Trigger: Wire(t), Source: assistant.TriageSource}, &r)
+		err := callWith(caller, api.MethodBoardRunStart, api.BoardRunStartParams{Trigger: Wire(t), Source: source}, &r)
 		c.loop.Post(func() {
 			if err != nil {
 				c.log.Info("board.runStart", "err", err)
@@ -976,6 +993,10 @@ func (c *Controller) ask(my int, t Trigger, limit int, queueKnown bool, id api.B
 	c.setState(Running(t, 0, total))
 	c.log.Info("board triage: run started", "trigger", string(Wire(t)))
 	drafts := assistant.TriageDrafts(t)
+	modelID := ""
+	if c.ModelID != nil {
+		modelID = c.ModelID()
+	}
 	c.request.StartCall(assistantpanel.Call{
 		SystemPrompt: assistant.TriageSystemPrompt(c.Language(), c.Today()),
 		Message:      assistant.TriageMessage(limit, drafts),
@@ -986,6 +1007,7 @@ func (c *Controller) ask(my int, t Trigger, limit int, queueKnown bool, id api.B
 		},
 		Timeout: c.Timeout,
 		Model:   assistant.ParseModel(string(c.settings.BoardTriageModel())),
+		ModelID: modelID,
 		OnTool:  func(e assistant.Event) { c.tool(my, t, e) },
 		OnUsage: func(e assistant.Event) { c.counted(my, e) },
 	}, func(o assistantpanel.Outcome) { c.answered(my, t, o) })

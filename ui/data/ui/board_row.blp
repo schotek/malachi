@@ -34,6 +34,13 @@ ListBoxRow board_row {
       spacing: 2;
       hexpand: true;
 
+      Label title_label {
+        xalign: 0;
+        ellipsize: end;
+
+        styles ["board-row-title"]
+      }
+
       Box {
         orientation: horizontal;
         spacing: 6;
@@ -42,6 +49,8 @@ ListBoxRow board_row {
           xalign: 0;
           ellipsize: end;
           hexpand: true;
+
+          styles ["caption", "dim-label"]
         }
 
         Label issue_key {
@@ -104,27 +113,24 @@ ListBoxRow board_row {
         }
       }
 
-      Label title_label {
-        xalign: 0;
-        ellipsize: end;
-      }
-
       Label snippet_label {
         xalign: 0;
         ellipsize: end;
 
         styles [
           "caption",
-          "dim-label",
+          "board-row-snippet",
         ]
       }
 
       Label due_label {
         xalign: 0;
+        halign: start;
         visible: false;
 
         styles [
           "caption",
+          "board-due-label",
         ]
       }
     }

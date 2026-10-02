@@ -33,7 +33,9 @@ public sealed class BulkActionsControllerTests
     private static readonly UnsubscribeOffer Mailto = new() { Method = UnsubscribeMethod.Mailto, Target = "u@shop.example" };
     private static readonly UnsubscribeOffer Page = new() { Method = UnsubscribeMethod.Url, Target = "shop.example", Url = "https://shop.example/u?x=1" };
 
-    private static Message Msg(UnsubscribeOffer? offer, BulkKind kind = BulkKind.Newsletter) => new()
+    private static Message Msg(UnsubscribeOffer? offer) => Msg(offer, BulkKind.Newsletter);
+
+    private static Message Msg(UnsubscribeOffer? offer, BulkKind kind) => new()
     {
         Summary = new MessageSummary
         {

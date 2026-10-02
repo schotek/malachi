@@ -70,6 +70,7 @@ public sealed partial class AppState
         ClaudeDesktop.StatusReported += (_, s) => Assistant.Apply(s);
         ClaudeDesktop.Changed += (_, _) => WatchClaudeDesktop();
         Assistant.Refresh();
+        InitializeChatGpt();
     }
 
     /// <summary>
@@ -84,7 +85,7 @@ public sealed partial class AppState
         ProcessEnvironment.Copy(ProcessEnvironment.Current()),
         directories: new PrivateDirectory(),
         logger: Logs.CreateLogger<AssistantRequest>(),
-        processLogger: Logs.CreateLogger<ClaudeCodeProcess>());
+        processLogger: Logs.CreateLogger<ClaudeCodeProcess>()) { Provider = InAppProvider };
 
     // While a change is pending, the controller hears when Claude Desktop
     // has quit (macOS: NSWorkspace's termination notification).
@@ -128,6 +129,7 @@ public sealed partial class AppState
     // more, here.
     private void CloseAssistant()
     {
+        CloseChatGpt();
         ClaudeCode?.CancelSignIn();
         claudeDesktopWatch?.Cancel();
         claudeDesktopWatch = null;

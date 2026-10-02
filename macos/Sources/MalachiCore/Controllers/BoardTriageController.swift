@@ -94,6 +94,23 @@ public final class BoardTriageController {
     public nonisolated static let clockTick: Duration = .seconds(60)
 
     public let settings: Settings
+    private var runtimeAvailable: Bool {
+        settings.assistantProvider == .chatgpt ? request.provider?()?.available == true : locator.locate() != nil
+    }
+    private func runtimeSignedIn() async -> Bool? {
+        if settings.assistantProvider == .chatgpt { return request.provider?()?.connected ?? false }
+        return await locator.signedIn()
+    }
+    private var providerEpoch = 0
+    public func providerChanged(disableAutomaticTriage: Bool = false) {
+        providerEpoch += 1
+        cancel()
+        if disableAutomaticTriage {
+            preferences.update(quiet: true, { $0.autoTriage = false }, completion: nil)
+        }
+        repairAssistantPreference()
+        availabilityChanged()
+    }
     public let locator: ClaudeCodeLocator
     public let preferences: BoardPreferencesController
     public let request: AssistantRequest
@@ -255,9 +272,16 @@ public final class BoardTriageController {
         self.today = today
         // The run checks consent itself and never lets the request ask.
         self.request.consent = nil
+        for key in [Settings.Key.assistantProvider, .assistantCodexPath, .assistantChatGPTModel, .boardTriageChatGPTModel] {
+            settingsTokens.append(settings.onChange(key) { [weak self] in
+                self?.providerChanged(disableAutomaticTriage: key == .assistantProvider)
+            })
+        }
+        self.request.usesBoardConsent = true
+        self.request.providerModelID = { [weak settings] in settings?.boardTriageChatGPTModel ?? "" }
         tokens.append(preferences.observe { [weak self] in self?.permissionsChanged() })
         tokens.append(preferences.observeLoaded { [weak self] in self?.repairAssistantPreference() })
-        for key in [Settings.Key.assistantConsent, .boardTriageConsent] {
+        for key in [Settings.Key.assistantConsent, .boardTriageConsent, .assistantChatGPTConsentVersion, .boardTriageChatGPTConsentVersion] {
             settingsTokens.append(settings.onChange(key) { [weak self] in self?.permissionsChanged() })
         }
         // A sign-in that starts or ends: the view says it waits for the
@@ -378,7 +402,7 @@ public final class BoardTriageController {
     /// to a triage bridge. Not while consent is being given or a write is
     /// under way (each write reads afresh first).
     private func repairAssistantPreference() {
-        guard !granting, !preferences.writing, !settings.boardTriageConsent,
+        guard !granting, !preferences.writing, !settings.selectedBoardConsent,
               preferences.stored?.assistant == true
         else { return }
         log.info("board triage: the assistant preference was on without consent; turning it off")
@@ -404,14 +428,15 @@ public final class BoardTriageController {
     /// check, or a run's own finding, overtook is dropped.
     public func checkSignIn() {
         signInGen += 1
+        if settings.assistantProvider == .chatgpt { signedIn = request.provider?()?.connected ?? false; return }
         let g = signInGen
-        guard locator.locate() != nil else {
+        guard runtimeAvailable else {
             signedIn = nil
             return
         }
         Task { [weak self] in
             guard let self else { return }
-            let s = await self.locator.signedIn()
+            let s = await self.runtimeSignedIn()
             self.signInAnswers += 1
             guard g == self.signInGen else { return }
             self.signedIn = s
@@ -433,12 +458,12 @@ public final class BoardTriageController {
 
     /// Triage is available, Claude Code is there and so is the bridge.
     public var canRun: Bool {
-        available() && bridge != nil && locator.locate() != nil
+        available() && bridge != nil && runtimeAvailable
     }
 
     /// Both consents and the board's assistant preference.
     public var consentGiven: Bool {
-        settings.assistantConsent && settings.boardTriageConsent && preferences.preferences?.assistant == true
+        (settings.assistantProvider == .chatgpt || settings.selectedAssistantConsent) && settings.selectedBoardConsent && preferences.preferences?.assistant == true
     }
 
     /// A manual run would ask for consent first.
@@ -458,13 +483,19 @@ public final class BoardTriageController {
     /// `preferences.onError` unless `quiet` (a run reports its own failure).
     @discardableResult
     public func giveConsent(quiet: Bool = false) async -> Bool {
+        let epoch = providerEpoch
+        let provider = settings.assistantProvider
         granting = true
         defer { granting = false }
         if preferences.preferences?.assistant != true || preferences.writing {
             guard await preferences.update(quiet: quiet, { $0.assistant = true }) else { return false }
         }
-        settings.assistantConsent = true
-        settings.boardTriageConsent = true
+        guard epoch == providerEpoch, provider == settings.assistantProvider else {
+            preferences.update(quiet: true, { $0.assistant = false; $0.autoTriage = false }, completion: nil)
+            return false
+        }
+        if provider == .claude { settings.assistantConsent = true; settings.boardTriageConsent = true }
+        else { settings.boardTriageChatGPTConsentVersion = 1 }
         return true
     }
 
@@ -475,7 +506,7 @@ public final class BoardTriageController {
     /// the assistant's consent for the panel stays.
     public func withdrawConsent() {
         cancel()
-        settings.boardTriageConsent = false
+        settings.selectedBoardConsent = false
         preferences.update(
             {
                 $0.assistant = false
@@ -492,12 +523,12 @@ public final class BoardTriageController {
         }
         return Board.triageView(
             Board.TriageViewInputs(
-                shown: available(), claudeFound: locator.locate() != nil, bridge: bridge != nil, signedIn: signedIn,
+                shown: available(), claudeFound: runtimeAvailable, bridge: bridge != nil, signedIn: signedIn,
                 needsConsent: needsConsent, assistantOn: board.known ? board.assistantOn : consentGiven,
                 state: state, lastRun: board.lastRun, autoTriage: preferences.preferences?.autoTriage ?? false,
                 pause: autoPause, backendFailed: preferences.preferences == nil && preferences.lastLoadFailed,
-                annotatedToday: today, boardPhase: viewBoardPhase, signingIn: locator.signingIn, usageKnown: board.known,
-                usage24h: board.usage24h, queue: board.known && board.assistantOn ? board.queue : nil, now: now))
+                annotatedToday: today, boardPhase: viewBoardPhase, signingIn: settings.assistantProvider == .claude && locator.signingIn, usageKnown: board.known,
+                usage24h: board.usage24h, queue: board.known && board.assistantOn ? board.queue : nil, now: now, provider: settings.assistantProvider))
     }
 
     /// The board's phase for the view: off as the daemon's preferences say
@@ -606,7 +637,7 @@ public final class BoardTriageController {
         // 1. What it needs.
         guard available() else { return fail(my, trigger, .assistantOff) }
         guard let bridge else { return fail(my, trigger, .toolsMissing) }
-        guard locator.locate() != nil else { return fail(my, trigger, .notFound) }
+        guard runtimeAvailable else { return fail(my, trigger, .notFound) }
         if preferences.preferences == nil {
             _ = await preferences.loadNow()
             guard my == gen else { return }
@@ -636,7 +667,7 @@ public final class BoardTriageController {
         if trigger == .manual {
             locator.refresh()
         }
-        let signed = await locator.signedIn()
+        let signed = await runtimeSignedIn()
         guard my == gen else { return }
         learnSignedIn(signed)
         if signed == false {
@@ -646,7 +677,7 @@ public final class BoardTriageController {
         let id: BoardRunID
         do {
             let r = try await client.call(
-                API.BoardRunStart.self, BoardRunStartParams(trigger: trigger.wire, source: Assistant.triageSource))
+                API.BoardRunStart.self, BoardRunStartParams(trigger: trigger.wire, source: settings.assistantProvider == .chatgpt ? "malachi-chatgpt" : Assistant.triageSource))
             id = r.runId
         } catch {
             log.info("board.runStart: \(String(describing: error), privacy: .public)")

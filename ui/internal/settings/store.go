@@ -85,6 +85,13 @@ const (
 	KeyAssistantModel      = "assistant-model"
 	KeyAssistantClaudePath = "assistant-claude-path"
 	KeyAssistantConsent    = "assistant-consent"
+	// Reserved provider metadata; ChatGPT is currently implemented on Windows.
+	KeyAssistantProvider              = "assistant-provider"
+	KeyAssistantCodexPath             = "assistant-codex-path"
+	KeyAssistantChatGPTModel          = "assistant-chatgpt-model"
+	KeyAssistantChatGPTConsentVersion = "assistant-chatgpt-consent-version"
+	KeyBoardChatGPTModel              = "board-triage-chatgpt-model"
+	KeyBoardChatGPTConsentVersion     = "board-triage-chatgpt-consent-version"
 )
 
 // Keys of the board (ui/internal/board): the style it opens in the first
@@ -176,11 +183,17 @@ var defaults = map[string]any{
 	KeyWindowHeight:    760,
 	KeyWindowMaximized: false,
 
-	KeyAssistantMenu:       true,
-	KeyAssistantTarget:     string(assistant.Desktop),
-	KeyAssistantModel:      string(assistant.Sonnet),
-	KeyAssistantClaudePath: "",
-	KeyAssistantConsent:    false,
+	KeyAssistantMenu:                  true,
+	KeyAssistantTarget:                string(assistant.Desktop),
+	KeyAssistantModel:                 string(assistant.Sonnet),
+	KeyAssistantClaudePath:            "",
+	KeyAssistantConsent:               false,
+	KeyAssistantProvider:              "claude",
+	KeyAssistantCodexPath:             "",
+	KeyAssistantChatGPTModel:          "",
+	KeyAssistantChatGPTConsentVersion: 0,
+	KeyBoardChatGPTModel:              "",
+	KeyBoardChatGPTConsentVersion:     0,
 
 	KeyBoardDefaultStyle:  string(BoardStyleList),
 	KeyBoardTriageConsent: false,
@@ -357,6 +370,33 @@ func (s *Store) SetAssistantClaudePath(v string) { s.set(KeyAssistantClaudePath,
 
 func (s *Store) AssistantConsent() bool     { return s.boolean(KeyAssistantConsent) }
 func (s *Store) SetAssistantConsent(v bool) { s.set(KeyAssistantConsent, v) }
+
+// Provider-specific consents never reuse permission given to another service.
+func (s *Store) AssistantProvider() string {
+	if s.str(KeyAssistantProvider) == "chatgpt" {
+		return "chatgpt"
+	}
+	return "claude"
+}
+func (s *Store) SetAssistantProvider(v string) {
+	if v == "claude" || v == "chatgpt" {
+		s.set(KeyAssistantProvider, v)
+	}
+}
+func (s *Store) AssistantCodexPath() string        { return s.str(KeyAssistantCodexPath) }
+func (s *Store) SetAssistantCodexPath(v string)    { s.set(KeyAssistantCodexPath, v) }
+func (s *Store) AssistantChatGPTModel() string     { return s.str(KeyAssistantChatGPTModel) }
+func (s *Store) SetAssistantChatGPTModel(v string) { s.set(KeyAssistantChatGPTModel, v) }
+func (s *Store) AssistantChatGPTConsentVersion() int {
+	return s.integer(KeyAssistantChatGPTConsentVersion)
+}
+func (s *Store) SetAssistantChatGPTConsentVersion(v int) {
+	s.set(KeyAssistantChatGPTConsentVersion, max(0, v))
+}
+func (s *Store) BoardChatGPTModel() string           { return s.str(KeyBoardChatGPTModel) }
+func (s *Store) SetBoardChatGPTModel(v string)       { s.set(KeyBoardChatGPTModel, v) }
+func (s *Store) BoardChatGPTConsentVersion() int     { return s.integer(KeyBoardChatGPTConsentVersion) }
+func (s *Store) SetBoardChatGPTConsentVersion(v int) { s.set(KeyBoardChatGPTConsentVersion, max(0, v)) }
 
 // BoardDefaultStyle is the style the board opens in the first time it is
 // shown after launch, read as parseBoardStyle reads it: an unknown or empty

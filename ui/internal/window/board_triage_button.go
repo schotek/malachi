@@ -5,12 +5,15 @@ package window
 
 import (
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
+	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
+	"context"
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
 	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/boardtriage"
+	"github.com/schotek/malachi/ui/internal/chatgpt"
 	"github.com/schotek/malachi/ui/internal/i18n"
 )
 
@@ -122,8 +125,26 @@ func (p *boardPage) onTriageClicked() {
 	case clickStop:
 		bt.Controller().Cancel()
 	case clickInstall:
-		p.w.launchURI(&p.w.ApplicationWindow.Window, assistant.InstallURL)
+		url := assistant.InstallURL
+		if p.w.assist.usesChatGPT() {
+			url = chatgpt.InstallURL
+		}
+		p.w.launchURI(&p.w.ApplicationWindow.Window, url)
 	case clickSignIn:
+		if a := p.w.assist; a.usesChatGPT() {
+			if a.chatGPT != nil && a.chatGPT.Connection().Status != chatgpt.SigningIn {
+				go func() {
+					if err := a.chatGPT.SignIn(context.Background()); err != nil {
+						glib.IdleAdd(func() {
+							if !a.chatGPTClosed {
+								p.w.Toast(assistant.ChatGPTText(i18n.Tr).ConnectionFailed)
+							}
+						})
+					}
+				}()
+			}
+			return
+		}
 		p.w.assist.locator.SignIn(func(r assistantpanel.SignInResult) {
 			switch r.Outcome {
 			case assistantpanel.SignInFailed:
@@ -141,6 +162,7 @@ func (p *boardPage) onTriageClicked() {
 // redraw of the board) and from wireTriage's Observe (whenever the
 // triage's own state moves between those redraws).
 func (p *boardPage) renderTriageButton() {
+	p.triageActivity.SetVisible(false)
 	if p.daemon == nil {
 		vm := p.ctl.View()
 		p.triageButton.SetVisible(vm.AssistantOn && vm.Phase != board.PhaseOff)
@@ -159,4 +181,7 @@ func (p *boardPage) renderTriageButton() {
 	p.triageButton.SetLabel(v.Title)
 	p.triageButton.SetSensitive(v.Enabled)
 	p.triageButton.SetTooltipText(v.ToolTip)
+	p.triageProgress.SetText(v.Progress)
+	p.triageActivity.SetTooltipText(v.Progress)
+	p.triageActivity.SetVisible(v.Running)
 }

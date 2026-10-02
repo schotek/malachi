@@ -9,6 +9,7 @@ ui/internal/accountwizard/results.go
 ui/internal/accountwizard/trust.go
 ui/internal/accountwizard/wizard.go
 ui/internal/assistant/assistant.go
+ui/internal/assistant/chatgpt.go
 ui/internal/background/background.go
 ui/internal/bulkmail/bulkmail.go
 ui/internal/compose/compose.go
@@ -43,6 +44,7 @@ ui/internal/window/assistant_panel.go
 ui/internal/window/attachments.go
 ui/internal/window/board_conversation.go
 ui/internal/window/board_quit.go
+ui/internal/window/board_today.go
 ui/internal/window/compose_open.go
 ui/internal/window/conversation_card.go
 ui/internal/window/drafts.go
@@ -56,6 +58,7 @@ ui/internal/window/messages.go
 ui/internal/window/notify.go
 ui/internal/window/outbox.go
 ui/internal/window/preferences.go
+ui/internal/window/preferences_chatgpt.go
 ui/internal/window/remote.go
 ui/internal/window/search.go
 ui/internal/window/search_ownwords.go

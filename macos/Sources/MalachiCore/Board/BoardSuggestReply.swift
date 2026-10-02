@@ -59,6 +59,7 @@ extension Board {
 
     /// What `suggestReplyView` looks at.
     public struct SuggestReplyInputs: Sendable, Equatable {
+        public var provider: AssistantProviderID = .claude
         /// `suggestReplyOffered` for the case shown.
         public var offered: Bool
         /// The feature can exist: the assistant shown with the In App
@@ -73,8 +74,9 @@ extension Board {
         public var caseID: CaseID
 
         public init(
-            offered: Bool, available: Bool, claudeFound: Bool, signedIn: Bool?, state: SuggestReplyState, caseID: CaseID
+            offered: Bool, available: Bool, claudeFound: Bool, signedIn: Bool?, state: SuggestReplyState, caseID: CaseID, provider: AssistantProviderID = .claude
         ) {
+            self.provider = provider
             self.offered = offered
             self.available = available
             self.claudeFound = claudeFound
@@ -134,16 +136,18 @@ extension Board {
         }
         if !i.claudeFound {
             v.enabled = false
-            v.note = Assistant.panelTexts().notFound
+            v.note = i.provider == .chatgpt ? L10n.T("Codex was not found. Choose a native Codex executable.") : Assistant.panelTexts().notFound
             return v
         }
         if i.signedIn == false {
             v.enabled = false
-            v.note = Assistant.signInTexts().hint
+            v.note = i.provider == .chatgpt ? L10n.T("Reconnect to ChatGPT") : Assistant.signInTexts().hint
             return v
         }
         if case .failed(let id, let f) = i.state, id == i.caseID {
-            v.note = Text.suggestReplyFailed(f)
+            if i.provider == .chatgpt, f == .notFound || f == .notSignedIn {
+                v.note = L10n.T("The suggested reply failed: %s.", f == .notFound ? L10n.T("Codex was not found. Choose a native Codex executable.") : L10n.T("Reconnect to ChatGPT"))
+            } else { v.note = Text.suggestReplyFailed(f) }
             v.noteIsFailure = true
         }
         return v

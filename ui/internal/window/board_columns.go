@@ -75,8 +75,8 @@ func (c *boardColumns) newPane(state board.State) *boardColumnPane {
 	container.SetHExpand(true)
 
 	header := gtk.NewBox(gtk.OrientationHorizontal, 8)
-	header.SetMarginStart(2)
-	header.SetMarginEnd(2)
+	header.SetMarginStart(20)
+	header.SetMarginEnd(20)
 	header.SetMarginBottom(8)
 	title := gtk.NewLabel("")
 	title.SetUseMarkup(false)
@@ -84,15 +84,18 @@ func (c *boardColumns) newPane(state board.State) *boardColumnPane {
 	title.SetHExpand(true)
 	title.SetEllipsize(pango.EllipsizeEnd)
 	title.AddCSSClass("heading")
-	title.AddCSSClass("board-column-title")
-	if cl := boardStateDotClass(state); cl != "" {
-		title.AddCSSClass(cl)
-	}
+	title.AddCSSClass("board-section-title")
+	header.AddCSSClass("board-section-heading")
+	dot := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	dot.SetVAlign(gtk.AlignCenter)
+	dot.AddCSSClass("board-state-dot")
+	dot.AddCSSClass(boardStateDotClass(state))
+	header.Append(dot)
 	header.Append(title)
 	count := gtk.NewLabel("")
 	count.SetUseMarkup(false)
 	count.AddCSSClass("caption")
-	count.AddCSSClass("dim-label")
+	count.AddCSSClass("board-section-count")
 	header.Append(count)
 	container.Append(header)
 
@@ -175,6 +178,7 @@ func (c *boardColumns) rowFor(it columnItem) *gtk.ListBoxRow {
 	case columnItemCase:
 		r := widget.NewBoardRow()
 		r.SetRow(boardRowData(it.row))
+		r.SetCardPresentation()
 		r.AddCSSClass("board-card-row")
 		if it.row.State == board.StateHot {
 			r.AddCSSClass("board-card-row-hot")

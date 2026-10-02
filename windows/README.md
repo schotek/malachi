@@ -415,7 +415,7 @@ confirmation dialogs.
 | On Windows | Instead of (GTK) | Why |
 |---|---|---|
 | The search box sits in the middle of the title bar (Ctrl+F, Ctrl+E); the Folder / Account / All Accounts scope bar shows over the list while a search runs; Enter opens the first result, Escape closes the search | A search bar over the message list (Ctrl+F, the search button) with the entry and the scope toggles | Where Windows 11 apps keep search (Outlook, Explorer, Settings) |
-| The status line (sync state, unsent messages, the connection; a click opens each account's state and action) runs across the whole bottom edge of the window | At the bottom of the sidebar, with the same popover | It stays in sight when a narrow window folds the sidebar away (as on macOS) |
+| The status line (sync state, unsent messages, the connection; a click opens each account's state and action) runs across the whole bottom edge of the window | At the bottom of the sidebar in Mail, and across the bottom of the Board in every style, with the same popover | It stays in sight when a narrow window folds the sidebar away (as on macOS) |
 | At 900 effective pixels or less the sidebar folds into an overlay that the title bar's pane button opens; at 600 or less the list and the message are one stack, the title bar's back button returns to the list, and a click on the selected row shows it again | Collapsed split views that navigate between whole-window pages | Windows 11's own pane and back buttons in the title bar; the list stays in sight while the sidebar is open (docs/windows-port.md §11.1) |
 | The primary menu `…` has New Message, Add Account…, Add Jira Account…, Preferences, About Malachi Mail and Quit | New Message, Preferences, Keyboard Shortcuts, About Malachi Mail (a Jira account is added from *Preferences → Accounts*, the *+* menu, or from the empty window) | Windows has no menu bar or application menu to add an account or quit from; GTK's Keyboard Shortcuts opens nothing |
 | The sidebar's New Message is an accent (filled) button | A plain header-bar button | Windows 11's style for a pane's primary action (Fluent's accent button); kept after the parity review |
@@ -634,3 +634,14 @@ Restart Claude Desktop afterwards. The AI page exists in all three desktop
 UIs with the same strings, so it is not a deviation; without a bridge
 beside the executable, or when its status fails, the page says so in the
 group's description, as in GTK.
+
+The Windows in-app assistant also has an experimental **ChatGPT (Codex)**
+provider. Choose it in Preferences → AI, select the in-app target, connect
+with **Continue with ChatGPT**, and accept its separate mail disclosure.
+It uses a native Windows Codex executable and your eligible ChatGPT plan;
+Claude MCP registration is independent. Tokens stay in Windows Credential
+Manager and a native inference gateway restricts Codex to the declared mail
+and draft tools. The panel, compose rewriting and natural-language search
+are wired; the Windows Board port remains separate work. Setup, architecture
+and native validation requirements are in
+[ChatGPT integration](../docs/chatgpt-integration.md#11-windows-implementation-and-validation-hand-off).

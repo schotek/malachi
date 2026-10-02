@@ -161,7 +161,7 @@ extension MainWindowController {
         case .stop:
             triage.cancel()
         case .getClaudeCode:
-            openInBrowser(Assistant.installURL) { [weak self] text in
+            openInBrowser(state.settings.assistantProvider == .chatgpt ? "https://developers.openai.com/codex/cli" : Assistant.installURL) { [weak self] text in
                 self?.toasts.show(text)
             }
         case .signIn:
@@ -176,6 +176,15 @@ extension MainWindowController {
     /// triage asks the sign-in again by itself when it ends. A failure or
     /// a timeout is a toast, as Settings says it.
     private func triageSignIn() {
+        if state.settings.assistantProvider == .chatgpt {
+            guard !state.chatGPT.connecting else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                do { try await self.state.chatGPT.signIn() }
+                catch { self.toasts.show(L10n.T("Could not connect to ChatGPT.")) }
+            }
+            return
+        }
         // The application has one sign-in: a second would end the first
         // (the control is insensitive meanwhile; this is the last guard).
         guard !state.claudeCode.signingIn else { return }

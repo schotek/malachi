@@ -13,7 +13,6 @@ import (
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
 	"github.com/schotek/malachi/ui/internal/editor"
 	"github.com/schotek/malachi/ui/internal/i18n"
-	"github.com/schotek/malachi/ui/internal/widget"
 )
 
 // Assistant is what the compose windows need of the assistant
@@ -26,6 +25,9 @@ type Assistant interface {
 	OnChange(f func()) (remove func())
 	RefreshHandlers()
 	NewRequest() *assistantpanel.Request
+	EnsureAssistantConsent(gtk.Widgetter, func(bool))
+	AskAssistantConsent(gtk.Widgetter, func(bool))
+	RuntimeGeneration() int
 }
 
 // assistantIcon is the Assistant's icon (window/assistant.go).
@@ -122,7 +124,17 @@ func (w *Window) wireRewrite(b *gtk.Builder) {
 		// Whether Claude Code is there is looked up now (a few stat
 		// calls), so the button reflects it from the start.
 		a.RefreshHandlers()
-		u.remove = a.OnChange(u.sync)
+		generation := a.RuntimeGeneration()
+		u.remove = a.OnChange(func() {
+			if now := a.RuntimeGeneration(); now != generation {
+				generation = now
+				u.popover.Popdown()
+				if u.rewriter != nil {
+					u.rewriter.Cancel()
+				}
+			}
+			u.sync()
+		})
 	}
 	u.sync()
 }
@@ -170,16 +182,11 @@ func (u *rewriteUI) clicked() {
 		return
 	}
 	u.opening = true
-	if u.w.m.settings.AssistantConsent() {
-		u.fetchTarget()
-		return
-	}
-	widget.AskAssistantConsent(u.w, func(allowed bool) {
+	u.w.m.Assistant.EnsureAssistantConsent(u.w, func(allowed bool) {
 		if !allowed || u.w.pane.dc.draft.closed {
 			u.opening = false
 			return
 		}
-		u.w.m.settings.SetAssistantConsent(true)
 		u.fetchTarget()
 	})
 }
@@ -201,7 +208,7 @@ func (u *rewriteUI) rewriterFor() *assistantpanel.Rewriter {
 		return u.rewriter
 	}
 	req := u.w.m.Assistant.NewRequest()
-	req.Consent = func(done func(bool)) { widget.AskAssistantConsent(u.w, done) }
+	req.Consent = func(done func(bool)) { u.w.m.Assistant.AskAssistantConsent(u.w, done) }
 	u.rewriter = assistantpanel.NewRewriter(i18n.Catalog{}, req)
 	u.rewriter.OnState = func(assistantpanel.RewriteState) { u.render() }
 	return u.rewriter

@@ -694,6 +694,23 @@ private final class Harness {
         await h.stop()
     }
 
+    @Test func providerSwitchDuringConsentWriteCannotApproveNewProvider() async throws {
+        let h = try await Harness(fake: try FakeClaude(turns: [answerTurn("synthetic")]), consent: false, prefs: BoardPreferences(autoTriage: true))
+        await h.daemon.script.hold(sets: true)
+        let grant = Task { @MainActor in await h.controller.giveConsent() }
+        try await triageWait { await h.daemon.script.waitingSets > 0 }
+        h.scratch.settings.assistantProvider = .chatgpt
+        await h.daemon.script.hold(sets: false)
+        #expect(await grant.value == false)
+        #expect(!h.scratch.settings.boardTriageConsent)
+        #expect(h.scratch.settings.boardTriageChatGPTConsentVersion == 0)
+        #expect(h.scratch.settings.assistantChatGPTConsentVersion == 0)
+        try await triageWait { !h.prefs.writing }
+        #expect(h.prefs.preferences?.autoTriage == false)
+        #expect(h.prefs.preferences?.assistant == false)
+        await h.stop()
+    }
+
     /// A daemon that does not answer the board's preferences: a manual run
     /// fails without the sheet, and the control is unavailable after it,
     /// so the failure is not repeated on every click.

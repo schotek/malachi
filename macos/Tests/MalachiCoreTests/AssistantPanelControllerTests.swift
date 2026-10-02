@@ -839,6 +839,21 @@ private func folded(
 
     /// The model setting reaches the command line of the next conversation;
     /// the board's triage model (`board-triage-model`) does not.
+    @Test func subtitleShowsSelectedProviderBeforeFirstQuestion() throws {
+        let fake = try FakeClaude(turns: [answerTurn("unused")])
+        let h = try PanelHarness(fake: fake)
+        defer { h.stop() }
+        h.scratch.settings.assistantProvider = .chatgpt
+        h.scratch.settings.assistantChatGPTModel = "gpt-6-sol"
+        #expect(h.panel.subtitle == "ChatGPT (Codex, experimental) · gpt-6-sol")
+        h.scratch.settings.assistantChatGPTModel = ""
+        #expect(h.panel.subtitle == "ChatGPT (Codex, experimental) · Use the provider’s default model")
+        #expect(fake.starts == 0)
+        h.scratch.settings.assistantProvider = .claude
+        h.scratch.settings.assistantModel = .opus
+        #expect(h.panel.subtitle == "Claude Code · Opus")
+    }
+
     @Test func modelSetting() async throws {
         let fake = try FakeClaude(turns: [answerTurn("ok")])
         let h = try PanelHarness(fake: fake)

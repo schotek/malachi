@@ -319,6 +319,7 @@ Adw.PreferencesDialog preferences_dialog {
     }
 
     Adw.PreferencesGroup assistant_group {
+      Adw.ComboRow assistant_provider { use-markup: false; }
       Adw.SwitchRow assistant_menu_switch {
         use-markup: false;
       }
@@ -342,6 +343,31 @@ Adw.PreferencesDialog preferences_dialog {
       Adw.ComboRow assistant_model {
         use-markup: false;
         visible: false;
+      }
+    }
+
+    Adw.PreferencesGroup chatgpt_group {
+      visible: false;
+      Adw.ActionRow codex_executable {
+        use-markup: false;
+        subtitle-selectable: true;
+        [suffix]
+        Button codex_choose { valign: center; }
+        [suffix]
+        Button codex_install { valign: center; }
+      }
+      Adw.ActionRow chatgpt_connection {
+        use-markup: false;
+        [suffix]
+        Button chatgpt_sign_in { valign: center; }
+        [suffix]
+        Button chatgpt_disconnect { valign: center; }
+      }
+      Adw.ComboRow chatgpt_model { use-markup: false; }
+      Adw.ActionRow chatgpt_usage {
+        use-markup: false;
+        [suffix]
+        Button chatgpt_manage_usage { valign: center; }
       }
     }
 

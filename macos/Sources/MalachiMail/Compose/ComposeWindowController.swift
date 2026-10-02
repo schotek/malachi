@@ -134,7 +134,13 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, Toast
         }
     }
 
+    private var providerGeneration = -1
     private func updateAssistant() {
+        if providerGeneration != state.assistant.providerGeneration {
+            providerGeneration = state.assistant.providerGeneration
+            rewrite?.cancel()
+            rewritePopover?.performClose(nil)
+        }
         let available = state.assistant.canRunInApp
         if let toolbar = window?.toolbar {
             toolbarDelegate.setAssistant(visible: available, in: toolbar)
@@ -156,12 +162,12 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, Toast
         openingRewrite = true
         Task { @MainActor [weak self] in
             guard let self else { return }
-            if !self.state.settings.assistantConsent {
+            if !self.state.settings.selectedAssistantConsent {
                 guard await self.askConsent() else {
                     self.openingRewrite = false
                     return
                 }
-                self.state.settings.assistantConsent = true
+                self.state.settings.selectedAssistantConsent = true
             }
             self.editor.rewriteTarget(attribution: self.params.attribution) { [weak self] target in
                 guard let self else { return }
@@ -173,9 +179,7 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, Toast
 
     /// "Send Mail to Claude?" on this window (the panel's consent).
     private func askConsent() async -> Bool {
-        let t = Assistant.panelTexts()
-        return await state.alerts.confirm(
-            on: window, heading: t.consentHeading, body: t.consentBody, confirmLabel: t.allow, declineLabel: t.cancel)
+        return await state.assistantConsent(on: window)
     }
 
     private func rewriteController() -> ComposeRewriteController {
@@ -183,6 +187,7 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, Toast
             return rewrite
         }
         let request = AssistantRequest(settings: state.settings, locator: state.claudeCode)
+        state.configureRequest(request)
         request.consent = { [weak self] in
             await self?.askConsent() ?? false
         }

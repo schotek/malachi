@@ -57,6 +57,8 @@ type boardPage struct {
 	settingAccount   bool
 	settingStyle     bool
 	triageButton     *gtk.Button
+	triageActivity   *gtk.Box
+	triageProgress   *gtk.Label
 
 	stack     *gtk.Stack
 	emptyPage *adw.StatusPage

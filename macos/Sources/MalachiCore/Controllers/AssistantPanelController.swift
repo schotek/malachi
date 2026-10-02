@@ -250,6 +250,9 @@ public final class AssistantPanelController {
 
     // MARK: Dependencies
 
+    public var provider: (() -> (any AssistantProvider)?)?
+    private var providerSession: (any AssistantSession)?
+    private var providerTokens: [Settings.ChangeToken] = []
     public let settings: Settings
     public let locator: ClaudeCodeLocator
     private let bridge: String?
@@ -358,6 +361,9 @@ public final class AssistantPanelController {
         self.directory = directory
         self.environment = environment
         self.killGrace = killGrace
+        for key in [Settings.Key.assistantProvider, .assistantCodexPath, .assistantChatGPTModel] {
+            providerTokens.append(settings.onChange(key) { [weak self] in self?.newConversation() })
+        }
         settingsToken = settings.onChange(.assistantModel) { [weak self] in
             self?.onState?()
         }
@@ -508,7 +514,11 @@ public final class AssistantPanelController {
 
     /// The panel's subtitle: "Claude Code · Sonnet".
     public var subtitle: String {
-        Assistant.targetName(.code) + " · " + Assistant.modelName(settings.assistantModel)
+        if settings.assistantProvider == .chatgpt {
+            let model = settings.assistantChatGPTModel.isEmpty ? L10n.T("Use the provider’s default model") : settings.assistantChatGPTModel
+            return ChatGPTText.name + " · " + model
+        }
+        return Assistant.targetName(.code) + " · " + Assistant.modelName(settings.assistantModel)
     }
 
     // MARK: The context
@@ -755,7 +765,7 @@ public final class AssistantPanelController {
 
     private func prepare(_ req: Request, _ my: Int, echo: Bool) async {
         // 1. Consent, once ever.
-        if !settings.assistantConsent {
+        if !settings.selectedAssistantConsent {
             let allowed = await consent?() ?? false
             guard my == gen else { return }
             guard allowed else {
@@ -766,7 +776,7 @@ public final class AssistantPanelController {
                 }
                 return
             }
-            settings.assistantConsent = true
+            settings.selectedAssistantConsent = true
         }
         // 2. The question in the transcript; the conversation's first
         // question pins what the chip showed, and what the question is
@@ -797,7 +807,7 @@ public final class AssistantPanelController {
         // 3. What the model is told: a new Claude Code knows nothing of
         // the conversation yet; the contexts the prompt names have their
         // members first.
-        if process?.running != true {
+        if process?.running != true && providerSession?.running != true {
             for i in pinned.indices {
                 pinned[i].announced = false
             }
@@ -813,6 +823,10 @@ public final class AssistantPanelController {
         } catch {
             log.warning("assistant prompt: \(String(describing: error), privacy: .public)")
             fail(Assistant.stoppedText(String(describing: error)), retry: false)
+            return
+        }
+        if settings.assistantProvider == .chatgpt {
+            await submitProvider(prompt, told: told, generation: my)
             return
         }
         // 4. Claude Code, started when the conversation has none.
@@ -857,6 +871,35 @@ public final class AssistantPanelController {
         refreshFailed = false
         phase = .running
         onState?()
+    }
+
+    private func submitProvider(_ prompt: String, told: [Int], generation my: Int) async {
+        guard let provider = provider?(), let bridge else {
+            fail(L10n.T("Could not connect to ChatGPT."), retry: false); return
+        }
+        do {
+            if providerSession?.running != true {
+                let session = try await provider.start(AssistantSessionSpec(
+                    systemPrompt: Assistant.systemPrompt(language: language(), today: today()),
+                    tools: AssistantRequest.Tools(bridge: bridge, socket: socket, bridgeArgs: [], allowed: Assistant.allowedTools),
+                    modelID: settings.assistantChatGPTModel))
+                guard my == gen else { session.terminate(); return }
+                providerSession = session
+                session.onEvents = { [weak self] events in self?.handle(events) }
+                session.onExit = { [weak self] reason in
+                    guard let self, self.providerSession != nil else { return }
+                    self.providerSession = nil
+                    if self.phase == .running { self.fail(Assistant.stoppedText(reason), retry: false) }
+                }
+            }
+            guard my == gen, let session = providerSession else { return }
+            for i in pinned.indices where told.contains(pinned[i].key) { pinned[i].announced = true }
+            phase = .running; onState?()
+            try await session.submit(prompt)
+        } catch {
+            guard my == gen else { return }
+            endProcess(); fail(L10n.T("Could not connect to ChatGPT."), retry: false)
+        }
     }
 
     /// Runs Claude Code's sign-in, shown as an activity line; true once it
@@ -1035,7 +1078,7 @@ public final class AssistantPanelController {
 
     private func handle(_ events: [Assistant.Event]) {
         for e in events {
-            guard process != nil else { return }
+            guard process != nil || providerSession != nil else { return }
             switch e.kind {
             case .systemInit:
                 guard e.bridgeConnected else {
@@ -1148,6 +1191,8 @@ public final class AssistantPanelController {
 
     /// Terminates the conversation's process; its end is not reported.
     private func endProcess() {
+        let session = providerSession; providerSession = nil
+        session?.onEvents = nil; session?.onExit = nil; session?.terminate()
         let p = process
         process = nil
         p?.terminate()

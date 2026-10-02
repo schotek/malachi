@@ -34,6 +34,8 @@ func (p *boardPage) bind(b *gtk.Builder) {
 	p.title = b.GetObject("board_title").Cast().(*adw.WindowTitle)
 	p.accountFilter = b.GetObject("board_account_filter").Cast().(*gtk.DropDown)
 	p.triageButton = b.GetObject("board_triage_button").Cast().(*gtk.Button)
+	p.triageActivity = b.GetObject("board_triage_activity").Cast().(*gtk.Box)
+	p.triageProgress = b.GetObject("board_triage_progress").Cast().(*gtk.Label)
 
 	p.stack = b.GetObject("board_stack").Cast().(*gtk.Stack)
 	p.emptyPage = b.GetObject("board_empty_page").Cast().(*adw.StatusPage)
@@ -444,6 +446,7 @@ func boardRowData(r board.Row) widget.BoardRowData {
 		Snippet:     boardSnippetText(r.Snippet, r.SnippetIsAssistant),
 		Date:        r.Time,
 		Due:         r.Due,
+		DueOverdue:  r.DueOverdue,
 		IssueKey:    r.IssueKey,
 		IssueStatus: r.IssueStatus,
 		IssueStyle:  r.IssueStyle,

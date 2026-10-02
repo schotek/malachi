@@ -569,6 +569,17 @@ say so; the ✦ button beside the search field (or Alt+Enter in it) turns
 what you typed ("invoices from Jana in March") into a search. Only the
 passage or the typed words go to Claude.
 
+GTK, macOS and Windows also offer **ChatGPT (Codex, experimental)** in
+*Preferences → AI → In-app provider*. Select *In App*, connect with
+*Continue with ChatGPT*, and accept the separate OpenAI disclosure. It uses
+your ChatGPT plan through a native Codex executable and the same restricted
+mail tools. GTK/macOS also support their Board triage and suggested replies,
+with separate Board consent and model selection. The native GTK build uses
+Secret Service, macOS uses Keychain and Windows uses Credential Manager;
+this provider is unavailable in the current Flatpak build. Setup, validation
+status and native checks are in
+[docs/chatgpt-integration.md](docs/chatgpt-integration.md#12-gtk-and-macos-implementation-and-validation-hand-off).
+
 Claude Desktop for Linux is a preview the project does not support: it is
 listed, but cannot be chosen (the macOS and Windows apps offer it). How it works and why
 it is safe: [docs/mcp.md](docs/mcp.md#hand-off-from-the-app-the-assistant-menu),

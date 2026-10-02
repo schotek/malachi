@@ -242,14 +242,16 @@ public sealed partial class AssistantRequest : IDisposable
         {
             return;
         }
+        var selectedProvider = Provider;
         // 1. Consent, once ever; an answer counts even when the request was
         // cancelled while the question was up.
-        if (!Settings.AssistantConsent)
+        if (!(selectedProvider?.HasConsent ?? Settings.AssistantConsent))
         {
             var allowed = await AskConsentAsync();
             if (allowed)
             {
-                Settings.AssistantConsent = true;
+                if (selectedProvider is null) { Settings.AssistantConsent = true; }
+                else if (my == gen && !IsClosed && ReferenceEquals(selectedProvider, Provider)) { selectedProvider.AcceptConsent(); }
             }
             if (my != gen)
             {
@@ -260,6 +262,11 @@ public sealed partial class AssistantRequest : IDisposable
                 Finish(my, new Outcome.Declined(), completion);
                 return;
             }
+        }
+        if (selectedProvider is not null)
+        {
+            await RunProviderAsync(selectedProvider, my, systemPrompt, message, jsonSchema, onText, completion);
+            return;
         }
         // 2. Claude Code, signed in.
         if (Locator.Locate() is not { } path)
@@ -367,6 +374,11 @@ public sealed partial class AssistantRequest : IDisposable
         {
             return;
         }
+        HandleEvents(my, events, onText, completion);
+    }
+
+    private void HandleEvents(int my, IReadOnlyList<AssistantEvent> events, Action<string>? onText, Action<Outcome> completion)
+    {
         foreach (var e in events)
         {
             switch (e.Kind)
@@ -475,6 +487,7 @@ public sealed partial class AssistantRequest : IDisposable
     // anyway) and keeps it until it reports its exit.
     private void Retire()
     {
+        EndProviderSession();
         if (process is not { } p)
         {
             return;

@@ -12,7 +12,6 @@ import (
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
 	"github.com/schotek/malachi/ui/internal/i18n"
-	"github.com/schotek/malachi/ui/internal/widget"
 )
 
 // The search in the user's own words (ui/internal/assistant search.go, the
@@ -57,7 +56,14 @@ func (w *Window) setupOwnWords(b *gtk.Builder) {
 	w.searchEntry.AddController(keys)
 	w.searchEntry.ConnectChanged(w.syncOwnWords)
 	// The main window lives as long as the application: no unbinding.
-	w.assist.OnChange(w.syncOwnWords)
+	generation := w.assist.RuntimeGeneration()
+	w.assist.OnChange(func() {
+		if now := w.assist.RuntimeGeneration(); now != generation {
+			generation = now
+			w.cancelOwnWords()
+		}
+		w.syncOwnWords()
+	})
 	w.syncOwnWords()
 }
 
@@ -117,7 +123,7 @@ func (w *Window) searcher() *assistantpanel.Searcher {
 	o := &w.ownWords
 	if o.searcher == nil {
 		req := w.assist.NewRequest()
-		req.Consent = func(done func(bool)) { widget.AskAssistantConsent(w, done) }
+		req.Consent = func(done func(bool)) { w.assist.AskAssistantConsent(w, done) }
 		o.searcher = assistantpanel.NewSearcher(tr, req)
 	}
 	return o.searcher

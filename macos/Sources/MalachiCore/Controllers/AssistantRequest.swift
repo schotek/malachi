@@ -120,6 +120,11 @@ public final class AssistantRequest {
     /// The reason when it was not there in time.
     public nonisolated static let timedOut = "no answer in time"
 
+    public var provider: (() -> (any AssistantProvider)?)?
+    public var usesBoardConsent = false
+    public var providerModelID: (() -> String)?
+    private var providerSession: (any AssistantSession)?
+    private var providerTokens: [Settings.ChangeToken] = []
     public let settings: Settings
     public let locator: ClaudeCodeLocator
     private let directory: URL
@@ -170,6 +175,14 @@ public final class AssistantRequest {
         self.environment = environment
         self.killGrace = killGrace
         self.timeout = timeout
+        for key in [Settings.Key.assistantProvider, .assistantCodexPath, .assistantChatGPTModel, .assistantChatGPTConsentVersion, .boardTriageChatGPTModel, .boardTriageChatGPTConsentVersion] {
+            providerTokens.append(settings.onChange(key) { [weak self] in
+                guard let self else { return }
+                if key == .assistantChatGPTConsentVersion && self.settings.assistantChatGPTConsentVersion == 1 { return }
+                if key == .boardTriageChatGPTConsentVersion && self.settings.boardTriageChatGPTConsentVersion == 1 { return }
+                self.cancel()
+            })
+        }
     }
 
     /// Asks Claude Code once: `message` as the one turn under
@@ -229,6 +242,11 @@ public final class AssistantRequest {
     // MARK: Running
 
     private func run(_ my: Int, _ call: Call, _ completion: @escaping @MainActor (Outcome) -> Void) async {
+        if settings.assistantProvider == .chatgpt {
+            guard let selected = provider?() else { finish(my, .failed(.stopped("chatgpt_unavailable")), completion); return }
+            await runProvider(my, call, selected, completion)
+            return
+        }
         // 1. Consent, once ever; an answer counts even when the request
         // was cancelled while the question was up.
         if !settings.assistantConsent {
@@ -352,6 +370,47 @@ public final class AssistantRequest {
         return p
     }
 
+    private func runProvider(_ my: Int, _ call: Call, _ provider: any AssistantProvider,
+                             _ completion: @escaping @MainActor (Outcome) -> Void) async {
+        if usesBoardConsent && !settings.selectedBoardConsent { finish(my, .declined, completion); return }
+        if !usesBoardConsent && !provider.hasConsent {
+            let allowed = await consent?() ?? false
+            guard my == gen else { return }
+            guard allowed else { finish(my, .declined, completion); return }
+            provider.acceptConsent()
+            // Consent changes cancel old requests through the settings observer;
+            // this request continues only if its generation still owns the call.
+            guard my == gen else { return }
+        }
+        do {
+            let session = try await provider.start(AssistantSessionSpec(systemPrompt: call.systemPrompt,
+                jsonSchema: call.jsonSchema, tools: call.tools, modelID: providerModelID?() ?? settings.assistantChatGPTModel,
+                timeout: call.timeout, boardConsent: usesBoardConsent))
+            guard my == gen else { session.terminate(); return }
+            providerSession = session; blocks = ""; streamed = ""
+            session.onEvents = { [weak self] events in
+                guard let self, my == self.gen, self.running else { return }
+                for event in events {
+                    if event.usage != nil { call.onUsage?(event) }
+                    switch event.kind {
+                    case .textDelta: self.streamed += event.text; call.onText?(self.blocks + self.streamed)
+                    case .text: self.blocks = event.text; self.streamed = ""; call.onText?(self.blocks)
+                    case .toolUse, .toolResult: call.onTool?(event)
+                    case .result:
+                        self.finish(my, event.success ? .answered(text: event.resultText, structured: event.structured)
+                            : .failed(.stopped(event.resultText)), completion)
+                    default: break
+                    }
+                    guard my == self.gen, self.running else { return }
+                }
+            }
+            session.onExit = { [weak self] reason in self?.finish(my, .failed(.stopped(reason)), completion) }
+            try await session.submit(call.message)
+        } catch {
+            finish(my, .failed(.stopped((error as? ChatGPTFailure)?.code ?? "chatgpt_request_failed")), completion)
+        }
+    }
+
     /// Ends request `my` with `outcome`, once.
     private func finish(_ my: Int, _ outcome: Outcome, _ completion: @MainActor (Outcome) -> Void) {
         guard my == gen, running else { return }
@@ -365,6 +424,8 @@ public final class AssistantRequest {
     /// Terminates the request's process (after its answer it is about to
     /// end anyway) and keeps it until it reports its exit.
     private func retire() {
+        let session = providerSession; providerSession = nil
+        session?.onEvents = nil; session?.onExit = nil; session?.terminate()
         guard let p = process else { return }
         process = nil
         p.onEvents = nil

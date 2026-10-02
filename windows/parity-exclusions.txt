@@ -76,7 +76,6 @@ Waiting for Them	Board: the macOS client's board (Nástěnka, Swift-first, texts
 For Your Information	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 Overview	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 account filter\004All Accounts	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Done	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 %d case	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 Nothing needs you today.	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 %d thing needs you today.	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
@@ -272,3 +271,19 @@ Writing a suggested reply…	Board: the macOS client's board (Nástěnka, Swift-
 The assistant is writing a reply for another conversation	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 The suggested reply failed: %s.	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 the assistant wrote no reply	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
+The provider of the assistant in the app	GSettings schema metadata; not displayed by the Windows client
+The in-app provider; external Claude hand-off is independent.	GSettings schema metadata; not displayed by the Windows client
+Where Codex is	GSettings schema metadata; not displayed by the Windows client
+The native Codex executable; empty looks in the usual places.	GSettings schema metadata; not displayed by the Windows client
+The model the ChatGPT provider uses	GSettings schema metadata; not displayed by the Windows client
+Empty uses the provider's model default.	GSettings schema metadata; not displayed by the Windows client
+The accepted ChatGPT mail consent version	GSettings schema metadata; not displayed by the Windows client
+Zero means no permission to send mail to OpenAI.	GSettings schema metadata; not displayed by the Windows client
+The model ChatGPT uses for the board	GSettings schema metadata; not displayed by the Windows client
+The accepted OpenAI board consent version	GSettings schema metadata; not displayed by the Windows client
+Zero means no permission to send board mail to OpenAI.	GSettings schema metadata; not displayed by the Windows client
+Codex was not found. Choose a native Codex executable.	Native Unix Codex executable message; Windows uses codex.exe
+Codex is unavailable in this Flatpak build.	Flatpak-only sandbox availability
+Let OpenAI Refine the Board?	Windows Board UI has not been ported
+Malachi Mail will send board mail to OpenAI through Codex, using your ChatGPT plan. It can read mail and annotate cases. Automatic triage sends newly received mail while enabled. It cannot send, delete or move messages.	Windows Board UI has not been ported
+Show %d More	Windows Board UI has not been ported; GTK Today action

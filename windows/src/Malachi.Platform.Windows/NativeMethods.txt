@@ -143,3 +143,9 @@ CCH_RM_SESSION_KEY
 IApplicationActivationManager
 ApplicationActivationManager
 ACTIVATEOPTIONS
+// ChatGPT SIWC: application-owned Credential Manager tokens, never mail credentials.
+CredRead
+CredWrite
+CredDelete
+CredEnumerate
+CredFree

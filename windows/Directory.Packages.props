@@ -47,6 +47,8 @@ docs/windows-port.md §0.
     <!-- Core and the platform services. -->
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <!-- SIWC ID tokens are validated by the maintained Microsoft JWT library. -->
+    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.23.0" />
     <PackageVersion Include="Microsoft.Windows.CsWin32" Version="0.3.335" />
     <!-- Tests: xUnit v3 on Microsoft.Testing.Platform (global.json). -->
     <PackageVersion Include="xunit.v3" Version="4.0.1" />

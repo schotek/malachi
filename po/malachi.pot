@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-02 17:21+0200\n"
+"POT-Creation-Date: 2026-10-02 20:26+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,7 +18,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: ui/main.go:268
+#: ui/main.go:269
 msgid "A native mail client for the GNOME desktop."
 msgstr ""
 
@@ -838,6 +838,110 @@ msgstr ""
 msgid "The sign-in failed: %s"
 msgstr ""
 
+#: ui/internal/assistant/chatgpt.go:38
+msgid "Mail you ask about is sent to OpenAI using your ChatGPT plan"
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:39
+msgid "In-app provider"
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:40
+msgid "ChatGPT (Codex, experimental)"
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:41
+msgid "Connect ChatGPT to use your plan with the in-app assistant."
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:42
+msgid "Codex"
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:43
+msgid "Get Codex…"
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:44
+msgid "Continue with ChatGPT"
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:45
+msgid "Disconnect"
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:46
+msgid "Manage usage"
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:47
+msgid "Not connected"
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:48
+msgid "Connecting…"
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:49
+#, c-format
+msgid "Connected as %s"
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:50
+msgid "Reconnect to ChatGPT"
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:51
+msgid "Could not connect to ChatGPT."
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:52
+msgid "Disconnected locally; remote sign-out could not be confirmed."
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:53
+msgid "Codex was not found. Choose a native codex.exe."
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:54
+msgid "Codex was not found. Choose a native Codex executable."
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:55
+msgid "Codex is unavailable in this Flatpak build."
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:56
+msgid "Use the provider’s default model"
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:57
+msgid "Model catalog unavailable. You can keep the provider’s default model."
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:58
+msgid "Send Mail to OpenAI?"
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:59
+msgid ""
+"Malachi Mail will send the selected mail and text you provide to OpenAI "
+"through Codex, using your ChatGPT plan. The assistant can read mail and "
+"prepare drafts. It cannot send, delete or move messages. This experimental "
+"integration does not import your ChatGPT conversations or memory."
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:60
+msgid "Let OpenAI Refine the Board?"
+msgstr ""
+
+#: ui/internal/assistant/chatgpt.go:61
+msgid ""
+"Malachi Mail will send board mail to OpenAI through Codex, using your "
+"ChatGPT plan. It can read mail and annotate cases. Automatic triage sends "
+"newly received mail while enabled. It cannot send, delete or move messages."
+msgstr ""
+
 #: ui/internal/background/background.go:130
 msgid "Check for new mail and show notifications in the background"
 msgstr ""
@@ -978,7 +1082,7 @@ msgid "The sender's server refused the request."
 msgstr ""
 
 #: ui/internal/compose/pane.go:216 ui/internal/compose/pane.go:1042
-#: ui/internal/jira/settings.go:123 ui/internal/window/assistant_panel.go:182
+#: ui/internal/jira/settings.go:123 ui/internal/window/assistant_panel.go:185
 msgid "Remove"
 msgstr ""
 
@@ -999,8 +1103,8 @@ msgstr ""
 msgid "Save changes to this draft?"
 msgstr ""
 
-#: ui/internal/compose/pane.go:692 ui/internal/widget/consent.go:42
-#: ui/internal/widget/rpc.go:196 ui/internal/window/assistant_panel.go:201
+#: ui/internal/compose/pane.go:692 ui/internal/widget/consent.go:47
+#: ui/internal/widget/rpc.go:196 ui/internal/window/assistant_panel.go:204
 #: ui/internal/window/board_quit.go:26 ui/internal/window/remote.go:269
 #: ui/internal/window/remote.go:295 ui/data/ui/account_wizard.ui:401
 #: ui/data/ui/jira_account.ui:25
@@ -1008,7 +1112,7 @@ msgid "_Cancel"
 msgstr ""
 
 #: ui/internal/compose/pane.go:693 ui/internal/compose/draft.go:735
-#: ui/internal/compose/draft.go:847 ui/internal/compose/rewrite.go:106
+#: ui/internal/compose/draft.go:847 ui/internal/compose/rewrite.go:108
 #: ui/internal/board/text.go:345 ui/data/ui/compose.ui:121
 msgid "_Discard"
 msgstr ""
@@ -1059,7 +1163,7 @@ msgid "Attaching %s"
 msgstr ""
 
 #: ui/internal/compose/pane_layout.go:42
-#: ui/internal/window/assistant_panel.go:412 ui/data/ui/compose.ui:65
+#: ui/internal/window/assistant_panel.go:426 ui/data/ui/compose.ui:65
 msgid "_Send"
 msgstr ""
 
@@ -1242,7 +1346,7 @@ msgstr ""
 
 #. TRANSLATORS: a field of a Jira issue.
 #: ui/internal/jira/jira.go:267 ui/internal/board/text.go:832
-#: ui/data/ui/preferences.ui:406
+#: ui/data/ui/preferences.ui:462
 msgid "Status"
 msgstr ""
 
@@ -1325,7 +1429,7 @@ msgid "The Jira site rejected the token of %s"
 msgstr ""
 
 #. TRANSLATORS: menu item; "Jira" is a product name.
-#: ui/internal/jira/wizard.go:78 ui/data/ui/preferences.ui:437
+#: ui/internal/jira/wizard.go:78 ui/data/ui/preferences.ui:493
 #: ui/data/ui/window.ui:682
 msgid "Add _Jira Account…"
 msgstr ""
@@ -1752,7 +1856,7 @@ msgstr ""
 #. TRANSLATORS: the window's second mode beside Mail: the conversations
 #. that need something, sorted into four states.
 #: ui/internal/board/text.go:65 ui/data/ui/preferences.ui:66
-#: ui/data/ui/preferences.ui:377
+#: ui/data/ui/preferences.ui:433
 msgid "Board"
 msgstr ""
 
@@ -2229,7 +2333,7 @@ msgstr ""
 msgid "The conversation could not be loaded."
 msgstr ""
 
-#: ui/internal/board/text.go:618 ui/internal/window/assistant_panel.go:653
+#: ui/internal/board/text.go:618 ui/internal/window/assistant_panel.go:667
 #: ui/internal/window/status.go:321 ui/data/ui/window.ui:433
 msgid "Try Again"
 msgstr ""
@@ -3341,7 +3445,7 @@ msgid_plural "+%d more"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/assistant_panel.go:945 ui/internal/window/drafts.go:77
+#: ui/internal/window/assistant_panel.go:959 ui/internal/window/drafts.go:77
 msgid "Opening the draft"
 msgstr ""
 
@@ -3436,6 +3540,11 @@ msgstr ""
 
 #: ui/internal/window/attachments.go:631
 msgid "Saving the attachments"
+msgstr ""
+
+#: ui/internal/window/board_today.go:449
+#, c-format
+msgid "Show %d More"
 msgstr ""
 
 #: ui/internal/window/compose_open.go:159
@@ -3757,78 +3866,83 @@ msgstr ""
 msgid "Move to Trash"
 msgstr ""
 
-#: ui/internal/window/preferences.go:312
+#: ui/internal/window/preferences.go:328
 msgid "Saving mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:341
+#: ui/internal/window/preferences.go:357
 msgid "Loading mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:404
+#: ui/internal/window/preferences.go:420
 msgid "Measuring the disk space"
 msgstr ""
 
-#: ui/internal/window/preferences.go:440
+#: ui/internal/window/preferences.go:456
 msgid "Converting the stored mail in the background"
 msgstr ""
 
-#: ui/internal/window/preferences.go:442
+#: ui/internal/window/preferences.go:458
 msgid "Converting stopped: the disk is full"
 msgstr ""
 
 #. TRANSLATORS: %s is a size such as "1.2 GiB".
-#: ui/internal/window/preferences.go:446
+#: ui/internal/window/preferences.go:462
 #, c-format
 msgid "Compression saves %s"
 msgstr ""
 
 #. TRANSLATORS: %s is a size such as "1.2 GiB".
-#: ui/internal/window/preferences.go:450
+#: ui/internal/window/preferences.go:466
 #, c-format
 msgid "%s of attachments are on the server only"
 msgstr ""
 
-#: ui/internal/window/preferences.go:588
+#: ui/internal/window/preferences.go:604
 msgid "The desktop portal refused to change autostart"
 msgstr ""
 
-#: ui/internal/window/preferences.go:591
+#: ui/internal/window/preferences.go:607
 msgid "Autostart needs xdg-desktop-portal"
 msgstr ""
 
-#: ui/internal/window/preferences.go:594
+#: ui/internal/window/preferences.go:610
 msgid "Autostart was not granted"
 msgstr ""
 
-#: ui/internal/window/preferences.go:629
+#: ui/internal/window/preferences.go:645
 msgid "Not available in the Flatpak build"
 msgstr ""
 
-#: ui/internal/window/preferences.go:635
+#: ui/internal/window/preferences.go:651
 msgid "The MCP bridge (malachi-mcp) was not found"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:682
+#: ui/internal/window/preferences.go:698
 #, c-format
 msgid "The MCP bridge did not answer: %s"
 msgstr ""
 
-#: ui/internal/window/preferences.go:727
+#: ui/internal/window/preferences.go:743
 msgid "No Claude app was found on this computer"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:730
+#: ui/internal/window/preferences.go:746
 #, c-format
 msgid "The MCP bridge could not be registered: %s"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:733
+#: ui/internal/window/preferences.go:749
 #, c-format
 msgid "The MCP bridge could not be unregistered: %s"
+msgstr ""
+
+#: ui/internal/window/preferences_chatgpt.go:32
+#: ui/data/ui/account_wizard.ui:142
+msgid "Account"
 msgstr ""
 
 #: ui/internal/window/remote.go:68
@@ -3891,7 +4005,7 @@ msgstr[1] ""
 msgid "Loading more results"
 msgstr ""
 
-#: ui/internal/window/search.go:311 ui/internal/window/search_ownwords.go:147
+#: ui/internal/window/search.go:311 ui/internal/window/search_ownwords.go:153
 #: ui/data/ui/window.ui:261
 msgid "Search Mail"
 msgstr ""
@@ -4221,10 +4335,6 @@ msgstr ""
 msgid "Server Settings"
 msgstr ""
 
-#: ui/data/ui/account_wizard.ui:142
-msgid "Account"
-msgstr ""
-
 #: ui/data/ui/account_wizard.ui:152
 msgid "Incoming Mail (IMAP)"
 msgstr ""
@@ -4529,7 +4639,7 @@ msgstr ""
 msgid "Confirm Before Deleting"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:108 data/io.github.schotek.Malachi.gschema.xml:101
+#: ui/data/ui/preferences.ui:108 data/io.github.schotek.Malachi.gschema.xml:105
 msgid "Ask before moving a message to Trash"
 msgstr ""
 
@@ -4545,7 +4655,7 @@ msgstr ""
 msgid "Play Sound"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:126 data/io.github.schotek.Malachi.gschema.xml:109
+#: ui/data/ui/preferences.ui:126 data/io.github.schotek.Malachi.gschema.xml:113
 msgid "Play the system new-mail sound"
 msgstr ""
 
@@ -4736,7 +4846,7 @@ msgid ""
 "computer"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:433 ui/data/ui/window.ui:670
+#: ui/data/ui/preferences.ui:489 ui/data/ui/window.ui:670
 msgid "_Add Account…"
 msgstr ""
 
@@ -4823,180 +4933,225 @@ msgstr ""
 msgid "_About Malachi Mail"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:48
+#: data/io.github.schotek.Malachi.gschema.xml:52
 msgid "Window width"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:52
+#: data/io.github.schotek.Malachi.gschema.xml:56
 msgid "Window height"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:56
+#: data/io.github.schotek.Malachi.gschema.xml:60
 msgid "Window maximized state"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:60
+#: data/io.github.schotek.Malachi.gschema.xml:64
 msgid "Width of the folder sidebar"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:64
+#: data/io.github.schotek.Malachi.gschema.xml:68
 msgid "Width of the message list pane"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:73
+#: data/io.github.schotek.Malachi.gschema.xml:77
 msgid "Folders whose subfolders are hidden in the sidebar"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:77
+#: data/io.github.schotek.Malachi.gschema.xml:81
 msgid "Accounts whose folders are hidden in the sidebar"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:81
+#: data/io.github.schotek.Malachi.gschema.xml:85
 msgid "Folders pinned to the Favourites section of the sidebar"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:88
+#: data/io.github.schotek.Malachi.gschema.xml:92
 msgid ""
 "Start hidden in the background at login (mirrors the Background portal's "
 "autostart decision)"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:92
+#: data/io.github.schotek.Malachi.gschema.xml:96
 msgid "Closing the main window keeps the application running"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:97
+#: data/io.github.schotek.Malachi.gschema.xml:101
 msgid ""
 "Seconds a message must be shown before it is marked as read; 0 = immediately"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:105
+#: data/io.github.schotek.Malachi.gschema.xml:109
 msgid "Show a desktop notification for new mail"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:115
+#: data/io.github.schotek.Malachi.gschema.xml:119
 msgid "Color scheme"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:116
+#: data/io.github.schotek.Malachi.gschema.xml:120
 msgid "Follow the system preference, or force a light or dark appearance."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:120
+#: data/io.github.schotek.Malachi.gschema.xml:124
 msgid "Message list density"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:124
+#: data/io.github.schotek.Malachi.gschema.xml:128
 msgid "Show a one-line preview under each message in the list"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:128
+#: data/io.github.schotek.Malachi.gschema.xml:132
 msgid "Group the message list by conversation"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:129
+#: data/io.github.schotek.Malachi.gschema.xml:133
 msgid ""
 "Show one row per conversation in the selected folder; expanding it lists the "
 "messages the folder holds."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:133
+#: data/io.github.schotek.Malachi.gschema.xml:137
 msgid "Where a search looks"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:134
+#: data/io.github.schotek.Malachi.gschema.xml:138
 msgid ""
 "The selected folder, every folder of its account, or every account; the last "
 "choice made in the search bar."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:138
+#: data/io.github.schotek.Malachi.gschema.xml:142
 msgid "Show sender avatars in the message list"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:142
+#: data/io.github.schotek.Malachi.gschema.xml:146
 msgid "Draw avatars in neutral grey instead of per-sender colours"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:146
+#: data/io.github.schotek.Malachi.gschema.xml:150
 msgid "Use a monospace font for plain-text message bodies"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:151
+#: data/io.github.schotek.Malachi.gschema.xml:155
 msgid "Message body text zoom in percent"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:157
+#: data/io.github.schotek.Malachi.gschema.xml:161
 msgid "Show the Assistant menu that hands mail to Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:158
+#: data/io.github.schotek.Malachi.gschema.xml:162
 msgid ""
 "The menu opens Claude Desktop or Claude Code on this computer with a "
 "prepared question about the selected mail."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:162
+#: data/io.github.schotek.Malachi.gschema.xml:166
 msgid "Where the Assistant menu opens Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:163
+#: data/io.github.schotek.Malachi.gschema.xml:167
 msgid ""
 "Claude Desktop, Claude Code in a terminal, or the panel in the app; the last "
 "choice made in the Assistant menu or in the settings."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:167
+#: data/io.github.schotek.Malachi.gschema.xml:171
 msgid "The model the assistant panel uses"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:168
+#: data/io.github.schotek.Malachi.gschema.xml:172
 msgid "Sonnet, Haiku or Opus, passed to Claude Code."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:172
+#: data/io.github.schotek.Malachi.gschema.xml:176
 msgid "Where Claude Code is"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:173
+#: data/io.github.schotek.Malachi.gschema.xml:177
 msgid ""
 "The claude executable the assistant panel runs; empty looks in the usual "
 "places."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:177
+#: data/io.github.schotek.Malachi.gschema.xml:181
 msgid "The assistant panel may send mail to Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:178
+#: data/io.github.schotek.Malachi.gschema.xml:182
 msgid "Set when the user allowed it the first time."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:184
+#: data/io.github.schotek.Malachi.gschema.xml:187
+msgid "The provider of the assistant in the app"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:188
+msgid "The in-app provider; external Claude hand-off is independent."
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:192
+msgid "Where Codex is"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:193
+msgid "The native Codex executable; empty looks in the usual places."
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:197
+msgid "The model the ChatGPT provider uses"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:198
+#: data/io.github.schotek.Malachi.gschema.xml:209
+msgid "Empty uses the provider's model default."
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:203
+msgid "The accepted ChatGPT mail consent version"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:204
+msgid "Zero means no permission to send mail to OpenAI."
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:208
+msgid "The model ChatGPT uses for the board"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:214
+msgid "The accepted OpenAI board consent version"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:215
+msgid "Zero means no permission to send board mail to OpenAI."
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:221
 msgid "The style the Board opens in"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:185
+#: data/io.github.schotek.Malachi.gschema.xml:222
 msgid ""
 "List, Columns or Today; applies the first time the Board is shown after "
 "launch, then the style last chosen lasts until the app quits."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:189
+#: data/io.github.schotek.Malachi.gschema.xml:226
 msgid "The Board's triage may send mail to Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:190
+#: data/io.github.schotek.Malachi.gschema.xml:227
 msgid ""
 "Set when the user allowed it the first time, apart from the assistant "
 "panel's consent."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:194
+#: data/io.github.schotek.Malachi.gschema.xml:231
 msgid "The model the Board's triage uses"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:195
+#: data/io.github.schotek.Malachi.gschema.xml:232
 msgid ""
 "Sonnet, Haiku or Opus, passed to Claude Code; apart from the assistant "
 "panel's model."

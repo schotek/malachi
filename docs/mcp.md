@@ -14,6 +14,12 @@ It is an MCP server over **stdio**: the agent's client spawns it as a child
 process and talks JSON-RPC on its stdin/stdout, as every local MCP server
 works. It is not a daemon and it does not listen on a port.
 
+The experimental GTK, macOS and Windows in-app ChatGPT/Codex provider, its core boundaries
+and the Linux/macOS port design are documented in
+[chatgpt-integration.md](chatgpt-integration.md). It reuses this bridge for
+the panel's read/draft tools; the Claude flows described below remain the
+default.
+
 ## Build and run
 
 ```sh

@@ -32,6 +32,11 @@ func AskTriageConsent(parent gtk.Widgetter, done func(allowed bool)) {
 	askConsent(parent, board.TriageConsentHeading(i18n.Tr), board.TriageConsentBody(i18n.Tr), done)
 }
 
+// AskProviderConsent presents a provider's plain-text disclosure.
+func AskProviderConsent(parent gtk.Widgetter, heading, body string, done func(bool)) {
+	askConsent(parent, heading, body, done)
+}
+
 // askConsent is a consent question: heading and body as plain text, Allow
 // suggested and the default, Cancel on close.
 func askConsent(parent gtk.Widgetter, heading, body string, done func(allowed bool)) {

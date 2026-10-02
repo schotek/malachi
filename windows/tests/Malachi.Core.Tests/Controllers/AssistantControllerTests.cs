@@ -42,6 +42,52 @@ namespace Malachi.Core.Tests.Controllers;
 [Collection(typeof(McpRegistrationProcesses))]
 public sealed class AssistantControllerTests
 {
+    [Fact]
+    public async Task ChatGptInAppDoesNotRequireClaudeRegistration()
+    {
+        using var h = new Harness(null, [], bridge: @"C:\\App\\malachi-mcp.exe");
+        var controller = await h.MakeAsync();
+        await h.Ui.RunAsync(() =>
+        {
+            h.Settings.AssistantMenu = true;
+            h.Settings.AssistantTarget = AssistantTarget.App;
+            h.Settings.AssistantProvider = AssistantProviderID.ChatGpt;
+            controller.SetInAppProviderAvailable(true);
+            Assert.False(controller.Registered);
+            Assert.True(controller.Shown);
+            Assert.True(controller.PanelShown);
+            Assert.True(controller.CanRunInApp);
+            Assert.True(controller.Pick(needsBridge: true).Ok);
+            controller.SetInAppProviderAvailable(false, "Connect ChatGPT");
+            Assert.True(controller.Shown);
+            Assert.False(controller.CanRunInApp);
+            Assert.False(controller.Pick(needsBridge: true).Ok);
+            Assert.Equal("Connect ChatGPT", controller.Problem(AssistantTarget.App));
+            h.Settings.AssistantProvider = AssistantProviderID.Claude;
+            Assert.False(controller.Shown);
+            Assert.False(controller.CanRunInApp);
+            controller.Close();
+        });
+    }
+
+    [Fact]
+    public async Task ChatGptWithoutBridgeExplainsMessageActionsButKeepsOneShotRequests()
+    {
+        using var h = new Harness(null, []);
+        var controller = await h.MakeAsync();
+        await h.Ui.RunAsync(() =>
+        {
+            h.Settings.AssistantMenu = true;
+            h.Settings.AssistantTarget = AssistantTarget.App;
+            h.Settings.AssistantProvider = AssistantProviderID.ChatGpt;
+            controller.SetInAppProviderAvailable(true);
+            Assert.True(controller.CanRunInApp);
+            Assert.False(controller.Pick(needsBridge: true).Ok);
+            Assert.Equal("The MCP bridge (malachi-mcp) was not found", controller.Problem(AssistantTarget.App));
+            controller.Close();
+        });
+    }
+
     private const string NotRegisteredProblem = "Turn on Register with Claude so that Claude can read your mail";
 
     /// <summary>What <c>malachi-mcp status --json</c> prints for the two clients.</summary>

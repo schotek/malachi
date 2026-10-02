@@ -28,6 +28,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
+using Malachi.Core.Assistants;
 
 namespace Malachi.Core.Settings;
 
@@ -77,6 +78,17 @@ public sealed class SettingsStore : IDisposable
         new(SettingsKey.AssistantModel, "assistant-model", "s", "sonnet", choices: Nicks<AssistantModel>.All),
         new(SettingsKey.AssistantClaudePath, "assistant-claude-path", "s", ""),
         new(SettingsKey.AssistantConsent, "assistant-consent", "b", false),
+        new(SettingsKey.AssistantProvider, "assistant-provider", "s", "claude", choices: Nicks<AssistantProviderID>.All),
+        new(SettingsKey.AssistantCodexPath, "assistant-codex-path", "s", ""),
+        new(SettingsKey.AssistantChatGptModel, "assistant-chatgpt-model", "s", ""),
+        new(SettingsKey.AssistantChatGptConsentVersion, "assistant-chatgpt-consent-version", "i", 0, minimum: 0, maximum: int.MaxValue),
+        // Schema metadata already present in GTK/macOS; the Windows Board
+        // widgets remain separate tracked work (docs/chatgpt-integration.md).
+        new(SettingsKey.BoardDefaultStyle, "board-default-style", "s", "list", choices: ["list", "columns", "today"]),
+        new(SettingsKey.BoardTriageConsent, "board-triage-consent", "b", false),
+        new(SettingsKey.BoardTriageModel, "board-triage-model", "s", "sonnet", choices: Nicks<AssistantModel>.All),
+        new(SettingsKey.BoardChatGptModel, "board-triage-chatgpt-model", "s", ""),
+        new(SettingsKey.BoardChatGptConsentVersion, "board-triage-chatgpt-consent-version", "i", 0, minimum: 0, maximum: int.MaxValue),
         new(SettingsKey.CtrlR, "ctrl-r", "s", "reply", choices: Nicks<CtrlR>.All, windowsOnly: true),
     ];
 
@@ -315,6 +327,34 @@ public sealed class SettingsStore : IDisposable
     {
         get => GetBoolean(SettingsKey.AssistantConsent);
         set => SetBoolean(SettingsKey.AssistantConsent, value);
+    }
+
+    /// <summary>The in-app provider; external Claude hand-offs keep their own target.</summary>
+    public AssistantProviderID AssistantProvider
+    {
+        get => GetEnum<AssistantProviderID>(SettingsKey.AssistantProvider);
+        set => SetEnum(SettingsKey.AssistantProvider, value);
+    }
+
+    /// <summary>The native Codex executable; empty uses discovery.</summary>
+    public string AssistantCodexPath
+    {
+        get => GetString(SettingsKey.AssistantCodexPath);
+        set => SetString(SettingsKey.AssistantCodexPath, value);
+    }
+
+    /// <summary>ChatGPT's model ID; empty lets the verified provider choose its default.</summary>
+    public string AssistantChatGptModel
+    {
+        get => GetString(SettingsKey.AssistantChatGptModel);
+        set => SetString(SettingsKey.AssistantChatGptModel, value);
+    }
+
+    /// <summary>The accepted OpenAI disclosure version, separately from Anthropic consent.</summary>
+    public int AssistantChatGptConsentVersion
+    {
+        get => GetInt32(SettingsKey.AssistantChatGptConsentVersion);
+        set => SetInt32(SettingsKey.AssistantChatGptConsentVersion, value);
     }
 
     // Sidebar state

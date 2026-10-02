@@ -95,9 +95,11 @@ type transcriptRow struct {
 
 // assistantPanel is the panel's widgets and its controller.
 type assistantPanel struct {
-	w     *Window
-	ctl   *assistantpanel.Controller
-	split *adw.OverlaySplitView
+	runtimeGeneration int
+	footer            *gtk.Label
+	w                 *Window
+	ctl               *assistantpanel.Controller
+	split             *adw.OverlaySplitView
 	// toggle opens the panel from the message pane's header bar; hide
 	// folds it from the panel's own.
 	toggle *gtk.ToggleButton
@@ -156,6 +158,7 @@ func newAssistantPanel(w *Window, b *gtk.Builder) *assistantPanel {
 	p.ctl = assistantpanel.New(assistantpanel.Config{
 		Translator: tr, Settings: w.settings, Locator: as.locator, Loop: glibLoop{}, Log: w.log,
 		Bridge: as.bridge, Socket: w.client.Socket, Directory: assistantDirectory(), Env: os.Environ(),
+		Provider: as.Provider,
 	})
 	p.ctl.Language = uiLanguage
 	p.ctl.Consent = p.askConsent
@@ -200,7 +203,9 @@ func newAssistantPanel(w *Window, b *gtk.Builder) *assistantPanel {
 	cancel := pb.GetObject("assistant_pending_cancel").Cast().(*gtk.Button)
 	cancel.SetTooltipText(strings.ReplaceAll(i18n.T("_Cancel"), "_", ""))
 	cancel.ConnectClicked(p.ctl.CancelPending)
-	pb.GetObject("assistant_footer").Cast().(*gtk.Label).SetText(panel.Footer)
+	p.footer = pb.GetObject("assistant_footer").Cast().(*gtk.Label)
+	p.footer.SetText(panel.Footer)
+	p.runtimeGeneration = as.RuntimeGeneration()
 	p.send.ConnectClicked(p.sendOrStop)
 	p.bindInput()
 	p.bindScrolling()
@@ -223,6 +228,15 @@ func (p *assistantPanel) close() {
 // syncShown folds the panel when it may not be shown and brings the
 // toggle up to date.
 func (p *assistantPanel) syncShown() {
+	if now := p.w.assist.RuntimeGeneration(); now != p.runtimeGeneration {
+		p.runtimeGeneration = now
+		p.ctl.ProviderChanged()
+	}
+	if p.w.assist.usesChatGPT() {
+		p.footer.SetText(assistant.ChatGPTText(tr).Footer)
+	} else {
+		p.footer.SetText(assistant.PanelTexts(tr).Footer)
+	}
 	if !p.w.assist.panelShown() {
 		p.split.SetShowSidebar(false)
 	}
@@ -351,7 +365,7 @@ func (p *assistantPanel) askAttachment(acc api.AccountID, id api.MessageID, a ap
 
 // askConsent asks "Send Mail to Claude?" before the first question ever.
 func (p *assistantPanel) askConsent(done func(bool)) {
-	widget.AskAssistantConsent(p.w, done)
+	p.w.assist.AskAssistantConsent(p.w, done)
 }
 
 // State

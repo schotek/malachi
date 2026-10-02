@@ -11,12 +11,12 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/boardtriage"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/settings"
-	"github.com/schotek/malachi/ui/internal/widget"
 )
 
 // The board's triage (ui/internal/boardtriage; docs/mcp.md "The board's
@@ -67,6 +67,7 @@ func formatTokens(n int64) string { return boardtriage.GroupDigits(n, tokenDigit
 // BoardTriage is the application's board triage (see the comment above).
 // Main loop only.
 type BoardTriage struct {
+	assistant *Assistant
 	prefs     *boardtriage.Preferences
 	ctl       *boardtriage.Controller
 	scheduler *boardtriage.Scheduler
@@ -97,19 +98,34 @@ func (a *Assistant) AttachBoardTriage(rpc *client.Client, mainWindow func() *Win
 	if a.board != nil {
 		return a.board
 	}
-	b := &BoardTriage{rpc: rpc, log: a.log.With("part", "board-triage"), mainWindow: mainWindow}
+	b := &BoardTriage{assistant: a, rpc: rpc, log: a.log.With("part", "board-triage"), mainWindow: mainWindow}
+	a.chatGPTSocket = rpc.Socket
+	a.rebuildCodex()
 	b.prefs = boardtriage.NewPreferences(boardtriage.PreferencesConfig{
 		Caller: rpc, Loop: glibLoop{}, Log: b.log, Translator: i18n.Tr,
 		Disconnected: func(err error) bool { return errors.Is(err, client.ErrDisconnected) },
 	})
 	b.prefs.OnError = b.toast
 	b.ctl = boardtriage.New(boardtriage.Config{
-		Caller: rpc, Settings: a.settings, Locator: a.locator, Preferences: b.prefs,
+		Caller: rpc, Settings: boardProviderSettings{providerSettings{a}}, Locator: providerLocator{a}, Preferences: b.prefs,
 		// A request of its own, not the rewrite's or the search's.
-		Request: a.NewRequest(), Loop: glibLoop{}, Log: b.log, Translator: i18n.Tr,
+		Request: a.newRequest(a.boardProvider), Loop: glibLoop{}, Log: b.log, Translator: providerBoardTranslator{a, i18n.Tr},
 		Bridge: a.bridge, Socket: rpc.Socket, Available: a.triageAvailable, Number: formatTokens,
 	})
 	b.ctl.Language = uiLanguage
+	b.ctl.ConsentIdentity = a.RuntimeGeneration
+	b.ctl.Source = func() string {
+		if a.usesChatGPT() {
+			return "malachi-chatgpt"
+		}
+		return assistant.TriageSource
+	}
+	b.ctl.ModelID = func() string {
+		if a.usesChatGPT() {
+			return a.settings.BoardChatGPTModel()
+		}
+		return ""
+	}
 	b.ctl.Consent = b.askConsent
 	b.ctl.OnRefresh = b.refresh
 	s := a.settings
@@ -275,7 +291,8 @@ func (b *BoardTriage) askConsent(done func(bool)) {
 	if w := b.window(); w != nil {
 		parent = w
 	}
-	widget.AskTriageConsent(parent, done)
+	provider := b.assistant
+	provider.askTriageConsent(parent, done)
 }
 
 // triageSnapshot is what a snapshot of the board says about the triage, as

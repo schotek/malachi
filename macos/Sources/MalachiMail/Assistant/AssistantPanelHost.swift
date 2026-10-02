@@ -40,6 +40,8 @@ final class AssistantPanelHost {
     let controller: AssistantPanelController
     let viewController: AssistantPanelViewController
 
+    private var providerToken: AssistantController.Token?
+    private var providerGeneration = -1
     private let state: AppState
     private let list: ListController
     private weak var mainWindow: MainWindowController?
@@ -55,14 +57,16 @@ final class AssistantPanelHost {
             settings: state.settings, locator: state.claudeCode, bridge: state.paths.mcpBridge?.path,
             socket: state.paths.socket)
         self.controller = controller
+        controller.provider = { [weak state] in state?.selectedProvider }
         viewController = AssistantPanelViewController(controller: controller)
 
-        let alerts = state.alerts
-        controller.consent = { [weak mainWindow] in
-            let t = Assistant.panelTexts()
-            return await alerts.confirm(
-                on: mainWindow?.window, heading: t.consentHeading, body: t.consentBody, confirmLabel: t.allow,
-                declineLabel: t.cancel)
+        controller.consent = { [weak state, weak mainWindow] in
+            await state?.assistantConsent(on: mainWindow?.window) ?? false
+        }
+        providerToken = state.assistant.onChange { [weak self] in
+            guard let self, self.providerGeneration != self.state.assistant.providerGeneration else { return }
+            self.providerGeneration = self.state.assistant.providerGeneration
+            self.controller.newConversation()
         }
         controller.resolveContext = { [weak self] context, done in
             guard let self else {
@@ -87,6 +91,7 @@ final class AssistantPanelHost {
 
     /// Ends the conversation's Claude Code for good.
     func close() {
+        providerToken?.cancel()
         controller.close()
     }
 

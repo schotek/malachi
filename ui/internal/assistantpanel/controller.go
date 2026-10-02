@@ -12,6 +12,7 @@
 package assistantpanel
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -367,9 +368,13 @@ type Controller struct {
 	pending        Pending
 	// pendingTarget is what the waiting action acts on; nil for the chip's
 	// context when its words are sent (before the first question).
-	pendingTarget *target
-	process       *Process
-	closed        bool
+	pendingTarget    *target
+	process          *Process
+	providerFactory  func() Provider
+	selectedProvider Provider
+	providerSession  Session
+	cancelProvider   context.CancelFunc
+	closed           bool
 
 	// gen is bumped by every question, Stop, NewConversation and Close:
 	// the steps of an older question stop at their next callback.
@@ -399,6 +404,8 @@ type Controller struct {
 
 // Config is what a Controller needs from the application.
 type Config struct {
+	// Provider selects the in-app runtime; nil retains Claude.
+	Provider   func() Provider
 	Translator assistant.Translator
 	Settings   Settings
 	Locator    *Locator
@@ -424,24 +431,25 @@ func New(cfg Config) *Controller {
 		grace = DefaultKillGrace
 	}
 	return &Controller{
-		Today:          func() string { return time.Now().Format("2006-01-02") },
-		Language:       func() string { return "" },
-		ResolveTimeout: DefaultResolveTimeout,
-		tr:             cfg.Translator,
-		settings:       cfg.Settings,
-		locator:        cfg.Locator,
-		loop:           cfg.Loop,
-		log:            cfg.Log,
-		bridge:         cfg.Bridge,
-		socket:         cfg.Socket,
-		directory:      cfg.Directory,
-		env:            cfg.Env,
-		killGrace:      grace,
-		streaming:      -1,
-		signingIn:      -1,
-		activities:     make(map[string]int),
-		toolNames:      make(map[string]string),
-		resolving:      make(map[int]*future[struct{}]),
+		Today:           func() string { return time.Now().Format("2006-01-02") },
+		Language:        func() string { return "" },
+		ResolveTimeout:  DefaultResolveTimeout,
+		tr:              cfg.Translator,
+		providerFactory: cfg.Provider,
+		settings:        cfg.Settings,
+		locator:         cfg.Locator,
+		loop:            cfg.Loop,
+		log:             cfg.Log,
+		bridge:          cfg.Bridge,
+		socket:          cfg.Socket,
+		directory:       cfg.Directory,
+		env:             cfg.Env,
+		killGrace:       grace,
+		streaming:       -1,
+		signingIn:       -1,
+		activities:      make(map[string]int),
+		toolNames:       make(map[string]string),
+		resolving:       make(map[int]*future[struct{}]),
 	}
 }
 
@@ -453,10 +461,7 @@ func (c *Controller) Close() {
 	c.closed = true
 	c.gen++
 	c.endSignIn()
-	if c.process != nil {
-		c.process.Terminate()
-	}
-	c.process = nil
+	c.endProcess()
 }
 
 // Reading
@@ -663,6 +668,16 @@ func (c *Controller) PendingLabel() string {
 
 // Subtitle is the panel's subtitle: "Claude Code · Sonnet".
 func (c *Controller) Subtitle() string {
+	if c.providerFactory != nil {
+		if provider := c.providerFactory(); provider != nil {
+			labels := assistant.ChatGPTText(c.tr)
+			model := provider.Model()
+			if model == "" {
+				model = labels.DefaultModel
+			}
+			return labels.Name + " · " + model
+		}
+	}
 	return assistant.TargetName(c.tr, assistant.Code) + " · " + assistant.ModelName(c.tr, c.settings.AssistantModel())
 }
 
@@ -986,6 +1001,9 @@ func (c *Controller) start(req request, echo bool) {
 	}
 	c.gen++
 	my := c.gen
+	if c.providerFactory != nil {
+		c.selectedProvider = c.providerFactory()
+	}
 	c.phase = PhasePreparing
 	c.state()
 	c.loop.Post(func() { c.askConsent(req, my, echo) })
@@ -996,7 +1014,7 @@ func (c *Controller) askConsent(req request, my int, echo bool) {
 	if my != c.gen {
 		return
 	}
-	if c.settings.AssistantConsent() {
+	if (c.selectedProvider != nil && c.selectedProvider.HasConsent()) || (c.selectedProvider == nil && c.settings.AssistantConsent()) {
 		c.pin(req, my, echo)
 		return
 	}
@@ -1012,7 +1030,11 @@ func (c *Controller) askConsent(req request, my int, echo bool) {
 			}
 			return
 		}
-		c.settings.SetAssistantConsent(true)
+		if c.selectedProvider != nil {
+			c.selectedProvider.AcceptConsent()
+		} else {
+			c.settings.SetAssistantConsent(true)
+		}
 		c.pin(req, my, echo)
 	}
 	if c.Consent == nil {
@@ -1052,7 +1074,7 @@ func (c *Controller) pin(req request, my int, echo bool) {
 	c.pending, c.pendingTarget = Pending{}, nil
 	c.state()
 	// A new Claude Code knows nothing of the conversation yet.
-	if c.process == nil || !c.process.Running() {
+	if !c.hasSession() {
 		for i := range c.pinned {
 			c.pinned[i].Announced = false
 		}
@@ -1079,6 +1101,10 @@ func (c *Controller) promptReady(req request, my int) {
 	if err != nil {
 		c.log.Warn("assistant prompt", "err", err)
 		c.fail(assistant.StoppedText(c.tr, err.Error()), false)
+		return
+	}
+	if c.selectedProvider != nil {
+		c.providerPrompt(my, prompt, told)
 		return
 	}
 	if c.process != nil && c.process.Running() {
@@ -1378,7 +1404,7 @@ func (c *Controller) launch(path string) (*Process, error) {
 
 func (c *Controller) handle(events []assistant.Event) {
 	for _, e := range events {
-		if c.process == nil {
+		if c.process == nil && c.providerSession == nil {
 			return
 		}
 		switch e.Kind {
@@ -1510,6 +1536,16 @@ func (c *Controller) clearRetries() {
 // endProcess terminates the conversation's process; its end is not
 // reported.
 func (c *Controller) endProcess() {
+	if c.cancelProvider != nil {
+		c.cancelProvider()
+		c.cancelProvider = nil
+	}
+	session := c.providerSession
+	c.providerSession = nil
+	if session != nil {
+		session.SetHandlers(nil, nil)
+		session.Terminate()
+	}
 	p := c.process
 	c.process = nil
 	if p != nil {

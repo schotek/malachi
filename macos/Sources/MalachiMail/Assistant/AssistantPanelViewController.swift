@@ -327,6 +327,7 @@ final class AssistantPanelViewController: NSViewController {
     /// state, its spinner among it.
     private func updateState() {
         let c = controller
+        footer.stringValue = c.settings.assistantProvider == .chatgpt ? ChatGPTText.footer : Assistant.panelTexts().footer
         subtitleLabel.stringValue = c.subtitle
         if c.isPinned {
             let symbol = c.pinned.count > 1

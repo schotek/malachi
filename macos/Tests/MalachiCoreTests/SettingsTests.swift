@@ -57,7 +57,12 @@ private final class Scratch {
         #expect(!s.boardTriageConsent)
         #expect(s.boardTriageModel == .sonnet)
         #expect(s.boardDefaultStyle == .list)
-        #expect(Settings.Key.allCases.count == 28)
+        #expect(Settings.Key.allCases.count == 34)
+        let providerDefaults = Settings.registrationDefaults()
+        #expect(providerDefaults[Settings.Key.assistantProvider.rawValue] as? String == "claude")
+        #expect(providerDefaults[Settings.Key.assistantCodexPath.rawValue] as? String == "")
+        #expect(providerDefaults[Settings.Key.assistantChatGPTModel.rawValue] as? String == "")
+        #expect(providerDefaults[Settings.Key.assistantChatGPTConsentVersion.rawValue] as? Int == 0)
         #expect(Set(Settings.registrationDefaults().keys) == Set(Settings.Key.allCases.map(\.rawValue)))
     }
 

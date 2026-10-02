@@ -217,7 +217,8 @@ public sealed class ThreadModelTests
 
         // A removal and its undo keep the replies.
         m.SetMembers("t_b", more, [b1], [r1]);
-        var removal = Assert.NotNull(m.RemoveMessages(["b1"]));
+        var removal = m.RemoveMessages(["b1"]);
+        Assert.NotNull(removal);
         Assert.Empty(m.Threads); // the folder lacks its member: the row goes
         m.RestoreRemoval(removal);
         Assert.Equal(["r1"], m.Members["t_b"].Sent.Select(s => s.Id.Value).ToArray());

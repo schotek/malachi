@@ -64,6 +64,10 @@ public final class AssistantController {
     /// The targets, in the order of the menu and the settings.
     public nonisolated static let targets: [Assistant.Target] = [.desktop, .code, .app]
 
+    public var chatGPT: CodexProvider?
+    public private(set) var providerGeneration = 0
+    public var provider: (() -> (any AssistantProvider)?)?
+    public func providerChanged() { providerGeneration += 1; refreshHandlers(); notify() }
     public let settings: Settings
     /// The last status the bridge reported; nil until one answered.
     public private(set) var status: MCPStatus?
@@ -143,7 +147,7 @@ public final class AssistantController {
         var found: [Assistant.Target: Bool] = [:]
         for t in Self.targets {
             if t == .app {
-                found[t] = bridge != nil && claude
+                found[t] = bridge != nil && (settings.assistantProvider == .chatgpt ? provider?()?.available == true : claude)
             } else {
                 found[t] = lookup(t.scheme)
             }
@@ -173,7 +177,7 @@ public final class AssistantController {
     /// Whether the Assistant appears at all (`Assistant.shown`): the
     /// `assistant-menu` preference while the bridge is registered.
     public var shown: Bool {
-        Assistant.shown(menu: settings.assistantMenu, registered: registered)
+        settings.assistantProvider == .chatgpt && settings.assistantTarget == .app ? settings.assistantMenu : Assistant.shown(menu: settings.assistantMenu, registered: registered)
     }
 
     /// What is known about target `t`: an app handles its links, the bridge
@@ -183,7 +187,7 @@ public final class AssistantController {
     public func availability(_ t: Assistant.Target) -> Assistant.Availability {
         let t = Assistant.parseTarget(t.rawValue)
         if t == .app {
-            return Assistant.Availability(handler: handlers[t] ?? false, registered: registered)
+            return Assistant.Availability(handler: handlers[t] ?? false, registered: settings.assistantProvider == .chatgpt ? bridge != nil : registered)
         }
         let client = status?.clients.first { $0.id == t.clientID }
         return Assistant.Availability(handler: handlers[t] ?? false, registered: client?.registered ?? false)
@@ -213,13 +217,16 @@ public final class AssistantController {
     /// up); whether it is signed in is asked when a request runs. Its
     /// changes come through `onChange` and `Settings.onChange(.assistantTarget)`.
     public var canRunInApp: Bool {
-        panelShown && claudeFound
+        panelShown && (settings.assistantProvider == .chatgpt ? provider?()?.available == true : claudeFound)
     }
 
     /// Why target `t` cannot run the message actions; "" when it can
     /// (`Assistant.problem`).
     public func problem(_ t: Assistant.Target) -> String {
-        Assistant.problem(t, availability(t))
+        if t == .app && settings.assistantProvider == .chatgpt {
+            return provider?()?.available == true ? "" : L10n.T("Codex was not found. Choose a native Codex executable.")
+        }
+        return Assistant.problem(t, availability(t))
     }
 
     // MARK: Change notification

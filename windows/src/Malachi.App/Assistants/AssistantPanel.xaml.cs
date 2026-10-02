@@ -177,6 +177,7 @@ public sealed partial class AssistantPanel : UserControl
             return;
         }
         SubtitleLabel.Text = c.Subtitle;
+        Footer.Text = c.Provider?.Id == AssistantProviderID.ChatGpt ? ChatGptText.Footer : Assistant.PanelTexts().Footer;
         ChipLabel.Text = c.ContextLabel;
         ToolTipService.SetToolTip(ChipLabel, c.ContextLabel);
         if (c.IsPinned)

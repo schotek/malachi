@@ -4,6 +4,7 @@
 package assistantpanel
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -111,6 +112,8 @@ const timedOut = "no answer in time"
 
 // RequestConfig is what a Request needs from the application.
 type RequestConfig struct {
+	// Provider selects the runtime; nil retains Claude.
+	Provider func() Provider
 	Settings Settings
 	Locator  *Locator
 	Loop     Loop
@@ -179,8 +182,12 @@ type Request struct {
 	// gen is bumped by every Start and Cancel: the steps of an older
 	// request stop at their next callback, its events and its end are
 	// dropped.
-	gen     int
-	process *Process
+	gen              int
+	process          *Process
+	providerFactory  func() Provider
+	selectedProvider Provider
+	providerSession  Session
+	cancelProvider   context.CancelFunc
 	// blocks are the text blocks of the answer that are whole, streamed
 	// the deltas since the last of them.
 	blocks, streamed string
@@ -193,14 +200,15 @@ func NewRequest(cfg RequestConfig) *Request {
 		grace = DefaultKillGrace
 	}
 	return &Request{
-		Timeout:   DefaultRequestTimeout,
-		settings:  cfg.Settings,
-		locator:   cfg.Locator,
-		loop:      cfg.Loop,
-		log:       cfg.Log,
-		directory: cfg.Directory,
-		env:       cfg.Env,
-		killGrace: grace,
+		Timeout:         DefaultRequestTimeout,
+		settings:        cfg.Settings,
+		providerFactory: cfg.Provider,
+		locator:         cfg.Locator,
+		loop:            cfg.Loop,
+		log:             cfg.Log,
+		directory:       cfg.Directory,
+		env:             cfg.Env,
+		killGrace:       grace,
 	}
 }
 
@@ -222,6 +230,8 @@ type Tools struct {
 
 // Call is what one StartCall asks for.
 type Call struct {
+	// ModelID overrides the selected provider model for this call.
+	ModelID string
 	// SystemPrompt and Message are the system prompt and the one turn.
 	SystemPrompt, Message string
 	// JSONSchema, when set, is the answer's shape.
@@ -259,9 +269,18 @@ func (r *Request) Start(systemPrompt, message, jsonSchema string, onText func(st
 // unless the request is cancelled.
 func (r *Request) StartCall(c Call, completion func(Outcome)) {
 	r.Cancel()
+	if c.Tools != nil {
+		cp := *c.Tools
+		cp.Allowed = append([]string{}, c.Tools.Allowed...)
+		cp.BridgeArgs = append([]string{}, c.Tools.BridgeArgs...)
+		c.Tools = &cp
+	}
 	r.gen++
 	my := r.gen
 	r.running = true
+	if r.providerFactory != nil {
+		r.selectedProvider = r.providerFactory()
+	}
 	r.loop.Post(func() { r.askConsent(my, c, completion) })
 }
 
@@ -279,16 +298,21 @@ func (r *Request) Cancel() {
 // askConsent is step 1: consent, once ever; an answer counts even when the
 // request was cancelled while the question was up.
 func (r *Request) askConsent(my int, c Call, completion func(Outcome)) {
+	provider := r.selectedProvider
 	if my != r.gen {
 		return
 	}
-	if r.settings.AssistantConsent() {
+	if (provider != nil && provider.HasConsent()) || (provider == nil && r.settings.AssistantConsent()) {
 		r.locate(my, c, completion)
 		return
 	}
 	answer := func(allowed bool) {
 		if allowed {
-			r.settings.SetAssistantConsent(true)
+			if provider != nil {
+				provider.AcceptConsent()
+			} else {
+				r.settings.SetAssistantConsent(true)
+			}
 		}
 		if my != r.gen {
 			return
@@ -308,6 +332,10 @@ func (r *Request) askConsent(my int, c Call, completion func(Outcome)) {
 
 // locate is step 2: Claude Code, signed in; then step 3.
 func (r *Request) locate(my int, c Call, completion func(Outcome)) {
+	if r.selectedProvider != nil {
+		r.launchProvider(my, c, completion)
+		return
+	}
 	path := r.locator.Locate()
 	if path == "" {
 		r.finish(my, failed(FailureNotFound, ""), completion)
@@ -457,6 +485,16 @@ func (r *Request) finish(my int, outcome Outcome, completion func(Outcome)) {
 // retire terminates the request's process (after its answer it is about
 // to end anyway); its end is not reported.
 func (r *Request) retire() {
+	if r.cancelProvider != nil {
+		r.cancelProvider()
+		r.cancelProvider = nil
+	}
+	session := r.providerSession
+	r.providerSession = nil
+	if session != nil {
+		session.SetHandlers(nil, nil)
+		session.Terminate()
+	}
 	p := r.process
 	r.process = nil
 	if p != nil {

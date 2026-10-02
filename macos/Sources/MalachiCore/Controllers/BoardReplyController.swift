@@ -51,6 +51,17 @@ public final class BoardReplyController {
     public nonisolated static let endWait: Duration = BoardTriageController.endWait
 
     public let settings: Settings
+    private var runtimeAvailable: Bool {
+        settings.assistantProvider == .chatgpt ? request.provider?()?.available == true : locator.locate() != nil
+    }
+    private func runtimeSignedIn() async -> Bool? {
+        if settings.assistantProvider == .chatgpt { return request.provider?()?.connected ?? false }
+        return await locator.signedIn()
+    }
+    public func providerChanged() {
+        cancel()
+        availabilityChanged()
+    }
     public let locator: ClaudeCodeLocator
     public let request: AssistantRequest
 
@@ -192,14 +203,15 @@ public final class BoardReplyController {
     /// later check, or a request's own finding, overtook is dropped.
     public func checkSignIn() {
         signInGen += 1
+        if settings.assistantProvider == .chatgpt { signedIn = request.provider?()?.connected ?? false; return }
         let g = signInGen
-        guard available(), locator.locate() != nil else {
+        guard available(), runtimeAvailable else {
             signedIn = nil
             return
         }
         Task { [weak self] in
             guard let self else { return }
-            let s = await self.locator.signedIn()
+            let s = await self.runtimeSignedIn()
             guard g == self.signInGen else { return }
             self.signedIn = s
         }
@@ -214,7 +226,7 @@ public final class BoardReplyController {
 
     /// The feature can run: available, the bridge and Claude Code there.
     public var canRun: Bool {
-        available() && bridge != nil && locator.locate() != nil
+        available() && bridge != nil && runtimeAvailable
     }
 
     /// The control for case `c` of snapshot `s` (`Board.suggestReplyView`);
@@ -222,7 +234,7 @@ public final class BoardReplyController {
     public func view(for c: Board.Case, in s: Board.Snapshot, samples: Bool) -> Board.SuggestReplyView {
         Board.suggestReplyView(Board.SuggestReplyInputs(
             offered: Board.suggestReplyOffered(c, in: s, samples: samples), available: available() && bridge != nil,
-            claudeFound: locator.locate() != nil, signedIn: signedIn, state: state, caseID: c.id))
+            claudeFound: runtimeAvailable, signedIn: signedIn, state: state, caseID: c.id, provider: settings.assistantProvider))
     }
 
     // MARK: A request
@@ -305,10 +317,10 @@ public final class BoardReplyController {
     private func run(_ my: Int, _ id: Board.CaseID, _ instruction: String) async {
         // 1. The assistant's consent, once ever; an answer counts even when
         // the request was stopped while the question was up.
-        if !settings.assistantConsent {
+        if !settings.selectedAssistantConsent {
             let allowed = await consent?() ?? false
             if allowed {
-                settings.assistantConsent = true
+                settings.selectedAssistantConsent = true
             }
             guard my == gen else { return }
             guard allowed else {

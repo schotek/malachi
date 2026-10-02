@@ -84,6 +84,7 @@ import MalachiCore
 /// `closed`), which the pane notices itself.
 @MainActor
 final class AIPaneViewController: PreferencesPaneViewController {
+    private var chatGPTPreferences: ChatGPTPreferences?
     let registerSwitch = NSSwitch()
     let mcpGroup = PreferencesGroupView(
         title: L10n.T("MCP"),
@@ -318,6 +319,11 @@ final class AIPaneViewController: PreferencesPaneViewController {
             c.adopt(known)
         }
         bindClaudeDesktop()
+        if chatGPTPreferences == nil, let assistant, let settings {
+            let preferences = ChatGPTPreferences(settings: settings, assistant: assistant) { [weak self] in self?.toast?($0) }
+            chatGPTPreferences = preferences
+            addGroup(preferences.group)
+        }
         bindAssistant()
         bindBoard()
         bindings.onClose = { [weak self] in
@@ -397,7 +403,7 @@ final class AIPaneViewController: PreferencesPaneViewController {
     /// rather than an "off" that may not be true.
     private func updateAssistantGroup() {
         guard let settings, !closed else { return }
-        let registered = bridgeRegistered
+        let registered = bridgeRegistered || settings.assistantProvider == .chatgpt
         let unknown = !registered && !bridgeKnown
         menuRow?.isEnabled = registered
         targetRow?.isEnabled = registered
@@ -408,7 +414,7 @@ final class AIPaneViewController: PreferencesPaneViewController {
         let app = settings.assistantTarget == .app
         targetRow?.subtitle = registered && !app ? (assistant?.problem(settings.assistantTarget) ?? "") : ""
         for row in [claudeCodeRow, modelRow].compactMap({ $0 }) {
-            assistantGroup.setRow(row, hidden: !app)
+            assistantGroup.setRow(row, hidden: !app || settings.assistantProvider == .chatgpt)
             row.isEnabled = registered
         }
         if app {
@@ -570,7 +576,7 @@ final class AIPaneViewController: PreferencesPaneViewController {
     /// while the bridge is not registered, so this only writes the
     /// preference while it is.
     @objc private func assistantMenuChanged(_ sender: Any?) {
-        guard let settings, bridgeRegistered else {
+        guard let settings, bridgeRegistered || settings.assistantProvider == .chatgpt else {
             updateAssistantGroup()
             return
         }
@@ -733,6 +739,7 @@ extension AIPaneViewController {
             boardGroup.isHidden = true
             return
         }
+        boardModel.isHidden = settings?.assistantProvider == .chatgpt
         let v = triage.view
         guard v.offered else {
             boardGroup.isHidden = true
@@ -742,6 +749,7 @@ extension AIPaneViewController {
         // Why triage cannot run now ("" when it can); the Claude Code row
         // above offers what Claude Code needs.
         boardGroup.descriptionText = Board.triageSettingsDescription(v)
+        boardConsentRow?.subtitle = settings?.assistantProvider == .chatgpt ? ChatGPTText.boardBody : Board.Text.triageSettingsConsentSubtitle
         let ready = v.control == .triage || v.control == .stop
         let prefs = triage.preferences.preferences
         let consent = givingConsent ? boardConsentSwitch.state == .on : triage.consentGiven

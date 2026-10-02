@@ -150,9 +150,9 @@ public sealed partial class ApiCodingTests
 
         // draft.get, and Draft.local: left out when false, as Go's omitempty.
         AssertSameJson("""{"accountId":"acc_1","draftId":"d_1"}""", EncodeObject(new DraftGetParams { AccountId = "acc_1", DraftId = "d_1" }).GetRawText());
-        var got = Decode<DraftGetResult>("""{"draft":{"id":"d_1","accountId":"acc_1","version":2,"to":[],"subject":"Re: Lunch","textBody":"Yes.","local":true,"updatedAt":"2026-10-02T07:00:00Z"}}""");
-        Assert.True(got.Draft.Local);
-        Assert.Equal(new DraftId("d_1"), got.Draft.Id);
+        var draftResult = Decode<DraftGetResult>("""{"draft":{"id":"d_1","accountId":"acc_1","version":2,"to":[],"subject":"Re: Lunch","textBody":"Yes.","local":true,"updatedAt":"2026-10-02T07:00:00Z"}}""");
+        Assert.True(draftResult.Draft.Local);
+        Assert.Equal(new DraftId("d_1"), draftResult.Draft.Id);
         var plain = new Draft { AccountId = "acc_1", Subject = "s", TextBody = "t" };
         Assert.False(EncodeObject(plain).TryGetProperty("local", out _));
         Assert.True(EncodeObject(plain with { Local = true }).GetProperty("local").GetBoolean());

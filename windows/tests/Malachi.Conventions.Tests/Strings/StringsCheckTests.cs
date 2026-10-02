@@ -158,10 +158,11 @@ public sealed class StringsCheckTests
             {
                 problems.Add($"{where}: no reason");
             }
-            var msgid = key.Contains((char)4, StringComparison.Ordinal) ? key[(key.IndexOf((char)4, StringComparison.Ordinal) + 1)..] : key;
-            if (used.Contains(msgid))
+            // A contextual msgid is a distinct catalog entry. A plain
+            // "None" used elsewhere does not use "daily cap\004None".
+            if (AllCalls.Any(c => c.Msgid is not null && Template.KeyOf(c.Context, c.Msgid) == key))
             {
-                problems.Add($"{where}: \"{msgid}\" is used in windows/src; drop the exclusion");
+                problems.Add($"{where}: \"{key}\" is used in windows/src; drop the exclusion");
             }
         }
         Assert.True(problems.Count == 0, string.Join('\n', problems));

@@ -142,6 +142,7 @@ public sealed partial class AiPage : UserControl
         }
         bindings.Choice(AssistantTargetBox, SettingsKey.AssistantTarget, Assistant.Targets, () => state.Settings.AssistantTarget, v => state.Settings.AssistantTarget = v);
         bindings.Choice(AssistantModelBox, SettingsKey.AssistantModel, Assistant.Models, () => state.Settings.AssistantModel, v => state.Settings.AssistantModel = v);
+        InitializeChatGpt(bindings);
         state.Assistant.Changed += OnAssistantChanged;
         state.ClaudeCode.SigningInChanged += OnSigningInChanged;
         UpdateRegisterRow();
@@ -158,6 +159,7 @@ public sealed partial class AiPage : UserControl
         registration.Load();
         state.ClaudeCode.Refresh();
         state.Assistant.RefreshHandlers();
+        RefreshChatGpt();
         UpdateAssistantGroup();
     }
 
@@ -172,6 +174,7 @@ public sealed partial class AiPage : UserControl
         state.Assistant.Changed -= OnAssistantChanged;
         // A sign-in under way goes on: the user is in the browser.
         state.ClaudeCode.SigningInChanged -= OnSigningInChanged;
+        CloseChatGpt();
     }
 
     // The MCP switch
@@ -275,22 +278,26 @@ public sealed partial class AiPage : UserControl
         var settings = state.Settings;
         var registered = BridgeRegistered;
         var unknown = !registered && !BridgeKnown;
-        AssistantMenuRow.IsEnabled = registered;
-        AssistantTargetRow.IsEnabled = registered;
-        var on = unknown ? settings.AssistantMenu : Assistant.Shown(settings.AssistantMenu, registered);
+        var chatGpt = settings.AssistantProvider == AssistantProviderID.ChatGpt;
+        var inAppChatGpt = chatGpt && settings.AssistantTarget == AssistantTarget.App;
+        AssistantDescription.Text = inAppChatGpt ? Assistants.ChatGptText.Description : Assistant.Texts().Description;
+        AssistantMenuRow.IsEnabled = registered || inAppChatGpt;
+        AssistantTargetRow.IsEnabled = registered || chatGpt;
+        var on = unknown || inAppChatGpt ? settings.AssistantMenu : Assistant.Shown(settings.AssistantMenu, registered);
         syncing = true;
         AssistantMenuSwitch.IsOn = on;
         syncing = false;
-        Describe(AssistantMenuRow, registered || unknown ? "" : Assistant.Texts().RegisterFirst);
+        Describe(AssistantMenuRow, registered || unknown || inAppChatGpt ? "" : Assistant.Texts().RegisterFirst);
         // In App: the Claude Code row says what is wrong with it.
         var app = settings.AssistantTarget == AssistantTarget.App;
         var problem = registered && !app ? state.Assistant.Problem(settings.AssistantTarget) : "";
         Describe(AssistantTargetRow, problem);
-        ClaudeCodeRow.Visibility = app ? Visibility.Visible : Visibility.Collapsed;
-        AssistantModelRow.Visibility = app ? Visibility.Visible : Visibility.Collapsed;
+        ClaudeCodeRow.Visibility = app && !chatGpt ? Visibility.Visible : Visibility.Collapsed;
+        AssistantModelRow.Visibility = app && !chatGpt ? Visibility.Visible : Visibility.Collapsed;
+        ChatGptRows.Visibility = app && chatGpt ? Visibility.Visible : Visibility.Collapsed;
         ClaudeCodeRow.IsEnabled = registered;
         AssistantModelRow.IsEnabled = registered;
-        if (app)
+        if (app && !chatGpt)
         {
             ShowClaudeCode();
         }
@@ -303,7 +310,7 @@ public sealed partial class AiPage : UserControl
         {
             return;
         }
-        if (!BridgeRegistered)
+        if (!BridgeRegistered && !(state.Settings.AssistantTarget == AssistantTarget.App && state.Settings.AssistantProvider == AssistantProviderID.ChatGpt))
         {
             UpdateAssistantGroup();
             return;

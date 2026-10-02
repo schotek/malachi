@@ -49,6 +49,7 @@ public sealed partial class ComposeWindow
     private bool rewriteOpening;
 
     private EventHandler? rewriteAssistantChanged;
+    private EventHandler? rewriteProviderChanged;
 
     private void WireRewrite()
     {
@@ -91,6 +92,14 @@ public sealed partial class ComposeWindow
         state.Assistant.RefreshHandlers();
         rewriteAssistantChanged = (_, _) => SyncRewrite();
         state.Assistant.Changed += rewriteAssistantChanged;
+        rewriteProviderChanged = (_, _) =>
+        {
+            RewriteFlyout.Hide();
+            rewriter?.Cancel();
+            if (rewriter is { } active) active.Request.Provider = state.InAppProvider;
+            SyncRewrite();
+        };
+        state.InAppProviderChanged += rewriteProviderChanged;
         SyncRewrite();
     }
 
@@ -116,6 +125,11 @@ public sealed partial class ComposeWindow
     // It all ends with the window.
     private void CloseRewrite()
     {
+        if (rewriteProviderChanged is { } providerHandler)
+        {
+            state.InAppProviderChanged -= providerHandler;
+            rewriteProviderChanged = null;
+        }
         if (rewriteAssistantChanged is { } handler)
         {
             state.Assistant.Changed -= handler;
@@ -144,14 +158,10 @@ public sealed partial class ComposeWindow
             return;
         }
         rewriteOpening = true;
-        if (!state.Settings.AssistantConsent)
+        if (!await state.EnsureAssistantConsentAsync(this) || closing)
         {
-            if (!await AskConsentAsync() || closing)
-            {
-                rewriteOpening = false;
-                return;
-            }
-            state.Settings.AssistantConsent = true;
+            rewriteOpening = false;
+            return;
         }
         editor.RewriteTarget(parameters.Attribution, target =>
         {
@@ -167,8 +177,7 @@ public sealed partial class ComposeWindow
     // "Send Mail to Claude?" on this window.
     private System.Threading.Tasks.Task<bool> AskConsentAsync()
     {
-        var p = Assistant.PanelTexts();
-        return state.Alerts.ConfirmAsync(this, p.ConsentHeading, p.ConsentBody, p.Allow, L10n.T("_Cancel"));
+        return state.AskAssistantConsentAsync(this);
     }
 
     // The rewrite's controller, made on first use.

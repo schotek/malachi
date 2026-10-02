@@ -376,7 +376,7 @@ the strings and the confirmation dialogs.
 | On macOS | Instead of (GTK) | Why |
 |---|---|---|
 | One unified toolbar across the three panes, split by tracking separators; the window title is the selected folder's name, the subtitle its counts ("12 unread of 1234"), as in Mail | Three header bars with pane titles; the counts are the subtitle of the list's header bar (`Adw.WindowTitle`) | The macOS window model; the menu bar duplicates every item |
-| The status line is a bar across the whole bottom edge of the window, under all three panes (sync state, unsent messages, the connection; a click opens the popover with each account's state and action) | The status line at the bottom of the sidebar, with the same popover | It stays in sight when the sidebar is folded away, which a narrow window does by itself |
+| The status line is a bar across the whole bottom edge of the window, under all three panes (sync state, unsent messages, the connection; a click opens the popover with each account's state and action) | The status line at the bottom of the sidebar in Mail, and across the bottom of the Board in every style, with the same popover | It stays in sight when the sidebar is folded away, which a narrow window does by itself |
 | A narrow window folds the sidebar (< 900 pt) and then the list (< 600 pt); *View → Show Sidebar* (⌃⌘S) and *Show Message List* (⌥⌘L) bring them back, and widening restores what folded by itself. The assistant panel, where it exists, folds first (once the panes beside it would get less than 900 pt), and the panes' breakpoints count the width the open panel leaves them | Breakpoints with back navigation between panes | Decided; there is no navigation stack in AppKit's split view |
 | When the list pane is folded, its toolbar items merge into the message section | — | How tracking separators behave |
 | Banners (backend, sign-in, certificate, draft, outbox), the remote-image and pictures bars and the account wizard's notice are rounded cards inset from the pane's edges, in a subtle system fill, with an SF Symbol (orange for a problem, grey for information) and the text in the regular weight; the bars' spinner takes the buttons' place at the end | `Adw.Banner`: an accent-tinted strip across the whole width with a bold title; the remote-image and pictures bars grey strips with the spinner at their start | The Mac's own notices |
@@ -737,3 +737,26 @@ there instead of opening a compose window. A case hot because of a star
 has *Unstar* beside *Why is this here?* and in its context menu: it takes
 the star off every copy that keeps it hot, and the rules decide where it
 goes.
+
+
+The in-app assistant also offers **ChatGPT (Codex, experimental)** in
+Settings → AI. Select a user-installed native Codex executable (Finder
+launches also check Homebrew's Apple Silicon/Intel paths), then **Continue
+with ChatGPT**. The panel, compose rewrite, natural-language search, Board
+triage and suggested replies use the selected provider. OpenAI has separate
+foreground and automatic Board consent; the Board model is independent and
+its empty selection uses the runtime default. Switching provider stops
+active requests and disables automatic triage.
+
+SIWC credentials are separate login Keychain items scoped to the application's
+ChatGPT data directory. Codex receives an opaque loopback gateway credential;
+the OpenAI bearer stays in the native connection service. Each session owns
+an ephemeral profile and process groups; the MCP sibling has a clean
+environment and the exact read/draft or Board tool policy. The user's own
+Codex configuration and mail keychain helper are not used for this grant.
+
+This implementation was written on Linux without a Swift/macOS SDK. Run
+`make test-macos` and `make macos` on macOS, then validate signed-app Keychain,
+Finder executable discovery, browser callback, native arm64/x86_64 process
+cleanup and eligible SIWC inference before release. See
+[the cross-platform implementation hand-off](../docs/chatgpt-integration.md#12-gtk-and-macos-implementation-and-validation-hand-off).

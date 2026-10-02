@@ -1835,6 +1835,42 @@ choose the wording of that one draft, addressed by the message's
 `Reply-To`, which the user edits and sends from the board, and can make the model read more of the user's mail through
 the read tools and send it to the provider, as in the panel.
 
+### Experimental ChatGPT provider
+
+The GTK, macOS and Windows in-app panel, compose rewrite and search conversion can also
+use ChatGPT through a user-installed native Codex executable. OpenAI has
+a separate, versioned mail/text disclosure; Claude consent and MCP
+registration do not authorize this provider. The daemon and mail API are
+unchanged. GTK/macOS also connect their existing Board triage/replies with
+a separate OpenAI Board disclosure; Windows Board is not yet ported.
+Foreground consent never authorizes automatic background mail transfer.
+
+SIWC uses PKCE, loopback state and a verified signed ID token (including
+issuer, audience, lifetime, nonce and reconnect identity). Renewable tokens
+stay in application-specific system stores: Secret Service on native GTK,
+Keychain on macOS and Credential Manager on Windows (checked chunks and
+atomic rotation). A native file lock serializes refresh between app instances.
+The current Flatpak build marks this provider unavailable.
+They are not stored in preferences, mail credentials or the user's Codex
+profile. Disconnect cancels sessions and deletes local tokens even if
+remote revocation cannot be confirmed.
+
+Codex has a private ephemeral profile and receives only an opaque local
+gateway credential. The application's fixed-destination HTTPS inference
+gateway supplies the OpenAI bearer token, advertises only the allowed
+Malachi read/draft tools (no tools for one-shot requests), and validates
+tool-call SSE events before forwarding them. The app owns a sibling MCP
+process with a clean environment and no inference credential. Retry after
+a failed mutation is never automatic. The runtime disables history,
+instruction sources and optional execution features; profile cleanup
+uses leases and refuses symlinks. These controls depend on the verified
+App Server protocol and require native release validation.
+
+Tests and remaining platform checks, including hard-crash descendant
+ownership, are recorded in [chatgpt-integration.md](chatgpt-integration.md)
+§11–12. Synthetic native-CLI canaries are not a substitute for live SIWC
+and published-app validation on each platform.
+
 ## 11. Reporting
 
 Security issues: open a private report on the GitHub repository (Security →

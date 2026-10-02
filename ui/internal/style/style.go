@@ -269,20 +269,19 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// the same voice.
 	b.WriteString("box.board-assistant-box { border-radius: 10px; padding: 8px 10px; background-color: alpha(@window_fg_color, 0.05); }\n")
 	b.WriteString("label.board-assistant-mark { color: @accent_color; }\n")
-	// Columns and Today (window/board_columns.go, window/board_today.go):
-	// the board's tinted surface, a card reusing board-card's fill via its
-	// own class (a left-leaning hot tint like the state pill's), a
-	// column's or a section's title in the state's colour (the
-	// board-state-dot-* classes above, reused here as text colour) and the
-	// count tiles of the Today page.
+	// Board headings keep their text readable; only the small state dot
+	// carries the state colour. Cards distinguish title, sender and summary.
 	b.WriteString("scrolledwindow.board-surface { background-color: alpha(@window_fg_color, 0.02); }\n")
 	b.WriteString("list.board-columns-list row.board-card-row { background-color: alpha(@window_fg_color, 0.045); border-radius: 10px; margin: 4px 10px; padding: 8px 10px; }\n")
 	b.WriteString("list.board-columns-list row.board-card-row.board-card-row-hot { background-color: alpha(@destructive_bg_color, 0.08); }\n")
 	b.WriteString("list.board-columns-list row.board-card-row:selected { box-shadow: inset 0 0 0 2px @accent_color; }\n")
-	b.WriteString(".board-column-title.board-state-dot-hot { color: @destructive_color; }\n")
-	b.WriteString(".board-column-title.board-state-dot-you { color: @accent_color; }\n")
-	b.WriteString(".board-column-title.board-state-dot-them { color: @orange_4; }\n")
-	b.WriteString(".board-column-title.board-state-dot-info { color: alpha(@window_fg_color, 0.7); }\n")
+	b.WriteString("label.board-section-title { color: @window_fg_color; }\n")
+	b.WriteString("label.board-section-count { min-width: 14px; padding: 2px 6px; border-radius: 99px; background-color: alpha(@window_fg_color, 0.08); color: alpha(@window_fg_color, 0.75); }\n")
+	b.WriteString("label.board-row-title { font-weight: 600; }\n")
+	b.WriteString("label.board-row-snippet { color: alpha(@window_fg_color, 0.75); }\n")
+	b.WriteString("label.board-due-label { padding: 3px 8px; border-radius: 99px; background-color: alpha(@accent_bg_color, 0.12); color: @accent_color; font-weight: 600; }\n")
+	b.WriteString("label.board-due-label.board-due-overdue, button.board-due-overdue label.board-due-label { background-color: alpha(@destructive_bg_color, 0.15); color: @destructive_color; }\n")
+	b.WriteString("button.board-more-button { color: @accent_color; font-weight: 600; }\n")
 	b.WriteString("box.board-column-placeholder { border: 1px dashed alpha(@window_fg_color, 0.3); border-radius: 10px; }\n")
 	b.WriteString("box.board-today-card { border: 1px solid alpha(@window_fg_color, 0.12); border-radius: 10px; padding: 12px 14px; }\n")
 	b.WriteString("box.board-today-card-dashed { border-style: dashed; }\n")

@@ -82,12 +82,17 @@ type PreferencesDialog struct {
 
 	mcpSwitch *adw.SwitchRow
 
-	assistantGroup  *adw.PreferencesGroup
-	assistantMenu   *adw.SwitchRow
-	assistantTarget *adw.ComboRow
-	claudeCodeRow   *adw.ActionRow
-	claudeChoose    *gtk.Button
-	assistantModel  *adw.ComboRow
+	assistantGroup                                                                  *adw.PreferencesGroup
+	assistantMenu                                                                   *adw.SwitchRow
+	assistantTarget                                                                 *adw.ComboRow
+	claudeCodeRow                                                                   *adw.ActionRow
+	claudeChoose                                                                    *gtk.Button
+	assistantModel                                                                  *adw.ComboRow
+	assistantProvider                                                               *adw.ComboRow
+	chatGPTGroup                                                                    *adw.PreferencesGroup
+	codexRow, chatGPTConnection, chatGPTUsage                                       *adw.ActionRow
+	codexChoose, codexInstall, chatGPTSignIn, chatGPTDisconnect, chatGPTManageUsage *gtk.Button
+	chatGPTModel                                                                    *adw.ComboRow
 
 	boardTriageGroup    *adw.PreferencesGroup
 	boardTriageConsent  *adw.SwitchRow
@@ -180,6 +185,17 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		mcpSwitch:            b.GetObject("mcp_switch").Cast().(*adw.SwitchRow),
 		mcpGroup:             b.GetObject("mcp_group").Cast().(*adw.PreferencesGroup),
 		assistantGroup:       b.GetObject("assistant_group").Cast().(*adw.PreferencesGroup),
+		assistantProvider:    b.GetObject("assistant_provider").Cast().(*adw.ComboRow),
+		chatGPTGroup:         b.GetObject("chatgpt_group").Cast().(*adw.PreferencesGroup),
+		codexRow:             b.GetObject("codex_executable").Cast().(*adw.ActionRow),
+		codexChoose:          b.GetObject("codex_choose").Cast().(*gtk.Button),
+		codexInstall:         b.GetObject("codex_install").Cast().(*gtk.Button),
+		chatGPTConnection:    b.GetObject("chatgpt_connection").Cast().(*adw.ActionRow),
+		chatGPTSignIn:        b.GetObject("chatgpt_sign_in").Cast().(*gtk.Button),
+		chatGPTDisconnect:    b.GetObject("chatgpt_disconnect").Cast().(*gtk.Button),
+		chatGPTModel:         b.GetObject("chatgpt_model").Cast().(*adw.ComboRow),
+		chatGPTUsage:         b.GetObject("chatgpt_usage").Cast().(*adw.ActionRow),
+		chatGPTManageUsage:   b.GetObject("chatgpt_manage_usage").Cast().(*gtk.Button),
 		assistantMenu:        b.GetObject("assistant_menu_switch").Cast().(*adw.SwitchRow),
 		assistantTarget:      b.GetObject("assistant_target").Cast().(*adw.ComboRow),
 		claudeCodeRow:        b.GetObject("assistant_claude_code").Cast().(*adw.ActionRow),
@@ -806,10 +822,7 @@ func (d *PreferencesDialog) bindAssistant(s *settings.Store) (unbind func()) {
 	d.claudeChoose.SetLabel(panel.Choose)
 	d.assistantModel.SetTitle(panel.Model)
 	d.assistantModel.SetModel(gtk.NewStringList(modelNames()))
-	if !a.hasBridge() {
-		d.assistantGroup.SetVisible(false)
-		return func() {}
-	}
+	unbindChatGPT := d.bindChatGPT(s)
 
 	var syncing bool
 	showClaudeCode, unbindClaude := d.bindClaudeCode(s)
@@ -818,8 +831,19 @@ func (d *PreferencesDialog) bindAssistant(s *settings.Store) (unbind func()) {
 			return
 		}
 		st := assistantGroupFor(s.AssistantMenu(), a.registered(), a.known(), a.problem(a.target()))
+		inAppChatGPT := a.usesChatGPT() && a.target() == assistant.App
+		if inAppChatGPT {
+			d.assistantGroup.SetDescription(assistant.ChatGPTText(tr).Description)
+		} else {
+			d.assistantGroup.SetDescription(texts.Description)
+		}
+		if inAppChatGPT {
+			st.sensitive = true
+			st.on = s.AssistantMenu()
+			st.registerFirst = false
+		}
 		d.assistantMenu.SetSensitive(st.sensitive)
-		d.assistantTarget.SetSensitive(st.sensitive)
+		d.assistantTarget.SetSensitive(st.sensitive || a.usesChatGPT())
 		syncing = true
 		d.assistantMenu.SetActive(st.on)
 		syncing = false
@@ -836,10 +860,10 @@ func (d *PreferencesDialog) bindAssistant(s *settings.Store) (unbind func()) {
 			d.assistantTarget.SetSubtitle(st.targetSubtitle)
 		}
 		for _, row := range []gtk.Widgetter{d.claudeCodeRow, d.assistantModel} {
-			gtk.BaseWidget(row).SetVisible(app)
+			gtk.BaseWidget(row).SetVisible(app && !a.usesChatGPT())
 			gtk.BaseWidget(row).SetSensitive(st.sensitive)
 		}
-		if app {
+		if app && !a.usesChatGPT() {
 			showClaudeCode()
 		}
 	}
@@ -848,7 +872,7 @@ func (d *PreferencesDialog) bindAssistant(s *settings.Store) (unbind func()) {
 			return
 		}
 		// The row is insensitive while the bridge is not registered.
-		if !a.registered() {
+		if !a.registered() && !(a.usesChatGPT() && a.target() == assistant.App) {
 			update()
 			return
 		}
@@ -871,6 +895,7 @@ func (d *PreferencesDialog) bindAssistant(s *settings.Store) (unbind func()) {
 		unbindTarget()
 		unbindModel()
 		unbindClaude()
+		unbindChatGPT()
 		d.assistantMenu.HandlerDisconnect(handle)
 	}
 }
@@ -1159,7 +1184,7 @@ func (d *PreferencesDialog) bindBoardTriage(s *settings.Store) (unbind func()) {
 		return func() {}
 	}
 	c, p := bt.Controller(), bt.Preferences()
-	btr := i18n.Tr
+	btr := providerBoardTranslator{d.assist, i18n.Tr}
 	d.boardTriageConsent.SetTitle(board.TriageSettingsConsent(btr))
 	d.boardTriageConsent.SetSubtitle(board.TriageSettingsConsentSubtitle(btr))
 	d.boardTriageModel.SetTitle(assistant.PanelTexts(tr).Model)
@@ -1184,6 +1209,7 @@ func (d *PreferencesDialog) bindBoardTriage(s *settings.Store) (unbind func()) {
 			return
 		}
 		prefs, known := p.Current()
+		d.boardTriageConsent.SetSubtitle(board.TriageSettingsConsentSubtitle(btr))
 		st := boardGroupFor(boardGroupInputs{
 			view: c.View(), prefs: prefs, prefsKnown: known, consentGiven: c.ConsentGiven(),
 			giving: giving, switchOn: d.boardTriageConsent.Active(),
@@ -1229,7 +1255,7 @@ func (d *PreferencesDialog) bindBoardTriage(s *settings.Store) (unbind func()) {
 			c.GiveConsent(false, finish)
 			return
 		}
-		widget.AskTriageConsent(d, func(allowed bool) {
+		d.assist.askTriageConsent(d, func(allowed bool) {
 			if !allowed || d.closed {
 				finish(false)
 				return
@@ -1266,8 +1292,7 @@ func (d *PreferencesDialog) bindBoardTriage(s *settings.Store) (unbind func()) {
 	dailyHandle := d.boardTriageDaily.NotifyProperty("selected", chosen(d.boardTriageDaily, &caps,
 		func(bp api.BoardPreferences) int { return bp.AutoTriageDailyCases },
 		func(bp *api.BoardPreferences, v int) { bp.AutoTriageDailyCases = v }))
-	unbindModel := bindChoice(s, settings.KeyBoardTriageModel, d.boardTriageModel, assistant.Models,
-		s.BoardTriageModel, s.SetBoardTriageModel)
+	unbindModel := d.bindBoardProviderModel(s)
 
 	// The board is listed again whenever the AI page comes up.
 	relist := func() {

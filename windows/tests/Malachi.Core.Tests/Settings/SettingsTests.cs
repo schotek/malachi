@@ -15,6 +15,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Malachi.Core.Assistants;
 using Malachi.Core.Settings;
 using Malachi.Core.Tests.Fixtures;
 using Xunit;
@@ -61,13 +62,49 @@ public sealed class SettingsTests
         Assert.False(s.WindowMaximized);
         Assert.Equal(240, s.FolderPaneWidth);
         Assert.Equal(380, s.MessageListWidth);
-        // The 28 gschema keys and ctrl-r.
-        Assert.Equal(29, SettingsStore.Schema.Count);
+        // The shared settings and Windows' ctrl-r.
+        Assert.Equal(38, SettingsStore.Schema.Count);
         Assert.Equal(Enum.GetValues<SettingsKey>().Length, SettingsStore.Schema.Count);
         Assert.Equal(
             SettingsStore.Schema.Select(k => k.Name).Order(StringComparer.Ordinal),
             SettingsStore.RegistrationDefaults().Keys.Order(StringComparer.Ordinal));
         Assert.False(s.Persistent);
+    }
+
+    [Fact]
+    public void ChatGptSettingsDoNotReuseClaudeIdentityOrConsent()
+    {
+        var backend = new InMemorySettingsBackend();
+        using var s = new SettingsStore(backend, null);
+        s.AssistantConsent = true;
+        s.AssistantModel = AssistantModel.Opus;
+        s.AssistantClaudePath = @"C:\Claude\claude.exe";
+        Assert.Equal(AssistantProviderID.Claude, s.AssistantProvider);
+        Assert.Equal(0, s.AssistantChatGptConsentVersion);
+        Assert.Empty(s.AssistantChatGptModel);
+        Assert.Empty(s.AssistantCodexPath);
+        var changed = 0;
+        s.OnChange(SettingsKey.AssistantProvider, () => changed++);
+        s.AssistantProvider = AssistantProviderID.ChatGpt;
+        s.AssistantProvider = AssistantProviderID.ChatGpt;
+        s.AssistantChatGptConsentVersion = 1;
+        s.AssistantChatGptModel = "provider-model";
+        s.AssistantCodexPath = @"C:\Program Files\Nástroje\codex.exe";
+        Assert.Equal(1, changed);
+        Assert.Equal(AssistantModel.Opus, s.AssistantModel);
+        Assert.True(s.AssistantConsent);
+        Assert.Equal(@"C:\Claude\claude.exe", s.AssistantClaudePath);
+        Assert.True(backend.TryGetString("assistant-provider", out var provider));
+        Assert.Equal("chatgpt", provider);
+        using var restored = new SettingsStore(backend, null);
+        Assert.Equal(AssistantProviderID.ChatGpt, restored.AssistantProvider);
+        Assert.Equal(s.AssistantCodexPath, restored.AssistantCodexPath);
+        Assert.Equal("provider-model", restored.AssistantChatGptModel);
+        backend.SetString("assistant-provider", "unknown");
+        Assert.Equal(AssistantProviderID.Claude, restored.AssistantProvider);
+        s.AssistantChatGptConsentVersion = -1;
+        Assert.Equal(0, s.AssistantChatGptConsentVersion);
+        Assert.True(s.AssistantConsent);
     }
 
     [Fact]

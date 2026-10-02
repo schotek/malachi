@@ -14,7 +14,6 @@ import (
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/settings"
-	"github.com/schotek/malachi/ui/internal/widget"
 )
 
 // BoardReply owns the application's one Suggest Reply request, independently
@@ -35,7 +34,7 @@ func (a *Assistant) AttachBoardReply(rpc *client.Client, mainWindow func() *Wind
 	}
 	b := &BoardReply{}
 	b.ctl = boardreply.NewController(boardreply.Config{
-		Caller: rpc, Settings: a.settings, Locator: a.locator,
+		Caller: rpc, Settings: providerSettings{a}, Locator: providerLocator{a},
 		Request: a.NewRequest(), Loop: glibLoop{}, Log: a.log.With("part", "board-reply"),
 		Bridge: a.bridge, Socket: rpc.Socket,
 		Available: func() bool { return boardreply.ReplyAvailable(a.shown(), a.target()) },
@@ -51,7 +50,7 @@ func (a *Assistant) AttachBoardReply(rpc *client.Client, mainWindow func() *Wind
 		if w := window(); w != nil {
 			parent = w
 		}
-		widget.AskAssistantConsent(parent, done)
+		a.AskAssistantConsent(parent, done)
 	}
 	b.ctl.OnRefresh = func() {
 		if w := window(); w != nil && w.boardPage != nil && w.boardPage.daemon != nil {
@@ -164,10 +163,11 @@ func (p *boardPage) suggestReplyView(id board.CaseID) board.SuggestReplyView {
 	if !ok {
 		return board.SuggestReplyView{}
 	}
-	panel := assistant.PanelTexts(tr)
+	words := providerBoardTranslator{p.w.assist, i18n.Tr}
+	panel := assistant.PanelTexts(words)
 	return ctl.View(k, snapshot, false, board.PanelWords{
-		Stop: panel.Stop, NotFound: panel.NotFound, SignInHint: assistant.SignInTexts(tr).Hint,
-	}, i18n.Tr)
+		Stop: panel.Stop, NotFound: panel.NotFound, SignInHint: assistant.SignInTexts(words).Hint,
+	}, words)
 }
 
 func (p *boardPage) suggestBoardReply() {

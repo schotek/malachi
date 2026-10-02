@@ -44,9 +44,16 @@ public final class Settings {
         case assistantModel = "assistant-model"
         case assistantClaudePath = "assistant-claude-path"
         case assistantConsent = "assistant-consent"
+        // Provider selection and independent, versioned OpenAI disclosures.
+        case assistantProvider = "assistant-provider"
+        case assistantCodexPath = "assistant-codex-path"
+        case assistantChatGPTModel = "assistant-chatgpt-model"
+        case assistantChatGPTConsentVersion = "assistant-chatgpt-consent-version"
         /// macOS only for now (the board is Swift-first): whether the user
         /// allowed the board's triage to send mail of the board's cases to
         /// Claude, on top of `assistantConsent` (`BoardTriageController`).
+        case boardTriageChatGPTModel = "board-triage-chatgpt-model"
+        case boardTriageChatGPTConsentVersion = "board-triage-chatgpt-consent-version"
         case boardTriageConsent = "board-triage-consent"
         /// macOS only for now: the model of the board's triage runs, the
         /// nicks of `assistantModel` but set apart from it (Settings → AI →
@@ -122,6 +129,12 @@ public final class Settings {
             Key.assistantModel.rawValue: Assistant.Model.sonnet.rawValue,
             Key.assistantClaudePath.rawValue: "",
             Key.assistantConsent.rawValue: false,
+            Key.assistantProvider.rawValue: "claude",
+            Key.boardTriageChatGPTModel.rawValue: "",
+            Key.boardTriageChatGPTConsentVersion.rawValue: 0,
+            Key.assistantCodexPath.rawValue: "",
+            Key.assistantChatGPTModel.rawValue: "",
+            Key.assistantChatGPTConsentVersion.rawValue: 0,
             Key.boardTriageConsent.rawValue: false,
             Key.boardTriageModel.rawValue: Assistant.Model.sonnet.rawValue,
             Key.boardDefaultStyle.rawValue: Board.Style.list.nick,
@@ -348,6 +361,39 @@ public final class Settings {
     public var boardDefaultStyle: Board.Style {
         get { Board.parseStyle(string(.boardDefaultStyle)) }
         set { set(.boardDefaultStyle, newValue.nick) }
+    }
+
+    public var assistantProvider: AssistantProviderID {
+        get { AssistantProviderID(rawValue: string(.assistantProvider)) ?? .claude }
+        set { set(.assistantProvider, newValue.rawValue) }
+    }
+    public var assistantCodexPath: String {
+        get { string(.assistantCodexPath) }
+        set { set(.assistantCodexPath, newValue) }
+    }
+    public var assistantChatGPTModel: String {
+        get { string(.assistantChatGPTModel) }
+        set { set(.assistantChatGPTModel, newValue) }
+    }
+    public var assistantChatGPTConsentVersion: Int {
+        get { integer(.assistantChatGPTConsentVersion) }
+        set { set(.assistantChatGPTConsentVersion, newValue) }
+    }
+    public var boardTriageChatGPTModel: String {
+        get { string(.boardTriageChatGPTModel) }
+        set { set(.boardTriageChatGPTModel, newValue) }
+    }
+    public var boardTriageChatGPTConsentVersion: Int {
+        get { integer(.boardTriageChatGPTConsentVersion) }
+        set { set(.boardTriageChatGPTConsentVersion, newValue) }
+    }
+    public var selectedAssistantConsent: Bool {
+        get { assistantProvider == .chatgpt ? assistantChatGPTConsentVersion == 1 : assistantConsent }
+        set { if assistantProvider == .chatgpt { assistantChatGPTConsentVersion = newValue ? 1 : 0 } else { assistantConsent = newValue } }
+    }
+    public var selectedBoardConsent: Bool {
+        get { assistantProvider == .chatgpt ? boardTriageChatGPTConsentVersion == 1 : boardTriageConsent }
+        set { if assistantProvider == .chatgpt { boardTriageChatGPTConsentVersion = newValue ? 1 : 0 } else { boardTriageConsent = newValue } }
     }
 
     // MARK: Change notification

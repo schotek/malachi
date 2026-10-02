@@ -18,6 +18,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
+	"github.com/schotek/malachi/ui/internal/chatgpt"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/mcpsetup"
 	"github.com/schotek/malachi/ui/internal/settings"
@@ -101,8 +102,14 @@ type Assistant struct {
 	handlers map[assistant.Target]bool
 	// claudeFound: the locator found Claude Code when the handlers were
 	// last looked up (CanRunInApp).
-	claudeFound bool
-	querying    bool
+	claudeFound       bool
+	chatGPT           *chatgpt.ConnectionService
+	codex             *chatgpt.Provider
+	chatGPTState      chatgpt.Connection
+	chatGPTSocket     string
+	chatGPTClosed     bool
+	runtimeGeneration int
+	querying          bool
 
 	observers map[int]func()
 	nextID    int
@@ -130,6 +137,7 @@ func NewAssistant(s *settings.Store, log *slog.Logger) *Assistant {
 	}
 	// Another claude chosen: whether the panel can run changes.
 	s.OnChanged(settings.KeyAssistantClaudePath, a.RefreshHandlers)
+	a.initChatGPT()
 	return a
 }
 
@@ -182,7 +190,11 @@ func (a *Assistant) RefreshHandlers() {
 	for _, t := range assistantTargets {
 		switch {
 		case t == assistant.App:
-			found[t] = a.bridge != "" && claude
+			if a.usesChatGPT() {
+				found[t] = a.bridge != "" && a.chatGPTReady()
+			} else {
+				found[t] = a.bridge != "" && claude
+			}
 		case supportedTarget(t):
 			found[t] = gio.AppInfoGetDefaultForURIScheme(t.Scheme()) != nil
 		}
@@ -248,6 +260,9 @@ func (a *Assistant) registered() bool {
 
 // shown says whether the Assistant appears at all (assistant.Shown).
 func (a *Assistant) shown() bool {
+	if a.usesChatGPT() && a.target() == assistant.App {
+		return a.settings.AssistantMenu()
+	}
 	return assistant.Shown(a.settings.AssistantMenu(), a.registered())
 }
 
@@ -264,6 +279,9 @@ func (a *Assistant) availability(t assistant.Target) assistant.Availability {
 	case !supportedTarget(t):
 		return assistant.Availability{}
 	case t == assistant.App:
+		if a.usesChatGPT() {
+			return assistant.Availability{Handler: a.bridge != "" && a.chatGPTReady(), Registered: true}
+		}
 		return assistant.Availability{Handler: a.handlers[t], Registered: a.registered()}
 	}
 	return targetAvailability(a.status, a.handlers, t)
@@ -305,16 +323,22 @@ func (a *Assistant) panelShown() bool {
 // looked up; whether it is signed in is asked when a request runs. Its
 // changes come through OnChange.
 func (a *Assistant) CanRunInApp() bool {
+	if a.usesChatGPT() {
+		return a.panelShown() && a.chatGPTReady()
+	}
 	return a.panelShown() && a.claudeFound
 }
 
 // NewRequest is a one-shot request on the user's Claude Code, in the
 // panel's private directory; the caller sets its Consent (the question on
 // its own window).
-func (a *Assistant) NewRequest() *assistantpanel.Request {
+func (a *Assistant) NewRequest() *assistantpanel.Request { return a.newRequest(a.Provider) }
+
+func (a *Assistant) newRequest(provider func() assistantpanel.Provider) *assistantpanel.Request {
 	return assistantpanel.NewRequest(assistantpanel.RequestConfig{
 		Settings: a.settings, Locator: a.locator, Loop: glibLoop{}, Log: a.log,
 		Directory: assistantDirectory(), Env: os.Environ(),
+		Provider: provider,
 	})
 }
 
@@ -335,6 +359,22 @@ func (a *Assistant) canAskFile(contentType string) bool {
 // problem says why target t cannot run the message actions; "" when it
 // can.
 func (a *Assistant) problem(t assistant.Target) string {
+	if t == assistant.App && a.usesChatGPT() {
+		txt := assistant.ChatGPTText(tr)
+		if os.Getenv("FLATPAK_ID") != "" {
+			return txt.FlatpakUnavailable
+		}
+		if chatgpt.Locate(a.settings.AssistantCodexPath()) == "" {
+			return txt.NativeMissingCodex
+		}
+		if !a.chatGPTReady() {
+			return txt.Reconnect
+		}
+		if a.bridge == "" {
+			return assistant.PanelTexts(tr).ToolsMissing
+		}
+		return ""
+	}
 	return assistant.Problem(tr, t, a.availability(t))
 }
 

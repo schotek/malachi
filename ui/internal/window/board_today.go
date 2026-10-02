@@ -4,12 +4,14 @@
 package window
 
 import (
+	"fmt"
 	"reflect"
 	"slices"
 	"strconv"
 
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
+	"github.com/diamondburned/gotk4/pkg/pango"
 
 	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/i18n"
@@ -17,10 +19,10 @@ import (
 )
 
 // The board's Today style: a greeting, the count tiles, what is hot, the
-// top of what waits for the user ("and N more"), the user's commitments —
+// top of what waits for the user ("Show N More"), the user's commitments —
 // one ListBox, board_today_list, board_page.blp — and beside it (under it
 // below 900sp, the root Adw.Breakpoint) the deadlines
-// (board_today_due_box) and a calendar placeholder. Every row reuses List
+// (board_today_due_box). Every row reuses List
 // style's building blocks (widget.BoardRow, boardSectionHeader, the
 // context menu) so Today reads as a filtered view of the same board, not
 // a fourth kind of row. Reference: macOS BoardTodayViewController.swift.
@@ -38,10 +40,8 @@ type boardToday struct {
 	items       []todayItem
 	reselecting bool
 
-	dueBox        *gtk.Box
-	calendarTitle *gtk.Label
-	calendarBody  *gtk.Label
-	dueGroups     []board.DueSection
+	dueBox    *gtk.Box
+	dueGroups []board.DueSection
 }
 
 // bindToday fetches Today's static widgets; called from ensureBoard after
@@ -53,12 +53,10 @@ func (p *boardPage) bindToday(b *gtk.Builder) {
 	t.tiles = b.GetObject("board_today_tiles").Cast().(*gtk.Box)
 	t.list = b.GetObject("board_today_list").Cast().(*gtk.ListBox)
 	t.dueBox = b.GetObject("board_today_due_box").Cast().(*gtk.Box)
-	t.calendarTitle = b.GetObject("board_today_calendar_title").Cast().(*gtk.Label)
-	t.calendarBody = b.GetObject("board_today_calendar_body").Cast().(*gtk.Label)
 	p.today = t
 }
 
-// wireToday connects board_today_list's selection and the "and N more"
+// wireToday connects board_today_list's selection and the "Show N More"
 // row's action.
 func (p *boardPage) wireToday() {
 	t := p.today
@@ -101,8 +99,6 @@ func (t *boardToday) apply(vm board.ViewModel) {
 	}
 	t.reflectSelection(vm.Selection)
 
-	t.calendarTitle.SetText(vm.Today.CalendarTitle)
-	t.calendarBody.SetText(vm.Today.CalendarBody)
 	if !reflect.DeepEqual(vm.Today.DueGroups, t.dueGroups) {
 		t.dueGroups = vm.Today.DueGroups
 		t.renderDue(vm.Today)
@@ -133,7 +129,7 @@ func (t *boardToday) rowFor(it todayItem) *gtk.ListBoxRow {
 		wireRowMenu(t.p, r.ListBoxRow, id)
 		return r.ListBoxRow
 	case todayItemMore:
-		return boardMoreRow(it.more)
+		return boardMoreRow(it.more, t.p.ctl.ShowWaitingForYou)
 	case todayItemCommitmentsHeading:
 		return boardSectionHeader(board.FromAssistant(i18n.Tr))
 	case todayItemCommitment:
@@ -200,7 +196,11 @@ func (t *boardToday) renderDue(today board.TodayPage) {
 		caption.AddCSSClass("dim-label")
 		t.dueBox.Append(caption)
 		for _, item := range group.Items {
-			t.dueBox.Append(t.dueItemButton(item))
+			button := t.dueItemButton(item)
+			if group.Kind == board.DueOverdue {
+				button.AddCSSClass("board-due-overdue")
+			}
+			t.dueBox.Append(button)
 		}
 	}
 }
@@ -215,7 +215,15 @@ func (t *boardToday) dueItemButton(item board.DueItem) *gtk.Button {
 	ctl := t.p.ctl
 	btn.ConnectClicked(func() { ctl.Select(id) })
 
-	box := gtk.NewBox(gtk.OrientationVertical, 2)
+	box := gtk.NewBox(gtk.OrientationVertical, 6)
+	if item.Label != "" {
+		badge := gtk.NewLabel(item.Label)
+		badge.SetUseMarkup(false)
+		badge.SetHAlign(gtk.AlignStart)
+		badge.AddCSSClass("caption")
+		badge.AddCSSClass("board-due-label")
+		box.Append(badge)
+	}
 	title := gtk.NewLabel(boardTitleText(item.Title, item.TitleIsAssistant))
 	title.SetUseMarkup(false)
 	title.SetXAlign(0)
@@ -285,6 +293,7 @@ func boardTileView(tile board.Tile) *gtk.Box {
 	title.SetUseMarkup(false)
 	title.SetXAlign(0)
 	title.SetWrap(true)
+	title.SetWrapMode(pango.WrapWordChar)
 	title.AddCSSClass("caption")
 	title.AddCSSClass("dim-label")
 	b.Append(title)
@@ -303,7 +312,7 @@ const (
 	// todayItemEmptyText is a section's empty text (no rows in it).
 	todayItemEmptyText
 	todayItemCase
-	// todayItemMore is "and N more" under the top of what waits for the
+	// todayItemMore is "Show N More" under the top of what waits for the
 	// user.
 	todayItemMore
 	// todayItemCommitmentsHeading is "From the Assistant", before the
@@ -325,7 +334,7 @@ type todayItem struct {
 }
 
 // caseID is the case a row selects; "" and false for a header, empty text
-// or the "and N more" row.
+// or the "Show N More" row.
 func (it todayItem) caseID() (board.CaseID, bool) {
 	switch it.kind {
 	case todayItemCase:
@@ -337,7 +346,7 @@ func (it todayItem) caseID() (board.CaseID, bool) {
 }
 
 // todayItems is the ordered rows of board_today_list: Hot (its rows, or
-// its empty text), Waiting for You (its rows, "and N more"), then the
+// its empty text), Waiting for You (its rows, "Show N More"), then the
 // commitments under "From the Assistant". Pure: every string it uses is
 // already in vm (ViewModel.Columns' EmptyText, ViewModel.SectionsEmptyText
 // as the fallback), so it needs no translator.
@@ -384,26 +393,31 @@ func boardColumnEmptyText(vm board.ViewModel, state board.State) string {
 	return vm.SectionsEmptyText
 }
 
-// boardTodaySectionHeader is a coloured section title and its count,
+// boardTodaySectionHeader is a state dot, a plain title and a count badge,
 // never selectable.
 func boardTodaySectionHeader(title string, count int, stateClass string) *gtk.ListBoxRow {
 	box := gtk.NewBox(gtk.OrientationHorizontal, 8)
 	box.SetMarginTop(10)
 	box.SetMarginBottom(4)
+	box.AddCSSClass("board-section-heading")
+	dot := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	dot.SetVAlign(gtk.AlignCenter)
+	dot.AddCSSClass("board-state-dot")
+	if stateClass != "" {
+		dot.AddCSSClass(stateClass)
+	}
+	box.Append(dot)
 	t := gtk.NewLabel(title)
 	t.SetUseMarkup(false)
 	t.SetXAlign(0)
 	t.SetHExpand(true)
 	t.AddCSSClass("heading")
-	t.AddCSSClass("board-column-title")
-	if stateClass != "" {
-		t.AddCSSClass(stateClass)
-	}
+	t.AddCSSClass("board-section-title")
 	box.Append(t)
 	c := gtk.NewLabel(strconv.Itoa(count))
 	c.SetUseMarkup(false)
 	c.AddCSSClass("caption")
-	c.AddCSSClass("dim-label")
+	c.AddCSSClass("board-section-count")
 	box.Append(c)
 	row := gtk.NewListBoxRow()
 	row.SetChild(box)
@@ -426,14 +440,17 @@ func boardPlainTextRow(text string) *gtk.ListBoxRow {
 	return row
 }
 
-// boardMoreRow is "and N more" under the top of what waits for the user
-// (Controller.ShowWaitingForYou, wireToday).
-func boardMoreRow(n int) *gtk.ListBoxRow {
-	l := gtk.NewLabel(board.AndMore(n, i18n.Tr))
-	l.SetUseMarkup(false)
-	l.SetXAlign(0)
-	l.AddCSSClass("link")
+// boardMoreRow opens the full list of what waits for the user.
+func boardMoreRow(n int, show func()) *gtk.ListBoxRow {
+	button := gtk.NewButton()
+	button.AddCSSClass("flat")
+	button.AddCSSClass("board-more-button")
+	button.SetHAlign(gtk.AlignStart)
+	label := gtk.NewLabel(fmt.Sprintf(i18n.T("Show %d More"), n))
+	label.SetUseMarkup(false)
+	button.SetChild(label)
+	button.ConnectClicked(show)
 	row := gtk.NewListBoxRow()
-	row.SetChild(l)
+	row.SetChild(button)
 	return row
 }

@@ -81,7 +81,7 @@ func ReplyAvailable(shown bool, target assistant.Target) bool {
 type Config struct {
 	Caller   Caller
 	Settings assistantpanel.Settings
-	Locator  *assistantpanel.Locator
+	Locator  boardtriage.Locator
 	// Request is the one-shot request a suggested reply uses (its consent
 	// hook is cleared: the controller asks itself, before its own timer
 	// starts); one of its own, not the panel's, the rewrite's, the
@@ -160,7 +160,7 @@ type Controller struct {
 
 	caller    Caller
 	settings  assistantpanel.Settings
-	locator   *assistantpanel.Locator
+	locator   boardtriage.Locator
 	request   *assistantpanel.Request
 	loop      assistantpanel.Loop
 	log       *slog.Logger

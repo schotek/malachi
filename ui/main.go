@@ -192,6 +192,7 @@ func main() {
 		if assist != nil {
 			assist.StopBoardReply()
 			assist.StopBoardTriage()
+			assist.CloseChatGPT()
 		}
 		rpc.Close()
 		// Quitting the application quits the daemon it started; "Run in

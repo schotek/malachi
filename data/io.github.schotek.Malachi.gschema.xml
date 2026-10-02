@@ -35,6 +35,10 @@
     <value nick="haiku" value="1"/>
     <value nick="opus" value="2"/>
   </enum>
+  <enum id="io.github.schotek.Malachi.AssistantProvider">
+    <value nick="claude" value="0"/>
+    <value nick="chatgpt" value="1"/>
+  </enum>
   <enum id="io.github.schotek.Malachi.BoardStyle">
     <value nick="list" value="0"/>
     <value nick="columns" value="1"/>
@@ -176,6 +180,39 @@
       <default>false</default>
       <summary>The assistant panel may send mail to Claude</summary>
       <description>Set when the user allowed it the first time.</description>
+    </key>
+    <!-- In-app providers share keys across the three native clients. -->
+    <key name="assistant-provider" enum="io.github.schotek.Malachi.AssistantProvider">
+      <default>'claude'</default>
+      <summary>The provider of the assistant in the app</summary>
+      <description>The in-app provider; external Claude hand-off is independent.</description>
+    </key>
+    <key name="assistant-codex-path" type="s">
+      <default>''</default>
+      <summary>Where Codex is</summary>
+      <description>The native Codex executable; empty looks in the usual places.</description>
+    </key>
+    <key name="assistant-chatgpt-model" type="s">
+      <default>''</default>
+      <summary>The model the ChatGPT provider uses</summary>
+      <description>Empty uses the provider's model default.</description>
+    </key>
+    <key name="assistant-chatgpt-consent-version" type="i">
+      <range min="0" max="2147483647"/>
+      <default>0</default>
+      <summary>The accepted ChatGPT mail consent version</summary>
+      <description>Zero means no permission to send mail to OpenAI.</description>
+    </key>
+    <key name="board-triage-chatgpt-model" type="s">
+      <default>''</default>
+      <summary>The model ChatGPT uses for the board</summary>
+      <description>Empty uses the provider's model default.</description>
+    </key>
+    <key name="board-triage-chatgpt-consent-version" type="i">
+      <range min="0" max="2147483647"/>
+      <default>0</default>
+      <summary>The accepted OpenAI board consent version</summary>
+      <description>Zero means no permission to send board mail to OpenAI.</description>
     </key>
 
     <!-- Board: the style it opens in, and its own triage consent and model -->

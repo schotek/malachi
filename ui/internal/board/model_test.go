@@ -281,7 +281,7 @@ func annotatedCase() Case {
 func TestWithAnnotations(t *testing.T) {
 	v := view(casesOf(annotatedCase()), annotatedOn())
 	r := v.Sections[0].Rows[0]
-	check(t, r.Title == "Assistant title" && r.Snippet == "Assistant summary" && r.Due == "Tomorrow", "row %+v", r)
+	check(t, r.Title == "Assistant title" && r.Snippet == "Assistant summary" && r.Due == "Tomorrow" && !r.DueOverdue, "row %+v", r)
 	d := v.Detail
 	check(t, d.State == StateHot && d.Source == Source{Kind: SourceAssistantChanged, From: StateYou}, "state %+v", d)
 	check(t, d.Title == "Assistant title" && d.Subject == "Raw subject", "title %q subject %q", d.Title, d.Subject)
@@ -449,6 +449,14 @@ func TestDueGroups(t *testing.T) {
 		mk("c10", StateYou, withAnnotation(dueAnnotation(nil, ""))),
 	)
 	v := view(cases, annotatedOn(), configured(func(v *ViewState) { v.Account = accountA }))
+	// Only a previous calendar day is overdue, not an earlier time today.
+	for _, section := range v.Sections {
+		for _, row := range section.Rows {
+			if row.DueOverdue != (row.ID == "c1") {
+				t.Errorf("case %s: overdue = %t", row.ID, row.DueOverdue)
+			}
+		}
+	}
 	groups := v.Today.DueGroups
 	var kinds []DueGroup
 	var titles []string

@@ -73,6 +73,9 @@ Code…) and Model. Its texts come from ui/internal/assistant, set in code
                         AutomationProperties.HeadingLevel="Level2"
                         Style="{StaticResource SettingsGroupHeaderStyle}" />
                     <TextBlock x:Name="AssistantDescription" Style="{StaticResource SettingsGroupDescriptionStyle}" />
+                    <tk:SettingsCard x:Name="AssistantProviderRow">
+                        <ComboBox x:Name="AssistantProviderBox" MinWidth="220" AutomationProperties.AutomationId="AssistantProvider" />
+                    </tk:SettingsCard>
                     <tk:SettingsCard x:Name="AssistantMenuRow">
                         <ToggleSwitch x:Name="AssistantMenuSwitch" AutomationProperties.AutomationId="AssistantMenu" Toggled="OnAssistantMenuToggled" />
                     </tk:SettingsCard>
@@ -105,6 +108,33 @@ Code…) and Model. Its texts come from ui/internal/assistant, set in code
                             MinWidth="200"
                             AutomationProperties.AutomationId="AssistantModel" />
                     </tk:SettingsCard>
+                    <StackPanel x:Name="ChatGptRows" Visibility="Collapsed" Spacing="{StaticResource SettingsCardSpacing}">
+                        <TextBlock x:Name="ChatGptDescription" Style="{StaticResource SettingsGroupDescriptionStyle}" />
+                        <tk:SettingsCard x:Name="CodexRow">
+                            <tk:SettingsCard.Description>
+                                <TextBlock x:Name="CodexState" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                            </tk:SettingsCard.Description>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="CodexInstallButton" AutomationProperties.AutomationId="CodexInstall" Click="OnInstallCodexClick" />
+                                <Button x:Name="CodexChooseButton" AutomationProperties.AutomationId="CodexChoose" Click="OnChooseCodexClick" />
+                            </StackPanel>
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="ChatGptAccountRow">
+                            <tk:SettingsCard.Description>
+                                <TextBlock x:Name="ChatGptAccountState" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                            </tk:SettingsCard.Description>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="ChatGptSignInButton" AutomationProperties.AutomationId="ChatGptSignIn" Click="OnChatGptSignInClick" />
+                                <Button x:Name="ChatGptDisconnectButton" AutomationProperties.AutomationId="ChatGptDisconnect" Click="OnChatGptDisconnectClick" />
+                            </StackPanel>
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="ChatGptModelRow">
+                            <ComboBox x:Name="ChatGptModelBox" MinWidth="220" AutomationProperties.AutomationId="ChatGptModel" SelectionChanged="OnChatGptModelChanged" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="ChatGptUsageRow">
+                            <Button x:Name="ChatGptUsageButton" AutomationProperties.AutomationId="ChatGptUsage" Click="OnChatGptUsageClick" />
+                        </tk:SettingsCard>
+                    </StackPanel>
                 </StackPanel>
             </StackPanel>
         </Grid>

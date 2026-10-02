@@ -119,6 +119,7 @@ extension Board {
 
     /// What `triageView` reads.
     public struct TriageViewInputs: Sendable, Equatable {
+        public var provider: AssistantProviderID = .claude
         /// The assistant is shown (Settings → AI, registered).
         public var shown: Bool
         public var claudeFound: Bool
@@ -163,8 +164,9 @@ extension Board {
             shown: Bool, claudeFound: Bool, bridge: Bool, signedIn: Bool?, needsConsent: Bool, assistantOn: Bool,
             state: TriageState, lastRun: Run?, autoTriage: Bool, pause: AutoTriagePause?, backendFailed: Bool = false,
             annotatedToday: Int? = nil, boardPhase: Phase? = nil, signingIn: Bool = false, usageKnown: Bool = false,
-            usage24h: BoardUsageTotal? = nil, queue: Int? = nil, locale: Locale = .current, now: Date
+            usage24h: BoardUsageTotal? = nil, queue: Int? = nil, locale: Locale = .current, now: Date, provider: AssistantProviderID = .claude
         ) {
+            self.provider = provider
             self.shown = shown
             self.claudeFound = claudeFound
             self.bridge = bridge
@@ -189,6 +191,7 @@ extension Board {
 
     /// The Triage control and the status strip.
     public struct TriageView: Sendable, Equatable {
+        public var provider: AssistantProviderID = .claude
         /// `.hidden` exactly when triage is not offered: the toolbar item
         /// and Settings' Board group follow this one rule (`offered`).
         public var control: TriageControl
@@ -255,6 +258,7 @@ extension Board {
             needsConsent: i.needsConsent, running: i.state.isActive, progress: "", statusLine: "", relativeTime: false,
             result: "", paused: "", waiting: "", annotatedToday: nil, todayLine: "", unavailable: nil, signingIn: false,
             usageShown: false, usageValue: "", usageDetail: "", usageToolTip: "")
+        v.provider = i.provider
         // A board the daemon does not have, or has turned off, has nothing
         // to triage; a run under way keeps its Stop (losing the board
         // stops it anyway).
@@ -270,8 +274,8 @@ extension Board {
             v.toolTip = Text.triageStopToolTip
         } else if !i.claudeFound {
             v.control = .getClaudeCode
-            v.title = Assistant.signInTexts().getClaudeCode
-            v.toolTip = Text.triageNeedsClaudeCode
+            v.title = i.provider == .chatgpt ? L10n.T("Get Codex…") : Assistant.signInTexts().getClaudeCode
+            v.toolTip = i.provider == .chatgpt ? L10n.T("Codex was not found. Choose a native Codex executable.") : Text.triageNeedsClaudeCode
         } else if !i.bridge {
             v.control = .unavailable
             v.enabled = false
@@ -286,14 +290,14 @@ extension Board {
             // One sign-in for the application: a click must not start a
             // second one (which would end the first as cancelled).
             v.control = .signIn
-            v.title = Assistant.signInTexts().signIn
+            v.title = i.provider == .chatgpt ? L10n.T("Continue with ChatGPT") : Assistant.signInTexts().signIn
             v.enabled = false
-            v.toolTip = Assistant.signInTexts().waiting
+            v.toolTip = i.provider == .chatgpt ? L10n.T("Connecting…") : Assistant.signInTexts().waiting
             v.signingIn = true
         } else if i.signedIn == false {
             v.control = .signIn
-            v.title = Assistant.signInTexts().signIn
-            v.toolTip = Text.triageNeedsSignIn
+            v.title = i.provider == .chatgpt ? L10n.T("Continue with ChatGPT") : Assistant.signInTexts().signIn
+            v.toolTip = i.provider == .chatgpt ? L10n.T("Reconnect to ChatGPT") : Text.triageNeedsSignIn
         }
         switch i.state {
         case .starting:
@@ -303,7 +307,9 @@ extension Board {
         case .finished(_, let n, let refused, _):
             v.result = Text.triageFinished(n, refused: refused)
         case .failed(_, let f, _):
-            v.result = f == .cancelled ? Text.triageStopped : Text.triageFailed(f)
+            if i.provider == .chatgpt, f == .notFound || f == .notSignedIn {
+                v.result = L10n.T("Triage failed: %s.", f == .notFound ? L10n.T("Codex was not found. Choose a native Codex executable.") : L10n.T("Reconnect to ChatGPT"))
+            } else { v.result = f == .cancelled ? Text.triageStopped : Text.triageFailed(f) }
         case .idle:
             break
         }
@@ -322,7 +328,8 @@ extension Board {
             }
         }
         if v.offered, i.autoTriage, !i.state.isActive, let p = i.pause {
-            v.paused = Text.autoTriagePaused(p, now: i.now)
+            v.paused = i.provider == .chatgpt && p == .signedOut
+                ? L10n.T("Automatic triage paused: %s", L10n.T("Reconnect to ChatGPT")) : Text.autoTriagePaused(p, now: i.now)
             if case .failed = p {
                 v.relativeTime = true
             }
@@ -397,7 +404,7 @@ extension Board {
                 return ""
             }
             if v.signingIn {
-                return Assistant.signInTexts().waiting
+                return v.provider == .chatgpt ? L10n.T("Connecting…") : Assistant.signInTexts().waiting
             }
             return v.paused.isEmpty ? v.statusLine : v.paused
         }
@@ -417,9 +424,9 @@ extension Board {
     public static func triageSettingsDescription(_ v: TriageView) -> String {
         switch v.control {
         case .getClaudeCode:
-            return Text.triageSettingsNeedsClaudeCode
+            return v.provider == .chatgpt ? L10n.T("Codex was not found. Choose a native Codex executable.") : Text.triageSettingsNeedsClaudeCode
         case .signIn:
-            return v.signingIn ? Assistant.signInTexts().waiting : Text.triageSettingsNeedsSignIn
+            return v.provider == .chatgpt ? (v.signingIn ? L10n.T("Connecting…") : L10n.T("Reconnect to ChatGPT")) : (v.signingIn ? Assistant.signInTexts().waiting : Text.triageSettingsNeedsSignIn)
         case .unavailable:
             return v.unavailable == .backend ? Text.triageSettingsNoBackend : Text.triageSettingsNoTools
         case .hidden, .triage, .stop:
