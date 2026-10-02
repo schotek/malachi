@@ -293,7 +293,12 @@ func newMessageView(w *Window, parent *gtk.Window, b *gtk.Builder) *messageView 
 	v.bindQuotedButton(b)
 	if slot := b.GetObject("issue_card_slot"); slot != nil {
 		v.card = newIssueCard(w, parent, func() (issueSubject, bool) { return subjectOf(v.shown) })
-		slot.Cast().(*gtk.Box).Append(v.card)
+		box := slot.Cast().(*gtk.Box)
+		box.Append(v.card)
+		// The slot shows with its card: an empty box would still count in
+		// the headers' spacing and push the subject of a mail message down.
+		box.SetVisible(false)
+		v.card.NotifyProperty("visible", func() { box.SetVisible(v.card.Visible()) })
 	}
 	v.plain()
 	v.hint.SetLabel(i18n.T("The formatted version of this message could not be shown safely; this is its plain text."))

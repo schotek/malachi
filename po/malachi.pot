@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-02 09:31+0200\n"
+"POT-Creation-Date: 2026-10-02 09:37+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1799,7 +1799,7 @@ msgid_plural "%d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/widget/message_row.go:307 ui/internal/window/message_view.go:575
+#: ui/internal/widget/message_row.go:307 ui/internal/window/message_view.go:580
 #: ui/internal/window/notify.go:111
 msgid "(No subject)"
 msgstr ""
@@ -2313,11 +2313,11 @@ msgstr ""
 msgid "Save _All"
 msgstr ""
 
-#: ui/internal/window/attachments.go:335 ui/internal/window/message_view.go:587
+#: ui/internal/window/attachments.go:335 ui/internal/window/message_view.go:592
 msgid "This message is too large to download."
 msgstr ""
 
-#: ui/internal/window/attachments.go:337 ui/internal/window/message_view.go:589
+#: ui/internal/window/attachments.go:337 ui/internal/window/message_view.go:594
 msgid "This message could not be read."
 msgstr ""
 
@@ -2424,12 +2424,12 @@ msgid "Cc"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:644
-#: ui/internal/window/message_view.go:495
+#: ui/internal/window/message_view.go:500
 msgid "Loading the message"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:699
-#: ui/internal/window/message_view.go:299
+#: ui/internal/window/message_view.go:304
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
@@ -2575,12 +2575,12 @@ msgstr ""
 msgid "Folders appear after the first synchronisation."
 msgstr ""
 
-#: ui/internal/window/message_view.go:581
-#: ui/internal/window/message_view.go:593
+#: ui/internal/window/message_view.go:586
+#: ui/internal/window/message_view.go:598
 msgid "(Empty message)"
 msgstr ""
 
-#: ui/internal/window/message_view.go:585
+#: ui/internal/window/message_view.go:590
 msgid "Downloading…"
 msgstr ""
 

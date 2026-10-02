@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-02 09:31+0200\n"
+"POT-Creation-Date: 2026-10-02 09:37+0200\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -1884,7 +1884,7 @@ msgstr[0] "%d zpráva"
 msgstr[1] "%d zprávy"
 msgstr[2] "%d zpráv"
 
-#: ui/internal/widget/message_row.go:307 ui/internal/window/message_view.go:575
+#: ui/internal/widget/message_row.go:307 ui/internal/window/message_view.go:580
 #: ui/internal/window/notify.go:111
 msgid "(No subject)"
 msgstr "(Bez předmětu)"
@@ -2414,11 +2414,11 @@ msgstr "Uložit _jako…"
 msgid "Save _All"
 msgstr "Uložit _vše"
 
-#: ui/internal/window/attachments.go:335 ui/internal/window/message_view.go:587
+#: ui/internal/window/attachments.go:335 ui/internal/window/message_view.go:592
 msgid "This message is too large to download."
 msgstr "Tato zpráva je příliš velká ke stažení."
 
-#: ui/internal/window/attachments.go:337 ui/internal/window/message_view.go:589
+#: ui/internal/window/attachments.go:337 ui/internal/window/message_view.go:594
 msgid "This message could not be read."
 msgstr "Tuto zprávu se nepodařilo přečíst."
 
@@ -2526,12 +2526,12 @@ msgid "Cc"
 msgstr "Kopie"
 
 #: ui/internal/window/conversation_card.go:644
-#: ui/internal/window/message_view.go:495
+#: ui/internal/window/message_view.go:500
 msgid "Loading the message"
 msgstr "Načtení zprávy"
 
 #: ui/internal/window/conversation_card.go:699
-#: ui/internal/window/message_view.go:299
+#: ui/internal/window/message_view.go:304
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
@@ -2681,12 +2681,12 @@ msgstr "Zatím žádné složky"
 msgid "Folders appear after the first synchronisation."
 msgstr "Složky se objeví po první synchronizaci."
 
-#: ui/internal/window/message_view.go:581
-#: ui/internal/window/message_view.go:593
+#: ui/internal/window/message_view.go:586
+#: ui/internal/window/message_view.go:598
 msgid "(Empty message)"
 msgstr "(Prázdná zpráva)"
 
-#: ui/internal/window/message_view.go:585
+#: ui/internal/window/message_view.go:590
 msgid "Downloading…"
 msgstr "Stahuje se…"
 
