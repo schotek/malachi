@@ -76,6 +76,9 @@ extension ListController {
     /// ending loads the folder again.
     public func setSearchActive(_ on: Bool) {
         guard on != mailbox.model.search.active else { return }
+        // Show in Mail waiting for a folder's listing: the list is
+        // something else now.
+        pendingReveal = nil
         mailbox.model.search.active = on
         mailbox.model.search.shown = false
         mailbox.model.search.focusFirst = false

@@ -204,6 +204,24 @@ enum MainMenu {
 
     private static func viewMenu() -> NSMenu {
         let m = NSMenu()
+        // The main window's modes (MalachiCore `Board`): the tag is the
+        // mode, validation checks the current one. No key equivalents yet.
+        let texts = Board.texts()
+        for mode in Board.Mode.allCases {
+            let it = item(mode == .mail ? texts.mail : texts.board, Action.setWindowMode)
+            it.tag = mode.rawValue
+            m.addItem(it)
+        }
+        m.addItem(.separator())
+        // The board's styles (MalachiCore `Board.Style`), disabled in Mail
+        // (`Board.allows`): the tag is the style, validation checks the
+        // current one. No key equivalents for now.
+        for style in Board.Style.allCases {
+            let it = item(boardStyleTitle(style), Action.setBoardStyle)
+            it.tag = style.rawValue
+            m.addItem(it)
+        }
+        m.addItem(.separator())
         // Key equivalent set by apply(commandR:).
         m.addItem(item(L10n.T("Check for New Mail"), Action.checkForNewMail, id: ItemID.checkForNewMail))
         m.addItem(.separator())
@@ -220,6 +238,12 @@ enum MainMenu {
         m.addItem(item(mn(L10n.T("Load _Images")), Action.loadImages))
         m.addItem(item(mn(L10n.T("Always Load Images From This _Sender")), Action.trustSender))
         return m
+    }
+
+    /// View ▸ As List, As Columns, Today (the toolbar's segments say List,
+    /// Columns, Today).
+    private static func boardStyleTitle(_ style: Board.Style) -> String {
+        Board.Text.styleMenuTitle(style)
     }
 
     private static func messageMenu(_ state: AppState) -> NSMenu {

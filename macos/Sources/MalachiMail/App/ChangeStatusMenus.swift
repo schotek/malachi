@@ -38,9 +38,11 @@ enum ChangeStatusMenus {
 
 extension MainWindowController: IssueTransitionHost {
     /// The selected row's message (a conversation row's newest folder
-    /// member, as the other actions take it).
+    /// member, as the other actions take it); none while the board hides
+    /// the list.
     var transitionSubject: IssueActionsController.Subject? {
-        issueSubject(of: (messageActions as? MessageActionsController)?.list.selectedRow?.message)
+        guard mode == .mail else { return nil }
+        return issueSubject(of: (messageActions as? MessageActionsController)?.list.selectedRow?.message)
     }
 }
 

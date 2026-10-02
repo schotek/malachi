@@ -283,7 +283,7 @@ func testMove(t *testing.T, caps imap.CapSet) {
 			id = m.ID
 		}
 	}
-	if err := h.st.MoveMessages(context.Background(), h.acc.ID, []string{id}, archive.ID); err != nil {
+	if _, err := h.st.MoveMessages(context.Background(), h.acc.ID, []string{id}, archive.ID); err != nil {
 		t.Fatal(err)
 	}
 	m, _ := h.st.GetMessage(context.Background(), h.acc.ID, id)
@@ -338,7 +338,7 @@ func TestTrashAndPermanentDelete(t *testing.T) {
 		}
 	}
 
-	if err := h.st.TrashMessages(context.Background(), h.acc.ID, []string{trashID}, trash.ID); err != nil {
+	if _, err := h.st.TrashMessages(context.Background(), h.acc.ID, []string{trashID}, trash.ID); err != nil {
 		t.Fatal(err)
 	}
 	h.syncer.Trigger("", false)
@@ -352,14 +352,14 @@ func TestTrashAndPermanentDelete(t *testing.T) {
 
 	// Trashing again from the trash deletes permanently.
 	h.waitStatus(api.SyncIdle)
-	if err := h.st.TrashMessages(context.Background(), h.acc.ID, []string{trashID}, trash.ID); err != nil {
+	if _, err := h.st.TrashMessages(context.Background(), h.acc.ID, []string{trashID}, trash.ID); err != nil {
 		t.Fatal(err)
 	}
 	h.syncer.Trigger("", false)
 	waitFor(t, "trash expunged on server", func() bool { return len(h.serverUIDs("Trash")) == 0 })
 
 	h.waitStatus(api.SyncIdle)
-	if err := h.st.DeleteMessages(context.Background(), h.acc.ID, []string{killID}); err != nil {
+	if _, err := h.st.DeleteMessages(context.Background(), h.acc.ID, []string{killID}); err != nil {
 		t.Fatal(err)
 	}
 	h.syncer.Trigger("", false)

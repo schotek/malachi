@@ -23,6 +23,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// open-URL event may arrive before `applicationDidFinishLaunching`
     /// returns); opened as soon as `hooks.openMailto` exists.
     private var pendingMailto: [URL] = []
+    /// `applicationShouldTerminate` answered `.terminateLater` and its quit
+    /// is under way.
+    private var quitting = false
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "app")
 
     func applicationDidFinishLaunching(_ notification: Foundation.Notification) {
@@ -103,9 +106,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             wc.showWindow(nil)
             NSApp.activate()
+            // Development aid only (MainWindowController+DevStart).
+            wc.applyDevelopmentStart()
         }
 
         connection.start()
+        // Automatic triage of the board (off unless turned on in Settings →
+        // AI): the schedule decides from now on.
+        state.autoTriage.start()
     }
 
     /// Coming to the front asks the Assistant's state again (the Claude
@@ -121,27 +129,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Quitting stops the daemon this app started (up to 15 s while its
     /// syncers log out), off the main thread so the windows stay
     /// responsive; "Run in Background" keeps everything alive by hiding
-    /// the window instead. The attachments written for opening go first,
-    /// as ui/main.go's shutdown removes them before it stops the daemon,
-    /// so a quit that never completes (a force quit or a logout that gives
-    /// up during the wait) leaves none behind; `applicationWillTerminate`
+    /// the window instead. The board's inline replies are saved first
+    /// (`BoardReplyEditorHost.finishAll`, bounded): one that could not be
+    /// saved or sent asks before quitting, as text the user typed must not
+    /// go silently, and Cancel keeps the application running with nothing
+    /// else stopped. Then the attachments written for opening go, as
+    /// ui/main.go's shutdown removes them before it stops the daemon, so a
+    /// quit that never completes (a force quit or a logout that gives up
+    /// during the wait) leaves none behind; `applicationWillTerminate`
     /// takes one whose write was still in flight.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        purgeOpenDir()
-        // The assistant panel's Claude Code ends with the application, and
-        // so do a sign-in of Claude Code nobody waits for any more and a
-        // search in the user's own words under way.
-        integration?.assistantPanel.close()
-        state?.claudeCode.cancelSignIn()
-        mainWindow?.cancelSearchInOwnWords()
         guard let state else {
+            shutDownSession()
             return .terminateNow
         }
+        // Asked again while the first quit waits (a second ⌘Q): that quit
+        // is under way and answers for both.
+        guard !quitting else {
+            return .terminateLater
+        }
+        quitting = true
         Task { @MainActor in
+            // The board's inline reply editor saves what was typed, while
+            // the connection still stands.
+            if await !BoardReplyEditorHost.finishAll(wait: BoardReplyController.endWait) {
+                state.showMainWindow()
+                let quit = await state.alerts.confirmDestructive(
+                    on: mainWindow?.window, heading: Board.Text.quitUnsavedHeading,
+                    body: Board.Text.quitUnsavedBody, confirmLabel: Board.Text.quitAnyway)
+                guard quit else {
+                    BoardReplyEditorHost.resumeAll()
+                    quitting = false
+                    sender.reply(toApplicationShouldTerminate: false)
+                    return
+                }
+            }
+            shutDownSession()
+            // The board's triage: no new run, and one under way ends with
+            // its board.runEnd answered, bounded, before the connection goes.
+            await state.stopBoardTriage()
             await state.connection.stop()
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
+    }
+
+    /// What goes with the session as soon as the quit is decided: the
+    /// attachments written for opening, the assistant panel's Claude Code,
+    /// a sign-in of Claude Code nobody waits for any more and a search in
+    /// the user's own words under way.
+    private func shutDownSession() {
+        purgeOpenDir()
+        integration?.assistantPanel.close()
+        state?.claudeCode.cancelSignIn()
+        mainWindow?.cancelSearchInOwnWords()
     }
 
     /// The last step before the process exits, whichever way the quit was
@@ -267,6 +308,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state?.hooks.openAISettings?()
     }
 
+    /// View ▸ Mail, Board, and the main window's switch, while another
+    /// window is key (a message or compose window): the main window comes
+    /// forward and handles the sender itself (a menu item's tag, a toolbar
+    /// group's selected segment), re-syncing its switches when nothing
+    /// changes. The main window handles them directly while it is key.
+    @objc func setWindowMode(_ sender: Any?) {
+        guard let mainWindow else { return }
+        mainWindow.showMainWindow()
+        mainWindow.setWindowMode(sender)
+    }
+
+    /// View ▸ As List, As Columns, Today, and the main window's style
+    /// segments, while another window is key: the main window comes
+    /// forward with that style, while it shows the board (validation
+    /// disables them otherwise, as `Board.allows` does there); its own
+    /// handler re-syncs the segments either way.
+    @objc func setBoardStyle(_ sender: Any?) {
+        guard let mainWindow else { return }
+        if mainWindow.mode == .board {
+            mainWindow.showMainWindow()
+        }
+        mainWindow.setBoardStyle(sender)
+    }
+
     @objc func openHelp(_ sender: Any?) {
         guard let url = MainMenu.helpURL else { return }
         NSWorkspace.shared.open(url)
@@ -283,6 +348,18 @@ extension AppDelegate: NSUserInterfaceValidations {
             return (item.tag == AddAccountTag.jira ? state?.hooks.addJiraAccount : state?.hooks.addAccount) != nil
         case Action.showPreferences: return state?.hooks.openPreferences != nil
         case Action.setUpAssistant: return state?.hooks.openAISettings != nil
+        case Action.setWindowMode:
+            // Checked: the main window's mode.
+            guard let mainWindow else { return false }
+            (item as? NSMenuItem)?.state = mainWindow.mode.rawValue == item.tag ? .on : .off
+            return true
+        case Action.setBoardStyle:
+            // Checked: the board's style; only while the main window shows it.
+            guard let mainWindow else { return false }
+            if let menuItem = item as? NSMenuItem {
+                mainWindow.validateBoardStyle(menuItem)
+            }
+            return Board.allows(.boardView, in: mainWindow.mode)
         case Action.setAssistantTarget:
             // Checked: the preference; enabled: an app handles the links,
             // for In App: Claude Code was found (and the bridge is there).

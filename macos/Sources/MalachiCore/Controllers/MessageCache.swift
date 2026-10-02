@@ -182,8 +182,30 @@ public final class MessageCache {
     /// does. `then` gets nil when the daemon no longer has the message (or
     /// cannot say).
     public func lookUp(accountId: AccountID, id: MessageID, _ then: @escaping @MainActor (MessageSummary?) -> Void) {
+        lookUpOutcome(accountId: accountId, id: id) { outcome in
+            if case .found(let s) = outcome {
+                then(s)
+            } else {
+                then(nil)
+            }
+        }
+    }
+
+    /// What `lookUpOutcome` found.
+    public enum LookUp {
+        case found(MessageSummary)
+        /// The daemon said the message is gone (messageNotFound,
+        /// messageGone).
+        case gone
+        /// The daemon could not be asked or could not answer.
+        case failed(any Error)
+    }
+
+    /// `lookUp` with the reason when there is no summary: a message the
+    /// daemon no longer has is told from one it could not be asked about.
+    public func lookUpOutcome(accountId: AccountID, id: MessageID, _ then: @escaping @MainActor (LookUp) -> Void) {
         if let s = summary(id) {
-            then(s)
+            then(.found(s))
             return
         }
         let lm = cache.loadedFor(id)
@@ -196,7 +218,13 @@ public final class MessageCache {
         waiters[ObjectIdentifier(lm), default: []].append { lm in
             guard !decided, !lm.getting else { return }
             decided = true
-            then(lm.msg?.summary)
+            if let s = lm.msg?.summary {
+                then(.found(s))
+            } else if let e = lm.getErr as? RPCError, e.code == .messageNotFound || e.code == .messageGone {
+                then(.gone)
+            } else {
+                then(.failed(lm.getErr ?? RPCClient.ClientError.transport("message.get gave no message")))
+            }
         }
         if !lm.getting {
             startGet(accountId, id, lm)
@@ -261,8 +289,10 @@ public final class MessageCache {
             switch outcome {
             case .failure(let err):
                 self.log.warning("message.get: \(String(describing: err), privacy: .public)")
+                lm.getErr = err
             case .success(let res):
                 lm.msg = res.message
+                lm.getErr = nil
             }
             self.settle(id, lm)
         }

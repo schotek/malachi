@@ -1,0 +1,12 @@
+Hi Bob,
+
+I will send the corrected table tomorrow.
+
+Jan
+
+From: Bob Example <bob@example.com>
+Sent: Wednesday, October 1, 2026 4:05 PM
+To: Jan Novak <me@example.org>
+Subject: RE: Figures
+
+Could you send the corrected table?

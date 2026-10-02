@@ -70,6 +70,7 @@ type DraftService interface {
 	Create(ctx context.Context, p DraftCreateParams) (*DraftCreateResult, error)
 	Open(ctx context.Context, p DraftOpenParams) (*DraftOpenResult, error)
 	Markdown(ctx context.Context, p DraftMarkdownParams) (*DraftMarkdownResult, error)
+	Get(ctx context.Context, p DraftGetParams) (*DraftGetResult, error)
 }
 
 type AttachmentService interface {
@@ -109,6 +110,28 @@ type IssueService interface {
 	Transition(ctx context.Context, p IssueTransitionParams) (*IssueTransitionResult, error)
 }
 
+// BoardService is the board (docs/api.md §4.13): cases, the user's
+// decisions on them, triage by an assistant and its runs.
+type BoardService interface {
+	List(ctx context.Context, p BoardListParams) (*BoardListResult, error)
+	Get(ctx context.Context, p BoardGetParams) (*BoardGetResult, error)
+	SetState(ctx context.Context, p BoardSetStateParams) (*BoardSetStateResult, error)
+	SetDone(ctx context.Context, p BoardSetDoneParams) (*BoardSetDoneResult, error)
+	Remind(ctx context.Context, p BoardRemindParams) (*BoardRemindResult, error)
+	Archive(ctx context.Context, p BoardArchiveParams) (*BoardArchiveResult, error)
+	Unflag(ctx context.Context, p BoardUnflagParams) (*BoardUnflagResult, error)
+	DiscardDraft(ctx context.Context, p BoardDiscardDraftParams) (*BoardDiscardDraftResult, error)
+	SetDraft(ctx context.Context, p BoardSetDraftParams) (*BoardSetDraftResult, error)
+	Queue(ctx context.Context, p BoardQueueParams) (*BoardQueueResult, error)
+	Annotate(ctx context.Context, p BoardAnnotateParams) (*BoardAnnotateResult, error)
+	Commit(ctx context.Context, p BoardCommitParams) (*BoardCommitResult, error)
+	SetCommitment(ctx context.Context, p BoardSetCommitmentParams) (*BoardSetCommitmentResult, error)
+	Preferences(ctx context.Context, p BoardPreferencesParams) (*BoardPreferencesResult, error)
+	SetPreferences(ctx context.Context, p BoardSetPreferencesParams) (*BoardSetPreferencesResult, error)
+	RunStart(ctx context.Context, p BoardRunStartParams) (*BoardRunStartResult, error)
+	RunEnd(ctx context.Context, p BoardRunEndParams) (*BoardRunEndResult, error)
+}
+
 // Backend is the complete server-side surface. The connection handshake
 // (system.hello, system.authenticate; docs/api.md §1.4) is not part of it:
 // the transport (internal/rpc) answers the handshake before any call of a
@@ -128,6 +151,7 @@ type Backend interface {
 	Senders() SenderService
 	Contacts() ContactService
 	Issues() IssueService
+	Board() BoardService
 }
 
 // Notifier is how backend components push events to connected clients.
@@ -139,4 +163,12 @@ type Notifier interface {
 	AuthRequired(n AuthRequiredNotification)
 	AccountsChanged(n AccountsChangedNotification)
 	MessagesChanged(n MessagesChangedNotification)
+}
+
+// BoardNotifier is the optional extension of Notifier for
+// notify.boardChanged. The RPC server implements it; a backend component
+// type-asserts its Notifier and sends nothing when the assertion fails,
+// so Notifier's other implementers (test fakes) need no change.
+type BoardNotifier interface {
+	BoardChanged(n BoardChangedNotification)
 }

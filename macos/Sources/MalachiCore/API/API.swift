@@ -329,6 +329,13 @@ public enum API {
         public static let name = "draft.markdown"
     }
 
+    /// One stored draft by id.
+    public enum DraftGet: RPCMethod {
+        public typealias Params = DraftGetParams
+        public typealias Result = DraftGetResult
+        public static let name = "draft.get"
+    }
+
     // MARK: Attachments
 
     public enum AttachmentImport: RPCMethod {
@@ -434,6 +441,121 @@ public enum API {
         public static let timeout = RPCTimeouts.transition
     }
 
+    // MARK: Board
+
+    // Every board method answers from the local store; none waits for a
+    // server, so all use the default timeout (docs/api.md §4.13).
+
+    /// The board: cases, open commitments, triage status.
+    public enum BoardList: RPCMethod {
+        public typealias Params = BoardListParams
+        public typealias Result = BoardListResult
+        public static let name = "board.list"
+    }
+
+    /// One case with its messages as plain text.
+    public enum BoardGet: RPCMethod {
+        public typealias Params = BoardGetParams
+        public typealias Result = BoardGetResult
+        public static let name = "board.get"
+    }
+
+    public enum BoardSetState: RPCMethod {
+        public typealias Params = BoardSetStateParams
+        public typealias Result = BoardSetStateResult
+        public static let name = "board.setState"
+    }
+
+    public enum BoardSetDone: RPCMethod {
+        public typealias Params = BoardSetDoneParams
+        public typealias Result = BoardSetDoneResult
+        public static let name = "board.setDone"
+    }
+
+    public enum BoardRemind: RPCMethod {
+        public typealias Params = BoardRemindParams
+        public typealias Result = BoardRemindResult
+        public static let name = "board.remind"
+    }
+
+    public enum BoardArchive: RPCMethod {
+        public typealias Params = BoardArchiveParams
+        public typealias Result = BoardArchiveResult
+        public static let name = "board.archive"
+    }
+
+    /// Removes the star that keeps a case hot.
+    public enum BoardUnflag: RPCMethod {
+        public typealias Params = BoardUnflagParams
+        public typealias Result = BoardUnflagResult
+        public static let name = "board.unflag"
+    }
+
+    public enum BoardDiscardDraft: RPCMethod {
+        public typealias Params = BoardDiscardDraftParams
+        public typealias Result = BoardDiscardDraftResult
+        public static let name = "board.discardDraft"
+    }
+
+    /// Links a reply draft the application had the assistant write as the
+    /// case's suggested reply (the board's Suggest Reply).
+    public enum BoardSetDraft: RPCMethod {
+        public typealias Params = BoardSetDraftParams
+        public typealias Result = BoardSetDraftResult
+        public static let name = "board.setDraft"
+    }
+
+    /// The triage queue (the MCP bridge's; a client does not call it).
+    public enum BoardQueue: RPCMethod {
+        public typealias Params = BoardQueueParams
+        public typealias Result = BoardQueueResult
+        public static let name = "board.queue"
+    }
+
+    /// The assistant's annotation (the MCP bridge's).
+    public enum BoardAnnotate: RPCMethod {
+        public typealias Params = BoardAnnotateParams
+        public typealias Result = BoardAnnotateResult
+        public static let name = "board.annotate"
+    }
+
+    /// A commitment the assistant found (the MCP bridge's).
+    public enum BoardCommit: RPCMethod {
+        public typealias Params = BoardCommitParams
+        public typealias Result = BoardCommitResult
+        public static let name = "board.commit"
+    }
+
+    public enum BoardSetCommitment: RPCMethod {
+        public typealias Params = BoardSetCommitmentParams
+        public typealias Result = BoardSetCommitmentResult
+        public static let name = "board.setCommitment"
+    }
+
+    public enum BoardPreferencesGet: RPCMethod {
+        public typealias Params = BoardPreferencesParams
+        public typealias Result = BoardPreferencesResult
+        public static let name = "board.preferences"
+    }
+
+    public enum BoardSetPreferences: RPCMethod {
+        public typealias Params = BoardSetPreferencesParams
+        public typealias Result = BoardSetPreferencesResult
+        public static let name = "board.setPreferences"
+    }
+
+    public enum BoardRunStart: RPCMethod {
+        public typealias Params = BoardRunStartParams
+        public typealias Result = BoardRunStartResult
+        public static let name = "board.runStart"
+    }
+
+    public enum BoardRunEnd: RPCMethod {
+        public typealias Params = BoardRunEndParams
+        public typealias Result = EmptyResult
+        public static let name = "board.runEnd"
+    }
+
     // MARK: Tables
 
     /// Every method type, in the order of methods.go.
@@ -450,7 +572,7 @@ public enum API {
         OutboxRetry.self,
         ThreadList.self, ThreadGet.self,
         DraftSave.self, DraftList.self, DraftDelete.self, DraftCreate.self, DraftOpen.self,
-        DraftMarkdown.self,
+        DraftMarkdown.self, DraftGet.self,
         AttachmentImport.self, AttachmentRemove.self, AttachmentGet.self,
         SearchQuery.self,
         SyncStatus.self, SyncTrigger.self,
@@ -458,6 +580,10 @@ public enum API {
         SenderList.self, SenderAdd.self, SenderRemove.self,
         ContactSearch.self,
         IssueTransitions.self, IssueTransition.self,
+        BoardList.self, BoardGet.self, BoardSetState.self, BoardSetDone.self, BoardRemind.self,
+        BoardArchive.self, BoardUnflag.self, BoardDiscardDraft.self, BoardSetDraft.self, BoardQueue.self, BoardAnnotate.self,
+        BoardCommit.self, BoardSetCommitment.self, BoardPreferencesGet.self, BoardSetPreferences.self,
+        BoardRunStart.self, BoardRunEnd.self,
     ]
 
     /// api.AllMethods: every callable method name.
@@ -473,11 +599,14 @@ public enum API {
         /// again, and what was cached of their messages let go
         /// (`MailboxController.handleMessagesChanged`).
         public static let messagesChanged = "notify.messagesChanged"
+        /// `BoardChangedNotification`: what `board.list` returns changed.
+        public static let boardChanged = "notify.boardChanged"
     }
 
     /// api.AllNotifications: every server-initiated notification name.
     public static let allNotifications: [String] = [
         Notify.newMessage, Notify.syncState, Notify.authRequired, Notify.accountsChanged, Notify.messagesChanged,
+        Notify.boardChanged,
     ]
 
     /// The limits the daemon enforces (types.go constants), for pre-checks.

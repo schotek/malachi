@@ -219,6 +219,10 @@ func linkMessageTx(ctx context.Context, tx *sql.Tx, r linkRow) (bool, error) {
 			plan.Canonical, r.accountID, from); err != nil {
 			return false, fmt.Errorf("merge threads: %w", err)
 		}
+		// The board's case goes with its thread (board_maint.go).
+		if err := mergeBoardCaseTx(ctx, tx, r.accountID, from, plan.Canonical); err != nil {
+			return false, fmt.Errorf("merge threads: %w", err)
+		}
 	}
 	return true, nil
 }

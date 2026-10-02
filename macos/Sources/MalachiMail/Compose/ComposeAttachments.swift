@@ -5,15 +5,15 @@ import AppKit
 import MalachiCore
 import UniformTypeIdentifiers
 
-// The attachments of a compose window (compose.go "Attachments"): picking
+// The attachments of a compose pane (compose.go "Attachments"): picking
 // files and images, importing them into the daemon's attachment store,
 // the chips, removal, and the cid: registrations of inline pictures.
 
-extension ComposeWindowController {
+extension ComposePane {
     /// `compose.attach`: files to attach, as many as chosen. Not in
     /// comment mode: a comment has no attachments.
     @objc func attachFiles(_ sender: Any?) {
-        guard let window, !isComment else { return }
+        guard let window = dialogWindow, !isComment else { return }
         let panel = NSOpenPanel()
         panel.title = L10n.T("Attach Files")
         panel.canChooseFiles = true
@@ -35,7 +35,7 @@ extension ComposeWindowController {
     /// `compose.insert-image`: one picture, imported inline and inserted
     /// at the caret as `cid:<contentId>`. Not in comment mode.
     @objc func insertImage(_ sender: Any?) {
-        guard let window, !isComment else { return }
+        guard let window = dialogWindow, !isComment else { return }
         let panel = NSOpenPanel()
         panel.title = L10n.T("Insert Image")
         panel.canChooseFiles = true

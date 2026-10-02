@@ -45,6 +45,19 @@ type Draft struct {
 	// issue-tracker account ("" public); every save writes it.
 	CommentVisibility api.CommentVisibility
 
+	// Local keeps the draft off the server's Drafts folder (a board case's
+	// suggested reply, migration 0018): no syncer uploads it, and it
+	// records no copy. SaveDraft writes it when it creates the draft only;
+	// makeDraftLocalTx (a link to a board case) sets it later, and
+	// releaseLinkedDraftTx clears it on an edited draft that lost its case.
+	Local bool
+
+	// Edited says the draft may hold text the user wrote (migration
+	// 0019): a save while a board case linked it, or a link while it was
+	// an ordinary draft. Never cleared; SaveDraft and makeDraftLocalTx set
+	// it, nothing reads it from Draft but tests.
+	Edited bool
+
 	// Copy is the draft's copy in the Drafts folder (zero: none yet), and
 	// SyncedVersion the version it holds; SaveDraft never writes either.
 	Copy          DraftCopy
@@ -67,6 +80,9 @@ type Draft struct {
 // attachment must belong to the same account and be unbound or bound to
 // this draft (ErrNotFound / ErrAttachmentBound otherwise). d.ID, d.Version,
 // d.UpdatedAt and d.Attachments are filled in on success.
+//
+// A save of a draft a board case links marks it edited (Draft.Edited):
+// only the board's inline editor saves a draft after its link.
 //
 // Every save restarts a stopped upload (the retry state is cleared). With
 // d.Adopt set the draft takes over that copy: another draft holding it is
@@ -99,10 +115,10 @@ func (s *Store) SaveDraft(ctx context.Context, d *Draft, attachmentIDs []string)
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO drafts (id, account_id, version, subject, to_json, cc_json, bcc_json,
 			                    text_body, html_body, in_reply_to, forwarding, reply_rfc_id, references_json,
-			                    comment_visibility, created_at, updated_at)
-			VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			                    comment_visibility, local, created_at, updated_at)
+			VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			draftID, d.AccountID, d.Subject, to, cc, bcc, d.TextBody, d.HTMLBody,
-			d.InReplyTo, d.Forwarding, d.ReplyRFCID, refs, string(d.CommentVisibility), now, now); err != nil {
+			d.InReplyTo, d.Forwarding, d.ReplyRFCID, refs, string(d.CommentVisibility), boolInt(d.Local), now, now); err != nil {
 			return fmt.Errorf("insert draft: %w", err)
 		}
 	} else {
@@ -112,6 +128,8 @@ func (s *Store) SaveDraft(ctx context.Context, d *Draft, attachmentIDs []string)
 			       reply_rfc_id = CASE WHEN ? != '' THEN ? ELSE reply_rfc_id END,
 			       references_json = CASE WHEN ? != '' THEN ? ELSE references_json END,
 			       comment_visibility = ?,
+			       edited = CASE WHEN edited = 1 OR EXISTS (SELECT 1 FROM board_cases c
+			                     WHERE c.draft_id = drafts.id AND c.account_id = drafts.account_id) THEN 1 ELSE 0 END,
 			       sync_attempts = 0, sync_next_at = '', sync_error = '', updated_at = ?
 			WHERE id = ? AND account_id = ? AND version = ?`,
 			d.Subject, to, cc, bcc, d.TextBody, d.HTMLBody, d.InReplyTo, d.Forwarding,
@@ -172,6 +190,14 @@ func (s *Store) SaveDraft(ctx context.Context, d *Draft, attachmentIDs []string)
 
 	var gone []messageFile
 	if d.Adopt != nil {
+		var local bool
+		if err := tx.QueryRowContext(ctx, `SELECT local FROM drafts WHERE id = ?`, draftID).Scan(&local); err != nil {
+			return fmt.Errorf("check draft: %w", err)
+		}
+		if local {
+			// A local draft never holds a copy in the Drafts folder.
+			return ErrDraftLocal
+		}
 		adopted, files, err := adoptCopyTx(ctx, tx, d.AccountID, draftID, *d.Adopt)
 		if err != nil {
 			return err
@@ -327,7 +353,7 @@ func draftAttachmentIDs(ctx context.Context, q querier, accountID, draftID strin
 const draftColumns = `id, account_id, version, subject, to_json, cc_json, bcc_json,
 	text_body, html_body, in_reply_to, forwarding, created_at, updated_at,
 	reply_rfc_id, references_json, rfc_message_id, server_folder_id, server_uidvalidity, server_uid,
-	server_remote_id, synced_version, synced_at, sync_attempts, comment_visibility`
+	server_remote_id, synced_version, synced_at, sync_attempts, comment_visibility, local, edited`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -340,13 +366,15 @@ func scanDraftStamp(row scanner) (Draft, string, error) {
 	var d Draft
 	var to, cc, bcc, created, updated, refs, synced, visibility string
 	var uidValidity, uid int64
+	var local, edited int
 	if err := row.Scan(&d.ID, &d.AccountID, &d.Version, &d.Subject, &to, &cc, &bcc,
 		&d.TextBody, &d.HTMLBody, &d.InReplyTo, &d.Forwarding, &created, &updated,
 		&d.ReplyRFCID, &refs, &d.Copy.RFCMessageID, &d.Copy.FolderID, &uidValidity, &uid,
-		&d.Copy.RemoteID, &d.SyncedVersion, &synced, &d.SyncAttempts, &visibility); err != nil {
+		&d.Copy.RemoteID, &d.SyncedVersion, &synced, &d.SyncAttempts, &visibility, &local, &edited); err != nil {
 		return Draft{}, "", err
 	}
 	d.CommentVisibility = api.CommentVisibility(visibility)
+	d.Local, d.Edited = local != 0, edited != 0
 	d.Copy.UIDValidity, d.Copy.UID = uint32(uidValidity), uint32(uid)
 	d.SyncedAt = parseStamp(synced)
 	if err := json.Unmarshal([]byte(refs), &d.References); err != nil {

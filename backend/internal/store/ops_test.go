@@ -80,17 +80,17 @@ func TestMoveMessagesSnapshot(t *testing.T) {
 	a := seedMessage(t, s, inbox, 1, "a", time.Now())
 	b := seedMessage(t, s, archive, 9, "b", time.Now(), api.FlagSeen)
 
-	if err := s.MoveMessages(ctx, "acc", []string{a.ID}, foreignFolder.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.MoveMessages(ctx, "acc", []string{a.ID}, foreignFolder.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("foreign target: %v", err)
 	}
-	if err := s.MoveMessages(ctx, "acc", []string{a.ID, "m_nope"}, archive.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.MoveMessages(ctx, "acc", []string{a.ID, "m_nope"}, archive.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown id: %v", err)
 	}
 	if got, _ := s.GetMessage(ctx, "acc", a.ID); got.FolderID != inbox.ID || got.UID != 1 {
 		t.Fatalf("moved despite failure: %+v", got)
 	}
 
-	if err := s.MoveMessages(ctx, "acc", []string{a.ID, b.ID}, archive.ID); err != nil {
+	if _, err := s.MoveMessages(ctx, "acc", []string{a.ID, b.ID}, archive.ID); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := s.GetMessage(ctx, "acc", a.ID)
@@ -126,13 +126,13 @@ func TestTrashAndDeleteMessages(t *testing.T) {
 	inTrash := seedMessage(t, s, trash, 4, "t", time.Now())
 	keep := seedMessage(t, s, inbox, 2, "keep", time.Now(), api.FlagSeen)
 
-	if err := s.TrashMessages(ctx, "acc", []string{a.ID, "m_nope"}, trash.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.TrashMessages(ctx, "acc", []string{a.ID, "m_nope"}, trash.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown id: %v", err)
 	}
-	if err := s.TrashMessages(ctx, "acc", []string{a.ID}, "f_nope"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.TrashMessages(ctx, "acc", []string{a.ID}, "f_nope"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown trash: %v", err)
 	}
-	if err := s.TrashMessages(ctx, "acc", []string{a.ID, inTrash.ID}, trash.ID); err != nil {
+	if _, err := s.TrashMessages(ctx, "acc", []string{a.ID, inTrash.ID}, trash.ID); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := s.GetMessage(ctx, "acc", a.ID); got.FolderID != trash.ID || got.UID != 0 {
@@ -156,13 +156,13 @@ func TestTrashAndDeleteMessages(t *testing.T) {
 	}
 
 	// Permanent delete: row gone now, file gone, op queued with snapshot.
-	if err := s.DeleteMessages(ctx, "acc", []string{keep.ID, "m_nope"}); !errors.Is(err, ErrNotFound) {
+	if _, err := s.DeleteMessages(ctx, "acc", []string{keep.ID, "m_nope"}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown id: %v", err)
 	}
 	if _, err := s.GetMessage(ctx, "acc", keep.ID); err != nil {
 		t.Fatalf("deleted despite failure: %v", err)
 	}
-	if err := s.DeleteMessages(ctx, "acc", []string{keep.ID}); err != nil {
+	if _, err := s.DeleteMessages(ctx, "acc", []string{keep.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.GetMessage(ctx, "acc", keep.ID); !errors.Is(err, ErrNotFound) {
@@ -319,7 +319,7 @@ func TestMoveMessagesIntoUnsyncedFolder(t *testing.T) {
 	a := seedMessage(t, s, inbox, 1, "a", time.Now())
 	keep := seedMessage(t, s, inbox, 2, "keep", time.Now(), api.FlagSeen)
 
-	if err := s.MoveMessages(ctx, "acc", []string{a.ID}, all.ID); err != nil {
+	if _, err := s.MoveMessages(ctx, "acc", []string{a.ID}, all.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.GetMessage(ctx, "acc", a.ID); !errors.Is(err, ErrNotFound) {

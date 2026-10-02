@@ -78,6 +78,24 @@ final class AppState {
     /// Whether Claude Desktop runs, quitting and starting it, and its
     /// termination, for `claudeDesktop`.
     private let claudeDesktopService: ClaudeDesktopService
+    /// The board's preferences in the daemon (`board.preferences`), read by
+    /// the triage, its schedule and Settings → AI; loaded whenever the
+    /// connection comes (`wireBoardTriage`).
+    let boardPreferences: BoardPreferencesController
+    /// The board's triage run by the user's Claude Code (docs/mcp.md
+    /// "Triage of the board"): the board toolbars' Triage, the status
+    /// strip, Settings → AI's Board group. One run at a time for the
+    /// application; the main window feeds it the board's snapshots.
+    let triage: BoardTriageController
+    /// Starts automatic runs (`board.preferences` `autoTriage`, off by
+    /// default) while the application runs: `start()` once it runs,
+    /// `stop()` at quit.
+    let autoTriage: BoardAutoTriageScheduler
+    /// The board's Suggest Reply (docs/mcp.md "A suggested reply on the
+    /// board"): one request at a time for the application, started from a
+    /// case's detail; the main window lists the board again after it.
+    let boardReply: BoardReplyController
+    private var boardTriageTokens: [NotificationHub.Token] = []
 
     var hooks = Hooks()
 
@@ -107,6 +125,77 @@ final class AppState {
         // Claude Desktop quitting by itself writes what it still has to get.
         desktop.onStatus = { [weak assistant] s in assistant?.apply(s) }
         service.onTerminate = { [weak desktop] in desktop?.terminated() }
+        let prefs = BoardPreferencesController(client: client)
+        boardPreferences = prefs
+        let triage = BoardTriageController(
+            client: client, settings: settings, locator: claudeCode, preferences: prefs, assistant: assistant,
+            bridge: paths.mcpBridge?.path, socket: paths.socket)
+        self.triage = triage
+        autoTriage = BoardAutoTriageScheduler(target: triage)
+        boardReply = BoardReplyController(
+            client: client, settings: settings, locator: claudeCode, assistant: assistant,
+            bridge: paths.mcpBridge?.path, socket: paths.socket)
+        wireBoardTriage()
+    }
+
+    /// The board's triage: its preferences follow the connection and say
+    /// a refused write as a toast; a manual run without consent asks with
+    /// the sheet on the main window.
+    private func wireBoardTriage() {
+        let prefs = boardPreferences
+        let toasts = toasts
+        prefs.onError = { text in toasts.show(text) }
+        boardTriageTokens.append(notifications.addConnectionState { s in
+            prefs.connectionChanged(connected: Self.isConnected(s))
+        })
+        if Self.isConnected(notifications.connectionState) {
+            prefs.load()
+        }
+        triage.consent = { [weak self] in
+            await self?.confirmTriageConsent(on: self?.mainWindow?.window) ?? false
+        }
+        // Suggest Reply asks the assistant's own consent, as the panel and
+        // the compose rewrite do, not the board's.
+        boardReply.consent = { [weak self] in
+            guard let self else { return false }
+            let t = Assistant.panelTexts()
+            return await self.alerts.confirm(
+                on: self.mainWindow?.window, heading: t.consentHeading, body: t.consentBody, confirmLabel: t.allow,
+                declineLabel: t.cancel)
+        }
+    }
+
+    /// Whether the daemon can be asked in connection state `s`.
+    static func isConnected(_ s: ConnectionController.ConnectionState) -> Bool {
+        switch s {
+        case .connected, .infoFailed: return true
+        case .connecting, .protocolMismatch, .unavailable, .stopping: return false
+        }
+    }
+
+    /// "Let the Assistant Triage the Board?" as a sheet on `window`, the
+    /// way the panel asks for its own consent (the panel's Allow and
+    /// Cancel); true allows. The triage's manual run asks on the main
+    /// window, Settings → AI on its own before it gives the consent.
+    func confirmTriageConsent(on window: NSWindow?) async -> Bool {
+        let t = Assistant.panelTexts()
+        return await alerts.confirm(
+            on: window, heading: Board.Text.triageConsentHeading, body: Board.Text.triageConsentBody,
+            confirmLabel: t.allow, declineLabel: t.cancel)
+    }
+
+    /// Quitting: the schedule stops and a run under way ends as cancelled
+    /// (its Claude Code is stopped), then waits for `board.runEnd` while the
+    /// connection still stands — at most `BoardTriageController.endWait`,
+    /// so a daemon that does not answer never holds the quit (it ends the
+    /// run itself later).
+    func stopBoardTriage() async {
+        autoTriage.stop()
+        // The suggested reply under way stops too, and deletes a draft it
+        // created and did not link yet, within the same bound.
+        async let reply: Void = boardReply.cancelAndCleanUp()
+        await triage.cancelAndEnd()
+        await reply
     }
 
     /// Whether an application handles links of `scheme` (LaunchServices),
@@ -187,6 +276,7 @@ final class NotificationHub {
     private var authRequired = HandlerList<AuthRequiredNotification>()
     private var accountsChanged = HandlerList<Void>()
     private var messagesChanged = HandlerList<MessagesChangedNotification>()
+    private var boardChanged = HandlerList<BoardChangedNotification>()
     private var connection = HandlerList<ConnectionController.ConnectionState>()
 
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "notify")
@@ -224,6 +314,11 @@ final class NotificationHub {
         messagesChanged.add(f)
     }
 
+    /// notify.boardChanged: the board's source lists it again.
+    func addBoardChanged(_ f: @escaping @MainActor (BoardChangedNotification) -> Void) -> Token {
+        boardChanged.add(f)
+    }
+
     /// Fires on every connection state change, after `connectionState`
     /// was updated. A handler added later does not get the current state;
     /// read `connectionState` for that.
@@ -252,6 +347,8 @@ final class NotificationHub {
             accountsChanged.fire(())
         case .messagesChanged(let m):
             messagesChanged.fire(m)
+        case .boardChanged(let b):
+            boardChanged.fire(b)
         case .unknown(let method):
             log.info("notification \(method, privacy: .public)")
         }

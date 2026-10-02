@@ -436,10 +436,10 @@ func TestLocalOperationsPushed(t *testing.T) {
 	if err := h.st.FlagMessages(ctx, h.acc.ID, []string{la.ID}, []api.Flag{api.FlagSeen, api.FlagFlagged}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.st.MoveMessages(ctx, h.acc.ID, []string{lb.ID}, proj.ID); err != nil {
+	if _, err := h.st.MoveMessages(ctx, h.acc.ID, []string{lb.ID}, proj.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.st.TrashMessages(ctx, h.acc.ID, []string{lc.ID, ld.ID}, trash.ID); err != nil {
+	if _, err := h.st.TrashMessages(ctx, h.acc.ID, []string{lc.ID, ld.ID}, trash.ID); err != nil {
 		t.Fatal(err)
 	}
 	h.pass("", false)
@@ -475,7 +475,7 @@ func TestLocalOperationsPushed(t *testing.T) {
 	e := h.fake.add("F-TRASH", "E", "alice@example.test", daysAgo(1), "e")
 	h.pass("", false)
 	le, _ := h.byRemote(e)
-	if err := h.st.DeleteMessages(ctx, h.acc.ID, []string{le.ID}); err != nil {
+	if _, err := h.st.DeleteMessages(ctx, h.acc.ID, []string{le.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.st.FlagMessages(ctx, h.acc.ID, []string{la.ID}, nil, []api.Flag{api.FlagSeen}); err != nil {
@@ -933,7 +933,7 @@ func TestUnchangedFoldersSkipped(t *testing.T) {
 		t.Fatal("message gone")
 	}
 	target := h.folder("F-ALPHA")
-	if err := h.st.MoveMessages(context.Background(), h.acc.ID, []string{m.ID}, target.ID); err != nil {
+	if _, err := h.st.MoveMessages(context.Background(), h.acc.ID, []string{m.ID}, target.ID); err != nil {
 		t.Fatal(err)
 	}
 	alpha := h.fake.count("GET", "/me/mailFolders/F-ALPHA/messages/delta")

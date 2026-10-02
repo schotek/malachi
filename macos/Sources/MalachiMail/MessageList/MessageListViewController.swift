@@ -450,7 +450,10 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         guard let i = keys.firstIndex(of: key) else { return }
         table.selectRowIndexes(IndexSet(integer: i), byExtendingSelection: false)
         table.scrollRowToVisible(i)
-        view.window?.makeFirstResponder(table)
+        // Not while the board hides the list: a hidden table must not take the keyboard.
+        if !table.isHiddenOrHasHiddenAncestor {
+            view.window?.makeFirstResponder(table)
+        }
     }
 
     /// Selects the controller's `selectedKey` without re-entering
@@ -545,6 +548,13 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     }
 
     // MARK: Actions
+
+    /// Gives the list the keyboard (the main window back from the board
+    /// with nothing else to give it to); not while the rows are hidden.
+    func focusList() {
+        guard !table.isHiddenOrHasHiddenAncestor else { return }
+        view.window?.makeFirstResponder(table)
+    }
 
     @objc private func retryClicked(_ sender: Any?) {
         list.retry()

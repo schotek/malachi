@@ -24,6 +24,9 @@ ui/internal/jira/transitions.go
 ui/internal/conversation/conversation.go
 ui/internal/conversation/fold.go
 ui/internal/conversation/quoted.go
+ui/internal/board/text.go
+ui/internal/board/triage.go
+ui/internal/board/reply.go
 ui/internal/settingspanel/settingspanel.go
 ui/internal/widget/consent.go
 ui/internal/widget/format.go

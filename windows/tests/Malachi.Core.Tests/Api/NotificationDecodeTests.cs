@@ -103,6 +103,26 @@ public sealed class NotificationDecodeTests
         Assert.Throws<JsonException>(() => Raw("notify.messagesChanged", """{"accountId":"acc_1","folderIds":"f_inbox"}"""));
     }
 
+    /// <summary>
+    /// Windows addition (docs/api.md §5, the board): <c>notify.boardChanged</c>
+    /// names the accounts whose board changed; none named, the list null or
+    /// left out, or no params at all: any account.
+    /// </summary>
+    [Fact]
+    public void BoardChanged()
+    {
+        var n = Raw("notify.boardChanged", """{"accountIds":["acc_1","acc_j"]}""");
+        Assert.Equal<AccountId>(["acc_1", "acc_j"], Assert.IsType<DaemonNotification.BoardChanged>(n).Payload.AccountIds);
+        foreach (var parameters in new[] { "{}", """{"accountIds":[]}""", """{"accountIds":null}""", "null" })
+        {
+            Assert.Empty(Assert.IsType<DaemonNotification.BoardChanged>(Raw("notify.boardChanged", parameters)).Payload.AccountIds);
+        }
+        var bare = DaemonNotification.Decode("notify.boardChanged", """{"jsonrpc":"2.0","method":"notify.boardChanged"}"""u8);
+        Assert.Empty(Assert.IsType<DaemonNotification.BoardChanged>(bare).Payload.AccountIds);
+        Assert.Throws<JsonException>(() => Raw("notify.boardChanged", """{"accountIds":"acc_1"}"""));
+        Assert.Throws<JsonException>(() => Raw("notify.boardChanged", "[]"));
+    }
+
     [Fact]
     public void UnknownMethodIsKeptByName()
     {
@@ -127,6 +147,7 @@ public sealed class NotificationDecodeTests
             (API.Notify.AuthRequired, """{"accountId":"acc_1","reason":1200,"message":"m"}"""),
             (API.Notify.AccountsChanged, "{}"),
             (API.Notify.MessagesChanged, """{"accountId":"acc_1","folderIds":["f_inbox"]}"""),
+            (API.Notify.BoardChanged, """{"accountIds":["acc_1"]}"""),
         ];
         Assert.Equal(API.AllNotifications, samples.Select(s => s.Method));
         foreach (var (method, parameters) in samples)

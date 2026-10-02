@@ -68,7 +68,7 @@ public sealed class ApiRoundTripTests
         """{"id":"att_1","filename":"a.png","contentType":"image/png","size":100,"inline":true,"contentId":"abc@malachi.local"}""";
 
     private const string Draft =
-        """{"id":"d_1","accountId":"acc_1","version":3,"to":[@address@],"cc":[@address@],"bcc":[@address@],"subject":"Re: Lunch","textBody":"> hi","htmlBody":"<p>hi</p>","inReplyTo":"m_1","forwarding":"m_2","attachments":[@draftattachment@],"replaces":"m_9","comment":{"issue":@issue@,"visibility":"internal"},"updatedAt":"2026-09-02T10:00:00.1234567Z"}""";
+        """{"id":"d_1","accountId":"acc_1","version":3,"to":[@address@],"cc":[@address@],"bcc":[@address@],"subject":"Re: Lunch","textBody":"> hi","htmlBody":"<p>hi</p>","inReplyTo":"m_1","forwarding":"m_2","attachments":[@draftattachment@],"replaces":"m_9","comment":{"issue":@issue@,"visibility":"internal"},"local":true,"updatedAt":"2026-09-02T10:00:00.1234567Z"}""";
 
     private const string Thread =
         """{"id":"t_9","accountId":"acc_1","subject":"Lunch","participants":[@address@],"messageCount":3,"unreadCount":1,"latestDate":"2026-09-02T10:00:00Z","latest":@summary@,"snippet":"plain","flags":["flagged","seen"],"hasAttachments":true,"folderIds":["f_inbox","f_sent"],"issue":@issue@,"sentCount":2}""";
@@ -89,6 +89,46 @@ public sealed class ApiRoundTripTests
     private const string Page = """{"cursor":"opaque","limit":50}""";
 
     private const string PageInfo = """{"nextCursor":"opaque","total":1234}""";
+
+    private const string CaseId = "c_0123456789abcdef0123456789abcdef";
+
+    private const string BoardIssue = """{"key":"ITSD-42","status":"In Progress","statusCategory":"inProgress"}""";
+
+    private const string BoardDue = """{"at":"2026-10-02T15:00:00Z","quote":"Please send the signed contract by Friday 3 pm.","messageId":"m_1"}""";
+
+    private const string BoardAnnotation =
+        """{"state":"you","title":"Signed contract for Alice","summary":"Alice needs the signed contract.\nShe asks for Friday.","why":"Alice asked you directly.","tasks":["Sign the contract","Send it to Alice"],"due":@boarddue@,"source":"claude-opus","at":"2026-09-30T08:30:00Z","stale":true}""";
+
+    private const string BoardCase =
+        """{"id":"@caseid@","accountId":"acc_1","threadId":"t_9","ruleState":"you","ruleReason":"you.addressed","userState":"hot","annotation":@boardannotation@,"visibility":"snoozed","doneAt":"2026-09-29T10:00:00Z","remindAt":"2026-10-02T07:00:00Z","subject":"Contract","person":@address@,"date":"2026-09-30T08:00:00Z","snippet":"Could you sign","unread":true,"hasAttachments":true,"messageCount":3,"replyMessageId":"m_1","replyFolderId":"f_inbox","latestMessageId":"m_2","issue":@boardissue@,"canArchive":true,"draft":{"draftId":"d_1","text":"Signed, attached.","updated":"2026-09-30T09:00:00Z"},"version":4294967296}""";
+
+    private const string BoardCommitment =
+        """{"id":"k_1","caseId":"@caseid@","accountId":"acc_1","messageId":"m_3","text":"Send the report","quote":"I will send the report on Monday.","due":"2026-10-05T09:00:00Z","state":"closed","closedReason":"replied","at":"2026-09-30T08:31:00Z"}""";
+
+    private const string BoardMessage =
+        """{"id":"m_1","folderId":"f_inbox","from":@address@,"date":"2026-09-30T08:00:00Z","mine":false,"text":"Could you sign the contract?","trimmed":true}""";
+
+    private const string BoardRun =
+        """{"at":"2026-09-30T08:00:00Z","endedAt":"2026-09-30T08:02:00Z","trigger":"auto","source":"claude-opus","annotated":3,"error":"timeout"}""";
+
+    private const string BoardUsage =
+        """{"inputTokens":1200,"outputTokens":340,"cacheCreationInputTokens":5,"cacheReadInputTokens":1000000000000}""";
+
+    private const string BoardUsageTotal =
+        """{"inputTokens":2400,"outputTokens":680,"cacheCreationInputTokens":10,"cacheReadInputTokens":2000000000000,"runs":2}""";
+
+    private const string BoardTriage = """{"lastRun":@boardrun@,"annotatedTodayAuto":3,"queue":5,"usage24h":@boardusagetotal@}""";
+
+    private const string BoardWindows = """{"hot":90,"you":30,"them":30,"info":14}""";
+
+    private const string BoardPreferences =
+        """{"enabled":true,"assistant":true,"windows":@boardwindows@,"triageAccounts":["acc_1","acc_j"],"autoTriage":true,"autoTriageMinutes":30,"autoTriageDailyCases":60}""";
+
+    private const string BoardQueueMessage =
+        """{"messageId":"m_1","from":@address@,"to":[{"address":"me@example.org"}],"cc":[@address@],"date":"2026-09-30T08:00:00Z","mine":false,"text":"Could you sign?","truncated":true}""";
+
+    private const string BoardQueueItem =
+        """{"caseId":"@caseid@","accountId":"acc_1","inputKey":"0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f","ruleState":"you","ruleReason":"you.addressed","userState":"them","subject":"Contract","replyMessageId":"m_1","issue":@boardissue@,"own":["me@example.org"],"messages":[@boardqueuemessage@],"hasDraft":true}""";
 
     // Every record: a JSON document and, when the encoding adds members, what it encodes to.
     private static readonly Dictionary<string, Sample> Samples = new(StringComparer.Ordinal)
@@ -141,6 +181,59 @@ public sealed class ApiRoundTripTests
         [nameof(AttachmentRemoveParams)] = Case<AttachmentRemoveParams>("""{"accountId":"acc_1","attachmentId":"att_1"}"""),
         [nameof(AttachmentGetParams)] = Case<AttachmentGetParams>("""{"accountId":"acc_1","attachmentId":"att_1"}"""),
         [nameof(AttachmentGetResult)] = Case<AttachmentGetResult>("""{"attachmentId":"att_1","filename":"a.png","contentType":"image/png","size":3,"data":"AQID"}"""),
+        // Board.cs
+        [nameof(Malachi.Core.Api.BoardCase)] = Case<BoardCase>(BoardCase),
+        [nameof(Malachi.Core.Api.BoardIssue)] = Case<BoardIssue>(BoardIssue),
+        [nameof(BoardDraft)] = Case<BoardDraft>("""{"draftId":"d_1","text":"Signed, attached.","updated":"2026-09-30T09:00:00.5Z"}"""),
+        [nameof(Malachi.Core.Api.BoardAnnotation)] = Case<BoardAnnotation>(BoardAnnotation),
+        [nameof(Malachi.Core.Api.BoardDue)] = Case<BoardDue>(BoardDue),
+        [nameof(Malachi.Core.Api.BoardCommitment)] = Case<BoardCommitment>(BoardCommitment),
+        [nameof(Malachi.Core.Api.BoardMessage)] = Case<BoardMessage>(BoardMessage),
+        [nameof(Malachi.Core.Api.BoardRun)] = Case<BoardRun>(BoardRun),
+        [nameof(Malachi.Core.Api.BoardTriage)] = Case<BoardTriage>(BoardTriage),
+        [nameof(Malachi.Core.Api.BoardUsage)] = Case<BoardUsage>(BoardUsage),
+        [nameof(Malachi.Core.Api.BoardUsageTotal)] = Case<BoardUsageTotal>(BoardUsageTotal),
+        [nameof(Malachi.Core.Api.BoardWindows)] = Case<BoardWindows>(BoardWindows),
+        [nameof(Malachi.Core.Api.BoardPreferences)] = Case<BoardPreferences>(BoardPreferences),
+        [nameof(QuoteNotFoundData)] = Case<QuoteNotFoundData>("""{"field":"due"}"""),
+        [nameof(BoardListParams)] = Case<BoardListParams>("""{"accountIds":["acc_1","acc_j"]}"""),
+        [nameof(BoardListResult)] = Case<BoardListResult>(
+            """{"cases":[@boardcase@],"commitments":[@boardcommitment@],"enabled":true,"assistant":false,"triage":@boardtriage@,"ready":true,"truncated":true}"""),
+        [nameof(BoardGetParams)] = Case<BoardGetParams>("""{"caseId":"@caseid@"}"""),
+        [nameof(BoardGetResult)] = Case<BoardGetResult>("""{"case":@boardcase@,"messages":[@boardmessage@,@boardmessage@]}"""),
+        [nameof(BoardSetStateParams)] = Case<BoardSetStateParams>("""{"caseId":"@caseid@","state":"them"}"""),
+        [nameof(BoardSetStateResult)] = Case<BoardSetStateResult>("""{"case":@boardcase@}"""),
+        [nameof(BoardSetDoneParams)] = Case<BoardSetDoneParams>("""{"caseId":"@caseid@","done":false}"""),
+        [nameof(BoardSetDoneResult)] = Case<BoardSetDoneResult>("""{"case":@boardcase@}"""),
+        [nameof(BoardRemindParams)] = Case<BoardRemindParams>("""{"caseId":"@caseid@","until":"2026-10-02T07:00:00Z"}"""),
+        [nameof(BoardRemindResult)] = Case<BoardRemindResult>("""{"case":@boardcase@}"""),
+        [nameof(BoardArchiveParams)] = Case<BoardArchiveParams>("""{"caseId":"@caseid@"}"""),
+        [nameof(BoardArchiveResult)] = Case<BoardArchiveResult>("""{"archived":0,"noArchive":true,"case":@boardcase@}"""),
+        [nameof(BoardUnflagParams)] = Case<BoardUnflagParams>("""{"caseId":"@caseid@"}"""),
+        [nameof(BoardUnflagResult)] = Case<BoardUnflagResult>("""{"case":@boardcase@,"unflagged":2}"""),
+        [nameof(BoardDiscardDraftParams)] = Case<BoardDiscardDraftParams>("""{"caseId":"@caseid@"}"""),
+        [nameof(BoardDiscardDraftResult)] = Case<BoardDiscardDraftResult>("""{"case":@boardcase@}"""),
+        [nameof(BoardSetDraftParams)] = Case<BoardSetDraftParams>("""{"caseId":"@caseid@","draftId":"d_1"}"""),
+        [nameof(BoardSetDraftResult)] = Case<BoardSetDraftResult>("""{"case":@boardcase@}"""),
+        [nameof(BoardQueueParams)] = Case<BoardQueueParams>("""{"accountIds":["acc_1"],"caseIds":["@caseid@"],"limit":5}"""),
+        [nameof(BoardQueueResult)] = Case<BoardQueueResult>("""{"items":[@boardqueueitem@],"remaining":7}"""),
+        [nameof(Malachi.Core.Api.BoardQueueItem)] = Case<BoardQueueItem>(BoardQueueItem),
+        [nameof(Malachi.Core.Api.BoardQueueMessage)] = Case<BoardQueueMessage>(BoardQueueMessage),
+        [nameof(BoardAnnotateParams)] = Case<BoardAnnotateParams>(
+            """{"caseId":"@caseid@","inputKey":"0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f","runId":"r_1","state":"you","title":"Signed contract","summary":"Alice needs it.","why":"Alice asked you.","tasks":["Sign"],"due":@boarddue@,"draftId":"d_1","source":"claude-opus"}"""),
+        [nameof(BoardAnnotateResult)] = Case<BoardAnnotateResult>("""{"case":@boardcase@,"draftNotLinked":true}"""),
+        [nameof(BoardCommitParams)] = Case<BoardCommitParams>(
+            """{"caseId":"@caseid@","inputKey":"0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f","runId":"r_1","messageId":"m_3","text":"Send the report","quote":"I will send the report on Monday.","due":"2026-10-05T09:00:00Z","source":"claude-opus"}"""),
+        [nameof(BoardCommitResult)] = Case<BoardCommitResult>("""{"commitment":@boardcommitment@}"""),
+        [nameof(BoardSetCommitmentParams)] = Case<BoardSetCommitmentParams>("""{"commitmentId":"k_1","done":true}"""),
+        [nameof(BoardSetCommitmentResult)] = Case<BoardSetCommitmentResult>("""{"commitment":@boardcommitment@}"""),
+        [nameof(BoardPreferencesResult)] = Case<BoardPreferencesResult>("""{"preferences":@boardpreferences@}"""),
+        [nameof(BoardSetPreferencesParams)] = Case<BoardSetPreferencesParams>("""{"preferences":@boardpreferences@}"""),
+        [nameof(BoardSetPreferencesResult)] = Case<BoardSetPreferencesResult>("""{"preferences":@boardpreferences@}"""),
+        [nameof(BoardRunStartParams)] = Case<BoardRunStartParams>("""{"trigger":"manual","source":"claude-opus"}"""),
+        [nameof(BoardRunStartResult)] = Case<BoardRunStartResult>("""{"runId":"r_1"}"""),
+        [nameof(BoardRunEndParams)] = Case<BoardRunEndParams>("""{"runId":"r_1","error":"cancelled","usage":@boardusage@}"""),
+        [nameof(BoardChangedNotification)] = Case<BoardChangedNotification>("""{"accountIds":["acc_1"]}"""),
         // Config.cs
         [nameof(Preferences)] = Case<Preferences>("""{"syncIntervalSeconds":300,"remoteContent":"knownSenders","offlineDays":30,"compressStore":false,"attachmentOfflineDays":-1,"neverStoreAttachments":true}"""),
         [nameof(ConfigGetResult)] = Case<ConfigGetResult>("""{"preferences":{"syncIntervalSeconds":0,"remoteContent":"block","offlineDays":0}}"""),
@@ -159,6 +252,8 @@ public sealed class ApiRoundTripTests
         [nameof(DraftListParams)] = Case<DraftListParams>("""{"accountId":"acc_1","page":@page@}"""),
         [nameof(DraftListResult)] = Case<DraftListResult>("""{"drafts":[@draft@],"page":@pageinfo@}"""),
         [nameof(DraftDeleteParams)] = Case<DraftDeleteParams>("""{"accountId":"acc_1","draftId":"d_1"}"""),
+        [nameof(DraftGetParams)] = Case<DraftGetParams>("""{"accountId":"acc_1","draftId":"d_1"}"""),
+        [nameof(DraftGetResult)] = Case<DraftGetResult>("""{"draft":@draft@}"""),
         [nameof(DraftCreateParams)] = Case<DraftCreateParams>(
             """{"accountId":"acc_1","mode":"replyAll","messageId":"m_1","mailto":"mailto:a@example.org","attribution":"On Tue, Alice wrote:","messageAccountId":"acc_j"}"""),
         [nameof(DraftCreateResult)] = Case<DraftCreateResult>("""{"draft":@draft@,"quoted":"html","blocked":@blocked@,"skipped":[@attachment@]}"""),
@@ -307,6 +402,26 @@ public sealed class ApiRoundTripTests
         ["MessageBodyParams with trimQuoted false"] = Case<MessageBodyParams>(
             """{"accountId":"a","messageId":"m","trimQuoted":false}""",
             """{"accountId":"a","messageId":"m"}"""),
+        // The board: the members Go leaves out (omitempty) stay out, the
+        // lists it never sends as null are written as arrays, and a
+        // notification without accounts means any account.
+        ["BoardCase of a mail thread, automatic and live"] = Case<BoardCase>(
+            """{"id":"@caseid@","accountId":"acc_1","threadId":"t_9","ruleState":"info","ruleReason":"somethingNewer","visibility":"live","subject":"","person":{"address":"a@example.org"},"date":"2026-09-30T08:00:00Z","snippet":"","unread":false,"hasAttachments":false,"messageCount":1,"replyMessageId":"m_1","replyFolderId":"f_inbox","latestMessageId":"m_1","canArchive":false,"version":0}""",
+            """{"id":"@caseid@","accountId":"acc_1","threadId":"t_9","ruleState":"info","ruleReason":"somethingNewer","visibility":"live","subject":"","person":{"address":"a@example.org"},"date":"2026-09-30T08:00:00Z","snippet":"","unread":false,"hasAttachments":false,"messageCount":1,"replyMessageId":"m_1","replyFolderId":"f_inbox","latestMessageId":"m_1","canArchive":false,"version":0}"""),
+        ["BoardAnnotation fresh, without a state, tasks or due"] = Case<BoardAnnotation>(
+            """{"title":"","summary":"","why":"","tasks":null,"source":"s","at":"2026-09-30T08:30:00Z","stale":null}""",
+            """{"title":"","summary":"","why":"","tasks":[],"source":"s","at":"2026-09-30T08:30:00Z"}"""),
+        ["BoardListResult of a disabled board"] = Case<BoardListResult>(
+            """{"cases":null,"commitments":null,"enabled":false,"assistant":false,"triage":{"annotatedTodayAuto":0,"queue":0},"ready":false}""",
+            """{"cases":[],"commitments":[],"enabled":false,"assistant":false,"triage":{"annotatedTodayAuto":0,"queue":0},"ready":false}"""),
+        ["BoardSetStateParams back to automatic"] = Case<BoardSetStateParams>(
+            """{"caseId":"@caseid@","state":null}""",
+            """{"caseId":"@caseid@"}"""),
+        ["BoardRemindParams ending the remind"] = Case<BoardRemindParams>(
+            """{"caseId":"@caseid@","until":null}""",
+            """{"caseId":"@caseid@"}"""),
+        ["BoardRunEndParams of a success"] = Case<BoardRunEndParams>("""{"runId":"r_1"}""", """{"runId":"r_1"}"""),
+        ["BoardChangedNotification for any account"] = Case<BoardChangedNotification>("{}", """{"accountIds":[]}"""),
         ["MessageBodyResult without links"] = Case<MessageBodyResult>(
             """{"messageId":"m","bodyState":"pending","hasHtml":false,"text":"","blocked":@blocked@,"remoteContent":"block","sanitizerVersion":"1"}""",
             """{"messageId":"m","bodyState":"pending","hasHtml":false,"text":"","blocked":@blocked@,"links":[],"remoteContent":"block","sanitizerVersion":"1"}"""),
@@ -547,6 +662,11 @@ public sealed class ApiRoundTripTests
             ("@pageinfo@", PageInfo), ("@page@", Page), ("@pin@", Pin),
             ("@jira@", Jira), ("@itemissue@", ItemIssue), ("@issue@", Issue),
             ("@bulk@", Bulk), ("@unsubscribe@", Unsubscribe),
+            ("@caseid@", CaseId), ("@boardissue@", BoardIssue), ("@boarddue@", BoardDue), ("@boardannotation@", BoardAnnotation),
+            ("@boardcase@", BoardCase), ("@boardcommitment@", BoardCommitment), ("@boardmessage@", BoardMessage),
+            ("@boardrun@", BoardRun), ("@boardtriage@", BoardTriage), ("@boardwindows@", BoardWindows),
+            ("@boardusage@", BoardUsage), ("@boardusagetotal@", BoardUsageTotal),
+            ("@boardpreferences@", BoardPreferences), ("@boardqueuemessage@", BoardQueueMessage), ("@boardqueueitem@", BoardQueueItem),
         };
         string previous;
         do

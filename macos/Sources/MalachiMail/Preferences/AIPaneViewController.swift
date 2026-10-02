@@ -51,6 +51,32 @@ import MalachiCore
 /// gets goes to that controller too, so the menus and this group know at
 /// once.
 ///
+/// Under it the Board group (macOS-only, Swift-first like the board; shown
+/// while triage is offered, Core's one rule that the board toolbars'
+/// Triage follows too: `BoardTriageController.view.offered` — the
+/// Assistant shown with the In App target, and a board the daemon has and
+/// has not turned off): "Let the assistant refine the board", the consent
+/// of the board's triage (on: the consent sheet first, then
+/// `BoardTriageController.giveConsent`; off: `withdrawConsent`, which turns
+/// automatic triage off too), "Model" (`board-triage-model`, the triage's
+/// own, apart from the Assistant group's; enabled whenever the group is
+/// shown), "Triage new mail automatically" with "At
+/// most every" and the daily cap (the daemon's `board.preferences` through
+/// the application's `BoardPreferencesController`; a value outside the
+/// lists shows as an extra item), and a status row from the triage view
+/// (`Board.triageSettingsStatus`: last run, today's count, or why
+/// automatic triage pauses; Core publishes the view again while it names
+/// a relative time, and this page observes it), and under it "Tokens in
+/// the Last 24 Hours" from the same view (`usageValue`, the split and the
+/// runs as `usageDetail`; shown once a board.list said them, the board
+/// asked to list again whenever the page comes up). Triage needs the In App
+/// target, under which the Claude Code and Model rows above show; while
+/// Claude Code is missing, signed out or signing in, the bridge is
+/// missing or the daemon did not answer the board's preferences, the
+/// group's description says why (`Board.triageSettingsDescription`) and
+/// the rows only let a consent or automatic triage be turned off. All
+/// texts are Core's (`Board.Text`).
+///
 /// The bridge path (or its absence), the settings, the assistant and the
 /// toast sink come through `configure`; the controller exists once they
 /// and the view are there, and the status is asked every time the page
@@ -74,6 +100,32 @@ final class AIPaneViewController: PreferencesPaneViewController {
         title: Assistant.texts().assistant,
         description: Assistant.texts().description
     )
+
+    let boardConsentSwitch = NSSwitch()
+    let boardAutoSwitch = NSSwitch()
+    /// The triage's own model (`board-triage-model`), apart from the
+    /// panel's.
+    let boardModel = NSPopUpButton(frame: .zero, pullsDown: false)
+    let boardInterval = NSPopUpButton(frame: .zero, pullsDown: false)
+    let boardDaily = NSPopUpButton(frame: .zero, pullsDown: false)
+    let boardGroup = PreferencesGroupView(title: Board.texts().board)
+    /// The application's triage (its view, consent and preferences); nil
+    /// hides the Board group.
+    private var triage: BoardTriageController?
+    /// The consent sheet on this window, before the consent is given.
+    private var confirmTriage: PrefsConfirmRestart?
+    private var triageToken: BoardObserverToken?
+    private var boardConsentRow: PreferenceRowView?
+    private var boardAutoRow: PreferenceRowView?
+    private var boardIntervalRow: PreferenceRowView?
+    private var boardDailyRow: PreferenceRowView?
+    private var boardStatusRow: PreferenceRowView?
+    /// "Tokens in the Last 24 Hours" and its value (dim, numeric).
+    private var boardUsageRow: PreferenceRowView?
+    let boardUsageValue = NSTextField(labelWithString: "")
+    /// The consent sheet is up or the consent is being stored: the switch
+    /// shows the user's choice until then.
+    private var givingConsent = false
 
     /// The MCP controller; nil until `configure` was called and the view
     /// loaded.
@@ -140,12 +192,17 @@ final class AIPaneViewController: PreferencesPaneViewController {
     /// controller with the question (nil: every change is written at once)
     /// and the toast sink; may be called before or after the view loaded. A
     /// second call after the controller started is ignored.
+    /// `triage` is the application's board triage (nil: no Board group)
+    /// and `confirmTriage` its consent sheet on a window.
     func configure(
         bridge: String?, settings: Settings, assistant: AssistantController?,
         claudeDesktop: ClaudeDesktopController? = nil, confirmRestart: PrefsConfirmRestart? = nil,
+        triage: BoardTriageController? = nil, confirmTriage: PrefsConfirmRestart? = nil,
         toast: @escaping @MainActor (String) -> Void
     ) {
         guard registration == nil else { return }
+        self.triage = triage
+        self.confirmTriage = confirmTriage
         self.bridge = bridge
         self.settings = settings
         self.assistant = assistant
@@ -203,6 +260,7 @@ final class AIPaneViewController: PreferencesPaneViewController {
         assistantGroup.setRow(claudeCode, hidden: true)
         assistantGroup.setRow(model, hidden: true)
         addGroup(assistantGroup)
+        addBoardGroup()
     }
 
     override func viewDidLoad() {
@@ -225,6 +283,8 @@ final class AIPaneViewController: PreferencesPaneViewController {
         assistant?.locator?.refresh()
         assistant?.refreshHandlers()
         updateAssistantGroup()
+        // The tokens of the last 24 hours age out without a notification.
+        triage?.relistBoard()
     }
 
     // MARK: Binding (preferences.go `bindMCP`)
@@ -259,9 +319,12 @@ final class AIPaneViewController: PreferencesPaneViewController {
         }
         bindClaudeDesktop()
         bindAssistant()
+        bindBoard()
         bindings.onClose = { [weak self] in
             guard let self else { return }
             self.registration?.close()
+            self.triageToken?.cancel()
+            self.triageToken = nil
             // The controller is the application's: it goes on without the page.
             self.claudeDesktop?.onChange = nil
             self.claudeDesktop?.onToast = nil
@@ -351,6 +414,7 @@ final class AIPaneViewController: PreferencesPaneViewController {
         if app {
             showClaudeCode()
         }
+        updateBoardGroup()
     }
 
     // MARK: Claude Code (the In App target)
@@ -594,6 +658,181 @@ final class AIPaneViewController: PreferencesPaneViewController {
         Task { @MainActor in
             await desktop.restartPending(write: write)
         }
+    }
+}
+
+// MARK: The Board group (the board's triage)
+
+extension AIPaneViewController {
+    /// "At most every": minutes between automatic runs.
+    static let boardIntervals = [15, 30, 60, 180]
+    /// The daily caps of conversations automatic runs annotate.
+    static let boardDailyCaps = [20, 60, 150]
+
+    /// Builds the group's rows (hidden until the triage says it is
+    /// offered).
+    fileprivate func addBoardGroup() {
+        let consent = PreferenceRowView(
+            title: Board.Text.triageSettingsConsent, subtitle: Board.Text.triageSettingsConsentSubtitle,
+            trailing: boardConsentSwitch)
+        boardConsentRow = consent
+        // The Assistant group's Model row, for the triage's own model.
+        boardModel.addItems(withTitles: Assistant.models.map(Assistant.modelName))
+        let model = PreferenceRowView(title: Assistant.panelTexts().model, trailing: boardModel)
+        let auto = PreferenceRowView(title: Board.Text.triageSettingsAutomatic, trailing: boardAutoSwitch)
+        boardAutoRow = auto
+        let interval = PreferenceRowView(title: Board.Text.triageSettingsInterval, trailing: boardInterval)
+        boardIntervalRow = interval
+        let daily = PreferenceRowView(title: Board.Text.triageSettingsDaily, trailing: boardDaily)
+        boardDailyRow = daily
+        let status = PreferenceRowView(title: L10n.T("Status"), subtitle: "")
+        boardStatusRow = status
+        boardUsageValue.textColor = .secondaryLabelColor
+        boardUsageValue.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        boardUsageValue.lineBreakMode = .byTruncatingTail
+        boardUsageValue.isSelectable = false
+        let usage = PreferenceRowView(title: Board.Text.triageSettingsUsage, subtitle: "", trailing: boardUsageValue)
+        boardUsageRow = usage
+        boardGroup.setRows([consent, model, auto, interval, daily, status, usage])
+        boardGroup.isHidden = true
+        addGroup(boardGroup)
+    }
+
+    /// Wires the controls and follows the triage (its view, consent and
+    /// preferences: `observe` reports all of them, and the view again once
+    /// a minute while it names a relative time).
+    fileprivate func bindBoard() {
+        guard let triage else { return }
+        boardConsentSwitch.target = self
+        boardConsentSwitch.action = #selector(boardConsentChanged(_:))
+        boardAutoSwitch.target = self
+        boardAutoSwitch.action = #selector(boardAutoChanged(_:))
+        boardInterval.target = self
+        boardInterval.action = #selector(boardIntervalChosen(_:))
+        boardDaily.target = self
+        boardDaily.action = #selector(boardDailyChosen(_:))
+        // A client setting like the panel's model, usable whenever the
+        // group is shown (choosing it needs no consent); the next run takes
+        // it.
+        if let settings {
+            bindings.add(.bind(boardModel, to: settings, .boardTriageModel, choices: Assistant.models, \.boardTriageModel))
+        }
+        triageToken = triage.observe { [weak self] in
+            self?.updateBoardGroup()
+        }
+        // The daemon's preferences, should none have come yet.
+        if triage.preferences.preferences == nil {
+            triage.preferences.load()
+        }
+        updateBoardGroup()
+    }
+
+    /// The group from the triage's view and the board's preferences.
+    fileprivate func updateBoardGroup() {
+        guard let triage, !closed else {
+            boardGroup.isHidden = true
+            return
+        }
+        let v = triage.view
+        guard v.offered else {
+            boardGroup.isHidden = true
+            return
+        }
+        boardGroup.isHidden = false
+        // Why triage cannot run now ("" when it can); the Claude Code row
+        // above offers what Claude Code needs.
+        boardGroup.descriptionText = Board.triageSettingsDescription(v)
+        let ready = v.control == .triage || v.control == .stop
+        let prefs = triage.preferences.preferences
+        let consent = givingConsent ? boardConsentSwitch.state == .on : triage.consentGiven
+        boardConsentSwitch.state = consent ? .on : .off
+        // Turning off is always possible; turning on needs a runnable triage.
+        boardConsentRow?.isEnabled = prefs != nil && !givingConsent && (ready || consent)
+        let auto = prefs?.autoTriage ?? false
+        boardAutoSwitch.state = auto ? .on : .off
+        boardAutoRow?.isEnabled = prefs != nil && !givingConsent && (auto || (consent && ready))
+        let minutes = prefs?.autoTriageMinutes ?? API.Limits.defaultBoardAutoTriageMinutes
+        let cap = prefs?.autoTriageDailyCases ?? API.Limits.defaultBoardAutoTriageDailyCases
+        Self.fill(boardInterval, values: Self.boardIntervals, selected: minutes) { Board.Text.triageInterval(minutes: $0) }
+        Self.fill(boardDaily, values: Self.boardDailyCaps, selected: cap, title: Board.Text.triageDailyCap)
+        let schedule = prefs != nil && consent && auto && ready && !givingConsent
+        boardIntervalRow?.isEnabled = schedule
+        boardDailyRow?.isEnabled = schedule
+        boardStatusRow?.subtitle = Board.triageSettingsStatus(v)
+        // The tokens of the last 24 hours, from the same view: refreshed
+        // with the status row (each board.list, the view's clock).
+        if let usage = boardUsageRow {
+            boardGroup.setRow(usage, hidden: !v.usageShown)
+            boardUsageValue.stringValue = v.usageValue
+            usage.subtitle = v.usageDetail
+            usage.toolTip = v.usageToolTip
+        }
+    }
+
+    /// The pop-up's items (`values`, and `selected` as an extra item when
+    /// it is not one of them), each tagged with its value, `selected`
+    /// chosen.
+    static func fill(_ popUp: NSPopUpButton, values: [Int], selected: Int, title: (Int) -> String) {
+        let wanted = values.contains(selected) ? values : values + [selected]
+        if popUp.itemArray.map(\.tag) != wanted {
+            popUp.removeAllItems()
+            for value in wanted {
+                popUp.addItem(withTitle: title(value))
+                popUp.lastItem?.tag = value
+            }
+        }
+        popUp.selectItem(withTag: selected)
+    }
+
+    // MARK: Actions
+
+    /// On: the consent sheet on this window, then the consent given (the
+    /// board's assistant preference on, once the daemon stored it); a
+    /// declined sheet leaves the switch off. Off: withdrawn (a run under
+    /// way stops; the panel's own consent stays).
+    @objc fileprivate func boardConsentChanged(_ sender: Any?) {
+        guard let triage, !closed, !givingConsent else { return }
+        guard boardConsentSwitch.state == .on else {
+            triage.withdrawConsent()
+            updateBoardGroup()
+            return
+        }
+        givingConsent = true
+        updateBoardGroup()
+        let confirm = confirmTriage
+        Task { @MainActor [weak self] in
+            // Without a sheet to ask, a consent that is needed is not given.
+            var allowed = !triage.needsConsent
+            if triage.needsConsent, let confirm {
+                allowed = await confirm(self?.view.window)
+            }
+            if allowed {
+                _ = await triage.giveConsent()
+            }
+            guard let self else { return }
+            self.givingConsent = false
+            self.updateBoardGroup()
+        }
+    }
+
+    @objc fileprivate func boardAutoChanged(_ sender: Any?) {
+        guard let triage, !closed else { return }
+        let on = boardAutoSwitch.state == .on
+        // Optimistic; a refused write is taken back and toasted by the
+        // application (`BoardPreferencesController.onError`).
+        triage.preferences.update({ $0.autoTriage = on }, completion: nil)
+    }
+
+    @objc fileprivate func boardIntervalChosen(_ sender: Any?) {
+        guard let triage, !closed, let minutes = boardInterval.selectedItem?.tag else { return }
+        guard triage.preferences.preferences?.autoTriageMinutes != minutes else { return }
+        triage.preferences.update({ $0.autoTriageMinutes = minutes }, completion: nil)
+    }
+
+    @objc fileprivate func boardDailyChosen(_ sender: Any?) {
+        guard let triage, !closed, let cases = boardDaily.selectedItem?.tag else { return }
+        guard triage.preferences.preferences?.autoTriageDailyCases != cases else { return }
+        triage.preferences.update({ $0.autoTriageDailyCases = cases }, completion: nil)
     }
 }
 

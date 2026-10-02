@@ -1,0 +1,2 @@
+The report is at https://reports.example.org/view?id=42&mode=full and the archive at
+www.example.org/archive?year=2026 — write to sales?team@example.org if anything is missing.

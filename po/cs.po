@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-01 13:35+0000\n"
+"POT-Creation-Date: 2026-10-02 08:16+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -594,7 +594,7 @@ msgstr "Nový rozhovor"
 msgid "A draft is ready"
 msgstr "Koncept je připravený"
 
-#: ui/internal/assistant/assistant.go:580
+#: ui/internal/assistant/assistant.go:580 ui/internal/board/text.go:342
 msgid "Open Draft"
 msgstr "Otevřít koncept"
 
@@ -612,7 +612,7 @@ msgstr "Vybrali jste jinou zprávu"
 msgid "Add to Conversation"
 msgstr "Přidat do rozhovoru"
 
-#: ui/internal/assistant/assistant.go:587
+#: ui/internal/assistant/assistant.go:587 ui/internal/board/triage.go:32
 msgid "Claude Code is not signed in"
 msgstr "Claude Code není přihlášený"
 
@@ -1016,7 +1016,9 @@ msgstr "Odesílatele se nepodařilo ověřit"
 msgid ""
 "Malachi Mail sent nothing because the one-click request is not signed by %s. "
 "Use the unsubscribe link in the message instead."
-msgstr "Malachi Mail nic neodeslalo, protože žádost o odhlášení jedním klikem není podepsaná doménou %s. Odhlaste se odkazem ve zprávě."
+msgstr ""
+"Malachi Mail nic neodeslalo, protože žádost o odhlášení jedním klikem není "
+"podepsaná doménou %s. Odhlaste se odkazem ve zprávě."
 
 #: ui/internal/bulkmail/bulkmail.go:236
 #, c-format
@@ -1024,9 +1026,12 @@ msgid ""
 "Malachi Mail sent nothing because the one-click request is not signed by %s. "
 "It can send an unsubscribe request to %s from your account instead. It will "
 "appear in Sent."
-msgstr "Malachi Mail nic neodeslalo, protože žádost o odhlášení jedním klikem není podepsaná doménou %s. Místo toho může z vašeho účtu odeslat žádost o odhlášení na %s. Objeví se v Odeslaných."
+msgstr ""
+"Malachi Mail nic neodeslalo, protože žádost o odhlášení jedním klikem není "
+"podepsaná doménou %s. Místo toho může z vašeho účtu odeslat žádost o "
+"odhlášení na %s. Objeví se v Odeslaných."
 
-#: ui/internal/bulkmail/bulkmail.go:242
+#: ui/internal/bulkmail/bulkmail.go:242 ui/internal/board/text.go:366
 msgid "_Close"
 msgstr "_Zavřít"
 
@@ -1154,7 +1159,7 @@ msgstr "Zahodit tuto zprávu?"
 
 #: ui/internal/compose/draft.go:477 ui/internal/compose/draft.go:490
 #: ui/internal/compose/draft.go:504 ui/internal/compose/rewrite.go:106
-#: ui/data/ui/compose.ui:560
+#: ui/internal/board/text.go:345 ui/data/ui/compose.ui:560
 msgid "_Discard"
 msgstr "Za_hodit"
 
@@ -1267,8 +1272,9 @@ msgstr "Komentář byl zařazen k odeslání"
 msgid "Comment"
 msgstr "Komentovat"
 
-#: ui/internal/jira/compose.go:164 ui/internal/window/conversation_card.go:281
-#: ui/data/ui/message_window.ui:38 ui/data/ui/window.ui:442
+#: ui/internal/jira/compose.go:164 ui/internal/board/text.go:362
+#: ui/internal/window/conversation_card.go:281 ui/data/ui/message_window.ui:38
+#: ui/data/ui/window.ui:442
 msgid "Reply"
 msgstr "Odpovědět"
 
@@ -1297,7 +1303,7 @@ msgid "Open %s in the Browser"
 msgstr "Otevřít %s v prohlížeči"
 
 #. TRANSLATORS: a field of a Jira issue.
-#: ui/internal/jira/jira.go:267
+#: ui/internal/jira/jira.go:267 ui/internal/board/text.go:823
 msgid "Status"
 msgstr "Stav"
 
@@ -1811,6 +1817,1137 @@ msgstr "Skrýt citovaný text"
 msgid "Show Quoted Text"
 msgstr "Zobrazit citovaný text"
 
+#: ui/internal/board/text.go:57 ui/data/ui/preferences.ui:114
+msgid "Mail"
+msgstr "Pošta"
+
+#. TRANSLATORS: the window's second mode beside Mail: the conversations
+#. that need something, sorted into four states.
+#: ui/internal/board/text.go:65
+msgid "Board"
+msgstr "Nástěnka"
+
+#. TRANSLATORS: a state of the board, its column and filter: the
+#. cases that need the user now (a deadline, an escalation).
+#: ui/internal/board/text.go:74
+msgid "Hot"
+msgstr "Hoří"
+
+#. TRANSLATORS: a state of the board, its column and filter: the
+#. cases that wait for the user's answer.
+#: ui/internal/board/text.go:78
+msgid "Waiting for You"
+msgstr "Čeká na vás"
+
+#. TRANSLATORS: a state of the board, its column and filter: the
+#. cases where the user waits for someone else's answer.
+#: ui/internal/board/text.go:82
+msgid "Waiting for Them"
+msgstr "Čekáte na ně"
+
+#. TRANSLATORS: a state of the board, its column and filter: the
+#. cases with nothing to do, only for reading.
+#: ui/internal/board/text.go:86
+msgid "For Your Information"
+msgstr "Informace"
+
+#. TRANSLATORS: the board's filter that shows every case still on it.
+#: ui/internal/board/text.go:117
+msgid "Overview"
+msgstr "Přehled"
+
+#: ui/internal/board/text.go:121
+msgctxt "account filter"
+msgid "All Accounts"
+msgstr "Všechny účty"
+
+#. TRANSLATORS: the board's filter and section of the finished cases,
+#. and the button that marks a case finished.
+#: ui/internal/board/text.go:127
+msgid "Done"
+msgstr "Hotovo"
+
+#. TRANSLATORS: the number of cases on the board, after the account
+#. filter: "All Accounts · 23 cases".
+#: ui/internal/board/text.go:134
+#, c-format
+msgid "%d case"
+msgid_plural "%d cases"
+msgstr[0] "%d případ"
+msgstr[1] "%d případy"
+msgstr[2] "%d případů"
+
+#. TRANSLATORS: tooltip of the member count of a conversation row.
+#. TRANSLATORS: subtitle of the message list; %d is the number of
+#. messages in the folder.
+#: ui/internal/board/text.go:139 ui/internal/widget/message_row.go:221
+#: ui/internal/window/folders.go:340
+#, c-format
+msgid "%d message"
+msgid_plural "%d messages"
+msgstr[0] "%d zpráva"
+msgstr[1] "%d zprávy"
+msgstr[2] "%d zpráv"
+
+#: ui/internal/board/text.go:146
+msgid "Nothing needs you today."
+msgstr "Dnes na vás nic nečeká."
+
+#: ui/internal/board/text.go:148
+#, c-format
+msgid "%d thing needs you today."
+msgid_plural "%d things need you today."
+msgstr[0] "Dnes na vás čeká %d věc."
+msgstr[1] "Dnes na vás čekají %d věci."
+msgstr[2] "Dnes na vás čeká %d věcí."
+
+#. TRANSLATORS: the row under the first few cases waiting for the user;
+#. %d is how many more there are.
+#: ui/internal/board/text.go:155
+#, c-format
+msgid "and %d more"
+msgid_plural "and %d more"
+msgstr[0] "a %d další"
+msgstr[1] "a %d další"
+msgstr[2] "a %d dalších"
+
+#. TRANSLATORS: a group of deadlines that have passed.
+#: ui/internal/board/text.go:177
+msgid "Overdue"
+msgstr "Po termínu"
+
+#. TRANSLATORS: a group of deadlines, a deadline's day, and the
+#. reminder preset of tomorrow 09:00.
+#: ui/internal/board/text.go:183 ui/internal/board/text.go:671
+msgid "Tomorrow"
+msgstr "Zítra"
+
+#. TRANSLATORS: a group of deadlines two to seven days ahead.
+#: ui/internal/board/text.go:186
+msgid "Next 7 Days"
+msgstr "Příštích 7 dní"
+
+#. TRANSLATORS: a group of deadlines more than a week ahead.
+#: ui/internal/board/text.go:189
+msgctxt "deadline"
+msgid "Later"
+msgstr "Později"
+
+#. TRANSLATORS: the board's style that shows the day (what needs the
+#. user, deadlines), a group of deadlines and a deadline's day.
+#: ui/internal/board/text.go:198
+msgid "Today"
+msgstr "Dnes"
+
+#: ui/internal/board/text.go:227
+msgid "The daemon’s rules set the state and the assistant kept it."
+msgstr "Stav určila pravidla démona a asistent ho nechal."
+
+#. TRANSLATORS: %s is the name of the assistant's model, such as
+#. "claude-sonnet-4-5".
+#: ui/internal/board/text.go:231
+#, c-format
+msgid "The daemon’s rules set the state and the assistant (%s) kept it."
+msgstr "Stav určila pravidla démona a asistent (%s) ho nechal."
+
+#. TRANSLATORS: %s is the state the rules chose, such as "Waiting for You".
+#: ui/internal/board/text.go:235
+#, c-format
+msgid "The assistant refined the state. The rules suggested: %s."
+msgstr "Stav zpřesnil asistent. Pravidla navrhovala: %s."
+
+#. TRANSLATORS: the first %s is the name of the assistant's model,
+#. the second the state the rules chose, such as "Waiting for You".
+#: ui/internal/board/text.go:239
+#, c-format
+msgid "The assistant (%s) refined the state. The rules suggested: %s."
+msgstr "Stav zpřesnil asistent (%s). Pravidla navrhovala: %s."
+
+#: ui/internal/board/text.go:241
+msgid "You moved this case yourself."
+msgstr "Tento případ jste přesunuli sami."
+
+#: ui/internal/board/text.go:243
+msgid "The daemon’s rules set the state; the assistant is off."
+msgstr "Stav určila pravidla démona, asistent je vypnutý."
+
+#: ui/internal/board/text.go:245
+msgid ""
+"The daemon’s rules set the state. The assistant has not looked at this case "
+"yet."
+msgstr ""
+"Stav určila pravidla démona. Asistent se na tento případ zatím nedíval."
+
+#: ui/internal/board/text.go:260
+msgid "Sorted by rules · refined by the assistant"
+msgstr "Roztříděno pravidly · zpřesnil asistent"
+
+#. TRANSLATORS: %s is the name of the assistant's model.
+#: ui/internal/board/text.go:263
+#, c-format
+msgid "Sorted by rules · refined by the assistant (%s)"
+msgstr "Roztříděno pravidly · zpřesnil asistent (%s)"
+
+#: ui/internal/board/text.go:274
+msgid "Sorted by the daemon’s rules · assistant off"
+msgstr "Roztříděno pravidly démona · asistent vypnutý"
+
+#: ui/internal/board/text.go:278
+msgid "No Case Selected"
+msgstr "Není vybraný žádný případ"
+
+#: ui/internal/board/text.go:282
+msgid ""
+"Select a case to see its summary, a suggested reply and the conversation."
+msgstr "Vyberte případ a uvidíte shrnutí, návrh odpovědi a konverzaci."
+
+#: ui/internal/board/text.go:286
+msgid "Nothing on the Board"
+msgstr "Nástěnka je prázdná"
+
+#: ui/internal/board/text.go:290
+msgid "Cases from your accounts show up here as they arrive."
+msgstr "Případy z vašich účtů se tu objeví, jakmile přijdou."
+
+#: ui/internal/board/text.go:294
+msgid "Nothing here."
+msgstr "Tady nic není."
+
+#. TRANSLATORS: the empty column Hot.
+#: ui/internal/board/text.go:300
+msgid "Nothing burning."
+msgstr "Nic nehoří."
+
+#. TRANSLATORS: an empty column of the board.
+#: ui/internal/board/text.go:303
+msgid "Empty."
+msgstr "Prázdné."
+
+#: ui/internal/board/text.go:308
+msgid "✦ From the Assistant"
+msgstr "✦ Od asistenta"
+
+#: ui/internal/board/text.go:311
+msgid "✦ Summary from the Assistant"
+msgstr "✦ Shrnutí od asistenta"
+
+#: ui/internal/board/text.go:314
+msgid "✦ Tasks and Questions"
+msgstr "✦ Úkoly a otázky"
+
+#: ui/internal/board/text.go:317
+msgid "Suggested Reply"
+msgstr "Návrh odpovědi"
+
+#. TRANSLATORS: under the board's suggested reply; "it" is the reply.
+#: ui/internal/board/text.go:323
+msgid "Only here on the board until you send it"
+msgstr "Jen tady na nástěnce, dokud ji neodešlete"
+
+#: ui/internal/board/text.go:327
+msgid "Loading the suggested reply…"
+msgstr "Načítá se návrh odpovědi…"
+
+#: ui/internal/board/text.go:331
+msgid "The suggested reply could not be opened."
+msgstr "Návrh odpovědi se nepodařilo otevřít."
+
+#: ui/internal/board/text.go:335
+msgid "The suggested reply was removed elsewhere."
+msgstr "Návrh odpovědi byl odstraněn jinde."
+
+#: ui/internal/board/text.go:339 ui/internal/window/actions.go:61
+msgid "Unstar"
+msgstr "Odebrat hvězdičku"
+
+#: ui/internal/board/text.go:348
+msgid "Why is this here?"
+msgstr "Proč je to tady?"
+
+#: ui/internal/board/text.go:352
+msgid "Move Back to Board"
+msgstr "Vrátit na nástěnku"
+
+#. TRANSLATORS: a button that takes a case off the board until a
+#. chosen time.
+#: ui/internal/board/text.go:358
+msgid "Remind…"
+msgstr "Připomenout…"
+
+#. TRANSLATORS: a button: the assistant reads the conversations on the
+#. board and adds notes (titles, summaries, tasks, deadlines).
+#: ui/internal/board/text.go:372
+msgid "✦ Triage"
+msgstr "✦ Roztřídit"
+
+#: ui/internal/board/text.go:376
+msgid "Not in this preview yet."
+msgstr "V této ukázce zatím není."
+
+#. TRANSLATORS: the board's style: a navigation column, the list of
+#. cases and the detail.
+#: ui/internal/board/text.go:394
+msgctxt "board style"
+msgid "List"
+msgstr "Seznam"
+
+#. TRANSLATORS: the board's style: one column of cards per state.
+#: ui/internal/board/text.go:397
+msgctxt "board style"
+msgid "Columns"
+msgstr "Sloupce"
+
+#: ui/internal/board/text.go:408
+msgid "As List"
+msgstr "Jako seznam"
+
+#: ui/internal/board/text.go:410
+msgid "As Columns"
+msgstr "Jako sloupce"
+
+#. TRANSLATORS: the sender of the user's own messages in a conversation.
+#: ui/internal/board/text.go:418
+msgid "You"
+msgstr "Vy"
+
+#. TRANSLATORS: %s is a number of messages, such as "3 messages".
+#: ui/internal/board/text.go:425
+#, c-format
+msgid "Conversation · %s"
+msgstr "Konverzace · %s"
+
+#: ui/internal/board/text.go:429
+msgid "Deadlines"
+msgstr "Termíny"
+
+#: ui/internal/board/text.go:433
+msgid ""
+"No deadlines. The assistant finds deadlines in the text of messages and "
+"keeps the sentence each one comes from."
+msgstr ""
+"Žádné termíny. Termíny z textu zpráv doplňuje asistent a ke každému ukládá "
+"větu, ze které pochází."
+
+#: ui/internal/board/text.go:438
+msgid "Calendar and Reminders"
+msgstr "Kalendář a připomínky"
+
+#: ui/internal/board/text.go:442
+msgid "Later. Read-only; where the data comes from differs on each platform."
+msgstr "Později. Jen pro čtení, zdroj dat je na každé platformě jiný."
+
+#. TRANSLATORS: a tile of the Today page: the promises the assistant
+#. found in the user's replies.
+#: ui/internal/board/text.go:449
+msgid "Promised"
+msgstr "Slíbené"
+
+#. TRANSLATORS: spoken by the screen reader; %s is a deadline's day,
+#. such as "Tomorrow" or "20 Oct".
+#: ui/internal/board/text.go:456
+#, c-format
+msgid "Due %s"
+msgstr "Termín %s"
+
+#: ui/internal/board/text.go:464
+msgid "Has attachments"
+msgstr "Obsahuje přílohy"
+
+#. TRANSLATORS: spoken by the screen reader for a case with unread mail.
+#: ui/internal/board/text.go:469
+msgctxt "board row"
+msgid "Unread"
+msgstr "Nepřečteno"
+
+#: ui/internal/board/text.go:478
+msgid ""
+"The newest message is marked as important, addressed to you and from a "
+"sender you have written to."
+msgstr ""
+"Nejnovější zpráva je označená jako důležitá, je adresovaná vám a poslal ji "
+"někdo, komu jste už psali."
+
+#: ui/internal/board/text.go:480
+msgid ""
+"You flagged a message in this conversation and the newest one is not yours."
+msgstr ""
+"Zprávu v této konverzaci jste označili příznakem a nejnovější zpráva není od "
+"vás."
+
+#: ui/internal/board/text.go:482
+msgid "The newest message is addressed to you by a sender you have written to."
+msgstr ""
+"Nejnovější zpráva je adresovaná vám a poslal ji někdo, komu jste už psali."
+
+#: ui/internal/board/text.go:484
+msgid "The newest message answers one of yours."
+msgstr "Nejnovější zpráva odpovídá na některou z vašich."
+
+#: ui/internal/board/text.go:486
+msgid "You replied last; the next step is theirs."
+msgstr "Naposledy jste odpověděli vy; další krok je na nich."
+
+#: ui/internal/board/text.go:488
+msgid "You asked a question and wait for the answer."
+msgstr "Položili jste otázku a čekáte na odpověď."
+
+#: ui/internal/board/text.go:490
+msgid "You are only in Cc on the newest message."
+msgstr "V nejnovější zprávě jste jen v kopii."
+
+#: ui/internal/board/text.go:492
+msgid "The message is not addressed to you (a mailing list or a Bcc)."
+msgstr "Zpráva není adresovaná vám (konference nebo skrytá kopie)."
+
+#: ui/internal/board/text.go:494
+msgid "A note to yourself."
+msgstr "Poznámka pro sebe."
+
+#: ui/internal/board/text.go:496
+msgid ""
+"The message is addressed to you, but its sender is one you have never "
+"written to, so it waits under For Your Information. Its importance does not "
+"count."
+msgstr ""
+"Zpráva je adresovaná vám, ale jejímu odesílateli jste nikdy nepsali, proto "
+"čeká v části Informace. Na její důležitosti nezáleží."
+
+#: ui/internal/board/text.go:498
+msgid "Your comment is the latest in the issue; the next step is theirs."
+msgstr "Váš komentář je v úkolu nejnovější; další krok je na nich."
+
+#: ui/internal/board/text.go:500
+msgid "Someone wrote in an issue assigned to you."
+msgstr "Někdo napsal do úkolu, který je přiřazený vám."
+
+#: ui/internal/board/text.go:502
+msgid "Someone wrote in an issue you reported."
+msgstr "Někdo napsal do úkolu, který jste zadali."
+
+#: ui/internal/board/text.go:504
+msgid "Someone wrote in an issue you commented on."
+msgstr "Někdo napsal do úkolu, který jste komentovali."
+
+#: ui/internal/board/text.go:506
+msgid "You only watch this issue."
+msgstr "Tento úkol jen sledujete."
+
+#: ui/internal/board/text.go:508
+msgid ""
+"The rules would no longer list it; your choice, a reminder, a deadline or a "
+"promise keeps it here."
+msgstr ""
+"Pravidla by ho už nezařadila; drží ho tu vaše volba, připomenutí, termín "
+"nebo slib."
+
+#: ui/internal/board/text.go:514
+msgid "The daemon’s rules put the case here."
+msgstr "Případ sem zařadila pravidla démona."
+
+#: ui/internal/board/text.go:535
+msgid "Loading the Board…"
+msgstr "Načítá se nástěnka…"
+
+#: ui/internal/board/text.go:537
+msgid "Preparing the Board…"
+msgstr "Připravuje se nástěnka…"
+
+#: ui/internal/board/text.go:541
+msgid "Board Unavailable"
+msgstr "Nástěnka není dostupná"
+
+#: ui/internal/board/text.go:543
+msgid "The Board Is Off"
+msgstr "Nástěnka je vypnutá"
+
+#: ui/internal/board/text.go:557
+msgid "The board needs a running mail backend."
+msgstr "Nástěnka vyžaduje běžící poštovní démon."
+
+#: ui/internal/board/text.go:559
+msgid "The board could not be loaded. Malachi Mail tries again shortly."
+msgstr "Nástěnku se nepodařilo načíst. Malachi Mail to brzy zkusí znovu."
+
+#: ui/internal/board/text.go:563
+msgid ""
+"The board is turned off in the settings. Your decisions are kept for when it "
+"is on again."
+msgstr ""
+"Nástěnka je v Předvolbách vypnutá. Vaše rozhodnutí zůstanou zachovaná pro "
+"chvíli, kdy ji znovu zapnete."
+
+#: ui/internal/board/text.go:575
+msgid "The mail backend is not running: the board shows what it knew last."
+msgstr "Poštovní démon neběží: nástěnka ukazuje poslední známý stav."
+
+#: ui/internal/board/text.go:577
+msgid ""
+"The board could not be loaded: it shows what it knew last. Malachi Mail "
+"tries again shortly."
+msgstr ""
+"Nástěnku se nepodařilo načíst: ukazuje poslední známý stav. Malachi Mail to "
+"brzy zkusí znovu."
+
+#: ui/internal/board/text.go:582
+msgid "Only the newest 1,000 cases are on the board."
+msgstr "Na nástěnce je jen 1000 nejnovějších případů."
+
+#: ui/internal/board/text.go:588
+msgid "This mail backend has no board. A newer Malachi Mail backend brings it."
+msgstr ""
+"Tento poštovní démon nástěnku nemá. Přinese ji novější démon Malachi Mail."
+
+#: ui/internal/board/text.go:592
+msgid ""
+"Malachi Mail is sorting your mail for the first time. This takes a minute or "
+"two."
+msgstr "Malachi Mail poprvé třídí vaši poštu. Potrvá to minutu nebo dvě."
+
+#: ui/internal/board/text.go:598
+msgid "The assistant’s notes are out of date: the conversation changed since."
+msgstr "Poznámky asistenta jsou zastaralé: konverzace se mezitím změnila."
+
+#: ui/internal/board/text.go:603
+msgid "Loading the conversation…"
+msgstr "Načítá se konverzace…"
+
+#: ui/internal/board/text.go:606
+msgid "The conversation could not be loaded."
+msgstr "Konverzaci se nepodařilo načíst."
+
+#: ui/internal/board/text.go:609 ui/internal/window/assistant_panel.go:653
+#: ui/internal/window/status.go:321 ui/data/ui/window.ui:411
+msgid "Try Again"
+msgstr "Zkusit znovu"
+
+#. TRANSLATORS: spoken by the screen reader before a title or a reason
+#. the assistant wrote; %s is that text.
+#: ui/internal/board/text.go:620
+#, c-format
+msgid "Assistant: %s"
+msgstr "Asistent: %s"
+
+#: ui/internal/board/text.go:624
+msgid "Show in Mail"
+msgstr "Zobrazit v Poště"
+
+#: ui/internal/board/text.go:629
+msgid "Show in Mail failed: the message is no longer on the server."
+msgstr "Zobrazení v Poště selhalo: zpráva už na serveru není."
+
+#: ui/internal/board/text.go:634
+msgid "Show in Mail failed: the message could not be loaded."
+msgstr "Zobrazení v Poště selhalo: zprávu se nepodařilo načíst."
+
+#: ui/internal/board/text.go:638 ui/data/ui/message_window.ui:81
+#: ui/data/ui/window.ui:498
+msgid "Archive"
+msgstr "Archivovat"
+
+#. TRANSLATORS: a section of the board's Done filter: the cases off the
+#. board until a reminder.
+#: ui/internal/board/text.go:644
+msgid "Snoozed"
+msgstr "Odložené"
+
+#. TRANSLATORS: %s is a day and a time, such as "Tomorrow 09:00" or
+#. "20 Oct 09:00".
+#: ui/internal/board/text.go:651
+#, c-format
+msgid "Back on the board %s"
+msgstr "Zpět na nástěnce %s"
+
+#. TRANSLATORS: a reminder preset: in about three hours, or at 18:00.
+#: ui/internal/board/text.go:669
+msgid "Later Today"
+msgstr "Později dnes"
+
+#. TRANSLATORS: a reminder preset: next Monday at 09:00.
+#: ui/internal/board/text.go:674
+msgid "Next Week"
+msgstr "Příští týden"
+
+#: ui/internal/board/text.go:680
+msgid "Don’t Remind Me"
+msgstr "Nepřipomínat"
+
+#: ui/internal/board/text.go:685
+msgid "Marked as done. This account has no archive."
+msgstr "Označeno jako hotové. Tento účet nemá archiv."
+
+#: ui/internal/board/text.go:688
+msgid "Marked as done. No message was in the inbox."
+msgstr "Označeno jako hotové. V doručené poště nebyla žádná zpráva."
+
+#: ui/internal/board/text.go:690
+#, c-format
+msgid "Archived %d message."
+msgid_plural "Archived %d messages."
+msgstr[0] "Archivována %d zpráva."
+msgstr[1] "Archivovány %d zprávy."
+msgstr[2] "Archivováno %d zpráv."
+
+#: ui/internal/board/text.go:748
+msgid "Moving the case"
+msgstr "Přesunutí případu"
+
+#: ui/internal/board/text.go:750
+msgid "Marking the case done"
+msgstr "Označení případu jako hotového"
+
+#: ui/internal/board/text.go:752
+msgid "Moving the case back to the board"
+msgstr "Vrácení případu na nástěnku"
+
+#: ui/internal/board/text.go:754
+msgid "Setting the reminder"
+msgstr "Nastavení připomenutí"
+
+#: ui/internal/board/text.go:756
+msgid "Archiving"
+msgstr "Archivování"
+
+#: ui/internal/board/text.go:758
+msgid "Changing the promise"
+msgstr "Uložení změny slibu"
+
+#: ui/internal/board/text.go:760
+msgid "Discarding the draft"
+msgstr "Zahození konceptu"
+
+#: ui/internal/board/text.go:762 ui/internal/window/actions.go:254
+msgid "Removing the star"
+msgstr "Odebrání hvězdičky"
+
+#: ui/internal/board/text.go:764
+msgid "Changing the board’s settings"
+msgstr "Uložení nastavení nástěnky"
+
+#: ui/internal/board/text.go:773
+msgid "the promise no longer exists"
+msgstr "slib už neexistuje"
+
+#: ui/internal/board/text.go:775
+msgid "the mail backend is not running"
+msgstr "poštovní démon neběží"
+
+#: ui/internal/board/text.go:777
+msgid "the mail backend did not answer in time"
+msgstr "poštovní démon neodpověděl včas"
+
+#: ui/internal/board/text.go:779
+msgid "the case is no longer on the board"
+msgstr "případ už na nástěnce není"
+
+#: ui/internal/board/text.go:781
+msgid "the board did not accept it"
+msgstr "nástěnka změnu nepřijala"
+
+#: ui/internal/board/text.go:783
+msgid "this mail backend has no board"
+msgstr "tento poštovní démon nástěnku nemá"
+
+#: ui/internal/board/text.go:785
+msgid "the mail backend could not save it"
+msgstr "poštovní démon změnu nedokázal uložit"
+
+#: ui/internal/board/text.go:787
+msgid "the draft no longer exists"
+msgstr "koncept už neexistuje"
+
+#. TRANSLATORS: a toast; %s is an action such as "Moving the case".
+#: ui/internal/board/text.go:800
+#, c-format
+msgid "%s failed."
+msgstr "%s selhalo."
+
+#. TRANSLATORS: a toast; the first %s is an action such as "Moving the
+#. case", the second the reason, such as "the case is no longer on the
+#. board".
+#: ui/internal/board/text.go:805
+#, c-format
+msgid "%s failed: %s."
+msgstr "%s selhalo: %s."
+
+#. TRANSLATORS: a menu item whose submenu lists the board's states.
+#: ui/internal/board/text.go:813
+msgid "Move To"
+msgstr "Přesunout do"
+
+#: ui/internal/board/text.go:817
+msgid "Mark as Done"
+msgstr "Označit jako hotové"
+
+#: ui/internal/board/text.go:820
+msgid "Remind Me"
+msgstr "Připomenout"
+
+#: ui/internal/board/text.go:826 ui/data/ui/preferences.ui:15
+msgid "Accounts"
+msgstr "Účty"
+
+#. TRANSLATORS: a button beside a promise the assistant found in the
+#. user's reply.
+#: ui/internal/board/text.go:833
+msgid "Mark Promise as Done"
+msgstr "Označit slib jako splněný"
+
+#: ui/internal/board/text.go:839
+#, c-format
+msgid "%d promise"
+msgid_plural "%d promises"
+msgstr[0] "%d slib"
+msgstr[1] "%d sliby"
+msgstr[2] "%d slibů"
+
+#. TRANSLATORS: quotation marks around a sentence quoted from a message;
+#. use your language's quotation marks.
+#: ui/internal/board/text.go:846
+#, c-format
+msgid "“%s”"
+msgstr "„%s“"
+
+#: ui/internal/board/triage.go:19
+msgid ""
+"Ask the assistant to read the conversations that wait for it and add notes"
+msgstr ""
+"Požádat asistenta, aby přečetl konverzace, které na něj čekají, a doplnil "
+"poznámky"
+
+#: ui/internal/board/triage.go:23
+msgid "Stop the assistant’s triage"
+msgstr "Zastavit třídění asistentem"
+
+#: ui/internal/board/triage.go:27
+msgid "The triage runs your Claude Code, which was not found on this Mac"
+msgstr "Třídění spouští váš Claude Code, který se na tomto Macu nenašel"
+
+#: ui/internal/board/triage.go:35
+msgid "Starting the triage…"
+msgstr "Spouští se třídění…"
+
+#: ui/internal/board/triage.go:40
+msgid "Triaging…"
+msgstr "Třídí se…"
+
+#. TRANSLATORS: the progress of the assistant's triage: conversations
+#. done of all.
+#: ui/internal/board/triage.go:44
+#, c-format
+msgid "Triaging… %d of %d"
+msgstr "Třídí se… %d z %d"
+
+#: ui/internal/board/triage.go:51
+msgid "The assistant is triaging the board…"
+msgstr "Asistent třídí nástěnku…"
+
+#. TRANSLATORS: conversations done of all.
+#: ui/internal/board/triage.go:54
+#, c-format
+msgid "The assistant is triaging the board… %d of %d"
+msgstr "Asistent třídí nástěnku… %d z %d"
+
+#: ui/internal/board/triage.go:62
+msgid "Triage finished. No conversation needed new notes."
+msgstr "Třídění dokončeno. Žádná konverzace nepotřebovala nové poznámky."
+
+#: ui/internal/board/triage.go:64
+#, c-format
+msgid "Triage finished: %d conversation refined."
+msgid_plural "Triage finished: %d conversations refined."
+msgstr[0] "Třídění dokončeno: zpřesněna %d konverzace."
+msgstr[1] "Třídění dokončeno: zpřesněny %d konverzace."
+msgstr[2] "Třídění dokončeno: zpřesněno %d konverzací."
+
+#: ui/internal/board/triage.go:75
+#, c-format
+msgid "The board refused %d of the assistant’s notes."
+msgid_plural "The board refused %d of the assistant’s notes."
+msgstr[0] "Nástěnka odmítla %d poznámku asistenta."
+msgstr[1] "Nástěnka odmítla %d poznámky asistenta."
+msgstr[2] "Nástěnka odmítla %d poznámek asistenta."
+
+#: ui/internal/board/triage.go:81
+#, c-format
+msgid "%d conversation triaged automatically today"
+msgid_plural "%d conversations triaged automatically today"
+msgstr[0] "Dnes automaticky roztříděna %d konverzace"
+msgstr[1] "Dnes automaticky roztříděny %d konverzace"
+msgstr[2] "Dnes automaticky roztříděno %d konverzací"
+
+#. TRANSLATORS: a segment of the board's status line after " · ", such
+#. as "Triaged by rules · refined by the assistant 5 minutes ago · 3
+#. conversations wait for the assistant": conversations it has not
+#. triaged yet.
+#: ui/internal/board/triage.go:91
+#, c-format
+msgid "%d conversation waits for the assistant"
+msgid_plural "%d conversations wait for the assistant"
+msgstr[0] "na asistenta čeká %d konverzace"
+msgstr[1] "na asistenta čekají %d konverzace"
+msgstr[2] "na asistenta čeká %d konverzací"
+
+#: ui/internal/board/triage.go:95
+msgid "Triage stopped."
+msgstr "Třídění zastaveno."
+
+#. TRANSLATORS: %s is the reason, such as "it took too long".
+#: ui/internal/board/triage.go:127
+#, c-format
+msgid "Triage failed: %s."
+msgstr "Třídění selhalo: %s."
+
+#: ui/internal/board/triage.go:137
+msgid "Claude Code was not found"
+msgstr "Claude Code se nenašel"
+
+#: ui/internal/board/triage.go:139
+msgid "the Malachi Mail tools are not available to the assistant"
+msgstr "asistent nemá k dispozici nástroje Malachi Mail"
+
+#: ui/internal/board/triage.go:141
+msgid "it took too long"
+msgstr "trvalo příliš dlouho"
+
+#: ui/internal/board/triage.go:143
+msgid "it was stopped"
+msgstr "bylo zastaveno"
+
+#: ui/internal/board/triage.go:145
+msgid "sending mail to the assistant was not allowed"
+msgstr "odeslání pošty asistentovi nebylo povoleno"
+
+#: ui/internal/board/triage.go:147
+msgid "the assistant is off"
+msgstr "asistent je vypnutý"
+
+#: ui/internal/board/triage.go:149
+msgid "the mail backend did not answer"
+msgstr "poštovní démon neodpověděl"
+
+#: ui/internal/board/triage.go:151
+msgid "the assistant stopped"
+msgstr "asistent skončil"
+
+#: ui/internal/board/triage.go:153
+msgid "no conversation waits for the assistant"
+msgstr "na asistenta nečeká žádná konverzace"
+
+#: ui/internal/board/triage.go:155
+msgid "the board refused the assistant’s notes"
+msgstr "nástěnka odmítla poznámky asistenta"
+
+#: ui/internal/board/triage.go:157
+msgid "the assistant added no notes"
+msgstr "asistent nepřidal žádné poznámky"
+
+#: ui/internal/board/triage.go:170
+msgid "Triaged by rules · not refined by the assistant yet"
+msgstr "Roztříděno pravidly · asistent zatím nezpřesnil"
+
+#. TRANSLATORS: %s is when, such as "5 minutes ago" or "yesterday".
+#: ui/internal/board/triage.go:173
+#, c-format
+msgid "Triaged by rules · refined by the assistant %s"
+msgstr "Roztříděno pravidly · asistent zpřesnil %s"
+
+#. TRANSLATORS: the first %s is the reason, such as "it took too
+#. long", the second when the next try comes, such as "in 5 minutes".
+#: ui/internal/board/triage.go:203
+#, c-format
+msgid "Automatic triage paused: %s · next try %s"
+msgstr "Automatické třídění pozastaveno: %s · další pokus %s"
+
+#: ui/internal/board/triage.go:208
+msgid "the assistant cannot run"
+msgstr "asistenta nelze spustit"
+
+#: ui/internal/board/triage.go:210
+msgid "sending mail to the assistant is not allowed"
+msgstr "odesílání pošty asistentovi není povoleno"
+
+#. TRANSLATORS: %s is the reason, such as "the assistant cannot run".
+#: ui/internal/board/triage.go:213
+#, c-format
+msgid "Automatic triage paused: %s"
+msgstr "Automatické třídění pozastaveno: %s"
+
+#: ui/internal/board/triage.go:218
+msgid "Let the Assistant Triage the Board?"
+msgstr "Nechat asistenta roztřídit nástěnku?"
+
+#: ui/internal/board/triage.go:222
+msgid ""
+"The assistant reads the conversations on the board that need notes and sends "
+"their text to Anthropic through your Claude Code, under your Claude account. "
+"It adds titles, summaries, tasks, deadlines and suggested replies to the "
+"board, and a triage you start yourself may also write replies, which stay on "
+"the board in Malachi Mail, not in your Drafts folder, until you send them. "
+"It cannot send, move or delete mail, and messages may contain instructions "
+"from their senders that it is told not to follow. You can turn this off in "
+"Settings."
+msgstr ""
+"Asistent přečte konverzace na nástěnce, které potřebují poznámky, a jejich "
+"text odešle společnosti Anthropic přes váš Claude Code pod vaším účtem "
+"Claude. Na nástěnku doplní názvy, shrnutí, úkoly, termíny a návrhy odpovědí "
+"a při třídění, které spustíte sami, může také napsat odpovědi, které "
+"zůstanou na nástěnce v Malachi Mail, ne ve vaší složce Koncepty, dokud je "
+"neodešlete. Nemůže odesílat, přesouvat ani mazat poštu. Zprávy mohou "
+"obsahovat pokyny od svých odesílatelů, které asistent podle svého zadání "
+"nemá plnit. Vypnout to můžete v Předvolbách."
+
+#: ui/internal/board/triage.go:228
+msgid "Let the assistant refine the board"
+msgstr "Nechat asistenta zpřesňovat nástěnku"
+
+#: ui/internal/board/triage.go:232
+msgid ""
+"Sends the newest messages of conversations that need sorting to Anthropic "
+"through your Claude Code. It cannot send, move or delete mail; a triage you "
+"start yourself may write replies, which stay on the board until you send "
+"them."
+msgstr ""
+"Odesílá nejnovější zprávy konverzací, které je potřeba roztřídit, "
+"společnosti Anthropic přes váš Claude Code. Nemůže odesílat, přesouvat ani "
+"mazat poštu; třídění, které spustíte sami, může napsat odpovědi, které "
+"zůstanou na nástěnce, dokud je neodešlete."
+
+#: ui/internal/board/triage.go:236
+msgid "Triage new mail automatically"
+msgstr "Automaticky třídit novou poštu"
+
+#. TRANSLATORS: a row followed by a choice such as "15 minutes" or
+#. "1 hour": automatic triage runs at most this often.
+#: ui/internal/board/triage.go:243
+msgid "At most every"
+msgstr "Nejvýš jednou za"
+
+#. TRANSLATORS: a row followed by a choice such as "Up to 60": how many
+#. conversations automatic triage sends to the assistant a day.
+#: ui/internal/board/triage.go:251
+msgid "Conversations a day"
+msgstr "Konverzací denně"
+
+#: ui/internal/board/triage.go:257
+msgid ""
+"The triage runs your Claude Code, which was not found on this Mac. The "
+"Claude Code row above offers to get it."
+msgstr ""
+"Třídění spouští váš Claude Code, který se na tomto Macu nenašel. Získat ho "
+"můžete v řádku Claude Code výše."
+
+#: ui/internal/board/triage.go:263
+msgid ""
+"Claude Code is not signed in. The Claude Code row above offers to sign in."
+msgstr ""
+"Claude Code není přihlášený. Přihlásit se můžete v řádku Claude Code výše."
+
+#: ui/internal/board/triage.go:268
+msgid ""
+"The Malachi Mail tools are not available to the assistant, so the board "
+"cannot be triaged."
+msgstr ""
+"Asistent nemá k dispozici nástroje Malachi Mail, takže nástěnku nelze "
+"roztřídit."
+
+#: ui/internal/board/triage.go:274
+msgid ""
+"The mail backend did not answer with the board’s settings, so they cannot be "
+"changed now."
+msgstr "Poštovní démon neposlal nastavení nástěnky, takže ho teď nelze změnit."
+
+#. TRANSLATORS: a value after "At most every".
+#: ui/internal/board/triage.go:283
+#, c-format
+msgid "%d hour"
+msgid_plural "%d hours"
+msgstr[0] "%d hodinu"
+msgstr[1] "%d hodiny"
+msgstr[2] "%d hodin"
+
+#. TRANSLATORS: a value after "At most every".
+#: ui/internal/board/triage.go:286
+#, c-format
+msgid "%d minute"
+msgid_plural "%d minutes"
+msgstr[0] "%d minutu"
+msgstr[1] "%d minuty"
+msgstr[2] "%d minut"
+
+#. TRANSLATORS: a value of "Conversations a day": automatic triage
+#. sends none.
+#: ui/internal/board/triage.go:295
+msgctxt "daily cap"
+msgid "None"
+msgstr "Žádné"
+
+#. TRANSLATORS: a value of "Conversations a day"; %d is the most.
+#: ui/internal/board/triage.go:298
+#, c-format
+msgid "Up to %d"
+msgstr "Nejvýš %d"
+
+#: ui/internal/board/triage.go:304
+msgid "Tokens in the Last 24 Hours"
+msgstr "Tokeny za posledních 24 hodin"
+
+#. TRANSLATORS: the value of "Tokens in the Last 24 Hours" when no
+#. triage run reported any.
+#: ui/internal/board/triage.go:311
+msgctxt "token usage"
+msgid "None"
+msgstr "Žádné"
+
+#. TRANSLATORS: the tokens the board's triage used in the last 24 hours,
+#. by kind: sent to the model, written by it, written to the prompt
+#. cache, read from the prompt cache. Each %s is a number such as
+#. "12,345".
+#: ui/internal/board/triage.go:321
+#, c-format
+msgid "Input %s · output %s · written to cache %s · read from cache %s"
+msgstr "Vstup %s · výstup %s · zápis do cache %s · čtení z cache %s"
+
+#. TRANSLATORS: under the tokens of the last 24 hours: the number of
+#. the assistant's triage runs they come from.
+#: ui/internal/board/triage.go:329
+#, c-format
+msgid "From %d triage run"
+msgid_plural "From %d triage runs"
+msgstr[0] "Z %d běhu třídění"
+msgstr[1] "Ze %d běhů třídění"
+msgstr[2] "Z %d běhů třídění"
+
+#: ui/internal/board/triage.go:334
+msgid ""
+"Counts only the triage runs Malachi Mail started, not those of other "
+"assistants"
+msgstr ""
+"Počítá jen běhy třídění spuštěné aplikací Malachi Mail, ne běhy jiných "
+"asistentů"
+
+#: ui/internal/board/triage.go:343
+msgid "just now"
+msgstr "právě teď"
+
+#: ui/internal/board/triage.go:345
+#, c-format
+msgid "%d minute ago"
+msgid_plural "%d minutes ago"
+msgstr[0] "před %d minutou"
+msgstr[1] "před %d minutami"
+msgstr[2] "před %d minutami"
+
+#: ui/internal/board/triage.go:347
+#, c-format
+msgid "%d hour ago"
+msgid_plural "%d hours ago"
+msgstr[0] "před %d hodinou"
+msgstr[1] "před %d hodinami"
+msgstr[2] "před %d hodinami"
+
+#. TRANSLATORS: when the assistant last refined the board.
+#: ui/internal/board/triage.go:350
+msgid "yesterday"
+msgstr "včera"
+
+#: ui/internal/board/triage.go:352
+#, c-format
+msgid "%d day ago"
+msgid_plural "%d days ago"
+msgstr[0] "před %d dnem"
+msgstr[1] "před %d dny"
+msgstr[2] "před %d dny"
+
+#. TRANSLATORS: when automatic triage tries again: at once.
+#: ui/internal/board/triage.go:362
+msgid "now"
+msgstr "teď"
+
+#: ui/internal/board/triage.go:364
+#, c-format
+msgid "in %d minute"
+msgid_plural "in %d minutes"
+msgstr[0] "za %d minutu"
+msgstr[1] "za %d minuty"
+msgstr[2] "za %d minut"
+
+#: ui/internal/board/triage.go:366
+#, c-format
+msgid "in %d hour"
+msgid_plural "in %d hours"
+msgstr[0] "za %d hodinu"
+msgstr[1] "za %d hodiny"
+msgstr[2] "za %d hodin"
+
+#. TRANSLATORS: when automatic triage tries again.
+#: ui/internal/board/triage.go:369
+msgid "tomorrow"
+msgstr "zítra"
+
+#: ui/internal/board/triage.go:371
+#, c-format
+msgid "in %d day"
+msgid_plural "in %d days"
+msgstr[0] "za %d den"
+msgstr[1] "za %d dny"
+msgstr[2] "za %d dní"
+
+#. TRANSLATORS: a button in a conversation's detail on the board: the
+#. assistant writes a reply draft for it.
+#: ui/internal/board/reply.go:18
+msgid "✦ Suggest Reply"
+msgstr "✦ Navrhnout odpověď"
+
+#: ui/internal/board/reply.go:23
+msgid "What should the reply say? (optional)"
+msgstr "Co má odpověď říct? (nepovinné)"
+
+#: ui/internal/board/reply.go:27
+msgid "Writing a suggested reply…"
+msgstr "Píše se návrh odpovědi…"
+
+#: ui/internal/board/reply.go:32
+msgid "The assistant is writing a reply for another conversation"
+msgstr "Asistent píše odpověď k jiné konverzaci"
+
+#. TRANSLATORS: %s is the reason, such as "it took too long".
+#: ui/internal/board/reply.go:61
+#, c-format
+msgid "The suggested reply failed: %s."
+msgstr "Návrh odpovědi se nepodařil: %s."
+
+#. TRANSLATORS: why a suggested reply failed: the assistant ended
+#. without creating the draft.
+#: ui/internal/board/reply.go:84
+msgid "the assistant wrote no reply"
+msgstr "asistent žádnou odpověď nenapsal"
+
+#: ui/internal/board/reply.go:98
+msgid "This reply could not be saved yet; Malachi Mail keeps trying."
+msgstr "Tuto odpověď se zatím nepodařilo uložit; Malachi Mail to zkouší dál."
+
+#. TRANSLATORS: %s is the reply's subject, such as "Re: Offer".
+#: ui/internal/board/reply.go:105
+#, c-format
+msgid "Your reply “%s” was not sent; it is still on the board."
+msgstr "Vaše odpověď „%s“ nebyla odeslána; zůstává na nástěnce."
+
+#: ui/internal/board/reply.go:110
+msgid "Quit without saving a reply?"
+msgstr "Ukončit bez uložení odpovědi?"
+
+#: ui/internal/board/reply.go:114
+msgid ""
+"A reply on the board could not be saved or sent yet. If you quit now, what "
+"you typed in it may be lost."
+msgstr ""
+"Odpověď na nástěnce se zatím nepodařilo uložit nebo odeslat. Když aplikaci "
+"teď ukončíte, to, co jste do ní napsali, se může ztratit."
+
+#: ui/internal/board/reply.go:118
+msgid "_Quit Anyway"
+msgstr "_Přesto ukončit"
+
 #. TRANSLATORS: put between the names of a conversation's participants ("Alice, Bob").
 #: ui/internal/widget/format.go:62
 msgctxt "participant list separator"
@@ -1867,17 +3004,6 @@ msgstr "%.0f KiB"
 #, c-format
 msgid "%d B"
 msgstr "%d B"
-
-#. TRANSLATORS: tooltip of the member count of a conversation row.
-#. TRANSLATORS: subtitle of the message list; %d is the number of
-#. messages in the folder.
-#: ui/internal/widget/message_row.go:221 ui/internal/window/folders.go:340
-#, c-format
-msgid "%d message"
-msgid_plural "%d messages"
-msgstr[0] "%d zpráva"
-msgstr[1] "%d zprávy"
-msgstr[2] "%d zpráv"
 
 #: ui/internal/widget/message_row.go:307 ui/internal/window/message_view.go:575
 #: ui/internal/window/notify.go:111
@@ -2224,10 +3350,6 @@ msgstr[2] "Přesunout %d zpráv do koše?"
 msgid "Move to _Trash"
 msgstr "Přesunout do _koše"
 
-#: ui/internal/window/actions.go:61
-msgid "Unstar"
-msgstr "Odebrat hvězdičku"
-
 #: ui/internal/window/actions.go:64 ui/data/ui/message_window.ui:68
 #: ui/data/ui/window.ui:483
 msgid "Star"
@@ -2268,10 +3390,6 @@ msgid_plural "Starring %d messages"
 msgstr[0] "Označení %d zprávy hvězdičkou"
 msgstr[1] "Označení %d zpráv hvězdičkou"
 msgstr[2] "Označení %d zpráv hvězdičkou"
-
-#: ui/internal/window/actions.go:254
-msgid "Removing the star"
-msgstr "Odebrání hvězdičky"
 
 #: ui/internal/window/actions.go:256
 #, c-format
@@ -2367,11 +3485,6 @@ msgstr[2] "+%d dalších"
 #: ui/internal/window/assistant_panel.go:412 ui/data/ui/compose.ui:65
 msgid "_Send"
 msgstr "_Odeslat"
-
-#: ui/internal/window/assistant_panel.go:653 ui/internal/window/status.go:321
-#: ui/data/ui/window.ui:411
-msgid "Try Again"
-msgstr "Zkusit znovu"
 
 #: ui/internal/window/assistant_panel.go:945 ui/internal/window/drafts.go:77
 msgid "Opening the draft"
@@ -3505,10 +4618,6 @@ msgstr "Přiložená zpráva"
 msgid "Message"
 msgstr "Zpráva"
 
-#: ui/data/ui/message_window.ui:81 ui/data/ui/window.ui:498
-msgid "Archive"
-msgstr "Archivovat"
-
 #: ui/data/ui/message_window.ui:441 ui/data/ui/window.ui:966
 msgid "Mark as Junk"
 msgstr "Označit jako nevyžádanou"
@@ -3528,10 +4637,6 @@ msgstr "Vždy načítat obrázky od tohoto _odesílatele"
 #: ui/data/ui/preferences.ui:10
 msgid "Preferences"
 msgstr "Předvolby"
-
-#: ui/data/ui/preferences.ui:15
-msgid "Accounts"
-msgstr "Účty"
 
 #: ui/data/ui/preferences.ui:19
 msgid "Mail Accounts"
@@ -3612,10 +4717,6 @@ msgstr "Přehrát zvuk"
 #: ui/data/ui/preferences.ui:107 data/io.github.schotek.Malachi.gschema.xml:104
 msgid "Play the system new-mail sound"
 msgstr "Přehrát systémový zvuk nové pošty"
-
-#: ui/data/ui/preferences.ui:114
-msgid "Mail"
-msgstr "Pošta"
 
 #: ui/data/ui/preferences.ui:115
 msgid "Stored by the mail daemon."
@@ -4103,6 +5204,9 @@ msgstr ""
 #: data/io.github.schotek.Malachi.metainfo.xml.in:30
 msgid "Malachi Mail contributors"
 msgstr "Přispěvatelé Malachi Mail"
+
+#~ msgid "Suggested by the assistant · nothing is sent by itself"
+#~ msgstr "Navrhl asistent · nic se neodešle samo"
 
 #~ msgid "This message has not been downloaded yet."
 #~ msgstr "Tato zpráva ještě nebyla stažena."

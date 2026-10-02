@@ -51,8 +51,8 @@ func TestMessageBodyTrimQuoted(t *testing.T) {
 		if len(whole.InlineParts) != 2 || len(cut.InlineParts) != 1 || cut.InlineParts["image001.png@01DC0000.00000000"] == "" {
 			t.Errorf("inlineParts: whole %v, cut %v", whole.InlineParts, cut.InlineParts)
 		}
-		// Outlook's text alternative has no separator the text rules know,
-		// so the text is the rendering of the trimmed HTML.
+		// Outlook's text alternative has the header block without a
+		// separator line, which the text rules cut too.
 		if strings.Contains(cut.Text, "Odesláno") || strings.Contains(cut.Text, "posílám") || !strings.Contains(cut.Text, "fakturu jsem zaplatil") {
 			t.Errorf("text %q", cut.Text)
 		}

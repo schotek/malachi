@@ -117,9 +117,16 @@ func (w *syncWriter) String() string {
 // client to it. The daemon need not be running: the bridge dials lazily.
 func connectBridge(t *testing.T, sock string, allowModify, allowSend bool) (*mcp.ClientSession, *syncWriter, *bridge) {
 	t.Helper()
+	return connectBridgeConfig(t, config{socket: sock, allowModify: allowModify, allowSend: allowSend})
+}
+
+// connectBridgeConfig is connectBridge with every switch of the command
+// line (the triage tier and its run id included).
+func connectBridgeConfig(t *testing.T, cfg config) (*mcp.ClientSession, *syncWriter, *bridge) {
+	t.Helper()
 	logs := &syncWriter{}
 	logger := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	b := newBridge(config{socket: sock, allowModify: allowModify, allowSend: allowSend}, logger)
+	b := newBridge(cfg, logger)
 	srv := b.mcpServer()
 	st, ct := mcp.NewInMemoryTransports()
 	ctx := context.Background()
@@ -154,6 +161,26 @@ func newHarness(t *testing.T, fb *fakeBackend, allowModify, allowSend bool) *har
 	startFakeDaemon(t, fb, sock)
 	cs, logs, b := connectBridge(t, sock, allowModify, allowSend)
 	return &harness{fb: fb, sock: sock, cs: cs, logs: logs, b: b}
+}
+
+// newTriageHarness starts a fake daemon and connects a bridge with the
+// triage tier and the given run id (and neither modify nor send).
+func newTriageHarness(t *testing.T, fb *fakeBackend, run string) *harness {
+	t.Helper()
+	sock := tempSocket(t)
+	startFakeDaemon(t, fb, sock)
+	cs, logs, b := connectBridgeConfig(t, config{socket: sock, allowTriage: true, triageRun: run})
+	return &harness{fb: fb, sock: sock, cs: cs, logs: logs, b: b}
+}
+
+// handedOut records cases as handed out by this bridge's queue (of the
+// fixture's account), as list_triage_queue would.
+func (h *harness) handedOut(ids ...api.BoardCaseID) {
+	h.b.triage.mu.Lock()
+	defer h.b.triage.mu.Unlock()
+	for _, id := range ids {
+		h.b.triage.cases[id] = handedCase{account: fxAccount, messages: map[api.MessageID]bool{}}
+	}
 }
 
 // callRaw calls a tool and returns the whole result.

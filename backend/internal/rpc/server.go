@@ -410,6 +410,13 @@ func (s *Server) MessagesChanged(n api.MessagesChangedNotification) {
 	s.broadcast(api.NotifyMessagesChanged, n)
 }
 
+// Server also implements the optional api.BoardNotifier.
+var _ api.BoardNotifier = (*Server)(nil)
+
+func (s *Server) BoardChanged(n api.BoardChangedNotification) {
+	s.broadcast(api.NotifyBoardChanged, n)
+}
+
 // --- connection ----------------------------------------------------------
 
 type conn struct {

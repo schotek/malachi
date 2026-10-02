@@ -223,6 +223,7 @@ can read the key file.
 | 1103 | threadNotFound | |
 | 1104 | draftNotFound | |
 | 1105 | attachmentNotFound | unknown id, another account's, or already bound to a different draft |
+| 1106 | caseNotFound | no board case with that id (it left the board, its account is gone), or for `board.setCommitment` no such commitment (§4.13) |
 | 1200 | authRequired | user interaction needed; a `notify.authRequired` was/will be sent |
 | 1201 | authFailed | server rejected credentials |
 | 1202 | keyringError | secret service unavailable |
@@ -241,6 +242,7 @@ can read the key file.
 | 1503 | partNotFound | `message.part` named a part the message does not have, or its content is no longer stored |
 | 1504 | partNotDownloaded | the part's data is not stored on this device (`Attachment.remote`); `message.download` fetches it |
 | 1505 | unsubscribeFailed | `message.unsubscribe` reached the sender's server, which refused the one-click request (any answer but 2xx, a redirect included), or the daemon refused to connect to the address of the URL (not a public one: loopback, private, link-local, a single-label or local-network name); `message` carries the reason and is not for display |
+| 1506 | quoteNotFound | `board.annotate` or `board.commit` quoted text the daemon did not find verbatim where it must be; `data` = `{ "field": "due" \| "commitment" }` (§4.13) |
 
 `tlsError` from an IMAP or SMTP endpoint (in `account.test` results and in a
 `SyncState`) carries:
@@ -1451,8 +1453,14 @@ and takes the first of these markers, in document order, that qualifies:
   Slovak, German, French, Spanish, Italian, Dutch, Polish and more); a
   `-----Original Message-----` line or a translation of it;
 - in plain text: a `-----Original Message-----` line, a line of
-  underscores followed by such a header block, or an attribution line
-  followed by nothing but `>`-quoted and blank lines.
+  underscores followed by such a header block, such a header block on
+  its own (Outlook's text alternative of an HTML reply: at least three
+  `Label: value` lines in a row at the start of their lines, after a
+  blank line whose nearest text above does not end with a colon — Apple
+  Mail's `Begin forwarded message:` stays whole —, From first and with a
+  value, a Sent or Date with a digit, a To or Subject, closed by a blank
+  line with the quoted message below), or an attribution line followed
+  by nothing but `>`-quoted and blank lines.
 
 Empty elements, line breaks and separators right before the cut go with
 it. Nothing is cut when the cut part shows nothing, or when nothing would
@@ -1972,7 +1980,7 @@ showing conversations merges the arrival into the thread row it shows.
 ### 4.5 draft
 
 Drafts live in the store and, once saved, get a copy in the account's
-folder with role `drafts` (below). The backend owns every derived field: it
+folder with role `drafts` (below), unless they are local. The backend owns every derived field: it
 sanitises `htmlBody` on the way **in**, derives `textBody` from it, assigns
 attachment metadata and sets `updatedAt`.
 
@@ -1986,6 +1994,7 @@ Draft { "id": "d_1" (absent on first save), "accountId", "version": 1,
         "attachments": [DraftAttachment] (opt),
         "replaces": "m_125" (opt; draft.open → draft.save only),
         "comment": DraftComment (opt; a comment draft of a jira account),
+        "local": true (opt; kept on this device, never in the Drafts folder),
         "updatedAt": Time }
 DraftAttachment { "id": "att_…", "filename": "safe-name.pdf", "contentType": "application/pdf",
                   "size": 12345, "inline": false, "contentId": "…@malachi.local" (opt) }
@@ -2024,6 +2033,39 @@ copy goes to a Drafts folder. `draft.list` returns `comment` with the issue
 (empty when the issue is no longer stored). `message.send` posts it
 (§4.3).
 
+**Local drafts.** A draft with `local: true` stays in the daemon's store:
+no syncer uploads it to the Drafts folder, no other client sees it, and it
+leaves the device only when it is sent (`message.send`: the outbox, the
+Sent copy, as any draft). It is a board case's suggested reply (§4.13).
+`draft.save` reads `local` on the first save only (no `id`); later saves
+keep the stored value, so a client can neither set nor clear it on an
+existing draft, and `local` together with `replaces`, or `replaces` on a
+local draft, is invalidArgument. Linking a draft to a case
+(`board.setDraft`, `board.annotate` `draftId`) makes it local and deletes
+a copy it already has in the Drafts folder (like `draft.delete` deletes
+one) — except a Microsoft 365 copy that was changed on the server after
+the upload (Outlook edits drafts in place): that one stays in the Drafts
+folder as the user's own draft, no longer tied to this one. An upload
+that was under way when the draft became local deletes the copy it made.
+The MCP bridge makes its drafts local when it was started for the board
+(`--reply-only`, `--triage-run`; `docs/mcp.md`). Nothing else creates a
+local draft.
+
+A local draft reaches the mail server only when the user sends it, with
+one exception. The daemon remembers whether the user may have written in
+it: a draft saved while a case links it (the board's own editor), or one
+that was an ordinary draft when it was linked, counts as **edited**.
+When a linked draft loses its case without `message.send` or
+`board.discardDraft` — a thread merge that keeps the other case's reply,
+the case deleted because its conversation was gone for a day, the end of
+a done case's 30 days, the account removed with its local data kept — an
+edited draft becomes an ordinary draft of the account (`local` false: it
+is uploaded to the Drafts folder and the user finds it there), and an
+untouched suggestion is deleted (`draft.delete`). Typed text is never
+destroyed, and an untouched suggestion never reaches the server. In results
+`local` is also true for every draft of a `jira` account, whose drafts
+never reach a server folder.
+
 The UI editor keeps its own live copy of the HTML; the backend's copy is
 the one that is sent. `draft.save` therefore echoes what it stored
 (`htmlBody`, `textBody`) and what it removed (`blocked`) so the UI can be
@@ -2034,7 +2076,8 @@ honest about removals. Reopening a draft always yields the sanitised form.
 - result: `{ "draftId": "d_1", "version": 2, "textBody": "…", "htmlBody": "…" (opt),
              "blocked": BlockedContent, "attachments": [DraftAttachment] (opt) }`
 - errors: invalidArgument (limits, bad address, CR/LF in header fields,
-  both `inReplyTo` and `forwarding`; on a comment draft recipients,
+  both `inReplyTo` and `forwarding`; `local` with `replaces`, or
+  `replaces` on a local draft; on a comment draft recipients,
   attachments, `forwarding`, `replaces` or a `visibility` the issue does
   not allow; a draft of a `jira` account whose `inReplyTo` is missing or
   names no stored message of an issue of the account), conflict (stored version ≠ supplied
@@ -2071,7 +2114,8 @@ shows the draft to every client. A copy that Microsoft Graph reports as
 changed after the upload (Outlook edits drafts in place) is not deleted;
 both stay. Uploads are retried with backoff; after 8 refused attempts a
 draft waits for its next save. Without a Drafts folder a draft stays
-local. `version` is never touched by the upload. `draft.delete` and
+on this device. A local draft is not uploaded, and it never holds a
+copy. `version` is never touched by the upload. `draft.delete` and
 `message.send` delete the copy too; a `message.move` or `message.delete`
 of the copy (Trash included) deletes the draft it belongs to, whose
 attachments are released rather than deleted, so that a compose window
@@ -2092,6 +2136,15 @@ unknown one messageNotFound.
 #### `draft.list`
 - params: `{ "accountId", "page": Page }`
 - result: `{ "drafts": [Draft], "page": PageInfo }` (newest `updatedAt` first; full bodies)
+
+#### `draft.get`
+- params: `{ "accountId", "draftId" }`
+- result: `{ "draft": Draft }` — the stored draft exactly as one item of
+  `draft.list` (sanitised compose HTML, `comment` on a comment draft,
+  `local`), for a client that opens one draft by id (the board's editor of
+  a suggested reply) without paging the list.
+- errors: invalidArgument (`accountId` or `draftId` missing), draftNotFound
+  (no such draft in the account), storageError
 
 #### `draft.delete`
 - params: `{ "accountId", "draftId" }`
@@ -2624,6 +2677,631 @@ transition that stopped being offered since the client listed them is
 refused rather than sent. Clients allow 20 s for `issue.transitions` and
 45 s for `issue.transition`.
 
+### 4.13 board
+
+The board sorts the user's conversations and issues by what is owed. A
+**case** is one thread of an account (§4.4): a mail conversation, or an
+issue of a `jira` account. Every case is in one of four **states**:
+
+| State | Meaning |
+|---|---|
+| `hot` | needs the user now |
+| `you` | waits for the user's answer |
+| `them` | the user waits for someone else |
+| `info` | nothing to do; for reading |
+
+Three parties can set a state, and the first one present wins:
+
+1. the **user** (`userState`, `board.setState`);
+2. an **assistant** (`annotation.state`), only while the board's
+   `assistant` preference is on and the annotation is not `stale`;
+3. the daemon's **rules** (`ruleState`, always present, with the code of
+   the rule in `ruleReason`).
+
+The rules read only headers, structure, folder roles, flags, the bulk
+classification (§3 `bulk`) and the fields of an issue, never the words
+of a message (one exception: a question mark in the user's own text,
+`them.asked`). Which members count: not hidden, not in a folder of role
+`trash`, `junk` or `drafts`, not bulk mail, not waiting for the bulk
+classification (it counts once classified) and no `jira` event. A member is the user's own
+(**mine**) only when it is in a folder of role `sent` or `outbox`, never
+because its `From` names the user. Copies of one message (one
+`Message-ID`) count once: when a copy is mine the message is the user's;
+otherwise the copy the daemon stored first stands for it, and a later
+copy (another client's move, or a forged duplicate) changes none of what
+the rules read (sender, recipients, `Importance`, arrival, bulk class).
+
+A thread is a case when its newest member that counts is inbound. When
+that member is mine, it is a case only when the rules say `them`
+(`them.replied`, `them.asked`); a reply of the user's to someone who did
+not write in the thread, a message shaped like a forward, or one that
+asks nothing is no case. While an inbound member of the thread waits for
+the bulk classification (new mail, or all mail after the classification
+rules changed) the daemon decides nothing and the thread keeps the case
+it had. A user state, a remind, a future deadline, an open commitment or
+a linked suggested reply (`draft`, while the draft exists) keeps a case
+the rules would drop (`ruleReason: "kept"`): neither unstarring the
+case nor answering it from another client leaves a suggested reply
+without its case. Cases are
+computed in the background as messages are stored, moved, flagged,
+deleted or merged.
+
+**Known senders.** The user is asked to act only on mail from people
+they have written to: a sender is **known** when its `From`, or an
+address of its `Reply-To`, is in `To` or `Cc` of a message in a folder of
+role `sent` or `outbox` of any of the user's enabled mail accounts (or of
+a message of the user's in the same thread). A message to the user from
+an unknown sender is `info.unknownSender`, and its `Importance` does not
+make it `hot`; an answer to one of the user's messages
+(`you.repliedToYou`) and the user's own flag (`hot.flagged`) count
+whoever sent it. Every header involved can be forged; the rule sorts
+mail, it does not authenticate it.
+
+**Merged threads.** The case id stays when threads merge, `threadId`
+may change. When both threads had a case, the case of the thread that
+absorbs the other survives with its id (the other id then answers
+caseNotFound) and the user's decisions carry over: the user state set
+later, done only when both were done (at the later time), else the
+earlier remind of either, every commitment, the surviving case's
+annotation (the other's when it had none), and the draft link (the
+other's when it had none, or when its own draft no longer exists; when
+both link a draft that exists, the surviving case keeps its own and the
+other draft loses its case: when the user edited it, it becomes an
+ordinary draft of the account, uploaded to its Drafts folder, so nothing
+typed is lost; an untouched suggestion is deleted, §4.5). The annotation
+is stale after a merge (its members changed).
+
+**Moved threads.** A thread whose messages another client moves keeps
+its case and the user's decisions: while its members are gone for a
+moment (one folder synced before the other) the case stays off the board,
+and the copies that come back, also as a thread of their own, take it
+over with its id. A case whose thread has had no member for a day is
+deleted; its suggested reply loses its case (below). A copy of a message the case already had when it was marked
+done does not reopen it.
+
+`ruleReason` codes (an open set: a client shows a generic text for a code
+it does not know; a code is never reused for another meaning):
+
+| Code | State | Rule |
+|---|---|---|
+| `hot.important` | hot | newest member inbound, the user in its `To`, a known sender, and its own header says `Importance: high` or `X-Priority` 1 or 2 |
+| `hot.flagged` | hot | the user flagged a member and the newest member is inbound |
+| `you.addressed` | you | newest member inbound, the user in its `To` and a known sender |
+| `you.repliedToYou` | you | newest member inbound and it answers (`In-Reply-To`) a message of the user's, whoever sent it |
+| `them.replied` | them | newest member the user's reply to an earlier inbound member, with one of its senders (`From` or `Reply-To`) in `To` |
+| `them.asked` | them | no inbound member counts, and one of the user's newest 10 messages that is not a forward, to someone else, asks a question (a question mark in its own text) |
+| `info.ccOnly` | info | inbound; the user only in `Cc` |
+| `info.notAddressed` | info | inbound; the user in neither `To` nor `Cc` (a list, a `Bcc`) |
+| `info.unknownSender` | info | inbound and the user in its `To`, from a sender the user has never written to (not known) |
+| `info.yourNote` | info | inbound from one of the user's addresses, every recipient one of the user's addresses |
+| `jira.yourComment` | them | the issue's last item that is not an event is the user's |
+| `jira.assigned` / `jira.reporter` / `jira.commented` | you | someone else's item on an issue assigned to, reported by, or commented on before by the user |
+| `jira.watching` | info | an issue the user only watches |
+| `kept` | (last) | the rules no longer make it a case; something above keeps it |
+
+The rules are tried in the order `hot.flagged`, `info.yourNote`,
+`hot.important`, `you.repliedToYou`, `you.addressed`,
+`info.unknownSender`, `info.ccOnly`, `info.notAddressed`; a message whose
+`From` names the user, in the user's inbox, is inbound like any other.
+
+**Own text and forwards.** `them.asked` and a commitment's quote read
+the user's **own text** of a message: for a message with HTML, the text
+of its HTML part with the quoted history cut off as `message.body`
+`trimQuoted` does; otherwise its plain text with the quoted history cut
+off (as `trimQuoted` does for text). On top of that every `>`-quoted line
+is dropped, the text is cut at an attribution line (`On … wrote:` and its
+translations) whose quote below is not `>`-quoted (always, for text taken
+from HTML), at the signature separator (`"-- "`), and a text of more
+than 100,000 lines, or one that starts with a quoted history, has none.
+In doubt there is less own text, never more. A question mark counts
+outside URLs and addresses, and after one as its sentence punctuation
+(`… to anna@example.cz?`). A message of the user's is shaped like a
+forward when its subject carries a forward marker (`Fwd:`, `FW:`, `WG:`,
+`TR:`, `ENC:`, `RV:`, `PD:`), it has an attached message
+(`message/rfc822`), its text starts with a quoted history, or it answers
+nothing (no `In-Reply-To` or `References`) and has less than 300 bytes of
+its own above a quoted history.
+
+**Jira.** An issue in the `done` status category, or in one of the
+account's `closedStatuses`, is no case.
+
+**Windows.** A case stays on the board for a number of days from its
+`date` that depends on the state in effect (`windows`, below: 90 for `hot`, 30 for
+`you` and `them`, 14 for `info` by default); a user state, a remind (also
+one that came due, until the user marks the case done or sets another), a
+future deadline or an open commitment keeps it regardless.
+
+```jsonc
+BoardCase {
+  "id": "c_<32 hex>",                 // stable; per account
+  "accountId": "acc_1", "threadId": "t_9",
+  "ruleState": "hot" | "you" | "them" | "info",
+  "ruleReason": "you.addressed",      // see the table
+  "userState": "them" (opt),          // the user's choice; absent = automatic
+  "annotation": BoardAnnotation (opt),
+  "visibility": "live" | "done" | "snoozed",
+  "doneAt": Time (opt),               // with visibility "done"
+  "remindAt": Time (opt),             // with visibility "snoozed", in the future
+  "subject": "Lunch",                 // the newest member's, Re:/Fwd: stripped; an issue's "KEY: Summary"
+  "person": Address,                  // the other party
+  "date": Time,                       // arrival of the newest member that counts
+  "snippet": "…", "unread": true, "hasAttachments": false,
+  "messageCount": 3,                  // members that count
+  "replyMessageId": "m_5", "replyFolderId": "f_inbox",
+  "latestMessageId": "m_7",
+  "issue": { "key": "ITSD-42", "status": "In Progress",
+             "statusCategory": "inProgress" (opt) } (opt),   // a jira account's case
+  "canArchive": true,
+  "draft": { "draftId": "d_1", "text": "…", "updated": Time } (opt),
+  "version": 12
+}
+BoardAnnotation {
+  "state": "them" (opt),              // absent: the assistant left the state to the rules
+  "title": "…", "summary": "…", "why": "…", "tasks": ["…"],
+  "due": BoardDue (opt),
+  "source": "…",                      // names the assistant
+  "at": Time,
+  "stale": true (opt)
+}
+BoardDue { "at": Time, "quote": "…", "messageId": "m_3" }
+BoardCommitment { "id": "k_1", "caseId": "c_…", "accountId": "acc_1",
+                  "messageId": "m_4",             // the user's own message
+                  "text": "…", "quote": "…", "due": Time (opt),
+                  "state": "open" | "done" | "closed",
+                  "closedReason": "replied" | "done" (opt),   // with "closed"
+                  "at": Time }
+BoardMessage { "id": "m_3", "folderId": "f_inbox", "from": Address, "date": Time,
+               "mine": false, "text": "…", "trimmed": true (opt) }
+```
+
+- `person`: the sender of the newest inbound member that counts, else the
+  first `To` recipient of the user's newest member that is not one of the
+  user's addresses. `subject` and `person` are cleaned (control, bidi and
+  other invisible characters removed, one line) but keep their URLs:
+  they are what the sender wrote, never a link.
+- `date`: when the newest member that counts arrived (its internal date,
+  else its `Date` header, else when the daemon stored it), never later
+  than when the daemon stored it nor than now.
+- `replyMessageId` is the member a reply answers (`draft.create` with
+  `mode: "reply"`): the newest inbound member that counts, else the newest
+  member that counts; on a `jira` account that reply is a comment.
+  `latestMessageId` is the newest member that counts.
+- `visibility`: `done` after `board.setDone` until an inbound member that
+  counts arrives later (by the time the daemon stored it, not by its
+  `Date` header, so neither a forged date nor a backfill of old mail
+  reopens a case); `snoozed` until `remindAt`, then `live` again with
+  `remindAt` gone; a remind that came due keeps the case listed (also
+  past its window) until it is marked done or reminded again. Marking a case done clears its remind; setting a remind
+  clears done.
+- `canArchive`: `board.archive` would move messages — the account has the
+  `move` capability (§4.1) and a folder of role `archive`, and a member is
+  in the folder of role `inbox`.
+- `draft`: the suggested reply linked to the case, while that draft
+  exists: linked by the user (`board.setDraft`) or by an annotation
+  (`board.annotate` `draftId`); `text` is its plain text, at most
+  `api.MaxBoardDraftTextBytes` (4000). The link is the case's, not the
+  annotation's: it needs no annotation, survives a stale annotation and a
+  later one without a draft, and is listed whatever the `assistant`
+  preference. A case links at most one draft; the link ends with
+  `board.discardDraft`, and shows no draft once the draft is sent or
+  deleted or its account is removed. Drafts are never sent by the board;
+  the user edits and sends them.
+
+  A linked draft is **local** (§4.5): linking makes it so, deletes a copy
+  it already had in the Drafts folder (as `draft.delete` does; a
+  Microsoft 365 copy changed in Outlook since the upload stays, §4.5), and
+  from then on no syncer uploads it. It reaches the mail server only when
+  the user sends it (`message.send`, with the usual Sent copy), or — if
+  the user edited it — when its case goes without Send or Discard, as one
+  of the user's ordinary drafts; an untouched suggestion never does (§4.5).
+  Its lifecycle on the board: saving it bumps the case's `version` and
+  marks it edited; it keeps a live case on the board (above) and from the
+  prune; a done case with a suggested reply stays listed among the done
+  for the done case's 30 days, and then loses its reply; sending,
+  deleting or discarding it lets the rules judge the case again. When its
+  case goes — deleted because its conversation was gone for a day, the
+  surviving case of a thread merge keeping its own reply (above), the
+  account removed with its local data kept — or a done case's 30 days
+  end, an edited reply becomes an ordinary draft and an untouched one is
+  deleted, at once. A local draft that was never linked (an assistant's
+  draft whose link was refused, or never asked for) is deleted once it
+  has not been saved for 6 hours. Drafts linked before migration 0018
+  were ordinary drafts: 0018 made them local, 0019 counts every local
+  draft as edited, and a copy one of
+  them had in the Drafts folder is deleted by the daemon (at the next sync
+  pass of the account and in its hourly upkeep; on Microsoft 365 unless it
+  was changed in Outlook since the upload).
+- `version` changes whenever anything of the case changes, the members
+  `board.get` returns included; a client caches `board.get` by `(id,
+  version)`.
+- `BoardMessage.text`: the message's own text — its quoted history cut
+  off as `message.body` with `trimQuoted` cuts it: the stored plain text
+  cut by the plain-text rules when they find the quote in it, else, when
+  the sanitiser cut a quoted history off the HTML part, the text of the
+  trimmed HTML, else the stored text whole (nothing is cut when the quote
+  does not run to the end, nothing of the message's own would be left
+  above it, or the trimming gives up; a pure forward is shown whole) —
+  with the signature (from the RFC 3676 separator `"\n-- \n"`) cut off,
+  cleaned (no control, bidi or other invisible characters), at most
+  `api.MaxBoardMessageTextBytes` (8000: an ordinary mail whole, so the
+  detail shows it in full); `trimmed` says something was cut off. Never
+  HTML. `mine` as above. One `board.get` thus carries at most 50 × 8000
+  bytes of message text (400 kB; under 2.4 MB of JSON even if every
+  character is escaped). `board.queue` keeps its own, smaller caps and
+  reads the stored plain text only (the plain-text rules, never the
+  HTML).
+
+**Annotations are text an assistant wrote.** `annotation` (`title`,
+`summary`, `why`, `tasks`, `due.quote`, `source`) and a commitment's
+`text` were written by an AI assistant that read the user's mail, which
+may have tried to steer it. The daemon cleans them (control, bidi and
+other invisible — default-ignorable — characters removed, except ZWJ,
+ZWNJ and an emoji's presentation selector; URLs — `scheme://…` and
+`www.…` — removed; whitespace collapsed in one-line fields) and enforces the
+limits below, but cannot make them true. A client shows them **only as
+plain text**, never as markup or links, always marked as the assistant's
+(never as the daemon's or the user's words), shows `due.quote` and a
+commitment's `quote` next to the date they support, and never acts on
+them by itself. No annotation sends, moves or deletes anything.
+
+`stale`: a member was added, removed or got its body since the
+annotation was made — the case's input key changed (`board.queue`
+`inputKey`: a key over the ids and body states of the members that
+count; a new version of the rules alone does not change it). A client then uses none of it (no state, title,
+summary, why, tasks or deadline) and may say that the notes are
+outdated; `draft` stays. `board.queue` offers the case again.
+
+| Field | Limit (UTF-8 bytes, after cleaning) |
+|---|---|
+| `title` | one line, ≤ 300 (`api.MaxBoardTitleBytes`); `""` = show the subject |
+| `why` | one line, ≤ 400 |
+| `summary` | a block (line breaks kept), ≤ 2000 |
+| `tasks` | ≤ 10 lines of ≤ 300 each |
+| commitment `text` | one line, ≤ 300 |
+| `source` | one line, ≤ 64 |
+| `quote` | 10–300, at least 10 characters that are not spaces |
+
+**Quotes.** A deadline (`annotation.due`) and a commitment carry a quote
+the daemon checks before it stores anything: the quote and the message's
+text are normalised alike (valid UTF-8, the cleaning above, each URL
+replaced by one placeholder so that removing it never joins the words
+around it, Unicode NFC, typographic quotes as ASCII, every run of
+whitespace one space) and the quote must be an exact substring. A
+deadline's quote must be in the stored plain text of `due.messageId`
+(all of it, a quoted history included), a member of the case that
+counts; a commitment's quote must be in the user's **own** text
+of `messageId` (a member that is mine; own text as above), so the other
+party's words never count as the user's promise. A deadline or a commitment's `due` must lie between one day
+before and 400 days after that message arrived (as `date` above: its
+internal date, else its `Date` header, never later than when the daemon stored
+it, so a forged `Date` cannot move the range). Otherwise the call fails
+with quoteNotFound (`data.field`: `due` or `commitment`) or
+invalidArgument (the date, the limits).
+
+**Commitments** are what the user promised in their own messages. One
+closes by itself (`closed`) when the user writes a message in the thread
+newer than any they had written when it was recorded (`closedReason:
+"replied"`; a commitment recorded on an older message stays open until
+the user writes again) or the case is marked done (`"done"`); the user
+ticks it off with `board.setCommitment`.
+
+**Triage and runs.** An assistant annotates through the MCP bridge
+(`docs/mcp.md`, `--allow-triage`): `board.queue` hands it cases with
+their text, `board.annotate` and `board.commit` store what it found. The
+daemon itself never talks to an assistant. A client that starts a run
+(the user's Triage button, or its own automatic schedule under the
+`autoTriage*` preferences) records it with `board.runStart` and
+`board.runEnd` and passes the `runId` to the bridge, which passes it on;
+the daemon counts each annotate and commit call in that run (accepted:
+`annotated` / commitments; refused with quoteNotFound, conflict or
+invalidArgument: rejected). A call without a `runId`, or with one the
+daemon does not know, counts in an implicit run with trigger `external`
+per `source` and day. Runs are kept for 90 days.
+
+**Preferences** (`board.preferences`, `board.setPreferences`; not part of
+`Preferences`, §4.8):
+
+```jsonc
+BoardPreferences {
+  "enabled": true,                     // the daemon computes the board
+  "assistant": false,                  // annotations count, board.queue hands out text
+  "windows": { "hot": 90, "you": 30, "them": 30, "info": 14 },   // days, 1..365
+  "triageAccounts": [],                // [] = every enabled mail account (imap, graph)
+  "autoTriage": false,                 // the client runs triage on its own schedule
+  "autoTriageMinutes": 30,             // least time between automatic runs, 5..1440
+  "autoTriageDailyCases": 60           // cases automatic runs annotate per local day, 0..1000
+}
+```
+
+The values above are the defaults. `assistant` is turned on by a client
+only after the user agreed to have mail read by the assistant. A `jira`
+account is triaged only when `triageAccounts` names it. The daemon only
+stores `autoTriage`, `autoTriageMinutes` and `autoTriageDailyCases`; the
+client's schedule reads them. While `enabled` is false the daemon
+computes nothing, `board.list` returns no cases, and every other board
+method but the preferences answers invalidArgument; the user's decisions
+(states, done, reminds, annotations) are kept for when it is turned on
+again.
+
+#### `board.list`
+- params: `{ "accountIds": ["acc_1"] (opt) }` — absent or empty = every
+  enabled account
+- result: `{ "cases": [BoardCase], "commitments": [BoardCommitment],
+  "enabled": bool, "assistant": bool, "triage": BoardTriage,
+  "ready": bool, "truncated": true (opt) }`
+- errors: accountNotFound, storageError
+
+```jsonc
+BoardTriage { "lastRun": { "at": Time,                 // when it started
+                           "endedAt": Time (opt),      // absent while it runs
+                           "trigger": "manual" | "auto" | "external",
+                           "source": "…", "annotated": 4,
+                           "error": "cancelled" | "timeout" | "signedOut" | "failed" (opt) } (opt),
+              "annotatedTodayAuto": 12,   // by automatic runs started today (local day)
+              "queue": 3,                 // live cases board.queue would offer; 0 with the assistant off
+              "usage24h": { "inputTokens": 1200, "outputTokens": 340,
+                            "cacheCreationInputTokens": 0, "cacheReadInputTokens": 9000,
+                            "runs": 2 } (opt) }  // runs ended in the last 24 h that reported usage
+```
+
+`cases`: live, done and snoozed cases of enabled accounts (a paused
+account's are left out; a done case for 30 days after it was marked
+done), newest `date` first, at most
+`api.MaxBoardCases` (1000, the newest; `truncated` then). Never null.
+`commitments`: the open commitments of the live cases listed, never
+null. `ready` is false until the daemon has evaluated every thread once
+since the board was enabled or its rules changed (after the upgrade that
+brings the board this takes a minute or two in the background); until
+then `cases` may be partial and a client says so. `lastRun` is a run
+still open if there is one (the newest by start), else the run with the
+latest activity (its end; an external run's latest call), of any
+trigger; its `error` is a class, never free text. `usage24h` sums the
+token usage (`board.runEnd`) of the runs that ended within the 24 hours
+before `board.list` answered (the daemon's clock, by each run's end) and
+carry usage; `runs` counts them (≥ 1). Absent when no run in that window
+has usage: runs of clients that did not report it, external runs and
+runs the daemon ended itself have none. The value is computed when
+`board.list` answers; it shrinks as runs age out of the window without a
+`notify.boardChanged`.
+
+#### `board.get`
+- params: `{ "caseId" }`
+- result: `{ "case": BoardCase, "messages": [BoardMessage] }` — the
+  members that count, the newest `api.MaxBoardMessages` (50), oldest
+  first; never null
+- errors: invalidArgument (an empty id), caseNotFound, storageError
+
+#### `board.setState`
+- params: `{ "caseId", "state": "hot" | "you" | "them" | "info" | null }`
+  — null (or absent) returns the case to automatic
+- result: `{ "case": BoardCase }`
+- errors: invalidArgument (an unknown state), caseNotFound, storageError
+
+#### `board.setDone`
+- params: `{ "caseId", "done": bool }`
+- result: `{ "case": BoardCase }` — done also clears a remind and closes
+  the case's open commitments (`closedReason: "done"`); `false` makes it
+  live again
+- errors: caseNotFound, storageError
+
+#### `board.remind`
+- params: `{ "caseId", "until": Time | null }` — in the future and at most
+  a year ahead (`api.MaxBoardRemind`); null (or absent) ends the remind
+- result: `{ "case": BoardCase }` — `snoozed` until `until`, done
+  cleared; when the time comes the case is live again and
+  `notify.boardChanged` says so
+- errors: invalidArgument (the past, more than a year), caseNotFound,
+  storageError
+
+#### `board.archive`
+- params: `{ "caseId" }`
+- result: `{ "archived": 2, "noArchive": true (opt), "case": BoardCase }`
+- errors: invalidArgument (the board disabled, no `caseId`), caseNotFound
+  (also when the case's account is gone), messageNotFound (a member left
+  or was deleted while the move was prepared; nothing moved, the case is
+  not marked done), storageError
+
+Moves the members in the folder of role `inbox` to the folder of role
+`archive` the way `message.move` does (local first, through the
+operation log), then marks the case done. An account without the `move`
+capability or without an archive folder only marks it done and answers
+`noArchive: true` with `archived: 0`.
+
+#### `board.unflag`
+- params: `{ "caseId" }`
+- result: `{ "case": BoardCase, "unflagged": 2 }`
+- errors: invalidArgument (the board disabled, no `caseId`), caseNotFound
+  (also when the case's account is gone), messageNotFound (a member was
+  deleted while the change was prepared; nothing changed), storageError
+
+Takes the star away from a case that is `hot.flagged`: clears the
+`flagged` flag of every copy whose flag the rules read — every flagged
+copy of a member that counts, or that waits for its bulk
+classification, in whatever folder, as the rules merge copies by
+`Message-ID` — the way `message.flag` does (local first, through the
+operation log; on a `jira` account on the item's local copies). A flagged
+copy in the trash, junk or Drafts, a hidden one, one in the outbox, or a
+copy of a message that does not count (bulk mail) keeps its flag. A
+`jira` item's copies in the virtual folders (`assignedToMe`, `watching`,
+`open`) are not read by the rules, but they are the same item: their
+flag is cleared with it, as `message.flag` does on a `jira` account.
+Why a method: `board.get` shows only the newest members, each
+`Message-ID` once, so a client cannot know every flagged copy.
+`unflagged` counts the flagged copies the rules read that the call
+cleared (a `jira` item's virtual copies not counted); 0 (nothing
+flagged) is no error. Should the call fail part way (a storage error
+after the copies the rules read were cleared, while a `jira` item's
+virtual copies were not yet), the error is returned with what was done
+kept, as with `message.flag`: calling it again finishes it.
+`case` is the case as stored when the flags were cleared; the rules
+judge it again right after, and `notify.boardChanged` follows with what
+it became (another state, the same state with `ruleReason: "kept"` when a
+user state, a suggested reply or the like keeps it, or no case).
+
+```jsonc
+// → { "caseId": "c_0f3…" }
+// ← { "case": { "id": "c_0f3…", "ruleState": "hot", "ruleReason": "hot.flagged", …, "version": 9 }, "unflagged": 2 }
+```
+
+#### `board.discardDraft`
+- params: `{ "caseId" }`
+- result: `{ "case": BoardCase }` — without `draft`
+- errors: caseNotFound, storageError
+
+Deletes the linked draft as `draft.delete` does and removes the link; a
+case without a draft is answered as it is.
+
+#### `board.setDraft`
+- params: `{ "caseId", "draftId" }`
+- result: `{ "case": BoardCase }` — with `draft`
+- errors: caseNotFound; invalidArgument (the board disabled, an empty
+  `caseId` or `draftId`, a draft that does not exist, is not a draft of
+  the case's account or does not reply to a member of the case — the
+  checks of `board.annotate`'s `draftId`); conflict (the case already
+  links another draft that still exists: discard it first); storageError
+
+Links a draft as the case's suggested reply on the user's request (the
+client's Suggest Reply). Needs neither an annotation nor the `assistant`
+preference. The draft becomes local (§4.5): a copy it had in the Drafts
+folder is deleted on the server (unless Outlook changed it since), and
+it is not uploaded again unless it loses its case after the user edited
+it. A draft that was an ordinary draft when linked counts as edited
+(§4.5): the daemon cannot tell who wrote it. Linking
+the draft the case already links answers the case unchanged. A link to a draft that no longer exists is replaced. Followed
+by `notify.boardChanged` when the case changed.
+
+```jsonc
+// → { "caseId": "c_0f3…", "draftId": "d_42" }
+// ← { "case": { "id": "c_0f3…", …, "draft": { "draftId": "d_42", "text": "Monday works.", "updated": Time }, "version": 13 } }
+```
+
+#### `board.queue`
+- params: `{ "accountIds": [] (opt), "caseIds": [] (opt), "limit": 3 (opt) }`
+  — `accountIds` empty = every triage account, others are ignored;
+  `caseIds` restricts to those cases (the others are skipped); `limit` 0
+  = 3, at most `api.MaxBoardQueueLimit` (5)
+- result: `{ "items": [BoardQueueItem], "remaining": 7 }`
+- errors: invalidArgument (the assistant preference off, the board
+  disabled, `limit` out of range), storageError
+
+```jsonc
+BoardQueueItem { "caseId": "c_…", "accountId": "acc_1",
+                 "inputKey": "<32 hex>",           // the members that count and their body states; pass back to board.annotate / board.commit
+                 "ruleState": "you", "ruleReason": "you.addressed",
+                 "userState": "them" (opt),
+                 "subject": "…", "replyMessageId": "m_5",
+                 "issue": { … } (opt),
+                 "own": ["me@example.org"],        // the user's addresses on the account
+                 "hasDraft": true (opt),           // the case already links a draft: a draftId passed to board.annotate is not linked
+                 "messages": [{ "messageId": "m_5", "from": Address,
+                                "to": [Address] (opt), "cc": [Address] (opt),
+                                "date": Time, "mine": false,
+                                "text": "…", "truncated": true (opt) }] }
+```
+
+The live cases of triage accounts without an annotation or with a stale
+one, newest `date` first; `remaining` counts the others the queue would
+offer. Per item the newest `api.MaxBoardQueueMessages` (8) members that
+count, oldest first, each `text` the stored plain text with the quoted
+history the plain-text rules find and the signature cut off, cleaned (as
+`BoardMessage.text`, but never from the HTML part), at most 3000
+bytes and 12 KiB for the item together (`truncated` when cut), so one
+call carries at most about 60 KiB. This is the only method that hands mail
+text to an assistant, and only while `assistant` is on.
+
+#### `board.annotate`
+- params: `{ "caseId", "inputKey", "runId" (opt), "state" (opt),
+  "title" (opt), "summary" (opt), "why" (opt), "tasks": [] (opt),
+  "due": BoardDue (opt), "draftId" (opt), "source" }`
+- result: `{ "case": BoardCase, "draftNotLinked": true (opt) }`
+- errors: caseNotFound; conflict (`inputKey` is not the case's current
+  one: it changed since `board.queue`); quoteNotFound (`data.field:
+  "due"`); invalidArgument (the assistant off, the case's account not a
+  triage account, an unknown state, a field over its limit, a `due`
+  outside its range or `due.messageId` not a member of the case that
+  counts, a
+  `draftId` that is not a draft of the case's account replying to a
+  member of the case, an empty `source`); storageError
+
+Replaces the case's annotation as a whole (fields left out are empty).
+The daemon computes the case's key again inside the same transaction, so
+an annotation of members that changed in between is refused.
+
+The case's draft link is not part of the annotation: without `draftId`
+the link stays as it is, and `draftId` is linked only when the case
+links no other draft that still exists (`hasDraft` in `board.queue`). A
+link the user made with `board.setDraft`, or an earlier annotation's, is
+never replaced by an unattended run: the annotation is stored, the draft
+passed stays unlinked, and the result says `draftNotLinked: true` (a
+local draft that was never linked is deleted after 6 hours without a
+save; an ordinary one stays among the account's drafts). Passing the draft already linked is
+no refusal. A draft it links becomes local as with `board.setDraft`.
+
+#### `board.commit`
+- params: `{ "caseId", "inputKey", "runId" (opt), "messageId", "text",
+  "quote", "due": Time (opt), "source" }` — `messageId` a member of the
+  case that is the user's own
+- result: `{ "commitment": BoardCommitment }`
+- errors: caseNotFound, conflict, quoteNotFound (`data.field:
+  "commitment"`), invalidArgument (the assistant off, the account not a
+  triage account, a message that is not the user's or not in the case,
+  limits, `due` out of range), storageError
+
+#### `board.setCommitment`
+- params: `{ "commitmentId", "done": bool }` — `false` reopens a done or
+  closed commitment
+- result: `{ "commitment": BoardCommitment }`
+- errors: caseNotFound (no such commitment, or its case is gone),
+  storageError
+
+#### `board.preferences`
+- params: `{}`
+- result: `{ "preferences": BoardPreferences }`
+- errors: storageError
+
+#### `board.setPreferences`
+- params: `{ "preferences": BoardPreferences }` — every field; a client
+  sends back what `board.preferences` gave it with its changes
+- result: `{ "preferences": BoardPreferences }` — as stored
+- errors: invalidArgument (a window, `autoTriageMinutes` or
+  `autoTriageDailyCases` out of range, an unknown account in
+  `triageAccounts`), storageError
+
+Changing `windows` or `enabled` makes the daemon evaluate the board
+again; `notify.boardChanged` follows.
+
+#### `board.runStart`
+- params: `{ "trigger": "manual" | "auto", "source" }` — `external` is
+  the daemon's own (calls without a run)
+- result: `{ "runId" }`
+- errors: invalidArgument (another trigger, an empty or over-long
+  `source`), storageError
+
+#### `board.runEnd`
+- params: `{ "runId", "error": "cancelled" | "timeout" | "signedOut" |
+  "failed" (opt), "usage": BoardUsage (opt) }` — `error` absent =
+  success; any other value is stored as `failed`, never as text
+- result: `{}`
+- errors: invalidArgument (an unknown run id, a negative `usage`
+  counter), invalidParams (a `usage` counter that is not a JSON integer
+  within 64 bits, like any mistyped parameter), storageError
+
+```jsonc
+BoardUsage { "inputTokens": 1200, "outputTokens": 340,
+             "cacheCreationInputTokens": 0, "cacheReadInputTokens": 9000 }
+```
+
+`usage` is the run's token usage as the client's assistant reported it
+(Claude Code's `usage` of the run); absent = unknown, and the run keeps
+none (a counter absent from a given `usage` is 0). It is stored with the
+run when this call ends it; each counter above `api.MaxBoardUsageTokens`
+(10^12) is stored as that. Ending a run that already ended changes
+nothing, its `usage` included; so does ending an external run. A run
+left open (the client stopped) is ended by the daemon with `failed`, and
+without usage, at its next start or after two hours. Every call that
+succeeds is followed by `notify.boardChanged`, so clients learn the new
+`usage24h`.
+
 ## 5. Notifications
 
 | Method | params |
@@ -2633,6 +3311,7 @@ refused rather than sent. Clients allow 20 s for `issue.transitions` and
 | `notify.authRequired` | `{ "accountId", "reason": 1200\|1201\|1202, "message": "…", "authUrl": "https://…" (opt) }` |
 | `notify.accountsChanged` | `{}` |
 | `notify.messagesChanged` | `{ "accountId", "folderIds": ["f_1"] (opt) }` |
+| `notify.boardChanged` | `{ "accountIds": ["acc_1"] (opt) }` |
 
 Notifications are sent only to connections that completed the handshake
 (§1.4).
@@ -2682,6 +3361,15 @@ and re-reads the counts (`folder.list`), which the daemon has recounted
 by then; what it displays of them (a reading pane, a conversation's
 cards) it fetches again. Changes within 250 ms are gathered into one
 notification per account; a change that takes longer sends several.
+
+`notify.boardChanged` is sent when what `board.list` returns changed for
+the accounts named (absent: any account): cases computed, changed or
+dropped (new mail, a move, a flag, a merge), a decision of the user (also
+to the client that made it), an annotation or commitment, a remind that
+came due, a change of the board preferences, a triage run started or
+ended. At most one per second; it carries no case, clients run
+`board.list` again (and `board.get` of a case they show whose `version`
+changed). A client that does not know it ignores it.
 
 `notify.syncState` is sent immediately on every change of `status`,
 `folderId`, `error`, `lastSync`, `pendingOutbox` or `failedOutbox`, and for
@@ -2984,3 +3672,25 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   address, never the one-click URL, and the client may repeat the call with
   `method: "mailto"`; new error code 1505 `unsubscribeFailed`.
   `ProtocolVersion` stays 2.
+- **2** (2026-10-01, compatible addition: the board): new §4.13 —
+  `board.list`, `board.get`, `board.setState`, `board.setDone`,
+  `board.remind`, `board.archive`, `board.discardDraft`, `board.setDraft`,
+  `board.queue`, `board.annotate`, `board.commit`, `board.setCommitment`,
+  `board.preferences`, `board.setPreferences`, `board.runStart` and
+  `board.runEnd`: cases of four states computed by the daemon's rules,
+  the user's decisions (a suggested reply linked on the user's request
+  among them), annotations and commitments of an assistant
+  checked against verbatim quotes, triage runs, and the board's own
+  preferences outside `Preferences`; new notification
+  `notify.boardChanged`; new error codes 1106 `caseNotFound` and 1506
+  `quoteNotFound`. `ProtocolVersion` stays 2.
+- **2** (2026-10-02, compatible addition: suggested replies on the
+  board): `Draft.local` (§4.5) — a draft kept on this device, not
+  uploaded to the Drafts folder; `draft.save` reads it on the first save
+  only; linking a draft to a case (`board.setDraft`, `board.annotate`
+  `draftId`) makes it local and deletes its copy in the Drafts folder; a
+  linked draft keeps a live case (`ruleReason: "kept"`) and the case from
+  the prune; a reply that loses its case becomes an ordinary draft when
+  the user edited it and is deleted when untouched. New `draft.get` (one draft as `draft.list` lists it) and
+  `board.unflag` (clears the flags behind `hot.flagged`). No new error
+  codes; `ProtocolVersion` stays 2.

@@ -26,6 +26,8 @@ import MalachiCore
 final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSMenuItemValidation {
     enum ID {
         static let toolbar = NSToolbar.Identifier("main")
+        /// The Mail/Board switch (`ModeSwitch`), the main window's only.
+        static let mode = NSToolbarItem.Identifier("mode")
         static let newMessage = NSToolbarItem.Identifier("newMessage")
         static let refresh = NSToolbarItem.Identifier("refresh")
         static let filter = NSToolbarItem.Identifier("filter")
@@ -56,6 +58,9 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     /// sidebar toggle sits at the sidebar section's trailing end, by the
     /// divider it folds. The search field closes the message section, at
     /// the toolbar's trailing end, where Mail has it.
+    /// The Mail/Board switch comes first, right after the window's buttons;
+    /// the board's toolbars (`BoardToolbar`) start with it too, so it stays
+    /// put when the window swaps the toolbars.
     /// The message actions are two groups (window.blp: the gap is
     /// `trash_button`'s `margin-end`):
     /// Archive and Trash, then Star, Assistant and More Actions. A `.space`
@@ -66,7 +71,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     /// the star is a view item). Mark as Junk has no button: it is in the
     /// menus only.
     static let defaultItems: [NSToolbarItem.Identifier] = [
-        .flexibleSpace, .toggleSidebar,
+        ID.mode, .flexibleSpace, .toggleSidebar,
         .sidebarTrackingSeparator,
         ID.newMessage, ID.filter, ID.refresh, .flexibleSpace,
         ID.listSeparator,
@@ -171,6 +176,12 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         tb.autosavesConfiguration = false
         toolbar = tb
         return tb
+    }
+
+    /// The Mail/Board switch, once the toolbar made it; the window keeps
+    /// its selected segment in step with the mode.
+    var modeItem: NSToolbarItemGroup? {
+        items[ID.mode] as? NSToolbarItemGroup
     }
 
     /// Shows whether the list is filtered: the filter icon filled in the
@@ -296,6 +307,9 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
 
     private func make(_ id: NSToolbarItem.Identifier) -> NSToolbarItem? {
         switch id {
+        case ID.mode:
+            guard splitView != nil else { return nil }
+            return ModeSwitch.item(id)
         case ID.newMessage:
             let it = button(id, image: Icon.newMessage, label: mn(L10n.T("_New Message")), action: Action.newMessage)
             it.toolTip = mn(L10n.T("_New Message")) + " (⌘N)"

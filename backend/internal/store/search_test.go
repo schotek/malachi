@@ -105,7 +105,7 @@ func TestSearchIndexFollowsWrites(t *testing.T) {
 	// A move keeps the entry: folders are joined at query time.
 	var docBefore, docAfter int64
 	s.db.QueryRowContext(ctx, `SELECT docid FROM search_docs WHERE message_id = ?`, m.ID).Scan(&docBefore)
-	if err := s.MoveMessages(ctx, acc, []string{m.ID}, archive.ID); err != nil {
+	if _, err := s.MoveMessages(ctx, acc, []string{m.ID}, archive.ID); err != nil {
 		t.Fatal(err)
 	}
 	s.db.QueryRowContext(ctx, `SELECT docid FROM search_docs WHERE message_id = ?`, m.ID).Scan(&docAfter)

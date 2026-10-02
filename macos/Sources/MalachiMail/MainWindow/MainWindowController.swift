@@ -23,6 +23,9 @@ import Quartz
 /// searched as if typed and Return pressed.
 /// The window is one instance for the application's life: with "Run in
 /// Background" it hides instead of closing.
+/// It has two modes (MalachiCore `Board`, MainWindowController+Mode): Mail,
+/// all of the above, and Board, a page in place of the panes with toolbars
+/// of its own; the status bar stays in both. The window starts in Mail.
 @MainActor
 final class MainWindowController: NSWindowController, NSWindowDelegate {
     static let defaultSize = NSSize(width: 1200, height: 760)
@@ -42,15 +45,85 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     /// The window title: the selected folder's name (D1 of the plan).
     var folderTitle: String {
-        didSet { window?.title = folderTitle.isEmpty ? MainMenu.appName : folderTitle }
+        didSet { applyTitle() }
     }
 
     /// The window subtitle: the selected folder's unread and total counts
     /// (window.go `refreshListTitle`, `folderCountsText`; the subtitle of
     /// the list's Adw.WindowTitle in GTK), empty for none, as in Mail.
     var folderSubtitle: String {
-        didSet { window?.subtitle = folderSubtitle }
+        didSet { applyTitle() }
     }
+
+    /// What the window shows; set only by setMode(_:).
+    var mode = Board.initialMode
+    /// The toolbar of the Mail mode. Held here: `MainToolbar` holds it
+    /// weakly, and while the board's toolbar is the window's nothing else
+    /// would. Its dynamic items and validation go to it in either mode.
+    let mailToolbar: NSToolbar
+    /// The board's source: the daemon's (`DaemonBoardSource` over the
+    /// application's client), made on first use and started on the first
+    /// entry into Board (`startBoard`, MainWindowController+Board): nothing
+    /// outside the board shows its data, so a user who never opens it never
+    /// lists it. Then it runs until the application quits, fed by the
+    /// notification fan-out (`boardTokens`). Nil with `MALACHI_BOARD_SAMPLES`.
+    private(set) lazy var boardSource: DaemonBoardSource? =
+        Self.boardSamples ? nil : DaemonBoardSource(client: state.client)
+    /// Whether `boardSource` was started (notifications reach it only then).
+    var boardStarted = false
+    /// DEVELOPMENT AID: `MALACHI_BOARD_SAMPLES=1` shows the invented sample
+    /// cases (`InMemoryBoardSource.dummy`) instead of the daemon's board,
+    /// to look at the three styles without mail; read once.
+    static let boardSamples = ProcessInfo.processInfo.environment["MALACHI_BOARD_SAMPLES"] == "1"
+    /// The board (MalachiCore `BoardController`), made on first use.
+    lazy var board = BoardController(source: boardSource ?? InMemoryBoardSource.dummy(samples: true))
+    /// What the user can do with a case (the toolbar, the panel, the
+    /// menus); Reply, Open Draft and Show in Mail go to `boardMail`.
+    lazy var boardActions: BoardActions = makeBoardActions()
+    /// What the board's actions need of the mail; the application installs
+    /// it (Integration+Board).
+    var boardMail = BoardMail()
+    /// The board source's subscriptions to the notification fan-out.
+    var boardTokens: [NotificationHub.Token] = []
+    /// The application's triage observed (MainWindowController+Triage);
+    /// the window lives as long as the application.
+    var triageTokens: [BoardObserverToken] = []
+    /// The run this window saw active last, for the toast of a manual
+    /// run's end.
+    var triageSeenActive: Board.TriageTrigger?
+    /// The toolbars of the Board mode (`BoardToolbar`: the List's, and the
+    /// one of Columns and Today), made on first use.
+    lazy var boardToolbars: BoardToolbar = {
+        let d = BoardToolbar(controller: board) { [weak self] in
+            self?.boardPage.listSplitView
+        }
+        // Triage follows the application's triage (MainWindowController+Triage).
+        d.triageItem = { [weak self] in
+            self?.triageToolbarItem ?? .hidden
+        }
+        boardToolbarsMade = true
+        return d
+    }()
+    /// Whether `boardToolbars` exists (its switches are counted then).
+    private(set) var boardToolbarsMade = false
+    /// The Board mode's page, made on first use; the window follows its
+    /// changes (MainWindowController+Board).
+    lazy var boardPage: BoardPageViewController = {
+        let page = BoardPageViewController(actions: boardActions)
+        page.onChange = { [weak self] _ in
+            self?.boardDidChange()
+        }
+        return page
+    }()
+    /// What had the keyboard in the board when the window went back to
+    /// Mail, given it back on the next entry.
+    weak var boardResponder: NSResponder?
+    /// What had the keyboard in Mail when the board took over (a search
+    /// field rather than its field editor), given it back on the way back.
+    weak var savedResponder: NSResponder?
+    /// Gives the keyboard to the mail when what had it is gone (the list);
+    /// the app installs it.
+    var mailFocusFallback: (@MainActor () -> Void)?
 
     private let toolbarDelegate: MainToolbar
     /// The toolbar's Assistant menu (ui/internal/assistant), with Summarize
@@ -99,9 +172,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         toolbarDelegate = MainToolbar(
             splitView: split.splitView, assistantMenu: assistantMenu, showsAssistant: state.assistant.shown,
             showsPanel: state.assistant.panelShown)
+        mailToolbar = toolbarDelegate.makeToolbar()
         super.init(window: w)
         w.delegate = self
-        w.toolbar = toolbarDelegate.makeToolbar()
+        w.toolbar = mailToolbar
         // The GTK sizes are window sizes, header bars included: the frame
         // is set once the toolbar is part of it. With Auto Layout content
         // the window's minimum comes from the content's constraints, so the
@@ -129,8 +203,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         let assistant = state.assistant
         split.assistantAllowed = assistant.panelShown
         assistantToken = assistant.onChange { [weak self] in
-            guard let self, let toolbar = self.window?.toolbar else { return }
-            self.toolbarDelegate.setAssistant(visible: assistant.shown, in: toolbar)
+            guard let self else { return }
+            self.toolbarDelegate.setAssistant(visible: assistant.shown, in: self.mailToolbar)
             self.updateAssistantPanel()
         }
         assistantTargetToken = state.settings.onChange(.assistantTarget) { [weak self] in
@@ -142,10 +216,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         toolbarDelegate.onOpenAssistantPanel = { [weak self] in
             self?.openAssistantPanel()
         }
-        if let toolbar = w.toolbar {
-            toolbarDelegate.setAssistant(
-                opensPanel: Assistant.buttonOpensPanel(state.settings.assistantTarget, hasPanel: true), in: toolbar)
-        }
+        toolbarDelegate.setAssistant(
+            opensPanel: Assistant.buttonOpensPanel(state.settings.assistantTarget, hasPanel: true), in: mailToolbar)
         toolbarDelegate.setOwnWords(available: assistant.canRunInApp)
         w.setFrameAutosaveName(Self.frameAutosaveName)
 
@@ -160,6 +232,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         split.messageContainer.setOverlay(toasts)
         state.toasts.presenter = toasts
         state.toasts.fallback = toasts
+        wireBoardSource()
+        wireTriage()
     }
 
     @available(*, unavailable)
@@ -191,8 +265,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         assistantPanel = vc as? AssistantPanelViewController
     }
 
-    /// Opens the assistant panel, while it exists.
+    /// Opens the assistant panel, while it exists; the board gives way to
+    /// the mail first.
     func revealAssistant() {
+        setMode(Board.mode(for: .revealAssistant, current: mode))
         split.revealAssistant()
     }
 
@@ -212,11 +288,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     private func updateAssistantPanel() {
         let allowed = state.assistant.panelShown
         split.assistantAllowed = allowed
-        if let toolbar = window?.toolbar {
-            toolbarDelegate.setAssistantPanel(visible: allowed, in: toolbar)
-            toolbarDelegate.setAssistant(
-                opensPanel: Assistant.buttonOpensPanel(state.settings.assistantTarget, hasPanel: true), in: toolbar)
-        }
+        toolbarDelegate.setAssistantPanel(visible: allowed, in: mailToolbar)
+        toolbarDelegate.setAssistant(
+            opensPanel: Assistant.buttonOpensPanel(state.settings.assistantTarget, hasPanel: true), in: mailToolbar)
         let ownWords = state.assistant.canRunInApp
         toolbarDelegate.setOwnWords(available: ownWords)
         if !ownWords, toolbarDelegate.converting {
@@ -241,7 +315,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
             switch outcome {
             case .query(let query):
                 self.toolbarDelegate.endConverting(text: query)
-                if self.split.isListCollapsed {
+                // Not in Board: the list is hidden there.
+                if self.split.isListCollapsed, self.mode != .board {
                     self.split.toggleMessageList(nil)
                 }
                 self.onSearchReturn?(query)
@@ -281,9 +356,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         return c
     }
 
+    /// The Mail/Board switches of both toolbars, the ones made so far
+    /// (MainWindowController+Mode keeps their selection in step).
+    var modeSwitches: [NSToolbarItemGroup] {
+        [toolbarDelegate.modeItem].compactMap { $0 } + (boardToolbarsMade ? boardToolbars.modeItems : [])
+    }
+
     private func setListSeparator(visible: Bool) {
-        guard let toolbar = window?.toolbar else { return }
-        toolbarDelegate.setListSeparator(visible: visible, in: toolbar)
+        toolbarDelegate.setListSeparator(visible: visible, in: mailToolbar)
     }
 
     /// Presents the window (a hidden one comes back) and activates the app.
@@ -303,6 +383,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         return false
     }
 
+    /// A resize by the user (or a tile, a zoom) to `frameSize`: the
+    /// board's List folds its panes for the new width first.
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        if mode == .board {
+            boardPage.shownList?.willResize(toWidth: frameSize.width)
+        }
+        return frameSize
+    }
+
     func windowDidBecomeKey(_ notification: Foundation.Notification) {
         state.toasts.presenter = toasts
         onBecomeKey?()
@@ -313,9 +402,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     /// The split view's actions (⌃⌘S, ⌥⌘L, the assistant panel's toggle)
     /// also while no view of the window has the keyboard focus: the
     /// responder chain then starts at the window and reaches this
-    /// controller, not the split view controller.
+    /// controller, not the split view controller. None while the board
+    /// shows.
     override func supplementalTarget(forAction action: Selector, sender: Any?) -> Any? {
-        if let target = MainContentViewController.splitTarget(split, forAction: action) {
+        if let target = content.splitTarget(forAction: action) {
             return target
         }
         return super.supplementalTarget(forAction: action, sender: sender)
@@ -443,7 +533,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     /// Whether `action` is allowed for the selection (actions.go
     /// `setMessageActionsSensitive`); nil for an action not handled here.
+    /// The mode comes first: in Board the hidden list keeps its selection,
+    /// and nothing may act on it (`Board.allows`).
     private func allows(_ action: Selector, _ f: ActionFlags) -> Bool? {
+        if let c = Self.command(action), !Board.allows(c, in: mode) {
+            return false
+        }
         switch action {
         case Action.checkForNewMail: return state.hooks.checkForNewMail != nil
         // The filter narrows a folder's listing; search results have none
@@ -465,6 +560,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         case Action.askAssistant: return f.on && !f.outbox && state.assistant.pick(needsBridge: true).ok
         case Action.summarizeUnread:
             return (messageActions?.canSummarizeUnread ?? false) && state.assistant.pick(needsBridge: true).ok
+        // The List's detail actions: on the selected case.
+        case Action.boardDone, Action.boardRemind: return boardHasDetail
+        case Action.boardArchive: return boardHasDetail && board.view.detail.map { boardActions.canArchive($0.id) } == true
+        case Action.boardReply: return boardHasDetail && board.view.detail.map { boardActions.canReply($0.id) } == true
+        case Action.boardTriage: return triageClickable
         default: return nil
         }
     }
@@ -491,6 +591,10 @@ extension MainWindowController: NSUserInterfaceValidations {
             case Action.setMessageFilter:
                 let current = state.hooks.messageFilter?() ?? .all
                 menuItem.state = FilterMenu.tag(current) == menuItem.tag ? .on : .off
+            case Action.setWindowMode:
+                menuItem.state = mode.rawValue == menuItem.tag ? .on : .off
+            case Action.setBoardStyle:
+                validateBoardStyle(menuItem)
             default: break
             }
             ActionPresentation.present(menuItem, action, f)

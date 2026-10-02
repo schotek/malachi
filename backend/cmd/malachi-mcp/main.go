@@ -7,7 +7,8 @@
 // It is a client of the daemon's JSON-RPC socket exactly like the desktop
 // UI is: it imports only pkg/api, holds no mail logic, never returns HTML,
 // and offers the tools that change or send mail only when started with
-// --allow-modify or --allow-send. See docs/mcp.md.
+// --allow-modify or --allow-send, and those that write the board's triage
+// notes only with --allow-triage. See docs/mcp.md.
 //
 // stdout carries the MCP frames. Everything else (logs, errors) goes to
 // stderr; the only other writes to stdout are -version and the reports of
@@ -66,6 +67,27 @@ type config struct {
 	socket      string
 	allowModify bool
 	allowSend   bool
+	allowTriage bool
+	triageRun   string // the run (board.runStart) the triage calls count in; only with allowTriage
+	triageMax   int    // the cases this process may annotate (--triage-max); 0 = maxSessionAnnotations
+	// replyOnly (--reply-only) confines create_draft to one reply to this
+	// message (tools_replyonly.go); never with the modify, send or triage
+	// tiers.
+	replyOnly api.MessageID
+}
+
+// instructions is serverInstructions, with the triage paragraph when the
+// triage tools are offered.
+func (c config) instructions() string {
+	switch {
+	case c.replyOnly != "":
+		return serverInstructions + replyOnlyInstructions(c.replyOnly)
+	case c.allowTriage && c.triageRun == "":
+		return serverInstructions + triageInstructions + triageOrdinaryDraftNote
+	case c.allowTriage:
+		return serverInstructions + triageInstructions
+	}
+	return serverInstructions
 }
 
 // usageText heads the -h output, before the server flags.
@@ -88,24 +110,14 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		return runSetup(args[0], args[1:], stdout, stderr)
 	}
-	fs := flag.NewFlagSet("malachi-mcp", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	fs.Usage = func() {
-		fmt.Fprint(stderr, usageText)
-		fs.PrintDefaults()
-	}
-	var cfg config
-	fs.StringVar(&cfg.socket, "socket", defaultSocketPath(), "malachid JSON-RPC unix socket; its connection key is read from beside it as PATH.key")
-	fs.BoolVar(&cfg.allowModify, "allow-modify", false, "offer the tools that flag, move and delete messages and change an issue's status")
-	fs.BoolVar(&cfg.allowSend, "allow-send", false, "offer the tool that sends a draft")
-	showVersion := fs.Bool("version", false, "print version and exit")
-	if err := fs.Parse(args); err != nil {
+	cfg, showVersion, err := parseServerFlags(args, stderr)
+	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
 		return err
 	}
-	if *showVersion {
+	if showVersion {
 		fmt.Fprintln(stdout, "malachi-mcp", version)
 		return nil
 	}
@@ -115,7 +127,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 
 	log := newLogger(stderr)
 	log.Info("starting malachi-mcp", "version", version, "socket", cfg.socket,
-		"allowModify", cfg.allowModify, "allowSend", cfg.allowSend)
+		"allowModify", cfg.allowModify, "allowSend", cfg.allowSend, "allowTriage", cfg.allowTriage, "triageRun", cfg.triageRun != "", "triageMax", cfg.triageMax, "replyOnly", cfg.replyOnly != "")
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -126,7 +138,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	// way the session is over and there is nothing to retry: the reason is
 	// logged (it is a transport-level text, never mail content) and the
 	// process exits cleanly, as the client expects of a stdio server.
-	err := b.mcpServer().Run(ctx, &mcp.StdioTransport{})
+	err = b.mcpServer().Run(ctx, &mcp.StdioTransport{})
 	switch {
 	case err == nil || ctx.Err() != nil:
 		log.Info("malachi-mcp stopped")
@@ -138,9 +150,67 @@ func run(args []string, stdout, stderr io.Writer) error {
 	return nil
 }
 
+// parseServerFlags reads the server's command line, with the environment
+// defaults of --triage-run and --triage-max; both are dropped without
+// --allow-triage and checked with it.
+func parseServerFlags(args []string, stderr io.Writer) (cfg config, showVersion bool, err error) {
+	fs := flag.NewFlagSet("malachi-mcp", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		fmt.Fprint(stderr, usageText)
+		fs.PrintDefaults()
+	}
+	fs.StringVar(&cfg.socket, "socket", defaultSocketPath(), "malachid JSON-RPC unix socket; its connection key is read from beside it as PATH.key")
+	fs.BoolVar(&cfg.allowModify, "allow-modify", false, "offer the tools that flag, move and delete messages and change an issue's status")
+	fs.BoolVar(&cfg.allowSend, "allow-send", false, "offer the tool that sends a draft")
+	fs.BoolVar(&cfg.allowTriage, "allow-triage", false, "offer the tools that read the board's triage queue and store an assistant's notes and the user's commitments")
+	fs.StringVar(&cfg.triageRun, "triage-run", os.Getenv("MALACHI_MCP_TRIAGE_RUN"), "with -allow-triage: the id of the triage run (board.runStart) the notes count in; default $MALACHI_MCP_TRIAGE_RUN")
+	triageMax := ""
+	fs.StringVar(&triageMax, "triage-max", os.Getenv("MALACHI_MCP_TRIAGE_MAX"), "with -allow-triage: how many cases this process may annotate, 1-200; the queue hands out no more than that allows; default $MALACHI_MCP_TRIAGE_MAX, else 200")
+	// No environment default: the message is per request.
+	replyOnly := fs.String("reply-only", "", "offer create_draft only for one reply (mode reply or replyAll, no other recipients or subject) to this message id, at most once; not with -allow-modify, -allow-send or -allow-triage")
+	version := fs.Bool("version", false, "print version and exit")
+	if err := fs.Parse(args); err != nil {
+		return config{}, false, err
+	}
+	if *version {
+		return cfg, true, nil
+	}
+	replyOnlySet := false
+	fs.Visit(func(f *flag.Flag) { replyOnlySet = replyOnlySet || f.Name == "reply-only" })
+	if replyOnlySet {
+		if err := validReplyOnly(*replyOnly); err != nil {
+			return config{}, false, err
+		}
+		for _, other := range []struct {
+			on   bool
+			name string
+		}{{cfg.allowModify, "--allow-modify"}, {cfg.allowSend, "--allow-send"}, {cfg.allowTriage, "--allow-triage"}} {
+			if other.on {
+				return config{}, false, fmt.Errorf("--reply-only cannot be combined with %s", other.name)
+			}
+		}
+		cfg.replyOnly = api.MessageID(*replyOnly)
+	}
+	if !cfg.allowTriage {
+		// The run id and the limit mean nothing without the triage tools.
+		cfg.triageRun, triageMax = "", ""
+	}
+	if err := validTriageRun(cfg.triageRun); err != nil {
+		return config{}, false, err
+	}
+	if cfg.triageMax, err = parseTriageMax(triageMax); err != nil {
+		return config{}, false, err
+	}
+	if !cfg.allowTriage {
+		cfg.triageMax = 0
+	}
+	return cfg, false, nil
+}
+
 // bridge ties the MCP server to the daemon connection and the per-process
 // state (the drafts this process created, what it had downloaded, the
-// document workers and the documents read).
+// document workers, the documents read and the triage counters).
 type bridge struct {
 	cfg       config
 	rpc       *rpcClient
@@ -149,6 +219,8 @@ type bridge struct {
 	downloads *sessionDownloads
 	workers   *workerPool
 	docs      *docCache
+	triage    *sessionTriage
+	reply     replyOnce // the one draft of a --reply-only process
 }
 
 func newBridge(cfg config, log *slog.Logger) *bridge {
@@ -163,6 +235,7 @@ func newBridge(cfg config, log *slog.Logger) *bridge {
 		downloads: &sessionDownloads{},
 		workers:   newWorkerPool(),
 		docs:      newDocCache(),
+		triage:    newSessionTriage(cfg.triageMax),
 	}
 }
 
@@ -173,18 +246,25 @@ func newBridge(cfg config, log *slog.Logger) *bridge {
 func (b *bridge) mcpServer() *mcp.Server {
 	srv := mcp.NewServer(
 		&mcp.Implementation{Name: "malachi", Title: "Malachi Mail", Version: version},
-		&mcp.ServerOptions{Instructions: serverInstructions},
+		&mcp.ServerOptions{Instructions: b.cfg.instructions()},
 	)
 	b.registerReadTools(srv)
 	b.registerIssueReadTools(srv)
+	b.registerBoardReadTools(srv)
 	b.registerDraftTools(srv)
-	if b.cfg.allowModify {
+	// --reply-only never comes with the other tiers (parseServerFlags
+	// refuses that); a config built otherwise gets none of them either.
+	confined := b.cfg.replyOnly != ""
+	if b.cfg.allowModify && !confined {
 		b.registerModifyTools(srv)
 		b.registerIssueModifyTools(srv)
 		b.registerUnsubscribeTool(srv)
 	}
-	if b.cfg.allowSend {
+	if b.cfg.allowSend && !confined {
 		b.registerSendTools(srv)
+	}
+	if b.cfg.allowTriage && !confined {
+		b.registerTriageTools(srv)
 	}
 	return srv
 }

@@ -1208,4 +1208,26 @@ private final class Harness {
 private final class ParentLog {
     let window = NSObject()
     var seen: [Bool] = []
+
+    /// The board's Reply by ids: a message the daemon no longer has says
+    /// so; one it could not be asked about says why, not that it is gone.
+    /// On an account that comments the action is named Comment.
+    @Test func openComposeByIdsSaysWhyItFoundNothing() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1)]])
+        defer { Task { await h.stop() } }
+        h.actions.openCompose(.reply, account: account, message: "nowhere")
+        try await waitUntil { h.log.toasts.count == 1 }
+        #expect(h.log.toasts.last == "Preparing the reply failed: the message is no longer on the server")
+        await h.fixture.fail(API.MessageGet.name, with: RPCError(code: .networkError, message: "down"))
+        h.actions.openCompose(.reply, account: account, message: "elsewhere")
+        try await waitUntil { h.log.toasts.count == 2 }
+        #expect(h.log.toasts.last == "Preparing the reply failed: the server could not be reached")
+        await h.fixture.succeed(API.MessageGet.name)
+        let i = try #require(h.mailbox.model.accounts.firstIndex { $0.id == account })
+        h.mailbox.model.accounts[i].capabilities = [.comment]
+        h.actions.openCompose(.reply, account: account, message: "nowhere2")
+        try await waitUntil { h.log.toasts.count == 3 }
+        #expect(h.log.toasts.last == "Comment failed: the message is no longer on the server")
+        #expect(h.log.composed.isEmpty)
+    }
 }

@@ -331,6 +331,45 @@ private final class Harness {
         #expect(await h.calls(API.MessageGet.name) == 3)
     }
 
+    /// `lookUpOutcome` tells a message the daemon no longer has
+    /// (messageNotFound, messageGone) from one it could not be asked about.
+    @Test func lookUpSaysWhyItFoundNothing() async throws {
+        let h = try await Harness()
+        try await h.serve("m9")
+        await h.daemon.on(API.MessageGet.name) { params in
+            let p = try JSONCoding.decoder().decode(MessageGetParams.self, from: params)
+            switch p.messageId.rawValue {
+            case "notfound": throw RPCError(code: .messageNotFound, message: "x")
+            case "gone": throw RPCError(code: .messageGone, message: "x")
+            default: throw RPCError(code: .storageError, message: "x")
+            }
+        }
+        try await h.start()
+        defer { Task { await h.stop() } }
+        var outcomes: [String: String] = [:]
+        for id in ["notfound", "gone", "broken"] {
+            h.cache.lookUpOutcome(accountId: account, id: MessageID(rawValue: id)) { o in
+                switch o {
+                case .found: outcomes[id] = "found"
+                case .gone: outcomes[id] = "gone"
+                case .failed(let e): outcomes[id] = (e as? RPCError)?.code == .storageError ? "failed" : "?"
+                }
+            }
+        }
+        try await waitUntil { outcomes.count == 3 }
+        #expect(outcomes == ["notfound": "gone", "gone": "gone", "broken": "failed"])
+        // Without a connection: failed, not gone.
+        await h.client.close()
+        var offline: MessageCache.LookUp?
+        h.cache.lookUpOutcome(accountId: account, id: MessageID(rawValue: "other")) { offline = $0 }
+        try await waitUntil { offline != nil }
+        if case .failed(let e) = offline {
+            #expect(e as? RPCClient.ClientError == .notConnected)
+        } else {
+            Issue.record("not connected is no gone message")
+        }
+    }
+
     @Test func evictedEntryIsStoredBackWhenItsHalfArrives() async throws {
         let h = try await Harness()
         try await h.serve("m4", delay: .milliseconds(60))

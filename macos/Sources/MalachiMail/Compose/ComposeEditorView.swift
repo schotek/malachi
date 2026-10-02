@@ -24,6 +24,11 @@ import WebKit
 /// save reads content at least as new as the moment it asked. GTK's
 /// fire-and-forget eval cannot see the returned `seq` and settles for the
 /// next `changed`; the `seq` the bridge returns exists for this.
+///
+/// Sized (`sized: true`, the board's inline reply): the view reports the
+/// height of its document through `onHeight` (validated: finite, within
+/// `maxReportedHeight`), and while the document fits the view's height the
+/// scroll wheel scrolls the enclosing scroll view instead.
 @MainActor
 final class ComposeEditorView: NSView, EditorView {
     var view: NSView { self }
@@ -38,6 +43,14 @@ final class ComposeEditorView: NSView, EditorView {
     }
     var onCrashed: (@MainActor () -> Void)?
     var onPaste: (@MainActor (_ text: String, _ answer: @escaping @MainActor (String?) -> Void) -> Void)?
+    var onHeight: (@MainActor (CGFloat) -> Void)?
+
+    /// The largest height a sized editor reports; a document taller than
+    /// this scrolls inside the view anyway.
+    static let maxReportedHeight: CGFloat = 100_000
+
+    /// Sized mode: the document's height as last reported (nil until then).
+    private(set) var contentHeight: CGFloat?
 
     private let web: ComposeWebView
     private let registry: CIDRegistry
@@ -66,9 +79,9 @@ final class ComposeEditorView: NSView, EditorView {
 
     /// An editor over `registry` (the process-wide registry in the
     /// application; the `cid:` handler of the view resolves in the same one).
-    init(registry: CIDRegistry = .shared) {
+    init(registry: CIDRegistry = .shared, sized: Bool = false) {
         self.registry = registry
-        web = ComposeWebView(registry: registry)
+        web = ComposeWebView(registry: registry, sized: sized)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
@@ -82,6 +95,16 @@ final class ComposeEditorView: NSView, EditorView {
         }
         web.onUnavailable = { [weak self] in
             self?.unavailable()
+        }
+        if sized {
+            web.onSize = { [weak self] css in
+                self?.sizeReported(css)
+            }
+            // The wheel scrolls what the editor sits in while it all shows.
+            web.outerScroll = { [weak self] in
+                guard let self, self.fits else { return nil }
+                return self.enclosingScrollView
+            }
         }
         addSubview(web)
         NSLayoutConstraint.activate([
@@ -204,6 +227,24 @@ final class ComposeEditorView: NSView, EditorView {
 
     func unregisterCID(_ id: String) {
         registry.unregister(id)
+    }
+
+    // MARK: Sized mode
+
+    /// The document is no taller than the view (or has not reported yet).
+    var fits: Bool {
+        guard let h = contentHeight else { return true }
+        return h <= bounds.height + 0.5
+    }
+
+    /// The size script's report: a finite, positive number of CSS pixels,
+    /// scaled by the page zoom and capped, or nothing.
+    private func sizeReported(_ css: Double) {
+        guard css.isFinite, css > 0 else { return }
+        let h = min(CGFloat(css) * max(web.pageZoom, 0.1), Self.maxReportedHeight).rounded(.up)
+        guard h != contentHeight else { return }
+        contentHeight = h
+        onHeight?(h)
     }
 
     // MARK: Bridge

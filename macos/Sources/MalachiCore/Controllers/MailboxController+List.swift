@@ -162,6 +162,9 @@ public final class ListController {
     private var markReadID: MessageID?
     private var settingsToken: Settings.ChangeToken?
     private var closed = false
+    /// Show in Mail (`reveal`, MailboxController+Reveal): the message to
+    /// select once its folder's first page is listed.
+    var pendingReveal: PendingReveal?
 
     /// Installs the list half into `mailbox`'s hooks and publishes the
     /// initial state (the folder the mailbox has selected, if any, is
@@ -198,6 +201,7 @@ public final class ListController {
         waiters = [:]
         failureWaiters = [:]
         refetchAfter = []
+        pendingReveal = nil
     }
 
     // MARK: Loading
@@ -218,6 +222,15 @@ public final class ListController {
         }
         let k = mailbox.model.selected
         let gen = mailbox.model.bumpList()
+        if let r = pendingReveal {
+            // Show in Mail waits for this folder's listing, this one now; a
+            // listing of another folder drops it.
+            if r.folder == k {
+                pendingReveal?.generation = gen
+            } else {
+                pendingReveal = nil
+            }
+        }
         mailbox.model.loadingMore = false
         let grouped = groupedListing(k)
         if k != mailbox.model.listFolder || grouped != mailbox.model.grouped {
@@ -253,6 +266,7 @@ public final class ListController {
         )
         mailbox.perform(API.MessageList.self, params) { [weak self] outcome in
             guard let self, gen == self.mailbox.model.listGen else { return }
+            defer { self.finishReveal() }
             self.mailbox.model.loading = false
             switch outcome {
             case .failure(let err):
@@ -298,6 +312,7 @@ public final class ListController {
         )
         mailbox.perform(API.ThreadList.self, params) { [weak self] outcome in
             guard let self, gen == self.mailbox.model.listGen else { return }
+            defer { self.finishReveal() }
             self.mailbox.model.loading = false
             switch outcome {
             case .failure(let err):

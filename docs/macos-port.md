@@ -228,6 +228,220 @@ window, Settings without search, ⌥⌘↑/↓ for reordering, the ⌘R setting,
 *Glass* sound, the owner and mode checks on the daemon's key file). A new
 deviation goes into that table, not silently into the code.
 
+The main window has two modes, Mail and Board (2026-10-01, Swift-first;
+only this client has the board so far, on the owner's instruction, so the
+GTK and Windows ports are owed). A two-segment control at the leading side
+of every toolbar and the first items of the View menu switch them; the
+mode is not saved. A hidden split view still reserves its sidebar section
+in the unified toolbar, so in Board the Mail split's view is taken out of
+the window's view hierarchy (`MainContentViewController.setMode`); its
+controller and all mail state (folder, selection, scroll positions, reader,
+search, the assistant's transcript) stay alive and the view is put back on
+return (`MainWindowController+Mode.swift`, the pure rules in
+`MalachiCore/Board/Board.swift`: `Board.Command.allows` disables the mail
+actions in Board, `viewsMail` keeps a window showing the board from
+counting as looking at a folder for notifications). The window swaps
+`window.toolbar` by mode and style, and a re-installed
+`.sidebarTrackingSeparator` does not bind to its split again after the view
+has left and re-entered the window: after every toolbar install the item is
+removed and inserted again (measured; the mode switch starts at the same x
+in Mail and in every board style).
+
+The board ([architecture.md §3.7](architecture.md#37-the-board), [api.md
+§4.13](api.md#413-board)) in layers:
+
+- **Source.** `MalachiCore/Board/BoardSource.swift` is the seam: a
+  snapshot of cases, accounts and commitments, `onChange`, and the user's
+  writes (state, done, remind, archive, a commitment ticked off, a
+  discarded draft, loading a case's conversation).
+  `DaemonBoardSource.swift` is the daemon's: `board.list` and
+  `account.list`, `board.get` when a case is selected (cached by case and
+  version), the writes laid over the data at once and taken back with a
+  toast when the daemon refuses them, `notify.boardChanged`,
+  `notify.accountsChanged` and the connection state fed by the
+  application's fan-out, one list in flight with a debounce, a back-off
+  after a failed list, phases `loading`, `preparing` (`ready: false`),
+  `ready`, `off`, `unavailable`, `failed`, `unsupported` (an older
+  daemon). `InMemoryBoardSource.dummy(samples:)` over `BoardSamples.swift`
+  is the invented data for the tests and `MALACHI_BOARD_SAMPLES`.
+- **Model and controller.** `BoardCase.swift` (the API's case in the
+  board's terms: the state in effect and who decided it, notes only when
+  the assistant preference is on and the notes are current, every string
+  cleaned and capped again by `cleanLine` / `cleanBlock`), `BoardView.swift`
+  (`Board.view(snapshot, viewState, now:)` builds every view model: the
+  four states, the filters, the three styles, the detail, the empty and
+  notice texts), `BoardRemind.swift` (the remind presets),
+  `BoardText.swift` and `BoardTriageText.swift` (the texts), and
+  `Controllers/BoardController.swift` (the view state: style, filters,
+  selection; writes go to the source). The window owns its source and
+  controller (`MainWindowController.boardSource`, `board`): the source is
+  made on the first entry into Board, or at launch while automatic triage
+  wants the board's data, and runs until the application quits.
+- **Triage** (owned by `AppState`, one for the application):
+  `BoardPreferencesController` (`board.preferences` and
+  `board.setPreferences`; each write reads afresh and lays only its own
+  change on top), `BoardTriageController` (the run: consent, the request
+  through `AssistantRequest` with the bridge's triage tools,
+  `board.runStart` / `board.runEnd`, progress from the stream events) and
+  `BoardAutoTriageScheduler` over the pure rule `Board.AutoTriage.decide`
+  (`BoardAutoTriage.swift`); `Assistant/AssistantTriage.swift` has the
+  command line, the tools per trigger, the limits (40 cases, 15 minutes)
+  and the prompt; [mcp.md](mcp.md), *The board's triage run in the app*.
+  `MainWindowController+Triage.swift` shows it: the board toolbars'
+  Triage item, the status strip's line, a toast when a manual run ends.
+- **Suggest Reply** (owned by `AppState`, one request for the
+  application): `BoardReplyController` runs Claude Code once for one case
+  (`Assistant/AssistantSuggestReply.swift`: the bridge under
+  `--reply-only <message>`, three tools, the prompt and the message) and
+  links the draft named by the `create_draft` result with
+  `board.setDraft`, deleting it when the link fails, on Stop, the timeout
+  or quit; `Board/BoardSuggestReply.swift` has the pure rules (offered,
+  the control's view) and `BoardSuggestReplyText.swift` the texts
+  ([mcp.md](mcp.md), *A suggested reply on the board*). The detail shows
+  it with `BoardSuggestReplyControl` in the suggested reply's place.
+  *Settings → AI → Board* (`AIPaneViewController`) has the consent, the
+  automatic switch with its interval and daily cap, and a status row.
+- **AppKit** (`MalachiMail/Board/`). `BoardPageViewController` hosts three
+  styles (List, Columns, Today; `MainWindowController+Board.swift` and the
+  View menu), an empty state, a sliding detail panel and toasts; only it
+  sets `BoardController.onChange` and fans changes out (`apply(_:)`). The
+  List style is a split view of its own (`BoardListViewController`:
+  navigation as a full-height sidebar, list, detail; resizable; the
+  navigation folds below 900 pt of page width, the inline detail below
+  640 pt, where the sliding panel takes over). Columns
+  (`BoardColumnsViewController`, four tables of cards, the commitments
+  under the first) and Today (`BoardTodayViewController`). The detail
+  (`BoardDetailViewController`) shows the state, the "why" box (with
+  *Unstar* beside it when the case is hot because of a star), the
+  assistant's title, deadline with its quote, summary and tasks under the
+  assistant's mark, the suggested reply, and the conversation as
+  plain-text cards from `board.get` (`BoardMessageCardView`), never HTML.
+  `BoardActions` is what can be done with a case from the toolbar, the
+  panel's action bar and the context menus (`BoardCaseMenu`): Done,
+  Remind… (Later Today, Tomorrow, Next Week), Archive, Unstar
+  (`BoardController.unflag`, `board.unflag`; offered by
+  `Board.canUnstar` / `Detail.canUnstar`: rule reason `hot.flagged`, not
+  done), and Reply and Show in Mail, which the application installs
+  (`App/Integration+Board.swift`: the compose window, the message selected
+  in Mail or in its own window). Every string from a case goes through
+  `stringValue`. There is no Open Draft on the board.
+- **The inline suggested reply** (2026-10-02). A suggested reply is a
+  local draft the case links (`Board.Case.draft`, never in the Drafts
+  folder, [api.md §4.13](api.md#413-board)); the detail edits it in place.
+  The compose window's content is `Compose/ComposePane.swift` (an
+  `NSViewController` with the header, the format bar, the editor, the
+  chips, the draft controller and the compose and Format actions;
+  `ComposeWindowController` keeps the window, its toolbar, the close
+  question, Escape and the rewrite, and forwards the actions to it); the
+  board uses it as `.inline` with owner `.board`: no From row, the editor
+  in its sized mode (the document's height clamped by Core's
+  `EditorHeight`, 160 pt up to `min(480, 0.6 × the detail's visible
+  height)`, then it scrolls inside; while it fits, the wheel scrolls the
+  detail), a footer `[Attach] status … [Discard] [Send]`.
+  `ComposeDraftController` with `DraftOwner.board` never deletes on close,
+  keeps a conflict in place (`draft.get`, our text wins) and reports a
+  draft deleted elsewhere (`onLost`); `settle()` waits for a send under
+  way, flushes and saves while dirty, `finish()` is that and the clean-up. `BoardReplyEditorController` (Core) loads the selected
+  case's draft with `draft.get`, keyed by case, account and draft, so the
+  board listing the case again after every autosave never reloads it.
+  The rules for the panes are Core's `Controllers/BoardReplyPanes.swift`
+  (tested with fake panes and over the real draft controller,
+  `BoardReplyPanesTests`); `Board/BoardReplyEditorHost.swift`, owned by
+  the page and shared by the List's detail and the panel's, only makes the
+  `ComposePane`s, moves their views and forwards their ends. There is
+  **one live pane per window**, its view in the detail that shows the case
+  (it moves between them on a style switch). Nothing typed and no Send's
+  outcome is lost silently: a pane that leaves sight (another selection, a
+  closed panel, the case leaving the board, Mail mode, a closed window
+  through the page's `viewDidDisappear` and `NSWindow.willCloseNotification`,
+  quit) and a pane whose case the board shows with another draft or none
+  (not proof the draft went) is **saved first** (`settle()`, no clean-up)
+  and closed only once that succeeded; only the draft controller's
+  `draftNotFound` (`onLost`) abandons it, with *The suggested reply was
+  removed elsewhere.* A pane whose save failed is kept, **whatever their
+  number**, saves again with back-off (5 s up to 2 min) and is shown again
+  when its case is, with the note *This reply could not be saved yet;
+  Malachi Mail keeps trying.*; one the user comes back to while it saves
+  stays theirs (the save's end does not close it). A **sending** pane is
+  never saved or closed before the send answered: success toasts the
+  confirmation (*Message queued for sending*, or the Jira comment's) and
+  ends the draft (`ended(key)`) wherever the user is; failure leaves the
+  draft controller's toast and, out of sight, *Your reply “…” was not
+  sent; it is still on the board.*, and the pane is kept (at most three of
+  these clean ones). Quit (`AppDelegate`: the replies first, within
+  `BoardReplyController.endWait`, then the triage and the connection)
+  asks *Quit without saving a reply?* (*Quit Anyway* / Cancel) when one
+  could not be saved or sent; Cancel stops nothing. With owner `.board`
+  the draft controller **never calls `draft.save` without a real change**
+  (the daemon takes every save of a linked suggestion as the user's edit):
+  `editorReady()` learns with one flush how the editor itself writes the
+  draft, and `settle()` compares two reads of the editor around its flush,
+  never the stored HTML with the editor's rendering of it. The inline
+  pane's account is always `params.accountID`, never the placeholder.
+  Discard asks the draft controller's question and deletes exactly the
+  draft it edits (`BoardController.discardDraft(_:draft:account:)` as
+  `discardStored`: `board.discardDraft` while the case links it, else
+  `draft.delete`; a refusal keeps the pane and its text); the case then
+  offers Suggest Reply again, and after Send or Discard the keyboard goes
+  to the state pill. The detail's column is `upper` (header to tasks),
+  `replySlot` and `lower` (the conversation): the rebuild on a changed
+  detail touches only `upper` and `lower`, so the editor's caret and
+  keyboard survive every refresh; the slot shows the pane, a loading
+  row, a failure note with Try Again, Suggest Reply, or for the samples
+  their static block. While the editor grows with the keyboard in it, the
+  detail scrolls to keep the pane's Send row in sight. The inline Send has
+  **no key equivalent** (a button's ⌘↩ would fire from anywhere in the
+  window): ⌘↩ and ⌘S are the menu's Send and Save Draft, which reach the
+  pane through the responder chain only while the keyboard is inside it
+  (from anywhere else nothing handles them and they are disabled). Tab
+  goes To → Cc/Bcc → Subject → editor; Escape in the pane closes its
+  suggestions or link popover first, then the panel. Reply on a case with
+  a suggested reply selects it and puts the keyboard into its editor
+  instead of opening a compose window.
+- **Toolbars** (`BoardToolbar`). List: mode switch, sidebar toggle, then
+  in the list column's section the style switch at its leading edge and
+  the account filter and Triage at its trailing edge, a tracking separator
+  on the list/detail divider, then Done (or Move Back to Board), Remind…,
+  Archive and Reply at the trailing edge, no window title; the detail has
+  no action bar there, its actions are toolbar items (`boardDone`,
+  `boardRemind`, `boardArchive`, `boardReply` in `App/Actions.swift`).
+  Columns and Today: mode switch and style switch (both navigational),
+  title with subtitle, flexible space, account filter, Triage; the detail
+  slides over as a panel with its own action bar. Toolbar sections cannot
+  overflow individually, so the list column keeps a minimum width that
+  holds its three items; in a narrow window Triage is the first item to
+  give way to the overflow menu. Triage is taken out of the toolbars while
+  it is not offered (`TriageView.offered`). Row and card tooltips are left
+  out, because AppKit shows the tooltips of views under an overlapping
+  sibling through the panel.
+
+The board's texts have their msgids in the Go package `ui/internal/board`
+(texts only, `text.go` and `triage.go`, translated in `po/`), which
+`Board.Text` looks up with key = msgid like every other text (§8); what
+stays a `// macOS-only string` there is English. The board's model and
+view logic have no Go reference yet: they come with the GTK port.
+
+Development aids, neither of them a feature, both only from an isolated
+instance (`MALACHI_DATA_DIR` and its own `MALACHI_SOCKET`, §1), never over
+a real store, since migration 0017 cannot be undone:
+
+- `MALACHI_BOARD_SAMPLES=1` shows the invented sample cases instead of the
+  daemon's board (read once at launch); Reply, Show in Mail, Unstar and
+  Triage then only say that the preview cannot do it, and the suggested
+  replies are the static block of earlier versions (no draft to edit).
+- `MALACHI_START` (`MainWindowController+DevStart.swift`): steps separated
+  by `;` (`mail`, `board:list`, `board:list:nav-off`, `board:columns`,
+  `board:today`, `size=WxH`, and `quit` as a last step) put the window
+  through those modes and styles after start-up (`compose` opens and
+  closes a blank compose window; `reply-pane`, with the samples, has the
+  real `BoardReplyEditorHost` show a blank, never saved pane in the
+  List's reply slot, types into it and prints its heights, its place in
+  the detail and where Send goes), `MALACHI_START_SIZE` sets
+  its size, `MALACHI_START_INTERVAL` the seconds per step (3) and
+  `MALACHI_START_TRACE` logs every resize; after each step the toolbar
+  items', the dividers' and the board's and triage's state go to stderr,
+  so a layout can be checked without clicking.
+
 ## 4. The API layer
 
 `MalachiCore/API/` re-declares `backend/pkg/api` (`API.swift` is the
@@ -501,7 +715,14 @@ format in one place for both clients.
   `CapabilitiesTests` for `ui/internal/capabilities`; `ConversationTests`
   for `ui/internal/conversation`), the Swift-first logic (`JiraListTests`,
   `JiraReaderTests`, `JiraActionRulesTests`, `JiraAccountsTests`,
-  `ConversationLayoutTests` with the height governor), the controllers
+  `ConversationLayoutTests` with the height governor, `BoardTests` for the
+  window modes, `BoardModelTests` and `BoardDaemonModelTests` for the
+  board's view models, `BoardRemindTests`, `BoardAutoTriageTests` and
+  `BoardTriageViewTests` for the schedule's rule and the triage's view,
+  `AssistantTriageTests` for its command line, `APICodingTests+Board` for
+  the API types), the board's controllers and source
+  (`BoardControllerTests`, `DaemonBoardSourceTests`,
+  `BoardPreferencesControllerTests`, `BoardTriageControllerTests`), the controllers
   (`JiraWizardControllerTests`, `JiraAccountControllerTests`,
   `JiraComposeControllerTests`, `JiraActionsTests`,
   `IssueActionsControllerTests` (`JiraTransitionsTests` for

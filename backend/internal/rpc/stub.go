@@ -38,6 +38,7 @@ func (b *StubBackend) Config() api.ConfigService          { return stubConfig{} 
 func (b *StubBackend) Senders() api.SenderService         { return stubSenders{} }
 func (b *StubBackend) Contacts() api.ContactService       { return stubContacts{} }
 func (b *StubBackend) Issues() api.IssueService           { return stubIssues{} }
+func (b *StubBackend) Board() api.BoardService            { return stubBoard{} }
 
 type stubContacts struct{}
 
@@ -52,6 +53,60 @@ func (stubIssues) Transitions(context.Context, api.IssueTransitionsParams) (*api
 }
 
 func (stubIssues) Transition(context.Context, api.IssueTransitionParams) (*api.IssueTransitionResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubBoard struct{}
+
+func (stubBoard) List(context.Context, api.BoardListParams) (*api.BoardListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) Get(context.Context, api.BoardGetParams) (*api.BoardGetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) SetState(context.Context, api.BoardSetStateParams) (*api.BoardSetStateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) SetDone(context.Context, api.BoardSetDoneParams) (*api.BoardSetDoneResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) Remind(context.Context, api.BoardRemindParams) (*api.BoardRemindResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) Archive(context.Context, api.BoardArchiveParams) (*api.BoardArchiveResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) Unflag(context.Context, api.BoardUnflagParams) (*api.BoardUnflagResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) DiscardDraft(context.Context, api.BoardDiscardDraftParams) (*api.BoardDiscardDraftResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) SetDraft(context.Context, api.BoardSetDraftParams) (*api.BoardSetDraftResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) Queue(context.Context, api.BoardQueueParams) (*api.BoardQueueResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) Annotate(context.Context, api.BoardAnnotateParams) (*api.BoardAnnotateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) Commit(context.Context, api.BoardCommitParams) (*api.BoardCommitResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) SetCommitment(context.Context, api.BoardSetCommitmentParams) (*api.BoardSetCommitmentResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) Preferences(context.Context, api.BoardPreferencesParams) (*api.BoardPreferencesResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) SetPreferences(context.Context, api.BoardSetPreferencesParams) (*api.BoardSetPreferencesResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) RunStart(context.Context, api.BoardRunStartParams) (*api.BoardRunStartResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubBoard) RunEnd(context.Context, api.BoardRunEndParams) (*api.BoardRunEndResult, error) {
 	return nil, api.ErrNotImplemented
 }
 
@@ -195,6 +250,9 @@ func (stubDrafts) Open(context.Context, api.DraftOpenParams) (*api.DraftOpenResu
 	return nil, api.ErrNotImplemented
 }
 func (stubDrafts) Markdown(context.Context, api.DraftMarkdownParams) (*api.DraftMarkdownResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubDrafts) Get(context.Context, api.DraftGetParams) (*api.DraftGetResult, error) {
 	return nil, api.ErrNotImplemented
 }
 

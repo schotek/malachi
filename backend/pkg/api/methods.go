@@ -61,6 +61,7 @@ const (
 	MethodDraftCreate   = "draft.create"
 	MethodDraftOpen     = "draft.open"
 	MethodDraftMarkdown = "draft.markdown"
+	MethodDraftGet      = "draft.get"
 
 	// Attachments (compose-side store).
 	MethodAttachmentImport = "attachment.import"
@@ -89,6 +90,25 @@ const (
 	// Issues (the issues of an issue-tracker account).
 	MethodIssueTransitions = "issue.transitions"
 	MethodIssueTransition  = "issue.transition"
+
+	// Board (docs/api.md §4.13).
+	MethodBoardList           = "board.list"
+	MethodBoardGet            = "board.get"
+	MethodBoardSetState       = "board.setState"
+	MethodBoardSetDone        = "board.setDone"
+	MethodBoardRemind         = "board.remind"
+	MethodBoardArchive        = "board.archive"
+	MethodBoardUnflag         = "board.unflag"
+	MethodBoardDiscardDraft   = "board.discardDraft"
+	MethodBoardSetDraft       = "board.setDraft"
+	MethodBoardQueue          = "board.queue"
+	MethodBoardAnnotate       = "board.annotate"
+	MethodBoardCommit         = "board.commit"
+	MethodBoardSetCommitment  = "board.setCommitment"
+	MethodBoardPreferences    = "board.preferences"
+	MethodBoardSetPreferences = "board.setPreferences"
+	MethodBoardRunStart       = "board.runStart"
+	MethodBoardRunEnd         = "board.runEnd"
 )
 
 // Notification names (backend → client, no reply expected).
@@ -98,6 +118,7 @@ const (
 	NotifyAuthRequired    = "notify.authRequired"
 	NotifyAccountsChanged = "notify.accountsChanged"
 	NotifyMessagesChanged = "notify.messagesChanged"
+	NotifyBoardChanged    = "notify.boardChanged"
 )
 
 // AllMethods lists every callable method. The RPC server uses it to register
@@ -115,7 +136,7 @@ var AllMethods = []string{
 	MethodOutboxRetry,
 	MethodThreadList, MethodThreadGet,
 	MethodDraftSave, MethodDraftList, MethodDraftDelete, MethodDraftCreate, MethodDraftOpen,
-	MethodDraftMarkdown,
+	MethodDraftMarkdown, MethodDraftGet,
 	MethodAttachmentImport, MethodAttachmentRemove, MethodAttachmentGet,
 	MethodSearchQuery,
 	MethodSyncStatus, MethodSyncTrigger,
@@ -123,9 +144,14 @@ var AllMethods = []string{
 	MethodSenderList, MethodSenderAdd, MethodSenderRemove,
 	MethodContactSearch,
 	MethodIssueTransitions, MethodIssueTransition,
+	MethodBoardList, MethodBoardGet, MethodBoardSetState, MethodBoardSetDone, MethodBoardRemind,
+	MethodBoardArchive, MethodBoardUnflag, MethodBoardDiscardDraft, MethodBoardSetDraft, MethodBoardQueue, MethodBoardAnnotate,
+	MethodBoardCommit, MethodBoardSetCommitment, MethodBoardPreferences, MethodBoardSetPreferences,
+	MethodBoardRunStart, MethodBoardRunEnd,
 }
 
 // AllNotifications lists every server-initiated notification.
 var AllNotifications = []string{
 	NotifyNewMessage, NotifySyncState, NotifyAuthRequired, NotifyAccountsChanged, NotifyMessagesChanged,
+	NotifyBoardChanged,
 }

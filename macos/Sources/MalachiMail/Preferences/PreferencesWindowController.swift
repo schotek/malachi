@@ -34,13 +34,16 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
     /// and `confirmRestart` the offer to restart Claude Desktop around a
     /// change of "Register with Claude" (nil: the change is written at
     /// once, as in GTK).
+    /// `triage` is the board's triage for the AI page's Board group (nil:
+    /// none) and `confirmTriage` its consent sheet.
     /// `confirmRemoval` renders the "Remove this account?" alert,
     /// `confirmTrust` the account wizard's "Trust This Certificate?".
     @discardableResult
     static func show(
         client: RPCClient, settings: Settings, bridge: String? = Paths.resolve().mcpBridge?.path,
         assistant: AssistantController? = nil, claudeDesktop: ClaudeDesktopController? = nil,
-        confirmRestart: PrefsConfirmRestart? = nil,
+        confirmRestart: PrefsConfirmRestart? = nil, triage: BoardTriageController? = nil,
+        confirmTriage: PrefsConfirmRestart? = nil,
         confirmRemoval: @escaping PrefsConfirmRemoval, confirmTrust: @escaping WizardConfirmTrust
     ) -> PreferencesWindowController {
         if let open = shared {
@@ -50,7 +53,8 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
         }
         let c = PreferencesWindowController(
             client: client, settings: settings, bridge: bridge, assistant: assistant, claudeDesktop: claudeDesktop,
-            confirmRestart: confirmRestart, confirmRemoval: confirmRemoval, confirmTrust: confirmTrust)
+            confirmRestart: confirmRestart, triage: triage, confirmTriage: confirmTriage, confirmRemoval: confirmRemoval,
+            confirmTrust: confirmTrust)
         shared = c
         c.showWindow(nil)
         c.window?.makeKeyAndOrderFront(nil)
@@ -60,6 +64,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
     private init(
         client: RPCClient, settings: Settings, bridge: String?, assistant: AssistantController?,
         claudeDesktop: ClaudeDesktopController?, confirmRestart: PrefsConfirmRestart?,
+        triage: BoardTriageController?, confirmTriage: PrefsConfirmRestart?,
         confirmRemoval: @escaping PrefsConfirmRemoval, confirmTrust: @escaping WizardConfirmTrust
     ) {
         self.settings = settings
@@ -93,7 +98,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
         appearancePane.configure(settings: settings)
         aiPane.configure(
             bridge: bridge, settings: settings, assistant: assistant, claudeDesktop: claudeDesktop,
-            confirmRestart: confirmRestart
+            confirmRestart: confirmRestart, triage: triage, confirmTriage: confirmTriage
         ) { text in toasts.show(text) }
         _ = generalPane.view
 

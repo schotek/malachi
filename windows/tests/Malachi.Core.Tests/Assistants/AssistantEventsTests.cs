@@ -218,6 +218,9 @@ public sealed class AssistantEventsTests
         ["with --allow-send"] = (
             "draft drf_0a1b2c3d4e5f60718293a4b5c6d7e8f9 (version 12) stored in account acc_work; it is NOT sent. send_message with draftId=drf_0a1b2c3d4e5f60718293a4b5c6d7e8f9 sends it; show the recipients below to the user first.",
             new DraftRef("acc_work", "drf_0a1b2c3d4e5f60718293a4b5c6d7e8f9", 12)),
+        ["a local draft's head"] = (
+            "draft d1 (version 3) stored in account a1; it is NOT sent. It stays in Malachi Mail on the board as the case's suggested reply, on the board only, and is not copied to the Drafts folder on the mail server. This bridge was started without --allow-send; the user sends it from Malachi Mail.\nmode: reply; quoted: html",
+            new DraftRef("a1", "d1", 3)),
         ["the head alone"] = ("draft d1 (version 1) stored in account a1; it is NOT sent.", new DraftRef("a1", "d1", 1)),
         ["odd but whitespace-free ids"] = (
             "draft AAMkAGI2=/+_- (version 007) stored in account a;b(version; it is NOT sent.",

@@ -122,6 +122,20 @@ public final class ComposeController {
         windows.first { $0.edits(draft) }
     }
 
+    /// Adds a form the manager did not open itself (the board's inline
+    /// reply editor), so it gets the account list as the windows do (at
+    /// once when it is known, and after every refresh). Registering twice
+    /// changes nothing; `remove` when it goes.
+    public func register(_ w: any ComposeWindowHandle) {
+        guard !windows.contains(where: { $0 === w }) else { return }
+        windows.append(w)
+        if !fetched {
+            refreshAccounts()
+        } else if !known.isEmpty {
+            w.setAccounts(accounts, placeholder: placeholder)
+        }
+    }
+
     /// Manager.remove: the window closed.
     public func remove(_ w: any ComposeWindowHandle) {
         windows.removeAll { $0 === w }

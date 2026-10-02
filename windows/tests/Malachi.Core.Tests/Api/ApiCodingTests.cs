@@ -1104,20 +1104,20 @@ public sealed partial class ApiCodingTests
         (1000, "notImplemented"), (1001, "invalidArgument"), (1002, "conflict"), (1003, "cancelled"), (1004, "unavailable"),
         (1005, "unauthenticated"),
         (1100, "accountNotFound"), (1101, "folderNotFound"), (1102, "messageNotFound"), (1103, "threadNotFound"),
-        (1104, "draftNotFound"), (1105, "attachmentNotFound"),
+        (1104, "draftNotFound"), (1105, "attachmentNotFound"), (1106, "caseNotFound"),
         (1200, "authRequired"), (1201, "authFailed"), (1202, "keyringError"), (1203, "oauthClientMissing"),
         (1300, "offline"), (1301, "networkError"), (1302, "serverError"), (1303, "tlsError"), (1304, "serverTimeout"),
         (1305, "messageGone"),
         (1400, "storageError"), (1401, "migrationFailed"),
         (1500, "malformedMessage"), (1501, "sanitizeFailed"), (1502, "attachmentTooBig"), (1503, "partNotFound"),
-        (1504, "partNotDownloaded"), (1505, "unsubscribeFailed"),
+        (1504, "partNotDownloaded"), (1505, "unsubscribeFailed"), (1506, "quoteNotFound"),
     ];
 
     [Fact]
     public void ErrorCodesAreNamed()
     {
-        Assert.Equal(35, ErrorCode.All.Count);
-        Assert.Equal(35, ErrorCode.All.Distinct().Count());
+        Assert.Equal(37, ErrorCode.All.Count);
+        Assert.Equal(37, ErrorCode.All.Distinct().Count());
         Assert.Equal(GoCodes.Select(c => c.Code), ErrorCode.All.Select(c => c.Value));
         Assert.Equal(GoCodes.Select(c => c.Name), ErrorCode.All.Select(c => c.Name));
         foreach (var code in ErrorCode.All)
@@ -1145,6 +1145,8 @@ public sealed partial class ApiCodingTests
         Assert.True(ErrorCode.MessageGone == 1305 && new ErrorCode(1305).Name == "messageGone");
         Assert.True(ErrorCode.PartNotDownloaded == 1504 && new ErrorCode(1504).Name == "partNotDownloaded");
         Assert.True(ErrorCode.UnsubscribeFailed == 1505 && new ErrorCode(1505).Name == "unsubscribeFailed");
+        Assert.True(ErrorCode.CaseNotFound == 1106 && new ErrorCode(1106).Name == "caseNotFound");
+        Assert.True(ErrorCode.QuoteNotFound == 1506 && new ErrorCode(1506).Name == "quoteNotFound");
     }
 
     // MARK: Params encoding
@@ -1242,7 +1244,7 @@ public sealed partial class ApiCodingTests
         "outbox.retry",
         "thread.list", "thread.get",
         "draft.save", "draft.list", "draft.delete", "draft.create", "draft.open",
-        "draft.markdown",
+        "draft.markdown", "draft.get",
         "attachment.import", "attachment.remove", "attachment.get",
         "search.query",
         "sync.status", "sync.trigger",
@@ -1250,17 +1252,23 @@ public sealed partial class ApiCodingTests
         "sender.list", "sender.add", "sender.remove",
         "contact.search",
         "issue.transitions", "issue.transition",
+        "board.list", "board.get", "board.setState", "board.setDone", "board.remind",
+        "board.archive", "board.unflag", "board.discardDraft", "board.setDraft", "board.queue", "board.annotate",
+        "board.commit", "board.setCommitment", "board.preferences", "board.setPreferences",
+        "board.runStart", "board.runEnd",
     ];
 
     [Fact]
     public void MethodTableMatchesGo()
     {
-        Assert.Equal(54, API.AllMethods.Count);
-        Assert.Equal(54, API.AllMethods.Distinct().Count()); // no duplicates
+        Assert.Equal(72, API.AllMethods.Count);
+        Assert.Equal(72, API.AllMethods.Distinct().Count()); // no duplicates
         Assert.Equal(GoMethods, API.AllMethods);
         Assert.Equal(API.AllMethods.Count, API.Methods.Count);
         Assert.Equal(API.SystemInfoName, API.SystemInfo.Name);
-        Assert.Equal(["notify.newMessage", "notify.syncState", "notify.authRequired", "notify.accountsChanged", "notify.messagesChanged"], API.AllNotifications);
+        Assert.Equal(
+            ["notify.newMessage", "notify.syncState", "notify.authRequired", "notify.accountsChanged", "notify.messagesChanged", "notify.boardChanged"],
+            API.AllNotifications);
     }
 
     [Fact]

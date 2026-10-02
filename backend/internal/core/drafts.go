@@ -23,6 +23,10 @@ func (s *draftService) Save(ctx context.Context, p api.DraftSaveParams) (*api.Dr
 	if err := validateDraft(&d); err != nil {
 		return nil, err
 	}
+	if d.Local && d.Replaces != "" {
+		// A local draft never holds a copy in the Drafts folder.
+		return nil, api.NewError(api.CodeInvalidArgument, "local and replaces exclude each other")
+	}
 	// The drafts of an issue tracker are comments: their own rules, then
 	// the same sanitising and storing as mail.
 	var visibility api.CommentVisibility
@@ -91,12 +95,15 @@ func (s *draftService) Save(ctx context.Context, p api.DraftSaveParams) (*api.Dr
 		Forwarding: string(d.Forwarding),
 
 		CommentVisibility: visibility,
+		// Read on the first save only: SaveDraft never changes it later.
+		Local: d.Local && d.ID == "",
 	}
 	// The threading headers are kept with the draft, for a parent that
 	// leaves the local store before the draft is sent.
 	if d.InReplyTo != "" {
 		row.ReplyRFCID, row.References = s.b.threadingHeaders(ctx, string(d.AccountID), string(d.InReplyTo))
 	}
+	adoptLinked := false
 	if d.Replaces != "" {
 		m, f, err := s.b.draftsMessage(ctx, string(d.AccountID), string(d.Replaces))
 		if err != nil {
@@ -104,6 +111,9 @@ func (s *draftService) Save(ctx context.Context, p api.DraftSaveParams) (*api.Dr
 		}
 		c := store.CopyOf(m, f)
 		row.Adopt = &c
+		// Adopting the copy deletes the draft that held it before; a case
+		// that links that one shows it.
+		adoptLinked = s.b.boardCopyLinked(ctx, string(d.AccountID), m)
 		if row.ReplyRFCID == "" && m.InReplyTo != "" {
 			row.ReplyRFCID, row.References = m.InReplyTo, m.References
 		}
@@ -115,10 +125,16 @@ func (s *draftService) Save(ctx context.Context, p api.DraftSaveParams) (*api.Dr
 		return nil, api.NewError(api.CodeConflict, "draft %s was modified; reload it", d.ID)
 	case errors.Is(err, store.ErrAttachmentBound):
 		return nil, api.NewError(api.CodeAttachmentNotFound, "attachment belongs to another draft")
+	case errors.Is(err, store.ErrDraftLocal):
+		return nil, api.NewError(api.CodeInvalidArgument, "draft %s is local; it cannot replace a message of the Drafts folder", d.ID)
 	case err != nil:
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
 	}
 	s.b.scheduleDraftSync(row.AccountID)
+	s.b.boardDraftTouched(ctx, row.AccountID, row.ID)
+	if adoptLinked {
+		s.b.notifyBoard(false, row.AccountID)
+	}
 	return &api.DraftSaveResult{
 		DraftID:     api.DraftID(row.ID),
 		Version:     row.Version,
@@ -151,8 +167,41 @@ func (s *draftService) List(ctx context.Context, p api.DraftListParams) (*api.Dr
 	for _, it := range items {
 		out = append(out, toAPIDraft(it))
 	}
-	s.b.decorateCommentDrafts(ctx, string(p.AccountID), items, out)
+	s.b.decorateDrafts(ctx, string(p.AccountID), items, out)
 	return &api.DraftListResult{Drafts: out, Page: api.PageInfo{NextCursor: next, Total: total}}, nil
+}
+
+// Get returns one stored draft as draft.list lists it (draft.get): the
+// board's editor opens a case's suggested reply by id without paging.
+func (s *draftService) Get(ctx context.Context, p api.DraftGetParams) (*api.DraftGetResult, error) {
+	if p.AccountID == "" || p.DraftID == "" {
+		return nil, api.NewError(api.CodeInvalidArgument, "accountId and draftId are required")
+	}
+	d, err := s.b.store.GetDraft(ctx, string(p.AccountID), string(p.DraftID))
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return nil, api.NewError(api.CodeDraftNotFound, "draft %s not found", p.DraftID)
+	case err != nil:
+		return nil, api.NewError(api.CodeStorageError, "%v", err)
+	}
+	out := []api.Draft{toAPIDraft(d)}
+	s.b.decorateDrafts(ctx, string(p.AccountID), []store.Draft{d}, out)
+	return &api.DraftGetResult{Draft: out[0]}, nil
+}
+
+// decorateDrafts adds what a listed draft shows beyond its row: the
+// comment of an issue-tracker account's draft, and local for every draft
+// of such an account (none reaches a server folder).
+func (b *Backend) decorateDrafts(ctx context.Context, accountID string, rows []store.Draft, out []api.Draft) {
+	if len(rows) == 0 {
+		return
+	}
+	if b.localDraftsOnly(accountID) {
+		for i := range out {
+			out[i].Local = true
+		}
+	}
+	b.decorateCommentDrafts(ctx, accountID, rows, out)
 }
 
 // Delete removes the draft and its attachments, and its copy in the
@@ -172,6 +221,7 @@ func (s *draftService) Delete(ctx context.Context, p api.DraftDeleteParams) (*ap
 	if !d.Copy.IsZero() {
 		s.b.triggerDrafts(string(p.AccountID))
 	}
+	s.b.boardDraftTouched(ctx, string(p.AccountID), string(p.DraftID))
 	return &api.DraftDeleteResult{}, nil
 }
 
@@ -384,6 +434,7 @@ func toAPIDraft(d store.Draft) api.Draft {
 		InReplyTo:   api.MessageID(d.InReplyTo),
 		Forwarding:  api.MessageID(d.Forwarding),
 		Attachments: toAPIAttachments(d.Attachments),
+		Local:       d.Local,
 		UpdatedAt:   d.UpdatedAt,
 	}
 }

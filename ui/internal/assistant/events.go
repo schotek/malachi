@@ -21,7 +21,14 @@ package assistant
 // tool_result {tool_use_id, is_error, content: a string or [{type: text,
 // text}]}) and result (subtype success or error_*, is_error, result,
 // structured_output, permission_denials [{tool_name}], total_cost_usd,
-// usage).
+// usage). An assistant message also carries message.id and message.usage
+// (input_tokens, output_tokens, cache_creation_input_tokens,
+// cache_read_input_tokens) for that API message, and parent_tool_use_id,
+// null outside a subagent; Claude Code splits one API message into several
+// assistant lines that share its id and usage, and their output_tokens is
+// only the count the API reported when the response began. The result's
+// usage covers the whole run's main loop (code.claude.com/docs/en/agent-sdk/
+// cost-tracking).
 //
 // This file holds no translatable text.
 
@@ -105,6 +112,21 @@ type Event struct {
 	// EventFailure: what Claude Code calls the failure, its message's
 	// error ("authentication_failed", "rate_limit", …).
 	Failure string
+	// EventResult: the run's usage as the result reports it. The first
+	// event of an assistant message (EventText, EventToolUse, or an
+	// EventOther standing for a message that yields no other event): the
+	// usage of that API message and its id in MessageID, only for a message
+	// of the main loop (parent_tool_use_id null or absent) with a non-empty
+	// id. nil when absent, or when a counter is not a whole number from 0
+	// to the largest int64 (UsageTally adds them up).
+	Usage     *Usage
+	MessageID string
+}
+
+// Usage is what Claude Code reports an API message, or a run, used, in
+// tokens. A counter missing or null in the line reads as 0.
+type Usage struct {
+	InputTokens, OutputTokens, CacheCreationInputTokens, CacheReadInputTokens int64
 }
 
 // NotSignedIn says whether the event is the failure of a turn for want of
@@ -125,7 +147,8 @@ func (e Event) RefreshFailed() bool {
 // ParseEvents reads one stdout line (without its newline): one event per
 // text or tool_use block of an assistant message and per tool_result
 // block of a user message, in order (thinking and other blocks yield
-// nothing, so such a message may yield none), one EventFailure alone for
+// nothing, so such a message may yield none, unless it carries usage: then
+// one EventOther with it), one EventFailure alone for
 // an assistant message with an error, one EventInit for
 // system/init, one EventTextDelta for a text delta, one EventResult for a
 // result, and one EventOther for any other line. It is an error when the
@@ -190,7 +213,8 @@ func parseAssistant(o object) []Event {
 		return []Event{{Kind: EventFailure, Failure: failure, Text: strings.Join(texts, "\n")}}
 	}
 	var out []Event
-	for _, raw := range o.obj("message").array("content") {
+	msg := o.obj("message")
+	for _, raw := range msg.array("content") {
 		b := objectOf(raw)
 		switch b.str("type") {
 		case "text":
@@ -199,7 +223,65 @@ func parseAssistant(o object) []Event {
 			out = append(out, Event{Kind: EventToolUse, Tool: strings.TrimPrefix(b.str("name"), toolPrefix), ToolUseID: b.str("id")})
 		}
 	}
+	// A subagent's message (parent_tool_use_id set) is left out, as the
+	// result's usage leaves it out.
+	if id := msg.str("id"); id != "" && isNull(o["parent_tool_use_id"]) {
+		if u := parseUsage(msg["usage"]); u != nil {
+			if len(out) == 0 {
+				out = append(out, Event{Kind: EventOther})
+			}
+			out[0].Usage, out[0].MessageID = u, id
+		}
+	}
 	return out
+}
+
+// isNull says whether raw is missing or JSON null.
+func isNull(raw json.RawMessage) bool {
+	raw = bytes.TrimSpace(raw)
+	return len(raw) == 0 || bytes.Equal(raw, []byte("null"))
+}
+
+// parseUsage reads a usage object; nil when raw is not an object or one of
+// its four counters is neither missing, null nor a whole number from 0 to
+// the largest int64 (no sign, fraction or exponent).
+func parseUsage(raw json.RawMessage) *Usage {
+	o := objectOf(raw)
+	if o == nil {
+		return nil
+	}
+	var u Usage
+	for key, dst := range map[string]*int64{
+		"input_tokens":                &u.InputTokens,
+		"output_tokens":               &u.OutputTokens,
+		"cache_creation_input_tokens": &u.CacheCreationInputTokens,
+		"cache_read_input_tokens":     &u.CacheReadInputTokens,
+	} {
+		n, ok := count(o[key])
+		if !ok {
+			return nil
+		}
+		*dst = n
+	}
+	return &u
+}
+
+// count reads a counter of usage: 0 for a missing or null member, else
+// digits only (the line is valid JSON, so without a leading zero) that fit
+// an int64.
+func count(raw json.RawMessage) (int64, bool) {
+	raw = bytes.TrimSpace(raw)
+	if isNull(raw) {
+		return 0, true
+	}
+	if raw[0] < '0' || raw[0] > '9' {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(string(raw), 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return n, true
 }
 
 func parseUser(o object) []Event {
@@ -255,6 +337,7 @@ func parseResult(o object) Event {
 	if raw := bytes.TrimSpace(o["structured_output"]); len(raw) > 0 && !bytes.Equal(raw, []byte("null")) {
 		e.Structured = append(json.RawMessage(nil), raw...)
 	}
+	e.Usage = parseUsage(o["usage"])
 	return e
 }
 

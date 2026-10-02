@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/API/Notifications.swift; Go:
-// backend/pkg/api/types.go ("Notifications (backend → client)"); contract:
-// docs/api.md §5.
+// backend/pkg/api/types.go ("Notifications (backend → client)") and
+// board.go (BoardChangedNotification, a Windows addition ahead of Swift);
+// contract: docs/api.md §5.
 //
 // Notifications, daemon to client. Best-effort: a client that misses one
 // resynchronises through sync.status, folder.list and message.list.
@@ -104,6 +105,14 @@ public abstract record DaemonNotification
     /// <param name="Payload">The account and its folders (empty = any).</param>
     public sealed record MessagesChanged(MessagesChangedNotification Payload) : DaemonNotification;
 
+    /// <summary>
+    /// <c>notify.boardChanged</c>: what <c>board.list</c> returns changed
+    /// (<see cref="BoardChangedNotification"/>, Board.cs); absent params read
+    /// as any account.
+    /// </summary>
+    /// <param name="Payload">The accounts (empty = any).</param>
+    public sealed record BoardChanged(BoardChangedNotification Payload) : DaemonNotification;
+
     /// <summary>A notification of a newer daemon.</summary>
     /// <param name="Method">Its method.</param>
     public sealed record Unknown(string Method) : DaemonNotification;
@@ -145,12 +154,20 @@ public abstract record DaemonNotification
             API.Notify.AuthRequired => new AuthRequired(Params(method, parameters, ApiJsonContext.Wire.AuthRequiredNotification)),
             API.Notify.AccountsChanged => new AccountsChanged(),
             API.Notify.MessagesChanged => new MessagesChanged(Params(method, parameters, ApiJsonContext.Wire.MessagesChangedNotification)),
+            API.Notify.BoardChanged => new BoardChanged(BoardChangedParams(method, parameters)),
             _ => new Unknown(method),
         };
     }
 
     private static bool HasParams(string method) =>
-        method is API.Notify.NewMessage or API.Notify.SyncState or API.Notify.AuthRequired or API.Notify.MessagesChanged;
+        method is API.Notify.NewMessage or API.Notify.SyncState or API.Notify.AuthRequired or API.Notify.MessagesChanged
+            or API.Notify.BoardChanged;
+
+    // notify.boardChanged's params are all optional: absent or null = any account.
+    private static BoardChangedNotification BoardChangedParams(string method, JsonElement? parameters) =>
+        parameters is null or { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined }
+            ? new BoardChangedNotification()
+            : Params(method, parameters, ApiJsonContext.Wire.BoardChangedNotification);
 
     private static T Params<T>(string method, JsonElement? parameters, JsonTypeInfo<T> info)
         where T : class

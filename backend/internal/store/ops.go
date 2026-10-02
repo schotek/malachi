@@ -111,9 +111,11 @@ func (s *Store) FlagMessages(ctx context.Context, accountID string, ids []string
 // per message with the source (folder, uid) snapshot. Messages already in
 // the target are skipped. ErrNotFound for a foreign/unknown message id or
 // target folder, ErrOutbox when a message lives in the outbox or the target
-// is the outbox folder; nothing changes then.
-func (s *Store) MoveMessages(ctx context.Context, accountID string, ids []string, targetFolderID string) error {
-	return s.mutate(ctx, accountID, ids, func(ctx context.Context, tx *sql.Tx, locs []messageLoc, outboxFolderID string) ([]messageFile, error) {
+// is the outbox folder; nothing changes then. A message of a Drafts folder
+// takes the draft whose copy it is with it (dropDraftsOfMessagesTx): the
+// ids of the drafts deleted so are returned.
+func (s *Store) MoveMessages(ctx context.Context, accountID string, ids []string, targetFolderID string) (droppedDrafts []string, err error) {
+	err = s.mutate(ctx, accountID, ids, func(ctx context.Context, tx *sql.Tx, locs []messageLoc, outboxFolderID string) ([]messageFile, error) {
 		if err := requireFolder(ctx, tx, accountID, targetFolderID); err != nil {
 			return nil, err
 		}
@@ -123,7 +125,8 @@ func (s *Store) MoveMessages(ctx context.Context, accountID string, ids []string
 		if err := rejectOutbox(locs); err != nil {
 			return nil, err
 		}
-		if err := dropDraftsOfMessagesTx(ctx, tx, accountID, locs); err != nil {
+		var err error
+		if droppedDrafts, err = dropDraftsOfMessagesTx(ctx, tx, accountID, locs); err != nil {
 			return nil, err
 		}
 		unsynced, err := folderUnsynced(ctx, tx, targetFolderID)
@@ -152,6 +155,10 @@ func (s *Store) MoveMessages(ctx context.Context, accountID string, ids []string
 		}
 		return files, nil
 	}, targetFolderID)
+	if err != nil {
+		return nil, err
+	}
+	return droppedDrafts, nil
 }
 
 // folderUnsynced reads the flag of a folder requireFolder has vouched for.
@@ -168,16 +175,18 @@ func folderUnsynced(ctx context.Context, tx *sql.Tx, folderID string) (bool, err
 // commit, delete operation queued). A message in the outbox is deleted
 // permanently as well, without an operation (it has no server copy);
 // ErrOutboxBusy when its delivery is in progress. One transaction;
-// ErrNotFound as for MoveMessages; nothing changes on any error.
-func (s *Store) TrashMessages(ctx context.Context, accountID string, ids []string, trashFolderID string) error {
-	return s.mutate(ctx, accountID, ids, func(ctx context.Context, tx *sql.Tx, locs []messageLoc, _ string) ([]messageFile, error) {
+// ErrNotFound as for MoveMessages; nothing changes on any error. Returns
+// the drafts deleted with their copies, as MoveMessages.
+func (s *Store) TrashMessages(ctx context.Context, accountID string, ids []string, trashFolderID string) (droppedDrafts []string, err error) {
+	err = s.mutate(ctx, accountID, ids, func(ctx context.Context, tx *sql.Tx, locs []messageLoc, _ string) ([]messageFile, error) {
 		if err := requireFolder(ctx, tx, accountID, trashFolderID); err != nil {
 			return nil, err
 		}
 		if err := rejectSendingOutbox(locs); err != nil {
 			return nil, err
 		}
-		if err := dropDraftsOfMessagesTx(ctx, tx, accountID, locs); err != nil {
+		var err error
+		if droppedDrafts, err = dropDraftsOfMessagesTx(ctx, tx, accountID, locs); err != nil {
 			return nil, err
 		}
 		now := nowStamp()
@@ -203,19 +212,25 @@ func (s *Store) TrashMessages(ctx context.Context, accountID string, ids []strin
 		}
 		return files, nil
 	}, trashFolderID)
+	if err != nil {
+		return nil, err
+	}
+	return droppedDrafts, nil
 }
 
 // DeleteMessages removes the messages permanently: rows now, raw files
 // after the commit, one delete operation per message so the server copy is
 // expunged (none for a message in the outbox, which has no server copy;
 // ErrOutboxBusy when its delivery is in progress). ErrNotFound for a
-// foreign/unknown id; nothing changes on any error.
-func (s *Store) DeleteMessages(ctx context.Context, accountID string, ids []string) error {
-	return s.mutate(ctx, accountID, ids, func(ctx context.Context, tx *sql.Tx, locs []messageLoc, _ string) ([]messageFile, error) {
+// foreign/unknown id; nothing changes on any error. Returns the drafts
+// deleted with their copies, as MoveMessages.
+func (s *Store) DeleteMessages(ctx context.Context, accountID string, ids []string) (droppedDrafts []string, err error) {
+	err = s.mutate(ctx, accountID, ids, func(ctx context.Context, tx *sql.Tx, locs []messageLoc, _ string) ([]messageFile, error) {
 		if err := rejectSendingOutbox(locs); err != nil {
 			return nil, err
 		}
-		if err := dropDraftsOfMessagesTx(ctx, tx, accountID, locs); err != nil {
+		var err error
+		if droppedDrafts, err = dropDraftsOfMessagesTx(ctx, tx, accountID, locs); err != nil {
 			return nil, err
 		}
 		now := nowStamp()
@@ -232,6 +247,10 @@ func (s *Store) DeleteMessages(ctx context.Context, accountID string, ids []stri
 		}
 		return files, nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	return droppedDrafts, nil
 }
 
 // rejectSendingOutbox is the guard of the deletions: ErrOutboxBusy when any

@@ -362,11 +362,16 @@ func (s *Store) SetAccountEnabled(ctx context.Context, id string, enabled bool) 
 // DeleteAccount removes the account row together with its mail cache
 // (folders, messages, pending operations — always, they are worthless
 // without the account; raw message files after the commit, and what a
-// reader keeps open on Windows with the next sweep) and, for an
+// reader keeps open on Windows with the next sweep), its board rows
+// (cases, annotations, commitments, dirty threads) and, for an
 // issue-tracker account, its issue tables, showing again (and recounting
 // the folders of) the mail of other accounts it hid. With
 // deleteLocalData it also deletes the account's drafts and attachments (rows
-// in the same transaction, files afterwards). ErrNotFound for an unknown id.
+// in the same transaction, files afterwards); without, the suggested
+// replies of its cases lose their cases as releaseLinkedDraftTx says (an
+// edited one stays as an ordinary draft, an untouched one is deleted). The
+// Drafts folder copies it still meant to delete (draft_stray_copies) are
+// forgotten with its operations. ErrNotFound for an unknown id.
 func (s *Store) DeleteAccount(ctx context.Context, id string, deleteLocalData bool) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -404,6 +409,21 @@ func (s *Store) DeleteAccount(ctx context.Context, id string, deleteLocalData bo
 			return fmt.Errorf("delete account issues: %w", err)
 		}
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM draft_stray_copies WHERE account_id = ?`, id); err != nil {
+		return fmt.Errorf("delete account draft copies: %w", err)
+	}
+	var files []string
+	if !deleteLocalData {
+		// The drafts stay, so the suggested replies lose their cases as
+		// anywhere else (releaseLinkedDraftTx), before the cases go.
+		if files, err = releaseAccountDraftsTx(ctx, tx, id); err != nil {
+			return err
+		}
+	}
+	// After the messages and issues: their deletion marked the threads dirty.
+	if err := deleteBoardAccountTx(ctx, tx, id); err != nil {
+		return err
+	}
 	if checkPathSegment(id) == nil {
 		// The raw files go after the commit, and what a reader keeps open
 		// (Windows) or a crash leaves goes with the sweep: the record says
@@ -414,7 +434,6 @@ func (s *Store) DeleteAccount(ctx context.Context, id string, deleteLocalData bo
 		}
 	}
 
-	var files []string
 	if deleteLocalData {
 		rows, err := tx.QueryContext(ctx, `SELECT id FROM attachments WHERE account_id = ?`, id)
 		if err != nil {

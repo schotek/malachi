@@ -31,7 +31,8 @@ var draftSyncQuiet = 30 * time.Second
 // that is gone is store.ErrNotFound; a storage failure is an *api.Error
 // with CodeStorageError; anything else (an attachment file missing, an
 // address the builder refuses, a message over the size cap) is this
-// draft's problem.
+// draft's problem. A local draft is store.ErrNotFound too: a board case
+// linked it after the syncer listed it.
 func (b *Backend) buildDraft(ctx context.Context, accountID, draftID string) (store.DraftUpload, error) {
 	a, err := b.store.GetAccount(ctx, accountID)
 	if err != nil {
@@ -46,6 +47,11 @@ func (b *Backend) buildDraft(ctx context.Context, accountID, draftID string) (st
 			return store.DraftUpload{}, fmt.Errorf("draft %s: %w", draftID, err)
 		}
 		return store.DraftUpload{}, api.NewError(api.CodeStorageError, "%v", err)
+	}
+	if d.Local {
+		// Linked to a board case since DueDraftUploads listed it: it is
+		// never uploaded (the syncers skip ErrNotFound).
+		return store.DraftUpload{}, fmt.Errorf("draft %s is local: %w", draftID, store.ErrNotFound)
 	}
 	inReplyTo, references := b.draftThreading(ctx, d)
 	in := smtp.BuildInput{

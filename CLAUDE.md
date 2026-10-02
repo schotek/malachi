@@ -418,6 +418,10 @@ Pořadí prací:
    (čtení, komentáře, změna stavu, notifikační maily, zobrazení
    konverzace; Windows na `feat/jira-windows`, zbývá průchod vlastníka
    proti skutečnému Jira Cloud)
+10. Nástěnka (případy, pravidla, triage asistentem) — backend, API, most
+    MCP a macOS klient napsané na `feat/board` (necommitnuté); zbývá Go
+    model v `ui/internal/board` (texty tam jsou), GTK a Windows, skutečný
+    běh triage s Claude Code
 
 Asistent (stav 2026-09-30, sloučeno do `main`; uživatel potvrdil, že
 funguje ve všech třech klientech). Na macOS je hotové a uživatelem otestované:
@@ -999,6 +1003,304 @@ potvrzení, `Fallback` po neověřeném odesílateli, `OpenableURL` jen https),
 port `MalachiCore/Bulk` a `Malachi.Core/Bulk`; pruh v panelu, okně zprávy
 a kartách konverzace, ne v přiložené zprávě.
 
+Nástěnka (stav 2026-10-02, větev `feat/board`, necommitnuté; UI jen
+v macOS klientu z výslovného pokynu vlastníka, výjimka z pravidla 6: GTK
+a Windows ji dluží). Hlavní okno má dva režimy, Pošta (vše dosavadní)
+a Nástěnka. Přepíná dvousegmentový přepínač (`envelope` / `square.grid.2x2`)
+na začátku každého toolbaru a položky Pošta a Nástěnka na vrcholu menu
+Zobrazení, bez klávesových zkratek; režim se neukládá (`Board.initialMode`
+je Pošta). V Nástěnce je obsah okna (sidebar, seznam, čtení, panel
+asistenta) nahrazený stránkou nástěnky, stavový pruh zůstává. Pohled split
+view pošty se z okna **vyjme** (`MainContentViewController.setMode`;
+kontroler i stav pošty — složka, výběr, posun, hledání, přepis asistenta —
+žijí dál a po návratu se pohled vrátí): skrytý split by v unified toolbaru
+dál držel místo pro svou sekci sidebaru. Okno proto podle režimu a stylu
+mění toolbary a po každé instalaci toolbaru musí odebrat a znovu vložit
+`.sidebarTrackingSeparator`, jinak se po návratu pohledu do okna znovu
+nenaváže na dělicí čáru (změřeno, ne zdokumentováno). Akce nad poštou jsou
+v Nástěnce vypnuté (`Board.Command.allows`), Zkontrolovat poštu a Nová
+zpráva zůstávají; Outbox ze stavového pruhu a panel asistenta vrátí Poštu;
+okno s Nástěnkou se pro notifikace nepočítá jako pohled na složku
+(`viewsMail`).
+
+Model a pravidla (démon, `docs/architecture.md` §3.7, `docs/api.md` §4.13,
+rozhodnutí v §7). **Případ** je jedno vlákno účtu (u účtu jira issue) v
+jednom ze čtyř stavů `hot` / `you` / `them` / `info` (Hot, Čeká na vás,
+Čeká na ně, K informaci). Stav dávají pravidla démona
+(`internal/board`, čistý balíček bez storu a hodin, `RulesVersion` "4";
+každá změna pravidel nebo toho, co jim store podává, = nové číslo, démon
+pak přepočítá všechny případy i uloženou poštu v nejdelším okně). Čtou jen
+hlavičky, strukturu, role složek, příznaky a klasifikaci hromadné pošty,
+nikdy slova zprávy, s jedinou výjimkou: otazník ve **vlastním textu**
+uživatele (`board.OwnText`: u HTML pošty text HTML části po ořezu citace
+jako `trimQuoted`, jinak prostý text; pryč `>` řádky, atribuce s
+neoznačenou citací pod ní, podpis; selhává „zavřeně“, při pochybnosti
+méně textu). Počítají se členové mimo koš, nevyžádanou a koncepty, ne
+skryté, ne hromadné (vlastní vždy), u jira ne události; „moje“ je jen
+řádek ve složce role `sent`/`outbox`, nikdy podle `From`; kopie jednoho
+Message-ID jsou jedna zpráva a za cizí zprávu mluví kopie uložená první
+(pozdější dvojče nic nezmění). Rozhodnutí vlastníka: `them` jen
+`them.replied` (moje poslední zpráva odpovídá někomu, kdo ve vlákně psal)
+nebo `them.asked` (žádná příchozí, otazník ve vlastním textu jedné z
+posledních 10 mých zpráv, která není přeposlání); moje zpráva ve tvaru
+přeposlání (`Fwd:`/`FW:`/…, příloha `message/rfc822`, začíná citací,
+nebo nic neodpovídá a nad citací má méně než 300 B) případ nikdy nedělá.
+Příchozí poslední člen: pořadí `hot.flagged`, `info.yourNote`,
+`hot.important`, `you.repliedToYou`, `you.addressed`, `info.unknownSender`,
+`info.ccOnly`, `info.notAddressed`. **Známý odesílatel** = jeho `From`
+nebo `Reply-To` je v `To`/`Cc` některé zprávy ve složkách `sent`/`outbox`
+kteréhokoli povoleného poštovního účtu (nejnovější první, nejvýš 20 000,
+čte se hodinově a při změně účtů) nebo mé zprávy ve vlákně; zpráva mně od
+neznámého je `info.unknownSender` a její `Importance` se nepočítá
+(`you.repliedToYou` a vlastní vlajka `hot.flagged` platí pro kohokoli).
+Jira: bez známého jira uživatele (`issues.me.`) žádné případy, issue
+v kategorii done nebo v `closedStatuses` není případ, události
+nerozhodují, poslední položka moje → `them`, cizí → `you` (jsem řešitel,
+reportér nebo jsem dřív psal), `info` (jen sleduji). Okna (preference
+`windows`): 90/30/30/14 dní pro hot/you/them/info, od `date` případu podle
+stavu v platnosti. Dokud příchozí člen čeká na klasifikaci hromadné pošty,
+verdikt je `Pending` a případ zůstává, jak byl. **Rozhodnutí uživatele
+vyhrává**: stav uživatele > anotace asistenta (jen se zapnutou preferencí
+`assistant` a ne `stale`) > pravidla; stav uživatele, remind (i prošlý,
+dokud nepřijde done nebo nový), budoucí termín a otevřený závazek drží
+případ, který by pravidla zahodila (`kept`); done znovu otevře jen
+příchozí zpráva, kterou démon uložil po done a která přišla nejdřív den
+před ním, a ne kopie zprávy, kterou případ měl už při done (`done_seen`;
+tedy ne zfalšované `Date`, backfill ani přesun jiným klientem); done ruší
+remind a zavírá otevřené závazky, remind ruší done; hotový případ je v
+`board.list` ještě 30 dní.
+
+Vrstvy. Migrace `0017_board.sql` (nevratná): `board_cases` (id `c_` + 32
+hex přežije sloučení vláken — `mergeBoardCaseTx` ve `store/threads.go`
+čte jen prosté sloupce, aby data nástěnky nikdy neshodila zápis pošty —
+i přesun jiným klientem: vlákno bez viditelných členů nechá případ
+`orphaned_at` mimo nástěnku, nové vlákno s některým z `member_ids` ho
+převezme, po dni ho smaže údržba; odvozené sloupce jsou cache, sloupce
+uživatele autoritativní; `input_key` = hash id a stavů těl počítaných
+členů), `board_annotations`, `board_commitments`, `board_runs` a
+`board_dirty` plněná triggery na `messages`, `issues`, `issue_items`
+a `meta` `issues.me.`. Triggery vkládají jen chybějící řádek, ne
+`INSERT OR IGNORE` (konfliktní klauzule příkazu, který trigger spustí,
+přebíjí tu jeho), a na tyto tabulky se **nikdy nepíše `INSERT OR
+REPLACE`** (obešlo by DELETE triggery). Store `store/board.go`,
+`board_cases.go`, `board_maint.go`, `board_triage.go` (`DrainBoard`:
+dávka nejvýš 50 vláken, 10 000 členů nebo 500 ms v jedné zápisové
+transakci, savepoint na vlákno, vlákno, které selže, se zaloguje jen
+id a vypadne ze sady). Core `core/board_worker.go` (worker spuštěný se
+synchronizací, budí ho notifier, metody nástěnky, tik 30 s a časovač
+nejbližšího remindu; `notify.boardChanged` nejvýš jednou za sekundu,
+jmenuje účty), `board_adapter.go` (decider běží v transakci a nesmí volat
+store; text členů čte líně, jen `Verdict.TextMembers`), `board_owntext.go`
+(vlastní text HTML zpráv se odvozuje mimo transakci, cache 8 MiB),
+`board_backfill.go` (první vyhodnocení uložené pošty v `core.Maintain`
+po 2000 zprávách, kurzor `meta` `board.rules` = `<verze>:<id>` /
+`<verze>:done`; do konce `ready: false`), `board_service.go` (15 metod
+`board.*`, preference v `meta` `board.prefs`, ne `config.get`). Hodinová
+údržba `boardUpkeep` ukončí běhy otevřené přes 2 h, maže běhy starší
+90 dní, prošlé remindy, staré a osiřelé případy, a porovná role složek
+s `meta` `board.roles`. API `pkg/api/board.go` (kompatibilní rozšíření
+protokolu 2, chyby 1106 `caseNotFound` a 1506 `quoteNotFound`,
+`notify.boardChanged`); Swift zrcadlo `MalachiCore/API/BoardAPI.swift`, C#
+`windows/src/Malachi.Core/Api/Board.cs` napsané bez sestavení.
+
+Asistent smí na nástěnku **jen přes most** a jen zapisovat poznámky:
+**anotaci** případu (stav, titulek, shrnutí, proč, úkoly, termín s
+doslovnou citací, odkaz na koncept; nahrazuje se celá) a **závazek**
+(slib z vlastní zprávy uživatele s doslovnou citací). Démon nic s modelem
+nemluví. Každý řetězec čistí (řídicí, bidi a neviditelné znaky, URL) a
+hlídá limity; `inputKey` z fronty porovná a v transakci `board.annotate`
+spočítá znovu (`conflict`); anotace po změně členů je `stale` a neplatí
+(odkaz na koncept zůstane). Citace se normalizuje na obou stranách stejně
+(NFC, URL → zástupný znak, typografické uvozovky → ASCII, mezery) a musí
+být přesný podřetězec: termín v uloženém prostém textu počítaného člena,
+závazek ve vlastním textu mé zprávy (cizí slova nikdy nejsou můj slib);
+datum od dne před do 400 dní po **příchodu** zprávy (`board.Arrival`,
+nikdy jen podle `Date`). Koncept musí být koncept účtu případu
+odpovídající na jeho člena. Asistent nemůže nastavit stav uživatele,
+done, remind, archivovat, zahodit koncept, měnit preference ani spustit
+běh. Klient ukazuje poznámky jen jako prostý text označený jako
+asistentův, citaci vždy u data. Most (`docs/mcp.md`, Triage of the
+board): `list_board` vždy (stránky do 48 KiB, se zapnutým asistentem
+i poznámky, jinak zadržené); `--allow-triage` (v `.mcp.json` z
+`MALACHI_MCP_ALLOW_TRIAGE`) přidá `list_triage_queue` (do 60 KiB, každý
+případ v ohradě s vlastní nonce), `annotate_case`, `add_commitment`
+a prompt `triage_board`; `--triage-run` (`MALACHI_MCP_TRIAGE_RUN`) dává
+`runId`, `--triage-max` (`MALACHI_MCP_TRIAGE_MAX`, 1–200, výchozí 200)
+je tvrdý limit přijatých anotací procesu, fronta pak nevydá víc než limit
++ 3 případy, závazků nejvýš 100. Návrh odpovědi jen u `hot.important`,
+`you.addressed`, `jira.assigned`, `jira.reporter`, nikdy `info.*`.
+Úroveň triage je nezávislá na `--allow-modify`/`--allow-send` a nic z nich
+nezapíná; `install` ani přepínač MCP v Předvolbách ji nepřidávají.
+
+Běh triage v aplikaci (macOS; `docs/mcp.md` The board's triage run in
+the app, `docs/security.md` §10.2): tlačítko ✦ Triage v obou toolbarech
+nástěnky spustí uživatelův Claude Code s příkazovou řádkou panelu a
+mostem `--allow-triage --triage-run <runId> --triage-max <n>`, nikdy
+modify/send; `--allowedTools` = čtecí nástroje panelu, `create_draft`
+**jen u ručního běhu** (`Assistant.triageAutomaticDrafts = false`) a tři
+nástroje triage. S `--triage-run` dělá `create_draft` jen odpověď
+(`reply`/`replyAll`, na Jiře veřejný komentář) na zprávu případu, který
+procesu vydala fronta, bez `to`/`cc`/`bcc`/`subject`/`messageAccountId`
+a `visibility: internal` (`triageReplyAllowed`, jinak pevná chyba
+`triageDraftRefusal`). Nabízí se jen s cílem asistenta „V aplikaci
+(experimentální)“ (`BoardTriageController.triageNeedsInAppTarget`),
+s nalezeným Claude Code, který není odhlášený, a s mostem v bundlu. Dva
+souhlasy: panelu `assistant-consent` a nástěnky `board-triage-consent`,
+oba jedním listem „Let the Assistant Triage the Board?“, plus preference
+démona `assistant` (zapíše se první, klíče až když ji démon uložil; ruční
+běh se zeptá, automatický nikdy). Odvolání v Předvolbách → AI → Nástěnka (skupina Board)
+zastaví běh a vypne `assistant` i `autoTriage`; bez klíče nástěnky
+aplikace `assistant` při každém načtení preferencí zase vypne. Běh:
+`board.runStart` (`manual`/`auto`, source `claude-code`), model vlastní
+(`board-triage-model`, řádek Model ve skupině Board, výchozí Sonnet,
+nezávislý na `assistant-model` panelu, platí od dalšího běhu), nejvýš 40
+případů (`Assistant.triageBatch`), automatický navíc nejvýš zbytek
+denního stropu, timeout 15 min, `board.runEnd` s třídou chyby a se
+spotřebou tokenů z výstupu Claude Code (`assistant.UsageTally`, Swift
+`Assistant.UsageTally`: `usage` výsledku, jinak součet různých API zpráv
+podle `message.id`, bez nich nic; po dosažení limitu aplikace počká
+nejvýš 45 s (`limitGrace`) na závěrečné hlášení Claude Code, aby
+spotřeba byla úplná, zastavený nebo vypršený běh hlásí jen dolní mez; Předvolby → AI → Nástěnka ukazují
+„Tokens in the Last 24 Hours“ z `triage.usage24h` s rozpisem a počtem
+běhů); průběh jen z událostí stream-json (přijaté a odmítnuté `annotate_case`), po dosažení
+limitu běh skončí jako úspěch; nic, co model napíše, se neukazuje ani
+neloguje. Ukončení aplikace čeká na `board.runEnd` nejvýš 2 s, otevřený
+běh démon ukončí jako `failed` při startu nebo po 2 h. Automatická triage
+(`BoardAutoTriageScheduler` nad čistým `Board.AutoTriage.decide`,
+přepínač „Triage new mail automatically“): výchozí vypnutá; běží jen když
+fronta něco má, nejdřív po `autoTriageMinutes` (výchozí 30, nabídka
+15/30/60/180), do denního stropu `autoTriageDailyCases` (výchozí 60,
+nabídka 20/60/150, počítá démon za místní den), po neúspěších se interval
+zdvojuje až na den; rozhoduje při změně vstupů, minutu po nových datech
+nástěnky a každých 30 min; démon tyto preference jen ukládá.
+
+Navrhnout odpověď (macOS; `docs/mcp.md` A suggested reply on the board,
+`docs/security.md` §10.2): detail případu bez návrhu odpovědi má na jeho
+místě pole s nepovinným pokynem a „✦ Navrhnout odpověď“ (pravidla
+`Board.suggestReplyOffered`/`suggestReplyView` v `BoardSuggestReply.swift`:
+případ s cílem odpovědi, ne hotový, ne K informaci, účet umí odpovědět,
+ne vzorová data; dostupnost jako přepis v okně Nová zpráva, souhlas jen
+panelu `assistant-consent`, model `assistant-model`). `BoardReplyController`
+(jeden pro aplikaci, `AppState`) spustí jednou Claude Code s mostem
+`--reply-only <replyMessageId>` a jen `read_message`, `list_messages`
+a `create_draft`, koncept z výsledku `create_draft` propojí přes
+`board.setDraft`; bez konceptu selže, odmítnuté propojení, Stop, timeout
+2 min a ukončení aplikace vytvořený nepropojený koncept smažou
+(`draft.delete`); spotřeba se nezapisuje.
+
+Návrh odpovědi se edituje přímo v detailu (macOS, 2026-10-02): je to
+lokální koncept, který případ propojuje (`Board.Case.draft`, nikdy ve
+složce Koncepty), na nástěnce už není „Otevřít koncept“ ani okno Nová
+zpráva. Obsah okna Nová zpráva je `Compose/ComposePane.swift`
+(`NSViewController`; okno si nechává toolbar, otázku při zavření, Escape
+a přepis a akce mu přeposílá); nástěnka ho používá jako `.inline`
+s vlastníkem `.board` (bez řádku Od, editor v režimu `sized` s výškou
+podle Core `EditorHeight` 160 až min(480, 0,6 × viditelná výška detailu),
+pak roluje uvnitř, patička Přiložit · stav · Zahodit · Odeslat).
+`ComposeDraftController` s `DraftOwner.board` při zavření nikdy nemaže,
+konflikt řeší na místě (`draft.get`, vyhrává náš text), smazání jinde
+hlásí `onLost`, `finish()` vyprázdní editor, uloží a uklidí.
+`BoardReplyEditorController` (Core) načte koncept vybraného případu přes
+`draft.get` s klíčem případ + účet + koncept, nikdy verze případu.
+Pravidla panů drží Core `Controllers/BoardReplyPanes.swift` (testované
+s falešnými pany i se skutečným draft controllerem, `BoardReplyPanesTests`);
+`Board/BoardReplyEditorHost.swift` (vlastní ho stránka, sdílí ho detail
+Seznamu i panelu) jen vyrábí `ComposePane`, stěhuje pohledy a přeposílá
+konce. Snadno se rozbije: **slot odpovědi stojí mimo přestavbu
+detailu** (sloupec je `upper` – slot – `lower`, `rebuild` sahá jen na
+`upper`/`lower`; každý autosave zvedne verzi případu a nástěnka se načte
+znovu, editor nesmí přijít o kurzor ani fokus); **jeden živý pane na
+okno**, jeho pohled jde do detailu, který případ ukazuje (při přepnutí
+stylu se přestěhuje); **nic napsaného ani výsledek Odeslat se neztratí
+potichu**: pane, který přestal být vidět (jiný výběr, zavřený panel,
+případ zmizel, režim Pošta, zavřené okno, ukončení), i pane, jehož případ
+nástěnka ukáže s jiným konceptem nebo bez něj (to není důkaz, že koncept
+zmizel), se nejdřív **uloží** (`settle()`, bez úklidu) a zavře až po
+úspěchu; opustí ho jen `draftNotFound` draft controlleru (`onLost`, toast
+„The suggested reply was removed elsewhere.“). Pane, jehož uložení
+selhalo, se drží **bez limitu**, ukládá znovu s rostoucí prodlevou (5 s
+až 2 min) a po návratu k případu se ukáže s poznámkou „This reply could
+not be saved yet; Malachi Mail keeps trying.“; pane, ke kterému se
+uživatel vrátí, zatímco se ukládá, zůstane jeho (dokončené uložení ho
+nezavře). **Odesílající pane** se neukládá ani nezavírá, dokud odeslání
+neodpoví: úspěch dá toast „Message queued for sending“ (u komentáře Jira
+jeho) a `ended(key)` i mimo jeho případ, selhání toast draft controlleru
+a mimo případ navíc „Your reply “%s” was not sent; it is still on the
+board.“ a pane zůstane (takových čistých nejvýš tři). Ukončení aplikace
+(`AppDelegate`, nejdřív odpovědi s limitem `BoardReplyController.endWait`,
+pak triage a spojení) se při neuložené či neodeslané odpovědi zeptá
+(„Quit without saving a reply?“, *Quit Anyway* / Zrušit; Zrušit nic
+nezastaví). Draft controller pane s vlastníkem `.board` **nevolá
+`draft.save` bez skutečné změny** (démon bere každé uložení propojeného
+návrhu jako úpravu uživatele): `editorReady()` po `ready` editoru jedním
+flushem zjistí, jak editor koncept sám zapsal, a `settle()` porovnává dvě
+čtení editoru (před a po flushi), nikdy uložený HTML s jeho vykreslením.
+**Inline Odeslat nemá klávesovou zkratku** (⌘↩ tlačítka by odeslalo
+odkudkoli z okna), ⌘↩ a ⌘S jsou položky menu, které pane dosáhnou
+řetězcem responderů jen s klávesnicí uvnitř, jinak je nic neobslouží
+a jsou zašedlé. Zahodit: otázka draft controlleru a
+`BoardController.discardDraft(_:draft:account:)` jako `discardStored`
+(smaže právě ten koncept, dokud ho případ propojuje přes
+`board.discardDraft`, jinak `draft.delete`; odmítnutí nechá pane i text),
+případ pak nabídne Navrhnout odpověď; po Odeslat i Zahodit jde klávesnice
+na pilulku stavu. Účet inline panu je vždy `params.accountID`, nikdy
+zástupný. Odpovědět u případu s návrhem dá
+klávesnici jeho editoru. Odebrat hvězdičku (`board.unflag`,
+`BoardController.unflag`) je odkaz za „Proč je to tady?“ a položka
+kontextového menu jen u případu horkého kvůli hvězdičce (`hot.flagged`)
+a ne hotového (`Detail.canUnstar`, pro menu `Board.canUnstar`).
+
+macOS UI: `MalachiCore/Board/` (`Board.swift`, `BoardCase.swift`,
+`BoardView.swift` s `Board.view(snapshot, viewState, now:)`,
+`BoardRemind.swift`, `BoardText.swift`, `BoardTriage*.swift`,
+`BoardAutoTriage.swift`; šev `BoardSource.swift` s
+`DaemonBoardSource.swift` nad `board.*` — optimistické zápisy, odmítnutý
+se vrátí s toastem, `board.get` v cache podle verze — a
+`InMemoryBoardSource` nad `BoardSamples.swift`), kontrolery
+`Controllers/BoardController.swift` (vlastní ho okno se zdrojem),
+`BoardPreferencesController`, `BoardTriageController` a
+`BoardAutoTriageScheduler` (vlastní je `AppState`, jeden pro aplikaci),
+`Assistant/AssistantTriage.swift`; AppKit `MalachiMail/Board/` (tři
+styly Seznam / Sloupce / Dnes, detail s poznámkami pod značkou asistenta
+a konverzací jako kartami prostého textu z `board.get`; `BoardActions`:
+Hotovo / Vrátit na nástěnku, Připomenout… s předvolbami, Archivovat,
+Odebrat hvězdičku, Odpovědět — s návrhem odpovědi jeho editor v detailu —,
+Zobrazit v Poště; `BoardReplyEditorHost` s inline `ComposePane`),
+`MainWindowController+Mode/+Board/+Triage/+DevStart`,
+`App/Integration+Board.swift`, skupina Board v Předvolbách → AI
+(`AIPaneViewController`: souhlas, automatická triage s intervalem
+a denním stropem, řádek stavu). Toolbar Seznamu: přepínač režimu, přepínač
+sidebaru, v sekci sloupce seznamu styl na začátku a filtr účtu a Triage
+na konci, sledovací oddělovač na dělicí čáře seznam/detail, pak Hotovo
+(nebo Vrátit na nástěnku), Připomenout…, Archivovat a na konci
+Odpovědět, bez titulku okna; Sloupce a Dnes: přepínač režimu a styl (oba
+`isNavigational`), titulek s podtitulkem, pružná mezera, filtr účtu
+a Triage, detail jako vysouvací panel s vlastní lištou akcí. Sekce
+toolbaru nemají vlastní přetok, proto má sloupec seznamu minimum 372 pt;
+Triage ustupuje do přetoku první. Tooltipy řádků a karet zrušené (AppKit
+je ukazuje skrz překrývající panel). Každý řetězec z případu Core znovu
+čistí a ořezává (`cleanLine` / `cleanBlock`) a UI ho ukazuje jen přes
+`stringValue`. Texty nástěnky a triage mají referenci msgidů v čistém Go
+balíčku `ui/internal/board` (`text.go`, `triage.go`, `reply.go`, jen texty za
+rozhraním `Translator` jako `jira.Translator`, v `po/POTFILES`, česky
+v `po/cs.po`); macOS `Board.Text` je přebírá s klíčem = msgid, co v něm
+zůstane jako `// macOS-only string`, je anglicky. Windows nástěnku nemá,
+takže tyto msgidy patří do `windows/parity-exclusions.txt`, dokud ji
+nedostane.
+
+Zbývá: model a pohledová logika nástěnky v Go (`ui/internal/board`
+zatím drží jen texty; pohledové modely, zdroj, pravidla rozvrhu triage)
+a porty do GTK a Windows (C# typy API jsou
+napsané bez sestavení, `build.ps1 app`/`test` čeká). Testy: Go testy
+balíčků `board` (s patologickými vstupy z `backend/testdata/board`
+a fuzz cíli), `store`, `core` a mostu, sady `swift test` nástěnky
+(`Board*`, `AssistantTriageTests`, `DaemonBoardSourceTests`, testy API);
+pravidla známých odesílatelů a okno 30 dní pro `you` vznikla po suchém
+běhu nad kopií skutečného storu (`TestBoardDryRun`). UI zkouší vlastník
+ručně. Neověřil nikdo: skutečný běh triage s Claude Code (ruční ani
+automatický), běh aplikace nad skutečnými daty s migrací 0017 a Windows
+build.
+
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně
 komprese a příloh na vyžádání, Microsoft účty).
@@ -1056,6 +1358,25 @@ komprese a příloh na vyžádání, Microsoft účty).
   `webkitgtk6.0`, `appstream`, `gettext` a `make`, žádné Go ani překlad
   gotk4), takže všechny `.blp` prošly Blueprintem. Sloučené Go soubory GTK
   prošly jen `gopls check`, ne překladem: sestavení a testy čekají na Toolbx.
+- `MALACHI_START` (`macos/Sources/MalachiMail/MainWindow/
+  MainWindowController+DevStart.swift`) je vývojová pomůcka macOS klienta,
+  ne funkce: kroky oddělené `;` (`mail`, `board:list`, `board:list:nav-off`,
+  `board:columns`, `board:today`, `size=WxH`, jako poslední krok `quit`)
+  provede po startu okno, `MALACHI_START_SIZE` nastaví velikost okna,
+  `MALACHI_START_INTERVAL` prodlevu kroků v sekundách (výchozí 3)
+  a `MALACHI_START_TRACE` vypisuje každou změnu šířky okna; po každém
+  kroku vypíše na stderr polohy položek toolbaru a dělicích čar a po první
+  Nástěnce i její fázi, počty, texty a stav triage. Slouží k ověření
+  rozložení bez klikání, jen z izolované instance (`MALACHI_DATA_DIR`
+  + vlastní `MALACHI_SOCKET`, viz Jira níže), nikdy nad ostrým storem; bez
+  proměnné se nic nespustí. `MALACHI_BOARD_SAMPLES=1` (čte se jednou při
+  startu) ukáže místo nástěnky démona vymyšlené vzorové případy
+  (`InMemoryBoardSource.dummy`); Odpovědět, Zobrazit v Poště, Odebrat
+  hvězdičku a Triage pak jen řeknou, že to náhled neumí, a návrh odpovědi
+  je statický blok. Krok `compose` otevře a zavře prázdné okno Nová
+  zpráva, `reply-pane` (se vzorovými daty) nechá skutečný
+  `BoardReplyEditorHost` ukázat prázdný, nikdy neukládaný pane ve slotu
+  Seznamu, píše do něj a vypíše výšky, polohu v detailu a kam míří Odeslat.
 - Jira testuj proti kopii, ne nad ostrým storem: migrace 0015 přestaví
   tabulku `accounts` a je jako každá migrace nevratná, takže by ostrý
   store změnila dřív, než je větev v `main`. Na macOS
@@ -1071,6 +1392,34 @@ komprese a příloh na vyžádání, Microsoft účty).
   UI neměň, přesměrovaly by i dconf s předvolbami. Komentáře
   na produkční Jiře jen do issue, které uživatel sám určí; Data Center
   není k dispozici a ověřuje se jen fakem `internal/jira/jiratest`.
+- Nástěnku zkoušej taky jen nad kopií: migrace 0017 je nevratná (tabulky
+  `board_*` a triggery na `messages`, `issues`, `issue_items`, `meta`),
+  postup s `MALACHI_DATA_DIR` a vlastním `MALACHI_SOCKET` je stejný jako
+  u Jiry výše. Běh triage i nad kopií posílá text pošty z ní přes
+  uživatelův Claude Code do Anthropicu. Migrace 0017 je **zmrazená**
+  (ostrý store vlastníka ji už provedl): nic se do ní nepřidává, sloupec
+  `drafts.local` a další změny patří do 0018.
+- `build/Malachi Mail.app` je denní aplikace vlastníka nad jeho skutečnými
+  daty: agent nikdy nespouští `make macos`, nesahá na `build/` a bundle
+  nespouští. Rozložení se měří debug binárkou
+  `macos/.build/debug/MalachiMail` (po `swift build --package-path macos`)
+  s `MALACHI_DAEMON=none`, prázdným dočasným `MALACHI_DATA_DIR`, vlastním
+  `MALACHI_SOCKET` v něm, `MALACHI_BOARD_SAMPLES=1` a skriptem
+  `MALACHI_START` končícím `quit`; nemá bundle identifier a píše doménu
+  předvoleb `MalachiMail`, ne `io.github.schotek.Malachi`: před během
+  `defaults export MalachiMail`, po něm `defaults import` (import jen
+  slučuje, klíče přidané během je třeba smazat) a kontrola, že export
+  `io.github.schotek.Malachi` je beze změny.
+- `TestBoardDryRun` (`backend/internal/core/board_dryrun_test.go`) je
+  suchý běh pravidel nad kopií storu, jinak se přeskočí: z `backend/`
+  `MALACHI_BOARD_DRYRUN_STORE=<kopie>/store.db go test ./internal/core/
+  -run 'TestBoardDryRun$' -v -count=1`. Zadaný store neotevře: zkopíruje
+  `store.db` (i `-wal` a `-shm`) do vlastního dočasného adresáře, kopii
+  migruje (0017), klasifikuje hromadnou poštu, vyhodnotí nástěnku
+  a nakonec ji smaže; `messages/` vedle zadaného storu jen čte přes
+  odkaz; cestu ve skutečných datových adresářích odmítne. Vypíše řádek na
+  případ (stav, kód důvodu, účet, jméno protistrany, předmět do 60 znaků,
+  počet zpráv) a součty, žádná těla ani adresy; i tak je to skutečná pošta.
 - Windows: XAML kompilátor je nástroj .NET Frameworku bez podpory dlouhých
   cest a na cestě přes 260 znaků padá (`MSB3073`, `XamlCompiler.exe`,
   `MSB3106`), i se zapnutými dlouhými cestami ve Windows. Klon drž na krátké

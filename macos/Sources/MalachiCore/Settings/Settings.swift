@@ -44,6 +44,14 @@ public final class Settings {
         case assistantModel = "assistant-model"
         case assistantClaudePath = "assistant-claude-path"
         case assistantConsent = "assistant-consent"
+        /// macOS only for now (the board is Swift-first): whether the user
+        /// allowed the board's triage to send mail of the board's cases to
+        /// Claude, on top of `assistantConsent` (`BoardTriageController`).
+        case boardTriageConsent = "board-triage-consent"
+        /// macOS only for now: the model of the board's triage runs, the
+        /// nicks of `assistantModel` but set apart from it (Settings → AI →
+        /// Board).
+        case boardTriageModel = "board-triage-model"
         /// macOS only: what ⌘R does (Settings → General → Keyboard).
         case commandR = "command-r"
         /// macOS only: the size of the window text (`Typo`, Settings →
@@ -110,6 +118,8 @@ public final class Settings {
             Key.assistantModel.rawValue: Assistant.Model.sonnet.rawValue,
             Key.assistantClaudePath.rawValue: "",
             Key.assistantConsent.rawValue: false,
+            Key.boardTriageConsent.rawValue: false,
+            Key.boardTriageModel.rawValue: Assistant.Model.sonnet.rawValue,
             Key.commandR.rawValue: CommandR.reply.rawValue,
             Key.uiTextSize.rawValue: TextSize.larger.rawValue,
         ]
@@ -309,6 +319,22 @@ public final class Settings {
     public var assistantConsent: Bool {
         get { bool(.assistantConsent) }
         set { set(.assistantConsent, newValue) }
+    }
+
+    /// Whether the user allowed the board's triage to send the board's
+    /// mail to Claude (asked before the first triage; withdrawn in
+    /// Settings). The board's `assistant` preference follows it.
+    public var boardTriageConsent: Bool {
+        get { bool(.boardTriageConsent) }
+        set { set(.boardTriageConsent, newValue) }
+    }
+
+    /// The model of the board's triage runs, apart from the panel's
+    /// (`assistantModel`): the same nicks, read with `Assistant.parseModel`
+    /// (an unknown nick is Sonnet).
+    public var boardTriageModel: Assistant.Model {
+        get { Assistant.parseModel(string(.boardTriageModel)) }
+        set { set(.boardTriageModel, Assistant.parseModel(newValue.rawValue).rawValue) }
     }
 
     // MARK: Change notification

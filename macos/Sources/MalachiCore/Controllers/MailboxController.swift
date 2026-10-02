@@ -602,6 +602,8 @@ public final class MailboxController {
             handleAccountsChanged()
         case .messagesChanged(let m):
             handleMessagesChanged(m)
+        case .boardChanged:
+            break  // the board's own controller listens (BoardController)
         case .unknown(let method):
             log.info("notification \(method, privacy: .public)")
         }

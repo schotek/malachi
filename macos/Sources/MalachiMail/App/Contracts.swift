@@ -248,4 +248,8 @@ protocol EditorView: AnyObject {
     /// The web content process died; the window may reload the last
     /// content on request.
     var onCrashed: (@MainActor () -> Void)? { get set }
+    /// Sized mode only (the board's inline reply): the document's height in
+    /// points whenever it changes, a finite number within bounds. The owner
+    /// decides the editor's height from it; unsized editors never call it.
+    var onHeight: (@MainActor (CGFloat) -> Void)? { get set }
 }

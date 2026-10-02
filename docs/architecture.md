@@ -191,6 +191,9 @@ backend/
                       staging area they are received into
   internal/search     FTS5 indexing and query parsing
   internal/thread     conversation threading
+  internal/board      the board's rules (which thread is a case, its state
+                      and reason), the verbatim quote check and the
+                      cleaning of annotations; pure, no store (§3.7)
   internal/sanitize   HTML sanitisation (security-critical)
   cmd/malachi-mcp     MCP (stdio) bridge for AI agents: a JSON-RPC client of
                       the socket with a flag-gated tool catalogue (docs/mcp.md)
@@ -199,6 +202,9 @@ backend/
   testdata/autoconfig Thunderbird autoconfig samples, including hostile ones
   testdata/jira       rendered Jira HTML, bot comments and REST pages,
                       including hostile and malformed ones
+  testdata/board      the user's own replies and forwards as the board's
+                      rules read them (innerText quotes, forged quote
+                      markers, question marks in quotes, URLs, signatures)
 ```
 
 Dependency direction: `cmd` → `rpc` → (`api` + service implementations);
@@ -275,6 +281,34 @@ user left through `message.unsubscribe` (`core/unsubscribe.go`:
 DKIM-verified one-click through `internal/oneclick`, or a plain-text
 request queued in the outbox without a draft, `EnqueueInput.DraftID` empty);
 `DeleteAccount` removes its rows. See `docs/security.md` §7.2.
+
+Migration 0017 is the board (§3.7): `board_cases` (one row per thread of
+an account that is a case), `board_annotations`, `board_commitments`,
+`board_runs` and the dirty set `board_dirty`, filled by triggers on
+`messages`, `issues`, `issue_items` and the `issues.me.` keys of `meta`;
+two triggers on `drafts` raise the version of a case whose linked draft
+changes. It creates objects only and scans nothing; the daemon fills the
+board for stored mail in the background. No board table has a foreign key
+to `accounts`; `DeleteAccount` removes the account's rows.
+
+Migration 0018 is local drafts (§3.7): `drafts.local` (a draft that stays
+on this device and is not uploaded to the Drafts folder) with the
+partial index `drafts_local`; it marks the drafts already linked to a
+case local (leaving the copy columns they had) and replaces the
+`drafts_board_ad` trigger of 0017 so that deleting a linked draft also
+marks its case's thread dirty. 0017 was already in use (a store migrated
+by a build of the day), so the column went into a migration of its own
+rather than into 0017; 0018 in turn ran on the owner's store the same
+morning, before the review that followed, so what that review added went
+into 0019. Migration 0019 is `drafts.edited` (the user may have written
+in it: saved while linked, or ordinary when linked; never cleared) and
+the table `draft_stray_copies` (copies in a Drafts folder no draft holds
+any more that the daemon still means to delete: not addressable yet, or a
+Graph copy awaiting its syncer's edit check). On a store that ran 0018 it
+counts every local draft as edited (whether the user typed in it cannot
+be known any more) and moves the copies local drafts still record to
+`draft_stray_copies`, clearing their copy columns; case versions and
+`board_dirty` stay as they were.
 
 A raw message is `<account>/<id>`, the bytes as received, or
 `<account>/<id>.zst`, the same bytes as one zstd frame
@@ -1055,6 +1089,257 @@ same. What differs:
   comments and malformed REST pages, `testdata/mime` the
   `jira-notification-*.eml` samples.
 
+### 3.7 The board
+
+The board ([api.md §4.13](api.md#413-board), decided 2026-10-01, §7) sorts
+the user's conversations and issues by what is owed. A **case** is one
+thread of an account (§3.4; for a `jira` account an issue, §3.6) in one of
+four states: `hot` (needs the user now), `you` (waits for the user's
+answer), `them` (the user waits for someone else), `info` (for reading).
+The daemon computes the cases from what it stores; the user's decisions
+are kept beside them; an assistant may add notes through the MCP bridge.
+Four layers, each of which knows only the one below:
+
+- `internal/board` — the rules, pure: no store, no I/O, no clock
+  (`Evaluate(Thread, Identity, now) Verdict`), with the quote check, the
+  cleaning of annotation strings and the plain-text excerpts.
+- `internal/store/board*.go` — the tables of migration 0017, the dirty
+  set and its drain (`DrainBoard`), the listing, the queue, the user's
+  decisions, annotations, commitments and runs.
+- `internal/core/board_*.go` — the worker that drains the dirty set,
+  the first evaluation of stored mail, the hourly upkeep, the identities,
+  the preferences and the fifteen `board.*` methods.
+- `cmd/malachi-mcp` — `list_board` for every agent and, under
+  `--allow-triage`, the triage tools ([mcp.md](mcp.md), *Triage of the
+  board*). The daemon itself never talks to a model.
+
+**Data** (migration 0017). `board_cases` holds one row per thread that is
+a case, `UNIQUE (account_id, thread_id)`, with an id of its own (`c_` and
+32 hex digits) that outlives thread ids: a thread merge moves the row to
+the surviving thread (`store/threads.go` calls `mergeBoardCaseTx`, which
+reads plain columns only, so board data can never fail the mail write
+that merges). Its columns are of two kinds. The **derived** ones
+(`rule_state`, `rule_reason`, `rules_version`, `input_key`,
+`members_key`, subject, snippet, person, date, counts, the reply and
+latest message, the issue's key and status, `can_archive`) are a cache the
+drain rebuilds from the thread at any time. The **user's** ones
+(`user_state`, `done_at`, `remind_at` with `reminded`, and `done_seen`,
+the Message-IDs the case had when it was marked done) are authoritative
+and never recomputed. `orphaned_at` and `member_ids` carry a case across a
+move by another client (below). `input_key` is a hash over the ids and
+body states of the members that count, the key an annotation is checked
+against; `members_key` also covers what `board.get` shows of them;
+`version` rises on every change of the row, its annotation or its linked
+draft. A linked draft is local (`drafts.local`, §5 *Local drafts*): the
+suggested reply is edited and sent from the board and does not reach the
+server's Drafts folder while it has its case. It keeps a live case: the
+drain keeps a case whose linked draft exists (`kept`), the prune keeps it
+and the board lists it; a done case lists it for the done retention (30
+days), after which the prune drops the link. Deleting the draft marks the
+thread dirty (trigger `drafts_board_ad`). One rule,
+`store.releaseLinkedDraftTx`, applies wherever a linked draft loses its
+case without Send or Discard, in the transaction that drops the link: a
+thread merge where both cases link an existing draft (the surviving case
+keeps its own), the prune of a case whose thread was gone for
+`BoardOrphanGrace`, the end of a done case's retention, and the removal
+of the account with its local data kept. An edited draft
+(`drafts.edited`: saved while linked — only the board's editor saves a
+linked draft — or ordinary when it was linked) becomes an ordinary draft
+(`local` cleared: it uploads, nothing typed is lost or left invisible);
+an untouched suggestion is deleted with its attachments and never
+reaches the server. Each such release is noted under
+`board.unlinkedDrafts` in `meta` for the upkeep's log and upload
+wake-up. The hourly upkeep deletes local drafts that were never linked
+and never edited and were not saved for 6 hours
+(`store.UnlinkedLocalDrafts`, `core.sweepLocalDrafts`; longer than a
+triage run may stay open), and makes any edited local draft without a
+case ordinary first (`store.ReleaseEditedLocalDrafts`, a safety net that
+finds nothing unless a path was missed). `board.unflag` clears the flags behind `hot.flagged`: the rows are
+chosen by `board.FlaggedCopies`, which merges copies exactly as the rules
+do, over the thread loaded as the drain loads it
+(`store.BoardCaseThread`). `board_annotations` holds one annotation per case (replaced as a
+whole) with its own `input_key` and the draft it linked;
+`board_commitments` the user's promises with the date of the user's
+newest message when each was recorded (`replied_after`);
+`board_runs` the triage runs. Annotations and commitments go with their
+case (`ON DELETE CASCADE`).
+
+**The dirty set.** `board_dirty` is a set of `(account, thread)` to
+evaluate again. Triggers fill it on every write a case depends on: a
+message stored, deleted (also through the cascade of a folder or account
+deletion), moved, merged, flagged or read, hidden, classified as bulk
+mail, given its body or a changed envelope; an issue stored, deleted, or
+its key, summary, status, assignee, reporter or watching changed; an issue
+item stored, deleted or changed in kind or author; and the account's Jira
+user (`issues.me.<account>` in `meta`) arriving or changing, which marks
+every issue of the account. An UPDATE trigger fires only when a watched
+column really changed, and each trigger inserts only what is missing
+instead of `INSERT OR IGNORE`, because the conflict clause of the
+statement that fires a trigger overrides the trigger's own (an upsert of
+`messages` would turn the IGNORE into a failure). No code may write these
+tables with `INSERT OR REPLACE`, which would bypass the DELETE triggers.
+Code marks threads too: a board method that changed a case
+(`boardWritten`), an account whose configuration the rules read changed,
+a folder role that changed (compared hourly against `meta` `board.roles`,
+so a change made while the daemon was down is seen), the known
+correspondents changing.
+
+**The worker** (`core/board_worker.go`, one goroutine started with the
+sync) drains the set in batches: at most 50 threads, 10 000 loaded
+members or 500 ms inside one write transaction, so the syncers' writes
+(whose busy timeout is 5 s) keep flowing, with a 20 ms pause between
+batches. `DrainBoard` checks for dirty rows before it opens a transaction;
+for each thread it loads the visible members (the newest 2000) and, for an
+issue, the issue, its items and the Jira user, calls the decider and
+writes the outcome under a savepoint, then removes the thread from the
+set. A sync write cannot slip between the read and the removal: it waits
+for the transaction and marks the thread again. A thread whose
+evaluation fails is rolled back to its savepoint, logged by its ids only,
+and dropped from the set; the batch goes on. The decider
+(`core/board_adapter.go`) runs inside the transaction and must not call
+the store: the identities are read before the batch, and the text of a
+member is read lazily, only for the members the rules look at
+(`Verdict.TextMembers`: none unless the newest member that counts is the
+user's). The own text of such a member that has HTML needs the raw
+message parsed and sanitised, which must not happen inside the
+transaction: the decider leaves the thread as it is and asks for it, the
+worker derives it after the batch (`core/board_owntext.go`, a two-level
+cache of 8 MiB) and marks the thread again; a thread that asked once is
+judged with what there is the next time. The worker wakes when the
+notifier sees new mail, changed messages or the end of a sync pass, when
+a board method changed something, every 30 s, and when the earliest
+remind comes due.
+
+**The first evaluation** (`core/board_backfill.go`). The migration scans
+nothing. `core.Maintain` marks dirty, in batches of 2000 messages by id,
+the threads with a visible member dated within the longest window, with
+the cursor in `meta` `board.rules` (`<rules version>:<last id>`, then
+`<rules version>:done`), so an interrupted pass resumes. A stored value of
+another rules version marks every case dirty and starts the pass over;
+so do turning the board on and a window growing beyond the longest one
+before (`restartBoardBackfill`, which a pass under way notices before it
+records anything more). `board.list` says `ready: false` until the pass
+is done and the set is empty.
+
+**The rules** (`internal/board`, `RulesVersion` "4"). What counts: a
+visible member (not hidden, not in a virtual folder) outside the folders
+of role trash, junk and drafts that is the user's or classified as no bulk
+mail (§3.1, migration 0016), and on an issue no event. **Mine** is a row
+in a folder of role sent or outbox, never a `From` naming the user. Copies
+of one Message-ID are one message: the user's when a copy is mine, else
+represented by the copy stored first, so a later twin (another client's
+move, a forged duplicate) never changes what the rules read. Members are
+ordered by their arrival (`board.Arrival`: the internal date, else the
+`Date` header, else the time stored, never later than the time stored or
+now); an issue's by the site's time of the item, never by a date a bot's
+relayed text claims. The user's addresses on an account are its own and
+the ten most frequent senders of its sent folder, used only to tell
+whether mail is addressed to the user; the **known correspondents** are
+the addresses in `To` or `Cc` of the sent and outbox folders of every
+enabled mail account (most recent first, at most 20 000), read hourly or
+when the accounts change. The order of the rules, the reasons and the
+known-sender rule are in the API's table: a newest inbound member that
+counts goes through `hot.flagged`, `info.yourNote`, `hot.important`,
+`you.repliedToYou`, `you.addressed`, `info.unknownSender`, `info.ccOnly`,
+`info.notAddressed`; a newest member that is the user's gives `them` only
+by `them.replied` (an answer to someone who wrote in the thread) or
+`them.asked` (no inbound member, and a question mark in the user's own
+text of one of their newest ten messages that is not a forward), and a
+message of the user's shaped like a forward is never a case. Words of a
+message never count, except that question mark. Jira: no case while the
+Jira user is unknown, for an issue in the done category or in the
+account's `closedStatuses`; events never decide; the newest item the
+user's → `them`, else `you` when the user is the assignee, the reporter or
+wrote an item before, `info` when the user only watches. While an inbound
+member waits for the bulk classification the verdict is **pending**: the
+case stays as it was, and the classification marks the thread again. The
+**own text** of a message of the user's (`board.OwnText`) is cut down to
+what the user wrote, failing closed: for HTML mail the text of the HTML
+part after the same quote trimming `message.body` applies with
+`trimQuoted`, otherwise the plain text after `sanitize.TrimQuotedText`;
+then every `>`-quoted line, an attribution line whose quote is not
+prefixed and everything below it, and the signature go, and a text over
+100 000 lines or starting with a quote has none. Every change of the
+rules, or of what the store hands them, gets a new `RulesVersion`, and a
+new value makes the daemon evaluate every case and the stored mail of
+the longest window again (version 3: the members carry their
+`References`, so a reply known only by them no longer starts its
+thread).
+
+**Outcome of a verdict** (`store/board.go`). With a state, the case is
+created (only when its date lies within the longest window, so the first
+evaluation does not fill the board with old mail) or its derived columns
+updated. With none, an existing case is **kept**, with reason `kept` and
+its last rule state, while the user set a state, a remind is set (ahead,
+or come due and not yet followed by done or another remind), a commitment
+is open, or a current annotation has a deadline still ahead; otherwise it
+is deleted. A thread with no visible member keeps its case **orphaned**
+(off the board): a move between folders by another client deletes one
+row before the other folder's sync stores it again, perhaps as a thread
+of its own, which adopts the orphan through `member_ids`; after a day
+(`BoardOrphanGrace`) the hourly prune deletes it.
+
+**Visibility.** A case is `live`, `done` (`done_at`) or `snoozed` (a remind
+ahead). Done reopens when an inbound member that counts was stored after
+`done_at`, arrived no earlier than a day before it, and is not one of
+`done_seen` (a copy another client moved is stored anew); so neither a
+backfill of old mail, a forged `Date`, a move nor the user's own message
+reopens it. Done clears a remind and closes the open commitments
+(`closedReason: done`); a remind clears done. A remind that comes due
+(`ClearDueBoardReminds`, from the worker's timer and the hourly upkeep;
+one past while the daemon was down fires at start) makes the case live and
+keeps it, past its window too, until the user marks it done or sets
+another. A case is listed within the window of its state in effect (the
+user's, the assistant's while it counts, else the rules'; preferences
+`windows`, default 90/30/30/14 days) or while something keeps it; a done
+case for 30 days. The hourly upkeep deletes cases older than the longest
+window that nothing keeps and that were not done in the last 30 days.
+
+**Annotations and commitments** (`core/board_service.go`,
+`store/board_triage.go`). `board.queue` hands out the live cases of the
+triage accounts without a current annotation, with the store's input key
+and the plain text of the newest eight members that count. `board.annotate`
+and `board.commit` carry that key back; the daemon compares it with the
+case's, and `AnnotateBoardCase` computes the key again inside its own
+transaction, so notes about members that changed meanwhile are refused
+(`conflict`). An annotation whose key is no longer the case's is
+**stale**: it counts for nothing, `board.queue` offers the case again,
+and only its draft link survives. Strings are cleaned (control, bidi and
+invisible characters, URLs) and capped. A deadline and a commitment carry
+a verbatim quote, normalised alike on both sides (`board.QuoteIn`): a
+deadline's must be in the stored plain text of a member that counts, a
+commitment's in the user's own text of a member that is mine (so the
+other party's words never become the user's promise), and the date must
+lie between a day before and 400 days after that message arrived. A
+linked draft must be a draft of the case's account replying to a member
+of the case. A commitment closes by itself (`replied`) when the user
+writes a message newer than any they had written when it was recorded.
+**Runs**: a client records the runs it starts (`board.runStart`, manual or
+auto, and `board.runEnd` with an error class); each annotate and commit
+call counts in its run as accepted or rejected, a call without a known
+open run in an implicit `external` run per `source` and local day. A run
+left open is ended as `failed` at the next start or after two hours; runs
+are kept 90 days. `board.list` reports the latest run, the cases automatic
+runs annotated today (the clients' daily cap) and the size of the queue.
+
+**Preferences** are the board's own (`meta` `board.prefs`, JSON of
+`api.BoardPreferences`; not `config.get`/`config.set`): `enabled`
+(default on), `assistant` (off; a client turns it on only after the user's
+consent), the four windows, `triageAccounts` (empty: every enabled mail
+account; a `jira` account only when named), and `autoTriage`,
+`autoTriageMinutes`, `autoTriageDailyCases`, which the daemon only stores
+for the client's schedule. With the board off nothing is computed, every
+method but the preferences refuses, and the user's decisions are kept.
+
+**Notifications.** `notify.boardChanged` names the accounts whose listing
+changed (absent: any) and goes out at most once per second from a timer,
+never from the caller's goroutine; it carries no case, a client lists
+again. The worker sends it for what a batch changed, the methods for what
+they wrote, the upkeep for reminds, prunes and runs.
+
+**What a client shows** is described in [macos-port.md](macos-port.md):
+only the macOS client has the board so far (§7).
+
 ## 4. Security boundary: HTML
 
 HTML in mail is hostile input. It is sanitised **in the backend**
@@ -1262,8 +1547,8 @@ quote (`compose.Attribution`) and shows what the sanitiser removed as a
 toast. `compose.Prefill`, the UI's own plain-text quote, is the fallback
 for a daemon that cannot answer.
 
-Drafts on the server: every saved draft gets a copy in the account's
-Drafts folder (api.md §4.5). The syncers upload it once it has rested for
+Drafts on the server: every saved draft that is not local gets a copy in
+the account's Drafts folder (api.md §4.5). The syncers upload it once it has rested for
 30 seconds (`store.DueDraftUploads`; core arms a wake-up for the syncer,
 `core/draft_sync.go`), over IMAP with `APPEND` and `\Draft`, over Graph
 with `POST me/messages` and the MIME message; `core.buildDraft` writes it
@@ -1288,6 +1573,34 @@ their absence proves nothing), and a copy Outlook changed in place is kept
 next to the new upload rather than overwritten (Graph's delta reports only
 its flags). In both UIs a message of the Drafts folder opens in the
 compose window (double-click, Enter, or the pane's *Edit* banner).
+
+Local drafts (migrations 0018 `drafts.local` and 0019 `drafts.edited`, `draft_stray_copies`): a board case's suggested
+reply stays in the store. `store.DueDraftUploads` and `NextDraftUpload`
+skip it, so no syncer uploads it and core arms no wake-up for it; it is
+set by `draft.save` on the first save only (the bridge under
+`--reply-only` and `--triage-run`) and by linking the draft to a case
+(`store.SetBoardDraft`, `AnnotateBoardCase` through `makeDraftLocalTx`).
+A local draft never records a copy: the link hands the copy the draft
+had to `strayCopyTx`, which deletes an IMAP copy that can be addressed at
+once (`dropCopyTx`, same transaction) and otherwise records it in
+`draft_stray_copies`. A Graph copy is always recorded there, because
+Outlook edits drafts in place: the Graph syncer asks the service whether
+the item changed after `synced_at` (`editedSince`, the check that keeps an
+edited copy when a new version is uploaded) and deletes it only when it
+did not; a changed one is forgotten and stays in the Drafts folder as the
+user's own draft. IMAP has no such notion and needs none: another client
+saves an edited draft as a new message under a new UID, so deleting the
+old UID cannot destroy its text. An upload picked before the draft became
+local ends in `MarkDraftSynced`, which then deletes the copy it made (or
+records it as stray when it cannot be addressed yet), and `buildDraft`
+already refuses a draft that became local after the syncer listed it.
+`store.DropStrayDraftCopies` works the stray copies off: each syncer calls
+it at the start of its pass (a failure is logged and the pass goes on)
+and the board's upkeep hourly (without the Graph check: those wait for
+their syncer); an entry it cannot resolve within a week (a row that never
+arrives, a UIDVALIDITY that changed, a syncer that does not run) is
+forgotten with a warning, and the copy then stays where the user sees
+it. Sending a local draft is an ordinary `message.send`.
 
 The *General* page: *Run in Background* makes the main window hide instead
 of close (a hidden window keeps the application alive; `app.show` and
@@ -1903,3 +2216,106 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   ship); wazero's interpreter (about 16 times slower). Not included:
   OCR, form fields, annotations and embedded files; a password is never
   asked for.
+- The board's case is a thread: **decided** (2026-10-01) — a case is one
+  thread of an account (an issue on a `jira` account), never a single
+  message or a cluster the program invents: the thread is what the user
+  answers, what the reading pane and the conversation view already show,
+  and what threading keeps stable (§3.4). The case has an id of its own,
+  carried along when threads merge and adopted by the copies of a
+  conversation another client moved, so the user's decisions outlive
+  thread ids. Rejected: a per-message board (a long conversation would
+  be many cards waiting for one answer).
+- The board's rules live in the daemon; an assistant reaches the board
+  only through the bridge: **decided** (2026-10-01) — the four states are
+  computed by deterministic rules over headers, structure, folder roles,
+  flags and the bulk classification (§3.7), never over the words of a
+  message (one question mark in the user's own text excepted), so every
+  client shows the same board, it works with no model at all, and a
+  sender cannot talk a message onto it. A model only refines it, through
+  the MCP bridge under its own flag, with notes the daemon checks and
+  cleans; the daemon never talks to a model and holds no key for one.
+  The owner's rulings on the rules: `them` only for a reply to someone who
+  wrote in the thread or a question the user asked, a message of the
+  user's shaped like a forward never; mail from a sender the user has
+  never written to is `info.unknownSender`, its `Importance` ignored (the
+  first run over a copy of a real store filled `you` with automated
+  mail); Jira by assignee, reporter, earlier comment or
+  watching, closed issues never; default windows 90/30/30/14 days.
+- The user's decision wins: **decided** (2026-10-01) — a state the user
+  chose beats the assistant's, which beats the rules'; done, a remind and
+  an open commitment keep a case the rules would drop; done reopens only
+  on a new inbound message (by when the daemon stored it, never by a
+  `Date` header or a copy of a message it already had). Nothing the board
+  does sends, moves or deletes mail on its own: only the user's
+  `board.archive` moves a case's inbox messages, `board.unflag` clears the
+  flags that made a case `hot.flagged`, and `board.discardDraft` deletes
+  its linked draft.
+- A suggested reply is a local draft: **decided** (2026-10-02) — a draft
+  linked to a case stays in the daemon's store (`drafts.local`), is
+  edited and sent from the board, and does not reach the server's Drafts
+  folder (but see the release rule below), where every client of the user (a phone included) would show an
+  assistant's text with no sign of where it came from. A per-draft flag,
+  because the only existing mechanism (an issue tracker's drafts) is per
+  account. Set both when the draft is created (the bridge under
+  `--reply-only` and `--triage-run`, so not even the first upload
+  happens) and when it is linked (so a draft any other path made, an
+  external triage session's included, ends up the same, its copy deleted);
+  a race with an upload already under way is closed in
+  `MarkDraftSynced`. Lifecycle: a linked draft keeps a live case (rules,
+  prune) and a done case for the done retention; sending or deleting it
+  lets the rules judge the case again. A suggested reply that loses its
+  case without Send or Discard (a thread merge, its conversation gone for
+  a day, the done retention over, the account removed with its local
+  data kept) follows one rule (2026-10-02, the owner): edited by the user
+  it becomes an ordinary draft in the Drafts folder, because typed text
+  is never destroyed nor left invisible; untouched it is deleted, so an
+  assistant's text the user never touched never reaches the server. The
+  daemon knows which by `drafts.edited`, set by a save while the draft is
+  linked (only the board's editor saves a linked draft; the bridge saves
+  before the link) and by linking an ordinary draft (who wrote it cannot
+  be told). Rejected for this: a time since unlinking (`unlinked_at`)
+  with a sweep — it leaves typed text invisible for hours and still
+  deletes it. A draft that was never linked is deleted after 6 hours
+  without a save (nothing would ever show it). A Microsoft 365 copy that
+  Outlook changed after the upload is never deleted by a link. Rejected: keeping suggested
+  replies ordinary drafts (they would appear on every device), and a
+  client-side "do not upload" (the daemon uploads, so only it can
+  guarantee it).
+- Verbatim quotes for deadlines and commitments: **decided** (2026-10-01)
+  — a model's deadline or a promise of the user's is stored only with a
+  quote the daemon finds, normalised alike, in the message (for a
+  commitment in the user's own text of the user's own message), and with
+  a date near that message. A model cannot invent a deadline the mail
+  does not state, nor a sender plant a promise in the user's name; the
+  clients always show the quote beside the date. Summaries, titles and
+  tasks cannot be checked this way and are shown as the assistant's
+  words.
+- No API keys in the app; the user's own Claude Code runs triage:
+  **decided** (2026-10-01) — the macOS app triages by starting the user's
+  own Claude Code CLI locked down as the assistant panel (no built-in
+  tools, nothing of the user's setup, no session on disk), with the
+  bridge it bundles; the app never holds or asks for a credential, and
+  the usage is the user's. The triage tier (`--allow-triage`) is separate
+  from `--allow-modify` and `--allow-send` and enables nothing of them,
+  because the queue hands out whole conversations at once while its tools
+  write only local notes; the app's run never passes the other two. It
+  is offered only with the assistant's *In App (experimental)* target and
+  after a consent of its own, and remains experimental until Anthropic
+  confirms the terms for running Claude Code from another product
+  (*The panel in the app* in [mcp.md](mcp.md)).
+- Automatic triage: **decided** (2026-10-01) — off by default; when the
+  user turns it on, a run starts at most every `autoTriageMinutes` (30;
+  the app offers 15 minutes to 3 hours) while cases wait, backs off
+  after failures up to a day, and stops for the day at
+  `autoTriageDailyCases` (60; the app offers 20, 60 or 150), counted by
+  the daemon per local day; an automatic run gets no `create_draft`, since
+  nobody watches it (unchanged now that a suggested reply stays local:
+  2026-10-02, the default of the owner's open decision). The daemon
+  only stores these preferences; the schedule is the client's.
+- The board on macOS first: **decided** (2026-10-01, the owner's
+  instruction, an exception to the rule that a UI change goes to all three
+  clients) — the window modes, the board and the triage run exist only in
+  the macOS client; its pure logic is Swift-first (`MalachiCore/Board`),
+  its texts' msgids are in `ui/internal/board`, and the Go reference of
+  the board's model and the GTK and Windows clients are owed. The Windows client has the API types
+  (`Malachi.Core/Api/Board.cs`) only.

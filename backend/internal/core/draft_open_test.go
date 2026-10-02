@@ -178,7 +178,7 @@ func TestDraftOpenOtherClientsDraft(t *testing.T) {
 	}
 
 	// With the parent gone from the store the kept headers still thread.
-	if err := m.b.store.DeleteMessages(ctx, string(m.acc), []string{parent}); err != nil {
+	if _, err := m.b.store.DeleteMessages(ctx, string(m.acc), []string{parent}); err != nil {
 		t.Fatal(err)
 	}
 	up, err = m.b.buildDraft(ctx, string(m.acc), string(saved.DraftID))

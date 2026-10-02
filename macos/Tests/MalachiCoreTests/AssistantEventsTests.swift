@@ -37,6 +37,11 @@ private let lineAuthFailed = #"{"type":"assistant","message":{"diagnostics":null
 // Claude Code 2.1.284 while another Claude Code held its refresh lock (the
 // text cut short here).
 private let lineRefreshFailed = #"{"type":"assistant","message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"Failed to refresh OAuth token: another Claude Code process is refreshing it or exited mid-refresh."}]},"session_id":"ecadd567","error":"server_error"}"#
+// One API message split into two assistant lines with the same id and
+// usage, and a result with all four counters (and fields not read).
+private let lineSplitThinking = #"{"type":"assistant","message":{"model":"claude-sonnet-4-5","id":"msg_07","type":"message","role":"assistant","content":[{"type":"thinking","thinking":"Which case first?","signature":"EqQB"}],"stop_reason":null,"usage":{"input_tokens":3,"cache_creation_input_tokens":1200,"cache_read_input_tokens":45000,"cache_creation":{"ephemeral_5m_input_tokens":1200,"ephemeral_1h_input_tokens":0},"output_tokens":8,"service_tier":"standard"}},"parent_tool_use_id":null,"session_id":"5f1c2d3e","uuid":"u13"}"#
+private let lineSplitTool = #"{"type":"assistant","message":{"model":"claude-sonnet-4-5","id":"msg_07","type":"message","role":"assistant","content":[{"type":"tool_use","id":"toolu_07","name":"mcp__malachi__annotate_case","input":{"caseId":"c1"}}],"stop_reason":null,"usage":{"input_tokens":3,"cache_creation_input_tokens":1200,"cache_read_input_tokens":45000,"output_tokens":8,"service_tier":"standard"}},"parent_tool_use_id":null,"session_id":"5f1c2d3e","uuid":"u14"}"#
+private let lineResultUsage = #"{"type":"result","subtype":"success","is_error":false,"num_turns":4,"result":"Annotated 3 cases.","session_id":"5f1c2d3e","total_cost_usd":0.08,"usage":{"input_tokens":12,"cache_creation_input_tokens":2400,"cache_read_input_tokens":180000,"output_tokens":1500,"server_tool_use":{"web_search_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_5m_input_tokens":2400}},"modelUsage":{},"permission_denials":[]}"#
 
 /// Every line above, for the check against the Go file.
 let assistantEventLines: [String: String] = [
@@ -47,13 +52,15 @@ let assistantEventLines: [String: String] = [
     "lineResultArr": lineResultArr, "lineUserText": lineUserText, "lineSuccess": lineSuccess,
     "lineStructured": lineStructured, "lineMaxTurns": lineMaxTurns, "lineAPIError": lineAPIError,
     "lineAuthFailed": lineAuthFailed, "lineRefreshFailed": lineRefreshFailed,
+    "lineSplitThinking": lineSplitThinking, "lineSplitTool": lineSplitTool, "lineResultUsage": lineResultUsage,
 ]
 
 /// An expected event: only the fields of its kind set, as Go's literals.
 private func E(
     _ kind: Assistant.Event.Kind, bridgeConnected: Bool = false, tools: [String] = [], text: String = "", tool: String = "",
     toolUseID: String = "", isError: Bool = false, resultText: String = "", success: Bool = false, denied: [String] = [],
-    costUSD: Double = 0, structured: String? = nil, failure: String = ""
+    costUSD: Double = 0, structured: String? = nil, failure: String = "", usage: Assistant.Usage? = nil,
+    messageID: String = ""
 ) -> Assistant.Event {
     var e = Assistant.Event(kind: kind)
     e.bridgeConnected = bridgeConnected
@@ -68,6 +75,8 @@ private func E(
     e.costUSD = costUSD
     e.structured = structured.map { Data($0.utf8) }
     e.failure = failure
+    e.usage = usage
+    e.messageID = messageID
     return e
 }
 
@@ -104,7 +113,7 @@ private func parse(_ line: String) throws -> [Assistant.Event] {
             ("tool input delta", lineToolDelta, [E(.other)]),
             ("text delta without an event", #"{"type":"stream_event"}"#, [E(.other)]),
             ("assistant blocks", lineAssistant, [
-                E(.text, text: "I'll read the message."),
+                E(.text, text: "I'll read the message.", usage: .init(inputTokens: 10, outputTokens: 20), messageID: "msg_01"),
                 E(.toolUse, tool: "read_message", toolUseID: "toolu_01"),
                 E(.text, text: "And search."),
                 E(.toolUse, tool: "WebFetch", toolUseID: "toolu_02"),
@@ -141,17 +150,29 @@ private func parse(_ line: String) throws -> [Assistant.Event] {
              #"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":"yes"}]}}"#,
              [E(.toolResult, toolUseID: "t1")]),
             ("user text", lineUserText, []),
-            ("success", lineSuccess, [E(.result, resultText: "The draft is ready.", success: true, costUSD: 0.0123)]),
+            ("success", lineSuccess, [E(.result, resultText: "The draft is ready.", success: true, costUSD: 0.0123,
+                                        usage: .init(inputTokens: 100, outputTokens: 50))]),
             ("structured output", lineStructured,
              [E(.result, success: true, costUSD: 0.5, structured: #"{"summary":"x", "items":[1,2]}"#)]),
             ("max turns with denials", lineMaxTurns,
-             [E(.result, isError: true, resultText: "error_max_turns", denied: ["send_message", "Bash"], costUSD: 0.2)]),
+             [E(.result, isError: true, resultText: "error_max_turns", denied: ["send_message", "Bash"], costUSD: 0.2,
+                usage: .init())]),
             ("success subtype with is_error", lineAPIError,
              [E(.result, isError: true, resultText: "Invalid API key · Please run /login")]),
             ("result of odd types",
              #"{"type":"result","subtype":"success","is_error":"no","result":5,"total_cost_usd":"1","permission_denials":[{"tool_name":3},"x",{"tool_name":""}]}"#,
              [E(.result, success: true)]),
             ("result without a subtype", #"{"type":"result","is_error":true}"#, [E(.result, isError: true)]),
+            ("split message, thinking", lineSplitThinking,
+             [E(.other, usage: .init(inputTokens: 3, outputTokens: 8, cacheCreationInputTokens: 1200, cacheReadInputTokens: 45000),
+                messageID: "msg_07")]),
+            ("split message, tool", lineSplitTool,
+             [E(.toolUse, tool: "annotate_case", toolUseID: "toolu_07",
+                usage: .init(inputTokens: 3, outputTokens: 8, cacheCreationInputTokens: 1200, cacheReadInputTokens: 45000),
+                messageID: "msg_07")]),
+            ("result with all counters", lineResultUsage,
+             [E(.result, resultText: "Annotated 3 cases.", success: true, costUSD: 0.08,
+                usage: .init(inputTokens: 12, outputTokens: 1500, cacheCreationInputTokens: 2400, cacheReadInputTokens: 180000))]),
             ("unknown type", #"{"type":"brand_new","text":"hi"}"#, [E(.other)]),
             ("no type", #"{"text":"hi"}"#, [E(.other)]),
             ("type of another type", #"{"type":["assistant"]}"#, [E(.other)]),
@@ -178,6 +199,115 @@ private func parse(_ line: String) throws -> [Assistant.Event] {
         for (name, line, want) in cases {
             let got = try parse(line)
             #expect(got == want, "\(name)")
+        }
+    }
+
+    /// TestParseEventsUsage: usage is read from untrusted lines; a counter
+    /// that is not a whole number from 0 to Int64.max drops the whole
+    /// usage, a missing or null one is 0.
+    @Test func parseEventsUsage() throws {
+        func result(_ usage: String) -> String {
+            #"{"type":"result","subtype":"success","is_error":false,"result":"r","usage":"# + usage + "}"
+        }
+        func assistant(_ fields: String) -> String {
+            #"{"type":"assistant","message":{"id":"m1","content":[{"type":"text","text":"t"}],"usage":{"input_tokens":5}}"#
+                + fields + "}"
+        }
+        typealias U = Assistant.Usage
+        let cases: [(String, String, U?, String)] = [
+            ("all four",
+             result(#"{"input_tokens":1,"output_tokens":2,"cache_creation_input_tokens":3,"cache_read_input_tokens":4}"#),
+             U(inputTokens: 1, outputTokens: 2, cacheCreationInputTokens: 3, cacheReadInputTokens: 4), ""),
+            ("missing and null counters", result(#"{"output_tokens":7,"cache_read_input_tokens":null}"#), U(outputTokens: 7), ""),
+            ("empty", result("{}"), U(), ""),
+            ("the largest int64", result(#"{"input_tokens":9223372036854775807}"#), U(inputTokens: Int64.max), ""),
+            ("spaces around a counter", result(#"{"input_tokens": 12 }"#), U(inputTokens: 12), ""),
+            ("the last of duplicate keys", result(#"{"input_tokens":-1,"input_tokens":3}"#), U(inputTokens: 3), ""),
+            ("negative", result(#"{"input_tokens":1,"output_tokens":-2}"#), nil, ""),
+            ("negative zero", result(#"{"input_tokens":-0}"#), nil, ""),
+            ("fractional", result(#"{"input_tokens":1.5}"#), nil, ""),
+            ("a whole fraction", result(#"{"input_tokens":10.0}"#), nil, ""),
+            ("an exponent", result(#"{"input_tokens":1e3}"#), nil, ""),
+            ("a string", result(#"{"input_tokens":"12"}"#), nil, ""),
+            ("a bool", result(#"{"cache_read_input_tokens":true}"#), nil, ""),
+            ("an object", result(#"{"output_tokens":{"n":1}}"#), nil, ""),
+            ("beyond int64", result(#"{"input_tokens":9223372036854775808}"#), nil, ""),
+            ("absurdly large", result(#"{"input_tokens":1000000000000000000000000000000}"#), nil, ""),
+            ("usage null", result("null"), nil, ""),
+            ("usage a number", result("5"), nil, ""),
+            ("usage an array", result("[1,2]"), nil, ""),
+            ("an assistant message", assistant(""), U(inputTokens: 5), "m1"),
+            ("an assistant message, parent null", assistant(#","parent_tool_use_id":null"#), U(inputTokens: 5), "m1"),
+            ("a subagent's message", assistant(#","parent_tool_use_id":"toolu_09""#), nil, ""),
+            ("a parent of another type", assistant(#","parent_tool_use_id":7"#), nil, ""),
+            ("a message without an id",
+             #"{"type":"assistant","message":{"content":[{"type":"text","text":"t"}],"usage":{"input_tokens":5}}}"#, nil, ""),
+            ("a message with an id of another type",
+             #"{"type":"assistant","message":{"id":3,"content":[{"type":"text","text":"t"}],"usage":{"input_tokens":5}}}"#, nil, ""),
+            ("a message with bad usage",
+             #"{"type":"assistant","message":{"id":"m1","content":[{"type":"text","text":"t"}],"usage":{"input_tokens":-5}}}"#,
+             nil, ""),
+        ]
+        for (name, line, want, id) in cases {
+            let events = try parse(line)
+            #expect(events.first?.usage == want && events.first?.messageID == id, "\(name)")
+        }
+        // Only the first event of a message carries it; a failure never does.
+        for e in try parse(lineAssistant).dropFirst() {
+            #expect(e.usage == nil && e.messageID.isEmpty)
+        }
+        let failure = try parse(lineAuthFailed)
+        #expect(failure.count == 1 && failure[0].usage == nil)
+    }
+
+    /// TestUsageTally.
+    @Test func usageTally() throws {
+        func tally(_ lines: [String]) throws -> Assistant.UsageTally {
+            var u = Assistant.UsageTally()
+            for line in lines {
+                for e in try parse(line) {
+                    u.add(e)
+                }
+            }
+            return u
+        }
+        func msg(_ id: String, _ i: Int64, _ o: Int64, _ c: Int64, _ r: Int64) -> String {
+            #"{"type":"assistant","message":{"id":""# + id + #"","content":[{"type":"text","text":"t"}],"usage":{"input_tokens":"#
+                + "\(i)" + #","output_tokens":"# + "\(o)" + #","cache_creation_input_tokens":"# + "\(c)"
+                + #","cache_read_input_tokens":"# + "\(r)" + #"}},"parent_tool_use_id":null}"#
+        }
+        typealias U = Assistant.Usage
+        let max = Assistant.maxUsageTokens
+        let cases: [(String, [String], U?)] = [
+            ("nothing", [], nil),
+            ("no usage at all", [lineInit, lineThinking, lineResultStr, lineAPIError], nil),
+            ("the result wins", [lineSplitThinking, lineSplitTool, lineResultUsage],
+             U(inputTokens: 12, outputTokens: 1500, cacheCreationInputTokens: 2400, cacheReadInputTokens: 180000)),
+            ("a message split into lines counts once", [lineSplitThinking, lineSplitTool],
+             U(inputTokens: 3, outputTokens: 8, cacheCreationInputTokens: 1200, cacheReadInputTokens: 45000)),
+            ("distinct messages add up", [lineAssistant, lineSplitThinking, lineSplitTool],
+             U(inputTokens: 13, outputTokens: 28, cacheCreationInputTokens: 1200, cacheReadInputTokens: 45000)),
+            ("the last usage of an id counts", [msg("m1", 1, 1, 1, 1), msg("m2", 10, 0, 0, 0), msg("m1", 2, 3, 4, 5)],
+             U(inputTokens: 12, outputTokens: 3, cacheCreationInputTokens: 4, cacheReadInputTokens: 5)),
+            ("a zeroed result gives way to the messages", [lineAssistant, lineMaxTurns], U(inputTokens: 10, outputTokens: 20)),
+            ("a zeroed result alone", [lineMaxTurns], U()),
+            ("a result after zero messages", [msg("m1", 0, 0, 0, 0), lineMaxTurns], U()),
+            ("a result alone", [lineSuccess], U(inputTokens: 100, outputTokens: 50)),
+            ("a bad result keeps the messages",
+             [lineAssistant, #"{"type":"result","subtype":"success","usage":{"input_tokens":-1}}"#],
+             U(inputTokens: 10, outputTokens: 20)),
+            ("a subagent's message is left out",
+             [lineAssistant,
+              #"{"type":"assistant","message":{"id":"m9","content":[],"usage":{"input_tokens":500}},"parent_tool_use_id":"toolu_01"}"#],
+             U(inputTokens: 10, outputTokens: 20)),
+            ("a failure is left out", [lineAuthFailed], nil),
+            ("counters stop at the maximum", [msg("m1", max, Int64.max, 1, 0), msg("m2", 1, 1, 0, 0)],
+             U(inputTokens: max, outputTokens: max, cacheCreationInputTokens: 1, cacheReadInputTokens: 0)),
+            ("a result beyond the maximum",
+             [#"{"type":"result","usage":{"cache_read_input_tokens":9223372036854775807}}"#], U(cacheReadInputTokens: max)),
+        ]
+        for (name, lines, want) in cases {
+            #expect(try tally(lines).total == want, "\(name)")
         }
     }
 
@@ -280,6 +410,9 @@ private func parse(_ line: String) throws -> [Assistant.Event] {
             ("with --allow-send",
              "draft drf_0a1b2c3d4e5f60718293a4b5c6d7e8f9 (version 12) stored in account acc_work; it is NOT sent. send_message with draftId=drf_0a1b2c3d4e5f60718293a4b5c6d7e8f9 sends it; show the recipients below to the user first.",
              Assistant.DraftRef(accountID: "acc_work", draftID: "drf_0a1b2c3d4e5f60718293a4b5c6d7e8f9", version: 12)),
+            ("a local draft's head",
+             "draft d1 (version 3) stored in account a1; it is NOT sent. It stays in Malachi Mail on the board as the case's suggested reply, on the board only, and is not copied to the Drafts folder on the mail server. This bridge was started without --allow-send; the user sends it from Malachi Mail.\nmode: reply; quoted: html",
+             Assistant.DraftRef(accountID: "a1", draftID: "d1", version: 3)),
             ("the head alone", "draft d1 (version 1) stored in account a1; it is NOT sent.",
              Assistant.DraftRef(accountID: "a1", draftID: "d1", version: 1)),
             ("odd but whitespace-free ids", "draft AAMkAGI2=/+_- (version 007) stored in account a;b(version; it is NOT sent.",

@@ -22,6 +22,8 @@ public final class LoadedMessage {
     public var body: MessageBodyResult?
     /// The message.body failure.
     public var err: (any Error)?
+    /// The last message.get failure (nil once it answered).
+    public var getErr: (any Error)?
 
     /// The quoted history is shown: `body` is the whole body, asked for
     /// without `trimQuoted` (the view's Show Quoted Text, `QuotedReveal`).

@@ -81,7 +81,7 @@ func (s *Syncer) pushDrafts(ctx context.Context, sess *session) (map[string]bool
 		if found {
 			s.log.Info("draft stored", "draft", d.ID, "version", up.Version, "mailbox", folder.Mailbox)
 		} else {
-			s.log.Info("draft gone during its upload, removing the copy", "draft", d.ID)
+			s.log.Info("draft gone or kept local during its upload, removing the copy", "draft", d.ID)
 		}
 	}
 	if len(appended) > 0 {

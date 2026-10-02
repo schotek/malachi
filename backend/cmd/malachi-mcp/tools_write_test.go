@@ -12,57 +12,70 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
-var readTools = []string{"create_draft", "get_attachment", "list_accounts", "list_folders", "list_messages", "list_transitions", "read_message", "search_messages", "sync_status", "trigger_sync"}
+var readTools = []string{"create_draft", "get_attachment", "list_accounts", "list_board", "list_folders", "list_messages", "list_transitions", "read_message", "search_messages", "sync_status", "trigger_sync"}
 
 const (
 	fxReplyAttribution   = "On Wed, 23 Sep 2026 10:00 UTC, Alice Example <alice@example.org> wrote:"
 	fxForwardAttribution = "---------- Forwarded message ----------\nFrom: Alice Example <alice@example.org>\nDate: Wed, 23 Sep 2026 10:00 UTC\nSubject: Quarterly numbers\nTo: Bob <bob@example.com>"
 )
 
+var triageTools = []string{"add_commitment", "annotate_case", "list_triage_queue"}
+
 func TestToolGatingByFlags(t *testing.T) {
+	with := func(extra ...string) []string { return append(append([]string{}, readTools...), extra...) }
+	modify := []string{"delete_messages", "mark_messages", "move_messages", "transition_issue", "unsubscribe"}
 	cases := []struct {
-		modify, send bool
-		want         []string
+		modify, send, triage bool
+		want                 []string
 	}{
-		{false, false, readTools},
-		{true, false, append(append([]string{}, readTools...), "delete_messages", "mark_messages", "move_messages", "transition_issue", "unsubscribe")},
-		{false, true, append(append([]string{}, readTools...), "send_message")},
-		{true, true, append(append([]string{}, readTools...), "delete_messages", "mark_messages", "move_messages", "send_message", "transition_issue", "unsubscribe")},
+		{false, false, false, readTools},
+		{true, false, false, with(modify...)},
+		{false, true, false, with("send_message")},
+		{true, true, false, with(append(modify, "send_message")...)},
+		// The triage tier adds its three tools and nothing of the others.
+		{false, false, true, with(triageTools...)},
+		{true, false, true, with(append(modify, triageTools...)...)},
+		{false, true, true, with(append([]string{"send_message"}, triageTools...)...)},
 	}
 	for _, c := range cases {
 		sock := tempSocket(t)
-		cs, _, _ := connectBridge(t, sock, c.modify, c.send)
+		cs, _, _ := connectBridgeConfig(t, config{socket: sock, allowModify: c.modify, allowSend: c.send, allowTriage: c.triage})
 		got := toolNames(t, cs)
 		want := append([]string{}, c.want...)
 		sortStrings(want)
 		if !reflect.DeepEqual(got, want) {
-			t.Errorf("modify=%v send=%v: tools %v, want %v", c.modify, c.send, got, want)
+			t.Errorf("modify=%v send=%v triage=%v: tools %v, want %v", c.modify, c.send, c.triage, got, want)
 		}
 	}
 	// A gated tool is unknown to the server, not merely refused.
 	cs, _, _ := connectBridge(t, tempSocket(t), false, false)
-	params := mcpCallParams("mark_messages")
-	if _, err := cs.CallTool(t.Context(), &params); err == nil {
-		t.Error("calling an unregistered tool must fail at the protocol level")
+	for _, name := range append([]string{"mark_messages"}, triageTools...) {
+		params := mcpCallParams(name)
+		if _, err := cs.CallTool(t.Context(), &params); err == nil {
+			t.Errorf("calling the unregistered tool %s must fail at the protocol level", name)
+		}
 	}
 }
 
 func TestAnnotations(t *testing.T) {
-	cs, _, _ := connectBridge(t, tempSocket(t), true, true)
+	cs, _, _ := connectBridgeConfig(t, config{socket: tempSocket(t), allowModify: true, allowSend: true, allowTriage: true})
 	tools := listTools(t, cs)
 	type ann struct{ readOnly, destructive, idempotent, openWorld bool }
 	want := map[string]ann{
-		"list_accounts": {true, false, true, false}, "list_folders": {true, false, true, false},
+		"list_accounts": {true, false, true, false}, "list_board": {true, false, true, false}, "list_folders": {true, false, true, false},
 		"list_messages": {true, false, true, false}, "read_message": {true, false, true, false},
 		"search_messages": {true, false, true, false}, "list_transitions": {true, false, true, false},
 		"get_attachment": {true, false, true, false}, "sync_status": {true, false, true, false},
 		"trigger_sync":  {false, false, true, false},
 		"create_draft":  {false, false, false, false},
 		"mark_messages": {false, false, true, false}, "move_messages": {false, false, true, false},
-		"transition_issue": {false, false, true, false},
-		"unsubscribe":      {false, true, true, true},
-		"delete_messages":  {false, true, true, false},
-		"send_message":     {false, true, true, true},
+		"transition_issue":  {false, false, true, false},
+		"unsubscribe":       {false, true, true, true},
+		"delete_messages":   {false, true, true, false},
+		"send_message":      {false, true, true, true},
+		"list_triage_queue": {true, false, true, false},
+		"annotate_case":     {false, false, true, false},
+		"add_commitment":    {false, false, false, false},
 	}
 	if len(tools) != len(want) {
 		t.Fatalf("%d tools, want %d", len(tools), len(want))

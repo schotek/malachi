@@ -752,6 +752,33 @@ public final class ActionsController {
         }
     }
 
+    /// `openCompose` for a message the list and the cache may not know (the
+    /// board's Reply, which has only the ids): its summary from message.get
+    /// first (`MessageCache.lookUpOutcome`, which keeps it), then as for a
+    /// listed one. A message the daemon no longer has says so in a toast;
+    /// one it could not be asked about says why. A reply on an account that
+    /// comments is named "Comment" (`Jira.replyLabel`).
+    public func openCompose(_ kind: ComposeKind, account: AccountID, message id: MessageID, from parent: AnyObject? = nil) {
+        if summary(id) != nil {
+            openCompose(kind, id, from: parent)
+            return
+        }
+        let what = kind == .reply && mailbox.model.account(account)?.can(.comment) == true
+            ? Jira.replyLabel(comment: true) : composeWhat(kind)
+        cache.lookUpOutcome(accountId: account, id: id) { [weak self] outcome in
+            guard let self else { return }
+            switch outcome {
+            case .found:
+                self.openCompose(kind, id, from: parent)
+            case .gone:
+                self.log.warning("compose: message.get found no message")
+                self.toast(L10n.T("%s failed: the message is no longer on the server", what))
+            case .failed(let err):
+                self.toast(rpcErrorText(what, err))
+            }
+        }
+    }
+
     /// Opens message `id` of a Drafts folder in the compose window, or
     /// raises the window already editing it (drafts.go `openDraft`). A
     /// second request while the first is on its way does nothing; a daemon

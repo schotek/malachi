@@ -1073,7 +1073,7 @@ func TestMovesAndDeletionsAreDropped(t *testing.T) {
 	h.mustPass()
 	ctx := context.Background()
 	m := h.rows(spaceBox("10000"))["c:"+sc.cOld]
-	if err := h.st.DeleteMessages(ctx, h.acc.ID, []string{m.ID}); err != nil {
+	if _, err := h.st.DeleteMessages(ctx, h.acc.ID, []string{m.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if n, _ := h.st.CountPendingOps(ctx, h.acc.ID); n != 1 {

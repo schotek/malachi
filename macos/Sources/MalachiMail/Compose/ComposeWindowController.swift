@@ -26,44 +26,22 @@ import os
 /// window (the panel's sheet, `assistant-consent`). Closing the popover
 /// or the window ends a running request.
 @MainActor
-final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTextFieldDelegate, ToastHosting, NSPopoverDelegate {
+final class ComposeWindowController: NSWindowController, NSWindowDelegate, ToastHosting, NSPopoverDelegate {
     static let defaultSize = NSSize(width: 760, height: 640)
     static let minimumSize = NSSize(width: 360, height: 420)
     static let toolbarIdentifier = NSToolbar.Identifier("compose")
 
     let state: AppState
     unowned let manager: ComposeManager
-    let params: ComposeParams
-    let editor: any EditorView
-    let draft: ComposeDraftController
-    let toasts = ToastPresenter()
-
-    let header = ComposeHeaderView()
-    /// The issue and its visibility in place of `header` in comment mode
-    /// (ComposeWindowController+Comment.swift); nil for an e-mail.
-    private(set) lazy var commentHeader: CommentHeaderView? = params.comment.map { CommentHeaderView(comment: $0) }
-    let formatToolbar = FormatToolbar()
-    let chips = AttachmentChipsView()
-    let statusLabel = NSTextField(labelWithString: "")
-    private let plainHint = NSTextField(labelWithString: L10n.T("This message will be sent as plain text."))
-    private let plainHintRow: NSView
+    /// The window's content: the fields, the editor, the draft
+    /// (`ComposePane`, window layout). Owned as the content view controller.
+    let pane: ComposePane
+    var params: ComposeParams { pane.params }
+    var editor: any EditorView { pane.editor }
+    var draft: ComposeDraftController { pane.draft }
+    /// The toast overlay over the content (the pane's).
+    var toasts: ToastPresenter { pane.toasts }
     private let toolbarDelegate: ComposeToolbar
-
-    /// The identities of the From row (`accounts`).
-    private(set) var accounts: [Account] = []
-    /// The identity the user picked in From (`chosenAccount`); until they
-    /// do, `params.accountID` is what From shows, also after the account
-    /// list arrives in place of the placeholder.
-    private var chosenAccountID: AccountID?
-    /// The attachments listed under the editor (`attachments`).
-    var attachments: [DraftAttachment] = []
-    /// The completion of the To, Cc and Bcc rows (`suggest`).
-    private(set) var suggestions: [RecipientSuggestionsController] = []
-    /// The formatting at the caret as last reported (for the Format menu).
-    private(set) var editorState = EditorState()
-    /// The editor content as of the last flush: a `changed` carrying the
-    /// same content is the flush's own report, not an edit.
-    private var lastFlushedHTML: String?
 
     private var escape: EscapeCloser?
     /// The controller decided the window may close: `windowShouldClose`
@@ -90,23 +68,12 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
     init(state: AppState, manager: ComposeManager, params: ComposeParams, editor: any EditorView) {
         self.state = state
         self.manager = manager
-        self.params = params
-        self.editor = editor
-        let controller = manager.controller
-        draft = ComposeDraftController(client: state.client, settings: state.settings) { [weak controller] in
-            controller?.placeholder ?? true
-        }
+        pane = ComposePane(state: state, accounts: manager.controller, params: params, editor: editor)
         toolbarDelegate = ComposeToolbar()
         // Whether Claude Code is there is looked up now (a few stat calls),
         // so the Assistant button reflects it from the start.
         state.assistant.refreshHandlers()
         toolbarDelegate.showsAssistant = state.assistant.canRunInApp
-
-        plainHint.font = Typo.caption
-        plainHint.textColor = Tint.secondary
-        plainHint.alignment = .left
-        plainHintRow = Self.inset(plainHint, top: 4, left: 12, bottom: 4, right: 12)
-        plainHintRow.isHidden = composeRichText
 
         let w = NSWindow(
             contentRect: NSRect(origin: .zero, size: Self.defaultSize),
@@ -122,46 +89,19 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
 
         w.delegate = self
         w.toolbar = toolbarDelegate.makeToolbar()
-        w.contentView = buildContent()
+        w.contentViewController = pane
         w.setFrame(NSRect(origin: .zero, size: Self.defaultSize), display: false)
-        w.initialFirstResponder = isComment ? editor.view : header.toField.editor
+        w.initialFirstResponder = pane.initialResponder
         w.autorecalculatesKeyViewLoop = true
-        chips.onRemove = { [weak self] id in
-            self?.removeAttachment(id)
-        }
-        // The editor's callbacks first, as in compose.go: `ready` and
-        // `state` may follow the load at any time.
-        wireEditor()
         applyCommentMode()
-
-        // Prefill before connecting change handlers so it does not count
-        // as an edit.
-        header.toField.stringValue = AddressList.format(params.to)
-        header.ccField.stringValue = AddressList.format(params.cc)
-        header.bccField.stringValue = AddressList.format(params.bcc)
-        header.subjectField.stringValue = params.subject
-        header.setCcBccVisible(cc: !params.cc.isEmpty, bcc: !params.bcc.isEmpty)
+        pane.host = self
         updateTitle()
-        draft.setOriginal(inReplyTo: params.inReplyTo, forwarding: params.forwarding, comment: params.comment)
-        // A draft opened from the Drafts folder is the user's already: its
-        // id and version make the saves updates, and closing never deletes it.
-        draft.setOpened(draftID: params.draftID, version: params.version, replaces: params.replaces,
-                        fromDrafts: params.kind == .edit)
-        editor.load(bodyHTML: params.bodyHTML)
-        setAccounts(controller.accounts, placeholder: controller.placeholder)
-        // What the backend imported for the template (a quoted original's
-        // pictures, a forwarded message's files): listed and shown now,
-        // bound by the first save.
-        setAttachments(params.attachments)
 
-        wireRows()
-        wireToolbar()
-        wireDraft()
         wireAssistant()
         escape = EscapeCloser.install(on: w)
         escape?.shouldClose = { [weak self] in
             guard let self else { return true }
-            return !self.suggestions.contains { $0.isVisible } && !self.formatToolbar.isLinkPopoverShown
+            return self.pane.popupsHidden
         }
     }
 
@@ -170,182 +110,15 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         fatalError("not used")
     }
 
-    // MARK: Layout
-
-    /// compose.blp `content`: the card, the formatting bar, the plain-text
-    /// hint, the editor, the chips and the status line, top to bottom.
-    private func buildContent() -> NSView {
-        let editorBox = NSBox()
-        editorBox.boxType = .custom
-        editorBox.titlePosition = .noTitle
-        editorBox.borderWidth = 0
-        editorBox.cornerRadius = 0
-        editorBox.fillColor = .textBackgroundColor
-        editorBox.contentViewMargins = .zero
-        editorBox.translatesAutoresizingMaskIntoConstraints = false
-        editorBox.setContentHuggingPriority(.defaultLow, for: .vertical)
-        editorBox.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
-        let editorView = editor.view
-        editorView.translatesAutoresizingMaskIntoConstraints = false
-        if let content = editorBox.contentView {
-            content.addSubview(editorView)
-            NSLayoutConstraint.activate([
-                editorView.topAnchor.constraint(equalTo: content.topAnchor),
-                editorView.bottomAnchor.constraint(equalTo: content.bottomAnchor),
-                editorView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-                editorView.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            ])
-        }
-
-        statusLabel.font = Typo.caption
-        statusLabel.textColor = Tint.secondary
-        statusLabel.alignment = .left
-        statusLabel.lineBreakMode = .byTruncatingTail
-        statusLabel.maximumNumberOfLines = 1
-        statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let statusRow = Self.inset(statusLabel, top: 4, left: 12, bottom: 4, right: 12)
-
-        let root = FillStackView()
-        root.spacing = 0
-        for v in [
-            Self.inset(commentHeader.map { $0 as NSView } ?? header, top: 12, left: 12, bottom: 6, right: 12),
-            formatToolbar, plainHintRow, editorBox, chips, statusRow,
-        ] {
-            root.addArrangedSubview(v)
-        }
-        for v in root.arrangedSubviews where v !== editorBox {
-            v.setContentHuggingPriority(.required, for: .vertical)
-        }
-
-        let container = NSView()
-        container.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(root)
-        NSLayoutConstraint.activate([
-            root.topAnchor.constraint(equalTo: container.topAnchor),
-            root.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            root.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            root.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-        ])
-        toasts.install(over: container)
-        return container
+    /// compose.go `updateTitle`: the pane's title (the subject, "New
+    /// Message", or the comment's issue).
+    func updateTitle() {
+        window?.title = pane.titleText
     }
 
-    /// A view with margins around it (the Blueprint's margin-* properties).
-    static func inset(_ v: NSView, top: CGFloat, left: CGFloat, bottom: CGFloat, right: CGFloat) -> NSView {
-        let c = NSView()
-        c.translatesAutoresizingMaskIntoConstraints = false
-        v.translatesAutoresizingMaskIntoConstraints = false
-        c.addSubview(v)
-        NSLayoutConstraint.activate([
-            v.topAnchor.constraint(equalTo: c.topAnchor, constant: top),
-            c.bottomAnchor.constraint(equalTo: v.bottomAnchor, constant: bottom),
-            v.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: left),
-            c.trailingAnchor.constraint(equalTo: v.trailingAnchor, constant: right),
-        ])
-        return c
-    }
-
-    // MARK: Wiring
-
-    private func wireEditor() {
-        editor.onState = { [weak self] st in
-            guard let self else { return }
-            self.editorState = st
-            self.formatToolbar.applyState(st)
-        }
-        editor.onChanged = { [weak self] in
-            guard let self else { return }
-            // The `changed` a flush produces reports what is being saved;
-            // only other content is an edit (see `flushEditor`).
-            if let flushed = self.lastFlushedHTML, flushed == self.editor.html() {
-                return
-            }
-            self.lastFlushedHTML = nil
-            self.draft.markDirty()
-        }
-        editor.onReady = { [weak self] in
-            guard let self, self.params.kind != .new, self.params.kind != .edit else { return }
-            self.editor.focusStart()
-        }
-        editor.onCrashed = { [weak self] in
-            guard let self, !self.draft.draft.closed else { return }
-            self.toast(L10n.T("The editor crashed; your last text was restored"))
-            self.editor.load(bodyHTML: self.editor.html())
-        }
-        editor.onDropFiles = { [weak self] urls in
-            guard let self else { return }
-            for url in urls where url.isFileURL {
-                self.importFile(path: url.path, name: url.lastPathComponent, inline: false, then: nil)
-            }
-        }
-        // Pasted text that looks like Markdown: the daemon renders it
-        // (draft.markdown); without an answer the text goes in as it is.
-        let client = state.client
-        editor.onPaste = { text, answer in
-            Task { @MainActor in
-                answer(await markdownPaste(text, client: client))
-            }
-        }
-    }
-
-    /// compose.go `wireRows`.
-    private func wireRows() {
-        let client = state.client
-        for field in header.recipientFields {
-            let s = RecipientSuggestionsController(field: field, client: client) { [weak self] in
-                self?.account.id ?? ComposeController.placeholderAccounts[0].id
-            }
-            s.onChanged = { [weak self] in
-                guard let self, !self.draft.draft.closed else { return }
-                self.validateRow(field)
-                self.draft.markDirty()
-            }
-            suggestions.append(s)
-        }
-        header.subjectField.delegate = self
-        header.onFromChanged = { [weak self] in
-            guard let self else { return }
-            self.chosenAccountID = self.account.id
-            self.draft.markDirty()
-            // Another identity means other address books: what is shown
-            // was asked on behalf of the previous one.
-            for s in self.suggestions {
-                s.hide()
-            }
-        }
-        header.onShowCcBcc = { [weak self] in
-            self?.header.setCcBccVisible(cc: true, bcc: true)
-        }
-    }
-
-    private func wireToolbar() {
-        formatToolbar.exec = { [weak self] command, argument in
-            self?.editor.exec(command, argument)
-        }
-        formatToolbar.focusEditor = { [weak self] in
-            self?.focusEditor()
-        }
-        formatToolbar.onInsertImage = { [weak self] in
-            self?.insertImage(nil)
-        }
-    }
-
-    private func wireDraft() {
-        draft.form = self
-        let alerts = state.alerts
-        draft.confirmDiscard = { [weak self] heading, body, label in
-            await alerts.confirmDestructive(on: self?.window, heading: heading, body: body, confirmLabel: label)
-        }
-        draft.saveDraftQuestion = { [weak self] in
-            switch await alerts.saveDraftQuestion(on: self?.window) {
-            case .save: return .save
-            case .discard: return .discard
-            case .cancel: return .cancel
-            }
-        }
-        draft.onSent = { [weak self] text in
-            self?.manager.controller.onSent?(text)
-        }
+    /// editor.GrabFocus: the keyboard back to the page.
+    func focusEditor() {
+        pane.focusEditor()
     }
 
     // MARK: Assistant
@@ -458,56 +231,6 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         rewrite?.cancel()
     }
 
-    // MARK: Rows
-
-    /// compose.go `validateRow`: whether a recipient row is free of
-    /// unparsable tokens. The row shows them itself, as red badges.
-    @discardableResult
-    func validateRow(_ field: RecipientTokenField) -> Bool {
-        field.resolved().invalid.isEmpty
-    }
-
-    /// compose.go `updateTitle`: the subject, or "New Message"; a comment
-    /// names its issue (`Jira.commentTitle`).
-    func updateTitle() {
-        if let c = params.comment {
-            window?.title = Jira.commentTitle(c.issue.key)
-            return
-        }
-        let s = header.subjectField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        window?.title = s.isEmpty ? L10n.T("New Message") : s
-    }
-
-    /// The subject row (`subject.ConnectChanged`).
-    func controlTextDidChange(_ obj: Foundation.Notification) {
-        guard (obj.object as? NSTextField) === header.subjectField else { return }
-        updateTitle()
-        draft.markDirty()
-    }
-
-    /// editor.GrabFocus: the keyboard back to the page.
-    func focusEditor() {
-        guard let window else { return }
-        let v = editor.view
-        if v.acceptsFirstResponder {
-            window.makeFirstResponder(v)
-        } else if let inner = Self.firstResponderCandidate(in: v) {
-            window.makeFirstResponder(inner)
-        }
-    }
-
-    private static func firstResponderCandidate(in v: NSView) -> NSView? {
-        for s in v.subviews {
-            if s.acceptsFirstResponder {
-                return s
-            }
-            if let deeper = firstResponderCandidate(in: s) {
-                return deeper
-            }
-        }
-        return nil
-    }
-
     // MARK: NSWindowDelegate
 
     /// closeRequest: the window goes at once when nothing is at stake;
@@ -552,97 +275,54 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         rewritePopover?.close()
         rewritePopover = nil
         rewrite?.cancel()
-        for s in suggestions {
-            s.cleanup() // a pending search must not touch the rows after this
-        }
-        draft.cleanup()
+        pane.cleanup()
         manager.remove(self)
     }
 }
 
-// MARK: - ComposeForm
+// MARK: - ComposePaneHost
 
-extension ComposeWindowController: ComposeForm {
-    /// compose.go `account`: the selected identity; a comment's is the
-    /// issue's account (`commentAccount`).
-    var account: Account {
-        if let a = commentAccount {
-            return a
-        }
-        let i = header.selectedAccountIndex
-        if i >= 0, i < accounts.count {
-            return accounts[i]
-        }
-        return accounts.first ?? ComposeController.placeholderAccounts[0]
+extension ComposeWindowController: ComposePaneHost {
+    var paneWindow: NSWindow? { window }
+
+    func paneTitleChanged(_ pane: ComposePane) {
+        updateTitle()
     }
 
-    /// compose.go `self`.
-    var selfAddress: Address {
-        let a = account
-        return Address(name: a.config.displayName, address: a.config.email)
-    }
-
-    func recipients() -> (to: [Address], cc: [Address], bcc: [Address], ok: Bool) {
-        var ok = true
-        func parse(_ f: RecipientTokenField) -> [Address] {
-            let (addresses, invalid) = f.resolved()
-            if !invalid.isEmpty {
-                ok = false
-            }
-            return addresses
-        }
-        let to = parse(header.toField)
-        let cc = parse(header.ccField)
-        let bcc = parse(header.bccField)
-        return (to, cc, bcc, ok)
-    }
-
-    var subject: String { header.subjectField.stringValue }
-
-    func editorHTML() -> String { editor.html() }
-
-    func editorText() -> String { editor.text() }
-
-    func flushEditor(_ done: @escaping @MainActor () -> Void) {
-        editor.flush { [weak self] in
-            self?.lastFlushedHTML = self?.editor.html()
-            done()
-        }
-    }
-
-    func setStatus(_ text: String) {
-        statusLabel.stringValue = text
-        statusLabel.toolTip = text.isEmpty ? nil : text
-    }
-
-    func toast(_ text: String) {
-        toasts.show(text)
-    }
-
-    func setSendEnabled(_ enabled: Bool) {
+    /// The toolbar's Send (`ComposeForm.setSendEnabled`).
+    func paneSendEnabledChanged(_ pane: ComposePane, _ enabled: Bool) {
         toolbarDelegate.sendButton.isEnabled = enabled
         window?.toolbar?.validateVisibleItems()
     }
 
-    func closeWindow() {
+    func paneToast(_ text: String) {
+        toasts.show(text)
+    }
+
+    /// `ComposeForm.closeWindow`: the controller decided, the window goes
+    /// without asking.
+    func paneDidEnd(_ pane: ComposePane, _ end: ComposePane.End) {
         closing = true
         window?.close()
     }
+
+    func paneHeightChanged(_ pane: ComposePane) {}
 }
 
 // MARK: - ComposeWindowHandle
 
 extension ComposeWindowController: ComposeWindowHandle {
-    /// manager.go `FindDraft`: the same saved draft, or the same Drafts
-    /// message taken over.
+    func setAccounts(_ list: [Account], placeholder: Bool) {
+        pane.setAccounts(list, placeholder: placeholder)
+    }
+
+    func toast(_ text: String) {
+        pane.toast(text)
+    }
+
+    /// manager.go `FindDraft`.
     func edits(_ d: Draft) -> Bool {
-        if let id = d.id, draft.draft.draftID == id {
-            return true
-        }
-        if let replaces = d.replaces, params.replaces == replaces {
-            return true
-        }
-        return false
+        pane.edits(d)
     }
 
     func present() {
@@ -650,162 +330,49 @@ extension ComposeWindowController: ComposeWindowHandle {
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate()
     }
-
-    /// compose.go `fromLocked`: From is fixed to `params.accountID` for a
-    /// reply or a forward (a draft reopened from Drafts included).
-    var fromLocked: Bool { params.inReplyTo != nil || params.forwarding != nil }
-
-    /// compose.go `setAccounts`: fills the From row, keeping the selected
-    /// identity the user picked when it is still listed; until they pick,
-    /// the account the window was opened for. The row is only enabled with
-    /// a choice, and never for a reply or a forward.
-    func setAccounts(_ list: [Account], placeholder: Bool) {
-        let selectedID = chosenAccountID ?? params.accountID
-        accounts = list
-        let labels = list.map { a -> String in
-            var name = (a.config.displayName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            if name.isEmpty {
-                name = a.config.name
-            }
-            // The account's own text, as plain text. GTK elides it at 30
-            // characters (fromFactory's max-width-chars); the pop-up here
-            // truncates to the width the row gives it (lineBreakMode).
-            return formatAddress(Address(name: name, address: a.config.email))
-        }
-        let found = list.firstIndex { $0.id == selectedID }
-        // A reply or a forward goes out from the account the original is
-        // in (compose.go `fromLocked`): its quoted pictures and forwarded
-        // files were copied into that account.
-        header.setAccounts(labels: labels, selected: found ?? 0, enabled: list.count > 1 && !(fromLocked && found != nil))
-        if placeholder, !isComment {
-            setStatus(L10n.T("Using placeholder account"))
-        }
-    }
 }
 
 // MARK: - Actions (compose.blp `compose.*`, the Format menu)
 
+// While a view of the content has the keyboard, the responder chain reaches
+// the pane (the content view controller) before the window; while the
+// window itself is first responder it does not, so every compose and Format
+// action and its validation is forwarded to the pane here.
+
 extension ComposeWindowController: MalachiActions {
-    @objc func sendMessage(_ sender: Any?) {
-        draft.send()
-    }
-
-    /// Not in comment mode: no Drafts folder keeps a comment.
-    @objc func saveDraft(_ sender: Any?) {
-        guard !isComment else { return }
-        draft.save(reason: .explicit)
-    }
-
-    @objc func discardDraft(_ sender: Any?) {
-        draft.discard()
-    }
-
-    @objc func formatBold(_ sender: Any?) {
-        editor.exec("bold", nil)
-    }
-
-    @objc func formatItalic(_ sender: Any?) {
-        editor.exec("italic", nil)
-    }
-
-    @objc func formatUnderline(_ sender: Any?) {
-        editor.exec("underline", nil)
-    }
-
-    @objc func formatParagraph(_ sender: Any?) {
-        formatToolbar.setBlock("p")
-    }
-
-    @objc func formatHeading1(_ sender: Any?) {
-        formatToolbar.setBlock("h1")
-    }
-
-    @objc func formatHeading2(_ sender: Any?) {
-        formatToolbar.setBlock("h2")
-    }
-
-    @objc func formatHeading3(_ sender: Any?) {
-        formatToolbar.setBlock("h3")
-    }
-
-    @objc func alignLeft(_ sender: Any?) {
-        formatToolbar.setAlign("left")
-    }
-
-    @objc func alignCenter(_ sender: Any?) {
-        formatToolbar.setAlign("center")
-    }
-
-    @objc func alignRight(_ sender: Any?) {
-        formatToolbar.setAlign("right")
-    }
-
-    @objc func bulletedList(_ sender: Any?) {
-        editor.exec("insertUnorderedList", nil)
-    }
-
-    @objc func numberedList(_ sender: Any?) {
-        editor.exec("insertOrderedList", nil)
-    }
-
-    @objc func quoteBlock(_ sender: Any?) {
-        formatToolbar.toggleQuote()
-    }
-
-    @objc func insertLink(_ sender: Any?) {
-        formatToolbar.showLinkPopover()
-    }
-
-    @objc func clearFormatting(_ sender: Any?) {
-        formatToolbar.clearFormatting()
-    }
+    @objc func sendMessage(_ sender: Any?) { pane.sendMessage(sender) }
+    @objc func saveDraft(_ sender: Any?) { pane.saveDraft(sender) }
+    @objc func discardDraft(_ sender: Any?) { pane.discardDraft(sender) }
+    @objc func attachFiles(_ sender: Any?) { pane.attachFiles(sender) }
+    @objc func insertImage(_ sender: Any?) { pane.insertImage(sender) }
+    @objc func formatBold(_ sender: Any?) { pane.formatBold(sender) }
+    @objc func formatItalic(_ sender: Any?) { pane.formatItalic(sender) }
+    @objc func formatUnderline(_ sender: Any?) { pane.formatUnderline(sender) }
+    @objc func formatParagraph(_ sender: Any?) { pane.formatParagraph(sender) }
+    @objc func formatHeading1(_ sender: Any?) { pane.formatHeading1(sender) }
+    @objc func formatHeading2(_ sender: Any?) { pane.formatHeading2(sender) }
+    @objc func formatHeading3(_ sender: Any?) { pane.formatHeading3(sender) }
+    @objc func alignLeft(_ sender: Any?) { pane.alignLeft(sender) }
+    @objc func alignCenter(_ sender: Any?) { pane.alignCenter(sender) }
+    @objc func alignRight(_ sender: Any?) { pane.alignRight(sender) }
+    @objc func bulletedList(_ sender: Any?) { pane.bulletedList(sender) }
+    @objc func numberedList(_ sender: Any?) { pane.numberedList(sender) }
+    @objc func quoteBlock(_ sender: Any?) { pane.quoteBlock(sender) }
+    @objc func insertLink(_ sender: Any?) { pane.insertLink(sender) }
+    @objc func clearFormatting(_ sender: Any?) { pane.clearFormatting(sender) }
 }
 
 extension ComposeWindowController: NSUserInterfaceValidations {
-    /// Send is off while sending; the Format items carry check marks for
-    /// the formatting at the caret.
+    /// The pane's (Send off while sending, the Format check marks, comment
+    /// mode); everything else of the window (the Assistant button) on.
     func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
-        guard let action = item.action else { return false }
-        if isComment, !Self.commentAllows(action) {
-            return false
-        }
-        let st = editorState
-        let block: String
-        switch st.block {
-        case "h1", "h2", "h3", "blockquote": block = st.block
-        default: block = "p"
-        }
-        let align = (st.align == "center" || st.align == "right") ? st.align : "left"
-        var checked: Bool?
-        switch action {
-        case Action.sendMessage:
-            return !draft.draft.sending
-        case Action.formatBold: checked = st.bold
-        case Action.formatItalic: checked = st.italic
-        case Action.formatUnderline: checked = st.underline
-        case Action.bulletedList: checked = st.ul
-        case Action.numberedList: checked = st.ol
-        case Action.quoteBlock: checked = block == "blockquote"
-        case Action.formatParagraph: checked = block == "p"
-        case Action.formatHeading1: checked = block == "h1"
-        case Action.formatHeading2: checked = block == "h2"
-        case Action.formatHeading3: checked = block == "h3"
-        case Action.alignLeft: checked = align == "left"
-        case Action.alignCenter: checked = align == "center"
-        case Action.alignRight: checked = align == "right"
-        default:
-            break
-        }
-        if let checked, let menuItem = item as? NSMenuItem {
-            menuItem.state = checked ? .on : .off
-        }
-        return true
+        pane.validateUserInterfaceItem(item)
     }
 }
 
 extension ComposeWindowController: NSToolbarItemValidation {
     func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
-        item.action == Action.sendMessage ? !draft.draft.sending : true
+        pane.validateToolbarItem(item)
     }
 }
 

@@ -5,7 +5,8 @@
       "command": "${CLAUDE_PROJECT_DIR:-.}/build/malachi-mcp",
       "args": [
         "--allow-modify=${MALACHI_MCP_ALLOW_MODIFY:-false}",
-        "--allow-send=${MALACHI_MCP_ALLOW_SEND:-false}"
+        "--allow-send=${MALACHI_MCP_ALLOW_SEND:-false}",
+        "--allow-triage=${MALACHI_MCP_ALLOW_TRIAGE:-false}"
       ]
     }
   }

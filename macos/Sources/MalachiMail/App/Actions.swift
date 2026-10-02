@@ -43,6 +43,22 @@ import MalachiCore
     @objc optional func moveToTrash(_ sender: Any?)
     @objc optional func loadImages(_ sender: Any?)
     @objc optional func trustSender(_ sender: Any?)
+    /// Mail or Board (MalachiCore `Board.Mode`): the menu item's tag, the
+    /// toolbar switch's selected segment. Swift-first.
+    @objc optional func setWindowMode(_ sender: Any?)
+    /// The board's style (MalachiCore `Board.Style`): the menu item's tag,
+    /// the toolbar's selected segment. Swift-first.
+    @objc optional func setBoardStyle(_ sender: Any?)
+    /// The board's detail actions in the List's toolbar, on the selected
+    /// case: Done (or Move Back to Board), and the placeholders Remind…,
+    /// Archive and Reply. Swift-first.
+    @objc optional func boardDone(_ sender: Any?)
+    @objc optional func boardRemind(_ sender: Any?)
+    @objc optional func boardArchive(_ sender: Any?)
+    @objc optional func boardReply(_ sender: Any?)
+    /// The board toolbars' Triage: what `BoardTriageController.view`
+    /// offers (Triage, Stop, Sign In…, Get Claude Code…). Swift-first.
+    @objc optional func boardTriage(_ sender: Any?)
 
     // The Assistant menu (ui/internal/assistant). A message action's tag
     // is its index in `Assistant.messageActions`; Summarize Unread is the
@@ -102,6 +118,13 @@ enum Action {
     static let moveToTrash = #selector(MalachiActions.moveToTrash(_:))
     static let loadImages = #selector(MalachiActions.loadImages(_:))
     static let trustSender = #selector(MalachiActions.trustSender(_:))
+    static let setWindowMode = #selector(MalachiActions.setWindowMode(_:))
+    static let setBoardStyle = #selector(MalachiActions.setBoardStyle(_:))
+    static let boardDone = #selector(MalachiActions.boardDone(_:))
+    static let boardRemind = #selector(MalachiActions.boardRemind(_:))
+    static let boardArchive = #selector(MalachiActions.boardArchive(_:))
+    static let boardReply = #selector(MalachiActions.boardReply(_:))
+    static let boardTriage = #selector(MalachiActions.boardTriage(_:))
 
     static let askAssistant = #selector(MalachiActions.askAssistant(_:))
     static let summarizeUnread = #selector(MalachiActions.summarizeUnread(_:))

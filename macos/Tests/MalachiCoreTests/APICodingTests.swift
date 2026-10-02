@@ -336,6 +336,24 @@ import Testing
         #expect(API.DraftMarkdown.name == "draft.markdown")
     }
 
+    @Test func draftGetAndLocal() throws {
+        #expect(try encodeObject(DraftGetParams(accountId: "acc_1", draftId: "d_1")).keys.sorted() == ["accountId", "draftId"])
+        let r = try decode(DraftGetResult.self, #"""
+        {"draft":{"id":"d_1","accountId":"acc_1","version":4,"to":[{"address":"alice@example.org"}],
+                  "subject":"Re: Plans","textBody":"x","htmlBody":"<p>x</p>","inReplyTo":"m_2",
+                  "updatedAt":"2026-10-01T08:00:00Z","local":true}}
+        """#)
+        #expect(r.draft.id == "d_1" && r.draft.version == 4 && r.draft.local == true && r.draft.inReplyTo == "m_2")
+        #expect(API.DraftGet.name == "draft.get")
+
+        // An ordinary draft: no local field either way.
+        let plain = try decode(Draft.self, #"{"accountId":"a","version":1,"to":null,"subject":"","textBody":"","updatedAt":"0001-01-01T00:00:00Z"}"#)
+        #expect(plain.local == nil)
+        let draft = try encodeObject(Draft(accountId: "a"))
+        #expect(draft["local"] == nil, "omitted when nil")
+        #expect(try encodeObject(Draft(accountId: "a", local: true))["local"] as? Bool == true)
+    }
+
     @Test func draftOpenExample() throws {
         let r = try decode(DraftOpenResult.self, #"""
         {"draft":{"accountId":"acc_1","version":0,"to":[{"address":"alice@example.org"}],
@@ -1210,17 +1228,17 @@ import Testing
         (1000, "notImplemented"), (1001, "invalidArgument"), (1002, "conflict"), (1003, "cancelled"), (1004, "unavailable"),
         (1005, "unauthenticated"),
         (1100, "accountNotFound"), (1101, "folderNotFound"), (1102, "messageNotFound"), (1103, "threadNotFound"),
-        (1104, "draftNotFound"), (1105, "attachmentNotFound"),
+        (1104, "draftNotFound"), (1105, "attachmentNotFound"), (1106, "caseNotFound"),
         (1200, "authRequired"), (1201, "authFailed"), (1202, "keyringError"), (1203, "oauthClientMissing"),
         (1300, "offline"), (1301, "networkError"), (1302, "serverError"), (1303, "tlsError"), (1304, "serverTimeout"),
         (1305, "messageGone"),
         (1400, "storageError"), (1401, "migrationFailed"),
         (1500, "malformedMessage"), (1501, "sanitizeFailed"), (1502, "attachmentTooBig"), (1503, "partNotFound"),
-        (1504, "partNotDownloaded"), (1505, "unsubscribeFailed"),
+        (1504, "partNotDownloaded"), (1505, "unsubscribeFailed"), (1506, "quoteNotFound"),
     ]
 
     @Test func errorCodesAreNamed() {
-        #expect(ErrorCode.all.count == 35 && Set(ErrorCode.all).count == 35)
+        #expect(ErrorCode.all.count == 37 && Set(ErrorCode.all).count == 37)
         #expect(ErrorCode.all.map(\.rawValue) == Self.goCodes.map { $0.0 })
         #expect(ErrorCode.all.map(\.name) == Self.goCodes.map { $0.1 })
         for code in ErrorCode.all {
@@ -1302,7 +1320,7 @@ import Testing
         "outbox.retry",
         "thread.list", "thread.get",
         "draft.save", "draft.list", "draft.delete", "draft.create", "draft.open",
-        "draft.markdown",
+        "draft.markdown", "draft.get",
         "attachment.import", "attachment.remove", "attachment.get",
         "search.query",
         "sync.status", "sync.trigger",
@@ -1310,16 +1328,21 @@ import Testing
         "sender.list", "sender.add", "sender.remove",
         "contact.search",
         "issue.transitions", "issue.transition",
+        "board.list", "board.get", "board.setState", "board.setDone", "board.remind",
+        "board.archive", "board.unflag", "board.discardDraft", "board.setDraft", "board.queue", "board.annotate",
+        "board.commit", "board.setCommitment", "board.preferences", "board.setPreferences",
+        "board.runStart", "board.runEnd",
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 54)
-        #expect(Set(API.allMethods).count == 54, "no duplicates")
+        #expect(API.allMethods.count == 72)
+        #expect(Set(API.allMethods).count == 72, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)
         #expect(API.allNotifications == [
             "notify.newMessage", "notify.syncState", "notify.authRequired", "notify.accountsChanged", "notify.messagesChanged",
+            "notify.boardChanged",
         ])
         #expect(API.AccountDetectSite.name == "account.detectSite" && API.AccountListSpaces.name == "account.listSpaces")
         #expect(API.IssueTransitions.name == "issue.transitions" && API.IssueTransition.name == "issue.transition")

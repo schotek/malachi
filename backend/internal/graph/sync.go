@@ -370,6 +370,13 @@ func (s *Syncer) cycle(ctx context.Context, req request) error {
 		}
 	}
 
+	// The Drafts folder copies no draft holds any more (a draft that became
+	// a board case's suggested reply) go with this pass's operations, each
+	// unless Outlook changed it since it was stored (strayEdited). A
+	// failure is logged, not the end of the pass: the next one tries again.
+	if _, err := s.deps.Store.DropStrayDraftCopies(ctx, s.account.ID, s.strayEdited, s.now()); err != nil {
+		s.log.Warn("delete stray draft copies", "err", err)
+	}
 	opFolders, err := s.pushOps(ctx, byMailbox)
 	if err != nil {
 		return err

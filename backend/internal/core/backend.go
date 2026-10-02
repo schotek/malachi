@@ -191,6 +191,8 @@ type Backend struct {
 	// im is the state of the notification mail of issue-tracker accounts
 	// (issue_mail.go).
 	im issueMail
+	// board is the state of the board's worker (board_worker.go).
+	board boardState
 }
 
 var _ api.Backend = (*Backend)(nil)
@@ -229,6 +231,7 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		rawKick:           make(chan struct{}, 1),
 	}
 	b.im.init()
+	b.board.init()
 	b.DetectJiraSite = func(ctx context.Context, rawURL string) (api.AccountDetectSiteResult, error) {
 		return jira.DetectSite(ctx, b.JiraHTTP, rawURL)
 	}
@@ -504,22 +507,28 @@ func (b *Backend) SyncPrefs() (intervalSeconds, offlineDays int) {
 }
 
 // StartSync runs both supervisors and starts a syncer and an outbox worker
-// for every enabled account in the store, and the worker that keeps the
+// for every enabled account in the store, the worker that keeps the
 // notification mail of issue-tracker accounts in step with them
-// (issue_mail.go). Before that it stores the runtime defaults that have no
-// preference yet (SetRuntimeDefaults) and sets the codec of new raw files.
-// The returned channel is closed when both Run methods have returned and
-// that worker has stopped, i.e. after ctx is cancelled and every syncer
-// and worker has stopped.
+// (issue_mail.go), and the board's worker (board_worker.go). Before that
+// it stores the runtime defaults that have no preference yet
+// (SetRuntimeDefaults) and sets the codec of new raw files. The returned
+// channel is closed when both Run methods have returned and those workers
+// have stopped, i.e. after ctx is cancelled and every syncer and worker
+// has stopped.
 func (b *Backend) StartSync(ctx context.Context) <-chan struct{} {
 	b.applyStoredPreferences(ctx)
 	done := make(chan struct{})
 	issueMailDone := b.startIssueMail(ctx)
+	boardDone := b.startBoard(ctx)
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(4)
 	go func() {
 		defer wg.Done()
 		<-issueMailDone
+	}()
+	go func() {
+		defer wg.Done()
+		<-boardDone
 	}()
 	go func() {
 		defer wg.Done()
@@ -567,11 +576,12 @@ func (b *Backend) Sync() api.SyncService              { return &syncService{b} }
 // Maintain runs periodic housekeeping until ctx is cancelled: the one-off
 // seeding of recipient completion, the upgrade passes that link, index and
 // classify (bulk mail) the messages stored before threading, search and
-// bulk mail existed, then the raw
+// bulk mail existed, and the board's first evaluation (backfillBoard),
+// then the raw
 // maintenance loop (maintainRaw) beside the orphan attachment sweep and
 // the evaluation of the notification mail of issue-tracker accounts
-// (reevaluateIssueMail) at start and hourly. It returns once all of it has
-// stopped.
+// (reevaluateIssueMail) and the board's upkeep (boardUpkeep) at start
+// and hourly. It returns once all of it has stopped.
 func (b *Backend) Maintain(ctx context.Context) {
 	if err := b.backfillCollectedAddresses(ctx); err != nil {
 		b.log.Warn("backfill collected addresses", "err", err)
@@ -584,6 +594,9 @@ func (b *Backend) Maintain(ctx context.Context) {
 	}
 	if err := b.backfillBulk(ctx); err != nil && !isCancelled(err) {
 		b.log.Warn("backfill bulk classification", "err", err)
+	}
+	if err := b.backfillBoard(ctx); err != nil && !isCancelled(err) {
+		b.log.Warn("backfill board", "err", err)
 	}
 	// The raw maintenance loop runs beside the attachment sweep; Maintain
 	// returns once it has stopped too.
@@ -603,6 +616,7 @@ func (b *Backend) Maintain(ctx context.Context) {
 	}
 	sweep()
 	b.reevaluateIssueMail(ctx)
+	b.boardUpkeep(ctx)
 	t := time.NewTicker(time.Hour)
 	defer t.Stop()
 	for {
@@ -612,6 +626,7 @@ func (b *Backend) Maintain(ctx context.Context) {
 		case <-t.C:
 			sweep()
 			b.reevaluateIssueMail(ctx)
+			b.boardUpkeep(ctx)
 		}
 	}
 }

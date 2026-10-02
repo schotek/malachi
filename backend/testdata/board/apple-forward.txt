@@ -1,0 +1,8 @@
+Begin forwarded message:
+
+From: Alice Example <alice@example.com>
+Subject: Contract draft
+Date: 30 September 2026 at 09:12:00 CEST
+To: Jan Novak <me@example.org>
+
+Could you check the attached draft by Friday?

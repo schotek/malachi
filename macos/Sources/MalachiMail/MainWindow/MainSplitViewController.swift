@@ -167,7 +167,32 @@ final class MainSplitViewController: NSSplitViewController {
 
     override func viewDidLayout() {
         super.viewDidLayout()
-        applyBreakpoints()
+        applyBreakpoints(view.bounds.width)
+        noteCollapseState()
+    }
+
+    /// The panes are about to come back into the window, into a slot of
+    /// `size` (the window may have been resized while the board showed):
+    /// the split view takes that size while it is still out of the window,
+    /// and the breakpoints fold and unfold the panes for it without
+    /// animation, so that the panes come back laid out for the window's
+    /// width and none is unfolded and remembered at a width from the
+    /// board's time. Folding comes before the new width when it narrows,
+    /// unfolding after it when it widens, so that the open panes' minimums
+    /// always fit.
+    func prepare(for size: NSSize) {
+        guard isViewLoaded, size.width > 0, size.height > 0 else { return }
+        let widening = size.width > view.frame.width
+        if !widening {
+            applyBreakpoints(size.width)
+        }
+        view.translatesAutoresizingMaskIntoConstraints = true
+        view.setFrameSize(size)
+        view.layoutSubtreeIfNeeded()
+        if widening {
+            applyBreakpoints(size.width)
+            view.layoutSubtreeIfNeeded()
+        }
         noteCollapseState()
     }
 
@@ -373,8 +398,7 @@ final class MainSplitViewController: NSSplitViewController {
         }
     }
 
-    private func applyBreakpoints() {
-        let full = view.bounds.width
+    private func applyBreakpoints(_ full: CGFloat) {
         guard full > 0, isViewLoaded else { return }
         applyAssistantBreakpoint(full)
         // The panes' classes on the width the open panel leaves them.
@@ -393,7 +417,13 @@ final class MainSplitViewController: NSSplitViewController {
         // No animation for the first pass or before the view is on screen
         // (a layout at the view's initial size happens before the window
         // shows; an animation started then can leave a pane half-way).
-        let animated = previous >= 0 && view.window != nil
+        // Visible, not only in a window: a fold animated before the window
+        // is on screen (a start from a narrow saved frame lays out at the
+        // default size first) leaves AppKit holding every pane at its
+        // width at 999.9 (`NSSplitView.PreferredSize.N`), above the
+        // window's own size, so that a resize without dragging (a zoom,
+        // the panes back from the board) snaps back to their sum.
+        let animated = previous >= 0 && view.window?.isVisible == true
         // Narrowing: fold what the class demands and remember it. The list
         // goes first: every collapse re-solves the layout, and with the
         // sidebar gone but the list still open the minimums (280 + 300)
@@ -510,7 +540,9 @@ final class PaneContainerViewController: NSViewController {
         addChild(vc)
         let sub = vc.view
         sub.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(sub, positioned: .below, relativeTo: overlay)
+        // The overlay may be elsewhere for now (the toasts over the board
+        // page, MainWindowController+Mode); it comes back with `setOverlay`.
+        view.addSubview(sub, positioned: .below, relativeTo: overlay?.superview === view ? overlay : nil)
         NSLayoutConstraint.activate([
             sub.topAnchor.constraint(equalTo: view.topAnchor),
             sub.bottomAnchor.constraint(equalTo: view.bottomAnchor),

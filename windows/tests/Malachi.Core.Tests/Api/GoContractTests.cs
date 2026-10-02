@@ -25,7 +25,7 @@ public sealed class GoContractTests
         var source = GoContract.ApiSource("methods.go");
         var constants = GoContract.StringConstants(source);
         var goMethods = GoContract.SliceIdentifiers(source, "AllMethods").Select(name => constants[name]).ToArray();
-        Assert.Equal(54, goMethods.Length);
+        Assert.Equal(70, goMethods.Length);
         Assert.Equal(goMethods, API.AllMethods);
         Assert.Equal(goMethods, API.Methods.Select(m => m.Name));
         Assert.Equal(ApiCodingTests.GoMethods, goMethods); // the Swift test's copy is current
@@ -43,6 +43,7 @@ public sealed class GoContractTests
         Assert.Equal(API.Notify.AuthRequired, constants["NotifyAuthRequired"]);
         Assert.Equal(API.Notify.AccountsChanged, constants["NotifyAccountsChanged"]);
         Assert.Equal(API.Notify.MessagesChanged, constants["NotifyMessagesChanged"]);
+        Assert.Equal(API.Notify.BoardChanged, constants["NotifyBoardChanged"]);
     }
 
     [Fact]
@@ -107,6 +108,13 @@ public sealed class GoContractTests
         { nameof(UnsubscribeMethod), "types.go", "UnsubscribeMethod" },
         { nameof(UnsubscribeOutcome), "types.go", "UnsubscribeOutcome" },
         { nameof(TlsErrorReason), "tls.go", "TLSErrorReason" },
+        { nameof(BoardState), "board.go", "BoardState" },
+        { nameof(BoardReason), "board.go", "BoardReason" },
+        { nameof(BoardVisibility), "board.go", "BoardVisibility" },
+        { nameof(BoardCommitmentState), "board.go", "BoardCommitmentState" },
+        { nameof(BoardTrigger), "board.go", "BoardTrigger" },
+        { nameof(BoardRunError), "board.go", "BoardRunError" },
+        { nameof(QuoteField), "board.go", "QuoteField" },
     };
 
     /// <summary>
@@ -211,13 +219,14 @@ public sealed class GoContractTests
 
     /// <summary>
     /// Every record of the API layer has exactly the JSON members of its Go
-    /// struct (types.go, tls.go, errors.go), field by field, and a Go int64
-    /// is a long: the contract's names as backend/pkg/api spells them.
+    /// struct (types.go, tls.go, errors.go, board.go), field by field, and a
+    /// Go int64 is a long: the contract's names as backend/pkg/api spells them.
     /// </summary>
     [Fact]
     public void EveryRecordHasTheMembersOfItsGoStruct()
     {
-        var structs = GoContract.Structs(GoContract.ApiSource("types.go"), GoContract.ApiSource("tls.go"), GoContract.ApiSource("errors.go"));
+        var structs = GoContract.Structs(
+            GoContract.ApiSource("types.go"), GoContract.ApiSource("tls.go"), GoContract.ApiSource("errors.go"), GoContract.ApiSource("board.go"));
         var records = typeof(API).Assembly.GetTypes().Where(t =>
             t.Namespace == "Malachi.Core.Api" && t.IsClass && t.IsPublic && !t.IsAbstract
             && t.GetProperty("EqualityContract", BindingFlags.NonPublic | BindingFlags.Instance) is not null

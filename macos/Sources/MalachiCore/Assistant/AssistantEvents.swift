@@ -20,7 +20,14 @@
 // tool_result {tool_use_id, is_error, content: a string or [{type: text,
 // text}]}) and result (subtype success or error_*, is_error, result,
 // structured_output, permission_denials [{tool_name}], total_cost_usd,
-// usage).
+// usage). An assistant message also carries message.id and message.usage
+// (input_tokens, output_tokens, cache_creation_input_tokens,
+// cache_read_input_tokens) for that API message, and parent_tool_use_id,
+// null outside a subagent; Claude Code splits one API message into several
+// assistant lines that share its id and usage, and their output_tokens is
+// only the count the API reported when the response began. The result's
+// usage covers the whole run's main loop (code.claude.com/docs/en/agent-sdk/
+// cost-tracking).
 //
 // The JSON is read the way Go's encoding/json reads it into
 // `map[string]json.RawMessage` (`GoJSON` below), not with
@@ -113,6 +120,15 @@ extension Assistant {
         /// failure: what Claude Code calls the failure, its message's
         /// `error` ("authentication_failed", "rate_limit", …).
         public var failure = ""
+        /// result: the run's usage as the result reports it. The first
+        /// event of an `assistant` message (text, toolUse, or an `other`
+        /// standing for a message that yields no other event): the usage of
+        /// that API message and its id in `messageID`, only for a message of
+        /// the main loop (`parent_tool_use_id` null or absent) with a
+        /// non-empty id. nil when absent, or when a counter is not a whole
+        /// number from 0 to Int64.max (`UsageTally` adds them up).
+        public var usage: Usage?
+        public var messageID = ""
 
         public init(kind: Kind) {
             self.kind = kind
@@ -154,7 +170,8 @@ extension Assistant {
     /// assistant.ParseEvents: one stdout line (without its newline): one
     /// event per text or tool_use block of an `assistant` message and per
     /// tool_result block of a `user` message, in order (thinking and other
-    /// blocks yield nothing, so such a message may yield none), one `failure`
+    /// blocks yield nothing, so such a message may yield none, unless it
+    /// carries usage: then one `other` with it), one `failure`
     /// alone for an `assistant` message with an error, one
     /// `systemInit` for system/init, one `textDelta` for a text delta, one
     /// `result` for a result, and one `other` for any other line. Throws
@@ -226,7 +243,8 @@ extension Assistant {
             return [e]
         }
         var out: [Event] = []
-        for raw in o.obj("message")?.array("content") ?? [] {
+        let msg = o.obj("message")
+        for raw in msg?.array("content") ?? [] {
             let block = GoJSON.Object(o.b, raw)
             switch block?.str("type") ?? "" {
             case "text":
@@ -242,7 +260,32 @@ extension Assistant {
                 continue // thinking, redacted thinking, anything newer
             }
         }
+        // A subagent's message (parent_tool_use_id set) is left out, as the
+        // result's usage leaves it out.
+        if let msg, case let id = msg.str("id"), !id.isEmpty, GoJSON.isNull(o.b, o.members["parent_tool_use_id"]),
+           let u = parseUsage(msg.b, msg.members["usage"])
+        {
+            if out.isEmpty {
+                out.append(Event(kind: .other))
+            }
+            out[0].usage = u
+            out[0].messageID = id
+        }
         return out
+    }
+
+    /// A usage object; nil when it is not an object or one of its four
+    /// counters is neither missing, null nor a whole number from 0 to
+    /// Int64.max (no sign, fraction or exponent).
+    private static func parseUsage(_ b: [UInt8], _ r: Range<Int>?) -> Usage? {
+        guard let o = GoJSON.Object(b, r),
+              let input = GoJSON.count(b, o.members["input_tokens"]),
+              let output = GoJSON.count(b, o.members["output_tokens"]),
+              let created = GoJSON.count(b, o.members["cache_creation_input_tokens"]),
+              let read = GoJSON.count(b, o.members["cache_read_input_tokens"])
+        else { return nil }
+        return Usage(
+            inputTokens: input, outputTokens: output, cacheCreationInputTokens: created, cacheReadInputTokens: read)
     }
 
     private static func parseUser(_ o: GoJSON.Object) -> [Event] {
@@ -297,6 +340,7 @@ extension Assistant {
                 e.structured = Data(o.b[r])
             }
         }
+        e.usage = parseUsage(o.b, o.members["usage"])
         return e
     }
 
@@ -699,6 +743,26 @@ enum GoJSON {
     static func boolean(_ b: [UInt8], _ r: Range<Int>?) -> Bool {
         guard let r, let i = first(b, r) else { return false }
         return literal(b, i, r.upperBound, "true")
+    }
+
+    /// Whether a raw value is missing or `null`.
+    static func isNull(_ b: [UInt8], _ r: Range<Int>?) -> Bool {
+        guard let r, let i = first(b, r) else { return true }
+        return literal(b, i, r.upperBound, "null")
+    }
+
+    /// A counter of usage: 0 for a missing or null value, else digits only
+    /// (the line is valid JSON, so without a leading zero) that fit an
+    /// Int64; nil for anything else (Go's strconv.ParseInt of the digits).
+    static func count(_ b: [UInt8], _ r: Range<Int>?) -> Int64? {
+        guard let r, let i = first(b, r) else { return 0 }
+        if literal(b, i, r.upperBound, "null") {
+            return 0
+        }
+        guard (0x30...0x39).contains(b[i]), let e = numberEnd(b, i, r.upperBound),
+              b[i..<e].allSatisfy({ (0x30...0x39).contains($0) })
+        else { return nil }
+        return Int64(String(decoding: b[i..<e], as: UTF8.self))
     }
 
     /// A raw value as a float64: a number that fits, else 0.

@@ -54,7 +54,9 @@ private final class Scratch {
         #expect(s.assistantModel == .sonnet)
         #expect(s.assistantClaudePath == "")
         #expect(!s.assistantConsent)
-        #expect(Settings.Key.allCases.count == 25)
+        #expect(!s.boardTriageConsent)
+        #expect(s.boardTriageModel == .sonnet)
+        #expect(Settings.Key.allCases.count == 27)
         #expect(Set(Settings.registrationDefaults().keys) == Set(Settings.Key.allCases.map(\.rawValue)))
     }
 
@@ -131,6 +133,22 @@ private final class Scratch {
         #expect(scratch.defaults.string(forKey: "assistant-model") == "opus")
         s.assistantModel = Assistant.Model("mythos")
         #expect(scratch.defaults.string(forKey: "assistant-model") == "sonnet")
+        // The board's triage model: the same nicks, kept apart from the
+        // panel's.
+        for nick in ["sonnet", "haiku", "opus"] {
+            scratch.defaults.set(nick, forKey: "board-triage-model")
+            #expect(s.boardTriageModel.rawValue == nick)
+        }
+        scratch.defaults.set("", forKey: "board-triage-model")
+        #expect(s.boardTriageModel == .sonnet)
+        s.boardTriageModel = .haiku
+        #expect(scratch.defaults.string(forKey: "board-triage-model") == "haiku")
+        #expect(s.assistantModel == .sonnet)
+        s.assistantModel = .opus
+        #expect(s.boardTriageModel == .haiku)
+        s.boardTriageModel = Assistant.Model("mythos")
+        #expect(scratch.defaults.string(forKey: "board-triage-model") == "sonnet")
+        s.assistantModel = .sonnet
         s.assistantClaudePath = "/opt/claude/bin/claude"
         #expect(scratch.defaults.string(forKey: "assistant-claude-path") == "/opt/claude/bin/claude")
         s.assistantConsent = true

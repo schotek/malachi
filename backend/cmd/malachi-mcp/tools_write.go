@@ -124,10 +124,22 @@ type createDraftIn struct {
 }
 
 func (b *bridge) createDraft(ctx context.Context, _ *mcp.CallToolRequest, in createDraftIn) (*mcp.CallToolResult, any, error) {
+	if b.cfg.replyOnly != "" {
+		return b.createReplyOnly(ctx, in)
+	}
+	return b.createDraftChecked(ctx, in)
+}
+
+// createDraftChecked is create_draft once the per-request guard
+// (--reply-only, tools_replyonly.go) let the call through.
+func (b *bridge) createDraftChecked(ctx context.Context, in createDraftIn) (*mcp.CallToolResult, any, error) {
 	if in.AccountID == "" {
 		return toolErrorf("accountId is required"), nil, nil
 	}
 	mode, ok := parseComposeMode(in.Mode)
+	if b.cfg.triageRun != "" && !b.triageReplyAllowed(in, mode) {
+		return toolErrorf("%s", triageDraftRefusal), nil, nil
+	}
 	switch {
 	case !ok:
 		return toolErrorf("unknown mode %q; use reply, replyAll or forward, or omit it for a new message", in.Mode), nil, nil
@@ -267,6 +279,7 @@ func (b *bridge) createDraft(ctx context.Context, _ *mcp.CallToolRequest, in cre
 		b.removeAttachments(acc, imported)
 		return capError(), nil, nil
 	}
+	d.Local = b.boardDraft()
 	saveCtx, cancel := b.callCtx(ctx)
 	defer cancel()
 	res, err := callRPC[api.DraftSaveResult](saveCtx, b.rpc, api.MethodDraftSave, api.DraftSaveParams{Draft: d})
@@ -277,7 +290,12 @@ func (b *bridge) createDraft(ctx context.Context, _ *mcp.CallToolRequest, in cre
 	b.drafts.add(res.DraftID, sessionDraft{accountID: acc, version: res.Version})
 
 	var head strings.Builder
+	// The first sentence is parsed by the clients (ParseDraftResult): keep it
+	// byte for byte and add anything else after it.
 	fmt.Fprintf(&head, "draft %s (version %d) stored in account %s; it is NOT sent.", res.DraftID, res.Version, acc)
+	if d.Local {
+		head.WriteString(" It stays in Malachi Mail on the board as the case's suggested reply, on the board only, and is not copied to the Drafts folder on the mail server.")
+	}
 	if b.cfg.allowSend {
 		fmt.Fprintf(&head, " send_message with draftId=%s sends it; show the recipients below to the user first.", res.DraftID)
 	} else {
@@ -343,6 +361,56 @@ func (b *bridge) createDraft(ctx context.Context, _ *mcp.CallToolRequest, in cre
 		}
 	}
 	return textResult(head.String() + "\n" + fenced(newNonce(), u.String())), nil, nil
+}
+
+// boardDraft says whether this process makes a board case's suggested
+// reply (--reply-only: the app's Suggest Reply; --triage-run: the app's
+// triage run): its drafts are local (draft.save local), not uploaded to
+// the Drafts folder on the mail server; one reaches the server only when
+// the user sends it, or as an ordinary draft once the user edited it and
+// its case went (docs/api.md §4.5). An external --allow-triage bridge
+// without a run also serves the user's own "make a draft" requests, so its
+// drafts are ordinary ones until board.annotate links one to a case
+// (which makes it local); triageOrdinaryDraftNote tells the model.
+func (b *bridge) boardDraft() bool {
+	return b.cfg.replyOnly != "" || b.cfg.triageRun != ""
+}
+
+// triageDraftRefusal is create_draft's one answer to anything a triage
+// run of the app may not draft; it echoes nothing of the call.
+const triageDraftRefusal = "in a triage run create_draft only replies to a message of a case from list_triage_queue: " +
+	"mode reply (or replyAll), the case's accountId, a messageId of that case (its replyMessageId), your body; " +
+	"to, cc, bcc, subject, messageAccountId and visibility internal are refused"
+
+// triageReplyAllowed is create_draft's rule in the app's triage run (a
+// process with --triage-run, which only the app's run passes): the mail it
+// reads is written by third parties, so a draft can only be a reply to a
+// message of a case the queue handed out in this process, prefilled by the
+// daemon (recipients from the original, its subject and quote). Nothing
+// that would choose other recipients, another message or another
+// account's parts is taken; a comment draft stays public as by default.
+func (b *bridge) triageReplyAllowed(in createDraftIn, mode api.ComposeMode) bool {
+	return confinedReply(in, mode) && b.triage.handedOutMessage(api.AccountID(in.AccountID), api.MessageID(in.MessageID))
+}
+
+// confinedReply is what a draft made from third-party mail without the
+// user at the keyboard may be (the app's triage run, a --reply-only
+// request): a reply or reply-all prefilled by the daemon from the
+// original, with the agent's body only. Nothing that would choose other
+// recipients, another subject or another account's parts is taken; a
+// comment draft stays public as by default. Which message it may answer
+// is the caller's check.
+func confinedReply(in createDraftIn, mode api.ComposeMode) bool {
+	switch {
+	case mode != api.ComposeReply && mode != api.ComposeReplyAll,
+		len(in.To)+len(in.CC)+len(in.BCC) > 0, in.Subject != "", in.MessageAccountID != "":
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(in.Visibility)) {
+	case "", string(api.CommentPublic):
+		return true
+	}
+	return false
 }
 
 // draftPlan says what create_draft makes of a request, by the accounts'
@@ -444,6 +512,7 @@ func (b *bridge) createComment(ctx context.Context, in createDraftIn) (*mcp.Call
 	}
 	d.Comment.Visibility = vis
 	d.HTMLBody, d.TextBody = bodyHTML(in.Body), ""
+	d.Local = b.boardDraft()
 	if !b.drafts.reserve() {
 		return toolErrorf("this session already created %d drafts, which is its limit; the user can send or delete them in Malachi Mail", maxSessionDrafts), nil, nil
 	}
@@ -457,6 +526,9 @@ func (b *bridge) createComment(ctx context.Context, in createDraftIn) (*mcp.Call
 
 	var head strings.Builder
 	fmt.Fprintf(&head, "comment draft %s (version %d) stored in account %s; it is NOT posted.", res.DraftID, res.Version, acc)
+	if d.Local {
+		head.WriteString(" It stays in Malachi Mail as the case's suggested reply, on the board only.")
+	}
 	if b.cfg.allowSend {
 		fmt.Fprintf(&head, " send_message with draftId=%s posts it to the issue below; show the issue, the visibility and the text to the user first.", res.DraftID)
 	} else {

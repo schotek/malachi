@@ -837,12 +837,14 @@ private func folded(
         #expect(h.contents[1] == .error("The assistant stopped: API Error: 529 Overloaded", retry: false))
     }
 
-    /// The model setting reaches the command line of the next conversation.
+    /// The model setting reaches the command line of the next conversation;
+    /// the board's triage model (`board-triage-model`) does not.
     @Test func modelSetting() async throws {
         let fake = try FakeClaude(turns: [answerTurn("ok")])
         let h = try PanelHarness(fake: fake)
         defer { h.stop() }
         h.scratch.settings.assistantModel = .opus
+        h.scratch.settings.boardTriageModel = .haiku
         #expect(h.panel.subtitle == "Claude Code · Opus")
         #expect(h.panel.submit("Hello"))
         try await h.turn()
