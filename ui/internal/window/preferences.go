@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -24,6 +25,8 @@ import (
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
 	"github.com/schotek/malachi/ui/internal/background"
+	"github.com/schotek/malachi/ui/internal/board"
+	"github.com/schotek/malachi/ui/internal/boardtriage"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/mcpsetup"
@@ -51,6 +54,7 @@ type PreferencesDialog struct {
 
 	launchAtLogin        *adw.SwitchRow
 	runInBackground      *adw.SwitchRow
+	boardDefaultStyle    *adw.ComboRow
 	markReadDelay        *adw.SpinRow
 	confirmDelete        *adw.SwitchRow
 	desktopNotifications *adw.SwitchRow
@@ -85,6 +89,16 @@ type PreferencesDialog struct {
 	claudeChoose    *gtk.Button
 	assistantModel  *adw.ComboRow
 
+	boardTriageGroup    *adw.PreferencesGroup
+	boardTriageConsent  *adw.SwitchRow
+	boardTriageModel    *adw.ComboRow
+	boardTriageAuto     *adw.SwitchRow
+	boardTriageInterval *adw.ComboRow
+	boardTriageDaily    *adw.ComboRow
+	boardTriageStatus   *adw.ActionRow
+	boardTriageUsage    *adw.ActionRow
+	boardTriageTokens   *gtk.Label
+
 	closed bool
 }
 
@@ -94,6 +108,12 @@ var (
 		settings.ColorSchemeSystem, settings.ColorSchemeLight, settings.ColorSchemeDark,
 	}
 	densityChoices = []settings.Density{settings.DensityComfortable, settings.DensityCompact}
+	// boardStyleChoices is in the order of the StringList in
+	// preferences.blp's board_default_style (List, Columns, Today, as
+	// board.StyleList/Columns/Today order them).
+	boardStyleChoices = []settings.BoardStyle{
+		settings.BoardStyleList, settings.BoardStyleColumns, settings.BoardStyleToday,
+	}
 )
 
 // Mail group choices, in the order of the StringLists in preferences.blp.
@@ -135,6 +155,7 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		accountsEmpty:        b.GetObject("accounts_empty_row").Cast().(*adw.ActionRow),
 		launchAtLogin:        b.GetObject("launch_at_login").Cast().(*adw.SwitchRow),
 		runInBackground:      b.GetObject("run_in_background").Cast().(*adw.SwitchRow),
+		boardDefaultStyle:    b.GetObject("board_default_style").Cast().(*adw.ComboRow),
 		markReadDelay:        b.GetObject("mark_read_delay").Cast().(*adw.SpinRow),
 		confirmDelete:        b.GetObject("confirm_delete").Cast().(*adw.SwitchRow),
 		desktopNotifications: b.GetObject("desktop_notifications").Cast().(*adw.SwitchRow),
@@ -164,6 +185,15 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		claudeCodeRow:        b.GetObject("assistant_claude_code").Cast().(*adw.ActionRow),
 		claudeChoose:         b.GetObject("assistant_claude_choose").Cast().(*gtk.Button),
 		assistantModel:       b.GetObject("assistant_model").Cast().(*adw.ComboRow),
+		boardTriageGroup:     b.GetObject("board_triage_group").Cast().(*adw.PreferencesGroup),
+		boardTriageConsent:   b.GetObject("board_triage_consent").Cast().(*adw.SwitchRow),
+		boardTriageModel:     b.GetObject("board_triage_model").Cast().(*adw.ComboRow),
+		boardTriageAuto:      b.GetObject("board_triage_auto").Cast().(*adw.SwitchRow),
+		boardTriageInterval:  b.GetObject("board_triage_interval").Cast().(*adw.ComboRow),
+		boardTriageDaily:     b.GetObject("board_triage_daily").Cast().(*adw.ComboRow),
+		boardTriageStatus:    b.GetObject("board_triage_status").Cast().(*adw.ActionRow),
+		boardTriageUsage:     b.GetObject("board_triage_usage").Cast().(*adw.ActionRow),
+		boardTriageTokens:    b.GetObject("board_triage_usage_value").Cast().(*gtk.Label),
 	}
 
 	// The dialog is rebuilt on every open while the store lives for the whole
@@ -183,12 +213,15 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		s.Bind(settings.KeyTextZoom, d.textZoom.Object, "value"),
 		bindChoice(s, settings.KeyColorScheme, d.colorScheme, colorSchemeChoices, s.ColorScheme, s.SetColorScheme),
 		bindChoice(s, settings.KeyDensity, d.density, densityChoices, s.Density, s.SetDensity),
+		bindChoice(s, settings.KeyBoardDefaultStyle, d.boardDefaultStyle, boardStyleChoices,
+			s.BoardDefaultStyle, s.SetBoardDefaultStyle),
 		d.bindLaunchAtLogin(s),
 		d.bindMail(c, refreshStorage),
 		unbindStorage,
 		d.bindAccounts(c),
 		d.bindMCP(),
 		d.bindAssistant(s),
+		d.bindBoardTriage(s),
 	}
 	d.ConnectClosed(func() {
 		d.closed = true
@@ -772,11 +805,7 @@ func (d *PreferencesDialog) bindAssistant(s *settings.Store) (unbind func()) {
 	d.claudeCodeRow.SetTitle(assistant.TargetName(tr, assistant.Code))
 	d.claudeChoose.SetLabel(panel.Choose)
 	d.assistantModel.SetTitle(panel.Model)
-	models := make([]string, len(assistant.Models))
-	for i, m := range assistant.Models {
-		models[i] = assistant.ModelName(tr, m)
-	}
-	d.assistantModel.SetModel(gtk.NewStringList(models))
+	d.assistantModel.SetModel(gtk.NewStringList(modelNames()))
 	if !a.hasBridge() {
 		d.assistantGroup.SetVisible(false)
 		return func() {}
@@ -983,6 +1012,293 @@ func claudeCodeState(path, version string, in assistantpanel.SignIn, signingIn b
 		parts = append(parts, t.NotSignedInShort)
 	}
 	return strings.Join(parts, " · ")
+}
+
+// Preferences → AI → Board, the choices of its combo rows (macOS
+// AIPaneViewController boardIntervals and boardDailyCaps).
+var (
+	// boardTriageIntervals are the minutes "At most every" offers between
+	// automatic runs.
+	boardTriageIntervals = []int{15, 30, 60, 180}
+	// boardTriageDailyCaps are the conversations a day "Conversations a
+	// day" offers for automatic runs.
+	boardTriageDailyCaps = []int{20, 60, 150}
+)
+
+// boardGroupInputs are what the Board group shows: the triage's view, the
+// daemon's board preferences (prefsKnown: they answered), whether consent
+// is given, and while it is being given (the sheet, then the daemon:
+// giving) what the consent switch shows (switchOn).
+type boardGroupInputs struct {
+	view             boardtriage.View
+	prefs            api.BoardPreferences
+	prefsKnown       bool
+	consentGiven     bool
+	giving, switchOn bool
+}
+
+// boardGroupState is how the Board group shows.
+type boardGroupState struct {
+	// shown: triage is offered (boardtriage.View.Offered); nothing else
+	// matters while it is not.
+	shown bool
+	// description says why triage cannot run now ("" when it can).
+	description string
+	// consentOn and autoOn are what the two switches show; *Sensitive
+	// whether they can be changed.
+	consentOn, consentSensitive bool
+	autoOn, autoSensitive       bool
+	// minutes and cases are the schedule's values (the daemon's, or its
+	// defaults before it answered); scheduleSensitive whether their rows
+	// can be changed.
+	minutes, cases    int
+	scheduleSensitive bool
+	// status is the status row's subtitle.
+	status string
+	// usageShown: the row of the tokens of the last 24 hours shows, with
+	// usageValue as its value, usageDetail as its subtitle and
+	// usageToolTip as its tooltip.
+	usageShown                            bool
+	usageValue, usageDetail, usageToolTip string
+}
+
+// boardGroupFor is the Board group for in (macOS AIPaneViewController
+// updateBoardGroup). Turning off is always possible once the daemon's
+// preferences are known; turning on needs a triage that can run (ready:
+// the control is Triage or Stop). The consent switch shows the consent,
+// or while it is being given what the user asked for; automatic triage
+// can be turned on only with consent, and its interval and daily cap
+// changed only while it is on; nothing changes while consent is being
+// given.
+func boardGroupFor(in boardGroupInputs, tr board.Translator) boardGroupState {
+	v := in.view
+	st := boardGroupState{shown: v.Offered()}
+	if !st.shown {
+		return st
+	}
+	ready := v.Control == boardtriage.ControlTriage || v.Control == boardtriage.ControlStop
+	consent := in.consentGiven
+	if in.giving {
+		consent = in.switchOn
+	}
+	auto := in.prefsKnown && in.prefs.AutoTriage
+	st.description = boardtriage.SettingsDescription(v, tr)
+	st.consentOn = consent
+	st.consentSensitive = in.prefsKnown && !in.giving && (ready || consent)
+	st.autoOn = auto
+	st.autoSensitive = in.prefsKnown && !in.giving && (auto || (consent && ready))
+	st.minutes, st.cases = api.DefaultBoardAutoTriageMinutes, api.DefaultBoardAutoTriageDailyCases
+	if in.prefsKnown {
+		st.minutes, st.cases = in.prefs.AutoTriageMinutes, in.prefs.AutoTriageDailyCases
+	}
+	st.scheduleSensitive = in.prefsKnown && consent && auto && ready && !in.giving
+	st.status = boardtriage.SettingsStatus(v)
+	st.usageShown = v.UsageShown
+	st.usageValue, st.usageDetail, st.usageToolTip = v.UsageValue, v.UsageDetail, v.UsageToolTip
+	return st
+}
+
+// choiceValues are the items of a combo row of values: values, and
+// selected after them when it is none of them (a value another client or
+// the daemon chose shows as it is, not rounded to an offered one).
+func choiceValues(values []int, selected int) []int {
+	if slices.Contains(values, selected) {
+		return values
+	}
+	return append(slices.Clip(values), selected)
+}
+
+// fillChoices gives row the items of values, labelled by label, unless it
+// shows them already (shown, kept up to date), and selects selected.
+func fillChoices(row *adw.ComboRow, shown *[]int, values []int, selected int, label func(int) string) {
+	if !slices.Equal(*shown, values) {
+		names := make([]string, len(values))
+		for i, v := range values {
+			names[i] = label(v)
+		}
+		row.SetModel(gtk.NewStringList(names))
+		*shown = slices.Clone(values)
+	}
+	if i := slices.Index(values, selected); i >= 0 && row.Selected() != uint(i) {
+		row.SetSelected(uint(i))
+	}
+}
+
+// modelNames are the names of assistant.Models, in their order (the items
+// of the Model rows).
+func modelNames() []string {
+	names := make([]string, len(assistant.Models))
+	for i, m := range assistant.Models {
+		names[i] = assistant.ModelName(tr, m)
+	}
+	return names
+}
+
+// bindBoardTriage fills the Board group (the board's triage, macOS
+// AIPaneViewController's Board group; its texts are ui/internal/board's
+// and the panel's) and keeps it with the application's triage
+// (Assistant.BoardTriage), by boardGroupFor; without one the group stays
+// hidden. The consent switch turned on asks "Let the Assistant Triage the
+// Board?" over the dialog first (unless consent is given already) and then
+// gives the consent (the board's assistant preference on, then both keys);
+// a declined sheet leaves it off. Turned off, the consent is withdrawn: a
+// run under way stops and automatic triage goes off too. Automatic triage
+// and its two choices write the daemon's board preferences (optimistic: a
+// refused write is taken back, and a toast in the dialog says why); Model
+// is bound to board-triage-model and can be chosen whenever the group
+// shows (the next run takes it). Whenever the AI page comes up the board
+// is listed again, so the tokens of the last 24 hours are current.
+func (d *PreferencesDialog) bindBoardTriage(s *settings.Store) (unbind func()) {
+	group := d.boardTriageGroup
+	var bt *BoardTriage
+	if d.assist != nil {
+		bt = d.assist.BoardTriage()
+	}
+	if bt == nil {
+		group.SetVisible(false)
+		return func() {}
+	}
+	c, p := bt.Controller(), bt.Preferences()
+	btr := i18n.Tr
+	d.boardTriageConsent.SetTitle(board.TriageSettingsConsent(btr))
+	d.boardTriageConsent.SetSubtitle(board.TriageSettingsConsentSubtitle(btr))
+	d.boardTriageModel.SetTitle(assistant.PanelTexts(tr).Model)
+	d.boardTriageModel.SetModel(gtk.NewStringList(modelNames()))
+	d.boardTriageAuto.SetTitle(board.TriageSettingsAutomatic(btr))
+	d.boardTriageInterval.SetTitle(board.TriageSettingsInterval(btr))
+	d.boardTriageDaily.SetTitle(board.TriageSettingsDaily(btr))
+	d.boardTriageUsage.SetTitle(board.TriageSettingsUsage(btr))
+
+	var (
+		// syncing is set while the rows are set from here.
+		syncing bool
+		// giving: the consent is being given (the sheet, then the daemon).
+		giving bool
+		// The items the interval and the daily cap rows show.
+		intervals, caps []int
+	)
+	interval := func(m int) string { return board.TriageInterval(m, btr) }
+	daily := func(n int) string { return board.TriageDailyCap(n, btr) }
+	update := func() {
+		if d.closed {
+			return
+		}
+		prefs, known := p.Current()
+		st := boardGroupFor(boardGroupInputs{
+			view: c.View(), prefs: prefs, prefsKnown: known, consentGiven: c.ConsentGiven(),
+			giving: giving, switchOn: d.boardTriageConsent.Active(),
+		}, btr)
+		group.SetVisible(st.shown)
+		if !st.shown {
+			return
+		}
+		group.SetDescription(st.description)
+		syncing = true
+		d.boardTriageConsent.SetActive(st.consentOn)
+		d.boardTriageAuto.SetActive(st.autoOn)
+		fillChoices(d.boardTriageInterval, &intervals, choiceValues(boardTriageIntervals, st.minutes), st.minutes, interval)
+		fillChoices(d.boardTriageDaily, &caps, choiceValues(boardTriageDailyCaps, st.cases), st.cases, daily)
+		syncing = false
+		d.boardTriageConsent.SetSensitive(st.consentSensitive)
+		d.boardTriageAuto.SetSensitive(st.autoSensitive)
+		d.boardTriageInterval.SetSensitive(st.scheduleSensitive)
+		d.boardTriageDaily.SetSensitive(st.scheduleSensitive)
+		d.boardTriageStatus.SetSubtitle(st.status)
+		d.boardTriageUsage.SetVisible(st.usageShown)
+		d.boardTriageTokens.SetLabel(st.usageValue)
+		d.boardTriageUsage.SetSubtitle(st.usageDetail)
+		d.boardTriageUsage.SetTooltipText(st.usageToolTip)
+	}
+
+	consentHandle := d.boardTriageConsent.NotifyProperty("active", func() {
+		if syncing || giving {
+			return
+		}
+		if !d.boardTriageConsent.Active() {
+			c.WithdrawConsent()
+			update()
+			return
+		}
+		giving = true
+		update()
+		finish := func(bool) {
+			giving = false
+			update()
+		}
+		if !c.NeedsConsent() {
+			c.GiveConsent(false, finish)
+			return
+		}
+		widget.AskTriageConsent(d, func(allowed bool) {
+			if !allowed || d.closed {
+				finish(false)
+				return
+			}
+			c.GiveConsent(false, finish)
+		})
+	})
+	autoHandle := d.boardTriageAuto.NotifyProperty("active", func() {
+		if syncing {
+			return
+		}
+		on := d.boardTriageAuto.Active()
+		p.Update(false, func(bp *api.BoardPreferences) { bp.AutoTriage = on }, nil)
+	})
+	// chosen writes the value of row's item i (items: what it shows) with
+	// set, unless the daemon's preferences are not known or have it.
+	chosen := func(row *adw.ComboRow, items *[]int, current func(api.BoardPreferences) int, set func(*api.BoardPreferences, int)) func() {
+		return func() {
+			if syncing {
+				return
+			}
+			i := row.Selected()
+			prefs, known := p.Current()
+			if !known || i >= uint(len(*items)) || current(prefs) == (*items)[i] {
+				return
+			}
+			v := (*items)[i]
+			p.Update(false, func(bp *api.BoardPreferences) { set(bp, v) }, nil)
+		}
+	}
+	intervalHandle := d.boardTriageInterval.NotifyProperty("selected", chosen(d.boardTriageInterval, &intervals,
+		func(bp api.BoardPreferences) int { return bp.AutoTriageMinutes },
+		func(bp *api.BoardPreferences, v int) { bp.AutoTriageMinutes = v }))
+	dailyHandle := d.boardTriageDaily.NotifyProperty("selected", chosen(d.boardTriageDaily, &caps,
+		func(bp api.BoardPreferences) int { return bp.AutoTriageDailyCases },
+		func(bp *api.BoardPreferences, v int) { bp.AutoTriageDailyCases = v }))
+	unbindModel := bindChoice(s, settings.KeyBoardTriageModel, d.boardTriageModel, assistant.Models,
+		s.BoardTriageModel, s.SetBoardTriageModel)
+
+	// The board is listed again whenever the AI page comes up.
+	relist := func() {
+		if !d.closed && d.VisiblePageName() == "ai" {
+			c.RelistBoard()
+		}
+	}
+	pageHandle := d.NotifyProperty("visible-page-name", relist)
+	removeToasts := bt.showToastsIn(func(text string) { d.AddToast(widget.PlainToast(text)) })
+	removeTriage := c.Observe(update)
+	removePrefs := p.Observe(update)
+	// The daemon's preferences, should none have come yet; Claude Code may
+	// have been signed in meanwhile (bindAssistant dropped the locator's
+	// answers, so this asks it afresh, together with the Claude Code row).
+	if _, known := p.Current(); !known {
+		p.Load(nil)
+	}
+	c.CheckSignIn()
+	update()
+	relist()
+	return func() {
+		removeTriage()
+		removePrefs()
+		removeToasts()
+		unbindModel()
+		d.HandlerDisconnect(pageHandle)
+		d.boardTriageConsent.HandlerDisconnect(consentHandle)
+		d.boardTriageAuto.HandlerDisconnect(autoHandle)
+		d.boardTriageInterval.HandlerDisconnect(intervalHandle)
+		d.boardTriageDaily.HandlerDisconnect(dailyHandle)
+	}
 }
 
 // targetListFactory renders the choices of "Open In" in its popup, in the

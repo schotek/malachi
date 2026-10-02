@@ -91,6 +91,10 @@ type Assistant struct {
 	// locator finds Claude Code for the panel (In App).
 	locator *assistantpanel.Locator
 
+	// board is the board's triage (board_triage.go), from
+	// AttachBoardTriage on; it runs under the In App target too.
+	board *BoardTriage
+
 	status   *mcpsetup.Status
 	handlers map[assistant.Target]bool
 	// claudeFound: the locator found Claude Code when the handlers were

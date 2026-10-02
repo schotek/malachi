@@ -95,9 +95,9 @@ type transcriptRow struct {
 
 // assistantPanel is the panel's widgets and its controller.
 type assistantPanel struct {
-	w      *Window
-	ctl    *assistantpanel.Controller
-	split  *adw.OverlaySplitView
+	w     *Window
+	ctl   *assistantpanel.Controller
+	split *adw.OverlaySplitView
 	// toggle opens the panel from the message pane's header bar; hide
 	// folds it from the panel's own.
 	toggle *gtk.ToggleButton

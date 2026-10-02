@@ -73,6 +73,22 @@ Adw.PreferencesDialog preferences_dialog {
     }
 
     Adw.PreferencesGroup {
+      title: _("Board");
+
+      Adw.ComboRow board_default_style {
+        title: _("Default View");
+
+        model: StringList {
+          strings [
+            C_("board style", "List"),
+            C_("board style", "Columns"),
+            _("Today"),
+          ]
+        };
+      }
+    }
+
+    Adw.PreferencesGroup {
       title: _("Reading");
 
       Adw.SpinRow mark_read_delay {
@@ -326,6 +342,62 @@ Adw.PreferencesDialog preferences_dialog {
       Adw.ComboRow assistant_model {
         use-markup: false;
         visible: false;
+      }
+    }
+
+    // The board's triage, shown while it is offered (boardtriage
+    // View.Offered: the Assistant shown with In App, and a board the
+    // daemon has and has not turned off). The texts come from
+    // ui/internal/board and ui/internal/assistant, set in Go
+    // (window/preferences.go bindBoardTriage), and so do the items of the
+    // combo rows; the description says why triage cannot run now.
+    Adw.PreferencesGroup board_triage_group {
+      title: _("Board");
+      visible: false;
+
+      Adw.SwitchRow board_triage_consent {
+        use-markup: false;
+      }
+
+      // board-triage-model, apart from the panel's assistant-model.
+      Adw.ComboRow board_triage_model {
+        use-markup: false;
+      }
+
+      Adw.SwitchRow board_triage_auto {
+        use-markup: false;
+      }
+
+      // autoTriageMinutes and autoTriageDailyCases of the daemon's
+      // board.preferences.
+      Adw.ComboRow board_triage_interval {
+        use-markup: false;
+      }
+
+      Adw.ComboRow board_triage_daily {
+        use-markup: false;
+      }
+
+      Adw.ActionRow board_triage_status {
+        title: _("Status");
+        use-markup: false;
+      }
+
+      // The tokens of the last 24 hours: the sum as the suffix, by kind
+      // and the runs as the subtitle.
+      Adw.ActionRow board_triage_usage {
+        use-markup: false;
+        visible: false;
+
+        [suffix]
+        Label board_triage_usage_value {
+          valign: center;
+
+          styles [
+            "dim-label",
+            "numeric",
+          ]
+        }
       }
     }
   }

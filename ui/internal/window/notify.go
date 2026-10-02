@@ -61,6 +61,14 @@ func (w *Window) handleNotification(method string, params json.RawMessage) {
 		w.hideAuthBanner()
 		w.compose.Invalidate()
 		w.loadAccounts()
+		w.boardAccountsChanged()
+	case api.NotifyBoardChanged:
+		var n api.BoardChangedNotification
+		if err := json.Unmarshal(params, &n); err != nil {
+			w.log.Warn("bad notify.boardChanged payload", "err", err)
+			return
+		}
+		w.boardChanged(n)
 	default:
 		w.log.Info("notification", "method", method)
 	}

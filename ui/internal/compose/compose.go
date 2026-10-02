@@ -4,715 +4,94 @@
 package compose
 
 import (
-	"context"
-	"fmt"
-	"log/slog"
-	"net/url"
-	"strings"
-
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
-	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
-	"github.com/diamondburned/gotk4/pkg/gio/v2"
-	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
-	"github.com/diamondburned/gotk4/pkg/pango"
 
-	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
-	"github.com/schotek/malachi/ui/internal/editor"
-	"github.com/schotek/malachi/ui/internal/i18n"
-	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
-// Window is one compose window, built from data/ui/compose.blp.
+// Window is one compose window, built from data/ui/compose.blp: the
+// chrome (header bar with Attach, Send, the draft menu and the
+// assistant's rewrite button; the close question; Escape) around a
+// LayoutWindow/OwnerWindow compose.Pane (pane.go), which holds the header
+// fields, the formatting bar, the editor, the attachment chips, the
+// status line and the draft logic. The window forwards Send, Attach,
+// close, Escape, the rewrite and the Format actions to the pane (through
+// its own action group and the pane's ShortcutController in compose.blp);
+// it is otherwise a thin shell so the same pane can be embedded inline by
+// the board (LayoutInline/OwnerBoard, boardreply.Pane) without it.
 type Window struct {
 	*adw.Window
 
 	m      *Manager
-	log    *slog.Logger
 	params Params
+	pane   *Pane
 
-	title   *adw.WindowTitle
-	from    *gtk.DropDown
-	to      *recipientField
-	cc      *recipientField
-	bcc     *recipientField
-	subject *gtk.Entry
+	title        *adw.WindowTitle
+	toasts       *adw.ToastOverlay
+	paneSlot     *gtk.Box
+	attachButton *gtk.Button
 
-	// The Cc and Bcc lines start hidden; the button reveals them, and
-	// each carries the separator above it.
-	ccBcc         *gtk.Button
-	ccBox, bccBox *gtk.Box
-	ccSep, bccSep *gtk.Separator
-
-	// The comment mode (comment.go) shows commentHeader in place of
-	// headerRows: the issue's key and summary and, on a service-desk
-	// request, the choice of who reads the comment (visibilityGroup, one
-	// toggle per commentOptions).
-	headerRows      *gtk.Box
-	commentHeader   *gtk.Box
-	commentTitle    *gtk.Label
-	commentSummary  *gtk.Label
-	visibilityGroup *adw.ToggleGroup
-	commentOptions  []jira.VisibilityOption
-	attachButton    *gtk.Button
-
-	toasts     *adw.ToastOverlay
-	editorSlot *gtk.Box
-	attBox     *gtk.FlowBox
-	status     *gtk.Label
-	sendButton *gtk.Button
-	toolbar    *gtk.Box
-	plainHint  *gtk.Label
-
-	bold, italic, underline *gtk.ToggleButton
-	ul, ol, quote           *gtk.ToggleButton
-	blockButton             *gtk.MenuButton
-	alignButton             *gtk.MenuButton
-	linkPopover             *gtk.Popover
-	linkEntry               *gtk.Entry
-	linkApply               *gtk.Button
-	colorButton             *gtk.ColorDialogButton
-	clearButton             *gtk.Button
-
-	editor      *editor.Editor
-	rewrite     *rewriteUI // the assistant's rewrite (rewrite.go)
-	actions     map[string]*gio.SimpleAction
-	blockAction *gio.SimpleAction
-	alignAction *gio.SimpleAction
-	syncing     bool // toolbar being updated from the page, not by the user
-
-	accounts []api.Account
-	// chosenAccount is the identity the user picked in From; until they
-	// do, params.AccountID is what From shows (also after the account
-	// list arrives, replacing the placeholder). settingFrom marks the
-	// window's own changes of the row, which are no choice.
-	chosenAccount api.AccountID
-	settingFrom   bool
-	attachments   []api.DraftAttachment
-	chips         map[string]gtk.Widgetter
-	// suggest is the recipient completion of the To, Cc and Bcc rows.
-	suggest []*suggestions
-
-	draft draftState
-}
-
-// recipientFieldFrom binds the recipient row id ("to", "cc", "bcc") of the
-// builder: its scrolled wrap box and label (compose.blp).
-func recipientFieldFrom(b *gtk.Builder, id string) *recipientField {
-	return newRecipientField(
-		b.GetObject(id+"_scroll").Cast().(*gtk.ScrolledWindow),
-		b.GetObject(id+"_row").Cast().(*adw.WrapBox),
-		b.GetObject(id+"_label").Cast().(*gtk.Label),
-		i18n.T("Remove"))
+	rewrite *rewriteUI // the assistant's rewrite (rewrite.go)
 }
 
 // newWindow builds and prefills a window; Manager.Open presents it.
 func newWindow(m *Manager, p Params) *Window {
 	b := data.Builder("compose.ui")
 	w := &Window{
-		Window:      b.GetObject("compose_window").Cast().(*adw.Window),
-		m:           m,
-		log:         m.log,
-		params:      p,
-		title:       b.GetObject("window_title").Cast().(*adw.WindowTitle),
-		from:        b.GetObject("from_row").Cast().(*gtk.DropDown),
-		to:          recipientFieldFrom(b, "to"),
-		cc:          recipientFieldFrom(b, "cc"),
-		bcc:         recipientFieldFrom(b, "bcc"),
-		subject:     b.GetObject("subject_row").Cast().(*gtk.Entry),
-		ccBcc:       b.GetObject("cc_bcc_button").Cast().(*gtk.Button),
-		ccBox:       b.GetObject("cc_box").Cast().(*gtk.Box),
-		bccBox:      b.GetObject("bcc_box").Cast().(*gtk.Box),
-		ccSep:       b.GetObject("cc_separator").Cast().(*gtk.Separator),
-		bccSep:      b.GetObject("bcc_separator").Cast().(*gtk.Separator),
-		headerRows:  b.GetObject("header_rows").Cast().(*gtk.Box),
-		toasts:      b.GetObject("toast_overlay").Cast().(*adw.ToastOverlay),
-		editorSlot:  b.GetObject("editor_slot").Cast().(*gtk.Box),
-		attBox:      b.GetObject("attachments_box").Cast().(*gtk.FlowBox),
-		status:      b.GetObject("draft_status").Cast().(*gtk.Label),
-		sendButton:  b.GetObject("send_button").Cast().(*gtk.Button),
-		toolbar:     b.GetObject("format_toolbar").Cast().(*gtk.Box),
-		plainHint:   b.GetObject("plain_text_hint").Cast().(*gtk.Label),
-		bold:        b.GetObject("bold_button").Cast().(*gtk.ToggleButton),
-		italic:      b.GetObject("italic_button").Cast().(*gtk.ToggleButton),
-		underline:   b.GetObject("underline_button").Cast().(*gtk.ToggleButton),
-		ul:          b.GetObject("ul_button").Cast().(*gtk.ToggleButton),
-		ol:          b.GetObject("ol_button").Cast().(*gtk.ToggleButton),
-		quote:       b.GetObject("quote_button").Cast().(*gtk.ToggleButton),
-		blockButton: b.GetObject("block_button").Cast().(*gtk.MenuButton),
-		alignButton: b.GetObject("align_button").Cast().(*gtk.MenuButton),
-		linkPopover: b.GetObject("link_popover").Cast().(*gtk.Popover),
-		linkEntry:   b.GetObject("link_entry").Cast().(*gtk.Entry),
-		linkApply:   b.GetObject("link_apply").Cast().(*gtk.Button),
-		colorButton: b.GetObject("color_button").Cast().(*gtk.ColorDialogButton),
-		clearButton: b.GetObject("clear_button").Cast().(*gtk.Button),
-		actions:     make(map[string]*gio.SimpleAction),
-		chips:       make(map[string]gtk.Widgetter),
-	}
-	w.commentHeader = b.GetObject("comment_header").Cast().(*gtk.Box)
-	w.commentTitle = b.GetObject("comment_title").Cast().(*gtk.Label)
-	w.commentSummary = b.GetObject("comment_summary").Cast().(*gtk.Label)
-	w.visibilityGroup = b.GetObject("comment_visibility").Cast().(*adw.ToggleGroup)
-	w.attachButton = b.GetObject("attach_button").Cast().(*gtk.Button)
-
-	// Editor.
-	w.editor = editor.New(m.log)
-	w.editor.SetDebug(m.log.Enabled(nil, slog.LevelDebug))
-	w.editorSlot.Append(w.editor)
-	w.editor.OnState = w.applyState
-	w.editor.OnChanged = w.editorChanged
-	w.editor.OnDropFiles, w.editor.OnPaste = w.attachGioFiles, w.pasteMarkdown
-	w.editor.OnReady = func() {
-		if p.Kind != KindNew && p.Kind != KindEdit {
-			w.editor.FocusStart()
-		}
-	}
-	w.editor.OnCrashed = func() {
-		if w.draft.closed {
-			return
-		}
-		w.toast(i18n.T("The editor crashed; your last text was restored"))
-		w.editor.Load(w.editor.HTML())
+		Window:       b.GetObject("compose_window").Cast().(*adw.Window),
+		m:            m,
+		params:       p,
+		title:        b.GetObject("window_title").Cast().(*adw.WindowTitle),
+		toasts:       b.GetObject("toast_overlay").Cast().(*adw.ToastOverlay),
+		paneSlot:     b.GetObject("pane_slot").Cast().(*gtk.Box),
+		attachButton: b.GetObject("attach_button").Cast().(*gtk.Button),
 	}
 
-	// Prefill before connecting change handlers so it does not count as
-	// an edit.
-	w.to.SetAddresses(p.To)
-	w.cc.SetAddresses(p.CC)
-	w.bcc.SetAddresses(p.BCC)
-	w.subject.SetText(p.Subject)
-	w.setCcBccVisible(len(p.CC) > 0, len(p.BCC) > 0)
-	w.updateTitle()
-	w.draft.inReplyTo, w.draft.forwarding = p.InReplyTo, p.Forwarding
-	// A draft opened from the Drafts folder is the user's already: its
-	// id and version make the saves updates, and closing never deletes it.
-	w.draft.draftID, w.draft.version, w.draft.replaces = p.DraftID, p.Version, p.Replaces
-	w.draft.explicitSave = p.Kind == KindEdit
-	w.editor.Load(p.BodyHTML)
-	w.setAccounts(m.Accounts(), m.Placeholder())
-	// What the backend imported for the template (a quoted original's
-	// pictures, a forwarded message's files): listed and shown now, bound
-	// by the first save.
-	w.setAttachments(p.Attachments)
+	w.pane = NewPane(m, p, PaneOptions{Layout: LayoutWindow, Owner: OwnerWindow})
+	w.pane.dialogParent = &w.Window.Window
+	w.pane.OnTitle = func(title string) { w.title.SetTitle(title) }
+	w.pane.OnToast = func(text string) { w.toasts.AddToast(widget.PlainToast(text)) }
+	w.pane.OnEnd = func(End) { w.Close() }
+	// The pane already computed its title in NewPane, before OnTitle
+	// existed to carry it here.
+	w.title.SetTitle(w.pane.ReplyTitle())
+	if p.Comment != nil {
+		// A comment names its issue in the window's own title too (not
+		// just the header bar's WindowTitle widget), as applyCommentMode
+		// always did; it never changes afterwards.
+		w.SetTitle(w.pane.ReplyTitle())
+		// Nothing attaches in comment mode: the window's own Attach
+		// button (comment.go's applyCommentMode does the same for the
+		// pane's internal attach controls).
+		w.attachButton.SetVisible(false)
+	}
+	w.paneSlot.Append(w.pane.Widget())
+	// The pane's own action group is also on the window itself: the
+	// header bar's Send, Attach and menu button are outside the pane's
+	// widget tree (compose.blp), so action-name there resolves through
+	// the window, not through the pane (which the format toolbar reaches
+	// through the pane's own insertion, pane.go ActionGroup).
+	w.InsertActionGroup("compose", w.pane.ActionGroup())
 
-	w.wireActions()
-	w.wireToolbar()
-	w.wireRows()
-	// The To entry takes the focus when the window opens.
-	w.SetFocus(w.to.entry)
+	// The To entry (or the editor, in comment mode) takes the focus when
+	// the window opens.
+	w.SetFocus(w.pane.InitialFocus())
 	w.wireRewrite(b)
-	if !richText {
-		// Text-only phase (see richText): no formatting to offer, no
-		// inline images, and the user is told what will go out.
-		w.toolbar.SetVisible(false)
-		w.actions["insert-image"].SetEnabled(false)
-		w.plainHint.SetVisible(true)
-	}
-	w.applyCommentMode()
 	w.ConnectCloseRequest(w.closeRequest)
 	return w
 }
 
-// fromFactory renders one identity in the From drop-down. GtkDropDown's
-// built-in factory uses a label that never elides, so a long
-// "Name <address>" would become the compose window's minimum width; this
-// one elides and, as everywhere, shows the account's own text as plain
-// text rather than markup.
-func fromFactory() *gtk.SignalListItemFactory {
-	f := gtk.NewSignalListItemFactory()
-	f.ConnectSetup(func(obj *coreglib.Object) {
-		item, ok := obj.Cast().(*gtk.ListItem)
-		if !ok {
-			return
-		}
-		l := gtk.NewLabel("")
-		l.SetUseMarkup(false)
-		l.SetXAlign(0)
-		l.SetEllipsize(pango.EllipsizeEnd)
-		l.SetMaxWidthChars(30)
-		item.SetChild(l)
-	})
-	f.ConnectBind(func(obj *coreglib.Object) {
-		item, ok := obj.Cast().(*gtk.ListItem)
-		if !ok {
-			return
-		}
-		l, ok := item.Child().(*gtk.Label)
-		if !ok {
-			return
-		}
-		if s, ok := item.Item().Cast().(*gtk.StringObject); ok {
-			l.SetLabel(s.String())
-		}
-	})
-	return f
-}
-
-// setAccounts fills the From row, keeping the selected identity when it is
-// still listed; before any choice was made the account the window was
-// opened for (Params.AccountID) is preselected. The row is only sensitive
-// with a choice.
-func (w *Window) setAccounts(accounts []api.Account, placeholder bool) {
-	selectedID := w.params.AccountID
-	if w.chosenAccount != "" {
-		selectedID = w.chosenAccount
+// closeRequest is the GTK "close-request" signal: delegates to the
+// pane's draftController.closeRequest (draft.go), then, once it is safe
+// to actually close, finishes the window's own teardown.
+func (w *Window) closeRequest() bool {
+	block := w.pane.dc.closeRequest()
+	if !block {
+		w.rewrite.close()
+		w.pane.finishTeardown()
+		w.m.remove(w)
 	}
-	w.accounts = accounts
-	labels := make([]string, 0, len(accounts))
-	selected := uint(0)
-	found := false
-	for i, a := range accounts {
-		name := a.Config.DisplayName
-		if name == "" {
-			name = a.Config.Name
-		}
-		labels = append(labels, widget.FormatAddress(api.Address{Name: name, Address: a.Config.Email}))
-		if a.ID == selectedID {
-			selected = uint(i)
-			found = true
-		}
-	}
-	w.settingFrom = true
-	w.from.SetFactory(&fromFactory().ListItemFactory)
-	w.from.SetModel(gtk.NewStringList(labels))
-	w.from.SetSelected(selected)
-	w.settingFrom = false
-	// A reply or a forward goes out from the account the original is in:
-	// its quoted pictures and forwarded files were copied into that
-	// account, and the reply belongs to that mailbox's conversation.
-	w.from.SetSensitive(len(accounts) > 1 && !(w.fromLocked() && found))
-	if placeholder && !w.isComment() {
-		w.setStatus(i18n.T("Using placeholder account"))
-	}
-}
-
-// fromLocked reports whether From is fixed to params.AccountID: for a
-// reply or a forward (a draft reopened from Drafts included).
-func (w *Window) fromLocked() bool {
-	return w.params.InReplyTo != "" || w.params.Forwarding != ""
-}
-
-// account is the selected identity; a comment's is the issue's account
-// (Manager.commentAccount), which writes no mail and is not in From.
-func (w *Window) account() api.Account {
-	if w.isComment() {
-		return w.m.commentAccount(w.params.AccountID)
-	}
-	if i := w.from.Selected(); i < uint(len(w.accounts)) {
-		return w.accounts[i]
-	}
-	return w.accounts[0]
-}
-
-func (w *Window) self() api.Address {
-	a := w.account()
-	return api.Address{Name: a.Config.DisplayName, Address: a.Config.Email}
-}
-
-func (w *Window) wireRows() {
-	for _, f := range []*recipientField{w.to, w.cc, w.bcc} {
-		f := f
-		s := newSuggestions(w, f)
-		w.suggest = append(w.suggest, s)
-		// A focus loss that is only the window going to the background, or a
-		// click on a suggestion, is not the end of the half-typed address.
-		f.skipCommit = func() bool { return !w.IsActive() || s.hover }
-		f.changed = func() {
-			if !w.draft.closed {
-				w.markDirty()
-			}
-		}
-		f.typed = s.onChanged
-		f.wireKeys() // after the completion's keys: they come first
-	}
-	w.subject.ConnectChanged(func() {
-		w.updateTitle()
-		w.markDirty()
-	})
-	w.from.NotifyProperty("selected", func() {
-		if w.settingFrom {
-			return
-		}
-		w.chosenAccount = w.account().ID
-		w.markDirty()
-		// Another identity means other address books: what is shown was
-		// asked on behalf of the previous one.
-		for _, s := range w.suggest {
-			s.hide()
-		}
-	})
-	w.ccBcc.ConnectClicked(w.showCcBcc)
-}
-
-// setCcBccVisible reveals the lines asked for and keeps the Cc/Bcc button
-// only while one of them is still hidden. A reply carrying only a Cc
-// therefore does not open an empty Bcc line as well.
-func (w *Window) setCcBccVisible(cc, bcc bool) {
-	if cc {
-		w.ccBox.SetVisible(true)
-		w.ccSep.SetVisible(true)
-	}
-	if bcc {
-		w.bccBox.SetVisible(true)
-		w.bccSep.SetVisible(true)
-	}
-	w.ccBcc.SetVisible(!w.ccBox.Visible() || !w.bccBox.Visible())
-}
-
-// showCcBcc is the Cc/Bcc button: both lines at once.
-func (w *Window) showCcBcc() { w.setCcBccVisible(true, true) }
-
-// updateTitle shows the subject, or "New Message"; a comment names its
-// issue (jira.CommentTitle).
-func (w *Window) updateTitle() {
-	if c := w.params.Comment; c != nil {
-		w.title.SetTitle(jira.CommentTitle(c.Issue.Key, i18n.Tr))
-		return
-	}
-	if s := strings.TrimSpace(w.subject.Text()); s != "" {
-		w.title.SetTitle(s)
-	} else {
-		w.title.SetTitle(i18n.T("New Message"))
-	}
-}
-
-// recipients reads the three rows as they would be with the typed text
-// committed; ok is false when any entry is not an address. It goes through
-// the fields' models, not through their text: parsing that again would
-// join or split entries differently.
-func (w *Window) recipients() (to, cc, bcc []api.Address, ok bool) {
-	ok = true
-	read := func(f *recipientField) []api.Address {
-		addrs, invalid := f.resolved()
-		if len(invalid) > 0 {
-			ok = false
-		}
-		return addrs
-	}
-	return read(w.to), read(w.cc), read(w.bcc), ok
-}
-
-// wireActions registers the "compose." action group on the window.
-func (w *Window) wireActions() {
-	g := gio.NewSimpleActionGroup()
-	add := func(name string, f func()) {
-		a := gio.NewSimpleAction(name, nil)
-		a.ConnectActivate(func(*glib.Variant) { f() })
-		g.AddAction(a)
-		w.actions[name] = a
-	}
-	add("send", w.send)
-	add("save", func() { w.save(saveExplicit, nil) })
-	add("attach", w.attachFiles)
-	add("insert-image", w.insertImage)
-	add("discard", w.discard)
-
-	w.blockAction = gio.NewSimpleActionStateful("block", glib.NewVariantType("s"), glib.NewVariantString("p"))
-	w.blockAction.ConnectActivate(func(p *glib.Variant) {
-		w.editor.Exec("FormatBlock", p.String())
-		w.editor.GrabFocus()
-	})
-	g.AddAction(w.blockAction)
-
-	w.alignAction = gio.NewSimpleActionStateful("align", glib.NewVariantType("s"), glib.NewVariantString("left"))
-	w.alignAction.ConnectActivate(func(p *glib.Variant) {
-		switch p.String() {
-		case "center":
-			w.editor.Exec("JustifyCenter", "")
-		case "right":
-			w.editor.Exec("JustifyRight", "")
-		default:
-			w.editor.Exec("JustifyLeft", "")
-		}
-		w.editor.GrabFocus()
-	})
-	g.AddAction(w.alignAction)
-
-	w.InsertActionGroup("compose", g)
-}
-
-func (w *Window) wireToolbar() {
-	toggle := func(b *gtk.ToggleButton, cmd string) {
-		b.ConnectToggled(func() {
-			if w.syncing {
-				return
-			}
-			w.editor.Exec(cmd, "")
-		})
-	}
-	toggle(w.bold, "Bold")
-	toggle(w.italic, "Italic")
-	toggle(w.underline, "Underline")
-	toggle(w.ul, "InsertUnorderedList")
-	toggle(w.ol, "InsertOrderedList")
-	w.quote.ConnectToggled(func() {
-		if w.syncing {
-			return
-		}
-		if w.quote.Active() {
-			w.editor.Exec("FormatBlock", "blockquote")
-		} else {
-			w.editor.Exec("Outdent", "")
-		}
-	})
-	w.clearButton.ConnectClicked(func() {
-		w.editor.Exec("RemoveFormat", "")
-		w.editor.Exec("Unlink", "")
-	})
-	w.colorButton.NotifyProperty("rgba", func() {
-		w.editor.Exec("ForeColor", w.colorButton.RGBA().String())
-	})
-
-	insertLink := func() {
-		raw := strings.TrimSpace(w.linkEntry.Text())
-		u, err := url.Parse(raw)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "mailto") {
-			w.linkEntry.AddCSSClass("error")
-			return
-		}
-		w.linkEntry.RemoveCSSClass("error")
-		w.editor.Exec("CreateLink", u.String())
-		w.linkEntry.SetText("")
-		w.linkPopover.Popdown()
-	}
-	w.linkApply.ConnectClicked(insertLink)
-	w.linkEntry.ConnectActivate(insertLink)
-}
-
-// applyState mirrors the formatting at the caret onto the toolbar.
-func (w *Window) applyState(st editor.State) {
-	w.syncing = true
-	defer func() { w.syncing = false }()
-	w.bold.SetActive(st.Bold)
-	w.italic.SetActive(st.Italic)
-	w.underline.SetActive(st.Underline)
-	w.ul.SetActive(st.UL)
-	w.ol.SetActive(st.OL)
-	w.quote.SetActive(st.Block == "blockquote")
-
-	block := st.Block
-	label := i18n.T("Paragraph")
-	switch block {
-	case "h1", "h2", "h3":
-		label = fmt.Sprintf(i18n.T("Heading %s"), block[1:])
-	default:
-		block = "p"
-	}
-	w.blockAction.SetState(glib.NewVariantString(block))
-	w.blockButton.SetLabel(label)
-
-	align := st.Align
-	if align != "center" && align != "right" {
-		align = "left"
-	}
-	w.alignAction.SetState(glib.NewVariantString(align))
-	w.alignButton.SetIconName("format-justify-" + align + "-symbolic")
-}
-
-func (w *Window) toast(text string) {
-	w.toasts.AddToast(widget.PlainToast(text))
-}
-
-func (w *Window) setStatus(text string) {
-	w.status.SetLabel(text)
-}
-
-// ---------------------------------------------------------------------------
-// Attachments
-// ---------------------------------------------------------------------------
-
-func (w *Window) attachFiles() {
-	dlg := gtk.NewFileDialog()
-	dlg.SetTitle(i18n.T("Attach Files"))
-	dlg.OpenMultiple(w.ctx(), &w.Window.Window, func(res gio.AsyncResulter) {
-		files, err := dlg.OpenMultipleFinish(res)
-		if err != nil || w.draft.closed {
-			return // cancelled
-		}
-		list := make([]*gio.File, 0, files.NItems())
-		for i := uint(0); i < files.NItems(); i++ {
-			list = append(list, files.Item(i).Cast().(*gio.File))
-		}
-		w.attachGioFiles(list)
-	})
-}
-
-// attachGioFiles imports files chosen in the dialog or dropped onto the
-// editor as attachments; only local files can be.
-func (w *Window) attachGioFiles(files []*gio.File) {
-	if w.draft.closed {
-		return
-	}
-	for _, f := range files {
-		path := f.Path()
-		if path == "" {
-			w.toast(i18n.T("Only local files can be attached"))
-			continue
-		}
-		w.importFile(path, f.Basename(), false, nil)
-	}
-}
-
-func (w *Window) insertImage() {
-	dlg := gtk.NewFileDialog()
-	dlg.SetTitle(i18n.T("Insert Image"))
-	filter := gtk.NewFileFilter()
-	filter.SetName(i18n.T("Images"))
-	for _, p := range []string{"*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp"} {
-		filter.AddPattern(p)
-	}
-	filters := gio.NewListStore(gtk.GTypeFileFilter)
-	filters.Append(filter.Object)
-	dlg.SetFilters(filters)
-	dlg.Open(w.ctx(), &w.Window.Window, func(res gio.AsyncResulter) {
-		f, err := dlg.OpenFinish(res)
-		if err != nil || w.draft.closed {
-			return
-		}
-		path := f.Path()
-		if path == "" {
-			w.toast(i18n.T("Only local images can be inserted"))
-			return
-		}
-		w.importFile(path, f.Basename(), true, func(att api.DraftAttachment) {
-			editor.RegisterCID(att.ContentID, path, att.ContentType)
-			w.editor.Exec("InsertImage", "cid:"+att.ContentID)
-			w.editor.GrabFocus()
-		})
-	})
-}
-
-// importFile hands the path to the backend and adds the attachment on
-// success; then (optional) runs afterwards on the main loop.
-func (w *Window) importFile(path, name string, inline bool, then func(api.DraftAttachment)) {
-	w.setStatus(fmt.Sprintf(i18n.T("Attaching %s…"), name))
-	w.rpc(func() (any, error) {
-		var res api.AttachmentImportResult
-		err := w.m.client.Call(w.ctx(), api.MethodAttachmentImport, api.AttachmentImportParams{
-			AccountID: w.account().ID, Path: path, Filename: name, Inline: inline,
-		}, &res)
-		return res, err
-	}, func(v any, err error) {
-		if err != nil {
-			w.toast(widget.RPCErrorText(fmt.Sprintf(i18n.T("Attaching %s"), name), err))
-			w.refreshStatus()
-			return
-		}
-		att := v.(api.AttachmentImportResult).Attachment
-		w.attachments = append(w.attachments, att)
-		w.addChip(att)
-		w.markDirty()
-		if then != nil {
-			then(att)
-		}
-	})
-}
-
-func (w *Window) addChip(att api.DraftAttachment) {
-	box := gtk.NewBox(gtk.OrientationHorizontal, 6)
-	box.AddCSSClass("card")
-	box.SetMarginTop(2)
-	box.SetMarginBottom(2)
-	icon := gtk.NewImageFromIconName("mail-attachment-symbolic")
-	if att.Inline {
-		icon.SetFromIconName("image-x-generic-symbolic")
-	}
-	icon.SetMarginStart(8)
-	name := gtk.NewLabel(att.Filename) // backend-sanitised, still plain text
-	name.SetEllipsize(3)               // PANGO_ELLIPSIZE_END
-	name.SetMaxWidthChars(24)
-	size := gtk.NewLabel(widget.FormatSize(att.Size))
-	size.AddCSSClass("caption")
-	size.AddCSSClass("dim-label")
-	remove := gtk.NewButtonFromIconName("window-close-symbolic")
-	remove.AddCSSClass("flat")
-	remove.SetTooltipText(i18n.T("Remove"))
-	remove.ConnectClicked(func() { w.removeAttachment(att.ID) })
-	box.Append(icon)
-	box.Append(name)
-	box.Append(size)
-	box.Append(remove)
-	w.attBox.Insert(box, -1)
-	w.chips[att.ID] = box
-	w.attBox.SetVisible(true)
-}
-
-func (w *Window) removeAttachment(id string) {
-	var kept []api.DraftAttachment
-	var removed *api.DraftAttachment
-	for i := range w.attachments {
-		if w.attachments[i].ID == id {
-			removed = &w.attachments[i]
-			continue
-		}
-		kept = append(kept, w.attachments[i])
-	}
-	if removed == nil {
-		return
-	}
-	if removed.Inline {
-		editor.UnregisterCID(removed.ContentID)
-	}
-	w.attachments = kept
-	if chip, ok := w.chips[id]; ok {
-		w.attBox.Remove(chip)
-		delete(w.chips, id)
-	}
-	w.attBox.SetVisible(len(w.attachments) > 0)
-	w.markDirty()
-	accountID := w.account().ID
-	w.rpc(func() (any, error) {
-		return nil, w.m.client.Call(w.ctx(), api.MethodAttachmentRemove,
-			api.AttachmentRemoveParams{AccountID: accountID, AttachmentID: id}, &api.AttachmentRemoveResult{})
-	}, func(_ any, err error) {
-		if err != nil {
-			w.log.Debug("attachment.remove", "err", err)
-		}
-	})
-}
-
-// setAttachments replaces the list and chips with what the backend kept.
-// An inline picture the window did not insert itself (the backend copied
-// it out of a quoted original) is served to the editor from the backend;
-// one that is gone from the list is forgotten.
-func (w *Window) setAttachments(atts []api.DraftAttachment) {
-	for id, chip := range w.chips {
-		w.attBox.Remove(chip)
-		delete(w.chips, id)
-	}
-	kept := make(map[string]bool, len(atts))
-	for _, a := range atts {
-		if a.Inline {
-			kept[a.ContentID] = true
-		}
-	}
-	for _, a := range w.attachments {
-		if a.Inline && !kept[a.ContentID] {
-			editor.UnregisterCID(a.ContentID)
-		}
-	}
-	w.attachments = nil
-	for _, a := range atts {
-		w.attachments = append(w.attachments, a)
-		w.addChip(a)
-		if a.Inline && !editor.CIDRegistered(a.ContentID) {
-			w.registerInline(a)
-		}
-	}
-	w.attBox.SetVisible(len(w.attachments) > 0)
-}
-
-// registerInline makes the editor fetch the picture behind cid:<contentId>
-// from the backend (attachment.get), for a copy the backend made.
-func (w *Window) registerInline(a api.DraftAttachment) {
-	c, accountID, id := w.m.client, w.account().ID, a.ID
-	editor.RegisterCIDFetcher(a.ContentID, func(ctx context.Context) ([]byte, string, error) {
-		var res api.AttachmentGetResult
-		if err := c.Call(ctx, api.MethodAttachmentGet, api.AttachmentGetParams{AccountID: accountID, AttachmentID: id}, &res); err != nil {
-			return nil, "", err
-		}
-		return res.Data, res.ContentType, nil
-	})
+	return block
 }

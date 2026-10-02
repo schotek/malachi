@@ -1,0 +1,132 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+// One row of the board's List style, instantiated per case by
+// ui/internal/widget/board_row.go. Object IDs are looked up there; keep
+// them in sync.
+//
+// All labels are plain Gtk.Label (use-markup off by default): a case's
+// person, title and snippet come from mail or from an assistant that read
+// mail, and are never shown as markup (CLAUDE.md rule 3; docs/api.md
+// §4.13 "Annotations are text an assistant wrote").
+ListBoxRow board_row {
+  child: Box content_box {
+    orientation: horizontal;
+    spacing: 10;
+    margin-start: 10;
+    margin-end: 10;
+    margin-top: 8;
+    margin-bottom: 8;
+
+    // The state's colour dot (internal/style state-dot-*).
+    Box state_dot {
+      valign: center;
+      width-request: 10;
+      height-request: 10;
+
+      styles [
+        "board-state-dot",
+      ]
+    }
+
+    Box {
+      orientation: vertical;
+      spacing: 2;
+      hexpand: true;
+
+      Box {
+        orientation: horizontal;
+        spacing: 6;
+
+        Label person_label {
+          xalign: 0;
+          ellipsize: end;
+          hexpand: true;
+        }
+
+        Label issue_key {
+          visible: false;
+
+          styles [
+            "caption",
+            "numeric",
+            "dim-label",
+          ]
+        }
+
+        Label status_pill {
+          visible: false;
+          valign: center;
+          ellipsize: end;
+          max-width-chars: 24;
+
+          styles [
+            "issue-pill",
+          ]
+        }
+
+        Image attachment_icon {
+          icon-name: "mail-attachment-symbolic";
+          visible: false;
+
+          styles [
+            "dim-label",
+          ]
+        }
+
+        Label count_badge {
+          visible: false;
+          valign: center;
+
+          styles [
+            "caption",
+            "numeric",
+            "thread-count",
+          ]
+        }
+
+        Label date_label {
+          xalign: 1;
+
+          styles [
+            "caption",
+            "dim-label",
+          ]
+        }
+
+        Box unread_dot {
+          valign: center;
+          visible: false;
+
+          styles [
+            "unread-dot",
+          ]
+        }
+      }
+
+      Label title_label {
+        xalign: 0;
+        ellipsize: end;
+      }
+
+      Label snippet_label {
+        xalign: 0;
+        ellipsize: end;
+
+        styles [
+          "caption",
+          "dim-label",
+        ]
+      }
+
+      Label due_label {
+        xalign: 0;
+        visible: false;
+
+        styles [
+          "caption",
+        ]
+      }
+    }
+  };
+}

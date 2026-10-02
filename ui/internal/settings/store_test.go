@@ -44,6 +44,15 @@ func TestMemoryDefaults(t *testing.T) {
 	if got := s.MarkReadDelay(); got != MarkReadDelayMax {
 		t.Errorf("MarkReadDelay not clamped: %d", got)
 	}
+	if got := s.BoardDefaultStyle(); got != BoardStyleList {
+		t.Errorf("BoardDefaultStyle = %q, want %q", got, BoardStyleList)
+	}
+	if s.BoardTriageConsent() {
+		t.Error("BoardTriageConsent default = true, want false")
+	}
+	if got := s.BoardTriageModel(); got != assistant.Sonnet {
+		t.Errorf("BoardTriageModel = %q, want sonnet", got)
+	}
 }
 
 func TestMemorySetAndNotify(t *testing.T) {
@@ -248,5 +257,46 @@ func TestAssistantKeys(t *testing.T) {
 	s.SetAssistantConsent(true)
 	if s.AssistantClaudePath() != "/opt/claude" || !s.AssistantConsent() {
 		t.Error("claude path or consent did not stick")
+	}
+}
+
+func TestBoardKeys(t *testing.T) {
+	s := NewMemory()
+	if got := s.BoardDefaultStyle(); got != BoardStyleList {
+		t.Errorf("BoardDefaultStyle default = %q, want list", got)
+	}
+	s.SetBoardDefaultStyle("grid")
+	if got := s.BoardDefaultStyle(); got != BoardStyleList {
+		t.Errorf("invalid style accepted: %q", got)
+	}
+	for _, want := range BoardStyles {
+		s.SetBoardDefaultStyle(want)
+		if got := s.BoardDefaultStyle(); got != want {
+			t.Errorf("BoardDefaultStyle = %q, want %q", got, want)
+		}
+	}
+	// AssistantModel and BoardTriageModel are independent keys, even though
+	// they share assistant.Model's nicks.
+	if s.BoardTriageConsent() {
+		t.Error("BoardTriageConsent default = true, want false")
+	}
+	s.SetBoardTriageConsent(true)
+	if !s.BoardTriageConsent() {
+		t.Error("SetBoardTriageConsent(true) did not stick")
+	}
+	if got := s.BoardTriageModel(); got != assistant.Sonnet {
+		t.Errorf("BoardTriageModel default = %q, want sonnet", got)
+	}
+	s.SetBoardTriageModel("gpt")
+	if got := s.BoardTriageModel(); got != assistant.Sonnet {
+		t.Errorf("invalid model accepted: %q", got)
+	}
+	s.SetAssistantModel(assistant.Opus)
+	s.SetBoardTriageModel(assistant.Haiku)
+	if got := s.BoardTriageModel(); got != assistant.Haiku {
+		t.Errorf("BoardTriageModel = %q, want haiku", got)
+	}
+	if got := s.AssistantModel(); got != assistant.Opus {
+		t.Errorf("AssistantModel = %q, want opus (must not follow BoardTriageModel)", got)
 	}
 }

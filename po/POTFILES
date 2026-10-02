@@ -12,6 +12,8 @@ ui/internal/assistant/assistant.go
 ui/internal/background/background.go
 ui/internal/bulkmail/bulkmail.go
 ui/internal/compose/compose.go
+ui/internal/compose/pane.go
+ui/internal/compose/pane_layout.go
 ui/internal/compose/draft.go
 ui/internal/compose/prefill.go
 ui/internal/compose/rewrite.go

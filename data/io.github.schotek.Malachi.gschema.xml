@@ -35,6 +35,11 @@
     <value nick="haiku" value="1"/>
     <value nick="opus" value="2"/>
   </enum>
+  <enum id="io.github.schotek.Malachi.BoardStyle">
+    <value nick="list" value="0"/>
+    <value nick="columns" value="1"/>
+    <value nick="today" value="2"/>
+  </enum>
 
   <schema id="io.github.schotek.Malachi" path="/io/github/schotek/Malachi/">
     <!-- Window geometry -->
@@ -171,6 +176,23 @@
       <default>false</default>
       <summary>The assistant panel may send mail to Claude</summary>
       <description>Set when the user allowed it the first time.</description>
+    </key>
+
+    <!-- Board: the style it opens in, and its own triage consent and model -->
+    <key name="board-default-style" enum="io.github.schotek.Malachi.BoardStyle">
+      <default>'list'</default>
+      <summary>The style the Board opens in</summary>
+      <description>List, Columns or Today; applies the first time the Board is shown after launch, then the style last chosen lasts until the app quits.</description>
+    </key>
+    <key name="board-triage-consent" type="b">
+      <default>false</default>
+      <summary>The Board's triage may send mail to Claude</summary>
+      <description>Set when the user allowed it the first time, apart from the assistant panel's consent.</description>
+    </key>
+    <key name="board-triage-model" enum="io.github.schotek.Malachi.AssistantModel">
+      <default>'sonnet'</default>
+      <summary>The model the Board's triage uses</summary>
+      <description>Sonnet, Haiku or Opus, passed to Claude Code; apart from the assistant panel's model.</description>
     </key>
   </schema>
 </schemalist>

@@ -35,7 +35,7 @@ const (
 
 // suggestions is the completion state of one recipient row.
 type suggestions struct {
-	w       *Window
+	w       *Pane
 	field   *recipientField
 	entry   *gtk.Entry
 	popover *gtk.Popover
@@ -50,7 +50,7 @@ type suggestions struct {
 // newSuggestions attaches completion to a recipient field: it reads the
 // text being typed from the field's entry, shows its popover under the
 // whole row and hands a picked contact to the field as a badge.
-func newSuggestions(w *Window, field *recipientField) *suggestions {
+func newSuggestions(w *Pane, field *recipientField) *suggestions {
 	entry := field.entry
 	s := &suggestions{w: w, field: field, entry: entry}
 	s.popover = gtk.NewPopover()

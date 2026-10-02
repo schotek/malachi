@@ -368,3 +368,42 @@ func (w *Window) showOutbox(acc api.AccountID) {
 	w.selectFolder(k)
 	w.outerSplit.SetShowContent(true)
 }
+
+// The status strip in Board (board_status_button in board_page.blp): the
+// folders sidebar's status_button and the board page's own show the same
+// line and share the same popover (status_popover), which GTK parents to
+// one button at a time; moveStatusStripToBoard/Mail move it as the mode
+// switches, the one place that decides which button is live.
+// currentStatusLine and refreshBoardStatusLabel (board.go, which knows the
+// triage's note) are the board's half of refreshSyncLabel (sync.go).
+
+// moveStatusStripToBoard parks the status popover and the status line on
+// the board page's own button as Board shows (setMode, after ensureBoard
+// built it).
+func (w *Window) moveStatusStripToBoard() {
+	if w.boardPage == nil {
+		return
+	}
+	w.statusButton.SetPopover(nil)
+	w.boardPage.statusButton.SetPopover(w.statusPopover)
+	w.refreshBoardStatusLabel()
+}
+
+// moveStatusStripToMail returns the popover and the status line to the
+// folder sidebar's button as Mail shows.
+func (w *Window) moveStatusStripToMail() {
+	if w.boardPage != nil {
+		w.boardPage.statusButton.SetPopover(nil)
+	}
+	w.statusButton.SetPopover(w.statusPopover)
+	w.refreshSyncLabel()
+}
+
+// currentStatusLine is the status line for right now (statusLineFor over
+// the cached sync states and the connection), without writing it anywhere;
+// refreshSyncLabel and refreshBoardStatusLabel (board.go) each apply it to
+// their own widgets.
+func (w *Window) currentStatusLine() statusLine {
+	text, spinning := syncStatusText(w.syncStates, w.model.accounts, w.syncFolderName, time.Now())
+	return statusLineFor(w.conn, text, spinning)
+}

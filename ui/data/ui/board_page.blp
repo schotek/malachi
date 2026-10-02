@@ -1,0 +1,552 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// The board's own page, built from ui/internal/window/board.go and shown as
+// the "board" page of window.blp's mode_stack. No translatable strings here
+// on purpose: every text is set from Go through ui/internal/board (see
+// CLAUDE.md "Texty a i18n" in the Board design) so this file never grows a
+// msgid of its own. Object IDs are looked up from Go; keep them in sync.
+//
+// Adw.BreakpointBin, not a bare Adw.ToolbarView, at the root: only
+// Adw.Window/Adw.ApplicationWindow/Adw.Dialog and Adw.BreakpointBin host
+// Adw.Breakpoint objects, and this page's two splits (board_nav_split,
+// board_list_split) need their own, nested inside window.blp's own
+// mode_stack page rather than the main window itself.
+Adw.BreakpointBin board_page_root {
+  width-request: 360;
+  height-request: 294;
+
+  Adw.Breakpoint {
+    condition ("max-width: 900sp")
+
+    setters {
+      board_nav_split.collapsed: true;
+      board_today_split.orientation: vertical;
+    }
+  }
+
+  Adw.Breakpoint {
+    condition ("max-width: 640sp")
+
+    setters {
+      board_nav_split.collapsed: true;
+      board_list_split.collapsed: true;
+    }
+  }
+
+  child: Adw.ToolbarView board_page {
+  [top]
+  Adw.HeaderBar board_header {
+    // Mirrors window.blp's mode_switch (icons only, tooltips from Go: the
+    // two groups follow one state, window/board.go setMode).
+    [start]
+    Adw.ToggleGroup board_mode_switch {
+      Adw.Toggle {
+        name: "mail";
+        icon-name: "mail-unread-symbolic";
+      }
+
+      Adw.Toggle {
+        name: "board";
+        icon-name: "view-grid-symbolic";
+      }
+    }
+
+    // List / Columns / Today (board.Styles); labels set from Go
+    // (board.StyleTitle), so no msgid here.
+    [start]
+    Adw.ToggleGroup board_style_switch {
+      margin-start: 12;
+
+      Adw.Toggle {
+        name: "list";
+      }
+
+      Adw.Toggle {
+        name: "columns";
+      }
+
+      Adw.Toggle {
+        name: "today";
+      }
+    }
+
+    title-widget: Adw.WindowTitle board_title {};
+
+    [end]
+    DropDown board_account_filter {
+      margin-end: 6;
+    }
+
+    [end]
+    Button board_triage_button {
+      visible: false;
+      margin-end: 6;
+    }
+  }
+
+  content: Adw.OverlaySplitView board_panel_split {
+    // The sliding detail panel over Columns and Today (board_panel.go):
+    // always collapsed, so it overlays the page instead of splitting it;
+    // show-sidebar follows "a case is selected, the board is not empty
+    // and the style is not List" (boardPanelShown). The List style keeps
+    // its own collapse/push below 640sp (board_list_split further down)
+    // instead of this panel.
+    sidebar-position: end;
+    collapsed: true;
+    show-sidebar: false;
+    min-sidebar-width: 360;
+    max-sidebar-width: 640;
+    sidebar-width-fraction: 0.42;
+
+    content: Box {
+      orientation: vertical;
+
+      // Above Columns and Today only; the List page below has its own
+      // banner above its own nav/list split. board_list.go's renderStack
+      // reveals whichever one applies.
+      Adw.Banner board_panel_notice {
+        revealed: false;
+      }
+
+      Stack board_stack {
+        transition-type: crossfade;
+
+        // Shown whenever the board has nothing else to show: no case at
+        // all (ViewModel.IsEmpty), or a phase (loading, unavailable,
+        // off, …) that leaves nothing to lay out; its texts are
+        // ViewModel.EmptyTitle/Body.
+        StackPage {
+          name: "empty";
+
+          child: Adw.StatusPage board_empty_page {
+            icon-name: "view-grid-symbolic";
+          };
+        }
+
+        StackPage {
+          name: "list";
+
+          child: Box {
+            orientation: vertical;
+
+            Adw.Banner board_notice {
+              revealed: false;
+            }
+
+            Adw.NavigationSplitView board_nav_split {
+              min-sidebar-width: 180;
+              max-sidebar-width: 260;
+              sidebar-width-fraction: 0.18;
+              vexpand: true;
+
+              sidebar: Adw.NavigationPage board_nav_page {
+                tag: "nav";
+
+                child: Adw.ToolbarView {
+                  content: ScrolledWindow {
+                    hscrollbar-policy: never;
+
+                    child: ListBox board_nav_list {
+                      selection-mode: single;
+
+                      styles [
+                        "navigation-sidebar",
+                      ]
+                    };
+                  };
+
+                  // The status strip, mirroring window.blp's status_button:
+                  // the one popover moves here while the board is shown
+                  // (window/status.go).
+                  [bottom]
+                  MenuButton board_status_button {
+                    direction: up;
+                    margin-start: 6;
+                    margin-end: 6;
+                    margin-top: 6;
+                    margin-bottom: 6;
+
+                    accessibility {
+                      labelled-by: board_sync_label;
+                    }
+
+                    styles [
+                      "flat",
+                      "status-line",
+                    ]
+
+                    child: Box {
+                      spacing: 8;
+
+                      Adw.Spinner board_sync_spinner {
+                        visible: false;
+                        valign: center;
+                      }
+
+                      Image board_connection_icon {
+                        visible: false;
+                      }
+
+                      Label board_sync_label {
+                        ellipsize: end;
+                        xalign: 0;
+                        hexpand: true;
+
+                        styles [
+                          "caption",
+                          "dim-label",
+                        ]
+                      }
+                    };
+                  }
+                };
+              };
+
+              content: Adw.NavigationPage {
+                tag: "cases";
+
+                child: Adw.NavigationSplitView board_list_split {
+                  min-sidebar-width: 280;
+                  max-sidebar-width: 420;
+                  sidebar-width-fraction: 0.36;
+
+                  sidebar: Adw.NavigationPage board_list_page {
+                    tag: "list";
+
+                    child: Adw.ToolbarView {
+                      content: Stack board_list_stack {
+                        StackPage {
+                          name: "rows";
+
+                          child: ScrolledWindow board_list_scroller {
+                            hscrollbar-policy: never;
+
+                            child: ListBox board_case_list {
+                              selection-mode: single;
+                              show-separators: true;
+
+                              styles [
+                                "navigation-sidebar",
+                                "message-list",
+                              ]
+                            };
+                          };
+                        }
+
+                        StackPage {
+                          name: "empty";
+
+                          child: Adw.StatusPage board_list_empty_page {};
+                        }
+                      };
+                    };
+                  };
+
+                  content: Adw.NavigationPage board_detail_page {
+                    tag: "detail";
+
+                    // The ONE detail widget tree: the actions header
+                    // (Done/Remind/Archive/Menu/Reply, board_detail.go)
+                    // and board_detail_stack. board_panel.go reparents it
+                    // between here (the List style) and
+                    // board_panel_content (Columns, Today) on every style
+                    // switch; board_detail.go only ever fills it, never
+                    // moves it.
+                    child: Adw.ToolbarView board_detail_tree {
+                      [top]
+                      Adw.HeaderBar {
+                        [start]
+                        Button board_done_button {}
+
+                        [start]
+                        MenuButton board_remind_button {
+                          icon-name: "appointment-soon-symbolic";
+                        }
+
+                        [start]
+                        Button board_archive_button {
+                          icon-name: "folder-download-symbolic";
+                        }
+
+                        [end]
+                        MenuButton board_detail_menu {
+                          icon-name: "view-more-symbolic";
+                        }
+
+                        [end]
+                        Button board_reply_button {
+                          styles [
+                            "suggested-action",
+                          ]
+                        }
+                      }
+
+                      content: Stack board_detail_stack {
+                        StackPage {
+                          name: "empty";
+
+                          child: Adw.StatusPage board_no_selection_page {
+                            icon-name: "view-grid-symbolic";
+                          };
+                        }
+
+                        StackPage {
+                          name: "detail";
+
+                          child: ScrolledWindow {
+                            hscrollbar-policy: never;
+                            vexpand: true;
+
+                            child: Adw.Clamp {
+                              maximum-size: 760;
+                              tightening-threshold: 760;
+
+                              child: Box board_detail_box {
+                                orientation: vertical;
+                                spacing: 16;
+                                margin-start: 24;
+                                margin-end: 24;
+                                margin-top: 24;
+                                margin-bottom: 24;
+
+                                // The state pill, title, person/date, Why
+                                // and Unstar links: rebuilt whole by Go on
+                                // every change (board_detail.go).
+                                Box board_detail_top {
+                                  orientation: vertical;
+                                  spacing: 6;
+                                }
+
+                                // The deadline with its quote.
+                                Box board_detail_due_box {
+                                  orientation: vertical;
+                                  spacing: 4;
+                                  visible: false;
+                                }
+
+                                // The assistant's summary and tasks.
+                                Box board_detail_summary_box {
+                                  orientation: vertical;
+                                  spacing: 8;
+                                  visible: false;
+                                }
+
+                                // Stable across rebuilds: a later agent
+                                // fills this with the inline
+                                // suggested-reply editor
+                                // (ui/internal/boardreply).
+                                // board_detail.go must never remove or
+                                // recreate it, only show or hide it.
+                                Box reply_slot {
+                                  orientation: vertical;
+                                }
+
+                                // The conversation, as plain-text cards.
+                                Box board_detail_conversation_box {
+                                  orientation: vertical;
+                                  spacing: 10;
+                                }
+
+                                // "From the Assistant": the case's open
+                                // commitments.
+                                Box board_detail_commitments_box {
+                                  orientation: vertical;
+                                  spacing: 6;
+                                  visible: false;
+                                }
+                              };
+                            };
+                          };
+                        }
+                      };
+                    };
+                  };
+                };
+              };
+            }
+          };
+        }
+
+        // Columns: the four states side by side on the board's tinted
+        // surface (board_columns.go builds the four panes into
+        // board_columns_row once, in board.States order); "board-surface"
+        // is internal/style's faint tint. hscrollbar-policy automatic with
+        // propagate-natural-width off: when four panes narrower than
+        // board_columns.go's minimum do not fit, this scrolls sideways
+        // instead of widening the window.
+        StackPage {
+          name: "columns";
+
+          child: ScrolledWindow board_columns_scroller {
+            hscrollbar-policy: automatic;
+            vscrollbar-policy: never;
+            propagate-natural-width: false;
+
+            styles [
+              "board-surface",
+            ]
+
+            child: Box board_columns_row {
+              orientation: horizontal;
+              homogeneous: true;
+              spacing: 14;
+              margin-start: 14;
+              margin-end: 14;
+              margin-top: 14;
+              margin-bottom: 14;
+            };
+          };
+        }
+
+        // Today: a main column (greeting, the count tiles, what is hot,
+        // the top of what waits for the user, the user's commitments, one
+        // ListBox, board_today.go) and beside it the deadlines and a
+        // calendar placeholder; the root Adw.Breakpoint above flips
+        // board_today_split to vertical (stacked) under 900sp.
+        StackPage {
+          name: "today";
+
+          child: Box board_today_split {
+            orientation: horizontal;
+
+            ScrolledWindow board_today_main_scroller {
+              hscrollbar-policy: never;
+              vscrollbar-policy: automatic;
+              hexpand: true;
+              vexpand: true;
+
+              styles [
+                "board-surface",
+              ]
+
+              child: Box board_today_main {
+                orientation: vertical;
+                spacing: 16;
+                margin-start: 20;
+                margin-end: 20;
+                margin-top: 20;
+                margin-bottom: 20;
+
+                Box {
+                  orientation: vertical;
+                  spacing: 4;
+
+                  Label board_today_title {
+                    xalign: 0;
+                    wrap: true;
+
+                    styles [
+                      "title-1",
+                    ]
+                  }
+
+                  Label board_today_phrase {
+                    xalign: 0;
+                    wrap: true;
+
+                    styles [
+                      "dim-label",
+                    ]
+                  }
+                }
+
+                Box board_today_tiles {
+                  orientation: horizontal;
+                  spacing: 8;
+                  homogeneous: true;
+                }
+
+                ListBox board_today_list {
+                  selection-mode: single;
+
+                  styles [
+                    "navigation-sidebar",
+                    "board-columns-list",
+                  ]
+                }
+              };
+            }
+
+            ScrolledWindow board_today_side_scroller {
+              hscrollbar-policy: never;
+              vscrollbar-policy: automatic;
+              min-content-width: 280;
+              max-content-width: 420;
+              min-content-height: 220;
+
+              styles [
+                "board-surface",
+              ]
+
+              child: Box board_today_side {
+                orientation: vertical;
+                spacing: 14;
+                margin-start: 14;
+                margin-end: 20;
+                margin-top: 20;
+                margin-bottom: 20;
+
+                // The deadlines: a heading and either DueEmpty or, per
+                // group, a caption and its due items; rebuilt whole by Go
+                // (board_today.go), as board_detail_due_box is.
+                Box board_today_due_box {
+                  orientation: vertical;
+                  spacing: 8;
+
+                  styles [
+                    "board-today-card",
+                  ]
+                }
+
+                // The calendar placeholder: static widgets, Go only sets
+                // their text (CalendarTitle/CalendarBody).
+                Box {
+                  orientation: vertical;
+                  spacing: 4;
+
+                  styles [
+                    "board-today-card",
+                    "board-today-card-dashed",
+                  ]
+
+                  Label board_today_calendar_title {
+                    xalign: 0;
+
+                    styles [
+                      "heading",
+                    ]
+                  }
+
+                  Label board_today_calendar_body {
+                    xalign: 0;
+                    wrap: true;
+
+                    styles [
+                      "dim-label",
+                    ]
+                  }
+                }
+              };
+            }
+          };
+        }
+      }
+    };
+
+    // The panel's own chrome: a title (the case's state, or Board) and
+    // Close, over the ONE detail widget tree board_panel.go moves in here
+    // from board_detail_page while the panel shows (Columns, Today).
+    sidebar: Adw.ToolbarView board_panel_content {
+      [top]
+      Adw.HeaderBar board_panel_header {
+        title-widget: Adw.WindowTitle board_panel_title {};
+
+        [end]
+        Button board_panel_close {}
+      }
+    };
+  };
+  };
+}

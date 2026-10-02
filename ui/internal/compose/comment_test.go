@@ -134,27 +134,33 @@ func TestCloseAsksOnlyWithSomethingToLose(t *testing.T) {
 	cases := []struct {
 		name    string
 		d       draftState
+		owner   Owner
 		comment bool
 		text    string
 		want    bool
 	}{
-		{"mail untouched", draftState{}, false, "", true},
-		{"mail dirty", draftState{dirty: true}, false, "", false},
-		{"mail saving", draftState{saving: true}, false, "", false},
-		{"mail discarded", draftState{dirty: true, discard: true}, false, "", true},
+		{"mail untouched", draftState{}, OwnerWindow, false, "", true},
+		{"mail dirty", draftState{dirty: true}, OwnerWindow, false, "", false},
+		{"mail saving", draftState{saving: true}, OwnerWindow, false, "", false},
+		{"mail discarded", draftState{dirty: true, discard: true}, OwnerWindow, false, "", true},
 		// A mail window with text but nothing unsaved goes: the text is in
 		// the Drafts folder.
-		{"mail saved", draftState{draftID: "d1"}, false, text, true},
+		{"mail saved", draftState{draftID: "d1"}, OwnerWindow, false, text, true},
 		// A comment with text asks, saved or not: no Drafts folder keeps it.
-		{"comment with text", draftState{}, true, text, false},
-		{"comment saved", draftState{draftID: "d1"}, true, text, false},
+		{"comment with text", draftState{}, OwnerWindow, true, text, false},
+		{"comment saved", draftState{draftID: "d1"}, OwnerWindow, true, text, false},
 		// Nothing in it: it goes, unsaved edits and a save under way or not.
-		{"comment emptied", draftState{dirty: true, draftID: "d1"}, true, blank, true},
-		{"comment saving", draftState{saving: true}, true, "", true},
-		{"comment sent", draftState{discard: true, draftID: "d1"}, true, text, true},
+		{"comment emptied", draftState{dirty: true, draftID: "d1"}, OwnerWindow, true, blank, true},
+		{"comment saving", draftState{saving: true}, OwnerWindow, true, "", true},
+		{"comment sent", draftState{discard: true, draftID: "d1"}, OwnerWindow, true, text, true},
+		// The board keeps its draft: closing never asks, whatever is in it
+		// (ComposeDraftBoardOwnerTests closingNeverAsksAndNeverDeletes).
+		{"board dirty mail", draftState{dirty: true}, OwnerBoard, false, "", true},
+		{"board dirty comment", draftState{dirty: true}, OwnerBoard, true, text, true},
+		{"board saving", draftState{saving: true}, OwnerBoard, false, "", true},
 	}
 	for _, c := range cases {
-		if got := closesUnasked(&c.d, c.comment, c.text); got != c.want {
+		if got := closesUnasked(&c.d, c.owner, c.comment, c.text); got != c.want {
 			t.Errorf("%s: closesUnasked = %v, want %v", c.name, got, c.want)
 		}
 	}
@@ -164,19 +170,25 @@ func TestTheCopyOfACommentGoesWithTheWindow(t *testing.T) {
 	cases := []struct {
 		name    string
 		d       draftState
+		owner   Owner
 		comment bool
 		want    bool
 	}{
-		{"comment autosaved", draftState{draftID: "d1"}, true, true},
-		{"comment closed while dirty", draftState{draftID: "d1", dirty: true}, true, true},
+		{"comment autosaved", draftState{draftID: "d1"}, OwnerWindow, true, true},
+		{"comment closed while dirty", draftState{draftID: "d1", dirty: true}, OwnerWindow, true, true},
 		// Sent (or deleted already by Discard): nothing left to delete.
-		{"comment sent", draftState{draftID: "d1", discard: true}, true, false},
-		{"comment never saved", draftState{}, true, false},
+		{"comment sent", draftState{draftID: "d1", discard: true}, OwnerWindow, true, false},
+		{"comment never saved", draftState{}, OwnerWindow, true, false},
 		// An e-mail's draft stays in Drafts.
-		{"mail saved", draftState{draftID: "d1"}, false, false},
+		{"mail saved", draftState{draftID: "d1"}, OwnerWindow, false, false},
+		// The board never deletes here, even a late save after a Close
+		// answers (ComposeDraftBoardOwnerTests aLateSaveNeverDeletes); only
+		// Discard does, through discardBoard, not cleanup.
+		{"board comment autosaved", draftState{draftID: "d1"}, OwnerBoard, true, false},
+		{"board mail saved", draftState{draftID: "d1"}, OwnerBoard, false, false},
 	}
 	for _, c := range cases {
-		if got := deletesOnClose(&c.d, c.comment); got != c.want {
+		if got := deletesOnClose(&c.d, c.owner, c.comment); got != c.want {
 			t.Errorf("%s: deletesOnClose = %v, want %v", c.name, got, c.want)
 		}
 	}
@@ -290,19 +302,27 @@ func TestRestrictedToolbar(t *testing.T) {
 	}
 }
 
-// Every control of toolbarFormats is in the toolbar of compose.blp, and
-// every format a comment keeps has a control there except code, which the
-// GTK toolbar does not offer (nor does the macOS one).
+// Every control of toolbarFormats is in the toolbar of compose_pane.blp,
+// and every format a comment keeps has a control there except code, which
+// the GTK toolbar does not offer (nor does the macOS one). The toolbar and
+// header fields live in the pane (compose_pane.blp, extracted from
+// compose.blp so the board can embed them inline too); attach_button is
+// window chrome and stays in compose.blp.
 func TestToolbarFormatsMatchTheBlueprint(t *testing.T) {
-	raw, err := os.ReadFile("../../data/ui/compose.blp")
+	raw, err := os.ReadFile("../../data/ui/compose_pane.blp")
 	if err != nil {
 		t.Fatal(err)
 	}
 	blp := string(raw)
+	windowRaw, err := os.ReadFile("../../data/ui/compose.blp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	windowBlp := string(windowRaw)
 	has := map[jira.Format]bool{}
 	for id, f := range toolbarFormats {
 		if !regexp.MustCompile(`\b` + regexp.QuoteMeta(id) + ` \{`).MatchString(blp) {
-			t.Errorf("%s is not an object of compose.blp", id)
+			t.Errorf("%s is not an object of compose_pane.blp", id)
 		}
 		has[f] = true
 	}
@@ -311,9 +331,12 @@ func TestToolbarFormatsMatchTheBlueprint(t *testing.T) {
 			t.Errorf("a comment keeps %s, but no toolbar control applies it", f)
 		}
 	}
-	for _, id := range []string{"header_rows", "comment_header", "comment_title", "comment_summary", "comment_visibility", "attach_button"} {
+	if !regexp.MustCompile(`\battach_button \{`).MatchString(windowBlp) {
+		t.Error("attach_button is not an object of compose.blp")
+	}
+	for _, id := range []string{"header_rows", "comment_header", "comment_title", "comment_summary", "comment_visibility"} {
 		if !regexp.MustCompile(`\b` + id + ` \{`).MatchString(blp) {
-			t.Errorf("%s is not an object of compose.blp", id)
+			t.Errorf("%s is not an object of compose_pane.blp", id)
 		}
 	}
 }

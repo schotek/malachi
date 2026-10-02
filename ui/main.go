@@ -85,6 +85,10 @@ func main() {
 		assist = window.NewAssistant(prefs, log)
 		assist.AddActions(app, func() { openPreferences(app, prefs, rpc, assist, log, "ai") })
 		assist.Refresh()
+		// The board's triage, once for the application (window/board_triage.go):
+		// its preferences in the daemon, the run and the automatic schedule.
+		// Toasts and the consent sheet go to the main window once there is one.
+		assist.AttachBoardTriage(rpc, func() *window.Window { return mainWin })
 		mgr = compose.NewManager(app, rpc, log, prefs)
 		// New Message needs an account that writes mail
 		// (capabilities.CanComposeNew): a Jira account only comments.
@@ -155,6 +159,12 @@ func main() {
 			mainWin.CloseAssistant()
 		}
 		window.SweepOpenedAttachments(log)
+		// The board's triage stops while the connection still stands: a run
+		// under way ends as cancelled and its board.runEnd is waited for, at
+		// most 2 s (the daemon ends a run nobody ended itself later).
+		if assist != nil {
+			assist.StopBoardTriage()
+		}
 		rpc.Close()
 		// Quitting the application quits the daemon it started; "Run in
 		// Background" keeps the application (and so the daemon) alive by

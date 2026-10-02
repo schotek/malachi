@@ -87,6 +87,16 @@ const (
 	KeyAssistantConsent    = "assistant-consent"
 )
 
+// Keys of the board (ui/internal/board): the style it opens in the first
+// time it is shown after launch, and its own triage consent and model,
+// apart from the assistant panel's (KeyAssistantConsent, KeyAssistantModel).
+// They must match the gschema.
+const (
+	KeyBoardDefaultStyle  = "board-default-style"
+	KeyBoardTriageConsent = "board-triage-consent"
+	KeyBoardTriageModel   = "board-triage-model"
+)
+
 // ColorScheme is the nick of the ColorScheme enum in the gschema.
 type ColorScheme string
 
@@ -113,6 +123,31 @@ const (
 	TextZoomMax  = 200
 	TextZoomStep = 10
 )
+
+// BoardStyle is the nick of the gschema's BoardStyle enum: how the board
+// (ui/internal/board) is laid out, read from board-default-style.
+type BoardStyle string
+
+const (
+	BoardStyleList    BoardStyle = "list"
+	BoardStyleColumns BoardStyle = "columns"
+	BoardStyleToday   BoardStyle = "today"
+)
+
+// BoardStyles are the styles in the order of the gschema enum.
+var BoardStyles = []BoardStyle{BoardStyleList, BoardStyleColumns, BoardStyleToday}
+
+// parseBoardStyle reads a stored nick; an unknown or empty one is List, like
+// assistant.ParseTarget and assistant.ParseModel read their keys.
+func parseBoardStyle(nick string) BoardStyle {
+	switch BoardStyle(nick) {
+	case BoardStyleColumns:
+		return BoardStyleColumns
+	case BoardStyleToday:
+		return BoardStyleToday
+	}
+	return BoardStyleList
+}
 
 // defaults mirror the gschema defaults for the in-memory fallback.
 var defaults = map[string]any{
@@ -146,6 +181,10 @@ var defaults = map[string]any{
 	KeyAssistantModel:      string(assistant.Sonnet),
 	KeyAssistantClaudePath: "",
 	KeyAssistantConsent:    false,
+
+	KeyBoardDefaultStyle:  string(BoardStyleList),
+	KeyBoardTriageConsent: false,
+	KeyBoardTriageModel:   string(assistant.Sonnet),
 }
 
 // Store reads and writes preferences. All methods must be called from the
@@ -318,6 +357,43 @@ func (s *Store) SetAssistantClaudePath(v string) { s.set(KeyAssistantClaudePath,
 
 func (s *Store) AssistantConsent() bool     { return s.boolean(KeyAssistantConsent) }
 func (s *Store) SetAssistantConsent(v bool) { s.set(KeyAssistantConsent, v) }
+
+// BoardDefaultStyle is the style the board opens in the first time it is
+// shown after launch, read as parseBoardStyle reads it: an unknown or empty
+// stored value is List.
+func (s *Store) BoardDefaultStyle() BoardStyle {
+	return parseBoardStyle(s.str(KeyBoardDefaultStyle))
+}
+
+// SetBoardDefaultStyle ignores values outside the enum.
+func (s *Store) SetBoardDefaultStyle(v BoardStyle) {
+	for _, st := range BoardStyles {
+		if v == st {
+			s.set(KeyBoardDefaultStyle, string(v))
+			return
+		}
+	}
+}
+
+func (s *Store) BoardTriageConsent() bool     { return s.boolean(KeyBoardTriageConsent) }
+func (s *Store) SetBoardTriageConsent(v bool) { s.set(KeyBoardTriageConsent, v) }
+
+// BoardTriageModel is the model of the board's triage runs, apart from the
+// assistant panel's (AssistantModel): the same nicks, read with
+// assistant.ParseModel (an unknown nick is Sonnet).
+func (s *Store) BoardTriageModel() assistant.Model {
+	return assistant.ParseModel(s.str(KeyBoardTriageModel))
+}
+
+// SetBoardTriageModel ignores values outside the enum.
+func (s *Store) SetBoardTriageModel(v assistant.Model) {
+	for _, m := range assistant.Models {
+		if v == m {
+			s.set(KeyBoardTriageModel, string(v))
+			return
+		}
+	}
+}
 
 // CollapsedFolders and CollapsedAccounts are the folded-away nodes of the
 // folder sidebar, each entry one node. The window package owns the encoding

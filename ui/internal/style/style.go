@@ -235,6 +235,59 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	b.WriteString("row.account-row.dragging { opacity: 0.4; }\n")
 	b.WriteString("row.account-row.drop-above { box-shadow: inset 0 2px 0 0 @accent_bg_color; }\n")
 	b.WriteString("row.account-row.drop-below { box-shadow: inset 0 -2px 0 0 @accent_bg_color; }\n")
+	// The board (window/board*.go, widget/board_row.go): a case's state as
+	// a colour dot in the navigation column, the list and the detail's
+	// state pill, and the pill itself as a menu button in the issue-status
+	// pill's shape. hot is the destructive red, you the accent blue, them a
+	// warm orange (libadwaita's named palette has no brown, the colour
+	// macOS uses for "waiting for them"), info the plain dim label colour
+	// (no dot, so a dot with none of the classes below stays invisible on
+	// purpose where the state is not shown).
+	b.WriteString(".board-state-dot { min-width: 9px; min-height: 9px; border-radius: 5px; background-color: alpha(@window_fg_color, 0.25); }\n")
+	b.WriteString(".board-state-dot-hot { background-color: @destructive_bg_color; }\n")
+	b.WriteString(".board-state-dot-you { background-color: @accent_bg_color; }\n")
+	b.WriteString(".board-state-dot-them { background-color: @orange_4; }\n")
+	b.WriteString(".board-state-dot-info { background-color: alpha(@window_fg_color, 0.35); }\n")
+	b.WriteString("menubutton.board-state-pill > button { min-height: 0; padding: 3px 10px; border-radius: 99px; font-weight: bold; font-size: 85%; background-color: alpha(@window_fg_color, 0.1); }\n")
+	b.WriteString("menubutton.board-state-pill.board-state-hot > button { background-color: alpha(@destructive_bg_color, 0.2); color: @destructive_color; }\n")
+	b.WriteString("menubutton.board-state-pill.board-state-you > button { background-color: alpha(@accent_bg_color, 0.2); color: @accent_color; }\n")
+	b.WriteString("menubutton.board-state-pill.board-state-them > button { background-color: alpha(@orange_4, 0.25); }\n")
+	// The board's nav column rows (window/board_list.go): the filter rows'
+	// dot and count badge, the account rows' kind capsule, same shape as
+	// the folder sidebar's unread badge.
+	b.WriteString("row.board-nav-row { min-height: 28px; }\n")
+	b.WriteString("label.board-nav-count { min-width: 8px; min-height: 16px; padding: 0 4px; border-radius: 99px; font-size: 80%; background-color: alpha(@window_fg_color, 0.1); }\n")
+	// A case's message cards in the detail (window/board_detail.go): the
+	// user's own on a faint accent tint, the other party's neutral, plain
+	// text only (CLAUDE.md rule 3 — never HTML on the board).
+	b.WriteString("box.board-card { padding: 8px 10px; border-radius: 10px; background-color: alpha(@window_fg_color, 0.045); }\n")
+	b.WriteString("box.board-card.board-card-mine { background-color: alpha(@accent_bg_color, 0.1); }\n")
+	// The assistant's summary, tasks and commitments: the same indigo-ish
+	// note the assistant panel gives its own cards, so the board reads as
+	// the same voice.
+	b.WriteString("box.board-assistant-box { border-radius: 10px; padding: 8px 10px; background-color: alpha(@window_fg_color, 0.05); }\n")
+	b.WriteString("label.board-assistant-mark { color: @accent_color; }\n")
+	// Columns and Today (window/board_columns.go, window/board_today.go):
+	// the board's tinted surface, a card reusing board-card's fill via its
+	// own class (a left-leaning hot tint like the state pill's), a
+	// column's or a section's title in the state's colour (the
+	// board-state-dot-* classes above, reused here as text colour) and the
+	// count tiles of the Today page.
+	b.WriteString("scrolledwindow.board-surface { background-color: alpha(@window_fg_color, 0.02); }\n")
+	b.WriteString("list.board-columns-list row.board-card-row { background-color: alpha(@window_fg_color, 0.045); border-radius: 10px; margin: 4px 10px; padding: 8px 10px; }\n")
+	b.WriteString("list.board-columns-list row.board-card-row.board-card-row-hot { background-color: alpha(@destructive_bg_color, 0.08); }\n")
+	b.WriteString("list.board-columns-list row.board-card-row:selected { box-shadow: inset 0 0 0 2px @accent_color; }\n")
+	b.WriteString(".board-column-title.board-state-dot-hot { color: @destructive_color; }\n")
+	b.WriteString(".board-column-title.board-state-dot-you { color: @accent_color; }\n")
+	b.WriteString(".board-column-title.board-state-dot-them { color: @orange_4; }\n")
+	b.WriteString(".board-column-title.board-state-dot-info { color: alpha(@window_fg_color, 0.7); }\n")
+	b.WriteString("box.board-column-placeholder { border: 1px dashed alpha(@window_fg_color, 0.3); border-radius: 10px; }\n")
+	b.WriteString("box.board-today-card { border: 1px solid alpha(@window_fg_color, 0.12); border-radius: 10px; padding: 12px 14px; }\n")
+	b.WriteString("box.board-today-card-dashed { border-style: dashed; }\n")
+	b.WriteString("button.board-due-item { padding: 6px 8px; border-radius: 8px; }\n")
+	b.WriteString(".board-today-tile { border: 1px solid alpha(@window_fg_color, 0.12); border-radius: 10px; padding: 10px; }\n")
+	b.WriteString(".board-today-tile.board-today-tile-hot { background-color: alpha(@destructive_bg_color, 0.06); }\n")
+	b.WriteString("label.board-today-tile-count { font-size: 170%; font-weight: bold; }\n")
 	fmt.Fprintf(&b, ".message-body { font-size: %d%%; }\n", textZoomPercent)
 	if monospace {
 		b.WriteString(".message-body { font-family: monospace; }\n")

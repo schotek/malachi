@@ -62,11 +62,11 @@ func (m *Manager) Open(p Params) *Window {
 	if msg := blockedSummary(p.Blocked); msg != "" {
 		// The backend quoted the original without its remote images and
 		// scripts; said once, as after a save.
-		w.toast(msg)
+		w.pane.toast(msg)
 	}
 	if msg := skippedSummary(p.Skipped); msg != "" {
 		// A forward that went on without some of the original's files.
-		w.toast(msg)
+		w.pane.toast(msg)
 	}
 	return w
 }
@@ -128,7 +128,7 @@ func (m *Manager) SelfAddress() api.Address {
 // same Drafts message taken over (d from draft.open). nil when none.
 func (m *Manager) FindDraft(d api.Draft) *Window {
 	for _, w := range m.windows {
-		if (d.ID != "" && w.draft.draftID == d.ID) || (d.Replaces != "" && w.params.Replaces == d.Replaces) {
+		if (d.ID != "" && w.pane.dc.draft.draftID == d.ID) || (d.Replaces != "" && w.pane.params.Replaces == d.Replaces) {
 			return w
 		}
 	}
@@ -171,7 +171,7 @@ func (m *Manager) refreshAccounts() {
 			}
 			m.accounts = res.Accounts
 			for _, w := range m.windows {
-				w.setAccounts(m.Accounts(), m.Placeholder())
+				w.pane.setAccounts(m.Accounts(), m.Placeholder())
 			}
 			if m.OnAccountsChanged != nil {
 				m.OnAccountsChanged()

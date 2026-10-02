@@ -41,19 +41,31 @@ Adw.ApplicationWindow main_window {
     }
   }
 
-  // The assistant panel (ui/internal/assistant, the In App target) on the
-  // right: window/assistant_panel.go puts assistant_panel.blp into
-  // assistant_panel_bin and shows it while the Assistant is on and In
-  // App chosen; the message pane's toggle opens it and the panel's own
-  // Hide button folds it.
-  content: Adw.OverlaySplitView assistant_split {
-    sidebar-position: end;
-    show-sidebar: false;
-    min-sidebar-width: 280;
-    max-sidebar-width: 480;
-    sidebar-width-fraction: 0.28;
+  // The window's two modes, Mail and Board (window/board.go): a plain
+  // Gtk.Stack rather than Adw.ViewStack, since the mode switch is the
+  // Adw.ToggleGroup below, not an AdwViewSwitcher title bar widget. "mail"
+  // is the tree below, unchanged; "board" is board_page.blp, put into
+  // board_page_bin by Go, as assistant_panel.blp is put into
+  // assistant_panel_bin.
+  content: Stack mode_stack {
+    transition-type: crossfade;
 
-    content: Adw.NavigationSplitView outer_split {
+    StackPage {
+      name: "mail";
+
+      // The assistant panel (ui/internal/assistant, the In App target) on
+      // the right: window/assistant_panel.go puts assistant_panel.blp into
+      // assistant_panel_bin and shows it while the Assistant is on and In
+      // App chosen; the message pane's toggle opens it and the panel's own
+      // Hide button folds it.
+      child: Adw.OverlaySplitView assistant_split {
+        sidebar-position: end;
+        show-sidebar: false;
+        min-sidebar-width: 280;
+        max-sidebar-width: 480;
+        sidebar-width-fraction: 0.28;
+
+        content: Adw.NavigationSplitView outer_split {
       min-sidebar-width: 200;
       max-sidebar-width: 320;
       sidebar-width-fraction: 0.2;
@@ -65,6 +77,24 @@ Adw.ApplicationWindow main_window {
         child: Adw.ToolbarView {
           [top]
           Adw.HeaderBar {
+            // The window's two modes, Mail and Board (window/board.go):
+            // icons only, tooltips set from Go (board.Mail / BoardName, so
+            // this file needs no msgid of its own). Mirrors
+            // board_mode_switch at the leading edge of the board page's own
+            // header bar; the two groups follow one state.
+            [start]
+            Adw.ToggleGroup mode_switch {
+              Adw.Toggle {
+                name: "mail";
+                icon-name: "mail-unread-symbolic";
+              }
+
+              Adw.Toggle {
+                name: "board";
+                icon-name: "view-grid-symbolic";
+              }
+            }
+
             [start]
             Button {
               icon-name: "mail-message-new-symbolic";
@@ -978,7 +1008,17 @@ Adw.ApplicationWindow main_window {
       };
     };
 
-    sidebar: Adw.Bin assistant_panel_bin {};
+        sidebar: Adw.Bin assistant_panel_bin {};
+      };
+    }
+
+    StackPage {
+      name: "board";
+
+      // window/board.go puts board_page.blp's root into this bin, built
+      // once on first use.
+      child: Adw.Bin board_page_bin {};
+    }
   };
 }
 

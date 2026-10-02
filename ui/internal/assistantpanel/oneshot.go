@@ -15,9 +15,11 @@ import (
 // The one-shot requests of the In App target (ui/internal/assistant
 // rewrite.go and search.go): the compose window's rewrite (Rewriter) and
 // the search in the user's own words (Searcher), each one question to the
-// user's Claude Code that reads no mail (Request). The macOS client leads
-// (MalachiCore AssistantRequest, ComposeRewriteController,
-// SearchConversion); this is its port.
+// user's Claude Code that reads no mail (Request), and the board's triage
+// run (ui/internal/boardtriage), which reads it through the bridge
+// (Request.StartCall with Tools). The macOS client leads (MalachiCore
+// AssistantRequest, ComposeRewriteController, SearchConversion); this is
+// its port.
 
 // FailureKind is why a request brought no answer.
 type FailureKind int
@@ -32,6 +34,9 @@ const (
 	// FailureNotSignedIn: Claude Code says it is not signed in, or the API
 	// refused its sign-in.
 	FailureNotSignedIn
+	// FailureToolsMissing: a request with Tools; Claude Code did not
+	// report the bridge connected.
+	FailureToolsMissing
 )
 
 // Failure is why a request brought no answer.
@@ -49,6 +54,8 @@ func (f Failure) Text(tr assistant.Translator) string {
 		return assistant.PanelTexts(tr).NotFound
 	case FailureNotSignedIn:
 		return assistant.SignInTexts(tr).Hint
+	case FailureToolsMissing:
+		return assistant.PanelTexts(tr).ToolsMissing
 	}
 	return assistant.StoppedText(tr, f.Reason)
 }
@@ -61,8 +68,16 @@ func (f Failure) ReasonText(tr assistant.Translator) string {
 		return assistant.PanelTexts(tr).NotFound
 	case FailureNotSignedIn:
 		return assistant.SignInTexts(tr).Hint
+	case FailureToolsMissing:
+		return assistant.PanelTexts(tr).ToolsMissing
 	}
 	return f.Reason
+}
+
+// TimedOut says whether the request ended because no answer came within
+// its timeout.
+func (f Failure) TimedOut() bool {
+	return f.Kind == FailureStopped && f.Reason == timedOut
 }
 
 // OutcomeKind is how a request ended.
@@ -110,13 +125,14 @@ type RequestConfig struct {
 	KillGrace time.Duration
 }
 
-// Request is one question to the user's Claude Code that reads no mail
-// (macOS AssistantRequest). It runs the panel's protocol once: the command
-// line of assistant.Args without the bridge (no MCP server, no tool), with
-// --json-schema when the answer has a shape, in the panel's private
-// directory and with assistant.ChildEnv; one assistant.UserMessage on
-// stdin, which is then closed; the answer is the result event. The steps,
-// each of which may end it:
+// Request is one question to the user's Claude Code (macOS
+// AssistantRequest). It runs the panel's protocol once: the command line of
+// assistant.Args without the bridge (no MCP server, no tool), or with the
+// bridge, its extra arguments and the tools of Tools when the caller
+// passes them (StartCall), with --json-schema when the answer has a shape,
+// in the panel's private directory and with assistant.ChildEnv; one
+// assistant.UserMessage on stdin, which is then closed; the answer is the
+// result event. The steps, each of which may end it:
 //
 //  1. The first request ever asks for consent (Consent, the panel's "Send
 //     Mail to Claude?" on the window that asks; the answer is the shared
@@ -132,7 +148,13 @@ type RequestConfig struct {
 //     OutcomeAnswered with the result's text and structured_output,
 //     anything else FailureStopped with the result's text or subtype. The
 //     process ending before its result is FailureStopped with its stderr's
-//     first line, and no result within Timeout ends it the same way.
+//     first line, and no result within Timeout (or the call's own) ends it
+//     the same way (Failure.TimedOut). With Tools, the init event must
+//     report the bridge connected (else FailureToolsMissing), and every
+//     tool call and tool result goes to Call.OnTool. Every event that
+//     carries usage (an API message's, the result's) goes to Call.OnUsage
+//     first, before the event is handled (assistant.UsageTally adds them
+//     up); none arrives once the request ended or was cancelled.
 //
 // One request at a time: Start cancels the one under way, and Cancel ends
 // it (its process terminated); a cancelled request never calls its
@@ -185,17 +207,62 @@ func NewRequest(cfg RequestConfig) *Request {
 // Running says whether a request is under way.
 func (r *Request) Running() bool { return r.running }
 
+// Tools are the bridge a request gives Claude Code, and what of it may
+// run.
+type Tools struct {
+	// Bridge is the path of malachi-mcp; Socket the daemon's socket
+	// (--socket), "" for the bridge's default.
+	Bridge, Socket string
+	// BridgeArgs are the bridge's further arguments
+	// (assistant.TriageBridgeArgs).
+	BridgeArgs []string
+	// Allowed is --allowedTools (assistant.TriageToolsFor).
+	Allowed []string
+}
+
+// Call is what one StartCall asks for.
+type Call struct {
+	// SystemPrompt and Message are the system prompt and the one turn.
+	SystemPrompt, Message string
+	// JSONSchema, when set, is the answer's shape.
+	JSONSchema string
+	// Tools gives Claude Code the bridge; nil: no tool at all.
+	Tools *Tools
+	// Timeout replaces the request's own for this call when above 0.
+	Timeout time.Duration
+	// Model replaces the assistant-model setting when set (read at the
+	// start).
+	Model assistant.Model
+	// OnText (may be nil) gets the answer's text as it streams, all of it
+	// so far.
+	OnText func(string)
+	// OnTool (may be nil) gets every tool call and tool result
+	// (assistant.EventToolUse, assistant.EventToolResult); it may cancel
+	// the request.
+	OnTool func(assistant.Event)
+	// OnUsage (may be nil) gets every event that carries usage, before
+	// the event is handled.
+	OnUsage func(assistant.Event)
+}
+
 // Start asks Claude Code once: message as the one turn under systemPrompt,
 // with the model of assistant-model and, when jsonSchema is set, that shape
 // of answer. A request under way is cancelled first. onText (may be nil)
 // gets the answer's text as it streams, all of it so far; completion is
 // called once with the outcome, unless the request is cancelled.
 func (r *Request) Start(systemPrompt, message, jsonSchema string, onText func(string), completion func(Outcome)) {
+	r.StartCall(Call{SystemPrompt: systemPrompt, Message: message, JSONSchema: jsonSchema, OnText: onText}, completion)
+}
+
+// StartCall asks Claude Code once as c says (see Call); a request under
+// way is cancelled first. completion is called once with the outcome,
+// unless the request is cancelled.
+func (r *Request) StartCall(c Call, completion func(Outcome)) {
 	r.Cancel()
 	r.gen++
 	my := r.gen
 	r.running = true
-	r.loop.Post(func() { r.askConsent(my, systemPrompt, message, jsonSchema, onText, completion) })
+	r.loop.Post(func() { r.askConsent(my, c, completion) })
 }
 
 // Cancel ends the request under way: its process is terminated and its
@@ -211,12 +278,12 @@ func (r *Request) Cancel() {
 
 // askConsent is step 1: consent, once ever; an answer counts even when the
 // request was cancelled while the question was up.
-func (r *Request) askConsent(my int, systemPrompt, message, jsonSchema string, onText func(string), completion func(Outcome)) {
+func (r *Request) askConsent(my int, c Call, completion func(Outcome)) {
 	if my != r.gen {
 		return
 	}
 	if r.settings.AssistantConsent() {
-		r.locate(my, systemPrompt, message, jsonSchema, onText, completion)
+		r.locate(my, c, completion)
 		return
 	}
 	answer := func(allowed bool) {
@@ -230,7 +297,7 @@ func (r *Request) askConsent(my int, systemPrompt, message, jsonSchema string, o
 			r.finish(my, Outcome{Kind: OutcomeDeclined}, completion)
 			return
 		}
-		r.locate(my, systemPrompt, message, jsonSchema, onText, completion)
+		r.locate(my, c, completion)
 	}
 	if r.Consent == nil {
 		answer(false)
@@ -240,7 +307,7 @@ func (r *Request) askConsent(my int, systemPrompt, message, jsonSchema string, o
 }
 
 // locate is step 2: Claude Code, signed in; then step 3.
-func (r *Request) locate(my int, systemPrompt, message, jsonSchema string, onText func(string), completion func(Outcome)) {
+func (r *Request) locate(my int, c Call, completion func(Outcome)) {
 	path := r.locator.Locate()
 	if path == "" {
 		r.finish(my, failed(FailureNotFound, ""), completion)
@@ -255,19 +322,23 @@ func (r *Request) locate(my int, systemPrompt, message, jsonSchema string, onTex
 			r.finish(my, failed(FailureNotSignedIn, ""), completion)
 			return
 		}
-		p, err := r.launch(my, path, systemPrompt, jsonSchema, onText, completion)
+		p, err := r.launch(my, path, c, completion)
 		if err != nil {
 			r.log.Warn("assistant request", "err", err)
 			r.finish(my, failed(FailureStopped, err.Error()), completion)
 			return
 		}
 		r.process = p
-		if !p.Send(assistant.UserMessage(message)) {
+		if !p.Send(assistant.UserMessage(c.Message)) {
 			r.finish(my, failed(FailureStopped, "claude is not running"), completion)
 			return
 		}
 		p.CloseInput()
-		r.loop.After(r.Timeout, func() {
+		timeout := r.Timeout
+		if c.Timeout > 0 {
+			timeout = c.Timeout
+		}
+		r.loop.After(timeout, func() {
 			if my == r.gen && r.running {
 				r.log.Warn("assistant request: no answer in time")
 				r.finish(my, failed(FailureStopped, timedOut), completion)
@@ -281,11 +352,23 @@ func failed(kind FailureKind, reason string) Outcome {
 }
 
 // launch is step 3: the process.
-func (r *Request) launch(my int, path, systemPrompt, jsonSchema string, onText func(string), completion func(Outcome)) (*Process, error) {
+func (r *Request) launch(my int, path string, c Call, completion func(Outcome)) (*Process, error) {
 	if err := ensureDirectory(r.directory); err != nil {
 		return nil, fmt.Errorf("the assistant's directory: %w", err)
 	}
-	args := assistant.Args(assistant.Options{Model: r.settings.AssistantModel(), SystemPrompt: systemPrompt, JSONSchema: jsonSchema})
+	model := c.Model
+	if model == "" {
+		model = r.settings.AssistantModel()
+	}
+	opts := assistant.Options{Model: model, SystemPrompt: c.SystemPrompt, JSONSchema: c.JSONSchema}
+	if c.Tools != nil {
+		opts.Bridge, opts.Socket = c.Tools.Bridge, c.Tools.Socket
+		opts.BridgeArgs = c.Tools.BridgeArgs
+		// Never nil with Tools: nil would be the panel's tools.
+		opts.Tools = append([]string{}, c.Tools.Allowed...)
+	}
+	args := assistant.Args(opts)
+	onText := c.OnText
 	p := NewProcess(r.loop, r.log, path, args, assistant.ChildEnv(r.env, path), r.directory, r.killGrace)
 	r.blocks, r.streamed = "", ""
 	p.OnEvents = func(events []assistant.Event) {
@@ -293,7 +376,28 @@ func (r *Request) launch(my int, path, systemPrompt, jsonSchema string, onText f
 			return
 		}
 		for _, e := range events {
+			if e.Usage != nil && c.OnUsage != nil {
+				c.OnUsage(e)
+				// The handler may have cancelled the request.
+				if p != r.process || my != r.gen {
+					return
+				}
+			}
 			switch e.Kind {
+			case assistant.EventInit:
+				if c.Tools != nil && !e.BridgeConnected {
+					r.log.Warn("assistant request: the malachi MCP server is not connected")
+					r.finish(my, failed(FailureToolsMissing, ""), completion)
+					return
+				}
+			case assistant.EventToolUse, assistant.EventToolResult:
+				if c.OnTool != nil {
+					c.OnTool(e)
+					// The handler may have cancelled the request.
+					if p != r.process || my != r.gen {
+						return
+					}
+				}
 			case assistant.EventTextDelta:
 				r.streamed += e.Text
 				if onText != nil {

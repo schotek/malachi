@@ -23,6 +23,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/assistant"
+	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/compose"
 	"github.com/schotek/malachi/ui/internal/conversation"
@@ -221,6 +222,42 @@ type Window struct {
 	conv *conversationView
 	// ownWords is the search in the user's own words (search_ownwords.go).
 	ownWords ownWords
+
+	// The window's second mode, Board (board.go, board_list.go,
+	// board_detail.go, board_actions.go, board_triage_button.go,
+	// board_show_in_mail.go): mode is never persisted (board.InitialMode is
+	// Mail at every launch). modeStack is window.blp's mode_stack;
+	// modeSwitchMail its ToggleGroup in the folders header bar, mirrored by
+	// the board page's own (boardPage.modeSwitch); settingModeSwitch guards
+	// the notify::active-name handlers against each other's writes, as
+	// setListFilter does for message_filter.
+	mode              board.Mode
+	modeStack         *gtk.Stack
+	modeSwitchMail    *adw.ToggleGroup
+	settingModeSwitch bool
+	// typingAllowsAccels is search.go's single-key gate (setTypingAccels);
+	// combined with the mode (board.Allows CommandMessageAction) by
+	// applyMessageAccels.
+	typingAllowsAccels bool
+
+	// boardPage is the board's own page (board.go), built once on first use
+	// (ensureBoard): the first switch to Board, or at launch when the
+	// application's board triage wants the board's data running in the
+	// background (boardtriage.Controller.WantsBoardData). boardPageBin is
+	// window.blp's placeholder, filled the way assistant_panel_bin is.
+	boardPage    *boardPage
+	boardPageBin *adw.Bin
+	// boardMoveToAction is win.board-move-to, registered once
+	// (board_actions.go registerBoardActions) and read back by
+	// applyActionsSensitivity to show the selected case's state as its
+	// checked target.
+	boardMoveToAction *gio.SimpleAction
+	// boardFocusReply gives the keyboard to the board detail's inline
+	// reply editor (a later agent's ui/internal/boardreply, filled into
+	// board_page.blp's reply_slot); nil until that editor exists, in which
+	// case boardReply (board_actions.go) does nothing when a draft is
+	// already linked rather than open a second compose window over it.
+	boardFocusReply func()
 }
 
 // Starter brings the daemon up before the window dials its socket
@@ -263,6 +300,14 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		// Until the client reports a state, the first attempt is underway.
 		conn:       connView{State: client.Connecting},
 		statusRows: make(map[api.AccountID]*statusRow),
+		// The mail single-key shortcuts are bound at the application level
+		// from the start (main.go addActions); setTypingAccels only ever
+		// lifts them from here on, so its baseline must agree.
+		typingAllowsAccels: true,
+
+		modeStack:      b.GetObject("mode_stack").Cast().(*gtk.Stack),
+		modeSwitchMail: b.GetObject("mode_switch").Cast().(*adw.ToggleGroup),
+		boardPageBin:   b.GetObject("board_page_bin").Cast().(*adw.Bin),
 
 		outerSplit: b.GetObject("outer_split").Cast().(*adw.NavigationSplitView),
 		innerSplit: b.GetObject("inner_split").Cast().(*adw.NavigationSplitView),
@@ -515,6 +560,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		return true // keep the timer
 	})
 
+	w.setupBoardMode()
 	return w
 }
 
@@ -717,6 +763,7 @@ func (w *Window) reconnect() {
 func (w *Window) showConnectionState(s client.State, err error) {
 	w.conn = nextConnView(w.conn, s, err)
 	w.logConnection(s, err)
+	w.boardConnectionChanged(s == client.Connected)
 	defer w.refreshSyncLabel()
 	switch s {
 	case client.Connecting:

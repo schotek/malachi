@@ -53,8 +53,20 @@ func (w *Window) setupSearch(b *gtk.Builder) {
 	w.setupOwnWords(b)
 }
 
-// setTypingAccels installs (on) or lifts the shortcuts without a modifier.
+// setTypingAccels is the typing half of the single-key shortcuts' gate: on
+// while the keyboard is away from a text field, lifted while it is there.
+// applyMessageAccels (board.go) combines it with the mode, the other half
+// (Board has no list or reader for a key to act on), and does the actual
+// installing (installMessageAccels).
 func (w *Window) setTypingAccels(on bool) {
+	w.typingAllowsAccels = on
+	w.applyMessageAccels()
+}
+
+// installMessageAccels installs (on) or lifts the shortcuts without a
+// modifier (MessageAccels); applyMessageAccels is the only caller, so the
+// gate (the mode and the typing state) is always applied together.
+func (w *Window) installMessageAccels(on bool) {
 	for action, accel := range MessageAccels {
 		if strings.HasPrefix(accel, "<") {
 			continue

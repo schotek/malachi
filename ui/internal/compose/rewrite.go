@@ -135,7 +135,7 @@ func (u *rewriteUI) available() bool {
 // sync shows the button while the rewrite can run, and closes the popover
 // when it cannot.
 func (u *rewriteUI) sync() {
-	if u.w.draft.closed {
+	if u.w.pane.dc.draft.closed {
 		return
 	}
 	ok := u.available()
@@ -166,7 +166,7 @@ func (u *rewriteUI) clicked() {
 		u.popover.Popdown()
 		return
 	}
-	if !u.available() || u.opening || u.w.draft.closed {
+	if !u.available() || u.opening || u.w.pane.dc.draft.closed {
 		return
 	}
 	u.opening = true
@@ -175,7 +175,7 @@ func (u *rewriteUI) clicked() {
 		return
 	}
 	widget.AskAssistantConsent(u.w, func(allowed bool) {
-		if !allowed || u.w.draft.closed {
+		if !allowed || u.w.pane.dc.draft.closed {
 			u.opening = false
 			return
 		}
@@ -186,9 +186,9 @@ func (u *rewriteUI) clicked() {
 
 // fetchTarget asks the editor for the passage, then shows the popover.
 func (u *rewriteUI) fetchTarget() {
-	u.w.editor.RewriteTarget(u.w.params.Attribution, func(t editor.RewriteTarget) {
+	u.w.pane.editor.RewriteTarget(u.w.pane.params.Attribution, func(t editor.RewriteTarget) {
 		u.opening = false
-		if !u.available() || u.w.draft.closed {
+		if !u.available() || u.w.pane.dc.draft.closed {
 			return
 		}
 		u.present(t)
@@ -294,6 +294,6 @@ func (u *rewriteUI) apply(below bool) {
 		return
 	}
 	u.popover.Popdown()
-	u.w.editor.GrabFocus()
-	u.w.editor.ApplyRewrite(st.Text, below)
+	u.w.pane.editor.GrabFocus()
+	u.w.pane.editor.ApplyRewrite(st.Text, below)
 }

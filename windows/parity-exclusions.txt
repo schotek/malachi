@@ -58,6 +58,12 @@ Where Claude Code is	gschema: a key's summary or description, for dconf editors,
 The claude executable the assistant panel runs; empty looks in the usual places.	gschema: a key's summary or description, for dconf editors, not the UI
 The assistant panel may send mail to Claude	gschema: a key's summary or description, for dconf editors, not the UI
 Set when the user allowed it the first time.	gschema: a key's summary or description, for dconf editors, not the UI
+The style the Board opens in	gschema: a key's summary or description, for dconf editors, not the UI
+List, Columns or Today; applies the first time the Board is shown after launch, then the style last chosen lasts until the app quits.	gschema: a key's summary or description, for dconf editors, not the UI
+The Board's triage may send mail to Claude	gschema: a key's summary or description, for dconf editors, not the UI
+Set when the user allowed it the first time, apart from the assistant panel's consent.	gschema: a key's summary or description, for dconf editors, not the UI
+The model the Board's triage uses	gschema: a key's summary or description, for dconf editors, not the UI
+Sonnet, Haiku or Opus, passed to Claude Code; apart from the assistant panel's model.	gschema: a key's summary or description, for dconf editors, not the UI
 Email Client	desktop file: the launcher's metadata of Linux desktops; the installer's metadata comes before a release (docs/windows-port.md §17)
 mail;email;imap;	desktop file: the launcher's metadata of Linux desktops; the installer's metadata comes before a release (docs/windows-port.md §17)
 Native email client for the GNOME desktop	AppStream metainfo: the Linux software centres' description; the installer's comes before a release
