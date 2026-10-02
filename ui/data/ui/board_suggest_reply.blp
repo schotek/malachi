@@ -1,0 +1,75 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+
+// Kept for the detail's lifetime so a refresh preserves typed instructions.
+// Texts come from board and assistant's existing catalogs.
+Box suggest_reply {
+  orientation: vertical;
+  spacing: 6;
+  styles ["board-assistant-box"]
+
+  Box suggest_input {
+    spacing: 8;
+    Entry suggest_instruction {
+      hexpand: true;
+    }
+    Button suggest_button {}
+  }
+
+  Box suggest_running {
+    spacing: 8;
+    visible: false;
+    Adw.Spinner {
+      width-request: 16;
+      height-request: 16;
+    }
+    Label suggest_progress {
+      use-markup: false;
+      xalign: 0;
+      hexpand: true;
+      wrap: true;
+    }
+    Button suggest_stop {}
+  }
+
+  Label suggest_note {
+    use-markup: false;
+    xalign: 0;
+    wrap: true;
+    visible: false;
+    styles ["caption", "dim-label"]
+  }
+}
+
+Box sample_reply {
+  orientation: vertical;
+  spacing: 8;
+  styles ["board-assistant-box"]
+  Label sample_heading {
+    use-markup: false;
+    xalign: 0;
+    styles ["heading"]
+  }
+  Label sample_text {
+    use-markup: false;
+    xalign: 0;
+    wrap: true;
+    selectable: true;
+  }
+  Box {
+    spacing: 8;
+    Button sample_discard {
+      use-underline: true;
+      valign: start;
+    }
+    Label sample_note {
+      use-markup: false;
+      hexpand: true;
+      xalign: 1;
+      wrap: true;
+      styles ["caption", "dim-label"]
+    }
+  }
+}

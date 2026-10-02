@@ -59,13 +59,7 @@ func (w *Window) registerBoardActions() {
 	w.addAction("board-show-in-mail", false, func() { w.boardShowInMailSelected() })
 }
 
-// boardReply is win.board-reply and the detail header's own Reply (or
-// Comment) button: opens the case's reply or comment (openReply,
-// compose_open.go), or gives the keyboard to the inline editor a later
-// agent's ui/internal/boardreply fills into reply_slot when the case
-// already links a suggested draft (Detail.DraftID) — never a second
-// compose window over the one being edited there. boardFocusReply is nil
-// until that editor exists.
+// boardReply opens a reply or focuses the linked draft's inline editor.
 func (w *Window) boardReply() {
 	p := w.boardPage
 	if p == nil {
@@ -76,9 +70,7 @@ func (w *Window) boardReply() {
 		return
 	}
 	if d.DraftID != "" {
-		if w.boardFocusReply != nil {
-			w.boardFocusReply()
-		}
+		p.focusBoardReply(d.ID)
 		return
 	}
 	w.openReply(d.AccountID, d.Reply.Message, w.boardCaseComments(*d), d.Person)

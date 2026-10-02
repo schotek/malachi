@@ -4,6 +4,7 @@
 package compose
 
 import (
+	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/boardreply"
 )
@@ -20,7 +21,7 @@ var _ boardreply.Pane = (*Pane)(nil)
 // what Editor's ready phase holds: the case's linked draft as draft.get
 // returned it). Comment and its issue, if any, go with it.
 func FromBoardParams(p boardreply.Params) Params {
-	out := FromDraft(KindReply, p.Draft, api.BlockedContent{})
+	out := FromDraft(KindEdit, p.Draft, api.BlockedContent{})
 	out.AccountID = p.Account
 	return out
 }
@@ -87,4 +88,27 @@ func (p *Pane) finishTeardown() {
 		f.close()
 	}
 	p.editor.Close()
+}
+
+// SetDialogParent sets the host for file pickers and discard confirmation.
+func (p *Pane) SetDialogParent(w *gtk.Window) { p.dialogParent = w }
+
+// FocusEditorStart focuses the beginning once the editor bridge is ready.
+// False asks the host to try again after the pane has mapped.
+func (p *Pane) FocusEditorStart() bool {
+	p.FocusEditor()
+	if !p.editor.Ready() {
+		return false
+	}
+	p.editor.FocusStart()
+	return true
+}
+
+// EditorHasFocus distinguishes typing from focus in a recipient or button.
+func (p *Pane) EditorHasFocus() bool {
+	if p.dialogParent == nil || p.dialogParent.Focus() == nil {
+		return false
+	}
+	f := gtk.BaseWidget(p.dialogParent.Focus())
+	return f == &p.editor.Widget || f.IsAncestor(p.editor)
 }

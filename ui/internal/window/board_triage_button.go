@@ -4,8 +4,12 @@
 package window
 
 import (
+	"github.com/diamondburned/gotk4/pkg/gdk/v4"
+	"github.com/diamondburned/gotk4/pkg/gtk/v4"
+
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
+	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/boardtriage"
 	"github.com/schotek/malachi/ui/internal/i18n"
 )
@@ -29,12 +33,27 @@ func (w *Window) boardTriageOrNil() *BoardTriage {
 }
 
 // wireTriage connects the Triage button to the application's board
-// triage. With none (MALACHI_BOARD_SAMPLES has none), the button stays
-// hidden, renderTriageButton's default. Observes for the lifetime of the
+// triage. Samples keep an inert preview control; they never start a real
+// run on the daemon. Observes for the lifetime of the
 // board page: the main window lives as long as the application, so this
 // is never unbound (as assistant_panel.go's own buttons are not).
 func (p *boardPage) wireTriage() {
+	// The first click replaces Triage with Stop under the pointer. Consume
+	// subsequent presses of that same multi-click before GtkButton handles
+	// them, matching the macOS control; keyboard activation still works.
+	click := gtk.NewGestureClick()
+	click.SetButton(gdk.BUTTON_PRIMARY)
+	click.SetPropagationPhase(gtk.PhaseCapture)
+	click.ConnectPressed(func(n int, _, _ float64) {
+		if n > 1 {
+			click.SetState(gtk.EventSequenceClaimed)
+		}
+	})
+	p.triageButton.AddController(click)
 	p.triageButton.ConnectClicked(p.onTriageClicked)
+	if p.daemon == nil {
+		return
+	}
 	bt := p.w.boardTriageOrNil()
 	if bt == nil {
 		return
@@ -89,6 +108,10 @@ func boardTriageClickFor(c boardtriage.Control) boardTriageClick {
 // stop a manual run, open Anthropic's page, or run Claude Code's own
 // sign-in.
 func (p *boardPage) onTriageClicked() {
+	if p.daemon == nil {
+		p.w.Toast(board.Later(i18n.Tr))
+		return
+	}
 	bt := p.w.boardTriageOrNil()
 	if bt == nil {
 		return
@@ -118,6 +141,14 @@ func (p *boardPage) onTriageClicked() {
 // redraw of the board) and from wireTriage's Observe (whenever the
 // triage's own state moves between those redraws).
 func (p *boardPage) renderTriageButton() {
+	if p.daemon == nil {
+		vm := p.ctl.View()
+		p.triageButton.SetVisible(vm.AssistantOn && vm.Phase != board.PhaseOff)
+		p.triageButton.SetLabel(board.Triage(i18n.Tr))
+		p.triageButton.SetTooltipText(board.Triage(i18n.Tr))
+		p.triageButton.SetSensitive(true)
+		return
+	}
 	bt := p.w.boardTriageOrNil()
 	if bt == nil {
 		p.triageButton.SetVisible(false)

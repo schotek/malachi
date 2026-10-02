@@ -89,6 +89,7 @@ func main() {
 		// its preferences in the daemon, the run and the automatic schedule.
 		// Toasts and the consent sheet go to the main window once there is one.
 		assist.AttachBoardTriage(rpc, func() *window.Window { return mainWin })
+		assist.AttachBoardReply(rpc, func() *window.Window { return mainWin })
 		mgr = compose.NewManager(app, rpc, log, prefs)
 		// New Message needs an account that writes mail
 		// (capabilities.CanComposeNew): a Jira account only comments.
@@ -116,13 +117,38 @@ func main() {
 			}
 		}()
 	})
-	// show presents the main window, creating it on first use. The window
-	// hides instead of closing when "Run in Background" is on, so it is
-	// reused; when it really closes the application exits with it.
+	// Both Quit and closing the main window settle the board's inline
+	// replies while the RPC connection and GTK loop are still running.
+	// Repeated requests share the first wait and its possible confirmation.
+	var closing boardExit
+	requestExit := func(proceed func()) {
+		if closing.pending {
+			return
+		}
+		if mainWin == nil {
+			proceed()
+			return
+		}
+		w := mainWin
+		closing.request(w.FinishBoardReplies, w.ConfirmQuitUnsaved, w.ResumeBoardReplies, proceed)
+	}
+	// Keep one main window and its observers for the application's lifetime.
+	// A non-background close removes its application hold after saving;
+	// another compose/message window may still keep the application alive.
+	// A later activation reuses this window and its existing subscriptions.
 	show := func() {
 		if mainWin == nil {
 			mainWin = window.New(app, rpc, log, prefs, assist, mgr, sup)
+			w := mainWin
+			w.RequestClose = func() {
+				requestExit(func() {
+					w.SetVisible(false)
+					w.SetApplication(nil)
+				})
+			}
 		}
+		mainWin.SetApplication(&app.Application)
+		mainWin.ResumeBoardReplies()
 		mainWin.Present()
 		if serviceHold {
 			app.Release()
@@ -157,12 +183,14 @@ func main() {
 		// The assistant panel's Claude Code ends with the application.
 		if mainWin != nil {
 			mainWin.CloseAssistant()
+			mainWin.CloseBoardReplies()
 		}
 		window.SweepOpenedAttachments(log)
 		// The board's triage stops while the connection still stands: a run
 		// under way ends as cancelled and its board.runEnd is waited for, at
 		// most 2 s (the daemon ends a run nobody ended itself later).
 		if assist != nil {
+			assist.StopBoardReply()
 			assist.StopBoardTriage()
 		}
 		rpc.Close()
@@ -173,7 +201,7 @@ func main() {
 		sup.Stop()
 	})
 
-	newMessage = addActions(app, rpc, log, func() *settings.Store { return prefs }, func() *window.Assistant { return assist }, show, func() *compose.Manager { return mgr }, openNotified)
+	newMessage = addActions(app, rpc, log, func() *settings.Store { return prefs }, func() *window.Assistant { return assist }, show, func() *compose.Manager { return mgr }, openNotified, func() { requestExit(app.Quit) })
 	os.Exit(app.Run(os.Args))
 }
 
@@ -201,7 +229,7 @@ func addUninstalledIconPath() {
 // settings store and the Assistant state, which exist only after startup
 // has run; show presents the main window. It returns app.compose, which
 // follows the accounts that write mail.
-func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, store func() *settings.Store, assist func() *window.Assistant, show func(), composer func() *compose.Manager, openNotified func(api.AccountID, api.MessageID)) *gio.SimpleAction {
+func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, store func() *settings.Store, assist func() *window.Assistant, show func(), composer func() *compose.Manager, openNotified func(api.AccountID, api.MessageID), requestQuit func()) *gio.SimpleAction {
 	newMessage := gio.NewSimpleAction("compose", nil)
 	newMessage.ConnectActivate(func(*glib.Variant) { composer().Open(compose.Params{}) })
 	app.AddAction(newMessage)
@@ -267,7 +295,7 @@ func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, stor
 	app.AddAction(addJira)
 
 	quit := gio.NewSimpleAction("quit", nil)
-	quit.ConnectActivate(func(*glib.Variant) { app.Quit() })
+	quit.ConnectActivate(func(*glib.Variant) { requestQuit() })
 	app.AddAction(quit)
 	app.SetAccelsForAction("app.quit", []string{"<Control>q"})
 

@@ -419,9 +419,10 @@ Pořadí prací:
    konverzace; Windows na `feat/jira-windows`, zbývá průchod vlastníka
    proti skutečnému Jira Cloud)
 10. Nástěnka (případy, pravidla, triage asistentem) — backend, API, most
-    MCP a macOS klient napsané na `feat/board` (necommitnuté); zbývá Go
-    model v `ui/internal/board` (texty tam jsou), GTK a Windows, skutečný
-    běh triage s Claude Code
+    MCP, macOS a GTK klient napsané na `feat/board`; Go model je v
+    `ui/internal/board`, běh triage v `boardtriage` a návrhy odpovědí v
+    `boardreply`. Zbývá Windows a ruční ověření GTK včetně skutečného
+    běhu triage a návrhu odpovědi s Claude Code
 
 Asistent (stav 2026-09-30, sloučeno do `main`; uživatel potvrdil, že
 funguje ve všech třech klientech). Na macOS je hotové a uživatelem otestované:
@@ -1003,9 +1004,9 @@ potvrzení, `Fallback` po neověřeném odesílateli, `OpenableURL` jen https),
 port `MalachiCore/Bulk` a `Malachi.Core/Bulk`; pruh v panelu, okně zprávy
 a kartách konverzace, ne v přiložené zprávě.
 
-Nástěnka (stav 2026-10-02, větev `feat/board`, necommitnuté; UI jen
-v macOS klientu z výslovného pokynu vlastníka, výjimka z pravidla 6: GTK
-a Windows ji dluží). Hlavní okno má dva režimy, Pošta (vše dosavadní)
+Nástěnka (stav 2026-10-02, větev `feat/board`; nejdřív macOS a potom
+GTK z výslovného pokynu vlastníka, výjimka z pravidla 6: Windows
+ji stále dluží). Hlavní okno má dva režimy, Pošta (vše dosavadní)
 a Nástěnka. Přepíná dvousegmentový přepínač (`envelope` / `square.grid.2x2`)
 na začátku každého toolbaru a položky Pošta a Nástěnka na vrcholu menu
 Zobrazení, bez klávesových zkratek; režim se neukládá (`Board.initialMode`
@@ -1296,25 +1297,63 @@ Triage ustupuje do přetoku první. Tooltipy řádků a karet zrušené (AppKit
 je ukazuje skrz překrývající panel). Každý řetězec z případu Core znovu
 čistí a ořezává (`cleanLine` / `cleanBlock`) a UI ho ukazuje jen přes
 `stringValue`. Texty nástěnky a triage mají referenci msgidů v čistém Go
-balíčku `ui/internal/board` (`text.go`, `triage.go`, `reply.go`, jen texty za
+balíčku `ui/internal/board` (`text.go`, `triage.go`, `reply.go`, texty za
 rozhraním `Translator` jako `jira.Translator`, v `po/POTFILES`, česky
 v `po/cs.po`); macOS `Board.Text` je přebírá s klíčem = msgid, co v něm
 zůstane jako `// macOS-only string`, je anglicky. Windows nástěnku nemá,
 takže tyto msgidy patří do `windows/parity-exclusions.txt`, dokud ji
 nedostane.
 
-Zbývá: model a pohledová logika nástěnky v Go (`ui/internal/board`
-zatím drží jen texty; pohledové modely, zdroj, pravidla rozvrhu triage)
-a porty do GTK a Windows (C# typy API jsou
-napsané bez sestavení, `build.ps1 app`/`test` čeká). Testy: Go testy
+GTK UI: `ui/internal/board` obsahuje i pohledové modely, kontroler,
+zdroj nad démonem, vzorová data a pravidla dostupnosti a rozvrhu.
+`ui/internal/boardtriage` vlastní předvolby, běh a automatickou triage;
+`ui/internal/boardreply` návrh odpovědi, načítání propojeného konceptu
+a životní cyklus jeho editorů. `window/board*.go` a `board_page.blp`
+zapojují režimy Pošta / Nástěnka, Seznam / Sloupce / Dnes, filtry,
+detail a vysouvací panel, akce, stav triage a navrhování odpovědí.
+Konverzační blok je trvalý i při obnově detailu: starší karty jsou
+sbalené na výňatek `board.get`, otevřené načítají `message.body` přes
+cache Pošty a zobrazují jen sanitizované HTML ve stejném `htmlview.Card`
+jako Pošta. Chyba, chybějící či zadržené HTML ponechá výňatek; zdrojová
+HTML pošta se do UI nedostane. Nejvýš čtyři živé web view řídí model
+konverzačních karet v `ui/internal/board`; karty si při obnově drží
+identitu a po skrytí web view uvolní. Odkazy, části a omezení výšky
+přebírají zabezpečení a pravidla Pošty.
+Sdílený `compose.Pane` slouží samostatnému oknu i inline odpovědi;
+vlastník `OwnerBoard` zachová neuložené či neodeslané odpovědi při
+změně výběru nebo režimu. Automatická triage spouští zdroj i po
+asynchronním načtení předvoleb a dostupnosti Claude, bez prvního
+ručního otevření nástěnky. Výchozí styl je v Předvolbách → Obecné,
+souhlas a rozvrh triage v Předvolbách → AI.
+
+Zbývá port do Windows (C# typy API jsou napsané bez sestavení,
+`build.ps1 app`/`test` čeká), ruční průchod GTK (všechny styly,
+inline odpověď, přepínání výběru a ukončení s neuloženým textem)
+a skutečný běh triage a navrhování odpovědi s Claude Code.
+Testovací pokrytí GTK je v `ui/internal/board`, `boardtriage`,
+`boardreply`, `compose` a `window`; samotná přítomnost testů
+nedokládá ruční ověření UI ani skutečného Claude. Volitelný
+`MALACHI_GTK_SMOKE=1 go test ./internal/window -run '^TestBoardGTKSmoke$' -count=1`
+(z `ui/`, s GTK displejem, případně Broadway) zkouší skutečné Blueprinty,
+tři styly, výběr a prázdný stav nad vymyšlenými daty bez démona.
+Přidané `MALACHI_GTK_EDITOR_SMOKE=1` ověří skutečný inline WebKit editor,
+jeho zachování při obnově a změně stylu a uložení nedotčeného konceptu;
+`MALACHI_GTK_CARDS_SMOKE=1` přidá HTML karty, jejich limit, obnovu,
+opožděné odpovědi a uvolnění. Obě rozšíření používají vymyšlená data
+a odpojeného klienta, nikoli skutečnou schránku.
+`MALACHI_GTK_EDITOR_SMOKE=1` přidá inline editor nad falešným konceptem,
+`MALACHI_GTK_CARDS_SMOKE=1` HTML karty nad vymyšlenými sanitizovanými těly
+v cache: identitu po obnově, změnu výňatku a opožděnou odpověď, strop
+živých web view, fallback a uvolnění při odchodu z Nástěnky.
+Testy backendu: Go testy
 balíčků `board` (s patologickými vstupy z `backend/testdata/board`
 a fuzz cíli), `store`, `core` a mostu, sady `swift test` nástěnky
 (`Board*`, `AssistantTriageTests`, `DaemonBoardSourceTests`, testy API);
 pravidla známých odesílatelů a okno 30 dní pro `you` vznikla po suchém
 běhu nad kopií skutečného storu (`TestBoardDryRun`). UI zkouší vlastník
-ručně. Neověřil nikdo: skutečný běh triage s Claude Code (ruční ani
-automatický), běh aplikace nad skutečnými daty s migrací 0017 a Windows
-build.
+ručně. Zde není doložen skutečný běh triage s Claude Code (ruční ani
+automatický), návrh odpovědi v GTK ani Windows build; migrace 0017 je
+již zmrazená po provedení v ostrém storu vlastníka (viz níže).
 
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně

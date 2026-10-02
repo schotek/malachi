@@ -38,7 +38,7 @@ import (
 // manual run without consent asks with "Let the Assistant Triage the
 // Board?" on the main window (widget.AskTriageConsent).
 //
-// What the board page feeds and uses (window.go, later): BoardChanged with
+// What the board page feeds and uses (board.go): BoardChanged with
 // every snapshot of its source, SetOnRefresh with the source's list again
 // (after a run, and whenever Preferences → AI comes up), Controller for
 // the Triage control and the status strip (View, Observe, Start, Cancel,

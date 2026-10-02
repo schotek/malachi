@@ -74,8 +74,7 @@ type End struct {
 // attachment chips, the status line, the draft behind them
 // (draftController over composeForm, below) and the compose and Format
 // actions. compose.Window embeds one for LayoutWindow/OwnerWindow; the
-// board embeds one for LayoutInline/OwnerBoard in its case detail (a later
-// piece of work: this package only delivers the pane).
+// board embeds one for LayoutInline/OwnerBoard in its case detail.
 //
 // Hooks (OnHeight, OnTitle, OnSendEnabled, OnToast, OnEnd, OnLost,
 // DiscardStored) are how the pane talks back to whatever hosts it,
@@ -193,16 +192,15 @@ type Pane struct {
 	OnEnd func(End)
 	// OnLost: OwnerBoard only, the draft was deleted elsewhere.
 	OnLost func()
+	// OnSendFailed reports a completed, failed send to the board host.
+	OnSendFailed func()
 	// DiscardStored: OwnerBoard only, Discard deletes the stored draft
 	// through this instead of a plain draft.delete (the board's
 	// board.discardDraft, which also unlinks it from the case).
 	DiscardStored func(accountID api.AccountID, draftID api.DraftID, done func(err error))
 
-	// dialogParent: LayoutWindow only, the window AlertDialog and
-	// ConfirmDestructive present on, and file dialogs. Set by
-	// compose.Window right after NewPane; nil for the board's inline pane
-	// (it never reaches a dialog: owner board always closes unasked, and
-	// Attach/Insert Image are plain buttons there too).
+	// dialogParent is the window for confirmation and file dialogs,
+	// supplied by either host before showing the pane.
 	dialogParent *gtk.Window
 
 	tornDown bool
@@ -219,7 +217,7 @@ func recipientFieldFrom(b *gtk.Builder, id string) *recipientField {
 }
 
 // NewPane builds and prefills a pane from compose_pane.blp. The window
-// (compose.go) presents it inside its own chrome; the board (future work)
+// (compose.go) presents it inside its own chrome; the board
 // puts its widget into the case detail and feeds it a visible height
 // (SetVisibleHeight) for the sized editor.
 func NewPane(m *Manager, p Params, opts PaneOptions) *Pane {
@@ -277,6 +275,11 @@ func NewPane(m *Manager, p Params, opts PaneOptions) *Pane {
 	pn.dc.ctxFn = pn.ctx
 	pn.dc.unregisterCID = editor.UnregisterCID
 	pn.dc.onSent = pn.handleSent
+	pn.dc.onSendFailed = func() {
+		if pn.OnSendFailed != nil {
+			pn.OnSendFailed()
+		}
+	}
 	pn.dc.onLost = func() {
 		if pn.OnLost != nil {
 			pn.OnLost()
@@ -289,10 +292,10 @@ func NewPane(m *Manager, p Params, opts PaneOptions) *Pane {
 		}
 		done(errNoDiscardHost)
 	}
+	pn.dc.confirmDiscard = func(heading, body, label string, proceed func()) {
+		widget.ConfirmDestructive(pn.dialogParent, heading, body, label, proceed)
+	}
 	if opts.Layout == LayoutWindow {
-		pn.dc.confirmDiscard = func(heading, body, label string, proceed func()) {
-			widget.ConfirmDestructive(pn.dialogParent, heading, body, label, proceed)
-		}
 		pn.dc.saveDraftQuestion = pn.showSaveDraftQuestion
 	}
 
@@ -559,9 +562,8 @@ func (p *Pane) wireRecipientSuggestions() {
 // isActive reports whether the host window is active, for the recipient
 // rows' skipCommit (a focus loss while the window is in the background is
 // not the end of a half-typed address). The board embeds the pane inline
-// without a window of its own (dialogParent nil there); true (always
-// "active" from the pane's point of view) keeps a half-typed address
-// uncommitted only on an actual focus loss.
+// with the main window as dialogParent, so switching to another
+// application preserves a half-typed address there as well.
 func (p *Pane) isActive() bool {
 	if p.dialogParent == nil {
 		return true
@@ -945,8 +947,7 @@ func (p *Pane) attachFiles() {
 }
 
 // topLevelWindow is the *gtk.Window a file dialog presents over: the
-// window layout's own window, or nil (the dialog picks a sensible
-// default) for the board's inline pane.
+// compose window or the board's main window.
 func (p *Pane) topLevelWindow() *gtk.Window { return p.dialogParent }
 
 // attachGioFiles imports files chosen in the dialog or dropped onto the

@@ -257,18 +257,22 @@ Adw.BreakpointBin board_page_root {
                     child: Adw.ToolbarView board_detail_tree {
                       [top]
                       Adw.HeaderBar {
-                        [start]
-                        Button board_done_button {}
+                        // Window controls belong to board_header above.
+                        show-start-title-buttons: false;
+                        show-end-title-buttons: false;
+                        show-title: false;
 
                         [start]
-                        MenuButton board_remind_button {
-                          icon-name: "appointment-soon-symbolic";
+                        Button board_done_button {
+                          // HeaderBar adds 6px: align with the detail's 24px inset.
+                          margin-start: 18;
                         }
 
                         [start]
-                        Button board_archive_button {
-                          icon-name: "folder-download-symbolic";
-                        }
+                        MenuButton board_remind_button {}
+
+                        [start]
+                        Button board_archive_button {}
 
                         [end]
                         MenuButton board_detail_menu {
@@ -541,6 +545,8 @@ Adw.BreakpointBin board_page_root {
     sidebar: Adw.ToolbarView board_panel_content {
       [top]
       Adw.HeaderBar board_panel_header {
+        show-start-title-buttons: false;
+        show-end-title-buttons: false;
         title-widget: Adw.WindowTitle board_panel_title {};
 
         [end]

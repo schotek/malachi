@@ -252,12 +252,9 @@ type Window struct {
 	// applyActionsSensitivity to show the selected case's state as its
 	// checked target.
 	boardMoveToAction *gio.SimpleAction
-	// boardFocusReply gives the keyboard to the board detail's inline
-	// reply editor (a later agent's ui/internal/boardreply, filled into
-	// board_page.blp's reply_slot); nil until that editor exists, in which
-	// case boardReply (board_actions.go) does nothing when a draft is
-	// already linked rather than open a second compose window over it.
-	boardFocusReply func()
+	// RequestClose settles inline drafts before closing the main window.
+	RequestClose         func()
+	boardAutoStartRemove func()
 }
 
 // Starter brings the daemon up before the window dials its socket
@@ -420,6 +417,10 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	// explicit hold is needed; app.show / activation presents it again.
 	w.ConnectCloseRequest(func() bool {
 		if !w.settings.RunInBackground() {
+			if w.RequestClose != nil {
+				w.RequestClose()
+				return true
+			}
 			return false // destroy; the application exits with its last window
 		}
 		w.SetVisible(false)

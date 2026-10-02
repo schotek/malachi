@@ -233,8 +233,8 @@ func boardAccountFactory() *gtk.SignalListItemFactory {
 }
 
 // renderStack shows the page that belongs on screen: the empty state
-// (ViewModel.IsEmpty, or a phase with nothing else to show), the current
-// style, or the placeholder of a style not built yet.
+// (ViewModel.IsEmpty, or a phase with nothing else to show), or the current
+// List, Columns or Today style.
 func (p *boardPage) renderStack(vm board.ViewModel) {
 	setStatusPage(p.emptyPage, "view-grid-symbolic", vm.EmptyTitle, vm.EmptyBody)
 	style := p.ctl.State().Style

@@ -201,6 +201,18 @@ conversation was rejected for the reason given for macOS below: in a
 card the headers, badges and event rows are native widgets with plain
 text, and the body is one message's output.
 
+The GTK board's conversation cards use the same `htmlview.Card` and
+height governor as Mail. Only an open card fetches its message's body
+through Mail's cache (`message.body`, with quoted history trimmed unless
+that cache entry already shows the quoted variant). Each HTML document is
+one daemon-sanitised body; the board never builds HTML from excerpts or
+assistant annotations. The sender, date and folded excerpt stay native
+plain-text widgets. Missing, withheld, unavailable or failed bodies keep
+the excerpt from `board.get`. At most four card web views are live beside
+the reply editor; folding, hiding or removing a card releases its view,
+and navigation, parts, links and sizing use the same restrictions above.
+An ordinary board refresh retains the existing cards and their documents.
+
 Layer 2 exists so a sanitiser bug is not automatically a compromise; it is
 not a reason to relax layer 1.
 

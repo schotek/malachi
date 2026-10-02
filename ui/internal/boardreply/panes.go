@@ -29,8 +29,8 @@ import (
 // makes them, puts their views into the detail and forwards their ends
 // here (Discarding, SendFailed, Ended). A pane is made over
 // ui/internal/compose's draft controller with owner board, not window (the
-// GTK port of ComposeDraftController and its "board" owner is future work,
-// not in this package); ComposeDraftBoardOwnerTests names the guarantees
+// GTK port of ComposeDraftController lives in compose/draft.go,
+// outside this package); ComposeDraftBoardOwnerTests names the guarantees
 // such a pane must give, one sentence each:
 //
 //   - Close is the controller's cleanup, never its finish, and never asks

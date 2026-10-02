@@ -398,6 +398,9 @@ func (h convWindowHost) convFetch(s api.MessageSummary, full, quoted bool, then 
 // body is there.
 func (w *Window) fetchBodyOnly(acc api.AccountID, id api.MessageID, then func(*loadedMessage)) {
 	lm := w.loadedFor(id)
+	if lm.account == "" {
+		lm.account = acc
+	}
 	if lm.body != nil {
 		then(lm)
 		return

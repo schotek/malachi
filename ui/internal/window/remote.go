@@ -176,6 +176,9 @@ func (w *Window) refreshRemoteBar(id api.MessageID, lm *loadedMessage) {
 // showLoaded re-renders message id wherever it is on display: the pane
 // when it is the selected message, and its own window when one is open.
 func (w *Window) showLoaded(id api.MessageID, lm *loadedMessage) {
+	if w.boardPage != nil && w.boardPage.conversation != nil {
+		w.boardPage.conversation.loaded(id, lm)
+	}
 	w.conversationShowLoaded(id, lm)
 	if s, ok := w.selectedMessage(); ok && s.ID == id && !w.conversationShown() {
 		w.paneLabels().render(s, lm)

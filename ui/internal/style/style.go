@@ -262,6 +262,8 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// text only (CLAUDE.md rule 3 — never HTML on the board).
 	b.WriteString("box.board-card { padding: 8px 10px; border-radius: 10px; background-color: alpha(@window_fg_color, 0.045); }\n")
 	b.WriteString("box.board-card.board-card-mine { background-color: alpha(@accent_bg_color, 0.1); }\n")
+	b.WriteString("box.board-conversation-card { background-color: alpha(@window_fg_color, 0.045); }\n")
+	b.WriteString("box.board-conversation-card.board-card-mine { background-color: alpha(@accent_bg_color, 0.1); }\n")
 	// The assistant's summary, tasks and commitments: the same indigo-ish
 	// note the assistant panel gives its own cards, so the board reads as
 	// the same voice.

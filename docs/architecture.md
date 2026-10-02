@@ -2314,8 +2314,11 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   only stores these preferences; the schedule is the client's.
 - The board on macOS first: **decided** (2026-10-01, the owner's
   instruction, an exception to the rule that a UI change goes to all three
-  clients) — the window modes, the board and the triage run exist only in
-  the macOS client; its pure logic is Swift-first (`MalachiCore/Board`),
-  its texts' msgids are in `ui/internal/board`, and the Go reference of
-  the board's model and the GTK and Windows clients are owed. The Windows client has the API types
+  clients) — the macOS client led with Swift-first logic
+  (`MalachiCore/Board`). The GTK port followed on 2026-10-02: its Go model
+  and texts are in `ui/internal/board`, triage in `ui/internal/boardtriage`,
+  and suggested replies and inline editor lifecycle in
+  `ui/internal/boardreply`. The GTK widgets mirror the three styles and
+  embed the shared `compose.Pane`; live Claude and manual GTK checks
+  remain to be verified. The Windows client has the API types
   (`Malachi.Core/Api/Board.cs`) only.

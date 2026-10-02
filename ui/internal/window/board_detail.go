@@ -5,7 +5,6 @@ package window
 
 import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
-	"github.com/diamondburned/gotk4/pkg/pango"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/board"
@@ -16,19 +15,22 @@ import (
 
 // The selected case in full: the state pill, title, person/date, the "Why
 // is this here?" box, the deadline, the assistant's summary and tasks, the
-// reply slot (a later agent's: ui/internal/boardreply), the conversation as
-// plain-text cards and the open commitments. Every string of a case is
-// hostile input (mail, or an assistant that read mail): shown only as
-// plain text, never markup (CLAUDE.md rule 3).
+// reply slot (ui/internal/boardreply), conversation cards and open
+// commitments. Case metadata and excerpts are hostile input shown as
+// plain text; board_conversation.go alone renders message.body's sanitised
+// HTML in Mail's locked card views (CLAUDE.md rule 3).
 //
-// Only reply_slot is stable across a rebuild (board_page.blp's comment);
-// every other box here is cleared and rebuilt whole on each call, which is
-// simple and cheap enough for the board's bounded case count.
+// The reply slot and conversation block stay stable across rebuilds, so
+// autosaves preserve the editor and each message's document. The other
+// boxes are rebuilt from the current detail.
 
 // renderDetail shows the selected case, or the empty placeholder.
 func (p *boardPage) renderDetail(vm board.ViewModel) {
 	d := vm.Detail
 	if d == nil {
+		if p.conversation != nil {
+			p.conversation.apply(nil)
+		}
 		p.noSelectionPage.SetIconName("view-grid-symbolic")
 		p.noSelectionPage.SetTitle(board.NoSelectionTitle(i18n.Tr))
 		p.noSelectionPage.SetDescription(board.NoSelectionBody(i18n.Tr))
@@ -55,8 +57,8 @@ func (p *boardPage) renderDetailHeader(d board.Detail) {
 		p.doneButton.SetLabel(board.Done(i18n.Tr))
 		p.doneButton.SetActionName("win.board-mark-done")
 	}
-	p.remindButton.SetTooltipText(board.Remind(i18n.Tr))
-	p.archiveButton.SetTooltipText(board.Archive(i18n.Tr))
+	p.remindButton.SetLabel(board.Remind(i18n.Tr))
+	p.archiveButton.SetLabel(board.Archive(i18n.Tr))
 	p.archiveButton.SetSensitive(!d.IsDone)
 	comment := p.w.boardCaseComments(d)
 	p.replyButton.SetLabel(jira.ReplyLabel(comment, i18n.Tr))
@@ -79,6 +81,7 @@ func (p *boardPage) renderDetailTop(d board.Detail) {
 
 	pillRow := gtk.NewBox(gtk.OrientationHorizontal, 8)
 	pill := gtk.NewMenuButton()
+	p.statePill = pill
 	pill.AddCSSClass("board-state-pill")
 	if c := boardStatePillClass(d.State); c != "" {
 		pill.AddCSSClass(c)
@@ -227,78 +230,6 @@ func (p *boardPage) renderDetailSummary(d board.Detail) {
 		}
 	}
 	p.summaryBox.Append(box)
-}
-
-// renderDetailReplySlot leaves reply_slot alone (a later agent's inline
-// editor): it is only shown or hidden, never cleared or rebuilt, per
-// board_page.blp's comment. Until that editor exists the slot has nothing
-// in it, so it stays hidden.
-func (p *boardPage) renderDetailReplySlot(d board.Detail) {
-	if p.replySlot.FirstChild() == nil {
-		p.replySlot.SetVisible(false)
-	}
-}
-
-// renderDetailConversation shows the case's messages as plain-text cards,
-// or the loading/failed note.
-func (p *boardPage) renderDetailConversation(d board.Detail) {
-	removeAllChildren(p.conversationBox)
-	head := gtk.NewLabel(d.ConversationTitle)
-	head.SetUseMarkup(false)
-	head.SetXAlign(0)
-	head.AddCSSClass("heading")
-	p.conversationBox.Append(head)
-	if d.MessagesNote != "" {
-		note := gtk.NewLabel(d.MessagesNote)
-		note.SetUseMarkup(false)
-		note.SetXAlign(0)
-		note.SetWrap(true)
-		note.AddCSSClass("dim-label")
-		p.conversationBox.Append(note)
-		if d.MessagesRetry {
-			retry := gtk.NewButtonWithLabel(board.TryAgain(i18n.Tr))
-			retry.AddCSSClass("flat")
-			retry.AddCSSClass("link")
-			retry.SetHAlign(gtk.AlignStart)
-			retry.ConnectClicked(p.ctl.RetryMessages)
-			p.conversationBox.Append(retry)
-		}
-		return
-	}
-	for _, m := range d.Messages {
-		p.conversationBox.Append(boardMessageCard(m))
-	}
-}
-
-// boardMessageCard is one plain-text card of the conversation.
-func boardMessageCard(m board.MessageCard) *gtk.Box {
-	card := gtk.NewBox(gtk.OrientationVertical, 4)
-	card.AddCSSClass("board-card")
-	if m.Mine {
-		card.AddCSSClass("board-card-mine")
-	}
-	head := gtk.NewBox(gtk.OrientationHorizontal, 8)
-	from := gtk.NewLabel(m.From)
-	from.SetUseMarkup(false)
-	from.SetXAlign(0)
-	from.SetHExpand(true)
-	from.AddCSSClass("heading")
-	from.SetEllipsize(pango.EllipsizeEnd)
-	head.Append(from)
-	when := gtk.NewLabel(m.When)
-	when.SetUseMarkup(false)
-	when.AddCSSClass("caption")
-	when.AddCSSClass("dim-label")
-	head.Append(when)
-	card.Append(head)
-	body := gtk.NewLabel(m.Text)
-	body.SetUseMarkup(false)
-	body.SetXAlign(0)
-	body.SetWrap(true)
-	body.SetWrapMode(pango.WrapWordChar)
-	body.SetSelectable(true)
-	card.Append(body)
-	return card
 }
 
 // renderDetailCommitments shows "From the Assistant": the case's open

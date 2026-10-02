@@ -228,9 +228,9 @@ window, Settings without search, ⌥⌘↑/↓ for reordering, the ⌘R setting,
 *Glass* sound, the owner and mode checks on the daemon's key file). A new
 deviation goes into that table, not silently into the code.
 
-The main window has two modes, Mail and Board (2026-10-01, Swift-first;
-only this client has the board so far, on the owner's instruction, so the
-GTK and Windows ports are owed). A two-segment control at the leading side
+The main window has two modes, Mail and Board (2026-10-01, Swift-first,
+on the owner's instruction; the GTK port followed on 2026-10-02, while
+the Windows port is still owed). A two-segment control at the leading side
 of every toolbar and the first items of the View menu switch them; the
 mode is not saved. A hidden split view still reserves its sidebar section
 in the unified toolbar, so in Board the Mail split's view is taken out of
@@ -432,10 +432,17 @@ The board ([architecture.md §3.7](architecture.md#37-the-board), [api.md
   sibling through the panel.
 
 The board's texts have their msgids in the Go package `ui/internal/board`
-(texts only, `text.go` and `triage.go`, translated in `po/`), which
+(including `text.go`, `triage.go` and `reply.go`, translated in `po/`), which
 `Board.Text` looks up with key = msgid like every other text (§8); what
-stays a `// macOS-only string` there is English. The board's model and
-view logic have no Go reference yet: they come with the GTK port.
+stays a `// macOS-only string` there is English. The GTK port also supplies
+the Go model and view logic in that package, the triage controllers in
+`ui/internal/boardtriage`, and the suggested reply and editor lifecycle in
+`ui/internal/boardreply`. Its widgets live in `ui/internal/window/board*.go`
+and `board_page.blp`, with the shared `compose.Pane` for inline drafts.
+It also mirrors `Board.ConversationCards`, using Mail's existing
+`htmlview.Card` for one sanitised `message.body` answer per open card,
+with the same four-view limit and plain-text excerpt fallback.
+Live Claude runs and a manual GTK pass remain to be verified.
 
 Development aids, neither of them a feature, both only from an isolated
 instance (`MALACHI_DATA_DIR` and its own `MALACHI_SOCKET`, §1), never over

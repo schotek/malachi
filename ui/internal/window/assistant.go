@@ -94,6 +94,8 @@ type Assistant struct {
 	// board is the board's triage (board_triage.go), from
 	// AttachBoardTriage on; it runs under the In App target too.
 	board *BoardTriage
+	// reply is the board's application-wide suggested reply request.
+	reply *BoardReply
 
 	status   *mcpsetup.Status
 	handlers map[assistant.Target]bool

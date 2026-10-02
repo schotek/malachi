@@ -14,7 +14,9 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/board"
+	"github.com/schotek/malachi/ui/internal/boardreply"
 	"github.com/schotek/malachi/ui/internal/boardtriage"
+	"github.com/schotek/malachi/ui/internal/compose"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
@@ -30,9 +32,7 @@ import (
 //
 // The macOS client leads (MalachiCore/Board, MalachiMail/Board); this is
 // the GTK port of its model (ui/internal/board, ported and tested this
-// session) and view logic. The Columns and Today styles and the inline
-// suggested-reply editor (ui/internal/boardreply) are later work; their
-// places are left (board_stack's "columns"/"today" pages, reply_slot).
+// session) and view logic, including the three styles and inline replies.
 
 // boardPage is the board's own page (board_page.blp), its controller and
 // data source, built once by ensureBoard.
@@ -91,7 +91,9 @@ type boardPage struct {
 	dueBox          *gtk.Box
 	summaryBox      *gtk.Box
 	replySlot       *gtk.Box
+	suggest         *boardSuggestReplyControl
 	conversationBox *gtk.Box
+	conversation    *boardConversation
 	commitmentsBox  *gtk.Box
 	statePill       *gtk.MenuButton
 
@@ -115,6 +117,15 @@ type boardPage struct {
 	// To") is registered and owned by the Window (boardMoveToAction),
 	// not here.
 	reveal revealState
+
+	replyEditor           *boardreply.Editor
+	replyPanes            *boardreply.Panes[*compose.Pane]
+	replyShown            *compose.Pane
+	replyUnsaved          *gtk.Label
+	replyFocusPending     board.CaseID
+	replySuspended        bool
+	replyClosed           bool
+	replyHeightDisconnect map[*compose.Pane]func()
 
 	triageRemoveObserve func()
 	triageRemoveEnded   func()
@@ -157,9 +168,7 @@ func (w *Window) setupBoardMode() {
 		}
 		w.setMode(parseModeNick(w.modeSwitchMail.ActiveName()))
 	})
-	if w.assist != nil && w.assist.BoardTriage() != nil && w.assist.BoardTriage().Controller().WantsBoardData() {
-		w.ensureBoard()
-	}
+	w.watchBoardAutoStart()
 }
 
 // modeNick and parseModeNick are the mode switch's "active-name" values.
@@ -213,11 +222,15 @@ func (w *Window) setMode(m board.Mode) {
 		}
 		w.ensureBoard()
 		w.moveStatusStripToBoard()
+		w.ResumeBoardReplies()
 		w.boardPage.ctl.BoardWillShow()
 		w.modeStack.SetVisibleChildName("board")
 		w.boardPage.applyAll()
 		w.boardPage.ctl.BoardShown()
 		return
+	}
+	if w.boardPage != nil {
+		w.boardPage.suspendBoardReplies()
 	}
 	w.moveStatusStripToMail()
 	w.modeStack.SetVisibleChildName("mail")
@@ -281,12 +294,17 @@ func (w *Window) ensureBoard() {
 		p.daemon.Start()
 	}
 	w.boardPage = p
+	p.initBoardReplies()
+	p.initBoardSuggestReply()
 	p.applyAll()
 	// The board's own status button keeps up with sync.go's (whose own
 	// timer and immediate refreshes this agent's files do not touch) by
 	// asking for the current line every few seconds; the main window
-	// lives as long as the application, so this is never stopped.
+	// stops this timer when CloseBoardReplies releases its page.
 	glib.TimeoutSecondsAdd(boardStatusRefreshSeconds, func() bool {
+		if p.replyClosed {
+			return false
+		}
 		w.refreshBoardStatusLabel()
 		return true // keep the timer
 	})
@@ -394,6 +412,7 @@ func (p *boardPage) refresh() { p.applyAll() }
 // detail. Called once after the board is built and whenever a full redraw
 // is simplest (BoardWillShow/BoardShown, the account list changing).
 func (p *boardPage) applyAll() {
+	p.updateBoardReplies()
 	vm := p.ctl.View()
 	p.renderHeader(vm)
 	p.renderStack(vm)
@@ -409,6 +428,7 @@ func (p *boardPage) applyAll() {
 
 // onChange is the controller's OnChange: redraw only what changed.
 func (p *boardPage) onChange(c board.Changes) {
+	p.updateBoardReplies()
 	vm := p.ctl.View()
 	p.renderStack(vm)
 	if c.Has(board.ChangeStyle) {

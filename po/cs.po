@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-02 14:43+0200\n"
+"POT-Creation-Date: 2026-10-02 17:06+0200\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -16,7 +16,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
 
-#: ui/main.go:240
+#: ui/main.go:268
 msgid "A native mail client for the GNOME desktop."
 msgstr "Nativní poštovní klient pro prostředí GNOME."
 
@@ -1047,82 +1047,83 @@ msgstr "Odhlášení"
 msgid "The sender's server refused the request."
 msgstr "Server odesílatele žádost odmítl."
 
-#: ui/internal/compose/pane.go:218 ui/internal/compose/pane.go:1041
+#: ui/internal/compose/pane.go:216 ui/internal/compose/pane.go:1042
 #: ui/internal/jira/settings.go:123 ui/internal/window/assistant_panel.go:182
 msgid "Remove"
 msgstr "Odebrat"
 
-#: ui/internal/compose/pane.go:318
+#: ui/internal/compose/pane.go:321
 msgid "The editor crashed; your last text was restored"
 msgstr "Editor spadl; poslední text byl obnoven"
 
-#: ui/internal/compose/pane.go:476 ui/internal/compose/draft.go:369
+#: ui/internal/compose/pane.go:479 ui/internal/compose/draft.go:369
 msgid "Using placeholder account"
 msgstr "Používá se zástupný účet"
 
-#: ui/internal/compose/pane.go:600 ui/data/ui/compose.ui:10
+#: ui/internal/compose/pane.go:602 ui/data/ui/compose.ui:10
 #: ui/data/ui/compose.ui:48
 msgid "New Message"
 msgstr "Nová zpráva"
 
-#: ui/internal/compose/pane.go:689
+#: ui/internal/compose/pane.go:691
 msgid "Save changes to this draft?"
 msgstr "Uložit změny v tomto konceptu?"
 
-#: ui/internal/compose/pane.go:690 ui/internal/widget/consent.go:42
+#: ui/internal/compose/pane.go:692 ui/internal/widget/consent.go:42
 #: ui/internal/widget/rpc.go:196 ui/internal/window/assistant_panel.go:201
-#: ui/internal/window/remote.go:266 ui/internal/window/remote.go:292
-#: ui/data/ui/account_wizard.ui:401 ui/data/ui/jira_account.ui:25
+#: ui/internal/window/board_quit.go:26 ui/internal/window/remote.go:269
+#: ui/internal/window/remote.go:295 ui/data/ui/account_wizard.ui:401
+#: ui/data/ui/jira_account.ui:25
 msgid "_Cancel"
 msgstr "_Zrušit"
 
-#: ui/internal/compose/pane.go:691 ui/internal/compose/draft.go:735
+#: ui/internal/compose/pane.go:693 ui/internal/compose/draft.go:735
 #: ui/internal/compose/draft.go:847 ui/internal/compose/rewrite.go:106
 #: ui/internal/board/text.go:345 ui/data/ui/compose.ui:121
 msgid "_Discard"
 msgstr "Za_hodit"
 
-#: ui/internal/compose/pane.go:692 ui/data/ui/compose.ui:104
+#: ui/internal/compose/pane.go:694 ui/data/ui/compose.ui:104
 msgid "_Save Draft"
 msgstr "_Uložit koncept"
 
-#: ui/internal/compose/pane.go:909 ui/data/ui/compose_pane.ui:289
+#: ui/internal/compose/pane.go:911 ui/data/ui/compose_pane.ui:289
 #: ui/data/ui/compose_pane.ui:445
 msgid "Paragraph"
 msgstr "Odstavec"
 
-#: ui/internal/compose/pane.go:912
+#: ui/internal/compose/pane.go:914
 #, c-format
 msgid "Heading %s"
 msgstr "Nadpis %s"
 
-#: ui/internal/compose/pane.go:933 ui/internal/compose/pane_layout.go:31
+#: ui/internal/compose/pane.go:935 ui/internal/compose/pane_layout.go:31
 #: ui/data/ui/compose.ui:54
 msgid "Attach Files"
 msgstr "Přiložit soubory"
 
-#: ui/internal/compose/pane.go:961
+#: ui/internal/compose/pane.go:962
 msgid "Only local files can be attached"
 msgstr "Přiložit lze jen místní soubory"
 
-#: ui/internal/compose/pane.go:970 ui/data/ui/compose_pane.ui:382
+#: ui/internal/compose/pane.go:971 ui/data/ui/compose_pane.ui:382
 msgid "Insert Image"
 msgstr "Vložit obrázek"
 
-#: ui/internal/compose/pane.go:972
+#: ui/internal/compose/pane.go:973
 msgid "Images"
 msgstr "Obrázky"
 
-#: ui/internal/compose/pane.go:986
+#: ui/internal/compose/pane.go:987
 msgid "Only local images can be inserted"
 msgstr "Vložit lze jen místní obrázky"
 
-#: ui/internal/compose/pane.go:1000
+#: ui/internal/compose/pane.go:1001
 #, c-format
 msgid "Attaching %s…"
 msgstr "Přikládá se %s…"
 
-#: ui/internal/compose/pane.go:1009
+#: ui/internal/compose/pane.go:1010
 #, c-format
 msgid "Attaching %s"
 msgstr "Přiložení souboru %s"
@@ -3025,11 +3026,13 @@ msgid "(No subject)"
 msgstr "(Bez předmětu)"
 
 #: ui/internal/widget/message_row.go:327
+#: ui/internal/window/board_conversation.go:428
 #: ui/internal/window/conversation_card.go:418 ui/internal/window/folders.go:62
 msgid "Collapse"
 msgstr "Sbalit"
 
 #: ui/internal/widget/message_row.go:331
+#: ui/internal/window/board_conversation.go:425
 #: ui/internal/window/conversation_card.go:420 ui/internal/window/folders.go:65
 msgid "Expand"
 msgstr "Rozbalit"
@@ -4007,44 +4010,44 @@ msgstr[0] "%d vzdálený obrázek byl blokován"
 msgstr[1] "%d vzdálené obrázky byly blokovány"
 msgstr[2] "%d vzdálených obrázků bylo blokováno"
 
-#: ui/internal/window/remote.go:207
+#: ui/internal/window/remote.go:210
 msgid "Trusting the sender"
 msgstr "Přidání odesílatele mezi známé"
 
-#: ui/internal/window/remote.go:230
+#: ui/internal/window/remote.go:233
 msgid "Changing the remote content preference"
 msgstr "Změna předvolby vzdáleného obsahu"
 
-#: ui/internal/window/remote.go:261 ui/internal/window/remote.go:287
+#: ui/internal/window/remote.go:264 ui/internal/window/remote.go:290
 msgid "Open This Link?"
 msgstr "Otevřít tento odkaz?"
 
 #. TRANSLATORS: %s are the link's visible text and its real destination.
-#: ui/internal/window/remote.go:263
+#: ui/internal/window/remote.go:266
 #, c-format
 msgid "The link is shown as “%s” but leads to %s."
 msgstr "Odkaz se zobrazuje jako „%s“, ale vede na %s."
 
-#: ui/internal/window/remote.go:267 ui/internal/window/remote.go:293
+#: ui/internal/window/remote.go:270 ui/internal/window/remote.go:296
 msgid "_Open Link"
 msgstr "_Otevřít odkaz"
 
 #. TRANSLATORS: %s is the link's real destination.
-#: ui/internal/window/remote.go:289
+#: ui/internal/window/remote.go:292
 #, c-format
 msgid "This link leads to %s."
 msgstr "Tento odkaz vede na %s."
 
-#: ui/internal/window/remote.go:418
+#: ui/internal/window/remote.go:421
 msgid "Downloading the pictures"
 msgstr "Stahování obrázků"
 
-#: ui/internal/window/remote.go:466
+#: ui/internal/window/remote.go:469
 msgid "Downloading pictures…"
 msgstr "Stahují se obrázky…"
 
 #. TRANSLATORS: %d is the number of pictures of the message kept on the mail server only.
-#: ui/internal/window/remote.go:469
+#: ui/internal/window/remote.go:472
 #, c-format
 msgid "%d picture of this message is on the server only"
 msgid_plural "%d pictures of this message are on the server only"
@@ -4352,15 +4355,15 @@ msgstr "Účet %s vyžaduje pozornost"
 msgid "Loading the conversation"
 msgstr "Načtení konverzace"
 
-#: ui/internal/window/window.go:734
+#: ui/internal/window/window.go:735
 msgid "New mail"
 msgstr "Nová pošta"
 
-#: ui/internal/window/window.go:806 ui/data/ui/window.ui:244
+#: ui/internal/window/window.go:807 ui/data/ui/window.ui:244
 msgid "Search"
 msgstr "Hledat"
 
-#: ui/internal/window/window.go:812 ui/data/ui/window.ui:214
+#: ui/internal/window/window.go:813 ui/data/ui/window.ui:214
 msgid "Messages"
 msgstr "Zprávy"
 
