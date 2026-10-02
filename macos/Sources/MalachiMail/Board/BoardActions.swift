@@ -37,6 +37,9 @@ final class BoardActions {
     var inlineReply: BoardReplyEditorHost.Environment?
     /// The page's inline reply editor (the page owns it).
     weak var replyHost: BoardReplyEditorHost?
+    /// What the detail's conversation cards need of Mail to show a
+    /// message's HTML (set by the application; nil keeps them text).
+    var mailBodies: BoardMailBodies?
 
     init(controller: BoardController, samples: Bool) {
         self.controller = controller

@@ -136,7 +136,7 @@ final class ConversationCardView: NSView {
 
     /// The body area for HTML and for the wait: the web view while live,
     /// else blank at `bodyHeight`.
-    private let bodyHost = CardBodyHost()
+    private let bodyHost = WebPaperView()
     private let loadingLabel = NSTextField(labelWithString: "")
     private var bodyHeight: NSLayoutConstraint!
     private var webView: MessageWebView?
@@ -948,39 +948,5 @@ final class ConversationCardView: NSView {
     func applyFont(_ font: NSFont, zoom: Int) {
         textView?.applyFont(font)
         webView?.setZoom(zoom)
-    }
-}
-
-/// The body area of a card for HTML and for the wait. Under an HTML body
-/// it is the white of the reader's page (`viewerDocument` paints a light
-/// canvas whatever the appearance), so a card that scrolls into view, whose
-/// web view is yet to be made or to paint, does not flash in the card's own
-/// background in the dark appearance.
-@MainActor
-private final class CardBodyHost: NSView {
-    /// The area holds an HTML body.
-    var paper = false {
-        didSet {
-            if paper != oldValue {
-                needsDisplay = true
-            }
-        }
-    }
-
-    init() {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        wantsLayer = true
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("not used")
-    }
-
-    override var wantsUpdateLayer: Bool { true }
-
-    override func updateLayer() {
-        layer?.backgroundColor = paper ? NSColor.white.cgColor : nil
     }
 }

@@ -96,8 +96,8 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
     private var foldState: [MessageID: Bool] = [:]
     /// The pane is narrow: the items show the short date.
     private var compactDates = false
-    private let statusBox = NSView()
-    private let statusLabel = NSTextField(labelWithString: "")
+    /// The link under the pointer in any card.
+    private let statusBox = LinkStatusView()
     private let loadingSpinner = Spinner(size: 32)
     private var spinnerWork: DispatchWorkItem?
     private var settingsTokens: [Settings.ChangeToken] = []
@@ -193,25 +193,6 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         NotificationCenter.default.addObserver(
             self, selector: #selector(clipFrameChanged(_:)), name: NSView.frameDidChangeNotification, object: clip)
 
-        // The link under the pointer in any card: plain text, the middle
-        // elided, as the single-message view shows it.
-        statusLabel.font = Typo.caption
-        statusLabel.textColor = .labelColor
-        statusLabel.lineBreakMode = .byTruncatingMiddle
-        statusLabel.maximumNumberOfLines = 1
-        statusLabel.isSelectable = false
-        statusLabel.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(240), for: .horizontal)
-        statusLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        statusLabel.translatesAutoresizingMaskIntoConstraints = false
-        statusBox.translatesAutoresizingMaskIntoConstraints = false
-        statusBox.wantsLayer = true
-        statusBox.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.92).cgColor
-        statusBox.layer?.cornerRadius = 4
-        statusBox.layer?.borderWidth = 1
-        statusBox.layer?.borderColor = NSColor.separatorColor.cgColor
-        statusBox.isHidden = true
-        statusBox.addSubview(statusLabel)
-
         loadingSpinner.setAccessibilityLabel(L10n.C("accessibility", "Loading the message"))
 
         let container = ConversationSurfaceView()
@@ -224,16 +205,12 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
             scroll.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             scroll.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            statusBox.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 6),
-            statusBox.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -6),
-            statusBox.widthAnchor.constraint(lessThanOrEqualTo: container.widthAnchor, multiplier: 0.8),
-            statusLabel.leadingAnchor.constraint(equalTo: statusBox.leadingAnchor, constant: 6),
-            statusBox.trailingAnchor.constraint(equalTo: statusLabel.trailingAnchor, constant: 6),
-            statusLabel.topAnchor.constraint(equalTo: statusBox.topAnchor, constant: 2),
-            statusBox.bottomAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 2),
             loadingSpinner.centerXAnchor.constraint(equalTo: container.centerXAnchor),
             loadingSpinner.centerYAnchor.constraint(equalTo: container.centerYAnchor),
         ])
+        // The link under the pointer in any card: plain text, the middle
+        // elided, as the single-message view shows it.
+        NSLayoutConstraint.activate(statusBox.pin(in: container))
         view = container
 
         controller.onChange = { [weak self] change in self?.modelChanged(change) }
@@ -803,9 +780,7 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
     }
 
     func hover(_ href: String) {
-        let text = String(href.prefix(MessageWebView.statusMaxChars))
-        statusLabel.stringValue = text
-        statusBox.isHidden = text.isEmpty
+        statusBox.show(href)
     }
 
     func openEmbedded(_ containing: MessageSummary, _ attachment: Attachment, _ remote: Bool, _ chip: NSView?) {

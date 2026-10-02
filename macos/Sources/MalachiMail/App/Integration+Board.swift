@@ -8,8 +8,10 @@ import MalachiCore
 /// through the actions (a comment on an issue tracker's account, as the
 /// capability check decides), Show in Mail through the list
 /// (`ListController.reveal`), with the message's own window when the list
-/// cannot show it, and the compose manager's controller for the inline
-/// reply editor's account list. Swift-first, like `Board`.
+/// cannot show it, the compose manager's controller for the inline
+/// reply editor's account list, and the message cache and the message
+/// windows' fan-out for the HTML of the detail's conversation cards.
+/// Swift-first, like `Board`.
 extension Integration {
     func wireBoard() {
         guard let mainWindow else { return }
@@ -26,6 +28,12 @@ extension Integration {
                 self?.list.cancelReveal()
             }
         )
+        // The detail's conversation cards show a message's HTML as Mail's
+        // conversation cards do: the same cache, the same web view, the
+        // same link policy through the message windows' fan-out.
+        let windows = windows
+        mainWindow.boardActions.mailBodies = BoardMailBodies(
+            cache: cache, settings: state.settings, track: { windows.track(display: $0) })
     }
 
     /// Selects message `message` in `folder` (its own folder, looked up,

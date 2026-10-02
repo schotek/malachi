@@ -1213,8 +1213,8 @@ s falešnými pany i se skutečným draft controllerem, `BoardReplyPanesTests`);
 Seznamu i panelu) jen vyrábí `ComposePane`, stěhuje pohledy a přeposílá
 konce. Snadno se rozbije: **slot odpovědi stojí mimo přestavbu
 detailu** (sloupec je `upper` – slot – `lower`, `rebuild` sahá jen na
-`upper`/`lower`; každý autosave zvedne verzi případu a nástěnka se načte
-znovu, editor nesmí přijít o kurzor ani fokus); **jeden živý pane na
+`upper`, `lower` drží trvalý blok konverzace; každý autosave zvedne verzi
+případu a nástěnka se načte znovu, editor nesmí přijít o kurzor ani fokus); **jeden živý pane na
 okno**, jeho pohled jde do detailu, který případ ukazuje (při přepnutí
 stylu se přestěhuje); **nic napsaného ani výsledek Odeslat se neztratí
 potichu**: pane, který přestal být vidět (jiný výběr, zavřený panel,
@@ -1267,7 +1267,17 @@ se vrátí s toastem, `board.get` v cache podle verze — a
 `BoardAutoTriageScheduler` (vlastní je `AppState`, jeden pro aplikaci),
 `Assistant/AssistantTriage.swift`; AppKit `MalachiMail/Board/` (tři
 styly Seznam / Sloupce / Dnes, detail s poznámkami pod značkou asistenta
-a konverzací jako kartami prostého textu z `board.get`; `BoardActions`:
+a konverzací jako kartami (`BoardConversationBlock`, `BoardMessageCardView`;
+od 2026-10-02 otevřená karta ukáže sanitizované HTML z `message.body`
+s `trimQuoted` přes `MessageCache` ve stejném uzamčeném `MessageWebView`
+v režimu `sized` jako karty konverzace Pošty — strop 4000 pt, kolečko jde
+detailu, odkazy přes `openLink` delegáta z `MessageWindows.track(display:)`;
+starší karty sbalené na náhled výňatku z `board.get` bez web view,
+nejvýš 4 živé web view a ustoupí nejdéle neotevřená karta, blok se při
+obnově nástěnky nepřestavuje, dokud se nezmění případ nebo jeho členové
+(id + výňatek), pozdní výška karty nad viewportem posune scroll o tolik,
+pravidla v Core `Board.ConversationCards`; jinak, bez HTML části, při
+chybě či u vzorových dat výňatek z `board.get`); `BoardActions`:
 Hotovo / Vrátit na nástěnku, Připomenout… s předvolbami, Archivovat,
 Odebrat hvězdičku, Odpovědět — s návrhem odpovědi jeho editor v detailu —,
 Zobrazit v Poště; `BoardReplyEditorHost` s inline `ComposePane`),
@@ -1381,7 +1391,11 @@ komprese a příloh na vyžádání, Microsoft účty).
   je statický blok. Krok `compose` otevře a zavře prázdné okno Nová
   zpráva, `reply-pane` (se vzorovými daty) nechá skutečný
   `BoardReplyEditorHost` ukázat prázdný, nikdy neukládaný pane ve slotu
-  Seznamu, píše do něj a vypíše výšky, polohu v detailu a kam míří Odeslat.
+  Seznamu, píše do něj a vypíše výšky, polohu v detailu a kam míří Odeslat;
+  `board-html` (jen se vzorovými daty) dá nejnovější kartě vymyšlený
+  HTML dokument cestou odpovědi `message.body` a vypíše výšky, živé web
+  view, kolik jich vyrobila opakovaná obnova, kam jde kolečko a posun
+  scrollu.
 - Jira testuj proti kopii, ne nad ostrým storem: migrace 0015 přestaví
   tabulku `accounts` a je jako každá migrace nevratná, takže by ostrý
   store změnila dřív, než je větev v `main`. Na macOS

@@ -26,6 +26,16 @@ import MalachiCore
 //   around it (Why is this here? twice) and dumps the heights, the pane's
 //   place and the keyboard after each step (`DevelopmentReplyPane`). Give
 //   both a longer MALACHI_START_INTERVAL (8 s for `reply-pane`).
+//   `board-html` (Board with MALACHI_BOARD_SAMPLES=1 only) selects the
+//   sample case with the most messages in the List, hands its newest card
+//   an invented, sanitised-looking HTML document through the path
+//   message.body's answer takes (`BoardConversationBlock.developmentFeed`),
+//   and dumps the card's reported height and frame, the live web views,
+//   the detail's document against its visible height before and after,
+//   the web views made by a repeated identical refresh, where the wheel
+//   over the web view goes, and the scroll position when an older card
+//   above the viewport opens with the same document (`DevelopmentBoardHTML`;
+//   10 s for MALACHI_START_INTERVAL).
 //   MALACHI_START_SIZE=1600x900   (the window's size, optional)
 //   MALACHI_START_INTERVAL=3      (seconds per step, optional)
 //   MALACHI_START_TRACE=1         (every window resize to stderr; on a
@@ -116,6 +126,10 @@ extension MainWindowController {
             DevelopmentReplyPane.run(in: self)
             return
         }
+        if step == "board-html" {
+            DevelopmentBoardHTML.run(in: self)
+            return
+        }
         if step.hasPrefix("size=") {
             developmentResize(String(step.dropFirst(5)))
             return
@@ -181,6 +195,14 @@ extension MainWindowController {
         }
         if let root = window?.contentView {
             walk(root)
+        }
+        // Every conversation block the board's two details hold, shown or
+        // not, and the web views in each (`board-html`).
+        for d in boardPage.children.flatMap({ [$0] + $0.children }).compactMap({ $0 as? BoardDetailViewController }) {
+            if let b = d.view.firstSubview(of: BoardConversationBlock.self) {
+                lines.append("  board detail \(d.presentation) in window \(b.window != nil) hidden \(b.isHiddenOrHasHiddenAncestor)"
+                    + " cards \(b.cards.count) live web views \(b.developmentLiveWebViews) made so far \(BoardMessageCardView.webViewsMade)")
+            }
         }
         for s in scrolls {
             let doc = s.documentView!
@@ -517,5 +539,162 @@ private final class DevelopmentReplyPane {
             paneInClip.maxY <= clip.maxY + 1 && paneInClip.maxY >= clip.minY ? 1 : 0, responder, inEditor ? 1 : 0,
             pane.sendButton?.isEnabled == true ? 1 : 0, pane.sendButton?.keyEquivalent ?? "-",
             pane.header.fromPopup.isHiddenOrHasHiddenAncestor ? 0 : 1))
+    }
+}
+
+/// DEVELOPMENT AID for `board-html`, samples only: the List's detail shows
+/// an invented HTML document in a conversation card through the card's
+/// real path (`BoardConversationBlock.developmentFeed`), and what came of
+/// it is measured. Nothing is fetched, saved or sent.
+@MainActor
+private enum DevelopmentBoardHTML {
+    // macOS-only strings: development output on stderr, never shown.
+    /// Invented content, shaped like the sanitiser's output (no scripts,
+    /// no remote resources, inline styles only).
+    static let document = """
+    <h2 style="margin:0 0 8px">Quarterly shelf check</h2>
+    <p>Hello team, the <b>shelf labels</b> in aisle 4 were checked on Tuesday. Most of them show the right price.</p>
+    <p>Three labels still need a new battery; the table below lists them. Please <b>replace them by Friday</b>.</p>
+    <table style="border-collapse:collapse" border="1" cellpadding="4">
+    <tr><th>Label</th><th>Aisle</th><th>Battery</th></tr>
+    <tr><td>A-104</td><td>4</td><td>12 %</td></tr>
+    <tr><td>A-117</td><td>4</td><td>9 %</td></tr>
+    <tr><td>B-020</td><td>5</td><td>4 %</td></tr>
+    </table>
+    <p>Thanks, <b>Invented Sender</b></p>
+    """
+
+    static func run(in main: MainWindowController) {
+        guard main.boardSource == nil else {
+            developmentPrint("MALACHI_START board-html: samples only (MALACHI_BOARD_SAMPLES=1)")
+            return
+        }
+        main.setMode(.board)
+        if main.board.state.style != .list {
+            main.board.setStyle(.list)
+        }
+        let ids = main.board.view.sections.flatMap { $0.rows.map(\.id) }
+        var best: (Board.CaseID, Int)?
+        for id in ids {
+            main.board.select(id)
+            let n = main.board.view.detail?.messages.count ?? 0
+            if n > (best?.1 ?? 0) {
+                best = (id, n)
+            }
+        }
+        main.board.select(best?.0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            step1(main)
+        }
+    }
+
+    private static func block(in main: MainWindowController) -> BoardConversationBlock? {
+        var found: BoardConversationBlock?
+        func walk(_ v: NSView) {
+            if let b = v as? BoardConversationBlock, b.window != nil, !b.isHiddenOrHasHiddenAncestor {
+                found = found ?? b
+            }
+            v.subviews.forEach(walk)
+        }
+        if let root = main.window?.contentView {
+            walk(root)
+        }
+        return found
+    }
+
+    private static func developmentDumpCards(_ label: String, _ b: BoardConversationBlock) {
+        let s = b.enclosingScrollView
+        let doc = s?.documentView?.frame.height ?? -1
+        let clip = s?.contentView.bounds ?? .zero
+        developmentPrint(String(
+            format: "MALACHI_START board-html %@: cards %d live web views %d made so far %d document %.0f visible %.0f top %.0f",
+            label, b.cards.count, b.developmentLiveWebViews, BoardMessageCardView.webViewsMade, doc, clip.height, clip.minY))
+        for (i, c) in b.cards.enumerated() {
+            let f = s.map { c.convert(c.bounds, to: $0.documentView) } ?? .zero
+            developmentPrint(String(format: "    card %d at %.0f..%.0f: %@", i, f.minY, f.maxY, c.developmentMetrics))
+        }
+    }
+
+    private static func step1(_ main: MainWindowController) {
+        guard let b = block(in: main), let newest = b.cards.indices.last else {
+            developmentPrint("MALACHI_START board-html: no visible conversation block with cards")
+            return
+        }
+        developmentDumpCards("before", b)
+        b.developmentFeed(newest, html: document)
+        developmentDumpCards("fed (no height yet)", b)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            developmentDumpCards("after the height arrived", b)
+            let made = BoardMessageCardView.webViewsMade
+            // Refreshes that leave the members alone, as an autosave does:
+            // the detail renders twice with a rebuild of its upper part.
+            main.board.toggleWhy()
+            main.board.toggleWhy()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                developmentPrint("MALACHI_START board-html: two identical refreshes made \(BoardMessageCardView.webViewsMade - made) web views,"
+                    + " live \(b.developmentLiveWebViews)")
+                wheel(b)
+                compensation(b, main)
+            }
+        }
+    }
+
+    /// A wheel event delivered where the pointer over the newest card's web
+    /// view would deliver it (never posted to the screen).
+    private static func wheel(_ b: BoardConversationBlock) {
+        guard let card = b.cards.last, let wv = card.webView, let s = b.enclosingScrollView,
+              let cg = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -40, wheel2: 0, wheel3: 0),
+              let event = NSEvent(cgEvent: cg)
+        else {
+            developmentPrint("MALACHI_START board-html: wheel not tried (no web view)")
+            return
+        }
+        let center = wv.convert(NSPoint(x: wv.bounds.midX, y: wv.bounds.midY), to: wv.superview)
+        guard let target = wv.hitTest(center) else { return }
+        let before = s.contentView.bounds.origin.y
+        target.scrollWheel(with: event)
+        let after = s.contentView.bounds.origin.y
+        developmentPrint(String(format: "MALACHI_START board-html: wheel over %@: detail origin %.0f -> %.0f",
+                                NSStringFromClass(type(of: target)), before, after))
+        s.contentView.scroll(to: NSPoint(x: 0, y: before))
+        s.reflectScrolledClipView(s.contentView)
+    }
+
+    /// The detail scrolled to its end, the oldest card (above the viewport)
+    /// gets the document and opens: the viewport's top follows its growth.
+    private static func compensation(_ b: BoardConversationBlock, _ main: MainWindowController) {
+        guard b.cards.count > 1, let s = b.enclosingScrollView, let doc = s.documentView else { return }
+        let clip = s.contentView
+        let end = max(0, doc.frame.height - clip.bounds.height)
+        clip.scroll(to: NSPoint(x: 0, y: end))
+        s.reflectScrolledClipView(clip)
+        let first = b.cards[0]
+        let f = first.convert(first.bounds, to: doc)
+        let anchor = b.cards.last.map { $0.convert($0.bounds, to: doc).minY } ?? 0
+        developmentPrint(String(format: "MALACHI_START board-html: scrolled to %.0f, card 0 at %.0f..%.0f (above the viewport %d), newest card top %.0f",
+                                clip.bounds.minY, f.minY, f.maxY, f.maxY <= clip.bounds.minY ? 1 : 0, anchor))
+        b.developmentFeed(0, html: document)
+        b.developmentOpen(0)
+        let newTop = b.cards.last.map { $0.convert($0.bounds, to: doc).minY } ?? 0
+        developmentPrint(String(format: "MALACHI_START board-html: card 0 opened: top %.0f, newest card top %.0f (on screen at %.0f before, %.0f now)",
+                                clip.bounds.minY, newTop, anchor - (end), newTop - clip.bounds.minY))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            let late = b.cards.last.map { $0.convert($0.bounds, to: doc).minY } ?? 0
+            developmentPrint(String(format: "MALACHI_START board-html: after card 0's height arrived: top %.0f, newest card on screen at %.0f",
+                                    clip.bounds.minY, late - clip.bounds.minY))
+            developmentDumpCards("end", b)
+        }
+    }
+}
+
+extension NSView {
+    /// DEVELOPMENT AID: the first view of type `T` under this one.
+    fileprivate func firstSubview<T: NSView>(of type: T.Type) -> T? {
+        for v in subviews {
+            if let t = v as? T ?? v.firstSubview(of: type) {
+                return t
+            }
+        }
+        return nil
     }
 }

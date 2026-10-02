@@ -15,9 +15,16 @@ import MalachiCore
 /// plain text set through `stringValue`; nothing from a case is markup.
 ///
 /// The column has three parts. `upper` (the header line up to the tasks)
-/// and `lower` (the conversation) are rebuilt from the detail whenever it
-/// differs from what is shown; between them `replySlot`, the suggested
-/// reply, is never touched by that rebuild. It follows the page's
+/// is rebuilt from the detail whenever it differs from what is shown;
+/// under it `replySlot`, the suggested reply, and `lower`, the
+/// conversation, are never touched by that rebuild. `lower` holds the
+/// conversation block (`BoardConversationBlock`), which follows the detail
+/// in place and changes its cards only when the case or its members
+/// changed, so the web views of its cards keep their documents across the
+/// board's refreshes; a card whose height changes above the viewport moves
+/// the scroll position with it (`heightChanging`), so nothing the user
+/// sees jumps, the inline editor included. The link under the pointer in
+/// a card shows in one status box at the bottom of the detail. It follows the page's
 /// `BoardReplyEditorHost` (`replySlotChanged`): the inline editor
 /// (`ComposePane`) of the case's suggested reply while the host gives it to
 /// this presentation, a loading row, a failure note with Try Again, else
@@ -76,8 +83,11 @@ final class BoardDetailViewController: NSViewController {
     private let upper = FillStackView()
     /// The suggested reply: only `renderSlot` changes it.
     private let replySlot = FillStackView()
-    /// The conversation: rebuilt with the detail.
+    /// The conversation: only the block changes it.
     private let lower = FillStackView()
+    private lazy var conversation = BoardConversationBlock(actions: actions)
+    /// The link under the pointer in a card of the conversation.
+    private let linkStatus = LinkStatusView()
     private let actionBar = NSStackView()
     private let separator = NSBox()
     private let closeButton = NSButton()
@@ -92,8 +102,8 @@ final class BoardDetailViewController: NSViewController {
 
     /// The detail as last applied (the action buttons act on its case).
     private var shown: Board.Detail?
-    /// `upper` and `lower` as built: the detail without what only the
-    /// reply slot shows (`Self.rebuildKey`).
+    /// `upper` as built: the detail without what only the reply slot and
+    /// the conversation show (`Self.rebuildKey`).
     private var built: Board.Detail?
     private var shownWhy = false
     /// Suggest Reply, in the place of the Suggested Reply block (kept
@@ -104,11 +114,6 @@ final class BoardDetailViewController: NSViewController {
     private var suggestToken: BoardObserverToken?
     /// What the reply slot shows.
     private var shownSlot: SlotState = .hidden
-    /// The conversation's cards the user folded or opened, by their place
-    /// (oldest first), for `foldCase` only: a rebuild of the same case
-    /// keeps them, another case starts over.
-    private var folds: [Int: Bool] = [:]
-    private var foldCase: Board.CaseID?
     /// The note under the live pane that what was typed could not be saved
     /// yet (`Board.Text.replyNotSaved`); shown and hidden in place, so the
     /// pane never leaves the window for it.
@@ -161,6 +166,24 @@ final class BoardDetailViewController: NSViewController {
             part.isHidden = true
             content.addArrangedSubview(part)
         }
+        lower.addArrangedSubview(conversation)
+        conversation.onShowInMail = { [weak self] in
+            guard let self, let d = self.shown else { return }
+            self.actions.showInMail(d.id)
+        }
+        conversation.onRetry = { [weak self] in
+            self?.controller.retryMessages()
+        }
+        conversation.onHover = { [weak self] href in
+            self?.linkStatus.show(href)
+        }
+        conversation.onHeightChanging = { [weak self] card, change in
+            if let self {
+                self.heightChanging(card, change)
+            } else {
+                change()
+            }
+        }
         document.addSubview(content)
         scroll.documentView = document
         scroll.hasVerticalScroller = true
@@ -170,6 +193,8 @@ final class BoardDetailViewController: NSViewController {
         scroll.translatesAutoresizingMaskIntoConstraints = false
 
         root.addSubview(scroll)
+        root.addSubview(linkStatus)
+        NSLayoutConstraint.activate(linkStatus.pin(in: root))
         let top = root.safeAreaLayoutGuide.topAnchor
         if presentation == .panel {
             root.addSubview(separator)
@@ -277,6 +302,7 @@ final class BoardDetailViewController: NSViewController {
             rebuild(detail, why: why)
             restore(focus)
             renderSlot()
+            conversation.apply(detail)
             if !sameCase {
                 scroll.contentView.scroll(to: .zero)
                 scroll.reflectScrolledClipView(scroll.contentView)
@@ -284,24 +310,29 @@ final class BoardDetailViewController: NSViewController {
             return
         }
         renderSlot()
+        conversation.apply(detail)
     }
 
-    /// The detail as far as `upper` and `lower` show it: the suggested
-    /// reply's text is the slot's (the samples' block), and an autosave
-    /// that changed only it rebuilds nothing.
+    /// The detail as far as `upper` shows it: the suggested reply's text
+    /// is the slot's (the samples' block) and the conversation the block's,
+    /// so an autosave or a new message that changed only them rebuilds
+    /// nothing.
     private static func rebuildKey(_ d: Board.Detail) -> Board.Detail {
         var d = d
         d.draft = ""
+        d.conversationTitle = ""
+        d.messages = []
+        d.messagesLoading = false
+        d.messagesNote = ""
+        d.messagesRetry = false
         return d
     }
 
-    /// Rebuilds `upper` and `lower`; the reply slot between them stays.
+    /// Rebuilds `upper`; the reply slot and the conversation stay.
     private func rebuild(_ detail: Board.Detail?, why: Bool) {
-        for part in [upper, lower] {
-            for v in part.arrangedSubviews {
-                part.removeArrangedSubview(v)
-                v.removeFromSuperview()
-            }
+        for v in upper.arrangedSubviews {
+            upper.removeArrangedSubview(v)
+            v.removeFromSuperview()
         }
         statePill = nil
         whyButton = nil
@@ -341,7 +372,6 @@ final class BoardDetailViewController: NSViewController {
         if !d.tasks.isEmpty {
             upper.addArrangedSubview(tasksBlock(d))
         }
-        lower.addArrangedSubview(conversationBlock(d))
     }
 
     // MARK: The reply slot
@@ -688,87 +718,6 @@ final class BoardDetailViewController: NSViewController {
         return BoardBox(column, fill: { .clear }, border: { .separatorColor })
     }
 
-    /// The heading with Show in Mail at its end, then the cards (every
-    /// message's whole text, older ones folded to a few lines; the column
-    /// scrolls, never a card); while the conversation loads a spinner row
-    /// instead, and the note when it could not be loaded.
-    private func conversationBlock(_ d: Board.Detail) -> NSView {
-        var views: [NSView] = []
-        let heading = NSTextField(labelWithString: d.conversationTitle)
-        heading.font = .systemFont(ofSize: Typo.bodySize, weight: .bold)
-        heading.lineBreakMode = .byTruncatingTail
-        heading.isSelectable = false
-        heading.setAccessibilityRole(.staticText)
-        heading.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        heading.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let show = NSButton()
-        configure(show, title: Board.Text.showInMail, action: #selector(showInMailClicked(_:)))
-        show.controlSize = .small
-        show.font = .systemFont(ofSize: NSFont.systemFontSize(for: .small))
-        show.isEnabled = actions.canShowInMail(d.id)
-        let top = NSStackView(views: [heading, show])
-        top.orientation = .horizontal
-        top.alignment = .centerY
-        top.distribution = .fill
-        top.spacing = 8
-        views.append(top)
-        if d.messagesLoading {
-            let spinner = Spinner(size: 16)
-            spinner.start()
-            let note = NSTextField(labelWithString: d.messagesNote)
-            note.font = Typo.caption
-            note.textColor = Tint.secondary
-            note.isSelectable = false
-            let row = NSStackView(views: [spinner, note])
-            row.orientation = .horizontal
-            row.alignment = .centerY
-            row.spacing = 6
-            views.append(row)
-        } else if !d.messagesNote.isEmpty {
-            let note = wrappingLabel(d.messagesNote, font: Typo.caption, color: Tint.secondary)
-            if d.messagesRetry {
-                let retry = NSButton(title: Board.Text.tryAgain, target: self, action: #selector(retryClicked(_:)))
-                retry.isBordered = false
-                retry.bezelStyle = .inline
-                retry.setButtonType(.momentaryChange)
-                retry.font = Typo.caption
-                retry.contentTintColor = .linkColor
-                retry.setAccessibilityLabel(Board.Text.tryAgain)
-                // The note as wide as the column, the link at its own width
-                // under it (as the deadline's quote under its chip).
-                let column = NSStackView(views: [note, retry])
-                column.orientation = .vertical
-                column.alignment = .leading
-                column.spacing = 2
-                column.translatesAutoresizingMaskIntoConstraints = false
-                note.widthAnchor.constraint(equalTo: column.widthAnchor).isActive = true
-                views.append(column)
-            } else {
-                views.append(note)
-            }
-        } else {
-            // The newest message in full; an older one of a longer
-            // conversation starts folded to a few lines (the card offers
-            // its arrow only when its text is longer than that).
-            if foldCase != d.id {
-                foldCase = d.id
-                folds = [:]
-            }
-            let newest = d.messages.count - 1
-            for (i, m) in d.messages.enumerated() {
-                let foldable = i < newest
-                let card = BoardMessageCardView(m, foldable: foldable, folded: folds[i] ?? foldable)
-                card.onFold = { [weak self] folded in
-                    self?.folds[i] = folded
-                }
-                views.append(card)
-            }
-        }
-        let column = FillStackView(fillingViews: views)
-        column.spacing = 8
-        return column
-    }
-
     /// `label` after the assistant's mark, spoken as `spoken` ("Assistant:
     /// …"): text the assistant wrote.
     private func marked(_ label: NSTextField, spoken: String) -> NSView {
@@ -820,16 +769,18 @@ final class BoardDetailViewController: NSViewController {
         case other
     }
 
-    /// Which control of `upper` or `lower` has the keyboard (a field's
-    /// editor counts as its field), before a rebuild removes it. The reply
-    /// slot is not rebuilt: the keyboard there (the inline editor, Suggest
-    /// Reply's field) stays where it is.
+    /// Which control of `upper` has the keyboard (a field's editor counts
+    /// as its field), before a rebuild removes it. The reply slot and the
+    /// conversation are not rebuilt: the keyboard there (the inline editor,
+    /// Suggest Reply's field, a card's selected text) stays where it is.
     private func focusedControl() -> FocusedControl {
         guard var responder = view.window?.firstResponder else { return .none }
         if let editor = responder as? NSTextView, editor.isFieldEditor, let field = editor.delegate as? NSResponder {
             responder = field
         }
-        guard let v = responder as? NSView, v.isDescendant(of: content), !v.isDescendant(of: replySlot) else {
+        guard let v = responder as? NSView, v.isDescendant(of: content), !v.isDescendant(of: replySlot),
+              !v.isDescendant(of: lower)
+        else {
             return .none
         }
         if let statePill, v.isDescendant(of: statePill) {
@@ -906,11 +857,6 @@ final class BoardDetailViewController: NSViewController {
         actions.replyHost?.retry()
     }
 
-    @objc private func showInMailClicked(_ sender: Any?) {
-        guard let d = shown else { return }
-        actions.showInMail(d.id)
-    }
-
     @objc private func discardClicked(_ sender: Any?) {
         guard let d = shown else { return }
         actions.discardDraft(d.id)
@@ -920,10 +866,36 @@ final class BoardDetailViewController: NSViewController {
         controller.toggleWhy()
     }
 
-    /// The conversation's Try Again.
-    @objc private func retryClicked(_ sender: Any?) {
-        controller.retryMessages()
+    // MARK: Heights in the conversation
+
+    /// Runs `change`, which alters the height of `card` without the user
+    /// asking (its web view's height arriving, HTML in place of its text,
+    /// a fold by the limit), and moves the viewport by as much when the
+    /// card ended above it (`Board.ConversationCards.compensatedTop`), so
+    /// what the user sees, the inline editor among it, stays in place.
+    private func heightChanging(_ card: NSView, _ change: () -> Void) {
+        guard compensationDepth == 0, card.window != nil, isViewLoaded else {
+            change()
+            return
+        }
+        let clip = scroll.contentView
+        let before = card.convert(card.bounds, to: document)
+        let top = clip.bounds.minY
+        compensationDepth += 1
+        change()
+        compensationDepth -= 1
+        view.layoutSubtreeIfNeeded()
+        let delta = card.convert(card.bounds, to: document).height - before.height
+        guard abs(delta) >= 0.5 else { return }
+        let target = CGFloat(Board.ConversationCards.compensatedTop(
+            viewportTop: Double(top), cardMaxY: Double(before.maxY), delta: Double(delta),
+            documentHeight: Double(document.frame.height), viewportHeight: Double(clip.bounds.height)))
+        guard abs(target - clip.bounds.minY) >= 0.5 else { return }
+        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: target))
+        scroll.reflectScrolledClipView(clip)
     }
+
+    private var compensationDepth = 0
 }
 
 /// A rounded box around `content` with a fill and a border whose colours

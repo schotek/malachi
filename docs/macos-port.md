@@ -314,8 +314,24 @@ The board ([architecture.md §3.7](architecture.md#37-the-board), [api.md
   (`BoardDetailViewController`) shows the state, the "why" box (with
   *Unstar* beside it when the case is hot because of a star), the
   assistant's title, deadline with its quote, summary and tasks under the
-  assistant's mark, the suggested reply, and the conversation as
-  plain-text cards from `board.get` (`BoardMessageCardView`), never HTML.
+  assistant's mark, the suggested reply, and the conversation as cards
+  (`BoardConversationBlock`, `BoardMessageCardView`): the newest open,
+  older ones folded to a three-line preview of the excerpt `board.get`
+  gave. An open card asks `message.body` for its message (through
+  `MessageCache.fetchBody`, so `trimQuoted` unless Mail revealed the
+  quoted text of that entry) and shows sanitised HTML in the web view of
+  Mail's conversation cards (`MessageWebView`, sized mode: the same
+  configuration, CSP, `malachi-cid:` handler, link script and height
+  rules; the white page under it, `WebPaperView`, in both appearances);
+  links go through Mail's `openLink`, the block being a `MessageDisplay`
+  registered with `MessageWindows`. Anything else (no HTML part, HTML
+  withheld, a body not stored, a failure, a message gone, the samples)
+  keeps the excerpt. The rules are Core's `Board.ConversationCards`: at
+  most 4 live web views (the inline editor is a fifth), the least
+  recently opened card folding back first, never the newest; the block is
+  outside the detail's rebuild and changes cards only when the case or its
+  members (id and excerpt) change; a card whose height changes above the
+  viewport moves the scroll position by as much (`compensatedTop`).
   `BoardActions` is what can be done with a case from the toolbar, the
   panel's action bar and the context menus (`BoardCaseMenu`): Done,
   Remind… (Later Today, Tomorrow, Next Week), Archive, Unstar

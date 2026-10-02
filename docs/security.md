@@ -270,6 +270,13 @@ for WKWebView, since nothing of the WebKitGTK configuration carries over:
   without JavaScript there is no isolation to stop it; in a card the
   headers, the badges and the event rows are native text and the body is
   one message's output.
+  The board's detail (`Board/BoardConversationBlock.swift`,
+  `BoardMessageCardView.swift`) shows the open cards of a case's
+  conversation in the same sized view, one per card, the document again
+  one `message.body` answer's sanitised HTML and nothing else; at most
+  four alive at a time, the sender and the date native text, links
+  through the same `openLink` as Mail's; every other card shows the
+  plain-text excerpt of `board.get` through `stringValue`.
 
 Layer 2 on Windows (`windows/src/Malachi.App/WebViews`, the rules in
 `Malachi.Core.Presentation`; [windows-port.md §6](windows-port.md#6-the-webview2-security-layer))
