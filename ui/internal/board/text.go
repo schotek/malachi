@@ -412,6 +412,15 @@ func StyleMenuTitle(s Style, tr Translator) string {
 	return StyleTitle(s, tr)
 }
 
+// DefaultStyleSetting is the Settings row of the style the board opens in
+// the first time it shows after launch (Settings → General → Board, the
+// key board-default-style); its choices are StyleTitle.
+func DefaultStyleSetting(tr Translator) string {
+	// TRANSLATORS: Settings → General → Board: which style (List, Columns,
+	// Today) the board opens in after launch.
+	return tr.T("Default View")
+}
+
 // You is the sender of the user's own messages in the conversation.
 func You(tr Translator) string {
 	// TRANSLATORS: the sender of the user's own messages in a conversation.

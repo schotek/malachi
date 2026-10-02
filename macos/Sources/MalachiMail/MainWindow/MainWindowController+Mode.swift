@@ -38,6 +38,9 @@ extension MainWindowController {
             // A Show in Mail still waiting selects nothing in the hidden
             // panes.
             boardMail.leftMail?()
+            // The first entry of the run opens the default style (Settings
+            // → General → Board), later ones the user's last.
+            board.boardWillShow()
             // The daemon's board is listed from the first entry on.
             startBoard()
             // The page first: the List's toolbar follows its split view.

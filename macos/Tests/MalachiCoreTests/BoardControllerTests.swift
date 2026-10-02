@@ -852,4 +852,75 @@ private func sampleCases() -> [Board.Case] {
             #expect(source.refreshes == before + 1, "\(phase)")
         }
     }
+
+    // MARK: The default style (Settings → General → Board)
+
+    /// The style of the first show is the setting's, read at that moment.
+    @Test func defaultStyleAtFirstShow() {
+        var setting = Board.Style.columns
+        let source = InMemoryBoardSource(Board.Snapshot(accounts: F.accounts, cases: sampleCases()))
+        let c = BoardController(source: source, now: { F.now }, calendar: F.calendar, defaultStyle: { setting })
+        let probe = Probe()
+        c.onChange = { probe.log.append($0) }
+        // Until the board shows it holds the List.
+        #expect(c.state.style == .list)
+        #expect(!c.hasShown)
+        // Changed before the first show: that one counts.
+        setting = .today
+        c.boardWillShow()
+        #expect(c.hasShown)
+        #expect(c.state.style == .today)
+        #expect(probe.log.contains { $0.contains(.style) })
+        // The default List changes nothing.
+        let list = make()
+        list.c.boardWillShow()
+        #expect(list.c.state.style == .list)
+        #expect(list.probe.log.isEmpty)
+    }
+
+    /// After the first show the style is the user's: leaving and entering
+    /// again keeps it, and so does a setting changed meanwhile.
+    @Test func laterShowsKeepTheUsersStyle() {
+        var setting = Board.Style.columns
+        let source = InMemoryBoardSource(Board.Snapshot(accounts: F.accounts, cases: sampleCases()))
+        let c = BoardController(source: source, now: { F.now }, calendar: F.calendar, defaultStyle: { setting })
+        c.boardWillShow()
+        c.boardShown()
+        #expect(c.state.style == .columns)
+        c.setStyle(.today)
+        // Back from Mail.
+        c.boardWillShow()
+        c.boardShown()
+        #expect(c.state.style == .today)
+        // The setting changes while the board has shown: the style stays.
+        setting = .list
+        c.boardWillShow()
+        #expect(c.state.style == .today)
+        setting = .columns
+        c.boardWillShow()
+        #expect(c.state.style == .today)
+        // The user's own choice still works.
+        c.setStyle(.list)
+        c.boardWillShow()
+        #expect(c.state.style == .list)
+    }
+
+    @Test func styleOnShowRule() {
+        for current in Board.Style.allCases {
+            for d in Board.Style.allCases {
+                #expect(Board.styleOnShow(current: current, defaultStyle: d, firstShow: true) == d)
+                #expect(Board.styleOnShow(current: current, defaultStyle: d, firstShow: false) == current)
+            }
+        }
+    }
+
+    @Test func styleNicks() {
+        #expect(Board.Style.allCases.map(\.nick) == ["list", "columns", "today"])
+        for s in Board.Style.allCases {
+            #expect(Board.parseStyle(s.nick) == s)
+        }
+        for junk in ["", "List", "0", "1", "grid", " today"] {
+            #expect(Board.parseStyle(junk) == .list, "\(junk)")
+        }
+    }
 }

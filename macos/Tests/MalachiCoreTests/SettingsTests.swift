@@ -56,7 +56,8 @@ private final class Scratch {
         #expect(!s.assistantConsent)
         #expect(!s.boardTriageConsent)
         #expect(s.boardTriageModel == .sonnet)
-        #expect(Settings.Key.allCases.count == 27)
+        #expect(s.boardDefaultStyle == .list)
+        #expect(Settings.Key.allCases.count == 28)
         #expect(Set(Settings.registrationDefaults().keys) == Set(Settings.Key.allCases.map(\.rawValue)))
     }
 
@@ -149,6 +150,20 @@ private final class Scratch {
         s.boardTriageModel = Assistant.Model("mythos")
         #expect(scratch.defaults.string(forKey: "board-triage-model") == "sonnet")
         s.assistantModel = .sonnet
+        // The board's default style: Board.Style's nicks; anything else,
+        // the empty string and the raw index included, is the List.
+        for (nick, style) in [("list", Board.Style.list), ("columns", .columns), ("today", .today)] {
+            scratch.defaults.set(nick, forKey: "board-default-style")
+            #expect(s.boardDefaultStyle == style)
+        }
+        for junk in ["", "grid", "1", "Columns"] {
+            scratch.defaults.set(junk, forKey: "board-default-style")
+            #expect(s.boardDefaultStyle == .list, "\(junk)")
+        }
+        s.boardDefaultStyle = .today
+        #expect(scratch.defaults.string(forKey: "board-default-style") == "today")
+        s.boardDefaultStyle = .list
+        #expect(scratch.defaults.string(forKey: "board-default-style") == "list")
         s.assistantClaudePath = "/opt/claude/bin/claude"
         #expect(scratch.defaults.string(forKey: "assistant-claude-path") == "/opt/claude/bin/claude")
         s.assistantConsent = true

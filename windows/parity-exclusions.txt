@@ -119,6 +119,7 @@ board style\004List	Board: the macOS client's board (Nástěnka, Swift-first, te
 board style\004Columns	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 As List	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 As Columns	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
+Default View	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 You	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 Conversation · %s	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 Deadlines	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet

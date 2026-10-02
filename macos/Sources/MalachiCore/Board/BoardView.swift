@@ -21,6 +21,29 @@ extension Board {
         case list
         case columns
         case today
+
+        /// The style's nick in the settings (`board-default-style`); the
+        /// raw value is an index and is never stored.
+        public var nick: String {
+            switch self {
+            case .list: "list"
+            case .columns: "columns"
+            case .today: "today"
+            }
+        }
+    }
+
+    /// The style a stored nick names; an unknown or empty one is the List.
+    public static func parseStyle(_ nick: String) -> Style {
+        Style.allCases.first { $0.nick == nick } ?? .list
+    }
+
+    /// The style the board takes as it shows: the default (from the
+    /// settings) the first time in a run, else the one it has, which is
+    /// the user's last choice. A default changed after the first show waits
+    /// for the next launch: the style never changes under the user.
+    public static func styleOnShow(current: Style, defaultStyle: Style, firstShow: Bool) -> Style {
+        firstShow ? defaultStyle : current
     }
 
     /// Which cases the list shows. `done` lists the snoozed cases too:

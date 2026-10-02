@@ -52,6 +52,10 @@ public final class Settings {
         /// nicks of `assistantModel` but set apart from it (Settings → AI →
         /// Board).
         case boardTriageModel = "board-triage-model"
+        /// macOS only for now: the style the board opens in the first time
+        /// it shows in a run, `Board.Style`'s nicks (Settings → General →
+        /// Board; `BoardController.boardWillShow`).
+        case boardDefaultStyle = "board-default-style"
         /// macOS only: what ⌘R does (Settings → General → Keyboard).
         case commandR = "command-r"
         /// macOS only: the size of the window text (`Typo`, Settings →
@@ -120,6 +124,7 @@ public final class Settings {
             Key.assistantConsent.rawValue: false,
             Key.boardTriageConsent.rawValue: false,
             Key.boardTriageModel.rawValue: Assistant.Model.sonnet.rawValue,
+            Key.boardDefaultStyle.rawValue: Board.Style.list.nick,
             Key.commandR.rawValue: CommandR.reply.rawValue,
             Key.uiTextSize.rawValue: TextSize.larger.rawValue,
         ]
@@ -335,6 +340,14 @@ public final class Settings {
     public var boardTriageModel: Assistant.Model {
         get { Assistant.parseModel(string(.boardTriageModel)) }
         set { set(.boardTriageModel, Assistant.parseModel(newValue.rawValue).rawValue) }
+    }
+
+    /// The style the board opens in the first time it shows in a run:
+    /// `Board.Style`'s nicks, read with `Board.parseStyle` (an unknown or
+    /// empty nick is the List).
+    public var boardDefaultStyle: Board.Style {
+        get { Board.parseStyle(string(.boardDefaultStyle)) }
+        set { set(.boardDefaultStyle, newValue.nick) }
     }
 
     // MARK: Change notification

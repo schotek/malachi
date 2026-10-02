@@ -196,6 +196,10 @@ extension Board {
             }
         }
 
+        /// Settings → General → Board: the style of the first show after
+        /// launch; its choices are `styleTitle`.
+        public static var defaultStyleSetting: String { L10n.T("Default View") }
+
         // Beyond the plan's list: texts the view model needs.
 
         /// The sender of the user's own messages in the conversation.

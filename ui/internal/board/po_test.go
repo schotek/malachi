@@ -91,6 +91,7 @@ func exercise(tr Translator) {
 		StyleTitle(s, tr)
 		StyleMenuTitle(s, tr)
 	}
+	DefaultStyleSetting(tr)
 	You(tr)
 	Conversation(2, tr)
 	Deadlines(tr)

@@ -1009,7 +1009,12 @@ a Windows ji dluží). Hlavní okno má dva režimy, Pošta (vše dosavadní)
 a Nástěnka. Přepíná dvousegmentový přepínač (`envelope` / `square.grid.2x2`)
 na začátku každého toolbaru a položky Pošta a Nástěnka na vrcholu menu
 Zobrazení, bez klávesových zkratek; režim se neukládá (`Board.initialMode`
-je Pošta). V Nástěnce je obsah okna (sidebar, seznam, čtení, panel
+je Pošta). Styl nástěnky při prvním zobrazení po spuštění určuje klíč
+`board-default-style` (`list`/`columns`/`today`, výchozí `list`, neznámá
+hodnota = Seznam; Předvolby → Obecné → Nástěnka → Výchozí zobrazení),
+pak platí poslední zvolený až do ukončení a změna klíče po prvním zobrazení
+se projeví až po dalším spuštění (`BoardController.boardWillShow`,
+`Board.styleOnShow`). V Nástěnce je obsah okna (sidebar, seznam, čtení, panel
 asistenta) nahrazený stránkou nástěnky, stavový pruh zůstává. Pohled split
 view pošty se z okna **vyjme** (`MainContentViewController.setMode`;
 kontroler i stav pošty — složka, výběr, posun, hledání, přepis asistenta —

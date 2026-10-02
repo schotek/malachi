@@ -76,7 +76,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     /// to look at the three styles without mail; read once.
     static let boardSamples = ProcessInfo.processInfo.environment["MALACHI_BOARD_SAMPLES"] == "1"
     /// The board (MalachiCore `BoardController`), made on first use.
-    lazy var board = BoardController(source: boardSource ?? InMemoryBoardSource.dummy(samples: true))
+    /// Its first show takes the style of Settings → General → Board.
+    lazy var board = BoardController(
+        source: boardSource ?? InMemoryBoardSource.dummy(samples: true),
+        defaultStyle: { [settings = state.settings] in settings.boardDefaultStyle }
+    )
     /// What the user can do with a case (the toolbar, the panel, the
     /// menus); Reply, Open Draft and Show in Mail go to `boardMail`.
     lazy var boardActions: BoardActions = makeBoardActions()

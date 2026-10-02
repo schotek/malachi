@@ -137,6 +137,7 @@ func TestStylesAndGroups(t *testing.T) {
 		{StyleMenuTitle(StyleList, tr), "As List"},
 		{StyleMenuTitle(StyleColumns, tr), "As Columns"},
 		{StyleMenuTitle(StyleToday, tr), "Today"},
+		{DefaultStyleSetting(tr), "Default View"},
 		{DueGroupTitle(DueOverdue, tr), "Overdue"},
 		{DueGroupTitle(DueToday, tr), "Today"},
 		{DueGroupTitle(DueTomorrow, tr), "Tomorrow"},

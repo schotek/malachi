@@ -27,6 +27,8 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
     // Startup
     let launchAtLogin = NSSwitch()
     let runInBackground = NSSwitch()
+    // Board (macOS only for now, the board being Swift-first)
+    let boardDefaultStyle = NSPopUpButton(frame: .zero, pullsDown: false)
     // Reading
     let markReadDelay = PrefsSpinControl(min: 0, max: Settings.markReadDelayMax, value: 2)
     // Deleting
@@ -46,6 +48,9 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
     let compressStore = NSSwitch()
     /// The Disk Space Used row's value (`storage_size`: dim, numeric).
     let storageValue = NSTextField(labelWithString: "")
+
+    /// The board's Default View pop-up's items, in order.
+    static let boardStyleChoices: [Board.Style] = Board.Style.allCases
 
     /// The ⌘R pop-up's items, in order.
     static let commandRChoices: [Settings.CommandR] = [.reply, .refresh]
@@ -115,6 +120,16 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
             PreferenceRowView(title: L10n.T("Run in Background"), subtitle: L10n.T("Closing the window keeps Malachi Mail running for notifications"), trailing: runInBackground),
         ])
         addGroup(startup)
+
+        // The style the board opens in after launch (`board-default-style`;
+        // later shows keep the user's last one). Not the AI page's Board
+        // group: that one hides with the triage.
+        let boardGroup = PreferencesGroupView(title: Board.Text.boardName)
+        boardDefaultStyle.addItems(withTitles: GeneralPaneViewController.boardStyleChoices.map(Board.Text.styleTitle))
+        boardGroup.setRows([
+            PreferenceRowView(title: Board.Text.defaultStyleSetting, trailing: boardDefaultStyle),
+        ])
+        addGroup(boardGroup)
 
         let reading = PreferencesGroupView(title: L10n.T("Reading"))
         reading.setRows([
@@ -224,6 +239,9 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
         bindings.add(.bind(desktopNotifications, to: settings, .desktopNotifications, \.desktopNotifications))
         bindings.add(.bind(notificationSound, to: settings, .notificationSound, \.notificationSound))
         bindings.add(.bind(commandR, to: settings, .commandR, choices: GeneralPaneViewController.commandRChoices, \.commandR))
+        bindings.add(.bind(
+            boardDefaultStyle, to: settings, .boardDefaultStyle,
+            choices: GeneralPaneViewController.boardStyleChoices, \.boardDefaultStyle))
 
         launchAtLogin.target = self
         launchAtLogin.action = #selector(launchAtLoginChanged(_:))

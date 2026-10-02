@@ -52,6 +52,11 @@ public final class BoardController {
 
     private let now: @MainActor () -> Date
     private let calendar: Calendar
+    /// The style the board opens in the first time it shows in a run (the
+    /// settings' `board-default-style`), asked for at that moment.
+    private let defaultStyle: @MainActor () -> Board.Style
+    /// Whether the board has shown in this run (`boardWillShow`).
+    public private(set) var hasShown = false
     /// Where the selection goes when the selected case leaves what is
     /// shown after the user's own write (done, reopened, moved out of the
     /// filter): computed before the write, used by the first report of the
@@ -71,11 +76,19 @@ public final class BoardController {
     /// and when the board came back from a failure (a reconnect).
     private var requested: (id: Board.CaseID, version: Int64, phase: Board.Phase)?
 
-    /// Installs itself as the source's `onChange`.
-    public init(source: any BoardSource, now: @escaping @MainActor () -> Date = { Date() }, calendar: Calendar = .current) {
+    /// Installs itself as the source's `onChange`. `defaultStyle` is the
+    /// style of the first show (`boardWillShow`); until then the board
+    /// holds the List.
+    public init(
+        source: any BoardSource,
+        now: @escaping @MainActor () -> Date = { Date() },
+        calendar: Calendar = .current,
+        defaultStyle: @escaping @MainActor () -> Board.Style = { .list }
+    ) {
         self.source = source
         self.now = now
         self.calendar = calendar
+        self.defaultStyle = defaultStyle
         var state = Board.ViewState()
         state.selection = Board.resolveSelection(source.snapshot, state)
         self.state = state
@@ -182,6 +195,15 @@ public final class BoardController {
     /// date may have (a new day moves the deadlines).
     public func refresh() {
         apply(state, user: false)
+    }
+
+    /// The board is about to show (the window enters Board mode, before
+    /// its page is laid out): the first time in a run it takes the default
+    /// style, later it keeps the user's last one (`Board.styleOnShow`).
+    public func boardWillShow() {
+        let first = !hasShown
+        hasShown = true
+        setStyle(Board.styleOnShow(current: state.style, defaultStyle: defaultStyle(), firstShow: first))
     }
 
     /// The board shows again (the window entered Board mode): a board that

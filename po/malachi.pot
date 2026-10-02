@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-02 08:16+0000\n"
+"POT-Creation-Date: 2026-10-02 09:33+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1230,7 +1230,7 @@ msgid "Open %s in the Browser"
 msgstr ""
 
 #. TRANSLATORS: a field of a Jira issue.
-#: ui/internal/jira/jira.go:267 ui/internal/board/text.go:823
+#: ui/internal/jira/jira.go:267 ui/internal/board/text.go:832
 msgid "Status"
 msgstr ""
 
@@ -1830,7 +1830,7 @@ msgstr ""
 
 #. TRANSLATORS: a group of deadlines, a deadline's day, and the
 #. reminder preset of tomorrow 09:00.
-#: ui/internal/board/text.go:183 ui/internal/board/text.go:671
+#: ui/internal/board/text.go:183 ui/internal/board/text.go:680
 msgid "Tomorrow"
 msgstr ""
 
@@ -2016,341 +2016,347 @@ msgstr ""
 msgid "As Columns"
 msgstr ""
 
+#. TRANSLATORS: Settings → General → Board: which style (List, Columns,
+#. Today) the board opens in after launch.
+#: ui/internal/board/text.go:421
+msgid "Default View"
+msgstr ""
+
 #. TRANSLATORS: the sender of the user's own messages in a conversation.
-#: ui/internal/board/text.go:418
+#: ui/internal/board/text.go:427
 msgid "You"
 msgstr ""
 
 #. TRANSLATORS: %s is a number of messages, such as "3 messages".
-#: ui/internal/board/text.go:425
+#: ui/internal/board/text.go:434
 #, c-format
 msgid "Conversation · %s"
 msgstr ""
 
-#: ui/internal/board/text.go:429
+#: ui/internal/board/text.go:438
 msgid "Deadlines"
 msgstr ""
 
-#: ui/internal/board/text.go:433
+#: ui/internal/board/text.go:442
 msgid ""
 "No deadlines. The assistant finds deadlines in the text of messages and "
 "keeps the sentence each one comes from."
 msgstr ""
 
-#: ui/internal/board/text.go:438
+#: ui/internal/board/text.go:447
 msgid "Calendar and Reminders"
 msgstr ""
 
-#: ui/internal/board/text.go:442
+#: ui/internal/board/text.go:451
 msgid "Later. Read-only; where the data comes from differs on each platform."
 msgstr ""
 
 #. TRANSLATORS: a tile of the Today page: the promises the assistant
 #. found in the user's replies.
-#: ui/internal/board/text.go:449
+#: ui/internal/board/text.go:458
 msgid "Promised"
 msgstr ""
 
 #. TRANSLATORS: spoken by the screen reader; %s is a deadline's day,
 #. such as "Tomorrow" or "20 Oct".
-#: ui/internal/board/text.go:456
+#: ui/internal/board/text.go:465
 #, c-format
 msgid "Due %s"
 msgstr ""
 
-#: ui/internal/board/text.go:464
+#: ui/internal/board/text.go:473
 msgid "Has attachments"
 msgstr ""
 
 #. TRANSLATORS: spoken by the screen reader for a case with unread mail.
-#: ui/internal/board/text.go:469
+#: ui/internal/board/text.go:478
 msgctxt "board row"
 msgid "Unread"
 msgstr ""
 
-#: ui/internal/board/text.go:478
+#: ui/internal/board/text.go:487
 msgid ""
 "The newest message is marked as important, addressed to you and from a "
 "sender you have written to."
 msgstr ""
 
-#: ui/internal/board/text.go:480
+#: ui/internal/board/text.go:489
 msgid ""
 "You flagged a message in this conversation and the newest one is not yours."
 msgstr ""
 
-#: ui/internal/board/text.go:482
+#: ui/internal/board/text.go:491
 msgid "The newest message is addressed to you by a sender you have written to."
 msgstr ""
 
-#: ui/internal/board/text.go:484
+#: ui/internal/board/text.go:493
 msgid "The newest message answers one of yours."
 msgstr ""
 
-#: ui/internal/board/text.go:486
+#: ui/internal/board/text.go:495
 msgid "You replied last; the next step is theirs."
 msgstr ""
 
-#: ui/internal/board/text.go:488
+#: ui/internal/board/text.go:497
 msgid "You asked a question and wait for the answer."
 msgstr ""
 
-#: ui/internal/board/text.go:490
+#: ui/internal/board/text.go:499
 msgid "You are only in Cc on the newest message."
 msgstr ""
 
-#: ui/internal/board/text.go:492
+#: ui/internal/board/text.go:501
 msgid "The message is not addressed to you (a mailing list or a Bcc)."
 msgstr ""
 
-#: ui/internal/board/text.go:494
+#: ui/internal/board/text.go:503
 msgid "A note to yourself."
 msgstr ""
 
-#: ui/internal/board/text.go:496
+#: ui/internal/board/text.go:505
 msgid ""
 "The message is addressed to you, but its sender is one you have never "
 "written to, so it waits under For Your Information. Its importance does not "
 "count."
 msgstr ""
 
-#: ui/internal/board/text.go:498
+#: ui/internal/board/text.go:507
 msgid "Your comment is the latest in the issue; the next step is theirs."
 msgstr ""
 
-#: ui/internal/board/text.go:500
+#: ui/internal/board/text.go:509
 msgid "Someone wrote in an issue assigned to you."
 msgstr ""
 
-#: ui/internal/board/text.go:502
+#: ui/internal/board/text.go:511
 msgid "Someone wrote in an issue you reported."
 msgstr ""
 
-#: ui/internal/board/text.go:504
+#: ui/internal/board/text.go:513
 msgid "Someone wrote in an issue you commented on."
 msgstr ""
 
-#: ui/internal/board/text.go:506
+#: ui/internal/board/text.go:515
 msgid "You only watch this issue."
 msgstr ""
 
-#: ui/internal/board/text.go:508
+#: ui/internal/board/text.go:517
 msgid ""
 "The rules would no longer list it; your choice, a reminder, a deadline or a "
 "promise keeps it here."
 msgstr ""
 
-#: ui/internal/board/text.go:514
+#: ui/internal/board/text.go:523
 msgid "The daemon’s rules put the case here."
 msgstr ""
 
-#: ui/internal/board/text.go:535
+#: ui/internal/board/text.go:544
 msgid "Loading the Board…"
 msgstr ""
 
-#: ui/internal/board/text.go:537
+#: ui/internal/board/text.go:546
 msgid "Preparing the Board…"
 msgstr ""
 
-#: ui/internal/board/text.go:541
+#: ui/internal/board/text.go:550
 msgid "Board Unavailable"
 msgstr ""
 
-#: ui/internal/board/text.go:543
+#: ui/internal/board/text.go:552
 msgid "The Board Is Off"
 msgstr ""
 
-#: ui/internal/board/text.go:557
+#: ui/internal/board/text.go:566
 msgid "The board needs a running mail backend."
 msgstr ""
 
-#: ui/internal/board/text.go:559
+#: ui/internal/board/text.go:568
 msgid "The board could not be loaded. Malachi Mail tries again shortly."
 msgstr ""
 
-#: ui/internal/board/text.go:563
+#: ui/internal/board/text.go:572
 msgid ""
 "The board is turned off in the settings. Your decisions are kept for when it "
 "is on again."
 msgstr ""
 
-#: ui/internal/board/text.go:575
+#: ui/internal/board/text.go:584
 msgid "The mail backend is not running: the board shows what it knew last."
 msgstr ""
 
-#: ui/internal/board/text.go:577
+#: ui/internal/board/text.go:586
 msgid ""
 "The board could not be loaded: it shows what it knew last. Malachi Mail "
 "tries again shortly."
 msgstr ""
 
-#: ui/internal/board/text.go:582
+#: ui/internal/board/text.go:591
 msgid "Only the newest 1,000 cases are on the board."
 msgstr ""
 
-#: ui/internal/board/text.go:588
+#: ui/internal/board/text.go:597
 msgid "This mail backend has no board. A newer Malachi Mail backend brings it."
 msgstr ""
 
-#: ui/internal/board/text.go:592
+#: ui/internal/board/text.go:601
 msgid ""
 "Malachi Mail is sorting your mail for the first time. This takes a minute or "
 "two."
 msgstr ""
 
-#: ui/internal/board/text.go:598
+#: ui/internal/board/text.go:607
 msgid "The assistant’s notes are out of date: the conversation changed since."
 msgstr ""
 
-#: ui/internal/board/text.go:603
+#: ui/internal/board/text.go:612
 msgid "Loading the conversation…"
 msgstr ""
 
-#: ui/internal/board/text.go:606
+#: ui/internal/board/text.go:615
 msgid "The conversation could not be loaded."
 msgstr ""
 
-#: ui/internal/board/text.go:609 ui/internal/window/assistant_panel.go:653
+#: ui/internal/board/text.go:618 ui/internal/window/assistant_panel.go:653
 #: ui/internal/window/status.go:321 ui/data/ui/window.ui:411
 msgid "Try Again"
 msgstr ""
 
 #. TRANSLATORS: spoken by the screen reader before a title or a reason
 #. the assistant wrote; %s is that text.
-#: ui/internal/board/text.go:620
+#: ui/internal/board/text.go:629
 #, c-format
 msgid "Assistant: %s"
 msgstr ""
 
-#: ui/internal/board/text.go:624
+#: ui/internal/board/text.go:633
 msgid "Show in Mail"
 msgstr ""
 
-#: ui/internal/board/text.go:629
+#: ui/internal/board/text.go:638
 msgid "Show in Mail failed: the message is no longer on the server."
 msgstr ""
 
-#: ui/internal/board/text.go:634
+#: ui/internal/board/text.go:643
 msgid "Show in Mail failed: the message could not be loaded."
 msgstr ""
 
-#: ui/internal/board/text.go:638 ui/data/ui/message_window.ui:81
+#: ui/internal/board/text.go:647 ui/data/ui/message_window.ui:81
 #: ui/data/ui/window.ui:498
 msgid "Archive"
 msgstr ""
 
 #. TRANSLATORS: a section of the board's Done filter: the cases off the
 #. board until a reminder.
-#: ui/internal/board/text.go:644
+#: ui/internal/board/text.go:653
 msgid "Snoozed"
 msgstr ""
 
 #. TRANSLATORS: %s is a day and a time, such as "Tomorrow 09:00" or
 #. "20 Oct 09:00".
-#: ui/internal/board/text.go:651
+#: ui/internal/board/text.go:660
 #, c-format
 msgid "Back on the board %s"
 msgstr ""
 
 #. TRANSLATORS: a reminder preset: in about three hours, or at 18:00.
-#: ui/internal/board/text.go:669
+#: ui/internal/board/text.go:678
 msgid "Later Today"
 msgstr ""
 
 #. TRANSLATORS: a reminder preset: next Monday at 09:00.
-#: ui/internal/board/text.go:674
+#: ui/internal/board/text.go:683
 msgid "Next Week"
 msgstr ""
 
-#: ui/internal/board/text.go:680
+#: ui/internal/board/text.go:689
 msgid "Don’t Remind Me"
 msgstr ""
 
-#: ui/internal/board/text.go:685
+#: ui/internal/board/text.go:694
 msgid "Marked as done. This account has no archive."
 msgstr ""
 
-#: ui/internal/board/text.go:688
+#: ui/internal/board/text.go:697
 msgid "Marked as done. No message was in the inbox."
 msgstr ""
 
-#: ui/internal/board/text.go:690
+#: ui/internal/board/text.go:699
 #, c-format
 msgid "Archived %d message."
 msgid_plural "Archived %d messages."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/board/text.go:748
+#: ui/internal/board/text.go:757
 msgid "Moving the case"
 msgstr ""
 
-#: ui/internal/board/text.go:750
+#: ui/internal/board/text.go:759
 msgid "Marking the case done"
 msgstr ""
 
-#: ui/internal/board/text.go:752
+#: ui/internal/board/text.go:761
 msgid "Moving the case back to the board"
 msgstr ""
 
-#: ui/internal/board/text.go:754
+#: ui/internal/board/text.go:763
 msgid "Setting the reminder"
 msgstr ""
 
-#: ui/internal/board/text.go:756
+#: ui/internal/board/text.go:765
 msgid "Archiving"
 msgstr ""
 
-#: ui/internal/board/text.go:758
+#: ui/internal/board/text.go:767
 msgid "Changing the promise"
 msgstr ""
 
-#: ui/internal/board/text.go:760
+#: ui/internal/board/text.go:769
 msgid "Discarding the draft"
 msgstr ""
 
-#: ui/internal/board/text.go:762 ui/internal/window/actions.go:254
+#: ui/internal/board/text.go:771 ui/internal/window/actions.go:254
 msgid "Removing the star"
 msgstr ""
 
-#: ui/internal/board/text.go:764
+#: ui/internal/board/text.go:773
 msgid "Changing the board’s settings"
 msgstr ""
 
-#: ui/internal/board/text.go:773
+#: ui/internal/board/text.go:782
 msgid "the promise no longer exists"
 msgstr ""
 
-#: ui/internal/board/text.go:775
+#: ui/internal/board/text.go:784
 msgid "the mail backend is not running"
 msgstr ""
 
-#: ui/internal/board/text.go:777
+#: ui/internal/board/text.go:786
 msgid "the mail backend did not answer in time"
 msgstr ""
 
-#: ui/internal/board/text.go:779
+#: ui/internal/board/text.go:788
 msgid "the case is no longer on the board"
 msgstr ""
 
-#: ui/internal/board/text.go:781
+#: ui/internal/board/text.go:790
 msgid "the board did not accept it"
 msgstr ""
 
-#: ui/internal/board/text.go:783
+#: ui/internal/board/text.go:792
 msgid "this mail backend has no board"
 msgstr ""
 
-#: ui/internal/board/text.go:785
+#: ui/internal/board/text.go:794
 msgid "the mail backend could not save it"
 msgstr ""
 
-#: ui/internal/board/text.go:787
+#: ui/internal/board/text.go:796
 msgid "the draft no longer exists"
 msgstr ""
 
 #. TRANSLATORS: a toast; %s is an action such as "Moving the case".
-#: ui/internal/board/text.go:800
+#: ui/internal/board/text.go:809
 #, c-format
 msgid "%s failed."
 msgstr ""
@@ -2358,35 +2364,35 @@ msgstr ""
 #. TRANSLATORS: a toast; the first %s is an action such as "Moving the
 #. case", the second the reason, such as "the case is no longer on the
 #. board".
-#: ui/internal/board/text.go:805
+#: ui/internal/board/text.go:814
 #, c-format
 msgid "%s failed: %s."
 msgstr ""
 
 #. TRANSLATORS: a menu item whose submenu lists the board's states.
-#: ui/internal/board/text.go:813
+#: ui/internal/board/text.go:822
 msgid "Move To"
 msgstr ""
 
-#: ui/internal/board/text.go:817
+#: ui/internal/board/text.go:826
 msgid "Mark as Done"
 msgstr ""
 
-#: ui/internal/board/text.go:820
+#: ui/internal/board/text.go:829
 msgid "Remind Me"
 msgstr ""
 
-#: ui/internal/board/text.go:826 ui/data/ui/preferences.ui:15
+#: ui/internal/board/text.go:835 ui/data/ui/preferences.ui:15
 msgid "Accounts"
 msgstr ""
 
 #. TRANSLATORS: a button beside a promise the assistant found in the
 #. user's reply.
-#: ui/internal/board/text.go:833
+#: ui/internal/board/text.go:842
 msgid "Mark Promise as Done"
 msgstr ""
 
-#: ui/internal/board/text.go:839
+#: ui/internal/board/text.go:848
 #, c-format
 msgid "%d promise"
 msgid_plural "%d promises"
@@ -2395,7 +2401,7 @@ msgstr[1] ""
 
 #. TRANSLATORS: quotation marks around a sentence quoted from a message;
 #. use your language's quotation marks.
-#: ui/internal/board/text.go:846
+#: ui/internal/board/text.go:855
 #, c-format
 msgid "“%s”"
 msgstr ""

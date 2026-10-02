@@ -631,7 +631,10 @@ are those of `data/io.github.schotek.Malachi.gschema.xml`
 `collapsed-accounts`, `favourite-folders`, `assistant-menu`,
 `assistant-target`, the latter read through `Assistant.parseTarget`, so an
 unknown nick is Claude Desktop) plus one macOS-only key,
-`command-r` (`reply`, the default, or `refresh`; §3). Numeric keys are
+`command-r` (`reply`, the default, or `refresh`; §3). The board adds
+`board-default-style` (`list`, the default, `columns` or `today`; Settings
+→ General → Board), the style of its first show after launch, later shows
+keeping the user's last one. Numeric keys are
 clamped to the schema's ranges, bad enum strings fall back to the default,
 and a change fires its handlers through KVO on `UserDefaults`, so a
 `defaults write` from outside reaches the running app exactly as a second
