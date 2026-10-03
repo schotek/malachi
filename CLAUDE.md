@@ -949,6 +949,28 @@ zprávy (přiložené zprávy ne); odhalení platí do jiné konverzace či
 zprávy, okno ho drží, dokud je otevřené (`QuotedReveal`, Swift první,
 port v `ui/internal/conversation/quoted.go` a `Malachi.Core`).
 
+Dvojklik na záhlaví karty konverzace (2026-10-02, všechny tři klienty;
+necommitnuté; Go a GTK sestavené a otestované v Toolbxu, Swift a C#
+napsané na Linuxu bez překladu — čeká `swift test` na Macu
+(`doubleClickOpensAWindowOrTheDraft`) a `build.ps1 app`/`test`/`lint` na
+Windows (`DoubleClickOpensAWindowOrTheDraft`)). Dvojklik na záhlaví karty
+v zobrazení konverzace (od horního okraje karty po spodek řádku záhlaví,
+mimo jeho tlačítka: šipka sbalení, rozbalení příjemců, Odpovědět/Všem/
+Přeposlat) otevře zprávu stejně jako dvojklik na její řádek v seznamu:
+v samostatném okně, zprávu ze složky Koncepty v okně Nová zpráva. Pravidlo
+je jedno pro seznam i kartu: GTK `Window.openMessage` (`message_view.go`,
+volá ho i row-activated), Swift `ActionsController.openMessage` přes
+`MessageActionDelegate.openMessage`, C# `ActionsController.OpenMessage`
+přes `MessageActionRouter.OpenMessage`. Pohledy jen poznají místo: GTK
+`convCard.openOnDoubleClick`/`onHeader` (gesto na kartě, meze přes
+`ComputeBounds`), macOS `NSClickGestureRecognizer` karty se dvěma kliky,
+který čte jen kliky na záhlaví (`shouldAttemptToRecognizeWith`, `onHeader`,
+`ConversationCardHeader.isButton`) a nezdržuje kliky pohledům pod sebou
+(`delaysPrimaryMouseButtonEvents = false`), Windows `DoubleTapped` na
+rámečku karty (`OnFrameDoubleTapped`, `OnHeader`). Na Macu ověřit hlavně,
+že jednoduchý klik na šipku sbalení, rozbalení příjemců a tlačítka při
+najetí reaguje hned a že dvojklik v těle (výběr slova) okno neotevírá.
+
 Příjemci jako badge (2026-10-01, všechny tři klienty; macOS otestovaný
 vlastníkem, GTK a Windows napsané na Macu bez překladu — čeká `make build`,
 `go test ./internal/compose/... ./internal/recipients/...` a `make lint`

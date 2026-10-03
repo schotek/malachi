@@ -645,3 +645,17 @@ and draft tools. The panel, compose rewriting and natural-language search
 are wired; the Windows Board port remains separate work. Setup, architecture
 and native validation requirements are in
 [ChatGPT integration](../docs/chatgpt-integration.md#11-windows-implementation-and-validation-hand-off).
+
+### Inbox date sections (native verification pending)
+
+The Inbox now mirrors the GTK/macOS collapsible sections: Flagged first,
+then local calendar periods and older years. Expanded conversation members
+stay with their parent; search and other folders remain flat. Headers use
+native WinUI collection groups. Folding a selected section clears selection;
+flag moves preserve the selected message and reveal its destination. With
+collapsed sections, further pages use Load More to avoid draining the inbox.
+Shared labels include Czech translations.
+
+Implementation and prepared tests have only been reviewed statically on macOS.
+Native build, tests and the UI walkthrough are delegated to the Windows agent:
+[verification handoff](../docs/windows-date-groups-handoff.md).

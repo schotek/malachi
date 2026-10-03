@@ -282,6 +282,10 @@ func (w *Window) syncRows() { w.reconcileRows(false) }
 func (w *Window) syncRowsAfterRemoval() { w.reconcileRows(true) }
 
 func (w *Window) reconcileRows(neighbour bool) {
+	if w.usesDateGroups() {
+		w.syncDateRows(neighbour)
+		return
+	}
 	prev, hadSel := w.selectedKey()
 	prevIdx := -1
 	if hadSel {
@@ -399,7 +403,7 @@ func (w *Window) selectedRow() (listRow, bool) {
 	if row == nil {
 		return listRow{}, false
 	}
-	return w.model.rowAt(row.Index())
+	return w.rowForWidget(row)
 }
 
 // selectedKey is the key of the selected row, if any, read off the row

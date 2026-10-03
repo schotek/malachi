@@ -71,6 +71,10 @@ func setStar(b *gtk.ToggleButton, on bool) {
 // message under the unread filter must not pull it out from under the
 // user. The filter is applied again on the next load of the list.
 func (w *Window) refreshRow(id api.MessageID) {
+	if w.usesDateGroups() {
+		w.syncDateRows(false)
+		return
+	}
 	s, _, ok := w.model.message(id)
 	if !ok {
 		return
@@ -84,7 +88,7 @@ func (w *Window) refreshRow(id api.MessageID) {
 // grouped mode the conversation rows carry aggregates, so the whole list
 // is reconciled.
 func (w *Window) refreshRows(ids []api.MessageID) {
-	if w.model.grouped {
+	if w.model.grouped || w.usesDateGroups() {
 		w.syncRows()
 		return
 	}

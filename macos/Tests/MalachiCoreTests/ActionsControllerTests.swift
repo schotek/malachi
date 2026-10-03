@@ -1016,6 +1016,39 @@ private final class Harness {
         #expect(h.log.composed.count == 1)
     }
 
+    /// message_view.go `openMessage`: what a double click opens, on a row
+    /// of the list or on the header of a conversation's card. A message
+    /// opens in a window of its own, as given (the user's reply in Sent,
+    /// which the list does not hold, too); one of a Drafts folder opens
+    /// for editing.
+    @Test func doubleClickOpensAWindowOrTheDraft() async throws {
+        var d1 = msg("d1", 1, .seen)
+        d1.folderId = drafts.folder
+        let m1 = msg("m1", 2)
+        let h = try await Harness(
+            folders: testFolders() + [testFolder("dr", path: "Drafts", role: .drafts)], messages: [inbox: [m1], drafts: [d1]])
+        defer { Task { await h.stop() } }
+        h.select(drafts)
+        try await h.loaded(drafts)
+        let opened = try encode(DraftOpenResult(draft: Draft(id: "d_1", accountId: "a", version: 3, subject: "s-d1", textBody: "x")))
+        let rec = Recorder()
+        await h.fixture.on(API.DraftOpen.name) { params in
+            await rec.addOpen(try decode(DraftOpenParams.self, params))
+            return opened
+        }
+
+        h.actions.openMessage(m1)
+        #expect(h.log.messageWindows == ["m1"])
+        #expect(h.log.composed.isEmpty)
+
+        h.actions.openMessage(d1)
+        try await waitUntil { h.log.composed.count == 1 }
+        #expect(h.log.composed[0].kind == .edit && h.log.composed[0].draftID == "d_1")
+        #expect(h.log.messageWindows == ["m1"])
+        let requests = await rec.opens
+        #expect(requests == [DraftOpenParams(accountId: "a", messageId: "d1")])
+    }
+
     /// The assistant panel's Open Draft (ui/internal/assistant, the In App
     /// target): the draft is looked up with draft.list, page after page,
     /// and opens for editing, or its window comes to the front; one that

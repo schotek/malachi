@@ -5194,3 +5194,35 @@ msgstr ""
 #: data/io.github.schotek.Malachi.metainfo.xml.in:30
 msgid "Malachi Mail contributors"
 msgstr ""
+
+#: ui/internal/maildate/groups.go:41
+msgid "Yesterday"
+msgstr ""
+
+#: ui/internal/maildate/groups.go:43
+msgid "This week"
+msgstr ""
+
+#: ui/internal/maildate/groups.go:45
+msgid "Last week"
+msgstr ""
+
+#: ui/internal/maildate/groups.go:47
+msgid "This month"
+msgstr ""
+
+#: ui/internal/maildate/groups.go:49
+msgid "Last month"
+msgstr ""
+
+#: ui/internal/maildate/groups.go:51
+msgid "This year"
+msgstr ""
+
+#: ui/internal/window/date_groups.go:95
+msgid "Collapsed"
+msgstr ""
+
+#: ui/internal/window/date_groups.go:97
+msgid "Expanded"
+msgstr ""

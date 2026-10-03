@@ -5,8 +5,8 @@
 // (the callbacks it installs, the banners, apply(rows:hint:), refreshRows,
 // syncSelection, applyAppearance, show(state), showLoadMore, focus(key),
 // rowDoubleClicked, activateSelected, foldSelected, the scroll edge) and
-// SearchScopeBar.swift; GTK: ui/internal/window/window.go (the list's
-// row-selected and row-activated handlers, refreshListTitle,
+// SearchScopeBar.swift; inbox headers: MailDateHeaderView.swift; GTK: ui/internal/window/window.go (the list's
+// date_groups.go and row-selected and row-activated handlers, refreshListTitle,
 // showConnectionState's banner), messages.go (showListState, showLoadMore,
 // applyListAppearance), threads.go (syncRows, addThreadShortcuts) and
 // search.go (the scope toggles, the filter hidden while searching,
@@ -18,7 +18,7 @@
 // never a deselection the collection caused (docs/windows-port.md §7.5).
 // Paging is Core's (MailboxController.Paging.cs): the view reports the
 // viewport after every change of the rows' extent or the pane's size and on
-// every scroll, and shows Load More only while LoadMoreRetry says so.
+// every scroll, and shows Load More for retries or while inbox sections are collapsed.
 //
 // Windows addition (windows/README.md): a context menu on a message offers
 // the actions of the message pane's header (a right click selects the row
@@ -37,12 +37,12 @@
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.Linq;
 using Malachi.App.Commands;
 using Malachi.App.Localization;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers;
-using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
 using Malachi.Core.Presentation;
@@ -51,6 +51,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using WinKey = Windows.System.VirtualKey;
@@ -67,6 +68,10 @@ public sealed partial class MessageListPane : UserControl
     private const int MaxFocusAttempts = 8;
 
     private readonly Button retryButton;
+    private readonly MailDateList dateList = new();
+    private readonly CollectionViewSource groupedSource;
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer calendarTimer;
+    private (DateTime Day, TimeSpan Offset, DayOfWeek FirstDay) calendarStamp;
     private ListController? list;
     private MailboxController? mailbox;
     private SettingsStore? settings;
@@ -84,6 +89,28 @@ public sealed partial class MessageListPane : UserControl
     public MessageListPane()
     {
         InitializeComponent();
+        groupedSource = new CollectionViewSource
+        {
+            Source = dateList.Sections,
+            IsSourceGrouped = true,
+            ItemsPath = new PropertyPath(nameof(MailDateSectionRow.Rows)),
+        };
+        MessageList.ItemsSource = Rows;
+        calendarTimer = DispatcherQueue.CreateTimer();
+        calendarTimer.Interval = TimeSpan.FromSeconds(30);
+        calendarTimer.Tick += (_, _) =>
+        {
+            if (dateList.Enabled && calendarStamp != CalendarStamp())
+            {
+                ApplyRows();
+            }
+        };
+        Loaded += (_, _) =>
+        {
+            ApplyRows();
+            calendarTimer.Start();
+        };
+        Unloaded += (_, _) => calendarTimer.Stop();
         NameSelectorList(FilterBar);
         NameSelectorList(ScopeBar);
         MessageList.AddHandler(TappedEvent, new TappedEventHandler(OnRowTapped), handledEventsToo: true);
@@ -122,7 +149,7 @@ public sealed partial class MessageListPane : UserControl
     public event EventHandler? ReconnectRequested;
 
     /// <summary>The rows, in the list's order.</summary>
-    public ObservableCollection<MessageRow> Rows { get; } = [];
+    public ObservableCollection<MessageRow> Rows => dateList.Rows;
 
     /// <summary>
     /// Installs the view-facing callbacks of the list half, the mailbox's
@@ -268,14 +295,17 @@ public sealed partial class MessageListPane : UserControl
             return;
         }
         var look = RowAppearance.From(settings, l.SearchActive, mailbox.Model.Grouped);
-        var now = TimeProvider.System.GetUtcNow();
+        calendarStamp = CalendarStamp();
         reselecting = true;
         try
         {
-            KeyedListSync.Apply(Rows, l.Rows, r => r.Key, v => v.Key, r => new MessageRow(r.Key), (v, r) => v.Update(r, l.RowMessage(r.Message), look, now));
-            for (var i = 0; i < Rows.Count; i++)
+            dateList.Apply(l.Rows, mailbox.Model.ListFolder,
+                !l.SearchActive && l.FolderRole == FolderRole.Inbox, l.SelectedKey,
+                (view, row, now) => view.Update(row, l.RowMessage(row.Message), look, now));
+            var source = dateList.Enabled ? (object)groupedSource.View : Rows;
+            if (!ReferenceEquals(MessageList.ItemsSource, source))
             {
-                Rows[i].IsLast = i == Rows.Count - 1;
+                MessageList.ItemsSource = source;
             }
         }
         finally
@@ -283,9 +313,28 @@ public sealed partial class MessageListPane : UserControl
             reselecting = false;
         }
         SyncSelection();
+        ShowLoadMore();
         TryFocusPending();
         // After the layout: the rows' extent moved (fillPane).
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, ReportViewport);
+    }
+
+    private static (DateTime Day, TimeSpan Offset, DayOfWeek FirstDay) CalendarStamp()
+    {
+        var now = TimeZoneInfo.ConvertTime(TimeProvider.System.GetUtcNow(), TimeZoneInfo.Local);
+        return (now.Date, now.Offset, CultureInfo.CurrentCulture.DateTimeFormat.FirstDayOfWeek);
+    }
+
+    private void OnDateGroupClicked(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: MailDateSectionRow section } && list is { } l)
+        {
+            if (dateList.Toggle(section.Group, l.SelectedKey))
+            {
+                l.Select(null);
+            }
+            ApplyRows();
+        }
     }
 
     // syncSelection: the controller's SelectedKey, without re-entering Select.
@@ -411,7 +460,7 @@ public sealed partial class MessageListPane : UserControl
     }
 
     // messages.go showLoadMore, the macOS way: the spinner while a page
-    // comes, Load More only to retry one that failed, the search note.
+    // comes, Load More for retries or collapsed sections, the search note.
     private void ShowLoadMore()
     {
         if (list is not { } l)
@@ -421,8 +470,9 @@ public sealed partial class MessageListPane : UserControl
         var state = l.LoadMoreState;
         LoadMoreSpinner.IsActive = state.Spinner;
         LoadMoreSpinner.Visibility = state.Spinner ? Visibility.Visible : Visibility.Collapsed;
-        LoadMoreButton.Visibility = l.LoadMoreRetry ? Visibility.Visible : Visibility.Collapsed;
-        LoadMoreBox.Visibility = state.Spinner || l.LoadMoreRetry ? Visibility.Visible : Visibility.Collapsed;
+        var showButton = l.LoadMoreRetry || (dateList.HasCollapsed && state.Button);
+        LoadMoreButton.Visibility = showButton ? Visibility.Visible : Visibility.Collapsed;
+        LoadMoreBox.Visibility = state.Spinner || showButton ? Visibility.Visible : Visibility.Collapsed;
         SearchNote.Text = state.Note;
         SearchNote.Visibility = state.Note.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -564,6 +614,10 @@ public sealed partial class MessageListPane : UserControl
     // row is selected, shown and given the keyboard.
     private void FocusRow(ListKey key)
     {
+        if (dateList.Reveal(key))
+        {
+            ApplyRows();
+        }
         if (Rows.FirstOrDefault(r => r.Key == key) is not { } row)
         {
             return;
@@ -583,6 +637,15 @@ public sealed partial class MessageListPane : UserControl
     // list (threads.go addThreadShortcuts).
     private void OnListKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        // A disclosure button owns Enter/Space/arrows while it has focus.
+        for (var source = e.OriginalSource as DependencyObject; source is not null && source != MessageList;
+            source = VisualTreeHelper.GetParent(source))
+        {
+            if (source is FrameworkElement { DataContext: MailDateSectionRow })
+            {
+                return;
+            }
+        }
         if (list is not { } l || MessageList.SelectedItem is not MessageRow row)
         {
             return;
@@ -741,7 +804,7 @@ public sealed partial class MessageListPane : UserControl
 
     private void ReportViewport()
     {
-        if (list is null || scroller is null || MessagesPage.Visibility != Visibility.Visible)
+        if (reselecting || dateList.HasCollapsed || list is null || scroller is null || MessagesPage.Visibility != Visibility.Visible)
         {
             return;
         }

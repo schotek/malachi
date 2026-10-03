@@ -5421,6 +5421,38 @@ msgstr ""
 msgid "Malachi Mail contributors"
 msgstr "Přispěvatelé Malachi Mail"
 
+#: ui/internal/maildate/groups.go:41
+msgid "Yesterday"
+msgstr "Včera"
+
+#: ui/internal/maildate/groups.go:43
+msgid "This week"
+msgstr "Tento týden"
+
+#: ui/internal/maildate/groups.go:45
+msgid "Last week"
+msgstr "Minulý týden"
+
+#: ui/internal/maildate/groups.go:47
+msgid "This month"
+msgstr "Tento měsíc"
+
+#: ui/internal/maildate/groups.go:49
+msgid "Last month"
+msgstr "Minulý měsíc"
+
+#: ui/internal/maildate/groups.go:51
+msgid "This year"
+msgstr "Tento rok"
+
+#: ui/internal/window/date_groups.go:95
+msgid "Collapsed"
+msgstr "Sbaleno"
+
+#: ui/internal/window/date_groups.go:97
+msgid "Expanded"
+msgstr "Rozbaleno"
+
 #~ msgid "Suggested by the assistant · nothing is sent by itself"
 #~ msgstr "Navrhl asistent · nic se neodešle samo"
 
@@ -5459,3 +5491,6 @@ msgstr "Přispěvatelé Malachi Mail"
 
 #~ msgid "Load Images"
 #~ msgstr "Načíst obrázky"
+
+#~ msgid "Connected"
+#~ msgstr "Připojeno"
