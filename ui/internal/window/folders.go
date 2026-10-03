@@ -572,9 +572,13 @@ func (w *Window) onNewMessage(n api.NewMessageNotification) {
 				w.loadMessages()
 			}
 		case matchesFilter(s, w.model.listFilter) && w.model.insertMessage(0, s):
-			r := w.newMessageRow(s)
-			w.rows[listKey{Message: s.ID}] = r
-			w.messageList.Prepend(r)
+			if w.usesDateGroups() {
+				w.syncDateRows(false)
+			} else {
+				r := w.newMessageRow(s)
+				w.rows[listKey{Message: s.ID}] = r
+				w.messageList.Prepend(r)
+			}
 			w.showListState()
 		}
 	} else if n.AccountID == w.model.listFolder.Account {

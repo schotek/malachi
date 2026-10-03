@@ -27,6 +27,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/compose"
 	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/maildate"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/signin"
 	"github.com/schotek/malachi/ui/internal/sound"
@@ -60,7 +61,11 @@ type Window struct {
 	// rows are the message list rows by key (a message, or a conversation
 	// in grouped mode), kept so appearance settings and flag changes can be
 	// pushed to them.
-	rows map[listKey]*widget.MessageRow
+	rows          map[listKey]*widget.MessageRow
+	dateFolder    folderKey
+	dateCollapsed map[maildate.Group]bool
+	dateButtons   map[maildate.Group]*gtk.Button
+	dateWeekStart time.Weekday
 
 	// folderRows are the sidebar rows by folder and section (header rows
 	// are not kept).
@@ -419,7 +424,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		w.outerSplit.SetShowContent(true)
 	})
 
-	// List rows mirror model.messages one to one (rebuildMessageRows).
+	// Resolve message rows by identity; date headings are not messages.
 	w.messageList.ConnectRowSelected(func(row *gtk.ListBoxRow) {
 		if !w.reselecting {
 			w.onMessageRowSelected(row)
@@ -429,7 +434,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	// conversation row folds or unfolds, a message opens in a window — a
 	// draft in the compose window.
 	w.messageList.ConnectRowActivated(func(row *gtk.ListBoxRow) {
-		if r, ok := w.model.rowAt(row.Index()); ok {
+		if r, ok := w.rowForWidget(row); ok {
 			switch {
 			case r.Thread:
 				w.toggleThread(r.Key.Thread)
@@ -440,9 +445,10 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 			}
 		}
 	})
+	w.initDateGroups()
 	w.loadMoreButton.ConnectClicked(w.loadMore)
 	w.listScroller.ConnectEdgeReached(func(pos gtk.PositionType) {
-		if pos == gtk.PosBottom {
+		if pos == gtk.PosBottom && !w.reselecting && (!w.usesDateGroups() || len(w.dateCollapsed) == 0) {
 			w.loadMore()
 		}
 	})
@@ -535,7 +541,7 @@ func (w *Window) onMessageRowSelected(row *gtk.ListBoxRow) {
 		w.scheduleMarkRead("")
 		return
 	}
-	r, ok := w.model.rowAt(row.Index())
+	r, ok := w.rowForWidget(row)
 	if !ok {
 		return
 	}

@@ -64,13 +64,13 @@ Native email client for the GNOME desktop	AppStream metainfo: the Linux software
 Malachi Mail is a desktop email client for Linux, built with GTK 4 and libadwaita. It keeps mail available offline, renders HTML messages only after sanitising them, and separates the user interface from the mail engine so that the engine can be reused.	AppStream metainfo: the Linux software centres' description; the installer's comes before a release
 This is an early version. Mail can be read, written, sent and searched, but keep a second mail program for anything that matters.	AppStream metainfo: the Linux software centres' description; the installer's comes before a release
 
-# macOS-only inbox sections, explicitly localized at the user's request.
-Today	macOS-only inbox date sections and their disclosure accessibility states
-Yesterday	macOS-only inbox date sections and their disclosure accessibility states
-This week	macOS-only inbox date sections and their disclosure accessibility states
-Last week	macOS-only inbox date sections and their disclosure accessibility states
-This month	macOS-only inbox date sections and their disclosure accessibility states
-Last month	macOS-only inbox date sections and their disclosure accessibility states
-This year	macOS-only inbox date sections and their disclosure accessibility states
-Collapsed	macOS-only inbox date sections and their disclosure accessibility states
-Expanded	macOS-only inbox date sections and their disclosure accessibility states
+# GTK/macOS inbox sections; Windows port not requested.
+Today	GTK/macOS inbox date sections and their disclosure states; Windows port not requested
+Yesterday	GTK/macOS inbox date sections and their disclosure states; Windows port not requested
+This week	GTK/macOS inbox date sections and their disclosure states; Windows port not requested
+Last week	GTK/macOS inbox date sections and their disclosure states; Windows port not requested
+This month	GTK/macOS inbox date sections and their disclosure states; Windows port not requested
+Last month	GTK/macOS inbox date sections and their disclosure states; Windows port not requested
+This year	GTK/macOS inbox date sections and their disclosure states; Windows port not requested
+Collapsed	GTK/macOS inbox date sections and their disclosure states; Windows port not requested
+Expanded	GTK/macOS inbox date sections and their disclosure states; Windows port not requested

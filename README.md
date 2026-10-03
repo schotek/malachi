@@ -57,7 +57,8 @@ work reliably anymore, and on Linux that is worse than anywhere else.
 - **Desktop integration.** `mailto:` links, new-mail notifications with an
   optional sound, launch at login (through the Background portal), light
   and dark styles, a message list with unread/flagged filters, a foldable
-  sidebar with favourite folders.
+  sidebar with favourite folders. In GTK and macOS, the Inbox has collapsible
+  date sections with flagged messages first; conversations stay together.
 - **Conversations.** The daemon threads mail by its headers as it
   arrives; *Group by Conversation* in the preferences turns the message
   list into one row per conversation, expandable to its messages.

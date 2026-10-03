@@ -3,13 +3,13 @@
 
 import Foundation
 
-/// macOS-only presentation of the inbox; no changes to the daemon's ordering or data.
+/// Inbox presentation; the GTK counterpart is ui/internal/maildate.
 public enum MailDateGroup: Hashable, Sendable {
     case flagged, today, yesterday, thisWeek, lastWeek, thisMonth, lastMonth, thisYear
     case year(Int)
 
     public var title: String {
-        // Explicitly localized macOS-only feature; extracted via po/POTFILES.macos.
+        // Shared GTK msgids from ui/internal/maildate/groups.go.
         switch self {
         case .flagged: return L10n.T("Flagged")
         case .today: return L10n.T("Today")

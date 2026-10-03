@@ -178,6 +178,10 @@ func (w *Window) loadMore() {
 				return
 			}
 			added := w.model.appendMessages(res.Messages, res.Page)
+			if w.usesDateGroups() {
+				w.syncDateRows(false)
+				return
+			}
 			for _, s := range w.model.messages[len(w.model.messages)-added:] {
 				r := w.newMessageRow(s)
 				w.rows[listKey{Message: s.ID}] = r
@@ -189,12 +193,19 @@ func (w *Window) loadMore() {
 }
 
 // rebuildMessageRows recreates the rows from the model. In flat mode one
-// row per message, in order: the row handlers in New map row.Index() back
-// onto model.messages. The selected message stays selected when it is
+// row per message. Inbox sections insert headings; row handlers resolve
+// messages by key rather than physical list position. The selected message stays selected when it is
 // still listed, without re-entering the row-selected handler (the pane
 // already shows it); when it is gone the pane is cleared. In grouped mode
 // the rows are keyed and syncRows does the same from scratch.
 func (w *Window) rebuildMessageRows() {
+	if w.usesDateGroups() {
+		w.syncDateRows(false)
+		return
+	}
+	w.dateCollapsed = nil
+	w.dateButtons = nil
+	w.dateFolder = folderKey{}
 	if w.model.grouped {
 		w.reselecting = true
 		w.messageList.RemoveAll()
@@ -315,6 +326,14 @@ func (w *Window) removeMessageRow(id api.MessageID) (restore func()) {
 		return func() {}
 	}
 	gen := w.model.listGen
+	if w.usesDateGroups() {
+		w.syncDateRows(true)
+		return func() {
+			if w.model.listGen == gen && w.model.insertMessage(idx, s) {
+				w.syncDateRows(false)
+			}
+		}
+	}
 	wasSelected := false
 	key := listKey{Message: id}
 	if r := w.rows[key]; r != nil {

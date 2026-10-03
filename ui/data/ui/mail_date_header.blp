@@ -1,0 +1,17 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+ListBoxRow date_header {
+  selectable: false;
+  activatable: false;
+  Button toggle {
+    styles ["flat"]
+    Box {
+      spacing: 8;
+      margin-top: 4;
+      margin-bottom: 4;
+      Image arrow { icon-name: "pan-down-symbolic"; }
+      Label title { xalign: 0; hexpand: true; use-markup: false; styles ["dim-label"] }
+    }
+  }
+}

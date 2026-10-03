@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-03 09:09+0200\n"
+"POT-Creation-Date: 2026-10-03 07:35+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1673,7 +1673,7 @@ msgstr ""
 
 #: ui/internal/jira/transitions.go:98
 #: ui/internal/window/conversation_card.go:161 ui/internal/window/folders.go:89
-#: ui/internal/window/messages.go:264
+#: ui/internal/window/messages.go:275
 msgid "Loading…"
 msgstr ""
 
@@ -2147,101 +2147,101 @@ msgstr ""
 msgid "Star"
 msgstr ""
 
-#: ui/internal/window/actions.go:192
+#: ui/internal/window/actions.go:196
 msgid "Marking the message as read"
 msgstr ""
 
-#: ui/internal/window/actions.go:194
+#: ui/internal/window/actions.go:198
 #, c-format
 msgid "Marking %d message as read"
 msgid_plural "Marking %d messages as read"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:196
+#: ui/internal/window/actions.go:200
 msgid "Marking the message as unread"
 msgstr ""
 
-#: ui/internal/window/actions.go:198
+#: ui/internal/window/actions.go:202
 #, c-format
 msgid "Marking %d message as unread"
 msgid_plural "Marking %d messages as unread"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:250
+#: ui/internal/window/actions.go:254
 msgid "Starring the message"
 msgstr ""
 
-#: ui/internal/window/actions.go:252
+#: ui/internal/window/actions.go:256
 #, c-format
 msgid "Starring %d message"
 msgid_plural "Starring %d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:254
+#: ui/internal/window/actions.go:258
 msgid "Removing the star"
 msgstr ""
 
-#: ui/internal/window/actions.go:256
+#: ui/internal/window/actions.go:260
 #, c-format
 msgid "Removing the star from %d message"
 msgid_plural "Removing the star from %d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:307
+#: ui/internal/window/actions.go:311
 msgid "Moving the message to Trash"
 msgstr ""
 
-#: ui/internal/window/actions.go:309
+#: ui/internal/window/actions.go:313
 #, c-format
 msgid "Moving %d message to Trash"
 msgid_plural "Moving %d messages to Trash"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:356
+#: ui/internal/window/actions.go:360
 msgid "Archiving the message"
 msgstr ""
 
-#: ui/internal/window/actions.go:358
+#: ui/internal/window/actions.go:362
 #, c-format
 msgid "Archiving %d message"
 msgid_plural "Archiving %d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:359
+#: ui/internal/window/actions.go:363
 msgid "This account has no archive folder"
 msgstr ""
 
-#: ui/internal/window/actions.go:385 ui/internal/window/actions.go:399
+#: ui/internal/window/actions.go:389 ui/internal/window/actions.go:403
 msgid "This account has no junk folder"
 msgstr ""
 
-#: ui/internal/window/actions.go:388
+#: ui/internal/window/actions.go:392
 msgid "Mark as junk?"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of messages of a conversation.
-#: ui/internal/window/actions.go:391
+#: ui/internal/window/actions.go:395
 #, c-format
 msgid "Mark %d message as junk?"
 msgid_plural "Mark %d messages as junk?"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:393
+#: ui/internal/window/actions.go:397
 msgid "Mark as _Junk"
 msgstr ""
 
-#: ui/internal/window/actions.go:396
+#: ui/internal/window/actions.go:400
 msgid "Marking the message as junk"
 msgstr ""
 
-#: ui/internal/window/actions.go:398
+#: ui/internal/window/actions.go:402
 #, c-format
 msgid "Marking %d message as junk"
 msgid_plural "Marking %d messages as junk"
@@ -2584,7 +2584,7 @@ msgstr ""
 msgid "Downloading…"
 msgstr ""
 
-#: ui/internal/window/messages.go:87 ui/internal/window/messages.go:262
+#: ui/internal/window/messages.go:87 ui/internal/window/messages.go:273
 #: ui/internal/window/threads.go:46
 msgid "Loading messages"
 msgstr ""
@@ -2593,49 +2593,49 @@ msgstr ""
 msgid "Loading more messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:254
+#: ui/internal/window/messages.go:265
 msgid "Select a folder"
 msgstr ""
 
-#: ui/internal/window/messages.go:255
+#: ui/internal/window/messages.go:266
 msgid "Choose a folder in the sidebar to see its messages."
 msgstr ""
 
-#: ui/internal/window/messages.go:257
+#: ui/internal/window/messages.go:268
 msgid "Not Synchronised"
 msgstr ""
 
-#: ui/internal/window/messages.go:258
+#: ui/internal/window/messages.go:269
 msgid ""
 "Messages moved here are archived on the server; the folder itself is not "
 "downloaded."
 msgstr ""
 
-#: ui/internal/window/messages.go:261
+#: ui/internal/window/messages.go:272
 msgid "Messages Unavailable"
 msgstr ""
 
-#: ui/internal/window/messages.go:266
+#: ui/internal/window/messages.go:277
 msgid "No Unread Messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:267
+#: ui/internal/window/messages.go:278
 msgid "Everything in this folder has been read."
 msgstr ""
 
-#: ui/internal/window/messages.go:269
+#: ui/internal/window/messages.go:280
 msgid "No Flagged Messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:270
+#: ui/internal/window/messages.go:281
 msgid "No message in this folder carries a flag."
 msgstr ""
 
-#: ui/internal/window/messages.go:272
+#: ui/internal/window/messages.go:283
 msgid "No Messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:273
+#: ui/internal/window/messages.go:284
 msgid "This folder is empty."
 msgstr ""
 
@@ -3115,16 +3115,56 @@ msgstr ""
 msgid "Loading the conversation"
 msgstr ""
 
-#: ui/internal/window/window.go:688
+#: ui/internal/window/window.go:694
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:759 ui/data/ui/window.ui:222
+#: ui/internal/window/window.go:765 ui/data/ui/window.ui:222
 msgid "Search"
 msgstr ""
 
-#: ui/internal/window/window.go:765 ui/data/ui/window.ui:192
+#: ui/internal/window/window.go:771 ui/data/ui/window.ui:192
 msgid "Messages"
+msgstr ""
+
+#: ui/internal/maildate/groups.go:37 ui/data/ui/window.ui:329
+msgid "Flagged"
+msgstr ""
+
+#: ui/internal/maildate/groups.go:39
+msgid "Today"
+msgstr ""
+
+#: ui/internal/maildate/groups.go:41
+msgid "Yesterday"
+msgstr ""
+
+#: ui/internal/maildate/groups.go:43
+msgid "This week"
+msgstr ""
+
+#: ui/internal/maildate/groups.go:45
+msgid "Last week"
+msgstr ""
+
+#: ui/internal/maildate/groups.go:47
+msgid "This month"
+msgstr ""
+
+#: ui/internal/maildate/groups.go:49
+msgid "Last month"
+msgstr ""
+
+#: ui/internal/maildate/groups.go:51
+msgid "This year"
+msgstr ""
+
+#: ui/internal/window/date_groups.go:95
+msgid "Collapsed"
+msgstr ""
+
+#: ui/internal/window/date_groups.go:97
+msgid "Expanded"
 msgstr ""
 
 #: ui/data/ui/account_wizard.ui:10 ui/data/ui/account_wizard.ui:21
@@ -3732,11 +3772,6 @@ msgstr ""
 msgid "Unread"
 msgstr ""
 
-#: ui/data/ui/window.ui:329
-#: macos/Sources/MalachiCore/Model/MailDateGroups.swift:14
-msgid "Flagged"
-msgstr ""
-
 #: ui/data/ui/window.ui:372
 msgid "Load More"
 msgstr ""
@@ -3958,40 +3993,4 @@ msgstr ""
 
 #: data/io.github.schotek.Malachi.metainfo.xml.in:30
 msgid "Malachi Mail contributors"
-msgstr ""
-
-#: macos/Sources/MalachiCore/Model/MailDateGroups.swift:15
-msgid "Today"
-msgstr ""
-
-#: macos/Sources/MalachiCore/Model/MailDateGroups.swift:16
-msgid "Yesterday"
-msgstr ""
-
-#: macos/Sources/MalachiCore/Model/MailDateGroups.swift:17
-msgid "This week"
-msgstr ""
-
-#: macos/Sources/MalachiCore/Model/MailDateGroups.swift:18
-msgid "Last week"
-msgstr ""
-
-#: macos/Sources/MalachiCore/Model/MailDateGroups.swift:19
-msgid "This month"
-msgstr ""
-
-#: macos/Sources/MalachiCore/Model/MailDateGroups.swift:20
-msgid "Last month"
-msgstr ""
-
-#: macos/Sources/MalachiCore/Model/MailDateGroups.swift:21
-msgid "This year"
-msgstr ""
-
-#: macos/Sources/MalachiMail/MessageList/MailDateHeaderView.swift:42
-msgid "Collapsed"
-msgstr ""
-
-#: macos/Sources/MalachiMail/MessageList/MailDateHeaderView.swift:42
-msgid "Expanded"
 msgstr ""
