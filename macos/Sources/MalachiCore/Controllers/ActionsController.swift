@@ -752,6 +752,18 @@ public final class ActionsController {
         }
     }
 
+    /// Opens message `s` as a double click does, on its row in the list or
+    /// on the header of its card in a conversation (message_view.go
+    /// `openMessage`): a message of a Drafts folder in the compose window,
+    /// any other in a window of its own.
+    public func openMessage(_ s: MessageSummary) {
+        if mailbox.model.inDrafts(s) {
+            openDraft(s.id)
+        } else {
+            openMessageWindow?(s)
+        }
+    }
+
     /// Opens message `id` of a Drafts folder in the compose window, or
     /// raises the window already editing it (drafts.go `openDraft`). A
     /// second request while the first is on its way does nothing; a daemon

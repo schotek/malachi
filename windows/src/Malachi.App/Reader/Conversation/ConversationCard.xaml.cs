@@ -5,7 +5,8 @@
 // setFolded, showFoldState, setCompact, refreshActions, toggleDetails,
 // renderDetails, render, renderBody, showText, showHTML, setHint,
 // renderBars, renderBulk, renderChips, refreshChips, setLive, loadWebView,
-// releaseWebView, sizeReported, setWebHeight, setZoom, forwardScroll);
+// releaseWebView, sizeReported, setWebHeight, setZoom, forwardScroll,
+// openOnDoubleClick, onHeader);
 // macOS: MessageView/ConversationCardView.swift. One message of the
 // conversation view (ConversationItemKind.Message). Headers are plain text;
 // the body's HTML is the sanitiser's output only, in a view of its own sized
@@ -44,6 +45,7 @@ using Malachi.Core.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 
@@ -434,6 +436,39 @@ internal sealed partial class ConversationCard : UserControl
         {
             pane.SetCardFolded(this, false);
         }
+    }
+
+    // openOnDoubleClick: a double click on the header opens the message as
+    // one on its row in the list does (MessageActionRouter.OpenMessage): in
+    // a window of its own, a draft in the compose window. The handler is the
+    // frame's, so that the padding around the header's line counts too.
+    private void OnFrameDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    {
+        if (!OnHeader(e))
+        {
+            return;
+        }
+        e.Handled = true;
+        pane.Services.Router.OpenMessage(s);
+    }
+
+    // onHeader: from the card's top edge to the bottom of the header's line,
+    // on none of its buttons (the fold arrow, the recipients' disclosure, the
+    // hover buttons, whose clicks are their own).
+    private bool OnHeader(DoubleTappedRoutedEventArgs e)
+    {
+        if (e.GetPosition(Header).Y >= Header.ActualHeight)
+        {
+            return false;
+        }
+        for (var at = e.OriginalSource as DependencyObject; at is not null && !ReferenceEquals(at, Frame); at = VisualTreeHelper.GetParent(at))
+        {
+            if (at is ButtonBase || ReferenceEquals(at, Buttons))
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void OnDisclosureClick(object sender, RoutedEventArgs e) => ToggleDetails();

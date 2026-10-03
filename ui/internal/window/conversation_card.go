@@ -9,6 +9,7 @@ import (
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
+	"github.com/diamondburned/gotk4/pkg/graphene"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/diamondburned/gotk4/pkg/pango"
 
@@ -27,7 +28,9 @@ import (
 // Comment on an issue —, Reply All and Forward as the account allows
 // them), the recipients, the attachment chips, the remote-image and
 // pictures bars, the body, and under it the "•••" that shows the quoted
-// history the daemon cut from it (quoted.go). The body is: plain text in a label, HTML in a view of
+// history the daemon cut from it (quoted.go). A double click on the header
+// opens the message as one on its row in the list does: in a window of its
+// own, a draft in the compose window (openOnDoubleClick). The body is: plain text in a label, HTML in a view of
 // its own sized to its document (htmlview.Card; never one document for
 // the conversation: a message's CSS must not reach another's headers).
 // Headers are plain text; the body's HTML is the sanitiser's output only.
@@ -312,6 +315,47 @@ func (c *convCard) buildHeader() {
 		c.setButtonsShown(c.hovering)
 	})
 	c.buttons.AddController(focus)
+	c.openOnDoubleClick()
+}
+
+// openOnDoubleClick makes a double click on the header open the message as
+// a double click on its row in the list does (Window.openMessage). The
+// gesture is the card's, so that the padding around the header's line
+// counts too; onHeader tells where the click fell.
+func (c *convCard) openOnDoubleClick() {
+	click := gtk.NewGestureClick()
+	click.SetButton(gdk.BUTTON_PRIMARY)
+	click.ConnectReleased(func(n int, x, y float64) {
+		if n == 2 && c.onHeader(x, y) {
+			c.cv.w.openMessage(c.s)
+		}
+	})
+	c.root.AddController(click)
+}
+
+// onHeader reports whether the point, in the card's coordinates, is on the
+// header: from the card's top edge to the bottom of the header's line, on
+// none of its buttons (the fold arrow, the recipients' disclosure, the
+// hover buttons, whose clicks are their own). A header not laid out yet
+// has no such point.
+func (c *convCard) onHeader(x, y float64) bool {
+	line, ok := gtk.BaseWidget(c.slots[cardSlotHeader]).ComputeBounds(c.root)
+	if !ok || y < 0 || y >= float64(line.Y()+line.Height()) {
+		return false
+	}
+	// graphene.Point wraps a C allocation (accounts_reorder.go onHandle).
+	p := graphene.NewPointAlloc()
+	p.Init(float32(x), float32(y))
+	for _, b := range []gtk.Widgetter{c.fold, c.disclosure, c.buttons} {
+		w := gtk.BaseWidget(b)
+		if !w.IsVisible() {
+			continue
+		}
+		if r, ok := w.ComputeBounds(c.root); ok && r.ContainsPoint(p) {
+			return false
+		}
+	}
+	return true
 }
 
 // setButtonsShown shows or hides the hover buttons.

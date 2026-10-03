@@ -742,7 +742,8 @@ Adw.ApplicationWindow main_window {
                           margin-top: 24;
 
                           // The issue card of a Jira message (window/issue_card.go), built
-                          // from Go; hidden for mail.
+                          // from Go; hidden for mail, the slot with it (message_view.go), so
+                          // that it takes no spacing above the subject.
                           Box issue_card_slot {
                             orientation: vertical;
                           }

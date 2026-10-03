@@ -981,6 +981,24 @@ public sealed partial class ActionsController
     }
 
     /// <summary>
+    /// Opens message <paramref name="s"/> as a double click does, on its row
+    /// in the list or on the header of its card in a conversation
+    /// (message_view.go <c>openMessage</c>): a message of a Drafts folder in
+    /// the compose window, any other in a window of its own.
+    /// </summary>
+    public void OpenMessage(MessageSummary s)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        Mailbox.Scope.VerifyAccess();
+        if (Mailbox.Model.InDrafts(s))
+        {
+            OpenDraft(s.Id);
+            return;
+        }
+        OpenMessageWindowRequested?.Invoke(this, s);
+    }
+
+    /// <summary>
     /// Opens message <paramref name="id"/> of a Drafts folder in the compose
     /// window, or raises the window already editing it (drafts.go
     /// <c>openDraft</c>). A second request while the first is on its way does

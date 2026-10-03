@@ -54,7 +54,9 @@ protocol ConversationCardHost: AnyObject {
 /// must not reach another's headers). Headers are plain text
 /// (`stringValue`); the body's HTML is the sanitiser's output only
 /// (`MessageWebView`). The sender's avatar is not the card's: it sits on
-/// the timeline beside it (`ConversationRow`).
+/// the timeline beside it (`ConversationRow`). A double click on the header
+/// opens the message as one on its row in the list does: in a window of its
+/// own, a draft in the compose window.
 ///
 /// The native parts keep the card's padding. An HTML body does not: its
 /// document is the reader's in its compact form (`viewerDocument(body:
@@ -266,6 +268,18 @@ final class ConversationCardView: NSView {
         previewBox.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(previewClicked(_:))))
         previewBox.isHidden = true
 
+        // A double click on the header opens the message as one on its row
+        // in the list does (conversation_card.go `openOnDoubleClick`). The
+        // recognizer is the card's, so that the padding around the header
+        // counts too; it reads only the clicks `onHeader` lets it
+        // (`gestureRecognizer(_:shouldAttemptToRecognizeWith:)`), and holds
+        // no click back from the views under it.
+        let doubleClick = NSClickGestureRecognizer(target: self, action: #selector(headerDoubleClicked(_:)))
+        doubleClick.numberOfClicksRequired = 2
+        doubleClick.delaysPrimaryMouseButtonEvents = false
+        doubleClick.delegate = self
+        addGestureRecognizer(doubleClick)
+
         content.spacing = 0
         install(bodyHost, .body)
 
@@ -450,6 +464,23 @@ final class ConversationCardView: NSView {
         if folded {
             host?.cardSetFolded(self, false)
         }
+    }
+
+    /// A double click on the header: the message opens in a window of its
+    /// own, a draft in the compose window (message_view.go `openMessage`).
+    @objc private func headerDoubleClicked(_ sender: NSClickGestureRecognizer) {
+        guard sender.state == .ended else { return }
+        host?.delegate?.openMessage(summary)
+    }
+
+    /// Whether `point`, in the card's coordinates, is on the header
+    /// (conversation_card.go `onHeader`): from the card's top edge to the
+    /// bottom of the header, on none of its buttons.
+    private func onHeader(_ point: NSPoint) -> Bool {
+        let line = header.convert(header.bounds, to: self)
+        guard bounds.contains(point), isFlipped ? point.y < line.maxY : point.y >= line.minY else { return false }
+        guard let hit = hitTest(superview?.convert(point, from: self) ?? point) else { return false }
+        return !header.isButton(hit)
     }
 
     // MARK: Recipients
@@ -948,6 +979,14 @@ final class ConversationCardView: NSView {
     func applyFont(_ font: NSFont, zoom: Int) {
         textView?.applyFont(font)
         webView?.setZoom(zoom)
+    }
+}
+
+extension ConversationCardView: NSGestureRecognizerDelegate {
+    /// The header's double click reads a click on the header only: the
+    /// buttons, the chips, the bars and the body keep theirs.
+    func gestureRecognizer(_ gestureRecognizer: NSGestureRecognizer, shouldAttemptToRecognizeWith event: NSEvent) -> Bool {
+        onHeader(convert(event.locationInWindow, from: nil))
     }
 }
 

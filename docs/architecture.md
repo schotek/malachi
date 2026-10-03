@@ -1855,9 +1855,13 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   2026-09-30: oldest first scrolled to the newest left the newest cut
   off while the cards above it grew); the macOS client shows the same
   order since that day (`ConversationLayout.displayOrder`), and the
-  model keeps the oldest first in both. Open: the Windows port, and a
-  card's page under a dark appearance (the document keeps its light
-  background).
+  model keeps the oldest first in both. A double click on a card's
+  header (the padding above it included, its buttons not) opens that
+  message as a double click on its row in the list does: in a window of
+  its own, a draft in the compose window (2026-10-02, all three clients;
+  `Window.openMessage`, `ActionsController.openMessage`). Open: the
+  Windows port, and a card's page under a dark appearance (the document
+  keeps its light background).
 - Document text in the MCP bridge, and its PDF engine: **decided**
   (2026-10-01) — `get_attachment` returns the text of PDF, DOCX and XLSX
   attachments, extracted by the bridge alone

@@ -141,6 +141,10 @@ protocol MessageActionDelegate: AnyObject {
     func isDraft(_ summary: MessageSummary) -> Bool
     /// drafts.go `openDraft`: the draft banner's Edit button.
     func editDraft(_ id: MessageID)
+    /// message_view.go `openMessage`: a double click on the header of a
+    /// conversation's card opens the message as one on its row in the list
+    /// does, in a window of its own, a draft in the compose window.
+    func openMessage(_ summary: MessageSummary)
     /// The special-use role of the folder `summary` lies in (`.none` when
     /// unknown): the bulk strip of a message in Junk warns instead of
     /// offering to unsubscribe (window/bulk.go `bulkStripFor`).

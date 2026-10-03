@@ -250,6 +250,10 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
         actions.openDraft(id)
     }
 
+    func openMessage(_ summary: MessageSummary) {
+        actions.openMessage(summary)
+    }
+
     func folderRole(of summary: MessageSummary) -> FolderRole {
         actions.mailbox.model.folderRole(FolderKey(account: summary.accountId, folder: summary.folderId))
     }
