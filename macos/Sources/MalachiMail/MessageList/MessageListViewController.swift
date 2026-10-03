@@ -80,7 +80,10 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     private let noteBox = NSStackView()
 
     /// The table's rows, by position, and what each key shows.
-    private var keys: [ListKey] = []
+    private var keys: [MailDateItem] = []
+    private var collapsedDates: Set<MailDateGroup> = []
+    private var dateFolder: FolderKey?
+    private var usesDateGroups: Bool { !list.searchActive && list.folderRole == .inbox }
     private var rowsByKey: [ListKey: ListRow] = [:]
     /// A programmatic selection change must not re-enter `select(key:)`
     /// (window.go `reselecting`).
@@ -284,6 +287,9 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         for key in [Settings.Key.density, .showPreviewLine, .showAvatars, .monochromeAvatars] {
             settingsTokens.append(settings.onChange(key) { [weak self] in self?.applyAppearance() })
         }
+        for name in [Notification.Name.NSCalendarDayChanged, .NSSystemTimeZoneDidChange, NSApplication.didBecomeActiveNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(refreshDateGroups), name: name, object: nil)
+        }
         // What the controllers hold already, for a list attached late.
         apply(rows: list.rows, hint: .clear)
         show(list.listState)
@@ -337,7 +343,12 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
             loadMoreButton.isHidden = true
             updateLoadMoreBox()
         }
-        let newKeys = rows.map(\.key)
+        if dateFolder != mailbox.model.listFolder {
+            dateFolder = mailbox.model.listFolder
+            collapsedDates.removeAll()
+        }
+        let newKeys = usesDateGroups ? MailDateGroups.items(rows: rows, collapsed: collapsedDates)
+            : rows.map { MailDateItem.message($0.key) }
         var newByKey: [ListKey: ListRow] = [:]
         newByKey.reserveCapacity(rows.count)
         for r in rows where newByKey[r.key] == nil {
@@ -345,10 +356,12 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         }
         let oldByKey = rowsByKey
         let oldKeys = keys
-        let common = !oldKeys.isEmpty && oldKeys.contains { newByKey[$0] != nil }
+        let newKeySet = Set(newKeys)
+        let common = oldKeys.contains { newKeySet.contains($0) }
 
+        let wasReselecting = isReselecting
         isReselecting = true
-        defer { isReselecting = false }
+        defer { isReselecting = wasReselecting }
         keys = newKeys
         rowsByKey = newByKey
         if !common || hint == .clear {
@@ -380,7 +393,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         // Rows that stayed: re-render the ones whose content moved.
         var changed = IndexSet()
         for (i, key) in newKeys.enumerated() where !inserted.contains(i) {
-            if let old = oldByKey[key], let new = newByKey[key], old != new {
+            if let messageKey = key.messageKey, let old = oldByKey[messageKey], let new = newByKey[messageKey], old != new {
                 changed.insert(i)
             }
         }
@@ -401,11 +414,54 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         syncSelection()
     }
 
+    @objc private func refreshDateGroups() {
+        guard isViewLoaded, usesDateGroups else { return }
+        apply(rows: list.rows, hint: .keep)
+        showLoadMore(list.loadMoreState)
+    }
+
+    private func revealDateGroup(for key: ListKey) {
+        var group: MailDateGroup?
+        for item in MailDateGroups.items(rows: list.rows) {
+            if case .heading(let value) = item { group = value }
+            if item == .message(key), let group, collapsedDates.remove(group) != nil {
+                keys = MailDateGroups.items(rows: list.rows, collapsed: collapsedDates)
+                table.reloadData()
+                return
+            }
+        }
+    }
+
+    private func toggleDateGroup(_ group: MailDateGroup) {
+        isReselecting = true
+        defer { isReselecting = false }
+        if collapsedDates.contains(group) {
+            collapsedDates.remove(group)
+        } else {
+            collapsedDates.insert(group)
+            // A hidden row must not remain the target of message actions.
+            let visible = MailDateGroups.items(rows: list.rows, collapsed: collapsedDates)
+            if let selected = list.selectedKey, !visible.contains(.message(selected)) {
+                list.select(key: nil)
+            }
+        }
+        apply(rows: list.rows, hint: .keep)
+        // Headers retain their identity when folded; refresh the disclosure.
+        table.reloadData()
+        syncSelection()
+        showLoadMore(list.loadMoreState)
+    }
+
     /// Flat mode: a flag change re-rendered these keys (actions.go
     /// `refreshRow`).
     private func refreshRows(_ changed: [ListKey]) {
+        if usesDateGroups {
+            // Flag changes can move a row between the first section and its date section.
+            apply(rows: list.rows, hint: .keep)
+            return
+        }
         for key in changed {
-            guard let row = list.row(for: key), let i = keys.firstIndex(of: key) else { continue }
+            guard let row = list.row(for: key), let i = keys.firstIndex(of: .message(key)) else { continue }
             rowsByKey[key] = row
             render(row: i)
         }
@@ -414,7 +470,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     /// Pushes the row's content to its visible cell, if any; a cell off
     /// screen is configured when it scrolls in.
     private func render(row i: Int) {
-        guard i >= 0, i < keys.count, let r = rowsByKey[keys[i]] else { return }
+        guard i >= 0, i < keys.count, let key = keys[i].messageKey, let r = rowsByKey[key] else { return }
         if let cell = table.view(atColumn: 0, row: i, makeIfNecessary: false) as? MessageCellView {
             configure(cell, r)
         }
@@ -447,7 +503,10 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     /// list takes the keyboard (search.go `selectFirstResult`). The table's
     /// selection change tells the controller.
     private func focus(_ key: ListKey) {
-        guard let i = keys.firstIndex(of: key) else { return }
+        if usesDateGroups, !keys.contains(.message(key)) {
+            revealDateGroup(for: key)
+        }
+        guard let i = keys.firstIndex(of: .message(key)) else { return }
         table.selectRowIndexes(IndexSet(integer: i), byExtendingSelection: false)
         table.scrollRowToVisible(i)
         view.window?.makeFirstResponder(table)
@@ -459,7 +518,10 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         let wasReselecting = isReselecting
         isReselecting = true
         defer { isReselecting = wasReselecting }
-        guard let key = list.selectedKey, let i = keys.firstIndex(of: key) else {
+        if usesDateGroups, let key = list.selectedKey, !keys.contains(.message(key)) {
+            revealDateGroup(for: key)
+        }
+        guard let key = list.selectedKey, let i = keys.firstIndex(of: .message(key)) else {
             if table.selectedRow >= 0 {
                 table.deselectAll(nil)
             }
@@ -512,9 +574,9 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         var failed = false
         if state.button, let at = requestedAt {
             requestedAt = nil
-            failed = keys.count == at
+            failed = list.rows.count == at
         }
-        loadMoreButton.isHidden = !failed
+        loadMoreButton.isHidden = !failed && !(usesDateGroups && !collapsedDates.isEmpty && state.button)
         updateLoadMoreBox()
         searchNote.stringValue = state.note
         noteBox.isHidden = state.note.isEmpty
@@ -529,7 +591,8 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
 
     /// Asks for the next page, noting the rows it had then.
     private func requestMore() {
-        requestedAt = keys.count
+        guard list.loadMoreState.button, requestedAt == nil else { return }
+        requestedAt = list.rows.count
         list.loadMore()
     }
 
@@ -537,6 +600,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     /// asks for the next page itself (GTK shows its Load More button
     /// then), unless a request is open or the last one failed.
     private func fillPane() {
+        guard !usesDateGroups || collapsedDates.isEmpty else { return }
         guard list.loadMoreState.button, requestedAt == nil, loadMoreButton.isHidden else { return }
         let rows = table.numberOfRows
         let height = rows > 0 ? table.rect(ofRow: rows - 1).maxY : 0
@@ -559,7 +623,8 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     @objc private func rowDoubleClicked(_ sender: Any?) {
         let row = table.clickedRow
         guard row >= 0, row < keys.count else { return }
-        list.activate(key: keys[row])
+        guard let key = keys[row].messageKey else { return }
+        list.activate(key: key)
     }
 
     /// The scroll edge (window.go `ConnectEdgeReached`): the bottom asks
@@ -570,7 +635,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         let clip = scroll.contentView
         let scrollable = table.bounds.height > clip.bounds.height
         let bottom = scrollable && clip.bounds.maxY >= table.bounds.height - 1
-        if bottom, !atBottom, loadMoreButton.isHidden {
+        if bottom, !atBottom, loadMoreButton.isHidden, !usesDateGroups || collapsedDates.isEmpty {
             requestMore()
         }
         atBottom = bottom
@@ -582,7 +647,8 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     private func activateSelected() -> Bool {
         let row = table.selectedRow
         guard row >= 0, row < keys.count else { return false }
-        list.activate(key: keys[row])
+        guard let key = keys[row].messageKey else { return false }
+        list.activate(key: key)
         return true
     }
 
@@ -591,7 +657,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     /// when there is nothing to do (threads.go `addThreadShortcuts`).
     private func foldSelected(_ on: Bool) -> Bool {
         let row = table.selectedRow
-        guard row >= 0, row < keys.count, let r = rowsByKey[keys[row]], let tid = r.key.thread else { return false }
+        guard row >= 0, row < keys.count, let key = keys[row].messageKey, let r = rowsByKey[key], let tid = r.key.thread else { return false }
         if on, r.member {
             return false
         }
@@ -607,7 +673,15 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     // MARK: NSTableViewDelegate
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        guard row >= 0, row < keys.count, let r = rowsByKey[keys[row]] else { return nil }
+        guard row >= 0, row < keys.count else { return nil }
+        if case .heading(let group) = keys[row] {
+            let header = table.makeView(withIdentifier: MailDateHeaderView.reuseIdentifier, owner: nil) as? MailDateHeaderView
+                ?? MailDateHeaderView()
+            header.configure(group, collapsed: collapsedDates.contains(group))
+            header.onToggle = { [weak self] in self?.toggleDateGroup(group) }
+            return header
+        }
+        guard let key = keys[row].messageKey, let r = rowsByKey[key] else { return nil }
         let cell = table.makeView(withIdentifier: MessageCellView.reuseIdentifier, owner: nil) as? MessageCellView
             ?? MessageCellView()
         configure(cell, r)
@@ -617,13 +691,17 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
         let rowView = table.makeView(withIdentifier: MessageRowView.reuseIdentifier, owner: nil) as? MessageRowView
             ?? MessageRowView()
-        rowView.isMember = row >= 0 && row < keys.count ? (rowsByKey[keys[row]]?.member ?? false) : false
+        rowView.isMember = row >= 0 && row < keys.count ? (keys[row].messageKey.flatMap { rowsByKey[$0]?.member } ?? false) : false
         return rowView
+    }
+
+    func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
+        row >= 0 && row < keys.count && keys[row].messageKey != nil
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
         guard !isReselecting else { return }
         let row = table.selectedRow
-        list.select(key: row >= 0 && row < keys.count ? keys[row] : nil)
+        list.select(key: row >= 0 && row < keys.count ? keys[row].messageKey : nil)
     }
 }

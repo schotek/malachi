@@ -4145,3 +4145,39 @@ msgstr "Přispěvatelé Malachi Mail"
 
 #~ msgid "Load Images"
 #~ msgstr "Načíst obrázky"
+
+#. macOS inbox section heading or disclosure state.
+msgid "Today"
+msgstr "Dnes"
+
+#. macOS inbox section heading or disclosure state.
+msgid "Yesterday"
+msgstr "Včera"
+
+#. macOS inbox section heading or disclosure state.
+msgid "This week"
+msgstr "Tento týden"
+
+#. macOS inbox section heading or disclosure state.
+msgid "Last week"
+msgstr "Minulý týden"
+
+#. macOS inbox section heading or disclosure state.
+msgid "This month"
+msgstr "Tento měsíc"
+
+#. macOS inbox section heading or disclosure state.
+msgid "Last month"
+msgstr "Minulý měsíc"
+
+#. macOS inbox section heading or disclosure state.
+msgid "This year"
+msgstr "Tento rok"
+
+#. macOS inbox section heading or disclosure state.
+msgid "Collapsed"
+msgstr "Sbaleno"
+
+#. macOS inbox section heading or disclosure state.
+msgid "Expanded"
+msgstr "Rozbaleno"

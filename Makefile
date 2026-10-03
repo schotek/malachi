@@ -67,6 +67,7 @@ LOCALE_ENV  := MALACHI_LOCALE_DIR=$(CURDIR)/$(LOCALE_DIR)
 ICON_SRC    := ui/data/icons/$(APP_ID).svg
 ICON_ENV    := MALACHI_ICON_DIR=$(CURDIR)/$(dir $(ICON_SRC))
 POTFILES_GO := $(shell grep -v '^\#' $(PO_DIR)/POTFILES 2>/dev/null)
+POTFILES_MACOS := $(shell grep -v '^\#' $(PO_DIR)/POTFILES.macos 2>/dev/null)
 XGETTEXT    := xgettext --from-code=UTF-8 --package-name=malachi \
                --msgid-bugs-address=https://github.com/schotek/malachi/issues \
                --copyright-holder="Vladislav Janeček" --add-comments=TRANSLATORS
@@ -180,6 +181,7 @@ pot: blueprint
 	$(XGETTEXT) -j -o $(POT) $(BLP_OUT) data/$(APP_ID).gschema.xml
 	$(XGETTEXT) -j -o $(POT) --language=Desktop --keyword= --keyword=GenericName --keyword=Comment --keyword=Keywords data/$(APP_ID).desktop.in
 	$(XGETTEXT) -j -o $(POT) --its=/usr/share/gettext/its/metainfo.its data/$(APP_ID).metainfo.xml.in
+	$(XGETTEXT) -j --language=C --keyword=T --keyword=N:1,2 --keyword=C:1c,2 -o $(POT) $(POTFILES_MACOS)
 
 ## po: update every po/*.po from the template (run after pot)
 po: pot

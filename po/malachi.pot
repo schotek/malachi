@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-01 13:36+0000\n"
+"POT-Creation-Date: 2026-10-03 09:09+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -3733,6 +3733,7 @@ msgid "Unread"
 msgstr ""
 
 #: ui/data/ui/window.ui:329
+#: macos/Sources/MalachiCore/Model/MailDateGroups.swift:14
 msgid "Flagged"
 msgstr ""
 
@@ -3957,4 +3958,40 @@ msgstr ""
 
 #: data/io.github.schotek.Malachi.metainfo.xml.in:30
 msgid "Malachi Mail contributors"
+msgstr ""
+
+#: macos/Sources/MalachiCore/Model/MailDateGroups.swift:15
+msgid "Today"
+msgstr ""
+
+#: macos/Sources/MalachiCore/Model/MailDateGroups.swift:16
+msgid "Yesterday"
+msgstr ""
+
+#: macos/Sources/MalachiCore/Model/MailDateGroups.swift:17
+msgid "This week"
+msgstr ""
+
+#: macos/Sources/MalachiCore/Model/MailDateGroups.swift:18
+msgid "Last week"
+msgstr ""
+
+#: macos/Sources/MalachiCore/Model/MailDateGroups.swift:19
+msgid "This month"
+msgstr ""
+
+#: macos/Sources/MalachiCore/Model/MailDateGroups.swift:20
+msgid "Last month"
+msgstr ""
+
+#: macos/Sources/MalachiCore/Model/MailDateGroups.swift:21
+msgid "This year"
+msgstr ""
+
+#: macos/Sources/MalachiMail/MessageList/MailDateHeaderView.swift:42
+msgid "Collapsed"
+msgstr ""
+
+#: macos/Sources/MalachiMail/MessageList/MailDateHeaderView.swift:42
+msgid "Expanded"
 msgstr ""

@@ -1,0 +1,4 @@
+# Explicitly localized macOS-only features requested by the user.
+# Other Swift sources continue to use the shared GTK msgids.
+macos/Sources/MalachiCore/Model/MailDateGroups.swift
+macos/Sources/MalachiMail/MessageList/MailDateHeaderView.swift
