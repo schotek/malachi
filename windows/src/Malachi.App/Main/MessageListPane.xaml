@@ -14,8 +14,8 @@ and SearchScopeBar.swift. Windows' deviations (windows/README.md): the
 search box sits in the title bar, so the header has no search toggle and
 the scope toggles show over the list while a search runs; the filter and
 the scope are SelectorBars (docs/windows-port.md §11.1); the banners are
-InfoBars; the list pages itself and Load More appears only to retry a page
-that failed (as macOS).
+InfoBars; the list pages itself and Load More appears for retries or while
+inbox sections are collapsed (as macOS).
 -->
 <UserControl
     x:Class="Malachi.App.Main.MessageListPane"
@@ -172,10 +172,29 @@ that failed (as macOS).
                     AutomationProperties.Name="{l:T Msgid='Messages'}"
                     ContextRequested="OnContextRequested"
                     DoubleTapped="OnDoubleTapped"
-                    ItemsSource="{x:Bind Rows}"
                     PreviewKeyDown="OnListKeyDown"
                     SelectionChanged="OnSelectionChanged"
                     SelectionMode="Single">
+                    <ListView.GroupStyle>
+                        <GroupStyle HidesIfEmpty="False">
+                            <GroupStyle.HeaderTemplate>
+                                <DataTemplate x:DataType="p:MailDateSectionRow">
+                                    <Button
+                                        Padding="12,8"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        AutomationProperties.Name="{x:Bind Title}"
+                                        AutomationProperties.HelpText="{x:Bind StateText, Mode=OneWay}"
+                                        Click="OnDateGroupClicked">
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <FontIcon FontSize="12" Glyph="{x:Bind res:Icons.Glyph(Icon), Mode=OneWay}" />
+                                            <TextBlock Text="{x:Bind Title}" />
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </GroupStyle.HeaderTemplate>
+                        </GroupStyle>
+                    </ListView.GroupStyle>
                     <ListView.ItemContainerStyle>
                         <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
                             <Setter Property="MinHeight" Value="0" />
@@ -189,7 +208,7 @@ that failed (as macOS).
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
-                <!-- Load More (only to retry) and the spinner of a page on its way. -->
+                <!-- Load More for retries or collapsed inbox sections, and the page spinner. -->
                 <StackPanel
                     x:Name="LoadMoreBox"
                     Grid.Row="1"

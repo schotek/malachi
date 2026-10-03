@@ -634,3 +634,17 @@ Restart Claude Desktop afterwards. The AI page exists in all three desktop
 UIs with the same strings, so it is not a deviation; without a bridge
 beside the executable, or when its status fails, the page says so in the
 group's description, as in GTK.
+
+### Inbox date sections (native verification pending)
+
+The Inbox now mirrors the GTK/macOS collapsible sections: Flagged first,
+then local calendar periods and older years. Expanded conversation members
+stay with their parent; search and other folders remain flat. Headers use
+native WinUI collection groups. Folding a selected section clears selection;
+flag moves preserve the selected message and reveal its destination. With
+collapsed sections, further pages use Load More to avoid draining the inbox.
+Shared labels include Czech translations.
+
+Implementation and prepared tests have only been reviewed statically on macOS.
+Native build, tests and the UI walkthrough are delegated to the Windows agent:
+[verification handoff](../docs/windows-date-groups-handoff.md).

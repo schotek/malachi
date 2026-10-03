@@ -13,7 +13,7 @@ namespace Malachi.Core.Controllers;
 /// and under the last page of search results how far back search reaches
 /// (window.blp <c>search_note</c>; empty otherwise). On Windows the list
 /// pages itself, so <see cref="Button"/> says that a page can be asked for,
-/// and the Load More button shows only to retry a failed page
+/// and the Load More button shows while inbox sections are collapsed or to retry a failed page
 /// (<see cref="ListController.LoadMoreRetry"/>).
 /// </summary>
 public sealed record LoadMoreState
