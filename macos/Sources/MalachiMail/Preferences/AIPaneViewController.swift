@@ -117,6 +117,7 @@ final class AIPaneViewController: PreferencesPaneViewController {
     private var confirmTriage: PrefsConfirmRestart?
     private var triageToken: BoardObserverToken?
     private var boardConsentRow: PreferenceRowView?
+    private var boardModelRow: PreferenceRowView?
     private var boardAutoRow: PreferenceRowView?
     private var boardIntervalRow: PreferenceRowView?
     private var boardDailyRow: PreferenceRowView?
@@ -261,7 +262,6 @@ final class AIPaneViewController: PreferencesPaneViewController {
         assistantGroup.setRow(claudeCode, hidden: true)
         assistantGroup.setRow(model, hidden: true)
         addGroup(assistantGroup)
-        addBoardGroup()
     }
 
     override func viewDidLoad() {
@@ -322,8 +322,10 @@ final class AIPaneViewController: PreferencesPaneViewController {
         if chatGPTPreferences == nil, let assistant, let settings {
             let preferences = ChatGPTPreferences(settings: settings, assistant: assistant) { [weak self] in self?.toast?($0) }
             chatGPTPreferences = preferences
+            assistantGroup.setRows([preferences.providerRow] + [menuRow, targetRow, claudeCodeRow, modelRow].compactMap { $0 })
             addGroup(preferences.group)
         }
+        addBoardGroup()
         bindAssistant()
         bindBoard()
         bindings.onClose = { [weak self] in
@@ -403,10 +405,14 @@ final class AIPaneViewController: PreferencesPaneViewController {
     /// rather than an "off" that may not be true.
     private func updateAssistantGroup() {
         guard let settings, !closed else { return }
-        let registered = bridgeRegistered || settings.assistantProvider == .chatgpt
+        chatGPTPreferences?.scheduleUpdate()
+        let inAppChatGPT = settings.assistantProvider == .chatgpt && settings.assistantTarget == .app
+        assistantGroup.descriptionText = inAppChatGPT
+            ? L10n.T("Connect ChatGPT to use your plan with the in-app assistant.") : Assistant.texts().description
+        let registered = bridgeRegistered || inAppChatGPT
         let unknown = !registered && !bridgeKnown
         menuRow?.isEnabled = registered
-        targetRow?.isEnabled = registered
+        targetRow?.isEnabled = registered || settings.assistantProvider == .chatgpt
         let on = unknown ? settings.assistantMenu : Assistant.shown(menu: settings.assistantMenu, registered: registered)
         assistantMenuSwitch.state = on ? .on : .off
         menuRow?.subtitle = registered || unknown ? "" : Assistant.texts().registerFirst
@@ -417,7 +423,7 @@ final class AIPaneViewController: PreferencesPaneViewController {
             assistantGroup.setRow(row, hidden: !app || settings.assistantProvider == .chatgpt)
             row.isEnabled = registered
         }
-        if app {
+        if app && !inAppChatGPT {
             showClaudeCode()
         }
         updateBoardGroup()
@@ -576,7 +582,7 @@ final class AIPaneViewController: PreferencesPaneViewController {
     /// while the bridge is not registered, so this only writes the
     /// preference while it is.
     @objc private func assistantMenuChanged(_ sender: Any?) {
-        guard let settings, bridgeRegistered || settings.assistantProvider == .chatgpt else {
+        guard let settings, bridgeRegistered || (settings.assistantProvider == .chatgpt && settings.assistantTarget == .app) else {
             updateAssistantGroup()
             return
         }
@@ -685,6 +691,7 @@ extension AIPaneViewController {
         // The Assistant group's Model row, for the triage's own model.
         boardModel.addItems(withTitles: Assistant.models.map(Assistant.modelName))
         let model = PreferenceRowView(title: Assistant.panelTexts().model, trailing: boardModel)
+        boardModelRow = model
         let auto = PreferenceRowView(title: Board.Text.triageSettingsAutomatic, trailing: boardAutoSwitch)
         boardAutoRow = auto
         let interval = PreferenceRowView(title: Board.Text.triageSettingsInterval, trailing: boardInterval)
@@ -699,7 +706,8 @@ extension AIPaneViewController {
         boardUsageValue.isSelectable = false
         let usage = PreferenceRowView(title: Board.Text.triageSettingsUsage, subtitle: "", trailing: boardUsageValue)
         boardUsageRow = usage
-        boardGroup.setRows([consent, model, auto, interval, daily, status, usage])
+        let modelRows: [NSView] = [model] + [chatGPTPreferences?.boardModelRow].compactMap { $0 }
+        boardGroup.setRows([consent] + modelRows + [auto, interval, daily, status, usage])
         boardGroup.isHidden = true
         addGroup(boardGroup)
     }
@@ -739,7 +747,9 @@ extension AIPaneViewController {
             boardGroup.isHidden = true
             return
         }
-        boardModel.isHidden = settings?.assistantProvider == .chatgpt
+        let usesChatGPT = settings?.assistantProvider == .chatgpt
+        if let row = boardModelRow { boardGroup.setRow(row, hidden: usesChatGPT) }
+        if let row = chatGPTPreferences?.boardModelRow { boardGroup.setRow(row, hidden: !usesChatGPT) }
         let v = triage.view
         guard v.offered else {
             boardGroup.isHidden = true

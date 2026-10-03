@@ -8,7 +8,7 @@ import Darwin
 /// posix_spawn establishes the group before exec, avoiding a setpgid race.
 @MainActor final class CodexJSONRPC {
     var notification: ((String, [String: Any]) -> Void)?
-    var request: ((String, [String: Any]) async throws -> [String: Any])?
+    var request: (@MainActor (String, [String: Any]) async throws -> [String: Any])?
     var onExit: (() -> Void)?
     private(set) var running = false
     private var pid: pid_t = 0

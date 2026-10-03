@@ -11,6 +11,8 @@ import MalachiCore
     private let provider = NSPopUpButton(frame: .zero, pullsDown: false)
     private let models = NSPopUpButton(frame: .zero, pullsDown: false)
     private let boardModels = NSPopUpButton(frame: .zero, pullsDown: false)
+    lazy var providerRow = PreferenceRowView(title: L10n.T("In-app provider"), trailing: provider)
+    lazy var boardModelRow = PreferenceRowView(title: Assistant.panelTexts().model, trailing: boardModels)
     private let signIn = NSButton(title: L10n.T("Continue with ChatGPT"), target: nil, action: nil)
     private let disconnect = NSButton(title: L10n.T("Disconnect"), target: nil, action: nil)
     private let choose = NSButton(title: Assistant.panelTexts().choose, target: nil, action: nil)
@@ -18,12 +20,11 @@ import MalachiCore
     private let usage = NSButton(title: L10n.T("Manage usage"), target: nil, action: nil)
     private let settings: Settings
     private weak var assistant: AssistantController?
-    private let toast: (String) -> Void
+    private let toast: @MainActor (String) -> Void
     private var token: AssistantController.Token?
     private var executableRow: PreferenceRowView!
     private var connectionRow: PreferenceRowView!
     private var modelRow: PreferenceRowView!
-    private var boardRow: PreferenceRowView!
     private var catalog: [CodexModel] = []
     private var catalogTask: Task<Void, Never>?
     private var catalogKey = ""
@@ -31,7 +32,7 @@ import MalachiCore
     private var version = ""
     private var generation = 0
     private var updateQueued = false
-    init(settings: Settings, assistant: AssistantController, toast: @escaping (String) -> Void) {
+    init(settings: Settings, assistant: AssistantController, toast: @escaping @MainActor (String) -> Void) {
         self.settings = settings; self.assistant = assistant; self.toast = toast
         super.init()
         provider.addItems(withTitles: [Assistant.targetName(.code), ChatGPTText.name])
@@ -43,19 +44,19 @@ import MalachiCore
         usage.target = self; usage.action = #selector(openUsage)
         models.target = self; models.action = #selector(modelChanged)
         boardModels.target = self; boardModels.action = #selector(boardModelChanged)
-        executableRow = PreferenceRowView(title: L10n.T("Codex"), trailing: buttons([install, choose]))
+        executableRow = PreferenceRowView(title: L10n.T("Codex"), trailing: buttons([choose, install]))
         executableRow.setSubtitleSelectable()
-        connectionRow = PreferenceRowView(title: ChatGPTText.name, trailing: buttons([signIn, disconnect, usage]))
+        connectionRow = PreferenceRowView(title: L10n.T("Account"), trailing: buttons([signIn, disconnect]))
         modelRow = PreferenceRowView(title: Assistant.panelTexts().model, trailing: models)
-        boardRow = PreferenceRowView(title: Board.texts().board, trailing: boardModels)
-        group.setRows([PreferenceRowView(title: L10n.T("In-app provider"), trailing: provider), executableRow, connectionRow, modelRow, boardRow])
+        let usageRow = PreferenceRowView(title: L10n.T("Manage usage"), trailing: usage)
+        group.setRows([executableRow, connectionRow, modelRow, usageRow])
         token = assistant.onChange { [weak self] in self?.scheduleUpdate() }
         update()
     }
     private func buttons(_ views: [NSView]) -> NSStackView {
         let stack = NSStackView(views: views); stack.orientation = .horizontal; stack.spacing = 6; return stack
     }
-    private func scheduleUpdate() {
+    func scheduleUpdate() {
         guard !updateQueued else { return }
         updateQueued = true
         DispatchQueue.main.async { [weak self] in
@@ -67,7 +68,7 @@ import MalachiCore
     private func update() {
         let selected = settings.assistantProvider == .chatgpt
         provider.selectItem(at: selected ? 1 : 0)
-        for row in [executableRow, connectionRow, modelRow, boardRow].compactMap({ $0 }) { group.setRow(row, hidden: !selected) }
+        group.isHidden = !selected || settings.assistantTarget != .app
         guard let codex = assistant?.chatGPT else { return }
         let path = codex.executable ?? ""
         if path != versionPath {
@@ -78,13 +79,17 @@ import MalachiCore
                 self.version = version ?? ""; self.update()
             }
         }
-        executableRow.subtitle = path.isEmpty ? L10n.T("Codex was not found. Choose a native Codex executable.") : [path, version].filter { !$0.isEmpty }.joined(separator: "\n")
+        executableRow.subtitle = path.isEmpty ? L10n.T("Codex was not found. Choose a native Codex executable.") : [path, version].filter { !$0.isEmpty }.joined(separator: " · ")
         let connection = codex.connection
         connectionRow.subtitle = connection.connecting ? L10n.T("Connecting…") : connection.connected
             ? L10n.T("Connected as %s", connection.email)
             : L10n.T("Not connected")
         signIn.isEnabled = !connection.connecting
+        signIn.isHidden = connection.connected
+        disconnect.isHidden = !connection.connected && !connection.connecting
         disconnect.isEnabled = connection.connected || connection.connecting
+        usage.isEnabled = connection.connected
+        modelRow.isEnabled = connection.connected
         install.isHidden = codex.available
         fillModels()
         let key = connection.connected && codex.available ? (codex.executable ?? "") + connection.email : ""
