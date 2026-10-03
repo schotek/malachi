@@ -334,7 +334,6 @@ public sealed partial class MessageListPane : UserControl
                 l.Select(null);
             }
             ApplyRows();
-            e.Handled = true;
         }
     }
 

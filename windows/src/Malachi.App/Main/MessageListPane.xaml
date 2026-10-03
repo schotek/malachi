@@ -175,14 +175,41 @@ inbox sections are collapsed (as macOS).
                     PreviewKeyDown="OnListKeyDown"
                     SelectionChanged="OnSelectionChanged"
                     SelectionMode="Single">
+                    <ListView.Resources>
+                        <!-- Stretch the section's content as well as its button. -->
+                        <Style TargetType="ListViewHeaderItem">
+                            <Setter Property="MinHeight" Value="0" />
+                            <Setter Property="Margin" Value="0" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListViewHeaderItem">
+                                        <ContentPresenter
+                                            Content="{TemplateBinding Content}"
+                                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                                            HorizontalContentAlignment="Stretch" />
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListView.Resources>
                     <ListView.GroupStyle>
                         <GroupStyle HidesIfEmpty="False">
                             <GroupStyle.HeaderTemplate>
                                 <DataTemplate x:DataType="p:MailDateSectionRow">
                                     <Button
-                                        Padding="12,8"
+                                        Height="30"
+                                        MinHeight="0"
+                                        Padding="12,0"
                                         HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Left"
+                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                        BorderThickness="0"
+                                        CornerRadius="0"
+                                        FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource SubtleButtonStyle}"
                                         AutomationProperties.Name="{x:Bind Title}"
                                         AutomationProperties.HelpText="{x:Bind StateText, Mode=OneWay}"
                                         Click="OnDateGroupClicked">
