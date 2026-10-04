@@ -80,7 +80,15 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     private let noteBox = NSStackView()
 
     /// The table's rows, by position, and what each key shows.
-    private var keys: [MailDateItem] = []
+    private var keys: [MailDateItem] = [] {
+        didSet {
+            // Flagged is always the first section; members inherit its tint.
+            flaggedRows = keys.first == .heading(.flagged)
+                ? 1..<(keys.dropFirst().firstIndex { $0.messageKey == nil } ?? keys.endIndex)
+                : 0..<0
+        }
+    }
+    private var flaggedRows = 0..<0
     private var collapsedDates: Set<MailDateGroup> = []
     private var dateFolder: FolderKey?
     private var usesDateGroups: Bool { !list.searchActive && list.folderRole == .inbox }
@@ -390,6 +398,11 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         }
         table.endUpdates()
 
+        // A conversation can change sections without changing each member.
+        for i in keys.indices {
+            (table.rowView(atRow: i, makeIfNecessary: false) as? MessageRowView)?.isInFlaggedSection = flaggedRows.contains(i)
+        }
+
         // Rows that stayed: re-render the ones whose content moved.
         var changed = IndexSet()
         for (i, key) in newKeys.enumerated() where !inserted.contains(i) {
@@ -481,6 +494,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         }
         if let rowView = table.rowView(atRow: i, makeIfNecessary: false) as? MessageRowView {
             rowView.isMember = r.member
+            rowView.isInFlaggedSection = flaggedRows.contains(i)
         }
     }
 
@@ -707,6 +721,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         let rowView = table.makeView(withIdentifier: MessageRowView.reuseIdentifier, owner: nil) as? MessageRowView
             ?? MessageRowView()
         rowView.isMember = row >= 0 && row < keys.count ? (keys[row].messageKey.flatMap { rowsByKey[$0]?.member } ?? false) : false
+        rowView.isInFlaggedSection = flaggedRows.contains(row)
         return rowView
     }
 

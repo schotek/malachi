@@ -28,6 +28,12 @@ result as bold runs built in code (never markup).
     xmlns:res="using:Malachi.App.Resources"
     IsTabStop="False">
     <Grid>
+        <!-- Inbox Flagged section, including unfolded members; selection wins. -->
+        <Border x:Name="FlaggedTint" Visibility="Collapsed" IsHitTestVisible="False">
+            <Border.Background>
+                <SolidColorBrush Opacity="0.06" Color="{ThemeResource SystemAccentColor}" />
+            </Border.Background>
+        </Border>
         <!-- style.go: the members of an unfolded conversation on a faint
              tint, so they read as one group. -->
         <Border Visibility="{x:Bind res:Bind.Visible(Row.IsMember), Mode=OneWay}">

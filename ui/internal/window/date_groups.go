@@ -115,6 +115,11 @@ func (w *Window) syncDateRows(neighbour bool) {
 			} else {
 				r.SetMessage(w.model.rowMessage(row.Message))
 			}
+			if group.Kind == maildate.Flagged {
+				r.AddCSSClass("flagged-section")
+			} else {
+				r.RemoveCSSClass("flagged-section")
+			}
 			w.rows[key] = r
 			w.messageList.Append(r)
 			visible = append(visible, key)

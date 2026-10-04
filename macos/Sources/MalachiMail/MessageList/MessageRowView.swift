@@ -20,6 +20,15 @@ final class MessageRowView: NSTableRowView {
         }
     }
 
+    /// Inbox rows beneath the Flagged heading, including conversation members.
+    var isInFlaggedSection = false {
+        didSet {
+            if isInFlaggedSection != oldValue {
+                needsDisplay = true
+            }
+        }
+    }
+
     private var tracking: NSTrackingArea?
     private var hovered = false {
         didSet {
@@ -41,6 +50,10 @@ final class MessageRowView: NSTableRowView {
 
     override func drawBackground(in dirtyRect: NSRect) {
         super.drawBackground(in: dirtyRect)
+        if isInFlaggedSection, !isSelected {
+            Tint.accent.withAlphaComponent(0.06).setFill()
+            bounds.fill()
+        }
         // The tint is for the resting state only (style.go).
         if isMember, !isSelected, !hovered {
             Tint.fg(alpha: 0.03).setFill()
@@ -108,6 +121,7 @@ final class MessageRowView: NSTableRowView {
         super.prepareForReuse()
         hovered = false
         isMember = false
+        isInFlaggedSection = false
     }
 }
 

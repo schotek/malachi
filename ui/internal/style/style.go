@@ -200,6 +200,8 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	b.WriteString("button.thread-twisty { min-width: 20px; min-height: 20px; padding: 0; margin: 0; }\n")
 	b.WriteString("label.thread-count { min-width: 8px; min-height: 18px; padding: 0 5px; border-radius: 99px; background-color: alpha(@window_fg_color, 0.1); }\n")
 	b.WriteString("list.message-list > row.thread-member:not(:selected):not(:hover):not(:active) { background-color: alpha(@window_fg_color, 0.03); }\n")
+	// Layer the section tint over native hover, without affecting selection.
+	b.WriteString("list.message-list > row.flagged-section:not(:selected) { background-image: linear-gradient(alpha(@accent_bg_color, 0.06), alpha(@accent_bg_color, 0.06)); }\n")
 	// The pills of a Jira account (widget/pill.go): an issue's status by
 	// its category (grey to do or unknown, blue in progress, green done),
 	// the orange Internal badge of a service-desk comment, and the JIRA
