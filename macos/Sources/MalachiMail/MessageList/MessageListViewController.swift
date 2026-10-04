@@ -414,10 +414,15 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         syncSelection()
     }
 
-    @objc private func refreshDateGroups() {
-        guard isViewLoaded, usesDateGroups else { return }
-        apply(rows: list.rows, hint: .keep)
-        showLoadMore(list.loadMoreState)
+    // Calendar/time-zone notifications can arrive on a background thread.
+    // The Objective-C entry point must be nonisolated: hopping inside an
+    // actor-isolated selector is too late for Swift's executor check.
+    @objc nonisolated private func refreshDateGroups() {
+        Task { @MainActor [weak self] in
+            guard let self, self.isViewLoaded, self.usesDateGroups else { return }
+            self.apply(rows: self.list.rows, hint: .keep)
+            self.showLoadMore(self.list.loadMoreState)
+        }
     }
 
     private func revealDateGroup(for key: ListKey) {

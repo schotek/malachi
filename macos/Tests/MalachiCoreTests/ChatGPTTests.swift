@@ -161,7 +161,7 @@ import Testing
         for claim in ["iss", "aud", "nonce", "exp", "sub"] {
             let (connection, store, _, _) = fixture(tamper: claim)
             if claim == "sub" { var metadata = ChatGPTRegistration(); metadata.subject = "expected"; store.metadata = metadata }
-            do { try await connection.signIn(); Issue.record("invalid identity claim accepted: " + claim) } catch {}
+            do { try await connection.signIn(); Issue.record("invalid identity claim accepted: \(claim)") } catch {}
             #expect(store.value == nil)
         }
     }
