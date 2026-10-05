@@ -35,6 +35,13 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
     unowned let manager: ComposeManager
     let params: ComposeParams
     let editor: any EditorView
+    let bodyLayout: ComposeBodyLayout
+    private let quotedEditor = ComposeEditorView(readOnly: true)
+    private let quoteSection = FillStackView()
+    private let quoteDisclosure = NSButton()
+    private let includeQuote = NSButton(checkboxWithTitle: "Include in Reply", target: nil, action: nil) // macOS-only string
+    private var quoteExpanded = true
+    private let composeAssistantBar = ComposeAssistantBar()
     let draft: ComposeDraftController
     let toasts = ToastPresenter()
 
@@ -73,6 +80,7 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
     private var closeQuestionPending = false
     /// The assistant's rewrite (the In App target): its controller, made
     /// on first use, and the popover while it is shown.
+    private var writingRequest: AssistantRequest?
     private var rewrite: ComposeRewriteController?
     private var rewritePopover: NSPopover?
     /// The Assistant button was clicked and the popover is on its way
@@ -92,6 +100,7 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         self.manager = manager
         self.params = params
         self.editor = editor
+        bodyLayout = ComposeBodyLayout(params)
         let controller = manager.controller
         draft = ComposeDraftController(client: state.client, settings: state.settings) { [weak controller] in
             controller?.placeholder ?? true
@@ -147,7 +156,14 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         // id and version make the saves updates, and closing never deletes it.
         draft.setOpened(draftID: params.draftID, version: params.version, replaces: params.replaces,
                         fromDrafts: params.kind == .edit)
-        editor.load(bodyHTML: params.bodyHTML)
+        editor.load(bodyHTML: bodyLayout.editorHTML)
+        if !bodyLayout.quotedHTML.isEmpty {
+            quotedEditor.load(bodyHTML: bodyLayout.quotedHTML)
+            quotedEditor.onCrashed = { [weak self] in
+                guard let self else { return }
+                self.quotedEditor.load(bodyHTML: self.bodyLayout.quotedHTML)
+            }
+        }
         setAccounts(controller.accounts, placeholder: controller.placeholder)
         // What the backend imported for the template (a quoted original's
         // pictures, a forwarded message's files): listed and shown now,
@@ -185,6 +201,9 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         editorBox.translatesAutoresizingMaskIntoConstraints = false
         editorBox.setContentHuggingPriority(.defaultLow, for: .vertical)
         editorBox.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        let minimumEditorHeight = editorBox.heightAnchor.constraint(greaterThanOrEqualToConstant: 100)
+        minimumEditorHeight.priority = .defaultHigh
+        minimumEditorHeight.isActive = true
         let editorView = editor.view
         editorView.translatesAutoresizingMaskIntoConstraints = false
         if let content = editorBox.contentView {
@@ -209,7 +228,7 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         root.spacing = 0
         for v in [
             Self.inset(commentHeader.map { $0 as NSView } ?? header, top: 12, left: 12, bottom: 6, right: 12),
-            formatToolbar, plainHintRow, editorBox, chips, statusRow,
+            formatToolbar, plainHintRow, editorBox, makeQuoteSection(), chips, composeAssistantBar, statusRow,
         ] {
             root.addArrangedSubview(v)
         }
@@ -228,6 +247,48 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         ])
         toasts.install(over: container)
         return container
+    }
+
+    private func makeQuoteSection() -> NSView {
+        quoteSection.spacing = 0
+        quoteSection.isHidden = bodyLayout.quotedHTML.isEmpty
+        quoteDisclosure.title = "Quoted Message" // macOS-only string
+        quoteDisclosure.bezelStyle = .inline
+        quoteDisclosure.isBordered = false
+        quoteDisclosure.font = .systemFont(ofSize: 13, weight: .semibold)
+        quoteDisclosure.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)
+        quoteDisclosure.imagePosition = .imageLeading
+        quoteDisclosure.target = self
+        quoteDisclosure.action = #selector(toggleQuote(_:))
+        includeQuote.state = .on
+        if params.kind == .forward {
+            includeQuote.title = "Include in Forward" // macOS-only string
+        }
+        includeQuote.target = self
+        includeQuote.action = #selector(changeQuoteIncluded(_:))
+        let heading = NSStackView(views: [quoteDisclosure, includeQuote, NSView()])
+        heading.spacing = 12
+        let separator = NSBox()
+        separator.boxType = .separator
+        quoteSection.addArrangedSubview(separator)
+        quoteSection.addArrangedSubview(Self.inset(heading, top: 8, left: 12, bottom: 8, right: 12))
+        quoteSection.addArrangedSubview(quotedEditor)
+        let height = quotedEditor.heightAnchor.constraint(equalToConstant: 180)
+        height.priority = .defaultHigh
+        height.isActive = true
+        quotedEditor.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        return quoteSection
+    }
+
+    @objc private func toggleQuote(_ sender: Any?) {
+        quoteExpanded.toggle()
+        quotedEditor.isHidden = !quoteExpanded
+        quoteDisclosure.image = NSImage(systemSymbolName: quoteExpanded ? "chevron.down" : "chevron.right", accessibilityDescription: nil)
+        quoteDisclosure.setAccessibilityValue(quoteExpanded ? L10n.T("Expanded") : L10n.T("Collapsed"))
+    }
+
+    @objc private func changeQuoteIncluded(_ sender: Any?) {
+        draft.markDirty()
     }
 
     /// A view with margins around it (the Blueprint's margin-* properties).
@@ -353,6 +414,18 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
     /// The Assistant button follows `canRunInApp`: the Assistant shown, In
     /// App chosen and Claude Code found.
     private func wireAssistant() {
+        composeAssistantBar.setMode(params.kind)
+        composeAssistantBar.onRequest = { [weak self] instruction in self?.writeWithAssistant(instruction) }
+        composeAssistantBar.onCancel = { [weak self] in self?.writingRequest?.cancel() }
+        composeAssistantBar.onApply = { [weak self] text in
+            guard let self else { return }
+            self.editor.focusStart()
+            self.editor.rewriteTarget(attribution: self.bodyLayout.quotedHTML.isEmpty ? self.params.attribution : "") { [weak self] target in
+                guard target != nil else { return }
+                self?.editor.applyRewrite(text, below: false)
+            }
+        }
+        updateAssistant()
         assistantToken = state.assistant.onChange { [weak self] in
             self?.updateAssistant()
         }
@@ -363,11 +436,51 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     private func updateAssistant() {
         let available = state.assistant.canRunInApp
+        composeAssistantBar.isHidden = !available || isComment
         if let toolbar = window?.toolbar {
             toolbarDelegate.setAssistant(visible: available, in: toolbar)
         }
         if !available {
             rewritePopover?.performClose(nil)
+            writingRequest?.cancel()
+            composeAssistantBar.show(text: "", running: false)
+        }
+    }
+
+    private func writeWithAssistant(_ instruction: String) {
+        guard state.assistant.canRunInApp, !isComment, !closing, editor.isReady else { return }
+        flushEditor { [weak self] in
+            guard let self, !self.closing else { return }
+            let message: String
+            do {
+                message = try ComposeAssistantPrompt.message(kind: self.params.kind, instruction: instruction,
+                    subject: self.subject, own: self.editor.text(), quote: self.quotedEditor.text())
+            } catch {
+                self.composeAssistantBar.show(text: "", running: false, failure: Assistant.stoppedText(String(describing: error)))
+                return
+            }
+            if self.writingRequest == nil {
+                let request = AssistantRequest(settings: self.state.settings, locator: self.state.claudeCode)
+                request.consent = { [weak self] in await self?.askConsent() ?? false }
+                self.writingRequest = request
+            }
+            self.composeAssistantBar.show(text: "", running: true)
+            self.writingRequest?.start(systemPrompt: ComposeAssistantPrompt.system, message: message,
+                onText: { [weak self] text in
+                    self?.composeAssistantBar.show(text: Assistant.cleanRewrite(text), running: true)
+                }, completion: { [weak self] outcome in
+                    guard let self, !self.closing else { return }
+                    switch outcome {
+                    case .answered(let text, _):
+                        let answer = Assistant.cleanRewrite(text)
+                        self.composeAssistantBar.show(text: answer, running: false,
+                            failure: answer.isEmpty ? Assistant.stoppedText("the answer is empty") : "")
+                    case .failed(let failure):
+                        self.composeAssistantBar.show(text: "", running: false, failure: failure.text)
+                    case .declined:
+                        self.composeAssistantBar.show(text: "", running: false)
+                    }
+                })
         }
     }
 
@@ -552,6 +665,7 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         rewritePopover?.close()
         rewritePopover = nil
         rewrite?.cancel()
+        writingRequest?.cancel()
         for s in suggestions {
             s.cleanup() // a pending search must not touch the rows after this
         }
@@ -599,14 +713,17 @@ extension ComposeWindowController: ComposeForm {
 
     var subject: String { header.subjectField.stringValue }
 
-    func editorHTML() -> String { editor.html() }
+    func editorHTML() -> String { bodyLayout.html(own: editor.html(), includeQuote: includeQuote.state == .on) }
 
-    func editorText() -> String { editor.text() }
+    func editorText() -> String {
+        bodyLayout.text(own: editor.text(), quote: quotedEditor.text(), includeQuote: includeQuote.state == .on)
+    }
 
     func flushEditor(_ done: @escaping @MainActor () -> Void) {
         editor.flush { [weak self] in
             self?.lastFlushedHTML = self?.editor.html()
-            done()
+            guard let self, !self.bodyLayout.quotedHTML.isEmpty else { done(); return }
+            self.quotedEditor.flush(done)
         }
     }
 

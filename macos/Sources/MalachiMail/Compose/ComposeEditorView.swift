@@ -39,6 +39,7 @@ final class ComposeEditorView: NSView, EditorView {
     var onCrashed: (@MainActor () -> Void)?
     var onPaste: (@MainActor (_ text: String, _ answer: @escaping @MainActor (String?) -> Void) -> Void)?
 
+    private let readOnly: Bool
     private let web: ComposeWebView
     private let registry: CIDRegistry
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "editor")
@@ -66,7 +67,8 @@ final class ComposeEditorView: NSView, EditorView {
 
     /// An editor over `registry` (the process-wide registry in the
     /// application; the `cid:` handler of the view resolves in the same one).
-    init(registry: CIDRegistry = .shared) {
+    init(registry: CIDRegistry = .shared, readOnly: Bool = false) {
+        self.readOnly = readOnly
         self.registry = registry
         web = ComposeWebView(registry: registry)
         super.init(frame: .zero)
@@ -122,7 +124,11 @@ final class ComposeEditorView: NSView, EditorView {
         lastText = ""
         lastSeq = 0
         drainWaiters()
-        web.loadDocument(editorDocument(body: bodyHTML))
+        var document = editorDocument(body: bodyHTML)
+        if readOnly {
+            document = document.replacingOccurrences(of: "<body contenteditable=\"true\">", with: "<body contenteditable=\"false\">")
+        }
+        web.loadDocument(document)
     }
 
     func html() -> String {

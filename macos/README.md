@@ -340,6 +340,22 @@ states use the shared GTK msgids from `ui/internal/maildate` and
 `po/<lang>.po`, plus its plural categories in `po2strings.py` if the script
 does not know the language yet (it refuses to guess).
 
+## Compose layout on macOS
+
+New replies and forwards show the complete original prepared by `draft.create`
+in a separate, read-only panel below the editor. Its disclosure button only
+changes visibility; the inclusion checkbox controls whether the original is
+included in both the saved draft and the outgoing message. Inline images and
+forwarded attachments continue to use the existing draft attachment handling.
+An existing draft opens intact in the editor, since its body may already contain
+user edits; no quoted-content detection or splitting is performed by this UI.
+
+With the In App assistant selected, the bottom panel can prepare a reply,
+forwarding introduction or new message using an optional instruction. It uses
+the existing consent and tool-free Claude request, previews the answer, and
+requires Replace before changing the editor. The toolbar's passage-rewrite
+menu remains available. These controls currently use English macOS-only labels.
+
 ## Differences from the GTK UI
 
 The GTK UI is the template; the client deviates only where macOS
