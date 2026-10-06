@@ -225,12 +225,12 @@ public sealed partial class AiPage
         if (window() is not { } owner) return;
         var chosen = await ComposeFileDialog.OpenAsync(WindowPresenter.Handle(owner), ChatGptText.Codex, multiple: false, ("codex.exe", "*.exe"));
         if (closed || chosen is not { Count: > 0 }) return;
-        if (!CodexExecutable.IsExecutableFile(chosen[0]))
+        if (chosen[0] is not { } path || !CodexExecutable.IsExecutableFile(path))
         {
             toasts.Show(ChatGptText.MissingCodex);
             return;
         }
-        state.Settings.AssistantCodexPath = string.Equals(chosen[0], CodexExecutable.AutomaticPath(), StringComparison.OrdinalIgnoreCase) ? "" : chosen[0];
+        state.Settings.AssistantCodexPath = string.Equals(path, CodexExecutable.AutomaticPath(), StringComparison.OrdinalIgnoreCase) ? "" : path;
         RefreshChatGpt();
     }
 
