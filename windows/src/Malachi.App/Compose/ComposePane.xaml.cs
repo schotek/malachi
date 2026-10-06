@@ -52,7 +52,7 @@ using System.Threading.Tasks;
 using Malachi.App.Shell;
 using Malachi.App.WebViews;
 using Malachi.Core.Api;
-using Malachi.Core.Board;
+using Malachi.Core.Boards;
 using Malachi.Core.Compose;
 using Malachi.Core.Controllers;
 using Malachi.Core.Html;
