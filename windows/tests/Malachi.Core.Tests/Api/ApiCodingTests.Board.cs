@@ -299,7 +299,7 @@ public sealed partial class ApiCodingTests
         Assert.Null(run.EndedAt);
 
         var board = API.Methods.Where(m => m.Name.StartsWith("board.", StringComparison.Ordinal)).ToArray();
-        Assert.Equal(15, board.Length);
+        Assert.Equal(17, board.Length);
         Assert.All(board, m => Assert.Equal(RpcTimeouts.Default, m.Timeout));
         Assert.Same(API.BoardList, board[0]);
         Assert.Same(API.BoardRunEnd, board[^1]);

@@ -34,9 +34,14 @@ public static class ChatGptOAuth
         {
             ["client_id"] = registration.ClientId ?? DynamicClient,
             ["ext_agent_host_id"] = registration.HostId,
-            ["response_type"] = "code", ["redirect_uri"] = redirect.AbsoluteUri,
-            ["scope"] = Scope, ["resource"] = Resource, ["state"] = state,
-            ["nonce"] = nonce, ["code_challenge_method"] = "S256", ["code_challenge"] = Challenge(verifier),
+            ["response_type"] = "code",
+            ["redirect_uri"] = redirect.AbsoluteUri,
+            ["scope"] = Scope,
+            ["resource"] = Resource,
+            ["state"] = state,
+            ["nonce"] = nonce,
+            ["code_challenge_method"] = "S256",
+            ["code_challenge"] = Challenge(verifier),
         };
         if (registration.ClientId is null) fields["agent_name_hint"] = "Malachi Mail";
         // Do not put retained tokens in a browser command line. The optional

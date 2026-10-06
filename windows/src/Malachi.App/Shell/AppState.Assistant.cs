@@ -85,7 +85,8 @@ public sealed partial class AppState
         ProcessEnvironment.Copy(ProcessEnvironment.Current()),
         directories: new PrivateDirectory(),
         logger: Logs.CreateLogger<AssistantRequest>(),
-        processLogger: Logs.CreateLogger<ClaudeCodeProcess>()) { Provider = InAppProvider };
+        processLogger: Logs.CreateLogger<ClaudeCodeProcess>())
+    { Provider = InAppProvider };
 
     // While a change is pending, the controller hears when Claude Desktop
     // has quit (macOS: NSWorkspace's termination notification).

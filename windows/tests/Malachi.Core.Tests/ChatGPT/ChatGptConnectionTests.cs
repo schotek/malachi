@@ -324,7 +324,9 @@ public sealed class ChatGptConnectionTests
             {
                 access_token = refresh ? "access-refreshed" : "access-first",
                 refresh_token = refresh ? "refresh-rotated" : "refresh-first",
-                id_token = refresh ? null : IdToken(), token_type = "Bearer", expires_in = 3600,
+                id_token = refresh ? null : IdToken(),
+                token_type = "Bearer",
+                expires_in = 3600,
                 scope = Fault == "scope" ? "openid profile email" : ChatGptOAuth.Scope,
             });
         }
@@ -342,7 +344,8 @@ public sealed class ChatGptConnectionTests
                 Claims = new Dictionary<string, object>
                 {
                     ["sub"] = Fault == "no-subject" ? "" : Fault == "changed-subject" ? "subject-two" : "subject-one",
-                    ["email"] = "person@example.test", ["nonce"] = Fault == "nonce" ? "wrong" : Authorization!["nonce"],
+                    ["email"] = "person@example.test",
+                    ["nonce"] = Fault == "nonce" ? "wrong" : Authorization!["nonce"],
                 },
             };
             if (Fault == "azp") descriptor.Claims["azp"] = "different-client";

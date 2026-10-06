@@ -17,7 +17,8 @@ public static class WindowsChatGptConnection
         AllowAutoRedirect = false,
         UseCookies = false,
         PooledConnectionLifetime = TimeSpan.FromMinutes(5),
-    }) { Timeout = TimeSpan.FromSeconds(30) };
+    })
+    { Timeout = TimeSpan.FromSeconds(30) };
 
     public static ChatGptConnectionService Create(string directory) => new(Http,
         new WindowsChatGptCredentialStore(directory), new WindowsChatGptBrowser());

@@ -107,6 +107,7 @@ public static class IconGlyphs
         ["mail-inbox"] = G(0xE81E),
         ["object-select"] = G(0xE73E),
         ["view-list"] = G(0xEA37),
+        ["view-grid"] = G(0xE80A),
         // Jira accounts: Reply as Comment (macOS text.bubble), the account's
         // row (GTK's stand-in for a ticket, as Adwaita has none), the views
         // Assigned to Me, Watching and Open as saved queries (Filter), and

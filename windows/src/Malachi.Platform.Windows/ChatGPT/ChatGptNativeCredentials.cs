@@ -41,9 +41,12 @@ internal static class ChatGptNativeCredentials
         {
             var item = new CREDENTIALW
             {
-                Type = CRED_TYPE.CRED_TYPE_GENERIC, TargetName = target,
-                CredentialBlob = blob, CredentialBlobSize = (uint)value.Length,
-                Persist = CRED_PERSIST.CRED_PERSIST_LOCAL_MACHINE, UserName = user,
+                Type = CRED_TYPE.CRED_TYPE_GENERIC,
+                TargetName = target,
+                CredentialBlob = blob,
+                CredentialBlobSize = (uint)value.Length,
+                Persist = CRED_PERSIST.CRED_PERSIST_LOCAL_MACHINE,
+                UserName = user,
             };
             if (!PInvoke.CredWrite(&item, 0)) throw new Win32Exception(Marshal.GetLastPInvokeError());
         }

@@ -98,8 +98,12 @@ public sealed class ChatGptConnectionService : IChatGptAccessTokenSource, IChatG
             }
             var result = await protocol.ExchangeAsync(new Dictionary<string, string>
             {
-                ["grant_type"] = "authorization_code", ["client_id"] = clientId, ["code"] = code,
-                ["code_verifier"] = verifier, ["redirect_uri"] = redirect.AbsoluteUri, ["resource"] = ChatGptOAuth.Resource,
+                ["grant_type"] = "authorization_code",
+                ["client_id"] = clientId,
+                ["code"] = code,
+                ["code_verifier"] = verifier,
+                ["redirect_uri"] = redirect.AbsoluteUri,
+                ["resource"] = ChatGptOAuth.Resource,
             }, ct).ConfigureAwait(false);
             if (string.IsNullOrEmpty(result.IdToken) || string.IsNullOrEmpty(result.RefreshToken))
                 throw new ChatGptAuthException(ChatGptAuthError.InvalidResponse);
@@ -154,8 +158,10 @@ public sealed class ChatGptConnectionService : IChatGptAccessTokenSource, IChatG
             {
                 var result = await protocol.ExchangeAsync(new Dictionary<string, string>
                 {
-                    ["grant_type"] = "refresh_token", ["client_id"] = registration.ClientId,
-                    ["refresh_token"] = tokens.RefreshToken, ["resource"] = ChatGptOAuth.Resource,
+                    ["grant_type"] = "refresh_token",
+                    ["client_id"] = registration.ClientId,
+                    ["refresh_token"] = tokens.RefreshToken,
+                    ["resource"] = ChatGptOAuth.Resource,
                 }, ct).ConfigureAwait(false);
                 var scope = result.Scope ?? tokens.Scope;
                 if (!ChatGptOAuth.HasPlanScope(scope)) throw new ChatGptAuthException(ChatGptAuthError.PermissionDenied);
@@ -163,8 +169,10 @@ public sealed class ChatGptConnectionService : IChatGptAccessTokenSource, IChatG
                     await protocol.ValidateAsync(result.IdToken, registration.ClientId, null, registration.Subject, ct).ConfigureAwait(false);
                 var refreshed = tokens with
                 {
-                    AccessToken = result.AccessToken, RefreshToken = result.RefreshToken ?? tokens.RefreshToken,
-                    IdToken = result.IdToken ?? tokens.IdToken, Scope = scope,
+                    AccessToken = result.AccessToken,
+                    RefreshToken = result.RefreshToken ?? tokens.RefreshToken,
+                    IdToken = result.IdToken ?? tokens.IdToken,
+                    Scope = scope,
                     ExpiresAt = time.GetUtcNow().AddSeconds(result.ExpiresIn),
                 };
                 ct.ThrowIfCancellationRequested();

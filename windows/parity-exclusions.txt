@@ -84,7 +84,6 @@ Overdue	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/in
 Tomorrow	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 Next 7 Days	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 deadline\004Later	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Today	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 The daemon’s rules set the state and the assistant kept it.	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 The daemon’s rules set the state and the assistant (%s) kept it.	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 The assistant refined the state. The rules suggested: %s.	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
