@@ -88,3 +88,16 @@ func normalizeQuoted(s string) string {
 	c = quoteFolds.Replace(norm.NFC.String(c))
 	return strings.Join(strings.Fields(c), " ")
 }
+
+// SameCommitment reports whether two quotes of commitments recorded on
+// the same message of the user's name the same promise: after the
+// normalisation of the verbatim check, one is a substring of the other
+// (a model quoting a shorter or a longer span of the same sentence).
+// Quotes that come out empty never match.
+func SameCommitment(a, b string) bool {
+	na, nb := normalizeQuoted(a), normalizeQuoted(b)
+	if na == "" || nb == "" {
+		return false
+	}
+	return strings.Contains(na, nb) || strings.Contains(nb, na)
+}

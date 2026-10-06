@@ -57,6 +57,12 @@ type BoardReason string
 // A sender is known when the user has written to it: its From or a
 // Reply-To address is in To or Cc of a message in a folder of role sent or
 // outbox of any of the user's enabled mail accounts.
+//
+// "Relevant member" below means one the rules decide by: a note to self
+// (a message of the user's, in a folder of role sent or outbox, whose
+// recipients in To, Cc and Bcc are all addresses of the user's accounts)
+// still counts as a member but is passed over, so the newest relevant
+// member is the newest that is not such a note.
 const (
 	// The newest relevant member is inbound, the user is in its To, its
 	// sender is known, and its own header says Importance: high or
@@ -85,7 +91,8 @@ const (
 	// Inbound and the user in its To, but from a sender the user has never
 	// written to (not known); its Importance does not count either.
 	BoardReasonInfoUnknownSender BoardReason = "info.unknownSender"
-	// A note to oneself: every recipient is one of the user's addresses.
+	// Inbound mail that is a note to oneself: from one of the user's
+	// addresses (any account's), every recipient one of them.
 	BoardReasonInfoYourNote BoardReason = "info.yourNote"
 	// Jira: the last item that is not an event is the user's comment.
 	BoardReasonJiraYourComment BoardReason = "jira.yourComment"
@@ -137,7 +144,8 @@ type BoardCase struct {
 	Visibility BoardVisibility  `json:"visibility"`
 	DoneAt     *time.Time       `json:"doneAt,omitempty"`   // set when Visibility is done
 	RemindAt   *time.Time       `json:"remindAt,omitempty"` // set while snoozed, always in the future
-	// Subject is the newest relevant member's, Re:/Fwd: stripped as in
+	// Subject is the newest relevant member's (a note to self of the
+	// user's is passed over, BoardReason), Re:/Fwd: stripped as in
 	// ThreadSummary; for an issue "KEY: Summary".
 	Subject string `json:"subject"`
 	// Person is the other party: the sender of the newest inbound relevant
@@ -145,14 +153,15 @@ type BoardCase struct {
 	// that is not one of the user's addresses. Subject and Person are
 	// cleaned but keep their URLs (never a link).
 	Person Address `json:"person"`
-	// Date is when the newest relevant member arrived: its internal date,
+	// Date is when the newest relevant member arrived (the one the state
+	// is decided by; the windows count from it): its internal date,
 	// else its Date header, else when the daemon stored it; never later
 	// than when the daemon stored it, nor than now.
 	Date           time.Time `json:"date"`
 	Snippet        string    `json:"snippet"` // of the newest relevant member
 	Unread         bool      `json:"unread"`  // a relevant member is unread
 	HasAttachments bool      `json:"hasAttachments"`
-	MessageCount   int       `json:"messageCount"` // relevant members
+	MessageCount   int       `json:"messageCount"` // relevant members, notes to self included
 	// ReplyMessageID is the member a reply answers (draft.create reply):
 	// the newest inbound relevant member, else the newest relevant member.
 	// On a jira account a reply is a comment on the issue.
@@ -411,6 +420,7 @@ const (
 	MaxBoardQueueMessages            = 8        // per case, the newest
 	MaxBoardQueueMessageBytes        = 3000     // BoardQueueMessage.Text
 	MaxBoardQueueCaseBytes           = 12 << 10 // the texts of one case together
+	MaxBoardQueueCommitments         = 10       // BoardQueueItem.Commitments
 	MaxBoardTitleBytes               = 300      // one line
 	MaxBoardWhyBytes                 = 400      // one line
 	MaxBoardSummaryBytes             = 2000     // a block
@@ -609,6 +619,10 @@ type BoardQueueItem struct {
 	// HasDraft: the case already links a draft that exists (BoardCase
 	// .Draft); a draftId passed to board.annotate is then not linked.
 	HasDraft bool `json:"hasDraft,omitempty"`
+	// Commitments the case already has (open and done, oldest first, at
+	// most MaxBoardQueueCommitments); board.commit returns one of them
+	// rather than record it again.
+	Commitments []BoardCommitment `json:"commitments,omitempty"`
 }
 
 // BoardQueueMessage is one member of a BoardQueueItem.
@@ -669,6 +683,11 @@ type BoardCommitParams struct {
 
 type BoardCommitResult struct {
 	Commitment BoardCommitment `json:"commitment"`
+	// Existing: the case already had this commitment (the same message
+	// and, normalised as for the verbatim check, the same quote or one
+	// containing or contained in it); it is returned as it was, nothing
+	// was added or counted.
+	Existing bool `json:"existing,omitempty"`
 }
 
 type BoardSetCommitmentParams struct {

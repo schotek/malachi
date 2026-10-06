@@ -30,8 +30,10 @@ import (
 // alone no longer starts its thread). 4: sanitize.TrimQuotedText also cuts
 // at an Outlook header block without a separator line, which changes the
 // own text of the user's plain-text messages and what is shaped like a
-// forward.
-const RulesVersion = "4"
+// forward. 5: a message of the user's to nothing but the user's own
+// addresses (Identity.Self, every account's) is a note to self and never
+// decides the state, and the store hands the rules each member's Bcc.
+const RulesVersion = "5"
 
 // Bulk classification values of messages.bulk the rules distinguish; any
 // other non-empty value is bulk mail (api.BulkKind).
@@ -76,7 +78,11 @@ type Member struct {
 	ReplyTo    []api.Address // the senders a reply goes to besides From; nil when none
 	To         []api.Address
 	Cc         []api.Address
-	Subject    string
+	// Bcc is known for the user's own messages (the sent copy keeps it);
+	// a note to self needs every recipient, Bcc included, to be the
+	// user's.
+	Bcc     []api.Address
+	Subject string
 
 	Date         time.Time // the Date header (forgeable), zero when absent
 	InternalDate time.Time // the server's arrival time, zero when unknown
@@ -133,11 +139,28 @@ type Issue struct {
 // addressed to the user (never whether it is the user's); the user's known
 // correspondents, the addresses the user has written to; and for a jira
 // account the user's account id on the site ("" while unknown: no jira
-// cases then).
+// cases then). Besides, the addresses of every account of the user
+// (WithSelf), which tell a note to self.
 type Identity struct {
 	addresses  map[string]bool
+	self       map[string]bool
 	known      map[string]bool
 	JiraUserID string
+}
+
+// MaxSelfAddresses bounds the addresses WithSelf adds; further ones are
+// ignored.
+const MaxSelfAddresses = 1024
+
+// WithSelf returns id with the addresses of every account of the user
+// (each account's own and the senders of its sent folders) as the user's
+// for notes to self (Self): a message of the user's to nothing but those
+// addresses (note to self), and inbound mail from one of them to nothing
+// but them (info.yourNote). They never tell whether mail is addressed to
+// the user on this account (Owns).
+func (id Identity) WithSelf(addresses []string) Identity {
+	id.self = addrSet(addresses, MaxSelfAddresses)
+	return id
 }
 
 // MaxIdentityAddresses bounds the addresses of an Identity; further ones
@@ -181,6 +204,13 @@ func (id Identity) Owns(addr string) bool {
 	return a != "" && id.addresses[a]
 }
 
+// Self reports whether addr is one of the user's addresses on this
+// account (Owns) or on any other account of the user (WithSelf).
+func (id Identity) Self(addr string) bool {
+	a := normAddr(addr)
+	return a != "" && (id.addresses[a] || id.self[a])
+}
+
 // Knows reports whether addr is one of the user's known correspondents
 // (an address the user has written to).
 func (id Identity) Knows(addr string) bool {
@@ -212,15 +242,19 @@ type Verdict struct {
 	// previous rule columns meanwhile.
 	Pending bool
 
-	Subject string      // the newest counting member's, Re:/Fwd: stripped, cleaned, one line (URLs kept)
+	// Subject, Date, LatestID and ReplyID's fallback are those of the
+	// newest counting member the rules decide by: a note to self of the
+	// user's (Evaluate) is passed over, unless every counting message is
+	// one.
+	Subject string      // the newest deciding member's, Re:/Fwd: stripped, cleaned, one line (URLs kept)
 	Person  api.Address // the other party (api.BoardCase.Person), cleaned (CleanAddress)
-	// Date is when the newest counting member arrived (Arrival), never
+	// Date is when the newest deciding member arrived (Arrival), never
 	// later than now; zero when nothing counts.
 	Date time.Time
 	// NewestInboundAt is the arrival of the newest inbound counting
 	// member, zero when none.
 	NewestInboundAt time.Time
-	LatestID        api.MessageID // the newest counting member
+	LatestID        api.MessageID // the newest deciding member
 	ReplyID         api.MessageID // the newest inbound counting member, else LatestID
 	ReplyFolderID   api.FolderID  // ReplyID's folder (that of its representative copy)
 	Unread          bool          // a counting member is unread
@@ -286,10 +320,11 @@ func (v Verdict) NewestInbound(doneAt time.Time, seen func(messageID string) boo
 // TextMembers returns the ids of the members whose Text and OwnText
 // Evaluate reads, newest first; it reads no other member's. They are
 // decided without any text, so a caller evaluates a thread without text
-// first and loads only these: none unless the newest counting member is
-// the user's (and never on a jira account); then that member (its forward
-// shape), and when no inbound member counts, the user's newest counting
-// messages up to the ask scan (them.asked).
+// first and loads only these: none unless the newest deciding member
+// (notes to self passed over) is the user's (and never on a jira
+// account); then that member (its forward shape), and when no inbound
+// member counts, the user's newest deciding messages up to the ask scan
+// (them.asked).
 func (v Verdict) TextMembers() []api.MessageID {
 	return slices.Clone(v.texts)
 }

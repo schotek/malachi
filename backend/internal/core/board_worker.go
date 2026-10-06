@@ -75,9 +75,12 @@ type boardState struct {
 	ctx context.Context
 	bg  sync.WaitGroup
 
-	// The accounts' own addresses and identities, read at.
-	idMu sync.Mutex
-	ids  map[string]boardIdentityEntry
+	// The accounts' own addresses and identities, read at; self: the
+	// addresses of every account last used (selfSet once recorded).
+	idMu    sync.Mutex
+	ids     map[string]boardIdentityEntry
+	self    []string
+	selfSet bool
 
 	// The user's known correspondents across the enabled mail accounts
 	// (knownKey: their ids), read at knownAt; knownGen counts the reads so
@@ -110,8 +113,9 @@ type boardState struct {
 type boardIdentityEntry struct {
 	addresses []string
 	at        time.Time
-	// identity is built over addresses and the known correspondents of
-	// knownGen (hasIdentity).
+	// identity is built over addresses, self (every account's) and the
+	// known correspondents of knownGen (hasIdentity).
+	self        []string
 	identity    board.Identity
 	knownGen    int
 	hasIdentity bool
@@ -320,13 +324,40 @@ func (b *Backend) boardAccounts(ctx context.Context) (map[string]*boardAccount, 
 			}
 		}
 	}
-	out := make(map[string]*boardAccount, len(list))
-	for _, a := range list {
-		ba := &boardAccount{jira: isIssueAccount(a)}
-		ba.addresses, ba.identity, err = b.boardIdentity(ctx, a, known, gen)
-		if err != nil {
+	// The user's addresses on every account, for notes to self.
+	own := make([][]string, len(list))
+	var self []string
+	seen := map[string]bool{}
+	for i, a := range list {
+		if own[i], err = b.boardOwn(ctx, a); err != nil {
 			return nil, err
 		}
+		for _, s := range own[i] {
+			if !seen[s] && len(self) < board.MaxSelfAddresses {
+				seen[s] = true
+				self = append(self, s)
+			}
+		}
+	}
+	if b.boardSelfChanged(self) {
+		// Another address of the user's (an account added or removed):
+		// a note to self may be one no longer, or newly, and a thread that
+		// is no case may become one, so the stored mail of the longest
+		// window is judged again (rare: the accounts changed).
+		since := b.boardSince(ctx)
+		for _, a := range list {
+			if a.Enabled && !isIssueAccount(a) {
+				if err := b.store.MarkBoardAccountDirty(ctx, a.ID, since); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+	out := make(map[string]*boardAccount, len(list))
+	for i, a := range list {
+		ba := &boardAccount{jira: isIssueAccount(a)}
+		ba.addresses = own[i]
+		ba.identity = b.boardIdentity(a, own[i], self, known, gen)
 		if ba.jira && a.Config.Jira != nil {
 			ba.closed = map[string]bool{}
 			for _, st := range a.Config.Jira.ClosedStatuses {
@@ -397,29 +428,37 @@ func sameAddresses(a, b []string) bool {
 	return true
 }
 
-// boardIdentity returns the user's addresses on an account (boardOwn) and
-// its identity for the rules over them and the known correspondents of
-// generation gen (a jira account's identity takes the user's id per
-// thread, so only its addresses are kept here).
-func (b *Backend) boardIdentity(ctx context.Context, a store.Account, known []string, gen int) ([]string, board.Identity, error) {
-	addresses, err := b.boardOwn(ctx, a)
-	if err != nil {
-		return nil, board.Identity{}, err
-	}
+// boardIdentity returns the identity for the rules of an account over its
+// addresses (boardOwn), the addresses of every account of the user (self)
+// and the known correspondents of generation gen (a jira account's
+// identity takes the user's id per thread: none here).
+func (b *Backend) boardIdentity(a store.Account, addresses, self, known []string, gen int) board.Identity {
 	if isIssueAccount(a) {
-		return addresses, board.Identity{}, nil
+		return board.Identity{}
 	}
 	bs := &b.board
 	bs.idMu.Lock()
 	defer bs.idMu.Unlock()
 	e := bs.ids[a.ID]
-	if e.hasIdentity && e.knownGen == gen && slices.Equal(e.addresses, addresses) {
-		return addresses, e.identity, nil
+	if e.hasIdentity && e.knownGen == gen && slices.Equal(e.addresses, addresses) && slices.Equal(e.self, self) {
+		return e.identity
 	}
-	e.addresses = addresses
-	e.identity, e.knownGen, e.hasIdentity = board.NewIdentity("", addresses, known), gen, true
+	e.addresses, e.self = addresses, self
+	e.identity, e.knownGen, e.hasIdentity = board.NewIdentity("", addresses, known).WithSelf(self), gen, true
 	bs.ids[a.ID] = e
-	return addresses, e.identity, nil
+	return e.identity
+}
+
+// boardSelfChanged records the addresses of every account of the user and
+// reports whether they differ from the ones recorded before (false the
+// first time).
+func (b *Backend) boardSelfChanged(self []string) bool {
+	bs := &b.board
+	bs.idMu.Lock()
+	defer bs.idMu.Unlock()
+	changed := bs.selfSet && !sameAddresses(bs.self, self)
+	bs.self, bs.selfSet = self, true
+	return changed
 }
 
 // boardOwn returns the user's addresses on an account: its own and the
@@ -629,6 +668,7 @@ func (b *Backend) boardUpkeep(ctx context.Context) {
 		b.log.Warn("board: delete old runs", "err", err)
 	}
 	b.clearDueReminds(ctx)
+	b.dedupBoardCommitments(ctx)
 	if accounts, err := b.store.DropStrayDraftCopies(ctx, "", nil, now); err != nil {
 		b.log.Warn("board: delete the Drafts folder copies no draft holds", "err", err)
 	} else {
@@ -650,6 +690,42 @@ func (b *Backend) boardUpkeep(ctx context.Context) {
 	b.sweepLocalDrafts(ctx, now)
 	if enabled {
 		b.boardRolesChanged(ctx)
+	}
+}
+
+// metaBoardCommitmentsDedup records that the commitments recorded more
+// than once before board.commit returned the existing one were merged.
+const metaBoardCommitmentsDedup = "board.commitments.dedup"
+
+// dedupBoardCommitments merges, once, the commitments recorded twice for
+// the same message and quote (store.DedupBoardCommitments with the rule
+// of board.commit) and tells the clients about the cases it changed.
+func (b *Backend) dedupBoardCommitments(ctx context.Context) {
+	if v, _, err := b.store.GetMeta(ctx, metaBoardCommitmentsDedup); err != nil {
+		b.log.Warn("board: read the commitments' merge mark", "err", err)
+		return
+	} else if v == "1" {
+		return
+	}
+	changed, err := b.store.DedupBoardCommitments(ctx, board.SameCommitment)
+	if err != nil {
+		b.log.Warn("board: merge the commitments recorded twice", "err", err)
+		return
+	}
+	accounts := make([]string, 0, len(changed))
+	for account, threads := range changed {
+		if err := b.store.MarkBoardThreadsDirty(ctx, account, threads); err != nil {
+			b.log.Warn("board: mark a thread", "err", err)
+		}
+		accounts = append(accounts, account)
+	}
+	if len(accounts) > 0 {
+		b.log.Info("board: merged the commitments recorded twice", "accounts", len(accounts))
+		b.notifyBoard(false, accounts...)
+		b.wakeBoard()
+	}
+	if err := b.store.SetMeta(ctx, metaBoardCommitmentsDedup, "1"); err != nil {
+		b.log.Warn("board: record the commitments' merge mark", "err", err)
 	}
 }
 

@@ -66,6 +66,12 @@ func (s fakeBoard) Commit(_ context.Context, p api.BoardCommitParams) (*api.Boar
 	if err := s.f.gate(api.MethodBoardCommit); err != nil {
 		return nil, err
 	}
+	if p.Text == fxRecordedText { // recorded before: the daemon returns that one
+		return &api.BoardCommitResult{Existing: true, Commitment: api.BoardCommitment{
+			ID: "k_old", CaseID: p.CaseID, AccountID: fxAccount, MessageID: p.MessageID,
+			Text: "the older wording", Quote: p.Quote, State: api.CommitmentOpen, At: time.Now().Add(-time.Hour),
+		}}, nil
+	}
 	return &api.BoardCommitResult{Commitment: api.BoardCommitment{
 		ID: api.BoardCommitmentID(fmt.Sprintf("k_%d", n)), CaseID: p.CaseID, AccountID: fxAccount, MessageID: p.MessageID,
 		Text: p.Text, Quote: p.Quote, Due: p.Due, State: api.CommitmentOpen, At: time.Now(),
@@ -77,6 +83,9 @@ func (s fakeBoard) Commit(_ context.Context, p api.BoardCommitParams) (*api.Boar
 const (
 	fxQueueSecret = "MAILTEXT-SENTINEL" // a word that only mail carries
 	fxInputKey    = "0123456789abcdef0123456789abcdef"
+	// fxRecordedText as add_commitment's text makes the fake daemon
+	// answer that the commitment was recorded before.
+	fxRecordedText = "recorded before"
 )
 
 func queueItem(id string, acc api.AccountID) api.BoardQueueItem {
@@ -714,4 +723,38 @@ func TestTriageInstructionsOrdinaryDrafts(t *testing.T) {
 	mustContain(t, run, triageInstructions)
 	mustNotContain(t, run, triageOrdinaryDraftNote)
 	mustNotContain(t, config{}.instructions(), triageInstructions)
+}
+
+// A commitment the daemon had already: the result says so, and the call
+// does not use up the session's commitments.
+func TestAddCommitmentAlreadyRecorded(t *testing.T) {
+	fb := newFixture()
+	h := newTriageHarness(t, fb, "run_7")
+	h.handedOut("c_mail")
+	out := h.ok(t, "add_commitment", map[string]any{
+		"caseId": "c_mail", "inputKey": fxInputKey, "messageId": "m0", "text": fxRecordedText, "quote": "I'll send the figures by Friday.",
+	})
+	mustContain(t, out, "already recorded: commitment k_old on case c_mail (message m0, open)", "nothing new was recorded, do not record this promise again",
+		"commitments left in this session: 100")
+	mustNotContain(t, out, "recorded commitment", "counted in run", "older wording")
+}
+
+// The commitments a case has are listed: ids and states outside the
+// fence, the model-written text and the quote inside it.
+func TestTriageQueueListsRecordedCommitments(t *testing.T) {
+	fb := newFixture()
+	it := queueItem("c_mail", fxAccount)
+	due := time.Date(2026, 10, 2, 15, 0, 0, 0, time.UTC)
+	it.Commitments = []api.BoardCommitment{{ID: "k_1", CaseID: "c_mail", AccountID: fxAccount, MessageID: "m0",
+		Text: "Send the figures " + fxQueueSecret, Quote: "I'll send the figures by Friday. " + fxFakeEnd, Due: &due, State: api.CommitmentOpen, At: time.Now()}}
+	fb.queueResult = &api.BoardQueueResult{Items: []api.BoardQueueItem{it}}
+	h := newTriageHarness(t, fb, "")
+	out := h.ok(t, "list_triage_queue", map[string]any{})
+	bodies, outside := caseFences(t, out)
+	if len(bodies) != 1 {
+		t.Fatalf("%d fences:\n%s", len(bodies), out)
+	}
+	mustContain(t, outside, `"commitmentId": "k_1"`, `"messageId": "m0"`, `"state": "open"`, `"due": "2026-10-02T15:00:00Z"`)
+	mustNotContain(t, outside, fxQueueSecret, "Send the figures")
+	mustContain(t, bodies[0], "Send the figures "+fxQueueSecret, "I'll send the figures by Friday.")
 }

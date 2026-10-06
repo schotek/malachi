@@ -17,8 +17,10 @@ import (
 // through a message of the user's and an inbound one, and checks
 // metamorphic properties: a forged twin of the inbound message changes
 // nothing, a later inbound message (spoofed sender) never removes a
-// counting member nor gives them, and Importance never gives hot without
-// the user in To. Run beyond the seeds only with the owner's consent.
+// counting member nor gives them, Importance never gives hot without
+// the user in To, and a note to self of the user's (to an address the
+// user owns) changes neither the state nor the date. Run beyond the seeds
+// only with the owner's consent.
 func FuzzEvaluate(f *testing.F) {
 	for _, name := range []string{"gmail-forward.txt", "outlook-short-forward.txt", "apple-forward.txt",
 		"question-in-quote.txt", "question-in-signature.txt", "question-in-url.txt", "question-own.txt", "reply-with-quote.txt",
@@ -29,6 +31,7 @@ func FuzzEvaluate(f *testing.F) {
 	f.Add("", "", "", "", "", "", "")
 	f.Add("\xff\x00?", "Fwd[: \u202e", "\r\n high", "2 (High)", "ME@example.org", "me@example.org", "")
 	f.Add("Lunch?", "Lunch", "high", "1", "me@work.example", "team@example.com", "newsletter")
+	f.Add(fixture(f, "note-to-self.txt"), "Fwd: Lunch", "", "", "bob@example.com", " ME@WORK.EXAMPLE ", "none")
 	f.Fuzz(func(t *testing.T, text, subject, importance, priority, from, to, bulk string) {
 		in := inbound("a", 5, "bob@example.com", "me@example.org")
 		in.Subject, in.Importance, in.XPriority, in.Text = subject, importance, priority, text
@@ -84,6 +87,18 @@ func FuzzEvaluate(f *testing.F) {
 			}
 			if s.LatestID == spoof.ID && s.Reason == api.BoardReasonHotImportant && !me.Owns(to) {
 				t.Fatalf("importance without the user in To: %+v", s)
+			}
+
+			// A note to self of the user's, newest: it decides nothing.
+			if me.Self(to) {
+				n := with(mine, func(m *Member) {
+					m.ID, m.MessageID, m.To = "n", "<n@mail.example>", addrs(to)
+					m.InternalDate, m.StoredAt, m.Date = hoursAgo(1), hoursAgo(1), time.Time{}
+				})
+				o := Evaluate(Thread{Members: append(slices.Clone(ms), n)}, me, now)
+				if o.State != v.State || o.Reason != v.Reason || !o.Date.Equal(v.Date) || o.LatestID != v.LatestID || o.Count != v.Count+1 {
+					t.Fatalf("note changed %s/%s → %s/%s", v.State, v.Reason, o.State, o.Reason)
+				}
 			}
 		}
 		e := BoardMessageExcerpt(text)

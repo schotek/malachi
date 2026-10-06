@@ -25,7 +25,9 @@ import (
 //     member mine.
 //   - The identity of a mail account is its own address and the senders
 //     of its sent folders, with the user's known correspondents across
-//     every enabled mail account (boardIdentity), read before the batch:
+//     every enabled mail account, and the addresses of every account of
+//     the user for notes to self (Identity.WithSelf; boardIdentity), read
+//     before the batch:
 //     the decider runs inside the store's write transaction and must not
 //     call the store. For a jira thread the user's id is the thread's Me.
 //   - Members carry Reply-To; an issue's members carry the site's time of
@@ -201,6 +203,7 @@ func boardThreadOf(t *store.BoardThread, acc *boardAccount) board.Thread {
 			ReplyTo:        m.ReplyTo,
 			To:             m.To,
 			Cc:             m.CC,
+			Bcc:            m.BCC,
 			Subject:        m.Subject,
 			Date:           m.Date,
 			InternalDate:   m.InternalDate,

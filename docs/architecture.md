@@ -1221,7 +1221,7 @@ before (`restartBoardBackfill`, which a pass under way notices before it
 records anything more). `board.list` says `ready: false` until the pass
 is done and the set is empty.
 
-**The rules** (`internal/board`, `RulesVersion` "4"). What counts: a
+**The rules** (`internal/board`, `RulesVersion` "5"). What counts: a
 visible member (not hidden, not in a virtual folder) outside the folders
 of role trash, junk and drafts that is the user's or classified as no bulk
 mail (§3.1, migration 0016), and on an issue no event. **Mine** is a row
@@ -1234,12 +1234,18 @@ ordered by their arrival (`board.Arrival`: the internal date, else the
 now); an issue's by the site's time of the item, never by a date a bot's
 relayed text claims. The user's addresses on an account are its own and
 the ten most frequent senders of its sent folder, used only to tell
-whether mail is addressed to the user; the **known correspondents** are
+whether mail is addressed to the user; the addresses of all the user's
+accounts together (`Identity.WithSelf`, read with them and kept until they
+change; a change marks the stored mail of the longest window dirty) tell
+a **note to self**: a message of the user's whose `To`, `Cc` and `Bcc`
+are at least one and all such addresses, which counts but never decides
+the state, the case's date or its subject (§4.13), and inbound mail from
+such an address to nothing but them (`info.yourNote`); the **known correspondents** are
 the addresses in `To` or `Cc` of the sent and outbox folders of every
 enabled mail account (most recent first, at most 20 000), read hourly or
 when the accounts change. The order of the rules, the reasons and the
 known-sender rule are in the API's table: a newest inbound member that
-counts goes through `hot.flagged`, `info.yourNote`, `hot.important`,
+counts (notes to self passed over) goes through `hot.flagged`, `info.yourNote`, `hot.important`,
 `you.repliedToYou`, `you.addressed`, `info.unknownSender`, `info.ccOnly`,
 `info.notAddressed`; a newest member that is the user's gives `them` only
 by `them.replied` (an answer to someone who wrote in the thread) or
@@ -1264,7 +1270,8 @@ rules, or of what the store hands them, gets a new `RulesVersion`, and a
 new value makes the daemon evaluate every case and the stored mail of
 the longest window again (version 3: the members carry their
 `References`, so a reply known only by them no longer starts its
-thread).
+thread; 4: the quote trimming cuts at an Outlook header block without a
+separator line; 5: notes to self, and the members carry their `Bcc`).
 
 **Outcome of a verdict** (`store/board.go`). With a state, the case is
 created (only when its date lies within the longest window, so the first

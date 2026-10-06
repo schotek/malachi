@@ -281,6 +281,12 @@ import Testing
           "state":"closed","closedReason":"replied","at":"2026-09-30T09:00:00Z"}}
         """#)
         #expect(r.commitment.state == .closed && r.commitment.closedReason == .replied && r.commitment.due == nil)
+        #expect(r.existing == nil)
+        let again = try decode(BoardCommitResult.self, #"""
+        {"commitment":{"id":"k_1","caseId":"c_1","accountId":"a","messageId":"m_3","text":"Send it","quote":"I will send it",
+          "state":"open","at":"2026-09-30T09:00:00Z"},"existing":true}
+        """#)
+        #expect(again.existing == true && again.commitment.id == "k_1")
         let s = try encodeObject(BoardSetCommitmentParams(commitmentId: "k_1", done: false))
         #expect(s["commitmentId"] as? String == "k_1" && s["done"] as? Bool == false)
         let sr = try decode(BoardSetCommitmentResult.self, #"""

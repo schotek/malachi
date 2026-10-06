@@ -128,7 +128,7 @@ public sealed class ApiRoundTripTests
         """{"messageId":"m_1","from":@address@,"to":[{"address":"me@example.org"}],"cc":[@address@],"date":"2026-09-30T08:00:00Z","mine":false,"text":"Could you sign?","truncated":true}""";
 
     private const string BoardQueueItem =
-        """{"caseId":"@caseid@","accountId":"acc_1","inputKey":"0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f","ruleState":"you","ruleReason":"you.addressed","userState":"them","subject":"Contract","replyMessageId":"m_1","issue":@boardissue@,"own":["me@example.org"],"messages":[@boardqueuemessage@],"hasDraft":true}""";
+        """{"caseId":"@caseid@","accountId":"acc_1","inputKey":"0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f","ruleState":"you","ruleReason":"you.addressed","userState":"them","subject":"Contract","replyMessageId":"m_1","issue":@boardissue@,"own":["me@example.org"],"messages":[@boardqueuemessage@],"hasDraft":true,"commitments":[@boardcommitment@]}""";
 
     // Every record: a JSON document and, when the encoding adds members, what it encodes to.
     private static readonly Dictionary<string, Sample> Samples = new(StringComparer.Ordinal)
@@ -224,7 +224,7 @@ public sealed class ApiRoundTripTests
         [nameof(BoardAnnotateResult)] = Case<BoardAnnotateResult>("""{"case":@boardcase@,"draftNotLinked":true}"""),
         [nameof(BoardCommitParams)] = Case<BoardCommitParams>(
             """{"caseId":"@caseid@","inputKey":"0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f","runId":"r_1","messageId":"m_3","text":"Send the report","quote":"I will send the report on Monday.","due":"2026-10-05T09:00:00Z","source":"claude-opus"}"""),
-        [nameof(BoardCommitResult)] = Case<BoardCommitResult>("""{"commitment":@boardcommitment@}"""),
+        [nameof(BoardCommitResult)] = Case<BoardCommitResult>("""{"commitment":@boardcommitment@,"existing":true}"""),
         [nameof(BoardSetCommitmentParams)] = Case<BoardSetCommitmentParams>("""{"commitmentId":"k_1","done":true}"""),
         [nameof(BoardSetCommitmentResult)] = Case<BoardSetCommitmentResult>("""{"commitment":@boardcommitment@}"""),
         [nameof(BoardPreferencesResult)] = Case<BoardPreferencesResult>("""{"preferences":@boardpreferences@}"""),

@@ -1058,7 +1058,7 @@ Model a pravidla (démon, `docs/architecture.md` §3.7, `docs/api.md` §4.13,
 rozhodnutí v §7). **Případ** je jedno vlákno účtu (u účtu jira issue) v
 jednom ze čtyř stavů `hot` / `you` / `them` / `info` (Hot, Čeká na vás,
 Čeká na ně, K informaci). Stav dávají pravidla démona
-(`internal/board`, čistý balíček bez storu a hodin, `RulesVersion` "4";
+(`internal/board`, čistý balíček bez storu a hodin, `RulesVersion` "5";
 každá změna pravidel nebo toho, co jim store podává, = nové číslo, démon
 pak přepočítá všechny případy i uloženou poštu v nejdelším okně). Čtou jen
 hlavičky, strukturu, role složek, příznaky a klasifikaci hromadné pošty,
@@ -1076,7 +1076,17 @@ nebo `them.asked` (žádná příchozí, otazník ve vlastním textu jedné z
 posledních 10 mých zpráv, která není přeposlání); moje zpráva ve tvaru
 přeposlání (`Fwd:`/`FW:`/…, příloha `message/rfc822`, začíná citací,
 nebo nic neodpovídá a nad citací má méně než 300 B) případ nikdy nedělá.
-Příchozí poslední člen: pořadí `hot.flagged`, `info.yourNote`,
+**Poznámka sobě** (od verze 5) = moje zpráva, jejíž příjemci v `To`,
+`Cc` a `Bcc` jsou aspoň jeden a všichni moje adresy kteréhokoli účtu
+(`Identity.WithSelf`: vlastní adresa a odesílatelé složek Odeslané všech
+účtů, v cache s identitou, jejich změna označí poštu nejdelšího okna);
+smíšení příjemci ani zpráva bez příjemců poznámkou nejsou. Poznámka se
+počítá (počet zpráv, vlajka, odpověď na ni), ale stav, datum, předmět
+a výňatek případu dává nejnovější člen, který poznámkou není (od něj
+běží okna); vlákno jen z poznámek případ nedělá. Moje odpověď poslaná
+jen na jinou mou adresu tak cizí poštu před sebou nezakryje.
+Příchozí poslední člen: pořadí `hot.flagged`, `info.yourNote` (od
+kterékoli mé adresy jen na mé adresy),
 `hot.important`, `you.repliedToYou`, `you.addressed`, `info.unknownSender`,
 `info.ccOnly`, `info.notAddressed`. **Známý odesílatel** = jeho `From`
 nebo `Reply-To` je v `To`/`Cc` některé zprávy ve složkách `sent`/`outbox`
