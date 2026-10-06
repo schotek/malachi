@@ -2901,7 +2901,9 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   published app, the folder `build.ps1 app` assembled
   (`build\windows\<arch>\Malachi Mail\`, or the one `MALACHI_UITEST_APP`
   names), as a user would, with a temporary folder of their own for the
-  data (`MALACHI_DATA_DIR`) and the socket (`MALACHI_SOCKET`, a short path),
+  data (`MALACHI_DATA_DIR`) and the socket (`MALACHI_SOCKET`, a short path;
+  the folder gets an ACL of its own, the user and SYSTEM only, since the
+  key file inherits it and `%TEMP%` may grant another principal access),
   a registry key of their own per app for the preferences
   (`MALACHI_SETTINGS_KEY=io.github.schotek.Malachi.UiTests.<guid>`, §8,
   deleted once that app is gone, also after a failure),
@@ -2910,7 +2912,9 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   Credential Manager. The app's terminal log is its stderr, a pipe the test
   reads. They find every element by AutomationId (the names follow the
   user's language) and use UI Automation's patterns only, never synthetic
-  input, so they need no foreground. Checked on an empty data folder: the
+  input, so they need no foreground (one exception: the board panel's
+  Escape, a key sent only once the app's window has the focus,
+  `Uia.PressKey`). Checked on an empty data folder: the
   main window with its New Message and primary menu and, once the daemon
   answered, its No Accounts page; the sidebar's New Message opens a
   composer (To, Subject, the editor) that closes without a question; the
@@ -2921,10 +2925,17 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   started exits with 0, and the socket and its key are gone; and the
   preferences' key: a `window-maximized` the session wrote into its key
   before the start shows as a maximised main window, and the key is gone
-  after the session. The classes
+  after the session. The Board (`BoardSmokeTests`, one app with
+  `MALACHI_BOARD_SAMPLES=1`, cases found by their sample titles): the title
+  bar's switch into the Board and its `…` menu back to Mail (the search box
+  again), the List with the selected case's detail, Columns and Today with
+  the detail in the sliding panel that Escape and Close close, Done then
+  Move Back through the Done filter, a Remind preset taking the case off
+  the board, and the Preferences' Board groups (General's default style,
+  AI's triage hidden without Register with Claude). The classes
   share one collection without parallelism (the app is one instance per
-  executable); one app serves the window checks, one the Quit, one the
-  preferences; about 30 s. **Opt-in**, `MALACHI_DEVMAIL=<folder with devmail.exe>` (the local
+  executable); one app serves the window checks, one the Board, one the
+  Quit, one the preferences; about a minute. **Opt-in**, `MALACHI_DEVMAIL=<folder with devmail.exe>` (the local
   IMAP and SMTP server of the port's research, outside the repository)
   adds a suite against a mail server: devmail started on free ports of
   127.0.0.1 and seeded with `backend/testdata/mime`, the account added over
