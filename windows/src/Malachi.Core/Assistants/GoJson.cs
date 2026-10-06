@@ -286,6 +286,52 @@ internal static class GoJson
         return d;
     }
 
+    /// <summary>Whether a raw value is missing or <c>null</c>.</summary>
+    internal static bool IsNull(ReadOnlySpan<byte> b, (int Lo, int Hi)? r)
+    {
+        if (r is not { } range)
+        {
+            return true;
+        }
+        var i = First(b, range);
+        return i < 0 || Literal(b, i, range.Hi, "null"u8);
+    }
+
+    /// <summary>
+    /// A counter of usage: 0 for a missing or null value, else digits only
+    /// (the line is valid JSON, so without a leading zero) that fit an
+    /// Int64; null for anything else (Go's strconv.ParseInt of the digits).
+    /// </summary>
+    internal static long? Count(ReadOnlySpan<byte> b, (int Lo, int Hi)? r)
+    {
+        if (r is not { } range)
+        {
+            return 0;
+        }
+        var i = First(b, range);
+        if (i < 0 || Literal(b, i, range.Hi, "null"u8))
+        {
+            return 0;
+        }
+        if (!IsDigit(b[i]))
+        {
+            return null;
+        }
+        var e = NumberEnd(b, i, range.Hi);
+        if (e < 0)
+        {
+            return null;
+        }
+        for (var j = i; j < e; j++)
+        {
+            if (!IsDigit(b[j]))
+            {
+                return null;
+            }
+        }
+        return long.TryParse(b[i..e], NumberStyles.None, CultureInfo.InvariantCulture, out var v) ? v : null;
+    }
+
     private static bool IsWs(byte c) => c is 0x20 or 0x09 or 0x0A or 0x0D;
 
     private static bool IsDigit(byte c) => c is >= 0x30 and <= 0x39;

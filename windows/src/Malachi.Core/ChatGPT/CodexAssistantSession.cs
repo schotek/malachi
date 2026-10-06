@@ -3,7 +3,10 @@
 
 // App Server protocol from docs/chatgpt-integration.md §5–6; normalized
 // event behavior is the Go/Swift assistant panel reference. MCP is owned
-// by the application and launched without inference credentials.
+// by the application and launched without inference credentials. The
+// spec's tools, bridge arguments, turn timeout and the token usage events
+// follow macos/Sources/MalachiCore/ChatGPT/CodexProvider.swift
+// (CodexSession: policy, initialize, submit, notification).
 
 using System;
 using System.Collections.Generic;
@@ -42,6 +45,7 @@ public sealed class CodexAssistantSession : IAssistantSession, IAsyncDisposable
     private string thread = "";
     private string turn = "";
     private string text = "";
+    private AssistantUsage? usage;
     private bool active;
     private bool ended;
     private bool closing;
@@ -63,9 +67,9 @@ public sealed class CodexAssistantSession : IAssistantSession, IAsyncDisposable
         directory = Path.Combine(options.Directory, "session-" + Guid.NewGuid().ToString("N"));
         home = Path.Combine(directory, "home");
         work = Path.Combine(directory, "work");
-        tools = spec.ToolPolicy == AssistantToolPolicy.Panel
-            ? new HashSet<string>(Assistant.AllowedTools.Select(Assistant.StripBridgePrefix), StringComparer.Ordinal)
-            : new HashSet<string>(StringComparer.Ordinal);
+        tools = spec.ToolPolicy == AssistantToolPolicy.None
+            ? new HashSet<string>(StringComparer.Ordinal)
+            : new HashSet<string>(Assistant.SessionTools(spec), StringComparer.Ordinal);
         gate = new CodexInferenceGate(tokens, tools, options.InferenceHandler?.Invoke(), time);
         stopped = CancellationTokenSource.CreateLinkedTokenSource(tokens.SessionCancellation);
         sessionCancellation = tokens.SessionCancellation.Register(Terminate);
@@ -91,11 +95,13 @@ public sealed class CodexAssistantSession : IAssistantSession, IAsyncDisposable
         EnsureDirectory(work, fresh: true);
         var clean = Assistant.ChildEnvironment(options.Environment, executable);
         var catalog = new List<JsonElement>();
-        if (spec.ToolPolicy == AssistantToolPolicy.Panel)
+        if (spec.ToolPolicy != AssistantToolPolicy.None)
         {
             // This peer is a sibling, not a Codex descendant: no access token
             // or even the local inference credential ever enters its environment.
-            bridge = new CodexJsonRpc(options.Bridge, ["--socket", options.Socket],
+            List<string> bridgeArgs = options.Socket.Length > 0 ? ["--socket", options.Socket] : [];
+            bridgeArgs.AddRange(spec.BridgeArgs);
+            bridge = new CodexJsonRpc(options.Bridge, bridgeArgs,
                 Assistant.ChildEnvironment(options.Environment, options.Bridge), work);
             _ = await bridge.CallAsync("initialize", w =>
             {
@@ -221,9 +227,10 @@ public sealed class CodexAssistantSession : IAssistantSession, IAsyncDisposable
             throw new AssistantProviderException("codex_session_busy_or_closed");
         }
         active = true;
-        turnDeadline = time.CreateTimer(_ => Terminate(), null, TimeSpan.FromMinutes(2), Timeout.InfiniteTimeSpan);
+        turnDeadline = time.CreateTimer(_ => Terminate(), null, spec.Timeout, Timeout.InfiniteTimeSpan);
         turnCancellation = cancellationToken.Register(Terminate);
         text = "";
+        usage = null;
         calls.Clear();
         Emit(new AssistantEvent(AssistantEventKind.SystemInit) { BridgeConnected = true, Tools = tools.ToArray() });
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, stopped.Token);
@@ -291,6 +298,21 @@ public sealed class CodexAssistantSession : IAssistantSession, IAsyncDisposable
                 Terminate(); // No built-in item is authorized, even after inference.
             }
         }
+        else if (method == "thread/tokenUsage/updated" && active && value.TryGetProperty("tokenUsage", out var tokenUsage)
+            && tokenUsage.ValueKind == JsonValueKind.Object && tokenUsage.TryGetProperty("total", out var total)
+            && total.ValueKind == JsonValueKind.Object)
+        {
+            if (CodexInferenceGate.String(value, "turnId") is { Length: > 0 } usageTurn && usageTurn != turn)
+            {
+                return;
+            }
+            var cached = Tokens(total, "cachedInputTokens");
+            usage = new AssistantUsage(
+                InputTokens: Math.Max(Tokens(total, "inputTokens") - cached, 0),
+                OutputTokens: Tokens(total, "outputTokens"),
+                CacheReadInputTokens: cached);
+            Emit(new AssistantEvent(AssistantEventKind.Other) { Usage = usage, MessageId = turn });
+        }
         else if (method == "turn/completed" && value.TryGetProperty("turn", out var completed) && active)
         {
             if (CodexInferenceGate.String(completed, "id") != turn) { Terminate(); return; }
@@ -316,6 +338,7 @@ public sealed class CodexAssistantSession : IAssistantSession, IAsyncDisposable
                 IsError = !success,
                 ResultText = success ? text : gate.LastFailure ?? "chatgpt_turn_failed",
                 Structured = structured,
+                Usage = usage,
             });
         }
         else if (method == "error" && active)
@@ -323,6 +346,21 @@ public sealed class CodexAssistantSession : IAssistantSession, IAsyncDisposable
             // Terminal turn/completed is still required for success.
             Emit(new AssistantEvent(AssistantEventKind.Failure) { Failure = "chatgpt_inference_failed" });
         }
+    }
+
+    // A counter of thread/tokenUsage/updated: a whole number from 0 up to
+    // MaxUsageTokens (a fraction cut off, as Swift's int64Value), else 0.
+    private static long Tokens(JsonElement total, string name)
+    {
+        if (!total.TryGetProperty(name, out var n) || n.ValueKind != JsonValueKind.Number)
+        {
+            return 0;
+        }
+        if (n.TryGetInt64(out var whole))
+        {
+            return Math.Clamp(whole, 0, Assistant.MaxUsageTokens);
+        }
+        return n.TryGetDouble(out var d) && double.IsFinite(d) ? (long)Math.Clamp(d, 0, Assistant.MaxUsageTokens) : 0;
     }
 
     private bool MatchesTurn(JsonElement value) => turn.Length > 0 && CodexInferenceGate.String(value, "turnId") == turn;

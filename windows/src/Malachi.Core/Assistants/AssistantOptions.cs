@@ -3,7 +3,12 @@
 
 // Port of macos/Sources/MalachiCore/Assistant/AssistantPanel.swift
 // (Assistant.Options); GTK: ui/internal/assistant/claude.go (Options).
+// A record compares its lists by reference, so the equality here is by
+// value, as Swift's Equatable struct compares its arrays.
 
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using Malachi.Core.Settings;
 
 namespace Malachi.Core.Assistants;
@@ -35,4 +40,50 @@ public sealed record AssistantOptions
     /// in the user's own words.
     /// </summary>
     public string JsonSchema { get; init; } = "";
+
+    /// <summary>
+    /// Further arguments of the bridge, after <c>--socket</c>: the board
+    /// triage's <see cref="Assistant.TriageBridgeArgs"/> or the suggested
+    /// reply's <see cref="Assistant.SuggestReplyBridgeArgs"/>; empty for the
+    /// panel. Unused without a bridge.
+    /// </summary>
+    public IReadOnlyList<string> BridgeArgs { get; init; } = [];
+
+    /// <summary>
+    /// The tools Claude Code may run (<c>--allowedTools</c>); null is the
+    /// panel's <see cref="Assistant.AllowedTools"/>. Unused without a bridge.
+    /// </summary>
+    public IReadOnlyList<string>? Tools { get; init; }
+
+    /// <inheritdoc/>
+    public bool Equals(AssistantOptions? other) =>
+        other is not null
+        && string.Equals(Bridge, other.Bridge, StringComparison.Ordinal)
+        && string.Equals(Socket, other.Socket, StringComparison.Ordinal)
+        && Model == other.Model
+        && string.Equals(SystemPrompt, other.SystemPrompt, StringComparison.Ordinal)
+        && string.Equals(JsonSchema, other.JsonSchema, StringComparison.Ordinal)
+        && BridgeArgs.SequenceEqual(other.BridgeArgs, StringComparer.Ordinal)
+        && (Tools is null ? other.Tools is null : other.Tools is not null && Tools.SequenceEqual(other.Tools, StringComparer.Ordinal));
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Bridge, StringComparer.Ordinal);
+        hash.Add(Socket, StringComparer.Ordinal);
+        hash.Add(Model);
+        hash.Add(SystemPrompt, StringComparer.Ordinal);
+        hash.Add(JsonSchema, StringComparer.Ordinal);
+        foreach (var a in BridgeArgs)
+        {
+            hash.Add(a, StringComparer.Ordinal);
+        }
+        hash.Add(Tools is null);
+        foreach (var t in Tools ?? [])
+        {
+            hash.Add(t, StringComparer.Ordinal);
+        }
+        return hash.ToHashCode();
+    }
 }

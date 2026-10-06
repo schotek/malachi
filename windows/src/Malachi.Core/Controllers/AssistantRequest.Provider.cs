@@ -4,6 +4,11 @@
 // Provider adaptation of ui/internal/assistantpanel/controller.go and
 // macos/Sources/MalachiCore/Controllers/AssistantPanelController.swift;
 // docs/chatgpt-integration.md §3. UI callbacks stay on the controller scope.
+// The board's use (usesBoardConsent, providerModelID, the call's tools,
+// timeout and model) is macos/Sources/MalachiCore/Controllers/
+// AssistantRequest.swift runProvider's; a provider starts the bridge and its
+// socket from its own options, so only the call's tools, bridge arguments
+// and policy reach it.
 
 using System;
 using System.Collections.Generic;
@@ -20,6 +25,17 @@ public sealed partial class AssistantRequest
     private IAssistantSession? providerSession;
     private CancellationTokenSource? providerStop;
 
+    /// <summary>
+    /// Whether a provider's request needs the provider's board consent
+    /// (<see cref="IAssistantProvider.HasBoardConsent"/>) instead of the
+    /// panel's: the board's triage and suggested reply. Without it the
+    /// request is declined at once, never asked here.
+    /// </summary>
+    public bool UsesBoardConsent { get; set; }
+
+    /// <summary>The provider's model of the next request (the board's setting); null or "" lets the provider choose.</summary>
+    public Func<string>? ProviderModelId { get; set; }
+
     /// <summary>Optional runtime; changing it cancels the request and its late events.</summary>
     public IAssistantProvider? Provider
     {
@@ -33,19 +49,24 @@ public sealed partial class AssistantRequest
         }
     }
 
-    private async Task RunProviderAsync(IAssistantProvider selected, int my, string systemPrompt, string message,
-        string jsonSchema, Action<string>? onText, Action<Outcome> completion)
+    private async Task RunProviderAsync(IAssistantProvider selected, int my, Call call)
     {
+        var completion = call.Completion;
         try
         {
             var stop = CancellationTokenSource.CreateLinkedTokenSource(scope.Lifetime);
             providerStop = stop;
-            StartTimer(my, completion);
+            StartTimer(my, call.Timeout, completion);
             var session = await selected.OpenAsync(new AssistantSessionSpec
             {
-                SystemPrompt = systemPrompt,
-                JsonSchema = jsonSchema,
-                ToolPolicy = AssistantToolPolicy.None,
+                SystemPrompt = call.SystemPrompt,
+                JsonSchema = call.JsonSchema,
+                ToolPolicy = call.Tools?.Policy ?? AssistantToolPolicy.None,
+                Tools = call.Tools?.Allowed,
+                BridgeArgs = call.Tools?.BridgeArgs ?? [],
+                ModelId = ProviderModelId?.Invoke() ?? "",
+                Timeout = call.Timeout,
+                BoardConsent = UsesBoardConsent,
             }, stop.Token);
             scope.Pending.Track(session.Completion);
             if (my != gen || !Running || !ReferenceEquals(selected, Provider))
@@ -60,7 +81,7 @@ public sealed partial class AssistantRequest
             {
                 if (ReferenceEquals(session, providerSession) && my == gen && Running)
                 {
-                    HandleEvents(my, batch, onText, completion);
+                    HandleEvents(my, batch, call);
                 }
             };
             session.Exited += (_, exit) =>
@@ -70,7 +91,7 @@ public sealed partial class AssistantRequest
                     Finish(my, new Outcome.Failed(new Failure.Stopped(exit.Description)), completion);
                 }
             };
-            await session.SubmitAsync(message, stop.Token);
+            await session.SubmitAsync(call.Message, stop.Token);
         }
         catch (OperationCanceledException)
         {

@@ -7,6 +7,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -151,6 +152,89 @@ public sealed class CodexPolicyTests
         gate.ValidateResponseEvent("{\"item\":{\"type\":\"function_call\",\"namespace\":\"malachi\",\"name\":\"read_message\"}}");
     }
 
+    /// <summary>
+    /// A triage session's gate passes the read and triage tools of its
+    /// spec and nothing else: no create_draft for an automatic run, never
+    /// send, modify or a tool of another namespace; a missing triage tool
+    /// fails before inference.
+    /// </summary>
+    [Fact]
+    public async Task TriageGateHoldsTheSpecsTools()
+    {
+        var spec = new AssistantSessionSpec
+        {
+            SystemPrompt = "S",
+            ToolPolicy = AssistantToolPolicy.Triage,
+            BridgeArgs = Assistant.TriageBridgeArgs("run_1", 5),
+        };
+        var tools = Assistant.SessionTools(spec);
+        Assert.Contains("annotate_case", tools);
+        Assert.DoesNotContain("create_draft", tools);
+        await using var gate = new CodexInferenceGate(new Tokens(), tools, new ResponseHandler());
+        var catalog = string.Join(",", tools.Append("create_draft").Append("send_message").Append("transition_issue")
+            .Select(t => "{\"type\":\"function\",\"name\":\"" + t + "\"}"));
+        using var filtered = JsonDocument.Parse(gate.FilterRequest(Encoding.UTF8.GetBytes(
+            "{\"tools\":[{\"type\":\"namespace\",\"name\":\"malachi\",\"tools\":[" + catalog + "]}]}")));
+        var names = filtered.RootElement.GetProperty("tools")[0].GetProperty("tools").EnumerateArray()
+            .Select(t => t.GetProperty("name").GetString()!).ToHashSet(StringComparer.Ordinal);
+        Assert.True(names.SetEquals(tools));
+        foreach (var name in new[] { "create_draft", "send_message", "transition_issue" })
+        {
+            Assert.Throws<AssistantProviderException>(() => gate.ValidateResponseEvent(
+                "{\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_call\",\"namespace\":\"malachi\",\"name\":\"" + name + "\"}}"));
+        }
+        gate.ValidateResponseEvent("{\"item\":{\"type\":\"function_call\",\"namespace\":\"malachi\",\"name\":\"annotate_case\"}}");
+        var withoutAnnotate = "{\"tools\":[{\"type\":\"namespace\",\"name\":\"malachi\",\"tools\":["
+            + string.Join(",", tools.Where(t => t != "annotate_case").Select(t => "{\"type\":\"function\",\"name\":\"" + t + "\"}")) + "]}]}";
+        Assert.Equal("codex_required_tools_missing",
+            Assert.Throws<AssistantProviderException>(() => gate.FilterRequest(Encoding.UTF8.GetBytes(withoutAnnotate))).Code);
+    }
+
+    /// <summary>
+    /// The provider refuses a spec outside its policy, and a board session
+    /// without the board consent (the panel's does not stand for it), before
+    /// any process exists; Available and Connected report the runtime and
+    /// the account.
+    /// </summary>
+    [Fact]
+    public async Task ProviderChecksPolicyAndBoardConsentFirst()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "malachi-codex-policy-" + Guid.NewGuid().ToString("N"));
+        var boardConsent = false;
+        var connected = false;
+        var provider = new CodexAssistantProvider(new CodexAssistantOptions
+        {
+            Executable = () => null,
+            Bridge = "",
+            Socket = "",
+            Directory = directory,
+            Environment = new Dictionary<string, string>(),
+            Model = () => "m",
+            HasConsent = () => true,
+            AcceptConsent = () => { },
+            HasBoardConsent = () => boardConsent,
+            AcceptBoardConsent = () => boardConsent = true,
+            Connected = () => connected,
+        }, new Tokens());
+        Assert.False(provider.Available);
+        Assert.False(provider.Connected);
+        connected = true;
+        Assert.True(provider.Connected);
+        Assert.False(provider.HasBoardConsent);
+        var outside = new AssistantSessionSpec { SystemPrompt = "S", ToolPolicy = AssistantToolPolicy.ReplyOnly, BridgeArgs = ["--reply-only", "m", "--allow-send"] };
+        Assert.Equal("chatgpt_invalid_tool_policy",
+            (await Assert.ThrowsAsync<AssistantProviderException>(() => provider.OpenAsync(outside, TestContext.Current.CancellationToken))).Code);
+        var board = new AssistantSessionSpec { SystemPrompt = "S", ToolPolicy = AssistantToolPolicy.ReplyOnly, BridgeArgs = Assistant.SuggestReplyBridgeArgs("m"), BoardConsent = true };
+        Assert.Equal("chatgpt_consent_required",
+            (await Assert.ThrowsAsync<AssistantProviderException>(() => provider.OpenAsync(board, TestContext.Current.CancellationToken))).Code);
+        provider.AcceptBoardConsent();
+        Assert.True(provider.HasBoardConsent);
+        // With the board consent it gets as far as the missing runtime.
+        Assert.Equal("codex_not_found",
+            (await Assert.ThrowsAsync<AssistantProviderException>(() => provider.OpenAsync(board, TestContext.Current.CancellationToken))).Code);
+        Assert.False(Directory.Exists(directory));
+    }
+
     [Fact]
     public void MailNamespaceRemainsDirectForCodeModeModels()
     {
@@ -180,9 +264,15 @@ public sealed class CodexPolicyTests
         var handler = new ResponseHandler(withTools, failAfterDraft);
         var provider = new CodexAssistantProvider(new CodexAssistantOptions
         {
-            Executable = () => executable, Bridge = withTools ? bridge : "", Socket = "", Directory = directory,
+            Executable = () => executable,
+            Bridge = withTools ? bridge : "",
+            Socket = "",
+            Directory = directory,
             Environment = new Dictionary<string, string> { ["SystemRoot"] = @"C:\Windows" },
-            Model = () => model, HasConsent = () => true, AcceptConsent = () => { }, InferenceHandler = () => handler,
+            Model = () => model,
+            HasConsent = () => true,
+            AcceptConsent = () => { },
+            InferenceHandler = () => handler,
         }, new Tokens());
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(45), TimeProvider.System);
         IAssistantSession? session = null;

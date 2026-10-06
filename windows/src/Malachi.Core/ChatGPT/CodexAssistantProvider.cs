@@ -3,7 +3,10 @@
 
 // Runtime adapter from docs/chatgpt-integration.md §3, §5–6. The normalized
 // event semantics match ui/internal/assistantpanel/process.go and
-// macos/Sources/MalachiCore/Platform/ClaudeCodeProcess.swift.
+// macos/Sources/MalachiCore/Platform/ClaudeCodeProcess.swift. Available,
+// Connected, the board consent and the spec's model, timeout and board
+// consent follow macos/Sources/MalachiCore/ChatGPT/CodexProvider.swift
+// (available, connected, start, makeSession).
 
 using System;
 using System.Collections.Generic;
@@ -43,10 +46,23 @@ public sealed class CodexAssistantProvider : IAssistantProvider
     public string Model => options.Model();
 
     /// <inheritdoc/>
+    public bool Available => options.Executable() is { } executable && Path.IsPathFullyQualified(executable) && File.Exists(executable);
+
+    /// <inheritdoc/>
+    public bool Connected => options.Connected?.Invoke()
+        ?? (tokens is ChatGptConnectionService service && service.Connection.Status == ChatGptConnectionStatus.Connected);
+
+    /// <inheritdoc/>
     public bool HasConsent => options.HasConsent();
 
     /// <inheritdoc/>
+    public bool HasBoardConsent => options.HasBoardConsent?.Invoke() ?? false;
+
+    /// <inheritdoc/>
     public void AcceptConsent() => options.AcceptConsent();
+
+    /// <inheritdoc/>
+    public void AcceptBoardConsent() => options.AcceptBoardConsent?.Invoke();
 
     /// <summary>Sweeps only abandoned app-owned profiles, retaining active sessions.</summary>
     public void CleanAbandonedSessions() => CodexSessionDirectories.Sweep(options.Directory, directories);
@@ -61,7 +77,8 @@ public sealed class CodexAssistantProvider : IAssistantProvider
         }
         var session = new CodexAssistantSession(options, tokens, new AssistantSessionSpec
         {
-            SystemPrompt = "Model discovery", ToolPolicy = AssistantToolPolicy.None,
+            SystemPrompt = "Model discovery",
+            ToolPolicy = AssistantToolPolicy.None,
         }, executable, "", directories, time, SynchronizationContext.Current);
         try
         {
@@ -79,7 +96,8 @@ public sealed class CodexAssistantProvider : IAssistantProvider
     public async Task<IAssistantSession> OpenAsync(AssistantSessionSpec spec, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(spec);
-        if (!Enum.IsDefined(spec.ToolPolicy)) { throw new AssistantProviderException("chatgpt_invalid_tool_policy"); }
+        if (!Assistant.PolicyAllows(spec)) { throw new AssistantProviderException("chatgpt_invalid_tool_policy"); }
+        if (spec.Timeout <= TimeSpan.Zero) { throw new AssistantProviderException("chatgpt_invalid_timeout"); }
         if (spec.JsonSchema.Length > 0)
         {
             try
@@ -89,7 +107,7 @@ public sealed class CodexAssistantProvider : IAssistantProvider
             }
             catch (JsonException) { throw new AssistantProviderException("chatgpt_invalid_output_schema"); }
         }
-        if (!HasConsent)
+        if (spec.BoardConsent ? !HasBoardConsent : !HasConsent)
         {
             throw new AssistantProviderException("chatgpt_consent_required");
         }
@@ -98,13 +116,13 @@ public sealed class CodexAssistantProvider : IAssistantProvider
         {
             throw new AssistantProviderException("codex_not_found");
         }
-        if (spec.ToolPolicy == AssistantToolPolicy.Panel && (!Path.IsPathFullyQualified(options.Bridge) || !File.Exists(options.Bridge)))
+        if (spec.ToolPolicy != AssistantToolPolicy.None && (!Path.IsPathFullyQualified(options.Bridge) || !File.Exists(options.Bridge)))
         {
             throw new AssistantProviderException("chatgpt_tools_unavailable");
         }
         var context = SynchronizationContext.Current;
         // Validates/refreshes the grant before a process or a tool exists.
-        var model = Model;
+        var model = spec.ModelId.Length > 0 ? spec.ModelId : spec.BoardConsent ? "" : Model;
         try { _ = await tokens.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false); }
         catch (ChatGptAuthException failure) { throw new AssistantProviderException("chatgpt_" + failure.Error.ToString().ToLowerInvariant()); }
         var session = new CodexAssistantSession(options, tokens, spec, executable, model, directories, time, context);

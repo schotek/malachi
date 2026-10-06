@@ -7,6 +7,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -66,6 +67,92 @@ public sealed class AssistantProviderTests
         Assert.IsType<AssistantRequest.Outcome.Declined>(h.Outcomes[1]);
         Assert.False(h.Settings.AssistantConsent);
         Assert.Equal(0, h.ClaudeProbes);
+    }
+
+    /// <summary>
+    /// A board request of a provider needs the provider's board consent: the
+    /// panel's consent does not stand for it, nobody is asked, and nothing
+    /// opens (Swift's runProvider with usesBoardConsent).
+    /// </summary>
+    [Fact]
+    public async Task BoardRequestWithoutBoardConsentIsDeclined()
+    {
+        await using var h = await Harness.CreateAsync();
+        await h.Ui.RunAsync(() =>
+        {
+            h.Request.UsesBoardConsent = true;
+            h.Start();
+        });
+        await h.IdleAsync();
+        Assert.IsType<AssistantRequest.Outcome.Declined>(Assert.Single(h.Outcomes));
+        Assert.Equal(0, h.ConsentAsked);
+        Assert.Equal(0, h.Provider.OpenCalls);
+        Assert.Equal(0, h.Provider.AcceptedBoardConsent);
+        Assert.Equal(0, h.ClaudeProbes);
+    }
+
+    /// <summary>
+    /// A board request opens a session with the call's tools, bridge
+    /// arguments, policy, timeout and the board's model, and its tool and
+    /// usage events reach the call's handlers; the panel's consent is not
+    /// asked even without it.
+    /// </summary>
+    [Fact]
+    public async Task BoardRequestCarriesItsToolsModelAndTimeout()
+    {
+        await using var h = await Harness.CreateAsync(consent: false);
+        var tools = new List<AssistantEvent>();
+        var usage = new List<AssistantEvent>();
+        var call = new AssistantRequest.Tools
+        {
+            Bridge = "ignored",
+            BridgeArgs = Assistant.TriageBridgeArgs("run_1", 5),
+            Allowed = Assistant.TriageTools(drafts: false),
+            Policy = AssistantToolPolicy.Triage,
+        };
+        await h.Ui.RunAsync(() =>
+        {
+            h.Provider.HasBoardConsent = true;
+            h.Request.UsesBoardConsent = true;
+            h.Request.ProviderModelId = () => "board-model";
+            h.Request.Start("system instructions", "triage", h.Outcomes.Add, tools: call, timeout: Assistant.TriageTimeout,
+                onTool: tools.Add, onUsage: usage.Add);
+        });
+        await h.Provider.Session.Submitted.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        var spec = h.Provider.Spec!;
+        Assert.Equal(AssistantToolPolicy.Triage, spec.ToolPolicy);
+        Assert.Equal(Assistant.TriageTools(drafts: false), spec.Tools);
+        Assert.Equal(Assistant.TriageBridgeArgs("run_1", 5), spec.BridgeArgs);
+        Assert.Equal("board-model", spec.ModelId);
+        Assert.Equal(Assistant.TriageTimeout, spec.Timeout);
+        Assert.True(spec.BoardConsent);
+        Assert.True(Assistant.PolicyAllows(spec));
+        await h.Ui.RunAsync(() => h.Provider.Session.Emit(
+            new AssistantEvent(AssistantEventKind.SystemInit) { BridgeConnected = true },
+            new AssistantEvent(AssistantEventKind.ToolUse) { Tool = "annotate_case", ToolUseId = "c1" },
+            new AssistantEvent(AssistantEventKind.ToolResult) { ToolUseId = "c1" },
+            new AssistantEvent(AssistantEventKind.Other) { Usage = new AssistantUsage(5, 6), MessageId = "turn" },
+            Result("done") with { Usage = new AssistantUsage(5, 6) }));
+        await h.IdleAsync();
+        Assert.Equal("done", Assert.IsType<AssistantRequest.Outcome.Answered>(Assert.Single(h.Outcomes)).Text);
+        Assert.Equal(["c1", "c1"], tools.Select(e => e.ToolUseId));
+        Assert.Equal([AssistantEventKind.Other, AssistantEventKind.Result], usage.Select(e => e.Kind));
+        Assert.Equal(0, h.ConsentAsked);
+        Assert.Equal(0, h.ClaudeProbes);
+    }
+
+    /// <summary>A provider session that does not report the bridge connected ends a request with tools as tools missing.</summary>
+    [Fact]
+    public async Task ProviderWithoutTheBridgeIsToolsMissing()
+    {
+        await using var h = await Harness.CreateAsync();
+        var call = new AssistantRequest.Tools { Bridge = "", Allowed = Assistant.AllowedTools, Policy = AssistantToolPolicy.Panel };
+        await h.Ui.RunAsync(() => h.Request.Start("s", "m", h.Outcomes.Add, tools: call));
+        await h.Provider.Session.Submitted.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        await h.Ui.RunAsync(() => h.Provider.Session.Emit(new AssistantEvent(AssistantEventKind.SystemInit), Result("x")));
+        await h.IdleAsync();
+        var failed = Assert.IsType<AssistantRequest.Outcome.Failed>(Assert.Single(h.Outcomes));
+        Assert.IsType<AssistantRequest.Failure.ToolsMissing>(failed.Failure);
     }
 
     [Fact]
@@ -383,7 +470,12 @@ public sealed class AssistantProviderTests
         public string SelectedModel { get; set; } = "test-model";
         public string Model => SelectedModel;
         public bool HasConsent { get; private set; } = consent;
+        public bool HasBoardConsent { get; set; }
+        public bool Available => true;
+        public bool Connected => true;
         public int AcceptedConsent { get; private set; }
+        public int AcceptedBoardConsent { get; private set; }
+        public void AcceptBoardConsent() { AcceptedBoardConsent++; HasBoardConsent = true; }
         public int OpenCalls { get; private set; }
         public AssistantSessionSpec? Spec { get; private set; }
         public CancellationToken OpenCancellation { get; private set; }

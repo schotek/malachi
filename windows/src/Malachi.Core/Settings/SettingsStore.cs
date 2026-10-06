@@ -357,6 +357,36 @@ public sealed class SettingsStore : IDisposable
         set => SetInt32(SettingsKey.AssistantChatGptConsentVersion, value);
     }
 
+    // Board
+
+    /// <summary>Whether the user allowed the assistant to triage the board with Claude Code (asked once, with the panel's consent).</summary>
+    public bool BoardTriageConsent
+    {
+        get => GetBoolean(SettingsKey.BoardTriageConsent);
+        set => SetBoolean(SettingsKey.BoardTriageConsent, value);
+    }
+
+    /// <summary>The model the board's triage passes to Claude Code, independent of the panel's.</summary>
+    public AssistantModel BoardTriageModel
+    {
+        get => GetEnum<AssistantModel>(SettingsKey.BoardTriageModel);
+        set => SetEnum(SettingsKey.BoardTriageModel, value);
+    }
+
+    /// <summary>ChatGPT's model ID of the board's triage; empty lets the provider choose its default.</summary>
+    public string BoardChatGptModel
+    {
+        get => GetString(SettingsKey.BoardChatGptModel);
+        set => SetString(SettingsKey.BoardChatGptModel, value);
+    }
+
+    /// <summary>The accepted version of the board's OpenAI disclosure, separately from the panel's.</summary>
+    public int BoardChatGptConsentVersion
+    {
+        get => GetInt32(SettingsKey.BoardChatGptConsentVersion);
+        set => SetInt32(SettingsKey.BoardChatGptConsentVersion, value);
+    }
+
     // Sidebar state
 
     /// <summary>

@@ -3,7 +3,8 @@
 
 // Port of macos/Sources/MalachiCore/Controllers/AssistantRequest.swift
 // (AssistantRequest: start, cancel, run, launch, finish, retire,
-// defaultTimeout, timedOut); GTK: ui/internal/assistantpanel/oneshot.go
+// defaultTimeout, timedOut, Tools, the per-call timeout and model, onTool,
+// onUsage, toolsMissing); GTK: ui/internal/assistantpanel/oneshot.go
 // (Request, NewRequest, Start, Cancel, askConsent, locate, launch, finish,
 // retire).
 //
@@ -39,16 +40,19 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Malachi.Core.Controllers;
 
 /// <summary>
-/// One question to the user's Claude Code that reads no mail: the one-shot
-/// requests of the In App target, the compose window's rewrite
+/// One question to the user's Claude Code: the one-shot requests of the In
+/// App target, the compose window's rewrite
 /// (<see cref="ComposeRewriteController"/>) and the search in the user's own
-/// words (<see cref="SearchConversion"/>).
+/// words (<see cref="SearchConversion"/>), which read no mail, and the
+/// board's triage run and suggested reply, which read it through the bridge.
 /// </summary>
 /// <remarks>
 /// <para>
 /// It runs the panel's protocol once (<see cref="ClaudeCodeProcess"/>): the
 /// command line of <see cref="Assistant.Args"/> without the bridge (no MCP
-/// server, no tool), with <c>--json-schema</c> when the answer has a shape,
+/// server, no tool), or with the bridge, its extra arguments and the tools of
+/// <see cref="Tools"/> when the caller passes them, and with
+/// <c>--json-schema</c> when the answer has a shape,
 /// in the panel's private directory and with
 /// <see cref="Assistant.ChildEnvironment"/>; one
 /// <see cref="Assistant.UserMessage"/> on stdin, which is then closed; the
@@ -72,7 +76,13 @@ namespace Malachi.Core.Controllers;
 /// <c>structured_output</c>, anything else <see cref="Failure.Stopped"/>
 /// with the result's text or subtype. The process ending before its result
 /// is <see cref="Failure.Stopped"/> with its stderr's first line, and no
-/// result within <see cref="Timeout"/> ends it the same way.</item>
+/// result within <see cref="Timeout"/> (or the call's own) ends it the same
+/// way. With <see cref="Tools"/>, the init event must report the bridge
+/// connected (else <see cref="Failure.ToolsMissing"/>), and every tool call
+/// and tool result goes to <c>onTool</c>. Every event that carries usage (an
+/// API message's, the result's) goes to <c>onUsage</c> first, before the
+/// event is handled (<see cref="AssistantUsageTally"/> adds them up); none
+/// arrives once the request ended or was cancelled.</item>
 /// </list>
 /// <para>
 /// One request at a time: <see cref="Start"/> cancels the one under way,
@@ -181,15 +191,29 @@ public sealed partial class AssistantRequest : IDisposable
 
     /// <summary>
     /// Asks Claude Code once: <paramref name="message"/> as the one turn
-    /// under <paramref name="systemPrompt"/>, with the model of the
-    /// <c>assistant-model</c> setting and, when <paramref name="jsonSchema"/>
-    /// is set, that shape of answer. A request under way is cancelled first.
-    /// <paramref name="onText"/> gets the answer's text as it streams (all of
-    /// it so far); <paramref name="completion"/> is called once with the
-    /// outcome, unless the request is cancelled. Both on the UI thread.
+    /// under <paramref name="systemPrompt"/>, with <paramref name="model"/>
+    /// (null: the <c>assistant-model</c> setting, read now) and, when
+    /// <paramref name="jsonSchema"/> is set, that shape of answer. A request
+    /// under way is cancelled first. <paramref name="tools"/> gives Claude
+    /// Code the bridge (null: no tool at all); <paramref name="timeout"/>
+    /// replaces the request's own for this call. <paramref name="onText"/>
+    /// gets the answer's text as it streams (all of it so far),
+    /// <paramref name="onTool"/> every tool call and tool result,
+    /// <paramref name="onUsage"/> every event that carries usage;
+    /// <paramref name="completion"/> is called once with the outcome, unless
+    /// the request is cancelled. All on the UI thread.
     /// </summary>
     public void Start(
-        string systemPrompt, string message, Action<Outcome> completion, string jsonSchema = "", Action<string>? onText = null)
+        string systemPrompt,
+        string message,
+        Action<Outcome> completion,
+        string jsonSchema = "",
+        Action<string>? onText = null,
+        Tools? tools = null,
+        TimeSpan? timeout = null,
+        AssistantModel? model = null,
+        Action<AssistantEvent>? onTool = null,
+        Action<AssistantEvent>? onUsage = null)
     {
         ArgumentNullException.ThrowIfNull(systemPrompt);
         ArgumentNullException.ThrowIfNull(message);
@@ -203,7 +227,9 @@ public sealed partial class AssistantRequest : IDisposable
         }
         var my = ++gen;
         Running = true;
-        scope.Run(_ => RunAsync(my, systemPrompt, message, jsonSchema, onText, completion));
+        var call = new Call(
+            systemPrompt, message, jsonSchema, tools, timeout ?? Timeout, model ?? Settings.AssistantModel, onText, onTool, onUsage, completion);
+        scope.Run(_ => RunAsync(my, call));
     }
 
     /// <summary>Ends the request under way: its process is terminated and its completion never called.</summary>
@@ -235,17 +261,26 @@ public sealed partial class AssistantRequest : IDisposable
     /// <summary>Closes the request.</summary>
     public void Dispose() => Close();
 
-    private async Task RunAsync(
-        int my, string systemPrompt, string message, string jsonSchema, Action<string>? onText, Action<Outcome> completion)
+    private async Task RunAsync(int my, Call call)
     {
+        var completion = call.Completion;
         if (my != gen)
         {
             return;
         }
         var selectedProvider = Provider;
         // 1. Consent, once ever; an answer counts even when the request was
-        // cancelled while the question was up.
-        if (!(selectedProvider?.HasConsent ?? Settings.AssistantConsent))
+        // cancelled while the question was up. A board request of a provider
+        // needs its board consent, which the board asks for itself.
+        if (selectedProvider is not null && UsesBoardConsent)
+        {
+            if (!selectedProvider.HasBoardConsent)
+            {
+                Finish(my, new Outcome.Declined(), completion);
+                return;
+            }
+        }
+        else if (!(selectedProvider?.HasConsent ?? Settings.AssistantConsent))
         {
             var allowed = await AskConsentAsync();
             if (allowed)
@@ -265,7 +300,7 @@ public sealed partial class AssistantRequest : IDisposable
         }
         if (selectedProvider is not null)
         {
-            await RunProviderAsync(selectedProvider, my, systemPrompt, message, jsonSchema, onText, completion);
+            await RunProviderAsync(selectedProvider, my, call);
             return;
         }
         // 2. Claude Code, signed in.
@@ -289,7 +324,7 @@ public sealed partial class AssistantRequest : IDisposable
         ClaudeCodeProcess p;
         try
         {
-            p = Launch(my, path, systemPrompt, jsonSchema, onText, completion);
+            p = Launch(my, path, call);
         }
         catch (ClaudeCodeStartException e)
         {
@@ -303,13 +338,13 @@ public sealed partial class AssistantRequest : IDisposable
             Finish(my, new Outcome.Failed(new Failure.Stopped("the assistant's directory: " + e.Message)), completion);
             return;
         }
-        if (!p.Send(Assistant.UserMessage(message)))
+        if (!p.Send(Assistant.UserMessage(call.Message)))
         {
             Finish(my, new Outcome.Failed(new Failure.Stopped("claude is not running")), completion);
             return;
         }
         p.CloseInput();
-        StartTimer(my, completion);
+        StartTimer(my, call.Timeout, completion);
     }
 
     // The hook's answer; no hook, or one that fails, declines.
@@ -333,8 +368,7 @@ public sealed partial class AssistantRequest : IDisposable
     }
 
     // Step 3: the private directory and the process.
-    private ClaudeCodeProcess Launch(
-        int my, string path, string systemPrompt, string jsonSchema, Action<string>? onText, Action<Outcome> completion)
+    private ClaudeCodeProcess Launch(int my, string path, Call call)
     {
         if (directories is null)
         {
@@ -346,18 +380,21 @@ public sealed partial class AssistantRequest : IDisposable
         }
         var options = new AssistantOptions
         {
-            Bridge = "",
-            Model = Settings.AssistantModel,
-            SystemPrompt = systemPrompt,
-            JsonSchema = jsonSchema,
+            Bridge = call.Tools?.Bridge ?? "",
+            Socket = call.Tools?.Socket ?? "",
+            Model = call.Model,
+            SystemPrompt = call.SystemPrompt,
+            JsonSchema = call.JsonSchema,
+            BridgeArgs = call.Tools?.BridgeArgs ?? [],
+            Tools = call.Tools?.Allowed,
         };
         var p = new ClaudeCodeProcess(
             path, Assistant.Args(options), Assistant.ChildEnvironment(environment, path), directory, killGrace, Time, processLogger);
         blocks = "";
         streamed = "";
-        EventHandler<IReadOnlyList<AssistantEvent>> events = (_, batch) => Handle(p, my, batch, onText, completion);
+        EventHandler<IReadOnlyList<AssistantEvent>> events = (_, batch) => Handle(p, my, batch, call);
         p.EventsReceived += events;
-        p.Exited += (_, exit) => Ended(p, my, exit, completion);
+        p.Exited += (_, exit) => Ended(p, my, exit, call.Completion);
         p.Start();
         // Counted until its end was reported (after the handler above).
         var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -368,29 +405,58 @@ public sealed partial class AssistantRequest : IDisposable
         return p;
     }
 
-    private void Handle(ClaudeCodeProcess p, int my, IReadOnlyList<AssistantEvent> events, Action<string>? onText, Action<Outcome> completion)
+    private void Handle(ClaudeCodeProcess p, int my, IReadOnlyList<AssistantEvent> events, Call call)
     {
         if (p != process || my != gen)
         {
             return;
         }
-        HandleEvents(my, events, onText, completion);
+        HandleEvents(my, events, call);
     }
 
-    private void HandleEvents(int my, IReadOnlyList<AssistantEvent> events, Action<string>? onText, Action<Outcome> completion)
+    private void HandleEvents(int my, IReadOnlyList<AssistantEvent> events, Call call)
     {
+        var completion = call.Completion;
         foreach (var e in events)
         {
+            if (e.Usage is not null && call.OnUsage is { } onUsage)
+            {
+                scope.Guard(() => onUsage(e));
+                // The handler may have cancelled the request.
+                if (my != gen || !Running)
+                {
+                    return;
+                }
+            }
             switch (e.Kind)
             {
+                case AssistantEventKind.SystemInit:
+                    if (call.Tools is not null && !e.BridgeConnected)
+                    {
+                        LogToolsMissing(logger);
+                        Finish(my, new Outcome.Failed(new Failure.ToolsMissing()), completion);
+                        return;
+                    }
+                    break;
+                case AssistantEventKind.ToolUse or AssistantEventKind.ToolResult:
+                    if (call.OnTool is { } onTool)
+                    {
+                        scope.Guard(() => onTool(e));
+                        // The handler may have cancelled the request.
+                        if (my != gen || !Running)
+                        {
+                            return;
+                        }
+                    }
+                    break;
                 case AssistantEventKind.TextDelta:
                     streamed += e.Text;
-                    Text(onText, blocks + streamed);
+                    Text(call.OnText, blocks + streamed);
                     break;
                 case AssistantEventKind.Text:
                     blocks += e.Text;
                     streamed = "";
-                    Text(onText, blocks);
+                    Text(call.OnText, blocks);
                     break;
                 case AssistantEventKind.Failure:
                     // Claude Code's own words for a turn the API refused,
@@ -436,11 +502,11 @@ public sealed partial class AssistantRequest : IDisposable
 
     // No result within Timeout ends request my. The wait is made now, on the
     // clock, so that a fake clock's next step is sure to see it.
-    private void StartTimer(int my, Action<Outcome> completion)
+    private void StartTimer(int my, TimeSpan timeout, Action<Outcome> completion)
     {
         var stop = CancellationTokenSource.CreateLinkedTokenSource(scope.Lifetime);
         timer = stop;
-        var delay = Task.Delay(Timeout, Time, stop.Token);
+        var delay = Task.Delay(timeout, Time, stop.Token);
         scope.RunDetached(async _ =>
         {
             try
@@ -507,6 +573,9 @@ public sealed partial class AssistantRequest : IDisposable
 
     [LoggerMessage(Level = LogLevel.Information, Message = "assistant request: claude ended with status {Status}")]
     private static partial void LogEnded(ILogger logger, int status);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "assistant request: the malachi MCP server is not connected")]
+    private static partial void LogToolsMissing(ILogger logger);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "assistant request: no answer in time")]
     private static partial void LogTimedOut(ILogger logger);

@@ -283,6 +283,4 @@ The accepted OpenAI board consent version	GSettings schema metadata; not display
 Zero means no permission to send board mail to OpenAI.	GSettings schema metadata; not displayed by the Windows client
 Codex was not found. Choose a native Codex executable.	Native Unix Codex executable message; Windows uses codex.exe
 Codex is unavailable in this Flatpak build.	Flatpak-only sandbox availability
-Let OpenAI Refine the Board?	Windows Board UI has not been ported
-Malachi Mail will send board mail to OpenAI through Codex, using your ChatGPT plan. It can read mail and annotate cases. Automatic triage sends newly received mail while enabled. It cannot send, delete or move messages.	Windows Board UI has not been ported
 Show %d More	Windows Board UI has not been ported; GTK Today action

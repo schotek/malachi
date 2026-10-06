@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Assistant/AssistantEvents.swift
-// (parseEvents, parseInit, parseAssistant, parseUser, resultText,
-// parseResult, parseDraftResult, validID); GTK:
+// (parseEvents, parseInit, parseAssistant, parseUsage, parseUser,
+// resultText, parseResult, parseDraftResult, validID); GTK:
 // ui/internal/assistant/events.go (ParseEvents, ParseDraftResult). The In
 // App target: what Claude Code writes on stdout with `--output-format
 // stream-json` (one JSON object per line) as the few events the panel
@@ -23,7 +23,13 @@
 // tool_result {tool_use_id, is_error, content: a string or [{type: text,
 // text}]}) and result (subtype success or error_*, is_error, result,
 // structured_output, permission_denials [{tool_name}], total_cost_usd,
-// usage).
+// usage). An assistant message also carries message.id and message.usage
+// (input_tokens, output_tokens, cache_creation_input_tokens,
+// cache_read_input_tokens) for that API message, and parent_tool_use_id,
+// null outside a subagent; Claude Code splits one API message into several
+// assistant lines that share its id and usage, and their output_tokens is
+// only the count the API reported when the response began. The result's
+// usage covers the whole run's main loop.
 //
 // The JSON is read the way Go's encoding/json reads it into
 // map[string]json.RawMessage (GoJson), not with System.Text.Json. Go's
@@ -41,7 +47,9 @@ public static partial class Assistant
     /// assistant.ParseEvents: one stdout line (without its newline): one
     /// event per text or tool_use block of an <c>assistant</c> message and
     /// per tool_result block of a <c>user</c> message, in order (thinking and
-    /// other blocks yield nothing, so such a message may yield none), one
+    /// other blocks yield nothing, so such a message may yield none, unless
+    /// it carries usage: then one <see cref="AssistantEventKind.Other"/>
+    /// with it), one
     /// <see cref="AssistantEventKind.Failure"/> alone for an <c>assistant</c>
     /// message with an error, one
     /// <see cref="AssistantEventKind.SystemInit"/> for system/init, one
@@ -171,7 +179,37 @@ public static partial class Assistant
                     continue; // thinking, redacted thinking, anything newer
             }
         }
+        // A subagent's message (parent_tool_use_id set) is left out, as the
+        // result's usage leaves it out.
+        if (o.Obj("message") is { } msg && msg.Str("id") is { Length: > 0 } id
+            && GoJson.IsNull(o.B, o.Member("parent_tool_use_id"))
+            && ParseUsage(msg.B, msg.Member("usage")) is { } u)
+        {
+            if (output.Count == 0)
+            {
+                output.Add(new AssistantEvent(AssistantEventKind.Other));
+            }
+            output[0] = output[0] with { Usage = u, MessageId = id };
+        }
         return output;
+    }
+
+    /// <summary>
+    /// A usage object; null when it is not an object or one of its four
+    /// counters is neither missing, null nor a whole number from 0 to
+    /// Int64.MaxValue (no sign, fraction or exponent).
+    /// </summary>
+    private static AssistantUsage? ParseUsage(byte[] b, (int Lo, int Hi)? r)
+    {
+        if (GoJson.Object.Of(b, r) is not { } o
+            || GoJson.Count(b, o.Member("input_tokens")) is not { } input
+            || GoJson.Count(b, o.Member("output_tokens")) is not { } output
+            || GoJson.Count(b, o.Member("cache_creation_input_tokens")) is not { } created
+            || GoJson.Count(b, o.Member("cache_read_input_tokens")) is not { } read)
+        {
+            return null;
+        }
+        return new AssistantUsage(input, output, created, read);
     }
 
     private static List<AssistantEvent> ParseUser(GoJson.Object o)
@@ -253,6 +291,7 @@ public static partial class Assistant
             Success = success,
             Denied = [.. denied],
             Structured = structured,
+            Usage = ParseUsage(o.B, o.Member("usage")),
         };
     }
 

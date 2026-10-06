@@ -39,4 +39,20 @@ public sealed record CodexAssistantOptions
 
     /// <summary>Persists version 1 consent separately from Claude's.</summary>
     public required Action AcceptConsent { get; init; }
+
+    /// <summary>
+    /// Whether version 1 of the board's consent for sending board mail to
+    /// OpenAI was accepted (<c>board-triage-chatgpt-consent-version</c>);
+    /// never without it.
+    /// </summary>
+    public Func<bool>? HasBoardConsent { get; init; }
+
+    /// <summary>Persists version 1 of the board's consent; nothing without it.</summary>
+    public Action? AcceptBoardConsent { get; init; }
+
+    /// <summary>
+    /// Whether the ChatGPT account is connected; without it, whether the
+    /// token source is a connection service whose connection is.
+    /// </summary>
+    public Func<bool>? Connected { get; init; }
 }

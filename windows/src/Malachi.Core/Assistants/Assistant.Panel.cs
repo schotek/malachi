@@ -205,8 +205,8 @@ public static partial class Assistant
         if (o.Bridge.Length > 0)
         {
             args.AddRange([
-                "--mcp-config", McpConfig(o.Bridge, o.Socket),
-                "--allowedTools", string.Join(",", AllowedTools),
+                "--mcp-config", McpConfig(o.Bridge, o.Socket, o.BridgeArgs),
+                "--allowedTools", string.Join(",", o.Tools ?? AllowedTools),
             ]);
         }
         args.AddRange([
@@ -225,20 +225,30 @@ public static partial class Assistant
     /// <summary>
     /// The JSON of <c>--mcp-config</c>, as encoding/json writes it
     /// (assistant.mcpConfig): the bridge as the stdio server "malachi", with
-    /// <c>--socket</c> when <paramref name="socket"/> is set (the args an
-    /// empty array otherwise, never null).
+    /// <c>--socket</c> when <paramref name="socket"/> is set and then
+    /// <paramref name="extra"/> (the args an empty array otherwise, never
+    /// null).
     /// </summary>
-    internal static string McpConfig(string bridge, string socket)
+    internal static string McpConfig(string bridge, string socket, IReadOnlyList<string>? extra = null)
     {
         var output = new List<byte>(bridge.Length + socket.Length + 80);
         output.AddRange(Utf8("{\"mcpServers\":{\"" + BridgeServer + "\":{\"type\":\"stdio\",\"command\":"));
         AppendJsonString(bridge, output);
         output.AddRange(Utf8(",\"args\":["));
+        var args = new List<string>();
         if (socket.Length > 0)
         {
-            AppendJsonString("--socket", output);
-            output.Add((byte)',');
-            AppendJsonString(socket, output);
+            args.Add("--socket");
+            args.Add(socket);
+        }
+        args.AddRange(extra ?? []);
+        for (var i = 0; i < args.Count; i++)
+        {
+            if (i > 0)
+            {
+                output.Add((byte)',');
+            }
+            AppendJsonString(args[i], output);
         }
         output.AddRange(Utf8("]}}}"));
         return FromUtf8(output.ToArray());

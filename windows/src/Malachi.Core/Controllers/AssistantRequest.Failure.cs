@@ -31,6 +31,7 @@ public sealed partial class AssistantRequest
             NotFound => Assistant.PanelTexts().NotFound,
             NotSignedIn => Assistant.SignInTexts().Hint,
             Stopped s => Assistant.StoppedText(s.Detail),
+            ToolsMissing => Assistant.PanelTexts().ToolsMissing,
             _ => Assistant.StoppedText(""),
         };
 
@@ -40,6 +41,7 @@ public sealed partial class AssistantRequest
             NotFound => Assistant.PanelTexts().NotFound,
             NotSignedIn => Assistant.SignInTexts().Hint,
             Stopped s => s.Detail,
+            ToolsMissing => Assistant.PanelTexts().ToolsMissing,
             _ => "",
         };
 
@@ -55,5 +57,8 @@ public sealed partial class AssistantRequest
         /// </summary>
         /// <param name="Detail">The technical reason.</param>
         public sealed record Stopped(string Detail) : Failure;
+
+        /// <summary>A request with <see cref="Tools"/>: Claude Code did not report the bridge connected.</summary>
+        public sealed record ToolsMissing : Failure;
     }
 }

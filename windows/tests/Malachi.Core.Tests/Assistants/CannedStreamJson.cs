@@ -3,7 +3,8 @@
 
 // Port of the canned stream-json of macos/Tests/MalachiCoreTests/
 // AssistantPanelControllerTests.swift (fakeInit, fakeInitFailed, fakeDelta,
-// fakeText, fakeToolUse, fakeToolResult, fakeResult, answerTurn) and of
+// fakeText, fakeToolUse, fakeToolResult, fakeResult, answerTurn; Windows
+// adds lines with usage) and of
 // AssistantRequestTests.swift (structuredResult, errorResult); GTK:
 // ui/internal/assistantpanel harness_test.go and oneshot_test.go. A turn of
 // Swift's FakeTurn is the stand-in's steps here: its lines first, then
@@ -65,6 +66,22 @@ internal static class CannedStreamJson
     public static string StructuredResult(string structured, string text = "") =>
         "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"" + text + "\",\"structured_output\":" + structured
         + ",\"total_cost_usd\":0.001}";
+
+    /// <summary>
+    /// An assistant message of the main loop with only a thinking block and
+    /// its API message's usage: it yields one Other carrying the usage
+    /// (Windows: Swift's request tests have no usage line).
+    /// </summary>
+    public static string MessageUsage(string messageId, long input, long output) =>
+        "{\"type\":\"assistant\",\"message\":{\"id\":\"" + messageId + "\",\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"t\"}],"
+        + "\"usage\":{\"input_tokens\":" + input.ToString(System.Globalization.CultureInfo.InvariantCulture) + ",\"output_tokens\":"
+        + output.ToString(System.Globalization.CultureInfo.InvariantCulture) + "}},\"parent_tool_use_id\":null}";
+
+    /// <summary>A successful result with the run's usage.</summary>
+    public static string UsageResult(string text, long input, long output) =>
+        "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"" + text + "\",\"total_cost_usd\":0.01,\"usage\":{\"input_tokens\":"
+        + input.ToString(System.Globalization.CultureInfo.InvariantCulture) + ",\"output_tokens\":"
+        + output.ToString(System.Globalization.CultureInfo.InvariantCulture) + "}}";
 
     /// <summary>A turn of <paramref name="lines"/> alone (Swift's FakeTurn without shell).</summary>
     public static IReadOnlyList<FakeClaudeStep> Turn(params string[] lines) => [FakeClaudeStep.Lines(lines)];
