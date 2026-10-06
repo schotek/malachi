@@ -156,12 +156,17 @@ public sealed class BoardSmokeTests(BoardSmokeFixture fixture) : IClassFixture<B
             Assert.NotNull(Uia.Find(preferences, "BoardDefaultStyle"));
 
             // The triage's group only once the app is registered with Claude
-            // (the In App target), which a fresh session is not.
+            // (the In App target). The switch reads the machine's Claude
+            // configuration (malachi-mcp status), so a developer's own
+            // registration shows it On; only the Off case asserts the group's
+            // absence.
             Uia.Select(Uia.Find(preferences, "AiPage"));
             var register = Uia.Find(preferences, "RegisterWithClaude");
-            Assert.Equal(ToggleState.Off, ToggleOf(register));
-            Assert.Null(Uia.TryFind(preferences, "BoardTriageConsent"));
-            Assert.Null(Uia.TryFind(preferences, "BoardTriageAuto"));
+            if (ToggleOf(register) == ToggleState.Off)
+            {
+                Assert.Null(Uia.TryFind(preferences, "BoardTriageConsent"));
+                Assert.Null(Uia.TryFind(preferences, "BoardTriageAuto"));
+            }
         }
         finally
         {
