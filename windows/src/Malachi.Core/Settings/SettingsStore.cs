@@ -29,6 +29,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using Malachi.Core.Assistants;
+using Malachi.Core.Board;
 
 namespace Malachi.Core.Settings;
 
@@ -84,7 +85,7 @@ public sealed class SettingsStore : IDisposable
         new(SettingsKey.AssistantChatGptConsentVersion, "assistant-chatgpt-consent-version", "i", 0, minimum: 0, maximum: int.MaxValue),
         // Schema metadata already present in GTK/macOS; the Windows Board
         // widgets remain separate tracked work (docs/chatgpt-integration.md).
-        new(SettingsKey.BoardDefaultStyle, "board-default-style", "s", "list", choices: ["list", "columns", "today"]),
+        new(SettingsKey.BoardDefaultStyle, "board-default-style", "s", "list", choices: Nicks<BoardStyle>.All),
         new(SettingsKey.BoardTriageConsent, "board-triage-consent", "b", false),
         new(SettingsKey.BoardTriageModel, "board-triage-model", "s", "sonnet", choices: Nicks<AssistantModel>.All),
         new(SettingsKey.BoardChatGptModel, "board-triage-chatgpt-model", "s", ""),
@@ -385,6 +386,16 @@ public sealed class SettingsStore : IDisposable
     {
         get => GetInt32(SettingsKey.BoardChatGptConsentVersion);
         set => SetInt32(SettingsKey.BoardChatGptConsentVersion, value);
+    }
+
+    /// <summary>
+    /// The style the board opens in the first time it shows after launch
+    /// (<see cref="Malachi.Core.Board.Board.StyleOnShow"/>); an unknown nick reads as the List.
+    /// </summary>
+    public BoardStyle BoardDefaultStyle
+    {
+        get => GetEnum<BoardStyle>(SettingsKey.BoardDefaultStyle);
+        set => SetEnum(SettingsKey.BoardDefaultStyle, value);
     }
 
     // Sidebar state

@@ -110,7 +110,7 @@ public enum SettingsKey
     /// <summary><c>assistant-chatgpt-consent-version</c>.</summary>
     AssistantChatGptConsentVersion,
 
-    /// <summary><c>board-default-style</c>; reserved for the Board UI port.</summary>
+    /// <summary><c>board-default-style</c>: <see cref="SettingsStore.BoardDefaultStyle"/>.</summary>
     BoardDefaultStyle,
 
     /// <summary><c>board-triage-consent</c>; reserved for the Board UI port.</summary>
