@@ -12,7 +12,7 @@ using Malachi.Core.Api;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-namespace Malachi.App.Board;
+namespace Malachi.App.Boards;
 
 /// <summary>The board detail that shows a <see cref="BoardConversationBlock"/>.</summary>
 public interface IBoardConversationHost

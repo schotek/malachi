@@ -132,6 +132,8 @@ public sealed partial class MainWindow : Window
         ArgumentNullException.ThrowIfNull(integration);
         AttachPanes(integration);
         AttachBoard(integration);
+        // The board's triage (MainWindow.Triage.cs).
+        AttachTriage();
     }
 
     /// <summary>window.go refreshListTitle: the selected folder in the caption (the list's header shows it with its counts).</summary>

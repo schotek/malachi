@@ -35,6 +35,8 @@ public sealed partial class StatusBarView : UserControl
     private MailboxController? mailbox;
     private bool open;
     private Action? afterClose;
+    private StatusLine? shown;
+    private string note = "";
 
     /// <summary>An empty line; <see cref="Attach"/> connects it.</summary>
     public StatusBarView()
@@ -78,11 +80,31 @@ public sealed partial class StatusBarView : UserControl
         CloseThen(() => OutboxRequested?.Invoke(this, acc));
     }
 
+    /// <summary>
+    /// A note after the line (the board's triage while a run works:
+    /// StatusBarViewController.setNote), "" for none; the line keeps its
+    /// place and the note gives way first when the width runs out.
+    /// </summary>
+    public void SetNote(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        if (text == note)
+        {
+            return;
+        }
+        note = text;
+        if (shown is { } line)
+        {
+            Show(line);
+        }
+    }
+
     // sync.go refreshSyncLabel.
     private void Show(StatusLine line)
     {
-        SyncLabel.Text = line.Text;
-        AutomationProperties.SetName(StatusButton, line.Text.Length > 0 ? line.Text : L10n.T("Sync Status"));
+        shown = line;
+        SyncLabel.Text = line.Text.Length == 0 ? note : Core.Boards.Board.JoinedNote(line.Text, note);
+        AutomationProperties.SetName(StatusButton, SyncLabel.Text.Length > 0 ? SyncLabel.Text : L10n.T("Sync Status"));
         SyncSpinner.IsActive = line.Spinning;
         SyncSpinner.Visibility = line.Spinning ? Visibility.Visible : Visibility.Collapsed;
         if (line.Icon.Length > 0)

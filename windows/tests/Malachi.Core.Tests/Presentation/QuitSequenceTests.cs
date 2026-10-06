@@ -153,6 +153,31 @@ public sealed class QuitSequenceTests
     }
 
     [Fact]
+    public async Task TheTriageEndsAfterTheWindowsHideAndBeforeTheDaemonStops()
+    {
+        // AppDelegate.swift: stopBoardTriage runs while the connection still
+        // carries board.runEnd; a step that throws does not keep the app.
+        var log = new List<string>();
+        var quit = new QuitSequence(new QuitSteps
+        {
+            BeginStopping = () => log.Add("begin"),
+            StopTriage = () =>
+            {
+                log.Add("triage");
+                return Task.FromException(new InvalidOperationException("triage"));
+            },
+            StopDaemon = () =>
+            {
+                log.Add("stop");
+                return Task.CompletedTask;
+            },
+            Exit = () => log.Add("exit"),
+        });
+        Assert.True(await quit.QuitAsync(QuitReason.SessionEnd));
+        Assert.Equal(["begin", "triage", "stop", "exit"], log);
+    }
+
+    [Fact]
     public async Task NoStepsStillQuit() => Assert.True(await new QuitSequence(new QuitSteps()).QuitAsync());
 
     private sealed class Harness

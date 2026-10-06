@@ -85,6 +85,9 @@ public sealed partial class AppState
             Model = () => Settings.AssistantChatGptModel,
             HasConsent = () => Settings.AssistantChatGptConsentVersion == 1,
             AcceptConsent = () => Settings.AssistantChatGptConsentVersion = 1,
+            // The board's own consent for the ChatGPT provider (the triage's run).
+            HasBoardConsent = () => Settings.BoardChatGptConsentVersion == 1,
+            AcceptBoardConsent = () => Settings.BoardChatGptConsentVersion = 1,
         }, ChatGpt, directories: new PrivateDirectory());
     }
 

@@ -194,6 +194,9 @@ public partial class App : Application
                     // leaves nothing behind (ui/main.go's shutdown order).
                     s.PurgeOpenDir();
                 },
+                // The board's triage: no new run, one under way ends with its
+                // board.runEnd while the connection stands (at most 2 s).
+                StopTriage = s.StopBoardTriageAsync,
                 StopDaemon = s.Connection.StopAsync,
                 Release = () =>
                 {

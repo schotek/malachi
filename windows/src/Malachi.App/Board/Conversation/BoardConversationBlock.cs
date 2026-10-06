@@ -53,7 +53,7 @@ using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 using CoreBoard = Malachi.Core.Boards.Board;
 
-namespace Malachi.App.Board;
+namespace Malachi.App.Boards;
 
 /// <summary>The conversation of the board's detail (BoardConversationBlock).</summary>
 public sealed partial class BoardConversationBlock : UserControl

@@ -39,7 +39,7 @@ using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 using CoreBoard = Malachi.Core.Boards.Board;
 
-namespace Malachi.App.Board;
+namespace Malachi.App.Boards;
 
 /// <summary>One card of the board detail's conversation (BoardMessageCardView).</summary>
 public sealed partial class BoardMessageCardView : UserControl

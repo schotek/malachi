@@ -76,6 +76,8 @@ public sealed partial class Integration : IDisposable
         WireHooks();
         WireReader();
         WireBoard();
+        // The board's triage (Integration.Triage.cs).
+        WireTriage();
     }
 
     /// <summary>The status line, the sign-in and certificate banners.</summary>
@@ -127,6 +129,8 @@ public sealed partial class Integration : IDisposable
     /// <summary>Stops the controllers' work; the daemon has been stopped by then.</summary>
     public void Dispose()
     {
+        // The board's triage (Integration.Triage.cs).
+        UnwireTriage();
         foreach (var t in tokens)
         {
             t.Dispose();

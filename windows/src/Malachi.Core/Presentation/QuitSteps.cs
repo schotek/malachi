@@ -35,6 +35,14 @@ public sealed record QuitSteps
     public Action? BeginStopping { get; init; }
 
     /// <summary>
+    /// Ends the board's triage while the connection still stands: the
+    /// schedule stops and a run under way ends, waiting for its
+    /// <c>board.runEnd</c> at most <see cref="BoardTriageController.EndWait"/>
+    /// (<see cref="BoardTriageController.CancelAndEndAsync"/>).
+    /// </summary>
+    public Func<Task>? StopTriage { get; init; }
+
+    /// <summary>
     /// Closes the connection and stops the daemon this app started
     /// (<see cref="ConnectionController.StopAsync"/>).
     /// </summary>

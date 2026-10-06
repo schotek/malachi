@@ -6,8 +6,8 @@
 // daemon is there); GTK: ui/internal/boardtriage (the preferences the
 // triage reads). The board's own preferences in the daemon (board.preferences:
 // the assistant, the automatic triage, the windows), asked for again after
-// every reconnection. The triage's port (stage 5) adds the triage, its
-// scheduler and the suggested reply here; the board controller belongs to
+// every reconnection. The triage and its scheduler are AppState.Triage.cs;
+// the board controller belongs to
 // the main window (Integration.Board.cs).
 
 using Malachi.Core.Boards;
@@ -42,10 +42,16 @@ public sealed partial class AppState
         {
             BoardPreferences.Load();
         }
+
+        // The triage and its schedule (AppState.Triage.cs).
+        InitializeTriage();
     }
 
     private void CloseBoard()
     {
+        // The triage and its schedule (AppState.Triage.cs).
+        CloseTriage();
+
         boardConnection?.Dispose();
         boardConnection = null;
         BoardPreferences.Dispose();

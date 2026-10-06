@@ -83,6 +83,9 @@ public sealed partial class AiPage
             if (closed) return;
             UpdateAssistantGroup();
             RefreshChatGpt();
+            // The board's model row follows the provider (AiPage.Board.cs).
+            RefreshBoardChatGptModels();
+            UpdateBoardGroup();
         })) chatGptUpdateQueued = false;
     }
 

@@ -78,10 +78,10 @@ public sealed partial class BoardPage : UserControl
     /// <summary>The one detail view (the List's pane or the panel shows it): its slots are the conversation's and the reply's.</summary>
     public BoardDetailView Detail => detail;
 
-    /// <summary>✦ Triage in the bar, disabled until the triage's port wires it (BoardTriageController).</summary>
+    /// <summary>✦ Triage in the bar, wired by the window (MainWindow.Triage.cs).</summary>
     public Button BoardTriageButton => TriageButton;
 
-    /// <summary>The triage's status under the bar, empty and hidden until the triage's port fills it.</summary>
+    /// <summary>The triage's status under the bar, filled by the window (MainWindow.Triage.cs).</summary>
     public ContentControl BoardTriageStrip => TriageStrip;
 
     /// <summary>Where the window's toasts lie while the board shows.</summary>

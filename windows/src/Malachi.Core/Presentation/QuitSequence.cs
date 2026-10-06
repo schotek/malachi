@@ -16,7 +16,9 @@
 // A second Quit while the first asks is the same Quit. A session end
 // (WM_ENDSESSION, the terminal's CTRL_CLOSE) skips the drafts and the
 // questions, also when it arrives while a question is up: the system gives
-// the app a few seconds. A step that throws is logged and the next one
+// the app a few seconds. The board's triage ends between the windows'
+// hiding and the daemon's stop, while the connection still carries its
+// board.runEnd, bounded (AppDelegate.swift's stopBoardTriage). A step that throws is logged and the next one
 // runs: the app always exits. Controllers' rule of §7.1: no
 // ConfigureAwait(false), the steps run on the UI thread.
 
@@ -144,6 +146,17 @@ public sealed partial class QuitSequence
     private async Task<bool> StopAsync()
     {
         Step(steps.BeginStopping, "begin stopping");
+        if (steps.StopTriage is { } triage)
+        {
+            try
+            {
+                await triage();
+            }
+            catch (Exception e)
+            {
+                LogStepFailed(logger, "stop the triage", e);
+            }
+        }
         if (steps.StopDaemon is { } stop)
         {
             try

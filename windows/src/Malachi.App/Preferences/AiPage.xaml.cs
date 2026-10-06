@@ -143,6 +143,8 @@ public sealed partial class AiPage : UserControl
         bindings.Choice(AssistantTargetBox, SettingsKey.AssistantTarget, Assistant.Targets, () => state.Settings.AssistantTarget, v => state.Settings.AssistantTarget = v);
         bindings.Choice(AssistantModelBox, SettingsKey.AssistantModel, Assistant.Models, () => state.Settings.AssistantModel, v => state.Settings.AssistantModel = v);
         InitializeChatGpt(bindings);
+        // The board's triage (AiPage.Board.cs).
+        InitializeBoardGroup(bindings);
         state.Assistant.Changed += OnAssistantChanged;
         state.ClaudeCode.SigningInChanged += OnSigningInChanged;
         UpdateRegisterRow();
@@ -161,6 +163,7 @@ public sealed partial class AiPage : UserControl
         state.Assistant.RefreshHandlers();
         RefreshChatGpt();
         UpdateAssistantGroup();
+        RefreshBoardGroup();
     }
 
     /// <summary>The window closed: a status run ends, an install or uninstall runs to its end unseen.</summary>
@@ -174,6 +177,7 @@ public sealed partial class AiPage : UserControl
         state.Assistant.Changed -= OnAssistantChanged;
         // A sign-in under way goes on: the user is in the browser.
         state.ClaudeCode.SigningInChanged -= OnSigningInChanged;
+        CloseBoardGroup();
         CloseChatGpt();
     }
 

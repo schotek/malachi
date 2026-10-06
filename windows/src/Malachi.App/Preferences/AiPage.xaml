@@ -14,7 +14,9 @@ Assistant (assistant_group): Show the Assistant Menu, Open In, and while In
 App is chosen Claude Code (the claude.exe the panel runs, Choose…, and in
 front of it the button of what the row offers: Sign In… or Get Claude
 Code…) and Model. Its texts come from ui/internal/assistant, set in code
-(AiPage.xaml.cs).
+(AiPage.xaml.cs). The group Board (board_triage_group, AiPage.Board.cs):
+the board's triage, its consent, model, automatic runs, status and the
+tokens of the last 24 hours; its texts come from ui/internal/board.
 -->
 <UserControl
     x:Class="Malachi.App.Preferences.AiPage"
@@ -135,6 +137,85 @@ Code…) and Model. Its texts come from ui/internal/assistant, set in code
                             <Button x:Name="ChatGptUsageButton" AutomationProperties.AutomationId="ChatGptUsage" Click="OnChatGptUsageClick" />
                         </tk:SettingsCard>
                     </StackPanel>
+                </StackPanel>
+
+                <!-- The board's triage (AiPage.Board.cs), shown while it is offered. -->
+                <StackPanel
+                    x:Name="BoardGroup"
+                    Spacing="{StaticResource SettingsCardSpacing}"
+                    Visibility="Collapsed">
+                    <TextBlock
+                        x:Name="BoardHeading"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}" />
+                    <TextBlock
+                        x:Name="BoardDescription"
+                        AutomationProperties.AutomationId="BoardTriageDescription"
+                        Style="{StaticResource SettingsGroupDescriptionStyle}"
+                        Visibility="Collapsed" />
+                    <tk:SettingsCard x:Name="BoardConsentRow">
+                        <ToggleSwitch
+                            x:Name="BoardConsentSwitch"
+                            AutomationProperties.AutomationId="BoardTriageConsent"
+                            Toggled="OnBoardConsentToggled" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="BoardModelRow">
+                        <ComboBox
+                            x:Name="BoardModelBox"
+                            MinWidth="200"
+                            AutomationProperties.AutomationId="BoardTriageModel" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="BoardChatGptModelRow" Visibility="Collapsed">
+                        <ComboBox
+                            x:Name="BoardChatGptModelBox"
+                            MinWidth="220"
+                            AutomationProperties.AutomationId="BoardTriageChatGptModel"
+                            SelectionChanged="OnBoardChatGptModelChanged" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="BoardAutoRow">
+                        <ToggleSwitch
+                            x:Name="BoardAutoSwitch"
+                            AutomationProperties.AutomationId="BoardTriageAuto"
+                            Toggled="OnBoardAutoToggled" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="BoardIntervalRow">
+                        <ComboBox
+                            x:Name="BoardIntervalBox"
+                            MinWidth="160"
+                            AutomationProperties.AutomationId="BoardTriageInterval"
+                            SelectionChanged="OnBoardIntervalChanged" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="BoardDailyRow">
+                        <ComboBox
+                            x:Name="BoardDailyBox"
+                            MinWidth="160"
+                            AutomationProperties.AutomationId="BoardTriageDaily"
+                            SelectionChanged="OnBoardDailyChanged" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="BoardStatusRow">
+                        <tk:SettingsCard.Description>
+                            <TextBlock
+                                x:Name="BoardStatusText"
+                                AutomationProperties.AutomationId="BoardTriageStatus"
+                                IsTextSelectionEnabled="True"
+                                TextWrapping="Wrap" />
+                        </tk:SettingsCard.Description>
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="BoardUsageRow" Visibility="Collapsed">
+                        <tk:SettingsCard.Description>
+                            <TextBlock
+                                x:Name="BoardUsageDetail"
+                                AutomationProperties.AutomationId="BoardTriageUsageDetail"
+                                IsTextSelectionEnabled="True"
+                                TextWrapping="Wrap" />
+                        </tk:SettingsCard.Description>
+                        <TextBlock
+                            x:Name="BoardUsageValue"
+                            AutomationProperties.AutomationId="BoardTriageUsage"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource BodyTextBlockStyle}"
+                            Typography.NumeralAlignment="Tabular" />
+                    </tk:SettingsCard>
                 </StackPanel>
             </StackPanel>
         </Grid>
