@@ -2711,7 +2711,23 @@ otherwise the copy the daemon stored first stands for it, and a later
 copy (another client's move, or a forged duplicate) changes none of what
 the rules read (sender, recipients, `Importance`, arrival, bulk class).
 
-A thread is a case when its newest member that counts is inbound. When
+A **note to self** is a message of the user's (mine) whose recipients,
+`To`, `Cc` and `Bcc` together, are at least one and every one an address
+of one of the user's accounts (each account's own address and the senders
+of its sent folder, compared without case and surrounding space); a
+mixture of the user's and anybody else's addresses is no note, and
+neither is a message without recipients. A note still counts (it is in
+`messageCount`, its flag counts for `hot.flagged`, an answer to it is
+`you.repliedToYou`), but the rules pass over it: the state is decided by
+the other members as if it were not there, and the case's `date`,
+`subject`, `snippet` and `latestMessageId` are those of the newest member
+that is not a note, so the windows count from it. A reply the user sent
+only to another of their own addresses therefore leaves the
+correspondent's mail before it on the board; a thread of nothing but
+notes is no case.
+
+A thread is a case when its newest member that counts, notes to self
+passed over, is inbound. When
 that member is mine, it is a case only when the rules say `them`
 (`them.replied`, `them.asked`); a reply of the user's to someone who did
 not write in the thread, a message shaped like a forward, or one that
@@ -2773,7 +2789,7 @@ it does not know; a code is never reused for another meaning):
 | `info.ccOnly` | info | inbound; the user only in `Cc` |
 | `info.notAddressed` | info | inbound; the user in neither `To` nor `Cc` (a list, a `Bcc`) |
 | `info.unknownSender` | info | inbound and the user in its `To`, from a sender the user has never written to (not known) |
-| `info.yourNote` | info | inbound from one of the user's addresses, every recipient one of the user's addresses |
+| `info.yourNote` | info | inbound from one of the user's addresses (of any of their accounts), every recipient one of them |
 | `jira.yourComment` | them | the issue's last item that is not an event is the user's |
 | `jira.assigned` / `jira.reporter` / `jira.commented` | you | someone else's item on an issue assigned to, reported by, or commented on before by the user |
 | `jira.watching` | info | an issue the user only watches |

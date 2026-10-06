@@ -96,6 +96,7 @@ type bmail struct {
 	refs      []string // References
 	from      api.Address
 	to, cc    []api.Address
+	bcc       []api.Address
 	replyTo   []api.Address
 	subject   string
 	at        time.Duration // after base
@@ -128,7 +129,7 @@ func (x *boardBox) put(m bmail) string {
 		subject = "Lunch"
 	}
 	row := &store.Message{AccountID: x.acc, FolderID: m.folder.ID, UID: x.uid, ThreadID: m.thread, Subject: subject,
-		Date: date, InternalDate: internal, From: []api.Address{m.from}, To: m.to, CC: m.cc, ReplyTo: m.replyTo, RFCMessageID: m.rfc,
+		Date: date, InternalDate: internal, From: []api.Address{m.from}, To: m.to, CC: m.cc, BCC: m.bcc, ReplyTo: m.replyTo, RFCMessageID: m.rfc,
 		InReplyTo: m.inReplyTo, References: m.refs, Size: 100, Flags: flags, Snippet: firstLine(m.text)}
 	if err := x.b.store.UpsertMessages(x.ctx, []*store.Message{row}); err != nil {
 		x.t.Fatal(err)
@@ -1090,7 +1091,7 @@ func TestBoardWorkerAndBackfill(t *testing.T) {
 	if err := x.b.backfillBoard(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if v, _, _ := x.b.store.GetMeta(x.ctx, metaBoardRules); v != boardRulesDone() || v != "4:done" {
+	if v, _, _ := x.b.store.GetMeta(x.ctx, metaBoardRules); v != boardRulesDone() || v != "5:done" {
 		t.Fatalf("meta = %q", v)
 	}
 	waitBoard(t, func() bool { r, c := x.list(); _, ok := c["t_old"]; return ok && r.Ready })
