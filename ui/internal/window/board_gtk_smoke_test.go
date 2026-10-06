@@ -53,6 +53,7 @@ func TestBoardGTKSmoke(t *testing.T) {
 	w.boardPage = p
 	p.wire()
 	p.wireToday()
+	p.wireKeys()
 	p.wirePanel()
 	p.wireTriage()
 	p.ctl.OnChange = p.onChange

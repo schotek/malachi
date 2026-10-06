@@ -285,6 +285,7 @@ func (w *Window) ensureBoard() {
 	w.boardPageBin.SetChild(p.root)
 	p.wire()
 	p.wireToday()
+	p.wireKeys()
 	p.wirePanel()
 	p.wireTriage()
 	if w.assist != nil {

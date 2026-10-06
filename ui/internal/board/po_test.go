@@ -95,6 +95,8 @@ func exercise(tr Translator) {
 	You(tr)
 	Conversation(2, tr)
 	Deadlines(tr)
+	// view.go: a case without a subject (the msgid is shared with the message list).
+	_ = viewContext{tr: tr}.subject(Case{})
 	DueEmpty(tr)
 	CalendarTitle(tr)
 	CalendarBody(tr)

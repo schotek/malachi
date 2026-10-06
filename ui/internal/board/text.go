@@ -7,14 +7,14 @@
 // Information), in three styles (List, Columns, Today), with the
 // assistant's notes and the board's triage by the user's Claude Code.
 //
-// Only the texts: one function per text of the macOS client's
+// This file holds the texts: one function per text of the macOS client's
 // Board.Text (macos/Sources/MalachiCore/Board/BoardText.swift and
 // BoardTriageText.swift), with the same grouping and comparable names, and
-// the board's view literals that moved there. The board was written in
-// Swift first; its model and view logic (cases, states, the view models,
-// the triage) are not ported here and come with the GTK client. Until
-// then this package is the reference of the msgids, so that the macOS
-// client (and later Windows) looks them up with key = msgid.
+// the board's view literals that moved there. The model and view logic
+// are ported in this package too (case.go, view.go, controller.go,
+// triage.go; the triage run in ui/internal/boardtriage, the suggested
+// reply in ui/internal/boardreply); this file stays the reference of the
+// msgids, which the macOS and Windows clients look up with key = msgid.
 //
 // The package is pure (no GTK, no gettext, no cgo: the caller passes a
 // Translator). Strings from a case (a model's name, a run's note) are

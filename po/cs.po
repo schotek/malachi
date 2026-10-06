@@ -3136,8 +3136,8 @@ msgstr "%.0f KiB"
 msgid "%d B"
 msgstr "%d B"
 
-#: ui/internal/widget/message_row.go:307 ui/internal/window/message_view.go:575
-#: ui/internal/window/notify.go:119
+#: ui/internal/board/view.go:785 ui/internal/widget/message_row.go:307
+#: ui/internal/window/message_view.go:575 ui/internal/window/notify.go:119
 msgid "(No subject)"
 msgstr "(Bez předmětu)"
 
