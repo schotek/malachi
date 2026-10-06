@@ -46,6 +46,7 @@ public sealed partial class NotificationHub : IDisposable
     private readonly HandlerList<AuthRequiredNotification> authRequired;
     private readonly HandlerList<AccountsChangedNotification> accountsChanged;
     private readonly HandlerList<MessagesChangedNotification> messagesChanged;
+    private readonly HandlerList<BoardChangedNotification> boardChanged;
     private readonly HandlerList<ConnectionState> connection;
     private ConnectionController? attached;
 
@@ -61,6 +62,7 @@ public sealed partial class NotificationHub : IDisposable
         authRequired = new HandlerList<AuthRequiredNotification>(Pending);
         accountsChanged = new HandlerList<AccountsChangedNotification>(Pending);
         messagesChanged = new HandlerList<MessagesChangedNotification>(Pending);
+        boardChanged = new HandlerList<BoardChangedNotification>(Pending);
         connection = new HandlerList<ConnectionState>(Pending);
     }
 
@@ -106,6 +108,9 @@ public sealed partial class NotificationHub : IDisposable
     /// <summary>Fires on every <c>notify.messagesChanged</c>.</summary>
     public IDisposable AddMessagesChanged(Action<MessagesChangedNotification> handler) => messagesChanged.Add(handler);
 
+    /// <summary>Fires on every <c>notify.boardChanged</c> (Swift <c>addBoardChanged</c>; the board's source lists again).</summary>
+    public IDisposable AddBoardChanged(Action<BoardChangedNotification> handler) => boardChanged.Add(handler);
+
     /// <summary>
     /// Fires on every connection state change, after
     /// <see cref="ConnectionState"/> was updated. A handler added later does
@@ -147,6 +152,9 @@ public sealed partial class NotificationHub : IDisposable
                 break;
             case DaemonNotification.MessagesChanged c:
                 messagesChanged.Fire(c.Payload);
+                break;
+            case DaemonNotification.BoardChanged b:
+                boardChanged.Fire(b.Payload);
                 break;
             case DaemonNotification.Unknown u:
                 LogUnknown(logger, u.Method);

@@ -1,0 +1,322 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Board/BoardDetailViewController.swift;
+GTK: board_detail_tree of ui/data/ui/board_page.blp and
+window/board_detail.go. The selected case in full, beside the List's list
+or in the sliding panel over Columns and Today (the page moves this one
+view between the two, as GTK moves board_detail_tree). Its bar: Close (the
+panel only), Done or Move Back to Board, Remind… (the presets), Archive,
+"…" (Show in Mail, Unstar) and Reply (Comment on an issue tracker's
+account). Under it a scrolling column of three parts: Upper (the state
+pill with Move To, when a snoozed case comes back, the account, the issue,
+Why is this here? and Unstar; the "why" box; the title; the deadline with
+its quote; the assistant's summary and tasks; the case's open promises),
+filled anew whenever the case differs from what it shows; ReplySlot (the
+suggested reply) and ConversationSlot (the conversation), which that
+never touches: their parts follow the case in place (IBoardDetailPart).
+What the assistant wrote carries its mark and is spoken as the
+assistant's. Every text is the view model's, cleaned by Core, as
+TextBlock.Text.
+-->
+<UserControl
+    x:Class="Malachi.App.Boards.BoardDetailView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:boards="using:Malachi.App.Boards"
+    xmlns:controls="using:Malachi.App.Controls"
+    xmlns:reader="using:Malachi.App.Reader"
+    xmlns:res="using:Malachi.App.Resources"
+    AutomationProperties.AutomationId="BoardDetail"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <Style
+            x:Key="DetailTextStyle"
+            BasedOn="{StaticResource BodyTextBlockStyle}"
+            TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="IsTextSelectionEnabled" Value="True" />
+        </Style>
+        <Style
+            x:Key="DetailCaptionStyle"
+            BasedOn="{StaticResource CaptionTextBlockStyle}"
+            TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Style>
+        <Style
+            x:Key="AssistantHeadingStyle"
+            BasedOn="{StaticResource BodyStrongTextBlockStyle}"
+            TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{ThemeResource BoardAssistantBrush}" />
+        </Style>
+        <Style
+            x:Key="AssistantMarkStyle"
+            BasedOn="{StaticResource BodyTextBlockStyle}"
+            TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{ThemeResource BoardAssistantBrush}" />
+        </Style>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- The detail's bar (board_detail_tree's header bar). -->
+        <Grid
+            x:Name="ActionBar"
+            Padding="16,8"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1"
+            ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button
+                x:Name="CloseButton"
+                AutomationProperties.AutomationId="BoardPanelClose"
+                Click="OnCloseClick"
+                Visibility="Collapsed" />
+            <Button
+                x:Name="DoneButton"
+                Grid.Column="1"
+                AutomationProperties.AutomationId="BoardDone"
+                Click="OnDoneClick" />
+            <Button
+                x:Name="RemindButton"
+                Grid.Column="2"
+                AutomationProperties.AutomationId="BoardRemind">
+                <Button.Flyout>
+                    <MenuFlyout x:Name="RemindMenu" Opening="OnRemindOpening" Placement="BottomEdgeAlignedLeft" />
+                </Button.Flyout>
+            </Button>
+            <Button
+                x:Name="ArchiveButton"
+                Grid.Column="3"
+                AutomationProperties.AutomationId="BoardArchive"
+                Click="OnArchiveClick" />
+            <Button
+                x:Name="MoreButton"
+                Grid.Column="4"
+                Width="40"
+                Padding="0"
+                AutomationProperties.AutomationId="BoardMore"
+                Style="{StaticResource SubtleButtonStyle}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-more-symbolic')}" />
+                <Button.Flyout>
+                    <MenuFlyout x:Name="MoreMenu" Opening="OnMoreOpening" Placement="BottomEdgeAlignedLeft" />
+                </Button.Flyout>
+            </Button>
+            <Button
+                x:Name="ReplyButton"
+                Grid.Column="6"
+                AutomationProperties.AutomationId="BoardReply"
+                Click="OnReplyClick"
+                Style="{StaticResource AccentButtonStyle}" />
+        </Grid>
+
+        <ScrollViewer
+            x:Name="Scroll"
+            Grid.Row="1"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
+            IsTabStop="False"
+            VerticalScrollBarVisibility="Auto">
+            <!-- A Grid between the ScrollViewer and the clamped column, as the preferences' pages. -->
+            <Grid>
+                <StackPanel
+                    x:Name="Column"
+                    MaxWidth="860"
+                    Padding="20,16,20,24"
+                    Spacing="14">
+                    <!-- Upper: filled anew with the case. -->
+                    <StackPanel x:Name="Upper" Spacing="14">
+                        <reader:WrapBox
+                            x:Name="HeaderLine"
+                            ChildSpacing="8"
+                            LineSpacing="6">
+                            <DropDownButton
+                                x:Name="StateButton"
+                                Padding="4,2"
+                                AutomationProperties.AutomationId="BoardStatePill">
+                                <boards:BoardStatePill x:Name="StatePill" />
+                                <DropDownButton.Flyout>
+                                    <MenuFlyout x:Name="StateMenu" Opening="OnStateMenuOpening" Placement="BottomEdgeAlignedLeft" />
+                                </DropDownButton.Flyout>
+                            </DropDownButton>
+                            <TextBlock
+                                x:Name="RemindText"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource DetailCaptionStyle}" />
+                            <Border
+                                x:Name="AccountTag"
+                                Background="{ThemeResource IssuePillPlainBrush}"
+                                Style="{StaticResource BoardPillBorderStyle}">
+                                <TextBlock
+                                    x:Name="AccountText"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource BoardPillTextStyle}" />
+                            </Border>
+                            <controls:IssuePill x:Name="IssueTag" />
+                            <HyperlinkButton
+                                x:Name="WhyLink"
+                                Padding="2,0"
+                                AutomationProperties.AutomationId="BoardWhy"
+                                Click="OnWhyClick" />
+                            <HyperlinkButton
+                                x:Name="UnstarLink"
+                                Padding="2,0"
+                                AutomationProperties.AutomationId="BoardUnstar"
+                                Click="OnUnstarClick" />
+                        </reader:WrapBox>
+
+                        <!-- "Why is this here?": the reason and who decided the state. -->
+                        <Border x:Name="WhyBox" Style="{StaticResource BoardBoxStyle}">
+                            <StackPanel Spacing="4">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        x:Name="WhyMark"
+                                        Margin="0,0,4,0"
+                                        AutomationProperties.AccessibilityView="Raw"
+                                        Style="{StaticResource AssistantMarkStyle}" />
+                                    <TextBlock
+                                        x:Name="WhyText"
+                                        Grid.Column="1"
+                                        Style="{StaticResource DetailTextStyle}" />
+                                </Grid>
+                                <TextBlock x:Name="SourceText" Style="{StaticResource DetailCaptionStyle}" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- The title, who and when, the subject under an assistant's title. -->
+                        <StackPanel Spacing="4">
+                            <TextBlock x:Name="MetaText" Style="{StaticResource DetailCaptionStyle}" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    x:Name="TitleMark"
+                                    Margin="0,0,6,0"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    Foreground="{ThemeResource BoardAssistantBrush}"
+                                    Style="{StaticResource SubtitleTextBlockStyle}" />
+                                <TextBlock
+                                    x:Name="TitleText"
+                                    Grid.Column="1"
+                                    AutomationProperties.HeadingLevel="Level2"
+                                    IsTextSelectionEnabled="True"
+                                    Style="{StaticResource SubtitleTextBlockStyle}"
+                                    TextWrapping="Wrap" />
+                            </Grid>
+                            <TextBlock x:Name="SubjectText" Style="{StaticResource DetailCaptionStyle}" />
+                        </StackPanel>
+
+                        <!-- The deadline and the sentence it comes from. -->
+                        <StackPanel x:Name="DeadlineBlock" Spacing="4">
+                            <Border
+                                HorizontalAlignment="Left"
+                                Background="{ThemeResource BoardDueFillBrush}"
+                                Style="{StaticResource BoardPillBorderStyle}">
+                                <TextBlock
+                                    x:Name="DueText"
+                                    Foreground="{ThemeResource BoardDueForegroundBrush}"
+                                    Style="{StaticResource BoardPillTextStyle}" />
+                            </Border>
+                            <TextBlock
+                                x:Name="DueQuoteText"
+                                FontStyle="Italic"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource DetailTextStyle}" />
+                        </StackPanel>
+
+                        <TextBlock x:Name="StaleText" Style="{StaticResource DetailCaptionStyle}" />
+
+                        <!-- The assistant's summary. -->
+                        <Border
+                            x:Name="SummaryBox"
+                            Background="{ThemeResource BoardAssistantFillBrush}"
+                            BorderBrush="{ThemeResource BoardAssistantBorderBrush}"
+                            Style="{StaticResource BoardBoxStyle}">
+                            <StackPanel Spacing="4">
+                                <TextBlock
+                                    x:Name="SummaryHeading"
+                                    AutomationProperties.HeadingLevel="Level3"
+                                    Style="{StaticResource AssistantHeadingStyle}" />
+                                <TextBlock x:Name="SummaryText" Style="{StaticResource DetailTextStyle}" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- The assistant's tasks. -->
+                        <StackPanel x:Name="TasksBlock" Spacing="6">
+                            <TextBlock
+                                x:Name="TasksHeading"
+                                AutomationProperties.HeadingLevel="Level3"
+                                Style="{StaticResource AssistantHeadingStyle}" />
+                            <ItemsControl x:Name="TasksList" IsTabStop="False">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <Grid Margin="0,0,0,6" ColumnSpacing="8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Ellipse
+                                                Width="12"
+                                                Height="12"
+                                                Margin="0,4,0,0"
+                                                VerticalAlignment="Top"
+                                                Stroke="{ThemeResource BoardAssistantBrush}"
+                                                StrokeThickness="1.5" />
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                IsTextSelectionEnabled="True"
+                                                Style="{StaticResource BodyTextBlockStyle}"
+                                                Text="{x:Bind}"
+                                                TextWrapping="Wrap" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <!-- The case's open promises (GTK renderDetailCommitments). -->
+                        <StackPanel x:Name="CommitmentsBlock" Spacing="2">
+                            <TextBlock
+                                x:Name="CommitmentsHeading"
+                                AutomationProperties.HeadingLevel="Level3"
+                                Style="{StaticResource AssistantHeadingStyle}" />
+                            <StackPanel x:Name="CommitmentsList" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- The suggested reply: only its part changes it. -->
+                    <ContentControl
+                        x:Name="ReplySlot"
+                        HorizontalContentAlignment="Stretch"
+                        IsTabStop="False" />
+
+                    <!-- The conversation: only its part changes it. -->
+                    <ContentControl
+                        x:Name="ConversationSlot"
+                        HorizontalContentAlignment="Stretch"
+                        IsTabStop="False" />
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

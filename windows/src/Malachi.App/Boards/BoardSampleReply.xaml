@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of draftBox (macos/Sources/MalachiMail/Board/BoardDetailViewController.swift):
+the invented samples' suggested reply, which has no draft to edit: the
+heading, its plain text, Discard and the note that it stays on the board
+until sent. The detail's default reply part for the samples; the daemon's
+board shows the inline editor or Suggest Reply there instead (stage 5,
+BoardDetailView.ReplyPart).
+-->
+<UserControl
+    x:Class="Malachi.App.Boards.BoardSampleReply"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False">
+    <Border Style="{StaticResource BoardBoxStyle}">
+        <StackPanel Spacing="8">
+            <TextBlock
+                x:Name="Heading"
+                AutomationProperties.HeadingLevel="Level3"
+                Style="{StaticResource BodyStrongTextBlockStyle}" />
+            <TextBlock
+                x:Name="DraftText"
+                IsTextSelectionEnabled="True"
+                Style="{StaticResource BodyTextBlockStyle}"
+                TextWrapping="Wrap" />
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button
+                    x:Name="DiscardButton"
+                    AutomationProperties.AutomationId="BoardDiscardDraft"
+                    Click="OnDiscardClick" />
+                <TextBlock
+                    x:Name="NoteText"
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    MaxLines="1"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    TextTrimming="CharacterEllipsis" />
+            </Grid>
+        </StackPanel>
+    </Border>
+</UserControl>

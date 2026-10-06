@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Board/BoardNavView.swift; GTK:
+board_nav_page of ui/data/ui/board_page.blp and renderNav, boardNavRow,
+boardAccountRow (window/board_list.go). The List style's own side pane
+(GTK keeps the state filters there, not in the window's sidebar): under
+"Board" the filters (Overview, the four states with their colour dot,
+Done) and under "Accounts" the account filter (All Accounts, then each
+account with its kind capsule), each with its count. A click sets the
+board controller's filter or account; the rows are built anew from the
+view model.
+-->
+<UserControl
+    x:Class="Malachi.App.Boards.BoardNavView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <Style
+            x:Key="NavItemStyle"
+            BasedOn="{StaticResource DefaultListViewItemStyle}"
+            TargetType="ListViewItem">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="8,0,8,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+    </UserControl.Resources>
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalScrollMode="Disabled"
+        IsTabStop="False"
+        VerticalScrollBarVisibility="Auto">
+        <StackPanel Padding="0,4,0,8">
+            <TextBlock
+                x:Name="BoardCaption"
+                AutomationProperties.HeadingLevel="Level2"
+                Style="{StaticResource BoardCaptionStyle}" />
+            <ListView
+                x:Name="FilterList"
+                AutomationProperties.AutomationId="BoardNavFilters"
+                ItemContainerStyle="{StaticResource NavItemStyle}"
+                ScrollViewer.VerticalScrollMode="Disabled"
+                SelectionChanged="OnFilterChanged"
+                SelectionMode="Single" />
+            <TextBlock
+                x:Name="AccountsCaption"
+                Margin="12,14,12,4"
+                AutomationProperties.HeadingLevel="Level2"
+                Style="{StaticResource BoardCaptionStyle}" />
+            <ListView
+                x:Name="AccountList"
+                AutomationProperties.AutomationId="BoardNavAccounts"
+                ItemContainerStyle="{StaticResource NavItemStyle}"
+                ScrollViewer.VerticalScrollMode="Disabled"
+                SelectionChanged="OnAccountChanged"
+                SelectionMode="Single" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

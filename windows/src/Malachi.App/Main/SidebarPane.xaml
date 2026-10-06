@@ -10,7 +10,8 @@ nothing to list) and of ui/internal/window/folders.go; macOS:
 Sidebar/FolderSidebarViewController.swift. The status line GTK keeps at
 the sidebar's bottom runs across the window's bottom edge (StatusBarView;
 windows/README.md). The primary menu is GTK's with Windows' order of the
-application's entries (docs/windows-port.md §11.1): New Message and Add
+application's entries (docs/windows-port.md §11.1), after the window's
+modes Mail and Board (macOS's View menu; MainWindow.Mode.cs): New Message and Add
 Account…, Preferences and About, Quit (Windows-only; GTK quits with Ctrl+Q
 and the window, macOS from its menu bar); the dead Keyboard Shortcuts item
 is left out (research 05 W4). The folder list is a flat ListView over the
@@ -61,6 +62,19 @@ mailbox's entries (research 03 D-L5), its headings not selectable.
                 <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-more-symbolic')}" />
                 <Button.Flyout>
                     <MenuFlyout x:Name="PrimaryMenu" Placement="BottomEdgeAlignedRight">
+                        <!-- The window's modes at the top (macOS's View ▸ Mail, Board; no key). -->
+                        <RadioMenuFlyoutItem
+                            x:Name="MenuMail"
+                            AutomationProperties.AutomationId="MenuMail"
+                            GroupName="WindowMode"
+                            IsChecked="True"
+                            Text="{l:T Msgid='Mail'}" />
+                        <RadioMenuFlyoutItem
+                            x:Name="MenuBoard"
+                            AutomationProperties.AutomationId="MenuBoard"
+                            GroupName="WindowMode"
+                            Text="{l:T Msgid='Board'}" />
+                        <MenuFlyoutSeparator />
                         <!-- Windows-only strings: the key names beside the items. -->
                         <MenuFlyoutItem
                             x:Name="MenuNewMessage"

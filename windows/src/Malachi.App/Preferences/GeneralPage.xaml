@@ -5,7 +5,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 Port of macos/Sources/MalachiMail/Preferences/GeneralPaneViewController.swift;
 GTK: preferences.blp general_page. The Blueprint's groups in its order:
-Startup (launch_at_login, run_in_background), Reading (mark_read_delay,
+Startup (launch_at_login, run_in_background), Board (board_default_style:
+the style of the first show after launch), Reading (mark_read_delay,
 0 to 60 s), Deleting (confirm_delete), Notifications
 (desktop_notifications, notification_sound) and the daemon's Mail group
 (mail_group: check_interval, remote_images, offline_days, attachment_days,
@@ -86,6 +87,25 @@ button with what Windows opens mailto: links with (windows/README.md).
                             x:Name="RunInBackgroundSwitch"
                             AutomationProperties.AutomationId="RunInBackground"
                             AutomationProperties.Name="{l:T Msgid='Run in Background'}" />
+                    </tk:SettingsCard>
+                </StackPanel>
+
+                <!-- The board's style of the first show after launch (board_default_style). -->
+                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}"
+                        Text="{l:T Msgid='Board'}" />
+                    <tk:SettingsCard Header="{l:T Msgid='Default View'}">
+                        <ComboBox
+                            x:Name="BoardStyleBox"
+                            MinWidth="200"
+                            AutomationProperties.AutomationId="BoardDefaultStyle"
+                            AutomationProperties.Name="{l:T Msgid='Default View'}">
+                            <ComboBoxItem Content="{l:T Msgid='List', Context='board style'}" />
+                            <ComboBoxItem Content="{l:T Msgid='Columns', Context='board style'}" />
+                            <ComboBoxItem Content="{l:T Msgid='Today'}" />
+                        </ComboBox>
                     </tk:SettingsCard>
                 </StackPanel>
 

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of the panel of macos/Sources/MalachiMail/Board/BoardPageViewController.swift
+(BoardPanelView, updatePanel, closePanel, cancelOperation); GTK:
+board_panel_split of ui/data/ui/board_page.blp and window/board_panel.go.
+The selected case's detail sliding in from the trailing edge over Columns,
+Today and the narrow List: up to 640 wide, leaving 40 of the page beside
+it, on the window's solid background with a border towards the page. The
+page moves its one detail view into Host while the panel shows; Escape
+closes it.
+-->
+<UserControl
+    x:Class="Malachi.App.Boards.BoardDetailPanel"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    HorizontalAlignment="Right"
+    AutomationProperties.AutomationId="BoardPanel"
+    IsTabStop="False"
+    PreviewKeyDown="OnPreviewKeyDown"
+    Visibility="Collapsed">
+    <UserControl.Transitions>
+        <TransitionCollection>
+            <PaneThemeTransition Edge="Right" />
+        </TransitionCollection>
+    </UserControl.Transitions>
+    <Grid
+        Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+        BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}"
+        BorderThickness="1,1,0,0">
+        <ContentControl
+            x:Name="Host"
+            HorizontalContentAlignment="Stretch"
+            VerticalContentAlignment="Stretch"
+            IsTabStop="False" />
+    </Grid>
+</UserControl>

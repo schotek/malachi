@@ -14,6 +14,8 @@
 // - 1200×760 and at least 360×294 (window.blp), the size and the
 //   maximised state kept in the gschema keys GTK declares
 //   (window-width, window-height, window-maximized; U10);
+// - the two modes, Mail and Board (MainWindow.Mode.cs: the switch in the
+//   title bar, the board's page in place of the panes);
 // - the panes (MainWindow.Panes.cs: the sidebar, the list, the message
 //   page's header bar, the status line and the adaptive layout), the
 //   reader's region the reader fills (wave 2, E4), the toast overlay over
@@ -96,6 +98,7 @@ public sealed partial class MainWindow : Window
         AppWindow.Changed += OnAppWindowChanged;
         Closed += (_, _) => hook.Dispose();
         InitializePanes();
+        InitializeMode();
     }
 
     /// <summary>The user asked to close the window (the caption's button, Alt+F4); the app decides.</summary>
@@ -128,12 +131,20 @@ public sealed partial class MainWindow : Window
     {
         ArgumentNullException.ThrowIfNull(integration);
         AttachPanes(integration);
+        AttachBoard(integration);
     }
 
     /// <summary>window.go refreshListTitle: the selected folder in the caption (the list's header shows it with its counts).</summary>
-    public void ShowListHeading(ListHeading heading) =>
-        // "<folder> – Malachi Mail", the folder isolated (docs/windows-port.md §11.1).
-        Title = heading.Caption;
+    public void ShowListHeading(ListHeading heading)
+    {
+        // "<folder> – Malachi Mail", the folder isolated (docs/windows-port.md
+        // §11.1); kept for Mail while the board shows (MainWindow.Mode.cs).
+        mailCaption = heading.Caption;
+        if (mode == Core.Boards.Board.Mode.Mail)
+        {
+            Title = mailCaption;
+        }
+    }
 
     /// <summary>
     /// Puts the keyboard in the search box and selects its text (win.search,

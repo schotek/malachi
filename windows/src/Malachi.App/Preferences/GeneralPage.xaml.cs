@@ -35,6 +35,7 @@ using CommunityToolkit.WinUI.Controls;
 using Malachi.App.Platform;
 using Malachi.App.Shell;
 using Malachi.Core.Api;
+using Malachi.Core.Boards;
 using Malachi.Core.Controllers;
 using Malachi.Core.Model;
 using Malachi.Core.Settings;
@@ -78,6 +79,10 @@ public sealed partial class GeneralPage : UserControl
 
         var s = state.Settings;
         bindings.Toggle(RunInBackgroundSwitch, SettingsKey.RunInBackground, () => s.RunInBackground, v => s.RunInBackground = v);
+        // preferences.go boardStyleChoices: the style of the board's first show after launch.
+        bindings.Choice(
+            BoardStyleBox, SettingsKey.BoardDefaultStyle, [BoardStyle.List, BoardStyle.Columns, BoardStyle.Today],
+            () => s.BoardDefaultStyle, v => s.BoardDefaultStyle = v);
         bindings.Number(MarkReadDelayBox, SettingsKey.MarkReadDelay, () => s.MarkReadDelay, v => s.MarkReadDelay = v);
         bindings.Toggle(ConfirmDeleteSwitch, SettingsKey.ConfirmDelete, () => s.ConfirmDelete, v => s.ConfirmDelete = v);
         bindings.Toggle(DesktopNotificationsSwitch, SettingsKey.DesktopNotifications, () => s.DesktopNotifications, v => s.DesktopNotifications = v);

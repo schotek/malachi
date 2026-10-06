@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of the state bar and dot of macos/Sources/MalachiMail/Board/BoardViews.swift
+(BoardStateBar, DotView in BoardNavView.swift) with BoardPalette.accent;
+GTK: the board-state-dot-* rules of ui/internal/style. A patch of a state's
+accent: the bar on a row's leading edge (3 px wide) or the dot of a filter
+(10 px round); the size and the radius are the user's. The colour is a
+visual state's ThemeResource (Boards/BoardStyles.xaml), so it follows the
+theme.
+-->
+<UserControl
+    x:Class="Malachi.App.Boards.BoardStateSwatch"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    AutomationProperties.AccessibilityView="Raw"
+    IsTabStop="False">
+    <Border x:Name="Fill" Background="{ThemeResource BoardInfoBrush}">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="States">
+                <VisualState x:Name="Info" />
+                <VisualState x:Name="Hot">
+                    <VisualState.Setters>
+                        <Setter Target="Fill.Background" Value="{ThemeResource BoardHotBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="You">
+                    <VisualState.Setters>
+                        <Setter Target="Fill.Background" Value="{ThemeResource BoardYouBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Them">
+                    <VisualState.Setters>
+                        <Setter Target="Fill.Background" Value="{ThemeResource BoardThemBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+    </Border>
+</UserControl>

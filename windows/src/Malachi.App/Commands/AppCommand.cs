@@ -21,6 +21,7 @@ public sealed class AppCommand
 {
     private Action? handler;
     private Func<bool>? canExecute;
+    private Func<bool>? gate;
 
     /// <summary>A command named <paramref name="name"/> (for logs), disabled until it has a handler.</summary>
     public AppCommand(string name)
@@ -59,8 +60,24 @@ public sealed class AppCommand
         }
     }
 
+    /// <summary>
+    /// What the window's mode allows (Board.Allows: in the Board mode the
+    /// list and the reader are hidden, so no key may act on their message),
+    /// checked before <see cref="CanExecute"/>; null means always. Set by the
+    /// window, apart from the screens' own <see cref="CanExecute"/>.
+    /// </summary>
+    public Func<bool>? Gate
+    {
+        get => gate;
+        set
+        {
+            gate = value;
+            Refresh();
+        }
+    }
+
     /// <summary>Whether the command runs when invoked now.</summary>
-    public bool IsEnabled => handler is not null && (canExecute?.Invoke() ?? true);
+    public bool IsEnabled => handler is not null && (gate?.Invoke() ?? true) && (canExecute?.Invoke() ?? true);
 
     /// <summary>Runs the command when it is enabled; true when it ran.</summary>
     public bool TryExecute()

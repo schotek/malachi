@@ -75,6 +75,7 @@ public sealed partial class Integration : IDisposable
         WireCompose();
         WireHooks();
         WireReader();
+        WireBoard();
     }
 
     /// <summary>The status line, the sign-in and certificate banners.</summary>
@@ -175,7 +176,7 @@ public sealed partial class Integration : IDisposable
         // before this), then the list.
         tokens.Add(hub.AddNewMessage(Mailbox.HandleNewMessage));
         Mailbox.OnWithdrawNotifications = PlatformServices.WithdrawNotifications;
-        Mailbox.IsMainWindowActive = () => state.IsMainWindowActive;
+        Mailbox.IsMainWindowActive = () => state.MainWindowViewsMail;
         mainWindow.Activated += (_, e) =>
         {
             if (e.WindowActivationState != WindowActivationState.Deactivated)

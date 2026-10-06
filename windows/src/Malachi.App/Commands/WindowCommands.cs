@@ -91,6 +91,12 @@ public sealed class WindowCommands
     /// <summary>win.search (Ctrl+F, Ctrl+E): the search box.</summary>
     public AppCommand Search { get; } = new(nameof(Search));
 
+    /// <summary>The main window's Mail mode (the title bar's switch, the menus' Mail; no key).</summary>
+    public AppCommand ShowMail { get; } = new(nameof(ShowMail));
+
+    /// <summary>The main window's Board mode (the title bar's switch, the menus' Board; no key).</summary>
+    public AppCommand ShowBoard { get; } = new(nameof(ShowBoard));
+
     /// <summary>The main window's primary menu (F10), while its button is shown.</summary>
     public AppCommand MainMenu { get; } = new(nameof(MainMenu));
 
@@ -177,7 +183,7 @@ public sealed class WindowCommands
     /// <summary>Every command, for re-validating them all (a hook was wired).</summary>
     public IEnumerable<AppCommand> All =>
     [
-        .. byShortcut.Values, AddAccount, AddJiraAccount, About, MarkRead, LoadImages, TrustSender, ChangeStatus,
+        .. byShortcut.Values, AddAccount, AddJiraAccount, About, MarkRead, LoadImages, TrustSender, ChangeStatus, ShowMail, ShowBoard,
     ];
 
     /// <summary>Re-validates every command.</summary>

@@ -147,7 +147,8 @@ public partial class App : Application
         {
             Settings = s.Settings,
             Notifications = s.Notifications,
-            IsMainWindowActive = () => s.IsMainWindowActive,
+            // An active main window showing the board is not looking at the mail (Board.ViewsMail).
+            IsMainWindowActive = () => s.MainWindowViewsMail,
             // The mailbox remembers the notification, to withdraw it once it
             // is outdated (the integration exists before the first message).
             NotificationShown = n => s.Integration?.Mailbox.RecordNotification(n),
