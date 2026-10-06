@@ -131,6 +131,8 @@ public sealed partial class Integration : IDisposable
     {
         // The board's triage (Integration.Triage.cs).
         UnwireTriage();
+        // A Show in Mail still waiting, and its timer (Integration.Board.cs).
+        EndBoard();
         foreach (var t in tokens)
         {
             t.Dispose();

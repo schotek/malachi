@@ -52,6 +52,7 @@ public sealed partial class Integration
 
     private DaemonBoardSource? boardDaemonSource;
     private bool boardStarted;
+    private bool boardEnded;
     private PendingReveal? reveal;
     private DispatcherQueueTimer? revealTimer;
     private ILogger? boardLogger;
@@ -85,6 +86,14 @@ public sealed partial class Integration
 
     /// <summary>The window leaves Mail: a Show in Mail still waiting selects nothing in the hidden panes.</summary>
     public void LeftMail() => CancelReveal();
+
+    // Dispose: a Show in Mail still waiting stops polling the disposed
+    // list, and a message.get answering later does nothing.
+    private void EndBoard()
+    {
+        boardEnded = true;
+        CancelReveal();
+    }
 
     /// <summary>The case actions of the main window's board, their ways into the mail installed.</summary>
     public BoardActions MakeBoardActions() => new(BoardController, BoardSamples)
@@ -168,6 +177,10 @@ public sealed partial class Integration
         {
             LogShowInMailFailed(boardLogger!, e.GetType().Name);
             mainWindow.Toasts.Show(Board.Text.ShowInMailFailed);
+            return;
+        }
+        if (boardEnded)
+        {
             return;
         }
         var summary = result.Message.Summary;
