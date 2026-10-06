@@ -30,10 +30,13 @@
 //      the interfaces whose named properties override built-ins), and the
 //      nodes the bridge walks may be one: the caret's parent, and the
 //      rewrite's way up and back from the attribution's div (a <form><input
-//      name="parentNode"> would send it elsewhere). So every Document and
-//      EventTarget accessor the bridge uses (body, getSelection,
-//      queryCommandState, queryCommandValue, execCommand, createRange,
-//      addEventListener) and every accessor it reads of such a node
+//      name="parentNode"> would send it elsewhere). The window's named
+//      properties (an element's id) come before EventTarget.prototype too,
+//      so the sized mode's load listener goes through the captured
+//      addEventListener as well. So every Document and
+//      EventTarget accessor the bridge uses (body, documentElement,
+//      getSelection, queryCommandState, queryCommandValue, execCommand,
+//      createRange, addEventListener) and every accessor it reads of such a node
 //      (parentElement, parentNode, previousSibling, nodeType, childNodes,
 //      Element.closest) is captured from the prototypes before any content
 //      exists and called on the document or the node. What it reads of the
@@ -108,12 +111,18 @@ public static class EditorBridge
     /// <c>pasted(id, null)</c> for the plain text (<see cref="PastedScript"/>),
     /// which inserts it where the caret was, as typing is reported. Only the
     /// latest paste is answered.
+    /// A ResizeObserver on the document element, debounced (100 ms), posts
+    /// the document's height (<c>height</c>: <c>h</c>, CSS pixels) whenever
+    /// it changes, on every input, paste and resize: the sized mode of the
+    /// board's inline reply (<see cref="EditorChannel.SizeReported"/>, raised
+    /// only by a channel made sized). It only reads the layout.
     /// </summary>
     public const string Script = """
         (() => {
           if (window !== window.top || !String(window.location.href).startsWith('malachi-doc://editor/')) return;
           const D = Document.prototype, E = EventTarget.prototype, N = Node.prototype;
           const getBody = Object.getOwnPropertyDescriptor(D, 'body').get;
+          const getRoot = Object.getOwnPropertyDescriptor(D, 'documentElement').get;
           const getParent = Object.getOwnPropertyDescriptor(N, 'parentElement').get;
           const getParentNode = Object.getOwnPropertyDescriptor(N, 'parentNode').get;
           const getPrevious = Object.getOwnPropertyDescriptor(N, 'previousSibling').get;
@@ -124,18 +133,29 @@ public static class EditorBridge
           const closest = Element.prototype.closest;
           const webview = window.chrome.webview, postMessage = webview.postMessage, postWith = webview.postMessageWithAdditionalObjects;
           const body = () => getBody.call(document);
+          const root = () => getRoot.call(document);
           const selection = () => getSelection.call(document);
           const parent = n => getParent.call(n);
           const on = (type, f, options) => addEventListener.call(document, type, f, options);
           const run = () => {
             const post = m => postMessage.call(webview, JSON.stringify(m));
             let seq = 0, timer = null;
+            let lastHeight = -1, heightTimer = null;
+            const postHeight = () => {
+              const h = root().scrollHeight;
+              if (h !== lastHeight) { lastHeight = h; post({type: 'height', h: h}); }
+            };
+            const scheduleHeight = () => { if (heightTimer) clearTimeout(heightTimer); heightTimer = setTimeout(postHeight, 100); };
+            try {
+              new ResizeObserver(scheduleHeight).observe(root());
+            } catch (e) {}
+            addEventListener.call(window, 'load', scheduleHeight);
             const flush = () => {
               if (timer) { clearTimeout(timer); timer = null; }
               post({type: 'changed', seq: ++seq, html: body().innerHTML, text: body().innerText});
               return seq;
             };
-            const schedule = () => { if (timer) clearTimeout(timer); timer = setTimeout(flush, 250); };
+            const schedule = () => { if (timer) clearTimeout(timer); timer = setTimeout(flush, 250); scheduleHeight(); };
             const q = c => { try { return queryCommandState.call(document, c); } catch (e) { return false; } };
             const state = () => post({
               type: 'state',

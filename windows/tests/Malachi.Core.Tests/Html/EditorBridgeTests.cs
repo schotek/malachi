@@ -88,6 +88,22 @@ public sealed class EditorBridgeTests
         var key = BridgeMessage.Decode("{\"type\":\"key\",\"key\":\"escape\"}");
         Assert.Equal((BridgeMessage.Kinds.Key, "escape"), (key.Type, key.Key));
         Assert.Equal(BridgeMessage.Kinds.Drop, BridgeMessage.Decode("{\"type\":\"drop\"}").Type);
+        // editor_test.go TestHeightMessage: the sized mode's height, unchecked
+        // here (EditorChannel verifies it); a mistyped or overflowing one
+        // fails the message.
+        var height = BridgeMessage.Decode("{\"type\":\"height\",\"h\":212.5}");
+        Assert.Equal((BridgeMessage.Kinds.Height, 212.5), (height.Type, height.H));
+        Assert.Equal(-3, BridgeMessage.Decode("{\"type\":\"height\",\"h\":-3}").H);
+        Assert.Equal(0, BridgeMessage.Decode("{\"type\":\"height\",\"h\":null}").H);
+        foreach (var bad in new[] { "{\"h\":\"1\"}", "{\"h\":true}", "{\"h\":1e400}", "{\"h\":-1e400}", "{\"h\":{}}" })
+        {
+            Assert.Null(BridgeMessage.TryDecode(bad));
+        }
+        Assert.Contains("type: height", height.ToString(), StringComparison.Ordinal);
+        foreach (var piece in new[] { "postHeight", "ResizeObserver", "post({type: 'height'", "addEventListener.call(window, 'load', scheduleHeight)" })
+        {
+            Assert.Contains(piece, EditorBridge.Script, StringComparison.Ordinal);
+        }
         // The exception never carries the page's content.
         var e = Assert.Throws<FormatException>(() => BridgeMessage.Decode("{\"html\":42,\"text\":\"secret\"}"));
         Assert.DoesNotContain("secret", e.Message, StringComparison.Ordinal);

@@ -7,6 +7,8 @@
 // The "rewrite" message is GTK's (its selected and text); macOS has none,
 // its bridge returns the passage instead (RewriteTarget). So is "paste" (its
 // id and text): plain text that looks like Markdown, for draft.markdown.
+// And "height" (its h): the document's height for the sized mode of the
+// board's inline reply.
 //
 // Decoded as encoding/json and Swift's decoding read it: a missing or null
 // member is its zero value, an unknown one is ignored, a mistyped one fails
@@ -38,7 +40,8 @@ namespace Malachi.Core.Html;
 /// (with <see cref="Seq"/>, <see cref="Html"/>, <see cref="Text"/>),
 /// <c>state</c> (the formatting, flattened into the same object as Go embeds
 /// it), <c>rewrite</c> (with <see cref="Selected"/> and <see cref="Text"/>),
-/// <c>paste</c> (with <see cref="Id"/> and <see cref="Text"/>), and on
+/// <c>paste</c> (with <see cref="Id"/> and <see cref="Text"/>), <c>height</c>
+/// (with <see cref="H"/>), and on
 /// Windows <c>key</c> (with <see cref="Key"/>) and <c>drop</c> (the files
 /// travel beside the message). A kind this client does not know decodes, and
 /// the channel ignores it.
@@ -65,6 +68,12 @@ public sealed record BridgeMessage
 
     /// <summary>A <c>key</c>'s key: <c>escape</c> or <c>link</c>.</summary>
     public string Key { get; init => field = value ?? ""; } = "";
+
+    /// <summary>
+    /// A <c>height</c>'s document height in CSS pixels, as the page posted it
+    /// (unchecked; <see cref="EditorChannel"/> takes only a verified one).
+    /// </summary>
+    public double H { get; init; }
 
     /// <summary>A <c>state</c>'s formatting.</summary>
     public EditorState State { get; init => field = value ?? new(); } = new();
@@ -97,6 +106,7 @@ public sealed record BridgeMessage
             }
             string type = "", html = "", text = "", key = "", block = "", align = "";
             long seq = 0, id = 0;
+            double h = 0;
             bool selected = false, bold = false, italic = false, underline = false, strike = false, ul = false, ol = false, link = false;
             foreach (var member in root.EnumerateObject())
             {
@@ -111,6 +121,9 @@ public sealed record BridgeMessage
                         break;
                     case "id":
                         id = ReadInteger(v, "id");
+                        break;
+                    case "h":
+                        h = ReadNumber(v, "h");
                         break;
                     case "html":
                         html = ReadString(v, "html");
@@ -162,6 +175,7 @@ public sealed record BridgeMessage
                 Id = id,
                 Html = html,
                 Text = text,
+                H = h,
                 Selected = selected,
                 Key = key,
                 State = new EditorState
@@ -206,7 +220,7 @@ public sealed record BridgeMessage
     {
         var kind = Type switch
         {
-            Kinds.Ready or Kinds.Changed or Kinds.State or Kinds.Rewrite or Kinds.Paste or Kinds.Key or Kinds.Drop => Type,
+            Kinds.Ready or Kinds.Changed or Kinds.State or Kinds.Rewrite or Kinds.Paste or Kinds.Key or Kinds.Drop or Kinds.Height => Type,
             "" => "\"\"",
             _ => "<other>",
         };
@@ -323,6 +337,15 @@ public sealed record BridgeMessage
         _ => throw new FormatException("bridge message: " + name + " is not a boolean"),
     };
 
+    // A finite JSON number (the page's height); one past double's range
+    // fails the message as a mistyped member does.
+    private static double ReadNumber(JsonElement v, string name) => v.ValueKind switch
+    {
+        JsonValueKind.Number when v.TryGetDouble(out var d) && double.IsFinite(d) => d,
+        JsonValueKind.Null => 0,
+        _ => throw new FormatException("bridge message: " + name + " is not a number"),
+    };
+
     private static long ReadInteger(JsonElement v, string name) => v.ValueKind switch
     {
         JsonValueKind.Number when v.TryGetInt64(out var n) => n,
@@ -353,5 +376,8 @@ public sealed record BridgeMessage
 
         /// <summary>Files dropped on the page, in the message's additional objects (Windows).</summary>
         public const string Drop = "drop";
+
+        /// <summary>The document's height (<c>h</c>), debounced, whenever it changes: the sized mode.</summary>
+        public const string Height = "height";
     }
 }

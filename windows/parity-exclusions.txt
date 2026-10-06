@@ -185,7 +185,6 @@ Moving the case back to the board	Board: the macOS client's board (Nástěnka, S
 Setting the reminder	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 Archiving	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 Changing the promise	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Discarding the draft	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 Changing the board’s settings	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 the promise no longer exists	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 the mail backend is not running	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
