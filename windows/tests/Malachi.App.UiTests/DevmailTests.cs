@@ -34,7 +34,8 @@ public sealed class DevmailTests(DevmailFixture fixture) : IClassFixture<Devmail
     public void TheInboxListsTheSeededMessages()
     {
         var list = Uia.Find(App.MainWindow, "MessageList");
-        Assert.True(Uia.All(list, ControlType.ListItem).Count > 10);
+        // The fixture waited for some rows; the rest may still be arriving.
+        Uia.WaitFor(() => Uia.All(list, ControlType.ListItem).Count > 10, "more than ten rows in the Inbox");
         Assert.NotNull(Row(Lunch));
     }
 
