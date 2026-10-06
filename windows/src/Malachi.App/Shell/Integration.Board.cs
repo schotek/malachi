@@ -76,6 +76,13 @@ public sealed partial class Integration
         source.Start();
     }
 
+    /// <summary>
+    /// Lists the daemon's board again, once started (the suggested reply
+    /// linked a draft: BoardReplyController.OnRefresh); nothing with the
+    /// samples.
+    /// </summary>
+    public void RefreshBoard() => StartedBoardSource?.Refresh();
+
     /// <summary>The window leaves Mail: a Show in Mail still waiting selects nothing in the hidden panes.</summary>
     public void LeftMail() => CancelReveal();
 

@@ -178,6 +178,8 @@ public partial class App : Application
         quit = new QuitSequence(
             new QuitSteps
             {
+                // The board's inline replies first, while the connection stands.
+                BoardReplies = main.FinishBoardRepliesForQuitAsync,
                 SaveDrafts = integration.Compose.SaveForQuitAsync,
                 BeginStopping = () =>
                 {

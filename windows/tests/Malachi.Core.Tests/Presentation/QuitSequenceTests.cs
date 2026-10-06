@@ -178,6 +178,55 @@ public sealed class QuitSequenceTests
     }
 
     [Fact]
+    public async Task TheBoardsRepliesComeFirstAndTheirCancelAbandonsTheQuit()
+    {
+        var log = new List<string>();
+        var answer = false;
+        var quit = new QuitSequence(new QuitSteps
+        {
+            BoardReplies = () =>
+            {
+                log.Add("replies");
+                return Task.FromResult(answer);
+            },
+            SaveDrafts = () =>
+            {
+                log.Add("save");
+                return Task.FromResult<IReadOnlyList<IComposeWindowHandle>>([]);
+            },
+            Exit = () => log.Add("exit"),
+        });
+        Assert.False(await quit.QuitAsync());
+        Assert.False(quit.IsQuitting);
+        Assert.Equal(["replies"], log);
+        answer = true;
+        Assert.True(await quit.QuitAsync());
+        Assert.Equal(["replies", "replies", "save", "exit"], log);
+    }
+
+    [Fact]
+    public async Task ASessionEndDoesNotWaitForTheBoardsQuestion()
+    {
+        var question = new TaskCompletionSource<bool>();
+        var log = new List<string>();
+        var quit = new QuitSequence(new QuitSteps
+        {
+            BoardReplies = () => question.Task,
+            SaveDrafts = () =>
+            {
+                log.Add("save");
+                return Task.FromResult<IReadOnlyList<IComposeWindowHandle>>([]);
+            },
+            Exit = () => log.Add("exit"),
+        });
+        var user = quit.QuitAsync();
+        Assert.True(await quit.QuitAsync(QuitReason.SessionEnd));
+        question.SetResult(false);
+        Assert.True(await user);
+        Assert.Equal(["exit"], log);
+    }
+
+    [Fact]
     public async Task NoStepsStillQuit() => Assert.True(await new QuitSequence(new QuitSteps()).QuitAsync());
 
     private sealed class Harness

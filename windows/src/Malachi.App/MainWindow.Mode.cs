@@ -71,6 +71,8 @@ public sealed partial class MainWindow
             return;
         }
         mode = next;
+        // The board's conversation cards and inline reply follow the mode.
+        SyncBoardParts();
         if (next == Board.Mode.Board)
         {
             // A Show in Mail still waiting selects nothing in the hidden panes.
@@ -185,6 +187,7 @@ public sealed partial class MainWindow
         actions.OnToast = text => Toasts.Show(text);
         integration.BoardController.ToastRequested += (_, text) => Toasts.Show(text);
         BoardView.Attach(actions, Commands);
+        AttachBoardParts(integration, actions);
         BoardView.ShowMode(mode);
     }
 

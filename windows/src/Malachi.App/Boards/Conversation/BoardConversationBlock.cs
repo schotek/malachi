@@ -32,7 +32,9 @@
 //
 // Windows: the detail calls Detach when it hides the block without taking
 // it out of the tree (the Mail mode, a closed panel), which lets every web
-// view go, and Attach when it shows it again; Close ends it for good.
+// view go, and Attach when it shows it again; Close ends it for good. The
+// block is the detail's conversation part (IBoardDetailPart) over the
+// daemon's board; the samples keep the plain-text excerpts.
 
 using System;
 using System.Collections.Generic;
@@ -56,7 +58,7 @@ using CoreBoard = Malachi.Core.Boards.Board;
 namespace Malachi.App.Boards;
 
 /// <summary>The conversation of the board's detail (BoardConversationBlock).</summary>
-public sealed partial class BoardConversationBlock : UserControl
+public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPart
 {
     // The link label's longest text (the conversation view's StatusMaxChars).
     private const int HoverMaxChars = 512;
@@ -149,6 +151,17 @@ public sealed partial class BoardConversationBlock : UserControl
     private bool Live =>
         !closed && attached && services is not null && IsLoaded && XamlRoot is not null
         && Visibility == Visibility.Visible && cardsColumn.Visibility == Visibility.Visible;
+
+    /// <inheritdoc/>
+    public UIElement View => this;
+
+    /// <inheritdoc/>
+    public void Apply(CoreBoard.Detail? detail)
+    {
+        // Hidden without a case, as the excerpts; the cards go with it.
+        Visibility = detail is null ? Visibility.Collapsed : Visibility.Visible;
+        Update(detail);
+    }
 
     // Applying the detail
 

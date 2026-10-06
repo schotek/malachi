@@ -121,6 +121,21 @@ public static class ShortcutMap
             }
             return ShortcutCommand.Reply;
         }
+        if (context.Window == WindowKind.Main && context.EditorFocused)
+        {
+            // The board's inline reply editor (BoardReplyEditorHost): while
+            // its page has the keyboard, Send and Save Draft are the
+            // compose window's keys. Nowhere else in the main window, so
+            // they are none of its chords (its accelerators): elsewhere in
+            // the pane its own scoped accelerators run them.
+            foreach (var (key, command) in Compose)
+            {
+                if (key == chord)
+                {
+                    return command;
+                }
+            }
+        }
         foreach (var (key, command) in Table(context.Window))
         {
             if (key != chord)

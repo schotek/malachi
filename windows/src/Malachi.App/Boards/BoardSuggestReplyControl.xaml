@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Board/BoardSuggestReplyControl.swift; GTK:
+suggest_reply of ui/data/ui/board_suggest_reply.blp. The case detail's
+Suggest Reply, in the place of the Suggested Reply block while the case has
+none: a one-line field for the user's optional instruction and
+✦ Suggest Reply (Enter in the field does the same); while the request runs
+for this case a spinner, its progress and Stop; under them one line, why it
+is disabled or how it failed. Only fixed texts; the field's text is the
+user's own and goes only to the reply controller.
+-->
+<UserControl
+    x:Class="Malachi.App.Boards.BoardSuggestReplyControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    AutomationProperties.AutomationId="BoardSuggestReply"
+    IsTabStop="False">
+    <Border
+        Background="{ThemeResource BoardAssistantFillBrush}"
+        BorderBrush="{ThemeResource BoardAssistantBorderBrush}"
+        Style="{StaticResource BoardBoxStyle}">
+        <StackPanel Spacing="6">
+            <Grid x:Name="InputRow" ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox
+                    x:Name="Field"
+                    AutomationProperties.AutomationId="BoardSuggestReplyInstruction"
+                    KeyDown="OnFieldKeyDown"
+                    TextWrapping="NoWrap" />
+                <Button
+                    x:Name="SuggestButton"
+                    Grid.Column="1"
+                    AutomationProperties.AutomationId="BoardSuggestReplyButton"
+                    Click="OnSuggestClick" />
+            </Grid>
+            <Grid
+                x:Name="RunningRow"
+                ColumnSpacing="8"
+                Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <ProgressRing
+                    x:Name="Spinner"
+                    Width="16"
+                    Height="16"
+                    VerticalAlignment="Center"
+                    IsActive="False" />
+                <TextBlock
+                    x:Name="ProgressText"
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource BodyTextBlockStyle}"
+                    TextWrapping="Wrap" />
+                <Button
+                    x:Name="StopButton"
+                    Grid.Column="2"
+                    AutomationProperties.AutomationId="BoardSuggestReplyStop"
+                    Click="OnStopClick" />
+            </Grid>
+            <TextBlock
+                x:Name="NoteText"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                TextWrapping="Wrap"
+                Visibility="Collapsed" />
+        </StackPanel>
+    </Border>
+</UserControl>

@@ -16,7 +16,10 @@
 // fills them where AppKit replaces its views), so the keyboard stays where
 // it was unless what had it hid; then the state pill takes it, as macOS's
 // restore. ReplySlot and ConversationSlot hold parts (IBoardDetailPart)
-// that follow the case in place; this view hands them every detail.
+// that follow the case in place; this view hands them every detail. It is
+// what the conversation's cards (BoardConversationBlock) ask of their
+// detail (IBoardConversationHost): its window, its scrolling column, Show
+// in Mail and Try Again.
 
 using System;
 using System.Collections.Generic;
@@ -34,7 +37,7 @@ using Microsoft.UI.Xaml.Media;
 namespace Malachi.App.Boards;
 
 /// <summary>The detail of the board's selected case.</summary>
-public sealed partial class BoardDetailView : UserControl
+public sealed partial class BoardDetailView : UserControl, IBoardConversationHost
 {
     // Windows-only string: the separator of a line's parts, as board.go's " · ".
     private const string Separator = " · ";
@@ -70,10 +73,20 @@ public sealed partial class BoardDetailView : UserControl
         AutomationProperties.SetName(StateButton, Board.Text.StateLabel);
         ToolTipService.SetToolTip(StateButton, Board.Text.StateLabel);
         Visibility = Visibility.Collapsed;
+        Scroll.SizeChanged += (_, _) => ViewportChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>The panel's Close button: the page clears the selection.</summary>
     public event EventHandler? CloseRequested;
+
+    /// <summary>The height of the scrolling column's viewport changed (the inline reply editor's cap follows).</summary>
+    public event EventHandler? ViewportChanged;
+
+    /// <summary>The window the detail is in (its questions and its links' toasts); set by the window.</summary>
+    public Window? HostWindow { get; set; }
+
+    /// <summary>The detail's scrolling column (the conversation's cards scroll it, the reply editor's cap is its viewport).</summary>
+    public ScrollViewer Scroller => Scroll;
 
     /// <summary>
     /// Where the detail is: the sliding panel (true: Close shows) or the
@@ -91,7 +104,8 @@ public sealed partial class BoardDetailView : UserControl
 
     /// <summary>
     /// The conversation under the suggested reply: the plain-text excerpts
-    /// until the HTML cards replace them (BoardConversationBlock).
+    /// (the samples), or the HTML cards over the daemon's board
+    /// (BoardConversationBlock, which the main window installs).
     /// </summary>
     public IBoardDetailPart? ConversationPart
     {
@@ -105,8 +119,9 @@ public sealed partial class BoardDetailView : UserControl
     }
 
     /// <summary>
-    /// The suggested reply: the samples' static block until stage 5's inline
-    /// editor and Suggest Reply replace it (BoardReplyEditorHost).
+    /// The suggested reply: the samples' static block, or over the daemon's
+    /// board the inline editor and Suggest Reply (BoardReplySlot of
+    /// BoardReplyEditorHost, which the main window installs).
     /// </summary>
     public IBoardDetailPart? ReplyPart
     {
@@ -148,6 +163,27 @@ public sealed partial class BoardDetailView : UserControl
 
     /// <summary>Gives the keyboard to the state pill, the first control worth it; false without a case.</summary>
     public bool FocusContent() => shown is not null && StateButton.Focus(FocusState.Programmatic);
+
+    /// <summary>
+    /// Gives the keyboard to Reply (GTK's replyButton): where Suggest Reply's
+    /// field leaves it when it is disabled under the keyboard.
+    /// </summary>
+    public bool FocusReplyButton() => shown is not null && ReplyButton.Focus(FocusState.Programmatic);
+
+    /// <inheritdoc/>
+    public bool CanShowInMail(Core.Api.BoardCaseId id) => actions?.CanShowInMail(id) == true;
+
+    /// <inheritdoc/>
+    public void ShowInMail()
+    {
+        if (shown is { } d)
+        {
+            actions?.ShowInMail(d.Id);
+        }
+    }
+
+    /// <inheritdoc/>
+    public void RetryMessages() => Controller?.RetryMessages();
 
     /// <summary>Renders the controller's detail.</summary>
     public void Render()

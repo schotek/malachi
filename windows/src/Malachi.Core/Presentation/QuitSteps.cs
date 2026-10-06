@@ -16,6 +16,14 @@ namespace Malachi.Core.Presentation;
 public sealed record QuitSteps
 {
     /// <summary>
+    /// First of all, the board's inline replies (macOS AppDelegate's
+    /// BoardReplyEditorHost.finishAll, GTK FinishBoardReplies): they settle
+    /// while the connection stands, and one that could not be saved or sent
+    /// asks "Quit without saving a reply?"; false (Cancel) abandons the Quit.
+    /// </summary>
+    public Func<Task<bool>>? BoardReplies { get; init; }
+
+    /// <summary>
     /// Saves every compose window's unsaved changes as drafts and returns
     /// the windows whose save failed (<see cref="ComposeController.SaveForQuitAsync"/>).
     /// </summary>

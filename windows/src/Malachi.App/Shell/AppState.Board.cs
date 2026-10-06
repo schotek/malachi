@@ -45,10 +45,16 @@ public sealed partial class AppState
 
         // The triage and its schedule (AppState.Triage.cs).
         InitializeTriage();
+
+        // The suggested reply (AppState.BoardReply.cs).
+        InitializeBoardReply();
     }
 
     private void CloseBoard()
     {
+        // The suggested reply (AppState.BoardReply.cs).
+        CloseBoardReply();
+
         // The triage and its schedule (AppState.Triage.cs).
         CloseTriage();
 

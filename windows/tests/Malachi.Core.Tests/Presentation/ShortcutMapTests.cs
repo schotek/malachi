@@ -139,6 +139,24 @@ public sealed class ShortcutMapTests
     }
 
     [Fact]
+    public void TheBoardsInlineEditorSendsAndSavesOnlyWhileItHasTheKeyboard()
+    {
+        // The main window's board: its reply editor's page keeps the compose keys.
+        var editor = Main with { TextInputFocused = true, EditorFocused = true };
+        Assert.Equal(C.Send, Resolve(KeyChord.Ctrl(K.Enter), editor));
+        Assert.Equal(C.SaveDraft, Resolve(KeyChord.Ctrl(K.S), editor));
+        // Anywhere else in the main window they run nothing, and they are no chord of it.
+        Assert.Null(Resolve(KeyChord.Ctrl(K.Enter)));
+        Assert.Null(Resolve(KeyChord.Ctrl(K.S), Main with { TextInputFocused = true }));
+        Assert.DoesNotContain(KeyChord.Ctrl(K.Enter), ShortcutMap.Chords(WindowKind.Main));
+        Assert.DoesNotContain(KeyChord.Ctrl(K.S), ShortcutMap.Chords(WindowKind.Main));
+        // A message window has no editor of its own: nothing there.
+        Assert.Null(Resolve(KeyChord.Ctrl(K.Enter), new ShortcutContext(WindowKind.Message, EditorFocused: true)));
+        // The editor's single keys type.
+        Assert.Null(Resolve(KeyChord.Bare(K.S), editor));
+    }
+
+    [Fact]
     public void PreferencesReorderWithCtrlUpAndDown()
     {
         var prefs = new ShortcutContext(WindowKind.Preferences);
