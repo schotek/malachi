@@ -81,4 +81,4 @@ The model ChatGPT uses for the board	GSettings schema metadata; not displayed by
 The accepted OpenAI board consent version	GSettings schema metadata; not displayed by the Windows client
 Zero means no permission to send board mail to OpenAI.	GSettings schema metadata; not displayed by the Windows client
 Codex is unavailable in this Flatpak build.	Flatpak-only sandbox availability
-Show %d More	Windows Board UI has not been ported; GTK Today action
+Show %d More	GTK Today's button; Windows follows macOS's "and %d more" row (Board.Text.AndMore)

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of BoardCardRowView (.plain, .hot) with BoardCaseContentView(card: true)
+of macos/Sources/MalachiMail/Board/BoardViews.swift; GTK: widget.BoardRow
+with SetCardPresentation and the board-card-row(-hot) CSS classes
+(window/board_columns.go). A case of the Columns style as a floating
+card: the List's row (BoardRowView) on a rounded card, warmer while the
+case is hot. Every text is the row's, plain.
+-->
+<UserControl
+    x:Class="Malachi.App.Boards.BoardCardView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:boards="using:Malachi.App.Boards"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <SolidColorBrush x:Key="BoardHotCardFillBrush" Color="#1FFF6B60" />
+                    <SolidColorBrush x:Key="BoardHotCardBorderBrush" Color="#66FF6B60" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="BoardHotCardFillBrush" Color="#12D70015" />
+                    <SolidColorBrush x:Key="BoardHotCardBorderBrush" Color="#59D70015" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast">
+                    <SolidColorBrush x:Key="BoardHotCardFillBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="BoardHotCardBorderBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Border
+        x:Name="Card"
+        Margin="0,3,0,3"
+        Padding="10,0,6,0"
+        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+        BorderThickness="1"
+        CornerRadius="8">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="Kinds">
+                <VisualState x:Name="Plain" />
+                <VisualState x:Name="Hot">
+                    <VisualState.Setters>
+                        <Setter Target="Card.Background" Value="{ThemeResource BoardHotCardFillBrush}" />
+                        <Setter Target="Card.BorderBrush" Value="{ThemeResource BoardHotCardBorderBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+        <boards:BoardRowView x:Name="RowView" />
+    </Border>
+</UserControl>

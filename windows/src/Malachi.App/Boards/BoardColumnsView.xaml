@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Board/BoardColumnsViewController.swift
+(loadView, makePane, the table's cells); GTK: board_columns_scroller and
+board_columns_row of ui/data/ui/board_page.blp and window/board_columns.go.
+The board's Columns style ("Sloupce"): the four states side by side, each a
+heading (the state's dot, its title in its colour and the count) over its
+own ListView of cards; Hot ends with the commitments under "From the
+Assistant"; an empty column shows a dashed placeholder. The columns share
+the width equally, none narrower than BoardColumnsView.ColumnMinimum: on a
+narrower page the outer ScrollViewer scrolls sideways. The panes are built
+in code from the templates here.
+-->
+<UserControl
+    x:Class="Malachi.App.Boards.BoardColumnsView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:boards="using:Malachi.App.Boards"
+    AutomationProperties.AutomationId="BoardColumnsView"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <DataTemplate x:Key="CardTemplate" x:DataType="boards:BoardRowItem">
+            <boards:BoardCardView Row="{x:Bind Row}" />
+        </DataTemplate>
+        <DataTemplate x:Key="CommitmentTemplate" x:DataType="boards:BoardCommitmentItem">
+            <Border
+                Margin="0,3,0,3"
+                Padding="10,0,6,0"
+                Background="{ThemeResource BoardAssistantFillBrush}"
+                BorderBrush="{ThemeResource BoardAssistantBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+                <boards:BoardCommitmentView Commitment="{x:Bind Commitment}" />
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="PlaceholderTemplate" x:DataType="boards:BoardPlaceholderItem">
+            <Grid Margin="0,3,0,3">
+                <Rectangle
+                    RadiusX="8"
+                    RadiusY="8"
+                    Stroke="{ThemeResource CardStrokeColorDefaultBrush}"
+                    StrokeDashArray="4,3"
+                    StrokeThickness="1" />
+                <TextBlock
+                    Margin="12,18,12,18"
+                    HorizontalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    MaxLines="2"
+                    Style="{StaticResource BodyTextBlockStyle}"
+                    Text="{x:Bind Text}"
+                    TextAlignment="Center"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="Wrap" />
+            </Grid>
+        </DataTemplate>
+        <DataTemplate x:Key="HeadingTemplate" x:DataType="boards:BoardHeadingItem">
+            <Grid Padding="2,12,2,4" ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    Foreground="{ThemeResource BoardAssistantBrush}"
+                    Style="{StaticResource BoardSectionTitleStyle}"
+                    Text="{x:Bind Title}" />
+                <TextBlock
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource BoardCountTextStyle}"
+                    Text="{x:Bind CountText}" />
+            </Grid>
+        </DataTemplate>
+        <boards:BoardItemTemplateSelector
+            x:Key="ItemSelector"
+            CommitmentTemplate="{StaticResource CommitmentTemplate}"
+            HeadingTemplate="{StaticResource HeadingTemplate}"
+            PlaceholderTemplate="{StaticResource PlaceholderTemplate}"
+            RowTemplate="{StaticResource CardTemplate}" />
+        <Style
+            x:Key="CardContainerStyle"
+            BasedOn="{StaticResource DefaultListViewItemStyle}"
+            TargetType="ListViewItem">
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="4,0,4,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+    </UserControl.Resources>
+    <ScrollViewer
+        x:Name="Outer"
+        HorizontalScrollBarVisibility="Auto"
+        HorizontalScrollMode="Auto"
+        SizeChanged="OnOuterSizeChanged"
+        VerticalScrollBarVisibility="Disabled"
+        VerticalScrollMode="Disabled"
+        ZoomMode="Disabled">
+        <Grid
+            x:Name="ColumnsGrid"
+            Padding="10,14,10,14"
+            HorizontalAlignment="Left"
+            ColumnSpacing="12" />
+    </ScrollViewer>
+</UserControl>

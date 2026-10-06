@@ -190,10 +190,20 @@ public sealed partial class BoardPage : UserControl
         switch (style)
         {
             case BoardStyle.Columns:
-                made = new BoardColumnsView();
+                var columns = new BoardColumnsView();
+                if (actions is not null)
+                {
+                    columns.Attach(actions);
+                }
+                made = columns;
                 break;
             case BoardStyle.Today:
-                made = new BoardTodayView();
+                var today = new BoardTodayView();
+                if (actions is not null)
+                {
+                    today.Attach(actions);
+                }
+                made = today;
                 break;
             default:
                 var list = new BoardListView();
