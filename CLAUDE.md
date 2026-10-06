@@ -419,10 +419,13 @@ Pořadí prací:
    konverzace; Windows na `feat/jira-windows`, zbývá průchod vlastníka
    proti skutečnému Jira Cloud)
 10. Nástěnka (případy, pravidla, triage asistentem) — backend, API, most
-    MCP, macOS a GTK klient napsané na `feat/board`; Go model je v
-    `ui/internal/board`, běh triage v `boardtriage` a návrhy odpovědí v
-    `boardreply`. Zbývá Windows a ruční ověření GTK včetně skutečného
-    běhu triage a návrhu odpovědi s Claude Code
+    MCP, macOS, GTK i Windows klient napsané na `feat/board`; Go model je
+    v `ui/internal/board`, běh triage v `boardtriage` a návrhy odpovědí v
+    `boardreply`, Windows v `Malachi.Core/Boards` a `Malachi.App/Boards`
+    (agenti prošli přes UI Automation nad vzorovými daty, vlastník ne).
+    Zbývá ruční ověření GTK a Windows včetně skutečného běhu triage a
+    návrhu odpovědi s Claude Code a Codexem, inline odpovědi nad skutečným
+    konceptem a ARM64
 
 Asistent (stav 2026-09-30, sloučeno do `main`; uživatel potvrdil, že
 funguje ve všech třech klientech). Na macOS je hotové a uživatelem otestované:
@@ -1027,8 +1030,8 @@ port `MalachiCore/Bulk` a `Malachi.Core/Bulk`; pruh v panelu, okně zprávy
 a kartách konverzace, ne v přiložené zprávě.
 
 Nástěnka (stav 2026-10-02, větev `feat/board`; nejdřív macOS a potom
-GTK z výslovného pokynu vlastníka, výjimka z pravidla 6: Windows
-ji stále dluží). Hlavní okno má dva režimy, Pošta (vše dosavadní)
+GTK z výslovného pokynu vlastníka, výjimka z pravidla 6; Windows ji doplnil
+2026-10-06, viz níže). Hlavní okno má dva režimy, Pošta (vše dosavadní)
 a Nástěnka. Přepíná dvousegmentový přepínač (`envelope` / `square.grid.2x2`)
 na začátku každého toolbaru a položky Pošta a Nástěnka na vrcholu menu
 Zobrazení, bez klávesových zkratek; režim se neukládá (`Board.initialMode`
@@ -1129,7 +1132,7 @@ po 2000 zprávách, kurzor `meta` `board.rules` = `<verze>:<id>` /
 s `meta` `board.roles`. API `pkg/api/board.go` (kompatibilní rozšíření
 protokolu 2, chyby 1106 `caseNotFound` a 1506 `quoteNotFound`,
 `notify.boardChanged`); Swift zrcadlo `MalachiCore/API/BoardAPI.swift`, C#
-`windows/src/Malachi.Core/Api/Board.cs` napsané bez sestavení.
+`windows/src/Malachi.Core/Api/Board.cs` (sestavené a otestované na Windows).
 
 Asistent smí na nástěnku **jen přes most** a jen zapisovat poznámky:
 **anotaci** případu (stav, titulek, shrnutí, proč, úkoly, termín s
@@ -1322,9 +1325,10 @@ je ukazuje skrz překrývající panel). Každý řetězec z případu Core znov
 balíčku `ui/internal/board` (`text.go`, `triage.go`, `reply.go`, texty za
 rozhraním `Translator` jako `jira.Translator`, v `po/POTFILES`, česky
 v `po/cs.po`); macOS `Board.Text` je přebírá s klíčem = msgid, co v něm
-zůstane jako `// macOS-only string`, je anglicky. Windows nástěnku nemá,
-takže tyto msgidy patří do `windows/parity-exclusions.txt`, dokud ji
-nedostane.
+zůstane jako `// macOS-only string`, je anglicky. Windows klient nástěnku
+má (viz níže) a msgidy nástěnky používá; v `windows/parity-exclusions.txt`
+zůstaly jen popisy klíčů gschema (styl, souhlas a model triage) a GTK
+„Show %d More“ (Windows má řádek „… a dalších %d“ jako macOS).
 
 GTK UI: `ui/internal/board` obsahuje i pohledové modely, kontroler,
 zdroj nad démonem, vzorová data a pravidla dostupnosti a rozvrhu.
@@ -1348,8 +1352,28 @@ asynchronním načtení předvoleb a dostupnosti Claude, bez prvního
 ručního otevření nástěnky. Výchozí styl je v Předvolbách → Obecné,
 souhlas a rozvrh triage v Předvolbách → AI.
 
-Zbývá port do Windows (C# typy API jsou napsané bez sestavení,
-`build.ps1 app`/`test` čeká), ruční průchod GTK (všechny styly,
+Windows klient má nástěnku (2026-10-06, `feat/board`, `docs/windows-port.md`
+§11.8, `windows/README.md` → The Board): port macOS s GTK jako reference,
+jmenné prostory `Malachi.Core.Boards` a `Malachi.App.Boards` (jmenný prostor
+`Board` by skryl třídu `Board`), jádro v `Malachi.Core/Boards` a
+`Controllers/Board*` (model, tři styly, `DaemonBoardSource`, triage a
+automatická triage, návrh odpovědi, `BoardReplyPanes`), obsah okna Nová
+zpráva přesunutý do sdíleného `Compose/ComposePane` s `DraftOwner.Board`,
+okno s režimy Pošta / Nástěnka (`MainWindow.Mode.cs`, `Boards/`),
+konverzační karty nad `CardWebView` (kanárek `board-card`), kroky ukončení
+`QuitSteps.BoardReplies` a `StopTriage`, Předvolby → AI → Nástěnka
+(`AiPage.Board.cs`); triage a návrh odpovědi jdou i přes zvoleného poskytovatele
+ChatGPT/Codex (`board-triage-chatgpt-model`, vlastní verze souhlasu,
+`docs/chatgpt-integration.md` §11). Agenti ho napsali, sestavili, otestovali
+(Core testy v `windows/tests/Malachi.Core.Tests`) a prošli přes UI Automation
+nad vzorovými daty (`MALACHI_BOARD_SAMPLES=1`) a účtem devmail; vlastník ho
+zatím neověřil. Zbývá jemu: skutečný běh triage a návrhu odpovědi s Claude
+Code i s Codexem, inline odpověď nad skutečným propojeným konceptem
+(autosave, odeslání, zahození, ukončení s neuloženým textem) a ARM64.
+Oprava klávesnice GTK (`board_keys.go`, `columns_key.go`: Sloupce a Dnes
+berou klávesnici, Vlevo/Vpravo přes `board.SidewaysTarget`) je sloučená, ale
+čeká na sestavení a `go test ./internal/window/...` v Toolbxu. Zbývá dál
+ruční průchod GTK (všechny styly,
 inline odpověď, přepínání výběru a ukončení s neuloženým textem)
 a skutečný běh triage a navrhování odpovědi s Claude Code.
 Testovací pokrytí GTK je v `ui/internal/board`, `boardtriage`,
@@ -1374,7 +1398,7 @@ a fuzz cíli), `store`, `core` a mostu, sady `swift test` nástěnky
 pravidla známých odesílatelů a okno 30 dní pro `you` vznikla po suchém
 běhu nad kopií skutečného storu (`TestBoardDryRun`). UI zkouší vlastník
 ručně. Zde není doložen skutečný běh triage s Claude Code (ruční ani
-automatický), návrh odpovědi v GTK ani Windows build; migrace 0017 je
+automatický), návrh odpovědi v GTK ani ve Windows klientu (ten agenti jen sestavili, otestovali a prošli nad vzorovými daty); migrace 0017 je
 již zmrazená po provedení v ostrém storu vlastníka (viz níže).
 
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné

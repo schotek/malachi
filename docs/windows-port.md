@@ -2595,6 +2595,153 @@ conversation's members when only its issue had moved (a status change
 with the events off), in all three clients (`sameShape`). Not walked: a
 real Jira Cloud site (the owner's, with a token they enter).
 
+### 11.8 The Board
+
+The Board (`feat/board`, 2026-10-06) is the third part of the client ported
+from macOS with GTK as the behaviour reference, and the rule that Go wins
+where the two differ. It is a second mode of the main window: Mail shows
+the panes, Board shows `BoardPage` in their place, and the status line
+stays. The hidden mode keeps its state (folder, selection, scroll, search,
+the assistant's transcript; the Board's style), the mode is not remembered
+(`Board.InitialMode`), and nothing reaches it from a key: the switch is the
+two-segment control at the start of the title bar, and `Mail` and `Board`
+are in the sidebar's `…` menu and the Board's own (README, deviations).
+
+**Layers.** As everywhere, three:
+
+1. `Malachi.Core.Boards` (`Board`, a static partial class with the nested
+   types of the Swift model, as `Board.Case`, `Board.Mode`, `Board.Text`):
+   the cases and their cleaning of hostile strings (`BoardCase`,
+   `BoardClean`, Go's grapheme cut), the view model of the three styles, the
+   detail and the selection rules (`BoardView`, `BoardViewTypes`), the
+   remind presets, the unstar rule, the texts with the GTK msgids
+   (`BoardText`, `BoardTriageText`, `BoardSuggestReplyText`), the rules of
+   the triage run and of automatic triage (`BoardTriage`,
+   `BoardAutoTriage`), the conversation cards (`BoardConversationCards`: the
+   newest open, at most four live web views), the editor's height
+   (`BoardEditorHeight`), Left and Right in Columns (`BoardColumnsKey`), the
+   source (`IBoardSource`, `DaemonBoardSource` over `board.*` with
+   optimistic writes and `board.get` cached by version, `InMemoryBoardSource`
+   over `BoardSamples`) and the observers (`BoardObservers`).
+2. The controllers in `Malachi.Core/Controllers`: `BoardController` (view
+   state and view model over the source), `BoardPreferencesController`
+   (`board.preferences`/`setPreferences`, optimistic queued writes),
+   `BoardTriageController` (consent, `board.runStart`/`runEnd` with the
+   run's usage, the limit and its 45 s grace, the provider's source and
+   consent; a provider switch stops a run and turns automatic triage off),
+   `BoardAutoTriageScheduler` with `IBoardAutoTriageTarget`,
+   `BoardReplyController` (one suggested reply for the application, the
+   bridge as `--reply-only`, the draft linked by `board.setDraft`),
+   `BoardReplyEditorController` and `BoardReplyPanes` with `IBoardReplyPane`
+   (one live pane, settle before close, an unsaved pane kept and saved again
+   with back-off, a sending pane waited for, at most three clean panes
+   kept). All run on the injected `TimeProvider` and `ControllerScope`. The
+   assistant's one-shot additions they stand on are in
+   `Assistants/Assistant.Triage.cs`, `Assistant.SuggestReply.cs`,
+   `AssistantUsage*.cs` (the usage of a run, read from the stream and the
+   result with Go's JSON semantics) and `AssistantRequest` (tools, timeout,
+   model, `ToolsMissing`).
+3. `Malachi.App/Boards` (the namespace is `Malachi.App.Boards`): `BoardPage`
+   (the page's bar, notice, the triage strip, the one detail view and the
+   sliding panel; the page is the controller's only listener), the three
+   styles behind `IBoardStyleContent` (`BoardListView` with `BoardNavView`,
+   `BoardColumnsView`, `BoardTodayView`; each replaces only the rows that
+   changed, so the scroll position and the selection stay), `BoardDetailView`
+   (the upper part is filled anew per case and keeps `ReplySlot` and
+   `ConversationSlot` outside that, parts of `IBoardDetailPart` that follow
+   the case in place), `BoardActions` and `BoardCaseMenu`, and, in the window,
+   `MainWindow.Mode.cs`, `MainWindow.Triage.cs` and `MainWindow.BoardReply.cs`
+   with `Shell/AppState.Board.cs`, `.Triage.cs`, `.BoardReply.cs` and
+   `Integration.Board.cs`, `.Triage.cs`; the Board group of *Preferences →
+   AI* is `Preferences/AiPage.Board.cs`, the style of the first show is a row
+   of *General*.
+
+**The namespace.** The type is `Board` in every port, so a namespace `Board`
+would hide it from the rest of the namespace tree (the first draft of the
+conversation cards, `Malachi.App.Board`, stopped the app from building). The
+namespaces are `Malachi.Core.Boards`, `Malachi.App.Boards` and, for the
+tests, `Malachi.Core.Tests.Boards`.
+
+**The compose pane.** The content of the New Message window moved into
+`Compose/ComposePane` (a `UserControl`, port of macOS `ComposePane` and
+GTK's `compose.Pane`) in a refactor that changed nothing for the window
+(`ComposePane.Attachments.cs`, `.Comment.cs`, `.Editor.cs` carry what the
+window's files did). The window keeps its title bar, the close question,
+Quit, its command routing and the rewrite, and hears from the pane through
+`IComposePaneHost`. `ComposePane.Options` chooses `Layout` (`Window` or
+`Inline`) and the `DraftOwner` (`Window` or `Board`). Inline there is no
+From row, the editor is in its sized mode (`ComposeWebView(sized: true)`,
+`EditorChannel`'s `SizeReported`, clamped by `EditorHeight` against the
+detail's visible height) and the footer is Attach, the status, Discard and
+Send, without a key on Send. `DraftOwner.Board` is in
+`ComposeDraftController`: closing never asks or deletes, a conflict fetches
+the version (`draft.get`) and keeps our text in the same draft, a draft
+deleted elsewhere is reported (`OnLost`) and never recreated, Discard goes
+through `DiscardStored`.
+
+**The inline reply.** `BoardReplyEditorHost` makes the panes Core's
+`BoardReplyPanes` asks for and gives the live one's view to the detail's
+reply slot (`BoardReplySlot`); every decision about a pane is Core's and
+tested there. There is one detail view, which the page moves between the
+List's pane and the panel, so the live pane moves with it. A pane that stops
+being visible (another selection, Mail mode, a hidden window) is saved
+first; one that could not be saved or sent stays and tries again. The samples
+have no draft behind them and keep a static block (`BoardSampleReply`).
+
+**Quitting.** `QuitSteps` has two new steps. `BoardReplies` runs first, while
+the connection stands: the panes settle, and a reply that could not be saved
+or sent asks *Quit without saving a reply?* (*Quit Anyway* or Cancel, which
+keeps the app running and abandons the quit); a session end overtaking the
+question stops instead. `StopTriage` runs between the windows' hiding and the
+daemon's stop: the schedule stops and a run under way ends, waiting for its
+`board.runEnd` at most 2 s (`BoardTriageController.CancelAndEndAsync`).
+
+**The conversation cards.** The detail's conversation is
+`Boards/Conversation/BoardConversationBlock` and `BoardMessageCardView`, never
+rebuilt with the detail: a refresh of the Board (every autosave of the reply
+lists it again) changes the heading in place and touches the cards only when
+the case or its members changed (`Board.ConversationCards.Apply`). An open
+card asks for its body through Mail's `MessageCache` (`message.body`, the
+variant its entry shows, trimmed unless Mail revealed the quoted text) and
+shows the sanitised HTML in a `CardWebView` (§6.7: no script of the page,
+measured from outside, the 4000 cap and the freeze of `WebHeightGovernor`), at
+most four at once, the one opened longest ago giving way. Older cards are
+folded to the excerpt of `board.get` without a web view; errors, withheld or
+missing HTML and the samples keep the excerpt. `Detach` lets every web view go
+while the Board is hidden, `Attach` brings them back. The network canary has a
+`board-card` view, a second `CardWebView` in this role, with the hostile
+document, its link, form, target, UNC and refresh and the corpus, and the
+assertions of the conversation card.
+
+**Keyboard.** The mail's single keys and reply keys stand still while the
+Board shows (`Board.Allows` through `AppCommand.Gate`); Check for New Mail and
+New Message stay, F10 opens the Board's menu. Up and Down step through rows
+past headings and placeholders; Left and Right in Columns follow
+`Board.SidewaysTarget` (ported from GTK's `columns_key.go`, which came with
+the same fix there: `board_keys.go` and `columns_key.go` give Columns and
+Today the keyboard); Return selects the focused card, Escape closes the
+panel. Ctrl+Enter and Ctrl+S of the inline editor are not chords of the main
+window: `ShortcutMap` resolves them to the compose commands only when the
+context is the main window with `EditorFocused`, and with the keyboard
+elsewhere in the pane the pane's own `KeyboardAccelerator`s run them.
+
+**Triage and the provider.** *Triage* in the Board's bar, the Board group of
+*Preferences → AI* and the schedule exist while triage is offered (one rule
+in Core, `TriageView.Offered`): the Assistant shown with the *In App
+(Experimental)* target, a Board the daemon has not turned off. The provider is
+the one the in-app assistant uses: Claude Code with the Board's own model
+(`board-triage-model`) and the Board's consent, or Codex (docs/chatgpt-
+integration.md §11) with `board-triage-chatgpt-model` and its own consent
+version. `AppState.Triage` holds one controller and one scheduler for the
+application, started at launch without a first entry into the Board.
+
+**Verified, and not.** Written and driven through UI Automation over sample
+data (`MALACHI_BOARD_SAMPLES=1`) and a devmail account by the port's agents;
+not yet verified by the owner. Still to be verified: a real Claude Code and a real Codex run
+of triage and of a suggested reply, an inline reply over a real linked draft
+(autosave, send, discard, quitting with an unsaved one) and ARM64 on real
+hardware.
+
 ## 12. Tests
 
 `make test-windows` (`build.ps1 test`) runs six test projects, 5,944
@@ -2632,6 +2779,22 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   a short path, playing the handshake with all of macOS's modes) and
   **MailFixture**, with `FakeTimeProvider` and `IdleAsync`. They run on any
   OS with .NET 10.
+- The Board's part of `Malachi.Core.Tests` (§11.8; counts of `[Fact]` and
+  `[Theory]` methods, a theory's cases not counted, added on 2026-10-06 and
+  not yet in the totals above): 198 in `Boards/` (the view model and its
+  limits, the cleaning of hostile strings, the remind and unstar rules, the
+  texts, the samples, the conversation cards' rules, Columns' key table,
+  `DaemonBoardSource` and the daemon's model, in-memory source), 166 in
+  `Controllers/Board*` (`BoardController` 55, triage 41, reply panes 21 and
+  their draft cases 2, reply 20, reply editor 9, preferences 10, scheduler
+  8), 32 in `ComposeDraftBoardOwnerTests` (`DraftOwner.Board`), 11 in
+  `AssistantTriageTests`, plus the Board's cases in the events, request,
+  provider, Codex policy, quit-sequence, shortcut-map, editor-bridge and
+  notification-hub tests. The triage and the replies run against
+  `FakeDaemon` and the stand-in `claude.exe`, with a `BoardTriageDaemon`
+  that plays the daemon's board preferences and runs. The canary has the `board-card` view
+  (§11.8). The UI smoke tests have no Board walk; the port's agents drove
+  the app by hand through UI Automation (§11.8).
 - `Malachi.Platform.Windows.Tests`: the process host against
   `Malachi.Core.TestDaemon` (graceful stop, kill after the timeout, deaf
   daemon), the key-file policy (owner, DACL, reparse points), the registry
@@ -3234,3 +3397,10 @@ the client trailed the daemon's API until 2026-09-30, are ported (§11.7,
 the card's view §6.7); of them only a walk against a real Jira Cloud site
 is open, which takes the owner's own token and an issue they name for the
 comments.
+
+The Board, where the client trailed the daemon's API until 2026-10-06, is
+ported (§11.8); what is open is the owner's own check with a real Claude
+Code and a real Codex (triage and a suggested reply), an inline reply over
+a real linked draft, and, as for the rest of the client, ARM64 on real
+hardware (above). The Board adds nothing to the licence, signing or
+installer items.

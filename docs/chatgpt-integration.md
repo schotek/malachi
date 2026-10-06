@@ -78,9 +78,9 @@ missing authoritative API operation, document that separately and change
 `backend/pkg/api` and [api.md](api.md) together.
 
 On this branch, GTK and macOS have board triage/suggested replies; the
-Windows tree has the assistant panel, rewrite and search, but no matching
-Board controllers yet. Track that parity prerequisite explicitly rather
-than treating a Codex adapter as a Windows board port.
+Windows tree had the assistant panel, rewrite and search, but no matching
+Board controllers; that prerequisite was met by the Windows Board port
+(§11), which a Codex adapter alone would not have been.
 
 ## 3. Provider contract in the client cores
 
@@ -411,7 +411,17 @@ Validate native x64 and ARM64 executable availability; report unsupported
 architecture instead of guessing or downloading a substitute. Test the
 published app, not just Core tests: real paths, no console flash, DACLs,
 browser callback, endpoint security restrictions and process-tree cleanup.
-The Windows Board parity prerequisite in §2 remains separate tracked work.
+The Windows Board parity prerequisite in §2 is met (2026-10-06): the
+Board's triage and suggested reply on Windows run with the provider chosen
+in *Preferences → AI*. With ChatGPT the triage uses its own model
+(`board-triage-chatgpt-model`, from the provider's catalog, apart from the
+panel's `assistant-chatgpt-model`) and its own consent version
+(`board-triage-chatgpt-consent-version`, a separate OpenAI Board disclosure,
+`ChatGptBoardText`), reports `malachi-chatgpt` as the run's source and the
+session's token usage as the run's; a provider switch stops a run and turns
+automatic triage off. Written and driven through UI Automation over sample
+data and a devmail account by the port's agents; a real Codex run of triage
+and of a suggested reply is not yet verified by the owner.
 
 ## 8. Preferences, consent and migration
 
@@ -526,8 +536,9 @@ recheck the linked official specifications when porting or releasing.
 
 The Windows client now implements the experimental provider for the
 assistant panel, compose rewriting and natural-language search conversion.
-Board triage and suggested replies are excluded because the Windows Board
-UI has not been ported. The existing Claude provider remains the default.
+The Windows Board (docs/windows-port.md §11.8) uses the selected provider
+as well, for triage and suggested replies, which §11 below describes. The
+existing Claude provider remains the default.
 
 To use it on Windows:
 
