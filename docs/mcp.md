@@ -650,10 +650,15 @@ Limits per process, all counted in the bridge:
   - Trusted: `caseId`, `accountId`, `inputKey` (to pass back as given),
     `ruleState`, `ruleReason`, `userState` when the user set one,
     `replyMessageId`, `issueKey` when it has the shape of a key
-    (`ABC-123`; any other key goes into the fence), and per message
+    (`ABC-123`; any other key goes into the fence), the commitments the
+    case already has (open and done, at most 10: `commitmentId`,
+    `messageId`, `state`, `due`; the procedure says to record none of
+    them again), and per message
     `messageId`, `date`, `mine` (true = in a folder of role `sent` or
     `outbox`, the user's own) and `truncated`.
-  - In the fence: `subject`, `issueStatus`, `yourAddresses` (the user's
+  - In the fence: `subject`, `issueStatus`, the recorded commitments'
+    `text` and `quote` (spent from the case's budget right after the
+    subject and the issue's fields), `yourAddresses` (the user's
     addresses on the account, at most 20), and per message `from`, `to`,
     `cc` (at most 20 each and 1 KiB together, then `(N more)`) and
     `text`. Every name is cut at 100 bytes and every address at 254,
@@ -716,7 +721,11 @@ Limits per process, all counted in the bridge:
   from the user's own text: the daemon checks the quote against it, so
   the other party's words never count as the user's promise. Output: one
   trusted line (commitment id, case, message, state, due, run) and the
-  commitments left.
+  commitments left. A promise the case already has (the same message and
+  quote, or a quote within or around it; `board.commit` returns it with
+  `existing`) is not recorded again: the line then says it was already
+  recorded, names that commitment, and the call does not count against
+  the session's commitments.
 
 #### The prompt `triage_board`
 

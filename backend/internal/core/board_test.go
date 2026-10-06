@@ -485,7 +485,7 @@ func TestBoardTriage(t *testing.T) {
 	in := x.put(bmail{folder: x.inbox, thread: "t_a", rfc: "a1", from: boardAlice, to: []api.Address{boardMe}, subject: "Report",
 		text: "Please send the report by Friday 3 October.\nThanks"})
 	mine := x.put(bmail{folder: x.sent, thread: "t_a", rfc: "a2", inReplyTo: "a1", from: boardMe, to: []api.Address{boardAlice},
-		subject: "Re: Report", at: time.Hour, text: "I will send it on Thursday morning.\n\nOn Mon, Alice wrote:\n> Please send the report by Friday 3 October."})
+		subject: "Re: Report", at: time.Hour, text: "I will send it on Thursday morning. I will also book the room.\n\nOn Mon, Alice wrote:\n> Please send the report by Friday 3 October."})
 	x.drain()
 
 	// The assistant off: no queue, no annotations.
@@ -504,7 +504,7 @@ func TestBoardTriage(t *testing.T) {
 	}
 	item := q.Items[0]
 	if len(item.InputKey) != 32 || len(item.Messages) != 2 || !slices.Contains(item.Own, boardMe.Address) ||
-		item.Messages[1].Text != "I will send it on Thursday morning." || !item.Messages[1].Truncated || !item.Messages[1].Mine ||
+		item.Messages[1].Text != "I will send it on Thursday morning. I will also book the room." || !item.Messages[1].Truncated || !item.Messages[1].Mine ||
 		item.ReplyMessageID != api.MessageID(in) {
 		t.Fatalf("queue item: %+v", item)
 	}
@@ -572,6 +572,14 @@ func TestBoardTriage(t *testing.T) {
 	if err != nil || k.Commitment.State != api.CommitmentOpen || k.Commitment.Quote != "I will send it on Thursday morning" {
 		t.Fatalf("commit: %+v %v", k, err)
 	}
+	// The same promise again, in other words or with a shorter span of
+	// the sentence: the one recorded comes back, nothing is counted.
+	for _, quote := range []string{"I will send it on Thursday morning", "I will send it\u200b on Thursday morning", "send it on Thursday"} {
+		again, err := cm(api.BoardCommitParams{MessageID: api.MessageID(mine), Text: "Report on Thursday", Quote: quote})
+		if err != nil || !again.Existing || again.Commitment.ID != k.Commitment.ID || again.Commitment.Text != "Send the report on Thursday" {
+			t.Fatalf("again %q: %+v %v", quote, again, err)
+		}
+	}
 	res, _ = x.list()
 	if len(res.Commitments) != 1 || res.Triage.Queue != 0 {
 		t.Fatalf("after triage: %d commitments, queue %d", len(res.Commitments), res.Triage.Queue)
@@ -593,7 +601,7 @@ func TestBoardTriage(t *testing.T) {
 
 	// After the run ended, a call naming it counts in the implicit
 	// external run of its source and day.
-	k2, err := cm(api.BoardCommitParams{MessageID: api.MessageID(mine), Text: "Look", Quote: "I will send it on Thursday"})
+	k2, err := cm(api.BoardCommitParams{MessageID: api.MessageID(mine), Text: "Book the room", Quote: "I will also book the room"})
 	if err != nil {
 		t.Fatal(err)
 	}

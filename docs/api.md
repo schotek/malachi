@@ -3193,6 +3193,7 @@ BoardQueueItem { "caseId": "c_…", "accountId": "acc_1",
                  "issue": { … } (opt),
                  "own": ["me@example.org"],        // the user's addresses on the account
                  "hasDraft": true (opt),           // the case already links a draft: a draftId passed to board.annotate is not linked
+                 "commitments": [BoardCommitment] (opt), // open and done ones already recorded, oldest first, at most 10
                  "messages": [{ "messageId": "m_5", "from": Address,
                                 "to": [Address] (opt), "cc": [Address] (opt),
                                 "date": Time, "mine": false,
@@ -3241,11 +3242,19 @@ no refusal. A draft it links becomes local as with `board.setDraft`.
 - params: `{ "caseId", "inputKey", "runId" (opt), "messageId", "text",
   "quote", "due": Time (opt), "source" }` — `messageId` a member of the
   case that is the user's own
-- result: `{ "commitment": BoardCommitment }`
+- result: `{ "commitment": BoardCommitment, "existing": true (opt) }`
 - errors: caseNotFound, conflict, quoteNotFound (`data.field:
   "commitment"`), invalidArgument (the assistant off, the account not a
   triage account, a message that is not the user's or not in the case,
   limits, `due` out of range), storageError
+
+A commitment already recorded for the same case, message and quote (in
+any state; quotes compared after the normalisation of the verbatim check,
+one containing the other counts as the same) is returned with `existing:
+true` instead of a second one: its text and state stay, nothing is
+counted in the run, and only an open or done one without a deadline takes
+`due`. Duplicates recorded before this rule are merged once by the
+daemon's board upkeep (the oldest kept, done when any of them was).
 
 #### `board.setCommitment`
 - params: `{ "commitmentId", "done": bool }` — `false` reopens a done or

@@ -993,6 +993,10 @@ public sealed record BoardQueueItem
     /// <summary>The case already links a draft that exists; left out when false.</summary>
     [JsonPropertyName("hasDraft")]
     public bool? HasDraft { get; init; }
+
+    /// <summary>The open and done commitments the case already has, oldest first, at most 10; left out when none.</summary>
+    [JsonPropertyName("commitments")]
+    public IReadOnlyList<BoardCommitment>? Commitments { get; init; }
 }
 
 /// <summary>api.BoardQueueMessage: one member of a <see cref="BoardQueueItem"/>.</summary>
@@ -1136,6 +1140,10 @@ public sealed record BoardCommitResult
     /// <summary>The commitment recorded.</summary>
     [JsonPropertyName("commitment")]
     public required BoardCommitment Commitment { get; init; }
+
+    /// <summary>The case already had this commitment (the same message and quote); it is returned as it was. Left out when false.</summary>
+    [JsonPropertyName("existing")]
+    public bool? Existing { get; init; }
 }
 
 /// <summary>api.BoardSetCommitmentParams.</summary>

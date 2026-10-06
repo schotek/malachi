@@ -629,6 +629,7 @@ func (b *Backend) boardUpkeep(ctx context.Context) {
 		b.log.Warn("board: delete old runs", "err", err)
 	}
 	b.clearDueReminds(ctx)
+	b.dedupBoardCommitments(ctx)
 	if accounts, err := b.store.DropStrayDraftCopies(ctx, "", nil, now); err != nil {
 		b.log.Warn("board: delete the Drafts folder copies no draft holds", "err", err)
 	} else {
@@ -650,6 +651,42 @@ func (b *Backend) boardUpkeep(ctx context.Context) {
 	b.sweepLocalDrafts(ctx, now)
 	if enabled {
 		b.boardRolesChanged(ctx)
+	}
+}
+
+// metaBoardCommitmentsDedup records that the commitments recorded more
+// than once before board.commit returned the existing one were merged.
+const metaBoardCommitmentsDedup = "board.commitments.dedup"
+
+// dedupBoardCommitments merges, once, the commitments recorded twice for
+// the same message and quote (store.DedupBoardCommitments with the rule
+// of board.commit) and tells the clients about the cases it changed.
+func (b *Backend) dedupBoardCommitments(ctx context.Context) {
+	if v, _, err := b.store.GetMeta(ctx, metaBoardCommitmentsDedup); err != nil {
+		b.log.Warn("board: read the commitments' merge mark", "err", err)
+		return
+	} else if v == "1" {
+		return
+	}
+	changed, err := b.store.DedupBoardCommitments(ctx, board.SameCommitment)
+	if err != nil {
+		b.log.Warn("board: merge the commitments recorded twice", "err", err)
+		return
+	}
+	accounts := make([]string, 0, len(changed))
+	for account, threads := range changed {
+		if err := b.store.MarkBoardThreadsDirty(ctx, account, threads); err != nil {
+			b.log.Warn("board: mark a thread", "err", err)
+		}
+		accounts = append(accounts, account)
+	}
+	if len(accounts) > 0 {
+		b.log.Info("board: merged the commitments recorded twice", "accounts", len(accounts))
+		b.notifyBoard(false, accounts...)
+		b.wakeBoard()
+	}
+	if err := b.store.SetMeta(ctx, metaBoardCommitmentsDedup, "1"); err != nil {
+		b.log.Warn("board: record the commitments' merge mark", "err", err)
 	}
 }
 

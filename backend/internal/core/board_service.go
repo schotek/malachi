@@ -677,6 +677,19 @@ func (s *boardService) Queue(ctx context.Context, p api.BoardQueueParams) (*api.
 		for i, m := range it.Messages {
 			texts[i] = m.Text
 		}
+		comms, err := s.b.store.BoardCommitments(ctx, c.ID)
+		if err != nil {
+			return nil, boardErr(err)
+		}
+		for _, k := range comms {
+			if k.State == api.CommitmentClosed {
+				continue
+			}
+			if len(item.Commitments) == api.MaxBoardQueueCommitments {
+				break
+			}
+			item.Commitments = append(item.Commitments, toAPICommitment(k))
+		}
 		ex := board.QueueExcerpts(texts)
 		for i, m := range it.Messages {
 			qm := queueMessage(m, s.b.boardNow())
@@ -971,7 +984,7 @@ func (s *boardService) Commit(ctx context.Context, p api.BoardCommitParams) (*ap
 		return nil, t.reject(ctx, boardQuoteNotFound(api.QuoteFieldCommitment))
 	}
 	in := store.BoardCommitmentInput{CaseID: c.ID, InputKey: p.InputKey, MessageID: msg, Text: text, Quote: quote,
-		Source: t.ref.Source, Run: t.ref, Now: s.b.boardNow()}
+		Source: t.ref.Source, Run: t.ref, Now: s.b.boardNow(), SameQuote: board.SameCommitment}
 	if p.Due != nil {
 		arrived, err := s.memberArrival(ctx, c.AccountID, msg)
 		if err != nil {
@@ -988,6 +1001,14 @@ func (s *boardService) Commit(ctx context.Context, p api.BoardCommitParams) (*ap
 		return nil, t.reject(ctx, boardErr(err))
 	case err != nil:
 		return nil, boardErr(err)
+	}
+	if k.Existing {
+		// Recorded before: nothing was counted; a deadline it took in
+		// changed the case.
+		if !in.Due.IsZero() {
+			s.b.notifyBoard(false, c.AccountID)
+		}
+		return &api.BoardCommitResult{Commitment: toAPICommitment(k), Existing: true}, nil
 	}
 	s.b.boardWritten(ctx, c)
 	s.b.notifyBoard(true) // the run's counts

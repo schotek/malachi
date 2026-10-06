@@ -411,6 +411,7 @@ const (
 	MaxBoardQueueMessages            = 8        // per case, the newest
 	MaxBoardQueueMessageBytes        = 3000     // BoardQueueMessage.Text
 	MaxBoardQueueCaseBytes           = 12 << 10 // the texts of one case together
+	MaxBoardQueueCommitments         = 10       // BoardQueueItem.Commitments
 	MaxBoardTitleBytes               = 300      // one line
 	MaxBoardWhyBytes                 = 400      // one line
 	MaxBoardSummaryBytes             = 2000     // a block
@@ -609,6 +610,10 @@ type BoardQueueItem struct {
 	// HasDraft: the case already links a draft that exists (BoardCase
 	// .Draft); a draftId passed to board.annotate is then not linked.
 	HasDraft bool `json:"hasDraft,omitempty"`
+	// Commitments the case already has (open and done, oldest first, at
+	// most MaxBoardQueueCommitments); board.commit returns one of them
+	// rather than record it again.
+	Commitments []BoardCommitment `json:"commitments,omitempty"`
 }
 
 // BoardQueueMessage is one member of a BoardQueueItem.
@@ -669,6 +674,11 @@ type BoardCommitParams struct {
 
 type BoardCommitResult struct {
 	Commitment BoardCommitment `json:"commitment"`
+	// Existing: the case already had this commitment (the same message
+	// and, normalised as for the verbatim check, the same quote or one
+	// containing or contained in it); it is returned as it was, nothing
+	// was added or counted.
+	Existing bool `json:"existing,omitempty"`
 }
 
 type BoardSetCommitmentParams struct {

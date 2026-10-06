@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/schotek/malachi/backend/pkg/api"
@@ -158,6 +159,10 @@ type BoardCommitment struct {
 	RunID        string
 	At           time.Time
 	ClosedAt     time.Time
+	// Existing (AddBoardCommitment only): the commitment was recorded
+	// before for the same message and quote and is returned instead of a
+	// new one.
+	Existing bool
 }
 
 // BoardCommitmentInput is a commitment to record (board.commit), cleaned
@@ -172,6 +177,9 @@ type BoardCommitmentInput struct {
 	Source    string
 	Run       BoardRunRef
 	Now       time.Time
+	// SameQuote says whether two quotes on the same message name the same
+	// promise (core passes board.SameCommitment); nil = equal strings.
+	SameQuote func(a, b string) bool
 }
 
 const boardCommitmentColumns = `id, case_id, account_id, message_id, message_date, replied_after, text, quote, due_at, state,
@@ -195,6 +203,13 @@ func scanBoardCommitment(row scanner) (BoardCommitment, error) {
 // AnnotateBoardCase does (ErrBoardConflict) and that the message is a
 // member of the case that counts and is the user's own (ErrBoardNotMine).
 // ErrNotFound for an unknown case. Returns the commitment and the run id.
+//
+// A commitment is identified by its case, its message and its quote
+// (in.SameQuote): when one of the case is already recorded on the same
+// message with the same quote, in any state, no row is added and nothing
+// is counted; that one is returned (Existing set, run id "") as it is —
+// its wording kept, a closed one still closed — except that one open or
+// done without a deadline takes in.Due (the case's version then goes up).
 func (s *Store) AddBoardCommitment(ctx context.Context, in BoardCommitmentInput) (BoardCommitment, string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -221,6 +236,25 @@ func (s *Store) AddBoardCommitment(ctx context.Context, in BoardCommitmentInput)
 	if msg == nil || !msg.Mine || !msg.Counts {
 		return BoardCommitment{}, "", ErrBoardNotMine
 	}
+	if prev, found, err := sameBoardCommitmentTx(ctx, tx, c.ID, msg.ID, in.Quote, in.SameQuote); err != nil {
+		return BoardCommitment{}, "", err
+	} else if found {
+		if prev.Due.IsZero() && !in.Due.IsZero() && prev.State != api.CommitmentClosed {
+			if _, err := tx.ExecContext(ctx, `UPDATE board_commitments SET due_at = ? WHERE id = ?`, stamp(in.Due), prev.ID); err != nil {
+				return BoardCommitment{}, "", fmt.Errorf("add board commitment: %w", err)
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE board_cases SET version = version + 1, updated_at = ? WHERE id = ?`,
+				nowStamp(), c.ID); err != nil {
+				return BoardCommitment{}, "", fmt.Errorf("add board commitment: %w", err)
+			}
+			prev.Due = parseStamp(stamp(in.Due))
+		}
+		if err := tx.Commit(); err != nil {
+			return BoardCommitment{}, "", fmt.Errorf("add board commitment: %w", err)
+		}
+		prev.Existing = true
+		return prev, "", nil
+	}
 	runID, err := countBoardRunTx(ctx, tx, in.Run, in.Now, "commitments")
 	if err != nil {
 		return BoardCommitment{}, "", err
@@ -246,6 +280,155 @@ func (s *Store) AddBoardCommitment(ctx context.Context, in BoardCommitmentInput)
 		return BoardCommitment{}, "", fmt.Errorf("add board commitment: %w", err)
 	}
 	return k, runID, nil
+}
+
+// sameBoardCommitmentTx finds the commitment of the case recorded on the
+// message with the same quote (same, nil = equal strings): an open one
+// first, then a done one, then a closed one, the oldest of each.
+func sameBoardCommitmentTx(ctx context.Context, tx *sql.Tx, caseID, messageID, quote string, same func(a, b string) bool) (BoardCommitment, bool, error) {
+	if same == nil {
+		same = func(a, b string) bool { return a == b }
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT `+boardCommitmentColumns+` FROM board_commitments WHERE case_id = ? AND message_id = ?
+		ORDER BY CASE state WHEN 'open' THEN 0 WHEN 'done' THEN 1 ELSE 2 END, created_at, id`, caseID, messageID)
+	if err != nil {
+		return BoardCommitment{}, false, fmt.Errorf("add board commitment: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		k, err := scanBoardCommitment(rows)
+		if err != nil {
+			return BoardCommitment{}, false, fmt.Errorf("add board commitment: %w", err)
+		}
+		if same(k.Quote, quote) {
+			return k, true, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return BoardCommitment{}, false, fmt.Errorf("add board commitment: %w", err)
+	}
+	return BoardCommitment{}, false, nil
+}
+
+// DedupBoardCommitments merges the open and done commitments that were
+// recorded more than once (before AddBoardCommitment looked for them):
+// per case and message, those whose quotes are the same (same, nil =
+// equal strings; one that matches any of a group joins it) are one
+// commitment. The oldest of each group stays with its text; it is done
+// when any of the group is (closed at the earliest such time), takes the
+// first deadline of the group when it has none, and the others are
+// deleted. Closed ones are left alone. In one transaction; the versions
+// of the cases concerned go up. Returns the threads of those cases by
+// account (none: nothing to merge). Running it again changes nothing.
+func (s *Store) DedupBoardCommitments(ctx context.Context, same func(a, b string) bool) (map[string][]string, error) {
+	if same == nil {
+		same = func(a, b string) bool { return a == b }
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("dedup board commitments: %w", err)
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, `SELECT `+boardCommitmentColumns+` FROM board_commitments WHERE state IN ('open', 'done')
+		ORDER BY case_id, message_id, created_at, id`)
+	if err != nil {
+		return nil, fmt.Errorf("dedup board commitments: %w", err)
+	}
+	var all []BoardCommitment
+	for rows.Next() {
+		k, err := scanBoardCommitment(rows)
+		if err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("dedup board commitments: %w", err)
+		}
+		all = append(all, k)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("dedup board commitments: %w", err)
+	}
+	cases := map[string]bool{}
+	for start := 0; start < len(all); {
+		end := start
+		for end < len(all) && all[end].CaseID == all[start].CaseID && all[end].MessageID == all[start].MessageID {
+			end++
+		}
+		var groups [][]BoardCommitment
+		for _, k := range all[start:end] {
+			joined := false
+			for g := range groups {
+				for _, m := range groups[g] {
+					if same(m.Quote, k.Quote) {
+						groups[g] = append(groups[g], k)
+						joined = true
+						break
+					}
+				}
+				if joined {
+					break
+				}
+			}
+			if !joined {
+				groups = append(groups, []BoardCommitment{k})
+			}
+		}
+		for _, g := range groups {
+			if len(g) < 2 {
+				continue
+			}
+			if err := mergeBoardCommitmentsTx(ctx, tx, g); err != nil {
+				return nil, err
+			}
+			cases[g[0].CaseID] = true
+		}
+		start = end
+	}
+	out := map[string][]string{}
+	for id := range cases {
+		var account, thread string
+		err := tx.QueryRowContext(ctx, `UPDATE board_cases SET version = version + 1, updated_at = ? WHERE id = ?
+			RETURNING account_id, thread_id`, nowStamp(), id).Scan(&account, &thread)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("dedup board commitments: %w", err)
+		}
+		if err == nil {
+			out[account] = append(out[account], thread)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("dedup board commitments: %w", err)
+	}
+	for _, threads := range out {
+		sort.Strings(threads)
+	}
+	return out, nil
+}
+
+// mergeBoardCommitmentsTx keeps the first (oldest) of a group of the same
+// commitment and deletes the others (DedupBoardCommitments).
+func mergeBoardCommitmentsTx(ctx context.Context, tx *sql.Tx, g []BoardCommitment) error {
+	keep := g[0]
+	state, closedAt, due := keep.State, keep.ClosedAt, keep.Due
+	for _, k := range g[1:] {
+		if k.State == api.CommitmentDone && (state != api.CommitmentDone || k.ClosedAt.Before(closedAt)) {
+			state, closedAt = api.CommitmentDone, k.ClosedAt
+		}
+		if due.IsZero() {
+			due = k.Due
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM board_commitments WHERE id = ?`, k.ID); err != nil {
+			return fmt.Errorf("dedup board commitments: %w", err)
+		}
+	}
+	closed := ""
+	if state == api.CommitmentDone {
+		closed = stamp(closedAt)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE board_commitments SET state = ?, closed_reason = '', closed_at = ?, due_at = ? WHERE id = ?`,
+		string(state), closed, optStamp(due), keep.ID); err != nil {
+		return fmt.Errorf("dedup board commitments: %w", err)
+	}
+	return nil
 }
 
 // SetBoardCommitment ticks a commitment off (done) or opens it again

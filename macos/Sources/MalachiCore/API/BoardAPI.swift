@@ -963,11 +963,14 @@ public struct BoardQueueItem: Codable, Sendable, Equatable {
     @NullAsEmpty public var own: [String]
     /// The newest 8, oldest first.
     @NullAsEmpty public var messages: [BoardQueueMessage]
+    /// The open and done commitments the case already has, oldest first,
+    /// at most 10; nil when none.
+    public var commitments: [BoardCommitment]?
 
     public init(
         caseId: BoardCaseID, accountId: AccountID, inputKey: String, ruleState: BoardState, ruleReason: BoardReason,
         userState: BoardState? = nil, subject: String, replyMessageId: MessageID, issue: BoardIssue? = nil,
-        own: [String] = [], messages: [BoardQueueMessage] = []
+        own: [String] = [], messages: [BoardQueueMessage] = [], commitments: [BoardCommitment]? = nil
     ) {
         self.caseId = caseId
         self.accountId = accountId
@@ -980,6 +983,7 @@ public struct BoardQueueItem: Codable, Sendable, Equatable {
         self.issue = issue
         self.own = own
         self.messages = messages
+        self.commitments = commitments
     }
 }
 
@@ -1107,9 +1111,13 @@ public struct BoardCommitParams: Codable, Sendable, Equatable {
 /// api.BoardCommitResult.
 public struct BoardCommitResult: Codable, Sendable, Equatable {
     public var commitment: BoardCommitment
+    /// The case already had this commitment (the same message and quote);
+    /// it is returned as it was. nil from an older daemon = false.
+    public var existing: Bool?
 
-    public init(commitment: BoardCommitment) {
+    public init(commitment: BoardCommitment, existing: Bool? = nil) {
         self.commitment = commitment
+        self.existing = existing
     }
 }
 
