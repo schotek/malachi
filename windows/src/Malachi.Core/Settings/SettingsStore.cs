@@ -29,7 +29,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using Malachi.Core.Assistants;
-using Malachi.Core.Board;
+using Malachi.Core.Boards;
 
 namespace Malachi.Core.Settings;
 
@@ -390,7 +390,7 @@ public sealed class SettingsStore : IDisposable
 
     /// <summary>
     /// The style the board opens in the first time it shows after launch
-    /// (<see cref="Malachi.Core.Board.Board.StyleOnShow"/>); an unknown nick reads as the List.
+    /// (<see cref="Board.StyleOnShow"/>); an unknown nick reads as the List.
     /// </summary>
     public BoardStyle BoardDefaultStyle
     {

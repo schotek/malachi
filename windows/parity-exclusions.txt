@@ -69,74 +69,6 @@ mail;email;imap;	desktop file: the launcher's metadata of Linux desktops; the in
 Native email client for the GNOME desktop	AppStream metainfo: the Linux software centres' description; the installer's comes before a release
 Malachi Mail is a desktop email client for Linux, built with GTK 4 and libadwaita. It keeps mail available offline, renders HTML messages only after sanitising them, and separates the user interface from the mail engine so that the engine can be reused.	AppStream metainfo: the Linux software centres' description; the installer's comes before a release
 This is an early version. Mail can be read, written, sent and searched, but keep a second mail program for anything that matters.	AppStream metainfo: the Linux software centres' description; the installer's comes before a release
-Ask the assistant to read the conversations that wait for it and add notes	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Stop the assistant’s triage	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-The triage runs your Claude Code, which was not found on this Mac	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Starting the triage…	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Triaging…	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Triaging… %d of %d	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-The assistant is triaging the board…	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-The assistant is triaging the board… %d of %d	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Triage finished. No conversation needed new notes.	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Triage finished: %d conversation refined.	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-The board refused %d of the assistant’s notes.	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-%d conversation triaged automatically today	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-%d conversation waits for the assistant	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Triage stopped.	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Triage failed: %s.	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Claude Code was not found	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-the Malachi Mail tools are not available to the assistant	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-it took too long	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-it was stopped	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-sending mail to the assistant was not allowed	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-the assistant is off	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-the mail backend did not answer	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-the assistant stopped	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-no conversation waits for the assistant	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-the board refused the assistant’s notes	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-the assistant added no notes	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Triaged by rules · not refined by the assistant yet	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Triaged by rules · refined by the assistant %s	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Automatic triage paused: %s · next try %s	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-the assistant cannot run	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-sending mail to the assistant is not allowed	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Automatic triage paused: %s	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Let the Assistant Triage the Board?	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-The assistant reads the conversations on the board that need notes and sends their text to Anthropic through your Claude Code, under your Claude account. It adds titles, summaries, tasks, deadlines and suggested replies to the board, and a triage you start yourself may also write replies, which stay on the board in Malachi Mail, not in your Drafts folder, until you send them. It cannot send, move or delete mail, and messages may contain instructions from their senders that it is told not to follow. You can turn this off in Settings.	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Let the assistant refine the board	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Sends the newest messages of conversations that need sorting to Anthropic through your Claude Code. It cannot send, move or delete mail; a triage you start yourself may write replies, which stay on the board until you send them.	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Triage new mail automatically	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-At most every	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Conversations a day	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-The triage runs your Claude Code, which was not found on this Mac. The Claude Code row above offers to get it.	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Claude Code is not signed in. The Claude Code row above offers to sign in.	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-The Malachi Mail tools are not available to the assistant, so the board cannot be triaged.	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-The mail backend did not answer with the board’s settings, so they cannot be changed now.	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-%d hour	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-%d minute	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-daily cap\004None	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Up to %d	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Tokens in the Last 24 Hours	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-token usage\004None	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Input %s · output %s · written to cache %s · read from cache %s	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-From %d triage run	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Counts only the triage runs Malachi Mail started, not those of other assistants	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-just now	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-%d minute ago	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-%d hour ago	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-yesterday	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-%d day ago	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-now	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-in %d minute	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-in %d hour	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-tomorrow	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-in %d day	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-✦ Suggest Reply	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-What should the reply say? (optional)	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-Writing a suggested reply…	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-The assistant is writing a reply for another conversation	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-The suggested reply failed: %s.	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
-the assistant wrote no reply	Board: the macOS client's board (Nástěnka, Swift-first, texts in ui/internal/board) has no Windows port yet
 The provider of the assistant in the app	GSettings schema metadata; not displayed by the Windows client
 The in-app provider; external Claude hand-off is independent.	GSettings schema metadata; not displayed by the Windows client
 Where Codex is	GSettings schema metadata; not displayed by the Windows client
@@ -148,6 +80,5 @@ Zero means no permission to send mail to OpenAI.	GSettings schema metadata; not 
 The model ChatGPT uses for the board	GSettings schema metadata; not displayed by the Windows client
 The accepted OpenAI board consent version	GSettings schema metadata; not displayed by the Windows client
 Zero means no permission to send board mail to OpenAI.	GSettings schema metadata; not displayed by the Windows client
-Codex was not found. Choose a native Codex executable.	Native Unix Codex executable message; Windows uses codex.exe
 Codex is unavailable in this Flatpak build.	Flatpak-only sandbox availability
 Show %d More	Windows Board UI has not been ported; GTK Today action
