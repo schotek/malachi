@@ -6,8 +6,8 @@
 // countsAsFailure checks of backOff); Go: ui/internal/boardtriage
 // auto_test.go. The schedule's tests (debounce, preferencesDecideAtOnce,
 // intervalBetweenRuns, backOff, dailyCap, signedOut,
-// lastAttemptFromTheDaemon, stop) come with the port of
-// BoardAutoTriageScheduler.
+// lastAttemptFromTheDaemon, stop) are in
+// Controllers/BoardAutoTriageSchedulerTests.cs.
 
 using System;
 using Malachi.Core.Boards;

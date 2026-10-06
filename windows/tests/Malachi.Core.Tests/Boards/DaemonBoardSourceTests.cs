@@ -7,9 +7,9 @@
 // optimistic writes and their revert, the phases and the retries, the
 // conversations cached by version); Go: ui/internal/board
 // daemon_source_test.go, whose Go-only TestDaemonConvert and
-// TestDaemonAccountInfo end the file. The two controller cases
-// (controllerDepartureAndRevert, controllerRetriesAFailedConversation-
-// AfterAReconnect) come with the port of BoardController.
+// TestDaemonAccountInfo come before the two cases of Swift's that run the
+// board's controller over this source (controllerDepartureAndRevert,
+// controllerRetriesAFailedConversationAfterAReconnect).
 //
 // Swift's ManualClock is a FakeTimeProvider: a wait is seen to be armed by
 // advancing the clock to just before it ends (nothing happens) and then to
@@ -25,6 +25,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Malachi.Core.Api;
 using Malachi.Core.Boards;
+using Malachi.Core.Controllers;
 using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.IssueTrackers;
 using Malachi.Core.Tests.Fixtures;
@@ -763,6 +764,62 @@ public sealed class DaemonBoardSourceTests
             [Capability.Comment, Capability.Forward, Capability.Transition]));
         Assert.True(jira.Badge == "JIRA" && jira.CanReply);
         Assert.False(DaemonBoardSource.Convert(A("m", new AccountConfig { Name = "M", Email = "m@x" }, [Capability.Move])).CanReply);
+    }
+
+    /// <summary>
+    /// The board controller over the daemon's source: the selection moves on
+    /// with the optimistic report, and a revert brings the case back.
+    /// </summary>
+    [Fact]
+    public async Task ControllerDepartureAndRevert()
+    {
+        await using var h = await Harness.StartAsync();
+        h.Script.SetCases([WireCase("1"), WireCase("2"), WireCase("3")]);
+        await h.StartedAsync();
+        var toasts = new List<string>();
+        var c = await h.Ui.RunAsync(() =>
+        {
+            var c = new BoardController(h.Source, h.Clock, BoardFixture.Culture, BoardFixture.Zone);
+            c.ToastRequested += (_, t) => toasts.Add(t);
+            return c;
+        });
+        Assert.Equal(Id("1"), await h.Ui.RunAsync(() => c.State.Selection));
+        await h.IdleAsync();
+        Assert.NotNull((await h.CAsync("1"))?.Messages); // selecting loaded the conversation
+        h.Script.WriteFailure = Daemon(ErrorCode.InvalidArgument, "no");
+        h.Script.Writes.Hold(true);
+        await h.Ui.RunAsync(() => c.MarkDone(Id("1")));
+        Assert.Equal(Id("2"), await h.Ui.RunAsync(() => c.State.Selection)); // at once, with the optimistic report
+        h.Script.Writes.Hold(false);
+        await h.UntilAsync(() => toasts.Count > 0);
+        await h.IdleAsync();
+        Assert.Equal(["Marking the case done failed: the board did not accept it."], await h.Ui.RunAsync(() => toasts.ToList()));
+        Assert.Equal([Id("1"), Id("2"), Id("3")], await h.Ui.RunAsync(() => c.View.Sections.SelectMany(s => s.Rows).Select(r => r.Id).ToList()));
+        Assert.Equal(Id("2"), await h.Ui.RunAsync(() => c.State.Selection));
+    }
+
+    /// <summary>The controller over the daemon's source asks again for a conversation that failed once the connection is back.</summary>
+    [Fact]
+    public async Task ControllerRetriesAFailedConversationAfterAReconnect()
+    {
+        await using var h = await Harness.StartAsync();
+        await h.StartedAsync();
+        h.Script.GetFailure = Daemon(ErrorCode.StorageError, "x");
+        var c = await h.Ui.RunAsync(() => new BoardController(h.Source, h.Clock, BoardFixture.Culture, BoardFixture.Zone));
+        await h.IdleAsync();
+        Assert.True(await h.Ui.RunAsync(() => c.View.Detail?.MessagesRetry == true));
+        h.Script.GetFailure = null;
+        await h.Ui.RunAsync(() =>
+        {
+            h.Source.ConnectionChanged(connected: false);
+            h.Source.ConnectionChanged(connected: true);
+        });
+        await h.IdleAsync();
+        // The hot case is the list's first row, selected.
+        var detail = await h.Ui.RunAsync(() => c.View.Detail);
+        Assert.Equal(Id("2"), detail?.Id);
+        Assert.True(detail?.MessagesRetry == false && (await h.CAsync("2"))?.Messages is not null);
+        Assert.Equal(2, h.Script.Count(API.BoardGet.Name));
     }
 
     /// <summary>A released or never closed hold.</summary>
