@@ -163,7 +163,7 @@ public sealed partial class ComposeWindow
             rewriteOpening = false;
             return;
         }
-        editor.RewriteTarget(parameters.Attribution, target =>
+        pane.Editor.RewriteTarget(parameters.Attribution, target =>
         {
             rewriteOpening = false;
             if (!RewriteAvailable || closing)
@@ -280,7 +280,7 @@ public sealed partial class ComposeWindow
             return;
         }
         RewriteFlyout.Hide();
-        editor.FocusPage();
-        editor.ApplyRewrite(done.Text, below);
+        pane.Editor.FocusPage();
+        pane.Editor.ApplyRewrite(done.Text, below);
     }
 }

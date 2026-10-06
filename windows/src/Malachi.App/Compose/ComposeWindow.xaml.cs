@@ -2,28 +2,29 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiMail/Compose/ComposeWindowController.swift
-// (init, wireRows, wireToolbar, wireDraft, validateRow, updateTitle,
-// windowShouldClose, windowWillClose, ComposeForm, ComposeWindowHandle,
-// the compose actions); GTK: ui/internal/compose/compose.go (Window,
-// newWindow, setAccounts, fromLocked, account, wireRows, setCcBccVisible,
-// updateTitle, validateRow, recipients, wireActions, toast, setStatus) and
-// draft.go (closeRequest, cleanup as the window runs them). The draft's
-// lifecycle is Core's ComposeDraftController, which reads this window
-// through IComposeForm; the attachments are Core's
-// ComposeAttachmentsController, the recipient completion Core's
-// SuggestionsController, the header's rules ComposeHeaderRules; the account
-// list arrives from ComposeController through IComposeWindowHandle. A comment
-// on an issue is written in the same window, in its comment mode
-// (ComposeWindow.Comment.cs).
+// (init, wireToolbar, windowShouldClose, windowWillClose, ComposePaneHost,
+// ComposeWindowHandle, the toolbar's actions); GTK:
+// ui/internal/compose/compose.go (Window, newWindow, wireActions, the
+// pane's hooks) and draft.go (closeRequest, cleanup as the window runs
+// them). The window's content is a ComposePane (Layout.Window, the window
+// owner), which holds the fields, the editor, the attachments and the draft
+// (Core's ComposeDraftController over the pane's IComposeForm); the window
+// keeps its title bar (the title, Attach, the rewrite, the Draft Menu,
+// Send), the close question, Quit and its commands' keys, and hears from the
+// pane through IComposePaneHost. The account list arrives from
+// ComposeController through IComposeWindowHandle and goes to the pane. A
+// comment on an issue is written in the same window, in the pane's comment
+// mode; the window takes away what attaches or saves a draft
+// (ApplyCommentMode).
 //
 // Windows specifics (docs/windows-port.md §6.5, §11.3, §11.5):
 // - the window is tracked (WindowTracker.Track, WindowKind.Compose): its
-//   colour scheme, its toasts, and its CommandRouter, which runs Ctrl+Enter
-//   (Send), Ctrl+S (Save Draft), Escape and Ctrl+W (the close request, not
-//   while a popup of the window is open), and the application's keys; the
-//   editor's WebView2 is marked as an editor, so its Ctrl+B, I, U, K and
-//   Escape stay with the bridge, which posts Escape and Ctrl+K back
-//   (Channel.KeyPressed);
+//   colour scheme, its toasts (the pane's overlay), and its CommandRouter,
+//   which runs Ctrl+Enter (Send), Ctrl+S (Save Draft), Escape and Ctrl+W
+//   (the close request, not while a popup of the window is open), and the
+//   application's keys; the editor's WebView2 is marked as an editor, so its
+//   Ctrl+B, I, U, K and Escape stay with the bridge, which posts Escape
+//   (ComposePane.EscapePressed) and Ctrl+K back;
 // - closing (the caption's button, Alt+F4, Escape, Ctrl+W) is the close
 //   request of draft.go: nothing at stake closes at once, otherwise "Save
 //   changes to this draft?" (AlertService: Save Draft the default, Discard,
@@ -33,24 +34,18 @@
 //   inside that event;
 // - Quit saves the draft without asking (SaveForQuitAsync) and asks the
 //   close question only when that failed (CloseForQuitAsync);
-// - TextBox.TextChanged also comes for the window's own prefill, after the
-//   setter returned: the Subject counts as edited when its text differs from
-//   the text last seen in it. The recipient rows (RecipientTokenBox) raise
-//   Changed only for the user's edits that change their Text (a prefill and
-//   committing typed text into a badge do not), and are frozen when the
-//   window cleans its draft up.
+// - the confirmation of a send ("Message queued for sending") goes to the
+//   main window through the manager (the pane's window layout reports it
+//   to ComposeController.ReportSent).
 
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Threading.Tasks;
 using Malachi.App.Shell;
-using Malachi.App.WebViews;
 using Malachi.Core.Api;
 using Malachi.Core.Compose;
 using Malachi.Core.Controllers;
-using Malachi.Core.Html;
 using Malachi.Core.I18n;
 using Malachi.Core.IssueTrackers;
 using Malachi.Core.Presentation;
@@ -59,7 +54,6 @@ using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
-using Microsoft.UI.Xaml.Controls;
 using Windows.Graphics;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -67,8 +61,7 @@ using Windows.Win32.Foundation;
 namespace Malachi.App.Compose;
 
 /// <summary>One compose window (compose.blp, compose.Window).</summary>
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "The draft, attachment and suggestion controllers are closed when the window closes (OnClosed).")]
-public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindowHandle
+public sealed partial class ComposeWindow : Window, IComposeWindowHandle, IComposePaneHost
 {
     /// <summary>compose.blp default-width.</summary>
     public const int DefaultWidth = 760;
@@ -85,22 +78,8 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
     private readonly AppState state;
     private readonly ComposeController compose;
     private readonly ComposeParams parameters;
-    private readonly ComposeDraftController draft;
-    private readonly ComposeAttachmentsController attachments;
-    private readonly ComposeWebView editor;
-    private readonly List<RecipientSuggestions> suggestions = [];
-    private readonly Dictionary<TextBox, string> seen = [];
+    private readonly ComposePane pane;
     private readonly ILogger logger;
-
-    // The identities of the From row (accounts).
-    private IReadOnlyList<Account> accounts = [];
-
-    // The identity the user picked in From (chosenAccount); until then the
-    // account the window was opened for.
-    private AccountId? chosenAccount;
-
-    // compose.send's enabled state (setSendEnabled).
-    private bool sendEnabled = true;
 
     // The window is closing for good: no question any more.
     private bool closing;
@@ -137,7 +116,11 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
             SolidBackground.Visibility = Visibility.Visible;
         }
         ApplySize();
-        Tracked = state.Windows.Track(this, WindowKind.Compose, Root, ToastsHost);
+        // The pane first: its toast overlay is the window's. A pane that
+        // cannot be built lets go of what it made itself.
+        pane = new ComposePane(state, compose, p, new ComposePane.Options { Layout = ComposePane.Layout.Window, Owner = DraftOwner.Window });
+        PaneSlot.Child = pane;
+        Tracked = state.Windows.Track(this, WindowKind.Compose, Root, pane.Toasts);
         try
         {
             var send = Mnemonic.Parse(L10n.T("_Send"));
@@ -145,49 +128,12 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
             SendButton.AccessKey = send.AccessKey ?? "";
             AutomationProperties.SetName(SendButton, send.Label);
 
-            draft = new ComposeDraftController(
-                state.Client, state.Settings, () => compose.Placeholder, CidRegistry.Shared,
-                logger: state.Logs.CreateLogger<ComposeDraftController>())
-            {
-                Form = this,
-            };
-            attachments = new ComposeAttachmentsController(
-                state.Client, () => CallAccount, CidRegistry.Shared, logger: state.Logs.CreateLogger<ComposeAttachmentsController>());
-            editor = new ComposeWebView();
-
-            // The editor's callbacks first, as in compose.go: Ready and the
-            // state may follow the load at any time.
-            WireEditor();
-            WireAttachments();
-
-            // Prefill before the change handlers so it does not count as an edit.
-            Header.To.Text = AddressList.Format(p.To);
-            Header.Cc.Text = AddressList.Format(p.Cc);
-            Header.Bcc.Text = AddressList.Format(p.Bcc);
-            Prefill(Header.Subject, p.Subject);
-            Header.SetCcBccVisible(cc: p.Cc.Count > 0, bcc: p.Bcc.Count > 0);
+            pane.Host = this;
+            pane.EscapePressed += (_, _) => RequestClose();
             UpdateTitle();
-            draft.SetOriginal(p.InReplyTo, p.Forwarding, p.Comment);
-            // A draft opened from the Drafts folder is the user's already: its id
-            // and version make the saves updates, and closing never deletes it.
-            draft.SetOpened(p.DraftId, p.Version, p.Replaces, fromDrafts: p.Kind == ComposeKind.Edit);
-            editor.Load(p.BodyHtml);
-            SetAccounts(compose.Accounts, compose.Placeholder);
-            // What the backend imported for the template (a quoted original's
-            // pictures, a forwarded message's files): listed and shown now,
-            // bound by the first save.
-            attachments.Set(p.Attachments);
-
-            WireDraft();
             WireCommands();
-            WireToolbar();
-            WireRows();
             WireHeaderBar();
             WireRewrite();
-            // Text-only phase (draft.go richText): no formatting to offer, no
-            // inline images, and the user is told what will go out.
-            FormatBar.Visibility = ComposeDraftController.RichText ? Visibility.Visible : Visibility.Collapsed;
-            PlainTextHint.Visibility = ComposeDraftController.RichText ? Visibility.Collapsed : Visibility.Visible;
             InsertImageItem.IsEnabled = ComposeDraftController.RichText;
             ApplyCommentMode();
         }
@@ -196,6 +142,7 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
             // Tracked, the window counts for the app's life until it closes:
             // one that could not be built must not hold the app (what opened
             // it logs the failure, ComposeController.Open).
+            pane.Close();
             Close();
             throw;
         }
@@ -208,156 +155,61 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
     /// <summary>The window as the shell tracks it.</summary>
     public TrackedWindow Tracked { get; }
 
-    /// <inheritdoc/>
-    Account IComposeForm.Account => Account;
+    /// <summary>The window's content.</summary>
+    public ComposePane Pane => pane;
 
-    /// <summary>
-    /// compose.go <c>account</c>: the selected identity; a comment's is the
-    /// issue's account (ComposeController.CommentAccount), which writes no
-    /// mail and is not in From.
-    /// </summary>
-    private Account Account
-    {
-        get
-        {
-            if (IsComment && parameters.AccountId is { } issueAccount)
-            {
-                return compose.CommentAccount(issueAccount);
-            }
-            var i = Header.SelectedAccountIndex;
-            if (i < accounts.Count)
-            {
-                return accounts[i];
-            }
-            return accounts.Count > 0 ? accounts[0] : ComposeController.PlaceholderAccounts[0];
-        }
-    }
+    /// <summary>comment.go <c>isComment</c>: the window writes a comment on an issue.</summary>
+    public bool IsComment => pane.IsComment;
 
     /// <inheritdoc/>
-    string IComposeForm.Subject => Header.Subject.Text;
-
-    // The identity for the window's own calls (imports, the template's
-    // pictures, the address books): while the From row lists the
-    // placeholder, because the account list is on its way, the account the
-    // window was opened for, whose store holds its template's files.
-    private AccountId CallAccount => compose.Placeholder && parameters.AccountId is { } opened ? opened : Account.Id;
-
-    /// <inheritdoc/>
-    IReadOnlyList<DraftAttachment> IComposeForm.Attachments => attachments.Attachments;
+    Window? IComposePaneHost.HostWindow => this;
 
     // Whether a popup of the window is open: Escape and Ctrl+W close it,
     // not the window (macOS EscapeCloser.shouldClose).
-    private bool PopupOpen =>
-        suggestions.Any(s => s.IsVisible) || FormatBar.IsPopupOpen || Header.IsFromOpen
-        || DraftMenuButton.Flyout?.IsOpen == true || RewriteFlyout.IsOpen;
+    private bool PopupOpen => pane.PopupOpen || DraftMenuButton.Flyout?.IsOpen == true || RewriteFlyout.IsOpen;
 
     private nint Handle => WindowPresenter.Handle(this);
 
-    /// <inheritdoc/>
-    public (IReadOnlyList<Address> To, IReadOnlyList<Address> Cc, IReadOnlyList<Address> Bcc, bool Ok) Recipients()
-    {
-        var ok = true;
-        IReadOnlyList<Address> Parse(RecipientTokenBox row)
-        {
-            // What the row holds, as its model resolves it: parsing its text
-            // again would read some entries differently.
-            var (addresses, invalid) = row.Resolved();
-            if (invalid.Count > 0)
-            {
-                ok = false;
-            }
-            return addresses;
-        }
-        var to = Parse(Header.To);
-        var cc = Parse(Header.Cc);
-        var bcc = Parse(Header.Bcc);
-        return (to, cc, bcc, ok);
-    }
-
-    /// <inheritdoc/>
-    public string EditorHtml() => editor.Html;
-
-    /// <inheritdoc/>
-    public string EditorText() => editor.Text;
-
-    /// <inheritdoc/>
-    public void FlushEditor(Action done) => editor.Flush(done);
-
-    /// <inheritdoc/>
-    public void SetAttachments(IReadOnlyList<DraftAttachment> attachments) => this.attachments.Set(attachments);
-
-    /// <inheritdoc/>
-    public void SetStatus(string text)
-    {
-        ArgumentNullException.ThrowIfNull(text);
-        StatusText.Text = text;
-        // The text block's peer kept its first text as its name (measured
-        // with UIA): the name follows the status explicitly.
-        AutomationProperties.SetName(StatusText, text);
-        ToolTipService.SetToolTip(StatusText, text.Length == 0 ? null : text);
-    }
-
-    /// <inheritdoc/>
+    /// <summary>Shows a transient message over the window's content.</summary>
     public void Toast(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
-        ToastsHost.Show(text);
+        pane.Toasts.Show(text);
     }
 
     /// <inheritdoc/>
-    public void SetSendEnabled(bool enabled)
+    void IComposePaneHost.TitleChanged(ComposePane pane) => UpdateTitle();
+
+    /// <inheritdoc/>
+    void IComposePaneHost.SendEnabledChanged(ComposePane pane, bool enabled)
     {
-        sendEnabled = enabled;
         SendButton.IsEnabled = enabled;
         Tracked.Commands.Send.Refresh();
     }
 
     /// <inheritdoc/>
-    public void CloseWindow() => CloseForGood();
+    void IComposePaneHost.Ended(ComposePane pane, ComposePane.EndKind kind) => CloseForGood();
 
-    /// <summary>
-    /// compose.go <c>setAccounts</c>: fills the From row, keeping the
-    /// identity the user picked while it is listed; until they pick, the
-    /// account the window was opened for. The row takes a choice only with
-    /// more than one identity, and never for a reply or a forward.
-    /// </summary>
-    public void SetAccounts(IReadOnlyList<Account> accounts, bool placeholder)
+    /// <inheritdoc/>
+    void IComposePaneHost.HeightChanged(ComposePane pane)
     {
-        ArgumentNullException.ThrowIfNull(accounts);
-        this.accounts = accounts;
-        var (index, found) = ComposeHeaderRules.FromSelection(accounts, chosenAccount, parameters.AccountId);
-        Header.SetAccounts(
-            [.. accounts.Select(ComposeHeaderRules.FromLabel)],
-            index,
-            ComposeHeaderRules.FromEnabled(accounts.Count, ComposeHeaderRules.FromLocked(parameters), found));
-        if (placeholder && !IsComment)
-        {
-            SetStatus(L10n.T("Using placeholder account"));
-        }
-        else
-        {
-            // The real accounts replaced the placeholder: the status line no
-            // longer says it uses one (GTK and macOS leave it until the next
-            // edit).
-            draft.RefreshStatus();
-        }
+        // The window's editor fills the window: there is no height to follow.
     }
+
+    /// <summary>compose.go <c>setAccounts</c>: the pane's From row lists <paramref name="accounts"/>.</summary>
+    public void SetAccounts(IReadOnlyList<Account> accounts, bool placeholder) => pane.SetAccounts(accounts, placeholder);
 
     /// <summary>
     /// manager.go <c>FindDraft</c>'s comparison: the same saved draft, or the
     /// same Drafts message taken over.
     /// </summary>
-    public bool Edits(Draft draft)
-    {
-        ArgumentNullException.ThrowIfNull(draft);
-        return (draft.Id is { } id && this.draft.Draft.DraftId == id) || (draft.Replaces is { } replaces && parameters.Replaces == replaces);
-    }
+    public bool Edits(Draft draft) => pane.Edits(draft);
 
     /// <summary>Brings the window to the front.</summary>
     public void Present() => WindowPresenter.Present(this);
 
     /// <summary>Quit: saves the draft without asking; true when nothing unsaved is left.</summary>
-    public Task<bool> SaveForQuitAsync() => closing ? Task.FromResult(true) : draft.SaveForQuitAsync();
+    public Task<bool> SaveForQuitAsync() => closing ? Task.FromResult(true) : pane.SaveForQuitAsync();
 
     /// <summary>
     /// Quit could not save the draft: the close question, and the window
@@ -384,100 +236,14 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
         return dpi == 0 ? 1.0 : dpi / 96.0;
     }
 
-    private void Prefill(TextBox row, string text)
-    {
-        row.Text = text;
-        seen[row] = text;
-    }
-
-    // Whether the row's text changed since it was last seen (its own
-    // prefill and a TextChanged that repeats it are no edit).
-    private bool Edited(TextBox row)
-    {
-        var text = row.Text;
-        if (seen.TryGetValue(row, out var last) && string.Equals(last, text, StringComparison.Ordinal))
-        {
-            return false;
-        }
-        seen[row] = text;
-        return true;
-    }
-
-    // compose.go updateTitle: the subject, or "New Message", as the
-    // window's caption (the taskbar, Alt+Tab) and in the header bar; a
-    // comment names its issue (Jira.CommentTitle).
+    // compose.go updateTitle: the pane's title (the subject, or "New
+    // Message"; a comment names its issue) as the window's caption (the
+    // taskbar, Alt+Tab) and in the header bar.
     private void UpdateTitle()
     {
-        var title = parameters.Comment is { } c ? Jira.CommentTitle(c.Issue.Key) : ComposeHeaderRules.WindowTitle(Header.Subject.Text);
+        var title = pane.TitleText;
         Title = title;
         TitleText.Text = title;
-    }
-
-    // compose.go wireRows.
-    private void WireRows()
-    {
-        foreach (var row in Header.RecipientFields)
-        {
-            var controller = new SuggestionsController(
-                state.Client,
-                () => CallAccount,
-                // The typed text after the last badge, and its end: the badges
-                // are no part of what is completed.
-                () => (row.Pending, Suggest.ScalarOffset(row.Pending.Length, row.Pending)),
-                logger: state.Logs.CreateLogger<SuggestionsController>());
-            var s = new RecipientSuggestions(row, controller);
-            suggestions.Add(s);
-            // The value changed (a badge, typed text: the draft is dirty), and
-            // the typed text did (what is asked of the address books).
-            row.Changed += (_, _) =>
-            {
-                if (!closing)
-                {
-                    draft.MarkDirty();
-                }
-            };
-            row.PendingChanged += (_, _) =>
-            {
-                if (!closing)
-                {
-                    controller.TextChanged();
-                }
-            };
-        }
-        Header.Subject.TextChanged += (_, _) =>
-        {
-            if (closing || !Edited(Header.Subject))
-            {
-                return;
-            }
-            UpdateTitle();
-            draft.MarkDirty();
-        };
-        Header.FromChanged += (_, _) =>
-        {
-            chosenAccount = Account.Id;
-            draft.MarkDirty();
-            // Another identity means other address books: what is shown was
-            // asked on behalf of the previous one.
-            HideSuggestions();
-        };
-    }
-
-    private void HideSuggestions()
-    {
-        foreach (var s in suggestions)
-        {
-            s.Controller.Hide();
-        }
-    }
-
-    // wireDraft: the draft controller's dialogs and its Sent.
-    private void WireDraft()
-    {
-        var alerts = state.Alerts;
-        draft.ConfirmDiscard = (heading, body, label) => alerts.ConfirmDestructiveAsync(this, heading, body, label);
-        draft.SaveDraftQuestion = () => alerts.SaveDraftQuestionAsync(this);
-        draft.Sent += (_, text) => compose.ReportSent(text);
     }
 
     // compose.go wireActions: compose.send and compose.save through the
@@ -485,16 +251,36 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
     private void WireCommands()
     {
         var c = Tracked.Commands;
-        c.Send.Handler = draft.Send;
-        c.Send.CanExecute = () => sendEnabled;
-        c.SaveDraft.Handler = () => draft.Save(SaveReason.Explicit);
+        c.Send.Handler = pane.Send;
+        c.Send.CanExecute = () => pane.SendEnabled;
+        c.SaveDraft.Handler = pane.SaveDraft;
         // No Drafts folder keeps a comment: Ctrl+S does nothing.
         c.SaveDraft.CanExecute = () => !IsComment;
         c.CloseWindow.Handler = RequestClose;
         c.CloseWindow.CanExecute = () => !PopupOpen;
     }
 
-    private void OnDiscardClick(object sender, RoutedEventArgs e) => draft.Discard();
+    // applyCommentMode, the window's part: nothing attaches, nothing is kept
+    // as a draft; the draft menu keeps Discard (compose.blp hidden-when of
+    // the disabled actions) and Insert Image where a comment keeps pictures.
+    private void ApplyCommentMode()
+    {
+        if (!IsComment)
+        {
+            return;
+        }
+        AttachButton.Visibility = Visibility.Collapsed;
+        AttachFilesItem.Visibility = Visibility.Collapsed;
+        SaveDraftItem.Visibility = Visibility.Collapsed;
+        InsertImageItem.Visibility = Jira.CommentAllows(JiraFormat.Image) ? Visibility.Visible : Visibility.Collapsed;
+        DiscardSeparator.Visibility = InsertImageItem.Visibility;
+    }
+
+    private void OnAttachClick(object sender, RoutedEventArgs e) => pane.AttachFiles();
+
+    private void OnInsertImageClick(object sender, RoutedEventArgs e) => pane.InsertImage();
+
+    private void OnDiscardClick(object sender, RoutedEventArgs e) => pane.Discard();
 
     // send_button and the menu's Save Draft run the window's commands (a
     // XamlUICommand would put its own label in place of the button's).
@@ -508,12 +294,7 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
     private void OnRootLoaded(object sender, RoutedEventArgs e)
     {
         Root.Loaded -= OnRootLoaded;
-        if (IsComment)
-        {
-            FocusEditor();
-            return;
-        }
-        Header.FocusTo();
+        pane.FocusInitial();
     }
 
     // windowShouldClose: the caption's button and Alt+F4. With nothing at
@@ -526,9 +307,9 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
         {
             return;
         }
-        if (draft.CanCloseWithoutAsking)
+        if (pane.CanCloseWithoutAsking)
         {
-            CleanupDraft();
+            pane.CleanupDraft();
             closing = true;
             return;
         }
@@ -550,9 +331,9 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
         {
             return Task.FromResult(true);
         }
-        if (draft.CanCloseWithoutAsking)
+        if (pane.CanCloseWithoutAsking)
         {
-            CleanupDraft();
+            pane.CleanupDraft();
             CloseForGood();
             return Task.FromResult(true);
         }
@@ -584,7 +365,7 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
     {
         try
         {
-            var allowed = await draft.CloseRequestAsync();
+            var allowed = await pane.CloseRequestAsync();
             if (allowed)
             {
                 CloseForGood();
@@ -599,16 +380,6 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
         }
     }
 
-    // The draft's cleanup. The recipient rows are frozen first: closing
-    // takes the keyboard from the typed text, which a row would commit, and
-    // that commit must not mark the cleaned-up draft dirty (and so arm its
-    // autosave) again.
-    private void CleanupDraft()
-    {
-        Header.FreezeRecipients();
-        draft.Cleanup();
-    }
-
     private void CloseForGood()
     {
         if (closing)
@@ -620,21 +391,14 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
     }
 
     // cleanup: the window really closes. Late replies are dropped, the
-    // popups go, the inline pictures are forgotten (the draft controller
-    // reads the attachments, so it runs before they close), the editor lets
-    // go of its browser, and the manager forgets the window.
+    // rewrite ends, the pane lets go (its popups, its draft, whose inline
+    // pictures are forgotten before the attachments close, its editor's
+    // browser), and the manager forgets the window.
     private void OnClosed(object sender, WindowEventArgs args)
     {
         closing = true;
-        foreach (var s in suggestions)
-        {
-            s.Dispose();
-        }
-        FormatBar.HidePopups();
         CloseRewrite();
-        CleanupDraft();
-        attachments.Dispose();
-        editor.Close();
+        pane.Close();
         compose.Remove(this);
     }
 

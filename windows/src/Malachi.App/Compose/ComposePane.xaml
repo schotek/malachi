@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Compose/ComposePane.swift (buildContent,
+buildInlineContent, footerRow, makeEditorBox); GTK:
+ui/data/ui/compose_pane.blp (pane_root) and ui/internal/compose/pane_layout.go
+(buildInlineFooter). The content of a compose window, and of the board's
+inline reply, top to bottom:
+
+- the card of header fields, or in comment mode the card of the issue in
+  its place (ComposePane.Comment.cs); margins 12, 12, 12, 6 in the window,
+  none but 6 below inline, where the card has no From row;
+- the formatting bar (margins 6 in the window), the plain-text hint
+  (hidden while rich text is sent);
+- the editor: filling the rest in the window, inline as tall as its
+  document between EditorHeight's minimum and cap (ComposePane.xaml.cs);
+- the attachment chips (hidden while there are none);
+- in the window the status line (margins 12, 4) under the toast overlay;
+  inline the footer row [Attach] status … [Discard] [Send], whose Send has
+  no key of its own (Ctrl+Enter and Ctrl+S are the pane's accelerators,
+  scoped to it), and the host shows the toasts.
+-->
+<UserControl
+    x:Class="Malachi.App.Compose.ComposePane"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Malachi.App.Controls"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:local="using:Malachi.App.Compose"
+    xmlns:res="using:Malachi.App.Resources"
+    IsTabStop="False">
+    <Grid x:Name="PaneRoot">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition x:Name="EditorRow" Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- header_rows -->
+        <local:ComposeHeader
+            x:Name="Header"
+            Grid.Row="0"
+            Margin="12,12,12,6" />
+
+        <!-- comment_header: comment mode only, in place of header_rows.
+             The issue a comment goes to (title and summary set in code,
+             plain text from the site) and, on a service-desk request,
+             who reads it (the items added in code). -->
+        <Border
+            x:Name="CommentHeader"
+            Grid.Row="0"
+            Margin="12,12,12,6"
+            Padding="12,10"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="{StaticResource OverlayCornerRadius}"
+            Visibility="Collapsed">
+            <Grid ColumnSpacing="12" RowSpacing="4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock
+                    x:Name="CommentTitle"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="ComposeCommentTitle"
+                    MaxLines="1"
+                    Style="{StaticResource HeadingLabelStyle}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="NoWrap" />
+                <SelectorBar
+                    x:Name="CommentVisibilityBar"
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="ComposeCommentVisibility"
+                    SelectionChanged="OnCommentVisibilityChanged"
+                    Visibility="Collapsed" />
+                <TextBlock
+                    x:Name="CommentSummary"
+                    Grid.Row="1"
+                    Grid.ColumnSpan="2"
+                    MaxLines="2"
+                    Style="{StaticResource DimLabelStyle}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="Wrap"
+                    Visibility="Collapsed" />
+            </Grid>
+        </Border>
+
+        <!-- format_toolbar -->
+        <local:FormatToolbar
+            x:Name="FormatBar"
+            Grid.Row="1"
+            Margin="6,0,6,0" />
+
+        <!-- plain_text_hint: shown instead of the bar while only plain
+             text is sent (compose/draft.go richText). -->
+        <TextBlock
+            x:Name="PlainTextHint"
+            Grid.Row="2"
+            Margin="12,4,12,4"
+            Style="{StaticResource DimCaptionLabelStyle}"
+            Text="{l:T Msgid='This message will be sent as plain text.'}"
+            TextWrapping="Wrap"
+            Visibility="Collapsed" />
+
+        <!-- editor_slot: the view background until the editor paints;
+             files dropped on it are attached. -->
+        <Border
+            x:Name="EditorSlot"
+            Grid.Row="3"
+            Margin="0,4,0,0"
+            AllowDrop="True"
+            Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+            DragOver="OnEditorDragOver"
+            Drop="OnEditorDrop" />
+
+        <!-- attachments_box -->
+        <local:AttachmentChipsView
+            x:Name="Chips"
+            Grid.Row="4"
+            Margin="12,6,12,6" />
+
+        <!-- toast_overlay over the content (the window layout). -->
+        <controls:ToastHost x:Name="PaneToasts" Grid.RowSpan="5" />
+
+        <!-- [bottom] draft_status (the window layout; inline it moves into
+             the footer). -->
+        <TextBlock
+            x:Name="StatusText"
+            Grid.Row="5"
+            Margin="12,4,12,4"
+            AutomationProperties.AutomationId="ComposeStatus"
+            AutomationProperties.LiveSetting="Polite"
+            MaxLines="1"
+            Style="{StaticResource DimCaptionLabelStyle}"
+            TextTrimming="CharacterEllipsis"
+            TextWrapping="NoWrap" />
+
+        <!-- The inline layout's footer (pane_layout.go buildInlineFooter). -->
+        <Grid
+            x:Name="Footer"
+            Grid.Row="5"
+            Margin="0,8,0,0"
+            ColumnSpacing="8"
+            Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button
+                x:Name="FooterAttach"
+                Width="40"
+                Height="32"
+                Padding="0"
+                AutomationProperties.AutomationId="ComposePaneAttach"
+                AutomationProperties.Name="{l:T Msgid='Attach Files'}"
+                Click="OnFooterAttachClick"
+                ToolTipService.ToolTip="{l:T Msgid='Attach Files'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('mail-attachment')}" />
+            </Button>
+            <Border x:Name="FooterStatusSlot" Grid.Column="1" VerticalAlignment="Center" />
+            <Button
+                x:Name="FooterDiscard"
+                Grid.Column="2"
+                Height="32"
+                AutomationProperties.AutomationId="ComposePaneDiscard"
+                Click="OnFooterDiscardClick" />
+            <Button
+                x:Name="FooterSend"
+                Grid.Column="3"
+                Height="32"
+                Padding="12,0,14,0"
+                AutomationProperties.AutomationId="ComposePaneSend"
+                Click="OnFooterSendClick"
+                Style="{StaticResource AccentButtonStyle}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('mail-send')}" />
+                    <TextBlock x:Name="FooterSendLabel" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+        </Grid>
+    </Grid>
+</UserControl>

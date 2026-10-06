@@ -54,7 +54,8 @@
 // Flush; Channel.Ready and Channel.Changed go to the draft controller's
 // EditorReady and EditorChanged; Channel.StateChanged to the format bar;
 // FilesDropped to attachment.import; Crashed to the editor-failure toast and
-// a Load of Html.
+// a Load of Html. Made sized (the board's inline reply), its channel raises
+// SizeReported with the document's height for the pane's EditorHeight.
 
 using System;
 using System.Collections.Generic;
@@ -83,12 +84,23 @@ public sealed partial class ComposeWebView : HardenedWebView
     {
     }
 
+    /// <summary>
+    /// An editor over <see cref="CidRegistry.Shared"/>; <paramref name="sized"/>
+    /// makes its channel report the document's height
+    /// (<see cref="EditorChannel.SizeReported"/>: the board's inline reply).
+    /// </summary>
+    public ComposeWebView(bool sized)
+        : this(CidRegistry.Shared, sized)
+    {
+    }
+
     /// <summary>An editor whose <c>cid:</c> pictures resolve in <paramref name="registry"/>.</summary>
-    public ComposeWebView(CidRegistry registry)
+    public ComposeWebView(CidRegistry registry, bool sized = false)
         : base(WebViewKind.Editor)
     {
         ArgumentNullException.ThrowIfNull(registry);
         Registry = registry;
+        Channel = new EditorChannel(sized);
     }
 
     /// <summary>
@@ -115,7 +127,7 @@ public sealed partial class ComposeWebView : HardenedWebView
     /// The bridge's state and events: <c>Ready</c>, <c>Changed</c>,
     /// <c>StateChanged</c>, <c>KeyPressed</c>, <c>PasteRequested</c>.
     /// </summary>
-    public EditorChannel Channel { get; } = new();
+    public EditorChannel Channel { get; }
 
     /// <summary>editor.Ready: whether the bridge runs in the current document.</summary>
     public bool IsEditorReady => Channel.IsReady;

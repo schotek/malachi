@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiMail/Compose/ComposeAttachments.swift
-// (attachFiles, insertImage); GTK: ui/internal/compose/compose.go
-// (attachFiles, insertImage, the chips' remove). The compose window's side
-// of its attachments: the pickers (ComposeFileDialog, owned by this window),
+// (attachFiles, insertImage); GTK: ui/internal/compose/pane.go
+// (attachFiles, insertImage, the chips' remove). The compose pane's side
+// of its attachments: the pickers (ComposeFileDialog, owned by the host's
+// window; none while the pane has no host),
 // the chips, and the draft controller's part (an attachment added or
 // removed is an edit; a failed import puts the status line back). What is
 // imported, refused, registered for cid: and removed is Core's
@@ -22,8 +23,8 @@ using Windows.Storage;
 
 namespace Malachi.App.Compose;
 
-/// <summary>The attachments of a compose window.</summary>
-public sealed partial class ComposeWindow
+/// <summary>The attachments of a compose pane.</summary>
+public sealed partial class ComposePane
 {
     // compose.go insertImage's filter: "Images", *.png, *.jpg, *.jpeg, *.gif,
     // *.webp (the pattern list is the shell's syntax, not text).
@@ -39,7 +40,11 @@ public sealed partial class ComposeWindow
         Chips.RemoveRequested += (_, id) => attachments.Remove(id);
     }
 
-    private void OnAttachClick(object sender, RoutedEventArgs e) => _ = AttachFilesAsync();
+    /// <summary>compose.attach: the file picker, and what is chosen is attached; not in comment mode.</summary>
+    public void AttachFiles() => _ = AttachFilesAsync();
+
+    /// <summary>compose.insert-image: one picture inline at the caret.</summary>
+    public void InsertImage() => _ = InsertImageAsync();
 
     // editor.OnDropFiles through XAML: WinUI's WebView2 hands an OLE drop of
     // files to its host rather than to the page (measured), so the editor's
@@ -80,7 +85,7 @@ public sealed partial class ComposeWindow
         {
             deferral.Complete();
         }
-        if (closing)
+        if (Gone)
         {
             return;
         }
@@ -88,8 +93,6 @@ public sealed partial class ComposeWindow
         // folder) has none: "Only local files can be attached".
         attachments.AttachFiles(items.Select(i => string.IsNullOrEmpty(i.Path) ? null : i.Path));
     }
-
-    private void OnInsertImageClick(object sender, RoutedEventArgs e) => _ = InsertImageAsync();
 
     // compose.attach: files to attach, as many as chosen; not in comment mode.
     private async Task AttachFilesAsync()
@@ -99,7 +102,7 @@ public sealed partial class ComposeWindow
             return;
         }
         var picked = await PickAsync(L10n.T("Attach Files"), multiple: true, filter: null);
-        if (picked is null || closing)
+        if (picked is null || Gone)
         {
             return; // cancelled
         }
@@ -116,7 +119,7 @@ public sealed partial class ComposeWindow
             return;
         }
         var picked = await PickAsync(L10n.T("Insert Image"), multiple: false, filter: (L10n.T("Images"), ImagePatterns));
-        if (picked is not { Count: > 0 } || closing)
+        if (picked is not { Count: > 0 } || Gone)
         {
             return;
         }
@@ -129,6 +132,10 @@ public sealed partial class ComposeWindow
 
     private async Task<IReadOnlyList<string?>?> PickAsync(string title, bool multiple, (string Name, string Patterns)? filter)
     {
+        if (Handle == 0)
+        {
+            return null;
+        }
         try
         {
             return await ComposeFileDialog.OpenAsync(Handle, title, multiple, filter);
@@ -140,9 +147,9 @@ public sealed partial class ComposeWindow
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "the files dropped on a compose window could not be read")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "the files dropped on a compose pane could not be read")]
     private static partial void LogDropFailed(ILogger logger, Exception error);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "the file dialog of a compose window failed")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "the file dialog of a compose pane failed")]
     private static partial void LogPickerFailed(ILogger logger, Exception error);
 }
