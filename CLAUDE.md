@@ -1508,10 +1508,15 @@ znovuotevření poštou otevře i závazky zavřené Hotovem; výběr při změn
 stylu zůstává jen u případu, který uživatel sám vybral nebo má živý pane;
 Escape nechá přednost popoverům; Ctrl/⌘+1/2 podle fyzické klávesy kvůli
 české QWERTZ). GTK `ui/internal/window`, `compose`, `settings`, `widget`,
-`style` a `chatgpt` jsou napsané naslepo a prošly jen `gofmt`/`gopls`;
-Windows C# a XAML jsou napsané naslepo, nesestavené (bez .NET) — nejprve
-`build.ps1 app` a seznam pravděpodobných míst v `docs/windows-port.md`
-§11.8. Nespuštěno: `TestBoardDryRun`, `codex_linux_test.go` (jen Toolbx),
+`style` a `chatgpt` jsou napsané naslepo, prošly `gofmt`/`gopls` a ručně
+spuštěný workflow `rpm.yml` na `feat/board` je přeložil v kontejneru
+Fedora (x86_64 i aarch64, `scripts/build.sh`), testy `internal/window`
+ale nespustil; Windows C# a XAML byly napsané naslepo a ručně spuštěný
+`windows.yml` je po třech opravných commitech (`1ffbcd3`, `79ae4d2`,
+`b131547`: CA1708 u bloků `extension`, CS8625, CA1822, vzorky round-trip
+API, pořadí navigace, `lowerBound`) sestavil, otestoval, zlintoval a
+zabalil pro x64 i ARM64 — na skutečném Windows zbývá UI smoke a ruční
+průchod. Nespuštěno: `TestBoardDryRun`, `codex_linux_test.go` (jen Toolbx),
 fuzz cíle, celé sady, aplikace macOS (izolovaný start visel na čtení
 keychainu v `AppState.init`: `ChatGPTKeychain.tokens()` ignoruje
 `MALACHI_DATA_DIR`, rozhodnutí vlastníka čeká), takže rozložení okna
