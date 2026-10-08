@@ -20,7 +20,7 @@ import (
 // The Triage control (board_triage_button in board_page.blp): the board's
 // own entry into the application's single board triage (board_triage.go's
 // BoardTriage, one per application, shared with the status strip's note,
-// renderStatusLabel in board.go). This file only wires the GTK button to
+// refreshBoardStatusLabel in board.go). This file only wires the GTK button to
 // boardtriage.Controller's View and Observe; every decision — whether it
 // is offered, its title, sensitivity and tooltip — is the controller's
 // (ui/internal/boardtriage), ported from macOS.
@@ -62,6 +62,9 @@ func (p *boardPage) wireTriage() {
 		return
 	}
 	p.triageRemoveObserve = bt.Controller().Observe(func() {
+		// The one place the triage's View is read (it looks for Claude
+		// Code on disk); the button and the status strip use this copy.
+		p.triageView, p.triageViewKnown = bt.Controller().View(), true
 		p.renderTriageButton()
 		p.w.refreshBoardStatusLabel()
 	})
@@ -119,6 +122,7 @@ func (p *boardPage) onTriageClicked() {
 	if bt == nil {
 		return
 	}
+	// A click acts on the controller's View of this moment, not the copy.
 	switch boardTriageClickFor(bt.Controller().View().Control) {
 	case clickStart:
 		bt.Controller().Start(boardtriage.Manual, 0)
@@ -171,12 +175,11 @@ func (p *boardPage) renderTriageButton() {
 		p.triageButton.SetSensitive(true)
 		return
 	}
-	bt := p.w.boardTriageOrNil()
-	if bt == nil {
+	v, ok := p.cachedTriageView()
+	if !ok {
 		p.triageButton.SetVisible(false)
 		return
 	}
-	v := bt.Controller().View()
 	p.triageButton.SetVisible(v.Offered())
 	p.triageButton.SetLabel(v.Title)
 	p.triageButton.SetSensitive(v.Enabled)

@@ -72,18 +72,75 @@ Adw.PreferencesDialog preferences_dialog {
       }
     }
 
-    Adw.PreferencesGroup {
+    // The board (ui/internal/board): its texts and the items of the combo
+    // rows are set in Go (window/preferences_board.go bindBoard). Show the
+    // Board, the windows and the triage's accounts are the daemon's board
+    // preferences; Board View and Open at Launch are board-default-style
+    // and board-start-mode.
+    Adw.PreferencesGroup board_group {
       title: _("Board");
 
-      Adw.ComboRow board_default_style {
-        title: _("Default View");
+      Adw.SwitchRow board_show {
+        use-markup: false;
+      }
 
-        model: StringList {
-          strings [
-            C_("board style", "List"),
-            C_("board style", "Columns"),
-            _("Today"),
-          ]
+      Adw.ComboRow board_default_style {
+        use-markup: false;
+      }
+
+      Adw.ComboRow board_start_mode {
+        use-markup: false;
+      }
+    }
+
+    // How long each state keeps a case (BoardPreferences.windows), one row
+    // per state in board.States' order.
+    Adw.PreferencesGroup board_windows_group {
+      Adw.SpinRow board_window_hot {
+        use-markup: false;
+        numeric: true;
+
+        adjustment: Adjustment {
+          lower: 1;
+          upper: 365;
+          step-increment: 1;
+          page-increment: 7;
+        };
+      }
+
+      Adw.SpinRow board_window_you {
+        use-markup: false;
+        numeric: true;
+
+        adjustment: Adjustment {
+          lower: 1;
+          upper: 365;
+          step-increment: 1;
+          page-increment: 7;
+        };
+      }
+
+      Adw.SpinRow board_window_them {
+        use-markup: false;
+        numeric: true;
+
+        adjustment: Adjustment {
+          lower: 1;
+          upper: 365;
+          step-increment: 1;
+          page-increment: 7;
+        };
+      }
+
+      Adw.SpinRow board_window_info {
+        use-markup: false;
+        numeric: true;
+
+        adjustment: Adjustment {
+          lower: 1;
+          upper: 365;
+          step-increment: 1;
+          page-increment: 7;
         };
       }
     }
@@ -387,6 +444,11 @@ Adw.PreferencesDialog preferences_dialog {
 
       // board-triage-model, apart from the panel's assistant-model.
       Adw.ComboRow board_triage_model {
+        use-markup: false;
+      }
+
+      // Triage These Accounts: a switch row per account, made in Go.
+      Adw.ExpanderRow board_triage_accounts {
         use-markup: false;
       }
 

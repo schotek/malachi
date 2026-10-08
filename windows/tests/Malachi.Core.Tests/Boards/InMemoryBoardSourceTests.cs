@@ -96,6 +96,24 @@ public sealed class InMemoryBoardSourceTests
         Assert.False(source.Snapshot.FindCase(F.Id("c1"))!.CanArchive);
     }
 
+    /// <summary>Every user write ends the mark of a case back from a reminder; Archive's outcome goes to OnArchived when set.</summary>
+    [Fact]
+    public void UserWritesEndTheReminderAndArchiveOffersUndo()
+    {
+        Case Reminded(string n) => F.Mk(n) with { RemindedAt = F.Ago(1) };
+        var (source, _) = Make(Reminded("c1"), Reminded("c2"), Reminded("c3"), Reminded("c4") with { CanArchive = true });
+        source.SetState(State.Hot, F.Id("c1"));
+        source.SetDone(true, F.Id("c2"));
+        source.Remind(null, F.Id("c3")); // not snoozed: only the mark ends
+        var outcomes = new List<ArchiveOutcome>();
+        source.OnArchived = outcomes.Add;
+        source.Archive(F.Id("c4"));
+        Assert.All(source.Snapshot.Cases, c => Assert.Null(c.RemindedAt));
+        var o = Assert.Single(outcomes);
+        Assert.True(o.Case == F.Id("c4") && o.Account == F.AccountA && o.UndoLabel == "Undo" && o.Moved.Count == 0);
+        Assert.Equal("Archived 1 message.", o.Text);
+    }
+
     [Fact]
     public void UnflagIsAPlaceholder()
     {

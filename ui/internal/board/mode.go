@@ -3,6 +3,8 @@
 
 package board
 
+import "time"
+
 // The main window's two modes: Mail (the folders, the list, the reader and
 // the assistant panel, as always) and Board (the page of the board:
 // Controller, View). The window shows one of them at a time under the same
@@ -27,9 +29,128 @@ const (
 // Modes lists every mode in the switch's order.
 var Modes = []Mode{ModeMail, ModeBoard}
 
-// InitialMode is the mode a new main window starts in. The mode is not
-// remembered.
+// InitialMode is the mode a new main window starts in when nothing else
+// says (the default of the key board-start-mode); StartMode decides.
 const InitialMode = ModeMail
+
+// Nick is the mode's value in the settings (the key board-last-mode:
+// "mail", "board").
+func (m Mode) Nick() string {
+	if m == ModeBoard {
+		return "board"
+	}
+	return "mail"
+}
+
+// ParseMode is the mode a stored nick names; false for an unknown one.
+func ParseMode(nick string) (Mode, bool) {
+	switch nick {
+	case "mail":
+		return ModeMail, true
+	case "board":
+		return ModeBoard, true
+	}
+	return ModeMail, false
+}
+
+// StartChoice is a value of Open at Launch (the key board-start-mode).
+type StartChoice int
+
+// The choices.
+const (
+	StartMail StartChoice = iota
+	StartBoard
+	// StartLast opens the mode shown last (the key board-last-mode).
+	StartLast
+)
+
+// StartModes lists the choices in Settings' order.
+var StartModes = []StartChoice{StartMail, StartBoard, StartLast}
+
+// NickLast is the stored value of a choice that takes what the user had
+// last (board-start-mode, board-default-style).
+const NickLast = "last"
+
+// Nick is the choice's value in the settings: "mail", "board", "last".
+func (s StartChoice) Nick() string {
+	switch s {
+	case StartBoard:
+		return "board"
+	case StartLast:
+		return NickLast
+	}
+	return "mail"
+}
+
+// ParseStartChoice is the choice a stored nick names; an unknown or empty
+// one is Mail.
+func ParseStartChoice(nick string) StartChoice {
+	for _, s := range StartModes {
+		if s.Nick() == nick {
+			return s
+		}
+	}
+	return StartMail
+}
+
+// StartMode is the mode a new main window opens in: startMode is the key
+// board-start-mode, lastMode the key board-last-mode (written whenever the
+// mode switches). With the board turned off (boardEnabled false) always
+// Mail.
+func StartMode(startMode, lastMode string, boardEnabled bool) Mode {
+	if !boardEnabled {
+		return ModeMail
+	}
+	switch ParseStartChoice(startMode) {
+	case StartBoard:
+		return ModeBoard
+	case StartLast:
+		m, _ := ParseMode(lastMode)
+		return m
+	}
+	return ModeMail
+}
+
+// StartWait is how long a new main window waits for the daemon's board
+// preferences before it settles in Mail for good (StartDecision).
+const StartWait = 5 * time.Second
+
+// StartDecision decides the mode a new main window opens in while the
+// daemon's board preferences may still be on their way. start is Open at
+// Launch (board-start-mode), lastMode the mode shown last
+// (board-last-mode); prefsKnown whether the daemon's preferences arrived
+// and enabled their Show the Board; userSwitched whether the user switched
+// the mode, userInteracted whether the user acted in Mail (a click or a
+// key there), waited the time since the window opened.
+//
+// decided is false while the window should keep waiting; until then it
+// shows Mail, writes nothing to board-last-mode and may still move to the
+// Board. Once decided the window applies mode if it still shows Mail
+// (ModeBoard only from the preferences) and never moves on its own again:
+//
+//   - a start that is Mail whatever the preferences say (Mail, or Last
+//     Used with Mail last): Mail at once;
+//   - the user switched: settled, the window keeps what the user chose
+//     (mode is Mail: the start moves nothing);
+//   - the user acted in Mail: Mail, so the reader never jumps away from
+//     what the user is doing;
+//   - the preferences arrived: StartMode with their Show the Board;
+//   - StartWait passed without them: Mail, since whether the board is on
+//     is unknown, and no later jump when they come.
+func StartDecision(start StartChoice, lastMode Mode, prefsKnown, enabled, userSwitched, userInteracted bool, waited time.Duration) (mode Mode, decided bool) {
+	wanted := StartMode(start.Nick(), lastMode.Nick(), true)
+	switch {
+	case wanted == ModeMail:
+		return ModeMail, true
+	case userSwitched, userInteracted:
+		return ModeMail, true
+	case prefsKnown:
+		return StartMode(start.Nick(), lastMode.Nick(), enabled), true
+	case waited >= StartWait:
+		return ModeMail, true
+	}
+	return ModeMail, false
+}
 
 // Command is one of the window's actions, as far as a mode cares
 // (Board.Command).
@@ -133,8 +254,8 @@ func (s Style) Nick() string {
 	return "list"
 }
 
-// ParseStyle is the style a stored nick names; an unknown or empty one is
-// the List.
+// ParseStyle is the style a stored nick names (the key board-last-style);
+// an unknown or empty one, and "last", is the List.
 func ParseStyle(nick string) Style {
 	for _, s := range Styles {
 		if s.Nick() == nick {
@@ -144,13 +265,69 @@ func ParseStyle(nick string) Style {
 	return StyleList
 }
 
-// StyleOnShow is the style the board takes as it shows: the default (from
-// the settings) the first time in a run, else the one it has, which is the
-// user's last choice. A default changed after the first show waits for the
-// next launch: the style never changes under the user.
-func StyleOnShow(current, defaultStyle Style, firstShow bool) Style {
-	if firstShow {
-		return defaultStyle
+// DefaultStyle is a value of Board View (the key board-default-style):
+// the style the board shows in, or the one used last.
+type DefaultStyle struct {
+	// Last: the style the user had last (board-last-style); Style is then
+	// unused.
+	Last  bool
+	Style Style
+}
+
+// DefaultStyles lists Board View's choices in Settings' order: Last Used,
+// List, Columns, Today.
+var DefaultStyles = []DefaultStyle{
+	{Last: true}, {Style: StyleList}, {Style: StyleColumns}, {Style: StyleToday},
+}
+
+// Nick is the choice's value in the settings: "last", "list", "columns",
+// "today".
+func (d DefaultStyle) Nick() string {
+	if d.Last {
+		return NickLast
 	}
-	return current
+	return d.Style.Nick()
+}
+
+// ParseDefaultStyle is the choice a stored nick of board-default-style
+// names: "last" is Last Used, a style's nick that style, anything else
+// (empty, unknown) Last Used, the key's default.
+func ParseDefaultStyle(nick string) DefaultStyle {
+	for _, s := range Styles {
+		if s.Nick() == nick {
+			return DefaultStyle{Style: s}
+		}
+	}
+	return DefaultStyle{Last: true}
+}
+
+// StyleOnShow is the style the board takes as it shows. Once the user
+// picked a style in this run (pickedThisRun) the board keeps it (current);
+// before that it takes Board View: the style used last (lastStyle, the key
+// board-last-style) for Last Used, else the chosen one, so a change of
+// Board View applies the next time the board shows unless the user already
+// picked a style. The style never changes while the board shows.
+func StyleOnShow(defaultStyle DefaultStyle, lastStyle, current Style, pickedThisRun bool) Style {
+	if pickedThisRun {
+		return current
+	}
+	if defaultStyle.Last {
+		return lastStyle
+	}
+	return defaultStyle.Style
+}
+
+// FilterOnShow is the account filter the board takes as it shows: the one
+// saved (the key board-account-filter) while that account is still among
+// accounts, else every account ("").
+func FilterOnShow(saved string, accounts []AccountInfo) string {
+	if saved == "" {
+		return ""
+	}
+	for _, a := range accounts {
+		if string(a.ID) == saved {
+			return saved
+		}
+	}
+	return ""
 }

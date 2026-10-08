@@ -248,6 +248,13 @@ public sealed partial class BoardAutoTriageScheduler : IDisposable
             Failures = 0;
             lastFailure = null;
         }
+        else if (e.Failure == Board.TriageFailure.Limit)
+        {
+            // The plan's usage limit: one step longer, not doubling on until
+            // a day, since the limit lifts on its own.
+            Failures = 1;
+            lastFailure = Board.TriageFailure.Limit;
+        }
         else if (e.Failure is { } f && Board.AutoTriage.CountsAsFailure(f))
         {
             Failures++;

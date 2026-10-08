@@ -309,7 +309,7 @@ private func inputs(
             ("ready", inputs(), ""),
             ("running", inputs(state: .starting(.manual)), ""),
             ("no Claude Code", inputs(claudeFound: false),
-             "The triage runs your Claude Code, which was not found on this Mac. The Claude Code row above offers to get it."),
+             "The triage runs your Claude Code, which was not found on this computer. The Claude Code row above offers to get it."),
             ("signed out", inputs(signedIn: false),
              "Claude Code is not signed in. The Claude Code row above offers to sign in."),
             ("signing in", inputs(signedIn: false, signingIn: true), Assistant.signInTexts().waiting),

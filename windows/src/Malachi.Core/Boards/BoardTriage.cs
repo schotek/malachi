@@ -71,6 +71,12 @@ public static partial class Board
         /// annotate. Counts for the back-off.
         /// </summary>
         NoProgress,
+
+        /// <summary>
+        /// The assistant's usage limit (of the user's plan) was reached; the
+        /// run ends as failed and the back-off doubles once.
+        /// </summary>
+        Limit,
     }
 
     /// <summary>The control the Triage button is.</summary>
@@ -104,6 +110,7 @@ public static partial class Board
         TriageFailure.NotSignedIn, TriageFailure.NotFound, TriageFailure.ToolsMissing, TriageFailure.Timeout,
         TriageFailure.Cancelled, TriageFailure.Declined, TriageFailure.AssistantOff, TriageFailure.Backend,
         TriageFailure.Stopped, TriageFailure.NothingToDo, TriageFailure.NotesRefused, TriageFailure.NoProgress,
+        TriageFailure.Limit,
     ];
 
     /// <summary>Where the application's triage run is.</summary>
@@ -249,6 +256,9 @@ public static partial class Board
 
         /// <summary>Now.</summary>
         public required DateTimeOffset Now { get; init; }
+
+        /// <summary>The zone of the calendar days of "yesterday" and "tomorrow"; the local one when null.</summary>
+        public TimeZoneInfo? TimeZone { get; init; }
     }
 
     /// <summary>The Triage control and the status strip.</summary>
@@ -448,7 +458,7 @@ public static partial class Board
         {
             // Notes another client wrote (Claude Code with the bridge's
             // triage tier) still count without the in-app assistant.
-            statusLine = Text.TriageStatusLine(i.AssistantOn, i.LastRun, i.Now);
+            statusLine = Text.TriageStatusLine(i.AssistantOn, i.LastRun, i.Now, i.TimeZone);
             if (i.AssistantOn && i.LastRun is { Running: false })
             {
                 relativeTime = true;
@@ -461,7 +471,7 @@ public static partial class Board
         {
             paused = chatGpt && p is AutoTriagePause.SignedOut
                 ? L10n.T("Automatic triage paused: %s", L10n.T("Reconnect to ChatGPT"))
-                : Text.AutoTriagePaused(p, i.Now);
+                : Text.AutoTriagePaused(p, i.Now, i.TimeZone);
             if (p is AutoTriagePause.Failed)
             {
                 relativeTime = true;
@@ -572,7 +582,7 @@ public static partial class Board
         var split = Text.TriageUsageSplit(
             Text.TriageTokens(parts[0], locale), Text.TriageTokens(parts[1], locale),
             Text.TriageTokens(parts[2], locale), Text.TriageTokens(parts[3], locale));
-        return (Text.TriageTokens(total, locale), split + "\n" + Text.TriageUsageRuns(Math.Max(u.Runs, 1)));
+        return (Text.UsageText(Text.TriageTokens(total, locale), u.LowerBound ?? false), split + "\n" + Text.TriageUsageRuns(Math.Max(u.Runs, 1)));
     }
 
     /// <summary>

@@ -46,6 +46,8 @@ extension Board {
         /// not annotate. Counts for the back-off, so that such a run does
         /// not repeat at every interval.
         case noProgress
+        /// The assistant's usage limit (of the user's plan) was reached.
+        case limit
 
         /// The class `board.runEnd` records (`BoardRunError`).
         public var runError: BoardRunError {
@@ -372,7 +374,9 @@ extension Board {
 
     /// The value and the detail of Settings' row of the tokens of the last
     /// 24 hours for `u`: the sum of the four counters (saturating) and the
-    /// split with the runs; "None" and "" without usage.
+    /// split with the runs; "None" and "" without usage. A total some run
+    /// of which was only partly reported (`lowerBound`) reads "at least …"
+    /// (`Text.usageText`).
     public static func triageUsageTexts(_ u: BoardUsageTotal?, locale: Locale) -> (value: String, detail: String) {
         guard let u else { return (Text.triageUsageNone, "") }
         let parts = [u.inputTokens, u.outputTokens, u.cacheCreationInputTokens, u.cacheReadInputTokens].map { max($0, 0) }
@@ -384,7 +388,10 @@ extension Board {
         let n = { Text.triageTokens($0, locale: locale) }
         let split = Text.triageUsageSplit(
             input: n(parts[0]), output: n(parts[1]), cacheWrite: n(parts[2]), cacheRead: n(parts[3]))
-        return (n(total), [split, Text.triageUsageRuns(max(u.runs, 1))].joined(separator: "\n"))
+        return (
+            Text.usageText(n(total), lowerBound: u.lowerBound),
+            [split, Text.triageUsageRuns(max(u.runs, 1))].joined(separator: "\n")
+        )
     }
 
     /// The status strip's triage note for the window in `mode` with the

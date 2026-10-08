@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -157,6 +158,9 @@ type fakeDaemon struct {
 	connected    bool
 	calls        []string
 	deleted      []api.DraftDeleteParams
+	moves        []api.MessageMoveParams
+	moveFailure  error
+	noMoved      bool
 	holding      map[held]bool
 	gates        map[held][]chan error
 }
@@ -341,7 +345,16 @@ func (f *fakeDaemon) serve(method string, params any) (any, error) {
 		var p api.BoardArchiveParams
 		_ = roundTrip(params, &p)
 		c, err := f.write(p.CaseID, func(c *api.BoardCase) { c.Visibility, c.CanArchive = api.BoardDone, false })
-		return api.BoardArchiveResult{Archived: 2, Case: c}, err
+		moved := []api.BoardMoved{{MessageID: "m_a", FromFolderID: "f_inbox"}, {MessageID: "m_b", FromFolderID: "f_other"}}
+		if f.noMoved {
+			moved = nil
+		}
+		return api.BoardArchiveResult{Archived: 2, Case: c, Moved: moved}, err
+	case api.MethodMessageMove:
+		var p api.MessageMoveParams
+		_ = roundTrip(params, &p)
+		f.moves = append(f.moves, p)
+		return api.MessageMoveResult{}, f.moveFailure
 	case api.MethodBoardDiscardDraft:
 		var p api.BoardDiscardDraftParams
 		_ = roundTrip(params, &p)
@@ -781,6 +794,86 @@ func TestDaemonArchiveSaysWhatItDid(t *testing.T) {
 	h.idle()
 	eq(t, "notices", h.notices, []string{"Archived 2 messages."})
 	check(t, !h.c("1").CanArchive, "can still archive")
+}
+
+func TestDaemonArchiveCanBeUndone(t *testing.T) {
+	h := newHarness(t, true).started()
+	var outcome *ArchiveOutcome
+	h.source.SetHandlers(Handlers{
+		Change:   func() { h.reports++ },
+		Error:    func(s string) { h.errors = append(h.errors, s) },
+		Archived: func(o ArchiveOutcome) { outcome = &o },
+	})
+	h.source.Archive(caseID("1"))
+	h.idle()
+	if outcome == nil {
+		t.Fatal("no outcome")
+	}
+	eq(t, "outcome", *outcome, ArchiveOutcome{
+		Case: caseID("1"), Account: "acc_1", Text: "Archived 2 messages.", UndoLabel: "Undo",
+		Moved: []api.BoardMoved{{MessageID: "m_a", FromFolderID: "f_inbox"}, {MessageID: "m_b", FromFolderID: "f_other"}},
+	})
+	h.source.UndoArchive(*outcome)
+	h.idle()
+	// The moves run side by side: in any order.
+	moves := slices.Clone(h.fake.moves)
+	slices.SortFunc(moves, func(a, b api.MessageMoveParams) int {
+		return strings.Compare(string(a.TargetFolderID), string(b.TargetFolderID))
+	})
+	eq(t, "moves", moves, []api.MessageMoveParams{
+		{AccountID: "acc_1", MessageIDs: []api.MessageID{"m_a"}, TargetFolderID: "f_inbox"},
+		{AccountID: "acc_1", MessageIDs: []api.MessageID{"m_b"}, TargetFolderID: "f_other"},
+	})
+	check(t, !h.c("1").Done(), "still done after Undo")
+	eq(t, "errors", len(h.errors), 0)
+}
+
+func TestDaemonUndoArchiveFailedMoveKeepsCaseDone(t *testing.T) {
+	h := newHarness(t, true).started()
+	var outcome *ArchiveOutcome
+	h.source.SetHandlers(Handlers{
+		Change:   func() { h.reports++ },
+		Error:    func(s string) { h.errors = append(h.errors, s) },
+		Archived: func(o ArchiveOutcome) { outcome = &o },
+	})
+	h.source.Archive(caseID("1"))
+	h.idle()
+	h.fake.set(func(f *fakeDaemon) { f.moveFailure = errors.New("messageNotFound") })
+	h.source.UndoArchive(*outcome)
+	h.idle()
+	check(t, h.c("1").Done(), "the case came back although the mail is still archived")
+	eq(t, "errors", h.errors, []string{"Could not undo the archive."})
+	for _, c := range h.fake.calls {
+		check(t, c != api.MethodBoardSetDone, "board.setDone called after a failed move")
+	}
+}
+
+func TestDaemonArchiveWithoutMovedHasNoUndo(t *testing.T) {
+	h := newHarness(t, true).started()
+	var outcome *ArchiveOutcome
+	h.source.SetHandlers(Handlers{
+		Change:   func() { h.reports++ },
+		Archived: func(o ArchiveOutcome) { outcome = &o },
+	})
+	h.fake.set(func(f *fakeDaemon) { f.noMoved = true })
+	h.source.Archive(caseID("1"))
+	h.idle()
+	check(t, outcome != nil && outcome.UndoLabel == "" && outcome.Text != "", "outcome %+v", outcome)
+}
+
+func TestDaemonRemindedAt(t *testing.T) {
+	back := t0.Add(-time.Hour)
+	h := newHarness(t, true)
+	h.fake.set(func(f *fakeDaemon) {
+		f.cases[0].RemindedAt = &back
+		f.cases[1].RemindedAt = &back
+		f.cases[1].Visibility = api.BoardDone // only a live case is reminded
+	})
+	h.started()
+	check(t, h.c("1").Reminded() && h.c("1").RemindedAt.Equal(back), "case 1 %+v", h.c("1"))
+	check(t, !h.c("2").Reminded() && h.c("2").RemindedAt.IsZero(), "case 2 %+v", h.c("2"))
+	h.source.SetState(caseID("1"), optState(StateThem)) // a user action ends it at once
+	check(t, !h.c("1").Reminded(), "still reminded after a move")
 }
 
 func draftCase(draft api.DraftID, text string) api.BoardCase {

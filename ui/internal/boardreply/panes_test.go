@@ -663,3 +663,24 @@ func itoa(n int) string {
 	}
 	return string(b)
 }
+
+func TestPanesHasSendingTellsASendFromUnsavedText(t *testing.T) {
+	h := newPanesHarness(t, Timing{RetryFirst: 20 * time.Millisecond, RetryMax: 80 * time.Millisecond})
+	c1 := panesCase("1", "d")
+	p := h.open(c1)
+	p.setSending(true)
+	c2 := panesCase("2", "d")
+	h.panes.Show(&c2)
+	h.loop.runUntil(t, func() bool {
+		key, ok := h.panes.LiveKey()
+		return ok && key.CaseID == "c_2"
+	})
+	if !h.panes.HasSending() || h.panes.HasUnsaved() {
+		t.Errorf("sending=%v unsaved=%v", h.panes.HasSending(), h.panes.HasUnsaved())
+	}
+	p.setSending(false)
+	h.panes.Ended(p, End{Kind: EndSent, Text: "Message queued for sending"})
+	if h.panes.HasSending() {
+		t.Error("still sending after the answer")
+	}
+}

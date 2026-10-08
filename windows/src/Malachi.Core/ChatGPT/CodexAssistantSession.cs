@@ -227,6 +227,9 @@ public sealed class CodexAssistantSession : IAssistantSession, IAsyncDisposable
             throw new AssistantProviderException("codex_session_busy_or_closed");
         }
         active = true;
+        // A failure the gate saw in an earlier turn (a usage limit, say)
+        // must not decide this one.
+        gate.NewTurn();
         turnDeadline = time.CreateTimer(_ => Terminate(), null, spec.Timeout, Timeout.InfiniteTimeSpan);
         turnCancellation = cancellationToken.Register(Terminate);
         text = "";

@@ -238,7 +238,8 @@ func TestBoardMailStates(t *testing.T) {
 	x.put(bmail{folder: x.sent, thread: "t_them", rfc: "th2", inReplyTo: "th1", from: boardMe, to: []api.Address{boardAlice}, subject: "Re: Offer", at: time.Hour, text: "Thanks, I will look."})
 	// them.asked: I started with a question.
 	x.put(bmail{folder: x.sent, thread: "t_ask", rfc: "ask1", from: boardMe, to: []api.Address{boardBob}, subject: "Invoice", text: "Did you send the invoice?\n-- \nMe"})
-	// No case: a statement to someone, and a forward of mine.
+	// No case: a statement to someone. A forward of mine is passed over
+	// (rules 6): Alice's message still decides.
 	x.put(bmail{folder: x.sent, thread: "t_stmt", rfc: "st1", from: boardMe, to: []api.Address{boardBob}, subject: "Notes", text: "Here are the notes."})
 	x.put(bmail{folder: x.inbox, thread: "t_fwd", rfc: "fw1", from: boardAlice, to: []api.Address{boardMe}, subject: "Plan", text: "The plan"})
 	x.put(bmail{folder: x.sent, thread: "t_fwd", rfc: "fw2", from: boardMe, to: []api.Address{boardBob}, subject: "Fwd: Plan", at: time.Hour,
@@ -248,11 +249,12 @@ func TestBoardMailStates(t *testing.T) {
 		headers: map[string]string{"List-Unsubscribe": "<mailto:unsub@example.invalid>", "List-Id": "<news.example.invalid>"}, text: "News"})
 	// Waiting for its classification: no case yet.
 	pending := x.put(bmail{folder: x.inbox, thread: "t_pending", rfc: "pe1", from: boardBob, to: []api.Address{boardMe}, subject: "Soon", pending: true})
-	// A spoofed "from me" inbound mail never makes a case "them".
+	// A spoofed "from me" inbound mail never makes a case "them" (the
+	// user never wrote to their own address: an unknown sender).
 	x.put(bmail{folder: x.inbox, thread: "t_spoof", rfc: "sp1", from: boardMe, to: []api.Address{boardBob}, subject: "Urgent", text: "Pay this?"})
 	// Known senders: Alice and Bob are (the user wrote to them above),
-	// Carol is not: her mail to the user is info, also when she marks it
-	// important; her flagged mail stays hot (the user's own flag).
+	// Carol is not: her mail to the user is a new contact, also when she
+	// marks it important; her flagged mail stays hot (the user's own flag).
 	x.put(bmail{folder: x.inbox, thread: "t_carol", rfc: "ca1", from: boardCarol, to: []api.Address{boardMe}, subject: "Offer", text: "Buy?"})
 	x.put(bmail{folder: x.inbox, thread: "t_carolimp", rfc: "ca2", from: boardCarol, to: []api.Address{boardMe}, subject: "Now",
 		headers: map[string]string{"Importance": "high"}, text: "Now!"})
@@ -275,9 +277,10 @@ func TestBoardMailStates(t *testing.T) {
 	want := map[string]api.BoardReason{
 		"t_you": api.BoardReasonYouAddressed, "t_hot": api.BoardReasonHotFlagged, "t_imp": api.BoardReasonHotImportant,
 		"t_cc": api.BoardReasonInfoCcOnly, "t_them": api.BoardReasonThemReplied, "t_ask": api.BoardReasonThemAsked,
-		"t_spoof": api.BoardReasonInfoNotAddressed,
-		"t_carol": api.BoardReasonInfoUnknownSender, "t_carolimp": api.BoardReasonInfoUnknownSender,
+		"t_spoof": api.BoardReasonInfoUnknownSender,
+		"t_carol": api.BoardReasonYouNewContact, "t_carolimp": api.BoardReasonYouNewContact,
 		"t_carolflag": api.BoardReasonHotFlagged, "t_shop": api.BoardReasonYouAddressed,
+		"t_fwd": api.BoardReasonYouAddressed,
 	}
 	for th, reason := range want {
 		c, ok := cases[api.ThreadID(th)]
@@ -289,7 +292,7 @@ func TestBoardMailStates(t *testing.T) {
 			t.Errorf("%s: %s %s %s v%d", th, c.RuleState, c.RuleReason, c.Visibility, c.Version)
 		}
 	}
-	for _, th := range []string{"t_stmt", "t_fwd", "t_news", "t_pending", "t_helpsent", "t_oldyou"} {
+	for _, th := range []string{"t_stmt", "t_news", "t_pending", "t_helpsent", "t_oldyou"} {
 		if c, ok := cases[api.ThreadID(th)]; ok {
 			t.Errorf("%s is a case: %s %s", th, c.RuleState, c.RuleReason)
 		}
@@ -818,12 +821,12 @@ func TestBoardPreferences(t *testing.T) {
 		t.Fatalf("round trip: %+v, want %+v", got.Preferences, set.Preferences)
 	}
 	for name, edit := range map[string]func(*api.BoardPreferences){
-		"window 0":         func(p *api.BoardPreferences) { p.Windows.Hot = 0 },
-		"window 366":       func(p *api.BoardPreferences) { p.Windows.Them = 366 },
-		"minutes":          func(p *api.BoardPreferences) { p.AutoTriageMinutes = 4 },
-		"daily":            func(p *api.BoardPreferences) { p.AutoTriageDailyCases = 1001 },
-		"unknown account":  func(p *api.BoardPreferences) { p.TriageAccounts = []api.AccountID{"acc_nope"} },
-		"negative minutes": func(p *api.BoardPreferences) { p.AutoTriageMinutes = -1 },
+		"window 0":          func(p *api.BoardPreferences) { p.Windows.Hot = 0 },
+		"window 366":        func(p *api.BoardPreferences) { p.Windows.Them = 366 },
+		"minutes":           func(p *api.BoardPreferences) { p.AutoTriageMinutes = 4 },
+		"daily":             func(p *api.BoardPreferences) { p.AutoTriageDailyCases = 1001 },
+		"malformed account": func(p *api.BoardPreferences) { p.TriageAccounts = []api.AccountID{"acc nope"} },
+		"negative minutes":  func(p *api.BoardPreferences) { p.AutoTriageMinutes = -1 },
 	} {
 		bad := api.DefaultBoardPreferences()
 		edit(&bad)
@@ -1091,7 +1094,7 @@ func TestBoardWorkerAndBackfill(t *testing.T) {
 	if err := x.b.backfillBoard(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if v, _, _ := x.b.store.GetMeta(x.ctx, metaBoardRules); v != boardRulesDone() || v != "5:done" {
+	if v, _, _ := x.b.store.GetMeta(x.ctx, metaBoardRules); v != boardRulesDone() || v != "6:done" {
 		t.Fatalf("meta = %q", v)
 	}
 	waitBoard(t, func() bool { r, c := x.list(); _, ok := c["t_old"]; return ok && r.Ready })

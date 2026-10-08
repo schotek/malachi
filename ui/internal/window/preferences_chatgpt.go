@@ -219,6 +219,10 @@ func (d *PreferencesDialog) bindChatGPT(s *settings.Store) func() {
 					}
 					refresh()
 				}
+				if err == nil {
+					// The board's triage may have waited for this.
+					a.recheckBoardSignIn()
+				}
 			})
 		}()
 	})

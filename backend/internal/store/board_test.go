@@ -91,7 +91,7 @@ func testDecider(th *BoardThread) (BoardVerdict, error) {
 	}
 	v := BoardVerdict{RulesVersion: "test", Subject: newest.Subject, Snippet: newest.Snippet, Date: newest.Date,
 		MessageCount: n, LatestMessageID: newest.ID, ReplyMessageID: newest.ID, ReplyFolderID: newest.FolderID,
-		Person: api.Address{Address: "alice@example.invalid"}}
+		Person: api.Address{Address: "alice@example.invalid"}, DecidingMessageID: newest.ID, DecidingMine: newest.Mine}
 	if inbound != nil {
 		v.NewestInboundStored, v.NewestInboundDate = inbound.StoredAt, inbound.Date
 	}

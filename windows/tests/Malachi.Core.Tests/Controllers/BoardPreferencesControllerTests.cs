@@ -3,7 +3,8 @@
 
 // Port of macos/Tests/MalachiCoreTests/BoardPreferencesControllerTests.swift
 // and of ui/internal/boardtriage/preferences_test.go, whose
-// TestPreferencesWriteFromDone ends the file: the board's preferences
+// TestPreferencesWriteFromDone ends the file, and TestPreferencesFieldSetters
+// and TestTriageAccountsChecklist: the board's preferences
 // against a fake daemon (BoardTriageDaemon): loading, optimistic writes,
 // their order and their revert. Swift's controller going away is Close
 // here (writeCompletesWhenTheControllerGoes). Go's TestWhyOf has no port:
@@ -11,6 +12,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers;
@@ -214,6 +216,124 @@ public sealed class BoardPreferencesControllerTests
         await h.IdleAsync();
         Assert.Equal([true, true], results);
         Assert.Equal(2, h.D.SetCalls.Count);
+    }
+
+    /// <summary>
+    /// Show the Board, the windows and the triage accounts go through the
+    /// same write as every preference; windows the daemon would refuse never
+    /// leave.
+    /// </summary>
+    [Fact]
+    public async Task FieldSetters()
+    {
+        await using var h = await Harness.StartAsync();
+        Assert.True(await h.Ui.InvokeAsync(h.C.LoadNowAsync));
+        async Task<bool> Wait(Action<Action<bool>> set)
+        {
+            var got = new List<bool>();
+            await h.Ui.RunAsync(() => set(got.Add));
+            await D.UntilAsync(h.Ui, () => got.Count > 0 && h.C.IsIdle);
+            return await h.Ui.RunAsync(() => got[0]);
+        }
+        Assert.True(await Wait(done => h.C.SetEnabled(false, done)));
+        Assert.False(await h.Ui.RunAsync(() => h.C.Preferences!.Enabled));
+        var w = new BoardWindows { Hot = 7, You = 365, Them = 1, Info = 2 };
+        Assert.True(await Wait(done => Assert.True(h.C.SetWindows(w, done))));
+        Assert.Equal(w, await h.Ui.RunAsync(() => h.C.Preferences!.Windows));
+        var sets = h.D.SetCalls.Count;
+        foreach (var bad in new[]
+        {
+            new BoardWindows { Hot = 0, You = 1, Them = 1, Info = 1 },
+            new BoardWindows { Hot = 1, You = BoardLimits.MaxBoardWindowDays + 1, Them = 1, Info = 1 },
+            new BoardWindows { Hot = 1, You = 1, Them = -3, Info = 1 },
+            new BoardWindows { Hot = 1, You = 1, Them = 1, Info = 0 },
+        })
+        {
+            Assert.False(BoardPreferencesController.ValidWindows(bad));
+            Assert.False(await h.Ui.RunAsync(() => h.C.SetWindows(bad, _ => Assert.Fail("completion called"))));
+        }
+        Assert.True(BoardPreferencesController.ValidWindows(BoardPreferencesController.DefaultWindows));
+        Assert.Equal(D.Prefs().Windows, BoardPreferencesController.DefaultWindows);
+        await h.IdleAsync();
+        Assert.Equal(sets, h.D.SetCalls.Count); // refused windows were not written
+        Assert.True(await Wait(done => h.C.SetTriageAccounts([new("b"), new("a"), new("b"), new("")], done)));
+        Assert.Equal([new AccountId("b"), new AccountId("a")], await h.Ui.RunAsync(() => h.C.Preferences!.TriageAccounts));
+        Assert.True(await Wait(done => h.C.SetTriageAccounts([], done)));
+        Assert.Empty(await h.Ui.RunAsync(() => h.C.Preferences!.TriageAccounts));
+    }
+
+    /// <summary>
+    /// Triage These Accounts' subtitle (Go TestTriageAccountsSubtitle): all
+    /// accounts only for an empty list; a list naming no account there is
+    /// any more reads nothing.
+    /// </summary>
+    [Fact]
+    public void TriageAccountsSubtitle()
+    {
+        static Account A(string id, string? kind, bool enabled) => new()
+        {
+            Id = new AccountId(id),
+            Config = new AccountConfig { Name = id, Email = "", Kind = kind is null ? null : new AccountKind(kind) },
+            Enabled = enabled,
+            State = new SyncState { AccountId = new AccountId(id), Status = SyncStatus.Idle },
+        };
+        static AccountId[] Ids(params string[] s) => [.. s.Select(x => new AccountId(x))];
+        Account[] accounts = [A("m1", null, true), A("j", AccountKind.Jira, true), A("off", null, false)];
+        const BoardPreferencesController.TriageAccountsCoverage All = BoardPreferencesController.TriageAccountsCoverage.All;
+        const BoardPreferencesController.TriageAccountsCoverage Some = BoardPreferencesController.TriageAccountsCoverage.Some;
+        const BoardPreferencesController.TriageAccountsCoverage None = BoardPreferencesController.TriageAccountsCoverage.None;
+        (string Name, AccountId[] Listed, Account[] Accounts, BoardPreferencesController.TriageAccountsCoverage Want)[] cases =
+        [
+            ("empty list", [], accounts, All),
+            ("nothing listed, no accounts", [], [], All),
+            ("one listed", Ids("m1"), accounts, Some),
+            ("issue tracker listed", Ids("j"), accounts, Some),
+            ("only removed accounts", Ids("gone", "gone2"), accounts, None),
+            ("only a disabled account", Ids("off"), accounts, None),
+            ("removed and present", Ids("gone", "m1"), accounts, Some),
+            ("listed, no accounts at all", Ids("m1"), [], None),
+        ];
+        foreach (var (name, listed, all, want) in cases)
+        {
+            Assert.True(want == BoardPreferencesController.TriageAccountsSubtitle(listed, all), name);
+        }
+        Assert.Equal("No account is selected, so the triage reads nothing.", Malachi.Core.Boards.Board.Text.TriageSettingsAccountsNone);
+    }
+
+    [Fact]
+    public void TriageAccountsChecklist()
+    {
+        static Account A(string id, string? kind, bool enabled) => new()
+        {
+            Id = new AccountId(id),
+            Config = new AccountConfig { Name = id, Email = "", Kind = kind is null ? null : new AccountKind(kind) },
+            Enabled = enabled,
+            State = new SyncState { AccountId = new AccountId(id), Status = SyncStatus.Idle },
+        };
+        Account[] accounts = [A("m1", null, true), A("m2", AccountKind.Graph, true), A("j", AccountKind.Jira, true), A("off", null, false)];
+        static AccountId[] Ids(params string[] s) => [.. s.Select(x => new AccountId(x))];
+        // Nothing listed: every enabled mail account, no issue tracker, nothing disabled.
+        foreach (var a in accounts)
+        {
+            Assert.Equal(a.Id.Value is "m1" or "m2", BoardPreferencesController.TriageAccountChecked([], a));
+        }
+        Assert.False(BoardPreferencesController.TriageAccountChecked(Ids("off"), accounts[3]));
+        (string Name, AccountId[] Listed, string Id, bool On, AccountId[]? Want)[] cases =
+        [
+            ("uncheck one of all", [], "m2", false, Ids("m1")),
+            ("check the tracker", [], "j", true, Ids("m1", "m2", "j")),
+            ("back to all is empty", Ids("m1"), "m2", true, []),
+            ("the last one stays", Ids("m1"), "m1", false, null),
+            ("unknown account", [], "x", true, null),
+            ("a disabled account cannot be toggled", Ids("m1"), "off", true, null),
+            ("a disabled listed account stays listed", Ids("off", "m1"), "m2", true, Ids("m1", "m2", "off")),
+            ("only the disabled one would be left", Ids("off", "m1"), "m1", false, null),
+        ];
+        foreach (var (name, listed, id, on, want) in cases)
+        {
+            var got = BoardPreferencesController.ToggleTriageAccount(listed, accounts, new AccountId(id), on);
+            Assert.True(want is null ? got is null : got is not null && got.SequenceEqual(want), name);
+        }
     }
 
     private sealed class Harness : IAsyncDisposable

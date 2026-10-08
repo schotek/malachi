@@ -6,8 +6,10 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -111,6 +113,39 @@ func (s *Store) MarkBoardAccountDirty(ctx context.Context, accountID string, sin
 	return nil
 }
 
+// MarkBoardCasesFrom marks dirty the threads of the cases of the accounts
+// that have a member from one of the addresses (its From or a Reply-To,
+// compared lower case and trimmed): whose known-ness changed (the user's
+// known correspondents were read again). Only the cases: an unknown
+// sender's mail is always a case, so a thread whose verdict changes with
+// its sender's known-ness is one. Nothing without accounts or addresses.
+func (s *Store) MarkBoardCasesFrom(ctx context.Context, accountIDs, addresses []string) error {
+	if len(accountIDs) == 0 || len(addresses) == 0 {
+		return nil
+	}
+	accounts, err := json.Marshal(accountIDs)
+	if err != nil {
+		return fmt.Errorf("mark board cases dirty: %w", err)
+	}
+	addrs, err := json.Marshal(addresses)
+	if err != nil {
+		return fmt.Errorf("mark board cases dirty: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `WITH changed(a) AS (SELECT lower(trim(value)) FROM json_each(?))
+		INSERT OR IGNORE INTO board_dirty (account_id, thread_id)
+		SELECT c.account_id, c.thread_id FROM board_cases c
+		WHERE c.account_id IN (SELECT value FROM json_each(?))
+			AND EXISTS (SELECT 1 FROM messages m WHERE m.account_id = c.account_id AND m.thread_id = c.thread_id
+				AND (EXISTS (SELECT 1 FROM json_each(m.from_json) j WHERE j.type = 'object'
+						AND lower(trim(json_extract(j.value, '$.address'))) IN (SELECT a FROM changed))
+					OR EXISTS (SELECT 1 FROM json_each(m.reply_to_json) j WHERE j.type = 'object'
+						AND lower(trim(json_extract(j.value, '$.address'))) IN (SELECT a FROM changed))))`,
+		string(addrs), string(accounts)); err != nil {
+		return fmt.Errorf("mark board cases dirty: %w", err)
+	}
+	return nil
+}
+
 // MarkBoardCasesDirty marks the thread of every case dirty (a new rule
 // version; the caller also starts the pass of MarkBoardDirtyBatch again).
 func (s *Store) MarkBoardCasesDirty(ctx context.Context) error {
@@ -147,10 +182,11 @@ func (s *Store) NextBoardRemind(ctx context.Context) (time.Time, bool, error) {
 }
 
 // ClearDueBoardReminds marks the reminds that came due at now as reminded
-// (the cases are live again, their version up, once) and returns the
-// accounts concerned, sorted. remind_at stays: a remind that came due
-// keeps its case on the board until the user marks it done or sets
-// another remind.
+// (the cases are live again, their version up, once; BoardCase.RemindedAt)
+// and returns the accounts concerned, sorted. remind_at stays: a remind
+// that came due keeps its case on the board until the user acts on the
+// case or inbound mail that counts arrives. reminded stays as well when
+// the clock goes back before remind_at afterwards (the case stays live).
 func (s *Store) ClearDueBoardReminds(ctx context.Context, now time.Time) ([]string, error) {
 	accounts, err := stringColumn(ctx, s.db, `UPDATE board_cases SET reminded = 1, version = version + 1, updated_at = ?
 		WHERE reminded = 0 AND remind_at != '' AND remind_at <= ? RETURNING account_id`, nowStamp(), stamp(now))
@@ -162,10 +198,11 @@ func (s *Store) ClearDueBoardReminds(ctx context.Context, now time.Time) ([]stri
 
 // BoardPrune says which cases PruneBoardCases deletes.
 type BoardPrune struct {
-	// Before: cases dated before it, unless something keeps them (a user
-	// state, a remind, an open commitment, a current annotation's
-	// deadline after Now, a linked draft that exists) or they were done at
-	// or after DoneBefore.
+	// Before: cases dated before it that were done before DoneBefore
+	// (whatever kept them while they were live: the user's state among
+	// them), and those not done unless something keeps them (a user state,
+	// a remind, an open commitment, a current annotation's deadline after
+	// Now while Assistant, a linked draft that exists).
 	Before time.Time
 	// DoneBefore: the done retention. A case done before it is pruned as
 	// above; a suggested reply it still links loses it first (the board
@@ -175,6 +212,9 @@ type BoardPrune struct {
 	// before it, whatever keeps them; zero = Now less BoardOrphanGrace.
 	OrphanBefore time.Time
 	Now          time.Time
+	// Assistant: the board's assistant preference is on (an annotation's
+	// deadline keeps a case only then).
+	Assistant bool
 }
 
 // PruneBoardCases deletes the cases off the board for good (the hourly
@@ -228,14 +268,14 @@ func (s *Store) PruneBoardCases(ctx context.Context, p BoardPrune) ([]string, er
 	}
 	deleted, err := collect(`DELETE FROM board_cases AS c
 		WHERE (c.orphaned_at != '' AND c.orphaned_at < ?)
-			OR (c.date < ? AND c.user_state = '' AND c.remind_at = ''
-			AND (c.done_at = '' OR c.done_at < ?)
+			OR (c.date < ? AND c.done_at != '' AND c.done_at < ?)
+			OR (c.date < ? AND c.done_at = '' AND c.user_state = '' AND c.remind_at = ''
 			AND NOT EXISTS (SELECT 1 FROM board_commitments k WHERE k.case_id = c.id AND k.state = 'open')
 			AND NOT EXISTS (SELECT 1 FROM drafts d WHERE c.draft_id != '' AND d.id = c.draft_id AND d.account_id = c.account_id)
-			AND NOT EXISTS (SELECT 1 FROM board_annotations a
-				WHERE a.case_id = c.id AND a.input_key = c.input_key AND a.due_at != '' AND a.due_at > ?))
+			AND NOT (? AND EXISTS (SELECT 1 FROM board_annotations a
+				WHERE a.case_id = c.id AND a.input_key = c.input_key AND a.due_at != '' AND a.due_at > ?)))
 		RETURNING account_id, id, draft_id, CASE WHEN orphaned_at != '' AND orphaned_at < ? THEN 'orphan' ELSE 'old' END`,
-		stamp(orphanBefore), stamp(p.Before), stamp(p.DoneBefore), n, stamp(orphanBefore))
+		stamp(orphanBefore), stamp(p.Before), stamp(p.DoneBefore), stamp(p.Before), boolInt(p.Assistant), n, stamp(orphanBefore))
 	if err != nil {
 		return nil, fmt.Errorf("prune board cases: %w", err)
 	}
@@ -294,16 +334,16 @@ type boardMergeRow struct {
 	id, userState, userAt, doneAt, remindAt, doneSeen string
 	reminded                                          int
 	annotated                                         bool
-	draftID                                           string
+	draftID, memberIDs                                string
 }
 
 func boardMergeRowTx(ctx context.Context, tx *sql.Tx, accountID, threadID string) (boardMergeRow, bool, error) {
 	var r boardMergeRow
 	err := tx.QueryRowContext(ctx, `SELECT c.id, c.user_state, c.user_state_at, c.done_at, c.remind_at, c.reminded, c.done_seen,
-			a.case_id IS NOT NULL, c.draft_id
+			a.case_id IS NOT NULL, c.draft_id, c.member_ids
 		FROM board_cases c LEFT JOIN board_annotations a ON a.case_id = c.id
 		WHERE c.account_id = ? AND c.thread_id = ?`, accountID, threadID).
-		Scan(&r.id, &r.userState, &r.userAt, &r.doneAt, &r.remindAt, &r.reminded, &r.doneSeen, &r.annotated, &r.draftID)
+		Scan(&r.id, &r.userState, &r.userAt, &r.doneAt, &r.remindAt, &r.reminded, &r.doneSeen, &r.annotated, &r.draftID, &r.memberIDs)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return r, false, nil
@@ -318,8 +358,11 @@ func boardMergeRowTx(ctx context.Context, tx *sql.Tx, accountID, threadID string
 // the canonical thread the absorbed case is renamed: its id, the user's
 // decisions, its annotation and commitments stay. With one, the canonical
 // case stays and takes over: the user state set later, done only when both
-// were done (the later time, the Message-IDs of both), else the earlier
-// remind of either, the canonical annotation (the absorbed one when it
+// were done (the later time, the Message-IDs of both; else the commitments
+// that done closed are open again), else the earlier
+// remind of either (with when it was set and the Message-IDs it saw, plus
+// those the other case remembers of its members, so that the merge itself
+// does not end it), the canonical annotation (the absorbed one when it
 // has none), the canonical draft link (the absorbed one when it has none,
 // or links a draft that is gone while the absorbed one's exists) and
 // every commitment. When both cases link a draft that exists, the
@@ -330,6 +373,11 @@ func boardMergeRowTx(ctx context.Context, tx *sql.Tx, accountID, threadID string
 // the triggers have marked both threads dirty. It reads plain columns and
 // compares the store's fixed-width stamps as text: nothing here decodes,
 // so a board row cannot fail the merge.
+// boardMergeLog is where mergeBoardCaseTx reports what it carries on
+// past: it runs inside the thread linker's transaction, which has no
+// logger of the store's (a variable for the tests).
+var boardMergeLog = slog.Default
+
 func mergeBoardCaseTx(ctx context.Context, tx *sql.Tx, accountID, from, canonical string) error {
 	absorbed, ok, err := boardMergeRowTx(ctx, tx, accountID, from)
 	if err != nil || !ok {
@@ -358,9 +406,30 @@ func mergeBoardCaseTx(ctx context.Context, tx *sql.Tx, accountID, from, canonica
 		doneAt = max(keep.doneAt, absorbed.doneAt)
 		doneSeen = mergeDoneSeen(keep.doneSeen, absorbed.doneSeen)
 	} else {
-		for _, r := range []boardMergeRow{keep, absorbed} {
+		for i, r := range []boardMergeRow{keep, absorbed} {
 			if r.remindAt != "" && (remindAt == "" || r.remindAt < remindAt) {
+				other := [2]boardMergeRow{absorbed, keep}[i]
 				remindAt, reminded = r.remindAt, r.reminded
+				doneSeen = ""
+				if r.doneAt == "" {
+					doneSeen = mergeDoneSeen(r.doneSeen, other.memberIDs)
+				}
+			}
+		}
+	}
+	if doneAt == "" {
+		// Live after the merge: the commitments that marking either case
+		// done closed are open again (SetBoardDone with done false). A
+		// failure here is the board's alone and never fails the mail
+		// write that merges the threads: logged, the merge goes on.
+		for _, r := range []boardMergeRow{keep, absorbed} {
+			if r.doneAt == "" {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE board_commitments SET state = 'open', closed_reason = '', closed_at = ''
+				WHERE case_id = ? AND state = 'closed' AND closed_reason = ? AND closed_at >= ?`,
+				r.id, api.CommitmentClosedDone, r.doneAt); err != nil {
+				boardMergeLog().Warn("board: merge: reopen the commitments done closed", "case", r.id, "err", err)
 			}
 		}
 	}

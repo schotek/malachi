@@ -11,6 +11,57 @@ public struct CodexPolicy: Sendable {
     public init(allowed: [String]) {
         tools = Set(allowed.map { $0.hasPrefix("mcp__malachi__") ? String($0.dropFirst(14)) : $0 })
     }
+
+    /// The gate a session passes before it starts anything (Go
+    /// `toolPolicy`, C# `Assistant.PolicyAllows`): only the application's
+    /// known capability sets and complete, immutable bridge argument forms.
+    /// Exactly three shapes of `tools.bridgeArgs` pass: none (the panel's
+    /// read and draft tools), `--reply-only <id>` (a suggested reply's
+    /// tools), and `--allow-triage --triage-run <id> --triage-max <n>` with
+    /// `n` in `Assistant.triageMaxRange` (the triage's tools); every tool
+    /// must carry the bridge's prefix, be one of that set's and appear once.
+    /// Anything else, `--allow-modify` and `--allow-send` included, throws
+    /// `chatgpt_invalid_tool_policy`: fails closed. No tools at all (nil)
+    /// pass with no bridge.
+    public static func check(_ tools: AssistantRequest.Tools?) throws {
+        guard let tools else { return }
+        let refused = ChatGPTFailure("chatgpt_invalid_tool_policy")
+        let args = tools.bridgeArgs
+        let known: [String]
+        if args.isEmpty {
+            known = Assistant.allowedTools
+        } else if args.count == 2, args[0] == "--reply-only", validIdentifier(args[1]) {
+            known = Assistant.suggestReplyTools
+        } else if args.count == 5, args[0] == "--allow-triage", args[1] == "--triage-run", validIdentifier(args[2]),
+                  args[3] == "--triage-max"
+        {
+            // Digits only, as Go's strconv.Atoi takes them (no sign, no
+            // spaces), and within the bridge's range.
+            guard !args[4].isEmpty, args[4].utf8.count <= 4, args[4].utf8.allSatisfy({ $0 >= 0x30 && $0 <= 0x39 }),
+                  let n = Int(args[4]), Assistant.triageMaxRange.contains(n)
+            else { throw refused }
+            known = Assistant.triageTools
+        } else {
+            throw refused
+        }
+        let bare = Set(known.map { String($0.dropFirst(prefix.count)) })
+        var seen = Set<String>()
+        for name in tools.allowed {
+            guard name.hasPrefix(prefix) else { throw refused }
+            let tool = String(name.dropFirst(prefix.count))
+            guard bare.contains(tool), seen.insert(tool).inserted else { throw refused }
+        }
+    }
+
+    /// The bridge's prefix of the tools' names.
+    private static let prefix = "mcp__malachi__"
+
+    /// A run or message id the bridge takes as an argument: not empty, at
+    /// most 512 bytes, not a flag, no NUL, line break, tab or space.
+    static func validIdentifier(_ s: String) -> Bool {
+        !s.isEmpty && s.utf8.count <= 512 && !s.hasPrefix("-")
+            && !s.unicodeScalars.contains { ["\u{0}", "\r", "\n", "\t", " "].contains($0) }
+    }
     public func filterRequest(_ data: Data) throws -> Data {
         guard var root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               root["previous_response_id"] == nil, root["conversation"] == nil else {

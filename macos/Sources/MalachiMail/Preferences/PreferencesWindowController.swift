@@ -94,11 +94,13 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
         // know the settings and the daemon; GTK builds every page at once,
         // so General loads config.get now rather than on its first visit.
         // The AI page asks the bridge for its status whenever it comes up.
-        generalPane.configure(settings: settings, client: client) { text in toasts.show(text) }
+        generalPane.configure(settings: settings, client: client, boardPreferences: triage?.preferences) { text in
+            toasts.show(text)
+        }
         appearancePane.configure(settings: settings)
         aiPane.configure(
             bridge: bridge, settings: settings, assistant: assistant, claudeDesktop: claudeDesktop,
-            confirmRestart: confirmRestart, triage: triage, confirmTriage: confirmTriage
+            confirmRestart: confirmRestart, triage: triage, confirmTriage: confirmTriage, client: client
         ) { text in toasts.show(text) }
         _ = generalPane.view
 

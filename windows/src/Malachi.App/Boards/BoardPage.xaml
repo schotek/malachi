@@ -10,13 +10,16 @@ main window's Board mode, in place of the mail's panes and above the
 status line, under the title bar that holds the Mail/Board switch. Its
 bar: the style switch (List, Columns, Today), the board's name and scope
 ("All Accounts · 23 cases"), the account filter, ✦ Triage (wired by the
-triage's port; BoardTriageButton) and "…" (Mail, Board, Add Account…,
+triage's port; BoardTriageButton) and "…" (Mail Ctrl+1, Board Ctrl+2, Add Account…,
 Preferences, Quit: the window's sidebar with the primary menu is hidden
 here). Under the bar the notice while the cases are partial or old, and
 BoardTriageStrip, the triage's status (filled by the triage's port). The
 content is the current style's view, the status page while the account
-scope has no case at all, and the sliding detail panel over Columns, Today
-and the narrow List. The window's toasts lie over it all (ToastLayer).
+scope has no case at all, the sliding detail panel over Columns, Today
+and the narrow List, and what Archive did with its Undo. The window's
+toasts lie over it all (ToastLayer). The page's keys: E, D and R on the
+selected case outside text fields (Board.KeyFor), and Escape in two steps
+(Board.EscapeFor).
 -->
 <UserControl
     x:Class="Malachi.App.Boards.BoardPage"
@@ -27,7 +30,7 @@ and the narrow List. The window's toasts lie over it all (ToastLayer).
     xmlns:main="using:Malachi.App.Main"
     xmlns:res="using:Malachi.App.Resources"
     IsTabStop="False">
-    <Grid x:Name="PageRoot">
+    <Grid x:Name="PageRoot" KeyDown="OnPageKeyDown">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -111,15 +114,18 @@ and the narrow List. The window's toasts lie over it all (ToastLayer).
                 <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-more-symbolic')}" />
                 <Button.Flyout>
                     <MenuFlyout x:Name="PageMenu" Placement="BottomEdgeAlignedRight">
+                        <!-- Windows-only strings: the key names beside the items (Board.BoardKeys). -->
                         <RadioMenuFlyoutItem
                             x:Name="MenuMail"
                             AutomationProperties.AutomationId="BoardMenuMail"
                             GroupName="WindowMode"
+                            KeyboardAcceleratorTextOverride="Ctrl+1"
                             Text="{l:T Msgid='Mail'}" />
                         <RadioMenuFlyoutItem
                             x:Name="MenuBoard"
                             AutomationProperties.AutomationId="BoardMenuBoard"
                             GroupName="WindowMode"
+                            KeyboardAcceleratorTextOverride="Ctrl+2"
                             Text="{l:T Msgid='Board'}" />
                         <MenuFlyoutSeparator />
                         <MenuFlyoutItem x:Name="MenuAddAccount" l:MnemonicLabel.Text="{l:T Msgid='_Add Account…'}" />
@@ -169,6 +175,29 @@ and the narrow List. The window's toasts lie over it all (ToastLayer).
                 AutomationProperties.AutomationId="BoardEmpty"
                 Visibility="Collapsed" />
             <boards:BoardDetailPanel x:Name="Panel" />
+            <!--
+                What Archive did, with Undo (Board.ArchiveOutcome; GTK's toast
+                with a button): an InfoBar where the window's toasts show, as
+                the toast has no button on Windows.
+            -->
+            <InfoBar
+                x:Name="ArchiveBar"
+                MaxWidth="560"
+                Margin="12,0,12,24"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Bottom"
+                AutomationProperties.AutomationId="BoardArchived"
+                Closed="OnArchiveBarClosed"
+                IsClosable="True"
+                IsOpen="False"
+                Severity="Informational">
+                <InfoBar.ActionButton>
+                    <Button
+                        x:Name="ArchiveUndoButton"
+                        AutomationProperties.AutomationId="BoardArchiveUndo"
+                        Click="OnArchiveUndoClick" />
+                </InfoBar.ActionButton>
+            </InfoBar>
         </Grid>
 
         <!-- The window's toasts while the board shows (MainWindow.Mode.cs moves them here). -->

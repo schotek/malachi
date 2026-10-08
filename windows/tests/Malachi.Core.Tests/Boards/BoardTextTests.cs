@@ -27,7 +27,7 @@ public sealed class BoardTextTests
     // The rule codes of docs/api.md §4.13.
     private static readonly string[] ReasonCodes =
     [
-        "hot.important", "hot.flagged", "you.addressed", "you.repliedToYou", "them.replied", "them.asked",
+        "hot.important", "hot.flagged", "you.addressed", "you.newContact", "you.repliedToYou", "them.replied", "them.asked",
         "info.ccOnly", "info.notAddressed", "info.yourNote", "info.unknownSender", "jira.yourComment",
         "jira.assigned", "jira.reporter", "jira.commented", "jira.watching", "kept",
     ];
@@ -86,6 +86,7 @@ public sealed class BoardTextTests
         }
         Assert.Equal("Overview", BText.FilterTitle(Filter.All));
         Assert.Equal("Done", BText.FilterTitle(Filter.Done));
+        Assert.Equal("Snoozed", BText.FilterTitle(Filter.Snoozed));
         Assert.Equal("Nothing burning.", BText.ColumnEmpty(State.Hot));
         Assert.Equal("Empty.", BText.ColumnEmpty(State.Info));
         Assert.Equal("", BText.StateName((State)9)); // an unknown state has no name
@@ -102,7 +103,45 @@ public sealed class BoardTextTests
             (BText.StyleMenuTitle(BoardStyle.List), "As List"),
             (BText.StyleMenuTitle(BoardStyle.Columns), "As Columns"),
             (BText.StyleMenuTitle(BoardStyle.Today), "Today"),
-            (BText.DefaultStyleSetting, "Default View"),
+            (BText.DefaultStyleSetting, "Board View"),
+            (BText.StartModeSetting, "Open at Launch"),
+            (BText.LastUsed, "Last Used"),
+            (BText.DefaultStyleTitle(DefaultStyle.Last), "Last Used"),
+            (BText.DefaultStyleTitle(DefaultStyle.Columns), "Columns"),
+            (BText.StartModeTitle(StartChoice.Mail), "Mail"),
+            (BText.StartModeTitle(StartChoice.Board), "Board"),
+            (BText.StartModeTitle(StartChoice.Last), "Last Used"),
+            (BText.RemindNoMore, "Back on the Board Now"),
+            (BText.RemindPreset(RemindPresetKind.ThisEvening), "This Evening"),
+            (BText.RemindPreset(RemindPresetKind.ThisMorning), "This Morning"),
+            (BText.Reminded, "Reminded"),
+            (BText.NewContact, "New contact"),
+            (BText.Undo, "Undo"),
+            (BText.UndoFailed, "Could not undo the archive."),
+            (BText.TitleWithBadge("Work", "IMAP"), "Work (IMAP)"),
+            (BText.TitleWithBadge("Work", ""), "Work"),
+            (BText.PersonAndTime("Jana", "2 Oct"), "Jana · 2 Oct"),
+            (BText.PersonAndTime("", "2 Oct"), "2 Oct"), // no " · " dangling
+            (BText.PersonAndTime("Jana", ""), "Jana"),
+            (BText.PersonAndTime("", ""), ""),
+            (BText.DayAndTime("Thu", "18:00"), "Thu at 18:00"),
+            (BText.RemindItem("Later Today", "Thu at 18:00"), "Later Today, Thu at 18:00"),
+            (BText.UsageText("12,345", true), "at least 12,345"),
+            (BText.UsageText("12,345", false), "12,345"),
+            (BText.TriageFailureText(TriageFailure.Limit), "the assistant’s usage limit was reached"),
+            (BText.SuggestReplyFailureText(SuggestReplyFailure.Limit), "the assistant’s usage limit was reached"),
+            (BText.TriageNeedsClaudeCode, "The triage runs your Claude Code, which was not found on this computer"),
+            (BText.Days(30), "30 days"),
+            (BText.Days(1), "1 day"),
+            (BText.TileToolTip(new Tile(TileKind.State, State.Hot, 3, "Hot")), "Hot: 3 cases"),
+            (BText.TileToolTip(new Tile(TileKind.State, State.Hot, 1, "Hot")), "Hot: 1 case"),
+            (BText.TileToolTip(new Tile(TileKind.Commitments, State.Hot, 3, "Promised")), "Promised: 3 promises"),
+            (BText.ShowBoardSetting, "Show the Board"),
+            (BText.WindowsSetting, "Keep cases for"),
+            (BText.TriageSettingsAccounts, "Triage These Accounts"),
+            (BText.TriageSettingsAccountsAll, "All accounts, while none is checked"),
+            (BText.SuggestReplyTitle(false), "✦ Suggest Reply"),
+            (BText.SuggestReplyTitle(true), "✦ Suggest Follow-up"),
             (BText.DueGroupTitle(DueGroupKind.Overdue), "Overdue"),
             (BText.DueGroupTitle(DueGroupKind.Today), "Today"),
             (BText.DueGroupTitle(DueGroupKind.Tomorrow), "Tomorrow"),
@@ -114,8 +153,8 @@ public sealed class BoardTextTests
             (BText.Close, "_Close"),
             (BText.Discard, "_Discard"),
             (BText.Quoted("Friday at noon"), "“Friday at noon”"),
-            (BText.SnoozedUntil("Tomorrow 09:00"), "Back on the board Tomorrow 09:00"),
-            (BText.SpokenRemind("Tomorrow 09:00"), "Back on the board Tomorrow 09:00"),
+            (BText.SnoozedUntil("Tomorrow at 09:00"), "Back on the board: Tomorrow at 09:00"),
+            (BText.SpokenRemind("Tomorrow at 09:00"), "Back on the board: Tomorrow at 09:00"),
             (BText.SpokenDue("Tomorrow"), "Due Tomorrow"),
             (BText.SpokenAssistant("Lunch on Friday"), "Assistant: Lunch on Friday"),
         ];
@@ -160,6 +199,10 @@ public sealed class BoardTextTests
             var r = BText.Reason(new BoardReason(c));
             Assert.True(r != BText.ReasonUnknown && seen.Add(r), $"Reason({c}) = {r} is not its own");
         }
+        Assert.Equal("The newest message is addressed to you by someone you have never written to.", BText.Reason(new BoardReason("you.newContact")));
+        Assert.Equal(
+            "The newest message comes from someone you have never written to and is not addressed to you, so it waits under For Your Information.",
+            BText.Reason(new BoardReason("info.unknownSender")));
         Assert.Equal(ReasonCodes.Order(StringComparer.Ordinal), KnownReasons.Select(r => r.Value).Order(StringComparer.Ordinal));
         foreach (var c in new[] { "", "hot", "kept.", "HOT.IMPORTANT" })
         {

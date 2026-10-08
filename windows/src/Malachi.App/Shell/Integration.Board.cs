@@ -22,7 +22,13 @@
 // keeps the row from showing (the message gone, a folder the sidebar does
 // not have, a search on screen, a listing that never finishes) opens the
 // message in its own window instead. GTK polls the list's state for the
-// listing, which this port does as well.
+// listing, which this port does as well. A Show in Mail whose answer comes
+// after the user moved on (left Mail for the board again, selected another
+// case, clicked Show in Mail again) does nothing, not even its toast.
+//
+// The board remembers its style and account filter: every change of the
+// style writes board-last-style, every change of the account filter
+// board-account-filter (BoardController reads them back as it shows).
 
 using System;
 using System.Threading.Tasks;
@@ -54,6 +60,10 @@ public sealed partial class Integration
     private bool boardStarted;
     private bool boardEnded;
     private PendingReveal? reveal;
+
+    // Bumped by every Show in Mail, by LeftMail and by EndBoard: an answer
+    // of message.get for an older one is dropped.
+    private int revealGeneration;
     private DispatcherQueueTimer? revealTimer;
     private ILogger? boardLogger;
 
@@ -85,13 +95,18 @@ public sealed partial class Integration
     public void RefreshBoard() => StartedBoardSource?.Refresh();
 
     /// <summary>The window leaves Mail: a Show in Mail still waiting selects nothing in the hidden panes.</summary>
-    public void LeftMail() => CancelReveal();
+    public void LeftMail()
+    {
+        revealGeneration++;
+        CancelReveal();
+    }
 
     // Dispose: a Show in Mail still waiting stops polling the disposed
     // list, and a message.get answering later does nothing.
     private void EndBoard()
     {
         boardEnded = true;
+        revealGeneration++;
         CancelReveal();
     }
 
@@ -123,12 +138,39 @@ public sealed partial class Integration
             tokens.Add(boardDaemonSource);
         }
         var settings = state.Settings;
-        BoardController = new BoardController(source, defaultStyle: () => settings.BoardDefaultStyle);
+        BoardController = new BoardController(
+            source,
+            defaultStyle: () => settings.BoardDefaultStyle,
+            lastStyle: () => settings.BoardLastStyle,
+            savedAccount: () => settings.BoardAccountFilter);
+        BoardController.Changed += (_, changes) => RememberBoardView(changes);
         var hub = state.Notifications;
         tokens.Add(hub.AddBoardChanged(n => StartedBoardSource?.BoardChanged(n)));
         tokens.Add(hub.AddAccountsChanged(() => StartedBoardSource?.AccountsChanged()));
         tokens.Add(hub.AddConnectionState(s =>
             StartedBoardSource?.ConnectionChanged(s is ConnectionState.Connected or ConnectionState.InfoFailed)));
+    }
+
+    // The style and the account filter, for the next show and the next
+    // launch (window/board.go rememberViewState). The filter is written only
+    // once the accounts are known, so that the saved one is not lost before
+    // the board could apply it.
+    private void RememberBoardView(BoardController.Changes changes)
+    {
+        var s = state.Settings;
+        var view = BoardController.State;
+        if ((changes & BoardController.Changes.Style) != 0 && s.BoardLastStyle != view.Style)
+        {
+            s.BoardLastStyle = view.Style;
+        }
+        if ((changes & BoardController.Changes.Filters) != 0 && BoardController.Source.Snapshot.Accounts.Count > 0)
+        {
+            var account = view.Account?.Value ?? "";
+            if (!string.Equals(s.BoardAccountFilter, account, StringComparison.Ordinal))
+            {
+                s.BoardAccountFilter = account;
+            }
+        }
     }
 
     // Reply: the ordinary reply window for the case's message (a comment
@@ -158,10 +200,17 @@ public sealed partial class Integration
         {
             return;
         }
-        _ = ShowInMailAsync(c.Account, message, c.Reply?.Folder, c.Thread);
+        var generation = ++revealGeneration;
+        _ = ShowInMailAsync(c.Account, message, c.Reply?.Folder, c.Thread, generation, BoardController.State.Selection);
     }
 
-    private async Task ShowInMailAsync(AccountId account, MessageId message, FolderId? fallbackFolder, ThreadId? thread)
+    // Whether the answer of Show in Mail number generation still counts: no
+    // newer one, Mail not left, the board not ended, the same case selected.
+    private bool RevealCurrent(int generation, BoardCaseId? selection) =>
+        !boardEnded && generation == revealGeneration && BoardController.State.Selection == selection;
+
+    private async Task ShowInMailAsync(
+        AccountId account, MessageId message, FolderId? fallbackFolder, ThreadId? thread, int generation, BoardCaseId? selection)
     {
         MessageGetResult result;
         try
@@ -170,16 +219,25 @@ public sealed partial class Integration
         }
         catch (RpcException e) when (e.Error.Code.Value is ErrorCode.MessageNotFound or ErrorCode.MessageGone)
         {
-            mainWindow.Toasts.Show(Board.Text.ShowInMailGone);
+            if (RevealCurrent(generation, selection))
+            {
+                mainWindow.Toasts.Show(Board.Text.ShowInMailGone);
+            }
             return;
         }
         catch (Exception e) when (e is RpcException or RpcClientException or TimeoutException or OperationCanceledException)
         {
-            LogShowInMailFailed(boardLogger!, e.GetType().Name);
-            mainWindow.Toasts.Show(Board.Text.ShowInMailFailed);
+            if (!boardEnded)
+            {
+                LogShowInMailFailed(boardLogger!, e.GetType().Name);
+            }
+            if (RevealCurrent(generation, selection))
+            {
+                mainWindow.Toasts.Show(Board.Text.ShowInMailFailed);
+            }
             return;
         }
-        if (boardEnded)
+        if (!RevealCurrent(generation, selection))
         {
             return;
         }

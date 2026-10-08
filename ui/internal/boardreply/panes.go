@@ -722,6 +722,27 @@ func (p *Panes[P]) HasUnsavedOrUnsent() bool {
 	return false
 }
 
+// HasSending reports whether a parked pane waits for a send to answer.
+func (p *Panes[P]) HasSending() bool {
+	for _, e := range p.parked {
+		if e.awaitingSend || e.pane.IsSending() {
+			return true
+		}
+	}
+	return false
+}
+
+// HasUnsaved reports whether a parked pane holds text not saved yet (or a
+// save under way), whatever else is pending.
+func (p *Panes[P]) HasUnsaved() bool {
+	for _, e := range p.parked {
+		if e.unsaved || e.settling {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *Panes[P]) anyPending() bool {
 	for _, e := range p.parked {
 		if e.pending() {

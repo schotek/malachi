@@ -117,6 +117,7 @@ private func mailCase(_ state: Board.State = .you) -> Board.Case {
             .stopped: "the assistant stopped",
             .backend: "the mail backend did not answer",
             .noDraft: "the assistant wrote no reply",
+            .limit: "the assistant’s usage limit was reached",
         ]
         for f in Board.SuggestReplyFailure.allCases {
             #expect(Board.Text.suggestReplyFailure(f) == want[f], "\(f)")

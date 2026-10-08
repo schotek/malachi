@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Board/BoardSource.swift (BoardSource and
-// its extension); GTK: ui/internal/board/source.go (Handlers, DataSource).
+// its extension); GTK: ui/internal/board/source.go (Handlers, DataSource,
+// ArchiveUndoer).
 //
 // Where the board's cases come from. The board reads a snapshot and is told
 // when it changes; what the user decides about a case (its state, done, a
@@ -44,10 +45,16 @@ public interface IBoardSource
     Action<string>? OnError { get; set; }
 
     /// <summary>
-    /// Called with a short sentence for a toast about what a write did
-    /// (Archive). One observer: the controller.
+    /// Called with a short sentence for a toast about what a write did. One
+    /// observer: the controller.
     /// </summary>
     Action<string>? OnNotice { get; set; }
+
+    /// <summary>
+    /// Called with what <see cref="Archive"/> did, for a toast with Undo
+    /// (Go <c>Handlers.Archived</c>). One observer: the controller.
+    /// </summary>
+    Action<Board.ArchiveOutcome>? OnArchived { get; set; }
 
     /// <summary>Moves the case to <paramref name="state"/>; null = back to automatic (the assistant's or the rules' state).</summary>
     void SetState(Board.State? state, BoardCaseId id);
@@ -63,7 +70,8 @@ public interface IBoardSource
 
     /// <summary>
     /// Moves the case's inbox messages to the archive (where the account can)
-    /// and marks it done; <see cref="OnNotice"/> says what it did.
+    /// and marks it done; <see cref="OnArchived"/> says what it did, with the
+    /// moved messages for Undo.
     /// </summary>
     void Archive(BoardCaseId id);
 

@@ -5,8 +5,9 @@
 // AIPaneViewController.swift (addBoardGroup, bindBoard, updateBoardGroup,
 // fill, boardConsentChanged, boardAutoChanged, boardIntervalChosen,
 // boardDailyChosen; ChatGPTPreferences' boardModelRow); GTK:
-// window/preferences.go (bindBoardTriage, boardGroupFor) and
-// preferences_chatgpt.go (bindBoardProviderModel).
+// window/preferences.go (bindBoardTriage, boardGroupFor),
+// preferences_board.go (bindTriageAccounts) and preferences_chatgpt.go
+// (bindBoardProviderModel).
 //
 // Shown while triage is offered (Core's one rule, TriageView.Offered, which
 // the board's Triage follows too: the Assistant shown with the In App
@@ -20,6 +21,12 @@
 //   way stops, automatic triage goes off too, the panel's own consent
 //   stays). Turning off is always possible; turning on needs a runnable
 //   triage.
+// - Triage These Accounts: a check box per enabled account, checked as the
+//   daemon decides (BoardPreferencesController.TriageAccountChecked; none
+//   listed is every enabled mail account, which the line under the heading
+//   says), changed through ToggleTriageAccount: the last checked account
+//   cannot be unchecked. The accounts are asked with account.list when the
+//   page is made and whenever it comes up.
 // - Model: the triage's own model, board-triage-model for Claude (apart
 //   from the panel's assistant-model), board-triage-chatgpt-model from the
 //   provider's catalog for ChatGPT (its default first, a stored model the
@@ -43,7 +50,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Malachi.Core.Api;
 using Malachi.Core.Assistants;
 using Malachi.Core.Boards;
@@ -52,6 +61,7 @@ using Malachi.Core.Controllers;
 using Malachi.Core.I18n;
 using Malachi.Core.Platform;
 using Malachi.Core.Settings;
+using Malachi.Core.Transport;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -74,6 +84,13 @@ public sealed partial class AiPage
     private bool syncingBoard;
     private bool givingBoardConsent;
     private int boardModelsGeneration;
+
+    // Triage These Accounts: the accounts of the last account.list, their
+    // check boxes (one per enabled account, in the accounts' order) and the
+    // generation of the newest request (a late answer is dropped).
+    private readonly List<Account> boardAccounts = [];
+    private readonly List<CheckBox> boardAccountBoxes = [];
+    private int boardAccountsGeneration;
 
     private BoardTriageController BoardTriage => state.BoardTriage;
 
@@ -100,6 +117,7 @@ public sealed partial class AiPage
         AutomationProperties.SetName(BoardIntervalBox, Board.Text.TriageSettingsInterval);
         BoardDailyRow.Header = Board.Text.TriageSettingsDaily;
         AutomationProperties.SetName(BoardDailyBox, Board.Text.TriageSettingsDaily);
+        BoardAccountsRow.Header = Board.Text.TriageSettingsAccounts;
         BoardStatusRow.Header = L10n.T("Status");
         BoardUsageRow.Header = Board.Text.TriageSettingsUsage;
 
@@ -110,6 +128,7 @@ public sealed partial class AiPage
             BoardTriage.Preferences.Load();
         }
         RefreshBoardChatGptModels();
+        _ = ReloadTriageAccountsAsync();
         UpdateBoardGroup();
     }
 
@@ -121,6 +140,7 @@ public sealed partial class AiPage
         BoardTriage.CheckSignIn();
         BoardTriage.RelistBoard();
         RefreshBoardChatGptModels();
+        _ = ReloadTriageAccountsAsync();
         UpdateBoardGroup();
     }
 
@@ -184,6 +204,105 @@ public sealed partial class AiPage
         BoardUsageValue.Text = v.UsageValue;
         BoardUsageDetail.Text = v.UsageDetail;
         ToolTipService.SetToolTip(BoardUsageRow, v.UsageToolTip.Length == 0 ? null : v.UsageToolTip);
+        UpdateTriageAccounts();
+    }
+
+    // Triage These Accounts (preferences_board.go bindTriageAccounts)
+
+    // The accounts afresh; the list is rebuilt from the answer.
+    private async Task ReloadTriageAccountsAsync()
+    {
+        var my = ++boardAccountsGeneration;
+        AccountListResult result;
+        try
+        {
+            result = await state.Client.CallAsync(API.AccountList, new EmptyParams());
+        }
+        catch (Exception e) when (e is RpcException or RpcClientException or TimeoutException or OperationCanceledException)
+        {
+            // The list stays as it was; the next appearance asks again.
+            return;
+        }
+        if (closed || my != boardAccountsGeneration)
+        {
+            return;
+        }
+        RebuildTriageAccounts(result.Accounts);
+    }
+
+    private void RebuildTriageAccounts(IReadOnlyList<Account> accounts)
+    {
+        foreach (var box in boardAccountBoxes)
+        {
+            box.Click -= OnTriageAccountClick;
+        }
+        BoardAccountsList.Children.Clear();
+        boardAccountBoxes.Clear();
+        boardAccounts.Clear();
+        boardAccounts.AddRange(accounts);
+        foreach (var a in accounts.Where(a => a.Enabled))
+        {
+            // The account's name as plain text (a string content is a TextBlock).
+            var title = Malachi.Core.Model.AccountsPage.AccountRowTitle(a);
+            var box = new CheckBox { Content = title, Tag = a.Id };
+            AutomationProperties.SetName(box, title);
+            box.Click += OnTriageAccountClick;
+            boardAccountBoxes.Add(box);
+            BoardAccountsList.Children.Add(box);
+        }
+        UpdateTriageAccounts();
+    }
+
+    // The check boxes as the daemon decides; the line under the heading
+    // while none is listed (every enabled mail account is triaged then), or
+    // while the list names only accounts gone since (the triage reads
+    // nothing: BoardPreferencesController.TriageAccountsSubtitle).
+    private void UpdateTriageAccounts()
+    {
+        if (closed)
+        {
+            return;
+        }
+        var prefs = BoardTriage.Preferences.Preferences;
+        var listed = prefs?.TriageAccounts ?? [];
+        BoardAccountsRow.IsEnabled = prefs is not null && boardAccountBoxes.Count > 0;
+        var line = prefs is null
+            ? ""
+            : BoardPreferencesController.TriageAccountsSubtitle(listed, boardAccounts) switch
+            {
+                BoardPreferencesController.TriageAccountsCoverage.All => Board.Text.TriageSettingsAccountsAll,
+                BoardPreferencesController.TriageAccountsCoverage.None => Board.Text.TriageSettingsAccountsNone,
+                _ => "",
+            };
+        BoardAccountsSubtitle.Text = line;
+        BoardAccountsSubtitle.Visibility = line.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        var enabled = boardAccounts.Where(a => a.Enabled).ToList();
+        for (var i = 0; i < boardAccountBoxes.Count && i < enabled.Count; i++)
+        {
+            boardAccountBoxes[i].IsChecked = BoardPreferencesController.TriageAccountChecked(listed, enabled[i]);
+        }
+    }
+
+    // A click: the list with that account changed, unless it would leave
+    // no account checked (the box then shows what is stored again).
+    private void OnTriageAccountClick(object sender, RoutedEventArgs e)
+    {
+        if (closed || sender is not CheckBox { Tag: AccountId id } box)
+        {
+            return;
+        }
+        if (BoardTriage.Preferences.Preferences is not { } prefs)
+        {
+            UpdateTriageAccounts();
+            return;
+        }
+        var next = BoardPreferencesController.ToggleTriageAccount(prefs.TriageAccounts, boardAccounts, id, box.IsChecked == true);
+        if (next is null)
+        {
+            UpdateTriageAccounts();
+            return;
+        }
+        BoardTriage.Preferences.SetTriageAccounts(next);
     }
 
     /// <summary>

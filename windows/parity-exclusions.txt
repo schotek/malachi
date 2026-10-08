@@ -59,7 +59,15 @@ The claude executable the assistant panel runs; empty looks in the usual places.
 The assistant panel may send mail to Claude	gschema: a key's summary or description, for dconf editors, not the UI
 Set when the user allowed it the first time.	gschema: a key's summary or description, for dconf editors, not the UI
 The style the Board opens in	gschema: a key's summary or description, for dconf editors, not the UI
-List, Columns or Today; applies the first time the Board is shown after launch, then the style last chosen lasts until the app quits.	gschema: a key's summary or description, for dconf editors, not the UI
+Last Used (the style in board-last-style), List, Columns or Today; a changed choice applies the next time the Board is shown, unless a style was already picked in this run, which then stays until the app quits.	gschema: a key's summary or description, for dconf editors, not the UI
+The style the Board was shown in last	gschema: a key's summary or description, for dconf editors, not the UI
+Written whenever the user changes the Board's style; read when board-default-style is Last Used.	gschema: a key's summary or description, for dconf editors, not the UI
+What the main window shows at launch	gschema: a key's summary or description, for dconf editors, not the UI
+Mail, the Board, or the mode shown last (board-last-mode). Always Mail while the Board is turned off.	gschema: a key's summary or description, for dconf editors, not the UI
+The mode the main window showed last	gschema: a key's summary or description, for dconf editors, not the UI
+\"mail\" or \"board\", written whenever the mode switches; read when board-start-mode is Last.	gschema: a key's summary or description, for dconf editors, not the UI
+The account the Board is filtered to	gschema: a key's summary or description, for dconf editors, not the UI
+The daemon's account id, written whenever the Board's account filter changes; empty means every account. Applied when the Board shows while that account still exists.	gschema: a key's summary or description, for dconf editors, not the UI
 The Board's triage may send mail to Claude	gschema: a key's summary or description, for dconf editors, not the UI
 Set when the user allowed it the first time, apart from the assistant panel's consent.	gschema: a key's summary or description, for dconf editors, not the UI
 The model the Board's triage uses	gschema: a key's summary or description, for dconf editors, not the UI
@@ -81,4 +89,3 @@ The model ChatGPT uses for the board	GSettings schema metadata; not displayed by
 The accepted OpenAI board consent version	GSettings schema metadata; not displayed by the Windows client
 Zero means no permission to send board mail to OpenAI.	GSettings schema metadata; not displayed by the Windows client
 Codex is unavailable in this Flatpak build.	Flatpak-only sandbox availability
-Show %d More	GTK Today's button; Windows follows macOS's "and %d more" row (Board.Text.AndMore)

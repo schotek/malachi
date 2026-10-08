@@ -316,6 +316,8 @@ final class AssistantPanelViewController: NSViewController {
             controller.signIn(id)
         case .install:
             onOpenPage?(Assistant.installURL)
+        case .reconnectProvider:
+            controller.reconnect(id)
         case .none:
             break
         }

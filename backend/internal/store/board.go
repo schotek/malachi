@@ -186,8 +186,13 @@ func (t *BoardThread) Text(id string) (string, error) {
 // BoardVerdict is a BoardDecider's verdict on a thread.
 type BoardVerdict struct {
 	// Skip leaves the case row as it is (the thread is not ready to judge);
-	// the thread is no longer dirty all the same.
+	// the thread is no longer dirty all the same, unless KeepDirty.
 	Skip bool
+	// KeepDirty (with Skip): the thread stays in the dirty set, in the same
+	// transaction, because the caller has to fetch something before it can
+	// be judged (the own texts of the user's HTML messages) and judges it
+	// again then. A daemon that stops in between finds it still dirty.
+	KeepDirty bool
 	// State is the rules' state; "" = the rules make no case of the thread
 	// (the store keeps an existing case that something holds, see
 	// DrainBoard, else deletes it).
@@ -210,16 +215,29 @@ type BoardVerdict struct {
 	ReplyFolderID   string
 	LatestMessageID string
 
+	// DecidingMessageID is the newest member the rules decided by (notes
+	// to self and forwards of the user's passed over), "" when there is
+	// none; DecidingMine: it is the user's. Only such a member of the
+	// user's answers the user's commitments: the open ones recorded before
+	// it are closed as replied (closeRepliedCommitmentsTx), never by a
+	// note to self or a forward.
+	DecidingMessageID string
+	DecidingMine      bool
+
 	// NewestInboundStored and NewestInboundDate are the StoredAt and the
 	// arrival (InternalDate, else Date) of the newest inbound member that
-	// counts, or of the inbound member that reopens a done case;
-	// NewestInboundMessageID is that member's RFCMessageID. Zero when there
-	// is none. A done case reopens when that member was stored after
-	// DoneAt, arrived after DoneAt less a day (so a backfill of old mail
-	// does not reopen it), and its Message-ID is not one the case already
-	// had when it was marked done (BoardCase.SeenAtDone: a copy another
-	// client moved is stored anew). Pick the member with SeenAtDone in mind:
-	// the store only refuses, it does not look for another.
+	// counts, or of the inbound member that reopens a done case or ends a
+	// remind; NewestInboundMessageID is that member's RFCMessageID. Zero
+	// when there is none. A done case reopens when that member was stored
+	// after DoneAt, arrived after DoneAt less a day (so a backfill of old
+	// mail does not reopen it), and its Message-ID is not one the case
+	// already had when it was marked done (BoardCase.SeenAtDone: a copy
+	// another client moved is stored anew). A remind ends the same way,
+	// measured from when it was set (BoardCase.RemindSetAt; its Message-IDs
+	// then, SeenAtDone): a pending one early (the case live again, not
+	// reminded), one that came due stops being "reminded". Pick the member
+	// with those in mind: the store only refuses, it does not look for
+	// another.
 	NewestInboundStored    time.Time
 	NewestInboundDate      time.Time
 	NewestInboundMessageID string
@@ -246,6 +264,9 @@ type BoardDrainOptions struct {
 	// 500 ms). At least one thread is taken.
 	MaxMembers int
 	Budget     time.Duration
+	// Assistant: the board's assistant preference is on, so a current
+	// annotation's deadline after Now keeps a case the rules dropped.
+	Assistant bool
 }
 
 // BoardDrainFailure is a thread DrainBoard could not evaluate: its writes
@@ -285,11 +306,14 @@ type BoardDrain struct {
 //     last rule state, while the user set a state, a remind is set (ahead,
 //     or come due and not followed by done or another remind), a
 //     commitment is open, its annotation is current and has a deadline
-//     after now, or it links a draft that exists; otherwise it is deleted.
+//     after now (only with opt.Assistant), or it links a draft that
+//     exists; otherwise it is deleted.
 //
-// For a kept or ruled case, a done case reopens per BoardVerdict, and the
-// open commitments a newer message of the user's answers are closed
-// (replied). The version goes up whenever any column changes.
+// For an existing case, first a done case reopens per BoardVerdict (the
+// user's state cleared with it), a remind ends per BoardVerdict, and the
+// open commitments the deciding member answers are closed (replied); what
+// keeps a case is judged after those. The version goes up whenever any
+// column changes.
 //
 // A thread whose evaluation fails (decide's error, an unknown state, a row
 // that does not decode) is rolled back to before it, reported in Failed
@@ -349,7 +373,7 @@ func (s *Store) DrainBoard(ctx context.Context, opt BoardDrainOptions, decide Bo
 		if _, err := tx.ExecContext(ctx, `SAVEPOINT board_thread`); err != nil {
 			return BoardDrain{}, fmt.Errorf("drain board: %w", err)
 		}
-		c, n, err := s.evaluateBoardThreadTx(ctx, tx, k.account, k.thread, opt, decide)
+		c, n, keep, err := s.evaluateBoardThreadTx(ctx, tx, k.account, k.thread, opt, decide)
 		loaded += n
 		if err != nil {
 			if ctx.Err() != nil {
@@ -365,8 +389,10 @@ func (s *Store) DrainBoard(ctx context.Context, opt BoardDrainOptions, decide Bo
 		if _, err := tx.ExecContext(ctx, `RELEASE board_thread`); err != nil {
 			return BoardDrain{}, fmt.Errorf("drain board: %w", err)
 		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM board_dirty WHERE account_id = ? AND thread_id = ?`, k.account, k.thread); err != nil {
-			return BoardDrain{}, fmt.Errorf("drain board: %w", err)
+		if !keep {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM board_dirty WHERE account_id = ? AND thread_id = ?`, k.account, k.thread); err != nil {
+				return BoardDrain{}, fmt.Errorf("drain board: %w", err)
+			}
 		}
 		out.Threads++
 	}
@@ -383,7 +409,8 @@ func (s *Store) DrainBoard(ctx context.Context, opt BoardDrainOptions, decide Bo
 }
 
 // boardDerived is what DrainBoard writes of a case and compares to decide
-// whether its version goes up.
+// whether its version goes up: the derived columns and the user's columns
+// the drain changes (a done case reopened, a remind ended).
 type boardDerived struct {
 	ruleState, ruleReason, rulesVersion  string
 	inputKey, membersKey                 string
@@ -394,11 +421,25 @@ type boardDerived struct {
 	issueKey, issueStatus, issueCategory string
 	doneAt, doneSeen, orphanedAt         string
 	memberIDs                            string
+	userState, userAt, remindAt          string
+	reminded                             bool
 }
 
 // evaluateBoardThreadTx is DrainBoard's work for one thread; it reports
-// whether the account's listing changed and how many members it loaded.
-func (s *Store) evaluateBoardThreadTx(ctx context.Context, tx *sql.Tx, accountID, threadID string, opt BoardDrainOptions, decide BoardDecider) (bool, int, error) {
+// whether the account's listing changed, how many members it loaded and
+// whether the thread stays dirty (BoardVerdict.KeepDirty).
+func (s *Store) evaluateBoardThreadTx(ctx context.Context, tx *sql.Tx, accountID, threadID string, opt BoardDrainOptions, decide BoardDecider) (bool, int, bool, error) {
+	changed, n, err := s.evaluateBoardThread(ctx, tx, accountID, threadID, opt, decide)
+	if errors.Is(err, errBoardKeepDirty) {
+		return false, n, true, nil
+	}
+	return changed, n, false, err
+}
+
+// errBoardKeepDirty: the verdict was Skip with KeepDirty.
+var errBoardKeepDirty = errors.New("store: board thread stays dirty")
+
+func (s *Store) evaluateBoardThread(ctx context.Context, tx *sql.Tx, accountID, threadID string, opt BoardDrainOptions, decide BoardDecider) (bool, int, error) {
 	now := opt.Now
 	existing, err := boardCaseByThreadTx(ctx, tx, accountID, threadID)
 	if err != nil && !errors.Is(err, ErrNotFound) {
@@ -452,6 +493,9 @@ func (s *Store) evaluateBoardThreadTx(ctx context.Context, tx *sql.Tx, accountID
 		return false, n, fmt.Errorf("board: judge thread %s: %w", threadID, err)
 	}
 	if v.Skip {
+		if v.KeepDirty {
+			return false, n, errBoardKeepDirty
+		}
 		return false, n, nil
 	}
 	if v.State != "" && !v.State.Valid() {
@@ -467,18 +511,8 @@ func (s *Store) evaluateBoardThreadTx(ctx context.Context, tx *sql.Tx, accountID
 		}
 	}
 
-	if v.State == "" {
-		if cur == nil {
-			return false, n, nil
-		}
-		// A linked suggested reply that still exists keeps its case too:
-		// unstarring it or replying elsewhere never orphans the draft.
-		kept := cur.UserState != "" || !cur.RemindAt.IsZero() || t.OpenCommitments > 0 || cur.Draft != nil ||
-			(cur.Annotation != nil && cur.Annotation.InputKey == inputKey && cur.Annotation.Due != nil && cur.Annotation.Due.At.After(now))
-		if !kept {
-			return true, n, deleteBoardCaseTx(ctx, tx, cur.ID)
-		}
-		v.State, v.Reason = cur.RuleState, api.BoardReasonKept
+	if v.State == "" && cur == nil {
+		return false, n, nil
 	}
 	if cur == nil && !opt.Since.IsZero() && !v.Date.IsZero() && v.Date.Before(opt.Since) {
 		// Older than any window: no row for the prune to delete again.
@@ -520,30 +554,63 @@ func (s *Store) evaluateBoardThreadTx(ctx context.Context, tx *sql.Tx, accountID
 		return true, n, nil
 	}
 
-	// A done case reopens when inbound mail that counts arrived later.
+	// The user's columns as they stand, then what new mail changes of
+	// them: a done case reopens when inbound mail that counts arrived later
+	// (and the user's state set before goes with done: the case is judged
+	// afresh), and a remind ends the same way, measured from when it was
+	// set: one ahead early, one that came due stops being "reminded".
 	d.doneAt, d.doneSeen = optStamp(cur.DoneAt), cur.doneSeen
+	d.userState, d.userAt = string(cur.UserState), optStamp(cur.UserStateAt)
+	d.remindAt, d.reminded = optStamp(cur.RemindAt), cur.Reminded
+	reopened := 0
 	if !cur.DoneAt.IsZero() && v.NewestInboundStored.After(cur.DoneAt) && v.NewestInboundDate.After(cur.DoneAt.Add(-24*time.Hour)) &&
 		!cur.SeenAtDone(v.NewestInboundMessageID) {
 		d.doneAt, d.doneSeen = "", ""
+		d.userState, d.userAt = "", ""
+		// As every other way back from done: the commitments done closed
+		// are open again.
+		if reopened, err = reopenDoneCommitmentsCountTx(ctx, tx, *cur); err != nil {
+			return false, n, err
+		}
 	}
-	closed, err := closeRepliedCommitmentsTx(ctx, tx, cur.ID, members, nowStr)
+	if set := cur.RemindSetAt(); !set.IsZero() && v.NewestInboundStored.After(set) && v.NewestInboundDate.After(set.Add(-24*time.Hour)) &&
+		!cur.SeenAtDone(v.NewestInboundMessageID) {
+		d.remindAt, d.reminded, d.doneSeen = "", false, ""
+	}
+	closed, err := closeRepliedCommitmentsTx(ctx, tx, cur.ID, members, v.DecidingMessageID, v.DecidingMine, nowStr)
 	if err != nil {
 		return false, n, err
 	}
+
+	if v.State == "" {
+		// Judged after the commitments the deciding member answered were
+		// closed and after new mail ended a remind: a case whose only hold
+		// just went is deleted now, not kept for its window.
+		// A linked suggested reply that still exists keeps its case too:
+		// unstarring it or replying elsewhere never orphans the draft.
+		kept := d.userState != "" || d.remindAt != "" || t.OpenCommitments+reopened-closed > 0 || cur.Draft != nil ||
+			(opt.Assistant && cur.Annotation != nil && cur.Annotation.InputKey == inputKey && cur.Annotation.Due != nil &&
+				cur.Annotation.Due.At.After(now))
+		if !kept {
+			return true, n, deleteBoardCaseTx(ctx, tx, cur.ID)
+		}
+		d.ruleState, d.ruleReason = string(cur.RuleState), string(api.BoardReasonKept)
+	}
 	if d == derivedOf(*cur) {
-		return closed, n, nil
+		return closed > 0 || reopened > 0, n, nil
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE board_cases SET
 			rule_state = ?, rule_reason = ?, rules_version = ?, input_key = ?, members_key = ?,
 			subject = ?, snippet = ?, person_json = ?, date = ?, unread = ?, has_attachments = ?, can_archive = ?,
 			message_count = ?, reply_message_id = ?, reply_folder_id = ?, latest_message_id = ?,
 			issue_key = ?, issue_status = ?, issue_status_category = ?, done_at = ?, done_seen = ?, orphaned_at = ?,
-			member_ids = ?, computed_at = ?, updated_at = ?, version = version + 1
+			member_ids = ?, user_state = ?, user_state_at = ?, remind_at = ?, reminded = ?,
+			computed_at = ?, updated_at = ?, version = version + 1
 		WHERE id = ?`,
 		d.ruleState, d.ruleReason, d.rulesVersion, d.inputKey, d.membersKey,
 		d.subject, d.snippet, d.person, d.date, boolInt(d.unread), boolInt(d.att), boolInt(d.archive),
 		d.count, d.replyID, d.replyFolder, d.latestID, d.issueKey, d.issueStatus, d.issueCategory, d.doneAt, d.doneSeen, d.orphanedAt,
-		d.memberIDs,
+		d.memberIDs, d.userState, d.userAt, d.remindAt, boolInt(d.reminded),
 		nowStr, nowStr, cur.ID); err != nil {
 		return false, n, fmt.Errorf("board: update case: %w", err)
 	}
@@ -592,6 +659,7 @@ func derivedOf(c BoardCase) boardDerived {
 		issueKey: c.issueField(0), issueStatus: c.issueField(1), issueCategory: c.issueField(2),
 		doneAt: optStamp(c.DoneAt), doneSeen: c.doneSeen, orphanedAt: optStamp(c.OrphanedAt),
 		memberIDs: c.memberIDs,
+		userState: string(c.UserState), userAt: optStamp(c.UserStateAt), remindAt: optStamp(c.RemindAt), reminded: c.Reminded,
 	}
 }
 
@@ -838,33 +906,37 @@ func loadBoardIssueTx(ctx context.Context, tx *sql.Tx, t *BoardThread, issueID s
 }
 
 // closeRepliedCommitmentsTx closes (replied) the case's open commitments
-// that a newer message of the user's answers: the user's newest member
-// that counts is dated after the commitment's replied_after (the user's
-// newest message when it was recorded, so a commitment recorded on an
-// older message stays open until the user writes again).
-func closeRepliedCommitmentsTx(ctx context.Context, tx *sql.Tx, caseID string, members []BoardMember, now string) (bool, error) {
-	var newest *BoardMember
+// that the deciding member answers (BoardVerdict.DecidingMessageID), when
+// that member is the user's and counts: those recorded before it, whose
+// replied_after (the user's newest message when it was recorded, so a
+// commitment recorded on an older message stays open until the user
+// writes again) is earlier than its date. A note to self or a forward of
+// the user's is never the deciding member, so it closes nothing; nor does
+// a message of the user's that an inbound one followed. Returns how many
+// it closed.
+func closeRepliedCommitmentsTx(ctx context.Context, tx *sql.Tx, caseID string, members []BoardMember, decidingID string, decidingMine bool, now string) (int, error) {
+	if decidingID == "" || !decidingMine {
+		return 0, nil
+	}
+	var deciding *BoardMember
 	for i := range members {
-		m := &members[i]
-		if !m.Mine || !m.Counts {
-			continue
-		}
-		if newest == nil || m.Date.After(newest.Date) || (m.Date.Equal(newest.Date) && m.ID > newest.ID) {
-			newest = m
+		if members[i].ID == decidingID {
+			deciding = &members[i]
+			break
 		}
 	}
-	if newest == nil {
-		return false, nil
+	if deciding == nil || !deciding.Counts || !(deciding.Mine || deciding.TwinOfMine) {
+		return 0, nil
 	}
 	res, err := tx.ExecContext(ctx, `UPDATE board_commitments SET state = 'closed', closed_reason = ?, closed_at = ?
 		WHERE case_id = ? AND state = 'open' AND message_id != ?
 			AND (CASE WHEN replied_after != '' THEN replied_after ELSE message_date END) < ?`,
-		api.CommitmentClosedReplied, now, caseID, newest.ID, stamp(newest.Date))
+		api.CommitmentClosedReplied, now, caseID, deciding.ID, stamp(deciding.Date))
 	if err != nil {
-		return false, fmt.Errorf("board: close replied commitments: %w", err)
+		return 0, fmt.Errorf("board: close replied commitments: %w", err)
 	}
 	n, _ := res.RowsAffected()
-	return n > 0, nil
+	return int(n), nil
 }
 
 func countOpenCommitmentsTx(ctx context.Context, q querier, caseID string) (int, error) {

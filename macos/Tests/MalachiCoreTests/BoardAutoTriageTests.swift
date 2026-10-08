@@ -326,6 +326,31 @@ private final class Harness {
         await h.stop()
     }
 
+    /// The plan's usage limit backs off one step only, however often it
+    /// repeats: it lifts on its own.
+    @Test func usageLimitBacksOffOneStep() async throws {
+        let h = Harness()
+        h.scheduler.start()
+        h.target.end(.automatic, .timeout)
+        try await h.advance(minutes(60))
+        try await waitUntil { h.target.starts.count == 2 }
+        h.target.end(.automatic, .stopped)
+        #expect(h.scheduler.failures == 2)
+        try await h.advance(minutes(120))
+        try await waitUntil { h.target.starts.count == 3 }
+        let at = h.now
+        h.target.end(.automatic, .limit)
+        #expect(h.scheduler.failures == 1)
+        #expect(h.scheduler.decision == .wait(until: at.addingTimeInterval(minutes(60))))
+        #expect(h.target.pause == .failed(.limit, until: at.addingTimeInterval(minutes(60))))
+        try await h.advance(minutes(60))
+        try await waitUntil { h.target.starts.count == 4 }
+        h.target.end(.automatic, .limit)
+        #expect(h.scheduler.failures == 1)
+        #expect(BoardAutoTriageScheduler.countsAsFailure(.limit))
+        await h.stop()
+    }
+
     /// The day's cap used up: the next try is at midnight, when the count
     /// read yesterday no longer holds.
     @Test func dailyCap() async throws {

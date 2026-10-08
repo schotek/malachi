@@ -124,6 +124,18 @@ final class AIPaneViewController: PreferencesPaneViewController {
     private var boardStatusRow: PreferenceRowView?
     /// "Tokens in the Last 24 Hours" and its value (dim, numeric).
     private var boardUsageRow: PreferenceRowView?
+    /// Triage These Accounts: a checkbox per enabled account
+    /// (`BoardPreferencesController.triageAccountChecked`).
+    private var boardAccountsRow: PreferenceRowView?
+    private let boardAccountsStack = NSStackView()
+    /// The accounts as account.list last answered, and the checkboxes of
+    /// the enabled ones, in that order.
+    private var boardAccounts: [Account] = []
+    private var boardAccountBoxes: [(id: AccountID, box: NSButton)] = []
+    private var boardAccountsGeneration = 0
+    /// The daemon's account.list, for Triage These Accounts (nil: the row
+    /// stays empty).
+    private var client: RPCClient?
     let boardUsageValue = NSTextField(labelWithString: "")
     /// The consent sheet is up or the consent is being stored: the switch
     /// shows the user's choice until then.
@@ -200,10 +212,11 @@ final class AIPaneViewController: PreferencesPaneViewController {
         bridge: String?, settings: Settings, assistant: AssistantController?,
         claudeDesktop: ClaudeDesktopController? = nil, confirmRestart: PrefsConfirmRestart? = nil,
         triage: BoardTriageController? = nil, confirmTriage: PrefsConfirmRestart? = nil,
-        toast: @escaping @MainActor (String) -> Void
+        client: RPCClient? = nil, toast: @escaping @MainActor (String) -> Void
     ) {
         guard registration == nil else { return }
         self.triage = triage
+        self.client = client
         self.confirmTriage = confirmTriage
         self.bridge = bridge
         self.settings = settings
@@ -286,6 +299,8 @@ final class AIPaneViewController: PreferencesPaneViewController {
         updateAssistantGroup()
         // The tokens of the last 24 hours age out without a notification.
         triage?.relistBoard()
+        // Accounts may have been added or turned off meanwhile.
+        reloadTriageAccounts()
     }
 
     // MARK: Binding (preferences.go `bindMCP`)
@@ -519,7 +534,7 @@ final class AIPaneViewController: PreferencesPaneViewController {
                     break
                 }
             }
-        case .none:
+        case .none, .reconnectProvider:
             break
         }
     }
@@ -707,7 +722,13 @@ extension AIPaneViewController {
         let usage = PreferenceRowView(title: Board.Text.triageSettingsUsage, subtitle: "", trailing: boardUsageValue)
         boardUsageRow = usage
         let modelRows: [NSView] = [model] + [chatGPTPreferences?.boardModelRow].compactMap { $0 }
-        boardGroup.setRows([consent] + modelRows + [auto, interval, daily, status, usage])
+        boardAccountsStack.orientation = .vertical
+        boardAccountsStack.alignment = .leading
+        boardAccountsStack.spacing = 4
+        let accounts = PreferenceRowView(
+            title: Board.Text.triageSettingsAccounts, subtitle: "", trailing: boardAccountsStack)
+        boardAccountsRow = accounts
+        boardGroup.setRows([consent] + modelRows + [accounts, auto, interval, daily, status, usage])
         boardGroup.isHidden = true
         addGroup(boardGroup)
     }
@@ -738,7 +759,81 @@ extension AIPaneViewController {
         if triage.preferences.preferences == nil {
             triage.preferences.load()
         }
+        reloadTriageAccounts()
         updateBoardGroup()
+    }
+
+    // MARK: Triage These Accounts (preferences_board.go `bindTriageAccounts`)
+
+    /// Asks account.list; the checkboxes follow the answer.
+    fileprivate func reloadTriageAccounts() {
+        guard let client, triage != nil, !closed else { return }
+        boardAccountsGeneration += 1
+        let my = boardAccountsGeneration
+        Task { @MainActor [weak self] in
+            let result = try? await client.call(API.AccountList.self, EmptyParams())
+            guard let self, !self.closed, my == self.boardAccountsGeneration, let result else { return }
+            self.rebuildTriageAccounts(result.accounts)
+        }
+    }
+
+    /// A checkbox per enabled account, titled as Settings → Accounts names
+    /// it (plain text).
+    private func rebuildTriageAccounts(_ list: [Account]) {
+        boardAccounts = list
+        for (_, box) in boardAccountBoxes {
+            boardAccountsStack.removeArrangedSubview(box)
+            box.removeFromSuperview()
+        }
+        boardAccountBoxes = list.filter(\.enabled).map { a in
+            let box = NSButton(checkboxWithTitle: accountLabel(a), target: self, action: #selector(triageAccountToggled(_:)))
+            box.lineBreakMode = .byTruncatingTail
+            boardAccountsStack.addArrangedSubview(box)
+            return (a.id, box)
+        }
+        updateTriageAccounts()
+    }
+
+    /// The checkboxes as the daemon decides; the subtitle says that none
+    /// listed is every enabled mail account, and that a list naming only
+    /// accounts that are gone triages nothing
+    /// (`BoardPreferencesController.triageAccountsSubtitle`).
+    private func updateTriageAccounts() {
+        guard let row = boardAccountsRow else { return }
+        let prefs = triage?.preferences.preferences
+        row.isEnabled = prefs != nil && !boardAccountBoxes.isEmpty
+        let listed = prefs?.triageAccounts ?? []
+        if prefs == nil {
+            row.subtitle = ""
+        } else {
+            switch BoardPreferencesController.triageAccountsSubtitle(listed, boardAccounts) {
+            case .all: row.subtitle = Board.Text.triageSettingsAccountsAll
+            case .none: row.subtitle = Board.Text.triageSettingsAccountsNone
+            case .some: row.subtitle = ""
+            }
+        }
+        for (id, box) in boardAccountBoxes {
+            guard let a = boardAccounts.first(where: { $0.id == id }) else { continue }
+            box.state = BoardPreferencesController.triageAccountChecked(listed, a) ? .on : .off
+        }
+    }
+
+    /// A checkbox changed: the list without or with that account, written
+    /// to the daemon; the last checked account stays checked.
+    @objc private func triageAccountToggled(_ sender: NSButton) {
+        guard !closed, let prefs = triage?.preferences, let current = prefs.preferences,
+              let id = boardAccountBoxes.first(where: { $0.box === sender })?.id
+        else {
+            updateTriageAccounts()
+            return
+        }
+        guard let next = BoardPreferencesController.toggleTriageAccount(
+            current.triageAccounts, accounts: boardAccounts, id: id, on: sender.state == .on)
+        else {
+            updateTriageAccounts()
+            return
+        }
+        prefs.setTriageAccounts(next)
     }
 
     /// The group from the triage's view and the board's preferences.
@@ -777,6 +872,7 @@ extension AIPaneViewController {
         boardIntervalRow?.isEnabled = schedule
         boardDailyRow?.isEnabled = schedule
         boardStatusRow?.subtitle = Board.triageSettingsStatus(v)
+        updateTriageAccounts()
         // The tokens of the last 24 hours, from the same view: refreshed
         // with the status row (each board.list, the view's clock).
         if let usage = boardUsageRow {

@@ -33,6 +33,7 @@ extension Board {
             case .all: return L10n.T("Overview")
             case .state(let s): return stateName(s)
             case .done: return done
+            case .snoozed: return snoozed
             }
         }
 
@@ -50,8 +51,9 @@ extension Board {
             L10n.N("%d message", "%d messages", n)
         }
 
-        /// The Today page's sentence under its title, for the hot cases and
-        /// the ones waiting for the user.
+        /// The Today page's sentence under its title: `n` counts the hot
+        /// cases and the ones waiting for the user that are new, due today
+        /// or back from a reminder (`Board.needsYouToday`).
         public static func todoPhrase(_ n: Int) -> String {
             guard n >= 1 else { return L10n.T("Nothing needs you today.") }
             return L10n.N("%d thing needs you today.", "%d things need you today.", n)
@@ -158,6 +160,14 @@ extension Board {
         /// The question before quitting while a reply on the board could
         /// not be saved or sent (`BoardReplyPanes.finishAll`).
         public static var quitUnsavedHeading: String { L10n.T("Quit without saving a reply?") }
+        /// The heading when only a send is unanswered and nothing typed is
+        /// unsaved (`quitHeading`).
+        public static var quitUnsentHeading: String { L10n.T("Quit with a reply still sending?") }
+        /// `Board.Text.QuitHeading`: the sending heading only when a send is
+        /// unanswered and nothing typed is unsaved.
+        public static func quitHeading(unsaved: Bool, sending: Bool) -> String {
+            sending && !unsaved ? quitUnsentHeading : quitUnsavedHeading
+        }
         public static var quitUnsavedBody: String {
             L10n.T("A reply on the board could not be saved or sent yet. If you quit now, what you typed in it may be lost.")
         }
@@ -196,9 +206,55 @@ extension Board {
             }
         }
 
-        /// Settings → General → Board: the style of the first show after
-        /// launch; its choices are `styleTitle`.
-        public static var defaultStyleSetting: String { L10n.T("Default View") }
+        /// Settings → General → Board: the style the board opens in (the
+        /// key `board-default-style`); its choices are
+        /// `Board.defaultStyles`, named by `defaultStyleTitle`.
+        public static var defaultStyleSetting: String { L10n.T("Board View") }
+
+        /// The choice of a setting that takes what the user had last (Board
+        /// View, Open at Launch).
+        public static var lastUsed: String { L10n.C("board setting", "Last Used") }
+
+        /// Names a choice of Board View.
+        public static func defaultStyleTitle(_ d: DefaultStyle) -> String {
+            switch d {
+            case .last: return lastUsed
+            case .style(let s): return styleTitle(s)
+            }
+        }
+
+        /// Settings → General → Board: the mode the main window opens in
+        /// (the key `board-start-mode`); its choices are
+        /// `Board.StartChoice.allCases`, named by `startModeTitle`.
+        public static var startModeSetting: String { L10n.T("Open at Launch") }
+
+        /// Names a choice of Open at Launch.
+        public static func startModeTitle(_ s: StartChoice) -> String {
+            switch s {
+            case .mail: return L10n.T("Mail")
+            case .board: return boardName
+            case .last: return lastUsed
+            }
+        }
+
+        /// Settings → General → Board: the switch that turns the board on or
+        /// off (the board preference `enabled`), and its line.
+        public static var showBoardSetting: String { L10n.T("Show the Board") }
+        public static var showBoardSettingSubtitle: String {
+            L10n.T("Sorts your conversations into what needs you, what waits for others and what is only for reading. Turned off, your decisions are kept.")
+        }
+
+        /// Settings → General → Board: the group of how long each state
+        /// keeps a case (the board preference `windows`), and its line.
+        public static var windowsSetting: String { L10n.T("Keep cases for") }
+        public static var windowsSettingSubtitle: String {
+            L10n.T("A case leaves the board when its newest message is older than this, unless your decision, a reminder or a deadline keeps it.")
+        }
+
+        /// A value of a state's row under `windowsSetting`: "30 days".
+        public static func days(_ n: Int) -> String {
+            L10n.N("%d day", "%d days", n)
+        }
 
         // Beyond the plan's list: texts the view model needs.
 
@@ -210,14 +266,10 @@ extension Board {
             L10n.T("Conversation · %s", messageCount(n))
         }
 
-        /// The Today page's deadlines and its calendar placeholder.
+        /// The Today page's deadlines.
         public static var deadlines: String { L10n.T("Deadlines") }
         public static var dueEmpty: String {
             L10n.T("No deadlines. The assistant finds deadlines in the text of messages and keeps the sentence each one comes from.")
-        }
-        public static var calendarTitle: String { L10n.T("Calendar and Reminders") }
-        public static var calendarBody: String {
-            L10n.T("Later. Read-only; where the data comes from differs on each platform.")
         }
         /// The commitments' tile.
         public static var commitments: String { L10n.T("Promised") }
@@ -236,7 +288,7 @@ extension Board {
         public static func reason(_ code: BoardReason) -> String {
             switch code.rawValue {
             case "hot.important": return L10n.T("The newest message is marked as important, addressed to you and from a sender you have written to.")
-            case "hot.flagged": return L10n.T("You flagged a message in this conversation and the newest one is not yours.")
+            case "hot.flagged": return L10n.T("You flagged a message in this conversation.")
             case "you.addressed": return L10n.T("The newest message is addressed to you by a sender you have written to.")
             case "you.repliedToYou": return L10n.T("The newest message answers one of yours.")
             case "them.replied": return L10n.T("You replied last; the next step is theirs.")
@@ -244,7 +296,8 @@ extension Board {
             case "info.ccOnly": return L10n.T("You are only in Cc on the newest message.")
             case "info.notAddressed": return L10n.T("The message is not addressed to you (a mailing list or a Bcc).")
             case "info.yourNote": return L10n.T("A note to yourself.")
-            case "info.unknownSender": return L10n.T("The message is addressed to you, but its sender is one you have never written to, so it waits under For Your Information. Its importance does not count.")
+            case "you.newContact": return L10n.T("The newest message is addressed to you by someone you have never written to.")
+            case "info.unknownSender": return L10n.T("The newest message comes from someone you have never written to and is not addressed to you, so it waits under For Your Information.")
             case "jira.yourComment": return L10n.T("Your comment is the latest in the issue; the next step is theirs.")
             case "jira.assigned": return L10n.T("Someone wrote in an issue assigned to you.")
             case "jira.reporter": return L10n.T("Someone wrote in an issue you reported.")
@@ -253,6 +306,51 @@ extension Board {
             case "kept": return L10n.T("The rules would no longer list it; your choice, a reminder, a deadline or a promise keeps it here.")
             default: return reasonUnknown
             }
+        }
+
+        /// The line "Why is this here?" adds for a case back from a
+        /// reminder (`Case.remindedAt`).
+        public static var reasonReminded: String { L10n.T("A reminder you set has come due.") }
+
+        /// The line "Why is this here?" adds whenever the user chose the
+        /// case's state (`Case.userState`): the choice keeps it on the
+        /// board whatever the rules say.
+        public static var reasonUserKeeps: String { L10n.T("Your decision keeps it on the board.") }
+
+        /// The badge of a case back from a reminder, until the user acts on
+        /// it.
+        public static var reminded: String { L10n.C("board badge", "Reminded") }
+
+        /// The badge of a case whose newest message is addressed to the user
+        /// by someone the user has never written to (`you.newContact`).
+        public static var newContact: String { L10n.C("board badge", "New contact") }
+
+        /// A title with a badge after it, as one label: an account and its
+        /// kind ("Work (IMAP)"), a case and its badge. Both are cleaned by
+        /// the caller; without a badge the title alone.
+        public static func titleWithBadge(_ title: String, _ badge: String) -> String {
+            badge.isEmpty ? title : L10n.T("%s (%s)", title, badge)
+        }
+
+        /// The detail's line under the title: who and when, both cleaned by
+        /// the caller.
+        public static func personAndTime(_ person: String, _ when: String) -> String {
+            L10n.T("%s · %s", person, when)
+        }
+
+        /// A day and a time of day: "Thu at 18:00", "Tomorrow at 09:00",
+        /// "20 Oct at 09:00".
+        public static func dayAndTime(_ day: String, _ clock: String) -> String {
+            L10n.T("%s at %s", day, clock)
+        }
+
+        /// The tooltip of a count tile of the Today page: "Hot: 3 cases",
+        /// or the promises of the commitments' tile.
+        public static func tileToolTip(_ t: Tile) -> String {
+            if t.kind == .commitments {
+                return L10n.N("%s: %d promise", "%s: %d promises", t.count, t.title, t.count)
+            }
+            return L10n.N("%s: %d case", "%s: %d cases", t.count, t.title, t.count)
         }
 
         /// The reason of a rule this client does not know.
@@ -336,12 +434,12 @@ extension Board {
         public static var showInMailFailed: String { L10n.T("Show in Mail failed: the message could not be loaded.") }
         public static var archive: String { L10n.T("Archive") }
 
-        /// The Done filter's section of the cases that come back later.
+        /// The filter and section of the cases that come back later.
         public static var snoozed: String { L10n.T("Snoozed") }
 
-        /// "Back on the board Tomorrow 09:00", for a snoozed case.
+        /// "Back on the board: Tomorrow at 09:00", for a snoozed case.
         public static func snoozedUntil(_ label: String) -> String {
-            L10n.T("Back on the board %s", label)
+            L10n.T("Back on the board: %s", label)
         }
 
         /// The remind presets (`Board.remindPresets`) and ending a remind.
@@ -350,10 +448,19 @@ extension Board {
             case .laterToday: return L10n.T("Later Today")
             case .tomorrow: return L10n.T("Tomorrow")
             case .nextWeek: return L10n.T("Next Week")
+            case .thisEvening: return L10n.T("This Evening")
+            case .thisMorning: return L10n.T("This Morning")
             }
         }
 
-        public static var remindNoMore: String { L10n.T("Don’t Remind Me") }
+        /// A preset's menu item with its time: "Tomorrow, Thu at 09:00".
+        public static func remindItem(_ preset: String, _ when: String) -> String {
+            L10n.format(L10n.C("remind preset", "%s, %s"), [preset, when])
+        }
+
+        /// Ends a reminder and puts the case back on the board at once
+        /// (`board.remind` with null).
+        public static var remindNoMore: String { L10n.T("Back on the Board Now") }
 
         /// What Archive did: messages moved, or only marked done.
         public static func archived(_ n: Int, noArchive: Bool) -> String {
@@ -363,6 +470,13 @@ extension Board {
             guard n >= 1 else { return L10n.T("Marked as done. No message was in the inbox.") }
             return L10n.N("Archived %d message.", "Archived %d messages.", n)
         }
+
+        /// The button of the Archive toast that takes the archive back.
+        public static var undo: String { L10n.T("Undo") }
+
+        /// The toast when taking an archive back failed (a move back did
+        /// not go through; the case stays done).
+        public static var undoFailed: String { L10n.T("Could not undo the archive.") }
 
         /// What a write of the board did, for the toast of its failure.
         public enum Action: Sendable, CaseIterable {

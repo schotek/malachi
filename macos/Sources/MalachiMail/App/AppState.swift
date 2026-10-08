@@ -148,13 +148,17 @@ final class AppState {
         assistant.provider = { [weak self] in self?.selectedProvider }
         configureRequest(triage.request)
         configureRequest(boardReply.request)
-        chatGPT.onChange = { [weak self] in self?.providerChanged() }
+        chatGPT.onChange = { [weak self] in self?.chatGPTConnectionChanged() }
+        // The triage and Suggest Reply follow these keys themselves, each
+        // only for the provider in effect (`AssistantRequest
+        // .providerChangeConcernsActive`); the application ends Codex's
+        // sessions the same way and lets the assistant's handlers follow.
         for key in [Settings.Key.assistantProvider, .assistantTarget, .assistantCodexPath, .assistantChatGPTModel, .boardTriageChatGPTModel] {
-            providerSettingsTokens.append(settings.onChange(key) { [weak self] in self?.providerChanged() })
+            providerSettingsTokens.append(settings.onChange(key) { [weak self] in self?.providerSettingChanged(key) })
         }
         providerSettingsTokens.append(settings.onChange(.assistantChatGPTConsentVersion) { [weak self] in
             guard let self, self.settings.assistantChatGPTConsentVersion != 1 else { return }
-            self.providerChanged()
+            self.providerSettingChanged(.assistantChatGPTConsentVersion)
         })
         Task { @MainActor [weak self] in try? await self?.chatGPT.load() }
         wireBoardTriage()
@@ -164,10 +168,32 @@ final class AppState {
     func configureRequest(_ request: AssistantRequest) {
         request.provider = { [weak self] in self?.selectedProvider }
     }
-    private func providerChanged() {
-        codex.cancelAll()
-        triage.providerChanged()
-        boardReply.providerChanged()
+    /// A settings key of the providers changed: Codex's sessions end only
+    /// when it concerns the provider in effect (a change for ChatGPT while
+    /// Claude is chosen leaves everything running; its model applies from
+    /// the next request).
+    private func providerSettingChanged(_ key: Settings.Key) {
+        // A model applies from the next request: nothing under way ends, the
+        // panel's conversation neither (`providerChanged` would start a new
+        // one).
+        if key == .assistantChatGPTModel || key == .boardTriageChatGPTModel {
+            return
+        }
+        if AssistantRequest.providerChangeConcernsActive(key, settings: settings) {
+            codex.cancelAll()
+        }
+        assistant.providerChanged()
+    }
+
+    /// The ChatGPT connection changed (connected, signed out, reconnected):
+    /// what runs over it ends only while ChatGPT is the provider; the
+    /// triage and Suggest Reply learn it here, as no settings key changed.
+    private func chatGPTConnectionChanged() {
+        if settings.assistantProvider == .chatgpt {
+            codex.cancelAll()
+            triage.providerChanged()
+            boardReply.providerChanged()
+        }
         assistant.providerChanged()
     }
     func assistantConsent(on window: NSWindow?) async -> Bool {

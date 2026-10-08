@@ -39,9 +39,6 @@ namespace Malachi.App.Boards;
 /// <summary>The detail of the board's selected case.</summary>
 public sealed partial class BoardDetailView : UserControl, IBoardConversationHost
 {
-    // Windows-only string: the separator of a line's parts, as board.go's " · ".
-    private const string Separator = " · ";
-
     private BoardActions? actions;
     private IBoardDetailPart? conversationPart;
     private IBoardDetailPart? replyPart;
@@ -60,8 +57,8 @@ public sealed partial class BoardDetailView : UserControl, IBoardConversationHos
     {
         InitializeComponent();
         MnemonicLabel.Apply(CloseButton, Board.Text.Close);
-        RemindButton.Content = Board.Text.Remind;
-        ArchiveButton.Content = Board.Text.Archive;
+        MnemonicLabel.Apply(RemindButton, Board.Text.Remind);
+        MnemonicLabel.Apply(ArchiveButton, Board.Text.Archive);
         WhyLink.Content = Board.Text.WhyLink;
         UnstarLink.Content = Board.Text.Unstar;
         SummaryHeading.Text = Board.Text.SummaryHeading;
@@ -161,8 +158,25 @@ public sealed partial class BoardDetailView : UserControl, IBoardConversationHos
         }
     }
 
-    /// <summary>Gives the keyboard to the state pill, the first control worth it; false without a case.</summary>
-    public bool FocusContent() => shown is not null && StateButton.Focus(FocusState.Programmatic);
+    /// <summary>
+    /// Gives the keyboard to the state pill, the first control worth it, or
+    /// on a done case (whose pill takes no keyboard) to Move Back to Board;
+    /// false without a case.
+    /// </summary>
+    public bool FocusContent() =>
+        shown is not null && ((StateButton.IsEnabled && StateButton.Focus(FocusState.Programmatic)) || DoneButton.Focus(FocusState.Programmatic));
+
+    /// <summary>Whether the keyboard is in the detail (the page's Escape and its single keys ask).</summary>
+    public bool HasKeyboard => FocusIn(this);
+
+    /// <summary>The detail's Remind… button opens its presets (the board's R).</summary>
+    public void OpenRemindMenu()
+    {
+        if (shown is not null && ActionBar.Visibility == Visibility.Visible && RemindButton.IsEnabled)
+        {
+            RemindMenu.ShowAt(RemindButton);
+        }
+    }
 
     /// <summary>
     /// Gives the keyboard to Reply (GTK's replyButton): where Suggest Reply's
@@ -213,7 +227,7 @@ public sealed partial class BoardDetailView : UserControl, IBoardConversationHos
             }
             if (hadFocus && !FocusIn(Upper) && d is not null)
             {
-                StateButton.Focus(FocusState.Programmatic);
+                FocusContent();
             }
             if (!sameCase)
             {
@@ -244,10 +258,57 @@ public sealed partial class BoardDetailView : UserControl, IBoardConversationHos
         {
             return;
         }
-        DoneButton.Content = d.IsDone ? Board.Text.NotDone : Board.Text.Done;
+        var done = d.IsDone ? Board.Text.NotDone : Board.Text.Done;
+        var reply = actions.ReplyLabel(d.AccountId);
+        MnemonicLabel.Apply(DoneButton, done);
         ArchiveButton.IsEnabled = actions.CanArchive(d.Id);
-        ReplyButton.Content = actions.ReplyLabel(d.AccountId);
+        MnemonicLabel.Apply(ReplyButton, reply);
         ReplyButton.IsEnabled = actions.CanReply(d.Id);
+        AssignAccessKeys([(DoneButton, done), (RemindButton, Board.Text.Remind), (ArchiveButton, Board.Text.Archive), (ReplyButton, reply)]);
+    }
+
+    // The bar's buttons as GTK labels (MnemonicLabel). Their msgids carry no
+    // "_" (a translation's own one wins), so each takes the first letter of
+    // its label that no button before it has, Close's (from its msgid)
+    // first. Windows-only: GTK's and macOS's buttons have no mnemonics; the
+    // labels are translated, and so are the keys.
+    private void AssignAccessKeys(IReadOnlyList<(Button Button, string Label)> buttons)
+    {
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (Core.Presentation.Mnemonic.Parse(Board.Text.Close).AccessKey is { } close)
+        {
+            used.Add(close);
+        }
+        foreach (var (_, label) in buttons)
+        {
+            if (Core.Presentation.Mnemonic.Parse(label).AccessKey is { } own)
+            {
+                used.Add(own);
+            }
+        }
+        foreach (var (button, label) in buttons)
+        {
+            var m = Core.Presentation.Mnemonic.Parse(label);
+            if (m.AccessKey is not null)
+            {
+                continue;
+            }
+            var key = "";
+            foreach (var c in m.Label)
+            {
+                var k = char.ToUpperInvariant(c).ToString();
+                if (char.IsLetterOrDigit(c) && !char.IsSurrogate(c) && !used.Contains(k))
+                {
+                    key = k;
+                    break;
+                }
+            }
+            button.AccessKey = key;
+            if (key.Length > 0)
+            {
+                used.Add(key);
+            }
+        }
     }
 
     private void Fill(Board.Detail d, bool why, IReadOnlyList<Board.CommitmentRow> commitments)
@@ -259,6 +320,8 @@ public sealed partial class BoardDetailView : UserControl, IBoardConversationHos
         StatePill.State = d.State;
         StatePill.Text = d.StateTitle;
         StateButton.IsEnabled = !d.IsDone;
+        BadgeList.ItemsSource = d.Badges.Count == 0 ? null : d.Badges.ToList();
+        BadgeList.Visibility = Vis(d.Badges.Count > 0);
         Show(RemindText, d.RemindText);
         AccountText.Text = d.Account;
         ToolTipService.SetToolTip(AccountTag, d.Account.Length > 0 ? d.Account : null);
@@ -281,9 +344,15 @@ public sealed partial class BoardDetailView : UserControl, IBoardConversationHos
         WhyText.Text = d.Why;
         AutomationProperties.SetName(WhyText, d.WhyIsAssistant ? Board.Text.SpokenAssistant(d.Why) : "");
         Show(SourceText, d.SourceText);
+        WhyNotesPanel.Children.Clear();
+        foreach (var note in d.WhyNotes)
+        {
+            WhyNotesPanel.Children.Add(new TextBlock { Text = note, Style = (Style)Resources["DetailCaptionStyle"] });
+        }
+        WhyNotesPanel.Visibility = Vis(d.WhyNotes.Count > 0);
 
         // The title: who and when above it, the subject under an assistant's.
-        Show(MetaText, string.Join(Separator, new[] { d.Person, d.Time }.Where(s => s.Length > 0)));
+        Show(MetaText, d.Person.Length > 0 && d.Time.Length > 0 ? d.Byline : d.Person + d.Time);
         TitleMark.Text = d.TitleIsAssistant ? Board.Text.AssistantMark : "";
         TitleMark.Visibility = Vis(d.TitleIsAssistant);
         TitleText.Text = d.Title;

@@ -4,7 +4,8 @@
 // Port of macos/Sources/MalachiCore/Board/BoardCase.swift (Cap, cleanLine,
 // cleanBlock, budget, kept, dropped, capped); GTK: ui/internal/board/case.go
 // (the cap constants, CleanLine, CleanBlock, budget, kept, dropped, capped,
-// graphemeBoundary, extends, regionalIndicator, hangulKind, hangulJoins).
+// graphemeBoundary, extends, regionalIndicator, hangulKind, hangulJoins,
+// joinerState).
 //
 // The cleaning every string of a case goes through before it reaches a view
 // model. The cut follows Go: Swift asks the string for its grapheme
@@ -14,7 +15,8 @@
 // or inside an Indic conjunct. A lone surrogate is Go's invalid UTF-8 and
 // Swift's replacement character: dropped. White space is Go's
 // unicode.IsSpace (Assistant.IsSpace), the dropped categories Cc, Cf, Zl
-// and Zp.
+// and Zp, except a joiner (ZWJ, ZWNJ) between two kept characters
+// (JoinerState, the daemon's board.CleanText rule).
 
 using System;
 using System.Buffers;
@@ -99,7 +101,8 @@ public static partial class Board
     /// One line of display text made safe: drops invalid UTF-16 (a lone
     /// surrogate) and the replacement character, control and format
     /// characters (Cc, Cf: NUL, bidirectional overrides such as U+202E,
-    /// zero-width characters), turns every whitespace (line breaks, tabs,
+    /// zero-width characters) except a joiner between two kept characters,
+    /// turns every whitespace (line breaks, tabs,
     /// U+2028, U+2029) into a space, collapses runs of spaces, trims, and
     /// caps the result at <paramref name="max"/> UTF-8 bytes on a character
     /// boundary (no grapheme cluster the cut broke is kept). Stops reading
@@ -117,6 +120,7 @@ public static partial class Board
         var bytes = 0;
         var limit = max;
         var space = false;
+        var joiner = new JoinerState();
         var left = Budget(max);
         for (var i = 0; i < s.Length;)
         {
@@ -140,6 +144,11 @@ public static partial class Board
             if (Assistant.IsSpace(r.Value))
             {
                 space = output.Count > 0;
+                joiner.Reset();
+                continue;
+            }
+            if (joiner.Take(r, output.Count == 0 || space))
+            {
                 continue;
             }
             if (Dropped(r))
@@ -152,6 +161,7 @@ public static partial class Board
                 bytes++;
                 space = false;
             }
+            bytes += joiner.Flush(output);
             output.Add(r);
             bytes += r.Utf8SequenceLength;
             if (bytes > max)
@@ -180,6 +190,7 @@ public static partial class Board
         var spaces = 0;
         var breaks = 0;
         var afterCR = false;
+        var joiner = new JoinerState();
         var left = Budget(max);
         for (var i = 0; i < s.Length;)
         {
@@ -225,6 +236,11 @@ public static partial class Board
                         spaces++;
                         break;
                 }
+                joiner.Reset();
+                continue;
+            }
+            if (joiner.Take(r, output.Count == 0 || spaces > 0 || breaks > 0))
+            {
                 continue;
             }
             if (Dropped(r))
@@ -248,6 +264,7 @@ public static partial class Board
             }
             breaks = 0;
             spaces = 0;
+            bytes += joiner.Flush(output);
             output.Add(r);
             bytes += r.Utf8SequenceLength;
             if (bytes > max)
@@ -297,7 +314,9 @@ public static partial class Board
         {
             end--;
         }
-        while (end > 0 && output[end - 1].Value is ' ' or '\n')
+        // Whitespace before the cut goes, and so does a joiner the cut left
+        // last: it joins nothing.
+        while (end > 0 && output[end - 1].Value is ' ' or '\n' or Zwj or Zwnj)
         {
             end--;
         }
@@ -349,15 +368,17 @@ public static partial class Board
 
     // A character that belongs to the cluster before it: a mark (Mn, Me, Mc
     // and Other_Grapheme_Extend), an emoji modifier, or one of the two
-    // spacing marks that are letters (Thai and Lao AM).
+    // spacing marks that are letters (Thai and Lao AM), or a joiner the
+    // cleaners kept.
     private static bool Extends(Rune r) =>
-        Rune.GetUnicodeCategory(r) is UnicodeCategory.NonSpacingMark or UnicodeCategory.EnclosingMark
+        r.Value is Zwj or Zwnj
+        || Rune.GetUnicodeCategory(r) is UnicodeCategory.NonSpacingMark or UnicodeCategory.EnclosingMark
             or UnicodeCategory.SpacingCombiningMark
         || OtherGraphemeExtend(r.Value) || r.Value is (>= 0x1F3FB and <= 0x1F3FF) or 0x0E33 or 0x0EB3;
 
     // Other_Grapheme_Extend (Unicode 15) beyond the marks: the halfwidth
-    // katakana sound marks, ZWNJ and the tags (the last two are Cf and
-    // dropped before they get here).
+    // katakana sound marks, ZWNJ and the tags (the tags are Cf and dropped
+    // before they get here; a kept ZWNJ is Extends' own case).
     private static bool OtherGraphemeExtend(int r) => r is 0x09BE or 0x09D7 or 0x0B3E or 0x0B57 or 0x0BBE or 0x0BD7
         or 0x0CC2 or 0x0CD5 or 0x0CD6 or 0x0D3E or 0x0D57 or 0x0DCF or 0x0DDF or 0x1B35 or 0x200C or 0x302E or 0x302F
         or 0xFF9E or 0xFF9F or 0x1133E or 0x11357 or 0x114B0 or 0x114BD or 0x115AF or 0x11930 or 0x1D165
@@ -389,4 +410,71 @@ public static partial class Board
         HangulLVT or HangulT => n == HangulT,
         _ => false,
     };
+
+    // The joiners and the variation selectors the joiner rule looks at.
+    private const int Zwnj = 0x200C;
+    private const int Zwj = 0x200D;
+    private const int Vs15 = 0xFE0E;
+    private const int Vs16 = 0xFE0F;
+
+    // A joiner (ZWJ, ZWNJ) the cleaners hold back until they see what
+    // follows it. The rule is the daemon's (board.CleanText): a joiner is
+    // kept only when, once the dropped characters are gone, the characters
+    // right before and right after it are kept characters that are neither
+    // whitespace nor a joiner. A joiner at the start or end of a line, next
+    // to whitespace, or in a run of joiners goes; a variation selector right
+    // after a held joiner goes too. Emoji ZWJ sequences and Persian or
+    // Indic words keep theirs.
+    private struct JoinerState
+    {
+        // The joiner held back, 0 when none.
+        private int joiner;
+
+        // The held joiner goes whatever follows (nothing kept before it,
+        // whitespace before it, or a run of joiners).
+        private bool stray;
+
+        // Whether r was consumed by the joiner rule: a joiner (held, or
+        // marking a run), or a variation selector after a held joiner.
+        // atStart: nothing kept is before r on its line, or whitespace is.
+        public bool Take(Rune r, bool atStart)
+        {
+            if (r.Value is Zwnj or Zwj)
+            {
+                if (joiner != 0)
+                {
+                    stray = true;
+                }
+                else
+                {
+                    joiner = r.Value;
+                    stray = atStart;
+                }
+                return true;
+            }
+            return r.Value is Vs15 or Vs16 && joiner != 0;
+        }
+
+        // Writes the held joiner before a kept character, unless it is
+        // stray, and forgets it; the UTF-8 bytes written.
+        public int Flush(List<Rune> output)
+        {
+            var written = 0;
+            if (joiner != 0 && !stray)
+            {
+                var j = new Rune(joiner);
+                output.Add(j);
+                written = j.Utf8SequenceLength;
+            }
+            Reset();
+            return written;
+        }
+
+        // Forgets a held joiner (whitespace followed it).
+        public void Reset()
+        {
+            joiner = 0;
+            stray = false;
+        }
+    }
 }

@@ -30,7 +30,8 @@ import MalachiCore
 // - The board source starts at launch, not on the first entry into Board,
 //   while the triage wants its data (`wantsBoardData`: automatic triage on,
 //   consented to and able to run): the schedule learns the queue only from
-//   its snapshots.
+//   its snapshots. It starts too when the triage asks the board to list
+//   (`relistBoard`: Settings → AI's Board group, a run's end).
 //
 // Nothing a run's assistant wrote is shown here: only the Core view's
 // counts and classes. Swift-first, like `Board`.
@@ -42,11 +43,14 @@ extension MainWindowController {
             source.onSnapshot = { [weak triage] s in
                 triage?.boardChanged(s)
             }
+            // Settings → AI's Board group asks too (its status row, the
+            // tokens of the last 24 hours): a board not listed yet starts
+            // now and lists, without the Board ever shown.
             triage.onRefresh = { [weak self] in
-                self?.startedBoardSource?.refresh()
+                self?.relistBoard()
             }
             state.boardReply.onRefresh = { [weak self] in
-                self?.startedBoardSource?.refresh()
+                self?.relistBoard()
             }
         }
         triageTokens = [triage.observe { [weak self] in self?.triageChanged() }]
@@ -67,6 +71,17 @@ extension MainWindowController {
         }
         toastTriageEnd()
         updateTriageStrip()
+    }
+
+    /// Lists the daemon's board again, starting it first when nothing
+    /// has (the start lists it).
+    private func relistBoard() {
+        guard boardSource != nil else { return }
+        if boardStarted {
+            startedBoardSource?.refresh()
+        } else {
+            startBoard()
+        }
     }
 
     /// The triage wants the board's data (`wantsBoardData`): the daemon's

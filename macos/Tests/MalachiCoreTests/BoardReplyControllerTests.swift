@@ -441,6 +441,18 @@ private final class Harness {
         await h.stop()
     }
 
+    @Test func aFollowUpCaseTitlesTheControlAsOne() async throws {
+        let h = try await Harness(fake: try FakeClaude(turns: [draftTurn()]))
+        var c = boardCase("1")
+        c.ruleState = .them
+        c.ruleReason = BoardReason(rawValue: "them.replied")
+        let v = h.controller.view(for: c, in: Board.Snapshot(), samples: false)
+        #expect(v.title == Board.Text.suggestReplyTitle(followUp: true))
+        let plain = h.controller.view(for: boardCase("1"), in: Board.Snapshot(), samples: false)
+        #expect(plain.title == Board.Text.suggestReplyTitle(followUp: false))
+        await h.stop()
+    }
+
     @Test func toolsMissing() async throws {
         let fake = try FakeClaude(turns: [FakeTurn(lines: [fakeInitFailed, fakeResult("x")])])
         let h = try await Harness(fake: fake)

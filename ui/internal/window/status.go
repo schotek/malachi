@@ -11,6 +11,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/certtrust"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
@@ -279,7 +280,9 @@ func (w *Window) newStatusRow(id api.AccountID) *statusRow {
 	r.arrow = gtk.NewImageFromIconName("go-next-symbolic")
 	r.failed.AddSuffix(r.arrow)
 	r.failed.ConnectActivated(func() {
-		w.statusButton.Popdown()
+		// The popover itself: in Board it hangs on the board page's
+		// button (moveStatusStripToBoard), not on statusButton.
+		w.statusPopover.Popdown()
 		w.showOutbox(id)
 	})
 	r.failed.SetVisible(false)
@@ -341,7 +344,7 @@ func (w *Window) onStatusAction(id api.AccountID) {
 		return
 	}
 	st := r.status
-	w.statusButton.Popdown()
+	w.statusPopover.Popdown() // on whichever button holds it
 	switch st.Action {
 	case statusActionCheck, statusActionRetry:
 		w.triggerAccountSync(id)
@@ -358,12 +361,14 @@ func (w *Window) onStatusAction(id api.AccountID) {
 }
 
 // showOutbox selects the account's outbox, as a click on its row in the
-// account's tree would (the popover's link to unsent messages).
+// account's tree would (the popover's link to unsent messages); from the
+// board it brings Mail back first (board.ModeFor RequestShowOutbox).
 func (w *Window) showOutbox(acc api.AccountID) {
 	k, ok := w.model.outboxKey(acc)
 	if !ok {
 		return
 	}
+	w.setMode(board.ModeFor(board.RequestShowOutbox, w.mode))
 	w.model.selectedFav = false
 	w.selectFolder(k)
 	w.outerSplit.SetShowContent(true)

@@ -10,7 +10,7 @@ and window/board_today.go. The board's Today style ("Dnes"): the greeting
 and the count tiles over one list of what is hot, the top of what waits
 for the user ("and N more"), and what the assistant says the user
 promised; beside it (under it below 760) the deadlines, grouped from
-Overdue on, and the calendar's placeholder. Every text is a cleaned plain
+Overdue on. Every text is a cleaned plain
 string of the view model, set as TextBlock.Text.
 -->
 <UserControl
@@ -153,22 +153,6 @@ string of the view model, set as TextBlock.Text.
                         <TextBlock x:Name="DeadlinesText" Style="{StaticResource BoardSectionTitleStyle}" />
                     </StackPanel>
                 </Border>
-                <Grid>
-                    <Rectangle
-                        RadiusX="8"
-                        RadiusY="8"
-                        Stroke="{ThemeResource CardStrokeColorDefaultBrush}"
-                        StrokeDashArray="4,3"
-                        StrokeThickness="1" />
-                    <StackPanel Padding="14" Spacing="6">
-                        <TextBlock x:Name="CalendarTitleText" Style="{StaticResource BoardSectionTitleStyle}" />
-                        <TextBlock
-                            x:Name="CalendarBodyText"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Style="{StaticResource BodyTextBlockStyle}"
-                            TextWrapping="Wrap" />
-                    </StackPanel>
-                </Grid>
             </StackPanel>
         </ScrollViewer>
     </Grid>

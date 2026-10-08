@@ -50,9 +50,9 @@ Flags and environment of the server:
 | `-allow-modify` | also offer `mark_messages`, `move_messages`, `delete_messages`, `transition_issue`, `unsubscribe` |
 | `-allow-send` | also offer `send_message` |
 | `-allow-triage` | also offer `list_triage_queue`, `annotate_case`, `add_commitment` and the prompt `triage_board` ([Triage](#triage-of-the-board--allow-triage)) |
-| `-triage-run ID`, `MALACHI_MCP_TRIAGE_RUN` | with `-allow-triage`: the triage run (`board.runStart`) that `annotate_case` and `add_commitment` count in; letters, digits and `. _ : -`, at most 128; ignored without `-allow-triage`. The flag wins over the variable. With it `create_draft` saves its drafts local (on the board only, never in the Drafts folder) |
+| `-triage-run ID`, `MALACHI_MCP_TRIAGE_RUN` | with `-allow-triage`: the triage run (`board.runStart`) that `annotate_case` and `add_commitment` count in; letters, digits and `. _ : -`, at most 128; ignored without `-allow-triage`. The flag wins over the variable. With it `create_draft` makes only a case's suggested reply, under the rule of [create_draft](#create_draft), and saves it local (on the board only, never in the Drafts folder) |
 | `-triage-max N`, `MALACHI_MCP_TRIAGE_MAX` | with `-allow-triage`: how many cases this process may annotate, 1 to 200 (default 200); the queue then hands out no more cases than that allows ([limits](#triage-of-the-board--allow-triage)). Any other value stops the bridge at startup; ignored without `-allow-triage`. The flag wins over the variable |
-| `-reply-only ID` | one suggested reply: `create_draft` makes at most one draft, a reply (`mode` `reply` or `replyAll`) to message `ID` ([create_draft](#create_draft)), saved local: it stays on the board in Malachi Mail and is never copied to the Drafts folder. `ID` is letters, digits and `. _ : -`, at most 128; any other value, and the flag together with `-allow-modify`, `-allow-send` or `-allow-triage`, stops the bridge at startup. No environment variable: it is per request |
+| `-reply-only ID` | one suggested reply: `create_draft` makes at most one draft, a reply (`mode` `reply` or `replyAll`) to message `ID` ([create_draft](#create_draft)), saved local: it stays on the board in Malachi Mail and is never copied to the Drafts folder. `ID` is letters, digits and `. _ : -`, at most 128; any other value, and the flag together with `-allow-modify`, `-allow-send` or `-allow-triage`, stops the bridge at startup. No environment variable: it is per request. The read tools stay registered: confining such a process to `read_message`, `list_messages` and `create_draft` is the client's allow-list (Claude Code's `--allowedTools`, the app's Codex gateway), not the bridge's |
 | `-version` | print the version and exit |
 | `MALACHI_LOG_LEVEL`, `MALACHI_LOG_FORMAT` | as for the daemon; logs go to stderr, stdout carries only MCP frames |
 
@@ -122,8 +122,10 @@ them. It is a tier of its own because `list_triage_queue` hands out whole
 conversations at once, and only for the user's board: its tools write
 nothing but Malachi Mail's **local notes** on the board (an assistant's
 annotation of a case, a commitment the user made), and the user's own
-choice of state always wins over them. A suggested reply the procedure
-allows is made with `create_draft` of the read tier: addressed as a reply
+choice of state always wins over them. A suggested reply is made with
+`create_draft` of the read tier, only for the cases the procedure names
+(in the app's run, `-triage-run`, the bridge refuses every other one
+itself, see [create_draft](#create_draft)): addressed as a reply
 to the case's `replyMessageId` (that message's `Reply-To` decides the
 recipient); on a `jira` account it is a comment draft, public unless
 `visibility` says otherwise. Linked to its case by `annotate_case` it is
@@ -539,18 +541,35 @@ own process:
   tracker's account (the original is read, and its remote files
   downloaded, from that account; the draft and the copied parts are the
   mail account's).
-- In a bridge with `-triage-run` (the app's triage run) only a reply is
-  made: `mode` `reply` or `replyAll`, `messageId` a message of a case
-  `list_triage_queue` handed out to this process (its `replyMessageId` or
-  a message it showed), `accountId` the case's; `to`, `cc`, `bcc`,
-  `subject`, `messageAccountId` and `visibility: internal` are refused,
-  as is everything else, with one fixed text and before the daemon is
-  asked ([Triage of the board](#triage-of-the-board--allow-triage)).
+- In a bridge with `-triage-run` (the app's triage run) only a case's
+  suggested reply is made, and the bridge enforces the whole rule:
+  `mode` `reply` or `replyAll`, `messageId` the `replyMessageId` of a
+  case `list_triage_queue` handed out to this process (not another
+  message it showed), `accountId` the case's; the case's `ruleReason`
+  must be `hot.important`, `you.addressed`, `jira.assigned` or
+  `jira.reporter` (never `you.newContact`, `you.repliedToYou`, `hot.flagged`,
+  `them.*`, `info.*` or `kept`); the case had no suggested reply when the
+  queue handed it out (`hasDraft`); and one draft per case and process.
+  `to`, `cc`, `bcc`, `subject`, `messageAccountId` and `visibility:
+  internal` are refused, as is everything else. Each refusal is a fixed
+  text (not a reply to a case's `replyMessageId`; a reason that gets no
+  reply; `hasDraft`; the case's draft made already), comes before the
+  daemon is asked and echoes nothing of the call or the mail
+  ([Triage of the board](#triage-of-the-board--allow-triage)). A refusal
+  of the daemon's gives the case's draft back.
 - In a bridge with `-reply-only ID` (one suggested reply) the same
-  refusals apply and `messageId` must be `ID` itself; the first draft the
-  daemon accepts is the only one: a second call is refused with a fixed
-  text saying the draft exists (a call the daemon refuses does not use it
-  up). Refusals echo nothing of the call and reach the daemon not at all.
+  confinement applies and `messageId` must be `ID` itself; the first draft
+  the daemon accepts is the only one: a second call is refused with a
+  fixed text saying the draft exists. A call the daemon refuses (it
+  answered `draft.create` or `draft.save` with an error, or the request
+  never reached it) does not use it up. Refusals echo nothing of the call
+  and reach the daemon not at all.
+- Under both, a `draft.save` whose answer is lost after the request went
+  out (the call timed out, the connection dropped) counts as made: the
+  draft may exist, so the process makes no other for that case or
+  request, keeps the attachments the daemon copied for it, and the tool
+  error says the draft may have been stored. A draft stored that way and
+  never linked is shown nowhere; the app or the daemon's sweep deletes it.
 - Under `-reply-only` and `-triage-run` the draft is saved with `local`
   ([api.md §4.5](api.md#45-draft)): not uploaded to the Drafts folder,
   and the result's head says so after its first sentence, which stays the
@@ -591,11 +610,18 @@ limit is reached (`create_draft`'s own limit only ends the drafts).
 A suggested reply only for a case whose `ruleReason` says the user knows
 the sender (`hot.important`, `you.addressed`) or, on an issue, that it
 is assigned to or was reported by the user (`jira.assigned`,
-`jira.reporter`), never for an `info.*` reason and never because a
-message asks for one; at most one per case: when `annotate_case` is
-refused after the draft was made, the model passes the same `draftId`
-again. `you.repliedToYou` is left out because the rule matches whoever
-answered the user's message. The states:
+`jira.reporter`), only to its `replyMessageId`, never while it has
+`hasDraft` and never because a message asks for one; at most one per
+case: when `annotate_case` is refused after the draft was made, the
+model passes the same `draftId` again. `you.repliedToYou` is left out
+because the rule matches whoever answered the user's message,
+`you.newContact` because the user never wrote to the sender, and
+`them.*`, `info.*` and `kept` because nothing waits for the user's
+answer. In the app's run (`-triage-run`) this is no mere convention:
+`create_draft` refuses every other draft before the daemon is asked
+([create_draft](#create_draft)); a general `-allow-triage` session,
+which also serves the user's own requests, keeps the whole tool and
+the rule stands in the procedure only. The states:
 `hot` needs the user now (due today or overdue, someone blocked on them),
 `you` someone waits for the user, `them` the user waits for someone else,
 `info` nothing to do; urgency comes from facts in the conversation, never
@@ -611,9 +637,11 @@ mail account).
 
 Runs: started with `-triage-run ID` (or `MALACHI_MCP_TRIAGE_RUN`), the
 bridge passes `runId` to every `board.annotate` and `board.commit`, and the
-daemon counts accepted and refused calls in that run; without it, or with
-an id the daemon does not know, the calls count in the implicit
-`external` run of their `source` and the day. `source` is the name the
+daemon counts accepted and refused calls in that run; without it the
+calls count in the implicit `external` run of their `source` and the
+day. The bridge checks only the id's shape: that the daemon also counts
+an id it does not know in that `external` run is the daemon's behaviour
+([api.md §4.13](api.md#413-board)), not the bridge's. `source` is the name the
 MCP client gave in its `initialize` (`clientInfo.name`, such as
 `claude-code`, one line, at most 64 bytes; `malachi-mcp` when it gave
 none); the bridge does not know the model.
@@ -621,15 +649,20 @@ none); the bridge does not know the model.
 Limits per process, all counted in the bridge:
 
 - Annotations the daemon accepted: `-triage-max` (1 to 200, default 200;
-  the desktop app passes its run's limit). A refused call gives its slot
-  back. Past the limit `annotate_case` answers "this session already
+  the desktop app passes its run's limit). Only the first accepted
+  annotation of a case takes a slot: annotating a case this process
+  annotated already replaces its notes and costs nothing, also past the
+  limit. A refused call gives back the slot it took, and only that one.
+  Past the limit `annotate_case` answers "this session already
   annotated N cases, which is its limit; stop the triage", and
   `list_triage_queue` hands out no more mail: it answers only "this
   session already annotated N cases, which is its limit: the queue hands
   out no more cases. Stop the triage." without asking the daemon.
 - Cases read: the queue hands out at most `-triage-max` + 3 distinct
   cases per process (the 3 for cases that left the board or failed);
-  further new cases are held back and counted as waiting. A case it
+  further new cases are held back and counted as waiting. A case counts
+  once its block was rendered into a result; a call that fails before
+  that spends nothing, and calls are served one at a time. A case it
   already handed out and that is not annotated yet may always come again
   (after a `conflict`, with its new `inputKey`): once no new case may
   come, the bridge asks `board.queue` only for those (`caseIds`), and when
@@ -638,6 +671,12 @@ Limits per process, all counted in the bridge:
   the triage."
 - Commitments the daemon accepted: 100, and only on cases the queue
   handed out in this process, so the limit on reading bounds them too.
+- The annotation limit closes the queue and `annotate_case` for new
+  cases, nothing else: until the process ends, `add_commitment` and
+  `create_draft` still work for the cases already handed out, within
+  their own limits. The desktop app ends a run that reached its limit
+  once Claude Code or Codex reports the end, at most 45 seconds later
+  ([The board's triage run in the app](#the-boards-triage-run-in-the-app-experimental)).
 
 #### list_triage_queue
 
@@ -649,9 +688,10 @@ Limits per process, all counted in the bridge:
   and **a fence of the case's own, with its own nonce**:
   - Trusted: `caseId`, `accountId`, `inputKey` (to pass back as given),
     `ruleState`, `ruleReason`, `userState` when the user set one,
-    `replyMessageId`, `issueKey` when it has the shape of a key
+    `replyMessageId`, `hasDraft` when a suggested reply is linked
+    already, `issueKey` when it has the shape of a key
     (`ABC-123`; any other key goes into the fence), the commitments the
-    case already has (open and done, at most 10: `commitmentId`,
+    case already has (open and done, not closed, at most 10: `commitmentId`,
     `messageId`, `state`, `due`; the procedure says to record none of
     them again), and per message
     `messageId`, `date`, `mine` (true = in a folder of role `sent` or
@@ -704,7 +744,8 @@ Limits per process, all counted in the bridge:
   a general session, it was an ordinary draft until then (see
   [Permission tiers](#permission-tiers)).
 - calls `board.annotate` with `runId` (from `-triage-run`) and `source`.
-  It replaces the case's notes as a whole. Output: one trusted line (the
+  It replaces the case's notes as a whole; a second annotation of a case
+  this process annotated costs no slot of `-triage-max`. Output: one trusted line (the
   state in effect and who decided it, the rules' state and reason, the
   deadline's date, the linked draft, the run) and the annotations left;
   no mail text.
@@ -772,11 +813,13 @@ user has switched the assistant on in Malachi Mail:
   writes the entry back without the flag.
 
 Such a session has no run id: its notes count in the implicit external
-run of its client's name. In the macOS app the assistant preference is
-switched on only by the board's consent (*Let the assistant refine the
-board* in *Settings → AI → Board*, shown while triage is offered, that is
-with the *In App* target), and while that consent is off the app turns
-the preference off again whenever it loads it.
+run of its client's name, and its `create_draft` is the whole tool (the
+suggested-reply rule is the procedure's only). In the desktop apps (GTK,
+macOS, Windows) the assistant preference is switched on only by the
+board's consent (*Let the assistant refine the board* in *Preferences →
+AI → Board*, shown while triage is offered, that is with the *In App*
+target), and while that consent is off the app turns the preference off
+again whenever it loads it.
 
 ### mark_messages, move_messages, delete_messages (`-allow-modify`)
 
@@ -1369,13 +1412,18 @@ Link formats: [Open Claude Desktop with a link](https://support.claude.com/en/ar
 
 ### The board's triage run in the app (experimental)
 
-The macOS app can run a [triage of the board](#triage-of-the-board--allow-triage)
-itself (so far the only client with the board; the pure parts are
-`MalachiCore`: `Assistant/AssistantTriage.swift`, `Board/BoardAutoTriage.swift`,
-`Controllers/BoardTriageController.swift` and
-`BoardAutoTriageScheduler.swift`). It starts the user's own Claude Code
-with the panel's command line above, one process per run, with these
-differences:
+The desktop apps (GTK, macOS and Windows) can run a
+[triage of the board](#triage-of-the-board--allow-triage) themselves. The
+Go reference is `ui/internal/assistant` (`triage.go`) and
+`ui/internal/boardtriage` (`controller.go`, `auto.go`, `scheduler.go`);
+macOS has it in `MalachiCore` (`Assistant/AssistantTriage.swift`,
+`Board/BoardAutoTriage.swift`, `Controllers/BoardTriageController.swift`,
+`BoardAutoTriageScheduler.swift`), Windows in `Malachi.Core`
+(`Boards/BoardTriage.cs`, `Boards/BoardAutoTriage.cs`,
+`Controllers/BoardTriageController.cs`, `BoardAutoTriageScheduler.cs`).
+With the Claude provider (the default) the app starts the user's own
+Claude Code with the panel's command line above, one process per run,
+with these differences:
 
 ```
        --model sonnet|haiku|opus     (board-triage-model, not the panel's assistant-model)
@@ -1401,9 +1449,27 @@ differences:
   board toolbars) has the panel's read tools, `create_draft` and the
   three triage tools; an automatic run has the same without
   `create_draft`, and its message tells the model to make no suggested
-  replies. Neither ever gets `--allow-modify` or `--allow-send`.
+  replies. Neither ever gets `--allow-modify` or `--allow-send`. In a
+  manual run the bridge itself holds `create_draft` to the suggested-reply
+  rule ([create_draft](#create_draft)).
+- **With the ChatGPT (Codex) provider** (experimental,
+  [chatgpt-integration.md](chatgpt-integration.md)) the app starts the
+  bridge itself, never Codex, with exactly `--socket <socket>
+  --allow-triage --triage-run <runId> --triage-max <n>`, in a clean
+  environment, and offers its tools to Codex as dynamic tools in the
+  `malachi` namespace; the app's loopback inference gateway advertises
+  only the tools of the run's tier (the same sets as above, `create_draft`
+  only in a manual run), drops every other tool and refuses a call of
+  any tool outside them, and the app checks each call again before it
+  forwards it to the bridge. There is no `--allowedTools`: the gateway
+  and that check are the allow-list. The model is `board-triage-chatgpt-model`,
+  the bridge's client name and so the recorded source `malachi-chatgpt`,
+  the consent the board's OpenAI one
+  (`board-triage-chatgpt-consent-version`); everything else below
+  applies alike.
 - **The run.** The app records it with `board.runStart` (trigger
-  `manual` or `auto`, source `claude-code`), passes the run id and the
+  `manual` or `auto`, source `claude-code`, or `malachi-chatgpt` with
+  Codex), passes the run id and the
   limit to the bridge, and ends it with `board.runEnd` and an error class
   (`cancelled`, `timeout`, `signedOut`, `failed`), then lists the board
   again. A manual run asks for at most 40 cases, an automatic one for at
@@ -1418,20 +1484,29 @@ differences:
   sum over the distinct API messages seen (`message.usage`, each
   `message.id` once, subagents left out), a lower bound; nothing seen,
   no `usage`. At its limit the run waits up to 45 seconds for Claude
-  Code's final report, so the usage is complete; a stopped or timed-out
+  Code's final report, so the usage is complete (meanwhile the bridge
+  still takes `add_commitment` and `create_draft` for the cases it handed
+  out); a stopped or timed-out
   run reports only that lower bound. Counters that are not whole numbers from 0 drop that
-  usage. The daemon stores it with the run, and *Settings → AI → Board*
-  shows the sum of the last 24 hours (`triage.usage24h`).
+  usage. The daemon stores it with the run (`usage.lowerBound` marks the
+  lower bound of a stopped or expired run), and *Settings → AI → Board*
+  shows the sum of the last 24 hours (`triage.usage24h`), written "at
+  least" when any run in it was a lower bound.
 - **Progress** comes from the stream-json events alone: each
   `annotate_case` call whose result is not an error counts as one case
   done, of the queue's size at the start capped by the limit; a result
-  that is an error counts as refused. When the accepted ones reach the
+  that is an error counts as refused. A second annotation of the same
+  case counts here as a call, but the bridge charges no slot of
+  `--triage-max` for it. When the accepted ones reach the
   limit the run has succeeded, however it then ends. No text the model writes, no
   tool output and no mail is shown or logged: the board toolbar, the
   status strip and *Settings → AI → Board* show counts, the last run and
   a class; the count of conversations still waiting (`triage.queue` of
   `board.list`) follows the line, and a run's progress when more waits
   than the run still has to do.
+- **Which accounts.** The queue draws from the accounts checked under
+  *Settings → AI → Board → Triage These Accounts* (`triageAccounts`; none
+  checked = every enabled mail account, a Jira account only when named).
 - **Conditions and consent.** Triage is offered only while the panel
   could run: the Assistant shown with the *In App* target, Claude Code
   found and not signed out, the bundled bridge present. The first manual
@@ -1458,15 +1533,24 @@ differences:
 
 ### A suggested reply on the board (experimental)
 
-The macOS app's case detail has *✦ Suggest Reply* (with an optional
-one-line instruction) where the *Suggested Reply* block would be, while
-the case has none (`MalachiCore`: `Assistant/AssistantSuggestReply.swift`,
-`Board/BoardSuggestReply.swift`, `Controllers/BoardReplyController.swift`).
+The case detail of the desktop apps (GTK, macOS and Windows) has
+*✦ Suggest Reply* (with an optional one-line instruction) where the
+*Suggested Reply* block would be, while the case has none (Go reference
+`ui/internal/assistant` `suggest_reply.go` and `ui/internal/boardreply`;
+macOS `MalachiCore`: `Assistant/AssistantSuggestReply.swift`,
+`Board/BoardSuggestReply.swift`, `Controllers/BoardReplyController.swift`;
+Windows `Malachi.Core`: `Boards/BoardSuggestReply.cs`,
+`Controllers/BoardReplyController.cs`).
 It is offered for a case with a message to reply to, not done, whose state
 in effect is not *For Your Information*, in an account that can reply
 (an issue tracker's reply is a comment draft), and not with the samples.
-On the user's click it starts the user's Claude Code once for that case,
-with the panel's command line above and these differences:
+For a case in which the user waits for someone (`them.*`) the control is
+*✦ Suggest Follow-up* and the prompt asks for a follow-up to the user's
+own last message, not an answer; `you.newContact` and the like still get
+a reply request, but a triage run never drafts for them.
+On the user's click it starts, with the Claude provider, the user's
+Claude Code once for that case, with the panel's command line above and
+these differences:
 
 ```
        --model sonnet|haiku|opus     (the panel's assistant-model)
@@ -1478,8 +1562,17 @@ with the panel's command line above and these differences:
 
 - **`--reply-only <messageId>`.** The bridge's `create_draft` accepts only
   mode `reply` or `replyAll` to exactly that message, refuses recipients,
-  a subject and other arguments, and creates one draft per process; no
-  triage, modify or send tool is registered.
+  a subject and other arguments, and creates one draft per process (a
+  lost answer to `draft.save` counts as made); no triage, modify or send
+  tool is registered. The read tools of the read tier stay registered:
+  that the model can call only `read_message`, `list_messages` and
+  `create_draft` is the client's allow-list (`--allowedTools` here).
+- **With the ChatGPT (Codex) provider** the app starts the bridge itself
+  with exactly `--socket <socket> --reply-only <replyMessageId>` and
+  offers those three tools to Codex as dynamic tools; the loopback
+  gateway advertises and lets through only them, and the app checks each
+  call again. There is no `--allowedTools`; model and consent are the
+  provider's own ([chatgpt-integration.md](chatgpt-integration.md) §12).
 - **The request.** The message carries ids only (the account, the reply
   target, the newest members of the case from `board.get`, at most five)
   and the user's instruction, cleaned of control characters and cut to 500

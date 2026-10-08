@@ -158,6 +158,11 @@ public final class BoardReplyPanes<Pane: BoardReplyPane> {
     private var loaderToken: BoardObserverToken?
     /// The quit's wait (`finishAll`).
     private var quitWait: CheckedContinuation<Void, Never>?
+    /// Bumped by every `finishAll`: the bound of an earlier call (a quit
+    /// the user cancelled) never ends a later call's wait.
+    private var quitGeneration = 0
+    /// The bound of the `finishAll` under way.
+    private var quitTimer: Task<Void, Never>?
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "board")
 
     public init(loader: BoardReplyEditorController, timing: Timing = Timing()) {
@@ -437,17 +442,38 @@ public final class BoardReplyPanes<Pane: BoardReplyPane> {
         for e in parked where e.unsaved && e.settling == nil {
             settle(e)
         }
+        quitGeneration += 1
+        let generation = quitGeneration
         if parked.contains(where: \.pending) {
             await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+                // A second call while an earlier one still waits: the
+                // earlier one returns now (with what is at stake then),
+                // never left suspended for good.
+                let earlier = quitWait
                 quitWait = c
-                Task { @MainActor [weak self] in
+                earlier?.resume()
+                quitTimer?.cancel()
+                quitTimer = Task { @MainActor [weak self] in
                     try? await Task.sleep(for: wait)
-                    self?.openQuit()
+                    guard !Task.isCancelled, let self, self.quitGeneration == generation else { return }
+                    self.openQuit()
                 }
                 checkQuit()
             }
         }
         return !parked.contains { $0.unsaved || $0.pending }
+    }
+
+    /// A parked pane waits for a send to answer (checked after
+    /// `finishAll`; `Panes.HasSending`).
+    public var hasSending: Bool {
+        parked.contains { $0.awaitingSend || $0.pane.isSending }
+    }
+
+    /// A parked pane holds text not saved yet, or a save is under way,
+    /// whatever else is pending (`Panes.HasUnsaved`).
+    public var hasUnsaved: Bool {
+        parked.contains { $0.unsaved || $0.settling != nil }
     }
 
     private func checkQuit() {
@@ -456,6 +482,8 @@ public final class BoardReplyPanes<Pane: BoardReplyPane> {
     }
 
     private func openQuit() {
+        quitTimer?.cancel()
+        quitTimer = nil
         quitWait?.resume()
         quitWait = nil
     }

@@ -35,12 +35,17 @@ extension MainWindowController {
             guard window.makeFirstResponder(nil) else { return }
             savedResponder = owner
             mode = .board
+            modeSwitched()
             // A Show in Mail still waiting selects nothing in the hidden
             // panes.
             boardMail.leftMail?()
             // The first entry of the run opens the default style (Settings
             // → General → Board), later ones the user's last.
             board.boardWillShow()
+            // The selected case's conversation may be fetched again: only
+            // now, so that the case the style just chosen shows is the one
+            // asked for, and once.
+            boardExtras.gate?.isOpen = true
             // The daemon's board is listed from the first entry on.
             startBoard()
             // The page first: the List's toolbar follows its split view.
@@ -65,6 +70,8 @@ extension MainWindowController {
             guard window.makeFirstResponder(nil) else { return }
             boardResponder = owner
             mode = .mail
+            modeSwitched()
+            boardExtras.gate?.isOpen = false
             content.setMode(.mail)
             split.messageContainer.setOverlay(toasts)
             window.toolbar = mailToolbar
@@ -82,6 +89,123 @@ extension MainWindowController {
         }
         applyTitle()
         updateTriageStrip()
+    }
+
+    /// Every switch is remembered (`board-last-mode`, for Open at Launch's
+    /// Last Used) and settles the mode the window opens in.
+    private func modeSwitched() {
+        state.settings.boardLastMode = mode
+        boardExtras.startDecided = true
+    }
+
+    // MARK: Open at Launch and Show the Board
+
+    /// Whether the board is on (the daemon's `enabled`; on until the
+    /// daemon said otherwise).
+    var boardEnabled: Bool {
+        state.boardPreferences.preferences?.enabled ?? true
+    }
+
+    /// Opens the window in the mode Open at Launch asks for
+    /// (`Settings.boardModeOnLaunch`) and keeps the mode switch and View ▸
+    /// Show Board with Show the Board, as the GTK window's
+    /// `setupModeMemory`: the Board waits for the daemon's word that the
+    /// board is on, unless the user switched first, and only until the
+    /// user's first click or key press in the window's Mail or
+    /// `Board.startWait` after launch, whichever comes first
+    /// (`Board.startDecision`); turned off, the switch goes (on macOS 14 its
+    /// Board segment is only disabled: a toolbar item hides from macOS 15)
+    /// and the window shows Mail. Called once, by the application's
+    /// integration, after the window is wired.
+    func setupModeMemory() {
+        guard boardExtras.prefsTokens.isEmpty else { return }
+        let settings = state.settings
+        let prefs = state.boardPreferences
+        let setUp = Date()
+        let decide = { [weak self] in
+            guard let self, !self.boardExtras.startDecided else { return }
+            let d = Board.startDecision(
+                start: settings.boardStartMode, lastMode: settings.boardLastMode, prefsKnown: prefs.stored != nil,
+                enabled: self.boardEnabled, userSwitched: self.mode == .board,
+                userInteracted: self.boardExtras.interacted, waited: Date().timeIntervalSince(setUp))
+            guard d.decided else { return }
+            self.boardExtras.startDecided = true
+            if d.mode == .board, self.mode == .mail {
+                self.setMode(.board)
+            }
+        }
+        boardExtras.prefsTokens = [
+            prefs.observe { [weak self] in self?.boardEnabledChanged() },
+            prefs.observeLoaded { decide() },
+        ]
+        boardEnabledChanged()
+        decide()
+        guard !boardExtras.startDecided else { return }
+        // The first click or key press in the window decides; so does the
+        // bound.
+        boardExtras.interactionMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown, .keyDown]
+        ) { [weak self] event in
+            MainActor.assumeIsolated {
+                guard let self, let window = self.window, event.window === window, self.mode == .mail,
+                      !self.boardExtras.interacted
+                else { return }
+                // A click counts inside the Mail content only (not the
+                // toolbar: its mode switch is the user's switch); a key
+                // anywhere in the window.
+                if event.type != .keyDown, !window.contentLayoutRect.contains(event.locationInWindow) {
+                    return
+                }
+                self.boardExtras.interacted = true
+                decide()
+                self.boardExtras.endInteractionWatch()
+            }
+            return event
+        }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(Board.startWait))
+            decide()
+            self?.boardExtras.endInteractionWatch()
+        }
+    }
+
+    /// Show the Board changed (or may have): the switches follow, and a
+    /// board turned off gives the window back to Mail.
+    private func boardEnabledChanged() {
+        let on = boardEnabled
+        if #available(macOS 15, *) {
+            for item in modeSwitches where item.isHidden == on {
+                item.isHidden = !on
+            }
+        }
+        window?.toolbar?.validateVisibleItems()
+        if !on, mode == .board {
+            setMode(.mail)
+        }
+    }
+
+    /// The board's part of a menu item's validation: Show Board while the
+    /// board is off, and the board's keys (⌘1, ⌘2, and E, D, R, which act
+    /// only while the board shows and nothing takes typing:
+    /// `Board.keyFor`); Done's title follows the case. False refuses the
+    /// item; true leaves it to the rest of the validation.
+    func validateBoardMenuItem(_ item: NSMenuItem, _ action: Selector, typing: Bool) -> Bool {
+        switch action {
+        case Action.setWindowMode:
+            if item.tag == Board.Mode.board.rawValue, !boardEnabled {
+                return false
+            }
+        case Action.boardDone:
+            item.title = mode == .board && board.view.detail?.isDone == true ? Board.Text.notDone : Board.Text.done
+        default:
+            break
+        }
+        let mods = item.keyEquivalentModifierMask.intersection([.command, .shift, .option, .control])
+        guard let key = item.keyEquivalent.first, mods.subtracting(.command).isEmpty,
+              [Action.setWindowMode, Action.boardDone, Action.boardRemind, Action.boardArchive].contains(action)
+        else { return true }
+        let inText = typing || (mode == .board && boardPage.replyHost.keyboardInLivePane() != nil)
+        return Board.keyFor(key, primary: mods.contains(.command), other: false, inText: inText, mode: mode) != nil
     }
 
     /// Whether the user looks at the selected folder (`Board.viewsMail`):
@@ -110,6 +234,43 @@ extension MainWindowController {
         if window.titleVisibility != visibility {
             window.titleVisibility = visibility
         }
+    }
+
+    /// ⌘1 and ⌘2 by the key, not by the character the layout types there
+    /// (`Board.numberRowDigit`): on Czech QWERTZ those keys type "+" and
+    /// "ě" also with ⌘, so the View menu's key equivalents alone would not
+    /// match. A local monitor sees the key before the window and the menu;
+    /// a layout whose ⌘ map types the digit is left to the menu item (its
+    /// highlight). The monitor holds the controller weakly and acts only for
+    /// this window, without a sheet or a modal window up.
+    func installModeKeys() -> Any? {
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            // The monitor's closure is called on the main thread by AppKit.
+            let consumed = MainActor.assumeIsolated {
+                self?.handleModeKey(event) ?? false
+            }
+            return consumed ? nil : event
+        }
+    }
+
+    private func handleModeKey(_ event: NSEvent) -> Bool {
+        guard let window, event.window === window, window.attachedSheet == nil, NSApp.modalWindow == nil else {
+            return false
+        }
+        let mods = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        guard mods == .command, let digit = Board.numberRowDigit(event.keyCode),
+              event.charactersIgnoringModifiers != String(digit)
+        else { return false }
+        switch Board.keyFor(digit, primary: true, other: false, inText: false, mode: mode) {
+        case .showMail:
+            setMode(.mail)
+        case .showBoard:
+            guard boardEnabled else { return false }
+            setMode(.board)
+        default:
+            return false
+        }
+        return true
     }
 
     /// The toolbar's switch (the selected segment) and View ▸ Mail, Board
@@ -191,11 +352,37 @@ extension MainWindowController {
     }
 }
 
+/// What the Board mode keeps beside the window's board controller.
+@MainActor
+final class BoardWindowExtras {
+    /// The board controller's source (`BoardMessagesGate`), once made.
+    var gate: BoardMessagesGate?
+    /// Open at Launch has nothing more to do: decided, or the user
+    /// switched first.
+    var startDecided = false
+    /// The user clicked or typed in the window before Open at Launch
+    /// decided (`Board.startDecision`'s `userInteracted`).
+    var interacted = false
+    /// Watches for that first interaction until it came or the bound.
+    var interactionMonitor: Any?
+
+    func endInteractionWatch() {
+        if let interactionMonitor {
+            NSEvent.removeMonitor(interactionMonitor)
+        }
+        interactionMonitor = nil
+    }
+    /// The board preferences observed (`setupModeMemory`).
+    var prefsTokens: [BoardObserverToken] = []
+    /// The account filter as last seen, to save only its changes.
+    var account = Board.AccountFilter.all
+}
+
 /// The Mail/Board switch of the toolbars: two segments with icons (a text
 /// would not fit the sidebar's section at its 200 pt minimum next to the
 /// window's buttons and the sidebar toggle), the labels as tooltips and
-/// accessibility descriptions. A segment's index is the mode's raw value.
-/// No key equivalent yet.
+/// accessibility descriptions. A segment's index is the mode's raw value;
+/// the keys are View ▸ Show Mail (⌘1) and Show Board (⌘2).
 @MainActor
 enum ModeSwitch {
     static func item(_ id: NSToolbarItem.Identifier, selected: Board.Mode = Board.initialMode) -> NSToolbarItemGroup {

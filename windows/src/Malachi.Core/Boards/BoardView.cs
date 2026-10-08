@@ -4,9 +4,9 @@
 // Port of macos/Sources/MalachiCore/Board/BoardView.swift (view,
 // resolveSelection, selectionAfterDone, dueGroup, dayDifference,
 // dueGroups, Scope, Context); GTK: ui/internal/board/view.go (View,
-// ResolveSelection, SelectionAfterDone, DueGroupOf, dayDifference,
-// dueSections, scope, newer, viewContext, newestMessages, countText,
-// sentences).
+// ResolveSelection, SelectionAfterDone, DueGroupOf, NeedsYouToday,
+// dayDifference, dueSections, scope, newer, viewContext, newestMessages,
+// countText, sentences).
 //
 // The board's view model: a pure function from a snapshot, the view state
 // (style, filters, selection) and the date to everything the three styles
@@ -55,12 +55,15 @@ public static partial class Board
 
         // The list: the columns' rows under the filter.
         var sections = new List<Section>();
-        if (v.Filter.Kind == FilterKind.Done)
+        if (v.Filter.Kind == FilterKind.Snoozed)
         {
             if (scope.Snoozed.Count > 0)
             {
                 sections.Add(new Section { Kind = SectionKind.Snoozed, Title = Text.Snoozed, Rows = [.. scope.Snoozed.Select(ctx.Row)] });
             }
+        }
+        else if (v.Filter.Kind == FilterKind.Done)
+        {
             if (scope.Finished.Count > 0)
             {
                 sections.Add(new Section { Kind = SectionKind.Done, Title = Text.Done, Rows = [.. scope.Finished.Select(ctx.Row)] });
@@ -121,16 +124,20 @@ public static partial class Board
             var f = Filter.Of(st);
             nav.Add(new NavItem(f, Text.FilterTitle(f), st, Count(st), v.Filter == f));
         }
-        nav.Add(new NavItem(
-            Filter.Done, Text.FilterTitle(Filter.Done), null, scope.Finished.Count + scope.Snoozed.Count, v.Filter == Filter.Done));
+        nav.Add(new NavItem(Filter.Snoozed, Text.FilterTitle(Filter.Snoozed), null, scope.Snoozed.Count, v.Filter == Filter.Snoozed));
+        nav.Add(new NavItem(Filter.Done, Text.FilterTitle(Filter.Done), null, scope.Finished.Count, v.Filter == Filter.Done));
 
         int LiveIn(AccountId? account) =>
             scope.Unique.Count(c => c.Visibility.IsLive && (account is null || c.Account == account));
         var accounts = new List<AccountItem> { new(null, Text.AllAccounts, "", LiveIn(null), v.Account is null) };
         foreach (var a in s.Accounts)
         {
-            accounts.Add(new AccountItem(
-                a.Id, CleanLine(a.Name, Cap.Account), CleanLine(a.Badge, Cap.Badge), LiveIn(a.Id), v.Account == a.Id));
+            var name = CleanLine(a.Name, Cap.Account);
+            var badge = CleanLine(a.Badge, Cap.Badge);
+            accounts.Add(new AccountItem(a.Id, name, badge, LiveIn(a.Id), v.Account == a.Id)
+            {
+                Label = Text.TitleWithBadge(name, badge),
+            });
         }
         var accountTitle = v.Account is { } accountId ? ctx.AccountName(accountId) : Text.AllAccounts;
 
@@ -142,10 +149,12 @@ public static partial class Board
         {
             tiles.Add(new Tile(TileKind.Commitments, default, commitmentCount, Text.Commitments));
         }
+        tiles = [.. tiles.Select(t => t with { ToolTip = Text.TileToolTip(t) })];
+        var todo = scope.Live.Count(c => scope.StateOf(c) is State.Hot or State.You && NeedsYouToday(c, s.Annotated, now, ctx.Zone));
         var today = new Today
         {
             Title = Text.StyleTitle(BoardStyle.Today),
-            Phrase = Text.TodoPhrase(hot.Count + you.Count),
+            Phrase = Text.TodoPhrase(todo),
             Tiles = tiles,
             Hot = hot,
             You = [.. you.Take(YouTopCount)],
@@ -153,8 +162,6 @@ public static partial class Board
             Commitments = commitments,
             DueGroups = DueGroupsOf(scope, ctx),
             DueEmpty = Text.DueEmpty,
-            CalendarTitle = Text.CalendarTitle,
-            CalendarBody = Text.CalendarBody,
         };
 
         // The selection and its detail.
@@ -247,6 +254,28 @@ public static partial class Board
             <= 7 => DueGroupKind.ThisWeek,
             _ => DueGroupKind.Later,
         };
+    }
+
+    /// <summary>
+    /// Whether the Today page's phrase counts case <paramref name="c"/> (of
+    /// the hot cases and those waiting for the user): new since yesterday's
+    /// midnight in <paramref name="timeZone"/> (its latest activity), due
+    /// today (its annotation counts and its deadline is today), or back from
+    /// a reminder.
+    /// </summary>
+    public static bool NeedsYouToday(Case c, bool annotated, DateTimeOffset now, TimeZoneInfo? timeZone = null)
+    {
+        ArgumentNullException.ThrowIfNull(c);
+        var zone = timeZone ?? TimeZoneInfo.Local;
+        if (c.Reminded)
+        {
+            return true;
+        }
+        if (DayDifference(c.Date, now, zone) <= 1)
+        {
+            return true;
+        }
+        return AnnotationOf(c, annotated) is { Due: { } due } && DayDifference(now, due, zone) == 0;
     }
 
     // How many calendar days in zone lie from a's day to b's.
@@ -345,7 +374,16 @@ public static partial class Board
             Live.Sort((a, b) =>
             {
                 var d = StateOf(a).CompareTo(StateOf(b));
-                return d != 0 ? d : Newer(a, b);
+                if (d != 0)
+                {
+                    return d;
+                }
+                // Back from a reminder first in its state.
+                if (a.Reminded != b.Reminded)
+                {
+                    return a.Reminded ? -1 : 1;
+                }
+                return Newer(a, b);
             });
             Finished.Sort(Newer);
             Snoozed.Sort((a, b) =>
@@ -363,7 +401,8 @@ public static partial class Board
         // repeats an id must not give two rows one identity.
         public List<Case> Unique { get; } = [];
 
-        // On the board, in the account scope: by state, then newest first.
+        // On the board, in the account scope: by state, back from a reminder
+        // first, then newest first.
         public List<Case> Live { get; } = [];
 
         // Done, in the account scope: newest first.
@@ -386,7 +425,11 @@ public static partial class Board
             {
                 return [.. Live.Where(c => StateOf(c) == View.Filter.State).Select(c => c.Id)];
             }
-            return [.. Snoozed.Concat(Finished).Select(c => c.Id)];
+            if (View.Filter.Kind == FilterKind.Snoozed)
+            {
+                return [.. Snoozed.Select(c => c.Id)];
+            }
+            return [.. Finished.Select(c => c.Id)];
         }
 
         public BoardCaseId? Resolve(BoardCaseId? selection)
@@ -458,8 +501,24 @@ public static partial class Board
         // The annotation, when it counts (AnnotationOf).
         private Annotation? Annotation(Case c) => AnnotationOf(c, Annotated);
 
-        // "Tomorrow 09:00", "20 Oct 09:00": when a snoozed case comes back.
-        private string RemindLabel(DateTimeOffset at) => DueLabel(at) + " " + DateFormat.FormatTime(at, culture, Zone);
+        // "Tomorrow at 09:00", "20 Oct at 09:00": when a snoozed case comes
+        // back.
+        private string RemindLabel(DateTimeOffset at) => Text.DayAndTime(DueLabel(at), DateFormat.FormatTime(at, culture, Zone));
+
+        // A case's badges' texts: Reminded, New contact.
+        private static List<string> Badges(Case c)
+        {
+            var badges = new List<string>(2);
+            if (c.Reminded)
+            {
+                badges.Add(Text.Reminded);
+            }
+            if (c.NewContact)
+            {
+                badges.Add(Text.NewContact);
+            }
+            return badges;
+        }
 
         // A deadline's day: Today, Tomorrow, else the list's date (in this
         // branch never today, so never a time).
@@ -488,7 +547,11 @@ public static partial class Board
             var n = int.Max(1, c.MessageCount);
             var remind = c.Visibility.RemindAt is { } at ? RemindLabel(at) : "";
 
-            var spoken = new List<string> { Text.StateName(st), person, title.Spoken };
+            var badges = Badges(c);
+            var spoken = new List<string> { Text.StateName(st) };
+            spoken.AddRange(badges);
+            spoken.Add(person);
+            spoken.Add(title.Spoken);
             if (due.Length > 0)
             {
                 spoken.Add(Text.SpokenDue(due));
@@ -530,6 +593,9 @@ public static partial class Board
                 Due = due,
                 DueOverdue = a?.Due is { } od && DueGroupOf(od, Now, Zone) == DueGroupKind.Overdue,
                 Remind = remind,
+                Reminded = c.Reminded,
+                NewContact = c.NewContact,
+                Badges = badges,
                 Attachments = c.HasAttachments,
                 CountText = DateFormat.ThreadCountText(n),
                 Unread = c.Unread,
@@ -565,6 +631,17 @@ public static partial class Board
                 CleanBlock(m.Text, Cap.Message), m.Mine)).ToList();
             var messagesNote = c.Messages is not null ? "" : c.MessagesFailed ? Text.MessagesFailed : Text.MessagesLoading;
             var stale = Annotated && c.Annotation is { Stale: true };
+            var whyNotes = new List<string>(2);
+            if (c.Reminded)
+            {
+                whyNotes.Add(Text.ReasonReminded);
+            }
+            if (c.UserState is not null)
+            {
+                whyNotes.Add(Text.ReasonUserKeeps);
+            }
+            var person = CleanLine(c.Person, Cap.Person);
+            var when = DateFormat.FormatDateTime(c.Date, culture, Zone);
             return new Detail
             {
                 Id = c.Id,
@@ -576,12 +653,17 @@ public static partial class Board
                 StateTitle = Text.StateName(st),
                 Source = source,
                 Why = why,
+                WhyNotes = whyNotes,
                 WhyIsAssistant = whyIsAssistant,
                 SourceText = Text.SourceText(source, snapshot.Run),
                 Account = AccountName(c.Account),
                 Issue = issue,
-                Person = CleanLine(c.Person, Cap.Person),
-                Time = DateFormat.FormatDateTime(c.Date, culture, Zone),
+                Person = person,
+                Time = when,
+                Byline = Text.PersonAndTime(person, when),
+                Reminded = c.Reminded,
+                NewContact = c.NewContact,
+                Badges = Badges(c),
                 Title = title.Text,
                 TitleIsAssistant = title.Assistant,
                 SpokenTitle = title.Spoken,

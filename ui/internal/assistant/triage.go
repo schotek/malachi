@@ -25,6 +25,7 @@ package assistant
 
 import (
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -97,6 +98,34 @@ func TriageDrafts(t TriageTrigger) bool {
 // TriageAnnotateTool is the triage tool whose accepted calls are the run's
 // progress (without the bridge's prefix, as Event.Tool names it).
 const TriageAnnotateTool = "annotate_case"
+
+// triageAnnotatedPrefix starts the text of every accepted annotate_case
+// result: "annotated case <caseId>: …" (the bridge's annotateCase).
+const triageAnnotatedPrefix = "annotated case "
+
+// TriageAnnotatedCase is the case an accepted annotate_case result names
+// (its text, Event.ResultText), false when the text does not start the
+// bridge's way or the id is not one: 1 to 64 bytes of ASCII letters,
+// digits, "_" and "-". The bridge accepts a second annotation of a case
+// without charging another of the run's cases, so the run counts the
+// distinct cases.
+func TriageAnnotatedCase(result string) (string, bool) {
+	rest, ok := strings.CutPrefix(result, triageAnnotatedPrefix)
+	if !ok {
+		return "", false
+	}
+	id, _, ok := strings.Cut(rest, ":")
+	if !ok || id == "" || len(id) > 64 {
+		return "", false
+	}
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
+			return "", false
+		}
+	}
+	return id, true
+}
 
 // The range the bridge's --triage-max accepts.
 const (

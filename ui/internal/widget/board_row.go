@@ -4,6 +4,8 @@
 package widget
 
 import (
+	"slices"
+
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/diamondburned/gotk4/pkg/pango"
 
@@ -24,6 +26,10 @@ type BoardRow struct {
 	person     *gtk.Label
 	issueKey   *gtk.Label
 	statusPill *gtk.Label
+	badges     *gtk.Box
+	// badgeTexts are the badges shown, so SetRow rebuilds the pills only
+	// when they change.
+	badgeTexts []string
 	attachment *gtk.Image
 	badge      *gtk.Label
 	date       *gtk.Label
@@ -42,6 +48,7 @@ func NewBoardRow() *BoardRow {
 		person:     b.GetObject("person_label").Cast().(*gtk.Label),
 		issueKey:   b.GetObject("issue_key").Cast().(*gtk.Label),
 		statusPill: b.GetObject("status_pill").Cast().(*gtk.Label),
+		badges:     b.GetObject("badges_box").Cast().(*gtk.Box),
 		attachment: b.GetObject("attachment_icon").Cast().(*gtk.Image),
 		badge:      b.GetObject("count_badge").Cast().(*gtk.Label),
 		date:       b.GetObject("date_label").Cast().(*gtk.Label),
@@ -77,6 +84,9 @@ type BoardRowData struct {
 	Attachments bool
 	Unread      bool
 	CountText   string
+	// Badges are the case's small pills (Reminded, New contact), in
+	// order; plain text.
+	Badges []string
 }
 
 // SetRow displays d. Every string is untrusted (mail, or an assistant that
@@ -112,6 +122,34 @@ func (r *BoardRow) SetRow(d BoardRowData) {
 	r.badge.SetText(d.CountText)
 	r.badge.SetVisible(d.CountText != "")
 	r.unreadDot.SetVisible(d.Unread)
+	r.setBadges(d.Badges)
+}
+
+// setBadges shows texts as neutral pills, rebuilt only when they change.
+func (r *BoardRow) setBadges(texts []string) {
+	r.badges.SetVisible(len(texts) > 0)
+	if slices.Equal(texts, r.badgeTexts) {
+		return
+	}
+	r.badgeTexts = slices.Clone(texts)
+	for c := r.badges.FirstChild(); c != nil; c = r.badges.FirstChild() {
+		r.badges.Remove(c)
+	}
+	for _, t := range texts {
+		r.badges.Append(NewBadgePill(t))
+	}
+}
+
+// NewBadgePill is one of a board case's badges (Reminded, New contact): a
+// neutral pill of plain text, its text as its tooltip since a long one is
+// cut.
+func NewBadgePill(text string) *gtk.Label {
+	l := NewPill()
+	l.AddCSSClass("board-badge")
+	l.SetText(text)
+	l.SetTooltipText(text)
+	l.SetVisible(text != "")
+	return l
 }
 
 // SetCardPresentation gives a column's card up to two lines for its title

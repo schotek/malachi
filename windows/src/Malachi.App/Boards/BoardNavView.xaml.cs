@@ -98,22 +98,24 @@ public sealed partial class BoardNavView : UserControl
             }
             var id = a.Filter is null ? "BoardNavAccountAll" : "BoardNavAccount" + accounts.Count.ToString(CultureInfo.InvariantCulture);
             accounts.Add(a.Filter);
-            AccountList.Items.Add(Row(a.Title, a.Count, null, a.Badge, id));
+            AccountList.Items.Add(Row(a.Title, a.Count, null, a.Badge, id, a.Label));
         }
         AccountList.SelectedIndex = selected;
     }
 
-    // BoardNav<State>: BoardNavAll (Overview), BoardNavHot, …, BoardNavDone.
+    // BoardNav<State>: BoardNavAll (Overview), BoardNavHot, …,
+    // BoardNavSnoozed, BoardNavDone.
     private static string NavId(Board.Filter f) => f.Kind switch
     {
         Board.FilterKind.State => "BoardNav" + f.State,
+        Board.FilterKind.Snoozed => "BoardNavSnoozed",
         Board.FilterKind.Done => "BoardNavDone",
         _ => "BoardNavAll",
     };
 
     // A row: the state's dot (an empty place for Overview and Done, so the
     // titles line up), the title, the account's kind and the count.
-    private static ListViewItem Row(string title, int count, Board.State? dot, string badge, string automationId)
+    private static ListViewItem Row(string title, int count, Board.State? dot, string badge, string automationId, string? spoken = null)
     {
         var grid = new Grid { ColumnSpacing = 8 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -167,7 +169,9 @@ public sealed partial class BoardNavView : UserControl
         var item = new ListViewItem { Content = grid };
         AutomationProperties.SetAutomationId(item, automationId);
         // Windows-only string: "Hot, 3", as macOS's radio rows say it.
-        AutomationProperties.SetName(item, count > 0 ? title + ", " + count.ToString(CultureInfo.CurrentCulture) : title);
+        // An account is spoken with its kind (AccountItem.Label).
+        var name = spoken ?? title;
+        AutomationProperties.SetName(item, count > 0 ? name + ", " + count.ToString(CultureInfo.CurrentCulture) : name);
         return item;
     }
 

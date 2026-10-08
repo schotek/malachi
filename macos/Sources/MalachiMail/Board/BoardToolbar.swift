@@ -234,6 +234,22 @@ final class BoardToolbar: NSObject, NSToolbarDelegate, NSMenuDelegate {
         toolbar.insertItem(withItemIdentifier: .sidebarTrackingSeparator, at: at)
     }
 
+    /// The List toolbar's own tracking separator (the list/detail divider,
+    /// `dividerIndex` 1) is made anew for the same reason after the List's
+    /// split view came back into the window (Mail → Board): the cached item
+    /// would keep its first binding.
+    func rebindDetailSeparator() {
+        guard made[Self.listIdentifier] != nil, listSplitView() != nil else { return }
+        let tb = listToolbar
+        guard let at = tb.items.firstIndex(where: { $0.itemIdentifier == ID.detailSeparator }) else {
+            made[Self.listIdentifier]?[ID.detailSeparator] = nil
+            return
+        }
+        made[Self.listIdentifier]?[ID.detailSeparator] = nil
+        tb.removeItem(at: at)
+        tb.insertItem(withItemIdentifier: ID.detailSeparator, at: at)
+    }
+
     /// AppKit makes the sidebar toggle itself (the delegate is not asked):
     /// in a narrow List it stays beside the switch while the list's and
     /// the detail's items give way.

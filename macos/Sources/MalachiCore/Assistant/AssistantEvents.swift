@@ -129,6 +129,11 @@ extension Assistant {
         /// number from 0 to Int64.max (`UsageTally` adds them up).
         public var usage: Usage?
         public var messageID = ""
+        /// `usage` is the message's whole usage, reported when it ended (a
+        /// provider's final count, Codex's token usage), not the
+        /// placeholder Claude Code reports when a message begins. Never set
+        /// by `parseEvents`.
+        public var usageFinal = false
 
         public init(kind: Kind) {
             self.kind = kind

@@ -2723,15 +2723,25 @@ the other members as if it were not there, and the case's `date`,
 `subject`, `snippet` and `latestMessageId` are those of the newest member
 that is not a note, so the windows count from it. A reply the user sent
 only to another of their own addresses therefore leaves the
-correspondent's mail before it on the board; a thread of nothing but
-notes is no case.
+correspondent's mail before it on the board.
 
-A thread is a case when its newest member that counts, notes to self
-passed over, is inbound. When
-that member is mine, it is a case only when the rules say `them`
-(`them.replied`, `them.asked`); a reply of the user's to someone who did
-not write in the thread, a message shaped like a forward, or one that
-asks nothing is no case. While an inbound member of the thread waits for
+A message of the user's **shaped like a forward** (below, "Own text and
+forwards") is passed over the same way: among the user's newest messages
+after the newest inbound member that counts (at most 10, the ones whose
+text the daemon reads), a forward counts but decides nothing, so
+forwarding a conversation to someone else neither ends its case nor
+makes a new one, and it answers none of the user's commitments. The
+newest member that counts and is neither a note nor such a forward is
+the **deciding member**: the state is decided by it, and `date`,
+`subject`, `snippet` and `latestMessageId` are its. A thread of nothing
+but notes and forwards is no case.
+
+A thread is a case when its deciding member is inbound, or when the
+user flagged a member that counts (`hot.flagged`, whoever wrote the
+deciding member). When the deciding member is mine, it is otherwise a
+case only when the rules say `them` (`them.replied`, `them.asked`); a
+reply of the user's to someone who did not write in the thread, or one
+that asks nothing, is no case. While an inbound member of the thread waits for
 the bulk classification (new mail, or all mail after the classification
 rules changed) the daemon decides nothing and the thread keeps the case
 it had. A user state, a remind, a future deadline, an open commitment or
@@ -2746,11 +2756,14 @@ deleted or merged.
 they have written to: a sender is **known** when its `From`, or an
 address of its `Reply-To`, is in `To` or `Cc` of a message in a folder of
 role `sent` or `outbox` of any of the user's enabled mail accounts (or of
-a message of the user's in the same thread). A message to the user from
-an unknown sender is `info.unknownSender`, and its `Importance` does not
-make it `hot`; an answer to one of the user's messages
-(`you.repliedToYou`) and the user's own flag (`hot.flagged`) count
-whoever sent it. Every header involved can be forged; the rule sorts
+a message of the user's in the same thread). A message from an unknown
+sender with the user in its `To` is a **new contact**
+(`you.newContact`: it waits for the user, but is told apart from mail of
+people the user writes to); from an unknown sender without the user in
+`To` (only in `Cc`, or not addressed) it is `info.unknownSender`. An
+unknown sender's `Importance` never makes a case `hot`; an answer to one
+of the user's messages (`you.repliedToYou`) and the user's own flag
+(`hot.flagged`) count whoever sent it. Every header involved can be forged; the rule sorts
 mail, it does not authenticate it.
 
 **Merged threads.** The case id stays when threads merge, `threadId`
@@ -2780,25 +2793,31 @@ it does not know; a code is never reused for another meaning):
 
 | Code | State | Rule |
 |---|---|---|
-| `hot.important` | hot | newest member inbound, the user in its `To`, a known sender, and its own header says `Importance: high` or `X-Priority` 1 or 2 |
-| `hot.flagged` | hot | the user flagged a member and the newest member is inbound |
-| `you.addressed` | you | newest member inbound, the user in its `To` and a known sender |
-| `you.repliedToYou` | you | newest member inbound and it answers (`In-Reply-To`) a message of the user's, whoever sent it |
-| `them.replied` | them | newest member the user's reply to an earlier inbound member, with one of its senders (`From` or `Reply-To`) in `To` |
+| `hot.important` | hot | deciding member inbound, the user in its `To`, a known sender, and its own header says `Importance: high` or `X-Priority` 1 or 2 |
+| `hot.flagged` | hot | the user flagged a member that counts (any copy the rules read), whoever wrote the deciding member |
+| `you.addressed` | you | deciding member inbound, the user in its `To` and a known sender |
+| `you.newContact` | you | deciding member inbound, the user in its `To`, from a sender the user has never written to (not known); its `Importance` does not count |
+| `you.repliedToYou` | you | deciding member inbound and it answers (`In-Reply-To`) a message of the user's, whoever sent it |
+| `them.replied` | them | deciding member the user's reply to an earlier inbound member, with one of its senders (`From` or `Reply-To`) in `To` |
 | `them.asked` | them | no inbound member counts, and one of the user's newest 10 messages that is not a forward, to someone else, asks a question (a question mark in its own text) |
 | `info.ccOnly` | info | inbound; the user only in `Cc` |
 | `info.notAddressed` | info | inbound; the user in neither `To` nor `Cc` (a list, a `Bcc`) |
-| `info.unknownSender` | info | inbound and the user in its `To`, from a sender the user has never written to (not known) |
+| `info.unknownSender` | info | inbound from a sender the user has never written to (not known), the user not in its `To` (only in `Cc`, or not addressed) |
 | `info.yourNote` | info | inbound from one of the user's addresses (of any of their accounts), every recipient one of them |
 | `jira.yourComment` | them | the issue's last item that is not an event is the user's |
 | `jira.assigned` / `jira.reporter` / `jira.commented` | you | someone else's item on an issue assigned to, reported by, or commented on before by the user |
 | `jira.watching` | info | an issue the user only watches |
 | `kept` | (last) | the rules no longer make it a case; something above keeps it |
 
-The rules are tried in the order `hot.flagged`, `info.yourNote`,
-`hot.important`, `you.repliedToYou`, `you.addressed`,
-`info.unknownSender`, `info.ccOnly`, `info.notAddressed`; a message whose
-`From` names the user, in the user's inbox, is inbound like any other.
+For an inbound deciding member the rules are tried in the order
+`hot.flagged`, `info.yourNote`, `hot.important` (known sender only),
+`you.repliedToYou`, `you.addressed` (known sender), `you.newContact`
+(unknown sender, the user in `To`), `info.unknownSender` (unknown
+sender, the user not in `To`), `info.ccOnly`, `info.notAddressed`
+(`ccOnly` and `notAddressed` are thus left to known senders); for a
+deciding member of the user's, `hot.flagged`, `them.replied`,
+`them.asked`. A message whose `From` names the user, in the user's
+inbox, is inbound like any other.
 
 **Own text and forwards.** `them.asked` and a commitment's quote read
 the user's **own text** of a message: for a message with HTML, the text
@@ -2816,7 +2835,15 @@ forward when its subject carries a forward marker (`Fwd:`, `FW:`, `WG:`,
 `TR:`, `ENC:`, `RV:`, `PD:`), it has an attached message
 (`message/rfc822`), its text starts with a quoted history, or it answers
 nothing (no `In-Reply-To` or `References`) and has less than 300 bytes of
-its own above a quoted history.
+its own above a quoted history. Such a message is passed over (above); a
+forward older than the user's 10 newest messages after the newest
+inbound member is judged without its text (only its subject and an
+attached message tell it).
+
+The rules have a version (`RulesVersion` in the daemon, now 6); a new
+version makes the daemon judge every thread of the longest window again
+in the background (`ready` false meanwhile), keeping the user's states,
+done, reminds, annotations and commitments.
 
 **Jira.** An issue in the `done` status category, or in one of the
 account's `closedStatuses`, is no case.
@@ -2824,8 +2851,12 @@ account's `closedStatuses`, is no case.
 **Windows.** A case stays on the board for a number of days from its
 `date` that depends on the state in effect (`windows`, below: 90 for `hot`, 30 for
 `you` and `them`, 14 for `info` by default); a user state, a remind (also
-one that came due, until the user marks the case done or sets another), a
-future deadline or an open commitment keeps it regardless.
+one that came due, while its `remindedAt` lasts: until the user acts on
+the case or an inbound member that counts arrives), a
+future deadline or an open commitment keeps it regardless. An
+annotation's deadline keeps or lists a case only while the `assistant`
+preference is on. A done case is pruned once its 30 days have passed,
+whatever its user state.
 
 ```jsonc
 BoardCase {
@@ -2838,6 +2869,7 @@ BoardCase {
   "visibility": "live" | "done" | "snoozed",
   "doneAt": Time (opt),               // with visibility "done"
   "remindAt": Time (opt),             // with visibility "snoozed", in the future
+  "remindedAt": Time (opt),           // with visibility "live": a remind came due and the user has not acted since
   "subject": "Lunch",                 // the newest member's, Re:/Fwd: stripped; an issue's "KEY: Summary"
   "person": Address,                  // the other party
   "date": Time,                       // arrival of the newest member that counts
@@ -2886,9 +2918,24 @@ BoardMessage { "id": "m_3", "folderId": "f_inbox", "from": Address, "date": Time
   counts arrives later (by the time the daemon stored it, not by its
   `Date` header, so neither a forged date nor a backfill of old mail
   reopens a case); `snoozed` until `remindAt`, then `live` again with
-  `remindAt` gone; a remind that came due keeps the case listed (also
-  past its window) until it is marked done or reminded again. Marking a case done clears its remind; setting a remind
-  clears done.
+  `remindAt` gone and `remindedAt` set; a remind that came due keeps the
+  case listed (also past its window) as long as `remindedAt` lasts: until
+  the user acts on the case or an inbound member that counts arrives
+  (below). Marking a case done clears its remind; setting a remind
+  clears done. **New mail ends a remind early**: an inbound member that
+  counts, which the daemon stored after the remind was set and which was
+  not a member then (a copy of a message the case already had, moved by
+  another client, does not count, as for done), makes a snoozed case
+  `live` again at once, with `remindAt` gone and `remindedAt` not set
+  (the remind did not come due). Only a remind set by a daemon with this
+  rule ends early: an older remind, or one a merge carried over from a
+  case without the marker, waits for its time.
+- `remindedAt`: when a remind came due (the `remindAt` it had); present
+  while the case is `live` after it, until the user acts on the case
+  (`board.setState`, `board.setDone`, `board.remind` — also with null —,
+  `board.archive`, `board.unflag`) or an inbound member that counts
+  arrives. A client lists such a case first in its state, marked as
+  reminded; it is no system notification.
 - `canArchive`: `board.archive` would move messages — the account has the
   `move` capability (§4.1) and a folder of role `archive`, and a member is
   in the folder of role `inbox`.
@@ -2945,14 +2992,17 @@ BoardMessage { "id": "m_3", "folderId": "f_inbox", "from": Address, "date": Time
   bytes of message text (400 kB; under 2.4 MB of JSON even if every
   character is escaped). `board.queue` keeps its own, smaller caps and
   reads the stored plain text only (the plain-text rules, never the
-  HTML).
+  HTML). The daemon derives the own text of at most 8 HTML members while
+  `board.get` waits and the rest in the background, so the text of an
+  older HTML member may stay untrimmed until the case next changes.
 
 **Annotations are text an assistant wrote.** `annotation` (`title`,
 `summary`, `why`, `tasks`, `due.quote`, `source`) and a commitment's
 `text` were written by an AI assistant that read the user's mail, which
 may have tried to steer it. The daemon cleans them (control, bidi and
-other invisible — default-ignorable — characters removed, except ZWJ,
-ZWNJ and an emoji's presentation selector; URLs — `scheme://…` and
+other invisible — default-ignorable — characters removed, except ZWJ
+and ZWNJ between two other kept characters that are not whitespace, and
+an emoji's presentation selector; URLs — `scheme://…` and
 `www.…` — removed; whitespace collapsed in one-line fields) and enforces the
 limits below, but cannot make them true. A client shows them **only as
 plain text**, never as markup or links, always marked as the assistant's
@@ -3057,6 +3107,7 @@ BoardTriage { "lastRun": { "at": Time,                 // when it started
               "queue": 3,                 // live cases board.queue would offer; 0 with the assistant off
               "usage24h": { "inputTokens": 1200, "outputTokens": 340,
                             "cacheCreationInputTokens": 0, "cacheReadInputTokens": 9000,
+                            "lowerBound": true (opt),   // a run summed reported only a lower bound
                             "runs": 2 } (opt) }  // runs ended in the last 24 h that reported usage
 ```
 
@@ -3074,7 +3125,9 @@ latest activity (its end; an external run's latest call), of any
 trigger; its `error` is a class, never free text. `usage24h` sums the
 token usage (`board.runEnd`) of the runs that ended within the 24 hours
 before `board.list` answered (the daemon's clock, by each run's end) and
-carry usage; `runs` counts them (≥ 1). Absent when no run in that window
+carry usage; `runs` counts them (≥ 1), and `lowerBound` is true when
+any of them reported only a lower bound (a client then says "at
+least"). Absent when no run in that window
 has usage: runs of clients that did not report it, external runs and
 runs the daemon ended itself have none. The value is computed when
 `board.list` answers; it shrinks as runs age out of the window without a
@@ -3090,28 +3143,31 @@ runs the daemon ended itself have none. The value is computed when
 #### `board.setState`
 - params: `{ "caseId", "state": "hot" | "you" | "them" | "info" | null }`
   — null (or absent) returns the case to automatic
-- result: `{ "case": BoardCase }`
+- result: `{ "case": BoardCase }` — clears `remindedAt`
 - errors: invalidArgument (an unknown state), caseNotFound, storageError
 
 #### `board.setDone`
 - params: `{ "caseId", "done": bool }`
 - result: `{ "case": BoardCase }` — done also clears a remind and closes
   the case's open commitments (`closedReason: "done"`); `false` makes it
-  live again
+  live again; either clears `remindedAt`
 - errors: caseNotFound, storageError
 
 #### `board.remind`
 - params: `{ "caseId", "until": Time | null }` — in the future and at most
   a year ahead (`api.MaxBoardRemind`); null (or absent) ends the remind
-- result: `{ "case": BoardCase }` — `snoozed` until `until`, done
-  cleared; when the time comes the case is live again and
-  `notify.boardChanged` says so
+- result: `{ "case": BoardCase }` — `snoozed` until `until`, done and
+  `remindedAt` cleared; when the time comes the case is live again with
+  `remindedAt` and `notify.boardChanged` says so; an inbound member that
+  counts, stored after the call, ends the remind early (`visibility`
+  above)
 - errors: invalidArgument (the past, more than a year), caseNotFound,
   storageError
 
 #### `board.archive`
 - params: `{ "caseId" }`
-- result: `{ "archived": 2, "noArchive": true (opt), "case": BoardCase }`
+- result: `{ "archived": 2, "noArchive": true (opt), "case": BoardCase,
+  "moved": [ { "messageId": "m_3", "fromFolderId": "f_inbox" } ] (opt) }`
 - errors: invalidArgument (the board disabled, no `caseId`), caseNotFound
   (also when the case's account is gone), messageNotFound (a member left
   or was deleted while the move was prepared; nothing moved, the case is
@@ -3121,7 +3177,16 @@ Moves the members in the folder of role `inbox` to the folder of role
 `archive` the way `message.move` does (local first, through the
 operation log), then marks the case done. An account without the `move`
 capability or without an archive folder only marks it done and answers
-`noArchive: true` with `archived: 0`.
+`noArchive: true` with `archived: 0`. It clears `remindedAt`. `moved`
+names every message moved and the folder it was moved from, so a client
+can undo: `message.move` of those messages back to their folders, then
+`board.setDone` with `done: false` (with `noArchive`, only the latter).
+`moved` is absent when nothing moved, and also when the move cannot be
+undone locally: an archive folder the daemon does not synchronise
+(`Folder.synced` false, Gmail's All Mail) takes the messages off the
+local store (`message.move`), so there is nothing to move back, and a
+client offers no Undo (with `noArchive` it may offer one that only
+clears done).
 
 #### `board.unflag`
 - params: `{ "caseId" }`
@@ -3130,7 +3195,8 @@ capability or without an archive folder only marks it done and answers
   (also when the case's account is gone), messageNotFound (a member was
   deleted while the change was prepared; nothing changed), storageError
 
-Takes the star away from a case that is `hot.flagged`: clears the
+Takes the star away from a case that is `hot.flagged` (whoever wrote
+last; a client offers it for such a case that is not done): clears the
 `flagged` flag of every copy whose flag the rules read — every flagged
 copy of a member that counts, or that waits for its bulk
 classification, in whatever folder, as the rules merge copies by
@@ -3152,7 +3218,8 @@ kept, as with `message.flag`: calling it again finishes it.
 `case` is the case as stored when the flags were cleared; the rules
 judge it again right after, and `notify.boardChanged` follows with what
 it became (another state, the same state with `ruleReason: "kept"` when a
-user state, a suggested reply or the like keeps it, or no case).
+user state, a suggested reply or the like keeps it, or no case). It
+clears `remindedAt`.
 
 ```jsonc
 // → { "caseId": "c_0f3…" }
@@ -3271,11 +3338,13 @@ true` instead of a second one: its text and state stay, nothing is
 counted in the run, and only an open or done one without a deadline takes
 `due`. Duplicates recorded before this rule are merged once by the
 daemon's board upkeep (the oldest kept, done when any of them was).
+Recording a commitment raises the case's `version`.
 
 #### `board.setCommitment`
 - params: `{ "commitmentId", "done": bool }` — `false` reopens a done or
   closed commitment
-- result: `{ "commitment": BoardCommitment }`
+- result: `{ "commitment": BoardCommitment }` — raises the case's
+  `version`
 - errors: caseNotFound (no such commitment, or its case is gone),
   storageError
 
@@ -3289,8 +3358,17 @@ daemon's board upkeep (the oldest kept, done when any of them was).
   sends back what `board.preferences` gave it with its changes
 - result: `{ "preferences": BoardPreferences }` — as stored
 - errors: invalidArgument (a window, `autoTriageMinutes` or
-  `autoTriageDailyCases` out of range, an unknown account in
-  `triageAccounts`), storageError
+  `autoTriageDailyCases` out of range, a malformed account id in
+  `triageAccounts` — empty, over 128 bytes, or other than printable ASCII
+  without spaces — or more than 1000 of them), storageError
+
+An id in `triageAccounts` of an account that no longer exists is dropped
+quietly, on writing and on reading (`board.preferences`, `board.list`),
+so a client that sends back what it read is never refused for an
+account removed meanwhile. A list whose accounts are all gone stays as
+it is: an empty list would mean every enabled mail account, and the
+user chose fewer; triage then reads no account until the user names
+others or empties the list.
 
 Changing `windows` or `enabled` makes the daemon evaluate the board
 again; `notify.boardChanged` follows.
@@ -3313,14 +3391,18 @@ again; `notify.boardChanged` follows.
 
 ```jsonc
 BoardUsage { "inputTokens": 1200, "outputTokens": 340,
-             "cacheCreationInputTokens": 0, "cacheReadInputTokens": 9000 }
+             "cacheCreationInputTokens": 0, "cacheReadInputTokens": 9000,
+             "lowerBound": true (opt) }   // only a lower bound of the run's usage
 ```
 
 `usage` is the run's token usage as the client's assistant reported it
 (Claude Code's `usage` of the run); absent = unknown, and the run keeps
 none (a counter absent from a given `usage` is 0). It is stored with the
 run when this call ends it; each counter above `api.MaxBoardUsageTokens`
-(10^12) is stored as that. Ending a run that already ended changes
+(10^12) is stored as that. `lowerBound` says the counters are only a
+lower bound: the client stopped the run, it timed out, or the client
+gave up waiting for the assistant's final report; it is stored with the
+usage and carried into `usage24h`. Ending a run that already ended changes
 nothing, its `usage` included; so does ending an external run. A run
 left open (the client stopped) is ended by the daemon with `failed`, and
 without usage, at its next start or after two hours. Every call that
@@ -3719,3 +3801,13 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   the user edited it and is deleted when untouched. New `draft.get` (one draft as `draft.list` lists it) and
   `board.unflag` (clears the flags behind `hot.flagged`). No new error
   codes; `ProtocolVersion` stays 2.
+- **2** (2026-10-08, compatible addition: board fixes, §4.13):
+  `BoardCase.remindedAt` (a remind came due and the user has not acted
+  since) and new mail ending a remind early; `BoardArchiveResult.moved`
+  (each archived message and its former folder, for undo);
+  `BoardUsage.lowerBound` in `board.runEnd` and in `usage24h`; new
+  `ruleReason` `you.newContact` (an unknown sender with the user in
+  `To`; `info.unknownSender` is now an unknown sender without the user
+  in `To`); `hot.flagged` whoever wrote last; the user's forwards in a
+  thread passed over like notes to self (rules version 6). No new
+  methods or error codes; `ProtocolVersion` stays 2.

@@ -41,11 +41,20 @@ func (identity) C(_, msgid string) string { return msgid }
 var tr identity
 
 // testLoop is the main loop of a test: what is posted runs on the test's
-// goroutine, in order, while runUntil waits; After waits in real time.
+// goroutine, in order, while runUntil waits; After waits in real time,
+// unless the test holds the timers (hold) to fire them itself (fire).
 type testLoop struct {
 	mu    sync.Mutex
 	queue []func()
 	wake  chan struct{}
+	hold  bool
+	held  []heldTimer
+}
+
+// heldTimer is a timer After kept for the test instead of starting it.
+type heldTimer struct {
+	d time.Duration
+	f func()
 }
 
 func newTestLoop() *testLoop { return &testLoop{wake: make(chan struct{}, 1)} }
@@ -61,7 +70,35 @@ func (l *testLoop) Post(f func()) {
 }
 
 func (l *testLoop) After(d time.Duration, f func()) {
+	l.mu.Lock()
+	if l.hold {
+		l.held = append(l.held, heldTimer{d, f})
+		l.mu.Unlock()
+		return
+	}
+	l.mu.Unlock()
 	time.AfterFunc(d, func() { l.Post(f) })
+}
+
+// fire posts every held timer of duration d, as if it had run out; it
+// reports how many there were.
+func (l *testLoop) fire(d time.Duration) int {
+	l.mu.Lock()
+	var due []func()
+	kept := l.held[:0]
+	for _, h := range l.held {
+		if h.d == d {
+			due = append(due, h.f)
+		} else {
+			kept = append(kept, h)
+		}
+	}
+	l.held = kept
+	l.mu.Unlock()
+	for _, f := range due {
+		l.Post(f)
+	}
+	return len(due)
 }
 
 // runUntil runs what was posted, one at a time, until cond holds; the test

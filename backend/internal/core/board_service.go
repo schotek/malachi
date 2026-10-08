@@ -9,6 +9,7 @@ import (
 	"errors"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/schotek/malachi/backend/internal/board"
@@ -49,7 +50,64 @@ func (b *Backend) boardPrefs(ctx context.Context) (api.BoardPreferences, error) 
 	if p.TriageAccounts == nil {
 		p.TriageAccounts = []api.AccountID{}
 	}
+	if len(p.TriageAccounts) > 0 {
+		// An account removed since the list was written drops out, so a
+		// client that writes back what it read is not refused for it.
+		list, err := b.store.ListAccounts(ctx)
+		if err != nil {
+			return p, api.NewError(api.CodeStorageError, "%v", err)
+		}
+		p.TriageAccounts = liveTriageAccounts(p.TriageAccounts, list)
+	}
 	return p, nil
+}
+
+// liveTriageAccounts drops the ids of accounts that no longer exist, and
+// duplicates. A list that named accounts and all of them are gone stays
+// as it is: an empty list would mean every enabled mail account, and the
+// user chose fewer; with its accounts gone it names none, and triage
+// reads no account (triageAccounts).
+func liveTriageAccounts(ids []api.AccountID, list []store.Account) []api.AccountID {
+	known := make(map[string]bool, len(list))
+	for _, a := range list {
+		known[a.ID] = true
+	}
+	live, named := []api.AccountID{}, []api.AccountID{}
+	for _, id := range ids {
+		if slices.Contains(named, id) {
+			continue
+		}
+		named = append(named, id)
+		if known[string(id)] {
+			live = append(live, id)
+		}
+	}
+	if len(live) == 0 {
+		return named
+	}
+	return live
+}
+
+// maxBoardTriageAccounts bounds triageAccounts: unknown ids are no longer
+// refused, so the count is what keeps the stored list small.
+const maxBoardTriageAccounts = 1000
+
+// maxBoardAccountIDLen bounds an account id in triageAccounts; the
+// daemon's own are much shorter (acc_ and hex).
+const maxBoardAccountIDLen = 128
+
+// wellFormedAccountID reports an id that could be one of the daemon's:
+// not empty, not overlong, printable ASCII without spaces.
+func wellFormedAccountID(id api.AccountID) bool {
+	if id == "" || len(id) > maxBoardAccountIDLen {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		if id[i] <= ' ' || id[i] > '~' {
+			return false
+		}
+	}
+	return true
 }
 
 // requireBoard returns the preferences of an enabled board, else
@@ -121,6 +179,9 @@ func toAPIBoardCase(c store.BoardCase, now time.Time) api.BoardCase {
 		t := c.RemindAt
 		out.RemindAt = &t
 	}
+	if t := c.RemindedAt(now); !t.IsZero() {
+		out.RemindedAt = &t
+	}
 	if c.Issue != nil {
 		out.Issue = &api.BoardIssue{Key: c.Issue.Key, Status: c.Issue.Status, StatusCategory: c.Issue.StatusCategory}
 	}
@@ -140,9 +201,36 @@ func toAPIBoardCase(c store.BoardCase, now time.Time) api.BoardCase {
 		out.Annotation = an
 	}
 	if d := c.Draft; d != nil {
-		out.Draft = &api.BoardDraft{DraftID: api.DraftID(d.DraftID), Text: d.Text, Updated: d.Updated}
+		out.Draft = &api.BoardDraft{DraftID: api.DraftID(d.DraftID), Text: cleanDraftText(d.Text), Updated: d.Updated}
 	}
 	return out
+}
+
+// cleanDraftText cleans a linked draft's text as every other string of a
+// case is cleaned (board.CleanText: control, bidi and invisible
+// characters out), each line's whitespace collapsed, at most one empty
+// line in a row and none at either end (as board.CleanBlock, but the URLs
+// the user wrote stay: the text is never a link), cut to
+// api.MaxBoardDraftTextBytes. An assistant may have written the draft.
+func cleanDraftText(s string) string {
+	var b strings.Builder
+	blank := 0
+	for line := range strings.SplitSeq(board.CleanText(s), "\n") {
+		line = strings.Join(strings.Fields(line), " ")
+		if line == "" {
+			blank++
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteByte('\n')
+			if blank > 0 {
+				b.WriteByte('\n')
+			}
+		}
+		blank = 0
+		b.WriteString(line)
+	}
+	return store.CutUTF8(b.String(), api.MaxBoardDraftTextBytes)
 }
 
 func toAPICommitment(k store.BoardCommitment) api.BoardCommitment {
@@ -165,7 +253,10 @@ func storeWindows(w api.BoardWindows) store.BoardWindowDays {
 	}
 }
 
-// localDay is the daemon's local day of t ("YYYY-MM-DD") and its start.
+// localDay is the daemon's local day of t ("YYYY-MM-DD") and its start:
+// the day of an external run (store.BoardRunRef) is the daemon's local
+// day, never the local day of the client that called (migration 0017's
+// comment says the caller's; the code has always used the daemon's).
 func localDay(t time.Time) (string, time.Time) {
 	l := t.In(time.Local)
 	start := time.Date(l.Year(), l.Month(), l.Day(), 0, 0, 0, 0, time.Local)
@@ -313,10 +404,32 @@ func (s *boardService) Get(ctx context.Context, p api.BoardGetParams) (*api.Boar
 	}
 	now := s.b.boardNow()
 	out := &api.BoardGetResult{Case: toAPIBoardCase(c, now), Messages: make([]api.BoardMessage, 0, len(msgs))}
-	for _, m := range msgs {
+	// At most boardGetDerive own texts of HTML members are derived while
+	// the call waits, the newest first; the others' excerpts come from
+	// their stored text this time, and their own texts are derived in the
+	// background for a later call (boardExcerpt).
+	type excerpt struct {
+		text string
+		cut  bool
+	}
+	excerpts := make([]excerpt, len(msgs))
+	budget := boardGetDerive
+	var later []boardOwnKey
+	for i := len(msgs) - 1; i >= 0; i-- {
+		text, cut, derived, pending := s.b.boardExcerpt(ctx, c.AccountID, msgs[i], budget > 0)
+		if derived {
+			budget--
+		}
+		if pending {
+			later = append(later, boardOwnKey{account: c.AccountID, id: msgs[i].ID, state: store.BodyFetched})
+		}
+		excerpts[i] = excerpt{text, cut}
+	}
+	s.b.deriveBoardOwnTextsLater(later)
+	for i, m := range msgs {
 		// The member's own text: its quoted history cut off as
-		// message.body with trimQuoted does (boardExcerptSource).
-		text, cut := s.b.boardExcerptSource(ctx, c.AccountID, m)
+		// message.body with trimQuoted does (boardExcerpt).
+		text, cut := excerpts[i].text, excerpts[i].cut
 		ex := board.BoardMessageExcerpt(text)
 		bm := api.BoardMessage{ID: api.MessageID(m.ID), FolderID: api.FolderID(m.FolderID), Date: boardMessageDate(m, now),
 			Mine: m.Mine, Text: ex.Text, Trimmed: ex.Trimmed || cut || m.TextCut}
@@ -421,7 +534,7 @@ func (s *boardService) Archive(ctx context.Context, p api.BoardArchiveParams) (*
 	// counts as no archive folder (the case is only marked done).
 	if can(a.Config, api.CapabilityMove) && aerr == nil && archive.Selectable {
 		out.NoArchive = false
-		ids, err := s.inboxMembers(ctx, a.ID, c.ThreadID)
+		inbox, ids, err := s.inboxMembers(ctx, a.ID, c.ThreadID)
 		if err != nil {
 			return nil, err
 		}
@@ -433,6 +546,16 @@ func (s *boardService) Archive(ctx context.Context, p api.BoardArchiveParams) (*
 			}
 			s.b.Supervisor.Trigger(a.ID, "", false)
 			out.Archived = len(ids)
+			// What a client needs to undo it: each message moved back
+			// to its folder. Not when the archive folder is never
+			// downloaded (Gmail's All Mail): the local move deleted the
+			// rows, so there is nothing to move back and no Undo.
+			if !archive.Unsynced {
+				out.Moved = make([]api.BoardMoved, len(ids))
+				for i, id := range ids {
+					out.Moved[i] = api.BoardMoved{MessageID: api.MessageID(id), FromFolderID: api.FolderID(inbox)}
+				}
+			}
 		}
 	}
 	c, err = s.b.store.SetBoardDone(ctx, c.ID, true, s.b.boardNow())
@@ -484,7 +607,18 @@ func (s *boardService) Unflag(ctx context.Context, p api.BoardUnflagParams) (*ap
 		id = board.NewIdentity(t.Me, acc.addresses, nil)
 	}
 	flagged := board.FlaggedCopies(boardThreadOf(t, acc), id, s.b.boardNow())
-	out := &api.BoardUnflagResult{Case: toAPIBoardCase(c, s.b.boardNow())}
+	// endReminded: the user acted on the case, so a remind that came due
+	// ends; only once the flags changed (a refused unflag changes nothing).
+	endReminded := func() error {
+		if !c.Reminded {
+			return nil
+		}
+		if c, err = s.b.store.ClearBoardReminded(ctx, c.ID); err != nil {
+			return boardErr(err)
+		}
+		s.b.boardWritten(ctx, c)
+		return nil
+	}
 	outbox := map[string]bool{}
 	for _, m := range t.Members {
 		if m.Role == api.RoleOutbox {
@@ -498,7 +632,10 @@ func (s *boardService) Unflag(ctx context.Context, p api.BoardUnflagParams) (*ap
 		}
 	}
 	if len(ids) == 0 {
-		return out, nil
+		if err := endReminded(); err != nil {
+			return nil, err
+		}
+		return &api.BoardUnflagResult{Case: toAPIBoardCase(c, s.b.boardNow())}, nil
 	}
 	if err := s.b.store.FlagMessages(ctx, a.ID, ids, nil, []api.Flag{api.FlagFlagged}); err != nil {
 		return nil, mutationError(err)
@@ -510,7 +647,10 @@ func (s *boardService) Unflag(ctx context.Context, p api.BoardUnflagParams) (*ap
 	} else {
 		s.b.Supervisor.Trigger(a.ID, "", false)
 	}
-	out.Unflagged = len(ids)
+	if err := endReminded(); err != nil {
+		return nil, err
+	}
+	out := &api.BoardUnflagResult{Unflagged: len(ids)}
 	if c, err = s.b.store.GetBoardCase(ctx, c.ID); err != nil {
 		return nil, boardErr(err)
 	}
@@ -519,21 +659,22 @@ func (s *boardService) Unflag(ctx context.Context, p api.BoardUnflagParams) (*ap
 	return out, nil
 }
 
-// inboxMembers lists the thread's messages in the folder of role inbox.
-func (s *boardService) inboxMembers(ctx context.Context, accountID, threadID string) ([]string, error) {
+// inboxMembers lists the thread's messages in the folder of role inbox,
+// with that folder's id.
+func (s *boardService) inboxMembers(ctx context.Context, accountID, threadID string) (string, []string, error) {
 	inbox, err := s.b.store.FolderByRole(ctx, accountID, api.RoleInbox)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		return nil, nil
+		return "", nil, nil
 	case err != nil:
-		return nil, api.NewError(api.CodeStorageError, "%v", err)
+		return "", nil, api.NewError(api.CodeStorageError, "%v", err)
 	}
 	msgs, err := s.b.store.ThreadMessages(ctx, accountID, threadID, inbox.ID, api.MaxThreadMessages)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		return nil, nil
+		return "", nil, nil
 	case err != nil:
-		return nil, api.NewError(api.CodeStorageError, "%v", err)
+		return "", nil, api.NewError(api.CodeStorageError, "%v", err)
 	}
 	ids := make([]string, 0, len(msgs))
 	for _, m := range msgs {
@@ -541,7 +682,7 @@ func (s *boardService) inboxMembers(ctx context.Context, accountID, threadID str
 			ids = append(ids, m.ID)
 		}
 	}
-	return ids, nil
+	return inbox.ID, ids, nil
 }
 
 func (s *boardService) DiscardDraft(ctx context.Context, p api.BoardDiscardDraftParams) (*api.BoardDiscardDraftResult, error) {
@@ -1058,24 +1199,22 @@ func (s *boardService) SetPreferences(ctx context.Context, p api.BoardSetPrefere
 	if next.AutoTriageDailyCases < 0 || next.AutoTriageDailyCases > api.MaxBoardAutoTriageDailyCases {
 		return nil, boardInvalid("autoTriageDailyCases must be 0..%d", api.MaxBoardAutoTriageDailyCases)
 	}
-	known := map[string]bool{}
+	if len(next.TriageAccounts) > maxBoardTriageAccounts {
+		return nil, boardInvalid("triageAccounts names more than %d accounts", maxBoardTriageAccounts)
+	}
+	for _, id := range next.TriageAccounts {
+		if !wellFormedAccountID(id) {
+			return nil, boardInvalid("a malformed account id in triageAccounts")
+		}
+	}
 	list, err := s.b.store.ListAccounts(ctx)
 	if err != nil {
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
 	}
-	for _, a := range list {
-		known[a.ID] = true
-	}
-	triage := []api.AccountID{}
-	for _, id := range next.TriageAccounts {
-		if !known[string(id)] {
-			return nil, boardInvalid("unknown account %q in triageAccounts", id)
-		}
-		if !slices.Contains(triage, id) {
-			triage = append(triage, id)
-		}
-	}
-	next.TriageAccounts = triage
+	// An account that no longer exists drops out quietly: a client sends
+	// back what it read, and an account removed meanwhile must not make
+	// every other preference unwritable.
+	next.TriageAccounts = liveTriageAccounts(next.TriageAccounts, list)
 	prev, err := s.b.boardPrefs(ctx)
 	if err != nil {
 		return nil, err

@@ -5,9 +5,9 @@ import Foundation
 import Testing
 @testable import MalachiCore
 
-// Remind… presets (MalachiCore/Board/BoardRemind.swift): Later Today,
-// Tomorrow at 9, next Monday at 9. A UTC calendar and a fixed date; the
-// 15th of October 2026 is a Thursday.
+// Remind… presets (MalachiCore/Board/BoardRemind.swift, Go remind_test.go,
+// the same cases). A UTC calendar and a fixed date; the 15th of October
+// 2026 is a Thursday.
 
 private typealias F = BoardFixture
 
@@ -25,28 +25,58 @@ private typealias F = BoardFixture
         #expect(p.map(\.kind) == [.laterToday, .tomorrow, .nextWeek])
         #expect(p.map(\.date) == [F.day(15, 15), F.day(16, 9), F.day(19, 9)])
         #expect(p.map(\.title) == ["Later Today", "Tomorrow", "Next Week"])
-        #expect(p.map(\.when) == ["Thu 15:00", "Fri 09:00", "Mon 09:00"])
+        #expect(p.map(\.when) == ["Thu at 15:00", "Fri at 09:00", "Mon at 09:00"])
+        #expect(p.first?.label == "Later Today, Thu at 15:00")
     }
 
-    /// Three hours ahead, rounded up to the hour; 18:00 when that is
-    /// earlier and still an hour away; none past the day.
+    /// Three hours ahead, rounded up to the hour, offered only up to 20:00
+    /// the same day, never from 19:00 and not before dawn (05:00).
     @Test func laterTodayRule() {
         let cases: [(Date, Date?)] = [
+            (F.day(15, 0, 30), nil),  // not before dawn
+            (F.day(15, 1, 10), nil),
+            (F.day(15, 4, 59), nil),
+            (F.day(15, 5), F.day(15, 8)),
             (F.day(15, 8), F.day(15, 11)),
             (F.day(15, 12, 20), F.day(15, 16)),
             (F.day(15, 14, 59), F.day(15, 18)),
-            (F.day(15, 15, 30), F.day(15, 18)),  // 19:00 rounded, 18:00 first
-            (F.day(15, 16, 30), F.day(15, 18)),
-            (F.day(15, 17), F.day(15, 18)),  // exactly an hour away
-            (F.day(15, 17, 30), F.day(15, 21)),  // 18:00 too close
-            (F.day(15, 19, 30), F.day(15, 23)),
-            (F.day(15, 20, 59), nil),  // 23:59 rounds up to midnight: tomorrow
-            (F.day(15, 21), nil),
+            (F.day(15, 16, 59), F.day(15, 20)),
+            (F.day(15, 17), F.day(15, 20)),  // exactly 20:00
+            (F.day(15, 17, 1), nil),  // 21:00 is too late
+            (F.day(15, 18, 59), nil),
+            (F.day(15, 19), nil),
+            (F.day(15, 20, 59), nil),
             (F.day(15, 23, 30), nil),
         ]
         for (now, want) in cases {
             #expect(laterToday(now) == want, "\(now)")
         }
+    }
+
+    /// The whole menu at the times of the day where the rule changes.
+    @Test func presetsThroughTheDay() {
+        typealias K = Board.RemindPreset.Kind
+        let cases: [(Date, [(K, Date)])] = [
+            (F.day(15, 0, 30), [(.thisMorning, F.day(15, 9)), (.nextWeek, F.day(19, 9))]),
+            (F.day(15, 1, 10), [(.thisMorning, F.day(15, 9)), (.nextWeek, F.day(19, 9))]),
+            (F.day(15, 4, 59), [(.thisMorning, F.day(15, 9)), (.nextWeek, F.day(19, 9))]),
+            (F.day(15, 5), [(.laterToday, F.day(15, 8)), (.tomorrow, F.day(16, 9)), (.nextWeek, F.day(19, 9))]),
+            (F.day(15, 12), [(.laterToday, F.day(15, 15)), (.tomorrow, F.day(16, 9)), (.nextWeek, F.day(19, 9))]),
+            (F.day(15, 16, 59), [(.laterToday, F.day(15, 20)), (.tomorrow, F.day(16, 9)), (.nextWeek, F.day(19, 9))]),
+            // This Evening is Later Today's time: offered once, as Later Today.
+            (F.day(15, 17), [(.laterToday, F.day(15, 20)), (.tomorrow, F.day(16, 9)), (.nextWeek, F.day(19, 9))]),
+            (F.day(15, 18, 59), [(.thisEvening, F.day(15, 20)), (.tomorrow, F.day(16, 9)), (.nextWeek, F.day(19, 9))]),
+            (F.day(15, 19), [(.tomorrow, F.day(16, 9)), (.nextWeek, F.day(19, 9))]),
+            (F.day(15, 20), [(.tomorrow, F.day(16, 9)), (.nextWeek, F.day(19, 9))]),
+            (F.day(15, 23, 30), [(.tomorrow, F.day(16, 9)), (.nextWeek, F.day(19, 9))]),
+        ]
+        for (now, want) in cases {
+            let got = presets(now)
+            #expect(got.map(\.kind) == want.map(\.0), "\(now)")
+            #expect(got.map(\.date) == want.map(\.1), "\(now)")
+        }
+        #expect(presets(F.day(15, 18)).first { $0.kind == .thisEvening }?.title == "This Evening")
+        #expect(presets(F.day(15, 1)).first { $0.kind == .thisMorning }?.title == "This Morning")
     }
 
     @Test func nextWeekIsTheComingMonday() {
@@ -85,13 +115,20 @@ private typealias F = BoardFixture
         // Next Week Monday 09:00, both in winter time.
         var p = Board.remindPresets(now: at(10, 24, 12), calendar: cal)
         #expect(p.map(\.date) == [at(10, 24, 15), at(10, 25, 9), at(10, 26, 9)])
-        #expect(p.map(\.when) == ["Sat 15:00", "Sun 09:00", "Mon 09:00"])
-        // On the night of the change: Later Today counts real hours.
+        #expect(p.map(\.when) == ["Sat at 15:00", "Sun at 09:00", "Mon at 09:00"])
+        // On the night of the change, before dawn: only This Morning.
         p = Board.remindPresets(now: at(10, 25, 1, 30), calendar: cal)
-        #expect(p.first?.kind == .laterToday && p.first?.date == at(10, 25, 4))
+        #expect(p.count == 2 && p.first?.kind == .thisMorning && p.first?.date == at(10, 25, 9))
+        // Later Today counts real hours once it is dawn.
+        p = Board.remindPresets(now: at(10, 25, 5, 30), calendar: cal)
+        #expect(p.first?.kind == .laterToday && p.first?.date == at(10, 25, 9))
         // Saturday before the spring change.
-        p = Board.remindPresets(now: at(3, 28, 20), calendar: cal)
-        #expect(p.map(\.date) == [at(3, 28, 23), at(3, 29, 9), at(3, 30, 9)])
-        #expect(p.map(\.when) == ["Sat 23:00", "Sun 09:00", "Mon 09:00"])
+        p = Board.remindPresets(now: at(3, 28, 16), calendar: cal)
+        #expect(p.map(\.date) == [at(3, 28, 19), at(3, 29, 9), at(3, 30, 9)])
+        #expect(p.map(\.when) == ["Sat at 19:00", "Sun at 09:00", "Mon at 09:00"])
+        // The night of the spring change, before 05:00: This Morning is
+        // 09:00 summer time the same day.
+        p = Board.remindPresets(now: at(3, 29, 1, 30), calendar: cal)
+        #expect(p.count == 2 && p[0].kind == .thisMorning && p[0].date == at(3, 29, 9))
     }
 }

@@ -83,9 +83,11 @@ public sealed class SettingsStore : IDisposable
         new(SettingsKey.AssistantCodexPath, "assistant-codex-path", "s", ""),
         new(SettingsKey.AssistantChatGptModel, "assistant-chatgpt-model", "s", ""),
         new(SettingsKey.AssistantChatGptConsentVersion, "assistant-chatgpt-consent-version", "i", 0, minimum: 0, maximum: int.MaxValue),
-        // Schema metadata already present in GTK/macOS; the Windows Board
-        // widgets remain separate tracked work (docs/chatgpt-integration.md).
-        new(SettingsKey.BoardDefaultStyle, "board-default-style", "s", "list", choices: Nicks<BoardStyle>.All),
+        new(SettingsKey.BoardDefaultStyle, "board-default-style", "s", "last", choices: Nicks<Board.DefaultStyle>.All),
+        new(SettingsKey.BoardLastStyle, "board-last-style", "s", "list", choices: Nicks<BoardStyle>.All),
+        new(SettingsKey.BoardStartMode, "board-start-mode", "s", "mail", choices: Nicks<Board.StartChoice>.All),
+        new(SettingsKey.BoardLastMode, "board-last-mode", "s", "mail"),
+        new(SettingsKey.BoardAccountFilter, "board-account-filter", "s", ""),
         new(SettingsKey.BoardTriageConsent, "board-triage-consent", "b", false),
         new(SettingsKey.BoardTriageModel, "board-triage-model", "s", "sonnet", choices: Nicks<AssistantModel>.All),
         new(SettingsKey.BoardChatGptModel, "board-triage-chatgpt-model", "s", ""),
@@ -389,13 +391,57 @@ public sealed class SettingsStore : IDisposable
     }
 
     /// <summary>
-    /// The style the board opens in the first time it shows after launch
-    /// (<see cref="Board.StyleOnShow"/>); an unknown nick reads as the List.
+    /// Board View: the style the board shows in until the user picks one in
+    /// a run, or the one used last (<see cref="Board.StyleOnShow"/>); an
+    /// unknown nick reads as Last Used, the default.
     /// </summary>
-    public BoardStyle BoardDefaultStyle
+    public Board.DefaultStyle BoardDefaultStyle
     {
-        get => GetEnum<BoardStyle>(SettingsKey.BoardDefaultStyle);
+        get => GetEnum<Board.DefaultStyle>(SettingsKey.BoardDefaultStyle);
         set => SetEnum(SettingsKey.BoardDefaultStyle, value);
+    }
+
+    /// <summary>
+    /// The style the board was shown in last, written on every change of the
+    /// style; read for Last Used. An unknown nick reads as the List.
+    /// </summary>
+    public BoardStyle BoardLastStyle
+    {
+        get => GetEnum<BoardStyle>(SettingsKey.BoardLastStyle);
+        set => SetEnum(SettingsKey.BoardLastStyle, value);
+    }
+
+    /// <summary>
+    /// Open at Launch: what the main window shows at launch
+    /// (<see cref="Board.StartMode"/>); an unknown nick reads as Mail.
+    /// </summary>
+    public Board.StartChoice BoardStartMode
+    {
+        get => GetEnum<Board.StartChoice>(SettingsKey.BoardStartMode);
+        set => SetEnum(SettingsKey.BoardStartMode, value);
+    }
+
+    /// <summary>
+    /// The mode the main window showed last ("mail" or "board",
+    /// <see cref="BoardModeExtensions"/>), written on every switch; read
+    /// for <see cref="Board.StartChoice.Last"/>.
+    /// </summary>
+    public string BoardLastMode
+    {
+        get => GetString(SettingsKey.BoardLastMode);
+        set => SetString(SettingsKey.BoardLastMode, value);
+    }
+
+    /// <summary>
+    /// The account the board is filtered to (the daemon's account id),
+    /// written on every change of the filter; empty is every account.
+    /// Applied when the board first shows while that account still exists
+    /// (<see cref="Board.FilterOnShow"/>).
+    /// </summary>
+    public string BoardAccountFilter
+    {
+        get => GetString(SettingsKey.BoardAccountFilter);
+        set => SetString(SettingsKey.BoardAccountFilter, value);
     }
 
     // Sidebar state

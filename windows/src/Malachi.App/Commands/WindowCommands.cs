@@ -37,6 +37,8 @@ public sealed class WindowCommands
             [ShortcutCommand.Quit] = Quit,
             [ShortcutCommand.CheckForNewMail] = CheckForNewMail,
             [ShortcutCommand.Search] = Search,
+            [ShortcutCommand.ShowMail] = ShowMail,
+            [ShortcutCommand.ShowBoard] = ShowBoard,
             [ShortcutCommand.MainMenu] = MainMenu,
             [ShortcutCommand.Reply] = Reply,
             [ShortcutCommand.ReplyAll] = ReplyAll,
@@ -91,10 +93,10 @@ public sealed class WindowCommands
     /// <summary>win.search (Ctrl+F, Ctrl+E): the search box.</summary>
     public AppCommand Search { get; } = new(nameof(Search));
 
-    /// <summary>The main window's Mail mode (the title bar's switch, the menus' Mail; no key).</summary>
+    /// <summary>The main window's Mail mode (the title bar's switch, the menus' Mail, Ctrl+1).</summary>
     public AppCommand ShowMail { get; } = new(nameof(ShowMail));
 
-    /// <summary>The main window's Board mode (the title bar's switch, the menus' Board; no key).</summary>
+    /// <summary>The main window's Board mode (the title bar's switch, the menus' Board, Ctrl+2).</summary>
     public AppCommand ShowBoard { get; } = new(nameof(ShowBoard));
 
     /// <summary>The main window's primary menu (F10), while its button is shown.</summary>
@@ -183,7 +185,7 @@ public sealed class WindowCommands
     /// <summary>Every command, for re-validating them all (a hook was wired).</summary>
     public IEnumerable<AppCommand> All =>
     [
-        .. byShortcut.Values, AddAccount, AddJiraAccount, About, MarkRead, LoadImages, TrustSender, ChangeStatus, ShowMail, ShowBoard,
+        .. byShortcut.Values, AddAccount, AddJiraAccount, About, MarkRead, LoadImages, TrustSender, ChangeStatus
     ];
 
     /// <summary>Re-validates every command.</summary>

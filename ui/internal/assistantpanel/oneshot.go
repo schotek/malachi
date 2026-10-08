@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/schotek/malachi/ui/internal/assistant"
+	"github.com/schotek/malachi/ui/internal/board"
 )
 
 // The one-shot requests of the In App target (ui/internal/assistant
@@ -50,6 +51,9 @@ type Failure struct {
 // window's popover): the panel's texts, and for a missing sign-in where to
 // sign in (a request has no Sign In… of its own).
 func (f Failure) Text(tr assistant.Translator) string {
+	if t, ok := f.providerText(tr); ok {
+		return t
+	}
 	switch f.Kind {
 	case FailureNotFound:
 		return assistant.PanelTexts(tr).NotFound
@@ -57,13 +61,47 @@ func (f Failure) Text(tr assistant.Translator) string {
 		return assistant.SignInTexts(tr).Hint
 	case FailureToolsMissing:
 		return assistant.PanelTexts(tr).ToolsMissing
+	case FailureLimit:
+		return assistant.StoppedText(tr, limitText(tr))
 	}
 	return assistant.StoppedText(tr, f.Reason)
 }
 
+// providerText is what a failure ProviderFailure made of a ChatGPT
+// provider's reason says, in that provider's words: Codex not found, or
+// the ChatGPT connection to make again. False for any other failure (and
+// for Claude Code's, whose reasons are never these codes).
+func (f Failure) providerText(tr assistant.Translator) (string, bool) {
+	words := assistant.ChatGPTText(tr)
+	switch {
+	case f.Kind == FailureNotFound && f.Reason == "codex_not_found":
+		return words.NativeMissingCodex, true
+	case f.Kind == FailureNotSignedIn && strings.HasPrefix(f.Reason, "chatgpt_"):
+		return words.Reconnect, true
+	}
+	return "", false
+}
+
+// limitText is the plan's usage limit inside a sentence ("The assistant
+// stopped: %s"), the board's words for it (board.FailLimit), never the
+// provider's code.
+func limitText(tr assistant.Translator) string {
+	return board.TriageFailureText(board.FailLimit, boardWords{tr})
+}
+
+// boardWords is a panel translator where the board's texts want one; the
+// board's limit text has no context, so C never runs for it and falls
+// back to the plain msgid.
+type boardWords struct{ assistant.Translator }
+
+func (b boardWords) C(_, msgid string) string { return b.T(msgid) }
+
 // ReasonText is the reason inside another sentence ("The search could not
 // be converted: %s").
 func (f Failure) ReasonText(tr assistant.Translator) string {
+	if t, ok := f.providerText(tr); ok {
+		return t
+	}
 	switch f.Kind {
 	case FailureNotFound:
 		return assistant.PanelTexts(tr).NotFound
@@ -71,6 +109,8 @@ func (f Failure) ReasonText(tr assistant.Translator) string {
 		return assistant.SignInTexts(tr).Hint
 	case FailureToolsMissing:
 		return assistant.PanelTexts(tr).ToolsMissing
+	case FailureLimit:
+		return limitText(tr)
 	}
 	return f.Reason
 }

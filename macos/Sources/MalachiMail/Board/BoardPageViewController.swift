@@ -60,6 +60,8 @@ final class BoardPageViewController: NSViewController {
     /// Whether the panel is in (or sliding in).
     private var panelShown = false
     private weak var toasts: ToastPresenter?
+    /// What Archive did, with Undo; above the window's toasts.
+    private let undoToast = BoardUndoToast()
 
     /// The case actions, shared by the styles, their menus and the detail.
     let actions: BoardActions
@@ -87,6 +89,11 @@ final class BoardPageViewController: NSViewController {
         // A refused write, what Archive did, a placeholder.
         controller.onToast = { [weak self] text in
             self?.showToast(text)
+        }
+        // Archive's toast offers Undo (the messages back to their folders,
+        // the case back on the board).
+        controller.onArchived = { [weak self] outcome in
+            self?.showArchived(outcome)
         }
         actions.onToast = { [weak self] text in
             self?.showToast(text)
@@ -211,7 +218,20 @@ final class BoardPageViewController: NSViewController {
         ])
         if let presenter = overlayView as? ToastPresenter {
             toasts = presenter
+            // Any toast, from the page or from elsewhere (the triage, the
+            // application), takes the Undo capsule away: never both.
+            presenter.onShow = { [weak self] in
+                self?.undoToast.dismiss()
+            }
         }
+        undoToast.removeFromSuperview()
+        view.addSubview(undoToast, positioned: .above, relativeTo: nil)
+        NSLayoutConstraint.activate([
+            undoToast.topAnchor.constraint(equalTo: view.topAnchor),
+            undoToast.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            undoToast.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            undoToast.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
     }
 
     /// The List's split view, once the List was made: the List's toolbar
@@ -233,9 +253,30 @@ final class BoardPageViewController: NSViewController {
         return list
     }
 
-    /// Shows a toast over the page (the toolbar's Triage too).
+    /// Shows a toast over the page (the toolbar's Triage too); Archive's
+    /// Undo gives way to it.
     func showToast(_ text: String) {
+        undoToast.dismiss()
         toasts?.show(text)
+    }
+
+    /// What Archive did, with Undo while the page is in a window and the
+    /// archive can be taken back (else the text alone: no `undoLabel` when
+    /// the daemon moved nothing it can move back).
+    private func showArchived(_ o: Board.ArchiveOutcome) {
+        guard let undoLabel = o.undoLabel, isViewLoaded, view.window != nil, undoToast.superview === view else {
+            showToast(o.text)
+            return
+        }
+        toasts?.dismissCurrent()
+        undoToast.show(o.text, undo: undoLabel) { [weak self] in
+            self?.controller.undoArchive(o)
+        }
+    }
+
+    /// Where the key R opens Remind…: in the panel while it shows.
+    var remindAnchor: NSView? {
+        panelShown ? detail.remindAnchor : nil
     }
 
     /// Gives the keyboard to the board: the current style's table, or the
@@ -376,7 +417,7 @@ final class BoardPageViewController: NSViewController {
     /// slides out for the style's table.
     private func updatePanel(animated: Bool) {
         let shows = controller.view.showsPanel && !controller.view.isEmpty
-        panel.setAccessibilityLabel(controller.view.detail?.title ?? "")
+        panel.setAccessibilityLabel(controller.view.detail?.spokenTitle ?? "")
         guard shows != panelShown, let trailing = panelTrailing else { return }
         panelShown = shows
         let animate = animated && view.window != nil && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -424,18 +465,30 @@ final class BoardPageViewController: NSViewController {
         current?.focusContent()
     }
 
-    /// Escape closes the panel (its inline reply is finished on the way);
-    /// otherwise it goes on up the chain. In the inline reply editor Escape
-    /// first closes its recipient suggestions or link popover.
+    /// Escape in two steps (`Board.escapeFor`): an open popup of the inline
+    /// reply editor (its recipient suggestions, the link popover) closes
+    /// first, by itself; the keyboard in that editor or its recipient
+    /// fields goes to the detail's state pill, closing nothing; anywhere
+    /// else on the page the panel closes (its inline reply moves on to
+    /// the List's pane or is saved and finished). Without a panel Escape
+    /// goes on up the chain.
     override func cancelOperation(_ sender: Any?) {
-        if let pane = replyHost.keyboardInLivePane(), !pane.popupsHidden {
+        let pane = replyHost.keyboardInLivePane()
+        switch Board.escapeFor(
+            focusInEditorOrRecipients: pane != nil, popupOpen: pane.map { !$0.popupsHidden } ?? false,
+            panelOpen: panelShown)
+        {
+        case .closePopup:
             return
-        }
-        guard panelShown else {
+        case .focusStatePill:
+            if let pane {
+                replyHost.focusStatePill(holding: pane)
+            }
+        case .closePanel:
+            closePanel()
+        case .nothing:
             nextResponder?.tryToPerform(#selector(cancelOperation(_:)), with: sender)
-            return
         }
-        closePanel()
     }
 
     /// Whether the keyboard is in `container` (a field's editor counts as

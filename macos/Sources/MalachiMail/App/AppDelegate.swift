@@ -155,7 +155,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if await !BoardReplyEditorHost.finishAll(wait: BoardReplyController.endWait) {
                 state.showMainWindow()
                 let quit = await state.alerts.confirmDestructive(
-                    on: mainWindow?.window, heading: Board.Text.quitUnsavedHeading,
+                    on: mainWindow?.window, heading: Board.Text.quitHeading(
+                        unsaved: BoardReplyEditorHost.anyUnsaved, sending: BoardReplyEditorHost.anySending),
                     body: Board.Text.quitUnsavedBody, confirmLabel: Board.Text.quitAnyway)
                 guard quit else {
                     BoardReplyEditorHost.resumeAll()

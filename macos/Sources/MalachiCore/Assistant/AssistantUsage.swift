@@ -42,11 +42,37 @@ extension Assistant {
     /// messages' starts. A result whose counters are all 0 while the
     /// messages counted some (Claude Code's crash result may be zeroed)
     /// gives way to that sum. A new tally is empty.
+    ///
+    /// `lowerBound` says whether `total` is less than the run used: true
+    /// unless the result's usage was taken, or the run's final report came
+    /// (`finished()`) and every message's usage counted was final
+    /// (`Event.usageFinal`, a provider that reports each message's usage
+    /// at its end).
     public struct UsageTally: Sendable, Equatable {
         private var result: Usage?
         private var messages: [String: Usage] = [:]
+        /// The messages whose usage counted was not final.
+        private var partial: Set<String> = []
+        /// The run's final report came.
+        private var hasFinished = false
 
         public init() {}
+
+        /// Says the run's final report came (the request answered): a
+        /// provider without a usage in its result then has its whole usage
+        /// in its final messages.
+        public mutating func finished() {
+            hasFinished = true
+        }
+
+        /// Whether `total` is a lower bound of what the run used (see the
+        /// type's comment); false when `total` has nothing.
+        public var lowerBound: Bool {
+            if resultTaken || messages.isEmpty {
+                return false
+            }
+            return !hasFinished || !partial.isEmpty
+        }
 
         /// Counts the usage `e` carries, if any.
         public mutating func add(_ e: Event) {
@@ -57,11 +83,15 @@ extension Assistant {
             }
             guard !e.messageID.isEmpty else { return }
             messages[e.messageID] = u
+            if e.usageFinal {
+                partial.remove(e.messageID)
+            } else {
+                partial.insert(e.messageID)
+            }
         }
 
-        /// The run's usage, each counter at most `maxUsageTokens`; nil when
-        /// nothing reported any.
-        public var total: Usage? {
+        /// The usage of the messages counted.
+        private var sum: Usage {
             var sum = Usage()
             for u in messages.values {
                 sum = Usage(
@@ -70,7 +100,19 @@ extension Assistant {
                     cacheCreationInputTokens: addTokens(sum.cacheCreationInputTokens, u.cacheCreationInputTokens),
                     cacheReadInputTokens: addTokens(sum.cacheReadInputTokens, u.cacheReadInputTokens))
             }
-            if let r = result, !r.isZero || sum.isZero {
+            return sum
+        }
+
+        /// Whether `total` is the result's usage.
+        private var resultTaken: Bool {
+            guard let r = result else { return false }
+            return !r.isZero || sum.isZero
+        }
+
+        /// The run's usage, each counter at most `maxUsageTokens`; nil when
+        /// nothing reported any.
+        public var total: Usage? {
+            if resultTaken, let r = result {
                 return Usage(
                     inputTokens: addTokens(0, r.inputTokens), outputTokens: addTokens(0, r.outputTokens),
                     cacheCreationInputTokens: addTokens(0, r.cacheCreationInputTokens),

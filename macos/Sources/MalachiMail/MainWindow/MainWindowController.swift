@@ -75,12 +75,25 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     /// cases (`InMemoryBoardSource.dummy`) instead of the daemon's board,
     /// to look at the three styles without mail; read once.
     static let boardSamples = ProcessInfo.processInfo.environment["MALACHI_BOARD_SAMPLES"] == "1"
-    /// The board (MalachiCore `BoardController`), made on first use.
-    /// Its first show takes the style of Settings → General → Board.
-    lazy var board = BoardController(
-        source: boardSource ?? InMemoryBoardSource.dummy(samples: true),
-        defaultStyle: { [settings = state.settings] in settings.boardDefaultStyle }
-    )
+    /// The board (MalachiCore `BoardController`), made on first use, over
+    /// the source behind `boardExtras.gate` (no conversation is fetched
+    /// while the window shows Mail). Its shows take Board View and the last
+    /// style (Settings → General → Board), its first the saved account
+    /// filter (MainWindowController+Board writes both back).
+    lazy var board: BoardController = {
+        let gate = BoardMessagesGate(boardSource ?? InMemoryBoardSource.dummy(samples: true))
+        gate.isOpen = mode == .board
+        boardExtras.gate = gate
+        let settings = state.settings
+        return BoardController(
+            source: gate,
+            defaultStyle: { settings.boardDefaultStyle },
+            lastStyle: { settings.boardLastStyle },
+            savedAccount: { settings.boardAccountFilter })
+    }()
+    /// What the Board mode keeps beside the controller
+    /// (MainWindowController+Mode, +Board).
+    let boardExtras = BoardWindowExtras()
     /// What the user can do with a case (the toolbar, the panel, the
     /// menus); Reply, Open Draft and Show in Mail go to `boardMail`.
     lazy var boardActions: BoardActions = makeBoardActions()
@@ -114,8 +127,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     /// changes (MainWindowController+Board).
     lazy var boardPage: BoardPageViewController = {
         let page = BoardPageViewController(actions: boardActions)
-        page.onChange = { [weak self] _ in
-            self?.boardDidChange()
+        page.onChange = { [weak self] changes in
+            self?.boardDidChange(changes)
         }
         return page
     }()
@@ -179,6 +192,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         mailToolbar = toolbarDelegate.makeToolbar()
         super.init(window: w)
         w.delegate = self
+        modeKeyMonitor = installModeKeys()
         w.toolbar = mailToolbar
         // The GTK sizes are window sizes, header bars included: the frame
         // is set once the toolbar is part of it. With Auto Layout content
@@ -453,6 +467,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     /// The window became key: the user looks at the selected folder, whose
     /// desktop notifications the app withdraws (window.go, `is-active`).
     var onBecomeKey: (@MainActor () -> Void)?
+    /// ⌘1 and ⌘2 by key code (`installModeKeys`).
+    private var modeKeyMonitor: Any?
 
     /// The toolbar search field's text (after the typing pause; "" when
     /// cleared) and Return in it; the app hands both to the list.
@@ -608,6 +624,10 @@ extension MainWindowController: NSUserInterfaceValidations {
             if Action.bareKeyActions.contains(action), isTyping {
                 return false
             }
+            // The board's keys (⌘1, ⌘2, E, D, R) and Show the Board.
+            if !validateBoardMenuItem(menuItem, action, typing: isTyping) {
+                return false
+            }
         }
         return allows(action, f) ?? true
     }
@@ -627,6 +647,10 @@ extension MainWindowController: NSToolbarItemValidation {
             break
         }
         ActionPresentation.present(item, f)
+        // The Board segment while Show the Board is off.
+        if action == Action.setWindowMode, item.tag == Board.Mode.board.rawValue, !boardEnabled {
+            return false
+        }
         return allows(action, f) ?? true
     }
 }

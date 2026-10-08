@@ -18,6 +18,25 @@ func SuggestReply(tr Translator) string {
 	return tr.T("✦ Suggest Reply")
 }
 
+// SuggestFollowUp is the button on a case waiting for someone else
+// (IsFollowUp): the assistant writes a follow-up to the user's own last
+// message.
+func SuggestFollowUp(tr Translator) string {
+	// TRANSLATORS: a button in a conversation's detail on the board, for a
+	// conversation where the user waits for an answer: the assistant writes
+	// a polite follow-up to the user's own last message.
+	return tr.T("✦ Suggest Follow-up")
+}
+
+// SuggestReplyTitle is the button: SuggestFollowUp for a follow-up, else
+// SuggestReply.
+func SuggestReplyTitle(followUp bool, tr Translator) string {
+	if followUp {
+		return SuggestFollowUp(tr)
+	}
+	return SuggestReply(tr)
+}
+
 // SuggestReplyPlaceholder is the placeholder of the instruction field.
 func SuggestReplyPlaceholder(tr Translator) string {
 	return tr.T("What should the reply say? (optional)")
@@ -46,12 +65,14 @@ const (
 	ReplyStopped
 	ReplyBackend
 	ReplyNoDraft
+	// ReplyLimit: the assistant's usage limit was reached.
+	ReplyLimit
 )
 
 // SuggestReplyFailures lists every failure.
 var SuggestReplyFailures = []SuggestReplyFailure{
 	ReplyNotFound, ReplyNotSignedIn, ReplyToolsMissing, ReplyTimeout, ReplyCancelled, ReplyStopped,
-	ReplyBackend, ReplyNoDraft,
+	ReplyBackend, ReplyNoDraft, ReplyLimit,
 }
 
 // SuggestReplyFailed is how a request failed: "The suggested reply failed:
@@ -82,6 +103,8 @@ func SuggestReplyFailureText(f SuggestReplyFailure, tr Translator) string {
 		// TRANSLATORS: why a suggested reply failed: the assistant ended
 		// without creating the draft.
 		return tr.T("the assistant wrote no reply")
+	case ReplyLimit:
+		return TriageFailureText(FailLimit, tr)
 	}
 	return ""
 }
@@ -108,6 +131,23 @@ func ReplyNotSent(title string, tr Translator) string {
 // QuitUnsavedHeading heads the question before quitting while a reply on
 // the board could not be saved or sent.
 func QuitUnsavedHeading(tr Translator) string { return tr.T("Quit without saving a reply?") }
+
+// QuitUnsentHeading heads the question when nothing typed is unsaved but a
+// reply was sent and the send has not answered yet.
+func QuitUnsentHeading(tr Translator) string {
+	// TRANSLATORS: Heading of the question before quitting while a reply
+	// the user sent is still being sent.
+	return tr.T("Quit with a reply still sending?")
+}
+
+// QuitHeading picks the question's heading: the "still sending" one when
+// nothing is unsaved but a send is unanswered, else QuitUnsavedHeading.
+func QuitHeading(unsaved, sending bool, tr Translator) string {
+	if sending && !unsaved {
+		return QuitUnsentHeading(tr)
+	}
+	return QuitUnsavedHeading(tr)
+}
 
 // QuitUnsavedBody explains QuitUnsavedHeading.
 func QuitUnsavedBody(tr Translator) string {

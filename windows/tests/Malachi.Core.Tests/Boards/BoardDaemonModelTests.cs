@@ -41,7 +41,7 @@ public sealed class BoardDaemonModelTests
             Assert.True(t.Length > 0 && t != BText.ReasonUnknown, code.Value);
             Assert.True(seen.Add(t), $"{code.Value} repeats another code's text");
         }
-        Assert.Equal(16, KnownReasons.Count);
+        Assert.Equal(17, KnownReasons.Count);
     }
 
     [Fact]
@@ -110,38 +110,45 @@ public sealed class BoardDaemonModelTests
     ];
 
     /// <summary>
-    /// Snoozed cases are off the board and listed under Done, soonest back
-    /// first, before the done ones.
+    /// Snoozed cases are off the board and listed under Snoozed, soonest back
+    /// first; Done lists and counts only the done ones.
     /// </summary>
     [Fact]
-    public void SnoozedAreUnderDone()
+    public void SnoozedHaveTheirOwnFilter()
     {
         var all = F.View(VisibilityCases());
         Assert.Equal(["l1"], all.Sections.SelectMany(s => F.Ids(s.Rows)));
         Assert.Equal(["l1"], all.Columns.SelectMany(s => F.Ids(s.Rows)));
-        Assert.Equal(3, all.Nav.First(n => n.Filter == Filter.Done).Count);
+        Assert.Equal(1, all.Nav[^1].Count);
+        Assert.Equal(Filter.Done, all.Nav[^1].Filter);
+        Assert.Equal(Filter.Snoozed, all.Nav[^2].Filter);
+        Assert.Equal(2, all.Nav[^2].Count);
         Assert.Equal(1, all.Nav.First(n => n.Filter == Filter.All).Count);
         Assert.Equal(1, all.Accounts[0].Count); // live only
         var done = F.View(VisibilityCases(), configure: v => v with { Filter = Filter.Done });
-        Assert.Equal([SectionKind.Snoozed, SectionKind.Done], done.Sections.Select(s => s.Kind));
-        Assert.Equal(["Snoozed", "Done"], done.Sections.Select(s => s.Title));
-        Assert.Equal(["s2", "s1"], F.Ids(done.Sections[0].Rows));
-        Assert.Equal("Tomorrow 09:00", done.Sections[0].Rows[0].Remind);
-        Assert.Equal("", done.Sections[1].Rows[0].Remind);
-        Assert.Equal(F.Id("s2"), done.Selection);
-        var d = Assert.IsType<Detail>(done.Detail);
-        Assert.True(d.IsSnoozed && !d.IsDone && d.RemindText == "Back on the board Tomorrow 09:00");
+        Assert.Equal([SectionKind.Done], done.Sections.Select(s => s.Kind));
+        Assert.Equal(["d1"], F.Ids(done.Sections[0].Rows));
+        Assert.Equal("", done.Sections[0].Rows[0].Remind);
+        var snoozed = F.View(VisibilityCases(), configure: v => v with { Filter = Filter.Snoozed });
+        Assert.Equal([SectionKind.Snoozed], snoozed.Sections.Select(s => s.Kind));
+        Assert.Equal("Snoozed", snoozed.Sections[0].Title);
+        Assert.Equal(["s2", "s1"], F.Ids(snoozed.Sections[0].Rows));
+        Assert.Equal("Tomorrow at 09:00", snoozed.Sections[0].Rows[0].Remind);
+        Assert.Equal(F.Id("s2"), snoozed.Selection);
+        var d = Assert.IsType<Detail>(snoozed.Detail);
+        Assert.True(d.IsSnoozed && !d.IsDone && d.RemindText == "Back on the board: Tomorrow at 09:00");
         // Only snoozed: not empty.
         Assert.False(F.View([F.Mk("s1", visibility: Visibility.Snoozed(Back))]).IsEmpty);
     }
 
     [Fact]
-    public void SelectionAfterDoneWalksTheSnoozedToo()
+    public void SelectionAfterDoneWalksTheSnoozed()
     {
-        var v = new ViewState { Filter = Filter.Done };
+        var v = new ViewState { Filter = Filter.Snoozed };
         var s = new Snapshot { Accounts = F.Accounts, Cases = VisibilityCases() };
-        Assert.Equal(F.Id("d1"), SelectionAfterDone(F.Id("s1"), s, v));
-        Assert.Equal(F.Id("s1"), SelectionAfterDone(F.Id("d1"), s, v));
+        Assert.Equal(F.Id("s1"), SelectionAfterDone(F.Id("s2"), s, v));
+        Assert.Equal(F.Id("s2"), SelectionAfterDone(F.Id("s1"), s, v));
+        Assert.Null(SelectionAfterDone(F.Id("d1"), s, v)); // not listed
     }
 
     [Fact]

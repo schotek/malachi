@@ -153,6 +153,102 @@ final class TriageDaemon {
 
 @MainActor
 @Suite(.serialized) struct BoardPreferencesControllerTests {
+    /// Show the Board, the windows and the triage accounts go through the
+    /// same write as every preference; windows the daemon would refuse
+    /// never leave (Go TestPreferencesFieldSetters).
+    @Test func fieldSetters() async throws {
+        let d = try await TriageDaemon()
+        let c = BoardPreferencesController(client: d.client)
+        #expect(await c.loadNow())
+        func wait(_ set: (@escaping @MainActor (Bool) -> Void) -> Void) async throws -> Bool {
+            var got: [Bool] = []
+            set { got.append($0) }
+            try await triageWait { !got.isEmpty }
+            return got[0]
+        }
+        #expect(try await wait { c.setEnabled(false, completion: $0) } && c.preferences?.enabled == false)
+        let w = BoardWindows(hot: 7, you: 365, them: 1, info: 2)
+        let windowsStored = try await wait { done in
+            let taken = c.setWindows(w, completion: done)
+            #expect(taken)
+        }
+        #expect(windowsStored && c.preferences?.windows == w)
+        let sets = await d.script.sets.count
+        for bad in [
+            BoardWindows(hot: 0, you: 1, them: 1, info: 1),
+            BoardWindows(hot: 1, you: API.Limits.maxBoardWindowDays + 1, them: 1, info: 1),
+            BoardWindows(hot: 1, you: 1, them: -3, info: 1), BoardWindows(hot: 1, you: 1, them: 1, info: 0),
+        ] {
+            #expect(!BoardPreferencesController.validWindows(bad))
+            let taken = c.setWindows(bad, completion: { _ in Issue.record("completion called") })
+            #expect(!taken)
+        }
+        #expect(BoardPreferencesController.validWindows(BoardPreferencesController.defaultWindows))
+        #expect(BoardPreferencesController.defaultWindows == BoardWindows())
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(await d.script.sets.count == sets)
+        #expect(try await wait { c.setTriageAccounts(["b", "a", "b", ""], completion: $0) })
+        #expect(c.preferences?.triageAccounts == ["b", "a"])
+        #expect(try await wait { c.setTriageAccounts([], completion: $0) } && c.preferences?.triageAccounts == [])
+        await d.stop()
+    }
+
+    /// Go TestTriageAccountsSubtitle: "all accounts" only for an empty
+    /// list; a list of accounts that are gone or off triages nothing.
+    @Test func triageAccountsSubtitle() {
+        func acct(_ id: String, _ kind: AccountKind?, _ enabled: Bool) -> Account {
+            Account(
+                id: AccountID(rawValue: id), config: AccountConfig(name: id, email: id + "@example.org", kind: kind),
+                enabled: enabled, state: SyncState(accountId: AccountID(rawValue: id), status: .idle))
+        }
+        let accounts = [acct("m1", nil, true), acct("j", .jira, true), acct("off", nil, false)]
+        typealias C = BoardPreferencesController.TriageAccountsCoverage
+        let cases: [(String, [AccountID], [Account], C)] = [
+            ("nothing listed", [], accounts, .all),
+            ("nothing listed, no accounts", [], [], .all),
+            ("one listed", ["m1"], accounts, .some),
+            ("issue tracker listed", ["j"], accounts, .some),
+            ("only removed accounts", ["gone", "gone2"], accounts, .none),
+            ("only a disabled account", ["off"], accounts, .none),
+            ("removed and present", ["gone", "m1"], accounts, .some),
+            ("listed, no accounts at all", ["m1"], [], .none),
+        ]
+        for (name, listed, accts, want) in cases {
+            #expect(BoardPreferencesController.triageAccountsSubtitle(listed, accts) == want, "\(name)")
+        }
+        #expect(Board.Text.triageSettingsAccountsNone == "No account is selected, so the triage reads nothing.")
+    }
+
+    /// Go TestTriageAccountsChecklist.
+    @Test func triageAccountsChecklist() {
+        func acct(_ id: String, _ kind: AccountKind?, _ enabled: Bool) -> Account {
+            Account(
+                id: AccountID(rawValue: id), config: AccountConfig(name: id, email: id + "@example.org", kind: kind),
+                enabled: enabled, state: SyncState(accountId: AccountID(rawValue: id), status: .idle))
+        }
+        let accounts = [acct("m1", nil, true), acct("m2", .graph, true), acct("j", .jira, true), acct("off", nil, false)]
+        // Nothing listed: every enabled mail account, no issue tracker,
+        // nothing disabled.
+        for a in accounts {
+            #expect(BoardPreferencesController.triageAccountChecked([], a) == (a.id == "m1" || a.id == "m2"), "\(a.id)")
+        }
+        #expect(!BoardPreferencesController.triageAccountChecked(["off"], accounts[3]))
+        let cases: [(String, [AccountID], AccountID, Bool, [AccountID]?)] = [
+            ("uncheck one of all", [], "m2", false, ["m1"]),
+            ("check the tracker", [], "j", true, ["m1", "m2", "j"]),
+            ("back to all is empty", ["m1"], "m2", true, []),
+            ("the last one stays", ["m1"], "m1", false, nil),
+            ("unknown account", [], "x", true, nil),
+            ("a disabled account cannot be toggled", ["m1"], "off", true, nil),
+            ("a disabled listed account stays listed", ["off", "m1"], "m2", true, ["m1", "m2", "off"]),
+            ("only the disabled one would be left", ["off", "m1"], "m1", false, nil),
+        ]
+        for (name, listed, id, on, want) in cases {
+            #expect(
+                BoardPreferencesController.toggleTriageAccount(listed, accounts: accounts, id: id, on: on) == want, "\(name)")
+        }
+    }
+
     @Test func loads() async throws {
         let d = try await TriageDaemon()
         await d.script.set(prefs: BoardPreferences(assistant: true, autoTriage: true, autoTriageMinutes: 60))

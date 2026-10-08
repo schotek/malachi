@@ -167,45 +167,60 @@ func TestChangesBits(t *testing.T) {
 
 func TestControllerSetStyle(t *testing.T) {
 	c, _, p := defaultController()
+	c.Select("c1") // picked by the user: it stays, now in the panel
+	p.log = nil
 	c.SetStyle(StyleColumns)
-	check(t, c.State().Style == StyleColumns && c.State().Selection == "" && c.View().Detail == nil, "columns")
+	check(t, c.State().Style == StyleColumns && c.State().Selection == "c1" && c.View().ShowsPanel, "columns")
 	eq(t, "log", p.log, []Changes{ChangeStyle | ChangeSelection})
 	c.SetStyle(StyleColumns)
 	eq(t, "the same style: silent", len(p.log), 1)
 	c.SetStyle(StyleToday)
 	eq(t, "today", p.log, []Changes{ChangeStyle | ChangeSelection, ChangeStyle})
-	c.SetStyle(StyleList) // entering the list with the detail beside it selects the first row
+	c.SetStyle(StyleList) // back beside the list
 	check(t, c.State().Selection == "c1" && !c.View().ShowsPanel, "list")
 	eq(t, "last", p.log[len(p.log)-1], ChangeStyle|ChangeSelection)
 }
 
-func TestLeavingTheListClearsTheSelection(t *testing.T) {
+func TestLeavingTheListKeepsTheSelection(t *testing.T) {
 	for _, style := range []Style{StyleColumns, StyleToday} {
 		c, _, p := defaultController()
 		c.Select("c3")
 		p.log = nil
 		c.SetStyle(style)
-		eq(t, "selection", c.State().Selection, CaseID(""))
+		eq(t, "selection", c.State().Selection, CaseID("c3"))
+		check(t, c.View().ShowsPanel && c.View().Detail.ID == "c3", "the panel shows c3")
 		eq(t, "log", p.log, []Changes{ChangeStyle | ChangeSelection})
 	}
+}
+
+func TestLeavingTheDoneListDropsADoneSelection(t *testing.T) {
+	c, _, _ := defaultController()
+	c.SetFilter(doneFilter)
+	eq(t, "done", c.State().Selection, CaseID("d1"))
+	c.SetStyle(StyleColumns) // Columns show only live cases
+	eq(t, "selection", c.State().Selection, CaseID(""))
 }
 
 func TestEnteringTheListWithoutInlineDetailSelectsNothing(t *testing.T) {
 	c, _, p := defaultController()
 	c.SetInlineDetail(false)
 	c.SetStyle(StyleColumns)
+	c.Select("")
 	p.log = nil
 	c.SetStyle(StyleList)
 	eq(t, "selection", c.State().Selection, CaseID(""))
 	eq(t, "log", p.log, []Changes{ChangeStyle})
 }
 
-func TestStyleChangeResetsWhy(t *testing.T) {
+func TestStyleChangeKeepsWhyOfTheSameCase(t *testing.T) {
 	c, _, _ := defaultController()
+	c.Select("c1")
 	c.ToggleWhy()
 	check(t, c.State().RevealsWhy, "not open")
 	c.SetStyle(StyleColumns)
-	check(t, !c.State().RevealsWhy, "still open")
+	check(t, c.State().RevealsWhy, "closed though the case stayed")
+	c.Select("c2")
+	check(t, !c.State().RevealsWhy, "still open on another case")
 }
 
 // Filters.
@@ -234,6 +249,7 @@ func TestFilterWithNothingSelectsNothing(t *testing.T) {
 func TestFilterInColumnsLeavesNoSelection(t *testing.T) {
 	c, _, p := defaultController()
 	c.SetStyle(StyleColumns)
+	c.Select("")
 	p.log = nil
 	c.SetFilter(filterState(StateHot))
 	eq(t, "selection", c.State().Selection, CaseID(""))
@@ -318,6 +334,7 @@ func TestToggleWhyAndItsReset(t *testing.T) {
 func TestToggleWhyNeedsASelection(t *testing.T) {
 	c, _, p := defaultController()
 	c.SetStyle(StyleColumns)
+	c.Select("")
 	p.log = nil
 	c.ToggleWhy()
 	check(t, !c.State().RevealsWhy && len(p.log) == 0, "toggled without a selection")
@@ -327,15 +344,18 @@ func TestControllerSetInlineDetail(t *testing.T) {
 	c, _, p := defaultController()
 	c.SetInlineDetail(true)
 	check(t, len(p.log) == 0, "the same: reported")
-	c.SetInlineDetail(false) // narrow: the panel never opens by itself
-	check(t, !c.State().InlineDetail && c.State().Selection == "" && !c.View().ShowsPanel, "narrow")
+	c.Select("c1")
+	p.log = nil
+	c.SetInlineDetail(false) // narrow: the selected case moves to the panel
+	check(t, !c.State().InlineDetail && c.State().Selection == "c1" && c.View().ShowsPanel, "narrow")
 	eq(t, "log", p.log, []Changes{ChangeSelection})
-	c.Select("c2") // a deliberate selection opens the panel
+	c.Select("c2")
 	check(t, c.View().ShowsPanel, "no panel")
 	c.SetInlineDetail(true) // wide again: beside the list, the selection stays
 	check(t, c.State().Selection == "c2" && !c.View().ShowsPanel, "wide")
 	eq(t, "log 3", p.log, []Changes{ChangeSelection, ChangeSelection, ChangeSelection})
 	c.SetInlineDetail(false)
+	c.Select("")            // the panel closed
 	c.SetInlineDetail(true) // nothing selected: the first row
 	eq(t, "first row", c.State().Selection, CaseID("c1"))
 }
@@ -365,7 +385,7 @@ func TestSetStateMovesTheCase(t *testing.T) {
 	check(t, caseIn(src.Snapshot(), "c3").UserState != nil && *caseIn(src.Snapshot(), "c3").UserState == StateThem, "not moved")
 	eq(t, "kinds", sectionKinds(c.View()), []string{"hot", "you", "them", "info"})
 	eq(t, "rows", ctrlRows(c), []string{"c1", "c2", "c4", "c3", "c5"})
-	eq(t, "nav", navCounts(c.View()), []int{5, 1, 1, 2, 1, 2})
+	eq(t, "nav", navCounts(c.View()), []int{5, 1, 1, 2, 1, 0, 2})
 	eq(t, "selection", c.State().Selection, CaseID("c1"))
 	eq(t, "log", p.log, []Changes{ChangeContent})
 	c.SetState("c3", StateThem) // nothing changes
@@ -566,7 +586,7 @@ func TestAWriteStraightToTheSourceIsFollowed(t *testing.T) {
 	check(t, c.State().Selection == "c3", "selection %q", c.State().Selection)
 	eq(t, "log", p.log, []Changes{ChangeSelection | ChangeContent})
 	src.SetState("c2", optState(StateThem))
-	eq(t, "nav", navCounts(c.View()), []int{4, 0, 1, 2, 1, 3})
+	eq(t, "nav", navCounts(c.View()), []int{4, 0, 1, 2, 1, 0, 3})
 }
 
 func TestReplaceCanEmptyTheBoard(t *testing.T) {
@@ -712,6 +732,7 @@ func TestAVanishedAccountFallsBackToAll(t *testing.T) {
 
 func TestAListenerThatSelectsGetsItsChangeAfterwards(t *testing.T) {
 	c, _, _ := defaultController()
+	c.Select("c1")
 	type entry struct {
 		changes   Changes
 		selection CaseID
@@ -729,12 +750,13 @@ func TestAListenerThatSelectsGetsItsChangeAfterwards(t *testing.T) {
 		}
 	}
 	c.SetStyle(StyleColumns)
-	eq(t, "log", log, []entry{{ChangeStyle | ChangeSelection, ""}, {ChangeSelection, "c4"}})
+	eq(t, "log", log, []entry{{ChangeStyle | ChangeSelection, "c1"}, {ChangeSelection, "c4"}})
 	eq(t, "selection", c.State().Selection, CaseID("c4"))
 }
 
 func TestAListenerThatMarksDoneGetsItsChangeAfterwards(t *testing.T) {
 	c, _, _ := defaultController()
+	c.Select("c1")
 	type entry struct {
 		changes   Changes
 		selection CaseID
@@ -982,4 +1004,24 @@ func TestLaterShowsKeepTheUsersStyle(t *testing.T) {
 	c.SetStyle(StyleList)
 	c.BoardWillShow()
 	eq(t, "the user's", c.State().Style, StyleList)
+}
+
+// The List's automatic first row is not kept by a style switch or a
+// narrowing (no panel slides in by itself); an explicit pick or a live
+// reply pane is.
+func TestAutoSelectedRowIsNotKept(t *testing.T) {
+	c, _, _ := defaultController()
+	eq(t, "auto", c.State().Selection, CaseID("c1"))
+	c.SetStyle(StyleColumns)
+	check(t, c.State().Selection == "" && !c.View().ShowsPanel, "columns opened a panel for the auto row")
+	c.SetStyle(StyleList)
+
+	c2, _, _ := defaultController()
+	c2.SetInlineDetail(false)
+	check(t, c2.State().Selection == "" && !c2.View().ShowsPanel, "narrowing opened a panel for the auto row")
+
+	c3, _, _ := defaultController()
+	c3.SetPaneLive(func(id CaseID) bool { return id == "c1" })
+	c3.SetStyle(StyleColumns)
+	check(t, c3.State().Selection == "c1" && c3.View().ShowsPanel, "a live pane lost its case")
 }

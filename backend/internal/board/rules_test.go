@@ -177,7 +177,13 @@ func TestInboundRules(t *testing.T) {
 		{"flagged but mine newest", []Member{
 			with(inbound("a", 5, "bob@example.com", "me@example.org"), func(m *Member) { m.Flagged = true }),
 			sent("b", 2, "Sure.", "bob@example.com"),
-		}, api.BoardThem, api.BoardReasonThemReplied},
+		}, api.BoardHot, api.BoardReasonHotFlagged},
+		{"flagged, only mine", []Member{
+			with(sent("a", 5, "Here are the minutes.", "bob@example.com"), func(m *Member) { m.Flagged = true }),
+		}, api.BoardHot, api.BoardReasonHotFlagged},
+		{"flagged note to self alone is no case", []Member{
+			with(sent("a", 5, "Buy milk.", "me@example.org"), func(m *Member) { m.Flagged = true }),
+		}, "", ""},
 		{"replied to you", []Member{
 			sent("a", 5, "Plan attached.", "team@example.com"),
 			with(inbound("b", 2, "bob@example.com", "team@example.com"), func(m *Member) { m.InReplyTo = "<a@mail.example>" }),
@@ -188,21 +194,21 @@ func TestInboundRules(t *testing.T) {
 		}, api.BoardYou, api.BoardReasonYouRepliedToYou},
 		{"forged in-reply-to", []Member{
 			with(inbound("b", 2, "mallory@example.net", "team@example.com"), func(m *Member) { m.InReplyTo = "<nobody@mail.example>" }),
-		}, api.BoardInfo, api.BoardReasonInfoNotAddressed},
+		}, api.BoardInfo, api.BoardReasonInfoUnknownSender},
 		{"empty in-reply-to matches no empty message-id", []Member{
 			with(sent("a", 5, "x", "team@example.com"), func(m *Member) { m.MessageID = "" }),
 			with(inbound("b", 2, "bob@example.com", "team@example.com"), func(m *Member) { m.InReplyTo = "<>" }),
 		}, api.BoardInfo, api.BoardReasonInfoNotAddressed},
 		{"spoofed from me to bob in the inbox is not mine", []Member{
 			inbound("a", 2, "me@example.org", "bob@example.com"),
-		}, api.BoardInfo, api.BoardReasonInfoNotAddressed},
+		}, api.BoardInfo, api.BoardReasonInfoUnknownSender},
 		{"spoofed from me to me is a note, never mine", []Member{
 			inbound("a", 2, "me@example.org", "me@example.org"),
 		}, api.BoardInfo, api.BoardReasonInfoYourNote},
 		{"spoofed from me answering bob is not them", []Member{
 			inbound("a", 5, "bob@example.com", "me@example.org"),
 			inbound("b", 2, "ME@example.org", "bob@example.com"),
-		}, api.BoardInfo, api.BoardReasonInfoNotAddressed},
+		}, api.BoardInfo, api.BoardReasonInfoUnknownSender},
 		{"note from another device to my aliases", []Member{
 			with(inbound("a", 2, "me@work.example", "me@example.org"), func(m *Member) { m.Cc = addrs("me@work.example") }),
 		}, api.BoardInfo, api.BoardReasonInfoYourNote},
@@ -227,11 +233,11 @@ func TestMineRules(t *testing.T) {
 		{"reply forwarded in the thread", []Member{
 			inbound("a", 5, "bob@example.com", "me@example.org"),
 			with(sent("b", 2, "FYI", "bob@example.com"), func(m *Member) { m.Subject = "Fwd: Lunch" }),
-		}, "", ""},
+		}, api.BoardYou, api.BoardReasonYouAddressed},
 		{"reply with an attached message", []Member{
 			inbound("a", 5, "bob@example.com", "me@example.org"),
 			with(sent("b", 2, "See attached", "bob@example.com"), func(m *Member) { m.HasMessagePart = true }),
-		}, "", ""},
+		}, api.BoardYou, api.BoardReasonYouAddressed},
 		{"reply quoting below its own text", []Member{
 			inbound("a", 5, "bob@example.com", "me@example.org"),
 			with(sent("b", 2, fixture(t, "reply-with-quote.txt"), "bob@example.com"), func(m *Member) { m.InReplyTo = "<a@mail.example>" }),
@@ -239,7 +245,7 @@ func TestMineRules(t *testing.T) {
 		{"short own text above a quote, answering nothing, is a forward", []Member{
 			inbound("a", 5, "bob@example.com", "me@example.org"),
 			sent("b", 2, fixture(t, "reply-with-quote.txt"), "bob@example.com"),
-		}, "", ""},
+		}, api.BoardYou, api.BoardReasonYouAddressed},
 		{"bulk inbound does not make a reply", []Member{
 			with(inbound("a", 5, "news@shop.example", "me@example.org"), func(m *Member) { m.Bulk = string(api.BulkNewsletter) }),
 			sent("b", 2, "Unsubscribe me", "news@shop.example"),

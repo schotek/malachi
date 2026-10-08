@@ -49,14 +49,32 @@ public final class BoardController {
     /// Called with a short sentence for a toast: a write the source could
     /// not make (undone by then), or what Archive did.
     public var onToast: (@MainActor (String) -> Void)?
+    /// Called with what Archive did, for a toast with Undo
+    /// (`ArchiveOutcome.text` and `undoLabel`; `undoArchive` takes it
+    /// back); nil shows the text through `onToast`.
+    public var onArchived: (@MainActor (Board.ArchiveOutcome) -> Void)?
 
     private let now: @MainActor () -> Date
     private let calendar: Calendar
-    /// The style the board opens in the first time it shows in a run (the
-    /// settings' `board-default-style`), asked for at that moment.
-    private let defaultStyle: @MainActor () -> Board.Style
+    /// Board View (the settings' `board-default-style`), asked for each
+    /// time the board shows until the user picks a style
+    /// (`Board.styleOnShow`).
+    private let defaultStyle: @MainActor () -> Board.DefaultStyle
+    /// The style used last (the settings' `board-last-style`, which the
+    /// page writes on every style the user picks).
+    private let lastStyle: @MainActor () -> Board.Style
+    /// The account filter saved (the settings' `board-account-filter`,
+    /// which the page writes on every account the user picks), asked for
+    /// the first time the board shows; nil is every account.
+    private let savedAccount: (@MainActor () -> String)?
     /// Whether the board has shown in this run (`boardWillShow`).
     public private(set) var hasShown = false
+    /// The user chose a style in this run (`setStyle`,
+    /// `showWaitingForYou`); the board then keeps it (`Board.styleOnShow`).
+    public private(set) var pickedStyle = false
+    /// The saved account filter waiting for the accounts to be known
+    /// (`Board.filterOnShow`); "" when none waits.
+    private var pendingAccount = ""
     /// Where the selection goes when the selected case leaves what is
     /// shown after the user's own write (done, reopened, moved out of the
     /// filter): computed before the write, used by the first report of the
@@ -76,19 +94,24 @@ public final class BoardController {
     /// and when the board came back from a failure (a reconnect).
     private var requested: (id: Board.CaseID, version: Int64, phase: Board.Phase)?
 
-    /// Installs itself as the source's `onChange`. `defaultStyle` is the
-    /// style of the first show (`boardWillShow`); until then the board
-    /// holds the List.
+    /// Installs itself as the source's `onChange`. `defaultStyle` (Board
+    /// View) and `lastStyle` give the style as the board shows
+    /// (`boardWillShow`), `savedAccount` the account filter the first time;
+    /// until then the board holds the List and every account.
     public init(
         source: any BoardSource,
         now: @escaping @MainActor () -> Date = { Date() },
         calendar: Calendar = .current,
-        defaultStyle: @escaping @MainActor () -> Board.Style = { .list }
+        defaultStyle: @escaping @MainActor () -> Board.DefaultStyle = { .last },
+        lastStyle: @escaping @MainActor () -> Board.Style = { .list },
+        savedAccount: (@MainActor () -> String)? = nil
     ) {
         self.source = source
         self.now = now
         self.calendar = calendar
         self.defaultStyle = defaultStyle
+        self.lastStyle = lastStyle
+        self.savedAccount = savedAccount
         var state = Board.ViewState()
         state.selection = Board.resolveSelection(source.snapshot, state)
         self.state = state
@@ -101,6 +124,14 @@ public final class BoardController {
         }
         source.onNotice = { [weak self] text in
             self?.onToast?(text)
+        }
+        source.onArchived = { [weak self] o in
+            guard let self else { return }
+            if let onArchived = self.onArchived {
+                onArchived(o)
+            } else {
+                self.onToast?(o.text)
+            }
         }
         requestMessages()
     }
@@ -115,13 +146,38 @@ public final class BoardController {
 
     // MARK: What the user looks at
 
-    /// Columns and Today start with nothing selected; the list selects its
-    /// first row when its detail is beside it.
+    /// The question "is a reply pane live for this case" (an inline editor
+    /// with text or a save in flight), set by the reply editor host; with
+    /// `userPicked` it decides whether a selection survives a style switch
+    /// or a narrowing (`keepsSelection`).
+    public var paneLive: (@MainActor (Board.CaseID) -> Bool)?
+    /// The case the user selected explicitly (`select` with a case), not
+    /// the List's automatic first row.
+    private var userPicked: Board.CaseID?
+
+    /// The rule of `setStyle` and `setInlineDetail(false)` (Go
+    /// `keepsSelection`): the selection is kept only when a reply pane is
+    /// live for the case or the user selected that case explicitly. The
+    /// List's automatic first row is not kept: Columns and Today would
+    /// otherwise slide their panel in for a case nobody chose.
+    private func keepsSelection() -> Bool {
+        guard let id = state.selection else { return false }
+        return id == userPicked || (paneLive?(id) ?? false)
+    }
+
+    /// The user's switch of the style. The selected case stays selected
+    /// only when `keepsSelection` (a live reply pane or an explicit pick;
+    /// Columns and Today show it in their panel, so an inline reply editor
+    /// moves there); else the selection is cleared: Columns and Today
+    /// select nothing and the list its first row when its detail is beside
+    /// it. The board keeps the style from now on in this run
+    /// (`Board.styleOnShow`).
     public func setStyle(_ s: Board.Style) {
+        pickedStyle = true
         guard s != state.style else { return }
         var next = state
         next.style = s
-        if s != .list {
+        if !keepsSelection() {
             next.selection = nil
         }
         apply(next)
@@ -138,6 +194,7 @@ public final class BoardController {
 
     /// Clears the selection (the list then selects its first row).
     public func setAccount(_ a: Board.AccountFilter) {
+        pendingAccount = ""
         guard a != state.account else { return }
         var next = state
         next.account = a
@@ -154,17 +211,21 @@ public final class BoardController {
         }
         var next = state
         next.selection = id
+        userPicked = id
         apply(next)
     }
 
     /// Whether the list has room for the detail beside it. Folding the
-    /// detail away also clears the selection, so the panel never slides in
-    /// by itself when the window narrows; unfolding selects the first row.
+    /// detail away keeps the selection only when `keepsSelection` (a live
+    /// reply pane or an explicit pick): that case's detail (and an inline
+    /// reply editor in it) moves to the panel, otherwise nothing is
+    /// selected and no panel slides in; unfolding shows it beside the list
+    /// again, or selects the first row.
     public func setInlineDetail(_ on: Bool) {
         guard on != state.inlineDetail else { return }
         var next = state
         next.inlineDetail = on
-        if !on {
+        if !on && !keepsSelection() {
             next.selection = nil
         }
         apply(next)
@@ -182,6 +243,7 @@ public final class BoardController {
     /// The list filtered to the cases waiting for the user (the Today
     /// page's "and N more").
     public func showWaitingForYou() {
+        pickedStyle = true
         var next = state
         next.style = .list
         next.filter = .state(.you)
@@ -198,12 +260,34 @@ public final class BoardController {
     }
 
     /// The board is about to show (the window enters Board mode, before
-    /// its page is laid out): the first time in a run it takes the default
-    /// style, later it keeps the user's last one (`Board.styleOnShow`).
+    /// its page is laid out): until the user picks a style it takes Board
+    /// View (`Board.styleOnShow`), and the first time in a run the saved
+    /// account filter (`Board.filterOnShow`; once the accounts are known).
     public func boardWillShow() {
         let first = !hasShown
         hasShown = true
-        setStyle(Board.styleOnShow(current: state.style, defaultStyle: defaultStyle(), firstShow: first))
+        if first, let savedAccount {
+            pendingAccount = savedAccount()
+        }
+        var next = state
+        next.style = Board.styleOnShow(
+            defaultStyle: defaultStyle(), lastStyle: lastStyle(), current: state.style, pickedThisRun: pickedStyle)
+        if next.style != state.style || !pendingAccount.isEmpty {
+            apply(next)
+        }
+    }
+
+    /// Takes back what Archive did (the toast's Undo): the messages go back
+    /// to their folders and the case back on the board (`Board.undoArchive`'s
+    /// calls, through a source that can move messages; any other source
+    /// only reopens the case).
+    public func undoArchive(_ o: Board.ArchiveOutcome) {
+        departure = nil
+        if let u = source as? any BoardArchiveUndoer {
+            u.undoArchive(o)
+            return
+        }
+        source.setDone(false, of: o.caseID)
     }
 
     /// The board shows again (the window entered Board mode): a board that
@@ -325,6 +409,16 @@ public final class BoardController {
     private func apply(_ next: Board.ViewState, user: Bool = true) {
         let snapshot = source.snapshot
         var next = next
+        if !pendingAccount.isEmpty && !snapshot.accounts.isEmpty {
+            // The saved filter, once the accounts are known; an account that
+            // went away leaves every account.
+            let a = Board.filterOnShow(saved: pendingAccount, accounts: snapshot.accounts)
+            if a != next.account {
+                next.account = a
+                next.selection = nil
+            }
+            pendingAccount = ""
+        }
         if case .account(let id) = next.account, !snapshot.accounts.contains(where: { $0.id == id }) {
             // The account went away: its filter with it.
             next.account = .all

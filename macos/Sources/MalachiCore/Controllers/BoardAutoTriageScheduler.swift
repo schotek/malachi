@@ -155,6 +155,11 @@ public final class BoardAutoTriageScheduler {
         if e.trigger == .manual || e.failure == nil {
             failures = 0
             lastFailure = nil
+        } else if e.failure == .limit {
+            // The plan's usage limit: one step longer, not doubling on
+            // until a day, since the limit lifts on its own.
+            failures = 1
+            lastFailure = .limit
         } else if let f = e.failure, Self.countsAsFailure(f) {
             failures += 1
             lastFailure = f
@@ -165,7 +170,7 @@ public final class BoardAutoTriageScheduler {
     /// Whether a failed automatic run makes the next one wait longer.
     static func countsAsFailure(_ f: Board.TriageFailure) -> Bool {
         switch f {
-        case .notSignedIn, .notFound, .toolsMissing, .timeout, .backend, .stopped, .notesRefused, .noProgress:
+        case .notSignedIn, .notFound, .toolsMissing, .timeout, .backend, .stopped, .notesRefused, .noProgress, .limit:
             return true
         case .cancelled, .declined, .assistantOff, .nothingToDo: return false
         }
@@ -262,6 +267,7 @@ extension BoardTriageController: BoardAutoTriageTarget {
         let lastAuto = board.lastRun.flatMap { $0.trigger == BoardTrigger.auto.rawValue ? $0.started : nil }
         return Board.AutoTriage.Inputs(
             trigger: .automatic, enabled: p?.autoTriage ?? false, available: canRun, signedIn: signedIn,
+            // This application's own run only (the Go and C# rule).
             consent: consentGiven, running: state.isActive,
             queue: board.known && board.assistantOn ? board.queue : 0, annotatedToday: board.annotatedToday,
             countedAt: board.countedAt,

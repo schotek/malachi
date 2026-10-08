@@ -11,6 +11,14 @@ import Foundation
 
 extension Board.Text {
     public static var suggestReply: String { L10n.T("✦ Suggest Reply") }
+    /// The button on a case waiting for someone else (`Board.isFollowUp`):
+    /// the assistant writes a follow-up to the user's own last message.
+    public static var suggestFollowUp: String { L10n.T("✦ Suggest Follow-up") }
+
+    /// The button: `suggestFollowUp` for a follow-up, else `suggestReply`.
+    public static func suggestReplyTitle(followUp: Bool) -> String {
+        followUp ? suggestFollowUp : suggestReply
+    }
     public static var suggestReplyPlaceholder: String { L10n.T("What should the reply say? (optional)") }
     public static var suggestReplyRunning: String { L10n.T("Writing a suggested reply…") }
     /// The control's line while the request runs for another case.
@@ -34,6 +42,7 @@ extension Board.Text {
         case .stopped: return triageFailure(.stopped)
         case .backend: return triageFailure(.backend)
         case .noDraft: return L10n.T("the assistant wrote no reply")
+        case .limit: return triageFailure(.limit)
         }
     }
 }

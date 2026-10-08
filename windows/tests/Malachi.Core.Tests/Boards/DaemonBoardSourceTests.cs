@@ -466,6 +466,112 @@ public sealed class DaemonBoardSourceTests
         Assert.False((await h.CAsync("1"))?.CanArchive);
     }
 
+    /// <summary>
+    /// Archive hands over what it did with the moved messages; Undo moves
+    /// them back, one call per source folder, then puts the case back on the
+    /// board.
+    /// </summary>
+    [Fact]
+    public async Task ArchiveCanBeUndone()
+    {
+        await using var h = await Harness.StartAsync();
+        await h.StartedAsync();
+        ArchiveOutcome? outcome = null;
+        await h.Ui.RunAsync(() => h.Source.OnArchived = o => outcome = o);
+        await h.Ui.RunAsync(() => h.Source.Archive(Id("1")));
+        await h.IdleAsync();
+        var o = Assert.IsType<ArchiveOutcome>(outcome);
+        Assert.Equal(
+            new ArchiveOutcome
+            {
+                Case = Id("1"),
+                Account = "acc_1",
+                Text = "Archived 2 messages.",
+                UndoLabel = "Undo",
+                Moved =
+                [
+                    new BoardMoved { MessageId = "m_a", FromFolderId = "f_inbox" },
+                    new BoardMoved { MessageId = "m_b", FromFolderId = "f_other" },
+                ],
+            },
+            o);
+        Assert.Empty(h.Notices); // the outcome, not a plain toast
+        await h.Ui.RunAsync(() => h.Source.UndoArchive(o));
+        await h.IdleAsync();
+        // The moves run side by side: in any order.
+        var moves = h.Script.Moves.OrderBy(m => m.TargetFolderId.Value, StringComparer.Ordinal).ToList();
+        Assert.Equal(2, moves.Count);
+        Assert.True(moves[0].TargetFolderId == "f_inbox" && moves[0].MessageIds.SequenceEqual([new MessageId("m_a")]));
+        Assert.True(moves[1].TargetFolderId == "f_other" && moves[1].MessageIds.SequenceEqual([new MessageId("m_b")]));
+        Assert.All(moves, m => Assert.Equal("acc_1", m.AccountId));
+        Assert.False((await h.CAsync("1"))?.Done);
+        Assert.Empty(h.Errors);
+    }
+
+    /// <summary>
+    /// A move back that fails stops the undo: the case stays done (the mail
+    /// is still archived), no board.setDone follows, and the error says so
+    /// (Go TestDaemonUndoArchiveFailedMoveKeepsCaseDone).
+    /// </summary>
+    [Fact]
+    public async Task AFailedMoveBackKeepsTheCaseDone()
+    {
+        await using var h = await Harness.StartAsync();
+        await h.StartedAsync();
+        ArchiveOutcome? outcome = null;
+        await h.Ui.RunAsync(() => h.Source.OnArchived = o => outcome = o);
+        await h.Ui.RunAsync(() => h.Source.Archive(Id("1")));
+        await h.IdleAsync();
+        var o = Assert.IsType<ArchiveOutcome>(outcome);
+        var setDone = h.Script.Count(API.BoardSetDone.Name);
+        h.Script.MoveFailure = Daemon(ErrorCode.MessageNotFound, "gone");
+        await h.Ui.RunAsync(() => h.Source.UndoArchive(o));
+        await h.IdleAsync();
+        Assert.True((await h.CAsync("1"))?.Done);
+        Assert.Equal(["Could not undo the archive."], h.Errors);
+        Assert.Equal(setDone, h.Script.Count(API.BoardSetDone.Name));
+    }
+
+    /// <summary>
+    /// An archive without moved has no Undo: the outcome's label is null and
+    /// the board shows a plain toast (Go TestDaemonArchiveWithoutMovedHasNoUndo).
+    /// </summary>
+    [Fact]
+    public async Task AnArchiveWithoutMovedHasNoUndo()
+    {
+        await using var h = await Harness.StartAsync();
+        h.Script.NoMoved = true;
+        await h.StartedAsync();
+        ArchiveOutcome? outcome = null;
+        await h.Ui.RunAsync(() => h.Source.OnArchived = o => outcome = o);
+        await h.Ui.RunAsync(() => h.Source.Archive(Id("1")));
+        await h.IdleAsync();
+        var o = Assert.IsType<ArchiveOutcome>(outcome);
+        Assert.True(o.UndoLabel is null && o.Text.Length > 0 && o.Moved.Count == 0);
+    }
+
+    /// <summary>remindedAt is read for a live case only; a user's write ends it at once.</summary>
+    [Fact]
+    public async Task RemindedAt()
+    {
+        var back = T0.AddHours(-1);
+        await using var h = await Harness.StartAsync();
+        h.Script.SetCases(
+        [
+            WireCase("1") with { RemindedAt = back },
+            WireCase("2") with { RemindedAt = back, Visibility = BoardVisibility.Done, DoneAt = T0 },
+        ]);
+        await h.StartedAsync();
+        var one = await h.CAsync("1");
+        Assert.True(one?.Reminded == true && one.RemindedAt == back);
+        var two = await h.CAsync("2");
+        Assert.True(two is { Reminded: false, RemindedAt: null });
+        await h.Ui.RunAsync(() => h.Source.SetState(State.Them, Id("1")));
+        Assert.False((await h.CAsync("1"))?.Reminded); // at once, before the answer
+        await h.IdleAsync();
+        Assert.False((await h.CAsync("1"))?.Reminded);
+    }
+
     [Fact]
     public async Task DiscardDraft()
     {
@@ -888,6 +994,7 @@ public sealed class DaemonBoardSourceTests
         private readonly Lock gate = new();
         private readonly List<string> calls = [];
         private readonly List<DraftDeleteParams> deleted = [];
+        private readonly List<MessageMoveParams> moves = [];
         private List<BoardCase> cases = [WireCase("1"), WireCase("2", BoardState.Hot)];
         private List<BoardCommitment> commitments = [];
         private bool enabled = true;
@@ -909,6 +1016,11 @@ public sealed class DaemonBoardSourceTests
 
         public RpcException? GetFailure { get; set; }
 
+        public RpcException? MoveFailure { get; set; }
+
+        /// <summary>board.archive answers without moved (an archive folder the daemon does not sync).</summary>
+        public bool NoMoved { get; set; }
+
         public IReadOnlyList<DraftDeleteParams> Deleted
         {
             get
@@ -916,6 +1028,17 @@ public sealed class DaemonBoardSourceTests
                 lock (gate)
                 {
                     return [.. deleted];
+                }
+            }
+        }
+
+        public IReadOnlyList<MessageMoveParams> Moves
+        {
+            get
+            {
+                lock (gate)
+                {
+                    return [.. moves];
                 }
             }
         }
@@ -961,7 +1084,7 @@ public sealed class DaemonBoardSourceTests
             fake.On(API.BoardSetState.Name, (FakeDaemon.MethodHandler)(async p =>
             {
                 var q = JsonCoding.Decode<BoardSetStateParams>(p);
-                var c = await WriteAsync(API.BoardSetState.Name, q.CaseId, c => c with { UserState = q.State });
+                var c = await WriteAsync(API.BoardSetState.Name, q.CaseId, c => c with { UserState = q.State, RemindedAt = null });
                 return JsonCoding.EncodeToString(new BoardSetStateResult { Case = c });
             }));
             fake.On(API.BoardSetDone.Name, (FakeDaemon.MethodHandler)(async p =>
@@ -989,7 +1112,23 @@ public sealed class DaemonBoardSourceTests
             {
                 var q = JsonCoding.Decode<BoardArchiveParams>(p);
                 var c = await WriteAsync(API.BoardArchive.Name, q.CaseId, c => c with { Visibility = BoardVisibility.Done, CanArchive = false });
-                return JsonCoding.EncodeToString(new BoardArchiveResult { Archived = 2, Case = c });
+                bool noMoved;
+                lock (gate)
+                {
+                    noMoved = NoMoved;
+                }
+                return JsonCoding.EncodeToString(new BoardArchiveResult
+                {
+                    Archived = 2,
+                    Case = c,
+                    Moved = noMoved
+                        ? null
+                        : new[]
+                        {
+                            new BoardMoved { MessageId = "m_a", FromFolderId = "f_inbox" },
+                            new BoardMoved { MessageId = "m_b", FromFolderId = "f_other" },
+                        },
+                });
             }));
             fake.On(API.BoardDiscardDraft.Name, (FakeDaemon.MethodHandler)(async p =>
             {
@@ -1013,6 +1152,19 @@ public sealed class DaemonBoardSourceTests
                 {
                     calls.Add(API.DraftDelete.Name);
                     deleted.Add(JsonCoding.Decode<DraftDeleteParams>(p));
+                }
+                return Task.FromResult("{}");
+            }));
+            fake.On(API.MessageMove.Name, (FakeDaemon.MethodHandler)(p =>
+            {
+                lock (gate)
+                {
+                    calls.Add(API.MessageMove.Name);
+                    moves.Add(JsonCoding.Decode<MessageMoveParams>(p));
+                    if (MoveFailure is { } failure)
+                    {
+                        return Task.FromException<string>(failure);
+                    }
                 }
                 return Task.FromResult("{}");
             }));

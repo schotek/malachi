@@ -58,6 +58,13 @@ final class AssistantPanelHost {
             socket: state.paths.socket)
         self.controller = controller
         controller.provider = { [weak state] in state?.selectedProvider }
+        controller.reconnectProvider = { [weak state] in
+            guard let state else { return false }
+            do { try await state.chatGPT.signIn() } catch { return false }
+            // The triage that learned "signed out" from a Codex failure looks again.
+            state.triage.recheckSignIn()
+            return true
+        }
         viewController = AssistantPanelViewController(controller: controller)
 
         controller.consent = { [weak state, weak mainWindow] in

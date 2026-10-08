@@ -52,9 +52,15 @@ type PreferencesDialog struct {
 	accountsEmpty *adw.ActionRow
 	accountRows   []*accountRow
 
-	launchAtLogin        *adw.SwitchRow
-	runInBackground      *adw.SwitchRow
-	boardDefaultStyle    *adw.ComboRow
+	launchAtLogin     *adw.SwitchRow
+	runInBackground   *adw.SwitchRow
+	boardGroup        *adw.PreferencesGroup
+	boardShow         *adw.SwitchRow
+	boardDefaultStyle *adw.ComboRow
+	boardStartMode    *adw.ComboRow
+	boardWindowsGroup *adw.PreferencesGroup
+	// boardWindows are the windows' rows in board.States' order.
+	boardWindows         [4]*adw.SpinRow
 	markReadDelay        *adw.SpinRow
 	confirmDelete        *adw.SwitchRow
 	desktopNotifications *adw.SwitchRow
@@ -98,6 +104,7 @@ type PreferencesDialog struct {
 	boardTriageConsent  *adw.SwitchRow
 	boardTriageModel    *adw.ComboRow
 	boardTriageAuto     *adw.SwitchRow
+	boardTriageAccounts *adw.ExpanderRow
 	boardTriageInterval *adw.ComboRow
 	boardTriageDaily    *adw.ComboRow
 	boardTriageStatus   *adw.ActionRow
@@ -113,12 +120,6 @@ var (
 		settings.ColorSchemeSystem, settings.ColorSchemeLight, settings.ColorSchemeDark,
 	}
 	densityChoices = []settings.Density{settings.DensityComfortable, settings.DensityCompact}
-	// boardStyleChoices is in the order of the StringList in
-	// preferences.blp's board_default_style (List, Columns, Today, as
-	// board.StyleList/Columns/Today order them).
-	boardStyleChoices = []settings.BoardStyle{
-		settings.BoardStyleList, settings.BoardStyleColumns, settings.BoardStyleToday,
-	}
 )
 
 // Mail group choices, in the order of the StringLists in preferences.blp.
@@ -152,15 +153,25 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 	b := data.Builder("preferences.ui")
 
 	d := &PreferencesDialog{
-		PreferencesDialog:    b.GetObject("preferences_dialog").Cast().(*adw.PreferencesDialog),
-		log:                  log.With("component", "preferences"),
-		assist:               as,
-		accountsGroup:        b.GetObject("accounts_group").Cast().(*adw.PreferencesGroup),
-		addAccount:           b.GetObject("add_account_button").Cast().(*gtk.MenuButton),
-		accountsEmpty:        b.GetObject("accounts_empty_row").Cast().(*adw.ActionRow),
-		launchAtLogin:        b.GetObject("launch_at_login").Cast().(*adw.SwitchRow),
-		runInBackground:      b.GetObject("run_in_background").Cast().(*adw.SwitchRow),
-		boardDefaultStyle:    b.GetObject("board_default_style").Cast().(*adw.ComboRow),
+		PreferencesDialog: b.GetObject("preferences_dialog").Cast().(*adw.PreferencesDialog),
+		log:               log.With("component", "preferences"),
+		assist:            as,
+		accountsGroup:     b.GetObject("accounts_group").Cast().(*adw.PreferencesGroup),
+		addAccount:        b.GetObject("add_account_button").Cast().(*gtk.MenuButton),
+		accountsEmpty:     b.GetObject("accounts_empty_row").Cast().(*adw.ActionRow),
+		launchAtLogin:     b.GetObject("launch_at_login").Cast().(*adw.SwitchRow),
+		runInBackground:   b.GetObject("run_in_background").Cast().(*adw.SwitchRow),
+		boardGroup:        b.GetObject("board_group").Cast().(*adw.PreferencesGroup),
+		boardShow:         b.GetObject("board_show").Cast().(*adw.SwitchRow),
+		boardDefaultStyle: b.GetObject("board_default_style").Cast().(*adw.ComboRow),
+		boardStartMode:    b.GetObject("board_start_mode").Cast().(*adw.ComboRow),
+		boardWindowsGroup: b.GetObject("board_windows_group").Cast().(*adw.PreferencesGroup),
+		boardWindows: [4]*adw.SpinRow{
+			b.GetObject("board_window_hot").Cast().(*adw.SpinRow),
+			b.GetObject("board_window_you").Cast().(*adw.SpinRow),
+			b.GetObject("board_window_them").Cast().(*adw.SpinRow),
+			b.GetObject("board_window_info").Cast().(*adw.SpinRow),
+		},
 		markReadDelay:        b.GetObject("mark_read_delay").Cast().(*adw.SpinRow),
 		confirmDelete:        b.GetObject("confirm_delete").Cast().(*adw.SwitchRow),
 		desktopNotifications: b.GetObject("desktop_notifications").Cast().(*adw.SwitchRow),
@@ -205,6 +216,7 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		boardTriageConsent:   b.GetObject("board_triage_consent").Cast().(*adw.SwitchRow),
 		boardTriageModel:     b.GetObject("board_triage_model").Cast().(*adw.ComboRow),
 		boardTriageAuto:      b.GetObject("board_triage_auto").Cast().(*adw.SwitchRow),
+		boardTriageAccounts:  b.GetObject("board_triage_accounts").Cast().(*adw.ExpanderRow),
 		boardTriageInterval:  b.GetObject("board_triage_interval").Cast().(*adw.ComboRow),
 		boardTriageDaily:     b.GetObject("board_triage_daily").Cast().(*adw.ComboRow),
 		boardTriageStatus:    b.GetObject("board_triage_status").Cast().(*adw.ActionRow),
@@ -229,15 +241,14 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		s.Bind(settings.KeyTextZoom, d.textZoom.Object, "value"),
 		bindChoice(s, settings.KeyColorScheme, d.colorScheme, colorSchemeChoices, s.ColorScheme, s.SetColorScheme),
 		bindChoice(s, settings.KeyDensity, d.density, densityChoices, s.Density, s.SetDensity),
-		bindChoice(s, settings.KeyBoardDefaultStyle, d.boardDefaultStyle, boardStyleChoices,
-			s.BoardDefaultStyle, s.SetBoardDefaultStyle),
+		d.bindBoard(s),
 		d.bindLaunchAtLogin(s),
 		d.bindMail(c, refreshStorage),
 		unbindStorage,
 		d.bindAccounts(c),
 		d.bindMCP(),
 		d.bindAssistant(s),
-		d.bindBoardTriage(s),
+		d.bindBoardTriage(s, c),
 	}
 	d.ConnectClosed(func() {
 		d.closed = true
@@ -1173,7 +1184,7 @@ func modelNames() []string {
 // is bound to board-triage-model and can be chosen whenever the group
 // shows (the next run takes it). Whenever the AI page comes up the board
 // is listed again, so the tokens of the last 24 hours are current.
-func (d *PreferencesDialog) bindBoardTriage(s *settings.Store) (unbind func()) {
+func (d *PreferencesDialog) bindBoardTriage(s *settings.Store, rpc *client.Client) (unbind func()) {
 	group := d.boardTriageGroup
 	var bt *BoardTriage
 	if d.assist != nil {
@@ -1293,11 +1304,14 @@ func (d *PreferencesDialog) bindBoardTriage(s *settings.Store) (unbind func()) {
 		func(bp api.BoardPreferences) int { return bp.AutoTriageDailyCases },
 		func(bp *api.BoardPreferences, v int) { bp.AutoTriageDailyCases = v }))
 	unbindModel := d.bindBoardProviderModel(s)
+	reloadAccounts, unbindAccounts := d.bindTriageAccounts(rpc, p)
 
-	// The board is listed again whenever the AI page comes up.
+	// The board is listed again whenever the AI page comes up, and its
+	// accounts asked again.
 	relist := func() {
 		if !d.closed && d.VisiblePageName() == "ai" {
 			c.RelistBoard()
+			reloadAccounts()
 		}
 	}
 	pageHandle := d.NotifyProperty("visible-page-name", relist)
@@ -1318,6 +1332,7 @@ func (d *PreferencesDialog) bindBoardTriage(s *settings.Store) (unbind func()) {
 		removePrefs()
 		removeToasts()
 		unbindModel()
+		unbindAccounts()
 		d.HandlerDisconnect(pageHandle)
 		d.boardTriageConsent.HandlerDisconnect(consentHandle)
 		d.boardTriageAuto.HandlerDisconnect(autoHandle)

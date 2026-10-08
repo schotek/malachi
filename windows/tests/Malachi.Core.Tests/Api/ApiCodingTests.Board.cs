@@ -276,6 +276,46 @@ public sealed partial class ApiCodingTests
         Assert.Equal(typeof(EmptyResult), API.BoardRunEnd.ResultInfo.Type);
     }
 
+    /// <summary>
+    /// Rules 6 and what came with them: remindedAt, you.newContact, the
+    /// messages board.archive moved (for Undo) and a usage that is only a
+    /// lower bound; each left out decodes as before.
+    /// </summary>
+    [Fact]
+    public void BoardRemindedNewContactMovedAndLowerBound()
+    {
+        var reminded = Decode<BoardCase>(BoardCaseJson
+            .Replace("\"you.addressed\"", "\"you.newContact\"", StringComparison.Ordinal)
+            .Replace("\"visibility\":\"live\"", "\"visibility\":\"live\",\"remindedAt\":\"2026-10-01T07:00:00Z\"", StringComparison.Ordinal));
+        Assert.Equal(BoardReason.YouNewContact, reminded.RuleReason.Value);
+        Assert.Equal(Rfc3339.Parse("2026-10-01T07:00:00Z"), reminded.RemindedAt);
+        Assert.Null(reminded.RemindAt);
+        Assert.Null(Decode<BoardCase>(BoardCaseJson).RemindedAt);
+
+        var archived = Decode<BoardArchiveResult>($$$"""
+            {"archived":2,"case":{{{BoardCaseJson}}},
+             "moved":[{"messageId":"m_5","fromFolderId":"f_inbox"},{"messageId":"m_7","fromFolderId":"f_work"}]}
+            """);
+        Assert.Equal(2, archived.Moved!.Count);
+        Assert.Equal(new BoardMoved { MessageId = "m_5", FromFolderId = "f_inbox" }, archived.Moved[0]);
+        Assert.Equal("f_work", archived.Moved[1].FromFolderId);
+        Assert.Null(Decode<BoardArchiveResult>($$$"""{"archived":0,"noArchive":true,"case":{{{BoardCaseJson}}}}""").Moved);
+        Assert.Null(Decode<BoardArchiveResult>($$$"""{"archived":0,"case":{{{BoardCaseJson}}},"moved":null}""").Moved);
+
+        // lowerBound: left out when false, as Go's omitempty.
+        var usage = new BoardUsage { InputTokens = 1, OutputTokens = 2, CacheCreationInputTokens = 0, CacheReadInputTokens = 0 };
+        Assert.False(EncodeObject(usage).TryGetProperty("lowerBound", out _));
+        Assert.True(EncodeObject(usage with { LowerBound = true }).GetProperty("lowerBound").GetBoolean());
+        var total = Decode<BoardTriage>("""
+            {"annotatedTodayAuto":0,"queue":0,"usage24h":{"inputTokens":1,"outputTokens":2,"cacheCreationInputTokens":0,"cacheReadInputTokens":0,"runs":3,"lowerBound":true}}
+            """).Usage24h!;
+        Assert.True(total.LowerBound);
+        Assert.Equal(3, total.Runs);
+        Assert.Null(Decode<BoardTriage>("""
+            {"annotatedTodayAuto":0,"queue":0,"usage24h":{"inputTokens":1,"outputTokens":2,"cacheCreationInputTokens":0,"cacheReadInputTokens":0,"runs":1}}
+            """).Usage24h!.LowerBound);
+    }
+
     /// <summary>The board's error codes, quoteNotFound's data, values of a newer daemon, and the timeouts.</summary>
     [Fact]
     public void BoardErrorsValuesAndTimeouts()

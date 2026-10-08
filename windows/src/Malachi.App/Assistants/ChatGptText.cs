@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Windows-first provider UI from docs/chatgpt-integration.md §8;
-// GTK msgid reference: ui/internal/assistant/chatgpt.go. No Swift UI yet.
+// GTK msgid reference: ui/internal/assistant/chatgpt.go. The macOS client has its ChatGPT preferences UI (`ChatGPTPreferences.swift`).
 
 using Malachi.Core.I18n;
 

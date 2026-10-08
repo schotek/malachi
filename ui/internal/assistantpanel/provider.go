@@ -35,6 +35,37 @@ type Session interface {
 	SetHandlers(func([]assistant.Event), func(Exit))
 }
 
+// FailureLimit: the provider refused the request because the usage limit
+// of the user's plan was reached (ChatGPT's HTTP 429); Reason is the
+// provider's code. It follows the kinds of oneshot.go.
+const FailureLimit = FailureToolsMissing + 1
+
+// ProviderFailure is the failure a provider's reason stands for (an error
+// of Provider.Open or Session.Submit, a failed result's text, an exit's
+// reason): Codex missing is FailureNotFound; a ChatGPT connection that is
+// missing, lapsed, refused or without consent is FailureNotSignedIn (the
+// board offers to connect again, as it offers Claude Code's sign-in); the
+// plan's usage limit is FailureLimit; anything else FailureStopped with
+// the reason as it is.
+func ProviderFailure(reason string) Failure {
+	switch reason {
+	case "codex_not_found":
+		return Failure{Kind: FailureNotFound, Reason: reason}
+	case "chatgpt_not_connected", "chatgpt_reconnect_required", "chatgpt_consent_required",
+		"chatgpt_permission_denied", "chatgpt_identity_mismatch":
+		return Failure{Kind: FailureNotSignedIn, Reason: reason}
+	case "chatgpt_usage_limit":
+		return Failure{Kind: FailureLimit, Reason: reason}
+	}
+	return Failure{Kind: FailureStopped, Reason: reason}
+}
+
+// providerFailed is the outcome of a provider's request that failed for
+// reason.
+func providerFailed(reason string) Outcome {
+	return Outcome{Kind: OutcomeFailed, Failure: ProviderFailure(reason)}
+}
+
 // ProviderChanged ends an old provider/profile conversation before new input.
 func (c *Controller) ProviderChanged() { c.NewConversation(); c.selectedProvider = nil }
 func (c *Controller) hasSession() bool {
@@ -59,7 +90,7 @@ func (c *Controller) providerPrompt(my int, prompt string, told []int) {
 				return
 			}
 			if err != nil {
-				c.fail(assistant.StoppedText(c.tr, err.Error()), false)
+				c.providerFail(err.Error(), false)
 				return
 			}
 			c.providerSession = session
@@ -73,7 +104,7 @@ func (c *Controller) providerPrompt(my int, prompt string, told []int) {
 				c.loop.Post(func() {
 					if c.providerSession == session && !c.closed {
 						c.providerSession = nil
-						c.exited(exit)
+						c.providerExited(exit)
 					}
 				})
 			})
@@ -84,7 +115,7 @@ func (c *Controller) providerPrompt(my int, prompt string, told []int) {
 func (c *Controller) sendProvider(my int, prompt string, told []int) {
 	session := c.providerSession
 	if session == nil {
-		c.fail(assistant.StoppedText(c.tr, "codex_session_closed"), false)
+		c.providerFail("codex_session_closed", false)
 		return
 	}
 	for i := range c.pinned {
@@ -103,7 +134,7 @@ func (c *Controller) sendProvider(my int, prompt string, told []int) {
 			c.loop.Post(func() {
 				if c.providerSession == session && my == c.gen && c.phase == PhaseRunning {
 					c.endProcess()
-					c.fail(assistant.StoppedText(c.tr, err.Error()), false)
+					c.providerFail(err.Error(), false)
 				}
 			})
 		}
@@ -139,7 +170,7 @@ func (r *Request) launchProvider(my int, c Call, completion func(Outcome)) {
 				return
 			}
 			if err != nil {
-				r.finish(my, failed(FailureStopped, err.Error()), completion)
+				r.finish(my, providerFailed(err.Error()), completion)
 				return
 			}
 			r.providerSession = session
@@ -153,7 +184,7 @@ func (r *Request) launchProvider(my int, c Call, completion func(Outcome)) {
 			}, func(exit Exit) {
 				r.loop.Post(func() {
 					if my == r.gen && r.running && r.providerSession == session {
-						r.finish(my, failed(FailureStopped, exit.Description()), completion)
+						r.finish(my, providerFailed(exit.Description()), completion)
 					}
 				})
 			})
@@ -161,7 +192,7 @@ func (r *Request) launchProvider(my int, c Call, completion func(Outcome)) {
 				if err := session.Submit(ctx, c.Message); err != nil {
 					r.loop.Post(func() {
 						if my == r.gen && r.running && r.providerSession == session {
-							r.finish(my, failed(FailureStopped, err.Error()), completion)
+							r.finish(my, providerFailed(err.Error()), completion)
 						}
 					})
 				}
@@ -203,7 +234,7 @@ func (r *Request) providerEvents(my int, session Session, c Call, events []assis
 			}
 		case assistant.EventResult:
 			if !e.Success {
-				r.finish(my, failed(FailureStopped, e.ResultText), completion)
+				r.finish(my, providerFailed(e.ResultText), completion)
 				return
 			}
 			text := e.ResultText

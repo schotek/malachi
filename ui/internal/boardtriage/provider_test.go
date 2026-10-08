@@ -42,3 +42,26 @@ func TestRunCapturesProviderSource(t *testing.T) {
 		t.Fatalf("wrong provenance: %+v", starts)
 	}
 }
+
+// A provider switch stops the run, turns automatic triage off and, without
+// the board's consent for the provider now selected, the assistant
+// preference too, in one write.
+func TestProviderChangedRepairsInOneWrite(t *testing.T) {
+	prefs := prefsWith(func(p *api.BoardPreferences) { p.Assistant, p.AutoTriage = true, true })
+	h := newHarness(t, newFakeClaude(t, "true", answerTurn("x")), options{prefs: &prefs})
+	h.settings.triageConsent = false
+	before := len(h.daemon.setList())
+	h.c.ProviderChanged(true)
+	h.loop.runUntil(t, h.prefs.Idle)
+	sets := h.daemon.setList()
+	if len(sets) != before+1 || sets[len(sets)-1].Assistant || sets[len(sets)-1].AutoTriage {
+		t.Fatalf("sets %+v", sets)
+	}
+	// With the consent and a profile change only, nothing is written.
+	h.settings.triageConsent = true
+	h.c.ProviderChanged(false)
+	h.loop.runUntil(t, h.prefs.Idle)
+	if len(h.daemon.setList()) != before+1 {
+		t.Errorf("sets %+v", h.daemon.setList())
+	}
+}

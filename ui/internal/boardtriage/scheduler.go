@@ -183,6 +183,11 @@ func (s *Scheduler) ended() {
 	case e.Trigger == Manual || !e.Failed:
 		s.failures = 0
 		s.hasLastFailure = false
+	case e.Failure == board.FailLimit:
+		// The plan's usage limit: one step longer, not doubling on until a
+		// day, since the limit lifts on its own.
+		s.failures = 1
+		s.lastFailure, s.hasLastFailure = e.Failure, true
 	case CountsAsFailure(e.Failure):
 		s.failures++
 		s.lastFailure, s.hasLastFailure = e.Failure, true

@@ -41,6 +41,7 @@ type replyDaemon struct {
 	getFailure  error
 	setFailure  error
 	caseDraft   *api.BoardDraft
+	ruleReason  api.BoardReason // board.get's, when set
 	gets        []api.BoardCaseID
 	sets        []api.BoardSetDraftParams
 	deletes     []api.DraftDeleteParams
@@ -75,7 +76,7 @@ func (d *replyDaemon) Call(ctx context.Context, method string, params, result an
 		}
 		d.mu.Lock()
 		d.gets = append(d.gets, p.CaseID)
-		failure, draft := d.getFailure, d.caseDraft
+		failure, draft, reason := d.getFailure, d.caseDraft, d.ruleReason
 		d.mu.Unlock()
 		if failure != nil {
 			return failure
@@ -88,7 +89,11 @@ func (d *replyDaemon) Call(ctx context.Context, method string, params, result an
 				From: api.Address{Address: "x@y"}, Date: t0, Text: "t",
 			})
 		}
-		out = api.BoardGetResult{Case: wireCase(n, draft), Messages: msgs}
+		c := wireCase(n, draft)
+		if reason != "" {
+			c.RuleState, c.RuleReason = api.BoardThem, reason
+		}
+		out = api.BoardGetResult{Case: c, Messages: msgs}
 	case api.MethodBoardSetDraft:
 		var p api.BoardSetDraftParams
 		if err := json.Unmarshal(raw, &p); err != nil {
@@ -334,9 +339,16 @@ func TestReplyStopDeletesTheCreatedDraft(t *testing.T) {
 func TestReplyTimeoutDeletesTheCreatedDraft(t *testing.T) {
 	fake := newFakeClaude(t, "true", draftTurn("d_9", "acc_1", "sleep 30"))
 	h := newReplyHarness(t, fake, true, testBridge)
-	h.c.Timeout = 50 * time.Millisecond
+	// The controller's own timer runs from the consent; the test holds it
+	// and lets it run out only once the draft is there, so the request
+	// times out after create_draft on any machine, however slow.
+	h.loop.hold = true
+	h.c.Timeout = time.Minute
 	h.c.Start(boardCase("1"), "")
 	h.loop.runUntil(t, func() bool { _, ok := h.c.Created(); return ok })
+	if n := h.loop.fire(h.c.Timeout); n != 1 {
+		t.Fatalf("held timers of the controller's timeout = %d, want 1", n)
+	}
 	h.loop.runUntil(t, func() bool { return !h.c.State().IsRunning() })
 	h.ended()
 	if got := h.c.State(); got.Kind != board.SuggestFailed || got.Failure != board.ReplyTimeout {
@@ -535,5 +547,59 @@ func TestReplyNeverOffersTheSamples(t *testing.T) {
 	}
 	if fake.starts() != 0 {
 		t.Errorf("starts = %d", fake.starts())
+	}
+}
+
+// A case that waits on the other side gets the follow-up prompt; any other
+// the reply prompt.
+func TestReplyFollowUpPrompt(t *testing.T) {
+	for _, tt := range []struct {
+		reason   api.BoardReason
+		followUp bool
+	}{{"", false}, {api.BoardReasonThemReplied, true}, {api.BoardReasonThemAsked, true}} {
+		fake := newFakeClaude(t, "true", draftTurn("d_9", "acc_1", ""))
+		h := newReplyHarness(t, fake, true, testBridge)
+		h.daemon.ruleReason = tt.reason
+		h.c.Start(boardCase("1"), "")
+		h.ended()
+		joined := strings.Join(fake.args(), " ")
+		if got := strings.Contains(joined, assistant.SuggestReplySystemPromptFor(true)); got != tt.followUp {
+			t.Errorf("%q: follow-up prompt = %v, want %v", tt.reason, got, tt.followUp)
+		}
+		if got := strings.Contains(joined, assistant.SuggestReplySystemPromptFor(false)); got == tt.followUp {
+			t.Errorf("%q: reply prompt = %v", tt.reason, got)
+		}
+	}
+}
+
+func TestReplyFailureOfLimit(t *testing.T) {
+	if got := replyFailureOf(assistantpanel.Failure{Kind: assistantpanel.FailureLimit, Reason: "chatgpt_usage_limit"}); got != board.ReplyLimit {
+		t.Errorf("limit = %v", got)
+	}
+	if got := replyFailureOf(assistantpanel.ProviderFailure("chatgpt_reconnect_required")); got != board.ReplyNotSignedIn {
+		t.Errorf("reconnect = %v", got)
+	}
+	if got := replyFailureOf(assistantpanel.ProviderFailure("codex_not_found")); got != board.ReplyNotFound {
+		t.Errorf("codex missing = %v", got)
+	}
+}
+
+// A case waiting on the other side offers a follow-up, any other a reply.
+func TestReplyViewTitleFollowsTheCase(t *testing.T) {
+	h := newReplyHarness(t, newFakeClaude(t, "true"), true, testBridge)
+	plain := boardCase("1")
+	nudge := boardCase("2")
+	nudge.RuleState, nudge.RuleReason = board.StateThem, api.BoardReasonThemReplied
+	for _, tt := range []struct {
+		k        board.Case
+		followUp bool
+	}{{plain, false}, {nudge, true}} {
+		v := h.c.View(tt.k, board.Snapshot{}, false, board.PanelWords{}, tr)
+		if !v.Shown || v.Title != board.SuggestReplyTitle(tt.followUp, tr) {
+			t.Errorf("%s: view %+v, want the title for follow-up %v", tt.k.ID, v, tt.followUp)
+		}
+	}
+	if board.SuggestReplyTitle(true, tr) == board.SuggestReplyTitle(false, tr) {
+		t.Error("the two titles are the same")
 	}
 }

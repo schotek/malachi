@@ -397,3 +397,148 @@ func (o *observers) notify() {
 		}
 	}
 }
+
+// DefaultWindows are the daemon's windows when none were set (docs/api.md
+// §4.13 BoardWindows: 90/30/30/14 days).
+var DefaultWindows = api.BoardWindows{Hot: 90, You: 30, Them: 30, Info: 14}
+
+// ValidWindows says whether the daemon's board.setPreferences takes w:
+// every window 1..api.MaxBoardWindowDays days.
+func ValidWindows(w api.BoardWindows) bool {
+	for _, d := range []int{w.Hot, w.You, w.Them, w.Info} {
+		if d < 1 || d > api.MaxBoardWindowDays {
+			return false
+		}
+	}
+	return true
+}
+
+// SetEnabled turns the board on or off (Show the Board), as Update.
+func (p *Preferences) SetEnabled(on bool, done func(stored bool)) {
+	p.Update(false, func(b *api.BoardPreferences) { b.Enabled = on }, done)
+}
+
+// SetWindows sets how long cases of each state stay, as Update; windows the
+// daemon would refuse (ValidWindows) are not written: false, and done is
+// not called.
+func (p *Preferences) SetWindows(w api.BoardWindows, done func(stored bool)) bool {
+	if !ValidWindows(w) {
+		return false
+	}
+	p.Update(false, func(b *api.BoardPreferences) { b.Windows = w }, done)
+	return true
+}
+
+// SetTriageAccounts sets the accounts triage may read and annotate (empty:
+// every enabled mail account), as Update; duplicates are left out, the
+// order kept. A Triage These Accounts list builds ids with
+// ToggleTriageAccount.
+func (p *Preferences) SetTriageAccounts(ids []api.AccountID, done func(stored bool)) {
+	list := make([]api.AccountID, 0, len(ids))
+	for _, id := range ids {
+		if id != "" && !slices.Contains(list, id) {
+			list = append(list, id)
+		}
+	}
+	p.Update(false, func(b *api.BoardPreferences) { b.TriageAccounts = slices.Clone(list) }, done)
+}
+
+// triageByDefault says whether a is triaged when the preferences name no
+// account: an enabled mail account (the daemon's triageAccounts: not an
+// issue tracker).
+func triageByDefault(a api.Account) bool {
+	return a.Enabled && a.Config.Protocol() != api.AccountJira
+}
+
+// TriageAccountChecked says whether account a is triaged under listed (the
+// preferences' TriageAccounts), as the daemon decides: a listed account
+// when some are listed, else every enabled mail account. A disabled
+// account is never triaged.
+func TriageAccountChecked(listed []api.AccountID, a api.Account) bool {
+	if !a.Enabled {
+		return false
+	}
+	if len(listed) == 0 {
+		return triageByDefault(a)
+	}
+	return slices.Contains(listed, a.ID)
+}
+
+// ToggleTriageAccount is listed with account id checked (on) or not, for
+// the accounts there are: the accounts checked now (TriageAccountChecked)
+// with id changed, in the order of accounts; empty again when that is
+// exactly every enabled mail account, so that a mail account added later
+// is triaged as before. A disabled account listed stays listed (in its
+// place), so that it is triaged again once enabled. ok is false, and
+// listed comes back as it was, when no enabled account would be left
+// checked (an empty list would mean every account) or id is not an
+// enabled account.
+func ToggleTriageAccount(listed []api.AccountID, accounts []api.Account, id api.AccountID, on bool) (next []api.AccountID, ok bool) {
+	found := false
+	enabled := 0
+	var checked, defaults []api.AccountID
+	for _, a := range accounts {
+		if !a.Enabled {
+			if slices.Contains(listed, a.ID) {
+				checked = append(checked, a.ID)
+			}
+			continue
+		}
+		c := TriageAccountChecked(listed, a)
+		if a.ID == id {
+			found = true
+			c = on
+		}
+		if c {
+			checked = append(checked, a.ID)
+			enabled++
+		}
+		if triageByDefault(a) {
+			defaults = append(defaults, a.ID)
+		}
+	}
+	if !found || enabled == 0 {
+		return slices.Clone(listed), false
+	}
+	if slices.Equal(checked, defaults) {
+		return []api.AccountID{}, true
+	}
+	return checked, true
+}
+
+// TriageAccountsCoverage is what Triage These Accounts' subtitle says
+// (TriageAccountsSubtitle).
+type TriageAccountsCoverage int
+
+// The coverages.
+const (
+	// TriageAccountsSome: the list names accounts and some of them are
+	// checked; the switches say which, no subtitle.
+	TriageAccountsSome TriageAccountsCoverage = iota
+	// TriageAccountsAll: nothing is listed, so every enabled mail account
+	// is triaged (board.TriageSettingsAccountsAll).
+	TriageAccountsAll
+	// TriageAccountsNone: the list names accounts but none of them is an
+	// enabled account any more (all removed or turned off). The daemon
+	// keeps such a list as it is, since an empty one would widen the
+	// triage to every account, so the triage reads nothing
+	// (board.TriageSettingsAccountsNone); checking an account replaces the
+	// list (ToggleTriageAccount).
+	TriageAccountsNone
+)
+
+// TriageAccountsSubtitle is the coverage of listed (the preferences'
+// TriageAccounts) over the accounts there are: All only when the list is
+// empty, None when it is not and no account is checked under it, else
+// Some.
+func TriageAccountsSubtitle(listed []api.AccountID, accounts []api.Account) TriageAccountsCoverage {
+	if len(listed) == 0 {
+		return TriageAccountsAll
+	}
+	for _, a := range accounts {
+		if TriageAccountChecked(listed, a) {
+			return TriageAccountsSome
+		}
+	}
+	return TriageAccountsNone
+}

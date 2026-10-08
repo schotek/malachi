@@ -93,6 +93,23 @@ into App.xaml.
         <Setter Property="MaxWidth" Value="170" />
     </Style>
 
+    <!--
+        A case's badges (Reminded, New contact) beside its state pill, in the
+        row, the card and the detail: plain pills as the account's, each a
+        text of Core's (Board.Row.Badges, Board.Detail.Badges) as TextBlock.Text.
+    -->
+    <DataTemplate x:Key="BoardBadgeTemplate">
+        <Border Background="{ThemeResource IssuePillPlainBrush}" Style="{StaticResource BoardPillBorderStyle}">
+            <TextBlock
+                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                Style="{StaticResource BoardPillTextStyle}"
+                Text="{Binding}" />
+        </Border>
+    </DataTemplate>
+    <ItemsPanelTemplate x:Key="BoardBadgesPanel">
+        <StackPanel Orientation="Horizontal" Spacing="6" />
+    </ItemsPanelTemplate>
+
     <!-- The detail's boxes (the "why", the summary, the suggested reply): BoardBox. -->
     <Style x:Key="BoardBoxStyle" TargetType="Border">
         <Setter Property="CornerRadius" Value="8" />

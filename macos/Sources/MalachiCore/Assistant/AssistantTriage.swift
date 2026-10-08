@@ -72,6 +72,32 @@ extension Assistant {
     /// (without the bridge's prefix, as `Event.tool` names it).
     public static let triageAnnotateTool = "annotate_case"
 
+    /// The start of the text of every accepted annotate_case result:
+    /// "annotated case <caseId>: …" (the bridge's annotateCase).
+    static let triageAnnotatedPrefix = "annotated case "
+
+    /// assistant.TriageAnnotatedCase: the case an accepted annotate_case
+    /// result names (its text, `Event.resultText`), nil when the text does
+    /// not start the bridge's way or the id is not one: 1 to 64 bytes of
+    /// ASCII letters, digits, "_" and "-". The bridge accepts a second
+    /// annotation of a case without charging another of the run's cases,
+    /// so the run counts the distinct cases.
+    public static func triageAnnotatedCase(_ result: String) -> String? {
+        let bytes = Array(result.utf8)
+        let prefix = Array(triageAnnotatedPrefix.utf8)
+        guard bytes.starts(with: prefix) else { return nil }
+        let rest = bytes[prefix.count...]
+        guard let colon = rest.firstIndex(of: UInt8(ascii: ":")) else { return nil }
+        let id = rest[rest.startIndex ..< colon]
+        guard !id.isEmpty, id.count <= 64 else { return nil }
+        for c in id {
+            let ok = (c >= 0x61 && c <= 0x7A) || (c >= 0x41 && c <= 0x5A) || (c >= 0x30 && c <= 0x39)
+                || c == UInt8(ascii: "_") || c == UInt8(ascii: "-")
+            guard ok else { return nil }
+        }
+        return String(decoding: id, as: UTF8.self)
+    }
+
     /// The bridge's arguments after --socket for run `runID`
     /// (`board.runStart`): the triage tier, the run the bridge passes on
     /// to board.annotate and board.commit, and `maxCases`, the run's limit,

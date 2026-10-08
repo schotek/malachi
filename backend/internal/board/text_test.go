@@ -41,6 +41,33 @@ func TestCleanLine(t *testing.T) {
 	}
 }
 
+// The joiner rule of CleanText: ZWJ and ZWNJ stay only between two kept
+// characters that are neither whitespace nor a joiner.
+func TestCleanTextJoiners(t *testing.T) {
+	const zj, znj = "\u200d", "\u200c"
+	for _, c := range []struct{ name, in, want string }{
+		{"emoji zwj sequence", "\U0001F468" + zj + "\U0001F469" + zj + "\U0001F467", "\U0001F468" + zj + "\U0001F469" + zj + "\U0001F467"},
+		{"heart on fire keeps vs16 and zwj", "\u2764\ufe0f" + zj + "\U0001F525", "\u2764\ufe0f" + zj + "\U0001F525"},
+		{"persian zwnj", "\u0645\u06cc" + znj + "\u062e", "\u0645\u06cc" + znj + "\u062e"},
+		{"leading", zj + "a", "a"},
+		{"trailing", "a" + znj, "a"},
+		{"before a space", "a" + zj + " b", "a b"},
+		{"after a space", "a " + zj + "b", "a b"},
+		{"at a line end", "a" + zj + "\nb", "a\nb"},
+		{"at a line start", "a\n" + znj + "b", "a\nb"},
+		{"a run of joiners", "a" + zj + zj + "b", "ab"},
+		{"mixed run", "a" + zj + znj + "b", "ab"},
+		{"invisible between is dropped first", "a" + zj + "\u200bb", "a" + zj + "b"},
+		{"vs16 after a joiner goes", "\u2764" + zj + "\ufe0f\U0001F525", "\u2764" + zj + "\U0001F525"},
+		{"only joiners", zj + znj + zj, ""},
+		{"joiner then a control", "a" + zj + "\x00", "a"},
+	} {
+		if got := CleanText(c.in); got != c.want {
+			t.Errorf("%s: %+q, want %+q", c.name, got, c.want)
+		}
+	}
+}
+
 func TestCleanBlock(t *testing.T) {
 	got, fits := CleanBlock("\n\n  First   line \r\n\r\n\r\n\r\nSecond\u202e line https://x.example\n\n", api.MaxBoardSummaryBytes)
 	if got != "First line\n\nSecond line" || !fits {

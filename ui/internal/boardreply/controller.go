@@ -145,6 +145,10 @@ type Config struct {
 // false), and the detail of the other case says so through
 // board.SuggestReplyViewOf (board.SuggestReplyElsewhere). Main loop only.
 type Controller struct {
+	// annotated: the assistant's annotations counted when View last ran
+	// (IsFollowUp decides by the state shown).
+	annotated bool
+
 	// Consent asks the user whether mail may go to the assistant (the
 	// panel's sheet, shared with the panel, the compose rewrite, the
 	// search and the triage) and calls done with the answer, true
@@ -268,6 +272,7 @@ func (c *Controller) CanRun() bool {
 // View is the control for case k of snapshot s (board.SuggestReplyViewOf);
 // samples: the board shows the invented samples.
 func (c *Controller) View(k board.Case, s board.Snapshot, samples bool, words board.PanelWords, tr board.Translator) board.SuggestReplyView {
+	c.annotated = s.Annotated
 	return board.SuggestReplyViewOf(board.SuggestReplyInputs{
 		Offered:     board.SuggestReplyOffered(k, s, samples),
 		Available:   c.available() && c.bridge != "",
@@ -275,6 +280,7 @@ func (c *Controller) View(k board.Case, s board.Snapshot, samples bool, words bo
 		SignedOut:   c.signedIn.Known && !c.signedIn.SignedIn,
 		State:       c.state,
 		Case:        k.ID,
+		FollowUp:    board.IsFollowUp(k, s.Annotated),
 	}, words, tr)
 }
 
@@ -476,7 +482,9 @@ func (c *Controller) gotCase(my int, id board.CaseID, instruction string, r api.
 	}
 	message := assistant.SuggestReplyMessage(string(r.Case.AccountID), string(r.Case.ReplyMessageID), others, instruction)
 	c.request.StartCall(assistantpanel.Call{
-		SystemPrompt: assistant.SuggestReplySystemPrompt(),
+		// A case waiting on the other side gets a follow-up on the user's
+		// own last message.
+		SystemPrompt: assistant.SuggestReplySystemPromptFor(board.IsFollowUpWire(r.Case, c.annotated)),
 		Message:      message,
 		Tools: &assistantpanel.Tools{
 			Bridge: c.bridge, Socket: c.socket,
@@ -558,6 +566,8 @@ func replyFailureOf(f assistantpanel.Failure) board.SuggestReplyFailure {
 		return board.ReplyNotFound
 	case assistantpanel.FailureNotSignedIn:
 		return board.ReplyNotSignedIn
+	case assistantpanel.FailureLimit:
+		return board.ReplyLimit
 	case assistantpanel.FailureToolsMissing:
 		return board.ReplyToolsMissing
 	default:

@@ -555,6 +555,12 @@ private final class Harness {
         // With the assistant off the queue counts as empty.
         h.board(queue: 4, assistantOn: false)
         #expect(h.controller.autoTriageInputs.queue == 0)
+        // Only this application's own run counts (the Go and C# rule): one
+        // the daemon reports open (another client's) does not.
+        h.board(queue: 4, run: Board.Run(model: "m", date: t0, running: true, trigger: "external", started: t0))
+        #expect(!h.controller.autoTriageInputs.running)
+        h.board(queue: 4, run: Board.Run(model: "m", date: t0, running: false, trigger: "external", started: t0))
+        #expect(!h.controller.autoTriageInputs.running)
         await h.stop()
     }
 
@@ -799,7 +805,9 @@ private final class Harness {
         // Two lines of message m1 (counted once), one of m2.
         let lines = [fakeInit] + annotateUsing("a1", msg: "m1", input: 5, read: 100)
             + annotateUsing("a2", msg: "m1", input: 5, read: 100) + annotateUsing("a3", msg: "m2", input: 7, read: 300)
-        let sum = BoardUsage(inputTokens: 12, outputTokens: 2, cacheCreationInputTokens: 20, cacheReadInputTokens: 400)
+        // Without the result's usage the sum is a lower bound.
+        let sum = BoardUsage(
+            inputTokens: 12, outputTokens: 2, cacheCreationInputTokens: 20, cacheReadInputTokens: 400, lowerBound: true)
         // Cancelled.
         var h = try await Harness(fake: try FakeClaude(turns: [FakeTurn(
             lines: lines, shell: "sleep 30; echo '\(resultUsing(input: 1, output: 1, write: 1, read: 1))'")]))
@@ -819,7 +827,8 @@ private final class Harness {
         h.controller.start(.automatic, limit: 3)
         try await h.ended()
         #expect(await h.daemon.script.runEnds == [BoardRunEndParams(runId: "run_1", usage: BoardUsage(
-            inputTokens: 1012, outputTokens: 3, cacheCreationInputTokens: 30, cacheReadInputTokens: 1400))])
+            inputTokens: 1012, outputTokens: 3, cacheCreationInputTokens: 30, cacheReadInputTokens: 1400,
+            lowerBound: true))])
         await h.stop()
         // Timed out.
         h = try await Harness(fake: try FakeClaude(turns: [FakeTurn(lines: lines, shell: "sleep 30")]))
@@ -898,10 +907,27 @@ private final class Harness {
         #expect(h.controller.state == .finished(.manual, annotated: 2, at: t0))
         try await h.ended()
         #expect(await h.daemon.script.runEnds == [BoardRunEndParams(runId: "run_1", usage: BoardUsage(
-            inputTokens: 12, outputTokens: 2, cacheCreationInputTokens: 20, cacheReadInputTokens: 400))])
+            inputTokens: 12, outputTokens: 2, cacheCreationInputTokens: 20, cacheReadInputTokens: 400,
+            lowerBound: true))])
         try await Task.sleep(for: .milliseconds(200))
         #expect(h.ends.count == 1 && h.ends[0].1 == nil)
         #expect(await h.daemon.script.runEnds.count == 1)
+        await h.stop()
+    }
+
+    /// A second note on the same case counts once (the bridge charges no
+    /// second slot for it); a result naming no case counts as its own.
+    @Test func reannotationCountsOnce() async throws {
+        let fake = try FakeClaude(turns: [FakeTurn(lines: [
+            fakeInit, fakeToolUse("a1", "annotate_case"), fakeToolResult("a1", "annotated case c_1: x"),
+            fakeToolUse("a2", "annotate_case"), fakeToolResult("a2", "annotated case c_1: y"),
+            fakeToolUse("a3", "annotate_case"), fakeToolResult("a3", "annotated"), fakeResult("ok"),
+        ])])
+        let h = try await Harness(fake: fake)
+        h.board(queue: 5)
+        h.controller.start(.manual, limit: 3)
+        try await h.ended()
+        #expect(h.controller.state == .finished(.manual, annotated: 2, refused: 0, at: t0))
         await h.stop()
     }
 
@@ -920,8 +946,9 @@ private final class Harness {
         try await h.ended()
         let ends = await h.daemon.script.runEnds
         #expect(ends.count == 2)
+        // A result without usage: the messages' placeholders, a lower bound.
         #expect(ends.first?.usage == BoardUsage(
-            inputTokens: 5, outputTokens: 1, cacheCreationInputTokens: 10, cacheReadInputTokens: 100))
+            inputTokens: 5, outputTokens: 1, cacheCreationInputTokens: 10, cacheReadInputTokens: 100, lowerBound: true))
         #expect(ends.last?.usage == nil)
         await h.stop()
     }

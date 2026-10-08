@@ -38,7 +38,10 @@ func TestBoardOwnTextFromHTML(t *testing.T) {
 	// The user's own words ask: them.asked.
 	x.put(bmail{folder: x.sent, thread: "t_venue", rfc: "v2", inReplyTo: "v1", from: boardMe, to: []api.Address{boardBob}, subject: "Re: Venue",
 		text: "Can you confirm the venue?\n\nSure.", html: gmailQuote("Can you confirm the venue?", "Sure.")})
-	// A reply with HTML to Bob's question, and a plain-text innerText one.
+	// An older message of the user's before Bob's question, then a reply
+	// with HTML to it, and a plain-text innerText one.
+	older := x.put(bmail{folder: x.sent, thread: "t_deck", rfc: "d0", from: boardMe, to: []api.Address{boardBob}, subject: "Deck",
+		at: -time.Hour, text: "The deck is coming.", html: "<p>The deck is coming.</p>"})
 	x.put(bmail{folder: x.inbox, thread: "t_deck", rfc: "d1", from: boardBob, to: []api.Address{boardMe}, subject: "Deck",
 		text: "Can you send the deck by Friday?"})
 	html := x.put(bmail{folder: x.sent, thread: "t_deck", rfc: "d2", inReplyTo: "d1", from: boardMe, to: []api.Address{boardBob}, subject: "Re: Deck",
@@ -57,8 +60,8 @@ func TestBoardOwnTextFromHTML(t *testing.T) {
 		t.Fatalf("deck: %s", deck.RuleReason)
 	}
 	// Own texts are derived only for what the rules read: the user's
-	// newest message (with HTML here, without in t_deck), not an older one
-	// of a thread with an inbound member.
+	// messages after the newest inbound one (rules 6: their forward
+	// shape), not an older one before it.
 	k := func(id string) boardOwnKey { return boardOwnKey{account: x.acc, id: id, state: store.BodyFetched} }
 	if own, ok := x.b.board.own.get(k(party)); !ok || !own.html || own.text != "Noted, see you there." {
 		t.Fatalf("own text of the HTML message: %+v %v", own, ok)
@@ -66,8 +69,11 @@ func TestBoardOwnTextFromHTML(t *testing.T) {
 	if own, ok := x.b.board.own.get(k(plain)); !ok || own.html {
 		t.Fatalf("own text of the plain message: %+v %v", own, ok)
 	}
-	if _, ok := x.b.board.own.get(k(html)); ok {
-		t.Fatal("the own text of an older reply was derived")
+	if own, ok := x.b.board.own.get(k(html)); !ok || !own.html {
+		t.Fatalf("own text of the HTML reply after the inbound message: %+v %v", own, ok)
+	}
+	if _, ok := x.b.board.own.get(k(older)); ok {
+		t.Fatal("the own text of a message before the inbound one was derived")
 	}
 
 	x.assistantOn()
@@ -109,8 +115,9 @@ func TestBoardFiredRemindOutsideWindow(t *testing.T) {
 	if _, err := x.svc.SetPreferences(x.ctx, api.BoardSetPreferencesParams{Preferences: p}); err != nil {
 		t.Fatal(err)
 	}
-	// Carol is unknown: info, dated ten days ago.
-	x.put(bmail{folder: x.inbox, thread: "t_i", rfc: "i1", from: boardCarol, to: []api.Address{boardMe}, at: -8 * 24 * time.Hour, text: "FYI"})
+	// Carol is unknown and writes to Alice, the user in Cc: info, dated ten days ago.
+	x.put(bmail{folder: x.inbox, thread: "t_i", rfc: "i1", from: boardCarol, to: []api.Address{boardAlice}, cc: []api.Address{boardMe},
+		at: -8 * 24 * time.Hour, text: "FYI"})
 	x.drain()
 	c := x.caseOf("t_i")
 	if c.RuleReason != api.BoardReasonInfoUnknownSender {
@@ -410,14 +417,14 @@ func TestBoardKnownCorrespondentsRefresh(t *testing.T) {
 	x := newBoardBox(t)
 	x.put(bmail{folder: x.inbox, thread: "t_c", rfc: "c1", from: boardCarol, to: []api.Address{boardMe}, text: "Hello"})
 	x.drain()
-	if c := x.caseOf("t_c"); c.RuleReason != api.BoardReasonInfoUnknownSender {
+	if c := x.caseOf("t_c"); c.RuleReason != api.BoardReasonYouNewContact {
 		t.Fatalf("before: %s", c.RuleReason)
 	}
 	// The user writes to Carol in another thread: known only after the
 	// next read of the set.
 	x.put(bmail{folder: x.sent, thread: "t_other", rfc: "o1", from: boardMe, to: []api.Address{boardCarol}, subject: "Other", text: "Hi Carol."})
 	x.drain()
-	if c := x.caseOf("t_c"); c.RuleReason != api.BoardReasonInfoUnknownSender {
+	if c := x.caseOf("t_c"); c.RuleReason != api.BoardReasonYouNewContact {
 		t.Fatalf("within the hour: %s", c.RuleReason)
 	}
 	later := time.Now().Add(boardIdentityTTL + time.Minute)

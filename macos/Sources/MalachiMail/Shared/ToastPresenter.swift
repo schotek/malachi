@@ -24,6 +24,10 @@ final class ToastPresenter: NSView, Toasts {
     }
 
     private var queue: [Toast] = []
+    /// Called whenever a toast comes into sight (shown, or replacing the
+    /// one shown): the board page takes its Undo capsule away then, so the
+    /// two never overlap, whoever asked for the toast.
+    var onShow: (() -> Void)?
     private var current: Toast?
     private var dismissal: DispatchWorkItem?
 
@@ -148,6 +152,7 @@ final class ToastPresenter: NSView, Toasts {
     // MARK: Internals
 
     private func present(_ toast: Toast) {
+        onShow?()
         current = toast
         label.stringValue = toast.text
         capsule.toolTip = toast.text
@@ -156,6 +161,7 @@ final class ToastPresenter: NSView, Toasts {
     }
 
     private func replaceCurrent(with toast: Toast) {
+        onShow?()
         dismissal?.cancel()
         dismissal = nil
         current = toast

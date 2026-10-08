@@ -439,6 +439,26 @@ private final class Harness {
         await h.stop()
     }
 
+    @Test func hasSendingTellsASendFromUnsavedText() async throws {
+        let h = try await Harness()
+        let p = try await h.open(boardCase("1"))
+        p.isSending = true
+        h.panes.show(boardCase("2"))
+        try await waitUntil { h.panes.live?.key.caseID.rawValue == "c_2" }
+        #expect(h.panes.hasSending && !h.panes.hasUnsaved)
+        p.isSending = false
+        h.panes.ended(p, .sent("Message queued for sending"))
+        #expect(!h.panes.hasSending)
+        await h.stop()
+    }
+
+    @Test func quitHeadingNamesASendOnlyWithoutUnsavedText() {
+        #expect(Board.Text.quitHeading(unsaved: false, sending: true) == Board.Text.quitUnsentHeading)
+        #expect(Board.Text.quitHeading(unsaved: true, sending: true) == Board.Text.quitUnsavedHeading)
+        #expect(Board.Text.quitHeading(unsaved: true, sending: false) == Board.Text.quitUnsavedHeading)
+        #expect(Board.Text.quitHeading(unsaved: false, sending: false) == Board.Text.quitUnsavedHeading)
+    }
+
     @Test func quittingWaitsForASendAtMostTheBound() async throws {
         let h = try await Harness()
         let p = try await h.open(boardCase("1"))
@@ -447,6 +467,45 @@ private final class Harness {
         #expect(await h.panes.finishAll(wait: .milliseconds(100)) == false)
         #expect(ContinuousClock.now - start >= .milliseconds(100))
         #expect(p.settles == 0 && !p.closed)
+        await h.stop()
+    }
+
+    /// Audit row 8: the bound of a quit that ended early (and that the user
+    /// then cancelled) never cuts a later quit's wait short.
+    @Test func anEarlierQuitsBoundDoesNotCutTheNextOneShort() async throws {
+        let h = try await Harness()
+        let p1 = try await h.open(boardCase("1"))
+        p1.isSending = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(30))
+            p1.isSending = false
+            h.panes.ended(p1, .sent("Message queued for sending"))
+        }
+        #expect(await h.panes.finishAll(wait: .milliseconds(400)))
+        // The user stays; a second quit follows within the first's bound.
+        h.panes.resume()
+        let p2 = try await h.open(boardCase("2"))
+        p2.isSending = true
+        let start = ContinuousClock.now
+        #expect(await h.panes.finishAll(wait: .milliseconds(900)) == false)
+        #expect(ContinuousClock.now - start >= .milliseconds(900))
+        await h.stop()
+    }
+
+    /// A second quit while the first still waits: the first returns at
+    /// once (its continuation is resumed, not overwritten), the second
+    /// waits its own bound.
+    @Test func aSecondQuitReleasesTheFirstWait() async throws {
+        let h = try await Harness()
+        let p = try await h.open(boardCase("1"))
+        p.isSending = true
+        let first = Task { @MainActor in await h.panes.finishAll(wait: .seconds(30)) }
+        try await Task.sleep(for: .milliseconds(50))
+        let start = ContinuousClock.now
+        let second = await h.panes.finishAll(wait: .milliseconds(100))
+        #expect(second == false)
+        #expect(await first.value == false)
+        #expect(ContinuousClock.now - start < .seconds(10))
         await h.stop()
     }
 

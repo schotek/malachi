@@ -44,6 +44,18 @@
     <value nick="columns" value="1"/>
     <value nick="today" value="2"/>
   </enum>
+  <!-- Board View: a style, or the one used last (board-last-style) -->
+  <enum id="io.github.schotek.Malachi.BoardDefaultStyle">
+    <value nick="last" value="3"/>
+    <value nick="list" value="0"/>
+    <value nick="columns" value="1"/>
+    <value nick="today" value="2"/>
+  </enum>
+  <enum id="io.github.schotek.Malachi.BoardStartMode">
+    <value nick="mail" value="0"/>
+    <value nick="board" value="1"/>
+    <value nick="last" value="2"/>
+  </enum>
 
   <schema id="io.github.schotek.Malachi" path="/io/github/schotek/Malachi/">
     <!-- Window geometry -->
@@ -215,11 +227,32 @@
       <description>Zero means no permission to send board mail to OpenAI.</description>
     </key>
 
-    <!-- Board: the style it opens in, and its own triage consent and model -->
-    <key name="board-default-style" enum="io.github.schotek.Malachi.BoardStyle">
-      <default>'list'</default>
+    <!-- Board: the style and mode it opens in, what it remembers, and its
+         own triage consent and model -->
+    <key name="board-default-style" enum="io.github.schotek.Malachi.BoardDefaultStyle">
+      <default>'last'</default>
       <summary>The style the Board opens in</summary>
-      <description>List, Columns or Today; applies the first time the Board is shown after launch, then the style last chosen lasts until the app quits.</description>
+      <description>Last Used (the style in board-last-style), List, Columns or Today; a changed choice applies the next time the Board is shown, unless a style was already picked in this run, which then stays until the app quits.</description>
+    </key>
+    <key name="board-last-style" enum="io.github.schotek.Malachi.BoardStyle">
+      <default>'list'</default>
+      <summary>The style the Board was shown in last</summary>
+      <description>Written whenever the user changes the Board's style; read when board-default-style is Last Used.</description>
+    </key>
+    <key name="board-start-mode" enum="io.github.schotek.Malachi.BoardStartMode">
+      <default>'mail'</default>
+      <summary>What the main window shows at launch</summary>
+      <description>Mail, the Board, or the mode shown last (board-last-mode). Always Mail while the Board is turned off.</description>
+    </key>
+    <key name="board-last-mode" type="s">
+      <default>'mail'</default>
+      <summary>The mode the main window showed last</summary>
+      <description>"mail" or "board", written whenever the mode switches; read when board-start-mode is Last.</description>
+    </key>
+    <key name="board-account-filter" type="s">
+      <default>''</default>
+      <summary>The account the Board is filtered to</summary>
+      <description>The daemon's account id, written whenever the Board's account filter changes; empty means every account. Applied when the Board shows while that account still exists.</description>
     </key>
     <key name="board-triage-consent" type="b">
       <default>false</default>

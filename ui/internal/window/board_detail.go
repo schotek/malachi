@@ -4,7 +4,10 @@
 package window
 
 import (
+	"slices"
+
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
+	"github.com/diamondburned/gotk4/pkg/pango"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/board"
@@ -31,13 +34,16 @@ func (p *boardPage) renderDetail(vm board.ViewModel) {
 		if p.conversation != nil {
 			p.conversation.apply(nil)
 		}
-		p.noSelectionPage.SetIconName("view-grid-symbolic")
-		p.noSelectionPage.SetTitle(board.NoSelectionTitle(i18n.Tr))
-		p.noSelectionPage.SetDescription(board.NoSelectionBody(i18n.Tr))
+		// Adw.StatusPage's description is markup: escaped (setStatusPage).
+		setStatusPage(p.noSelectionPage, "view-grid-symbolic", board.NoSelectionTitle(i18n.Tr), board.NoSelectionBody(i18n.Tr))
 		p.detailStack.SetVisibleChildName("empty")
 		return
 	}
 	p.detailStack.SetVisibleChildName("detail")
+	// The deadline, summary and commitment boxes are still rebuilt whole:
+	// the keyboard on a commitment's tick goes to the state pill rather
+	// than nowhere.
+	refocus := p.keyboardIn(p.dueBox, p.summaryBox, p.commitmentsBox)
 	p.renderDetailHeader(*d)
 	p.renderDetailTop(*d)
 	p.renderDetailDue(*d)
@@ -45,10 +51,30 @@ func (p *boardPage) renderDetail(vm board.ViewModel) {
 	p.renderDetailReplySlot(*d)
 	p.renderDetailConversation(*d)
 	p.renderDetailCommitments(*d)
+	if refocus && !p.keyboardIn(p.dueBox, p.summaryBox, p.commitmentsBox) && p.statePill != nil {
+		p.statePill.GrabFocus()
+	}
+}
+
+// keyboardIn reports the window's focus inside one of boxes.
+func (p *boardPage) keyboardIn(boxes ...*gtk.Box) bool {
+	f := p.w.Focus()
+	if f == nil {
+		return false
+	}
+	for _, b := range boxes {
+		if gtk.BaseWidget(f).IsAncestor(b) {
+			return true
+		}
+	}
+	return false
 }
 
 // renderDetailHeader is the detail pane's own header bar: Done / Move Back
-// to Board, Remind…, Archive, Reply (or Comment), Show in Mail.
+// to Board, Remind…, Archive, Reply (or Comment), Show in Mail. The
+// buttons act through the win.board-* actions, whose enabled state
+// (applyActionsSensitivity) is the buttons' sensitivity; the menus are set
+// once (wireDetailHeader), so a refresh never closes an open one.
 func (p *boardPage) renderDetailHeader(d board.Detail) {
 	if d.IsDone {
 		p.doneButton.SetLabel(board.NotDone(i18n.Tr))
@@ -57,13 +83,19 @@ func (p *boardPage) renderDetailHeader(d board.Detail) {
 		p.doneButton.SetLabel(board.Done(i18n.Tr))
 		p.doneButton.SetActionName("win.board-mark-done")
 	}
-	p.remindButton.SetLabel(board.Remind(i18n.Tr))
-	p.archiveButton.SetLabel(board.Archive(i18n.Tr))
-	p.archiveButton.SetSensitive(!d.IsDone)
 	comment := p.w.boardCaseComments(d)
 	p.replyButton.SetLabel(jira.ReplyLabel(comment, i18n.Tr))
+}
+
+// wireDetailHeader sets what the detail header's buttons never change:
+// their texts and actions, the "…" menu and the Remind popover.
+func (p *boardPage) wireDetailHeader() {
+	p.remindButton.SetLabel(board.Remind(i18n.Tr))
+	p.archiveButton.SetLabel(board.Archive(i18n.Tr))
+	p.archiveButton.SetActionName("win.board-archive")
 	p.replyButton.SetActionName("win.board-reply")
 	p.detailMenu.SetMenuModel(boardDetailMenu())
+	p.wireRemindButton()
 }
 
 // boardCaseComments reports whether the case's reply is a comment (a Jira
@@ -74,98 +106,169 @@ func (w *Window) boardCaseComments(d board.Detail) bool {
 	return ok && acc.Can(api.CapabilityComment)
 }
 
-// renderDetailTop rebuilds the state pill, title, person/date and the Why /
-// Unstar links.
-func (p *boardPage) renderDetailTop(d board.Detail) {
-	removeAllChildren(p.detailTop)
+// boardDetailTop is the top of the detail — the state pill, the issue's
+// status, the badges, title, subject, byline, remind line, the Why and
+// Unstar links and the "Why is this here?" box — built once and updated in
+// place: ChangeContent fires on every autosave and annotation, and a
+// rebuilt pill or link would take the keyboard with it.
+type boardDetailTop struct {
+	pill      *gtk.MenuButton
+	pillClass string
+	issue     *gtk.Label
+	badges    *gtk.Box
+	shown     []string // the badges shown
+	title     *gtk.Label
+	subject   *gtk.Label
+	byline    *gtk.Label
+	remind    *gtk.Label
+	why       *gtk.Button
+	unstar    *gtk.Button
+	whyBox    *gtk.Box
+	whyText   *gtk.Label
+	source    *gtk.Label
+	notes     *gtk.Box
+	noteTexts []string
+	stale     *gtk.Label
+}
 
+// detailLabel is a plain-text label of the detail's top.
+func detailLabel(classes ...string) *gtk.Label {
+	l := gtk.NewLabel("")
+	l.SetUseMarkup(false)
+	l.SetXAlign(0)
+	l.SetWrap(true)
+	for _, c := range classes {
+		l.AddCSSClass(c)
+	}
+	return l
+}
+
+// buildDetailTop makes p.top's widgets into board_detail_top, once.
+func (p *boardPage) buildDetailTop() *boardDetailTop {
+	t := &boardDetailTop{}
 	pillRow := gtk.NewBox(gtk.OrientationHorizontal, 8)
-	pill := gtk.NewMenuButton()
-	p.statePill = pill
-	pill.AddCSSClass("board-state-pill")
-	if c := boardStatePillClass(d.State); c != "" {
-		pill.AddCSSClass(c)
-	}
-	pill.SetLabel(d.StateTitle)
-	pill.SetTooltipText(board.StateLabel(i18n.Tr))
-	pill.SetMenuModel(p.w.boardStateMenu())
-	pillRow.Append(pill)
-	if d.Issue != nil {
-		status := widget.NewPill()
-		widget.SetStatusPill(status, d.Issue.Status, d.Issue.Style)
-		pillRow.Append(status)
-	}
+	t.pill = gtk.NewMenuButton()
+	t.pill.AddCSSClass("board-state-pill")
+	t.pill.SetTooltipText(board.StateLabel(i18n.Tr))
+	t.pill.SetMenuModel(p.w.boardStateMenu())
+	pillRow.Append(t.pill)
+	t.issue = widget.NewPill()
+	pillRow.Append(t.issue)
+	t.badges = gtk.NewBox(gtk.OrientationHorizontal, 4)
+	t.badges.SetVAlign(gtk.AlignCenter)
+	t.badges.SetVisible(false)
+	pillRow.Append(t.badges)
 	p.detailTop.Append(pillRow)
+	p.statePill = t.pill
 
-	title := gtk.NewLabel(boardTitleText(d.Title, d.TitleIsAssistant))
-	title.SetUseMarkup(false)
-	title.SetXAlign(0)
-	title.SetWrap(true)
-	title.SetSelectable(true)
-	title.AddCSSClass("title-2")
-	p.detailTop.Append(title)
-	if d.Subject != "" {
-		subj := gtk.NewLabel(d.Subject)
-		subj.SetUseMarkup(false)
-		subj.SetXAlign(0)
-		subj.SetWrap(true)
-		subj.AddCSSClass("dim-label")
-		p.detailTop.Append(subj)
-	}
-
-	person := gtk.NewLabel(d.Person + " · " + d.Time)
-	person.SetUseMarkup(false)
-	person.SetXAlign(0)
-	person.AddCSSClass("dim-label")
-	p.detailTop.Append(person)
-
-	if d.RemindText != "" {
-		snoozed := gtk.NewLabel(d.RemindText)
-		snoozed.SetUseMarkup(false)
-		snoozed.SetXAlign(0)
-		snoozed.AddCSSClass("caption")
-		snoozed.AddCSSClass("dim-label")
-		p.detailTop.Append(snoozed)
-	}
+	t.title = detailLabel("title-2")
+	t.title.SetSelectable(true)
+	p.detailTop.Append(t.title)
+	t.subject = detailLabel("dim-label")
+	p.detailTop.Append(t.subject)
+	t.byline = detailLabel("dim-label")
+	t.byline.SetWrap(false)
+	t.byline.SetEllipsize(pango.EllipsizeEnd)
+	p.detailTop.Append(t.byline)
+	t.remind = detailLabel("caption", "dim-label")
+	p.detailTop.Append(t.remind)
 
 	links := gtk.NewBox(gtk.OrientationHorizontal, 8)
-	why := gtk.NewButtonWithLabel(board.WhyLink(i18n.Tr))
-	why.AddCSSClass("flat")
-	why.AddCSSClass("link")
-	why.ConnectClicked(p.ctl.ToggleWhy)
-	links.Append(why)
-	if d.CanUnstar {
-		unstar := gtk.NewButtonWithLabel(board.Unstar(i18n.Tr))
-		unstar.AddCSSClass("flat")
-		unstar.AddCSSClass("link")
-		id := d.ID
-		unstar.ConnectClicked(func() { p.ctl.Unflag(id) })
-		links.Append(unstar)
-	}
+	t.why = gtk.NewButtonWithLabel(board.WhyLink(i18n.Tr))
+	t.why.AddCSSClass("flat")
+	t.why.AddCSSClass("link")
+	t.why.ConnectClicked(p.ctl.ToggleWhy)
+	links.Append(t.why)
+	t.unstar = gtk.NewButtonWithLabel(board.Unstar(i18n.Tr))
+	t.unstar.AddCSSClass("flat")
+	t.unstar.AddCSSClass("link")
+	t.unstar.ConnectClicked(func() {
+		if d := p.ctl.View().Detail; d != nil && d.CanUnstar {
+			p.ctl.Unflag(d.ID)
+		}
+	})
+	links.Append(t.unstar)
 	p.detailTop.Append(links)
 
-	if p.ctl.State().RevealsWhy {
-		box := gtk.NewBox(gtk.OrientationVertical, 2)
-		box.AddCSSClass("board-assistant-box")
-		why := gtk.NewLabel(d.Why)
-		why.SetUseMarkup(false)
-		why.SetXAlign(0)
-		why.SetWrap(true)
-		if d.WhyIsAssistant {
-			why.SetText(board.AssistantMark + " " + d.Why)
-		}
-		box.Append(why)
-		if d.StaleNote != "" {
-			note := gtk.NewLabel(d.StaleNote)
-			note.SetUseMarkup(false)
-			note.SetXAlign(0)
-			note.SetWrap(true)
-			note.AddCSSClass("caption")
-			note.AddCSSClass("dim-label")
-			box.Append(note)
-		}
-		p.detailTop.Append(box)
+	t.whyBox = gtk.NewBox(gtk.OrientationVertical, 4)
+	t.whyBox.AddCSSClass("board-assistant-box")
+	t.whyText = detailLabel()
+	t.whyBox.Append(t.whyText)
+	t.source = detailLabel("caption", "dim-label")
+	t.whyBox.Append(t.source)
+	t.notes = gtk.NewBox(gtk.OrientationVertical, 2)
+	t.whyBox.Append(t.notes)
+	t.stale = detailLabel("caption", "dim-label")
+	t.whyBox.Append(t.stale)
+	p.detailTop.Append(t.whyBox)
+	return t
+}
+
+// setText shows text in l, hiding l while it is empty.
+func setShownText(l *gtk.Label, text string) {
+	l.SetText(text)
+	l.SetVisible(text != "")
+}
+
+// renderDetailTop shows the state pill, the badges, title, byline and the
+// Why / Unstar links of d, in place.
+func (p *boardPage) renderDetailTop(d board.Detail) {
+	if p.top == nil {
+		p.top = p.buildDetailTop()
 	}
+	t := p.top
+	if c := boardStatePillClass(d.State); c != t.pillClass {
+		if t.pillClass != "" {
+			t.pill.RemoveCSSClass(t.pillClass)
+		}
+		if c != "" {
+			t.pill.AddCSSClass(c)
+		}
+		t.pillClass = c
+	}
+	t.pill.SetLabel(d.StateTitle)
+	if d.Issue != nil {
+		widget.SetStatusPill(t.issue, d.Issue.Status, d.Issue.Style)
+	} else {
+		widget.SetStatusPill(t.issue, "", jira.StatusPlain)
+	}
+	t.badges.SetVisible(len(d.Badges) > 0)
+	if !slices.Equal(d.Badges, t.shown) {
+		t.shown = slices.Clone(d.Badges)
+		removeAllChildren(t.badges)
+		for _, b := range d.Badges {
+			t.badges.Append(widget.NewBadgePill(b))
+		}
+	}
+
+	t.title.SetText(boardTitleText(d.Title, d.TitleIsAssistant))
+	setShownText(t.subject, d.Subject)
+	setShownText(t.byline, d.Byline)
+	setShownText(t.remind, d.RemindText)
+	t.unstar.SetVisible(d.CanUnstar)
+
+	reveals := p.ctl.State().RevealsWhy
+	t.whyBox.SetVisible(reveals)
+	if !reveals {
+		return
+	}
+	why := d.Why
+	if d.WhyIsAssistant && why != "" {
+		why = board.AssistantMark + " " + why
+	}
+	t.whyText.SetText(why)
+	setShownText(t.source, d.SourceText)
+	if !slices.Equal(d.WhyNotes, t.noteTexts) {
+		t.noteTexts = slices.Clone(d.WhyNotes)
+		removeAllChildren(t.notes)
+		for _, n := range d.WhyNotes {
+			l := detailLabel()
+			l.SetText(n)
+			t.notes.Append(l)
+		}
+	}
+	t.notes.SetVisible(len(d.WhyNotes) > 0)
+	setShownText(t.stale, d.StaleNote)
 }
 
 // renderDetailDue shows the deadline with its quote.
@@ -235,7 +338,6 @@ func (p *boardPage) renderDetailSummary(d board.Detail) {
 // renderDetailCommitments shows "From the Assistant": the case's open
 // commitments, each with a tick that marks it done.
 func (p *boardPage) renderDetailCommitments(d board.Detail) {
-	removeAllChildren(p.commitmentsBox)
 	own := p.ctl.View().Commitments
 	var mine []board.CommitmentRow
 	for _, k := range own {
@@ -244,9 +346,16 @@ func (p *boardPage) renderDetailCommitments(d board.Detail) {
 		}
 	}
 	p.commitmentsBox.SetVisible(len(mine) > 0)
-	if len(mine) == 0 {
+	// The same commitments keep their rows (and a focused tick).
+	if p.commitmentsCase == d.ID && slices.Equal(mine, p.commitmentsShown) {
 		return
 	}
+	p.commitmentsCase, p.commitmentsShown = d.ID, mine
+	if len(mine) == 0 {
+		removeAllChildren(p.commitmentsBox)
+		return
+	}
+	removeAllChildren(p.commitmentsBox)
 	head := gtk.NewLabel(board.FromAssistant(i18n.Tr))
 	head.SetUseMarkup(false)
 	head.SetXAlign(0)

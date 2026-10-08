@@ -54,6 +54,41 @@ public static partial class Assistant
     /// </summary>
     public const string TriageAnnotateTool = "annotate_case";
 
+    // The start of the text of every accepted annotate_case result:
+    // "annotated case <caseId>: …" (the bridge's annotateCase).
+    private const string TriageAnnotatedPrefix = "annotated case ";
+
+    /// <summary>
+    /// The case an accepted annotate_case result names (its text,
+    /// <see cref="AssistantEvent.ResultText"/>); null when the text does not
+    /// start the bridge's way or the id is not one: 1 to 64 ASCII letters,
+    /// digits, "_" and "-". The bridge accepts a second annotation of a case
+    /// without charging another of the run's cases, so the run counts the
+    /// distinct cases.
+    /// </summary>
+    public static string? TriageAnnotatedCase(string? result)
+    {
+        if (result is null || !result.StartsWith(TriageAnnotatedPrefix, StringComparison.Ordinal))
+        {
+            return null;
+        }
+        var rest = result[TriageAnnotatedPrefix.Length..];
+        var colon = rest.IndexOf(':', StringComparison.Ordinal);
+        if (colon <= 0 || colon > 64)
+        {
+            return null;
+        }
+        var id = rest[..colon];
+        foreach (var c in id)
+        {
+            if (!(char.IsAsciiLetterOrDigit(c) || c is '_' or '-'))
+            {
+                return null;
+            }
+        }
+        return id;
+    }
+
     /// <summary>
     /// The run's <c>source</c> for <c>board.runStart</c>: what the bridge
     /// reports as its client's name for the annotations of the run.

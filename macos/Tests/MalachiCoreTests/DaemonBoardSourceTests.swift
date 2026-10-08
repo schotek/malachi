@@ -102,6 +102,22 @@ private actor BoardScript {
         return try JSONCoding.encoder().encode(EmptyResult())
     }
     func count(_ method: String) -> Int { calls.filter { $0 == method }.count }
+    private(set) var moves: [MessageMoveParams] = []
+    /// message.move fails (a message gone from the archive).
+    var moveFailure: RPCError?
+    /// board.archive answers without `moved` (an archive folder the daemon
+    /// does not sync).
+    var archiveMovesNothing = false
+    func set(moveFailure: RPCError?) { self.moveFailure = moveFailure }
+    func set(archiveMovesNothing: Bool) { self.archiveMovesNothing = archiveMovesNothing }
+    func move(_ params: Data) throws -> Data {
+        calls.append(API.MessageMove.name)
+        moves.append(try JSONCoding.decoder().decode(MessageMoveParams.self, from: params))
+        if let moveFailure {
+            throw moveFailure
+        }
+        return try JSONCoding.encoder().encode(EmptyResult())
+    }
 
     /// Holds the replies of board.list (writes, board.get) from now on, or
     /// lets them through again and releases the ones held.
@@ -248,7 +264,10 @@ private final class Harness {
                 $0.visibility = .done
                 $0.canArchive = false
             }
-            return try JSONCoding.encoder().encode(BoardArchiveResult(archived: 2, case: c))
+            let moved = await s.archiveMovesNothing ? nil : [
+                BoardMoved(messageId: "m_a", fromFolderId: "f_inbox"), BoardMoved(messageId: "m_b", fromFolderId: "f_inbox"),
+            ]
+            return try JSONCoding.encoder().encode(BoardArchiveResult(archived: 2, case: c, moved: moved))
         }
         await fake.on(API.BoardDiscardDraft.name) { p in
             let q = try JSONCoding.decoder().decode(BoardDiscardDraftParams.self, from: p)
@@ -265,6 +284,7 @@ private final class Harness {
         }
         await fake.on(API.BoardSetCommitment.name) { p in try await s.setCommitment(p) }
         await fake.on(API.DraftDelete.name) { p in try await s.delete(p) }
+        await fake.on(API.MessageMove.name) { p in try await s.move(p) }
         try await fake.start()
         client = RPCClient(socketPath: fake.path)
         if connect {
@@ -613,6 +633,79 @@ private final class Harness {
         try await h.idle()
         #expect(h.notices == ["Archived 2 messages."])
         #expect(h.c("1")?.canArchive == false)
+        await h.stop()
+    }
+
+    /// Archive hands its outcome to `onArchived` with the moved messages;
+    /// Undo moves them back, folder by folder, then reopens the case.
+    @Test func archiveOffersUndo() async throws {
+        let h = try await Harness().started()
+        var outcomes: [Board.ArchiveOutcome] = []
+        h.source.onArchived = { outcomes.append($0) }
+        h.source.archive(caseID("1"))
+        try await h.idle()
+        #expect(h.notices.isEmpty)
+        let o = try #require(outcomes.first)
+        #expect(o.caseID == caseID("1") && o.account == "acc_1" && o.text == "Archived 2 messages." && o.undoLabel == "Undo")
+        #expect(o.moved.map(\.messageId) == ["m_a", "m_b"])
+        h.source.undoArchive(o)
+        try await waitUntil { await h.count(API.BoardSetDone.name) == 1 }
+        try await h.idle()
+        #expect(await h.script.moves == [MessageMoveParams(accountId: "acc_1", messageIds: ["m_a", "m_b"], targetFolderId: "f_inbox")])
+        let calls = await h.script.calls
+        #expect(calls.lastIndex(of: API.MessageMove.name)! < calls.lastIndex(of: API.BoardSetDone.name)!)
+        #expect(h.c("1")?.done == false)
+        await h.stop()
+    }
+
+    /// No `moved` (Gmail's All Mail, which the daemon does not sync): the
+    /// outcome has no Undo, the page shows the plain toast.
+    @Test func archiveWithoutMovedOffersNoUndo() async throws {
+        let h = try await Harness()
+        await h.script.set(archiveMovesNothing: true)
+        _ = try await h.started()
+        var outcomes: [Board.ArchiveOutcome] = []
+        h.source.onArchived = { outcomes.append($0) }
+        h.source.archive(caseID("1"))
+        try await h.idle()
+        let o = try #require(outcomes.first)
+        #expect(o.undoLabel == nil && o.moved.isEmpty && o.text == "Archived 2 messages.")
+        await h.stop()
+    }
+
+    /// A move back that fails stops the undo: the case stays done (the mail
+    /// is still archived) and the toast says so (Go `UndoArchive`).
+    @Test func undoArchiveStopsWhenAMoveFails() async throws {
+        let h = try await Harness().started()
+        var outcomes: [Board.ArchiveOutcome] = []
+        h.source.onArchived = { outcomes.append($0) }
+        h.source.archive(caseID("1"))
+        try await h.idle()
+        let o = try #require(outcomes.first)
+        await h.script.set(moveFailure: RPCError(code: .messageNotFound, message: "gone"))
+        h.source.undoArchive(o)
+        try await waitUntil { !h.errors.isEmpty }
+        try await h.idle()
+        #expect(h.errors == ["Could not undo the archive."])
+        #expect(await h.count(API.BoardSetDone.name) == 0)
+        #expect(h.c("1")?.done == true)
+        await h.stop()
+    }
+
+    /// A fired remind's mark shows only on a live case and goes with the
+    /// user's write.
+    @Test func remindedAtComesAndGoes() async throws {
+        let h = try await Harness()
+        var c = wireCase("1")
+        c.remindedAt = t0
+        await h.script.set(cases: [c])
+        _ = try await h.started()
+        #expect(h.c("1")?.reminded == true)
+        await h.script.hold(writes: true)
+        h.source.setState(.hot, of: caseID("1"))
+        #expect(h.c("1")?.remindedAt == nil)  // optimistic, before the daemon answers
+        await h.script.hold(writes: false)
+        try await h.idle()
         await h.stop()
     }
 

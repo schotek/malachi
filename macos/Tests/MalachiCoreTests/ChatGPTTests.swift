@@ -6,6 +6,55 @@ import Testing
 @testable import MalachiCore
 
 @Suite struct CodexPolicyTests {
+    /// The gate before a session starts (Go `toolPolicy`, C#
+    /// `PolicyAllows`): exactly three bridge argument shapes, tools a subset
+    /// of the shape's, fail closed for anything else.
+    @Test func policyGateAcceptsOnlyTheThreeShapes() throws {
+        func tools(_ args: [String], _ allowed: [String]) -> AssistantRequest.Tools {
+            AssistantRequest.Tools(bridge: "/b", socket: "/s", bridgeArgs: args, allowed: allowed)
+        }
+        let triage = ["--allow-triage", "--triage-run", "run_1", "--triage-max", "40"]
+        // Accepted.
+        try CodexPolicy.check(nil)
+        try CodexPolicy.check(tools([], Assistant.allowedTools))
+        try CodexPolicy.check(tools([], ["mcp__malachi__read_message"]))
+        try CodexPolicy.check(tools(["--reply-only", "m_1"], Assistant.suggestReplyTools))
+        try CodexPolicy.check(tools(triage, Assistant.triageTools))
+        try CodexPolicy.check(tools(triage, Assistant.triageTools(drafts: false)))
+        try CodexPolicy.check(tools(Assistant.triageBridgeArgs(runID: "r", maxCases: 200), Assistant.triageTools))
+        // Refused: the mutating tiers, in any place.
+        let refused: [(String, AssistantRequest.Tools)] = [
+            ("allow-modify", tools(["--allow-modify"], Assistant.allowedTools)),
+            ("allow-send", tools(["--allow-send"], Assistant.allowedTools)),
+            ("modify after triage", tools(triage + ["--allow-modify"], Assistant.triageTools)),
+            ("send after reply-only", tools(["--reply-only", "m_1", "--allow-send"], Assistant.suggestReplyTools)),
+            ("modify as the run id", tools(["--allow-triage", "--triage-run", "--allow-modify", "--triage-max", "4"], Assistant.triageTools)),
+            ("send as the message id", tools(["--reply-only", "--allow-send"], Assistant.suggestReplyTools)),
+            // Shapes out of order or incomplete.
+            ("reordered", tools(["--triage-run", "r", "--allow-triage", "--triage-max", "4"], Assistant.triageTools)),
+            ("no max", tools(["--allow-triage", "--triage-run", "r"], Assistant.triageTools)),
+            ("max 0", tools(["--allow-triage", "--triage-run", "r", "--triage-max", "0"], Assistant.triageTools)),
+            ("max 201", tools(["--allow-triage", "--triage-run", "r", "--triage-max", "201"], Assistant.triageTools)),
+            ("max signed", tools(["--allow-triage", "--triage-run", "r", "--triage-max", "+4"], Assistant.triageTools)),
+            ("max spaced", tools(["--allow-triage", "--triage-run", "r", "--triage-max", " 4"], Assistant.triageTools)),
+            ("id with a space", tools(["--reply-only", "m 1"], Assistant.suggestReplyTools)),
+            ("id with a line break", tools(["--reply-only", "m\n1"], Assistant.suggestReplyTools)),
+            ("empty id", tools(["--reply-only", ""], Assistant.suggestReplyTools)),
+            ("long id", tools(["--reply-only", String(repeating: "a", count: 513)], Assistant.suggestReplyTools)),
+            ("unknown flag", tools(["--socket", "/x"], Assistant.allowedTools)),
+            // Tools beyond the shape's set, unprefixed, or twice.
+            ("send tool", tools([], ["mcp__malachi__send_message"])),
+            ("triage tool in the panel", tools([], ["mcp__malachi__annotate_case"])),
+            ("search in a reply", tools(["--reply-only", "m_1"], ["mcp__malachi__search_messages"])),
+            ("unprefixed", tools([], ["read_message"])),
+            ("twice", tools([], ["mcp__malachi__read_message", "mcp__malachi__read_message"])),
+            ("a shell", tools([], ["Bash"])),
+        ]
+        for (name, t) in refused {
+            #expect(throws: ChatGPTFailure.self, "\(name)") { try CodexPolicy.check(t) }
+        }
+    }
+
     @Test func catalogIsExactAndHostedToolsAreRemoved() throws {
         let policy = CodexPolicy(allowed: ["mcp__malachi__read_message"])
         let bytes = Data(#"{"model":"test","tools":[{"type":"shell"},{"type":"namespace","name":"malachi","tools":[{"type":"function","name":"read_message","parameters":{}},{"type":"function","name":"send_message"}]}],"store":true,"stream":false,"tool_choice":"required"}"#.utf8)
@@ -244,6 +293,77 @@ import Testing
         late?([result])
         #expect(!answered)
     }
+    /// A provider's failure codes are the board's classes: the plan's usage
+    /// limit, a lapsed connection (the sign-in offer), Codex missing.
+    @Test func providerFailureClasses() {
+        #expect(AssistantRequest.providerFailure("codex_not_found") == .notFound)
+        for code in ["chatgpt_not_connected", "chatgpt_reconnect_required", "chatgpt_consent_required",
+                     "chatgpt_permission_denied", "chatgpt_identity_mismatch"] {
+            #expect(AssistantRequest.providerFailure(code) == .notSignedIn, "\(code)")
+        }
+        #expect(AssistantRequest.providerFailure("chatgpt_usage_limit") == .limit("chatgpt_usage_limit"))
+        #expect(AssistantRequest.providerFailure("chatgpt_turn_failed") == .stopped("chatgpt_turn_failed"))
+        #expect(AssistantRequest.Failure.limit("x").reason == "the assistant’s usage limit was reached")
+    }
+
+    @Test func aFailedResultMapsToItsClass() async {
+        let name = "io.github.schotek.Malachi.provider-test-" + UUID().uuidString
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let settings = Settings(defaults: defaults); settings.assistantProvider = .chatgpt
+        let request = AssistantRequest(settings: settings, locator: ClaudeCodeLocator(settings: settings))
+        let provider = SyntheticProvider(); request.provider = { provider }
+        var outcome: AssistantRequest.Outcome?
+        request.start(systemPrompt: "synthetic", message: "synthetic") { outcome = $0 }
+        for _ in 0..<100 where provider.session.input == nil { await Task.yield() }
+        var result = Assistant.Event(kind: .result); result.success = false; result.resultText = "chatgpt_usage_limit"
+        provider.session.onEvents?([result])
+        #expect(outcome == .failed(.limit("chatgpt_usage_limit")))
+    }
+
+    /// Audit row 4: only a change that concerns the provider in effect ends
+    /// a request under way.
+    @Test func onlyTheActiveProvidersKeysCancel() async {
+        let name = "io.github.schotek.Malachi.provider-test-" + UUID().uuidString
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let settings = Settings(defaults: defaults)
+        // The pure rule.
+        settings.assistantProvider = .claude
+        for key in [Settings.Key.assistantCodexPath, .assistantChatGPTModel, .boardTriageChatGPTModel,
+                    .assistantChatGPTConsentVersion, .boardTriageChatGPTConsentVersion, .assistantTarget, .assistantModel] {
+            #expect(!AssistantRequest.providerChangeConcernsActive(key, settings: settings), "\(key)")
+        }
+        #expect(AssistantRequest.providerChangeConcernsActive(.assistantProvider, settings: settings))
+        settings.assistantProvider = .chatgpt
+        for key in [Settings.Key.assistantProvider, .assistantCodexPath] {
+            #expect(AssistantRequest.providerChangeConcernsActive(key, settings: settings), "\(key)")
+        }
+        // A model applies from the next request: never a cancel.
+        for key in [Settings.Key.assistantChatGPTModel, .boardTriageChatGPTModel] {
+            #expect(!AssistantRequest.providerChangeConcernsActive(key, settings: settings), "\(key)")
+        }
+        settings.assistantChatGPTConsentVersion = 1
+        #expect(!AssistantRequest.providerChangeConcernsActive(.assistantChatGPTConsentVersion, settings: settings))
+        settings.assistantChatGPTConsentVersion = 0
+        #expect(AssistantRequest.providerChangeConcernsActive(.assistantChatGPTConsentVersion, settings: settings))
+        // A request of ChatGPT: the Claude model leaves it, the Codex path ends it.
+        settings.assistantChatGPTConsentVersion = 1
+        let request = AssistantRequest(settings: settings, locator: ClaudeCodeLocator(settings: settings))
+        let provider = SyntheticProvider(); request.provider = { provider }
+        request.start(systemPrompt: "synthetic", message: "synthetic") { _ in }
+        for _ in 0..<100 where provider.session.input == nil { await Task.yield() }
+        settings.assistantModel = .opus
+        settings.boardTriageModel = .haiku
+        #expect(request.running && provider.session.running)
+        // Its own models neither: they apply from the next request.
+        settings.assistantChatGPTModel = "next-model"
+        settings.boardTriageChatGPTModel = "next-triage-model"
+        #expect(request.running && provider.session.running)
+        settings.assistantCodexPath = "/elsewhere/codex"
+        #expect(!request.running && !provider.session.running)
+    }
+
     @Test func boardUsesItsOwnConsentModelAndRestrictedBridge() async {
         let name = "io.github.schotek.Malachi.provider-test-" + UUID().uuidString
         let defaults = UserDefaults(suiteName: name)!

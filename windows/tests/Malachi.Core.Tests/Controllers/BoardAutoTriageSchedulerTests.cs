@@ -149,6 +149,32 @@ public sealed class BoardAutoTriageSchedulerTests
         });
     }
 
+    /// <summary>
+    /// The plan's usage limit backs off one step, and stays one step however
+    /// often it comes (it lifts on its own), not doubling on to a day.
+    /// </summary>
+    [Fact]
+    public async Task UsageLimitBacksOffOneStep()
+    {
+        await using var h = await Harness.StartAsync();
+        await h.Ui.RunAsync(() =>
+        {
+            h.T.End(TriageTrigger.Automatic, TriageFailure.Limit);
+            Assert.Equal(1, h.S.Failures);
+            Assert.Equal(new AutoTriage.Decision.Wait(T0 + Minutes(60)), h.S.Decision);
+            Assert.Equal(new AutoTriagePause.Failed(TriageFailure.Limit, T0 + Minutes(60)), h.T.Pause);
+        });
+        await h.AdvanceAsync(Minutes(60));
+        var second = h.Clock.GetUtcNow();
+        await h.Ui.RunAsync(() =>
+        {
+            Assert.Equal(2, h.T.Starts.Count);
+            h.T.End(TriageTrigger.Automatic, TriageFailure.Limit);
+            Assert.Equal(1, h.S.Failures);
+            Assert.Equal(new AutoTriage.Decision.Wait(second + Minutes(60)), h.S.Decision);
+        });
+    }
+
     /// <summary>The day's cap used up: the next try is at midnight, when the count read yesterday no longer holds.</summary>
     [Fact]
     public async Task DailyCap()

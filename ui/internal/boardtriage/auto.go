@@ -45,8 +45,9 @@ type AutoInputs struct {
 	SignedIn assistantpanel.SignIn
 	// Consent: both consents and the board's assistant preference.
 	Consent bool
-	// Running: a run is under way (this application's, or one the daemon
-	// reports open).
+	// Running: this application's own run is under way. A run the daemon
+	// reports open (another client's, or one left open) does not count:
+	// it never holds the scheduler back (decision H3-2).
 	Running bool
 	// Queue is the cases board.queue would offer (BoardTriage.Queue).
 	Queue int

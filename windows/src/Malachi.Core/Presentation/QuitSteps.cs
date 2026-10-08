@@ -24,6 +24,35 @@ public sealed record QuitSteps
     public Func<Task<bool>>? BoardReplies { get; init; }
 
     /// <summary>
+    /// A session end's settle of the board's inline replies, without a
+    /// question: what can be saved is saved while the connection stands,
+    /// and nothing waits for the user. The sequence waits for it at most
+    /// <see cref="SettleWait"/>; it runs first at a session end, never on a
+    /// user's Quit (that one has <see cref="BoardReplies"/>).
+    /// </summary>
+    public Func<Task>? SettleBoardReplies { get; init; }
+
+    /// <summary>How long a session end waits for <see cref="SettleBoardReplies"/> at most.</summary>
+    public TimeSpan SettleWait { get; init; } = BoardReplyController.EndWait;
+
+    /// <summary>
+    /// A user's Quit was abandoned (a question answered Cancel, or the drafts
+    /// could not be saved): the app runs on, so the board shows its replies
+    /// again (macOS resumeAll, GTK ResumeBoardReplies).
+    /// </summary>
+    public Action? Abandoned { get; init; }
+
+    /// <summary>
+    /// Past the point of no return, beside <see cref="StopTriage"/>: the
+    /// suggested reply under way stops and deletes a draft it did not link
+    /// yet (<see cref="BoardReplyController.CancelAndCleanUpAsync"/>, which
+    /// waits at most <see cref="BoardReplyController.EndWait"/>). Here, not
+    /// in <see cref="BoardReplies"/>, so that an abandoned Quit leaves it
+    /// running.
+    /// </summary>
+    public Func<Task>? EndBoardReply { get; init; }
+
+    /// <summary>
     /// Saves every compose window's unsaved changes as drafts and returns
     /// the windows whose save failed (<see cref="ComposeController.SaveForQuitAsync"/>).
     /// </summary>

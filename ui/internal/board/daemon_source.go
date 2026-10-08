@@ -625,7 +625,7 @@ func (d *DaemonSource) SetState(id CaseID, state *State) {
 		local = statePtr(*state)
 	}
 	writeCase(d, api.MethodBoardSetState, api.BoardSetStateParams{CaseID: id, State: wire}, ActionMove, id,
-		func(c *Case) { c.UserState = local },
+		func(c *Case) { c.UserState, c.RemindedAt = local, time.Time{} },
 		func(r *api.BoardSetStateResult) api.BoardCase { return r.Case })
 }
 
@@ -636,7 +636,7 @@ func (d *DaemonSource) SetDone(id CaseID, done bool) {
 		action = ActionDone
 	}
 	writeCase(d, api.MethodBoardSetDone, api.BoardSetDoneParams{CaseID: id, Done: done}, action, id,
-		func(c *Case) { c.SetDone(done) },
+		func(c *Case) { c.SetDone(done); c.RemindedAt = time.Time{} },
 		func(r *api.BoardSetDoneResult) api.BoardCase { return r.Case })
 }
 
@@ -647,16 +647,62 @@ func (d *DaemonSource) Remind(id CaseID, until *time.Time) {
 		func(r *api.BoardRemindResult) api.BoardCase { return r.Case })
 }
 
-// Archive implements DataSource.
+// Archive implements DataSource: Handlers.Archived gets what it did, with
+// the moved messages for Undo (UndoArchive).
 func (d *DaemonSource) Archive(id CaseID) {
 	writeCase(d, api.MethodBoardArchive, api.BoardArchiveParams{CaseID: id}, ActionArchive, id,
-		func(c *Case) { c.Visibility = Visibility{Kind: VisibleDone} },
+		func(c *Case) { c.Visibility, c.RemindedAt = Visibility{Kind: VisibleDone}, time.Time{} },
 		func(r *api.BoardArchiveResult) api.BoardCase {
-			if d.h.Notice != nil {
-				d.h.Notice(Archived(r.Archived, r.NoArchive, d.tr))
+			o := ArchiveOutcome{
+				Case: id, Account: r.Case.AccountID, Moved: slices.Clone(r.Moved),
+				Text: Archived(r.Archived, r.NoArchive, d.tr),
 			}
+			// No moved messages: the daemon cannot take this archive back
+			// (an archive folder it does not sync), so the plain toast.
+			if len(o.Moved) > 0 {
+				o.UndoLabel = Undo(d.tr)
+			}
+			notifyArchived(d.h, o)
 			return r.Case
 		})
+}
+
+// UndoArchive implements ArchiveUndoer: the calls of UndoArchive, the
+// moves first, then the case back on the board (optimistic, as SetDone;
+// a refusal is a toast). A move that fails stops the undo: the case stays
+// done, because the mail is still archived, and the toast says so.
+func (d *DaemonSource) UndoArchive(o ArchiveOutcome) {
+	if d.stopped {
+		return
+	}
+	calls := UndoArchive(o.Moved, o.Account, o.Case)
+	left := len(calls.Moves)
+	if left == 0 {
+		d.SetDone(o.Case, false)
+		return
+	}
+	d.writesInFlight++
+	failed := false
+	for _, m := range calls.Moves {
+		d.call(api.MethodMessageMove, m, new(api.MessageMoveResult), func(err error) {
+			if err != nil {
+				d.log.Info("message.move back failed", "err", err)
+				failed = true
+			}
+			left--
+			if left > 0 {
+				return
+			}
+			d.writesInFlight--
+			if failed {
+				if d.h.Error != nil {
+					d.h.Error(UndoFailed(d.tr))
+				}
+				return
+			}
+			d.SetDone(o.Case, false)
+		})
+	}
 }
 
 // DiscardDraft implements DataSource.
@@ -715,7 +761,7 @@ func (d *DaemonSource) DiscardStoredDraft(id CaseID, draft api.DraftID, account 
 // for the notification.
 func (d *DaemonSource) Unflag(id CaseID) {
 	writeCase(d, api.MethodBoardUnflag, api.BoardUnflagParams{CaseID: id}, ActionUnflag, id,
-		func(*Case) {},
+		func(c *Case) { c.RemindedAt = time.Time{} },
 		func(r *api.BoardUnflagResult) api.BoardCase {
 			d.Refresh()
 			return r.Case
@@ -832,6 +878,10 @@ func convertCase(w api.BoardCase) Case {
 			vis = Visibility{Kind: VisibleSnoozed, At: w.RemindAt.UTC()}
 		}
 	}
+	var reminded time.Time
+	if w.RemindedAt != nil && vis.IsLive() {
+		reminded = w.RemindedAt.UTC()
+	}
 	var reply *ReplyTarget
 	if w.ReplyMessageID != "" {
 		reply = &ReplyTarget{Message: w.ReplyMessageID, Folder: w.ReplyFolderID}
@@ -856,7 +906,7 @@ func convertCase(w api.BoardCase) Case {
 		ID: w.ID, Account: w.AccountID, Thread: w.ThreadID, Person: displayName(w.Person), Date: w.Date.UTC(),
 		Subject: w.Subject, Snippet: w.Snippet, Unread: w.Unread, HasAttachments: w.HasAttachments,
 		MessageCount: w.MessageCount, Issue: issue, RuleState: rule, RuleReason: w.RuleReason,
-		Annotation: convertAnnotation(w.Annotation), UserState: user, Visibility: vis, Reply: reply,
+		Annotation: convertAnnotation(w.Annotation), UserState: user, Visibility: vis, RemindedAt: reminded, Reply: reply,
 		LatestMessage: w.LatestMessageID, CanArchive: w.CanArchive, Draft: draft, Version: w.Version,
 	}
 }

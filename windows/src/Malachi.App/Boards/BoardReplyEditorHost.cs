@@ -32,6 +32,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Malachi.App.Compose;
 using Malachi.App.Shell;
@@ -107,6 +108,10 @@ public sealed class BoardReplyEditorHost : IBoardInlineReply, IComposePaneHost, 
         Slot = new BoardReplySlot(this, actions, state.BoardReply);
         Slot.KeyboardLost += (_, _) => detail.FocusReplyButton();
         detail.ViewportChanged += (_, _) => ApplyVisibleHeight();
+        // A live pane keeps its case selected across a style switch or a
+        // narrowing (BoardController.KeepsSelection; Swift paneIsLive, GTK
+        // SetPaneLive).
+        actions.Controller.PaneLive = id => !closed && panes.LiveKey is { } key && key.CaseId == id;
     }
 
     /// <summary>The detail's reply part (BoardDetailView.ReplyPart).</summary>
@@ -118,6 +123,18 @@ public sealed class BoardReplyEditorHost : IBoardInlineReply, IComposePaneHost, 
 
     /// <inheritdoc/>
     Window? IComposePaneHost.HostWindow => window();
+
+    /// <summary>Whether the keyboard is in the live pane (its editor, its recipient fields): the page's Escape then goes to the state pill.</summary>
+    internal bool KeyboardInPane => !suspended && !closed && panes.Live is PaneHandle h && h.Pane.KeyboardInside;
+
+    /// <summary>Whether a popup of the live pane is open (the recipients' suggestions, a menu of its bar): Escape closes that first.</summary>
+    internal bool PanePopupOpen => !suspended && !closed && panes.Live is PaneHandle h && h.Pane.PopupOpen;
+
+    /// <summary>Whether a pane still holds text that is not saved (GTK <c>Panes.HasUnsaved</c>), for the quit question.</summary>
+    internal bool HasUnsaved => !closed && panes.Panes.Any(p => p.HasUnsavedText);
+
+    /// <summary>Whether a reply the user sent waits for the send to answer (GTK <c>Panes.HasSending</c>), for the quit question.</summary>
+    internal bool HasSending => !closed && panes.Panes.Any(p => p.IsSending);
 
     /// <summary>Whether the panes are out of sight (Mail mode, a hidden window, quitting).</summary>
     internal bool Suspended => suspended;
@@ -222,6 +239,19 @@ public sealed class BoardReplyEditorHost : IBoardInlineReply, IComposePaneHost, 
         loader.Dispose();
     }
 
+    /// <summary>
+    /// The detail moved between the list and the panel while the live pane
+    /// had the keyboard (BoardPage.PlaceDetail): the keyboard goes back to
+    /// its editor where the caret was, not to the state pill.
+    /// </summary>
+    internal void RefocusLive()
+    {
+        if (!closed && !suspended && panes.Live is PaneHandle h && h.Pane.XamlRoot is not null)
+        {
+            h.Pane.FocusEditor();
+        }
+    }
+
     // IBoardInlineReply
 
     /// <inheritdoc/>
@@ -280,6 +310,16 @@ public sealed class BoardReplyEditorHost : IBoardInlineReply, IComposePaneHost, 
             }
         };
         pane.SendFailed += (_, _) => panes.SendFailed(handle);
+        // Escape in the editor's page (its bridge; the pane's popups first):
+        // the keyboard goes to the state pill, nothing closes
+        // (Board.EscapeFor's second step).
+        pane.EscapePressed += (_, _) =>
+        {
+            if (!closed && !suspended && ReferenceEquals((panes.Live as PaneHandle)?.Pane, pane))
+            {
+                detail.FocusContent();
+            }
+        };
         pane.SetVisibleHeight(detail.Scroller.ViewportHeight);
         composer.Register(handle);
         return handle;
@@ -348,7 +388,15 @@ public sealed class BoardReplyEditorHost : IBoardInlineReply, IComposePaneHost, 
         {
             return;
         }
-        if (!pane.FocusEditorStart() && tries < FocusTries)
+        var ready = pane.FocusEditorStart();
+        // Into view once, on the first try or when the editor took the
+        // keyboard after a wait: not on every retry, which would pull the
+        // detail back while the user scrolls.
+        if (tries == 0 || ready)
+        {
+            pane.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
+        }
+        if (!ready && tries < FocusTries)
         {
             var timer = detail.DispatcherQueue.CreateTimer();
             timer.Interval = FocusRetry;
@@ -360,7 +408,6 @@ public sealed class BoardReplyEditorHost : IBoardInlineReply, IComposePaneHost, 
             };
             timer.Start();
         }
-        pane.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
     }
 
     // A pane that had the keyboard went: the state pill takes it, once the

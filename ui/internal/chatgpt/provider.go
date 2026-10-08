@@ -155,8 +155,9 @@ func toolPolicy(t *assistantpanel.Tools) (map[string]bool, []string, error) {
 	case len(args) == 2 && args[0] == "--reply-only" && validIdentifier(args[1]):
 		allowed = assistant.SuggestReplyTools
 	case len(args) == 5 && args[0] == "--allow-triage" && args[1] == "--triage-run" && validIdentifier(args[2]) && args[3] == "--triage-max":
+		// Digits only, as the other clients read it: Atoi would take "+4".
 		n, err := strconv.Atoi(args[4])
-		if err != nil || n < assistant.TriageMaxLowest || n > assistant.TriageMaxHighest {
+		if err != nil || !digitsOnly(args[4]) || n < assistant.TriageMaxLowest || n > assistant.TriageMaxHighest {
 			return nil, nil, errors.New("chatgpt_invalid_tool_policy")
 		}
 		allowed = assistant.TriageTools
@@ -355,6 +356,7 @@ func (s *session) Submit(ctx context.Context, input string) error {
 		return errors.New("codex_session_busy_or_closed")
 	}
 	s.active = true
+	s.gate.newTurn()
 	s.text, s.turn = "", ""
 	s.calls = map[string]bool{}
 	thread := s.thread
@@ -669,4 +671,17 @@ func validImage(mime, data string) bool {
 	}
 	decoded, err := base64.StdEncoding.DecodeString(data)
 	return err == nil && len(decoded) <= 3<<20
+}
+
+// digitsOnly reports a non-empty string of ASCII digits (no sign).
+func digitsOnly(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }

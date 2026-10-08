@@ -62,6 +62,7 @@ private func sampleCases() -> [Board.Case] {
 
     var onError: (@MainActor (String) -> Void)?
     var onNotice: (@MainActor (String) -> Void)?
+    var onArchived: (@MainActor (Board.ArchiveOutcome) -> Void)?
     /// The cases whose conversation was asked for, in order.
     var loads: [Board.CaseID] = []
 
@@ -124,44 +125,61 @@ private func sampleCases() -> [Board.Case] {
 
     @Test func setStyle() {
         let (c, _, probe) = make()
+        c.select(F.id("c1"))  // picked by the user: it stays, now in the panel
+        probe.log = []
         c.setStyle(.columns)
-        #expect(c.state.style == .columns && c.state.selection == nil && c.view.detail == nil)
+        #expect(c.state.style == .columns && c.state.selection == F.id("c1") && c.view.showsPanel)
         #expect(probe.log == [[.style, .selection]])
         c.setStyle(.columns)
         #expect(probe.log.count == 1)  // the same style: silent
         c.setStyle(.today)
         #expect(probe.log == [[.style, .selection], .style])
-        c.setStyle(.list)  // entering the list with the detail beside it selects the first row
+        c.setStyle(.list)  // back beside the list
         #expect(c.state.selection == F.id("c1") && !c.view.showsPanel)
         #expect(probe.log.last == [.style, .selection])
     }
 
-    @Test func leavingTheListClearsTheSelection() {
+    /// Audit row 18: the panel opens on the case, so that an inline reply
+    /// editor can move there.
+    @Test func leavingTheListKeepsTheSelection() {
         for style in [Board.Style.columns, .today] {
             let (c, _, probe) = make()
             c.select(F.id("c3"))
             probe.log = []
             c.setStyle(style)
-            #expect(c.state.selection == nil)
+            #expect(c.state.selection == F.id("c3"))
+            #expect(c.view.showsPanel && c.view.detail?.id == F.id("c3"))
             #expect(probe.log == [[.style, .selection]])
         }
+    }
+
+    @Test func leavingTheDoneListDropsADoneSelection() {
+        let (c, _, _) = make()
+        c.setFilter(.done)
+        #expect(c.state.selection == F.id("d1"))
+        c.setStyle(.columns)  // Columns show only live cases
+        #expect(c.state.selection == nil)
     }
 
     @Test func enteringTheListWithoutInlineDetailSelectsNothing() {
         let (c, _, probe) = make()
         c.setInlineDetail(false)
         c.setStyle(.columns)
+        c.select(nil)
         probe.log = []
         c.setStyle(.list)
         #expect(c.state.selection == nil)
         #expect(probe.log == [.style])
     }
 
-    @Test func styleChangeResetsWhy() {
+    @Test func styleChangeKeepsWhyOfTheSameCase() {
         let (c, _, _) = make()
+        c.select(F.id("c1"))
         c.toggleWhy()
         #expect(c.state.revealsWhy)
         c.setStyle(.columns)
+        #expect(c.state.revealsWhy)  // the case stayed
+        c.select(F.id("c2"))
         #expect(!c.state.revealsWhy)
     }
 
@@ -191,6 +209,7 @@ private func sampleCases() -> [Board.Case] {
     @Test func filterInColumnsLeavesNoSelection() {
         let (c, _, probe) = make()
         c.setStyle(.columns)
+        c.select(nil)
         probe.log = []
         c.setFilter(.state(.hot))
         #expect(c.state.selection == nil)
@@ -275,6 +294,7 @@ private func sampleCases() -> [Board.Case] {
     @Test func toggleWhyNeedsASelection() {
         let (c, _, probe) = make()
         c.setStyle(.columns)
+        c.select(nil)
         probe.log = []
         c.toggleWhy()
         #expect(!c.state.revealsWhy && probe.log.isEmpty)
@@ -284,17 +304,39 @@ private func sampleCases() -> [Board.Case] {
         let (c, _, probe) = make()
         c.setInlineDetail(true)
         #expect(probe.log.isEmpty)
-        c.setInlineDetail(false)  // narrow: the panel never opens by itself
-        #expect(!c.state.inlineDetail && c.state.selection == nil && !c.view.showsPanel)
+        c.select(F.id("c1"))
+        probe.log = []
+        c.setInlineDetail(false)  // narrow: the selected case moves to the panel
+        #expect(!c.state.inlineDetail && c.state.selection == F.id("c1") && c.view.showsPanel)
         #expect(probe.log == [.selection])
-        c.select(F.id("c2"))  // a deliberate selection opens the panel
+        c.select(F.id("c2"))
         #expect(c.view.showsPanel)
         c.setInlineDetail(true)  // wide again: beside the list, the selection stays
         #expect(c.state.selection == F.id("c2") && !c.view.showsPanel)
         #expect(probe.log == [.selection, .selection, .selection])
         c.setInlineDetail(false)
+        c.select(nil)  // the panel closed
         c.setInlineDetail(true)  // nothing selected: the first row
         #expect(c.state.selection == F.id("c1"))
+    }
+
+    /// The List's automatic first row is not kept by a style switch or a
+    /// narrowing (no panel slides in by itself); an explicit pick or a live
+    /// reply pane is (Go `TestAutoSelectedRowIsNotKept`).
+    @Test func autoSelectedRowIsNotKept() {
+        let (c, _, _) = make()
+        #expect(c.state.selection == F.id("c1"))
+        c.setStyle(.columns)
+        #expect(c.state.selection == nil && !c.view.showsPanel)
+
+        let (c2, _, _) = make()
+        c2.setInlineDetail(false)
+        #expect(c2.state.selection == nil && !c2.view.showsPanel)
+
+        let (c3, _, _) = make()
+        c3.paneLive = { $0 == F.id("c1") }
+        c3.setStyle(.columns)
+        #expect(c3.state.selection == F.id("c1") && c3.view.showsPanel)
     }
 
     @Test func showWaitingForYou() {
@@ -322,7 +364,7 @@ private func sampleCases() -> [Board.Case] {
         #expect(source.snapshot.cases.first { $0.id == F.id("c3") }?.userState == .them)
         #expect(c.view.sections.map(\.kind) == [.state(.hot), .state(.you), .state(.them), .state(.info)])
         #expect(rows(c) == ["c1", "c2", "c4", "c3", "c5"])
-        #expect(c.view.nav.map(\.count) == [5, 1, 1, 2, 1, 2])
+        #expect(c.view.nav.map(\.count) == [5, 1, 1, 2, 1, 0, 2])
         #expect(c.state.selection == F.id("c1"))
         #expect(probe.log == [.content])
         c.setState(.them, of: F.id("c3"))  // nothing changes
@@ -513,7 +555,7 @@ private func sampleCases() -> [Board.Case] {
         source.setDone(true, of: F.id("c1"))  // not through the controller
         #expect(c.state.selection == F.id("c3") && probe.log == [[.selection, .content]])
         source.setState(.them, of: F.id("c2"))
-        #expect(c.view.nav.map(\.count) == [4, 0, 1, 2, 1, 3])
+        #expect(c.view.nav.map(\.count) == [4, 0, 1, 2, 1, 0, 3])
     }
 
     @Test func replaceCanEmptyTheBoard() {
@@ -648,6 +690,7 @@ private func sampleCases() -> [Board.Case] {
 
     @Test func aListenerThatSelectsGetsItsChangeAfterwards() {
         let (c, _, _) = make()
+        c.select(F.id("c1"))
         var log: [(Changes, String?)] = []
         var nested = false
         c.onChange = { changes in
@@ -662,7 +705,7 @@ private func sampleCases() -> [Board.Case] {
         }
         c.setStyle(.columns)
         #expect(log.count == 2)
-        #expect(log[0].0 == [.style, .selection] && log[0].1 == nil)
+        #expect(log[0].0 == [.style, .selection] && log[0].1 == "c1")
         #expect(log[1].0 == [.selection] && log[1].1 == "c4")
         #expect(c.state.selection == F.id("c4"))
     }
@@ -857,7 +900,7 @@ private func sampleCases() -> [Board.Case] {
 
     /// The style of the first show is the setting's, read at that moment.
     @Test func defaultStyleAtFirstShow() {
-        var setting = Board.Style.columns
+        var setting = Board.DefaultStyle.style(.columns)
         let source = InMemoryBoardSource(Board.Snapshot(accounts: F.accounts, cases: sampleCases()))
         let c = BoardController(source: source, now: { F.now }, calendar: F.calendar, defaultStyle: { setting })
         let probe = Probe()
@@ -866,7 +909,7 @@ private func sampleCases() -> [Board.Case] {
         #expect(c.state.style == .list)
         #expect(!c.hasShown)
         // Changed before the first show: that one counts.
-        setting = .today
+        setting = .style(.today)
         c.boardWillShow()
         #expect(c.hasShown)
         #expect(c.state.style == .today)
@@ -878,10 +921,10 @@ private func sampleCases() -> [Board.Case] {
         #expect(list.probe.log.isEmpty)
     }
 
-    /// After the first show the style is the user's: leaving and entering
+    /// Once the user picked a style it is the user's: leaving and entering
     /// again keeps it, and so does a setting changed meanwhile.
     @Test func laterShowsKeepTheUsersStyle() {
-        var setting = Board.Style.columns
+        var setting = Board.DefaultStyle.style(.columns)
         let source = InMemoryBoardSource(Board.Snapshot(accounts: F.accounts, cases: sampleCases()))
         let c = BoardController(source: source, now: { F.now }, calendar: F.calendar, defaultStyle: { setting })
         c.boardWillShow()
@@ -892,11 +935,11 @@ private func sampleCases() -> [Board.Case] {
         c.boardWillShow()
         c.boardShown()
         #expect(c.state.style == .today)
-        // The setting changes while the board has shown: the style stays.
-        setting = .list
+        // The setting changes after the user picked one: the style stays.
+        setting = .style(.list)
         c.boardWillShow()
         #expect(c.state.style == .today)
-        setting = .columns
+        setting = .style(.columns)
         c.boardWillShow()
         #expect(c.state.style == .today)
         // The user's own choice still works.
@@ -907,9 +950,16 @@ private func sampleCases() -> [Board.Case] {
 
     @Test func styleOnShowRule() {
         for current in Board.Style.allCases {
-            for d in Board.Style.allCases {
-                #expect(Board.styleOnShow(current: current, defaultStyle: d, firstShow: true) == d)
-                #expect(Board.styleOnShow(current: current, defaultStyle: d, firstShow: false) == current)
+            for last in Board.Style.allCases {
+                for d in Board.defaultStyles {
+                    let want: Board.Style
+                    switch d {
+                    case .last: want = last
+                    case .style(let s): want = s
+                    }
+                    #expect(Board.styleOnShow(defaultStyle: d, lastStyle: last, current: current, pickedThisRun: false) == want)
+                    #expect(Board.styleOnShow(defaultStyle: d, lastStyle: last, current: current, pickedThisRun: true) == current)
+                }
             }
         }
     }

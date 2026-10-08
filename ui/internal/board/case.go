@@ -65,7 +65,7 @@ func statePtr(s State) *State { return &s }
 // KnownReasons are the rule codes of docs/api.md §4.13 this client has a
 // text of its own for (Reason); any other code reads ReasonUnknown.
 var KnownReasons = []api.BoardReason{
-	api.BoardReasonHotImportant, api.BoardReasonHotFlagged, api.BoardReasonYouAddressed,
+	api.BoardReasonHotImportant, api.BoardReasonHotFlagged, api.BoardReasonYouAddressed, api.BoardReasonYouNewContact,
 	api.BoardReasonYouRepliedToYou, api.BoardReasonThemReplied, api.BoardReasonThemAsked,
 	api.BoardReasonInfoCcOnly, api.BoardReasonInfoNotAddressed, api.BoardReasonInfoUnknownSender,
 	api.BoardReasonInfoYourNote, api.BoardReasonJiraYourComment, api.BoardReasonJiraAssigned,
@@ -217,6 +217,11 @@ type Case struct {
 	// UserState is the user's own choice; nil = automatic.
 	UserState  *State
 	Visibility Visibility
+	// RemindedAt is when a remind of the user's came due (board.list
+	// remindedAt): the case is live again and listed first in its state,
+	// marked Reminded, until the user acts on it or new mail comes; zero
+	// otherwise.
+	RemindedAt time.Time
 	// Reply is what a reply answers; nil for the samples.
 	Reply *ReplyTarget
 	// LatestMessage is the newest message that counts; "" for the samples.
@@ -239,6 +244,13 @@ type Case struct {
 
 // Done reports a case marked done.
 func (c Case) Done() bool { return c.Visibility.IsDone() }
+
+// Reminded reports a live case back from a reminder (RemindedAt).
+func (c Case) Reminded() bool { return !c.RemindedAt.IsZero() && c.Visibility.IsLive() }
+
+// NewContact reports a case whose newest message is addressed to the user
+// by someone the user never wrote to (you.newContact).
+func (c Case) NewContact() bool { return c.RuleReason == api.BoardReasonYouNewContact }
 
 // SetDone moves the case to done (when unknown) or back on the board; a
 // case already where done says stays as it is (its date, or its remind).
@@ -428,7 +440,8 @@ const (
 
 // CleanLine makes one line of display text safe: it drops invalid UTF-8
 // (and the replacement character), control and format characters (Cc, Cf:
-// NUL, bidirectional overrides such as U+202E, zero-width characters),
+// NUL, bidirectional overrides such as U+202E, zero-width characters)
+// except a joiner between two kept characters (keepJoiner),
 // turns every whitespace (line breaks, tabs, U+2028, U+2029) into a space,
 // collapses runs of spaces, trims, and caps the result at maxBytes UTF-8
 // bytes on a character boundary (no grapheme cluster the cut broke is
@@ -442,6 +455,7 @@ func CleanLine(s string, maxBytes int) string {
 	var out []byte
 	limit := maxBytes
 	space := false
+	var j joinerState
 	left := budget(maxBytes)
 	for _, r := range s {
 		if left == 0 {
@@ -459,6 +473,10 @@ func CleanLine(s string, maxBytes int) string {
 		}
 		if unicode.IsSpace(r) {
 			space = len(out) > 0
+			j.reset()
+			continue
+		}
+		if j.take(r, len(out) == 0 || space) {
 			continue
 		}
 		if dropped(r) {
@@ -468,6 +486,7 @@ func CleanLine(s string, maxBytes int) string {
 			out = append(out, ' ')
 			space = false
 		}
+		out = j.flush(out)
 		out = utf8.AppendRune(out, r)
 		if len(out) > maxBytes {
 			break
@@ -488,6 +507,7 @@ func CleanBlock(s string, maxBytes int) string {
 	limit := maxBytes
 	spaces, breaks := 0, 0
 	afterCR := false
+	var j joinerState
 	left := budget(maxBytes)
 	for _, r := range s {
 		if left == 0 {
@@ -521,6 +541,10 @@ func CleanBlock(s string, maxBytes int) string {
 			default:
 				spaces++
 			}
+			j.reset()
+			continue
+		}
+		if j.take(r, len(out) == 0 || spaces > 0 || breaks > 0) {
 			continue
 		}
 		if dropped(r) {
@@ -536,6 +560,7 @@ func CleanBlock(s string, maxBytes int) string {
 			}
 		}
 		breaks, spaces = 0, 0
+		out = j.flush(out)
 		out = utf8.AppendRune(out, r)
 		if len(out) > maxBytes {
 			break
@@ -543,6 +568,61 @@ func CleanBlock(s string, maxBytes int) string {
 	}
 	return capped(out, limit)
 }
+
+// The joiners and the variation selectors the joiner rule looks at.
+const (
+	zwnj = 0x200C
+	zwj  = 0x200D
+	vs15 = 0xFE0E
+	vs16 = 0xFE0F
+)
+
+// joinerState carries a joiner (ZWJ, ZWNJ) the cleaners hold back until
+// they see what follows it. The rule is the daemon's (board.CleanText): a
+// joiner is kept only when, once the dropped characters are gone, the
+// characters right before and right after it are kept characters that are
+// neither whitespace nor a joiner. A joiner at the start or end of a line,
+// next to whitespace, or in a run of joiners goes; a variation selector
+// right after a held joiner goes too. Emoji ZWJ sequences and Persian or
+// Indic words keep theirs.
+type joinerState struct {
+	// joiner is the joiner held back, 0 when none.
+	joiner rune
+	// stray: the held joiner goes whatever follows (nothing kept before it,
+	// whitespace before it, or a run of joiners).
+	stray bool
+}
+
+// take reports whether r was consumed by the joiner rule: a joiner (held,
+// or marking a run), or a variation selector after a held joiner.
+// atStart: nothing kept is before r on its line, or whitespace is.
+func (j *joinerState) take(r rune, atStart bool) bool {
+	switch {
+	case r == zwnj || r == zwj:
+		if j.joiner != 0 {
+			j.stray = true
+		} else {
+			j.joiner, j.stray = r, atStart
+		}
+		return true
+	case (r == vs15 || r == vs16) && j.joiner != 0:
+		return true
+	}
+	return false
+}
+
+// flush writes the held joiner before a kept character, unless it is
+// stray, and forgets it.
+func (j *joinerState) flush(out []byte) []byte {
+	if j.joiner != 0 && !j.stray {
+		out = utf8.AppendRune(out, j.joiner)
+	}
+	j.reset()
+	return out
+}
+
+// reset forgets a held joiner (whitespace followed it).
+func (j *joinerState) reset() { j.joiner, j.stray = 0, false }
 
 // budget is how many input characters the cleaners read for a cap of
 // maxBytes bytes: what they keep stops them at the cap, so only dropped
@@ -585,8 +665,17 @@ func capped(out []byte, n int) string {
 		_, w := utf8.DecodeLastRune(out[:end])
 		end -= w
 	}
-	for end > 0 && (out[end-1] == ' ' || out[end-1] == '\n') {
-		end--
+	for end > 0 {
+		if out[end-1] == ' ' || out[end-1] == '\n' {
+			end--
+			continue
+		}
+		// A joiner the cut left last joins nothing.
+		if r, w := utf8.DecodeLastRune(out[:end]); r == zwj || r == zwnj {
+			end -= w
+			continue
+		}
+		break
 	}
 	return string(out[:end])
 }
@@ -632,7 +721,7 @@ func graphemeBoundary(b []byte, i int) bool {
 // mark (Mn, Me, Mc and Other_Grapheme_Extend), an emoji modifier, or one of
 // the two spacing marks that are letters (Thai and Lao AM).
 func extends(r rune) bool {
-	return unicode.In(r, unicode.Mn, unicode.Me, unicode.Mc, unicode.Other_Grapheme_Extend) ||
+	return r == zwj || r == zwnj || unicode.In(r, unicode.Mn, unicode.Me, unicode.Mc, unicode.Other_Grapheme_Extend) ||
 		(r >= 0x1F3FB && r <= 0x1F3FF) || r == 0x0E33 || r == 0x0EB3
 }
 

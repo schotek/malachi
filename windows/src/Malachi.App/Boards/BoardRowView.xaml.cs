@@ -7,6 +7,7 @@
 // texts come from the view model (Board.Row, cleaned by Core) and go into
 // TextBlock.Text only; the parts without a value hide.
 
+using System.Linq;
 using Malachi.Core.Boards;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
@@ -56,6 +57,9 @@ public sealed partial class BoardRowView : UserControl
         SnippetText.Visibility = Show(r.Snippet.Length > 0);
         StatePill.State = r.State;
         StatePill.Text = Board.Text.StateName(r.State);
+        // Reminded, New contact: Core's texts, spoken with the row (Spoken).
+        BadgeList.ItemsSource = r.Badges.Count == 0 ? null : r.Badges.ToList();
+        BadgeList.Visibility = Show(r.Badges.Count > 0);
         DueText.Text = r.Due;
         DueChip.Visibility = Show(r.Due.Length > 0);
         VisualStateManager.GoToState(this, r.DueOverdue ? "DueOverdue" : "DueNormal", false);

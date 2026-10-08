@@ -59,18 +59,22 @@ func (w *Window) registerBoardActions() {
 	w.addAction("board-show-in-mail", false, func() { w.boardShowInMailSelected() })
 }
 
-// boardReply opens a reply or focuses the linked draft's inline editor.
+// boardReply opens a reply or focuses the linked draft's inline editor
+// (enabled only when the case has either, boardCanReply).
 func (w *Window) boardReply() {
 	p := w.boardPage
 	if p == nil {
 		return
 	}
 	d := p.ctl.View().Detail
-	if d == nil || d.Reply == nil {
+	if d == nil {
 		return
 	}
 	if d.DraftID != "" {
 		p.focusBoardReply(d.ID)
+		return
+	}
+	if d.Reply == nil {
 		return
 	}
 	w.openReply(d.AccountID, d.Reply.Message, w.boardCaseComments(*d), d.Person)
@@ -89,30 +93,55 @@ func (w *Window) boardShowInMailSelected() {
 	}
 }
 
+// boardActionGates is which win.board-* actions a detail allows, pure and
+// tested without GTK (the macOS client's gating, BoardActions.swift):
+// Archive while the case is not done or the source still can archive it
+// (Detail.CanArchive); Reply with a message to answer or a linked draft
+// to edit; Show in Mail with a message to show (the reply target, else the
+// newest), or on the samples, which only say they cannot.
+type boardActionGates struct {
+	markDone, reopen, archive, unflag, reply, showInMail, moveTo bool
+}
+
+func boardGatesFor(d board.Detail, samples bool) boardActionGates {
+	return boardActionGates{
+		markDone:   !d.IsDone,
+		reopen:     d.IsDone,
+		archive:    d.CanArchive || !d.IsDone,
+		unflag:     d.CanUnstar,
+		reply:      d.Reply != nil || d.DraftID != "",
+		showInMail: samples || d.Reply != nil || d.LatestMessage != "",
+		moveTo:     !d.IsDone,
+	}
+}
+
 // apiBoardState is a convenience cast where the action's string parameter
 // (one of the four nicks board.State.API uses) becomes api.BoardState.
 func apiBoardState(s string) boardAPIState { return boardAPIState(s) }
 
 // applyActionsSensitivity enables the win.board-* actions for the current
 // selection: nothing while the window is not in Board, or no case is
-// selected.
+// selected; otherwise boardGatesFor.
 func (p *boardPage) applyActionsSensitivity(vm board.ViewModel) {
+	var g boardActionGates
 	on := p.w.mode == board.ModeBoard && vm.Detail != nil
-	for _, name := range []string{"board-mark-done", "board-reopen", "board-archive", "board-unflag", "board-reply", "board-show-in-mail"} {
+	if on {
+		g = boardGatesFor(*vm.Detail, p.daemon == nil)
+	}
+	for name, enabled := range map[string]bool{
+		"board-mark-done": g.markDone, "board-reopen": g.reopen, "board-archive": g.archive,
+		"board-unflag": g.unflag, "board-reply": g.reply, "board-show-in-mail": g.showInMail,
+	} {
 		if a := p.w.actions[name]; a != nil {
-			a.SetEnabled(on)
+			a.SetEnabled(enabled)
 		}
 	}
+	p.w.boardMoveToAction.SetEnabled(g.moveTo)
+	// Remind… is a MenuButton (its popover is built on open), not an
+	// action: its sensitivity follows the selection directly.
+	p.remindButton.SetSensitive(on)
 	if on {
-		d := *vm.Detail
-		p.w.actions["board-mark-done"].SetEnabled(!d.IsDone)
-		p.w.actions["board-reopen"].SetEnabled(d.IsDone)
-		p.w.actions["board-archive"].SetEnabled(!d.IsDone)
-		p.w.actions["board-unflag"].SetEnabled(d.CanUnstar)
-		p.w.boardMoveToAction.SetEnabled(!d.IsDone)
-		p.w.boardMoveToAction.SetState(glib.NewVariantString(string(d.State.API())))
-	} else {
-		p.w.boardMoveToAction.SetEnabled(false)
+		p.w.boardMoveToAction.SetState(glib.NewVariantString(string(vm.Detail.State.API())))
 	}
 }
 
@@ -228,9 +257,9 @@ func (p *boardPage) showCaseContextMenu(anchor *gtk.Widget, id board.CaseID, x, 
 		at := choice.Date
 		a.ConnectActivate(func(*glib.Variant) { p.ctl.Remind(id, &at) })
 		group.AddAction(a)
-		remindMenu.Append(choice.Title+" "+choice.When, "boardctx."+name)
+		remindMenu.Append(choice.Label, "boardctx."+name)
 	}
-	if _, snoozed := d.RemindText, d.IsSnoozed; snoozed {
+	if d.IsSnoozed {
 		a := gio.NewSimpleAction("remind-none", nil)
 		a.ConnectActivate(func(*glib.Variant) { p.ctl.Remind(id, nil) })
 		group.AddAction(a)
@@ -249,7 +278,7 @@ func (p *boardPage) showCaseContextMenu(anchor *gtk.Widget, id board.CaseID, x, 
 	remindItem := gio.NewMenuItem(board.RemindMe(i18n.Tr), "")
 	remindItem.SetSubmenu(remindMenu)
 	top.AppendItem(remindItem)
-	if !d.IsDone {
+	if boardGatesFor(*d, p.daemon == nil).archive {
 		top.Append(board.Archive(i18n.Tr), "win.board-archive")
 	}
 	if d.CanUnstar {
@@ -266,9 +295,32 @@ func (p *boardPage) showCaseContextMenu(anchor *gtk.Widget, id board.CaseID, x, 
 
 	pm := gtk.NewPopoverMenuFromModel(m)
 	pm.InsertActionGroup("boardctx", group)
-	pm.SetParent(anchor)
+	// The menu hangs on the list that holds the row, not on the row: a
+	// refresh may take the row out of its list (renderList) while the menu
+	// is open, and a row going with a popover still parented to it warns
+	// "still has children" and leaves the menu on a freed parent. The list
+	// stays; the click's point is translated into it.
+	parent := gtk.BaseWidget(p.root)
+	if list := anchor.Ancestor(gtk.GTypeListBox); list != nil {
+		parent = gtk.BaseWidget(list)
+	}
+	if px, py, ok := anchor.TranslateCoordinates(parent, x, y); ok {
+		x, y = px, py
+	}
+	pm.SetParent(parent)
 	rect := gdkRectangleAt(x, y)
 	pm.SetPointingTo(&rect)
+	// A popover set on a widget stays its child until unparented: a menu
+	// per right-click would pile up on the list. Closed, it lets go of the
+	// list once its own closing has run (idle: an activated item's action
+	// runs first).
+	pm.ConnectClosed(func() {
+		glib.IdleAdd(func() {
+			if pm.Parent() != nil {
+				pm.Unparent()
+			}
+		})
+	})
 	pm.Popup()
 }
 

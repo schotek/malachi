@@ -254,6 +254,10 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	b.WriteString("menubutton.board-state-pill.board-state-hot > button { background-color: alpha(@destructive_bg_color, 0.2); color: @destructive_color; }\n")
 	b.WriteString("menubutton.board-state-pill.board-state-you > button { background-color: alpha(@accent_bg_color, 0.2); color: @accent_color; }\n")
 	b.WriteString("menubutton.board-state-pill.board-state-them > button { background-color: alpha(@orange_4, 0.25); }\n")
+	// A case's badges (Reminded, New contact; widget.NewBadgePill): the
+	// issue pill's shape, smaller and tinted with the accent, so that they
+	// never read as an issue's status.
+	b.WriteString("label.issue-pill.board-badge { padding: 0 5px; font-size: 72%; background-color: alpha(@accent_bg_color, 0.15); color: @accent_color; }\n")
 	// The board's nav column rows (window/board_list.go): the filter rows'
 	// dot and count badge, the account rows' kind capsule, same shape as
 	// the folder sidebar's unread badge.

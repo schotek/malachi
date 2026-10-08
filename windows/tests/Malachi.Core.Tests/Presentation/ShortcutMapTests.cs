@@ -96,6 +96,26 @@ public sealed class ShortcutMapTests
     }
 
     [Fact]
+    public void CtrlOneAndTwoSwitchTheModeOfTheMainWindowOnly()
+    {
+        Assert.Equal(C.ShowMail, Resolve(KeyChord.Ctrl(K.Number1)));
+        Assert.Equal(C.ShowBoard, Resolve(KeyChord.Ctrl(K.Number2)));
+        // Ctrl chords: a text input does not lift them, nor does the ctrl-r setting.
+        var typing = Main with { TextInputFocused = true };
+        Assert.Equal(C.ShowMail, Resolve(KeyChord.Ctrl(K.Number1), typing));
+        Assert.Equal(C.ShowBoard, Resolve(KeyChord.Ctrl(K.Number2), typing with { CtrlR = CtrlR.Refresh }));
+        Assert.False(ShortcutMap.IsSingleKey(C.ShowMail));
+        Assert.False(ShortcutMap.IsSingleKey(C.ShowBoard));
+        Assert.Contains(KeyChord.Ctrl(K.Number1), ShortcutMap.Chords(WindowKind.Main));
+        Assert.Contains(KeyChord.Ctrl(K.Number2), ShortcutMap.Chords(WindowKind.Main));
+        foreach (var window in Enum.GetValues<WindowKind>().Where(w => w != WindowKind.Main))
+        {
+            Assert.Null(ShortcutMap.Resolve(KeyChord.Ctrl(K.Number1), new ShortcutContext(window)));
+            Assert.DoesNotContain(KeyChord.Ctrl(K.Number2), ShortcutMap.Chords(window));
+        }
+    }
+
+    [Fact]
     public void SingleKeysTypeWhileATextInputHasTheFocus()
     {
         var typing = Main with { TextInputFocused = true };

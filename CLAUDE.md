@@ -1034,13 +1034,16 @@ GTK z výslovného pokynu vlastníka, výjimka z pravidla 6; Windows ji doplnil
 2026-10-06, viz níže). Hlavní okno má dva režimy, Pošta (vše dosavadní)
 a Nástěnka. Přepíná dvousegmentový přepínač (`envelope` / `square.grid.2x2`)
 na začátku každého toolbaru a položky Pošta a Nástěnka na vrcholu menu
-Zobrazení, bez klávesových zkratek; režim se neukládá (`Board.initialMode`
-je Pošta). Styl nástěnky při prvním zobrazení po spuštění určuje klíč
-`board-default-style` (`list`/`columns`/`today`, výchozí `list`, neznámá
-hodnota = Seznam; Předvolby → Obecné → Nástěnka → Výchozí zobrazení),
-pak platí poslední zvolený až do ukončení a změna klíče po prvním zobrazení
-se projeví až po dalším spuštění (`BoardController.boardWillShow`,
-`Board.styleOnShow`). V Nástěnce je obsah okna (sidebar, seznam, čtení, panel
+Zobrazení, s klávesami ⌘/Ctrl+1 (Pošta) a ⌘/Ctrl+2 (Nástěnka) od 2026-10-08;
+režim při spuštění určuje `board-start-mode` (`mail` výchozí / `board` /
+`last`, poslední režim je `board-last-mode`; Předvolby → Obecné → Nástěnka →
+Při spuštění otevřít). Styl nástěnky při prvním zobrazení po spuštění určuje
+klíč `board-default-style` (`last` výchozí, `list`/`columns`/`today`, neznámá
+hodnota = Poslední použité; Předvolby → Obecné → Nástěnka → Zobrazení
+nástěnky, v kódu „Board View“), `last` bere `board-last-style`, který se
+zapisuje při každé změně stylu; po prvním zobrazení platí zvolený styl
+(`BoardController.boardWillShow`, `Board.styleOnShow`). Filtr účtu se
+pamatuje vždy (`board-account-filter`, použije se, jen když účet existuje). V Nástěnce je obsah okna (sidebar, seznam, čtení, panel
 asistenta) nahrazený stránkou nástěnky, stavový pruh zůstává. Pohled split
 view pošty se z okna **vyjme** (`MainContentViewController.setMode`;
 kontroler i stav pošty — složka, výběr, posun, hledání, přepis asistenta —
@@ -1056,9 +1059,10 @@ okno s Nástěnkou se pro notifikace nepočítá jako pohled na složku
 
 Model a pravidla (démon, `docs/architecture.md` §3.7, `docs/api.md` §4.13,
 rozhodnutí v §7). **Případ** je jedno vlákno účtu (u účtu jira issue) v
-jednom ze čtyř stavů `hot` / `you` / `them` / `info` (Hot, Čeká na vás,
-Čeká na ně, K informaci). Stav dávají pravidla démona
-(`internal/board`, čistý balíček bez storu a hodin, `RulesVersion` "5";
+jednom ze čtyř stavů `hot` / `you` / `them` / `info` (česky Hoří, Čeká na
+vás, Čeká na ně, Pro informaci od 2026-10-08; anglické msgidy Hot, Waiting
+for You, Waiting for Them, For Your Information zůstaly). Stav dávají pravidla démona
+(`internal/board`, čistý balíček bez storu a hodin, `RulesVersion` "6";
 každá změna pravidel nebo toho, co jim store podává, = nové číslo, démon
 pak přepočítá všechny případy i uloženou poštu v nejdelším okně). Čtou jen
 hlavičky, strukturu, role složek, příznaky a klasifikaci hromadné pošty,
@@ -1075,7 +1079,9 @@ Message-ID jsou jedna zpráva a za cizí zprávu mluví kopie uložená první
 nebo `them.asked` (žádná příchozí, otazník ve vlastním textu jedné z
 posledních 10 mých zpráv, která není přeposlání); moje zpráva ve tvaru
 přeposlání (`Fwd:`/`FW:`/…, příloha `message/rfc822`, začíná citací,
-nebo nic neodpovídá a nad citací má méně než 300 B) případ nikdy nedělá.
+nebo nic neodpovídá a nad citací má méně než 300 B) případ sama nikdy
+nedělá a uvnitř vlákna (od verze 6, hledá se jen mezi mými zprávami po
+nejnovější příchozí, nejvýš deset) projde jako poznámka sobě.
 **Poznámka sobě** (od verze 5) = moje zpráva, jejíž příjemci v `To`,
 `Cc` a `Bcc` jsou aspoň jeden a všichni moje adresy kteréhokoli účtu
 (`Identity.WithSelf`: vlastní adresa a odesílatelé složek Odeslané všech
@@ -1084,15 +1090,20 @@ smíšení příjemci ani zpráva bez příjemců poznámkou nejsou. Poznámka s
 počítá (počet zpráv, vlajka, odpověď na ni), ale stav, datum, předmět
 a výňatek případu dává nejnovější člen, který poznámkou není (od něj
 běží okna); vlákno jen z poznámek případ nedělá. Moje odpověď poslaná
-jen na jinou mou adresu tak cizí poštu před sebou nezakryje.
-Příchozí poslední člen: pořadí `hot.flagged`, `info.yourNote` (od
-kterékoli mé adresy jen na mé adresy),
-`hot.important`, `you.repliedToYou`, `you.addressed`, `info.unknownSender`,
+jen na jinou mou adresu tak cizí poštu před sebou nezakryje. Rozhodující
+člen (nejnovější, který není poznámka ani vlastní přeposlání;
+`Verdict.DecidingMessageID`, `DecidingMine`) je-li příchozí: pořadí
+`hot.flagged` (od verze 6 platí, i když psal naposled já, a pak se nabízí
+Odebrat hvězdičku), `info.yourNote` (od kterékoli mé adresy jen na mé
+adresy), `hot.important` (jen známý odesílatel), `you.repliedToYou`,
+`you.addressed` (známý), `you.newContact` (neznámý odesílatel, já v `To`;
+štítek Nový kontakt), `info.unknownSender` (neznámý, nejsem v `To`),
 `info.ccOnly`, `info.notAddressed`. **Známý odesílatel** = jeho `From`
 nebo `Reply-To` je v `To`/`Cc` některé zprávy ve složkách `sent`/`outbox`
 kteréhokoli povoleného poštovního účtu (nejnovější první, nejvýš 20 000,
-čte se hodinově a při změně účtů) nebo mé zprávy ve vlákně; zpráva mně od
-neznámého je `info.unknownSender` a její `Importance` se nepočítá
+čte se hodinově a při změně účtů) nebo mé zprávy ve vlákně; zpráva
+mně v `To` od neznámého je `you.newContact`, jinak `info.unknownSender`, a její
+`Importance` se nepočítá
 (`you.repliedToYou` a vlastní vlajka `hot.flagged` platí pro kohokoli).
 Jira: bez známého jira uživatele (`issues.me.`) žádné případy, issue
 v kategorii done nebo v `closedStatuses` není případ, události
@@ -1103,12 +1114,15 @@ stavu v platnosti. Dokud příchozí člen čeká na klasifikaci hromadné pošt
 verdikt je `Pending` a případ zůstává, jak byl. **Rozhodnutí uživatele
 vyhrává**: stav uživatele > anotace asistenta (jen se zapnutou preferencí
 `assistant` a ne `stale`) > pravidla; stav uživatele, remind (i prošlý,
-dokud nepřijde done nebo nový), budoucí termín a otevřený závazek drží
-případ, který by pravidla zahodila (`kept`); done znovu otevře jen
+dokud nepřijde done nebo nový), budoucí termín (jen se zapnutou preferencí `assistant`) a otevřený
+závazek (po závazcích, které zavřel tentýž verdikt) drží případ, který by pravidla zahodila (`kept`); done znovu otevře jen
 příchozí zpráva, kterou démon uložil po done a která přišla nejdřív den
 před ním, a ne kopie zprávy, kterou případ měl už při done (`done_seen`;
 tedy ne zfalšované `Date`, backfill ani přesun jiným klientem); done ruší
-remind a zavírá otevřené závazky, remind ruší done; hotový případ je v
+remind a zavírá otevřené závazky, remind ruší done; cokoli, co případ z done
+vrátí (příchozí zpráva, `board.setDone {done:false}`, remind), závazky zavřené
+done (`closed_reason='done'`, `closed_at >= done_at`) znovu otevře a příchozí
+zpráva navíc smaže `user_state`; hotový případ je v
 `board.list` ještě 30 dní.
 
 Vrstvy. Migrace `0017_board.sql` (nevratná): `board_cases` (id `c_` + 32
@@ -1135,7 +1149,7 @@ store; text členů čte líně, jen `Verdict.TextMembers`), `board_owntext.go`
 (vlastní text HTML zpráv se odvozuje mimo transakci, cache 8 MiB),
 `board_backfill.go` (první vyhodnocení uložené pošty v `core.Maintain`
 po 2000 zprávách, kurzor `meta` `board.rules` = `<verze>:<id>` /
-`<verze>:done`; do konce `ready: false`), `board_service.go` (15 metod
+`<verze>:done`; do konce `ready: false`), `board_service.go` (17 metod
 `board.*`, preference v `meta` `board.prefs`, ne `config.get`). Hodinová
 údržba `boardUpkeep` ukončí běhy otevřené přes 2 h, maže běhy starší
 90 dní, prošlé remindy, staré a osiřelé případy, a porovná role složek
@@ -1219,7 +1233,7 @@ Navrhnout odpověď (macOS; `docs/mcp.md` A suggested reply on the board,
 `docs/security.md` §10.2): detail případu bez návrhu odpovědi má na jeho
 místě pole s nepovinným pokynem a „✦ Navrhnout odpověď“ (pravidla
 `Board.suggestReplyOffered`/`suggestReplyView` v `BoardSuggestReply.swift`:
-případ s cílem odpovědi, ne hotový, ne K informaci, účet umí odpovědět,
+případ s cílem odpovědi, ne hotový, ne Pro informaci, účet umí odpovědět,
 ne vzorová data; dostupnost jako přepis v okně Nová zpráva, souhlas jen
 panelu `assistant-consent`, model `assistant-model`). `BoardReplyController`
 (jeden pro aplikaci, `AppState`) spustí jednou Claude Code s mostem
@@ -1337,8 +1351,9 @@ rozhraním `Translator` jako `jira.Translator`, v `po/POTFILES`, česky
 v `po/cs.po`); macOS `Board.Text` je přebírá s klíčem = msgid, co v něm
 zůstane jako `// macOS-only string`, je anglicky. Windows klient nástěnku
 má (viz níže) a msgidy nástěnky používá; v `windows/parity-exclusions.txt`
-zůstaly jen popisy klíčů gschema (styl, souhlas a model triage) a GTK
-„Show %d More“ (Windows má řádek „… a dalších %d“ jako macOS).
+zůstaly jen popisy klíčů gschema (styl, režim, souhlas a model triage);
+GTK „Show %d More“ nahradil `AndMore`, stejný řádek „… a dalších %d“ jako
+Windows a macOS.
 
 GTK UI: `ui/internal/board` obsahuje i pohledové modely, kontroler,
 zdroj nad démonem, vzorová data a pravidla dostupnosti a rozvrhu.
@@ -1359,7 +1374,7 @@ Sdílený `compose.Pane` slouží samostatnému oknu i inline odpovědi;
 vlastník `OwnerBoard` zachová neuložené či neodeslané odpovědi při
 změně výběru nebo režimu. Automatická triage spouští zdroj i po
 asynchronním načtení předvoleb a dostupnosti Claude, bez prvního
-ručního otevření nástěnky. Výchozí styl je v Předvolbách → Obecné,
+ručního otevření nástěnky. Zobrazení nástěnky je v Předvolbách → Obecné,
 souhlas a rozvrh triage v Předvolbách → AI.
 
 Windows klient má nástěnku (2026-10-06, `feat/board`, `docs/windows-port.md`
@@ -1410,6 +1425,113 @@ běhu nad kopií skutečného storu (`TestBoardDryRun`). UI zkouší vlastník
 ručně. Zde není doložen skutečný běh triage s Claude Code (ruční ani
 automatický), návrh odpovědi v GTK ani ve Windows klientu (ten agenti jen sestavili, otestovali a prošli nad vzorovými daty); migrace 0017 je
 již zmrazená po provedení v ostrém storu vlastníka (viz níže).
+
+Opravy nástěnky (2026-10-08, `feat/board`, necommitnuté; plán a audit
+mimo repozitář; rozhodnutí vlastníka platí pro všechny tři klienty naráz).
+Démon, **bez nové migrace** (0017 je zmrazená a každá migrace ve stromu
+dojde na živá data vlastníka): `RulesVersion` "6" (vlastní přeposlání ve
+vlákně projde jako poznámka a nezavře závazky, vlastní vlajka je `hot`
+bez ohledu na to, kdo psal naposled, `you.newContact`, rozhodující člen
+viz výše). **Remind**: příchozí započítaný člen uložený po nastavení
+remindu, který tehdy nebyl členem a prošel týmiž třemi zkouškami jako
+reopen z done, odložení zruší (případ je živý, `remindedAt` se
+nenastaví); remind, který vypršel, vystaví `remindedAt` (jen u `live`),
+klienti ho řadí první ve stavu se štítkem Připomenuto, bez notifikace, a
+smaže ho každá akce uživatele (`board.setState`, `setDone`, `remind` i
+s `null`, `archive`, `unflag`) i nová příchozí zpráva. Bez schématu to jde
+dvěma zneužitými sloupci: `done_seen` nese za odložení první řádek
+`~remind <razítko>` a id příchozích zpráv v té chvíli (`BoardCase.RemindSetAt`)
+a `board_runs.day = 'lowerBound'` značí u neexterních běhů dolní mez
+spotřeby; remindy nastavené před touto změnou poštou probuzeny nejsou a
+komentář zmrazené 0017, že `day` externího běhu je den volajícího, je
+chybný (je to místní den démona). Dále: `kept` se počítá po závazcích
+zavřených týmž verdiktem; termín asistenta drží a řadí případ jen se
+zapnutým `assistant` (i ve výpisu a prořezu); prořez maže dávno hotové
+případy bez ohledu na `user_state`; `board.get` odvodí synchronně nejvýš
+8 vlastních textů (zbytek z uloženého, doplní worker); známí odesílatelé
+označí jen případy, kterých se změna týká; `BoardArchiveResult.moved`
+(zpráva + zdrojová složka) pro Zpět; `usage.lowerBound` a
+`usage24h.lowerBound`; `Draft.Text` čištěný jako ostatní řetězce. Most:
+pod `--triage-run` `create_draft` **vynucuje** pravidlo návrhu odpovědi
+(jen `replyMessageId` případu, `ruleReason` ∈ {`hot.important`,
+`you.addressed`, `jira.assigned`, `jira.reporter`}, ne při `hasDraft`,
+jeden na případ, pevná chyba bez textu pošty); opakovaná anotace téhož
+případu nestojí slot `--triage-max`; fronta zveřejní případy až po
+vykreslení; ztracená odpověď po `draft.save` znamená „koncept možná
+existuje“ (bez opakování); `--reply-only` dál registruje čtecí nástroje
+(omezení je allowlist klienta, u Codexu brána).
+
+Klienti (GTK, macOS i Windows, texty v `ui/internal/board`, Swift a C#
+porty s klíčem = msgid): štítky Připomenuto a Nový kontakt, řádek „Drží ho
+vaše rozhodnutí“ v „Proč je to tady?“ u stavu uživatele (připnutí zůstává),
+položka Odložené v navigaci (Hotovo jen hotové), fráze Dnes jen z nového od
+včerejší půlnoci / termínu dnes / vráceného remindu, presety remindu bez
+skoků večer a po půlnoci (Později dnes nejvýš 20:00, Dnes večer, Dnes ráno),
+„Vrátit na nástěnku hned“ (dřív „Nepřipomínat“), Archivovat s tlačítkem Zpět
+(`message.move` zpět a `board.setDone {done:false}`), ✦ Navrhnout
+připomenutí u `them.*` (prompt žádá follow-up na vlastní zprávu), názvy
+stavů česky Hoří / Čeká na vás / Čeká na ně / Pro informaci, klávesy
+⌘/Ctrl+1 a 2 a E (Archivovat), D (Hotovo / Zpět na nástěnku), R
+(Připomenout…) mimo textová pole (macOS jako položky menu včetně nového
+menu Board, GTK akce `win.show-mail` / `win.show-board`), Escape
+dvoustupňově (otevřený popup se zavře; klávesnice v editoru či polích
+příjemců jde na pilulku stavu; jinde zavře panel Sloupců a Dnes, v Seznamu
+nic; čistá pravidla `board.EscapeFor`), výběr se při změně stylu a zúžení
+drží a pane odpovědi se stěhuje do panelu, odpověď v odesílání má při Konci
+vlastní otázku („Ukončit, i když se odpověď ještě odesílá?“). Předvolby →
+Obecné → Nástěnka: Zobrazovat nástěnku (vypnutá: přepínač režimu skrytý a
+Pošta vynucená, vypne i automatickou triage), Zobrazení nástěnky, Při
+spuštění otevřít, Ponechat případy po dobu (čtyři okna `windows`, 1–365
+dní); Předvolby → AI → Nástěnka: Třídit tyto účty (`triageAccounts`, prázdné
+= všechny povolené poštovní; poslední zaškrtnutý účet vypnout nejde) a
+spotřeba „nejméně“ u zastavených běhů; souhlasy říkají, že model čte i
+ostatní uloženou poštu a přílohy. Codex: selhání poskytovatele se mapují na
+třídy (nenalezen, nepřihlášen, nový limit využití) a panel nabízí
+Znovu připojit ChatGPT (GTK hotové; macOS E3 a Windows F2 psané); změna
+poskytovatele ruší jen běh aktivního a zapíše předvolby jednou; `thread/start`
+posílá `sandbox: read-only`, `approvalPolicy: never`, `environments: []`,
+`ephemeral: true` (`docs/chatgpt-integration.md`), verze Codexu se jen
+ukazuje v Předvolbách a není bránou.
+
+Stav ověření oprav (2026-10-08, upřímně). Na tomto Macu proběhly a jsou
+zelené: `go vet` a Go testy démona (`pkg/api`, `internal/board`, most
+`malachi-mcp`, `internal/rpc`, `store` a `core` s `-run 'Board|Merge|Thread'`),
+Go reference `ui/internal/board`, `boardtriage`, `boardreply`, `assistant`,
+`assistantpanel`; `swift build` celého balíčku bez varování a filtrované
+testy `MalachiCore` (625, filtr Board/Triage/Settings/Assistant/ChatGPT);
+`make po` v Dockeru (`cs.po` bez fuzzy a nepřeložených), Blueprint a
+`glib-compile-schemas` tamtéž. Tři revize (Go, macOS, GTK + Windows čtením)
+proběhly a jejich nálezy jsou opravené (mimo jiné: Zpět po archivaci
+na Gmailu se nenabízí, protože All Mail není synchronizovaný a `moved`
+chybí; odstraněný účet v `triageAccounts` už neblokuje zápis předvoleb;
+znovuotevření poštou otevře i závazky zavřené Hotovem; výběr při změně
+stylu zůstává jen u případu, který uživatel sám vybral nebo má živý pane;
+Escape nechá přednost popoverům; Ctrl/⌘+1/2 podle fyzické klávesy kvůli
+české QWERTZ). GTK `ui/internal/window`, `compose`, `settings`, `widget`,
+`style` a `chatgpt` jsou napsané naslepo a prošly jen `gofmt`/`gopls`;
+Windows C# a XAML jsou napsané naslepo, nesestavené (bez .NET) — nejprve
+`build.ps1 app` a seznam pravděpodobných míst v `docs/windows-port.md`
+§11.8. Nespuštěno: `TestBoardDryRun`, `codex_linux_test.go` (jen Toolbx),
+fuzz cíle, celé sady, aplikace macOS (izolovaný start visel na čtení
+keychainu v `AppState.init`: `ChatGPTKeychain.tokens()` ignoruje
+`MALACHI_DATA_DIR`, rozhodnutí vlastníka čeká), takže rozložení okna
+(oddělovač toolbaru po Pošta → Nástěnka → Pošta, pane v panelu, Dnes bez
+kalendáře, kapsle Zpět, menu Nástěnka s D/R/E, monitor ⌘1/⌘2) se neměřilo.
+Čeká na vlastníka (CP2): macOS nad kopií dat s vlastním socketem — první
+start přepočítá nástěnku (pravidla v6) — Odložené, Připomenuto po vypršení,
+probuzení poštou, Nový kontakt, Zpět u Archivovat (u Gmailu bez Zpět),
+Escape dvoustupňově, ⌘1/⌘2/E/D/R, pane při změně stylu a zúžení, Předvolby
+(Zobrazovat nástěnku, Zobrazení, Při spuštění, Ponechat případy, Třídit
+tyto účty), Konec s neuloženou a odesílající odpovědí, Znovu připojit
+ChatGPT v panelu; (CP3) v Toolbxu `make build`, `go test
+./internal/window/... ./internal/settings/... ./internal/chatgpt/...
+./internal/boardtriage/...`, `make lint`, `make po`, smoke testy
+`MALACHI_GTK_SMOKE=1`, ručně Escape s otevřenými popovery, kontextové menu
+Archivovat, Ctrl+1/2 na české klávesnici, R v úzkém Seznamu; na Windows
+`build.ps1 app`/`test`/`lint` a smoke; skutečný běh triage a návrhu
+odpovědi s Claude Code i Codexem. GTK nemá okno zkratek
+(`win.show-help-overlay` ukazuje nikam), takže Ctrl+1/2 a E/D/R nejsou
+nikde vypsané (rozhodnutí vlastníka).
 
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně
@@ -1506,7 +1628,9 @@ komprese a příloh na vyžádání, Microsoft účty).
   UI neměň, přesměrovaly by i dconf s předvolbami. Komentáře
   na produkční Jiře jen do issue, které uživatel sám určí; Data Center
   není k dispozici a ověřuje se jen fakem `internal/jira/jiratest`.
-- Nástěnku zkoušej taky jen nad kopií: migrace 0017 je nevratná (tabulky
+- Nástěnku zkoušej taky jen nad kopií (první start s `RulesVersion` 6 přepočítá
+všechny případy a poštu nejdelšího okna, stavy uživatele, Done a remindy
+zůstanou; vlastníkovi to říct před testem): migrace 0017 je nevratná (tabulky
   `board_*` a triggery na `messages`, `issues`, `issue_items`, `meta`),
   postup s `MALACHI_DATA_DIR` a vlastním `MALACHI_SOCKET` je stejný jako
   u Jiry výše. Běh triage i nad kopií posílá text pošty z ní přes

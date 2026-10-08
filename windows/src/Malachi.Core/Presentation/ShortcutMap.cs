@@ -62,6 +62,9 @@ public static class ShortcutMap
         (KeyChord.Ctrl(VirtualKey.F), ShortcutCommand.Search),
         (KeyChord.Ctrl(VirtualKey.E), ShortcutCommand.Search),
         (KeyChord.Bare(VirtualKey.F10), ShortcutCommand.MainMenu),
+        // The mode switch (Board.BoardKeys): Ctrl chords, so no text input lifts them.
+        (KeyChord.Ctrl(VirtualKey.Number1), ShortcutCommand.ShowMail),
+        (KeyChord.Ctrl(VirtualKey.Number2), ShortcutCommand.ShowBoard),
     ];
 
     private static readonly (KeyChord Chord, ShortcutCommand Command)[] Close =

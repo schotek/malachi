@@ -17,9 +17,14 @@
 // A second Quit while the first asks is the same Quit. A session end
 // (WM_ENDSESSION, the terminal's CTRL_CLOSE) skips the drafts and the
 // questions, also when it arrives while a question is up: the system gives
-// the app a few seconds. The board's triage ends between the windows'
-// hiding and the daemon's stop, while the connection still carries its
-// board.runEnd, bounded (AppDelegate.swift's stopBoardTriage). A step that throws is logged and the next one
+// the app a few seconds. It still settles the board's inline replies first,
+// bounded and without a question (SettleBoardReplies), so the text typed
+// since the last autosave is saved where it can be. A user's Quit that is
+// abandoned says so (Abandoned), so the board shows its replies again. The
+// board's triage and its suggested reply end between the windows' hiding
+// and the daemon's stop, while the connection still carries their
+// board.runEnd and draft.delete, bounded (AppDelegate.swift's
+// stopBoardTriage). A step that throws is logged and the next one
 // runs: the app always exits. Controllers' rule of §7.1: no
 // ConfigureAwait(false), the steps run on the UI thread.
 
@@ -41,6 +46,7 @@ public sealed partial class QuitSequence
     private Phase phase;
     private Task<bool>? asking;
     private Task<bool>? stopping;
+    private bool sessionEnded;
 
     /// <summary>A sequence over <paramref name="steps"/>.</summary>
     public QuitSequence(QuitSteps steps, ILogger<QuitSequence>? logger = null)
@@ -78,12 +84,14 @@ public sealed partial class QuitSequence
                 return stopping!;
             case Phase.Saving when reason == QuitReason.SessionEnd:
                 // The session ends while a question is up: it gets no answer.
+                sessionEnded = true;
                 return Stop();
             case Phase.Saving:
                 return asking!;
         }
         if (reason == QuitReason.SessionEnd)
         {
+            sessionEnded = true;
             return Stop();
         }
         phase = Phase.Saving;
@@ -101,9 +109,7 @@ public sealed partial class QuitSequence
                 if (phase == Phase.Saving)
                 {
                     LogBoardRepliesKept(logger);
-                    phase = Phase.Idle;
-                    asking = null;
-                    return false;
+                    return Abandon();
                 }
                 return await Stop();
             }
@@ -125,9 +131,7 @@ public sealed partial class QuitSequence
                     if (phase == Phase.Saving)
                     {
                         LogAbandoned(logger);
-                        phase = Phase.Idle;
-                        asking = null;
-                        return false;
+                        return Abandon();
                     }
                     break;
                 }
@@ -140,12 +144,19 @@ public sealed partial class QuitSequence
                 // Nothing tells which drafts are safe: the app runs on, and
                 // the next Quit tries again.
                 LogSaveFailed(logger, e);
-                phase = Phase.Idle;
-                asking = null;
-                return false;
+                return Abandon();
             }
         }
         return await Stop();
+    }
+
+    // A user's Quit ends without quitting: the app runs on.
+    private bool Abandon()
+    {
+        phase = Phase.Idle;
+        asking = null;
+        Step(steps.Abandoned, "abandon");
+        return false;
     }
 
     // The point of no return, once.
@@ -162,18 +173,32 @@ public sealed partial class QuitSequence
     [SuppressMessage("Design", "CA1031", Justification = "Every step runs and the app exits, whatever one of them throws.")]
     private async Task<bool> StopAsync()
     {
-        Step(steps.BeginStopping, "begin stopping");
-        if (steps.StopTriage is { } triage)
+        if (sessionEnded && steps.SettleBoardReplies is { } settle)
         {
+            // Bounded and without a question: the session ends anyway.
             try
             {
-                await triage();
+                var settled = settle();
+                if (await Task.WhenAny(settled, Task.Delay(steps.SettleWait)) != settled)
+                {
+                    LogSettleTimedOut(logger);
+                }
+                else
+                {
+                    await settled;
+                }
             }
             catch (Exception e)
             {
-                LogStepFailed(logger, "stop the triage", e);
+                LogStepFailed(logger, "settle the board's replies", e);
             }
         }
+        Step(steps.BeginStopping, "begin stopping");
+        // Side by side, each bounded on its own: the whole stop of a session
+        // end fits in the few seconds Windows gives it.
+        await Task.WhenAll(
+            RunStep(steps.StopTriage, "stop the triage"),
+            RunStep(steps.EndBoardReply, "end the suggested reply"));
         if (steps.StopDaemon is { } stop)
         {
             try
@@ -189,6 +214,23 @@ public sealed partial class QuitSequence
         phase = Phase.Done;
         Step(steps.Exit, "exit");
         return true;
+    }
+
+    [SuppressMessage("Design", "CA1031", Justification = "Every step runs and the app exits, whatever one of them throws.")]
+    private async Task RunStep(Func<Task>? step, string name)
+    {
+        if (step is null)
+        {
+            return;
+        }
+        try
+        {
+            await step();
+        }
+        catch (Exception e)
+        {
+            LogStepFailed(logger, name, e);
+        }
     }
 
     [SuppressMessage("Design", "CA1031", Justification = "Every step runs and the app exits, whatever one of them throws.")]
@@ -212,6 +254,9 @@ public sealed partial class QuitSequence
 
     [LoggerMessage(Level = LogLevel.Error, Message = "quit abandoned: the drafts could not be saved")]
     private static partial void LogSaveFailed(ILogger logger, Exception error);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "quit: the board's replies did not settle in time")]
+    private static partial void LogSettleTimedOut(ILogger logger);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "quit: {Step} failed")]
     private static partial void LogStepFailed(ILogger logger, string step, Exception error);

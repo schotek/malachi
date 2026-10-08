@@ -20,7 +20,11 @@ func (w *Window) ConfirmQuitUnsaved(done func(bool)) {
 		w.SetApplication(&w.app.Application)
 	}
 	w.Present()
-	d := adw.NewAlertDialog(board.QuitUnsavedHeading(i18n.Tr), board.QuitUnsavedBody(i18n.Tr))
+	unsaved, sending := false, false
+	if pg := w.boardPage; pg != nil && pg.replyPanes != nil {
+		unsaved, sending = pg.replyPanes.HasUnsaved(), pg.replyPanes.HasSending()
+	}
+	d := adw.NewAlertDialog(board.QuitHeading(unsaved, sending, i18n.Tr), board.QuitUnsavedBody(i18n.Tr))
 	d.SetHeadingUseMarkup(false)
 	d.SetBodyUseMarkup(false)
 	d.AddResponse("cancel", i18n.T("_Cancel"))
@@ -31,3 +35,7 @@ func (w *Window) ConfirmQuitUnsaved(done func(bool)) {
 	d.ConnectResponse(func(response string) { done(response == "quit") })
 	d.Present(w)
 }
+
+// mainMenuTooltip is the board's main menu button's tooltip, Mail's own
+// (window.blp), so board_page.blp needs no msgid of its own.
+func mainMenuTooltip() string { return i18n.T("Main Menu") }

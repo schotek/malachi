@@ -52,10 +52,18 @@ type ControllerOptions struct {
 	Env Env
 	// Now is the clock; nil is time.Now.
 	Now func() time.Time
-	// DefaultStyle is the nick of the style the board opens in the first
-	// time it shows in a run (the key board-default-style), asked for at
-	// that moment; nil, or a nick ParseStyle does not know, is the List.
+	// DefaultStyle is the nick of Board View (the key
+	// board-default-style), asked for each time the board shows until the
+	// user picks a style (StyleOnShow); nil is Last Used.
 	DefaultStyle func() string
+	// LastStyle is the nick of the style used last (the key
+	// board-last-style, which the page writes on every ChangeStyle); nil
+	// is the List.
+	LastStyle func() string
+	// SavedAccount is the account filter saved (the key
+	// board-account-filter, which the page writes on every ChangeFilters),
+	// asked for the first time the board shows; nil is every account.
+	SavedAccount func() string
 }
 
 // Controller is the board's view state and view model (BoardController).
@@ -68,14 +76,31 @@ type Controller struct {
 	// OnToast is called with a short sentence for a toast: a write the
 	// source could not make (undone by then), or what Archive did.
 	OnToast func(string)
+	// OnArchived is called with what Archive did, for a toast with Undo
+	// (ArchiveOutcome.Text and Undo; UndoArchive takes it back); nil
+	// shows the text through OnToast.
+	OnArchived func(ArchiveOutcome)
 
 	source       DataSource
 	env          Env
 	now          func() time.Time
 	defaultStyle func() string
-	state        ViewState
-	view         ViewModel
-	hasShown     bool
+	lastStyle    func() string
+	savedAccount func() string
+	// picked: the user chose a style in this run (SetStyle,
+	// ShowWaitingForYou); the board then keeps it (StyleOnShow).
+	picked bool
+	// userPicked is the case the user selected explicitly (Select with a
+	// case), not the List's automatic first row; paneLive says whether a
+	// reply pane is live for a case (SetPaneLive).
+	userPicked CaseID
+	paneLive   func(CaseID) bool
+	// pendingAccount is the saved account filter waiting for the accounts
+	// to be known (FilterOnShow); "" when none waits.
+	pendingAccount string
+	state          ViewState
+	view           ViewModel
+	hasShown       bool
 	// departure is where the selection goes when the selected case leaves
 	// what is shown after the user's own write (done, reopened, moved out
 	// of the filter): computed before the write, used by the first report
@@ -114,7 +139,8 @@ type requested struct {
 // reports nothing while it is made, but may ask src for the selected
 // case's conversation.
 func NewController(src DataSource, o ControllerOptions) *Controller {
-	c := &Controller{source: src, env: o.Env, now: o.Now, defaultStyle: o.DefaultStyle}
+	c := &Controller{source: src, env: o.Env, now: o.Now, defaultStyle: o.DefaultStyle, lastStyle: o.LastStyle,
+		savedAccount: o.SavedAccount}
 	if c.now == nil {
 		c.now = time.Now
 	}
@@ -126,6 +152,13 @@ func NewController(src DataSource, o ControllerOptions) *Controller {
 		Change: c.Refresh,
 		Error:  c.toast,
 		Notice: c.toast,
+		Archived: func(o ArchiveOutcome) {
+			if c.OnArchived != nil {
+				c.OnArchived(o)
+				return
+			}
+			c.toast(o.Text)
+		},
 	})
 	c.requestMessages()
 	return c
@@ -159,15 +192,44 @@ func (c *Controller) RemindPresets() []RemindChoice { return RemindPresets(c.now
 
 // What the user looks at.
 
-// SetStyle switches the style. Columns and Today start with nothing
-// selected; the list selects its first row when its detail is beside it.
+// SetPaneLive installs the question "is a reply pane live for this case"
+// (an inline editor with text or a save in flight), which decides whether a
+// selection survives a style switch or a narrowing (keepsSelection).
+func (c *Controller) SetPaneLive(f func(CaseID) bool) { c.paneLive = f }
+
+// keepsSelection is the rule of SetStyle and SetInlineDetail(false), for
+// the Swift and C# ports to mirror: the selection is kept only when a reply
+// pane is live for the case or when the user selected that case explicitly
+// (Select). The List's automatic first row is not kept: Columns and Today
+// would otherwise slide their panel in for a case nobody chose, and the
+// overview page opens without a panel.
+func (c *Controller) keepsSelection() bool {
+	id := c.state.Selection
+	if id == "" {
+		return false
+	}
+	return id == c.userPicked || (c.paneLive != nil && c.paneLive(id))
+}
+
+// SetStyle is the user's switch of the style. The selected case stays
+// selected only when keepsSelection (a live reply pane, or an explicit
+// pick; Columns and Today show it in their panel, so an inline reply
+// editor moves there); else the selection is cleared: Columns and Today
+// show no panel and the list selects its first row when its detail is
+// beside it. The board keeps the style from now on in this run
+// (StyleOnShow).
 func (c *Controller) SetStyle(s Style) {
+	c.picked = true
+	c.setStyle(s)
+}
+
+func (c *Controller) setStyle(s Style) {
 	if s == c.state.Style {
 		return
 	}
 	next := c.state
 	next.Style = s
-	if s != StyleList {
+	if !c.keepsSelection() {
 		next.Selection = ""
 	}
 	c.apply(next, true)
@@ -188,6 +250,7 @@ func (c *Controller) SetFilter(f Filter) {
 // SetAccount switches the account filter ("" = every account) and clears
 // the selection (the list then selects its first row).
 func (c *Controller) SetAccount(a api.AccountID) {
+	c.pendingAccount = ""
 	if a == c.state.Account {
 		return
 	}
@@ -207,20 +270,23 @@ func (c *Controller) Select(id CaseID) {
 	}
 	next := c.state
 	next.Selection = id
+	c.userPicked = id
 	c.apply(next, true)
 }
 
 // SetInlineDetail says whether the list has room for the detail beside
-// it. Folding the detail away also clears the selection, so the panel
-// never slides in by itself when the window narrows; unfolding selects the
-// first row.
+// it. Folding the detail away keeps the selection only when keepsSelection
+// (a live reply pane or an explicit pick): that case's detail (and an
+// inline reply editor in it) moves to the panel, otherwise nothing is
+// selected and no panel slides in; unfolding shows it beside the list
+// again, or selects the first row.
 func (c *Controller) SetInlineDetail(on bool) {
 	if on == c.state.InlineDetail {
 		return
 	}
 	next := c.state
 	next.InlineDetail = on
-	if !on {
+	if !on && !c.keepsSelection() {
 		next.Selection = ""
 	}
 	c.apply(next, true)
@@ -240,6 +306,7 @@ func (c *Controller) ToggleWhy() {
 // ShowWaitingForYou shows the list filtered to the cases waiting for the
 // user (the Today page's "and N more").
 func (c *Controller) ShowWaitingForYou() {
+	c.picked = true
 	next := c.state
 	next.Style = StyleList
 	next.Filter = Filter{Kind: FilterState, State: StateYou}
@@ -256,17 +323,41 @@ func (c *Controller) Refresh() {
 }
 
 // BoardWillShow is called as the board is about to show (the window
-// enters Board mode, before its page is laid out): the first time in a run
-// it takes the default style, later it keeps the user's last one
-// (StyleOnShow).
+// enters Board mode, before its page is laid out): until the user picks a
+// style it takes Board View (StyleOnShow), and the first time in a run the
+// saved account filter (FilterOnShow; once the accounts are known).
 func (c *Controller) BoardWillShow() {
 	first := !c.hasShown
 	c.hasShown = true
-	def := StyleList
-	if c.defaultStyle != nil {
-		def = ParseStyle(c.defaultStyle())
+	if first && c.savedAccount != nil {
+		c.pendingAccount = c.savedAccount()
 	}
-	c.SetStyle(StyleOnShow(c.state.Style, def, first))
+	def := DefaultStyle{Last: true}
+	if c.defaultStyle != nil {
+		def = ParseDefaultStyle(c.defaultStyle())
+	}
+	last := StyleList
+	if c.lastStyle != nil {
+		last = ParseStyle(c.lastStyle())
+	}
+	next := c.state
+	next.Style = StyleOnShow(def, last, c.state.Style, c.picked)
+	if next.Style != c.state.Style || c.pendingAccount != "" {
+		c.apply(next, true)
+	}
+}
+
+// UndoArchive takes back what Archive did (the toast's Undo): the
+// messages go back to their folders and the case back on the board
+// (UndoArchive's calls, through a source that can move messages; any other
+// source only reopens the case).
+func (c *Controller) UndoArchive(o ArchiveOutcome) {
+	c.departure = nil
+	if u, ok := c.source.(ArchiveUndoer); ok {
+		u.UndoArchive(o)
+		return
+	}
+	c.source.SetDone(o.Case, false)
 }
 
 // BoardShown is called once the board shows again (the window entered
@@ -390,6 +481,15 @@ func (c *Controller) write(id CaseID, changes bool, body func()) {
 // view state (a pending departure no longer applies).
 func (c *Controller) apply(next ViewState, user bool) {
 	snapshot := c.source.Snapshot()
+	if c.pendingAccount != "" && len(snapshot.Accounts) > 0 {
+		// The saved filter, once the accounts are known; an account that
+		// went away leaves every account.
+		if a := api.AccountID(FilterOnShow(c.pendingAccount, snapshot.Accounts)); a != next.Account {
+			next.Account = a
+			next.Selection = ""
+		}
+		c.pendingAccount = ""
+	}
 	if next.Account != "" && !hasAccount(snapshot, next.Account) {
 		// The account went away: its filter with it.
 		next.Account = ""

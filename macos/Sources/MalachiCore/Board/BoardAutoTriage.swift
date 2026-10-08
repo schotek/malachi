@@ -52,8 +52,9 @@ extension Board {
             public var signedIn: Bool?
             /// Both consents and the board's `assistant` preference.
             public var consent: Bool
-            /// A run is under way (this application's, or one the daemon
-            /// reports open).
+            /// This application's own run is under way (Go and C# alike: a
+            /// run the daemon reports open, another client's or one it has
+            /// not seen end, does not count; the daemon ends a stale one).
             public var running: Bool
             /// Cases `board.queue` would offer (`BoardTriage.queue`).
             public var queue: Int

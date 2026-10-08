@@ -3,6 +3,12 @@
 
 package board
 
+import (
+	"strings"
+
+	"github.com/schotek/malachi/backend/pkg/api"
+)
+
 // The rules and the view model of the case detail's Suggest Reply control
 // (the reply controller runs the request): when it is offered, when it can
 // run, and what it shows. Pure; the detail only shows the view model. The
@@ -56,6 +62,27 @@ func SuggestReplyOffered(c Case, s Snapshot, samples bool) bool {
 	return c.Issue == nil
 }
 
+// IsFollowUpReason reports a rule code under which the case's reply target
+// is the user's own last message (them.*): a suggested reply there is a
+// follow-up, a nudge on that message, not an answer.
+func IsFollowUpReason(r api.BoardReason) bool { return strings.HasPrefix(string(r), "them.") }
+
+// IsFollowUp reports a case whose suggested reply is a follow-up: the
+// state the client shows for it (StateOf: the user's choice, else the
+// assistant's annotation when annotated is true and the annotation is not
+// stale, else the rules') is them. The control reads SuggestFollowUp and
+// the request tells the assistant it nudges the user's own message.
+//
+// Ports (Swift, C#) must mirror this: decide by the effective state, not
+// by the rule code; a them.replied case the user moved to You is not a
+// follow-up, a case kept in Them by the user is.
+func IsFollowUp(c Case, annotated bool) bool { return StateOf(c, annotated) == StateThem }
+
+// IsFollowUpWire is IsFollowUp for a case as the daemon sent it.
+func IsFollowUpWire(w api.BoardCase, annotated bool) bool {
+	return IsFollowUp(convertCase(w), annotated)
+}
+
 // SuggestReplyInputs is what SuggestReplyViewOf looks at.
 type SuggestReplyInputs struct {
 	// Offered is SuggestReplyOffered for the case shown.
@@ -71,6 +98,9 @@ type SuggestReplyInputs struct {
 	State     SuggestReplyState
 	// Case is the case shown.
 	Case CaseID
+	// FollowUp is IsFollowUp (effective state) for the case shown: the button reads
+	// SuggestFollowUp.
+	FollowUp bool
 }
 
 // PanelWords are the texts the control shares with the assistant panel:
@@ -113,7 +143,7 @@ func SuggestReplyViewOf(i SuggestReplyInputs, words PanelWords, tr Translator) S
 		return SuggestReplyView{}
 	}
 	v := SuggestReplyView{
-		Shown: true, Enabled: true, Title: SuggestReply(tr), Placeholder: SuggestReplyPlaceholder(tr),
+		Shown: true, Enabled: true, Title: SuggestReplyTitle(i.FollowUp, tr), Placeholder: SuggestReplyPlaceholder(tr),
 		Progress: SuggestReplyRunning(tr), Stop: words.Stop,
 	}
 	if i.State.Kind == SuggestRunning {

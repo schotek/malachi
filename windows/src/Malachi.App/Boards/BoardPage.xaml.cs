@@ -11,24 +11,34 @@
 //
 // The page is the board controller's only listener: it hands every change
 // to the style shown, the detail and its own parts, then raises Changed
-// for the window (the title bar, the commands). One view per style, made
+// for the window (the title bar, the commands). Its keys (GTK
+// board_keys.go wireBoardKeys): E, D and R act on the selected case while
+// the keyboard is in no text field (Board.KeyFor: Archive, Done or Move
+// Back to Board, Remind…'s presets); Escape goes where Board.EscapeFor
+// says: an open popup closes by itself, the keyboard in the reply editor or
+// its recipient fields goes to the state pill, else the panel closes. What
+// Archive did shows with Undo (BoardController.ArchiveDone). One view per style, made
 // on first use and kept, so a style shown again finds its scroll position.
 // The one detail view lives beside the List's list while the List has room
 // for it, in the sliding panel otherwise. Every text is the view model's.
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Malachi.App.Commands;
 using Malachi.App.Main;
 using Malachi.Core.Api;
 using Malachi.Core.Boards;
 using Malachi.Core.Controllers;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Windows.UI.Core;
+using WinKey = Windows.System.VirtualKey;
 
 namespace Malachi.App.Boards;
 
@@ -47,6 +57,14 @@ public sealed partial class BoardPage : UserControl
     private IReadOnlyList<Board.AccountItem> shownAccounts = [];
     private bool syncing;
 
+    // What Archive did last, while its Undo is offered, and the bar's timer.
+    private Board.ArchiveOutcome? archived;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? archiveTimer;
+
+    // How long Archive's Undo is offered (Windows: longer than a toast, as
+    // it has a button to reach).
+    private static readonly TimeSpan ArchiveUndoTime = TimeSpan.FromSeconds(8);
+
     /// <summary>An empty page; <see cref="Attach"/> connects it.</summary>
     public BoardPage()
     {
@@ -61,7 +79,6 @@ public sealed partial class BoardPage : UserControl
         TriageButton.Content = Board.Text.Triage;
         AutomationProperties.SetName(AccountFilter, Board.Text.AccountsCaption);
         detail.CloseRequested += (_, _) => ClosePanel();
-        Panel.CloseRequested += (_, _) => ClosePanel();
         detailHost = Panel.DetailHost;
         detailHost.Content = detail;
     }
@@ -87,6 +104,12 @@ public sealed partial class BoardPage : UserControl
     /// <summary>Where the window's toasts lie while the board shows.</summary>
     public Panel ToastLayer => ToastLayerGrid;
 
+    /// <summary>Whether the keyboard is in the inline reply editor or its fields (set by the window; Escape's second step).</summary>
+    public Func<bool>? ReplyHasKeyboard { get; set; }
+
+    /// <summary>Whether a popup of the inline reply editor is open (set by the window; Escape's first step).</summary>
+    public Func<bool>? ReplyPopupOpen { get; set; }
+
     /// <summary>
     /// Connects the page: the board's actions (its controller and source)
     /// and the window's commands for the "…" menu.
@@ -103,6 +126,8 @@ public sealed partial class BoardPage : UserControl
         CommandBinding.Bind(MenuQuit, commands.Quit);
         detail.Attach(boardActions);
         boardActions.Controller.Changed += (_, changes) => Apply(changes);
+        boardActions.Controller.ArchiveDone += (_, outcome) => ShowArchived(outcome);
+        ArchiveUndoButton.Content = Board.Text.Undo;
         ShowStyle(boardActions.Controller.State.Style);
         ApplyAll();
     }
@@ -230,11 +255,18 @@ public sealed partial class BoardPage : UserControl
             return;
         }
         var hadFocus = FocusIn(detail);
+        // The inline reply had the keyboard: it gets it back where the caret
+        // was (the pane moves with the detail), not the state pill.
+        var reply = hadFocus && actions?.InlineReply is BoardReplyEditorHost r && r.KeyboardInPane ? r : null;
         detailHost.Content = null;
         detailHost = host;
         host.Content = detail;
         detail.InPanel = ReferenceEquals(host, Panel.DetailHost);
-        if (hadFocus)
+        if (reply is not null)
+        {
+            DispatcherQueue.TryEnqueue(reply.RefocusLive);
+        }
+        else if (hadFocus)
         {
             DispatcherQueue.TryEnqueue(() => detail.FocusContent());
         }
@@ -259,8 +291,8 @@ public sealed partial class BoardPage : UserControl
                 {
                     accountFilterIds.Add(a.Filter);
                     // The kind in brackets after the name, as GTK's drop-down
-                    // (renderHeader); both are plain text.
-                    AccountFilter.Items.Add(a.Badge.Length == 0 ? a.Title : a.Title + " (" + a.Badge + ")"); // Windows-only string
+                    // (renderHeader, AccountItem.Label); plain text.
+                    AccountFilter.Items.Add(a.Label);
                 }
             }
             var selected = -1;
@@ -397,4 +429,129 @@ public sealed partial class BoardPage : UserControl
     }
 
     private void OnContentSizeChanged(object sender, SizeChangedEventArgs e) => Panel.Fit(e.NewSize.Width);
+
+    // Archive's Undo
+
+    // What Archive did, with Undo, until the time is up or another archive
+    // replaces it.
+    private void ShowArchived(Board.ArchiveOutcome outcome)
+    {
+        archived = outcome;
+        ArchiveBar.Message = outcome.Text;
+        ArchiveUndoButton.Content = outcome.UndoLabel;
+        ArchiveBar.IsOpen = true;
+        archiveTimer?.Stop();
+        var timer = DispatcherQueue.CreateTimer();
+        timer.Interval = ArchiveUndoTime;
+        timer.IsRepeating = false;
+        timer.Tick += (t, _) =>
+        {
+            t.Stop();
+            if (ReferenceEquals(archiveTimer, t))
+            {
+                archiveTimer = null;
+                ArchiveBar.IsOpen = false;
+            }
+        };
+        archiveTimer = timer;
+        timer.Start();
+    }
+
+    // The messages back to their folders, the case back on the board.
+    private void OnArchiveUndoClick(object sender, RoutedEventArgs e)
+    {
+        var outcome = archived;
+        ArchiveBar.IsOpen = false;
+        if (outcome is not null && Controller is { } controller)
+        {
+            controller.UndoArchive(outcome);
+        }
+    }
+
+    private void OnArchiveBarClosed(InfoBar sender, InfoBarClosedEventArgs args)
+    {
+        archived = null;
+        archiveTimer?.Stop();
+        archiveTimer = null;
+    }
+
+    // The page's keys
+
+    private void OnPageKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Handled || Controller is not { } controller || actions is null)
+        {
+            return;
+        }
+        if (e.Key == WinKey.Escape)
+        {
+            Escape(e);
+            return;
+        }
+        var key = e.Key switch
+        {
+            WinKey.E => 'e',
+            WinKey.D => 'd',
+            WinKey.R => 'r',
+            _ => '\0',
+        };
+        if (key == '\0' || e.KeyStatus.WasKeyDown)
+        {
+            return;
+        }
+        var primary = IsDown(WinKey.Control);
+        var other = IsDown(WinKey.Shift) || IsDown(WinKey.Menu) || IsDown(WinKey.LeftWindows) || IsDown(WinKey.RightWindows);
+        if (Board.KeyFor(key, primary, other, KeyboardInText(), Board.Mode.Board) is not { } action
+            || controller.State.Selection is not { } id || actions.Case(id) is null)
+        {
+            return;
+        }
+        e.Handled = true;
+        switch (action)
+        {
+            case Board.KeyAction.Archive:
+                actions.Archive(id);
+                break;
+            case Board.KeyAction.Done:
+                actions.ToggleDone(id);
+                break;
+            case Board.KeyAction.Remind:
+                detail.OpenRemindMenu();
+                break;
+        }
+    }
+
+    // Escape in two steps (Board.EscapeFor).
+    private void Escape(KeyRoutedEventArgs e)
+    {
+        // A tooltip is no popup the user opened.
+        var popup = ReplyPopupOpen?.Invoke() == true
+            || (XamlRoot is { } root && VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Any(p => p.Child is not ToolTip));
+        switch (Board.EscapeFor(ReplyHasKeyboard?.Invoke() == true, popup, Panel.IsShown))
+        {
+            case Board.EscapeTarget.FocusStatePill:
+                e.Handled = detail.FocusContent();
+                break;
+            case Board.EscapeTarget.ClosePanel:
+                e.Handled = true;
+                ClosePanel();
+                break;
+        }
+    }
+
+    // A text field has the keyboard (a reply editor, a recipient field,
+    // Suggest Reply's instruction): the single keys type there.
+    private bool KeyboardInText()
+    {
+        if (ReplyHasKeyboard?.Invoke() == true || XamlRoot is not { } root)
+        {
+            return true;
+        }
+        var focused = FocusManager.GetFocusedElement(root);
+        // A combo box's letters pick its items.
+        return focused is TextBox or PasswordBox or RichEditBox or AutoSuggestBox or ComboBox or WebView2;
+    }
+
+    private static bool IsDown(WinKey key) =>
+        InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
 }

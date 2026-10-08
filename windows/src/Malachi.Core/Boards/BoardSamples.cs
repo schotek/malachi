@@ -395,6 +395,30 @@ public static partial class Board
                 ],
             },
 
+            // A reminder that came due, and a first message from a new contact.
+            new()
+            {
+                Id = Samples.Id(22), Account = work, Person = "Dana Placeholder", Date = s.AgoDays(2, 15),
+                Subject = "Contract draft for review", Snippet = "Let me know when you have read the draft.",
+                MessageCount = 2, RuleState = State.You, RuleReason = BoardReason.YouAddressed,
+                RemindedAt = s.AgoHours(1),
+                Messages =
+                [
+                    Msg("Dana Placeholder", s.AgoDays(3, 10), "Here is the contract draft. Let me know when you have read it."),
+                    Mine(s.AgoDays(2, 15), "Thanks, I will read it on Monday."),
+                ],
+            },
+            new()
+            {
+                Id = Samples.Id(23), Account = home, Person = "Pat Newcomer", Date = s.AgoHours(4),
+                Subject = "Question about your listing", Snippet = "Is the bicycle still available?",
+                Unread = true, MessageCount = 1, RuleState = State.You, RuleReason = BoardReason.YouNewContact,
+                Messages =
+                [
+                    Msg("Pat Newcomer", s.AgoHours(4), "Hello, is the bicycle still available?"),
+                ],
+            },
+
             // Done.
             new()
             {

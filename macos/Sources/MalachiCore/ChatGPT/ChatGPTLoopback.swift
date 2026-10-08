@@ -125,6 +125,9 @@ import Foundation
     private let session: URLSession
     var baseURL: String { "http://127.0.0.1:\(listener.port)" + path.dropLast(10) }
     private(set) var failure = "codex_session_ended"
+    /// Forgets the failure of an earlier turn (Go `newTurn`), so a turn
+    /// that fails for another reason does not report a stale one.
+    func newTurn() { failure = "codex_session_ended" }
     init(connection: ChatGPTConnection, policy: CodexPolicy) {
         self.connection = connection; self.policy = policy
         let config = URLSessionConfiguration.ephemeral; config.urlCache = nil; config.httpCookieStorage = nil

@@ -13,8 +13,11 @@
 // ticked off) goes to the source, which keeps it; the view model follows
 // once the source reports it. Selecting a case asks the source for its
 // conversation (IBoardSource.LoadMessages); the detail says it loads until
-// it arrives. The source's toasts (a refused write, what Archive did) reach
-// the page through ToastRequested.
+// it arrives. The source's toasts (a refused write) reach the page through
+// ToastRequested, what Archive did through ArchiveDone (a toast with Undo,
+// UndoArchive). The board remembers its style and account filter through
+// the settings the page writes (board-last-style, board-account-filter):
+// the options defaultStyle, lastStyle and savedAccount read them back.
 //
 // Windows: Swift's onChange and onToast are the events Changed and
 // ToastRequested; its now closure and Calendar are the injected
@@ -45,9 +48,31 @@ public sealed partial class BoardController
     private readonly CultureInfo? culture;
     private readonly TimeZoneInfo? timeZone;
 
-    // The style the board opens in the first time it shows in a run (the
-    // settings' board-default-style), asked for at that moment.
-    private readonly Func<BoardStyle> defaultStyle;
+    // Board View (the settings' board-default-style), asked for each time
+    // the board shows until the user picks a style (Board.StyleOnShow).
+    private readonly Func<Board.DefaultStyle> defaultStyle;
+
+    // The style used last (board-last-style, which the page writes on every
+    // Changes.Style).
+    private readonly Func<BoardStyle> lastStyle;
+
+    // The account filter saved (board-account-filter, which the page writes
+    // on every Changes.Filters), asked for the first time the board shows.
+    private readonly Func<string?> savedAccount;
+
+    // The user chose a style in this run (SetStyle, ShowWaitingForYou); the
+    // board then keeps it (Board.StyleOnShow).
+    private bool picked;
+
+    // The saved account filter waiting for the accounts to be known
+    // (Board.FilterOnShow); null when none waits.
+    private string? pendingAccount;
+
+    // The case the user selected explicitly (Select from the page), not the
+    // List's automatic first row; PaneLive says whether a reply pane is live
+    // for a case. Together they decide whether a selection survives a style
+    // switch or a narrowing (KeepsSelection).
+    private BoardCaseId? userPicked;
 
     // Where the selection goes when the selected case leaves what is shown
     // after the user's own write (done, reopened, moved out of the filter):
@@ -72,30 +97,39 @@ public sealed partial class BoardController
 
     /// <summary>
     /// The controller over <paramref name="source"/>, installed as its
-    /// <see cref="IBoardSource.OnChange"/>, <see cref="IBoardSource.OnError"/>
-    /// and <see cref="IBoardSource.OnNotice"/>. <paramref name="defaultStyle"/>
-    /// is the style of the first show (<see cref="BoardWillShow"/>); until
-    /// then the board holds the List. It reports nothing while it is made,
-    /// but may ask the source for the selected case's conversation.
+    /// <see cref="IBoardSource.OnChange"/>, <see cref="IBoardSource.OnError"/>,
+    /// <see cref="IBoardSource.OnNotice"/> and
+    /// <see cref="IBoardSource.OnArchived"/>. Board View
+    /// (<paramref name="defaultStyle"/>, <paramref name="lastStyle"/>) gives
+    /// the style each time the board shows until the user picks one
+    /// (<see cref="BoardWillShow"/>); until the first show the board holds
+    /// the List. It reports nothing while it is made, but may ask the source
+    /// for the selected case's conversation.
     /// </summary>
     /// <param name="source">The cases and the writes.</param>
     /// <param name="time">The clock of the dates; the system's when null.</param>
     /// <param name="culture">The dates' culture; the current one when null.</param>
     /// <param name="timeZone">The days' time zone; the local one when null.</param>
-    /// <param name="defaultStyle">The setting <c>board-default-style</c>, read at the first show; the List when null.</param>
+    /// <param name="defaultStyle">The setting <c>board-default-style</c>, read as the board shows; Last Used when null.</param>
+    /// <param name="lastStyle">The setting <c>board-last-style</c>; the List when null.</param>
+    /// <param name="savedAccount">The setting <c>board-account-filter</c>, read at the first show; every account when null.</param>
     public BoardController(
         IBoardSource source,
         TimeProvider? time = null,
         CultureInfo? culture = null,
         TimeZoneInfo? timeZone = null,
-        Func<BoardStyle>? defaultStyle = null)
+        Func<Board.DefaultStyle>? defaultStyle = null,
+        Func<BoardStyle>? lastStyle = null,
+        Func<string?>? savedAccount = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         Source = source;
         this.time = time ?? TimeProvider.System;
         this.culture = culture;
         this.timeZone = timeZone;
-        this.defaultStyle = defaultStyle ?? (() => BoardStyle.List);
+        this.defaultStyle = defaultStyle ?? (() => Board.DefaultStyle.Last);
+        this.lastStyle = lastStyle ?? (() => BoardStyle.List);
+        this.savedAccount = savedAccount ?? (() => null);
         var state = new Board.ViewState();
         state = state with { Selection = Board.ResolveSelection(source.Snapshot, state) };
         State = state;
@@ -103,6 +137,7 @@ public sealed partial class BoardController
         source.OnChange = Refresh;
         source.OnError = Toast;
         source.OnNotice = Toast;
+        source.OnArchived = OnArchived;
         RequestMessages();
     }
 
@@ -111,9 +146,21 @@ public sealed partial class BoardController
 
     /// <summary>
     /// Called with a short sentence for a toast: a write the source could not
-    /// make (undone by then), or what Archive did (Swift <c>onToast</c>).
+    /// make (undone by then), or what Archive did when nobody listens to
+    /// <see cref="ArchiveDone"/> (Swift <c>onToast</c>).
     /// </summary>
     public event EventHandler<string>? ToastRequested;
+
+    /// <summary>
+    /// Called with what Archive did, for a toast with Undo
+    /// (<see cref="Board.ArchiveOutcome.Text"/> and
+    /// <see cref="Board.ArchiveOutcome.UndoLabel"/>; <see cref="UndoArchive"/>
+    /// takes it back). Without a listener, or without Undo (a null
+    /// <see cref="Board.ArchiveOutcome.UndoLabel"/>: nothing the daemon can
+    /// move back), the text goes to <see cref="ToastRequested"/> (Go
+    /// <c>OnArchived</c>).
+    /// </summary>
+    public event EventHandler<Board.ArchiveOutcome>? ArchiveDone;
 
     /// <summary>The cases and the writes.</summary>
     public IBoardSource Source { get; }
@@ -137,19 +184,19 @@ public sealed partial class BoardController
 
     // What the user looks at
 
-    /// <summary>Columns and Today start with nothing selected; the list selects its first row when its detail is beside it.</summary>
+    /// <summary>
+    /// The user's switch of the style. The selected case stays selected
+    /// only when <see cref="KeepsSelection"/> (a live reply pane, or an
+    /// explicit pick; Columns and Today show it in their panel, so an inline
+    /// reply editor moves there); else the selection is cleared: Columns and
+    /// Today show no panel and the list selects its first row when its
+    /// detail is beside it. The board keeps the style from now on in this
+    /// run (<see cref="Board.StyleOnShow"/>).
+    /// </summary>
     public void SetStyle(BoardStyle style)
     {
-        if (style == State.Style)
-        {
-            return;
-        }
-        var next = State with { Style = style };
-        if (style != BoardStyle.List)
-        {
-            next = next with { Selection = null };
-        }
-        Apply(next);
+        picked = true;
+        ChangeStyle(style);
     }
 
     /// <summary>Switches the list's filter and clears the selection (the list then selects its first row).</summary>
@@ -165,6 +212,7 @@ public sealed partial class BoardController
     /// <summary>Switches the account filter (null: every account) and clears the selection (the list then selects its first row).</summary>
     public void SetAccount(AccountId? account)
     {
+        pendingAccount = null;
         if (account == State.Account)
         {
             return;
@@ -184,13 +232,36 @@ public sealed partial class BoardController
             // Selected again: its conversation is asked for again.
             requested = null;
         }
+        userPicked = id;
         Apply(State with { Selection = id });
     }
 
     /// <summary>
+    /// Is a reply pane live for this case (an inline editor with text or a
+    /// save in flight)? Set by the reply editor host; decides with the
+    /// user's own pick whether a selection survives a style switch or a
+    /// narrowing (<see cref="KeepsSelection"/>).
+    /// </summary>
+    public Func<BoardCaseId, bool>? PaneLive { get; set; }
+
+    /// <summary>
+    /// The rule of <see cref="SetStyle"/> and <see cref="SetInlineDetail"/>
+    /// (false): the selection is kept only when a reply pane is live for the
+    /// case or the user selected that case explicitly (<see cref="Select"/>).
+    /// The List's automatic first row is not kept: Columns and Today would
+    /// otherwise slide their panel in for a case nobody chose, and the
+    /// overview page opens without a panel.
+    /// </summary>
+    public bool KeepsSelection() =>
+        State.Selection is { } id && (id == userPicked || (PaneLive?.Invoke(id) ?? false));
+
+    /// <summary>
     /// Whether the list has room for the detail beside it. Folding the detail
-    /// away also clears the selection, so the panel never slides in by
-    /// itself when the window narrows; unfolding selects the first row.
+    /// away keeps the selection only when <see cref="KeepsSelection"/> (a
+    /// live reply pane or an explicit pick): that case's detail (and an
+    /// inline reply editor in it) moves to the panel, otherwise nothing is
+    /// selected and no panel slides in; unfolding shows it beside the list
+    /// again, or selects the first row.
     /// </summary>
     public void SetInlineDetail(bool on)
     {
@@ -199,7 +270,7 @@ public sealed partial class BoardController
             return;
         }
         var next = State with { InlineDetail = on };
-        if (!on)
+        if (!on && !KeepsSelection())
         {
             next = next with { Selection = null };
         }
@@ -219,6 +290,7 @@ public sealed partial class BoardController
     /// <summary>The list filtered to the cases waiting for the user (the Today page's "and N more").</summary>
     public void ShowWaitingForYou()
     {
+        picked = true;
         var next = State with { Style = BoardStyle.List, Filter = Board.Filter.Of(Board.State.You) };
         if (next.Style != State.Style || next.Filter != State.Filter)
         {
@@ -232,14 +304,44 @@ public sealed partial class BoardController
 
     /// <summary>
     /// The board is about to show (the window enters Board mode, before its
-    /// page is laid out): the first time in a run it takes the default style,
-    /// later it keeps the user's last one (<see cref="Board.StyleOnShow"/>).
+    /// page is laid out): until the user picks a style it takes Board View
+    /// (<see cref="Board.StyleOnShow"/>), and the first time in a run the
+    /// saved account filter (<see cref="Board.FilterOnShow"/>; once the
+    /// accounts are known).
     /// </summary>
     public void BoardWillShow()
     {
         var first = !HasShown;
         HasShown = true;
-        SetStyle(Board.StyleOnShow(State.Style, defaultStyle(), first));
+        if (first)
+        {
+            var saved = savedAccount();
+            pendingAccount = string.IsNullOrEmpty(saved) ? null : saved;
+        }
+        var next = State with { Style = Board.StyleOnShow(defaultStyle(), lastStyle(), State.Style, picked) };
+        if (next.Style != State.Style || pendingAccount is not null)
+        {
+            Apply(next);
+        }
+    }
+
+    /// <summary>
+    /// The toast's Undo: takes back what Archive did. The messages go back to
+    /// their folders and the case back on the board
+    /// (<see cref="Board.UndoArchive"/>'s calls, through a source that can
+    /// move messages, <see cref="IBoardArchiveUndoer"/>); any other source
+    /// only reopens the case.
+    /// </summary>
+    public void UndoArchive(Board.ArchiveOutcome outcome)
+    {
+        ArgumentNullException.ThrowIfNull(outcome);
+        departure = null;
+        if (Source is IBoardArchiveUndoer undoer)
+        {
+            undoer.UndoArchive(outcome);
+            return;
+        }
+        Source.SetDone(false, outcome.Case);
     }
 
     /// <summary>
@@ -347,6 +449,33 @@ public sealed partial class BoardController
 
     private void Toast(string text) => ToastRequested?.Invoke(this, text);
 
+    // An outcome without Undo (the daemon moved nothing it can take back)
+    // is a plain toast.
+    private void OnArchived(Board.ArchiveOutcome outcome)
+    {
+        if (outcome.UndoLabel is not null && ArchiveDone is { } handler)
+        {
+            handler(this, outcome);
+            return;
+        }
+        Toast(outcome.Text);
+    }
+
+    // The style switch itself, the user's (SetStyle) or Board View's.
+    private void ChangeStyle(BoardStyle style)
+    {
+        if (style == State.Style)
+        {
+            return;
+        }
+        var next = State with { Style = style };
+        if (!KeepsSelection())
+        {
+            next = next with { Selection = null };
+        }
+        Apply(next);
+    }
+
     // Runs the user's write on case id; when id is selected and the write
     // changes the case, notes where the selection goes should the case leave
     // what is shown. A write that changes nothing drops a departure noted
@@ -363,6 +492,18 @@ public sealed partial class BoardController
     private void Apply(Board.ViewState next, bool user = true)
     {
         var snapshot = Source.Snapshot;
+        if (pendingAccount is { } saved && snapshot.Accounts.Count > 0)
+        {
+            // The saved filter, once the accounts are known; an account that
+            // went away leaves every account.
+            var filter = Board.FilterOnShow(saved, snapshot.Accounts);
+            AccountId? savedId = filter.Length == 0 ? null : new AccountId(filter);
+            if (savedId != next.Account)
+            {
+                next = next with { Account = savedId, Selection = null };
+            }
+            pendingAccount = null;
+        }
         if (next.Account is { } account && !snapshot.Accounts.Any(a => a.Id == account))
         {
             // The account went away: its filter with it.

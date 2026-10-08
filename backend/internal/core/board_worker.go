@@ -244,7 +244,7 @@ func (b *Backend) drainBoard(ctx context.Context) error {
 		now := b.boardNow()
 		wants := &boardWants{}
 		d, err := b.store.DrainBoard(ctx, store.BoardDrainOptions{
-			Limit: boardBatch, Now: now, Since: boardSinceOf(now, prefs.Windows),
+			Limit: boardBatch, Now: now, Since: boardSinceOf(now, prefs.Windows), Assistant: prefs.Assistant,
 		}, b.boardDecider(accounts, now, wants))
 		if err != nil {
 			return err
@@ -312,16 +312,19 @@ func (b *Backend) boardAccounts(ctx context.Context) (map[string]*boardAccount, 
 	if err != nil {
 		return nil, err
 	}
-	if changed {
-		// Someone became known (or stopped being): the cases are judged
-		// again — an unknown sender's mail is always a case (info), so
-		// marking the cases' threads reaches every verdict that changes.
+	if len(changed) > 0 {
+		// Someone became known (or stopped being): the cases with mail
+		// from them are judged again — an unknown sender's mail is always
+		// a case, so marking those cases' threads reaches every verdict
+		// that changes; no other thread's does.
+		var mail []string
 		for _, a := range list {
 			if a.Enabled && !isIssueAccount(a) {
-				if err := b.store.MarkBoardAccountDirty(ctx, a.ID, b.boardNow()); err != nil {
-					return nil, err
-				}
+				mail = append(mail, a.ID)
 			}
+		}
+		if err := b.store.MarkBoardCasesFrom(ctx, mail, changed); err != nil {
+			return nil, err
 		}
 	}
 	// The user's addresses on every account, for notes to self.
@@ -382,9 +385,9 @@ func (b *Backend) boardAccounts(ctx context.Context) (map[string]*boardAccount, 
 // user has written to in any of the enabled mail accounts, most recent
 // first, at most board.MaxKnownCorrespondents) and the generation of that
 // read, read again after boardIdentityTTL, when the set of enabled mail
-// accounts changed, or after boardAccountChanged; changed when a read
-// after the first found other addresses.
-func (b *Backend) boardKnown(ctx context.Context, list []store.Account) (known []string, gen int, changed bool, err error) {
+// accounts changed, or after boardAccountChanged; changed lists the
+// addresses a read after the first added or dropped (none: the same set).
+func (b *Backend) boardKnown(ctx context.Context, list []store.Account) (known []string, gen int, changed []string, err error) {
 	var ids []string
 	for _, a := range list {
 		if a.Enabled && !isIssueAccount(a) {
@@ -398,16 +401,38 @@ func (b *Backend) boardKnown(ctx context.Context, list []store.Account) (known [
 	bs.knownMu.Lock()
 	defer bs.knownMu.Unlock()
 	if !bs.knownAt.IsZero() && bs.knownKey == key && now.Sub(bs.knownAt) < boardIdentityTTL {
-		return bs.known, bs.knownGen, false, nil
+		return bs.known, bs.knownGen, nil, nil
 	}
 	known, err = b.store.BoardKnownCorrespondents(ctx, ids, board.MaxKnownCorrespondents)
 	if err != nil {
-		return nil, 0, false, err
+		return nil, 0, nil, err
 	}
-	changed = bs.knownGen > 0 && !sameAddresses(bs.known, known)
+	if bs.knownGen > 0 {
+		changed = addressesDiff(bs.known, known)
+	}
 	bs.known, bs.knownKey, bs.knownAt = known, key, now
 	bs.knownGen++
 	return bs.known, bs.knownGen, changed, nil
+}
+
+// addressesDiff lists the addresses in one of two lists but not in the
+// other, sorted; none when they hold the same addresses.
+func addressesDiff(a, b []string) []string {
+	in := make(map[string]int, len(a)+len(b))
+	for _, x := range a {
+		in[x] |= 1
+	}
+	for _, x := range b {
+		in[x] |= 2
+	}
+	var out []string
+	for x, m := range in {
+		if m != 3 {
+			out = append(out, x)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // sameAddresses reports whether two address lists hold the same
@@ -745,6 +770,7 @@ func (b *Backend) boardPrune(ctx context.Context, now time.Time) bool {
 		Before:     boardSinceOf(now, prefs.Windows),
 		DoneBefore: now.Add(-boardDoneKeep),
 		Now:        now,
+		Assistant:  prefs.Assistant,
 	})
 	if err != nil {
 		b.log.Warn("board: delete old cases", "err", err)

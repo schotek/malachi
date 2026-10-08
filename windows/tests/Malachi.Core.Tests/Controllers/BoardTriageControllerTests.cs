@@ -151,6 +151,22 @@ public sealed class BoardTriageControllerTests
     }
 
     /// <summary>
+    /// A second note on the same case costs the run no case (the bridge's
+    /// rule): Done counts distinct cases (Go TestReannotationCountsOnce).
+    /// </summary>
+    [Fact]
+    public async Task ReannotationCountsOnce()
+    {
+        RequireWindows();
+        static string[] Same(string id) => [C.ToolUse(id, "annotate_case"), C.ToolResult(id, "annotated case c_1: state in effect hot")];
+        await using var h = await Harness.StartAsync(Fake(Turn(Lines([C.Init], Same("a1"), Same("a2"), Annotate("a3"), [C.Result("ok")]))));
+        await h.BoardAsync(queue: 3);
+        await h.Ui.RunAsync(() => Assert.True(h.C.Start(TriageTrigger.Manual)));
+        await h.EndedAsync();
+        Assert.Equal(new TriageState.Finished(TriageTrigger.Manual, 2, 0, T0), await h.StateAsync());
+    }
+
+    /// <summary>
     /// An automatic run asks for its limit; the progress counts against the
     /// smaller of the queue and the limit. It gets no create_draft and is
     /// told so.
@@ -1219,6 +1235,38 @@ public sealed class BoardTriageControllerTests
         Assert.Equal(0, FakeClaudeScript.Starts(h.Dir.Path));
     }
 
+    /// <summary>
+    /// A ChatGPT model changed while a run is under way applies from the next
+    /// run and stops nothing (Swift providerChangeConcernsActive); the Codex
+    /// executable of the selected provider still ends the run.
+    /// </summary>
+    [Fact]
+    public async Task AModelChangeDoesNotStopARun()
+    {
+        RequireWindows();
+        await using var h = await Harness.StartAsync(Fake(C.AnswerTurn("unused")));
+        var provider = new FakeProvider(hold: true);
+        await h.Ui.RunAsync(() =>
+        {
+            h.Settings.BoardChatGptConsentVersion = 1;
+            h.Request.Provider = provider;
+            h.Settings.AssistantProvider = AssistantProviderID.ChatGpt;
+        });
+        await D.UntilAsync(h.Ui, () => h.P.IsIdle);
+        await h.BoardAsync(queue: 1);
+        Assert.True(await h.Ui.RunAsync(() => h.C.Start(TriageTrigger.Manual, 1)));
+        await D.UntilAsync(h.Ui, () => provider.Session is not null);
+        await h.Ui.RunAsync(() =>
+        {
+            h.Settings.BoardChatGptModel = "another-board-model";
+            h.Settings.AssistantChatGptModel = "another-panel-model";
+        });
+        Assert.True((await h.StateAsync()).IsActive);
+        Assert.True(provider.Session!.IsRunning);
+        await h.Ui.RunAsync(() => h.Settings.AssistantCodexPath = "C:\\elsewhere\\codex.exe");
+        await D.UntilAsync(h.Ui, () => !provider.Session!.IsRunning);
+    }
+
     /// <summary>Switches the stand-ins read from any thread.</summary>
     private sealed class Flags
     {
@@ -1238,8 +1286,8 @@ public sealed class BoardTriageControllerTests
         }
     }
 
-    /// <summary>A ChatGPT provider whose session answers at once.</summary>
-    private sealed class FakeProvider : IAssistantProvider
+    /// <summary>A ChatGPT provider whose session answers at once (<paramref name="hold"/>: never, until terminated).</summary>
+    private sealed class FakeProvider(bool hold = false) : IAssistantProvider
     {
         public AssistantProviderID Id => AssistantProviderID.ChatGpt;
 
@@ -1255,6 +1303,8 @@ public sealed class BoardTriageControllerTests
 
         public AssistantSessionSpec? Spec { get; private set; }
 
+        public AnsweringSession? Session { get; private set; }
+
         public void AcceptConsent()
         {
         }
@@ -1266,11 +1316,12 @@ public sealed class BoardTriageControllerTests
         public Task<IAssistantSession> OpenAsync(AssistantSessionSpec spec, CancellationToken cancellationToken)
         {
             Spec = spec;
-            return Task.FromResult<IAssistantSession>(new AnsweringSession());
+            Session = new AnsweringSession(hold);
+            return Task.FromResult<IAssistantSession>(Session);
         }
     }
 
-    private sealed class AnsweringSession : IAssistantSession
+    private sealed class AnsweringSession(bool hold = false) : IAssistantSession
     {
         private readonly TaskCompletionSource completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -1284,6 +1335,11 @@ public sealed class BoardTriageControllerTests
 
         public Task SubmitAsync(string input, CancellationToken cancellationToken)
         {
+            if (hold)
+            {
+                EventsReceived?.Invoke(this, [new AssistantEvent(AssistantEventKind.SystemInit) { BridgeConnected = true }]);
+                return Task.CompletedTask;
+            }
             EventsReceived?.Invoke(this, [
                 new AssistantEvent(AssistantEventKind.SystemInit) { BridgeConnected = true },
                 new AssistantEvent(AssistantEventKind.Result) { Success = true, ResultText = "ok" },

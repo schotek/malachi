@@ -113,6 +113,18 @@ public enum SettingsKey
     /// <summary><c>board-default-style</c>: <see cref="SettingsStore.BoardDefaultStyle"/>.</summary>
     BoardDefaultStyle,
 
+    /// <summary><c>board-last-style</c>: <see cref="SettingsStore.BoardLastStyle"/>.</summary>
+    BoardLastStyle,
+
+    /// <summary><c>board-start-mode</c>: <see cref="SettingsStore.BoardStartMode"/>.</summary>
+    BoardStartMode,
+
+    /// <summary><c>board-last-mode</c>: <see cref="SettingsStore.BoardLastMode"/>.</summary>
+    BoardLastMode,
+
+    /// <summary><c>board-account-filter</c>: <see cref="SettingsStore.BoardAccountFilter"/>.</summary>
+    BoardAccountFilter,
+
     /// <summary><c>board-triage-consent</c>; reserved for the Board UI port.</summary>
     BoardTriageConsent,
 

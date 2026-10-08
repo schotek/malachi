@@ -82,6 +82,7 @@ enum MainMenu {
         bar.addItem(submenu(fileMenu(), title: "File")) // macOS-only string
         bar.addItem(submenu(editMenu(), title: "Edit")) // macOS-only string
         bar.addItem(submenu(viewMenu(), title: "View")) // macOS-only string
+        bar.addItem(submenu(boardMenu(), title: Board.Text.boardName))
         bar.addItem(submenu(messageMenu(state), title: L10n.T("Message")))
         bar.addItem(submenu(formatMenu(), title: "Format")) // macOS-only string
         let windows = windowMenu()
@@ -205,10 +206,16 @@ enum MainMenu {
     private static func viewMenu() -> NSMenu {
         let m = NSMenu()
         // The main window's modes (MalachiCore `Board`): the tag is the
-        // mode, validation checks the current one. No key equivalents yet.
-        let texts = Board.texts()
-        for mode in Board.Mode.allCases {
-            let it = item(mode == .mail ? texts.mail : texts.board, Action.setWindowMode)
+        // mode, validation checks the current one; ⌘1 and ⌘2 as the
+        // board's keys (`Board.boardKeys`).
+        for key in Board.boardKeys() {
+            let mode: Board.Mode
+            switch key.action {
+            case .showMail: mode = .mail
+            case .showBoard: mode = .board
+            case .archive, .done, .remind: continue
+            }
+            let it = item(key.title, Action.setWindowMode, key: String(key.character))
             it.tag = mode.rawValue
             m.addItem(it)
         }
@@ -244,6 +251,25 @@ enum MainMenu {
     /// Columns, Today).
     private static func boardStyleTitle(_ style: Board.Style) -> String {
         Board.Text.styleMenuTitle(style)
+    }
+
+    /// The board's case actions on the selected case, with the board's
+    /// single keys (`Board.boardKeys`: D, R, E), which the main window
+    /// refuses outside the Board and while the keyboard is in text
+    /// (`Board.keyFor`). Done's title follows the case (Move Back to
+    /// Board on a done one).
+    private static func boardMenu() -> NSMenu {
+        let m = NSMenu()
+        let keys = Board.boardKeys()
+        // In the order of the detail's buttons.
+        for (want, action) in [(Board.KeyAction.done, Action.boardDone), (.remind, Action.boardRemind), (.archive, Action.boardArchive)] {
+            guard let key = keys.first(where: { $0.action == want }) else { continue }
+            let title = want == .done ? Board.Text.done : key.title
+            m.addItem(item(title, action, key: String(key.character), mods: []))
+        }
+        m.addItem(.separator())
+        m.addItem(item(Board.Text.reply, Action.boardReply))
+        return m
     }
 
     private static func messageMenu(_ state: AppState) -> NSMenu {

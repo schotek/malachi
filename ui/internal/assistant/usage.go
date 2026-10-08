@@ -18,9 +18,37 @@ const MaxUsageTokens int64 = 1_000_000_000_000
 // tokens are the placeholders of the messages' starts. A result whose
 // counters are all 0 while the messages counted some (Claude Code's crash
 // result may be zeroed) gives way to that sum. The zero value is empty.
+//
+// LowerBound says whether Total is less than the run used: true unless the
+// result's usage was taken, or the run's final report came (Finished) and
+// every message's usage counted was final (Event.UsageFinal, a provider
+// that reports each message's usage at its end).
 type UsageTally struct {
 	result   *Usage
 	messages map[string]Usage
+	// partial: some message's usage counted was not final; finished: the
+	// run's final report came.
+	partial  map[string]bool
+	finished bool
+}
+
+// Finished says the run's final report came (the request answered): a
+// provider without a usage in its result (ChatGPT) then has its whole
+// usage in its final messages.
+func (t *UsageTally) Finished() { t.finished = true }
+
+// LowerBound says whether Total is a lower bound of what the run used (see
+// the type's comment); false when Total has nothing.
+func (t *UsageTally) LowerBound() bool {
+	if t.resultTaken() || len(t.messages) == 0 {
+		return false
+	}
+	return !t.finished || len(t.partial) > 0
+}
+
+// resultTaken says whether Total is the result's usage.
+func (t *UsageTally) resultTaken() bool {
+	return t.result != nil && (*t.result != Usage{} || t.sum() == Usage{})
 }
 
 // Add counts the usage e carries, if any.
@@ -40,11 +68,18 @@ func (t *UsageTally) Add(e Event) {
 		t.messages = map[string]Usage{}
 	}
 	t.messages[e.MessageID] = *e.Usage
+	if t.partial == nil {
+		t.partial = map[string]bool{}
+	}
+	if e.UsageFinal {
+		delete(t.partial, e.MessageID)
+	} else {
+		t.partial[e.MessageID] = true
+	}
 }
 
-// Total is the run's usage, each counter at most MaxUsageTokens; false
-// when nothing reported any.
-func (t *UsageTally) Total() (Usage, bool) {
+// sum is the usage of the messages counted.
+func (t *UsageTally) sum() Usage {
 	var sum Usage
 	for _, u := range t.messages {
 		sum = Usage{
@@ -54,8 +89,15 @@ func (t *UsageTally) Total() (Usage, bool) {
 			CacheReadInputTokens:     addTokens(sum.CacheReadInputTokens, u.CacheReadInputTokens),
 		}
 	}
+	return sum
+}
+
+// Total is the run's usage, each counter at most MaxUsageTokens; false
+// when nothing reported any.
+func (t *UsageTally) Total() (Usage, bool) {
+	sum := t.sum()
 	switch {
-	case t.result != nil && (*t.result != Usage{} || sum == Usage{}):
+	case t.resultTaken():
 		r := *t.result
 		return Usage{
 			InputTokens:              addTokens(0, r.InputTokens),

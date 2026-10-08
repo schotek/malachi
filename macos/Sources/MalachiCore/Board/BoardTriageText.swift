@@ -18,7 +18,7 @@ extension Board.Text {
     }
     public static var triageStopToolTip: String { L10n.T("Stop the assistant’s triage") }
     public static var triageNeedsClaudeCode: String {
-        L10n.T("The triage runs your Claude Code, which was not found on this Mac")
+        L10n.T("The triage runs your Claude Code, which was not found on this computer")
     }
     /// The assistant panel's msgid.
     public static var triageNeedsSignIn: String { L10n.T("Claude Code is not signed in") }
@@ -88,28 +88,31 @@ extension Board.Text {
         case .nothingToDo: return L10n.T("no conversation waits for the assistant")
         case .notesRefused: return L10n.T("the board refused the assistant’s notes")
         case .noProgress: return L10n.T("the assistant added no notes")
+        case .limit: return L10n.T("the assistant’s usage limit was reached")
         }
     }
 
     /// The status strip when no run works: who sorted the board, and when
     /// the assistant last refined it.
-    public static func triageStatusLine(assistantOn: Bool, lastRun: Board.Run?, now: Date) -> String {
+    public static func triageStatusLine(
+        assistantOn: Bool, lastRun: Board.Run?, now: Date, calendar: Calendar = .current
+    ) -> String {
         guard assistantOn else {
             return assistantOffLine
         }
         guard let run = lastRun, !run.running else {
             return L10n.T("Triaged by rules · not refined by the assistant yet")
         }
-        return L10n.T("Triaged by rules · refined by the assistant %s", relativeTime(run.date, now: now))
+        return L10n.T("Triaged by rules · refined by the assistant %s", relativeTime(run.date, now: now, calendar: calendar))
     }
 
     /// "Automatic triage paused: …".
-    public static func autoTriagePaused(_ p: Board.AutoTriagePause, now: Date) -> String {
+    public static func autoTriagePaused(_ p: Board.AutoTriagePause, now: Date, calendar: Calendar = .current) -> String {
         let why: String
         switch p {
         case .failed(let f, let until):
             return L10n.T(
-                "Automatic triage paused: %s · next try %s", triageFailure(f), relativeFuture(until, now: now))
+                "Automatic triage paused: %s · next try %s", triageFailure(f), relativeFuture(until, now: now, calendar: calendar))
         case .signedOut: why = triageNeedsSignIn
         case .unavailable: why = L10n.T("the assistant cannot run")
         case .noConsent: why = L10n.T("sending mail to the assistant is not allowed")
@@ -122,7 +125,7 @@ extension Board.Text {
     public static var triageConsentHeading: String { L10n.T("Let the Assistant Triage the Board?") }
     public static var triageConsentBody: String {
         L10n.T(
-            "The assistant reads the conversations on the board that need notes and sends their text to Anthropic through your Claude Code, under your Claude account. It adds titles, summaries, tasks, deadlines and suggested replies to the board, and a triage you start yourself may also write replies, which stay on the board in Malachi Mail, not in your Drafts folder, until you send them. It cannot send, move or delete mail, and messages may contain instructions from their senders that it is told not to follow. You can turn this off in Settings."
+            "The assistant reads the conversations on the board that need notes, and any other mail and attachments it needs to understand them, and sends their text to Anthropic through your Claude Code, under your Claude account. It adds titles, summaries, tasks, deadlines and suggested replies to the board, and a triage you start yourself may also write replies, which stay on the board in Malachi Mail, not in your Drafts folder, until you send them. It cannot send, move or delete mail, and messages may contain instructions from their senders that it is told not to follow. Which accounts it triages, and whether it runs at all, you choose in Settings."
         )
     }
 
@@ -135,13 +138,25 @@ extension Board.Text {
             "Sends the newest messages of conversations that need sorting to Anthropic through your Claude Code. It cannot send, move or delete mail; a triage you start yourself may write replies, which stay on the board until you send them."
         )
     }
+    /// The list of the accounts the triage reads (the board preference
+    /// `triageAccounts`; none chosen = every account), and its line while
+    /// none is checked.
+    public static var triageSettingsAccounts: String { L10n.T("Triage These Accounts") }
+    public static var triageSettingsAccountsAll: String { L10n.T("All accounts, while none is checked") }
+    /// The line while the list names only accounts that are gone or turned
+    /// off (`BoardPreferencesController.TriageAccountsCoverage.none`): the
+    /// daemon keeps such a list rather than widen the triage to every
+    /// account.
+    public static var triageSettingsAccountsNone: String {
+        L10n.T("No account is selected, so the triage reads nothing.")
+    }
     public static var triageSettingsAutomatic: String { L10n.T("Triage new mail automatically") }
     public static var triageSettingsInterval: String { L10n.T("At most every") }
     public static var triageSettingsDaily: String { L10n.T("Conversations a day") }
 
     /// The group's description when triage cannot run.
     public static var triageSettingsNeedsClaudeCode: String {
-        L10n.T("The triage runs your Claude Code, which was not found on this Mac. The Claude Code row above offers to get it.")
+        L10n.T("The triage runs your Claude Code, which was not found on this computer. The Claude Code row above offers to get it.")
     }
     public static var triageSettingsNeedsSignIn: String {
         L10n.T("Claude Code is not signed in. The Claude Code row above offers to sign in.")
@@ -181,6 +196,18 @@ extension Board.Text {
     public static func triageUsageRuns(_ runs: Int) -> String {
         L10n.N("From %d triage run", "From %d triage runs", runs)
     }
+    /// That row's value when a run summed in it reported only part of its
+    /// tokens (`BoardUsage.lowerBound`): "at least 12,345".
+    public static func triageUsageAtLeast(_ value: String) -> String {
+        L10n.T("at least %s", value)
+    }
+
+    /// That row's value: the sum (a number formatted for the locale), with
+    /// `triageUsageAtLeast` when it is a lower bound.
+    public static func usageText(_ total: String, lowerBound: Bool) -> String {
+        lowerBound ? triageUsageAtLeast(total) : total
+    }
+
     /// That row's tooltip: whose runs count.
     public static var triageUsageToolTip: String {
         L10n.T("Counts only the triage runs Malachi Mail started, not those of other assistants")
@@ -197,27 +224,31 @@ extension Board.Text {
         return f.string(from: NSNumber(value: n)) ?? String(n)
     }
 
-    /// "just now", "5 minutes ago", "2 hours ago", "yesterday", "3 days ago".
-    public static func relativeTime(_ date: Date, now: Date) -> String {
+    /// "just now", "5 minutes ago", "2 hours ago" (under a day), else by
+    /// calendar days in `calendar`: "yesterday", "3 days ago".
+    public static func relativeTime(_ date: Date, now: Date, calendar: Calendar = .current) -> String {
         let s = max(0, Int(now.timeIntervalSince(date)))
         switch s {
         case ..<60: return L10n.T("just now")
         case ..<3600: return L10n.N("%d minute ago", "%d minutes ago", s / 60)
         case ..<86400: return L10n.N("%d hour ago", "%d hours ago", s / 3600)
-        case ..<172_800: return L10n.T("yesterday")
-        default: return L10n.N("%d day ago", "%d days ago", s / 86400)
+        default: break
         }
+        let days = max(1, Board.dayDifference(from: date, to: now, calendar: calendar))
+        return days == 1 ? L10n.T("yesterday") : L10n.N("%d day ago", "%d days ago", days)
     }
 
-    /// "now", "in 5 minutes", "in 2 hours", "tomorrow", "in 3 days".
-    public static func relativeFuture(_ date: Date, now: Date) -> String {
+    /// "now", "in 5 minutes", "in 2 hours" (under a day), else by calendar
+    /// days in `calendar`: "tomorrow", "in 3 days".
+    public static func relativeFuture(_ date: Date, now: Date, calendar: Calendar = .current) -> String {
         let s = max(0, Int(date.timeIntervalSince(now)))
         switch s {
         case ..<60: return L10n.T("now")
         case ..<3600: return L10n.N("in %d minute", "in %d minutes", s / 60)
         case ..<86400: return L10n.N("in %d hour", "in %d hours", s / 3600)
-        case ..<172_800: return L10n.T("tomorrow")
-        default: return L10n.N("in %d day", "in %d days", s / 86400)
+        default: break
         }
+        let days = max(1, Board.dayDifference(from: now, to: date, calendar: calendar))
+        return days == 1 ? L10n.T("tomorrow") : L10n.N("in %d day", "in %d days", days)
     }
 }

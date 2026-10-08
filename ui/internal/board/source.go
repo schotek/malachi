@@ -31,8 +31,75 @@ type Handlers struct {
 	// load failed (a write is undone by then).
 	Error func(string)
 	// Notice is called with a short sentence for a toast about what a write
-	// did (Archive).
+	// did.
 	Notice func(string)
+	// Archived is called with what Archive did, for a toast with Undo; nil
+	// sends its Text to Notice.
+	Archived func(ArchiveOutcome)
+}
+
+// ArchiveOutcome is what Archive did: the toast's text and what Undo
+// takes back (UndoArchive).
+type ArchiveOutcome struct {
+	Case    CaseID
+	Account api.AccountID
+	// Moved is each message moved to the archive and the folder it came
+	// from (board.archive moved); empty when only the case was marked done.
+	Moved []api.BoardMoved
+	// Text is Archived: what happened, for the toast.
+	Text string
+	// UndoLabel is the toast's button (Undo).
+	UndoLabel string
+}
+
+// UndoCalls are the daemon calls that take an archive back, in order:
+// every move back to its folder, then the case back on the board.
+type UndoCalls struct {
+	Moves  []api.MessageMoveParams
+	Reopen api.BoardSetDoneParams
+}
+
+// UndoArchive describes the calls that take back an archive of case id in
+// account: message.move of the moved messages back to the folders they
+// came from (one call per folder, in the order the folders first appear,
+// messages in their order), then board.setDone with done false. Without
+// moved messages only the reopen.
+func UndoArchive(moved []api.BoardMoved, account api.AccountID, id CaseID) UndoCalls {
+	var moves []api.MessageMoveParams
+	index := map[api.FolderID]int{}
+	for _, m := range moved {
+		if m.MessageID == "" || m.FromFolderID == "" {
+			continue
+		}
+		i, ok := index[m.FromFolderID]
+		if !ok {
+			i = len(moves)
+			index[m.FromFolderID] = i
+			moves = append(moves, api.MessageMoveParams{AccountID: account, TargetFolderID: m.FromFolderID})
+		}
+		if !slices.Contains(moves[i].MessageIDs, m.MessageID) {
+			moves[i].MessageIDs = append(moves[i].MessageIDs, m.MessageID)
+		}
+	}
+	return UndoCalls{Moves: moves, Reopen: api.BoardSetDoneParams{CaseID: id, Done: false}}
+}
+
+// ArchiveUndoer is a source that can take an archive back with the
+// daemon's calls (UndoArchive); Controller.UndoArchive uses it when the
+// source is one.
+type ArchiveUndoer interface {
+	UndoArchive(o ArchiveOutcome)
+}
+
+// notifyArchived hands o to h.Archived, else its text to h.Notice.
+func notifyArchived(h Handlers, o ArchiveOutcome) {
+	if h.Archived != nil {
+		h.Archived(o)
+		return
+	}
+	if h.Notice != nil {
+		h.Notice(o.Text)
+	}
 }
 
 // DataSource is the board's cases and the writes the user's decisions make
@@ -127,6 +194,7 @@ func (m *InMemorySource) Replace(s Snapshot) {
 // SetState implements DataSource.
 func (m *InMemorySource) SetState(id CaseID, state *State) {
 	m.update(id, func(c *Case) {
+		c.RemindedAt = time.Time{}
 		if state == nil {
 			c.UserState = nil
 		} else {
@@ -137,7 +205,10 @@ func (m *InMemorySource) SetState(id CaseID, state *State) {
 
 // SetDone implements DataSource.
 func (m *InMemorySource) SetDone(id CaseID, done bool) {
-	m.update(id, func(c *Case) { c.SetDone(done) })
+	m.update(id, func(c *Case) {
+		c.SetDone(done)
+		c.RemindedAt = time.Time{}
+	})
 }
 
 // Remind implements DataSource.
@@ -148,6 +219,7 @@ func (m *InMemorySource) Remind(id CaseID, until *time.Time) {
 // remindCase lays a remind over c: snoozed until *until, or back on the
 // board from a remind (done stays done).
 func remindCase(c *Case, until *time.Time) {
+	c.RemindedAt = time.Time{}
 	if until != nil {
 		c.Visibility = Visibility{Kind: VisibleSnoozed, At: *until}
 	} else if _, ok := c.Visibility.RemindAt(); ok {
@@ -168,10 +240,11 @@ func (m *InMemorySource) Archive(id CaseID) {
 	m.update(id, func(c *Case) {
 		c.Visibility = Visibility{Kind: VisibleDone}
 		c.CanArchive = false
+		c.RemindedAt = time.Time{}
 	})
-	if m.h.Notice != nil {
-		m.h.Notice(Archived(moved, !c.CanArchive, m.tr))
-	}
+	notifyArchived(m.h, ArchiveOutcome{
+		Case: id, Account: c.Account, Text: Archived(moved, !c.CanArchive, m.tr), UndoLabel: Undo(m.tr),
+	})
 }
 
 // SetCommitmentDone implements DataSource.

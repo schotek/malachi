@@ -235,11 +235,9 @@ public sealed partial class BoardTodayView : UserControl, IBoardStyleContent
     }
 
     // BoardTodaySideView.configure (GTK renderDue): the deadlines, or the
-    // line without one, then the calendar's placeholder.
+    // line without one.
     private void RenderSide(Board.Today today)
     {
-        CalendarTitleText.Text = today.CalendarTitle;
-        CalendarBodyText.Text = today.CalendarBody;
         if (shownDue is not null && shownDue.SequenceEqual(today.DueGroups) && shownDueEmpty == today.DueEmpty)
         {
             return;
@@ -514,11 +512,11 @@ public sealed partial class BoardTodayView : UserControl, IBoardStyleContent
                 AutomationProperties.SetAutomationId(args.ItemContainer, "BoardTodayMore");
                 break;
             case BoardTodaySectionItem s:
-                AutomationProperties.SetName(args.ItemContainer, BoardStateHeading.Spoken(s.Title, Board.Text.CaseCount(s.Count)));
+                AutomationProperties.SetName(args.ItemContainer, BoardStateHeading.Spoken(s.State, s.Title, s.Count));
                 AutomationProperties.SetAutomationId(args.ItemContainer, "BoardTodaySection" + s.State);
                 break;
             case BoardHeadingItem h:
-                AutomationProperties.SetName(args.ItemContainer, BoardStateHeading.Spoken(h.Title, Board.Text.PromiseCount(h.Count)));
+                AutomationProperties.SetName(args.ItemContainer, BoardStateHeading.SpokenPromises(h.Title, h.Count));
                 AutomationProperties.SetAutomationId(args.ItemContainer, "BoardCommitmentsHeading");
                 break;
             case BoardTodayTextItem t:

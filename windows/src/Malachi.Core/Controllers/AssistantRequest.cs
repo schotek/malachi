@@ -472,7 +472,7 @@ public sealed partial class AssistantRequest : IDisposable
                     var text = e.ResultText.Length == 0 ? blocks + streamed : e.ResultText;
                     Outcome outcome = e.Success
                         ? new Outcome.Answered(text, e.Structured)
-                        : new Outcome.Failed(new Failure.Stopped(e.ResultText));
+                        : new Outcome.Failed(providerSession is not null ? ProviderFailure(e.ResultText) : new Failure.Stopped(e.ResultText));
                     Finish(my, outcome, completion);
                     return;
                 default:

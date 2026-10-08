@@ -41,7 +41,7 @@ func (forms) C(ctx, msgid string) string { return ctx + "|" + msgid }
 
 // reasonCodes are the rule codes of docs/api.md §4.13.
 var reasonCodes = []string{
-	"hot.important", "hot.flagged", "you.addressed", "you.repliedToYou", "them.replied", "them.asked",
+	"hot.important", "hot.flagged", "you.addressed", "you.newContact", "you.repliedToYou", "them.replied", "them.asked",
 	"info.ccOnly", "info.notAddressed", "info.yourNote", "info.unknownSender", "jira.yourComment",
 	"jira.assigned", "jira.reporter", "jira.commented", "jira.watching", "kept",
 }
@@ -137,7 +137,32 @@ func TestStylesAndGroups(t *testing.T) {
 		{StyleMenuTitle(StyleList, tr), "As List"},
 		{StyleMenuTitle(StyleColumns, tr), "As Columns"},
 		{StyleMenuTitle(StyleToday, tr), "Today"},
-		{DefaultStyleSetting(tr), "Default View"},
+		{DefaultStyleSetting(tr), "Board View"},
+		{StartModeSetting(tr), "Open at Launch"},
+		{LastUsed(tr), "Last Used"},
+		{RemindNoMore(tr), "Back on the Board Now"},
+		{RemindPreset(RemindThisEvening, tr), "This Evening"},
+		{RemindPreset(RemindThisMorning, tr), "This Morning"},
+		{Reminded(tr), "Reminded"},
+		{NewContact(tr), "New contact"},
+		{Undo(tr), "Undo"},
+		{TitleWithBadge("Work", "IMAP", tr), "Work (IMAP)"},
+		{TitleWithBadge("Work", "", tr), "Work"},
+		{PersonAndTime("Jana", "2 Oct", tr), "Jana · 2 Oct"},
+		{PersonAndTime("", "2 Oct", tr), "2 Oct"},
+		{PersonAndTime("Jana", "", tr), "Jana"},
+		{PersonAndTime("", "", tr), ""},
+		{TriageSettingsAccountsNone(tr), "No account is selected, so the triage reads nothing."},
+		{DayAndTime("Thu", "18:00", tr), "Thu at 18:00"},
+		{RemindItem("Later Today", "Thu at 18:00", tr), "Later Today, Thu at 18:00"},
+		{UsageText("12,345", true, tr), "at least 12,345"},
+		{UsageText("12,345", false, tr), "12,345"},
+		{TriageFailureText(FailLimit, tr), "the assistant’s usage limit was reached"},
+		{SuggestReplyFailureText(ReplyLimit, tr), "the assistant’s usage limit was reached"},
+		{TriageNeedsClaudeCode(tr), "The triage runs your Claude Code, which was not found on this computer"},
+		{Days(30, tr), "30 days"},
+		{TileToolTip(Tile{Kind: TileState, Count: 3, Title: "Hot"}, tr), "Hot: 3 cases"},
+		{TileToolTip(Tile{Kind: TileState, Count: 1, Title: "Hot"}, tr), "Hot: 1 case"},
 		{DueGroupTitle(DueOverdue, tr), "Overdue"},
 		{DueGroupTitle(DueToday, tr), "Today"},
 		{DueGroupTitle(DueTomorrow, tr), "Tomorrow"},
@@ -149,8 +174,8 @@ func TestStylesAndGroups(t *testing.T) {
 		{Close(tr), "_Close"},
 		{Discard(tr), "_Discard"},
 		{Quoted("Friday at noon", tr), "“Friday at noon”"},
-		{SnoozedUntil("Tomorrow 09:00", tr), "Back on the board Tomorrow 09:00"},
-		{SpokenRemind("Tomorrow 09:00", tr), "Back on the board Tomorrow 09:00"},
+		{SnoozedUntil("Tomorrow at 09:00", tr), "Back on the board: Tomorrow at 09:00"},
+		{SpokenRemind("Tomorrow at 09:00", tr), "Back on the board: Tomorrow at 09:00"},
 		{SpokenDue("Tomorrow", tr), "Due Tomorrow"},
 		{SpokenAssistant("Lunch on Friday", tr), "Assistant: Lunch on Friday"},
 	} {
@@ -313,8 +338,8 @@ func TestRelative(t *testing.T) {
 	past := map[int]string{
 		-30: "just now", 0: "just now", 59: "just now", 60: "1 minute ago", 119: "1 minute ago",
 		120: "2 minutes ago", 3599: "59 minutes ago", 3600: "1 hour ago", 7199: "1 hour ago",
-		7200: "2 hours ago", 86399: "23 hours ago", 86400: "yesterday", 172_799: "yesterday",
-		172_800: "2 days ago", 10 * 86400: "10 days ago",
+		7200: "2 hours ago", 86399: "23 hours ago", 86400: "yesterday", 129_600: "yesterday",
+		129_601: "2 days ago", 172_800: "2 days ago", 10 * 86400: "10 days ago",
 	}
 	for s, want := range past {
 		if got := RelativeTime(t0.Add(-time.Duration(s)*time.Second), t0, tr); got != want {
@@ -323,8 +348,8 @@ func TestRelative(t *testing.T) {
 	}
 	future := map[int]string{
 		-30: "now", 0: "now", 59: "now", 60: "in 1 minute", 119: "in 1 minute", 120: "in 2 minutes",
-		3600: "in 1 hour", 7200: "in 2 hours", 86400: "tomorrow", 172_799: "tomorrow",
-		172_800: "in 2 days",
+		3600: "in 1 hour", 7200: "in 2 hours", 86400: "tomorrow", 129_599: "tomorrow",
+		129_600: "in 2 days", 172_800: "in 2 days",
 	}
 	for s, want := range future {
 		if got := RelativeFuture(t0.Add(time.Duration(s)*time.Second), t0, tr); got != want {
@@ -342,6 +367,11 @@ func TestInlineReply(t *testing.T) {
 		{ReplyNotSaved(tr), "This reply could not be saved yet; Malachi Mail keeps trying."},
 		{ReplyNotSent("Re: Offer", tr), "Your reply “Re: Offer” was not sent; it is still on the board."},
 		{QuitUnsavedHeading(tr), "Quit without saving a reply?"},
+		{QuitUnsentHeading(tr), "Quit with a reply still sending?"},
+		{QuitHeading(false, true, tr), "Quit with a reply still sending?"},
+		{QuitHeading(true, true, tr), "Quit without saving a reply?"},
+		{QuitHeading(true, false, tr), "Quit without saving a reply?"},
+		{QuitHeading(false, false, tr), "Quit without saving a reply?"},
 		{QuitUnsavedBody(tr), "A reply on the board could not be saved or sent yet. If you quit now, what you typed in it may be lost."},
 		{QuitAnyway(tr), "_Quit Anyway"},
 		{Unstar(tr), "Unstar"},
@@ -378,7 +408,18 @@ func TestSuggestReply(t *testing.T) {
 			t.Errorf("got %q, want %q", c.got, c.want)
 		}
 	}
-	if len(SuggestReplyFailures) != int(ReplyNoDraft)+1 {
+	if len(SuggestReplyFailures) != int(ReplyLimit)+1 {
 		t.Errorf("SuggestReplyFailures has %d entries", len(SuggestReplyFailures))
 	}
+}
+
+// TestRelativeByCalendarDay: past a day, "yesterday" and "tomorrow" are
+// calendar days in now's zone, not 24 to 48 hours.
+func TestRelativeByCalendarDay(t *testing.T) {
+	now := time.Date(2026, 10, 2, 0, 30, 0, 0, time.UTC)
+	eq(t, "25 h ago, the day before yesterday", RelativeTime(now.Add(-25*time.Hour), now, tr), "2 days ago")
+	late := time.Date(2026, 10, 2, 23, 30, 0, 0, time.UTC)
+	eq(t, "47 h ago, yesterday", RelativeTime(late.Add(-47*time.Hour), late, tr), "yesterday")
+	eq(t, "25 h ahead, the day after tomorrow", RelativeFuture(late.Add(25*time.Hour), late, tr), "in 2 days")
+	eq(t, "47 h ahead, tomorrow", RelativeFuture(now.Add(47*time.Hour), now, tr), "tomorrow")
 }

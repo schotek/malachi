@@ -97,20 +97,21 @@ public sealed class BoardViewTests
             F.Mk("c4", State.Info, account: F.AccountB, done: true), F.Mk("c5", State.Them, done: true),
         ];
         var all = F.View(cases);
-        Assert.Equal([3, 1, 2, 0, 0, 2], all.Nav.Select(n => n.Count));
-        Assert.Equal(["Overview", "Hot", "Waiting for You", "Waiting for Them", "For Your Information", "Done"], all.Nav.Select(n => n.Title));
-        Assert.Equal([null, State.Hot, State.You, State.Them, State.Info, null], all.Nav.Select(n => n.Dot));
-        Assert.Equal([true, false, false, false, false, false], all.Nav.Select(n => n.Selected));
+        Assert.Equal([3, 1, 2, 0, 0, 0, 2], all.Nav.Select(n => n.Count));
+        Assert.Equal(["Overview", "Hot", "Waiting for You", "Waiting for Them", "For Your Information", "Snoozed", "Done"], all.Nav.Select(n => n.Title));
+        Assert.Equal([null, State.Hot, State.You, State.Them, State.Info, null, null], all.Nav.Select(n => n.Dot));
+        Assert.Equal([true, false, false, false, false, false, false], all.Nav.Select(n => n.Selected));
         Assert.Equal(["All Accounts", "Alpha", "Beta"], all.Accounts.Select(a => a.Title));
         Assert.Equal(["", "IMAP", "JIRA"], all.Accounts.Select(a => a.Badge));
+        Assert.Equal(["All Accounts", "Alpha (IMAP)", "Beta (JIRA)"], all.Accounts.Select(a => a.Label));
         Assert.Equal([3, 1, 2], all.Accounts.Select(a => a.Count));
         Assert.Equal([true, false, false], all.Accounts.Select(a => a.Selected));
         Assert.Equal("All Accounts · 3 cases", all.Subtitle);
 
         // The account filter narrows the cases; the account list keeps its own counts.
         var b = F.View(cases, configure: v => v with { Account = F.AccountB, Filter = Filter.Done });
-        Assert.Equal([2, 0, 2, 0, 0, 1], b.Nav.Select(n => n.Count));
-        Assert.Equal([false, false, false, false, false, true], b.Nav.Select(n => n.Selected));
+        Assert.Equal([2, 0, 2, 0, 0, 0, 1], b.Nav.Select(n => n.Count));
+        Assert.Equal([false, false, false, false, false, false, true], b.Nav.Select(n => n.Selected));
         Assert.Equal([3, 1, 2], b.Accounts.Select(a => a.Count));
         Assert.Equal([false, false, true], b.Accounts.Select(a => a.Selected));
         Assert.Equal("Beta", b.AccountTitle);
@@ -355,7 +356,7 @@ public sealed class BoardViewTests
         Assert.Equal("2027-01-03", on.Commitments[2].Due);
         Assert.True(on.ShowsCommitmentsInList);
         Assert.Equal(on.Commitments, on.Today.Commitments);
-        Assert.Equal(new Tile(TileKind.Commitments, State.Hot, 3, "Promised"), on.Today.Tiles[^1]);
+        Assert.Equal(new Tile(TileKind.Commitments, State.Hot, 3, "Promised") { ToolTip = "Promised: 3 promises" }, on.Today.Tiles[^1]);
 
         // In the account scope.
         var b = F.View(cases, annotated: true, commitments: ks, configure: v => v with { Account = F.AccountB });
@@ -509,7 +510,7 @@ public sealed class BoardViewTests
         Assert.Equal(["y1", "y2", "y3", "y4", "y5"], F.Ids(t.You));
         Assert.Equal(2, t.YouMore);
         Assert.Equal("9 things need you today.", t.Phrase);
-        Assert.Equal("Calendar and Reminders", t.CalendarTitle);
+        Assert.Equal(["Hot: 2 cases", "Waiting for You: 7 cases", "Waiting for Them: 1 case", "For Your Information: 0 cases"], t.Tiles.Select(x => x.ToolTip));
 
         var few = F.View([F.Mk("y1"), F.Mk("y2")]).Today;
         Assert.True(few.YouMore == 0 && few.You.Count == 2);
@@ -541,13 +542,13 @@ public sealed class BoardViewTests
     {
         var at = F.Now.AddHours(20);
         var c = F.Mk("c1", visibility: Visibility.Snoozed(at));
-        var v = F.View([c], configure: x => x with { Filter = Filter.Done });
+        var v = F.View([c], configure: x => x with { Filter = Filter.Snoozed });
         var r = v.Sections.SelectMany(s => s.Rows).First(x => x.Id == F.Id("c1"));
-        Assert.Equal("Tomorrow 08:00", r.Remind);
+        Assert.Equal("Tomorrow at 08:00", r.Remind);
         Assert.Contains(BText.SpokenRemind(r.Remind) + ".", r.Spoken, StringComparison.Ordinal);
         Assert.Equal("snoozed", F.KindOf(v.Sections[0]));
         var d = Assert.IsType<Detail>(v.Detail);
-        Assert.True(d.IsSnoozed && d.RemindText == "Back on the board Tomorrow 08:00");
+        Assert.True(d.IsSnoozed && d.RemindText == "Back on the board: Tomorrow at 08:00");
     }
 
     [Fact]

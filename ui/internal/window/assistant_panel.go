@@ -707,16 +707,20 @@ func offerLabel(o assistantpanel.Offer) string {
 		return t.SignIn
 	case assistantpanel.OfferInstall:
 		return t.GetClaudeCode
+	case assistantpanel.OfferReconnect:
+		return assistant.ChatGPTText(tr).Reconnect
 	}
 	return ""
 }
 
 // offered is the other button of an error line: Sign In… runs Claude
-// Code's own sign-in and sends the question again (the controller's),
-// Get Claude Code… opens Anthropic's page with the installers.
+// Code's own sign-in and Reconnect to ChatGPT the provider's reconnect
+// (ReconnectProvider), both then send the question again (the
+// controller's SignIn); Get Claude Code… opens Anthropic's page with the
+// installers.
 func (p *assistantPanel) offered(id int, o assistantpanel.Offer) {
 	switch o {
-	case assistantpanel.OfferSignIn:
+	case assistantpanel.OfferSignIn, assistantpanel.OfferReconnect:
 		p.ctl.SignIn(id)
 	case assistantpanel.OfferInstall:
 		p.w.launchURI(&p.w.ApplicationWindow.Window, assistant.InstallURL)

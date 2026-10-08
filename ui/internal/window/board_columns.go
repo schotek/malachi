@@ -4,7 +4,7 @@
 package window
 
 import (
-	"slices"
+	"reflect"
 
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
@@ -143,6 +143,7 @@ func (c *boardColumns) apply(vm board.ViewModel) {
 	if c == nil {
 		return
 	}
+	var refocus *boardColumnPane
 	for i, col := range vm.Columns {
 		if i >= len(c.panes) {
 			break
@@ -153,13 +154,27 @@ func (c *boardColumns) apply(vm board.ViewModel) {
 		pane.count.SetVisible(len(col.Rows) > 0)
 
 		items := columnItems(col, vm.Commitments, col.State == board.StateHot)
-		if slices.Equal(items, pane.items) {
+		if reflect.DeepEqual(items, pane.items) {
 			continue
+		}
+		if listHoldsFocus(c.p.w, pane.list) {
+			refocus = pane
 		}
 		pane.items = items
 		c.rebuildPane(pane, items)
 	}
 	c.reflectSelection(vm.Selection)
+	if refocus != nil {
+		// The rebuilt pane took the focused card with it: the keyboard goes
+		// to the selected card, wherever it now is, else back to that pane.
+		for _, pane := range c.panes {
+			if pane != nil && pane.list.SelectedRow() != nil {
+				refocus = pane
+				break
+			}
+		}
+		focusSelectedRow(refocus.list)
+	}
 }
 
 // rebuildPane replaces pane's rows with items, in order.
@@ -288,9 +303,9 @@ const (
 	columnItemCommitment
 )
 
-// columnItem is one row of a column's list: comparable (every field is a
-// plain value, board.Row and board.CommitmentRow included), so render can
-// skip a pane whose rows did not change (slices.Equal).
+// columnItem is one row of a column's list, compared whole
+// (reflect.DeepEqual: board.Row carries its Badges) so render can skip a
+// pane whose rows did not change.
 type columnItem struct {
 	kind        columnItemKind
 	row         board.Row

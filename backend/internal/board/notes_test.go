@@ -88,7 +88,7 @@ func TestNotesToSelf(t *testing.T) {
 		{"forged inbound from this account to itself", self, []Member{a, inbound("c", 2, "me@example.org", "me@example.org")},
 			api.BoardInfo, api.BoardReasonInfoYourNote, "c"},
 		{"inbound from another own account, to a foreign address too", self, []Member{inbound("c", 2, "me@home.example", "me@example.org", "bob@example.com")},
-			api.BoardInfo, api.BoardReasonInfoUnknownSender, "c"},
+			api.BoardYou, api.BoardReasonYouNewContact, "c"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

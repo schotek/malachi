@@ -14,8 +14,19 @@
 // transcript are there on the way back, and so is the board's style. The
 // switch is the two-segment control at the start of the title bar (icons,
 // the modes' names as tooltips); the sidebar's primary menu and the
-// board's "…" menu have Mail and Board too; no key switches. The mode is
-// not remembered (Board.InitialMode). While the board shows:
+// board's "…" menu have Mail and Board too, and Ctrl+1 and Ctrl+2 switch
+// (Board.BoardKeys; ShortcutMap's, so they reach the window from a
+// WebView2 that has the keyboard too). The window opens in Mail and
+// settles its start with Board.StartDecision (GTK window.go decideStart):
+// once the daemon's board preferences are known, in the mode Open at Launch
+// says (board-start-mode, board-last-mode, the board turned on), unless
+// the user switched or clicked or typed in Mail first, and in Mail when
+// Board.StartWait passes without them. Until then nothing is written to
+// board-last-mode (a Last Used Board survives a daemon that never
+// answers); from then on every switch writes it, and a start settled at
+// once writes the mode it opened in (GTK modeShown). With the board turned off (Settings →
+// General → Show the Board) the switch hides, Board is disabled and the
+// window shows Mail. While the board shows:
 //
 // - the mail's commands stand still (Board.Allows through AppCommand.Gate):
 //   the single keys of the list (A, J, U, S, Delete) and the reply keys
@@ -30,6 +41,7 @@
 //   status line's Outbox and the assistant panel bring Mail back.
 
 using System;
+using System.Diagnostics;
 using Malachi.App.Boards;
 using Malachi.App.Commands;
 using Malachi.App.Shell;
@@ -38,6 +50,7 @@ using Malachi.Core.Controllers;
 using Malachi.Core.Presentation;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 
 namespace Malachi.App;
 
@@ -46,6 +59,24 @@ public sealed partial class MainWindow
 {
     private Board.Mode mode = Board.InitialMode;
     private Integration? boardIntegration;
+
+    // The daemon's board preferences say the board is on (unknown: on).
+    private bool boardEnabled = true;
+
+    // The mode of the launch is decided (Board.StartDecision): the
+    // preferences no longer move the window.
+    private bool startModeDecided;
+
+    // Board.StartDecision's inputs while the start is open: when the window
+    // opened, whether the user switched or acted in Mail, the bound's timer
+    // and the Mail page's watchers (removed once decided).
+    private long startBegan;
+    private bool startSwitched;
+    private bool startInteracted;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? startTimer;
+    private PointerEventHandler? startPointer;
+    private KeyEventHandler? startKey;
+    private BoardObserverToken? boardEnabledToken;
 
     // The caption of Mail ("<folder> – Malachi Mail"), kept while the board shows.
     private string mailCaption = Core.AppIdentity.DisplayName;
@@ -65,12 +96,20 @@ public sealed partial class MainWindow
     /// </summary>
     public void SetMode(Board.Mode next)
     {
-        if (next == mode || (next == Board.Mode.Board && BoardView.Controller is null))
+        if (next == mode || (next == Board.Mode.Board && (BoardView.Controller is null || !boardEnabled)))
         {
             SyncModeSwitch();
             return;
         }
+        if (!startModeDecided)
+        {
+            // A switch before the start is decided is the user's own (the
+            // decision's own switch comes after it is decided).
+            startSwitched = true;
+            DecideStart(timedOut: false);
+        }
         mode = next;
+        WriteLastMode();
         // The board's conversation cards and inline reply follow the mode.
         SyncBoardParts();
         if (next == Board.Mode.Board)
@@ -78,8 +117,8 @@ public sealed partial class MainWindow
             // A Show in Mail still waiting selects nothing in the hidden panes.
             boardIntegration?.LeftMail();
             var controller = BoardView.Controller!;
-            // The first entry of the run opens the default style (Settings →
-            // General → Board), later ones the user's last.
+            // Board View (Settings → General → Board) until the user picks a
+            // style in this run, and the saved account filter the first time.
             controller.BoardWillShow();
             // The daemon's board is listed from the first entry on.
             boardIntegration?.StartBoard();
@@ -138,6 +177,9 @@ public sealed partial class MainWindow
     {
         Commands.ShowMail.Handler = () => SetMode(Board.Mode.Mail);
         Commands.ShowBoard.Handler = () => SetMode(Board.Mode.Board);
+        Commands.ShowBoard.CanExecute = () => boardEnabled;
+        // Ctrl+1 and Ctrl+2 are ShortcutMap's (the router: root accelerators,
+        // and the WebView2 keys while a page has the keyboard).
         // A segment's click asks for its mode; the switch then shows the
         // mode the window is in (a refused change, the same mode again).
         ModeMailButton.Click += (_, _) =>
@@ -176,6 +218,107 @@ public sealed partial class MainWindow
         };
         Commands.MainMenu.CanExecute = () => mode == Board.Mode.Board || PaneSplit.IsPaneOpen;
         SyncModeSwitch();
+        BeginStart();
+    }
+
+    // The start of the window (GTK setupModeMemory): decided at once when
+    // Open at Launch is Mail whatever the preferences say, which writes the
+    // mode shown; else the Mail page's clicks and keys and the StartWait
+    // bound may settle it.
+    private void BeginStart()
+    {
+        startBegan = Stopwatch.GetTimestamp();
+        DecideStart(timedOut: false);
+        if (startModeDecided)
+        {
+            WriteLastMode();
+            return;
+        }
+        startPointer = (_, _) => MailActed();
+        // After the key: the decision may switch modes, which must not happen
+        // under the key's own handling.
+        startKey = (_, _) => DispatcherQueue.TryEnqueue(MailActed);
+        AssistantSplit.AddHandler(UIElement.PointerPressedEvent, startPointer, handledEventsToo: true);
+        AssistantSplit.AddHandler(UIElement.KeyDownEvent, startKey, handledEventsToo: true);
+        var timer = DispatcherQueue.CreateTimer();
+        timer.Interval = Board.StartWait;
+        timer.IsRepeating = false;
+        timer.Tick += (t, _) =>
+        {
+            t.Stop();
+            DecideStart(timedOut: true);
+        };
+        startTimer = timer;
+        timer.Start();
+        Closed += (_, _) =>
+        {
+            startTimer?.Stop();
+            startTimer = null;
+        };
+    }
+
+    // A click or a key in Mail (the folders, the list, the reader's chrome)
+    // settles the start in Mail (Board.StartDecision).
+    private void MailActed()
+    {
+        if (!startModeDecided && mode == Board.Mode.Mail)
+        {
+            startInteracted = true;
+            DecideStart(timedOut: false);
+        }
+    }
+
+    // Board.StartDecision again (the preferences arrived, the user switched
+    // or acted in Mail, timedOut: the StartWait bound fired); once decided
+    // the window opens the Board if the decision says so. The preferences
+    // count as known only once the board is attached (SetMode needs its
+    // controller).
+    private void DecideStart(bool timedOut)
+    {
+        if (startModeDecided)
+        {
+            return;
+        }
+        var prefs = state.BoardPreferences.Preferences;
+        var known = prefs is not null && boardIntegration is not null;
+        var waited = Stopwatch.GetElapsedTime(startBegan);
+        if (timedOut && waited < Board.StartWait)
+        {
+            waited = Board.StartWait;
+        }
+        var s = state.Settings;
+        var (start, decided) = Board.StartDecision(
+            s.BoardStartMode, Board.ParseMode(s.BoardLastMode), known, prefs?.Enabled ?? true, startSwitched, startInteracted, waited);
+        if (!decided)
+        {
+            return;
+        }
+        startModeDecided = true;
+        startTimer?.Stop();
+        startTimer = null;
+        if (startPointer is not null)
+        {
+            AssistantSplit.RemoveHandler(UIElement.PointerPressedEvent, startPointer);
+            startPointer = null;
+        }
+        if (startKey is not null)
+        {
+            AssistantSplit.RemoveHandler(UIElement.KeyDownEvent, startKey);
+            startKey = null;
+        }
+        if (start == Board.Mode.Board && mode == Board.Mode.Mail)
+        {
+            SetMode(start);
+        }
+    }
+
+    // Open at Launch's Last Used reads it (GTK modeShown).
+    private void WriteLastMode()
+    {
+        if (state.Settings.BoardLastMode != mode.Nick)
+        {
+            state.Settings.BoardLastMode = mode.Nick;
+        }
     }
 
     // The Integration exists: the board's page over its controller, the
@@ -189,6 +332,34 @@ public sealed partial class MainWindow
         BoardView.Attach(actions, Commands);
         AttachBoardParts(integration, actions);
         BoardView.ShowMode(mode);
+        // Show the Board, and Open at Launch once the preferences are known.
+        boardEnabledToken = state.BoardPreferences.Observe(BoardPreferencesChanged);
+        Closed += (_, _) =>
+        {
+            boardEnabledToken?.Cancel();
+            boardEnabledToken = null;
+        };
+        BoardPreferencesChanged();
+    }
+
+    // The daemon's board preferences changed or came: the board on or off
+    // (window.go's mode memory and the hidden switch), and the mode of the
+    // launch the first time they are known.
+    private void BoardPreferencesChanged()
+    {
+        var prefs = state.BoardPreferences.Preferences;
+        var enabled = prefs?.Enabled ?? true;
+        if (enabled != boardEnabled)
+        {
+            boardEnabled = enabled;
+            ModeSwitch.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+            if (!enabled && mode == Board.Mode.Board)
+            {
+                SetMode(Board.Mode.Mail);
+            }
+            Commands.ShowBoard.Refresh();
+        }
+        DecideStart(timedOut: false);
     }
 
     // The toast overlay over the visible mode: the message pane's content in

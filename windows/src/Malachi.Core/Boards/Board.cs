@@ -3,8 +3,11 @@
 
 // Port of macos/Sources/MalachiCore/Board/Board.swift and the style rules of
 // BoardView.swift (parseStyle, styleOnShow); GTK: ui/internal/board/mode.go
-// (InitialMode, Allows, ModeFor, ViewsMail, ParseStyle, StyleOnShow) and
-// text.go (Mail, BoardName).
+// (InitialMode, ParseMode, StartChoice, StartModes, NickLast,
+// ParseStartChoice, StartMode, StartWait, StartDecision, Allows, ModeFor, ViewsMail, ParseStyle,
+// DefaultStyle, DefaultStyles, ParseDefaultStyle, StyleOnShow,
+// FilterOnShow) and text.go (Mail, BoardName). The nicks are
+// BoardModeExtensions.
 //
 // The main window's two modes: Mail (the folders, the list, the reader and
 // the assistant panel, as always) and Board (a triage board). The window
@@ -23,6 +26,8 @@
 // which the settings store.
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Malachi.Core.I18n;
 
 namespace Malachi.Core.Boards;
@@ -43,8 +48,142 @@ public static partial class Board
         Board,
     }
 
-    /// <summary>The mode a new main window starts in. The mode is not remembered.</summary>
+    /// <summary>
+    /// The mode a new main window starts in when nothing else says (the
+    /// default of the key board-start-mode); <see cref="StartMode"/> decides.
+    /// </summary>
     public const Mode InitialMode = Mode.Mail;
+
+    /// <summary>
+    /// The stored value of a choice that takes what the user had last
+    /// (board-start-mode, board-default-style).
+    /// </summary>
+    public const string NickLast = "last";
+
+    /// <summary>
+    /// A value of Open at Launch (the key board-start-mode). The members'
+    /// names in lower case are the gschema's nicks, in its order.
+    /// </summary>
+    public enum StartChoice
+    {
+        /// <summary>Mail.</summary>
+        Mail,
+
+        /// <summary>The board.</summary>
+        Board,
+
+        /// <summary>The mode shown last (the key board-last-mode).</summary>
+        Last,
+    }
+
+    /// <summary>The choices of Open at Launch in Settings' order.</summary>
+    public static IReadOnlyList<StartChoice> StartModes { get; } = [StartChoice.Mail, StartChoice.Board, StartChoice.Last];
+
+    /// <summary>
+    /// A value of Board View (the key board-default-style): a style, or the
+    /// one used last (Go's <c>DefaultStyle{Last, Style}</c>). The members'
+    /// names in lower case are the gschema's nicks, in its order; Settings
+    /// lists them as <see cref="DefaultStyles"/>.
+    /// </summary>
+    public enum DefaultStyle
+    {
+        /// <summary>The List.</summary>
+        List,
+
+        /// <summary>Columns.</summary>
+        Columns,
+
+        /// <summary>Today.</summary>
+        Today,
+
+        /// <summary>Last Used: the style the user had last (board-last-style).</summary>
+        Last,
+    }
+
+    /// <summary>Board View's choices in Settings' order: Last Used, List, Columns, Today.</summary>
+    public static IReadOnlyList<DefaultStyle> DefaultStyles { get; } =
+        [DefaultStyle.Last, DefaultStyle.List, DefaultStyle.Columns, DefaultStyle.Today];
+
+    /// <summary>The mode a stored nick names (board-last-mode); null for an unknown one.</summary>
+    public static Mode? ParseMode(string? nick) => nick switch
+    {
+        "mail" => Mode.Mail,
+        "board" => Mode.Board,
+        _ => null,
+    };
+
+    /// <summary>The choice of Open at Launch a stored nick names; an unknown or empty one is Mail.</summary>
+    public static StartChoice ParseStartChoice(string? nick) =>
+        StartModes.FirstOrDefault(s => string.Equals(s.Nick, nick, StringComparison.Ordinal));
+
+    /// <summary>
+    /// The mode a new main window opens in: <paramref name="startMode"/> is
+    /// the key board-start-mode, <paramref name="lastMode"/> the key
+    /// board-last-mode (written whenever the mode switches). With the board
+    /// turned off (<paramref name="boardEnabled"/> false) always Mail.
+    /// </summary>
+    public static Mode StartMode(StartChoice startMode, string? lastMode, bool boardEnabled)
+    {
+        if (!boardEnabled)
+        {
+            return Mode.Mail;
+        }
+        return startMode switch
+        {
+            StartChoice.Board => Mode.Board,
+            StartChoice.Last => ParseMode(lastMode) ?? Mode.Mail,
+            _ => Mode.Mail,
+        };
+    }
+
+    /// <summary>
+    /// <see cref="StartMode(StartChoice, string, bool)"/> with the stored nick
+    /// of board-start-mode (<see cref="ParseStartChoice"/>).
+    /// </summary>
+    public static Mode StartMode(string? startMode, string? lastMode, bool boardEnabled) =>
+        StartMode(ParseStartChoice(startMode), lastMode, boardEnabled);
+
+    /// <summary>
+    /// How long a new main window waits for the daemon's board preferences
+    /// before it settles its start in Mail (<see cref="StartDecision"/>).
+    /// </summary>
+    public static readonly TimeSpan StartWait = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Whether, and in which mode, a new main window settles its start
+    /// (Go <c>StartDecision</c>). <paramref name="start"/> is Open at Launch
+    /// (board-start-mode), <paramref name="lastMode"/> the mode shown last
+    /// (board-last-mode, null when unknown); <paramref name="prefsKnown"/>
+    /// whether the daemon's preferences arrived and <paramref name="enabled"/>
+    /// their Show the Board; <paramref name="userSwitched"/> whether the user
+    /// switched the mode, <paramref name="userInteracted"/> whether the user
+    /// acted in Mail (a click or a key there), <paramref name="waited"/> the
+    /// time since the window opened.
+    /// <para>
+    /// Decided is false while the window should keep waiting; until then it
+    /// shows Mail, writes nothing to board-last-mode and may still move to
+    /// the Board. Once decided the window applies the mode if it still shows
+    /// Mail and never moves on its own again: a start that is Mail whatever
+    /// the preferences say settles at once; the user's switch or act in Mail
+    /// settles in Mail (the reader never jumps away from what the user is
+    /// doing); the preferences settle with <see cref="StartMode(StartChoice, string, bool)"/>;
+    /// <see cref="StartWait"/> without them settles in Mail, with no later jump.
+    /// </para>
+    /// </summary>
+    public static (Mode Mode, bool Decided) StartDecision(
+        StartChoice start, Mode? lastMode, bool prefsKnown, bool enabled, bool userSwitched, bool userInteracted, TimeSpan waited)
+    {
+        var lastNick = lastMode == Mode.Board ? "board" : "mail";
+        if (StartMode(start, lastNick, boardEnabled: true) == Mode.Mail || userSwitched || userInteracted)
+        {
+            return (Mode.Mail, true);
+        }
+        if (prefsKnown)
+        {
+            return (StartMode(start, lastNick, enabled), true);
+        }
+        return (Mode.Mail, waited >= StartWait);
+    }
 
     /// <summary>The window's actions, as far as a mode cares.</summary>
     public enum Command
@@ -132,7 +271,10 @@ public static partial class Board
     /// </summary>
     public static bool ViewsMail(Mode mode, bool windowIsKey) => mode == Mode.Mail && windowIsKey;
 
-    /// <summary>The style a stored nick names; an unknown or empty one is the List.</summary>
+    /// <summary>
+    /// The style a stored nick names (the key board-last-style); an unknown
+    /// or empty one, and "last", is the List.
+    /// </summary>
     public static BoardStyle ParseStyle(string? nick)
     {
         foreach (var s in Enum.GetValues<BoardStyle>())
@@ -146,11 +288,53 @@ public static partial class Board
     }
 
     /// <summary>
-    /// The style the board takes as it shows: the default (from the
-    /// settings) the first time in a run, else the one it has, which is the
-    /// user's last choice. A default changed after the first show waits for
-    /// the next launch: the style never changes under the user.
+    /// The choice a stored nick of board-default-style names: "last" is Last
+    /// Used, a style's nick that style, anything else (empty, unknown) Last
+    /// Used, the key's default.
     /// </summary>
-    public static BoardStyle StyleOnShow(BoardStyle current, BoardStyle defaultStyle, bool firstShow) =>
-        firstShow ? defaultStyle : current;
+    public static DefaultStyle ParseDefaultStyle(string? nick)
+    {
+        foreach (var d in DefaultStyles)
+        {
+            if (!d.IsLast && string.Equals(d.Nick, nick, StringComparison.Ordinal))
+            {
+                return d;
+            }
+        }
+        return DefaultStyle.Last;
+    }
+
+    /// <summary>
+    /// The style the board takes as it shows. Once the user picked a style in
+    /// this run (<paramref name="pickedThisRun"/>) the board keeps it
+    /// (<paramref name="current"/>); before that it takes Board View: the
+    /// style used last (<paramref name="lastStyle"/>, the key
+    /// board-last-style) for Last Used, else the chosen one, so a change of
+    /// Board View applies the next time the board shows unless the user
+    /// already picked a style. The style never changes while the board
+    /// shows.
+    /// </summary>
+    public static BoardStyle StyleOnShow(DefaultStyle defaultStyle, BoardStyle lastStyle, BoardStyle current, bool pickedThisRun)
+    {
+        if (pickedThisRun)
+        {
+            return current;
+        }
+        return defaultStyle.IsLast ? lastStyle : defaultStyle.Style;
+    }
+
+    /// <summary>
+    /// The account filter the board takes as it shows: the one saved (the
+    /// key board-account-filter) while that account is still among
+    /// <paramref name="accounts"/>, else every account ("").
+    /// </summary>
+    public static string FilterOnShow(string? saved, IReadOnlyList<AccountInfo> accounts)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+        if (string.IsNullOrEmpty(saved))
+        {
+            return "";
+        }
+        return accounts.Any(a => string.Equals(a.Id.Value, saved, StringComparison.Ordinal)) ? saved : "";
+    }
 }

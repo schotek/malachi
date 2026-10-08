@@ -84,7 +84,11 @@ func (o *replyOnce) end(made bool) {
 
 // createReplyOnly is create_draft under --reply-only: the confined reply
 // (confinedReply) to the named message, once. A call the daemon refuses
-// gives the draft back, so the model may correct it.
+// (draft.create or draft.save answered with an error, or the request never
+// reached it) gives the draft back, so the model may correct it; once
+// draft.save went out and its answer was lost (a timeout, a dropped
+// connection), the draft may exist and the one draft is used up: the app
+// links or deletes what the daemon stored, never a second one.
 func (b *bridge) createReplyOnly(ctx context.Context, in createDraftIn) (*mcp.CallToolResult, any, error) {
 	mode, ok := parseComposeMode(in.Mode)
 	if !ok || !confinedReply(in, mode) || api.MessageID(in.MessageID) != b.cfg.replyOnly {
@@ -93,7 +97,8 @@ func (b *bridge) createReplyOnly(ctx context.Context, in createDraftIn) (*mcp.Ca
 	if !b.reply.begin() {
 		return toolErrorf("%s", replyOnlyDoneRefusal), nil, nil
 	}
-	res, out, err := b.createDraftChecked(ctx, in)
-	b.reply.end(err == nil && res != nil && !res.IsError)
+	att := &draftAttempt{}
+	res, out, err := b.createDraftChecked(ctx, in, att)
+	b.reply.end(att.made())
 	return res, out, err
 }

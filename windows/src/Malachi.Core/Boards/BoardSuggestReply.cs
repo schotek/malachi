@@ -49,6 +49,9 @@ public static partial class Board
 
         /// <summary>The model finished without creating a draft.</summary>
         NoDraft,
+
+        /// <summary>The assistant's usage limit was reached.</summary>
+        Limit,
     }
 
     /// <summary>Every <see cref="SuggestReplyFailure"/> (Swift <c>allCases</c>, Go <c>SuggestReplyFailures</c>).</summary>
@@ -56,7 +59,7 @@ public static partial class Board
     [
         SuggestReplyFailure.NotFound, SuggestReplyFailure.NotSignedIn, SuggestReplyFailure.ToolsMissing,
         SuggestReplyFailure.Timeout, SuggestReplyFailure.Cancelled, SuggestReplyFailure.Stopped,
-        SuggestReplyFailure.Backend, SuggestReplyFailure.NoDraft,
+        SuggestReplyFailure.Backend, SuggestReplyFailure.NoDraft, SuggestReplyFailure.Limit,
     ];
 
     /// <summary>What the application's one suggested reply is doing.</summary>
@@ -112,6 +115,9 @@ public static partial class Board
 
         /// <summary>The case shown.</summary>
         public required BoardCaseId CaseId { get; init; }
+
+        /// <summary><see cref="IsFollowUp"/> for the case shown: the button reads <see cref="Text.SuggestFollowUp"/>.</summary>
+        public bool FollowUp { get; init; }
     }
 
     /// <summary>The control in the place of the Suggested Reply block. Fixed texts; nothing from mail or from the model.</summary>
@@ -169,6 +175,39 @@ public static partial class Board
     }
 
     /// <summary>
+    /// Whether <paramref name="reason"/> is a rule code under which the
+    /// case's reply target is the user's own last message (<c>them.*</c>): a
+    /// suggested reply there is a follow-up, a nudge on that message, not an
+    /// answer.
+    /// </summary>
+    public static bool IsFollowUpReason(BoardReason reason) =>
+        (reason.Value ?? "").StartsWith("them.", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Whether the suggested reply of <paramref name="c"/> is a follow-up
+    /// (Go <c>IsFollowUp</c>): the state the client shows for it
+    /// (<see cref="StateOf"/>: the user's choice, else the assistant's
+    /// annotation when <paramref name="annotated"/> and not stale, else the
+    /// rules') is Them. The effective state decides, not the rule code: a
+    /// them.replied case the user moved to You is no follow-up, a case the
+    /// user keeps in Them is one. The control reads
+    /// <see cref="Text.SuggestFollowUp"/> and the request tells the assistant
+    /// it nudges the user's own message.
+    /// </summary>
+    public static bool IsFollowUp(Case c, bool annotated)
+    {
+        ArgumentNullException.ThrowIfNull(c);
+        return StateOf(c, annotated) == State.Them;
+    }
+
+    /// <summary><see cref="IsFollowUp(Case, bool)"/> for a case as the daemon sent it (Go <c>IsFollowUpWire</c>).</summary>
+    public static bool IsFollowUpWire(BoardCase c, bool annotated)
+    {
+        ArgumentNullException.ThrowIfNull(c);
+        return IsFollowUp(DaemonBoardSource.Convert(c), annotated);
+    }
+
+    /// <summary>
     /// The control for <paramref name="i"/>: hidden unless offered and
     /// available; while the request runs for this case its progress and
     /// Stop; disabled, with the reason, while it runs for another case,
@@ -188,7 +227,7 @@ public static partial class Board
         {
             Shown = true,
             Enabled = true,
-            Title = Text.SuggestReply,
+            Title = Text.SuggestReplyTitle(i.FollowUp),
             Placeholder = Text.SuggestReplyPlaceholder,
             Progress = Text.SuggestReplyRunning,
             Stop = Assistant.PanelTexts().Stop,

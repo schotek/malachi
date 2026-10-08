@@ -8,7 +8,8 @@
 // timeout and model) is macos/Sources/MalachiCore/Controllers/
 // AssistantRequest.swift runProvider's; a provider starts the bridge and its
 // socket from its own options, so only the call's tools, bridge arguments
-// and policy reach it.
+// and policy reach it. A provider's failure codes are classified as Go's
+// assistantpanel.ProviderFailure does (ProviderFailure).
 
 using System;
 using System.Collections.Generic;
@@ -49,6 +50,25 @@ public sealed partial class AssistantRequest
         }
     }
 
+    /// <summary>
+    /// The failure a provider's code stands for (an error of opening or
+    /// submitting, a failed result's text, an exit's reason): Codex missing
+    /// is <see cref="Failure.NotFound"/>; a ChatGPT connection that is
+    /// missing, lapsed, refused or without consent is
+    /// <see cref="Failure.NotSignedIn"/> (the board offers to connect again,
+    /// as it offers Claude Code's sign-in); the plan's usage limit is
+    /// <see cref="Failure.Limit"/>; anything else <see cref="Failure.Stopped"/>
+    /// with the code as it is.
+    /// </summary>
+    public static Failure ProviderFailure(string code) => code switch
+    {
+        "codex_not_found" => new Failure.NotFound(),
+        "chatgpt_not_connected" or "chatgpt_reconnect_required" or "chatgpt_consent_required"
+            or "chatgpt_permission_denied" or "chatgpt_identity_mismatch" => new Failure.NotSignedIn(),
+        "chatgpt_usage_limit" => new Failure.Limit(code),
+        _ => new Failure.Stopped(code),
+    };
+
     private async Task RunProviderAsync(IAssistantProvider selected, int my, Call call)
     {
         var completion = call.Completion;
@@ -88,7 +108,7 @@ public sealed partial class AssistantRequest
             {
                 if (ReferenceEquals(session, providerSession) && my == gen && Running)
                 {
-                    Finish(my, new Outcome.Failed(new Failure.Stopped(exit.Description)), completion);
+                    Finish(my, new Outcome.Failed(ProviderFailure(exit.Description)), completion);
                 }
             };
             await session.SubmitAsync(call.Message, stop.Token);
@@ -101,7 +121,7 @@ public sealed partial class AssistantRequest
         {
             if (my == gen && Running)
             {
-                Finish(my, new Outcome.Failed(new Failure.Stopped(e is AssistantProviderException failure ? failure.Code : "chatgpt_runtime_failed")), completion);
+                Finish(my, new Outcome.Failed(ProviderFailure(e is AssistantProviderException failure ? failure.Code : "chatgpt_runtime_failed")), completion);
             }
         }
     }

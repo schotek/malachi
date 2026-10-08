@@ -8,7 +8,9 @@
 // account.list for the accounts' names, board.get for a case's
 // conversation when it is selected, and the user's decisions written back
 // with board.setState, setDone, remind, archive, unflag, discardDraft and
-// setCommitment.
+// setCommitment; an archive is taken back with message.move and
+// board.setDone (UndoArchive). Every user write ends the mark of a case back
+// from a reminder (RemindedAt) at once, as the daemon does.
 //
 // It subscribes to nothing itself: the application's notification fan-out
 // calls BoardChanged on notify.boardChanged, AccountsChanged on
@@ -58,7 +60,7 @@ namespace Malachi.Core.Boards;
 /// The board's cases from the daemon (Swift <c>DaemonBoardSource</c>).
 /// Create it, and call it, on the UI thread.
 /// </summary>
-public sealed partial class DaemonBoardSource : IBoardSource, IDisposable
+public sealed partial class DaemonBoardSource : IBoardSource, IBoardArchiveUndoer, IDisposable
 {
     /// <summary>How long a notification waits for others before the board is listed again.</summary>
     public static readonly TimeSpan DefaultDebounce = TimeSpan.FromMilliseconds(300);
@@ -146,8 +148,11 @@ public sealed partial class DaemonBoardSource : IBoardSource, IDisposable
     /// <summary>Called with a sentence for a toast when a write was refused (Swift <c>onError</c>).</summary>
     public Action<string>? OnError { get; set; }
 
-    /// <summary>Called with a sentence for a toast about what a write did: Archive (Swift <c>onNotice</c>).</summary>
+    /// <summary>Called with a sentence for a toast about what a write did (Swift <c>onNotice</c>).</summary>
     public Action<string>? OnNotice { get; set; }
+
+    /// <summary>Called with what Archive did, with the moved messages for Undo; null sends its text to <see cref="OnNotice"/>.</summary>
+    public Action<Board.ArchiveOutcome>? OnArchived { get; set; }
 
     /// <summary>
     /// Called after <see cref="OnChange"/> with the new snapshot, for the
@@ -326,34 +331,105 @@ public sealed partial class DaemonBoardSource : IBoardSource, IDisposable
     public void SetState(Board.State? state, BoardCaseId id) =>
         Write(
             API.BoardSetState, new BoardSetStateParams { CaseId = id, State = state is { } s ? WireState(s) : (BoardState?)null },
-            Board.Text.Action.Move, id, c => c with { UserState = state }, r => r.Case);
+            Board.Text.Action.Move, id, c => c with { UserState = state, RemindedAt = null }, r => r.Case);
 
     /// <summary>Done takes the case off the board (and ends a remind); not done puts it back.</summary>
     public void SetDone(bool done, BoardCaseId id) =>
         Write(
             API.BoardSetDone, new BoardSetDoneParams { CaseId = id, Done = done },
-            done ? Board.Text.Action.Done : Board.Text.Action.Reopen, id, c => c.WithDone(done), r => r.Case);
+            done ? Board.Text.Action.Done : Board.Text.Action.Reopen, id, c => c.WithDone(done) with { RemindedAt = null }, r => r.Case);
 
     /// <summary>Hides the case until <paramref name="until"/>; null puts a snoozed case back on the board.</summary>
     public void Remind(DateTimeOffset? until, BoardCaseId id) =>
         Write(
             API.BoardRemind, new BoardRemindParams { CaseId = id, Until = until }, Board.Text.Action.Remind, id,
             c => until is { } u
-                ? c with { Visibility = Board.Visibility.Snoozed(u) }
-                : c.Visibility.RemindAt is not null ? c with { Visibility = Board.Visibility.Live } : c,
+                ? c with { Visibility = Board.Visibility.Snoozed(u), RemindedAt = null }
+                : c.Visibility.RemindAt is not null ? c with { Visibility = Board.Visibility.Live, RemindedAt = null } : c with { RemindedAt = null },
             r => r.Case);
 
-    /// <summary>Moves the case's inbox messages to the archive (where the account can) and marks it done; <see cref="OnNotice"/> says what it did.</summary>
+    /// <summary>
+    /// Moves the case's inbox messages to the archive (where the account can)
+    /// and marks it done; <see cref="OnArchived"/> says what it did, with the
+    /// moved messages for Undo (<see cref="UndoArchive"/>).
+    /// </summary>
     public void Archive(BoardCaseId id) =>
         Write(
             API.BoardArchive, new BoardArchiveParams { CaseId = id }, Board.Text.Action.Archive, id,
-            c => c with { Visibility = Board.Visibility.Done() },
+            c => c with { Visibility = Board.Visibility.Done(), RemindedAt = null },
             r =>
             {
-                var notice = Board.Text.Archived(r.Archived, r.NoArchive ?? false);
-                scope.Guard(() => OnNotice?.Invoke(notice));
+                var outcome = new Board.ArchiveOutcome
+                {
+                    Case = id,
+                    Account = r.Case.AccountId,
+                    Moved = [.. r.Moved ?? []],
+                    Text = Board.Text.Archived(r.Archived, r.NoArchive ?? false),
+                    // No moved messages: the daemon cannot take this archive
+                    // back (an archive folder it does not sync), so the
+                    // plain toast.
+                    UndoLabel = r.Moved is { Count: > 0 } ? Board.Text.Undo : null,
+                };
+                scope.Guard(() =>
+                {
+                    if (OnArchived is { } archived)
+                    {
+                        archived(outcome);
+                        return;
+                    }
+                    OnNotice?.Invoke(outcome.Text);
+                });
                 return r.Case;
             });
+
+    /// <summary>
+    /// The toast's Undo: the calls of <see cref="Board.UndoArchive"/>, the
+    /// moves first, then the case back on the board (optimistic, as
+    /// <see cref="SetDone"/>; a refusal is a toast). A move that fails stops
+    /// the undo: the case stays done, because the mail is still archived,
+    /// and <see cref="OnError"/> says <see cref="Board.Text.UndoFailed"/>.
+    /// </summary>
+    public void UndoArchive(Board.ArchiveOutcome outcome)
+    {
+        ArgumentNullException.ThrowIfNull(outcome);
+        scope.VerifyAccess();
+        if (stopped)
+        {
+            return;
+        }
+        var calls = Board.UndoArchive(outcome.Moved, outcome.Account, outcome.Case);
+        var left = calls.Moves.Count;
+        if (left == 0)
+        {
+            SetDone(false, outcome.Case);
+            return;
+        }
+        writesInFlight++;
+        var failed = false;
+        foreach (var move in calls.Moves)
+        {
+            scope.Perform(client, API.MessageMove, move, result =>
+            {
+                if (!result.TryGetValue(out _, out var error))
+                {
+                    LogCallFailed(API.MessageMove.Name, error);
+                    failed = true;
+                }
+                left--;
+                if (left > 0)
+                {
+                    return;
+                }
+                writesInFlight--;
+                if (failed)
+                {
+                    scope.Guard(() => OnError?.Invoke(Board.Text.UndoFailed));
+                    return;
+                }
+                SetDone(false, outcome.Case);
+            });
+        }
+    }
 
     /// <summary>Drops the suggested reply (the draft itself, too).</summary>
     public void DiscardDraft(BoardCaseId id) =>
@@ -403,13 +479,13 @@ public sealed partial class DaemonBoardSource : IBoardSource, IDisposable
     }
 
     /// <summary>
-    /// board.unflag. Nothing changes optimistically (the rules decide what
-    /// the case becomes); the board is listed again once the stars are gone,
+    /// board.unflag. Nothing changes optimistically but the reminder's mark
+    /// (the rules decide what the case becomes); the board is listed again once the stars are gone,
     /// so the case moves without waiting for the notification.
     /// </summary>
     public void Unflag(BoardCaseId id) =>
         Write(
-            API.BoardUnflag, new BoardUnflagParams { CaseId = id }, Board.Text.Action.Unflag, id, c => c,
+            API.BoardUnflag, new BoardUnflagParams { CaseId = id }, Board.Text.Action.Unflag, id, c => c with { RemindedAt = null },
             r =>
             {
                 Refresh();
@@ -500,6 +576,8 @@ public sealed partial class DaemonBoardSource : IBoardSource, IDisposable
             Annotation = c.Annotation is { } a ? Convert(a) : null,
             UserState = StateOf(c.UserState),
             Visibility = visibility,
+            // Only a live case is back from a reminder.
+            RemindedAt = visibility.IsLive ? c.RemindedAt?.ToUniversalTime() : null,
             Reply = string.IsNullOrEmpty(c.ReplyMessageId.Value) ? null : new Board.ReplyTarget(c.ReplyMessageId, c.ReplyFolderId),
             LatestMessage = string.IsNullOrEmpty(c.LatestMessageId.Value) ? null : (MessageId?)c.LatestMessageId,
             CanArchive = c.CanArchive,

@@ -19,5 +19,5 @@ public static class ChatGptBoardText
     public static string BoardConsentHeading => L10n.T("Let OpenAI Refine the Board?");
 
     /// <summary>The body of the board's consent for ChatGPT.</summary>
-    public static string BoardConsentBody => L10n.T("Malachi Mail will send board mail to OpenAI through Codex, using your ChatGPT plan. It can read mail and annotate cases. Automatic triage sends newly received mail while enabled. It cannot send, delete or move messages.");
+    public static string BoardConsentBody => L10n.T("Malachi Mail will send board mail to OpenAI through Codex, using your ChatGPT plan. It reads the conversations on the board and any other mail and attachments it needs, and annotates cases. A triage you start yourself may also write replies, which stay on the board, never in your Drafts folder, until you send them. Automatic triage sends newly received mail while enabled. It cannot send, delete or move messages. Which accounts it triages you choose in Settings.");
 }

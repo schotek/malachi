@@ -45,6 +45,33 @@ func exercise(tr Translator) {
 	}
 	FilterTitle(Filter{Kind: FilterAll}, tr)
 	FilterTitle(Filter{Kind: FilterDone}, tr)
+	FilterTitle(Filter{Kind: FilterSnoozed}, tr)
+	ReasonReminded(tr)
+	ReasonUserKeeps(tr)
+	Reminded(tr)
+	NewContact(tr)
+	TitleWithBadge("t", "b", tr)
+	PersonAndTime("p", "t", tr)
+	DayAndTime("d", "t", tr)
+	TileToolTip(Tile{Kind: TileState, Count: 2}, tr)
+	TileToolTip(Tile{Kind: TileCommitments, Count: 2}, tr)
+	Undo(tr)
+	UndoFailed(tr)
+	for _, d := range DefaultStyles {
+		DefaultStyleTitle(d, tr)
+	}
+	StartModeSetting(tr)
+	for _, s := range StartModes {
+		StartModeTitle(s, tr)
+	}
+	ShowBoardSetting(tr)
+	ShowBoardSettingSubtitle(tr)
+	WindowsSetting(tr)
+	WindowsSettingSubtitle(tr)
+	Days(2, tr)
+	RemindItem("t", "w", tr)
+	BoardKeys(tr)
+	KeysGroup(tr)
 	AllAccounts(tr)
 	CaseCount(2, tr)
 	MessageCount(2, tr)
@@ -75,6 +102,7 @@ func exercise(tr Translator) {
 	ReplyNotSaved(tr)
 	ReplyNotSent("t", tr)
 	QuitUnsavedHeading(tr)
+	QuitUnsentHeading(tr)
 	QuitUnsavedBody(tr)
 	QuitAnyway(tr)
 	Unstar(tr)
@@ -98,8 +126,6 @@ func exercise(tr Translator) {
 	// view.go: a case without a subject (the msgid is shared with the message list).
 	_ = viewContext{tr: tr}.subject(Case{})
 	DueEmpty(tr)
-	CalendarTitle(tr)
-	CalendarBody(tr)
 	Commitments(tr)
 	SpokenDue("d", tr)
 	SpokenRemind("d", tr)
@@ -125,7 +151,7 @@ func exercise(tr Translator) {
 	Archive(tr)
 	Snoozed(tr)
 	SnoozedUntil("d", tr)
-	for k := RemindLaterToday; k <= RemindNextWeek; k++ {
+	for _, k := range RemindKinds {
 		RemindPreset(k, tr)
 	}
 	RemindNoMore(tr)
@@ -152,6 +178,7 @@ func exercise(tr Translator) {
 // exerciseReply is exercise for reply.go.
 func exerciseReply(tr Translator) {
 	SuggestReply(tr)
+	SuggestFollowUp(tr)
 	SuggestReplyPlaceholder(tr)
 	SuggestReplyRunning(tr)
 	SuggestReplyElsewhere(tr)
@@ -189,6 +216,10 @@ func exerciseTriage(tr Translator, now time.Time) {
 	TriageSettingsConsent(tr)
 	TriageSettingsConsentSubtitle(tr)
 	TriageSettingsAutomatic(tr)
+	TriageSettingsAccounts(tr)
+	TriageSettingsAccountsAll(tr)
+	TriageSettingsAccountsNone(tr)
+	TriageUsageAtLeast("1", tr)
 	TriageSettingsInterval(tr)
 	TriageSettingsDaily(tr)
 	TriageSettingsNeedsClaudeCode(tr)

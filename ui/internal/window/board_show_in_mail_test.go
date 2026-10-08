@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/board"
 )
 
 func TestDecideReveal(t *testing.T) {
@@ -85,6 +86,31 @@ func TestRevealGone(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			if got := revealGone(c.err); got != c.want {
 				t.Errorf("revealGone(%v) = %v, want %v", c.err, got, c.want)
+			}
+		})
+	}
+}
+
+// Show in Mail looks for the reply target, else the newest message
+// (macOS reply ?? latestMessage).
+func TestBoardRevealTarget(t *testing.T) {
+	cases := []struct {
+		name   string
+		d      board.Detail
+		msg    api.MessageID
+		folder api.FolderID
+		ok     bool
+	}{
+		{"the reply target with its folder", board.Detail{Reply: &board.ReplyTarget{Message: "m_1", Folder: "f_1"}, LatestMessage: "m_2"}, "m_1", "f_1", true},
+		{"no reply target: the newest, folder from message.get", board.Detail{LatestMessage: "m_2"}, "m_2", "", true},
+		{"an empty reply target falls back too", board.Detail{Reply: &board.ReplyTarget{}, LatestMessage: "m_2"}, "m_2", "", true},
+		{"neither", board.Detail{}, "", "", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			msg, folder, ok := boardRevealTarget(c.d)
+			if msg != c.msg || folder != c.folder || ok != c.ok {
+				t.Errorf("boardRevealTarget() = %q, %q, %v; want %q, %q, %v", msg, folder, ok, c.msg, c.folder, c.ok)
 			}
 		})
 	}

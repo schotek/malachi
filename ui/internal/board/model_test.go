@@ -170,7 +170,7 @@ func TestAccountScopeAndCounts(t *testing.T) {
 		mk("c4", StateInfo, withAccount(accountB), withDone()), mk("c5", StateThem, withDone()),
 	)
 	all := view(cases)
-	eq(t, "nav counts", navCounts(all), []int{3, 1, 2, 0, 0, 2})
+	eq(t, "nav counts", navCounts(all), []int{3, 1, 2, 0, 0, 0, 2})
 	var titles, accountTitles, badges []string
 	var dots []string
 	var selected, accountSelected []bool
@@ -188,9 +188,9 @@ func TestAccountScopeAndCounts(t *testing.T) {
 		badges = append(badges, a.Badge)
 		accountSelected = append(accountSelected, a.Selected)
 	}
-	eq(t, "nav titles", titles, []string{"Overview", "Hot", "Waiting for You", "Waiting for Them", "For Your Information", "Done"})
-	eq(t, "dots", dots, []string{"", "hot", "you", "them", "info", ""})
-	eq(t, "nav selected", selected, []bool{true, false, false, false, false, false})
+	eq(t, "nav titles", titles, []string{"Overview", "Hot", "Waiting for You", "Waiting for Them", "For Your Information", "Snoozed", "Done"})
+	eq(t, "dots", dots, []string{"", "hot", "you", "them", "info", "", ""})
+	eq(t, "nav selected", selected, []bool{true, false, false, false, false, false, false})
 	eq(t, "account titles", accountTitles, []string{"All Accounts", "Alpha", "Beta"})
 	eq(t, "badges", badges, []string{"", "IMAP", "JIRA"})
 	eq(t, "account counts", accountCounts(all), []int{3, 1, 2})
@@ -199,12 +199,12 @@ func TestAccountScopeAndCounts(t *testing.T) {
 
 	// The account filter narrows the cases; the account list keeps its own counts.
 	b := view(cases, configured(func(v *ViewState) { v.Account = accountB; v.Filter = doneFilter }))
-	eq(t, "b nav counts", navCounts(b), []int{2, 0, 2, 0, 0, 1})
+	eq(t, "b nav counts", navCounts(b), []int{2, 0, 2, 0, 0, 0, 1})
 	selected = nil
 	for _, n := range b.Nav {
 		selected = append(selected, n.Selected)
 	}
-	eq(t, "b nav selected", selected, []bool{false, false, false, false, false, true})
+	eq(t, "b nav selected", selected, []bool{false, false, false, false, false, false, true})
 	eq(t, "b account counts", accountCounts(b), []int{3, 1, 2})
 	accountSelected = nil
 	for _, a := range b.Accounts {
@@ -402,7 +402,7 @@ func TestCommitments(t *testing.T) {
 	eq(t, "k5 due", on.Commitments[2].Due, "2027-01-03")
 	check(t, on.ShowsCommitmentsInList, "not in the list")
 	eq(t, "today's", on.Today.Commitments, on.Commitments)
-	eq(t, "tile", on.Today.Tiles[len(on.Today.Tiles)-1], Tile{Kind: TileCommitments, Count: 3, Title: "Promised"})
+	eq(t, "tile", on.Today.Tiles[len(on.Today.Tiles)-1], Tile{Kind: TileCommitments, Count: 3, Title: "Promised", ToolTip: "Promised: 3 promises"})
 
 	// In the account scope.
 	b := view(cases, annotatedOn(), withCommitments(ks...), configured(func(v *ViewState) { v.Account = accountB }))
@@ -578,7 +578,6 @@ func TestTodayPage(t *testing.T) {
 	eq(t, "you", idsOf(today.You), []string{"y1", "y2", "y3", "y4", "y5"})
 	eq(t, "more", today.YouMore, 2)
 	eq(t, "phrase", today.Phrase, "9 things need you today.")
-	eq(t, "calendar", today.CalendarTitle, "Calendar and Reminders")
 
 	few := view(casesOf(mk("y1", StateYou), mk("y2", StateYou))).Today
 	check(t, few.YouMore == 0 && len(few.You) == 2 && few.Phrase == "2 things need you today.", "few %+v", few)
@@ -605,7 +604,7 @@ func TestViewSaysWhetherTheAssistantIsOn(t *testing.T) {
 
 func TestSnoozedRowSpeaksItsRemindTime(t *testing.T) {
 	c := mk("c1", StateYou, withVisibility(Visibility{Kind: VisibleSnoozed, At: testNow.Add(20 * time.Hour)}))
-	v := view(casesOf(c), configured(func(v *ViewState) { v.Filter = doneFilter }))
+	v := view(casesOf(c), configured(func(v *ViewState) { v.Filter = Filter{Kind: FilterSnoozed} }))
 	r := v.Sections[0].Rows[0]
 	check(t, r.Remind != "", "no remind")
 	check(t, strings.Contains(r.Spoken, SpokenRemind(r.Remind, tr)+"."), "spoken %q", r.Spoken)
@@ -788,7 +787,7 @@ func TestARepeatedCaseIDShowsTheFirstCaseOnly(t *testing.T) {
 		cols = append(cols, idsOf(c.Rows)...)
 	}
 	eq(t, "columns", cols, []string{"c1", "c2"})
-	eq(t, "nav", navCounts(v), []int{2, 1, 1, 0, 0, 0})
+	eq(t, "nav", navCounts(v), []int{2, 1, 1, 0, 0, 0, 0})
 	eq(t, "accounts", accountCounts(v), []int{2, 2, 0})
 	check(t, v.Detail.ID == "c1" && v.Detail.Title == "first", "detail %+v", v.Detail)
 	selected := view(casesOf(first, again), configured(func(v *ViewState) { v.Style = StyleColumns; v.Selection = "c1" }))
@@ -912,10 +911,10 @@ func TestCleanLine(t *testing.T) {
 		{"a\x00b", "ab"},
 		{"a\u202Eb", "ab"}, // right-to-left override
 		{"\u202Ea\u202C", "a"},
-		{"a\u200Bb\u200Dc\uFEFFd", "abcd"}, // zero width, joiner, BOM
-		{"a\u2066b\u2069", "ab"},           // isolates
-		{"a\u0007b\u001Bc", "abc"},         // bell, escape
-		{"\u202E\u200B\x00\uFEFF", ""},     // only format characters
+		{"a\u200Bb\u200Dc\uFEFFd", "ab\u200Dcd"}, // zero width, joiner kept between two letters, BOM
+		{"a\u2066b\u2069", "ab"},                 // isolates
+		{"a\u0007b\u001Bc", "abc"},               // bell, escape
+		{"\u202E\u200B\x00\uFEFF", ""},           // only format characters
 		{"", ""},
 		{"   \n\t ", ""},
 		{"čeština ✓ 🙂", "čeština ✓ 🙂"},
@@ -1007,8 +1006,10 @@ func TestTheCutNeverBreaksACharacter(t *testing.T) {
 	eq(t, "block 15", CleanBlock(cz+cz, 15), cz)
 	// Not cut at all: a trailing cluster stays as it is.
 	eq(t, "trailing", CleanLine("x\U0001F1E8", 100), "x\U0001F1E8")
-	// Format characters (ZWJ, ZWNJ) are still dropped.
-	eq(t, "joiners", CleanLine("a\u200Db\u200Cc", 100), "abc")
+	// A joiner between two kept characters stays (the joiner rule).
+	eq(t, "joiners", CleanLine("a\u200Db\u200Cc", 100), "a\u200Db\u200Cc")
+	// A cut right after a joiner does not leave it last.
+	eq(t, "cut after a joiner", CleanLine("ab\u200Dc", 5), "ab")
 	// A Hangul syllable written in jamo is one character.
 	jamo := "\u1100\u1161\u11A8" // 각, 9 bytes
 	eq(t, "jamo", CleanLine("a"+jamo, 7), "a")

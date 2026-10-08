@@ -165,6 +165,8 @@ func (p *boardPage) suggestReplyView(id board.CaseID) board.SuggestReplyView {
 	}
 	words := providerBoardTranslator{p.w.assist, i18n.Tr}
 	panel := assistant.PanelTexts(words)
+	// A case waiting for them is titled Suggest Follow-up by boardreply's
+	// View itself (SuggestReplyInputs.FollowUp, the effective state).
 	return ctl.View(k, snapshot, false, board.PanelWords{
 		Stop: panel.Stop, NotFound: panel.NotFound, SignInHint: assistant.SignInTexts(words).Hint,
 	}, words)

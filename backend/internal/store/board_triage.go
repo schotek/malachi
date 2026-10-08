@@ -21,8 +21,9 @@ import (
 
 // BoardRunRef names the run a call counts in: RunID when it names a run
 // that is open (manual or auto), else the implicit external run of Source
-// and Day (the caller's local day, "YYYY-MM-DD"; "" = Now's UTC day),
-// created on first use.
+// and Day (the daemon's local day, "YYYY-MM-DD", which core passes — not
+// the local day of the client that called; "" = Now's UTC day), created
+// on first use.
 type BoardRunRef struct {
 	RunID  string
 	Source string
@@ -243,8 +244,7 @@ func (s *Store) AddBoardCommitment(ctx context.Context, in BoardCommitmentInput)
 			if _, err := tx.ExecContext(ctx, `UPDATE board_commitments SET due_at = ? WHERE id = ?`, stamp(in.Due), prev.ID); err != nil {
 				return BoardCommitment{}, "", fmt.Errorf("add board commitment: %w", err)
 			}
-			if _, err := tx.ExecContext(ctx, `UPDATE board_cases SET version = version + 1, updated_at = ? WHERE id = ?`,
-				nowStamp(), c.ID); err != nil {
+			if err := bumpBoardCaseTx(ctx, tx, c.ID); err != nil {
 				return BoardCommitment{}, "", fmt.Errorf("add board commitment: %w", err)
 			}
 			prev.Due = parseStamp(stamp(in.Due))
@@ -274,6 +274,9 @@ func (s *Store) AddBoardCommitment(ctx context.Context, in BoardCommitmentInput)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', '', ?, ?, ?, '')`,
 		k.ID, k.CaseID, k.AccountID, k.MessageID, stamp(k.MessageDate), stamp(k.RepliedAfter), k.Text, k.Quote, optStamp(k.Due),
 		k.Source, k.RunID, stamp(in.Now)); err != nil {
+		return BoardCommitment{}, "", fmt.Errorf("add board commitment: %w", err)
+	}
+	if err := bumpBoardCaseTx(ctx, tx, c.ID); err != nil {
 		return BoardCommitment{}, "", fmt.Errorf("add board commitment: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -431,21 +434,50 @@ func mergeBoardCommitmentsTx(ctx context.Context, tx *sql.Tx, g []BoardCommitmen
 	return nil
 }
 
+// bumpBoardCaseTx raises the version of a case: something shown with it
+// changed outside its row (a commitment).
+func bumpBoardCaseTx(ctx context.Context, tx *sql.Tx, caseID string) error {
+	_, err := tx.ExecContext(ctx, `UPDATE board_cases SET version = version + 1, updated_at = ? WHERE id = ?`, nowStamp(), caseID)
+	return err
+}
+
 // SetBoardCommitment ticks a commitment off (done) or opens it again
-// (from done or closed). ErrNotFound for an unknown commitment.
+// (from done or closed); a change raises its case's version, in the same
+// transaction. ErrNotFound for an unknown commitment.
 func (s *Store) SetBoardCommitment(ctx context.Context, id string, done bool, now time.Time) (BoardCommitment, error) {
-	var err error
-	if done {
-		_, err = s.db.ExecContext(ctx, `UPDATE board_commitments SET state = 'done', closed_reason = '', closed_at = ?
-			WHERE id = ? AND state != 'done'`, stamp(now), id)
-	} else {
-		_, err = s.db.ExecContext(ctx, `UPDATE board_commitments SET state = 'open', closed_reason = '', closed_at = ''
-			WHERE id = ? AND state != 'open'`, id)
-	}
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return BoardCommitment{}, fmt.Errorf("set board commitment: %w", err)
 	}
-	return s.GetBoardCommitment(ctx, id)
+	defer tx.Rollback()
+	var caseID string
+	if done {
+		err = tx.QueryRowContext(ctx, `UPDATE board_commitments SET state = 'done', closed_reason = '', closed_at = ?
+			WHERE id = ? AND state != 'done' RETURNING case_id`, stamp(now), id).Scan(&caseID)
+	} else {
+		err = tx.QueryRowContext(ctx, `UPDATE board_commitments SET state = 'open', closed_reason = '', closed_at = ''
+			WHERE id = ? AND state != 'open' RETURNING case_id`, id).Scan(&caseID)
+	}
+	switch {
+	case errors.Is(err, sql.ErrNoRows): // unchanged, or unknown (read below)
+	case err != nil:
+		return BoardCommitment{}, fmt.Errorf("set board commitment: %w", err)
+	default:
+		if err := bumpBoardCaseTx(ctx, tx, caseID); err != nil {
+			return BoardCommitment{}, fmt.Errorf("set board commitment: %w", err)
+		}
+	}
+	k, err := scanBoardCommitment(tx.QueryRowContext(ctx, `SELECT `+boardCommitmentColumns+` FROM board_commitments WHERE id = ?`, id))
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return BoardCommitment{}, ErrNotFound
+	case err != nil:
+		return BoardCommitment{}, fmt.Errorf("set board commitment: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return BoardCommitment{}, fmt.Errorf("set board commitment: %w", err)
+	}
+	return k, nil
 }
 
 // GetBoardCommitment returns one commitment; ErrNotFound otherwise.
@@ -513,6 +545,13 @@ type BoardRun struct {
 const boardRunColumns = `id, trigger, source, day, started_at, ended_at, annotated, commitments, rejected, error,
 	input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens`
 
+// boardRunLowerBound is the day column of a manual or auto run whose
+// usage the client reported as a lower bound (api.BoardUsage.LowerBound).
+// day names the local day only of an external run (the unique index on it
+// is partial, WHERE trigger = 'external'); migration 0017 has no column of
+// its own for the flag, and is frozen.
+const boardRunLowerBound = "lowerBound"
+
 func scanBoardRun(row scanner) (BoardRun, error) {
 	var r BoardRun
 	var trigger, started, ended, errClass string
@@ -521,9 +560,13 @@ func scanBoardRun(row scanner) (BoardRun, error) {
 		&in, &out, &created, &read); err != nil {
 		return BoardRun{}, err
 	}
+	lower := trigger != string(api.TriggerExternal) && r.Day == boardRunLowerBound
+	if lower {
+		r.Day = ""
+	}
 	if in.Valid {
 		r.Usage = &api.BoardUsage{InputTokens: in.Int64, OutputTokens: out.Int64, CacheCreationInputTokens: created.Int64,
-			CacheReadInputTokens: read.Int64}
+			CacheReadInputTokens: read.Int64, LowerBound: lower}
 	}
 	r.Trigger, r.Error = api.BoardTrigger(trigger), api.BoardRunError(errClass)
 	r.StartedAt, r.EndedAt = parseStamp(started), parseStamp(ended)
@@ -547,7 +590,7 @@ func (s *Store) StartBoardRun(ctx context.Context, trigger api.BoardTrigger, sou
 // EndBoardRun ends a run with an error class ("" = success; a class the
 // store does not know is stored as failed) and the token usage the client
 // reported (nil = unknown: the run keeps none; each counter is clamped to
-// 0..api.MaxBoardUsageTokens). Ending a run that has ended, or an
+// 0..api.MaxBoardUsageTokens; LowerBound is kept, boardRunLowerBound). Ending a run that has ended, or an
 // external one, changes nothing, its usage included. ErrNotFound for an
 // unknown id.
 func (s *Store) EndBoardRun(ctx context.Context, id string, errClass api.BoardRunError, usage *api.BoardUsage, now time.Time) error {
@@ -557,14 +600,18 @@ func (s *Store) EndBoardRun(ctx context.Context, id string, errClass api.BoardRu
 		errClass = api.RunFailed
 	}
 	var in, out, created, read any // NULL without usage
+	day := ""
 	if usage != nil {
 		u := usage.Clamped()
 		in, out, created, read = u.InputTokens, u.OutputTokens, u.CacheCreationInputTokens, u.CacheReadInputTokens
+		if u.LowerBound {
+			day = boardRunLowerBound
+		}
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE board_runs SET ended_at = ?, error = ?,
+	res, err := s.db.ExecContext(ctx, `UPDATE board_runs SET ended_at = ?, error = ?, day = ?,
 			input_tokens = ?, output_tokens = ?, cache_creation_input_tokens = ?, cache_read_input_tokens = ?
 		WHERE id = ? AND ended_at = '' AND trigger != 'external'`,
-		stamp(now), string(errClass), in, out, created, read, id)
+		stamp(now), string(errClass), day, in, out, created, read, id)
 	if err != nil {
 		return fmt.Errorf("end board run: %w", err)
 	}
@@ -668,18 +715,22 @@ func (s *Store) PruneBoardRuns(ctx context.Context, startedBefore time.Time) (in
 
 // BoardRunUsage returns the token usage summed over the runs that ended
 // at or after since (by ended_at) and carry usage, and how many those are;
-// a zero api.BoardUsageTotal when none. Runs carry usage only when a
+// LowerBound when any of them was a lower bound. A zero
+// api.BoardUsageTotal when none. Runs carry usage only when a
 // client ended them with board.runEnd, so external runs never count. The
 // partial index board_runs_usage holds only runs with usage, and
 // PruneBoardRuns bounds the table to 90 days of runs.
 func (s *Store) BoardRunUsage(ctx context.Context, since time.Time) (api.BoardUsageTotal, error) {
 	var t api.BoardUsageTotal
+	var lower int
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0),
-			COALESCE(SUM(cache_creation_input_tokens), 0), COALESCE(SUM(cache_read_input_tokens), 0)
-		FROM board_runs WHERE input_tokens IS NOT NULL AND ended_at >= ?`, stamp(since)).Scan(&t.Runs,
-		&t.InputTokens, &t.OutputTokens, &t.CacheCreationInputTokens, &t.CacheReadInputTokens); err != nil {
+			COALESCE(SUM(cache_creation_input_tokens), 0), COALESCE(SUM(cache_read_input_tokens), 0),
+			COALESCE(MAX(trigger != 'external' AND day = ?), 0)
+		FROM board_runs WHERE input_tokens IS NOT NULL AND ended_at >= ?`, boardRunLowerBound, stamp(since)).Scan(&t.Runs,
+		&t.InputTokens, &t.OutputTokens, &t.CacheCreationInputTokens, &t.CacheReadInputTokens, &lower); err != nil {
 		return api.BoardUsageTotal{}, fmt.Errorf("board run usage: %w", err)
 	}
+	t.LowerBound = lower != 0
 	return t, nil
 }
 

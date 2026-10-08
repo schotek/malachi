@@ -62,8 +62,12 @@ func newInferenceGate(tokens TokenSource, tools map[string]bool, client *http.Cl
 	return g, nil
 }
 func (g *inferenceGate) failure(code string) { g.mu.Lock(); g.lastFailure = code; g.mu.Unlock() }
-func (g *inferenceGate) Failure() string     { g.mu.Lock(); defer g.mu.Unlock(); return g.lastFailure }
-func (g *inferenceGate) Close()              { g.cancel(); _ = g.server.Close(); <-g.done }
+
+// newTurn forgets the failure of an earlier turn, so a turn that fails for
+// another reason is not reported with it.
+func (g *inferenceGate) newTurn()        { g.failure("") }
+func (g *inferenceGate) Failure() string { g.mu.Lock(); defer g.mu.Unlock(); return g.lastFailure }
+func (g *inferenceGate) Close()          { g.cancel(); _ = g.server.Close(); <-g.done }
 func rawObject(b []byte) (map[string]json.RawMessage, error) {
 	var value map[string]json.RawMessage
 	if !uniqueJSON(b) {
@@ -378,6 +382,6 @@ func (g *inferenceGate) reportUsage(data string) {
 	fn := g.usage
 	g.mu.Unlock()
 	if fn != nil {
-		fn(assistant.Event{Kind: assistant.EventOther, MessageID: str(response, "id"), Usage: &u})
+		fn(assistant.Event{Kind: assistant.EventOther, MessageID: str(response, "id"), Usage: &u, UsageFinal: true})
 	}
 }

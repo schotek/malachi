@@ -50,6 +50,11 @@ enum BoardPalette {
         (.systemBrown, NSColor.systemOrange.withAlphaComponent(0.15))
     }
 
+    /// A case's badge (Reminded, New contact): the accent at low alpha.
+    static var badgeColours: IssuePill.Colours {
+        (.controlAccentColor, NSColor.controlAccentColor.withAlphaComponent(0.15))
+    }
+
     /// The account's tag: neutral, as a status to do.
     static var accountColours: IssuePill.Colours {
         (.secondaryLabelColor, Tint.fg(alpha: 0.1))

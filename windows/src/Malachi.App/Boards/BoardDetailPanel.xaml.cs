@@ -5,14 +5,13 @@
 // (panelWidth, panelMargin, updatePanel, cancelOperation) and
 // window/board_panel.go (wirePanel's Escape, boardPanelShown). The page
 // says when it shows (Board.ViewModel.ShowsPanel on a board with cases)
-// and how wide the page is; Escape asks the page to close it, which
-// clears the selection.
+// and how wide the page is. Escape is the page's (BoardPage.OnPageKeyDown,
+// Board.EscapeFor): it closes the panel only once no popup and no text of
+// the reply editor holds the keyboard.
 
 using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
-using WinKey = Windows.System.VirtualKey;
 
 namespace Malachi.App.Boards;
 
@@ -31,9 +30,6 @@ public sealed partial class BoardDetailPanel : UserControl
         InitializeComponent();
     }
 
-    /// <summary>Escape in the panel: the page closes it.</summary>
-    public event EventHandler? CloseRequested;
-
     /// <summary>Where the page puts the detail while the panel shows.</summary>
     public ContentControl DetailHost => Host;
 
@@ -45,14 +41,4 @@ public sealed partial class BoardDetailPanel : UserControl
 
     /// <summary>The page is <paramref name="pageWidth"/> wide: the panel takes up to 640 of it, leaving 40.</summary>
     public void Fit(double pageWidth) => Width = Math.Max(0, Math.Min(PanelWidth, pageWidth - PanelMargin));
-
-    // Escape closes the panel, unless a menu or a field inside took it.
-    private void OnPreviewKeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (e.Key == WinKey.Escape && IsShown)
-        {
-            e.Handled = true;
-            CloseRequested?.Invoke(this, EventArgs.Empty);
-        }
-    }
 }

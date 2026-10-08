@@ -44,8 +44,8 @@ func TestMemoryDefaults(t *testing.T) {
 	if got := s.MarkReadDelay(); got != MarkReadDelayMax {
 		t.Errorf("MarkReadDelay not clamped: %d", got)
 	}
-	if got := s.BoardDefaultStyle(); got != BoardStyleList {
-		t.Errorf("BoardDefaultStyle = %q, want %q", got, BoardStyleList)
+	if got := s.BoardDefaultStyle(); got != BoardStyleLast {
+		t.Errorf("BoardDefaultStyle = %q, want %q", got, BoardStyleLast)
 	}
 	if s.BoardTriageConsent() {
 		t.Error("BoardTriageConsent default = true, want false")
@@ -262,18 +262,53 @@ func TestAssistantKeys(t *testing.T) {
 
 func TestBoardKeys(t *testing.T) {
 	s := NewMemory()
-	if got := s.BoardDefaultStyle(); got != BoardStyleList {
-		t.Errorf("BoardDefaultStyle default = %q, want list", got)
+	if got := s.BoardDefaultStyle(); got != BoardStyleLast {
+		t.Errorf("BoardDefaultStyle default = %q, want last", got)
 	}
 	s.SetBoardDefaultStyle("grid")
-	if got := s.BoardDefaultStyle(); got != BoardStyleList {
+	if got := s.BoardDefaultStyle(); got != BoardStyleLast {
 		t.Errorf("invalid style accepted: %q", got)
 	}
-	for _, want := range BoardStyles {
+	for _, want := range BoardDefaultStyles {
 		s.SetBoardDefaultStyle(want)
 		if got := s.BoardDefaultStyle(); got != want {
 			t.Errorf("BoardDefaultStyle = %q, want %q", got, want)
 		}
+	}
+	// board-last-style never takes Last Used: it is the style itself.
+	if got := s.BoardLastStyle(); got != BoardStyleList {
+		t.Errorf("BoardLastStyle default = %q, want list", got)
+	}
+	s.SetBoardLastStyle(BoardStyleLast)
+	if got := s.BoardLastStyle(); got != BoardStyleList {
+		t.Errorf("BoardLastStyle took %q", got)
+	}
+	s.SetBoardLastStyle(BoardStyleToday)
+	if got := s.BoardLastStyle(); got != BoardStyleToday {
+		t.Errorf("BoardLastStyle = %q, want today", got)
+	}
+	if got := s.BoardStartMode(); got != BoardStartMail {
+		t.Errorf("BoardStartMode default = %q, want mail", got)
+	}
+	s.SetBoardStartMode("calendar")
+	if got := s.BoardStartMode(); got != BoardStartMail {
+		t.Errorf("invalid start mode accepted: %q", got)
+	}
+	for _, want := range BoardStartModes {
+		s.SetBoardStartMode(want)
+		if got := s.BoardStartMode(); got != want {
+			t.Errorf("BoardStartMode = %q, want %q", got, want)
+		}
+	}
+	if got := s.BoardLastMode(); got != "mail" {
+		t.Errorf("BoardLastMode default = %q, want mail", got)
+	}
+	if got := s.BoardAccountFilter(); got != "" {
+		t.Errorf("BoardAccountFilter default = %q, want empty", got)
+	}
+	s.SetBoardAccountFilter("acc-1")
+	if got := s.BoardAccountFilter(); got != "acc-1" {
+		t.Errorf("BoardAccountFilter = %q, want acc-1", got)
 	}
 	// AssistantModel and BoardTriageModel are independent keys, even though
 	// they share assistant.Model's nicks.

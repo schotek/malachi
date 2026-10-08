@@ -26,6 +26,12 @@ public static class VirtualKey
     /// <summary>VK_DELETE.</summary>
     public const int Delete = 0x2E;
 
+    /// <summary>'1' of the main row.</summary>
+    public const int Number1 = 0x31;
+
+    /// <summary>'2' of the main row.</summary>
+    public const int Number2 = 0x32;
+
     /// <summary>'A'.</summary>
     public const int A = 0x41;
 

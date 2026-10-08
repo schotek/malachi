@@ -102,13 +102,41 @@ public final class BoardTriageController {
         return await locator.signedIn()
     }
     private var providerEpoch = 0
+    /// The assistant's provider changed, or its profile (Go
+    /// `ProviderChanged`): a run under way stops, automatic triage goes
+    /// off when the provider itself changed (`disableAutomaticTriage`: a
+    /// consent given to one provider never starts runs of another), the
+    /// daemon's assistant preference goes off when the board's consent is
+    /// not given (the settings answer for the provider now selected), and
+    /// availability and the sign-in are asked again. Both changes go in
+    /// one quiet write, so that the repair is not skipped for the write
+    /// under way. The controller calls it itself for the settings keys
+    /// that concern the provider in effect
+    /// (`AssistantRequest.providerChangeConcernsActive`); the application
+    /// calls it for a change of the ChatGPT connection while ChatGPT is the
+    /// provider.
     public func providerChanged(disableAutomaticTriage: Bool = false) {
         providerEpoch += 1
         cancel()
-        if disableAutomaticTriage {
-            preferences.update(quiet: true, { $0.autoTriage = false }, completion: nil)
+        var repair = !granting && !settings.selectedBoardConsent
+        if preferences.stored?.assistant == false {
+            repair = false
         }
-        repairAssistantPreference()
+        if disableAutomaticTriage || repair {
+            if repair {
+                log.info("board triage: the assistant preference was on without consent; turning it off")
+            }
+            preferences.update(
+                quiet: true,
+                { p in
+                    if disableAutomaticTriage {
+                        p.autoTriage = false
+                    }
+                    if repair {
+                        p.assistant = false
+                    }
+                }, completion: nil)
+        }
         availabilityChanged()
     }
     public let locator: ClaudeCodeLocator
@@ -210,6 +238,10 @@ public final class BoardTriageController {
     private var runID: BoardRunID?
     /// The annotate_case calls of the run, by id, and the accepted ones.
     private var annotateCalls: Set<String> = []
+    /// The distinct cases the run's accepted notes named (Done counts
+    /// them: the bridge takes a second note on a case without charging
+    /// another of the run's cases).
+    private var annotatedCases: Set<String> = []
     /// The annotate_case calls of the run the bridge refused.
     private var refused = 0
     /// The tokens the run's Claude Code reported so far.
@@ -272,9 +304,12 @@ public final class BoardTriageController {
         self.today = today
         // The run checks consent itself and never lets the request ask.
         self.request.consent = nil
-        for key in [Settings.Key.assistantProvider, .assistantCodexPath, .assistantChatGPTModel, .boardTriageChatGPTModel] {
+        // The only registration of these keys for the triage: a change that
+        // concerns the other provider leaves a run alone.
+        for key in AssistantRequest.providerKeys {
             settingsTokens.append(settings.onChange(key) { [weak self] in
-                self?.providerChanged(disableAutomaticTriage: key == .assistantProvider)
+                guard let self, AssistantRequest.providerChangeConcernsActive(key, settings: self.settings) else { return }
+                self.providerChanged(disableAutomaticTriage: key == .assistantProvider)
             })
         }
         self.request.usesBoardConsent = true
@@ -581,6 +616,7 @@ public final class BoardTriageController {
         let my = gen
         runID = nil
         annotateCalls = []
+        annotatedCases = []
         refused = 0
         usage = Assistant.UsageTally()
         limitHit = false
@@ -708,10 +744,11 @@ public final class BoardTriageController {
             completion: { [weak self] outcome in self?.answered(my, trigger, outcome) })
     }
 
-    /// Counts an annotate_case of run `my`, accepted or refused, until the
-    /// accepted ones reach the run's limit (`limitReached`).
+    /// Counts an annotate_case of run `my`, accepted (each case once) or
+    /// refused, until the accepted cases reach the run's limit
+    /// (`limitReached`).
     private func tool(_ my: Int, _ trigger: Board.TriageTrigger, _ e: Assistant.Event) {
-        guard my == gen, !limitHit, case .running(_, let done, let total) = state else { return }
+        guard my == gen, !limitHit, case .running(_, _, let total) = state else { return }
         switch e.kind {
         case .toolUse where e.tool == Assistant.triageAnnotateTool:
             annotateCalls.insert(e.toolUseID)
@@ -721,8 +758,12 @@ public final class BoardTriageController {
                 refused += 1
                 return
             }
-            state = .running(trigger, done: done + 1, total: total)
-            if done + 1 >= runLimit {
+            // A result that names no case counts as a case of its own.
+            let key = Assistant.triageAnnotatedCase(e.resultText) ?? "call:" + e.toolUseID
+            guard annotatedCases.insert(key).inserted else { return }
+            let done = annotatedCases.count
+            state = .running(trigger, done: done, total: total)
+            if done >= runLimit {
                 limitReached(my, trigger)
             }
         default:
@@ -768,6 +809,9 @@ public final class BoardTriageController {
             if outcome == .failed(.notSignedIn) {
                 learnSignedIn(false)
             }
+            if case .answered = outcome {
+                usage.finished()
+            }
             let id = runID
             runID = nil
             finish(trigger, nil, run: id)
@@ -777,6 +821,7 @@ public final class BoardTriageController {
         switch outcome {
         case .answered:
             failure = nil
+            usage.finished()
             if case .running(_, 0, _) = state {
                 if refused > 0 {
                     failure = .notesRefused
@@ -791,6 +836,7 @@ public final class BoardTriageController {
             case .notFound: failure = .notFound
             case .notSignedIn: failure = .notSignedIn
             case .toolsMissing: failure = .toolsMissing
+            case .limit: failure = .limit
             case .stopped(let reason): failure = reason == AssistantRequest.timedOut ? .timeout : .stopped
             }
         }
@@ -817,7 +863,8 @@ public final class BoardTriageController {
             annotated = 0
         }
         if let run {
-            endRun(run, failure.map(\.runError), usage: usage.total.map(BoardUsage.init))
+            let lowerBound = usage.lowerBound
+            endRun(run, failure.map(\.runError), usage: usage.total.map { BoardUsage($0, lowerBound: lowerBound) })
         }
         // The end first, while `state` still says active: the schedule
         // counts the failure before the state's change asks it again.

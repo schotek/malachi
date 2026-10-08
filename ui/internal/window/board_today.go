@@ -4,9 +4,7 @@
 package window
 
 import (
-	"fmt"
 	"reflect"
-	"slices"
 	"strconv"
 
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
@@ -56,8 +54,10 @@ func (p *boardPage) bindToday(b *gtk.Builder) {
 	p.today = t
 }
 
-// wireToday connects board_today_list's selection and the "Show N More"
-// row's action.
+// wireToday connects board_today_list's selection. The "and N more" row
+// is never selectable: an arrow key passing over it must not switch the
+// style, so it acts only when activated (Return, a click; its own button,
+// board_keys.go's row-activated handler).
 func (p *boardPage) wireToday() {
 	t := p.today
 	t.list.ConnectRowSelected(func(row *gtk.ListBoxRow) {
@@ -74,10 +74,6 @@ func (p *boardPage) wireToday() {
 		}
 		if id, ok := t.items[idx].caseID(); ok {
 			p.ctl.Select(id)
-			return
-		}
-		if t.items[idx].kind == todayItemMore {
-			p.ctl.ShowWaitingForYou()
 		}
 	})
 }
@@ -93,11 +89,16 @@ func (t *boardToday) apply(vm board.ViewModel) {
 	renderTodayTiles(t.tiles, vm.Today.Tiles)
 
 	items := todayItems(vm)
-	if !slices.Equal(items, t.items) {
+	refocus := false
+	if !reflect.DeepEqual(items, t.items) {
+		refocus = listHoldsFocus(t.p.w, t.list)
 		t.items = items
 		t.rebuildList(items)
 	}
 	t.reflectSelection(vm.Selection)
+	if refocus {
+		focusSelectedRow(t.list)
+	}
 
 	if !reflect.DeepEqual(vm.Today.DueGroups, t.dueGroups) {
 		t.dueGroups = vm.Today.DueGroups
@@ -297,7 +298,7 @@ func boardTileView(tile board.Tile) *gtk.Box {
 	title.AddCSSClass("caption")
 	title.AddCSSClass("dim-label")
 	b.Append(title)
-	b.SetTooltipText(strconv.Itoa(tile.Count) + " " + tile.Title)
+	b.SetTooltipText(tile.ToolTip)
 	return b
 }
 
@@ -312,8 +313,8 @@ const (
 	// todayItemEmptyText is a section's empty text (no rows in it).
 	todayItemEmptyText
 	todayItemCase
-	// todayItemMore is "Show N More" under the top of what waits for the
-	// user.
+	// todayItemMore is "and N more" (board.AndMore) under the top of what
+	// waits for the user.
 	todayItemMore
 	// todayItemCommitmentsHeading is "From the Assistant", before the
 	// commitments.
@@ -321,8 +322,8 @@ const (
 	todayItemCommitment
 )
 
-// todayItem is one row: comparable (board.Row and board.CommitmentRow
-// included), so apply can skip the rebuild when nothing changed.
+// todayItem is one row, compared whole (reflect.DeepEqual: board.Row
+// carries its Badges), so apply can skip the rebuild when nothing changed.
 type todayItem struct {
 	kind       todayItemKind
 	state      board.State
@@ -334,7 +335,7 @@ type todayItem struct {
 }
 
 // caseID is the case a row selects; "" and false for a header, empty text
-// or the "Show N More" row.
+// or the "and N more" row.
 func (it todayItem) caseID() (board.CaseID, bool) {
 	switch it.kind {
 	case todayItemCase:
@@ -440,17 +441,41 @@ func boardPlainTextRow(text string) *gtk.ListBoxRow {
 	return row
 }
 
-// boardMoreRow opens the full list of what waits for the user.
+// boardMoreRow opens the full list of what waits for the user
+// (board.AndMore, a plural): its button on a click, row-activated
+// (board_keys.go) on Return. Never selectable, so arrow keys pass over it
+// without switching the style; still activatable and focusable.
 func boardMoreRow(n int, show func()) *gtk.ListBoxRow {
 	button := gtk.NewButton()
 	button.AddCSSClass("flat")
 	button.AddCSSClass("board-more-button")
 	button.SetHAlign(gtk.AlignStart)
-	label := gtk.NewLabel(fmt.Sprintf(i18n.T("Show %d More"), n))
+	button.SetCanFocus(false)
+	label := gtk.NewLabel(board.AndMore(n, i18n.Tr))
 	label.SetUseMarkup(false)
 	button.SetChild(label)
 	button.ConnectClicked(show)
 	row := gtk.NewListBoxRow()
 	row.SetChild(button)
+	row.SetSelectable(false)
+	row.SetActivatable(true)
 	return row
+}
+
+// listHoldsFocus reports whether the keyboard is inside list, read before
+// a rebuild replaces its rows (and with them the focused one).
+func listHoldsFocus(w *Window, list *gtk.ListBox) bool {
+	f := w.Focus()
+	return f != nil && gtk.BaseWidget(f).IsAncestor(list)
+}
+
+// focusSelectedRow gives the keyboard back to list's selected row after a
+// rebuild took the focused row away (nothing when the window's focus went
+// elsewhere meanwhile, or nothing is selected).
+func focusSelectedRow(list *gtk.ListBox) {
+	if row := list.SelectedRow(); row != nil {
+		row.GrabFocus()
+		return
+	}
+	list.GrabFocus()
 }

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -48,7 +49,8 @@ type BoardCase struct {
 	UserStateAt time.Time
 	DoneAt      time.Time
 	// RemindAt stays set after it came due (Reminded): the case is live
-	// again and kept until the user marks it done or sets another remind.
+	// again and kept until the user acts on it (done, another remind, a
+	// state, unflag) or inbound mail that counts arrives.
 	RemindAt time.Time
 	Reminded bool // RemindAt came due and the version went up (ClearDueBoardReminds)
 
@@ -66,17 +68,66 @@ type BoardCase struct {
 	CreatedAt time.Time
 
 	membersKey string
-	doneSeen   string // done_seen: the Message-IDs the case had when marked done
-	memberIDs  string // member_ids: the Message-IDs of its newest members
+	// done_seen: the Message-IDs the case had when marked done, or while a
+	// remind is set, the time it was set (boardRemindMark) and the
+	// Message-IDs the case had then
+	doneSeen  string
+	memberIDs string // member_ids: the Message-IDs of its newest members
 }
 
 // SeenAtDone says whether the Message-ID (bare or in angle brackets) was
-// one of the inbound members that counted when the case was marked done:
-// a later copy of it (a move by another client stores the message anew)
-// does not reopen the case. False when the case is not done.
+// one of the inbound members that counted when the case was marked done,
+// or when its remind was set: a later copy of it (a move by another
+// client stores the message anew) neither reopens the case nor ends the
+// remind. False when the case is neither done nor snoozed.
 func (c BoardCase) SeenAtDone(rfcMessageID string) bool {
 	id := boardSeenID(rfcMessageID)
 	return id != "" && c.doneSeen != "" && strings.Contains(c.doneSeen, "\n"+id+"\n")
+}
+
+// boardRemindMark starts the first line of done_seen while a remind is
+// set: the time it was set follows (the store's clock, as StoredAt), then
+// a line per Message-ID the case had then. done_seen holds nothing else
+// meanwhile: a remind clears done (migration 0017 has no column of its
+// own for it; done and a remind never stand together).
+const boardRemindMark = "~remind "
+
+// boardRemindSeen is done_seen for a remind set at set over the members:
+// the mark with the time, then the inbound members' Message-IDs as
+// boardDoneSeen lists them.
+func boardRemindSeen(set time.Time, members []BoardMember) string {
+	ids := []string{boardRemindMark + stamp(set)}
+	for i := len(members) - 1; i >= 0; i-- {
+		if m := members[i]; m.Counts && !m.Mine {
+			ids = append(ids, m.RFCMessageID)
+		}
+	}
+	return joinDoneSeen(ids)
+}
+
+// RemindSetAt is when the case's remind was set, zero when it has none,
+// is done, or was set before the store recorded the time (an older
+// daemon; a thread merge): new mail then does not end it.
+func (c BoardCase) RemindSetAt() time.Time {
+	if c.RemindAt.IsZero() || !c.DoneAt.IsZero() {
+		return time.Time{}
+	}
+	first, _, _ := strings.Cut(strings.TrimPrefix(c.doneSeen, "\n"), "\n")
+	at, ok := strings.CutPrefix(first, boardRemindMark)
+	if !ok {
+		return time.Time{}
+	}
+	return parseStamp(at)
+}
+
+// RemindedAt is when the remind came due (RemindAt) while the case is
+// live after it, zero otherwise: until the user acts on the case or new
+// mail that counts arrives.
+func (c BoardCase) RemindedAt(now time.Time) time.Time {
+	if !c.Reminded || c.RemindAt.IsZero() || c.Visibility(now) != api.BoardLive {
+		return time.Time{}
+	}
+	return c.RemindAt
 }
 
 // BoardIssueInfo is the issue behind a case, as the case last saw it.
@@ -93,12 +144,14 @@ func (c BoardCase) issueField(i int) string {
 	return [...]string{c.Issue.Key, c.Issue.Status, string(c.Issue.StatusCategory)}[i]
 }
 
-// Visibility derives where the case is listed at now.
+// Visibility derives where the case is listed at now. A remind that came
+// due is live even when the clock went back before RemindAt since: no
+// timer would end that snooze.
 func (c BoardCase) Visibility(now time.Time) api.BoardVisibility {
 	switch {
 	case !c.DoneAt.IsZero():
 		return api.BoardDone
-	case !c.RemindAt.IsZero() && c.RemindAt.After(now):
+	case !c.RemindAt.IsZero() && !c.Reminded && c.RemindAt.After(now):
 		return api.BoardSnoozed
 	}
 	return api.BoardLive
@@ -271,7 +324,8 @@ type BoardListing struct {
 // arguments: its thread has visible members (not orphaned), and the
 // effective state's window from Date holds, or something keeps it (a user
 // state, a remind, ahead or come due, an open commitment, a current
-// annotation's future deadline, a linked draft that exists), or it was
+// annotation's future deadline while the assistant preference is on, a
+// linked draft that exists), or it was
 // marked done within doneSince or links a draft that exists (a done case
 // keeps its suggested reply until the prune drops the link at the end of
 // the done retention, PruneBoardCases).
@@ -287,11 +341,11 @@ func boardShown(now time.Time, w BoardWindowDays, doneDays int, assistant bool) 
 			OR c.remind_at != ''
 			OR EXISTS (SELECT 1 FROM board_commitments k WHERE k.case_id = c.id AND k.state = 'open')
 			OR ` + boardHasDraft + `
-			OR (a.due_at IS NOT NULL AND a.due_at != '' AND a.due_at > ? AND a.input_key = c.input_key)
+			OR (? AND a.due_at IS NOT NULL AND a.due_at != '' AND a.due_at > ? AND a.input_key = c.input_key)
 			OR c.date >= CASE ` + boardEffectiveState + `
 				WHEN 'hot' THEN ? WHEN 'you' THEN ? WHEN 'them' THEN ? ELSE ? END))
 		OR (c.done_at != '' AND (c.done_at >= ? OR ` + boardHasDraft + `))))`
-	return cond, []any{n, boolInt(assistant), since(w.Hot), since(w.You), since(w.Them), since(w.Info), since(doneDays)}
+	return cond, []any{boolInt(assistant), n, boolInt(assistant), since(w.Hot), since(w.You), since(w.Them), since(w.Info), since(doneDays)}
 }
 
 // boardHasDraft: the case c links a draft that exists.
@@ -402,22 +456,113 @@ func (s *Store) SetBoardUserState(ctx context.Context, id string, state api.Boar
 		return BoardCase{}, fmt.Errorf("set board state: unknown state %q", state)
 	}
 	return s.setBoardUser(ctx, id, "set board state", func(_ *sql.Tx, c BoardCase) (string, []any, error) {
-		if c.UserState == state {
+		switch {
+		case c.UserState == state && !c.Reminded:
 			return "", nil, nil
+		case c.UserState == state:
+			return boardEndReminded, nil, nil
 		}
-		return `user_state = ?, user_state_at = ?`, []any{string(state), optStamp(now)}, nil
+		set := `user_state = ?, user_state_at = ?`
+		if c.Reminded {
+			set += ", " + boardEndReminded
+		}
+		return set, []any{string(state), optStamp(now)}, nil
 	})
 }
 
+// boardEndReminded is the SET clause that ends a remind that came due (the
+// user acted on the case): it no longer keeps the case, nor marks it as
+// reminded. done_seen held the remind's Message-IDs (a remind and done
+// never stand together).
+const boardEndReminded = `remind_at = '', reminded = 0, done_seen = CASE WHEN done_at = '' THEN '' ELSE done_seen END`
+
+// ClearBoardReminded ends a remind of the case that came due (board.unflag:
+// the user acted on it); nothing else changes, and nothing when it has
+// none. ErrNotFound for an unknown case.
+func (s *Store) ClearBoardReminded(ctx context.Context, id string) (BoardCase, error) {
+	return s.setBoardUser(ctx, id, "clear board remind", func(_ *sql.Tx, c BoardCase) (string, []any, error) {
+		if !c.Reminded {
+			return "", nil, nil
+		}
+		return boardEndReminded, nil, nil
+	})
+}
+
+// loadBoardSeenTx reads of a thread's newest visible members (as
+// loadBoardMembersTx, oldest first) only what done_seen records: the
+// Message-ID and what decides whether a member counts and is the user's
+// (boardCounts). Nothing of it is decoded, so a member row whose
+// addresses, flags or attachments do not decode cannot fail board.done or
+// board.remind; the marker names every member that counts.
+func loadBoardSeenTx(ctx context.Context, q querier, accountID, threadID string) ([]BoardMember, error) {
+	rows, err := q.QueryContext(ctx, `SELECT m.rfc_message_id, f.role, COALESCE(i.kind, ''), m.bulk`+boardMembersFrom+
+		` ORDER BY `+boardMemberOrder+` DESC, m.id DESC LIMIT ?`, accountID, threadID, boardThreadRows)
+	if err != nil {
+		return nil, fmt.Errorf("board: thread members: %w", err)
+	}
+	defer rows.Close()
+	var out []BoardMember
+	for rows.Next() {
+		var m BoardMember
+		var role, kind string
+		if err := rows.Scan(&m.RFCMessageID, &role, &kind, &m.Bulk); err != nil {
+			return nil, fmt.Errorf("board: scan member: %w", err)
+		}
+		m.Role, m.ItemKind = api.FolderRole(role), api.IssueItemKind(kind)
+		m.Mine = m.Role == api.RoleSent || m.Role == api.RoleOutbox
+		m.Counts = boardCounts(m)
+		out = append(out, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("board: thread members: %w", err)
+	}
+	slices.Reverse(out) // oldest first
+	return out, nil
+}
+
+// reopenDoneCommitmentsTx opens again the commitments that marking the case
+// done closed (closed_reason done, at or after its done time): the case is
+// live again without them having been kept.
+func reopenDoneCommitmentsTx(ctx context.Context, tx *sql.Tx, c BoardCase) error {
+	_, err := reopenDoneCommitmentsCountTx(ctx, tx, c)
+	return err
+}
+
+// reopenDoneCommitmentsCountTx is reopenDoneCommitmentsTx, reporting how
+// many it opened (DrainBoard counts them as open for kept).
+func reopenDoneCommitmentsCountTx(ctx context.Context, tx *sql.Tx, c BoardCase) (int, error) {
+	if c.DoneAt.IsZero() {
+		return 0, nil
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE board_commitments SET state = 'open', closed_reason = '', closed_at = ''
+		WHERE case_id = ? AND state = 'closed' AND closed_reason = ? AND closed_at >= ?`,
+		c.ID, api.CommitmentClosedDone, stamp(c.DoneAt))
+	if err != nil {
+		return 0, fmt.Errorf("board: reopen the commitments done closed: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("board: reopen the commitments done closed: %w", err)
+	}
+	return int(n), nil
+}
+
 // SetBoardDone marks a case done at now (clearing a remind and closing its
-// open commitments with reason done) or live again. Done records the
-// Message-IDs of the case's inbound members (BoardCase.SeenAtDone).
-// ErrNotFound for an unknown case.
+// open commitments with reason done) or live again (opening again the
+// commitments done closed). Done records the Message-IDs of the case's
+// inbound members (BoardCase.SeenAtDone). Either ends a remind that came
+// due. ErrNotFound for an unknown case.
 func (s *Store) SetBoardDone(ctx context.Context, id string, done bool, now time.Time) (BoardCase, error) {
 	return s.setBoardUser(ctx, id, "set board done", func(tx *sql.Tx, c BoardCase) (string, []any, error) {
 		if !done {
 			if c.DoneAt.IsZero() {
+				if c.Reminded {
+					return boardEndReminded, nil, nil
+				}
 				return "", nil, nil
+			}
+			if err := reopenDoneCommitmentsTx(ctx, tx, c); err != nil {
+				return "", nil, err
 			}
 			return `done_at = '', done_seen = ''`, nil, nil
 		}
@@ -428,7 +573,7 @@ func (s *Store) SetBoardDone(ctx context.Context, id string, done bool, now time
 		if !c.DoneAt.IsZero() && c.RemindAt.IsZero() {
 			return "", nil, nil
 		}
-		members, _, err := loadBoardMembersTx(ctx, tx, c.AccountID, c.ThreadID, boardThreadRows)
+		members, err := loadBoardSeenTx(ctx, tx, c.AccountID, c.ThreadID)
 		if err != nil {
 			return "", nil, fmt.Errorf("set board done: %w", err)
 		}
@@ -437,20 +582,33 @@ func (s *Store) SetBoardDone(ctx context.Context, id string, done bool, now time
 }
 
 // SetBoardRemind snoozes a case until (zero: no more, which also lets a
-// remind that came due stop keeping the case), clearing done. ErrNotFound
-// for an unknown case. The caller checks that until lies ahead.
+// remind that came due stop keeping the case), clearing done (and opening
+// again the commitments done closed). It records when it was set and the
+// Message-IDs of the case's inbound members then (BoardCase.RemindSetAt):
+// inbound mail that counts stored later ends the remind (DrainBoard).
+// ErrNotFound for an unknown case. The caller checks that until lies
+// ahead.
 func (s *Store) SetBoardRemind(ctx context.Context, id string, until time.Time) (BoardCase, error) {
-	return s.setBoardUser(ctx, id, "set board remind", func(_ *sql.Tx, c BoardCase) (string, []any, error) {
+	return s.setBoardUser(ctx, id, "set board remind", func(tx *sql.Tx, c BoardCase) (string, []any, error) {
 		if until.IsZero() {
 			if c.RemindAt.IsZero() {
 				return "", nil, nil
 			}
-			return `remind_at = '', reminded = 0`, nil, nil
+			return boardEndReminded, nil, nil
 		}
 		if c.RemindAt.Equal(until) && !c.Reminded && c.DoneAt.IsZero() {
 			return "", nil, nil
 		}
-		return `remind_at = ?, reminded = 0, done_at = '', done_seen = ''`, []any{stamp(until)}, nil
+		if err := reopenDoneCommitmentsTx(ctx, tx, c); err != nil {
+			return "", nil, err
+		}
+		members, err := loadBoardSeenTx(ctx, tx, c.AccountID, c.ThreadID)
+		if err != nil {
+			return "", nil, fmt.Errorf("set board remind: %w", err)
+		}
+		// The store's clock, as the members' StoredAt.
+		set := parseStamp(nowStamp())
+		return `remind_at = ?, reminded = 0, done_at = '', done_seen = ?`, []any{stamp(until), boardRemindSeen(set, members)}, nil
 	})
 }
 
@@ -611,7 +769,7 @@ func boardQueueWhere(q BoardQueueQuery) (string, []any) {
 	shown, shownArgs := boardShown(q.Now, q.Windows, 0, false)
 	where := ` FROM board_cases c LEFT JOIN board_annotations a ON a.case_id = c.id
 		WHERE c.account_id IN (` + inPlaceholders(len(q.AccountIDs)) + `)
-			AND c.done_at = '' AND (c.remind_at = '' OR c.remind_at <= ?)
+			AND c.done_at = '' AND (c.remind_at = '' OR c.reminded = 1 OR c.remind_at <= ?)
 			AND (a.case_id IS NULL OR a.input_key != c.input_key)
 			AND NOT EXISTS (SELECT 1 FROM board_dirty x WHERE x.account_id = c.account_id AND x.thread_id = c.thread_id)
 			AND ` + shown

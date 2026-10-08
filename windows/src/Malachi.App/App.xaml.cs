@@ -180,6 +180,10 @@ public partial class App : Application
             {
                 // The board's inline replies first, while the connection stands.
                 BoardReplies = main.FinishBoardRepliesForQuitAsync,
+                // A session end settles them without a question, bounded.
+                SettleBoardReplies = main.SettleBoardRepliesAsync,
+                // A Quit the user abandoned: the board shows its replies again.
+                Abandoned = main.QuitAbandoned,
                 SaveDrafts = integration.Compose.SaveForQuitAsync,
                 BeginStopping = () =>
                 {
@@ -199,6 +203,10 @@ public partial class App : Application
                 // The board's triage: no new run, one under way ends with its
                 // board.runEnd while the connection stands (at most 2 s).
                 StopTriage = s.StopBoardTriageAsync,
+                // The suggested reply under way stops and deletes a draft it
+                // did not link yet; past the point of no return only, so an
+                // abandoned Quit leaves it running.
+                EndBoardReply = () => s.BoardReply.CancelAndCleanUpAsync(),
                 StopDaemon = s.Connection.StopAsync,
                 Release = () =>
                 {

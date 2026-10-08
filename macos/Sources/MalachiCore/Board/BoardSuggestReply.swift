@@ -24,6 +24,8 @@ extension Board {
         case backend
         /// The model finished without creating a draft.
         case noDraft
+        /// The assistant's usage limit was reached.
+        case limit
     }
 
     /// What the application's one suggested reply is doing.
@@ -57,6 +59,23 @@ extension Board {
         return c.issue == nil
     }
 
+    /// Whether rule code `r` makes the case's reply target the user's own
+    /// last message (`them.*`): a suggested reply there is a follow-up, a
+    /// nudge on that message, not an answer.
+    public static func isFollowUpReason(_ r: BoardReason) -> Bool { r.rawValue.hasPrefix("them.") }
+
+    /// Whether the suggested reply of `c` is a follow-up: the state the
+    /// client shows for it (`state(of:annotated:)`: the user's choice, else
+    /// the assistant's annotation when `annotated` and it is not stale,
+    /// else the rules') is Them. The control reads `Text.suggestFollowUp`
+    /// and the request tells the assistant it nudges the user's own
+    /// message. By the effective state, not the rule code (Go
+    /// `IsFollowUp`): a them.replied case the user moved to You is not a
+    /// follow-up, a case the user keeps in Them is.
+    public static func isFollowUp(_ c: Case, annotated: Bool) -> Bool {
+        state(of: c, annotated: annotated) == .them
+    }
+
     /// What `suggestReplyView` looks at.
     public struct SuggestReplyInputs: Sendable, Equatable {
         public var provider: AssistantProviderID = .claude
@@ -72,11 +91,16 @@ extension Board {
         public var state: SuggestReplyState
         /// The case shown.
         public var caseID: CaseID
+        /// `isFollowUp` for the case shown: the button reads
+        /// `Text.suggestFollowUp`.
+        public var followUp: Bool
 
         public init(
-            offered: Bool, available: Bool, claudeFound: Bool, signedIn: Bool?, state: SuggestReplyState, caseID: CaseID, provider: AssistantProviderID = .claude
+            offered: Bool, available: Bool, claudeFound: Bool, signedIn: Bool?, state: SuggestReplyState, caseID: CaseID,
+            provider: AssistantProviderID = .claude, followUp: Bool = false
         ) {
             self.provider = provider
+            self.followUp = followUp
             self.offered = offered
             self.available = available
             self.claudeFound = claudeFound
@@ -119,7 +143,7 @@ extension Board {
     public static func suggestReplyView(_ i: SuggestReplyInputs) -> SuggestReplyView {
         guard i.offered, i.available else { return .hidden }
         var v = SuggestReplyView(
-            shown: true, enabled: true, running: false, note: "", noteIsFailure: false, title: Text.suggestReply,
+            shown: true, enabled: true, running: false, note: "", noteIsFailure: false, title: Text.suggestReplyTitle(followUp: i.followUp),
             placeholder: Text.suggestReplyPlaceholder, progress: Text.suggestReplyRunning,
             stop: Assistant.panelTexts().stop)
         switch i.state {

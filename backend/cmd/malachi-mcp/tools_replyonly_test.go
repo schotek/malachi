@@ -4,8 +4,10 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -172,4 +174,47 @@ func TestAnnotateCaseKeepsExistingDraft(t *testing.T) {
 	mustNotContain(t, out, "reply draft d1 linked")
 	out = h.ok(t, "annotate_case", map[string]any{"caseId": fxCaseWithDraft, "inputKey": fxInputKey})
 	mustNotContain(t, out, "NOT linked")
+}
+
+// A draft.save whose answer is lost (the call ended after the request went
+// out) may have stored the draft: the one draft is used up, never a second.
+func TestReplyOnlyLostAnswerUsesUpTheDraft(t *testing.T) {
+	fb := newFixture()
+	h := newReplyOnlyHarness(t, fb, config{replyOnly: "m1"})
+	fb.mu.Lock()
+	fb.delay = map[string]time.Duration{api.MethodDraftSave: 400 * time.Millisecond}
+	fb.mu.Unlock()
+	ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
+	defer cancel()
+	res, _, err := h.b.createDraft(ctx, nil, createDraftIn{AccountID: "a1", Mode: "reply", MessageID: "m1", Body: "Thanks"})
+	if err != nil || res == nil || !res.IsError {
+		t.Fatalf("lost answer: %+v %v", res, err)
+	}
+	mustContain(t, textOf(res), "may have been stored all the same")
+	fb.mu.Lock()
+	fb.delay = nil
+	fb.mu.Unlock()
+	h.fail(t, "create_draft", map[string]any{"accountId": "a1", "mode": "reply", "messageId": "m1", "body": "Again"}, replyOnlyDoneRefusal)
+
+	// A daemon's own refusal of draft.save stored nothing: the draft is free.
+	fb2 := newFixture()
+	h2 := newReplyOnlyHarness(t, fb2, config{replyOnly: "m1"})
+	fb2.setFail(api.MethodDraftSave, api.NewError(api.CodeStorageError, "disk"))
+	out := h2.fail(t, "create_draft", map[string]any{"accountId": "a1", "mode": "reply", "messageId": "m1", "body": "Thanks"}, "storageError")
+	mustNotContain(t, out, "may have been stored")
+	fb2.setFail(api.MethodDraftSave, nil)
+	mustContain(t, h2.ok(t, "create_draft", map[string]any{"accountId": "a1", "mode": "reply", "messageId": "m1", "body": "Thanks"}), "draft d2 ")
+}
+
+// --reply-only still registers the read tools: the restriction of the
+// suggested reply to read_message, list_messages and create_draft is the
+// client's allow-list (--allowedTools, the Codex gateway), not the bridge.
+func TestReplyOnlyKeepsReadTools(t *testing.T) {
+	h := newReplyOnlyHarness(t, newFixture(), config{replyOnly: "m1"})
+	tools := listTools(t, h.cs)
+	for _, name := range []string{"list_accounts", "list_folders", "list_messages", "search_messages", "read_message", "get_attachment", "list_board", "sync_status", "trigger_sync", "create_draft"} {
+		if _, ok := tools[name]; !ok {
+			t.Errorf("tool %s not registered under --reply-only", name)
+		}
+	}
 }

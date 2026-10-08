@@ -56,6 +56,23 @@ final class BoardDetailViewController: NSViewController {
     /// The state pill, the first control worth the keyboard.
     var focusTarget: NSView? { statePill }
 
+    /// Where Remind…'s menu opens for the key R: the action bar's button,
+    /// or the state pill while the button gave way.
+    var remindAnchor: NSView? {
+        presentation == .panel && !remindButton.isHiddenOrHasHiddenAncestor ? remindButton : statePill
+    }
+
+    /// Escape in the inline editor or a recipient field: the keyboard goes
+    /// to the state pill (`Board.EscapeTarget.focusStatePill`); false when
+    /// the detail has none to give it to.
+    @discardableResult
+    func focusStatePill() -> Bool {
+        guard isViewLoaded, let window = view.window, let statePill, !statePill.isHiddenOrHasHiddenAncestor else {
+            return false
+        }
+        return window.makeFirstResponder(statePill)
+    }
+
     /// The panel's column: at its leading edge, under the action bar's
     /// buttons, up to here.
     private static let panelWidth: CGFloat = 760
@@ -299,7 +316,16 @@ final class BoardDetailViewController: NSViewController {
             built = key
             shownWhy = why
             let focus = focusedControl()
-            rebuild(detail, why: why)
+            if sameCase, owns(focusIn: replySlot) {
+                // The user types in the inline reply under `upper`: a
+                // rebuild that changes its height (the notes arrived, the
+                // due label rolled over) moves the scroll position with
+                // it, as a card's height change does, so the editor stays
+                // where it is on screen.
+                keepingReplySlotInPlace { rebuild(detail, why: why) }
+            } else {
+                rebuild(detail, why: why)
+            }
             restore(focus)
             renderSlot()
             conversation.apply(detail)
@@ -420,9 +446,12 @@ final class BoardDetailViewController: NSViewController {
         let suggest = d.map { actions.suggestReplyView($0.id) } ?? .hidden
         defer { unsavedNote?.isHidden = !unsaved }
         if state == shownSlot, pane.map({ $0.view.isDescendant(of: replySlot) }) ?? true {
-            if state == .suggest, let d, suggest != shownSuggest {
+            if state == .suggest || state == .failed(retry: false), let d, suggest != shownSuggest {
                 shownSuggest = suggest
                 suggestControl.apply(suggest, case: d.id)
+                if state != .suggest {
+                    suggestBox.isHidden = !suggest.shown
+                }
             }
             return
         }
@@ -443,11 +472,19 @@ final class BoardDetailViewController: NSViewController {
             case .suggest:
                 shownSuggest = suggest
                 suggestControl.apply(suggest, case: d.id)
+                suggestBox.isHidden = false
                 replySlot.addArrangedSubview(suggestBox)
             case .loading:
                 replySlot.addArrangedSubview(replyNoteBox(loading: true, retry: false))
             case .failed(let retry):
                 replySlot.addArrangedSubview(replyNoteBox(loading: false, retry: retry))
+                // A reply deleted elsewhere: a new one can be suggested.
+                if !retry {
+                    shownSuggest = suggest
+                    suggestControl.apply(suggest, case: d.id)
+                    suggestBox.isHidden = !suggest.shown
+                    replySlot.addArrangedSubview(suggestBox)
+                }
             case .editor:
                 if let pane {
                     replySlot.addArrangedSubview(editorBox(pane))
@@ -568,6 +605,10 @@ final class BoardDetailViewController: NSViewController {
         }
         statePill = pill
         flow.addView(sized(pill))
+        // Reminded, New contact: beside the state, in the tags' style.
+        for badge in d.badges {
+            flow.addView(sized(BoardTag.badge(badge)))
+        }
         if !d.remindText.isEmpty {
             // "Back on the board Tomorrow 09:00", beside the state.
             let remind = NSTextField(labelWithString: d.remindText)
@@ -603,6 +644,10 @@ final class BoardDetailViewController: NSViewController {
         if !d.sourceText.isEmpty {
             views.append(wrappingLabel(d.sourceText, font: Typo.caption, color: Tint.secondary))
         }
+        // A reminder come due, the user's decision that keeps the case.
+        for note in d.whyNotes {
+            views.append(wrappingLabel(note, font: Typo.caption, color: Tint.secondary))
+        }
         let column = FillStackView(fillingViews: views)
         column.spacing = 4
         let card = CalloutCard()
@@ -619,7 +664,7 @@ final class BoardDetailViewController: NSViewController {
     }
 
     private func titleBlock(_ d: Board.Detail) -> NSView {
-        let meta = [d.person, d.time].filter { !$0.isEmpty }.joined(separator: " · ")
+        let meta = d.byline
         var views: [NSView] = []
         if !meta.isEmpty {
             views.append(wrappingLabel(meta, font: Typo.caption, color: Tint.secondary))
@@ -896,6 +941,28 @@ final class BoardDetailViewController: NSViewController {
     }
 
     private var compensationDepth = 0
+
+    /// Runs `change` (a rebuild of `upper`) and scrolls by as much as it
+    /// moved the reply slot, so the inline editor that has the keyboard
+    /// stays where it is on screen. The document is flipped: a taller
+    /// `upper` moves the slot down, and the view follows it down.
+    private func keepingReplySlotInPlace(_ change: () -> Void) {
+        guard replySlot.window != nil else {
+            change()
+            return
+        }
+        let clip = scroll.contentView
+        let before = replySlot.convert(replySlot.bounds, to: document).minY
+        change()
+        view.layoutSubtreeIfNeeded()
+        let delta = replySlot.convert(replySlot.bounds, to: document).minY - before
+        guard abs(delta) >= 0.5 else { return }
+        let maxTop = max(0, document.frame.height - clip.bounds.height)
+        let target = min(max(0, clip.bounds.minY + delta), maxTop)
+        guard abs(target - clip.bounds.minY) >= 0.5 else { return }
+        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: target))
+        scroll.reflectScrolledClipView(clip)
+    }
 }
 
 /// A rounded box around `content` with a fill and a border whose colours

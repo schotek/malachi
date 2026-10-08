@@ -34,6 +34,8 @@ extension Integration {
         let windows = windows
         mainWindow.boardActions.mailBodies = BoardMailBodies(
             cache: cache, settings: state.settings, track: { windows.track(display: $0) })
+        // Open at Launch and Show the Board, now that the board can act.
+        mainWindow.setupModeMemory()
     }
 
     /// Selects message `message` in `folder` (its own folder, looked up,

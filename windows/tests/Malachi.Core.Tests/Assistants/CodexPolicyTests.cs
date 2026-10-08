@@ -356,6 +356,28 @@ public sealed class CodexPolicyTests
         }
     }
 
+    /// <summary>A failure of one turn is gone once the next turn starts (Go <c>inferenceGate.newTurn</c>).</summary>
+    [Fact]
+    public async Task NewTurnForgetsTheFailureOfTheTurnBefore()
+    {
+        await using var gate = new CodexInferenceGate(new Tokens(), [], new RefusingHandler());
+        using var local = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, gate.BaseUrl + "/responses");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", gate.Credential);
+        request.Content = new StringContent("{\"input\":[{\"role\":\"user\",\"content\":\"synthetic\"}],\"tools\":[]}", Encoding.UTF8, "application/json");
+        using var response = await local.SendAsync(request, TestContext.Current.CancellationToken);
+        await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("chatgpt_usage_limit", gate.LastFailure);
+        gate.NewTurn();
+        Assert.Null(gate.LastFailure);
+    }
+
+    private sealed class RefusingHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.TooManyRequests) { Content = new StringContent("{}") });
+    }
+
     private sealed class StreamShapeHandler(string? mime, string body) : HttpMessageHandler
     {
         public bool AcceptedSse { get; private set; }

@@ -71,3 +71,38 @@ func TestUsageTally(t *testing.T) {
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+func TestUsageTallyLowerBound(t *testing.T) {
+	final := func(id string, in int64) Event {
+		return Event{Kind: EventOther, MessageID: id, Usage: &Usage{InputTokens: in, OutputTokens: 1}, UsageFinal: true}
+	}
+	tests := []struct {
+		name     string
+		lines    []string
+		events   []Event
+		finished bool
+		want     bool
+	}{
+		{"nothing", nil, nil, false, false},
+		{"the result's usage is whole", []string{lineSplitThinking, lineSplitTool, lineResultUsage}, nil, false, false},
+		{"stopped before the result", []string{lineAssistant, lineSplitThinking}, nil, false, true},
+		{"answered without a result usage: placeholders", []string{lineAssistant}, nil, true, true},
+		{"a zeroed result gives way to placeholders", []string{lineAssistant, lineMaxTurns}, nil, true, true},
+		{"final messages of a finished run", nil, []Event{final("r1", 5), final("r2", 7)}, true, false},
+		{"final messages of a run that never finished", nil, []Event{final("r1", 5)}, false, true},
+		{"one message not final", nil, []Event{final("r1", 5), {Kind: EventOther, MessageID: "r2", Usage: &Usage{InputTokens: 1}}}, true, true},
+		{"a placeholder later made final", nil, []Event{{Kind: EventOther, MessageID: "r1", Usage: &Usage{InputTokens: 1}}, final("r1", 5)}, true, false},
+	}
+	for _, tt := range tests {
+		u := tally(t, tt.lines...)
+		for _, e := range tt.events {
+			u.Add(e)
+		}
+		if tt.finished {
+			u.Finished()
+		}
+		if got := u.LowerBound(); got != tt.want {
+			t.Errorf("%s: LowerBound = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}

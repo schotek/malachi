@@ -112,16 +112,22 @@ func revealRowKeys(msg api.MessageID, thread api.ThreadID) []listKey {
 }
 
 // showInMail is win.board-show-in-mail and the row context menu's: d is
-// the selected case. The samples never link a message (Detail.Reply is
-// nil): a placeholder toast, like the board's other not-yet-real actions
-// (board.Later).
+// the selected case. It shows the message a reply would answer, else the
+// case's newest (boardRevealTarget, as macOS's reply ?? latestMessage).
+// Only the samples, which link no message, say it is not there yet
+// (board.Later); a real case without either has the action disabled.
 func (p *boardPage) showInMail(d board.Detail) {
 	w := p.w
-	if d.Reply == nil {
+	if p.daemon == nil {
+		// The samples' ids are invented: never asked of the daemon.
 		w.Toast(board.Later(i18n.Tr))
 		return
 	}
-	acc, msg, thread, fallbackFolder := d.AccountID, d.Reply.Message, d.Thread, d.Reply.Folder
+	msg, fallbackFolder, ok := boardRevealTarget(d)
+	if !ok {
+		return
+	}
+	acc, thread := d.AccountID, d.Thread
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 		defer cancel()
@@ -144,6 +150,19 @@ func (p *boardPage) showInMail(d board.Detail) {
 			p.reveal.start(w, folderKey{Account: acc, Folder: folder}, msg, thread)
 		})
 	}()
+}
+
+// boardRevealTarget is the message Show in Mail looks for in d: the reply
+// target with its folder, else the newest message (its folder comes from
+// message.get alone); false for neither.
+func boardRevealTarget(d board.Detail) (api.MessageID, api.FolderID, bool) {
+	if d.Reply != nil && d.Reply.Message != "" {
+		return d.Reply.Message, d.Reply.Folder, true
+	}
+	if d.LatestMessage != "" {
+		return d.LatestMessage, "", true
+	}
+	return "", "", false
 }
 
 // revealGone reports message.get saying the message is gone outright

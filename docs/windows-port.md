@@ -2602,10 +2602,13 @@ from macOS with GTK as the behaviour reference, and the rule that Go wins
 where the two differ. It is a second mode of the main window: Mail shows
 the panes, Board shows `BoardPage` in their place, and the status line
 stays. The hidden mode keeps its state (folder, selection, scroll, search,
-the assistant's transcript; the Board's style), the mode is not remembered
-(`Board.InitialMode`), and nothing reaches it from a key: the switch is the
-two-segment control at the start of the title bar, and `Mail` and `Board`
-are in the sidebar's `…` menu and the Board's own (README, deviations).
+the assistant's transcript; the Board's style), the mode is remembered only
+for *Open at Launch* (below). The switch is the two-segment control at the
+start of the title bar, `Mail` and `Board` are in the sidebar's `…` menu and
+the Board's own (README, deviations), and Ctrl+1 and Ctrl+2 are the commands
+`ShortcutCommand.ShowMail` and `ShowBoard` of `ShortcutMap`, run by the
+`CommandRouter` (root accelerators, and the WebView2 keys while a page has the
+keyboard).
 
 **Layers.** As everywhere, three:
 
@@ -2645,8 +2648,10 @@ are in the sidebar's `…` menu and the Board's own (README, deviations).
    (the page's bar, notice, the triage strip, the one detail view and the
    sliding panel; the page is the controller's only listener), the three
    styles behind `IBoardStyleContent` (`BoardListView` with `BoardNavView`,
-   `BoardColumnsView`, `BoardTodayView`; each replaces only the rows that
-   changed, so the scroll position and the selection stay), `BoardDetailView`
+   `BoardColumnsView`, `BoardTodayView`; the List's sections are
+   `BoardListGroup`, an `ObservableCollection` per section that `Sync`s and
+   `Update`s its rows in place, with one `ItemsSource` set once and the focus
+   restored, so the scroll position and the selection stay), `BoardDetailView`
    (the upper part is filled anew per case and keeps `ReplySlot` and
    `ConversationSlot` outside that, parts of `IBoardDetailPart` that follow
    the case in place), `BoardActions` and `BoardCaseMenu`, and, in the window,
@@ -2688,7 +2693,7 @@ being visible (another selection, Mail mode, a hidden window) is saved
 first; one that could not be saved or sent stays and tries again. The samples
 have no draft behind them and keep a static block (`BoardSampleReply`).
 
-**Quitting.** `QuitSteps` has two new steps. `BoardReplies` runs first, while
+**Quitting.** `QuitSteps` has two new steps. `SettleBoardReplies` runs first, while
 the connection stands: the panes settle, and a reply that could not be saved
 or sent asks *Quit without saving a reply?* (*Quit Anyway* or Cancel, which
 keeps the app running and abandons the quit); a session end overtaking the
@@ -2719,8 +2724,8 @@ New Message stay, F10 opens the Board's menu. Up and Down step through rows
 past headings and placeholders; Left and Right in Columns follow
 `Board.SidewaysTarget` (ported from GTK's `columns_key.go`, which came with
 the same fix there: `board_keys.go` and `columns_key.go` give Columns and
-Today the keyboard); Return selects the focused card, Escape closes the
-panel. Ctrl+Enter and Ctrl+S of the inline editor are not chords of the main
+Today the keyboard); Return selects the focused card, and Escape goes in two
+steps (below). Ctrl+Enter and Ctrl+S of the inline editor are not chords of the main
 window: `ShortcutMap` resolves them to the compose commands only when the
 context is the main window with `EditorFocused`, and with the keyboard
 elsewhere in the pane the pane's own `KeyboardAccelerator`s run them.
@@ -2734,6 +2739,49 @@ the one the in-app assistant uses: Claude Code with the Board's own model
 integration.md §11) with `board-triage-chatgpt-model` and its own consent
 version. `AppState.Triage` holds one controller and one scheduler for the
 application, started at launch without a first entry into the Board.
+
+**Round of 2026-10-08.** The fix round adds, ported from GTK and mirrored in
+Core: a *Reminded* badge and a *New contact* badge beside the state pill
+(rows, cards and detail; `Row.Badges`, `Detail.Badges`), a *Why is this here?*
+note and a byline in the detail (`Detail.WhyNotes`, `Detail.Byline`), and a
+*Snoozed* nav item (`FilterKind.Snoozed`). Archive shows an InfoBar with *Undo*
+for 8 seconds, which calls `UndoArchive` (the messages go back to their
+folders, the case back to the Board). *Suggest Follow-up* drafts a follow-up
+for a case whose reason asks for one (`Board.IsFollowUpReason`). Escape goes in
+two steps through `Board.EscapeFor` in the page's `KeyDown`: an open popup
+closes first, the keyboard in the inline reply or its recipient fields goes to
+the state pill, and anywhere else the panel closes. Ctrl+1 and Ctrl+2 switch
+the mode through `ShortcutMap` and the `CommandRouter` like every window
+shortcut; only E, D and R, which act on the selected case, go through
+`Board.KeyFor`.
+The style, the account filter and the mode are remembered (`BoardLastStyle`,
+`BoardAccountFilter`, `BoardLastMode`), and *Open at Launch* takes Mail, Board
+or the last mode (`Board.StartMode`). *Preferences → General* has a Board group
+in `Preferences/GeneralPage.Board.cs` (*Show the Board*, *Board View*, *Open at
+Launch*, *Keep cases for*); *Preferences → AI* has *Triage These Accounts*, a
+checklist of the accounts (`account.list`, none checked means all). Quit's
+board steps are `SettleBoardReplies` (the panes settle first, bounded, with no
+question when the session ends) and `EndBoardReply` (after `StopTriage`); an
+abandoned Quit re-syncs the Board's parts (`Abandoned`), and the question's
+heading is `Board.Text.QuitHeading(unsaved, sending)`. The Codex provider
+reports its failures as `ProviderFailure` codes, and the panel offers
+*Reconnect to ChatGPT* for an expired sign-in (written by package F3, not yet
+built).
+
+**Verification status (2026-10-08).** Everything in this round was written on
+a Mac without .NET, so none of it is compiled or run yet. It awaits
+`build.ps1 app`, `build.ps1 test` (the Board filters, `StringsCheckTests`,
+`GschemaCoverageTests`, `QuitSequenceTests`, `ApiCodingTests`, and
+`SettingsTests` with its schema count of 42), `build.ps1 lint`, the UI smoke
+tests and a hand pass of the new keys, Archive's Undo and the quit question.
+The compile risks the packages named: the `Nick` extension members of
+`Board.Mode`, `Board.StartChoice` and `Board.DefaultStyle` (one name on three
+receivers, C# 14 extension blocks); a `Board` member inside `Board.StartChoice`
+beside the class `Board`; collection expressions inside tuple literals in the
+tests; `BoardListGroup`, an `ObservableCollection` subclass (CA1710 suffix);
+the `{Binding}` badge template in `BoardStyles.xaml`; and the `InfoBar.Closed`,
+`NumberBox.ValueChanged` and `SettingBindings.Choice` uses over the new Board
+enums.
 
 **Verified, and not.** Written and driven through UI Automation over sample
 data (`MALACHI_BOARD_SAMPLES=1`) and a devmail account by the port's agents;

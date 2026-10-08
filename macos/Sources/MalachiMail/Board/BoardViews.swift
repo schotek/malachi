@@ -54,6 +54,22 @@ enum BoardTag {
         pill.isHidden = key.isEmpty
     }
 
+    /// A badge of a case (Reminded, New contact: `Row.badges`,
+    /// `Detail.badges`), in the accent's colours, semibold as the due chip.
+    static func badge(_ text: String = "") -> PillLabel {
+        let pill = make()
+        pill.font = .systemFont(ofSize: Typo.captionSize, weight: .semibold)
+        setBadge(pill, text)
+        paint(pill, BoardPalette.badgeColours, emphasized: false)
+        return pill
+    }
+
+    static func setBadge(_ pill: PillLabel, _ text: String) {
+        pill.setText(text, maxCharacters: 24)
+        pill.toolTip = nil
+        pill.isHidden = text.isEmpty
+    }
+
     /// The message count's text ("3 messages") in the caption.
     static func count(_ text: String = "") -> NSTextField {
         let label = NSTextField(labelWithString: text)
@@ -142,6 +158,9 @@ final class BoardCaseContentView: NSTableCellView {
     private let account = BoardTag.account()
     private let issue = BoardTag.issue()
     private let due = BoardTag.due()
+    /// The case's badges (`Row.badges`: Reminded, New contact), at most
+    /// two, hidden while empty.
+    private let badges = [BoardTag.badge(), BoardTag.badge()]
     /// When a snoozed case comes back (`Row.remind`), in the meta line.
     private let remind = NSTextField(labelWithString: "")
     private let attachment = NSImageView()
@@ -205,7 +224,7 @@ final class BoardCaseContentView: NSTableCellView {
         let titleLine: NSView
         if compact {
             // Title (with the chip) and time, then the detail line.
-            top = NSStackView(views: [mark, title, due, time])
+            top = NSStackView(views: [mark, title] + badges + [due, time])
             top.setCustomSpacing(BoardAssistantMark.gap, after: mark)
             lines = [top, snippet]
             titleLine = top
@@ -216,7 +235,7 @@ final class BoardCaseContentView: NSTableCellView {
             remind.isSelectable = false
             remind.isHidden = true
             remind.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-            let meta = NSStackView(views: [account, issue, due, remind, attachment, count])
+            let meta = NSStackView(views: badges + [account, issue, due, remind, attachment, count])
             meta.orientation = .horizontal
             meta.alignment = .centerY
             meta.spacing = BoardMetrics.itemGap
@@ -281,7 +300,7 @@ final class BoardCaseContentView: NSTableCellView {
         // row view around it is the row).
         setAccessibilityElement(true)
         for v in [bar, person, time, mark, title, titleLine, snippet, account, issue, due, remind, attachment, count, column, content]
-            as [NSView]
+            as [NSView] + badges
         {
             v.setAccessibilityElement(false)
         }
@@ -316,6 +335,9 @@ final class BoardCaseContentView: NSTableCellView {
         title.stringValue = row.title
         mark.isHidden = !row.marksAssistant
         BoardTag.setDue(due, row.due)
+        for (i, pill) in badges.enumerated() {
+            BoardTag.setBadge(pill, i < row.badges.count ? row.badges[i] : "")
+        }
         if compact {
             // "person · account · snippet", the empty parts left out.
             snippet.stringValue = [row.person, row.account, row.snippet].filter { !$0.isEmpty }.joined(separator: " · ")
@@ -360,6 +382,9 @@ final class BoardCaseContentView: NSTableCellView {
         BoardTag.paint(account, BoardPalette.accountColours, emphasized: emphasized)
         BoardTag.paint(issue, IssuePill.colours(issueStyle), emphasized: emphasized)
         BoardTag.paint(due, BoardPalette.dueColours, emphasized: emphasized)
+        for pill in badges {
+            BoardTag.paint(pill, BoardPalette.badgeColours, emphasized: emphasized)
+        }
     }
 
     override func layout() {

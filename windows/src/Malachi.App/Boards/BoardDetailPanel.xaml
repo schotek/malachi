@@ -9,8 +9,8 @@ board_panel_split of ui/data/ui/board_page.blp and window/board_panel.go.
 The selected case's detail sliding in from the trailing edge over Columns,
 Today and the narrow List: up to 640 wide, leaving 40 of the page beside
 it, on the window's solid background with a border towards the page. The
-page moves its one detail view into Host while the panel shows; Escape
-closes it.
+page moves its one detail view into Host while the panel shows; the
+page's Escape closes it (Board.EscapeFor).
 -->
 <UserControl
     x:Class="Malachi.App.Boards.BoardDetailPanel"
@@ -19,7 +19,6 @@ closes it.
     HorizontalAlignment="Right"
     AutomationProperties.AutomationId="BoardPanel"
     IsTabStop="False"
-    PreviewKeyDown="OnPreviewKeyDown"
     Visibility="Collapsed">
     <UserControl.Transitions>
         <TransitionCollection>

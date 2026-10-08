@@ -3,7 +3,11 @@
 
 // Port of macos/Sources/MalachiCore/Assistant/AssistantUsage.swift
 // (Assistant.UsageTally, maxUsageTokens, addTokens); GTK:
-// ui/internal/assistant/usage.go (UsageTally, MaxUsageTokens). Swift's
+// ui/internal/assistant/usage.go (UsageTally, Finished, LowerBound,
+// MaxUsageTokens). Go's Event.UsageFinal (a provider that reports each
+// message's whole usage at its end) has no counterpart here: the Windows
+// Codex session reports its turn's total with its result, which the tally
+// takes, so every message usage counted here is partial. Swift's
 // mutating struct is a class here: one tally per run, filled on the UI
 // thread. This file holds no translatable text.
 
@@ -24,11 +28,44 @@ namespace Malachi.Core.Assistants;
 /// are the placeholders of the messages' starts. A result whose counters are
 /// all 0 while the messages counted some (Claude Code's crash result may be
 /// zeroed) gives way to that sum. A new tally is empty.
+/// <see cref="LowerBound"/> says whether <see cref="Total"/> is less than
+/// the run used.
 /// </remarks>
 public sealed class AssistantUsageTally
 {
     private readonly Dictionary<string, AssistantUsage> messages = new(StringComparer.Ordinal);
     private AssistantUsage? result;
+    private readonly HashSet<string> partial = new(StringComparer.Ordinal);
+    private bool finished;
+
+    /// <summary>
+    /// Whether <see cref="Total"/> is a lower bound of what the run used: true
+    /// unless the result's usage was taken (or nothing was counted); the
+    /// messages' sum stays a lower bound even after <see cref="Finished"/>,
+    /// since no message usage counted here is final.
+    /// </summary>
+    public bool LowerBound => !ResultTaken && messages.Count > 0 && (!finished || partial.Count > 0);
+
+    /// <summary>Says the run's final report came (the request answered).</summary>
+    public void Finished() => finished = true;
+
+    // Whether Total is the result's usage.
+    private bool ResultTaken => result is { } r && (!r.IsZero || Sum().IsZero);
+
+    // The usage of the messages counted.
+    private AssistantUsage Sum()
+    {
+        var sum = default(AssistantUsage);
+        foreach (var u in messages.Values)
+        {
+            sum = new AssistantUsage(
+                AddTokens(sum.InputTokens, u.InputTokens),
+                AddTokens(sum.OutputTokens, u.OutputTokens),
+                AddTokens(sum.CacheCreationInputTokens, u.CacheCreationInputTokens),
+                AddTokens(sum.CacheReadInputTokens, u.CacheReadInputTokens));
+        }
+        return sum;
+    }
 
     /// <summary>
     /// The run's usage, each counter at most
@@ -38,16 +75,8 @@ public sealed class AssistantUsageTally
     {
         get
         {
-            var sum = default(AssistantUsage);
-            foreach (var u in messages.Values)
-            {
-                sum = new AssistantUsage(
-                    AddTokens(sum.InputTokens, u.InputTokens),
-                    AddTokens(sum.OutputTokens, u.OutputTokens),
-                    AddTokens(sum.CacheCreationInputTokens, u.CacheCreationInputTokens),
-                    AddTokens(sum.CacheReadInputTokens, u.CacheReadInputTokens));
-            }
-            if (result is { } r && (!r.IsZero || sum.IsZero))
+            var sum = Sum();
+            if (ResultTaken && result is { } r)
             {
                 return new AssistantUsage(
                     AddTokens(0, r.InputTokens),
@@ -77,6 +106,8 @@ public sealed class AssistantUsageTally
             return;
         }
         messages[e.MessageId] = u;
+        // Not a message's final usage (see the file's note).
+        partial.Add(e.MessageId);
     }
 
     /// <summary>a + b of two counters from 0 up, at most <see cref="Assistant.MaxUsageTokens"/>.</summary>

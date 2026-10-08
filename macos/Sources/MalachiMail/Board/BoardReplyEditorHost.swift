@@ -66,6 +66,13 @@ final class BoardReplyEditorHost {
     private var heights: [ObjectIdentifier: CGFloat] = [:]
     /// The page is out of the window (Mail mode, a closed window).
     private var suspended = false
+    /// `suspended` before the quit's `finishAll`, which its Cancel puts
+    /// back (`resumeAll`).
+    private var suspendedBeforeQuit = false
+    /// The presentation that showed the selected case at the last
+    /// `update`: when it changes (a style switch, the List narrowing or
+    /// widening) the live pane moves to the other detail.
+    private var lastPresentation: BoardDetailViewController.Presentation?
 
     private var details: [WeakDetail] = []
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "board")
@@ -77,6 +84,22 @@ final class BoardReplyEditorHost {
         self.actions = actions
         Self.hosts.removeAll { $0.host == nil }
         Self.hosts.append(WeakHost(host: self))
+        // A live pane keeps its case selected across a style switch or a
+        // narrowing (`BoardController.keepsSelection`).
+        actions.controller.paneLive = { [weak self] id in
+            self?.paneIsLive(for: id) ?? false
+        }
+    }
+
+    /// Whether the live pane (or the development hook's) is case `id`'s.
+    private func paneIsLive(for id: Board.CaseID) -> Bool {
+        if let development, development.caseID == id {
+            return true
+        }
+        if let live = panes?.live, panes?.slot(for: id).isPane(live) == true {
+            return true
+        }
+        return false
     }
 
     /// A detail whose reply slot follows the host (`replySlotChanged`).
@@ -126,10 +149,26 @@ final class BoardReplyEditorHost {
         panes?.loader.retry()
     }
 
-    /// Whether Reply edits the suggested reply of case `id` inline.
+    /// Whether Reply edits the suggested reply of case `id` inline: the
+    /// case links one and it is not gone (then a compose window answers
+    /// instead: only `.failed(retry: false)`, the draft deleted elsewhere;
+    /// a failure that can be retried is retried by `focusReply`, never a
+    /// second, unlinked draft in a compose window).
     func editsInline(_ id: Board.CaseID) -> Bool {
-        guard prepared, let c = actions.boardCase(id) else { return false }
-        return c.draft != nil
+        guard prepared, let c = actions.boardCase(id), c.draft != nil else { return false }
+        if case .failed(retry: false) = panes?.slot(for: id) {
+            return false
+        }
+        return true
+    }
+
+    /// The case's suggested reply is gone (its draft was deleted
+    /// elsewhere): Suggest Reply is offered again in its place.
+    func draftGone(_ id: Board.CaseID) -> Bool {
+        if case .failed(retry: false) = panes?.slot(for: id) {
+            return true
+        }
+        return false
     }
 
     /// Reply with a suggested reply: the case is selected and its editor
@@ -143,6 +182,10 @@ final class BoardReplyEditorHost {
             return
         }
         focusPending = id
+        if case .failed(retry: true) = panes?.slot(for: id) {
+            // The editor takes the keyboard once the retried load made it.
+            retry()
+        }
     }
 
     // MARK: Following the board
@@ -160,6 +203,47 @@ final class BoardReplyEditorHost {
         }
         guard prepare() else { return }
         panes?.show(selected)
+        followPresentation()
+    }
+
+    /// The selected case's detail moved to the other presentation (the
+    /// selection stays on a style switch and when the List narrows): the
+    /// live pane goes with it, saved nowhere and never retired, and the
+    /// keyboard it had comes back once the detail shows it (the caret
+    /// stays in the editor's document, which moves as it is).
+    private func followPresentation() {
+        let presentation = activePresentation
+        guard presentation != lastPresentation else { return }
+        let first = lastPresentation == nil
+        lastPresentation = presentation
+        guard !first else { return }
+        var owner: NSView?
+        if let pane = keyboardInLivePane() {
+            owner = MainWindowController.focusOwner(window()?.firstResponder) as? NSView
+            if owner.map({ !$0.isDescendant(of: pane.view) }) ?? true {
+                owner = pane.editor.view
+            }
+        }
+        changed()
+        guard let owner else { return }
+        // After the page put the detail (the panel, the List) into sight.
+        DispatchQueue.main.async { [weak self, weak owner] in
+            guard let self, let owner, let window = owner.window, !owner.isHiddenOrHasHiddenAncestor,
+                  let pane = self.panes?.live ?? self.development?.pane, owner.isDescendant(of: pane.view)
+            else { return }
+            window.makeFirstResponder(owner)
+        }
+    }
+
+    /// Escape in the live pane's editor or recipient fields: the keyboard
+    /// goes to the state pill of the detail that holds `pane`.
+    @discardableResult
+    func focusStatePill(holding pane: ComposePane) -> Bool {
+        for d in details {
+            guard let detail = d.detail, detail.isViewLoaded, pane.view.isDescendant(of: detail.view) else { continue }
+            return detail.focusStatePill()
+        }
+        return false
     }
 
     /// The page left the window (Mail mode) or the window closes: the live
@@ -318,6 +402,7 @@ final class BoardReplyEditorHost {
     static func finishAll(wait: Duration) async -> Bool {
         var ok = true
         for h in hosts.compactMap(\.host) {
+            h.suspendedBeforeQuit = h.suspended
             h.suspended = true
             h.focusPending = nil
             h.dropDevelopment()
@@ -328,11 +413,18 @@ final class BoardReplyEditorHost {
         return ok
     }
 
+    /// After `finishAll` said no: what is left, for the question's heading
+    /// (`Board.Text.quitHeading`).
+    static var anySending: Bool { hosts.compactMap(\.host).contains { $0.panes?.hasSending == true } }
+    static var anyUnsaved: Bool { hosts.compactMap(\.host).contains { $0.panes?.hasUnsaved == true } }
+
     /// The user stayed after all (the quit question's Cancel): the pages
-    /// show their replies again.
+    /// that showed their replies show them again; a page that was out of
+    /// its window (Mail mode) stays suspended until it comes back.
     static func resumeAll() {
         for h in hosts.compactMap(\.host) {
-            h.suspended = false
+            h.suspended = h.suspendedBeforeQuit
+            guard !h.suspended else { continue }
             h.panes?.resume()
             h.update()
         }

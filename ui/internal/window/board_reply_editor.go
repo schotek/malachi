@@ -39,6 +39,16 @@ func (p *boardPage) initBoardReplies() {
 		p.replyFocusPending = ""
 		glib.IdleAdd(func() { p.focusBoardPane(pane, 0) })
 	}
+	// A live inline reply keeps its case selected across a style switch
+	// or a narrowing (board.Controller keepsSelection; macOS
+	// BoardReplyEditorHost paneIsLive).
+	p.ctl.SetPaneLive(func(id board.CaseID) bool {
+		if p.replyClosed {
+			return false
+		}
+		key, ok := panes.LiveKey()
+		return ok && key.CaseID == id
+	})
 	if p.w.mode != board.ModeBoard {
 		p.suspendBoardReplies()
 	}

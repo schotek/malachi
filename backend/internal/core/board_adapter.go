@@ -83,7 +83,10 @@ func (b *Backend) boardDecider(accounts map[string]*boardAccount, now time.Time,
 					return store.BoardVerdict{}, err
 				}
 				if !ready {
-					return store.BoardVerdict{Skip: true}, nil
+					// The thread stays dirty in the drain's own
+					// transaction: a stop before the own texts are derived
+					// cannot lose it.
+					return store.BoardVerdict{Skip: true, KeepDirty: true}, nil
 				}
 				v = board.Evaluate(th, id, now)
 			}
@@ -95,6 +98,7 @@ func (b *Backend) boardDecider(accounts map[string]*boardAccount, now time.Time,
 		}
 		out := store.BoardVerdict{
 			State: v.State, Reason: v.Reason, RulesVersion: board.RulesVersion,
+			DecidingMessageID: string(v.DecidingMessageID), DecidingMine: v.DecidingMine,
 		}
 		if v.Count == 0 {
 			return out, nil
@@ -115,12 +119,17 @@ func (b *Backend) boardDecider(accounts map[string]*boardAccount, now time.Time,
 				}
 			}
 		}
-		// What the store compares to reopen a done case; a message the case
-		// had when it was marked done is passed over (board.Verdict.NewestInbound).
+		// What the store compares to reopen a done case, or to end a
+		// remind (measured from when it was set); a message the case had
+		// then is passed over (board.Verdict.NewestInbound). Done and a
+		// remind never stand together.
 		var doneAt time.Time
 		var seen func(string) bool
 		if t.Case != nil {
 			doneAt, seen = t.Case.DoneAt, t.Case.SeenAtDone
+			if doneAt.IsZero() {
+				doneAt = t.Case.RemindSetAt()
+			}
 		}
 		out.NewestInboundStored, out.NewestInboundDate, out.NewestInboundMessageID = v.NewestInbound(doneAt, seen)
 		return out, nil

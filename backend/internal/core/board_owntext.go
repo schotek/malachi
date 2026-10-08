@@ -67,10 +67,37 @@ type boardOwnCache struct {
 	cur, old map[boardOwnKey]boardOwnText
 	bytes    int
 	retried  map[string]bool
+	// deriving: the own texts being derived in the background
+	// (deriveBoardOwnTextsLater).
+	deriving map[boardOwnKey]bool
 }
 
 func (c *boardOwnCache) init() {
 	c.cur, c.old, c.retried = map[boardOwnKey]boardOwnText{}, map[boardOwnKey]boardOwnText{}, map[string]bool{}
+	c.deriving = map[boardOwnKey]bool{}
+}
+
+// claim returns the keys no background derivation holds yet and holds
+// them; release lets them go.
+func (c *boardOwnCache) claim(keys []boardOwnKey) []boardOwnKey {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var out []boardOwnKey
+	for _, k := range keys {
+		if !c.deriving[k] {
+			c.deriving[k] = true
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+func (c *boardOwnCache) release(keys []boardOwnKey) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, k := range keys {
+		delete(c.deriving, k)
+	}
 }
 
 func (c *boardOwnCache) get(k boardOwnKey) (boardOwnText, bool) {
@@ -206,7 +233,12 @@ func (b *Backend) deriveBoardOwnText(ctx context.Context, accountID, id string) 
 	return boardOwnText{text: out.Text, html: true, trimmed: out.QuotedTrimmed}
 }
 
-// boardExcerptSource is the text board.get makes a message's excerpt of
+// boardGetDerive is how many own texts board.get derives while it waits
+// (boardExcerpt); a cold cache over a long thread would otherwise parse
+// and sanitise up to api.MaxBoardMessages messages in one call.
+const boardGetDerive = 8
+
+// boardExcerpt is the text board.get makes a message's excerpt of
 // (board.BoardMessageExcerpt) and whether a quoted history was cut off it
 // already: the quoted history goes as message.body with trimQuoted takes
 // it off (html.go sanitizeInto). The stored plain text, when the text
@@ -216,18 +248,51 @@ func (b *Backend) deriveBoardOwnText(ctx context.Context, accountID, id string) 
 // Outlook text alternative or Gmail's innerText, whose quote the text
 // rules cannot see); else the stored text whole. The HTML's own text
 // comes from the cache the rules use (the same derivation), so opening a
-// case parses only the members neither has seen. In doubt — the HTML
-// unreadable, refused, or its trimming given up — the stored text.
-func (b *Backend) boardExcerptSource(ctx context.Context, accountID string, m store.BoardMessage) (string, bool) {
+// case parses only the members neither has seen, and only when derive:
+// otherwise a member not in the cache gets its stored text (pending, for
+// the caller to derive later). derived: it was derived now. In doubt —
+// the HTML unreadable, refused, or its trimming given up — the stored
+// text.
+func (b *Backend) boardExcerpt(ctx context.Context, accountID string, m store.BoardMessage, derive bool) (text string, cut, derived, pending bool) {
 	if m.BodyState != store.BodyFetched {
-		return m.Text, false
+		return m.Text, false, false, false
 	}
 	if _, ok := sanitize.TrimQuotedText(m.Text); ok {
-		return m.Text, false
+		return m.Text, false, false, false
 	}
-	own := b.boardOwnTextCached(ctx, boardOwnKey{account: accountID, id: m.ID, state: store.BodyFetched})
+	k := boardOwnKey{account: accountID, id: m.ID, state: store.BodyFetched}
+	own, ok := b.board.own.get(k)
+	switch {
+	case ok:
+	case !derive:
+		return m.Text, false, false, true
+	default:
+		own, derived = b.boardOwnTextCached(ctx, k), true
+	}
 	if !own.html || !own.trimmed {
-		return m.Text, false
+		return m.Text, false, derived, false
 	}
-	return own.text, true
+	return own.text, true, derived, false
+}
+
+// deriveBoardOwnTextsLater derives the own texts into the cache in the
+// background of the worker (nothing when it is not running), each key
+// once at a time: board.get left them for later.
+func (b *Backend) deriveBoardOwnTextsLater(keys []boardOwnKey) {
+	c := &b.board.own
+	keys = c.claim(keys)
+	if len(keys) == 0 {
+		return
+	}
+	if !b.goBoard(func(ctx context.Context) {
+		defer c.release(keys)
+		for _, k := range keys {
+			if ctx.Err() != nil {
+				return
+			}
+			b.boardOwnTextCached(ctx, k)
+		}
+	}) {
+		c.release(keys)
+	}
 }

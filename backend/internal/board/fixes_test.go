@@ -191,15 +191,17 @@ func TestForgedTwins(t *testing.T) {
 	}
 }
 
-// The owner's decision: you.addressed and hot.important need a sender the
-// user has written to; unknown senders are info.unknownSender.
+// The owner's decisions: you.addressed and hot.important need a sender the
+// user has written to; an unknown sender with the user in To is
+// you.newContact (RulesVersion 6), without the user in To
+// info.unknownSender; an unknown sender's Importance never counts.
 func TestKnownSenders(t *testing.T) {
 	runRules(t, []ruleCase{
-		{"unknown sender", []Member{inbound("a", 2, "dave@example.com", "me@example.org")}, api.BoardInfo, api.BoardReasonInfoUnknownSender},
+		{"unknown sender", []Member{inbound("a", 2, "dave@example.com", "me@example.org")}, api.BoardYou, api.BoardReasonYouNewContact},
 		{"unknown sender, other case of a known one", []Member{inbound("a", 2, "BOB@example.COM", "me@example.org")}, api.BoardYou, api.BoardReasonYouAddressed},
-		{"unknown sender, importance high", []Member{with(inbound("a", 2, "dave@example.com", "me@example.org"), func(m *Member) { m.Importance = "high" })}, api.BoardInfo, api.BoardReasonInfoUnknownSender},
+		{"unknown sender, importance high", []Member{with(inbound("a", 2, "dave@example.com", "me@example.org"), func(m *Member) { m.Importance = "high" })}, api.BoardYou, api.BoardReasonYouNewContact},
 		{"unknown sender, flagged by the user", []Member{with(inbound("a", 2, "dave@example.com", "me@example.org"), func(m *Member) { m.Flagged = true })}, api.BoardHot, api.BoardReasonHotFlagged},
-		{"unknown sender, cc", []Member{with(inbound("a", 2, "dave@example.com", "x@example.com"), func(m *Member) { m.Cc = addrs("me@example.org") })}, api.BoardInfo, api.BoardReasonInfoCcOnly},
+		{"unknown sender, cc", []Member{with(inbound("a", 2, "dave@example.com", "x@example.com"), func(m *Member) { m.Cc = addrs("me@example.org") })}, api.BoardInfo, api.BoardReasonInfoUnknownSender},
 		{"known reply-to", []Member{with(inbound("a", 2, "noreply@shop.example", "me@example.org"), func(m *Member) { m.ReplyTo = addrs("x@shop.example", "Carol@example.com") })}, api.BoardYou, api.BoardReasonYouAddressed},
 		{"unknown sender answering the user", []Member{
 			sent("a", 5, "Plan attached.", "team@example.com"),
@@ -215,12 +217,12 @@ func TestKnownSenders(t *testing.T) {
 		}, api.BoardHot, api.BoardReasonHotImportant},
 		{"spoofed from me with importance", []Member{
 			with(inbound("a", 2, "me@example.org", "me@example.org", "x@example.com"), func(m *Member) { m.Importance = "high" }),
-		}, api.BoardInfo, api.BoardReasonInfoUnknownSender},
-		{"automated sender", []Member{inbound("a", 2, "noreply@ci.example", "me@example.org")}, api.BoardInfo, api.BoardReasonInfoUnknownSender},
+		}, api.BoardYou, api.BoardReasonYouNewContact},
+		{"automated sender", []Member{inbound("a", 2, "noreply@ci.example", "me@example.org")}, api.BoardYou, api.BoardReasonYouNewContact},
 	})
-	// Nobody known at all: every addressed message is info.
+	// Nobody known at all: every message to the user is a new contact.
 	nobody := NewIdentity("", []string{"me@example.org"}, nil)
-	if v := Evaluate(Thread{Members: []Member{inbound("a", 2, "bob@example.com", "me@example.org")}}, nobody, now); v.Reason != api.BoardReasonInfoUnknownSender {
+	if v := Evaluate(Thread{Members: []Member{inbound("a", 2, "bob@example.com", "me@example.org")}}, nobody, now); v.Reason != api.BoardReasonYouNewContact {
 		t.Fatalf("nobody known: %s", v.Reason)
 	}
 	// Reply-To beyond the scanned ones does not make a sender known.
@@ -229,7 +231,7 @@ func TestKnownSenders(t *testing.T) {
 		many = append(many, "x@shop.example")
 	}
 	far := with(inbound("a", 2, "noreply@shop.example", "me@example.org"), func(m *Member) { m.ReplyTo = addrs(append(many, "bob@example.com")...) })
-	if v := Evaluate(Thread{Members: []Member{far}}, me, now); v.Reason != api.BoardReasonInfoUnknownSender {
+	if v := Evaluate(Thread{Members: []Member{far}}, me, now); v.Reason != api.BoardReasonYouNewContact {
 		t.Fatalf("far reply-to: %s", v.Reason)
 	}
 }

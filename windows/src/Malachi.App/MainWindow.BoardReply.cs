@@ -39,29 +39,40 @@ public sealed partial class MainWindow
     private bool boardPartsShown;
 
     /// <summary>
-    /// The application quits: the board's replies settle (at most
+    /// The user quits: the board's replies settle (at most
     /// <see cref="BoardReplyController.EndWait"/>) while the connection
     /// stands; one that could not be saved or sent asks "Quit without saving
-    /// a reply?" (Cancel keeps the app running and stops nothing). Then the
-    /// suggested reply under way stops and deletes a draft it did not link
-    /// yet. False abandons the Quit.
+    /// a reply?" ("Quit with a reply still sending?" when only a send is
+    /// unanswered; Cancel keeps the app running and stops nothing, and the
+    /// sequence's Abandoned shows the replies again). The suggested reply
+    /// under way is left alone here: it ends past the point of no return
+    /// (QuitSteps.EndBoardReply). False abandons the Quit.
     /// </summary>
     public async Task<bool> FinishBoardRepliesForQuitAsync()
     {
         if (boardReplies is { } host && !await host.FinishAllAsync(BoardReplyController.EndWait))
         {
-            var quit = await state.Alerts.ConfirmDestructiveAsync(
-                this, Board.Text.QuitUnsavedHeading, Board.Text.QuitUnsavedBody, Board.Text.QuitAnyway);
-            if (!quit)
-            {
-                // The user stays: the page shows its reply again.
-                SyncBoardParts(force: true);
-                return false;
-            }
+            return await state.Alerts.ConfirmDestructiveAsync(
+                this, Board.Text.QuitHeading(host.HasUnsaved, host.HasSending), Board.Text.QuitUnsavedBody, Board.Text.QuitAnyway);
         }
-        await state.BoardReply.CancelAndCleanUpAsync();
         return true;
     }
+
+    /// <summary>
+    /// The session ends: the board's replies settle without a question;
+    /// what cannot be saved in time is lost with the session (the sequence
+    /// bounds the wait).
+    /// </summary>
+    public async Task SettleBoardRepliesAsync()
+    {
+        if (boardReplies is { } host)
+        {
+            _ = await host.FinishAllAsync(BoardReplyController.EndWait);
+        }
+    }
+
+    /// <summary>A Quit the user abandoned: the board's parts show again as they should.</summary>
+    public void QuitAbandoned() => SyncBoardParts(force: true);
 
     // After the page is attached: the parts of the daemon's board, the
     // window's Send and Save Draft for the inline editor.
@@ -82,6 +93,9 @@ public sealed partial class MainWindow
         boardReplies = host;
         actions.InlineReply = host;
         detail.ReplyPart = host.Slot;
+        // The page's Escape asks where the keyboard is (Board.EscapeFor).
+        BoardView.ReplyHasKeyboard = () => boardReplies?.KeyboardInPane == true;
+        BoardView.ReplyPopupOpen = () => boardReplies?.PanePopupOpen == true;
 
         var c = Commands;
         c.Send.Handler = () => boardReplies?.EditorPane?.Send();

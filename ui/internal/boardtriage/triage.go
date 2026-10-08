@@ -417,7 +417,9 @@ func JoinedNote(line, note string) string {
 // UsageTexts are the value and the detail of the Board group's row of the
 // tokens of the last 24 hours for u: the sum of the four counters
 // (negative ones as 0, saturating at the largest int64) and the split with
-// the runs (at least 1); the usage's "None" and "" without usage. number
+// the runs (at least 1); the usage's "None" and "" without usage. A total
+// some run of which was only partly reported (LowerBound) reads "at least
+// …" (board.UsageText). number
 // formats a count for the locale; nil writes plain digits.
 func UsageTexts(u *api.BoardUsageTotal, number func(int64) string, tr board.Translator) (value, detail string) {
 	if u == nil {
@@ -439,7 +441,7 @@ func UsageTexts(u *api.BoardUsageTotal, number func(int64) string, tr board.Tran
 		}
 	}
 	split := board.TriageUsageSplit(number(parts[0]), number(parts[1]), number(parts[2]), number(parts[3]), tr)
-	return number(total), split + "\n" + board.TriageUsageRuns(max(u.Runs, 1), tr)
+	return board.UsageText(number(total), u.LowerBound, tr), split + "\n" + board.TriageUsageRuns(max(u.Runs, 1), tr)
 }
 
 // maxInt64 is the largest int64.

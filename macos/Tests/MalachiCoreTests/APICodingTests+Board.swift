@@ -86,6 +86,28 @@ import Testing
 
     // MARK: Enums
 
+    /// `remindedAt` and the reason `you.newContact` (contract of
+    /// 2026-10-08): both decode, round-trip, and are absent by default.
+    @MainActor @Test func remindedAtAndNewContact() throws {
+        #expect(try decode(BoardCase.self, minimalCase).remindedAt == nil)
+        let doc = minimalCase
+            .replacingOccurrences(of: "you.addressed", with: "you.newContact")
+            .replacingOccurrences(of: #""visibility":"live""#, with: #""visibility":"live","remindedAt":"2026-10-08T07:00:00Z""#)
+        let c = try decode(BoardCase.self, doc)
+        #expect(c.ruleReason == .youNewContact && BoardReason.known.contains(c.ruleReason))
+        #expect(c.remindedAt == RFC3339.parse("2026-10-08T07:00:00Z"))
+        let back = try JSONCoding.decoder().decode(BoardCase.self, from: JSONCoding.encoder().encode(c))
+        #expect(back == c)
+        #expect(try encodeObject(try decode(BoardCase.self, minimalCase))["remindedAt"] == nil)
+        // The board's model: reminded only while live.
+        #expect(DaemonBoardSource.convert(c).reminded)
+        var snoozed = c
+        snoozed.visibility = .snoozed
+        snoozed.remindAt = RFC3339.parse("2026-10-09T07:00:00Z")
+        #expect(DaemonBoardSource.convert(snoozed).remindedAt == nil)
+        #expect(DaemonBoardSource.convert(c).newContact)
+    }
+
     @Test func unknownEnumValuesDecode() throws {
         let doc = minimalCase
             .replacingOccurrences(of: #""ruleState":"you""#, with: #""ruleState":"later""#)
@@ -109,10 +131,10 @@ import Testing
 
     @Test func enumConstantsAreTheContractValues() {
         #expect(BoardState.all == ["hot", "you", "them", "info"] && BoardState.all.allSatisfy(\.isValid))
-        #expect(BoardReason.known.count == 16 && Set(BoardReason.known).count == 16)
+        #expect(BoardReason.known.count == 17 && Set(BoardReason.known).count == 17)
         #expect(BoardReason.known.map(\.rawValue) == [
             "hot.important", "hot.flagged", "you.addressed", "you.repliedToYou", "them.replied", "them.asked",
-            "info.ccOnly", "info.notAddressed", "info.unknownSender", "info.yourNote",
+            "info.ccOnly", "info.notAddressed", "you.newContact", "info.unknownSender", "info.yourNote",
             "jira.yourComment", "jira.assigned", "jira.reporter", "jira.commented", "jira.watching", "kept",
         ])
         #expect([BoardVisibility.live, .done, .snoozed].map(\.rawValue) == ["live", "done", "snoozed"])
@@ -202,6 +224,13 @@ import Testing
         #expect(a.archived == 2 && a.noArchive == nil)
         let n = try decode(BoardArchiveResult.self, #"{"archived":0,"noArchive":true,"case":\#(minimalCase)}"#)
         #expect(n.archived == 0 && n.noArchive == true)
+        #expect(a.moved == nil && n.moved == nil)  // absent: nothing moved, or an older daemon
+        let m = try decode(BoardArchiveResult.self, #"{"archived":2,"case":\#(minimalCase),"moved":[{"messageId":"m_1","fromFolderId":"f_in"},{"messageId":"m_2","fromFolderId":"f_work"}]}"#)
+        #expect(m.moved == [
+            BoardMoved(messageId: "m_1", fromFolderId: "f_in"), BoardMoved(messageId: "m_2", fromFolderId: "f_work"),
+        ])
+        let back = try JSONCoding.decoder().decode(BoardArchiveResult.self, from: JSONCoding.encoder().encode(m))
+        #expect(back == m)
         #expect(try encodeObject(BoardDiscardDraftParams(caseId: "c_1")).keys.sorted() == ["caseId"])
         #expect(try decode(BoardDiscardDraftResult.self, #"{"case":\#(minimalCase)}"#).case.draft == nil)
     }
@@ -344,6 +373,16 @@ import Testing
         // The assistant's tally, clamped to the contract's maximum.
         let clamped = BoardUsage(Assistant.Usage(inputTokens: -3, outputTokens: Int64.max, cacheReadInputTokens: 7))
         #expect(clamped == BoardUsage(outputTokens: API.Limits.maxBoardUsageTokens, cacheReadInputTokens: 7))
+        // A lower bound says so; a whole count leaves the key out.
+        let partial = try encodeObject(BoardRunEndParams(runId: "r_1", usage: BoardUsage(inputTokens: 1, lowerBound: true)))
+        #expect((partial["usage"] as? [String: Any])?["lowerBound"] as? Bool == true)
+        let whole = try encodeObject(BoardRunEndParams(runId: "r_1", usage: BoardUsage(inputTokens: 1)))
+        #expect((whole["usage"] as? [String: Any])?["lowerBound"] == nil)
+        #expect(BoardUsage(Assistant.Usage(inputTokens: 1), lowerBound: true).lowerBound)
+        let decoded = try decode(
+            BoardUsage.self,
+            #"{"inputTokens":1,"outputTokens":2,"cacheCreationInputTokens":3,"cacheReadInputTokens":4,"lowerBound":true}"#)
+        #expect(decoded == BoardUsage(inputTokens: 1, outputTokens: 2, cacheCreationInputTokens: 3, cacheReadInputTokens: 4, lowerBound: true))
     }
 
     /// `triage.usage24h`: one flat object; absent = none; a counter left
@@ -355,6 +394,10 @@ import Testing
         let partial = try decode(BoardTriage.self, #"{"annotatedTodayAuto":0,"queue":0,"usage24h":{"cacheReadInputTokens":1000000000000,"runs":1}}"#)
         #expect(partial.usage24h == BoardUsageTotal(cacheReadInputTokens: 1_000_000_000_000, runs: 1))
         #expect(try decode(BoardTriage.self, #"{"annotatedTodayAuto":0,"queue":0,"usage24h":null}"#).usage24h == nil)
+        #expect(t.usage24h?.lowerBound == false)
+        let atLeast = try decode(BoardTriage.self, #"{"annotatedTodayAuto":0,"queue":0,"usage24h":{"inputTokens":5,"runs":2,"lowerBound":true}}"#)
+        #expect(atLeast.usage24h == BoardUsageTotal(inputTokens: 5, runs: 2, lowerBound: true))
+        #expect(Board.triageUsageTexts(atLeast.usage24h, locale: Locale(identifier: "en_US_POSIX")).value == "at least 5")
         #expect(try encodeObject(BoardTriage()).keys.sorted() == ["annotatedTodayAuto", "queue"])
     }
 

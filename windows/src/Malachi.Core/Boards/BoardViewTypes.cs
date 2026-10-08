@@ -33,8 +33,11 @@ public static partial class Board
         /// <summary>The cases of one state.</summary>
         State,
 
-        /// <summary>The done cases, and the snoozed ones: both are off the board for now.</summary>
+        /// <summary>The done cases.</summary>
         Done,
+
+        /// <summary>The cases off the board until a reminder.</summary>
+        Snoozed,
     }
 
     /// <summary>What a section of the list holds.</summary>
@@ -43,7 +46,7 @@ public static partial class Board
         /// <summary>The live cases of <see cref="Section.State"/>.</summary>
         State,
 
-        /// <summary>Under the Done filter, before the done cases: the cases that come back later, the soonest first.</summary>
+        /// <summary>Under the Snoozed filter: the cases that come back later, the soonest first.</summary>
         Snoozed,
 
         /// <summary>The done cases.</summary>
@@ -91,8 +94,11 @@ public static partial class Board
         /// <summary>Every case on the board.</summary>
         public static Filter All => default;
 
-        /// <summary>The done and the snoozed cases.</summary>
+        /// <summary>The done cases.</summary>
         public static Filter Done => new(FilterKind.Done, default);
+
+        /// <summary>The snoozed cases.</summary>
+        public static Filter Snoozed => new(FilterKind.Snoozed, default);
 
         /// <summary>Which.</summary>
         public FilterKind Kind { get; }
@@ -180,8 +186,17 @@ public static partial class Board
         /// <summary>The due date lies before today in the board's time zone (Go only).</summary>
         public bool DueOverdue { get; init; }
 
-        /// <summary>When a snoozed case comes back ("Tomorrow 09:00"); "" otherwise.</summary>
+        /// <summary>When a snoozed case comes back ("Tomorrow at 09:00"); "" otherwise.</summary>
         public string Remind { get; init; } = "";
+
+        /// <summary>The case is back from a reminder (<see cref="Case.Reminded"/>): listed first in its state, with the badge <see cref="Text.Reminded"/>.</summary>
+        public bool Reminded { get; init; }
+
+        /// <summary>Its sender is someone the user never wrote to (<c>you.newContact</c>): the badge <see cref="Text.NewContact"/>.</summary>
+        public bool NewContact { get; init; }
+
+        /// <summary>The badges' texts in order (Reminded, New contact); none when empty.</summary>
+        public IReadOnlyList<string> Badges { get; init => field = value ?? []; } = [];
 
         /// <summary>Attachments in the case.</summary>
         public bool Attachments { get; init; }
@@ -201,6 +216,19 @@ public static partial class Board
         /// title.
         /// </summary>
         public bool MarksAssistant => TitleIsAssistant || SnippetIsAssistant;
+
+        /// <summary>Whether both show the same, the badges compared in order.</summary>
+        public bool Equals(Row? other) =>
+            other is not null && Id == other.Id && State == other.State && Person == other.Person && Time == other.Time
+            && Title == other.Title && TitleIsAssistant == other.TitleIsAssistant && Snippet == other.Snippet
+            && SnippetIsAssistant == other.SnippetIsAssistant && Account == other.Account && IssueKey == other.IssueKey
+            && IssueStatus == other.IssueStatus && IssueStyle == other.IssueStyle && Due == other.Due
+            && DueOverdue == other.DueOverdue && Remind == other.Remind && Reminded == other.Reminded
+            && NewContact == other.NewContact && SameList(Badges, other.Badges) && Attachments == other.Attachments
+            && CountText == other.CountText && Unread == other.Unread && Spoken == other.Spoken;
+
+        /// <inheritdoc/>
+        public override int GetHashCode() => HashCode.Combine(Id, State, Title, Time, Reminded);
     }
 
     /// <summary>A commitment of the user's, with the case it comes from.</summary>
@@ -282,7 +310,7 @@ public static partial class Board
     /// <summary>A filter in the navigation column.</summary>
     /// <param name="Filter">The filter.</param>
     /// <param name="Title">Its name.</param>
-    /// <param name="Dot">The state's colour dot; null for Overview and Done.</param>
+    /// <param name="Dot">The state's colour dot; null for Overview, Snoozed and Done.</param>
     /// <param name="Count">The cases it lists.</param>
     /// <param name="Selected">It is the filter.</param>
     public sealed record NavItem(Filter Filter, string Title, State? Dot, int Count, bool Selected);
@@ -293,7 +321,11 @@ public static partial class Board
     /// <param name="Badge">Its kind capsule; "" for every account.</param>
     /// <param name="Count">The cases not done.</param>
     /// <param name="Selected">It is the account filter.</param>
-    public sealed record AccountItem(AccountId? Filter, string Title, string Badge, int Count, bool Selected);
+    public sealed record AccountItem(AccountId? Filter, string Title, string Badge, int Count, bool Selected)
+    {
+        /// <summary><see cref="Title"/> with <see cref="Badge"/> (<see cref="Text.TitleWithBadge"/>), for a one-line menu and its spoken name.</summary>
+        public string Label { get; init; } = Title;
+    }
 
     /// <summary>A message of the detail's conversation.</summary>
     /// <param name="Id">The message; null for the samples.</param>
@@ -334,6 +366,14 @@ public static partial class Board
         public required string Why { get; init; }
 
         /// <summary>
+        /// Lines "Why is this here?" adds after <see cref="Why"/> and
+        /// <see cref="SourceText"/>: <see cref="Text.ReasonReminded"/> for a
+        /// case back from a reminder, <see cref="Text.ReasonUserKeeps"/> when
+        /// the user chose its state.
+        /// </summary>
+        public IReadOnlyList<string> WhyNotes { get; init => field = value ?? []; } = [];
+
+        /// <summary>
         /// <see cref="Why"/> is the assistant's reason, not the rules': the
         /// box leads it with the assistant's mark.
         /// </summary>
@@ -353,6 +393,18 @@ public static partial class Board
 
         /// <summary>The full date of the latest activity.</summary>
         public required string Time { get; init; }
+
+        /// <summary><see cref="Person"/> and <see cref="Time"/> as one line (<see cref="Text.PersonAndTime"/>).</summary>
+        public string Byline { get; init; } = "";
+
+        /// <summary>The row's (<see cref="Row.Reminded"/>).</summary>
+        public bool Reminded { get; init; }
+
+        /// <summary>The row's (<see cref="Row.NewContact"/>).</summary>
+        public bool NewContact { get; init; }
+
+        /// <summary>The row's (<see cref="Row.Badges"/>).</summary>
+        public IReadOnlyList<string> Badges { get; init => field = value ?? []; } = [];
 
         /// <summary>The title.</summary>
         public required string Title { get; init; }
@@ -432,8 +484,11 @@ public static partial class Board
             other is not null && Id == other.Id && AccountId == other.AccountId && Thread == other.Thread
             && Reply == other.Reply && LatestMessage == other.LatestMessage && State == other.State
             && StateTitle == other.StateTitle && Source == other.Source && Why == other.Why
+            && SameList(WhyNotes, other.WhyNotes)
             && WhyIsAssistant == other.WhyIsAssistant && SourceText == other.SourceText && Account == other.Account
-            && Issue == other.Issue && Person == other.Person && Time == other.Time && Title == other.Title
+            && Issue == other.Issue && Person == other.Person && Time == other.Time && Byline == other.Byline
+            && Reminded == other.Reminded && NewContact == other.NewContact && SameList(Badges, other.Badges)
+            && Title == other.Title
             && TitleIsAssistant == other.TitleIsAssistant && SpokenTitle == other.SpokenTitle
             && Subject == other.Subject && Due == other.Due && DueQuote == other.DueQuote && Summary == other.Summary
             && SameList(Tasks, other.Tasks) && Draft == other.Draft && DraftId == other.DraftId
@@ -497,7 +552,11 @@ public static partial class Board
     /// <param name="State">The state of <see cref="TileKind.State"/>; <see cref="State.Hot"/> otherwise.</param>
     /// <param name="Count">How many.</param>
     /// <param name="Title">Its title.</param>
-    public sealed record Tile(TileKind Kind, State State, int Count, string Title);
+    public sealed record Tile(TileKind Kind, State State, int Count, string Title)
+    {
+        /// <summary>Its count and title in one sentence (<see cref="Text.TileToolTip"/>), for the tooltip and the spoken name.</summary>
+        public string ToolTip { get; init; } = "";
+    }
 
     /// <summary>The Today page.</summary>
     public sealed record Today
@@ -505,7 +564,11 @@ public static partial class Board
         /// <summary>Its title.</summary>
         public required string Title { get; init; }
 
-        /// <summary>The sentence under the title.</summary>
+        /// <summary>
+        /// The sentence under the title: <see cref="Text.TodoPhrase"/> of the
+        /// hot cases and those waiting for the user that need the user today
+        /// (<see cref="NeedsYouToday"/>).
+        /// </summary>
         public required string Phrase { get; init; }
 
         /// <summary>The four states, and the commitments when annotations count.</summary>
@@ -529,18 +592,12 @@ public static partial class Board
         /// <summary>The deadlines without one.</summary>
         public required string DueEmpty { get; init; }
 
-        /// <summary>The calendar placeholder's title.</summary>
-        public required string CalendarTitle { get; init; }
-
-        /// <summary>The calendar placeholder's body.</summary>
-        public required string CalendarBody { get; init; }
-
         /// <summary>Whether both show the same, the lists compared in order.</summary>
         public bool Equals(Today? other) =>
             other is not null && Title == other.Title && Phrase == other.Phrase && SameList(Tiles, other.Tiles)
             && SameList(Hot, other.Hot) && SameList(You, other.You) && YouMore == other.YouMore
             && SameList(Commitments, other.Commitments) && SameList(DueGroups, other.DueGroups)
-            && DueEmpty == other.DueEmpty && CalendarTitle == other.CalendarTitle && CalendarBody == other.CalendarBody;
+            && DueEmpty == other.DueEmpty;
 
         /// <inheritdoc/>
         public override int GetHashCode() => HashCode.Combine(Phrase, Hot.Count, You.Count, YouMore);

@@ -311,6 +311,49 @@ private func parse(_ line: String) throws -> [Assistant.Event] {
         }
     }
 
+    /// TestUsageTallyLowerBound.
+    @Test func usageTallyLowerBound() throws {
+        func final(_ id: String, _ input: Int64) -> Assistant.Event {
+            var e = Assistant.Event(kind: .other)
+            e.messageID = id
+            e.usage = Assistant.Usage(inputTokens: input, outputTokens: 1)
+            e.usageFinal = true
+            return e
+        }
+        func placeholder(_ id: String) -> Assistant.Event {
+            var e = Assistant.Event(kind: .other)
+            e.messageID = id
+            e.usage = Assistant.Usage(inputTokens: 1)
+            return e
+        }
+        let cases: [(String, [String], [Assistant.Event], Bool, Bool)] = [
+            ("nothing", [], [], false, false),
+            ("the result's usage is whole", [lineSplitThinking, lineSplitTool, lineResultUsage], [], false, false),
+            ("stopped before the result", [lineAssistant, lineSplitThinking], [], false, true),
+            ("answered without a result usage: placeholders", [lineAssistant], [], true, true),
+            ("a zeroed result gives way to placeholders", [lineAssistant, lineMaxTurns], [], true, true),
+            ("final messages of a finished run", [], [final("r1", 5), final("r2", 7)], true, false),
+            ("final messages of a run that never finished", [], [final("r1", 5)], false, true),
+            ("one message not final", [], [final("r1", 5), placeholder("r2")], true, true),
+            ("a placeholder later made final", [], [placeholder("r1"), final("r1", 5)], true, false),
+        ]
+        for (name, lines, events, finished, want) in cases {
+            var u = Assistant.UsageTally()
+            for line in lines {
+                for e in try parse(line) {
+                    u.add(e)
+                }
+            }
+            for e in events {
+                u.add(e)
+            }
+            if finished {
+                u.finished()
+            }
+            #expect(u.lowerBound == want, "\(name)")
+        }
+    }
+
     /// Event.NotSignedIn: only the failure of a turn for want of a sign-in
     /// the API accepts.
     @Test func notSignedInIsTheRefusedSignIn() {

@@ -174,12 +174,13 @@ func newTriageHarness(t *testing.T, fb *fakeBackend, run string) *harness {
 }
 
 // handedOut records cases as handed out by this bridge's queue (of the
-// fixture's account), as list_triage_queue would.
+// fixture's account, rule reason you.addressed, replying to m1), as
+// list_triage_queue would.
 func (h *harness) handedOut(ids ...api.BoardCaseID) {
 	h.b.triage.mu.Lock()
 	defer h.b.triage.mu.Unlock()
 	for _, id := range ids {
-		h.b.triage.cases[id] = handedCase{account: fxAccount, messages: map[api.MessageID]bool{}}
+		h.b.triage.cases[id] = handedCase{account: fxAccount, ruleReason: api.BoardReasonYouAddressed, replyMessageID: "m1"}
 	}
 }
 

@@ -27,7 +27,7 @@ func TestModelMsgidsInTemplate(t *testing.T) {
 		s.Phase = p
 		s.Truncated = true
 		for _, style := range Styles {
-			for _, f := range []Filter{{}, filterState(StateYou), doneFilter} {
+			for _, f := range []Filter{{}, filterState(StateYou), doneFilter, {Kind: FilterSnoozed}} {
 				for _, sel := range []CaseID{"", "sample-1", "sample-2", "sample-6", "sample-14", "x"} {
 					View(s, ViewState{Style: style, Filter: f, Selection: sel, InlineDetail: true}, testNow, env)
 				}

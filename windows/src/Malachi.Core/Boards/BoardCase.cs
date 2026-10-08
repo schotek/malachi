@@ -136,7 +136,7 @@ public static partial class Board
     /// </summary>
     public static IReadOnlyList<BoardReason> KnownReasons { get; } =
     [
-        BoardReason.HotImportant, BoardReason.HotFlagged, BoardReason.YouAddressed, BoardReason.YouRepliedToYou,
+        BoardReason.HotImportant, BoardReason.HotFlagged, BoardReason.YouAddressed, BoardReason.YouNewContact, BoardReason.YouRepliedToYou,
         BoardReason.ThemReplied, BoardReason.ThemAsked, BoardReason.InfoCcOnly, BoardReason.InfoNotAddressed,
         BoardReason.InfoUnknownSender, BoardReason.InfoYourNote, BoardReason.JiraYourComment, BoardReason.JiraAssigned,
         BoardReason.JiraReporter, BoardReason.JiraCommented, BoardReason.JiraWatching, BoardReason.Kept,
@@ -363,6 +363,14 @@ public static partial class Board
         /// <summary>Where it is listed.</summary>
         public Visibility Visibility { get; init; }
 
+        /// <summary>
+        /// When a remind of the user's came due (<c>board.list</c>'s
+        /// remindedAt): the case is live again and listed first in its state,
+        /// marked Reminded, until the user acts on it or new mail comes; null
+        /// otherwise.
+        /// </summary>
+        public DateTimeOffset? RemindedAt { get; init; }
+
         /// <summary>What a reply answers; null for the samples.</summary>
         public ReplyTarget? Reply { get; init; }
 
@@ -387,6 +395,12 @@ public static partial class Board
         /// <summary>Marked done.</summary>
         public bool Done => Visibility.IsDone;
 
+        /// <summary>A live case back from a reminder (<see cref="RemindedAt"/>).</summary>
+        public bool Reminded => RemindedAt is not null && Visibility.IsLive;
+
+        /// <summary>Its newest message is addressed to the user by someone the user never wrote to (<c>you.newContact</c>).</summary>
+        public bool NewContact => RuleReason.Value == BoardReason.YouNewContact;
+
         /// <summary>
         /// The case moved to done (when unknown) or back on the board; the
         /// same case when it already is (Swift's setter of <c>done</c>).
@@ -401,7 +415,7 @@ public static partial class Board
             && Unread == other.Unread && HasAttachments == other.HasAttachments && MessageCount == other.MessageCount
             && Issue == other.Issue && RuleState == other.RuleState && RuleReason == other.RuleReason
             && Annotation == other.Annotation && UserState == other.UserState && Visibility == other.Visibility
-            && Reply == other.Reply && LatestMessage == other.LatestMessage && CanArchive == other.CanArchive
+            && RemindedAt == other.RemindedAt && Reply == other.Reply && LatestMessage == other.LatestMessage && CanArchive == other.CanArchive
             && Draft == other.Draft && SameList(Messages, other.Messages) && MessagesFailed == other.MessagesFailed
             && Version == other.Version;
 

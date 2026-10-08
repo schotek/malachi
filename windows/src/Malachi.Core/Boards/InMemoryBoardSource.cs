@@ -8,7 +8,8 @@
 // A source over a snapshot held in memory: the dummy board
 // (MALACHI_BOARD_SAMPLES=1), and the tests. Writes are emulated locally
 // (Archive marks the case done and says it moved its messages when the case
-// can archive). A write to an unknown case, or one that changes nothing, is
+// can archive; its Undo only reopens the case). Every user write ends the
+// mark of a case back from a reminder (RemindedAt), as the daemon does. A write to an unknown case, or one that changes nothing, is
 // ignored and calls no one. A change makes new lists, so snapshots handed
 // out stay as they were.
 
@@ -33,6 +34,9 @@ public sealed class InMemoryBoardSource(Board.Snapshot snapshot) : IBoardSource
     /// <inheritdoc/>
     public Action<string>? OnNotice { get; set; }
 
+    /// <inheritdoc/>
+    public Action<Board.ArchiveOutcome>? OnArchived { get; set; }
+
     /// <summary>
     /// The dummy board: the invented sample cases
     /// (<see cref="Board.SampleSnapshot"/>) dated relative to
@@ -54,14 +58,15 @@ public sealed class InMemoryBoardSource(Board.Snapshot snapshot) : IBoardSource
     }
 
     /// <inheritdoc/>
-    public void SetState(Board.State? state, BoardCaseId id) => Update(id, c => c with { UserState = state });
+    public void SetState(Board.State? state, BoardCaseId id) => Update(id, c => c with { UserState = state, RemindedAt = null });
 
     /// <inheritdoc/>
-    public void SetDone(bool done, BoardCaseId id) => Update(id, c => c.WithDone(done));
+    public void SetDone(bool done, BoardCaseId id) => Update(id, c => c.WithDone(done) with { RemindedAt = null });
 
     /// <inheritdoc/>
     public void Remind(DateTimeOffset? until, BoardCaseId id) => Update(id, c =>
     {
+        c = c with { RemindedAt = null };
         if (until is { } u)
         {
             return c with { Visibility = Board.Visibility.Snoozed(u) };
@@ -77,8 +82,20 @@ public sealed class InMemoryBoardSource(Board.Snapshot snapshot) : IBoardSource
             return;
         }
         var moved = c.CanArchive ? int.Max(1, c.MessageCount) : 0;
-        Update(id, x => x with { Visibility = Board.Visibility.Done(), CanArchive = false });
-        OnNotice?.Invoke(Board.Text.Archived(moved, !c.CanArchive));
+        Update(id, x => x with { Visibility = Board.Visibility.Done(), CanArchive = false, RemindedAt = null });
+        var outcome = new Board.ArchiveOutcome
+        {
+            Case = id,
+            Account = c.Account,
+            Text = Board.Text.Archived(moved, !c.CanArchive),
+            UndoLabel = Board.Text.Undo,
+        };
+        if (OnArchived is { } archived)
+        {
+            archived(outcome);
+            return;
+        }
+        OnNotice?.Invoke(outcome.Text);
     }
 
     /// <inheritdoc/>

@@ -67,7 +67,7 @@ public struct BoardReason: WireEnum {
     /// Newest relevant member inbound, the user in its To, and its own
     /// header says Importance: high or X-Priority 1 or 2.
     public static let hotImportant: BoardReason = "hot.important"
-    /// The user flagged a member and the newest relevant member is inbound.
+    /// The user flagged a member, whoever wrote the newest relevant member.
     public static let hotFlagged: BoardReason = "hot.flagged"
     /// Newest relevant member inbound and the user is in its To.
     public static let youAddressed: BoardReason = "you.addressed"
@@ -81,8 +81,13 @@ public struct BoardReason: WireEnum {
     public static let infoCcOnly: BoardReason = "info.ccOnly"
     /// Inbound; the user is not among the recipients (a list, a Bcc).
     public static let infoNotAddressed: BoardReason = "info.notAddressed"
-    /// Inbound and the user in its To, but from a sender the user has never
-    /// written to; its Importance does not count either.
+    /// Newest relevant member inbound, the user in its To, and its sender
+    /// one the user has never written to: a new contact. Its Importance
+    /// does not count.
+    public static let youNewContact: BoardReason = "you.newContact"
+    /// Inbound from a sender the user has never written to, the user not in
+    /// its To (in Cc, or not addressed); its Importance does not count
+    /// either.
     public static let infoUnknownSender: BoardReason = "info.unknownSender"
     /// A note to oneself.
     public static let infoYourNote: BoardReason = "info.yourNote"
@@ -104,7 +109,7 @@ public struct BoardReason: WireEnum {
     /// The codes of this contract version, in the order of board.go.
     public static let known: [BoardReason] = [
         .hotImportant, .hotFlagged, .youAddressed, .youRepliedToYou, .themReplied, .themAsked,
-        .infoCcOnly, .infoNotAddressed, .infoUnknownSender, .infoYourNote,
+        .infoCcOnly, .infoNotAddressed, .youNewContact, .infoUnknownSender, .infoYourNote,
         .jiraYourComment, .jiraAssigned, .jiraReporter, .jiraCommented, .jiraWatching, .kept,
     ]
 }
@@ -118,7 +123,8 @@ public struct BoardVisibility: WireEnum {
     public static let live: BoardVisibility = "live"
     /// The user marked it done (`doneAt`); a later inbound message reopens it.
     public static let done: BoardVisibility = "done"
-    /// Hidden until `remindAt`, then live again.
+    /// Hidden until `remindAt`, then live again (`remindedAt`); a later
+    /// inbound message ends it early.
     public static let snoozed: BoardVisibility = "snoozed"
 }
 
@@ -329,6 +335,10 @@ public struct BoardCase: Codable, Sendable, Equatable {
     public var doneAt: Date?
     /// Set while snoozed, always in the future.
     public var remindAt: Date?
+    /// When a remind came due, set while live after it and until the user
+    /// acts on the case or an inbound member that counts arrives. Clients
+    /// list such a case first in its state, marked as reminded.
+    public var remindedAt: Date?
     /// The newest relevant member's, `Re:`/`Fwd:` stripped; for an issue
     /// "KEY: Summary".
     public var subject: String
@@ -361,7 +371,8 @@ public struct BoardCase: Codable, Sendable, Equatable {
     public init(
         id: BoardCaseID, accountId: AccountID, threadId: ThreadID, ruleState: BoardState, ruleReason: BoardReason,
         userState: BoardState? = nil, annotation: BoardAnnotation? = nil, visibility: BoardVisibility = .live,
-        doneAt: Date? = nil, remindAt: Date? = nil, subject: String, person: Address, date: Date,
+        doneAt: Date? = nil, remindAt: Date? = nil, remindedAt: Date? = nil, subject: String, person: Address,
+        date: Date,
         snippet: String = "", unread: Bool = false, hasAttachments: Bool = false, messageCount: Int = 1,
         replyMessageId: MessageID, replyFolderId: FolderID, latestMessageId: MessageID, issue: BoardIssue? = nil,
         canArchive: Bool = false, draft: BoardDraft? = nil, version: Int64 = 1
@@ -376,6 +387,7 @@ public struct BoardCase: Codable, Sendable, Equatable {
         self.visibility = visibility
         self.doneAt = doneAt
         self.remindAt = remindAt
+        self.remindedAt = remindedAt
         self.subject = subject
         self.person = person
         self.date = date
@@ -518,24 +530,52 @@ public struct BoardUsage: Codable, Sendable, Equatable {
     public var outputTokens: Int64
     public var cacheCreationInputTokens: Int64
     public var cacheReadInputTokens: Int64
+    /// The counters are a lower bound, not the whole usage (the run was
+    /// stopped, timed out, or the app gave up waiting for the assistant's
+    /// final report). Omitted on the wire when false.
+    public var lowerBound: Bool
 
     public init(
         inputTokens: Int64 = 0, outputTokens: Int64 = 0, cacheCreationInputTokens: Int64 = 0,
-        cacheReadInputTokens: Int64 = 0
+        cacheReadInputTokens: Int64 = 0, lowerBound: Bool = false
     ) {
         self.inputTokens = inputTokens
         self.outputTokens = outputTokens
         self.cacheCreationInputTokens = cacheCreationInputTokens
         self.cacheReadInputTokens = cacheReadInputTokens
+        self.lowerBound = lowerBound
     }
 
     /// The assistant's tally of a run, each counter brought into
     /// 0...`API.Limits.maxBoardUsageTokens`.
-    public init(_ u: Assistant.Usage) {
+    public init(_ u: Assistant.Usage, lowerBound: Bool = false) {
         func c(_ n: Int64) -> Int64 { min(max(n, 0), API.Limits.maxBoardUsageTokens) }
         self.init(
             inputTokens: c(u.inputTokens), outputTokens: c(u.outputTokens),
-            cacheCreationInputTokens: c(u.cacheCreationInputTokens), cacheReadInputTokens: c(u.cacheReadInputTokens))
+            cacheCreationInputTokens: c(u.cacheCreationInputTokens), cacheReadInputTokens: c(u.cacheReadInputTokens),
+            lowerBound: lowerBound)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens, lowerBound
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        inputTokens = try c.decode(Int64.self, forKey: .inputTokens)
+        outputTokens = try c.decode(Int64.self, forKey: .outputTokens)
+        cacheCreationInputTokens = try c.decode(Int64.self, forKey: .cacheCreationInputTokens)
+        cacheReadInputTokens = try c.decode(Int64.self, forKey: .cacheReadInputTokens)
+        lowerBound = try c.decodeIfPresent(Bool.self, forKey: .lowerBound) ?? false
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(inputTokens, forKey: .inputTokens)
+        try c.encode(outputTokens, forKey: .outputTokens)
+        try c.encode(cacheCreationInputTokens, forKey: .cacheCreationInputTokens)
+        try c.encode(cacheReadInputTokens, forKey: .cacheReadInputTokens)
+        if lowerBound { try c.encode(true, forKey: .lowerBound) }
     }
 }
 
@@ -549,16 +589,33 @@ public struct BoardUsageTotal: Codable, Sendable, Equatable {
     public var cacheReadInputTokens: Int64
     /// The runs that contributed, ≥ 1.
     public var runs: Int
+    /// Any run summed was a lower bound (`BoardUsage.lowerBound`).
+    public var lowerBound: Bool
 
     public init(
         inputTokens: Int64 = 0, outputTokens: Int64 = 0, cacheCreationInputTokens: Int64 = 0,
-        cacheReadInputTokens: Int64 = 0, runs: Int = 1
+        cacheReadInputTokens: Int64 = 0, runs: Int = 1, lowerBound: Bool = false
     ) {
         self.inputTokens = inputTokens
         self.outputTokens = outputTokens
         self.cacheCreationInputTokens = cacheCreationInputTokens
         self.cacheReadInputTokens = cacheReadInputTokens
         self.runs = runs
+        self.lowerBound = lowerBound
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens, runs, lowerBound
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(inputTokens, forKey: .inputTokens)
+        try c.encode(outputTokens, forKey: .outputTokens)
+        try c.encode(cacheCreationInputTokens, forKey: .cacheCreationInputTokens)
+        try c.encode(cacheReadInputTokens, forKey: .cacheReadInputTokens)
+        try c.encode(runs, forKey: .runs)
+        if lowerBound { try c.encode(true, forKey: .lowerBound) }
     }
 
     public init(from decoder: any Decoder) throws {
@@ -568,6 +625,7 @@ public struct BoardUsageTotal: Codable, Sendable, Equatable {
         cacheCreationInputTokens = try c.decodeIfPresent(Int64.self, forKey: .cacheCreationInputTokens) ?? 0
         cacheReadInputTokens = try c.decodeIfPresent(Int64.self, forKey: .cacheReadInputTokens) ?? 0
         runs = try c.decodeIfPresent(Int.self, forKey: .runs) ?? 0
+        lowerBound = try c.decodeIfPresent(Bool.self, forKey: .lowerBound) ?? false
     }
 }
 
@@ -807,11 +865,28 @@ public struct BoardArchiveResult: Codable, Sendable, Equatable {
     /// false.
     public var noArchive: Bool?
     public var `case`: BoardCase
+    /// Each message moved to the archive folder with the folder it came
+    /// from, so that the archive can be undone (`message.move` back, then
+    /// `board.setDone` false). nil when nothing was moved.
+    public var moved: [BoardMoved]?
 
-    public init(archived: Int, noArchive: Bool? = nil, case: BoardCase) {
+    public init(archived: Int, noArchive: Bool? = nil, case: BoardCase, moved: [BoardMoved]? = nil) {
         self.archived = archived
         self.noArchive = noArchive
         self.case = `case`
+        self.moved = moved
+    }
+}
+
+/// api.BoardMoved: a message `board.archive` moved, with its folder before
+/// the move.
+public struct BoardMoved: Codable, Sendable, Equatable, Hashable {
+    public var messageId: MessageID
+    public var fromFolderId: FolderID
+
+    public init(messageId: MessageID, fromFolderId: FolderID) {
+        self.messageId = messageId
+        self.fromFolderId = fromFolderId
     }
 }
 

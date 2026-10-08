@@ -225,3 +225,26 @@ private final class Harness {
         #expect(h.outcomes.isEmpty)
     }
 }
+
+/// The distinct cases of a run's accepted notes (Go TestTriageAnnotatedCase).
+@Suite struct AssistantTriageAnnotatedCaseTests {
+    @Test func triageAnnotatedCase() {
+        let cases: [(String, String?)] = [
+            ("annotated case c_0123456789abcdef0123456789abcdef: state in effect hot (decided by rules)",
+             "c_0123456789abcdef0123456789abcdef"),
+            ("annotated case c_1: x\nannotations left in this session: 3", "c_1"),
+            ("annotated case : x", nil),
+            ("annotated case c 1: x", nil),
+            ("annotated case c_1", nil),
+            ("Annotated case c_1: x", nil),
+            ("this session already annotated 3 cases", nil),
+            ("annotated case c_\u{202E}1: x", nil),
+            ("annotated case " + String(repeating: "a", count: 65) + ": x", nil),
+            ("annotated case " + String(repeating: "a", count: 64) + ": x", String(repeating: "a", count: 64)),
+            ("", nil),
+        ]
+        for (input, want) in cases {
+            #expect(Assistant.triageAnnotatedCase(input) == want, "\(input.debugDescription)")
+        }
+    }
+}

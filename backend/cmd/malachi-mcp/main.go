@@ -164,11 +164,11 @@ func parseServerFlags(args []string, stderr io.Writer) (cfg config, showVersion 
 	fs.BoolVar(&cfg.allowModify, "allow-modify", false, "offer the tools that flag, move and delete messages and change an issue's status")
 	fs.BoolVar(&cfg.allowSend, "allow-send", false, "offer the tool that sends a draft")
 	fs.BoolVar(&cfg.allowTriage, "allow-triage", false, "offer the tools that read the board's triage queue and store an assistant's notes and the user's commitments")
-	fs.StringVar(&cfg.triageRun, "triage-run", os.Getenv("MALACHI_MCP_TRIAGE_RUN"), "with -allow-triage: the id of the triage run (board.runStart) the notes count in; default $MALACHI_MCP_TRIAGE_RUN")
+	fs.StringVar(&cfg.triageRun, "triage-run", os.Getenv("MALACHI_MCP_TRIAGE_RUN"), "with -allow-triage: the id of the app's triage run (board.runStart) the notes count in; create_draft then makes only a case's suggested reply; default $MALACHI_MCP_TRIAGE_RUN")
 	triageMax := ""
 	fs.StringVar(&triageMax, "triage-max", os.Getenv("MALACHI_MCP_TRIAGE_MAX"), "with -allow-triage: how many cases this process may annotate, 1-200; the queue hands out no more than that allows; default $MALACHI_MCP_TRIAGE_MAX, else 200")
 	// No environment default: the message is per request.
-	replyOnly := fs.String("reply-only", "", "offer create_draft only for one reply (mode reply or replyAll, no other recipients or subject) to this message id, at most once; not with -allow-modify, -allow-send or -allow-triage")
+	replyOnly := fs.String("reply-only", "", "make create_draft only one reply (mode reply or replyAll, no other recipients or subject) to this message id, at most once (the read tools stay); not with -allow-modify, -allow-send or -allow-triage")
 	version := fs.Bool("version", false, "print version and exit")
 	if err := fs.Parse(args); err != nil {
 		return config{}, false, err

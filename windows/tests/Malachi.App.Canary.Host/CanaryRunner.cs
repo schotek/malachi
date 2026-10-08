@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // The canary host's run (docs/windows-port.md §12): the app's viewer, editor,
-// previewer, conversation card and board card (the same CardWebView in the
-// board detail's conversation; or, in the control run, a WebView2
-// without any protection)
+// previewer, conversation card and board card (the same CardWebView, set up
+// as the board detail's conversation sets it up, without the board's card
+// view around it; or, in the control run, a WebView2 without any
+// protection)
 // in one window beyond the edge of the screen, the steps of the
 // configuration played on them, and everything they did recorded. Pointer
 // actions go through the DevTools protocol (Input.dispatchMouseEvent), which
@@ -121,7 +122,15 @@ internal sealed class CanaryRunner
                 editor = new ComposeWebView(registry);
                 preview = new PreviewWebView { FileTypes = new ShellFileTypes(), TypePolicy = new FileTypePolicy() };
                 card = new CardWebView { Parts = (_, _) => Task.FromResult(("image/png", Png)) };
-                boardCard = new CardWebView { Parts = (_, _) => Task.FromResult(("image/png", Png)) };
+                // The board detail's card as BoardConversationBlock.MakeWebView
+                // and BoardMessageCardView.LoadWebView make it (Parts, Zoom,
+                // OnLink, OnHover, OnSize), built here directly: the canary
+                // host compiles only the app's WebViews, and
+                // BoardMessageCardView would bring the board, the reader's
+                // services and the message cache with it. So this re-tests
+                // CardWebView with the board's settings, not the card's own
+                // code around it (docs/windows-port.md §12).
+                boardCard = new CardWebView { Parts = (_, _) => Task.FromResult(("image/png", Png)), Zoom = 100 };
                 var column = 0;
                 foreach (var view in new FrameworkElement[] { viewer, editor, preview, card, boardCard })
                 {

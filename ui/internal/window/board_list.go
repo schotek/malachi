@@ -4,6 +4,7 @@
 package window
 
 import (
+	"slices"
 	"strconv"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
@@ -34,6 +35,7 @@ func (p *boardPage) bind(b *gtk.Builder) {
 	p.title = b.GetObject("board_title").Cast().(*adw.WindowTitle)
 	p.accountFilter = b.GetObject("board_account_filter").Cast().(*gtk.DropDown)
 	p.triageButton = b.GetObject("board_triage_button").Cast().(*gtk.Button)
+	p.menuButton = b.GetObject("board_menu_button").Cast().(*gtk.MenuButton)
 	p.triageActivity = b.GetObject("board_triage_activity").Cast().(*gtk.Box)
 	p.triageProgress = b.GetObject("board_triage_progress").Cast().(*gtk.Label)
 
@@ -153,6 +155,16 @@ func (p *boardPage) wire() {
 	p.applyInlineDetail()
 }
 
+// wireMenuButton gives the board's header the window's main menu: the
+// model of Mail's own main menu button (window.blp's primary_menu, kept
+// from the window's builder in New) and its tooltip.
+func (p *boardPage) wireMenuButton() {
+	p.menuButton.SetTooltipText(mainMenuTooltip())
+	if m := p.w.mainMenu; m != nil {
+		p.menuButton.SetMenuModel(m)
+	}
+}
+
 // applyInlineDetail keeps Controller.State().InlineDetail following
 // whether the List style currently has room for the detail beside it:
 // false whenever another style shows, so a style switch away from List
@@ -187,18 +199,21 @@ func (p *boardPage) renderHeader(vm board.ViewModel) {
 	selected := uint(0)
 	for i, a := range vm.Accounts {
 		ids = append(ids, a.Filter)
-		label := a.Title
-		if a.Badge != "" {
-			label = a.Title + " (" + a.Badge + ")"
-		}
-		labels = append(labels, label)
+		labels = append(labels, a.Label)
 		if a.Selected {
 			selected = uint(i)
 		}
 	}
+	// The same entries as last time keep the model: a fresh one on every
+	// change of the board would close an open dropdown under the pointer.
+	if !slices.Equal(labels, p.accountFilterLabels) {
+		p.accountFilterLabels = labels
+		p.accountFilter.SetModel(gtk.NewStringList(labels))
+	}
 	p.accountFilterIDs = ids
-	p.accountFilter.SetModel(gtk.NewStringList(labels))
-	p.accountFilter.SetSelected(selected)
+	if p.accountFilter.Selected() != selected {
+		p.accountFilter.SetSelected(selected)
+	}
 	p.settingAccount = false
 }
 
@@ -258,99 +273,150 @@ func (p *boardPage) renderStack(vm board.ViewModel) {
 	}
 }
 
-// renderNav rebuilds the navigation column: the state filters with their
-// colour dot and count, Overview and Done, then the accounts with their
-// kind capsule, newest first as ViewModel already orders them.
+// renderNav shows the navigation column: the state filters with their
+// colour dot and count, Overview, Snoozed and Done, then the accounts with
+// their kind capsule, as ViewModel orders them. Rows of the same kinds as
+// last time are updated in place (the counts move on every change of the
+// board, and a rebuilt row would take the keyboard and an arrow key's
+// position with it); a different shape rebuilds the column.
 func (p *boardPage) renderNav(vm board.ViewModel) {
 	p.reselecting = true
 	defer func() { p.reselecting = false }()
-	p.navList.RemoveAll()
-	selected := -1
-	idx := 0
-	add := func(row *gtk.ListBoxRow, isSelected bool) {
-		row.AddCSSClass("board-nav-row")
-		p.navList.Append(row)
-		if isSelected {
-			selected = idx
+	if len(p.navRows) != len(vm.Nav)+len(vm.Accounts) || p.navFilters != len(vm.Nav) {
+		refocus := listHoldsFocus(p.w, p.navList)
+		p.navList.RemoveAll()
+		p.navRows = p.navRows[:0]
+		for range vm.Nav {
+			n := newBoardNavRow(false)
+			p.navList.Append(n.row)
+			p.navRows = append(p.navRows, n)
 		}
-		idx++
+		for range vm.Accounts {
+			n := newBoardNavRow(true)
+			p.navList.Append(n.row)
+			p.navRows = append(p.navRows, n)
+		}
+		p.navFilters = len(vm.Nav)
+		defer func() {
+			if refocus {
+				focusSelectedRow(p.navList)
+			}
+		}()
 	}
-	for _, n := range vm.Nav {
-		add(boardNavRow(n), n.Selected)
+	selected := -1
+	for i, n := range vm.Nav {
+		p.navRows[i].setNav(n)
+		if n.Selected {
+			selected = i
+		}
 	}
-	for _, a := range vm.Accounts {
-		add(boardAccountRow(a), a.Selected)
+	for j, a := range vm.Accounts {
+		i := len(vm.Nav) + j
+		p.navRows[i].setAccount(a)
+		if a.Selected {
+			selected = i
+		}
 	}
-	if selected >= 0 {
-		if row := p.navList.RowAtIndex(selected); row != nil {
+	if selected < 0 {
+		p.navList.UnselectAll()
+		return
+	}
+	if row := p.navList.RowAtIndex(selected); row != nil {
+		if cur := p.navList.SelectedRow(); cur == nil || cur.Index() != selected {
 			p.navList.SelectRow(row)
 		}
 	}
 }
 
-// boardNavRow is one filter row of the navigation column: the state's
-// colour dot (or none for Overview/Done), the title and the count.
-func boardNavRow(n board.NavItem) *gtk.ListBoxRow {
-	box := gtk.NewBox(gtk.OrientationHorizontal, 8)
-	box.SetMarginStart(6)
-	box.SetMarginEnd(6)
-	box.SetMarginTop(4)
-	box.SetMarginBottom(4)
-	dot := gtk.NewBox(gtk.OrientationHorizontal, 0)
-	dot.SetSizeRequest(10, 10)
-	dot.SetVAlign(gtk.AlignCenter)
-	dot.AddCSSClass("board-state-dot")
-	if n.HasDot {
-		dot.AddCSSClass(boardStateDotClass(n.Dot))
-	} else {
-		dot.SetOpacity(0)
-	}
-	box.Append(dot)
-	title := gtk.NewLabel(n.Title)
-	title.SetUseMarkup(false)
-	title.SetXAlign(0)
-	title.SetHExpand(true)
-	title.SetEllipsize(pango.EllipsizeEnd)
-	box.Append(title)
-	count := gtk.NewLabel(boardCountText(n.Count))
-	count.SetUseMarkup(false)
-	count.AddCSSClass("caption")
-	count.AddCSSClass("numeric")
-	count.AddCSSClass("board-nav-count")
-	count.SetVisible(n.Count > 0)
-	box.Append(count)
-	row := gtk.NewListBoxRow()
-	row.SetChild(box)
-	return row
+// boardNavRow is one row of the navigation column, kept across changes: a
+// filter (the state's colour dot, or none for Overview, Snoozed and Done;
+// the title; the count) or an account (its name, kind capsule and count).
+type boardNavRow struct {
+	row      *gtk.ListBoxRow
+	dot      *gtk.Box
+	title    *gtk.Label
+	badge    *gtk.Label
+	count    *gtk.Label
+	dotClass string
 }
 
-// boardAccountRow is one account row of the navigation column: its name
-// and kind capsule (widget.NewKindBadge, as the folder sidebar shows it).
-func boardAccountRow(a board.AccountItem) *gtk.ListBoxRow {
+// newBoardNavRow builds an empty row; account: the account kind (a kind
+// capsule instead of a dot).
+func newBoardNavRow(account bool) *boardNavRow {
+	n := &boardNavRow{}
 	box := gtk.NewBox(gtk.OrientationHorizontal, 8)
 	box.SetMarginStart(6)
 	box.SetMarginEnd(6)
 	box.SetMarginTop(4)
 	box.SetMarginBottom(4)
-	title := gtk.NewLabel(a.Title)
-	title.SetUseMarkup(false)
-	title.SetXAlign(0)
-	title.SetHExpand(true)
-	title.SetEllipsize(pango.EllipsizeEnd)
-	box.Append(title)
-	if a.Badge != "" {
-		box.Append(widget.NewKindBadge(a.Badge))
+	if !account {
+		n.dot = gtk.NewBox(gtk.OrientationHorizontal, 0)
+		n.dot.SetSizeRequest(10, 10)
+		n.dot.SetVAlign(gtk.AlignCenter)
+		n.dot.AddCSSClass("board-state-dot")
+		box.Append(n.dot)
 	}
-	count := gtk.NewLabel(boardCountText(a.Count))
-	count.SetUseMarkup(false)
-	count.AddCSSClass("caption")
-	count.AddCSSClass("numeric")
-	count.AddCSSClass("board-nav-count")
-	count.SetVisible(a.Count > 0)
-	box.Append(count)
-	row := gtk.NewListBoxRow()
-	row.SetChild(box)
-	return row
+	n.title = gtk.NewLabel("")
+	n.title.SetUseMarkup(false)
+	n.title.SetXAlign(0)
+	n.title.SetHExpand(true)
+	n.title.SetEllipsize(pango.EllipsizeEnd)
+	box.Append(n.title)
+	if account {
+		n.badge = widget.NewKindBadge("")
+		box.Append(n.badge)
+	}
+	n.count = gtk.NewLabel("")
+	n.count.SetUseMarkup(false)
+	n.count.AddCSSClass("caption")
+	n.count.AddCSSClass("numeric")
+	n.count.AddCSSClass("board-nav-count")
+	box.Append(n.count)
+	n.row = gtk.NewListBoxRow()
+	n.row.SetChild(box)
+	n.row.AddCSSClass("board-nav-row")
+	return n
+}
+
+// setNav shows filter item it.
+func (n *boardNavRow) setNav(it board.NavItem) {
+	if n.dot != nil {
+		class := ""
+		if it.HasDot {
+			class = boardStateDotClass(it.Dot)
+		}
+		if class != n.dotClass {
+			if n.dotClass != "" {
+				n.dot.RemoveCSSClass(n.dotClass)
+			}
+			if class != "" {
+				n.dot.AddCSSClass(class)
+			}
+			n.dotClass = class
+		}
+		if it.HasDot {
+			n.dot.SetOpacity(1)
+		} else {
+			n.dot.SetOpacity(0)
+		}
+	}
+	n.title.SetText(it.Title)
+	n.setCount(it.Count)
+}
+
+// setAccount shows account item a.
+func (n *boardNavRow) setAccount(a board.AccountItem) {
+	n.title.SetText(a.Title)
+	if n.badge != nil {
+		n.badge.SetText(a.Badge)
+		n.badge.SetVisible(a.Badge != "")
+	}
+	n.setCount(a.Count)
+}
+
+func (n *boardNavRow) setCount(c int) {
+	n.count.SetText(boardCountText(c))
+	n.count.SetVisible(c > 0)
 }
 
 // boardCountText is a nav row's count badge: nothing below one.
@@ -376,9 +442,14 @@ func (p *boardPage) onNavRowSelected(index int) {
 	}
 }
 
-// renderList rebuilds the case list: the sections with their headers (and,
-// under Overview, the "From the Assistant" commitments above the sections,
-// board.ViewModel.ShowsCommitmentsInList), or the empty page.
+// renderList shows the case list: the sections with their headers, or the
+// empty page. Rows are keyed by case id (headers by their section) and
+// kept across changes: an existing row is updated in place, only rows that
+// came or went are inserted or removed, and a row that moved is moved
+// alone. ChangeContent fires on every autosave, annotation and boardChanged,
+// so a rebuild would take the keyboard and the arrow-key position from
+// under the user; if the focused row had to move anyway, the keyboard goes
+// back to the selected row.
 func (p *boardPage) renderList(vm board.ViewModel) {
 	p.listEmptyPage.SetTitle(board.SectionEmpty(i18n.Tr))
 	if len(vm.Sections) == 0 {
@@ -388,39 +459,124 @@ func (p *boardPage) renderList(vm board.ViewModel) {
 	p.listStack.SetVisibleChildName("rows")
 	p.reselecting = true
 	defer func() { p.reselecting = false }()
-	p.caseList.RemoveAll()
-	p.caseOrder = p.caseOrder[:0]
+	refocus := listHoldsFocus(p.w, p.caseList)
+	if p.caseRows == nil {
+		p.caseRows = make(map[board.CaseID]*widget.BoardRow)
+		p.headerRows = make(map[boardSectionKey]*boardHeaderRow)
+	}
+
+	var want []*gtk.ListBoxRow
+	order := make([]board.CaseID, 0, len(p.caseOrder))
+	keepCases := make(map[board.CaseID]bool)
+	keepHeaders := make(map[boardSectionKey]bool)
 	for _, sec := range vm.Sections {
-		p.caseList.Append(boardSectionHeader(sec.Title))
-		p.caseOrder = append(p.caseOrder, "")
+		key := boardSectionKey{kind: sec.Kind, state: sec.State}
+		h := p.headerRows[key]
+		if h == nil {
+			h = newBoardHeaderRow()
+			p.headerRows[key] = h
+		}
+		h.label.SetText(sec.Title)
+		keepHeaders[key] = true
+		want = append(want, h.row)
+		order = append(order, "")
 		for _, row := range sec.Rows {
-			r := widget.NewBoardRow()
+			r := p.caseRows[row.ID]
+			if r == nil {
+				r = p.newCaseRow(row.ID)
+				p.caseRows[row.ID] = r
+			}
 			r.SetRow(boardRowData(row))
-			p.caseList.Append(r.ListBoxRow)
-			p.caseOrder = append(p.caseOrder, row.ID)
-			rr := r
-			id := row.ID
-			click := gtk.NewGestureClick()
-			click.SetButton(gdk.BUTTON_SECONDARY)
-			click.ConnectPressed(func(n int, x, y float64) {
-				p.ctl.Select(id)
-				p.showCaseContextMenu(&rr.ListBoxRow.Widget, id, x, y)
-			})
-			r.ListBoxRow.AddController(click)
-			long := gtk.NewGestureLongPress()
-			long.ConnectPressed(func(x, y float64) {
-				p.ctl.Select(id)
-				p.showCaseContextMenu(&rr.ListBoxRow.Widget, id, x, y)
-			})
-			r.ListBoxRow.AddController(long)
+			keepCases[row.ID] = true
+			want = append(want, r.ListBoxRow)
+			order = append(order, row.ID)
 		}
 	}
+	for id, r := range p.caseRows {
+		if !keepCases[id] {
+			if r.Parent() != nil {
+				p.caseList.Remove(r.ListBoxRow)
+			}
+			delete(p.caseRows, id)
+		}
+	}
+	for key, h := range p.headerRows {
+		if !keepHeaders[key] {
+			if h.row.Parent() != nil {
+				p.caseList.Remove(h.row)
+			}
+			delete(p.headerRows, key)
+		}
+	}
+	for i, row := range want {
+		if cur := p.caseList.RowAtIndex(i); cur != nil && sameObject(cur, row) {
+			continue
+		}
+		if row.Parent() != nil {
+			p.caseList.Remove(row)
+		}
+		p.caseList.Insert(row, i)
+	}
+	p.caseOrder = order
 	p.syncListSelection(vm)
+	if refocus && !listHoldsFocus(p.w, p.caseList) {
+		focusSelectedRow(p.caseList)
+	}
+}
+
+// boardSectionKey names a section of the case list across changes.
+type boardSectionKey struct {
+	kind  board.SectionKind
+	state board.State
+}
+
+// boardHeaderRow is a section header kept across changes.
+type boardHeaderRow struct {
+	row   *gtk.ListBoxRow
+	label *gtk.Label
+}
+
+func newBoardHeaderRow() *boardHeaderRow {
+	row, label := boardSectionHeaderParts("")
+	return &boardHeaderRow{row: row, label: label}
+}
+
+// newCaseRow is case id's row with its context menu (right-click, long
+// press); filled by renderList.
+func (p *boardPage) newCaseRow(id board.CaseID) *widget.BoardRow {
+	r := widget.NewBoardRow()
+	anchor := &r.ListBoxRow.Widget
+	click := gtk.NewGestureClick()
+	click.SetButton(gdk.BUTTON_SECONDARY)
+	click.ConnectPressed(func(n int, x, y float64) {
+		p.ctl.Select(id)
+		p.showCaseContextMenu(anchor, id, x, y)
+	})
+	r.ListBoxRow.AddController(click)
+	long := gtk.NewGestureLongPress()
+	long.ConnectPressed(func(x, y float64) {
+		p.ctl.Select(id)
+		p.showCaseContextMenu(anchor, id, x, y)
+	})
+	r.ListBoxRow.AddController(long)
+	return r
+}
+
+// sameObject reports whether a and b wrap the same GObject (gotk4 may hand
+// out a fresh Go wrapper for an object it already wrapped).
+func sameObject(a, b coreglib.Objector) bool {
+	return coreglib.InternObject(a).Native() == coreglib.InternObject(b).Native()
 }
 
 // boardSectionHeader is a non-selectable header row, as the Jira sidebar's
 // account headers are built (plain, bold, dim).
 func boardSectionHeader(title string) *gtk.ListBoxRow {
+	row, _ := boardSectionHeaderParts(title)
+	return row
+}
+
+// boardSectionHeaderParts is boardSectionHeader and its label.
+func boardSectionHeaderParts(title string) (*gtk.ListBoxRow, *gtk.Label) {
 	l := gtk.NewLabel(title)
 	l.SetUseMarkup(false)
 	l.SetXAlign(0)
@@ -434,7 +590,7 @@ func boardSectionHeader(title string) *gtk.ListBoxRow {
 	row.SetChild(l)
 	row.SetSelectable(false)
 	row.SetActivatable(false)
-	return row
+	return row, l
 }
 
 // boardRowData projects a board.Row onto widget.BoardRowData.
@@ -453,6 +609,7 @@ func boardRowData(r board.Row) widget.BoardRowData {
 		Attachments: r.Attachments,
 		Unread:      r.Unread,
 		CountText:   r.CountText,
+		Badges:      r.Badges,
 	}
 }
 

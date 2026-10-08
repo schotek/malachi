@@ -8,8 +8,10 @@
 // the three styles with a case selected and its detail (beside the List,
 // in the sliding panel over Columns and Today, which Escape and Close
 // close), Done and Move Back, a Remind preset that takes the case off the
-// board, and the Board groups of the Preferences (General's default style;
-// AI's triage hidden while Register with Claude is off). Cases are found by
+// board, and the Board groups of the Preferences (General's Board View, Open
+// at Launch, Show the Board and Keep cases for; AI's triage hidden while
+// Register with Claude is off and shown once it is on, over the session's
+// own Claude registration, BoardSmokeFixture). Cases are found by
 // their sample titles, which are data, never translated; everything else by
 // AutomationId.
 
@@ -154,19 +156,31 @@ public sealed class BoardSmokeTests(BoardSmokeFixture fixture) : IClassFixture<B
         {
             Uia.Select(Uia.Find(preferences, "GeneralPage"));
             Assert.NotNull(Uia.Find(preferences, "BoardDefaultStyle"));
+            Assert.NotNull(Uia.Find(preferences, "BoardStartMode"));
+            Assert.NotNull(Uia.Find(preferences, "BoardShow"));
+            Assert.NotNull(Uia.Find(preferences, "BoardWindowHot"));
 
             // The triage's group only once the app is registered with Claude
-            // (the In App target). The switch reads the machine's Claude
-            // configuration (malachi-mcp status), so a developer's own
-            // registration shows it On; only the Off case asserts the group's
-            // absence.
+            // (Open In is In App). The session's Claude Code is present and
+            // not registered (BoardSmokeFixture): the group is absent, then
+            // the switch registers the bridge in the session's ~/.claude.json
+            // and the group shows, then the switch takes it back.
             Uia.Select(Uia.Find(preferences, "AiPage"));
             var register = Uia.Find(preferences, "RegisterWithClaude");
-            if (ToggleOf(register) == ToggleState.Off)
-            {
-                Assert.Null(Uia.TryFind(preferences, "BoardTriageConsent"));
-                Assert.Null(Uia.TryFind(preferences, "BoardTriageAuto"));
-            }
+            Uia.WaitFor(() => register.Current.IsEnabled, "Register with Claude to know the status");
+            Assert.Equal(ToggleState.Off, ToggleOf(register));
+            Assert.Null(Uia.TryFind(preferences, "BoardTriageConsent"));
+            Assert.Null(Uia.TryFind(preferences, "BoardTriageAuto"));
+
+            Uia.Toggle(register);
+            Uia.WaitFor(() => ToggleOf(Uia.Find(preferences, "RegisterWithClaude")) == ToggleState.On, "the bridge to be registered");
+            Assert.NotNull(Uia.Find(preferences, "BoardTriageConsent"));
+            Assert.NotNull(Uia.Find(preferences, "BoardTriageAuto"));
+            Assert.NotNull(Uia.Find(preferences, "BoardTriageAccountsSubtitle"));
+
+            Uia.Toggle(Uia.Find(preferences, "RegisterWithClaude"));
+            Uia.WaitFor(() => ToggleOf(Uia.Find(preferences, "RegisterWithClaude")) == ToggleState.Off, "the bridge to be unregistered");
+            Uia.WaitFor(() => Uia.TryFind(preferences, "BoardTriageConsent") is null, "the triage's group to hide");
         }
         finally
         {

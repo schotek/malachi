@@ -106,7 +106,8 @@ final class BoardActions {
     }
 
     /// With a suggested reply its inline editor takes the keyboard (the
-    /// case is selected for it); otherwise a compose window answers.
+    /// case is selected for it); otherwise, also when that reply could not
+    /// be opened, a compose window answers.
     func reply(_ id: Board.CaseID) {
         guard let c = boardCase(id) else { return }
         if let replyHost, replyHost.editsInline(id) {
@@ -155,16 +156,29 @@ final class BoardActions {
 
     // MARK: Suggest Reply
 
-    /// The detail's Suggest Reply control for case `id` (Core's view).
+    /// The detail's Suggest Reply control for case `id` (Core's view),
+    /// titled ✦ Suggest Follow-up where the reply nudges the user's own
+    /// message (`Board.isFollowUp`).
     func suggestReplyView(_ id: Board.CaseID) -> Board.SuggestReplyView {
-        guard let suggestion, let c = boardCase(id) else { return .hidden }
+        guard let suggestion, let c = suggestable(id) else { return .hidden }
         return suggestion.view(for: c, in: controller.source.snapshot, samples: samples)
     }
 
     /// ✦ Suggest Reply for case `id` with the user's `instruction`.
     func suggestReply(_ id: Board.CaseID, instruction: String) {
-        guard let suggestion, let c = boardCase(id) else { return }
+        guard let suggestion, let c = suggestable(id) else { return }
         suggestion.start(c, instruction: instruction)
+    }
+
+    /// The case as Suggest Reply sees it: a suggested reply deleted
+    /// elsewhere (`BoardReplyEditorHost.draftGone`) counts as none, so a
+    /// new one can be asked for; the new link replaces the old.
+    private func suggestable(_ id: Board.CaseID) -> Board.Case? {
+        guard var c = boardCase(id) else { return nil }
+        if c.draft != nil, replyHost?.draftGone(id) == true {
+            c.draft = nil
+        }
+        return c
     }
 
     /// Stop of the suggested reply under way.
@@ -179,14 +193,20 @@ final class BoardActions {
     func remindMenu(for id: Board.CaseID) -> NSMenu {
         let menu = NSMenu()
         for preset in controller.remindPresets() {
-            let item = BoardMenuAction.item(preset.title) { [weak self] in
-                self?.remind(id, until: preset.date)
-            }
+            // The title with its time under it where the menu can show a
+            // subtitle; else the whole item on one line (`label`).
+            let item: NSMenuItem
             if #available(macOS 14.4, *) {
+                item = BoardMenuAction.item(preset.title) { [weak self] in
+                    self?.remind(id, until: preset.date)
+                }
                 item.subtitle = preset.when
             } else {
-                item.toolTip = preset.when
+                item = BoardMenuAction.item(preset.label) { [weak self] in
+                    self?.remind(id, until: preset.date)
+                }
             }
+            item.setAccessibilityLabel(preset.label)
             menu.addItem(item)
         }
         if isSnoozed(id) {

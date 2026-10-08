@@ -61,14 +61,15 @@ type BoardReason string
 // "Relevant member" below means one the rules decide by: a note to self
 // (a message of the user's, in a folder of role sent or outbox, whose
 // recipients in To, Cc and Bcc are all addresses of the user's accounts)
-// still counts as a member but is passed over, so the newest relevant
-// member is the newest that is not such a note.
+// and a message of the user's shaped like a forward still count as
+// members but are passed over, so the newest relevant member is the
+// newest that is neither.
 const (
 	// The newest relevant member is inbound, the user is in its To, its
 	// sender is known, and its own header says Importance: high or
 	// X-Priority 1 or 2.
 	BoardReasonHotImportant BoardReason = "hot.important"
-	// The user flagged a member and the newest relevant member is inbound.
+	// The user flagged a member, whoever wrote the newest relevant member.
 	BoardReasonHotFlagged BoardReason = "hot.flagged"
 	// The newest relevant member is inbound, the user is in its To and its
 	// sender is known.
@@ -88,8 +89,13 @@ const (
 	// Inbound; the user is not among the To or Cc recipients (a list, a
 	// Bcc).
 	BoardReasonInfoNotAddressed BoardReason = "info.notAddressed"
-	// Inbound and the user in its To, but from a sender the user has never
-	// written to (not known); its Importance does not count either.
+	// The newest relevant member is inbound, the user is in its To, and its
+	// sender is one the user has never written to (not known): a new
+	// contact. Its Importance does not count.
+	BoardReasonYouNewContact BoardReason = "you.newContact"
+	// Inbound from a sender the user has never written to (not known), the
+	// user not in its To (in Cc, or not addressed); its Importance does not
+	// count either.
 	BoardReasonInfoUnknownSender BoardReason = "info.unknownSender"
 	// Inbound mail that is a note to oneself: from one of the user's
 	// addresses (any account's), every recipient one of them.
@@ -117,7 +123,7 @@ type BoardVisibility string
 const (
 	BoardLive    BoardVisibility = "live"    // on the board
 	BoardDone    BoardVisibility = "done"    // the user marked it done (DoneAt); a later inbound message reopens it
-	BoardSnoozed BoardVisibility = "snoozed" // hidden until RemindAt, then live again (and listed until done or reminded again)
+	BoardSnoozed BoardVisibility = "snoozed" // hidden until RemindAt, then live again (RemindedAt; listed until done or reminded again); a later inbound message ends it early
 )
 
 // BoardCase is a conversation (a mail thread) or an issue (a jira
@@ -144,6 +150,13 @@ type BoardCase struct {
 	Visibility BoardVisibility  `json:"visibility"`
 	DoneAt     *time.Time       `json:"doneAt,omitempty"`   // set when Visibility is done
 	RemindAt   *time.Time       `json:"remindAt,omitempty"` // set while snoozed, always in the future
+	// RemindedAt is when a remind came due (the remindAt it had), set
+	// while Visibility is live after that remind and until the user acts
+	// on the case (board.setState, board.setDone, board.remind, also with
+	// null, board.archive, board.unflag) or an inbound member that counts
+	// arrives. Clients list such a case first in its state, marked as
+	// reminded. Never set by a remind that new mail cancelled.
+	RemindedAt *time.Time `json:"remindedAt,omitempty"`
 	// Subject is the newest relevant member's (a note to self of the
 	// user's is passed over, BoardReason), Re:/Fwd: stripped as in
 	// ThreadSummary; for an issue "KEY: Summary".
@@ -353,6 +366,11 @@ type BoardUsage struct {
 	OutputTokens             int64 `json:"outputTokens"`
 	CacheCreationInputTokens int64 `json:"cacheCreationInputTokens"`
 	CacheReadInputTokens     int64 `json:"cacheReadInputTokens"`
+	// LowerBound: the counters are a lower bound, not the whole usage
+	// (the run was stopped, timed out, or its client gave up waiting for
+	// the assistant's final report). In BoardUsageTotal: any run summed
+	// was a lower bound.
+	LowerBound bool `json:"lowerBound,omitempty"`
 }
 
 // Valid reports whether no counter is negative.
@@ -364,7 +382,8 @@ func (u BoardUsage) Valid() bool {
 func (u BoardUsage) Clamped() BoardUsage {
 	c := func(n int64) int64 { return min(max(n, 0), MaxBoardUsageTokens) }
 	return BoardUsage{InputTokens: c(u.InputTokens), OutputTokens: c(u.OutputTokens),
-		CacheCreationInputTokens: c(u.CacheCreationInputTokens), CacheReadInputTokens: c(u.CacheReadInputTokens)}
+		CacheCreationInputTokens: c(u.CacheCreationInputTokens), CacheReadInputTokens: c(u.CacheReadInputTokens),
+		LowerBound: u.LowerBound}
 }
 
 // BoardUsageTotal is BoardUsage summed over Runs runs (BoardTriage.Usage24h).
@@ -395,7 +414,9 @@ type BoardPreferences struct {
 	Windows   BoardWindows `json:"windows"` // default 90/30/30/14
 	// TriageAccounts limits triage to these accounts; empty = every
 	// enabled mail account (kind imap or graph). A jira account is
-	// triaged only when listed. Never null.
+	// triaged only when listed. Never null. Ids of accounts that no
+	// longer exist are dropped on reading and writing, unless every one
+	// is gone (then the list stays and triage reads no account).
 	TriageAccounts []AccountID `json:"triageAccounts"`
 	// AutoTriage: the client runs triage on its own schedule. Default
 	// false. The daemon only stores it.
@@ -549,6 +570,21 @@ type BoardArchiveResult struct {
 	Archived  int       `json:"archived"`            // messages moved to the archive folder
 	NoArchive bool      `json:"noArchive,omitempty"` // the account cannot archive: only marked done
 	Case      BoardCase `json:"case"`
+	// Moved names each message moved to the archive folder and the folder
+	// it was moved from, so that a client can undo the archive
+	// (message.move back, then board.setDone with done false). Absent when
+	// nothing was moved (NoArchive, or an older daemon) and when the move
+	// cannot be undone locally (an archive folder that is not
+	// synchronised, Gmail's All Mail: the messages left the local store);
+	// a client then offers no Undo.
+	Moved []BoardMoved `json:"moved,omitempty"`
+}
+
+// BoardMoved is a message board.archive moved, with its folder before the
+// move.
+type BoardMoved struct {
+	MessageID    MessageID `json:"messageId"`
+	FromFolderID FolderID  `json:"fromFolderId"`
 }
 
 // BoardUnflagParams asks board.unflag to clear the flag (the star) of

@@ -183,3 +183,28 @@ func TestTriageTexts(t *testing.T) {
 		t.Error("ClampTriageMax")
 	}
 }
+
+func TestTriageAnnotatedCase(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+		ok   bool
+	}{
+		{"annotated case c_0123456789abcdef0123456789abcdef: state in effect hot (decided by rules)", "c_0123456789abcdef0123456789abcdef", true},
+		{"annotated case c_1: x\nannotations left in this session: 3", "c_1", true},
+		{"annotated case : x", "", false},
+		{"annotated case c 1: x", "", false},
+		{"annotated case c_1", "", false},
+		{"Annotated case c_1: x", "", false},
+		{"this session already annotated 3 cases", "", false},
+		{"annotated case c_‮1: x", "", false},
+		{"annotated case " + strings.Repeat("a", 65) + ": x", "", false},
+		{"", "", false},
+	}
+	for _, tt := range tests {
+		got, ok := TriageAnnotatedCase(tt.in)
+		if got != tt.want || ok != tt.ok {
+			t.Errorf("TriageAnnotatedCase(%q) = %q, %v; want %q, %v", tt.in, got, ok, tt.want, tt.ok)
+		}
+	}
+}

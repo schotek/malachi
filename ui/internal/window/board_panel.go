@@ -5,7 +5,6 @@ package window
 
 import (
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
-	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/ui/internal/board"
@@ -48,24 +47,15 @@ func (p *boardPage) bindPanel(b *gtk.Builder) {
 	p.panel = pn
 }
 
-// wirePanel sets the Close button's text and wires it and Escape to close
-// the panel (clearing the selection, like board_actions.go's actions do
-// for the rest of the detail).
+// wirePanel sets the Close button's text and wires it to close the panel
+// (clearing the selection, like board_actions.go's actions do for the rest
+// of the detail). Escape is the whole page's (board_keys.go
+// wireBoardKeys), not only the panel's.
 func (p *boardPage) wirePanel() {
 	pn := p.panel
 	pn.close.SetLabel(board.Close(i18n.Tr))
 	pn.close.SetUseUnderline(true)
 	pn.close.ConnectClicked(func() { p.ctl.Select("") })
-
-	keys := gtk.NewEventControllerKey()
-	keys.ConnectKeyPressed(func(val, code uint, state gdk.ModifierType) bool {
-		if val != gdk.KEY_Escape || state != 0 || !pn.split.ShowSidebar() {
-			return false
-		}
-		p.ctl.Select("")
-		return true
-	})
-	pn.content.AddController(keys)
 }
 
 // renderPanel shows the panel exactly while boardPanelShown and moves the

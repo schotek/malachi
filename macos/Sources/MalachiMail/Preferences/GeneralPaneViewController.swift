@@ -27,8 +27,14 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
     // Startup
     let launchAtLogin = NSSwitch()
     let runInBackground = NSSwitch()
-    // Board (macOS only for now, the board being Swift-first)
+    // Board (preferences_board.go `bindBoard`)
+    let boardShow = NSSwitch()
     let boardDefaultStyle = NSPopUpButton(frame: .zero, pullsDown: false)
+    let boardStartMode = NSPopUpButton(frame: .zero, pullsDown: false)
+    /// Keep cases for: one row per state, in `Board.State.allCases`' order.
+    let boardWindows = Board.State.allCases.map { _ in
+        PrefsSpinControl(min: 1, max: API.Limits.maxBoardWindowDays, value: 30)
+    }
     // Reading
     let markReadDelay = PrefsSpinControl(min: 0, max: Settings.markReadDelayMax, value: 2)
     // Deleting
@@ -49,8 +55,13 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
     /// The Disk Space Used row's value (`storage_size`: dim, numeric).
     let storageValue = NSTextField(labelWithString: "")
 
-    /// The board's Default View pop-up's items, in order.
-    static let boardStyleChoices: [Board.Style] = Board.Style.allCases
+    /// The board's Board View pop-up's items, in order.
+    static let boardStyleChoices: [Board.DefaultStyle] = Board.defaultStyles
+    /// Open at Launch's items, in order.
+    static let boardStartChoices: [Board.StartChoice] = Board.startModes
+    /// The windows' writes wait for the stepping to pause (GTK
+    /// `boardWindowsDebounce`).
+    static let boardWindowsDelay: TimeInterval = 0.6
 
     /// The ⌘R pop-up's items, in order.
     static let commandRChoices: [Settings.CommandR] = [.reply, .refresh]
@@ -73,6 +84,19 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
 
     private var settings: Settings?
     private var client: RPCClient?
+    /// The daemon's board preferences (Show the Board, Keep cases for);
+    /// nil hides their rows.
+    private var boardPreferences: BoardPreferencesController?
+    private var boardShowRow: PreferenceRowView?
+    private let boardGroup = PreferencesGroupView(title: Board.Text.boardName)
+    private let boardWindowsGroup = PreferencesGroupView(
+        title: Board.Text.windowsSetting, description: Board.Text.windowsSettingSubtitle)
+    private var boardWindowRows: [PreferenceRowView] = []
+    private var boardPrefsToken: BoardObserverToken?
+    /// The board's switch and steppers are being set from the daemon.
+    private var syncingBoard = false
+    /// The windows' write waiting for the stepping to pause.
+    private var boardWindowsWrite: DispatchWorkItem?
     private var toast: (@MainActor (String) -> Void)?
     private let loginItems = LoginItemService()
     private let bindings = PreferenceBindingSet()
@@ -101,10 +125,16 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
 
     /// Supplies what the pane binds to; may be called before or after the
     /// view loaded. A second call after the bindings started is ignored.
-    func configure(settings: Settings, client: RPCClient, toast: @escaping @MainActor (String) -> Void) {
+    /// `boardPreferences`: the application's (Show the Board and Keep
+    /// cases for show only with it).
+    func configure(
+        settings: Settings, client: RPCClient, boardPreferences: BoardPreferencesController? = nil,
+        toast: @escaping @MainActor (String) -> Void
+    ) {
         guard !bound else { return }
         self.settings = settings
         self.client = client
+        self.boardPreferences = boardPreferences
         self.toast = toast
         bindIfReady()
     }
@@ -121,15 +151,27 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
         ])
         addGroup(startup)
 
-        // The style the board opens in after launch (`board-default-style`;
-        // later shows keep the user's last one). Not the AI page's Board
-        // group: that one hides with the triage.
-        let boardGroup = PreferencesGroupView(title: Board.Text.boardName)
-        boardDefaultStyle.addItems(withTitles: GeneralPaneViewController.boardStyleChoices.map(Board.Text.styleTitle))
+        // The board (preferences.blp `board_group`): Show the Board (the
+        // daemon's `enabled`), the style it shows in (`board-default-style`)
+        // and the mode the window opens in (`board-start-mode`). Not the AI
+        // page's Board group: that one hides with the triage.
+        boardDefaultStyle.addItems(withTitles: GeneralPaneViewController.boardStyleChoices.map(Board.Text.defaultStyleTitle))
+        boardStartMode.addItems(withTitles: GeneralPaneViewController.boardStartChoices.map(Board.Text.startModeTitle))
+        let showRow = PreferenceRowView(
+            title: Board.Text.showBoardSetting, subtitle: Board.Text.showBoardSettingSubtitle, trailing: boardShow)
+        boardShowRow = showRow
         boardGroup.setRows([
+            showRow,
             PreferenceRowView(title: Board.Text.defaultStyleSetting, trailing: boardDefaultStyle),
+            PreferenceRowView(title: Board.Text.startModeSetting, trailing: boardStartMode),
         ])
         addGroup(boardGroup)
+        // Keep cases for: the daemon's `windows`, a stepper per state.
+        boardWindowRows = zip(Board.State.allCases, boardWindows).map { state, spin in
+            PreferenceRowView(title: Board.Text.stateName(state), subtitle: Board.Text.days(spin.value), trailing: spin)
+        }
+        boardWindowsGroup.setRows(boardWindowRows)
+        addGroup(boardWindowsGroup)
 
         let reading = PreferencesGroupView(title: L10n.T("Reading"))
         reading.setRows([
@@ -242,6 +284,10 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
         bindings.add(.bind(
             boardDefaultStyle, to: settings, .boardDefaultStyle,
             choices: GeneralPaneViewController.boardStyleChoices, \.boardDefaultStyle))
+        bindings.add(.bind(
+            boardStartMode, to: settings, .boardStartMode,
+            choices: GeneralPaneViewController.boardStartChoices, \.boardStartMode))
+        bindBoard()
 
         launchAtLogin.target = self
         launchAtLogin.action = #selector(launchAtLoginChanged(_:))
@@ -254,6 +300,7 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
         bindings.onClose = { [weak self] in
             self?.mail?.close()
             self?.storage?.close()
+            self?.unbindBoard()
         }
     }
 
@@ -390,6 +437,127 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
             mail.set(neverStoreAttachments: neverStore.state == .on)
         } else if sender as AnyObject === compressStore {
             mail.set(compressStore: compressStore.state == .on)
+        }
+    }
+
+    // MARK: Board (preferences_board.go `bindBoard`)
+
+    /// Show the Board and Keep cases for follow the daemon's preferences:
+    /// insensitive until it answered, the windows greyed out while the
+    /// board is off. Turning the board off turns the automatic triage off
+    /// in the same write; a window's change is written once the stepping
+    /// pauses (the window's closing writes the last step).
+    private func bindBoard() {
+        guard let prefs = boardPreferences else {
+            if let row = boardShowRow {
+                boardGroup.setRow(row, hidden: true)
+            }
+            boardWindowsGroup.isHidden = true
+            return
+        }
+        boardShow.target = self
+        boardShow.action = #selector(boardShowChanged(_:))
+        for spin in boardWindows {
+            spin.onChange = { [weak self] _ in self?.boardWindowStepped() }
+        }
+        boardPrefsToken = prefs.observe { [weak self] in self?.renderBoard() }
+        if prefs.stored == nil {
+            prefs.load()
+        }
+        renderBoard()
+    }
+
+    private func unbindBoard() {
+        boardPrefsToken?.cancel()
+        boardPrefsToken = nil
+        if boardWindowsWrite != nil {
+            // The last step is not lost with the window.
+            writeBoardWindows(final: true)
+        }
+    }
+
+    private func renderBoard() {
+        guard !closed else { return }
+        let p = boardPreferences?.preferences
+        syncingBoard = true
+        defer { syncingBoard = false }
+        boardShowRow?.isEnabled = p != nil
+        boardShow.state = p?.enabled ?? true ? .on : .off
+        var windows = BoardPreferencesController.defaultWindows
+        if let w = p?.windows, BoardPreferencesController.validWindows(w) {
+            windows = w
+        }
+        boardWindowsGroup.isEnabled = p?.enabled == true
+        for (i, state) in Board.State.allCases.enumerated() {
+            let spin = boardWindows[i]
+            if boardWindowsWrite == nil, spin.value != Self.window(windows, state) {
+                spin.value = Self.window(windows, state)
+            }
+            boardWindowRows[i].subtitle = Board.Text.days(spin.value)
+        }
+    }
+
+    @objc private func boardShowChanged(_ sender: Any?) {
+        guard !syncingBoard, let prefs = boardPreferences else { return }
+        if boardShow.state == .on {
+            prefs.setEnabled(true)
+            return
+        }
+        // Turned off, nothing runs on its own either.
+        prefs.update({ p in
+            p.enabled = false
+            p.autoTriage = false
+        }, completion: nil)
+    }
+
+    private func boardWindowStepped() {
+        for (i, spin) in boardWindows.enumerated() {
+            boardWindowRows[i].subtitle = Board.Text.days(spin.value)
+        }
+        guard !syncingBoard else { return }
+        boardWindowsWrite?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                self?.writeBoardWindows(final: false)
+            }
+        }
+        boardWindowsWrite = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.boardWindowsDelay, execute: work)
+    }
+
+    /// Tells the daemon what the steppers show; `final`: the window is
+    /// closing, and the last step still goes.
+    private func writeBoardWindows(final: Bool) {
+        boardWindowsWrite?.cancel()
+        boardWindowsWrite = nil
+        guard let prefs = boardPreferences, let p = prefs.preferences, final || !closed else { return }
+        var w = p.windows
+        if !BoardPreferencesController.validWindows(w) {
+            w = BoardPreferencesController.defaultWindows
+        }
+        for (i, state) in Board.State.allCases.enumerated() {
+            Self.setWindow(&w, state, boardWindows[i].value)
+        }
+        if w == p.windows || !prefs.setWindows(w) {
+            renderBoard()
+        }
+    }
+
+    private static func window(_ w: BoardWindows, _ s: Board.State) -> Int {
+        switch s {
+        case .hot: return w.hot
+        case .you: return w.you
+        case .them: return w.them
+        case .info: return w.info
+        }
+    }
+
+    private static func setWindow(_ w: inout BoardWindows, _ s: Board.State, _ days: Int) {
+        switch s {
+        case .hot: w.hot = days
+        case .you: w.you = days
+        case .them: w.them = days
+        case .info: w.info = days
         }
     }
 

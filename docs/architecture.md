@@ -1108,7 +1108,7 @@ Four layers, each of which knows only the one below:
   decisions, annotations, commitments and runs.
 - `internal/core/board_*.go` — the worker that drains the dirty set,
   the first evaluation of stored mail, the hourly upkeep, the identities,
-  the preferences and the fifteen `board.*` methods.
+  the preferences and the seventeen `board.*` methods.
 - `cmd/malachi-mcp` — `list_board` for every agent and, under
   `--allow-triage`, the triage tools ([mcp.md](mcp.md), *Triage of the
   board*). The daemon itself never talks to a model.
@@ -1125,7 +1125,17 @@ latest message, the issue's key and status, `can_archive`) are a cache the
 drain rebuilds from the thread at any time. The **user's** ones
 (`user_state`, `done_at`, `remind_at` with `reminded`, and `done_seen`,
 the Message-IDs the case had when it was marked done) are authoritative
-and never recomputed. `orphaned_at` and `member_ids` carry a case across a
+and never recomputed. Two columns are used for more than their name
+says, because no migration was allowed (0017 is frozen, §7): while a
+remind is set (`remind_at` ahead, not yet `reminded`) `done_seen` holds
+the remind's marker, a first line `~remind <stamp>` (the store's clock
+when the remind was set) followed by the inbound Message-IDs the case
+had then (`BoardCase.RemindSetAt`; done and remind exclude each other, so
+the column is free); and `board_runs.day` of a manual or automatic run
+is `lowerBound` when its token count is only a lower bound (the unique
+index on `day` covers `external` runs only, whose `day` is the
+**daemon's** local day, `YYYY-MM-DD`; the comment in 0017 that says the
+caller's is wrong). `orphaned_at` and `member_ids` carry a case across a
 move by another client (below). `input_key` is a hash over the ids and
 body states of the members that count, the key an annotation is checked
 against; `members_key` also covers what `board.get` shows of them;
@@ -1199,13 +1209,17 @@ and dropped from the set; the batch goes on. The decider
 (`core/board_adapter.go`) runs inside the transaction and must not call
 the store: the identities are read before the batch, and the text of a
 member is read lazily, only for the members the rules look at
-(`Verdict.TextMembers`: none unless the newest member that counts is the
-user's). The own text of such a member that has HTML needs the raw
+(`Verdict.TextMembers`: none unless the newest member that is no note to
+self is the user's, then the user's up to ten newest messages after the
+newest inbound one, among which forwards are looked for). The own text of such a member that has HTML needs the raw
 message parsed and sanitised, which must not happen inside the
 transaction: the decider leaves the thread as it is and asks for it, the
 worker derives it after the batch (`core/board_owntext.go`, a two-level
 cache of 8 MiB) and marks the thread again; a thread that asked once is
-judged with what there is the next time. The worker wakes when the
+judged with what there is the next time. `board.get` is the exception: it
+derives up to eight such texts, newest first, while the caller waits
+(`boardGetDerive`) and shows the stored text for the rest, which the
+worker derives afterwards. The worker wakes when the
 notifier sees new mail, changed messages or the end of a sync pass, when
 a board method changed something, every 30 s, and when the earliest
 remind comes due.
@@ -1221,7 +1235,7 @@ before (`restartBoardBackfill`, which a pass under way notices before it
 records anything more). `board.list` says `ready: false` until the pass
 is done and the set is empty.
 
-**The rules** (`internal/board`, `RulesVersion` "5"). What counts: a
+**The rules** (`internal/board`, `RulesVersion` "6"). What counts: a
 visible member (not hidden, not in a virtual folder) outside the folders
 of role trash, junk and drafts that is the user's or classified as no bulk
 mail (§3.1, migration 0016), and on an issue no event. **Mine** is a row
@@ -1239,19 +1253,27 @@ accounts together (`Identity.WithSelf`, read with them and kept until they
 change; a change marks the stored mail of the longest window dirty) tell
 a **note to self**: a message of the user's whose `To`, `Cc` and `Bcc`
 are at least one and all such addresses, which counts but never decides
-the state, the case's date or its subject (§4.13), and inbound mail from
+the state, the case's date or its subject (§4.13); an **own forward inside
+a thread** (version 6; looked for only among the user's messages after
+the newest inbound one, newest ten) passes the same way, so the deciding
+member is the newest that is neither (`Verdict.DecidingMessageID`,
+`DecidingMine`), and a commitment closes against it alone. Inbound mail from
 such an address to nothing but them (`info.yourNote`); the **known correspondents** are
 the addresses in `To` or `Cc` of the sent and outbox folders of every
 enabled mail account (most recent first, at most 20 000), read hourly or
 when the accounts change. The order of the rules, the reasons and the
-known-sender rule are in the API's table: a newest inbound member that
-counts (notes to self passed over) goes through `hot.flagged`, `info.yourNote`, `hot.important`,
-`you.repliedToYou`, `you.addressed`, `info.unknownSender`, `info.ccOnly`,
-`info.notAddressed`; a newest member that is the user's gives `them` only
-by `them.replied` (an answer to someone who wrote in the thread) or
+known-sender rule are in the API's table: a deciding member that is inbound
+goes through `hot.flagged`, `info.yourNote`, `hot.important` (known
+senders), `you.repliedToYou`, `you.addressed` (known), `you.newContact`
+(an unknown sender with the user in `To`: it waits for the user but is
+told apart), `info.unknownSender` (unknown, the user not in `To`),
+`info.ccOnly`, `info.notAddressed`; the user's own flag (`hot.flagged`)
+wins whoever wrote last, so `board.unflag` is offered also when the
+user's message is the newest; a deciding member that is the user's gives
+`them` only by `them.replied` (an answer to someone who wrote in the thread) or
 `them.asked` (no inbound member, and a question mark in the user's own
 text of one of their newest ten messages that is not a forward), and a
-message of the user's shaped like a forward is never a case. Words of a
+message of the user's shaped like a forward never makes a case by itself. Words of a
 message never count, except that question mark. Jira: no case while the
 Jira user is unknown, for an issue in the done category or in the
 account's `closedStatuses`; events never decide; the newest item the
@@ -1271,7 +1293,11 @@ new value makes the daemon evaluate every case and the stored mail of
 the longest window again (version 3: the members carry their
 `References`, so a reply known only by them no longer starts its
 thread; 4: the quote trimming cuts at an Outlook header block without a
-separator line; 5: notes to self, and the members carry their `Bcc`).
+separator line; 5: notes to self, and the members carry their `Bcc`; 6: an own forward in
+a thread passes like a note, the user's flag is `hot` whoever wrote last,
+`you.newContact`). The first start after such a change judges the whole
+board again; the user's states, done, reminds, annotations and
+commitments stay.
 
 **Outcome of a verdict** (`store/board.go`). With a state, the case is
 created (only when its date lies within the longest window, so the first
@@ -1279,8 +1305,10 @@ evaluation does not fill the board with old mail) or its derived columns
 updated. With none, an existing case is **kept**, with reason `kept` and
 its last rule state, while the user set a state, a remind is set (ahead,
 or come due and not yet followed by done or another remind), a commitment
-is open, or a current annotation has a deadline still ahead; otherwise it
-is deleted. A thread with no visible member keeps its case **orphaned**
+is open (counted after the commitments this very verdict closed, so the
+reply that closes the last one lets the case go), or a current annotation
+has a deadline still ahead **and the `assistant` preference is on**;
+otherwise it is deleted. A thread with no visible member keeps its case **orphaned**
 (off the board): a move between folders by another client deletes one
 row before the other folder's sync stores it again, perhaps as a thread
 of its own, which adopts the orphan through `member_ids`; after a day
@@ -1292,11 +1320,28 @@ ahead). Done reopens when an inbound member that counts was stored after
 `done_seen` (a copy another client moved is stored anew); so neither a
 backfill of old mail, a forged `Date`, a move nor the user's own message
 reopens it. Done clears a remind and closes the open commitments
-(`closedReason: done`); a remind clears done. A remind that comes due
+(`closedReason: done`); a remind clears done. Whatever takes a case out
+of done (an inbound member, `board.setDone` with `done: false`, which
+the clients' Undo of Archive uses, a remind) opens again the commitments
+that done closed (`closed_reason = 'done'`, closed at or after `done_at`;
+those the user's reply closed stay closed); an inbound member that
+reopens it also clears the user's state, so the rules judge it again.
+The prune drops a long-done case whatever its user state, remind or
+deadline. A remind that comes due
 (`ClearDueBoardReminds`, from the worker's timer and the hourly upkeep;
 one past while the daemon was down fires at start) makes the case live and
 keeps it, past its window too, until the user marks it done or sets
-another. A case is listed within the window of its state in effect (the
+another, and shows it as **reminded** (`remindedAt`, §4.13): a client
+lists it first in its state until the user acts on it; there is no
+notification. New mail ends a remind too: an inbound member that counts,
+stored after the remind was set and not a member then (the three tests
+of done: stored after, arrived no earlier than a day before, not in the
+marker's list) makes the case live at once, without `remindedAt`, as the
+remind did not come due. A remind set before the marker existed, or
+merged from a row without it, is not woken by mail. Every action of the
+user's on the case, and new inbound mail, clear `remindedAt`; with the
+clock gone back so that a fired remind lies ahead again the case still
+counts as reminded, not snoozed. A case is listed within the window of its state in effect (the
 user's, the assistant's while it counts, else the rules'; preferences
 `windows`, default 90/30/30/14 days) or while something keeps it; a done
 case for 30 days. The hourly upkeep deletes cases older than the longest
@@ -1320,12 +1365,19 @@ other party's words never become the user's promise), and the date must
 lie between a day before and 400 days after that message arrived. A
 linked draft must be a draft of the case's account replying to a member
 of the case. A commitment closes by itself (`replied`) when the user
-writes a message newer than any they had written when it was recorded.
+writes a message newer than any they had written when it was recorded
+and that message is the deciding member (a note to self or an own forward
+closes nothing); adding or changing a commitment raises the case's
+`version`.
 **Runs**: a client records the runs it starts (`board.runStart`, manual or
-auto, and `board.runEnd` with an error class); each annotate and commit
+auto, and `board.runEnd` with an error class and its token `usage`, whose
+`lowerBound` says a stopped, expired or grace-expired run counted too
+little; `usage24h` is a lower bound when any summed run was, and the
+clients write "at least"); each annotate and commit
 call counts in its run as accepted or rejected, a call without a known
 open run in an implicit `external` run per `source` and local day. A run
-left open is ended as `failed` at the next start or after two hours; runs
+left open is ended as `failed` at the next start or by the hourly upkeep
+once it is two hours old (so after two to three); runs
 are kept 90 days. `board.list` reports the latest run, the cases automatic
 runs annotated today (the clients' daily cap) and the size of the queue.
 
@@ -1344,8 +1396,12 @@ never from the caller's goroutine; it carries no case, a client lists
 again. The worker sends it for what a batch changed, the methods for what
 they wrote, the upkeep for reminds, prunes and runs.
 
-**What a client shows** is described in [macos-port.md](macos-port.md):
-only the macOS client has the board so far (§7).
+**What a client shows** is described in [macos-port.md](macos-port.md),
+`docs/windows-port.md` §11.8 and, for GTK, the sources in
+`ui/internal/board`; all three clients have the board (§7). The reply of
+`board.archive` carries `moved` (each message and the folder it left), from
+which a client builds its Undo: `message.move` back, then `board.setDone`
+with `done: false`.
 
 ## 4. Security boundary: HTML
 
@@ -2252,6 +2308,25 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   first run over a copy of a real store filled `you` with automated
   mail); Jira by assignee, reporter, earlier comment or
   watching, closed issues never; default windows 90/30/30/14 days.
+  Amended 2026-10-08 (rules version 6): an own forward inside a thread
+  passes like a note to self, so it neither decides nor closes a
+  commitment; the user's own flag makes a case `hot` whoever wrote last;
+  mail from an unknown sender addressed to the user in `To` is `you` with
+  its own reason `you.newContact` (labelled *New contact* in the clients,
+  `Importance` still ignored), unknown senders not in `To` stay
+  `info.unknownSender`.
+- A remind is woken by new mail and a returned remind is marked:
+  **decided** (2026-10-08, the owner) — an inbound member stored after a
+  remind was set ends the snooze (a reply from the other side is worth
+  more than the date the user picked), and a remind that came due sets
+  `remindedAt`, so the clients list the case first in its state with a
+  *Reminded* badge until the user acts. Done by schema-less means, since
+  0017 is frozen and a new migration would reach the owner's live data
+  before the branch is merged (the marker in `done_seen`, §3.7), at the
+  price that older reminds are not woken by mail. A state chosen by the
+  user keeps its pin, and *Why is this here?* then says *Your decision
+  keeps it on the board*. Rejected: a notification for a returned remind
+  (the board is not a mail alert).
 - The user's decision wins: **decided** (2026-10-01) — a state the user
   chose beats the assistant's, which beats the rules'; done, a remind and
   an open commitment keep a case the rules would drop; done reopens only
@@ -2331,5 +2406,9 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   and suggested replies and inline editor lifecycle in
   `ui/internal/boardreply`. The GTK widgets mirror the three styles and
   embed the shared `compose.Pane`; live Claude and manual GTK checks
-  remain to be verified. The Windows client has the API types
-  (`Malachi.Core/Api/Board.cs`) only.
+  remain to be verified. The Windows client has the Board as a full port
+  (see `docs/windows-port.md` §11.8). The fix round of 2026-10-08 went into
+  all three clients at once (Czech state names *Hoří / Čeká na vás / Čeká na ně / Pro
+  informaci*, the English ones unchanged; the *Snoozed* navigation item; Archive with Undo; keys
+  ⌘/Ctrl+1 and 2, E, D, R; the two-stage Escape; the board's own
+  preferences). It is written, not yet verified, on GTK and Windows (see CLAUDE.md).

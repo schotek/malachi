@@ -113,6 +113,7 @@ namespace Malachi.Core.Api;
 [JsonSerializable(typeof(BoardRemindResult))]
 [JsonSerializable(typeof(BoardArchiveParams))]
 [JsonSerializable(typeof(BoardArchiveResult))]
+[JsonSerializable(typeof(BoardMoved))]
 [JsonSerializable(typeof(BoardUnflagParams))]
 [JsonSerializable(typeof(BoardUnflagResult))]
 [JsonSerializable(typeof(BoardDiscardDraftParams))]

@@ -194,3 +194,71 @@ func TestSubtitleFollowsProviderBeforeFirstQuestion(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestProviderFailureClasses(t *testing.T) {
+	for _, k := range []FailureKind{FailureStopped, FailureNotFound, FailureNotSignedIn, FailureToolsMissing} {
+		if k == FailureLimit {
+			t.Fatalf("FailureLimit collides with kind %d", k)
+		}
+	}
+	tests := []struct {
+		reason string
+		want   FailureKind
+	}{
+		{"codex_not_found", FailureNotFound},
+		{"chatgpt_not_connected", FailureNotSignedIn},
+		{"chatgpt_reconnect_required", FailureNotSignedIn},
+		{"chatgpt_consent_required", FailureNotSignedIn},
+		{"chatgpt_permission_denied", FailureNotSignedIn},
+		{"chatgpt_identity_mismatch", FailureNotSignedIn},
+		{"chatgpt_usage_limit", FailureLimit},
+		{"chatgpt_turn_failed", FailureStopped},
+		{"codex_session_ended", FailureStopped},
+		{"chatgpt_usage_limit ", FailureStopped},
+		{"", FailureStopped},
+	}
+	for _, tt := range tests {
+		if got := ProviderFailure(tt.reason); got.Kind != tt.want || got.Reason != tt.reason {
+			t.Errorf("ProviderFailure(%q) = %+v, want kind %d", tt.reason, got, tt.want)
+		}
+	}
+}
+
+// A provider's failed result, refused open and exit reach the request's
+// completion with their classes.
+func TestProviderRequestFailureClasses(t *testing.T) {
+	run := func(t *testing.T, act func(p *fakeProvider, s *fakeSession), want FailureKind) {
+		t.Helper()
+		loop := newTestLoop()
+		provider := newFakeProvider()
+		r := NewRequest(RequestConfig{Provider: func() Provider { return provider }, Settings: &memSettings{}, Loop: loop, Log: discardLog()})
+		var got *Outcome
+		r.StartCall(Call{SystemPrompt: "fixture", Message: "input"}, func(o Outcome) { got = &o })
+		loop.runUntil(t, func() bool { return r.providerSession != nil })
+		s := <-provider.sessions
+		<-s.sent
+		act(provider, s)
+		loop.runUntil(t, func() bool { return got != nil })
+		if got.Kind != OutcomeFailed || got.Failure.Kind != want {
+			t.Fatalf("outcome = %+v, want failure kind %d", *got, want)
+		}
+	}
+	t.Run("usage limit result", func(t *testing.T) {
+		run(t, func(_ *fakeProvider, s *fakeSession) {
+			go s.emit(assistant.Event{Kind: assistant.EventResult, IsError: true, ResultText: "chatgpt_usage_limit"})
+		}, FailureLimit)
+	})
+	t.Run("reconnect exit", func(t *testing.T) {
+		run(t, func(_ *fakeProvider, s *fakeSession) {
+			s.mu.Lock()
+			exit := s.exit
+			s.mu.Unlock()
+			go exit(Exit{Status: 1, Reason: "chatgpt_reconnect_required"})
+		}, FailureNotSignedIn)
+	})
+	t.Run("other result", func(t *testing.T) {
+		run(t, func(_ *fakeProvider, s *fakeSession) {
+			go s.emit(assistant.Event{Kind: assistant.EventResult, IsError: true, ResultText: "chatgpt_turn_failed"})
+		}, FailureStopped)
+	})
+}

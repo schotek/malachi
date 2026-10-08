@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Board/BoardSuggestReplyText.swift; Go:
-// ui/internal/board/reply.go (SuggestReply … SuggestReplyFailureText),
-// which holds the msgids.
+// ui/internal/board/reply.go (SuggestReply, SuggestFollowUp,
+// SuggestReplyTitle … SuggestReplyFailureText), which holds the msgids.
 //
 // The texts of the case detail's Suggest Reply. The reasons are the
 // triage's where the meaning is the same; Stop and the sign-in hint are
@@ -20,6 +20,20 @@ public static partial class Board
     {
         /// <summary>The button that asks the assistant for a reply draft.</summary>
         public static string SuggestReply => L10n.T("✦ Suggest Reply");
+
+        /// <summary>
+        /// The button on a case waiting for someone else
+        /// (<see cref="IsFollowUp"/>): the assistant writes a follow-up to the
+        /// user's own last message.
+        /// </summary>
+        public static string SuggestFollowUp =>
+            // TRANSLATORS: a button in a conversation's detail on the board, for a
+            // conversation where the user waits for an answer: the assistant writes
+            // a polite follow-up to the user's own last message.
+            L10n.T("✦ Suggest Follow-up");
+
+        /// <summary>The button: <see cref="SuggestFollowUp"/> for a follow-up, else <see cref="SuggestReply"/>.</summary>
+        public static string SuggestReplyTitle(bool followUp) => followUp ? SuggestFollowUp : SuggestReply;
 
         /// <summary>The placeholder of the instruction field.</summary>
         public static string SuggestReplyPlaceholder => L10n.T("What should the reply say? (optional)");
@@ -45,6 +59,7 @@ public static partial class Board
             SuggestReplyFailure.Stopped => TriageFailureText(TriageFailure.Stopped),
             SuggestReplyFailure.Backend => TriageFailureText(TriageFailure.Backend),
             SuggestReplyFailure.NoDraft => L10n.T("the assistant wrote no reply"),
+            SuggestReplyFailure.Limit => TriageFailureText(TriageFailure.Limit),
             _ => "",
         };
     }

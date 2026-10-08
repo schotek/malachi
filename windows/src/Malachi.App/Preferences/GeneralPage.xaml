@@ -5,8 +5,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 Port of macos/Sources/MalachiMail/Preferences/GeneralPaneViewController.swift;
 GTK: preferences.blp general_page. The Blueprint's groups in its order:
-Startup (launch_at_login, run_in_background), Board (board_default_style:
-the style of the first show after launch), Reading (mark_read_delay,
+Startup (launch_at_login, run_in_background), Board (Show the Board,
+Board View, Open at Launch) and Keep cases for (a window per state;
+preferences_board.go bindBoard), Reading (mark_read_delay,
 0 to 60 s), Deleting (confirm_delete), Notifications
 (desktop_notifications, notification_sound) and the daemon's Mail group
 (mail_group: check_interval, remote_images, offline_days, attachment_days,
@@ -90,22 +91,97 @@ button with what Windows opens mailto: links with (windows/README.md).
                     </tk:SettingsCard>
                 </StackPanel>
 
-                <!-- The board's style of the first show after launch (board_default_style). -->
+                <!--
+                    The board (preferences_board.go bindBoard): Show the Board (the
+                    daemon's board preferences), Board View (board-default-style),
+                    Open at Launch (board-start-mode). The texts are Core's
+                    (GeneralPage.xaml.cs).
+                -->
                 <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
                     <TextBlock
+                        x:Name="BoardHeading"
                         AutomationProperties.HeadingLevel="Level2"
-                        Style="{StaticResource SettingsGroupHeaderStyle}"
-                        Text="{l:T Msgid='Board'}" />
-                    <tk:SettingsCard Header="{l:T Msgid='Default View'}">
+                        Style="{StaticResource SettingsGroupHeaderStyle}" />
+                    <tk:SettingsCard x:Name="BoardShowRow">
+                        <ToggleSwitch
+                            x:Name="BoardShowSwitch"
+                            AutomationProperties.AutomationId="BoardShow"
+                            Toggled="OnBoardShowToggled" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="BoardStyleRow">
                         <ComboBox
                             x:Name="BoardStyleBox"
                             MinWidth="200"
-                            AutomationProperties.AutomationId="BoardDefaultStyle"
-                            AutomationProperties.Name="{l:T Msgid='Default View'}">
-                            <ComboBoxItem Content="{l:T Msgid='List', Context='board style'}" />
-                            <ComboBoxItem Content="{l:T Msgid='Columns', Context='board style'}" />
-                            <ComboBoxItem Content="{l:T Msgid='Today'}" />
-                        </ComboBox>
+                            AutomationProperties.AutomationId="BoardDefaultStyle" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="BoardStartRow">
+                        <ComboBox
+                            x:Name="BoardStartBox"
+                            MinWidth="200"
+                            AutomationProperties.AutomationId="BoardStartMode" />
+                    </tk:SettingsCard>
+                </StackPanel>
+
+                <!--
+                    Keep cases for (preferences_board.go boardWindowsGroup): a
+                    window per state, 1 to 365 days, written to the daemon after
+                    the last step (one write for a run of clicks).
+                -->
+                <StackPanel x:Name="BoardWindowsGroup" Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        x:Name="BoardWindowsHeading"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}" />
+                    <TextBlock
+                        x:Name="BoardWindowsDescription"
+                        Style="{StaticResource SettingsGroupDescriptionStyle}" />
+                    <tk:SettingsCard x:Name="BoardWindowHotRow">
+                        <NumberBox
+                            x:Name="BoardWindowHotBox"
+                            MinWidth="120"
+                            AutomationProperties.AutomationId="BoardWindowHot"
+                            LargeChange="10"
+                            Maximum="365"
+                            Minimum="1"
+                            SmallChange="1"
+                            SpinButtonPlacementMode="Inline"
+                            ValidationMode="InvalidInputOverwritten" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="BoardWindowYouRow">
+                        <NumberBox
+                            x:Name="BoardWindowYouBox"
+                            MinWidth="120"
+                            AutomationProperties.AutomationId="BoardWindowYou"
+                            LargeChange="10"
+                            Maximum="365"
+                            Minimum="1"
+                            SmallChange="1"
+                            SpinButtonPlacementMode="Inline"
+                            ValidationMode="InvalidInputOverwritten" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="BoardWindowThemRow">
+                        <NumberBox
+                            x:Name="BoardWindowThemBox"
+                            MinWidth="120"
+                            AutomationProperties.AutomationId="BoardWindowThem"
+                            LargeChange="10"
+                            Maximum="365"
+                            Minimum="1"
+                            SmallChange="1"
+                            SpinButtonPlacementMode="Inline"
+                            ValidationMode="InvalidInputOverwritten" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="BoardWindowInfoRow">
+                        <NumberBox
+                            x:Name="BoardWindowInfoBox"
+                            MinWidth="120"
+                            AutomationProperties.AutomationId="BoardWindowInfo"
+                            LargeChange="10"
+                            Maximum="365"
+                            Minimum="1"
+                            SmallChange="1"
+                            SpinButtonPlacementMode="Inline"
+                            ValidationMode="InvalidInputOverwritten" />
                     </tk:SettingsCard>
                 </StackPanel>
 

@@ -11,7 +11,8 @@ view between the two, as GTK moves board_detail_tree). Its bar: Close (the
 panel only), Done or Move Back to Board, Remind… (the presets), Archive,
 "…" (Show in Mail, Unstar) and Reply (Comment on an issue tracker's
 account). Under it a scrolling column of three parts: Upper (the state
-pill with Move To, when a snoozed case comes back, the account, the issue,
+pill with Move To, its badges (Reminded, New contact), when a snoozed
+case comes back, the account, the issue,
 Why is this here? and Unstar; the "why" box; the title; the deadline with
 its quote; the assistant's summary and tasks; the case's open promises),
 filled anew whenever the case differs from what it shows; ReplySlot (the
@@ -153,6 +154,12 @@ TextBlock.Text.
                                     <MenuFlyout x:Name="StateMenu" Opening="OnStateMenuOpening" Placement="BottomEdgeAlignedLeft" />
                                 </DropDownButton.Flyout>
                             </DropDownButton>
+                            <ItemsControl
+                                x:Name="BadgeList"
+                                VerticalAlignment="Center"
+                                IsTabStop="False"
+                                ItemTemplate="{StaticResource BoardBadgeTemplate}"
+                                ItemsPanel="{StaticResource BoardBadgesPanel}" />
                             <TextBlock
                                 x:Name="RemindText"
                                 VerticalAlignment="Center"
@@ -198,6 +205,8 @@ TextBlock.Text.
                                         Style="{StaticResource DetailTextStyle}" />
                                 </Grid>
                                 <TextBlock x:Name="SourceText" Style="{StaticResource DetailCaptionStyle}" />
+                                <!-- Back from a reminder; the user's decision keeps it (Detail.WhyNotes). -->
+                                <StackPanel x:Name="WhyNotesPanel" Spacing="4" />
                             </StackPanel>
                         </Border>
 

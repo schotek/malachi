@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -25,6 +26,14 @@ type echoBoard struct{ stubBoard }
 func (echoBoard) SetState(_ context.Context, p api.BoardSetStateParams) (*api.BoardSetStateResult, error) {
 	c := api.BoardCase{ID: p.CaseID, RuleState: api.BoardInfo, UserState: p.State}
 	return &api.BoardSetStateResult{Case: c}, nil
+}
+
+// Archive answers with one moved message and a reminded case, so that
+// the wire form of the 2026-10-08 fields can be checked.
+func (echoBoard) Archive(_ context.Context, p api.BoardArchiveParams) (*api.BoardArchiveResult, error) {
+	at := time.Date(2026, 10, 8, 9, 0, 0, 0, time.UTC)
+	return &api.BoardArchiveResult{Archived: 1, Case: api.BoardCase{ID: p.CaseID, Visibility: api.BoardLive, RemindedAt: &at},
+		Moved: []api.BoardMoved{{MessageID: "m_1", FromFolderID: "f_inbox"}}}, nil
 }
 
 func boardMethods() []string {
@@ -94,6 +103,23 @@ func TestBoardSetStateDecodes(t *testing.T) {
 	resp = call(t, c, r, api.MethodBoardList, api.BoardListParams{})
 	if resp.Error == nil || resp.Error.Code != api.CodeNotImplemented {
 		t.Errorf("board.list: want notImplemented, got %+v", resp)
+	}
+}
+
+// board.archive's moved messages and a case's remindedAt reach the client
+// under their documented names.
+func TestBoardArchiveMovedOnTheWire(t *testing.T) {
+	ts := startServer(t, &boardBackend{}, nil, nil)
+	c, r := dialAuthed(t, ts.sock)
+	resp := call(t, c, r, api.MethodBoardArchive, api.BoardArchiveParams{CaseID: "c_1"})
+	if resp.Error != nil {
+		t.Fatalf("board.archive: %+v", resp.Error)
+	}
+	raw := string(resp.Result)
+	for _, want := range []string{`"moved":[{"messageId":"m_1","fromFolderId":"f_inbox"}]`, `"remindedAt":"2026-10-08T09:00:00Z"`} {
+		if !strings.Contains(raw, want) {
+			t.Errorf("result %s lacks %s", raw, want)
+		}
 	}
 }
 

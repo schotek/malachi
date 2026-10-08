@@ -267,6 +267,33 @@ public sealed partial class ComposePane : UserControl, IComposeForm
     /// </summary>
     public bool PopupOpen => suggestions.Any(s => s.IsVisible) || FormatBar.IsPopupOpen || Header.IsFromOpen;
 
+    /// <summary>
+    /// Whether the keyboard is in the pane: its editor's page, its recipient
+    /// fields, its rows or buttons (the board's Escape and single keys ask).
+    /// </summary>
+    public bool KeyboardInside
+    {
+        get
+        {
+            if (EditorHasFocus())
+            {
+                return true;
+            }
+            if (XamlRoot is not { } root)
+            {
+                return false;
+            }
+            for (var d = FocusManager.GetFocusedElement(root) as DependencyObject; d is not null; d = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(d))
+            {
+                if (ReferenceEquals(d, this))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
     /// <summary>closeRequest's first branch: nothing at stake.</summary>
     public bool CanCloseWithoutAsking => draft.CanCloseWithoutAsking;
 

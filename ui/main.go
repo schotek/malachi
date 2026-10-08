@@ -307,6 +307,10 @@ func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, stor
 	for action, accel := range window.MessageAccels {
 		app.SetAccelsForAction(action, []string{accel})
 	}
+	// Ctrl+1 Mail, Ctrl+2 Board, in both modes.
+	for action, accel := range window.ModeAccels() {
+		app.SetAccelsForAction(action, []string{accel})
+	}
 	return newMessage
 }
 

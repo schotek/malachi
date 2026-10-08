@@ -262,9 +262,13 @@ type Controller struct {
 	// annotateCalls are the run's annotate_case calls waiting for their
 	// results; refused the ones the bridge refused.
 	annotateCalls map[string]bool
-	refused       int
-	usage         assistant.UsageTally
-	runLimit      int
+	// annotatedCases are the distinct cases the run's accepted notes named
+	// (Done counts them: the bridge takes a second note on a case without
+	// charging another of the run's cases).
+	annotatedCases map[string]bool
+	refused        int
+	usage          assistant.UsageTally
+	runLimit       int
 	// limitHit: the run reached its limit and waits for Claude Code's
 	// result; it ends as a success however it ends. graceGen retires the
 	// wait.
@@ -518,6 +522,33 @@ func (c *Controller) repairAssistantPreference() {
 	}
 	c.log.Info("board triage: the assistant preference was on without consent; turning it off")
 	c.prefs.Update(true, func(p *api.BoardPreferences) { p.Assistant = false }, nil)
+}
+
+// ProviderChanged says the assistant's provider changed, or its profile
+// (macOS providerChanged): a run under way stops, automatic triage goes
+// off when the provider itself changed (disableAutomatic: a consent given
+// to one provider never starts runs of another), the daemon's assistant
+// preference goes off when the board's consent is not given (the
+// settings answer for the provider now selected), and availability and
+// the sign-in are asked again. Both changes go in one quiet write, so
+// that the repair is not skipped for the write under way.
+func (c *Controller) ProviderChanged(disableAutomatic bool) {
+	c.Cancel()
+	repair := !c.granting && !c.settings.BoardTriageConsent()
+	if p, ok := c.prefs.Stored(); ok && !p.Assistant {
+		repair = false
+	}
+	if disableAutomatic || repair {
+		c.prefs.Update(true, func(p *api.BoardPreferences) {
+			if disableAutomatic {
+				p.AutoTriage = false
+			}
+			if repair {
+				p.Assistant = false
+			}
+		}, nil)
+	}
+	c.AvailabilityChanged()
 }
 
 // RelistBoard asks the board to list again (OnRefresh), so the tokens of
@@ -802,6 +833,7 @@ func (c *Controller) Start(t Trigger, limit int) bool {
 	my := c.gen
 	c.runID = ""
 	c.annotateCalls = map[string]bool{}
+	c.annotatedCases = map[string]bool{}
 	c.refused = 0
 	c.usage = assistant.UsageTally{}
 	c.limitHit = false
@@ -1013,8 +1045,8 @@ func (c *Controller) ask(my int, t Trigger, limit int, queueKnown bool, id api.B
 	}, func(o assistantpanel.Outcome) { c.answered(my, t, o) })
 }
 
-// tool counts an annotate_case of run my, accepted or refused, until the
-// accepted ones reach the run's limit (limitReached).
+// tool counts an annotate_case of run my, accepted (each case once) or
+// refused, until the accepted cases reach the run's limit (limitReached).
 func (c *Controller) tool(my int, t Trigger, e assistant.Event) {
 	if my != c.gen || c.limitHit || c.state.Kind != StateRunning {
 		return
@@ -1028,7 +1060,16 @@ func (c *Controller) tool(my int, t Trigger, e assistant.Event) {
 			c.refused++
 			return
 		}
-		done := c.state.Done + 1
+		// A result that names no case counts as a case of its own.
+		key := "call:" + e.ToolUseID
+		if id, ok := assistant.TriageAnnotatedCase(e.ResultText); ok {
+			key = id
+		}
+		if c.annotatedCases[key] {
+			return
+		}
+		c.annotatedCases[key] = true
+		done := len(c.annotatedCases)
 		c.setState(Running(t, done, c.state.Total))
 		if done >= c.runLimit {
 			c.limitReached(my, t)
@@ -1080,6 +1121,9 @@ func (c *Controller) answered(my int, t Trigger, o assistantpanel.Outcome) {
 		if notSignedIn {
 			c.learnSignedIn(assistantpanel.SignIn{Known: true})
 		}
+		if o.Kind == assistantpanel.OutcomeAnswered {
+			c.usage.Finished()
+		}
 		id := c.runID
 		c.runID = ""
 		c.finish(t, nil, id)
@@ -1089,6 +1133,7 @@ func (c *Controller) answered(my int, t Trigger, o assistantpanel.Outcome) {
 	set := func(f board.TriageFailure) { failure = &f }
 	switch o.Kind {
 	case assistantpanel.OutcomeAnswered:
+		c.usage.Finished()
 		if c.state.Kind == StateRunning && c.state.Done == 0 {
 			if c.refused > 0 {
 				set(board.FailNotesRefused)
@@ -1106,6 +1151,8 @@ func (c *Controller) answered(my int, t Trigger, o assistantpanel.Outcome) {
 			set(board.FailNotSignedIn)
 		case assistantpanel.FailureToolsMissing:
 			set(board.FailToolsMissing)
+		case assistantpanel.FailureLimit:
+			set(board.FailLimit)
 		default:
 			if o.Failure.TimedOut() {
 				set(board.FailTimeout)
@@ -1144,6 +1191,7 @@ func (c *Controller) finish(t Trigger, failure *board.TriageFailure, run api.Boa
 			usage = &api.BoardUsage{
 				InputTokens: u.InputTokens, OutputTokens: u.OutputTokens,
 				CacheCreationInputTokens: u.CacheCreationInputTokens, CacheReadInputTokens: u.CacheReadInputTokens,
+				LowerBound: c.usage.LowerBound(),
 			}
 		}
 		c.endRun(run, class, usage)

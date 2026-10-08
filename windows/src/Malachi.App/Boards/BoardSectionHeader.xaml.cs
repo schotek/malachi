@@ -6,6 +6,7 @@
 // boardSectionHeader (window/board_list.go). The group header of the List
 // style's ListView (BoardListView.xaml's GroupStyle).
 
+using System.ComponentModel;
 using Malachi.Core.Boards;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -34,7 +35,22 @@ public sealed partial class BoardSectionHeader : UserControl
         set => SetValue(GroupProperty, value);
     }
 
-    private static void OnGroupChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) => ((BoardSectionHeader)d).Apply();
+    // The group updates in place (its count, its title): the header follows.
+    private static void OnGroupChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var header = (BoardSectionHeader)d;
+        if (e.OldValue is INotifyPropertyChanged old)
+        {
+            old.PropertyChanged -= header.OnGroupPropertyChanged;
+        }
+        if (e.NewValue is INotifyPropertyChanged next)
+        {
+            next.PropertyChanged += header.OnGroupPropertyChanged;
+        }
+        header.Apply();
+    }
+
+    private void OnGroupPropertyChanged(object? sender, PropertyChangedEventArgs e) => Apply();
 
     private void Apply()
     {

@@ -38,7 +38,7 @@ public sealed partial class AppState
     /// <summary>Null preserves the existing Claude execution path.</summary>
     public IAssistantProvider? InAppProvider => Settings.AssistantProvider == AssistantProviderID.ChatGpt ? Codex : null;
 
-    /// <summary>Selection, model, executable or connected account changed.</summary>
+    /// <summary>Selection, executable, consent withdrawn or connected account changed (not a model: it applies from the next request).</summary>
     public event EventHandler? InAppProviderChanged;
 
     private void InitializeChatGpt()
@@ -52,7 +52,10 @@ public sealed partial class AppState
             // policy before starting a child; cleanup never weakens it.
         }
         ChatGpt.Changed += ChatGptConnectionChanged;
-        foreach (var key in new[] { SettingsKey.AssistantProvider, SettingsKey.AssistantTarget, SettingsKey.AssistantCodexPath, SettingsKey.AssistantChatGptModel })
+        // Not the ChatGPT models: the provider reads its model when a request
+        // starts, so a new one applies from the next request and stops
+        // nothing under way (Swift providerChangeConcernsActive).
+        foreach (var key in new[] { SettingsKey.AssistantProvider, SettingsKey.AssistantTarget, SettingsKey.AssistantCodexPath })
         {
             chatGptSettings.Add(Settings.OnChange(key, InAppSelectionChanged));
         }

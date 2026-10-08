@@ -3,10 +3,13 @@
 
 // Port of macos/Tests/MalachiCoreTests/BoardTests.swift; GTK:
 // ui/internal/board/mode_test.go (TestInitialMode, TestAllows,
-// TestModeForRequest, TestViewsMail, TestModeTexts, and the two Swift
-// lacks: TestStyleOnShowRule, TestStyleNicks).
+// TestModeForRequest, TestViewsMail, TestModeTexts, and those Swift
+// lacks: TestStyleOnShowRule, TestDefaultStyleNicks, TestStartMode,
+// TestFilterOnShow, TestStyleNicks, TestStartDecision).
 
 using System;
+using System.Linq;
+using Malachi.Core.Api;
 using Malachi.Core.Boards;
 using Xunit;
 using static Malachi.Core.Boards.Board;
@@ -91,12 +94,98 @@ public sealed class BoardTests
     {
         foreach (var current in Enum.GetValues<BoardStyle>())
         {
-            foreach (var d in Enum.GetValues<BoardStyle>())
+            foreach (var last in Enum.GetValues<BoardStyle>())
             {
-                Assert.Equal(d, StyleOnShow(current, d, firstShow: true));
-                Assert.Equal(current, StyleOnShow(current, d, firstShow: false));
+                foreach (var d in DefaultStyles)
+                {
+                    var want = d.IsLast ? last : d.Style;
+                    Assert.Equal(want, StyleOnShow(d, last, current, pickedThisRun: false));
+                    Assert.Equal(current, StyleOnShow(d, last, current, pickedThisRun: true));
+                }
             }
         }
+    }
+
+    [Fact]
+    public void DefaultStyleNicks()
+    {
+        Assert.Equal(["last", "list", "columns", "today"], DefaultStyles.Select(d => d.Nick));
+        foreach (var d in DefaultStyles)
+        {
+            Assert.Equal(d, ParseDefaultStyle(d.Nick));
+        }
+        foreach (var junk in new[] { "", "List", "grid", null })
+        {
+            Assert.True(ParseDefaultStyle(junk).IsLast);
+        }
+        Assert.Equal(BoardStyle.List, ParseStyle("last"));
+        Assert.Equal(["Last Used", "List", "Columns", "Today"], DefaultStyles.Select(Board.Text.DefaultStyleTitle));
+        // The settings' nicks are the members' names in lower case, in the gschema's order.
+        Assert.Equal(["list", "columns", "today", "last"], Enum.GetValues<DefaultStyle>().Select(d => d.Nick));
+        Assert.Equal(["mail", "board", "last"], Enum.GetValues<StartChoice>().Select(c => c.Nick));
+    }
+
+    [Theory]
+    [InlineData("mail", "board", true, Mode.Mail)]
+    [InlineData("board", "mail", true, Mode.Board)]
+    [InlineData("last", "board", true, Mode.Board)]
+    [InlineData("last", "mail", true, Mode.Mail)]
+    [InlineData("last", "", true, Mode.Mail)]
+    [InlineData("last", "junk", true, Mode.Mail)]
+    [InlineData("", "board", true, Mode.Mail)]
+    [InlineData("junk", "board", true, Mode.Mail)]
+    [InlineData("board", "board", false, Mode.Mail)]
+    [InlineData("last", "board", false, Mode.Mail)]
+    public void StartModeRule(string start, string last, bool enabled, Mode want) => Assert.Equal(want, StartMode(start, last, enabled));
+
+    /// <summary>The start of a new window while the preferences may still come (Go TestStartDecision).</summary>
+    [Theory]
+    [InlineData(StartChoice.Mail, Mode.Board, false, true, false, false, 0, Mode.Mail, true)] // mail start decides at once
+    [InlineData(StartChoice.Last, Mode.Mail, false, true, false, false, 0, Mode.Mail, true)] // last used with mail last decides at once
+    [InlineData(StartChoice.Board, Mode.Mail, false, true, false, false, 1000, Mode.Mail, false)] // board start waits for prefs
+    [InlineData(StartChoice.Last, Mode.Board, false, true, false, false, 4000, Mode.Mail, false)] // last used board waits for prefs
+    [InlineData(StartChoice.Board, Mode.Mail, true, true, false, false, 1000, Mode.Board, true)] // board start, prefs on
+    [InlineData(StartChoice.Last, Mode.Board, true, true, false, false, 0, Mode.Board, true)] // last used board, prefs on
+    [InlineData(StartChoice.Board, Mode.Mail, true, false, false, false, 0, Mode.Mail, true)] // board start, board turned off
+    [InlineData(StartChoice.Board, Mode.Mail, false, true, true, false, 0, Mode.Mail, true)] // user switched first
+    [InlineData(StartChoice.Board, Mode.Mail, true, true, true, false, 0, Mode.Mail, true)] // user switched, prefs on too
+    [InlineData(StartChoice.Last, Mode.Board, false, true, false, true, 1000, Mode.Mail, true)] // user acted in mail
+    [InlineData(StartChoice.Board, Mode.Mail, true, true, false, true, 0, Mode.Mail, true)] // user acted in mail before prefs on
+    [InlineData(StartChoice.Board, Mode.Mail, false, true, false, false, 5000, Mode.Mail, true)] // bound passed without prefs
+    [InlineData(StartChoice.Last, Mode.Board, false, true, false, false, 60000, Mode.Mail, true)] // long after the bound
+    [InlineData(StartChoice.Board, Mode.Mail, false, true, false, false, 4999, Mode.Mail, false)] // just under the bound
+    public void StartDecisionRule(
+        StartChoice start, Mode last, bool known, bool enabled, bool switched, bool acted, int waitedMs, Mode wantMode, bool wantDecided)
+    {
+        var (mode, decided) = StartDecision(start, last, known, enabled, switched, acted, TimeSpan.FromMilliseconds(waitedMs));
+        Assert.Equal(wantMode, mode);
+        Assert.Equal(wantDecided, decided);
+    }
+
+    [Fact]
+    public void StartModeNicks()
+    {
+        foreach (var m in new[] { Mode.Mail, Mode.Board })
+        {
+            Assert.Equal(m, ParseMode(m.Nick));
+        }
+        Assert.Null(ParseMode("junk"));
+        Assert.Equal(["mail", "board", "last"], StartModes.Select(s => s.Nick));
+        Assert.Equal(["Mail", "Board", "Last Used"], StartModes.Select(Board.Text.StartModeTitle));
+        foreach (var s in StartModes)
+        {
+            Assert.Equal(s, ParseStartChoice(s.Nick));
+        }
+    }
+
+    [Fact]
+    public void FilterOnShowRule()
+    {
+        AccountInfo[] accounts = [new(new AccountId("a"), "A"), new(new AccountId("b"), "B")];
+        Assert.Equal("b", FilterOnShow("b", accounts));
+        Assert.Equal("", FilterOnShow("c", accounts));
+        Assert.Equal("", FilterOnShow("", accounts));
+        Assert.Equal("", FilterOnShow("a", []));
     }
 
     [Fact]

@@ -7,7 +7,7 @@ import MalachiCore
 /// The board's Today style ("Dnes"): a greeting, the count tiles, what is
 /// hot, the top of what waits for the user and what the assistant says
 /// the user promised, in one table; beside it (under it in a narrow
-/// window) the deadlines and a placeholder for the calendar. Every text is
+/// window) the deadlines. Every text is
 /// a cleaned plain string of the view model, shown through `stringValue`.
 ///
 /// Port of: ui/internal/board (not yet; Swift-first, see
@@ -511,7 +511,9 @@ private final class BoardTodayTileView: NSView {
         // Static text for VoiceOver: "3 Hot".
         setAccessibilityElement(true)
         setAccessibilityRole(.staticText)
-        setAccessibilityLabel("\(tile.count) \(tile.title)")
+        // The count and the title as one sentence (`Tile.toolTip`), spoken;
+        // not a tooltip, which would show through the sliding panel.
+        setAccessibilityLabel(tile.toolTip)
     }
 
     @available(*, unavailable)
@@ -720,11 +722,7 @@ private final class BoardTodaySideView: NSScrollView {
             }
         }
 
-        let calendar = BoardTodayCard(dashed: true)
-        calendar.add(heading(today.calendarTitle))
-        calendar.add(wrappingLabel(today.calendarBody, font: Typo.body))
-
-        cards = [deadlines, calendar]
+        cards = [deadlines]
         for card in cards {
             doc.addSubview(card)
         }

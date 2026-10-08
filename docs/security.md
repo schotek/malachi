@@ -1650,14 +1650,20 @@ What text leaves the daemon, and when:
   nonce), cleans them as everywhere (§10), caps everything again (60 KiB
   per call, every header counted) and logs none of it. `install` and the
   apps' MCP switch never add the flag; the desktop app's own triage run
-  passes it to a bridge it starts for that run, in the same locked-down
-  Claude Code as the panel (§10.1), together with `--triage-max`, the
+  passes it to a bridge it starts for that run (for the locked-down
+  Claude Code of the panel, §10.1, or for the experimental Codex
+  provider below), together with `--triage-max`, the
   run's limit of cases (40, and for an automatic run no more than what is
   left of the user's daily cap). The bridge enforces that limit itself: past it
-  `annotate_case` refuses and the queue hands out no more mail, and the
-  queue never hands out more than the limit plus 3 distinct cases per
-  process, so how much mail reaches the model does not depend on the
-  model obeying the request.
+  `annotate_case` refuses for a case not yet annotated and the queue
+  hands out no more mail, and the queue never hands out more than the
+  limit plus 3 distinct cases per process (a case counts once its text
+  was rendered into a result), so how much mail reaches the model does
+  not depend on the model obeying the request. Annotating a case again
+  replaces its notes and costs nothing of the limit; until the process
+  ends (the app waits at most 45 s for it after the limit),
+  `add_commitment` and `create_draft` still work for the cases handed
+  out, within their own limits.
 - What the triage tools write back stays local: notes are stored in the
   daemon's store and shown by the apps. A suggested reply stays local
   too: the model makes it with `create_draft`, addressed as a reply to
@@ -1682,14 +1688,23 @@ What text leaves the daemon, and when:
   untouched suggestion that loses its case is deleted, and so never
   reaches the server. On a `jira` account it is a comment
   draft, public by default, that stays in Malachi Mail until the user
-  posts it. Triage never sends it. The procedure allows one only for cases whose rule
-  reason says the user knows the sender (`hot.important`,
-  `you.addressed`) or for an issue assigned to or reported by the user,
-  never for an `info.*` case; whether a run may make drafts at all is up
-  to the client, which chooses the model's allowed tools.
+  posts it. Triage never sends it. A suggested reply is made only for a
+  case whose rule reason says the user knows the sender (`hot.important`,
+  `you.addressed`) or for an issue assigned to or reported by the user
+  (`jira.assigned`, `jira.reporter`), never for `you.newContact`,
+  `them.*`, `info.*` or `kept`, only to the case's `replyMessageId`,
+  never for a case that had one (`hasDraft`) and at most one per case.
+  In the app's run (`--triage-run`) the bridge enforces this itself and
+  refuses every other `create_draft` before the daemon is asked, also
+  after a lost answer to `draft.save` (the draft may exist); in an
+  external session it is the procedure's rule only. Whether a run may
+  make drafts at all is up to the client, which chooses the model's
+  allowed tools.
 
-The desktop app's own run (macOS only so far; [mcp.md](mcp.md), *The
-board's triage run in the app*):
+The desktop app's own run (GTK, macOS and Windows; [mcp.md](mcp.md), *The
+board's triage run in the app*), described here for the Claude provider;
+for the experimental Codex provider see *Experimental ChatGPT provider*
+below:
 
 - **When mail leaves.** Only when the user presses *✦ Triage*, or while
   the user has turned on *Triage new mail automatically* (off by
@@ -1699,7 +1714,11 @@ board's triage run in the app*):
   `assistant` preference: the panel's (`assistant-consent`) and the
   board's own (`board-triage-consent`), given together on one sheet that
   says the conversations' text goes to Anthropic through the user's Claude
-  Code. The app writes the daemon's preference first and keeps the two
+  Code, and (since 2026-10-08) that the model can also search and read
+  the rest of the user's stored mail and its attachments. Which accounts
+  the queue draws from is the user's choice (*Triage These Accounts*,
+  `triageAccounts`; none checked means every enabled mail account); it
+  bounds the queue, not the read tools. The app writes the daemon's preference first and keeps the two
   keys only once the daemon stored it; a manual run without consent asks,
   an automatic run never does. Withdrawing the board's consent in
   *Settings → AI → Board* stops a run under way and turns `assistant` and
@@ -1713,11 +1732,12 @@ board's triage run in the app*):
   `read_message`, `get_attachment`), the three triage tools and, in a
   manual run only, `create_draft`, which in a process with
   `--triage-run` makes nothing but a reply (`reply`, `replyAll`, or a
-  public comment on an issue) to a message of a case the queue handed
-  out to that process, with the recipients, subject and quote the daemon
-  prefills: no new message, no forward, no `to`, `cc`, `bcc`, `subject`,
-  `messageAccountId` or internal visibility. An automatic run has no
-  tool that writes anything but the board's local notes.
+  public comment on an issue) to the `replyMessageId` of a case the
+  queue handed out to that process, whose rule reason allows a suggested
+  reply (above), one per case, with the recipients, subject and quote the
+  daemon prefills: no new message, no forward, no `to`, `cc`, `bcc`,
+  `subject`, `messageAccountId` or internal visibility. An automatic run
+  has no tool that writes anything but the board's local notes.
 - **How much.** A manual run asks for at most 40 cases; an automatic run
   for at most 40 and no more than what is left of the day's cap
   (`autoTriageDailyCases`, 60 by default, counted by the daemon per local
@@ -1730,7 +1750,9 @@ board's triage run in the app*):
   queue is bounded only by the run's time and the bridge's caps.
 - **What the app shows.** Nothing the model writes during the run: no
   answer text, no tool output, nothing logged; the outcome is the count of
-  accepted and refused notes and an error class (`board.runEnd`). The
+  accepted and refused notes, an error class and the token count
+  (`board.runEnd`; a stopped or expired run reports a lower bound, which
+  the clients show as "at least"). The
   notes themselves reach the user only through the board, as the
   assistant's plain text.
 
@@ -1800,7 +1822,8 @@ any case of the run (local notes, shown as the assistant's); with the
 read tools, more of the user's mail read and sent to the model's provider
 than the queue would have handed out; and in a manual run a reply draft
 in wording the attacker chose (possibly carrying text from other mail
-the model read) to a message of a handed-out case, addressed by that
+the model read) to the reply target of a handed-out case whose rule
+reason allows one, addressed by that
 message's `Reply-To` (with `replyAll` also its `To` and `Cc`) to
 addresses the sender picked. Such a draft
 sits on the board, on this device only (not in the Drafts folder on the
@@ -1814,15 +1837,20 @@ send, move, flag, delete, unsubscribe, change an issue or the board's
 preferences, set the user's state, or store a deadline or a commitment
 that is not verbatim in the mail.
 
-*✦ Suggest Reply* in a case's detail (macOS only so far; [mcp.md](mcp.md),
+*✦ Suggest Reply* in a case's detail (GTK, macOS and Windows; [mcp.md](mcp.md),
 *A suggested reply on the board*) is not triage: the user starts it for
 one case, it runs under the same conditions as the compose rewrite and
 needs only the panel's consent (`assistant-consent`), not the board's,
 and it adds no notes. The model holds the locked-down Claude Code of
-§10.1 with a bridge started as `--reply-only <messageId>` and only
-`read_message`, `list_messages` and `create_draft`, which in that process
-makes one reply (`reply` or `replyAll`, or a comment on an issue) to that
-message with what the daemon prefills, and nothing else; the app links
+§10.1 (or, with the Codex provider, the gateway below) with a bridge
+started as `--reply-only <messageId>` and only `read_message`,
+`list_messages` and `create_draft`. The bridge in that process still
+registers the other read tools; the restriction to those three is the
+client's allow-list (`--allowedTools`, or the gateway's tool filter and
+the app's check of every call), while the bridge itself confines
+`create_draft` to one reply (`reply` or `replyAll`, or a comment on an
+issue) to that message with what the daemon prefills, and nothing else,
+counting a `draft.save` whose answer was lost as made; the app links
 the draft with `board.setDraft` (the daemon checks that it is a reply
 within the case in its account) and deletes it when the link fails or
 the request is stopped, times out or the app quits first, so none stays
@@ -1841,8 +1869,8 @@ The GTK, macOS and Windows in-app panel, compose rewrite and search conversion c
 use ChatGPT through a user-installed native Codex executable. OpenAI has
 a separate, versioned mail/text disclosure; Claude consent and MCP
 registration do not authorize this provider. The daemon and mail API are
-unchanged. GTK/macOS also connect their existing Board triage/replies with
-a separate OpenAI Board disclosure; Windows Board is not yet ported.
+unchanged. GTK, macOS and Windows also connect their Board triage and
+suggested replies, with a separate OpenAI Board disclosure for triage.
 Foreground consent never authorizes automatic background mail transfer.
 
 SIWC uses PKCE, loopback state and a verified signed ID token (including
@@ -1857,10 +1885,21 @@ remote revocation cannot be confirmed.
 
 Codex has a private ephemeral profile and receives only an opaque local
 gateway credential. The application's fixed-destination HTTPS inference
-gateway supplies the OpenAI bearer token, advertises only the allowed
-Malachi read/draft tools (no tools for one-shot requests), and validates
-tool-call SSE events before forwarding them. The app owns a sibling MCP
-process with a clean environment and no inference credential. Retry after
+gateway supplies the OpenAI bearer token, advertises only the tools of
+the request's tier as dynamic tools in the `malachi` namespace (the
+panel's read/draft tools; for *✦ Suggest Reply* `read_message`,
+`list_messages` and `create_draft`; for a triage run the run's read
+tools, the three triage tools and, in a manual run only, `create_draft`;
+no tools for one-shot requests), drops every other tool and validates
+tool-call SSE events before forwarding them, and the app checks every
+call against the same tier again before it reaches the bridge. There is
+no `--allowedTools` on this path: the gateway and that check are the
+allow-list. Codex never starts the bridge: the app owns a sibling MCP
+process with a clean environment and no inference credential, started
+with exactly `--socket <path>` plus `--reply-only <messageId>` or
+`--allow-triage --triage-run <id> --triage-max <n>` (or neither for the
+panel), so the bridge's own confinement of `create_draft` and its triage
+limits hold as for Claude. Retry after
 a failed mutation is never automatic. The runtime disables history,
 instruction sources and optional execution features; profile cleanup
 uses leases and refuses symlinks. These controls depend on the verified

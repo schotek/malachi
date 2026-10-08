@@ -81,6 +81,15 @@ Adw.BreakpointBin board_page_root {
 
     title-widget: Adw.WindowTitle board_title {};
 
+    // The window's main menu, as at the end of Mail's folders header bar:
+    // its model is window.blp's primary_menu and its tooltip Mail's, both
+    // set from Go (board_list.go wireMenuButton), so no msgid here.
+    [end]
+    MenuButton board_menu_button {
+      icon-name: "open-menu-symbolic";
+      primary: true;
+    }
+
     [end]
     DropDown board_account_filter {
       margin-end: 6;
@@ -181,6 +190,7 @@ Adw.BreakpointBin board_page_root {
       // reveals whichever one applies.
       Adw.Banner board_panel_notice {
         revealed: false;
+        use-markup: false;
       }
 
       Stack board_stack {
@@ -206,6 +216,7 @@ Adw.BreakpointBin board_page_root {
 
             Adw.Banner board_notice {
               revealed: false;
+              use-markup: false;
             }
 
             Adw.NavigationSplitView board_nav_split {
@@ -343,9 +354,9 @@ Adw.BreakpointBin board_page_root {
                                 margin-top: 24;
                                 margin-bottom: 24;
 
-                                // The state pill, title, person/date, Why
-                                // and Unstar links: rebuilt whole by Go on
-                                // every change (board_detail.go).
+                                // The state pill, badges, title, byline, Why
+                                // and Unstar links: built once by Go and
+                                // updated in place (board_detail.go).
                                 Box board_detail_top {
                                   orientation: vertical;
                                   spacing: 6;

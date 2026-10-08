@@ -36,6 +36,7 @@ type boardConversation struct {
 	closed       bool
 	userChanging bool
 	zoomRemove   func()
+	widthRemove  func()
 }
 
 type boardConversationStatus struct {
@@ -101,6 +102,15 @@ func newBoardConversation(p *boardPage) *boardConversation {
 	p.conversationBox.ConnectUnmap(b.scheduleRefresh)
 	if p.w.settings != nil {
 		b.zoomRemove = p.w.settings.OnChanged(settings.KeyTextZoom, func() { b.setZoom(p.w.settings.TextZoom()) })
+	}
+	// The detail's width: its scroller's horizontal adjustment is
+	// configured on every allocation (page size = width), the one signal
+	// GTK gives for a width change. The scroller moves with the detail
+	// tree between List and the panel, so it is the same one throughout.
+	if scroller := p.boardReplyScroller(); scroller != nil {
+		adj := scroller.HAdjustment()
+		handler := adj.ConnectChanged(b.measureAll)
+		b.widthRemove = func() { adj.HandlerDisconnect(handler) }
 	}
 	return b
 }
@@ -324,6 +334,10 @@ func (b *boardConversation) close() {
 			b.zoomRemove()
 			b.zoomRemove = nil
 		}
+		if b.widthRemove != nil {
+			b.widthRemove()
+			b.widthRemove = nil
+		}
 	}
 }
 func (b *boardConversation) showHover(uri string) {
@@ -378,23 +392,62 @@ func (b *boardConversation) makeCard(m board.MessageCard) *boardConversationCard
 	c.host.SetSizeRequest(-1, c.height)
 	c.root.Append(c.host)
 	c.update(m)
-	c.measureTick = c.root.AddTickCallback(func(gtk.Widgetter, gdk.FrameClocker) bool {
-		width := c.text.Width()
-		if width > 0 && width != c.measuredWidth {
-			c.measuredWidth = width
-			layout := c.text.CreatePangoLayout(c.m.Text)
-			layout.SetWidth(width * pango.SCALE)
-			layout.SetWrap(pango.WrapWordChar)
-			long := layout.LineCount() > 3
-			if c.long == nil || *c.long != long {
-				c.long = &long
-				b.refresh()
-			}
-		}
-		return !b.closed
-	})
+	// Measured once on map and again on each width change (the block's
+	// scroller, measureAll), never on every frame.
+	c.root.ConnectMap(c.armMeasure)
+	c.armMeasure()
 	c.forwardScroll()
 	return c
+}
+
+// armMeasure measures the card's text on the next frame (when GTK has
+// allocated it), once: a one-shot tick callback, armed at most once at a
+// time.
+func (c *boardConversationCard) armMeasure() {
+	if c.measureTick != 0 || c.block.closed {
+		return
+	}
+	c.measureTick = c.root.AddTickCallback(func(gtk.Widgetter, gdk.FrameClocker) bool {
+		c.measureTick = 0
+		c.measure()
+		return false
+	})
+}
+
+// measure decides whether the card's text is long (more than three lines
+// at its current width; the fold arrow depends on it), and refreshes the
+// block when that changed.
+func (c *boardConversationCard) measure() {
+	b := c.block
+	if b.closed {
+		return
+	}
+	width := c.text.Width()
+	if width <= 0 && c.root.Mapped() {
+		// Mapped but not laid out yet: once more on the next frame (one
+		// tick per frame; an unmapped card waits for its next map).
+		c.armMeasure()
+		return
+	}
+	if width <= 0 || width == c.measuredWidth {
+		return
+	}
+	c.measuredWidth = width
+	layout := c.text.CreatePangoLayout(c.m.Text)
+	layout.SetWidth(width * pango.SCALE)
+	layout.SetWrap(pango.WrapWordChar)
+	long := layout.LineCount() > 3
+	if c.long == nil || *c.long != long {
+		c.long = &long
+		b.refresh()
+	}
+}
+
+// measureAll arms every card's measurement: the detail's width changed.
+func (b *boardConversation) measureAll() {
+	for _, c := range b.cards {
+		c.armMeasure()
+	}
 }
 func (c *boardConversationCard) update(m board.MessageCard) {
 	if c.m == m {
@@ -404,6 +457,7 @@ func (c *boardConversationCard) update(m board.MessageCard) {
 		if c.m.Text != m.Text {
 			c.long = nil
 			c.measuredWidth = -1
+			defer c.armMeasure()
 		}
 		c.m = m
 		c.from.SetText(m.From)

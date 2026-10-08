@@ -519,7 +519,7 @@ public sealed partial class BoardColumnsView : UserControl, IBoardStyleContent
                 AutomationProperties.SetAutomationId(args.ItemContainer, "BoardColumnPlaceholder");
                 break;
             case BoardHeadingItem h:
-                AutomationProperties.SetName(args.ItemContainer, BoardStateHeading.Spoken(h.Title, Board.Text.PromiseCount(h.Count)));
+                AutomationProperties.SetName(args.ItemContainer, BoardStateHeading.SpokenPromises(h.Title, h.Count));
                 AutomationProperties.SetAutomationId(args.ItemContainer, "BoardCommitmentsHeading");
                 break;
         }

@@ -455,7 +455,7 @@ func TestSettingsTexts(t *testing.T) {
 		{"ready", nil, ""},
 		{"running", func(i *ViewInputs) { i.State = Starting(Manual) }, ""},
 		{"no Claude Code", func(i *ViewInputs) { i.ClaudeFound = false },
-			"The triage runs your Claude Code, which was not found on this Mac. The Claude Code row above offers to get it."},
+			"The triage runs your Claude Code, which was not found on this computer. The Claude Code row above offers to get it."},
 		{"signed out", func(i *ViewInputs) { i.SignedIn = signedOutS },
 			"Claude Code is not signed in. The Claude Code row above offers to sign in."},
 		{"signing in", func(i *ViewInputs) { i.SignedIn, i.SigningIn = signedOutS, true }, assistant.SignInTexts(tr).Waiting},
@@ -516,6 +516,10 @@ func TestViewUsage(t *testing.T) {
 	value, detail := UsageTexts(&api.BoardUsageTotal{BoardUsage: api.BoardUsage{InputTokens: maxInt64, OutputTokens: maxInt64, CacheReadInputTokens: -5}}, en, tr)
 	if value != "9,223,372,036,854,775,807" || !strings.Contains(detail, "read from cache 0\nFrom 1 triage run") {
 		t.Errorf("huge: %q %q", value, detail)
+	}
+	// A total some run of which was only partly reported says so.
+	if v, _ := UsageTexts(&api.BoardUsageTotal{BoardUsage: api.BoardUsage{InputTokens: 1200, LowerBound: true}, Runs: 2}, en, tr); v != "at least 1,200" {
+		t.Errorf("lower bound: %q", v)
 	}
 }
 

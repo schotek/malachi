@@ -223,6 +223,128 @@ public final class BoardPreferencesController {
         }
     }
 
+    // MARK: Settings' rows (Go boardtriage preferences.go)
+
+    /// The daemon's windows when none were set (docs/api.md §4.13
+    /// `BoardWindows`: 90/30/30/14 days).
+    public nonisolated static let defaultWindows = BoardWindows(hot: 90, you: 30, them: 30, info: 14)
+
+    /// Whether the daemon's `board.setPreferences` takes `w`: every window
+    /// 1...`API.Limits.maxBoardWindowDays` days.
+    public nonisolated static func validWindows(_ w: BoardWindows) -> Bool {
+        [w.hot, w.you, w.them, w.info].allSatisfy { (1 ... API.Limits.maxBoardWindowDays).contains($0) }
+    }
+
+    /// Turns the board on or off (Show the Board), as `update`.
+    public func setEnabled(_ on: Bool, completion: (@MainActor (Bool) -> Void)? = nil) {
+        update({ $0.enabled = on }, completion: completion)
+    }
+
+    /// Sets how long cases of each state stay, as `update`; windows the
+    /// daemon would refuse (`validWindows`) are not written: false, and
+    /// `completion` is not called.
+    @discardableResult
+    public func setWindows(_ w: BoardWindows, completion: (@MainActor (Bool) -> Void)? = nil) -> Bool {
+        guard Self.validWindows(w) else { return false }
+        update({ $0.windows = w }, completion: completion)
+        return true
+    }
+
+    /// Sets the accounts triage may read and annotate (empty: every
+    /// enabled mail account), as `update`; duplicates and empty ids are
+    /// left out, the order kept. A Triage These Accounts list builds the
+    /// ids with `toggleTriageAccount`.
+    public func setTriageAccounts(_ ids: [AccountID], completion: (@MainActor (Bool) -> Void)? = nil) {
+        var list: [AccountID] = []
+        for id in ids where !id.rawValue.isEmpty && !list.contains(id) {
+            list.append(id)
+        }
+        update({ $0.triageAccounts = list }, completion: completion)
+    }
+
+    /// Whether `a` is triaged when the preferences name no account: an
+    /// enabled mail account (not an issue tracker).
+    private nonisolated static func triageByDefault(_ a: Account) -> Bool {
+        a.enabled && a.config.protocolKind != .jira
+    }
+
+    /// Whether account `a` is triaged under `listed` (the preferences'
+    /// `triageAccounts`), as the daemon decides: a listed account when some
+    /// are listed, else every enabled mail account. A disabled account is
+    /// never triaged.
+    public nonisolated static func triageAccountChecked(_ listed: [AccountID], _ a: Account) -> Bool {
+        guard a.enabled else { return false }
+        return listed.isEmpty ? triageByDefault(a) : listed.contains(a.id)
+    }
+
+    /// What Triage These Accounts' subtitle says (Go
+    /// `TriageAccountsCoverage`).
+    public enum TriageAccountsCoverage: Sendable, Equatable {
+        /// The list names accounts and some of them are checked; the
+        /// checkboxes say which, no subtitle.
+        case some
+        /// Nothing is listed, so every enabled mail account is triaged
+        /// (`Board.Text.triageSettingsAccountsAll`).
+        case all
+        /// The list names accounts but none of them is an enabled account
+        /// any more (all removed or turned off). The daemon keeps such a
+        /// list as it is, since an empty one would widen the triage to
+        /// every account, so the triage reads nothing
+        /// (`Board.Text.triageSettingsAccountsNone`); checking an account
+        /// replaces the list.
+        case none
+    }
+
+    /// The coverage of `listed` (the preferences' `triageAccounts`) over
+    /// `accounts` (Go `TriageAccountsSubtitle`): all only when the list is
+    /// empty, none when it is not and no account is checked under it, else
+    /// some.
+    public nonisolated static func triageAccountsSubtitle(_ listed: [AccountID], _ accounts: [Account]) -> TriageAccountsCoverage {
+        if listed.isEmpty {
+            return .all
+        }
+        return accounts.contains { triageAccountChecked(listed, $0) } ? .some : .none
+    }
+
+    /// `listed` with account `id` checked (`on`) or not, for `accounts`: the
+    /// accounts checked now (`triageAccountChecked`) with `id` changed, in
+    /// the order of `accounts`; empty again when that is exactly every
+    /// enabled mail account, so that a mail account added later is triaged
+    /// as before. A disabled account listed stays listed (in its place),
+    /// so that it is triaged again once enabled. nil when no enabled
+    /// account would be left checked (an empty list would mean every
+    /// account) or `id` is not an enabled account.
+    public nonisolated static func toggleTriageAccount(
+        _ listed: [AccountID], accounts: [Account], id: AccountID, on: Bool
+    ) -> [AccountID]? {
+        var found = false
+        var enabled = 0
+        var checked: [AccountID] = []
+        var defaults: [AccountID] = []
+        for a in accounts {
+            guard a.enabled else {
+                if listed.contains(a.id) {
+                    checked.append(a.id)
+                }
+                continue
+            }
+            var c = triageAccountChecked(listed, a)
+            if a.id == id {
+                found = true
+                c = on
+            }
+            if c {
+                checked.append(a.id)
+                enabled += 1
+            }
+            if triageByDefault(a) {
+                defaults.append(a.id)
+            }
+        }
+        guard found, enabled > 0 else { return nil }
+        return checked == defaults ? [] : checked
+    }
+
     private func lift(_ token: Int) {
         overlays.removeAll { $0.token == token }
         publish()

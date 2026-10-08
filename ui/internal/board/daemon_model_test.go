@@ -30,7 +30,7 @@ func TestEveryKnownCodeHasItsOwnText(t *testing.T) {
 		check(t, !seen[text], "%s repeats another code's text", code)
 		seen[text] = true
 	}
-	eq(t, "known", len(KnownReasons), 16)
+	eq(t, "known", len(KnownReasons), 17)
 }
 
 func TestUnknownCodesGetTheGenericText(t *testing.T) {
@@ -84,9 +84,10 @@ func visibilityCases() []Case {
 	)
 }
 
-// TestSnoozedAreUnderDone: snoozed cases are off the board and listed under
-// Done, soonest back first, before the done ones.
-func TestSnoozedAreUnderDone(t *testing.T) {
+// TestSnoozedHaveTheirOwnFilter: snoozed cases are off the board and
+// listed under Snoozed, soonest back first; Done lists and counts only the
+// done ones.
+func TestSnoozedHaveTheirOwnFilter(t *testing.T) {
 	all := view(visibilityCases())
 	eq(t, "rows", rowsOf(all), []string{"l1"})
 	var cols []string
@@ -94,27 +95,33 @@ func TestSnoozedAreUnderDone(t *testing.T) {
 		cols = append(cols, idsOf(c.Rows)...)
 	}
 	eq(t, "columns", cols, []string{"l1"})
-	eq(t, "done count", all.Nav[len(all.Nav)-1].Count, 3)
+	eq(t, "done count", all.Nav[len(all.Nav)-1].Count, 1)
+	eq(t, "snoozed nav", all.Nav[len(all.Nav)-2].Filter.Kind, FilterSnoozed)
+	eq(t, "snoozed count", all.Nav[len(all.Nav)-2].Count, 2)
 	eq(t, "overview count", all.Nav[0].Count, 1)
 	eq(t, "accounts count", all.Accounts[0].Count, 1) // live only
 	done := view(visibilityCases(), configured(func(v *ViewState) { v.Filter = doneFilter }))
-	eq(t, "kinds", sectionKinds(done), []string{"snoozed", "done"})
-	eq(t, "titles", []string{done.Sections[0].Title, done.Sections[1].Title}, []string{"Snoozed", "Done"})
-	eq(t, "snoozed rows", idsOf(done.Sections[0].Rows), []string{"s2", "s1"})
-	eq(t, "remind", done.Sections[0].Rows[0].Remind, "Tomorrow 09:00")
-	eq(t, "no remind", done.Sections[1].Rows[0].Remind, "")
-	eq(t, "selection", done.Selection, CaseID("s2"))
-	d := done.Detail
-	check(t, d.IsSnoozed && !d.IsDone && d.RemindText == "Back on the board Tomorrow 09:00", "detail %+v", d)
+	eq(t, "kinds", sectionKinds(done), []string{"done"})
+	eq(t, "done rows", idsOf(done.Sections[0].Rows), []string{"d1"})
+	eq(t, "no remind", done.Sections[0].Rows[0].Remind, "")
+	snoozed := view(visibilityCases(), configured(func(v *ViewState) { v.Filter = Filter{Kind: FilterSnoozed} }))
+	eq(t, "snoozed kinds", sectionKinds(snoozed), []string{"snoozed"})
+	eq(t, "title", snoozed.Sections[0].Title, "Snoozed")
+	eq(t, "snoozed rows", idsOf(snoozed.Sections[0].Rows), []string{"s2", "s1"})
+	eq(t, "remind", snoozed.Sections[0].Rows[0].Remind, "Tomorrow at 09:00")
+	eq(t, "selection", snoozed.Selection, CaseID("s2"))
+	d := snoozed.Detail
+	check(t, d.IsSnoozed && !d.IsDone && d.RemindText == "Back on the board: Tomorrow at 09:00", "detail %+v", d)
 	// Only snoozed: not empty.
 	check(t, !view(casesOf(mk("s1", StateYou, withVisibility(Visibility{Kind: VisibleSnoozed, At: back})))).IsEmpty, "empty")
 }
 
-func TestSelectionAfterDoneWalksTheSnoozedToo(t *testing.T) {
-	v := stateWith(func(v *ViewState) { v.Filter = doneFilter })
+func TestSelectionAfterDoneWalksTheSnoozed(t *testing.T) {
+	v := stateWith(func(v *ViewState) { v.Filter = Filter{Kind: FilterSnoozed} })
 	s := testSnapshot(visibilityCases()...)
-	eq(t, "s1", SelectionAfterDone("s1", s, v), CaseID("d1"))
-	eq(t, "d1", SelectionAfterDone("d1", s, v), CaseID("s1"))
+	eq(t, "s2", SelectionAfterDone("s2", s, v), CaseID("s1"))
+	eq(t, "s1", SelectionAfterDone("s1", s, v), CaseID("s2"))
+	eq(t, "d1 not listed", SelectionAfterDone("d1", s, v), CaseID(""))
 }
 
 func TestDoneIsTheVisibility(t *testing.T) {
@@ -170,7 +177,7 @@ func TestOnlyOpenCommitments(t *testing.T) {
 	}
 	v := view(casesOf(mk("c1", StateYou)), annotatedOn(), withCommitments(ks...))
 	eq(t, "ids", commitmentIDs(v.Commitments), []string{"k1"})
-	eq(t, "tile", v.Today.Tiles[len(v.Today.Tiles)-1], Tile{Kind: TileCommitments, Count: 1, Title: Commitments(tr)})
+	eq(t, "tile", v.Today.Tiles[len(v.Today.Tiles)-1], Tile{Kind: TileCommitments, Count: 1, Title: Commitments(tr), ToolTip: "Promised: 1 promise"})
 }
 
 func phaseView(p Phase, truncated bool, cases ...Case) ViewModel {

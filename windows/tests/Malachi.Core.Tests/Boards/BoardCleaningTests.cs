@@ -5,7 +5,8 @@
 // (BoardCleaningTests); GTK: ui/internal/board/model_test.go (TestCleanLine,
 // TestCleanLineCaps, TestCleanLineBigInput,
 // TestCleaningIsBoundedForDroppedInput, TestTheCutNeverBreaksACharacter,
-// TestCleanBlock, TestCleanBlockBigInput). A lone surrogate is the C#
+// TestCleanBlock, TestCleanBlockBigInput) and clean_joiner_test.go
+// (TestCleanJoiners). A lone surrogate is the C#
 // counterpart of Go's invalid UTF-8.
 
 using System;
@@ -33,7 +34,7 @@ public sealed class BoardCleaningTests
     [InlineData("a\0b", "ab")]
     [InlineData("a\u202Eb", "ab")] // right-to-left override
     [InlineData("\u202Ea\u202C", "a")]
-    [InlineData("a\u200Bb\u200Dc\uFEFFd", "abcd")] // zero width, joiner, BOM
+    [InlineData("a\u200Bb\u200Dc\uFEFFd", "ab\u200Dcd")] // zero width, joiner kept between two letters, BOM
     [InlineData("a\u2066b\u2069", "ab")] // isolates
     [InlineData("a\u0007b\u001Bc", "abc")] // bell, escape
     [InlineData("\u202E\u200B\0\uFEFF", "")] // only format characters
@@ -150,14 +151,44 @@ public sealed class BoardCleaningTests
         // Not cut at all: a trailing cluster stays as it is.
         var lone = "x" + char.ConvertFromUtf32(0x1F1E8);
         Assert.Equal(lone, CleanLine(lone, 100));
-        // Format characters (ZWJ, ZWNJ) are still dropped.
-        Assert.Equal("abc", CleanLine("a\u200Db\u200Cc", 100));
+        // A joiner between two kept characters stays (the joiner rule).
+        Assert.Equal("a\u200Db\u200Cc", CleanLine("a\u200Db\u200Cc", 100));
+        // A cut right after a joiner does not leave it last.
+        Assert.Equal("ab", CleanLine("ab\u200Dc", 5));
         // The rest of Go's rules: an emoji modifier, a Hangul syllable of
         // conjoining jamo, the Thai AM after its letter.
         var thumb = char.ConvertFromUtf32(0x1F44D) + char.ConvertFromUtf32(0x1F3FD);
         Assert.Equal("a", CleanLine("a" + thumb, 8));
         Assert.Equal("a", CleanLine("a\u1100\u1161", 4));
         Assert.Equal("a", CleanLine("aกำ", 6));
+    }
+
+    /// <summary>
+    /// The joiner rule is the daemon's (backend internal/board
+    /// TestCleanTextJoiners, the same cases), in CleanLine and in
+    /// CleanBlock; a null block is the line's.
+    /// </summary>
+    [Theory]
+    [InlineData("\U0001F468\u200D\U0001F469\u200D\U0001F467", "\U0001F468\u200D\U0001F469\u200D\U0001F467", null)] // emoji ZWJ sequence
+    [InlineData("\u2764\uFE0F\u200D\U0001F525", "\u2764\uFE0F\u200D\U0001F525", null)] // heart on fire keeps VS16 and ZWJ
+    [InlineData("\u0645\u06CC\u200C\u062E", "\u0645\u06CC\u200C\u062E", null)] // Persian ZWNJ
+    [InlineData("\u200Da", "a", null)] // leading
+    [InlineData("a\u200C", "a", null)] // trailing
+    [InlineData("a\u200D b", "a b", null)] // before a space
+    [InlineData("a \u200Db", "a b", null)] // after a space
+    [InlineData("a\u200D\nb", "a b", "a\nb")] // at a line end
+    [InlineData("a\n\u200Cb", "a b", "a\nb")] // at a line start
+    [InlineData("a\u200D\u200Db", "ab", null)] // a run of joiners
+    [InlineData("a\u200D\u200Cb", "ab", null)] // a mixed run
+    [InlineData("a\u200D\u200Bb", "a\u200Db", null)] // an invisible character between is dropped first
+    [InlineData("\u2764\u200D\uFE0F\U0001F525", "\u2764\u200D\U0001F525", null)] // VS16 after a joiner goes
+    [InlineData("\u200D\u200C\u200D", "", null)] // only joiners
+    [InlineData("a\u200D\0", "a", null)] // a joiner, then a control
+    [InlineData("a\u200D\u202Eb", "a\u200Db", null)] // a bidi override around
+    public void CleanJoiners(string input, string line, string? block)
+    {
+        Assert.Equal(line, CleanLine(input, 100));
+        Assert.Equal(block ?? line, CleanBlock(input, 100));
     }
 
     [Theory]

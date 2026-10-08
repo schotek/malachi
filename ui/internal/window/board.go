@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
-	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
@@ -18,6 +17,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/boardtriage"
 	"github.com/schotek/malachi/ui/internal/compose"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -66,6 +66,14 @@ type boardPage struct {
 
 	navSplit *adw.NavigationSplitView
 	navList  *gtk.ListBox
+	// navRows are navList's rows in order, kept across changes
+	// (renderNav); navFilters is how many of them are filters, the rest
+	// being accounts.
+	navRows    []*boardNavRow
+	navFilters int
+	// accountFilterLabels is the account filter's model, kept while the
+	// entries do not change (renderHeader).
+	accountFilterLabels []string
 
 	statusButton *gtk.MenuButton
 	syncSpinner  *adw.Spinner
@@ -79,6 +87,10 @@ type boardPage struct {
 	// caseOrder mirrors the case list's rows in order, a header's slot "".
 	caseOrder   []board.CaseID
 	reselecting bool
+	// caseRows and headerRows are the case list's rows by case id and
+	// section, kept across changes (renderList).
+	caseRows   map[board.CaseID]*widget.BoardRow
+	headerRows map[boardSectionKey]*boardHeaderRow
 
 	detailPage      *adw.NavigationPage
 	doneButton      *gtk.Button
@@ -98,6 +110,12 @@ type boardPage struct {
 	conversation    *boardConversation
 	commitmentsBox  *gtk.Box
 	statePill       *gtk.MenuButton
+	// top is the detail's top, built once (board_detail.go).
+	top *boardDetailTop
+	// commitmentsCase and commitmentsShown are what the commitments box
+	// shows (renderDetailCommitments rebuilds it only when they change).
+	commitmentsCase  board.CaseID
+	commitmentsShown []board.CommitmentRow
 
 	columns *boardColumns
 	today   *boardToday
@@ -131,6 +149,19 @@ type boardPage struct {
 
 	triageRemoveObserve func()
 	triageRemoveEnded   func()
+	// triageView is the board triage's View as of its last change
+	// (wireTriage's Observe): the Triage button and the status strip read
+	// it instead of asking the controller, whose View looks for Claude
+	// Code on disk each time (boardtriage Locate). triageViewKnown: it
+	// was read at least once.
+	triageView      boardtriage.View
+	triageViewKnown bool
+
+	// gate holds the conversation loads back while the window shows Mail
+	// (boardMessagesGate); src is the gate.
+	gate *boardMessagesGate
+
+	menuButton *gtk.MenuButton
 }
 
 // boardAPIState is api.BoardState's value on the wire: board_actions.go
@@ -223,6 +254,8 @@ func (w *Window) setMode(m board.Mode) {
 			w.boardPage.reveal.cancel()
 		}
 		w.ensureBoard()
+		// The conversation the board held back while in Mail.
+		w.boardPage.gate.flush()
 		w.moveStatusStripToBoard()
 		w.ResumeBoardReplies()
 		w.boardPage.ctl.BoardWillShow()
@@ -271,12 +304,21 @@ func (w *Window) ensureBoard() {
 	}
 	p := &boardPage{w: w}
 	p.newDataSource()
-	p.ctl = board.NewController(p.src, board.ControllerOptions{
-		Env:          board.Env{Tr: i18n.Tr, Dates: boardEnv{}, Loc: time.Local},
-		DefaultStyle: func() string { return string(w.settings.BoardDefaultStyle()) },
-	})
+	// The source behind a gate: a page built in Mail (automatic triage
+	// wants the board's data, board_auto_start.go) must not load the
+	// first case's conversation (board.get) nobody looks at.
+	p.gate = &boardMessagesGate{DataSource: p.src, shown: func() bool { return w.mode == board.ModeBoard }}
+	p.src = p.gate
+	opts := board.ControllerOptions{Env: board.Env{Tr: i18n.Tr, Dates: boardEnv{}, Loc: time.Local}}
+	if st := w.settings; st != nil {
+		opts.DefaultStyle = func() string { return string(st.BoardDefaultStyle()) }
+		opts.LastStyle = func() string { return string(st.BoardLastStyle()) }
+		opts.SavedAccount = st.BoardAccountFilter
+	}
+	p.ctl = board.NewController(p.src, opts)
 	p.ctl.OnChange = p.onChange
 	p.ctl.OnToast = w.Toast
+	p.ctl.OnArchived = w.boardArchived
 	pb := data.Builder("board_page.ui")
 	p.bind(pb)
 	p.bindColumns(pb)
@@ -284,6 +326,8 @@ func (w *Window) ensureBoard() {
 	p.bindPanel(pb)
 	w.boardPageBin.SetChild(p.root)
 	p.wire()
+	p.wireDetailHeader()
+	p.wireMenuButton()
 	p.wireToday()
 	p.wireKeys()
 	p.wirePanel()
@@ -300,23 +344,7 @@ func (w *Window) ensureBoard() {
 	p.initBoardReplies()
 	p.initBoardSuggestReply()
 	p.applyAll()
-	// The board's own status button keeps up with sync.go's (whose own
-	// timer and immediate refreshes this agent's files do not touch) by
-	// asking for the current line every few seconds; the main window
-	// stops this timer when CloseBoardReplies releases its page.
-	glib.TimeoutSecondsAdd(boardStatusRefreshSeconds, func() bool {
-		if p.replyClosed {
-			return false
-		}
-		w.refreshBoardStatusLabel()
-		return true // keep the timer
-	})
 }
-
-// boardStatusRefreshSeconds is how often refreshBoardStatusLabel polls the
-// status line on its own (board_triage.go's connection poll uses the same
-// cadence): short enough to feel immediate, cheap enough to run forever.
-const boardStatusRefreshSeconds = 1
 
 // newDataSource is the board's source: the daemon's, unless
 // MALACHI_BOARD_SAMPLES=1 asks for the invented sample board (the owner's
@@ -366,19 +394,19 @@ func (w *Window) boardConnectionChanged(connected bool) {
 // replaced by a non-empty boardtriage.StripText while there is one to
 // show (the triage's note takes the strip over, as it does on macOS and
 // in the GTK panel). Called whenever something that moves the line
-// changes: the board's own notify hooks above, wireTriage's Observe
-// (board_triage_button.go) and a short timer (ensureBoard) that catches
-// the rest (sync.go's own refreshSyncLabel, which this agent does not
-// own and so cannot hook directly).
+// changes: refreshSyncLabel itself (sync.go), the board's own notify hooks
+// above, the triage's Observe (board_triage_button.go) and
+// moveStatusStripToBoard. Only while the board shows: switching to Board
+// refreshes it (moveStatusStripToBoard), so a hidden board costs nothing.
 func (w *Window) refreshBoardStatusLabel() {
 	p := w.boardPage
-	if p == nil {
+	if p == nil || p.replyClosed || w.mode != board.ModeBoard {
 		return
 	}
 	line := w.currentStatusLine()
 	text := line.Text
-	if bt := w.boardTriageOrNil(); bt != nil {
-		triageText := boardtriage.StripText(bt.Controller().View(), true, p.ctl.Source().Snapshot().Phase, i18n.Tr)
+	if v, ok := p.cachedTriageView(); ok {
+		triageText := boardtriage.StripText(v, true, p.ctl.Source().Snapshot().Phase, i18n.Tr)
 		text = boardStatusText(line.Text, triageText)
 	}
 	p.syncLabel.SetUseMarkup(false)
@@ -392,6 +420,79 @@ func (w *Window) refreshBoardStatusLabel() {
 		p.statusButton.Popdown()
 	}
 	p.statusButton.SetSensitive(line.Active)
+}
+
+// cachedTriageView is the board triage's View as last observed
+// (triageView), read once from the controller the first time; false
+// without a board triage (samples, a bare test window).
+func (p *boardPage) cachedTriageView() (boardtriage.View, bool) {
+	if p.daemon == nil {
+		return boardtriage.View{}, false
+	}
+	bt := p.w.boardTriageOrNil()
+	if bt == nil {
+		return boardtriage.View{}, false
+	}
+	if !p.triageViewKnown {
+		p.triageView, p.triageViewKnown = bt.Controller().View(), true
+	}
+	return p.triageView, true
+}
+
+// boardArchived is the controller's OnArchived: what Archive did, as a
+// toast with Undo (ArchiveOutcome.UndoLabel), which moves the messages back
+// and puts the case back on the board (Controller.UndoArchive).
+func (w *Window) boardArchived(o board.ArchiveOutcome) {
+	t := widget.PlainToast(o.Text)
+	if o.UndoLabel != "" {
+		t.SetButtonLabel(o.UndoLabel)
+		t.ConnectButtonClicked(func() {
+			if p := w.boardPage; p != nil && !p.replyClosed {
+				p.ctl.UndoArchive(o)
+			}
+		})
+	}
+	w.toasts.AddToast(t)
+}
+
+// boardMessagesGate is the board's source with LoadMessages held back while
+// the window is not in Board (shown false): the controller asks for the
+// selected case's conversation as soon as it is built, which automatic
+// triage does in Mail. The last case asked for loads when the board shows
+// (flush). Everything else goes straight to the source.
+type boardMessagesGate struct {
+	board.DataSource
+	shown   func() bool
+	pending board.CaseID
+}
+
+// LoadMessages loads id's conversation now, or once the board shows.
+func (g *boardMessagesGate) LoadMessages(id board.CaseID) {
+	if g.shown() {
+		g.pending = ""
+		g.DataSource.LoadMessages(id)
+		return
+	}
+	g.pending = id
+}
+
+// flush loads the conversation held back, if any.
+func (g *boardMessagesGate) flush() {
+	if id := g.pending; id != "" && g.shown() {
+		g.pending = ""
+		g.DataSource.LoadMessages(id)
+	}
+}
+
+// UndoArchive passes Undo through to the source when it can move the
+// messages back (board.ArchiveUndoer, the daemon's), else only reopens
+// the case, as Controller.UndoArchive does for such a source.
+func (g *boardMessagesGate) UndoArchive(o board.ArchiveOutcome) {
+	if u, ok := g.DataSource.(board.ArchiveUndoer); ok {
+		u.UndoArchive(o)
+		return
+	}
+	g.DataSource.SetDone(o.Case, false)
 }
 
 // boardStatusText is refreshBoardStatusLabel's text decision, pure and
@@ -434,13 +535,12 @@ func (p *boardPage) onChange(c board.Changes) {
 	p.updateBoardReplies()
 	vm := p.ctl.View()
 	p.renderStack(vm)
-	if c.Has(board.ChangeStyle) {
-		p.renderHeader(vm)
-		p.renderStack(vm)
-	}
-	if c.Has(board.ChangeFilters) {
+	// The header's subtitle (the case count) and the account filter's
+	// entries follow the content too, not only the style and the filters.
+	if c.Has(board.ChangeStyle) || c.Has(board.ChangeFilters) || c.Has(board.ChangeContent) {
 		p.renderHeader(vm)
 	}
+	p.rememberViewState(c)
 	if c.Has(board.ChangeContent) {
 		p.renderNav(vm)
 		p.renderList(vm)
@@ -456,5 +556,26 @@ func (p *boardPage) onChange(c board.Changes) {
 		p.columns.apply(vm)
 		p.today.apply(vm)
 		p.renderPanel(vm)
+	}
+	// The strip's triage note reads the board's phase (off, unsupported),
+	// which changes without a poll; a no-op while the board is hidden.
+	p.w.refreshBoardStatusLabel()
+}
+
+// rememberViewState writes the style and the account filter the user is
+// looking at for the next launch (board-last-style, board-account-filter;
+// board.StyleOnShow and FilterOnShow read them back through
+// ControllerOptions). Only once the board has shown: the List the
+// controller holds before that is not a choice.
+func (p *boardPage) rememberViewState(c board.Changes) {
+	st := p.w.settings
+	if st == nil || !p.ctl.HasShown() {
+		return
+	}
+	if c.Has(board.ChangeStyle) {
+		st.SetBoardLastStyle(settings.BoardStyle(p.ctl.State().Style.Nick()))
+	}
+	if c.Has(board.ChangeFilters) {
+		st.SetBoardAccountFilter(string(p.ctl.State().Account))
 	}
 }

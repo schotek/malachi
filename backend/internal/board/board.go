@@ -33,7 +33,13 @@ import (
 // forward. 5: a message of the user's to nothing but the user's own
 // addresses (Identity.Self, every account's) is a note to self and never
 // decides the state, and the store hands the rules each member's Bcc.
-const RulesVersion = "5"
+// 6: a message of the user's shaped like a forward is passed over like a
+// note to self (it no longer ends the case); hot.flagged whoever wrote
+// last; an inbound message from an unknown sender with the user in its To
+// is you.newContact, from an unknown sender without the user in To
+// info.unknownSender; ZWJ and ZWNJ are kept only between two other kept
+// characters (CleanText).
+const RulesVersion = "6"
 
 // Bulk classification values of messages.bulk the rules distinguish; any
 // other non-empty value is bulk mail (api.BulkKind).
@@ -242,10 +248,20 @@ type Verdict struct {
 	// previous rule columns meanwhile.
 	Pending bool
 
+	// DecidingMessageID is the newest deciding member: the newest
+	// counting member that is neither a note to self nor a message of the
+	// user's shaped like a forward (Evaluate); on a jira account the newest
+	// counting item. "" when there is none (nothing counts, or every
+	// counting message is a note or a forward). DecidingMine: it is the
+	// user's. Only a deciding member of the user's answers the user's
+	// commitments (the store closes them as replied against it alone).
+	DecidingMessageID api.MessageID
+	DecidingMine      bool
+
 	// Subject, Date, LatestID and ReplyID's fallback are those of the
-	// newest counting member the rules decide by: a note to self of the
-	// user's (Evaluate) is passed over, unless every counting message is
-	// one.
+	// newest deciding member (DecidingMessageID): a note to self or a
+	// forward of the user's (Evaluate) is passed over, unless every
+	// counting message is one.
 	Subject string      // the newest deciding member's, Re:/Fwd: stripped, cleaned, one line (URLs kept)
 	Person  api.Address // the other party (api.BoardCase.Person), cleaned (CleanAddress)
 	// Date is when the newest deciding member arrived (Arrival), never
@@ -320,11 +336,12 @@ func (v Verdict) NewestInbound(doneAt time.Time, seen func(messageID string) boo
 // TextMembers returns the ids of the members whose Text and OwnText
 // Evaluate reads, newest first; it reads no other member's. They are
 // decided without any text, so a caller evaluates a thread without text
-// first and loads only these: none unless the newest deciding member
-// (notes to self passed over) is the user's (and never on a jira
-// account); then that member (its forward shape), and when no inbound
-// member counts, the user's newest deciding messages up to the ask scan
-// (them.asked).
+// first and loads only these: none unless the newest member that counts,
+// notes to self passed over, is the user's (and never on a jira account);
+// then the user's messages after the newest inbound one, newest first, at
+// most 10 (their forward shape, and with no inbound member the ask scan,
+// them.asked). A forward of the user's beyond those is judged without its
+// text.
 func (v Verdict) TextMembers() []api.MessageID {
 	return slices.Clone(v.texts)
 }

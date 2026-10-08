@@ -41,6 +41,9 @@ import Darwin
         return try await makeSession(spec)
     }
     private func makeSession(_ spec: AssistantSessionSpec) async throws -> CodexSession {
+        // The policy gate first: a spec outside the known shapes starts
+        // nothing, not even Codex.
+        try CodexPolicy.check(spec.tools)
         guard connected else { throw ChatGPTFailure("chatgpt_not_connected") }
         guard let executable else { throw ChatGPTFailure("codex_not_found") }
         var spec = spec; if spec.modelID.isEmpty && !spec.boardConsent { spec.modelID = settings.assistantChatGPTModel }
@@ -98,6 +101,9 @@ import Darwin
         gateway = CodexInferenceGateway(connection: connection, policy: policy)
     }
     func initialize() async throws {
+        // Again here, so that no path starts the bridge with arguments the
+        // gate did not pass.
+        try CodexPolicy.check(spec.tools)
         startup = Task { @MainActor [weak self] in try? await Task.sleep(for: .seconds(30)); if !Task.isCancelled { self?.terminate() } }
         defer { startup?.cancel(); startup = nil }
         try privateDirectory(root)
@@ -113,7 +119,10 @@ import Darwin
             let peer = try CodexJSONRPC(executable: tools.bridge, arguments: args, environment: CodexPolicy.environment(ProcessInfo.processInfo.environment), directory: work)
             bridge = peer; bridgeExited = false
             peer.onExit = { [weak self] in self?.bridgeExited = true; self?.terminate() }
-            _ = try await peer.call("initialize", ["protocolVersion": "2024-11-05", "capabilities": [:], "clientInfo": ["name": "malachi-chatgpt", "version": "1"]])
+            let handshake = try await peer.call("initialize", ["protocolVersion": "2024-11-05", "capabilities": [:], "clientInfo": ["name": "malachi-chatgpt", "version": "1"]])
+            // The bridge must speak the protocol version asked for (Go
+            // checks the same).
+            guard handshake["protocolVersion"] as? String == "2024-11-05" else { throw ChatGPTFailure("chatgpt_tools_unavailable") }
             try peer.notify("notifications/initialized")
             let listed = try await peer.call("tools/list")
             guard let entries = listed["tools"] as? [[String: Any]] else { throw ChatGPTFailure("chatgpt_tools_unavailable") }
@@ -158,6 +167,8 @@ import Darwin
     func submit(_ input: String) async throws {
         guard running, !active, let codex else { throw ChatGPTFailure("codex_session_busy_or_closed") }
         active = true; text = ""; calls = []; usage = nil
+        // A failure of an earlier turn is not this turn's.
+        gateway.newTurn()
         var ready = Assistant.Event(kind: .systemInit); ready.bridgeConnected = true; ready.tools = policy.tools.sorted(); onEvents?([ready])
         deadline = Task { @MainActor [weak self] in try? await Task.sleep(for: self?.spec.timeout ?? .seconds(120)); if !Task.isCancelled { self?.terminate() } }
         var params: [String: Any] = ["threadId": thread, "input": [["type": "text", "text": input]], "environments": []]
@@ -187,7 +198,8 @@ import Darwin
             func count(_ name: String) -> Int64 { min(max((total[name] as? NSNumber)?.int64Value ?? 0, 0), Assistant.maxUsageTokens) }
             let cached = count("cachedInputTokens")
             usage = Assistant.Usage(inputTokens: max(count("inputTokens") - cached, 0), outputTokens: count("outputTokens"), cacheReadInputTokens: cached)
-            event = Assistant.Event(kind: .other); event?.usage = usage; event?.messageID = turn
+            // The thread's running total: final for what it counts.
+            event = Assistant.Event(kind: .other); event?.usage = usage; event?.messageID = turn; event?.usageFinal = true
         } else if method == "turn/completed", let completed = value["turn"] as? [String: Any] {
             guard completed["id"] as? String == turn else { terminate(); return }
             var success = completed["status"] as? String == "completed"

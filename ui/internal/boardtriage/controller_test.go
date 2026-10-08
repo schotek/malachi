@@ -43,6 +43,11 @@ type options struct {
 	prefs     *api.BoardPreferences
 	noBridge  bool
 	noLoad    bool
+	// provider runs the request instead of the fake claude (the board's
+	// Codex path).
+	provider assistantpanel.Provider
+	// bridge replaces testBridge when set.
+	bridge string
 }
 
 type harness struct {
@@ -78,9 +83,19 @@ func newHarness(t *testing.T, fake *fakeClaude, o options) *harness {
 		Settings: h.settings, Locator: real, Loop: h.loop, Log: discardLog(), Directory: filepath.Join(fake.dir, "work"),
 		Env: []string{"HOME=" + fake.dir}, KillGrace: 300 * time.Millisecond,
 	})
+	if o.provider != nil {
+		request = assistantpanel.NewRequest(assistantpanel.RequestConfig{
+			Settings: h.settings, Locator: real, Loop: h.loop, Log: discardLog(), Directory: filepath.Join(fake.dir, "work"),
+			Env: []string{"HOME=" + fake.dir}, KillGrace: 300 * time.Millisecond,
+			Provider: func() assistantpanel.Provider { return o.provider },
+		})
+	}
 	request.Timeout = 10 * time.Second
 	h.prefs = newPrefs(h.daemon, h.loop)
 	bridge := testBridge
+	if o.bridge != "" {
+		bridge = o.bridge
+	}
 	if o.noBridge {
 		bridge = ""
 	}
@@ -163,6 +178,12 @@ func end(id string, class api.BoardRunError, usage *api.BoardUsage) api.BoardRun
 
 func usage(input, output, write, read int64) *api.BoardUsage {
 	return &api.BoardUsage{InputTokens: input, OutputTokens: output, CacheCreationInputTokens: write, CacheReadInputTokens: read}
+}
+
+// atLeast is u marked as a lower bound.
+func atLeast(u *api.BoardUsage) *api.BoardUsage {
+	u.LowerBound = true
+	return u
 }
 
 func (h *harness) hasState(want State) bool {
@@ -931,13 +952,14 @@ func TestUsageFromTheResult(t *testing.T) {
 	h.expectEnds("usage", end("run_1", "", usage(40, 900, 1200, 50000)))
 }
 
-// Without a result: the distinct API messages seen, each once. A cancelled
+// Without a result: the distinct API messages seen, each once, a lower
+// bound. A cancelled
 // run, a run stopped at its limit, one that timed out and one that quit
 // (CancelAndEnd).
 func TestUsageWithoutAResult(t *testing.T) {
 	// Two lines of message m1 (counted once), one of m2.
 	seen := lines([]string{fakeInit}, annotateUsing("a1", "m1", 5, 100), annotateUsing("a2", "m1", 5, 100), annotateUsing("a3", "m2", 7, 300))
-	sum := usage(12, 2, 20, 400)
+	sum := atLeast(usage(12, 2, 20, 400))
 	t.Run("cancelled", func(t *testing.T) {
 		h := newHarness(t, newFakeClaude(t, "true", fakeTurn{lines: seen, shell: "sleep 30; echo '" + resultUsing(1, 1, 1, 1, true) + "'"}), options{})
 		h.board(4, true, 0, nil)
@@ -954,7 +976,7 @@ func TestUsageWithoutAResult(t *testing.T) {
 		h.board(12, true, 0, nil)
 		h.c.Start(Automatic, 3)
 		h.ended()
-		h.expectEnds("limit", end("run_1", "", usage(1012, 3, 30, 1400)))
+		h.expectEnds("limit", end("run_1", "", atLeast(usage(1012, 3, 30, 1400))))
 	})
 	t.Run("timed out", func(t *testing.T) {
 		h := newHarness(t, newFakeClaude(t, "true", fakeTurn{lines: seen, shell: "sleep 30"}), options{})
@@ -1032,7 +1054,7 @@ func TestStopWhileWaitingForTheResult(t *testing.T) {
 	h.c.Cancel()
 	h.expectState("stopped", Finished(Manual, 2, 0, t0))
 	h.ended()
-	h.expectEnds("usage", end("run_1", "", usage(12, 2, 20, 400)))
+	h.expectEnds("usage", end("run_1", "", atLeast(usage(12, 2, 20, 400))))
 	h.loop.settle(t, 200*time.Millisecond)
 	if len(h.ends) != 1 || h.ends[0].Failed || len(h.daemon.ends()) != 1 {
 		t.Errorf("ends %+v, runEnds %d", h.ends, len(h.daemon.ends()))
@@ -1040,7 +1062,8 @@ func TestStopWhileWaitingForTheResult(t *testing.T) {
 }
 
 // A run that reported nothing sends no usage, and a new run does not carry
-// the last one's.
+// the last one's; a result without usage leaves the messages' placeholders,
+// a lower bound.
 func TestNoUsageIsLeftOut(t *testing.T) {
 	fake := newFakeClaude(t, "true",
 		fakeTurn{lines: lines([]string{fakeInit}, annotateUsing("a1", "m1", 5, 100), []string{fakeResult("ok", true)})},
@@ -1051,7 +1074,7 @@ func TestNoUsageIsLeftOut(t *testing.T) {
 	h.ended()
 	h.c.Start(Manual, 0)
 	h.ended()
-	h.expectEnds("two runs", end("run_1", "", usage(5, 1, 10, 100)), end("run_2", "", nil))
+	h.expectEnds("two runs", end("run_1", "", atLeast(usage(5, 1, 10, 100))), end("run_2", "", nil))
 }
 
 // The board's usage of the last 24 hours reaches the view; unknown before

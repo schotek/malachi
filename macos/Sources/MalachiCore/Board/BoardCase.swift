@@ -225,6 +225,11 @@ extension Board {
         /// The user's own choice; nil = automatic.
         public var userState: State?
         public var visibility: Visibility
+        /// When a remind of the user's came due (`board.list` `remindedAt`):
+        /// the case is live again and listed first in its state, marked
+        /// Reminded, until the user acts on it or new mail comes; nil
+        /// otherwise.
+        public var remindedAt: Date?
         /// What a reply answers; nil for the samples.
         public var reply: ReplyTarget?
         /// The newest message that counts; nil for the samples.
@@ -244,7 +249,8 @@ extension Board {
             id: CaseID, account: AccountID, thread: ThreadID? = nil, person: String, date: Date, subject: String,
             snippet: String = "", unread: Bool = false, hasAttachments: Bool = false, messageCount: Int = 1,
             issue: IssueInfo? = nil, ruleState: State, ruleReason: BoardReason = "", annotation: Annotation? = nil,
-            userState: State? = nil, visibility: Visibility = .live, reply: ReplyTarget? = nil,
+            userState: State? = nil, visibility: Visibility = .live, remindedAt: Date? = nil,
+            reply: ReplyTarget? = nil,
             latestMessage: MessageID? = nil, canArchive: Bool = false, draft: DraftLink? = nil,
             messages: [CaseMessage]? = nil, messagesFailed: Bool = false, version: Int64 = 0
         ) {
@@ -264,6 +270,7 @@ extension Board {
             self.annotation = annotation
             self.userState = userState
             self.visibility = visibility
+            self.remindedAt = remindedAt
             self.reply = reply
             self.latestMessage = latestMessage
             self.canArchive = canArchive
@@ -272,6 +279,13 @@ extension Board {
             self.messagesFailed = messagesFailed
             self.version = version
         }
+
+        /// A live case back from a reminder (`remindedAt`).
+        public var reminded: Bool { remindedAt != nil && visibility.isLive }
+
+        /// A case whose newest message is addressed to the user by someone
+        /// the user never wrote to (`you.newContact`).
+        public var newContact: Bool { ruleReason == .youNewContact }
 
         /// Marked done. Setting it moves the case to done (when unknown) or
         /// back on the board.
@@ -494,8 +508,8 @@ extension Board {
 
     /// One line of display text made safe: drops invalid UTF-8 (the
     /// replacement character), control and format characters (Cc, Cf: NUL,
-    /// bidirectional overrides such as U+202E, zero-width characters),
-    /// turns every whitespace (line breaks, tabs, Zl, Zp) into a space,
+    /// bidirectional overrides such as U+202E, zero-width characters)
+    /// except a joiner between two kept characters (`JoinerState`), turns every whitespace (line breaks, tabs, Zl, Zp) into a space,
     /// collapses runs of spaces, trims, and caps the result at `max` UTF-8
     /// bytes on a character boundary (a scalar boundary as `Jira.clean`,
     /// without a trailing grapheme cluster the cut broke). Stops reading
@@ -508,6 +522,7 @@ extension Board {
         var bytes = 0
         var limit = max
         var space = false
+        var j = JoinerState()
         var left = budget(max)
         for r in s.unicodeScalars {
             if left == 0 {
@@ -525,6 +540,10 @@ extension Board {
             }
             if r.properties.isWhitespace {
                 space = !out.isEmpty
+                j.reset()
+                continue
+            }
+            if j.take(r, atStart: out.isEmpty || space) {
                 continue
             }
             if dropped(r) {
@@ -535,6 +554,7 @@ extension Board {
                 bytes += 1
                 space = false
             }
+            bytes += j.flush(&out)
             out.append(r)
             bytes += UTF8.width(r)
             if bytes > max {
@@ -556,6 +576,7 @@ extension Board {
         var spaces = 0
         var breaks = 0
         var afterCR = false
+        var j = JoinerState()
         var left = budget(max)
         for r in s.unicodeScalars {
             if left == 0 {
@@ -589,6 +610,10 @@ extension Board {
                 default:
                     spaces += 1
                 }
+                j.reset()
+                continue
+            }
+            if j.take(r, atStart: out.isEmpty || spaces > 0 || breaks > 0) {
                 continue
             }
             if dropped(r) {
@@ -604,6 +629,7 @@ extension Board {
             }
             breaks = 0
             spaces = 0
+            bytes += j.flush(&out)
             out.append(r)
             bytes += UTF8.width(r)
             if bytes > max {
@@ -611,6 +637,66 @@ extension Board {
             }
         }
         return capped(out, limit)
+    }
+
+    /// A joiner (ZWJ, ZWNJ) the cleaners hold back until they see what
+    /// follows it. The rule is the daemon's (board.CleanText, Go
+    /// `joinerState`): a joiner is kept only when, once the dropped
+    /// characters are gone, the characters right before and right after it
+    /// are kept characters that are neither whitespace nor a joiner. A
+    /// joiner at the start or end of a line, next to whitespace, or in a run
+    /// of joiners goes; a variation selector right after a held joiner goes
+    /// too. Emoji ZWJ sequences and Persian or Indic words keep theirs.
+    struct JoinerState {
+        static let zwnj: UInt32 = 0x200C
+        static let zwj: UInt32 = 0x200D
+        static let vs15: UInt32 = 0xFE0E
+        static let vs16: UInt32 = 0xFE0F
+
+        /// The joiner held back, nil when none.
+        private var joiner: Unicode.Scalar?
+        /// The held joiner goes whatever follows (nothing kept before it,
+        /// whitespace before it, or a run of joiners).
+        private var stray = false
+
+        static func isJoiner(_ r: Unicode.Scalar) -> Bool { r.value == zwnj || r.value == zwj }
+
+        /// Whether `r` was consumed by the joiner rule: a joiner (held, or
+        /// marking a run), or a variation selector after a held joiner.
+        /// `atStart`: nothing kept is before `r` on its line, or whitespace
+        /// is.
+        mutating func take(_ r: Unicode.Scalar, atStart: Bool) -> Bool {
+            if Self.isJoiner(r) {
+                if joiner != nil {
+                    stray = true
+                } else {
+                    joiner = r
+                    stray = atStart
+                }
+                return true
+            }
+            if (r.value == Self.vs15 || r.value == Self.vs16) && joiner != nil {
+                return true
+            }
+            return false
+        }
+
+        /// Writes the held joiner before a kept character, unless it is
+        /// stray, and forgets it; returns the bytes written.
+        mutating func flush(_ out: inout String.UnicodeScalarView) -> Int {
+            defer { reset() }
+            if let joiner, !stray {
+                out.append(joiner)
+                return UTF8.width(joiner)
+            }
+            return 0
+        }
+
+        /// Forgets a held joiner (whitespace followed it).
+        mutating func reset() {
+            joiner = nil
+            stray = false
+        }
     }
 
     /// How many input scalars the cleaners read for a cap of `max` bytes:
@@ -658,7 +744,9 @@ extension Board {
             scalars.formIndex(before: &end)
         }
         var out = String.UnicodeScalarView(scalars[..<end])
-        while let last = out.last, last == " " || last == "\n" {
+        // Trailing whitespace goes, and a joiner the cut left last joins
+        // nothing.
+        while let last = out.last, last == " " || last == "\n" || JoinerState.isJoiner(last) {
             out.removeLast()
         }
         return String(out)

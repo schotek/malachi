@@ -112,3 +112,37 @@ func (p *Pane) EditorHasFocus() bool {
 	f := gtk.BaseWidget(p.dialogParent.Focus())
 	return f == &p.editor.Widget || f.IsAncestor(p.editor)
 }
+
+// PopupOpen says whether a popup of the pane is open: a recipient field's
+// suggestions, the link popover, or the paragraph-style and alignment
+// menus. Escape closes that first (board.EscapeFor's EscapeClosePopup);
+// the popup's own handler does, so a host that sees true lets the key go.
+func (p *Pane) PopupOpen() bool {
+	for _, s := range p.suggest {
+		if s.popover.Visible() {
+			return true
+		}
+	}
+	if p.linkPopover.Visible() {
+		return true
+	}
+	for _, b := range []*gtk.MenuButton{p.blockButton, p.alignButton} {
+		if b.Active() {
+			return true
+		}
+	}
+	return false
+}
+
+// KeyboardInside says whether the keyboard is in the pane (its editor, a
+// recipient field, a button of its own), as the focus of the dialog
+// parent (SetDialogParent) says; false without one. Escape then moves the
+// keyboard to the host's state pill (board.EscapeFor's
+// EscapeFocusStatePill), which the board page does itself.
+func (p *Pane) KeyboardInside() bool {
+	if p.dialogParent == nil || p.dialogParent.Focus() == nil {
+		return false
+	}
+	// The root box itself takes no focus: inside means below it.
+	return gtk.BaseWidget(p.dialogParent.Focus()).IsAncestor(p.root)
+}

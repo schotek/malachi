@@ -24,7 +24,7 @@ func TriageStopToolTip(tr Translator) string { return tr.T("Stop the assistant�
 
 // TriageNeedsClaudeCode is the button's tooltip without Claude Code.
 func TriageNeedsClaudeCode(tr Translator) string {
-	return tr.T("The triage runs your Claude Code, which was not found on this Mac")
+	return tr.T("The triage runs your Claude Code, which was not found on this computer")
 }
 
 // TriageNeedsSignIn is the button's tooltip while Claude Code is signed
@@ -111,13 +111,16 @@ const (
 	FailNothingToDo
 	FailNotesRefused
 	FailNoProgress
+	// FailLimit: the assistant's usage limit (of the user's plan) was
+	// reached.
+	FailLimit
 )
 
 // TriageFailures lists every failure.
 var TriageFailures = []TriageFailure{
 	FailNotSignedIn, FailNotFound, FailToolsMissing, FailTimeout, FailCancelled,
 	FailDeclined, FailAssistantOff, FailBackend, FailStopped, FailNothingToDo,
-	FailNotesRefused, FailNoProgress,
+	FailNotesRefused, FailNoProgress, FailLimit,
 }
 
 // TriageFailed is how a run failed: "Triage failed: Claude Code is not
@@ -155,6 +158,11 @@ func TriageFailureText(f TriageFailure, tr Translator) string {
 		return tr.T("the board refused the assistant’s notes")
 	case FailNoProgress:
 		return tr.T("the assistant added no notes")
+	case FailLimit:
+		// TRANSLATORS: why a triage or a suggested reply failed, inside a
+		// sentence such as "Triage failed: %s.": the user's plan allows no
+		// more use of the assistant for now.
+		return tr.T("the assistant’s usage limit was reached")
 	}
 	return ""
 }
@@ -219,7 +227,7 @@ func TriageConsentHeading(tr Translator) string { return tr.T("Let the Assistant
 
 // TriageConsentBody: see TriageConsentHeading.
 func TriageConsentBody(tr Translator) string {
-	return tr.T("The assistant reads the conversations on the board that need notes and sends their text to Anthropic through your Claude Code, under your Claude account. It adds titles, summaries, tasks, deadlines and suggested replies to the board, and a triage you start yourself may also write replies, which stay on the board in Malachi Mail, not in your Drafts folder, until you send them. It cannot send, move or delete mail, and messages may contain instructions from their senders that it is told not to follow. You can turn this off in Settings.")
+	return tr.T("The assistant reads the conversations on the board that need notes, and any other mail and attachments it needs to understand them, and sends their text to Anthropic through your Claude Code, under your Claude account. It adds titles, summaries, tasks, deadlines and suggested replies to the board, and a triage you start yourself may also write replies, which stay on the board in Malachi Mail, not in your Drafts folder, until you send them. It cannot send, move or delete mail, and messages may contain instructions from their senders that it is told not to follow. Which accounts it triages, and whether it runs at all, you choose in Settings.")
 }
 
 // Settings → AI, the Board group.
@@ -230,6 +238,21 @@ func TriageSettingsConsent(tr Translator) string { return tr.T("Let the assistan
 // TriageSettingsConsentSubtitle says what the consent sheet says.
 func TriageSettingsConsentSubtitle(tr Translator) string {
 	return tr.T("Sends the newest messages of conversations that need sorting to Anthropic through your Claude Code. It cannot send, move or delete mail; a triage you start yourself may write replies, which stay on the board until you send them.")
+}
+
+// TriageSettingsAccounts heads the list of the accounts the triage reads
+// (board preferences triageAccounts; none chosen = every account).
+func TriageSettingsAccounts(tr Translator) string {
+	// TRANSLATORS: Settings → AI → Board: a list of the user's accounts
+	// with a check box each; the assistant triages only the checked ones.
+	return tr.T("Triage These Accounts")
+}
+
+// TriageSettingsAccountsAll is that list's line while no account is
+// checked: then every account is triaged.
+func TriageSettingsAccountsAll(tr Translator) string {
+	// TRANSLATORS: under "Triage These Accounts" when none is checked.
+	return tr.T("All accounts, while none is checked")
 }
 
 // TriageSettingsAutomatic is the row of automatic runs.
@@ -254,7 +277,7 @@ func TriageSettingsDaily(tr Translator) string {
 // TriageSettingsNeedsClaudeCode is the group's description without
 // Claude Code.
 func TriageSettingsNeedsClaudeCode(tr Translator) string {
-	return tr.T("The triage runs your Claude Code, which was not found on this Mac. The Claude Code row above offers to get it.")
+	return tr.T("The triage runs your Claude Code, which was not found on this computer. The Claude Code row above offers to get it.")
 }
 
 // TriageSettingsNeedsSignIn is the group's description while Claude Code
@@ -329,13 +352,31 @@ func TriageUsageRuns(runs int, tr Translator) string {
 	return fmt.Sprintf(tr.N("From %d triage run", "From %d triage runs", runs), runs)
 }
 
+// TriageUsageAtLeast is that row's value when a run summed in it reported
+// only part of its tokens (api.BoardUsage.LowerBound): "at least 12,345".
+func TriageUsageAtLeast(value string, tr Translator) string {
+	// TRANSLATORS: the value of "Tokens in the Last 24 Hours" when a run
+	// was stopped before it reported all its tokens; %s is a number such
+	// as "12,345".
+	return fmt.Sprintf(tr.T("at least %s"), value)
+}
+
+// UsageText is that row's value: the sum (a number formatted for the
+// locale), with TriageUsageAtLeast when it is a lower bound.
+func UsageText(total string, lowerBound bool, tr Translator) string {
+	if lowerBound {
+		return TriageUsageAtLeast(total, tr)
+	}
+	return total
+}
+
 // TriageUsageToolTip is that row's tooltip: whose runs count.
 func TriageUsageToolTip(tr Translator) string {
 	return tr.T("Counts only the triage runs Malachi Mail started, not those of other assistants")
 }
 
-// RelativeTime is "just now", "5 minutes ago", "2 hours ago",
-// "yesterday", "3 days ago".
+// RelativeTime is "just now", "5 minutes ago", "2 hours ago" (under a
+// day), else by calendar days in now's zone: "yesterday", "3 days ago".
 func RelativeTime(date, now time.Time, tr Translator) string {
 	s := max(0, int(now.Sub(date)/time.Second))
 	switch {
@@ -345,15 +386,17 @@ func RelativeTime(date, now time.Time, tr Translator) string {
 		return fmt.Sprintf(tr.N("%d minute ago", "%d minutes ago", s/60), s/60)
 	case s < 86400:
 		return fmt.Sprintf(tr.N("%d hour ago", "%d hours ago", s/3600), s/3600)
-	case s < 172_800:
+	}
+	days := max(1, dayDifference(date, now, now.Location()))
+	if days == 1 {
 		// TRANSLATORS: when the assistant last refined the board.
 		return tr.T("yesterday")
 	}
-	return fmt.Sprintf(tr.N("%d day ago", "%d days ago", s/86400), s/86400)
+	return fmt.Sprintf(tr.N("%d day ago", "%d days ago", days), days)
 }
 
-// RelativeFuture is "now", "in 5 minutes", "in 2 hours", "tomorrow",
-// "in 3 days".
+// RelativeFuture is "now", "in 5 minutes", "in 2 hours" (under a day),
+// else by calendar days in now's zone: "tomorrow", "in 3 days".
 func RelativeFuture(date, now time.Time, tr Translator) string {
 	s := max(0, int(date.Sub(now)/time.Second))
 	switch {
@@ -364,9 +407,61 @@ func RelativeFuture(date, now time.Time, tr Translator) string {
 		return fmt.Sprintf(tr.N("in %d minute", "in %d minutes", s/60), s/60)
 	case s < 86400:
 		return fmt.Sprintf(tr.N("in %d hour", "in %d hours", s/3600), s/3600)
-	case s < 172_800:
+	}
+	days := max(1, dayDifference(now, date, now.Location()))
+	if days == 1 {
 		// TRANSLATORS: when automatic triage tries again.
 		return tr.T("tomorrow")
 	}
-	return fmt.Sprintf(tr.N("in %d day", "in %d days", s/86400), s/86400)
+	return fmt.Sprintf(tr.N("in %d day", "in %d days", days), days)
 }
+
+// ProviderSwap is what a msgid of this package says about Claude Code that
+// a client with another assistant provider (ChatGPT through Codex) says
+// in that provider's words (the GTK window's providerBoardTranslator).
+type ProviderSwap int
+
+// The swaps.
+const (
+	// SwapNotFound: Claude Code was not found.
+	SwapNotFound ProviderSwap = iota
+	// SwapNotSignedIn: Claude Code is not signed in.
+	SwapNotSignedIn
+	// SwapConsent: the consent's summary in Settings.
+	SwapConsent
+)
+
+// ProviderSwappedTexts are the msgids of this package a client replaces
+// for another provider, by what they say. The translator that replaces
+// them matches these; TestProviderSwappedTexts keeps every one a msgid the
+// package asks for, so a changed wording fails there and not silently.
+func ProviderSwappedTexts() map[string]ProviderSwap {
+	r := swapRecorder{}
+	TriageFailureText(FailNotFound, r.as(SwapNotFound))
+	TriageNeedsClaudeCode(r.as(SwapNotFound))
+	TriageSettingsNeedsClaudeCode(r.as(SwapNotFound))
+	TriageNeedsSignIn(r.as(SwapNotSignedIn))
+	TriageSettingsNeedsSignIn(r.as(SwapNotSignedIn))
+	TriageSettingsConsentSubtitle(r.as(SwapConsent))
+	return r
+}
+
+// swapRecorder notes the msgids asked for under the swap of as.
+type swapRecorder map[string]ProviderSwap
+
+func (r swapRecorder) as(k ProviderSwap) Translator { return swapTranslator{r, k} }
+
+type swapTranslator struct {
+	r swapRecorder
+	k ProviderSwap
+}
+
+func (t swapTranslator) T(msgid string) string { t.r[msgid] = t.k; return msgid }
+func (t swapTranslator) N(msgid, plural string, n int) string {
+	t.r[msgid] = t.k
+	if n == 1 {
+		return msgid
+	}
+	return plural
+}
+func (t swapTranslator) C(_, msgid string) string { t.r[msgid] = t.k; return msgid }

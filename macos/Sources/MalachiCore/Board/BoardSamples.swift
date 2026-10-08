@@ -356,6 +356,28 @@ extension Board {
                         text: "The notes are attached. The launch moves by a week.")
                 ]))
 
+        // A reminder that came due, and a first message from a new contact.
+        cases.append(
+            Case(
+                id: s.id(22), account: work, person: "Dana Placeholder", date: s.ago(days: 2, hour: 15),
+                subject: "Contract draft for review", snippet: "Let me know when you have read the draft.",
+                messageCount: 2, ruleState: .you, ruleReason: .youAddressed, remindedAt: s.ago(hours: 1),
+                messages: [
+                    CaseMessage(
+                        from: "Dana Placeholder", date: s.ago(days: 3, hour: 10),
+                        text: "Here is the contract draft. Let me know when you have read it."),
+                    CaseMessage(
+                        from: "You", date: s.ago(days: 2, hour: 15), text: "Thanks, I will read it on Monday.", mine: true),
+                ]))
+        cases.append(
+            Case(
+                id: s.id(23), account: home, person: "Pat Newcomer", date: s.ago(hours: 4),
+                subject: "Question about your listing", snippet: "Is the bicycle still available?", unread: true,
+                ruleState: .you, ruleReason: .youNewContact,
+                messages: [
+                    CaseMessage(from: "Pat Newcomer", date: s.ago(hours: 4), text: "Hello, is the bicycle still available?")
+                ]))
+
         // Done.
         cases.append(
             Case(

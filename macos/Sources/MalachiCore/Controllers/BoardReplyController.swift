@@ -58,10 +58,17 @@ public final class BoardReplyController {
         if settings.assistantProvider == .chatgpt { return request.provider?()?.connected ?? false }
         return await locator.signedIn()
     }
+    /// The assistant's provider in effect, or its profile, changed: a
+    /// request under way stops and availability is asked again. The
+    /// controller calls it itself for the settings keys that concern the
+    /// provider in effect (`AssistantRequest.providerChangeConcernsActive`);
+    /// the application calls it for a change of the ChatGPT connection
+    /// while ChatGPT is the provider.
     public func providerChanged() {
         cancel()
         availabilityChanged()
     }
+    private var providerTokens: [Settings.ChangeToken] = []
     public let locator: ClaudeCodeLocator
     public let request: AssistantRequest
 
@@ -116,6 +123,9 @@ public final class BoardReplyController {
     /// Bumped by every `start` and `cancel`: the steps of an older request
     /// stop at their next `await`.
     private var gen = 0
+    /// Whether the assistant's annotations counted at the last `view`
+    /// (the snapshot's `annotated`), for the request's follow-up rule.
+    private var annotated = false
     /// The case of the request under way.
     private var caseID: Board.CaseID?
     /// The create_draft calls of the request, by tool use id.
@@ -156,6 +166,13 @@ public final class BoardReplyController {
         self.available = available
         // The controller asks consent itself, before its time runs.
         self.request.consent = nil
+        // The only registration of these keys for the suggested reply.
+        for key in AssistantRequest.providerKeys {
+            providerTokens.append(settings.onChange(key) { [weak self] in
+                guard let self, AssistantRequest.providerChangeConcernsActive(key, settings: self.settings) else { return }
+                self.providerChanged()
+            })
+        }
         signInToken = locator.onSignInChange { [weak self] in
             self?.checkSignIn()
             self?.observers.notify()
@@ -232,9 +249,11 @@ public final class BoardReplyController {
     /// The control for case `c` of snapshot `s` (`Board.suggestReplyView`);
     /// `samples`: the board shows the invented samples.
     public func view(for c: Board.Case, in s: Board.Snapshot, samples: Bool) -> Board.SuggestReplyView {
-        Board.suggestReplyView(Board.SuggestReplyInputs(
+        annotated = s.annotated
+        return Board.suggestReplyView(Board.SuggestReplyInputs(
             offered: Board.suggestReplyOffered(c, in: s, samples: samples), available: available() && bridge != nil,
-            claudeFound: runtimeAvailable, signedIn: signedIn, state: state, caseID: c.id, provider: settings.assistantProvider))
+            claudeFound: runtimeAvailable, signedIn: signedIn, state: state, caseID: c.id, provider: settings.assistantProvider,
+            followUp: Board.isFollowUp(c, annotated: s.annotated)))
     }
 
     // MARK: A request
@@ -360,7 +379,11 @@ public final class BoardReplyController {
             accountID: c.accountId.rawValue, messageID: c.replyMessageId.rawValue,
             others: got.messages.map(\.id.rawValue), instruction: instruction)
         request.start(
-            systemPrompt: Assistant.suggestReplySystemPrompt(), message: message,
+            // A case shown waiting on the other side (the effective state)
+            // answers the user's own last message: a follow-up.
+            systemPrompt: Assistant.suggestReplySystemPrompt(
+                followUp: Board.isFollowUp(DaemonBoardSource.convert(c), annotated: annotated)),
+            message: message,
             tools: AssistantRequest.Tools(
                 bridge: bridge, socket: socket,
                 bridgeArgs: Assistant.suggestReplyBridgeArgs(messageID: c.replyMessageId.rawValue),
@@ -433,6 +456,7 @@ public final class BoardReplyController {
         case .notFound: return .notFound
         case .notSignedIn: return .notSignedIn
         case .toolsMissing: return .toolsMissing
+        case .limit: return .limit
         case .stopped(let reason): return reason == AssistantRequest.timedOut ? .timeout : .stopped
         }
     }

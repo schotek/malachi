@@ -56,8 +56,12 @@ private final class Scratch {
         #expect(!s.assistantConsent)
         #expect(!s.boardTriageConsent)
         #expect(s.boardTriageModel == .sonnet)
-        #expect(s.boardDefaultStyle == .list)
-        #expect(Settings.Key.allCases.count == 34)
+        #expect(s.boardDefaultStyle == .last)
+        #expect(s.boardLastStyle == .list)
+        #expect(s.boardStartMode == .mail)
+        #expect(s.boardLastMode == .mail)
+        #expect(s.boardAccountFilter == "")
+        #expect(Settings.Key.allCases.count == 38)
         let providerDefaults = Settings.registrationDefaults()
         #expect(providerDefaults[Settings.Key.assistantProvider.rawValue] as? String == "claude")
         #expect(providerDefaults[Settings.Key.assistantCodexPath.rawValue] as? String == "")
@@ -155,20 +159,49 @@ private final class Scratch {
         s.boardTriageModel = Assistant.Model("mythos")
         #expect(scratch.defaults.string(forKey: "board-triage-model") == "sonnet")
         s.assistantModel = .sonnet
-        // The board's default style: Board.Style's nicks; anything else,
-        // the empty string and the raw index included, is the List.
-        for (nick, style) in [("list", Board.Style.list), ("columns", .columns), ("today", .today)] {
+        // Board View: the gschema's BoardDefaultStyle nicks; anything else,
+        // the empty string and the raw index included, is Last Used.
+        let defaults: [(String, Board.DefaultStyle)] = [
+            ("last", .last), ("list", .style(.list)), ("columns", .style(.columns)), ("today", .style(.today)),
+        ]
+        for (nick, style) in defaults {
             scratch.defaults.set(nick, forKey: "board-default-style")
             #expect(s.boardDefaultStyle == style)
         }
         for junk in ["", "grid", "1", "Columns"] {
             scratch.defaults.set(junk, forKey: "board-default-style")
-            #expect(s.boardDefaultStyle == .list, "\(junk)")
+            #expect(s.boardDefaultStyle == .last, "\(junk)")
         }
-        s.boardDefaultStyle = .today
+        s.boardDefaultStyle = .style(.today)
         #expect(scratch.defaults.string(forKey: "board-default-style") == "today")
-        s.boardDefaultStyle = .list
-        #expect(scratch.defaults.string(forKey: "board-default-style") == "list")
+        s.boardDefaultStyle = .last
+        #expect(scratch.defaults.string(forKey: "board-default-style") == "last")
+        // The style used last: Board.Style's nicks, "last" and junk the List.
+        for (nick, style) in [("list", Board.Style.list), ("columns", .columns), ("today", .today), ("last", .list), ("2", .list)] {
+            scratch.defaults.set(nick, forKey: "board-last-style")
+            #expect(s.boardLastStyle == style, "\(nick)")
+        }
+        s.boardLastStyle = .columns
+        #expect(scratch.defaults.string(forKey: "board-last-style") == "columns")
+        // Open at Launch and the mode shown last.
+        for (nick, choice) in [("mail", Board.StartChoice.mail), ("board", .board), ("last", .last), ("", .mail), ("x", .mail)] {
+            scratch.defaults.set(nick, forKey: "board-start-mode")
+            #expect(s.boardStartMode == choice, "\(nick)")
+        }
+        s.boardStartMode = .last
+        #expect(scratch.defaults.string(forKey: "board-start-mode") == "last")
+        s.boardLastMode = .board
+        #expect(scratch.defaults.string(forKey: "board-last-mode") == "board")
+        #expect(s.boardModeOnLaunch(boardEnabled: true) == .board)
+        #expect(s.boardModeOnLaunch(boardEnabled: false) == .mail)
+        scratch.defaults.set("junk", forKey: "board-last-mode")
+        #expect(s.boardLastMode == .mail && s.boardModeOnLaunch(boardEnabled: true) == .mail)
+        s.boardStartMode = .mail
+        s.boardLastMode = .mail
+        // The account filter: any string, kept as is.
+        s.boardAccountFilter = "acc_7"
+        #expect(scratch.defaults.string(forKey: "board-account-filter") == "acc_7")
+        s.boardAccountFilter = ""
         s.assistantClaudePath = "/opt/claude/bin/claude"
         #expect(scratch.defaults.string(forKey: "assistant-claude-path") == "/opt/claude/bin/claude")
         s.assistantConsent = true

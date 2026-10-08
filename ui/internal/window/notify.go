@@ -13,6 +13,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/widget"
@@ -79,7 +80,9 @@ func (w *Window) handleNotification(method string, params json.RawMessage) {
 // elsewhere before it arrived here. The notification is remembered, so it
 // can be withdrawn once it is outdated (withdrawNotifications).
 func (w *Window) notifyNewMessage(n api.NewMessageNotification) {
-	if w.IsActive() || hasFlag(n.Message.Flags, api.FlagSeen) {
+	// The user looks at the mail only in an active window showing Mail:
+	// the board does not show the folder (board.ViewsMail).
+	if board.ViewsMail(w.mode, w.IsActive()) || hasFlag(n.Message.Flags, api.FlagSeen) {
 		return
 	}
 	if w.settings.DesktopNotifications() {
@@ -228,13 +231,14 @@ func (w *Window) withdraw(ids []api.MessageID) {
 }
 
 // withdrawViewedNotifications withdraws the notifications of the selected
-// folder's messages while the main window is active (it became active, or
-// the folder was selected in it): the folder's list shows those messages
+// folder's messages while the main window is active and shows Mail (it
+// became active, came back to Mail, or the folder was selected in it;
+// board.ViewsMail): the folder's list shows those messages
 // now, so their notifications have nothing left to announce. Notifications
 // of other folders stay until their folder is viewed or their message is
 // read, moved or deleted.
 func (w *Window) withdrawViewedNotifications() {
-	if !w.IsActive() || w.model.selected.Folder == "" {
+	if !board.ViewsMail(w.mode, w.IsActive()) || w.model.selected.Folder == "" {
 		return
 	}
 	w.withdraw(w.notified.removeFolder(w.model.selected))

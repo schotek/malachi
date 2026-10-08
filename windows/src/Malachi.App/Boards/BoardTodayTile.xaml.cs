@@ -36,8 +36,9 @@ public sealed partial class BoardTodayTile : UserControl
         var count = tile.Count.ToString(CultureInfo.CurrentCulture);
         CountText.Text = count;
         TitleText.Text = tile.Title;
-        // "3 Hot", as the macOS tile's VoiceOver label and GTK's tooltip.
-        var spoken = count + " " + tile.Title; // Windows-only string: the count before the title
+        // "Hot: 3 cases", as the macOS tile's VoiceOver label and GTK's
+        // tooltip (Board.Text.TileToolTip).
+        var spoken = tile.ToolTip.Length > 0 ? tile.ToolTip : Board.Text.TileToolTip(tile);
         AutomationProperties.SetName(this, spoken);
         ToolTipService.SetToolTip(this, spoken);
         VisualStateManager.GoToState(this, KindName(tile), false);

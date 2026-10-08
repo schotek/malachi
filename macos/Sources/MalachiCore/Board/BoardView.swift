@@ -22,8 +22,9 @@ extension Board {
         case columns
         case today
 
-        /// The style's nick in the settings (`board-default-style`); the
-        /// raw value is an index and is never stored.
+        /// The style's nick in the settings (`board-default-style`,
+        /// `board-last-style`); the raw value is an index and is never
+        /// stored.
         public var nick: String {
             switch self {
             case .list: "list"
@@ -33,26 +34,79 @@ extension Board {
         }
     }
 
-    /// The style a stored nick names; an unknown or empty one is the List.
+    /// The style a stored nick names (the key `board-last-style`); an
+    /// unknown or empty one, and "last", is the List.
     public static func parseStyle(_ nick: String) -> Style {
         Style.allCases.first { $0.nick == nick } ?? .list
     }
 
-    /// The style the board takes as it shows: the default (from the
-    /// settings) the first time in a run, else the one it has, which is
-    /// the user's last choice. A default changed after the first show waits
-    /// for the next launch: the style never changes under the user.
-    public static func styleOnShow(current: Style, defaultStyle: Style, firstShow: Bool) -> Style {
-        firstShow ? defaultStyle : current
+    /// A value of Board View (the key `board-default-style`): the style the
+    /// board shows in, or the one used last.
+    public enum DefaultStyle: Hashable, Sendable {
+        /// The style the user had last (`board-last-style`).
+        case last
+        case style(Style)
+
+        /// The choice's value in the settings: "last", "list", "columns",
+        /// "today".
+        public var nick: String {
+            switch self {
+            case .last: Board.nickLast
+            case .style(let s): s.nick
+            }
+        }
     }
 
-    /// Which cases the list shows. `done` lists the snoozed cases too:
-    /// both are off the board for now.
+    /// Board View's choices in Settings' order: Last Used, List, Columns,
+    /// Today.
+    public static let defaultStyles: [DefaultStyle] = [.last] + Style.allCases.map { .style($0) }
+
+    /// The choice a stored nick of `board-default-style` names: "last" is
+    /// Last Used, a style's nick that style, anything else (empty, unknown)
+    /// Last Used, the key's default.
+    public static func parseDefaultStyle(_ nick: String) -> DefaultStyle {
+        Style.allCases.first { $0.nick == nick }.map { .style($0) } ?? .last
+    }
+
+    /// The style the board takes as it shows. Once the user picked a style
+    /// in this run (`pickedThisRun`) the board keeps it (`current`); before
+    /// that it takes Board View: the style used last (`lastStyle`, the key
+    /// `board-last-style`) for Last Used, else the chosen one, so a change
+    /// of Board View applies the next time the board shows unless the user
+    /// already picked a style. The style never changes while the board
+    /// shows.
+    public static func styleOnShow(
+        defaultStyle: DefaultStyle, lastStyle: Style, current: Style, pickedThisRun: Bool
+    ) -> Style {
+        if pickedThisRun {
+            return current
+        }
+        switch defaultStyle {
+        case .last: return lastStyle
+        case .style(let s): return s
+        }
+    }
+
+    /// The account filter the board takes as it shows: the one saved (the
+    /// key `board-account-filter`) while that account is still among
+    /// `accounts`, else every account.
+    public static func filterOnShow(saved: String, accounts: [AccountInfo]) -> AccountFilter {
+        guard !saved.isEmpty, let a = accounts.first(where: { $0.id.rawValue == saved }) else { return .all }
+        return .account(a.id)
+    }
+
+    /// Which cases the list shows.
     public enum Filter: Hashable, Sendable {
         case all
         case state(State)
         case done
+        /// The cases off the board until a reminder.
+        case snoozed
     }
+
+    /// The navigation's filters in order: Overview, the four states,
+    /// Snoozed, Done.
+    public static let filters: [Filter] = [.all] + State.allCases.map { .state($0) } + [.snoozed, .done]
 
     /// Which account's cases the board shows.
     public enum AccountFilter: Hashable, Sendable {
@@ -97,8 +151,18 @@ extension Board {
         public var issueStyle: Jira.StatusStyle
         /// "" without a due date.
         public var due: String
-        /// When a snoozed case comes back ("Tomorrow 09:00"); "" otherwise.
+        /// When a snoozed case comes back ("Tomorrow at 09:00"); ""
+        /// otherwise.
         public var remind: String
+        /// The case is back from a reminder (`Case.reminded`); it is listed
+        /// first in its state and carries the badge Reminded.
+        public var reminded: Bool
+        /// Its sender is someone the user never wrote to
+        /// (`you.newContact`); badge New contact.
+        public var newContact: Bool
+        /// The badges' texts in order (Reminded, New contact); none when
+        /// empty.
+        public var badges: [String]
         public var attachments: Bool
         /// The message count from two on, "" below.
         public var countText: String
@@ -130,8 +194,8 @@ extension Board {
 
     public enum SectionKind: Hashable, Sendable {
         case state(State)
-        /// Under the Done filter, before the done cases: the cases that
-        /// come back later, the soonest first.
+        /// Under the Snoozed filter: the cases that come back later, the
+        /// soonest first.
         case snoozed
         case done
     }
@@ -166,6 +230,9 @@ extension Board {
         public var filter: AccountFilter
         public var title: String
         public var badge: String
+        /// `title` with `badge` (`Text.titleWithBadge`), for a one-line
+        /// menu.
+        public var label: String
         /// The cases not done.
         public var count: Int
         public var selected: Bool
@@ -194,6 +261,10 @@ extension Board {
         public var stateTitle: String
         public var source: StateSource
         public var why: String
+        /// Lines "Why is this here?" adds after `why` and `sourceText`:
+        /// `Text.reasonReminded` for a case back from a reminder,
+        /// `Text.reasonUserKeeps` when the user chose its state.
+        public var whyNotes: [String]
         /// `why` is the assistant's reason, not the rules': the box leads
         /// it with the assistant's mark.
         public var whyIsAssistant: Bool
@@ -202,6 +273,12 @@ extension Board {
         public var issue: IssueInfo?
         public var person: String
         public var time: String
+        /// `person` and `time` as one line (`Text.personAndTime`).
+        public var byline: String
+        /// The row's (`Row`).
+        public var reminded: Bool
+        public var newContact: Bool
+        public var badges: [String]
         public var title: String
         /// `title` is the assistant's, not the subject: the detail marks it.
         public var titleIsAssistant: Bool
@@ -228,7 +305,7 @@ extension Board {
         public var staleNote: String
         public var isDone: Bool
         public var isSnoozed: Bool
-        /// "" or "Back on the board Tomorrow 09:00".
+        /// "" or "Back on the board: Tomorrow at 09:00".
         public var remindText: String
         /// Archive moves messages; without, it only marks the case done.
         public var canArchive: Bool
@@ -283,11 +360,15 @@ extension Board {
         public var kind: TileKind
         public var count: Int
         public var title: String
+        /// The tile's count and title in one sentence (`Text.tileToolTip`).
+        public var toolTip: String { Text.tileToolTip(self) }
     }
 
     /// The Today page.
     public struct Today: Sendable, Equatable {
         public var title: String
+        /// `Text.todoPhrase` of the hot cases and those waiting for the
+        /// user that need the user today (`Board.needsYouToday`).
         public var phrase: String
         /// The four states, and the commitments when annotations count.
         public var tiles: [Tile]
@@ -300,8 +381,6 @@ extension Board {
         /// The non-empty groups, in `DueGroupKind` order.
         public var dueGroups: [DueGroup]
         public var dueEmpty: String
-        public var calendarTitle: String
-        public var calendarBody: String
     }
 
     /// Everything the board shows.
@@ -367,10 +446,11 @@ extension Board {
             for col in columns where !col.rows.isEmpty && (v.filter == .all || v.filter == .state(col.state)) {
                 sections.append(Section(kind: .state(col.state), title: col.title, rows: col.rows))
             }
-        case .done:
+        case .snoozed:
             if !scope.snoozed.isEmpty {
                 sections.append(Section(kind: .snoozed, title: Text.snoozed, rows: scope.snoozed.map(rowOf)))
             }
+        case .done:
             if !scope.finished.isEmpty {
                 sections.append(Section(kind: .done, title: Text.done, rows: scope.finished.map(rowOf)))
             }
@@ -406,19 +486,24 @@ extension Board {
         }
         nav.append(
             NavItem(
-                filter: .done, title: Text.filterTitle(.done), dot: nil, count: scope.finished.count + scope.snoozed.count,
+                filter: .snoozed, title: Text.filterTitle(.snoozed), dot: nil, count: scope.snoozed.count,
+                selected: v.filter == .snoozed))
+        nav.append(
+            NavItem(
+                filter: .done, title: Text.filterTitle(.done), dot: nil, count: scope.finished.count,
                 selected: v.filter == .done))
 
         var accounts = [
             AccountItem(
-                filter: .all, title: Text.allAccounts, badge: "", count: scope.unique.filter(\.visibility.isLive).count,
-                selected: v.account == .all)
+                filter: .all, title: Text.allAccounts, badge: "", label: Text.allAccounts,
+                count: scope.unique.filter(\.visibility.isLive).count, selected: v.account == .all)
         ]
         for a in s.accounts {
+            let name = cleanLine(a.name, max: Cap.account)
+            let badge = cleanLine(a.badge, max: Cap.badge)
             accounts.append(
                 AccountItem(
-                    filter: .account(a.id), title: cleanLine(a.name, max: Cap.account),
-                    badge: cleanLine(a.badge, max: Cap.badge),
+                    filter: .account(a.id), title: name, badge: badge, label: Text.titleWithBadge(name, badge),
                     count: scope.unique.filter { $0.visibility.isLive && $0.account == a.id }.count,
                     selected: v.account == .account(a.id)))
         }
@@ -435,11 +520,14 @@ extension Board {
         if s.annotated {
             tiles.append(Tile(kind: .commitments, count: commitmentCount, title: Text.commitments))
         }
+        let todo = scope.live.filter { c in
+            let st = scope.state(c)
+            return (st == .hot || st == .you) && needsYouToday(c, annotated: s.annotated, now: now, calendar: calendar)
+        }.count
         let today = Today(
-            title: Text.styleTitle(.today), phrase: Text.todoPhrase(hot.count + you.count), tiles: tiles, hot: hot,
+            title: Text.styleTitle(.today), phrase: Text.todoPhrase(todo), tiles: tiles, hot: hot,
             you: Array(you.prefix(youTopCount)), youMore: max(0, you.count - youTopCount), commitments: commitments,
-            dueGroups: dueGroups(scope, ctx), dueEmpty: Text.dueEmpty, calendarTitle: Text.calendarTitle,
-            calendarBody: Text.calendarBody
+            dueGroups: dueGroups(scope, ctx), dueEmpty: Text.dueEmpty
         )
 
         // The selection and its detail.
@@ -493,6 +581,25 @@ extension Board {
         case 2...7: return .thisWeek
         default: return .later
         }
+    }
+
+    /// Whether the Today page's phrase counts case `c` (for the hot cases
+    /// and those waiting for the user): new since yesterday's midnight in
+    /// `calendar` (its latest activity), due today (its annotation counts
+    /// and its deadline is today), or back from a reminder.
+    public static func needsYouToday(_ c: Case, annotated: Bool, now: Date, calendar: Calendar) -> Bool {
+        if c.reminded {
+            return true
+        }
+        if dayDifference(from: c.date, to: now, calendar: calendar) <= 1 {
+            return true
+        }
+        if let due = annotation(of: c, annotated: annotated)?.due,
+           dayDifference(from: now, to: due, calendar: calendar) == 0
+        {
+            return true
+        }
+        return false
     }
 
     // MARK: Helpers
@@ -561,7 +668,14 @@ extension Board {
             live = inScope.filter(\.visibility.isLive).sorted { a, b in
                 let ra = rank[Board.state(of: a, annotated: annotated)] ?? 0
                 let rb = rank[Board.state(of: b, annotated: annotated)] ?? 0
-                return ra != rb ? ra < rb : Scope.newer(a, b)
+                if ra != rb {
+                    return ra < rb
+                }
+                // Back from a reminder first in its state.
+                if a.reminded != b.reminded {
+                    return a.reminded
+                }
+                return Scope.newer(a, b)
             }
             finished = inScope.filter(\.visibility.isDone).sorted(by: Scope.newer)
             snoozed = inScope.filter { $0.visibility.remindAt != nil }.sorted { a, b in
@@ -586,7 +700,8 @@ extension Board {
             switch view.filter {
             case .all: return live.map(\.id)
             case .state(let st): return live.filter { state($0) == st }.map(\.id)
-            case .done: return snoozed.map(\.id) + finished.map(\.id)
+            case .snoozed: return snoozed.map(\.id)
+            case .done: return finished.map(\.id)
             }
         }
 
@@ -645,9 +760,22 @@ extension Board {
             Board.annotation(of: c, annotated: annotated)
         }
 
-        /// "Tomorrow 09:00", "20 Oct 09:00": when a snoozed case comes back.
+        /// "Tomorrow at 09:00", "20 Oct at 09:00": when a snoozed case
+        /// comes back.
         func remindLabel(_ at: Date) -> String {
-            dueLabel(at) + " " + formatTime(at, locale: locale, calendar: calendar)
+            Text.dayAndTime(dueLabel(at), formatTime(at, locale: locale, calendar: calendar))
+        }
+
+        /// A case's badges' texts: Reminded, New contact.
+        func badges(_ c: Case) -> [String] {
+            var out: [String] = []
+            if c.reminded {
+                out.append(Text.reminded)
+            }
+            if c.newContact {
+                out.append(Text.newContact)
+            }
+            return out
         }
 
         func dueLabel(_ due: Date) -> String {
@@ -682,7 +810,8 @@ extension Board {
             let due = annotation(c)?.due.map { dueLabel($0) } ?? ""
             let n = max(1, c.messageCount)
 
-            var spoken = [Text.stateName(st), person, title.spoken]
+            let badges = badges(c)
+            var spoken = [Text.stateName(st)] + badges + [person, title.spoken]
             if !due.isEmpty {
                 spoken.append(Text.spokenDue(due))
             }
@@ -706,7 +835,8 @@ extension Board {
                 title: title.text, titleIsAssistant: title.assistant, snippet: snippet,
                 snippetIsAssistant: snippetIsAssistant, account: accountName(c.account), issueKey: issueKey,
                 issueStatus: issueStatus, issueStyle: c.issue?.style ?? .plain, due: due,
-                remind: c.visibility.remindAt.map { remindLabel($0) } ?? "", attachments: c.hasAttachments,
+                remind: c.visibility.remindAt.map { remindLabel($0) } ?? "", reminded: c.reminded,
+                newContact: c.newContact, badges: badges, attachments: c.hasAttachments,
                 countText: threadCountText(n), unread: c.unread, spoken: sentences(spoken)
             )
         }
@@ -748,12 +878,22 @@ extension Board {
             }
             let draft = cleanBlock(c.draft?.text ?? "", max: Cap.draft)
             let stale = annotated && c.annotation?.stale == true
+            var whyNotes: [String] = []
+            if c.reminded {
+                whyNotes.append(Text.reasonReminded)
+            }
+            if c.userState != nil {
+                whyNotes.append(Text.reasonUserKeeps)
+            }
+            let person = cleanLine(c.person, max: Cap.person)
+            let when = formatDateTime(c.date, locale: locale, calendar: calendar)
             return Detail(
                 id: c.id, accountID: c.account, thread: c.thread, reply: c.reply, latestMessage: c.latestMessage,
-                state: st, stateTitle: Text.stateName(st), source: source, why: why, whyIsAssistant: whyIsAssistant,
-                sourceText: Text.sourceText(source, run: snapshot.run), account: accountName(c.account), issue: issue,
-                person: cleanLine(c.person, max: Cap.person),
-                time: formatDateTime(c.date, locale: locale, calendar: calendar), title: title.text,
+                state: st, stateTitle: Text.stateName(st), source: source, why: why, whyNotes: whyNotes,
+                whyIsAssistant: whyIsAssistant, sourceText: Text.sourceText(source, run: snapshot.run),
+                account: accountName(c.account), issue: issue, person: person, time: when,
+                byline: person.isEmpty ? when : when.isEmpty ? person : Text.personAndTime(person, when), reminded: c.reminded, newContact: c.newContact,
+                badges: badges(c), title: title.text,
                 titleIsAssistant: title.assistant, spokenTitle: title.spoken,
                 subject: title.text == subject ? "" : subject, due: a?.due.map { dueLabel($0) } ?? "",
                 dueQuote: a?.due == nil ? "" : cleanLine(a?.dueQuote ?? "", max: Cap.quote), summary: summary,

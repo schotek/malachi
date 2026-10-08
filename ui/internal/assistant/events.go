@@ -121,6 +121,10 @@ type Event struct {
 	// to the largest int64 (UsageTally adds them up).
 	Usage     *Usage
 	MessageID string
+	// UsageFinal: Usage is the message's whole usage, reported when the
+	// message ended (ChatGPT's response.completed), not the placeholder
+	// Claude Code reports when a message begins. Never set by ParseEvents.
+	UsageFinal bool
 }
 
 // Usage is what Claude Code reports an API message, or a run, used, in

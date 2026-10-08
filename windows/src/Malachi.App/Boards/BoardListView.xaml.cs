@@ -10,15 +10,18 @@
 // its view model and reports the user's picks.
 //
 // The sections are the ListView's groups (BoardListGroup), so a header is
-// never selected and the arrow keys pass over it. The list is built anew
-// only when its sections or commitments changed; the scroll position is
-// kept across it. A selection change selects the row without rebuilding
-// anything. The fold decisions follow the width (900: the side pane, 640
+// never selected and the arrow keys pass over it. The groups and their
+// items are updated in place when the sections or commitments changed
+// (GTK's renderList keyed by case id): a row that did not change keeps its
+// container, the scroll position stays, and the keyboard goes back to the
+// selected row should an update take it. A selection change selects the
+// row without touching anything else. The fold decisions follow the width (900: the side pane, 640
 // or the list's and the detail's minimums: the detail) and reach the
 // controller after the layout pass, as macOS defers them.
 
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using Malachi.Core.Api;
 using Malachi.Core.Boards;
@@ -56,6 +59,7 @@ public sealed partial class BoardListView : UserControl, IBoardStyleContent
     private const double HideDetailBelow = 640;
 
     private readonly CollectionViewSource source = new() { IsSourceGrouped = true };
+    private readonly ObservableCollection<BoardListGroup> groups = [];
     private BoardActions? actions;
     private IReadOnlyList<Board.Section> shownSections = [];
     private IReadOnlyList<Board.CommitmentRow> shownCommitments = [];
@@ -70,6 +74,8 @@ public sealed partial class BoardListView : UserControl, IBoardStyleContent
     public BoardListView()
     {
         InitializeComponent();
+        source.Source = groups;
+        CaseList.ItemsSource = source.View;
         AutomationProperties.SetName(CaseList, Board.Text.StyleTitle(BoardStyle.List));
         NoSelection.Show("view-grid", Board.Text.NoSelectionTitle, Board.Text.NoSelectionBody);
     }
@@ -149,48 +155,115 @@ public sealed partial class BoardListView : UserControl, IBoardStyleContent
     }
 
     // BoardListViewController.items(for:): the commitments under Overview
-    // first, then each section with its rows.
+    // first, then each section with its rows; the groups shown are made so
+    // in place (BoardListGroup.Sync).
     private void Rebuild(Board.ViewModel model)
     {
-        var groups = new List<BoardListGroup>();
+        var next = new List<(string Key, BoardListGroupKind Kind, Board.State State, string Title, string Spoken, List<object> Items)>();
         if (model.ShowsCommitmentsInList && model.Commitments.Count > 0)
         {
             var n = model.Commitments.Count;
-            groups.Add(new BoardListGroup(
-                BoardListGroupKind.Commitments, Board.State.Info, Board.Text.FromAssistant,
-                Spoken(Board.Text.FromAssistant, Board.Text.PromiseCount(n)),
-                model.Commitments.Select(c => (object)new BoardCommitmentItem(c))));
+            next.Add(("commitments", BoardListGroupKind.Commitments, Board.State.Info, Board.Text.FromAssistant,
+                Spoken(Board.TileKind.Commitments, Board.State.Info, Board.Text.FromAssistant, n),
+                model.Commitments.Select(c => (object)new BoardCommitmentItem(c)).ToList()));
         }
         foreach (var section in model.Sections)
         {
             var kind = section.Kind == Board.SectionKind.State ? BoardListGroupKind.State : BoardListGroupKind.Plain;
-            groups.Add(new BoardListGroup(
-                kind, section.State, section.Title, Spoken(section.Title, Board.Text.CaseCount(section.Rows.Count)),
-                section.Rows.Select(r => (object)new BoardRowItem(r))));
+            next.Add((section.Kind + ":" + section.State, kind, section.State, section.Title,
+                Spoken(Board.TileKind.State, section.State, section.Title, section.Rows.Count),
+                section.Rows.Select(r => (object)new BoardRowItem(r)).ToList()));
         }
-        // The scroll position stays where it was (a done case left, a new
-        // one arrived): the list is the same list, refilled.
-        var scroller = FindDescendant<ScrollViewer>(CaseList);
-        var offset = scroller?.VerticalOffset ?? 0;
+        var hadFocus = FocusIn(CaseList);
         syncing = true;
         try
         {
-            source.Source = groups;
-            CaseList.ItemsSource = source.View;
+            for (var i = 0; i < next.Count; i++)
+            {
+                var want = next[i];
+                var at = -1;
+                for (var j = i; j < groups.Count; j++)
+                {
+                    if (groups[j].Key == want.Key)
+                    {
+                        at = j;
+                        break;
+                    }
+                }
+                BoardListGroup group;
+                if (at < 0)
+                {
+                    group = new BoardListGroup(want.Key, want.Kind, want.State, want.Title, want.Spoken);
+                    group.Sync(want.Items, KeyOf);
+                    groups.Insert(i, group);
+                    continue;
+                }
+                if (at != i)
+                {
+                    // Not ObservableCollection.Move: a grouped
+                    // CollectionViewSource is not trusted to follow a Move
+                    // of a group; a remove and an insert it follows always,
+                    // and the focus comes back below.
+                    group = groups[at];
+                    groups.RemoveAt(at);
+                    groups.Insert(i, group);
+                }
+                group = groups[i];
+                group.Update(want.Kind, want.State, want.Title, want.Spoken);
+                group.Sync(want.Items, KeyOf);
+            }
+            while (groups.Count > next.Count)
+            {
+                groups.RemoveAt(groups.Count - 1);
+            }
         }
         finally
         {
             syncing = false;
         }
-        if (scroller is not null && offset > 0)
+        if (hadFocus && !FocusIn(CaseList))
         {
-            DispatcherQueue.TryEnqueue(() => scroller.ChangeView(null, offset, null, disableAnimation: true));
+            // A replaced row took the keyboard with it: back to the selected row.
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!FocusIn(CaseList))
+                {
+                    SyncSelection();
+                    FocusContent();
+                }
+            });
         }
     }
 
-    // A header's name for the screen reader: "Hot, 3 cases".
-    // Windows-only string: the comma between a title and its spoken count.
-    private static string Spoken(string title, string count) => title + ", " + count;
+    // An item's identity across updates: a case's row, a commitment.
+    private static string KeyOf(object item) => item switch
+    {
+        BoardRowItem r => "r:" + r.Row.Id.Value,
+        BoardCommitmentItem c => "c:" + c.Commitment.Id.Value,
+        _ => "",
+    };
+
+    // A header's name for the screen reader: "Hot: 3 cases", "From the
+    // Assistant: 2 promises" (Board.Text.TileToolTip, the tiles' sentence).
+    private static string Spoken(Board.TileKind kind, Board.State state, string title, int count) =>
+        Board.Text.TileToolTip(new Board.Tile(kind, state, count, title));
+
+    // Whether the keyboard is in container.
+    private bool FocusIn(DependencyObject container)
+    {
+        if (XamlRoot is null)
+        {
+            return false;
+        }
+        for (var d = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject; d is not null; d = VisualTreeHelper.GetParent(d))
+        {
+            if (ReferenceEquals(d, container))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 
     // Selects the row of the controller's selection without telling the
     // controller and brings it into view. A selected commitment stays while
@@ -226,8 +299,7 @@ public sealed partial class BoardListView : UserControl, IBoardStyleContent
         }
     }
 
-    private IEnumerable<object> Items() =>
-        source.Source is IEnumerable<BoardListGroup> groups ? groups.SelectMany(g => g) : [];
+    private IEnumerable<object> Items() => groups.SelectMany(g => g);
 
     // The status page beside the list while no case is selected.
     private void UpdateNoSelection()
@@ -419,25 +491,6 @@ public sealed partial class BoardListView : UserControl, IBoardStyleContent
             if (d is ListViewItem item)
             {
                 return item;
-            }
-        }
-        return null;
-    }
-
-    private static T? FindDescendant<T>(DependencyObject root)
-        where T : DependencyObject
-    {
-        var count = VisualTreeHelper.GetChildrenCount(root);
-        for (var i = 0; i < count; i++)
-        {
-            var child = VisualTreeHelper.GetChild(root, i);
-            if (child is T found)
-            {
-                return found;
-            }
-            if (FindDescendant<T>(child) is { } deeper)
-            {
-                return deeper;
             }
         }
         return null;

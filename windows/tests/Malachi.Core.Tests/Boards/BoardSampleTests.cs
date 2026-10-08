@@ -92,6 +92,9 @@ public sealed class BoardSampleTests
         Assert.Contains(snap.Cases, c => StateSourceOf(c, true).Kind == StateSourceKind.AssistantChanged);
         Assert.Contains(snap.Cases, c => c.Unread);
         Assert.Contains(snap.Cases, c => c.HasAttachments);
+        // A reminder that came due and a first message from a new contact (Go samples 22 and 23).
+        Assert.Contains(snap.Cases, c => c.Reminded && c.Id.Value == "sample-22");
+        Assert.Contains(snap.Cases, c => c.NewContact && c.Id.Value == "sample-23");
         Assert.All(snap.Cases, c => Assert.True(c.Date <= F.Now));
     }
 

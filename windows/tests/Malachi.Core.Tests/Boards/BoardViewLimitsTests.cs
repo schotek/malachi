@@ -175,7 +175,7 @@ public sealed class BoardViewLimitsTests
         Assert.Equal(["c1", "c2"], ids);
         Assert.Equal("first", v.Sections[0].Rows[0].Title);
         Assert.Equal(["c1", "c2"], v.Columns.SelectMany(c => c.Rows).Select(r => r.Id.Value));
-        Assert.Equal([2, 1, 1, 0, 0, 0], v.Nav.Select(n => n.Count));
+        Assert.Equal([2, 1, 1, 0, 0, 0, 0], v.Nav.Select(n => n.Count));
         Assert.Equal([2, 2, 0], v.Accounts.Select(a => a.Count));
         Assert.True(v.Detail?.Id == F.Id("c1") && v.Detail?.Title == "first");
         var selected = F.View([first, again], configure: x => x with { Style = BoardStyle.Columns, Selection = F.Id("c1") });

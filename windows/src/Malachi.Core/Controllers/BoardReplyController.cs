@@ -120,6 +120,10 @@ public sealed partial class BoardReplyController : IDisposable
     // board.setDraft is on its way: Stop leaves the draft to it.
     private bool linking;
 
+    // The assistant's annotations counted when View last ran: the request's
+    // follow-up decides by the state shown (Board.IsFollowUpWire).
+    private bool annotated;
+
     // Bumped by every sign-in check and every sign-in a request learnt.
     private int signInGen;
 
@@ -325,6 +329,7 @@ public sealed partial class BoardReplyController : IDisposable
     {
         ArgumentNullException.ThrowIfNull(c);
         ArgumentNullException.ThrowIfNull(s);
+        annotated = s.Annotated;
         return Board.SuggestReplyViewOf(new Board.SuggestReplyInputs
         {
             Offered = Board.SuggestReplyOffered(c, s, samples),
@@ -334,6 +339,7 @@ public sealed partial class BoardReplyController : IDisposable
             State = state,
             CaseId = c.Id,
             Provider = Settings.AssistantProvider,
+            FollowUp = Board.IsFollowUp(c, s.Annotated),
         });
     }
 
@@ -542,7 +548,9 @@ public sealed partial class BoardReplyController : IDisposable
         var message = Assistant.SuggestReplyMessage(
             r.Case.AccountId.Value, r.Case.ReplyMessageId.Value, [.. r.Messages.Select(m => m.Id.Value)], instruction);
         Request.Start(
-            Assistant.SuggestReplySystemPrompt(),
+            // A case waiting on the other side gets a follow-up on the user's
+            // own last message.
+            Assistant.SuggestReplySystemPromptFor(Board.IsFollowUpWire(r.Case, annotated)),
             message,
             outcome => Answered(my, id, outcome),
             tools: new AssistantRequest.Tools
@@ -629,6 +637,7 @@ public sealed partial class BoardReplyController : IDisposable
     {
         AssistantRequest.Failure.NotFound => Board.SuggestReplyFailure.NotFound,
         AssistantRequest.Failure.NotSignedIn => Board.SuggestReplyFailure.NotSignedIn,
+        AssistantRequest.Failure.Limit => Board.SuggestReplyFailure.Limit,
         AssistantRequest.Failure.ToolsMissing => Board.SuggestReplyFailure.ToolsMissing,
         AssistantRequest.Failure.Stopped { Detail: AssistantRequest.TimedOut } => Board.SuggestReplyFailure.Timeout,
         _ => Board.SuggestReplyFailure.Stopped,

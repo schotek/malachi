@@ -31,6 +31,8 @@ ui/internal/board/text.go
 ui/internal/board/triage.go
 ui/internal/board/reply.go
 ui/internal/board/view.go
+ui/internal/board/remind.go
+ui/internal/board/keys.go
 ui/internal/settingspanel/settingspanel.go
 ui/internal/widget/consent.go
 ui/internal/widget/format.go

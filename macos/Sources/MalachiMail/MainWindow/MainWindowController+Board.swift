@@ -38,14 +38,32 @@ extension MainWindowController {
     }
 
     /// After every change the board page applied: the toolbar and the
-    /// subtitle follow.
-    func boardDidChange() {
+    /// subtitle follow, and what the user chose is remembered for the next
+    /// launch (`board-last-style` once the user picked a style in this run,
+    /// `board-account-filter` whenever the account changed).
+    func boardDidChange(_ changes: BoardController.Changes = []) {
+        rememberBoardView(changes)
         boardToolbars.update()
         if mode == .board {
             installBoardToolbar(force: false)
             applyTitle()
             // The board off or back on, the samples' own line.
             updateTriageStrip()
+        }
+    }
+
+    private func rememberBoardView(_ changes: BoardController.Changes) {
+        let settings = state.settings
+        if changes.contains(.style), board.pickedStyle, settings.boardLastStyle != board.state.style {
+            settings.boardLastStyle = board.state.style
+        }
+        let account = board.state.account
+        if changes.contains(.filters), account != boardExtras.account {
+            boardExtras.account = account
+            switch account {
+            case .all: settings.boardAccountFilter = ""
+            case .account(let id): settings.boardAccountFilter = id.rawValue
+            }
         }
     }
 
@@ -61,6 +79,9 @@ extension MainWindowController {
             window.toolbar = wanted
         }
         BoardToolbar.rebindSidebarSeparator(in: wanted)
+        if force, wanted === boardToolbars.listToolbar {
+            boardToolbars.rebindDetailSeparator()
+        }
         BoardToolbar.keepSidebarToggle(in: wanted)
         if wanted === boardToolbars.listToolbar {
             boardPage.shownList?.toolbarInstalled()
@@ -84,6 +105,15 @@ extension MainWindowController {
         let menu = boardActions.remindMenu(for: d.id)
         if let item = sender as? NSToolbarItem, let anchor = item.view, anchor.window === window,
            !anchor.isHiddenOrHasHiddenAncestor
+        {
+            BoardActions.popUp(menu, under: anchor)
+            return
+        }
+        // The menu item and its key R: under the panel's Remind… (or its
+        // state pill), else under the List toolbar's Remind….
+        let toolbarAnchor = window.toolbar?.items.first { $0.itemIdentifier == BoardToolbar.ID.boardRemind }?.view
+        for anchor in [boardPage.remindAnchor, toolbarAnchor].compactMap({ $0 })
+            where anchor.window === window && !anchor.isHiddenOrHasHiddenAncestor
         {
             BoardActions.popUp(menu, under: anchor)
             return

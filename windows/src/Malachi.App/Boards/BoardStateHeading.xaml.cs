@@ -46,13 +46,18 @@ public sealed partial class BoardStateHeading : UserControl
         TitleText.Text = title;
         CountText.Text = count.ToString(CultureInfo.CurrentCulture);
         CountText.Visibility = count > 0 || showsZero ? Visibility.Visible : Visibility.Collapsed;
-        AutomationProperties.SetName(this, Spoken(title, Board.Text.CaseCount(count)));
+        AutomationProperties.SetName(this, Spoken(state, title, count));
         VisualStateManager.GoToState(this, state.ToString(), false);
     }
 
-    // A heading's name for the screen reader: "Hot, 3 cases", as the List's.
-    // Windows-only string: the comma between a title and its spoken count.
-    internal static string Spoken(string title, string count) => title + ", " + count;
+    // A heading's name for the screen reader: "Hot: 3 cases", the tiles'
+    // sentence (Board.Text.TileToolTip), as the List's headers.
+    internal static string Spoken(Board.State state, string title, int count) =>
+        Board.Text.TileToolTip(new Board.Tile(Board.TileKind.State, state, count, title));
+
+    // The commitments' heading: "From the Assistant: 2 promises".
+    internal static string SpokenPromises(string title, int count) =>
+        Board.Text.TileToolTip(new Board.Tile(Board.TileKind.Commitments, Board.State.Hot, count, title));
 
     private static void OnSectionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {

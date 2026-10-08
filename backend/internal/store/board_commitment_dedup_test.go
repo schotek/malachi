@@ -80,7 +80,9 @@ func TestBoardCommitmentRecordedOnce(t *testing.T) {
 		t.Fatalf("counted: %+v %v", run, err)
 	}
 
-	// A deadline the existing one lacked is taken; one it has stays.
+	// A deadline the existing one lacked is taken (the case's version goes
+	// up, as it did when the commitment was recorded); one it has stays.
+	c = caseOf(t, s, "acc", c.ThreadID)
 	due := boardNow.Add(48 * time.Hour)
 	in := commitIn(c, mine1, "x", quote)
 	in.Due = due

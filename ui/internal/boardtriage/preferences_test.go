@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/board"
@@ -295,5 +296,135 @@ func TestWhyOf(t *testing.T) {
 	}
 	if WhyOf(disconnected, nil) != board.WhyNone {
 		t.Error("without a hook")
+	}
+}
+
+// Show the Board, the windows and the triage accounts go through the same
+// write as every preference; windows the daemon would refuse never leave.
+func TestPreferencesFieldSetters(t *testing.T) {
+	loop := newTestLoop()
+	d := newFakeDaemon(api.DefaultBoardPreferences())
+	p := newPrefs(d, loop)
+	loadNow(t, loop, p)
+	wait := func(set func(done func(bool))) bool {
+		t.Helper()
+		var got []bool
+		set(func(ok bool) { got = append(got, ok) })
+		loop.runUntil(t, func() bool { return len(got) > 0 })
+		return got[0]
+	}
+	if !wait(func(done func(bool)) { p.SetEnabled(false, done) }) || current(p).Enabled {
+		t.Fatalf("enabled: %+v", current(p))
+	}
+	w := api.BoardWindows{Hot: 7, You: 365, Them: 1, Info: 2}
+	if !wait(func(done func(bool)) {
+		if !p.SetWindows(w, done) {
+			t.Fatal("valid windows refused")
+		}
+	}) || current(p).Windows != w {
+		t.Fatalf("windows: %+v", current(p))
+	}
+	sets := len(d.setList())
+	for _, bad := range []api.BoardWindows{
+		{Hot: 0, You: 1, Them: 1, Info: 1}, {Hot: 1, You: api.MaxBoardWindowDays + 1, Them: 1, Info: 1},
+		{Hot: 1, You: 1, Them: -3, Info: 1}, {Hot: 1, You: 1, Them: 1, Info: 0},
+	} {
+		if ValidWindows(bad) || p.SetWindows(bad, func(bool) { t.Error("done called") }) {
+			t.Errorf("%+v accepted", bad)
+		}
+	}
+	if !ValidWindows(DefaultWindows) || DefaultWindows != api.DefaultBoardPreferences().Windows {
+		t.Errorf("DefaultWindows %+v vs the contract's %+v", DefaultWindows, api.DefaultBoardPreferences().Windows)
+	}
+	loop.settle(t, 20*time.Millisecond)
+	if len(d.setList()) != sets {
+		t.Error("refused windows were written")
+	}
+	if !wait(func(done func(bool)) { p.SetTriageAccounts([]api.AccountID{"b", "a", "b", ""}, done) }) ||
+		!slices.Equal(current(p).TriageAccounts, []api.AccountID{"b", "a"}) {
+		t.Fatalf("accounts: %+v", current(p))
+	}
+	if !wait(func(done func(bool)) { p.SetTriageAccounts(nil, done) }) || len(current(p).TriageAccounts) != 0 {
+		t.Fatalf("all accounts: %+v", current(p))
+	}
+	if last := d.setList()[len(d.setList())-1]; last.TriageAccounts == nil {
+		t.Errorf("sent null accounts: %+v", last)
+	}
+}
+
+func TestTriageAccountsChecklist(t *testing.T) {
+	acct := func(id string, kind api.AccountKind, enabled bool) api.Account {
+		return api.Account{ID: api.AccountID(id), Enabled: enabled, Config: api.AccountConfig{Kind: kind}}
+	}
+	accounts := []api.Account{
+		acct("m1", "", true), acct("m2", api.AccountGraph, true), acct("j", api.AccountJira, true), acct("off", "", false),
+	}
+	ids := func(s ...string) []api.AccountID {
+		out := []api.AccountID{}
+		for _, x := range s {
+			out = append(out, api.AccountID(x))
+		}
+		return out
+	}
+	// Nothing listed: every enabled mail account, no issue tracker, nothing disabled.
+	for _, a := range accounts {
+		want := a.ID == "m1" || a.ID == "m2"
+		if got := TriageAccountChecked(nil, a); got != want {
+			t.Errorf("default %s = %v", a.ID, got)
+		}
+	}
+	if TriageAccountChecked(ids("off"), accounts[3]) {
+		t.Error("a disabled account checked")
+	}
+	tests := []struct {
+		name   string
+		listed []api.AccountID
+		id     string
+		on     bool
+		want   []api.AccountID
+		ok     bool
+	}{
+		{"uncheck one of all", nil, "m2", false, ids("m1"), true},
+		{"check the tracker", nil, "j", true, ids("m1", "m2", "j"), true},
+		{"back to all is empty", ids("m1"), "m2", true, ids(), true},
+		{"the last one stays", ids("m1"), "m1", false, ids("m1"), false},
+		{"unknown account", nil, "x", true, nil, false},
+		{"a disabled account cannot be toggled", ids("m1"), "off", true, ids("m1"), false},
+		{"a disabled listed account stays listed", ids("off", "m1"), "m2", true, ids("m1", "m2", "off"), true},
+		{"only the disabled one would be left", ids("off", "m1"), "m1", false, ids("off", "m1"), false},
+	}
+	for _, tt := range tests {
+		got, ok := ToggleTriageAccount(tt.listed, accounts, api.AccountID(tt.id), tt.on)
+		if ok != tt.ok || !slices.Equal(got, tt.want) {
+			t.Errorf("%s: = %v, %v; want %v, %v", tt.name, got, ok, tt.want, tt.ok)
+		}
+	}
+}
+
+func TestTriageAccountsSubtitle(t *testing.T) {
+	acct := func(id string, kind api.AccountKind, enabled bool) api.Account {
+		return api.Account{ID: api.AccountID(id), Enabled: enabled, Config: api.AccountConfig{Kind: kind}}
+	}
+	accounts := []api.Account{acct("m1", "", true), acct("j", api.AccountJira, true), acct("off", "", false)}
+	tests := []struct {
+		name     string
+		listed   []api.AccountID
+		accounts []api.Account
+		want     TriageAccountsCoverage
+	}{
+		{"nothing listed", nil, accounts, TriageAccountsAll},
+		{"empty list", []api.AccountID{}, accounts, TriageAccountsAll},
+		{"nothing listed, no accounts", nil, nil, TriageAccountsAll},
+		{"one listed", []api.AccountID{"m1"}, accounts, TriageAccountsSome},
+		{"issue tracker listed", []api.AccountID{"j"}, accounts, TriageAccountsSome},
+		{"only removed accounts", []api.AccountID{"gone", "gone2"}, accounts, TriageAccountsNone},
+		{"only a disabled account", []api.AccountID{"off"}, accounts, TriageAccountsNone},
+		{"removed and present", []api.AccountID{"gone", "m1"}, accounts, TriageAccountsSome},
+		{"listed, no accounts at all", []api.AccountID{"m1"}, nil, TriageAccountsNone},
+	}
+	for _, tt := range tests {
+		if got := TriageAccountsSubtitle(tt.listed, tt.accounts); got != tt.want {
+			t.Errorf("%s: got %v, want %v", tt.name, got, tt.want)
+		}
 	}
 }

@@ -828,6 +828,27 @@ public sealed partial class AssistantPanelController : IDisposable
         Start(request with { SignIn = true }, echo: false);
     }
 
+    /// <summary>
+    /// Reconnect to ChatGPT on an error item: the window's
+    /// <see cref="ReconnectProvider"/>, then the same question once more
+    /// (GTK <c>ReconnectProvider</c>/<c>reconnectFirst</c>).
+    /// </summary>
+    public void Reconnect(int itemId)
+    {
+        scope.VerifyAccess();
+        if (IsClosed || CurrentPhase != Phase.Idle || lastRequest is not { } request)
+        {
+            return;
+        }
+        var idx = items.FindIndex(i => i.Id == itemId);
+        if (idx < 0 || items[idx].Content is not ErrorContent { Offer: ErrorOffer.Reconnect } error)
+        {
+            return;
+        }
+        SetContent(idx, error with { Offer = ErrorOffer.None });
+        Start(request with { SignIn = true }, echo: false);
+    }
+
     /// <summary>A draft card's Open Draft.</summary>
     public void OpenDraftItem(int itemId)
     {
@@ -1011,6 +1032,10 @@ public sealed partial class AssistantPanelController : IDisposable
         }
         if (selectedProvider is not null)
         {
+            if (request.SignIn && ReconnectProvider is not null && !await ReconnectFirstAsync(my))
+            {
+                return;
+            }
             await SubmitProviderAsync(selectedProvider, prompt, told, my);
             return;
         }
@@ -1455,6 +1480,10 @@ public sealed partial class AssistantPanelController : IDisposable
                         // a new Claude Code.
                         EndProcess();
                         Append(new ErrorContent(Assistant.StoppedText(e.ResultText), true, ErrorOffer.SignIn));
+                    }
+                    else if (ProviderSession is not null)
+                    {
+                        AppendProviderFailure(e.ResultText, retry: true);
                     }
                     else
                     {

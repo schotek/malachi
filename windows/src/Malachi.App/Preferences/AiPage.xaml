@@ -159,6 +159,23 @@ tokens of the last 24 hours; its texts come from ui/internal/board.
                             AutomationProperties.AutomationId="BoardTriageConsent"
                             Toggled="OnBoardConsentToggled" />
                     </tk:SettingsCard>
+                    <!-- Triage These Accounts: a check box per enabled account (AiPage.Board.cs). -->
+                    <tk:SettingsCard x:Name="BoardAccountsRow">
+                        <tk:SettingsCard.Description>
+                            <StackPanel Spacing="2">
+                                <TextBlock
+                                    x:Name="BoardAccountsSubtitle"
+                                    AutomationProperties.AutomationId="BoardTriageAccountsSubtitle"
+                                    TextWrapping="Wrap"
+                                    Visibility="Collapsed" />
+                                <StackPanel
+                                    x:Name="BoardAccountsList"
+                                    Margin="0,4,0,0"
+                                    AutomationProperties.AutomationId="BoardTriageAccounts"
+                                    Spacing="0" />
+                            </StackPanel>
+                        </tk:SettingsCard.Description>
+                    </tk:SettingsCard>
                     <tk:SettingsCard x:Name="BoardModelRow">
                         <ComboBox
                             x:Name="BoardModelBox"

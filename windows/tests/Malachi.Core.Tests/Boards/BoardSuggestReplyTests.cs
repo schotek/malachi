@@ -135,6 +135,7 @@ public sealed class BoardSuggestReplyTests
             (SuggestReplyFailure.Stopped, "the assistant stopped"),
             (SuggestReplyFailure.Backend, "the mail backend did not answer"),
             (SuggestReplyFailure.NoDraft, "the assistant wrote no reply"),
+            (SuggestReplyFailure.Limit, "the assistant’s usage limit was reached"),
         ];
         Assert.Equal(SuggestReplyFailures.Length, want.Length);
         foreach (var (f, text) in want)

@@ -146,6 +146,9 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
     // The annotate_case calls of the run waiting for their results, and the
     // ones the bridge refused.
     private HashSet<string> annotateCalls = [];
+
+    // The distinct cases the run's accepted notes named (Tool).
+    private HashSet<string> annotatedCases = new(StringComparer.Ordinal);
     private int refused;
 
     // The tokens the run's Claude Code reported so far.
@@ -238,10 +241,22 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
         request.Consent = null;
         request.UsesBoardConsent = true;
         request.ProviderModelId = () => settings.BoardChatGptModel;
-        foreach (var key in new[] { SettingsKey.AssistantProvider, SettingsKey.AssistantCodexPath, SettingsKey.AssistantChatGptModel, SettingsKey.BoardChatGptModel })
+        foreach (var key in new[] { SettingsKey.AssistantProvider, SettingsKey.AssistantCodexPath })
         {
+            // The provider itself, or the ChatGPT provider's executable while
+            // it is the one selected: a change of a provider not in use stops
+            // nothing. A model (the panel's or the triage's ChatGPT model)
+            // never ends a run: it applies from the next one (Swift
+            // providerChangeConcernsActive); the consents go through
+            // PermissionsChanged.
             var disable = key == SettingsKey.AssistantProvider;
-            settingsTokens.Add(settings.OnChange(key, () => ProviderChanged(disable)));
+            settingsTokens.Add(settings.OnChange(key, () =>
+            {
+                if (disable || settings.AssistantProvider == AssistantProviderID.ChatGpt)
+                {
+                    ProviderChanged(disable);
+                }
+            }));
         }
         tokens.Add(preferences.Observe(PermissionsChanged));
         tokens.Add(preferences.ObserveLoaded(RepairAssistantPreference));
@@ -516,19 +531,34 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
     }
 
     /// <summary>
-    /// The provider or its model changed: a run under way stops, a provider
-    /// switch turns automatic triage off (<paramref name="disableAutomaticTriage"/>),
-    /// and a consent being given approves nothing.
+    /// The provider or its profile changed: a run under way stops, a
+    /// provider switch turns automatic triage off
+    /// (<paramref name="disableAutomaticTriage"/>: a consent given to one
+    /// provider never starts runs of another), the daemon's assistant
+    /// preference goes off when the board's consent is not given for the
+    /// provider now selected, and a consent being given approves nothing.
+    /// Both changes go in one quiet write, so that the repair is not skipped
+    /// for the write under way (Go <c>ProviderChanged</c>).
     /// </summary>
     public void ProviderChanged(bool disableAutomaticTriage = false)
     {
         providerEpoch++;
         Cancel();
-        if (disableAutomaticTriage)
+        var repair = !granting && !SelectedBoardConsent && Preferences.Stored?.Assistant != false;
+        if (disableAutomaticTriage || repair)
         {
-            Preferences.Update(p => p with { AutoTriage = false }, quiet: true);
+            if (repair)
+            {
+                LogRepaired(logger);
+            }
+            Preferences.Update(
+                p => p with
+                {
+                    AutoTriage = !disableAutomaticTriage && p.AutoTriage,
+                    Assistant = !repair && p.Assistant,
+                },
+                quiet: true);
         }
-        RepairAssistantPreference();
         AvailabilityChanged();
     }
 
@@ -709,6 +739,7 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
                 Usage24h = Board.Usage24h,
                 Queue = Board.Known && Board.AssistantOn ? Board.Queue : null,
                 Now = now,
+                TimeZone = timeZone,
             });
         }
     }
@@ -776,6 +807,7 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
         var my = ++gen;
         runId = null;
         annotateCalls = [];
+        annotatedCases = [];
         refused = 0;
         usage = new AssistantUsageTally();
         limitHit = false;
@@ -985,8 +1017,11 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
         return await Locator.SignedInAsync();
     }
 
-    // Counts an annotate_case of run my, accepted or refused, until the
-    // accepted ones reach the run's limit (LimitReached).
+    // Counts an annotate_case of run my, accepted (each case once) or
+    // refused, until the accepted cases reach the run's limit
+    // (LimitReached). The bridge takes a second note on a case without
+    // charging another of the run's cases, so Done counts distinct cases; a
+    // result that names no case counts as a case of its own.
     private void Tool(int my, Boards.Board.TriageTrigger trigger, AssistantEvent e)
     {
         if (my != gen || limitHit || State is not Boards.Board.TriageState.Running running)
@@ -1004,7 +1039,12 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
                 refused++;
                 return;
             }
-            var done = running.Done + 1;
+            var key = Assistant.TriageAnnotatedCase(e.ResultText) ?? "call:" + e.ToolUseId;
+            if (!annotatedCases.Add(key))
+            {
+                return;
+            }
+            var done = annotatedCases.Count;
             State = new Boards.Board.TriageState.Running(trigger, done, running.Total);
             if (done >= runLimit)
             {
@@ -1076,6 +1116,10 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
             {
                 LearnSignedIn(false);
             }
+            if (outcome is AssistantRequest.Outcome.Answered)
+            {
+                usage.Finished();
+            }
             var done = runId;
             runId = null;
             Finish(trigger, null, done);
@@ -1085,6 +1129,7 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
         switch (outcome)
         {
             case AssistantRequest.Outcome.Answered:
+                usage.Finished();
                 if (State is Boards.Board.TriageState.Running { Done: 0 })
                 {
                     if (refused > 0)
@@ -1106,6 +1151,7 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
                     AssistantRequest.Failure.NotFound => Boards.Board.TriageFailure.NotFound,
                     AssistantRequest.Failure.NotSignedIn => Boards.Board.TriageFailure.NotSignedIn,
                     AssistantRequest.Failure.ToolsMissing => Boards.Board.TriageFailure.ToolsMissing,
+                    AssistantRequest.Failure.Limit => Boards.Board.TriageFailure.Limit,
                     AssistantRequest.Failure.Stopped { Detail: AssistantRequest.TimedOut } => Boards.Board.TriageFailure.Timeout,
                     _ => Boards.Board.TriageFailure.Stopped,
                 };
@@ -1141,6 +1187,7 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
                     OutputTokens = u.OutputTokens,
                     CacheCreationInputTokens = u.CacheCreationInputTokens,
                     CacheReadInputTokens = u.CacheReadInputTokens,
+                    LowerBound = usage.LowerBound ? true : null,
                 }
                 : null;
             EndRun(id, failure?.RunError, total);

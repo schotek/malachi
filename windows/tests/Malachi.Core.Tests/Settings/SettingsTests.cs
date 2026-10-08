@@ -63,7 +63,7 @@ public sealed class SettingsTests
         Assert.Equal(240, s.FolderPaneWidth);
         Assert.Equal(380, s.MessageListWidth);
         // The shared settings and Windows' ctrl-r.
-        Assert.Equal(38, SettingsStore.Schema.Count);
+        Assert.Equal(42, SettingsStore.Schema.Count);
         Assert.Equal(Enum.GetValues<SettingsKey>().Length, SettingsStore.Schema.Count);
         Assert.Equal(
             SettingsStore.Schema.Select(k => k.Name).Order(StringComparer.Ordinal),

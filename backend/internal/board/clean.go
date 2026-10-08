@@ -24,13 +24,23 @@ const (
 // whitespace character a space, and no control, format or other
 // default-ignorable characters (bidi overrides, zero-width spaces, the
 // Tags block, variation selectors, the combining grapheme joiner, Hangul
-// fillers…) except ZWJ and ZWNJ, and VS15/VS16 right after an emoji.
-// Nothing is collapsed. At most the first 1 MiB of s is looked at.
+// fillers…) except ZWJ and ZWNJ between two other kept characters, and
+// VS15/VS16 right after an emoji. Nothing is collapsed. At most the first
+// 1 MiB of s is looked at.
+//
+// The joiner rule: a ZWJ (U+200D) or ZWNJ (U+200C) is kept only when, once
+// the dropped characters are gone, the characters right before and right
+// after it are kept characters that are neither whitespace (a line break
+// included) nor a joiner; a joiner at the start or end of a line, next to
+// a space or in a run of joiners is dropped. Emoji ZWJ sequences and
+// Persian or Indic words keep theirs.
 func CleanText(s string) string {
 	s = capBytes(s, maxInputBytes)
 	var b strings.Builder
 	b.Grow(len(s))
-	var last rune // the last character written, 0 at a line start
+	var last rune   // the last character written, 0 at a line start
+	var joiner rune // a joiner waiting for the character after it, 0 when none
+	var stray bool  // the waiting joiner is dropped (a run of joiners, or nothing before it)
 	for i := 0; i < len(s); {
 		r, n := utf8.DecodeRuneInString(s[i:])
 		i += n
@@ -49,12 +59,24 @@ func CleanText(s string) string {
 		case unicode.IsControl(r):
 			continue
 		case r == vs15 || r == vs16:
-			if !emojiBase(last) {
+			if joiner != 0 || !emojiBase(last) {
 				continue
 			}
 		case r == zwnj || r == zwj:
+			if joiner != 0 {
+				stray = true
+				continue
+			}
+			joiner, stray = r, last == 0 || last == ' '
+			continue
 		case ignorable(r):
 			continue
+		}
+		if joiner != 0 {
+			if !stray && r != '\n' && r != ' ' {
+				b.WriteRune(joiner)
+			}
+			joiner, stray = 0, false
 		}
 		if r == '\n' {
 			b.WriteByte('\n')

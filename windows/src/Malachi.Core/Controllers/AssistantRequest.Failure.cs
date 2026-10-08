@@ -4,7 +4,7 @@
 // Port of macos/Sources/MalachiCore/Controllers/AssistantRequest.swift
 // (AssistantRequest.Failure, text, reason); GTK:
 // ui/internal/assistantpanel/oneshot.go (Failure, FailureKind, Text,
-// ReasonText). Swift's enum with an associated value is a closed record
+// ReasonText) and provider.go (FailureLimit). Swift's enum with an associated value is a closed record
 // hierarchy, compared by value as the enum is.
 
 using Malachi.Core.Assistants;
@@ -32,6 +32,7 @@ public sealed partial class AssistantRequest
             NotSignedIn => Assistant.SignInTexts().Hint,
             Stopped s => Assistant.StoppedText(s.Detail),
             ToolsMissing => Assistant.PanelTexts().ToolsMissing,
+            Limit => Assistant.StoppedText(Boards.Board.Text.TriageFailureText(Boards.Board.TriageFailure.Limit)),
             _ => Assistant.StoppedText(""),
         };
 
@@ -42,6 +43,7 @@ public sealed partial class AssistantRequest
             NotSignedIn => Assistant.SignInTexts().Hint,
             Stopped s => s.Detail,
             ToolsMissing => Assistant.PanelTexts().ToolsMissing,
+            Limit => Boards.Board.Text.TriageFailureText(Boards.Board.TriageFailure.Limit),
             _ => "",
         };
 
@@ -60,5 +62,12 @@ public sealed partial class AssistantRequest
 
         /// <summary>A request with <see cref="Tools"/>: Claude Code did not report the bridge connected.</summary>
         public sealed record ToolsMissing : Failure;
+
+        /// <summary>
+        /// The provider refused the request because the usage limit of the
+        /// user's plan was reached (ChatGPT's HTTP 429).
+        /// </summary>
+        /// <param name="Code">The provider's code.</param>
+        public sealed record Limit(string Code) : Failure;
     }
 }

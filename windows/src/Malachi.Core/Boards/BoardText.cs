@@ -3,7 +3,8 @@
 
 // Port of macos/Sources/MalachiCore/Board/BoardText.swift (Board.Text); GTK:
 // ui/internal/board/text.go, which holds the msgids, and reply.go
-// (ReplyNotSaved, ReplyNotSent, QuitUnsavedHeading, QuitUnsavedBody,
+// (ReplyNotSaved, ReplyNotSent, QuitUnsavedHeading, QuitUnsentHeading,
+// QuitHeading, QuitUnsavedBody,
 // QuitAnyway).
 //
 // The board's texts: every text goes through L10n with the GTK msgid as
@@ -63,6 +64,7 @@ public static partial class Board
         {
             FilterKind.State => StateName(f.State),
             FilterKind.Done => Done,
+            FilterKind.Snoozed => Snoozed,
             // TRANSLATORS: the board's filter that shows every case still on it.
             _ => L10n.T("Overview"),
         };
@@ -82,7 +84,11 @@ public static partial class Board
         /// <summary>"1 message", "3 messages".</summary>
         public static string MessageCount(int n) => L10n.N("%d message", "%d messages", n);
 
-        /// <summary>The Today page's sentence under its title, for the hot cases and the ones waiting for the user.</summary>
+        /// <summary>
+        /// The Today page's sentence under its title: <paramref name="n"/>
+        /// counts the hot cases and the ones waiting for the user that are
+        /// new, due today or back from a reminder (<see cref="NeedsYouToday"/>).
+        /// </summary>
         public static string TodoPhrase(int n) =>
             n < 1 ? L10n.T("Nothing needs you today.") : L10n.N("%d thing needs you today.", "%d things need you today.", n);
 
@@ -216,6 +222,23 @@ public static partial class Board
         /// <summary>The question before quitting while a reply on the board could not be saved or sent: its heading.</summary>
         public static string QuitUnsavedHeading => L10n.T("Quit without saving a reply?");
 
+        /// <summary>
+        /// The question's heading when nothing typed is unsaved but a reply was
+        /// sent and the send has not answered yet (Go <c>QuitUnsentHeading</c>).
+        /// </summary>
+        public static string QuitUnsentHeading =>
+            // TRANSLATORS: Heading of the question before quitting while a reply
+            // the user sent is still being sent.
+            L10n.T("Quit with a reply still sending?");
+
+        /// <summary>
+        /// The question's heading (Go <c>QuitHeading</c>): <see cref="QuitUnsentHeading"/>
+        /// when nothing is unsaved (<paramref name="unsaved"/> false) but a send
+        /// is unanswered (<paramref name="sending"/>), else <see cref="QuitUnsavedHeading"/>.
+        /// </summary>
+        public static string QuitHeading(bool unsaved, bool sending) =>
+            sending && !unsaved ? QuitUnsentHeading : QuitUnsavedHeading;
+
         /// <summary>The question before quitting while a reply on the board could not be saved or sent: its body.</summary>
         public static string QuitUnsavedBody =>
             L10n.T("A reply on the board could not be saved or sent yet. If you quit now, what you typed in it may be lost.");
@@ -279,11 +302,66 @@ public static partial class Board
             _ => StyleTitle(s),
         };
 
-        /// <summary>Settings → General → Board: the style of the first show after launch; its choices are <see cref="StyleTitle"/>.</summary>
+        /// <summary>
+        /// Settings → General → Board: the style the board opens in (the key
+        /// board-default-style); its choices are <see cref="DefaultStyles"/>,
+        /// named by <see cref="DefaultStyleTitle"/>.
+        /// </summary>
         public static string DefaultStyleSetting =>
-            // TRANSLATORS: Settings → General → Board: which style (List, Columns,
-            // Today) the board opens in after launch.
-            L10n.T("Default View");
+            // TRANSLATORS: Settings → General → Board: which style (Last Used,
+            // List, Columns, Today) the board opens in.
+            L10n.T("Board View");
+
+        /// <summary>The choice of a setting that takes what the user had last (Board View, Open at Launch).</summary>
+        public static string LastUsed =>
+            // TRANSLATORS: a choice of Settings → General → Board (Board View,
+            // Open at Launch): what the user had last.
+            L10n.C("board setting", "Last Used");
+
+        /// <summary>A choice of Board View.</summary>
+        public static string DefaultStyleTitle(DefaultStyle d) => d.IsLast ? LastUsed : StyleTitle(d.Style);
+
+        /// <summary>
+        /// Settings → General → Board: the mode the main window opens in (the
+        /// key board-start-mode); its choices are <see cref="StartModes"/>,
+        /// named by <see cref="StartModeTitle"/>.
+        /// </summary>
+        public static string StartModeSetting =>
+            // TRANSLATORS: Settings → General → Board: whether the main window
+            // opens on Mail, on the Board, or on what was shown last.
+            L10n.T("Open at Launch");
+
+        /// <summary>A choice of Open at Launch.</summary>
+        public static string StartModeTitle(StartChoice s) => s switch
+        {
+            StartChoice.Board => BoardName,
+            StartChoice.Last => LastUsed,
+            _ => L10n.T("Mail"),
+        };
+
+        /// <summary>Settings → General → Board: the switch that turns the board on or off (board preferences enabled).</summary>
+        public static string ShowBoardSetting =>
+            // TRANSLATORS: Settings → General → Board: a switch.
+            L10n.T("Show the Board");
+
+        /// <summary>The line of <see cref="ShowBoardSetting"/>.</summary>
+        public static string ShowBoardSettingSubtitle =>
+            L10n.T("Sorts your conversations into what needs you, what waits for others and what is only for reading. Turned off, your decisions are kept.");
+
+        /// <summary>Settings → General → Board: the group of how long each state keeps a case (board preferences windows).</summary>
+        public static string WindowsSetting =>
+            // TRANSLATORS: Settings → General → Board: a group of rows, one per
+            // state, each followed by a number of days.
+            L10n.T("Keep cases for");
+
+        /// <summary>The explanation of <see cref="WindowsSetting"/>.</summary>
+        public static string WindowsSettingSubtitle =>
+            L10n.T("A case leaves the board when its newest message is older than this, unless your decision, a reminder or a deadline keeps it.");
+
+        /// <summary>A value of a state's row under <see cref="WindowsSetting"/>: "30 days".</summary>
+        public static string Days(int n) =>
+            // TRANSLATORS: how long a state of the board keeps a case.
+            L10n.N("%d day", "%d days", n);
 
         /// <summary>The sender of the user's own messages in the conversation.</summary>
         public static string You =>
@@ -302,12 +380,6 @@ public static partial class Board
         public static string DueEmpty =>
             L10n.T("No deadlines. The assistant finds deadlines in the text of messages and keeps the sentence each one comes from.");
 
-        /// <summary>The title of the Today page's calendar placeholder.</summary>
-        public static string CalendarTitle => L10n.T("Calendar and Reminders");
-
-        /// <summary>The body of the Today page's calendar placeholder.</summary>
-        public static string CalendarBody => L10n.T("Later. Read-only; where the data comes from differs on each platform.");
-
         /// <summary>The commitments' tile.</summary>
         public static string Commitments =>
             // TRANSLATORS: a tile of the Today page: the promises the assistant
@@ -320,7 +392,7 @@ public static partial class Board
             // such as "Tomorrow" or "20 Oct".
             L10n.T("Due %s", label);
 
-        /// <summary>A part of a row's spoken label: "Back on the board Tomorrow 09:00".</summary>
+        /// <summary>A part of a row's spoken label: "Back on the board: Tomorrow at 09:00".</summary>
         public static string SpokenRemind(string label) => SnoozedUntil(label);
 
         /// <summary>A part of a row's spoken label.</summary>
@@ -339,7 +411,7 @@ public static partial class Board
         public static string Reason(BoardReason code) => code.Value switch
         {
             BoardReason.HotImportant => L10n.T("The newest message is marked as important, addressed to you and from a sender you have written to."),
-            BoardReason.HotFlagged => L10n.T("You flagged a message in this conversation and the newest one is not yours."),
+            BoardReason.HotFlagged => L10n.T("You flagged a message in this conversation."),
             BoardReason.YouAddressed => L10n.T("The newest message is addressed to you by a sender you have written to."),
             BoardReason.YouRepliedToYou => L10n.T("The newest message answers one of yours."),
             BoardReason.ThemReplied => L10n.T("You replied last; the next step is theirs."),
@@ -347,7 +419,8 @@ public static partial class Board
             BoardReason.InfoCcOnly => L10n.T("You are only in Cc on the newest message."),
             BoardReason.InfoNotAddressed => L10n.T("The message is not addressed to you (a mailing list or a Bcc)."),
             BoardReason.InfoYourNote => L10n.T("A note to yourself."),
-            BoardReason.InfoUnknownSender => L10n.T("The message is addressed to you, but its sender is one you have never written to, so it waits under For Your Information. Its importance does not count."),
+            BoardReason.YouNewContact => L10n.T("The newest message is addressed to you by someone you have never written to."),
+            BoardReason.InfoUnknownSender => L10n.T("The newest message comes from someone you have never written to and is not addressed to you, so it waits under For Your Information."),
             BoardReason.JiraYourComment => L10n.T("Your comment is the latest in the issue; the next step is theirs."),
             BoardReason.JiraAssigned => L10n.T("Someone wrote in an issue assigned to you."),
             BoardReason.JiraReporter => L10n.T("Someone wrote in an issue you reported."),
@@ -359,6 +432,79 @@ public static partial class Board
 
         /// <summary>The reason of a rule this client does not know.</summary>
         public static string ReasonUnknown => L10n.T("The daemon’s rules put the case here.");
+
+        /// <summary>The line "Why is this here?" adds for a case back from a reminder (<see cref="Case.RemindedAt"/>).</summary>
+        public static string ReasonReminded => L10n.T("A reminder you set has come due.");
+
+        /// <summary>
+        /// The line "Why is this here?" adds whenever the user chose the
+        /// case's state (<see cref="Case.UserState"/>): the choice keeps it on
+        /// the board whatever the rules say.
+        /// </summary>
+        public static string ReasonUserKeeps =>
+            // TRANSLATORS: under "Why is this here?" when the user moved the case
+            // to its state; "it" is the case.
+            L10n.T("Your decision keeps it on the board.");
+
+        /// <summary>The badge of a case back from a reminder, until the user acts on it.</summary>
+        public static string Reminded =>
+            // TRANSLATORS: a badge on a case of the board that came back because a
+            // reminder the user set came due.
+            L10n.C("board badge", "Reminded");
+
+        /// <summary>The badge of a case whose newest message is addressed to the user by someone the user has never written to (<c>you.newContact</c>).</summary>
+        public static string NewContact =>
+            // TRANSLATORS: a badge on a case of the board: its sender is someone
+            // the user has never written to.
+            L10n.C("board badge", "New contact");
+
+        /// <summary>
+        /// A title with a badge after it, as one label: an account and its kind
+        /// ("Work (IMAP)"), a case and its badge. Both are cleaned by the
+        /// caller; without a badge the title alone.
+        /// </summary>
+        public static string TitleWithBadge(string title, string badge) =>
+            string.IsNullOrEmpty(badge) ? title
+            // TRANSLATORS: a name and a short badge after it, such as "Work
+            // (IMAP)" or "Offer (Reminded)".
+            : L10n.T("%s (%s)", title, badge);
+
+        /// <summary>
+        /// The detail's line under the title: who and when, both cleaned by
+        /// the caller. Either alone when the other is empty (no " · "
+        /// dangling), empty when both are.
+        /// </summary>
+        public static string PersonAndTime(string person, string when)
+        {
+            ArgumentNullException.ThrowIfNull(person);
+            ArgumentNullException.ThrowIfNull(when);
+            if (person.Length == 0 || when.Length == 0)
+            {
+                return person + when;
+            }
+            // TRANSLATORS: the line under a case's title on the board: the other
+            // party and the date, such as "Jana Nováková · 2 Oct 2026 14:05".
+            return L10n.T("%s · %s", person, when);
+        }
+
+        /// <summary>A day and a time of day: "Thu at 18:00", "Tomorrow at 09:00", "20 Oct at 09:00".</summary>
+        public static string DayAndTime(string day, string clock) =>
+            // TRANSLATORS: a day and a time of day, such as "Thu at 18:00",
+            // "Tomorrow at 09:00" or "20 Oct at 09:00".
+            L10n.T("%s at %s", day, clock);
+
+        /// <summary>The tooltip of a count tile of the Today page: "Hot: 3 cases", or the promises of the commitments' tile.</summary>
+        public static string TileToolTip(Tile t)
+        {
+            ArgumentNullException.ThrowIfNull(t);
+            return t.Kind == TileKind.Commitments
+                // TRANSLATORS: the tooltip of the Today page's tile of promises;
+                // %s is the tile's title ("Promised").
+                ? L10n.N("%s: %d promise", "%s: %d promises", t.Count, t.Title, t.Count)
+                // TRANSLATORS: the tooltip of a tile of the Today page; %s is a state
+                // of the board, such as "Hot", %d how many cases are in it.
+                : L10n.N("%s: %d case", "%s: %d cases", t.Count, t.Title, t.Count);
+        }
 
         /// <summary>The empty board's title, by how far the data is.</summary>
         public static string EmptyTitleOf(Phase phase) => phase switch
@@ -432,31 +578,46 @@ public static partial class Board
         /// <summary>Archives a case's messages.</summary>
         public static string Archive => L10n.T("Archive");
 
-        /// <summary>The Done filter's section of the cases that come back later.</summary>
+        /// <summary>The filter and section of the cases that come back later.</summary>
         public static string Snoozed =>
-            // TRANSLATORS: a section of the board's Done filter: the cases off the
+            // TRANSLATORS: a filter and section of the board: the cases off the
             // board until a reminder.
             L10n.T("Snoozed");
 
-        /// <summary>"Back on the board Tomorrow 09:00", for a snoozed case.</summary>
+        /// <summary>"Back on the board: Tomorrow at 09:00", for a snoozed case.</summary>
         public static string SnoozedUntil(string label) =>
-            // TRANSLATORS: %s is a day and a time, such as "Tomorrow 09:00" or
-            // "20 Oct 09:00".
-            L10n.T("Back on the board %s", label);
+            // TRANSLATORS: %s is a day and a time, such as "Tomorrow at 09:00" or
+            // "20 Oct at 09:00".
+            L10n.T("Back on the board: %s", label);
 
         /// <summary>The remind presets (<see cref="RemindPresets"/>).</summary>
         public static string RemindPreset(RemindPresetKind k) => k switch
         {
-            // TRANSLATORS: a reminder preset: in about three hours, or at 18:00.
+            // TRANSLATORS: a reminder preset: in three hours, rounded up to the
+            // hour, at 20:00 at the latest.
             RemindPresetKind.LaterToday => L10n.T("Later Today"),
             RemindPresetKind.Tomorrow => L10n.T("Tomorrow"),
             // TRANSLATORS: a reminder preset: next Monday at 09:00.
             RemindPresetKind.NextWeek => L10n.T("Next Week"),
+            // TRANSLATORS: a reminder preset: today at 20:00.
+            RemindPresetKind.ThisEvening => L10n.T("This Evening"),
+            // TRANSLATORS: a reminder preset offered after midnight: today at
+            // 09:00.
+            RemindPresetKind.ThisMorning => L10n.T("This Morning"),
             _ => "",
         };
 
-        /// <summary>Ends a reminder.</summary>
-        public static string RemindNoMore => L10n.T("Don’t Remind Me");
+        /// <summary>A remind preset's menu item: "Later Today, Thu at 18:00".</summary>
+        public static string RemindItem(string title, string when) =>
+            // TRANSLATORS: a reminder preset's menu item: its name and when it
+            // comes back, such as "Later Today, Thu at 18:00".
+            L10n.Format(L10n.C("remind preset", "%s, %s"), title, when);
+
+        /// <summary>Ends a reminder and puts the case back on the board at once (<c>board.remind</c> with null).</summary>
+        public static string RemindNoMore =>
+            // TRANSLATORS: a menu item of a snoozed case: it ends the reminder and
+            // the case is back on the board now.
+            L10n.T("Back on the Board Now");
 
         /// <summary>What Archive did: messages moved, or only marked done.</summary>
         public static string Archived(int n, bool noArchive)
@@ -469,6 +630,15 @@ public static partial class Board
                 ? L10n.T("Marked as done. No message was in the inbox.")
                 : L10n.N("Archived %d message.", "Archived %d messages.", n);
         }
+
+        /// <summary>The button of the Archive toast that takes the archive back.</summary>
+        public static string Undo =>
+            // TRANSLATORS: the button of a toast that takes back what was just
+            // done (an archive).
+            L10n.T("Undo");
+
+        /// <summary>The toast when taking an archive back failed: the mail is still archived and the case stays done.</summary>
+        public static string UndoFailed => L10n.T("Could not undo the archive.");
 
         /// <summary>What a write of the board did, for the toast of its failure (Swift <c>Board.Text.Action</c>).</summary>
         public enum Action

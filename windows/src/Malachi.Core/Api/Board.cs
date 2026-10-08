@@ -90,7 +90,7 @@ public readonly record struct BoardReason(string Value) : IWireEnumeration<Board
     /// <summary>Inbound, the user in its To, and its own header says Importance: high or X-Priority 1 or 2.</summary>
     public const string HotImportant = "hot.important";
 
-    /// <summary>The user flagged a member and the newest relevant member is inbound.</summary>
+    /// <summary>The user flagged a member, whoever wrote the newest relevant member.</summary>
     public const string HotFlagged = "hot.flagged";
 
     /// <summary>The newest relevant member is inbound and the user is in its To.</summary>
@@ -111,7 +111,14 @@ public readonly record struct BoardReason(string Value) : IWireEnumeration<Board
     /// <summary>Inbound; the user is not among the To or Cc recipients (a list, a Bcc).</summary>
     public const string InfoNotAddressed = "info.notAddressed";
 
-    /// <summary>Inbound and the user in its To, but from a sender the user has never written to.</summary>
+    /// <summary>
+    /// The newest relevant member is inbound, the user in its To, and its
+    /// sender one the user has never written to (a new contact); its
+    /// Importance does not count.
+    /// </summary>
+    public const string YouNewContact = "you.newContact";
+
+    /// <summary>Inbound from a sender the user has never written to, the user not in its To (in Cc, or not addressed).</summary>
     public const string InfoUnknownSender = "info.unknownSender";
 
     /// <summary>A note to oneself: every recipient is one of the user's addresses.</summary>
@@ -156,7 +163,11 @@ public readonly record struct BoardVisibility(string Value) : IWireEnumeration<B
     /// <summary>The user marked it done; a later inbound message reopens it (Go <c>BoardDone</c>).</summary>
     public const string Done = "done";
 
-    /// <summary>Hidden until <see cref="BoardCase.RemindAt"/>, then live again (Go <c>BoardSnoozed</c>).</summary>
+    /// <summary>
+    /// Hidden until <see cref="BoardCase.RemindAt"/>, then live again
+    /// (<see cref="BoardCase.RemindedAt"/>); a later inbound message ends it
+    /// early (Go <c>BoardSnoozed</c>).
+    /// </summary>
     public const string Snoozed = "snoozed";
 
     /// <summary>The value of a wire string.</summary>
@@ -297,6 +308,15 @@ public sealed record BoardCase
     /// <summary>Set while snoozed, always in the future.</summary>
     [JsonPropertyName("remindAt")]
     public DateTimeOffset? RemindAt { get; init; }
+
+    /// <summary>
+    /// When a remind came due (the remindAt it had); set while live after
+    /// that remind until the user acts on the case or an inbound member
+    /// that counts arrives. Clients list such a case first in its state,
+    /// marked as reminded. Never set by a remind that new mail cancelled.
+    /// </summary>
+    [JsonPropertyName("remindedAt")]
+    public DateTimeOffset? RemindedAt { get; init; }
 
     /// <summary>The newest relevant member's, Re:/Fwd: stripped; for an issue "KEY: Summary".</summary>
     [JsonPropertyName("subject")]
@@ -607,6 +627,14 @@ public sealed record BoardUsage
     /// <summary>Input tokens read from the prompt cache.</summary>
     [JsonPropertyName("cacheReadInputTokens")]
     public required long CacheReadInputTokens { get; init; }
+
+    /// <summary>
+    /// The counters are a lower bound, not the whole usage (the run was
+    /// stopped, timed out, or its client gave up waiting for the
+    /// assistant's final report); left out when false.
+    /// </summary>
+    [JsonPropertyName("lowerBound")]
+    public bool? LowerBound { get; init; }
 }
 
 /// <summary>
@@ -635,6 +663,10 @@ public sealed record BoardUsageTotal
     /// <summary>The runs that contributed, at least 1.</summary>
     [JsonPropertyName("runs")]
     public required int Runs { get; init; }
+
+    /// <summary>Any run summed was a lower bound (<see cref="BoardUsage.LowerBound"/>); left out when false.</summary>
+    [JsonPropertyName("lowerBound")]
+    public bool? LowerBound { get; init; }
 }
 
 /// <summary>
@@ -851,6 +883,27 @@ public sealed record BoardArchiveResult
     /// <summary>The case after the change.</summary>
     [JsonPropertyName("case")]
     public required BoardCase Case { get; init; }
+
+    /// <summary>
+    /// Each message moved to the archive folder with the folder it was
+    /// moved from, so that the archive can be undone (<c>message.move</c>
+    /// back, then <c>board.setDone</c> with done false); null when nothing
+    /// was moved (noArchive, or an older daemon).
+    /// </summary>
+    [JsonPropertyName("moved")]
+    public IReadOnlyList<BoardMoved>? Moved { get; init; }
+}
+
+/// <summary>api.BoardMoved: a message <c>board.archive</c> moved, with its folder before the move.</summary>
+public sealed record BoardMoved
+{
+    /// <summary>The message.</summary>
+    [JsonPropertyName("messageId")]
+    public required MessageId MessageId { get; init; }
+
+    /// <summary>Its folder before the move.</summary>
+    [JsonPropertyName("fromFolderId")]
+    public required FolderId FromFolderId { get; init; }
 }
 
 /// <summary>api.BoardUnflagParams: clears the flags behind <c>hot.flagged</c>.</summary>

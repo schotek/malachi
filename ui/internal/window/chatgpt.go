@@ -12,7 +12,6 @@ import (
 
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
-	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
 	"github.com/schotek/malachi/ui/internal/board"
@@ -65,11 +64,14 @@ func (a *Assistant) initChatGPT() {
 		settings.KeyAssistantChatGPTModel, settings.KeyAssistantTarget} {
 		key := key
 		a.settings.OnChanged(key, func() {
-			if key == settings.KeyAssistantProvider && a.board != nil {
-				// Automatic mail transfer never silently follows a provider switch.
-				a.board.prefs.Update(false, func(p *api.BoardPreferences) { p.AutoTriage = false }, nil)
-			}
 			a.runtimeChanged()
+			if key == settings.KeyAssistantProvider && a.board != nil {
+				// Automatic mail transfer never silently follows a provider
+				// switch, and the daemon's assistant preference stays only
+				// with the new provider's board consent: one quiet write
+				// (boardtriage.Controller.ProviderChanged).
+				a.board.ctl.ProviderChanged(true)
+			}
 		})
 	}
 	a.settings.OnChanged(settings.KeyAssistantChatGPTConsentVersion, func() {
@@ -302,6 +304,44 @@ func (s boardProviderSettings) SetAssistantConsent(ok bool) {
 	}
 }
 
+// reconnectChatGPT connects the ChatGPT account again (its sign-in in the
+// browser, as Preferences → AI's Continue with ChatGPT) and calls done on
+// the main loop with whether it worked; the board's triage then asks
+// afresh whether its provider is signed in. The assistant panel's
+// Reconnect to ChatGPT runs it (assistantpanel.Controller.ReconnectProvider);
+// ctx is the panel's: Stop on "Connecting…" cancels it and with it the
+// sign-in in the browser.
+func (a *Assistant) reconnectChatGPT(ctx context.Context, done func(ok bool)) {
+	if a.chatGPT == nil || a.chatGPTClosed {
+		done(false)
+		return
+	}
+	go func() {
+		err := a.chatGPT.SignIn(ctx)
+		glib.IdleAdd(func() {
+			if a.chatGPTClosed {
+				done(false)
+				return
+			}
+			a.recheckBoardSignIn()
+			done(err == nil)
+		})
+	}()
+}
+
+// recheckBoardSignIn asks the board's triage afresh whether its provider
+// is signed in (after a ChatGPT sign-in elsewhere in the application).
+func (a *Assistant) recheckBoardSignIn() {
+	if a.board != nil {
+		a.board.ctl.RecheckSignIn()
+	}
+}
+
+// providerSwaps are the board's msgids that speak of Claude Code
+// (board.ProviderSwappedTexts), read once; the ChatGPT provider says them
+// in its own words (providerBoardTranslator).
+var providerSwaps = board.ProviderSwappedTexts()
+
 // Keep legacy Board presentation provider-aware without changing its pure model.
 type providerBoardTranslator struct {
 	a *Assistant
@@ -311,13 +351,22 @@ type providerBoardTranslator struct {
 func (t providerBoardTranslator) T(msgid string) string {
 	if t.a != nil && t.a.usesChatGPT() {
 		words := assistant.ChatGPTText(t.Translator)
+		if swap, ok := providerSwaps[msgid]; ok {
+			switch swap {
+			case board.SwapNotFound:
+				return words.NativeMissingCodex
+			case board.SwapNotSignedIn:
+				return words.Reconnect
+			case board.SwapConsent:
+				return words.BoardConsentBody
+			}
+		}
+		// The assistant's own texts of Claude Code's sign-in that the
+		// board's triage shows (assistant.SignInTexts, PanelTexts).
 		switch msgid {
-		case "Claude Code was not found", "Claude Code was not found on this computer",
-			"The triage runs your Claude Code, which was not found on this Mac",
-			"The triage runs your Claude Code, which was not found on this Mac. The Claude Code row above offers to get it.":
+		case "Claude Code was not found on this computer":
 			return words.NativeMissingCodex
-		case "Claude Code is not signed in", "Claude Code is not signed in. The Claude Code row above offers to sign in.",
-			"Claude Code is not signed in. Sign in under AI in the preferences.":
+		case "Claude Code is not signed in. Sign in under AI in the preferences.":
 			return words.Reconnect
 		case "Get Claude Code…":
 			return words.Install
@@ -325,8 +374,6 @@ func (t providerBoardTranslator) T(msgid string) string {
 			return words.SignIn
 		case "Waiting for the sign-in in your browser…":
 			return words.Connecting
-		case "Sends the newest messages of conversations that need sorting to Anthropic through your Claude Code. It cannot send, move or delete mail; a triage you start yourself may write replies, which stay on the board until you send them.":
-			return words.BoardConsentBody
 		}
 	}
 	return t.Translator.T(msgid)

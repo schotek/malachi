@@ -59,10 +59,22 @@ public final class Settings {
         /// nicks of `assistantModel` but set apart from it (Settings → AI →
         /// Board).
         case boardTriageModel = "board-triage-model"
-        /// macOS only for now: the style the board opens in the first time
-        /// it shows in a run, `Board.Style`'s nicks (Settings → General →
-        /// Board; `BoardController.boardWillShow`).
+        /// Board View: the style the board opens in, `Board.DefaultStyle`'s
+        /// nicks ("last" = `boardLastStyle`; Settings → General → Board;
+        /// `BoardController.boardWillShow`).
         case boardDefaultStyle = "board-default-style"
+        /// The style the board was shown in last, `Board.Style`'s nicks;
+        /// written on every change of the style.
+        case boardLastStyle = "board-last-style"
+        /// Open at Launch: `Board.StartChoice`'s nicks (`Board.startMode`).
+        case boardStartMode = "board-start-mode"
+        /// The mode the main window showed last, `Board.Mode`'s nicks;
+        /// written whenever the mode switches.
+        case boardLastMode = "board-last-mode"
+        /// The account id the board is filtered to, "" for every account;
+        /// written whenever the board's account filter changes
+        /// (`Board.filterOnShow`).
+        case boardAccountFilter = "board-account-filter"
         /// macOS only: what ⌘R does (Settings → General → Keyboard).
         case commandR = "command-r"
         /// macOS only: the size of the window text (`Typo`, Settings →
@@ -137,7 +149,11 @@ public final class Settings {
             Key.assistantChatGPTConsentVersion.rawValue: 0,
             Key.boardTriageConsent.rawValue: false,
             Key.boardTriageModel.rawValue: Assistant.Model.sonnet.rawValue,
-            Key.boardDefaultStyle.rawValue: Board.Style.list.nick,
+            Key.boardDefaultStyle.rawValue: Board.DefaultStyle.last.nick,
+            Key.boardLastStyle.rawValue: Board.Style.list.nick,
+            Key.boardStartMode.rawValue: Board.StartChoice.mail.nick,
+            Key.boardLastMode.rawValue: Board.Mode.mail.nick,
+            Key.boardAccountFilter.rawValue: "",
             Key.commandR.rawValue: CommandR.reply.rawValue,
             Key.uiTextSize.rawValue: TextSize.larger.rawValue,
         ]
@@ -355,12 +371,45 @@ public final class Settings {
         set { set(.boardTriageModel, Assistant.parseModel(newValue.rawValue).rawValue) }
     }
 
-    /// The style the board opens in the first time it shows in a run:
-    /// `Board.Style`'s nicks, read with `Board.parseStyle` (an unknown or
-    /// empty nick is the List).
-    public var boardDefaultStyle: Board.Style {
-        get { Board.parseStyle(string(.boardDefaultStyle)) }
+    /// Board View: `Board.DefaultStyle`'s nicks, read with
+    /// `Board.parseDefaultStyle` (an unknown or empty nick is Last Used).
+    public var boardDefaultStyle: Board.DefaultStyle {
+        get { Board.parseDefaultStyle(string(.boardDefaultStyle)) }
         set { set(.boardDefaultStyle, newValue.nick) }
+    }
+
+    /// The style the board was shown in last: `Board.Style`'s nicks, read
+    /// with `Board.parseStyle` (an unknown or empty nick is the List).
+    public var boardLastStyle: Board.Style {
+        get { Board.parseStyle(string(.boardLastStyle)) }
+        set { set(.boardLastStyle, newValue.nick) }
+    }
+
+    /// Open at Launch, read with `Board.parseStartChoice` (an unknown or
+    /// empty nick is Mail).
+    public var boardStartMode: Board.StartChoice {
+        get { Board.parseStartChoice(string(.boardStartMode)) }
+        set { set(.boardStartMode, newValue.nick) }
+    }
+
+    /// The mode shown last; an unknown nick is Mail.
+    public var boardLastMode: Board.Mode {
+        get { Board.parseMode(string(.boardLastMode)) ?? .mail }
+        set { set(.boardLastMode, newValue.nick) }
+    }
+
+    /// The board's saved account filter: the daemon's account id, "" for
+    /// every account.
+    public var boardAccountFilter: String {
+        get { string(.boardAccountFilter) }
+        set { set(.boardAccountFilter, newValue) }
+    }
+
+    /// The mode a new main window opens in (`Board.startMode` over
+    /// `boardStartMode` and `boardLastMode`); Mail while the board is
+    /// turned off.
+    public func boardModeOnLaunch(boardEnabled: Bool) -> Board.Mode {
+        Board.startMode(start: string(.boardStartMode), last: string(.boardLastMode), boardEnabled: boardEnabled)
     }
 
     public var assistantProvider: AssistantProviderID {

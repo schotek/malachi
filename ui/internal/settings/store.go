@@ -95,11 +95,17 @@ const (
 )
 
 // Keys of the board (ui/internal/board): the style it opens in the first
-// time it is shown after launch, and its own triage consent and model,
-// apart from the assistant panel's (KeyAssistantConsent, KeyAssistantModel).
-// They must match the gschema.
+// time it is shown after launch (a style, or Last Used: the one written to
+// board-last-style), the mode a new main window opens in (board-start-mode
+// over board-last-mode, board.StartMode), the account filter it remembers,
+// and its own triage consent and model, apart from the assistant panel's
+// (KeyAssistantConsent, KeyAssistantModel). They must match the gschema.
 const (
 	KeyBoardDefaultStyle  = "board-default-style"
+	KeyBoardLastStyle     = "board-last-style"
+	KeyBoardStartMode     = "board-start-mode"
+	KeyBoardLastMode      = "board-last-mode"
+	KeyBoardAccountFilter = "board-account-filter"
 	KeyBoardTriageConsent = "board-triage-consent"
 	KeyBoardTriageModel   = "board-triage-model"
 )
@@ -131,21 +137,31 @@ const (
 	TextZoomStep = 10
 )
 
-// BoardStyle is the nick of the gschema's BoardStyle enum: how the board
-// (ui/internal/board) is laid out, read from board-default-style.
+// BoardStyle is the nick of the gschema's BoardStyle enum (board-last-style)
+// and of its BoardDefaultStyle enum (board-default-style), which adds
+// BoardStyleLast: how the board (ui/internal/board) is laid out. The board
+// package reads the nicks itself (board.ParseStyle, board.ParseDefaultStyle).
 type BoardStyle string
 
 const (
 	BoardStyleList    BoardStyle = "list"
 	BoardStyleColumns BoardStyle = "columns"
 	BoardStyleToday   BoardStyle = "today"
+	// BoardStyleLast is board-default-style's Last Used: the style in
+	// board-last-style.
+	BoardStyleLast BoardStyle = "last"
 )
 
-// BoardStyles are the styles in the order of the gschema enum.
+// BoardStyles are the styles in the order of the gschema's BoardStyle enum.
 var BoardStyles = []BoardStyle{BoardStyleList, BoardStyleColumns, BoardStyleToday}
 
-// parseBoardStyle reads a stored nick; an unknown or empty one is List, like
-// assistant.ParseTarget and assistant.ParseModel read their keys.
+// BoardDefaultStyles are board-default-style's values in the order of the
+// gschema's BoardDefaultStyle enum (board.DefaultStyles' order).
+var BoardDefaultStyles = []BoardStyle{BoardStyleLast, BoardStyleList, BoardStyleColumns, BoardStyleToday}
+
+// parseBoardStyle reads a stored nick of board-last-style; an unknown or
+// empty one is List, like assistant.ParseTarget and assistant.ParseModel
+// read their keys.
 func parseBoardStyle(nick string) BoardStyle {
 	switch BoardStyle(nick) {
 	case BoardStyleColumns:
@@ -155,6 +171,31 @@ func parseBoardStyle(nick string) BoardStyle {
 	}
 	return BoardStyleList
 }
+
+// parseBoardDefaultStyle reads a stored nick of board-default-style; an
+// unknown or empty one is Last Used, the key's default.
+func parseBoardDefaultStyle(nick string) BoardStyle {
+	for _, st := range BoardDefaultStyles {
+		if BoardStyle(nick) == st {
+			return st
+		}
+	}
+	return BoardStyleLast
+}
+
+// BoardStartMode is the nick of the gschema's BoardStartMode enum
+// (board-start-mode): what a new main window shows (board.StartChoice).
+type BoardStartMode string
+
+const (
+	BoardStartMail  BoardStartMode = "mail"
+	BoardStartBoard BoardStartMode = "board"
+	BoardStartLast  BoardStartMode = "last"
+)
+
+// BoardStartModes are the values in the order of the gschema enum
+// (board.StartModes' order).
+var BoardStartModes = []BoardStartMode{BoardStartMail, BoardStartBoard, BoardStartLast}
 
 // defaults mirror the gschema defaults for the in-memory fallback.
 var defaults = map[string]any{
@@ -195,7 +236,11 @@ var defaults = map[string]any{
 	KeyBoardChatGPTModel:              "",
 	KeyBoardChatGPTConsentVersion:     0,
 
-	KeyBoardDefaultStyle:  string(BoardStyleList),
+	KeyBoardDefaultStyle:  string(BoardStyleLast),
+	KeyBoardLastStyle:     string(BoardStyleList),
+	KeyBoardStartMode:     string(BoardStartMail),
+	KeyBoardLastMode:      "mail",
+	KeyBoardAccountFilter: "",
 	KeyBoardTriageConsent: false,
 	KeyBoardTriageModel:   string(assistant.Sonnet),
 }
@@ -398,20 +443,81 @@ func (s *Store) SetBoardChatGPTModel(v string)       { s.set(KeyBoardChatGPTMode
 func (s *Store) BoardChatGPTConsentVersion() int     { return s.integer(KeyBoardChatGPTConsentVersion) }
 func (s *Store) SetBoardChatGPTConsentVersion(v int) { s.set(KeyBoardChatGPTConsentVersion, max(0, v)) }
 
-// BoardDefaultStyle is the style the board opens in the first time it is
-// shown after launch, read as parseBoardStyle reads it: an unknown or empty
-// stored value is List.
+// BoardDefaultStyle is Board View, the style the board opens in the first
+// time it is shown after launch: a style or BoardStyleLast, read as
+// parseBoardDefaultStyle reads it (an unknown or empty stored value is
+// Last Used).
 func (s *Store) BoardDefaultStyle() BoardStyle {
-	return parseBoardStyle(s.str(KeyBoardDefaultStyle))
+	return parseBoardDefaultStyle(s.str(KeyBoardDefaultStyle))
 }
 
 // SetBoardDefaultStyle ignores values outside the enum.
 func (s *Store) SetBoardDefaultStyle(v BoardStyle) {
-	for _, st := range BoardStyles {
+	for _, st := range BoardDefaultStyles {
 		if v == st {
 			s.set(KeyBoardDefaultStyle, string(v))
 			return
 		}
+	}
+}
+
+// BoardLastStyle is the style the board was shown in last (an unknown or
+// empty stored value is List).
+func (s *Store) BoardLastStyle() BoardStyle {
+	return parseBoardStyle(s.str(KeyBoardLastStyle))
+}
+
+// SetBoardLastStyle ignores values outside the enum (BoardStyleLast too).
+func (s *Store) SetBoardLastStyle(v BoardStyle) {
+	for _, st := range BoardStyles {
+		if v == st {
+			if s.str(KeyBoardLastStyle) != string(v) {
+				s.set(KeyBoardLastStyle, string(v))
+			}
+			return
+		}
+	}
+}
+
+// BoardStartMode is Open at Launch; an unknown stored value is Mail.
+func (s *Store) BoardStartMode() BoardStartMode {
+	for _, m := range BoardStartModes {
+		if BoardStartMode(s.str(KeyBoardStartMode)) == m {
+			return m
+		}
+	}
+	return BoardStartMail
+}
+
+// SetBoardStartMode ignores values outside the enum.
+func (s *Store) SetBoardStartMode(v BoardStartMode) {
+	for _, m := range BoardStartModes {
+		if v == m {
+			s.set(KeyBoardStartMode, string(v))
+			return
+		}
+	}
+}
+
+// BoardLastMode is the nick of the mode the main window showed last
+// (board.Mode.Nick), read by board.StartMode.
+func (s *Store) BoardLastMode() string { return s.str(KeyBoardLastMode) }
+
+// SetBoardLastMode writes the nick only when it changed.
+func (s *Store) SetBoardLastMode(v string) {
+	if s.str(KeyBoardLastMode) != v {
+		s.set(KeyBoardLastMode, v)
+	}
+}
+
+// BoardAccountFilter is the account the board was filtered to last, ""
+// for every account.
+func (s *Store) BoardAccountFilter() string { return s.str(KeyBoardAccountFilter) }
+
+// SetBoardAccountFilter writes the account id only when it changed.
+func (s *Store) SetBoardAccountFilter(v string) {
+	if s.str(KeyBoardAccountFilter) != v {
+		s.set(KeyBoardAccountFilter, v)
 	}
 }
 

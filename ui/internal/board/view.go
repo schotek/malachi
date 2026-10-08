@@ -115,9 +115,18 @@ type Row struct {
 	Due string
 	// DueOverdue compares calendar dates in the display timezone.
 	DueOverdue bool
-	// Remind is when a snoozed case comes back ("Tomorrow 09:00"); ""
+	// Remind is when a snoozed case comes back ("Tomorrow at 09:00"); ""
 	// otherwise.
-	Remind      string
+	Remind string
+	// Reminded: the case is back from a reminder (Case.Reminded); it is
+	// listed first in its state and carries the badge Reminded.
+	Reminded bool
+	// NewContact: its sender is someone the user never wrote to
+	// (you.newContact); badge NewContact.
+	NewContact bool
+	// Badges are the badges' texts in order (Reminded, New contact); none
+	// when empty.
+	Badges      []string
 	Attachments bool
 	// CountText is the message count from two on, "" below.
 	CountText string
@@ -200,6 +209,8 @@ type AccountItem struct {
 	Filter api.AccountID
 	Title  string
 	Badge  string
+	// Label is Title with Badge (TitleWithBadge), for a one-line menu.
+	Label string
 	// Count counts the live cases.
 	Count    int
 	Selected bool
@@ -229,6 +240,10 @@ type Detail struct {
 	StateTitle    string
 	Source        Source
 	Why           string
+	// WhyNotes are lines "Why is this here?" adds after Why and
+	// SourceText: ReasonReminded for a case back from a reminder,
+	// ReasonUserKeeps when the user chose its state.
+	WhyNotes []string
 	// WhyIsAssistant: Why is the assistant's reason, not the rules'; the
 	// box leads it with the assistant's mark.
 	WhyIsAssistant bool
@@ -237,7 +252,13 @@ type Detail struct {
 	Issue          *IssueInfo
 	Person         string
 	Time           string
-	Title          string
+	// Byline is Person and Time as one line (PersonAndTime).
+	Byline string
+	// Reminded, NewContact and Badges are the row's (Row).
+	Reminded   bool
+	NewContact bool
+	Badges     []string
+	Title      string
 	// TitleIsAssistant: Title is the assistant's, not the subject; the
 	// detail marks it.
 	TitleIsAssistant bool
@@ -328,11 +349,15 @@ type Tile struct {
 	State State
 	Count int
 	Title string
+	// ToolTip is the tile's count and title in one sentence (TileToolTip).
+	ToolTip string
 }
 
 // TodayPage is the Today style (Swift Board.Today).
 type TodayPage struct {
-	Title  string
+	Title string
+	// Phrase is TodoPhrase of the hot cases and those waiting for the
+	// user that need the user today (NeedsYouToday).
 	Phrase string
 	// Tiles are the four states, and the commitments when annotations
 	// count.
@@ -344,10 +369,8 @@ type TodayPage struct {
 	YouMore     int
 	Commitments []CommitmentRow
 	// DueGroups are the non-empty groups, in DueGroups order.
-	DueGroups     []DueSection
-	DueEmpty      string
-	CalendarTitle string
-	CalendarBody  string
+	DueGroups []DueSection
+	DueEmpty  string
 }
 
 // ViewModel is everything the board shows (Swift Board.View).
@@ -422,10 +445,11 @@ func View(s Snapshot, v ViewState, now time.Time, env Env) ViewModel {
 	// The list: the columns' rows under the filter.
 	var sections []Section
 	switch v.Filter.Kind {
-	case FilterDone:
+	case FilterSnoozed:
 		if len(sc.snoozed) > 0 {
 			sections = append(sections, Section{Kind: SectionSnoozed, Title: Snoozed(tr), Rows: ctx.rows(sc.snoozed)})
 		}
+	case FilterDone:
 		if len(sc.finished) > 0 {
 			sections = append(sections, Section{Kind: SectionDone, Title: Done(tr), Rows: ctx.rows(sc.finished)})
 		}
@@ -484,8 +508,11 @@ func View(s Snapshot, v ViewState, now time.Time, env Env) ViewModel {
 		})
 	}
 	nav = append(nav, NavItem{
+		Filter: Filter{Kind: FilterSnoozed}, Title: FilterTitle(Filter{Kind: FilterSnoozed}, tr),
+		Count: len(sc.snoozed), Selected: v.Filter.Kind == FilterSnoozed,
+	}, NavItem{
 		Filter: Filter{Kind: FilterDone}, Title: FilterTitle(Filter{Kind: FilterDone}, tr),
-		Count: len(sc.finished) + len(sc.snoozed), Selected: v.Filter.Kind == FilterDone,
+		Count: len(sc.finished), Selected: v.Filter.Kind == FilterDone,
 	})
 
 	liveIn := func(account api.AccountID) int {
@@ -497,10 +524,11 @@ func View(s Snapshot, v ViewState, now time.Time, env Env) ViewModel {
 		}
 		return n
 	}
-	accounts := []AccountItem{{Title: AllAccounts(tr), Count: liveIn(""), Selected: v.Account == ""}}
+	accounts := []AccountItem{{Title: AllAccounts(tr), Label: AllAccounts(tr), Count: liveIn(""), Selected: v.Account == ""}}
 	for _, a := range s.Accounts {
+		name, badge := CleanLine(a.Name, capAccount), CleanLine(a.Badge, capBadge)
 		accounts = append(accounts, AccountItem{
-			Filter: a.ID, Title: CleanLine(a.Name, capAccount), Badge: CleanLine(a.Badge, capBadge),
+			Filter: a.ID, Title: name, Badge: badge, Label: TitleWithBadge(name, badge, tr),
 			Count: liveIn(a.ID), Selected: v.Account == a.ID,
 		})
 	}
@@ -519,11 +547,19 @@ func View(s Snapshot, v ViewState, now time.Time, env Env) ViewModel {
 	if s.Annotated {
 		tiles = append(tiles, Tile{Kind: TileCommitments, Count: commitmentCount, Title: Commitments(tr)})
 	}
+	for i := range tiles {
+		tiles[i].ToolTip = TileToolTip(tiles[i], tr)
+	}
+	todo := 0
+	for _, c := range sc.live {
+		if st := sc.state(c); (st == StateHot || st == StateYou) && NeedsYouToday(c, s.Annotated, now, ctx.loc) {
+			todo++
+		}
+	}
 	today := TodayPage{
-		Title: StyleTitle(StyleToday, tr), Phrase: TodoPhrase(len(hot)+len(you), tr), Tiles: tiles, Hot: hot,
+		Title: StyleTitle(StyleToday, tr), Phrase: TodoPhrase(todo, tr), Tiles: tiles, Hot: hot,
 		You: you[:min(len(you), YouTopCount)], YouMore: max(0, len(you)-YouTopCount), Commitments: commitments,
-		DueGroups: dueSections(sc, ctx), DueEmpty: DueEmpty(tr), CalendarTitle: CalendarTitle(tr),
-		CalendarBody: CalendarBody(tr),
+		DueGroups: dueSections(sc, ctx), DueEmpty: DueEmpty(tr),
 	}
 
 	// The selection and its detail.
@@ -600,6 +636,23 @@ func DueGroupOf(due, now time.Time, loc *time.Location) DueGroup {
 		return DueThisWeek
 	}
 	return DueLater
+}
+
+// NeedsYouToday reports a case the Today page's phrase counts (for the
+// hot cases and those waiting for the user): new since yesterday's
+// midnight in loc (its latest activity), due today (its annotation counts
+// and its deadline is today in loc), or back from a reminder.
+func NeedsYouToday(c Case, annotated bool, now time.Time, loc *time.Location) bool {
+	if c.Reminded() {
+		return true
+	}
+	if dayDifference(c.Date, now, loc) <= 1 {
+		return true
+	}
+	if a := AnnotationOf(c, annotated); a != nil && a.Due != nil && dayDifference(now, *a.Due, loc) == 0 {
+		return true
+	}
+	return false
 }
 
 // dayDifference is how many calendar days in loc lie from a's day to b's.
@@ -693,6 +746,13 @@ func newScope(s Snapshot, v ViewState) scope {
 		if c := cmp.Compare(sc.state(a), sc.state(b)); c != 0 {
 			return c
 		}
+		// Back from a reminder first in its state.
+		if ra, rb := a.Reminded(), b.Reminded(); ra != rb {
+			if ra {
+				return -1
+			}
+			return 1
+		}
 		return newer(a, b)
 	})
 	slices.SortFunc(sc.finished, newer)
@@ -731,8 +791,9 @@ func (sc scope) shown() []CaseID {
 		add(sc.live, nil)
 	case sc.v.Filter.Kind == FilterState:
 		add(sc.live, func(c Case) bool { return sc.state(c) == sc.v.Filter.State })
-	default:
+	case sc.v.Filter.Kind == FilterSnoozed:
 		add(sc.snoozed, nil)
+	default:
 		add(sc.finished, nil)
 	}
 	return out
@@ -805,10 +866,22 @@ func (ctx viewContext) titled(c Case) title {
 	return title{s, false, s}
 }
 
-// remindLabel is when a snoozed case comes back: "Tomorrow 09:00",
-// "20 Oct 09:00".
+// remindLabel is when a snoozed case comes back: "Tomorrow at 09:00",
+// "20 Oct at 09:00".
 func (ctx viewContext) remindLabel(at time.Time) string {
-	return ctx.dueLabel(at) + " " + ctx.dates.Time(at)
+	return DayAndTime(ctx.dueLabel(at), ctx.dates.Time(at), ctx.tr)
+}
+
+// badges are a case's badges' texts: Reminded, New contact.
+func (ctx viewContext) badges(c Case) []string {
+	var out []string
+	if c.Reminded() {
+		out = append(out, Reminded(ctx.tr))
+	}
+	if c.NewContact() {
+		out = append(out, NewContact(ctx.tr))
+	}
+	return out
 }
 
 // dueLabel is a deadline's day: Today, Tomorrow, else the list's date (in
@@ -864,7 +937,9 @@ func (ctx viewContext) row(c Case) Row {
 		remind = ctx.remindLabel(at)
 	}
 
-	spoken := []string{StateName(st, tr), person, t.spoken}
+	badges := ctx.badges(c)
+	spoken := append([]string{StateName(st, tr)}, badges...)
+	spoken = append(spoken, person, t.spoken)
 	if due != "" {
 		spoken = append(spoken, SpokenDue(due, tr))
 	}
@@ -891,8 +966,8 @@ func (ctx viewContext) row(c Case) Row {
 		ID: c.ID, State: st, Person: person, Time: ctx.dates.Date(c.Date, ctx.now), Title: t.text,
 		TitleIsAssistant: t.assistant, Snippet: snippet, SnippetIsAssistant: snippetIsAssistant,
 		Account: ctx.accountName(c.Account), IssueKey: issueKey, IssueStatus: issueStatus, IssueStyle: issueStyle,
-		Due: due, DueOverdue: dueOverdue, Remind: remind, Attachments: c.HasAttachments, CountText: countText(n), Unread: c.Unread,
-		Spoken: sentences(spoken),
+		Due: due, DueOverdue: dueOverdue, Remind: remind, Reminded: c.Reminded(), NewContact: c.NewContact(), Badges: badges,
+		Attachments: c.HasAttachments, CountText: countText(n), Unread: c.Unread, Spoken: sentences(spoken),
 	}
 }
 
@@ -978,11 +1053,21 @@ func (ctx viewContext) detail(c Case) Detail {
 	if ctx.s.Run != nil {
 		model = CleanLine(ctx.s.Run.Model, capModel)
 	}
+	var whyNotes []string
+	if c.Reminded() {
+		whyNotes = append(whyNotes, ReasonReminded(tr))
+	}
+	if c.UserState != nil {
+		whyNotes = append(whyNotes, ReasonUserKeeps(tr))
+	}
+	person := CleanLine(c.Person, capPerson)
+	when := ctx.dates.DateTime(c.Date)
 	return Detail{
 		ID: c.ID, AccountID: c.Account, Thread: c.Thread, Reply: c.Reply, LatestMessage: c.LatestMessage,
-		State: st, StateTitle: StateName(st, tr), Source: source, Why: why, WhyIsAssistant: whyIsAssistant,
+		State: st, StateTitle: StateName(st, tr), Source: source, Why: why, WhyNotes: whyNotes, WhyIsAssistant: whyIsAssistant,
 		SourceText: SourceText(source, model, tr), Account: ctx.accountName(c.Account), Issue: issue,
-		Person: CleanLine(c.Person, capPerson), Time: ctx.dates.DateTime(c.Date), Title: t.text,
+		Person: person, Time: when, Byline: PersonAndTime(person, when, tr), Reminded: c.Reminded(),
+		NewContact: c.NewContact(), Badges: ctx.badges(c), Title: t.text,
 		TitleIsAssistant: t.assistant, SpokenTitle: t.spoken, Subject: shownSubject, Due: due, DueQuote: dueQuote,
 		Summary: summary, Tasks: tasks, Draft: draft, DraftID: draftID, CanUnstar: CanUnstar(c),
 		StaleNote: staleNote, IsDone: c.Visibility.IsDone(), IsSnoozed: snoozed, RemindText: remindText,

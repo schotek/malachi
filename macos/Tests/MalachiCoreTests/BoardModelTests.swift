@@ -180,10 +180,10 @@ private typealias F = BoardFixture
             F.mk("c4", .info, account: F.accountB, done: true), F.mk("c5", .them, done: true),
         ]
         let all = F.view(cases)
-        #expect(all.nav.map(\.count) == [3, 1, 2, 0, 0, 2])
-        #expect(all.nav.map(\.title) == ["Overview", "Hot", "Waiting for You", "Waiting for Them", "For Your Information", "Done"])
-        #expect(all.nav.map(\.dot) == [nil, .hot, .you, .them, .info, nil])
-        #expect(all.nav.map(\.selected) == [true, false, false, false, false, false])
+        #expect(all.nav.map(\.count) == [3, 1, 2, 0, 0, 0, 2])
+        #expect(all.nav.map(\.title) == ["Overview", "Hot", "Waiting for You", "Waiting for Them", "For Your Information", "Snoozed", "Done"])
+        #expect(all.nav.map(\.dot) == [nil, .hot, .you, .them, .info, nil, nil])
+        #expect(all.nav.map(\.selected) == [true, false, false, false, false, false, false])
         #expect(all.accounts.map(\.title) == ["All Accounts", "Alpha", "Beta"])
         #expect(all.accounts.map(\.badge) == ["", "IMAP", "JIRA"])
         #expect(all.accounts.map(\.count) == [3, 1, 2])
@@ -192,8 +192,8 @@ private typealias F = BoardFixture
 
         // The account filter narrows the cases; the account list keeps its own counts.
         let b = F.view(cases) { $0.account = .account(F.accountB); $0.filter = .done }
-        #expect(b.nav.map(\.count) == [2, 0, 2, 0, 0, 1])
-        #expect(b.nav.map(\.selected) == [false, false, false, false, false, true])
+        #expect(b.nav.map(\.count) == [2, 0, 2, 0, 0, 0, 1])
+        #expect(b.nav.map(\.selected) == [false, false, false, false, false, false, true])
         #expect(b.accounts.map(\.count) == [3, 1, 2])
         #expect(b.accounts.map(\.selected) == [false, false, true])
         #expect(b.accountTitle == "Beta")
@@ -515,7 +515,6 @@ private typealias F = BoardFixture
         #expect(F.ids(t.you) == ["y1", "y2", "y3", "y4", "y5"])
         #expect(t.youMore == 2)
         #expect(t.phrase == "9 things need you today.")
-        #expect(t.calendarTitle == "Calendar and Reminders")
 
         let few = F.view([F.mk("y1"), F.mk("y2")]).today
         #expect(few.youMore == 0 && few.you.count == 2)
@@ -543,7 +542,7 @@ private typealias F = BoardFixture
     @Test func snoozedRowSpeaksItsRemindTime() {
         let at = F.now.addingTimeInterval(20 * 3600)
         let c = F.mk("c1", visibility: .snoozed(until: at))
-        let v = F.view([c]) { $0.filter = .done }
+        let v = F.view([c]) { $0.filter = .snoozed }
         let r = v.sections.flatMap(\.rows).first { $0.id == F.id("c1") }!
         #expect(!r.remind.isEmpty)
         #expect(r.spoken.contains(Board.Text.spokenRemind(r.remind) + "."))
@@ -676,7 +675,7 @@ private typealias F = BoardFixture
         #expect(ids == ["c1", "c2"] && Set(ids).count == ids.count)
         #expect(v.sections[0].rows[0].title == "first")
         #expect(v.columns.flatMap(\.rows).map(\.id.rawValue) == ["c1", "c2"])
-        #expect(v.nav.map(\.count) == [2, 1, 1, 0, 0, 0])
+        #expect(v.nav.map(\.count) == [2, 1, 1, 0, 0, 0, 0])
         #expect(v.accounts.map(\.count) == [2, 2, 0])
         #expect(v.detail?.id == F.id("c1") && v.detail?.title == "first")
         let selected = F.view([first, again]) { $0.style = .columns; $0.selection = F.id("c1") }
@@ -806,7 +805,7 @@ private typealias F = BoardFixture
             ("a\0b", "ab"),
             ("a\u{202E}b", "ab"),  // right-to-left override
             ("\u{202E}a\u{202C}", "a"),
-            ("a\u{200B}b\u{200D}c\u{FEFF}d", "abcd"),  // zero width, joiner, BOM
+            ("a\u{200B}b\u{FEFF}d", "abd"),  // zero width, BOM
             ("a\u{2066}b\u{2069}", "ab"),  // isolates
             ("a\u{7}b\u{1B}c", "abc"),  // bell, escape
             ("\u{202E}\u{200B}\0\u{FEFF}", ""),  // only format characters
@@ -902,8 +901,29 @@ private typealias F = BoardFixture
         #expect(Board.cleanBlock(cz + cz, max: 15) == cz)
         // Not cut at all: a trailing cluster stays as it is.
         #expect(Board.cleanLine("x\u{1F1E8}", max: 100) == "x\u{1F1E8}")
-        // Format characters (ZWJ, ZWNJ) are still dropped.
-        #expect(Board.cleanLine("a\u{200D}b\u{200C}c", max: 100) == "abc")
+        // A joiner between two kept characters stays (the daemon's rule);
+        // one the cut leaves last goes.
+        #expect(Board.cleanLine("a\u{200D}b\u{200C}c", max: 100) == "a\u{200D}b\u{200C}c")
+        #expect(Array(Board.cleanLine("ab\u{200D}c", max: 5).unicodeScalars) == Array("ab".unicodeScalars))
+    }
+
+    /// A cut at the cap never leaves a joiner last (`capped`), in a line
+    /// and in a block, whichever joiner and wherever the cap falls in a
+    /// joined sequence.
+    @Test func capLeavesNoTrailingJoiner() {
+        let inputs = ["ab\u{200D}c", "ab\u{200C}c", "x \u{1F469}\u{200D}\u{1F469}", "a\u{200D}b\u{200D}c\u{200D}d"]
+        for input in inputs {
+            for max in 1...input.utf8.count {
+                for out in [Board.cleanLine(input, max: max), Board.cleanBlock(input, max: max)] {
+                    #expect(out.utf8.count <= max, "\(input.debugDescription) \(max)")
+                    if let last = out.unicodeScalars.last {
+                        #expect(!Board.JoinerState.isJoiner(last), "\(input.debugDescription) \(max)")
+                    }
+                }
+            }
+        }
+        #expect(Array(Board.cleanBlock("ab\u{200D}c", max: 5).unicodeScalars) == Array("ab".unicodeScalars))
+        #expect(Array(Board.cleanLine("ab\u{200C}c", max: 5).unicodeScalars) == Array("ab".unicodeScalars))
     }
 
     @Test func cleanBlock() {
@@ -1046,6 +1066,13 @@ private typealias F = BoardFixture
         let later = Board.sampleSnapshot(now: BoardFixture.now.addingTimeInterval(86400), calendar: BoardFixture.calendar)
         #expect(later != snap)
         #expect(later.cases.map(\.id) == snap.cases.map(\.id))
+    }
+
+    /// The samples show a reminder that came due and a new contact (Go
+    /// samples 22 and 23), so their marks can be seen in the preview.
+    @Test func remindedAndNewContact() {
+        #expect(snap.cases.contains { $0.reminded && $0.id.rawValue.hasSuffix("22") })
+        #expect(snap.cases.contains { $0.newContact && $0.id.rawValue.hasSuffix("23") })
     }
 }
 

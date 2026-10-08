@@ -428,3 +428,27 @@ func TestSchedulerStop(t *testing.T) {
 		t.Errorf("pause after Stop: %+v", h.target.pause)
 	}
 }
+
+// The plan's usage limit waits one step longer, however often it repeats.
+func TestSchedulerUsageLimitBacksOffOneStep(t *testing.T) {
+	h := newSchedHarness(t)
+	h.s.Start()
+	h.expectStarts("start", 40)
+	h.target.end(Automatic, true, board.FailStopped)
+	h.loop.advance(minutes(60))
+	want := []int{40, 40}
+	h.expectStarts("after one failure", want...)
+	for i := range 3 {
+		at := h.loop.now
+		h.target.end(Automatic, true, board.FailLimit)
+		if h.s.Failures() != 1 {
+			t.Fatalf("limit %d: failures %d", i, h.s.Failures())
+		}
+		h.expect("limit", wait(at.Add(minutes(60))))
+		h.expectPause("limit", failedPause(board.FailLimit, at.Add(minutes(60))))
+		h.loop.advance(minutes(60))
+		want = append(want, 40)
+		h.expectStarts("after the limit", want...)
+	}
+	h.s.Stop()
+}

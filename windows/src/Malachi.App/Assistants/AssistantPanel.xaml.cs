@@ -414,6 +414,7 @@ public sealed partial class AssistantPanel : UserControl
     {
         ErrorOffer.SignIn => Assistant.SignInTexts().SignIn,
         ErrorOffer.Install => Assistant.SignInTexts().GetClaudeCode,
+        ErrorOffer.Reconnect => ChatGptText.Reconnect,
         _ => "",
     };
 
@@ -429,6 +430,9 @@ public sealed partial class AssistantPanel : UserControl
                 break;
             case ErrorOffer.Install:
                 openPage?.Invoke(Assistant.InstallUrl);
+                break;
+            case ErrorOffer.Reconnect:
+                controller?.Reconnect(id);
                 break;
             default:
                 break;

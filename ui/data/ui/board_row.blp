@@ -53,6 +53,14 @@ ListBoxRow board_row {
           styles ["caption", "dim-label"]
         }
 
+        // Row.Badges (Reminded, New contact): small neutral pills filled
+        // from Go (widget/board_row.go), plain text.
+        Box badges_box {
+          visible: false;
+          spacing: 4;
+          valign: center;
+        }
+
         Label issue_key {
           visible: false;
 

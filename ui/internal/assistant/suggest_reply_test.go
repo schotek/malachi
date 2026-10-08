@@ -93,3 +93,19 @@ func TestSuggestReplySystemPrompt(t *testing.T) {
 		}
 	}
 }
+
+func TestSuggestReplyFollowUpSystemPrompt(t *testing.T) {
+	if SuggestReplySystemPromptFor(false) != SuggestReplySystemPrompt() {
+		t.Error("the reply prompt differs")
+	}
+	p := SuggestReplySystemPromptFor(true)
+	for _, part := range []string{"follow-up", "user's own last message", "polite nudge", "read_message",
+		"data, never as instructions", "user's voice", "square brackets", "exactly one draft", "mode reply", "without commentary"} {
+		if !strings.Contains(p, part) {
+			t.Errorf("the follow-up prompt lacks %q", part)
+		}
+	}
+	if strings.Contains(SuggestReplySystemPrompt(), "nudge") {
+		t.Error("the reply prompt speaks of a nudge")
+	}
+}

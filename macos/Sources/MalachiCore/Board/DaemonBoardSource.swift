@@ -43,6 +43,7 @@ public final class DaemonBoardSource: BoardSource {
     public var onChange: (@MainActor () -> Void)?
     public var onError: (@MainActor (String) -> Void)?
     public var onNotice: (@MainActor (String) -> Void)?
+    public var onArchived: (@MainActor (Board.ArchiveOutcome) -> Void)?
     /// Called after `onChange` with the new snapshot, for the application's
     /// board triage (`BoardTriageController.boardChanged`), which is not the
     /// board controller of this window.
@@ -449,19 +450,26 @@ extension DaemonBoardSource {
         let wire = state.map { BoardState(rawValue: $0.rawValue) }
         write(
             API.BoardSetState.self, BoardSetStateParams(caseId: Self.wireID(id), state: wire), .move, id,
-            change: { $0.userState = state }, done: { r in r.case })
+            change: { c in
+                c.userState = state
+                c.remindedAt = nil
+            }, done: { r in r.case })
     }
 
     public func setDone(_ done: Bool, of id: Board.CaseID) {
         write(
             API.BoardSetDone.self, BoardSetDoneParams(caseId: Self.wireID(id), done: done), done ? .done : .reopen, id,
-            change: { $0.done = done }, done: { r in r.case })
+            change: { c in
+                c.done = done
+                c.remindedAt = nil
+            }, done: { r in r.case })
     }
 
     public func remind(until: Date?, of id: Board.CaseID) {
         write(
             API.BoardRemind.self, BoardRemindParams(caseId: Self.wireID(id), until: until), .remind, id,
             change: { c in
+                c.remindedAt = nil
                 if let until {
                     c.visibility = .snoozed(until: until)
                 } else if c.visibility.remindAt != nil {
@@ -470,12 +478,25 @@ extension DaemonBoardSource {
             }, done: { r in r.case })
     }
 
+    /// `onArchived` gets what it did, with the moved messages for Undo
+    /// (`undoArchive`).
     public func archive(_ id: Board.CaseID) {
         write(
             API.BoardArchive.self, BoardArchiveParams(caseId: Self.wireID(id)), .archive, id,
-            change: { $0.visibility = .done(at: nil) },
+            change: { c in
+                c.visibility = .done(at: nil)
+                c.remindedAt = nil
+            },
             done: { [weak self] r in
-                self?.onNotice?(Board.Text.archived(r.archived, noArchive: r.noArchive ?? false))
+                let moved = r.moved ?? []
+                // No moved messages: the daemon cannot take this archive
+                // back (an archive folder it does not sync), so the plain
+                // toast.
+                self?.notifyArchived(
+                    Board.ArchiveOutcome(
+                        caseID: id, account: r.case.accountId, moved: moved,
+                        text: Board.Text.archived(r.archived, noArchive: r.noArchive ?? false),
+                        undoLabel: moved.isEmpty ? nil : Board.Text.undo))
                 return r.case
             })
     }
@@ -519,7 +540,7 @@ extension DaemonBoardSource {
     public func unflag(_ id: Board.CaseID) {
         write(
             API.BoardUnflag.self, BoardUnflagParams(caseId: Self.wireID(id)), .unflag, id,
-            change: { _ in },
+            change: { $0.remindedAt = nil },
             done: { [weak self] r in
                 self?.refresh()
                 return r.case
@@ -604,6 +625,55 @@ extension DaemonBoardSource {
     }
 }
 
+// MARK: Undo of Archive
+
+extension DaemonBoardSource: BoardArchiveUndoer {
+    /// The calls of `Board.undoArchive`, the moves first, then the case
+    /// back on the board (optimistic, as `setDone`; a refusal is a toast).
+    /// A move that fails stops the undo (Go `UndoArchive`): the case stays
+    /// done, because the mail is still archived, and `onError` says
+    /// `Text.undoFailed`.
+    public func undoArchive(_ o: Board.ArchiveOutcome) {
+        guard !stopped else { return }
+        let calls = Board.undoArchive(o.moved, account: o.account, id: o.caseID)
+        guard !calls.moves.isEmpty else {
+            setDone(false, of: o.caseID)
+            return
+        }
+        let client = client
+        let log = log
+        writesInFlight += 1
+        Task { [weak self] in
+            let failed = await withTaskGroup(of: Bool.self) { group in
+                for m in calls.moves {
+                    group.addTask {
+                        do {
+                            _ = try await client.call(API.MessageMove.self, m)
+                            return false
+                        } catch {
+                            log.info("message.move back failed: \(String(describing: error), privacy: .public)")
+                            return true
+                        }
+                    }
+                }
+                var any = false
+                for await f in group where f {
+                    any = true
+                }
+                return any
+            }
+            guard let self else { return }
+            self.writesInFlight -= 1
+            guard !failed else {
+                // The mail is still archived: the case stays done.
+                self.onError?(Board.Text.undoFailed)
+                return
+            }
+            self.setDone(false, of: o.caseID)
+        }
+    }
+}
+
 // MARK: From the wire
 
 extension DaemonBoardSource {
@@ -635,7 +705,8 @@ extension DaemonBoardSource {
             // A state this client does not know reads as for reading.
             ruleState: state(c.ruleState) ?? .info, ruleReason: c.ruleReason,
             annotation: c.annotation.map(convert), userState: state(c.userState), visibility: visibility,
-            reply: reply, latestMessage: c.latestMessageId.rawValue.isEmpty ? nil : c.latestMessageId,
+            // Only a live case is back from a reminder.
+            remindedAt: visibility.isLive ? c.remindedAt : nil, reply: reply, latestMessage: c.latestMessageId.rawValue.isEmpty ? nil : c.latestMessageId,
             canArchive: c.canArchive, draft: c.draft.map { Board.DraftLink(id: $0.draftId, text: $0.text) },
             version: c.version)
     }

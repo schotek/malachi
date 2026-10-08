@@ -115,6 +115,9 @@ func (w *Window) refreshSyncLabel() {
 	if w.statusPopover.Visible() {
 		w.refreshStatusPopover()
 	}
+	// The board page's own status button shows the same line (or the
+	// triage's note over it).
+	w.refreshBoardStatusLabel()
 }
 
 // syncFolderName is the display name of a folder an account's state names,

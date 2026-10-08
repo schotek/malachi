@@ -1,7 +1,7 @@
 # ChatGPT / Codex integration in Malachi Mail
 
 Status: **Experimental implementation in GTK, macOS and Windows**,
-updated on **2026-10-02**. The original proposal was checked against
+updated on **2026-10-02**, the Board paragraphs on **2026-10-08**. The original proposal was checked against
 `feat/board` at `e0da0cf`. The Windows implementation is described in §11 and GTK/macOS in §12;
 the cross-platform release gates remain applicable. Native macOS/Windows
 builds and live account authorization remain to be verified. This is not
@@ -77,10 +77,10 @@ MCP name; do not relabel old annotations. If implementation discovers a
 missing authoritative API operation, document that separately and change
 `backend/pkg/api` and [api.md](api.md) together.
 
-On this branch, GTK and macOS have board triage/suggested replies; the
-Windows tree had the assistant panel, rewrite and search, but no matching
-Board controllers; that prerequisite was met by the Windows Board port
-(§11), which a Codex adapter alone would not have been.
+On this branch all three clients have board triage/suggested replies. The
+Windows tree first had the assistant panel, rewrite and search, but no
+matching Board controllers; that prerequisite was met by the Windows Board
+port (§11), which a Codex adapter alone would not have been.
 
 ## 3. Provider contract in the client cores
 
@@ -215,7 +215,10 @@ Generate schemas from a tested CLI version and record the version with
 fixtures. During research, the local `0.159.0-alpha.12.1` CLI exposed App
 Server, `ephemeral`, instructions and output-schema fields; this is evidence
 of feasibility, not the minimum supported production version. Select that
-version only after tests on each supported architecture. No bundled SDK or
+version only after tests on each supported architecture. The implemented
+clients enforce no minimum: the version string is read with `--version`
+(only a well-formed `codex <x.y.z>` line is accepted) and **shown in
+Preferences**; it is not a gate. No bundled SDK or
 Node/Python runtime is necessary for a native stdio adapter.
 
 Implement this protocol sequence:
@@ -225,6 +228,14 @@ Implement this protocol sequence:
 2. Start a thread with the request's instructions, model, isolated working
    directory and verified configuration. Use an in-memory/ephemeral thread
    if the tested version supports the required privacy behavior.
+   *Implemented (GTK `ui/internal/chatgpt/provider.go`, mirrored in Swift
+   and C#):* `thread/start` sends `approvalPolicy: "never"`,
+   `sandbox: "read-only"`, `ephemeral: true` and `environments: []`
+   (`turn/start` repeats `environments: []`), the isolated `cwd` and the
+   instructions, and offers the Malachi tools as `dynamicTools` run by the
+   host through the gateway; the child does not start the bridge. A result
+   that does not confirm an ephemeral thread, no instruction sources and
+   the Malachi model provider fails with `codex_isolation_unverified`.
 3. Inspect MCP startup/catalog before sending mail. Treat missing required
    tools as an error; initialization alone is not bridge readiness.
 4. `turn/start` carries the user's input and, for search conversion, the
@@ -588,9 +599,10 @@ Implementation boundaries:
 - WinUI preferences, consent and event wiring remain in `Malachi.App`.
   The provider preferences are shared with the GTK schema and Go/Swift
   settings metadata; provider msgids live in the pure Go `assistant`
-  package. GTK/macOS also expose the provider (§12). The two additional
-  OpenAI Board keys are reserved in Windows pending the Board port.
-  The daemon, mail API and bridge implementation are unchanged.
+  package. GTK/macOS also expose the provider (§12). The two OpenAI
+  Board keys (`board-triage-chatgpt-model`,
+  `board-triage-chatgpt-consent-version`) are used by the Windows Board
+  (above). The daemon, mail API and bridge implementation are unchanged.
 
 Offline tests cover signed-identity attacks, refresh rotation/concurrency,
 connection cancellation, revocation failure, inference tool filtering,
@@ -678,10 +690,11 @@ Manager/DACL behavior, browser launch or actual ChatGPT plan inference.
 
 GTK and macOS implement the same experimental in-app provider for the
 assistant panel, compose rewriting and natural-language search. They also
-connect their existing Board triage, automatic triage and suggested replies.
-Windows Board is still a separate missing UI port; this integration does
-not claim Board parity across all three clients. Claude remains the default,
-and external Claude hand-off remains independent.
+connect their existing Board triage, automatic triage and suggested replies;
+Windows does the same since 2026-10-06 (§11). Claude remains the default,
+and external Claude hand-off remains independent. The Board parts of all
+three clients are written but not verified against a real ChatGPT account
+(2026-10-08).
 
 ### Setup and platform storage
 
@@ -755,6 +768,29 @@ to the current run. Automatic triage excludes reply creation. The existing
 MCP bridge reports the source as `malachi-chatgpt`; no new daemon method is
 needed. Actual validated token usage is reported to the Board's existing
 usage accounting.
+
+### Failures of a Codex run (2026-10-08)
+
+The provider's reason codes map to the same failure classes as Claude's, in
+the panel, the one-shot requests and the Board runs: `codex_not_found`
+becomes *not found*; `chatgpt_not_connected`, `reconnect_required`,
+`consent_required`, `permission_denied` and `identity_mismatch` become *not
+signed in*; `chatgpt_usage_limit` becomes a new *limit* class ("the
+assistant's usage limit was reached"; a Board run ends as failed with the
+limit text and its automatic schedule backs off one step); anything else is
+*stopped*. Where Claude Code would offer *Sign In…*, the panel offers
+**Reconnect to ChatGPT** (runs the connection flow, then sends the last
+question again). The failure of
+the last turn is forgotten when a new turn is submitted. The gateway marks
+a completed response's usage as final, so a Board run's token count is exact
+unless the run was stopped, in which case it is a lower bound ("at least").
+Changing the provider cancels a run and writes the Board preferences once
+(automatic triage off, the Board's `assistant` preference repaired when the
+selected provider's Board consent is missing); a change of a setting that
+concerns only the inactive provider cancels nothing. The reason mapping and the
+panel controller are tested in Go; the Reconnect offer is written in all
+three clients (macOS and Windows still being finished when this was
+written), not verified on any of them (2026-10-08).
 
 ### Validation performed on Linux ARM64
 

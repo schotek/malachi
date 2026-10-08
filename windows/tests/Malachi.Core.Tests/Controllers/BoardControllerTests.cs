@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Tests/MalachiCoreTests/BoardControllerTests.swift; GTK:
-// ui/internal/board/controller_test.go. The board's controller over an
+// ui/internal/board/controller_test.go and fixes_test.go (the controller's
+// part: TestControllerArchiveOffersUndo, TestBoardViewLastUsed,
+// TestSavedAccountFilter). The board's controller over an
 // in-memory source: what the user looks at, what they decide about a case,
 // and which Changes the page is told about. Swift's styleOnShowRule and
 // styleNicks are in Boards/BoardTests.cs already (the rule is the model's).
@@ -33,8 +35,10 @@ public sealed class BoardControllerTests
         F.Mk("d1", State.Info, hours: 6, done: true), F.Mk("d2", State.Info, hours: 7, done: true),
     ];
 
-    private static BoardController Controller(IBoardSource source, FakeTimeProvider? clock = null, Func<BoardStyle>? defaultStyle = null) =>
-        new(source, clock ?? new FakeTimeProvider(F.Now), F.Culture, F.Zone, defaultStyle);
+    private static BoardController Controller(
+        IBoardSource source, FakeTimeProvider? clock = null, Func<DefaultStyle>? defaultStyle = null,
+        Func<BoardStyle>? lastStyle = null, Func<string?>? savedAccount = null) =>
+        new(source, clock ?? new FakeTimeProvider(F.Now), F.Culture, F.Zone, defaultStyle, lastStyle, savedAccount);
 
     private static (BoardController C, InMemoryBoardSource Source, List<Changes> Log) Make(
         IReadOnlyList<Case>? cases = null, bool annotated = false, FakeTimeProvider? clock = null)
@@ -85,14 +89,16 @@ public sealed class BoardControllerTests
     public void SetStyle()
     {
         var (c, _, log) = Make();
+        c.Select(F.Id("c1")); // picked by the user: it stays, now in the panel
+        log.Clear();
         c.SetStyle(BoardStyle.Columns);
-        Assert.True(c.State.Style == BoardStyle.Columns && c.State.Selection is null && c.View.Detail is null);
+        Assert.True(c.State.Style == BoardStyle.Columns && c.State.Selection == F.Id("c1") && c.View.ShowsPanel);
         Assert.Equal([Changes.Style | Changes.Selection], log);
         c.SetStyle(BoardStyle.Columns);
         Assert.Single(log); // the same style: silent
         c.SetStyle(BoardStyle.Today);
         Assert.Equal([Changes.Style | Changes.Selection, Changes.Style], log);
-        c.SetStyle(BoardStyle.List); // entering the list with the detail beside it selects the first row
+        c.SetStyle(BoardStyle.List); // back beside the list
         Assert.True(c.State.Selection == F.Id("c1") && !c.View.ShowsPanel);
         Assert.Equal(Changes.Style | Changes.Selection, log[^1]);
     }
@@ -100,14 +106,25 @@ public sealed class BoardControllerTests
     [Theory]
     [InlineData(BoardStyle.Columns)]
     [InlineData(BoardStyle.Today)]
-    public void LeavingTheListClearsTheSelection(BoardStyle style)
+    public void LeavingTheListKeepsTheSelection(BoardStyle style)
     {
         var (c, _, log) = Make();
         c.Select(F.Id("c3"));
         log.Clear();
         c.SetStyle(style);
-        Assert.Null(c.State.Selection);
+        Assert.Equal(F.Id("c3"), c.State.Selection);
+        Assert.True(c.View.ShowsPanel && c.View.Detail?.Id == F.Id("c3")); // the panel shows c3
         Assert.Equal([Changes.Style | Changes.Selection], log);
+    }
+
+    [Fact]
+    public void LeavingTheDoneListDropsADoneSelection()
+    {
+        var (c, _, _) = Make();
+        c.SetFilter(Filter.Done);
+        Assert.Equal(F.Id("d1"), c.State.Selection);
+        c.SetStyle(BoardStyle.Columns); // Columns show only live cases
+        Assert.Null(c.State.Selection);
     }
 
     [Fact]
@@ -116,6 +133,7 @@ public sealed class BoardControllerTests
         var (c, _, log) = Make();
         c.SetInlineDetail(false);
         c.SetStyle(BoardStyle.Columns);
+        c.Select(null);
         log.Clear();
         c.SetStyle(BoardStyle.List);
         Assert.Null(c.State.Selection);
@@ -123,13 +141,42 @@ public sealed class BoardControllerTests
     }
 
     [Fact]
-    public void StyleChangeResetsWhy()
+    public void StyleChangeKeepsWhyOfTheSameCase()
     {
         var (c, _, _) = Make();
+        c.Select(F.Id("c1"));
         c.ToggleWhy();
         Assert.True(c.State.RevealsWhy);
         c.SetStyle(BoardStyle.Columns);
-        Assert.False(c.State.RevealsWhy);
+        Assert.True(c.State.RevealsWhy); // the case stayed
+        c.Select(F.Id("c2"));
+        Assert.False(c.State.RevealsWhy); // another case
+    }
+
+    /// <summary>
+    /// The List's automatic first row is not kept by a style switch or a
+    /// narrowing (no panel slides in by itself); an explicit pick or a live
+    /// reply pane is (Go TestAutoSelectedRowIsNotKept).
+    /// </summary>
+    [Fact]
+    public void AutoSelectedRowIsNotKept()
+    {
+        var (c, _, _) = Make();
+        Assert.Equal(F.Id("c1"), c.State.Selection); // automatic
+        Assert.False(c.KeepsSelection());
+        c.SetStyle(BoardStyle.Columns);
+        Assert.True(c.State.Selection is null && !c.View.ShowsPanel); // no panel for the automatic row
+        c.SetStyle(BoardStyle.List);
+
+        var (c2, _, _) = Make();
+        c2.SetInlineDetail(false);
+        Assert.True(c2.State.Selection is null && !c2.View.ShowsPanel); // narrowing opened no panel
+
+        var (c3, _, _) = Make();
+        c3.PaneLive = id => id == F.Id("c1");
+        Assert.True(c3.KeepsSelection());
+        c3.SetStyle(BoardStyle.Columns);
+        Assert.True(c3.State.Selection == F.Id("c1") && c3.View.ShowsPanel); // a live pane keeps its case
     }
 
     // Filters
@@ -164,6 +211,7 @@ public sealed class BoardControllerTests
     {
         var (c, _, log) = Make();
         c.SetStyle(BoardStyle.Columns);
+        c.Select(null);
         log.Clear();
         c.SetFilter(Filter.Of(State.Hot));
         Assert.Null(c.State.Selection);
@@ -260,6 +308,7 @@ public sealed class BoardControllerTests
     {
         var (c, _, log) = Make();
         c.SetStyle(BoardStyle.Columns);
+        c.Select(null);
         log.Clear();
         c.ToggleWhy();
         Assert.True(!c.State.RevealsWhy && log.Count == 0);
@@ -271,15 +320,18 @@ public sealed class BoardControllerTests
         var (c, _, log) = Make();
         c.SetInlineDetail(true);
         Assert.Empty(log);
-        c.SetInlineDetail(false); // narrow: the panel never opens by itself
-        Assert.True(!c.State.InlineDetail && c.State.Selection is null && !c.View.ShowsPanel);
+        c.Select(F.Id("c1"));
+        log.Clear();
+        c.SetInlineDetail(false); // narrow: the selected case moves to the panel
+        Assert.True(!c.State.InlineDetail && c.State.Selection == F.Id("c1") && c.View.ShowsPanel);
         Assert.Equal([Changes.Selection], log);
-        c.Select(F.Id("c2")); // a deliberate selection opens the panel
+        c.Select(F.Id("c2"));
         Assert.True(c.View.ShowsPanel);
         c.SetInlineDetail(true); // wide again: beside the list, the selection stays
         Assert.True(c.State.Selection == F.Id("c2") && !c.View.ShowsPanel);
         Assert.Equal([Changes.Selection, Changes.Selection, Changes.Selection], log);
         c.SetInlineDetail(false);
+        c.Select(null); // the panel closed
         c.SetInlineDetail(true); // nothing selected: the first row
         Assert.Equal(F.Id("c1"), c.State.Selection);
     }
@@ -678,6 +730,7 @@ public sealed class BoardControllerTests
     {
         var source = new InMemoryBoardSource(new Snapshot { Accounts = F.Accounts, Cases = SampleCases() });
         var c = Controller(source);
+        c.Select(F.Id("c1"));
         var log = new List<(Changes Changes, string? Selection)>();
         var nested = false;
         c.Changed += (_, changes) =>
@@ -694,7 +747,7 @@ public sealed class BoardControllerTests
         };
         c.SetStyle(BoardStyle.Columns);
         Assert.Equal(2, log.Count);
-        Assert.True(log[0].Changes == (Changes.Style | Changes.Selection) && log[0].Selection is null);
+        Assert.True(log[0].Changes == (Changes.Style | Changes.Selection) && log[0].Selection == "c1"); // the case stays, in the panel
         Assert.True(log[1].Changes == Changes.Selection && log[1].Selection == "c4");
         Assert.Equal(F.Id("c4"), c.State.Selection);
     }
@@ -915,7 +968,7 @@ public sealed class BoardControllerTests
     [Fact]
     public void DefaultStyleAtFirstShow()
     {
-        var setting = BoardStyle.Columns;
+        var setting = DefaultStyle.Columns;
         var source = new InMemoryBoardSource(new Snapshot { Accounts = F.Accounts, Cases = SampleCases() });
         var c = Controller(source, defaultStyle: () => setting);
         var log = new List<Changes>();
@@ -924,7 +977,7 @@ public sealed class BoardControllerTests
         Assert.Equal(BoardStyle.List, c.State.Style);
         Assert.False(c.HasShown);
         // Changed before the first show: that one counts.
-        setting = BoardStyle.Today;
+        setting = DefaultStyle.Today;
         c.BoardWillShow();
         Assert.True(c.HasShown);
         Assert.Equal(BoardStyle.Today, c.State.Style);
@@ -934,6 +987,12 @@ public sealed class BoardControllerTests
         list.C.BoardWillShow();
         Assert.Equal(BoardStyle.List, list.C.State.Style);
         Assert.Empty(list.Log);
+        // An unknown stored nick is Last Used, whose style the List is by default.
+        var odd = Controller(
+            new InMemoryBoardSource(new Snapshot { Accounts = F.Accounts, Cases = SampleCases() }),
+            defaultStyle: () => ParseDefaultStyle("grid"));
+        odd.BoardWillShow();
+        Assert.Equal(BoardStyle.List, odd.State.Style);
     }
 
     /// <summary>
@@ -943,7 +1002,7 @@ public sealed class BoardControllerTests
     [Fact]
     public void LaterShowsKeepTheUsersStyle()
     {
-        var setting = BoardStyle.Columns;
+        var setting = DefaultStyle.Columns;
         var source = new InMemoryBoardSource(new Snapshot { Accounts = F.Accounts, Cases = SampleCases() });
         var c = Controller(source, defaultStyle: () => setting);
         c.BoardWillShow();
@@ -954,17 +1013,82 @@ public sealed class BoardControllerTests
         c.BoardWillShow();
         c.BoardShown();
         Assert.Equal(BoardStyle.Today, c.State.Style);
-        // The setting changes while the board has shown: the style stays.
-        setting = BoardStyle.List;
+        // The setting changes after the user picked a style: the style stays.
+        setting = DefaultStyle.List;
         c.BoardWillShow();
         Assert.Equal(BoardStyle.Today, c.State.Style);
-        setting = BoardStyle.Columns;
+        setting = DefaultStyle.Columns;
         c.BoardWillShow();
         Assert.Equal(BoardStyle.Today, c.State.Style);
         // The user's own choice still works.
         c.SetStyle(BoardStyle.List);
         c.BoardWillShow();
         Assert.Equal(BoardStyle.List, c.State.Style);
+    }
+
+    /// <summary>
+    /// Board View's Last Used takes the style used last; a chosen one applies
+    /// until the user picks a style in the run.
+    /// </summary>
+    [Fact]
+    public void BoardViewLastUsed()
+    {
+        var def = DefaultStyle.Last;
+        var last = BoardStyle.Today;
+        var c = Controller(
+            new InMemoryBoardSource(new Snapshot { Accounts = F.Accounts, Cases = SampleCases() }),
+            defaultStyle: () => def, lastStyle: () => last);
+        c.BoardWillShow();
+        Assert.Equal(BoardStyle.Today, c.State.Style); // last used
+        // Not picked yet: a new Board View applies at the next show.
+        def = DefaultStyle.Columns;
+        c.BoardWillShow();
+        Assert.Equal(BoardStyle.Columns, c.State.Style);
+        c.SetStyle(BoardStyle.List);
+        def = DefaultStyle.Today;
+        c.BoardWillShow();
+        Assert.Equal(BoardStyle.List, c.State.Style); // picked
+    }
+
+    /// <summary>The saved account filter applies at the first show, once the accounts are known; an account gone since is every account.</summary>
+    [Fact]
+    public void SavedAccountFilter()
+    {
+        var source = new InMemoryBoardSource(new Snapshot { Cases = SampleCases(), Phase = Phase.Loading });
+        var c = Controller(source, savedAccount: () => F.AccountB.Value);
+        c.BoardWillShow();
+        Assert.Null(c.State.Account); // the accounts are not known yet
+        source.Replace(source.Snapshot with { Accounts = F.Accounts, Phase = Phase.Ready });
+        Assert.Equal(F.AccountB, c.State.Account); // applied once known
+        c.SetAccount(null);
+        c.BoardWillShow();
+        Assert.Null(c.State.Account); // not again
+
+        var gone = Controller(
+            new InMemoryBoardSource(new Snapshot { Accounts = F.Accounts, Cases = SampleCases() }), savedAccount: () => "gone");
+        gone.BoardWillShow();
+        Assert.Null(gone.State.Account);
+    }
+
+    /// <summary>Archive offers Undo through ArchiveDone; Undo puts the case back; without a listener the text is a toast.</summary>
+    [Fact]
+    public void ArchiveOffersUndo()
+    {
+        var (c, source, _) = Make();
+        var got = new List<ArchiveOutcome>();
+        c.ArchiveDone += (_, o) => got.Add(o);
+        c.Archive(F.Id("c1"));
+        var outcome = Assert.Single(got);
+        Assert.True(outcome.Case == F.Id("c1") && outcome.UndoLabel == "Undo" && outcome.Text.Length > 0);
+        Assert.True(source.Snapshot.FindCase(F.Id("c1"))?.Done);
+        c.UndoArchive(outcome); // the samples move nothing: only back on the board
+        Assert.False(source.Snapshot.FindCase(F.Id("c1"))?.Done);
+
+        var (c2, _, _) = Make();
+        var toasts = new List<string>();
+        c2.ToastRequested += (_, t) => toasts.Add(t);
+        c2.Archive(F.Id("c1"));
+        Assert.Single(toasts);
     }
 
     /// <summary>
@@ -982,6 +1106,8 @@ public sealed class BoardControllerTests
         public Action<string>? OnError { get; set; }
 
         public Action<string>? OnNotice { get; set; }
+
+        public Action<ArchiveOutcome>? OnArchived { get; set; }
 
         /// <summary>The cases whose conversation was asked for, in order.</summary>
         public List<BoardCaseId> Loads { get; } = [];

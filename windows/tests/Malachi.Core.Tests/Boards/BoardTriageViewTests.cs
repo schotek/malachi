@@ -46,6 +46,7 @@ public sealed class BoardTriageViewTests
             SigningIn = signingIn,
             Queue = queue,
             Now = T0,
+            TimeZone = TimeZoneInfo.Utc,
         };
 
     private static Run FiveMinutesAgo => new() { Model = "claude-code", Date = T0.AddMinutes(-5), Trigger = "auto" };
@@ -204,7 +205,7 @@ public sealed class BoardTriageViewTests
     [InlineData(86400, "yesterday")]
     [InlineData(3 * 86400, "3 days ago")]
     [InlineData(-30, "just now")]
-    public void RelativeTimes(int ago, string want) => Assert.Equal(want, BoardText.RelativeTime(T0.AddSeconds(-ago), T0));
+    public void RelativeTimes(int ago, string want) => Assert.Equal(want, BoardText.RelativeTime(T0.AddSeconds(-ago), T0, TimeZoneInfo.Utc));
 
     [Theory]
     [InlineData(0, "now")]
@@ -214,7 +215,20 @@ public sealed class BoardTriageViewTests
     [InlineData(4 * 3600, "in 4 hours")]
     [InlineData(86400, "tomorrow")]
     [InlineData(2 * 86400, "in 2 days")]
-    public void RelativeFutures(int ahead, string want) => Assert.Equal(want, BoardText.RelativeFuture(T0.AddSeconds(ahead), T0));
+    public void RelativeFutures(int ahead, string want) => Assert.Equal(want, BoardText.RelativeFuture(T0.AddSeconds(ahead), T0, TimeZoneInfo.Utc));
+
+    /// <summary>Past a day, "yesterday" and "tomorrow" are calendar days in the zone, not 24 to 48 hours.</summary>
+    [Fact]
+    public void RelativeByCalendarDay()
+    {
+        var utc = TimeZoneInfo.Utc;
+        var now = new DateTimeOffset(2026, 10, 2, 0, 30, 0, TimeSpan.Zero);
+        var late = new DateTimeOffset(2026, 10, 2, 23, 30, 0, TimeSpan.Zero);
+        Assert.Equal("2 days ago", BoardText.RelativeTime(now.AddHours(-25), now, utc)); // the day before yesterday
+        Assert.Equal("yesterday", BoardText.RelativeTime(late.AddHours(-47), late, utc));
+        Assert.Equal("in 2 days", BoardText.RelativeFuture(late.AddHours(25), late, utc)); // the day after tomorrow
+        Assert.Equal("tomorrow", BoardText.RelativeFuture(now.AddHours(47), now, utc));
+    }
 
     [Fact]
     public void RunErrors()
@@ -226,6 +240,7 @@ public sealed class BoardTriageViewTests
         {
             TriageFailure.NotFound, TriageFailure.ToolsMissing, TriageFailure.Declined, TriageFailure.AssistantOff, TriageFailure.Backend,
             TriageFailure.Stopped, TriageFailure.NothingToDo, TriageFailure.NotesRefused, TriageFailure.NoProgress,
+            TriageFailure.Limit,
         })
         {
             Assert.True(f.RunError == BoardRunError.Failed, f.ToString());
@@ -388,7 +403,7 @@ public sealed class BoardTriageViewTests
             ("ready", Inputs(), ""),
             ("running", Inputs(state: new TriageState.Starting(TriageTrigger.Manual)), ""),
             ("no Claude Code", Inputs(claudeFound: false),
-                "The triage runs your Claude Code, which was not found on this Mac. The Claude Code row above offers to get it."),
+                "The triage runs your Claude Code, which was not found on this computer. The Claude Code row above offers to get it."),
             ("signed out", Inputs(signedIn: false), "Claude Code is not signed in. The Claude Code row above offers to sign in."),
             ("signing in", Inputs(signedIn: false, signingIn: true), Assistant.SignInTexts().Waiting),
             ("no bridge", Inputs(bridge: false), "The Malachi Mail tools are not available to the assistant, so the board cannot be triaged."),
@@ -457,6 +472,8 @@ public sealed class BoardTriageViewTests
             "Input 1,200 · output 340 · written to cache 5 · read from cache 1,234,567\nFrom 1 triage run", TriageViewOf(i).UsageDetail);
         i = i with { Usage24h = i.Usage24h! with { Runs = 3 } };
         Assert.EndsWith("\nFrom 3 triage runs", TriageViewOf(i).UsageDetail, StringComparison.Ordinal);
+        // A run that reported only part of its tokens: "at least".
+        Assert.Equal("at least 1,236,112", TriageViewOf(i with { Usage24h = i.Usage24h! with { LowerBound = true } }).UsageValue);
         // Not offered: no row.
         Assert.False(TriageViewOf(i with { Shown = false }).UsageShown);
         // Grouped for the locale; a sum beyond Int64 stops there.

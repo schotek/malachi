@@ -96,6 +96,8 @@ const (
 	FilterAll FilterKind = iota
 	FilterState
 	FilterDone
+	// FilterSnoozed is the cases off the board until a reminder.
+	FilterSnoozed
 )
 
 // Filter is a filter of the list; State counts for FilterState only.
@@ -112,6 +114,8 @@ func FilterTitle(f Filter, tr Translator) string {
 		return StateName(f.State, tr)
 	case FilterDone:
 		return Done(tr)
+	case FilterSnoozed:
+		return Snoozed(tr)
 	}
 	// TRANSLATORS: the board's filter that shows every case still on it.
 	return tr.T("Overview")
@@ -139,8 +143,9 @@ func MessageCount(n int, tr Translator) string {
 	return fmt.Sprintf(tr.N("%d message", "%d messages", n), n)
 }
 
-// TodoPhrase is the Today page's sentence under its title, for the hot
-// cases and the ones waiting for the user.
+// TodoPhrase is the Today page's sentence under its title: n counts the
+// hot cases and the ones waiting for the user that are new, due today or
+// back from a reminder (NeedsYouToday).
 func TodoPhrase(n int, tr Translator) string {
 	if n < 1 {
 		return tr.T("Nothing needs you today.")
@@ -413,12 +418,79 @@ func StyleMenuTitle(s Style, tr Translator) string {
 }
 
 // DefaultStyleSetting is the Settings row of the style the board opens in
-// the first time it shows after launch (Settings → General → Board, the
-// key board-default-style); its choices are StyleTitle.
+// (Settings → General → Board, the key board-default-style); its choices
+// are DefaultStyles, named by DefaultStyleTitle.
 func DefaultStyleSetting(tr Translator) string {
-	// TRANSLATORS: Settings → General → Board: which style (List, Columns,
-	// Today) the board opens in after launch.
-	return tr.T("Default View")
+	// TRANSLATORS: Settings → General → Board: which style (Last Used,
+	// List, Columns, Today) the board opens in.
+	return tr.T("Board View")
+}
+
+// LastUsed is the choice of a setting that takes what the user had last
+// (Board View, Open at Launch).
+func LastUsed(tr Translator) string {
+	// TRANSLATORS: a choice of Settings → General → Board (Board View,
+	// Open at Launch): what the user had last.
+	return tr.C("board setting", "Last Used")
+}
+
+// DefaultStyleTitle names a choice of Board View.
+func DefaultStyleTitle(d DefaultStyle, tr Translator) string {
+	if d.Last {
+		return LastUsed(tr)
+	}
+	return StyleTitle(d.Style, tr)
+}
+
+// StartModeSetting is the Settings row of the mode the main window opens
+// in (the key board-start-mode); its choices are StartModes, named by
+// StartModeTitle.
+func StartModeSetting(tr Translator) string {
+	// TRANSLATORS: Settings → General → Board: whether the main window
+	// opens on Mail, on the Board, or on what was shown last.
+	return tr.T("Open at Launch")
+}
+
+// StartModeTitle names a choice of Open at Launch.
+func StartModeTitle(s StartChoice, tr Translator) string {
+	switch s {
+	case StartBoard:
+		return BoardName(tr)
+	case StartLast:
+		return LastUsed(tr)
+	}
+	return Mail(tr)
+}
+
+// ShowBoardSetting is the Settings switch that turns the board on or off
+// (board preferences enabled), and ShowBoardSettingSubtitle its line.
+func ShowBoardSetting(tr Translator) string {
+	// TRANSLATORS: Settings → General → Board: a switch.
+	return tr.T("Show the Board")
+}
+
+// ShowBoardSettingSubtitle: see ShowBoardSetting.
+func ShowBoardSettingSubtitle(tr Translator) string {
+	return tr.T("Sorts your conversations into what needs you, what waits for others and what is only for reading. Turned off, your decisions are kept.")
+}
+
+// WindowsSetting heads the group of how long each state keeps a case
+// (board preferences windows).
+func WindowsSetting(tr Translator) string {
+	// TRANSLATORS: Settings → General → Board: a group of rows, one per
+	// state, each followed by a number of days.
+	return tr.T("Keep cases for")
+}
+
+// WindowsSettingSubtitle explains WindowsSetting.
+func WindowsSettingSubtitle(tr Translator) string {
+	return tr.T("A case leaves the board when its newest message is older than this, unless your decision, a reminder or a deadline keeps it.")
+}
+
+// Days is a value of a state's row under WindowsSetting: "30 days".
+func Days(n int, tr Translator) string {
+	// TRANSLATORS: how long a state of the board keeps a case.
+	return fmt.Sprintf(tr.N("%d day", "%d days", n), n)
 }
 
 // You is the sender of the user's own messages in the conversation.
@@ -440,15 +512,6 @@ func Deadlines(tr Translator) string { return tr.T("Deadlines") }
 // DueEmpty is the Today page's deadlines without one.
 func DueEmpty(tr Translator) string {
 	return tr.T("No deadlines. The assistant finds deadlines in the text of messages and keeps the sentence each one comes from.")
-}
-
-// CalendarTitle and CalendarBody are the Today page's calendar
-// placeholder.
-func CalendarTitle(tr Translator) string { return tr.T("Calendar and Reminders") }
-
-// CalendarBody: see CalendarTitle.
-func CalendarBody(tr Translator) string {
-	return tr.T("Later. Read-only; where the data comes from differs on each platform.")
 }
 
 // Commitments is the commitments' tile on the Today page.
@@ -486,7 +549,7 @@ func Reason(code string, tr Translator) string {
 	case "hot.important":
 		return tr.T("The newest message is marked as important, addressed to you and from a sender you have written to.")
 	case "hot.flagged":
-		return tr.T("You flagged a message in this conversation and the newest one is not yours.")
+		return tr.T("You flagged a message in this conversation.")
 	case "you.addressed":
 		return tr.T("The newest message is addressed to you by a sender you have written to.")
 	case "you.repliedToYou":
@@ -501,8 +564,10 @@ func Reason(code string, tr Translator) string {
 		return tr.T("The message is not addressed to you (a mailing list or a Bcc).")
 	case "info.yourNote":
 		return tr.T("A note to yourself.")
+	case "you.newContact":
+		return tr.T("The newest message is addressed to you by someone you have never written to.")
 	case "info.unknownSender":
-		return tr.T("The message is addressed to you, but its sender is one you have never written to, so it waits under For Your Information. Its importance does not count.")
+		return tr.T("The newest message comes from someone you have never written to and is not addressed to you, so it waits under For Your Information.")
 	case "jira.yourComment":
 		return tr.T("Your comment is the latest in the issue; the next step is theirs.")
 	case "jira.assigned":
@@ -517,6 +582,80 @@ func Reason(code string, tr Translator) string {
 		return tr.T("The rules would no longer list it; your choice, a reminder, a deadline or a promise keeps it here.")
 	}
 	return ReasonUnknown(tr)
+}
+
+// ReasonReminded is the line "Why is this here?" adds for a case back
+// from a reminder (Case.RemindedAt).
+func ReasonReminded(tr Translator) string { return tr.T("A reminder you set has come due.") }
+
+// ReasonUserKeeps is the line "Why is this here?" adds whenever the user
+// chose the case's state (Case.UserState): the choice keeps it on the
+// board whatever the rules say.
+func ReasonUserKeeps(tr Translator) string {
+	// TRANSLATORS: under "Why is this here?" when the user moved the case
+	// to its state; "it" is the case.
+	return tr.T("Your decision keeps it on the board.")
+}
+
+// Reminded is the badge of a case back from a reminder, until the user
+// acts on it.
+func Reminded(tr Translator) string {
+	// TRANSLATORS: a badge on a case of the board that came back because a
+	// reminder the user set came due.
+	return tr.C("board badge", "Reminded")
+}
+
+// NewContact is the badge of a case whose newest message is addressed to
+// the user by someone the user has never written to (you.newContact).
+func NewContact(tr Translator) string {
+	// TRANSLATORS: a badge on a case of the board: its sender is someone
+	// the user has never written to.
+	return tr.C("board badge", "New contact")
+}
+
+// TitleWithBadge is a title with a badge after it, as one label: an
+// account and its kind ("Work (IMAP)"), a case and its badge. Both are
+// cleaned by the caller; without a badge the title alone.
+func TitleWithBadge(title, badge string, tr Translator) string {
+	if badge == "" {
+		return title
+	}
+	// TRANSLATORS: a name and a short badge after it, such as "Work
+	// (IMAP)" or "Offer (Reminded)".
+	return fmt.Sprintf(tr.T("%s (%s)"), title, badge)
+}
+
+// PersonAndTime is the detail's line under the title: who and when, both
+// cleaned by the caller. Either alone when the other is empty (no " · "
+// dangling), empty when both are.
+func PersonAndTime(person, when string, tr Translator) string {
+	if person == "" || when == "" {
+		return person + when
+	}
+	// TRANSLATORS: the line under a case's title on the board: the other
+	// party and the date, such as "Jana Nováková · 2 Oct 2026 14:05".
+	return fmt.Sprintf(tr.T("%s · %s"), person, when)
+}
+
+// DayAndTime is a day and a time of day: "Thu at 18:00", "Tomorrow at
+// 09:00", "20 Oct at 09:00".
+func DayAndTime(day, clock string, tr Translator) string {
+	// TRANSLATORS: a day and a time of day, such as "Thu at 18:00",
+	// "Tomorrow at 09:00" or "20 Oct at 09:00".
+	return fmt.Sprintf(tr.T("%s at %s"), day, clock)
+}
+
+// TileToolTip is the tooltip of a count tile of the Today page: "Hot: 3
+// cases", or the promises of the commitments' tile.
+func TileToolTip(t Tile, tr Translator) string {
+	if t.Kind == TileCommitments {
+		// TRANSLATORS: the tooltip of the Today page's tile of promises;
+		// %s is the tile's title ("Promised").
+		return fmt.Sprintf(tr.N("%s: %d promise", "%s: %d promises", t.Count), t.Title, t.Count)
+	}
+	// TRANSLATORS: the tooltip of a tile of the Today page; %s is a state
+	// of the board, such as "Hot", %d how many cases are in it.
+	return fmt.Sprintf(tr.N("%s: %d case", "%s: %d cases", t.Count), t.Title, t.Count)
 }
 
 // ReasonUnknown is the reason of a rule this client does not know.
@@ -646,18 +785,19 @@ func ShowInMailFailed(tr Translator) string {
 // Archive archives a case's messages.
 func Archive(tr Translator) string { return tr.T("Archive") }
 
-// Snoozed is the Done filter's section of the cases that come back later.
+// Snoozed is the filter and section of the cases that come back later.
 func Snoozed(tr Translator) string {
-	// TRANSLATORS: a section of the board's Done filter: the cases off the
+	// TRANSLATORS: a filter and section of the board: the cases off the
 	// board until a reminder.
 	return tr.T("Snoozed")
 }
 
-// SnoozedUntil is "Back on the board Tomorrow 09:00", for a snoozed case.
+// SnoozedUntil is "Back on the board: Tomorrow at 09:00", for a snoozed
+// case.
 func SnoozedUntil(label string, tr Translator) string {
-	// TRANSLATORS: %s is a day and a time, such as "Tomorrow 09:00" or
-	// "20 Oct 09:00".
-	return fmt.Sprintf(tr.T("Back on the board %s"), label)
+	// TRANSLATORS: %s is a day and a time, such as "Tomorrow at 09:00" or
+	// "20 Oct at 09:00".
+	return fmt.Sprintf(tr.T("Back on the board: %s"), label)
 }
 
 // RemindKind is a remind preset (Board.RemindPreset.Kind).
@@ -668,25 +808,46 @@ const (
 	RemindLaterToday RemindKind = iota
 	RemindTomorrow
 	RemindNextWeek
+	// RemindThisEvening is 20:00 today, offered from 17:00 to 18:59.
+	RemindThisEvening
+	// RemindThisMorning is 09:00 today, offered before 05:00 in place of
+	// RemindTomorrow.
+	RemindThisMorning
 )
+
+// RemindKinds lists every preset kind.
+var RemindKinds = []RemindKind{RemindLaterToday, RemindTomorrow, RemindNextWeek, RemindThisEvening, RemindThisMorning}
 
 // RemindPreset is a remind preset's item.
 func RemindPreset(k RemindKind, tr Translator) string {
 	switch k {
 	case RemindLaterToday:
-		// TRANSLATORS: a reminder preset: in about three hours, or at 18:00.
+		// TRANSLATORS: a reminder preset: in three hours, rounded up to the
+		// hour, at 20:00 at the latest.
 		return tr.T("Later Today")
 	case RemindTomorrow:
 		return tr.T("Tomorrow")
 	case RemindNextWeek:
 		// TRANSLATORS: a reminder preset: next Monday at 09:00.
 		return tr.T("Next Week")
+	case RemindThisEvening:
+		// TRANSLATORS: a reminder preset: today at 20:00.
+		return tr.T("This Evening")
+	case RemindThisMorning:
+		// TRANSLATORS: a reminder preset offered after midnight: today at
+		// 09:00.
+		return tr.T("This Morning")
 	}
 	return ""
 }
 
-// RemindNoMore ends a reminder.
-func RemindNoMore(tr Translator) string { return tr.T("Don’t Remind Me") }
+// RemindNoMore ends a reminder and puts the case back on the board at
+// once (board.remind with null).
+func RemindNoMore(tr Translator) string {
+	// TRANSLATORS: a menu item of a snoozed case: it ends the reminder and
+	// the case is back on the board now.
+	return tr.T("Back on the Board Now")
+}
 
 // Archived says what Archive did: messages moved, or only marked done.
 func Archived(n int, noArchive bool, tr Translator) string {
@@ -697,6 +858,18 @@ func Archived(n int, noArchive bool, tr Translator) string {
 		return tr.T("Marked as done. No message was in the inbox.")
 	}
 	return fmt.Sprintf(tr.N("Archived %d message.", "Archived %d messages.", n), n)
+}
+
+// Undo is the button of the Archive toast that takes the archive back.
+func Undo(tr Translator) string {
+	// TRANSLATORS: the button of a toast that takes back what was just
+	// done (an archive).
+	return tr.T("Undo")
+}
+
+// UndoFailed is the toast when taking an archive back failed.
+func UndoFailed(tr Translator) string {
+	return tr.T("Could not undo the archive.")
 }
 
 // Action is what a write of the board did, for the toast of its failure
@@ -853,4 +1026,14 @@ func Quoted(s string, tr Translator) string {
 	// TRANSLATORS: quotation marks around a sentence quoted from a message;
 	// use your language's quotation marks.
 	return fmt.Sprintf(tr.T("“%s”"), s)
+}
+
+// TriageSettingsAccountsNone is Triage These Accounts' line while the list
+// names only accounts that are gone or turned off
+// (boardtriage.TriageAccountsNone): the daemon keeps such a list rather
+// than widen the triage to every account.
+func TriageSettingsAccountsNone(tr Translator) string {
+	// TRANSLATORS: under "Triage These Accounts" when the accounts chosen
+	// for the triage were all removed, so it triages nothing.
+	return tr.T("No account is selected, so the triage reads nothing.")
 }

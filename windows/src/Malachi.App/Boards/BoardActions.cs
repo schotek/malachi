@@ -20,6 +20,7 @@ using System.Threading.Tasks;
 using Malachi.Core.Api;
 using Malachi.Core.Boards;
 using Malachi.Core.Controllers;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Malachi.App.Boards;
@@ -86,7 +87,7 @@ public sealed class BoardActions
     public bool CanShowInMail(BoardCaseId id) =>
         Case(id) is { } c && (Samples || ((c.Reply is not null || c.LatestMessage is not null) && OnShowInMail is not null));
 
-    /// <summary>The case is snoozed (Don't Remind Me is offered).</summary>
+    /// <summary>The case is snoozed (Back on the Board Now is offered).</summary>
     public bool IsSnoozed(BoardCaseId id) => Case(id)?.Visibility.RemindAt is not null;
 
     /// <summary>Reply's label: Comment on an issue tracker's account (jira.ReplyLabel).</summary>
@@ -198,7 +199,7 @@ public sealed class BoardActions
     /// <summary>
     /// Remind…'s items for case <paramref name="id"/> into
     /// <paramref name="items"/>: the presets for now, the time beside each,
-    /// and Don't Remind Me for a snoozed case.
+    /// and Back on the Board Now for a snoozed case.
     /// </summary>
     public void FillRemindMenu(IList<MenuFlyoutItemBase> items, BoardCaseId id)
     {
@@ -209,8 +210,10 @@ public sealed class BoardActions
         {
             var at = preset.Date;
             var item = BoardMenuItem.Make(preset.Title, () => Remind(id, at), automationId: "BoardRemindPreset" + n++);
-            // The time at the trailing edge, as macOS's subtitle and GTK's dim label.
+            // The time at the trailing edge, as macOS's subtitle and GTK's dim
+            // label; spoken as one item ("Later Today, Thu at 18:00").
             item.KeyboardAcceleratorTextOverride = preset.When;
+            AutomationProperties.SetName(item, preset.Label);
             items.Add(item);
         }
         if (IsSnoozed(id))

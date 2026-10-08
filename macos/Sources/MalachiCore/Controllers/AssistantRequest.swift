@@ -61,6 +61,9 @@ public final class AssistantRequest {
         /// A request with `Tools`: Claude Code did not report the bridge
         /// connected.
         case toolsMissing
+        /// The provider refused the request because the usage limit of the
+        /// user's plan was reached (ChatGPT's HTTP 429); the provider's code.
+        case limit(String)
 
         /// The line where the panel's errors are shown (the compose
         /// window's popover): the panel's texts, and for a missing sign-in
@@ -71,6 +74,7 @@ public final class AssistantRequest {
             case .notSignedIn: return Assistant.signInTexts().hint
             case .stopped(let reason): return Assistant.stoppedText(reason)
             case .toolsMissing: return Assistant.panelTexts().toolsMissing
+            case .limit: return Assistant.stoppedText(Board.Text.triageFailure(.limit))
             }
         }
 
@@ -82,9 +86,61 @@ public final class AssistantRequest {
             case .notSignedIn: return Assistant.signInTexts().hint
             case .stopped(let reason): return reason
             case .toolsMissing: return Assistant.panelTexts().toolsMissing
+            case .limit: return Board.Text.triageFailure(.limit)
             }
         }
     }
+
+    /// assistantpanel.ProviderFailure: the failure a provider's reason
+    /// stands for (an error of `AssistantProvider.start` or
+    /// `AssistantSession.submit`, a failed result's text, an exit's
+    /// reason): Codex missing is `notFound`; a ChatGPT connection that is
+    /// missing, lapsed, refused or without consent is `notSignedIn` (the
+    /// board offers to connect again, as it offers Claude Code's sign-in);
+    /// the plan's usage limit is `limit`; anything else `stopped` with the
+    /// reason as it is.
+    public nonisolated static func providerFailure(_ reason: String) -> Failure {
+        switch reason {
+        case "codex_not_found":
+            return .notFound
+        case "chatgpt_not_connected", "chatgpt_reconnect_required", "chatgpt_consent_required",
+             "chatgpt_permission_denied", "chatgpt_identity_mismatch":
+            return .notSignedIn
+        case "chatgpt_usage_limit":
+            return .limit(reason)
+        default:
+            return .stopped(reason)
+        }
+    }
+
+    /// Whether a change of settings `key` concerns the assistant provider
+    /// in effect, so that a request of it under way must end: the provider
+    /// itself always; the Codex executable and a ChatGPT consent withdrawn
+    /// only while the provider is ChatGPT. A model (the panel's or the
+    /// triage's ChatGPT model) never ends a request: it applies from the
+    /// next one, as a change that concerns the other provider.
+    public static func providerChangeConcernsActive(_ key: Settings.Key, settings: Settings) -> Bool {
+        switch key {
+        case .assistantProvider:
+            return true
+        case .assistantChatGPTModel, .boardTriageChatGPTModel:
+            return false
+        case .assistantCodexPath:
+            return settings.assistantProvider == .chatgpt
+        case .assistantChatGPTConsentVersion:
+            return settings.assistantProvider == .chatgpt && settings.assistantChatGPTConsentVersion != 1
+        case .boardTriageChatGPTConsentVersion:
+            return settings.assistantProvider == .chatgpt && settings.boardTriageChatGPTConsentVersion != 1
+        default:
+            return false
+        }
+    }
+
+    /// The settings keys `providerChangeConcernsActive` looks at.
+    public static let providerKeys: [Settings.Key] = [
+        .assistantProvider, .assistantCodexPath, .assistantChatGPTModel, .assistantChatGPTConsentVersion,
+        .boardTriageChatGPTModel, .boardTriageChatGPTConsentVersion,
+    ]
 
     /// The bridge a request gives Claude Code, and what of it may run.
     public struct Tools: Sendable, Equatable {
@@ -175,11 +231,9 @@ public final class AssistantRequest {
         self.environment = environment
         self.killGrace = killGrace
         self.timeout = timeout
-        for key in [Settings.Key.assistantProvider, .assistantCodexPath, .assistantChatGPTModel, .assistantChatGPTConsentVersion, .boardTriageChatGPTModel, .boardTriageChatGPTConsentVersion] {
+        for key in Self.providerKeys {
             providerTokens.append(settings.onChange(key) { [weak self] in
-                guard let self else { return }
-                if key == .assistantChatGPTConsentVersion && self.settings.assistantChatGPTConsentVersion == 1 { return }
-                if key == .boardTriageChatGPTConsentVersion && self.settings.boardTriageChatGPTConsentVersion == 1 { return }
+                guard let self, Self.providerChangeConcernsActive(key, settings: self.settings) else { return }
                 self.cancel()
             })
         }
@@ -243,7 +297,7 @@ public final class AssistantRequest {
 
     private func run(_ my: Int, _ call: Call, _ completion: @escaping @MainActor (Outcome) -> Void) async {
         if settings.assistantProvider == .chatgpt {
-            guard let selected = provider?() else { finish(my, .failed(.stopped("chatgpt_unavailable")), completion); return }
+            guard let selected = provider?() else { finish(my, .failed(Self.providerFailure("chatgpt_unavailable")), completion); return }
             await runProvider(my, call, selected, completion)
             return
         }
@@ -398,16 +452,16 @@ public final class AssistantRequest {
                     case .toolUse, .toolResult: call.onTool?(event)
                     case .result:
                         self.finish(my, event.success ? .answered(text: event.resultText, structured: event.structured)
-                            : .failed(.stopped(event.resultText)), completion)
+                            : .failed(Self.providerFailure(event.resultText)), completion)
                     default: break
                     }
                     guard my == self.gen, self.running else { return }
                 }
             }
-            session.onExit = { [weak self] reason in self?.finish(my, .failed(.stopped(reason)), completion) }
+            session.onExit = { [weak self] reason in self?.finish(my, .failed(Self.providerFailure(reason)), completion) }
             try await session.submit(call.message)
         } catch {
-            finish(my, .failed(.stopped((error as? ChatGPTFailure)?.code ?? "chatgpt_request_failed")), completion)
+            finish(my, .failed(Self.providerFailure((error as? ChatGPTFailure)?.code ?? "chatgpt_request_failed")), completion)
         }
     }
 

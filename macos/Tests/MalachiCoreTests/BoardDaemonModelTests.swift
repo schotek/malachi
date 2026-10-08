@@ -22,7 +22,7 @@ private typealias F = BoardFixture
             #expect(!t.isEmpty && t != Board.Text.reasonUnknown, "\(code.rawValue)")
             #expect(seen.insert(t).inserted, "\(code.rawValue) repeats another code's text")
         }
-        #expect(BoardReason.known.count == 16)
+        #expect(BoardReason.known.count == 17)
     }
 
     @Test func unknownCodesGetTheGenericText() {
@@ -80,34 +80,38 @@ private typealias F = BoardFixture
         ]
     }
 
-    /// Snoozed cases are off the board and listed under Done, soonest back
-    /// first, before the done ones.
-    @Test func snoozedAreUnderDone() {
+    /// Snoozed cases are off the board and listed under Snoozed, soonest
+    /// back first; Done lists and counts only the done ones.
+    @Test func snoozedHaveTheirOwnFilter() {
         let all = F.view(cases())
         #expect(all.sections.flatMap(\.rows).map(\.id.rawValue) == ["l1"])
         #expect(all.columns.flatMap(\.rows).map(\.id.rawValue) == ["l1"])
-        #expect(all.nav.first { $0.filter == .done }?.count == 3)
+        #expect(all.nav.first { $0.filter == .done }?.count == 1)
+        #expect(all.nav.first { $0.filter == .snoozed }?.count == 2)
         #expect(all.nav.first { $0.filter == .all }?.count == 1)
         #expect(all.accounts.first?.count == 1)  // live only
         let done = F.view(cases()) { $0.filter = .done }
-        #expect(done.sections.map(\.kind) == [.snoozed, .done])
-        #expect(done.sections.map(\.title) == ["Snoozed", "Done"])
-        #expect(F.ids(done.sections[0].rows) == ["s2", "s1"])
-        #expect(done.sections[0].rows[0].remind == "Tomorrow 09:00")
-        #expect(done.sections[1].rows[0].remind == "")
-        #expect(done.selection == F.id("s2"))
-        let d = try! #require(done.detail)
-        #expect(d.isSnoozed && !d.isDone && d.remindText == "Back on the board Tomorrow 09:00")
+        #expect(done.sections.map(\.kind) == [.done])
+        #expect(F.ids(done.sections[0].rows) == ["d1"] && done.sections[0].rows[0].remind == "")
+        let snoozed = F.view(cases()) { $0.filter = .snoozed }
+        #expect(snoozed.sections.map(\.kind) == [.snoozed])
+        #expect(snoozed.sections.map(\.title) == ["Snoozed"])
+        #expect(F.ids(snoozed.sections[0].rows) == ["s2", "s1"])
+        #expect(snoozed.sections[0].rows[0].remind == "Tomorrow at 09:00")
+        #expect(snoozed.selection == F.id("s2"))
+        let d = try! #require(snoozed.detail)
+        #expect(d.isSnoozed && !d.isDone && d.remindText == "Back on the board: Tomorrow at 09:00")
         // Only snoozed: not empty.
         #expect(!F.view([F.mk("s1", visibility: .snoozed(until: back))]).isEmpty)
     }
 
-    @Test func selectionAfterDoneWalksTheSnoozedToo() {
+    @Test func selectionAfterDoneWalksTheSnoozed() {
         var v = Board.ViewState()
-        v.filter = .done
+        v.filter = .snoozed
         let s = Board.Snapshot(accounts: F.accounts, cases: cases())
-        #expect(Board.selectionAfterDone(F.id("s1"), s, v) == F.id("d1"))
-        #expect(Board.selectionAfterDone(F.id("d1"), s, v) == F.id("s1"))
+        #expect(Board.selectionAfterDone(F.id("s2"), s, v) == F.id("s1"))
+        #expect(Board.selectionAfterDone(F.id("s1"), s, v) == F.id("s2"))
+        #expect(Board.selectionAfterDone(F.id("d1"), s, v) == nil)  // not listed
     }
 
     @Test func doneIsTheVisibility() {

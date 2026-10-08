@@ -50,5 +50,5 @@ public enum ChatGPTText {
     public static var consentHeading: String { L10n.T("Send Mail to OpenAI?") }
     public static var consentBody: String { L10n.T("Malachi Mail will send the selected mail and text you provide to OpenAI through Codex, using your ChatGPT plan. The assistant can read mail and prepare drafts. It cannot send, delete or move messages. This experimental integration does not import your ChatGPT conversations or memory.") }
     public static var boardHeading: String { L10n.T("Let OpenAI Refine the Board?") }
-    public static var boardBody: String { L10n.T("Malachi Mail will send board mail to OpenAI through Codex, using your ChatGPT plan. It can read mail and annotate cases. Automatic triage sends newly received mail while enabled. It cannot send, delete or move messages.") }
+    public static var boardBody: String { L10n.T("Malachi Mail will send board mail to OpenAI through Codex, using your ChatGPT plan. It reads the conversations on the board and any other mail and attachments it needs, and annotates cases. A triage you start yourself may also write replies, which stay on the board, never in your Drafts folder, until you send them. Automatic triage sends newly received mail while enabled. It cannot send, delete or move messages. Which accounts it triages you choose in Settings.") }
 }

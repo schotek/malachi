@@ -124,22 +124,54 @@ type createDraftIn struct {
 }
 
 func (b *bridge) createDraft(ctx context.Context, _ *mcp.CallToolRequest, in createDraftIn) (*mcp.CallToolResult, any, error) {
-	if b.cfg.replyOnly != "" {
+	switch {
+	case b.cfg.replyOnly != "":
 		return b.createReplyOnly(ctx, in)
+	case b.cfg.triageRun != "":
+		return b.createTriageDraft(ctx, in)
 	}
-	return b.createDraftChecked(ctx, in)
+	return b.createDraftChecked(ctx, in, &draftAttempt{})
+}
+
+// draftAttempt tells a per-request guard (--reply-only, --triage-run) what
+// became of a create_draft call: saved, or perhaps saved (draft.save went
+// out and no answer of the daemon's says it failed: a timeout, a lost
+// connection). Either uses up the guard's one draft, so a lost answer can
+// never yield a second one.
+type draftAttempt struct {
+	saved, uncertain bool
+}
+
+func (a *draftAttempt) made() bool { return a.saved || a.uncertain }
+
+// saveFailed records a failed draft.save and says whether the daemon
+// certainly stored nothing (it answered with an error of its own, or the
+// request never reached it); otherwise the draft may exist.
+func (a *draftAttempt) saveFailed(err error) (nothing bool) {
+	if fetchedNothing(err) {
+		return true
+	}
+	a.uncertain = true
+	return false
+}
+
+// saveError is the tool's answer to a failed draft.save: the error, and
+// when the draft may exist all the same, that no other is to be made.
+func saveError(err error, nothing bool) *mcp.CallToolResult {
+	if nothing {
+		return toolError(err)
+	}
+	return toolErrorf("%s; the draft may have been stored all the same: do not make another, tell the user to look in Malachi Mail", errorText(err))
 }
 
 // createDraftChecked is create_draft once the per-request guard
-// (--reply-only, tools_replyonly.go) let the call through.
-func (b *bridge) createDraftChecked(ctx context.Context, in createDraftIn) (*mcp.CallToolResult, any, error) {
+// (--reply-only, tools_replyonly.go; --triage-run, createTriageDraft) let
+// the call through; att learns whether a draft was (perhaps) stored.
+func (b *bridge) createDraftChecked(ctx context.Context, in createDraftIn, att *draftAttempt) (*mcp.CallToolResult, any, error) {
 	if in.AccountID == "" {
 		return toolErrorf("accountId is required"), nil, nil
 	}
 	mode, ok := parseComposeMode(in.Mode)
-	if b.cfg.triageRun != "" && !b.triageReplyAllowed(in, mode) {
-		return toolErrorf("%s", triageDraftRefusal), nil, nil
-	}
 	switch {
 	case !ok:
 		return toolErrorf("unknown mode %q; use reply, replyAll or forward, or omit it for a new message", in.Mode), nil, nil
@@ -183,7 +215,7 @@ func (b *bridge) createDraftChecked(ctx context.Context, in createDraftIn) (*mcp
 		return refused, nil, nil
 	}
 	if comment {
-		return b.createComment(ctx, in)
+		return b.createComment(ctx, in, att)
 	}
 	if in.Visibility != "" {
 		return toolErrorf("visibility applies only to a comment draft (mode reply on an issue-tracker account)"), nil, nil
@@ -284,9 +316,14 @@ func (b *bridge) createDraftChecked(ctx context.Context, in createDraftIn) (*mcp
 	defer cancel()
 	res, err := callRPC[api.DraftSaveResult](saveCtx, b.rpc, api.MethodDraftSave, api.DraftSaveParams{Draft: d})
 	if err != nil {
-		b.removeAttachments(acc, imported)
-		return toolError(err), nil, nil
+		nothing := att.saveFailed(err)
+		if nothing {
+			// A draft that may exist keeps its attachments.
+			b.removeAttachments(acc, imported)
+		}
+		return saveError(err, nothing), nil, nil
 	}
+	att.saved = true
 	b.drafts.add(res.DraftID, sessionDraft{accountID: acc, version: res.Version})
 
 	var head strings.Builder
@@ -376,21 +413,45 @@ func (b *bridge) boardDraft() bool {
 	return b.cfg.replyOnly != "" || b.cfg.triageRun != ""
 }
 
-// triageDraftRefusal is create_draft's one answer to anything a triage
-// run of the app may not draft; it echoes nothing of the call.
-const triageDraftRefusal = "in a triage run create_draft only replies to a message of a case from list_triage_queue: " +
-	"mode reply (or replyAll), the case's accountId, a messageId of that case (its replyMessageId), your body; " +
-	"to, cc, bcc, subject, messageAccountId and visibility internal are refused"
+// The fixed answers of create_draft in the app's triage run; none echoes
+// anything of the call or of the mail.
+const (
+	// triageDraftRefusal: not a confined reply to the replyMessageId of a
+	// case the queue handed out in this process.
+	triageDraftRefusal = "in a triage run create_draft only replies to the replyMessageId of a case from list_triage_queue: " +
+		"mode reply (or replyAll), the case's accountId, that messageId and your body; " +
+		"to, cc, bcc, subject, messageAccountId and visibility internal are refused"
+	// triageDraftReasonRefusal: the case's rule reason gets no suggested reply.
+	triageDraftReasonRefusal = "in a triage run create_draft makes a suggested reply only for a case whose ruleReason is " +
+		triageReplyReasons + "; make no draft for this case"
+	// triageDraftHasDraftRefusal: the case had a suggested reply already.
+	triageDraftHasDraftRefusal = "this case has a suggested reply already (hasDraft): make no draft for it"
+	// triageDraftDoneRefusal: this process made (or is making) the case's one draft.
+	triageDraftDoneRefusal = "this process already made the reply draft of this case (or is making it): make no other; " +
+		"pass its draftId to annotate_case"
+)
 
-// triageReplyAllowed is create_draft's rule in the app's triage run (a
-// process with --triage-run, which only the app's run passes): the mail it
-// reads is written by third parties, so a draft can only be a reply to a
-// message of a case the queue handed out in this process, prefilled by the
-// daemon (recipients from the original, its subject and quote). Nothing
-// that would choose other recipients, another message or another
-// account's parts is taken; a comment draft stays public as by default.
-func (b *bridge) triageReplyAllowed(in createDraftIn, mode api.ComposeMode) bool {
-	return confinedReply(in, mode) && b.triage.handedOutMessage(api.AccountID(in.AccountID), api.MessageID(in.MessageID))
+// createTriageDraft is create_draft in the app's triage run (a process with
+// --triage-run, which only the app's run passes). The mail it reads is
+// written by third parties, so a draft can only be the confined reply
+// (confinedReply) to the replyMessageId of a case the queue handed out in
+// this process, whose rule reason is one of triageReplyReasonSet, that had
+// no suggested reply when handed out, and only one per case (also when the
+// daemon's answer to draft.save was lost). Every refusal comes before the
+// daemon is asked.
+func (b *bridge) createTriageDraft(ctx context.Context, in createDraftIn) (*mcp.CallToolResult, any, error) {
+	mode, ok := parseComposeMode(in.Mode)
+	if !ok || !confinedReply(in, mode) {
+		return toolErrorf("%s", triageDraftRefusal), nil, nil
+	}
+	id, refusal := b.triage.claimDraft(api.AccountID(in.AccountID), api.MessageID(in.MessageID))
+	if refusal != "" {
+		return toolErrorf("%s", refusal), nil, nil
+	}
+	att := &draftAttempt{}
+	res, out, err := b.createDraftChecked(ctx, in, att)
+	b.triage.endDraft(id, att.made())
+	return res, out, err
 }
 
 // confinedReply is what a draft made from third-party mail without the
@@ -472,7 +533,7 @@ func (b *bridge) draftPlan(ctx context.Context, acc, msgAcc api.AccountID, mode 
 // issue-tracker account makes the comment draft of the message's issue,
 // the agent's text becomes its body (escaped, like any body) and the
 // visibility its own, and draft.save stores it.
-func (b *bridge) createComment(ctx context.Context, in createDraftIn) (*mcp.CallToolResult, any, error) {
+func (b *bridge) createComment(ctx context.Context, in createDraftIn, att *draftAttempt) (*mcp.CallToolResult, any, error) {
 	acc := api.AccountID(in.AccountID)
 	switch {
 	case len(in.To)+len(in.CC)+len(in.BCC) > 0:
@@ -520,8 +581,9 @@ func (b *bridge) createComment(ctx context.Context, in createDraftIn) (*mcp.Call
 	defer cancel()
 	res, err := callRPC[api.DraftSaveResult](saveCtx, b.rpc, api.MethodDraftSave, api.DraftSaveParams{Draft: d})
 	if err != nil {
-		return toolError(err), nil, nil
+		return saveError(err, att.saveFailed(err)), nil, nil
 	}
+	att.saved = true
 	b.drafts.add(res.DraftID, sessionDraft{accountID: acc, version: res.Version})
 
 	var head strings.Builder

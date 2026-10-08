@@ -360,18 +360,21 @@ func TestTriageErrorsAreActionableWithoutMailText(t *testing.T) {
 func TestTriagePerProcessLimits(t *testing.T) {
 	fb := newFixture()
 	h := newTriageHarness(t, fb, "")
-	h.handedOut("c_mail")
+	h.handedOut("c_mail", "c_next")
 	h.b.triage.annotations = maxSessionAnnotations - 1
 	h.b.triage.commitments = maxSessionCommitments - 1
 	args := map[string]any{"caseId": "c_mail", "inputKey": fxInputKey}
 	commit := map[string]any{"caseId": "c_mail", "inputKey": fxInputKey, "messageId": "m0", "text": "x", "quote": "I'll send the figures"}
 	mustContain(t, h.ok(t, "annotate_case", args), "annotations left in this session: 0")
-	h.fail(t, "annotate_case", args, "already annotated 200 cases, which is its limit; stop the triage")
+	h.fail(t, "annotate_case", map[string]any{"caseId": "c_next", "inputKey": fxInputKey}, "already annotated 200 cases, which is its limit; stop the triage")
+	// The case annotated already may be annotated again past the limit: its
+	// notes are replaced, and it costs no slot.
+	mustContain(t, h.ok(t, "annotate_case", args), "annotations left in this session: 0")
 	mustContain(t, h.ok(t, "add_commitment", commit), "commitments left in this session: 0")
 	h.fail(t, "add_commitment", commit, "already recorded 100 commitments")
 	fb.mu.Lock()
 	defer fb.mu.Unlock()
-	if len(fb.annotateCalls) != 1 || len(fb.commitCalls) != 1 {
+	if len(fb.annotateCalls) != 2 || len(fb.commitCalls) != 1 {
 		t.Fatalf("the daemon was asked past the limit: %d annotate, %d commit", len(fb.annotateCalls), len(fb.commitCalls))
 	}
 }
@@ -757,4 +760,156 @@ func TestTriageQueueListsRecordedCommitments(t *testing.T) {
 	mustContain(t, outside, `"commitmentId": "k_1"`, `"messageId": "m0"`, `"state": "open"`, `"due": "2026-10-02T15:00:00Z"`)
 	mustNotContain(t, outside, fxQueueSecret, "Send the figures")
 	mustContain(t, bodies[0], "Send the figures "+fxQueueSecret, "I'll send the figures by Friday.")
+}
+
+// In the app's run create_draft makes a suggested reply only to the
+// replyMessageId of a handed-out case whose rule reason allows one, that
+// had none linked, and one per case; each refusal is a fixed text that
+// comes before the daemon is asked.
+func TestTriageRunDraftRule(t *testing.T) {
+	fb := newFixture()
+	item := func(id string, reason api.BoardReason, reply api.MessageID) api.BoardQueueItem {
+		it := queueItem(id, fxAccount)
+		it.RuleReason, it.ReplyMessageID = reason, reply
+		return it
+	}
+	hasDraft := item("c_has", api.BoardReasonYouAddressed, "m5")
+	hasDraft.HasDraft = true
+	fb.queueResult = &api.BoardQueueResult{Items: []api.BoardQueueItem{
+		item("c_ok", api.BoardReasonYouAddressed, "m1"),
+		item("c_info", api.BoardReasonInfoCcOnly, "m3"),
+		item("c_them", api.BoardReasonThemReplied, "m4"),
+		hasDraft,
+	}}
+	h := newTriageHarness(t, fb, "run_rule")
+	h.ok(t, "list_triage_queue", map[string]any{"limit": 5})
+	fb.mu.Lock()
+	fb.queueResult = &api.BoardQueueResult{Items: []api.BoardQueueItem{
+		item("c_kept", api.BoardReasonKept, "m6"),
+		item("c_new", api.BoardReason("you.newContact"), "m7"),
+		item("c_flag", api.BoardReasonHotFlagged, "m10"),
+	}}
+	fb.mu.Unlock()
+	h.ok(t, "list_triage_queue", map[string]any{"limit": 5})
+
+	reply := func(mid string) map[string]any {
+		return map[string]any{"accountId": "a1", "mode": "reply", "messageId": mid, "body": "Thanks " + fxQueueSecret}
+	}
+	for _, mid := range []string{"m3", "m4", "m6", "m7", "m10"} {
+		mustNotContain(t, h.fail(t, "create_draft", reply(mid), triageDraftReasonRefusal), fxQueueSecret)
+	}
+	mustNotContain(t, h.fail(t, "create_draft", reply("m5"), triageDraftHasDraftRefusal), fxQueueSecret)
+	// m0 is a message the queue showed of c_ok, but not its replyMessageId.
+	mustNotContain(t, h.fail(t, "create_draft", reply("m0"), triageDraftRefusal), fxQueueSecret)
+	fb.mu.Lock()
+	if n := len(fb.draftCreates) + len(fb.draftSaves); n != 0 {
+		fb.mu.Unlock()
+		t.Fatalf("the daemon was asked %d times for refused drafts", n)
+	}
+	fb.mu.Unlock()
+
+	// A refusal of the daemon's gives the case's draft back.
+	fb.setFail(api.MethodDraftCreate, api.NewError(api.CodeMessageNotFound, "gone"))
+	h.fail(t, "create_draft", reply("m1"), "messageNotFound")
+	fb.setFail(api.MethodDraftCreate, nil)
+	mustContain(t, h.ok(t, "create_draft", reply("m1")), "draft d1 ")
+	// One per case, replyAll included.
+	h.fail(t, "create_draft", reply("m1"), triageDraftDoneRefusal)
+	h.fail(t, "create_draft", map[string]any{"accountId": "a1", "mode": "replyAll", "messageId": "m1"}, triageDraftDoneRefusal)
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
+	if len(fb.draftSaves) != 1 {
+		t.Fatalf("%d draft.save calls, want 1", len(fb.draftSaves))
+	}
+	for _, r := range []api.BoardReason{api.BoardReasonHotImportant, api.BoardReasonYouAddressed, api.BoardReasonJiraAssigned, api.BoardReasonJiraReporter} {
+		if !slices.Contains(triageReplyReasonSet, r) || !strings.Contains(triageReplyReasons, string(r)) {
+			t.Errorf("reason %s missing", r)
+		}
+	}
+	if len(triageReplyReasonSet) != 4 {
+		t.Errorf("reply reasons %v", triageReplyReasonSet)
+	}
+}
+
+// A draft.save whose answer is lost (the call timed out after the request
+// went out) may have stored the draft: the case's one draft is used up.
+func TestTriageRunDraftLostAnswer(t *testing.T) {
+	fb := newFixture()
+	it := queueItem("c_ok", fxAccount)
+	fb.queueResult = &api.BoardQueueResult{Items: []api.BoardQueueItem{it}}
+	h := newTriageHarness(t, fb, "run_lost")
+	h.ok(t, "list_triage_queue", nil)
+	fb.mu.Lock()
+	fb.delay = map[string]time.Duration{api.MethodDraftSave: 400 * time.Millisecond}
+	fb.mu.Unlock()
+	ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
+	defer cancel()
+	res, _, err := h.b.createDraft(ctx, nil, createDraftIn{AccountID: "a1", Mode: "reply", MessageID: "m1", Body: "Thanks"})
+	if err != nil || res == nil || !res.IsError {
+		t.Fatalf("lost answer: %+v %v", res, err)
+	}
+	mustContain(t, textOf(res), "may have been stored all the same")
+	fb.mu.Lock()
+	fb.delay = nil
+	fb.mu.Unlock()
+	h.fail(t, "create_draft", map[string]any{"accountId": "a1", "mode": "reply", "messageId": "m1", "body": "Again"}, triageDraftDoneRefusal)
+}
+
+// A repeated list_triage_queue hands out the same unannotated cases again
+// without spending the read budget on them.
+func TestTriageQueueRepeatsWithoutNewAdmission(t *testing.T) {
+	fb := newFixture()
+	fb.queueResult = &api.BoardQueueResult{Items: []api.BoardQueueItem{queueItem("c_a", fxAccount), queueItem("c_b", fxAccount)}}
+	sock := tempSocket(t)
+	startFakeDaemon(t, fb, sock)
+	cs, _, b := connectBridgeConfig(t, config{socket: sock, allowTriage: true, triageMax: 1})
+	h := &harness{fb: fb, sock: sock, cs: cs, b: b}
+	for i := 0; i < 3; i++ {
+		out := h.ok(t, "list_triage_queue", nil)
+		mustContain(t, out, "2 cases below", `"c_a"`, `"c_b"`)
+		mustNotContain(t, out, "held back")
+		if _, room, pending := b.triage.queueRoom(); room != 2 || len(pending) != 2 {
+			t.Fatalf("call %d: room %d, pending %v", i, room, pending)
+		}
+	}
+	// admit alone records nothing: only a rendered result does (handOut).
+	s := newSessionTriage(1)
+	if got, held := s.admit([]api.BoardQueueItem{queueItem("c_x", fxAccount)}); len(got) != 1 || held != 0 || len(s.cases) != 0 {
+		t.Fatalf("admit: %d shown, %d held, %d recorded", len(got), held, len(s.cases))
+	}
+}
+
+// The help text names the triage and reply-only flags.
+func TestUsageListsBoardFlags(t *testing.T) {
+	_, errOut, err := runCmd("-h")
+	if err != nil {
+		t.Fatalf("-h: %v", err)
+	}
+	mustContain(t, errOut, "-allow-triage", "-triage-run", "-triage-max", "-reply-only")
+}
+
+// install and uninstall never register a triage or reply-only flag, not
+// even with the triage environment set: the triage tier comes only from
+// the app's own run.
+func TestSetupNeverWritesBoardFlags(t *testing.T) {
+	fx := newSetupFixture(t)
+	mkdir(t, fx.desktopDir())
+	mkdir(t, fx.codeDir())
+	t.Setenv("MALACHI_MCP_ALLOW_TRIAGE", "1")
+	t.Setenv("MALACHI_MCP_TRIAGE_RUN", "run_env")
+	t.Setenv("MALACHI_MCP_TRIAGE_MAX", "7")
+	forbidden := []string{"triage", "reply-only", "allow-", "run_env"}
+	for _, sub := range []string{"install", "uninstall", "install"} {
+		out, errOut, err := runCmd(sub, "--json")
+		if err != nil {
+			t.Fatalf("%s --json: %v (%s)", sub, err, errOut)
+		}
+		mustNotContain(t, out, forbidden...)
+	}
+	for _, f := range []string{fx.desktopFile(), fx.codeFile()} {
+		mustNotContain(t, readFile(t, f), forbidden...)
+		if e, ok := serverEntry(t, f, "malachi"); !ok || len(e["args"].([]any)) != 0 {
+			t.Errorf("%s: entry %v", f, e)
+		}
+	}
 }

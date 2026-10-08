@@ -364,6 +364,28 @@ func SampleSnapshot(now time.Time, loc *time.Location) Snapshot {
 		MessagesLoaded: true,
 	})
 
+	// A reminder that came due, and a first message from a new contact.
+	cases = append(cases, Case{
+		ID: s.id(22), Account: work, Person: "Dana Placeholder", Date: s.agoDays(2, 15),
+		Subject: "Contract draft for review", Snippet: "Let me know when you have read the draft.",
+		MessageCount: 2, RuleState: StateYou, RuleReason: api.BoardReasonYouAddressed,
+		RemindedAt: s.agoHours(1),
+		Messages: []CaseMessage{
+			msg("Dana Placeholder", s.agoDays(3, 10), "Here is the contract draft. Let me know when you have read it."),
+			mine(s.agoDays(2, 15), "Thanks, I will read it on Monday."),
+		},
+		MessagesLoaded: true,
+	})
+	cases = append(cases, Case{
+		ID: s.id(23), Account: home, Person: "Pat Newcomer", Date: s.agoHours(4),
+		Subject: "Question about your listing", Snippet: "Is the bicycle still available?",
+		Unread: true, MessageCount: 1, RuleState: StateYou, RuleReason: api.BoardReasonYouNewContact,
+		Messages: []CaseMessage{
+			msg("Pat Newcomer", s.agoHours(4), "Hello, is the bicycle still available?"),
+		},
+		MessagesLoaded: true,
+	})
+
 	// Done.
 	cases = append(cases, Case{
 		ID: s.id(20), Account: work, Person: "Nia Demo", Date: s.agoDays(1, 10),

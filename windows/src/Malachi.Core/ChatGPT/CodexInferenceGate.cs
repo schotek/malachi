@@ -63,6 +63,14 @@ public sealed class CodexInferenceGate : IAsyncDisposable
     /// <summary>Fixed diagnostic code only; never a payload or credential.</summary>
     public string? LastFailure { get; private set; }
 
+    /// <summary>
+    /// A new turn starts: the failure of an earlier turn is forgotten, so a
+    /// turn that fails for another reason (or not through the gate) is not
+    /// reported with the old code (Go <c>inferenceGate.newTurn</c>). The
+    /// session calls it as it submits a turn.
+    /// </summary>
+    public void NewTurn() => LastFailure = null;
+
     /// <summary>Filters the complete upstream tool catalog, before inference.</summary>
     public byte[] FilterRequest(ReadOnlyMemory<byte> body)
     {

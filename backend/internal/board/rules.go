@@ -56,27 +56,33 @@ type entry struct {
 //     Pending is set and no state is given.
 //   - A note to self (note) is a message of the user's (Mine) whose
 //     recipients, To, Cc and Bcc, are at least one and all of the user's
-//     own addresses (Identity.Self: any account's). It counts (Count,
-//     Members, Unread, flags, known senders) but never decides: the state
-//     is decided, and Date, LatestID and Subject are taken, from the
-//     counting messages without notes. A thread of nothing but notes is
-//     no case.
-//   - Newest deciding member inbound: hot.flagged (any counting member
-//     flagged), info.yourNote (from one of the user's addresses, any
-//     account's, to nothing but such addresses), hot.important (the user in its To, a known
-//     sender and its own Importance: high or X-Priority 1/2),
-//     you.repliedToYou (its In-Reply-To names one of the user's messages),
-//     you.addressed (the user in To and a known sender), info.unknownSender
-//     (the user in To, the sender unknown), info.ccOnly (in Cc), else
-//     info.notAddressed. A sender is known when its From or a Reply-To
-//     address is one of id's known correspondents or a recipient of one of
-//     the user's counting messages in the thread.
-//   - Newest deciding member the user's: never a case when it is shaped
-//     like a forward; them.replied when its To names a sender (From or
-//     Reply-To) of an earlier inbound counting member; them.asked when the
-//     thread has no inbound counting member and one of the user's newest
-//     deciding messages that is not a forward, to someone else, has a
-//     question mark in its own text; otherwise no case.
+//     own addresses (Identity.Self: any account's). A message of the
+//     user's shaped like a forward (forwardShaped), among the user's
+//     newest messages after the newest inbound one (at most 10), is passed
+//     over the same way. Both count (Count, Members, Unread, flags, known
+//     senders) but never decide: the state is decided, and Date, LatestID,
+//     DecidingMessageID and Subject are taken, from the counting messages
+//     without them (the deciding messages). A thread of nothing but notes
+//     and forwards is no case.
+//   - hot.flagged when any counting member is flagged, whoever wrote the
+//     newest deciding member.
+//   - Newest deciding member inbound: info.yourNote (from one of the
+//     user's addresses, any account's, to nothing but such addresses),
+//     hot.important (the user in its To, a known sender and its own
+//     Importance: high or X-Priority 1/2), you.repliedToYou (its
+//     In-Reply-To names one of the user's messages), you.addressed (the
+//     user in To and a known sender), you.newContact (the user in To, the
+//     sender unknown), info.unknownSender (the user not in To, the sender
+//     unknown), info.ccOnly (in Cc), else info.notAddressed. A sender is
+//     known when its From or a Reply-To address is one of id's known
+//     correspondents or a recipient of one of the user's counting messages
+//     in the thread.
+//   - Newest deciding member the user's: them.replied when its To names a
+//     sender (From or Reply-To) of an earlier inbound counting member;
+//     them.asked when the thread has no inbound counting member and one of
+//     the user's newest deciding messages (of the 10 newest of the user's,
+//     forwards among them passed over), to someone else, has a question
+//     mark in its own text; otherwise no case.
 //
 // Jira (Thread.Issue set): no case while the user's id is unknown, or when
 // the issue is done or closed; events never count; the newest counting
@@ -86,14 +92,26 @@ type entry struct {
 func Evaluate(t Thread, id Identity, now time.Time) Verdict {
 	jira := t.Issue != nil
 	counting, pending := countingOf(t, id, now)
-	deciding := counting
+	deciding, shown := counting, counting
+	var window []*entry
 	if !jira {
 		deciding = withoutNotes(counting, id)
+		if len(deciding) > 0 {
+			shown = deciding
+		}
+		window = trailingMine(deciding)
+		deciding = withoutForwards(deciding, window)
+		if len(deciding) > 0 {
+			shown = deciding
+		}
 	}
 	var v Verdict
-	fill(&v, counting, deciding, id)
+	fill(&v, counting, shown, id)
 	if !jira && !pending {
-		v.texts = textMembers(deciding)
+		v.texts = idsOf(window)
+	}
+	if n := len(deciding); n > 0 {
+		v.DecidingMessageID, v.DecidingMine = deciding[n-1].ID, deciding[n-1].mine
 	}
 	switch {
 	case jira:
@@ -101,12 +119,70 @@ func Evaluate(t Thread, id Identity, now time.Time) Verdict {
 	case pending:
 		v.Pending = true
 	case len(deciding) == 0:
+	case anyFlagged(counting):
+		v.State, v.Reason = api.BoardHot, api.BoardReasonHotFlagged
 	case deciding[len(deciding)-1].mine:
-		v.State, v.Reason = mineRule(deciding, id)
+		v.State, v.Reason = mineRule(deciding, window, id)
 	default:
 		v.State, v.Reason = inboundRule(counting, deciding[len(deciding)-1], id)
 	}
 	return v
+}
+
+// anyFlagged reports whether the user flagged a copy of a counting
+// message (hot.flagged, whoever wrote last).
+func anyFlagged(counting []*entry) bool {
+	for _, e := range counting {
+		if e.flagged {
+			return true
+		}
+	}
+	return false
+}
+
+// trailingMine returns the user's messages at the end of deciding (after
+// its newest inbound message), newest first, at most maxAskScan: the
+// messages whose text the rules read (their forward shape, and with no
+// inbound message the ask scan). It is decided without any text.
+func trailingMine(deciding []*entry) []*entry {
+	var out []*entry
+	for i := len(deciding) - 1; i >= 0 && len(out) < maxAskScan && deciding[i].mine; i-- {
+		out = append(out, deciding[i])
+	}
+	return out
+}
+
+// withoutForwards returns deciding without the messages of window that
+// are shaped like a forward (in their order; deciding itself when none
+// is): a forward of the user's is passed over like a note to self.
+func withoutForwards(deciding, window []*entry) []*entry {
+	fwd := map[*entry]bool{}
+	for _, e := range window {
+		if forwardShaped(&e.Member, startsThread(&e.Member)) {
+			fwd[e] = true
+		}
+	}
+	if len(fwd) == 0 {
+		return deciding
+	}
+	out := make([]*entry, 0, len(deciding)-len(fwd))
+	for _, e := range deciding {
+		if !fwd[e] {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func idsOf(list []*entry) []api.MessageID {
+	if len(list) == 0 {
+		return nil
+	}
+	out := make([]api.MessageID, len(list))
+	for i, e := range list {
+		out[i] = e.ID
+	}
+	return out
 }
 
 // withoutNotes returns the counting messages that are no note to self,
@@ -319,15 +395,12 @@ func normMessageID(s string) string {
 }
 
 // fill sets the derived fields of v from the counting messages; the
-// newest of the deciding ones (counting without notes to self, unless
-// there is none) gives Date, LatestID, Subject and the person a message of
-// the user's names.
+// newest of the shown ones (the deciding messages; when there is none,
+// counting without notes to self, else counting) gives Date, LatestID,
+// Subject and the person a message of the user's names.
 func fill(v *Verdict, counting, deciding []*entry, id Identity) {
 	if len(counting) == 0 {
 		return
-	}
-	if len(deciding) == 0 {
-		deciding = counting
 	}
 	latest := deciding[len(deciding)-1]
 	v.LatestID = latest.ID
@@ -389,11 +462,6 @@ func CleanAddress(a api.Address) api.Address {
 // inbound; flags, known senders and the user's messages a reply answers
 // are read over every counting message, notes to self included.
 func inboundRule(counting []*entry, latest *entry, id Identity) (api.BoardState, api.BoardReason) {
-	for _, e := range counting {
-		if e.flagged {
-			return api.BoardHot, api.BoardReasonHotFlagged
-		}
-	}
 	if yourNote(latest, id) {
 		return api.BoardInfo, api.BoardReasonInfoYourNote
 	}
@@ -413,6 +481,8 @@ func inboundRule(counting []*entry, latest *entry, id Identity) (api.BoardState,
 	case inTo && known:
 		return api.BoardYou, api.BoardReasonYouAddressed
 	case inTo:
+		return api.BoardYou, api.BoardReasonYouNewContact
+	case !known:
 		return api.BoardInfo, api.BoardReasonInfoUnknownSender
 	case anyOwned(latest.Cc, id):
 		return api.BoardInfo, api.BoardReasonInfoCcOnly
@@ -510,17 +580,15 @@ func important(importance, xPriority string) bool {
 }
 
 // mineRule decides a thread whose newest deciding member is the user's,
-// over the deciding messages (counting is them here: notes to self left
-// out).
-func mineRule(counting []*entry, id Identity) (api.BoardState, api.BoardReason) {
-	last := len(counting) - 1
-	latest := counting[last]
-	if forwardShaped(&latest.Member, startsThread(&latest.Member)) {
-		return "", ""
-	}
+// over the deciding messages (notes to self and the user's forwards of
+// window left out); window are the user's messages whose text was read
+// (trailingMine), so the ask scan reads no other.
+func mineRule(deciding, window []*entry, id Identity) (api.BoardState, api.BoardReason) {
+	last := len(deciding) - 1
+	latest := deciding[last]
 	senders := map[string]bool{}
 	inbound := false
-	for _, e := range counting[:last] {
+	for _, e := range deciding[:last] {
 		if e.mine {
 			continue
 		}
@@ -542,36 +610,13 @@ func mineRule(counting []*entry, id Identity) (api.BoardState, api.BoardReason) 
 		}
 		return "", ""
 	}
-	for i, checked := last, 0; i >= 0 && checked < maxAskScan; i, checked = i-1, checked+1 {
-		e := counting[i]
-		if i != last && forwardShaped(&e.Member, startsThread(&e.Member)) {
-			continue
-		}
+	for i := last; i >= 0 && slices.Contains(window, deciding[i]); i-- {
+		e := deciding[i]
 		if toSomeoneElse(e.To, id) && hasQuestion(capBytes(OwnText(e.Member), maxOwnTextBytes)) {
 			return api.BoardThem, api.BoardReasonThemAsked
 		}
 	}
 	return "", ""
-}
-
-// textMembers returns the ids of the members whose text mineRule reads,
-// decided from the deciding messages alone, without their text
-// (Verdict.TextMembers).
-func textMembers(counting []*entry) []api.MessageID {
-	n := len(counting)
-	if n == 0 || !counting[n-1].mine {
-		return nil
-	}
-	for _, e := range counting[:n-1] {
-		if !e.mine {
-			return []api.MessageID{counting[n-1].ID} // its forward shape only
-		}
-	}
-	out := make([]api.MessageID, 0, min(n, maxAskScan))
-	for i := n - 1; i >= 0 && len(out) < maxAskScan; i-- {
-		out = append(out, counting[i].ID)
-	}
-	return out
 }
 
 // startsThread reports whether m starts its thread: it answers nothing (no

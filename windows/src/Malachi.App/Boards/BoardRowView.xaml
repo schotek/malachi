@@ -94,6 +94,12 @@ the view model's, already cleaned, set as TextBlock.Text.
                 Orientation="Horizontal"
                 Spacing="6">
                 <boards:BoardStatePill x:Name="StatePill" />
+                <ItemsControl
+                    x:Name="BadgeList"
+                    VerticalAlignment="Center"
+                    IsTabStop="False"
+                    ItemTemplate="{StaticResource BoardBadgeTemplate}"
+                    ItemsPanel="{StaticResource BoardBadgesPanel}" />
                 <Border
                     x:Name="DueChip"
                     Background="{ThemeResource BoardDueFillBrush}"
