@@ -365,7 +365,7 @@ public sealed class BoardControllerTests
         Assert.Equal(State.Them, source.Snapshot.FindCase(F.Id("c3"))?.UserState);
         Assert.Equal(["state(Hot)", "state(You)", "state(Them)", "state(Info)"], c.View.Sections.Select(F.KindOf));
         Assert.Equal(["c1", "c2", "c4", "c3", "c5"], Rows(c));
-        Assert.Equal([5, 1, 1, 2, 1, 2], c.View.Nav.Select(n => n.Count));
+        Assert.Equal([5, 1, 1, 2, 1, 0, 2], c.View.Nav.Select(n => n.Count));
         Assert.Equal(F.Id("c1"), c.State.Selection);
         Assert.Equal([Changes.Content], log);
         c.SetState(State.Them, F.Id("c3")); // nothing changes
@@ -584,7 +584,7 @@ public sealed class BoardControllerTests
         source.SetDone(true, F.Id("c1")); // not through the controller
         Assert.True(c.State.Selection == F.Id("c3") && log.SequenceEqual([Changes.Selection | Changes.Content]));
         source.SetState(State.Them, F.Id("c2"));
-        Assert.Equal([4, 0, 1, 2, 1, 3], c.View.Nav.Select(n => n.Count));
+        Assert.Equal([4, 0, 1, 2, 1, 0, 3], c.View.Nav.Select(n => n.Count));
     }
 
     [Fact]

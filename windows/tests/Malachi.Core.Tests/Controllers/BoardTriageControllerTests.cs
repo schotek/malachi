@@ -96,6 +96,8 @@ public sealed class BoardTriageControllerTests
     private static BoardUsage Usage(long input, long output, long write, long read) =>
         new() { InputTokens = input, OutputTokens = output, CacheCreationInputTokens = write, CacheReadInputTokens = read };
 
+    private static BoardUsage AtLeast(BoardUsage usage) => usage with { LowerBound = true };
+
     private static AssistantOptions Options(int max, bool drafts = true) => new()
     {
         Bridge = "/b/malachi-mcp",
@@ -921,7 +923,7 @@ public sealed class BoardTriageControllerTests
     private static string[] UsageLines() => Lines(
         [C.Init], AnnotateUsing("a1", "m1", 5, 100), AnnotateUsing("a2", "m1", 5, 100), AnnotateUsing("a3", "m2", 7, 300));
 
-    private static readonly BoardUsage UsageSum = Usage(12, 2, 20, 400);
+    private static readonly BoardUsage UsageSum = AtLeast(Usage(12, 2, 20, 400));
 
     /// <summary>Without a result: the distinct API messages seen, each once. A cancelled run.</summary>
     [Fact]
@@ -950,7 +952,7 @@ public sealed class BoardTriageControllerTests
         await h.UntilAsync(() => h.C.RunUsage?.InputTokens == 1012);
         h.Clock.Advance(TimeSpan.FromMilliseconds(300));
         await h.EndedAsync();
-        Assert.Equal([End(usage: Usage(1012, 3, 30, 1400))], h.D.RunEndCalls);
+        Assert.Equal([End(usage: AtLeast(Usage(1012, 3, 30, 1400)))], h.D.RunEndCalls);
     }
 
     /// <summary>Without a result: a run that timed out.</summary>
@@ -1041,7 +1043,7 @@ public sealed class BoardTriageControllerTests
             Assert.Equal(new TriageState.Finished(TriageTrigger.Manual, 2, 0, T0), h.C.State);
         });
         await h.EndedAsync();
-        Assert.Equal([End(usage: Usage(12, 2, 20, 400))], h.D.RunEndCalls);
+        Assert.Equal([End(usage: AtLeast(Usage(12, 2, 20, 400)))], h.D.RunEndCalls);
         await h.IdleWithKillAsync();
         Assert.Equal([new BoardTriageEnd(TriageTrigger.Manual, null)], h.Ends);
         Assert.Single(h.D.RunEndCalls);
@@ -1062,7 +1064,7 @@ public sealed class BoardTriageControllerTests
         await h.EndedAsync();
         var ends = h.D.RunEndCalls;
         Assert.Equal(2, ends.Count);
-        Assert.Equal(Usage(5, 1, 10, 100), ends[0].Usage);
+        Assert.Equal(AtLeast(Usage(5, 1, 10, 100)), ends[0].Usage);
         Assert.Null(ends[1].Usage);
     }
 

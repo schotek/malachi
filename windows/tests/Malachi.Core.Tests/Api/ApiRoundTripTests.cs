@@ -100,7 +100,7 @@ public sealed class ApiRoundTripTests
         """{"state":"you","title":"Signed contract for Alice","summary":"Alice needs the signed contract.\nShe asks for Friday.","why":"Alice asked you directly.","tasks":["Sign the contract","Send it to Alice"],"due":@boarddue@,"source":"claude-opus","at":"2026-09-30T08:30:00Z","stale":true}""";
 
     private const string BoardCase =
-        """{"id":"@caseid@","accountId":"acc_1","threadId":"t_9","ruleState":"you","ruleReason":"you.addressed","userState":"hot","annotation":@boardannotation@,"visibility":"snoozed","doneAt":"2026-09-29T10:00:00Z","remindAt":"2026-10-02T07:00:00Z","subject":"Contract","person":@address@,"date":"2026-09-30T08:00:00Z","snippet":"Could you sign","unread":true,"hasAttachments":true,"messageCount":3,"replyMessageId":"m_1","replyFolderId":"f_inbox","latestMessageId":"m_2","issue":@boardissue@,"canArchive":true,"draft":{"draftId":"d_1","text":"Signed, attached.","updated":"2026-09-30T09:00:00Z"},"version":4294967296}""";
+        """{"id":"@caseid@","accountId":"acc_1","threadId":"t_9","ruleState":"you","ruleReason":"you.addressed","userState":"hot","annotation":@boardannotation@,"visibility":"snoozed","doneAt":"2026-09-29T10:00:00Z","remindAt":"2026-10-02T07:00:00Z","remindedAt":"2026-10-02T07:00:05Z","subject":"Contract","person":@address@,"date":"2026-09-30T08:00:00Z","snippet":"Could you sign","unread":true,"hasAttachments":true,"messageCount":3,"replyMessageId":"m_1","replyFolderId":"f_inbox","latestMessageId":"m_2","issue":@boardissue@,"canArchive":true,"draft":{"draftId":"d_1","text":"Signed, attached.","updated":"2026-09-30T09:00:00Z"},"version":4294967296}""";
 
     private const string BoardCommitment =
         """{"id":"k_1","caseId":"@caseid@","accountId":"acc_1","messageId":"m_3","text":"Send the report","quote":"I will send the report on Monday.","due":"2026-10-05T09:00:00Z","state":"closed","closedReason":"replied","at":"2026-09-30T08:31:00Z"}""";
@@ -111,11 +111,13 @@ public sealed class ApiRoundTripTests
     private const string BoardRun =
         """{"at":"2026-09-30T08:00:00Z","endedAt":"2026-09-30T08:02:00Z","trigger":"auto","source":"claude-opus","annotated":3,"error":"timeout"}""";
 
+    private const string BoardMoved = """{"messageId":"m_1","fromFolderId":"f_inbox"}""";
+
     private const string BoardUsage =
-        """{"inputTokens":1200,"outputTokens":340,"cacheCreationInputTokens":5,"cacheReadInputTokens":1000000000000}""";
+        """{"inputTokens":1200,"outputTokens":340,"cacheCreationInputTokens":5,"cacheReadInputTokens":1000000000000,"lowerBound":true}""";
 
     private const string BoardUsageTotal =
-        """{"inputTokens":2400,"outputTokens":680,"cacheCreationInputTokens":10,"cacheReadInputTokens":2000000000000,"runs":2}""";
+        """{"inputTokens":2400,"outputTokens":680,"cacheCreationInputTokens":10,"cacheReadInputTokens":2000000000000,"runs":2,"lowerBound":true}""";
 
     private const string BoardTriage = """{"lastRun":@boardrun@,"annotatedTodayAuto":3,"queue":5,"usage24h":@boardusagetotal@}""";
 
@@ -208,7 +210,8 @@ public sealed class ApiRoundTripTests
         [nameof(BoardRemindParams)] = Case<BoardRemindParams>("""{"caseId":"@caseid@","until":"2026-10-02T07:00:00Z"}"""),
         [nameof(BoardRemindResult)] = Case<BoardRemindResult>("""{"case":@boardcase@}"""),
         [nameof(BoardArchiveParams)] = Case<BoardArchiveParams>("""{"caseId":"@caseid@"}"""),
-        [nameof(BoardArchiveResult)] = Case<BoardArchiveResult>("""{"archived":0,"noArchive":true,"case":@boardcase@}"""),
+        [nameof(BoardArchiveResult)] = Case<BoardArchiveResult>("""{"archived":0,"noArchive":true,"case":@boardcase@,"moved":[@boardmoved@]}"""),
+        [nameof(Malachi.Core.Api.BoardMoved)] = Case<BoardMoved>(BoardMoved),
         [nameof(BoardUnflagParams)] = Case<BoardUnflagParams>("""{"caseId":"@caseid@"}"""),
         [nameof(BoardUnflagResult)] = Case<BoardUnflagResult>("""{"case":@boardcase@,"unflagged":2}"""),
         [nameof(BoardDiscardDraftParams)] = Case<BoardDiscardDraftParams>("""{"caseId":"@caseid@"}"""),
@@ -665,7 +668,7 @@ public sealed class ApiRoundTripTests
             ("@caseid@", CaseId), ("@boardissue@", BoardIssue), ("@boarddue@", BoardDue), ("@boardannotation@", BoardAnnotation),
             ("@boardcase@", BoardCase), ("@boardcommitment@", BoardCommitment), ("@boardmessage@", BoardMessage),
             ("@boardrun@", BoardRun), ("@boardtriage@", BoardTriage), ("@boardwindows@", BoardWindows),
-            ("@boardusage@", BoardUsage), ("@boardusagetotal@", BoardUsageTotal),
+            ("@boardmoved@", BoardMoved), ("@boardusage@", BoardUsage), ("@boardusagetotal@", BoardUsageTotal),
             ("@boardpreferences@", BoardPreferences), ("@boardqueuemessage@", BoardQueueMessage), ("@boardqueueitem@", BoardQueueItem),
         };
         string previous;

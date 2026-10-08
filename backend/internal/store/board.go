@@ -264,6 +264,11 @@ type BoardDrainOptions struct {
 	// 500 ms). At least one thread is taken.
 	MaxMembers int
 	Budget     time.Duration
+	// Clock reads the time the Budget is measured with; nil = time.Now.
+	// Tests pass one that advances by itself: a budget of a nanosecond is
+	// not enough for Windows' timer, which can report no time at all after
+	// the first thread.
+	Clock func() time.Time
 	// Assistant: the board's assistant preference is on, so a current
 	// annotation's deadline after Now keeps a case the rules dropped.
 	Assistant bool
@@ -344,7 +349,11 @@ func (s *Store) DrainBoard(ctx context.Context, opt BoardDrainOptions, decide Bo
 		return out, fmt.Errorf("drain board: %w", err)
 	}
 	defer tx.Rollback()
-	start := time.Now()
+	clock := opt.Clock
+	if clock == nil {
+		clock = time.Now
+	}
+	start := clock()
 
 	type key struct{ account, thread string }
 	var batch []key
@@ -367,7 +376,7 @@ func (s *Store) DrainBoard(ctx context.Context, opt BoardDrainOptions, decide Bo
 	changed := map[string]bool{}
 	loaded := 0
 	for i, k := range batch {
-		if i > 0 && (loaded >= maxMembers || time.Since(start) >= budget) {
+		if i > 0 && (loaded >= maxMembers || clock().Sub(start) >= budget) {
 			break
 		}
 		if _, err := tx.ExecContext(ctx, `SAVEPOINT board_thread`); err != nil {

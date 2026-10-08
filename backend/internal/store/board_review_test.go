@@ -238,7 +238,11 @@ func TestBoardDrainBudgets(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		boardMail(t, s, inbox, uint32(i+1), fmt.Sprintf("m%d", i), "")
 	}
-	for i, opt := range []BoardDrainOptions{{Now: boardNow, MaxMembers: 1}, {Now: boardNow, Budget: time.Nanosecond}} {
+	// The budget option runs on a clock that advances a millisecond per
+	// reading: the real one can stand still across a thread on Windows.
+	tick := boardNow
+	ticking := func() time.Time { tick = tick.Add(time.Millisecond); return tick }
+	for i, opt := range []BoardDrainOptions{{Now: boardNow, MaxMembers: 1}, {Now: boardNow, Budget: time.Millisecond, Clock: ticking}} {
 		if err := s.MarkBoardAccountDirty(ctx, "acc", time.Time{}); err != nil {
 			t.Fatal(err)
 		}
