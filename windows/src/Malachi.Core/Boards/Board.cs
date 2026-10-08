@@ -7,7 +7,7 @@
 // ParseStartChoice, StartMode, StartWait, StartDecision, Allows, ModeFor, ViewsMail, ParseStyle,
 // DefaultStyle, DefaultStyles, ParseDefaultStyle, StyleOnShow,
 // FilterOnShow) and text.go (Mail, BoardName). The nicks are
-// BoardModeExtensions.
+// BoardModeNickExtensions, BoardStartChoiceExtensions and BoardDefaultStyleExtensions.
 //
 // The main window's two modes: Mail (the folders, the list, the reader and
 // the assistant panel, as always) and Board (a triage board). The window

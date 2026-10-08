@@ -497,7 +497,11 @@ public sealed partial class BoardController
             // The saved filter, once the accounts are known; an account that
             // went away leaves every account.
             var filter = Board.FilterOnShow(saved, snapshot.Accounts);
-            AccountId? savedId = filter.Length == 0 ? null : new AccountId(filter);
+            AccountId? savedId = null;
+            if (filter.Length != 0)
+            {
+                savedId = new AccountId(filter);
+            }
             if (savedId != next.Account)
             {
                 next = next with { Account = savedId, Selection = null };

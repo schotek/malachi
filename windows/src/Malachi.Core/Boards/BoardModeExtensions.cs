@@ -9,15 +9,21 @@
 
 namespace Malachi.Core.Boards;
 
-/// <summary>Go's methods of <see cref="Board.Mode"/>, <see cref="Board.StartChoice"/> and <see cref="Board.DefaultStyle"/>.</summary>
-public static class BoardModeExtensions
+/// <summary>Go's method of <see cref="Board.Mode"/>.</summary>
+/// <remarks>One static class per receiver: several extension blocks in one
+/// class trip CA1708 over their synthesised names.</remarks>
+public static class BoardModeNickExtensions
 {
     extension(Board.Mode mode)
     {
         /// <summary>The mode's value in the settings (board-last-mode): "mail", "board".</summary>
         public string Nick => mode == Board.Mode.Board ? "board" : "mail";
     }
+}
 
+/// <summary>Go's method of <see cref="Board.StartChoice"/>.</summary>
+public static class BoardStartChoiceExtensions
+{
     extension(Board.StartChoice choice)
     {
         /// <summary>The choice's value in the settings (board-start-mode): "mail", "board", "last".</summary>
@@ -28,7 +34,11 @@ public static class BoardModeExtensions
             _ => "mail",
         };
     }
+}
 
+/// <summary>Go's methods of <see cref="Board.DefaultStyle"/>.</summary>
+public static class BoardDefaultStyleExtensions
+{
     extension(Board.DefaultStyle choice)
     {
         /// <summary>Last Used: the style the user had last; <see cref="Style"/> is then unused.</summary>

@@ -423,7 +423,7 @@ public sealed class SettingsStore : IDisposable
 
     /// <summary>
     /// The mode the main window showed last ("mail" or "board",
-    /// <see cref="BoardModeExtensions"/>), written on every switch; read
+    /// <see cref="BoardModeNickExtensions"/>), written on every switch; read
     /// for <see cref="Board.StartChoice.Last"/>.
     /// </summary>
     public string BoardLastMode
