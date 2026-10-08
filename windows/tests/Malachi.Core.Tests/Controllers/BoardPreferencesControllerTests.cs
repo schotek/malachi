@@ -273,7 +273,7 @@ public sealed class BoardPreferencesControllerTests
         static Account A(string id, string? kind, bool enabled) => new()
         {
             Id = new AccountId(id),
-            Config = new AccountConfig { Name = id, Email = "", Kind = kind is null ? null : new AccountKind(kind) },
+            Config = new AccountConfig { Name = id, Email = "", Kind = kind is null ? (AccountKind?)null : new AccountKind(kind) },
             Enabled = enabled,
             State = new SyncState { AccountId = new AccountId(id), Status = SyncStatus.Idle },
         };
@@ -306,7 +306,7 @@ public sealed class BoardPreferencesControllerTests
         static Account A(string id, string? kind, bool enabled) => new()
         {
             Id = new AccountId(id),
-            Config = new AccountConfig { Name = id, Email = "", Kind = kind is null ? null : new AccountKind(kind) },
+            Config = new AccountConfig { Name = id, Email = "", Kind = kind is null ? (AccountKind?)null : new AccountKind(kind) },
             Enabled = enabled,
             State = new SyncState { AccountId = new AccountId(id), Status = SyncStatus.Idle },
         };

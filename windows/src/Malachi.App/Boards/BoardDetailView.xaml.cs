@@ -272,7 +272,7 @@ public sealed partial class BoardDetailView : UserControl, IBoardConversationHos
     // its label that no button before it has, Close's (from its msgid)
     // first. Windows-only: GTK's and macOS's buttons have no mnemonics; the
     // labels are translated, and so are the keys.
-    private void AssignAccessKeys(IReadOnlyList<(Button Button, string Label)> buttons)
+    private static void AssignAccessKeys(IReadOnlyList<(Button Button, string Label)> buttons)
     {
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (Core.Presentation.Mnemonic.Parse(Board.Text.Close).AccessKey is { } close)
