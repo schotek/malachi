@@ -281,11 +281,12 @@ func (w *Window) setMode(m board.Mode) {
 // applyMessageAccels keeps the single-key list shortcuts (MessageAccels)
 // installed exactly when a key may act on the selected message: in Mail,
 // and with the keyboard away from a text field (typingAllowsAccels,
-// search.go's gate — a letter typed in the search entry must not archive
-// the selected message). Board hides the list and the reader those
-// shortcuts act on (board.Allows CommandMessageAction), so they never fire
-// there, however the typing gate stands; called by setMode and by
-// search.go wherever typingAllowsAccels changes.
+// typing_gate.go's gate — a letter typed in the search entry or the
+// assistant's question must not archive the selected message). Board hides
+// the list and the reader those shortcuts act on (board.Allows
+// CommandMessageAction), so they never fire there, however the typing gate
+// stands; called by setMode and by setTypingAccels (search.go) wherever
+// typingAllowsAccels changes.
 func (w *Window) applyMessageAccels() {
 	w.installMessageAccels(messageAccelsAllowed(w.mode, w.typingAllowsAccels))
 }

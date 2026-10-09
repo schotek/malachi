@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-08 08:50+0000\n"
+"POT-Creation-Date: 2026-10-09 08:21+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -2439,7 +2439,7 @@ msgstr ""
 msgid "The conversation could not be loaded."
 msgstr ""
 
-#: ui/internal/board/text.go:757 ui/internal/window/assistant_panel.go:667
+#: ui/internal/board/text.go:757 ui/internal/window/assistant_panel.go:669
 #: ui/internal/window/status.go:324 ui/data/ui/window.ui:433
 msgid "Try Again"
 msgstr ""
@@ -3647,7 +3647,7 @@ msgid_plural "+%d more"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/assistant_panel.go:963 ui/internal/window/drafts.go:77
+#: ui/internal/window/assistant_panel.go:965 ui/internal/window/drafts.go:77
 msgid "Opening the draft"
 msgstr ""
 
@@ -4202,48 +4202,48 @@ msgid_plural "%d pictures of this message are on the server only"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/search.go:259
+#: ui/internal/window/search.go:258
 msgid "Loading more results"
 msgstr ""
 
-#: ui/internal/window/search.go:311 ui/internal/window/search_ownwords.go:153
+#: ui/internal/window/search.go:310 ui/internal/window/search_ownwords.go:153
 #: ui/data/ui/window.ui:261
 msgid "Search Mail"
 msgstr ""
 
-#: ui/internal/window/search.go:315
+#: ui/internal/window/search.go:314
 msgid "Search Failed"
 msgstr ""
 
-#: ui/internal/window/search.go:316
+#: ui/internal/window/search.go:315
 msgid "Searching"
 msgstr ""
 
-#: ui/internal/window/search.go:318
+#: ui/internal/window/search.go:317
 msgid "Searching…"
 msgstr ""
 
-#: ui/internal/window/search.go:320
+#: ui/internal/window/search.go:319
 msgid "No Results"
 msgstr ""
 
 #. TRANSLATORS: tooltip of the Folder search scope; %s is a folder.
-#: ui/internal/window/search.go:343
+#: ui/internal/window/search.go:342
 #, c-format
 msgid "Search in %s"
 msgstr ""
 
-#: ui/internal/window/search.go:345
+#: ui/internal/window/search.go:344
 msgid "Select a folder to search in it"
 msgstr ""
 
 #. TRANSLATORS: tooltip of the Account search scope; %s is an account.
-#: ui/internal/window/search.go:349
+#: ui/internal/window/search.go:348
 #, c-format
 msgid "Search every folder of %s except Trash and Junk"
 msgstr ""
 
-#: ui/internal/window/search.go:353
+#: ui/internal/window/search.go:352
 msgid "Search every account except Trash and Junk"
 msgstr ""
 
@@ -4493,15 +4493,15 @@ msgstr ""
 msgid "Loading the conversation"
 msgstr ""
 
-#: ui/internal/window/window.go:948
+#: ui/internal/window/window.go:952
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:1020 ui/data/ui/window.ui:244
+#: ui/internal/window/window.go:1024 ui/data/ui/window.ui:244
 msgid "Search"
 msgstr ""
 
-#: ui/internal/window/window.go:1026 ui/data/ui/window.ui:214
+#: ui/internal/window/window.go:1030 ui/data/ui/window.ui:214
 msgid "Messages"
 msgstr ""
 

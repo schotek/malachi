@@ -438,6 +438,8 @@ func (p *assistantPanel) text() string {
 
 // bindInput: Return sends, Shift-Return starts a new line, Escape drops a
 // waiting message action; the placeholder shows while the field is empty.
+// Letters are the field's own: the window's typing gate (typing_gate.go)
+// lifts the single-key mail shortcuts while it has the keyboard.
 func (p *assistantPanel) bindInput() {
 	buf := p.input.Buffer()
 	buf.ConnectChanged(func() {

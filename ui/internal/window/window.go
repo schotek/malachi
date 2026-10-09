@@ -247,7 +247,9 @@ type Window struct {
 	// mainMenu is window.blp's primary_menu, the main menu's model, which
 	// the board's header reuses (board_list.go wireMenuButton).
 	mainMenu gio.MenuModeller
-	// typingAllowsAccels is search.go's single-key gate (setTypingAccels);
+	// typingAllowsAccels is the single-key shortcuts' typing gate
+	// (typing_gate.go wireTypingGate, search.go setTypingAccels): false
+	// while an editable text widget of the window has the keyboard;
 	// combined with the mode (board.Allows CommandMessageAction) by
 	// applyMessageAccels.
 	typingAllowsAccels bool
@@ -310,7 +312,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		conn:       connView{State: client.Connecting},
 		statusRows: make(map[api.AccountID]*statusRow),
 		// The mail single-key shortcuts are bound at the application level
-		// from the start (main.go addActions); setTypingAccels only ever
+		// from the start (main.go addActions); the typing gate only ever
 		// lifts them from here on, so its baseline must agree.
 		typingAllowsAccels: true,
 
@@ -579,6 +581,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	w.setupBoardMode()
 	w.setupModeMemory()
 	w.wireModeKeys()
+	w.wireTypingGate()
 	return w
 }
 
@@ -815,8 +818,9 @@ func (w *Window) onMessageRowSelected(row *gtk.ListBoxRow) {
 
 // MessageAccels are the keyboard shortcuts of the main window's win.*
 // actions, which main.go registers with the application. The single-key
-// ones (no modifier) are lifted while the search entry has the keyboard
-// (search.go): typing an "a" there must not archive the selected message.
+// ones (no modifier) are lifted while a text field of the window has the
+// keyboard (typing_gate.go): typing an "a" into the search entry or the
+// assistant's question must not archive the selected message.
 var MessageAccels = map[string]string{
 	"win.trash":       "Delete",
 	"win.archive":     "a",

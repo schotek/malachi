@@ -234,9 +234,10 @@ func (p *boardPage) keyboardInReplyPane() bool {
 	return p.replyShown != nil && p.replyShown.KeyboardInside()
 }
 
-// keyboardInText reports the keyboard where a letter is typing: a text
-// field or text view anywhere on the page, or anything in the reply slot
-// (the inline editor, its fields, Suggest Reply's instruction).
+// keyboardInText reports the keyboard where a letter is typing: an
+// editable text field or text view anywhere on the page (focusTakesTyping,
+// typing_gate.go, the window's rule), or anything in the reply slot (the
+// inline editor, its fields, Suggest Reply's instruction).
 func (p *boardPage) keyboardInText() bool {
 	f := p.w.Focus()
 	if f == nil {
@@ -245,11 +246,7 @@ func (p *boardPage) keyboardInText() bool {
 	if gtk.BaseWidget(f).IsAncestor(p.replySlot) {
 		return true
 	}
-	switch gtk.BaseWidget(f).Cast().(type) {
-	case *gtk.Text, *gtk.TextView, *gtk.Entry, *gtk.SearchEntry, *gtk.PasswordEntry, *gtk.SpinButton:
-		return true
-	}
-	return false
+	return focusTakesTyping(f)
 }
 
 // boardKey runs a board key on the selected case through the same

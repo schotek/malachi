@@ -301,9 +301,9 @@ func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, stor
 	app.SetAccelsForAction("app.quit", []string{"<Control>q"})
 
 	// Actions of the main window (window.registerActions). The window
-	// lifts the single-key ones while its search entry has the keyboard. A
-	// message window mirrors them for its msg.* group
-	// (window.messageShortcuts).
+	// lifts the single-key ones while one of its text fields has the
+	// keyboard (window.wireTypingGate). A message window mirrors them for
+	// its msg.* group (window.messageShortcuts).
 	for action, accel := range window.MessageAccels {
 		app.SetAccelsForAction(action, []string{accel})
 	}
