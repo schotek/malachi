@@ -109,6 +109,7 @@ func Evaluate(t Thread, id Identity, now time.Time) Verdict {
 	fill(&v, counting, shown, id)
 	if !jira && !pending {
 		v.texts = idsOf(window)
+		archiveState(&v, counting)
 	}
 	if n := len(deciding); n > 0 {
 		v.DecidingMessageID, v.DecidingMine = deciding[n-1].ID, deciding[n-1].mine
@@ -127,6 +128,36 @@ func Evaluate(t Thread, id Identity, now time.Time) Verdict {
 		v.State, v.Reason = inboundRule(counting, deciding[len(deciding)-1], id)
 	}
 	return v
+}
+
+// archiveState fills Archived and NewestInboundInInbox from the folder
+// roles of every copy of the inbound counting messages (a copy in the
+// trash, junk or drafts was dropped by prepare and says nothing): the
+// newest inbound message is the last of counting that is not the user's.
+func archiveState(v *Verdict, counting []*entry) {
+	var newest *entry
+	inbox := false
+	for _, e := range counting {
+		if e.mine {
+			continue
+		}
+		newest = e
+		for _, c := range e.copies {
+			inbox = inbox || c.FolderRole == api.RoleInbox
+		}
+	}
+	if newest == nil {
+		return
+	}
+	for _, c := range newest.copies {
+		switch c.FolderRole {
+		case api.RoleInbox:
+			v.NewestInboundInInbox = true
+		case api.RoleArchive:
+			v.Archived = true
+		}
+	}
+	v.Archived = v.Archived && !inbox
 }
 
 // anyFlagged reports whether the user flagged a copy of a counting

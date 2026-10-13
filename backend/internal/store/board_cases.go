@@ -520,6 +520,21 @@ func loadBoardSeenTx(ctx context.Context, q querier, accountID, threadID string)
 	return out, nil
 }
 
+// closeOpenCommitmentsDoneTx closes the case's open commitments with
+// reason done at now (the case is being marked done), reporting how many.
+func closeOpenCommitmentsDoneTx(ctx context.Context, tx *sql.Tx, caseID, now string) (int, error) {
+	res, err := tx.ExecContext(ctx, `UPDATE board_commitments SET state = 'closed', closed_reason = ?, closed_at = ?
+		WHERE case_id = ? AND state = 'open'`, api.CommitmentClosedDone, now, caseID)
+	if err != nil {
+		return 0, fmt.Errorf("board: close the commitments on done: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("board: close the commitments on done: %w", err)
+	}
+	return int(n), nil
+}
+
 // reopenDoneCommitmentsTx opens again the commitments that marking the case
 // done closed (closed_reason done, at or after its done time): the case is
 // live again without them having been kept.
@@ -566,8 +581,7 @@ func (s *Store) SetBoardDone(ctx context.Context, id string, done bool, now time
 			}
 			return `done_at = '', done_seen = ''`, nil, nil
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE board_commitments SET state = 'closed', closed_reason = ?, closed_at = ?
-			WHERE case_id = ? AND state = 'open'`, api.CommitmentClosedDone, stamp(now), id); err != nil {
+		if _, err := closeOpenCommitmentsDoneTx(ctx, tx, id, stamp(now)); err != nil {
 			return "", nil, fmt.Errorf("set board done: %w", err)
 		}
 		if !c.DoneAt.IsZero() && c.RemindAt.IsZero() {

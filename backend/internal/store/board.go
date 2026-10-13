@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -224,6 +225,14 @@ type BoardVerdict struct {
 	DecidingMessageID string
 	DecidingMine      bool
 
+	// Archived: the thread's inbound members that count are out of the
+	// inbox and the newest of them lies in the archive folder (any copy;
+	// board.Verdict.Archived); NewestInboundInInbox: the newest of them
+	// has a copy in the inbox. DrainBoard reads the transitions of both
+	// against the case's last judgement (the archive in the mail view).
+	Archived             bool
+	NewestInboundInInbox bool
+
 	// NewestInboundStored and NewestInboundDate are the StoredAt and the
 	// arrival (InternalDate, else Date) of the newest inbound member that
 	// counts, or of the inbound member that reopens a done case or ends a
@@ -316,9 +325,14 @@ type BoardDrain struct {
 //
 // For an existing case, first a done case reopens per BoardVerdict (the
 // user's state cleared with it), a remind ends per BoardVerdict, and the
-// open commitments the deciding member answers are closed (replied); what
-// keeps a case is judged after those. The version goes up whenever any
-// column changes.
+// open commitments the deciding member answers are closed (replied); then
+// the archive in the mail view: a live case whose thread turned Archived
+// since its last judgement is marked done as SetBoardDone does (the user
+// archived it, in whatever client), a done case whose newest inbound
+// member, one it had when it was marked done, came back into the inbox is
+// live again as SetBoardDone with done false does; what keeps a case is
+// judged after those. A thread Archived already makes no new case. The
+// version goes up whenever any column changes.
 //
 // A thread whose evaluation fails (decide's error, an unknown state, a row
 // that does not decode) is rolled back to before it, reported in Failed
@@ -527,6 +541,14 @@ func (s *Store) evaluateBoardThread(ctx context.Context, tx *sql.Tx, accountID, 
 		// Older than any window: no row for the prune to delete again.
 		return false, n, nil
 	}
+	if cur == nil && v.Archived {
+		// Archived already (its inbound messages out of the inbox, the
+		// newest in the archive folder): handled before the board saw
+		// it — a first evaluation over old mail, a message the phone
+		// archived before the daemon stored it. No case; a message that
+		// arrives in the inbox makes one.
+		return false, n, nil
+	}
 
 	d := boardDerived{
 		ruleState: string(v.State), ruleReason: string(v.Reason), rulesVersion: v.RulesVersion,
@@ -571,8 +593,11 @@ func (s *Store) evaluateBoardThread(ctx context.Context, tx *sql.Tx, accountID, 
 	d.doneAt, d.doneSeen = optStamp(cur.DoneAt), cur.doneSeen
 	d.userState, d.userAt = string(cur.UserState), optStamp(cur.UserStateAt)
 	d.remindAt, d.reminded = optStamp(cur.RemindAt), cur.Reminded
+	// New mail that arrived archived (the phone handled it before the
+	// daemon stored it: the thread is Archived) neither reopens a done
+	// case nor ends a remind; moved into the inbox later, it does.
 	reopened := 0
-	if !cur.DoneAt.IsZero() && v.NewestInboundStored.After(cur.DoneAt) && v.NewestInboundDate.After(cur.DoneAt.Add(-24*time.Hour)) &&
+	if !cur.DoneAt.IsZero() && !v.Archived && v.NewestInboundStored.After(cur.DoneAt) && v.NewestInboundDate.After(cur.DoneAt.Add(-24*time.Hour)) &&
 		!cur.SeenAtDone(v.NewestInboundMessageID) {
 		d.doneAt, d.doneSeen = "", ""
 		d.userState, d.userAt = "", ""
@@ -582,7 +607,7 @@ func (s *Store) evaluateBoardThread(ctx context.Context, tx *sql.Tx, accountID, 
 			return false, n, err
 		}
 	}
-	if set := cur.RemindSetAt(); !set.IsZero() && v.NewestInboundStored.After(set) && v.NewestInboundDate.After(set.Add(-24*time.Hour)) &&
+	if set := cur.RemindSetAt(); !set.IsZero() && !v.Archived && v.NewestInboundStored.After(set) && v.NewestInboundDate.After(set.Add(-24*time.Hour)) &&
 		!cur.SeenAtDone(v.NewestInboundMessageID) {
 		d.remindAt, d.reminded, d.doneSeen = "", false, ""
 	}
@@ -591,13 +616,46 @@ func (s *Store) evaluateBoardThread(ctx context.Context, tx *sql.Tx, accountID, 
 		return false, n, err
 	}
 
+	// The archive in the mail view (docs/api.md §4.13), read as the
+	// transitions since the case's last judgement, from the columns it
+	// left: only a change marks a case, so one the user moved back to
+	// the board stays live however often its archived thread is judged
+	// again (read, flagged, the rules revised).
+	closedDone := 0
+	newest := boardNewestInbound(members, v.ReplyMessageID)
+	if d.doneAt == "" && v.Archived {
+		// Archived now; last time no member that counted was in the
+		// inbox and the newest inbound one lay in the very folder its
+		// archive copy is in now, or the case was judged by rules that
+		// never looked (boardRulesSawArchive).
+		was := !cur.CanArchive && cur.ReplyFolderID != "" && cur.ReplyFolderID == boardCopyFolder(members, newest, api.RoleArchive)
+		if !was || !boardRulesSawArchive(cur.RulesVersion) {
+			if closedDone, err = closeOpenCommitmentsDoneTx(ctx, tx, cur.ID, nowStr); err != nil {
+				return false, n, err
+			}
+			d.doneAt, d.doneSeen = nowStr, boardDoneSeen(members)
+			d.remindAt, d.reminded = "", false
+		}
+	} else if d.doneAt != "" && v.NewestInboundInInbox && newest != nil {
+		// The newest inbound member, one the case had when it was marked
+		// done, is back in the inbox it was not in last time: un-archived
+		// (a move by another client arrives as a new row). As
+		// SetBoardDone with done false: the user's state stays.
+		if f := boardCopyFolder(members, newest, api.RoleInbox); f != "" && f != cur.ReplyFolderID && cur.SeenAtDone(newest.RFCMessageID) {
+			d.doneAt, d.doneSeen = "", ""
+			if reopened, err = reopenDoneCommitmentsCountTx(ctx, tx, *cur); err != nil {
+				return false, n, err
+			}
+		}
+	}
+
 	if v.State == "" {
 		// Judged after the commitments the deciding member answered were
 		// closed and after new mail ended a remind: a case whose only hold
 		// just went is deleted now, not kept for its window.
 		// A linked suggested reply that still exists keeps its case too:
 		// unstarring it or replying elsewhere never orphans the draft.
-		kept := d.userState != "" || d.remindAt != "" || t.OpenCommitments+reopened-closed > 0 || cur.Draft != nil ||
+		kept := d.userState != "" || d.remindAt != "" || t.OpenCommitments+reopened-closed-closedDone > 0 || cur.Draft != nil ||
 			(opt.Assistant && cur.Annotation != nil && cur.Annotation.InputKey == inputKey && cur.Annotation.Due != nil &&
 				cur.Annotation.Due.At.After(now))
 		if !kept {
@@ -837,6 +895,50 @@ func boardCounts(m BoardMember) bool {
 		return m.ItemKind != api.IssueItemEvent
 	}
 	return m.Mine || m.Bulk == "none"
+}
+
+// boardArchiveRules is the first rules version whose verdicts say whether
+// a thread is archived (board.RulesVersion "7"). A case judged by an
+// earlier version never had the chance to be marked done by an archive,
+// so its first judgement since marks it done when its thread is archived,
+// whatever its columns say of the last time.
+const boardArchiveRules = 7
+
+// boardRulesSawArchive says whether the rules version could tell an
+// archive; a version that is no number (a test's) counts as current.
+func boardRulesSawArchive(version string) bool {
+	n, err := strconv.Atoi(version)
+	return err != nil || n >= boardArchiveRules
+}
+
+// boardNewestInbound is the member replyID names (BoardVerdict.ReplyMessageID)
+// when it is inbound — the newest inbound member that counts; the verdict
+// falls back to the newest member of the user's — nil otherwise.
+func boardNewestInbound(members []BoardMember, replyID string) *BoardMember {
+	for i := range members {
+		if m := &members[i]; m.ID == replyID {
+			if m.Mine || m.TwinOfMine {
+				return nil
+			}
+			return m
+		}
+	}
+	return nil
+}
+
+// boardCopyFolder is the folder of role role holding a copy of m (a row
+// sharing its Message-ID, or m itself), "" when there is none or m is nil.
+func boardCopyFolder(members []BoardMember, m *BoardMember, role api.FolderRole) string {
+	if m == nil {
+		return ""
+	}
+	for i := range members {
+		c := &members[i]
+		if c.Role == role && (c.ID == m.ID || (m.RFCMessageID != "" && c.RFCMessageID == m.RFCMessageID)) {
+			return c.FolderID
+		}
+	}
+	return ""
 }
 
 // boardKeys computes a thread's input key (the members that count and

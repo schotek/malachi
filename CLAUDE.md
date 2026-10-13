@@ -1062,7 +1062,7 @@ rozhodnutí v §7). **Případ** je jedno vlákno účtu (u účtu jira issue) v
 jednom ze čtyř stavů `hot` / `you` / `them` / `info` (česky Hoří, Čeká na
 vás, Čeká na ně, Pro informaci od 2026-10-08; anglické msgidy Hot, Waiting
 for You, Waiting for Them, For Your Information zůstaly). Stav dávají pravidla démona
-(`internal/board`, čistý balíček bez storu a hodin, `RulesVersion` "6";
+(`internal/board`, čistý balíček bez storu a hodin, `RulesVersion` "7";
 každá změna pravidel nebo toho, co jim store podává, = nové číslo, démon
 pak přepočítá všechny případy i uloženou poštu v nejdelším okně). Čtou jen
 hlavičky, strukturu, role složek, příznaky a klasifikaci hromadné pošty,
@@ -1493,6 +1493,35 @@ posílá `sandbox: read-only`, `approvalPolicy: never`, `environments: []`,
 `ephemeral: true` (`docs/chatgpt-integration.md`), verze Codexu se jen
 ukazuje v Předvolbách a není bránou.
 
+Archivace v Poště = Hotovo (2026-10-13, `feat/board`, necommitnuté; jen
+démon, klienti beze změny — všechny tři to dostanou přes
+`notify.boardChanged`). Vlastník archivoval vyřízenou poštu v Poště a
+případy zůstaly: pravidla počítala člena v Archivu jako kteréhokoli
+jiného. `RulesVersion` "7": verdikt říká, kde příchozí zprávy leží
+(`Archived` = žádná kopie v Doručené a nejnovější v Archivu,
+`NewestInboundInInbox`), store (`DrainBoard`) z toho čte **přechody**
+proti poslednímu hodnocení (`can_archive`, `reply_folder_id`; bez
+migrace): živý nebo odložený případ, jehož vlákno uživatel archivoval
+kterýmkoli klientem (i telefonem, přesun přijde jako smazaný a nový
+řádek), je hotový jako po `board.archive` (remind pryč, závazky zavřené
+`done`, stav uživatele zůstává); nejnovější příchozí zpráva, kterou
+případ měl při Hotovo, vrácená do Doručené ho vrátí jako `board.setDone
+{done:false}` (stav zůstává, závazky zavřené Hotovem se otevřou);
+„Vrátit na nástěnku“ drží, i když se archivované vlákno hodnotí znovu
+(přečtení, hvězdička); zpráva, která přišla už archivovaná (vyřízená
+na telefonu), hotový případ neotevře ani remind neukončí, dokud není
+v Doručené; už archivované vlákno nový případ nedělá; případy z pravidel
+před 7 se při prvním přepočtu uzavřou (`boardRulesSawArchive`); případ
+`them` archivovaný po odpovědi je hotový taky (došlá odpověď ho otevře);
+Gmail (All Mail nesynchronizované) dál končí jako osiřelý případ.
+Dokumentace `docs/api.md` §4.13 „Archived threads“, `docs/architecture.md`
+§3.7 a §7. Testy zelené na tomto Macu: `TestArchiveState` (pravidla),
+`TestBoardArchiveInMailView` (store i core), celé `internal/board`,
+`pkg/api`, most a `store`/`core` s filtrem Board. Vlastník ověří nad
+kopií storu: první start přepočítá všechny případy a už archivované
+uzavře (objeví se v Hotovo), pak archivaci v Poště, Vrátit na nástěnku
+a přesun zpět do Doručené.
+
 Stav ověření oprav (2026-10-08, upřímně). Na tomto Macu proběhly a jsou
 zelené: `go vet` a Go testy démona (`pkg/api`, `internal/board`, most
 `malachi-mcp`, `internal/rpc`, `store` a `core` s `-run 'Board|Merge|Thread'`),
@@ -1523,7 +1552,7 @@ keychainu v `AppState.init`: `ChatGPTKeychain.tokens()` ignoruje
 (oddělovač toolbaru po Pošta → Nástěnka → Pošta, pane v panelu, Dnes bez
 kalendáře, kapsle Zpět, menu Nástěnka s D/R/E, monitor ⌘1/⌘2) se neměřilo.
 Čeká na vlastníka (CP2): macOS nad kopií dat s vlastním socketem — první
-start přepočítá nástěnku (pravidla v6) — Odložené, Připomenuto po vypršení,
+start přepočítá nástěnku (pravidla v7) — Odložené, Připomenuto po vypršení,
 probuzení poštou, Nový kontakt, Zpět u Archivovat (u Gmailu bez Zpět),
 Escape dvoustupňově, ⌘1/⌘2/E/D/R, pane při změně stylu a zúžení, Předvolby
 (Zobrazovat nástěnku, Zobrazení, Při spuštění, Ponechat případy, Třídit
@@ -1633,7 +1662,7 @@ komprese a příloh na vyžádání, Microsoft účty).
   UI neměň, přesměrovaly by i dconf s předvolbami. Komentáře
   na produkční Jiře jen do issue, které uživatel sám určí; Data Center
   není k dispozici a ověřuje se jen fakem `internal/jira/jiratest`.
-- Nástěnku zkoušej taky jen nad kopií (první start s `RulesVersion` 6 přepočítá
+- Nástěnku zkoušej taky jen nad kopií (první start s `RulesVersion` 7 přepočítá
 všechny případy a poštu nejdelšího okna, stavy uživatele, Done a remindy
 zůstanou; vlastníkovi to říct před testem): migrace 0017 je nevratná (tabulky
   `board_*` a triggery na `messages`, `issues`, `issue_items`, `meta`),

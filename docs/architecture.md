@@ -1235,7 +1235,7 @@ before (`restartBoardBackfill`, which a pass under way notices before it
 records anything more). `board.list` says `ready: false` until the pass
 is done and the set is empty.
 
-**The rules** (`internal/board`, `RulesVersion` "6"). What counts: a
+**The rules** (`internal/board`, `RulesVersion` "7"). What counts: a
 visible member (not hidden, not in a virtual folder) outside the folders
 of role trash, junk and drafts that is the user's or classified as no bulk
 mail (§3.1, migration 0016), and on an issue no event. **Mine** is a row
@@ -1320,7 +1320,21 @@ ahead). Done reopens when an inbound member that counts was stored after
 `done_seen` (a copy another client moved is stored anew); so neither a
 backfill of old mail, a forged `Date`, a move nor the user's own message
 reopens it. Done clears a remind and closes the open commitments
-(`closedReason: done`); a remind clears done. Whatever takes a case out
+(`closedReason: done`); a remind clears done. **The archive in the mail
+view** is done too (rules 7, `DrainBoard`): a thread whose inbound
+members that count have no copy in the inbox and whose newest lies in
+the archive folder, judged after one in which that was not so
+(`can_archive` and `reply_folder_id`, the columns of the last judgement;
+no new column), marks its live or snoozed case done as `board.archive`
+does without the move; the newest inbound member the case had at done,
+back in an inbox it was not in, makes it live again with the user's
+state, as `board.setDone` with `done: false` does; a message that arrives
+archived does neither until it is in the inbox; a thread archived
+already makes no case; a case judged by rules before 7 is marked done at
+its first judgement by rules 7 when its thread is archived
+(`boardRulesSawArchive`). Only the transitions count, so a case put back
+by hand stays however often its archived thread is judged again (read,
+flagged). Whatever takes a case out
 of done (an inbound member, `board.setDone` with `done: false`, which
 the clients' Undo of Archive uses, a remind) opens again the commitments
 that done closed (`closed_reason = 'done'`, closed at or after `done_at`;
@@ -2336,6 +2350,22 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   `board.archive` moves a case's inbox messages, `board.unflag` clears the
   flags that made a case `hot.flagged`, and `board.discardDraft` deletes
   its linked draft.
+- The archive in the mail view is done: **decided** (2026-10-13) — the
+  owner archives a thread in Mail (in any client, the phone included)
+  once it is handled and expected the case to leave the board, which it
+  did not: the rules counted a member in the archive folder like any
+  other. Now the change to "out of the inbox, the newest in the archive"
+  marks the case done as `board.archive` does, the move back into the
+  inbox makes it live again, a thread archived already is no case, and a
+  message that arrives archived (handled on the phone) reopens nothing
+  until it is in the inbox. Read as transitions from the columns of the
+  last judgement (no migration), so the user's way back to the board
+  sticks. A `them` case archived after the reply is done too (the answer
+  that comes reopens it): the owner's archive means handled. Rejected:
+  dropping the archive folder from what counts (the rules would lose the
+  thread's history — the known sender, `them.replied`); marking done on
+  the state rather than the change (reading an archived message would
+  close a case the user had just put back).
 - A suggested reply is a local draft: **decided** (2026-10-02) — a draft
   linked to a case stays in the daemon's store (`drafts.local`), is
   edited and sent from the board, and does not reach the server's Drafts

@@ -38,8 +38,12 @@ import (
 // last; an inbound message from an unknown sender with the user in its To
 // is you.newContact, from an unknown sender without the user in To
 // info.unknownSender; ZWJ and ZWNJ are kept only between two other kept
-// characters (CleanText).
-const RulesVersion = "6"
+// characters (CleanText). 7: the verdict says where the inbound messages
+// lie (Archived, NewestInboundInInbox), on which the store marks a case
+// done when the user archives the thread in the mail view and live again
+// when a message comes back into the inbox, and makes no case of a thread
+// archived already.
+const RulesVersion = "7"
 
 // Bulk classification values of messages.bulk the rules distinguish; any
 // other non-empty value is bulk mail (api.BulkKind).
@@ -281,6 +285,21 @@ type Verdict struct {
 	// folder; for a message that is not the user's, the copy stored first),
 	// without Text and OwnText.
 	Members []Member
+
+	// Archived and NewestInboundInInbox say where the inbound counting
+	// messages lie, read from every copy of each (a copy in the trash,
+	// junk or drafts never counts): Archived when none of them has a copy
+	// in a folder of role inbox and the newest has one in a folder of
+	// role archive — the user archived the thread, in whatever client;
+	// NewestInboundInInbox when the newest has a copy in a folder of role
+	// inbox. Both false without an inbound counting message, while
+	// Pending, and on a jira account. The store marks a live case done
+	// when Archived turns true, makes a done case live again when
+	// NewestInboundInInbox turns true for a message the case had when it
+	// was marked done, and makes no case of a thread that is Archived
+	// already (DrainBoard, docs/api.md §4.13).
+	Archived             bool
+	NewestInboundInInbox bool
 
 	// inbound are the inbound counting messages, newest first
 	// (NewestInbound).

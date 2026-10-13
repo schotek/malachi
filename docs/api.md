@@ -2788,6 +2788,31 @@ over with its id. A case whose thread has had no member for a day is
 deleted; its suggested reply loses its case (below). A copy of a message the case already had when it was marked
 done does not reopen it.
 
+**Archived threads.** Archiving in the mail view marks a case done. When
+a move (`message.move`, from whatever client — also one the daemon learns
+of from the server as a deleted row and a new one) leaves the thread's
+inbound members that count with no copy in the folder of role `inbox`
+and the newest of them with a copy in the folder of role `archive`, a
+live or snoozed case is marked done exactly as `board.archive` does
+without its move: `doneAt` now, the remind cleared, the open commitments
+closed with `closedReason: done`, the user's state kept, and
+`notify.boardChanged` sent. Only the change counts, read against the
+case's last judgement: a case the user moved back to the board
+(`board.setDone` with `done: false`) stays live however often its
+archived thread is judged again (read, flagged, revised rules). The
+reverse move — the newest inbound member the case had when it was marked
+done, back into the inbox it was not in — makes a done case live again
+as `board.setDone` with `done: false` does: the user's state kept, the
+commitments done closed open again. An inbound member that arrives
+archived (handled in another client before the daemon stored it) neither
+reopens a done case nor ends a remind until it is moved into the inbox,
+and a thread archived already makes no case until a member of it is in
+the inbox. A daemon whose rules first tell an archive (`RulesVersion` 7)
+marks every live case of an archived thread done once, at its first
+judgement of it. On Gmail the archive is All Mail, which the daemon never
+synchronises: archiving takes the messages off the local store and the
+case goes off the board as an orphan (**Moved threads** above) instead.
+
 `ruleReason` codes (an open set: a client shows a generic text for a code
 it does not know; a code is never reused for another meaning):
 
@@ -2914,10 +2939,12 @@ BoardMessage { "id": "m_3", "folderId": "f_inbox", "from": Address, "date": Time
   `mode: "reply"`): the newest inbound member that counts, else the newest
   member that counts; on a `jira` account that reply is a comment.
   `latestMessageId` is the newest member that counts.
-- `visibility`: `done` after `board.setDone` until an inbound member that
-  counts arrives later (by the time the daemon stored it, not by its
+- `visibility`: `done` after `board.setDone`, `board.archive` or an archive
+  in the mail view (**Archived threads** above) until an inbound member
+  that counts arrives later (by the time the daemon stored it, not by its
   `Date` header, so neither a forged date nor a backfill of old mail
-  reopens a case); `snoozed` until `remindAt`, then `live` again with
+  reopens a case; one that arrives archived waits until it is in the
+  inbox); `snoozed` until `remindAt`, then `live` again with
   `remindAt` gone and `remindedAt` set; a remind that came due keeps the
   case listed (also past its window) as long as `remindedAt` lasts: until
   the user acts on the case or an inbound member that counts arrives
@@ -3186,7 +3213,10 @@ undone locally: an archive folder the daemon does not synchronise
 (`Folder.synced` false, Gmail's All Mail) takes the messages off the
 local store (`message.move`), so there is nothing to move back, and a
 client offers no Undo (with `noArchive` it may offer one that only
-clears done).
+clears done). Archiving the same messages in the mail view
+(`message.move` into the archive folder, from any client) marks the case
+done as well (**Archived threads**, §4.13); `board.archive` differs in
+moving them itself and in naming `moved`.
 
 #### `board.unflag`
 - params: `{ "caseId" }`

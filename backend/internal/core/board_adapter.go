@@ -99,6 +99,7 @@ func (b *Backend) boardDecider(accounts map[string]*boardAccount, now time.Time,
 		out := store.BoardVerdict{
 			State: v.State, Reason: v.Reason, RulesVersion: board.RulesVersion,
 			DecidingMessageID: string(v.DecidingMessageID), DecidingMine: v.DecidingMine,
+			Archived: v.Archived, NewestInboundInInbox: v.NewestInboundInInbox,
 		}
 		if v.Count == 0 {
 			return out, nil
