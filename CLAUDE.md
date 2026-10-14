@@ -1001,6 +1001,48 @@ se posouvá, změna se hlásí jen při skutečné změně textu. Zbývá:
 `AddressList.format` nedává jméno s dvojtečkou do uvozovek (starší chyba,
 týká se předvyplnění odpovědi).
 
+Citovaná zpráva a pruh asistenta v okně Nová zpráva (2026-10-14, všechny
+tři klienty; macOS na `main` od `f17a379`, GTK a Windows doplněné
+necommitnuté). Nová odpověď či přeposlání ukáže originál, který připravil
+`draft.create`, odděleně pod editorem v panelu jen pro čtení (editor
+začíná `<p><br></p>`); šipka panel jen skryje, zaškrtávátko „Zahrnout do
+odpovědi/přeposlání“ rozhodne, jestli ho koncept a zpráva obsahují (tělo
+`vlastní + "\n" + originál`). Koncept z Konceptů, komentář Jira a inline
+odpověď nástěnky se otevírají celé v editoru, nic se v těle nehledá ani
+nedělí. Pruh asistenta dole (jen cíl „V aplikaci“, ne u komentáře, nadpis
+jmenuje poskytovatele) napíše odpověď, úvod přeposlání nebo zprávu
+z nepovinného pokynu, náhled je prostý text a do editoru jde jen přes
+Nahradit (místo vlastního textu, jeden krok zpět). Reference je Go:
+`ui/internal/composebody` (rozdělení těla, Swift `ComposeBodyLayout`),
+`ui/internal/assistant/compose_write.go` (`WriteMessage` = JSON s poli
+mode, instruction, subject, existingText, originalMessage, systémový
+prompt, `WriteTexts`, `WriteBarTitle`; Swift `ComposeAssistantPrompt`)
+a `assistantpanel.Writer` (stavy jako `Rewriter`). GTK: `compose/quoted.go`
+a `compose/write.go`, widgety v novém `compose_extras.blp` (bez
+přeložitelných textů, `compose_pane.blp` beze změny), editor má
+`ReadOnly` (`editor.ReadOnlyDocument`), `compose.Assistant.UsesChatGPT`.
+Windows: Core `Compose/ComposeBodyLayout.cs`, `Assistants/Assistant.Write.cs`
+(+ `AssistantWriteMode`, `WriteStrings`; JSON bajt po bajtu jako Go přes
+`AppendJsonString(…, escapeHtml: false)`), `Controllers/ComposeWriteController.cs`
+(sdílí `ComposeRewriteController.AnswerState`), App `ComposePane.Quote.cs`,
+`ComposeAssistantBar.xaml`, `ComposeWindow.Write.cs`, `ComposeWebView`
+s `readOnly` (`EditorDocument.ReadOnlyDocument`); odchylka: vyprázdnění
+citace jde před editorem, protože kanál editoru hlásí `Changed` vyprázdnění
+až po jeho callbacku (jinak by každé uložení znovu označilo koncept za
+změněný). macOS bral texty jako anglické jen pro macOS, teď msgid z GTK.
+Ověřeno na Macu: Go testy čistých balíčků, `swift build` a `swift test`, kontrola
+řetězců macOS; GTK typově zkontrolované ze zdrojů gotk4 bez cgo (žádný
+překlad), `po/malachi.pot` a `po/cs.po` upravené skriptem, který na
+`HEAD` přesně reprodukoval výstup `xgettext` a `msgmerge` pro Go soubory.
+Čeká: v Toolbxu `make build`, `go test ./internal/compose/...
+./internal/editor/... ./internal/window/...`, `make lint` a `make po`
+(má vyjít beze změny), ručně odpověď, přeposlání, Zahrnout, pruh
+s Claude Code i ChatGPT; na Windows (napsané bez `dotnet`) `build.ps1
+app`/`test`/`lint` (`ComposeBodyLayoutTests`, `AssistantWriteTests`,
+`AssistantRequestTests` Writer*, `EditorBridgeTests`), UI smoke
+(`DevmailTests` odpověď bez otázky, `BoardSmokeTests`, mřížka
+`ComposePane.xaml` má o řádky víc) a ruční průchod.
+
 Hromadná pošta a odhlášení (2026-10-01, všechny tři klienty; necommitnuté,
 macOS sestavený a cílené testy zelené, GTK jen `gopls` + Blueprint v Dockeru,
 Windows napsané bez překladu — čeká `make build`/`go test ./internal/window/...`/

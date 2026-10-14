@@ -14,9 +14,17 @@ inline reply, top to bottom:
   none but 6 below inline, where the card has no From row;
 - the formatting bar (margins 6 in the window), the plain-text hint
   (hidden while rich text is sent);
-- the editor: filling the rest in the window, inline as tall as its
-  document between EditorHeight's minimum and cap (ComposePane.xaml.cs);
+- the editor: filling the rest in the window (at least 100 px), inline as
+  tall as its document between EditorHeight's minimum and cap
+  (ComposePane.xaml.cs);
+- in the window, a new reply's or forward's prepared original apart from
+  the editor (compose_extras.blp quote_section, ComposePane.Quote.cs): a
+  separator, the flat disclosure "Quoted Message", which only hides the
+  view, and the checkbox "Include in Reply" / "Include in Forward", then the
+  original read-only, 180 px; hidden without one, and inline;
 - the attachment chips (hidden while there are none);
+- in the window the assistant's bar (compose_extras.blp assistant_bar,
+  ComposeAssistantBar), which the window shows and wires; hidden inline;
 - in the window the status line (margins 12, 4) under the toast overlay;
   inline the footer row [Attach] status … [Discard] [Send], whose Send has
   no key of its own (Ctrl+Enter and Ctrl+S are the pane's accelerators,
@@ -37,6 +45,8 @@ inline reply, top to bottom:
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition x:Name="EditorRow" Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -119,26 +129,72 @@ inline reply, top to bottom:
         <Border
             x:Name="EditorSlot"
             Grid.Row="3"
+            MinHeight="100"
             Margin="0,4,0,0"
             AllowDrop="True"
             Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
             DragOver="OnEditorDragOver"
             Drop="OnEditorDrop" />
 
+        <!-- quote_section: the prepared original (the window layout, with
+             one); its texts are set in code (Assistant.WriteTexts). -->
+        <StackPanel
+            x:Name="QuoteSection"
+            Grid.Row="4"
+            Visibility="Collapsed">
+            <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+            <StackPanel
+                Margin="12,6,12,6"
+                Orientation="Horizontal"
+                Spacing="12">
+                <!-- quote_disclosure: hides or shows the view only. -->
+                <Button
+                    x:Name="QuoteDisclosure"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="ComposeQuoteDisclosure"
+                    Click="OnQuoteDisclosureClick"
+                    Style="{StaticResource SubtleButtonStyle}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon x:Name="QuoteDisclosureIcon" FontSize="12" />
+                        <TextBlock x:Name="QuoteDisclosureLabel" Style="{StaticResource HeadingLabelStyle}" />
+                    </StackPanel>
+                </Button>
+                <!-- include_quote: whether the draft and the message include it. -->
+                <CheckBox
+                    x:Name="IncludeQuote"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="ComposeIncludeQuote"
+                    Click="OnIncludeQuoteClick"
+                    IsChecked="True" />
+            </StackPanel>
+            <!-- quoted_slot: the read-only view (ComposePane.Quote.cs). -->
+            <Border
+                x:Name="QuotedSlot"
+                Height="180"
+                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
+        </StackPanel>
+
         <!-- attachments_box -->
         <local:AttachmentChipsView
             x:Name="Chips"
-            Grid.Row="4"
+            Grid.Row="5"
             Margin="12,6,12,6" />
 
+        <!-- assistant_bar: the window shows it while the In App target can
+             run, never in comment mode (ComposeWindow.Write.cs). -->
+        <local:ComposeAssistantBar
+            x:Name="AssistantBarView"
+            Grid.Row="6"
+            Visibility="Collapsed" />
+
         <!-- toast_overlay over the content (the window layout). -->
-        <controls:ToastHost x:Name="PaneToasts" Grid.RowSpan="5" />
+        <controls:ToastHost x:Name="PaneToasts" Grid.RowSpan="7" />
 
         <!-- [bottom] draft_status (the window layout; inline it moves into
              the footer). -->
         <TextBlock
             x:Name="StatusText"
-            Grid.Row="5"
+            Grid.Row="7"
             Margin="12,4,12,4"
             AutomationProperties.AutomationId="ComposeStatus"
             AutomationProperties.LiveSetting="Polite"
@@ -150,7 +206,7 @@ inline reply, top to bottom:
         <!-- The inline layout's footer (pane_layout.go buildInlineFooter). -->
         <Grid
             x:Name="Footer"
-            Grid.Row="5"
+            Grid.Row="7"
             Margin="0,8,0,0"
             ColumnSpacing="8"
             Visibility="Collapsed">

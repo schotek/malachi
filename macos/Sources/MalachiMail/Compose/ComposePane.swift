@@ -102,7 +102,7 @@ final class ComposePane: NSViewController, NSTextFieldDelegate {
     private let quotedEditor: ComposeEditorView?
     private let quoteSection = FillStackView()
     private let quoteDisclosure = NSButton()
-    private let includeQuote = NSButton(checkboxWithTitle: "Include in Reply", target: nil, action: nil) // macOS-only string
+    private let includeQuote = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private var quoteExpanded = true
     /// The window layout's assistant bar; the window wires and shows it.
     let composeAssistantBar = ComposeAssistantBar()
@@ -351,7 +351,8 @@ final class ComposePane: NSViewController, NSTextFieldDelegate {
             quoteSection.isHidden = true
             return quoteSection
         }
-        quoteDisclosure.title = "Quoted Message" // macOS-only string
+        let texts = ComposeAssistantPrompt.texts(kind: params.kind)
+        quoteDisclosure.title = texts.quoted
         quoteDisclosure.bezelStyle = .inline
         quoteDisclosure.isBordered = false
         quoteDisclosure.font = .systemFont(ofSize: 13, weight: .semibold)
@@ -360,9 +361,7 @@ final class ComposePane: NSViewController, NSTextFieldDelegate {
         quoteDisclosure.target = self
         quoteDisclosure.action = #selector(toggleQuote(_:))
         includeQuote.state = .on
-        if params.kind == .forward {
-            includeQuote.title = "Include in Forward" // macOS-only string
-        }
+        includeQuote.title = texts.include
         includeQuote.target = self
         includeQuote.action = #selector(changeQuoteIncluded(_:))
         let heading = NSStackView(views: [quoteDisclosure, includeQuote, NSView()])

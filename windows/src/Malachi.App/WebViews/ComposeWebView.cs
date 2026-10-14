@@ -55,7 +55,11 @@
 // EditorReady and EditorChanged; Channel.StateChanged to the format bar;
 // FilesDropped to attachment.import; Crashed to the editor-failure toast and
 // a Load of Html. Made sized (the board's inline reply), its channel raises
-// SizeReported with the document's height for the pane's EditorHeight.
+// SizeReported with the document's height for the pane's EditorHeight. Made
+// read-only (macOS ComposeEditorView's readOnly: the compose window's panel
+// with the prepared original under the editor), it loads the same page with
+// a body that is not editable (EditorDocument.ReadOnlyDocument), under the
+// same CSP, gate and bridge, which still reports its Html and Text.
 
 using System;
 using System.Collections.Generic;
@@ -94,12 +98,17 @@ public sealed partial class ComposeWebView : HardenedWebView
     {
     }
 
-    /// <summary>An editor whose <c>cid:</c> pictures resolve in <paramref name="registry"/>.</summary>
-    public ComposeWebView(CidRegistry registry, bool sized = false)
+    /// <summary>
+    /// An editor whose <c>cid:</c> pictures resolve in <paramref name="registry"/>;
+    /// <paramref name="readOnly"/> shows its document without letting it be
+    /// edited (the compose window's quoted original).
+    /// </summary>
+    public ComposeWebView(CidRegistry registry, bool sized = false, bool readOnly = false)
         : base(WebViewKind.Editor)
     {
         ArgumentNullException.ThrowIfNull(registry);
         Registry = registry;
+        IsReadOnly = readOnly;
         Channel = new EditorChannel(sized);
     }
 
@@ -122,6 +131,9 @@ public sealed partial class ComposeWebView : HardenedWebView
 
     /// <summary>The registry the <c>cid:</c> pictures resolve in.</summary>
     public CidRegistry Registry { get; }
+
+    /// <summary>Whether the document is shown without being editable (<see cref="EditorDocument.ReadOnlyDocument"/>).</summary>
+    public bool IsReadOnly { get; }
 
     /// <summary>
     /// The bridge's state and events: <c>Ready</c>, <c>Changed</c>,
@@ -147,7 +159,8 @@ public sealed partial class ComposeWebView : HardenedWebView
     {
         ArgumentNullException.ThrowIfNull(bodyHtml);
         Channel.Load(bodyHtml);
-        LoadDocument(Encoding.UTF8.GetBytes(EditorDocument.Document(bodyHtml)), "text/html; charset=utf-8", EditorDocument.Csp);
+        var document = IsReadOnly ? EditorDocument.ReadOnlyDocument(bodyHtml) : EditorDocument.Document(bodyHtml);
+        LoadDocument(Encoding.UTF8.GetBytes(document), "text/html; charset=utf-8", EditorDocument.Csp);
     }
 
     /// <summary>

@@ -986,7 +986,14 @@ the Go copy modulo the documented deltas.
 
 The compose window wires the view as GTK wires `editor.Editor`: its
 `IComposeForm` answers `EditorHtml`/`EditorText`/`FlushEditor` with `Html`,
-`Text` and `Flush`; `Channel.Ready` and `Channel.Changed` go to the draft
+`Text` and `Flush` (with a new reply's or forward's prepared original
+shown apart, the body is the editor's and, when included, the original:
+`ComposeBodyLayout`; the original's read-only view, `ComposeWebView`
+made `readOnly`, loads `EditorDocument.ReadOnlyDocument`, the same page
+with `<body contenteditable="false">`, and is flushed before the editor,
+because the editor's channel releases the `Changed` of a flush right after
+that flush's done, which must record the flushed HTML first);
+`Channel.Ready` and `Channel.Changed` go to the draft
 controller's `EditorReady` and `EditorChanged`, `Channel.StateChanged` to the
 format bar, `Channel.KeyPressed` (`escape`, `link`) to the window's Escape
 and Insert Link, `FilesDropped` to `attachment.import`, `Crashed` to the
@@ -1777,7 +1784,9 @@ controllers of Swift: `AssistantController` (the link handlers are the
 shell's default ProgIDs of `claude` and `claude-cli`, `AssocQueryString`;
 the bridge's registration its own status), `ClaudeCodeLocator`,
 `ClaudeCodeProcess`, `AssistantPanelController`, `AssistantRequest`,
-`ComposeRewriteController`, `SearchConversion` and `ClaudeDesktopController`,
+`ComposeRewriteController`, `ComposeWriteController` (the compose window's
+assistant bar, a port of Go's `assistantpanel.Writer`), `SearchConversion`
+and `ClaudeDesktopController`,
 with the Swift and Go tests against a stand-in `claude.exe`
 (`tests/Malachi.FakeClaude`, scripted by a JSON file beside it: turns,
 stderr, exits, a process that never ends). What is Windows' own:
@@ -2024,7 +2033,14 @@ monospace, or the viewer of §6.3. Message windows (820×620, one per
 message, closed with the message) and attached-message windows as on macOS.
 Compose (760×640): From, To/Cc/Bcc with the recipient popup of
 `suggest.go` (not `AutoSuggestBox`: no preselection, no Tab accept), the
-format toolbar, the editor of §6.5, attachment chips, *Save changes to this
+format toolbar, the editor of §6.5 (at least 100 px), for a new reply or
+forward the prepared original read-only under it (`ComposePane.Quote.cs`
+over Core's `ComposeBodyLayout`, the port of `ui/internal/composebody`:
+*Quoted Message*, a disclosure that only hides the view, and *Include in
+Reply* / *Include in Forward*, which decides whether the draft and the
+message include it and marks the draft dirty; a draft opened from Drafts,
+a comment and the Board's inline reply keep the body whole in the editor),
+attachment chips, the assistant's bar (§11.6), *Save changes to this
 draft?* on close. The window forwards the editor's Ready and Changed to
 `EditorReady` and `EditorChanged` of its draft controller and, once it
 really closes (after `Cleanup`), hands itself to
@@ -2434,7 +2450,19 @@ requests can run (`ComposeWindow.Rewrite.cs`): its flyout has the four
 rewrites, an instruction field (Enter sends; with no words, Enter takes
 the answer), the answer as plain text in a read-only box, and *Discard*,
 *Insert Below* and *Replace*; the editor's passage and the answer go
-through the bridge (§6.5). The main window's search box has the ✦ of
+through the bridge (§6.5). Under the chips the same condition shows the
+assistant's bar (`ComposeAssistantBar`, wired by `ComposeWindow.Write.cs`;
+never in comment mode): *Assistant · Claude (Anthropic)* or *· ChatGPT
+(OpenAI)* as a disclosure, *Write a Reply* / *Write an Introduction* /
+*Write a Message* with an optional instruction (Enter writes), the answer
+as plain text in a read-only box while it streams, the error line, *Cancel*
+or *Discard* and *Replace*, which puts the answer in place of the editor's
+own text through the rewrite's bridge calls. Core's
+`ComposeWriteController` (the port of `assistantpanel.Writer`) sends
+`Assistant.WriteMessage`, a JSON object byte for byte Go's, under
+`Assistant.WriteSystemPrompt`; the first request ever asks for consent as
+the rewrite does, and a change of provider, the bar becoming unavailable
+and the window closing end it. The main window's search box has the ✦ of
 *Search in Your Own Words* and Alt+Enter (`MainWindow.OwnWords.cs`); while
 the words are converted the box is disabled and says so. *Preferences →
 AI* (`AiPage`) has GTK's rows: *Register with Claude* (with Claude
@@ -2672,9 +2700,11 @@ tests, `Malachi.Core.Tests.Boards`.
 GTK's `compose.Pane`) in a refactor that changed nothing for the window
 (`ComposePane.Attachments.cs`, `.Comment.cs`, `.Editor.cs` carry what the
 window's files did). The window keeps its title bar, the close question,
-Quit, its command routing and the rewrite, and hears from the pane through
-`IComposePaneHost`. `ComposePane.Options` chooses `Layout` (`Window` or
-`Inline`) and the `DraftOwner` (`Window` or `Board`). Inline there is no
+Quit, its command routing and the rewrite, wires the pane's assistant bar,
+and hears from the pane through `IComposePaneHost`. `ComposePane.Options`
+chooses `Layout` (`Window` or `Inline`) and the `DraftOwner` (`Window` or
+`Board`); the prepared original apart from the editor and the assistant's
+bar are the `Window` layout's only (§11.3, §11.6). Inline there is no
 From row, the editor is in its sized mode (`ComposeWebView(sized: true)`,
 `EditorChannel`'s `SizeReported`, clamped by `EditorHeight` against the
 detail's visible height) and the footer is Attach, the status, Discard and

@@ -378,3 +378,7 @@ func (t providerBoardTranslator) T(msgid string) string {
 	}
 	return t.Translator.T(msgid)
 }
+
+// UsesChatGPT says whether ChatGPT (Codex) is the provider in effect
+// (compose.Assistant: the compose window's assistant bar names it).
+func (a *Assistant) UsesChatGPT() bool { return a.usesChatGPT() }

@@ -20,6 +20,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
+	"github.com/schotek/malachi/ui/internal/composebody"
 	"github.com/schotek/malachi/ui/internal/editor"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
@@ -134,7 +135,13 @@ type Pane struct {
 	footerDiscard *gtk.Button
 	footerSend    *gtk.Button
 
-	editor      *editor.Editor
+	editor *editor.Editor
+	// body is how the body is shown: a window's prepared original apart
+	// from the editor (quoted, nil without one; quoted.go). bar is the
+	// window layout's assistant bar, which the window wires (write.go).
+	body        composebody.Layout
+	quoted      *quotedPart
+	bar         *barWidgets
 	group       *gio.SimpleActionGroup
 	actions     map[string]*gio.SimpleAction
 	blockAction *gio.SimpleAction
@@ -337,7 +344,8 @@ func NewPane(m *Manager, p Params, opts PaneOptions) *Pane {
 	// A draft opened from the Drafts folder is the user's already: its
 	// id and version make the saves updates, and closing never deletes it.
 	pn.dc.setOpened(p.DraftID, p.Version, p.Replaces, p.Kind == KindEdit)
-	pn.editor.Load(p.BodyHTML)
+	pn.body = bodyLayout(p, opts.Layout)
+	pn.editor.Load(pn.body.EditorHTML)
 	pn.setAccounts(m.Accounts(), m.Placeholder())
 	// What the backend imported for the template (a quoted original's
 	// pictures, a forwarded message's files): listed and shown now, bound
@@ -363,6 +371,7 @@ func NewPane(m *Manager, p Params, opts PaneOptions) *Pane {
 		pn.buildInlineFooter()
 		pn.wireInlineShortcuts()
 	} else {
+		pn.buildWindowParts()
 		pn.root.Append(pn.status)
 		pn.status.SetMarginStart(12)
 		pn.status.SetMarginEnd(12)
@@ -633,16 +642,18 @@ func (p *Pane) subject() string { return p.subjectEntry.Text() }
 
 func (p *Pane) attachments() []api.DraftAttachment { return p.attachmentList }
 
-func (p *Pane) editorHTML() string { return p.editor.HTML() }
-func (p *Pane) editorText() string { return p.editor.Text() }
+func (p *Pane) editorHTML() string { return p.body.HTML(p.editor.HTML(), p.includesQuote()) }
+func (p *Pane) editorText() string {
+	return p.body.Text(p.editor.Text(), p.quotedText(), p.includesQuote())
+}
 
 // flushEditor asks the editor for its current content; its own debounced
 // "changed" that reports the same content is the flush's own report, not
-// an edit (editorChanged).
+// an edit (editorChanged). The original's view follows (quoted.go).
 func (p *Pane) flushEditor(done func()) {
 	p.editor.Flush(func() {
 		p.flushed.record(p.editor.HTML())
-		done()
+		p.flushQuoted(done)
 	})
 }
 

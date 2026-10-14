@@ -25,7 +25,11 @@
 // Two layouts (Options.Layout): Window is the compose window's content as
 // it always was (the window keeps its title bar, the Draft Menu, the close
 // question, Escape, Quit, the assistant's rewrite and its commands' keys,
-// and runs the pane's Send, Save Draft, Attach, Insert Image and Discard);
+// and runs the pane's Send, Save Draft, Attach, Insert Image and Discard),
+// with a new reply's or forward's prepared original apart from the editor
+// (ComposeBodyLayout, ComposePane.Quote.cs: the draft's body is the
+// editor's and, when included, the original) and the assistant's bar,
+// which the window wires (AssistantBar, ComposeWindow.Write.cs);
 // Inline is a reply edited in place in the board's case detail: no From row
 // (the reply is from-locked; the detail shows the account, and the account
 // is always the params' own), the editor in its sized mode (EditorChannel
@@ -79,6 +83,9 @@ public sealed partial class ComposePane : UserControl, IComposeForm
     private readonly ComposeDraftController draft;
     private readonly ComposeAttachmentsController attachments;
     private readonly ComposeWebView editor;
+
+    // The read-only view of BodyLayout.QuotedHtml (null without one).
+    private readonly ComposeWebView? quoted;
     private readonly List<RecipientSuggestions> suggestions = [];
     private readonly Dictionary<TextBox, string> seen = [];
     private readonly ILogger logger;
@@ -123,6 +130,9 @@ public sealed partial class ComposePane : UserControl, IComposeForm
         this.compose = compose;
         parameters = p;
         PaneOptions = options;
+        // The inline layout keeps the body whole: the board's reply is a
+        // saved draft (composebody.New with ComposeMode.New).
+        BodyLayout = options.Layout == Layout.Inline ? new ComposeBodyLayout(ComposeMode.New, false, p.BodyHtml) : new ComposeBodyLayout(p);
         logger = state.Logs.CreateLogger<ComposePane>();
         InitializeComponent();
 
@@ -137,6 +147,7 @@ public sealed partial class ComposePane : UserControl, IComposeForm
         editor = new ComposeWebView(sized: IsInline);
         try
         {
+            quoted = BodyLayout.HasQuote ? new ComposeWebView(CidRegistry.Shared, readOnly: true) : null;
             if (IsInline)
             {
                 BuildInline();
@@ -145,6 +156,7 @@ public sealed partial class ComposePane : UserControl, IComposeForm
             // The editor's callbacks first, as in compose.go: Ready and the
             // state may follow the load at any time.
             WireEditor();
+            WireQuote();
             WireAttachments();
 
             // Prefill before the change handlers so it does not count as an edit.
@@ -158,7 +170,8 @@ public sealed partial class ComposePane : UserControl, IComposeForm
             // A draft opened from the Drafts folder is the user's already: its id
             // and version make the saves updates, and closing never deletes it.
             draft.SetOpened(p.DraftId, p.Version, p.Replaces, fromDrafts: p.Kind == ComposeKind.Edit);
-            editor.Load(p.BodyHtml);
+            editor.Load(BodyLayout.EditorHtml);
+            quoted?.Load(BodyLayout.QuotedHtml);
             SetAccounts(compose.Accounts, compose.Placeholder);
             // What the backend imported for the template (a quoted original's
             // pictures, a forwarded message's files): listed and shown now,
@@ -240,6 +253,19 @@ public sealed partial class ComposePane : UserControl, IComposeForm
     /// <summary>The formatted-text editor (the window's rewrite works on it).</summary>
     public ComposeWebView Editor => editor;
 
+    /// <summary>
+    /// The body split for the window layout (ComposeBodyLayout): the
+    /// editor's part and the prepared original under it (none without one,
+    /// and inline).
+    /// </summary>
+    public ComposeBodyLayout BodyLayout { get; }
+
+    /// <summary>The window layout's assistant bar; the window shows and wires it.</summary>
+    public ComposeAssistantBar AssistantBar => AssistantBarView;
+
+    /// <summary>The subject row's text.</summary>
+    public string Subject => Header.Subject.Text;
+
     /// <summary>The draft behind the pane.</summary>
     public ComposeDraftController DraftController => draft;
 
@@ -316,7 +342,7 @@ public sealed partial class ComposePane : UserControl, IComposeForm
     Account IComposeForm.Account => Account;
 
     /// <inheritdoc/>
-    string IComposeForm.Subject => Header.Subject.Text;
+    string IComposeForm.Subject => Subject;
 
     /// <inheritdoc/>
     IReadOnlyList<DraftAttachment> IComposeForm.Attachments => attachments.Attachments;
@@ -391,14 +417,37 @@ public sealed partial class ComposePane : UserControl, IComposeForm
         return (to, cc, bcc, ok);
     }
 
-    /// <inheritdoc/>
-    public string EditorHtml() => editor.Html;
+    /// <summary>
+    /// The editor's own HTML and, when the panel's checkbox includes it, the
+    /// prepared original below it (ComposeBodyLayout.Html).
+    /// </summary>
+    public string EditorHtml() => BodyLayout.Html(editor.Html, IncludesQuote);
 
-    /// <inheritdoc/>
-    public string EditorText() => editor.Text;
+    /// <summary>
+    /// The editor's own text and, when included, a blank line and the
+    /// panel's text of the original (ComposeBodyLayout.Text).
+    /// </summary>
+    public string EditorText() => BodyLayout.Text(editor.Text, QuotedText, IncludesQuote);
 
-    /// <inheritdoc/>
-    public void FlushEditor(Action done) => editor.Flush(done);
+    /// <summary>
+    /// Flushes the editor and the panel with the original: the panel first,
+    /// then the editor, whose flush calls <paramref name="done"/> (macOS
+    /// flushes the panel after the editor). The editor's channel raises the
+    /// <c>Changed</c> of its flush right after that flush's done returned
+    /// (EditorChannel), so the draft controller must record the flushed
+    /// HTML within it: a done that waited for the panel's flush would let
+    /// the editor's own report count as an edit.
+    /// </summary>
+    public void FlushEditor(Action done)
+    {
+        ArgumentNullException.ThrowIfNull(done);
+        if (quoted is not { } q)
+        {
+            editor.Flush(done);
+            return;
+        }
+        q.Flush(() => editor.Flush(done));
+    }
 
     /// <inheritdoc/>
     public void SetAttachments(IReadOnlyList<DraftAttachment> attachments) => this.attachments.Set(attachments);
@@ -675,6 +724,7 @@ public sealed partial class ComposePane : UserControl, IComposeForm
         FormatBar.HidePopups();
         attachments.Dispose();
         editor.Close();
+        quoted?.Close();
     }
 
     // The inline layout (buildInlineContent): the header without From, no
@@ -689,6 +739,11 @@ public sealed partial class ComposePane : UserControl, IComposeForm
         PlainTextHint.Margin = new Thickness(0, 4, 0, 4);
         Chips.Margin = new Thickness(0, 6, 0, 0);
         EditorRow.Height = GridLength.Auto;
+        EditorSlot.MinHeight = 0;
+        // The window layout's parts: the body stays whole, the board has
+        // its own way to ask the assistant.
+        QuoteSection.Visibility = Visibility.Collapsed;
+        AssistantBarView.Visibility = Visibility.Collapsed;
         PaneToasts.Visibility = Visibility.Collapsed;
 
         PaneRoot.Children.Remove(StatusText);

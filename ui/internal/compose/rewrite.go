@@ -18,10 +18,11 @@ import (
 // Assistant is what the compose windows need of the assistant
 // (window/assistant.go): whether its one-shot requests can run (the
 // Assistant shown, In App chosen, Claude Code found), a notice when that
-// may have changed, a fresh look for Claude Code, and a request for a
-// rewrite (its consent is the window's).
+// may have changed, a fresh look for Claude Code, a request for a rewrite
+// or the bar (its consent is the window's), and whether ChatGPT answers.
 type Assistant interface {
 	CanRunInApp() bool
+	UsesChatGPT() bool
 	OnChange(f func()) (remove func())
 	RefreshHandlers()
 	NewRequest() *assistantpanel.Request

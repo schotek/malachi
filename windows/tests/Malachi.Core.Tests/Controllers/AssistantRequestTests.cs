@@ -5,7 +5,9 @@
 // one-shot requests: AssistantRequest, the compose window's
 // ComposeRewriteController and the search field's SearchConversion) and of
 // ui/internal/assistantpanel/oneshot_test.go, against the stand-in
-// claude.exe of Malachi.FakeClaude. No real Claude Code is ever run here.
+// claude.exe of Malachi.FakeClaude; the compose window's assistant bar
+// (ComposeWriteController, writer_test.go) is AssistantRequestTests.Write.cs,
+// over the same harness. No real Claude Code is ever run here.
 //
 // Windows differences, as the controllers': the timeout and the kill grace
 // run on a fake clock, so a claude that never answers (Swift's "sleep 30",
@@ -42,7 +44,7 @@ using SearchOutcome = Malachi.Core.Controllers.SearchConversion.Outcome;
 namespace Malachi.Core.Tests.Controllers;
 
 [Collection(typeof(McpRegistrationProcesses))]
-public sealed class AssistantRequestTests
+public sealed partial class AssistantRequestTests
 {
     private static readonly TimeSpan Grace = TimeSpan.FromMilliseconds(300);
 

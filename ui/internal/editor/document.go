@@ -3,7 +3,10 @@
 
 package editor
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // documentTemplate wraps the body of a message being composed. The meta CSP
 // keeps the editor offline: no remote images, scripts, fonts or frames can
@@ -31,4 +34,11 @@ const documentTemplate = `<!doctype html>
 // draft HTML, and the editor's own previous content on reload.
 func Document(bodyHTML string) string {
 	return fmt.Sprintf(documentTemplate, bodyHTML)
+}
+
+// ReadOnlyDocument is Document for a view that shows a body without
+// editing it (the compose window's quoted original): the same page, its
+// body not contenteditable.
+func ReadOnlyDocument(bodyHTML string) string {
+	return strings.Replace(Document(bodyHTML), `<body contenteditable="true">`, `<body contenteditable="false">`, 1)
 }

@@ -26,6 +26,19 @@ func TestDocument(t *testing.T) {
 	}
 }
 
+// The quoted original's page: the same document, the template's body not
+// editable, and only the template's tag is touched.
+func TestReadOnlyDocument(t *testing.T) {
+	body := `<p>x</p><body contenteditable="true">`
+	doc := ReadOnlyDocument(body)
+	if doc != strings.Replace(Document(body), `<body contenteditable="true"><p>`, `<body contenteditable="false"><p>`, 1) {
+		t.Errorf("document %s", doc)
+	}
+	if !strings.Contains(doc, body) || !strings.Contains(doc, `default-src 'none'`) {
+		t.Error("body or CSP missing")
+	}
+}
+
 func TestDecodeMessage(t *testing.T) {
 	m, err := decodeMessage(`{"type":"state","bold":true,"block":"h1","align":"center"}`)
 	if err != nil || m.Type != "state" || !m.Bold || m.Block != "h1" || m.Align != "center" {

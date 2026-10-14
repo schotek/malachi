@@ -10,8 +10,9 @@
 // owner), which holds the fields, the editor, the attachments and the draft
 // (Core's ComposeDraftController over the pane's IComposeForm); the window
 // keeps its title bar (the title, Attach, the rewrite, the Draft Menu,
-// Send), the close question, Quit and its commands' keys, and hears from the
-// pane through IComposePaneHost. The account list arrives from
+// Send), the close question, Quit and its commands' keys, wires the pane's
+// assistant bar (ComposeWindow.Write.cs), and hears from the pane through
+// IComposePaneHost. The account list arrives from
 // ComposeController through IComposeWindowHandle and goes to the pane. A
 // comment on an issue is written in the same window, in the pane's comment
 // mode; the window takes away what attaches or saves a draft
@@ -134,6 +135,7 @@ public sealed partial class ComposeWindow : Window, IComposeWindowHandle, ICompo
             WireCommands();
             WireHeaderBar();
             WireRewrite();
+            WireWrite();
             InsertImageItem.IsEnabled = ComposeDraftController.RichText;
             ApplyCommentMode();
         }
@@ -391,13 +393,15 @@ public sealed partial class ComposeWindow : Window, IComposeWindowHandle, ICompo
     }
 
     // cleanup: the window really closes. Late replies are dropped, the
-    // rewrite ends, the pane lets go (its popups, its draft, whose inline
-    // pictures are forgotten before the attachments close, its editor's
-    // browser), and the manager forgets the window.
+    // rewrite and the assistant bar's writing end, the pane lets go (its
+    // popups, its draft, whose inline pictures are forgotten before the
+    // attachments close, its editor's and its quoted original's browsers),
+    // and the manager forgets the window.
     private void OnClosed(object sender, WindowEventArgs args)
     {
         closing = true;
         CloseRewrite();
+        CloseWrite();
         pane.Close();
         compose.Remove(this);
     }

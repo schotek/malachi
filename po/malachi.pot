@@ -946,6 +946,47 @@ msgid ""
 "you choose in Settings."
 msgstr ""
 
+#. TRANSLATORS: Placeholder of the field of the assistant's bar at the bottom of the compose window.
+#: ui/internal/assistant/compose_write.go:119
+msgid "What should the message say? (optional)"
+msgstr ""
+
+#. TRANSLATORS: Heading of the panel under the compose window's editor that shows the message being replied to or forwarded.
+#: ui/internal/assistant/compose_write.go:121
+msgid "Quoted Message"
+msgstr ""
+
+#. TRANSLATORS: A checkbox in the compose window: whether the reply includes the quoted message.
+#: ui/internal/assistant/compose_write.go:123
+msgid "Include in Reply"
+msgstr ""
+
+#. TRANSLATORS: A button of the assistant's bar in the compose window of a forward.
+#: ui/internal/assistant/compose_write.go:128
+msgid "Write an Introduction"
+msgstr ""
+
+#. TRANSLATORS: A checkbox in the compose window: whether the forward includes the forwarded message.
+#: ui/internal/assistant/compose_write.go:130
+msgid "Include in Forward"
+msgstr ""
+
+#. TRANSLATORS: A button of the assistant's bar in the compose window of a new message.
+#: ui/internal/assistant/compose_write.go:133
+msgid "Write a Message"
+msgstr ""
+
+#. TRANSLATORS: A button of the assistant's bar in the compose window of a reply.
+#: ui/internal/assistant/compose_write.go:136
+msgid "Write a Reply"
+msgstr ""
+
+#. TRANSLATORS: Heading of the assistant's bar in the compose window; %s is the provider, e.g. "Claude (Anthropic)".
+#: ui/internal/assistant/compose_write.go:149
+#, c-format
+msgid "Assistant · %s"
+msgstr ""
+
 #: ui/internal/background/background.go:130
 msgid "Check for new mail and show notifications in the background"
 msgstr ""
@@ -1085,83 +1126,85 @@ msgstr ""
 msgid "The sender's server refused the request."
 msgstr ""
 
-#: ui/internal/compose/pane.go:216 ui/internal/compose/pane.go:1042
+#: ui/internal/compose/pane.go:223 ui/internal/compose/pane.go:1053
 #: ui/internal/jira/settings.go:123 ui/internal/window/assistant_panel.go:185
 msgid "Remove"
 msgstr ""
 
-#: ui/internal/compose/pane.go:321
+#: ui/internal/compose/pane.go:328
 msgid "The editor crashed; your last text was restored"
 msgstr ""
 
-#: ui/internal/compose/pane.go:479 ui/internal/compose/draft.go:369
+#: ui/internal/compose/pane.go:488 ui/internal/compose/draft.go:369
 msgid "Using placeholder account"
 msgstr ""
 
-#: ui/internal/compose/pane.go:602 ui/data/ui/compose.ui:10
+#: ui/internal/compose/pane.go:611 ui/data/ui/compose.ui:10
 #: ui/data/ui/compose.ui:48
 msgid "New Message"
 msgstr ""
 
-#: ui/internal/compose/pane.go:691
+#: ui/internal/compose/pane.go:702
 msgid "Save changes to this draft?"
 msgstr ""
 
-#: ui/internal/compose/pane.go:692 ui/internal/widget/consent.go:47
-#: ui/internal/widget/rpc.go:196 ui/internal/window/assistant_panel.go:204
+#: ui/internal/compose/pane.go:703 ui/internal/compose/write.go:164
+#: ui/internal/widget/consent.go:47 ui/internal/widget/rpc.go:196
+#: ui/internal/window/assistant_panel.go:204
 #: ui/internal/window/board_quit.go:30 ui/internal/window/remote.go:269
 #: ui/internal/window/remote.go:295 ui/data/ui/account_wizard.ui:401
 #: ui/data/ui/jira_account.ui:25
 msgid "_Cancel"
 msgstr ""
 
-#: ui/internal/compose/pane.go:693 ui/internal/compose/draft.go:735
-#: ui/internal/compose/draft.go:847 ui/internal/compose/rewrite.go:108
-#: ui/internal/board/text.go:350 ui/data/ui/compose.ui:121
+#: ui/internal/compose/pane.go:704 ui/internal/compose/draft.go:735
+#: ui/internal/compose/draft.go:847 ui/internal/compose/rewrite.go:109
+#: ui/internal/compose/write.go:166 ui/internal/board/text.go:350
+#: ui/data/ui/compose.ui:121
 msgid "_Discard"
 msgstr ""
 
-#: ui/internal/compose/pane.go:694 ui/data/ui/compose.ui:104
+#: ui/internal/compose/pane.go:705 ui/data/ui/compose.ui:104
 msgid "_Save Draft"
 msgstr ""
 
-#: ui/internal/compose/pane.go:911 ui/data/ui/compose_pane.ui:289
+#: ui/internal/compose/pane.go:922 ui/data/ui/compose_pane.ui:289
 #: ui/data/ui/compose_pane.ui:445
 msgid "Paragraph"
 msgstr ""
 
-#: ui/internal/compose/pane.go:914
+#: ui/internal/compose/pane.go:925
 #, c-format
 msgid "Heading %s"
 msgstr ""
 
-#: ui/internal/compose/pane.go:935 ui/internal/compose/pane_layout.go:31
+#: ui/internal/compose/pane.go:946 ui/internal/compose/pane_layout.go:31
 #: ui/data/ui/compose.ui:54
 msgid "Attach Files"
 msgstr ""
 
-#: ui/internal/compose/pane.go:962
+#: ui/internal/compose/pane.go:973
 msgid "Only local files can be attached"
 msgstr ""
 
-#: ui/internal/compose/pane.go:971 ui/data/ui/compose_pane.ui:382
+#: ui/internal/compose/pane.go:982 ui/data/ui/compose_pane.ui:382
 msgid "Insert Image"
 msgstr ""
 
-#: ui/internal/compose/pane.go:973
+#: ui/internal/compose/pane.go:984
 msgid "Images"
 msgstr ""
 
-#: ui/internal/compose/pane.go:987
+#: ui/internal/compose/pane.go:998
 msgid "Only local images can be inserted"
 msgstr ""
 
-#: ui/internal/compose/pane.go:1001
+#: ui/internal/compose/pane.go:1012
 #, c-format
 msgid "Attaching %s…"
 msgstr ""
 
-#: ui/internal/compose/pane.go:1010
+#: ui/internal/compose/pane.go:1021
 #, c-format
 msgid "Attaching %s"
 msgstr ""
@@ -1275,6 +1318,14 @@ msgstr ""
 #: ui/internal/compose/prefill.go:182
 #, c-format
 msgid "To: %s"
+msgstr ""
+
+#: ui/internal/compose/quoted.go:146 ui/internal/window/date_groups.go:97
+msgid "Expanded"
+msgstr ""
+
+#: ui/internal/compose/quoted.go:149 ui/internal/window/date_groups.go:95
+msgid "Collapsed"
 msgstr ""
 
 #. TRANSLATORS: tooltip of a recipient suggestion that came from a
@@ -4531,14 +4582,6 @@ msgstr ""
 
 #: ui/internal/maildate/groups.go:51
 msgid "This year"
-msgstr ""
-
-#: ui/internal/window/date_groups.go:95
-msgid "Collapsed"
-msgstr ""
-
-#: ui/internal/window/date_groups.go:97
-msgid "Expanded"
 msgstr ""
 
 #: ui/data/ui/account_wizard.ui:10 ui/data/ui/account_wizard.ui:21

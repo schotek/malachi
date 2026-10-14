@@ -378,8 +378,12 @@ public static partial class Assistant
     /// \t or \u00XX, and, as Go escapes them for HTML, <c>&lt;</c>
     /// <c>&gt;</c> <c>&amp;</c> as backslash-u escapes (u003c, u003e, u0026)
     /// and U+2028 U+2029 as u2028 and u2029 escapes. The result is one line.
+    /// Without <paramref name="escapeHtml"/> (an Encoder with
+    /// <c>SetEscapeHTML(false)</c>, <see cref="WriteMessage"/>) the three
+    /// HTML characters stay as they are; Go escapes U+2028 and U+2029 either
+    /// way.
     /// </summary>
-    internal static void AppendJsonString(string s, List<byte> output)
+    internal static void AppendJsonString(string s, List<byte> output, bool escapeHtml = true)
     {
         const string hex = "0123456789abcdef";
         output.Add((byte)'"');
@@ -416,7 +420,8 @@ public static partial class Assistant
                         output.Add(0x5C);
                         output.Add((byte)'t');
                         break;
-                    case 0x3C or 0x3E or 0x26 or < 0x20:
+                    case < 0x20:
+                    case 0x3C or 0x3E or 0x26 when escapeHtml:
                         output.Add(0x5C);
                         output.Add((byte)'u');
                         output.Add((byte)'0');

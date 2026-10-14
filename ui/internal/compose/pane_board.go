@@ -88,6 +88,7 @@ func (p *Pane) finishTeardown() {
 		f.close()
 	}
 	p.editor.Close()
+	p.closeQuoted()
 }
 
 // SetDialogParent sets the host for file pickers and discard confirmation.

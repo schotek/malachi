@@ -1380,7 +1380,7 @@ question then names the added message to the model); an Assistant-menu
 action on another message adds it by itself, its question naming the
 ids anyway.
 
-Two one-shot requests use the same command line without the bridge (no
+Three one-shot requests use the same command line without the bridge (no
 `--mcp-config`, no `--allowedTools`: the model has no tool at all), one
 message on stdin and the `result` event as the answer, and exist under
 the same conditions as the panel:
@@ -1392,6 +1392,16 @@ the same conditions as the panel:
   or the user's own. The answer is shown as plain text and goes into the
   editor as escaped text only when the user chooses Replace or Insert
   Below, as one undoable step.
+- **Writing in the compose window** (the assistant's bar at the bottom of
+  the window, `assistant.WriteMessage`, `assistantpanel.Writer`) sends a
+  JSON object: the kind of window, the user's optional instruction, the
+  subject, the user's own text in the editor and, for a new reply or
+  forward, the text of the prepared original shown under the editor
+  (`ui/internal/composebody`). The system prompt says that only the
+  instruction is one; everything else is mail data. The answer, a reply,
+  a forward's introduction or a message, is previewed as plain text and
+  goes into the editor in place of the user's own text only on Replace,
+  as one undoable step. The bar is not there for a comment on an issue.
 - **Searching in your own words** sends only the typed words;
   `--json-schema` makes the answer a `query` in the search syntax of
   `search.query`, which the app puts into the search field and runs as if

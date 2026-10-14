@@ -18,8 +18,11 @@ A compose window, top to bottom as compose.blp:
 - the content, which is the compose pane (ComposePane.xaml, Layout.Window):
   under the toast overlay the card of header fields, or in comment mode the
   card of the issue in its place, the formatting bar, the plain-text hint,
-  the editor filling the rest, the attachment chips; the status line at the
-  bottom.
+  the editor filling the rest, a new reply's or forward's prepared original
+  read-only under it (compose_extras.blp quote_section), the attachment
+  chips, the assistant's bar while the In App target can run
+  (compose_extras.blp assistant_bar; ComposeWindow.Write.cs); the status
+  line at the bottom.
 -->
 <Window
     x:Class="Malachi.App.Compose.ComposeWindow"

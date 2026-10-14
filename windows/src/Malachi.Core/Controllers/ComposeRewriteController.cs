@@ -4,7 +4,8 @@
 // Port of macos/Sources/MalachiCore/Controllers/ComposeRewriteController.swift
 // (ComposeRewriteController: state, onState, running, start, cancel,
 // finished); GTK: ui/internal/assistantpanel/oneshot.go (Rewriter,
-// NewRewriter, State, Running, Start, Cancel, finished). Swift's onState is
+// NewRewriter, State, Running, Start, Cancel, finished, and answerState,
+// which the compose window's ComposeWriteController shares). Swift's onState is
 // the event StateChanged, raised through ControllerEvents
 // (docs/windows-port.md §7.5); Dispose (the window closed: Cancel, and no
 // report afterwards) is Windows' own.
@@ -121,24 +122,29 @@ public sealed partial class ComposeRewriteController : IDisposable
         scope.Close();
     }
 
-    private void Finished(AssistantRequest.Outcome outcome)
+    /// <summary>
+    /// oneshot.go <c>answerState</c>: the state a rewrite or the compose
+    /// window's writing (<see cref="ComposeWriteController"/>) ends in: the
+    /// answer cleaned (<see cref="Assistant.CleanRewrite"/>), an empty one a
+    /// failure; a failure's line; idle when the consent was declined.
+    /// </summary>
+    internal static RewriteState AnswerState(AssistantRequest.Outcome outcome)
     {
         switch (outcome)
         {
             case AssistantRequest.Outcome.Answered answered:
                 var clean = Assistant.CleanRewrite(answered.Text);
-                Set(clean.Length == 0
+                return clean.Length == 0
                     ? new RewriteState.Failed(Assistant.StoppedText("the answer is empty"))
-                    : new RewriteState.Done(clean));
-                break;
+                    : new RewriteState.Done(clean);
             case AssistantRequest.Outcome.Failed failed:
-                Set(new RewriteState.Failed(failed.Failure.Text));
-                break;
+                return new RewriteState.Failed(failed.Failure.Text);
             default:
-                Set(new RewriteState.Idle());
-                break;
+                return new RewriteState.Idle();
         }
     }
+
+    private void Finished(AssistantRequest.Outcome outcome) => Set(AnswerState(outcome));
 
     private void Set(RewriteState state)
     {

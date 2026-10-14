@@ -34,6 +34,7 @@ type Window struct {
 	attachButton *gtk.Button
 
 	rewrite *rewriteUI // the assistant's rewrite (rewrite.go)
+	write   *writeUI   // the assistant's bar (write.go); nil for none
 }
 
 // newWindow builds and prefills a window; Manager.Open presents it.
@@ -79,6 +80,7 @@ func newWindow(m *Manager, p Params) *Window {
 	// the window opens.
 	w.SetFocus(w.pane.InitialFocus())
 	w.wireRewrite(b)
+	w.wireWrite()
 	w.ConnectCloseRequest(w.closeRequest)
 	return w
 }
@@ -90,6 +92,9 @@ func (w *Window) closeRequest() bool {
 	block := w.pane.dc.closeRequest()
 	if !block {
 		w.rewrite.close()
+		if w.write != nil {
+			w.write.close()
+		}
 		w.pane.finishTeardown()
 		w.m.remove(w)
 	}

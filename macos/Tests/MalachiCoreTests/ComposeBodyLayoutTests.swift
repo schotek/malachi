@@ -46,6 +46,21 @@ struct ComposeBodyLayoutTests {
         #expect(payload["mode"] == "reply")
     }
 
+    /// assistant TestWriteTexts.
+    @Test func writeTexts() {
+        let reply = ComposeAssistantPrompt.texts(kind: .replyAll)
+        #expect(reply == ComposeAssistantPrompt.Strings(
+            instruction: "What should the message say? (optional)", write: "Write a Reply",
+            quoted: "Quoted Message", include: "Include in Reply"))
+        let forward = ComposeAssistantPrompt.texts(kind: .forward)
+        #expect(forward.write == "Write an Introduction" && forward.include == "Include in Forward")
+        for kind in [ComposeKind.new, .edit] {
+            #expect(ComposeAssistantPrompt.texts(kind: kind).write == "Write a Message")
+        }
+        #expect(ComposeAssistantPrompt.barTitle(chatGPT: false) == "Assistant · Claude (Anthropic)")
+        #expect(ComposeAssistantPrompt.barTitle(chatGPT: true) == "Assistant · ChatGPT (OpenAI)")
+    }
+
     @Test func emptyAndOversizedRequestsAreRefused() {
         #expect(throws: Assistant.RewriteError.noPassage) {
             try ComposeAssistantPrompt.message(kind: .new, instruction: " ", subject: "", own: "", quote: "")

@@ -60,6 +60,9 @@ type Editor struct {
 	// height in CSS pixels, on input, paste and resize. Unset: the page
 	// still measures and posts it, but nothing reads the message.
 	OnHeight func(css float64)
+	// ReadOnly shows the body without editing it (ReadOnlyDocument); set
+	// before Load.
+	ReadOnly bool
 }
 
 // New builds an editor from data/ui/editor.blp. Call Load to show content.
@@ -138,6 +141,10 @@ func (e *Editor) Close() {
 func (e *Editor) Load(bodyHTML string) {
 	e.ready = false
 	e.html, e.text = bodyHTML, ""
+	if e.ReadOnly {
+		e.LoadHtml(ReadOnlyDocument(bodyHTML), "")
+		return
+	}
 	e.LoadHtml(Document(bodyHTML), "")
 }
 

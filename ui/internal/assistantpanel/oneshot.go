@@ -639,17 +639,23 @@ func (w *Rewriter) Cancel() {
 }
 
 func (w *Rewriter) finished(o Outcome) {
+	w.set(answerState(w.tr, o))
+}
+
+// answerState is the state a rewrite or the compose window's writing
+// (Writer) ends in: the answer cleaned (assistant.CleanRewrite), an empty
+// one a failure; a failure's line; idle when the consent was declined.
+func answerState(tr assistant.Translator, o Outcome) RewriteState {
 	switch o.Kind {
 	case OutcomeAnswered:
 		if clean := assistant.CleanRewrite(o.Text); clean != "" {
-			w.set(RewriteState{Kind: RewriteDone, Text: clean})
-		} else {
-			w.set(RewriteState{Kind: RewriteFailed, Text: assistant.StoppedText(w.tr, "the answer is empty")})
+			return RewriteState{Kind: RewriteDone, Text: clean}
 		}
+		return RewriteState{Kind: RewriteFailed, Text: assistant.StoppedText(tr, "the answer is empty")}
 	case OutcomeFailed:
-		w.set(RewriteState{Kind: RewriteFailed, Text: o.Failure.Text(w.tr)})
+		return RewriteState{Kind: RewriteFailed, Text: o.Failure.Text(tr)}
 	default:
-		w.set(RewriteState{})
+		return RewriteState{}
 	}
 }
 

@@ -25,13 +25,15 @@ request), message actions with context menus, notifications with the
 system's new-mail sound (withdrawn once their message is read, moved or
 deleted, here or elsewhere), compose with the rich-text editor, drafts (kept
 in the Drafts folder and opened from it for editing), reply and forward
-with the quoted original, `mailto:` links and the *Default apps*
+with the quoted original (shown read-only under the editor, included or
+not), `mailto:` links and the *Default apps*
 registration, the Preferences window, launch at login, running in the
 background with a notification-area icon, Preferences → AI for the MCP
 bridge, the Assistant (the ✦ menu that hands mail to Claude Desktop or
 Claude Code with a prepared question, and the experimental panel that asks
-your own Claude Code inside the main window, with the rewrite in the
-compose window and the search in your own words; [AI agents](../README.md#the-assistant)),
+your own Claude Code inside the main window, with the rewrite and the
+bar that writes a reply, an introduction or a message in the compose
+window, and the search in your own words; [AI agents](../README.md#the-assistant)),
 **Jira accounts** (`kind: jira`, [docs/api.md §4.1](../docs/api.md#41-account):
 the assistant, the JIRA heading in the sidebar with the Assigned to Me /
 Watching / Open views above the spaces, the always-grouped list with
@@ -652,7 +654,8 @@ with **Continue with ChatGPT**, and accept its separate mail disclosure.
 It uses a native Windows Codex executable and your eligible ChatGPT plan;
 Claude MCP registration is independent. Tokens stay in Windows Credential
 Manager and a native inference gateway restricts Codex to the declared mail
-and draft tools. The panel, compose rewriting, natural-language search and the
+and draft tools. The panel, compose rewriting and the compose window's
+assistant bar, natural-language search and the
 Board's triage and suggested replies are wired ([The Board](#the-board)). Setup, architecture
 and native validation requirements are in
 [ChatGPT integration](../docs/chatgpt-integration.md#11-windows-implementation-and-validation-hand-off).
@@ -710,3 +713,22 @@ Shared labels include Czech translations.
 Implementation and prepared tests have only been reviewed statically on macOS.
 Native build, tests and the UI walkthrough are delegated to the Windows agent:
 [verification handoff](../docs/windows-date-groups-handoff.md).
+
+### The quoted original and the assistant bar in compose (native verification pending)
+
+A new reply or forward shows the original that `draft.create` prepared in a
+read-only view under the editor, as in the other two clients: *Quoted
+Message* only hides or shows it, *Include in Reply* (*Include in Forward*)
+decides whether the saved draft and the message include it, and the
+editor starts empty. A draft opened from Drafts, a comment and the Board's
+inline reply keep the whole body in the editor. While the assistant's In
+App target can run, the bottom of the compose window has the assistant's
+bar (*Assistant · Claude (Anthropic)* or *· ChatGPT (OpenAI)*): *Write a
+Reply* (*Write an Introduction*, *Write a Message*) with an optional
+instruction, the answer previewed as plain text, and *Replace*, which puts
+it in place of your own text. The pure logic is Core's
+(`ComposeBodyLayout`, `Assistant.WriteMessage`, `ComposeWriteController`)
+with the Go tests ported, the views are `ComposePane.Quote.cs`,
+`ComposeAssistantBar` and `ComposeWindow.Write.cs`. All of it was written
+on a Mac without a build, so the build, the tests and a walk through the
+UI are still to be done on Windows.

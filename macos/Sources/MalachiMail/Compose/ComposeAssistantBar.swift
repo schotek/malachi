@@ -29,13 +29,13 @@ final class ComposeAssistantBar: NSView {
         super.init(frame: frame)
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
-        disclosure.title = L10n.T("Assistant") + " · Claude (Anthropic)"
+        disclosure.title = ComposeAssistantPrompt.barTitle(chatGPT: false)
         disclosure.isBordered = false
         disclosure.font = .systemFont(ofSize: 13, weight: .semibold)
         disclosure.imagePosition = .imageLeading
         disclosure.target = self
         disclosure.action = #selector(toggle(_:))
-        instruction.placeholderString = "What should the message say? (optional)" // macOS-only string
+        instruction.placeholderString = ComposeAssistantPrompt.texts(kind: .reply).instruction
         instruction.setAccessibilityLabel(instruction.placeholderString)
         instruction.usesSingleLineMode = true
         instruction.cell?.isScrollable = true
@@ -43,7 +43,7 @@ final class ComposeAssistantBar: NSView {
         instruction.action = #selector(request(_:))
         instruction.setContentHuggingPriority(.defaultLow, for: .horizontal)
         instruction.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        write.title = "Write a Reply" // macOS-only string
+        write.title = ComposeAssistantPrompt.texts(kind: .reply).write
         write.bezelStyle = .rounded
         write.target = self
         write.action = #selector(request(_:))
@@ -106,12 +106,11 @@ final class ComposeAssistantBar: NSView {
 
     /// Names the provider in effect after "Assistant".
     func setProvider(chatGPT: Bool) {
-        disclosure.title = L10n.T("Assistant") + (chatGPT ? " · ChatGPT (OpenAI)" : " · Claude (Anthropic)") // macOS-only string
+        disclosure.title = ComposeAssistantPrompt.barTitle(chatGPT: chatGPT)
     }
 
     func setMode(_ kind: ComposeKind) {
-        if kind == .forward { write.title = "Write an Introduction" } // macOS-only string
-        if kind == .new || kind == .edit { write.title = "Write a Message" } // macOS-only string
+        write.title = ComposeAssistantPrompt.texts(kind: kind).write
     }
 
     func show(text: String, running: Bool, failure: String = "") {

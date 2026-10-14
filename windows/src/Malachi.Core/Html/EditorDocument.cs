@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/HTML/EditorDocument.swift; GTK:
-// ui/internal/editor/document.go (documentTemplate, Document).
+// ui/internal/editor/document.go (documentTemplate, Document). The
+// read-only document of the compose window's quoted original is macOS
+// ComposeEditorView's readOnly (the same page with
+// <body contenteditable="false">); here it is its own head, so that a body
+// that holds the opening tag as text is never touched.
 //
 // The page the compose editor loads, byte for byte GTK's and macOS's with
 // one addition: a fixed <title> line after the charset (docs/windows-port.md
@@ -29,8 +33,8 @@ public static class EditorDocument
     /// <summary>The document's fixed title (a brand name, not translated).</summary>
     public const string Title = "Malachi Mail"; // Windows-only string
 
-    // editor.documentTemplate up to the body's content.
-    private const string Head =
+    // editor.documentTemplate up to the body's opening tag.
+    private const string HeadStart =
         "<!doctype html>\n"
         + "<html>\n"
         + "<head>\n"
@@ -43,8 +47,13 @@ public static class EditorDocument
         + " img { max-width: 100%; }\n"
         + " a { color: #1c71d8; }\n"
         + "</style>\n"
-        + "</head>\n"
-        + "<body contenteditable=\"true\">";
+        + "</head>\n";
+
+    // editor.documentTemplate up to the body's content.
+    private const string Head = HeadStart + "<body contenteditable=\"true\">";
+
+    // The read-only document's head: the body is not editable.
+    private const string ReadOnlyHead = HeadStart + "<body contenteditable=\"false\">";
 
     // editor.documentTemplate after the body's content.
     private const string Tail = "</body>\n</html>\n";
@@ -60,5 +69,17 @@ public static class EditorDocument
     {
         ArgumentNullException.ThrowIfNull(body);
         return Head + body + Tail;
+    }
+
+    /// <summary>
+    /// The read-only page of the compose window's quoted original (macOS
+    /// ComposeEditorView's readOnly): <see cref="Document"/> with
+    /// <c>&lt;body contenteditable="false"&gt;</c>, the same head, CSP and
+    /// bridge. The body is inserted verbatim, as there.
+    /// </summary>
+    public static string ReadOnlyDocument(string body)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        return ReadOnlyHead + body + Tail;
     }
 }

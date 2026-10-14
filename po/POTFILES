@@ -10,6 +10,7 @@ ui/internal/accountwizard/trust.go
 ui/internal/accountwizard/wizard.go
 ui/internal/assistant/assistant.go
 ui/internal/assistant/chatgpt.go
+ui/internal/assistant/compose_write.go
 ui/internal/background/background.go
 ui/internal/bulkmail/bulkmail.go
 ui/internal/compose/compose.go
@@ -18,6 +19,8 @@ ui/internal/compose/pane_layout.go
 ui/internal/compose/draft.go
 ui/internal/compose/prefill.go
 ui/internal/compose/rewrite.go
+ui/internal/compose/quoted.go
+ui/internal/compose/write.go
 ui/internal/compose/suggest.go
 ui/internal/jira/compose.go
 ui/internal/jira/jira.go

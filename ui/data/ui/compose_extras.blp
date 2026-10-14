@@ -1,0 +1,147 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// Two parts of a compose pane's window layout (ui/internal/compose
+// quoted.go and write.go; macOS ComposePane makeQuoteSection and
+// ComposeAssistantBar), standalone objects the pane places itself between
+// its own children: quote_section under editor_slot, assistant_bar under
+// attachments_box. The board's inline layout has neither. Every text comes
+// from ui/internal/assistant (WriteTexts, WriteBarTitle), set in Go, so
+// this file has no translatable strings.
+//
+// The prepared original of a new reply or forward (ui/internal/composebody),
+// read-only: Go appends its view to quoted_slot. The disclosure only hides
+// the view; the checkbox decides whether the draft and the message include
+// the original.
+Box quote_section {
+  orientation: vertical;
+
+  Separator {}
+
+  Box {
+    spacing: 12;
+    margin-start: 12;
+    margin-end: 12;
+    margin-top: 6;
+    margin-bottom: 6;
+
+    Button quote_disclosure {
+      styles [
+        "flat",
+      ]
+
+      child: Adw.ButtonContent quote_disclosure_content {
+        icon-name: "pan-down-symbolic";
+      };
+    }
+
+    CheckButton include_quote {
+      active: true;
+      valign: center;
+    }
+  }
+
+  Box quoted_slot {
+    orientation: vertical;
+    height-request: 180;
+
+    styles [
+      "view",
+    ]
+  }
+}
+
+// The assistant's bar: shown by Go while the In App target can run, never
+// in comment mode. It writes a reply, a forward's introduction or a
+// message from the optional instruction (assistantpanel.Writer), shows the
+// answer as plain text (never markup) and puts it into the editor only on
+// Replace.
+Box assistant_bar {
+  orientation: vertical;
+  spacing: 8;
+  margin-start: 12;
+  margin-end: 12;
+  margin-top: 6;
+  margin-bottom: 6;
+
+  Button assistant_bar_disclosure {
+    halign: start;
+
+    styles [
+      "flat",
+    ]
+
+    child: Adw.ButtonContent assistant_bar_title {
+      icon-name: "pan-down-symbolic";
+    };
+  }
+
+  Box assistant_bar_contents {
+    orientation: vertical;
+    spacing: 8;
+
+    Box {
+      spacing: 8;
+
+      Button assistant_bar_write {}
+
+      Entry assistant_bar_instruction {
+        hexpand: true;
+      }
+
+      Box assistant_bar_spinner {
+        visible: false;
+
+        Adw.Spinner {}
+      }
+    }
+
+    ScrolledWindow assistant_bar_preview_scroll {
+      height-request: 100;
+      hscrollbar-policy: never;
+      visible: false;
+
+      styles [
+        "card",
+      ]
+
+      child: TextView assistant_bar_preview {
+        editable: false;
+        cursor-visible: false;
+        wrap-mode: word_char;
+        top-margin: 6;
+        bottom-margin: 6;
+        left-margin: 8;
+        right-margin: 8;
+      };
+    }
+
+    Label assistant_bar_error {
+      use-markup: false;
+      wrap: true;
+      xalign: 0;
+      visible: false;
+
+      styles [
+        "error",
+      ]
+    }
+
+    Box assistant_bar_buttons {
+      spacing: 8;
+      halign: end;
+      visible: false;
+
+      Button assistant_bar_discard {
+        use-underline: true;
+      }
+
+      Button assistant_bar_replace {
+        styles [
+          "suggested-action",
+        ]
+      }
+    }
+  }
+}

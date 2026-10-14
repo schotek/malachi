@@ -8,6 +8,8 @@
 // bridgeScriptIsGTKsPlusTheAdditions checks of its own copy. Swift's
 // rewriteTargetDecode reads what its bridge returns; here the passage is
 // GTK's "rewrite" message, so its cases go through the channel.
+// ReadOnlyDocument checks the page of the compose window's quoted original,
+// which macOS makes in its view (ComposeEditorView readOnly).
 
 using System;
 using System.Collections.Generic;
@@ -42,6 +44,24 @@ public sealed class EditorBridgeTests
         Assert.Contains("<body contenteditable=\"true\">100%s %d</body>", EditorDocument.Document("100%s %d"), StringComparison.Ordinal);
         // Windows: the fixed title right after the charset.
         Assert.Contains("<meta charset=\"utf-8\">\n<title>Malachi Mail</title>\n<meta http-equiv", doc, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The compose window's quoted original (macOS ComposeEditorView
+    /// readOnly): the editor's page with a body that is not editable; the
+    /// body itself, the opening tag as its text included, is untouched.
+    /// </summary>
+    [Fact]
+    public void ReadOnlyDocument()
+    {
+        const string body = "<p>&lt;body contenteditable=\"true\"&gt;</p><body contenteditable=\"true\">";
+        var doc = EditorDocument.ReadOnlyDocument(body);
+        var editable = EditorDocument.Document(body);
+        const string open = "<body contenteditable=\"false\">";
+        Assert.Equal(editable.Replace("<body contenteditable=\"true\"><p>", open + "<p>", StringComparison.Ordinal), doc);
+        Assert.Contains(open + body + "</body>\n</html>\n", doc, StringComparison.Ordinal);
+        Assert.StartsWith(editable[..editable.IndexOf("<body", StringComparison.Ordinal)], doc, StringComparison.Ordinal);
+        Assert.Contains("<meta http-equiv=\"Content-Security-Policy\" content=\"" + EditorDocument.Csp + "\">", doc, StringComparison.Ordinal);
     }
 
     [Fact]
