@@ -44,6 +44,17 @@ func (s *Syncer) syncFolder(ctx context.Context, f store.Folder, since time.Time
 		known[id] = true
 	}
 
+	// A message the user moved or deleted locally whose operation is still
+	// queued (enqueued after this pass pushed the operations) is still
+	// where it was on the server: an enumeration, a resynchronisation or a
+	// change made elsewhere (read on the phone) reports it here, and
+	// MoveByRemoteID would drag its row back — the message would reappear
+	// until the next pass pushed the operation. Such a report is skipped.
+	queued, err := s.deps.Store.PendingSourceRemoteIDs(ctx, s.account.ID)
+	if err != nil {
+		return nil, storageError(err)
+	}
+
 	seen := map[string]bool{}
 	created := map[string]bool{}
 	// removed holds the ids whose last state in the stream is "removed":
@@ -79,6 +90,9 @@ func (s *Syncer) syncFolder(ctx context.Context, f store.Folder, since time.Time
 				continue
 			}
 			delete(removed, m.ID)
+			if queued[m.ID] {
+				continue
+			}
 			seen[m.ID] = true
 			exists := known[m.ID]
 			if !exists {
@@ -112,9 +126,10 @@ func (s *Syncer) syncFolder(ctx context.Context, f store.Folder, since time.Time
 	}
 	if initial {
 		// Everything the enumeration did not mention is gone or outside
-		// the window.
+		// the window — except a row the user moved here whose move is
+		// still queued: the server does not hold it here yet.
 		for id := range known {
-			if !seen[id] {
+			if !seen[id] && !queued[id] {
 				removed[id] = true
 			}
 		}

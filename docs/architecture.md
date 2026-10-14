@@ -466,7 +466,15 @@ account; `internal/core` owns its lifecycle:
   synchronises folders. A move keeps the local id; the row waits with UID 0
   until the server's COPYUID (or a Message-ID reconciliation on servers
   without UIDPLUS) assigns the new one. Flags are server-wins after the
-  queued change has been pushed.
+  queued change has been pushed. A folder pass leaves alone the messages
+  whose move or delete is still queued (`PendingSourceUIDs`,
+  `PendingSourceRemoteIDs`: queued after the pass pushed the operations,
+  so still on the server): the IMAP diff does not fetch their UIDs back
+  as new, a Graph delta entry naming their id is skipped, and a Graph
+  enumeration does not tombstone their row in the folder they were moved
+  to, so a message deleted while a pass runs neither reappears until the
+  next pass pushes the operation (it did on IMAP, as a second row, for
+  ten to twenty seconds) nor loses its row to a reconciliation.
 - **Cycle.** connect → `LIST` (special-use, `STATUS`) → push ops → per
   changed folder, in `store.SortSyncOrder` (the inbox first, then drafts
   and sent, then ordinary folders, and junk, archive and trash with their

@@ -499,6 +499,58 @@ func (s *Store) deleteOp(ctx context.Context, id int64, what string) error {
 	return nil
 }
 
+// PendingSourceUIDs lists the UIDs the folder's queued move and delete
+// operations were taken from (their snapshot), ascending, each once: the
+// messages the user moved or deleted locally that are still on the server
+// until the operations are pushed. A folder pass leaves them alone — it
+// would fetch them back as new.
+func (s *Store) PendingSourceUIDs(ctx context.Context, folderID string) ([]uint32, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT uid FROM message_ops
+		WHERE folder_id = ? AND kind IN ('move', 'delete') AND uid > 0 ORDER BY uid`, folderID)
+	if err != nil {
+		return nil, fmt.Errorf("list queued sources: %w", err)
+	}
+	defer rows.Close()
+	var out []uint32
+	for rows.Next() {
+		var uid int64
+		if err := rows.Scan(&uid); err != nil {
+			return nil, fmt.Errorf("list queued sources: %w", err)
+		}
+		out = append(out, uint32(uid))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list queued sources: %w", err)
+	}
+	return out, nil
+}
+
+// PendingSourceRemoteIDs lists the remote ids of the account's queued move
+// and delete operations: the messages the user moved or deleted locally
+// that the server still reports where they were until the operations are
+// pushed. A folder pass leaves them alone — a delta naming one would move
+// its row back.
+func (s *Store) PendingSourceRemoteIDs(ctx context.Context, accountID string) (map[string]bool, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT remote_id FROM message_ops
+		WHERE account_id = ? AND kind IN ('move', 'delete') AND remote_id != ''`, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("list queued sources: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("list queued sources: %w", err)
+		}
+		out[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list queued sources: %w", err)
+	}
+	return out, nil
+}
+
 // CountPendingOps returns how many operations of the account are still
 // queued, due or not.
 func (s *Store) CountPendingOps(ctx context.Context, accountID string) (int, error) {
