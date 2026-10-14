@@ -122,7 +122,7 @@ final class ComposeAssistantBar: NSView {
         error.isHidden = failure.isEmpty
         resultButtons.isHidden = !running && text.isEmpty
         apply.isEnabled = !running && !text.isEmpty
-        discard.title = running ? L10n.T("Cancel") : mn(L10n.T("_Discard"))
+        discard.title = running ? mn(L10n.T("_Cancel")) : mn(L10n.T("_Discard"))
         instruction.isEnabled = !running
         write.isEnabled = !running
         if running { spinner.startAnimation(nil) } else { spinner.stopAnimation(nil) }
