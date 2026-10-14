@@ -61,7 +61,7 @@ func TestActionRulesMailAccountsOfferEverything(t *testing.T) {
 	for _, acc := range []api.Account{ruleOldMail, ruleMail} {
 		m := ruleModel([]api.Account{acc}, acc.ID, api.FlagSeen)
 		st := m.messageActionState(firstRow(m), true)
-		if !(st.reply && st.replyAll && st.forward && st.trash && st.archive && st.junk) {
+		if !(st.reply && st.replyAll && st.forward && st.trash && st.archive && st.junk && st.move) {
 			t.Errorf("%s: %+v", acc.ID, st)
 		}
 		all := capabilities.Actions{Reply: true, ReplyAll: true, Forward: true, Move: true, Trash: true, Archive: true, Junk: true}
@@ -80,7 +80,7 @@ func TestActionRulesJiraWithoutCapabilities(t *testing.T) {
 	if !st.on {
 		t.Fatal("not on")
 	}
-	if st.reply || st.replyAll || st.forward || st.trash || st.archive || st.junk {
+	if st.reply || st.replyAll || st.forward || st.trash || st.archive || st.junk || st.move {
 		t.Errorf("an action the account lacks is on: %+v", st)
 	}
 	if st.supported != everythingJiraLacks || st.comment {
@@ -198,6 +198,20 @@ func TestActionRulesAQueuedJiraCommentCanBeCancelled(t *testing.T) {
 	}
 	if st.star || st.archive || st.junk {
 		t.Errorf("%+v", st)
+	}
+}
+
+// Move To (the message's context menu) is the account's; a queued message
+// does not move.
+func TestActionRulesMoveIsNotForTheOutbox(t *testing.T) {
+	m := ruleModel([]api.Account{ruleMail}, "m", api.FlagSeen)
+	if st := m.messageActionState(firstRow(m), true); !st.move {
+		t.Errorf("mail: %+v", st)
+	}
+	m.messages[0].FolderID = "out"
+	m.messages[0].Outbox = &api.OutboxInfo{State: api.OutboxQueued}
+	if st := m.messageActionState(firstRow(m), true); st.move || !st.supported.Move {
+		t.Errorf("outbox: %+v", st)
 	}
 }
 

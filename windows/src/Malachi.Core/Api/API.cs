@@ -198,6 +198,20 @@ public static class API
     public static readonly RpcMethod<FolderSubscribeParams, EmptyResult> FolderSubscribe =
         new("folder.subscribe", RpcTimeouts.Default, Wire.FolderSubscribeParams, Wire.EmptyResult);
 
+    /// <summary>
+    /// <c>folder.markRead</c>: every stored, unhidden unread message of a
+    /// folder read (Mark All as Read in its context menu).
+    /// </summary>
+    public static readonly RpcMethod<FolderMarkReadParams, FolderMarkReadResult> FolderMarkRead =
+        new("folder.markRead", RpcTimeouts.Default, Wire.FolderMarkReadParams, Wire.FolderMarkReadResult);
+
+    /// <summary>
+    /// <c>folder.empty</c>: every stored message of a Trash or Junk folder
+    /// deleted for good (Empty Trash and Empty Junk in its context menu).
+    /// </summary>
+    public static readonly RpcMethod<FolderEmptyParams, FolderEmptyResult> FolderEmpty =
+        new("folder.empty", RpcTimeouts.Default, Wire.FolderEmptyParams, Wire.FolderEmptyResult);
+
     // Messages
 
     /// <summary><c>message.list</c>.</summary>
@@ -452,7 +466,7 @@ public static class API
         AccountUpdate, AccountDiscover, AccountTest, AccountLinked,
         AccountReorder, AccountOAuthStart, AccountOAuthWait, AccountOAuthCancel,
         AccountDetectSite, AccountListSpaces,
-        FolderList, FolderSubscribe,
+        FolderList, FolderSubscribe, FolderMarkRead, FolderEmpty,
         MessageList, MessageGet, MessageBody, MessagePart,
         MessageEmbedded, MessageDownload, MessageFlag, MessageMove, MessageDelete,
         MessageSend, MessageUnsubscribe,

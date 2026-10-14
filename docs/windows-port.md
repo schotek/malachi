@@ -51,7 +51,7 @@ except for the Windows CI job of the backend row and what §17 lists.
 | Main window | **GTK structure**: a command row per pane under a slim title bar that holds the search box; the primary menu behind a `…` button (no menu bar); GTK back navigation at 900/600 px or less; the status line across the whole bottom edge | Built: `MainWindow`, `Malachi.App/Main`, §11.1 |
 | Keyboard | Windows scheme: Ctrl+R Reply, Ctrl+Shift+R Reply All, Ctrl+Shift+F Forward, F5 Check for New Mail, Ctrl+F/Ctrl+E search; a setting `ctrl-r` (`reply`, default, or `refresh`) as macOS's `command-r`; otherwise GTK's keys, Ctrl+Q Quit and A/J/U/S/Delete included (no Outlook aliases: a pre-translate handler delivers every key even with a WebView2 focused, §11.5) | Built: `ShortcutMap` (Core), `Malachi.App/Commands`, §11.5 |
 | Attachment click | An **own previewer**: images, PDF and text in a locked-down WebView2 window (no network, no script, no temporary file); other types offer Open / Save As; programs are never opened | Built: `PreviewWindow`, `PreviewWebView`, §6.6 |
-| Windows additions | Notification-area icon while running in the background; context menus on messages and folders; a *Default apps* button in Preferences; dirty drafts saved on Quit | Built: §10 (tray, *Default apps*, Quit), §11.2 (context menus) |
+| Windows additions | Notification-area icon while running in the background; a *Default apps* button in Preferences; dirty drafts saved on Quit (the context menus on messages and folders, first a Windows addition, are in all three clients since 2026-10-14, §11.2) | Built: §10 (tray, *Default apps*, Quit) |
 | Unlisted links | Confirmed before opening, as on macOS (GTK opens them; see §6.4) | Built: `LinkDecision`, `LinkOpener`, §6.4 |
 | Dependencies | CsWin32, CommunityToolkit.WinUI Controls, CommunityToolkit.Mvvm, Microsoft.Extensions.Logging.Abstractions / TimeProvider.Testing; xUnit v3 for tests. Each justified in its commit (CLAUDE.md) | Built: `Directory.Packages.props`; besides these the Windows SDK build tools and, for the strings check (§9), Roslyn (`Microsoft.CodeAnalysis.CSharp`). Of the toolkit's controls the app uses SettingsControls and Sizers (Segmented, unused once the filter became a `SelectorBar`, §11.1, is no longer referenced) |
 | Backend changes | Four platform-neutral fixes on the branch, each its own commit (§14): the helper path check, the stored files that Windows will not rename or remove while open (after sending, and in main's raw store), `malachi-mcp --claude-desktop-config/--command`, and `.gitattributes` + portable Go tests + Windows CI | Built, except the Windows CI workflow (§13, §17) |
@@ -1956,8 +1956,9 @@ hover or selection, keyboard-reachable), with the status pages of GTK. The
 message list is a virtualised `ListView` updated by key diff, rows after
 `message_row.blp` (margins 8/3, avatars 40/28 with the libadwaita palette
 ported, bold unread, count pill, date, unread dot, search highlights); it
-pages itself at the end (as macOS), *Load More* only to retry. Context menus
-(§0) on messages and folders offer only existing actions.
+pages itself at the end (as macOS), *Load More* only to retry. Messages,
+folders and account headings have the context menus of all three clients
+(below).
 
 In the code (`Malachi.App/Main`, the view models in
 `Malachi.Core/Presentation` with their tests): the sidebar's rows are
@@ -1974,8 +1975,7 @@ container never takes it, Left and Right fold a folder with children and,
 beyond GTK, an account heading (whose arrow is no tab stop in a row). The
 star waits for the pointer, the selection or the keyboard (a 150 ms fade),
 stays in sight in the tree for a pinned folder, and is reached with Tab
-from its row (U5; verified). The context menu of a folder or heading has
-Add to / Remove from Favourites and Expand / Collapse. The message rows are
+from its row (U5; verified). The message rows are
 `MessageRow`s (message_row.go's `SetMessage`, `SetThread` and `applyLead`:
 the start margin 6, 2 in a grouped list, a member indented by the avatar
 and the gap or 24; 8 or 3 above and below; the avatar 40 or 28; the
@@ -1992,10 +1992,9 @@ and the attachment chip) after the subject where its icons say so. Double
 click and Enter activate (a conversation folds, a draft goes to
 `draft.open`, a message to its message window, §11.3), Left and Right
 fold, a right click selects the row (without the navigation of a folded
-window) and opens the header's actions (Reply, Reply All, Forward; Mark as
-Unread, Mark as Read, Star or Unstar; Archive, Mark as Junk, Move to Trash
-or Cancel Sending). The filter and the scope bar are `SelectorBar`s, whose
-template's list is what UI Automation announces: it carries the bar's name
+window) and opens its context menu (below). The filter and the scope bar
+are `SelectorBar`s, whose template's list is what UI Automation announces:
+it carries the bar's name
 (Windows-only *Filter* and *Search Scope*; the bar itself is Raw, or a
 named bar would be announced as a group around the list). The end of a
 search, and the back button, ask for the keyboard on the list: the request
@@ -2021,6 +2020,50 @@ first, and Load More appearing only after a page request timed out (the
 daemon suspended), then paging on. WinUI keeps the selection through the
 in-place updates of the view overload and restores it where the controller
 moves it.
+
+The context menus (2026-10-14, the same in GTK and macOS:
+`ui/internal/window/context_menus.go`) open with a right click, a press
+and hold, Shift+F10 or the Menu key (`ContextRequested`). What they offer
+is Core's `ContextMenus/ContextMenu` (namespace `Malachi.Core.ContextMenus`,
+as `Boards`: a namespace `ContextMenu` would hide the class), the port of
+`ui/internal/contextmenu` with its tests (`ContextMenuTests`; Go's item ids
+are `ContextMenu.Name`, also the items' automation ids
+`ContextMenu.<id>`): the items in their groups, a separator between two, an
+item the account does not offer left out and one that cannot run now
+disabled. A message's menu (`MessageListPane.OnContextRequested`) selects
+the row first and acts on the selection through the window's commands, so
+its items are enabled as the command row's are (`MessageState.Of` the
+window's `ActionFlags`), in the groups Open in New Window (Edit for a
+draft: `ActionsController.OpenMessage`, as activating the row); Reply
+(Comment on an issue), Reply All, Forward; Mark as Read and Mark as Unread
+(each only when it applies, both on a conversation with read and unread
+members), Star or Unstar, Change Status (the issue card's menu); Archive,
+Move To, Mark as Junk, Move to Trash or Cancel Sending; and Assistant,
+while the Assistant is shown. Move To is a submenu of the account's folders in
+the sidebar's order (`FolderTree.FolderTreeRows` with nothing folded and no
+Favourites → `ContextMenu.MoveTargets`: no outbox, Drafts, \All folder or
+Jira view, the current folder and the containers disabled, a container
+without a listed subfolder left out), each indented by an em space per
+level, its accessible name the folder's title alone; it runs
+`ActionsController.MoveTo`, the role moves' optimistic move to any folder
+(rows and counts at once, back on failure, the windows closed; not for the
+outbox's messages, `ActionFlags.Move`). The Assistant's submenu is the ✦
+menu's items without Summarize Unread in This Folder, the folder's
+(`AssistantMenu.FillMessageMenu`, GTK's `assistantMenu("win", false)`). A
+folder's or an account heading's menu (`SidebarPane.OnContextRequested`)
+acts on the row clicked and leaves the selection alone, in the groups
+Check for New Mail (`MailboxController.TriggerSync` for the folder; a Jira
+view, and an account heading, the whole account); Mark All as Read
+(`folder.markRead`, no question) and, on a Trash or Junk folder of an
+account with the delete capability, Empty Trash or Empty Junk
+(`folder.empty`, always after `ContextMenu.EmptyQuestion` with the
+folder's own total, which says older messages kept only on the server
+stay there); Add to or Remove from Favourites, Expand or Collapse. They read the folder's own counts
+(`MailModel.Folder`), not the badge; the daemon's `notify.messagesChanged`
+brings the folder and the list up to date, and a failure is a toast in the
+menu's words (`ContextMenu.MarkingReadText`, `EmptyingText`,
+`MovingText`). An account heading has Check for New Mail and its folding,
+the Favourites heading no menu.
 
 ### 11.3 Reader, windows, compose, wizard, preferences
 
@@ -2416,8 +2459,9 @@ This Folder* while the folder has unread mail, *Open In* with the three
 targets as radio items, and, while the chosen Claude app cannot take the
 request, its problem and *Set Up…*, which opens *Preferences → AI*). The
 same menu sits in a message window's command bar, without *Summarize
-Unread*. The attachment chip's menu has *Ask Claude about This
-Attachment*. Every action goes through `AssistantActions` (the port of
+Unread*, and is the *Assistant* submenu of a message's context menu in the
+list, without it too (`AssistantMenu.FillMessageMenu`, §11.2). The
+attachment chip's menu has *Ask Claude about This Attachment*. Every action goes through `AssistantActions` (the port of
 GTK's `assistant.go` and macOS `AssistantActions.swift`): a hand-off
 builds the link in Core and opens it with `ILauncher.OpenAssistantLinkAsync`,
 In App runs in the panel.
@@ -2839,8 +2883,9 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
 - `Malachi.Core.Tests` (xUnit v3): every Go UI pure-logic test and every
   Swift test of `MalachiCoreTests` ported with the same shape (Theory for
   Swift's parameterised tests): models, threads, folding, favourites,
-  folder tree, actions, attachments, accounts page, notification text,
-  outbox, sync status, compose source, address list, prefill, mailto,
+  folder tree, actions, context menus, attachments, accounts page,
+  notification text, outbox, sync status, compose source, address list,
+  prefill, mailto,
   suggestions, links, CID registry, editor bridge, wizard fields and
   results, sign-in, format, error texts, provider; the transport (framing,
   JSON-RPC, the §1.4 vectors, Go's handshake failure table, the client);

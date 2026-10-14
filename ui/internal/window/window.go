@@ -514,6 +514,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		w.setListFilter(api.MessageFilter(w.messageFilter.ActiveName()))
 	})
 	w.setupSearch(b)
+	w.wireContextMenus()
 
 	// "clicked" fires for user clicks only, not for SetActive from Go. On a
 	// conversation row the star acts on every member (flagTarget).
@@ -859,6 +860,32 @@ func (w *Window) registerActions() {
 	w.addAction("mark-read", false, forRows(func(_ listRow, ids []api.MessageID) { w.setSeenIDs(ids, true) }))
 	w.addAction("mark-unread", false, forRows(func(_ listRow, ids []api.MessageID) { w.setSeenIDs(ids, false) }))
 	w.addAction("toggle-flag", false, forRows(func(row listRow, ids []api.MessageID) { w.setFlaggedIDs(ids, w.model.flagTarget(row)) }))
+	// The message's context menu (context_menus.go) reaches these too:
+	// open, the replies (the header bar's buttons call openCompose
+	// themselves) and Move To with the target folder's id.
+	w.addAction("open-message", false, func() {
+		if s, ok := w.selectedMessage(); ok {
+			w.openMessage(s)
+		}
+	})
+	for _, r := range []struct {
+		name string
+		kind compose.Kind
+	}{{"reply", compose.KindReply}, {"reply-all", compose.KindReplyAll}, {"forward", compose.KindForward}} {
+		r := r
+		w.addAction(r.name, false, forSelected(func(id api.MessageID) { w.openCompose(r.kind, id) }))
+	}
+	moveTo := gio.NewSimpleAction("move-to", glib.NewVariantType("s"))
+	moveTo.SetEnabled(false)
+	moveTo.ConnectActivate(func(v *glib.Variant) {
+		if v == nil {
+			return
+		}
+		target := api.FolderID(v.String())
+		w.selectedIDs(func(_ listRow, ids []api.MessageID) { w.moveIDsTo(ids, target) })
+	})
+	w.AddAction(moveTo)
+	w.actions["move-to"] = moveTo
 	w.addAction("load-images", false, forSelected(w.loadRemoteImages))
 	w.addAction("trust-sender", false, forSelected(w.trustSender))
 	// Change Status pops up the menu of the issue card on display: the

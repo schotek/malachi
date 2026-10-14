@@ -390,24 +390,41 @@ public final class ActionsController {
     /// refuses moves on them), and a message already in the target folder
     /// is a no-op.
     func moveToRole(_ ids: [MessageID], _ role: FolderRole, missing: String, what: (Int) -> String) {
-        let msgs = summaries(ids).filter { !mailbox.model.inOutbox($0) } // accelerators bypass the disabled actions
+        let msgs = movable(ids)
         guard let first = msgs.first else { return }
-        let acc = first.accountId
-        guard let target = mailbox.model.folderByRole(acc, role) else {
+        guard let target = mailbox.model.folderByRole(first.accountId, role) else {
             toast(missing)
             return
         }
-        if target.id == first.folderId {
-            return
-        }
+        move(msgs, to: target.id, what: what)
+    }
+
+    /// Moves messages to another folder of their account (Move To in a
+    /// message's context menu; actions.go `moveIDsTo`), as `moveToRole`
+    /// does.
+    public func moveTo(_ ids: [MessageID], folder: FolderID) {
+        move(movable(ids), to: folder, what: ContextMenu.movingText)
+    }
+
+    /// The summaries of `ids` a move takes: not the outbox's (accelerators
+    /// and menus bypass the disabled actions).
+    private func movable(_ ids: [MessageID]) -> [MessageSummary] {
+        summaries(ids).filter { !mailbox.model.inOutbox($0) }
+    }
+
+    /// The move itself (actions.go `moveListTo`): the rows go at once and
+    /// come back on failure, the counts follow, the windows close.
+    private func move(_ msgs: [MessageSummary], to target: FolderID, what: (Int) -> String) {
+        guard let first = msgs.first, target != first.folderId else { return }
+        let acc = first.accountId
         let moving = msgs.map(\.id)
         let restore = list.removeRows(moving)
         for s in msgs {
             onWindowsClose?(s.id)
         }
-        let undo = trackMoves(msgs, target: FolderKey(account: acc, folder: target.id))
+        let undo = trackMoves(msgs, target: FolderKey(account: acc, folder: target))
         call(
-            API.MessageMove.self, MessageMoveParams(accountId: acc, messageIds: moving, targetFolderId: target.id),
+            API.MessageMove.self, MessageMoveParams(accountId: acc, messageIds: moving, targetFolderId: target),
             what: what(msgs.count), onError: { _ in
                 restore()
                 undo()
@@ -415,6 +432,29 @@ public final class ActionsController {
                 self?.mailbox.withdrawNotifications(moving)
             }
         )
+    }
+
+    // MARK: Folders
+
+    /// Mark All as Read in a folder's context menu (folder.markRead;
+    /// context_menus.go `markFolderRead`). The daemon's
+    /// notify.messagesChanged brings the counts and the list up to date.
+    public func markFolderRead(_ k: FolderKey) {
+        call(API.FolderMarkRead.self, FolderMarkReadParams(accountId: k.account, folderId: k.folder),
+             what: ContextMenu.markingReadText())
+    }
+
+    /// Empty Trash or Empty Junk (folder.empty), always after the
+    /// question, shown over `parent`; the notification brings the folder
+    /// up to date.
+    public func emptyFolder(_ k: FolderKey, parent: AnyObject? = nil) {
+        guard let f = mailbox.model.folder(k) else { return }
+        let junk = f.role == .junk
+        let q = ContextMenu.emptyQuestion(junk: junk, count: f.total)
+        ask(parent, heading: q.heading, body: q.body, label: q.confirm) { [weak self] in
+            self?.call(API.FolderEmpty.self, FolderEmptyParams(accountId: k.account, folderId: k.folder),
+                       what: ContextMenu.emptyingText(junk: junk))
+        }
     }
 
     // MARK: Outbox

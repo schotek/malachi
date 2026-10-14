@@ -22,6 +22,7 @@ ui/internal/compose/rewrite.go
 ui/internal/compose/quoted.go
 ui/internal/compose/write.go
 ui/internal/compose/suggest.go
+ui/internal/contextmenu/text.go
 ui/internal/jira/compose.go
 ui/internal/jira/jira.go
 ui/internal/jira/wizard.go

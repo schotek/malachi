@@ -13,6 +13,11 @@ import MalachiCore
 /// status line GTK has at the bottom of the sidebar is the window's status
 /// bar here (`StatusBarViewController`), so the outline runs to the bottom.
 ///
+/// A right click (or a Control-click) on a folder or an account heading
+/// opens its context menu (ui/internal/contextmenu `FolderItems`,
+/// `AccountItems`), which acts on the row clicked and leaves the selection
+/// alone; the Favourites heading has none.
+///
 /// The controller owns every decision; this view mirrors `model.entries`
 /// and sends clicks back. It installs the sidebar-facing callbacks of the
 /// mailbox controller (`onEntriesChanged`, `onBadgesChanged`,
@@ -20,8 +25,12 @@ import MalachiCore
 @MainActor
 final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate {
     let mailbox: MailboxController
+    /// Mark All as Read and Empty Trash or Junk of a folder's context menu
+    /// (`ActionsController`), installed by the integration.
+    var onMarkFolderRead: (@MainActor (FolderKey) -> Void)?
+    var onEmptyFolder: (@MainActor (FolderKey) -> Void)?
 
-    private let outline = NSOutlineView()
+    private let outline = FolderOutlineView()
     private let scroll = NSScrollView()
     private let statusView = SidebarStatusView()
     private let dataSource = FolderOutlineDataSource()
@@ -63,6 +72,7 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
         outline.outlineTableColumn = column
         outline.dataSource = dataSource
         outline.delegate = self
+        outline.menuForRow = { [weak self] row in self?.menu(forRow: row) }
 
         scroll.documentView = outline
         scroll.hasVerticalScroller = true
@@ -300,5 +310,84 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
                 self?.mailbox.setFolderCollapsed(key, collapsed)
             }
         }
+    }
+}
+
+// MARK: - Context menu
+
+extension FolderSidebarViewController {
+    /// The menu of the outline's `row`: a folder's or an account
+    /// heading's, its items closures over the row clicked; nil for the
+    /// Favourites heading or nothing to offer.
+    fileprivate func menu(forRow row: Int) -> NSMenu? {
+        let node = outline.item(atRow: row)
+        var groups: [[ContextMenu.Item]] = []
+        var labels = ContextMenu.Labels()
+        var run: [ContextMenu.ItemID: @MainActor () -> Void] = [:]
+        let mailbox = self.mailbox
+        // Folding goes through the outline, whose delegate tells the
+        // mailbox (`outlineViewItemDidExpand`/`Collapse`).
+        let fold: @MainActor () -> Void = { [weak outline] in
+            guard let outline else { return }
+            if outline.isItemExpanded(node) {
+                outline.collapseItem(node)
+            } else {
+                outline.expandItem(node)
+            }
+        }
+        switch node {
+        case let a as AccountNode:
+            let id = a.id
+            groups = ContextMenu.accountItems(foldable: outline.isExpandable(a))
+            labels.collapsed = !outline.isItemExpanded(a)
+            run[.checkMail] = { mailbox.triggerSync(accountId: id) }
+            run[.fold] = fold
+        case let f as FolderNode:
+            let k = f.key
+            guard let folder = mailbox.model.folder(k) ?? f.entry.folder else { return nil }
+            let account = mailbox.model.account(k.account)
+            groups = ContextMenu.folderItems(ContextMenu.FolderState(
+                selectable: folder.selectable, role: folder.role, unread: folder.unread, total: folder.total,
+                canDelete: account?.can(.delete) ?? false, foldable: !f.fav && outline.isExpandable(f)))
+            labels = ContextMenu.Labels(junk: folder.role == .junk, favourite: f.entry.starred,
+                                        collapsed: !outline.isItemExpanded(f))
+            run[.checkMail] = { mailbox.triggerSync(folder: folder) }
+            run[.markAllRead] = { [weak self] in self?.onMarkFolderRead?(k) }
+            run[.emptyFolder] = { [weak self] in self?.onEmptyFolder?(k) }
+            run[.favourite] = { mailbox.toggleFavourite(k) }
+            run[.fold] = fold
+        default:
+            return nil
+        }
+        guard !groups.isEmpty else { return nil }
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        for (i, group) in groups.enumerated() {
+            if i > 0 {
+                menu.addItem(.separator())
+            }
+            for it in group {
+                let action = run[it.id] ?? {}
+                let item = BoardMenuAction.item(mn(ContextMenu.label(it.id, labels)), action)
+                item.isEnabled = it.enabled && run[it.id] != nil
+                menu.addItem(item)
+            }
+        }
+        return menu
+    }
+}
+
+/// The sidebar's outline: a right click (or a Control-click) asks
+/// `menuForRow` for the row's context menu.
+@MainActor
+final class FolderOutlineView: NSOutlineView {
+    var menuForRow: (@MainActor (Int) -> NSMenu?)?
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let row = row(at: convert(event.locationInWindow, from: nil))
+        // AppKit's own `menu(for:)` draws the outline round the clicked
+        // row; the selection stays.
+        menu = row >= 0 ? menuForRow?(row) : nil
+        return menu == nil ? nil : super.menu(for: event)
     }
 }

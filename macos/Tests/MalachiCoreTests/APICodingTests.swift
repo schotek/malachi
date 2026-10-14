@@ -28,6 +28,17 @@ import Testing
         #expect(legacy.protocolVersion == API.protocolVersion)
     }
 
+    /// docs/api.md §4.2: folder.markRead and folder.empty.
+    @Test func folderActions() throws {
+        let read = try encodeObject(FolderMarkReadParams(accountId: "acc_1", folderId: "f_1"))
+        #expect(read.keys.sorted() == ["accountId", "folderId"] && read["folderId"] as? String == "f_1")
+        let empty = try encodeObject(FolderEmptyParams(accountId: "acc_1", folderId: "f_9"))
+        #expect(empty.keys.sorted() == ["accountId", "folderId"] && empty["accountId"] as? String == "acc_1")
+        #expect(try decode(API.FolderMarkRead.Result.self, #"{"marked":3}"#) == FolderMarkReadResult(marked: 3))
+        #expect(try decode(API.FolderEmpty.Result.self, #"{"deleted":12}"#) == FolderEmptyResult(deleted: 12))
+        #expect(API.FolderMarkRead.name == "folder.markRead" && API.FolderEmpty.name == "folder.empty")
+    }
+
     /// docs/api.md §4.0 and §1.4: system.hello and system.authenticate.
     @Test func handshakeExamples() throws {
         let nonce = String(repeating: "0f", count: 32)
@@ -1313,7 +1324,7 @@ import Testing
         "account.update", "account.discover", "account.test", "account.linked",
         "account.reorder", "account.oauthStart", "account.oauthWait", "account.oauthCancel",
         "account.detectSite", "account.listSpaces",
-        "folder.list", "folder.subscribe",
+        "folder.list", "folder.subscribe", "folder.markRead", "folder.empty",
         "message.list", "message.get", "message.body", "message.part",
         "message.embedded", "message.download", "message.flag", "message.move", "message.delete",
         "message.send", "message.unsubscribe",
@@ -1335,8 +1346,8 @@ import Testing
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 72)
-        #expect(Set(API.allMethods).count == 72, "no duplicates")
+        #expect(API.allMethods.count == 74)
+        #expect(Set(API.allMethods).count == 74, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)

@@ -34,6 +34,9 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     /// Space and Shift-Space in the list (`up`): a page of the reading
     /// pane's conversation; false when it shows none.
     var onPageReader: (@MainActor (_ up: Bool) -> Bool)?
+    /// The context menu of the selected row (`MessageContextMenu`); a right
+    /// click selects its row before asking.
+    var contextMenu: (@MainActor () -> NSMenu?)?
     /// The sign-in banner's button (window.go `onAuthBannerButton`: the
     /// preferences, or the online accounts panel).
     var onAuthBannerButton: (@MainActor () -> Void)?
@@ -151,6 +154,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         table.onFold = { [weak self] in self?.foldSelected(false) ?? false }
         table.onUnfold = { [weak self] in self?.foldSelected(true) ?? false }
         table.onPage = { [weak self] up in self?.onPageReader?(up) ?? false }
+        table.menuForRow = { [weak self] row in self?.menuForRow(row) }
 
         scroll.documentView = table
         scroll.hasVerticalScroller = true
@@ -647,6 +651,21 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         loadMoreButton.isHidden = true
         updateLoadMoreBox()
         requestMore()
+    }
+
+    /// A right click on `row`: a message row is selected (the menu acts on
+    /// the selection, as on Windows) and the list takes the keyboard, so
+    /// that the single-key actions a typing text field turns off are on.
+    private func menuForRow(_ row: Int) -> NSMenu? {
+        guard row >= 0, row < keys.count, let key = keys[row].messageKey else { return nil }
+        if table.selectedRow != row {
+            table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        }
+        if list.selectedKey != key {
+            list.select(key: key)
+        }
+        view.window?.makeFirstResponder(table)
+        return contextMenu?()
     }
 
     @objc private func rowDoubleClicked(_ sender: Any?) {

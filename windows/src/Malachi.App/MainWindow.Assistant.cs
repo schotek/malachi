@@ -75,6 +75,8 @@ public sealed partial class MainWindow
             canSummarizeUnread: () => actions.CanSummarizeUnread,
             summarizeUnread: () => actions.SummarizeUnread(this));
         assistantMenu = menu;
+        // A message's context menu has the same items as a submenu.
+        ListPane.AssistantMenu = menu;
         var button = MessageCommands.Assistant;
         button.Click += (_, _) => OnAssistantButtonClick();
         ToolTipService.SetToolTip(button, texts.Assistant);

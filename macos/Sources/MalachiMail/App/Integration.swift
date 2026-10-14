@@ -131,6 +131,19 @@ final class Integration {
         list.onActionFlagsChanged = { [weak self] _ in
             self?.mainWindow?.mailToolbar.validateVisibleItems()
         }
+        // The context menus (ui/internal/contextmenu): a message's acts on
+        // the selection a right click made, a folder's on the folder.
+        listView.contextMenu = { [weak self] in
+            guard let self else { return nil }
+            return MessageContextMenu.make(
+                state: self.state, mailbox: self.mailbox, row: self.list.selectedRow, flags: self.messageActions.flags)
+        }
+        sidebar.onMarkFolderRead = { [weak self] k in
+            self?.actions.markFolderRead(k)
+        }
+        sidebar.onEmptyFolder = { [weak self] k in
+            self?.actions.emptyFolder(k, parent: self?.mainWindow?.window)
+        }
     }
 
     /// The assistant panel follows the list's selection, after the reader

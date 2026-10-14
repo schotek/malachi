@@ -44,7 +44,7 @@ public static class ActionRules
     /// conversation row is read when every member is, flagged when any is. An
     /// outbox message keeps only reply, forward and trash (which cancels the
     /// send; the daemon refuses flags and moves). Reply, Reply All, Forward,
-    /// Trash, Archive and Junk need the account's capabilities as well
+    /// Trash, Archive, Junk and Move To need the account's capabilities as well
     /// (Capabilities.Available); what the account lacks altogether is
     /// Unsupported. With <paramref name="on"/> false (or no row) everything is
     /// off, and Unsupported and Comment are those of the listed folder's
@@ -93,6 +93,7 @@ public static class ActionRules
             Trash = available.Trash,
             Archive = available.Archive,
             Junk = available.Junk,
+            Move = available.Move,
             MarkRead = !outbox && unread,
             MarkUnread = !outbox && seen,
             ToggleFlag = !outbox,

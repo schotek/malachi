@@ -4,13 +4,15 @@
 // Port of macos/Sources/MalachiMail/MessageList/MessageListViewController.swift
 // (the callbacks it installs, the banners, apply(rows:hint:), refreshRows,
 // syncSelection, applyAppearance, show(state), showLoadMore, focus(key),
-// rowDoubleClicked, activateSelected, foldSelected, the scroll edge) and
-// SearchScopeBar.swift; inbox headers: MailDateHeaderView.swift; GTK: ui/internal/window/window.go (the list's
+// rowDoubleClicked, activateSelected, foldSelected, the scroll edge,
+// menuForRow), MessageContextMenu.swift and SearchScopeBar.swift; inbox
+// headers: MailDateHeaderView.swift; GTK: ui/internal/window/window.go (the list's
 // date_groups.go and row-selected and row-activated handlers, refreshListTitle,
 // showConnectionState's banner), messages.go (showListState, showLoadMore,
-// applyListAppearance), threads.go (syncRows, addThreadShortcuts) and
-// search.go (the scope toggles, the filter hidden while searching,
-// refreshSearchScope's tooltips).
+// applyListAppearance), threads.go (syncRows, addThreadShortcuts),
+// context_menus.go (showMessageMenu, moveToMenu) and search.go (the scope
+// toggles, the filter hidden while searching, refreshSearchScope's
+// tooltips).
 //
 // The view mirrors ListController.Rows by key into MessageRows updated in
 // place (KeyedListSync's view overload) and selects SelectedKey after every
@@ -20,11 +22,16 @@
 // viewport after every change of the rows' extent or the pane's size and on
 // every scroll, and shows Load More for retries or while inbox sections are collapsed.
 //
-// Windows addition (windows/README.md): a context menu on a message offers
-// the actions of the message pane's header (a right click selects the row
-// first, as Windows lists do, without showing the message in a folded
-// window, where the list stays in sight under the menu; a click on the row
-// selected so shows it there, as a click on any other row does).
+// The context menu of a message (context_menus.go showMessageMenu and
+// moveToMenu; what it offers is Core's ContextMenu, the port of
+// ui/internal/contextmenu): a right click, Shift+F10 or the Menu key
+// selects the row first (without showing the message in a folded window,
+// where the list stays in sight under the menu; a click on the row selected
+// so shows it there, as a click on any other row does), and the items act
+// on the selection through the window's commands, enabled as the command
+// row's are; Open in New Window (Edit for a draft) opens it as activating
+// its row does, Move To lists the account's folders as the sidebar orders
+// them, and the Assistant's submenu is the ✦ menu's items.
 //
 // The keyboard goes to the list on request (the end of a search, the back
 // button): the request waits until rows are shown and their containers are
@@ -35,13 +42,16 @@
 // status page instead of rows.
 
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
+using Malachi.App.Assistants;
 using Malachi.App.Commands;
 using Malachi.App.Localization;
 using Malachi.Core.Api;
+using Malachi.Core.ContextMenus;
 using Malachi.Core.Controllers;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
@@ -74,6 +84,7 @@ public sealed partial class MessageListPane : UserControl
     private (DateTime Day, TimeSpan Offset, DayOfWeek FirstDay) calendarStamp;
     private ListController? list;
     private MailboxController? mailbox;
+    private ActionsController? actions;
     private SettingsStore? settings;
     private WindowCommands? commands;
     private ScrollViewer? scroller;
@@ -154,15 +165,18 @@ public sealed partial class MessageListPane : UserControl
     /// <summary>
     /// Installs the view-facing callbacks of the list half, the mailbox's
     /// title and the sync controller's banners, and shows what they hold
-    /// already.
+    /// already; <paramref name="actionsController"/> opens and moves the
+    /// selection from the context menu.
     /// </summary>
-    public void Attach(ListController listController, SyncController sync, WindowCommands windowCommands)
+    public void Attach(ListController listController, SyncController sync, ActionsController actionsController, WindowCommands windowCommands)
     {
         ArgumentNullException.ThrowIfNull(listController);
         ArgumentNullException.ThrowIfNull(sync);
+        ArgumentNullException.ThrowIfNull(actionsController);
         ArgumentNullException.ThrowIfNull(windowCommands);
         list = listController;
         mailbox = listController.Mailbox;
+        actions = actionsController;
         settings = listController.Settings;
         commands = windowCommands;
         CommandBinding.Bind(RefreshButton, windowCommands.CheckForNewMail);
@@ -239,6 +253,13 @@ public sealed partial class MessageListPane : UserControl
     /// the key does what it did (no conversation shown).
     /// </summary>
     internal Func<bool, bool>? PageConversation { get; set; }
+
+    /// <summary>
+    /// The main window's Assistant menu (null before the reader exists):
+    /// while the Assistant is shown, a message's context menu has its items
+    /// as a submenu.
+    /// </summary>
+    internal AssistantMenu? AssistantMenu { get; set; }
 
     /// <summary>A conversation row's fold arrow (threads.go toggleThread).</summary>
     internal void ToggleThread(MessageRow row)
@@ -697,10 +718,11 @@ public sealed partial class MessageListPane : UserControl
         return source is ListViewItem item ? MessageList.ItemFromContainer(item) as MessageRow : null;
     }
 
-    // Windows-only: the message pane's actions as a context menu.
+    // context_menus.go showMessageMenu: the row is selected, then its menu
+    // is ContextMenu.MessageItems in its groups, a separator between two.
     private void OnContextRequested(UIElement sender, ContextRequestedEventArgs e)
     {
-        if (commands is not { } c || RowAt(e.OriginalSource as DependencyObject, out _) is not { } row)
+        if (commands is not { } c || list is not { } l || RowAt(e.OriginalSource as DependencyObject, out _) is not { } row)
         {
             return;
         }
@@ -718,55 +740,25 @@ public sealed partial class MessageListPane : UserControl
                 selectingForMenu = false;
             }
         }
+        if (l.SelectedRow is not { } selected)
+        {
+            return;
+        }
         var flags = c.Flags;
+        var assistant = AssistantMenu is { Shown: true } shown ? shown : null;
+        var state = ContextMenu.MessageState.Of(flags, draft: l.Mailbox.Model.InDrafts(selected.Message), assistant: assistant is not null);
+        var labels = new ContextMenu.Labels { Comment = flags.Comment, Flagged = flags.Flagged, Outbox = flags.Outbox };
         var menu = new MenuFlyout();
-        void Add(AppCommand command, string label, bool mnemonic = false)
+        foreach (var group in ContextMenu.MessageItems(state))
         {
-            var item = CommandBinding.Item(command);
-            if (mnemonic)
-            {
-                MnemonicLabel.Apply(item, label);
-            }
-            else
-            {
-                item.Text = label;
-            }
-            menu.Items.Add(item);
-        }
-        // What the account does not offer is left out (ActionPresentation);
-        // Reply is Comment on an issue.
-        void AddOffered(MessageActionKind kind, AppCommand command, string label)
-        {
-            if (ActionPresentation.Offers(flags, kind))
-            {
-                Add(command, label);
-            }
-        }
-        void Separate()
-        {
-            if (menu.Items.Count > 0 && menu.Items[^1] is not MenuFlyoutSeparator)
+            if (menu.Items.Count > 0)
             {
                 menu.Items.Add(new MenuFlyoutSeparator());
             }
-        }
-        AddOffered(MessageActionKind.Reply, c.Reply, ActionPresentation.ReplyLabel(flags));
-        AddOffered(MessageActionKind.ReplyAll, c.ReplyAll, L10n.T("Reply All"));
-        AddOffered(MessageActionKind.Forward, c.Forward, L10n.T("Forward"));
-        Separate();
-        Add(c.MarkUnread, L10n.T("Mark as _Unread"), mnemonic: true);
-        Add(c.MarkRead, L10n.T("Mark as _Read"), mnemonic: true);
-        Add(c.ToggleFlag, flags.Flagged ? L10n.T("Unstar") : L10n.T("Star"));
-        if (c.ChangeStatus.IsEnabled)
-        {
-            Add(c.ChangeStatus, L10n.T("Change Status"));
-        }
-        Separate();
-        AddOffered(MessageActionKind.Archive, c.Archive, L10n.T("Archive"));
-        AddOffered(MessageActionKind.Junk, c.Junk, L10n.T("Mark as Junk"));
-        AddOffered(MessageActionKind.Trash, c.Trash, Outbox.TrashTooltip(flags.Outbox));
-        if (menu.Items[^1] is MenuFlyoutSeparator last)
-        {
-            menu.Items.Remove(last);
+            foreach (var it in group)
+            {
+                menu.Items.Add(MessageMenuItem(it, labels, c, selected.Message, assistant));
+            }
         }
         e.Handled = true;
         if (MessageList.ContainerFromItem(row) is not ListViewItem container)
@@ -780,6 +772,122 @@ public sealed partial class MessageListPane : UserControl
         else
         {
             menu.ShowAt(container);
+        }
+    }
+
+    // One item of the message menu: Open in New Window (Edit) and Move To
+    // the pane's own, the Assistant the ✦ menu's items, the rest the
+    // window's commands (context_menus.go messageMenuActions), enabled when
+    // the model and the command both say so.
+    private MenuFlyoutItemBase MessageMenuItem(ContextMenu.Item it, ContextMenu.Labels labels, WindowCommands c, MessageSummary message, AssistantMenu? assistant)
+    {
+        MenuFlyoutItemBase item;
+        switch (it.Id)
+        {
+            case ContextMenu.ItemId.OpenMessage or ContextMenu.ItemId.EditDraft:
+                {
+                    var open = new MenuFlyoutItem { IsEnabled = it.Enabled && actions is not null };
+                    open.Click += (_, _) => OpenSelected();
+                    item = open;
+                    break;
+                }
+            case ContextMenu.ItemId.MoveTo:
+                {
+                    var sub = new MenuFlyoutSubItem();
+                    if (it.Enabled)
+                    {
+                        FillMoveTargets(sub.Items, message);
+                    }
+                    sub.IsEnabled = sub.Items.Count > 0;
+                    item = sub;
+                    break;
+                }
+            case ContextMenu.ItemId.Assistant:
+                {
+                    var sub = new MenuFlyoutSubItem();
+                    assistant?.FillMessageMenu(sub.Items);
+                    sub.IsEnabled = sub.Items.Count > 0;
+                    item = sub;
+                    break;
+                }
+            default:
+                {
+                    var command = CommandOf(c, it.Id);
+                    var mi = command is null ? new MenuFlyoutItem() : CommandBinding.Item(command);
+                    mi.IsEnabled = it.Enabled && command is { IsEnabled: true };
+                    item = mi;
+                    break;
+                }
+        }
+        MnemonicLabel.Apply(item, ContextMenu.Label(it.Id, labels));
+        AutomationProperties.SetAutomationId(item, "ContextMenu." + ContextMenu.Name(it.Id));
+        return item;
+    }
+
+    // context_menus.go messageMenuActions: the window's command of an item.
+    private static AppCommand? CommandOf(WindowCommands c, ContextMenu.ItemId id) => id switch
+    {
+        ContextMenu.ItemId.Reply => c.Reply,
+        ContextMenu.ItemId.ReplyAll => c.ReplyAll,
+        ContextMenu.ItemId.Forward => c.Forward,
+        ContextMenu.ItemId.MarkRead => c.MarkRead,
+        ContextMenu.ItemId.MarkUnread => c.MarkUnread,
+        ContextMenu.ItemId.ToggleFlag => c.ToggleFlag,
+        ContextMenu.ItemId.ChangeStatus => c.ChangeStatus,
+        ContextMenu.ItemId.Archive => c.Archive,
+        ContextMenu.ItemId.Junk => c.Junk,
+        ContextMenu.ItemId.Trash => c.Trash,
+        _ => null,
+    };
+
+    // context_menus.go moveToMenu: the folders of the message's account as
+    // the sidebar orders them (its tree, nothing folded, no Favourites),
+    // indented by depth; the current folder and the containers disabled.
+    // A folder's name is the server's: plain text, never a mnemonic.
+    private void FillMoveTargets(IList<MenuFlyoutItemBase> items, MessageSummary message)
+    {
+        if (mailbox is not { } m || m.Model.Account(message.AccountId) is not { } account)
+        {
+            return;
+        }
+        IReadOnlyList<Folder> folders = m.Model.Folders.TryGetValue(message.AccountId, out var known) ? known : [];
+        var entries = new List<ContextMenu.Entry>();
+        foreach (var e in FolderTree.FolderTreeRows(account, folders, new CollapseState(), new FavouriteState()))
+        {
+            if (!e.Header && e.Folder is { } f)
+            {
+                entries.Add(new ContextMenu.Entry(f, e.Depth));
+            }
+        }
+        foreach (var t in ContextMenu.MoveTargets(entries, message.FolderId))
+        {
+            var title = FolderTree.FolderTitle(t.Folder);
+            // An em space per level, about the sidebar's 12 px.
+            var indent = new string('\u2003', t.Depth);
+            var item = new MenuFlyoutItem { Text = indent + title, IsEnabled = t.Enabled };
+            AutomationProperties.SetName(item, title);
+            var target = t.Folder.Id;
+            item.Click += (_, _) => MoveSelectedTo(target);
+            items.Add(item);
+        }
+    }
+
+    // window.go open-message: the selected row's message opens as
+    // activating it does (a draft in the compose window).
+    private void OpenSelected()
+    {
+        if (actions is { } a && list?.SelectedRow?.Message is { } s)
+        {
+            a.OpenMessage(s);
+        }
+    }
+
+    // window.go move-to: every message the selected row stands for.
+    private void MoveSelectedTo(FolderId target)
+    {
+        if (actions is { } a)
+        {
+            list?.SelectedIds((_, ids) => a.MoveTo(ids, target));
         }
     }
 

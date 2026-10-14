@@ -464,6 +464,22 @@ a real store, since migration 0017 cannot be undone:
   `MALACHI_START_TRACE` logs every resize; after each step the toolbar
   items', the dividers' and the board's and triage's state go to stderr,
   so a layout can be checked without clicking.
+- **Context menus** (2026-10-14, all three clients at once). What the
+  menus of a message and of a sidebar row offer is Core's `ContextMenu`
+  (`ui/internal/contextmenu`): `messageItems`, `folderItems`,
+  `accountItems`, `moveTargets`, the labels and the Empty question. The
+  message list's `MessageListTableView.menu(for:)` selects the row and
+  gives the table the keyboard first (the single-key actions are off while
+  a text view types), then `MessageList/MessageContextMenu.swift` builds
+  nil-target items of the window's actions (validated and titled by
+  `MainWindowController`, including the new `openMessage:` and
+  `moveToFolder:`), Move To from `folderTree` with nothing folded, and new
+  instances of `IssueTransitionMenu` and `AssistantMenu`, each kept alive
+  by its item. The sidebar's `FolderOutlineView.menu(for:)` acts on the
+  node clicked with closure items (`BoardMenuAction.item`); Mark All as
+  Read and Empty are `ActionsController.markFolderRead` / `emptyFolder`
+  (`folder.markRead`, `folder.empty`), Check for New Mail
+  `MailboxController.triggerSync(folder:)`.
 
 ## 4. The API layer
 

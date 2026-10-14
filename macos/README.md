@@ -393,6 +393,21 @@ which its heading names, previews the answer, and requires Replace before
 changing the editor. The toolbar's passage-rewrite menu remains available.
 Its texts are the GTK msgids. The board's inline reply has neither part.
 
+## Context menus
+
+A right click (or a Control-click) on a message in the list selects it and
+opens its menu: Open in New Window (a draft opens in the compose window),
+the replies, read and star, Change Status, Archive, Move To (the account's
+folders), Junk, Trash, and the Assistant's submenu. The items are the
+window's own actions without a target, so `MainWindowController` validates
+and titles them as in the menu bar (`MessageList/MessageContextMenu.swift`).
+On a folder in the sidebar: Check for New Mail, Mark All as Read, Empty
+Trash or Junk (always asked first), Favourites and folding; on an account
+heading Check for New Mail and folding; the selection stays
+(`FolderSidebarViewController`). What each menu offers is the shared model
+of `ui/internal/contextmenu` (`MalachiCore/ContextMenu`), as in the GTK and
+Windows clients.
+
 ## Differences from the GTK UI
 
 The GTK UI is the template; the client deviates only where macOS

@@ -108,6 +108,18 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
         forSelected { actions.openCompose(.reply, $0) }
     }
 
+    func openSelected() {
+        if let s = list.selectedRow?.message {
+            actions.openMessage(s)
+        }
+    }
+
+    func moveSelected(to folder: FolderID) {
+        list.selectedIDs { [weak self] _, ids in
+            self?.actions.moveTo(ids, folder: folder)
+        }
+    }
+
     func replyAll() {
         forSelected { actions.openCompose(.replyAll, $0) }
     }

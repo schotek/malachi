@@ -5,8 +5,9 @@
 // (ActionsController); GTK: ui/internal/window/actions.go (markRead,
 // markUnread, setSeenIDs, toggleFlagged, setFlaggedIDs, trashFrom, trashIDs,
 // confirmTrash, trackMoves, archiveIDs, junkFrom, junkIDs, moveIDsToRole,
-// call, callThen), outbox.go (retryOutbox, cancelSendFrom), remote.go
-// (loadRemoteImages, trustSender, ensureKnownSendersPolicy,
+// moveIDsTo, movable, moveListTo, call, callThen), context_menus.go
+// (markFolderRead, emptyFolder), outbox.go (retryOutbox, cancelSendFrom),
+// remote.go (loadRemoteImages, trustSender, ensureKnownSendersPolicy,
 // downloadPictures), compose_open.go (openCompose, openComposeFrom),
 // drafts.go (openDraft) and assistant_panel.go (openSavedDraft, findDraft).
 //
@@ -38,6 +39,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Malachi.Core.Api;
 using Malachi.Core.Compose;
+using Malachi.Core.ContextMenus;
 using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
@@ -531,31 +533,58 @@ public sealed partial class ActionsController
         ArgumentNullException.ThrowIfNull(missing);
         ArgumentNullException.ThrowIfNull(what);
         Mailbox.Scope.VerifyAccess();
-        var msgs = Summaries(ids).Where(s => !Mailbox.Model.InOutbox(s)).ToList(); // accelerators bypass the disabled commands
+        var msgs = Movable(ids);
         if (msgs.Count == 0)
         {
             return;
         }
-        var acc = msgs[0].AccountId;
-        if (Mailbox.Model.FolderByRole(acc, role) is not { } target)
+        if (Mailbox.Model.FolderByRole(msgs[0].AccountId, role) is not { } target)
         {
             toast(missing);
             return;
         }
-        if (target.Id == msgs[0].FolderId)
+        MoveList(msgs, target.Id, what);
+    }
+
+    /// <summary>
+    /// Moves messages to another folder of their account, <paramref name="folder"/>
+    /// (Move To in a message's context menu; actions.go <c>moveIDsTo</c>),
+    /// as <see cref="MoveToRole"/> does: the rows go at once and come back on
+    /// failure, the counts follow, the windows of the messages close, and
+    /// success withdraws their desktop notifications. Outbox messages are
+    /// left out, and a move into the folder they are in is a no-op.
+    /// </summary>
+    public void MoveTo(IReadOnlyList<MessageId> ids, FolderId folder)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        Mailbox.Scope.VerifyAccess();
+        MoveList(Movable(ids), folder, ContextMenu.MovingText);
+    }
+
+    // actions.go movable: the known ones of ids a move takes, not the
+    // outbox's (accelerators and menus bypass the disabled commands).
+    private List<MessageSummary> Movable(IEnumerable<MessageId> ids) =>
+        [.. Summaries(ids).Where(s => !Mailbox.Model.InOutbox(s))];
+
+    // actions.go moveListTo: the move itself. The messages are of one
+    // folder (a conversation row's members are), and of one account.
+    private void MoveList(List<MessageSummary> msgs, FolderId target, Func<int, string> what)
+    {
+        if (msgs.Count == 0 || target == msgs[0].FolderId)
         {
             return;
         }
+        var acc = msgs[0].AccountId;
         MessageId[] moving = [.. msgs.Select(s => s.Id)];
         var restore = List.RemoveRows(moving);
         foreach (var s in msgs)
         {
             WindowsClose?.Invoke(this, s.Id);
         }
-        var undo = TrackMoves(msgs, new FolderKey(acc, target.Id));
+        var undo = TrackMoves(msgs, new FolderKey(acc, target));
         Call(
             API.MessageMove,
-            new MessageMoveParams { AccountId = acc, MessageIds = moving, TargetFolderId = target.Id },
+            new MessageMoveParams { AccountId = acc, MessageIds = moving, TargetFolderId = target },
             what(msgs.Count),
             onError: _ =>
             {
@@ -563,6 +592,41 @@ public sealed partial class ActionsController
                 undo();
             },
             onOk: _ => Mailbox.WithdrawNotifications(moving));
+    }
+
+    // Folders (context_menus.go)
+
+    /// <summary>
+    /// Mark All as Read in a folder's context menu (<c>folder.markRead</c>;
+    /// context_menus.go <c>markFolderRead</c>). Nothing changes here: the
+    /// daemon's <c>notify.messagesChanged</c> brings the counts and the list
+    /// up to date; a failure is a toast.
+    /// </summary>
+    public void MarkFolderRead(FolderKey k)
+    {
+        Mailbox.Scope.VerifyAccess();
+        Call(API.FolderMarkRead, new FolderMarkReadParams { AccountId = k.Account, FolderId = k.Folder }, ContextMenu.MarkingReadText());
+    }
+
+    /// <summary>
+    /// Empty Trash or Empty Junk in a folder's context menu
+    /// (<c>folder.empty</c>; context_menus.go <c>emptyFolder</c>), always
+    /// after the question (<see cref="ContextMenu.EmptyQuestion"/>, the
+    /// folder's own total) shown over <paramref name="parent"/>; the
+    /// daemon's <c>notify.messagesChanged</c> brings the folder up to date.
+    /// A folder the model does not know is left alone.
+    /// </summary>
+    public void EmptyFolder(FolderKey k, object? parent = null)
+    {
+        Mailbox.Scope.VerifyAccess();
+        if (Mailbox.Model.Folder(k) is not { } f)
+        {
+            return;
+        }
+        var junk = f.Role == FolderRole.Junk;
+        var q = ContextMenu.EmptyQuestion(junk, f.Total);
+        Ask(parent, q.Heading, q.Body, q.Confirm, () =>
+            Call(API.FolderEmpty, new FolderEmptyParams { AccountId = k.Account, FolderId = k.Folder }, ContextMenu.EmptyingText(junk)));
     }
 
     // Outbox

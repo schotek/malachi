@@ -91,6 +91,12 @@ protocol MessageActions: AnyObject {
     func markUnread()
     func loadImages()
     func trustSender()
+    /// Opens the selected message in a window of its own (a draft: in the
+    /// compose window), as activating its row does.
+    func openSelected()
+    /// Moves what the selection stands for to another folder of its
+    /// account (Move To).
+    func moveSelected(to folder: FolderID)
 
     /// The Assistant menu (ui/internal/assistant): a message action on the
     /// selection, a conversation row's folder members newest first or the

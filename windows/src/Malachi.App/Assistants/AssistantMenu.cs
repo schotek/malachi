@@ -18,8 +18,14 @@
 // has no section headers; GTK and macOS head a section with it), and the
 // items are rebuilt at every opening (WinUI's menu has no pull-down
 // button's title to lose).
+//
+// The main window's menu also fills the Assistant submenu of a message's
+// context menu (context_menus.go showMessageMenu: assistantMenu("win",
+// false)): the same items without Summarize Unread in This Folder, which is
+// the folder's, not the message's.
 
 using System;
+using System.Collections.Generic;
 using Malachi.App.Shell;
 using Malachi.Core.Assistants;
 using Malachi.Core.Settings;
@@ -70,30 +76,47 @@ internal sealed class AssistantMenu
     /// <summary>The menu, for a button's Flyout.</summary>
     public MenuFlyout Flyout { get; }
 
-    private void Fill()
+    /// <summary>Whether the Assistant is shown (its ✦ button is, and a message's context menu has its submenu).</summary>
+    public bool Shown => state.Assistant.Shown;
+
+    /// <summary>
+    /// Fills <paramref name="items"/> (a context menu's Assistant submenu)
+    /// with the menu's items, Summarize Unread in This Folder left out; the
+    /// state is asked for again, as when the menu opens.
+    /// </summary>
+    public void FillMessageMenu(IList<MenuFlyoutItemBase> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        state.Assistant.Refresh();
+        Fill(items, unread: null);
+    }
+
+    private void Fill() => Fill(Flyout.Items, summarizeUnread);
+
+    private void Fill(IList<MenuFlyoutItemBase> items, Action? unread)
     {
         var assistant = state.Assistant;
         var texts = Assistant.Texts();
         var (target, ok) = assistant.Pick(needsBridge: true);
-        Flyout.Items.Clear();
+        items.Clear();
         foreach (var a in Assistant.MessageActions)
         {
             var item = new MenuFlyoutItem { Text = Assistant.Label(a), IsEnabled = ok && canAsk() };
             item.Click += (_, _) => ask(a);
-            Flyout.Items.Add(item);
+            items.Add(item);
         }
-        if (summarizeUnread is { } unread)
+        if (unread is { } summarize)
         {
-            Flyout.Items.Add(new MenuFlyoutSeparator());
+            items.Add(new MenuFlyoutSeparator());
             var item = new MenuFlyoutItem
             {
                 Text = Assistant.Label(AssistantAction.Unread),
                 IsEnabled = ok && (canSummarizeUnread?.Invoke() ?? true),
             };
-            item.Click += (_, _) => unread();
-            Flyout.Items.Add(item);
+            item.Click += (_, _) => summarize();
+            items.Add(item);
         }
-        Flyout.Items.Add(new MenuFlyoutSeparator());
+        items.Add(new MenuFlyoutSeparator());
         var openIn = new MenuFlyoutSubItem { Text = texts.OpenIn };
         var chosen = state.Settings.AssistantTarget;
         foreach (var t in Assistant.Targets)
@@ -108,14 +131,14 @@ internal sealed class AssistantMenu
             item.Click += (_, _) => state.Settings.AssistantTarget = t;
             openIn.Items.Add(item);
         }
-        Flyout.Items.Add(openIn);
+        items.Add(openIn);
         if (!ok)
         {
-            Flyout.Items.Add(new MenuFlyoutSeparator());
-            Flyout.Items.Add(new MenuFlyoutItem { Text = assistant.Problem(target), IsEnabled = false });
+            items.Add(new MenuFlyoutSeparator());
+            items.Add(new MenuFlyoutItem { Text = assistant.Problem(target), IsEnabled = false });
             var item = new MenuFlyoutItem { Text = texts.SetUp };
             item.Click += (_, _) => setUp();
-            Flyout.Items.Add(item);
+            items.Add(item);
         }
     }
 }

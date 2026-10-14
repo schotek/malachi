@@ -54,6 +54,12 @@ public readonly record struct ActionFlags
     /// <summary>Junk.</summary>
     public bool Junk { get; init; }
 
+    /// <summary>
+    /// The row can go to another folder of its account (Move To in its
+    /// context menu; action_rules.go <c>actionState.move</c>).
+    /// </summary>
+    public bool Move { get; init; }
+
     /// <summary>Mark as Read.</summary>
     public bool MarkRead { get; init; }
 

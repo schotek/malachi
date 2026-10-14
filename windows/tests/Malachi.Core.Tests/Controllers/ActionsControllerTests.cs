@@ -22,11 +22,12 @@
 // GTK refreshSeen, which macOS leaves to AppKit's menu validation), reading,
 // trashing and moving withdraw the notifications only once the daemon
 // agreed (actions.go's callThen success halves), and a
-// confirmation that fails runs nothing and is logged, and the assistant
+// confirmation that fails runs nothing and is logged, the assistant
 // panel's Open Draft stops at the last page and after the page limit
-// (assistant_panel.go findDraft). The cache is the real MessageCache, as in
-// Swift, so the downloads of a forward or a reply and Download Pictures go
-// through it.
+// (assistant_panel.go findDraft), and the context menus' Move To and folder
+// actions are refused with their toasts (moveToAFolder, folderActions). The
+// cache is the real MessageCache, as in Swift, so the downloads of a
+// forward or a reply and Download Pictures go through it.
 
 using System;
 using System.Collections.Generic;
@@ -444,6 +445,130 @@ public sealed class ActionsControllerTests
         Assert.Equal(["x1", "m1"], Ids(h.List.Rows));
         Assert.Equal(2, h.Unread(ArchiveFolder));
         Assert.Equal(0, h.Unread(JunkFolder));
+    }
+
+    /// <summary>
+    /// Move To in a message's context menu (actions.go <c>moveIDsTo</c>):
+    /// any folder of the account, as Archive moves: the rows and the badges
+    /// at once, the windows closed, message.move naming the folder, the
+    /// notifications withdrawn once the daemon agreed; the current folder is
+    /// a no-op. Beyond Swift: a refusal brings the rows and the badges back
+    /// with the menu's toast, and a queued message does not move.
+    /// </summary>
+    [Fact]
+    public async Task MoveToAFolder()
+    {
+        await using var h = await StartAsync(messages: In(Inbox, Msg("m1", 1), Msg("m2", 2, flags: Seen), Msg("m3", 3)));
+        Assert.True(h.Actions.ActionFlagsFor(h.List.Rows[0]).Move);
+        Assert.Equal((2, 0), (h.Unread(Inbox), h.Unread(JunkFolder)));
+
+        // The current folder: nothing.
+        await h.Run(() => h.Actions.MoveTo(["m1"], Inbox.Folder));
+        await h.IdleAsync();
+        Assert.Empty(h.Fixture.MoveRequests);
+        Assert.Equal(["m3", "m2", "m1"], Ids(h.List.Rows));
+
+        await h.Run(() =>
+        {
+            h.Actions.MoveTo(["m1", "unknown"], JunkFolder.Folder);
+            Assert.Equal(["m3", "m2"], Ids(h.List.Rows));
+            Assert.Equal(["m1"], IdsOf(h.Log.ClosedWindows));
+            Assert.Equal((1, 1), (h.Unread(Inbox), h.Unread(JunkFolder)));
+        });
+        await h.IdleAsync();
+        AssertMoveRequest(Assert.Single(h.Fixture.MoveRequests), ["m1"], "junk");
+        Assert.Equal(["m1"], IdsOf(h.Mailbox.Withdrawn));
+        Assert.Empty(h.Log.Toasts);
+        Assert.Empty(h.Log.Confirmations);
+
+        // Refused: the rows and the badges come back.
+        h.Fixture.Fail(API.MessageMove.Name, Error(ErrorCode.StorageError, "disk"));
+        await h.Run(() =>
+        {
+            h.Actions.MoveTo(["m2", "m3"], ArchiveFolder.Folder);
+            Assert.Empty(h.List.Rows);
+            Assert.Equal((0, 1), (h.Unread(Inbox), h.Unread(ArchiveFolder)));
+        });
+        await h.IdleAsync();
+        Assert.Equal(["Moving 2 messages failed"], h.Log.Toasts);
+        Assert.Equal(["m3", "m2"], Ids(h.List.Rows));
+        Assert.Equal((1, 0), (h.Unread(Inbox), h.Unread(ArchiveFolder)));
+        Assert.Equal(["m1"], IdsOf(h.Mailbox.Withdrawn));
+        h.Fixture.Succeed(API.MessageMove.Name);
+
+        // A queued message does not move.
+        var queued = Msg("o1", 5) with { Outbox = new OutboxInfo { State = OutboxState.Queued, Attempts = 0 } };
+        h.Fixture.SetMessages([queued], Acc, OutboxFolder.Folder);
+        await h.SelectAsync(OutboxFolder);
+        Assert.False(h.Actions.ActionFlagsFor(h.List.Rows[0]).Move);
+        await h.Run(() => h.Actions.MoveTo(["o1"], ArchiveFolder.Folder));
+        await h.IdleAsync();
+        Assert.Equal(["o1"], Ids(h.List.Rows));
+        Assert.Single(h.Fixture.MoveRequests); // a refused move is not recorded
+    }
+
+    /// <summary>
+    /// Mark All as Read and Empty Trash or Junk (a folder's context menu;
+    /// context_menus.go <c>markFolderRead</c>, <c>emptyFolder</c>):
+    /// folder.markRead at once, with no question and nothing changed here
+    /// (the daemon's notify.messagesChanged does that); folder.empty only
+    /// once the question, with the folder's own total, is answered yes,
+    /// whatever the Trash setting says. Beyond Swift: Junk's question, a
+    /// folder the model does not know, and the refusals' toasts.
+    /// </summary>
+    [Fact]
+    public async Task FolderActions()
+    {
+        await using var h = await StartAsync(
+            messages: new Dictionary<FolderKey, MessageSummary[]>
+            {
+                [Inbox] = [Msg("m1", 1)],
+                [Trash] = [Msg("t1", 2), Msg("t2", 3, flags: Seen)],
+                [JunkFolder] = [Msg("j1", 4)],
+            },
+            confirmDelete: false);
+
+        await h.Run(() => h.Actions.MarkFolderRead(Inbox));
+        await h.IdleAsync();
+        var mark = Assert.Single(h.Fixture.FolderMarkReadRequests);
+        Assert.Equal(("a", "in"), (mark.AccountId.Value, mark.FolderId.Value));
+        Assert.Empty(h.Log.Confirmations);
+        Assert.Equal(1, h.Unread(Inbox));
+        Assert.Equal(["m1"], Ids(h.List.Rows));
+
+        // Declined: nothing.
+        h.Log.Answer = false;
+        await h.Run(() => h.Actions.EmptyFolder(Trash));
+        await h.IdleAsync();
+        Assert.Equal(
+            new Confirmation("Empty the Trash?", "2 messages will be deleted for good. Older messages that are only on the mail server stay there.", "_Empty"),
+            Assert.Single(h.Log.Confirmations));
+        Assert.Empty(h.Fixture.FolderEmptyRequests);
+
+        // Confirmed.
+        h.Log.Answer = true;
+        await h.Run(() => h.Actions.EmptyFolder(JunkFolder));
+        await h.IdleAsync();
+        Assert.Equal(
+            new Confirmation("Empty the Junk Folder?", "1 message will be deleted for good. Older messages that are only on the mail server stay there.", "_Empty"),
+            h.Log.Confirmations[^1]);
+        var empty = Assert.Single(h.Fixture.FolderEmptyRequests);
+        Assert.Equal(("a", "junk"), (empty.AccountId.Value, empty.FolderId.Value));
+
+        // A folder the model does not know.
+        await h.Run(() => h.Actions.EmptyFolder(new FolderKey("a", "nope")));
+        await h.IdleAsync();
+        Assert.Equal(2, h.Log.Confirmations.Count);
+        Assert.Empty(h.Log.Toasts);
+
+        // Refused.
+        h.Fixture.Fail(API.FolderMarkRead.Name, Error(ErrorCode.StorageError, "disk"));
+        h.Fixture.Fail(API.FolderEmpty.Name, Error(ErrorCode.StorageError, "disk"));
+        await h.Run(() => h.Actions.MarkFolderRead(Inbox));
+        await h.IdleAsync();
+        await h.Run(() => h.Actions.EmptyFolder(Trash));
+        await h.IdleAsync();
+        Assert.Equal(["Marking the folder as read failed", "Emptying the Trash failed"], h.Log.Toasts);
     }
 
     [Fact]

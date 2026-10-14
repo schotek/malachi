@@ -12,9 +12,9 @@
 // (toggleFavourite, saveFavourites, onFavouritesChanged), notify.go
 // (handleNotification, the sidebar's share), sync.go (loadSyncStatus,
 // applySyncState, triggerSync, triggerAccountSync, startSync), outbox.go
-// (trackOutbox, cancelSendFrom), status.go (showOutbox), window.go
-// (refreshListTitle, showConnectionState's data side) and actions.go
-// (callThen); the notifications' withdrawal is
+// (trackOutbox, cancelSendFrom), status.go (showOutbox), context_menus.go
+// (checkFolder), window.go (refreshListTitle, showConnectionState's data
+// side) and actions.go (callThen); the notifications' withdrawal is
 // MailboxController.Notifications.cs.
 //
 // What changes on Windows (docs/windows-port.md §7): the RPC plumbing is a
@@ -1143,6 +1143,23 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
     {
         Scope.VerifyAccess();
         StartSync(new SyncTriggerParams { AccountId = accountId });
+    }
+
+    /// <summary>
+    /// Runs sync.trigger for one folder (Check for New Mail in its context
+    /// menu; context_menus.go <c>checkFolder</c>); an issue tracker's view
+    /// (<c>Folder.Virtual</c>) is a selection of its account's issues,
+    /// so the whole account.
+    /// </summary>
+    public void TriggerSync(FolderKey k)
+    {
+        Scope.VerifyAccess();
+        if (!string.IsNullOrEmpty(Model.Folder(k)?.Virtual?.Value))
+        {
+            StartSync(new SyncTriggerParams { AccountId = k.Account });
+            return;
+        }
+        StartSync(new SyncTriggerParams { AccountId = k.Account, FolderId = k.Folder });
     }
 
     /// <summary>

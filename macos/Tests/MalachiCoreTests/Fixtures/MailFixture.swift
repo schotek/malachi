@@ -57,6 +57,8 @@ actor MailFixture {
     private(set) var flagRequests: [MessageFlagParams] = []
     private(set) var moveRequests: [MessageMoveParams] = []
     private(set) var deleteRequests: [MessageDeleteParams] = []
+    private(set) var folderMarkReadRequests: [FolderMarkReadParams] = []
+    private(set) var folderEmptyRequests: [FolderEmptyParams] = []
 
     let daemon: FakeDaemon
     private var failures: [String: RPCError] = [:]
@@ -68,6 +70,7 @@ actor MailFixture {
         API.SyncStatus.name, API.SyncTrigger.name, API.ConfigGet.name,
         API.MessageList.name, API.MessageGet.name, API.MessageBody.name,
         API.MessageFlag.name, API.MessageMove.name, API.MessageDelete.name,
+        API.FolderMarkRead.name, API.FolderEmpty.name,
         API.ThreadList.name, API.ThreadGet.name,
     ]
 
@@ -289,6 +292,14 @@ actor MailFixture {
             deleteRequests.append(p)
             try deleteMessages(p)
             return try encode(EmptyResult())
+        case API.FolderMarkRead.name:
+            let p = try decode(FolderMarkReadParams.self, params)
+            folderMarkReadRequests.append(p)
+            return try encode(FolderMarkReadResult(marked: 0))
+        case API.FolderEmpty.name:
+            let p = try decode(FolderEmptyParams.self, params)
+            folderEmptyRequests.append(p)
+            return try encode(FolderEmptyResult(deleted: 0))
         case API.ThreadList.name:
             let p = try decode(ThreadListParams.self, params)
             threadListRequests.append(p)

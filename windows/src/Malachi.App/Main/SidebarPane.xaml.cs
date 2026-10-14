@@ -3,7 +3,7 @@
 
 // Port of macos/Sources/MalachiMail/Sidebar/FolderSidebarViewController.swift
 // (the callbacks it installs, rebuildRows, refreshBadges, show(status),
-// highlightFolderRow, the selection and the folds); GTK:
+// highlightFolderRow, the selection and the folds, menu(forRow:)); GTK:
 // ui/internal/window/folders.go (rebuildFolderList, updateFolderRow,
 // showFolderStatus, highlightFolderRow), window.go (the folder list's
 // row-selected handler), collapse.go (addFolderShortcuts: Left and Right
@@ -15,20 +15,30 @@
 // selected: a selection that lands on one (the keyboard moves the
 // selection with the focus) is put back.
 //
-// Windows additions (windows/README.md): Left and Right fold an account
-// heading too (its arrow is not a tab stop in a ListView's row), and a
-// context menu on a folder or heading offers what its row already does
-// (Add to / Remove from Favourites, Expand / Collapse). A row chosen by
-// click or Enter is FolderChosen, which closes the folded sidebar's
-// overlay (window.go: outerSplit.SetShowContent).
+// The context menu of a folder or an account heading (context_menus.go
+// showFolderMenuAt, checkFolder, markFolderRead, emptyFolder; what it
+// offers is Core's ContextMenu, the port of ui/internal/contextmenu) acts
+// on the row clicked and leaves the selection alone: Check for New Mail;
+// Mark All as Read and Empty Trash or Empty Junk (always asked); Add to or
+// Remove from Favourites and Expand or Collapse. An account heading's has
+// Check for New Mail and its folding, the Favourites heading none. A
+// right click, Shift+F10 or the Menu key opens it.
+//
+// Windows addition (windows/README.md): Left and Right fold an account
+// heading too (its arrow is not a tab stop in a ListView's row). A row
+// chosen by click or Enter is FolderChosen, which closes the folded
+// sidebar's overlay (window.go: outerSplit.SetShowContent).
 
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using Malachi.App.Commands;
+using Malachi.App.Localization;
+using Malachi.Core.Api;
+using Malachi.Core.ContextMenus;
 using Malachi.Core.Controllers;
 using Malachi.Core.Controllers.Infrastructure;
-using Malachi.Core.I18n;
 using Malachi.Core.Presentation;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -43,6 +53,7 @@ namespace Malachi.App.Main;
 public sealed partial class SidebarPane : UserControl
 {
     private MailboxController? mailbox;
+    private ActionsController? actions;
     private bool reselecting;
 
     /// <summary>An empty sidebar; <see cref="Attach"/> connects it.</summary>
@@ -62,14 +73,18 @@ public sealed partial class SidebarPane : UserControl
 
     /// <summary>
     /// Installs the sidebar-facing callbacks of <paramref name="controller"/>
-    /// and shows what it holds already; <paramref name="commands"/> are the
-    /// main window's (New Message, the primary menu).
+    /// and shows what it holds already; <paramref name="actionsController"/>
+    /// marks a folder read and empties it from its context menu, and
+    /// <paramref name="commands"/> are the main window's (New Message, the
+    /// primary menu).
     /// </summary>
-    public void Attach(MailboxController controller, WindowCommands commands)
+    public void Attach(MailboxController controller, ActionsController actionsController, WindowCommands commands)
     {
         ArgumentNullException.ThrowIfNull(controller);
+        ArgumentNullException.ThrowIfNull(actionsController);
         ArgumentNullException.ThrowIfNull(commands);
         mailbox = controller;
+        actions = actionsController;
         CommandBinding.Bind(MenuMail, commands.ShowMail);
         CommandBinding.Bind(MenuBoard, commands.ShowBoard);
         // The sidebar shows in Mail only: its menu checks Mail.
@@ -266,8 +281,11 @@ public sealed partial class SidebarPane : UserControl
         return focused is ListViewItem item ? FolderList.ItemFromContainer(item) as SidebarRow : null;
     }
 
-    // Windows-only: the row's own actions as a context menu (right click,
-    // Shift+F10, the menu key).
+    // context_menus.go showFolderMenuAt: the menu of the row clicked, an
+    // account heading's (ContextMenu.AccountItems) or a folder's
+    // (ContextMenu.FolderItems, from the folder's own counts, not the
+    // badge), its groups with a separator between two; nothing for the
+    // Favourites heading or when there is nothing to offer.
     private void OnContextRequested(UIElement sender, ContextRequestedEventArgs e)
     {
         var source = e.OriginalSource as DependencyObject;
@@ -275,26 +293,68 @@ public sealed partial class SidebarPane : UserControl
         {
             source = VisualTreeHelper.GetParent(source);
         }
-        if (source is not ListViewItem item || FolderList.ItemFromContainer(item) is not SidebarRow row)
+        if (source is not ListViewItem item || FolderList.ItemFromContainer(item) is not SidebarRow row || mailbox is not { } m)
+        {
+            return;
+        }
+        IReadOnlyList<IReadOnlyList<ContextMenu.Item>> groups;
+        ContextMenu.Labels labels;
+        var run = new Dictionary<ContextMenu.ItemId, Action>();
+        switch (row.Kind)
+        {
+            case SidebarRowKind.AccountHeading when row.Account is { } acc:
+                groups = ContextMenu.AccountItems(row.TwistyActive);
+                labels = new ContextMenu.Labels { Collapsed = row.Collapsed };
+                run[ContextMenu.ItemId.CheckMail] = () => m.TriggerSync(acc);
+                run[ContextMenu.ItemId.Fold] = () => ToggleFold(row);
+                break;
+            case SidebarRowKind.Folder when row.Folder is { } k && m.Model.Folder(k) is { } f:
+                groups = ContextMenu.FolderItems(new ContextMenu.FolderState
+                {
+                    Selectable = f.Selectable,
+                    Role = f.Role,
+                    Unread = f.Unread,
+                    Total = f.Total,
+                    CanDelete = m.Model.Account(k.Account)?.Can(Capability.Delete) ?? false,
+                    Foldable = row.TwistyActive && !row.Key.Favourite,
+                });
+                labels = new ContextMenu.Labels { Junk = f.Role == FolderRole.Junk, Favourite = row.Starred, Collapsed = row.Collapsed };
+                run[ContextMenu.ItemId.CheckMail] = () => m.TriggerSync(k);
+                run[ContextMenu.ItemId.Favourite] = () => m.ToggleFavourite(k);
+                run[ContextMenu.ItemId.Fold] = () => ToggleFold(row);
+                if (actions is { } a)
+                {
+                    run[ContextMenu.ItemId.MarkAllRead] = () => a.MarkFolderRead(k);
+                    // The question goes on the main window (null).
+                    run[ContextMenu.ItemId.EmptyFolder] = () => a.EmptyFolder(k);
+                }
+                break;
+            default:
+                return;
+        }
+        if (groups.Count == 0)
         {
             return;
         }
         var menu = new MenuFlyout();
-        if (row.HasStar)
+        foreach (var group in groups)
         {
-            var star = new MenuFlyoutItem { Text = row.StarTooltip };
-            star.Click += (_, _) => ToggleFavourite(row);
-            menu.Items.Add(star);
-        }
-        if (row.TwistyActive)
-        {
-            var fold = new MenuFlyoutItem { Text = row.Collapsed ? L10n.T("Expand") : L10n.T("Collapse") };
-            fold.Click += (_, _) => ToggleFold(row);
-            menu.Items.Add(fold);
-        }
-        if (menu.Items.Count == 0)
-        {
-            return;
+            if (menu.Items.Count > 0)
+            {
+                menu.Items.Add(new MenuFlyoutSeparator());
+            }
+            foreach (var it in group)
+            {
+                var entry = new MenuFlyoutItem { IsEnabled = false };
+                if (run.GetValueOrDefault(it.Id) is { } action)
+                {
+                    entry.IsEnabled = it.Enabled;
+                    entry.Click += (_, _) => action();
+                }
+                MnemonicLabel.Apply(entry, ContextMenu.Label(it.Id, labels));
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(entry, "ContextMenu." + ContextMenu.Name(it.Id));
+                menu.Items.Add(entry);
+            }
         }
         e.Handled = true;
         if (e.TryGetPosition(item, out var point))

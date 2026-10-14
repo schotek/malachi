@@ -21,7 +21,8 @@ account or every account, the reader with a locked-down WebView2 view,
 message windows and attached messages, attachments with a previewer of
 the app's own (those the daemon keeps on the mail server downloaded when
 they are opened, saved or forwarded, and the pictures it keeps there on
-request), message actions with context menus, notifications with the
+request), message and folder actions with context menus (Move To, Mark
+All as Read, Empty Trash), notifications with the
 system's new-mail sound (withdrawn once their message is read, moved or
 deleted, here or elsewhere), compose with the rich-text editor, drafts (kept
 in the Drafts folder and opened from it for editing), reply and forward
@@ -425,7 +426,6 @@ confirmation dialogs.
 | Mnemonics are WinUI access keys: Alt shows their key tips on the menus and buttons that carry a GTK mnemonic; a dialog's buttons have none | Underlined mnemonics | WinUI's form of mnemonics; a `ContentDialog`'s buttons take no access keys |
 | Alerts are `ContentDialog`s: the primary button on the left, Cancel on the right; the defaults and close responses stay GTK's (*Save Draft* is the default of the close question) | GTK's button order | WinUI's dialog |
 | Banners (the backend, sign-in and certificate banners over the list, the outbox and draft banners over a message) are `InfoBar`s: a warning's or an information's icon and tint, the text in the regular weight, the button at the end | `Adw.Banner`: an accent-tinted strip with a bold title | WinUI's notice bar |
-| Context menus on messages and folders, with the actions that exist elsewhere; a right click selects the row | None | Windows convention |
 | Left and Right fold an account's heading in the sidebar, as they fold a folder | Only a folder's; a heading folds with its arrow | A row's buttons are no tab stops in a Windows list, so the heading's arrow needs the keys |
 | The message list pages itself at its end; *Load More* appears only to retry a page that failed | The *Load More* button under the list | As macOS |
 | The window's caption names the selected folder: *Inbox – Malachi Mail* | *Malachi Mail* (the folder is the list's header) | The taskbar and Alt+Tab tell windows apart by their captions; macOS shows the folder as the window's title too |

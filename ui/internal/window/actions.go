@@ -12,6 +12,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/contextmenu"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/settings"
@@ -411,31 +412,50 @@ func (w *Window) junkIDs(parent gtk.Widgetter, ids []api.MessageID, subject stri
 // folder counts follow the messages to the target (trackMoves). Success
 // withdraws their desktop notifications.
 func (w *Window) moveIDsToRole(ids []api.MessageID, role api.FolderRole, what func(n int) string, missing string) {
-	var list []api.MessageSummary
-	for _, s := range w.summaries(ids) {
-		if !w.model.inOutbox(s) {
-			list = append(list, s) // accelerators bypass the disabled actions
-		}
-	}
+	list := w.movable(ids)
 	if len(list) == 0 {
 		return
 	}
-	acc := list[0].AccountID
-	target, ok := w.model.folderByRole(acc, role)
+	target, ok := w.model.folderByRole(list[0].AccountID, role)
 	if !ok {
 		w.Toast(missing)
 		return
 	}
-	if target.ID == list[0].FolderID {
+	w.moveListTo(list, target.ID, what)
+}
+
+// moveIDsTo moves messages to another folder of their account (Move To
+// in a message's context menu), as moveIDsToRole does.
+func (w *Window) moveIDsTo(ids []api.MessageID, target api.FolderID) {
+	w.moveListTo(w.movable(ids), target, func(n int) string { return contextmenu.MovingText(i18n.Tr, n) })
+}
+
+// movable are the summaries of ids a move takes: not the outbox's
+// (accelerators and menus bypass the disabled actions).
+func (w *Window) movable(ids []api.MessageID) []api.MessageSummary {
+	var list []api.MessageSummary
+	for _, s := range w.summaries(ids) {
+		if !w.model.inOutbox(s) {
+			list = append(list, s)
+		}
+	}
+	return list
+}
+
+// moveListTo is the move itself: the rows go at once and come back on
+// failure, the counts follow, the windows of the messages close.
+func (w *Window) moveListTo(list []api.MessageSummary, target api.FolderID, what func(n int) string) {
+	if len(list) == 0 || target == list[0].FolderID {
 		return
 	}
+	acc := list[0].AccountID
 	restore := w.removeRows(idsOf(list))
 	for _, s := range list {
 		w.closeMessageWindow(s.ID)
 	}
-	undo := w.trackMoves(list, folderKey{Account: acc, Folder: target.ID})
+	undo := w.trackMoves(list, folderKey{Account: acc, Folder: target})
 	w.callThen(what(len(list)), api.MethodMessageMove, api.MessageMoveParams{
-		AccountID: acc, MessageIDs: idsOf(list), TargetFolderID: target.ID,
+		AccountID: acc, MessageIDs: idsOf(list), TargetFolderID: target,
 	}, func() {
 		restore()
 		undo()
@@ -507,6 +527,11 @@ func (w *Window) setMessageActionsSensitive(on bool) {
 		"load-images":   st.on && st.loadImages,
 		"trust-sender":  st.on && st.trustSender,
 		"change-status": st.changeStatus,
+		"open-message":  st.on,
+		"reply":         st.reply,
+		"reply-all":     st.replyAll,
+		"forward":       st.forward,
+		"move-to":       st.move,
 	}
 	for name, e := range enabled {
 		if a := w.actions[name]; a != nil {

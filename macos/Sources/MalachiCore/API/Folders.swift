@@ -81,3 +81,45 @@ public struct FolderSubscribeParams: Codable, Sendable, Equatable {
         self.subscribed = subscribed
     }
 }
+
+/// api.FolderMarkReadParams (`folder.markRead`): every stored, unhidden
+/// unread message of the folder read.
+public struct FolderMarkReadParams: Codable, Sendable, Equatable {
+    public var accountId: AccountID
+    public var folderId: FolderID
+
+    public init(accountId: AccountID, folderId: FolderID) {
+        self.accountId = accountId
+        self.folderId = folderId
+    }
+}
+
+/// api.FolderMarkReadResult: how many messages were unread.
+public struct FolderMarkReadResult: Codable, Sendable, Equatable {
+    public var marked: Int
+
+    public init(marked: Int) {
+        self.marked = marked
+    }
+}
+
+/// api.FolderEmptyParams (`folder.empty`): every stored message of a Trash
+/// or Junk folder deleted for good.
+public struct FolderEmptyParams: Codable, Sendable, Equatable {
+    public var accountId: AccountID
+    public var folderId: FolderID
+
+    public init(accountId: AccountID, folderId: FolderID) {
+        self.accountId = accountId
+        self.folderId = folderId
+    }
+}
+
+/// api.FolderEmptyResult: how many messages were deleted.
+public struct FolderEmptyResult: Codable, Sendable, Equatable {
+    public var deleted: Int
+
+    public init(deleted: Int) {
+        self.deleted = deleted
+    }
+}

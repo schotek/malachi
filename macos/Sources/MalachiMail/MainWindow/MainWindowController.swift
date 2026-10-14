@@ -536,6 +536,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         messageActions?.loadImages()
     }
 
+    /// Open in New Window in a message's context menu.
+    @objc func openMessage(_ sender: Any?) {
+        messageActions?.openSelected()
+    }
+
+    /// Move To in a message's context menu: the item's folder id.
+    @objc func moveToFolder(_ sender: Any?) {
+        guard let id = (sender as? NSMenuItem)?.representedObject as? String else { return }
+        messageActions?.moveSelected(to: FolderID(id))
+    }
+
     @objc func trustSender(_ sender: Any?) {
         messageActions?.trustSender()
     }
@@ -578,6 +589,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         case Action.moveToTrash: return f.trash
         case Action.loadImages: return f.loadImages
         case Action.trustSender: return f.trustSender
+        case Action.openMessage: return f.on
+        case Action.moveToFolder: return f.move
         // A message not in the Outbox, and the chosen Claude app can read
         // the mail (ui/internal/assistant `Pick`, no fallback).
         case Action.askAssistant: return f.on && !f.outbox && state.assistant.pick(needsBridge: true).ok

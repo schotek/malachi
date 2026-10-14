@@ -34,7 +34,7 @@ public enum MessageActionKind
     /// <summary>Move to Trash.</summary>
     Trash = 8,
 
-    /// <summary>Move to a folder (no control on Windows yet).</summary>
+    /// <summary>Move to a folder (Move To in a message's context menu).</summary>
     Move = 16,
 
     /// <summary>Archive.</summary>

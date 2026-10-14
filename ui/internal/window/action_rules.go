@@ -23,8 +23,10 @@ type actionState struct {
 	// star shows it (a conversation row: any member is flagged).
 	on, outbox, flagged bool
 
-	reply, replyAll, forward, star, trash, archive, junk      bool
-	markRead, markUnread, toggleFlag, loadImages, trustSender bool
+	// move: the row can go to another folder of its account (Move To in
+	// its context menu).
+	reply, replyAll, forward, star, trash, archive, junk, move bool
+	markRead, markUnread, toggleFlag, loadImages, trustSender  bool
 	// changeStatus: the row's account changes the status of the row's
 	// issue (jira.CanTransition, a message of an issue).
 	changeStatus bool
@@ -85,6 +87,7 @@ func (m *mailModel) messageActionState(row listRow, on bool) actionState {
 		trash:        avail.Trash,
 		archive:      avail.Archive,
 		junk:         avail.Junk,
+		move:         avail.Move,
 		markRead:     !outbox && unread,
 		markUnread:   !outbox && seen,
 		toggleFlag:   !outbox,

@@ -43,6 +43,11 @@ import MalachiCore
     @objc optional func moveToTrash(_ sender: Any?)
     @objc optional func loadImages(_ sender: Any?)
     @objc optional func trustSender(_ sender: Any?)
+    /// A message's context menu: Open in New Window (a draft: its compose
+    /// window), and Move To with the target folder's id as the item's
+    /// `representedObject`.
+    @objc optional func openMessage(_ sender: Any?)
+    @objc optional func moveToFolder(_ sender: Any?)
     /// Mail or Board (MalachiCore `Board.Mode`): the menu item's tag, the
     /// toolbar switch's selected segment. Swift-first.
     @objc optional func setWindowMode(_ sender: Any?)
@@ -118,6 +123,8 @@ enum Action {
     static let moveToTrash = #selector(MalachiActions.moveToTrash(_:))
     static let loadImages = #selector(MalachiActions.loadImages(_:))
     static let trustSender = #selector(MalachiActions.trustSender(_:))
+    static let openMessage = #selector(MalachiActions.openMessage(_:))
+    static let moveToFolder = #selector(MalachiActions.moveToFolder(_:))
     static let setWindowMode = #selector(MalachiActions.setWindowMode(_:))
     static let setBoardStyle = #selector(MalachiActions.setBoardStyle(_:))
     static let boardDone = #selector(MalachiActions.boardDone(_:))

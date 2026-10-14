@@ -1043,6 +1043,54 @@ app`/`test`/`lint` (`ComposeBodyLayoutTests`, `AssistantWriteTests`,
 (`DevmailTests` odpověď bez otázky, `BoardSmokeTests`, mřížka
 `ComposePane.xaml` má o řádky víc) a ruční průchod.
 
+Kontextová menu u zpráv a složek (2026-10-14, všechny tři klienty,
+necommitnuté; rozhodnutí vlastníka přes AskUserQuestion). Pravý klik
+(v GTK i dlouhý stisk a Shift+F10 / klávesa Menu, na macOS Control-klik)
+na zprávu ji vybere a menu působí na výběr: Otevřít v novém okně (koncept
+Upravit), Odpovědět/Komentovat, Odpovědět všem, Přeposlat │ jen použitelné
+z Označit jako přečtené/nepřečtené, Hvězdička, Změnit stav │ Archivovat,
+Přesunout do ▸ (složky účtu v pořadí sidebaru bez Outboxu, Konceptů, \All
+a pohledů Jira; aktuální složka a kontejnery zašedlé), Nevyžádaná, Koš
+(Zrušit odesílání) │ Asistent ▸. Na složce (výběr se nemění): Zkontrolovat
+poštu (pohled Jira = celý účet) │ Označit vše jako přečtené, Vysypat koš /
+nevyžádanou (vždy s potvrzením) │ Oblíbené, Rozbalit/Sbalit; na hlavičce
+účtu Zkontrolovat poštu a Rozbalit/Sbalit. Démon dostal dvě kompatibilní
+metody protokolu 2: `folder.markRead` a `folder.empty` (jen role
+trash/junk, capability `delete`, trvale i u Nevyžádané); obě nad uloženými
+zprávami okna `offlineDays` (starší jen na serveru zůstanou, potvrzení to
+říká), po dávkách `MaxMessageIDsPerCall` přes `FlagMessages` /
+`DeleteMessages` (žádný nový druh operace ani migrace), pak
+`notify.messagesChanged` (`core/folder_actions.go`,
+`store.FolderMessageIDs`, `docs/api.md` §4.2 a §5, rozhodnutí v
+`docs/architecture.md` §7); most MCP beze změny. Reference obsahu menu je
+čistý `ui/internal/contextmenu` (`MessageItems`, `FolderItems`,
+`AccountItems`, `MoveTargets`, texty), port `MalachiCore/ContextMenu` a
+`Malachi.Core` ContextMenu; `actionState.move` / `ActionFlags.move`
+(= `Capabilities.Available.Move`) a obecný přesun `moveIDsTo` /
+`moveTo(_:folder:)` / `MoveTo`. GTK: `window/context_menus.go`
+(`PopoverMenu` na `ListBox`, akce `win.open-message`, `win.reply`,
+`win.reply-all`, `win.forward`, `win.move-to`, dočasná skupina
+`folderctx`); macOS: `MessageList/MessageContextMenu.swift`,
+`MessageListTableView.menu(for:)`, `FolderOutlineView` ve
+`FolderSidebarViewController`, akce `openMessage:` a `moveToFolder:`.
+Ověřeno na Macu: Go testy démona (celé) a čistých balíčků UI, `swift build`
+a celý `swift test`, kontrola řetězců; GTK typově zkontrolované bez cgo;
+`po/` skriptem ověřeným na `HEAD`. Čeká: Toolbx `make build`, `go test
+./internal/window/...`, `make lint`, `make po` (beze změny), ručně menu
+v GTK; macOS ručně v aplikaci (pravý klik na zprávu, konverzaci, koncept,
+Outbox, Jira, Přesunout do, složka a účet, Vysypat jen nad kopií dat).
+Windows (napsané agentem bez `dotnet`): `Malachi.Core/ContextMenus`
+(`ContextMenu`, `ContextMenuText`, testy včetně Go id přes
+`ContextMenu.Name`), `ActionsController.MoveTo`/`MarkFolderRead`/
+`EmptyFolder`, `MailboxController.TriggerSync(FolderKey)`, API zrcadlo
+(72 → 74 metod), rozšířené `OnContextRequested` v `MessageListPane` a
+`SidebarPane`, `AssistantMenu.FillMessageMenu`; odchylka: bez
+`Model.Folder(k)` se menu složky neotevře. Čeká `build.ps1 app`/`test`/
+`lint` (`ContextMenuTests`, `ApiCodingTests`, `GoContractTests`,
+`ApiRoundTripTests`, `ActionRulesTests`, `ActionsControllerTests`,
+`MailboxControllerFoldersTests`, konvence), UI smoke a ruční průchod
+(pravý klik, Shift+F10, klávesa Menu, odsazení Přesunout do em-mezerami).
+
 Hromadná pošta a odhlášení (2026-10-01, všechny tři klienty; necommitnuté,
 macOS sestavený a cílené testy zelené, GTK jen `gopls` + Blueprint v Dockeru,
 Windows napsané bez překladu — čeká `make build`/`go test ./internal/window/...`/

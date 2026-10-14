@@ -58,6 +58,22 @@ public sealed partial class ApiCodingTests
         Assert.Equal(2, API.ProtocolVersion);
     }
 
+    /// <summary>docs/api.md §4.2: folder.markRead and folder.empty.</summary>
+    [Fact]
+    public void FolderActions()
+    {
+        var read = EncodeObject(new FolderMarkReadParams { AccountId = "acc_1", FolderId = "f_1" });
+        Assert.Equal(["accountId", "folderId"], Keys(read));
+        Assert.Equal("f_1", read.GetProperty("folderId").GetString());
+        var empty = EncodeObject(new FolderEmptyParams { AccountId = "acc_1", FolderId = "f_9" });
+        Assert.Equal(["accountId", "folderId"], Keys(empty));
+        Assert.Equal("acc_1", empty.GetProperty("accountId").GetString());
+        Assert.Equal(new FolderMarkReadResult { Marked = 3 }, JsonSerializer.Deserialize("""{"marked":3}""", API.FolderMarkRead.ResultInfo));
+        Assert.Equal(new FolderEmptyResult { Deleted = 12 }, JsonSerializer.Deserialize("""{"deleted":12}""", API.FolderEmpty.ResultInfo));
+        Assert.Equal("folder.markRead", API.FolderMarkRead.Name);
+        Assert.Equal("folder.empty", API.FolderEmpty.Name);
+    }
+
     [Fact]
     public void AccountListExample()
     {
@@ -1237,7 +1253,7 @@ public sealed partial class ApiCodingTests
         "account.update", "account.discover", "account.test", "account.linked",
         "account.reorder", "account.oauthStart", "account.oauthWait", "account.oauthCancel",
         "account.detectSite", "account.listSpaces",
-        "folder.list", "folder.subscribe",
+        "folder.list", "folder.subscribe", "folder.markRead", "folder.empty",
         "message.list", "message.get", "message.body", "message.part",
         "message.embedded", "message.download", "message.flag", "message.move", "message.delete",
         "message.send", "message.unsubscribe",
@@ -1261,8 +1277,8 @@ public sealed partial class ApiCodingTests
     [Fact]
     public void MethodTableMatchesGo()
     {
-        Assert.Equal(72, API.AllMethods.Count);
-        Assert.Equal(72, API.AllMethods.Distinct().Count()); // no duplicates
+        Assert.Equal(74, API.AllMethods.Count);
+        Assert.Equal(74, API.AllMethods.Distinct().Count()); // no duplicates
         Assert.Equal(GoMethods, API.AllMethods);
         Assert.Equal(API.AllMethods.Count, API.Methods.Count);
         Assert.Equal(API.SystemInfoName, API.SystemInfo.Name);

@@ -9,7 +9,7 @@
 // TestActionRulesNothingSelectedFollowsTheListedFolder,
 // TestActionRulesTheRowsAccountDecidesInASearch,
 // TestActionRulesAQueuedJiraCommentCanBeCancelled,
-// TestActionRulesChangeStatus).
+// TestActionRulesMoveIsNotForTheOutbox, TestActionRulesChangeStatus).
 //
 // The per-message actions of a Jira account (ActionRules.MessageActionState
 // over Capabilities): what the account does not offer is off and
@@ -120,7 +120,7 @@ public sealed class ActionRulesTests
         {
             var m = Model([acc], acc.Id, Flag.Seen);
             var st = State(m, FirstRow(m));
-            Assert.True(st.Reply && st.ReplyAll && st.Forward && st.Trash && st.Archive && st.Junk, $"{acc.Id}: {st}");
+            Assert.True(st.Reply && st.ReplyAll && st.Forward && st.Trash && st.Archive && st.Junk && st.Move, $"{acc.Id}: {st}");
             Assert.True(st.Unsupported == MessageActionKind.None && !st.Comment, $"{acc.Id}: {st}");
             var idle = State(m, null, on: false);
             Assert.True(!idle.On && idle.Unsupported == MessageActionKind.None && !idle.Comment, $"{acc.Id}: nothing selected in a mail folder: {idle}");
@@ -133,7 +133,7 @@ public sealed class ActionRulesTests
         var m = Model([Mail, JiraReadOnly], "j");
         var st = State(m, FirstRow(m));
         Assert.True(st.On);
-        Assert.False(st.Reply || st.ReplyAll || st.Forward || st.Trash || st.Archive || st.Junk, $"an action the account lacks is on: {st}");
+        Assert.False(st.Reply || st.ReplyAll || st.Forward || st.Trash || st.Archive || st.Junk || st.Move, $"an action the account lacks is on: {st}");
         Assert.Equal(EverythingJiraLacks, st.Unsupported);
         Assert.False(st.Comment);
         // Flags are local and always allowed.
@@ -216,6 +216,18 @@ public sealed class ActionRulesTests
         var st = State(m, FirstRow(m));
         Assert.True(st.Outbox && st.Trash && !st.Unsupported.HasFlag(MessageActionKind.Trash), $"Trash cancels the send: {st}");
         Assert.False(st.Star || st.Archive || st.Junk, st.ToString());
+    }
+
+    /// <summary>Move To (the message's context menu) is the account's; a queued message does not move.</summary>
+    [Fact]
+    public void MoveIsNotForTheOutbox()
+    {
+        var m = Model([Mail], "m", Flag.Seen);
+        Assert.True(State(m, FirstRow(m)).Move, "mail");
+        Change(m, s => s with { FolderId = "out", Outbox = new OutboxInfo { State = OutboxState.Queued, Attempts = 0 } });
+        var st = State(m, FirstRow(m));
+        Assert.False(st.Move, $"outbox: {st}");
+        Assert.False(st.Unsupported.HasFlag(MessageActionKind.Move), $"outbox: {st}");
     }
 
     [Fact]

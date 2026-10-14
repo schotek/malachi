@@ -210,6 +210,10 @@ namespace Malachi.Core.Api;
 [JsonSerializable(typeof(FolderListParams))]
 [JsonSerializable(typeof(FolderListResult))]
 [JsonSerializable(typeof(FolderSubscribeParams))]
+[JsonSerializable(typeof(FolderMarkReadParams))]
+[JsonSerializable(typeof(FolderMarkReadResult))]
+[JsonSerializable(typeof(FolderEmptyParams))]
+[JsonSerializable(typeof(FolderEmptyResult))]
 // Jira.cs
 [JsonSerializable(typeof(SpaceRef))]
 [JsonSerializable(typeof(StatusRef))]

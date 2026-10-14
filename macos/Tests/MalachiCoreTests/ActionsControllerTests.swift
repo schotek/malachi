@@ -457,6 +457,51 @@ private final class Harness {
         #expect(h.unread(inbox) == 1)
     }
 
+    /// Move To (a message's context menu; actions.go `moveIDsTo`): any
+    /// folder of the account, as Archive moves; the current folder is a
+    /// no-op.
+    @Test func moveToAFolder() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1), msg("m2", 2, .seen)]])
+        defer { Task { await h.stop() } }
+        #expect(h.actions.actionFlags(for: h.list.rows[0]).move)
+        h.actions.moveTo(["m1"], folder: inbox.folder)
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(await h.fixture.moveRequests.isEmpty)
+        #expect(ids(h.list.rows) == ["m2", "m1"] || ids(h.list.rows) == ["m1", "m2"])
+        h.actions.moveTo(["m1", "unknown"], folder: junk.folder)
+        #expect(ids(h.list.rows) == ["m2"])
+        #expect(h.log.closedWindows == ["m1"])
+        #expect(h.unread(junk) == 1)
+        try await waitUntil { await h.fixture.moveRequests.count == 1 }
+        #expect(await h.fixture.moveRequests.last == MessageMoveParams(accountId: "a", messageIds: ["m1"], targetFolderId: "junk"))
+        #expect(h.log.confirmations.isEmpty && h.log.toasts.isEmpty)
+    }
+
+    /// Mark All as Read and Empty Trash (a folder's context menu):
+    /// folder.markRead at once, folder.empty only once the question is
+    /// answered yes.
+    @Test func folderActions() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1)], trash: [msg("t1", 2), msg("t2", 3)]])
+        defer { Task { await h.stop() } }
+        h.actions.markFolderRead(inbox)
+        try await waitUntil { await h.fixture.folderMarkReadRequests.count == 1 }
+        #expect(await h.fixture.folderMarkReadRequests == [FolderMarkReadParams(accountId: "a", folderId: "in")])
+        #expect(h.log.confirmations.isEmpty)
+
+        let q = ContextMenu.emptyQuestion(junk: false, count: h.mailbox.model.folder(trash)?.total ?? -1)
+        h.log.answer = false
+        h.actions.emptyFolder(trash)
+        try await waitUntil { h.log.confirmations.count == 1 }
+        #expect(h.log.confirmations.last == Confirmation(heading: q.heading, body: q.body, label: q.confirm))
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(await h.fixture.folderEmptyRequests.isEmpty)
+        h.log.answer = true
+        h.actions.emptyFolder(trash)
+        try await waitUntil { await h.fixture.folderEmptyRequests.count == 1 }
+        #expect(await h.fixture.folderEmptyRequests == [FolderEmptyParams(accountId: "a", folderId: "trash")])
+        #expect(h.log.toasts.isEmpty)
+    }
+
     @Test func archiveAndJunkNeedTheRoleFolders() async throws {
         // Without an Archive or Junk folder: a toast, nothing else.
         let bare = try await Harness(

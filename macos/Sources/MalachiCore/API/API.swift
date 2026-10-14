@@ -186,6 +186,20 @@ public enum API {
         public static let name = "folder.subscribe"
     }
 
+    /// Every stored, unhidden unread message of a folder read.
+    public enum FolderMarkRead: RPCMethod {
+        public typealias Params = FolderMarkReadParams
+        public typealias Result = FolderMarkReadResult
+        public static let name = "folder.markRead"
+    }
+
+    /// Every stored message of a Trash or Junk folder deleted for good.
+    public enum FolderEmpty: RPCMethod {
+        public typealias Params = FolderEmptyParams
+        public typealias Result = FolderEmptyResult
+        public static let name = "folder.empty"
+    }
+
     // MARK: Messages
 
     public enum MessageList: RPCMethod {
@@ -565,7 +579,7 @@ public enum API {
         AccountUpdate.self, AccountDiscover.self, AccountTest.self, AccountLinked.self,
         AccountReorder.self, AccountOAuthStart.self, AccountOAuthWait.self, AccountOAuthCancel.self,
         AccountDetectSite.self, AccountListSpaces.self,
-        FolderList.self, FolderSubscribe.self,
+        FolderList.self, FolderSubscribe.self, FolderMarkRead.self, FolderEmpty.self,
         MessageList.self, MessageGet.self, MessageBody.self, MessagePart.self,
         MessageEmbedded.self, MessageDownload.self, MessageFlag.self, MessageMove.self, MessageDelete.self,
         MessageSend.self, MessageUnsubscribe.self,

@@ -243,6 +243,7 @@ func (w *Window) newMessageRow(s api.MessageSummary) *widget.MessageRow {
 	r := widget.NewMessageRow()
 	r.SetMessage(w.model.rowMessage(s))
 	w.applyRowAppearance(r)
+	w.attachMessageMenu(r.ListBoxRow)
 	return r
 }
 

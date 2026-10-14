@@ -107,3 +107,49 @@ public sealed record FolderSubscribeParams
     [JsonPropertyName("subscribed")]
     public required bool Subscribed { get; init; }
 }
+
+/// <summary>
+/// api.FolderMarkReadParams (<c>folder.markRead</c>): every stored,
+/// unhidden unread message of the folder read.
+/// </summary>
+public sealed record FolderMarkReadParams
+{
+    /// <summary>The account.</summary>
+    [JsonPropertyName("accountId")]
+    public required AccountId AccountId { get; init; }
+
+    /// <summary>The folder.</summary>
+    [JsonPropertyName("folderId")]
+    public required FolderId FolderId { get; init; }
+}
+
+/// <summary>api.FolderMarkReadResult: how many messages were unread.</summary>
+public sealed record FolderMarkReadResult
+{
+    /// <summary>The messages marked read.</summary>
+    [JsonPropertyName("marked")]
+    public required int Marked { get; init; }
+}
+
+/// <summary>
+/// api.FolderEmptyParams (<c>folder.empty</c>): every stored message of a
+/// Trash or Junk folder deleted for good.
+/// </summary>
+public sealed record FolderEmptyParams
+{
+    /// <summary>The account.</summary>
+    [JsonPropertyName("accountId")]
+    public required AccountId AccountId { get; init; }
+
+    /// <summary>The folder.</summary>
+    [JsonPropertyName("folderId")]
+    public required FolderId FolderId { get; init; }
+}
+
+/// <summary>api.FolderEmptyResult: how many messages were deleted.</summary>
+public sealed record FolderEmptyResult
+{
+    /// <summary>The messages deleted.</summary>
+    [JsonPropertyName("deleted")]
+    public required int Deleted { get; init; }
+}

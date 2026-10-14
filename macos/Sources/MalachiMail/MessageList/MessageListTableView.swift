@@ -9,7 +9,8 @@ import AppKit
 /// fold and unfold a conversation (threads.go `addThreadShortcuts`), Space
 /// and Shift-Space page through the conversation in the reading pane. Each
 /// key handler reports whether it did something; when it did not the key
-/// goes on to the table for its normal navigation.
+/// goes on to the table for its normal navigation. A right click (or a
+/// Control-click) on a message row opens its context menu (`menuForRow`).
 @MainActor
 final class MessageListTableView: NSTableView {
     /// Return or Enter on the selected row.
@@ -21,6 +22,16 @@ final class MessageListTableView: NSTableView {
     /// Space (Shift-Space: `up`): a page of the conversation in the reading
     /// pane, when it shows one.
     var onPage: (@MainActor (_ up: Bool) -> Bool)?
+    /// The context menu of the row clicked, which the closure selects
+    /// first; nil for none (a date heading).
+    var menuForRow: (@MainActor (Int) -> NSMenu?)?
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let row = row(at: convert(event.locationInWindow, from: nil))
+        // AppKit's own `menu(for:)` draws the outline round the clicked row.
+        menu = row >= 0 ? menuForRow?(row) : nil
+        return menu == nil ? nil : super.menu(for: event)
+    }
 
     override func drawGrid(inClipRect clipRect: NSRect) {
         // The rows draw their own separator (MessageRowView).

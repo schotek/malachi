@@ -351,6 +351,7 @@ func (w *Window) newRowFor(row listRow) *widget.MessageRow {
 		r.ConnectExpander(func() { w.toggleThread(tid) })
 	}
 	w.addThreadShortcuts(r, tid, !row.Thread)
+	w.attachMessageMenu(r.ListBoxRow)
 	return r
 }
 

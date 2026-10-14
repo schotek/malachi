@@ -35,8 +35,10 @@ namespace Malachi.Core.Tests.Fixtures;
 /// It serves <c>system.info</c>, <c>account.list</c>, <c>folder.list</c>,
 /// <c>sync.status</c>, <c>sync.trigger</c> (recorded in
 /// <see cref="Triggers"/>) and <c>config.get</c>, and
-/// <c>message.list/get/body/flag/move/delete</c> and
-/// <c>thread.list/get</c> over the messages of every folder
+/// <c>message.list/get/body/flag/move/delete</c>,
+/// <c>folder.markRead/empty</c> (recorded only, the messages left as they
+/// are: the daemon's notify.messagesChanged is what a client reads them
+/// back by) and <c>thread.list/get</c> over the messages of every folder
 /// (<see cref="SetMessages"/>), <see cref="SetBody"/> and
 /// <see cref="SetDetail"/>, with the folder counters following every
 /// change (a folder-scoped conversation counts and, with withSent, returns
@@ -44,8 +46,9 @@ namespace Malachi.Core.Tests.Fixtures;
 /// by id: the fixture has no Message-IDs); the requests are recorded in
 /// <see cref="ListRequests"/>, <see cref="ThreadListRequests"/>,
 /// <see cref="ThreadGetRequests"/>, <see cref="BodyRequests"/>,
-/// <see cref="FlagRequests"/>, <see cref="MoveRequests"/> and
-/// <see cref="DeleteRequests"/>. A handler that needs no fixture state can
+/// <see cref="FlagRequests"/>, <see cref="MoveRequests"/>,
+/// <see cref="DeleteRequests"/>, <see cref="FolderMarkReadRequests"/> and
+/// <see cref="FolderEmptyRequests"/>. A handler that needs no fixture state can
 /// go straight to <see cref="On"/>.
 /// </remarks>
 internal sealed class MailFixture : IAsyncDisposable
@@ -57,6 +60,7 @@ internal sealed class MailFixture : IAsyncDisposable
         API.SyncStatus.Name, API.SyncTrigger.Name, API.ConfigGet.Name,
         API.MessageList.Name, API.MessageGet.Name, API.MessageBody.Name,
         API.MessageFlag.Name, API.MessageMove.Name, API.MessageDelete.Name,
+        API.FolderMarkRead.Name, API.FolderEmpty.Name,
         API.ThreadList.Name, API.ThreadGet.Name,
     ];
 
@@ -79,6 +83,8 @@ internal sealed class MailFixture : IAsyncDisposable
     private readonly List<MessageFlagParams> flagRequests = [];
     private readonly List<MessageMoveParams> moveRequests = [];
     private readonly List<MessageDeleteParams> deleteRequests = [];
+    private readonly List<FolderMarkReadParams> folderMarkReadRequests = [];
+    private readonly List<FolderEmptyParams> folderEmptyRequests = [];
     private IReadOnlyList<Account> accounts = [];
     private IReadOnlyList<SyncState> syncStates = [];
     private SystemInfoResult info = new() { Version = "fake", ProtocolVersion = API.ProtocolVersion, Pid = 7, StorePath = "/tmp/s.db" };
@@ -136,6 +142,10 @@ internal sealed class MailFixture : IAsyncDisposable
     public IReadOnlyList<MessageMoveParams> MoveRequests => Snapshot(moveRequests);
 
     public IReadOnlyList<MessageDeleteParams> DeleteRequests => Snapshot(deleteRequests);
+
+    public IReadOnlyList<FolderMarkReadParams> FolderMarkReadRequests => Snapshot(folderMarkReadRequests);
+
+    public IReadOnlyList<FolderEmptyParams> FolderEmptyRequests => Snapshot(folderEmptyRequests);
 
     /// <summary>Registers the handlers and starts listening.</summary>
     public async Task StartAsync()
@@ -354,6 +364,12 @@ internal sealed class MailFixture : IAsyncDisposable
                     DeleteMessages(q);
                     return JsonCoding.EncodeToString(new EmptyResult());
                 }
+            case "folder.markRead":
+                folderMarkReadRequests.Add(JsonCoding.Decode<FolderMarkReadParams>(p));
+                return JsonCoding.EncodeToString(new FolderMarkReadResult { Marked = 0 });
+            case "folder.empty":
+                folderEmptyRequests.Add(JsonCoding.Decode<FolderEmptyParams>(p));
+                return JsonCoding.EncodeToString(new FolderEmptyResult { Deleted = 0 });
             case "thread.list":
                 {
                     var q = JsonCoding.Decode<ThreadListParams>(p);

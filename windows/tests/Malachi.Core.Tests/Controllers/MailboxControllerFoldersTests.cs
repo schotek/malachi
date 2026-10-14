@@ -790,6 +790,35 @@ public sealed class MailboxControllerFoldersTests
     }
 
     /// <summary>
+    /// context_menus.go <c>checkFolder</c>: Check for New Mail in a folder's
+    /// context menu asks for that folder, whatever is selected; an issue
+    /// tracker's view is a selection of its account's issues, so the whole
+    /// account.
+    /// </summary>
+    [Fact]
+    public async Task TriggerSyncForOneFolder()
+    {
+        var (accounts, folders) = TestAccounts();
+        folders["acc2"] = [.. folders["acc2"], TestFolder("view", "Open") with { Virtual = VirtualFolder.Open }];
+        var log = new Log();
+        await using var h = await StartAsync(log, accounts, folders);
+        await h.IdleAsync();
+
+        Assert.Equal(("Checking for new mail…", true), await h.On(() =>
+        {
+            h.Mailbox.TriggerSync(new FolderKey("acc1", "alpha"));
+            return h.Sync.Footer;
+        }));
+        await h.IdleAsync();
+        await h.On(() => h.Mailbox.TriggerSync(new FolderKey("acc2", "view")));
+        await h.IdleAsync();
+        Assert.Equal(
+            [new SyncTriggerParams { AccountId = "acc1", FolderId = "alpha" }, new SyncTriggerParams { AccountId = "acc2" }],
+            h.Fixture.Triggers);
+        Assert.Empty(h.Toasts);
+    }
+
+    /// <summary>
     /// status.go <c>showOutbox</c>: the popover's link to unsent messages
     /// selects the account's outbox like a click on its tree row; a paused
     /// account's outbox, or a missing one, is not shown.

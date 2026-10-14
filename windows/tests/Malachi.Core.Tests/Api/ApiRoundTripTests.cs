@@ -274,6 +274,10 @@ public sealed class ApiRoundTripTests
         [nameof(FolderListResult)] = Case<FolderListResult>(
             """{"folders":[{"id":"f_1","accountId":"acc_1","name":"Inbox","path":"Inbox","role":"inbox","subscribed":true,"selectable":true,"synced":true,"unread":3,"total":120}]}"""),
         [nameof(FolderSubscribeParams)] = Case<FolderSubscribeParams>("""{"accountId":"acc_1","folderId":"f_1","subscribed":false}"""),
+        [nameof(FolderMarkReadParams)] = Case<FolderMarkReadParams>("""{"accountId":"acc_1","folderId":"f_1"}"""),
+        [nameof(FolderMarkReadResult)] = Case<FolderMarkReadResult>("""{"marked":3}"""),
+        [nameof(FolderEmptyParams)] = Case<FolderEmptyParams>("""{"accountId":"acc_1","folderId":"f_trash"}"""),
+        [nameof(FolderEmptyResult)] = Case<FolderEmptyResult>("""{"deleted":12}"""),
         // Jira.cs
         [nameof(SpaceRef)] = Case<SpaceRef>("""{"id":"10001","key":"ITSD","name":"IT Service Desk"}"""),
         [nameof(StatusRef)] = Case<StatusRef>("""{"id":"6","name":"Closed"}"""),

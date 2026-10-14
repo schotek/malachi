@@ -742,6 +742,17 @@ public final class MailboxController {
         startSync(SyncTriggerParams(accountId: accountId))
     }
 
+    /// Runs sync.trigger for one folder (Check for New Mail in its context
+    /// menu); an issue tracker's view is a selection of its account's
+    /// issues, so the whole account.
+    public func triggerSync(folder f: Folder) {
+        if f.virtual != nil {
+            triggerSync(accountId: f.accountId)
+            return
+        }
+        startSync(SyncTriggerParams(accountId: f.accountId, folderId: f.id))
+    }
+
     /// Runs sync.trigger with `params` (sync.go `startSync`). The line's
     /// spinner starts at once; the daemon's notify.syncState takes over,
     /// with the sync controller's fallback timer so the spinner never

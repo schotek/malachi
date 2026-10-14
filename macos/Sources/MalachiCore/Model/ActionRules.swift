@@ -17,7 +17,7 @@ public func flagChange(_ f: Flag, on: Bool) -> (set: [Flag]?, clear: [Flag]?) {
 /// A message action that an account may not offer at all
 /// (`Capabilities.supported`): the client hides it where it can and
 /// disables it otherwise. Seen and flagged work on every account and are
-/// not among them; `move` has no control on the Mac yet.
+/// not among them; `move` is Move To in a message's context menu.
 public enum MessageActionKind: Sendable, Hashable, CaseIterable {
     case reply, replyAll, forward, trash, move, archive, junk
 }
@@ -42,6 +42,9 @@ public struct ActionFlags: Sendable, Equatable {
     public var trash: Bool
     public var archive: Bool
     public var junk: Bool
+    /// The row can go to another folder of its account (Move To in its
+    /// context menu).
+    public var move: Bool
     public var markRead: Bool
     public var markUnread: Bool
     public var toggleFlag: Bool
@@ -58,7 +61,7 @@ public struct ActionFlags: Sendable, Equatable {
     public init(
         on: Bool = false, outbox: Bool = false, flagged: Bool = false, reply: Bool = false, replyAll: Bool = false,
         forward: Bool = false, star: Bool = false, trash: Bool = false, archive: Bool = false, junk: Bool = false,
-        markRead: Bool = false, markUnread: Bool = false, toggleFlag: Bool = false, loadImages: Bool = false,
+        move: Bool = false, markRead: Bool = false, markUnread: Bool = false, toggleFlag: Bool = false, loadImages: Bool = false,
         trustSender: Bool = false, comment: Bool = false, unsupported: Set<MessageActionKind> = []
     ) {
         self.on = on
@@ -71,6 +74,7 @@ public struct ActionFlags: Sendable, Equatable {
         self.trash = trash
         self.archive = archive
         self.junk = junk
+        self.move = move
         self.markRead = markRead
         self.markUnread = markUnread
         self.toggleFlag = toggleFlag
@@ -124,6 +128,7 @@ public func messageActionState(_ row: ListRow?, on: Bool = true, model: MailMode
         trash: available.trash,
         archive: available.archive,
         junk: available.junk,
+        move: available.move,
         markRead: !outbox && unread,
         markUnread: !outbox && seen,
         toggleFlag: !outbox,

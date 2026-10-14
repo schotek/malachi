@@ -98,8 +98,8 @@ public sealed partial class MainWindow
     {
         list = integration.List;
         new SelectionActions(integration.Actions, integration.List, () => this).Install(Commands);
-        SidebarPane.Attach(integration.Mailbox, Commands);
-        ListPane.Attach(integration.List, integration.Sync, Commands);
+        SidebarPane.Attach(integration.Mailbox, integration.Actions, Commands);
+        ListPane.Attach(integration.List, integration.Sync, integration.Actions, Commands);
         MessageCommands.Attach(Commands);
         StatusLine.Attach(integration.Sync, integration.Mailbox);
 

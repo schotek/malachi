@@ -198,7 +198,7 @@ func (w *Window) rebuildFolderList() {
 	w.reselecting = true
 	w.folderList.RemoveAll()
 	w.folderRows = make(map[rowKey]*folderRow, len(w.model.entries))
-	for _, e := range w.model.entries {
+	for idx, e := range w.model.entries {
 		if e.Header && e.Favourite {
 			row, _ := newHeaderRow(i18n.T("Favourites"), "", false, false)
 			w.folderList.Append(row)
@@ -208,6 +208,7 @@ func (w *Window) rebuildFolderList() {
 			row, twisty := newHeaderRow(accountLabel(e.Account), accountHeaderBadge(e.Account), e.Collapsed, true)
 			acc := e.Account.ID
 			twisty.ConnectClicked(func() { w.toggleAccount(acc) })
+			w.attachFolderMenu(row, idx)
 			w.folderList.Append(row)
 			continue
 		}
@@ -224,6 +225,7 @@ func (w *Window) rebuildFolderList() {
 			r.star.ConnectClicked(func() { w.toggleFavourite(k) })
 		}
 		w.addFolderShortcuts(r, k, e)
+		w.attachFolderMenu(r, idx)
 		w.folderRows[rowKey{folderKey: k, fav: e.Favourite}] = r
 		w.folderList.Append(r)
 	}
