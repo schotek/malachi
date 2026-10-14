@@ -2,20 +2,34 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Model/ActionRules.swift (ActionFlags);
-// GTK: ui/internal/window/actions.go (setMessageActionsSensitive) and
-// action_rules.go (actionState).
+// GTK: ui/internal/window/actions.go (setMessageActionsSensitive),
+// action_rules.go (actionState) and ui/internal/selection (Flags: Count,
+// Open).
 
 namespace Malachi.Core.Model;
 
 /// <summary>
 /// What the per-message header buttons and actions allow for the selected
-/// row (actions.go <c>setMessageActionsSensitive</c>). The default value is
-/// everything off (nothing selected, <see cref="None"/>).
+/// row, or the selected rows combined (actions.go
+/// <c>setMessageActionsSensitive</c>, <c>Selection.Combine</c>). The default
+/// value is everything off (nothing selected, <see cref="None"/>).
 /// </summary>
 public readonly record struct ActionFlags
 {
     /// <summary>Everything off (nothing selected).</summary>
     public static ActionFlags None => default;
+
+    /// <summary>
+    /// How many rows are selected: 1 for a row's own flags, two or more for
+    /// several (<c>Selection.Combine</c>), 0 with nothing selected.
+    /// </summary>
+    public int Count { get; init; }
+
+    /// <summary>
+    /// Open in New Window can open them: one row always, several up to
+    /// <c>Selection.MaxOpen</c>.
+    /// </summary>
+    public bool Open { get; init; }
 
     /// <summary>Something is selected and the actions are on at all.</summary>
     public bool On { get; init; }

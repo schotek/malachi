@@ -4,14 +4,17 @@
 // Port of macos/Sources/MalachiMail/Actions/MessageActionsController.swift
 // (the MessageActions half: the main window's actions on the selection);
 // GTK: ui/internal/window/window.go (registerActions: forSelected and
-// forRows; the reply buttons and the star's clicked handler). The main
+// forRows; the reply buttons and the star's clicked handler) and
+// selection.go (forwardSelection, selectionSubject, flagTargetOf). The main
 // window's per-message commands (the header bar, the context menu, Delete,
 // A, J, U, S) act on the list's selection: the reply and image actions on
-// the selected row's message (a conversation row's newest folder member),
-// the flag and move actions on every message the row stands for (all the
-// folder members of a conversation row, fetched first when they are not
-// known yet). Everything else is the ActionsController's; a confirmation
-// goes on the main window.
+// the selected row's message (a conversation row's newest folder member;
+// none for several rows), the flag and move actions on every message the
+// rows stand for (all the folder members of a conversation row, fetched
+// first when they are not known yet), Forward on several rows in one
+// message. Everything else is the ActionsController's; a confirmation goes
+// on the main window, with the subject of one row (nothing for several,
+// whose heading counts them).
 
 using System;
 using Malachi.App.Commands;
@@ -22,7 +25,7 @@ using Microsoft.UI.Xaml;
 
 namespace Malachi.App.Main;
 
-/// <summary>The main window's actions on the selected row.</summary>
+/// <summary>The main window's actions on the selected rows.</summary>
 internal sealed class SelectionActions
 {
     private readonly ActionsController actions;
@@ -45,20 +48,33 @@ internal sealed class SelectionActions
         ArgumentNullException.ThrowIfNull(commands);
         commands.Reply.Handler = () => ForSelected(id => actions.OpenCompose(ComposeKind.Reply, id));
         commands.ReplyAll.Handler = () => ForSelected(id => actions.OpenCompose(ComposeKind.ReplyAll, id));
-        // "Forward Without Attachments?" goes on the main window.
-        commands.Forward.Handler = () => ForSelected(id => actions.OpenCompose(ComposeKind.Forward, id, window()));
-        commands.Trash.Handler = () => list.SelectedIds((row, ids) => actions.Trash(ids, ListController.RowSubject(row), window()));
-        commands.Junk.Handler = () => list.SelectedIds((row, ids) => actions.Junk(ids, ListController.RowSubject(row), window()));
+        commands.Forward.Handler = Forward;
+        commands.Trash.Handler = () => list.SelectedIds((rows, ids) => actions.Trash(ids, ListController.SelectionSubject(rows), window()));
+        commands.Junk.Handler = () => list.SelectedIds((rows, ids) => actions.Junk(ids, ListController.SelectionSubject(rows), window()));
         commands.Archive.Handler = () => list.SelectedIds((_, ids) => actions.Archive(ids));
-        // On a conversation row the star acts on every member (flagTarget).
-        commands.ToggleFlag.Handler = () => list.SelectedIds((row, ids) => actions.SetFlagged(ids, ListController.FlagTarget(row)));
+        // On a conversation row the star acts on every member (flagTarget);
+        // several rows are starred unless every one is (Selection.FlagTarget).
+        commands.ToggleFlag.Handler = () => list.SelectedIds((rows, ids) => actions.SetFlagged(ids, list.FlagTarget(rows)));
         commands.MarkRead.Handler = () => list.SelectedIds((_, ids) => actions.SetSeen(ids, true));
         commands.MarkUnread.Handler = () => list.SelectedIds((_, ids) => actions.SetSeen(ids, false));
         commands.LoadImages.Handler = () => ForSelected(actions.LoadImages);
         commands.TrustSender.Handler = () => ForSelected(actions.TrustSender);
     }
 
-    // window.go forSelected: the selected row's message.
+    // selection.go forwardSelection: the selected message as before
+    // ("Forward Without Attachments?" goes on the main window), or several
+    // rows in one new message, each attached whole.
+    private void Forward()
+    {
+        if (list.SelectedRows.Count > 1)
+        {
+            list.SelectedIds((_, ids) => actions.ForwardMessages(ids));
+            return;
+        }
+        ForSelected(id => actions.OpenCompose(ComposeKind.Forward, id, window()));
+    }
+
+    // window.go forSelected: the selected row's message (none for several).
     private void ForSelected(Action<MessageId> fn)
     {
         if (list.SelectedRow?.Message is { } s)

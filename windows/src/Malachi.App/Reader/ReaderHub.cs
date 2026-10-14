@@ -8,12 +8,12 @@
 // the links' question, the toasts where the click was); GTK: what window.New
 // wires for the message pane (showMessage on the row-selected signal,
 // openMessageWindow on row-activated, openDraft, refreshOutboxViews'
-// reader share, emptyPageName) and the win.* actions of registerActions
-// acting on the selection. It makes the reader's services once, puts the
-// pane into the main window's Reader region, gives the main window's
-// per-message commands their handlers (the selection's actions; the
-// Integration feeds their flags), and fans out what the cache and the
-// actions learn to every view and message window.
+// reader share, emptyPageName, selection.go's count of several rows) and
+// the win.* actions of registerActions acting on the selection. It makes
+// the reader's services once, puts the pane into the main window's Reader
+// region, gives the main window's per-message commands their handlers (the
+// selection's actions; the Integration feeds their flags), and fans out
+// what the cache and the actions learn to every view and message window.
 
 using System;
 using System.Linq;
@@ -235,6 +235,9 @@ public sealed class ReaderHub : IDisposable
                 Pane.Reader.Show(s);
             }
         };
+        // Several rows (selection.go showSelectionPage): announced after
+        // the null row and message that cleared the pane above; their count.
+        list.SeveralSelected += (_, n) => Pane.Reader.ShowSelection(n);
         list.ActivateMessage += (_, s) => registry.OpenMessage(s);
         list.ActivateDraft += (_, s) => integration.Actions.OpenDraft(s.Id);
         list.OutboxRefreshed += (_, account) => RefetchOutbox(account);

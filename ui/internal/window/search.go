@@ -273,7 +273,7 @@ func (w *Window) loadMoreSearch(gen uint64) {
 // selectFirstResult selects the first row and gives it the keyboard.
 func (w *Window) selectFirstResult() {
 	if row := w.messageList.RowAtIndex(0); row != nil {
-		w.messageList.SelectRow(row)
+		w.selectOnly(row)
 		row.GrabFocus()
 	}
 }

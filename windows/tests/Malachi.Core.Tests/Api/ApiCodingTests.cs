@@ -1238,9 +1238,15 @@ public sealed partial class ApiCodingTests
         Assert.Null(Member(create, "mailto"));
         Assert.Equal("On x, y wrote:", create.GetProperty("attribution").GetString());
         Assert.Null(Member(create, "messageAccountId"));
+        Assert.Null(Member(create, "messageIds"));
         var forward = EncodeObject(new DraftCreateParams { AccountId = "acc_mail", Mode = ComposeMode.Forward, MessageId = "m", MessageAccountId = "acc_jira" });
         Assert.Equal("acc_jira", forward.GetProperty("messageAccountId").GetString());
         Assert.Equal("acc_mail", forward.GetProperty("accountId").GetString());
+        // Several messages forwarded at once (the selection of several rows):
+        // messageIds instead of messageId.
+        var several = EncodeObject(new DraftCreateParams { AccountId = "a", Mode = ComposeMode.Forward, MessageIds = ["m2", "m1"] });
+        Assert.Equal(["m2", "m1"], several.GetProperty("messageIds").EnumerateArray().Select(e => e.GetString()));
+        Assert.Null(Member(several, "messageId"));
     }
 
     // MARK: Method table

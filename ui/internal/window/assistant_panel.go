@@ -270,6 +270,9 @@ func messageContext(s api.MessageSummary) assistantpanel.Context {
 // selectionContext is the list's selection as the panel's context; nil for
 // none or an Outbox message.
 func (p *assistantPanel) selectionContext() *assistantpanel.Context {
+	if rows := p.w.selectedRows(); len(rows) > 1 {
+		return p.w.severalContext(rows)
+	}
 	row, ok := p.w.selectedRow()
 	if !ok || p.w.model.inOutbox(row.Message) {
 		return nil
@@ -312,14 +315,26 @@ func (p *assistantPanel) followSelection() {
 // the list still shows it selected; otherwise the context stays what it
 // was.
 func (p *assistantPanel) resolve(c assistantpanel.Context, done func(assistant.Selection)) {
+	if rows := p.w.selectedRows(); len(rows) > 1 {
+		// Several rows: every member of their conversations, once known,
+		// when the selection is still of the context's account.
+		p.w.selectedIDs(func(rs []listRow, ids []api.MessageID) {
+			if string(rs[0].Message.AccountID) != c.Selection.AccountID {
+				done(c.Selection)
+				return
+			}
+			done(assistant.Selection{AccountID: c.Selection.AccountID, MessageIDs: p.w.newestFirstIDs(ids)})
+		})
+		return
+	}
 	row, ok := p.w.selectedRow()
 	if !ok || !row.Thread || string(row.Message.AccountID) != c.Selection.AccountID ||
 		len(c.Selection.MessageIDs) == 0 || c.Selection.MessageIDs[0] != string(row.Message.ID) {
 		done(c.Selection)
 		return
 	}
-	p.w.selectedIDs(func(r listRow, ids []api.MessageID) {
-		done(assistant.Selection{AccountID: string(r.Message.AccountID), MessageIDs: newestFirst(ids, true)})
+	p.w.selectedIDs(func(rs []listRow, ids []api.MessageID) {
+		done(assistant.Selection{AccountID: string(rs[0].Message.AccountID), MessageIDs: newestFirst(ids, true)})
 	})
 }
 

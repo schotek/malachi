@@ -244,6 +244,9 @@ func (s *draftService) Create(ctx context.Context, p api.DraftCreateParams) (*ap
 	default:
 		return nil, bad("mode must be new, reply, replyAll or forward")
 	}
+	if len(p.MessageIDs) > 0 && (p.Mode != api.ComposeForward || p.MessageID != "") {
+		return nil, bad("messageIds is for mode forward, without messageId")
+	}
 	a, err := s.b.requireAccount(ctx, string(p.AccountID))
 	if err != nil {
 		return nil, err
@@ -285,6 +288,9 @@ func (s *draftService) Create(ctx context.Context, p api.DraftCreateParams) (*ap
 			return nil, err
 		}
 		return &api.DraftCreateResult{Draft: d, Quoted: api.QuoteNone}, nil
+	}
+	if len(p.MessageIDs) > 0 {
+		return s.b.forwardMany(ctx, a, src, p.MessageIDs)
 	}
 	if p.MessageID == "" {
 		return nil, bad("messageId is required for mode %s", p.Mode)

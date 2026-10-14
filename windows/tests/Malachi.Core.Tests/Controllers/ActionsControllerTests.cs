@@ -25,7 +25,9 @@
 // confirmation that fails runs nothing and is logged, the assistant
 // panel's Open Draft stops at the last page and after the page limit
 // (assistant_panel.go findDraft), and the context menus' Move To and folder
-// actions are refused with their toasts (moveToAFolder, folderActions). The
+// actions are refused with their toasts (moveToAFolder, folderActions);
+// Swift's tests of several selected rows (severalRowsTrashAndCountPerFolder,
+// severalRowsForwardAndOpen) are the last two before the helpers. The
 // cache is the real MessageCache, as in Swift, so the downloads of a
 // forward or a reply and Download Pictures go through it.
 
@@ -38,6 +40,7 @@ using Malachi.Core.Api;
 using Malachi.Core.Compose;
 using Malachi.Core.Controllers;
 using Malachi.Core.Model;
+using Malachi.Core.Selections;
 using Malachi.Core.Tests.Api;
 using Malachi.Core.Tests.Fixtures;
 using Malachi.Core.Tests.Model;
@@ -168,10 +171,10 @@ public sealed class ActionsControllerTests
         await h.Run(() =>
         {
             h.List.Select(new ListKey(Thread: "t1"));
-            h.List.SelectedIds((row, ids) =>
+            h.List.SelectedIds((rows, ids) =>
             {
                 members = ids;
-                target = ListHalf.FlagTarget(row);
+                target = ListHalf.FlagTarget(rows[0]);
             });
         });
         await h.IdleAsync();
@@ -1491,6 +1494,118 @@ public sealed class ActionsControllerTests
         Assert.Equal(5, h.Log.Composed.Count);
         Assert.Equal(3, rec.Downloads.Count);
         Assert.Equal("m2", rec.Drafts[^1].MessageId?.Value);
+    }
+
+    /// <summary>
+    /// Several rows (selection.go): one question naming their count, no
+    /// subject; the counts follow each message's own folder; queued messages
+    /// cancel together after one question, with one message.delete.
+    /// </summary>
+    [Fact]
+    public async Task SeveralRowsTrashAndCountPerFolder()
+    {
+        var queued = new OutboxInfo { State = OutboxState.Queued, Attempts = 0 };
+        var x1 = Msg("x1", 7) with { FolderId = ArchiveFolder.Folder };
+        await using var h = await StartAsync(messages: new Dictionary<FolderKey, MessageSummary[]>
+        {
+            [Inbox] = [Msg("m1", 1), Msg("m2", 2, flags: Seen), Msg("m3", 3)],
+            [ArchiveFolder] = [x1],
+            [OutboxFolder] = [Msg("o1", 5) with { Outbox = queued }, Msg("o2", 6) with { Outbox = queued }],
+        });
+        var log = h.Log;
+        Assert.Equal(2, h.Unread(Inbox));
+        Assert.Equal(1, h.Unread(ArchiveFolder));
+
+        await h.Run(() =>
+        {
+            h.List.SelectKeys([new ListKey(Message: "m3"), new ListKey(Message: "m1")]);
+            var rows = h.List.SelectedRows;
+            h.Actions.Trash([.. rows.Select(r => r.Message.Id)], ListController.SelectionSubject(rows));
+        });
+        await h.IdleAsync();
+        Assert.Equal(new Confirmation("Move 2 messages to Trash?", "", "Move to _Trash"), Assert.Single(log.Confirmations));
+        AssertDeleteRequest(Assert.Single(h.Fixture.DeleteRequests), ["m3", "m1"]);
+        Assert.Equal(["m2"], Ids(h.List.Rows));
+        Assert.Equal(0, h.Unread(Inbox));
+        Assert.Equal(2, h.Unread(Trash));
+
+        // Messages of two folders (a search): each folder's badge follows
+        // its own; the undo puts them back.
+        await h.Run(() =>
+        {
+            var undo = h.Actions.TrackMoves([h.Summary("m2"), x1], Trash);
+            Assert.True(h.Unread(Inbox) == 0 && h.Unread(ArchiveFolder) == 0 && h.Unread(Trash) == 3);
+            undo();
+            Assert.True(h.Unread(Inbox) == 0 && h.Unread(ArchiveFolder) == 1 && h.Unread(Trash) == 2);
+        });
+
+        // Queued messages: one question, every send cancelled at once.
+        await h.SelectAsync(OutboxFolder);
+        var flags = ActionFlags.None;
+        await h.Run(() =>
+        {
+            h.List.SelectKeys([.. h.List.Rows.Select(r => r.Key)]);
+            flags = Selection.Combine([.. h.List.SelectedRows.Select(r => h.Actions.ActionFlagsFor(r))]);
+            h.Actions.Trash([.. h.List.SelectedRows.Select(r => r.Message.Id)], "");
+        });
+        await h.IdleAsync();
+        Assert.True(flags.Outbox && flags.Trash && !flags.Forward, flags.ToString());
+        Assert.Equal(2, log.Confirmations.Count);
+        Assert.Equal(new Confirmation("Cancel sending 2 messages?", "", "Do Not _Send"), log.Confirmations[^1]);
+        Assert.Equal(["o1", "o2"], IdsOf(log.ClosedWindows.TakeLast(2)).Order());
+        Assert.Equal(2, h.Fixture.DeleteRequests.Count);
+        Assert.Equal(["o1", "o2"], IdsOf(h.Fixture.DeleteRequests[^1].MessageIds).Order());
+        Assert.True(log.Toasts.Count == 0, "the drops were ours, not deliveries");
+        Assert.Empty(h.Fixture.Messages(Acc, OutboxFolder.Folder));
+    }
+
+    /// <summary>
+    /// Forward on several rows: one draft.create forward with every id (as
+    /// selected), the compose window with what was not attached, one request
+    /// at a time; Open opens each, up to Selection.MaxOpen.
+    /// </summary>
+    [Fact]
+    public async Task SeveralRowsForwardAndOpen()
+    {
+        await using var h = await StartAsync(messages: In(Inbox, Msg("m1", 1), Msg("m2", 2, flags: Seen)));
+        var rec = new Recorder();
+        var draft = new Draft { AccountId = "a", Subject = "Fwd: s-m2", TextBody = "", HtmlBody = "" };
+        var notAttached = new Attachment { PartId = "", Filename = "s-m1.eml", ContentType = "message/rfc822", Size = 9, Inline = false, Remote = true };
+        var created = JsonCoding.EncodeToString(new DraftCreateResult { Draft = draft, Quoted = QuoteForm.None, Skipped = [notAttached] });
+        Answer(h, API.DraftCreate.Name, p =>
+        {
+            rec.AddDraft(JsonCoding.Decode<DraftCreateParams>(p));
+            return created;
+        });
+        await h.Run(() =>
+        {
+            h.Actions.ForwardMessages(["m2", "m1"]);
+            h.Actions.ForwardMessages(["m2", "m1"]);
+        });
+        await h.IdleAsync();
+        var asked = Assert.Single(rec.Drafts);
+        Assert.Equal("a", asked.AccountId.Value);
+        Assert.Equal("forward", asked.Mode.Value);
+        Assert.Null(asked.MessageId);
+        Assert.Null(asked.MessageAccountId);
+        Assert.Equal(["m2", "m1"], IdsOf(asked.MessageIds!));
+        var f = Assert.Single(h.Log.Composed);
+        Assert.Equal(ComposeKind.Forward, f.Kind);
+        Assert.Equal(1, f.Skipped);
+        Assert.Equal("Fwd: s-m2", f.Subject);
+        Assert.Equal("a", f.AccountId?.Value);
+
+        // One alone is not forwarded this way.
+        await h.Run(() => h.Actions.ForwardMessages(["m2"]));
+        await h.IdleAsync();
+        Assert.Single(rec.Drafts);
+
+        await h.Run(() =>
+        {
+            h.Actions.OpenMessages([h.Summary("m2"), h.Summary("m1")]);
+            h.Actions.OpenMessages([.. Enumerable.Repeat(h.Summary("m1"), Selection.MaxOpen + 1)]);
+        });
+        Assert.Equal(["m2", "m1"], IdsOf(h.Log.MessageWindows));
     }
 
     // Helpers

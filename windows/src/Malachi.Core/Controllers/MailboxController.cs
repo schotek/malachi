@@ -538,7 +538,7 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
     /// <see cref="EntriesChanged"/> (Swift decides it after
     /// <c>onEntriesChanged</c>, to the same effect), so that
     /// <see cref="SelectedEntryKey"/> is already its row when the new rows
-    /// arrive, as <see cref="ListController.SelectedKey"/> is with
+    /// arrive, as <see cref="ListController.SelectedKeys"/> are with
     /// <see cref="ListController.RowsChanged"/>; the selection's
     /// announcements follow as in Swift.
     /// </remarks>

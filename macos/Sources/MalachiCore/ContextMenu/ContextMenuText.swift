@@ -15,15 +15,18 @@ extension ContextMenu {
         public var junk = false
         public var favourite = false
         public var collapsed = false
+        /// Open opens this many rows (2 or more).
+        public var count = 0
 
         public init(comment: Bool = false, flagged: Bool = false, outbox: Bool = false, junk: Bool = false,
-                    favourite: Bool = false, collapsed: Bool = false) {
+                    favourite: Bool = false, collapsed: Bool = false, count: Int = 0) {
             self.comment = comment
             self.flagged = flagged
             self.outbox = outbox
             self.junk = junk
             self.favourite = favourite
             self.collapsed = collapsed
+            self.count = count
         }
     }
 
@@ -32,8 +35,11 @@ extension ContextMenu {
     public static func label(_ id: ItemID, _ l: Labels = Labels()) -> String {
         switch id {
         case .openMessage:
-            // TRANSLATORS: In the menu of a message in the list: opens it in a window of its own.
-            L10n.T("Open in New Window")
+            l.count > 1
+                // TRANSLATORS: In the menu of several selected messages: opens each in a window of its own; %d is their number.
+                ? L10n.N("Open %d Message in a New Window", "Open %d Messages in New Windows", l.count)
+                // TRANSLATORS: In the menu of a message in the list: opens it in a window of its own.
+                : L10n.T("Open in New Window")
         case .editDraft: L10n.T("Edit")
         case .reply: l.comment ? L10n.T("Comment") : L10n.T("Reply")
         case .replyAll: L10n.T("Reply All")

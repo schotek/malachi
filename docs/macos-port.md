@@ -480,6 +480,28 @@ a real store, since migration 0017 cannot be undone:
   Read and Empty are `ActionsController.markFolderRead` / `emptyFolder`
   (`folder.markRead`, `folder.empty`), Check for New Mail
   `MailboxController.triggerSync(folder:)`.
+- **Several selected messages** (2026-10-14, all three clients at once).
+  The rules are Core's `Selection` (`ui/internal/selection`): `combine`
+  of the rows' `ActionFlags` (`count`, `open`), `flagTarget`, `restrict`
+  (one account: the row added last decides), `reconcile` (the keys still
+  listed, a folded member as its conversation row, else the neighbour) and
+  the texts. `ListController` keeps `selectedKeys` (`selectedKey` and
+  `selectedRow` only for exactly one), `select(keys:)` announces several
+  with `onSelectedRowChanged(nil)`, `onSelectedMessageChanged(nil)` and
+  `onSeveralSelected(count)` without the mark-read timer, and
+  `selectedIDs` hands over `[ListRow]` with every member fetched first.
+  `MessageListViewController` allows multiple selection;
+  `tableView(_:selectionIndexesForProposedSelection:)` drops date headings
+  and restricts to one account (the clicked row, else the row not selected
+  before), `cancelOperation` (Escape) lets go of several, a right click on
+  a selected row keeps the selection, Return and folding act on one row
+  only. The reading pane shows the count on the empty page
+  (`MessageViewController.showSelection(count:)`). `ActionsController`
+  counts per source folder, skips messages already in the target, cancels
+  several queued sends with one question (`cancelSends`) and forwards
+  several in one message (`forwardMessages`: `draft.create` forward with
+  `messageIds`); `MessageContextMenu.make(rows:)` and `AssistantMenu(count:)`
+  build the menus for several.
 
 ## 4. The API layer
 

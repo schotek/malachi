@@ -77,8 +77,13 @@ public final class ListController {
     /// The rows on screen, in order: `model.rows` in grouped mode, one row
     /// per message in flat mode (messages.go `rebuildMessageRows`).
     public private(set) var rows: [ListRow] = []
-    /// The key of the selected row, nil for none (threads.go `selectedKey`).
-    public private(set) var selectedKey: ListKey?
+    /// The keys of the selected rows in list order, empty for none
+    /// (selection.go `selectedKeys`; several within one account,
+    /// `Selection.restrict`).
+    public private(set) var selectedKeys: [ListKey] = []
+    /// The key of the selected row when it is one; nil for none or several
+    /// (the single-message features have none then).
+    public var selectedKey: ListKey? { selectedKeys.count == 1 ? selectedKeys[0] : nil }
     /// What the selection allows (actions.go `setMessageActionsSensitive`).
     public private(set) var actionFlags: ActionFlags = .none
 
@@ -140,6 +145,10 @@ public final class ListController {
     /// compose window (window.go, the row-activated handler; drafts.go
     /// `openDraft`).
     public var onActivateDraft: (@MainActor (MessageSummary) -> Void)?
+    /// Several rows are selected (their number): the pane shows their
+    /// count (selection.go `showSelectionPage`); `onSelectedRowChanged` and
+    /// `onSelectedMessageChanged` announced nil just before.
+    public var onSeveralSelected: (@MainActor (Int) -> Void)?
     /// The per-message actions changed with the selection or its flags.
     public var onActionFlagsChanged: (@MainActor (ActionFlags) -> Void)?
     /// The mark-as-read timer fired for the selected message (actions.go
@@ -520,10 +529,16 @@ public final class ListController {
         return mailbox.model.rowAt(idx)
     }
 
-    /// The row behind the selection, if any (threads.go `selectedRow`).
+    /// The row behind the selection when it is one row (selection.go
+    /// `selectedRow`); nil for none or several.
     public var selectedRow: ListRow? {
         guard let key = selectedKey else { return nil }
         return row(for: key)
+    }
+
+    /// The selected rows in list order (selection.go `selectedRows`).
+    public var selectedRows: [ListRow] {
+        selectedKeys.compactMap { row(for: $0) }
     }
 
     /// The rows the model has right now, in either mode.
@@ -555,25 +570,36 @@ public final class ListController {
     /// index of the selected row is read off the rows as they were before
     /// the model moved on, as the GTK code reads it off the widgets.
     func reconcile(_ hint: SelectionHint) {
-        let prevKey = selectedKey
-        let prevIdx = prevKey.flatMap { k in rows.firstIndex { $0.key == k } } ?? -1
+        let prev = selectedKeys
+        let prevIdx = prev.first.flatMap { k in rows.firstIndex { $0.key == k } } ?? -1
         rows = currentRows()
         var changed = false
-        if let prevKey {
+        if !prev.isEmpty {
             if hint == .clear {
-                selectedKey = nil
-                changed = true
-            } else if rows.contains(where: { $0.key == prevKey }) {
-                // Still listed: the pane already shows it.
-            } else if let tid = prevKey.thread, let r = rows.first(where: { $0.key == ListKey(thread: tid) }) {
-                selectedKey = r.key
-                changed = true
-            } else if hint == .neighbour, prevIdx >= 0, min(prevIdx, rows.count - 1) >= 0 {
-                selectedKey = rows[min(prevIdx, rows.count - 1)].key
+                selectedKeys = []
                 changed = true
             } else {
-                selectedKey = nil
-                changed = true
+                // Still listed: kept (the pane already shows them); a
+                // member that folded away: its conversation row; all gone
+                // in a removal: the row now at the first one's place.
+                let present = Set(rows.map(\.key))
+                let now = rows
+                let next = Selection.reconcile(prev, resolve: { k in
+                    if present.contains(k) {
+                        return k
+                    }
+                    if let tid = k.thread, present.contains(ListKey(thread: tid)) {
+                        return ListKey(thread: tid)
+                    }
+                    return nil
+                }, neighbour: hint == .neighbour ? {
+                    let i = min(prevIdx, now.count - 1)
+                    return prevIdx >= 0 && i >= 0 ? now[i].key : nil
+                } : nil)
+                if next != prev {
+                    selectedKeys = next
+                    changed = true
+                }
             }
         }
         onRows?(rows, hint)
@@ -784,17 +810,48 @@ public final class ListController {
     /// row's message (a conversation row's newest folder member), the
     /// actions follow, the mark-as-read timer is armed.
     public func select(key: ListKey?) {
-        selectedKey = key
+        select(keys: key.map { [$0] } ?? [])
+    }
+
+    /// The user selected several rows (or one, or none): `keys` in list
+    /// order, within one account (the view restricts them first,
+    /// `restrict(_:latest:)`). Several show their count, mark nothing read
+    /// and combine their actions (`Selection.combine`).
+    public func select(keys: [ListKey]) {
+        var seen = Set<ListKey>()
+        let next = keys.filter { seen.insert($0).inserted }
+        guard next != selectedKeys || next.count <= 1 else { return }
+        selectedKeys = next
         announceSelection()
+    }
+
+    /// `Selection.restrict` over the rows of `keys`: the keys within the
+    /// account of `latest`, the row the user added last.
+    public func restrict(_ keys: [ListKey], latest: ListKey) -> [ListKey] {
+        let rows = keys.compactMap { k in row(for: k).map { (key: k, account: $0.message.accountId) } }
+        return Selection.restrict(rows, latest: latest)
     }
 
     /// window.go `onMessageRowSelected` for the current `selectedKey`. A
     /// conversation row shows the whole conversation and marks only the
     /// member `Conversation.build` picks (`markConversationRead`).
     private func announceSelection() {
-        let row = selectedRow
+        let rows = selectedRows
+        if rows.count != selectedKeys.count {
+            selectedKeys = rows.map(\.key)
+        }
+        if rows.count > 1 {
+            // Several: their count in the pane, nothing marked read.
+            onSelectedRowChanged?(nil)
+            onSelectedMessageChanged?(nil)
+            onSeveralSelected?(rows.count)
+            refreshActionFlags()
+            scheduleMarkRead(nil)
+            return
+        }
+        let row = rows.first
         if row == nil {
-            selectedKey = nil
+            selectedKeys = []
             onSelectionCleared?()
         }
         onSelectedRowChanged?(row)
@@ -858,28 +915,60 @@ public final class ListController {
     /// Re-evaluates the per-message actions for the selected row
     /// (actions.go `refreshMessageActions`).
     public func refreshActionFlags() {
-        let f = messageActionState(selectedRow, model: mailbox.model)
+        let rows = selectedRows
+        let f = rows.count > 1
+            ? Selection.combine(rows.map { messageActionState($0, model: mailbox.model) })
+            : messageActionState(rows.first, model: mailbox.model)
         guard f != actionFlags else { return }
         actionFlags = f
         onActionFlagsChanged?(f)
     }
 
-    /// Runs `then` with the selected row and every message it stands for:
-    /// one, or all the folder members of a conversation row, fetched first
-    /// when they are not known yet (the selection must still be that
-    /// conversation by then; threads.go `selectedIDs`).
-    public func selectedIDs(_ then: @escaping @MainActor (ListRow, [MessageID]) -> Void) {
-        guard let row = selectedRow else { return }
-        if let ids = mailbox.model.rowIDs(row) {
-            then(row, ids)
+    /// Runs `then` with the selected rows and every message they stand
+    /// for: one each, or all the folder members of a conversation row,
+    /// fetched first when they are not known yet (the selection must still
+    /// be those rows by then; selection.go `selectedIDs`).
+    public func selectedIDs(_ then: @escaping @MainActor ([ListRow], [MessageID]) -> Void) {
+        let keys = selectedKeys
+        let rows = selectedRows
+        guard !rows.isEmpty else { return }
+        let missing = rows.filter { mailbox.model.rowIDs($0) == nil }.compactMap(\.key.thread)
+        let run: @MainActor () -> Void = { [weak self] in
+            guard let self, self.selectedKeys == keys else { return }
+            let now = self.selectedRows
+            var ids: [MessageID] = []
+            for r in now {
+                guard let got = self.mailbox.model.rowIDs(r) else { return }
+                ids += got
+            }
+            then(now, ids)
+        }
+        if missing.isEmpty {
+            run()
             return
         }
-        guard let tid = row.key.thread else { return }
-        ensureMembers(tid) { [weak self] in
-            guard let self, let r = self.selectedRow, r.thread, r.key.thread == tid,
-                  let ids = self.mailbox.model.rowIDs(r) else { return }
-            then(r, ids)
+        var left = missing.count
+        for tid in missing {
+            ensureMembers(tid) {
+                left -= 1
+                if left == 0 {
+                    run()
+                }
+            }
         }
+    }
+
+    /// The body of a confirmation for rows: the subject of one row, nothing
+    /// for several (the heading counts them; selection.go
+    /// `selectionSubject`).
+    public func selectionSubject(_ rows: [ListRow]) -> String {
+        rows.count == 1 ? rowSubject(rows[0]) : ""
+    }
+
+    /// What the star does to rows: a row's own rule (`flagTarget`), for
+    /// several `Selection.flagTarget` of the combined flags.
+    public func flagTarget(_ rows: [ListRow]) -> Bool {
+        rows.count == 1 ? flagTarget(rows[0]) : Selection.flagTarget(actionFlags)
     }
 
     /// The subject a confirmation shows for a row: the conversation's, or
@@ -1025,12 +1114,7 @@ public final class ListController {
     /// reload) does nothing either.
     public func removeRows(_ ids: [MessageID]) -> Restore {
         if !mailbox.model.grouped {
-            let restores = ids.map { removeMessageRow($0) }
-            return {
-                for r in restores.reversed() {
-                    r()
-                }
-            }
+            return removeMessageRows(ids)
         }
         // The conversations the messages belong to, while the model still
         // knows it.
@@ -1054,17 +1138,28 @@ public final class ListController {
         }
     }
 
-    /// Drops a message from the flat list (messages.go `removeMessageRow`).
-    /// When it was the selected one its neighbour is selected (the pane
-    /// follows), or the pane is cleared when the list ran empty.
-    private func removeMessageRow(_ id: MessageID) -> Restore {
-        guard let (s, idx) = mailbox.model.removeMessage(id) else {
+    /// Drops messages from the flat list in one go (messages.go
+    /// `removeMessageRows`): the selection keeps the rows still listed;
+    /// when every selected row went, the row now at the first one's place
+    /// takes over (the pane follows), or the pane is cleared when the list
+    /// ran empty. The restore puts them back at their places.
+    private func removeMessageRows(_ ids: [MessageID]) -> Restore {
+        var gone: [(MessageSummary, Int)] = []
+        for id in ids {
+            if let removed = mailbox.model.removeMessage(id) {
+                gone.append(removed)
+            }
+        }
+        guard !gone.isEmpty else {
             return {}
         }
         let gen = mailbox.model.listGen
         syncRowsAfterRemoval()
         return { [weak self] in
-            guard let self, self.mailbox.model.listGen == gen, self.mailbox.model.insertMessage(at: idx, s) else { return }
+            guard let self, self.mailbox.model.listGen == gen else { return }
+            for (s, idx) in gone.reversed() {
+                _ = self.mailbox.model.insertMessage(at: idx, s)
+            }
             self.reconcile(.keep)
         }
     }

@@ -715,9 +715,9 @@ private final class Harness {
         #expect(h.list.actionFlags.on && h.list.actionFlags.markRead && h.list.actionFlags.markUnread)
 
         let log = h.log
-        h.list.selectedIDs { row, ids in
+        h.list.selectedIDs { rows, ids in
             log.ids.append(ids)
-            #expect(row.thread)
+            #expect(rows.count == 1 && rows[0].thread)
         }
         #expect(log.ids.isEmpty, "the members are asked for first")
         try await waitUntil { !log.ids.isEmpty }
@@ -732,9 +732,9 @@ private final class Harness {
 
         // A plain row: itself.
         h.list.select(key: ListKey(thread: "t2", message: "b1"))
-        h.list.selectedIDs { row, ids in
+        h.list.selectedIDs { rows, ids in
             log.ids.append(ids)
-            #expect(!row.thread)
+            #expect(rows.count == 1 && !rows[0].thread)
         }
         #expect(log.ids.last == ["b1"])
         #expect(h.list.rowSubject(h.list.rows[2]) == "s-a3")
@@ -1051,5 +1051,78 @@ private func statusTitle(_ s: ListState) -> String? {
         h.list.activateSearch("abc")
         #expect(focus.keys.count == 2)
         #expect(await calls.params.count == 1)
+    }
+
+    /// Several rows (selection.go): their count in the pane, nothing marked
+    /// read, the actions combined; a reload keeps them, a removal keeps the
+    /// rows still listed or, all gone, takes the row now at the first one's
+    /// place.
+    @Test func severalRowsShowTheirCountAndFollowTheList() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1), msg("m2", 2, .seen), msg("m3", 3), msg("m4", 4)]])
+        defer { Task { await h.stop() } }
+        try await h.settled()
+        h.scratch.settings.markReadDelay = 0
+        var counts: [Int] = []
+        h.list.onSeveralSelected = { counts.append($0) }
+        #expect(ids(h.list.rows) == ["m4", "m3", "m2", "m1"])
+
+        h.list.select(keys: [ListKey(message: "m4"), ListKey(message: "m2"), ListKey(message: "m4")])
+        #expect(h.list.selectedKeys == [ListKey(message: "m4"), ListKey(message: "m2")])
+        #expect(h.list.selectedKey == nil && h.list.selectedRow == nil)
+        #expect(h.list.selectedRows.map(\.message.id) == ["m4", "m2"])
+        #expect(counts == [2])
+        #expect(h.log.selections.last == .some(nil))
+        let f = h.list.actionFlags
+        #expect(f.count == 2 && f.on && f.markRead && f.markUnread && !f.reply && f.forward && f.open)
+        #expect(h.list.flagTarget(h.list.selectedRows))
+        #expect(h.list.selectionSubject(h.list.selectedRows) == "")
+        try await Task.sleep(for: .milliseconds(60))
+        #expect(h.log.marks.isEmpty, "several rows mark nothing read")
+
+        // The same rows again: nothing announced.
+        h.list.select(keys: [ListKey(message: "m4"), ListKey(message: "m2")])
+        #expect(counts == [2])
+
+        let log = h.log
+        h.list.selectedIDs { rows, ids in
+            #expect(rows.count == 2)
+            log.ids.append(ids)
+        }
+        #expect(log.ids == [["m4", "m2"]])
+
+        // A new message on top: the selection stays.
+        h.mailbox.handleNewMessage(NewMessageNotification(accountId: "a", folderId: "in", message: msg("m5", 5)))
+        #expect(ids(h.list.rows) == ["m5", "m4", "m3", "m2", "m1"])
+        #expect(h.list.selectedKeys == [ListKey(message: "m4"), ListKey(message: "m2")])
+
+        // One of them removed: the other stays, now one row.
+        let undo = h.list.removeRows(["m2"])
+        #expect(h.list.selectedKeys == [ListKey(message: "m4")])
+        #expect(h.log.selections.last == "m4")
+        undo()
+        h.list.select(keys: [ListKey(message: "m4"), ListKey(message: "m2")])
+
+        // Both removed in one go: the row now where the first one was.
+        _ = h.list.removeRows(["m4", "m2"])
+        #expect(ids(h.list.rows) == ["m5", "m3", "m1"])
+        #expect(h.list.selectedKeys == [ListKey(message: "m3")])
+        #expect(h.log.selections.last == "m3")
+        try await waitUntil { h.log.marks.contains("m3") }
+    }
+
+    /// Several rows of a grouped list: a conversation row stands for its
+    /// members, fetched first.
+    @Test func selectedIDsOfSeveralRows() async throws {
+        let h = try await Harness(messages: [inbox: threadedMessages()], grouped: true)
+        defer { Task { await h.stop() } }
+        try await h.settled()
+        #expect(ids(h.list.rows) == ["T:t3", "b1", "T:t1"])
+        h.list.select(keys: [h.list.rows[1].key, h.list.rows[2].key])
+        #expect(h.list.actionFlags.count == 2)
+        let log = h.log
+        h.list.selectedIDs { _, ids in log.ids.append(ids) }
+        try await waitUntil { !log.ids.isEmpty }
+        #expect(log.ids == [["b1", "a1", "a2", "a3"]])
+        #expect(h.list.rows.count == 3, "fetching members for an action does not unfold the row")
     }
 }

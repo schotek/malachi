@@ -166,6 +166,9 @@ inbox sections are collapsed (as macOS).
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
+                <!-- message_list: several rows can be selected (selection.go:
+                     Ctrl-click, Shift-click, Shift+arrows, Ctrl+A), within one
+                     account; the date headings are group headers, never items. -->
                 <ListView
                     x:Name="MessageList"
                     AutomationProperties.AutomationId="MessageList"
@@ -174,7 +177,7 @@ inbox sections are collapsed (as macOS).
                     DoubleTapped="OnDoubleTapped"
                     PreviewKeyDown="OnListKeyDown"
                     SelectionChanged="OnSelectionChanged"
-                    SelectionMode="Single">
+                    SelectionMode="Extended">
                     <ListView.Resources>
                         <!-- Stretch the section's content as well as its button. -->
                         <Style TargetType="ListViewHeaderItem">

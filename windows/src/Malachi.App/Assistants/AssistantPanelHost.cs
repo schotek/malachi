@@ -5,12 +5,14 @@
 // GTK: ui/internal/window/assistant_panel.go (newAssistantPanel's
 // controller and hooks, close, syncShown, reveal, messageContext,
 // selectionContext, followSelection, resolve, run, runAbout,
-// summarizeUnread, askAttachment, askConsent). The assistant panel's
-// conversation (Core's AssistantPanelController) between the main window
-// and the panel's view: the list's selection becomes the panel's context
-// (one message, or a conversation row's folder members newest first, only
-// its newest message until the members are known; never an Outbox
-// message), the Assistant menus' actions run in it (the panel unfolds,
+// summarizeUnread, askAttachment, askConsent) and selection.go
+// (severalContext). The assistant panel's conversation (Core's
+// AssistantPanelController) between the main window and the panel's view:
+// the list's selection becomes the panel's context (one message, or a
+// conversation row's folder members newest first, only its newest message
+// until the members are known, or every message of several selected rows
+// newest first; never an Outbox message), the Assistant menus' actions run
+// in it (the panel unfolds,
 // the main window comes forward), the first question asks for consent on
 // the main window, and Open Draft opens a draft only after draft.list has
 // it. A link of an answer is opened only after "Open This Link?" named its
@@ -18,6 +20,7 @@
 // the application itself names, opens as the sign-in pages do.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Malachi.App.Reader;
 using Malachi.App.Shell;
@@ -29,6 +32,7 @@ using Malachi.Core.I18n;
 using Malachi.Core.Model;
 using Malachi.Core.Platform;
 using Malachi.Core.Presentation;
+using Malachi.Core.Selections;
 using Malachi.Platform.Windows.Files;
 using Microsoft.Extensions.Logging;
 
@@ -115,6 +119,11 @@ internal sealed class AssistantPanelHost : IDisposable
     // Outbox message.
     private AssistantPanelController.Context? SelectionContext()
     {
+        var rows = list.SelectedRows;
+        if (rows.Count > 1)
+        {
+            return SeveralContext(rows);
+        }
         if (list.SelectedRow is not { } row || list.Mailbox.Model.InOutbox(row.Message))
         {
             return null;
@@ -138,18 +147,66 @@ internal sealed class AssistantPanelHost : IDisposable
         return new(new AssistantSelection(account, [row.Message.Id.Value]), Math.Max(row.Summary?.MessageCount ?? 0, 2), true, subject, thread);
     }
 
+    // selection.go severalContext: several selected rows (one account) as
+    // the panel's context: every message they stand for, newest first; a
+    // conversation whose members are not known yet stands by its newest
+    // message until they are asked for (partial). Null when one is queued.
+    private AssistantPanelController.Context? SeveralContext(IReadOnlyList<ListRow> rows)
+    {
+        var model = list.Mailbox.Model;
+        var ids = new List<MessageId>();
+        var partial = false;
+        var count = 0;
+        foreach (var r in rows)
+        {
+            if (model.InOutbox(r.Message))
+            {
+                return null;
+            }
+            if (model.RowIds(r) is { } got)
+            {
+                ids.AddRange(got);
+                count += got.Count;
+            }
+            else
+            {
+                ids.Add(r.Message.Id);
+                count += Math.Max(r.Summary?.MessageCount ?? 1, 1);
+                partial = true;
+            }
+        }
+        var newest = Selection.NewestFirst(model, ids).Select(i => i.Value).ToList();
+        return new(new AssistantSelection(rows[0].Message.AccountId.Value, newest), count, partial, Selection.SelectedText(rows.Count), "");
+    }
+
     // Completes a folded conversation's members (newest first) when the
     // list still shows it selected; otherwise the context stays what it was.
+    // Several rows: every member of their conversations, once known, while
+    // the selection is of the context's account.
     private void Resolve(AssistantPanelController.Context c, Action<AssistantSelection> done)
     {
+        if (list.SelectedRows.Count > 1)
+        {
+            list.SelectedIds((rows, ids) =>
+            {
+                if (rows[0].Message.AccountId.Value != c.Selection.AccountId)
+                {
+                    done(c.Selection);
+                    return;
+                }
+                var newest = Selection.NewestFirst(list.Mailbox.Model, ids).Select(i => i.Value).ToList();
+                done(new AssistantSelection(c.Selection.AccountId, newest));
+            });
+            return;
+        }
         if (list.SelectedRow is not { Thread: true } row || row.Message.AccountId.Value != c.Selection.AccountId
             || c.Selection.MessageIds.Count == 0 || c.Selection.MessageIds[0] != row.Message.Id.Value)
         {
             done(c.Selection);
             return;
         }
-        list.SelectedIds((r, ids) =>
-            done(new AssistantSelection(r.Message.AccountId.Value, ids.Reverse().Select(i => i.Value).ToList())));
+        list.SelectedIds((rows, ids) =>
+            done(new AssistantSelection(rows[0].Message.AccountId.Value, ids.Reverse().Select(i => i.Value).ToList())));
     }
 
     // Running from the menus

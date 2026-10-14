@@ -106,6 +106,9 @@ public static class IconGlyphs
         ["sidebar-show-right"] = G(0xE90D),
         ["mail-inbox"] = G(0xE81E),
         ["object-select"] = G(0xE73E),
+        // The reading pane while several messages are selected
+        // (selection.go): SelectAll.
+        ["edit-select-all"] = G(0xE8B3),
         ["view-list"] = G(0xEA37),
         ["view-grid"] = G(0xE80A),
         // Jira accounts: Reply as Comment (macOS text.bubble), the account's

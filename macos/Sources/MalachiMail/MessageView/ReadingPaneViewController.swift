@@ -73,6 +73,15 @@ final class ReadingPaneViewController: NSViewController {
         }
     }
 
+    /// Several rows are selected (`ListController.onSeveralSelected`):
+    /// their count, no conversation.
+    func showSelection(count n: Int) {
+        _ = view
+        controller.clear()
+        setConversation(false)
+        reader.showSelection(count: n)
+    }
+
     /// Space and Shift-Space from the list: a page of the conversation;
     /// false when no conversation is shown (the key goes on as before).
     func page(up: Bool) -> Bool {

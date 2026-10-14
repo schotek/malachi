@@ -30,15 +30,20 @@ enum MessageContextMenu {
         .trash: Action.moveToTrash,
     ]
 
-    /// The menu of the selected row; nil without one.
-    static func make(state: AppState, mailbox: MailboxController, row: ListRow?, flags: ActionFlags) -> NSMenu? {
-        guard let row, flags.on else { return nil }
+    /// The menu of the selected rows (one or several; `flags` combined);
+    /// nil without any.
+    static func make(state: AppState, mailbox: MailboxController, rows: [ListRow], flags: ActionFlags) -> NSMenu? {
+        guard let row = rows.first, flags.on else { return nil }
         let s = row.message
         let transitions = IssueTransitionMenu(state: state) { IssueTransitionMenu.keyWindowSubject() }
         let model = ContextMenu.MessageState(
-            flags: flags, draft: mailbox.model.inDrafts(s), changeStatus: transitions.isOffered,
+            flags: flags, draft: mailbox.model.inDrafts(s), changeStatus: rows.count == 1 && transitions.isOffered,
             assistant: state.assistant.shown)
-        let labels = ContextMenu.Labels(comment: flags.comment, flagged: flags.flagged, outbox: flags.outbox)
+        let labels = ContextMenu.Labels(comment: flags.comment, flagged: flags.flagged, outbox: flags.outbox, count: rows.count)
+        // The folder all are in (Move To greys it out); none when they
+        // differ (a search).
+        let folders = Set(rows.map(\.message.folderId))
+        let current = folders.count == 1 ? folders.first : nil
         let menu = NSMenu()
         for (i, group) in ContextMenu.messageItems(model).enumerated() {
             if i > 0 {
@@ -49,13 +54,13 @@ enum MessageContextMenu {
                 switch it.id {
                 case .moveTo:
                     let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-                    item.submenu = moveToMenu(mailbox: mailbox, message: s)
+                    item.submenu = moveToMenu(mailbox: mailbox, account: s.accountId, current: current)
                     item.isEnabled = it.enabled
                     menu.addItem(item)
                 case .changeStatus:
                     menu.addItem(transitions.menuItem())
                 case .assistant:
-                    let assistant = AssistantMenu(state: state, includesUnread: false)
+                    let assistant = AssistantMenu(state: state, includesUnread: false, count: rows.count)
                     let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
                     item.submenu = assistant.menu
                     item.representedObject = assistant // its menu's delegate is weak
@@ -68,17 +73,17 @@ enum MessageContextMenu {
         return menu
     }
 
-    /// Move To: the folders of `s`'s account in the sidebar's order,
-    /// indented by depth (`ContextMenu.moveTargets`); the current folder and
-    /// the containers disabled.
-    private static func moveToMenu(mailbox: MailboxController, message s: MessageSummary) -> NSMenu {
+    /// Move To: the folders of the account in the sidebar's order,
+    /// indented by depth (`ContextMenu.moveTargets`); the current folder
+    /// (when all are in one) and the containers disabled.
+    private static func moveToMenu(mailbox: MailboxController, account id: AccountID, current: FolderID?) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
-        guard let account = mailbox.model.account(s.accountId) else { return menu }
-        let entries = folderTree(account, mailbox.model.folders[s.accountId] ?? [], CollapseState(), FavouriteState())
+        guard let account = mailbox.model.account(id) else { return menu }
+        let entries = folderTree(account, mailbox.model.folders[id] ?? [], CollapseState(), FavouriteState())
             .filter { !$0.header }
             .compactMap { e in e.folder.map { ContextMenu.Entry(folder: $0, depth: e.depth) } }
-        for t in ContextMenu.moveTargets(entries, current: s.folderId) {
+        for t in ContextMenu.moveTargets(entries, current: current ?? FolderID("")) {
             let item = NSMenuItem(title: folderTitle(t.folder), action: Action.moveToFolder, keyEquivalent: "")
             item.representedObject = t.folder.id.rawValue
             item.indentationLevel = min(t.depth, 15)

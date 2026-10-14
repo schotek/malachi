@@ -630,5 +630,11 @@ public static class API
 
         /// <summary>The transitions <c>issue.transitions</c> returns at most.</summary>
         public const int MaxIssueTransitions = 100;
+
+        /// <summary>
+        /// The messages one <c>draft.create</c> forward takes at most
+        /// (<see cref="DraftCreateParams.MessageIds"/>).
+        /// </summary>
+        public const int MaxForwardMessages = 20;
     }
 }

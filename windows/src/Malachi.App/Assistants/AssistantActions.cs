@@ -30,6 +30,7 @@ using Malachi.Core.Assistants;
 using Malachi.Core.Controllers;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
+using Malachi.Core.Selections;
 using Malachi.Core.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
@@ -65,8 +66,10 @@ internal sealed partial class AssistantActions
     /// <summary>
     /// A message action on the list's selection: a conversation row's folder
     /// members, newest first (the list hands them oldest first, fetched first
-    /// when not known yet), or the one message. Never an Outbox message: it
-    /// is not on the server yet.
+    /// when not known yet), or the one message; several rows (one account)
+    /// every message they stand for, newest first, but Draft a Reply…, which
+    /// answers one message (Assistant.MessageActionsFor). Never an Outbox
+    /// message: it is not on the server yet.
     /// </summary>
     public void Ask(AssistantAction action, Window? window)
     {
@@ -79,14 +82,24 @@ internal sealed partial class AssistantActions
             }
             return;
         }
-        list.SelectedIds((row, ids) =>
+        list.SelectedIds((rows, ids) =>
         {
-            if (Model.InOutbox(row.Message))
+            if (rows.Count == 0 || rows.Any(r => Model.InOutbox(r.Message)))
             {
                 return;
             }
-            IEnumerable<MessageId> newestFirst = row.Thread ? ids.Reverse() : ids;
-            HandOff(action, row.Message.AccountId, newestFirst.ToList(), window);
+            var first = rows[0];
+            if (rows.Count > 1)
+            {
+                if (action == AssistantAction.DraftReply)
+                {
+                    return;
+                }
+                HandOff(action, first.Message.AccountId, Selection.NewestFirst(Model, ids), window);
+                return;
+            }
+            IEnumerable<MessageId> newestFirst = first.Thread ? ids.Reverse() : ids;
+            HandOff(action, first.Message.AccountId, newestFirst.ToList(), window);
         });
     }
 

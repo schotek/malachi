@@ -143,7 +143,9 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         table.usesAutomaticRowHeights = true
         table.intercellSpacing = .zero
         table.allowsEmptySelection = true
-        table.allowsMultipleSelection = false
+        // Several rows (selection.go): ⌘-click, Shift-click and
+        // Shift-arrows, ⌘A; within one account, never the date headings.
+        table.allowsMultipleSelection = true
         table.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
         table.selectionHighlightStyle = .regular
         table.dataSource = self
@@ -155,6 +157,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         table.onUnfold = { [weak self] in self?.foldSelected(true) ?? false }
         table.onPage = { [weak self] up in self?.onPageReader?(up) ?? false }
         table.menuForRow = { [weak self] row in self?.menuForRow(row) }
+        table.onEscape = { [weak self] in self?.clearSeveral() ?? false }
 
         scroll.documentView = table
         scroll.hasVerticalScroller = true
@@ -463,8 +466,9 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
             collapsedDates.insert(group)
             // A hidden row must not remain the target of message actions.
             let visible = MailDateGroups.items(rows: list.rows, collapsed: collapsedDates)
-            if let selected = list.selectedKey, !visible.contains(.message(selected)) {
-                list.select(key: nil)
+            let kept = list.selectedKeys.filter { visible.contains(.message($0)) }
+            if kept != list.selectedKeys {
+                list.select(keys: kept)
             }
         }
         apply(rows: list.rows, hint: .keep)
@@ -538,24 +542,38 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         }
     }
 
-    /// Selects the controller's `selectedKey` without re-entering
-    /// `select(key:)`.
+    /// Selects the controller's `selectedKeys` without re-entering
+    /// `select(keys:)`.
     private func syncSelection() {
         let wasReselecting = isReselecting
         isReselecting = true
         defer { isReselecting = wasReselecting }
-        if usesDateGroups, let key = list.selectedKey, !keys.contains(.message(key)) {
-            revealDateGroup(for: key)
-        }
-        guard let key = list.selectedKey, let i = keys.firstIndex(of: .message(key)) else {
-            if table.selectedRow >= 0 {
-                table.deselectAll(nil)
+        if usesDateGroups {
+            for key in list.selectedKeys where !keys.contains(.message(key)) {
+                revealDateGroup(for: key)
             }
-            return
         }
-        if table.selectedRow != i {
-            table.selectRowIndexes(IndexSet(integer: i), byExtendingSelection: false)
+        var want = IndexSet()
+        for key in list.selectedKeys {
+            if let i = keys.firstIndex(of: .message(key)) {
+                want.insert(i)
+            }
         }
+        if table.selectedRowIndexes != want {
+            table.selectRowIndexes(want, byExtendingSelection: false)
+        }
+    }
+
+    /// The keys of the table's selected rows, in list order.
+    private func tableSelectedKeys() -> [ListKey] {
+        table.selectedRowIndexes.compactMap { i in i < keys.count ? keys[i].messageKey : nil }
+    }
+
+    /// Escape with several rows selected lets go of them (selection.go).
+    func clearSeveral() -> Bool {
+        guard table.selectedRowIndexes.count > 1 else { return false }
+        table.deselectAll(nil)
+        return true
     }
 
     /// The list settings changed (window.go, the settings handlers): every
@@ -653,15 +671,17 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         requestMore()
     }
 
-    /// A right click on `row`: a message row is selected (the menu acts on
-    /// the selection, as on Windows) and the list takes the keyboard, so
-    /// that the single-key actions a typing text field turns off are on.
+    /// A right click on `row`: a message row outside the selection becomes
+    /// it (the menu acts on the selection) and the list takes the
+    /// keyboard, so that the single-key actions a typing text field turns
+    /// off are on.
     private func menuForRow(_ row: Int) -> NSMenu? {
         guard row >= 0, row < keys.count, let key = keys[row].messageKey else { return nil }
-        if table.selectedRow != row {
+        // A row of the selection keeps it; another becomes the selection.
+        if !table.selectedRowIndexes.contains(row) {
             table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
         }
-        if list.selectedKey != key {
+        if !list.selectedKeys.contains(key) {
             list.select(key: key)
         }
         view.window?.makeFirstResponder(table)
@@ -694,7 +714,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
 
     private func activateSelected() -> Bool {
         let row = table.selectedRow
-        guard row >= 0, row < keys.count else { return false }
+        guard table.selectedRowIndexes.count == 1, row >= 0, row < keys.count else { return false }
         guard let key = keys[row].messageKey else { return false }
         list.activate(key: key)
         return true
@@ -705,7 +725,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     /// when there is nothing to do (threads.go `addThreadShortcuts`).
     private func foldSelected(_ on: Bool) -> Bool {
         let row = table.selectedRow
-        guard row >= 0, row < keys.count, let key = keys[row].messageKey, let r = rowsByKey[key], let tid = r.key.thread else { return false }
+        guard table.selectedRowIndexes.count == 1, row >= 0, row < keys.count, let key = keys[row].messageKey, let r = rowsByKey[key], let tid = r.key.thread else { return false }
         if on, r.member {
             return false
         }
@@ -748,9 +768,26 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         row >= 0 && row < keys.count && keys[row].messageKey != nil
     }
 
+    /// No date heading, and one account (selection.go `restrictSelection`):
+    /// the row the user adds decides whose, the clicked one or else one
+    /// not selected before.
+    func tableView(_ tableView: NSTableView, selectionIndexesForProposedSelection proposed: IndexSet) -> IndexSet {
+        let rows = proposed.filter { $0 < keys.count && keys[$0].messageKey != nil }
+        guard rows.count > 1 else { return IndexSet(rows) }
+        let proposedKeys = rows.compactMap { keys[$0].messageKey }
+        var latest = proposedKeys[proposedKeys.count - 1]
+        let clicked = table.clickedRow
+        if clicked >= 0, clicked < keys.count, let k = keys[clicked].messageKey, proposedKeys.contains(k) {
+            latest = k
+        } else if let added = rows.first(where: { !table.selectedRowIndexes.contains($0) }), let k = keys[added].messageKey {
+            latest = k
+        }
+        let kept = Set(list.restrict(proposedKeys, latest: latest))
+        return IndexSet(rows.filter { keys[$0].messageKey.map(kept.contains) ?? false })
+    }
+
     func tableViewSelectionDidChange(_ notification: Notification) {
         guard !isReselecting else { return }
-        let row = table.selectedRow
-        list.select(key: row >= 0 && row < keys.count ? keys[row].messageKey : nil)
+        list.select(keys: tableSelectedKeys())
     }
 }

@@ -258,7 +258,7 @@ public sealed class ApiRoundTripTests
         [nameof(DraftGetParams)] = Case<DraftGetParams>("""{"accountId":"acc_1","draftId":"d_1"}"""),
         [nameof(DraftGetResult)] = Case<DraftGetResult>("""{"draft":@draft@}"""),
         [nameof(DraftCreateParams)] = Case<DraftCreateParams>(
-            """{"accountId":"acc_1","mode":"replyAll","messageId":"m_1","mailto":"mailto:a@example.org","attribution":"On Tue, Alice wrote:","messageAccountId":"acc_j"}"""),
+            """{"accountId":"acc_1","mode":"replyAll","messageId":"m_1","mailto":"mailto:a@example.org","attribution":"On Tue, Alice wrote:","messageAccountId":"acc_j","messageIds":["m_2","m_3"]}"""),
         [nameof(DraftCreateResult)] = Case<DraftCreateResult>("""{"draft":@draft@,"quoted":"html","blocked":@blocked@,"skipped":[@attachment@]}"""),
         [nameof(DraftOpenParams)] = Case<DraftOpenParams>("""{"accountId":"acc_1","messageId":"m_1"}"""),
         [nameof(DraftOpenResult)] = Case<DraftOpenResult>("""{"draft":@draft@,"blocked":@blocked@,"skipped":[@attachment@]}"""),

@@ -408,6 +408,21 @@ heading Check for New Mail and folding; the selection stays
 of `ui/internal/contextmenu` (`MalachiCore/ContextMenu`), as in the GTK and
 Windows clients.
 
+## Selecting several messages
+
+⌘-click, Shift-click, Shift-arrows and Edit → Select All (⌘A) select
+several messages in the list, all of one account (a row of another
+account, in a search of every account, leaves only the rows of the
+account of the row added last); Escape lets go of them. The reading pane
+then shows only how many are selected and marks nothing read. The toolbar,
+the Message menu and the context menu act on all of them: read and unread,
+the star, Archive, Move To, Junk, Trash (in the Outbox: cancel sending
+them all after one question), Forward (one new message with each selected
+message attached, at most 20), Open in New Window (at most 10) and the
+Assistant's Summarize, Tasks and Ask. Reply, Reply All and Change Status
+are for one message. The rules are those of `ui/internal/selection`
+(`MalachiCore/Selection`), as in the GTK and Windows clients.
+
 ## Differences from the GTK UI
 
 The GTK UI is the template; the client deviates only where macOS

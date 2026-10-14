@@ -25,6 +25,16 @@ final class MessageListTableView: NSTableView {
     /// The context menu of the row clicked, which the closure selects
     /// first; nil for none (a date heading).
     var menuForRow: (@MainActor (Int) -> NSMenu?)?
+    /// Escape: lets go of several selected rows; false when there is
+    /// nothing to do, and Escape goes on up the responder chain.
+    var onEscape: (@MainActor () -> Bool)?
+
+    override func cancelOperation(_ sender: Any?) {
+        if onEscape?() == true {
+            return
+        }
+        super.cancelOperation(sender)
+    }
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let row = row(at: convert(event.locationInWindow, from: nil))

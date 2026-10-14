@@ -10,28 +10,46 @@
 // date_groups.go and row-selected and row-activated handlers, refreshListTitle,
 // showConnectionState's banner), messages.go (showListState, showLoadMore,
 // applyListAppearance), threads.go (syncRows, addThreadShortcuts),
-// context_menus.go (showMessageMenu, moveToMenu) and search.go (the scope
-// toggles, the filter hidden while searching, refreshSearchScope's
-// tooltips).
+// context_menus.go (showMessageMenu, commonFolder, moveToMenu), search.go
+// (the scope toggles, the filter hidden while searching, refreshSearchScope's
+// tooltips) and selection.go (setupSelection, onSelectionChanged,
+// restrictSelection, selectOnly, openSelection).
 //
 // The view mirrors ListController.Rows by key into MessageRows updated in
-// place (KeyedListSync's view overload) and selects SelectedKey after every
-// apply with its own handler suppressed; a click goes back as Select, and
-// never a deselection the collection caused (docs/windows-port.md §7.5).
+// place (KeyedListSync's view overload) and selects SelectedKeys after every
+// apply with its own handler suppressed; a click goes back as SelectKeys,
+// and never a deselection the collection caused (docs/windows-port.md
+// §7.5).
+//
+// Several rows (selection.go; MessageListViewController.swift's
+// allowsMultipleSelection, selectionIndexesForProposedSelection,
+// clearSeveral): the ListView's Extended selection, so Ctrl-click toggles a
+// row, Shift-click and Shift+arrows extend, Ctrl+A selects every row shown;
+// the date headings are the groups' headers, never items. The selection
+// stays within one account: the rows of another account than the row the
+// user added last (the focused one when it is selected, else the first this
+// change added) leave it (ListController.Restrict). Escape lets go of
+// several rows; with one it goes on as before. Several rows never take a
+// folded window to the message page (MessageChosen is for one), and Enter,
+// Left, Right and Space do what they do for one row only.
 // Paging is Core's (MailboxController.Paging.cs): the view reports the
 // viewport after every change of the rows' extent or the pane's size and on
 // every scroll, and shows Load More for retries or while inbox sections are collapsed.
 //
 // The context menu of a message (context_menus.go showMessageMenu and
 // moveToMenu; what it offers is Core's ContextMenu, the port of
-// ui/internal/contextmenu): a right click, Shift+F10 or the Menu key
-// selects the row first (without showing the message in a folded window,
-// where the list stays in sight under the menu; a click on the row selected
-// so shows it there, as a click on any other row does), and the items act
-// on the selection through the window's commands, enabled as the command
-// row's are; Open in New Window (Edit for a draft) opens it as activating
-// its row does, Move To lists the account's folders as the sidebar orders
-// them, and the Assistant's submenu is the ✦ menu's items.
+// ui/internal/contextmenu): a right click, Shift+F10 or the Menu key on a
+// row outside the selection selects that row alone first (without showing
+// the message in a folded window, where the list stays in sight under the
+// menu; a click on the row selected so shows it there, as a click on any
+// other row does), on a row of a selection of several rows keeps it (the
+// keyboard on a row outside it: the selection's menu at its first row), and
+// the items act on the selection through the window's commands, enabled as
+// the command row's are; Open in New Window (Edit for a draft) opens it as
+// activating its row does (several rows: a window each, up to
+// Selection.MaxOpen), Move To lists the account's folders as the sidebar
+// orders them (the current folder disabled when every row is in it), and
+// the Assistant's submenu is the ✦ menu's items for that many rows.
 //
 // The keyboard goes to the list on request (the end of a search, the back
 // button): the request waits until rows are shown and their containers are
@@ -147,7 +165,11 @@ public sealed partial class MessageListPane : UserControl
         };
     }
 
-    /// <summary>The user selected a message (window.go onMessageRowSelected: innerSplit.SetShowContent).</summary>
+    /// <summary>
+    /// The user selected a message (window.go onMessageRowSelected:
+    /// innerSplit.SetShowContent); never for several rows, which stay in
+    /// the list.
+    /// </summary>
     public event EventHandler? MessageChosen;
 
     /// <summary>The sign-in banner's button (sync.go onAuthBannerButton).</summary>
@@ -320,9 +342,23 @@ public sealed partial class MessageListPane : UserControl
         reselecting = true;
         try
         {
-            dateList.Apply(l.Rows, mailbox.Model.ListFolder,
-                !l.SearchActive && l.FolderRole == FolderRole.Inbox, l.SelectedKey,
+            var selected = l.SelectedKeys;
+            var folder = mailbox.Model.ListFolder;
+            var sections = !l.SearchActive && l.FolderRole == FolderRole.Inbox;
+            void Apply() => dateList.Apply(l.Rows, folder, sections, selected.Count > 0 ? selected[0] : (ListKey?)null,
                 (view, row, now) => view.Update(row, l.RowMessage(row.Message), look, now));
+            Apply();
+            // Every selected row in sight (date_groups.go syncDateRows): a
+            // flag may have moved one of several into a folded section.
+            var revealed = false;
+            for (var i = 1; i < selected.Count; i++)
+            {
+                revealed |= dateList.Reveal(selected[i]);
+            }
+            if (revealed)
+            {
+                Apply();
+            }
             var source = dateList.Enabled ? (object)groupedSource.View : Rows;
             if (!ReferenceEquals(MessageList.ItemsSource, source))
             {
@@ -346,38 +382,95 @@ public sealed partial class MessageListPane : UserControl
         return (now.Date, now.Offset, CultureInfo.CurrentCulture.DateTimeFormat.FirstDayOfWeek);
     }
 
+    // date_groups.go toggleDateGroup: the selected rows a fold hides leave
+    // the selection (the pane follows), or the next apply would unfold
+    // their section again.
     private void OnDateGroupClicked(object sender, RoutedEventArgs e)
     {
         if (sender is Button { DataContext: MailDateSectionRow section } && list is { } l)
         {
-            if (dateList.Toggle(section.Group, l.SelectedKey))
+            // The rows a fold hides (an unfold hides none: a folded
+            // section has no rows).
+            var hidden = section.Rows.Select(r => r.Key).ToHashSet();
+            _ = dateList.Toggle(section.Group, null);
+            ListKey[] kept = [.. l.SelectedKeys.Where(k => !hidden.Contains(k))];
+            if (kept.Length != l.SelectedKeys.Count)
             {
-                l.Select(null);
+                l.SelectKeys(kept);
             }
             ApplyRows();
         }
     }
 
-    // syncSelection: the controller's SelectedKey, without re-entering Select.
+    // syncSelection: the controller's SelectedKeys, without re-entering
+    // SelectKeys; a key the view does not show is left out.
     private void SyncSelection()
     {
         if (list is null)
         {
             return;
         }
-        var wanted = list.SelectedKey is { } key ? Rows.FirstOrDefault(r => r.Key == key) : null;
-        if (ReferenceEquals(MessageList.SelectedItem, wanted))
+        var byKey = new Dictionary<ListKey, MessageRow>();
+        foreach (var r in Rows)
+        {
+            byKey.TryAdd(r.Key, r);
+        }
+        var wanted = new List<MessageRow>();
+        foreach (var key in list.SelectedKeys)
+        {
+            if (byKey.TryGetValue(key, out var row))
+            {
+                wanted.Add(row);
+            }
+        }
+        var wantedSet = wanted.ToHashSet();
+        var selected = MessageList.SelectedItems;
+        var current = selected.OfType<MessageRow>().ToHashSet();
+        if (current.Count == selected.Count && current.SetEquals(wantedSet))
         {
             return;
         }
         reselecting = true;
         try
         {
-            MessageList.SelectedItem = wanted;
+            for (var i = selected.Count - 1; i >= 0; i--)
+            {
+                if (selected[i] is not MessageRow r || !wantedSet.Contains(r))
+                {
+                    selected.RemoveAt(i);
+                }
+            }
+            foreach (var row in wanted)
+            {
+                if (!current.Contains(row))
+                {
+                    selected.Add(row);
+                }
+            }
         }
         finally
         {
             reselecting = false;
+        }
+    }
+
+    // The selected rows in the list's order (SelectedItems keeps the order
+    // they were selected in).
+    private List<MessageRow> SelectedRowsInOrder()
+    {
+        var selected = MessageList.SelectedItems.OfType<MessageRow>().ToHashSet();
+        return [.. Rows.Where(selected.Contains)];
+    }
+
+    // selectOnly: row becomes the whole selection, as a plain click makes
+    // it; the selection handler runs for it.
+    private void SelectOnly(MessageRow row)
+    {
+        MessageList.SelectedItem = row;
+        // What an Extended selection kept beside it goes as well.
+        foreach (var other in MessageList.SelectedItems.OfType<MessageRow>().Where(r => !ReferenceEquals(r, row)).ToList())
+        {
+            MessageList.SelectedItems.Remove(other);
         }
     }
 
@@ -601,9 +694,10 @@ public sealed partial class MessageListPane : UserControl
         }
     }
 
-    // The row the user selected (window.go row-selected →
-    // onMessageRowSelected); a deselection the collection caused is not
-    // the user's and never goes back.
+    // The rows the user selected (window.go row-selected →
+    // onMessageRowSelected; selection.go onSelectionChanged): one shows its
+    // message, several their count, within one account; a deselection the
+    // collection caused is not the user's and never goes back.
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (reselecting || list is null)
@@ -611,21 +705,51 @@ public sealed partial class MessageListPane : UserControl
             return;
         }
         EndFocusRequest();
-        var row = MessageList.SelectedItem as MessageRow;
-        list.Select(row?.Key);
-        if (row is not null && !selectingForMenu)
+        var rows = SelectedRowsInOrder();
+        IReadOnlyList<ListKey> keys = rows.Count > 1 ? Restricted(rows, e) : [.. rows.Select(r => r.Key)];
+        list.SelectKeys(keys);
+        // The rows of another account (restrictSelection) leave the view's
+        // selection too.
+        SyncSelection();
+        if (keys.Count == 1 && !selectingForMenu)
         {
             MessageChosen?.Invoke(this, EventArgs.Empty);
         }
     }
 
+    // selection.go restrictSelection: the keys of rows (two or more, in
+    // list order) within the account of the row the user added last: the
+    // focused one when it is selected, else the first this change added,
+    // else the last.
+    private IReadOnlyList<ListKey> Restricted(List<MessageRow> rows, SelectionChangedEventArgs e)
+    {
+        var latest = rows[^1];
+        var added = e.AddedItems.OfType<MessageRow>().ToHashSet();
+        if (FocusedRow() is { } focused && rows.Contains(focused))
+        {
+            latest = focused;
+        }
+        else if (rows.FirstOrDefault(added.Contains) is { } first)
+        {
+            latest = first;
+        }
+        ListKey[] keys = [.. rows.Select(r => r.Key)];
+        return list is { } l ? l.Restrict(keys, latest.Key) : keys;
+    }
+
+    // The row whose container has the keyboard, if any.
+    private MessageRow? FocusedRow() =>
+        XamlRoot is { } root && FocusManager.GetFocusedElement(root) is DependencyObject focused ? RowAt(focused, out _) : null;
+
     // Windows addition: a click on the row already selected shows it too,
     // which a folded window needs for a row a context menu selected (or one
     // left selected by the back button); a click that selects shows it
     // through OnSelectionChanged, and a second MessageChosen is harmless.
+    // Not for several rows, which stay in the list.
     private void OnRowTapped(object sender, TappedRoutedEventArgs e)
     {
-        if (RowAt(e.OriginalSource as DependencyObject, out var inButton) is { } row && !inButton && ReferenceEquals(MessageList.SelectedItem, row))
+        if (RowAt(e.OriginalSource as DependencyObject, out var inButton) is { } row && !inButton
+            && MessageList.SelectedItems.Count == 1 && ReferenceEquals(MessageList.SelectedItem, row))
         {
             MessageChosen?.Invoke(this, EventArgs.Empty);
         }
@@ -643,7 +767,7 @@ public sealed partial class MessageListPane : UserControl
         {
             return;
         }
-        MessageList.SelectedItem = row;
+        SelectOnly(row);
         MessageList.ScrollIntoView(row);
         MessageList.UpdateLayout();
         if (MessageList.ContainerFromItem(row) is ListViewItem item)
@@ -655,9 +779,28 @@ public sealed partial class MessageListPane : UserControl
     // MessageListTableView.keyDown: Enter opens the selected row (a
     // conversation folds instead), Left folds its conversation, Right
     // unfolds a conversation row; a key with nothing to do goes on to the
-    // list (threads.go addThreadShortcuts).
+    // list (threads.go addThreadShortcuts). Those are for one selected row;
+    // Escape lets go of several, and Ctrl+A selects every row shown
+    // (selection.go setupSelection).
     private void OnListKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (e.Key == WinKey.Escape)
+        {
+            // With one row (or none) it goes on to the window.
+            if (MessageList.SelectedItems.Count > 1)
+            {
+                MessageList.SelectedItems.Clear();
+                e.Handled = true;
+            }
+            return;
+        }
+        if (e.Key == WinKey.A && ModifierDown(WinKey.Control) && !ModifierDown(WinKey.Shift) && !ModifierDown(WinKey.Menu))
+        {
+            // The ListView's own key in Extended mode, made sure of.
+            MessageList.SelectAll();
+            e.Handled = true;
+            return;
+        }
         // A disclosure button owns Enter/Space/arrows while it has focus.
         for (var source = e.OriginalSource as DependencyObject; source is not null && source != MessageList;
             source = VisualTreeHelper.GetParent(source))
@@ -667,7 +810,7 @@ public sealed partial class MessageListPane : UserControl
                 return;
             }
         }
-        if (list is not { } l || MessageList.SelectedItem is not MessageRow row)
+        if (list is not { } l || MessageList.SelectedItems.Count != 1 || MessageList.SelectedItem is not MessageRow row)
         {
             return;
         }
@@ -718,36 +861,49 @@ public sealed partial class MessageListPane : UserControl
         return source is ListViewItem item ? MessageList.ItemFromContainer(item) as MessageRow : null;
     }
 
-    // context_menus.go showMessageMenu: the row is selected, then its menu
-    // is ContextMenu.MessageItems in its groups, a separator between two.
+    // context_menus.go showMessageMenu: the menu of the selection the row
+    // belongs to, or of the row alone, selected first; it is
+    // ContextMenu.MessageItems in its groups, a separator between two.
     private void OnContextRequested(UIElement sender, ContextRequestedEventArgs e)
     {
         if (commands is not { } c || list is not { } l || RowAt(e.OriginalSource as DependencyObject, out _) is not { } row)
         {
             return;
         }
-        if (!ReferenceEquals(MessageList.SelectedItem, row))
+        if (!MessageList.SelectedItems.Contains(row))
         {
-            // The actions act on the selection, so the row is selected; a
-            // folded window stays on the list, under the menu.
-            selectingForMenu = true;
-            try
+            if (!e.TryGetPosition(this, out _) && SelectedRowsInOrder() is { Count: > 0 } selection)
             {
-                MessageList.SelectedItem = row;
+                // Shift+F10 or the Menu key on a row outside the selection
+                // (Ctrl+arrows moved the keyboard): the selection's menu, at
+                // its first row (context_menus.go wireContextMenus).
+                row = selection[0];
             }
-            finally
+            else
             {
-                selectingForMenu = false;
+                // The actions act on the selection, so the row becomes it; a
+                // folded window stays on the list, under the menu.
+                selectingForMenu = true;
+                try
+                {
+                    SelectOnly(row);
+                }
+                finally
+                {
+                    selectingForMenu = false;
+                }
             }
         }
-        if (l.SelectedRow is not { } selected)
+        var rows = l.SelectedRows;
+        if (rows.Count == 0)
         {
             return;
         }
+        var first = rows[0];
         var flags = c.Flags;
         var assistant = AssistantMenu is { Shown: true } shown ? shown : null;
-        var state = ContextMenu.MessageState.Of(flags, draft: l.Mailbox.Model.InDrafts(selected.Message), assistant: assistant is not null);
-        var labels = new ContextMenu.Labels { Comment = flags.Comment, Flagged = flags.Flagged, Outbox = flags.Outbox };
+        var state = ContextMenu.MessageState.Of(flags, draft: l.Mailbox.Model.InDrafts(first.Message), assistant: assistant is not null);
+        var labels = new ContextMenu.Labels { Comment = flags.Comment, Flagged = flags.Flagged, Outbox = flags.Outbox, Count = rows.Count };
         var menu = new MenuFlyout();
         foreach (var group in ContextMenu.MessageItems(state))
         {
@@ -757,7 +913,7 @@ public sealed partial class MessageListPane : UserControl
             }
             foreach (var it in group)
             {
-                menu.Items.Add(MessageMenuItem(it, labels, c, selected.Message, assistant));
+                menu.Items.Add(MessageMenuItem(it, labels, c, rows, assistant));
             }
         }
         e.Handled = true;
@@ -776,10 +932,10 @@ public sealed partial class MessageListPane : UserControl
     }
 
     // One item of the message menu: Open in New Window (Edit) and Move To
-    // the pane's own, the Assistant the ✦ menu's items, the rest the
-    // window's commands (context_menus.go messageMenuActions), enabled when
-    // the model and the command both say so.
-    private MenuFlyoutItemBase MessageMenuItem(ContextMenu.Item it, ContextMenu.Labels labels, WindowCommands c, MessageSummary message, AssistantMenu? assistant)
+    // the pane's own, the Assistant the ✦ menu's items for that many rows,
+    // the rest the window's commands (context_menus.go messageMenuActions),
+    // enabled when the model and the command both say so.
+    private MenuFlyoutItemBase MessageMenuItem(ContextMenu.Item it, ContextMenu.Labels labels, WindowCommands c, IReadOnlyList<ListRow> rows, AssistantMenu? assistant)
     {
         MenuFlyoutItemBase item;
         switch (it.Id)
@@ -796,7 +952,7 @@ public sealed partial class MessageListPane : UserControl
                     var sub = new MenuFlyoutSubItem();
                     if (it.Enabled)
                     {
-                        FillMoveTargets(sub.Items, message);
+                        FillMoveTargets(sub.Items, rows[0].Message.AccountId, CommonFolder(rows));
                     }
                     sub.IsEnabled = sub.Items.Count > 0;
                     item = sub;
@@ -805,7 +961,7 @@ public sealed partial class MessageListPane : UserControl
             case ContextMenu.ItemId.Assistant:
                 {
                     var sub = new MenuFlyoutSubItem();
-                    assistant?.FillMessageMenu(sub.Items);
+                    assistant?.FillMessageMenu(sub.Items, rows.Count);
                     sub.IsEnabled = sub.Items.Count > 0;
                     item = sub;
                     break;
@@ -840,17 +996,33 @@ public sealed partial class MessageListPane : UserControl
         _ => null,
     };
 
-    // context_menus.go moveToMenu: the folders of the message's account as
-    // the sidebar orders them (its tree, nothing folded, no Favourites),
-    // indented by depth; the current folder and the containers disabled.
-    // A folder's name is the server's: plain text, never a mnemonic.
-    private void FillMoveTargets(IList<MenuFlyoutItemBase> items, MessageSummary message)
+    // context_menus.go commonFolder: the folder every row is in, null when
+    // they differ (a search).
+    private static FolderId? CommonFolder(IReadOnlyList<ListRow> rows)
     {
-        if (mailbox is not { } m || m.Model.Account(message.AccountId) is not { } account)
+        var folder = rows[0].Message.FolderId;
+        for (var i = 1; i < rows.Count; i++)
+        {
+            if (rows[i].Message.FolderId != folder)
+            {
+                return null;
+            }
+        }
+        return folder;
+    }
+
+    // context_menus.go moveToMenu: the folders of the selection's account as
+    // the sidebar orders them (its tree, nothing folded, no Favourites),
+    // indented by depth; the current folder (when every row is in one) and
+    // the containers disabled. A folder's name is the server's: plain text,
+    // never a mnemonic.
+    private void FillMoveTargets(IList<MenuFlyoutItemBase> items, AccountId accountId, FolderId? current)
+    {
+        if (mailbox is not { } m || m.Model.Account(accountId) is not { } account)
         {
             return;
         }
-        IReadOnlyList<Folder> folders = m.Model.Folders.TryGetValue(message.AccountId, out var known) ? known : [];
+        IReadOnlyList<Folder> folders = m.Model.Folders.TryGetValue(accountId, out var known) ? known : [];
         var entries = new List<ContextMenu.Entry>();
         foreach (var e in FolderTree.FolderTreeRows(account, folders, new CollapseState(), new FavouriteState()))
         {
@@ -859,7 +1031,7 @@ public sealed partial class MessageListPane : UserControl
                 entries.Add(new ContextMenu.Entry(f, e.Depth));
             }
         }
-        foreach (var t in ContextMenu.MoveTargets(entries, message.FolderId))
+        foreach (var t in ContextMenu.MoveTargets(entries, current ?? new FolderId("")))
         {
             var title = FolderTree.FolderTitle(t.Folder);
             // An em space per level, about the sidebar's 12 px.
@@ -872,17 +1044,28 @@ public sealed partial class MessageListPane : UserControl
         }
     }
 
-    // window.go open-message: the selected row's message opens as
-    // activating it does (a draft in the compose window).
+    // window.go open-message (selection.go openSelection): the selected
+    // row's message opens as activating it does (a draft in the compose
+    // window), or a window for each of several rows (the newest member of a
+    // conversation row), at most Selection.MaxOpen.
     private void OpenSelected()
     {
-        if (actions is { } a && list?.SelectedRow?.Message is { } s)
+        if (actions is not { } a || list is not { } l)
         {
-            a.OpenMessage(s);
+            return;
+        }
+        var rows = l.SelectedRows;
+        if (rows.Count > 1)
+        {
+            a.OpenMessages([.. rows.Select(r => r.Message)]);
+        }
+        else if (rows.Count == 1)
+        {
+            a.OpenMessage(rows[0].Message);
         }
     }
 
-    // window.go move-to: every message the selected row stands for.
+    // window.go move-to: every message the selected rows stand for.
     private void MoveSelectedTo(FolderId target)
     {
         if (actions is { } a)

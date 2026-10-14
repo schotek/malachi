@@ -10,19 +10,19 @@ namespace Malachi.Core.Controllers;
 /// <summary>
 /// How the selection was reconciled with a new set of rows (threads.go
 /// <c>reconcileRows</c>), handed to the view with the rows so it can mirror
-/// the controller's <see cref="ListController.SelectedKey"/> afterwards.
+/// the controller's <see cref="ListController.SelectedKeys"/> afterwards.
 /// </summary>
 public enum SelectionHint
 {
     /// <summary>
-    /// The same key stays selected; when a member row folded away its
-    /// conversation row takes over; otherwise the selection is dropped.
+    /// The same keys stay selected; when a member row folded away its
+    /// conversation row takes over; a key that is gone leaves the selection.
     /// </summary>
     Keep,
 
     /// <summary>
-    /// As <see cref="Keep"/>, but a selected row that is gone hands the
-    /// selection to the row now at its place (a removal).
+    /// As <see cref="Keep"/>, but when every selected row is gone the
+    /// selection goes to the row now at the first one's place (a removal).
     /// </summary>
     Neighbour,
 

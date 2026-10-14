@@ -2201,7 +2201,9 @@ backend has none.
              "messageId" (opt; required unless mode is new),
              "mailto": "mailto:…" (opt, new only),
              "attribution": "On …, X wrote:" (opt; reply and forward),
-             "messageAccountId" (opt; forward only) }`
+             "messageAccountId" (opt; forward only),
+             "messageIds": [MessageId] (opt; forward only, instead of
+             `messageId`) }`
 - result: `{ "draft": Draft, "quoted": "html" | "text" | "none",
              "blocked": BlockedContent, "skipped": [Attachment] (opt) }`
 - errors: invalidArgument (mode, a missing `messageId`, `mailto` or
@@ -2209,7 +2211,9 @@ backend has none.
   control characters, a mode the account's capabilities do not allow — a
   forward needs `compose` of `accountId` and `forward` of the message's
   account —, `messageAccountId` with another mode than `forward`, a
-  message of a `jira` account whose issue is not stored),
+  message of a `jira` account whose issue is not stored, `messageIds`
+  with another mode than `forward`, with `messageId`, with an empty id,
+  or with fewer than 2 or more than 20 distinct ids),
   accountNotFound (also `messageAccountId`),
   messageNotFound, storageError (a copy of a part could not be stored;
   nothing is left behind)
@@ -2231,6 +2235,19 @@ Per mode:
 - `forward`: no recipients, `Fwd:` + the stripped subject, `forwarding`
   set, and every part of the original that is not its body imported into
   the attachment store (see below).
+- `forward` with `messageIds` (several messages at once, the clients'
+  selection of several rows): no recipients, `Fwd:` + the stripped subject
+  of the newest of them, nothing quoted (`quoted: "none"`, empty bodies),
+  `forwarding` the newest of them (a client keeps the sending account as
+  for any forward), and each message attached whole as
+  `message/rfc822` named `<subject>.eml`, newest first. Nothing is
+  downloaded for it: a message comes from the whole copy
+  `message.download` holds in memory, else from its stored file when that
+  is whole; one that is not (parts kept on the mail server only, a body
+  not downloaded) is listed in `skipped` with `remote` set, one over the
+  caps below without it. All the messages are of one account
+  (`messageAccountId`, else `accountId`). The SMTP builder sends such an
+  attachment as `application/octet-stream`, as every `message/*` part.
 - `new`: an empty draft, or the `mailto:` URI parsed — `to` (the path and
   `to=`), `cc`, `bcc`, `subject`, `body`; nothing else is interpreted,
   unusable addresses are dropped, the body is escaped into `htmlBody`.
@@ -3873,6 +3890,10 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   the user edited it and is deleted when untouched. New `draft.get` (one draft as `draft.list` lists it) and
   `board.unflag` (clears the flags behind `hot.flagged`). No new error
   codes; `ProtocolVersion` stays 2.
+- **2** (2026-10-14, compatible addition: forwarding several messages,
+  §4.5): `draft.create` `messageIds` (mode `forward`, 2–20 messages of one
+  account, each attached whole as `message/rfc822`, nothing downloaded,
+  the rest in `skipped`). No new error codes; `ProtocolVersion` stays 2.
 - **2** (2026-10-14, compatible addition: folder actions of the
   clients' context menus, §4.2): new `folder.markRead` (every stored,
   unhidden unread message of a folder read) and `folder.empty` (every

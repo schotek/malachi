@@ -109,6 +109,10 @@ final class AssistantPanelHost {
     /// The list's selection as the panel's context; nil for none or an
     /// Outbox message.
     func selectionContext() -> AssistantPanelController.Context? {
+        let rows = list.selectedRows
+        if rows.count > 1 {
+            return severalContext(rows)
+        }
         guard let row = list.selectedRow, !model.inOutbox(row.message) else { return nil }
         let account = row.message.accountId.rawValue
         guard row.thread else {
@@ -132,6 +136,33 @@ final class AssistantPanelHost {
             count: max(row.summary?.messageCount ?? 2, 2), partial: true, subject: subject, threadID: thread)
     }
 
+    /// Several selected rows (one account) as the panel's context: every
+    /// message they stand for, newest first; a conversation whose members
+    /// are not known yet stands by its newest message until they are asked
+    /// for (partial). nil when one is queued.
+    private func severalContext(_ rows: [ListRow]) -> AssistantPanelController.Context? {
+        var ids: [MessageID] = []
+        var partial = false
+        var count = 0
+        for r in rows {
+            if model.inOutbox(r.message) {
+                return nil
+            }
+            if let got = model.rowIDs(r) {
+                ids += got
+                count += got.count
+            } else {
+                ids.append(r.message.id)
+                count += max(r.summary?.messageCount ?? 1, 1)
+                partial = true
+            }
+        }
+        let account = rows[0].message.accountId.rawValue
+        return AssistantPanelController.Context(
+            selection: Assistant.Selection(accountID: account, messageIDs: model.newestFirst(ids).map(\.rawValue)),
+            count: count, partial: partial, subject: Selection.selectedText(rows.count), threadID: "")
+    }
+
     /// One message as the panel's context.
     static func context(of s: MessageSummary) -> AssistantPanelController.Context {
         AssistantPanelController.Context(
@@ -152,12 +183,26 @@ final class AssistantPanelHost {
     private func resolve(
         _ context: AssistantPanelController.Context, _ done: @escaping @MainActor (Assistant.Selection) -> Void
     ) {
+        if list.selectedRows.count > 1 {
+            // Several rows: every member of their conversations, once
+            // known, while the selection is of the context's account.
+            list.selectedIDs { [weak self] rows, ids in
+                guard let self, rows.first?.message.accountId.rawValue == context.selection.accountID else {
+                    done(context.selection)
+                    return
+                }
+                done(Assistant.Selection(
+                    accountID: context.selection.accountID, messageIDs: self.model.newestFirst(ids).map(\.rawValue)))
+            }
+            return
+        }
         guard let row = list.selectedRow, row.thread, row.message.accountId.rawValue == context.selection.accountID,
               context.selection.messageIDs.first == row.message.id.rawValue else {
             done(context.selection)
             return
         }
-        list.selectedIDs { row, ids in
+        list.selectedIDs { rows, ids in
+            guard let row = rows.first else { return }
             done(Assistant.Selection(accountID: row.message.accountId.rawValue, messageIDs: ids.reversed().map(\.rawValue)))
         }
     }

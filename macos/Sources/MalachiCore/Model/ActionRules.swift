@@ -25,6 +25,11 @@ public enum MessageActionKind: Sendable, Hashable, CaseIterable {
 /// What the per-message header buttons and actions allow for the selected
 /// row (actions.go `setMessageActionsSensitive`).
 public struct ActionFlags: Sendable, Equatable {
+    /// How many rows are selected (several: `Selection.combine`).
+    public var count: Int
+    /// Open in New Window can open them (several: at most
+    /// `Selection.maxOpen`).
+    public var open: Bool
     /// Something is selected and the actions are on at all.
     public var on: Bool
     /// The row is a queued outgoing message: the trash button cancels the
@@ -59,11 +64,13 @@ public struct ActionFlags: Sendable, Equatable {
     public var unsupported: Set<MessageActionKind>
 
     public init(
-        on: Bool = false, outbox: Bool = false, flagged: Bool = false, reply: Bool = false, replyAll: Bool = false,
+        count: Int = 0, open: Bool = false, on: Bool = false, outbox: Bool = false, flagged: Bool = false, reply: Bool = false, replyAll: Bool = false,
         forward: Bool = false, star: Bool = false, trash: Bool = false, archive: Bool = false, junk: Bool = false,
         move: Bool = false, markRead: Bool = false, markUnread: Bool = false, toggleFlag: Bool = false, loadImages: Bool = false,
         trustSender: Bool = false, comment: Bool = false, unsupported: Set<MessageActionKind> = []
     ) {
+        self.count = count
+        self.open = open
         self.on = on
         self.outbox = outbox
         self.flagged = flagged
@@ -122,7 +129,7 @@ public func messageActionState(_ row: ListRow?, on: Bool = true, model: MailMode
     let supported = Capabilities.supported(situation)
     let available = Capabilities.available(situation)
     return ActionFlags(
-        on: true, outbox: outbox, flagged: flagged,
+        count: 1, open: true, on: true, outbox: outbox, flagged: flagged,
         reply: available.reply, replyAll: available.replyAll, forward: available.forward,
         star: !outbox,
         trash: available.trash,

@@ -589,7 +589,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         case Action.moveToTrash: return f.trash
         case Action.loadImages: return f.loadImages
         case Action.trustSender: return f.trustSender
-        case Action.openMessage: return f.on
+        case Action.openMessage: return f.on && f.open
         case Action.moveToFolder: return f.move
         // A message not in the Outbox, and the chosen Claude app can read
         // the mail (ui/internal/assistant `Pick`, no fallback).
@@ -631,6 +631,13 @@ extension MainWindowController: NSUserInterfaceValidations {
                 menuItem.state = mode.rawValue == menuItem.tag ? .on : .off
             case Action.setBoardStyle:
                 validateBoardStyle(menuItem)
+            case Action.askAssistant:
+                // Several rows: Ask names them, Draft a Reply… (one
+                // message) is not offered (Assistant.messageActionsFor).
+                if let a = AssistantMenu.action(tag: menuItem.tag) {
+                    menuItem.title = Assistant.labelFor(a, count: f.count)
+                    menuItem.isHidden = !Assistant.messageActionsFor(f.count).contains(a)
+                }
             default: break
             }
             ActionPresentation.present(menuItem, action, f)

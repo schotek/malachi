@@ -408,14 +408,34 @@ func (a *Assistant) notify() {
 // why above "Set Up the Assistant…". update brings that last section up to
 // date; the button calls it as its menu opens.
 func (a *Assistant) assistantMenu(prefix string, unread bool) (menu *gio.Menu, update func()) {
+	return a.assistantMenuFor(prefix, unread, 1)
+}
+
+// assistantMenuFor is assistantMenu for count selected rows (a message's
+// context menu on several): the actions that make sense for them
+// (assistant.MessageActionsFor, assistant.LabelFor).
+func (a *Assistant) assistantMenuFor(prefix string, unread bool, count int) (menu *gio.Menu, update func()) {
+	return a.assistantMenuCounting(prefix, unread, func() int { return count })
+}
+
+// assistantMenuCounting is assistantMenuFor with the count asked again at
+// each update (the main window's toolbar button, whose rows change): the
+// actions follow it between one row and several.
+func (a *Assistant) assistantMenuCounting(prefix string, unread bool, count func() int) (menu *gio.Menu, update func()) {
 	texts := assistant.Texts(tr)
 	menu = gio.NewMenu()
 	actions := gio.NewMenu()
-	for _, act := range assistant.MessageActions {
-		item := gio.NewMenuItem(assistant.Label(tr, act), "")
-		item.SetActionAndTargetValue(prefix+".assistant", glib.NewVariantString(string(act)))
-		actions.AppendItem(item)
+	several := count() > 1
+	fill := func() {
+		n := count()
+		actions.RemoveAll()
+		for _, act := range assistant.MessageActionsFor(n) {
+			item := gio.NewMenuItem(assistant.LabelFor(tr, act, n), "")
+			item.SetActionAndTargetValue(prefix+".assistant", glib.NewVariantString(string(act)))
+			actions.AppendItem(item)
+		}
 	}
+	fill()
 	menu.AppendSection("", actions)
 	if unread {
 		folder := gio.NewMenu()
@@ -436,6 +456,10 @@ func (a *Assistant) assistantMenu(prefix string, unread bool) (menu *gio.Menu, u
 	setup := gio.NewMenu()
 	menu.AppendSection("", setup)
 	update = func() {
+		if s := count() > 1; s != several {
+			several = s
+			fill()
+		}
 		setup.RemoveAll()
 		target, ok := a.pick(true)
 		if ok {
@@ -454,10 +478,14 @@ func (a *Assistant) assistantMenu(prefix string, unread bool) (menu *gio.Menu, u
 // uses the last known one) and calls opening first, which brings the
 // window's actions up to date. In the window with the panel (openPanel
 // not nil) and In App chosen, the button has no menu and a click calls
-// openPanel instead (assistant.ButtonOpensPanel). The returned function
-// stops following.
-func (a *Assistant) bindAssistantButton(b *gtk.MenuButton, prefix string, unread bool, opening, openPanel func()) (unbind func()) {
-	menu, update := a.assistantMenu(prefix, unread)
+// openPanel instead (assistant.ButtonOpensPanel). count, when not nil, is
+// how many rows the actions are for (the main window's selection; nil is
+// one). The returned function stops following.
+func (a *Assistant) bindAssistantButton(b *gtk.MenuButton, prefix string, unread bool, opening, openPanel func(), count func() int) (unbind func()) {
+	if count == nil {
+		count = func() int { return 1 }
+	}
+	menu, update := a.assistantMenuCounting(prefix, unread, count)
 	opensPanel := func() bool { return assistant.ButtonOpensPanel(a.target(), openPanel != nil) }
 	// setModel gives b its menu, or none while a click opens the panel
 	// (the create-popup function keeps the button sensitive without one).
@@ -577,11 +605,20 @@ func (w *Window) askAssistant(act assistant.Action) {
 		}
 		return
 	}
-	w.selectedIDs(func(row listRow, ids []api.MessageID) {
-		if w.model.inOutbox(row.Message) {
+	w.selectedIDs(func(rows []listRow, ids []api.MessageID) {
+		for _, row := range rows {
+			if w.model.inOutbox(row.Message) {
+				return
+			}
+		}
+		if len(rows) > 1 {
+			if act == assistant.DraftReply {
+				return // answers one message (assistant.MessageActionsFor)
+			}
+			w.handOff(&w.ApplicationWindow.Window, act, rows[0].Message.AccountID, w.newestFirstIDs(ids), w.Toast)
 			return
 		}
-		w.handOff(&w.ApplicationWindow.Window, act, row.Message.AccountID, newestFirst(ids, row.Thread), w.Toast)
+		w.handOff(&w.ApplicationWindow.Window, act, rows[0].Message.AccountID, newestFirst(ids, rows[0].Thread), w.Toast)
 	})
 }
 
@@ -656,9 +693,13 @@ func (w *Window) summarizeUnread() {
 // target can run them (the menu then says why not instead).
 func (w *Window) syncAssistantActions() {
 	_, ok := w.assist.pick(true)
-	row, selected := w.selectedRow()
+	rows := w.selectedRows()
+	enabled := ok && len(rows) > 0
+	for _, row := range rows {
+		enabled = enabled && !w.model.inOutbox(row.Message)
+	}
 	if a := w.actions["assistant"]; a != nil {
-		a.SetEnabled(ok && selected && !w.model.inOutbox(row.Message))
+		a.SetEnabled(enabled)
 	}
 	if a := w.actions["assistant-unread"]; a != nil {
 		a.SetEnabled(ok && w.canSummarizeUnread())

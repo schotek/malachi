@@ -502,7 +502,7 @@ msgid "The assistant stopped: %s"
 msgstr "Asistent skončil: %s"
 
 #. TRANSLATORS: The menu that hands the selected mail to Claude Desktop or Claude Code, and its settings group.
-#: ui/internal/assistant/assistant.go:470 ui/internal/contextmenu/text.go:74
+#: ui/internal/assistant/assistant.go:470 ui/internal/contextmenu/text.go:80
 msgid "Assistant"
 msgstr "Asistent"
 
@@ -1060,6 +1060,11 @@ msgstr "Napsat odpověď"
 msgid "Assistant · %s"
 msgstr "Asistent · %s"
 
+#. TRANSLATORS: An item of the Assistant menu while several messages are selected.
+#: ui/internal/assistant/selection.go:29
+msgid "Ask About These Messages…"
+msgstr "Zeptat se na tyto zprávy…"
+
 #: ui/internal/background/background.go:130
 msgid "Check for new mail and show notifications in the background"
 msgstr "Kontrolovat novou poštu a zobrazovat oznámení na pozadí"
@@ -1295,7 +1300,7 @@ msgid "Attaching %s"
 msgstr "Přiložení souboru %s"
 
 #: ui/internal/compose/pane_layout.go:42
-#: ui/internal/window/assistant_panel.go:426 ui/data/ui/compose.ui:65
+#: ui/internal/window/assistant_panel.go:441 ui/data/ui/compose.ui:65
 msgid "_Send"
 msgstr "_Odeslat"
 
@@ -1408,11 +1413,11 @@ msgstr "Předmět: %s"
 msgid "To: %s"
 msgstr "Komu: %s"
 
-#: ui/internal/compose/quoted.go:146 ui/internal/window/date_groups.go:97
+#: ui/internal/compose/quoted.go:146 ui/internal/window/date_groups.go:96
 msgid "Expanded"
 msgstr "Rozbaleno"
 
-#: ui/internal/compose/quoted.go:149 ui/internal/window/date_groups.go:95
+#: ui/internal/compose/quoted.go:149 ui/internal/window/date_groups.go:94
 msgid "Collapsed"
 msgstr "Sbaleno"
 
@@ -1428,145 +1433,154 @@ msgstr "Adresář"
 msgid "Recently used"
 msgstr "Nedávno použité"
 
+#. TRANSLATORS: In the menu of several selected messages: opens each in a window of its own; %d is their number.
+#: ui/internal/contextmenu/text.go:42
+#, c-format
+msgid "Open %d Message in a New Window"
+msgid_plural "Open %d Messages in New Windows"
+msgstr[0] "Otevřít %d zprávu v novém okně"
+msgstr[1] "Otevřít %d zprávy v nových oknech"
+msgstr[2] "Otevřít %d zpráv v nových oknech"
+
 #. TRANSLATORS: In the menu of a message in the list: opens it in a window of its own.
-#: ui/internal/contextmenu/text.go:39
+#: ui/internal/contextmenu/text.go:45
 msgid "Open in New Window"
 msgstr "Otevřít v novém okně"
 
-#: ui/internal/contextmenu/text.go:41 ui/data/ui/window.ui:534
+#: ui/internal/contextmenu/text.go:47 ui/data/ui/window.ui:534
 msgid "Edit"
 msgstr "Upravit"
 
 #. TRANSLATORS: the Reply action of an issue: writes a comment.
-#: ui/internal/contextmenu/text.go:44 ui/internal/jira/compose.go:162
+#: ui/internal/contextmenu/text.go:50 ui/internal/jira/compose.go:162
 msgid "Comment"
 msgstr "Komentovat"
 
-#: ui/internal/contextmenu/text.go:46 ui/internal/jira/compose.go:164
+#: ui/internal/contextmenu/text.go:52 ui/internal/jira/compose.go:164
 #: ui/internal/board/text.go:367 ui/internal/window/conversation_card.go:284
 #: ui/data/ui/message_window.ui:38 ui/data/ui/window.ui:464
 msgid "Reply"
 msgstr "Odpovědět"
 
-#: ui/internal/contextmenu/text.go:48
+#: ui/internal/contextmenu/text.go:54
 #: ui/internal/window/conversation_card.go:285 ui/data/ui/message_window.ui:44
 #: ui/data/ui/window.ui:471
 msgid "Reply All"
 msgstr "Odpovědět všem"
 
-#: ui/internal/contextmenu/text.go:50
+#: ui/internal/contextmenu/text.go:56
 #: ui/internal/window/conversation_card.go:286 ui/data/ui/message_window.ui:50
 #: ui/data/ui/window.ui:478
 msgid "Forward"
 msgstr "Přeposlat"
 
-#: ui/internal/contextmenu/text.go:52 ui/data/ui/message_window.ui:451
+#: ui/internal/contextmenu/text.go:58 ui/data/ui/message_window.ui:451
 #: ui/data/ui/window.ui:1010
 msgid "Mark as _Read"
 msgstr "Označit jako _přečtené"
 
-#: ui/internal/contextmenu/text.go:54 ui/data/ui/message_window.ui:447
+#: ui/internal/contextmenu/text.go:60 ui/data/ui/message_window.ui:447
 #: ui/data/ui/window.ui:1006
 msgid "Mark as _Unread"
 msgstr "Označit jako _nepřečtené"
 
-#: ui/internal/contextmenu/text.go:57 ui/internal/board/text.go:344
-#: ui/internal/window/actions.go:62
+#: ui/internal/contextmenu/text.go:63 ui/internal/board/text.go:344
+#: ui/internal/window/actions.go:63
 msgid "Unstar"
 msgstr "Odebrat hvězdičku"
 
-#: ui/internal/contextmenu/text.go:59 ui/internal/window/actions.go:65
+#: ui/internal/contextmenu/text.go:65 ui/internal/window/actions.go:66
 #: ui/data/ui/message_window.ui:68 ui/data/ui/window.ui:505
 msgid "Star"
 msgstr "Přidat hvězdičku"
 
 #. TRANSLATORS: menu of the status changes a Jira issue allows.
-#: ui/internal/contextmenu/text.go:61 ui/internal/jira/transitions.go:87
+#: ui/internal/contextmenu/text.go:67 ui/internal/jira/transitions.go:87
 #: ui/data/ui/message_window.ui:467 ui/data/ui/window.ui:1026
 msgid "Change Status"
 msgstr "Změnit stav"
 
-#: ui/internal/contextmenu/text.go:63 ui/internal/board/text.go:786
+#: ui/internal/contextmenu/text.go:69 ui/internal/board/text.go:786
 #: ui/data/ui/message_window.ui:81 ui/data/ui/window.ui:520
 msgid "Archive"
 msgstr "Archivovat"
 
 #. TRANSLATORS: a menu item whose submenu lists the board's states.
-#: ui/internal/contextmenu/text.go:65 ui/internal/board/text.go:995
+#: ui/internal/contextmenu/text.go:71 ui/internal/board/text.go:995
 msgid "Move To"
 msgstr "Přesunout do"
 
-#: ui/internal/contextmenu/text.go:67 ui/data/ui/message_window.ui:441
+#: ui/internal/contextmenu/text.go:73 ui/data/ui/message_window.ui:441
 #: ui/data/ui/window.ui:1000
 msgid "Mark as Junk"
 msgstr "Označit jako nevyžádanou"
 
-#: ui/internal/contextmenu/text.go:70 ui/internal/window/outbox.go:240
+#: ui/internal/contextmenu/text.go:76 ui/internal/window/outbox.go:240
 msgid "Cancel Sending"
 msgstr "Zrušit odeslání"
 
-#: ui/internal/contextmenu/text.go:72 ui/internal/window/outbox.go:242
+#: ui/internal/contextmenu/text.go:78 ui/internal/window/outbox.go:242
 #: ui/data/ui/message_window.ui:74 ui/data/ui/window.ui:512
 msgid "Move to Trash"
 msgstr "Přesunout do koše"
 
-#: ui/internal/contextmenu/text.go:76 ui/internal/window/status.go:269
+#: ui/internal/contextmenu/text.go:82 ui/internal/window/status.go:269
 #: ui/data/ui/preferences.ui:198 ui/data/ui/window.ui:237
 msgid "Check for New Mail"
 msgstr "Kontrolovat novou poštu"
 
 #. TRANSLATORS: In the menu of a folder in the sidebar.
-#: ui/internal/contextmenu/text.go:79
+#: ui/internal/contextmenu/text.go:85
 msgid "Mark All as Read"
 msgstr "Označit vše jako přečtené"
 
 #. TRANSLATORS: In the menu of the Junk folder: deletes its messages for good.
-#: ui/internal/contextmenu/text.go:83
+#: ui/internal/contextmenu/text.go:89
 msgid "Empty Junk"
 msgstr "Vysypat nevyžádanou poštu"
 
 #. TRANSLATORS: In the menu of the Trash folder: deletes its messages for good.
-#: ui/internal/contextmenu/text.go:86
+#: ui/internal/contextmenu/text.go:92
 msgid "Empty Trash"
 msgstr "Vysypat koš"
 
-#: ui/internal/contextmenu/text.go:89 ui/internal/window/favourites.go:113
+#: ui/internal/contextmenu/text.go:95 ui/internal/window/favourites.go:113
 msgid "Remove from Favourites"
 msgstr "Odebrat z oblíbených"
 
-#: ui/internal/contextmenu/text.go:91 ui/internal/window/favourites.go:111
+#: ui/internal/contextmenu/text.go:97 ui/internal/window/favourites.go:111
 msgid "Add to Favourites"
 msgstr "Přidat do oblíbených"
 
-#: ui/internal/contextmenu/text.go:94 ui/internal/widget/message_row.go:331
+#: ui/internal/contextmenu/text.go:100 ui/internal/widget/message_row.go:331
 #: ui/internal/window/board_conversation.go:479
 #: ui/internal/window/conversation_card.go:464 ui/internal/window/folders.go:65
 msgid "Expand"
 msgstr "Rozbalit"
 
-#: ui/internal/contextmenu/text.go:96 ui/internal/widget/message_row.go:327
+#: ui/internal/contextmenu/text.go:102 ui/internal/widget/message_row.go:327
 #: ui/internal/window/board_conversation.go:482
 #: ui/internal/window/conversation_card.go:462 ui/internal/window/folders.go:62
 msgid "Collapse"
 msgstr "Sbalit"
 
 #. TRANSLATORS: The heading of the question before the Trash is emptied.
-#: ui/internal/contextmenu/text.go:113
+#: ui/internal/contextmenu/text.go:119
 msgid "Empty the Trash?"
 msgstr "Vysypat koš?"
 
 #. TRANSLATORS: The button that empties the Trash or the Junk folder.
-#: ui/internal/contextmenu/text.go:115
+#: ui/internal/contextmenu/text.go:121
 msgid "_Empty"
 msgstr "_Vysypat"
 
 #. TRANSLATORS: The heading of the question before the Junk folder is emptied.
-#: ui/internal/contextmenu/text.go:119
+#: ui/internal/contextmenu/text.go:125
 msgid "Empty the Junk Folder?"
 msgstr "Vysypat nevyžádanou poštu?"
 
 #. TRANSLATORS: %d is the number of messages the folder shows.
-#: ui/internal/contextmenu/text.go:122
+#: ui/internal/contextmenu/text.go:128
 #, c-format
 msgid ""
 "%d message will be deleted for good. Older messages that are only on the "
@@ -1585,12 +1599,12 @@ msgstr[2] ""
 "serveru, tam zůstanou."
 
 #. TRANSLATORS: What failed when a message could not be moved to another folder.
-#: ui/internal/contextmenu/text.go:131
+#: ui/internal/contextmenu/text.go:137
 msgid "Moving the message"
 msgstr "Přesunutí zprávy"
 
 #. TRANSLATORS: What failed when messages could not be moved to another folder; %d is their number.
-#: ui/internal/contextmenu/text.go:134
+#: ui/internal/contextmenu/text.go:140
 #, c-format
 msgid "Moving %d message"
 msgid_plural "Moving %d messages"
@@ -1599,19 +1613,37 @@ msgstr[1] "Přesunutí %d zpráv"
 msgstr[2] "Přesunutí %d zpráv"
 
 #. TRANSLATORS: What failed when a folder could not be marked read.
-#: ui/internal/contextmenu/text.go:140
+#: ui/internal/contextmenu/text.go:146
 msgid "Marking the folder as read"
 msgstr "Označení složky jako přečtené"
 
 #. TRANSLATORS: What failed when the Junk folder could not be emptied.
-#: ui/internal/contextmenu/text.go:147
+#: ui/internal/contextmenu/text.go:153
 msgid "Emptying the Junk folder"
 msgstr "Vysypání nevyžádané pošty"
 
 #. TRANSLATORS: What failed when the Trash could not be emptied.
-#: ui/internal/contextmenu/text.go:150
+#: ui/internal/contextmenu/text.go:156
 msgid "Emptying the Trash"
 msgstr "Vysypání koše"
+
+#. TRANSLATORS: The reading pane while several messages are selected in the list; %d is their number.
+#: ui/internal/selection/text.go:18
+#, c-format
+msgid "%d message selected"
+msgid_plural "%d messages selected"
+msgstr[0] "Vybrána %d zpráva"
+msgstr[1] "Vybrány %d zprávy"
+msgstr[2] "Vybráno %d zpráv"
+
+#. TRANSLATORS: The question before the sending of several queued messages is cancelled; %d is their number.
+#: ui/internal/selection/text.go:25
+#, c-format
+msgid "Cancel sending %d message?"
+msgid_plural "Cancel sending %d messages?"
+msgstr[0] "Zrušit odeslání %d zprávy?"
+msgstr[1] "Zrušit odeslání %d zpráv?"
+msgstr[2] "Zrušit odeslání %d zpráv?"
 
 #. TRANSLATORS: a comment on a service-desk request that the customer reads too.
 #: ui/internal/jira/compose.go:74
@@ -2111,7 +2143,7 @@ msgstr "Vyžaduje pole v Jiře"
 
 #: ui/internal/jira/transitions.go:98
 #: ui/internal/window/conversation_card.go:164 ui/internal/window/folders.go:89
-#: ui/internal/window/messages.go:276
+#: ui/internal/window/messages.go:266
 msgid "Loading…"
 msgstr "Načítá se…"
 
@@ -2780,7 +2812,7 @@ msgstr "Načítá se konverzace…"
 msgid "The conversation could not be loaded."
 msgstr "Konverzaci se nepodařilo načíst."
 
-#: ui/internal/board/text.go:757 ui/internal/window/assistant_panel.go:669
+#: ui/internal/board/text.go:757 ui/internal/window/assistant_panel.go:684
 #: ui/internal/window/status.go:324 ui/data/ui/window.ui:433
 msgid "Try Again"
 msgstr "Zkusit znovu"
@@ -2895,7 +2927,7 @@ msgstr "Archivování"
 msgid "Changing the promise"
 msgstr "Uložení změny slibu"
 
-#: ui/internal/board/text.go:944 ui/internal/window/actions.go:259
+#: ui/internal/board/text.go:944 ui/internal/window/actions.go:270
 msgid "Removing the star"
 msgstr "Odebrání hvězdičky"
 
@@ -3871,12 +3903,12 @@ msgstr "Chyba"
 msgid "Saving the account order"
 msgstr "Uložení pořadí účtů"
 
-#: ui/internal/window/actions.go:41
+#: ui/internal/window/actions.go:42
 msgid "Move to Trash?"
 msgstr "Přesunout do koše?"
 
 #. TRANSLATORS: %d is the number of messages of a conversation.
-#: ui/internal/window/actions.go:44
+#: ui/internal/window/actions.go:45
 #, c-format
 msgid "Move %d message to Trash?"
 msgid_plural "Move %d messages to Trash?"
@@ -3884,15 +3916,15 @@ msgstr[0] "Přesunout %d zprávu do koše?"
 msgstr[1] "Přesunout %d zprávy do koše?"
 msgstr[2] "Přesunout %d zpráv do koše?"
 
-#: ui/internal/window/actions.go:46
+#: ui/internal/window/actions.go:47
 msgid "Move to _Trash"
 msgstr "Přesunout do _koše"
 
-#: ui/internal/window/actions.go:197
+#: ui/internal/window/actions.go:208
 msgid "Marking the message as read"
 msgstr "Označení zprávy jako přečtené"
 
-#: ui/internal/window/actions.go:199
+#: ui/internal/window/actions.go:210
 #, c-format
 msgid "Marking %d message as read"
 msgid_plural "Marking %d messages as read"
@@ -3900,11 +3932,11 @@ msgstr[0] "Označení %d zprávy jako přečtené"
 msgstr[1] "Označení %d zpráv jako přečtených"
 msgstr[2] "Označení %d zpráv jako přečtených"
 
-#: ui/internal/window/actions.go:201
+#: ui/internal/window/actions.go:212
 msgid "Marking the message as unread"
 msgstr "Označení zprávy jako nepřečtené"
 
-#: ui/internal/window/actions.go:203
+#: ui/internal/window/actions.go:214
 #, c-format
 msgid "Marking %d message as unread"
 msgid_plural "Marking %d messages as unread"
@@ -3912,11 +3944,11 @@ msgstr[0] "Označení %d zprávy jako nepřečtené"
 msgstr[1] "Označení %d zpráv jako nepřečtených"
 msgstr[2] "Označení %d zpráv jako nepřečtených"
 
-#: ui/internal/window/actions.go:255
+#: ui/internal/window/actions.go:266
 msgid "Starring the message"
 msgstr "Označení zprávy hvězdičkou"
 
-#: ui/internal/window/actions.go:257
+#: ui/internal/window/actions.go:268
 #, c-format
 msgid "Starring %d message"
 msgid_plural "Starring %d messages"
@@ -3924,7 +3956,7 @@ msgstr[0] "Označení %d zprávy hvězdičkou"
 msgstr[1] "Označení %d zpráv hvězdičkou"
 msgstr[2] "Označení %d zpráv hvězdičkou"
 
-#: ui/internal/window/actions.go:261
+#: ui/internal/window/actions.go:272
 #, c-format
 msgid "Removing the star from %d message"
 msgid_plural "Removing the star from %d messages"
@@ -3932,11 +3964,11 @@ msgstr[0] "Odebrání hvězdičky %d zprávě"
 msgstr[1] "Odebrání hvězdičky %d zprávám"
 msgstr[2] "Odebrání hvězdičky %d zprávám"
 
-#: ui/internal/window/actions.go:312
+#: ui/internal/window/actions.go:345
 msgid "Moving the message to Trash"
 msgstr "Přesunutí zprávy do koše"
 
-#: ui/internal/window/actions.go:314
+#: ui/internal/window/actions.go:347
 #, c-format
 msgid "Moving %d message to Trash"
 msgid_plural "Moving %d messages to Trash"
@@ -3944,11 +3976,11 @@ msgstr[0] "Přesunutí %d zprávy do koše"
 msgstr[1] "Přesunutí %d zpráv do koše"
 msgstr[2] "Přesunutí %d zpráv do koše"
 
-#: ui/internal/window/actions.go:361
+#: ui/internal/window/actions.go:407
 msgid "Archiving the message"
 msgstr "Archivace zprávy"
 
-#: ui/internal/window/actions.go:363
+#: ui/internal/window/actions.go:409
 #, c-format
 msgid "Archiving %d message"
 msgid_plural "Archiving %d messages"
@@ -3956,20 +3988,20 @@ msgstr[0] "Archivace %d zprávy"
 msgstr[1] "Archivace %d zpráv"
 msgstr[2] "Archivace %d zpráv"
 
-#: ui/internal/window/actions.go:364
+#: ui/internal/window/actions.go:410
 msgid "This account has no archive folder"
 msgstr "Tento účet nemá složku Archiv"
 
-#: ui/internal/window/actions.go:390 ui/internal/window/actions.go:404
+#: ui/internal/window/actions.go:436 ui/internal/window/actions.go:450
 msgid "This account has no junk folder"
 msgstr "Tento účet nemá složku pro nevyžádanou poštu"
 
-#: ui/internal/window/actions.go:393
+#: ui/internal/window/actions.go:439
 msgid "Mark as junk?"
 msgstr "Označit jako nevyžádanou poštu?"
 
 #. TRANSLATORS: %d is the number of messages of a conversation.
-#: ui/internal/window/actions.go:396
+#: ui/internal/window/actions.go:442
 #, c-format
 msgid "Mark %d message as junk?"
 msgid_plural "Mark %d messages as junk?"
@@ -3977,15 +4009,15 @@ msgstr[0] "Označit %d zprávu jako nevyžádanou?"
 msgstr[1] "Označit %d zprávy jako nevyžádané?"
 msgstr[2] "Označit %d zpráv jako nevyžádané?"
 
-#: ui/internal/window/actions.go:398
+#: ui/internal/window/actions.go:444
 msgid "Mark as _Junk"
 msgstr "Označit jako _nevyžádanou"
 
-#: ui/internal/window/actions.go:401
+#: ui/internal/window/actions.go:447
 msgid "Marking the message as junk"
 msgstr "Označení zprávy jako nevyžádané"
 
-#: ui/internal/window/actions.go:403
+#: ui/internal/window/actions.go:449
 #, c-format
 msgid "Marking %d message as junk"
 msgid_plural "Marking %d messages as junk"
@@ -4015,7 +4047,7 @@ msgstr[0] "+%d další"
 msgstr[1] "+%d další"
 msgstr[2] "+%d dalších"
 
-#: ui/internal/window/assistant_panel.go:965 ui/internal/window/drafts.go:77
+#: ui/internal/window/assistant_panel.go:980 ui/internal/window/drafts.go:77
 msgid "Opening the draft"
 msgstr "Otevření konceptu"
 
@@ -4313,59 +4345,59 @@ msgstr "(Prázdná zpráva)"
 msgid "Downloading…"
 msgstr "Stahuje se…"
 
-#: ui/internal/window/messages.go:87 ui/internal/window/messages.go:274
+#: ui/internal/window/messages.go:88 ui/internal/window/messages.go:264
 #: ui/internal/window/threads.go:46
 msgid "Loading messages"
 msgstr "Načtení zpráv"
 
-#: ui/internal/window/messages.go:176 ui/internal/window/threads.go:82
+#: ui/internal/window/messages.go:177 ui/internal/window/threads.go:82
 msgid "Loading more messages"
 msgstr "Načtení dalších zpráv"
 
-#: ui/internal/window/messages.go:266
+#: ui/internal/window/messages.go:256
 msgid "Select a folder"
 msgstr "Vyberte složku"
 
-#: ui/internal/window/messages.go:267
+#: ui/internal/window/messages.go:257
 msgid "Choose a folder in the sidebar to see its messages."
 msgstr "Zvolte složku v postranním panelu a zobrazí se její zprávy."
 
-#: ui/internal/window/messages.go:269
+#: ui/internal/window/messages.go:259
 msgid "Not Synchronised"
 msgstr "Nesynchronizováno"
 
-#: ui/internal/window/messages.go:270
+#: ui/internal/window/messages.go:260
 msgid ""
 "Messages moved here are archived on the server; the folder itself is not "
 "downloaded."
 msgstr ""
 "Zprávy sem přesunuté jsou na serveru archivovány; složka sama se nestahuje."
 
-#: ui/internal/window/messages.go:273
+#: ui/internal/window/messages.go:263
 msgid "Messages Unavailable"
 msgstr "Zprávy nejsou dostupné"
 
-#: ui/internal/window/messages.go:278
+#: ui/internal/window/messages.go:268
 msgid "No Unread Messages"
 msgstr "Žádné nepřečtené zprávy"
 
-#: ui/internal/window/messages.go:279
+#: ui/internal/window/messages.go:269
 msgid "Everything in this folder has been read."
 msgstr "Všechno v této složce je přečtené."
 
-#: ui/internal/window/messages.go:281
+#: ui/internal/window/messages.go:271
 msgid "No Flagged Messages"
 msgstr "Žádné označené zprávy"
 
-#: ui/internal/window/messages.go:282
+#: ui/internal/window/messages.go:272
 msgid "No message in this folder carries a flag."
 msgstr "Žádná zpráva v této složce nemá příznak."
 
-#: ui/internal/window/messages.go:284
+#: ui/internal/window/messages.go:274
 msgid "No Messages"
 msgstr "Žádné zprávy"
 
-#: ui/internal/window/messages.go:285
+#: ui/internal/window/messages.go:275
 msgid "This folder is empty."
 msgstr "Tato složka je prázdná."
 
@@ -4408,11 +4440,11 @@ msgstr "„%s“ bude odstraněna z pošty k odeslání a neodešle se."
 msgid "Cancel sending this message?"
 msgstr "Zrušit odeslání této zprávy?"
 
-#: ui/internal/window/outbox.go:205
+#: ui/internal/window/outbox.go:205 ui/internal/window/selection.go:410
 msgid "Do Not _Send"
 msgstr "_Neodesílat"
 
-#: ui/internal/window/outbox.go:217
+#: ui/internal/window/outbox.go:217 ui/internal/window/selection.go:423
 msgid "Cancelling the send"
 msgstr "Rušení odeslání"
 
@@ -4848,15 +4880,15 @@ msgstr "Účet %s vyžaduje pozornost"
 msgid "Loading the conversation"
 msgstr "Načtení konverzace"
 
-#: ui/internal/window/window.go:979
+#: ui/internal/window/window.go:986
 msgid "New mail"
 msgstr "Nová pošta"
 
-#: ui/internal/window/window.go:1051 ui/data/ui/window.ui:244
+#: ui/internal/window/window.go:1058 ui/data/ui/window.ui:244
 msgid "Search"
 msgstr "Hledat"
 
-#: ui/internal/window/window.go:1057 ui/data/ui/window.ui:214
+#: ui/internal/window/window.go:1064 ui/data/ui/window.ui:214
 msgid "Messages"
 msgstr "Zprávy"
 

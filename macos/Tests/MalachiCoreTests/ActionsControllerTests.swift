@@ -299,9 +299,9 @@ private final class Harness {
         h.list.select(key: ListKey(thread: "t1"))
         let log = h.log
         var members: [MessageID] = []
-        h.list.selectedIDs { row, ids in
+        h.list.selectedIDs { rows, ids in
             members = ids
-            #expect(h.list.flagTarget(row), "no member flagged: the star flags them all")
+            #expect(h.list.flagTarget(rows[0]), "no member flagged: the star flags them all")
         }
         try await waitUntil { !members.isEmpty }
         #expect(members == ["a1", "a2", "a3"])
@@ -1307,5 +1307,86 @@ private final class ParentLog {
         try await waitUntil { h.log.toasts.count == 3 }
         #expect(h.log.toasts.last == "Comment failed: the message is no longer on the server")
         #expect(h.log.composed.isEmpty)
+    }
+
+    /// Several rows (selection.go): one question naming their count, no
+    /// subject; the counts follow each message's own folder; queued
+    /// messages cancel together.
+    @Test func severalRowsTrashAndCountPerFolder() async throws {
+        var o1 = msg("o1", 5)
+        o1.folderId = outbox.folder
+        o1.outbox = OutboxInfo(state: .queued, attempts: 0)
+        var o2 = msg("o2", 6)
+        o2.folderId = outbox.folder
+        o2.outbox = OutboxInfo(state: .queued, attempts: 0)
+        var x1 = msg("x1", 7)
+        x1.folderId = archive.folder
+        let h = try await Harness(messages: [inbox: [msg("m1", 1), msg("m2", 2, .seen), msg("m3", 3)], archive: [x1], outbox: [o1, o2]])
+        defer { Task { await h.stop() } }
+        let log = h.log
+        #expect(h.unread(inbox) == 2 && h.unread(archive) == 1)
+
+        h.list.select(keys: [ListKey(message: "m3"), ListKey(message: "m1")])
+        let rows = h.list.selectedRows
+        h.actions.trash(rows.map(\.message.id), subject: h.list.selectionSubject(rows))
+        try await waitUntil { log.confirmations.count == 1 }
+        #expect(log.confirmations.last == Confirmation(heading: "Move 2 messages to Trash?", body: "", label: "Move to _Trash"))
+        try await waitUntil { await h.fixture.deleteRequests.count == 1 }
+        #expect(await h.fixture.deleteRequests.last == MessageDeleteParams(accountId: "a", messageIds: ["m3", "m1"]))
+        #expect(ids(h.list.rows) == ["m2"])
+        #expect(h.unread(inbox) == 0 && h.unread(trash) == 2)
+
+        // Messages of two folders (a search): each folder's badge follows
+        // its own; the undo puts them back.
+        let undo = h.actions.trackMoves([try h.summary("m2"), x1], target: trash)
+        #expect(h.unread(inbox) == 0 && h.unread(archive) == 0 && h.unread(trash) == 3)
+        undo()
+        #expect(h.unread(inbox) == 0 && h.unread(archive) == 1 && h.unread(trash) == 2)
+
+        // Queued messages: one question, every send cancelled at once.
+        h.select(outbox)
+        try await h.loaded(outbox)
+        h.list.select(keys: h.list.rows.map(\.key))
+        #expect(h.list.actionFlags.outbox && h.list.actionFlags.trash && !h.list.actionFlags.forward)
+        h.actions.trash(h.list.selectedRows.map(\.message.id), subject: "")
+        try await waitUntil { log.confirmations.count == 2 }
+        #expect(log.confirmations.last == Confirmation(heading: "Cancel sending 2 messages?", body: "", label: "Do Not _Send"))
+        // (The emptied outbox leaves the sidebar, and the list with it.)
+        #expect(Set(log.closedWindows.suffix(2)) == ["o1", "o2"])
+        try await waitUntil { await h.fixture.deleteRequests.count == 2 }
+        #expect(Set(await h.fixture.deleteRequests.last?.messageIds ?? []) == ["o1", "o2"])
+    }
+
+    /// Forward on several rows: one draft.create forward with every id
+    /// (newest first as selected), the compose window with what was not
+    /// attached; Open opens each up to ten.
+    @Test func severalRowsForwardAndOpen() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1), msg("m2", 2, .seen)]])
+        defer { Task { await h.stop() } }
+        let rec = Recorder()
+        let draft = Draft(accountId: "a", subject: "Fwd: s-m2", textBody: "", htmlBody: "")
+        let created = try encode(DraftCreateResult(
+            draft: draft, quoted: .none,
+            skipped: [Attachment(partId: "", filename: "s-m1.eml", contentType: "message/rfc822", size: 9, inline: false, remote: true)]))
+        await h.fixture.on(API.DraftCreate.name) { params in
+            await rec.addDraft(try decode(DraftCreateParams.self, params))
+            return created
+        }
+        h.actions.forwardMessages(["m2", "m1"])
+        h.actions.forwardMessages(["m2", "m1"])
+        try await waitUntil { h.log.composed.count == 1 }
+        #expect(await rec.drafts == [DraftCreateParams(accountId: "a", mode: .forward, messageIds: ["m2", "m1"])])
+        #expect(h.log.composed[0].kind == .forward && h.log.composed[0].skipped == 1)
+        #expect(h.log.composed[0].subject == "Fwd: s-m2")
+
+        // One alone is not forwarded this way.
+        h.actions.forwardMessages(["m2"])
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(await rec.drafts.count == 1)
+
+        h.actions.openMessages([try h.summary("m2"), try h.summary("m1")])
+        #expect(h.log.messageWindows == ["m2", "m1"])
+        h.actions.openMessages(Array(repeating: try h.summary("m1"), count: Selection.maxOpen + 1))
+        #expect(h.log.messageWindows.count == 2)
     }
 }

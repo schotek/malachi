@@ -70,6 +70,8 @@ public final class ActionsController {
     /// (compose_open.go `composing`): a second click while it runs does
     /// nothing.
     private var composing: Set<MessageID> = []
+    /// The forward of several messages is being prepared (`forwardMessages`).
+    private var forwardingMany = false
     /// The drafts the assistant panel's Open Draft is looking up.
     private var findingDrafts: Set<DraftID> = []
     /// The pages of draft.list one Open Draft reads at most.
@@ -140,17 +142,20 @@ public final class ActionsController {
     /// optimistically (rows, unread badge of the folder, menu actions), and
     /// sends one message.flag; a failure puts everything back, success in
     /// marking read withdraws their desktop notifications (actions.go
-    /// `setSeenIDs`). The messages are of one folder (a conversation row's
-    /// members are).
+    /// `setSeenIDs`). The messages are of one account (a selection is),
+    /// possibly of several of its folders (a search): each folder's count
+    /// follows its own.
     public func setSeen(_ ids: [MessageID], _ seen: Bool) {
         var todo: [MessageID] = []
         var key: FolderKey?
+        var folderOf: [MessageID: FolderKey] = [:]
         for id in ids {
             guard let s = summary(id), hasFlag(s.flags, .seen) != seen, !mailbox.model.inOutbox(s) else {
                 continue // accelerators bypass the disabled actions
             }
             todo.append(id)
             key = FolderKey(account: s.accountId, folder: s.folderId)
+            folderOf[id] = key
         }
         guard let k = key, !todo.isEmpty else { return }
         let changing = todo
@@ -163,8 +168,15 @@ public final class ActionsController {
             if changed.isEmpty {
                 return
             }
-            // Marking unread raises the unread count.
-            self.mailbox.adjustCounts(k, on ? -changed.count : changed.count, 0)
+            // Marking unread raises the unread count of each message's
+            // folder.
+            var perFolder: [FolderKey: Int] = [:]
+            for id in changed {
+                perFolder[folderOf[id] ?? k, default: 0] += 1
+            }
+            for (f, n) in perFolder {
+                self.mailbox.adjustCounts(f, on ? -n : n, 0)
+            }
         }
         apply(seen)
 
@@ -258,7 +270,8 @@ public final class ActionsController {
     /// Moves messages to Trash (message.delete) after the optional
     /// confirmation shown over `parent`, with `subject` as its body
     /// (actions.go `trashIDs`). For a single outbox message it cancels the
-    /// send instead (`cancelSend`).
+    /// send instead (`cancelSend`), for several queued ones the sending of
+    /// them all after one question (`cancelSends`).
     public func trash(_ ids: [MessageID], subject: String, parent: AnyObject? = nil) {
         if ids.count == 1, let s = summary(ids[0]), mailbox.model.inOutbox(s) {
             cancelSend(ids[0], parent: parent)
@@ -266,6 +279,14 @@ public final class ActionsController {
         }
         let msgs = summaries(ids)
         guard !msgs.isEmpty else { return }
+        let queued = msgs.filter { mailbox.model.inOutbox($0) }
+        if queued.count == msgs.count {
+            cancelSends(queued, parent: parent)
+            return
+        }
+        if !queued.isEmpty {
+            return // a selection is one folder's; outbox rows never mix in
+        }
         confirmTrash(parent, count: msgs.count, subject: subject) { [weak self] in
             self?.moveToTrash(msgs)
         }
@@ -298,11 +319,14 @@ public final class ActionsController {
         let acc = msgs[0].accountId
         // message.delete moves to the Trash role folder; a message already
         // there is expunged instead (no target count to credit).
-        var target: FolderKey?
-        if let trash = mailbox.model.folderByRole(acc, .trash), trash.id != msgs[0].folderId {
-            target = FolderKey(account: acc, folder: trash.id)
+        let trash = mailbox.model.folderByRole(acc, .trash)
+        let target = trash.map { FolderKey(account: acc, folder: $0.id) }
+        let undoMoves = trackMoves(msgs.filter { $0.folderId != trash?.id }, target: target)
+        let undoExpunged = trackMoves(msgs.filter { $0.folderId == trash?.id }, target: nil)
+        let undo: ListController.Restore = {
+            undoExpunged()
+            undoMoves()
         }
-        let undo = trackMoves(msgs, target: target)
         let n = msgs.count
         let what = n == 1
             ? L10n.T("Moving the message to Trash")
@@ -321,14 +345,28 @@ public final class ActionsController {
     /// failed move (actions.go `trackMoves`). Read messages move only the
     /// totals; `MailModel.moveCounts` says where even those stay put.
     func trackMoves(_ msgs: [MessageSummary], target: FolderKey?) -> ListController.Restore {
-        guard let first = msgs.first else {
+        guard !msgs.isEmpty else {
             return {}
         }
-        let unread = msgs.filter { !hasFlag($0.flags, .seen) }.count
-        let n = msgs.count
-        let src = FolderKey(account: first.accountId, folder: first.folderId)
+        // Per source folder: a selection of a search may come from several.
+        var order: [FolderKey] = []
+        var counts: [FolderKey: (unread: Int, total: Int)] = [:]
+        for s in msgs {
+            let src = FolderKey(account: s.accountId, folder: s.folderId)
+            if counts[src] == nil {
+                order.append(src)
+                counts[src] = (0, 0)
+            }
+            counts[src]!.total += 1
+            if !hasFlag(s.flags, .seen) {
+                counts[src]!.unread += 1
+            }
+        }
         let shift: @MainActor (Int) -> Void = { [weak self] sign in
-            self?.mailbox.moveCounts(src, target, sign * unread, sign * n)
+            for src in order {
+                guard let c = counts[src] else { continue }
+                self?.mailbox.moveCounts(src, target, sign * c.unread, sign * c.total)
+            }
         }
         shift(1)
         return { shift(-1) }
@@ -415,7 +453,9 @@ public final class ActionsController {
     /// The move itself (actions.go `moveListTo`): the rows go at once and
     /// come back on failure, the counts follow, the windows close.
     private func move(_ msgs: [MessageSummary], to target: FolderID, what: (Int) -> String) {
-        guard let first = msgs.first, target != first.folderId else { return }
+        // The messages already in the target stay where they are.
+        let msgs = msgs.filter { $0.folderId != target }
+        guard let first = msgs.first else { return }
         let acc = first.accountId
         let moving = msgs.map(\.id)
         let restore = list.removeRows(moving)
@@ -493,6 +533,43 @@ public final class ActionsController {
                     // notify.syncState on the change; a second reload finds
                     // nothing left to count.
                     self?.mailbox.onOutboxChanged(s.accountId)
+                }
+            )
+        }
+    }
+
+    /// Trash on several queued messages: one question, then the sending
+    /// of them all is cancelled (message.delete), as `cancelSend` does for
+    /// one (selection.go `cancelSends`).
+    func cancelSends(_ msgs: [MessageSummary], parent: AnyObject? = nil) {
+        if msgs.count == 1 {
+            cancelSend(msgs[0].id, parent: parent)
+            return
+        }
+        ask(parent, heading: Selection.cancelSendingQuestion(msgs.count), body: "", label: L10n.T("Do Not _Send")) { [weak self] in
+            guard let self else { return }
+            let ids = msgs.map(\.id)
+            let acc = msgs[0].accountId
+            let restore = self.list.removeRows(ids)
+            for id in ids {
+                self.onWindowsClose?(id)
+            }
+            let undo = self.trackMoves(msgs, target: nil)
+            for _ in msgs {
+                self.mailbox.noteOutboxCancelled(acc)
+            }
+            self.call(
+                API.MessageDelete.self, MessageDeleteParams(accountId: acc, messageIds: ids),
+                what: L10n.T("Cancelling the send"),
+                onError: { [weak self] _ in
+                    for _ in msgs {
+                        self?.mailbox.noteOutboxCancelFailed(acc)
+                    }
+                    restore()
+                    undo()
+                },
+                onOK: { [weak self] _ in
+                    self?.mailbox.onOutboxChanged(acc)
                 }
             )
         }
@@ -756,6 +833,51 @@ public final class ActionsController {
                 p.attribution = attributionLine
                 self.openCompose?(p)
             }
+        }
+    }
+
+    /// Forwards several messages in one new message (draft.create forward
+    /// with `messageIds`; selection.go `forwardMessages`): the daemon
+    /// attaches each whole; one it could not attach is counted in the
+    /// compose window's note (`skipped`). From their account, or a mail
+    /// account for an issue tracker's (`forwardAccount`). One request at a
+    /// time.
+    public func forwardMessages(_ ids: [MessageID]) {
+        guard ids.count >= 2, !forwardingMany, let s = summary(ids[0]) else { return }
+        var from = s.accountId
+        var messageAccount: AccountID?
+        if let own = mailbox.model.account(s.accountId), !own.can(.compose) {
+            guard let target = forwardAccount() else { return }
+            from = target.id
+            messageAccount = s.accountId
+        }
+        let params = DraftCreateParams(
+            accountId: from, mode: .forward, messageAccountId: messageAccount,
+            messageIds: Array(ids.prefix(Selection.maxForward)))
+        forwardingMany = true
+        mailbox.perform(API.DraftCreate.self, params, timeout: RPCTimeouts.compose) { [weak self] outcome in
+            guard let self else { return }
+            self.forwardingMany = false
+            switch outcome {
+            case .failure(let err):
+                self.log.warning("draft.create forward of \(ids.count): \(String(describing: err), privacy: .public)")
+                self.toast(rpcErrorText(composeWhat(.forward), err))
+            case .success(let res):
+                var p = fromDraft(kind: .forward, draft: res.draft, blocked: res.blocked)
+                p.accountID = from
+                p.skipped = res.skipped?.count ?? 0
+                self.openCompose?(p)
+            }
+        }
+    }
+
+    /// Opens each message in a window of its own (a draft in the compose
+    /// window), at most `Selection.maxOpen` (Open in New Window on several
+    /// rows).
+    public func openMessages(_ msgs: [MessageSummary]) {
+        guard msgs.count <= Selection.maxOpen else { return }
+        for s in msgs {
+            openMessage(s)
         }
     }
 

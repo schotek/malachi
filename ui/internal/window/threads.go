@@ -270,10 +270,11 @@ func (w *Window) fetchExpandedMembers() {
 
 // syncRows brings the ListBox in line with model.rows: rows whose key is
 // gone are removed, new keys get a widget at their position, the rest are
-// moved when needed and re-rendered. The selection follows its key; when
-// a member row folded away its conversation row takes over (and the pane
-// shows the newest member); when the selected row is gone the pane is
-// cleared. Row signals from all this are suppressed (reselecting).
+// moved when needed and re-rendered. The selection follows its keys
+// (selection.Reconcile); when a member row folded away its conversation
+// row takes over (and the pane shows the newest member); when every
+// selected row is gone the pane is cleared. Row signals from all this are
+// suppressed (reselecting).
 func (w *Window) syncRows() { w.reconcileRows(false) }
 
 // syncRowsAfterRemoval is syncRows for a removal: a selected row that is
@@ -286,10 +287,10 @@ func (w *Window) reconcileRows(neighbour bool) {
 		w.syncDateRows(neighbour)
 		return
 	}
-	prev, hadSel := w.selectedKey()
+	prev := w.selectedKeys()
 	prevIdx := -1
-	if hadSel {
-		prevIdx = w.messageList.SelectedRow().Index()
+	if len(prev) > 0 {
+		prevIdx = w.rows[prev[0]].Index()
 	}
 	w.reselecting = true
 	for key, r := range w.rows {
@@ -313,29 +314,14 @@ func (w *Window) reconcileRows(neighbour bool) {
 		r.RemoveCSSClass("flagged-section")
 		w.renderRow(r, row)
 	}
-	selected := false
-	if hadSel {
-		if r := w.rows[prev]; r != nil {
-			w.messageList.SelectRow(r.ListBoxRow)
-			selected = true
-		} else if r := w.rows[listKey{Thread: prev.Thread}]; prev.Thread != "" && r != nil {
-			w.messageList.SelectRow(r.ListBoxRow)
-			w.reselecting = false
-			w.onMessageRowSelected(r.ListBoxRow)
-			selected = true
-		} else if next := min(prevIdx, w.model.rowCount()-1); neighbour && next >= 0 {
-			if row := w.messageList.RowAtIndex(next); row != nil {
-				w.messageList.SelectRow(row)
-				w.reselecting = false
-				w.onMessageRowSelected(row)
-				selected = true
-			}
+	w.restoreSelection(prev, func() (listKey, bool) {
+		next := min(prevIdx, w.model.rowCount()-1)
+		if !neighbour || next < 0 {
+			return listKey{}, false
 		}
-	}
-	w.reselecting = false
-	if hadSel && !selected {
-		w.onMessageRowSelected(nil)
-	}
+		r, ok := w.rowForWidget(w.messageList.RowAtIndex(next))
+		return r.Key, ok
+	})
 	w.showListState()
 	w.conversationListChanged()
 }
@@ -399,59 +385,9 @@ func (w *Window) addThreadShortcuts(r *widget.MessageRow, tid api.ThreadID, memb
 	r.AddController(sc)
 }
 
-// selectedRow is the row behind the selection, if any.
-func (w *Window) selectedRow() (listRow, bool) {
-	row := w.messageList.SelectedRow()
-	if row == nil {
-		return listRow{}, false
-	}
-	return w.rowForWidget(row)
-}
-
-// selectedKey is the key of the selected row, if any, read off the row
-// widgets rather than the model: reconcileRows needs it after the model
-// has moved on, when the selected row's index no longer says which row it
-// is (a removal above it, a conversation moved to the top).
-func (w *Window) selectedKey() (listKey, bool) {
-	sel := w.messageList.SelectedRow()
-	if sel == nil {
-		return listKey{}, false
-	}
-	idx := sel.Index()
-	for key, r := range w.rows {
-		if r.Index() == idx {
-			return key, true
-		}
-	}
-	return listKey{}, false
-}
-
 // rowFor is the widget showing message id on its own row, if listed.
 func (w *Window) rowFor(id api.MessageID) *widget.MessageRow {
 	return w.rows[w.model.keyFor(id)]
-}
-
-// selectedIDs runs fn with the selected row and every message it stands
-// for: one, or all the folder members of a conversation row, fetched
-// first when they are not known yet (the selection must still be that
-// conversation by then).
-func (w *Window) selectedIDs(fn func(listRow, []api.MessageID)) {
-	row, ok := w.selectedRow()
-	if !ok {
-		return
-	}
-	if ids := w.model.rowIDs(row); ids != nil {
-		fn(row, ids)
-		return
-	}
-	tid := row.Key.Thread
-	w.ensureMembers(tid, func() {
-		if r, ok := w.selectedRow(); ok && r.Thread && r.Key.Thread == tid {
-			if ids := w.model.rowIDs(r); ids != nil {
-				fn(r, ids)
-			}
-		}
-	})
 }
 
 // rowSubject is the subject a confirmation shows for a row: the

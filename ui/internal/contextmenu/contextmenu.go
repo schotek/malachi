@@ -75,8 +75,14 @@ type Item struct {
 
 // MessageState is what the window knows of the message row clicked (by
 // then the selected one; a folded conversation stands for its members in
-// the folder, as for the window's other actions).
+// the folder, as for the window's other actions), or of the selection of
+// several rows it belongs to (Count; ui/internal/selection Combine).
 type MessageState struct {
+	// Count is how many rows are selected (0 and 1: one).
+	Count int
+	// Open: Open in New Window can open them (several: at most
+	// selection.MaxOpen); one row always can.
+	Open bool
 	// Draft: a message of the Drafts folder, which opens in the compose
 	// window.
 	Draft bool
@@ -103,17 +109,20 @@ type MessageState struct {
 
 // MessageItems is the message menu in its groups: opening; answering;
 // read, star and status; where the message goes; the Assistant. Empty
-// groups are left out.
+// groups are left out. For several rows Open opens each (Labels.Count),
+// Forward forwards them in one message, and Reply, Reply All and Change
+// Status, which are for one message, are not offered.
 func MessageItems(s MessageState) [][]Item {
-	open := Item{ID: OpenMessage, Enabled: true}
-	if s.Draft {
+	several := s.Count > 1
+	open := Item{ID: OpenMessage, Enabled: !several || s.Open}
+	if s.Draft && !several {
 		open.ID = EditDraft
 	}
 	var answer []Item
-	if s.OfferReply {
+	if s.OfferReply && !several {
 		answer = append(answer, Item{Reply, s.Reply})
 	}
-	if s.OfferReplyAll {
+	if s.OfferReplyAll && !several {
 		answer = append(answer, Item{ReplyAll, s.ReplyAll})
 	}
 	if s.OfferForward {
@@ -127,7 +136,7 @@ func MessageItems(s MessageState) [][]Item {
 		mark = append(mark, Item{MarkUnread, true})
 	}
 	mark = append(mark, Item{ToggleFlag, s.ToggleFlag})
-	if s.ChangeStatus {
+	if s.ChangeStatus && !several {
 		mark = append(mark, Item{ChangeStatus, true})
 	}
 	var move []Item

@@ -228,7 +228,7 @@ func (r *revealState) finish(w *Window) {
 	r.active = false
 	for _, k := range revealRowKeys(r.message, r.thread) {
 		if row, ok := w.rows[k]; ok {
-			w.messageList.SelectRow(row.ListBoxRow)
+			w.selectOnly(row.ListBoxRow)
 			row.ListBoxRow.GrabFocus()
 			w.innerSplit.SetShowContent(true)
 			return

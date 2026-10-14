@@ -7,6 +7,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/capabilities"
 	"github.com/schotek/malachi/ui/internal/jira"
+	"github.com/schotek/malachi/ui/internal/selection"
 )
 
 // The pure rules of the per-message actions (actions.go
@@ -19,6 +20,11 @@ import (
 // actionState is what the per-message buttons and actions allow for the
 // selected row.
 type actionState struct {
+	// count: how many rows are selected (selection.go; several combine
+	// the rows' states, selection.Combine); open: Open in New Window can
+	// open them.
+	count int
+	open  bool
 	// on: a row is selected; outbox: it is a queued message; flagged: the
 	// star shows it (a conversation row: any member is flagged).
 	on, outbox, flagged bool
@@ -77,6 +83,8 @@ func (m *mailModel) messageActionState(row listRow, on bool) actionState {
 	sup := capabilities.Supported(sit)
 	avail := capabilities.Available(sit)
 	return actionState{
+		count:        1,
+		open:         true,
 		on:           true,
 		outbox:       outbox,
 		flagged:      flagged,
@@ -117,4 +125,29 @@ func (m *mailModel) idleActionState() actionState {
 func (m *mailModel) canMoveToRole(s api.MessageSummary, role api.FolderRole) bool {
 	f, ok := m.folderByRole(s.AccountID, role)
 	return ok && f.ID != s.FolderID
+}
+
+// flags is the state as the selection rules take it.
+func (s actionState) flags() selection.Flags {
+	return selection.Flags{
+		Count: s.count, On: s.on, Outbox: s.outbox, Flagged: s.flagged,
+		Reply: s.reply, ReplyAll: s.replyAll, Forward: s.forward,
+		Star: s.star, ToggleFlag: s.toggleFlag,
+		Trash: s.trash, Archive: s.archive, Junk: s.junk, Move: s.move,
+		MarkRead: s.markRead, MarkUnread: s.markUnread,
+		LoadImages: s.loadImages, TrustSender: s.trustSender,
+		ChangeStatus: s.changeStatus, Open: s.open, Comment: s.comment,
+	}
+}
+
+// with is s with the selection's flags f; the account's offers stay s's
+// (a selection is of one account).
+func (s actionState) with(f selection.Flags) actionState {
+	s.count, s.open, s.on, s.outbox, s.flagged = f.Count, f.Open, f.On, f.Outbox, f.Flagged
+	s.reply, s.replyAll, s.forward = f.Reply, f.ReplyAll, f.Forward
+	s.star, s.toggleFlag = f.Star, f.ToggleFlag
+	s.trash, s.archive, s.junk, s.move = f.Trash, f.Archive, f.Junk, f.Move
+	s.markRead, s.markUnread = f.MarkRead, f.MarkUnread
+	s.loadImages, s.trustSender, s.changeStatus = f.LoadImages, f.TrustSender, f.ChangeStatus
+	return s
 }

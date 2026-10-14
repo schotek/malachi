@@ -156,7 +156,7 @@ public sealed class GoContractTests
     {
         var go = GoContract.IntConstants(GoContract.ApiSource("types.go"));
         var limits = typeof(API.Limits).GetFields(BindingFlags.Public | BindingFlags.Static).Where(f => f.IsLiteral).ToArray();
-        Assert.Equal(32, limits.Length);
+        Assert.Equal(33, limits.Length);
         foreach (var limit in limits)
         {
             // Go spells the identifier "IDs"; C# "Ids".

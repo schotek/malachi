@@ -17,7 +17,8 @@ the Unsubscribe button), the remote-image bar (a bar of its own, as in GTK: two
 buttons, reachable by Tab), the pictures bar under it (pictures of the
 HTML kept on the mail server only, Download Pictures; not in an attached
 message's window, whose pictures arrive inlined), and the message stack:
-No Message Selected and No Accounts (the pane only) or the message, whose
+No Message Selected, No Accounts and the count of several selected rows
+(the pane only) or the message, whose
 headers stay put in a clamp of 900 (sides 24, top 12,
 docs/windows-port.md §11.3), scrolling on their own only past two thirds
 of the page, while the body below scrolls on its own in the same clamp:
@@ -399,6 +400,32 @@ gets the sanitiser's output only.
                 <TextBlock
                     Style="{StaticResource BodyLabelStyle}"
                     Text="{l:T Msgid='Select a message to read it here.'}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+
+            <!-- "selection" (selection.go selectionPage): several rows are
+                 selected in the list; how many (ReaderController.SelectionText). -->
+            <StackPanel
+                x:Name="SelectionPage"
+                MaxWidth="400"
+                Margin="36,12"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                AutomationProperties.AutomationId="SelectionPage"
+                Spacing="12"
+                Visibility="{x:Bind local:ReaderBind.PageVisible(Reader.Page, 'Selection'), Mode=OneWay}">
+                <StackPanel.OpacityTransition>
+                    <ScalarTransition Duration="0:0:0.2" />
+                </StackPanel.OpacityTransition>
+                <FontIcon
+                    Margin="0,0,0,24"
+                    FontSize="96"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                    Glyph="{x:Bind res:Icons.Glyph('edit-select-all')}" />
+                <TextBlock
+                    Style="{StaticResource Title1LabelStyle}"
+                    Text="{x:Bind Reader.SelectionText, Mode=OneWay}"
                     TextAlignment="Center"
                     TextWrapping="Wrap" />
             </StackPanel>

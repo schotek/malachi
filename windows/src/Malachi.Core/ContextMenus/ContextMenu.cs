@@ -8,10 +8,11 @@
 //
 // What the right-click menus of the message list and of the sidebar offer,
 // in all three clients: which items, in which groups, and which of them are
-// enabled. A right click on a message selects it first, so the message menu
-// acts on the selection through the window's own commands; the sidebar's
-// menu acts on the folder or account clicked and leaves the selection
-// alone. Pure logic, no widgets: the views map the item ids to their
+// enabled. A right click on a message outside the selection selects it
+// first (one inside a selection of several rows keeps it), so the message
+// menu acts on the selection through the window's own commands; the
+// sidebar's menu acts on the folder or account clicked and leaves the
+// selection alone. Pure logic, no widgets: the views map the item ids to their
 // actions and build their menus from the groups (a separator between two).
 // The texts are ContextMenuText.cs.
 //
@@ -133,10 +134,21 @@ public static partial class ContextMenu
     /// <summary>
     /// contextmenu.MessageState: what the window knows of the message row
     /// clicked (by then the selected one; a folded conversation stands for
-    /// its members in the folder, as for the window's other actions).
+    /// its members in the folder, as for the window's other actions), or of
+    /// the selection of several rows it belongs to (<see cref="Count"/>;
+    /// Selection.Combine).
     /// </summary>
     public readonly record struct MessageState
     {
+        /// <summary>How many rows are selected (0 and 1: one).</summary>
+        public int Count { get; init; }
+
+        /// <summary>
+        /// Open in New Window can open them (several: at most
+        /// Selection.MaxOpen); one row always can.
+        /// </summary>
+        public bool Open { get; init; }
+
         /// <summary>A message of the Drafts folder, which opens in the compose window.</summary>
         public bool Draft { get; init; }
 
@@ -212,6 +224,8 @@ public static partial class ContextMenu
             bool Offers(MessageActionKind kind) => (f.Unsupported & kind) == 0;
             return new MessageState
             {
+                Count = f.Count,
+                Open = f.Open,
                 Draft = draft,
                 Outbox = f.Outbox,
                 OfferReply = Offers(MessageActionKind.Reply),
@@ -240,17 +254,21 @@ public static partial class ContextMenu
     /// <summary>
     /// contextmenu.MessageItems: the message menu in its groups: opening;
     /// answering; read, star and status; where the message goes; the
-    /// Assistant. Empty groups are left out.
+    /// Assistant. Empty groups are left out. For several rows Open opens
+    /// each (<see cref="Labels.Count"/>), Forward forwards them in one
+    /// message, and Reply, Reply All and Change Status, which are for one
+    /// message, are not offered.
     /// </summary>
     public static IReadOnlyList<IReadOnlyList<Item>> MessageItems(MessageState s)
     {
-        var open = new Item(s.Draft ? ItemId.EditDraft : ItemId.OpenMessage, true);
+        var several = s.Count > 1;
+        var open = new Item(s.Draft && !several ? ItemId.EditDraft : ItemId.OpenMessage, !several || s.Open);
         var answer = new List<Item>();
-        if (s.OfferReply)
+        if (s.OfferReply && !several)
         {
             answer.Add(new Item(ItemId.Reply, s.Reply));
         }
-        if (s.OfferReplyAll)
+        if (s.OfferReplyAll && !several)
         {
             answer.Add(new Item(ItemId.ReplyAll, s.ReplyAll));
         }
@@ -268,7 +286,7 @@ public static partial class ContextMenu
             mark.Add(new Item(ItemId.MarkUnread, true));
         }
         mark.Add(new Item(ItemId.ToggleFlag, s.ToggleFlag));
-        if (s.ChangeStatus)
+        if (s.ChangeStatus && !several)
         {
             mark.Add(new Item(ItemId.ChangeStatus, true));
         }

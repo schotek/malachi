@@ -16,7 +16,7 @@ namespace Malachi.Core.Controllers;
 /// with it. The view applies the rows by key
 /// (<see cref="Infrastructure.KeyedListSync"/>, <see cref="ListRow.Key"/>),
 /// with row view models updated in place, then mirrors
-/// <see cref="ListController.SelectedKey"/>, which is current when the
+/// <see cref="ListController.SelectedKeys"/>, which is current when the
 /// update arrives (docs/windows-port.md §7.5).
 /// </summary>
 /// <param name="Rows">Every row, in order; never changed afterwards.</param>

@@ -78,6 +78,14 @@ type Window struct {
 	// (rebuilds, restoring the selection); the row-selected handlers ignore
 	// those signals so they only react to the user.
 	reselecting bool
+	// lastSelected are the keys selected when the selection last changed
+	// (selection.go): the row a change added is the one not among them.
+	lastSelected []listKey
+	// selectionPage is the message stack's page while several rows are
+	// selected (selection.go); forwardingMany is set while the forward of
+	// several of them is being prepared.
+	selectionPage  *adw.StatusPage
+	forwardingMany bool
 
 	// savingCollapse and savingFavourites are set while this window writes
 	// the sidebar's fold state or its pinned folders, so it does not treat
@@ -393,7 +401,8 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	w.pane.onQuoted = w.setPaneQuoted
 	w.registerActions()
 	// The main window lives as long as the application: no unbinding.
-	as.bindAssistantButton(w.assistButton, "win", true, w.syncAssistantActions, w.openAssistantPanel)
+	as.bindAssistantButton(w.assistButton, "win", true, w.syncAssistantActions, w.openAssistantPanel,
+		func() int { return len(w.selectedRows()) })
 	w.assistantPanel = newAssistantPanel(w, b)
 	// Sign In… on the panel's "Reconnect to ChatGPT" line (chatgpt.go).
 	w.assistantPanel.ctl.ReconnectProvider = as.reconnectChatGPT
@@ -481,12 +490,9 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		w.outerSplit.SetShowContent(true)
 	})
 
-	// Resolve message rows by identity; date headings are not messages.
-	w.messageList.ConnectRowSelected(func(row *gtk.ListBoxRow) {
-		if !w.reselecting {
-			w.onMessageRowSelected(row)
-		}
-	})
+	// Several rows can be selected (selection.go), which also follows the
+	// selection; date headings are not messages.
+	w.setupSelection()
 	// Fires on double-click or Enter (activate-on-single-click is off): a
 	// conversation row folds or unfolds, a message opens in a window — a
 	// draft in the compose window.
@@ -519,14 +525,14 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	// "clicked" fires for user clicks only, not for SetActive from Go. On a
 	// conversation row the star acts on every member (flagTarget).
 	w.starButton.ConnectClicked(func() {
-		w.selectedIDs(func(row listRow, ids []api.MessageID) {
-			w.setFlaggedIDs(ids, w.model.flagTarget(row))
+		w.selectedIDs(func(rows []listRow, ids []api.MessageID) {
+			w.setFlaggedIDs(ids, w.flagTargetOf(rows))
 		})
 	})
 	for _, r := range []struct {
 		b    *gtk.Button
 		kind compose.Kind
-	}{{w.replyButton, compose.KindReply}, {w.replyAllButton, compose.KindReplyAll}, {w.forwardButton, compose.KindForward}} {
+	}{{w.replyButton, compose.KindReply}, {w.replyAllButton, compose.KindReplyAll}} {
 		r := r
 		r.b.ConnectClicked(func() {
 			if s, ok := w.selectedMessage(); ok {
@@ -534,6 +540,9 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 			}
 		})
 	}
+	// Forward forwards the selection: one message, or several in one
+	// (forwardSelection).
+	w.forwardButton.ConnectClicked(w.forwardSelection)
 	w.banner.ConnectButtonClicked(w.reconnect)
 	w.authBanner.ConnectButtonClicked(w.onAuthBannerButton)
 	w.certBanner.ConnectButtonClicked(w.onCertBannerButton)
@@ -843,9 +852,9 @@ func (w *Window) registerActions() {
 			}
 		}
 	}
-	// forRows acts on every message the selected row stands for: one, or
-	// all the folder members of a conversation row.
-	forRows := func(fn func(listRow, []api.MessageID)) func() {
+	// forRows acts on every message the selected rows stand for: one
+	// each, or all the folder members of a conversation row.
+	forRows := func(fn func([]listRow, []api.MessageID)) func() {
 		return func() { w.selectedIDs(fn) }
 	}
 	w.addAction("refresh", true, w.triggerSync)
@@ -854,27 +863,25 @@ func (w *Window) registerActions() {
 	w.addAction("show-mail", true, func() { w.setMode(board.ModeMail) })
 	w.addAction("show-board", true, func() { w.setMode(board.ModeBoard) })
 	w.addAction("search", true, w.startSearch)
-	w.addAction("trash", false, forRows(func(row listRow, ids []api.MessageID) { w.trashIDs(w, ids, rowSubject(row)) }))
-	w.addAction("archive", false, forRows(func(_ listRow, ids []api.MessageID) { w.archiveIDs(ids) }))
-	w.addAction("junk", false, forRows(func(row listRow, ids []api.MessageID) { w.junkIDs(w, ids, rowSubject(row)) }))
-	w.addAction("mark-read", false, forRows(func(_ listRow, ids []api.MessageID) { w.setSeenIDs(ids, true) }))
-	w.addAction("mark-unread", false, forRows(func(_ listRow, ids []api.MessageID) { w.setSeenIDs(ids, false) }))
-	w.addAction("toggle-flag", false, forRows(func(row listRow, ids []api.MessageID) { w.setFlaggedIDs(ids, w.model.flagTarget(row)) }))
+	w.addAction("trash", false, forRows(func(rows []listRow, ids []api.MessageID) { w.trashIDs(w, ids, selectionSubject(rows)) }))
+	w.addAction("archive", false, forRows(func(_ []listRow, ids []api.MessageID) { w.archiveIDs(ids) }))
+	w.addAction("junk", false, forRows(func(rows []listRow, ids []api.MessageID) { w.junkIDs(w, ids, selectionSubject(rows)) }))
+	w.addAction("mark-read", false, forRows(func(_ []listRow, ids []api.MessageID) { w.setSeenIDs(ids, true) }))
+	w.addAction("mark-unread", false, forRows(func(_ []listRow, ids []api.MessageID) { w.setSeenIDs(ids, false) }))
+	w.addAction("toggle-flag", false, forRows(func(rows []listRow, ids []api.MessageID) { w.setFlaggedIDs(ids, w.flagTargetOf(rows)) }))
 	// The message's context menu (context_menus.go) reaches these too:
-	// open, the replies (the header bar's buttons call openCompose
-	// themselves) and Move To with the target folder's id.
-	w.addAction("open-message", false, func() {
-		if s, ok := w.selectedMessage(); ok {
-			w.openMessage(s)
-		}
-	})
+	// open (several rows: a window each, selection.MaxOpen), the replies
+	// (the header bar's buttons call openCompose themselves), forward (the
+	// selection in one message) and Move To with the target folder's id.
+	w.addAction("open-message", false, w.openSelection)
 	for _, r := range []struct {
 		name string
 		kind compose.Kind
-	}{{"reply", compose.KindReply}, {"reply-all", compose.KindReplyAll}, {"forward", compose.KindForward}} {
+	}{{"reply", compose.KindReply}, {"reply-all", compose.KindReplyAll}} {
 		r := r
 		w.addAction(r.name, false, forSelected(func(id api.MessageID) { w.openCompose(r.kind, id) }))
 	}
+	w.addAction("forward", false, w.forwardSelection)
 	moveTo := gio.NewSimpleAction("move-to", glib.NewVariantType("s"))
 	moveTo.SetEnabled(false)
 	moveTo.ConnectActivate(func(v *glib.Variant) {
@@ -882,7 +889,7 @@ func (w *Window) registerActions() {
 			return
 		}
 		target := api.FolderID(v.String())
-		w.selectedIDs(func(_ listRow, ids []api.MessageID) { w.moveIDsTo(ids, target) })
+		w.selectedIDs(func(_ []listRow, ids []api.MessageID) { w.moveIDsTo(ids, target) })
 	})
 	w.AddAction(moveTo)
 	w.actions["move-to"] = moveTo

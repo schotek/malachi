@@ -12,14 +12,22 @@
 // ActionsController's; this only resolves the selection (a conversation
 // row's members, its subject for the confirmation, its star's target) and
 // the window a confirmation goes on. The links and attachments, which
-// macOS handles here too, are LinkOpener's and AttachmentOpener's.
+// macOS handles here too, are LinkOpener's and AttachmentOpener's. Several
+// selected rows (selection.go, the same in macOS) combine their flags
+// (Selection.Combine), go to one question without a subject, star or
+// unstar together (Selection.FlagTarget) and are forwarded in one message
+// (ActionsController.ForwardMessages); Reply, Reply All, Load Images and
+// Trust Sender stay the one row's.
 // UI-thread-affine.
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Malachi.Core.Api;
 using Malachi.Core.Compose;
 using Malachi.Core.Controllers;
 using Malachi.Core.Model;
+using Malachi.Core.Selections;
 
 namespace Malachi.Core.Presentation;
 
@@ -47,8 +55,21 @@ public sealed class MessageActionRouter
 
     // The selection (window.go registerActions)
 
-    /// <summary>What the main window's per-message commands allow now (actions.go <c>setMessageActionsSensitive</c>).</summary>
-    public ActionFlags Flags => actions.ActionFlagsFor(list.SelectedRow);
+    /// <summary>
+    /// What the main window's per-message commands allow now (actions.go
+    /// <c>setMessageActionsSensitive</c>); several rows combine their flags
+    /// (<see cref="Selection.Combine"/>).
+    /// </summary>
+    public ActionFlags Flags
+    {
+        get
+        {
+            var rows = list.SelectedRows;
+            return rows.Count > 1
+                ? Selection.Combine([.. rows.Select(actions.ActionFlagsFor)])
+                : actions.ActionFlagsFor(rows.Count == 1 ? rows[0] : null);
+        }
+    }
 
     /// <summary>Reply to the selected row's message (a conversation row's newest folder member).</summary>
     public void Reply() => ForSelected(id => actions.OpenCompose(ComposeKind.Reply, id));
@@ -58,21 +79,38 @@ public sealed class MessageActionRouter
 
     /// <summary>
     /// Forward the selected row's message; "Forward Without Attachments?"
-    /// goes on the main window.
+    /// goes on the main window. Several rows go in one message, each
+    /// attached whole (selection.go <c>forwardSelection</c>).
     /// </summary>
-    public void Forward() => ForSelected(id => actions.OpenCompose(ComposeKind.Forward, id, MainWindow?.Invoke()));
+    public void Forward()
+    {
+        if (list.SelectedRows.Count > 1)
+        {
+            list.SelectedIds((_, ids) => actions.ForwardMessages(ids));
+            return;
+        }
+        ForSelected(id => actions.OpenCompose(ComposeKind.Forward, id, MainWindow?.Invoke()));
+    }
 
-    /// <summary>win.trash: every message of the selected row, confirmed over the main window when the setting asks.</summary>
-    public void Trash() => list.SelectedIds((row, ids) => actions.Trash(ids, ListController.RowSubject(row), MainWindow?.Invoke()));
+    /// <summary>
+    /// win.trash: every message of the selected rows, confirmed over the main
+    /// window when the setting asks, with the subject of one row (nothing
+    /// for several, whose heading counts them).
+    /// </summary>
+    public void Trash() => list.SelectedIds((rows, ids) => actions.Trash(ids, ListController.SelectionSubject(rows), MainWindow?.Invoke()));
 
-    /// <summary>win.junk: every message of the selected row, always confirmed.</summary>
-    public void Junk() => list.SelectedIds((row, ids) => actions.Junk(ids, ListController.RowSubject(row), MainWindow?.Invoke()));
+    /// <summary>win.junk: every message of the selected rows, always confirmed.</summary>
+    public void Junk() => list.SelectedIds((rows, ids) => actions.Junk(ids, ListController.SelectionSubject(rows), MainWindow?.Invoke()));
 
     /// <summary>win.archive.</summary>
     public void Archive() => list.SelectedIds((_, ids) => actions.Archive(ids));
 
-    /// <summary>win.toggle-flag: a conversation row stars every member, or unstars them when any is starred (<c>flagTarget</c>).</summary>
-    public void ToggleFlag() => list.SelectedIds((row, ids) => actions.SetFlagged(ids, ListController.FlagTarget(row)));
+    /// <summary>
+    /// win.toggle-flag: a conversation row stars every member, or unstars
+    /// them when any is starred (<c>flagTarget</c>); several rows are starred
+    /// unless every one is, which unstars them (<see cref="Selection.FlagTarget"/>).
+    /// </summary>
+    public void ToggleFlag() => list.SelectedIds((rows, ids) => actions.SetFlagged(ids, FlagTarget(rows)));
 
     /// <summary>win.mark-read.</summary>
     public void MarkRead() => list.SelectedIds((_, ids) => actions.SetSeen(ids, true));
@@ -184,6 +222,11 @@ public sealed class MessageActionRouter
         ArgumentNullException.ThrowIfNull(to);
         Compose?.Invoke(new ComposeParams { Kind = ComposeKind.New, AccountId = account, To = [to] });
     }
+
+    // selection.go flagTargetOf: a row's own rule, for several the
+    // combined flags'.
+    private bool FlagTarget(IReadOnlyList<ListRow> rows) =>
+        rows.Count == 1 ? ListController.FlagTarget(rows[0]) : Selection.FlagTarget(Flags);
 
     // Runs fn on the selected row's message (a conversation row's newest
     // folder member; window.go selectedMessage).

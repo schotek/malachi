@@ -115,7 +115,7 @@ func (w *Window) loadAccounts() {
 			// (added, removed, paused, renamed).
 			w.refreshCertBanner()
 			w.refreshSyncLabel()
-			if w.messageList.SelectedRow() == nil {
+			if len(w.messageList.SelectedRows()) == 0 {
 				w.messageStack.SetVisibleChildName(w.emptyPageName())
 			}
 
@@ -566,7 +566,12 @@ func (w *Window) onNewMessage(n api.NewMessageNotification) {
 		case w.model.grouped:
 			// Into its conversation row, or a new one at the top; without
 			// a thread id (a daemon still linking) the list is asked again.
-			sel, _ := w.selectedKey()
+			// The selected row keeps its shape; several rows have none
+			// that a reply changes.
+			var sel listKey
+			if keys := w.selectedKeys(); len(keys) == 1 {
+				sel = keys[0]
+			}
 			if w.model.applyNewMessage(s, w.model.listFilter, sel) {
 				w.syncRows()
 				w.refetchReplies(s.ThreadID)

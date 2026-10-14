@@ -128,7 +128,7 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 	unbind := w.assist.bindAssistantButton(b.GetObject("assistant_button").Cast().(*gtk.MenuButton), "msg", false, func() {
 		_, ok := w.assist.pick(true)
 		ask.SetEnabled(ok && !outbox)
-	}, nil)
+	}, nil, nil)
 	activeHandle := mw.NotifyProperty("is-active", func() {
 		if mw.IsActive() {
 			w.assist.Refresh()

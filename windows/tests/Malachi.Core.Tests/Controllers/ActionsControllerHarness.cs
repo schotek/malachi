@@ -14,8 +14,8 @@
 // exercises ported next to them: loading the accounts, the folders (with
 // the outbox's delivery tracking) and the first page of a folder in either
 // mode, removing rows with their restore (messages.go removeRows /
-// removeMessageRow) and the conversation members of a selected row
-// (threads.go selectedIDs, ensureMembers). The cache is the real
+// removeMessageRow) and the conversation members of the selected rows
+// (selection.go selectedIDs, threads.go ensureMembers). The cache is the real
 // MessageCache, as in Swift, on the fixture's clock (its download spinner)
 // and counted in the harness's work. The mailbox's scope is the group's, as
 // in the app.
@@ -416,16 +416,22 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
 
     /// <summary>
     /// The list half (MailboxController+List.swift's share of the suite):
-    /// the first page in either mode, the rows, the selection and its
-    /// members, the optimistic removal with its restore.
+    /// the first page in either mode, the rows, the selection (one row or
+    /// several) and its members, the optimistic removal with its restore.
     /// </summary>
     internal sealed class ListHalf(MailboxHalf mailbox) : IActionsList
     {
         private readonly Dictionary<ThreadId, List<Action>> waiters = [];
 
-        public ListKey? SelectedKey { get; private set; }
+        /// <summary>The selected rows' keys in list order (ListController.SelectedKeys).</summary>
+        public IReadOnlyList<ListKey> SelectedKeys { get; private set; } = [];
+
+        public ListKey? SelectedKey => SelectedKeys.Count == 1 ? SelectedKeys[0] : null;
 
         public ListRow? SelectedRow => SelectedKey is { } k ? Row(k) : null;
+
+        /// <summary>The selected rows in list order (ListController.SelectedRows).</summary>
+        public IReadOnlyList<ListRow> SelectedRows => [.. SelectedKeys.Select(Row).OfType<ListRow>()];
 
         /// <summary>The rows the model has right now, in either mode.</summary>
         public IReadOnlyList<ListRow> Rows => Model.Grouped
@@ -439,7 +445,10 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
 
         public ListRow? Row(ListKey key) => Model.RowAt(Model.RowIndexOf(key));
 
-        public void Select(ListKey? key) => SelectedKey = key;
+        public void Select(ListKey? key) => SelectedKeys = key is { } k ? [k] : [];
+
+        /// <summary>ListController.SelectKeys: several rows (or one, or none), a key named twice once.</summary>
+        public void SelectKeys(IReadOnlyList<ListKey> keys) => SelectedKeys = [.. keys.Distinct()];
 
         /// <summary>messages.go loadMessages / threads.go loadThreadPage for the selected folder.</summary>
         public void LoadMessages()
@@ -453,7 +462,7 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
                 Model.ListFolder = k;
                 Model.Grouped = grouped;
                 Model.ClearMessages();
-                SelectedKey = null;
+                SelectedKeys = [];
             }
             if (k is not { } key)
             {
@@ -500,31 +509,61 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
         }
 
         /// <summary>
-        /// threads.go selectedIDs: the selected row and every message it
-        /// stands for, the members fetched first when they are not known.
+        /// selection.go selectedIDs: the selected rows and every message they
+        /// stand for, the members fetched first when they are not known (the
+        /// selection must still be those rows by then).
         /// </summary>
-        public void SelectedIds(Action<ListRow, IReadOnlyList<MessageId>> then)
+        public void SelectedIds(Action<IReadOnlyList<ListRow>, IReadOnlyList<MessageId>> then)
         {
-            if (SelectedRow is not { } row)
+            var keys = SelectedKeys;
+            var rows = SelectedRows;
+            if (rows.Count == 0)
             {
                 return;
             }
-            if (Model.RowIds(row) is { } ids)
+            var missing = new List<ThreadId>();
+            foreach (var r in rows)
             {
-                then(row, ids);
-                return;
-            }
-            if (row.Key.Thread is not { } tid)
-            {
-                return;
-            }
-            EnsureMembers(tid, () =>
-            {
-                if (SelectedRow is { Thread: true } r && r.Key.Thread == tid && Model.RowIds(r) is { } members)
+                if (Model.RowIds(r) is null && r.Key.Thread is { } tid)
                 {
-                    then(r, members);
+                    missing.Add(tid);
                 }
-            });
+            }
+            void Run()
+            {
+                if (!SelectedKeys.SequenceEqual(keys))
+                {
+                    return;
+                }
+                var now = SelectedRows;
+                var ids = new List<MessageId>();
+                foreach (var r in now)
+                {
+                    if (Model.RowIds(r) is not { } got)
+                    {
+                        return;
+                    }
+                    ids.AddRange(got);
+                }
+                then(now, ids);
+            }
+            if (missing.Count == 0)
+            {
+                Run();
+                return;
+            }
+            var left = missing.Count;
+            foreach (var tid in missing)
+            {
+                EnsureMembers(tid, () =>
+                {
+                    left--;
+                    if (left == 0)
+                    {
+                        Run();
+                    }
+                });
+            }
         }
 
         /// <summary>thread_model.go flagTarget.</summary>

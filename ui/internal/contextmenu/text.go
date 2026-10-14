@@ -27,6 +27,8 @@ type Labels struct {
 	Favourite bool
 	// Collapsed: Fold is Expand.
 	Collapsed bool
+	// Count: OpenMessage opens this many rows (2 or more).
+	Count int
 }
 
 // Label is an item's text. Some carry a mnemonic underscore, as the same
@@ -35,6 +37,10 @@ type Labels struct {
 func Label(tr Translator, id ItemID, l Labels) string {
 	switch id {
 	case OpenMessage:
+		if l.Count > 1 {
+			// TRANSLATORS: In the menu of several selected messages: opens each in a window of its own; %d is their number.
+			return fmt.Sprintf(tr.N("Open %d Message in a New Window", "Open %d Messages in New Windows", l.Count), l.Count)
+		}
 		// TRANSLATORS: In the menu of a message in the list: opens it in a window of its own.
 		return tr.T("Open in New Window")
 	case EditDraft:

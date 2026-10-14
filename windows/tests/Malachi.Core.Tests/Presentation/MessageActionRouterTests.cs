@@ -7,7 +7,9 @@
 // over the real ActionsController and MailFixture
 // (ActionsControllerHarness). What the actions themselves do is
 // ActionsControllerTests'; this checks that each command reaches the right
-// messages with the right subject and window.
+// messages with the right subject and window, for one row and for several
+// (selection.go: one question without a subject, the star of them all,
+// Forward in one message).
 
 using System;
 using System.Collections.Generic;
@@ -29,7 +31,7 @@ public sealed class MessageActionRouterTests
     private static Dictionary<FolderKey, MessageSummary[]> In(FolderKey k, params MessageSummary[] list) => new() { [k] = list };
 
     private static MessageActionRouter Router(ActionsControllerHarness h, List<ComposeParams>? composed = null) =>
-        new(h.Actions, new Selection(h.List))
+        new(h.Actions, new ListSelection(h.List))
         {
             MainWindow = () => "main",
             Compose = p => composed?.Add(p),
@@ -87,6 +89,53 @@ public sealed class MessageActionRouterTests
         Assert.Equal(["a1", "a2", "a3"], h.Fixture.MoveRequests.Single().MessageIds.Select(id => id.Value).Order());
     }
 
+    /// <summary>
+    /// Several rows: the flags combine (Reply off, Forward on), Trash asks
+    /// once with their count and no subject, the star stars them all, and
+    /// Forward makes one draft.create with every id.
+    /// </summary>
+    [Fact]
+    public async Task SeveralRowsActTogether()
+    {
+        await using var h = await StartAsync(messages: In(Inbox, Msg("m1", 1), Msg("m2", 2), Msg("m3", 3)));
+        h.Log.Answer = true;
+        var forwarded = new List<DraftCreateParams>();
+        h.Fixture.Daemon.On(API.DraftCreate.Name, p =>
+        {
+            lock (forwarded)
+            {
+                forwarded.Add(JsonCoding.Decode<DraftCreateParams>(p));
+            }
+            return JsonCoding.EncodeToString(new DraftCreateResult
+            {
+                Draft = new Draft { AccountId = "a", Subject = "Fwd: s-m3" },
+                Quoted = QuoteForm.None,
+            });
+        });
+        var router = Router(h);
+        var flags = ActionFlags.None;
+        await h.Run(() =>
+        {
+            h.List.SelectKeys([new ListKey(Message: "m3"), new ListKey(Message: "m1")]);
+            flags = router.Flags;
+            router.ToggleFlag();
+            router.Forward();
+            router.Reply(); // for one message: nothing
+        });
+        await h.IdleAsync();
+        Assert.True(flags.Count == 2 && flags.Forward && !flags.Reply && flags.Open, flags.ToString());
+        Assert.Equal(["m3", "m1"], h.Fixture.FlagRequests.Single().MessageIds.Select(id => id.Value));
+        Assert.Equal([Flag.Flagged], h.Fixture.FlagRequests.Single().Set);
+        var asked = Assert.Single(forwarded);
+        Assert.Equal(["m3", "m1"], asked.MessageIds!.Select(id => id.Value));
+        Assert.Single(h.Log.Composed);
+
+        await h.Run(router.Trash);
+        await h.IdleAsync();
+        Assert.Equal(new Confirmation("Move 2 messages to Trash?", "", "Move to _Trash"), Assert.Single(h.Log.Confirmations));
+        Assert.Equal(["m3", "m1"], h.Fixture.DeleteRequests.Single().MessageIds.Select(id => id.Value));
+    }
+
     [Fact]
     public async Task OneMessagesCommandsActOnItAndAskOverItsWindow()
     {
@@ -141,10 +190,12 @@ public sealed class MessageActionRouterTests
     }
 
     // ListHalf is the harness's stand-in for ListController.
-    private sealed class Selection(ListHalf list) : IListSelection
+    private sealed class ListSelection(ListHalf list) : IListSelection
     {
+        public IReadOnlyList<ListRow> SelectedRows => list.SelectedRows;
+
         public ListRow? SelectedRow => list.SelectedRow;
 
-        public void SelectedIds(Action<ListRow, IReadOnlyList<MessageId>> done) => list.SelectedIds(done);
+        public void SelectedIds(Action<IReadOnlyList<ListRow>, IReadOnlyList<MessageId>> done) => list.SelectedIds(done);
     }
 }

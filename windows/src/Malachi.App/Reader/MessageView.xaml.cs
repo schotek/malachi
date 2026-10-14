@@ -373,6 +373,7 @@ public sealed partial class MessageView : UserControl
                 {
                     ReaderPage.Empty => EmptyPage,
                     ReaderPage.NoAccounts => NoAccountsPage,
+                    ReaderPage.Selection => SelectionPage,
                     ReaderPage.Conversation when conversation is not null => conversation,
                     _ => MessagePage,
                 });

@@ -6,6 +6,7 @@ package window
 import (
 	"context"
 	"os/exec"
+	"slices"
 	"time"
 
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
@@ -52,22 +53,20 @@ func (w *Window) rowForWidget(row *gtk.ListBoxRow) (listRow, bool) {
 // Reuse message widgets and keep selection by identity through flag changes,
 // pagination and midnight. Headings are never selectable message targets.
 func (w *Window) syncDateRows(neighbour bool) {
-	prev, hadSelection := w.selectedKey()
+	prev := w.selectedKeys()
 	prevIndex := -1
-	if hadSelection {
-		prevIndex = w.messageList.SelectedRow().Index()
+	if len(prev) > 0 {
+		prevIndex = w.rows[prev[0]].Index()
 	}
 	if w.dateFolder != w.model.listFolder {
 		w.dateFolder = w.model.listFolder
 		w.dateCollapsed = make(map[maildate.Group]bool)
 	}
 	sections := w.dateSections()
-	if hadSelection {
-		for _, section := range sections {
-			for _, key := range section.Keys {
-				if key == prev {
-					delete(w.dateCollapsed, section.Group)
-				}
+	for _, section := range sections {
+		for _, key := range section.Keys {
+			if slices.Contains(prev, key) {
+				delete(w.dateCollapsed, section.Group)
 			}
 		}
 	}
@@ -125,36 +124,17 @@ func (w *Window) syncDateRows(neighbour bool) {
 			visible = append(visible, key)
 		}
 	}
-	selected := false
-	changed := false
-	if hadSelection {
-		r := w.rows[prev]
-		if r == nil && prev.Thread != "" {
-			r = w.rows[listKey{Thread: prev.Thread}]
-			changed = r != nil
+	w.restoreSelection(prev, func() (listKey, bool) {
+		if !neighbour || len(visible) == 0 {
+			return listKey{}, false
 		}
-		if r == nil && neighbour && len(visible) > 0 {
-			key := visible[len(visible)-1]
-			for _, candidate := range visible {
-				if w.rows[candidate].Index() >= prevIndex {
-					key = candidate
-					break
-				}
+		for _, candidate := range visible {
+			if w.rows[candidate].Index() >= prevIndex {
+				return candidate, true
 			}
-			r = w.rows[key]
-			changed = true
 		}
-		if r != nil {
-			w.messageList.SelectRow(r.ListBoxRow)
-			selected = true
-		}
-	}
-	w.reselecting = false
-	if hadSelection && !selected {
-		w.onMessageRowSelected(nil)
-	} else if changed {
-		w.onMessageRowSelected(w.messageList.SelectedRow())
-	}
+		return visible[len(visible)-1], true
+	})
 	w.showListState()
 	w.conversationListChanged()
 }
@@ -169,14 +149,16 @@ func (w *Window) toggleDateGroup(group maildate.Group) {
 		w.dateCollapsed[group] = true
 	}
 	if w.dateCollapsed[group] {
-		key, selected := w.selectedKey()
+		// The selected rows the fold hides leave the selection (the pane
+		// follows), or syncDateRows would unfold their section again.
+		selected := w.selectedKeys()
 		for _, section := range w.dateSections() {
 			if section.Group != group {
 				continue
 			}
 			for _, member := range section.Keys {
-				if selected && member == key {
-					w.messageList.UnselectAll()
+				if r := w.rows[member]; r != nil && slices.Contains(selected, member) {
+					w.messageList.UnselectRow(r.ListBoxRow)
 				}
 			}
 		}

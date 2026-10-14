@@ -12,8 +12,11 @@
 // window.go (the row-selected and row-activated handlers,
 // onMessageRowSelected, showConnectionState's list share), actions.go
 // (scheduleMarkRead, refreshMessageActions, refreshRows, the apply step of
-// setSeenIDs / setFlaggedIDs) and outbox.go (refreshOutboxViews, the list
-// share).
+// setSeenIDs / setFlaggedIDs), outbox.go (refreshOutboxViews, the list
+// share) and selection.go (the selection of several rows: selectedKeys,
+// selectedRows, restrictSelection, showSelectionPage, selectionState,
+// selectedIDs, selectionSubject, flagTargetOf, restoreSelection; Core's
+// Selections/Selection.cs is ui/internal/selection).
 //
 // The file keeps Swift's name: like MailboxController+List.swift it holds
 // ListController, the second half of the one GTK window object, and
@@ -23,13 +26,21 @@
 // mark-as-read delay runs on the TimeProvider, the Swift callbacks are
 // events of the same words, and the state a view binds to is observable.
 // The rows are a snapshot keyed by ListRow.Key for KeyedListSync, and
-// SelectedKey is the source of truth for the selection, current whenever
+// SelectedKeys is the source of truth for the selection, current whenever
 // the rows are announced (RowsChanged, RowsRefreshed): the view applies
 // them by key with row view models updated in place (KeyedListSync's view
-// overload, so a changed flag is never a Replace) and selects SelectedKey
+// overload, so a changed flag is never a Replace) and selects SelectedKeys
 // with its own handler suppressed, after every apply, since WinUI may drop
 // the selection of a moved item (docs/windows-port.md §7.5; phase E
-// verifies).
+// verifies). SelectedKey is the one selected row's key, null for none or
+// several (the single-message features have none then).
+//
+// Several rows (selection.go, the same in GTK and macOS): the view selects
+// them with Ctrl-click, Shift-click, Shift+arrows and Ctrl+A, within one
+// account (Restrict); they show their count in the pane
+// (SeveralSelected), mark nothing read, and the actions combine
+// (Selection.Combine); a reload, a page, a fold and a removal keep the keys
+// still listed (Selection.Reconcile).
 
 using System;
 using System.Collections.Generic;
@@ -41,6 +52,7 @@ using Malachi.Core.Api;
 using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
+using Malachi.Core.Selections;
 using Malachi.Core.Settings;
 using Malachi.Core.Text;
 using Microsoft.Extensions.Logging;
@@ -115,6 +127,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         ListState = new ListState.Messages();
         LoadMoreState = new LoadMoreState();
         Rows = [];
+        SelectedKeys = [];
         Scope.VerifyAccess();
         // The filter is deliberately not persisted (window.go).
         Model.ListFilter = MessageFilter.All;
@@ -143,8 +156,8 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
 
     /// <summary>
     /// The rows changed (Swift <c>onRows</c>): reconcile the list by key,
-    /// then mirror <see cref="SelectedKey"/>. <see cref="Rows"/> and
-    /// <see cref="SelectedKey"/> are current when it is raised. A row that
+    /// then mirror <see cref="SelectedKeys"/>. <see cref="Rows"/> and
+    /// <see cref="SelectedKeys"/> are current when it is raised. A row that
     /// stays may be a new record (a conversation's counts after a flag
     /// change): its view model is updated in place, never replaced, and the
     /// view selects the key with its own selection handler suppressed
@@ -170,7 +183,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     /// mark-as-read sets about a second after every selection; Swift
     /// <c>onRowsRefreshed</c>); <see cref="RowFor"/> and <see cref="Rows"/>
     /// have the new content, new records under the same keys, and
-    /// <see cref="SelectedKey"/> stays. The view updates the rows' view
+    /// <see cref="SelectedKeys"/> stay. The view updates the rows' view
     /// models in place (or applies <see cref="Rows"/> through the view
     /// overload of <see cref="KeyedListSync"/>), never replaces them, which a
     /// WinUI selector takes for a removal and an insertion that drops the
@@ -195,19 +208,29 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
 
     /// <summary>
     /// The message the pane should show: the selected row's (a conversation
-    /// row's newest folder member), null when nothing is selected (window.go
-    /// <c>onMessageRowSelected</c>; Swift <c>onSelectedMessageChanged</c>).
+    /// row's newest folder member), null when nothing or several rows are
+    /// selected (window.go <c>onMessageRowSelected</c>; Swift
+    /// <c>onSelectedMessageChanged</c>).
     /// </summary>
     public event EventHandler<MessageSummary?>? SelectedMessageChanged;
 
     /// <summary>
     /// The selected row itself, announced just before
-    /// <see cref="SelectedMessageChanged"/>, null when nothing is selected: a
-    /// conversation row (<see cref="ListRow.ShowsConversation"/>) puts the
-    /// whole conversation in the pane (<see cref="ConversationController"/>),
-    /// any other row its message (Swift <c>onSelectedRowChanged</c>).
+    /// <see cref="SelectedMessageChanged"/>, null when nothing or several
+    /// rows are selected: a conversation row
+    /// (<see cref="ListRow.ShowsConversation"/>) puts the whole conversation
+    /// in the pane (<see cref="ConversationController"/>), any other row its
+    /// message (Swift <c>onSelectedRowChanged</c>).
     /// </summary>
     public event EventHandler<ListRow?>? SelectedRowChanged;
+
+    /// <summary>
+    /// Several rows are selected (their number): the pane shows their count
+    /// (selection.go <c>showSelectionPage</c>; Swift <c>onSeveralSelected</c>);
+    /// <see cref="SelectedRowChanged"/> and <see cref="SelectedMessageChanged"/>
+    /// announced null just before.
+    /// </summary>
+    public event EventHandler<int>? SeveralSelected;
 
     /// <summary>
     /// The folder members the model holds of a conversation changed while
@@ -285,7 +308,19 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     [ObservableProperty]
     public partial IReadOnlyList<ListRow> Rows { get; private set; }
 
-    /// <summary>The key of the selected row, null for none (threads.go <c>selectedKey</c>).</summary>
+    /// <summary>
+    /// The keys of the selected rows in list order, empty for none
+    /// (selection.go <c>selectedKeys</c>; several within one account,
+    /// <see cref="Restrict"/>). A snapshot, replaced whole.
+    /// </summary>
+    [ObservableProperty]
+    public partial IReadOnlyList<ListKey> SelectedKeys { get; private set; }
+
+    /// <summary>
+    /// The key of the selected row when it is one; null for none or several
+    /// (threads.go <c>selectedKey</c>; the single-message features have none
+    /// then).
+    /// </summary>
     [ObservableProperty]
     public partial ListKey? SelectedKey { get; private set; }
 
@@ -306,8 +341,14 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     /// <summary>The listed folder is the account's outbox: never grouped, never marked read.</summary>
     public bool InOutbox => FolderRole == Api.FolderRole.Outbox;
 
-    /// <summary>The row behind the selection, if any (threads.go <c>selectedRow</c>).</summary>
+    /// <summary>
+    /// The row behind the selection when it is one row (selection.go
+    /// <c>selectedRow</c>); null for none or several.
+    /// </summary>
     public ListRow? SelectedRow => SelectedKey is { } key ? RowFor(key) : null;
+
+    /// <summary>The selected rows in list order (selection.go <c>selectedRows</c>).</summary>
+    public IReadOnlyList<ListRow> SelectedRows => [.. SelectedKeys.Select(RowFor).OfType<ListRow>()];
 
     private MailModel Model => Mailbox.Model;
 
@@ -720,9 +761,10 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
 
     /// <summary>
     /// Brings the rows in line with the model (threads.go <c>syncRows</c>):
-    /// the selection follows its key; when a member row folded away its
-    /// conversation row takes over (and the pane shows the newest member);
-    /// when the selected row is gone the pane is cleared.
+    /// the selection follows its keys (<see cref="Selection.Reconcile"/>);
+    /// when a member row folded away its conversation row takes over (and
+    /// the pane shows the newest member); when every selected row is gone
+    /// the pane is cleared.
     /// </summary>
     public void SyncRows()
     {
@@ -732,62 +774,86 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
 
     /// <summary>
     /// <see cref="SyncRows"/> for a removal (threads.go
-    /// <c>syncRowsAfterRemoval</c>): a selected row that is gone hands the
-    /// selection to the row now at its place, pane included, as the flat
-    /// list does.
+    /// <c>syncRowsAfterRemoval</c>): when every selected row is gone, the
+    /// selection goes to the row now at the first one's place, pane
+    /// included, as the flat list does.
     /// </summary>
     private void SyncRowsAfterRemoval() => Reconcile(SelectionHint.Neighbour);
 
     /// <summary>
     /// Publishes the model's rows and reconciles the selection with them
     /// (threads.go <c>reconcileRows</c>, messages.go
-    /// <c>rebuildMessageRows</c>). The index of the selected row is read off
-    /// the rows as they were before the model moved on, as the GTK code
-    /// reads it off the widgets.
+    /// <c>rebuildMessageRows</c>, selection.go <c>restoreSelection</c>): each
+    /// selected key still listed stays (the pane already shows it), a member
+    /// that folded away becomes its conversation row, and when none is left
+    /// a removal (<see cref="SelectionHint.Neighbour"/>) selects the row now
+    /// at the first selected one's place. That place is read off the rows as
+    /// they were before the model moved on, as the GTK code reads it off the
+    /// widgets, unless <paramref name="neighbourIndex"/> gives it (a flat
+    /// removal of several rows at once: the first selected one's index when
+    /// it was removed, messages.go <c>removeMessageRows</c>).
     /// </summary>
-    internal void Reconcile(SelectionHint hint)
+    internal void Reconcile(SelectionHint hint, int? neighbourIndex = null)
     {
-        var prevKey = SelectedKey;
+        var prev = SelectedKeys;
         var prevIdx = -1;
-        if (prevKey is { } pk)
+        if (prev.Count > 0)
         {
+            var first = prev[0];
             for (var i = 0; i < Rows.Count; i++)
             {
-                if (Rows[i].Key == pk)
+                if (Rows[i].Key == first)
                 {
                     prevIdx = i;
                     break;
                 }
             }
         }
+        if (neighbourIndex is { } at)
+        {
+            prevIdx = at;
+        }
         var rows = CurrentRows();
-        var key = prevKey;
+        var keys = prev;
         var changed = false;
-        if (prevKey is { } k)
+        if (prev.Count > 0)
         {
             if (hint == SelectionHint.Clear)
             {
-                key = null;
-                changed = true;
-            }
-            else if (rows.Any(r => r.Key == k))
-            {
-                // Still listed: the pane already shows it.
-            }
-            else if (k.Thread is { } tid && rows.FirstOrDefault(r => r.Key == new ListKey(tid)) is { } conversation)
-            {
-                key = conversation.Key;
-                changed = true;
-            }
-            else if (hint == SelectionHint.Neighbour && prevIdx >= 0 && Math.Min(prevIdx, rows.Count - 1) >= 0)
-            {
-                key = rows[Math.Min(prevIdx, rows.Count - 1)].Key;
+                keys = [];
                 changed = true;
             }
             else
             {
-                key = null;
-                changed = true;
+                var present = rows.Select(r => r.Key).ToHashSet();
+                ListKey? Resolve(ListKey k)
+                {
+                    if (present.Contains(k))
+                    {
+                        return k;
+                    }
+                    if (k.Thread is { } tid && present.Contains(new ListKey(tid)))
+                    {
+                        return new ListKey(tid);
+                    }
+                    return null;
+                }
+                ListKey? Neighbour()
+                {
+                    var i = Math.Min(prevIdx, rows.Count - 1);
+                    return prevIdx >= 0 && i >= 0 ? rows[i].Key : null;
+                }
+                Func<ListKey?>? neighbour = null;
+                if (hint == SelectionHint.Neighbour)
+                {
+                    neighbour = Neighbour;
+                }
+                var now = Selection.Reconcile(prev, Resolve, neighbour);
+                if (!now.SequenceEqual(prev))
+                {
+                    keys = now;
+                    changed = true;
+                }
             }
         }
         if (hint == SelectionHint.Clear)
@@ -795,7 +861,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
             ResetPaging();
         }
         Rows = rows;
-        SelectedKey = key;
+        SetSelectedKeys(keys);
         RowsChanged?.Invoke(this, new RowsUpdate(rows, hint));
         if (changed)
         {
@@ -998,7 +1064,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
             }
             Model.SetMembers(tid, res.Thread, res.Messages, res.Sent);
             SyncRows();
-            if (SelectedRow is { } row && row.Key.Thread == tid)
+            if (SelectedRows.Any(row => row.Key.Thread == tid))
             {
                 RefreshActionFlags();
             }
@@ -1100,8 +1166,62 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     public void Select(ListKey? key)
     {
         Scope.VerifyAccess();
-        SelectedKey = key;
+        SelectKeys(key is { } k ? [k] : []);
+    }
+
+    /// <summary>
+    /// The user selected several rows, or one, or none (selection.go
+    /// <c>onSelectionChanged</c>; Swift <c>select(keys:)</c>):
+    /// <paramref name="keys"/> in list order, within one account (the view
+    /// restricts them first, <see cref="Restrict"/>), a key named twice
+    /// once. One row is <see cref="Select(ListKey?)"/>; several show their
+    /// count (<see cref="SeveralSelected"/>), mark nothing read and combine
+    /// their actions (<see cref="Selection.Combine"/>), and the same rows
+    /// again announce nothing.
+    /// </summary>
+    public void SelectKeys(IReadOnlyList<ListKey> keys)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+        Scope.VerifyAccess();
+        var seen = new HashSet<ListKey>();
+        ListKey[] unique = [.. keys.Where(seen.Add)];
+        if (unique.Length > 1 && unique.SequenceEqual(SelectedKeys))
+        {
+            return;
+        }
+        SetSelectedKeys(unique);
         AnnounceSelection();
+    }
+
+    /// <summary>
+    /// <see cref="Selection.Restrict"/> over the rows of
+    /// <paramref name="keys"/> (selection.go <c>restrictSelection</c>; Swift
+    /// <c>restrict(_:latest:)</c>): the keys within the account of
+    /// <paramref name="latest"/>, the row the user added last, in their
+    /// order; a key the list does not show is left out.
+    /// </summary>
+    public IReadOnlyList<ListKey> Restrict(IReadOnlyList<ListKey> keys, ListKey latest)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+        var rows = new List<(ListKey Key, AccountId Account)>(keys.Count);
+        foreach (var k in keys)
+        {
+            if (RowFor(k) is { } r)
+            {
+                rows.Add((k, r.Message.AccountId));
+            }
+        }
+        return Selection.Restrict(rows, latest);
+    }
+
+    // The selection is keys: SelectedKeys, and SelectedKey when it is one.
+    private void SetSelectedKeys(IReadOnlyList<ListKey> keys)
+    {
+        if (!keys.SequenceEqual(SelectedKeys))
+        {
+            SelectedKeys = keys;
+        }
+        SelectedKey = keys.Count == 1 ? keys[0] : null;
     }
 
     /// <summary>
@@ -1124,16 +1244,32 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
 
     /// <summary>
     /// window.go <c>onMessageRowSelected</c> for the current
-    /// <see cref="SelectedKey"/>. A conversation row shows the whole
+    /// <see cref="SelectedKeys"/>. A conversation row shows the whole
     /// conversation and marks only the member <c>Conversation.Build</c> picks
-    /// (<see cref="MarkConversationRead"/>).
+    /// (<see cref="MarkConversationRead"/>). Several rows show their count
+    /// and mark nothing read (selection.go <c>showSelectionPage</c>).
     /// </summary>
     private void AnnounceSelection()
     {
-        var row = SelectedRow;
+        var rows = SelectedRows;
+        if (rows.Count != SelectedKeys.Count)
+        {
+            SetSelectedKeys([.. rows.Select(r => r.Key)]);
+        }
+        if (rows.Count > 1)
+        {
+            // Several: their count in the pane, nothing marked read.
+            SelectedRowChanged?.Invoke(this, null);
+            SelectedMessageChanged?.Invoke(this, null);
+            SeveralSelected?.Invoke(this, rows.Count);
+            RefreshActionFlags();
+            ScheduleMarkRead(null);
+            return;
+        }
+        var row = rows.Count == 1 ? rows[0] : null;
         if (row is null)
         {
-            SelectedKey = null;
+            SetSelectedKeys([]);
             SelectionCleared?.Invoke(this, EventArgs.Empty);
         }
         SelectedRowChanged?.Invoke(this, row);
@@ -1220,11 +1356,18 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         AnnounceSelection();
     }
 
-    /// <summary>Re-evaluates the per-message actions for the selected row (actions.go <c>refreshMessageActions</c>).</summary>
+    /// <summary>
+    /// Re-evaluates the per-message actions for the selected row (actions.go
+    /// <c>refreshMessageActions</c>); several rows combine theirs
+    /// (selection.go <c>selectionState</c>, <see cref="Selection.Combine"/>).
+    /// </summary>
     public void RefreshActionFlags()
     {
         Scope.VerifyAccess();
-        var f = ActionRules.MessageActionState(SelectedRow, Model);
+        var rows = SelectedRows;
+        var f = rows.Count > 1
+            ? Selection.Combine([.. rows.Select(r => ActionRules.MessageActionState(r, Model))])
+            : ActionRules.MessageActionState(rows.Count == 1 ? rows[0] : null, Model);
         if (f == ActionFlags)
         {
             return;
@@ -1234,35 +1377,88 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     }
 
     /// <summary>
-    /// Runs <paramref name="done"/> with the selected row and every message
-    /// it stands for: one, or all the folder members of a conversation row,
-    /// fetched first when they are not known yet (the selection must still
-    /// be that conversation by then; threads.go <c>selectedIDs</c>).
+    /// Runs <paramref name="done"/> with the selected rows and every message
+    /// they stand for, in list order: one each, or all the folder members of
+    /// a conversation row, fetched first when they are not known yet (the
+    /// selection must still be those rows by then; selection.go
+    /// <c>selectedIDs</c>).
     /// </summary>
-    public void SelectedIds(Action<ListRow, IReadOnlyList<MessageId>> done)
+    public void SelectedIds(Action<IReadOnlyList<ListRow>, IReadOnlyList<MessageId>> done)
     {
         ArgumentNullException.ThrowIfNull(done);
         Scope.VerifyAccess();
-        if (SelectedRow is not { } row)
+        var keys = SelectedKeys;
+        var rows = SelectedRows;
+        if (rows.Count == 0)
         {
             return;
         }
-        if (Model.RowIds(row) is { } ids)
+        var missing = new List<ThreadId>();
+        foreach (var r in rows)
         {
-            done(row, ids);
-            return;
-        }
-        if (row.Key.Thread is not { } tid)
-        {
-            return;
-        }
-        EnsureMembers(tid, () =>
-        {
-            if (SelectedRow is { Thread: true } r && r.Key.Thread == tid && Model.RowIds(r) is { } known)
+            if (Model.RowIds(r) is null && r.Key.Thread is { } tid)
             {
-                done(r, known);
+                missing.Add(tid);
             }
-        });
+        }
+        void Run()
+        {
+            if (!SelectedKeys.SequenceEqual(keys))
+            {
+                return;
+            }
+            var now = SelectedRows;
+            var ids = new List<MessageId>();
+            foreach (var r in now)
+            {
+                if (Model.RowIds(r) is not { } got)
+                {
+                    return;
+                }
+                ids.AddRange(got);
+            }
+            done(now, ids);
+        }
+        if (missing.Count == 0)
+        {
+            Run();
+            return;
+        }
+        var left = missing.Count;
+        foreach (var tid in missing)
+        {
+            EnsureMembers(tid, () =>
+            {
+                left--;
+                if (left == 0)
+                {
+                    Run();
+                }
+            });
+        }
+    }
+
+    /// <summary>
+    /// The body of a confirmation for <paramref name="rows"/>: the subject of
+    /// one row (<see cref="RowSubject"/>), nothing for several, whose
+    /// heading counts them (selection.go <c>selectionSubject</c>).
+    /// </summary>
+    public static string SelectionSubject(IReadOnlyList<ListRow> rows)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        return rows.Count == 1 ? RowSubject(rows[0]) : "";
+    }
+
+    /// <summary>
+    /// What the star does to <paramref name="rows"/> (selection.go
+    /// <c>flagTargetOf</c>): a row's own rule (<see cref="FlagTarget(ListRow)"/>),
+    /// for several <see cref="Selection.FlagTarget"/> of the combined
+    /// <see cref="ActionFlags"/>.
+    /// </summary>
+    public bool FlagTarget(IReadOnlyList<ListRow> rows)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        return rows.Count == 1 ? FlagTarget(rows[0]) : Selection.FlagTarget(ActionFlags);
     }
 
     /// <summary>The subject a confirmation shows for a row: the conversation's, or the message's (threads.go <c>rowSubject</c>).</summary>
@@ -1495,14 +1691,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         Scope.VerifyAccess();
         if (!Model.Grouped)
         {
-            var restores = ids.Select(RemoveMessageRow).ToList();
-            return () =>
-            {
-                for (var i = restores.Count - 1; i >= 0; i--)
-                {
-                    restores[i]();
-                }
-            };
+            return RemoveMessageRows(ids);
         }
         // The conversations the messages belong to, while the model still
         // knows it.
@@ -1534,24 +1723,45 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     }
 
     /// <summary>
-    /// Drops a message from the flat list (messages.go
-    /// <c>removeMessageRow</c>). When it was the selected one its neighbour
-    /// is selected (the pane follows), or the pane is cleared when the list
-    /// ran empty.
+    /// Drops messages from the flat list in one go (messages.go
+    /// <c>removeMessageRows</c>): the selection keeps the rows still listed;
+    /// when every selected row went, the row now at the place of the first
+    /// selected one removed takes over (the pane follows), or the pane is
+    /// cleared when the list ran empty. The restore puts them back at their
+    /// places; it does nothing once the list was reloaded meanwhile.
     /// </summary>
-    private Action RemoveMessageRow(MessageId id)
+    private Action RemoveMessageRows(IReadOnlyList<MessageId> ids)
     {
-        if (Model.RemoveMessage(id) is not { } removed)
+        var prev = SelectedKeys;
+        var selectedAt = -1;
+        var gone = new List<(MessageSummary Summary, int Index)>();
+        foreach (var id in ids)
+        {
+            if (Model.RemoveMessage(id) is not { } removed)
+            {
+                continue;
+            }
+            gone.Add(removed);
+            if (selectedAt < 0 && prev.Contains(new ListKey(Message: id)))
+            {
+                selectedAt = removed.Index;
+            }
+        }
+        if (gone.Count == 0)
         {
             return () => { };
         }
         var gen = Model.ListGen;
-        SyncRowsAfterRemoval();
+        Reconcile(SelectionHint.Neighbour, selectedAt >= 0 ? selectedAt : (int?)null);
         return () =>
         {
-            if (Model.ListGen != gen || !Model.InsertMessage(removed.Index, removed.Summary))
+            if (Model.ListGen != gen)
             {
                 return;
+            }
+            for (var i = gone.Count - 1; i >= 0; i--)
+            {
+                _ = Model.InsertMessage(gone[i].Index, gone[i].Summary);
             }
             Reconcile(SelectionHint.Keep);
         };

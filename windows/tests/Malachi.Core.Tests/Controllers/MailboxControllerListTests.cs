@@ -15,9 +15,10 @@
 // (Swift shortens the delay's tick to 20 ms and sleeps). The controllers
 // live on the tests' UI thread, which goes on working after a call
 // returns, so what Swift reads right after a call is read in the same UI
-// turn here. The last two tests are Windows-only: the rows as keyed
-// snapshots with the selection as a key, and a flag change applied in place
-// (docs/windows-port.md §7.5).
+// turn here. Two tests are Windows-only: the rows as keyed snapshots with
+// the selection as keys, and a flag change applied in place
+// (docs/windows-port.md §7.5). The last two are Swift's tests of the
+// selection of several rows (selection.go).
 
 using System;
 using System.Collections.Generic;
@@ -573,10 +574,10 @@ public sealed class MailboxControllerListTests
         {
             h.List.Select(new ListKey("t1"));
             Assert.True(h.List.ActionFlags.On && h.List.ActionFlags.MarkRead && h.List.ActionFlags.MarkUnread);
-            h.List.SelectedIds((row, ids) =>
+            h.List.SelectedIds((rows, ids) =>
             {
                 log.Ids.Add(ids);
-                log.IdsFromThreads.Add(row.Thread);
+                log.IdsFromThreads.Add(rows.Count == 1 && rows[0].Thread);
             });
             return log.Ids.Count;
         });
@@ -600,10 +601,10 @@ public sealed class MailboxControllerListTests
         await h.On(() =>
         {
             h.List.Select(new ListKey("t2", "b1"));
-            h.List.SelectedIds((row, ids) =>
+            h.List.SelectedIds((rows, ids) =>
             {
                 log.Ids.Add(ids);
-                log.IdsFromThreads.Add(row.Thread);
+                log.IdsFromThreads.Add(rows.Count == 1 && rows[0].Thread);
             });
         });
         Assert.Equal(["b1"], log.Ids[^1].Select(id => id.Value));
@@ -838,12 +839,13 @@ public sealed class MailboxControllerListTests
         });
 
         await h.On(() => h.List.Select(new ListKey(Message: "m3")));
-        Assert.Equal([nameof(ListController.SelectedKey), nameof(ListController.ActionFlags)], changed);
+        Assert.Equal([nameof(ListController.SelectedKeys), nameof(ListController.SelectedKey), nameof(ListController.ActionFlags)], changed);
         changed.Clear();
         await h.On(() => h.List.RemoveRows(["m3"]));
         Assert.Equal(h.List.Rows.Select(r => r.Key), view.Select(r => r.Key));
         Assert.Equal([new ListKey(Message: "m2")], selectedInView);
         Assert.Contains(nameof(ListController.Rows), changed);
+        Assert.Contains(nameof(ListController.SelectedKeys), changed);
         Assert.Contains(nameof(ListController.SelectedKey), changed);
 
         // A new message moves every row down by one: the view inserts it and
@@ -959,6 +961,106 @@ public sealed class MailboxControllerListTests
             Assert.True(changes.KeptStructure);
             return changes.Updated;
         }
+    }
+
+    /// <summary>
+    /// Several rows (selection.go): their count in the pane, nothing marked
+    /// read, the actions combined; a reload keeps them, a removal keeps the
+    /// rows still listed or, all gone, takes the row now at the first one's
+    /// place.
+    /// </summary>
+    [Fact]
+    public async Task SeveralRowsShowTheirCountAndFollowTheList()
+    {
+        var log = new ListLog();
+        await using var h = await StartAsync(log, messages: new() { [Inbox] = [Msg("m1", 1), Msg("m2", 2, flags: [Flag.Seen]), Msg("m3", 3), Msg("m4", 4)] });
+        await h.IdleAsync();
+        var counts = new List<int>();
+        await h.On(() =>
+        {
+            h.Settings.MarkReadDelay = 0;
+            h.List.SeveralSelected += (_, n) => counts.Add(n);
+        });
+        Assert.Equal(["m4", "m3", "m2", "m1"], Ids(h.List.Rows));
+
+        var (flags, target, subject) = await h.On(() =>
+        {
+            h.List.SelectKeys([new ListKey(Message: "m4"), new ListKey(Message: "m2"), new ListKey(Message: "m4")]);
+            var rows = h.List.SelectedRows;
+            return (h.List.ActionFlags, h.List.FlagTarget(rows), ListController.SelectionSubject(rows));
+        });
+        Assert.Equal([new ListKey(Message: "m4"), new ListKey(Message: "m2")], h.List.SelectedKeys);
+        Assert.Null(h.List.SelectedKey);
+        Assert.Null(h.List.SelectedRow);
+        Assert.Equal(["m4", "m2"], h.List.SelectedRows.Select(r => r.Message.Id.Value));
+        Assert.Equal([2], counts);
+        Assert.Null(log.Selections[^1]);
+        Assert.True(flags.Count == 2 && flags.On && flags.MarkRead && flags.MarkUnread && !flags.Reply && flags.Forward && flags.Open, flags.ToString());
+        Assert.True(target, "no row starred: the star stars them all");
+        Assert.Equal("", subject);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(1));
+        Assert.True(log.Marks.Count == 0, "several rows mark nothing read");
+
+        // The same rows again: nothing announced.
+        await h.On(() => h.List.SelectKeys([new ListKey(Message: "m4"), new ListKey(Message: "m2")]));
+        Assert.Equal([2], counts);
+
+        var handed = await h.On(() =>
+        {
+            var rowCount = 0;
+            h.List.SelectedIds((rows, ids) =>
+            {
+                rowCount = rows.Count;
+                log.Ids.Add(ids);
+            });
+            return rowCount;
+        });
+        Assert.Equal(2, handed);
+        Assert.Equal(["m4", "m2"], Assert.Single(log.Ids).Select(id => id.Value));
+
+        // A new message on top: the selection stays.
+        await h.On(() => h.Mailbox.HandleNewMessage(New(Msg("m5", 5))));
+        Assert.Equal(["m5", "m4", "m3", "m2", "m1"], Ids(h.List.Rows));
+        Assert.Equal([new ListKey(Message: "m4"), new ListKey(Message: "m2")], h.List.SelectedKeys);
+
+        // One of them removed: the other stays, now one row.
+        var undo = await h.On(() => h.List.RemoveRows(["m2"]));
+        Assert.Equal([new ListKey(Message: "m4")], h.List.SelectedKeys);
+        Assert.Equal("m4", log.Selections[^1]?.Value);
+        await h.On(() =>
+        {
+            undo();
+            h.List.SelectKeys([new ListKey(Message: "m4"), new ListKey(Message: "m2")]);
+        });
+        Assert.Equal([2, 2], counts);
+
+        // Both removed in one go: the row now where the first one was.
+        await h.On(() => h.List.RemoveRows(["m4", "m2"]));
+        Assert.Equal(["m5", "m3", "m1"], Ids(h.List.Rows));
+        Assert.Equal([new ListKey(Message: "m3")], h.List.SelectedKeys);
+        Assert.Equal("m3", log.Selections[^1]?.Value);
+        await h.IdleAsync();
+        Assert.Contains("m3", Ids(log.Marks));
+    }
+
+    /// <summary>Several rows of a grouped list: a conversation row stands for its members, fetched first.</summary>
+    [Fact]
+    public async Task SelectedIdsOfSeveralRows()
+    {
+        var log = new ListLog();
+        await using var h = await StartAsync(log, messages: new() { [Inbox] = ThreadedMessages() }, grouped: true);
+        await h.IdleAsync();
+        Assert.Equal(["T:t3", "b1", "T:t1"], Ids(h.List.Rows));
+        var count = await h.On(() =>
+        {
+            h.List.SelectKeys([h.List.Rows[1].Key, h.List.Rows[2].Key]);
+            h.List.SelectedIds((_, ids) => log.Ids.Add(ids));
+            return h.List.ActionFlags.Count;
+        });
+        Assert.Equal(2, count);
+        await h.IdleAsync();
+        Assert.Equal(["b1", "a1", "a2", "a3"], Assert.Single(log.Ids).Select(id => id.Value));
+        Assert.True(h.List.Rows.Count == 3, "fetching members for an action does not unfold the row");
     }
 
     /// <summary>A message dated <paramref name="hours"/> after <see cref="Base"/>; unread unless <paramref name="flags"/> say otherwise.</summary>

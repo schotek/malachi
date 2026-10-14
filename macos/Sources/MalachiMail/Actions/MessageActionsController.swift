@@ -92,8 +92,12 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
 
     // MARK: MessageActions (the selection; window.go `registerActions`)
 
+    /// Several rows combine their flags (`Selection.combine`).
     var flags: ActionFlags {
-        actions.actionFlags(for: list.selectedRow)
+        let rows = list.selectedRows
+        return rows.count > 1
+            ? Selection.combine(rows.map { actions.actionFlags(for: $0) })
+            : actions.actionFlags(for: rows.first)
     }
 
     /// Runs `fn` on the selected row's message (a conversation row's newest
@@ -108,8 +112,13 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
         forSelected { actions.openCompose(.reply, $0) }
     }
 
+    /// One row as activating it does; several each in a window
+    /// (`Selection.maxOpen`).
     func openSelected() {
-        if let s = list.selectedRow?.message {
+        let rows = list.selectedRows
+        if rows.count > 1 {
+            actions.openMessages(rows.map(\.message))
+        } else if let s = rows.first?.message {
             actions.openMessage(s)
         }
     }
@@ -124,22 +133,29 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
         forSelected { actions.openCompose(.replyAll, $0) }
     }
 
-    /// "Forward Without Attachments?" goes on the main window.
+    /// "Forward Without Attachments?" goes on the main window. Several
+    /// rows go in one message, each attached whole (`forwardMessages`).
     func forward() {
+        if list.selectedRows.count > 1 {
+            list.selectedIDs { [weak self] _, ids in
+                self?.actions.forwardMessages(ids)
+            }
+            return
+        }
         forSelected { actions.openCompose(.forward, $0, from: mainWindow()) }
     }
 
     func trash() {
-        list.selectedIDs { [weak self] row, ids in
+        list.selectedIDs { [weak self] rows, ids in
             guard let self else { return }
-            self.actions.trash(ids, subject: self.list.rowSubject(row), parent: self.mainWindow())
+            self.actions.trash(ids, subject: self.list.selectionSubject(rows), parent: self.mainWindow())
         }
     }
 
     func junk() {
-        list.selectedIDs { [weak self] row, ids in
+        list.selectedIDs { [weak self] rows, ids in
             guard let self else { return }
-            self.actions.junk(ids, subject: self.list.rowSubject(row), parent: self.mainWindow())
+            self.actions.junk(ids, subject: self.list.selectionSubject(rows), parent: self.mainWindow())
         }
     }
 
@@ -151,9 +167,9 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
 
     /// On a conversation row the star acts on every member (`flagTarget`).
     func toggleFlag() {
-        list.selectedIDs { [weak self] row, ids in
+        list.selectedIDs { [weak self] rows, ids in
             guard let self else { return }
-            self.actions.setFlagged(ids, self.list.flagTarget(row))
+            self.actions.setFlagged(ids, self.list.flagTarget(rows))
         }
     }
 

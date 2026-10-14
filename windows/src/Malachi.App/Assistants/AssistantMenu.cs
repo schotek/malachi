@@ -20,9 +20,12 @@
 // button's title to lose).
 //
 // The main window's menu also fills the Assistant submenu of a message's
-// context menu (context_menus.go showMessageMenu: assistantMenu("win",
-// false)): the same items without Summarize Unread in This Folder, which is
-// the folder's, not the message's.
+// context menu (context_menus.go showMessageMenu: assistantMenuFor("win",
+// false, count)): the same items without Summarize Unread in This Folder,
+// which is the folder's, not the message's; for several selected rows the
+// actions that make sense for them (Assistant.MessageActionsFor: no Draft a
+// Reply…) with Ask named for several (Assistant.LabelFor; Swift's
+// AssistantMenu count).
 
 using System;
 using System.Collections.Generic;
@@ -43,12 +46,16 @@ internal sealed class AssistantMenu
     private readonly Func<bool>? canSummarizeUnread;
     private readonly Action? summarizeUnread;
     private readonly Action setUp;
+    private readonly Func<int>? count;
 
     /// <summary>
     /// A menu whose message actions run <paramref name="ask"/> while
     /// <paramref name="canAsk"/> (a message not in the Outbox is shown), with
     /// Summarize Unread in This Folder when <paramref name="summarizeUnread"/>
     /// is given; "Set Up the Assistant…" runs <paramref name="setUp"/>.
+    /// <paramref name="count"/>, when given, is how many rows the actions
+    /// are for at each opening (the main window's selection: several leave
+    /// out Draft a Reply… and name Ask for several).
     /// </summary>
     public AssistantMenu(
         AppState state,
@@ -56,7 +63,8 @@ internal sealed class AssistantMenu
         Action<AssistantAction> ask,
         Action setUp,
         Func<bool>? canSummarizeUnread = null,
-        Action? summarizeUnread = null)
+        Action? summarizeUnread = null,
+        Func<int>? count = null)
     {
         this.state = state;
         this.canAsk = canAsk;
@@ -64,6 +72,7 @@ internal sealed class AssistantMenu
         this.setUp = setUp;
         this.canSummarizeUnread = canSummarizeUnread;
         this.summarizeUnread = summarizeUnread;
+        this.count = count;
         Flyout = new MenuFlyout { Placement = FlyoutPlacementMode.BottomEdgeAlignedRight };
         Flyout.Opening += (_, _) =>
         {
@@ -81,27 +90,28 @@ internal sealed class AssistantMenu
 
     /// <summary>
     /// Fills <paramref name="items"/> (a context menu's Assistant submenu)
-    /// with the menu's items, Summarize Unread in This Folder left out; the
-    /// state is asked for again, as when the menu opens.
+    /// with the menu's items for <paramref name="count"/> selected rows,
+    /// Summarize Unread in This Folder left out; the state is asked for
+    /// again, as when the menu opens.
     /// </summary>
-    public void FillMessageMenu(IList<MenuFlyoutItemBase> items)
+    public void FillMessageMenu(IList<MenuFlyoutItemBase> items, int count = 1)
     {
         ArgumentNullException.ThrowIfNull(items);
         state.Assistant.Refresh();
-        Fill(items, unread: null);
+        Fill(items, unread: null, count);
     }
 
-    private void Fill() => Fill(Flyout.Items, summarizeUnread);
+    private void Fill() => Fill(Flyout.Items, summarizeUnread, Math.Max(1, count?.Invoke() ?? 1));
 
-    private void Fill(IList<MenuFlyoutItemBase> items, Action? unread)
+    private void Fill(IList<MenuFlyoutItemBase> items, Action? unread, int count)
     {
         var assistant = state.Assistant;
         var texts = Assistant.Texts();
         var (target, ok) = assistant.Pick(needsBridge: true);
         items.Clear();
-        foreach (var a in Assistant.MessageActions)
+        foreach (var a in Assistant.MessageActionsFor(count))
         {
-            var item = new MenuFlyoutItem { Text = Assistant.Label(a), IsEnabled = ok && canAsk() };
+            var item = new MenuFlyoutItem { Text = Assistant.LabelFor(a, count), IsEnabled = ok && canAsk() };
             item.Click += (_, _) => ask(a);
             items.Add(item);
         }

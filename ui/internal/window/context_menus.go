@@ -77,9 +77,14 @@ func rowMenuPoint(row *gtk.Widget) (x, y float64) {
 // gestures as they are made (attachMessageMenu, attachFolderMenu).
 func (w *Window) wireContextMenus() {
 	addMenuKeys(w.messageList, func() bool {
-		row := w.messageList.SelectedRow()
-		if row == nil {
+		// The focused row when it is selected, else the first selected.
+		sel := w.messageList.SelectedRows()
+		if len(sel) == 0 {
 			return false
+		}
+		row := sel[0]
+		if focus, ok := w.messageList.FocusChild().(*gtk.ListBoxRow); ok && focus != nil && focus.IsSelected() {
+			row = focus
 		}
 		x, y := rowMenuPoint(&row.Widget)
 		w.showMessageMenu(row, x, y)
@@ -105,21 +110,27 @@ func (w *Window) attachMessageMenu(r *gtk.ListBoxRow) {
 	addRowMenu(r, func(x, y float64) { w.showMessageMenu(r, x, y) })
 }
 
-// showMessageMenu selects row and shows its menu at (x, y) in the row.
+// showMessageMenu shows the menu of row at (x, y) in it: of the
+// selection it belongs to, or of row alone, selected first.
 func (w *Window) showMessageMenu(r *gtk.ListBoxRow, x, y float64) {
 	if _, ok := w.rowForWidget(r); !ok {
 		return // a date heading
 	}
-	w.messageList.SelectRow(r)
+	if !r.IsSelected() {
+		w.selectOnly(r)
+	}
 	w.setMessageActionsSensitive(true)
 	w.syncAssistantActions()
-	row, ok := w.selectedRow()
-	if !ok {
+	rows := w.selectedRows()
+	if len(rows) == 0 {
 		return
 	}
-	st := w.model.messageActionState(row, true)
+	row := rows[0]
+	st := w.selectionState(true)
 	assistantShown := w.assist != nil && w.assist.shown()
 	s := contextmenu.MessageState{
+		Count:         st.count,
+		Open:          st.open,
 		Draft:         w.model.inDrafts(row.Message),
 		Outbox:        st.outbox,
 		OfferReply:    st.supported.Reply,
@@ -142,7 +153,7 @@ func (w *Window) showMessageMenu(r *gtk.ListBoxRow, x, y float64) {
 		ChangeStatus:  st.changeStatus,
 		Assistant:     assistantShown,
 	}
-	labels := contextmenu.Labels{Comment: st.comment, Flagged: st.flagged, Outbox: st.outbox}
+	labels := contextmenu.Labels{Comment: st.comment, Flagged: st.flagged, Outbox: st.outbox, Count: st.count}
 	m := gio.NewMenu()
 	for _, g := range contextmenu.MessageItems(s) {
 		section := gio.NewMenu()
@@ -152,11 +163,11 @@ func (w *Window) showMessageMenu(r *gtk.ListBoxRow, x, y float64) {
 			case contextmenu.MoveTo:
 				item := gio.NewMenuItem(label, "")
 				if it.Enabled {
-					item.SetSubmenu(w.moveToMenu(row.Message))
+					item.SetSubmenu(w.moveToMenu(row.Message.AccountID, commonFolder(rows)))
 				}
 				section.AppendItem(item)
 			case contextmenu.Assistant:
-				menu, update := w.assist.assistantMenu("win", false)
+				menu, update := w.assist.assistantMenuFor("win", false, len(rows))
 				update()
 				item := gio.NewMenuItem(label, "")
 				item.SetSubmenu(menu)
@@ -170,19 +181,32 @@ func (w *Window) showMessageMenu(r *gtk.ListBoxRow, x, y float64) {
 	popupContextMenu(&r.Widget, &w.messageList.Widget, m, "", nil, x, y)
 }
 
-// moveToMenu is the Move To submenu of s: its account's folders as the
-// sidebar orders them, indented by depth; the current folder and the
-// containers without an action, so insensitive.
-func (w *Window) moveToMenu(s api.MessageSummary) *gio.Menu {
-	acc, _ := w.model.account(s.AccountID)
+// commonFolder is the folder every row is in, "" when they differ (a
+// search).
+func commonFolder(rows []listRow) api.FolderID {
+	f := rows[0].Message.FolderID
+	for _, r := range rows[1:] {
+		if r.Message.FolderID != f {
+			return ""
+		}
+	}
+	return f
+}
+
+// moveToMenu is the Move To submenu of the selection: its account's
+// folders as the sidebar orders them, indented by depth; the current
+// folder (when all are in one) and the containers without an action, so
+// insensitive.
+func (w *Window) moveToMenu(account api.AccountID, current api.FolderID) *gio.Menu {
+	acc, _ := w.model.account(account)
 	var entries []contextmenu.Entry
-	for _, e := range folderTree(acc, w.model.folders[s.AccountID], newCollapseState(), newFavouriteState()) {
+	for _, e := range folderTree(acc, w.model.folders[account], newCollapseState(), newFavouriteState()) {
 		if !e.Header {
 			entries = append(entries, contextmenu.Entry{Folder: e.Folder, Depth: e.Depth})
 		}
 	}
 	m := gio.NewMenu()
-	for _, t := range contextmenu.MoveTargets(entries, s.FolderID) {
+	for _, t := range contextmenu.MoveTargets(entries, current) {
 		item := gio.NewMenuItem(strings.Repeat("\u2003", t.Depth)+folderTitle(t.Folder), "")
 		if t.Enabled {
 			item.SetActionAndTargetValue("win.move-to", glib.NewVariantString(string(t.Folder.ID)))

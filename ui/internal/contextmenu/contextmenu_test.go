@@ -91,6 +91,26 @@ func TestMessageItems(t *testing.T) {
 	}
 }
 
+// Several rows: Open with its count (off over selection.MaxOpen), Forward
+// alone of the replies, no Change Status; a draft opens like the others.
+func TestMessageItemsSeveral(t *testing.T) {
+	s := mail
+	s.Count, s.Open, s.Draft, s.ChangeStatus, s.Reply, s.ReplyAll = 3, true, true, true, false, false
+	if got := show(MessageItems(s)); got != "open | forward | markUnread toggleFlag | archive moveTo junk trash | assistant" {
+		t.Errorf("several: %s", got)
+	}
+	s.Open = false
+	if got := show(MessageItems(s)); got != "open- | forward | markUnread toggleFlag | archive moveTo junk trash | assistant" {
+		t.Errorf("too many to open: %s", got)
+	}
+	if got := Label(identity{}, OpenMessage, Labels{Count: 3}); got != "Open 3 Messages in New Windows" {
+		t.Errorf("label: %q", got)
+	}
+	if got := Label(identity{}, OpenMessage, Labels{Count: 1}); got != "Open in New Window" {
+		t.Errorf("label of one: %q", got)
+	}
+}
+
 func TestFolderItems(t *testing.T) {
 	cases := []struct {
 		name string

@@ -1235,8 +1235,9 @@ of those loops and their `PropertyChanged` notifications with
 How the lists reach the view, as the mailbox does it: `MailboxController` publishes the
 sidebar as `Entries` (keyed by `SidebarKey.Of`) with the highlighted row as
 `SelectedEntryKey`, and its list half `ListController` publishes `Rows`
-(keyed by `ListRow.Key`) with `SelectedKey`. The key is the source of
-truth, and it is current whenever a snapshot is announced:
+(keyed by `ListRow.Key`) with `SelectedKeys` (in list order; `SelectedKey`
+is the one row's, null for none or several, §11.2). The key is the source
+of truth, and it is current whenever a snapshot is announced:
 
 - The rows arrive with `RowsChanged` (and its `SelectionHint`) and, in flat
   mode, with `RowsRefreshed` (a flag changed: mark-as-read, about a second
@@ -1250,12 +1251,12 @@ truth, and it is current whenever a snapshot is announced:
   would `Replace` the row, and a WinUI selector treats that as a removal
   plus an insertion, dropping the selection. It is only for lists without
   a selection.
-- After every apply the view selects `SelectedKey` or `SelectedEntryKey`
+- After every apply the view selects `SelectedKeys` or `SelectedEntryKey`
   where its `ListView`'s selection differs (a moved row may have lost it),
   with its own selection handler suppressed while it applies and selects.
   A deselection the collection caused must never go back as `Select(null)`,
   which would clear the reader. A click goes back as
-  `SelectFolder`/`Select`.
+  `SelectFolder`/`SelectKeys`.
 
 The paging of the list and the search box's pause, which macOS keeps in
 AppKit, are in Core (`MailboxController.Paging.cs`, `SearchFieldChanged`):
@@ -2064,6 +2065,63 @@ brings the folder and the list up to date, and a failure is a toast in the
 menu's words (`ContextMenu.MarkingReadText`, `EmptyingText`,
 `MovingText`). An account heading has Check for New Mail and its folding,
 the Favourites heading no menu.
+
+Several messages can be selected (2026-10-14, the same in GTK and macOS:
+`ui/internal/selection`, `ui/internal/window/selection.go`). The list's
+`ListView` is in Extended mode: Ctrl-click toggles a row, Shift-click and
+Shift+arrows extend, Ctrl+A selects every row shown (the ListView's own
+key, handled in `OnListKeyDown` to be sure), Escape lets go of several
+rows (with one it goes on to the window); the date headings are the
+groups' headers, never items. The pure rules are Core's
+`Selections/Selection` (namespace `Malachi.Core.Selections`, as `Boards`:
+`Combine` of the rows' `ActionFlags`, which gained `Count` and `Open`,
+`FlagTarget`, `Restrict`, `Reconcile`, `NewestFirst`, `MaxOpen` 10,
+`MaxForward` = `API.Limits.MaxForwardMessages` 20, the texts) with
+`SelectionTests`. The `ListController` holds `SelectedKeys` in list order
+(`SelectedKey`, `SelectedRow` are the one row's, null for several;
+`SelectedRows`, `SelectKeys`, `Restrict`, `SelectionSubject`,
+`FlagTarget(rows)`); several rows raise `SelectedRowChanged` and
+`SelectedMessageChanged` with null and then `SeveralSelected`, which puts
+the reader's `ReaderPage.Selection` up (*%d messages selected*, the GTK
+icon `edit-select-all`, Segoe Fluent's SelectAll), arm no mark-as-read
+timer and combine the flags the commands follow. `SelectedIds` hands every
+row with every message they stand for (a conversation's members fetched
+first); `Reconcile` keeps the keys still listed after a reload, a page, a
+fold or a removal (a member folded away as its conversation row) and,
+when none is left after a removal, takes the row now at the first one's
+place; a flat removal of several rows goes in one step
+(`RemoveMessageRows`, messages.go `removeMessageRows`). The view
+(`MessageListPane`) reads the selected rows in list order, keeps them
+within one account (`Restrict`; the row added last is the focused one when
+it is selected, else the first the change added), mirrors `SelectedKeys`
+back through `SelectedItems` with its handler suppressed, raises
+`MessageChosen` (a folded window's switch to the message) only for one row,
+and keeps Enter, Left, Right and Space for one row. A folded date section
+lets go of the selected rows it hides; every selected row's section is
+revealed. On several rows the commands follow `Selection.Combine` (Mark as
+Read / Unread when any row can, the star stars all unless all are starred,
+Archive and Junk when any can, Trash and Move To when all can; Reply,
+Reply All, Change Status, Load Images and Trust Sender off); the
+confirmations of Trash and Junk have the plural heading and no body;
+Forward is one `draft.create` forward with `messageIds`
+(`ActionsController.ForwardMessages`, one request at a time, what the
+daemon could not attach in the compose window's note); the badges follow
+each message's own folder (`SetSeen`, `TrackMoves`); messages already in
+the target of a move stay; Trash on several queued messages asks *Cancel
+sending %d messages?* once (*Do Not Send*, no body) and cancels them with
+one `message.delete`. The context menu of a row of the selection keeps it
+(Shift+F10 on a row outside it: the selection's menu at its first row),
+another row becomes the selection alone; for several it offers *Open %d
+Messages in New Windows* (`ActionsController.OpenMessages`, off over ten),
+Forward without the replies, Move To with the current folder disabled only
+when every row is in it, and the Assistant's actions for several
+(`Assistant.MessageActionsFor`, `LabelFor`: no Draft a Reply…, *Ask About
+These Messages…*); the ✦ button's menu follows the selection at every
+opening (`AssistantMenu` `count`, as GTK's `assistantMenuCounting` and the
+macOS validation). The Assistant takes every message newest first
+(`Selection.NewestFirst`), the panel's context counts them (partial while
+a conversation's members are not known). Written on a Mac without `dotnet`
+from the Swift port; to be built, tested and walked through on Windows.
 
 ### 11.3 Reader, windows, compose, wizard, preferences
 

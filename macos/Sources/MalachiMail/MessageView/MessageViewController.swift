@@ -327,6 +327,9 @@ final class MessageViewController: NSViewController {
     func clear() {
         guard mode == .pane else { return }
         _ = view
+        emptyPage?.illustration = .icon("mail-unread-symbolic")
+        emptyPage?.title = L10n.T("No Message Selected")
+        emptyPage?.descriptionText = L10n.T("Select a message to read it here.")
         current = nil
         quoted.clear()
         shownLoaded = nil
@@ -340,6 +343,16 @@ final class MessageViewController: NSViewController {
         hideBars()
         webView?.clear() // drop the pictures of the message before
         setPage(message: false)
+    }
+
+    /// The pane while several rows are selected (selection.go
+    /// `showSelectionPage`): their count on the empty page.
+    func showSelection(count n: Int) {
+        guard mode == .pane else { return }
+        clear()
+        emptyPage?.illustration = .symbol("square.stack")
+        emptyPage?.title = Selection.selectedText(n)
+        emptyPage?.descriptionText = ""
     }
 
     /// Renders an attached message (embedded.go `show`): its own headers

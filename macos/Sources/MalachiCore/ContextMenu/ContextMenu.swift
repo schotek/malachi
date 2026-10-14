@@ -68,6 +68,10 @@ public enum ContextMenu {
     /// contextmenu.MessageState: what the window knows of the message row
     /// clicked (by then the selected one).
     public struct MessageState: Sendable, Equatable {
+        /// How many rows are selected (0 and 1: one); `open`: Open in New
+        /// Window can open them (several: at most `Selection.maxOpen`).
+        public var count = 0
+        public var open = false
         public var draft = false
         public var outbox = false
         /// What the account offers at all (`Capabilities.supported`, the
@@ -89,6 +93,8 @@ public enum ContextMenu {
 
         /// The state of the window's action flags (`messageActionState`).
         public init(flags f: ActionFlags, draft: Bool, changeStatus: Bool, assistant: Bool) {
+            count = f.count
+            open = f.open
             self.draft = draft
             outbox = f.outbox
             offerReply = !f.unsupported.contains(.reply)
@@ -115,17 +121,20 @@ public enum ContextMenu {
 
     /// contextmenu.MessageItems: opening; answering; read, star and status;
     /// where the message goes; the Assistant. Empty groups are left out.
+    /// For several rows Open opens each, Forward forwards them in one
+    /// message, and Reply, Reply All and Change Status are not offered.
     public static func messageItems(_ s: MessageState) -> [[Item]] {
-        let open = Item(s.draft ? .editDraft : .openMessage, true)
+        let several = s.count > 1
+        let open = Item(s.draft && !several ? .editDraft : .openMessage, !several || s.open)
         var answer: [Item] = []
-        if s.offerReply { answer.append(Item(.reply, s.reply)) }
-        if s.offerReplyAll { answer.append(Item(.replyAll, s.replyAll)) }
+        if s.offerReply, !several { answer.append(Item(.reply, s.reply)) }
+        if s.offerReplyAll, !several { answer.append(Item(.replyAll, s.replyAll)) }
         if s.offerForward { answer.append(Item(.forward, s.forward)) }
         var mark: [Item] = []
         if s.markRead { mark.append(Item(.markRead, true)) }
         if s.markUnread { mark.append(Item(.markUnread, true)) }
         mark.append(Item(.toggleFlag, s.toggleFlag))
-        if s.changeStatus { mark.append(Item(.changeStatus, true)) }
+        if s.changeStatus, !several { mark.append(Item(.changeStatus, true)) }
         var move: [Item] = []
         if s.offerArchive { move.append(Item(.archive, s.archive)) }
         if s.offerMove { move.append(Item(.moveTo, s.move)) }

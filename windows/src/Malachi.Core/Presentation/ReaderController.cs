@@ -38,7 +38,9 @@
 // history the daemon cut from it, the choice held until the view shows
 // another message (QuotedReveal; macOS quotedButton, toggleQuoted;
 // Swift-first). A bulk message has a strip above its body (Bulk, BulkBusy;
-// ReaderController.Bulk.cs). UI-thread-affine.
+// ReaderController.Bulk.cs). While several rows are selected in the list the
+// pane shows their count instead (ShowSelection; selection.go
+// showSelectionPage, macOS showSelection(count:)). UI-thread-affine.
 
 using System;
 using System.Collections.Generic;
@@ -50,6 +52,7 @@ using Malachi.Core.Controllers;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
 using Malachi.Core.Platform;
+using Malachi.Core.Selections;
 using Malachi.Core.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -170,6 +173,13 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
     /// <summary>The page of the message stack; a window always shows the message.</summary>
     [ObservableProperty]
     public partial ReaderPage Page { get; private set; }
+
+    /// <summary>
+    /// The title of <see cref="ReaderPage.Selection"/>: how many rows are
+    /// selected (<see cref="Selection.SelectedText"/>); "" before the first.
+    /// </summary>
+    [ObservableProperty]
+    public partial string SelectionText { get; private set; } = "";
 
     /// <summary>The subject (message_subject), or "(No subject)".</summary>
     [ObservableProperty]
@@ -362,14 +372,33 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
     }
 
     /// <summary>
+    /// The pane while several rows are selected in the list (selection.go
+    /// <c>showSelectionPage</c>; macOS <c>showSelection(count:)</c>): what it
+    /// showed goes, as with <see cref="Clear"/>, and the page counts the
+    /// rows (<see cref="SelectionText"/>); nothing is marked read. Windows
+    /// never show it.
+    /// </summary>
+    public void ShowSelection(int n)
+    {
+        if (Mode != ReaderMode.Pane)
+        {
+            return;
+        }
+        Clear();
+        SelectionText = Selection.SelectedText(n);
+        Page = ReaderPage.Selection;
+    }
+
+    /// <summary>
     /// <c>account.list</c> answered (folders.go <c>loadAccounts</c>): the
-    /// placeholder becomes No Accounts while there is none, unless a message
-    /// or a conversation is on display.
+    /// placeholder becomes No Accounts while there is none, unless a message,
+    /// a conversation or a selection of several rows is on display (GTK
+    /// checks the list's selected rows).
     /// </summary>
     public void SetHasAccounts(bool has)
     {
         hasAccounts = has;
-        if (Mode == ReaderMode.Pane && Page is not (ReaderPage.Message or ReaderPage.Conversation))
+        if (Mode == ReaderMode.Pane && Page is not (ReaderPage.Message or ReaderPage.Conversation or ReaderPage.Selection))
         {
             Page = has ? ReaderPage.Empty : ReaderPage.NoAccounts;
         }

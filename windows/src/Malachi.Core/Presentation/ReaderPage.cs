@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of the pages of window.blp's message_stack ("empty", "no-accounts",
-// "message"); macOS: MessageViewController.swift (setPage) and
-// Integration.swift (showNoAccountsPage); GTK: window.go emptyPageName.
+// "message", and selection.go's "selection"); macOS:
+// MessageViewController.swift (setPage, showSelection) and Integration.swift
+// (showNoAccountsPage); GTK: window.go emptyPageName.
 
 namespace Malachi.Core.Presentation;
 
@@ -25,4 +26,11 @@ public enum ReaderPage
     /// the reader leaves empty (<see cref="ReaderController.LeaveForConversation"/>).
     /// </summary>
     Conversation,
+
+    /// <summary>
+    /// Several rows are selected in the list (the pane only, selection.go
+    /// <c>selectionPageName</c>): their count
+    /// (<see cref="ReaderController.SelectionText"/>).
+    /// </summary>
+    Selection,
 }

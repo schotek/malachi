@@ -9,14 +9,17 @@
 // (markFolderRead, emptyFolder), outbox.go (retryOutbox, cancelSendFrom),
 // remote.go (loadRemoteImages, trustSender, ensureKnownSendersPolicy,
 // downloadPictures), compose_open.go (openCompose, openComposeFrom),
-// drafts.go (openDraft) and assistant_panel.go (openSavedDraft, findDraft).
+// drafts.go (openDraft), assistant_panel.go (openSavedDraft, findDraft) and
+// selection.go (cancelSends, forwardMessages, openSelection).
 //
 // The per-message actions of the main window and the message windows,
 // minus the widgets: an optimistic change in the model and the rows,
 // message.flag / message.move / message.delete in the background, and the
 // change put back on failure. Every action takes a list of messages: one
 // from a message window or a plain row, all the folder members from a
-// conversation row of the grouped list.
+// conversation row of the grouped list, every message of a selection of
+// several rows (one account, possibly several of its folders in a search:
+// each folder's counts follow its own messages).
 //
 // Swift holds the mailbox, list and cache controllers; here they are the
 // members the actions use (IActionsMailbox, IActionsList, IActionsCache),
@@ -44,6 +47,7 @@ using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
 using Malachi.Core.Platform;
+using Malachi.Core.Selections;
 using Malachi.Core.Settings;
 using Malachi.Core.Text;
 using Microsoft.Extensions.Logging;
@@ -75,6 +79,10 @@ public sealed partial class ActionsController
     // The drafts the assistant panel's Open Draft is looking up
     // (assistant_panel.go findingDrafts).
     private readonly HashSet<DraftId> findingDrafts = [];
+
+    // The forward of several messages is being prepared (selection.go
+    // forwardingMany): one request at a time.
+    private bool forwardingMany;
 
     /// <param name="mailbox">The folder half (the model, the badges, the RPC plumbing).</param>
     /// <param name="list">The list half (the rows).</param>
@@ -214,8 +222,9 @@ public sealed partial class ActionsController
     /// message windows through <see cref="SeenChanged"/>), and sends one
     /// <c>message.flag</c>; a failure puts everything back, success in
     /// marking read withdraws their desktop notifications (actions.go
-    /// <c>setSeenIDs</c>). The messages are of one folder (a conversation
-    /// row's members are).
+    /// <c>setSeenIDs</c>). The messages are of one account (a selection is),
+    /// possibly of several of its folders (a search): each folder's count
+    /// follows its own.
     /// </summary>
     public void SetSeen(IReadOnlyList<MessageId> ids, bool seen)
     {
@@ -223,6 +232,7 @@ public sealed partial class ActionsController
         Mailbox.Scope.VerifyAccess();
         var todo = new List<MessageId>();
         FolderKey? key = null;
+        var folderOf = new Dictionary<MessageId, FolderKey>();
         foreach (var id in ids)
         {
             if (Summary(id) is not { } s || FolderTree.HasFlag(s.Flags, Flag.Seen) == seen || Mailbox.Model.InOutbox(s))
@@ -230,7 +240,9 @@ public sealed partial class ActionsController
                 continue; // accelerators bypass the disabled commands
             }
             todo.Add(id);
-            key = new FolderKey(s.AccountId, s.FolderId);
+            var folder = new FolderKey(s.AccountId, s.FolderId);
+            key = folder;
+            folderOf[id] = folder;
         }
         if (key is not { } k || todo.Count == 0)
         {
@@ -249,8 +261,27 @@ public sealed partial class ActionsController
             {
                 SeenChanged?.Invoke(this, (id, on));
             }
-            // Marking unread raises the unread count.
-            Mailbox.AdjustCounts(k, on ? -changed.Count : changed.Count, 0);
+            // Marking unread raises the unread count of each message's
+            // folder.
+            var perFolder = new Dictionary<FolderKey, int>();
+            var order = new List<FolderKey>();
+            foreach (var id in changed)
+            {
+                var f = folderOf.TryGetValue(id, out var known) ? known : k;
+                if (perFolder.TryGetValue(f, out var count))
+                {
+                    perFolder[f] = count + 1;
+                }
+                else
+                {
+                    perFolder[f] = 1;
+                    order.Add(f);
+                }
+            }
+            foreach (var f in order)
+            {
+                Mailbox.AdjustCounts(f, on ? -perFolder[f] : perFolder[f], 0);
+            }
         }
         Apply(seen);
 
@@ -360,9 +391,12 @@ public sealed partial class ActionsController
     /// <summary>
     /// Moves messages to Trash (<c>message.delete</c>) after the optional
     /// confirmation shown over <paramref name="parent"/>, with
-    /// <paramref name="subject"/> as its body (actions.go <c>trashIDs</c>).
-    /// For a single outbox message it cancels the send instead
-    /// (<see cref="CancelSend"/>).
+    /// <paramref name="subject"/> as its body (actions.go <c>trashIDs</c>;
+    /// "" for several rows, whose heading counts them). For a single outbox
+    /// message it cancels the send instead (<see cref="CancelSend"/>), for
+    /// several queued ones the sending of them all after one question
+    /// (selection.go <c>cancelSends</c>). A message already in Trash is
+    /// expunged.
     /// </summary>
     public void Trash(IReadOnlyList<MessageId> ids, string subject, object? parent = null)
     {
@@ -378,6 +412,16 @@ public sealed partial class ActionsController
         if (msgs.Count == 0)
         {
             return;
+        }
+        List<MessageSummary> queued = [.. msgs.Where(Mailbox.Model.InOutbox)];
+        if (queued.Count == msgs.Count)
+        {
+            CancelSends(queued, parent);
+            return;
+        }
+        if (queued.Count > 0)
+        {
+            return; // a selection is one folder's; outbox rows never mix in
         }
         ConfirmTrash(parent, msgs.Count, subject, () => MoveToTrash(msgs));
     }
@@ -414,12 +458,15 @@ public sealed partial class ActionsController
         var acc = msgs[0].AccountId;
         // message.delete moves to the Trash role folder; a message already
         // there is expunged instead (no target count to credit).
-        FolderKey? target = null;
-        if (Mailbox.Model.FolderByRole(acc, FolderRole.Trash) is { } trash && trash.Id != msgs[0].FolderId)
+        var trash = Mailbox.Model.FolderByRole(acc, FolderRole.Trash);
+        FolderKey? target = trash is null ? null : new FolderKey(acc, trash.Id);
+        var undoMoves = TrackMoves([.. msgs.Where(s => trash is null || s.FolderId != trash.Id)], target);
+        var undoExpunged = TrackMoves([.. msgs.Where(s => trash is not null && s.FolderId == trash.Id)], null);
+        void Undo()
         {
-            target = new FolderKey(acc, trash.Id);
+            undoExpunged();
+            undoMoves();
         }
-        var undo = TrackMoves(msgs, target);
         var n = msgs.Count;
         var what = n == 1
             ? L10n.T("Moving the message to Trash")
@@ -431,18 +478,19 @@ public sealed partial class ActionsController
             onError: _ =>
             {
                 restore();
-                undo();
+                Undo();
             },
             onOk: _ => Mailbox.WithdrawNotifications(ids));
     }
 
     /// <summary>
     /// Adjusts the cached folder counts (the unread badges, the counts under
-    /// the list title) for messages leaving their folder for
+    /// the list title) for messages leaving their folders for
     /// <paramref name="target"/> (null: leaving the store) and returns the
-    /// reverse, for a failed move (actions.go <c>trackMoves</c>). Read
-    /// messages move only the totals; <see cref="MailModel.MoveCounts"/> says
-    /// where even those stay put. Public for the tests (Swift's is internal).
+    /// reverse, for a failed move (actions.go <c>trackMoves</c>), per source
+    /// folder: a selection of a search may come from several. Read messages
+    /// move only the totals; <see cref="MailModel.MoveCounts"/> says where
+    /// even those stay put. Public for the tests (Swift's is internal).
     /// </summary>
     public Action TrackMoves(IReadOnlyList<MessageSummary> msgs, FolderKey? target)
     {
@@ -451,10 +499,25 @@ public sealed partial class ActionsController
         {
             return static () => { };
         }
-        var unread = msgs.Count(s => !FolderTree.HasFlag(s.Flags, Flag.Seen));
-        var n = msgs.Count;
-        var src = new FolderKey(msgs[0].AccountId, msgs[0].FolderId);
-        void Shift(int sign) => Mailbox.MoveCounts(src, target, sign * unread, sign * n);
+        var order = new List<FolderKey>();
+        var counts = new Dictionary<FolderKey, (int Unread, int Total)>();
+        foreach (var s in msgs)
+        {
+            var src = new FolderKey(s.AccountId, s.FolderId);
+            if (!counts.TryGetValue(src, out var c))
+            {
+                order.Add(src);
+            }
+            counts[src] = (c.Unread + (FolderTree.HasFlag(s.Flags, Flag.Seen) ? 0 : 1), c.Total + 1);
+        }
+        void Shift(int sign)
+        {
+            foreach (var src in order)
+            {
+                var c = counts[src];
+                Mailbox.MoveCounts(src, target, sign * c.Unread, sign * c.Total);
+            }
+        }
         Shift(1);
         return () => Shift(-1);
     }
@@ -567,10 +630,13 @@ public sealed partial class ActionsController
         [.. Summaries(ids).Where(s => !Mailbox.Model.InOutbox(s))];
 
     // actions.go moveListTo: the move itself. The messages are of one
-    // folder (a conversation row's members are), and of one account.
-    private void MoveList(List<MessageSummary> msgs, FolderId target, Func<int, string> what)
+    // account (a conversation row's members, a selection), possibly of
+    // several of its folders (a search); the ones already in the target stay
+    // where they are.
+    private void MoveList(List<MessageSummary> all, FolderId target, Func<int, string> what)
     {
-        if (msgs.Count == 0 || target == msgs[0].FolderId)
+        List<MessageSummary> msgs = [.. all.Where(s => s.FolderId != target)];
+        if (msgs.Count == 0)
         {
             return;
         }
@@ -679,6 +745,49 @@ public sealed partial class ActionsController
                     // nothing left to count.
                     Mailbox.OnOutboxChanged(s.AccountId);
                 });
+        });
+    }
+
+    // Trash on several queued messages (selection.go cancelSends): one
+    // question, then the sending of them all is cancelled with one
+    // message.delete, as CancelSend does for one; the rows come back when
+    // the daemon refuses.
+    private void CancelSends(List<MessageSummary> msgs, object? parent)
+    {
+        if (msgs.Count == 1)
+        {
+            CancelSend(msgs[0].Id, parent);
+            return;
+        }
+        Ask(parent, Selection.CancelSendingQuestion(msgs.Count), "", L10n.T("Do Not _Send"), () =>
+        {
+            MessageId[] ids = [.. msgs.Select(s => s.Id)];
+            var acc = msgs[0].AccountId;
+            var restore = List.RemoveRows(ids);
+            foreach (var id in ids)
+            {
+                WindowsClose?.Invoke(this, id);
+            }
+            var undo = TrackMoves(msgs, null);
+            // Counted before the call, as CancelSend does (trackOutbox).
+            for (var i = 0; i < msgs.Count; i++)
+            {
+                Mailbox.NoteOutboxCancelled(acc);
+            }
+            Call(
+                API.MessageDelete,
+                new MessageDeleteParams { AccountId = acc, MessageIds = ids },
+                L10n.T("Cancelling the send"),
+                onError: _ =>
+                {
+                    for (var i = 0; i < msgs.Count; i++)
+                    {
+                        Mailbox.NoteOutboxCancelFailed(acc);
+                    }
+                    restore();
+                    undo();
+                },
+                onOk: _ => Mailbox.OnOutboxChanged(acc));
         });
     }
 
@@ -1063,6 +1172,85 @@ public sealed partial class ActionsController
     }
 
     /// <summary>
+    /// Open in New Window on several rows (selection.go
+    /// <c>openSelection</c>): each message in a window of its own, a draft
+    /// in the compose window, as <see cref="OpenMessage"/> does; nothing over
+    /// <see cref="Selection.MaxOpen"/> (the item is off then; this is the
+    /// guard).
+    /// </summary>
+    public void OpenMessages(IReadOnlyList<MessageSummary> msgs)
+    {
+        ArgumentNullException.ThrowIfNull(msgs);
+        Mailbox.Scope.VerifyAccess();
+        if (msgs.Count > Selection.MaxOpen)
+        {
+            return;
+        }
+        foreach (var s in msgs)
+        {
+            OpenMessage(s);
+        }
+    }
+
+    /// <summary>
+    /// Forwards several messages in one new message (selection.go
+    /// <c>forwardMessages</c>: <c>draft.create</c> forward with
+    /// <see cref="DraftCreateParams.MessageIds"/>, at most
+    /// <see cref="Selection.MaxForward"/>): the daemon attaches each whole;
+    /// one it could not attach is counted in the compose window's note
+    /// (<see cref="ComposeParams.Skipped"/>). From their account, or from a
+    /// mail account for an issue tracker's (<c>ForwardAccount</c>), as one
+    /// message is forwarded. One request at a time; fewer than two messages
+    /// do nothing (one goes through <see cref="OpenCompose"/>).
+    /// </summary>
+    public void ForwardMessages(IReadOnlyList<MessageId> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        Mailbox.Scope.VerifyAccess();
+        if (ids.Count < 2 || forwardingMany || Summary(ids[0]) is not { } s)
+        {
+            return;
+        }
+        var from = s.AccountId;
+        AccountId? messageAccount = null;
+        if (Mailbox.Model.Account(s.AccountId) is { } own && !own.Can(Capability.Compose))
+        {
+            if (ForwardAccount() is not { } target)
+            {
+                // Forward is off without such an account; an accelerator
+                // bypasses that.
+                LogNoForwardAccount(logger);
+                return;
+            }
+            from = target.Id;
+            messageAccount = s.AccountId;
+        }
+        var parameters = new DraftCreateParams
+        {
+            AccountId = from,
+            Mode = ComposeMode.Forward,
+            MessageIds = [.. ids.Take(Selection.MaxForward)],
+            MessageAccountId = messageAccount,
+        };
+        forwardingMany = true;
+        Mailbox.Scope.Perform(Mailbox.Client, API.DraftCreate, parameters, outcome =>
+        {
+            forwardingMany = false;
+            if (!outcome.TryGetValue(out var res, out var error))
+            {
+                LogForwardManyFailed(logger, ids.Count, error!);
+                toast(RpcErrorText.Text(ComposeSources.ComposeWhat(ComposeKind.Forward), error));
+                return;
+            }
+            OpenComposeRequested?.Invoke(this, Prefill.FromDraft(ComposeKind.Forward, res.Draft, res.Blocked) with
+            {
+                AccountId = from,
+                Skipped = res.Skipped?.Count ?? 0,
+            });
+        }, RpcTimeouts.Compose);
+    }
+
+    /// <summary>
     /// Opens message <paramref name="id"/> of a Drafts folder in the compose
     /// window, or raises the window already editing it (drafts.go
     /// <c>openDraft</c>). A second request while the first is on its way does
@@ -1232,6 +1420,9 @@ public sealed partial class ActionsController
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "draft.create {Mode} failed")]
     private static partial void LogDraftCreateFailed(ILogger logger, string mode, Exception error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "draft.create forward of {Count} messages failed")]
+    private static partial void LogForwardManyFailed(ILogger logger, int count, Exception error);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "remote content preference not changed")]
     private static partial void LogPolicyChangeFailed(ILogger logger, Exception error);

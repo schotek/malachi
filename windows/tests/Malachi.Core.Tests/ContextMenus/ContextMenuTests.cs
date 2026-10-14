@@ -3,8 +3,9 @@
 
 // Port of macos/Tests/MalachiCoreTests/ContextMenuTests.swift, the
 // counterpart of ui/internal/contextmenu/contextmenu_test.go
-// (TestMessageItems, TestFolderItems, TestMoveTargets, TestLabels,
-// TestEmptyQuestion, TestProgressTexts), with Swift's messageStateOfFlags.
+// (TestMessageItems, TestMessageItemsSeveral, TestFolderItems,
+// TestMoveTargets, TestLabels, TestEmptyQuestion, TestProgressTexts), with
+// Swift's messageStateOfFlags and SelectionTests.contextMenuOfSeveral.
 // Go passes a translator that returns the msgids; the process-wide
 // catalogue is English here, so every msgid is its own translation. The
 // groups are written as in Go ("id id- | id", "-" after a disabled item),
@@ -116,6 +117,25 @@ public sealed class ContextMenuTests
         Assert.True(s.Draft && s.ChangeStatus && !s.Assistant && !s.Outbox, s.ToString());
         Assert.True(s.OfferReply && !s.OfferReplyAll && s.OfferForward && s.OfferArchive && s.OfferMove && !s.OfferJunk && s.OfferTrash, s.ToString());
         Assert.True(s.Reply && !s.ReplyAll && s.Forward && s.Trash && s.Archive && !s.Junk && s.Move && s.MarkRead && !s.MarkUnread && s.ToggleFlag, s.ToString());
+        // The selection's count and whether Open in New Window can open it.
+        var several = MessageState.Of(f with { Count = 3, Open = true }, draft: false, assistant: false);
+        Assert.True(several.Count == 3 && several.Open, several.ToString());
+    }
+
+    /// <summary>
+    /// contextmenu_test.go TestMessageItemsSeveral: several rows: Open with
+    /// its count (off over Selection.MaxOpen), Forward alone of the replies,
+    /// no Change Status; a draft opens like the others.
+    /// </summary>
+    [Fact]
+    public void MessageItemsSeveral()
+    {
+        var s = Mail with { Count = 3, Open = true, Draft = true, ChangeStatus = true, Reply = false, ReplyAll = false };
+        Assert.Equal("open | forward | markUnread toggleFlag | archive moveTo junk trash | assistant", Show(MessageItems(s)));
+        s = s with { Open = false };
+        Assert.Equal("open- | forward | markUnread toggleFlag | archive moveTo junk trash | assistant", Show(MessageItems(s)));
+        Assert.Equal("Open 3 Messages in New Windows", Label(ItemId.OpenMessage, new Labels { Count = 3 }));
+        Assert.Equal("Open in New Window", Label(ItemId.OpenMessage, new Labels { Count = 1 }));
     }
 
     public static TheoryData<string, FolderState, string> FolderCases => new()

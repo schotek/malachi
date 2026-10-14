@@ -69,11 +69,14 @@ public sealed partial class MainWindow
         var texts = Assistant.Texts();
         var menu = new AssistantMenu(
             state,
-            canAsk: () => integration.List.SelectedRow is { } row && !integration.List.Mailbox.Model.InOutbox(row.Message),
+            // A message, a conversation or several rows, none of them in the
+            // Outbox (selection.go: syncAssistantActions).
+            canAsk: () => CanAsk(integration.List),
             ask: a => actions.Ask(a, this),
             setUp: () => PreferencesWindow.Show(state)?.ShowAi(),
             canSummarizeUnread: () => actions.CanSummarizeUnread,
-            summarizeUnread: () => actions.SummarizeUnread(this));
+            summarizeUnread: () => actions.SummarizeUnread(this),
+            count: () => integration.List.SelectedRows.Count);
         assistantMenu = menu;
         // A message's context menu has the same items as a submenu.
         ListPane.AssistantMenu = menu;
@@ -112,6 +115,25 @@ public sealed partial class MainWindow
         SyncAssistant();
         UpdateAssistantToggle();
         host.FollowSelection();
+    }
+
+    // assistant.go syncAssistantActions: something is selected and nothing
+    // of it is queued in the Outbox (not on the server yet).
+    private static bool CanAsk(Core.Controllers.ListController list)
+    {
+        var rows = list.SelectedRows;
+        if (rows.Count == 0)
+        {
+            return false;
+        }
+        foreach (var row in rows)
+        {
+            if (list.Mailbox.Model.InOutbox(row.Message))
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     /// <summary>Unfolds the assistant panel, the main window brought forward (assistant_panel.go reveal).</summary>

@@ -1044,7 +1044,7 @@ app`/`test`/`lint` (`ComposeBodyLayoutTests`, `AssistantWriteTests`,
 `ComposePane.xaml` má o řádky víc) a ruční průchod.
 
 Kontextová menu u zpráv a složek (2026-10-14, všechny tři klienty,
-necommitnuté; rozhodnutí vlastníka přes AskUserQuestion). Pravý klik
+commit `bcaf8b0`; rozhodnutí vlastníka přes AskUserQuestion). Pravý klik
 (v GTK i dlouhý stisk a Shift+F10 / klávesa Menu, na macOS Control-klik)
 na zprávu ji vybere a menu působí na výběr: Otevřít v novém okně (koncept
 Upravit), Odpovědět/Komentovat, Odpovědět všem, Přeposlat │ jen použitelné
@@ -1090,6 +1090,96 @@ Windows (napsané agentem bez `dotnet`): `Malachi.Core/ContextMenus`
 `ApiRoundTripTests`, `ActionRulesTests`, `ActionsControllerTests`,
 `MailboxControllerFoldersTests`, konvence), UI smoke a ruční průchod
 (pravý klik, Shift+F10, klávesa Menu, odsazení Přesunout do em-mezerami).
+
+Výběr více zpráv (2026-10-14, všechny tři klienty, necommitnuté;
+rozhodnutí vlastníka přes AskUserQuestion). V seznamu jde vybrat víc
+řádků: ⌘/Ctrl-klik, Shift-klik, Shift+šipky, ⌘/Ctrl+A (zobrazené řádky,
+ne nadpisy dat), Escape v seznamu výběr více řádků zruší; žádný režim se
+zaškrtávátky. Jeden řádek = beze změny. Dva a víc: panel čtení jen
+„Vybráno N zpráv“ (plurál `%d message selected`), nic se neoznačí jako
+přečtené, v úzkém rozložení se nepřepíná na čtení; akce působí na všechny:
+Přečtené / Nepřečtené (když je některý nepřečtený / přečtený), hvězdička
+(všem, pokud nemají všechny, jinak všem odebrat), Archivovat a Nevyžádaná
+(když aspoň jeden může, zprávy už v cíli zůstanou), Koš a Přesunout do (jen
+když mohou všechny; aktuální složka v Přesunout do zašedlá, jen když je
+všude stejná), Přeposlat (jedna zpráva, každá vybraná jako příloha `.eml`,
+nejvýš 20), Otevřít (okno pro každou, nejvýš 10, popisek „Otevřít %d zpráv
+v nových oknech“), Asistent (Shrnout, Úkoly a termíny, „Zeptat se na tyto
+zprávy…“, bez Navrhnout odpověď; id nejnovější první); Odpovědět,
+Odpovědět všem, Změnit stav, Načíst obrázky a Důvěřovat odesílateli
+vypnuté. Outbox: jen Koš = jedna otázka „Zrušit odeslání %d zpráv?“
+a jedno `message.delete`. Potvrzení Koše a Nevyžádané s počtem bez
+předmětu. **Výběr jen v rámci jednoho účtu**: řádek jiného účtu (hledání
+ve všech účtech) nechá jen řádky účtu řádku přidaného naposled
+(`selection.Restrict`), proto jedno volání na akci; počty nepřečtených se
+upravují po zdrojových složkách (výběr v hledání může mít víc složek
+účtu). Po změně seznamu zůstanou klíče, které v něm jsou (člen sbalený
+do konverzace → její řádek, bez duplicit), jinak soused prvního
+(`selection.Reconcile`); pravý klik do výběru ho nechá, jinam vybere jen
+ten řádek. Démon: `draft.create` `forward` s `messageIds` (2–20, výlučně
+s `messageId`, z jednoho účtu = `messageAccountId` nebo `accountId`,
+kompatibilní rozšíření protokolu 2, `api.MaxForwardMessages`;
+`core/forward_many.go`): koncept `Fwd: <předmět nejnovější>` bez těla
+a citace, každá zpráva celá jako `message/rfc822` `<předmět>.eml`, jen
+když je celá na disku nebo v paměťové cache (nic nestahuje — klient by
+čekal), jinak a nad limit přílohy do `skipped` (`remote` u vzdálené);
+`docs/api.md` §4.5; most MCP beze změny. Reference: čistý
+`ui/internal/selection` (`Flags`, `Combine`, `FlagTarget`, `Restrict`,
+`Reconcile`, `MaxOpen`, `MaxForward`, texty), `assistant.MessageActionsFor`
+/ `LabelFor`, `contextmenu` `MessageState.Count`/`Open`, `Labels.Count`;
+porty `MalachiCore/Selection`, `Assistant/AssistantSelection.swift`
+a Windows (viz níže). GTK: `window/selection.go` (`ListBox` v režimu
+MULTIPLE nastaveném z Go, `selected-rows-changed`, `selectedKeys`/
+`selectedRows`/`selectedIDs` nad víc řádky, nahrazení výběru
+`UnselectAll` + `SelectRow` pod `reselecting`, stránka počtu
+`Adw.StatusPage` v `message_stack` vytvořená z Go, `restoreSelection`
+po přestavbě), `action_rules.go` (`selectionState`), `actions.go` (počty
+po složkách, `cancelSends`), `messages.go` (`removeMessageRows` jedním
+sladěním), `context_menus.go`, `assistant.go`; macOS:
+`ListController.selectedKeys` (`selectedKey` jen při jednom),
+`select(keys:)`, `onSeveralSelected`, `selectedIDs([ListRow], …)`,
+`ActionsController.cancelSends`/`forwardMessages`/`openMessages`,
+`MessageListViewController` (`allowsMultipleSelection`,
+`selectionIndexesForProposedSelection` s `restrict`, Escape přes
+`cancelOperation`), `MessageContextMenu.make(rows:)`, `AssistantMenu(count:)`,
+stránka počtu v `MessageViewController.showSelection(count:)`. Tlačítko ✦
+hlavního okna ve všech třech klientech sleduje počet vybraných řádků
+(bez Navrhnout odpověď, Zeptat se pro více zpráv): GTK
+`assistantMenuCounting` s parametrem `count` v `bindAssistantButton`,
+macOS validace `askAssistant` v `MainWindowController` (titulek
+a `isHidden`), Windows `AssistantMenu(count:)` při každém otevření.
+Windows (napsané agentem bez `dotnet`, `docs/windows-port.md` §11.2):
+`Malachi.Core/Selections/Selection.cs` (jmenný prostor `Selections`,
+jako `Boards`), `Assistants/Assistant.SelectionActions.cs`,
+`ActionFlags.Count`/`Open`, `ListController.SelectedKeys`/`SelectedRows`/
+`SelectKeys`/`SeveralSelected`, `IListSelection.SelectedIds` nad řádky,
+`ActionsController.ForwardMessages`/`OpenMessages`/`CancelSends`,
+`MessageActionRouter`, `ReaderPage.Selection`, `MessageListPane`
+v režimu `Extended` (Ctrl+A, Escape, `Restrict` podle řádku s fokusem),
+`IconGlyphs` `edit-select-all`; testy `SelectionTests`,
+`ContextMenuTests.MessageItemsSeveral`, `MailboxControllerListTests`
+(`SeveralRowsShowTheirCountAndFollowTheList`, `SelectedIdsOfSeveralRows`,
+změněný `RowsAreKeyedSnapshotsWithTheSelectionAsAKey`),
+`ActionsControllerTests` (`SeveralRowsTrashAndCountPerFolder`,
+`SeveralRowsForwardAndOpen`), `MessageActionRouterTests.SeveralRowsActTogether`,
+`ReaderControllerTests.SeveralRowsShowTheirCount`, API vzorky
+(`messageIds`, `GoContractTests` 33 limitů). Hádané chování WinUI:
+`SelectedItem` v režimu Extended, pořadí `SelectedItems`, `TryGetPosition`
+u Shift+F10, glyf E8B3. 4 nové
+msgid (3 plurály) i česky, `po/` skriptem ověřeným na `HEAD`. Ověřeno na
+Macu: Go testy démona (`internal/core` včetně `TestForwardMany*`,
+`pkg/api`, `go vet ./...`), čisté balíčky UI (`selection`, `contextmenu`,
+`assistant`), `swift build` a celý `swift test` (1569, nové
+`SelectionTests`, `severalRowsShowTheirCountAndFollowTheList`,
+`selectedIDsOfSeveralRows`, `severalRowsTrashAndCountPerFolder`,
+`severalRowsForwardAndOpen`), `check-strings.py`; GTK jen typová kontrola
+bez cgo. Čeká: Toolbx `make build`, `go test ./internal/window/...`,
+`make lint`, `make po` (beze změny), ručně v GTK (Ctrl/Shift-klik,
+Shift+šipky, Ctrl+A, Escape, stránka počtu, akce, kontextové menu,
+tlačítko ✦, hledání ve všech účtech, přeposlání, otevření oken); macOS
+ručně debug binárkou nad kopií dat (totéž, ⌘A z menu Úpravy); Windows
+`build.ps1 app`/`test`/`lint`, UI smoke a ruční průchod (totéž, Shift+F10,
+sbalení sekce data s vybranými řádky).
 
 Hromadná pošta a odhlášení (2026-10-01, všechny tři klienty; necommitnuté,
 macOS sestavený a cílené testy zelené, GTK jen `gopls` + Blueprint v Dockeru,

@@ -136,7 +136,7 @@ final class Integration {
         listView.contextMenu = { [weak self] in
             guard let self else { return nil }
             return MessageContextMenu.make(
-                state: self.state, mailbox: self.mailbox, row: self.list.selectedRow, flags: self.messageActions.flags)
+                state: self.state, mailbox: self.mailbox, rows: self.list.selectedRows, flags: self.messageActions.flags)
         }
         sidebar.onMarkFolderRead = { [weak self] k in
             self?.actions.markFolderRead(k)
@@ -207,6 +207,9 @@ final class Integration {
     private func wireReading() {
         listView.onSelectedRowChanged = { [weak self] row in
             self?.readingPane.show(row)
+        }
+        list.onSeveralSelected = { [weak self] n in
+            self?.readingPane.showSelection(count: n)
         }
         listView.onActivateMessage = { [weak self] summary in
             self?.windows.openMessage(summary)

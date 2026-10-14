@@ -11,6 +11,7 @@ ui/internal/accountwizard/wizard.go
 ui/internal/assistant/assistant.go
 ui/internal/assistant/chatgpt.go
 ui/internal/assistant/compose_write.go
+ui/internal/assistant/selection.go
 ui/internal/background/background.go
 ui/internal/bulkmail/bulkmail.go
 ui/internal/compose/compose.go
@@ -23,6 +24,7 @@ ui/internal/compose/quoted.go
 ui/internal/compose/write.go
 ui/internal/compose/suggest.go
 ui/internal/contextmenu/text.go
+ui/internal/selection/text.go
 ui/internal/jira/compose.go
 ui/internal/jira/jira.go
 ui/internal/jira/wizard.go
@@ -70,6 +72,7 @@ ui/internal/window/remote.go
 ui/internal/window/search.go
 ui/internal/window/search_ownwords.go
 ui/internal/window/search_model.go
+ui/internal/window/selection.go
 ui/internal/window/status.go
 ui/internal/window/sync.go
 ui/internal/window/threads.go

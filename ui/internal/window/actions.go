@@ -6,6 +6,7 @@ package window
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
@@ -152,13 +153,15 @@ func (w *Window) markRead(id api.MessageID) { w.setSeenIDs([]api.MessageID{id}, 
 func (w *Window) markUnread(id api.MessageID) { w.setSeenIDs([]api.MessageID{id}, false) }
 
 // setSeenIDs changes the seen flag of the messages that do not have it so
-// yet, optimistically (rows, unread badge of the folder, menu actions),
-// and sends one message.flag; a failure puts everything back, success in
-// marking read withdraws their desktop notifications. The messages are of
-// one folder (a conversation row's members are).
+// yet, optimistically (rows, unread badges of their folders, menu
+// actions), and sends one message.flag; a failure puts everything back,
+// success in marking read withdraws their desktop notifications. The
+// messages are of one account (a selection is), possibly of several of its
+// folders (a search).
 func (w *Window) setSeenIDs(ids []api.MessageID, seen bool) {
 	var todo []api.MessageID
 	var k folderKey
+	folderOf := make(map[api.MessageID]folderKey)
 	for _, id := range ids {
 		s, ok := w.summary(id)
 		if !ok || hasFlag(s.Flags, api.FlagSeen) == seen || w.model.inOutbox(s) {
@@ -166,6 +169,7 @@ func (w *Window) setSeenIDs(ids []api.MessageID, seen bool) {
 		}
 		todo = append(todo, id)
 		k = folderKey{Account: s.AccountID, Folder: s.FolderID}
+		folderOf[id] = k
 	}
 	if len(todo) == 0 {
 		return
@@ -180,12 +184,19 @@ func (w *Window) setSeenIDs(ids []api.MessageID, seen bool) {
 			return
 		}
 		w.refreshRows(changed)
-		delta := len(changed) // marking unread raises the unread count
-		if on {
-			delta = -delta
+		// Marking unread raises the unread count of each message's folder.
+		perFolder := make(map[folderKey]int)
+		for _, id := range changed {
+			perFolder[folderOf[id]]++
 		}
-		w.model.adjustCounts(k, delta, 0)
-		w.updateFolderRow(k)
+		for f, n := range perFolder {
+			delta := n
+			if on {
+				delta = -delta
+			}
+			w.model.adjustCounts(f, delta, 0)
+			w.updateFolderRow(f)
+		}
 		w.refreshMessageActions()
 	}
 	apply(seen)
@@ -283,7 +294,9 @@ func (w *Window) trashFrom(parent gtk.Widgetter, id api.MessageID) {
 // trashIDs moves messages to Trash (message.delete) after the optional
 // confirmation shown over parent, with subject as its body, and withdraws
 // their desktop notifications once it succeeded. For a single outbox
-// message it cancels the send instead (outbox.go).
+// message it cancels the send instead (outbox.go); for several queued
+// ones it cancels the sending of them all after one question
+// (cancelSends). A message already in Trash is expunged.
 func (w *Window) trashIDs(parent gtk.Widgetter, ids []api.MessageID, subject string) {
 	if len(ids) == 1 {
 		if s, ok := w.summary(ids[0]); ok && w.model.inOutbox(s) {
@@ -295,6 +308,12 @@ func (w *Window) trashIDs(parent gtk.Widgetter, ids []api.MessageID, subject str
 	if len(list) == 0 {
 		return
 	}
+	if queued := w.queued(list); len(queued) == len(list) {
+		w.cancelSends(parent, queued)
+		return
+	} else if len(queued) > 0 {
+		return // a selection is one folder's; outbox rows never mix in
+	}
 	confirmTrash(parent, w.settings, len(list), subject, func() {
 		restore := w.removeRows(idsOf(list))
 		for _, s := range list {
@@ -304,10 +323,24 @@ func (w *Window) trashIDs(parent gtk.Widgetter, ids []api.MessageID, subject str
 		// message.delete moves to the Trash role folder; a message already
 		// there is expunged instead (no target count to credit).
 		var target folderKey
-		if trash, ok := w.model.folderByRole(acc, api.RoleTrash); ok && trash.ID != list[0].FolderID {
+		trash, hasTrash := w.model.folderByRole(acc, api.RoleTrash)
+		if hasTrash {
 			target = folderKey{Account: acc, Folder: trash.ID}
 		}
-		undo := w.trackMoves(list, target)
+		var moving, expunged []api.MessageSummary
+		for _, s := range list {
+			if hasTrash && s.FolderID == trash.ID {
+				expunged = append(expunged, s)
+			} else {
+				moving = append(moving, s)
+			}
+		}
+		undoMoves := w.trackMoves(moving, target)
+		undoExpunge := w.trackMoves(expunged, folderKey{})
+		undo := func() {
+			undoExpunge()
+			undoMoves()
+		}
 		n := len(list)
 		what := i18n.T("Moving the message to Trash")
 		if n > 1 {
@@ -331,16 +364,29 @@ func (w *Window) trackMoves(list []api.MessageSummary, target folderKey) (undo f
 	if len(list) == 0 {
 		return func() {}
 	}
-	unread := 0
+	// Per source folder: a selection of a search may come from several.
+	type counts struct{ unread, total int }
+	bySource := make(map[folderKey]*counts)
+	var order []folderKey
 	for _, s := range list {
+		src := folderKey{Account: s.AccountID, Folder: s.FolderID}
+		c := bySource[src]
+		if c == nil {
+			c = &counts{}
+			bySource[src] = c
+			order = append(order, src)
+		}
+		c.total++
 		if !hasFlag(s.Flags, api.FlagSeen) {
-			unread++
+			c.unread++
 		}
 	}
-	src := folderKey{Account: list[0].AccountID, Folder: list[0].FolderID}
 	shift := func(sign int) {
-		w.model.moveCounts(src, target, sign*unread, sign*len(list))
-		w.updateFolderRow(src) // refreshes every row, the target's too
+		for _, src := range order {
+			c := bySource[src]
+			w.model.moveCounts(src, target, sign*c.unread, sign*c.total)
+			w.updateFolderRow(src) // refreshes every row, the target's too
+		}
 	}
 	shift(1)
 	return func() { shift(-1) }
@@ -445,7 +491,9 @@ func (w *Window) movable(ids []api.MessageID) []api.MessageSummary {
 // moveListTo is the move itself: the rows go at once and come back on
 // failure, the counts follow, the windows of the messages close.
 func (w *Window) moveListTo(list []api.MessageSummary, target api.FolderID, what func(n int) string) {
-	if len(list) == 0 || target == list[0].FolderID {
+	// The messages already in the target stay where they are.
+	list = slices.DeleteFunc(slices.Clone(list), func(s api.MessageSummary) bool { return s.FolderID == target })
+	if len(list) == 0 {
 		return
 	}
 	acc := list[0].AccountID
@@ -497,8 +545,8 @@ func (w *Window) scheduleMarkRead(id api.MessageID) {
 // (or nothing selected) everything is off, and what is shown follows the
 // listed folder's account.
 func (w *Window) setMessageActionsSensitive(on bool) {
-	row, ok := w.selectedRow()
-	st := w.model.messageActionState(row, on && ok)
+	// Several selected rows combine their states (selection.go).
+	st := w.selectionState(on)
 	w.presentReply(w.replyButton, st.comment)
 	for _, b := range []struct {
 		button             *gtk.Button
@@ -527,7 +575,7 @@ func (w *Window) setMessageActionsSensitive(on bool) {
 		"load-images":   st.on && st.loadImages,
 		"trust-sender":  st.on && st.trustSender,
 		"change-status": st.changeStatus,
-		"open-message":  st.on,
+		"open-message":  st.on && st.open,
 		"reply":         st.reply,
 		"reply-all":     st.replyAll,
 		"forward":       st.forward,

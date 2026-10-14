@@ -35,6 +35,9 @@ final class AssistantMenu: NSObject, NSMenuDelegate {
     let state: AppState
     /// Whether the menu offers Summarize Unread in This Folder.
     let includesUnread: Bool
+    /// How many rows the actions are for (a message's context menu on
+    /// several: `Assistant.messageActionsFor`, `Assistant.labelFor`).
+    let count: Int
     let menu: NSMenu
     /// The separator, the problem and "Set Up the Assistant…", shown while
     /// the chosen target cannot run the message actions.
@@ -43,9 +46,10 @@ final class AssistantMenu: NSObject, NSMenuDelegate {
     /// information only.
     private let problemItem = NSMenuItem()
 
-    init(state: AppState, includesUnread: Bool) {
+    init(state: AppState, includesUnread: Bool, count: Int = 1) {
         self.state = state
         self.includesUnread = includesUnread
+        self.count = count
         menu = NSMenu(title: Assistant.texts().assistant)
         super.init()
         menu.delegate = self
@@ -86,8 +90,10 @@ final class AssistantMenu: NSObject, NSMenuDelegate {
     /// Builds the items, once.
     private func populate() {
         let texts = Assistant.texts()
-        for (i, a) in Assistant.messageActions.enumerated() {
-            menu.addItem(item(Assistant.label(a), Action.askAssistant, tag: i))
+        let offered = Assistant.messageActionsFor(count)
+        // The tag stays the action's index in `Assistant.messageActions`.
+        for (i, a) in Assistant.messageActions.enumerated() where offered.contains(a) {
+            menu.addItem(item(Assistant.labelFor(a, count: count), Action.askAssistant, tag: i))
         }
         if includesUnread {
             menu.addItem(.separator())

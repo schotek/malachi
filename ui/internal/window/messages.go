@@ -5,6 +5,7 @@ package window
 
 import (
 	"context"
+	"slices"
 
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 
@@ -214,7 +215,7 @@ func (w *Window) rebuildMessageRows() {
 		w.syncRows()
 		return
 	}
-	prev, hadSelection := w.selectedMessage()
+	prev := w.selectedKeys()
 
 	w.reselecting = true
 	w.messageList.RemoveAll()
@@ -224,18 +225,7 @@ func (w *Window) rebuildMessageRows() {
 		w.rows[listKey{Message: s.ID}] = r
 		w.messageList.Append(r)
 	}
-	if hadSelection {
-		if r := w.rows[listKey{Message: prev.ID}]; r != nil {
-			w.messageList.SelectRow(r.ListBoxRow)
-		} else {
-			hadSelection = false
-		}
-	}
-	w.reselecting = false
-
-	if !hadSelection && prev.ID != "" {
-		w.onMessageRowSelected(nil)
-	}
+	w.restoreSelection(prev, nil)
 }
 
 // newMessageRow builds a row for s with the current appearance settings.
@@ -315,60 +305,87 @@ func (w *Window) selectedMessage() (api.MessageSummary, bool) {
 	return r.Message, ok
 }
 
-// removeMessageRow drops a message from the flat list. When it was the
-// selected one its neighbour is selected (the pane follows), or the pane
-// is cleared when the list ran empty. The returned function puts the
-// message back at its place, for reverting a failed move or delete; it
-// does nothing once the list was reloaded in the meantime. Grouped mode
-// goes through removeRows.
+// removeMessageRow drops a message from the flat list (removeMessageRows).
 func (w *Window) removeMessageRow(id api.MessageID) (restore func()) {
-	s, idx, ok := w.model.removeMessage(id)
-	if !ok {
+	return w.removeMessageRows([]api.MessageID{id})
+}
+
+// removeMessageRows drops messages from the flat list in one go. The
+// selection keeps the rows still listed; when every selected row went,
+// the row now at the first removed selected one's place takes over (the
+// pane follows), or the pane is cleared when the list ran empty. The
+// returned function puts the messages back at their places, for reverting
+// a failed move or delete; it does nothing once the list was reloaded in
+// the meantime. Grouped mode goes through removeRows.
+func (w *Window) removeMessageRows(ids []api.MessageID) (restore func()) {
+	type removed struct {
+		s   api.MessageSummary
+		idx int
+	}
+	prev := w.selectedKeys()
+	selectedAt := -1
+	var gone []removed
+	for _, id := range ids {
+		s, idx, ok := w.model.removeMessage(id)
+		if !ok {
+			continue
+		}
+		gone = append(gone, removed{s, idx})
+		if selectedAt < 0 && slices.Contains(prev, listKey{Message: id}) {
+			selectedAt = idx
+		}
+	}
+	if len(gone) == 0 {
 		return func() {}
 	}
 	gen := w.model.listGen
 	if w.usesDateGroups() {
 		w.syncDateRows(true)
 		return func() {
-			if w.model.listGen == gen && w.model.insertMessage(idx, s) {
-				w.syncDateRows(false)
+			if w.model.listGen != gen {
+				return
 			}
+			for i := len(gone) - 1; i >= 0; i-- {
+				w.model.insertMessage(gone[i].idx, gone[i].s)
+			}
+			w.syncDateRows(false)
 		}
 	}
-	wasSelected := false
-	key := listKey{Message: id}
-	if r := w.rows[key]; r != nil {
-		if sel := w.messageList.SelectedRow(); sel != nil && sel.Index() == idx {
-			wasSelected = true
-		}
-		delete(w.rows, key)
-		// Removing the selected row emits row-selected(nil); skip it so the
-		// pane does not blink through the empty page before the neighbour.
-		w.reselecting = true
-		w.messageList.Remove(r)
-		w.reselecting = false
-	}
-	if wasSelected {
-		next := idx
-		if next > len(w.model.messages)-1 {
-			next = len(w.model.messages) - 1
-		}
-		if row := w.messageList.RowAtIndex(next); next >= 0 && row != nil {
-			w.messageList.SelectRow(row)
-		} else {
-			w.onMessageRowSelected(nil)
+	// Removing a selected row emits the selection signals; they are
+	// skipped so that the pane does not blink through the empty page
+	// before the neighbour.
+	w.reselecting = true
+	for _, g := range gone {
+		key := listKey{Message: g.s.ID}
+		if r := w.rows[key]; r != nil {
+			delete(w.rows, key)
+			w.messageList.Remove(r)
 		}
 	}
+	w.restoreSelection(prev, func() (listKey, bool) {
+		next := min(selectedAt, len(w.model.messages)-1)
+		if selectedAt < 0 || next < 0 {
+			return listKey{}, false
+		}
+		r, ok := w.rowForWidget(w.messageList.RowAtIndex(next))
+		return r.Key, ok
+	})
 	w.showListState()
 
 	return func() {
-		if w.model.listGen != gen || !w.model.insertMessage(idx, s) {
+		if w.model.listGen != gen {
 			return
 		}
-		_, at, _ := w.model.message(s.ID)
-		r := w.newMessageRow(s)
-		w.rows[listKey{Message: s.ID}] = r
-		w.messageList.Insert(r, at)
+		for i := len(gone) - 1; i >= 0; i-- {
+			g := gone[i]
+			if !w.model.insertMessage(g.idx, g.s) {
+				continue
+			}
+			_, at, _ := w.model.message(g.s.ID)
+			r := w.newMessageRow(g.s)
+			w.rows[listKey{Message: g.s.ID}] = r
+			w.messageList.Insert(r, at)
+		}
 		w.showListState()
 	}
 }
@@ -379,15 +396,7 @@ func (w *Window) removeMessageRow(id api.MessageID) (restore func()) {
 // the list is loaded again instead and the restore does nothing.
 func (w *Window) removeRows(ids []api.MessageID) (restore func()) {
 	if !w.model.grouped {
-		restores := make([]func(), 0, len(ids))
-		for _, id := range ids {
-			restores = append(restores, w.removeMessageRow(id))
-		}
-		return func() {
-			for i := len(restores) - 1; i >= 0; i-- {
-				restores[i]()
-			}
-		}
+		return w.removeMessageRows(ids)
 	}
 	r, ok := w.model.removeMessages(ids)
 	if !ok {

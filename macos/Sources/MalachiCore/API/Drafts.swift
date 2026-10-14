@@ -193,10 +193,14 @@ public struct DraftCreateParams: Codable, Sendable, Equatable {
     /// `forward` only: the account of `messageId` when it is not
     /// `accountId` (a jira message forwarded from a mail account).
     public var messageAccountId: AccountID?
+    /// `forward` only, instead of `messageId`: 2 to
+    /// `Selection.maxForward` messages of one account, each attached whole
+    /// (docs/api.md §4.5).
+    public var messageIds: [MessageID]?
 
     public init(
         accountId: AccountID, mode: ComposeMode, messageId: MessageID? = nil, mailto: String? = nil,
-        attribution: String? = nil, messageAccountId: AccountID? = nil
+        attribution: String? = nil, messageAccountId: AccountID? = nil, messageIds: [MessageID]? = nil
     ) {
         self.accountId = accountId
         self.mode = mode
@@ -204,6 +208,7 @@ public struct DraftCreateParams: Codable, Sendable, Equatable {
         self.mailto = mailto
         self.attribution = attribution
         self.messageAccountId = messageAccountId
+        self.messageIds = messageIds
     }
 }
 

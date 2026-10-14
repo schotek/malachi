@@ -83,6 +83,8 @@ public static class ActionRules
         var available = Capabilities.Available(situation);
         return new ActionFlags
         {
+            Count = 1,
+            Open = true,
             On = true,
             Outbox = outbox,
             Flagged = flagged,

@@ -1678,7 +1678,15 @@ type DraftCreateParams struct {
 	// the user's accounts, such as an issue tracker's from a mail account.
 	// Empty = AccountID.
 	MessageAccountID AccountID `json:"messageAccountId,omitempty"`
+	// MessageIDs forwards several messages at once (ComposeForward only,
+	// instead of MessageID): 2 to MaxForwardMessages messages of one
+	// account (MessageAccountID or AccountID), each attached whole as
+	// message/rfc822; the draft quotes nothing.
+	MessageIDs []MessageID `json:"messageIds,omitempty"`
 }
+
+// MaxForwardMessages caps DraftCreateParams.MessageIDs.
+const MaxForwardMessages = 20
 
 // QuoteForm says how much of the original a draft.create result quotes.
 type QuoteForm string

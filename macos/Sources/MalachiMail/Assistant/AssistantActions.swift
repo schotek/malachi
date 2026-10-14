@@ -65,10 +65,17 @@ final class AssistantActions {
             }
             return
         }
-        list.selectedIDs { [weak self] row, ids in
-            guard let self, !self.model.inOutbox(row.message) else { return }
-            let newestFirst = row.thread ? Array(ids.reversed()) : ids
-            self.ask(action, account: row.message.accountId, ids: newestFirst, from: window)
+        list.selectedIDs { [weak self] rows, ids in
+            guard let self, let first = rows.first, !rows.contains(where: { self.model.inOutbox($0.message) }) else { return }
+            if rows.count > 1 {
+                // Several rows (one account): newest first; Draft a Reply…
+                // answers one message (Assistant.messageActionsFor).
+                guard action != .draftReply else { return }
+                self.ask(action, account: first.message.accountId, ids: self.model.newestFirst(ids), from: window)
+                return
+            }
+            let newestFirst = first.thread ? Array(ids.reversed()) : ids
+            self.ask(action, account: first.message.accountId, ids: newestFirst, from: window)
         }
     }
 

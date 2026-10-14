@@ -271,6 +271,16 @@ public sealed record DraftCreateParams
     /// </summary>
     [JsonPropertyName("messageAccountId")]
     public AccountId? MessageAccountId { get; init; }
+
+    /// <summary>
+    /// <c>forward</c> only, instead of <see cref="MessageId"/>: 2 to
+    /// <see cref="API.Limits.MaxForwardMessages"/> messages of one account
+    /// (<see cref="MessageAccountId"/>, else <see cref="AccountId"/>), each
+    /// attached whole as <c>message/rfc822</c>; the draft quotes nothing
+    /// (docs/api.md §4.5).
+    /// </summary>
+    [JsonPropertyName("messageIds")]
+    public IReadOnlyList<MessageId>? MessageIds { get; init; }
 }
 
 /// <summary>

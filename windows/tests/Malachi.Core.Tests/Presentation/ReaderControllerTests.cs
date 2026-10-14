@@ -5,7 +5,8 @@
 // (showMessage with bodyGen, render, renderHeaders, renderBody, loading
 // with bodySpinnerDelay), remote.go (showRemoteBar, showPicturesBar),
 // outbox.go (renderOutboxBanner), download.go (refreshChips), embedded.go
-// (show, loadImages), window.go (emptyPageName) and the quoted-text button
+// (show, loadImages), window.go (emptyPageName), selection.go
+// (showSelectionPage: the count of several rows) and the quoted-text button
 // (MessageViewController.swift quotedButton, toggleQuoted), which macOS keeps
 // untested in MessageViewController.swift and
 // EmbeddedWindowController.swift. The cache is a fake that answers when the
@@ -363,6 +364,38 @@ public sealed class ReaderControllerTests
         Assert.Equal(ReaderPage.Empty, r.Page);
         Assert.Equal(ReaderBodyPage.Text, r.BodyPage);
         Assert.Equal("", r.BodyText);
+    }
+
+    /// <summary>
+    /// selection.go showSelectionPage: several rows show their count instead
+    /// of what the pane showed, which goes as with a clear (a late reply
+    /// included); the placeholder of account.list does not replace it, and
+    /// a window never shows it.
+    /// </summary>
+    [Fact]
+    public void SeveralRowsShowTheirCount()
+    {
+        var r = Make();
+        r.Show(Summary("m1"));
+        r.ShowSelection(3);
+        Assert.Equal(ReaderPage.Selection, r.Page);
+        Assert.Equal("3 messages selected", r.SelectionText);
+        Assert.Null(r.Current);
+        Assert.Null(r.Html);
+        cache.Entry("m1").Body = TextBody("m1");
+        cache.Settle("m1");
+        Assert.Equal(ReaderPage.Selection, r.Page);
+        Assert.Equal("", r.BodyText);
+        r.SetHasAccounts(true);
+        Assert.Equal(ReaderPage.Selection, r.Page);
+        r.Show(Summary("m2"));
+        Assert.Equal(ReaderPage.Message, r.Page);
+        r.Clear();
+        Assert.Equal(ReaderPage.Empty, r.Page);
+
+        var w = Make(ReaderMode.Window);
+        w.ShowSelection(2);
+        Assert.Equal(ReaderPage.Message, w.Page);
     }
 
     [Fact]
