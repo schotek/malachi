@@ -97,6 +97,7 @@ import Testing
             (API.Notify.authRequired, #"{"accountId":"acc_1","reason":1200,"message":"m"}"#),
             (API.Notify.accountsChanged, "{}"),
             (API.Notify.messagesChanged, #"{"accountId":"acc_1","folderIds":["f_inbox"]}"#),
+            (API.Notify.boardChanged, #"{"accountIds":["acc_1"]}"#),
         ]
         #expect(samples.map(\.0) == API.allNotifications)
         for (method, params) in samples {
