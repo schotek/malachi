@@ -770,6 +770,30 @@ type FolderSubscribeParams struct {
 
 type FolderSubscribeResult struct{}
 
+// FolderMarkReadParams marks the folder's stored messages read
+// (folder.markRead).
+type FolderMarkReadParams struct {
+	AccountID AccountID `json:"accountId"`
+	FolderID  FolderID  `json:"folderId"`
+}
+
+// FolderMarkReadResult says how many messages were unread before.
+type FolderMarkReadResult struct {
+	Marked int `json:"marked"`
+}
+
+// FolderEmptyParams deletes every stored message of a Trash or Junk
+// folder for good (folder.empty).
+type FolderEmptyParams struct {
+	AccountID AccountID `json:"accountId"`
+	FolderID  FolderID  `json:"folderId"`
+}
+
+// FolderEmptyResult says how many messages were deleted.
+type FolderEmptyResult struct {
+	Deleted int `json:"deleted"`
+}
+
 // ---------------------------------------------------------------------------
 // Messages
 // ---------------------------------------------------------------------------

@@ -341,3 +341,38 @@ func TestMoveMessagesIntoUnsyncedFolder(t *testing.T) {
 		t.Errorf("other message touched: %+v", got)
 	}
 }
+
+// FolderMessageIDs: newest first; unread only on request; hidden rows only
+// on request; another folder's never.
+func TestFolderMessageIDs(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	inbox := seedFolder(t, s, "acc", "INBOX", api.RoleInbox)
+	trash := seedFolder(t, s, "acc", "Trash", api.RoleTrash)
+	base := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	old := seedMessage(t, s, inbox, 1, "old", base)
+	seen := seedMessage(t, s, inbox, 2, "seen", base.Add(time.Hour), api.FlagSeen)
+	hidden := seedMessage(t, s, inbox, 3, "hidden", base.Add(2*time.Hour))
+	seedMessage(t, s, trash, 1, "elsewhere", base.Add(3*time.Hour))
+	if _, _, err := s.SetMessageHidden(ctx, hidden.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		unread, hidden bool
+		want           []string
+	}{
+		{false, false, []string{seen.ID, old.ID}},
+		{true, false, []string{old.ID}},
+		{false, true, []string{hidden.ID, seen.ID, old.ID}},
+		{true, true, []string{hidden.ID, old.ID}},
+	}
+	for _, c := range cases {
+		got, err := s.FolderMessageIDs(ctx, inbox.ID, c.unread, c.hidden)
+		if err != nil || fmt.Sprint(got) != fmt.Sprint(c.want) {
+			t.Errorf("unread=%v hidden=%v: %v %v, want %v", c.unread, c.hidden, got, err, c.want)
+		}
+	}
+	if got, err := s.FolderMessageIDs(ctx, "f_nope", false, true); err != nil || len(got) != 0 {
+		t.Errorf("unknown folder: %v %v", got, err)
+	}
+}

@@ -424,6 +424,39 @@ func TestJiraAccountRoutingAndCapabilities(t *testing.T) {
 	if after != before {
 		t.Fatalf("a local flag asked the jira syncer: %v", jiraSup.calls[before:])
 	}
+
+	// folder.markRead too, and the copies in a view follow; folder.empty
+	// is not for an issue tracker.
+	folders, _, err = b.store.UpsertFolders(ctx, string(id), []store.Folder{
+		{Mailbox: "space:10000", Name: "IT Service Desk", Path: "IT Service Desk", Role: api.RoleNone, Subscribed: true, Selectable: true},
+		{Mailbox: "view:open", Name: "Open", Path: "Open", Role: api.RoleNone, Subscribed: true, Selectable: true, Virtual: api.VirtualOpen},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unread := &store.Message{AccountID: string(id), FolderID: folders[0].ID, RemoteID: "c:2", ThreadID: store.IssueThreadID("20001"),
+		Subject: "ITSD-1: Printer", RFCMessageID: "comment.2.issue.20001@acme.atlassian.net.malachi.invalid"}
+	copied := &store.Message{AccountID: string(id), FolderID: folders[1].ID, RemoteID: "c:2", ThreadID: store.IssueThreadID("20001"),
+		Subject: "ITSD-1: Printer", RFCMessageID: "comment.2.issue.20001@acme.atlassian.net.malachi.invalid"}
+	if err := b.store.UpsertMessages(ctx, []*store.Message{unread, copied}); err != nil {
+		t.Fatal(err)
+	}
+	marked, err := b.Folders().MarkRead(ctx, api.FolderMarkReadParams{AccountID: id, FolderID: api.FolderID(folders[0].ID)})
+	if err != nil || marked.Marked != 1 {
+		t.Fatalf("folder.markRead: %+v %v", marked, err)
+	}
+	if c, err := b.store.GetMessage(ctx, string(id), copied.ID); err != nil || !slices.Contains(c.Flags, api.FlagSeen) {
+		t.Fatalf("the copy in the view: %+v %v", c.Flags, err)
+	}
+	jiraSup.mu.Lock()
+	after = len(jiraSup.calls)
+	jiraSup.mu.Unlock()
+	if after != before {
+		t.Fatalf("folder.markRead asked the jira syncer: %v", jiraSup.calls[before:])
+	}
+	if _, err := b.Folders().Empty(ctx, api.FolderEmptyParams{AccountID: id, FolderID: api.FolderID(folders[0].ID)}); errCode(t, err) != api.CodeInvalidArgument {
+		t.Fatalf("folder.empty: %v", err)
+	}
 }
 
 // account.detectSite through the daemon, against the fake sites.

@@ -32,6 +32,8 @@ const (
 	// Folders.
 	MethodFolderList      = "folder.list"
 	MethodFolderSubscribe = "folder.subscribe"
+	MethodFolderMarkRead  = "folder.markRead"
+	MethodFolderEmpty     = "folder.empty"
 
 	// Messages.
 	MethodMessageList     = "message.list"
@@ -129,7 +131,7 @@ var AllMethods = []string{
 	MethodAccountUpdate, MethodAccountDiscover, MethodAccountTest, MethodAccountLinked,
 	MethodAccountReorder, MethodAccountOAuthStart, MethodAccountOAuthWait, MethodAccountOAuthCancel,
 	MethodAccountDetectSite, MethodAccountListSpaces,
-	MethodFolderList, MethodFolderSubscribe,
+	MethodFolderList, MethodFolderSubscribe, MethodFolderMarkRead, MethodFolderEmpty,
 	MethodMessageList, MethodMessageGet, MethodMessageBody, MethodMessagePart,
 	MethodMessageEmbedded, MethodMessageDownload, MethodMessageFlag, MethodMessageMove, MethodMessageDelete,
 	MethodMessageSend, MethodMessageUnsubscribe,

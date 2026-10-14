@@ -178,6 +178,12 @@ func (stubFolders) List(context.Context, api.FolderListParams) (*api.FolderListR
 func (stubFolders) Subscribe(context.Context, api.FolderSubscribeParams) (*api.FolderSubscribeResult, error) {
 	return nil, api.ErrNotImplemented
 }
+func (stubFolders) MarkRead(context.Context, api.FolderMarkReadParams) (*api.FolderMarkReadResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubFolders) Empty(context.Context, api.FolderEmptyParams) (*api.FolderEmptyResult, error) {
+	return nil, api.ErrNotImplemented
+}
 
 type stubMessages struct{}
 

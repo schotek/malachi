@@ -73,6 +73,8 @@ func (s *Server) registerBackend(b api.Backend) {
 
 	s.handlers[api.MethodFolderList] = wrap(fol.List)
 	s.handlers[api.MethodFolderSubscribe] = wrap(fol.Subscribe)
+	s.handlers[api.MethodFolderMarkRead] = wrap(fol.MarkRead)
+	s.handlers[api.MethodFolderEmpty] = wrap(fol.Empty)
 
 	s.handlers[api.MethodMessageList] = wrap(msg.List)
 	s.handlers[api.MethodMessageGet] = wrap(msg.Get)

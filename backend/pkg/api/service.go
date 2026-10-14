@@ -38,6 +38,8 @@ type AccountService interface {
 type FolderService interface {
 	List(ctx context.Context, p FolderListParams) (*FolderListResult, error)
 	Subscribe(ctx context.Context, p FolderSubscribeParams) (*FolderSubscribeResult, error)
+	MarkRead(ctx context.Context, p FolderMarkReadParams) (*FolderMarkReadResult, error)
+	Empty(ctx context.Context, p FolderEmptyParams) (*FolderEmptyResult, error)
 }
 
 type MessageService interface {

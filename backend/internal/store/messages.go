@@ -280,6 +280,37 @@ func (s *Store) ListUIDsOlderThan(ctx context.Context, folderID string, before t
 	return out, rows.Err()
 }
 
+// FolderMessageIDs lists the ids of a folder's messages, newest first
+// (folder.markRead, folder.empty): with unreadOnly only the unread ones,
+// hidden rows (a notification mail hidden by an issue-tracker account)
+// only with includeHidden.
+func (s *Store) FolderMessageIDs(ctx context.Context, folderID string, unreadOnly, includeHidden bool) ([]string, error) {
+	q := `SELECT id FROM messages WHERE folder_id = ?`
+	if unreadOnly {
+		q += ` AND unread = 1`
+	}
+	if !includeHidden {
+		q += ` AND hidden = 0`
+	}
+	rows, err := s.db.QueryContext(ctx, q+` ORDER BY date DESC, id`, folderID)
+	if err != nil {
+		return nil, fmt.Errorf("list folder messages: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan message id: %w", err)
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list folder messages: %w", err)
+	}
+	return out, nil
+}
+
 func (s *Store) ListUIDs(ctx context.Context, folderID string) ([]uint32, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT uid FROM messages WHERE folder_id = ? AND uid > 0 ORDER BY uid`, folderID)
 	if err != nil {

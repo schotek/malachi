@@ -2450,3 +2450,13 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   informaci*, the English ones unchanged; the *Snoozed* navigation item; Archive with Undo; keys
   ⌘/Ctrl+1 and 2, E, D, R; the two-stage Escape; the board's own
   preferences). It is written, not yet verified, on GTK and Windows (see CLAUDE.md).
+- Folder actions work on the stored messages: **decided** (2026-10-14, the
+  owner's choice for the clients' context menus) — `folder.markRead` and
+  `folder.empty` change what the local store holds of a folder (the
+  `offlineDays` window, what the folder shows), message by message through
+  the existing operation queue (`OpFlag`, `OpDelete`), so no new operation
+  kind and no migration of `message_ops`. Messages older than the window,
+  kept on the server only, stay as they are; emptying Junk deletes for
+  good, as emptying Trash does. A server-wide command (IMAP `1:*`, Graph
+  paging) was weighed and left out: it needs a new operation kind, a table
+  rebuild and a second path for every provider.

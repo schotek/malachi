@@ -1285,6 +1285,44 @@ Not implemented yet: the sync engine synchronises every selectable folder
 regardless of subscription, and a local-only flag would be overwritten by
 the next `LIST`. Use `includeUnsubscribed` meanwhile.
 
+#### `folder.markRead`
+- params: `{ "accountId", "folderId" }`
+- result: `{ "marked": int }` — how many messages were unread
+- errors: invalidArgument (no `accountId` or `folderId`, an `outbox`),
+  accountNotFound, folderNotFound, conflict, storageError
+
+Marks every unread message the folder holds in the local store read, as
+`message.flag` with `set: ["seen"]` would: the messages within the
+`offlineDays` window that `message.list` shows; hidden messages (§4.2
+`folder.list`) are left alone, and so are messages older than the window,
+which only the server keeps. Each message is changed locally and queued
+for the server like a `message.flag`, in batches of
+`MaxMessageIDsPerCall` messages, each batch all-or-nothing; when a batch
+fails the batches before it stay done and calling again finishes the job.
+On a `jira` account the flags are local and reach the copies of the
+messages in the account's other folders (§4.3 `message.flag`); any
+folder, a view included, may be marked. With anything marked the daemon
+nudges the syncer (not for a `jira` account) and sends
+`notify.messagesChanged` (§5). Nothing unread: `{ "marked": 0 }`, no
+notification.
+
+#### `folder.empty`
+- params: `{ "accountId", "folderId" }`
+- result: `{ "deleted": int }`
+- errors: invalidArgument (no `accountId` or `folderId`, a folder whose
+  role is not `trash` or `junk`, an account without the `delete`
+  capability), accountNotFound, folderNotFound, conflict, storageError
+
+Deletes every message a Trash or Junk folder holds in the local store for
+good, hidden ones too, as `message.delete` with `permanent: true` would
+(a Junk folder's messages do not go to the Trash first): on IMAP `\Deleted`
+and `EXPUNGE` (on Gmail a plain expunge in Trash and Spam), on Graph
+`permanentDelete`. Like `folder.markRead` it works on the stored messages
+only, in batches, and messages older than the `offlineDays` window stay
+on the server; a client says so when it asks the user to confirm. With
+anything deleted the daemon nudges the syncer and sends
+`notify.messagesChanged` (§5). An empty folder: `{ "deleted": 0 }`.
+
 ### 4.3 message
 
 #### `message.list`
@@ -3476,7 +3514,8 @@ first synchronisation. A mail hidden as a notification of an
 issue-tracker site (§4.1 `notificationMail: "hide"`) produces none.
 
 `notify.messagesChanged` is sent when messages of an account changed
-without arriving or leaving. Three cases. Messages were hidden or shown
+without arriving or leaving, or left a folder at the user's request all
+at once. Four cases. Messages were hidden or shown
 again: notification mails a `jira` account hides once their issue is
 stored, and shows again when its `notificationMail`, its senders or its
 spaces change, the issue leaves it, or the account is paused or removed;
@@ -3489,7 +3528,10 @@ message of its thread retitled); `accountId` is then the `jira` account,
 and the pass sends it once, when it ends. Or the background pass over
 existing mail classified messages as bulk mail (`MessageSummary.bulk`,
 after migration 0016 or a new rule version): sent once per account with
-such messages, when the pass ends, without `folderIds`. In every case
+such messages, when the pass ends, without `folderIds`. Or a client
+called `folder.markRead` or `folder.empty` (§4.2) and something changed:
+`folderIds` names that folder, except after `folder.markRead` on a `jira`
+account, whose copies in other folders changed too (absent). In every case
 `folderIds` names
 the folders concerned (absent: any folder of the account); a client
 showing one drops what it cached of their messages (bodies, headers,
@@ -3831,6 +3873,13 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   the user edited it and is deleted when untouched. New `draft.get` (one draft as `draft.list` lists it) and
   `board.unflag` (clears the flags behind `hot.flagged`). No new error
   codes; `ProtocolVersion` stays 2.
+- **2** (2026-10-14, compatible addition: folder actions of the
+  clients' context menus, §4.2): new `folder.markRead` (every stored,
+  unhidden unread message of a folder read) and `folder.empty` (every
+  stored message of a Trash or Junk folder deleted for good), both over
+  the stored messages of the `offlineDays` window, in batches of
+  `MaxMessageIDsPerCall`; `notify.messagesChanged` after them. No new
+  error codes; `ProtocolVersion` stays 2.
 - **2** (2026-10-08, compatible addition: board fixes, §4.13):
   `BoardCase.remindedAt` (a remind came due and the user has not acted
   since) and new mail ending a remind early; `BoardArchiveResult.moved`
