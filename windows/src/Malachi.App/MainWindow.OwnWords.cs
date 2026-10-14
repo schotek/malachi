@@ -53,7 +53,19 @@ public sealed partial class MainWindow
         SearchBox.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(OnOwnWordsKey), handledEventsToo: true);
         SearchBox.TextChanged += (_, _) => SyncOwnWords();
         state.Assistant.Changed += (_, _) => SyncOwnWords();
-        Closed += (_, _) => searcher?.Dispose();
+        state.InAppProviderChanged += OnSearchProviderChanged;
+        Closed += (_, _) =>
+        {
+            state.InAppProviderChanged -= OnSearchProviderChanged;
+            searcher?.Dispose();
+        };
+        SyncOwnWords();
+    }
+
+    private void OnSearchProviderChanged(object? sender, EventArgs e)
+    {
+        CancelOwnWords();
+        if (searcher is { } active) active.Request.Provider = state.InAppProvider;
         SyncOwnWords();
     }
 
@@ -136,8 +148,7 @@ public sealed partial class MainWindow
             return existing;
         }
         var request = state.NewAssistantRequest();
-        var p = Assistant.PanelTexts();
-        request.Consent = () => state.Alerts.ConfirmAsync(this, p.ConsentHeading, p.ConsentBody, p.Allow, L10n.T("_Cancel"));
+        request.Consent = () => state.AskAssistantConsentAsync(this);
         searcher = new SearchConversion(request);
         return searcher;
     }

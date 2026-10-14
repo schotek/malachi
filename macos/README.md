@@ -27,9 +27,9 @@ own words ([AI agents](#ai-agents)), and the Czech translation generated
 from `po/` at build time. What is missing is listed
 under [Not on macOS, not yet](#not-on-macos-not-yet).
 
-Two things came here before the GTK UI, on purpose
+Three things came here before the GTK UI, on purpose
 ([docs/architecture.md §7](../docs/architecture.md#7-open-decisions),
-"macOS first for Jira"): **Jira accounts** (`kind: jira`, [docs/api.md
+"macOS first for Jira", for the first two): **Jira accounts** (`kind: jira`, [docs/api.md
 §4.1](../docs/api.md#41-account): the assistant, the JIRA heading in the
 sidebar with the Assigned to Me / Watching / Open views above the spaces,
 the always-grouped list with status pills and event rows, the issue card
@@ -41,7 +41,26 @@ the whole conversation stacked in the reading pane, for mail and Jira
 alike). Their pure logic is a Go reference the GTK UI uses as it is
 (`ui/internal/jira`, `ui/internal/capabilities`,
 `ui/internal/conversation`); the GTK UI mirrors both since 2026-09-30,
-see [Swift-first](#swift-first-where-the-gtk-ui-mirrors-it).
+see [Swift-first](#swift-first-where-the-gtk-ui-mirrors-it). The third is
+the **Board** (2026-10-01, on the owner's instruction before the GTK and
+Windows ports): the main window's second mode beside Mail, a switch in the
+toolbar (the mail split's view is taken out of the window in Board, its
+state kept). The board shows the daemon's cases ([docs/api.md
+§4.13](../docs/api.md#413-board), [docs/architecture.md
+§3.7](../docs/architecture.md#37-the-board)): conversations and Jira issues
+the daemon's rules put into Hot, Waiting for You, Waiting for Them and For
+Your Information (Czech *Hoří*, *Čeká na vás*, *Čeká na ně*, *Pro informaci*),
+with the user's own state, Done, Remind (a returned remind is listed first
+in its state with a *Reminded* badge; the *Snoozed* item of the navigation
+lists the reminds ahead) and Archive (with *Undo*), and
+the notes an assistant added (a title, a summary, tasks, a deadline with
+its quote, a suggested reply, the user's promises); *✦ Triage* has the
+user's own Claude Code write those notes ([AI agents](#ai-agents)). Its
+pure logic is Swift-first (`MalachiCore/Board`), its texts' msgids are in
+`ui/internal/board`. The Go reference of the model is there and the GTK
+board (2026-10-02) and the Windows board (2026-10-06) follow it; the fix
+round of 2026-10-08 went into all three clients (written for GTK and
+Windows without a build, see CLAUDE.md for what is verified where).
 
 Licence: GPL-3.0-or-later (everything outside `backend/`). Every source file
 starts with the SPDX header; in `Package.swift` it sits on lines 2–3 because
@@ -165,6 +184,12 @@ macos/
                                 (Capabilities.swift, of ui/internal/capabilities) and the
                                 Jira parts of the reading pane, the list and the accounts
                                 page (IssueReading, ChipPlan, MailModel+Jira)
+    Board/                      the board, Swift-first: the window modes, the case model and
+                                view models (Board, BoardCase, BoardView, BoardRemind,
+                                BoardText), the source seam (BoardSource, DaemonBoardSource,
+                                the samples), the triage's rules and texts (BoardTriage,
+                                BoardAutoTriage, BoardTriageText) and Suggest Reply's
+                                (BoardSuggestReply, BoardSuggestReplyText)
     Jira/                       the port of ui/internal/jira: the texts and view models of
                                 the assistant, the sidebar, the list, the issue card, the
                                 comment window and the account settings (JiraWizard,
@@ -172,7 +197,10 @@ macos/
                                 the RE2 check of a filter, after Go's regexp/syntax)
     Controllers/                @MainActor view models over the RPC client, tested against
                                 an in-process fake daemon (JiraWizardController,
-                                JiraAccountController and ConversationController among them)
+                                JiraAccountController, ConversationController and the
+                                board's BoardController, BoardPreferencesController,
+                                BoardTriageController, BoardAutoTriageScheduler and
+                                BoardReplyController among them)
     I18n/                       L10n (T/N/C), the catalogue loader, plural rules, strftime
     Settings/                   UserDefaults with the GSettings keys
     Platform/                   the open directory for attachments, RPC timeouts, the
@@ -191,14 +219,20 @@ macos/
                                 ConversationRow, MessageParts shared with the pane),
                                 Windows/ (MessageDisplay: the fan-out to a view showing
                                 several messages), Actions/, Assistant/, Attachments/,
-                                Compose/ (CommentHeaderView and
+                                Compose/ (ComposePane: the compose content, also the
+                                board's inline reply editor; CommentHeaderView,
+                                ComposePane+Comment and
                                 ComposeWindowController+Comment: the comment mode),
                                 WebViews/ (MessageWebView has the sized mode of a
-                                conversation card), Preferences/ (JiraAccount/: the
+                                conversation card and a board message card;
+                                WebPaperView, LinkStatusView), Preferences/ (JiraAccount/: the
                                 settings sheet of a Jira account), AccountWizard/ (the
                                 pages of the assistant; the browser sign-in is
                                 OAuthPageController; Jira/: the Jira assistant's sheet and
-                                pages), Notifications/, Appearance/, Shared/ (IssuePill)
+                                pages), Notifications/, Appearance/, Shared/ (IssuePill),
+                                Board/ (the board page, its three styles, the detail, the
+                                toolbars, the case actions and menus; MainWindow/'s
+                                +Mode, +Board, +Triage and +DevStart extensions)
   Sources/MalachiKeychain/      malachi-keychain, the daemon's keyring helper
   Tests/MalachiCoreTests/       the Go UI tests ported 1:1 plus the transport, controller
                                 and localisation tests; Fixtures/ holds FakeDaemon and
@@ -299,7 +333,7 @@ next start after a crash.
 | RPC socket | `~/.cache/malachi/run/rpc.sock` (`MALACHI_SOCKET` overrides; `XDG_RUNTIME_DIR` / `XDG_CACHE_HOME` honoured) |
 | RPC key | beside the socket, its path plus `.key` (`~/.cache/malachi/run/rpc.sock.key`): a new key at every daemon start, mode 0600, removed when the daemon stops cleanly; the app reads it for every connection and keeps nothing ([docs/api.md §1.4](../docs/api.md#14-handshake)) |
 | Attachments being opened or previewed, or handed to Claude | `~/Library/Caches/Malachi Mail/open/` (private, emptied at start and exit, entries older than an hour swept) |
-| Preferences | `defaults` domain `io.github.schotek.Malachi`, the GSettings keys (the Assistant's `assistant-menu`, `assistant-target`, `assistant-model`, `assistant-claude-path` and `assistant-consent` among them) plus `command-r` and `ui-text-size` |
+| Preferences | `defaults` domain `io.github.schotek.Malachi`, the GSettings keys (the Assistant's `assistant-menu`, `assistant-target`, `assistant-model`, `assistant-claude-path` and `assistant-consent` among them) plus `command-r`, `ui-text-size` and the board's `board-triage-consent`, `board-triage-model`, `board-default-style` (Settings → General → Board → *Board View*: `last` (*Last Used*, the default), `list`, `columns` or `today`, the style the board opens in the first time it shows after launch; later shows keep the user's last one), `board-last-style`, `board-start-mode` (*Open at Launch*: `mail`, `board` or `last`), `board-last-mode` and `board-account-filter` (remembered account filter); the board's own preferences (*Show the Board*, *Keep cases for*, *Triage These Accounts*, auto-triage) are the daemon's (`board.preferences`) |
 | The assistant panel's Claude Code | the user's own `claude` (the path in *Settings → AI*, else `~/.local/bin`, `~/.claude/local`, Homebrew, nvm, `~/.npm-global/bin`, the `PATH`), run in `~/Library/Caches/Malachi Mail/assistant` (empty, private); nothing of the conversation is written anywhere |
 | Passwords, sign-ins | login keychain, service `io.github.schotek.Malachi` (`password`, or `oauth2.refresh_token` for a browser sign-in) |
 | MCP bridge | `Contents/MacOS/malachi-mcp` in the bundle, `build/malachi-mcp` in a checkout |
@@ -365,7 +399,7 @@ the strings and the confirmation dialogs.
 | On macOS | Instead of (GTK) | Why |
 |---|---|---|
 | One unified toolbar across the three panes, split by tracking separators; the window title is the selected folder's name, the subtitle its counts ("12 unread of 1234"), as in Mail | Three header bars with pane titles; the counts are the subtitle of the list's header bar (`Adw.WindowTitle`) | The macOS window model; the menu bar duplicates every item |
-| The status line is a bar across the whole bottom edge of the window, under all three panes (sync state, unsent messages, the connection; a click opens the popover with each account's state and action) | The status line at the bottom of the sidebar, with the same popover | It stays in sight when the sidebar is folded away, which a narrow window does by itself |
+| The status line is a bar across the whole bottom edge of the window, under all three panes (sync state, unsent messages, the connection; a click opens the popover with each account's state and action) | The status line at the bottom of the sidebar in Mail, and across the bottom of the Board in every style, with the same popover | It stays in sight when the sidebar is folded away, which a narrow window does by itself |
 | A narrow window folds the sidebar (< 900 pt) and then the list (< 600 pt); *View → Show Sidebar* (⌃⌘S) and *Show Message List* (⌥⌘L) bring them back, and widening restores what folded by itself. The assistant panel, where it exists, folds first (once the panes beside it would get less than 900 pt), and the panes' breakpoints count the width the open panel leaves them | Breakpoints with back navigation between panes | Decided; there is no navigation stack in AppKit's split view |
 | When the list pane is folded, its toolbar items merge into the message section | — | How tracking separators behave |
 | Banners (backend, sign-in, certificate, draft, outbox), the remote-image and pictures bars and the account wizard's notice are rounded cards inset from the pane's edges, in a subtle system fill, with an SF Symbol (orange for a problem, grey for information) and the text in the regular weight; the bars' spinner takes the buttons' place at the end | `Adw.Banner`: an accent-tinted strip across the whole width with a bold title; the remote-image and pictures bars grey strips with the spinner at their start | The Mac's own notices |
@@ -401,6 +435,7 @@ the strings and the confirmation dialogs.
 | A folded conversation row (two or more members in the folder; a Jira folder is always grouped) shows the whole conversation in the reading pane: native cards on a timeline, ordered as Jira shows an issue (the issue card, then what opened the conversation — the issue's description, or the oldest message of mail not cut by `thread.get` — folded to its header and a preview while more follows, then the rest newest first, the row of older members at the bottom, the pane opened at its top; `ConversationLayout.displayOrder`, the user's choice, 2026-09-30, here since the same day), each HTML body in a locked web view of its own sized to its document (at most eight alive), a Jira conversation's status and assignee changes as compact rows; only the newest member that is not an event is marked read; a double click on a card's header opens that message in a window of its own, as one on its row in the list does; Space and ⇧Space in the list page through it (`MessageView/Conversation*`, `ConversationController`) | The same order (`ui/internal/window/conversation_*.go`, `convDisplayOrder`, where it came first); a card's HTML view has the JavaScript engine on for the application's isolated-world script, with script markup off (`ui/internal/htmlview/card.go`, `size.go`) | Decided ([docs/architecture.md §7](../docs/architecture.md#7-open-decisions), "Conversation view"); the pure model is the Go reference `ui/internal/conversation`, the security of the per-card views in [docs/security.md §3.2](../docs/security.md#32-defences) |
 | `MALACHI_DATA_DIR` names the data directory (`config.toml`, `store.db`, the messages) instead of `~/Library/Application Support/Malachi Mail`, for the app and the daemon it starts (`Daemon/Paths.swift`) | `--config` / `--store` flags of the daemon, XDG directories | The Windows client's override, taken over so that a test build runs beside the everyday one on a copy of the store (pair it with its own `MALACHI_SOCKET`) |
 | Inbox rows in Mail mode have a collapsible Flagged section first, then date sections (Today, Yesterday, this/last week, this/last month, this year, older years); local calendar boundaries, thread children kept with their parent (a flagged conversation stays in Flagged), empty sections omitted. Flag changes immediately move rows without duplicating them; pagination adds older flagged rows to the first section. Folding clears a hidden selection; while any section is folded, further pages use Load More to avoid fetching the whole inbox. Search and other folders are unchanged (`MailDateGroups`, `MailDateHeaderView`) | The same groups and translations (`ui/internal/maildate`, `window/date_groups.go`); a header is a nonselectable row with a disclosure button | Also implemented in WinUI 3 with native collection group headers; native verification pending (`docs/windows-date-groups-handoff.md`) |
+| The board's keys are menu items: *View → Show Mail* (⌘1) and *Show Board* (⌘2), and a *Board* menu with *Done* / *Move Back to Board* (D), *Remind…* (R) and *Archive* (E) on the selected case, refused by menu validation outside the Board and while the keyboard is in text (`Board.keyFor`); R opens Remind… under the panel's button or the List toolbar's. *Board → Archive* is E (the GTK key) while *Message → Archive* stays A, the Mac's mail key, so the two Archive items have different keys. ⌘1 and ⌘2 also go by the key code (`kVK_ANSI_1`/`kVK_ANSI_2`, `Board.numberRowDigit`): Czech QWERTZ types + and ě on those keys even with ⌘ (`UCKeyTranslate` of the system's Czech layouts), so the menu's key equivalents alone would not match there. Archive's *Undo* is a capsule of the board page beside the window's toasts. With *Show the Board* off on macOS 14 the mode switch's Board segment is disabled (a toolbar item hides only from macOS 15) | Ctrl+1 / Ctrl+2 and E / D / R handled by the board page's key controller; *Undo* is the Adw.Toast's button | The menu bar lists every command with its key; `ToastPresenter` has no button |
 
 The link under the pointer is shown at the bottom of the message view as
 in GTK (a user script that runs with content JavaScript off), and a masked
@@ -449,6 +484,8 @@ took the same map):
 | `Controllers/JiraWizardController.swift`, `Controllers/JiraAccountController.swift`: the flows over `account.detectSite`, `account.listSpaces`, `account.add` / `update` | `ui/internal/accountwizard/jira_flow.go` (the flow, tested against a fake daemon) and `jira.go`; `ui/internal/jiraaccount` (`controller.go`, `dialog.go`); `ui/internal/window/jira_editors.go` routes to them |
 | `Controllers/ConversationController.swift`, `Model/ConversationLayout.swift`, `MessageView/Conversation*.swift`, the sized mode of `WebViews/MessageWebView.swift` | `ui/internal/window/conversation_controller.go`, `conversation_layout.go`, `conversation_view.go`, `conversation_card.go`, `conversation_rows.go` (from `onMessageRowSelected`); `ui/internal/htmlview/card.go` and `size.go` (the height measured by an isolated-world script, [docs/security.md §3.2](../docs/security.md#32-defences)) |
 | `Controllers/IssueActionsController.swift`, `Shared/IssueStatusPill.swift`, `Shared/IssueTransitionMenu.swift`, `App/ChangeStatusMenus.swift`: the status pill of the issue card as the menu of the transitions the site allows (`issue.transitions` / `issue.transition`), the same list under *Change Status* in the Message menu and More Actions; the items and texts are `ui/internal/jira/transitions.go` | `ui/internal/window/issue_actions.go`, `issue_card.go` (the pill as a menu button with a popover), *Change Status* in the More Actions menu of the main window and of a message window (`win.change-status`, `msg.change-status`) |
+| `MalachiCore/Board/` (`Board.swift`: `Board.Mode`, `Board.Command` with `allows`, `Board.Request` with `mode(for:current:)`, `viewsMail`; `BoardCase.swift`, `BoardView.swift` with `Board.view(snapshot, viewState, now:)`, `BoardRemind.swift`, `BoardText.swift`; `BoardSource.swift` with `InMemoryBoardSource` and `BoardSamples.swift`, `DaemonBoardSource.swift`) and `Controllers/BoardController.swift`: the window's two modes, Mail and Board, switched by a two-segment control in the toolbar and the View menu (in Board the mail split's view is taken out of the window, the toolbar is swapped by the board style, mail actions are disabled and the board does not count as looking at the folder for notifications; the mode used last is kept in `board-last-mode` and *Open at Launch* (`board-start-mode`: Mail, Board or Last Used) picks the mode a new window opens in, waiting for the daemon's *Show the Board* at most `Board.startWait` and never after the user acted in Mail, `Board.startDecision`), and the board over the daemon's `board.*` methods: cases (conversations or Jira issues) in four states (Hot, Waiting for You, Waiting for Them, For Your Information) set by the daemon's rules, refined by the assistant's notes while the assistant is on and overridable by the user, the assistant's promises ("From the Assistant"), three styles (List as a split view of its own with the actions in the toolbar, Columns, Today), filters by state and account, a detail with the notes under the assistant's mark, deadlines with their quote and the conversation as cards (the excerpt `board.get` gives, an open card the message's sanitised HTML from `message.body` in the web view of Mail's conversation cards, at most 4 at a time, `Board.ConversationCards`), and the actions Done / Move Back to Board, Remind… (Later Today, This Evening or This Morning when they apply, Tomorrow, Next Week; *Back on the Board Now* clears it), Archive (a capsule with *Undo*, which moves the messages back from `moved` and reopens the case), Unstar (only for a case hot because of a star, `board.unflag`), Reply (a comment on an issue; with a suggested reply its inline editor), Show in Mail, from the toolbar, the panel and context menus; the suggested reply (a local draft) is edited in place in the detail (`ComposePane` inline, `BoardReplyEditorController`; the rules of its panes in Core's `BoardReplyPanes`, the AppKit side `BoardReplyEditorHost`) and sent or discarded from there, and nothing typed in it or sent from it is lost silently (a pane that leaves sight is saved first, one that cannot be saved is kept and retried and shown with a note, a send's outcome arrives wherever the user is, quit asks while one is unsaved); the source writes optimistically and takes a refused write back with a toast. AppKit: `MalachiMail/Board/` (`BoardPageViewController`, `BoardToolbar`, `BoardListViewController`, `BoardColumnsViewController`, `BoardTodayViewController`, `BoardDetailViewController`, `BoardReplyEditorHost`, `BoardActions`, `BoardCaseMenu`), `MainWindow/MainWindowController+Mode.swift`, `+Board.swift`, `App/Integration+Board.swift`. The Go reference `ui/internal/board` holds the texts' msgids and also the model, the view models and the controller this port mirrors | `ui/internal/board` (texts, model, view models and controller), `ui/internal/window/board*.go` and `data/ui/board_page.blp` (a `Gtk.Stack` `mode_stack` with the outer split and the board page, an `Adw.ToggleGroup` `mode_switch` in the header bar, `win.show-mail` / `win.show-board`) |
+| `MalachiCore/Board/BoardTriage.swift`, `BoardTriageText.swift`, `BoardAutoTriage.swift`, `Assistant/AssistantTriage.swift`, `Controllers/BoardTriageController.swift`, `BoardAutoTriageScheduler.swift`, `BoardPreferencesController.swift`: the board's triage. *✦ Triage* in both board toolbars runs the selected provider's agent, by default the user's own Claude Code (`claude -p` with the bridge's triage tools; with ChatGPT it is Codex, with its own model and consent) over the conversations that wait for notes; it needs the Assistant's *In App (Experimental)* target and a consent sheet first (mail goes to Anthropic through the user's Claude Code, or to OpenAI with ChatGPT; it cannot send, move or delete mail; a run the user starts may prepare reply drafts). The item is *Get Claude Code…*, *Sign In…* (insensitive while the sign-in waits for the browser), insensitive with the reason as tooltip, *✦ Triage* or *Stop*, and is taken out of the toolbar while triage is not offered (no In App target, a board turned off or an older daemon: `TriageView.offered`, the one rule Settings follows too); the second click of a double click is ignored. The status strip shows `Board.triageStripText`; while `board.list` reports a non-empty `triage.queue` its line (and the paused text, and Settings' status row) ends with "· 3 conversations wait for the assistant", and a run's progress does too when more waits than the run still has to do. *Settings → AI → Board*: the consent, *Triage new mail automatically* (off by default) with *At most every* (15, 30, 60 or 180 minutes) and *Conversations a day* (20, 60 or 150), a status row, and *Tokens in the Last 24 Hours* (the sum of the runs this app reported, grouped for the locale, or *None*; the split into input, output, written to and read from cache and the number of runs under it; the board is listed again whenever the page comes up); withdrawing the consent turns automatic triage off. A run asks for at most 40 cases and ends after 15 minutes; an automatic run gets no `create_draft` and backs off after failures, up to a day ([docs/mcp.md](../docs/mcp.md#the-boards-triage-run-in-the-app-experimental)). Quitting waits for the run's `board.runEnd` at most 2 s. AppKit: `MainWindow/MainWindowController+Triage.swift`, `Board/BoardToolbar.swift`, `Preferences/AIPaneViewController.swift`, `App/AppState.swift`. The texts' msgids are in `ui/internal/board/triage.go` | `ui/internal/boardtriage` (the run, the schedule's rule, the preferences helpers), `ui/internal/board` (the texts), `ui/internal/window/board_triage*.go` and `preferences_board.go` |
 | `Compose/CommentHeaderView.swift`, `Compose/ComposeWindowController+Comment.swift`: the comment mode of the compose window (no recipients, subject, attachments or Save Draft; the visibility choice on a service-desk request) | `ui/internal/compose/comment.go`, `draft.go`, `manager.go` |
 
 ## Not on macOS, not yet
@@ -679,3 +716,72 @@ editor bridge carries two additions for the rewrite (`rewriteTarget`,
 asked `draft.create` for (`ComposeParams.attribution`); GTK has the same
 (its search field has no magnifier menu: a button beside it, and
 Alt+Enter), so this is no deviation.
+
+The **Board's triage** is a third use of the same Claude Code, under the
+same conditions (In App chosen, `claude` found) and a consent of its own
+(*Let the Assistant Triage the Board?*, `board-triage-consent`, which also
+turns on the daemon's `assistant` preference): *✦ Triage* in the board
+toolbars, or the automatic schedule of *Settings → AI → Board*, starts
+Claude Code with the bundled bridge under `--allow-triage` and only the
+bridge's read tools, its triage tools and, in a run the user starts,
+`create_draft`, with the board's own *Model* (`board-triage-model`,
+Sonnet by default, apart from the panel's `assistant-model`). The notes
+it writes appear on the board as the assistant's; nothing the model writes is shown otherwise. Board, triage
+and their settings exist only on macOS for now
+([Swift-first](#swift-first-where-the-gtk-ui-mirrors-it)); the command
+line, the limits and the schedule are in
+[docs/mcp.md](../docs/mcp.md#the-boards-triage-run-in-the-app-experimental),
+the threat model in [docs/security.md
+§10.2](../docs/security.md#102-board-triage).
+
+A case's detail without a suggested reply has *✦ Suggest Reply* in that
+block's place, with a one-line field for an optional instruction (Return
+does the same), under the conditions of the compose rewrite and with the
+panel's consent and *Model* only (`BoardReplyController`, one request for
+the application): it runs Claude Code once for that case with the bridge
+under `--reply-only <message>` and only `read_message`, `list_messages`
+and `create_draft`, shows a spinner and *Stop* while it writes, and links
+the draft with `board.setDraft`, after which the detail opens it in the
+inline editor; a failure is one line under the field, and a draft it
+created and could not link is deleted ([docs/mcp.md](../docs/mcp.md#a-suggested-reply-on-the-board-experimental)).
+
+A suggested reply stays on the board (a local draft, never in the Drafts
+folder) until it is sent. The detail shows it under *Suggested Reply*
+with *Only here on the board until you send it* as an editor in place
+(`ComposePane`, the compose window's content without the From row: To,
+Cc/Bcc, Subject, the format bar, the editor, which grows with its text up
+to a cap and then scrolls, the attachments and *Attach*, the status line,
+*Discard* and *Send*); it saves itself as the compose window does,
+survives the board refreshing around it, and is saved when another case
+is selected, the panel closes, the window goes back to Mail or closes, or
+the app quits. *Send* queues it like any message (or comment) and the
+case moves on by the rules; *Discard* deletes it after the usual question
+and the case offers *✦ Suggest Reply* again. ⌘↩ and ⌘S work only while
+the keyboard is in the editor; *Reply* on such a case puts the keyboard
+there instead of opening a compose window. A case hot because of a star
+has *Unstar* beside *Why is this here?* and in its context menu: it takes
+the star off every copy that keeps it hot, and the rules decide where it
+goes.
+
+
+The in-app assistant also offers **ChatGPT (Codex, experimental)** in
+Settings → AI. Select a user-installed native Codex executable (Finder
+launches also check Homebrew's Apple Silicon/Intel paths), then **Continue
+with ChatGPT**. The panel, compose rewrite, natural-language search, Board
+triage and suggested replies use the selected provider. OpenAI has separate
+foreground and automatic Board consent; the Board model is independent and
+its empty selection uses the runtime default. Switching provider stops
+active requests and disables automatic triage.
+
+SIWC credentials are separate login Keychain items scoped to the application's
+ChatGPT data directory. Codex receives an opaque loopback gateway credential;
+the OpenAI bearer stays in the native connection service. Each session owns
+an ephemeral profile and process groups; the MCP sibling has a clean
+environment and the exact read/draft or Board tool policy. The user's own
+Codex configuration and mail keychain helper are not used for this grant.
+
+This implementation was written on Linux without a Swift/macOS SDK. Run
+`make test-macos` and `make macos` on macOS, then validate signed-app Keychain,
+Finder executable discovery, browser callback, native arm64/x86_64 process
+cleanup and eligible SIWC inference before release. See
+[the cross-platform implementation hand-off](../docs/chatgpt-integration.md#12-gtk-and-macos-implementation-and-validation-hand-off).

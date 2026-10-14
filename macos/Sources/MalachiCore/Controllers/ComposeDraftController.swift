@@ -112,6 +112,20 @@ extension ComposeForm {
     public var commentVisibility: CommentVisibility { .public }
 }
 
+/// Who keeps the draft a compose form edits.
+public enum DraftOwner: Sendable, Equatable {
+    /// The compose window (compose/draft.go): closing may ask, delete an
+    /// unsaved draft or a comment's copy, and a conflict or a draft deleted
+    /// elsewhere starts a new draft.
+    case window
+    /// A board case's suggested reply edited inline (a local draft the case
+    /// links): the board keeps it, so nothing here ever deletes it except
+    /// Discard (through `discardStored`), closing never asks, a conflict
+    /// keeps our text in the same draft (`draft.get` for the version) and a
+    /// draft deleted elsewhere is reported (`onLost`), never recreated.
+    case board
+}
+
 /// compose/draft.go: autosave, `build`, `save`, `saveFailed`, `send`,
 /// `discard`, `closeRequest` and `cleanup` over a `ComposeForm`.
 @MainActor
@@ -140,6 +154,24 @@ public final class ComposeDraftController {
     /// The clock behind `lastSaved` (tests pin it).
     public var now: @MainActor () -> Date = { Date() }
 
+    /// Who keeps the draft (`DraftOwner`).
+    public let owner: DraftOwner
+
+    /// `.board`: the draft went (draftNotFound on a save or send, or on the
+    /// `draft.get` after a conflict). The controller has already abandoned
+    /// itself (`abandon`); no new draft is made.
+    public var onLost: (@MainActor () -> Void)?
+
+    /// `.board`: Discard deletes the stored draft through this (the host
+    /// passes `board.discardDraft`, which also unlinks it from the case);
+    /// nil = `draft.delete`. A failure keeps the form open with a toast.
+    public var discardStored: (@MainActor (AccountID, DraftID) async throws -> Void)?
+
+    /// Called once a send failed and Send is back (after the form's toast
+    /// saying why); not when the draft was lost (`onLost`). nil for a
+    /// window, which shows only the toast.
+    public var onSendFailed: (@MainActor () -> Void)?
+
     private let client: RPCClient
     private let settings: Settings
     private let placeholder: @MainActor () -> Bool
@@ -148,6 +180,23 @@ public final class ComposeDraftController {
     private var autosave: Task<Void, Never>?
     /// Runs when the in-flight save finishes (`pendingAfterSave`).
     private var pendingAfterSave: [@MainActor ((any Error)?) -> Void] = []
+    /// `.board`: the `draft.get` after a conflict, while it runs.
+    private var refetch: Task<Void, Never>?
+    /// `.board`: the body of the last draft.save that went through, so
+    /// `finish` sees an edit the editor reported only with its flush.
+    private var lastSavedBody: String?
+    /// `.board`: the draft was deleted elsewhere.
+    public private(set) var lost = false
+    /// `.board`: Discard is deleting the stored draft.
+    private var discarding = false
+    /// `.board`: the editor's own rendering of the loaded draft is known
+    /// (`editorReady`), so what it reports from now on is comparable.
+    private var editorRendered = false
+    /// A send is under way and has not answered (`draft.sending` stays set
+    /// after a success, while the form closes).
+    private var sendPending = false
+    /// `settle` waiting for a send under way to answer.
+    private var sendWaiters: [CheckedContinuation<Void, Never>] = []
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "compose")
 
     /// - Parameters:
@@ -157,10 +206,13 @@ public final class ComposeDraftController {
     ///     placeholder identity (the status line says so).
     ///   - registry: the cid: registry the inline pictures live in.
     ///   - autosaveDelay: `Self.autosaveDelay`; tests pass milliseconds.
+    ///   - owner: who keeps the draft (`DraftOwner`).
     public init(
         client: RPCClient, settings: Settings, placeholder: @escaping @MainActor () -> Bool,
-        registry: CIDRegistry = .shared, autosaveDelay: Duration = ComposeDraftController.autosaveDelay
+        registry: CIDRegistry = .shared, autosaveDelay: Duration = ComposeDraftController.autosaveDelay,
+        owner: DraftOwner = .window
     ) {
+        self.owner = owner
         self.client = client
         self.settings = settings
         self.placeholder = placeholder
@@ -199,7 +251,8 @@ public final class ComposeDraftController {
     /// there is nothing in it (`Jira.sendProblem`), a save under way or
     /// not (its copy goes too, `cleanup`).
     public var canCloseWithoutAsking: Bool {
-        if draft.discard {
+        if draft.discard || owner == .board {
+            // The board keeps its draft: whoever closes it calls `finish`.
             return true
         }
         if isComment {
@@ -322,6 +375,7 @@ public final class ComposeDraftController {
             guard let self, !self.draft.closed, let wire = self.build() else { return }
             let client = self.client
             let log = self.log
+            let owner = self.owner
             Task { [weak self] in
                 let outcome: Result<DraftSaveResult, any Error>
                 do {
@@ -331,11 +385,15 @@ public final class ComposeDraftController {
                 }
                 guard let self, !self.draft.closed else {
                     // The window went while a comment was being saved: no
-                    // Drafts folder keeps it, so the copy goes too.
-                    if wire.comment != nil, case .success(let res) = outcome {
+                    // Drafts folder keeps it, so the copy goes too. The
+                    // board's copy is the case's suggested reply: it stays.
+                    if owner == .window, wire.comment != nil, case .success(let res) = outcome {
                         Self.forget(client: client, log: log, accountID: wire.accountId, draftID: res.draftId)
                     }
                     return
+                }
+                if case .success = outcome {
+                    self.lastSavedBody = Self.body(wire)
                 }
                 self.saved(reason, outcome)
             }
@@ -384,6 +442,19 @@ public final class ComposeDraftController {
     /// is gone is dropped from the next save; an autosave does not nag with
     /// the same failure every 30 s.
     public func saveFailed(_ reason: SaveReason, _ error: any Error) {
+        if owner == .board, let e = error as? RPCError {
+            switch e.code {
+            case .conflict:
+                // Changed elsewhere: our text wins in the same draft.
+                refetchVersion()
+                return
+            case .draftNotFound:
+                markLost()
+                return
+            default:
+                break
+            }
+        }
         if let e = error as? RPCError {
             switch e.code {
             case .conflict:
@@ -459,6 +530,7 @@ public final class ComposeDraftController {
             }
         }
         draft.sending = true
+        sendPending = true
         form.setSendEnabled(false)
         refreshStatus()
         let fail: @MainActor () -> Void = { [weak self] in
@@ -466,6 +538,8 @@ public final class ComposeDraftController {
             self.draft.sending = false
             self.form?.setSendEnabled(true)
             self.refreshStatus()
+            self.onSendFailed?()
+            self.sendAnswered()
         }
         guard form.isComment else {
             queue(fail: fail)
@@ -508,10 +582,19 @@ public final class ComposeDraftController {
                 guard let self, !self.draft.closed else { return }
                 switch outcome {
                 case .failure(let err):
+                    if self.owner == .board, let e = err as? RPCError, e.code == .draftNotFound {
+                        self.markLost()
+                        return
+                    }
                     if let e = err as? RPCError, e.code == .conflict {
-                        self.draft.draftID = nil
-                        self.draft.version = 0
-                        self.draft.dirty = true
+                        if self.owner == .board {
+                            self.draft.dirty = true
+                            self.refetchVersion()
+                        } else {
+                            self.draft.draftID = nil
+                            self.draft.version = 0
+                            self.draft.dirty = true
+                        }
                     }
                     self.form?.toast(rpcErrorText(L10n.T("Sending"), err))
                     fail()
@@ -520,6 +603,7 @@ public final class ComposeDraftController {
                     self.draft.discard = true
                     self.onSent?(comment ? Jira.commentQueued() : L10n.T("Message queued for sending"))
                     self.form?.closeWindow()
+                    self.sendAnswered()
                 }
             }
         }
@@ -565,6 +649,10 @@ public final class ComposeDraftController {
 
     private func discardNow() {
         guard let form else { return }
+        if owner == .board, let id = draft.draftID {
+            discardBoard(accountID: form.account.id, draftID: id)
+            return
+        }
         let accountID = form.account.id
         let client = client
         let log = log
@@ -626,6 +714,212 @@ public final class ComposeDraftController {
         }
     }
 
+    /// `.board` Discard: the stored draft goes through `discardStored` (or
+    /// draft.delete); only then does the form close. A failure says so and
+    /// keeps the form, its text and the autosave.
+    private func discardBoard(accountID: AccountID, draftID: DraftID) {
+        guard !discarding else { return }
+        discarding = true
+        cancelAutosave()
+        let client = client
+        let stored = discardStored
+        Task { [weak self] in
+            var failure: (any Error)?
+            do {
+                if let stored {
+                    try await stored(accountID, draftID)
+                } else {
+                    _ = try await client.call(API.DraftDelete.self, DraftDeleteParams(accountId: accountID, draftId: draftID))
+                }
+            } catch let e as RPCError where e.code == .draftNotFound {
+                // Gone already: what Discard wanted.
+            } catch {
+                failure = error
+            }
+            guard let self, !self.draft.closed else { return }
+            self.discarding = false
+            if let failure {
+                self.form?.toast(rpcErrorText(L10n.T("Discarding the draft"), failure))
+                if self.draft.dirty, self.autosave == nil {
+                    self.markDirty()
+                }
+                return
+            }
+            self.draft.discard = true
+            self.form?.closeWindow()
+        }
+    }
+
+    // MARK: The board's draft
+
+    /// The body a save sent: what `finish` compares the editor with.
+    private static func body(_ d: Draft) -> String {
+        if let html = d.htmlBody, !html.isEmpty {
+            return html
+        }
+        return d.textBody
+    }
+
+    /// `.board` after a conflict: the stored version from draft.get, then
+    /// our text is saved over it (local wins in place). A draft gone
+    /// meanwhile is lost; another failure retries with the autosave.
+    private func refetchVersion() {
+        draft.dirty = true
+        guard refetch == nil, let form, let id = draft.draftID else {
+            return
+        }
+        cancelAutosave()
+        let params = DraftGetParams(accountId: form.account.id, draftId: id)
+        let client = client
+        refetch = Task { [weak self] in
+            let outcome: Result<DraftGetResult, any Error>
+            do {
+                outcome = .success(try await client.call(API.DraftGet.self, params))
+            } catch {
+                outcome = .failure(error)
+            }
+            guard let self else { return }
+            self.refetch = nil
+            guard !self.draft.closed else { return }
+            switch outcome {
+            case .success(let r):
+                self.draft.version = r.draft.version
+            case .failure(let err):
+                if let e = err as? RPCError, e.code == .draftNotFound {
+                    self.markLost()
+                    return
+                }
+                self.log.debug("draft.get: \(String(describing: err), privacy: .public)")
+            }
+            self.markDirty()
+        }
+    }
+
+    /// `.board`: the draft was deleted elsewhere. Nothing is saved again
+    /// (that would make a draft no case links); the host hears it.
+    private func markLost() {
+        guard !lost, !draft.closed else { return }
+        lost = true
+        abandon()
+        onLost?()
+    }
+
+    /// `.board`: the form goes (another case selected, the board left, the
+    /// app quits): what was typed is saved first (`settle`), then the
+    /// controller cleans up. True when nothing typed was lost; false when a
+    /// save failed (the controller stays usable, its autosave armed, so the
+    /// host may keep the form and call again) or the draft was lost. Never
+    /// asks, never deletes. Waits for the editor and the daemon without a
+    /// limit of its own: the caller bounds it.
+    public func finish() async -> Bool {
+        if draft.closed {
+            return !draft.dirty && !lost
+        }
+        guard form != nil else {
+            cleanup()
+            return !draft.dirty
+        }
+        let ok = await settle()
+        if ok, !draft.closed {
+            cleanup()
+        }
+        return ok
+    }
+
+    /// `.board`: saves everything typed and leaves the controller open
+    /// (the board's panes decide when it closes, `BoardReplyPanes`). Waits
+    /// for a send under way to answer; flushes the editor and saves while
+    /// there are unsaved edits or a save is under way (a conflict refetch
+    /// is awaited and the save retried). True when nothing typed is
+    /// unsaved (or the draft was sent); false when a save failed (the
+    /// autosave stays armed) or the draft was lost. No limit of its own.
+    public func settle() async -> Bool {
+        if sendPending, !draft.closed {
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                sendWaiters.append(cont)
+            }
+        }
+        if draft.closed {
+            return !draft.dirty && !lost
+        }
+        guard let form else {
+            return !draft.dirty
+        }
+        // What the editor reported last; the flush may report more. Its
+        // `changed` is the flush's own and does not mark the draft dirty
+        // (the pane drops it), so the difference is looked at here: two
+        // reads of the editor's own rendering, once `editorReady` learned
+        // it (before that `editorHTML` is the HTML the editor was given,
+        // which it writes back differently: never an edit).
+        let before = form.editorHTML()
+        let comparable = editorRendered
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            form.flushEditor { cont.resume() }
+        }
+        if draft.closed {
+            return !draft.dirty && !lost
+        }
+        if comparable, form.editorHTML() != before {
+            // An edit the editor reported only with the flush.
+            draft.dirty = true
+        } else if let saved = lastSavedBody, let wire = build(), Self.body(wire) != saved {
+            // Reported by an earlier flush whose save did not carry it.
+            draft.dirty = true
+        }
+        for _ in 0..<4 {
+            if draft.closed {
+                return !draft.dirty && !lost
+            }
+            if let refetch {
+                await refetch.value
+                continue
+            }
+            guard draft.dirty || draft.saving else {
+                return true
+            }
+            let err = await withCheckedContinuation { (cont: CheckedContinuation<(any Error)?, Never>) in
+                save(reason: .explicit) { cont.resume(returning: $0) }
+            }
+            if err != nil, refetch == nil {
+                return false
+            }
+        }
+        return false
+    }
+
+    /// `.board`: the editor reported `ready` for the loaded draft. One flush
+    /// learns how the editor itself writes the draft (it normalises the HTML
+    /// it was given), so `settle` can tell an edit the editor reported only
+    /// with its flush from that normalisation; the flush's own `changed` is
+    /// not an edit (the form drops it), so nothing is saved for it. Again
+    /// after every reload of the editor.
+    public func editorReady() {
+        guard let form, !draft.closed else { return }
+        editorRendered = false
+        form.flushEditor { [weak self] in
+            self?.editorRendered = true
+        }
+    }
+
+    /// The send answered (or the form went): `settle` goes on.
+    private func sendAnswered() {
+        sendPending = false
+        let waiters = sendWaiters
+        sendWaiters = []
+        for c in waiters {
+            c.resume()
+        }
+    }
+
+    /// Forgets the form without saving or deleting anything: Discard was
+    /// handled by the host, or the draft is gone. Idempotent.
+    public func abandon() {
+        guard !draft.closed else { return }
+        draft.discard = true
+        refetch?.cancel()
+        cleanup()
+    }
+
     /// cleanup runs when the window really closes: late replies are
     /// dropped, the autosave is disarmed, the inline pictures forgotten.
     /// Idempotent. A save whose outcome is still awaited (the close
@@ -634,7 +928,7 @@ public final class ComposeDraftController {
     /// Drafts folder keeps it (the autosave is only for a crash).
     public func cleanup() {
         guard !draft.closed else { return }
-        if isComment, !draft.discard {
+        if owner == .window, isComment, !draft.discard {
             deleteDraft()
         }
         draft.closed = true
@@ -649,5 +943,6 @@ public final class ComposeDraftController {
         for f in pending {
             f(CancellationError())
         }
+        sendAnswered()
     }
 }

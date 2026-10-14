@@ -27,6 +27,7 @@ using System.Linq;
 using Malachi.Core.Assistants;
 using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.Daemon;
+using Malachi.Core.I18n;
 using Malachi.Core.Platform;
 using Malachi.Core.Settings;
 using Microsoft.Extensions.Logging;
@@ -94,6 +95,8 @@ public sealed class AssistantController : IDisposable
     private readonly List<SettingsChangeToken> tokens = [];
 
     private Dictionary<AssistantTarget, bool> handlers = [];
+    private bool inAppProviderAvailable;
+    private string inAppProviderProblem = "chatgpt_not_connected";
 
     /// <summary>An Assistant state on the calling (UI) thread.</summary>
     /// <param name="bridge"><c>malachi-mcp.exe</c> beside the application (<see cref="Paths.McpBridge"/>), or null when there is none.</param>
@@ -133,6 +136,7 @@ public sealed class AssistantController : IDisposable
         };
         tokens.Add(settings.OnChange(SettingsKey.AssistantMenu, Notify));
         tokens.Add(settings.OnChange(SettingsKey.AssistantTarget, Notify));
+        tokens.Add(settings.OnChange(SettingsKey.AssistantProvider, Notify));
         // Another claude chosen: whether the panel can run changes.
         tokens.Add(settings.OnChange(SettingsKey.AssistantClaudePath, RefreshHandlers));
     }
@@ -180,7 +184,8 @@ public sealed class AssistantController : IDisposable
     /// Whether the Assistant appears at all (<see cref="Assistant.Shown"/>):
     /// the <c>assistant-menu</c> preference while the bridge is registered.
     /// </summary>
-    public bool Shown => Assistant.Shown(Settings.AssistantMenu, Registered);
+    public bool Shown => Settings.AssistantProvider == AssistantProviderID.ChatGpt && Settings.AssistantTarget == AssistantTarget.App
+        ? Settings.AssistantMenu : Assistant.Shown(Settings.AssistantMenu, Registered);
 
     /// <summary>
     /// Whether the assistant panel exists: the Assistant is shown and the In
@@ -196,7 +201,7 @@ public sealed class AssistantController : IDisposable
     /// found (as last looked up); whether it is signed in is asked when a
     /// request runs. Its changes come through <see cref="Changed"/>.
     /// </summary>
-    public bool CanRunInApp => PanelShown && ClaudeFound;
+    public bool CanRunInApp => PanelShown && (Settings.AssistantProvider == AssistantProviderID.ChatGpt ? inAppProviderAvailable : ClaudeFound);
 
     /// <summary>Stops listening: late replies are dropped, nothing is emitted.</summary>
     public void Close()
@@ -285,6 +290,10 @@ public sealed class AssistantController : IDisposable
         var handler = handlers.TryGetValue(t, out var h) && h;
         if (t == AssistantTarget.App)
         {
+            if (Settings.AssistantProvider == AssistantProviderID.ChatGpt)
+            {
+                return new AssistantAvailability(inAppProviderAvailable, bridge is not null);
+            }
             return new AssistantAvailability(handler, Registered);
         }
         var client = Status?.Clients.FirstOrDefault(c => c.Id == t.ClientId());
@@ -308,7 +317,19 @@ public sealed class AssistantController : IDisposable
             needsBridge);
 
     /// <summary>Why target <paramref name="t"/> cannot run the message actions; "" when it can (<see cref="Assistant.Problem"/>).</summary>
-    public string Problem(AssistantTarget t) => Assistant.Problem(t, Availability(t));
+    public string Problem(AssistantTarget t) => t == AssistantTarget.App && Settings.AssistantProvider == AssistantProviderID.ChatGpt
+        ? (!inAppProviderAvailable ? inAppProviderProblem : bridge is null ? L10n.T("The MCP bridge (malachi-mcp) was not found") : "")
+        : Assistant.Problem(t, Availability(t));
+
+    /// <summary>Platform connection/runtime availability; independent of Claude registration.</summary>
+    public void SetInAppProviderAvailable(bool available, string? problem = null)
+    {
+        scope.VerifyAccess();
+        if (Closed) { return; }
+        inAppProviderAvailable = available;
+        inAppProviderProblem = problem ?? "chatgpt_not_connected";
+        Notify();
+    }
 
     /// <summary>
     /// Whether an attachment's "Ask the Assistant…" can run for a part of

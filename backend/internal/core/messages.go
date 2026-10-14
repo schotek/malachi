@@ -288,10 +288,14 @@ func (s *messageService) Move(ctx context.Context, p api.MessageMoveParams) (*ap
 	if !target.Selectable {
 		return nil, api.NewError(api.CodeInvalidArgument, "target folder is not selectable")
 	}
-	if err := s.b.store.MoveMessages(ctx, a.ID, ids, target.ID); err != nil {
+	dropped, err := s.b.store.MoveMessages(ctx, a.ID, ids, target.ID)
+	if err != nil {
 		return nil, mutationError(err)
 	}
 	s.b.Supervisor.Trigger(a.ID, "", false)
+	// Moving a draft's copy out of Drafts deletes the draft; a case that
+	// links it shows that.
+	s.b.boardDraftsDropped(ctx, a.ID, dropped)
 	return &api.MessageMoveResult{}, nil
 }
 
@@ -333,14 +337,16 @@ func (s *messageService) Delete(ctx context.Context, p api.MessageDeleteParams) 
 		}
 		trash = t
 	}
+	var dropped []string
 	if permanent {
-		err = s.b.store.DeleteMessages(ctx, a.ID, ids)
+		dropped, err = s.b.store.DeleteMessages(ctx, a.ID, ids)
 	} else {
-		err = s.b.store.TrashMessages(ctx, a.ID, ids, trash.ID)
+		dropped, err = s.b.store.TrashMessages(ctx, a.ID, ids, trash.ID)
 	}
 	if err != nil {
 		return nil, mutationError(err)
 	}
+	s.b.boardDraftsDropped(ctx, a.ID, dropped) // as in Move
 	if len(queued) < len(ids) {
 		s.b.Supervisor.Trigger(a.ID, "", false)
 	}

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of BoardDueItemView (macos/Sources/MalachiMail/Board/BoardTodayViewController.swift);
+GTK: dueItemButton (window/board_today.go). A deadline of the Today page's
+side card, a flat button: the due chip (red text while overdue), the
+case's title (after the assistant's mark when the title is the
+assistant's), the quote that gave the date and the person, as GTK stacks
+them. A click, Space or Return selects the case. Plain text throughout.
+-->
+<UserControl
+    x:Class="Malachi.App.Boards.BoardDueItemView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False">
+    <Grid>
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="Due">
+                <VisualState x:Name="DueNormal" />
+                <VisualState x:Name="DueOverdue">
+                    <VisualState.Setters>
+                        <Setter Target="DueText.Foreground" Value="{ThemeResource BoardOverdueForegroundBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+        <Button
+            x:Name="ItemButton"
+            Padding="6,4,6,4"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Stretch"
+            AutomationProperties.AutomationId="BoardTodayDue"
+            Click="OnClick"
+            Style="{StaticResource SubtleButtonStyle}">
+            <StackPanel Spacing="3">
+                <Border
+                    x:Name="DueChip"
+                    HorizontalAlignment="Left"
+                    Background="{ThemeResource BoardDueFillBrush}"
+                    Style="{StaticResource BoardPillBorderStyle}">
+                    <TextBlock
+                        x:Name="DueText"
+                        Foreground="{ThemeResource BoardDueForegroundBrush}"
+                        Style="{StaticResource BoardPillTextStyle}" />
+                </Border>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        x:Name="MarkText"
+                        Margin="0,0,4,0"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Foreground="{ThemeResource BoardAssistantBrush}"
+                        Style="{StaticResource BodyStrongTextBlockStyle}" />
+                    <TextBlock
+                        x:Name="TitleText"
+                        Grid.Column="1"
+                        MaxLines="2"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="Wrap" />
+                </Grid>
+                <TextBlock
+                    x:Name="QuoteText"
+                    FontStyle="Italic"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    MaxLines="2"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="Wrap" />
+                <TextBlock
+                    x:Name="PersonText"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    MaxLines="1"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+        </Button>
+    </Grid>
+</UserControl>

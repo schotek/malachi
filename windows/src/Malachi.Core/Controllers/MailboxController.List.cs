@@ -1105,6 +1105,24 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     }
 
     /// <summary>
+    /// The board's Show in Mail (board_show_in_mail.go <c>finish</c>, Swift
+    /// <c>ListController.reveal</c>'s last step): the row of
+    /// <paramref name="key"/> is selected and given the keyboard through
+    /// <see cref="FocusRow"/>, as the search's first result is. False when
+    /// the list shows no such row.
+    /// </summary>
+    public bool RevealRow(ListKey key)
+    {
+        Scope.VerifyAccess();
+        if (RowFor(key) is null)
+        {
+            return false;
+        }
+        FocusRow?.Invoke(this, key);
+        return true;
+    }
+
+    /// <summary>
     /// window.go <c>onMessageRowSelected</c> for the current
     /// <see cref="SelectedKey"/>. A conversation row shows the whole
     /// conversation and marks only the member <c>Conversation.Build</c> picks

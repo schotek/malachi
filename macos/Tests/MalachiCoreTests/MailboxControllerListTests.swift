@@ -410,6 +410,114 @@ private final class Harness {
         #expect(h.list.rows.count == 3)
     }
 
+    /// Show in Mail (`reveal`): the folder is selected, the message's row is
+    /// handed to the view once listed; what cannot be shown goes to
+    /// `otherwise`.
+    @Test func revealSelectsTheRowOnceItsFolderIsListed() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1), msg("m2", 2)], trash: [msg("t1", 1)]])
+        defer { Task { await h.stop() } }
+        try await h.loaded(inbox)
+        var focused: [ListKey] = []
+        var otherwise = 0
+        h.list.onFocusRow = { focused.append($0) }
+
+        // Another folder: selected, then the row once its page is in;
+        // `found` runs first.
+        var found = 0
+        h.list.onFocusRow = { focused.append($0); #expect(found == focused.count) }
+        h.list.reveal(account: account, folder: trash.folder, message: "t1", found: { found += 1 }) { otherwise += 1 }
+        #expect(h.mailbox.model.selected == trash)
+        #expect(focused.isEmpty)
+        try await waitUntil { !focused.isEmpty }
+        #expect(focused == [ListKey(message: "t1")])
+        #expect(otherwise == 0 && found == 1)
+        h.list.onFocusRow = { focused.append($0) }
+
+        // The folder listed already: at once.
+        h.list.reveal(account: account, folder: trash.folder, message: "t1") { otherwise += 1 }
+        #expect(focused.count == 2)
+
+        // Not on the page, an unknown folder: the other way.
+        h.list.reveal(account: account, folder: inbox.folder, message: "gone") { otherwise += 1 }
+        try await waitUntil { otherwise == 1 }
+        h.list.reveal(account: account, folder: "nowhere", message: "m1") { otherwise += 1 }
+        #expect(otherwise == 2)
+        #expect(h.mailbox.model.selected == inbox)
+
+        // The user going elsewhere before the page came drops the request
+        // at once: nothing can select its row later.
+        h.list.reveal(account: account, folder: trash.folder, message: "t1") { otherwise += 1 }
+        #expect(h.list.pendingReveal != nil)
+        h.select(inbox)
+        #expect(h.list.pendingReveal == nil)
+        try await h.loaded(inbox)
+        #expect(focused.count == 2)
+        #expect(otherwise == 2)
+    }
+
+    /// A search started before the folder's page came drops Show in Mail:
+    /// ending the search lists the folder again and selects nothing.
+    @Test func revealIsDroppedByASearch() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1)], trash: [msg("t1", 1)]])
+        defer { Task { await h.stop() } }
+        try await h.loaded(inbox)
+        var focused: [ListKey] = []
+        h.list.onFocusRow = { focused.append($0) }
+        h.list.reveal(account: account, folder: trash.folder, message: "t1") {
+            Issue.record("nothing else happens")
+        }
+        #expect(h.list.pendingReveal != nil)
+        h.list.setSearchActive(true)
+        #expect(h.list.pendingReveal == nil)
+        h.list.setSearchActive(false)
+        try await h.loaded(trash)
+        #expect(focused.isEmpty && h.list.pendingReveal == nil)
+    }
+
+    /// The window leaving Mail drops Show in Mail; a reload of the same
+    /// folder meanwhile (a sync) does not.
+    @Test func revealIsDroppedByLeavingMailNotByAReload() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1)], trash: [msg("t1", 1)]])
+        defer { Task { await h.stop() } }
+        try await h.loaded(inbox)
+        var focused: [ListKey] = []
+        h.list.onFocusRow = { focused.append($0) }
+        h.list.reveal(account: account, folder: trash.folder, message: "t1") {
+            Issue.record("the row is listed")
+        }
+        h.list.cancelReveal()
+        try await h.loaded(trash)
+        #expect(focused.isEmpty && h.list.pendingReveal == nil)
+        // Back in the inbox, Show in Mail again; the folder reloads before
+        // its first page came: the row is selected from the newer listing.
+        h.select(inbox)
+        try await h.loaded(inbox)
+        h.list.reveal(account: account, folder: trash.folder, message: "t1") {
+            Issue.record("the row is listed")
+        }
+        let first = h.list.pendingReveal?.generation
+        h.mailbox.reloadMessages?()
+        #expect(h.list.pendingReveal != nil && h.list.pendingReveal?.generation != first)
+        try await waitUntil { !focused.isEmpty }
+        #expect(focused == [ListKey(message: "t1")])
+    }
+
+    @Test func revealFindsTheConversationRowOfAGroupedListing() async throws {
+        let h = try await Harness(messages: [inbox: threadedMessages(), trash: [msg("x", 1)]], grouped: true)
+        defer { Task { await h.stop() } }
+        try await h.loaded(inbox)
+        h.select(trash)
+        try await h.loaded(trash)
+        var focused: [ListKey] = []
+        h.list.onFocusRow = { focused.append($0) }
+        // a1 is an older member of t1: its folded row is found by the thread.
+        h.list.reveal(account: account, folder: inbox.folder, message: "a1", thread: "t1") {
+            Issue.record("the conversation row is listed")
+        }
+        try await waitUntil { !focused.isEmpty }
+        #expect(focused == [ListKey(thread: "t1")])
+    }
+
     @Test func reloadKeepsFetchedMembersOfTheSameShape() async throws {
         let h = try await Harness(messages: [inbox: threadedMessages()], grouped: true)
         defer { Task { await h.stop() } }

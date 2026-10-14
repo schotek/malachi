@@ -75,6 +75,9 @@ public sealed partial class Integration : IDisposable
         WireCompose();
         WireHooks();
         WireReader();
+        WireBoard();
+        // The board's triage (Integration.Triage.cs).
+        WireTriage();
     }
 
     /// <summary>The status line, the sign-in and certificate banners.</summary>
@@ -126,6 +129,10 @@ public sealed partial class Integration : IDisposable
     /// <summary>Stops the controllers' work; the daemon has been stopped by then.</summary>
     public void Dispose()
     {
+        // The board's triage (Integration.Triage.cs).
+        UnwireTriage();
+        // A Show in Mail still waiting, and its timer (Integration.Board.cs).
+        EndBoard();
         foreach (var t in tokens)
         {
             t.Dispose();
@@ -175,7 +182,7 @@ public sealed partial class Integration : IDisposable
         // before this), then the list.
         tokens.Add(hub.AddNewMessage(Mailbox.HandleNewMessage));
         Mailbox.OnWithdrawNotifications = PlatformServices.WithdrawNotifications;
-        Mailbox.IsMainWindowActive = () => state.IsMainWindowActive;
+        Mailbox.IsMainWindowActive = () => state.MainWindowViewsMail;
         mainWindow.Activated += (_, e) =>
         {
             if (e.WindowActivationState != WindowActivationState.Deactivated)

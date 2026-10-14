@@ -42,19 +42,31 @@ func (w *Window) setupSearch(b *gtk.Builder) {
 	w.searchEntry.ConnectActivate(w.onSearchActivate)
 	w.searchScope.NotifyProperty("active-name", w.onSearchScopeChanged)
 
-	// The single-key shortcuts (a, j, s, u, Delete) are application
-	// accelerators, which GTK runs before the focused widget sees the key:
-	// while the entry has the keyboard they are lifted, so the letters
-	// reach it.
-	focus := gtk.NewEventControllerFocus()
-	focus.ConnectEnter(func() { w.setTypingAccels(false) })
-	focus.ConnectLeave(func() { w.setTypingAccels(true) })
-	w.searchEntry.AddController(focus)
+	// The single-key shortcuts (a, j, s, u, Delete) are lifted while the
+	// entry has the keyboard by the window's typing gate (typing_gate.go),
+	// which watches the focus for every text field of the window.
 	w.setupOwnWords(b)
 }
 
-// setTypingAccels installs (on) or lifts the shortcuts without a modifier.
+// setTypingAccels is the typing half of the single-key shortcuts' gate: on
+// while the keyboard is away from a text field, lifted while it is there.
+// wireTypingGate (typing_gate.go) calls it on every change of the window's
+// focus, so a value that has not changed is nothing to do.
+// applyMessageAccels (board.go) combines it with the mode, the other half
+// (Board has no list or reader for a key to act on), and does the actual
+// installing (installMessageAccels).
 func (w *Window) setTypingAccels(on bool) {
+	if on == w.typingAllowsAccels {
+		return
+	}
+	w.typingAllowsAccels = on
+	w.applyMessageAccels()
+}
+
+// installMessageAccels installs (on) or lifts the shortcuts without a
+// modifier (MessageAccels); applyMessageAccels is the only caller, so the
+// gate (the mode and the typing state) is always applied together.
+func (w *Window) installMessageAccels(on bool) {
 	for action, accel := range MessageAccels {
 		if strings.HasPrefix(accel, "<") {
 			continue
@@ -113,7 +125,6 @@ func (w *Window) onSearchModeChanged() {
 		st.hits = nil
 		w.searchEntry.SetText("") // its search-changed finds search inactive
 		w.messageFilter.SetVisible(true)
-		w.setTypingAccels(true)
 		w.rebuildMessageRows()
 		w.loadMessages()
 		w.messageList.GrabFocus()

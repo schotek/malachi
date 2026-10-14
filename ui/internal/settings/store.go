@@ -85,6 +85,29 @@ const (
 	KeyAssistantModel      = "assistant-model"
 	KeyAssistantClaudePath = "assistant-claude-path"
 	KeyAssistantConsent    = "assistant-consent"
+	// Reserved provider metadata; ChatGPT is currently implemented on Windows.
+	KeyAssistantProvider              = "assistant-provider"
+	KeyAssistantCodexPath             = "assistant-codex-path"
+	KeyAssistantChatGPTModel          = "assistant-chatgpt-model"
+	KeyAssistantChatGPTConsentVersion = "assistant-chatgpt-consent-version"
+	KeyBoardChatGPTModel              = "board-triage-chatgpt-model"
+	KeyBoardChatGPTConsentVersion     = "board-triage-chatgpt-consent-version"
+)
+
+// Keys of the board (ui/internal/board): the style it opens in the first
+// time it is shown after launch (a style, or Last Used: the one written to
+// board-last-style), the mode a new main window opens in (board-start-mode
+// over board-last-mode, board.StartMode), the account filter it remembers,
+// and its own triage consent and model, apart from the assistant panel's
+// (KeyAssistantConsent, KeyAssistantModel). They must match the gschema.
+const (
+	KeyBoardDefaultStyle  = "board-default-style"
+	KeyBoardLastStyle     = "board-last-style"
+	KeyBoardStartMode     = "board-start-mode"
+	KeyBoardLastMode      = "board-last-mode"
+	KeyBoardAccountFilter = "board-account-filter"
+	KeyBoardTriageConsent = "board-triage-consent"
+	KeyBoardTriageModel   = "board-triage-model"
 )
 
 // ColorScheme is the nick of the ColorScheme enum in the gschema.
@@ -114,6 +137,66 @@ const (
 	TextZoomStep = 10
 )
 
+// BoardStyle is the nick of the gschema's BoardStyle enum (board-last-style)
+// and of its BoardDefaultStyle enum (board-default-style), which adds
+// BoardStyleLast: how the board (ui/internal/board) is laid out. The board
+// package reads the nicks itself (board.ParseStyle, board.ParseDefaultStyle).
+type BoardStyle string
+
+const (
+	BoardStyleList    BoardStyle = "list"
+	BoardStyleColumns BoardStyle = "columns"
+	BoardStyleToday   BoardStyle = "today"
+	// BoardStyleLast is board-default-style's Last Used: the style in
+	// board-last-style.
+	BoardStyleLast BoardStyle = "last"
+)
+
+// BoardStyles are the styles in the order of the gschema's BoardStyle enum.
+var BoardStyles = []BoardStyle{BoardStyleList, BoardStyleColumns, BoardStyleToday}
+
+// BoardDefaultStyles are board-default-style's values in the order of the
+// gschema's BoardDefaultStyle enum (board.DefaultStyles' order).
+var BoardDefaultStyles = []BoardStyle{BoardStyleLast, BoardStyleList, BoardStyleColumns, BoardStyleToday}
+
+// parseBoardStyle reads a stored nick of board-last-style; an unknown or
+// empty one is List, like assistant.ParseTarget and assistant.ParseModel
+// read their keys.
+func parseBoardStyle(nick string) BoardStyle {
+	switch BoardStyle(nick) {
+	case BoardStyleColumns:
+		return BoardStyleColumns
+	case BoardStyleToday:
+		return BoardStyleToday
+	}
+	return BoardStyleList
+}
+
+// parseBoardDefaultStyle reads a stored nick of board-default-style; an
+// unknown or empty one is Last Used, the key's default.
+func parseBoardDefaultStyle(nick string) BoardStyle {
+	for _, st := range BoardDefaultStyles {
+		if BoardStyle(nick) == st {
+			return st
+		}
+	}
+	return BoardStyleLast
+}
+
+// BoardStartMode is the nick of the gschema's BoardStartMode enum
+// (board-start-mode): what a new main window shows (board.StartChoice).
+type BoardStartMode string
+
+const (
+	BoardStartMail  BoardStartMode = "mail"
+	BoardStartBoard BoardStartMode = "board"
+	BoardStartLast  BoardStartMode = "last"
+)
+
+// BoardStartModes are the values in the order of the gschema enum
+// (board.StartModes' order).
+var BoardStartModes = []BoardStartMode{BoardStartMail, BoardStartBoard, BoardStartLast}
+
 // defaults mirror the gschema defaults for the in-memory fallback.
 var defaults = map[string]any{
 	KeyLaunchAtLogin:        false,
@@ -141,11 +224,25 @@ var defaults = map[string]any{
 	KeyWindowHeight:    760,
 	KeyWindowMaximized: false,
 
-	KeyAssistantMenu:       true,
-	KeyAssistantTarget:     string(assistant.Desktop),
-	KeyAssistantModel:      string(assistant.Sonnet),
-	KeyAssistantClaudePath: "",
-	KeyAssistantConsent:    false,
+	KeyAssistantMenu:                  true,
+	KeyAssistantTarget:                string(assistant.Desktop),
+	KeyAssistantModel:                 string(assistant.Sonnet),
+	KeyAssistantClaudePath:            "",
+	KeyAssistantConsent:               false,
+	KeyAssistantProvider:              "claude",
+	KeyAssistantCodexPath:             "",
+	KeyAssistantChatGPTModel:          "",
+	KeyAssistantChatGPTConsentVersion: 0,
+	KeyBoardChatGPTModel:              "",
+	KeyBoardChatGPTConsentVersion:     0,
+
+	KeyBoardDefaultStyle:  string(BoardStyleLast),
+	KeyBoardLastStyle:     string(BoardStyleList),
+	KeyBoardStartMode:     string(BoardStartMail),
+	KeyBoardLastMode:      "mail",
+	KeyBoardAccountFilter: "",
+	KeyBoardTriageConsent: false,
+	KeyBoardTriageModel:   string(assistant.Sonnet),
 }
 
 // Store reads and writes preferences. All methods must be called from the
@@ -318,6 +415,131 @@ func (s *Store) SetAssistantClaudePath(v string) { s.set(KeyAssistantClaudePath,
 
 func (s *Store) AssistantConsent() bool     { return s.boolean(KeyAssistantConsent) }
 func (s *Store) SetAssistantConsent(v bool) { s.set(KeyAssistantConsent, v) }
+
+// Provider-specific consents never reuse permission given to another service.
+func (s *Store) AssistantProvider() string {
+	if s.str(KeyAssistantProvider) == "chatgpt" {
+		return "chatgpt"
+	}
+	return "claude"
+}
+func (s *Store) SetAssistantProvider(v string) {
+	if v == "claude" || v == "chatgpt" {
+		s.set(KeyAssistantProvider, v)
+	}
+}
+func (s *Store) AssistantCodexPath() string        { return s.str(KeyAssistantCodexPath) }
+func (s *Store) SetAssistantCodexPath(v string)    { s.set(KeyAssistantCodexPath, v) }
+func (s *Store) AssistantChatGPTModel() string     { return s.str(KeyAssistantChatGPTModel) }
+func (s *Store) SetAssistantChatGPTModel(v string) { s.set(KeyAssistantChatGPTModel, v) }
+func (s *Store) AssistantChatGPTConsentVersion() int {
+	return s.integer(KeyAssistantChatGPTConsentVersion)
+}
+func (s *Store) SetAssistantChatGPTConsentVersion(v int) {
+	s.set(KeyAssistantChatGPTConsentVersion, max(0, v))
+}
+func (s *Store) BoardChatGPTModel() string           { return s.str(KeyBoardChatGPTModel) }
+func (s *Store) SetBoardChatGPTModel(v string)       { s.set(KeyBoardChatGPTModel, v) }
+func (s *Store) BoardChatGPTConsentVersion() int     { return s.integer(KeyBoardChatGPTConsentVersion) }
+func (s *Store) SetBoardChatGPTConsentVersion(v int) { s.set(KeyBoardChatGPTConsentVersion, max(0, v)) }
+
+// BoardDefaultStyle is Board View, the style the board opens in the first
+// time it is shown after launch: a style or BoardStyleLast, read as
+// parseBoardDefaultStyle reads it (an unknown or empty stored value is
+// Last Used).
+func (s *Store) BoardDefaultStyle() BoardStyle {
+	return parseBoardDefaultStyle(s.str(KeyBoardDefaultStyle))
+}
+
+// SetBoardDefaultStyle ignores values outside the enum.
+func (s *Store) SetBoardDefaultStyle(v BoardStyle) {
+	for _, st := range BoardDefaultStyles {
+		if v == st {
+			s.set(KeyBoardDefaultStyle, string(v))
+			return
+		}
+	}
+}
+
+// BoardLastStyle is the style the board was shown in last (an unknown or
+// empty stored value is List).
+func (s *Store) BoardLastStyle() BoardStyle {
+	return parseBoardStyle(s.str(KeyBoardLastStyle))
+}
+
+// SetBoardLastStyle ignores values outside the enum (BoardStyleLast too).
+func (s *Store) SetBoardLastStyle(v BoardStyle) {
+	for _, st := range BoardStyles {
+		if v == st {
+			if s.str(KeyBoardLastStyle) != string(v) {
+				s.set(KeyBoardLastStyle, string(v))
+			}
+			return
+		}
+	}
+}
+
+// BoardStartMode is Open at Launch; an unknown stored value is Mail.
+func (s *Store) BoardStartMode() BoardStartMode {
+	for _, m := range BoardStartModes {
+		if BoardStartMode(s.str(KeyBoardStartMode)) == m {
+			return m
+		}
+	}
+	return BoardStartMail
+}
+
+// SetBoardStartMode ignores values outside the enum.
+func (s *Store) SetBoardStartMode(v BoardStartMode) {
+	for _, m := range BoardStartModes {
+		if v == m {
+			s.set(KeyBoardStartMode, string(v))
+			return
+		}
+	}
+}
+
+// BoardLastMode is the nick of the mode the main window showed last
+// (board.Mode.Nick), read by board.StartMode.
+func (s *Store) BoardLastMode() string { return s.str(KeyBoardLastMode) }
+
+// SetBoardLastMode writes the nick only when it changed.
+func (s *Store) SetBoardLastMode(v string) {
+	if s.str(KeyBoardLastMode) != v {
+		s.set(KeyBoardLastMode, v)
+	}
+}
+
+// BoardAccountFilter is the account the board was filtered to last, ""
+// for every account.
+func (s *Store) BoardAccountFilter() string { return s.str(KeyBoardAccountFilter) }
+
+// SetBoardAccountFilter writes the account id only when it changed.
+func (s *Store) SetBoardAccountFilter(v string) {
+	if s.str(KeyBoardAccountFilter) != v {
+		s.set(KeyBoardAccountFilter, v)
+	}
+}
+
+func (s *Store) BoardTriageConsent() bool     { return s.boolean(KeyBoardTriageConsent) }
+func (s *Store) SetBoardTriageConsent(v bool) { s.set(KeyBoardTriageConsent, v) }
+
+// BoardTriageModel is the model of the board's triage runs, apart from the
+// assistant panel's (AssistantModel): the same nicks, read with
+// assistant.ParseModel (an unknown nick is Sonnet).
+func (s *Store) BoardTriageModel() assistant.Model {
+	return assistant.ParseModel(s.str(KeyBoardTriageModel))
+}
+
+// SetBoardTriageModel ignores values outside the enum.
+func (s *Store) SetBoardTriageModel(v assistant.Model) {
+	for _, m := range assistant.Models {
+		if v == m {
+			s.set(KeyBoardTriageModel, string(v))
+			return
+		}
+	}
+}
 
 // CollapsedFolders and CollapsedAccounts are the folded-away nodes of the
 // folder sidebar, each entry one node. The window package owns the encoding

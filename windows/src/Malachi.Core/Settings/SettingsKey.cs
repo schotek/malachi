@@ -98,6 +98,45 @@ public enum SettingsKey
     /// <summary><c>assistant-consent</c>.</summary>
     AssistantConsent,
 
+    /// <summary><c>assistant-provider</c>, independent of the external hand-off target.</summary>
+    AssistantProvider,
+
+    /// <summary><c>assistant-codex-path</c>.</summary>
+    AssistantCodexPath,
+
+    /// <summary><c>assistant-chatgpt-model</c>.</summary>
+    AssistantChatGptModel,
+
+    /// <summary><c>assistant-chatgpt-consent-version</c>.</summary>
+    AssistantChatGptConsentVersion,
+
+    /// <summary><c>board-default-style</c>: <see cref="SettingsStore.BoardDefaultStyle"/>.</summary>
+    BoardDefaultStyle,
+
+    /// <summary><c>board-last-style</c>: <see cref="SettingsStore.BoardLastStyle"/>.</summary>
+    BoardLastStyle,
+
+    /// <summary><c>board-start-mode</c>: <see cref="SettingsStore.BoardStartMode"/>.</summary>
+    BoardStartMode,
+
+    /// <summary><c>board-last-mode</c>: <see cref="SettingsStore.BoardLastMode"/>.</summary>
+    BoardLastMode,
+
+    /// <summary><c>board-account-filter</c>: <see cref="SettingsStore.BoardAccountFilter"/>.</summary>
+    BoardAccountFilter,
+
+    /// <summary><c>board-triage-consent</c>; reserved for the Board UI port.</summary>
+    BoardTriageConsent,
+
+    /// <summary><c>board-triage-model</c>; reserved for the Board UI port.</summary>
+    BoardTriageModel,
+
+    /// <summary><c>board-triage-chatgpt-model</c>; reserved for the Board UI port.</summary>
+    BoardChatGptModel,
+
+    /// <summary><c>board-triage-chatgpt-consent-version</c>; separate OpenAI Board disclosure.</summary>
+    BoardChatGptConsentVersion,
+
     /// <summary><c>ctrl-r</c>, Windows only: what Ctrl+R does.</summary>
     CtrlR,
 }

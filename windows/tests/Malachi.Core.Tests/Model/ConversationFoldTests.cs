@@ -70,8 +70,8 @@ public sealed class ConversationFoldTests
     [MemberData(nameof(DefaultCases))]
     public void DefaultFolds(string name, ConversationItem[] items, string? opening, string want) =>
         Assert.True(
-            want == Text(Conversation.DefaultFolds(items, opening is null ? null : new MessageId(opening))),
-            $"{name}: {Text(Conversation.DefaultFolds(items, opening is null ? null : new MessageId(opening)))}");
+            want == Text(Conversation.DefaultFolds(items, opening is null ? (MessageId?)null : new MessageId(opening))),
+            $"{name}: {Text(Conversation.DefaultFolds(items, opening is null ? (MessageId?)null : new MessageId(opening)))}");
 
     [Fact]
     public void Folds()

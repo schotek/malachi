@@ -207,6 +207,9 @@ actor MailFixture {
         case .messagesChanged(let m):
             method = API.Notify.messagesChanged
             params = try encode(m)
+        case .boardChanged(let b):
+            method = API.Notify.boardChanged
+            params = try encode(b)
         case .unknown(let m):
             method = m
             params = Data("{}".utf8)

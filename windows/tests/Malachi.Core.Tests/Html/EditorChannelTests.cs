@@ -394,6 +394,60 @@ public sealed class EditorChannelTests
         Assert.Equal(want, EditorChannel.ParseFlushResult(json));
     }
 
+    // The sized mode (editor_test.go TestHeightMessage, TestValidHeight): the
+    // page posts the document's height, and a sized channel takes only a
+    // verified number; a channel that is not sized never reports one.
+    [Fact]
+    public void ASizedChannelReportsTheVerifiedHeight()
+    {
+        var channel = new EditorChannel(sized: true);
+        Assert.True(channel.Sized);
+        var heights = new List<double>();
+        var changes = 0;
+        channel.SizeReported += (_, h) => heights.Add(h);
+        channel.Changed += (_, _) => changes++;
+        channel.Receive("""{"type":"height","h":212.5}""");
+        channel.Receive("""{"type":"height","h":0}""");
+        channel.Receive("""{"type":"height","h":1e7}""");
+        // Anything else is dropped: negative, not a number, past double's
+        // range, missing (0 is a height, but null is no number either).
+        Assert.NotNull(channel.Receive("""{"type":"height","h":-1}"""));
+        Assert.Null(channel.Receive("""{"type":"height","h":"300"}"""));
+        Assert.Null(channel.Receive("""{"type":"height","h":true}"""));
+        Assert.Null(channel.Receive("""{"type":"height","h":[300]}"""));
+        Assert.Null(channel.Receive("""{"type":"height","h":1e400}"""));
+        Assert.Null(channel.Receive("""{"type":"height","h":{"v":1}}"""));
+        Assert.Equal([212.5, 0, EditorChannel.MaxReportedHeight], heights);
+        // A height is not content.
+        Assert.Equal(0, changes);
+        Assert.Equal("", channel.Html);
+        Assert.False(channel.IsReady);
+    }
+
+    [Fact]
+    public void AChannelThatIsNotSizedIgnoresTheHeight()
+    {
+        var channel = new EditorChannel();
+        Assert.False(channel.Sized);
+        var heights = 0;
+        channel.SizeReported += (_, _) => heights++;
+        Assert.Equal(BridgeMessage.Kinds.Height, channel.Receive("""{"type":"height","h":212.5}""")?.Type);
+        Assert.Equal(0, heights);
+    }
+
+    [Theory]
+    [InlineData(212.5, 212.5)]
+    [InlineData(0.0, 0.0)]
+    [InlineData(-1.0, null)]
+    [InlineData(double.NaN, null)]
+    [InlineData(double.PositiveInfinity, null)]
+    [InlineData(double.NegativeInfinity, null)]
+    [InlineData(1048576.0 + 1000, 1048576.0)]
+    public void ValidHeights(double reported, double? want)
+    {
+        Assert.Equal(want, EditorChannel.ValidHeight(reported));
+    }
+
     // The compose window's half: draft.go save (dirty cleared, the flush's
     // done records what it saves) and editorChanged (an echo is no edit).
     private sealed class Window

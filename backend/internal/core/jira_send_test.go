@@ -95,6 +95,13 @@ func testJiraComments(t *testing.T, mode jiratest.Mode) {
 	if ld := drafts.Drafts[0]; ld.Comment == nil || ld.Comment.Issue.Key != web.Key || ld.Subject != web.Key+": Landing page typo" || ld.InReplyTo != desc.ID {
 		t.Fatalf("listed comment draft = %+v %+v", ld, ld.Comment)
 	}
+	// draft.get: the same draft as listed, comment included; an issue
+	// tracker's drafts are local by kind.
+	got, err := b.Drafts().Get(ctx, api.DraftGetParams{AccountID: id, DraftID: saved.DraftID})
+	if err != nil || got.Draft.Comment == nil || got.Draft.Comment.Issue.Key != web.Key || !got.Draft.Local ||
+		!drafts.Drafts[0].Local || got.Draft.HTMLBody != drafts.Drafts[0].HTMLBody {
+		t.Fatalf("draft.get of a comment draft = %+v %v", got, err)
+	}
 	if _, has := outboxFolder(t, b, id); has {
 		t.Fatal("an outbox folder before anything was sent")
 	}

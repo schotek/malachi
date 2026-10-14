@@ -428,7 +428,7 @@ func TestMessageRefsCascade(t *testing.T) {
 	if n := refsCount(t, s); n != 1 {
 		t.Errorf("after delete: refs = %d, want 1", n)
 	}
-	if err := s.TrashMessages(ctx, "acc", []string{b.ID}, trash.ID); err != nil {
+	if _, err := s.TrashMessages(ctx, "acc", []string{b.ID}, trash.ID); err != nil {
 		t.Fatal(err)
 	}
 	if n := refsCount(t, s); n != 1 {

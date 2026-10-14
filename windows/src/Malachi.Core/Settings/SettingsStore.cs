@@ -28,6 +28,8 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
+using Malachi.Core.Assistants;
+using Malachi.Core.Boards;
 
 namespace Malachi.Core.Settings;
 
@@ -77,6 +79,19 @@ public sealed class SettingsStore : IDisposable
         new(SettingsKey.AssistantModel, "assistant-model", "s", "sonnet", choices: Nicks<AssistantModel>.All),
         new(SettingsKey.AssistantClaudePath, "assistant-claude-path", "s", ""),
         new(SettingsKey.AssistantConsent, "assistant-consent", "b", false),
+        new(SettingsKey.AssistantProvider, "assistant-provider", "s", "claude", choices: Nicks<AssistantProviderID>.All),
+        new(SettingsKey.AssistantCodexPath, "assistant-codex-path", "s", ""),
+        new(SettingsKey.AssistantChatGptModel, "assistant-chatgpt-model", "s", ""),
+        new(SettingsKey.AssistantChatGptConsentVersion, "assistant-chatgpt-consent-version", "i", 0, minimum: 0, maximum: int.MaxValue),
+        new(SettingsKey.BoardDefaultStyle, "board-default-style", "s", "last", choices: Nicks<Board.DefaultStyle>.All),
+        new(SettingsKey.BoardLastStyle, "board-last-style", "s", "list", choices: Nicks<BoardStyle>.All),
+        new(SettingsKey.BoardStartMode, "board-start-mode", "s", "mail", choices: Nicks<Board.StartChoice>.All),
+        new(SettingsKey.BoardLastMode, "board-last-mode", "s", "mail"),
+        new(SettingsKey.BoardAccountFilter, "board-account-filter", "s", ""),
+        new(SettingsKey.BoardTriageConsent, "board-triage-consent", "b", false),
+        new(SettingsKey.BoardTriageModel, "board-triage-model", "s", "sonnet", choices: Nicks<AssistantModel>.All),
+        new(SettingsKey.BoardChatGptModel, "board-triage-chatgpt-model", "s", ""),
+        new(SettingsKey.BoardChatGptConsentVersion, "board-triage-chatgpt-consent-version", "i", 0, minimum: 0, maximum: int.MaxValue),
         new(SettingsKey.CtrlR, "ctrl-r", "s", "reply", choices: Nicks<CtrlR>.All, windowsOnly: true),
     ];
 
@@ -315,6 +330,118 @@ public sealed class SettingsStore : IDisposable
     {
         get => GetBoolean(SettingsKey.AssistantConsent);
         set => SetBoolean(SettingsKey.AssistantConsent, value);
+    }
+
+    /// <summary>The in-app provider; external Claude hand-offs keep their own target.</summary>
+    public AssistantProviderID AssistantProvider
+    {
+        get => GetEnum<AssistantProviderID>(SettingsKey.AssistantProvider);
+        set => SetEnum(SettingsKey.AssistantProvider, value);
+    }
+
+    /// <summary>The native Codex executable; empty uses discovery.</summary>
+    public string AssistantCodexPath
+    {
+        get => GetString(SettingsKey.AssistantCodexPath);
+        set => SetString(SettingsKey.AssistantCodexPath, value);
+    }
+
+    /// <summary>ChatGPT's model ID; empty lets the verified provider choose its default.</summary>
+    public string AssistantChatGptModel
+    {
+        get => GetString(SettingsKey.AssistantChatGptModel);
+        set => SetString(SettingsKey.AssistantChatGptModel, value);
+    }
+
+    /// <summary>The accepted OpenAI disclosure version, separately from Anthropic consent.</summary>
+    public int AssistantChatGptConsentVersion
+    {
+        get => GetInt32(SettingsKey.AssistantChatGptConsentVersion);
+        set => SetInt32(SettingsKey.AssistantChatGptConsentVersion, value);
+    }
+
+    // Board
+
+    /// <summary>Whether the user allowed the assistant to triage the board with Claude Code (asked once, with the panel's consent).</summary>
+    public bool BoardTriageConsent
+    {
+        get => GetBoolean(SettingsKey.BoardTriageConsent);
+        set => SetBoolean(SettingsKey.BoardTriageConsent, value);
+    }
+
+    /// <summary>The model the board's triage passes to Claude Code, independent of the panel's.</summary>
+    public AssistantModel BoardTriageModel
+    {
+        get => GetEnum<AssistantModel>(SettingsKey.BoardTriageModel);
+        set => SetEnum(SettingsKey.BoardTriageModel, value);
+    }
+
+    /// <summary>ChatGPT's model ID of the board's triage; empty lets the provider choose its default.</summary>
+    public string BoardChatGptModel
+    {
+        get => GetString(SettingsKey.BoardChatGptModel);
+        set => SetString(SettingsKey.BoardChatGptModel, value);
+    }
+
+    /// <summary>The accepted version of the board's OpenAI disclosure, separately from the panel's.</summary>
+    public int BoardChatGptConsentVersion
+    {
+        get => GetInt32(SettingsKey.BoardChatGptConsentVersion);
+        set => SetInt32(SettingsKey.BoardChatGptConsentVersion, value);
+    }
+
+    /// <summary>
+    /// Board View: the style the board shows in until the user picks one in
+    /// a run, or the one used last (<see cref="Board.StyleOnShow"/>); an
+    /// unknown nick reads as Last Used, the default.
+    /// </summary>
+    public Board.DefaultStyle BoardDefaultStyle
+    {
+        get => GetEnum<Board.DefaultStyle>(SettingsKey.BoardDefaultStyle);
+        set => SetEnum(SettingsKey.BoardDefaultStyle, value);
+    }
+
+    /// <summary>
+    /// The style the board was shown in last, written on every change of the
+    /// style; read for Last Used. An unknown nick reads as the List.
+    /// </summary>
+    public BoardStyle BoardLastStyle
+    {
+        get => GetEnum<BoardStyle>(SettingsKey.BoardLastStyle);
+        set => SetEnum(SettingsKey.BoardLastStyle, value);
+    }
+
+    /// <summary>
+    /// Open at Launch: what the main window shows at launch
+    /// (<see cref="Board.StartMode"/>); an unknown nick reads as Mail.
+    /// </summary>
+    public Board.StartChoice BoardStartMode
+    {
+        get => GetEnum<Board.StartChoice>(SettingsKey.BoardStartMode);
+        set => SetEnum(SettingsKey.BoardStartMode, value);
+    }
+
+    /// <summary>
+    /// The mode the main window showed last ("mail" or "board",
+    /// <see cref="BoardModeNickExtensions"/>), written on every switch; read
+    /// for <see cref="Board.StartChoice.Last"/>.
+    /// </summary>
+    public string BoardLastMode
+    {
+        get => GetString(SettingsKey.BoardLastMode);
+        set => SetString(SettingsKey.BoardLastMode, value);
+    }
+
+    /// <summary>
+    /// The account the board is filtered to (the daemon's account id),
+    /// written on every change of the filter; empty is every account.
+    /// Applied when the board first shows while that account still exists
+    /// (<see cref="Board.FilterOnShow"/>).
+    /// </summary>
+    public string BoardAccountFilter
+    {
+        get => GetString(SettingsKey.BoardAccountFilter);
+        set => SetString(SettingsKey.BoardAccountFilter, value);
     }
 
     // Sidebar state

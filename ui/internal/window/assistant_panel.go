@@ -95,9 +95,11 @@ type transcriptRow struct {
 
 // assistantPanel is the panel's widgets and its controller.
 type assistantPanel struct {
-	w      *Window
-	ctl    *assistantpanel.Controller
-	split  *adw.OverlaySplitView
+	runtimeGeneration int
+	footer            *gtk.Label
+	w                 *Window
+	ctl               *assistantpanel.Controller
+	split             *adw.OverlaySplitView
 	// toggle opens the panel from the message pane's header bar; hide
 	// folds it from the panel's own.
 	toggle *gtk.ToggleButton
@@ -156,6 +158,7 @@ func newAssistantPanel(w *Window, b *gtk.Builder) *assistantPanel {
 	p.ctl = assistantpanel.New(assistantpanel.Config{
 		Translator: tr, Settings: w.settings, Locator: as.locator, Loop: glibLoop{}, Log: w.log,
 		Bridge: as.bridge, Socket: w.client.Socket, Directory: assistantDirectory(), Env: os.Environ(),
+		Provider: as.Provider,
 	})
 	p.ctl.Language = uiLanguage
 	p.ctl.Consent = p.askConsent
@@ -200,7 +203,9 @@ func newAssistantPanel(w *Window, b *gtk.Builder) *assistantPanel {
 	cancel := pb.GetObject("assistant_pending_cancel").Cast().(*gtk.Button)
 	cancel.SetTooltipText(strings.ReplaceAll(i18n.T("_Cancel"), "_", ""))
 	cancel.ConnectClicked(p.ctl.CancelPending)
-	pb.GetObject("assistant_footer").Cast().(*gtk.Label).SetText(panel.Footer)
+	p.footer = pb.GetObject("assistant_footer").Cast().(*gtk.Label)
+	p.footer.SetText(panel.Footer)
+	p.runtimeGeneration = as.RuntimeGeneration()
 	p.send.ConnectClicked(p.sendOrStop)
 	p.bindInput()
 	p.bindScrolling()
@@ -223,6 +228,15 @@ func (p *assistantPanel) close() {
 // syncShown folds the panel when it may not be shown and brings the
 // toggle up to date.
 func (p *assistantPanel) syncShown() {
+	if now := p.w.assist.RuntimeGeneration(); now != p.runtimeGeneration {
+		p.runtimeGeneration = now
+		p.ctl.ProviderChanged()
+	}
+	if p.w.assist.usesChatGPT() {
+		p.footer.SetText(assistant.ChatGPTText(tr).Footer)
+	} else {
+		p.footer.SetText(assistant.PanelTexts(tr).Footer)
+	}
 	if !p.w.assist.panelShown() {
 		p.split.SetShowSidebar(false)
 	}
@@ -351,7 +365,7 @@ func (p *assistantPanel) askAttachment(acc api.AccountID, id api.MessageID, a ap
 
 // askConsent asks "Send Mail to Claude?" before the first question ever.
 func (p *assistantPanel) askConsent(done func(bool)) {
-	widget.AskAssistantConsent(p.w, done)
+	p.w.assist.AskAssistantConsent(p.w, done)
 }
 
 // State
@@ -424,6 +438,8 @@ func (p *assistantPanel) text() string {
 
 // bindInput: Return sends, Shift-Return starts a new line, Escape drops a
 // waiting message action; the placeholder shows while the field is empty.
+// Letters are the field's own: the window's typing gate (typing_gate.go)
+// lifts the single-key mail shortcuts while it has the keyboard.
 func (p *assistantPanel) bindInput() {
 	buf := p.input.Buffer()
 	buf.ConnectChanged(func() {
@@ -693,16 +709,20 @@ func offerLabel(o assistantpanel.Offer) string {
 		return t.SignIn
 	case assistantpanel.OfferInstall:
 		return t.GetClaudeCode
+	case assistantpanel.OfferReconnect:
+		return assistant.ChatGPTText(tr).Reconnect
 	}
 	return ""
 }
 
 // offered is the other button of an error line: Sign In… runs Claude
-// Code's own sign-in and sends the question again (the controller's),
-// Get Claude Code… opens Anthropic's page with the installers.
+// Code's own sign-in and Reconnect to ChatGPT the provider's reconnect
+// (ReconnectProvider), both then send the question again (the
+// controller's SignIn); Get Claude Code… opens Anthropic's page with the
+// installers.
 func (p *assistantPanel) offered(id int, o assistantpanel.Offer) {
 	switch o {
-	case assistantpanel.OfferSignIn:
+	case assistantpanel.OfferSignIn, assistantpanel.OfferReconnect:
 		p.ctl.SignIn(id)
 	case assistantpanel.OfferInstall:
 		p.w.launchURI(&p.w.ApplicationWindow.Window, assistant.InstallURL)

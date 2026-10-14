@@ -415,7 +415,7 @@ confirmation dialogs.
 | On Windows | Instead of (GTK) | Why |
 |---|---|---|
 | The search box sits in the middle of the title bar (Ctrl+F, Ctrl+E); the Folder / Account / All Accounts scope bar shows over the list while a search runs; Enter opens the first result, Escape closes the search | A search bar over the message list (Ctrl+F, the search button) with the entry and the scope toggles | Where Windows 11 apps keep search (Outlook, Explorer, Settings) |
-| The status line (sync state, unsent messages, the connection; a click opens each account's state and action) runs across the whole bottom edge of the window | At the bottom of the sidebar, with the same popover | It stays in sight when a narrow window folds the sidebar away (as on macOS) |
+| The status line (sync state, unsent messages, the connection; a click opens each account's state and action) runs across the whole bottom edge of the window | At the bottom of the sidebar in Mail, and across the bottom of the Board in every style, with the same popover | It stays in sight when a narrow window folds the sidebar away (as on macOS) |
 | At 900 effective pixels or less the sidebar folds into an overlay that the title bar's pane button opens; at 600 or less the list and the message are one stack, the title bar's back button returns to the list, and a click on the selected row shows it again | Collapsed split views that navigate between whole-window pages | Windows 11's own pane and back buttons in the title bar; the list stays in sight while the sidebar is open (docs/windows-port.md §11.1) |
 | The primary menu `…` has New Message, Add Account…, Add Jira Account…, Preferences, About Malachi Mail and Quit | New Message, Preferences, Keyboard Shortcuts, About Malachi Mail (a Jira account is added from *Preferences → Accounts*, the *+* menu, or from the empty window) | Windows has no menu bar or application menu to add an account or quit from; GTK's Keyboard Shortcuts opens nothing |
 | The sidebar's New Message is an accent (filled) button | A plain header-bar button | Windows 11's style for a pane's primary action (Fluent's accent button); kept after the parity review |
@@ -474,6 +474,17 @@ confirmation dialogs.
 | The settings of a Jira account are a window of their own, modal over *Preferences* (the edit button on its row; *Edit Account…* from a banner): one scrolling page with the site (read only, *Replace Token…*), the spaces, the synchronisation, the folders with the closed statuses, the notification e-mails and the bot comments; a failed call in an `InfoBar` under the title bar, the call under way at the bottom left, Save and Cancel at the bottom right (`Preferences/JiraAccountWindow`) | A dialog with Cancel and Save in its header over one preferences page, the call under way as the header's subtitle and a banner for a failed call (`ui/internal/jiraaccount`) | A Windows dialog has its buttons at the bottom, the default first (as the mail assistant and macOS's sheet) |
 | In the comment window of a service-desk request, *Reply to Customer* and *Internal Note* are a `SelectorBar` beside the issue's key and summary | An `Adw.ToggleGroup` | WinUI has no segmented control; the `SelectorBar` is its choice between a few alternatives |
 | A conversation card's HTML view runs no script at all, like the message view: the app measures the document from outside (`CardSize`, run through WebView2's host scripting) when it loaded, when a picture arrived after it, and when the card's width, height or the text zoom changed, and caps the height with the same governor | The card's view runs a measuring script of the application in an isolated world of the page (the JavaScript engine on, script markup off), which reports every change of the height | With page script off no listener of an injected script fires in WebView2 (measured); a host script still runs, so nothing of the page's own has to (docs/windows-port.md §6.7, docs/security.md §3.2) |
+| The Board's mode switch is the two-segment control at the start of the title bar (icons; the modes' names as tooltips), and the primary menu `…` and the Board's own `…` menu have Mail and Board too; Ctrl+1 and Ctrl+2 switch everywhere in the window, through the shortcut router (`ShortcutCommand.ShowMail`/`ShowBoard`), so also while a WebView2, a message or a card, has the keyboard | The same switch in the header bar and the sidebar's menu, `<Control>1` and `<Control>2` everywhere in the window | Windows has no menu bar to put View ▸ Mail / Board in (as above) |
+| The Board's single keys E (Archive), D (Done or Move Back to Board) and R (Remind…'s presets) act on the selected case while the keyboard is on the Board's page outside a text field, a combo box and a web view | The same keys outside text fields | A WebView2 (a card, the reply editor) with the keyboard sends no XAML key event, so a key typed there never reaches the page |
+| The Board's detail buttons (Done or Move Back to Board, Remind…, Archive, Reply or Comment) have access keys, each the first letter of its translated label not taken by a button before it (Close's comes from its msgid) | No mnemonics on these buttons | Their msgids carry no `_`; Windows users expect Alt to reach a toolbar's buttons |
+| What Archive did shows in an InfoBar where the toasts show, with *Undo* (the messages back to their folders, the case back on the Board), for 8 seconds or until closed | A toast with *Undo* | The window's toasts take no button on Windows; an InfoBar is Windows' notice with an action |
+| The Board has a bar of its own in every style: the style switch (List, Columns, Today), the account filter, *Triage* and a `…` menu (Mail, Board, Add Account…, Preferences, Quit); the title bar's search box hides while it shows | GTK's header bar with the same items and its primary menu | The Board replaces the mail panes, so the search box (the mail's) has nothing to search |
+| The List style's side pane holds the state filters and the accounts, as in GTK, and folds away below 900 effective pixels; where the list and the detail do not both fit (640) the detail is the sliding panel | `Adw.Breakpoint`s of the page | A layout pass of the page plays the breakpoints; the thresholds are GTK's |
+| The Board's detail has a `…` menu (Show in Mail, and Unstar for a case that is here because of a star) beside the state pill and the Remind Me button, and every row and card has the full case menu on a right click and Shift+F10; Escape goes in two steps (`Board.EscapeFor`): an open popup (the recipients' suggestions, a menu) closes first, the keyboard in the inline reply editor or its recipient fields goes to the state pill, and anywhere else the sliding panel closes and clears the selection | `boardDetailMenu` and the card menu; the same Escape | WinUI's `MenuFlyout`; the page handles Escape after its controls (KeyDown), and the reply editor's WebView2 hands its Escape to the page through the editor's bridge |
+| Ctrl+Enter (Send) and Ctrl+S (Save Draft) of the Board's inline reply editor run only while the editor has the keyboard (the main window's router sends them to the live pane); with the keyboard elsewhere in the pane the pane's own accelerators do, and in the rest of the window they are none | The compose window's keys | The main window must not send a message from anywhere in it (as macOS keeps ⌘↩ off the inline button) |
+| Today's list ends with an *and %d more* row (it acts on a click or Return; the arrow keys only focus it) | The same *and %d more* row (since 2026-10-08; it was a *Show %d More* button before) | macOS's form, the model's `Board.Text.AndMore` in all three clients |
+| The Columns style's columns are at least 240 px wide and the page scrolls sideways below that | GTK's column width | A Windows window is often narrower than a GNOME one; the arrow keys step the same way (`Board.SidewaysTarget`) |
+| The Board's types are in the namespaces `Malachi.Core.Boards` and `Malachi.App.Boards`, not `…Board` | The Go and Swift package names (`board`, `Board`) | A namespace `Board` collides with the static class `Board` that holds the model's rules (`Board.Mode`, `Board.Text`), the name every port has (docs/windows-port.md §11.8) |
 The link under the pointer is shown at the bottom of the message view as
 in GTK, and a masked link is confirmed before it opens; those are security
 features, not deviations.
@@ -634,6 +645,57 @@ Restart Claude Desktop afterwards. The AI page exists in all three desktop
 UIs with the same strings, so it is not a deviation; without a bridge
 beside the executable, or when its status fails, the page says so in the
 group's description, as in GTK.
+
+The Windows in-app assistant also has an experimental **ChatGPT (Codex)**
+provider. Choose it in Preferences → AI, select the in-app target, connect
+with **Continue with ChatGPT**, and accept its separate mail disclosure.
+It uses a native Windows Codex executable and your eligible ChatGPT plan;
+Claude MCP registration is independent. Tokens stay in Windows Credential
+Manager and a native inference gateway restricts Codex to the declared mail
+and draft tools. The panel, compose rewriting, natural-language search and the
+Board's triage and suggested replies are wired ([The Board](#the-board)). Setup, architecture
+and native validation requirements are in
+[ChatGPT integration](../docs/chatgpt-integration.md#11-windows-implementation-and-validation-hand-off).
+
+### The Board
+
+The main window has two modes, Mail and Board, like the other two clients.
+The Board shows the cases the daemon keeps (one conversation, or one Jira
+issue, each in one of four states: Hot, Waiting for You, Waiting for Them,
+For Your Information) in three styles, List, Columns and Today, with a
+detail in a pane beside the list or in a sliding panel, the conversation as
+cards (sanitised HTML in the same locked `CardWebView` as the reading pane,
+at most four live), and the actions Done, Remind Me, Archive, Unstar, Reply
+and Show in Mail. *Preferences → General → Board* turns the Board on or
+off (*Show the Board*: off hides the mode switch), chooses its style
+(*Board View*: the one used last by default) and what the window opens in
+(*Open at Launch*), and how long each state keeps a case (*Keep cases
+for*); the account filter is remembered. *Preferences → AI → Board* has
+*Triage These Accounts*.
+
+Triage is the user's own agent, as in the other clients, and only with the
+*In App (Experimental)* target. *Triage* in the Board's bar runs Claude
+Code (`claude.exe`), or Codex when the ChatGPT provider is chosen in
+*Preferences → AI*, over the cases that wait for notes, through the
+bridge's triage tools only. The first run asks *Let the Assistant Triage
+the Board?*; *Preferences → AI → Board* withdraws that, sets the Board's
+own model (`board-triage-model`, or `board-triage-chatgpt-model` for
+ChatGPT), turns on automatic triage with its interval and daily limit, and
+shows the last 24 hours' tokens. A case with no suggested reply offers
+*✦ Suggest Reply*; the reply is a local draft the case links and is edited
+in the detail itself (the compose pane the compose window also uses), so
+quitting asks before it drops one that could not be saved or sent.
+
+`MALACHI_BOARD_SAMPLES=1` (read once, at start) shows invented sample cases
+instead of the daemon's Board, for looking at the layout without mail:
+Reply and Show in Mail say that a sample has no message behind it, and
+Triage is a placeholder.
+
+Written and driven through UI Automation over sample data and a devmail
+account by the port's agents; not yet verified by the owner. Still to be
+verified: a real Claude Code and a real Codex run of triage and of a
+suggested reply, an inline reply over a real linked draft (autosave, send,
+discard, quitting with an unsaved one) and ARM64 on real hardware.
 
 ### Inbox date sections (native verification pending)
 

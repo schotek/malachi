@@ -12,6 +12,7 @@
 package assistantpanel
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -58,6 +59,10 @@ const (
 	// OfferInstall: "Get Claude Code…" beside "Claude Code was not found on
 	// this computer"; the view opens assistant.InstallURL in the browser.
 	OfferInstall
+	// OfferReconnect: "Reconnect to ChatGPT" beside a provider's lapsed
+	// connection (Controller.SignIn, which runs ReconnectProvider); the
+	// view labels it assistant.ChatGPTText's Reconnect, not Sign In….
+	OfferReconnect
 )
 
 // Content is what one item of the transcript shows; only the fields of its
@@ -336,6 +341,15 @@ type Controller struct {
 	// OnFocusInput: the question field should take the keyboard (a message
 	// action waits for the user's words).
 	OnFocusInput func()
+	// ReconnectProvider connects the provider's account again (ChatGPT's
+	// sign-in in the browser) and calls done on the loop with whether it
+	// worked: the Reconnect offer on a provider's "Reconnect to ChatGPT"
+	// line (OfferReconnect) runs it and then asks the same question once
+	// more. ctx is cancelled when the user stops the question while it
+	// connects (Stop on "Connecting…"): the sign-in in the browser ends
+	// then, and done may still come (it is ignored). nil: that line
+	// offers nothing.
+	ReconnectProvider func(ctx context.Context, done func(ok bool))
 	// OnRestoreInput: a question that was not sent (consent declined); its
 	// text goes back into the field.
 	OnRestoreInput func(text string)
@@ -367,9 +381,13 @@ type Controller struct {
 	pending        Pending
 	// pendingTarget is what the waiting action acts on; nil for the chip's
 	// context when its words are sent (before the first question).
-	pendingTarget *target
-	process       *Process
-	closed        bool
+	pendingTarget    *target
+	process          *Process
+	providerFactory  func() Provider
+	selectedProvider Provider
+	providerSession  Session
+	cancelProvider   context.CancelFunc
+	closed           bool
 
 	// gen is bumped by every question, Stop, NewConversation and Close:
 	// the steps of an older question stop at their next callback.
@@ -399,6 +417,8 @@ type Controller struct {
 
 // Config is what a Controller needs from the application.
 type Config struct {
+	// Provider selects the in-app runtime; nil retains Claude.
+	Provider   func() Provider
 	Translator assistant.Translator
 	Settings   Settings
 	Locator    *Locator
@@ -424,24 +444,25 @@ func New(cfg Config) *Controller {
 		grace = DefaultKillGrace
 	}
 	return &Controller{
-		Today:          func() string { return time.Now().Format("2006-01-02") },
-		Language:       func() string { return "" },
-		ResolveTimeout: DefaultResolveTimeout,
-		tr:             cfg.Translator,
-		settings:       cfg.Settings,
-		locator:        cfg.Locator,
-		loop:           cfg.Loop,
-		log:            cfg.Log,
-		bridge:         cfg.Bridge,
-		socket:         cfg.Socket,
-		directory:      cfg.Directory,
-		env:            cfg.Env,
-		killGrace:      grace,
-		streaming:      -1,
-		signingIn:      -1,
-		activities:     make(map[string]int),
-		toolNames:      make(map[string]string),
-		resolving:      make(map[int]*future[struct{}]),
+		Today:           func() string { return time.Now().Format("2006-01-02") },
+		Language:        func() string { return "" },
+		ResolveTimeout:  DefaultResolveTimeout,
+		tr:              cfg.Translator,
+		providerFactory: cfg.Provider,
+		settings:        cfg.Settings,
+		locator:         cfg.Locator,
+		loop:            cfg.Loop,
+		log:             cfg.Log,
+		bridge:          cfg.Bridge,
+		socket:          cfg.Socket,
+		directory:       cfg.Directory,
+		env:             cfg.Env,
+		killGrace:       grace,
+		streaming:       -1,
+		signingIn:       -1,
+		activities:      make(map[string]int),
+		toolNames:       make(map[string]string),
+		resolving:       make(map[int]*future[struct{}]),
 	}
 }
 
@@ -453,10 +474,7 @@ func (c *Controller) Close() {
 	c.closed = true
 	c.gen++
 	c.endSignIn()
-	if c.process != nil {
-		c.process.Terminate()
-	}
-	c.process = nil
+	c.endProcess()
 }
 
 // Reading
@@ -663,6 +681,16 @@ func (c *Controller) PendingLabel() string {
 
 // Subtitle is the panel's subtitle: "Claude Code · Sonnet".
 func (c *Controller) Subtitle() string {
+	if c.providerFactory != nil {
+		if provider := c.providerFactory(); provider != nil {
+			labels := assistant.ChatGPTText(c.tr)
+			model := provider.Model()
+			if model == "" {
+				model = labels.DefaultModel
+			}
+			return labels.Name + " · " + model
+		}
+	}
 	return assistant.TargetName(c.tr, assistant.Code) + " · " + assistant.ModelName(c.tr, c.settings.AssistantModel())
 }
 
@@ -905,14 +933,18 @@ func (c *Controller) Retry(itemID int) {
 	c.start(*c.lastRequest, false)
 }
 
-// SignIn is Sign In… on an error item: Claude Code's own sign-in in the
-// browser, then the same question once more.
+// SignIn is Sign In… (OfferSignIn) or Reconnect (OfferReconnect) on an
+// error item: Claude Code's own sign-in in the browser, or the provider's
+// reconnect, then the same question once more.
 func (c *Controller) SignIn(itemID int) {
 	if c.closed || c.phase != PhaseIdle || c.lastRequest == nil {
 		return
 	}
 	idx := c.indexOf(itemID)
-	if idx < 0 || c.items[idx].Content.Kind != ContentError || c.items[idx].Content.Offer != OfferSignIn {
+	if idx < 0 || c.items[idx].Content.Kind != ContentError {
+		return
+	}
+	if o := c.items[idx].Content.Offer; o != OfferSignIn && o != OfferReconnect {
 		return
 	}
 	c.items[idx].Content.Offer = OfferNone
@@ -986,6 +1018,9 @@ func (c *Controller) start(req request, echo bool) {
 	}
 	c.gen++
 	my := c.gen
+	if c.providerFactory != nil {
+		c.selectedProvider = c.providerFactory()
+	}
 	c.phase = PhasePreparing
 	c.state()
 	c.loop.Post(func() { c.askConsent(req, my, echo) })
@@ -996,7 +1031,7 @@ func (c *Controller) askConsent(req request, my int, echo bool) {
 	if my != c.gen {
 		return
 	}
-	if c.settings.AssistantConsent() {
+	if (c.selectedProvider != nil && c.selectedProvider.HasConsent()) || (c.selectedProvider == nil && c.settings.AssistantConsent()) {
 		c.pin(req, my, echo)
 		return
 	}
@@ -1012,7 +1047,11 @@ func (c *Controller) askConsent(req request, my int, echo bool) {
 			}
 			return
 		}
-		c.settings.SetAssistantConsent(true)
+		if c.selectedProvider != nil {
+			c.selectedProvider.AcceptConsent()
+		} else {
+			c.settings.SetAssistantConsent(true)
+		}
 		c.pin(req, my, echo)
 	}
 	if c.Consent == nil {
@@ -1052,7 +1091,7 @@ func (c *Controller) pin(req request, my int, echo bool) {
 	c.pending, c.pendingTarget = Pending{}, nil
 	c.state()
 	// A new Claude Code knows nothing of the conversation yet.
-	if c.process == nil || !c.process.Running() {
+	if !c.hasSession() {
 		for i := range c.pinned {
 			c.pinned[i].Announced = false
 		}
@@ -1079,6 +1118,14 @@ func (c *Controller) promptReady(req request, my int) {
 	if err != nil {
 		c.log.Warn("assistant prompt", "err", err)
 		c.fail(assistant.StoppedText(c.tr, err.Error()), false)
+		return
+	}
+	if c.selectedProvider != nil {
+		if req.signIn && c.ReconnectProvider != nil {
+			c.reconnectFirst(my, func() { c.providerPrompt(my, prompt, told) })
+			return
+		}
+		c.providerPrompt(my, prompt, told)
 		return
 	}
 	if c.process != nil && c.process.Running() {
@@ -1148,6 +1195,79 @@ func (c *Controller) signInFirst(my int, then func()) {
 			c.offer(assistant.PanelTexts(c.tr).NotSignedIn, false, OfferSignIn)
 		}
 	})
+}
+
+// reconnectFirst connects the provider's account again
+// (ReconnectProvider), shown as an activity line, and goes on with then
+// once it worked; otherwise the turn ends with Could not connect and the
+// Reconnect offer again. Stop cancels the reconnect's context.
+func (c *Controller) reconnectFirst(my int, then func()) {
+	words := assistant.ChatGPTText(c.tr)
+	c.endProcess() // a session of the account that lapsed is no use
+	c.signingIn = c.append(Content{Kind: ContentActivity, Label: words.Connecting})
+	cancelled := false
+	ctx, cancel := context.WithCancel(context.Background())
+	c.cancelSignIn = func() {
+		cancelled = true
+		cancel()
+	}
+	c.ReconnectProvider(ctx, func(ok bool) {
+		cancel() // the reconnect is over either way
+		c.loop.Post(func() {
+			if cancelled || my != c.gen || c.closed {
+				return
+			}
+			c.cancelSignIn = nil
+			c.closeSignIn()
+			if ok {
+				then()
+				return
+			}
+			c.offer(words.ConnectionFailed, false, OfferReconnect)
+		})
+	})
+}
+
+// providerFailure is the error line of a provider's reason
+// (ProviderFailure): Codex not found, the ChatGPT connection to make again
+// (with OfferReconnect, which reconnects, when the window gave
+// ReconnectProvider), the plan's usage limit, or the assistant stopped
+// with the reason; never the raw code where a sentence exists.
+func (c *Controller) providerFailure(reason string, retry bool) Content {
+	f := ProviderFailure(reason)
+	line := Content{Kind: ContentError, Text: f.Text(c.tr), Retry: retry}
+	switch f.Kind {
+	case FailureNotFound:
+		line.Retry = true
+	case FailureNotSignedIn:
+		line.Retry = false
+		if c.ReconnectProvider != nil {
+			line.Offer = OfferReconnect
+		}
+	case FailureLimit:
+		line.Retry = true
+	}
+	return line
+}
+
+// providerFail ends the turn with the error line of a provider's reason.
+func (c *Controller) providerFail(reason string, retry bool) {
+	line := c.providerFailure(reason, retry)
+	if line.Offer == OfferReconnect {
+		// The next question needs a new session of the connected account.
+		c.endProcess()
+	}
+	c.offer(line.Text, line.Retry, line.Offer)
+}
+
+// providerExited is the end of a provider's session: during a turn an
+// error with its reason (providerFailure), between turns nothing.
+func (c *Controller) providerExited(e Exit) {
+	c.log.Info("assistant: provider session ended", "status", e.Status)
+	if c.phase != PhaseRunning {
+		return
+	}
+	c.providerFail(e.Description(), true)
 }
 
 // endSignIn ends the sign-in the question under way started; its end is
@@ -1378,7 +1498,7 @@ func (c *Controller) launch(path string) (*Process, error) {
 
 func (c *Controller) handle(events []assistant.Event) {
 	for _, e := range events {
-		if c.process == nil {
+		if c.process == nil && c.providerSession == nil {
 			return
 		}
 		switch e.Kind {
@@ -1454,6 +1574,12 @@ func (c *Controller) handle(events []assistant.Event) {
 				// A new sign-in takes a new Claude Code.
 				c.endProcess()
 				c.append(Content{Kind: ContentError, Text: assistant.PanelTexts(c.tr).NotSignedIn, Offer: OfferSignIn})
+			case c.selectedProvider != nil:
+				line := c.providerFailure(e.ResultText, true)
+				if line.Offer == OfferReconnect {
+					c.endProcess()
+				}
+				c.append(line)
 			case c.refreshFailed:
 				// Its words say what happened and what helps: Try Again
 				// in a minute, or a new sign-in now; either way a new
@@ -1510,6 +1636,16 @@ func (c *Controller) clearRetries() {
 // endProcess terminates the conversation's process; its end is not
 // reported.
 func (c *Controller) endProcess() {
+	if c.cancelProvider != nil {
+		c.cancelProvider()
+		c.cancelProvider = nil
+	}
+	session := c.providerSession
+	c.providerSession = nil
+	if session != nil {
+		session.SetHandlers(nil, nil)
+		session.Terminate()
+	}
 	p := c.process
 	c.process = nil
 	if p != nil {

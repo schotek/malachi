@@ -139,6 +139,10 @@ public final class AssistantPanelController {
         /// found on this computer"; the view opens `Assistant.installURL`
         /// in the browser.
         case install
+        /// "Reconnect to ChatGPT" beside a ChatGPT connection that is
+        /// missing or lapsed (`reconnect(_:)`; only when the window gave
+        /// `reconnectProvider`).
+        case reconnectProvider
     }
 
     /// What changed in `items`, for the view.
@@ -243,6 +247,9 @@ public final class AssistantPanelController {
         var target: Target?
         /// Sign In… sent it: Claude Code signs in before it starts.
         var signIn = false
+        /// Reconnect to ChatGPT sent it: the connection is made again
+        /// before the question goes on.
+        var reconnect = false
     }
 
     /// How long the members of a folded conversation are waited for.
@@ -250,6 +257,12 @@ public final class AssistantPanelController {
 
     // MARK: Dependencies
 
+    public var provider: (() -> (any AssistantProvider)?)?
+    /// Connects the ChatGPT account again (its sign-in in the browser);
+    /// true when it worked. nil: a lapsed connection offers nothing.
+    public var reconnectProvider: (@MainActor () async -> Bool)?
+    private var providerSession: (any AssistantSession)?
+    private var providerTokens: [Settings.ChangeToken] = []
     public let settings: Settings
     public let locator: ClaudeCodeLocator
     private let bridge: String?
@@ -358,6 +371,9 @@ public final class AssistantPanelController {
         self.directory = directory
         self.environment = environment
         self.killGrace = killGrace
+        for key in [Settings.Key.assistantProvider, .assistantCodexPath, .assistantChatGPTModel] {
+            providerTokens.append(settings.onChange(key) { [weak self] in self?.newConversation() })
+        }
         settingsToken = settings.onChange(.assistantModel) { [weak self] in
             self?.onState?()
         }
@@ -508,7 +524,11 @@ public final class AssistantPanelController {
 
     /// The panel's subtitle: "Claude Code · Sonnet".
     public var subtitle: String {
-        Assistant.targetName(.code) + " · " + Assistant.modelName(settings.assistantModel)
+        if settings.assistantProvider == .chatgpt {
+            let model = settings.assistantChatGPTModel.isEmpty ? L10n.T("Use the provider’s default model") : settings.assistantChatGPTModel
+            return ChatGPTText.name + " · " + model
+        }
+        return Assistant.targetName(.code) + " · " + Assistant.modelName(settings.assistantModel)
     }
 
     // MARK: The context
@@ -697,6 +717,18 @@ public final class AssistantPanelController {
         start(req, echo: false)
     }
 
+    /// Reconnect to ChatGPT on an error item: the account's sign-in, then
+    /// the same question once more (GTK `ReconnectProvider`).
+    public func reconnect(_ itemID: Int) {
+        guard !closed, phase == .idle, var req = lastRequest, reconnectProvider != nil,
+              let idx = items.firstIndex(where: { $0.id == itemID }),
+              case .error(let text, let retry, .reconnectProvider) = items[idx].content else { return }
+        items[idx].content = .error(text, retry: retry, offer: .none)
+        onChange?(.updated(idx))
+        req.reconnect = true
+        start(req, echo: false)
+    }
+
     /// A draft card's Open Draft.
     public func openDraft(_ itemID: Int) {
         guard let item = items.first(where: { $0.id == itemID }), case .draft(let ref) = item.content else { return }
@@ -755,7 +787,7 @@ public final class AssistantPanelController {
 
     private func prepare(_ req: Request, _ my: Int, echo: Bool) async {
         // 1. Consent, once ever.
-        if !settings.assistantConsent {
+        if !settings.selectedAssistantConsent {
             let allowed = await consent?() ?? false
             guard my == gen else { return }
             guard allowed else {
@@ -766,7 +798,7 @@ public final class AssistantPanelController {
                 }
                 return
             }
-            settings.assistantConsent = true
+            settings.selectedAssistantConsent = true
         }
         // 2. The question in the transcript; the conversation's first
         // question pins what the chip showed, and what the question is
@@ -786,6 +818,7 @@ public final class AssistantPanelController {
         // Try Again sends the question, not the sign-in.
         var last = req
         last.signIn = false
+        last.reconnect = false
         lastRequest = last
         clearRetries()
         if echo {
@@ -797,7 +830,7 @@ public final class AssistantPanelController {
         // 3. What the model is told: a new Claude Code knows nothing of
         // the conversation yet; the contexts the prompt names have their
         // members first.
-        if process?.running != true {
+        if process?.running != true && providerSession?.running != true {
             for i in pinned.indices {
                 pinned[i].announced = false
             }
@@ -813,6 +846,13 @@ public final class AssistantPanelController {
         } catch {
             log.warning("assistant prompt: \(String(describing: error), privacy: .public)")
             fail(Assistant.stoppedText(String(describing: error)), retry: false)
+            return
+        }
+        if settings.assistantProvider == .chatgpt {
+            if req.reconnect, reconnectProvider != nil {
+                guard await reconnectFirst(my) else { return }
+            }
+            await submitProvider(prompt, told: told, generation: my)
             return
         }
         // 4. Claude Code, started when the conversation has none.
@@ -857,6 +897,69 @@ public final class AssistantPanelController {
         refreshFailed = false
         phase = .running
         onState?()
+    }
+
+    private func submitProvider(_ prompt: String, told: [Int], generation my: Int) async {
+        guard let provider = provider?(), let bridge else {
+            fail(L10n.T("Could not connect to ChatGPT."), retry: false); return
+        }
+        do {
+            if providerSession?.running != true {
+                let session = try await provider.start(AssistantSessionSpec(
+                    systemPrompt: Assistant.systemPrompt(language: language(), today: today()),
+                    tools: AssistantRequest.Tools(bridge: bridge, socket: socket, bridgeArgs: [], allowed: Assistant.allowedTools),
+                    modelID: settings.assistantChatGPTModel))
+                guard my == gen else { session.terminate(); return }
+                providerSession = session
+                session.onEvents = { [weak self] events in self?.handle(events) }
+                session.onExit = { [weak self] reason in
+                    guard let self, self.providerSession != nil else { return }
+                    self.providerSession = nil
+                    if self.phase == .running { self.providerFail(reason, retry: false) }
+                }
+            }
+            guard my == gen, let session = providerSession else { return }
+            for i in pinned.indices where told.contains(pinned[i].key) { pinned[i].announced = true }
+            phase = .running; onState?()
+            try await session.submit(prompt)
+        } catch {
+            guard my == gen else { return }
+            endProcess()
+            let code = (error as? ChatGPTFailure)?.code ?? ""
+            if AssistantRequest.providerFailure(code) == .notSignedIn, reconnectProvider != nil {
+                providerFail(code, retry: false)
+            } else {
+                fail(L10n.T("Could not connect to ChatGPT."), retry: false)
+            }
+        }
+    }
+
+    /// The error line of a provider's reason (GTK `providerFail`): a
+    /// connection that is missing or lapsed offers Reconnect to ChatGPT,
+    /// anything else is the assistant stopped with the reason.
+    private func providerFail(_ reason: String, retry: Bool) {
+        if AssistantRequest.providerFailure(reason) == .notSignedIn, reconnectProvider != nil {
+            // The next question needs a new session of the account.
+            endProcess()
+            fail(L10n.T("Could not connect to ChatGPT."), retry: false, offer: .reconnectProvider)
+        } else {
+            fail(Assistant.stoppedText(reason), retry: retry)
+        }
+    }
+
+    /// Connects ChatGPT again, shown as an activity line; true once it
+    /// worked. Otherwise the turn ends with Could not connect and
+    /// Reconnect to ChatGPT again.
+    private func reconnectFirst(_ my: Int) async -> Bool {
+        endProcess() // a session of the account that lapsed is no use
+        signingIn = append(.activity(label: Assistant.signInTexts().waiting, done: false))
+        let ok = await reconnectProvider?() ?? false
+        guard my == gen, !closed else { return false }
+        closeSignIn()
+        if !ok {
+            fail(L10n.T("Could not connect to ChatGPT."), retry: false, offer: .reconnectProvider)
+        }
+        return ok
     }
 
     /// Runs Claude Code's sign-in, shown as an activity line; true once it
@@ -1035,7 +1138,7 @@ public final class AssistantPanelController {
 
     private func handle(_ events: [Assistant.Event]) {
         for e in events {
-            guard process != nil else { return }
+            guard process != nil || providerSession != nil else { return }
             switch e.kind {
             case .systemInit:
                 guard e.bridgeConnected else {
@@ -1148,6 +1251,8 @@ public final class AssistantPanelController {
 
     /// Terminates the conversation's process; its end is not reported.
     private func endProcess() {
+        let session = providerSession; providerSession = nil
+        session?.onEvents = nil; session?.onExit = nil; session?.terminate()
         let p = process
         process = nil
         p?.terminate()

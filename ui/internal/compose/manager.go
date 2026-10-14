@@ -40,6 +40,7 @@ type Manager struct {
 	// (rewrite.go); nil leaves it off.
 	Assistant Assistant
 
+	inline   []*Pane
 	windows  []*Window
 	accounts []api.Account
 	fetched  bool
@@ -62,11 +63,11 @@ func (m *Manager) Open(p Params) *Window {
 	if msg := blockedSummary(p.Blocked); msg != "" {
 		// The backend quoted the original without its remote images and
 		// scripts; said once, as after a save.
-		w.toast(msg)
+		w.pane.toast(msg)
 	}
 	if msg := skippedSummary(p.Skipped); msg != "" {
 		// A forward that went on without some of the original's files.
-		w.toast(msg)
+		w.pane.toast(msg)
 	}
 	return w
 }
@@ -128,7 +129,7 @@ func (m *Manager) SelfAddress() api.Address {
 // same Drafts message taken over (d from draft.open). nil when none.
 func (m *Manager) FindDraft(d api.Draft) *Window {
 	for _, w := range m.windows {
-		if (d.ID != "" && w.draft.draftID == d.ID) || (d.Replaces != "" && w.params.Replaces == d.Replaces) {
+		if (d.ID != "" && w.pane.dc.draft.draftID == d.ID) || (d.Replaces != "" && w.pane.params.Replaces == d.Replaces) {
 			return w
 		}
 	}
@@ -149,7 +150,7 @@ func (m *Manager) remove(w *Window) {
 // otherwise the next window fetches again.
 func (m *Manager) Invalidate() {
 	m.fetched = false
-	if len(m.windows) > 0 || m.OnAccountsChanged != nil {
+	if len(m.windows) > 0 || len(m.inline) > 0 || m.OnAccountsChanged != nil {
 		m.refreshAccounts()
 	}
 }
@@ -171,11 +172,38 @@ func (m *Manager) refreshAccounts() {
 			}
 			m.accounts = res.Accounts
 			for _, w := range m.windows {
-				w.setAccounts(m.Accounts(), m.Placeholder())
+				w.pane.setAccounts(m.Accounts(), m.Placeholder())
+			}
+			for _, p := range m.inline {
+				p.setAccounts(m.Accounts(), m.Placeholder())
 			}
 			if m.OnAccountsChanged != nil {
 				m.OnAccountsChanged()
 			}
 		})
 	}()
+}
+
+// RegisterInline keeps a board pane's account identity current, including
+// changes that arrive while it is parked with unsaved text.
+func (m *Manager) RegisterInline(p *Pane) {
+	for _, known := range m.inline {
+		if known == p {
+			return
+		}
+	}
+	m.inline = append(m.inline, p)
+	if !m.fetched {
+		m.refreshAccounts()
+	}
+}
+
+// RemoveInline releases a pane after the board has settled it.
+func (m *Manager) RemoveInline(p *Pane) {
+	for i, known := range m.inline {
+		if known == p {
+			m.inline = append(m.inline[:i], m.inline[i+1:]...)
+			return
+		}
+	}
 }

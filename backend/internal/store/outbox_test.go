@@ -718,13 +718,13 @@ func TestOutboxCounts(t *testing.T) {
 
 	// Deleting a failed entry (message.delete, permanent or through the
 	// Trash) takes it off the count; so does the worker's clean-up.
-	if err := s.DeleteMessages(ctx, "acc", []string{two.ID}); err != nil {
+	if _, err := s.DeleteMessages(ctx, "acc", []string{two.ID}); err != nil {
 		t.Fatal(err)
 	}
 	counts("failed deleted", "acc", 1, 0)
 	fail(one.ID)
 	counts("failed again", "acc", 0, 1)
-	if err := s.TrashMessages(ctx, "acc", []string{one.ID}, trash.ID); err != nil {
+	if _, err := s.TrashMessages(ctx, "acc", []string{one.ID}, trash.ID); err != nil {
 		t.Fatal(err)
 	}
 	counts("failed trashed", "acc", 0, 0)
@@ -760,16 +760,16 @@ func TestOutboxMutationsGuarded(t *testing.T) {
 	if err := s.FlagMessages(ctx, "acc", []string{normal.ID, queued.ID}, []api.Flag{api.FlagFlagged}, nil); !errors.Is(err, ErrOutbox) {
 		t.Errorf("flag: %v", err)
 	}
-	if err := s.MoveMessages(ctx, "acc", []string{normal.ID, queued.ID}, trash.ID); !errors.Is(err, ErrOutbox) {
+	if _, err := s.MoveMessages(ctx, "acc", []string{normal.ID, queued.ID}, trash.ID); !errors.Is(err, ErrOutbox) {
 		t.Errorf("move from outbox: %v", err)
 	}
-	if err := s.MoveMessages(ctx, "acc", []string{normal.ID}, outbox.ID); !errors.Is(err, ErrOutbox) {
+	if _, err := s.MoveMessages(ctx, "acc", []string{normal.ID}, outbox.ID); !errors.Is(err, ErrOutbox) {
 		t.Errorf("move into outbox: %v", err)
 	}
-	if err := s.TrashMessages(ctx, "acc", []string{normal.ID, sending.ID}, trash.ID); !errors.Is(err, ErrOutboxBusy) {
+	if _, err := s.TrashMessages(ctx, "acc", []string{normal.ID, sending.ID}, trash.ID); !errors.Is(err, ErrOutboxBusy) {
 		t.Errorf("trash while sending: %v", err)
 	}
-	if err := s.DeleteMessages(ctx, "acc", []string{normal.ID, sending.ID}); !errors.Is(err, ErrOutboxBusy) {
+	if _, err := s.DeleteMessages(ctx, "acc", []string{normal.ID, sending.ID}); !errors.Is(err, ErrOutboxBusy) {
 		t.Errorf("delete while sending: %v", err)
 	}
 	got, _ := s.GetMessage(ctx, "acc", normal.ID)
@@ -784,7 +784,7 @@ func TestOutboxMutationsGuarded(t *testing.T) {
 	}
 
 	// Trash deletes an outbox row permanently, the rest moves as usual.
-	if err := s.TrashMessages(ctx, "acc", []string{normal.ID, queued.ID}, trash.ID); err != nil {
+	if _, err := s.TrashMessages(ctx, "acc", []string{normal.ID, queued.ID}, trash.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.GetMessage(ctx, "acc", queued.ID); !errors.Is(err, ErrNotFound) {
@@ -814,7 +814,7 @@ func TestOutboxMutationsGuarded(t *testing.T) {
 	if err := s.MarkOutboxFailed(ctx, sending.ID, api.CodeUnavailable, "x"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteMessages(ctx, "acc", []string{sending.ID}); err != nil {
+	if _, err := s.DeleteMessages(ctx, "acc", []string{sending.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.GetMessage(ctx, "acc", sending.ID); !errors.Is(err, ErrNotFound) {

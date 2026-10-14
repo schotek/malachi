@@ -239,6 +239,7 @@ internal sealed class MailFixture : IAsyncDisposable
             DaemonNotification.AuthRequired a => (API.Notify.AuthRequired, JsonCoding.EncodeToString(a.Payload)),
             DaemonNotification.AccountsChanged => (API.Notify.AccountsChanged, "{}"),
             DaemonNotification.MessagesChanged c => (API.Notify.MessagesChanged, JsonCoding.EncodeToString(c.Payload)),
+            DaemonNotification.BoardChanged b => (API.Notify.BoardChanged, JsonCoding.EncodeToString(b.Payload)),
             DaemonNotification.Unknown u => (u.Method, "{}"),
             _ => throw new ArgumentException($"no such notification: {n}", nameof(n)),
         };

@@ -4,8 +4,9 @@ SPDX-FileCopyrightText: 2026 Vladislav Janeček
 SPDX-License-Identifier: GPL-3.0-or-later
 
 The application object and its resources: the WinUI controls' styles,
-the app's text styles (Resources/Typography.xaml) and the pills of an
-issue-tracker account (Resources/Pills.xaml).
+the app's text styles (Resources/Typography.xaml), the pills of an
+issue-tracker account (Resources/Pills.xaml) and the board's colours
+(Boards/BoardStyles.xaml).
 -->
 <Application
     x:Class="Malachi.App.App"
@@ -17,6 +18,7 @@ issue-tracker account (Resources/Pills.xaml).
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
                 <ResourceDictionary Source="ms-appx:///Resources/Typography.xaml" />
                 <ResourceDictionary Source="ms-appx:///Resources/Pills.xaml" />
+                <ResourceDictionary Source="ms-appx:///Boards/BoardStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

@@ -9,9 +9,12 @@ ui/internal/accountwizard/results.go
 ui/internal/accountwizard/trust.go
 ui/internal/accountwizard/wizard.go
 ui/internal/assistant/assistant.go
+ui/internal/assistant/chatgpt.go
 ui/internal/background/background.go
 ui/internal/bulkmail/bulkmail.go
 ui/internal/compose/compose.go
+ui/internal/compose/pane.go
+ui/internal/compose/pane_layout.go
 ui/internal/compose/draft.go
 ui/internal/compose/prefill.go
 ui/internal/compose/rewrite.go
@@ -24,6 +27,12 @@ ui/internal/jira/transitions.go
 ui/internal/conversation/conversation.go
 ui/internal/conversation/fold.go
 ui/internal/conversation/quoted.go
+ui/internal/board/text.go
+ui/internal/board/triage.go
+ui/internal/board/reply.go
+ui/internal/board/view.go
+ui/internal/board/remind.go
+ui/internal/board/keys.go
 ui/internal/settingspanel/settingspanel.go
 ui/internal/widget/consent.go
 ui/internal/widget/format.go
@@ -36,6 +45,9 @@ ui/internal/window/actions.go
 ui/internal/window/addresses.go
 ui/internal/window/assistant_panel.go
 ui/internal/window/attachments.go
+ui/internal/window/board_conversation.go
+ui/internal/window/board_quit.go
+ui/internal/window/board_today.go
 ui/internal/window/compose_open.go
 ui/internal/window/conversation_card.go
 ui/internal/window/drafts.go
@@ -49,6 +61,7 @@ ui/internal/window/messages.go
 ui/internal/window/notify.go
 ui/internal/window/outbox.go
 ui/internal/window/preferences.go
+ui/internal/window/preferences_chatgpt.go
 ui/internal/window/remote.go
 ui/internal/window/search.go
 ui/internal/window/search_ownwords.go

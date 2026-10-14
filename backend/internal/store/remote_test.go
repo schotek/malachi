@@ -190,7 +190,7 @@ func TestRemoteFlagsMoveAndDelete(t *testing.T) {
 	}
 
 	// A delete operation keeps the remote id after the row is gone.
-	if err := s.DeleteMessages(ctx, "acc", []string{m.ID}); err != nil {
+	if _, err := s.DeleteMessages(ctx, "acc", []string{m.ID}); err != nil {
 		t.Fatal(err)
 	}
 	ops, _ = s.NextOps(ctx, "acc", time.Now(), 10)

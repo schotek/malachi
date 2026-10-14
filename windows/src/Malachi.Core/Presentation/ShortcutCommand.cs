@@ -32,6 +32,12 @@ public enum ShortcutCommand
     /// <summary>Search (win.search, Ctrl+F, Ctrl+E).</summary>
     Search,
 
+    /// <summary>The main window's Mail mode (Ctrl+1, Board.BoardKeys; reaches the window from a WebView2 too).</summary>
+    ShowMail,
+
+    /// <summary>The main window's Board mode (Ctrl+2, Board.BoardKeys).</summary>
+    ShowBoard,
+
     /// <summary>Opens the primary menu (window.blp's MenuButton with primary: true, F10).</summary>
     MainMenu,
 

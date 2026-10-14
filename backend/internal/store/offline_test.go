@@ -632,7 +632,7 @@ func TestMessageServerLocation(t *testing.T) {
 	}
 	// Moved locally, the move not pushed yet: the server still has it where
 	// the operation's snapshot says.
-	if err := s.MoveMessages(ctx, "acc", []string{imapMsg.ID}, archive.ID); err != nil {
+	if _, err := s.MoveMessages(ctx, "acc", []string{imapMsg.ID}, archive.ID); err != nil {
 		t.Fatal(err)
 	}
 	if loc, err := s.MessageServerLocation(ctx, "acc", imapMsg.ID); err != nil || loc.Folder.ID != inbox.ID || loc.UID != 5 {

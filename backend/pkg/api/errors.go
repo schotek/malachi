@@ -41,6 +41,10 @@ const (
 	// CodeAttachmentNotFound: unknown id, another account's, or already bound
 	// to a different draft.
 	CodeAttachmentNotFound ErrorCode = 1105
+	// CodeCaseNotFound: no board case (or, for board.setCommitment, no
+	// commitment) with that id; the thread left the board or the account
+	// is gone (docs/api.md §4.13).
+	CodeCaseNotFound ErrorCode = 1106
 
 	// 1200–1299: authentication.
 	CodeAuthRequired ErrorCode = 1200 // credentials missing or token expired; see notify.authRequired
@@ -84,6 +88,10 @@ const (
 	// server, which refused or did not answer the one-click request
 	// (Error.Message carries the status, never shown verbatim).
 	CodeUnsubscribeFailed ErrorCode = 1505
+	// CodeQuoteNotFound: board.annotate or board.commit quoted text the
+	// daemon did not find verbatim where it must be; Error.Data is a
+	// QuoteNotFoundData naming the field.
+	CodeQuoteNotFound ErrorCode = 1506
 )
 
 // String returns the stable symbolic name of the code.
@@ -112,6 +120,7 @@ var codeNames = map[ErrorCode]string{
 	CodeThreadNotFound:     "threadNotFound",
 	CodeDraftNotFound:      "draftNotFound",
 	CodeAttachmentNotFound: "attachmentNotFound",
+	CodeCaseNotFound:       "caseNotFound",
 	CodeAuthRequired:       "authRequired",
 	CodeAuthFailed:         "authFailed",
 	CodeKeyringError:       "keyringError",
@@ -130,6 +139,7 @@ var codeNames = map[ErrorCode]string{
 	CodePartNotFound:       "partNotFound",
 	CodePartNotDownloaded:  "partNotDownloaded",
 	CodeUnsubscribeFailed:  "unsubscribeFailed",
+	CodeQuoteNotFound:      "quoteNotFound",
 }
 
 // Error is the JSON-RPC error object. It implements the Go error interface so

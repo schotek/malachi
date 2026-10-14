@@ -186,7 +186,7 @@ func TestGmailPermanentDeleteGoesThroughTrash(t *testing.T) {
 	if len(msgs) != 1 {
 		t.Fatalf("inbox = %+v", msgs)
 	}
-	if err := h.st.DeleteMessages(context.Background(), h.acc.ID, []string{msgs[0].ID}); err != nil {
+	if _, err := h.st.DeleteMessages(context.Background(), h.acc.ID, []string{msgs[0].ID}); err != nil {
 		t.Fatal(err)
 	}
 	h.syncer.Trigger("", false)
@@ -203,5 +203,58 @@ func TestGmailPermanentDeleteGoesThroughTrash(t *testing.T) {
 	}
 	if st.UIDNext != 2 {
 		t.Fatalf("Trash UIDNEXT = %d, the message never passed through", st.UIDNext)
+	}
+}
+
+// TestLocalDraftNeverAppended: a local draft (a board case's suggested
+// reply) is never appended to the Drafts folder, and a draft that becomes
+// local while its upload runs (picked before a case linked it) has the
+// copy it just appended deleted again — with UIDPLUS and without.
+func TestLocalDraftNeverAppended(t *testing.T) {
+	for name, caps := range map[string]imap.CapSet{"uidplus": fullCaps, "rev1": rev1Caps} {
+		t.Run(name, func(t *testing.T) {
+			var h *harness
+			build := draftBuilder(&h)
+			var raced string
+			h = newHarness(t, harnessOptions{caps: caps, buildDraft: func(ctx context.Context, id string) (store.DraftUpload, error) {
+				up, err := build(ctx, id)
+				if id == raced {
+					// Linked while the upload runs: local from now on.
+					if _, err := h.st.DB().Exec(`UPDATE drafts SET local = 1 WHERE id = ?`, id); err != nil {
+						t.Error(err)
+					}
+				}
+				return up, err
+			}})
+			if err := h.user.Create("Drafts", nil); err != nil {
+				t.Fatal(err)
+			}
+			local := store.Draft{AccountID: h.acc.ID, Subject: "local", TextBody: "board", Local: true}
+			h.saveDraft(&local)
+			race := store.Draft{AccountID: h.acc.ID, Subject: "raced", TextBody: "linked mid-upload"}
+			h.saveDraft(&race)
+			raced = race.ID
+			plain := store.Draft{AccountID: h.acc.ID, Subject: "plain", TextBody: "ordinary"}
+			h.saveDraft(&plain)
+			start := time.Now()
+			h.start()
+			h.waitIdle(start)
+			drafts := h.folder("drafts")
+			h.syncer.Trigger(api.FolderID(drafts.ID), false)
+			// The raced copy may have gone up before the folder's first
+			// select (no UIDVALIDITY to address it by): it is recorded, and
+			// a later pass deletes it once the folder's pass brought it.
+			waitFor(t, "only the ordinary draft on the server", func() bool {
+				h.syncer.Trigger(api.FolderID(drafts.ID), false)
+				subjects := h.serverSubjects("Drafts")
+				return len(subjects) == 1 && subjects[0] == "plain"
+			})
+			for _, id := range []string{local.ID, race.ID} {
+				got, err := h.st.GetDraft(context.Background(), h.acc.ID, id)
+				if err != nil || !got.Local || !got.Copy.IsZero() || got.SyncedVersion != 0 {
+					t.Fatalf("local draft after the pass = %+v %v", got, err)
+				}
+			}
+		})
 	}
 }

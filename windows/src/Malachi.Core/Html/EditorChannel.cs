@@ -40,6 +40,14 @@
 // draft.markdown) and the view evaluates PastedScript, with the HTML or null
 // for the text as it is. The page answers only its latest paste, so an
 // answer that comes late or for another document does nothing.
+//
+// The sized mode is GTK's (editor.go OnHeight, bridge.go validHeight; macOS
+// ComposeEditorView.sizeReported): the page posts the document's height as
+// "height" on every input, paste and resize, and a channel made sized (the
+// board's inline reply) raises SizeReported with it, only a finite number
+// that is not negative, capped at MaxReportedHeight; any other channel, and
+// any other value, ignores it. The host scales it by its zoom and clamps it
+// (Board.EditorHeight).
 
 using System;
 using System.Collections.Generic;
@@ -50,10 +58,22 @@ namespace Malachi.Core.Html;
 /// <summary>The compose editor's side of the bridge: content, readiness and flushes.</summary>
 public sealed class EditorChannel
 {
+    /// <summary>
+    /// editor.maxReportedHeight: the largest height, in CSS pixels,
+    /// <see cref="SizeReported"/> carries; a taller document reports this.
+    /// </summary>
+    public const double MaxReportedHeight = 1 << 20;
+
     private readonly List<Waiter> waiters = [];
     private readonly List<Action<RewriteTarget>> rewrites = [];
     private long nextWaiterId;
     private int heldChanges;
+
+    /// <summary>A channel; <paramref name="sized"/> makes it report the document's height (<see cref="SizeReported"/>).</summary>
+    public EditorChannel(bool sized = false)
+    {
+        Sized = sized;
+    }
 
     /// <summary>Fires once the bridge runs in a document the view loaded.</summary>
     public event EventHandler? Ready;
@@ -78,6 +98,17 @@ public sealed class EditorChannel
     /// is the pasted text).
     /// </summary>
     public event EventHandler<BridgeMessage>? PasteRequested;
+
+    /// <summary>
+    /// editor.OnHeight: in the sized mode, the document's height in CSS
+    /// pixels as the page last reported it (<see cref="ValidHeight"/>), on
+    /// input, paste and resize. Never raised by a channel that is not
+    /// <see cref="Sized"/>.
+    /// </summary>
+    public event EventHandler<double>? SizeReported;
+
+    /// <summary>The channel reports the document's height (the board's inline reply).</summary>
+    public bool Sized { get; }
 
     /// <summary>editor.Ready: whether the bridge runs in the current document.</summary>
     public bool IsReady { get; private set; }
@@ -155,6 +186,12 @@ public sealed class EditorChannel
                 KeyPressed?.Invoke(this, message.Key);
                 return message;
             case BridgeMessage.Kinds.Drop:
+                return message;
+            case BridgeMessage.Kinds.Height:
+                if (Sized && ValidHeight(message.H) is { } css)
+                {
+                    SizeReported?.Invoke(this, css);
+                }
                 return message;
             default:
                 return null;
@@ -335,6 +372,14 @@ public sealed class EditorChannel
             return null;
         }
     }
+
+    /// <summary>
+    /// editor.validHeight: a reported height as the host takes it, a finite
+    /// number that is not negative, capped at <see cref="MaxReportedHeight"/>;
+    /// null for anything else.
+    /// </summary>
+    public static double? ValidHeight(double h) =>
+        double.IsFinite(h) && h >= 0 ? Math.Min(h, MaxReportedHeight) : null;
 
     // A flush result is outstanding: some waiter does not know its seq yet.
     private bool Outstanding() => waiters.Exists(w => w.Seq is null);

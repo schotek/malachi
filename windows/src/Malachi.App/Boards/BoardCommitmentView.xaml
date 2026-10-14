@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of BoardCommitmentContentView (macos/Sources/MalachiMail/Board/BoardViews.swift);
+GTK: the commitment rows of renderDetailCommitments (window/board_detail.go).
+A promise the assistant found in the user's own reply: a tick that marks it
+done (Mark Promise as Done), what was promised, the sentence it comes from
+in quotation marks, the case it comes from (the assistant's mark before an
+assistant's title) and its deadline. Plain text throughout.
+-->
+<UserControl
+    x:Class="Malachi.App.Boards.BoardCommitmentView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False">
+    <Grid Padding="0,8,4,8" ColumnSpacing="8">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <CheckBox
+            x:Name="Tick"
+            MinWidth="0"
+            VerticalAlignment="Top"
+            AutomationProperties.AutomationId="BoardCommitmentTick"
+            Click="OnTickClick" />
+        <StackPanel Grid.Column="1" Spacing="2">
+            <TextBlock
+                x:Name="PromiseText"
+                MaxLines="2"
+                Style="{StaticResource BodyStrongTextBlockStyle}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="Wrap" />
+            <TextBlock
+                x:Name="QuoteText"
+                FontStyle="Italic"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                MaxLines="1"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                TextTrimming="CharacterEllipsis" />
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock
+                    x:Name="SourceMark"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Foreground="{ThemeResource BoardAssistantBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}" />
+                <TextBlock
+                    x:Name="SourceText"
+                    MaxWidth="320"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    MaxLines="1"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    TextTrimming="CharacterEllipsis" />
+                <Border
+                    x:Name="DueChip"
+                    Background="{ThemeResource BoardDueFillBrush}"
+                    Style="{StaticResource BoardPillBorderStyle}">
+                    <TextBlock
+                        x:Name="DueText"
+                        Foreground="{ThemeResource BoardDueForegroundBrush}"
+                        Style="{StaticResource BoardPillTextStyle}" />
+                </Border>
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</UserControl>

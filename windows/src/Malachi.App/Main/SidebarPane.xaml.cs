@@ -70,6 +70,14 @@ public sealed partial class SidebarPane : UserControl
         ArgumentNullException.ThrowIfNull(controller);
         ArgumentNullException.ThrowIfNull(commands);
         mailbox = controller;
+        CommandBinding.Bind(MenuMail, commands.ShowMail);
+        CommandBinding.Bind(MenuBoard, commands.ShowBoard);
+        // The sidebar shows in Mail only: its menu checks Mail.
+        PrimaryMenu.Opening += (_, _) =>
+        {
+            MenuMail.IsChecked = true;
+            MenuBoard.IsChecked = false;
+        };
         CommandBinding.Bind(NewMessageButton, commands.NewMessage);
         CommandBinding.Bind(MenuNewMessage, commands.NewMessage);
         CommandBinding.Bind(MenuAddAccount, commands.AddAccount);

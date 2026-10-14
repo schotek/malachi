@@ -25,4 +25,10 @@ public enum ErrorOffer
     /// in the browser.
     /// </summary>
     Install,
+
+    /// <summary>
+    /// OfferReconnect: "Reconnect to ChatGPT" beside the ChatGPT connection
+    /// that is missing or lapsed (<see cref="AssistantPanelController.Reconnect"/>).
+    /// </summary>
+    Reconnect,
 }

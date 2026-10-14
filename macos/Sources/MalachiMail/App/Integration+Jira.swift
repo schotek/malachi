@@ -86,7 +86,7 @@ extension Integration {
 
         ChangeStatusMenus.install(intoMenuBar: NSApp.mainMenu, state: state)
         if let mainWindow {
-            ChangeStatusMenus.install(intoToolbar: mainWindow.window?.toolbar, state: state) { [weak mainWindow] in
+            ChangeStatusMenus.install(intoToolbar: mainWindow.mailToolbar, state: state) { [weak mainWindow] in
                 mainWindow?.transitionSubject
             }
         }

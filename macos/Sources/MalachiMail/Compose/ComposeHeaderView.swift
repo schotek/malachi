@@ -8,9 +8,10 @@ import MalachiCore
 /// `header_rows`): one line per field, a label of uniform width and the
 /// field beside it, separated by hairlines: From (a pop-up of identities),
 /// To with the Cc/Bcc button, Cc and Bcc (hidden until asked for),
-/// Subject. The recipient rows are `RecipientTokenField`s (finished
-/// addresses as badges; an unparsable entry is a red-tinted badge, D8 of
-/// the plan) and grow by lines. Everything typed here is plain text.
+/// Subject (From left out with `showsFrom: false`). The recipient rows are
+/// `RecipientTokenField`s (finished addresses as badges; an unparsable
+/// entry is a red-tinted badge, D8 of the plan) and grow by lines.
+/// Everything typed here is plain text.
 @MainActor
 final class ComposeHeaderView: NSBox {
     static let rowHeight: CGFloat = 30
@@ -34,7 +35,10 @@ final class ComposeHeaderView: NSBox {
     private let bccRow: NSGridRow
     private let bccSeparatorRow: NSGridRow
 
-    init() {
+    /// - Parameter showsFrom: whether the From row is there; the inline
+    ///   reply of the board has none (it is from-locked, and the case's
+    ///   detail names the account). The pop-up still holds the identities.
+    init(showsFrom: Bool = true) {
         let fromLabel = Self.label(L10n.T("From"))
         let toLabel = Self.label(L10n.T("To"))
         let ccLabel = Self.label(L10n.T("Cc"))
@@ -131,6 +135,10 @@ final class ComposeHeaderView: NSBox {
             content.trailingAnchor.constraint(equalTo: grid.trailingAnchor, constant: Self.horizontalInset),
         ])
 
+        if !showsFrom {
+            grid.row(at: 0).isHidden = true
+            grid.row(at: 1).isHidden = true
+        }
         // The Cc and Bcc lines start hidden; the button reveals them.
         ccRow.isHidden = true
         ccSeparatorRow.isHidden = true

@@ -20,6 +20,15 @@ final class MessageRowView: NSTableRowView {
         }
     }
 
+    /// Inbox rows beneath the Flagged heading, including conversation members.
+    var isInFlaggedSection = false {
+        didSet {
+            if isInFlaggedSection != oldValue {
+                needsDisplay = true
+            }
+        }
+    }
+
     private var tracking: NSTrackingArea?
     private var hovered = false {
         didSet {
@@ -41,6 +50,10 @@ final class MessageRowView: NSTableRowView {
 
     override func drawBackground(in dirtyRect: NSRect) {
         super.drawBackground(in: dirtyRect)
+        if isInFlaggedSection, !isSelected {
+            Tint.accent.withAlphaComponent(0.06).setFill()
+            bounds.fill()
+        }
         // The tint is for the resting state only (style.go).
         if isMember, !isSelected, !hovered {
             Tint.fg(alpha: 0.03).setFill()
@@ -82,7 +95,8 @@ final class MessageRowView: NSTableRowView {
             removeTrackingArea(tracking)
         }
         let area = NSTrackingArea(
-            rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil
+            rect: bounds, options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self,
+            userInfo: nil
         )
         addTrackingArea(area)
         tracking = area
@@ -90,7 +104,12 @@ final class MessageRowView: NSTableRowView {
 
     override func mouseEntered(with event: NSEvent) {
         super.mouseEntered(with: event)
-        hovered = true
+        hovered = receivesPointer(event)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        hovered = receivesPointer(event)
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -102,5 +121,18 @@ final class MessageRowView: NSTableRowView {
         super.prepareForReuse()
         hovered = false
         isMember = false
+        isInFlaggedSection = false
+    }
+}
+
+extension NSView {
+    /// Whether the pointer of `event` is over this view and not over a
+    /// view laid above it. A tracking area takes no notice of overlapping
+    /// siblings (the board's sliding panel over its rows); hit-testing,
+    /// which routes the clicks, does.
+    func receivesPointer(_ event: NSEvent) -> Bool {
+        guard let root = window?.contentView, let parent = root.superview else { return false }
+        guard let hit = root.hitTest(parent.convert(event.locationInWindow, from: nil)) else { return false }
+        return hit.isDescendant(of: self)
     }
 }

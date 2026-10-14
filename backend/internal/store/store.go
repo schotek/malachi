@@ -38,11 +38,14 @@ var (
 	ErrExists          = errors.New("store: already exists")
 	ErrVersionConflict = errors.New("store: version conflict")
 	ErrAttachmentBound = errors.New("store: attachment bound to another draft")
-	ErrTooBig          = errors.New("store: size limit exceeded")
-	ErrBadCursor       = errors.New("store: bad cursor")
-	ErrBadOrder        = errors.New("store: bad account order")
-	ErrOutboxBusy      = errors.New("store: outbox message is being sent")
-	ErrOutbox          = errors.New("store: not allowed for an outbox message")
+	// ErrDraftLocal: a local draft cannot take over a copy in the Drafts
+	// folder (SaveDraft with Adopt).
+	ErrDraftLocal = errors.New("store: the draft is local")
+	ErrTooBig     = errors.New("store: size limit exceeded")
+	ErrBadCursor  = errors.New("store: bad cursor")
+	ErrBadOrder   = errors.New("store: bad account order")
+	ErrOutboxBusy = errors.New("store: outbox message is being sent")
+	ErrOutbox     = errors.New("store: not allowed for an outbox message")
 	// ErrRawCorrupt: a stored raw message file cannot be read back intact
 	// (a .zst file that is not one whole frame of this store's).
 	ErrRawCorrupt = errors.New("store: raw message file is damaged")

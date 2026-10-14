@@ -103,6 +103,10 @@ public sealed partial class MessageRow : ObservableObject
     [ObservableProperty]
     public partial bool IsMember { get; private set; }
 
+    /// <summary>Inbox Flagged section membership, including unfolded conversation members.</summary>
+    [ObservableProperty]
+    public partial bool IsInFlaggedSection { get; internal set; }
+
     /// <summary>What the avatar's colour and initials come from: the first sender's (or participant's) display name.</summary>
     [ObservableProperty]
     public partial string AvatarText { get; private set; }

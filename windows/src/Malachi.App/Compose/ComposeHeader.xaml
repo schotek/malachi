@@ -10,7 +10,8 @@ per field, in the Blueprint's order: From (the identities), To with the
 Cc/Bcc button, Cc and Bcc (hidden until asked for, each with the separator
 above it), Subject. The labels share one column (the size group); the rows
 are 30 px high and padded 12 px left and right, the separators run from edge
-to edge. The fields sit on the card rather than being controls of their own:
+to edge. The board's inline reply shows no From line (ShowsFrom). The
+fields sit on the card rather than being controls of their own:
 no background, no border, no focus rectangle (the caret says which one takes
 typing), the From drop-down flat with a tint under the pointer. The
 recipient rows are RecipientTokenBoxes: the finished addresses are badges,
@@ -169,7 +170,10 @@ text.
                 </ComboBox.ItemTemplate>
             </ComboBox>
 
-            <Rectangle Grid.Row="1" Style="{StaticResource ComposeSeparatorStyle}" />
+            <Rectangle
+                x:Name="FromSeparator"
+                Grid.Row="1"
+                Style="{StaticResource ComposeSeparatorStyle}" />
 
             <!-- To, and the Cc/Bcc button -->
             <TextBlock

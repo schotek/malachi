@@ -44,6 +44,37 @@ public final class Settings {
         case assistantModel = "assistant-model"
         case assistantClaudePath = "assistant-claude-path"
         case assistantConsent = "assistant-consent"
+        // Provider selection and independent, versioned OpenAI disclosures.
+        case assistantProvider = "assistant-provider"
+        case assistantCodexPath = "assistant-codex-path"
+        case assistantChatGPTModel = "assistant-chatgpt-model"
+        case assistantChatGPTConsentVersion = "assistant-chatgpt-consent-version"
+        /// macOS only for now (the board is Swift-first): whether the user
+        /// allowed the board's triage to send mail of the board's cases to
+        /// Claude, on top of `assistantConsent` (`BoardTriageController`).
+        case boardTriageChatGPTModel = "board-triage-chatgpt-model"
+        case boardTriageChatGPTConsentVersion = "board-triage-chatgpt-consent-version"
+        case boardTriageConsent = "board-triage-consent"
+        /// macOS only for now: the model of the board's triage runs, the
+        /// nicks of `assistantModel` but set apart from it (Settings → AI →
+        /// Board).
+        case boardTriageModel = "board-triage-model"
+        /// Board View: the style the board opens in, `Board.DefaultStyle`'s
+        /// nicks ("last" = `boardLastStyle`; Settings → General → Board;
+        /// `BoardController.boardWillShow`).
+        case boardDefaultStyle = "board-default-style"
+        /// The style the board was shown in last, `Board.Style`'s nicks;
+        /// written on every change of the style.
+        case boardLastStyle = "board-last-style"
+        /// Open at Launch: `Board.StartChoice`'s nicks (`Board.startMode`).
+        case boardStartMode = "board-start-mode"
+        /// The mode the main window showed last, `Board.Mode`'s nicks;
+        /// written whenever the mode switches.
+        case boardLastMode = "board-last-mode"
+        /// The account id the board is filtered to, "" for every account;
+        /// written whenever the board's account filter changes
+        /// (`Board.filterOnShow`).
+        case boardAccountFilter = "board-account-filter"
         /// macOS only: what ⌘R does (Settings → General → Keyboard).
         case commandR = "command-r"
         /// macOS only: the size of the window text (`Typo`, Settings →
@@ -110,6 +141,19 @@ public final class Settings {
             Key.assistantModel.rawValue: Assistant.Model.sonnet.rawValue,
             Key.assistantClaudePath.rawValue: "",
             Key.assistantConsent.rawValue: false,
+            Key.assistantProvider.rawValue: "claude",
+            Key.boardTriageChatGPTModel.rawValue: "",
+            Key.boardTriageChatGPTConsentVersion.rawValue: 0,
+            Key.assistantCodexPath.rawValue: "",
+            Key.assistantChatGPTModel.rawValue: "",
+            Key.assistantChatGPTConsentVersion.rawValue: 0,
+            Key.boardTriageConsent.rawValue: false,
+            Key.boardTriageModel.rawValue: Assistant.Model.sonnet.rawValue,
+            Key.boardDefaultStyle.rawValue: Board.DefaultStyle.last.nick,
+            Key.boardLastStyle.rawValue: Board.Style.list.nick,
+            Key.boardStartMode.rawValue: Board.StartChoice.mail.nick,
+            Key.boardLastMode.rawValue: Board.Mode.mail.nick,
+            Key.boardAccountFilter.rawValue: "",
             Key.commandR.rawValue: CommandR.reply.rawValue,
             Key.uiTextSize.rawValue: TextSize.larger.rawValue,
         ]
@@ -309,6 +353,96 @@ public final class Settings {
     public var assistantConsent: Bool {
         get { bool(.assistantConsent) }
         set { set(.assistantConsent, newValue) }
+    }
+
+    /// Whether the user allowed the board's triage to send the board's
+    /// mail to Claude (asked before the first triage; withdrawn in
+    /// Settings). The board's `assistant` preference follows it.
+    public var boardTriageConsent: Bool {
+        get { bool(.boardTriageConsent) }
+        set { set(.boardTriageConsent, newValue) }
+    }
+
+    /// The model of the board's triage runs, apart from the panel's
+    /// (`assistantModel`): the same nicks, read with `Assistant.parseModel`
+    /// (an unknown nick is Sonnet).
+    public var boardTriageModel: Assistant.Model {
+        get { Assistant.parseModel(string(.boardTriageModel)) }
+        set { set(.boardTriageModel, Assistant.parseModel(newValue.rawValue).rawValue) }
+    }
+
+    /// Board View: `Board.DefaultStyle`'s nicks, read with
+    /// `Board.parseDefaultStyle` (an unknown or empty nick is Last Used).
+    public var boardDefaultStyle: Board.DefaultStyle {
+        get { Board.parseDefaultStyle(string(.boardDefaultStyle)) }
+        set { set(.boardDefaultStyle, newValue.nick) }
+    }
+
+    /// The style the board was shown in last: `Board.Style`'s nicks, read
+    /// with `Board.parseStyle` (an unknown or empty nick is the List).
+    public var boardLastStyle: Board.Style {
+        get { Board.parseStyle(string(.boardLastStyle)) }
+        set { set(.boardLastStyle, newValue.nick) }
+    }
+
+    /// Open at Launch, read with `Board.parseStartChoice` (an unknown or
+    /// empty nick is Mail).
+    public var boardStartMode: Board.StartChoice {
+        get { Board.parseStartChoice(string(.boardStartMode)) }
+        set { set(.boardStartMode, newValue.nick) }
+    }
+
+    /// The mode shown last; an unknown nick is Mail.
+    public var boardLastMode: Board.Mode {
+        get { Board.parseMode(string(.boardLastMode)) ?? .mail }
+        set { set(.boardLastMode, newValue.nick) }
+    }
+
+    /// The board's saved account filter: the daemon's account id, "" for
+    /// every account.
+    public var boardAccountFilter: String {
+        get { string(.boardAccountFilter) }
+        set { set(.boardAccountFilter, newValue) }
+    }
+
+    /// The mode a new main window opens in (`Board.startMode` over
+    /// `boardStartMode` and `boardLastMode`); Mail while the board is
+    /// turned off.
+    public func boardModeOnLaunch(boardEnabled: Bool) -> Board.Mode {
+        Board.startMode(start: string(.boardStartMode), last: string(.boardLastMode), boardEnabled: boardEnabled)
+    }
+
+    public var assistantProvider: AssistantProviderID {
+        get { AssistantProviderID(rawValue: string(.assistantProvider)) ?? .claude }
+        set { set(.assistantProvider, newValue.rawValue) }
+    }
+    public var assistantCodexPath: String {
+        get { string(.assistantCodexPath) }
+        set { set(.assistantCodexPath, newValue) }
+    }
+    public var assistantChatGPTModel: String {
+        get { string(.assistantChatGPTModel) }
+        set { set(.assistantChatGPTModel, newValue) }
+    }
+    public var assistantChatGPTConsentVersion: Int {
+        get { integer(.assistantChatGPTConsentVersion) }
+        set { set(.assistantChatGPTConsentVersion, newValue) }
+    }
+    public var boardTriageChatGPTModel: String {
+        get { string(.boardTriageChatGPTModel) }
+        set { set(.boardTriageChatGPTModel, newValue) }
+    }
+    public var boardTriageChatGPTConsentVersion: Int {
+        get { integer(.boardTriageChatGPTConsentVersion) }
+        set { set(.boardTriageChatGPTConsentVersion, newValue) }
+    }
+    public var selectedAssistantConsent: Bool {
+        get { assistantProvider == .chatgpt ? assistantChatGPTConsentVersion == 1 : assistantConsent }
+        set { if assistantProvider == .chatgpt { assistantChatGPTConsentVersion = newValue ? 1 : 0 } else { assistantConsent = newValue } }
+    }
+    public var selectedBoardConsent: Bool {
+        get { assistantProvider == .chatgpt ? boardTriageChatGPTConsentVersion == 1 : boardTriageConsent }
+        set { if assistantProvider == .chatgpt { boardTriageChatGPTConsentVersion = newValue ? 1 : 0 } else { boardTriageConsent = newValue } }
     }
 
     // MARK: Change notification

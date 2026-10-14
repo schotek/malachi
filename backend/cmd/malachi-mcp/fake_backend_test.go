@@ -86,6 +86,17 @@ type fakeBackend struct {
 	unsubscribeCalls  []api.MessageUnsubscribeParams
 	unsubscribeResult *api.MessageUnsubscribeResult
 
+	boardResult *api.BoardListResult // what board.list answers (nil = notImplemented)
+	boardCalls  []api.BoardListParams
+
+	// queueResult is what board.queue answers (nil = notImplemented);
+	// queueCalls, annotateCalls and commitCalls what the triage methods
+	// were asked.
+	queueResult   *api.BoardQueueResult
+	queueCalls    []api.BoardQueueParams
+	annotateCalls []api.BoardAnnotateParams
+	commitCalls   []api.BoardCommitParams
+
 	searchResults []api.SearchResult // what every search.query answers
 	searchCalls   []api.SearchQueryParams
 }

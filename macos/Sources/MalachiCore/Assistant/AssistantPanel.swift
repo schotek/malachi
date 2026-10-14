@@ -135,15 +135,25 @@ extension Assistant {
         /// else): the result event's structured_output, as for
         /// `searchSchema`.
         public var jsonSchema: String
+        /// Further arguments of the bridge, after --socket: the board
+        /// triage's `triageBridgeArgs`; empty for the panel. Unused without
+        /// a bridge.
+        public var bridgeArgs: [String]
+        /// The tools Claude Code may run (--allowedTools); nil is the
+        /// panel's `allowedTools`. Unused without a bridge.
+        public var tools: [String]?
 
         public init(
-            bridge: String, socket: String = "", model: Model = .sonnet, systemPrompt: String, jsonSchema: String = ""
+            bridge: String, socket: String = "", model: Model = .sonnet, systemPrompt: String, jsonSchema: String = "",
+            bridgeArgs: [String] = [], tools: [String]? = nil
         ) {
             self.bridge = bridge
             self.socket = socket
             self.model = model
             self.systemPrompt = systemPrompt
             self.jsonSchema = jsonSchema
+            self.bridgeArgs = bridgeArgs
+            self.tools = tools
         }
     }
 
@@ -164,8 +174,8 @@ extension Assistant {
         ]
         if !o.bridge.isEmpty {
             args += [
-                "--mcp-config", mcpConfig(bridge: o.bridge, socket: o.socket),
-                "--allowedTools", allowedTools.joined(separator: ","),
+                "--mcp-config", mcpConfig(bridge: o.bridge, socket: o.socket, extra: o.bridgeArgs),
+                "--allowedTools", (o.tools ?? allowedTools).joined(separator: ","),
             ]
         }
         args += [
@@ -182,15 +192,21 @@ extension Assistant {
 
     /// mcpConfig: the JSON of --mcp-config, as encoding/json writes it: the
     /// bridge as the stdio server "malachi", with --socket when `socket` is
-    /// set (the args an empty array otherwise, never null).
-    static func mcpConfig(bridge: String, socket: String) -> String {
+    /// set and then `extra` (the args an empty array otherwise, never null).
+    static func mcpConfig(bridge: String, socket: String, extra: [String] = []) -> String {
         var out = Array(#"{"mcpServers":{"malachi":{"type":"stdio","command":"#.utf8)
         appendJSONString(bridge, to: &out)
         out.append(contentsOf: Array(#","args":["#.utf8))
+        var args: [String] = []
         if !socket.isEmpty {
-            appendJSONString("--socket", to: &out)
-            out.append(UInt8(ascii: ","))
-            appendJSONString(socket, to: &out)
+            args += ["--socket", socket]
+        }
+        args += extra
+        for (i, a) in args.enumerated() {
+            if i > 0 {
+                out.append(UInt8(ascii: ","))
+            }
+            appendJSONString(a, to: &out)
         }
         out.append(contentsOf: Array("]}}}".utf8))
         return String(decoding: out, as: UTF8.self)

@@ -1,0 +1,8 @@
+---------- Forwarded message ---------
+From: Alice ‮elpmaxE ecilA <alice@example.com>
+Date: Tue, 30 Sep 2026 at 09:12
+Subject: Contract draft
+To: Jan Novak <me@example.org>
+
+Could you check the attached draft by Friday? I will send the figures by Monday.
+https://example.com/draft?id=1

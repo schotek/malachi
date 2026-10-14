@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of BoardSectionHeaderView.configure(column) and configure(title:count:color:)
+(macos/Sources/MalachiMail/Board/BoardViews.swift); GTK: the column header
+of newPane (window/board_columns.go) and boardTodaySectionHeader
+(window/board_today.go). A state's heading in the Columns style and on the
+Today page: the state's dot, the title in the state's colour and the
+count (hidden while empty). Plain text; the colour is a visual state's
+ThemeResource, so it follows the theme.
+-->
+<UserControl
+    x:Class="Malachi.App.Boards.BoardStateHeading"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:boards="using:Malachi.App.Boards"
+    IsTabStop="False">
+    <Grid ColumnSpacing="8">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="Colours">
+                <VisualState x:Name="Info" />
+                <VisualState x:Name="Hot">
+                    <VisualState.Setters>
+                        <Setter Target="TitleText.Foreground" Value="{ThemeResource BoardHotBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="You">
+                    <VisualState.Setters>
+                        <Setter Target="TitleText.Foreground" Value="{ThemeResource BoardYouBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Them">
+                    <VisualState.Setters>
+                        <Setter Target="TitleText.Foreground" Value="{ThemeResource BoardThemBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <boards:BoardStateSwatch
+            x:Name="Dot"
+            Width="8"
+            Height="8"
+            VerticalAlignment="Center"
+            Corners="4" />
+        <TextBlock
+            x:Name="TitleText"
+            Grid.Column="1"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Style="{StaticResource BoardSectionTitleStyle}" />
+        <TextBlock
+            x:Name="CountText"
+            Grid.Column="2"
+            VerticalAlignment="Center"
+            Style="{StaticResource BoardCountTextStyle}" />
+    </Grid>
+</UserControl>

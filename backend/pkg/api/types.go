@@ -1533,8 +1533,20 @@ type Draft struct {
 	// (draft.create reply on an account with CapabilityComment): sending it
 	// posts a comment to the issue instead of an e-mail. In draft.save only
 	// Comment.Visibility is read.
-	Comment   *DraftComment `json:"comment,omitempty"`
-	UpdatedAt time.Time     `json:"updatedAt"` // server-set; ignored in params
+	Comment *DraftComment `json:"comment,omitempty"`
+	// Local keeps the draft on this device: it is not uploaded to the
+	// account's Drafts folder (a board case's suggested reply, §4.13). It
+	// reaches the server when it is sent, or as an ordinary draft when the
+	// user edited it and it lost its case (docs/api.md §4.5); an untouched
+	// suggestion that loses its case is deleted. In draft.save it is read
+	// on the first save only (no id) and refused with Replaces; later saves
+	// keep the stored value, which a client can neither set nor clear.
+	// Linking a draft to a case (board.setDraft, board.annotate draftId)
+	// makes it local. In results it is true for a local draft and for
+	// every draft of an issue-tracker account, whose drafts never reach a
+	// server folder.
+	Local     bool      `json:"local,omitempty"`
+	UpdatedAt time.Time `json:"updatedAt"` // server-set; ignored in params
 }
 
 // DraftComment says where a comment draft goes and who may read it.
@@ -1592,6 +1604,17 @@ type DraftDeleteParams struct {
 }
 
 type DraftDeleteResult struct{}
+
+// DraftGetParams names one stored draft (draft.get).
+type DraftGetParams struct {
+	AccountID AccountID `json:"accountId"`
+	DraftID   DraftID   `json:"draftId"`
+}
+
+// DraftGetResult is the draft as one item of draft.list returns it.
+type DraftGetResult struct {
+	Draft Draft `json:"draft"`
+}
 
 // ComposeMode selects how draft.create pre-fills a draft.
 type ComposeMode string

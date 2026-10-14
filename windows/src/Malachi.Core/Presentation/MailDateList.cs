@@ -82,6 +82,8 @@ public sealed class MailDateList
         {
             cache.Remove(key);
         }
+        var flaggedKeys = snapshot.Where(s => s.Group.Kind == MailDateGroupKind.Flagged)
+            .SelectMany(s => s.Rows).Select(r => r.Key).ToHashSet();
         foreach (var row in source)
         {
             if (!cache.TryGetValue(row.Key, out var view))
@@ -89,6 +91,7 @@ public sealed class MailDateList
                 view = new MessageRow(row.Key);
                 cache.Add(row.Key, view);
             }
+            view.IsInFlaggedSection = flaggedKeys.Contains(row.Key);
             update(view, row, now);
         }
         // Remove departing children before inserting them in their destination.

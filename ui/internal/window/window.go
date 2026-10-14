@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
+	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
@@ -23,6 +24,8 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/assistant"
+	"github.com/schotek/malachi/ui/internal/board"
+	"github.com/schotek/malachi/ui/internal/boardtriage"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/compose"
 	"github.com/schotek/malachi/ui/internal/conversation"
@@ -226,6 +229,46 @@ type Window struct {
 	conv *conversationView
 	// ownWords is the search in the user's own words (search_ownwords.go).
 	ownWords ownWords
+
+	// The window's second mode, Board (board.go, board_list.go,
+	// board_detail.go, board_actions.go, board_triage_button.go,
+	// board_show_in_mail.go): mode is never persisted (board.InitialMode is
+	// Mail at every launch). modeStack is window.blp's mode_stack;
+	// modeSwitchMail its ToggleGroup in the folders header bar, mirrored by
+	// the board page's own (boardPage.modeSwitch); settingModeSwitch guards
+	// the notify::active-name handlers against each other's writes, as
+	// setListFilter does for message_filter.
+	mode              board.Mode
+	modeStack         *gtk.Stack
+	modeSwitchMail    *adw.ToggleGroup
+	settingModeSwitch bool
+	// modeStart is the start mode's decision (setupModeMemory).
+	modeStart *modeStart
+	// mainMenu is window.blp's primary_menu, the main menu's model, which
+	// the board's header reuses (board_list.go wireMenuButton).
+	mainMenu gio.MenuModeller
+	// typingAllowsAccels is the single-key shortcuts' typing gate
+	// (typing_gate.go wireTypingGate, search.go setTypingAccels): false
+	// while an editable text widget of the window has the keyboard;
+	// combined with the mode (board.Allows CommandMessageAction) by
+	// applyMessageAccels.
+	typingAllowsAccels bool
+
+	// boardPage is the board's own page (board.go), built once on first use
+	// (ensureBoard): the first switch to Board, or at launch when the
+	// application's board triage wants the board's data running in the
+	// background (boardtriage.Controller.WantsBoardData). boardPageBin is
+	// window.blp's placeholder, filled the way assistant_panel_bin is.
+	boardPage    *boardPage
+	boardPageBin *adw.Bin
+	// boardMoveToAction is win.board-move-to, registered once
+	// (board_actions.go registerBoardActions) and read back by
+	// applyActionsSensitivity to show the selected case's state as its
+	// checked target.
+	boardMoveToAction *gio.SimpleAction
+	// RequestClose settles inline drafts before closing the main window.
+	RequestClose         func()
+	boardAutoStartRemove func()
 }
 
 // Starter brings the daemon up before the window dials its socket
@@ -268,6 +311,14 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		// Until the client reports a state, the first attempt is underway.
 		conn:       connView{State: client.Connecting},
 		statusRows: make(map[api.AccountID]*statusRow),
+		// The mail single-key shortcuts are bound at the application level
+		// from the start (main.go addActions); the typing gate only ever
+		// lifts them from here on, so its baseline must agree.
+		typingAllowsAccels: true,
+
+		modeStack:      b.GetObject("mode_stack").Cast().(*gtk.Stack),
+		modeSwitchMail: b.GetObject("mode_switch").Cast().(*adw.ToggleGroup),
+		boardPageBin:   b.GetObject("board_page_bin").Cast().(*adw.Bin),
 
 		outerSplit: b.GetObject("outer_split").Cast().(*adw.NavigationSplitView),
 		innerSplit: b.GetObject("inner_split").Cast().(*adw.NavigationSplitView),
@@ -344,6 +395,8 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	// The main window lives as long as the application: no unbinding.
 	as.bindAssistantButton(w.assistButton, "win", true, w.syncAssistantActions, w.openAssistantPanel)
 	w.assistantPanel = newAssistantPanel(w, b)
+	// Sign In… on the panel's "Reconnect to ChatGPT" line (chatgpt.go).
+	w.assistantPanel.ctl.ReconnectProvider = as.reconnectChatGPT
 	// A Claude app may have been installed or registered meanwhile.
 	w.NotifyProperty("is-active", func() {
 		if w.IsActive() {
@@ -380,6 +433,10 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	// explicit hold is needed; app.show / activation presents it again.
 	w.ConnectCloseRequest(func() bool {
 		if !w.settings.RunInBackground() {
+			if w.RequestClose != nil {
+				w.RequestClose()
+				return true
+			}
 			return false // destroy; the application exits with its last window
 		}
 		w.SetVisible(false)
@@ -518,7 +575,206 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		return true // keep the timer
 	})
 
+	if m, ok := b.GetObject("primary_menu").Cast().(gio.MenuModeller); ok {
+		w.mainMenu = m
+	}
+	w.setupBoardMode()
+	w.setupModeMemory()
+	w.wireModeKeys()
+	w.wireTypingGate()
 	return w
+}
+
+// ModeAccels are the accelerators of the window's mode actions
+// (win.show-mail, win.show-board: Ctrl+1, Ctrl+2 from board.BoardKeys),
+// which main.go registers with the application. They work in both modes
+// and are never lifted.
+func ModeAccels() map[string]string {
+	out := make(map[string]string)
+	for _, k := range board.BoardKeys(i18n.Tr) {
+		if !k.Primary {
+			continue
+		}
+		switch k.Action {
+		case board.KeyShowMail:
+			out["win.show-mail"] = "<Control>" + string(k.Rune)
+		case board.KeyShowBoard:
+			out["win.show-board"] = "<Control>" + string(k.Rune)
+		}
+	}
+	return out
+}
+
+// setupModeMemory follows the mode the window shows (board.go setMode
+// switches mode_stack, whose visible child is the mode): every switch is
+// written to board-last-mode, Find… (win.search, Ctrl+F) works only in
+// Mail (board.Allows CommandMailView), and coming back to Mail withdraws
+// the notifications of the folder now in view (notify.go, as becoming
+// active does: board.ViewsMail). It also opens the window in the mode
+// board-start-mode asks for (modeStart, board.StartDecision) and keeps the
+// mode switch and win.show-board with the board's Show the Board
+// (BoardPreferences.Enabled): turned off, the switch hides and the window
+// shows Mail.
+func (w *Window) setupModeMemory() {
+	lastMode, _ := board.ParseMode(w.settings.BoardLastMode())
+	ms := &modeStart{
+		start: board.ParseStartChoice(string(w.settings.BoardStartMode())),
+		last:  lastMode,
+		began: time.Now(),
+	}
+	w.modeStart = ms
+	w.modeStack.NotifyProperty("visible-child-name", func() {
+		// A switch before the start is decided is the user's own (the
+		// decision's own switch comes after decided is set).
+		if !ms.decided {
+			ms.switched = true
+			w.decideStart(false)
+		}
+		w.modeShown()
+	})
+
+	prefs := w.boardPreferences()
+	enabled := func() bool {
+		if prefs == nil {
+			return true
+		}
+		p, known := prefs.Current()
+		return !known || p.Enabled
+	}
+	apply := func() {
+		on := enabled()
+		w.modeSwitchMail.SetVisible(on)
+		if w.boardPage != nil {
+			w.boardPage.modeSwitch.SetVisible(on)
+		}
+		if a := w.actions["show-board"]; a != nil {
+			a.SetEnabled(on)
+		}
+		if !on && w.mode == board.ModeBoard {
+			w.setMode(board.ModeMail)
+		}
+	}
+	if prefs != nil {
+		// The application's triage lives as long as the window.
+		prefs.Observe(apply)
+		prefs.ObserveLoaded(func() { w.decideStart(false) })
+	}
+	apply()
+	w.decideStart(false)
+	if !ms.decided {
+		w.watchMailInteraction()
+		glib.TimeoutAdd(uint(board.StartWait/time.Millisecond), func() bool {
+			w.decideStart(true)
+			return false
+		})
+	}
+	w.modeShown()
+}
+
+// modeStart is the start mode's decision while the daemon's board
+// preferences may still be on their way (board.StartDecision): until it is
+// decided the window shows Mail and writes nothing to board-last-mode, so a
+// Last Used that was the Board survives a daemon that never answers.
+type modeStart struct {
+	start                         board.StartChoice
+	last                          board.Mode
+	began                         time.Time
+	decided, switched, interacted bool
+	// unwatch removes watchMailInteraction's controllers.
+	unwatch func()
+}
+
+// boardPreferences is the application's board preferences (nil without the
+// board's triage).
+func (w *Window) boardPreferences() *boardtriage.Preferences {
+	if w.assist != nil {
+		if bt := w.assist.BoardTriage(); bt != nil {
+			return bt.Preferences()
+		}
+	}
+	return nil
+}
+
+// decideStart asks board.StartDecision again (the preferences arrived,
+// the user switched or acted in Mail, timedOut: the StartWait bound
+// fired) and, once decided, opens the Board if the decision says so.
+func (w *Window) decideStart(timedOut bool) {
+	ms := w.modeStart
+	if ms == nil || ms.decided {
+		return
+	}
+	known, enabled := true, true
+	if prefs := w.boardPreferences(); prefs != nil {
+		_, known = prefs.Stored()
+		if p, k := prefs.Current(); k {
+			enabled = p.Enabled
+		}
+	}
+	waited := time.Since(ms.began)
+	if timedOut && waited < board.StartWait {
+		waited = board.StartWait
+	}
+	mode, decided := board.StartDecision(ms.start, ms.last, known, enabled, ms.switched, ms.interacted, waited)
+	if !decided {
+		return
+	}
+	ms.decided = true
+	if ms.unwatch != nil {
+		ms.unwatch()
+		ms.unwatch = nil
+	}
+	if mode == board.ModeBoard && w.mode == board.ModeMail {
+		w.setMode(board.ModeBoard)
+	}
+}
+
+// watchMailInteraction counts a click or a key anywhere in Mail (the
+// folders, the list, the reader) as the user acting there, which settles
+// the start in Mail (board.StartDecision). Capture phase, never claimed:
+// the click or key goes on as always.
+func (w *Window) watchMailInteraction() {
+	mail := w.modeStack.ChildByName("mail")
+	if mail == nil {
+		return
+	}
+	acted := func() {
+		if ms := w.modeStart; ms != nil && !ms.decided && w.mode == board.ModeMail {
+			ms.interacted = true
+			w.decideStart(false)
+		}
+	}
+	click := gtk.NewGestureClick()
+	click.SetButton(0)
+	click.SetPropagationPhase(gtk.PhaseCapture)
+	click.ConnectPressed(func(int, float64, float64) { acted() })
+	keys := gtk.NewEventControllerKey()
+	keys.SetPropagationPhase(gtk.PhaseCapture)
+	keys.ConnectKeyPressed(func(uint, uint, gdk.ModifierType) bool {
+		// After this key: the decision may switch modes, which must not
+		// happen under the key's own handling.
+		glib.IdleAdd(acted)
+		return false
+	})
+	base := gtk.BaseWidget(mail)
+	base.AddController(click)
+	base.AddController(keys)
+	w.modeStart.unwatch = func() {
+		base.RemoveController(click)
+		base.RemoveController(keys)
+	}
+}
+
+// modeShown is setupModeMemory's follow-up of a mode switch.
+func (w *Window) modeShown() {
+	if ms := w.modeStart; ms == nil || ms.decided {
+		w.settings.SetBoardLastMode(w.mode.Nick())
+	}
+	if a := w.actions["search"]; a != nil {
+		a.SetEnabled(board.Allows(board.CommandMailView, w.mode))
+	}
+	if w.mode == board.ModeMail {
+		w.withdrawViewedNotifications()
+	}
 }
 
 // onMessageRowSelected shows the message behind row in the pane, or the
@@ -562,8 +818,9 @@ func (w *Window) onMessageRowSelected(row *gtk.ListBoxRow) {
 
 // MessageAccels are the keyboard shortcuts of the main window's win.*
 // actions, which main.go registers with the application. The single-key
-// ones (no modifier) are lifted while the search entry has the keyboard
-// (search.go): typing an "a" there must not archive the selected message.
+// ones (no modifier) are lifted while a text field of the window has the
+// keyboard (typing_gate.go): typing an "a" into the search entry or the
+// assistant's question must not archive the selected message.
 var MessageAccels = map[string]string{
 	"win.trash":       "Delete",
 	"win.archive":     "a",
@@ -591,6 +848,10 @@ func (w *Window) registerActions() {
 		return func() { w.selectedIDs(fn) }
 	}
 	w.addAction("refresh", true, w.triggerSync)
+	// The mode keys (Ctrl+1, Ctrl+2; ModeAccels). show-board follows Show
+	// the Board (setupModeMemory).
+	w.addAction("show-mail", true, func() { w.setMode(board.ModeMail) })
+	w.addAction("show-board", true, func() { w.setMode(board.ModeBoard) })
 	w.addAction("search", true, w.startSearch)
 	w.addAction("trash", false, forRows(func(row listRow, ids []api.MessageID) { w.trashIDs(w, ids, rowSubject(row)) }))
 	w.addAction("archive", false, forRows(func(_ listRow, ids []api.MessageID) { w.archiveIDs(ids) }))
@@ -720,6 +981,7 @@ func (w *Window) reconnect() {
 func (w *Window) showConnectionState(s client.State, err error) {
 	w.conn = nextConnView(w.conn, s, err)
 	w.logConnection(s, err)
+	w.boardConnectionChanged(s == client.Connected)
 	defer w.refreshSyncLabel()
 	switch s {
 	case client.Connecting:

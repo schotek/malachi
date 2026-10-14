@@ -72,6 +72,79 @@ Adw.PreferencesDialog preferences_dialog {
       }
     }
 
+    // The board (ui/internal/board): its texts and the items of the combo
+    // rows are set in Go (window/preferences_board.go bindBoard). Show the
+    // Board, the windows and the triage's accounts are the daemon's board
+    // preferences; Board View and Open at Launch are board-default-style
+    // and board-start-mode.
+    Adw.PreferencesGroup board_group {
+      title: _("Board");
+
+      Adw.SwitchRow board_show {
+        use-markup: false;
+      }
+
+      Adw.ComboRow board_default_style {
+        use-markup: false;
+      }
+
+      Adw.ComboRow board_start_mode {
+        use-markup: false;
+      }
+    }
+
+    // How long each state keeps a case (BoardPreferences.windows), one row
+    // per state in board.States' order.
+    Adw.PreferencesGroup board_windows_group {
+      Adw.SpinRow board_window_hot {
+        use-markup: false;
+        numeric: true;
+
+        adjustment: Adjustment {
+          lower: 1;
+          upper: 365;
+          step-increment: 1;
+          page-increment: 7;
+        };
+      }
+
+      Adw.SpinRow board_window_you {
+        use-markup: false;
+        numeric: true;
+
+        adjustment: Adjustment {
+          lower: 1;
+          upper: 365;
+          step-increment: 1;
+          page-increment: 7;
+        };
+      }
+
+      Adw.SpinRow board_window_them {
+        use-markup: false;
+        numeric: true;
+
+        adjustment: Adjustment {
+          lower: 1;
+          upper: 365;
+          step-increment: 1;
+          page-increment: 7;
+        };
+      }
+
+      Adw.SpinRow board_window_info {
+        use-markup: false;
+        numeric: true;
+
+        adjustment: Adjustment {
+          lower: 1;
+          upper: 365;
+          step-increment: 1;
+          page-increment: 7;
+        };
+      }
+    }
+
     Adw.PreferencesGroup {
       title: _("Reading");
 
@@ -303,6 +376,7 @@ Adw.PreferencesDialog preferences_dialog {
     }
 
     Adw.PreferencesGroup assistant_group {
+      Adw.ComboRow assistant_provider { use-markup: false; }
       Adw.SwitchRow assistant_menu_switch {
         use-markup: false;
       }
@@ -326,6 +400,92 @@ Adw.PreferencesDialog preferences_dialog {
       Adw.ComboRow assistant_model {
         use-markup: false;
         visible: false;
+      }
+    }
+
+    Adw.PreferencesGroup chatgpt_group {
+      visible: false;
+      Adw.ActionRow codex_executable {
+        use-markup: false;
+        subtitle-selectable: true;
+        [suffix]
+        Button codex_choose { valign: center; }
+        [suffix]
+        Button codex_install { valign: center; }
+      }
+      Adw.ActionRow chatgpt_connection {
+        use-markup: false;
+        [suffix]
+        Button chatgpt_sign_in { valign: center; }
+        [suffix]
+        Button chatgpt_disconnect { valign: center; }
+      }
+      Adw.ComboRow chatgpt_model { use-markup: false; }
+      Adw.ActionRow chatgpt_usage {
+        use-markup: false;
+        [suffix]
+        Button chatgpt_manage_usage { valign: center; }
+      }
+    }
+
+    // The board's triage, shown while it is offered (boardtriage
+    // View.Offered: the Assistant shown with In App, and a board the
+    // daemon has and has not turned off). The texts come from
+    // ui/internal/board and ui/internal/assistant, set in Go
+    // (window/preferences.go bindBoardTriage), and so do the items of the
+    // combo rows; the description says why triage cannot run now.
+    Adw.PreferencesGroup board_triage_group {
+      title: _("Board");
+      visible: false;
+
+      Adw.SwitchRow board_triage_consent {
+        use-markup: false;
+      }
+
+      // board-triage-model, apart from the panel's assistant-model.
+      Adw.ComboRow board_triage_model {
+        use-markup: false;
+      }
+
+      // Triage These Accounts: a switch row per account, made in Go.
+      Adw.ExpanderRow board_triage_accounts {
+        use-markup: false;
+      }
+
+      Adw.SwitchRow board_triage_auto {
+        use-markup: false;
+      }
+
+      // autoTriageMinutes and autoTriageDailyCases of the daemon's
+      // board.preferences.
+      Adw.ComboRow board_triage_interval {
+        use-markup: false;
+      }
+
+      Adw.ComboRow board_triage_daily {
+        use-markup: false;
+      }
+
+      Adw.ActionRow board_triage_status {
+        title: _("Status");
+        use-markup: false;
+      }
+
+      // The tokens of the last 24 hours: the sum as the suffix, by kind
+      // and the runs as the subtitle.
+      Adw.ActionRow board_triage_usage {
+        use-markup: false;
+        visible: false;
+
+        [suffix]
+        Label board_triage_usage_value {
+          valign: center;
+
+          styles [
+            "dim-label",
+            "numeric",
+          ]
+        }
       }
     }
   }

@@ -15,20 +15,17 @@ A compose window, top to bottom as compose.blp:
   Insert Image…, Discard) and the accented Send at the end, on Mica; a narrow
   window shows Send without its label and no app icon
   (ComposeWindow.HeaderBar.cs);
-- under the toast overlay: the card of header fields (margins 12, 12, 12, 6),
-  or in comment mode the card of the issue in its place
-  (ComposeWindow.Comment.cs), the formatting bar (margins 6), the plain-text
-  hint (hidden while rich text is sent), the editor filling the rest, the
-  attachment chips (margins 12, 6, hidden while there are none);
-- the status line at the bottom (margins 12, 4).
+- the content, which is the compose pane (ComposePane.xaml, Layout.Window):
+  under the toast overlay the card of header fields, or in comment mode the
+  card of the issue in its place, the formatting bar, the plain-text hint,
+  the editor filling the rest, the attachment chips; the status line at the
+  bottom.
 -->
 <Window
     x:Class="Malachi.App.Compose.ComposeWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:Malachi.App.Controls"
     xmlns:l="using:Malachi.App.Localization"
-    xmlns:local="using:Malachi.App.Compose"
     xmlns:reader="using:Malachi.App.Reader"
     xmlns:res="using:Malachi.App.Resources">
     <Window.SystemBackdrop>
@@ -38,13 +35,12 @@ A compose window, top to bottom as compose.blp:
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Where Mica is not available the window paints itself. -->
         <Border
             x:Name="SolidBackground"
-            Grid.RowSpan="3"
+            Grid.RowSpan="2"
             Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
             Visibility="Collapsed" />
 
@@ -221,119 +217,9 @@ A compose window, top to bottom as compose.blp:
             </TitleBar.RightHeader>
         </TitleBar>
 
-        <!-- toast_overlay over the content. -->
-        <Grid x:Name="ContentHost" Grid.Row="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
-
-            <!-- header_rows -->
-            <local:ComposeHeader
-                x:Name="Header"
-                Grid.Row="0"
-                Margin="12,12,12,6" />
-
-            <!-- comment_header: comment mode only, in place of header_rows.
-                 The issue a comment goes to (title and summary set in code,
-                 plain text from the site) and, on a service-desk request,
-                 who reads it (the items added in code). -->
-            <Border
-                x:Name="CommentHeader"
-                Grid.Row="0"
-                Margin="12,12,12,6"
-                Padding="12,10"
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="{StaticResource OverlayCornerRadius}"
-                Visibility="Collapsed">
-                <Grid ColumnSpacing="12" RowSpacing="4">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <TextBlock
-                        x:Name="CommentTitle"
-                        VerticalAlignment="Center"
-                        AutomationProperties.AutomationId="ComposeCommentTitle"
-                        MaxLines="1"
-                        Style="{StaticResource HeadingLabelStyle}"
-                        TextTrimming="CharacterEllipsis"
-                        TextWrapping="NoWrap" />
-                    <SelectorBar
-                        x:Name="CommentVisibilityBar"
-                        Grid.Column="1"
-                        VerticalAlignment="Center"
-                        AutomationProperties.AutomationId="ComposeCommentVisibility"
-                        SelectionChanged="OnCommentVisibilityChanged"
-                        Visibility="Collapsed" />
-                    <TextBlock
-                        x:Name="CommentSummary"
-                        Grid.Row="1"
-                        Grid.ColumnSpan="2"
-                        MaxLines="2"
-                        Style="{StaticResource DimLabelStyle}"
-                        TextTrimming="CharacterEllipsis"
-                        TextWrapping="Wrap"
-                        Visibility="Collapsed" />
-                </Grid>
-            </Border>
-
-            <!-- format_toolbar -->
-            <local:FormatToolbar
-                x:Name="FormatBar"
-                Grid.Row="1"
-                Margin="6,0,6,0" />
-
-            <!-- plain_text_hint: shown instead of the bar while only plain
-                 text is sent (compose/draft.go richText). -->
-            <TextBlock
-                x:Name="PlainTextHint"
-                Grid.Row="2"
-                Margin="12,4,12,4"
-                Style="{StaticResource DimCaptionLabelStyle}"
-                Text="{l:T Msgid='This message will be sent as plain text.'}"
-                TextWrapping="Wrap"
-                Visibility="Collapsed" />
-
-            <!-- editor_slot: the view background until the editor paints;
-                 files dropped on it are attached. -->
-            <Border
-                x:Name="EditorSlot"
-                Grid.Row="3"
-                Margin="0,4,0,0"
-                AllowDrop="True"
-                DragOver="OnEditorDragOver"
-                Drop="OnEditorDrop"
-                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
-
-            <!-- attachments_box -->
-            <local:AttachmentChipsView
-                x:Name="Chips"
-                Grid.Row="4"
-                Margin="12,6,12,6" />
-
-            <controls:ToastHost x:Name="ToastsHost" Grid.RowSpan="5" />
-        </Grid>
-
-        <!-- [bottom] draft_status -->
-        <TextBlock
-            x:Name="StatusText"
-            Grid.Row="2"
-            Margin="12,4,12,4"
-            AutomationProperties.AutomationId="ComposeStatus"
-            AutomationProperties.LiveSetting="Polite"
-            MaxLines="1"
-            Style="{StaticResource DimCaptionLabelStyle}"
-            TextTrimming="CharacterEllipsis"
-            TextWrapping="NoWrap" />
+        <!-- The content: the compose pane (ComposePane, Layout.Window): the
+             header fields, the formatting bar, the editor, the chips, the
+             status line, and the toast overlay over them. -->
+        <Border x:Name="PaneSlot" Grid.Row="1" />
     </Grid>
 </Window>

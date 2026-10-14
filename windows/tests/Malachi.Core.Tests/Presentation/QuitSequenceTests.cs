@@ -153,6 +153,191 @@ public sealed class QuitSequenceTests
     }
 
     [Fact]
+    public async Task TheTriageEndsAfterTheWindowsHideAndBeforeTheDaemonStops()
+    {
+        // AppDelegate.swift: stopBoardTriage runs while the connection still
+        // carries board.runEnd; a step that throws does not keep the app.
+        var log = new List<string>();
+        var quit = new QuitSequence(new QuitSteps
+        {
+            BeginStopping = () => log.Add("begin"),
+            StopTriage = () =>
+            {
+                log.Add("triage");
+                return Task.FromException(new InvalidOperationException("triage"));
+            },
+            StopDaemon = () =>
+            {
+                log.Add("stop");
+                return Task.CompletedTask;
+            },
+            Exit = () => log.Add("exit"),
+        });
+        Assert.True(await quit.QuitAsync(QuitReason.SessionEnd));
+        Assert.Equal(["begin", "triage", "stop", "exit"], log);
+    }
+
+    [Fact]
+    public async Task TheBoardsRepliesComeFirstAndTheirCancelAbandonsTheQuit()
+    {
+        var log = new List<string>();
+        var answer = false;
+        var quit = new QuitSequence(new QuitSteps
+        {
+            BoardReplies = () =>
+            {
+                log.Add("replies");
+                return Task.FromResult(answer);
+            },
+            SaveDrafts = () =>
+            {
+                log.Add("save");
+                return Task.FromResult<IReadOnlyList<IComposeWindowHandle>>([]);
+            },
+            Exit = () => log.Add("exit"),
+        });
+        Assert.False(await quit.QuitAsync());
+        Assert.False(quit.IsQuitting);
+        Assert.Equal(["replies"], log);
+        answer = true;
+        Assert.True(await quit.QuitAsync());
+        Assert.Equal(["replies", "replies", "save", "exit"], log);
+    }
+
+    [Fact]
+    public async Task ASessionEndDoesNotWaitForTheBoardsQuestion()
+    {
+        var question = new TaskCompletionSource<bool>();
+        var log = new List<string>();
+        var quit = new QuitSequence(new QuitSteps
+        {
+            BoardReplies = () => question.Task,
+            SaveDrafts = () =>
+            {
+                log.Add("save");
+                return Task.FromResult<IReadOnlyList<IComposeWindowHandle>>([]);
+            },
+            Exit = () => log.Add("exit"),
+        });
+        var user = quit.QuitAsync();
+        Assert.True(await quit.QuitAsync(QuitReason.SessionEnd));
+        question.SetResult(false);
+        Assert.True(await user);
+        Assert.Equal(["exit"], log);
+    }
+
+    /// <summary>
+    /// A session end settles the board's replies first, without a question
+    /// and bounded, and ends the suggested reply beside the triage; a user's
+    /// Quit never runs the settle.
+    /// </summary>
+    [Fact]
+    public async Task ASessionEndSettlesTheBoardsRepliesAndEndsTheSuggestedReply()
+    {
+        var log = new List<string>();
+        QuitSteps Steps(Func<Task> settle) => new()
+        {
+            BoardReplies = () =>
+            {
+                log.Add("replies");
+                return Task.FromResult(true);
+            },
+            SettleBoardReplies = settle,
+            SettleWait = TimeSpan.FromMilliseconds(50),
+            BeginStopping = () => log.Add("begin"),
+            StopTriage = () =>
+            {
+                log.Add("triage");
+                return Task.CompletedTask;
+            },
+            EndBoardReply = () =>
+            {
+                log.Add("reply");
+                return Task.CompletedTask;
+            },
+            StopDaemon = () =>
+            {
+                log.Add("stop");
+                return Task.CompletedTask;
+            },
+            Exit = () => log.Add("exit"),
+        };
+        Task Settle()
+        {
+            log.Add("settle");
+            return Task.CompletedTask;
+        }
+        Assert.True(await new QuitSequence(Steps(Settle)).QuitAsync(QuitReason.SessionEnd));
+        Assert.Equal(["settle", "begin", "triage", "reply", "stop", "exit"], log);
+
+        log.Clear();
+        Assert.True(await new QuitSequence(Steps(Settle)).QuitAsync());
+        Assert.Equal(["replies", "begin", "triage", "reply", "stop", "exit"], log);
+
+        // A settle that never ends does not keep the session.
+        log.Clear();
+        var never = new TaskCompletionSource();
+        Assert.True(await new QuitSequence(Steps(() => never.Task)).QuitAsync(QuitReason.SessionEnd));
+        Assert.Equal(["begin", "triage", "reply", "stop", "exit"], log);
+    }
+
+    /// <summary>
+    /// The suggested reply ends beside the triage, not after it: a slow
+    /// triage stop does not push the reply's end past the session's few
+    /// seconds, and the daemon stops only after both.
+    /// </summary>
+    [Fact]
+    public async Task TheSuggestedReplyEndsBesideTheTriage()
+    {
+        var log = new List<string>();
+        var triage = new TaskCompletionSource();
+        var quit = new QuitSequence(new QuitSteps
+        {
+            StopTriage = () =>
+            {
+                log.Add("triage");
+                return triage.Task;
+            },
+            EndBoardReply = () =>
+            {
+                log.Add("reply");
+                return Task.CompletedTask;
+            },
+            StopDaemon = () =>
+            {
+                log.Add("stop");
+                return Task.CompletedTask;
+            },
+            Exit = () => log.Add("exit"),
+        });
+        var quitting = quit.QuitAsync(QuitReason.SessionEnd);
+        Assert.Equal(["triage", "reply"], log); // the reply did not wait for the triage
+        triage.SetResult();
+        Assert.True(await quitting);
+        Assert.Equal(["triage", "reply", "stop", "exit"], log);
+    }
+
+    /// <summary>An abandoned Quit says so, and ends no suggested reply.</summary>
+    [Fact]
+    public async Task AnAbandonedQuitSaysSoAndEndsNothing()
+    {
+        var log = new List<string>();
+        var quit = new QuitSequence(new QuitSteps
+        {
+            BoardReplies = () => Task.FromResult(false),
+            Abandoned = () => log.Add("abandoned"),
+            EndBoardReply = () =>
+            {
+                log.Add("reply");
+                return Task.CompletedTask;
+            },
+            Exit = () => log.Add("exit"),
+        });
+        Assert.False(await quit.QuitAsync());
+        Assert.Equal(["abandoned"], log);
+    }
+
+    [Fact]
     public async Task NoStepsStillQuit() => Assert.True(await new QuitSequence(new QuitSteps()).QuitAsync());
 
     private sealed class Harness

@@ -5,7 +5,8 @@
 // (bindIfReady, refreshLaunchAtLogin, launchAtLoginChanged, bindMail,
 // renderMail, mailChanged, bindStorage); GTK:
 // ui/internal/window/preferences.go (NewPreferences' bindings,
-// bindLaunchAtLogin, bindMail, bindStorage). The UI-only rows are bound
+// bindLaunchAtLogin, bindMail, bindStorage) and preferences_board.go
+// (bindBoard; GeneralPage.Board.cs). The UI-only rows are bound
 // two-way to the settings; the Mail group is the daemon's, through
 // MailPreferencesController (config.get, config.set), and stays
 // insensitive until the daemon answered. Keep Attachments Offline For,
@@ -78,6 +79,9 @@ public sealed partial class GeneralPage : UserControl
 
         var s = state.Settings;
         bindings.Toggle(RunInBackgroundSwitch, SettingsKey.RunInBackground, () => s.RunInBackground, v => s.RunInBackground = v);
+        // preferences_board.go bindBoard: Board View, Open at Launch, Show
+        // the Board and the windows of the states.
+        InitializeBoardGroup(bindings);
         bindings.Number(MarkReadDelayBox, SettingsKey.MarkReadDelay, () => s.MarkReadDelay, v => s.MarkReadDelay = v);
         bindings.Toggle(ConfirmDeleteSwitch, SettingsKey.ConfirmDelete, () => s.ConfirmDelete, v => s.ConfirmDelete = v);
         bindings.Toggle(DesktopNotificationsSwitch, SettingsKey.DesktopNotifications, () => s.DesktopNotifications, v => s.DesktopNotifications = v);
@@ -119,6 +123,7 @@ public sealed partial class GeneralPage : UserControl
     /// <summary>The window closed: late replies of the daemon are dropped, the disk space is not asked for any more.</summary>
     public void Close()
     {
+        CloseBoardGroup();
         mail.Close();
         storage.Close();
     }

@@ -1,0 +1,492 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// The compose pane (ui/internal/compose pane.go): the content a compose
+// window shows (compose.blp places pane_root in its ToolbarView) and the
+// board's inline suggested reply embeds directly. Object IDs are looked up
+// from pane.go; keep them in sync. The rich-text editor (ui/internal/editor)
+// is appended to editor_slot from Go. In comment mode (comment.go)
+// comment_header replaces header_rows, and the toolbar keeps the controls
+// of a comment's formats (their ids are comment.go toolbarFormats).
+//
+// draft_status is a standalone object (like rewrite_popover in compose.blp):
+// Go places it itself, either as the last child of pane_root (window
+// layout, inset like the old bottom bar) or inside the inline footer row
+// it builds (inline layout), never both.
+Box pane_root {
+  orientation: vertical;
+
+  // One line per field: a label of uniform width (size_group below) and
+  // the entry beside it. Adw.EntryRow stacks its title above the text,
+  // which cost the header more height than the editor itself had. Density
+  // is CSS (.compose-headers in ui/internal/style).
+  Box header_rows {
+    orientation: vertical;
+    margin-start: 12;
+    margin-end: 12;
+    margin-top: 12;
+    margin-bottom: 6;
+
+    styles [
+      "card",
+      "compose-headers",
+    ]
+
+    // Inline layout (board's suggested reply): the reply is from-locked,
+    // so Go hides this row and the separator under it entirely.
+    Box from_box {
+      spacing: 12;
+
+      Label from_label {
+        label: _("From");
+        xalign: 0;
+
+        styles [
+          "dim-label",
+        ]
+      }
+
+      DropDown from_row {
+        hexpand: true;
+
+        accessibility {
+          labelled-by: from_label;
+        }
+
+        styles [
+          "flat",
+        ]
+      }
+    }
+
+    Separator from_separator {}
+
+    Box {
+      spacing: 12;
+
+      Label to_label {
+        label: _("To");
+        xalign: 0;
+        valign: start;
+        height-request: 30;
+
+        styles [
+          "dim-label",
+        ]
+      }
+
+      ScrolledWindow to_scroll {
+        hexpand: true;
+        focusable: false;
+        hscrollbar-policy: never;
+        vscrollbar-policy: external;
+
+        child: Adw.WrapBox to_row {
+          child-spacing: 4;
+          line-spacing: 2;
+          valign: center;
+        };
+      }
+
+      Button cc_bcc_button {
+        label: _("Cc/Bcc");
+        valign: center;
+
+        styles [
+          "flat",
+        ]
+      }
+    }
+
+    Separator cc_separator {
+      visible: false;
+    }
+
+    Box cc_box {
+      spacing: 12;
+      visible: false;
+
+      Label cc_label {
+        label: _("Cc");
+        xalign: 0;
+        valign: start;
+        height-request: 30;
+
+        styles [
+          "dim-label",
+        ]
+      }
+
+      ScrolledWindow cc_scroll {
+        hexpand: true;
+        focusable: false;
+        hscrollbar-policy: never;
+        vscrollbar-policy: external;
+
+        child: Adw.WrapBox cc_row {
+          child-spacing: 4;
+          line-spacing: 2;
+          valign: center;
+        };
+      }
+    }
+
+    Separator bcc_separator {
+      visible: false;
+    }
+
+    Box bcc_box {
+      spacing: 12;
+      visible: false;
+
+      Label bcc_label {
+        label: _("Bcc");
+        xalign: 0;
+        valign: start;
+        height-request: 30;
+
+        styles [
+          "dim-label",
+        ]
+      }
+
+      ScrolledWindow bcc_scroll {
+        hexpand: true;
+        focusable: false;
+        hscrollbar-policy: never;
+        vscrollbar-policy: external;
+
+        child: Adw.WrapBox bcc_row {
+          child-spacing: 4;
+          line-spacing: 2;
+          valign: center;
+        };
+      }
+    }
+
+    Separator {}
+
+    Box {
+      spacing: 12;
+
+      Label subject_label {
+        label: _("Subject");
+        xalign: 0;
+
+        styles [
+          "dim-label",
+        ]
+      }
+
+      Entry subject_row {
+        hexpand: true;
+        has-frame: false;
+
+        accessibility {
+          labelled-by: subject_label;
+        }
+      }
+    }
+  }
+
+  // Comment mode only: the issue a comment goes to (title and summary are
+  // set from Go, plain text from the site) and, on a service-desk request,
+  // who reads it (toggles added from Go).
+  Box comment_header {
+    visible: false;
+    margin-start: 12;
+    margin-end: 12;
+    margin-top: 12;
+    margin-bottom: 6;
+
+    styles [
+      "card",
+    ]
+
+    Box {
+      orientation: vertical;
+      hexpand: true;
+      spacing: 4;
+      margin-start: 12;
+      margin-end: 12;
+      margin-top: 10;
+      margin-bottom: 10;
+
+      Box {
+        spacing: 12;
+
+        Label comment_title {
+          xalign: 0;
+          hexpand: true;
+          ellipsize: end;
+          use-markup: false;
+
+          styles [
+            "heading",
+          ]
+        }
+
+        Adw.ToggleGroup comment_visibility {
+          visible: false;
+          valign: center;
+          homogeneous: true;
+        }
+      }
+
+      Label comment_summary {
+        visible: false;
+        xalign: 0;
+        wrap: true;
+        wrap-mode: word_char;
+        lines: 2;
+        ellipsize: end;
+        use-markup: false;
+
+        styles [
+          "dim-label",
+        ]
+      }
+    }
+  }
+
+  // Every control keeps focus in the editor so commands act on the page
+  // selection.
+  Box format_toolbar {
+    orientation: horizontal;
+    spacing: 2;
+    margin-start: 6;
+    margin-end: 6;
+
+    styles [
+      "toolbar",
+    ]
+
+    ToggleButton bold_button {
+      icon-name: "format-text-bold-symbolic";
+      tooltip-text: _("Bold (Ctrl+B)");
+      focus-on-click: false;
+    }
+
+    ToggleButton italic_button {
+      icon-name: "format-text-italic-symbolic";
+      tooltip-text: _("Italic (Ctrl+I)");
+      focus-on-click: false;
+    }
+
+    ToggleButton underline_button {
+      icon-name: "format-text-underline-symbolic";
+      tooltip-text: _("Underline (Ctrl+U)");
+      focus-on-click: false;
+    }
+
+    Separator {
+      orientation: vertical;
+    }
+
+    MenuButton block_button {
+      label: _("Paragraph");
+      menu-model: block_menu;
+      tooltip-text: _("Paragraph Style");
+      focus-on-click: false;
+    }
+
+    MenuButton align_button {
+      icon-name: "format-justify-left-symbolic";
+      menu-model: align_menu;
+      tooltip-text: _("Alignment");
+      focus-on-click: false;
+    }
+
+    Separator {
+      orientation: vertical;
+    }
+
+    ToggleButton ul_button {
+      icon-name: "view-list-bullet-symbolic";
+      tooltip-text: _("Bulleted List");
+      focus-on-click: false;
+    }
+
+    ToggleButton ol_button {
+      icon-name: "view-list-ordered-symbolic";
+      tooltip-text: _("Numbered List");
+      focus-on-click: false;
+    }
+
+    ToggleButton quote_button {
+      icon-name: "format-indent-more-symbolic";
+      tooltip-text: _("Quote");
+      focus-on-click: false;
+    }
+
+    Separator {
+      orientation: vertical;
+    }
+
+    MenuButton link_button {
+      icon-name: "insert-link-symbolic";
+      tooltip-text: _("Insert Link");
+      focus-on-click: false;
+
+      popover: Popover link_popover {
+        child: Box {
+          spacing: 6;
+          margin-top: 6;
+          margin-bottom: 6;
+          margin-start: 6;
+          margin-end: 6;
+
+          Entry link_entry {
+            placeholder-text: "https://";
+            width-chars: 32;
+          }
+
+          Button link_apply {
+            label: _("Insert");
+
+            styles [
+              "suggested-action",
+            ]
+          }
+        };
+      };
+    }
+
+    ColorDialogButton color_button {
+      tooltip-text: _("Text Colour");
+      focus-on-click: false;
+
+      dialog: ColorDialog {
+        with-alpha: false;
+      };
+    }
+
+    Button image_button {
+      icon-name: "insert-image-symbolic";
+      tooltip-text: _("Insert Image");
+      action-name: "compose.insert-image";
+      focus-on-click: false;
+    }
+
+    Button clear_button {
+      icon-name: "edit-clear-symbolic";
+      tooltip-text: _("Clear Formatting");
+      focus-on-click: false;
+    }
+  }
+
+  // Shown instead of the toolbar while only plain text is sent
+  // (draft.go richText).
+  Label plain_text_hint {
+    label: _("This message will be sent as plain text.");
+    xalign: 0;
+    visible: false;
+    margin-start: 12;
+    margin-end: 12;
+    margin-top: 4;
+    margin-bottom: 4;
+
+    styles [
+      "caption",
+      "dim-label",
+    ]
+  }
+
+  // Shows the view background until the editor has painted. Window
+  // layout: vexpand fills the window; inline layout: Go turns vexpand off
+  // and sets a height request (the sized editor, board/editor_height.go).
+  Box editor_slot {
+    orientation: vertical;
+    vexpand: true;
+
+    styles [
+      "view",
+    ]
+  }
+
+  // Attachment chips; shown only when non-empty.
+  FlowBox attachments_box {
+    visible: false;
+    selection-mode: none;
+    max-children-per-line: 6;
+    homogeneous: false;
+    margin-start: 12;
+    margin-end: 12;
+    margin-top: 6;
+    margin-bottom: 6;
+  }
+}
+
+// The header field labels share one width so the entries line up.
+SizeGroup pane_header_labels {
+  mode: horizontal;
+
+  widgets [
+    from_label,
+    to_label,
+    cc_label,
+    bcc_label,
+    subject_label,
+  ]
+}
+
+menu block_menu {
+  item {
+    label: _("Paragraph");
+    action: "compose.block";
+    target: "p";
+  }
+
+  item {
+    label: _("Heading 1");
+    action: "compose.block";
+    target: "h1";
+  }
+
+  item {
+    label: _("Heading 2");
+    action: "compose.block";
+    target: "h2";
+  }
+
+  item {
+    label: _("Heading 3");
+    action: "compose.block";
+    target: "h3";
+  }
+}
+
+menu align_menu {
+  item {
+    label: _("Left");
+    action: "compose.align";
+    target: "left";
+  }
+
+  item {
+    label: _("Center");
+    action: "compose.align";
+    target: "center";
+  }
+
+  item {
+    label: _("Right");
+    action: "compose.align";
+    target: "right";
+  }
+}
+
+// The status line: window layout appends it as pane_root's last child
+// (inset like the old compose.blp bottom bar); inline layout moves it
+// into the footer row Go builds (attach · status · discard · send).
+Label draft_status {
+  xalign: 0;
+  hexpand: true;
+  ellipsize: end;
+
+  styles [
+    "dim-label",
+    "caption",
+  ]
+}

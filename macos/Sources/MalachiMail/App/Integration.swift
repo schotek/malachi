@@ -72,8 +72,10 @@ final class Integration {
         mailbox = MailboxController(client: state.client, settings: state.settings, sync: sync, toast: mainToast)
         sidebar = FolderSidebarViewController(mailbox: mailbox)
         statusBar = StatusBarViewController(sync: sync, mailbox: mailbox)
+        // The main window showing the board does not count as looking at
+        // the folder (`Board.viewsMail`).
         notifications = NotificationService(settings: state.settings) { [weak mainWindow] in
-            mainWindow?.window?.isKeyWindow ?? false
+            mainWindow?.viewsMail ?? false
         }
 
         list = ListController(mailbox: mailbox, settings: state.settings)
@@ -99,6 +101,10 @@ final class Integration {
         mainWindow.install(message: reader)
         mainWindow.install(statusBar: statusBar)
         mainWindow.install(assistant: assistantPanel.viewController)
+        // Back from the board with nothing to give the keyboard back to.
+        mainWindow.mailFocusFallback = { [weak listView] in
+            listView?.focusList()
+        }
         wireConnection()
         wireNotifications()
         wireMailbox()
@@ -110,6 +116,7 @@ final class Integration {
         compose.install(into: state)
         wireJira()
         wireConversation()
+        wireBoard()
     }
 
     /// window.go 337-360 and 411-433: the toolbar and menu act on the
@@ -122,7 +129,7 @@ final class Integration {
             self?.actions.markRead(id)
         }
         list.onActionFlagsChanged = { [weak self] _ in
-            self?.mainWindow?.window?.toolbar?.validateVisibleItems()
+            self?.mainWindow?.mailToolbar.validateVisibleItems()
         }
     }
 
@@ -303,7 +310,13 @@ final class Integration {
             self?.statusAction(st)
         }
         statusBar.onShowOutbox = { [weak self] acc in
-            guard let self, self.mailbox.showOutbox(acc) else { return }
+            guard let self, self.mailbox.model.outboxKey(acc) != nil else { return }
+            // The outbox shows in the list: the board gives way to the mail
+            // first, so the list that then shows the Outbox gets the keyboard.
+            if let mainWindow = self.mainWindow {
+                mainWindow.setMode(Board.mode(for: .showOutbox, current: mainWindow.mode))
+            }
+            _ = self.mailbox.showOutbox(acc)
             // GTK shows the content pane (outerSplit.SetShowContent); here a
             // list folded by a narrow window unfolds, or only the title
             // would change.
@@ -358,7 +371,7 @@ final class Integration {
             self?.notifications.withdraw(identifiers)
         }
         mailbox.isMainWindowKey = { [weak self] in
-            self?.mainWindow?.window?.isKeyWindow ?? false
+            self?.mainWindow?.viewsMail ?? false
         }
         mainWindow?.onBecomeKey = { [weak self] in
             self?.mailbox.withdrawViewedNotifications()
@@ -446,6 +459,10 @@ final class Integration {
                 let t = Assistant.restartTexts()
                 return await state.alerts.confirm(
                     on: window, heading: t.heading, body: t.body, confirmLabel: t.restart, declineLabel: t.later)
+            },
+            triage: state.triage,
+            confirmTriage: { window in
+                await state.confirmTriageConsent(on: window)
             },
             confirmRemoval: { window, c in
                 let answer = await state.alerts.confirmDestructiveExtra(

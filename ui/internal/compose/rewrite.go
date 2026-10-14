@@ -13,7 +13,6 @@ import (
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
 	"github.com/schotek/malachi/ui/internal/editor"
 	"github.com/schotek/malachi/ui/internal/i18n"
-	"github.com/schotek/malachi/ui/internal/widget"
 )
 
 // Assistant is what the compose windows need of the assistant
@@ -26,6 +25,9 @@ type Assistant interface {
 	OnChange(f func()) (remove func())
 	RefreshHandlers()
 	NewRequest() *assistantpanel.Request
+	EnsureAssistantConsent(gtk.Widgetter, func(bool))
+	AskAssistantConsent(gtk.Widgetter, func(bool))
+	RuntimeGeneration() int
 }
 
 // assistantIcon is the Assistant's icon (window/assistant.go).
@@ -122,7 +124,17 @@ func (w *Window) wireRewrite(b *gtk.Builder) {
 		// Whether Claude Code is there is looked up now (a few stat
 		// calls), so the button reflects it from the start.
 		a.RefreshHandlers()
-		u.remove = a.OnChange(u.sync)
+		generation := a.RuntimeGeneration()
+		u.remove = a.OnChange(func() {
+			if now := a.RuntimeGeneration(); now != generation {
+				generation = now
+				u.popover.Popdown()
+				if u.rewriter != nil {
+					u.rewriter.Cancel()
+				}
+			}
+			u.sync()
+		})
 	}
 	u.sync()
 }
@@ -135,7 +147,7 @@ func (u *rewriteUI) available() bool {
 // sync shows the button while the rewrite can run, and closes the popover
 // when it cannot.
 func (u *rewriteUI) sync() {
-	if u.w.draft.closed {
+	if u.w.pane.dc.draft.closed {
 		return
 	}
 	ok := u.available()
@@ -166,29 +178,24 @@ func (u *rewriteUI) clicked() {
 		u.popover.Popdown()
 		return
 	}
-	if !u.available() || u.opening || u.w.draft.closed {
+	if !u.available() || u.opening || u.w.pane.dc.draft.closed {
 		return
 	}
 	u.opening = true
-	if u.w.m.settings.AssistantConsent() {
-		u.fetchTarget()
-		return
-	}
-	widget.AskAssistantConsent(u.w, func(allowed bool) {
-		if !allowed || u.w.draft.closed {
+	u.w.m.Assistant.EnsureAssistantConsent(u.w, func(allowed bool) {
+		if !allowed || u.w.pane.dc.draft.closed {
 			u.opening = false
 			return
 		}
-		u.w.m.settings.SetAssistantConsent(true)
 		u.fetchTarget()
 	})
 }
 
 // fetchTarget asks the editor for the passage, then shows the popover.
 func (u *rewriteUI) fetchTarget() {
-	u.w.editor.RewriteTarget(u.w.params.Attribution, func(t editor.RewriteTarget) {
+	u.w.pane.editor.RewriteTarget(u.w.pane.params.Attribution, func(t editor.RewriteTarget) {
 		u.opening = false
-		if !u.available() || u.w.draft.closed {
+		if !u.available() || u.w.pane.dc.draft.closed {
 			return
 		}
 		u.present(t)
@@ -201,7 +208,7 @@ func (u *rewriteUI) rewriterFor() *assistantpanel.Rewriter {
 		return u.rewriter
 	}
 	req := u.w.m.Assistant.NewRequest()
-	req.Consent = func(done func(bool)) { widget.AskAssistantConsent(u.w, done) }
+	req.Consent = func(done func(bool)) { u.w.m.Assistant.AskAssistantConsent(u.w, done) }
 	u.rewriter = assistantpanel.NewRewriter(i18n.Catalog{}, req)
 	u.rewriter.OnState = func(assistantpanel.RewriteState) { u.render() }
 	return u.rewriter
@@ -294,6 +301,6 @@ func (u *rewriteUI) apply(below bool) {
 		return
 	}
 	u.popover.Popdown()
-	u.w.editor.GrabFocus()
-	u.w.editor.ApplyRewrite(st.Text, below)
+	u.w.pane.editor.GrabFocus()
+	u.w.pane.editor.ApplyRewrite(st.Text, below)
 }

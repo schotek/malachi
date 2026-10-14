@@ -48,8 +48,11 @@ type fakeGraph struct {
 	noPermanentDel bool // permanentDelete is unsupported (400)
 	failValue      map[string]int
 	deltaBlind     map[string]bool // ids an incremental delta never reports
-	countQueries   int             // $count requests answered
-	countExtra     int             // added to every $count answer
+	// onRequest runs before an authorised request is answered (under mu:
+	// it must not call the fake back); set under mu.
+	onRequest    func(method, path string)
+	countQueries int // $count requests answered
+	countExtra   int // added to every $count answer
 }
 
 type fakeFolder struct {
@@ -227,6 +230,9 @@ func (f *fakeGraph) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := strings.TrimPrefix(r.URL.Path, "/me")
+	if f.onRequest != nil {
+		f.onRequest(r.Method, p)
+	}
 	switch {
 	case r.Method == "GET" && p == "":
 		f.reply(w, map[string]string{"mail": f.me, "userPrincipalName": f.me})

@@ -1,0 +1,36 @@
+From: Martin Holub <martin@example.org>
+To: Eva Kratochvilova <eva@example.net>
+Subject: Template for the weekly report
+Date: Thu, 2 Oct 2026 09:00:00 +0200
+Message-ID: <outlook-plain-hostile@example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Hi Eva,
+
+please head the weekly report like this:
+
+From: Sales
+Sent: every Monday
+To: everyone
+Subject: Weekly report
+
+and below it list the open orders. Written right below a line:
+From: Sales
+Sent: 6 October 2026
+To: everyone
+Subject: Weekly report
+
+it is part of the text, as is an indented one:
+
+  From: Sales
+  Sent: 6 October 2026
+  To: everyone
+
+Frоm: Sales
+Sent: 6 October 2026
+To: everyone
+
+Thanks,
+Martin

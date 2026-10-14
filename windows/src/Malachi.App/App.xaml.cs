@@ -147,7 +147,8 @@ public partial class App : Application
         {
             Settings = s.Settings,
             Notifications = s.Notifications,
-            IsMainWindowActive = () => s.IsMainWindowActive,
+            // An active main window showing the board is not looking at the mail (Board.ViewsMail).
+            IsMainWindowActive = () => s.MainWindowViewsMail,
             // The mailbox remembers the notification, to withdraw it once it
             // is outdated (the integration exists before the first message).
             NotificationShown = n => s.Integration?.Mailbox.RecordNotification(n),
@@ -177,6 +178,12 @@ public partial class App : Application
         quit = new QuitSequence(
             new QuitSteps
             {
+                // The board's inline replies first, while the connection stands.
+                BoardReplies = main.FinishBoardRepliesForQuitAsync,
+                // A session end settles them without a question, bounded.
+                SettleBoardReplies = main.SettleBoardRepliesAsync,
+                // A Quit the user abandoned: the board shows its replies again.
+                Abandoned = main.QuitAbandoned,
                 SaveDrafts = integration.Compose.SaveForQuitAsync,
                 BeginStopping = () =>
                 {
@@ -193,6 +200,13 @@ public partial class App : Application
                     // leaves nothing behind (ui/main.go's shutdown order).
                     s.PurgeOpenDir();
                 },
+                // The board's triage: no new run, one under way ends with its
+                // board.runEnd while the connection stands (at most 2 s).
+                StopTriage = s.StopBoardTriageAsync,
+                // The suggested reply under way stops and deletes a draft it
+                // did not link yet; past the point of no return only, so an
+                // abandoned Quit leaves it running.
+                EndBoardReply = () => s.BoardReply.CancelAndCleanUpAsync(),
                 StopDaemon = s.Connection.StopAsync,
                 Release = () =>
                 {

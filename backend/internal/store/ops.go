@@ -111,9 +111,11 @@ func (s *Store) FlagMessages(ctx context.Context, accountID string, ids []string
 // per message with the source (folder, uid) snapshot. Messages already in
 // the target are skipped. ErrNotFound for a foreign/unknown message id or
 // target folder, ErrOutbox when a message lives in the outbox or the target
-// is the outbox folder; nothing changes then.
-func (s *Store) MoveMessages(ctx context.Context, accountID string, ids []string, targetFolderID string) error {
-	return s.mutate(ctx, accountID, ids, func(ctx context.Context, tx *sql.Tx, locs []messageLoc, outboxFolderID string) ([]messageFile, error) {
+// is the outbox folder; nothing changes then. A message of a Drafts folder
+// takes the draft whose copy it is with it (dropDraftsOfMessagesTx): the
+// ids of the drafts deleted so are returned.
+func (s *Store) MoveMessages(ctx context.Context, accountID string, ids []string, targetFolderID string) (droppedDrafts []string, err error) {
+	err = s.mutate(ctx, accountID, ids, func(ctx context.Context, tx *sql.Tx, locs []messageLoc, outboxFolderID string) ([]messageFile, error) {
 		if err := requireFolder(ctx, tx, accountID, targetFolderID); err != nil {
 			return nil, err
 		}
@@ -123,7 +125,8 @@ func (s *Store) MoveMessages(ctx context.Context, accountID string, ids []string
 		if err := rejectOutbox(locs); err != nil {
 			return nil, err
 		}
-		if err := dropDraftsOfMessagesTx(ctx, tx, accountID, locs); err != nil {
+		var err error
+		if droppedDrafts, err = dropDraftsOfMessagesTx(ctx, tx, accountID, locs); err != nil {
 			return nil, err
 		}
 		unsynced, err := folderUnsynced(ctx, tx, targetFolderID)
@@ -152,6 +155,10 @@ func (s *Store) MoveMessages(ctx context.Context, accountID string, ids []string
 		}
 		return files, nil
 	}, targetFolderID)
+	if err != nil {
+		return nil, err
+	}
+	return droppedDrafts, nil
 }
 
 // folderUnsynced reads the flag of a folder requireFolder has vouched for.
@@ -168,16 +175,18 @@ func folderUnsynced(ctx context.Context, tx *sql.Tx, folderID string) (bool, err
 // commit, delete operation queued). A message in the outbox is deleted
 // permanently as well, without an operation (it has no server copy);
 // ErrOutboxBusy when its delivery is in progress. One transaction;
-// ErrNotFound as for MoveMessages; nothing changes on any error.
-func (s *Store) TrashMessages(ctx context.Context, accountID string, ids []string, trashFolderID string) error {
-	return s.mutate(ctx, accountID, ids, func(ctx context.Context, tx *sql.Tx, locs []messageLoc, _ string) ([]messageFile, error) {
+// ErrNotFound as for MoveMessages; nothing changes on any error. Returns
+// the drafts deleted with their copies, as MoveMessages.
+func (s *Store) TrashMessages(ctx context.Context, accountID string, ids []string, trashFolderID string) (droppedDrafts []string, err error) {
+	err = s.mutate(ctx, accountID, ids, func(ctx context.Context, tx *sql.Tx, locs []messageLoc, _ string) ([]messageFile, error) {
 		if err := requireFolder(ctx, tx, accountID, trashFolderID); err != nil {
 			return nil, err
 		}
 		if err := rejectSendingOutbox(locs); err != nil {
 			return nil, err
 		}
-		if err := dropDraftsOfMessagesTx(ctx, tx, accountID, locs); err != nil {
+		var err error
+		if droppedDrafts, err = dropDraftsOfMessagesTx(ctx, tx, accountID, locs); err != nil {
 			return nil, err
 		}
 		now := nowStamp()
@@ -203,19 +212,25 @@ func (s *Store) TrashMessages(ctx context.Context, accountID string, ids []strin
 		}
 		return files, nil
 	}, trashFolderID)
+	if err != nil {
+		return nil, err
+	}
+	return droppedDrafts, nil
 }
 
 // DeleteMessages removes the messages permanently: rows now, raw files
 // after the commit, one delete operation per message so the server copy is
 // expunged (none for a message in the outbox, which has no server copy;
 // ErrOutboxBusy when its delivery is in progress). ErrNotFound for a
-// foreign/unknown id; nothing changes on any error.
-func (s *Store) DeleteMessages(ctx context.Context, accountID string, ids []string) error {
-	return s.mutate(ctx, accountID, ids, func(ctx context.Context, tx *sql.Tx, locs []messageLoc, _ string) ([]messageFile, error) {
+// foreign/unknown id; nothing changes on any error. Returns the drafts
+// deleted with their copies, as MoveMessages.
+func (s *Store) DeleteMessages(ctx context.Context, accountID string, ids []string) (droppedDrafts []string, err error) {
+	err = s.mutate(ctx, accountID, ids, func(ctx context.Context, tx *sql.Tx, locs []messageLoc, _ string) ([]messageFile, error) {
 		if err := rejectSendingOutbox(locs); err != nil {
 			return nil, err
 		}
-		if err := dropDraftsOfMessagesTx(ctx, tx, accountID, locs); err != nil {
+		var err error
+		if droppedDrafts, err = dropDraftsOfMessagesTx(ctx, tx, accountID, locs); err != nil {
 			return nil, err
 		}
 		now := nowStamp()
@@ -232,6 +247,10 @@ func (s *Store) DeleteMessages(ctx context.Context, accountID string, ids []stri
 		}
 		return files, nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	return droppedDrafts, nil
 }
 
 // rejectSendingOutbox is the guard of the deletions: ErrOutboxBusy when any
@@ -478,6 +497,58 @@ func (s *Store) deleteOp(ctx context.Context, id int64, what string) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// PendingSourceUIDs lists the UIDs the folder's queued move and delete
+// operations were taken from (their snapshot), ascending, each once: the
+// messages the user moved or deleted locally that are still on the server
+// until the operations are pushed. A folder pass leaves them alone — it
+// would fetch them back as new.
+func (s *Store) PendingSourceUIDs(ctx context.Context, folderID string) ([]uint32, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT uid FROM message_ops
+		WHERE folder_id = ? AND kind IN ('move', 'delete') AND uid > 0 ORDER BY uid`, folderID)
+	if err != nil {
+		return nil, fmt.Errorf("list queued sources: %w", err)
+	}
+	defer rows.Close()
+	var out []uint32
+	for rows.Next() {
+		var uid int64
+		if err := rows.Scan(&uid); err != nil {
+			return nil, fmt.Errorf("list queued sources: %w", err)
+		}
+		out = append(out, uint32(uid))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list queued sources: %w", err)
+	}
+	return out, nil
+}
+
+// PendingSourceRemoteIDs lists the remote ids of the account's queued move
+// and delete operations: the messages the user moved or deleted locally
+// that the server still reports where they were until the operations are
+// pushed. A folder pass leaves them alone — a delta naming one would move
+// its row back.
+func (s *Store) PendingSourceRemoteIDs(ctx context.Context, accountID string) (map[string]bool, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT remote_id FROM message_ops
+		WHERE account_id = ? AND kind IN ('move', 'delete') AND remote_id != ''`, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("list queued sources: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("list queued sources: %w", err)
+		}
+		out[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list queued sources: %w", err)
+	}
+	return out, nil
 }
 
 // CountPendingOps returns how many operations of the account are still

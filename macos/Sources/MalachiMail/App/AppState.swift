@@ -70,6 +70,9 @@ final class AppState {
     /// Finds the user's Claude Code and asks its version and sign-in, for
     /// the assistant panel, its availability and Settings → AI (one
     /// instance, so their answers are shared).
+    let chatGPT: ChatGPTConnection
+    let codex: CodexProvider
+    private var providerSettingsTokens: [Settings.ChangeToken] = []
     let claudeCode: ClaudeCodeLocator
     /// Claude Desktop around a change of "Register with Claude": the offer
     /// to restart it and the change it still has to pick up, for the
@@ -78,6 +81,24 @@ final class AppState {
     /// Whether Claude Desktop runs, quitting and starting it, and its
     /// termination, for `claudeDesktop`.
     private let claudeDesktopService: ClaudeDesktopService
+    /// The board's preferences in the daemon (`board.preferences`), read by
+    /// the triage, its schedule and Settings → AI; loaded whenever the
+    /// connection comes (`wireBoardTriage`).
+    let boardPreferences: BoardPreferencesController
+    /// The board's triage run by the user's Claude Code (docs/mcp.md
+    /// "Triage of the board"): the board toolbars' Triage, the status
+    /// strip, Settings → AI's Board group. One run at a time for the
+    /// application; the main window feeds it the board's snapshots.
+    let triage: BoardTriageController
+    /// Starts automatic runs (`board.preferences` `autoTriage`, off by
+    /// default) while the application runs: `start()` once it runs,
+    /// `stop()` at quit.
+    let autoTriage: BoardAutoTriageScheduler
+    /// The board's Suggest Reply (docs/mcp.md "A suggested reply on the
+    /// board"): one request at a time for the application, started from a
+    /// case's detail; the main window lists the board again after it.
+    let boardReply: BoardReplyController
+    private var boardTriageTokens: [NotificationHub.Token] = []
 
     var hooks = Hooks()
 
@@ -107,6 +128,145 @@ final class AppState {
         // Claude Desktop quitting by itself writes what it still has to get.
         desktop.onStatus = { [weak assistant] s in assistant?.apply(s) }
         service.onTerminate = { [weak desktop] in desktop?.terminated() }
+        let prefs = BoardPreferencesController(client: client)
+        boardPreferences = prefs
+        let triage = BoardTriageController(
+            client: client, settings: settings, locator: claudeCode, preferences: prefs, assistant: assistant,
+            bridge: paths.mcpBridge?.path, socket: paths.socket)
+        self.triage = triage
+        autoTriage = BoardAutoTriageScheduler(target: triage)
+        boardReply = BoardReplyController(
+            client: client, settings: settings, locator: claudeCode, assistant: assistant,
+            bridge: paths.mcpBridge?.path, socket: paths.socket)
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Malachi Mail/ChatGPT", isDirectory: true)
+        let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("io.github.schotek.Malachi/assistant/chatgpt", isDirectory: true)
+        chatGPT = ChatGPTConnection(store: ChatGPTKeychain(directory: support), browser: ChatGPTSystemBrowser(), validator: ChatGPTAppleSignature())
+        codex = CodexProvider(connection: chatGPT, settings: settings, directory: cache)
+        assistant.chatGPT = codex
+        assistant.provider = { [weak self] in self?.selectedProvider }
+        configureRequest(triage.request)
+        configureRequest(boardReply.request)
+        chatGPT.onChange = { [weak self] in self?.chatGPTConnectionChanged() }
+        // The triage and Suggest Reply follow these keys themselves, each
+        // only for the provider in effect (`AssistantRequest
+        // .providerChangeConcernsActive`); the application ends Codex's
+        // sessions the same way and lets the assistant's handlers follow.
+        for key in [Settings.Key.assistantProvider, .assistantTarget, .assistantCodexPath, .assistantChatGPTModel, .boardTriageChatGPTModel] {
+            providerSettingsTokens.append(settings.onChange(key) { [weak self] in self?.providerSettingChanged(key) })
+        }
+        providerSettingsTokens.append(settings.onChange(.assistantChatGPTConsentVersion) { [weak self] in
+            guard let self, self.settings.assistantChatGPTConsentVersion != 1 else { return }
+            self.providerSettingChanged(.assistantChatGPTConsentVersion)
+        })
+        Task { @MainActor [weak self] in try? await self?.chatGPT.load() }
+        wireBoardTriage()
+    }
+
+    var selectedProvider: (any AssistantProvider)? { settings.assistantProvider == .chatgpt ? codex : nil }
+    func configureRequest(_ request: AssistantRequest) {
+        request.provider = { [weak self] in self?.selectedProvider }
+    }
+    /// A settings key of the providers changed: Codex's sessions end only
+    /// when it concerns the provider in effect (a change for ChatGPT while
+    /// Claude is chosen leaves everything running; its model applies from
+    /// the next request).
+    private func providerSettingChanged(_ key: Settings.Key) {
+        // A model applies from the next request: nothing under way ends, the
+        // panel's conversation neither (`providerChanged` would start a new
+        // one).
+        if key == .assistantChatGPTModel || key == .boardTriageChatGPTModel {
+            return
+        }
+        if AssistantRequest.providerChangeConcernsActive(key, settings: settings) {
+            codex.cancelAll()
+        }
+        assistant.providerChanged()
+    }
+
+    /// The ChatGPT connection changed (connected, signed out, reconnected):
+    /// what runs over it ends only while ChatGPT is the provider; the
+    /// triage and Suggest Reply learn it here, as no settings key changed.
+    private func chatGPTConnectionChanged() {
+        if settings.assistantProvider == .chatgpt {
+            codex.cancelAll()
+            triage.providerChanged()
+            boardReply.providerChanged()
+        }
+        assistant.providerChanged()
+    }
+    func assistantConsent(on window: NSWindow?) async -> Bool {
+        let t = Assistant.panelTexts()
+        let openAI = settings.assistantProvider == .chatgpt
+        let generation = assistant.providerGeneration
+        let selected = settings.assistantProvider
+        let allowed = await alerts.confirm(on: window, heading: openAI ? ChatGPTText.consentHeading : t.consentHeading,
+            body: openAI ? ChatGPTText.consentBody : t.consentBody, confirmLabel: t.allow, declineLabel: t.cancel)
+        return allowed && generation == assistant.providerGeneration && selected == settings.assistantProvider
+    }
+
+    /// The board's triage: its preferences follow the connection and say
+    /// a refused write as a toast; a manual run without consent asks with
+    /// the sheet on the main window.
+    private func wireBoardTriage() {
+        let prefs = boardPreferences
+        let toasts = toasts
+        prefs.onError = { text in toasts.show(text) }
+        boardTriageTokens.append(notifications.addConnectionState { s in
+            prefs.connectionChanged(connected: Self.isConnected(s))
+        })
+        if Self.isConnected(notifications.connectionState) {
+            prefs.load()
+        }
+        triage.consent = { [weak self] in
+            await self?.confirmTriageConsent(on: self?.mainWindow?.window) ?? false
+        }
+        // Suggest Reply asks the assistant's own consent, as the panel and
+        // the compose rewrite do, not the board's.
+        boardReply.consent = { [weak self] in
+            guard let self else { return false }
+            return await self.assistantConsent(on: self.mainWindow?.window)
+        }
+    }
+
+    /// Whether the daemon can be asked in connection state `s`.
+    static func isConnected(_ s: ConnectionController.ConnectionState) -> Bool {
+        switch s {
+        case .connected, .infoFailed: return true
+        case .connecting, .protocolMismatch, .unavailable, .stopping: return false
+        }
+    }
+
+    /// "Let the Assistant Triage the Board?" as a sheet on `window`, the
+    /// way the panel asks for its own consent (the panel's Allow and
+    /// Cancel); true allows. The triage's manual run asks on the main
+    /// window, Settings → AI on its own before it gives the consent.
+    func confirmTriageConsent(on window: NSWindow?) async -> Bool {
+        let t = Assistant.panelTexts()
+        let generation = assistant.providerGeneration
+        let selected = settings.assistantProvider
+        let allowed = await alerts.confirm(
+            on: window, heading: settings.assistantProvider == .chatgpt ? ChatGPTText.boardHeading : Board.Text.triageConsentHeading,
+            body: settings.assistantProvider == .chatgpt ? ChatGPTText.boardBody : Board.Text.triageConsentBody,
+            confirmLabel: t.allow, declineLabel: t.cancel)
+        return allowed && generation == assistant.providerGeneration && selected == settings.assistantProvider
+    }
+
+    /// Quitting: the schedule stops and a run under way ends as cancelled
+    /// (its Claude Code is stopped), then waits for `board.runEnd` while the
+    /// connection still stands — at most `BoardTriageController.endWait`,
+    /// so a daemon that does not answer never holds the quit (it ends the
+    /// run itself later).
+    func stopBoardTriage() async {
+        codex.cancelAll()
+        chatGPT.cancel()
+        autoTriage.stop()
+        // The suggested reply under way stops too, and deletes a draft it
+        // created and did not link yet, within the same bound.
+        async let reply: Void = boardReply.cancelAndCleanUp()
+        await triage.cancelAndEnd()
+        await reply
     }
 
     /// Whether an application handles links of `scheme` (LaunchServices),
@@ -187,6 +347,7 @@ final class NotificationHub {
     private var authRequired = HandlerList<AuthRequiredNotification>()
     private var accountsChanged = HandlerList<Void>()
     private var messagesChanged = HandlerList<MessagesChangedNotification>()
+    private var boardChanged = HandlerList<BoardChangedNotification>()
     private var connection = HandlerList<ConnectionController.ConnectionState>()
 
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "notify")
@@ -224,6 +385,11 @@ final class NotificationHub {
         messagesChanged.add(f)
     }
 
+    /// notify.boardChanged: the board's source lists it again.
+    func addBoardChanged(_ f: @escaping @MainActor (BoardChangedNotification) -> Void) -> Token {
+        boardChanged.add(f)
+    }
+
     /// Fires on every connection state change, after `connectionState`
     /// was updated. A handler added later does not get the current state;
     /// read `connectionState` for that.
@@ -252,6 +418,8 @@ final class NotificationHub {
             accountsChanged.fire(())
         case .messagesChanged(let m):
             messagesChanged.fire(m)
+        case .boardChanged(let b):
+            boardChanged.fire(b)
         case .unknown(let method):
             log.info("notification \(method, privacy: .public)")
         }

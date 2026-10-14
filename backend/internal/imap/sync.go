@@ -344,6 +344,12 @@ func (s *Syncer) cycle(ctx context.Context, sess *session, req request) error {
 		}
 	}
 
+	// The Drafts folder copies no draft holds any more (a draft that became
+	// a board case's suggested reply) go with this pass's operations. A
+	// failure is logged, not the end of the pass: the upkeep tries again.
+	if _, err := s.deps.Store.DropStrayDraftCopies(ctx, s.account.ID, nil, s.now()); err != nil {
+		s.log.Warn("delete stray draft copies", "err", err)
+	}
 	if err := s.pushOps(ctx, sess); err != nil {
 		return err
 	}

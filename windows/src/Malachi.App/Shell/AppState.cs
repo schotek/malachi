@@ -84,6 +84,7 @@ public sealed partial class AppState : IDisposable
         Alerts = alerts;
         Windows.Alerts = alerts;
         InitializeAssistant();
+        InitializeBoard();
     }
 
     /// <summary>The app's log.</summary>
@@ -285,6 +286,7 @@ public sealed partial class AppState : IDisposable
     {
         CloseAssistant();
         Integration?.Dispose();
+        CloseBoard();
         Windows.Dispose();
         Notifications.Dispose();
         Connection.Dispose();

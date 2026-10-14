@@ -298,7 +298,7 @@ func TestAssignUIDPatchesOps(t *testing.T) {
 	archive := seedFolder(t, s, "acc", "Archive", api.RoleArchive)
 	m := seedMessage(t, s, inbox, 1, "moved", time.Now())
 
-	if err := s.MoveMessages(ctx, "acc", []string{m.ID}, archive.ID); err != nil {
+	if _, err := s.MoveMessages(ctx, "acc", []string{m.ID}, archive.ID); err != nil {
 		t.Fatal(err)
 	}
 	// A flag change while the move is unreconciled is blocked on uid 0.
@@ -351,10 +351,10 @@ func TestAssignUIDPatchesOps(t *testing.T) {
 	// UID belongs to the middle folder, so only the ops there are patched.
 	third := seedFolder(t, s, "acc", "Third", api.RoleNone)
 	m2 := seedMessage(t, s, inbox, 2, "twice", time.Now())
-	if err := s.MoveMessages(ctx, "acc", []string{m2.ID}, archive.ID); err != nil {
+	if _, err := s.MoveMessages(ctx, "acc", []string{m2.ID}, archive.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MoveMessages(ctx, "acc", []string{m2.ID}, third.ID); err != nil {
+	if _, err := s.MoveMessages(ctx, "acc", []string{m2.ID}, third.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.AssignUID(ctx, m2.ID, 78, 1, nil); err != nil {
@@ -377,10 +377,10 @@ func TestAssignUIDPatchesOps(t *testing.T) {
 	// The message was deleted locally while its move was pending: the
 	// blocked delete op still gets its uid.
 	m3 := seedMessage(t, s, inbox, 3, "thrice", time.Now())
-	if err := s.MoveMessages(ctx, "acc", []string{m3.ID}, archive.ID); err != nil {
+	if _, err := s.MoveMessages(ctx, "acc", []string{m3.ID}, archive.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteMessages(ctx, "acc", []string{m3.ID}); err != nil {
+	if _, err := s.DeleteMessages(ctx, "acc", []string{m3.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.AssignUID(ctx, m3.ID, 79, 1, nil); err != nil {
@@ -402,7 +402,7 @@ func TestDeleteStalePendingAndByUID(t *testing.T) {
 	stale := seedMessage(t, s, inbox, 1, "stale", time.Now())
 	blocked := seedMessage(t, s, inbox, 2, "blocked", time.Now())
 	fresh := seedMessage(t, s, inbox, 3, "fresh", time.Now())
-	if err := s.MoveMessages(ctx, "acc", []string{stale.ID, blocked.ID, fresh.ID}, archive.ID); err != nil {
+	if _, err := s.MoveMessages(ctx, "acc", []string{stale.ID, blocked.ID, fresh.ID}, archive.ID); err != nil {
 		t.Fatal(err)
 	}
 	ops, _ := s.NextOps(ctx, "acc", time.Now(), 10)

@@ -837,12 +837,50 @@ private func folded(
         #expect(h.contents[1] == .error("The assistant stopped: API Error: 529 Overloaded", retry: false))
     }
 
-    /// The model setting reaches the command line of the next conversation.
+    /// The model setting reaches the command line of the next conversation;
+    /// the board's triage model (`board-triage-model`) does not.
+    @Test func subtitleShowsSelectedProviderBeforeFirstQuestion() throws {
+        let fake = try FakeClaude(turns: [answerTurn("unused")])
+        let h = try PanelHarness(fake: fake)
+        defer { h.stop() }
+        h.scratch.settings.assistantProvider = .chatgpt
+        h.scratch.settings.assistantChatGPTModel = "gpt-6-sol"
+        #expect(h.panel.subtitle == "ChatGPT (Codex, experimental) · gpt-6-sol")
+        h.scratch.settings.assistantChatGPTModel = ""
+        #expect(h.panel.subtitle == "ChatGPT (Codex, experimental) · Use the provider’s default model")
+        #expect(fake.starts == 0)
+        h.scratch.settings.assistantProvider = .claude
+        h.scratch.settings.assistantModel = .opus
+        #expect(h.panel.subtitle == "Claude Code · Opus")
+    }
+
+    @Test func aLapsedChatGPTConnectionOffersReconnectAndResends() async throws {
+        let fake = try FakeClaude(turns: [answerTurn("unused")])
+        let h = try PanelHarness(fake: fake)
+        defer { h.stop() }
+        h.scratch.settings.assistantProvider = .chatgpt
+        h.scratch.settings.assistantChatGPTConsentVersion = 1
+        let provider = ReconnectProvider()
+        h.panel.provider = { provider }
+        var reconnects = 0
+        h.panel.reconnectProvider = { reconnects += 1; return true }
+        #expect(h.panel.submit("Hello"))
+        try await h.turn()
+        let error = try #require(h.panel.items.last)
+        #expect(error.content == .error("Could not connect to ChatGPT.", retry: false, offer: .reconnectProvider))
+        provider.failure = nil
+        h.panel.reconnect(error.id)
+        try await waitFor { provider.starts == 2 }
+        #expect(reconnects == 1 && provider.session.input?.contains("Hello") == true)
+        #expect(!h.contents.contains(.error("Could not connect to ChatGPT.", retry: false, offer: .reconnectProvider)))
+    }
+
     @Test func modelSetting() async throws {
         let fake = try FakeClaude(turns: [answerTurn("ok")])
         let h = try PanelHarness(fake: fake)
         defer { h.stop() }
         h.scratch.settings.assistantModel = .opus
+        h.scratch.settings.boardTriageModel = .haiku
         #expect(h.panel.subtitle == "Claude Code · Opus")
         #expect(h.panel.submit("Hello"))
         try await h.turn()
@@ -1176,5 +1214,31 @@ private func folded(
         #expect(fake.starts == 2)
         #expect(fake.prompts.last == "Context: the user has selected message m1 in account a.\n"
             + "Context: the user has also selected message m2 in account a; questions from now on may be about it too.\n\nOnce more")
+    }
+}
+
+
+@MainActor private final class ReconnectSession: AssistantSession {
+    var running = true
+    var onEvents: (([Assistant.Event]) -> Void)?
+    var onExit: ((String) -> Void)?
+    var input: String?
+    func submit(_ input: String) async throws { self.input = input }
+    func terminate() { running = false }
+}
+
+/// A provider whose first start fails as not signed in.
+@MainActor private final class ReconnectProvider: AssistantProvider {
+    var available = true
+    var connected = true
+    var hasConsent = true
+    var failure: ChatGPTFailure? = ChatGPTFailure("chatgpt_reconnect_required")
+    var starts = 0
+    let session = ReconnectSession()
+    func acceptConsent() {}
+    func start(_ spec: AssistantSessionSpec) async throws -> any AssistantSession {
+        starts += 1
+        if let failure { throw failure }
+        return session
     }
 }

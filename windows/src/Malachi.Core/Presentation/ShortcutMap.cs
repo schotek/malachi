@@ -62,6 +62,9 @@ public static class ShortcutMap
         (KeyChord.Ctrl(VirtualKey.F), ShortcutCommand.Search),
         (KeyChord.Ctrl(VirtualKey.E), ShortcutCommand.Search),
         (KeyChord.Bare(VirtualKey.F10), ShortcutCommand.MainMenu),
+        // The mode switch (Board.BoardKeys): Ctrl chords, so no text input lifts them.
+        (KeyChord.Ctrl(VirtualKey.Number1), ShortcutCommand.ShowMail),
+        (KeyChord.Ctrl(VirtualKey.Number2), ShortcutCommand.ShowBoard),
     ];
 
     private static readonly (KeyChord Chord, ShortcutCommand Command)[] Close =
@@ -120,6 +123,21 @@ public static class ShortcutMap
                 return context.Window == WindowKind.Main ? ShortcutCommand.CheckForNewMail : null;
             }
             return ShortcutCommand.Reply;
+        }
+        if (context.Window == WindowKind.Main && context.EditorFocused)
+        {
+            // The board's inline reply editor (BoardReplyEditorHost): while
+            // its page has the keyboard, Send and Save Draft are the
+            // compose window's keys. Nowhere else in the main window, so
+            // they are none of its chords (its accelerators): elsewhere in
+            // the pane its own scoped accelerators run them.
+            foreach (var (key, command) in Compose)
+            {
+                if (key == chord)
+                {
+                    return command;
+                }
+            }
         }
         foreach (var (key, command) in Table(context.Window))
         {

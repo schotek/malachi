@@ -86,6 +86,14 @@ type Options struct {
 	// (--json-schema, after everything else): the result event's
 	// structured_output (Event.Structured), as for SearchSchema.
 	JSONSchema string
+	// BridgeArgs are further arguments of the bridge, after --socket: the
+	// board triage's TriageBridgeArgs, the suggested reply's
+	// SuggestReplyBridgeArgs; empty for the panel. Unused without a
+	// Bridge.
+	BridgeArgs []string
+	// Tools are the tools Claude Code may run (--allowedTools); nil is
+	// the panel's AllowedTools. Unused without a Bridge.
+	Tools []string
 }
 
 // Args are the arguments of claude (without the executable itself) for
@@ -104,9 +112,13 @@ func Args(o Options) []string {
 		"--strict-mcp-config",
 	}
 	if o.Bridge != "" {
+		tools := o.Tools
+		if tools == nil {
+			tools = AllowedTools
+		}
 		args = append(args,
-			"--mcp-config", mcpConfig(o.Bridge, o.Socket),
-			"--allowedTools", strings.Join(AllowedTools, ","))
+			"--mcp-config", mcpConfig(o.Bridge, o.Socket, o.BridgeArgs...),
+			"--allowedTools", strings.Join(tools, ","))
 	}
 	args = append(args,
 		"--permission-mode", "dontAsk",
@@ -121,8 +133,9 @@ func Args(o Options) []string {
 }
 
 // mcpConfig is the JSON of --mcp-config: the bridge as the stdio server
-// "malachi", with --socket when socket is set.
-func mcpConfig(bridge, socket string) string {
+// "malachi", with --socket when socket is set and then extra (the args an
+// empty array otherwise, never null).
+func mcpConfig(bridge, socket string, extra ...string) string {
 	type server struct {
 		Type    string   `json:"type"`
 		Command string   `json:"command"`
@@ -132,6 +145,7 @@ func mcpConfig(bridge, socket string) string {
 	if socket != "" {
 		args = []string{"--socket", socket}
 	}
+	args = append(args, extra...)
 	cfg := struct {
 		MCPServers map[string]server `json:"mcpServers"`
 	}{map[string]server{bridgeServer: {Type: "stdio", Command: bridge, Args: args}}}

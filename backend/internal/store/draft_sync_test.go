@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -216,8 +217,8 @@ func TestDraftCopyGoesWithTrashAndMove(t *testing.T) {
 		t.Fatal(err)
 	}
 	row := seedCopy(t, s, drafts, 5, "", "c@x")
-	if err := s.TrashMessages(ctx, "acc", []string{row.ID}, trash.ID); err != nil {
-		t.Fatal(err)
+	if dropped, err := s.TrashMessages(ctx, "acc", []string{row.ID}, trash.ID); err != nil || fmt.Sprint(dropped) != "["+d.ID+"]" {
+		t.Fatalf("trash: dropped %v, %v", dropped, err)
 	}
 	if _, err := s.GetDraft(ctx, "acc", d.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("draft of a trashed copy kept: %v", err)
@@ -234,8 +235,8 @@ func TestDraftCopyGoesWithTrashAndMove(t *testing.T) {
 		t.Fatal(err)
 	}
 	row2 := seedCopy(t, s, drafts, 6, "", "")
-	if err := s.MoveMessages(ctx, "acc", []string{row2.ID}, inbox.ID); err != nil {
-		t.Fatal(err)
+	if dropped, err := s.MoveMessages(ctx, "acc", []string{row2.ID}, inbox.ID); err != nil || fmt.Sprint(dropped) != "["+again.ID+"]" {
+		t.Fatalf("move: dropped %v, %v", dropped, err)
 	}
 	if _, err := s.GetDraft(ctx, "acc", again.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("draft of a moved copy kept: %v", err)
@@ -250,11 +251,21 @@ func TestDraftCopyGoesWithTrashAndMove(t *testing.T) {
 		t.Fatal(err)
 	}
 	stray := seedCopy(t, s, inbox, 7, "", "keep@x")
-	if err := s.DeleteMessages(ctx, "acc", []string{stray.ID}); err != nil {
-		t.Fatal(err)
+	if dropped, err := s.DeleteMessages(ctx, "acc", []string{stray.ID}); err != nil || len(dropped) != 0 {
+		t.Fatalf("delete of an inbox message: dropped %v, %v", dropped, err)
 	}
 	if _, err := s.GetDraft(ctx, "acc", keep.ID); err != nil {
 		t.Fatalf("inbox message took a draft along: %v", err)
+	}
+	// Two rows of the Drafts folder that are copies of one draft (by
+	// Message-ID and by UID), deleted together: the draft is named once.
+	byID := seedCopy(t, s, drafts, 7, "", "")
+	byRFC := seedCopy(t, s, drafts, 8, "", "keep@x")
+	if dropped, err := s.DeleteMessages(ctx, "acc", []string{byID.ID, byRFC.ID}); err != nil || fmt.Sprint(dropped) != "["+keep.ID+"]" {
+		t.Fatalf("delete: dropped %v, %v", dropped, err)
+	}
+	if _, err := s.GetDraft(ctx, "acc", keep.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("draft of a deleted copy kept: %v", err)
 	}
 }
 

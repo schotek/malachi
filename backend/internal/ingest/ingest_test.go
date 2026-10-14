@@ -408,7 +408,7 @@ func TestStoreErrors(t *testing.T) {
 
 	// The row is gone.
 	gone := f.row(t, f.inbox, 32, ingestNow, "")
-	if err := f.st.DeleteMessages(ctx, f.acc.ID, []string{gone.ID}); err != nil {
+	if _, err := f.st.DeleteMessages(ctx, f.acc.ID, []string{gone.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Store(ctx, f.st, f.request(gone, rep.raw, Policy{}), nil); !errors.Is(err, store.ErrNotFound) {
@@ -513,7 +513,7 @@ func TestStripSkipsMessageMovedToDrafts(t *testing.T) {
 	if listed.StrippableBytes == 0 || listed.RawState != store.RawFull {
 		t.Fatalf("stored %+v", listed)
 	}
-	if err := f.st.MoveMessages(ctx, f.acc.ID, []string{m.ID}, f.drafts.ID); err != nil {
+	if _, err := f.st.MoveMessages(ctx, f.acc.ID, []string{m.ID}, f.drafts.ID); err != nil {
 		t.Fatal(err)
 	}
 	for _, reconciled := range []bool{false, true} {

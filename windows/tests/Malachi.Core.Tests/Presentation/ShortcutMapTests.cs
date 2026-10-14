@@ -96,6 +96,26 @@ public sealed class ShortcutMapTests
     }
 
     [Fact]
+    public void CtrlOneAndTwoSwitchTheModeOfTheMainWindowOnly()
+    {
+        Assert.Equal(C.ShowMail, Resolve(KeyChord.Ctrl(K.Number1)));
+        Assert.Equal(C.ShowBoard, Resolve(KeyChord.Ctrl(K.Number2)));
+        // Ctrl chords: a text input does not lift them, nor does the ctrl-r setting.
+        var typing = Main with { TextInputFocused = true };
+        Assert.Equal(C.ShowMail, Resolve(KeyChord.Ctrl(K.Number1), typing));
+        Assert.Equal(C.ShowBoard, Resolve(KeyChord.Ctrl(K.Number2), typing with { CtrlR = CtrlR.Refresh }));
+        Assert.False(ShortcutMap.IsSingleKey(C.ShowMail));
+        Assert.False(ShortcutMap.IsSingleKey(C.ShowBoard));
+        Assert.Contains(KeyChord.Ctrl(K.Number1), ShortcutMap.Chords(WindowKind.Main));
+        Assert.Contains(KeyChord.Ctrl(K.Number2), ShortcutMap.Chords(WindowKind.Main));
+        foreach (var window in Enum.GetValues<WindowKind>().Where(w => w != WindowKind.Main))
+        {
+            Assert.Null(ShortcutMap.Resolve(KeyChord.Ctrl(K.Number1), new ShortcutContext(window)));
+            Assert.DoesNotContain(KeyChord.Ctrl(K.Number2), ShortcutMap.Chords(window));
+        }
+    }
+
+    [Fact]
     public void SingleKeysTypeWhileATextInputHasTheFocus()
     {
         var typing = Main with { TextInputFocused = true };
@@ -136,6 +156,24 @@ public sealed class ShortcutMapTests
         // The editor's formatting keys stay in its bridge.
         Assert.Null(Resolve(KeyChord.Ctrl(K.U), editor));
         Assert.Null(Resolve(KeyChord.Ctrl(K.I), editor));
+    }
+
+    [Fact]
+    public void TheBoardsInlineEditorSendsAndSavesOnlyWhileItHasTheKeyboard()
+    {
+        // The main window's board: its reply editor's page keeps the compose keys.
+        var editor = Main with { TextInputFocused = true, EditorFocused = true };
+        Assert.Equal(C.Send, Resolve(KeyChord.Ctrl(K.Enter), editor));
+        Assert.Equal(C.SaveDraft, Resolve(KeyChord.Ctrl(K.S), editor));
+        // Anywhere else in the main window they run nothing, and they are no chord of it.
+        Assert.Null(Resolve(KeyChord.Ctrl(K.Enter)));
+        Assert.Null(Resolve(KeyChord.Ctrl(K.S), Main with { TextInputFocused = true }));
+        Assert.DoesNotContain(KeyChord.Ctrl(K.Enter), ShortcutMap.Chords(WindowKind.Main));
+        Assert.DoesNotContain(KeyChord.Ctrl(K.S), ShortcutMap.Chords(WindowKind.Main));
+        // A message window has no editor of its own: nothing there.
+        Assert.Null(Resolve(KeyChord.Ctrl(K.Enter), new ShortcutContext(WindowKind.Message, EditorFocused: true)));
+        // The editor's single keys type.
+        Assert.Null(Resolve(KeyChord.Bare(K.S), editor));
     }
 
     [Fact]

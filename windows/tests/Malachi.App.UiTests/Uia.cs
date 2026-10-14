@@ -6,7 +6,8 @@
 // no child of the desktop in the UIA tree), elements by AutomationId (the
 // names are translated, the ids are not), the patterns the tests use, and
 // waiting with a deadline instead of sleeping. Only patterns, no synthetic
-// input: the tests run beside other windows and never need the foreground.
+// input: the tests run beside other windows and never need the foreground,
+// except PressKey for what only a key does (the board panel's Escape).
 
 using System;
 using System.Collections.Generic;
@@ -108,6 +109,32 @@ internal static class Uia
     /// <summary>A text field's value.</summary>
     public static string Value(AutomationElement element) =>
         ((ValuePattern)element.GetCurrentPattern(ValuePattern.Pattern)).Current.Value;
+
+    /// <summary>Toggles a toggle button or a checkable menu item.</summary>
+    public static void Toggle(AutomationElement element) =>
+        ((TogglePattern)element.GetCurrentPattern(TogglePattern.Pattern)).Toggle();
+
+    /// <summary>
+    /// Presses virtual key <paramref name="key"/> with the keyboard focus on
+    /// <paramref name="element"/>: the one exception to patterns only, for
+    /// what only a key does (the board panel's Escape). The focus brings the
+    /// element's window to the foreground; the key goes out only once that
+    /// window of <paramref name="processId"/> has it, never to another one.
+    /// </summary>
+    public static void PressKey(AutomationElement element, int processId, byte key)
+    {
+        ArgumentNullException.ThrowIfNull(element);
+        element.SetFocus();
+        WaitFor(
+            () =>
+            {
+                NativeMethods.GetWindowThreadProcessId(NativeMethods.GetForegroundWindow(), out var owner);
+                return owner == processId && element.Current.HasKeyboardFocus;
+            },
+            "the keyboard focus in the app");
+        NativeMethods.KeybdEvent(key, 0, 0, 0);
+        NativeMethods.KeybdEvent(key, 0, NativeMethods.KeyEventKeyUp, 0);
+    }
 
     /// <summary>Asks a window to close (its caption's Close, WM_CLOSE).</summary>
     public static void Close(AutomationElement window) =>

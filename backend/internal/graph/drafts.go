@@ -99,7 +99,7 @@ func (s *Syncer) pushDrafts(ctx context.Context, byMailbox map[string]store.Fold
 		if found {
 			s.log.Info("draft stored", "draft", d.ID, "version", up.Version)
 		} else {
-			s.log.Info("draft gone during its upload, removing the copy", "draft", d.ID)
+			s.log.Info("draft gone or kept local during its upload, removing the copy", "draft", d.ID)
 		}
 	}
 	if len(touched) > 0 {
@@ -147,6 +147,12 @@ func (s *Syncer) editedSince(ctx context.Context, remoteID string, t time.Time) 
 		return false, nil
 	}
 	return false, err
+}
+
+// strayEdited is DropStrayDraftCopies' edit check: a copy changed on the
+// server after it was stored is the user's own draft now and stays.
+func (s *Syncer) strayEdited(ctx context.Context, c store.StrayDraftCopy) (bool, error) {
+	return s.editedSince(ctx, c.Copy.RemoteID, c.SyncedAt)
 }
 
 // draftFailed records a failed upload on the draft with the operations'

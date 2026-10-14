@@ -11,6 +11,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Malachi.Core.Api;
@@ -59,6 +60,19 @@ public sealed class NotificationHubTests
         hub.AddAccountsChanged(() => seen++);
         hub.Handle(new RpcNotification("notify.accountsChanged", Encoding.UTF8.GetBytes("""{"jsonrpc":"2.0","method":"notify.accountsChanged"}""")));
         Assert.Equal(1, seen);
+    }
+
+    [Fact]
+    public void BoardChangedReachesItsHandlers()
+    {
+        using var hub = new NotificationHub();
+        var seen = new List<string>();
+        hub.AddBoardChanged(n => seen.Add(string.Join(",", n.AccountIds.Select(a => a.Value))));
+        hub.AddMessagesChanged(_ => seen.Add("messages"));
+        hub.Handle(Raw("notify.boardChanged", """{"accountIds":["acc_1","acc_2"]}"""));
+        hub.Handle(new RpcNotification("notify.boardChanged", Encoding.UTF8.GetBytes("""{"jsonrpc":"2.0","method":"notify.boardChanged"}""")));
+        Assert.Equal(["acc_1,acc_2", ""], seen);
+        Assert.Empty(hub.Pending.TakeFaults());
     }
 
     [Fact]

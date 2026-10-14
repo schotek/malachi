@@ -310,6 +310,7 @@ func (w *Window) reconcileRows(neighbour bool) {
 			w.messageList.Remove(r)
 			w.messageList.Insert(r, i)
 		}
+		r.RemoveCSSClass("flagged-section")
 		w.renderRow(r, row)
 	}
 	selected := false

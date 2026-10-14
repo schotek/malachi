@@ -562,6 +562,171 @@ public sealed class AssistantRequestTests
     /// asked, the model Haiku, the locator kept to the directory, the
     /// environment with what must never reach claude.
     /// </summary>
+    // The request with the bridge (AssistantTriageTests.swift)
+
+    private static readonly AssistantRequest.Tools TriageTools = new()
+    {
+        Bridge = "/b/malachi-mcp",
+        Socket = "/s.sock",
+        BridgeArgs = Assistant.TriageBridgeArgs("run_7", 3),
+        Allowed = Assistant.TriageToolsAll,
+        Policy = AssistantToolPolicy.TriageDrafts,
+    };
+
+    /// <summary>
+    /// The request starts Claude Code with the bridge and the tools it was
+    /// given, and hands every tool call and result to onTool: accepted and
+    /// refused annotate_case calls alike.
+    /// </summary>
+    [Fact]
+    public async Task RequestWithTools()
+    {
+        RequireWindows();
+        await using var h = await Harness.CreateAsync(Fake(CannedStreamJson.Turn(
+            CannedStreamJson.Init,
+            CannedStreamJson.ToolUse("t1", "list_triage_queue"), CannedStreamJson.ToolResult("t1", "2 cases"),
+            CannedStreamJson.ToolUse("t2", "annotate_case"), CannedStreamJson.ToolResult("t2", "ok"),
+            CannedStreamJson.ToolUse("t3", "annotate_case"), CannedStreamJson.ToolResult("t3", "conflict", error: true),
+            CannedStreamJson.Text("Done."), CannedStreamJson.Result("Done."))));
+        var tools = new List<AssistantEvent>();
+        await h.Ui.RunAsync(() => h.Request.Start("SYS", "triage", h.Complete, tools: TriageTools, onTool: e =>
+        {
+            tools.Add(e);
+            h.Changed();
+        }));
+        await h.WhenAsync(() => h.Outcomes.Count > 0, "the outcome");
+        await h.IdleAsync();
+        Assert.Equal([new Outcome.Answered("Done.", null)], h.Outcomes);
+        Assert.Equal(
+            [AssistantEventKind.ToolUse, AssistantEventKind.ToolResult, AssistantEventKind.ToolUse, AssistantEventKind.ToolResult, AssistantEventKind.ToolUse, AssistantEventKind.ToolResult],
+            tools.Select(e => e.Kind));
+        Assert.Equal(["list_triage_queue", "", "annotate_case", "", "annotate_case", ""], tools.Select(e => e.Tool));
+        Assert.Equal(["t1", "t1", "t2", "t2", "t3", "t3"], tools.Select(e => e.ToolUseId));
+        Assert.Equal([false, false, false, false, false, true], tools.Select(e => e.IsError));
+        Assert.Equal(
+            Assistant.Args(new AssistantOptions
+            {
+                Bridge = "/b/malachi-mcp",
+                Socket = "/s.sock",
+                Model = AssistantModel.Haiku,
+                SystemPrompt = "SYS",
+                BridgeArgs = ["--allow-triage", "--triage-run", "run_7", "--triage-max", "3"],
+                Tools = Assistant.TriageToolsAll,
+            }),
+            FakeClaudeScript.Args(h.Dir.Path));
+        Assert.Equal(["triage"], FakeClaudeScript.Prompts(h.Dir.Path));
+        // The child's environment keeps no MALACHI_* variable: the run id goes as a flag.
+        Assert.DoesNotContain(FakeClaudeScript.Env(h.Dir.Path).Keys, k => k.StartsWith("MALACHI_", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>With the bridge asked for, an init that does not report it connected ends the request; without it the init is not looked at.</summary>
+    [Fact]
+    public async Task ToolsMissing()
+    {
+        RequireWindows();
+        await using var h = await Harness.CreateAsync(Fake(
+            CannedStreamJson.Turn(CannedStreamJson.InitFailed, CannedStreamJson.Text("x"), CannedStreamJson.Result("x")),
+            CannedStreamJson.Turn(CannedStreamJson.InitFailed, CannedStreamJson.Text("x"), CannedStreamJson.Result("x"))));
+        await h.Ui.RunAsync(() => h.Request.Start("S", "m", h.Complete, tools: TriageTools));
+        await h.WhenAsync(() => h.Outcomes.Count > 0, "the outcome");
+        Assert.Equal([new Outcome.Failed(new AssistantRequest.Failure.ToolsMissing())], h.Outcomes);
+        Assert.Equal(Assistant.PanelTexts().ToolsMissing, new AssistantRequest.Failure.ToolsMissing().Text);
+        Assert.Equal(Assistant.PanelTexts().ToolsMissing, new AssistantRequest.Failure.ToolsMissing().Reason);
+        await h.IdleAsync();
+        await h.StartAsync("S", "m");
+        await h.WhenAsync(() => h.Outcomes.Count > 1, "the second outcome");
+        Assert.Equal(new Outcome.Answered("x", null), h.Outcomes[1]);
+    }
+
+    /// <summary>The call's own timeout replaces the request's, for that call only.</summary>
+    [Fact]
+    public async Task PerCallTimeout()
+    {
+        RequireWindows();
+        await using var h = await Harness.CreateAsync(Fake(
+            [FakeClaudeStep.Lines(CannedStreamJson.Init, CannedStreamJson.ToolUse("t1", "list_triage_queue")), FakeClaudeStep.Hang()]));
+        var tools = new List<AssistantEvent>();
+        await h.Ui.RunAsync(() => h.Request.Start("S", "m", h.Complete, tools: TriageTools, timeout: TimeSpan.FromMilliseconds(400), onTool: e =>
+        {
+            tools.Add(e);
+            h.Changed();
+        }));
+        await h.WhenAsync(() => tools.Count == 1, "the tool call");
+        h.Time.Advance(TimeSpan.FromMilliseconds(400));
+        await h.WhenAsync(() => h.Outcomes.Count > 0, "the outcome");
+        Assert.Equal([Stopped(AssistantRequest.TimedOut)], h.Outcomes);
+        Assert.Equal(TimeSpan.FromSeconds(10), await h.Ui.RunAsync(() => h.Request.Timeout));
+        h.Time.Advance(Grace);
+        await h.IdleAsync();
+    }
+
+    /// <summary>A handler that cancels the request from a tool event stops it: no further event, no completion.</summary>
+    [Fact]
+    public async Task CancelFromATool()
+    {
+        RequireWindows();
+        await using var h = await Harness.CreateAsync(Fake(CannedStreamJson.Turn(
+            CannedStreamJson.Init, CannedStreamJson.ToolUse("t1", "annotate_case"), CannedStreamJson.ToolUse("t2", "annotate_case"), CannedStreamJson.Result("x"))));
+        var tools = new List<AssistantEvent>();
+        await h.Ui.RunAsync(() => h.Request.Start("S", "m", h.Complete, tools: TriageTools, onTool: e =>
+        {
+            tools.Add(e);
+            h.Request.Cancel();
+            h.Changed();
+        }));
+        await h.WhenAsync(() => tools.Count > 0 && !h.Request.Running, "the cancelled request");
+        h.Time.Advance(Grace);
+        await h.IdleAsync();
+        Assert.Equal(["t1"], tools.Select(e => e.ToolUseId));
+        Assert.Empty(h.Outcomes);
+    }
+
+    /// <summary>
+    /// Every event with usage goes to onUsage before it is handled, the
+    /// result's too; a tally of them is the result's usage. The call's model
+    /// replaces the setting.
+    /// </summary>
+    [Fact]
+    public async Task UsageAndModel()
+    {
+        RequireWindows();
+        await using var h = await Harness.CreateAsync(Fake(CannedStreamJson.Turn(
+            CannedStreamJson.Init,
+            CannedStreamJson.MessageUsage("msg_1", 10, 1),
+            CannedStreamJson.ToolUse("t1", "annotate_case"), CannedStreamJson.ToolResult("t1", "ok"),
+            CannedStreamJson.MessageUsage("msg_2", 20, 2),
+            CannedStreamJson.UsageResult("Done.", 30, 40))));
+        var usage = new List<AssistantEvent>();
+        var order = new List<string>();
+        var tally = new AssistantUsageTally();
+        await h.Ui.RunAsync(() => h.Request.Start(
+            "S", "m", o =>
+            {
+                order.Add("completion");
+                h.Complete(o);
+            },
+            tools: TriageTools, model: AssistantModel.Opus,
+            onTool: e => order.Add("tool " + e.ToolUseId),
+            onUsage: e =>
+            {
+                usage.Add(e);
+                tally.Add(e);
+                order.Add("usage " + e.Kind);
+            }));
+        await h.WhenAsync(() => h.Outcomes.Count > 0, "the outcome");
+        await h.IdleAsync();
+        Assert.Equal([new Outcome.Answered("Done.", null)], h.Outcomes);
+        Assert.Equal(
+            [new AssistantUsage(10, 1), new AssistantUsage(20, 2), new AssistantUsage(30, 40)],
+            usage.Select(e => e.Usage!.Value));
+        Assert.Equal(["msg_1", "msg_2", ""], usage.Select(e => e.MessageId));
+        Assert.Equal(new AssistantUsage(30, 40), tally.Total);
+        Assert.Equal(["usage Other", "tool t1", "tool t1", "usage Other", "usage Result", "completion"], order);
+        var args = FakeClaudeScript.Args(h.Dir.Path).ToList();
+        Assert.Equal("opus", args[args.IndexOf("--model") + 1]);
+        Assert.Equal(AssistantModel.Haiku, h.Settings.AssistantModel);
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly UiConditions conditions = new();

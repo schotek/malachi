@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // The canary host's run (docs/windows-port.md §12): the app's viewer, editor,
-// previewer and conversation card (or, in the control run, a WebView2
-// without any protection)
+// previewer, conversation card and board card (the same CardWebView, set up
+// as the board detail's conversation sets it up, without the board's card
+// view around it; or, in the control run, a WebView2 without any
+// protection)
 // in one window beyond the edge of the screen, the steps of the
 // configuration played on them, and everything they did recorded. Pointer
 // actions go through the DevTools protocol (Input.dispatchMouseEvent), which
@@ -72,11 +74,13 @@ internal sealed class CanaryRunner
     private ComposeWebView? editor;
     private PreviewWebView? preview;
     private CardWebView? card;
+    private CardWebView? boardCard;
     private WebView2? control;
 
-    // The views of a protected run: the viewer, the editor, the previewer
-    // and a card of the conversation view.
-    private const int ViewCount = 4;
+    // The views of a protected run: the viewer, the editor, the previewer,
+    // a card of the conversation view and a card of the board detail's
+    // conversation (BoardMessageCardView's CardWebView).
+    private const int ViewCount = 5;
 
     public CanaryRunner(HostConfig config)
     {
@@ -118,8 +122,17 @@ internal sealed class CanaryRunner
                 editor = new ComposeWebView(registry);
                 preview = new PreviewWebView { FileTypes = new ShellFileTypes(), TypePolicy = new FileTypePolicy() };
                 card = new CardWebView { Parts = (_, _) => Task.FromResult(("image/png", Png)) };
+                // The board detail's card as BoardConversationBlock.MakeWebView
+                // and BoardMessageCardView.LoadWebView make it (Parts, Zoom,
+                // OnLink, OnHover, OnSize), built here directly: the canary
+                // host compiles only the app's WebViews, and
+                // BoardMessageCardView would bring the board, the reader's
+                // services and the message cache with it. So this re-tests
+                // CardWebView with the board's settings, not the card's own
+                // code around it (docs/windows-port.md §12).
+                boardCard = new CardWebView { Parts = (_, _) => Task.FromResult(("image/png", Png)), Zoom = 100 };
                 var column = 0;
-                foreach (var view in new FrameworkElement[] { viewer, editor, preview, card })
+                foreach (var view in new FrameworkElement[] { viewer, editor, preview, card, boardCard })
                 {
                     grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(ViewWidth) });
                     view.Width = ViewWidth;
@@ -134,6 +147,10 @@ internal sealed class CanaryRunner
                 card.OnHover = text => Add(HostEvent.Kinds.Hover, "card", null, detail: text);
                 card.OnSize = (css, viewport, _) => Add(HostEvent.Kinds.Size, "card", null,
                     detail: css.ToString("0.##", CultureInfo.InvariantCulture) + (viewport ? " viewport" : " -"));
+                boardCard.OnLink = link => Add(HostEvent.Kinds.Link, "board-card", link.Resolved, detail: link.Raw);
+                boardCard.OnHover = text => Add(HostEvent.Kinds.Hover, "board-card", null, detail: text);
+                boardCard.OnSize = (css, viewport, _) => Add(HostEvent.Kinds.Size, "board-card", null,
+                    detail: css.ToString("0.##", CultureInfo.InvariantCulture) + (viewport ? " viewport" : " -"));
                 editor.Channel.Ready += (_, _) => Add(HostEvent.Kinds.Bridge, "editor", null, detail: "ready");
                 editor.Channel.KeyPressed += (_, key) => Add(HostEvent.Kinds.Bridge, "editor", null, detail: "key " + key);
                 editor.FilesDropped += (_, paths) => Add(HostEvent.Kinds.Dropped, "editor", null, detail: string.Join("|", paths));
@@ -144,7 +161,7 @@ internal sealed class CanaryRunner
                     // last text again.
                     editor.Load(editor.Html);
                 };
-                foreach (var (name, view) in new (string, HardenedWebView)[] { ("viewer", viewer), ("editor", editor), ("preview", preview), ("card", card) })
+                foreach (var (name, view) in new (string, HardenedWebView)[] { ("viewer", viewer), ("editor", editor), ("preview", preview), ("card", card), ("board-card", boardCard) })
                 {
                     view.Unavailable += (_, _) => Add(HostEvent.Kinds.Unavailable, name, null);
                     view.CoreWebViewInitialized += (_, _) => Initialized(name, view);
@@ -346,6 +363,10 @@ internal sealed class CanaryRunner
                 {
                     card!.Zoom = (int)step.X;
                 }
+                else if (step.View == "board-card")
+                {
+                    boardCard!.Zoom = (int)step.X;
+                }
                 else
                 {
                     viewer!.Zoom = (int)step.X;
@@ -408,6 +429,9 @@ internal sealed class CanaryRunner
                 break;
             case "card":
                 card!.Load(html, reload: false);
+                break;
+            case "board-card":
+                boardCard!.Load(html, reload: false);
                 break;
             default:
                 core.NavigateToString(html);
@@ -693,6 +717,7 @@ internal sealed class CanaryRunner
             editor?.Close();
             preview?.Close();
             card?.Close();
+            boardCard?.Close();
             control?.Close();
         }
         catch (Exception e) when (e is not OutOfMemoryException)

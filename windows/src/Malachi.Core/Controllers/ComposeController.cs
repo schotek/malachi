@@ -3,8 +3,8 @@
 
 // Port of macos/Sources/MalachiCore/Controllers/ComposeController.swift
 // (ComposeController); GTK: ui/internal/compose/manager.go (Manager, Open,
-// Accounts, Placeholder, SelfAddress, FindDraft, remove, Invalidate,
-// refreshAccounts) and dummy.go (dummyAccounts).
+// Accounts, Placeholder, SelfAddress, FindDraft, RegisterInline, remove,
+// Invalidate, refreshAccounts) and dummy.go (dummyAccounts).
 //
 // What the compose windows share (the client, the settings, the account
 // list) and the list of open windows, without the widgets. Windows are made
@@ -198,6 +198,34 @@ public sealed partial class ComposeController : ObservableObject, IDisposable
     {
         ArgumentNullException.ThrowIfNull(draft);
         return windows.FirstOrDefault(w => w.Edits(draft));
+    }
+
+    /// <summary>
+    /// Swift <c>register</c> (GTK Manager.RegisterInline): a form the controller
+    /// did not make, the board's inline reply, joins the open windows, so it
+    /// gets the account list like them (at once when it is known, otherwise
+    /// once <c>account.list</c> answered) and is found by
+    /// <see cref="FindDraft"/>. Registering twice changes nothing; the form
+    /// calls <see cref="Remove"/> when it goes.
+    /// </summary>
+    public void Register(IComposeWindowHandle w)
+    {
+        scope.VerifyAccess();
+        ArgumentNullException.ThrowIfNull(w);
+        if (windows.Exists(x => ReferenceEquals(x, w)))
+        {
+            return;
+        }
+        windows.Add(w);
+        OnPropertyChanged(nameof(OpenWindows));
+        if (!fetched)
+        {
+            RefreshAccounts();
+        }
+        else if (known.Count > 0)
+        {
+            w.SetAccounts(Accounts, Placeholder);
+        }
     }
 
     /// <summary>

@@ -65,6 +65,29 @@ public sealed class MailDateListTests
     }
 
     [Fact]
+    public void SectionTintFollowsParentAndClearsOnReuseOutsideInbox()
+    {
+        var model = new MailDateList(new FakeTimeProvider(Now));
+        var parent = Row("parent", Now, Flag.Flagged);
+        var child = Row("child", Now.AddYears(-1)) with { Member = true };
+        Apply(model, [parent, child]);
+        var childView = model.Rows.Single(r => r.Key == child.Key);
+        Assert.All(model.Rows, r => Assert.True(r.IsInFlaggedSection));
+
+        // An unchanged child moves with its parent, regardless of its own star.
+        var unflagged = parent with { Message = parent.Message with { Flags = [] } };
+        Apply(model, [unflagged, child]);
+        Assert.Same(childView, model.Rows.Single(r => r.Key == child.Key));
+        Assert.All(model.Rows, r => Assert.False(r.IsInFlaggedSection));
+        Apply(model, [parent, child]);
+        Assert.True(childView.IsInFlaggedSection);
+
+        model.Apply([parent, child], Inbox, false, null, (_, _, _) => { });
+        Assert.Same(childView, model.Rows.Single(r => r.Key == child.Key));
+        Assert.All(model.Rows, r => Assert.False(r.IsInFlaggedSection));
+    }
+
+    [Fact]
     public void FlagMovesNeverPublishDuplicateItemsBetweenNativeGroups()
     {
         var model = new MailDateList(new FakeTimeProvider(Now));

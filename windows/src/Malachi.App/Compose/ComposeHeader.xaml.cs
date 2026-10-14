@@ -8,7 +8,8 @@
 // notification). The rules are Core's (ComposeHeaderRules); the compose
 // window reads the fields and decides. The recipient rows are
 // RecipientTokenBoxes: an unparsable entry shows as a red badge there, which
-// replaces validateRow's red row.
+// replaces validateRow's red row. ShowsFrom takes the From line away for
+// the board's inline reply (ComposeHeaderView(showsFrom:), pane.go).
 
 using System;
 using System.Collections.Generic;
@@ -60,6 +61,21 @@ public sealed partial class ComposeHeader : UserControl
 
     /// <summary>The recipient rows, in order (compose.go <c>suggest</c>'s rows).</summary>
     public IReadOnlyList<RecipientTokenBox> RecipientFields => [ToBox, CcBox, BccBox];
+
+    /// <summary>
+    /// Whether the card has its From line (compose.go's from_box and
+    /// from_separator; ComposeHeaderView showsFrom). The board's inline
+    /// reply has none: it is from-locked and the detail shows the account.
+    /// </summary>
+    public bool ShowsFrom
+    {
+        get => FromBox.Visibility == Visibility.Visible;
+        set
+        {
+            var v = value ? Visibility.Visible : Visibility.Collapsed;
+            FromLabel.Visibility = FromBox.Visibility = FromSeparator.Visibility = v;
+        }
+    }
 
     /// <summary>The selected identity's index (<c>from.Selected()</c>), 0 when none is.</summary>
     public int SelectedAccountIndex => Math.Max(FromBox.SelectedIndex, 0);

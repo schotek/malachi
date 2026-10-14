@@ -458,6 +458,7 @@ final class AssistantMessageLineView: NSView, AssistantItemView {
         switch offer {
         case .signIn: return t.signIn
         case .install: return t.getClaudeCode
+        case .reconnectProvider: return L10n.T("Reconnect to ChatGPT")
         case .none: return ""
         }
     }

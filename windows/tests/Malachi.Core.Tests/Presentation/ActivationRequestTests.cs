@@ -115,8 +115,8 @@ public sealed class ActivationRequestTests
     public void ANotificationClickWithoutBothIdsShowsTheMainWindow(string? account, string? message)
     {
         var r = ActivationRequest.FromNotification(
-            account is null ? null : new Malachi.Core.Api.AccountId(account),
-            message is null ? null : new Malachi.Core.Api.MessageId(message),
+            account is null ? (Malachi.Core.Api.AccountId?)null : new Malachi.Core.Api.AccountId(account),
+            message is null ? (Malachi.Core.Api.MessageId?)null : new Malachi.Core.Api.MessageId(message),
             redirected: true);
         Assert.True(r.ShowMainWindow);
         Assert.Null(r.NotifiedAccount);

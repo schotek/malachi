@@ -39,6 +39,7 @@ internal sealed class AssistantPanelHost : IDisposable
 {
     private readonly MainWindow window;
     private readonly ListController list;
+    private readonly AppState state;
 
     /// <summary>
     /// The panel's conversation over <paramref name="state"/>, rendered by
@@ -48,6 +49,7 @@ internal sealed class AssistantPanelHost : IDisposable
     public AssistantPanelHost(AppState state, MainWindow window, Integration integration, ReaderServices reader, AssistantPanel view)
     {
         this.window = window;
+        this.state = state;
         list = integration.List;
         Controller = new AssistantPanelController(
             state.Settings,
@@ -59,8 +61,10 @@ internal sealed class AssistantPanelHost : IDisposable
             logger: state.Logs.CreateLogger<AssistantPanelController>(),
             directories: new PrivateDirectory(),
             processLogger: state.Logs.CreateLogger<ClaudeCodeProcess>());
-        var texts = Core.Assistants.Assistant.PanelTexts();
-        Controller.Consent = () => state.Alerts.ConfirmAsync(window, texts.ConsentHeading, texts.ConsentBody, texts.Allow, L10n.T("_Cancel"));
+        Controller.Provider = state.InAppProvider;
+        Controller.Consent = () => state.AskAssistantConsentAsync(window);
+        Controller.ReconnectProvider = ReconnectChatGptAsync;
+        state.InAppProviderChanged += OnProviderChanged;
         Controller.ResolveContext = Resolve;
         Controller.OpenDraft = r => integration.Actions.OpenSavedDraft(new AccountId(r.AccountId), new DraftId(r.DraftId));
         view.Attach(
@@ -73,7 +77,30 @@ internal sealed class AssistantPanelHost : IDisposable
     public AssistantPanelController Controller { get; }
 
     /// <summary>Ends a running Claude Code for good (the application quits).</summary>
-    public void Dispose() => Controller.Close();
+    public void Dispose()
+    {
+        state.InAppProviderChanged -= OnProviderChanged;
+        Controller.Close();
+    }
+
+    // Reconnect to ChatGPT on an error line: the connection's own sign-in
+    // (the preferences' button); the board's triage looks at it again once
+    // it worked.
+    private async System.Threading.Tasks.Task<bool> ReconnectChatGptAsync()
+    {
+        try
+        {
+            await state.ChatGpt.SignInAsync();
+        }
+        catch (Exception e) when (e is OperationCanceledException or Malachi.Core.ChatGPT.ChatGptAuthException)
+        {
+            return false;
+        }
+        state.BoardTriage.RecheckSignIn();
+        return true;
+    }
+
+    private void OnProviderChanged(object? sender, EventArgs e) => Controller.Provider = state.InAppProvider;
 
     // The context
 

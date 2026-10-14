@@ -4,7 +4,8 @@
 // The few Win32 calls the UI tests need beside UI Automation: the top-level
 // windows of a process (a WinUI window the app owns, the wizard, is not a
 // child of the desktop in the UIA tree), and the processes a process
-// started (the app's daemon).
+// started (the app's daemon), and one key pressed for a test that needs
+// the keyboard (the board panel's Escape, Uia.PressKey).
 
 using System;
 using System.Runtime.InteropServices;
@@ -25,6 +26,15 @@ internal static partial class NativeMethods
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool IsWindowVisible(nint window);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint GetForegroundWindow();
+
+    /// <summary>KEYEVENTF_KEYUP.</summary>
+    public const uint KeyEventKeyUp = 0x0002;
+
+    [LibraryImport("user32.dll", EntryPoint = "keybd_event")]
+    public static partial void KeybdEvent(byte key, byte scan, uint flags, nint extraInfo);
 
     [LibraryImport("user32.dll", EntryPoint = "GetClassNameW", StringMarshalling = StringMarshalling.Utf16)]
     public static unsafe partial int GetClassName(nint window, char* className, int maxCount);

@@ -65,6 +65,9 @@ public enum DaemonNotification: Sendable, Equatable {
     /// Messages of an account were hidden or shown again without arriving
     /// or leaving (`MessagesChangedNotification`, API/Jira.swift).
     case messagesChanged(MessagesChangedNotification)
+    /// What `board.list` returns changed (`BoardChangedNotification`,
+    /// API/BoardAPI.swift); no accounts = any.
+    case boardChanged(BoardChangedNotification)
     case unknown(method: String)
 
     /// Decodes the params of a raw notification by its method. Throws when
@@ -81,6 +84,10 @@ public enum DaemonNotification: Sendable, Equatable {
             self = .accountsChanged
         case API.Notify.messagesChanged:
             self = .messagesChanged(try raw.params(MessagesChangedNotification.self))
+        case API.Notify.boardChanged:
+            // Missing or null params mean "any account".
+            let envelope = try JSONCoding.decoder().decode(OptionalParamsEnvelope<BoardChangedNotification>.self, from: raw.line)
+            self = .boardChanged(envelope.params ?? BoardChangedNotification())
         default:
             self = .unknown(method: raw.method)
         }

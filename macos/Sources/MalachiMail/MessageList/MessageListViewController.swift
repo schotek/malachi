@@ -80,7 +80,15 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     private let noteBox = NSStackView()
 
     /// The table's rows, by position, and what each key shows.
-    private var keys: [MailDateItem] = []
+    private var keys: [MailDateItem] = [] {
+        didSet {
+            // Flagged is always the first section; members inherit its tint.
+            flaggedRows = keys.first == .heading(.flagged)
+                ? 1..<(keys.dropFirst().firstIndex { $0.messageKey == nil } ?? keys.endIndex)
+                : 0..<0
+        }
+    }
+    private var flaggedRows = 0..<0
     private var collapsedDates: Set<MailDateGroup> = []
     private var dateFolder: FolderKey?
     private var usesDateGroups: Bool { !list.searchActive && list.folderRole == .inbox }
@@ -390,6 +398,11 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         }
         table.endUpdates()
 
+        // A conversation can change sections without changing each member.
+        for i in keys.indices {
+            (table.rowView(atRow: i, makeIfNecessary: false) as? MessageRowView)?.isInFlaggedSection = flaggedRows.contains(i)
+        }
+
         // Rows that stayed: re-render the ones whose content moved.
         var changed = IndexSet()
         for (i, key) in newKeys.enumerated() where !inserted.contains(i) {
@@ -414,10 +427,15 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         syncSelection()
     }
 
-    @objc private func refreshDateGroups() {
-        guard isViewLoaded, usesDateGroups else { return }
-        apply(rows: list.rows, hint: .keep)
-        showLoadMore(list.loadMoreState)
+    // Calendar/time-zone notifications can arrive on a background thread.
+    // The Objective-C entry point must be nonisolated: hopping inside an
+    // actor-isolated selector is too late for Swift's executor check.
+    @objc nonisolated private func refreshDateGroups() {
+        Task { @MainActor [weak self] in
+            guard let self, self.isViewLoaded, self.usesDateGroups else { return }
+            self.apply(rows: self.list.rows, hint: .keep)
+            self.showLoadMore(self.list.loadMoreState)
+        }
     }
 
     private func revealDateGroup(for key: ListKey) {
@@ -476,6 +494,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         }
         if let rowView = table.rowView(atRow: i, makeIfNecessary: false) as? MessageRowView {
             rowView.isMember = r.member
+            rowView.isInFlaggedSection = flaggedRows.contains(i)
         }
     }
 
@@ -509,7 +528,10 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         guard let i = keys.firstIndex(of: .message(key)) else { return }
         table.selectRowIndexes(IndexSet(integer: i), byExtendingSelection: false)
         table.scrollRowToVisible(i)
-        view.window?.makeFirstResponder(table)
+        // Not while the board hides the list: a hidden table must not take the keyboard.
+        if !table.isHiddenOrHasHiddenAncestor {
+            view.window?.makeFirstResponder(table)
+        }
     }
 
     /// Selects the controller's `selectedKey` without re-entering
@@ -610,6 +632,13 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
 
     // MARK: Actions
 
+    /// Gives the list the keyboard (the main window back from the board
+    /// with nothing else to give it to); not while the rows are hidden.
+    func focusList() {
+        guard !table.isHiddenOrHasHiddenAncestor else { return }
+        view.window?.makeFirstResponder(table)
+    }
+
     @objc private func retryClicked(_ sender: Any?) {
         list.retry()
     }
@@ -692,6 +721,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         let rowView = table.makeView(withIdentifier: MessageRowView.reuseIdentifier, owner: nil) as? MessageRowView
             ?? MessageRowView()
         rowView.isMember = row >= 0 && row < keys.count ? (keys[row].messageKey.flatMap { rowsByKey[$0]?.member } ?? false) : false
+        rowView.isInFlaggedSection = flaggedRows.contains(row)
         return rowView
     }
 

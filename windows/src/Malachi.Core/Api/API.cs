@@ -5,7 +5,8 @@
 // macos/Sources/MalachiCore/Transport/JSONRPC.swift); Go:
 // backend/pkg/api/methods.go (Method*, Notify*, AllMethods,
 // AllNotifications), backend/pkg/api/types.go (the limits); contract:
-// docs/api.md §4, §5.
+// docs/api.md §4, §5. The board methods (board.go, §4.13) have no Swift
+// descriptors yet.
 //
 // backend/pkg/api re-declared in C#: the method table of methods.go with the
 // params and result type of each, the notification names, the limits. The
@@ -297,6 +298,10 @@ public static class API
     public static readonly RpcMethod<DraftMarkdownParams, DraftMarkdownResult> DraftMarkdown =
         new("draft.markdown", RpcTimeouts.Default, Wire.DraftMarkdownParams, Wire.DraftMarkdownResult);
 
+    /// <summary><c>draft.get</c>: one stored draft by id, as <c>draft.list</c> lists it.</summary>
+    public static readonly RpcMethod<DraftGetParams, DraftGetResult> DraftGet =
+        new("draft.get", RpcTimeouts.Default, Wire.DraftGetParams, Wire.DraftGetResult);
+
     // Attachments
 
     /// <summary><c>attachment.import</c>.</summary>
@@ -367,6 +372,76 @@ public static class API
     public static readonly RpcMethod<IssueTransitionParams, IssueTransitionResult> IssueTransition =
         new("issue.transition", RpcTimeouts.Transition, Wire.IssueTransitionParams, Wire.IssueTransitionResult);
 
+    // Board (docs/api.md §4.13)
+
+    /// <summary><c>board.list</c>: the cases, the open commitments of the live ones and the state of triage.</summary>
+    public static readonly RpcMethod<BoardListParams, BoardListResult> BoardList =
+        new("board.list", RpcTimeouts.Default, Wire.BoardListParams, Wire.BoardListResult);
+
+    /// <summary><c>board.get</c>: one case with the members that count, as plain text.</summary>
+    public static readonly RpcMethod<BoardGetParams, BoardGetResult> BoardGet =
+        new("board.get", RpcTimeouts.Default, Wire.BoardGetParams, Wire.BoardGetResult);
+
+    /// <summary><c>board.setState</c>: the user's own state of a case, or back to automatic.</summary>
+    public static readonly RpcMethod<BoardSetStateParams, BoardSetStateResult> BoardSetState =
+        new("board.setState", RpcTimeouts.Default, Wire.BoardSetStateParams, Wire.BoardSetStateResult);
+
+    /// <summary><c>board.setDone</c>.</summary>
+    public static readonly RpcMethod<BoardSetDoneParams, BoardSetDoneResult> BoardSetDone =
+        new("board.setDone", RpcTimeouts.Default, Wire.BoardSetDoneParams, Wire.BoardSetDoneResult);
+
+    /// <summary><c>board.remind</c>: snoozes a case until a time, or ends the remind.</summary>
+    public static readonly RpcMethod<BoardRemindParams, BoardRemindResult> BoardRemind =
+        new("board.remind", RpcTimeouts.Default, Wire.BoardRemindParams, Wire.BoardRemindResult);
+
+    /// <summary><c>board.archive</c>: moves the case's inbox members to the archive (local first) and marks it done.</summary>
+    public static readonly RpcMethod<BoardArchiveParams, BoardArchiveResult> BoardArchive =
+        new("board.archive", RpcTimeouts.Default, Wire.BoardArchiveParams, Wire.BoardArchiveResult);
+
+    /// <summary><c>board.unflag</c>: clears the flag of every copy that makes the case <c>hot.flagged</c>.</summary>
+    public static readonly RpcMethod<BoardUnflagParams, BoardUnflagResult> BoardUnflag =
+        new("board.unflag", RpcTimeouts.Default, Wire.BoardUnflagParams, Wire.BoardUnflagResult);
+
+    /// <summary><c>board.discardDraft</c>: deletes the draft linked to a case.</summary>
+    public static readonly RpcMethod<BoardDiscardDraftParams, BoardDiscardDraftResult> BoardDiscardDraft =
+        new("board.discardDraft", RpcTimeouts.Default, Wire.BoardDiscardDraftParams, Wire.BoardDiscardDraftResult);
+
+    /// <summary><c>board.setDraft</c>: links a reply draft to a case on the user's request.</summary>
+    public static readonly RpcMethod<BoardSetDraftParams, BoardSetDraftResult> BoardSetDraft =
+        new("board.setDraft", RpcTimeouts.Default, Wire.BoardSetDraftParams, Wire.BoardSetDraftResult);
+
+    /// <summary><c>board.queue</c>: the cases an assistant should triage, with their text (the MCP bridge's).</summary>
+    public static readonly RpcMethod<BoardQueueParams, BoardQueueResult> BoardQueue =
+        new("board.queue", RpcTimeouts.Default, Wire.BoardQueueParams, Wire.BoardQueueResult);
+
+    /// <summary><c>board.annotate</c>: an assistant's annotation of a case (the MCP bridge's).</summary>
+    public static readonly RpcMethod<BoardAnnotateParams, BoardAnnotateResult> BoardAnnotate =
+        new("board.annotate", RpcTimeouts.Default, Wire.BoardAnnotateParams, Wire.BoardAnnotateResult);
+
+    /// <summary><c>board.commit</c>: a commitment an assistant found in the user's message (the MCP bridge's).</summary>
+    public static readonly RpcMethod<BoardCommitParams, BoardCommitResult> BoardCommit =
+        new("board.commit", RpcTimeouts.Default, Wire.BoardCommitParams, Wire.BoardCommitResult);
+
+    /// <summary><c>board.setCommitment</c>: ticks a commitment off or reopens it.</summary>
+    public static readonly RpcMethod<BoardSetCommitmentParams, BoardSetCommitmentResult> BoardSetCommitment =
+        new("board.setCommitment", RpcTimeouts.Default, Wire.BoardSetCommitmentParams, Wire.BoardSetCommitmentResult);
+
+    /// <summary><c>board.preferences</c>.</summary>
+    public static readonly RpcMethod<EmptyParams, BoardPreferencesResult> BoardPreferences =
+        new("board.preferences", RpcTimeouts.Default, Wire.EmptyParams, Wire.BoardPreferencesResult);
+
+    /// <summary><c>board.setPreferences</c>: replaces every preference.</summary>
+    public static readonly RpcMethod<BoardSetPreferencesParams, BoardSetPreferencesResult> BoardSetPreferences =
+        new("board.setPreferences", RpcTimeouts.Default, Wire.BoardSetPreferencesParams, Wire.BoardSetPreferencesResult);
+
+    /// <summary><c>board.runStart</c>: starts a triage run.</summary>
+    public static readonly RpcMethod<BoardRunStartParams, BoardRunStartResult> BoardRunStart =
+        new("board.runStart", RpcTimeouts.Default, Wire.BoardRunStartParams, Wire.BoardRunStartResult);
+
+    /// <summary><c>board.runEnd</c>: ends a triage run, with the class of its failure if any.</summary>
+    public static readonly RpcMethod<BoardRunEndParams, EmptyResult> BoardRunEnd =
+        new("board.runEnd", RpcTimeouts.Default, Wire.BoardRunEndParams, Wire.EmptyResult);
+
     // Tables
 
     /// <summary>Every method, in the order of methods.go.</summary>
@@ -384,7 +459,7 @@ public static class API
         OutboxRetry,
         ThreadList, ThreadGet,
         DraftSave, DraftList, DraftDelete, DraftCreate, DraftOpen,
-        DraftMarkdown,
+        DraftMarkdown, DraftGet,
         AttachmentImport, AttachmentRemove, AttachmentGet,
         SearchQuery,
         SyncStatus, SyncTrigger,
@@ -392,6 +467,10 @@ public static class API
         SenderList, SenderAdd, SenderRemove,
         ContactSearch,
         IssueTransitions, IssueTransition,
+        BoardList, BoardGet, BoardSetState, BoardSetDone, BoardRemind,
+        BoardArchive, BoardUnflag, BoardDiscardDraft, BoardSetDraft, BoardQueue, BoardAnnotate,
+        BoardCommit, BoardSetCommitment, BoardPreferences, BoardSetPreferences,
+        BoardRunStart, BoardRunEnd,
     ];
 
     /// <summary>api.AllMethods: every callable method name.</summary>
@@ -414,12 +493,16 @@ public static class API
 
         /// <summary>api.NotifyMessagesChanged.</summary>
         public const string MessagesChanged = "notify.messagesChanged";
+
+        /// <summary>api.NotifyBoardChanged.</summary>
+        public const string BoardChanged = "notify.boardChanged";
     }
 
     /// <summary>api.AllNotifications: every server-initiated notification name.</summary>
     public static IReadOnlyList<string> AllNotifications { get; } =
     [
         Notify.NewMessage, Notify.SyncState, Notify.AuthRequired, Notify.AccountsChanged, Notify.MessagesChanged,
+        Notify.BoardChanged,
     ];
 
     /// <summary>

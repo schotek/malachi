@@ -183,6 +183,7 @@ func (s *accountService) Remove(ctx context.Context, p api.AccountRemoveParams) 
 	}
 	unlock()
 	s.b.log.Info("account removed", "id", p.AccountID, "deleteLocalData", p.DeleteLocalData)
+	s.b.notifyBoard(false, string(p.AccountID)) // its cases went with it
 	s.b.accountsChanged()
 	return &api.AccountRemoveResult{}, nil
 }
@@ -217,6 +218,7 @@ func (s *accountService) SetEnabled(ctx context.Context, p api.AccountSetEnabled
 		// A paused issue-tracker account shows the mail it hid; one
 		// resumed hides it again.
 		s.b.issueAccountChanged(ctx, a, a)
+		s.b.boardAccountChanged(ctx, a, a)
 	} else {
 		s.b.invalidateIssueTrackers()
 	}
@@ -364,6 +366,7 @@ func (s *accountService) Update(ctx context.Context, p api.AccountUpdateParams) 
 	// What an issue-tracker account does with its notification mail, its
 	// senders or its spaces may have changed.
 	s.b.issueAccountChanged(ctx, existing, updated)
+	s.b.boardAccountChanged(ctx, existing, updated)
 	s.b.accountsChanged()
 	return &api.AccountUpdateResult{}, nil
 }

@@ -122,6 +122,15 @@ public sealed record Draft
     public DraftComment? Comment { get; init; }
 
     /// <summary>
+    /// True for a draft kept on this device, never uploaded to the Drafts
+    /// folder (a board case's suggested reply; also every draft of a jira
+    /// account in results). <c>draft.save</c> reads it on the first save
+    /// only; left out when false.
+    /// </summary>
+    [JsonPropertyName("local")]
+    public bool? Local { get; init; }
+
+    /// <summary>
     /// Daemon-set; ignored in params (<c>DateTimeOffset.GoZero</c> in a
     /// <c>draft.create</c> result, and encoded so).
     /// </summary>
@@ -191,6 +200,26 @@ public sealed record DraftListResult
     /// <summary>The next cursor and the total.</summary>
     [JsonPropertyName("page")]
     public required PageInfo Page { get; init; }
+}
+
+/// <summary>api.DraftGetParams: one stored draft by id (<c>draft.get</c>).</summary>
+public sealed record DraftGetParams
+{
+    /// <summary>The account.</summary>
+    [JsonPropertyName("accountId")]
+    public required AccountId AccountId { get; init; }
+
+    /// <summary>The draft.</summary>
+    [JsonPropertyName("draftId")]
+    public required DraftId DraftId { get; init; }
+}
+
+/// <summary>api.DraftGetResult: the draft as one item of <c>draft.list</c>.</summary>
+public sealed record DraftGetResult
+{
+    /// <summary>The stored draft.</summary>
+    [JsonPropertyName("draft")]
+    public required Draft Draft { get; init; }
 }
 
 /// <summary>api.DraftDeleteParams.</summary>

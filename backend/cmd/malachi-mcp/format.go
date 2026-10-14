@@ -151,6 +151,35 @@ func formatAddress(a api.Address) string {
 	return name + " <" + addr + ">"
 }
 
+// Caps of one address where a tool lists many (the board, the triage
+// queue): a display name is as long as the sender likes and the daemon
+// allows a long address, so each is cut, marked with "…".
+const (
+	maxListedNameBytes    = 100
+	maxListedAddressBytes = 254 // the longest address SMTP carries
+)
+
+// formatListedAddress is formatAddress with the name and the address cut
+// to their caps; cut reports whether either was.
+func formatListedAddress(a api.Address) (s string, cut bool) {
+	name, addr := oneLine(a.Name), oneLine(a.Address)
+	name, c1 := capText(name, maxListedNameBytes)
+	addr, c2 := capText(addr, maxListedAddressBytes)
+	if name == "" {
+		return addr, c2
+	}
+	return name + " <" + addr + ">", c1 || c2
+}
+
+// capText cuts s to at most n bytes on a rune boundary and marks the cut
+// with "…" (3 more bytes).
+func capText(s string, n int) (string, bool) {
+	if len(s) <= n {
+		return s, false
+	}
+	return truncateBytes(s, n) + "…", true
+}
+
 func formatAddresses(as []api.Address) []string {
 	out := make([]string, 0, len(as))
 	for _, a := range as {

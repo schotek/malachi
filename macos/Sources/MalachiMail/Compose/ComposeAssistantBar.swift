@@ -104,6 +104,11 @@ final class ComposeAssistantBar: NSView {
     override func updateLayer() { layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.06).cgColor }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
 
+    /// Names the provider in effect after "Assistant".
+    func setProvider(chatGPT: Bool) {
+        disclosure.title = L10n.T("Assistant") + (chatGPT ? " · ChatGPT (OpenAI)" : " · Claude (Anthropic)") // macOS-only string
+    }
+
     func setMode(_ kind: ComposeKind) {
         if kind == .forward { write.title = "Write an Introduction" } // macOS-only string
         if kind == .new || kind == .edit { write.title = "Write a Message" } // macOS-only string

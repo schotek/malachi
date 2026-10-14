@@ -30,6 +30,7 @@ public sealed class EditorBridgeDriftTests
         "  if (window !== window.top || !String(window.location.href).startsWith('malachi-doc://editor/')) return;\n"
         + "  const D = Document.prototype, E = EventTarget.prototype, N = Node.prototype;\n"
         + "  const getBody = Object.getOwnPropertyDescriptor(D, 'body').get;\n"
+        + "  const getRoot = Object.getOwnPropertyDescriptor(D, 'documentElement').get;\n"
         + "  const getParent = Object.getOwnPropertyDescriptor(N, 'parentElement').get;\n"
         + "  const getParentNode = Object.getOwnPropertyDescriptor(N, 'parentNode').get;\n"
         + "  const getPrevious = Object.getOwnPropertyDescriptor(N, 'previousSibling').get;\n"
@@ -40,6 +41,7 @@ public sealed class EditorBridgeDriftTests
         + "  const closest = Element.prototype.closest;\n"
         + "  const webview = window.chrome.webview, postMessage = webview.postMessage, postWith = webview.postMessageWithAdditionalObjects;\n"
         + "  const body = () => getBody.call(document);\n"
+        + "  const root = () => getRoot.call(document);\n"
         + "  const selection = () => getSelection.call(document);\n"
         + "  const parent = n => getParent.call(n);\n"
         + "  const on = (type, f, options) => addEventListener.call(document, type, f, options);\n";
@@ -65,6 +67,9 @@ public sealed class EditorBridgeDriftTests
             "2: Node.parentElement through the prototype"),
         ("document.getSelection()", "selection()", 6, "2: Document.getSelection captured"),
         ("document.body", "body()", 11, "2: the Document.body getter captured"),
+        ("document.documentElement", "root()", 2, "2: the Document.documentElement getter captured"),
+        ("window.addEventListener('load', scheduleHeight);", "addEventListener.call(window, 'load', scheduleHeight);", 1,
+            "2: EventTarget.addEventListener captured, past the window's named properties"),
         ("document.queryCommandState(c)", "queryCommandState.call(document, c)", 1, "2: Document.queryCommandState captured"),
         ("document.queryCommandValue('formatBlock')", "queryCommandValue.call(document, 'formatBlock')", 1,
             "2: Document.queryCommandValue captured"),

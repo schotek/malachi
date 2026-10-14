@@ -18,6 +18,13 @@ import MalachiCore
 /// deviation table in macos/README.md). The actions of the popover's rows
 /// go to the app (`onAction`, `onShowOutbox`), which owns the sign-in, the
 /// account assistant and the selection.
+///
+/// At the bar's trailing end a second, quieter line may follow (`setNote`):
+/// the board's triage (its progress, when the assistant last refined the
+/// board, why automatic triage pauses), which the main window sets for its
+/// mode. It is never the sync line's: it gives way first when the bar is
+/// too narrow for both (lower compression resistance), and is hidden when
+/// empty. macOS-only, like the board.
 @MainActor
 final class StatusBarViewController: NSViewController, NSPopoverDelegate {
     /// The bar's height, its 1 pt top line included.
@@ -43,6 +50,8 @@ final class StatusBarViewController: NSViewController, NSPopoverDelegate {
     private let spinner = Spinner(size: 16)
     private let connectionIcon = NSImageView()
     private let statusButton = NSButton(title: "", target: nil, action: nil)
+    /// The board's triage line at the trailing end (`setNote`).
+    private let noteLabel = NSTextField(labelWithString: "")
     private let popover = NSPopover()
     private let content = StatusPopoverViewController()
     /// When a click on the line closed the transient popover on its
@@ -97,7 +106,17 @@ final class StatusBarViewController: NSViewController, NSPopoverDelegate {
         statusButton.setContentHuggingPriority(.defaultLow, for: .horizontal)
         statusButton.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let row = NSStackView(views: [spinner, connectionIcon, statusButton])
+        noteLabel.font = Typo.caption
+        noteLabel.textColor = .secondaryLabelColor
+        noteLabel.alignment = .right
+        noteLabel.lineBreakMode = .byTruncatingTail
+        noteLabel.maximumNumberOfLines = 1
+        noteLabel.isHidden = noteLabel.stringValue.isEmpty
+        noteLabel.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        // Below the sync line's: the note truncates first.
+        noteLabel.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(rawValue: 200), for: .horizontal)
+
+        let row = NSStackView(views: [spinner, connectionIcon, statusButton, noteLabel])
         row.orientation = .horizontal
         row.alignment = .centerY
         row.distribution = .fill
@@ -142,6 +161,20 @@ final class StatusBarViewController: NSViewController, NSPopoverDelegate {
     }
 
     // MARK: Line
+
+    /// The triage's line at the bar's trailing end; "" hides it. Only the
+    /// counts and classes of the Core's triage view, never a run's output.
+    func setNote(_ text: String) {
+        guard noteLabel.stringValue != text else { return }
+        noteLabel.stringValue = text
+        noteLabel.toolTip = text.isEmpty ? nil : text
+        noteLabel.isHidden = text.isEmpty
+    }
+
+    /// The sync line and the note as shown (the development hook prints them).
+    var shownTexts: (line: String, note: String) {
+        (statusButton.title, noteLabel.stringValue)
+    }
 
     /// Shows the line (sync.go `refreshSyncLabel`): the text, the spinner,
     /// the connection icon while there is no connection, the foot of the

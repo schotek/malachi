@@ -4,6 +4,7 @@
 package editor
 
 import (
+	"math"
 	"strings"
 	"testing"
 )
@@ -68,6 +69,41 @@ func TestRewriteInsertion(t *testing.T) {
 		cmd, arg := RewriteInsertion(c.text, c.below)
 		if cmd != c.cmd || arg != c.arg {
 			t.Errorf("RewriteInsertion(%q, %v) = (%q, %q), want (%q, %q)", c.text, c.below, cmd, arg, c.cmd, c.arg)
+		}
+	}
+}
+
+// The sized mode (compose's inline layout): the page posts the document's
+// height, and Go takes only a verified number.
+func TestHeightMessage(t *testing.T) {
+	m, err := decodeMessage(`{"type":"height","h":212.5}`)
+	if err != nil || m.Type != "height" || m.H != 212.5 {
+		t.Errorf("height: %+v %v", m, err)
+	}
+	for _, fn := range []string{"postHeight", "ResizeObserver", "post({type: 'height'"} {
+		if !strings.Contains(bridgeJS, fn) {
+			t.Errorf("bridgeJS lacks %s", fn)
+		}
+	}
+}
+
+func TestValidHeight(t *testing.T) {
+	cases := []struct {
+		in   float64
+		want float64
+		ok   bool
+	}{
+		{212.5, 212.5, true},
+		{0, 0, true},
+		{-1, 0, false},
+		{math.NaN(), 0, false},
+		{math.Inf(1), 0, false},
+		{maxReportedHeight + 1000, maxReportedHeight, true},
+	}
+	for _, c := range cases {
+		got, ok := validHeight(c.in)
+		if ok != c.ok || (ok && got != c.want) {
+			t.Errorf("validHeight(%v) = (%v, %v), want (%v, %v)", c.in, got, ok, c.want, c.ok)
 		}
 	}
 }

@@ -41,6 +41,9 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     public static let draftNotFound: ErrorCode = 1104
     /// Unknown id, another account's, or bound to a different draft.
     public static let attachmentNotFound: ErrorCode = 1105
+    /// No board case with that id (it left the board, its account is
+    /// gone), or for `board.setCommitment` no such commitment.
+    public static let caseNotFound: ErrorCode = 1106
 
     // 1200–1299: authentication.
     /// Credentials missing or token expired; see notify.authRequired.
@@ -81,6 +84,10 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     /// did not answer the one-click request (`message` carries the status,
     /// never shown verbatim).
     public static let unsubscribeFailed: ErrorCode = 1505
+    /// `board.annotate` or `board.commit` quoted text the daemon did not
+    /// find verbatim where it must be; `data` is `QuoteNotFoundData`
+    /// (`RPCError.quoteNotFound`).
+    public static let quoteNotFound: ErrorCode = 1506
 
     /// The stable symbolic name (api.ErrorCode.String): `"attachmentTooBig"`,
     /// or `"unknown(1234)"` for a code this client does not know.
@@ -96,11 +103,12 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .parseError, .invalidRequest, .methodNotFound, .invalidParams, .internalError,
         .notImplemented, .invalidArgument, .conflict, .cancelled, .unavailable, .unauthenticated,
         .accountNotFound, .folderNotFound, .messageNotFound, .threadNotFound, .draftNotFound, .attachmentNotFound,
+        .caseNotFound,
         .authRequired, .authFailed, .keyringError, .oauthClientMissing,
         .offline, .networkError, .serverError, .tlsError, .serverTimeout, .messageGone,
         .storageError, .migrationFailed,
         .malformedMessage, .sanitizeFailed, .attachmentTooBig, .partNotFound, .partNotDownloaded,
-        .unsubscribeFailed,
+        .unsubscribeFailed, .quoteNotFound,
     ]
 
     private static let names: [ErrorCode: String] = [
@@ -121,6 +129,7 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .threadNotFound: "threadNotFound",
         .draftNotFound: "draftNotFound",
         .attachmentNotFound: "attachmentNotFound",
+        .caseNotFound: "caseNotFound",
         .authRequired: "authRequired",
         .authFailed: "authFailed",
         .keyringError: "keyringError",
@@ -139,6 +148,7 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .partNotFound: "partNotFound",
         .partNotDownloaded: "partNotDownloaded",
         .unsubscribeFailed: "unsubscribeFailed",
+        .quoteNotFound: "quoteNotFound",
     ]
 }
 

@@ -51,7 +51,7 @@ func (s *Server) registerBackend(b api.Backend) {
 	msg, thr, drf := b.Messages(), b.Threads(), b.Drafts()
 	srch, sync := b.Search(), b.Sync()
 	cfg, snd, att := b.Config(), b.Senders(), b.Attachments()
-	con, iss := b.Contacts(), b.Issues()
+	con, iss, brd := b.Contacts(), b.Issues(), b.Board()
 
 	s.handlers[api.MethodSystemInfo] = wrap(sys.Info)
 	s.handlers[api.MethodSystemStorage] = wrap(sys.Storage)
@@ -96,6 +96,7 @@ func (s *Server) registerBackend(b api.Backend) {
 	s.handlers[api.MethodDraftCreate] = wrap(drf.Create)
 	s.handlers[api.MethodDraftOpen] = wrap(drf.Open)
 	s.handlers[api.MethodDraftMarkdown] = wrap(drf.Markdown)
+	s.handlers[api.MethodDraftGet] = wrap(drf.Get)
 
 	s.handlers[api.MethodAttachmentImport] = wrap(att.Import)
 	s.handlers[api.MethodAttachmentRemove] = wrap(att.Remove)
@@ -117,4 +118,22 @@ func (s *Server) registerBackend(b api.Backend) {
 
 	s.handlers[api.MethodIssueTransitions] = wrap(iss.Transitions)
 	s.handlers[api.MethodIssueTransition] = wrap(iss.Transition)
+
+	s.handlers[api.MethodBoardList] = wrap(brd.List)
+	s.handlers[api.MethodBoardGet] = wrap(brd.Get)
+	s.handlers[api.MethodBoardSetState] = wrap(brd.SetState)
+	s.handlers[api.MethodBoardSetDone] = wrap(brd.SetDone)
+	s.handlers[api.MethodBoardRemind] = wrap(brd.Remind)
+	s.handlers[api.MethodBoardArchive] = wrap(brd.Archive)
+	s.handlers[api.MethodBoardUnflag] = wrap(brd.Unflag)
+	s.handlers[api.MethodBoardDiscardDraft] = wrap(brd.DiscardDraft)
+	s.handlers[api.MethodBoardSetDraft] = wrap(brd.SetDraft)
+	s.handlers[api.MethodBoardQueue] = wrap(brd.Queue)
+	s.handlers[api.MethodBoardAnnotate] = wrap(brd.Annotate)
+	s.handlers[api.MethodBoardCommit] = wrap(brd.Commit)
+	s.handlers[api.MethodBoardSetCommitment] = wrap(brd.SetCommitment)
+	s.handlers[api.MethodBoardPreferences] = wrap(brd.Preferences)
+	s.handlers[api.MethodBoardSetPreferences] = wrap(brd.SetPreferences)
+	s.handlers[api.MethodBoardRunStart] = wrap(brd.RunStart)
+	s.handlers[api.MethodBoardRunEnd] = wrap(brd.RunEnd)
 }

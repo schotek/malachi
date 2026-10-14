@@ -59,12 +59,17 @@ public struct Draft: Codable, Sendable, Equatable {
     /// Set on a comment draft of a jira account (`draft.create` reply);
     /// `draft.save` reads only its `visibility`. Sent back unchanged.
     public var comment: DraftComment?
+    /// The draft stays in the daemon's store and never reaches the Drafts
+    /// folder on the server (a board case's suggested reply). Read by
+    /// `draft.save` on the first save only; in results true for such a
+    /// draft and for any draft of an issue-tracker account. nil = false.
+    public var local: Bool?
 
     public init(
         id: DraftID? = nil, accountId: AccountID, version: Int = 0, to: [Address] = [], cc: [Address]? = nil,
         bcc: [Address]? = nil, subject: String = "", textBody: String = "", htmlBody: String? = nil,
         inReplyTo: MessageID? = nil, forwarding: MessageID? = nil, attachments: [DraftAttachment]? = nil,
-        replaces: MessageID? = nil, updatedAt: Date = .goZero, comment: DraftComment? = nil
+        replaces: MessageID? = nil, updatedAt: Date = .goZero, comment: DraftComment? = nil, local: Bool? = nil
     ) {
         self.id = id
         self.accountId = accountId
@@ -81,6 +86,7 @@ public struct Draft: Codable, Sendable, Equatable {
         self.replaces = replaces
         self.updatedAt = updatedAt
         self.comment = comment
+        self.local = local
     }
 }
 
@@ -145,6 +151,28 @@ public struct DraftDeleteParams: Codable, Sendable, Equatable {
     public init(accountId: AccountID, draftId: DraftID) {
         self.accountId = accountId
         self.draftId = draftId
+    }
+}
+
+/// api.DraftGetParams: one stored draft by id (the board's inline reply
+/// editor opens it on every case selection, without paging `draft.list`).
+public struct DraftGetParams: Codable, Sendable, Equatable {
+    public var accountId: AccountID
+    public var draftId: DraftID
+
+    public init(accountId: AccountID, draftId: DraftID) {
+        self.accountId = accountId
+        self.draftId = draftId
+    }
+}
+
+/// api.DraftGetResult: the same `Draft` as one `draft.list` item (stored,
+/// sanitised compose HTML). `draftNotFound` when it is gone.
+public struct DraftGetResult: Codable, Sendable, Equatable {
+    public var draft: Draft
+
+    public init(draft: Draft) {
+        self.draft = draft
     }
 }
 

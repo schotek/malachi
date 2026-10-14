@@ -39,6 +39,11 @@ const (
 	// Claude Code 2.1.284 while another Claude Code held its refresh lock
 	// (the text cut short here).
 	lineRefreshFailed = `{"type":"assistant","message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"Failed to refresh OAuth token: another Claude Code process is refreshing it or exited mid-refresh."}]},"session_id":"ecadd567","error":"server_error"}`
+	// One API message split into two assistant lines with the same id and
+	// usage, and a result with all four counters (and fields not read).
+	lineSplitThinking = `{"type":"assistant","message":{"model":"claude-sonnet-4-5","id":"msg_07","type":"message","role":"assistant","content":[{"type":"thinking","thinking":"Which case first?","signature":"EqQB"}],"stop_reason":null,"usage":{"input_tokens":3,"cache_creation_input_tokens":1200,"cache_read_input_tokens":45000,"cache_creation":{"ephemeral_5m_input_tokens":1200,"ephemeral_1h_input_tokens":0},"output_tokens":8,"service_tier":"standard"}},"parent_tool_use_id":null,"session_id":"5f1c2d3e","uuid":"u13"}`
+	lineSplitTool     = `{"type":"assistant","message":{"model":"claude-sonnet-4-5","id":"msg_07","type":"message","role":"assistant","content":[{"type":"tool_use","id":"toolu_07","name":"mcp__malachi__annotate_case","input":{"caseId":"c1"}}],"stop_reason":null,"usage":{"input_tokens":3,"cache_creation_input_tokens":1200,"cache_read_input_tokens":45000,"output_tokens":8,"service_tier":"standard"}},"parent_tool_use_id":null,"session_id":"5f1c2d3e","uuid":"u14"}`
+	lineResultUsage   = `{"type":"result","subtype":"success","is_error":false,"num_turns":4,"result":"Annotated 3 cases.","session_id":"5f1c2d3e","total_cost_usd":0.08,"usage":{"input_tokens":12,"cache_creation_input_tokens":2400,"cache_read_input_tokens":180000,"output_tokens":1500,"server_tool_use":{"web_search_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_5m_input_tokens":2400}},"modelUsage":{},"permission_denials":[]}`
 )
 
 func TestParseEvents(t *testing.T) {
@@ -68,7 +73,7 @@ func TestParseEvents(t *testing.T) {
 		{"tool input delta", lineToolDelta, []Event{{Kind: EventOther}}},
 		{"text delta without an event", `{"type":"stream_event"}`, []Event{{Kind: EventOther}}},
 		{"assistant blocks", lineAssistant, []Event{
-			{Kind: EventText, Text: "I'll read the message."},
+			{Kind: EventText, Text: "I'll read the message.", Usage: &Usage{InputTokens: 10, OutputTokens: 20}, MessageID: "msg_01"},
 			{Kind: EventToolUse, Tool: "read_message", ToolUseID: "toolu_01"},
 			{Kind: EventText, Text: "And search."},
 			{Kind: EventToolUse, Tool: "WebFetch", ToolUseID: "toolu_02"},
@@ -102,15 +107,22 @@ func TestParseEvents(t *testing.T) {
 		{"tool result, no content", `{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":"yes"}]}}`,
 			[]Event{{Kind: EventToolResult, ToolUseID: "t1"}}},
 		{"user text", lineUserText, nil},
-		{"success", lineSuccess, []Event{{Kind: EventResult, Success: true, ResultText: "The draft is ready.", CostUSD: 0.0123}}},
+		{"success", lineSuccess, []Event{{Kind: EventResult, Success: true, ResultText: "The draft is ready.", CostUSD: 0.0123,
+			Usage: &Usage{InputTokens: 100, OutputTokens: 50}}}},
 		{"structured output", lineStructured, []Event{{Kind: EventResult, Success: true, CostUSD: 0.5,
 			Structured: json.RawMessage(`{"summary":"x", "items":[1,2]}`)}}},
 		{"max turns with denials", lineMaxTurns, []Event{{Kind: EventResult, IsError: true, ResultText: "error_max_turns", CostUSD: 0.2,
-			Denied: []string{"send_message", "Bash"}}}},
+			Denied: []string{"send_message", "Bash"}, Usage: &Usage{}}}},
 		{"success subtype with is_error", lineAPIError, []Event{{Kind: EventResult, IsError: true, ResultText: "Invalid API key · Please run /login"}}},
 		{"result of odd types", `{"type":"result","subtype":"success","is_error":"no","result":5,"total_cost_usd":"1","permission_denials":[{"tool_name":3},"x",{"tool_name":""}]}`,
 			[]Event{{Kind: EventResult, Success: true}}},
 		{"result without a subtype", `{"type":"result","is_error":true}`, []Event{{Kind: EventResult, IsError: true}}},
+		{"split message, thinking", lineSplitThinking, []Event{{Kind: EventOther, MessageID: "msg_07",
+			Usage: &Usage{InputTokens: 3, OutputTokens: 8, CacheCreationInputTokens: 1200, CacheReadInputTokens: 45000}}}},
+		{"split message, tool", lineSplitTool, []Event{{Kind: EventToolUse, Tool: "annotate_case", ToolUseID: "toolu_07", MessageID: "msg_07",
+			Usage: &Usage{InputTokens: 3, OutputTokens: 8, CacheCreationInputTokens: 1200, CacheReadInputTokens: 45000}}}},
+		{"result with all counters", lineResultUsage, []Event{{Kind: EventResult, Success: true, ResultText: "Annotated 3 cases.", CostUSD: 0.08,
+			Usage: &Usage{InputTokens: 12, OutputTokens: 1500, CacheCreationInputTokens: 2400, CacheReadInputTokens: 180000}}}},
 		{"unknown type", `{"type":"brand_new","text":"hi"}`, []Event{{Kind: EventOther}}},
 		{"no type", `{"text":"hi"}`, []Event{{Kind: EventOther}}},
 		{"type of another type", `{"type":["assistant"]}`, []Event{{Kind: EventOther}}},
@@ -130,6 +142,71 @@ func TestParseEvents(t *testing.T) {
 				t.Errorf("ParseEvents =\n%+v\nwant\n%+v", got, tt.want)
 			}
 		})
+	}
+}
+
+// Usage is read from untrusted lines: a counter that is not a whole number
+// from 0 to the largest int64 drops the whole usage; a missing or null one
+// is 0.
+func TestParseEventsUsage(t *testing.T) {
+	result := func(usage string) string {
+		return `{"type":"result","subtype":"success","is_error":false,"result":"r","usage":` + usage + `}`
+	}
+	assistant := func(fields string) string {
+		return `{"type":"assistant","message":{"id":"m1","content":[{"type":"text","text":"t"}],"usage":{"input_tokens":5}}` + fields + `}`
+	}
+	tests := []struct {
+		name string
+		line string
+		want *Usage
+		id   string
+	}{
+		{"all four", result(`{"input_tokens":1,"output_tokens":2,"cache_creation_input_tokens":3,"cache_read_input_tokens":4}`), &Usage{1, 2, 3, 4}, ""},
+		{"missing and null counters", result(`{"output_tokens":7,"cache_read_input_tokens":null}`), &Usage{OutputTokens: 7}, ""},
+		{"empty", result(`{}`), &Usage{}, ""},
+		{"the largest int64", result(`{"input_tokens":9223372036854775807}`), &Usage{InputTokens: 9223372036854775807}, ""},
+		{"spaces around a counter", result(`{"input_tokens": 12 }`), &Usage{InputTokens: 12}, ""},
+		{"the last of duplicate keys", result(`{"input_tokens":-1,"input_tokens":3}`), &Usage{InputTokens: 3}, ""},
+		{"negative", result(`{"input_tokens":1,"output_tokens":-2}`), nil, ""},
+		{"negative zero", result(`{"input_tokens":-0}`), nil, ""},
+		{"fractional", result(`{"input_tokens":1.5}`), nil, ""},
+		{"a whole fraction", result(`{"input_tokens":10.0}`), nil, ""},
+		{"an exponent", result(`{"input_tokens":1e3}`), nil, ""},
+		{"a string", result(`{"input_tokens":"12"}`), nil, ""},
+		{"a bool", result(`{"cache_read_input_tokens":true}`), nil, ""},
+		{"an object", result(`{"output_tokens":{"n":1}}`), nil, ""},
+		{"beyond int64", result(`{"input_tokens":9223372036854775808}`), nil, ""},
+		{"absurdly large", result(`{"input_tokens":1000000000000000000000000000000}`), nil, ""},
+		{"usage null", result(`null`), nil, ""},
+		{"usage a number", result(`5`), nil, ""},
+		{"usage an array", result(`[1,2]`), nil, ""},
+		{"an assistant message", assistant(``), &Usage{InputTokens: 5}, "m1"},
+		{"an assistant message, parent null", assistant(`,"parent_tool_use_id":null`), &Usage{InputTokens: 5}, "m1"},
+		{"a subagent's message", assistant(`,"parent_tool_use_id":"toolu_09"`), nil, ""},
+		{"a parent of another type", assistant(`,"parent_tool_use_id":7`), nil, ""},
+		{"a message without an id", `{"type":"assistant","message":{"content":[{"type":"text","text":"t"}],"usage":{"input_tokens":5}}}`, nil, ""},
+		{"a message with an id of another type", `{"type":"assistant","message":{"id":3,"content":[{"type":"text","text":"t"}],"usage":{"input_tokens":5}}}`, nil, ""},
+		{"a message with bad usage", `{"type":"assistant","message":{"id":"m1","content":[{"type":"text","text":"t"}],"usage":{"input_tokens":-5}}}`, nil, ""},
+	}
+	for _, tt := range tests {
+		events, err := ParseEvents([]byte(tt.line))
+		if err != nil || len(events) == 0 {
+			t.Fatalf("%s: ParseEvents = %v, %v", tt.name, events, err)
+		}
+		if got := events[0].Usage; !reflect.DeepEqual(got, tt.want) || events[0].MessageID != tt.id {
+			t.Errorf("%s: Usage = %+v, %q; want %+v, %q", tt.name, got, events[0].MessageID, tt.want, tt.id)
+		}
+	}
+	// Only the first event of a message carries it; a failure never does.
+	events, _ := ParseEvents([]byte(lineAssistant))
+	for _, e := range events[1:] {
+		if e.Usage != nil || e.MessageID != "" {
+			t.Errorf("a later event carries usage: %+v", e)
+		}
+	}
+	events, _ = ParseEvents([]byte(lineAuthFailed))
+	if len(events) != 1 || events[0].Usage != nil {
+		t.Errorf("a failure carries usage: %+v", events)
 	}
 }
 
@@ -216,6 +293,9 @@ func TestParseDraftResult(t *testing.T) {
 		{"with --allow-send",
 			"draft drf_0a1b2c3d4e5f60718293a4b5c6d7e8f9 (version 12) stored in account acc_work; it is NOT sent. send_message with draftId=drf_0a1b2c3d4e5f60718293a4b5c6d7e8f9 sends it; show the recipients below to the user first.",
 			DraftRef{AccountID: "acc_work", DraftID: "drf_0a1b2c3d4e5f60718293a4b5c6d7e8f9", Version: 12}},
+		{"a local draft's head",
+			"draft d1 (version 3) stored in account a1; it is NOT sent. It stays in Malachi Mail on the board as the case's suggested reply, on the board only, and is not copied to the Drafts folder on the mail server. This bridge was started without --allow-send; the user sends it from Malachi Mail.\nmode: reply; quoted: html",
+			DraftRef{AccountID: "a1", DraftID: "d1", Version: 3}},
 		{"the head alone", "draft d1 (version 1) stored in account a1; it is NOT sent.",
 			DraftRef{AccountID: "a1", DraftID: "d1", Version: 1}},
 		{"odd but whitespace-free ids", "draft AAMkAGI2=/+_- (version 007) stored in account a;b(version; it is NOT sent.",

@@ -184,23 +184,79 @@ func (w *Window) forwardAccount() (api.Account, bool) {
 // attribution, and no fallback either: without a comment draft from the
 // daemon there is nothing to write, only the toast.
 func (w *Window) openComment(s api.MessageSummary) {
-	id := s.ID
-	w.composing[id] = true
-	params := api.DraftCreateParams{AccountID: s.AccountID, Mode: api.ComposeReply, MessageID: id}
+	w.openCommentFor(s.AccountID, s.ID)
+}
+
+// openReply opens a reply to message msg of account acc, or (comment) a
+// comment on its issue — the same choice openComposeFrom makes from the
+// account's capability, already decided by the caller. Unlike
+// openComposeFrom this needs no cached summary of msg (w.summary), so the
+// board's own Reply (board_actions.go boardReply) can use it for a case
+// whose message the mail model never listed: the backend's draft.create
+// only needs the account and the message id. person, when not "", is the
+// case's other party, cleaned already (board.CleanLine), used for the
+// quote's attribution line in place of the From header a cached summary
+// would have given (compose.Attribution's name-only branch).
+func (w *Window) openReply(acc api.AccountID, msg api.MessageID, comment bool, person string) {
+	if comment {
+		w.openCommentFor(acc, msg)
+		return
+	}
+	if w.composing[msg] {
+		return
+	}
+	w.composing[msg] = true
+	kind := compose.KindReply
+	attribution := ""
+	if person != "" {
+		attribution = compose.Attribution(kind, compose.Source{From: []api.Address{{Name: person}}})
+	}
+	params := api.DraftCreateParams{AccountID: acc, Mode: kind.Mode(), MessageID: msg, Attribution: attribution}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), composeTimeout)
 		defer cancel()
 		var res api.DraftCreateResult
 		err := w.client.Call(ctx, api.MethodDraftCreate, params, &res)
 		glib.IdleAdd(func() {
-			delete(w.composing, id)
+			delete(w.composing, msg)
+			if err != nil {
+				w.log.Warn("draft.create", "mode", params.Mode, "err", err)
+				if text := composeFallbackText(composeWhat(kind), err); text != "" {
+					w.Toast(text)
+				}
+				return
+			}
+			p := compose.FromDraft(kind, res.Draft, res.Blocked)
+			p.AccountID = acc
+			p.Skipped = len(res.Skipped)
+			p.Attribution = attribution
+			w.compose.Open(p)
+		})
+	}()
+}
+
+// openCommentFor is openComment without needing a cached summary (the
+// board's own comment, through openReply).
+func (w *Window) openCommentFor(acc api.AccountID, msg api.MessageID) {
+	if w.composing[msg] {
+		return
+	}
+	w.composing[msg] = true
+	params := api.DraftCreateParams{AccountID: acc, Mode: api.ComposeReply, MessageID: msg}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), composeTimeout)
+		defer cancel()
+		var res api.DraftCreateResult
+		err := w.client.Call(ctx, api.MethodDraftCreate, params, &res)
+		glib.IdleAdd(func() {
+			delete(w.composing, msg)
 			if err != nil {
 				w.log.Warn("draft.create comment", "err", err)
 				w.Toast(widget.RPCErrorText(composeWhat(compose.KindReply), err))
 				return
 			}
 			p := compose.FromDraft(compose.KindReply, res.Draft, res.Blocked)
-			p.AccountID = s.AccountID
+			p.AccountID = acc
 			w.compose.Open(p)
 		})
 	}()

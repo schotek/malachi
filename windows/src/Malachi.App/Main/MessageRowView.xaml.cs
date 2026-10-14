@@ -29,6 +29,8 @@ public sealed partial class MessageRowView : UserControl
     public MessageRowView()
     {
         InitializeComponent();
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
     }
 
     /// <summary>The row it shows.</summary>
@@ -80,15 +82,55 @@ public sealed partial class MessageRowView : UserControl
             row.PropertyChanged += view.OnRowPropertyChanged;
         }
         view.FillPreview();
+        view.UpdateFlaggedTint();
     }
 
     private void OnRowPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(MessageRow.IsInFlaggedSection))
+        {
+            UpdateFlaggedTint();
+        }
         if (e.PropertyName is nameof(MessageRow.Preview) or nameof(MessageRow.Highlights))
         {
             FillPreview();
         }
     }
+
+    private ListViewItem? container;
+    private long selectionToken;
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        DetachContainer();
+        DependencyObject? parent = VisualTreeHelper.GetParent(this);
+        while (parent is not null && parent is not ListViewItem)
+        {
+            parent = VisualTreeHelper.GetParent(parent);
+        }
+        container = parent as ListViewItem;
+        if (container is not null)
+        {
+            selectionToken = container.RegisterPropertyChangedCallback(ListViewItem.IsSelectedProperty,
+                (_, _) => UpdateFlaggedTint());
+        }
+        UpdateFlaggedTint();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e) => DetachContainer();
+
+    private void DetachContainer()
+    {
+        if (container is not null)
+        {
+            container.UnregisterPropertyChangedCallback(ListViewItem.IsSelectedProperty, selectionToken);
+            container = null;
+        }
+    }
+
+    private void UpdateFlaggedTint() => FlaggedTint.Visibility =
+        Row?.IsInFlaggedSection == true && container?.IsSelected != true
+            ? Visibility.Visible : Visibility.Collapsed;
 
     // widget.highlightAttrs: the excerpt as plain runs, the matched words
     // (Core's UTF-16 ranges, sorted and apart) in bold.

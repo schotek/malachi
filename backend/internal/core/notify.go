@@ -294,7 +294,8 @@ func errorCode(e *api.Error) api.ErrorCode {
 // issue-tracker site, issue_mail.go) is dropped. notify.messagesChanged is
 // gathered per account (messagesChanged), and the first finished pass of
 // an issue-tracker account judges its notification mail (issuePassed).
-// notify.accountsChanged passes through.
+// notify.accountsChanged passes through. New mail, changed messages and a
+// sync state that is not syncing wake the board's worker (wakeBoard).
 type outboxAwareNotifier struct {
 	b     *Backend
 	inner api.Notifier
@@ -308,6 +309,7 @@ func (n outboxAwareNotifier) NewMessage(ev api.NewMessageNotification) {
 	}
 	n.b.decorateNewMessage(&ev)
 	n.inner.NewMessage(ev)
+	n.b.wakeBoard()
 }
 func (n outboxAwareNotifier) AuthRequired(ev api.AuthRequiredNotification) {
 	if ev.AuthURL == "" {
@@ -324,11 +326,16 @@ func (n outboxAwareNotifier) MessagesChanged(ev api.MessagesChangedNotification)
 		folders[i] = string(f)
 	}
 	n.b.messagesChanged(map[string][]string{string(ev.AccountID): folders})
+	n.b.wakeBoard()
 }
 func (n outboxAwareNotifier) SyncState(ev api.SyncStateNotification) {
 	ev.State.PendingOutbox, ev.State.FailedOutbox = n.b.outboxCounts(string(ev.State.AccountID))
 	n.inner.SyncState(ev)
 	n.b.issuePassed(ev.State)
+	if ev.State.Status != api.SyncSyncing {
+		// A pass ended (or stopped): what it stored is on the board soon.
+		n.b.wakeBoard()
+	}
 }
 
 // forwardingNotifier hands events to whatever notifier the backend has at

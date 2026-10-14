@@ -63,6 +63,15 @@ import WebKit
 ///   on draft.save. Only plain text that looks like Markdown is taken by
 ///   the bridge's paste listener and comes back as HTML the daemon
 ///   sanitised (draft.markdown) or as the plain text.
+///
+/// The sized mode (`sized`, the board's inline reply) changes none of the
+/// above: the document is still `editorDocument(body:)` with its CSP, the
+/// bridge script is the same and content JavaScript stays off. A second
+/// script of the application's own, in the same `.defaultClient` world
+/// (`sizeScript`), reports the height of the document's content through a
+/// `size` handler; it only reads the layout. The owner sets the view's
+/// height from it, and the scroll wheel goes on to the enclosing scroll
+/// view while the document fits (`outerScroll`).
 @MainActor
 final class ComposeWebView: WKWebView {
     /// The body of a message the bridge posted to the `malachi` handler
@@ -77,9 +86,19 @@ final class ComposeWebView: WKWebView {
     /// rule list could not be installed (`ContentRules`); the next load
     /// tries again.
     var onUnavailable: (@MainActor () -> Void)?
+    /// Sized mode: the content height the size script reported, in CSS
+    /// pixels, unchecked (the editor validates it).
+    var onSize: (@MainActor (Double) -> Void)?
+    /// Sized mode: the scroll view the wheel scrolls instead of the
+    /// document, nil while the document has something to scroll itself.
+    var outerScroll: (@MainActor () -> NSScrollView?)?
 
     /// The script message handler the bridge posts to.
     static let bridgeHandlerName = "malachi"
+    /// Sized mode: the handler the size script posts to.
+    static let sizeHandlerName = "size"
+    /// The view reports the height of its document (see the type's comment).
+    let sized: Bool
 
     /// The content rule list: everything blocked, then the draft's inline
     /// pictures, the daemon-inlined `data:` pictures and the document
@@ -97,6 +116,7 @@ final class ComposeWebView: WKWebView {
 
     private let handler: CIDSchemeHandler
     private let bridgeProxy: BridgeMessageProxy
+    private let sizeProxy: SizeMessageProxy?
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "editor")
 
     /// The content rule list is installed; until then a document waits in
@@ -106,14 +126,25 @@ final class ComposeWebView: WKWebView {
     private var pendingDocument: String?
 
     /// A view over `registry`, the registry its `cid:` handler resolves
-    /// ids in (the process-wide one in the application).
-    init(registry: CIDRegistry = .shared) {
+    /// ids in (the process-wide one in the application); `sized` adds the
+    /// size script (the board's inline reply).
+    init(registry: CIDRegistry = .shared, sized: Bool = false) {
         let handler = CIDSchemeHandler(registry: registry)
         let proxy = BridgeMessageProxy()
+        let sizeProxy = sized ? SizeMessageProxy() : nil
         self.handler = handler
         self.bridgeProxy = proxy
-        super.init(frame: .zero, configuration: Self.makeConfiguration(handler: handler, bridge: proxy))
+        self.sizeProxy = sizeProxy
+        self.sized = sized
+        let config = Self.makeConfiguration(handler: handler, bridge: proxy)
+        if let sizeProxy {
+            config.userContentController.addUserScript(
+                WKUserScript(source: Self.sizeScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: .defaultClient))
+            config.userContentController.add(sizeProxy, contentWorld: .defaultClient, name: Self.sizeHandlerName)
+        }
+        super.init(frame: .zero, configuration: config)
         proxy.target = self
+        sizeProxy?.target = self
         navigationDelegate = self
         uiDelegate = self
         allowsBackForwardNavigationGestures = false
@@ -185,6 +216,36 @@ final class ComposeWebView: WKWebView {
         }
     }
 
+    /// Sized mode's script, in the bridge's world: the height of the
+    /// body's box with its bottom margin (where the content ends, whatever
+    /// the view's own height), whenever it changes (a ResizeObserver on
+    /// the root and the body, and every picture that finishes loading). It
+    /// reads the layout only; the document is not changed.
+    static let sizeScript = """
+    (function () {
+        var last = -1;
+        function measure() {
+            var b = document.body;
+            if (!b) { return; }
+            var r = b.getBoundingClientRect();
+            var mb = parseFloat(window.getComputedStyle(b).marginBottom) || 0;
+            var h = Math.ceil(r.bottom + window.scrollY + mb);
+            if (h !== last) {
+                last = h;
+                try { window.webkit.messageHandlers['\(sizeHandlerName)'].postMessage({h: h}); } catch (e) {}
+            }
+        }
+        try {
+            var ro = new ResizeObserver(function () { measure(); });
+            ro.observe(document.documentElement);
+            if (document.body) { ro.observe(document.body); }
+        } catch (e) {}
+        document.addEventListener('load', function () { measure(); }, true);
+        window.addEventListener('load', function () { measure(); });
+        measure();
+    })();
+    """
+
     // MARK: Content and scripts
 
     /// Loads a complete editor document (`editorDocument(body:)` and
@@ -222,6 +283,18 @@ final class ComposeWebView: WKWebView {
                 done(nil, error)
             }
         }
+    }
+
+    // MARK: Scrolling
+
+    /// Sized mode: the wheel scrolls the enclosing view while the document
+    /// fits (as `MessageWebView`'s conversation cards).
+    override func scrollWheel(with event: NSEvent) {
+        if let outer = outerScroll?() {
+            outer.scrollWheel(with: event)
+            return
+        }
+        super.scrollWheel(with: event)
     }
 
     // MARK: Context menu
@@ -292,6 +365,12 @@ final class ComposeWebView: WKWebView {
     fileprivate func receive(_ body: Any) {
         onBridgeMessage?(body)
     }
+
+    /// Sized mode: the size script posted `{h}`. Anything else is dropped.
+    fileprivate func receiveSize(_ body: Any) {
+        guard sized, let dict = body as? [String: Any], let h = (dict["h"] as? NSNumber)?.doubleValue else { return }
+        onSize?(h)
+    }
 }
 
 // The WebKit delegate protocols are main-actor isolated in the Swift
@@ -344,5 +423,16 @@ private final class BridgeMessageProxy: NSObject, WKScriptMessageHandler {
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         target?.receive(message.body)
+    }
+}
+
+/// The `size` message handler of the sized mode, between the configuration
+/// and the view as `BridgeMessageProxy`.
+@MainActor
+private final class SizeMessageProxy: NSObject, WKScriptMessageHandler {
+    weak var target: ComposeWebView?
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        target?.receiveSize(message.body)
     }
 }

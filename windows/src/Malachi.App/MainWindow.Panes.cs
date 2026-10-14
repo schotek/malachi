@@ -111,6 +111,8 @@ public sealed partial class MainWindow
         // status.go showOutbox: the account's outbox, and the list it shows.
         StatusLine.OutboxRequested += (_, acc) =>
         {
+            // The outbox shows in the list: the board gives way (Board.ModeFor).
+            ApplyModeRequest(Core.Boards.Board.Request.ShowOutbox);
             if (integration.Mailbox.ShowOutbox(acc))
             {
                 Navigate(layout.FolderChosen);
@@ -286,8 +288,8 @@ public sealed partial class MainWindow
         }
         ListPane.Visibility = layout.ListVisible ? Visibility.Visible : Visibility.Collapsed;
         MessagePane.Visibility = layout.MessageVisible ? Visibility.Visible : Visibility.Collapsed;
-        AppTitleBar.IsPaneToggleButtonVisible = layout.PaneToggleVisible;
-        AppTitleBar.IsBackButtonVisible = layout.BackVisible;
+        AppTitleBar.IsPaneToggleButtonVisible = layout.PaneToggleVisible && mode == Core.Boards.Board.Mode.Mail;
+        AppTitleBar.IsBackButtonVisible = layout.BackVisible && mode == Core.Boards.Board.Mode.Mail;
         // The narrow title bar has the back and pane buttons beside the box.
         SearchBox.MinWidth = layout.Mode == PaneMode.Narrow ? 120 : 240;
     }

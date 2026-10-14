@@ -6,6 +6,7 @@ package editor
 import (
 	"encoding/json"
 	"html"
+	"math"
 	"strings"
 )
 
@@ -33,15 +34,33 @@ import (
 // with pasted(id, html) to insert the rendered HTML where the paste went,
 // or pasted(id, null) to paste the text as it is. Every other paste is
 // WebKit's own. The regexes write the backtick as \x60.
+//
+// A ResizeObserver on the document element, debounced like flush, posts
+// the document's height ("height": h) on every input, paste and resize:
+// the sized mode of the inline pane (Go only acts on it when
+// Editor.OnHeight is set; htmlview/size.go reports a card's height the
+// same way, in its own isolated world — this document already runs its
+// own script in the main world, so one more message type on the same
+// "malachi" handler is simpler than a second world and handler).
 const bridgeJS = `(() => {
   const post = m => window.webkit.messageHandlers.malachi.postMessage(JSON.stringify(m));
   let seq = 0, timer = null;
+  let lastHeight = -1, heightTimer = null;
+  const postHeight = () => {
+    const h = document.documentElement.scrollHeight;
+    if (h !== lastHeight) { lastHeight = h; post({type: 'height', h: h}); }
+  };
+  const scheduleHeight = () => { if (heightTimer) clearTimeout(heightTimer); heightTimer = setTimeout(postHeight, 100); };
+  try {
+    new ResizeObserver(scheduleHeight).observe(document.documentElement);
+  } catch (e) {}
+  window.addEventListener('load', scheduleHeight);
   const flush = () => {
     if (timer) { clearTimeout(timer); timer = null; }
     post({type: 'changed', seq: ++seq, html: document.body.innerHTML, text: document.body.innerText});
     return seq;
   };
-  const schedule = () => { if (timer) clearTimeout(timer); timer = setTimeout(flush, 250); };
+  const schedule = () => { if (timer) clearTimeout(timer); timer = setTimeout(flush, 250); scheduleHeight(); };
   const q = c => { try { return document.queryCommandState(c); } catch (e) { return false; } };
   const state = () => post({
     type: 'state',
@@ -153,8 +172,25 @@ type bridgeMessage struct {
 	Text string `json:"text"`
 	// Selected is the "rewrite" message's: the passage is the selection.
 	Selected bool `json:"selected"`
+	// H is the "height" message's document height in CSS pixels (sized
+	// mode, validHeight).
+	H float64 `json:"h"`
 	State
 }
+
+// validHeight is a reported height as Go takes it: a finite number that is
+// not negative, capped at maxReportedHeight; false for anything else. Same
+// technique as ui/internal/htmlview/size.go's validHeight.
+func validHeight(h float64) (float64, bool) {
+	if math.IsNaN(h) || math.IsInf(h, 0) || h < 0 {
+		return 0, false
+	}
+	return math.Min(h, maxReportedHeight), true
+}
+
+// maxReportedHeight caps a reported height, in CSS pixels, before Go's own
+// clamp (board.NewEditorHeight) sees it.
+const maxReportedHeight = 1 << 20
 
 // RewriteTarget is what the compose window's rewrite works on, as the
 // bridge reports it: the selection (Selected), or the user's own text

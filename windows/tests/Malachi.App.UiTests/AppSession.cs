@@ -23,6 +23,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text;
 using System.Threading;
 using System.Windows.Automation;
@@ -110,7 +112,7 @@ internal sealed class AppSession : IDisposable
         Process? process = null;
         try
         {
-            Directory.CreateDirectory(folder);
+            CreatePrivateFolder(folder);
             if (preferences is not null)
             {
                 using var key = Registry.CurrentUser.CreateSubKey(SettingsKeyPath(settingsKeyName));
@@ -240,6 +242,26 @@ internal sealed class AppSession : IDisposable
             DeleteSettingsKey(SettingsKeyName);
             RemoveFolder(Folder);
         }
+    }
+
+    // The socket's key file inherits the folder's ACL, and the app refuses a
+    // key other users may read (WindowsKeyFilePolicy): %TEMP% may grant
+    // another principal access (measured 2026-10-06: a sandbox's SID with
+    // Modify), so the folder has its own ACL, the user and SYSTEM only.
+    private static void CreatePrivateFolder(string folder)
+    {
+        var security = new DirectorySecurity();
+        security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        var inherit = InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
+        foreach (var who in new IdentityReference[]
+        {
+            WindowsIdentity.GetCurrent().User ?? throw new InvalidOperationException("no current user"),
+            new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
+        })
+        {
+            security.AddAccessRule(new FileSystemAccessRule(who, FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
+        }
+        new DirectoryInfo(folder).Create(security);
     }
 
     private static void Kill(Process p)

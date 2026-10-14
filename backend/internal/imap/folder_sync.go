@@ -55,8 +55,19 @@ func (s *Syncer) syncFolder(ctx context.Context, sess *session, f store.Folder, 
 		return storageError(err)
 	}
 	gone, fresh, common := diffUIDs(local, server)
+	// A message the user moved or deleted locally whose operation is still
+	// queued (enqueued after this pass pushed the operations) is on the
+	// server yet: not new, and not fetched back — it would reappear, a
+	// second row, until the next pass pushed the operation and saw it gone.
+	queued, err := s.deps.Store.PendingSourceUIDs(ctx, f.ID)
+	if err != nil {
+		return storageError(err)
+	}
+	if len(queued) > 0 {
+		fresh = subtractUIDs(fresh, queued)
+	}
 	s.log.Debug("folder diff", "folder", f.ID, "exists", sel.NumMessages, "server", len(server),
-		"local", len(local), "gone", len(gone), "fresh", len(fresh), "common", len(common), "localWindow", filtered)
+		"local", len(local), "gone", len(gone), "fresh", len(fresh), "common", len(common), "queued", len(queued), "localWindow", filtered)
 	if filtered {
 		// The server returned everything: apply the window here. New UIDs
 		// are kept only when their INTERNALDATE is inside it; known rows

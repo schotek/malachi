@@ -56,6 +56,10 @@ type Editor struct {
 	// and must call answer once, on the main loop, with the HTML to insert
 	// in its place or "" for the text as it is. Unset: the text is pasted.
 	OnPaste func(text string, answer func(html string))
+	// OnHeight is the sized mode (compose's inline layout): the document's
+	// height in CSS pixels, on input, paste and resize. Unset: the page
+	// still measures and posts it, but nothing reads the message.
+	OnHeight func(css float64)
 }
 
 // New builds an editor from data/ui/editor.blp. Call Load to show content.
@@ -123,7 +127,7 @@ func New(log *slog.Logger) *Editor {
 // pile processes up until the sandbox cannot start another one. The
 // editor is dead afterwards.
 func (e *Editor) Close() {
-	e.OnCrashed, e.OnChanged, e.OnState, e.OnReady, e.OnDropFiles, e.OnPaste = nil, nil, nil, nil, nil, nil
+	e.OnCrashed, e.OnChanged, e.OnState, e.OnReady, e.OnDropFiles, e.OnPaste, e.OnHeight = nil, nil, nil, nil, nil, nil, nil
 	e.ready = false
 	e.waiters = nil
 	e.StopLoading()
@@ -257,6 +261,12 @@ func (e *Editor) onMessage(v *javascriptcore.Value) {
 		e.answerRewrites(RewriteTarget{Selected: msg.Selected, Text: msg.Text})
 	case "paste":
 		e.paste(msg.ID, msg.Text)
+	case "height":
+		if e.OnHeight != nil {
+			if css, ok := validHeight(msg.H); ok {
+				e.OnHeight(css)
+			}
+		}
 	}
 }
 

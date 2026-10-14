@@ -468,7 +468,9 @@ public sealed partial class AssistantPanelController : IDisposable
     };
 
     /// <summary>The panel's subtitle: "Claude Code · Sonnet" (two translated names, GTK's and Swift's separator).</summary>
-    public string Subtitle => Assistant.TargetName(AssistantTarget.Code) + " · " + Assistant.ModelName(Settings.AssistantModel);
+    public string Subtitle => Provider is { } provider
+        ? L10n.T("ChatGPT (Codex, experimental)") + " · " + (provider.Model.Length > 0 ? provider.Model : L10n.T("Use the provider’s default model"))
+        : Assistant.TargetName(AssistantTarget.Code) + " · " + Assistant.ModelName(Settings.AssistantModel);
 
     // What the quick actions act on: the chip's context before the
     // conversation's first question, the newest pinned context after it
@@ -826,6 +828,27 @@ public sealed partial class AssistantPanelController : IDisposable
         Start(request with { SignIn = true }, echo: false);
     }
 
+    /// <summary>
+    /// Reconnect to ChatGPT on an error item: the window's
+    /// <see cref="ReconnectProvider"/>, then the same question once more
+    /// (GTK <c>ReconnectProvider</c>/<c>reconnectFirst</c>).
+    /// </summary>
+    public void Reconnect(int itemId)
+    {
+        scope.VerifyAccess();
+        if (IsClosed || CurrentPhase != Phase.Idle || lastRequest is not { } request)
+        {
+            return;
+        }
+        var idx = items.FindIndex(i => i.Id == itemId);
+        if (idx < 0 || items[idx].Content is not ErrorContent { Offer: ErrorOffer.Reconnect } error)
+        {
+            return;
+        }
+        SetContent(idx, error with { Offer = ErrorOffer.None });
+        Start(request with { SignIn = true }, echo: false);
+    }
+
     /// <summary>A draft card's Open Draft.</summary>
     public void OpenDraftItem(int itemId)
     {
@@ -930,7 +953,8 @@ public sealed partial class AssistantPanelController : IDisposable
             return;
         }
         // 1. Consent, once ever.
-        if (!Settings.AssistantConsent)
+        var selectedProvider = Provider;
+        if (!(selectedProvider?.HasConsent ?? Settings.AssistantConsent))
         {
             var allowed = await AskConsentAsync();
             if (my != gen)
@@ -947,7 +971,8 @@ public sealed partial class AssistantPanelController : IDisposable
                 }
                 return;
             }
-            Settings.AssistantConsent = true;
+            if (selectedProvider is null) { Settings.AssistantConsent = true; }
+            else { selectedProvider.AcceptConsent(); }
         }
         // 2. The question in the transcript; the conversation's first
         // question pins what the chip showed, and what the question is about
@@ -978,7 +1003,7 @@ public sealed partial class AssistantPanelController : IDisposable
         // 3. What the model is told: a new Claude Code knows nothing of the
         // conversation yet; the contexts the prompt names have their members
         // first.
-        if (Process?.Running != true)
+        if (!HasRunningSession)
         {
             for (var i = 0; i < pinned.Count; i++)
             {
@@ -1005,8 +1030,17 @@ public sealed partial class AssistantPanelController : IDisposable
             Fail(Assistant.StoppedText(e.Message), retry: false);
             return;
         }
+        if (selectedProvider is not null)
+        {
+            if (request.SignIn && ReconnectProvider is not null && !await ReconnectFirstAsync(my))
+            {
+                return;
+            }
+            await SubmitProviderAsync(selectedProvider, prompt, told, my);
+            return;
+        }
         // 4. Claude Code, started when the conversation has none.
-        if (Process?.Running != true)
+        if (!HasRunningSession)
         {
             Process = null;
             if (Locator.Locate() is not { } path)
@@ -1351,7 +1385,7 @@ public sealed partial class AssistantPanelController : IDisposable
     {
         foreach (var e in events)
         {
-            if (Process is null)
+            if (Process is null && ProviderSession is null)
             {
                 return;
             }
@@ -1447,6 +1481,10 @@ public sealed partial class AssistantPanelController : IDisposable
                         EndProcess();
                         Append(new ErrorContent(Assistant.StoppedText(e.ResultText), true, ErrorOffer.SignIn));
                     }
+                    else if (ProviderSession is not null)
+                    {
+                        AppendProviderFailure(e.ResultText, retry: true);
+                    }
                     else
                     {
                         Append(new ErrorContent(Assistant.StoppedText(e.ResultText), true));
@@ -1530,6 +1568,7 @@ public sealed partial class AssistantPanelController : IDisposable
         var p = Process;
         Process = null;
         p?.Terminate();
+        EndProviderSession();
     }
 
     // Nothing streams any more and every activity is over.

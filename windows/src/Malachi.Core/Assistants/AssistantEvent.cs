@@ -5,7 +5,8 @@
 // (Assistant.Event, Equatable); GTK: ui/internal/assistant/events.go
 // (Event). A record compares its lists and arrays by reference, so the
 // equality here is by value, as Swift's arrays and Data compare: the tools,
-// the denials and the bytes of the structured output. The texts are mail
+// the denials and the bytes of the structured output (the usage and its
+// message id compared as well, as Swift's). The texts are mail
 // content and model output: never logged.
 
 using System;
@@ -74,6 +75,20 @@ public sealed record AssistantEvent
     public string Failure { get; init; } = "";
 
     /// <summary>
+    /// Result: the run's usage as the result reports it. The first event of
+    /// an <c>assistant</c> message (Text, ToolUse, or an Other standing for a
+    /// message that yields no other event): the usage of that API message,
+    /// its id in <see cref="MessageId"/>, only for a message of the main loop
+    /// (<c>parent_tool_use_id</c> null or absent) with a non-empty id. Null
+    /// when absent, or when a counter is not a whole number from 0 to
+    /// <see cref="long.MaxValue"/> (<see cref="AssistantUsageTally"/> adds them up).
+    /// </summary>
+    public AssistantUsage? Usage { get; init; }
+
+    /// <summary>The id of the API message whose <see cref="Usage"/> the event carries; "" otherwise.</summary>
+    public string MessageId { get; init; } = "";
+
+    /// <summary>
     /// Event.NotSignedIn: whether the event is the failure of a turn for
     /// want of a sign-in the API accepts: Claude Code is signed out, or its
     /// sign-in has expired or was revoked (<c>claude auth status</c> may
@@ -111,7 +126,9 @@ public sealed record AssistantEvent
         && (Structured is null
             ? other.Structured is null
             : other.Structured is not null && Structured.AsSpan().SequenceEqual(other.Structured))
-        && string.Equals(Failure, other.Failure, StringComparison.Ordinal);
+        && string.Equals(Failure, other.Failure, StringComparison.Ordinal)
+        && Usage == other.Usage
+        && string.Equals(MessageId, other.MessageId, StringComparison.Ordinal);
 
     /// <inheritdoc/>
     public override int GetHashCode()
@@ -140,6 +157,8 @@ public sealed record AssistantEvent
             hash.AddBytes(Structured);
         }
         hash.Add(Failure, StringComparer.Ordinal);
+        hash.Add(Usage);
+        hash.Add(MessageId, StringComparer.Ordinal);
         return hash.ToHashCode();
     }
 }

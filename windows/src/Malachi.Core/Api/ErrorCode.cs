@@ -83,6 +83,12 @@ public readonly record struct ErrorCode(int Value)
     /// <summary>Unknown id, another account's, or bound to a different draft.</summary>
     public const int AttachmentNotFound = 1105;
 
+    /// <summary>
+    /// No board case with that id (it left the board, its account is gone),
+    /// or for <c>board.setCommitment</c> no such commitment.
+    /// </summary>
+    public const int CaseNotFound = 1106;
+
     // 1200–1299: authentication.
 
     /// <summary>Credentials missing or token expired; see notify.authRequired.</summary>
@@ -157,6 +163,13 @@ public readonly record struct ErrorCode(int Value)
     /// </summary>
     public const int UnsubscribeFailed = 1505;
 
+    /// <summary>
+    /// <c>board.annotate</c> or <c>board.commit</c> quoted text the daemon did
+    /// not find verbatim where it must be; <c>data</c> is a
+    /// <see cref="QuoteNotFoundData"/> naming the field.
+    /// </summary>
+    public const int QuoteNotFound = 1506;
+
     private static readonly Dictionary<int, string> Names = new()
     {
         [ParseError] = "parseError",
@@ -176,6 +189,7 @@ public readonly record struct ErrorCode(int Value)
         [ThreadNotFound] = "threadNotFound",
         [DraftNotFound] = "draftNotFound",
         [AttachmentNotFound] = "attachmentNotFound",
+        [CaseNotFound] = "caseNotFound",
         [AuthRequired] = "authRequired",
         [AuthFailed] = "authFailed",
         [KeyringError] = "keyringError",
@@ -194,6 +208,7 @@ public readonly record struct ErrorCode(int Value)
         [PartNotFound] = "partNotFound",
         [PartNotDownloaded] = "partNotDownloaded",
         [UnsubscribeFailed] = "unsubscribeFailed",
+        [QuoteNotFound] = "quoteNotFound",
     };
 
     /// <summary>
@@ -205,11 +220,12 @@ public readonly record struct ErrorCode(int Value)
         ParseError, InvalidRequest, MethodNotFound, InvalidParams, InternalError,
         NotImplemented, InvalidArgument, Conflict, Cancelled, Unavailable, Unauthenticated,
         AccountNotFound, FolderNotFound, MessageNotFound, ThreadNotFound, DraftNotFound, AttachmentNotFound,
+        CaseNotFound,
         AuthRequired, AuthFailed, KeyringError, OAuthClientMissing,
         Offline, NetworkError, ServerError, TlsError, ServerTimeout, MessageGone,
         StorageError, MigrationFailed,
         MalformedMessage, SanitizeFailed, AttachmentTooBig, PartNotFound, PartNotDownloaded,
-        UnsubscribeFailed,
+        UnsubscribeFailed, QuoteNotFound,
     ];
 
     /// <summary>
