@@ -3,7 +3,7 @@
 
 // Port of macos/Sources/MalachiCore/Model/MailModel+Threads.swift
 // (RowThread); GTK: ui/internal/widget/message_row.go (Thread, with its
-// Tag). Immutable.
+// Tag and Draft). Immutable.
 
 using System;
 using System.Collections.Generic;
@@ -58,4 +58,11 @@ public sealed record RowThread
 
     /// <summary>The tag of the latest member (<see cref="Malachi.Core.Bulk.BulkMail.Tag"/>); empty for personal mail.</summary>
     public string Tag { get; init; } = "";
+
+    /// <summary>
+    /// The badge of a conversation with the user's unsent reply
+    /// (<see cref="Conversation.DraftBadge"/> when
+    /// <see cref="ThreadSummary.DraftCount"/> is above 0); "" hides it.
+    /// </summary>
+    public string Draft { get; init; } = "";
 }

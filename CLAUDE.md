@@ -1708,6 +1708,61 @@ typová kontrola. Čeká: Toolbx `make build`, `go test
 (tlačítko, kontextové menu, klávesa, otázka podle předvolby, Zpět, Jira
 bez Smazat) nad kopií dat.
 
+Koncepty v konverzaci (2026-10-15, všechny tři klienty, commity `4b436b9`
+a následující `feat: unsent drafts…`;
+rozhodnutí vlastníka přes AskUserQuestion: Jira i pošta, okno komentáře
+koncept ponechá, návrh z nástěnky v konverzaci ne). Neodeslaná odpověď
+(u Jiry komentář, třeba z MCP `create_draft`) je karta v konverzaci
+vlákna a řádek seznamu má červený štítek „Koncept“. Démon (kompatibilní
+rozšíření protokolu 2, `docs/api.md` §4.4 a §5): `ThreadSummary.draftCount`
+a `thread.get` `withDrafts` → `drafts` (jako `draft.list`, nejnovější
+první, nejvýš `api.MaxThreadDrafts` 20); koncept patří vláknu přes
+`in_reply_to` → `messages.thread_id` v kterékoli složce účtu
+(`store/thread_drafts.go`, bez migrace), ne přeposlání, ne koncept
+propojený s případem nástěnky, 0 ve složce Koncepty (kopie je tam
+členem), v Outboxu a account-wide, virtuální pohledy Jira ano; nová
+notifikace `notify.draftsChanged {accountId, threadIds}` (`core/drafts_notify.go`,
+koalescence 250 ms, prázdné `threadIds` = kterékoli vlákno) po
+`draft.save`, `draft.delete`, odeslání, smazání konceptu přesunem kopie
+a propojení s případem. Reference `ui/internal/conversation/drafts.go`
+(`DraftCard`, `Drafts`, `SameDrafts`, texty, `DraftsFirst`: karty hned pod
+úvodní kartou, jinak první) a `IsConversationRow` počítá i `DraftCount`;
+karty nejsou v `Model.Items` (nejsou členy, nečtou se, nesbalují se).
+Karta: odesílatel = uživatel, štítek Koncept (+ Interní), „Koncept uložen
+…“, prostý text, Upravit (`draft.get`, okno Nová zpráva / komentáře, nebo
+vytáhne okno, které ho už edituje) a Zahodit (otázka, `draft.delete`),
+dvojklik na záhlaví = Upravit. Okno komentáře se při zavření chová jako
+e-mail (`closesUnasked`, `deletesOnClose` jen u prázdného komentáře,
+otázka Uložit koncept / Zahodit / Zrušit, `forgetLate`). GTK:
+`window/conversation_draft.go`, `conversation_view.go` (`apply`),
+`convWithDrafts`, `thread_model.go`, `widget/message_row.go` +
+`message_row.blp` (`draft_pill`), `compose/draft.go`; macOS:
+`MalachiCore/Model/ConversationDrafts.swift`, `ConversationController.drafts`,
+`ListController.refreshDrafts`, `ActionsController.editThreadDraft`/
+`discardThreadDraft`, `MalachiMail/MessageView/ConversationDraftCardView.swift`,
+`MessageCellView` (`draftPill`), `ComposeDraftController` (`LateSave`).
+Windows: `Malachi.Core/Model/Conversation.Drafts.cs`, `ConversationDraftCard.cs`,
+`ConversationController.Drafts`, `MailboxController.RefreshDrafts`,
+`ActionsController.EditThreadDraft`/`DiscardThreadDraft`,
+`ComposeDraftController` (`ClosesUnasked`, `DeletesOnClose`, `ForgetLate`;
+Konec uloží komentář s textem), App `Reader/Conversation/ConversationDraftView.cs`
+(karta z kódu), `IssuePill.IsDraft`, `DraftPill` v šestém sloupci řádku.
+1 nový msgid (`msgctxt "conversation"` „Draft“, česky Koncept). Ověřeno na
+Macu: Go testy démona (`TestThreadDraftMembers`, `TestThreadDrafts`,
+`TestDraftsChangedCoalesces`, `TestJiraComments`), `ui/internal/conversation`,
+celé `swift test` (`ConversationDraftsTests`, `draftsAreDraftCards`,
+`threadDrafts`, Jira compose testy zavírání), kontrola řetězců, `po/`
+skriptem ověřeným na `HEAD`; GTK jen typová kontrola bez cgo (Swift
+testy na tomto Macu potřebují `-Xswiftc -plugin-path -Xswiftc
+/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing`).
+Čeká: Toolbx `make build`, `go test ./internal/window/...
+./internal/compose/...` (`TestConversationDraftsAreDraftCards`,
+`TestOnlyAnEmptyCommentGoesWithTheWindow`), `make lint`, `make po` (beze
+změny); Windows (napsané agentem bez `dotnet`) `build.ps1 app`/`test`/`lint`;
+ručně ve všech třech nad kopií dat: koncept komentáře z MCP v konverzaci
+issue, Upravit, zavřít s uložením, Zahodit, odeslat, odpověď na e-mail
+z MCP, štítek v seznamu.
+
 Archivace v Poště = Hotovo (2026-10-13, `feat/board`, necommitnuté; jen
 démon, klienti beze změny — všechny tři to dostanou přes
 `notify.boardChanged`). Vlastník archivoval vyřízenou poštu v Poště a

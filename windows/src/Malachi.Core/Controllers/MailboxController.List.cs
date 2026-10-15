@@ -13,10 +13,11 @@
 // onMessageRowSelected, showConnectionState's list share), actions.go
 // (scheduleMarkRead, refreshMessageActions, refreshRows, the apply step of
 // setSeenIDs / setFlaggedIDs), outbox.go (refreshOutboxViews, the list
-// share) and selection.go (the selection of several rows: selectedKeys,
+// share), selection.go (the selection of several rows: selectedKeys,
 // selectedRows, restrictSelection, showSelectionPage, selectionState,
 // selectedIDs, selectionSubject, flagTargetOf, restoreSelection; Core's
-// Selections/Selection.cs is ui/internal/selection).
+// Selections/Selection.cs is ui/internal/selection) and
+// conversation_draft.go (onDraftsChanged).
 //
 // The file keeps Swift's name: like MailboxController+List.swift it holds
 // ListController, the second half of the one GTK window object, and
@@ -135,6 +136,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         mailbox.OnNewMessageForList = ApplyNewMessage;
         mailbox.OnNewMessageElsewhere = ApplyNewMessageElsewhere;
         mailbox.RefreshShownSent = RefreshShownSent;
+        mailbox.RefreshDrafts = RefreshDrafts;
         mailbox.RefreshOutboxViews = RefreshOutboxViews;
         mailbox.CollapseLoading = CollapseLoadingRows;
         mailbox.RefreshShown = RefreshShown;
@@ -960,8 +962,9 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     /// <c>ensureMembers</c>), and runs <paramref name="failed"/> instead of
     /// <paramref name="then"/>. Neither runs when the list moved on meanwhile
     /// (another folder, a reload, the connection lost). thread.get asks for
-    /// the user's replies in Sent too (withSent), which the conversation view
-    /// shows beside the members (<see cref="ThreadMembers.Sent"/>).
+    /// the user's replies in Sent too (withSent) and for their drafts
+    /// (withDrafts), which the conversation view shows beside the members
+    /// (<see cref="ThreadMembers.Sent"/>, <see cref="ThreadMembers.Drafts"/>).
     /// </summary>
     public void EnsureMembers(ThreadId tid, Action? then, Action? failed = null)
     {
@@ -1035,7 +1038,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         }
         Model.Members[tid] = mem with { Fetching = true };
         var gen = Model.ListGen;
-        var parameters = new ThreadGetParams { AccountId = k.Account, ThreadId = tid, FolderId = k.Folder, WithSent = true };
+        var parameters = new ThreadGetParams { AccountId = k.Account, ThreadId = tid, FolderId = k.Folder, WithSent = true, WithDrafts = true };
         Mailbox.Perform(API.ThreadGet, parameters, outcome =>
         {
             if (gen != Model.ListGen || !Model.Members.TryGetValue(tid, out var now))
@@ -1062,7 +1065,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
                 }
                 return;
             }
-            Model.SetMembers(tid, res.Thread, res.Messages, res.Sent);
+            Model.SetMembers(tid, res.Thread, res.Messages, res.Sent, res.Drafts);
             SyncRows();
             if (SelectedRows.Any(row => row.Key.Thread == tid))
             {
@@ -1636,6 +1639,54 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
             return;
         }
         RefetchMembers(tid);
+    }
+
+    /// <summary>
+    /// notify.draftsChanged (<see cref="MailboxController.RefreshDrafts"/>;
+    /// conversation_draft.go <c>onDraftsChanged</c>): the listed
+    /// conversations it names, and the one on show, are asked thread.get again
+    /// (<see cref="RefetchMembers"/>), which brings their
+    /// <see cref="ThreadSummary.DraftCount"/> (a single message with a draft
+    /// reply becomes a conversation row) and their drafts (the conversation
+    /// view's draft cards); without names, the one on show and every listed
+    /// one that has drafts. Nothing in flat mode (no row shows a
+    /// conversation), while the list loads, or for another account.
+    /// </summary>
+    public void RefreshDrafts(DraftsChangedNotification n)
+    {
+        ArgumentNullException.ThrowIfNull(n);
+        Scope.VerifyAccess();
+        if (!Model.Grouped || Model.Loading || Model.ListFolder is not { } k || k.Account != n.AccountId)
+        {
+            return;
+        }
+        var want = new List<ThreadId>();
+        void Want(ThreadId tid)
+        {
+            if (!want.Contains(tid))
+            {
+                want.Add(tid);
+            }
+        }
+        if (n.ThreadIds.Count == 0)
+        {
+            if (SelectedRow is { } row && (row.ShowsConversation || row.Thread) && row.Key.Thread is { } shown)
+            {
+                Want(shown);
+            }
+            foreach (var t in Model.Threads.Where(t => t.DraftCount > 0).ToList())
+            {
+                Want(t.Id);
+            }
+        }
+        foreach (var tid in n.ThreadIds)
+        {
+            Want(tid);
+        }
+        foreach (var tid in want.Where(Model.TIndex.ContainsKey).ToList())
+        {
+            RefetchMembers(tid);
+        }
     }
 
     /// <summary>

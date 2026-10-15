@@ -8,12 +8,15 @@
 // window, the controller half (ComposeDraftController over a fake form and
 // a fake daemon). A comment draft from draft.create opens it
 // (Prefill.FromDraft), it is sent without recipients but not empty,
-// draft.save carries the chosen visibility, and there is no Save Draft:
-// closing asks whether to discard, and the copy the autosave kept goes with
-// the window. The choice of visibility itself is JiraComposeTests. Swift
-// shortens the autosave and sleeps; here the controller's clock is moved.
-// Added: Quit leaves an empty comment alone and asks about one with text,
-// which no Drafts folder would keep.
+// draft.save carries the chosen visibility, and a comment with text is kept
+// on close as an e-mail's draft is (its draft card in the issue's
+// conversation shows it; comment_test.go TestCloseAsksOnlyWithSomethingToLose
+// and TestOnlyAnEmptyCommentGoesWithTheWindow, 2026-10-15): the close asks
+// the e-mail's question only with unsaved edits, and only an empty
+// comment's copy goes with the window. The choice of visibility itself is
+// JiraComposeTests. Swift shortens the autosave and sleeps; here the
+// controller's clock is moved. Added: Quit leaves an empty comment alone and
+// saves one with text without asking.
 
 using System;
 using System.Collections.Generic;
@@ -150,11 +153,13 @@ public sealed class JiraComposeControllerTests
         Assert.False(h.Draft.Draft.Sending);
     }
 
+    // A comment with text is kept as an e-mail's draft is: the autosave
+    // keeps a copy silently, and a clean window closes unasked and leaves it
+    // (the issue's draft card in the conversation shows it).
     [Fact]
-    public async Task ThereIsNoSaveDraftForAComment()
+    public async Task ASavedCommentClosesUnaskedAndStays()
     {
         await using var h = await Harness.StartAsync();
-        // The autosave keeps a copy against a crash, silently.
         await h.Ui.RunAsync(h.Draft.MarkDirty);
         await h.AutosaveAsync();
         Assert.Single(h.Saves);
@@ -162,23 +167,106 @@ public sealed class JiraComposeControllerTests
         Assert.Equal("d1", h.Draft.Draft.DraftId?.Value);
         Assert.All(h.Form.Statuses, s => Assert.Empty(s));
 
-        // Closing with text asks whether to discard, never Save Draft; Cancel
-        // keeps the window.
-        Assert.False(h.Draft.CanCloseWithoutAsking);
-        h.DiscardAnswer = false;
-        Assert.False(await h.CloseRequestAsync());
-        Assert.Equal(1, h.DiscardQuestions);
-        Assert.Equal(0, h.SaveQuestions);
-        Assert.Empty(h.Deletes);
-
-        // Discard: the saved copy goes with the window.
-        h.DiscardAnswer = true;
+        Assert.True(h.Draft.CanCloseWithoutAsking);
         Assert.True(await h.CloseRequestAsync());
-        Assert.Equal(2, h.DiscardQuestions);
-        Assert.Equal(0, h.SaveQuestions);
-        var delete = Assert.Single(h.Deletes);
-        Assert.Equal((JiraAccount, "d1"), (delete.AccountId, delete.DraftId.Value));
+        Assert.Equal((0, 0), (h.DiscardQuestions, h.SaveQuestions));
+        Assert.Empty(h.Deletes);
         Assert.True(h.Draft.Draft.Closed);
+    }
+
+    // Unsaved edits of a comment with text: the close asks the e-mail's
+    // question (Save Draft), never whether to discard; Save Draft saves it
+    // and leaves it, Discard deletes what only the autosave stored.
+    [Fact]
+    public async Task ACommentWithUnsavedEditsAsksToSaveIt()
+    {
+        await using (var h = await Harness.StartAsync())
+        {
+            await h.Ui.RunAsync(h.Draft.MarkDirty);
+            Assert.False(h.Draft.CanCloseWithoutAsking);
+            Assert.True(await h.CloseRequestAsync());
+            Assert.Equal((0, 1), (h.DiscardQuestions, h.SaveQuestions));
+            var save = Assert.Single(h.Saves);
+            Assert.NotNull(save.Draft.Comment);
+            Assert.Empty(h.Deletes);
+            Assert.True(h.Draft.Draft.Closed);
+        }
+
+        await using (var h = await Harness.StartAsync())
+        {
+            await h.Ui.RunAsync(h.Draft.MarkDirty);
+            await h.AutosaveAsync();
+            Assert.Single(h.Saves);
+            await h.Ui.RunAsync(h.Draft.MarkDirty);
+            h.CloseAnswer = DraftCloseAnswer.Discard;
+            Assert.True(await h.CloseRequestAsync());
+            Assert.Equal((0, 1), (h.DiscardQuestions, h.SaveQuestions));
+            Assert.Equal("d1", Assert.Single(h.Deletes).DraftId.Value);
+        }
+    }
+
+    // draft.go closesUnasked (comment_test.go TestCloseAsksOnlyWithSomethingToLose).
+    [Fact]
+    public void CloseAsksOnlyWithSomethingToLose()
+    {
+        const string text = "Replaced the toner.";
+        const string blank = " \n\t\u200b\ufeff\u00a0";
+        (string Name, DraftState D, DraftOwner Owner, bool Comment, string Text, bool Want)[] cases =
+        [
+            ("mail untouched", new DraftState(), DraftOwner.Window, false, "", true),
+            ("mail dirty", new DraftState { Dirty = true }, DraftOwner.Window, false, "", false),
+            ("mail saving", new DraftState { Saving = true }, DraftOwner.Window, false, "", false),
+            ("mail discarded", new DraftState { Dirty = true, Discard = true }, DraftOwner.Window, false, "", true),
+            // A mail window with text but nothing unsaved goes: the text is
+            // in the Drafts folder.
+            ("mail saved", new DraftState { DraftId = "d1" }, DraftOwner.Window, false, text, true),
+            // A comment with text is kept as an e-mail is (its draft card in
+            // the issue's conversation shows it): it asks only with unsaved
+            // edits or a save under way.
+            ("comment with text", new DraftState(), DraftOwner.Window, true, text, true),
+            ("comment saved", new DraftState { DraftId = "d1" }, DraftOwner.Window, true, text, true),
+            ("comment dirty", new DraftState { Dirty = true, DraftId = "d1" }, DraftOwner.Window, true, text, false),
+            ("comment saving with text", new DraftState { Saving = true }, DraftOwner.Window, true, text, false),
+            // Nothing in it: it goes, unsaved edits and a save under way or not.
+            ("comment emptied", new DraftState { Dirty = true, DraftId = "d1" }, DraftOwner.Window, true, blank, true),
+            ("comment saving", new DraftState { Saving = true }, DraftOwner.Window, true, "", true),
+            ("comment sent", new DraftState { Discard = true, DraftId = "d1" }, DraftOwner.Window, true, text, true),
+            // The board keeps its draft: closing never asks, whatever is in it.
+            ("board dirty mail", new DraftState { Dirty = true }, DraftOwner.Board, false, "", true),
+            ("board dirty comment", new DraftState { Dirty = true }, DraftOwner.Board, true, text, true),
+            ("board saving", new DraftState { Saving = true }, DraftOwner.Board, false, "", true),
+        ];
+        foreach (var c in cases)
+        {
+            Assert.True(c.Want == ComposeDraftController.ClosesUnasked(c.D, c.Owner, c.Comment, c.Text), $"{c.Name}: closesUnasked != {c.Want}");
+        }
+    }
+
+    // draft.go deletesOnClose (comment_test.go TestOnlyAnEmptyCommentGoesWithTheWindow).
+    [Fact]
+    public void OnlyAnEmptyCommentGoesWithTheWindow()
+    {
+        (string Name, DraftState D, DraftOwner Owner, bool Comment, bool Empty, bool Want)[] cases =
+        [
+            // A comment with text stays: the issue's draft card shows it.
+            ("comment autosaved", new DraftState { DraftId = "d1" }, DraftOwner.Window, true, false, false),
+            ("comment closed while dirty", new DraftState { DraftId = "d1", Dirty = true }, DraftOwner.Window, true, false, false),
+            // Nothing in it: its copy goes with the window.
+            ("comment emptied", new DraftState { DraftId = "d1" }, DraftOwner.Window, true, true, true),
+            ("comment emptied while dirty", new DraftState { DraftId = "d1", Dirty = true }, DraftOwner.Window, true, true, true),
+            // Sent (or deleted already by Discard): nothing left to delete.
+            ("comment sent", new DraftState { DraftId = "d1", Discard = true }, DraftOwner.Window, true, true, false),
+            ("comment never saved", new DraftState(), DraftOwner.Window, true, true, false),
+            // An e-mail's draft stays in Drafts.
+            ("mail saved", new DraftState { DraftId = "d1" }, DraftOwner.Window, false, true, false),
+            // The board never deletes here.
+            ("board comment autosaved", new DraftState { DraftId = "d1" }, DraftOwner.Board, true, true, false),
+            ("board mail saved", new DraftState { DraftId = "d1" }, DraftOwner.Board, false, true, false),
+        ];
+        foreach (var c in cases)
+        {
+            Assert.True(c.Want == ComposeDraftController.DeletesOnClose(c.D, c.Owner, c.Comment, c.Empty), $"{c.Name}: deletesOnClose != {c.Want}");
+        }
     }
 
     [Fact]
@@ -197,19 +285,37 @@ public sealed class JiraComposeControllerTests
         Assert.Equal("d1", Assert.Single(h.Deletes).DraftId.Value);
     }
 
+    // A save that answers after the window went keeps what it stored when
+    // the comment has text (the issue's draft card), and deletes it when the
+    // comment was emptied.
     [Fact]
-    public async Task ASaveUnderWayWhenTheWindowGoesIsDeletedToo()
+    public async Task ASaveUnderWayWhenTheWindowGoesIsDeletedOnlyWhenEmpty()
     {
-        await using var h = await Harness.StartAsync();
-        var hold = h.HoldSaves();
-        await h.Ui.RunAsync(() => h.Draft.Save(SaveReason.Autosave));
-        await hold.ArrivedAsync();
-        await h.Ui.RunAsync(h.Draft.Cleanup);
-        hold.Release();
-        // The first save had no id to delete; its answer brings one.
-        await h.IdleAsync();
-        var delete = Assert.Single(h.Deletes);
-        Assert.Equal((JiraAccount, "d1"), (delete.AccountId, delete.DraftId.Value));
+        await using (var h = await Harness.StartAsync())
+        {
+            var hold = h.HoldSaves();
+            await h.Ui.RunAsync(() => h.Draft.Save(SaveReason.Autosave));
+            await hold.ArrivedAsync();
+            await h.Ui.RunAsync(h.Draft.Cleanup);
+            hold.Release();
+            await h.IdleAsync();
+            Assert.Single(h.Saves);
+            Assert.Empty(h.Deletes);
+        }
+
+        await using (var h = await Harness.StartAsync())
+        {
+            var hold = h.HoldSaves();
+            await h.Ui.RunAsync(() => h.Draft.Save(SaveReason.Autosave));
+            await hold.ArrivedAsync();
+            h.Form.Text = "  ";
+            await h.Ui.RunAsync(h.Draft.Cleanup);
+            hold.Release();
+            // The first save had no id to delete; its answer brings one.
+            await h.IdleAsync();
+            var delete = Assert.Single(h.Deletes);
+            Assert.Equal((JiraAccount, "d1"), (delete.AccountId, delete.DraftId.Value));
+        }
     }
 
     [Fact]
@@ -246,19 +352,24 @@ public sealed class JiraComposeControllerTests
         Assert.False(h.Draft.CanCloseWithoutAsking);
     }
 
-    // Windows-only: Quit saves dirty drafts without asking, but no Drafts
-    // folder keeps a comment: an empty one is left alone, one with text is
-    // asked about (the close question, Discard this message?).
+    // Windows-only: Quit saves dirty drafts without asking, a comment with
+    // text too (it is kept as an e-mail's draft is); an empty one is left
+    // alone, its copy goes with the window.
     [Fact]
-    public async Task QuitAsksAboutACommentWithText()
+    public async Task QuitSavesACommentWithText()
     {
         await using var h = await Harness.StartAsync();
-        await h.Ui.RunAsync(h.Draft.MarkDirty);
-        Assert.False(await await h.Ui.RunAsync(h.Draft.SaveForQuitAsync));
         h.Form.Text = " ";
+        await h.Ui.RunAsync(h.Draft.MarkDirty);
         Assert.True(await await h.Ui.RunAsync(h.Draft.SaveForQuitAsync));
         await h.IdleAsync();
         Assert.Empty(h.Saves);
+        h.Form.Text = "Replaced the toner.";
+        Assert.True(await await h.Ui.RunAsync(h.Draft.SaveForQuitAsync));
+        await h.IdleAsync();
+        Assert.Single(h.Saves);
+        Assert.Equal((0, 0), (h.DiscardQuestions, h.SaveQuestions));
+        Assert.False(h.Draft.Draft.Dirty);
     }
 
     // The comment draft draft.create returns for a reply to w1 of the request.
@@ -401,6 +512,8 @@ public sealed class JiraComposeControllerTests
 
         public bool DiscardAnswer { get; set; } = true;
 
+        public DraftCloseAnswer CloseAnswer { get; set; } = DraftCloseAnswer.Save;
+
         public IReadOnlyList<DraftSaveParams> Saves => Locked(saves);
 
         public IReadOnlyList<MessageSendParams> Sends => Locked(sends);
@@ -434,7 +547,7 @@ public sealed class JiraComposeControllerTests
                 draft.SaveDraftQuestion = () =>
                 {
                     h.SaveQuestions++;
-                    return Task.FromResult(DraftCloseAnswer.Save);
+                    return Task.FromResult(h.CloseAnswer);
                 };
                 return draft;
             });

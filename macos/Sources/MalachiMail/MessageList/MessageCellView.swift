@@ -94,6 +94,9 @@ final class MessageCellView: NSTableCellView {
     /// next to the subject; never on a row of an issue.
     private let bulkPill = PillLabel()
     private let internalPill = PillLabel()
+    /// The Draft badge of a conversation with an unsent reply
+    /// (`RowThread.draft`).
+    private let draftPill = PillLabel()
     private let eventLabel = NSTextField(labelWithString: "")
     private let subjectLine = NSStackView()
 
@@ -178,6 +181,7 @@ final class MessageCellView: NSTableCellView {
         badge.font = Typo.captionNumeric
         badge.textColor = .labelColor
         badge.isHidden = true
+        draftPill.isHidden = true
 
         // The issue key ("ITSD-42") in the caption with monospaced digits,
         // the status and the Internal badge as pills after the summary.
@@ -189,7 +193,7 @@ final class MessageCellView: NSTableCellView {
         issueKey.isHidden = true
         issueKey.setContentHuggingPriority(.required, for: .horizontal)
         issueKey.setContentCompressionResistancePriority(.required, for: .horizontal)
-        for pill in [statusPill, bulkPill, internalPill] {
+        for pill in [statusPill, bulkPill, internalPill, draftPill] {
             pill.font = Typo.caption
             pill.isHidden = true
         }
@@ -246,7 +250,7 @@ final class MessageCellView: NSTableCellView {
         line.alignment = .centerY
         line.spacing = RowMetrics.lineSpacing
 
-        for v in [issueKey, subject, bulkPill, statusPill, internalPill] {
+        for v in [issueKey, subject, bulkPill, statusPill, internalPill, draftPill] {
             subjectLine.addArrangedSubview(v)
         }
         subjectLine.orientation = .horizontal
@@ -314,6 +318,7 @@ final class MessageCellView: NSTableCellView {
         origin.toolTip = m.originTooltip.isEmpty ? nil : m.originTooltip
         origin.isHidden = m.origin.isEmpty
         badge.isHidden = true
+        draftPill.isHidden = true
         issue = m.issue
         bulkTag = m.tag
         thread = false
@@ -335,6 +340,8 @@ final class MessageCellView: NSTableCellView {
         // TRANSLATORS: tooltip of the member count of a conversation row.
         badge.toolTip = L10n.N("%d message", "%d messages", t.count)
         badge.isHidden = t.count < 2
+        draftPill.stringValue = t.draft
+        draftPill.isHidden = t.draft.isEmpty
         issue = t.issue
         bulkTag = t.tag
         thread = true
@@ -527,6 +534,7 @@ final class MessageCellView: NSTableCellView {
         IssuePill.paint(statusPill, IssuePill.colours(statusStyle), emphasized: emphasized)
         IssuePill.paint(bulkPill, IssuePill.bulkColours, emphasized: emphasized)
         IssuePill.paint(internalPill, IssuePill.internalColours, emphasized: emphasized)
+        IssuePill.paint(draftPill, IssuePill.draftColours, emphasized: emphasized)
         date.textColor = secondary
         origin.textColor = secondary
         preview.textColor = secondary

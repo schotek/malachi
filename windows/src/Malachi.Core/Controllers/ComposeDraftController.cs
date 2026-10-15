@@ -6,8 +6,11 @@
 // (richText, autosaveDelay, editorChanged, markDirty, refreshStatus,
 // draftStatus, build, save, saveFailed, commentSaveFailure, send, queue,
 // queuedText, deleteDraft, discard, closeRequest, cleanup, closesUnasked,
-// deletesOnClose). A comment on an issue (IComposeForm.IsComment) goes
-// through it too, with the differences of GTK's comment branches.
+// emptyComment, deletesOnClose). A comment on an issue
+// (IComposeForm.IsComment) goes through it too, with the differences of
+// GTK's comment branches: a comment with text is kept on close as an
+// e-mail's draft is (the issue's draft card shows it), only an empty one
+// goes with the window.
 //
 // The lifecycle of the draft behind a compose window, without the widgets:
 // the window is reached through IComposeForm, the daemon through the
@@ -235,22 +238,59 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
     public bool Lost { get; private set; }
 
     /// <summary>
-    /// closeRequest's first branch (draft.go <c>closesUnasked</c>): the
-    /// window may go without a question. A comment, which no Drafts folder
-    /// keeps, goes unasked only while there is nothing in it
-    /// (<see cref="Jira.SendProblem"/>), a save under way or not (its copy
-    /// goes too, <see cref="Cleanup"/>). The board keeps its draft: whoever
-    /// closes it calls <see cref="FinishAsync"/>.
+    /// closeRequest's first branch (<see cref="ClosesUnasked"/>): the window
+    /// may go without a question. The board keeps its draft: whoever closes
+    /// it calls <see cref="FinishAsync"/>.
     /// </summary>
-    public bool CanCloseWithoutAsking =>
-        Draft.Discard || Owner == DraftOwner.Board || (IsComment ? !HasCommentText : !Draft.Dirty && !Draft.Saving);
+    public bool CanCloseWithoutAsking => ClosesUnasked(Draft, Owner, IsComment, Form?.EditorText() ?? "");
 
     /// <summary>The window writes a comment (<see cref="IComposeForm.IsComment"/>).</summary>
     public bool IsComment => Form?.IsComment ?? false;
 
     // The comment holds more than white space and invisible characters (the
     // editor's last reported text).
-    private bool HasCommentText => Jira.SendProblem(Form?.EditorText() ?? "").Length == 0;
+    private bool HasCommentText => !EmptyComment(Form?.EditorText() ?? "");
+
+    /// <summary>
+    /// draft.go <c>closesUnasked</c>, <see cref="CanCloseWithoutAsking"/>'s
+    /// pure core: the board keeps its draft (never asks), a comment with
+    /// nothing in it (<see cref="EmptyComment"/> on <paramref name="text"/>,
+    /// the editor's last reported text) goes unasked, and otherwise a comment
+    /// is kept as an e-mail is: unasked without unsaved edits or a save under
+    /// way, its draft card in the issue's conversation showing it
+    /// (<see cref="Model.ConversationDraftCard"/>); with them the close asks
+    /// to save it.
+    /// </summary>
+    public static bool ClosesUnasked(DraftState d, DraftOwner owner, bool comment, string text)
+    {
+        ArgumentNullException.ThrowIfNull(d);
+        if (d.Discard || owner == DraftOwner.Board)
+        {
+            return true;
+        }
+        if (comment && EmptyComment(text))
+        {
+            return true;
+        }
+        return !d.Dirty && !d.Saving;
+    }
+
+    /// <summary>draft.go <c>emptyComment</c>: a comment with nothing in it to post (<see cref="Jira.SendProblem"/>).</summary>
+    public static bool EmptyComment(string? text) => Jira.SendProblem(text ?? "").Length > 0;
+
+    /// <summary>
+    /// draft.go <c>deletesOnClose</c>: whether <see cref="Cleanup"/> deletes
+    /// the saved draft: a window-owned comment's copy goes with the window
+    /// only when nothing is in it (<paramref name="empty"/>, the editor's
+    /// last reported text) and it was not sent or deleted already; otherwise
+    /// it stays as the issue's draft card, as an e-mail's draft stays in
+    /// Drafts. The board keeps its draft always.
+    /// </summary>
+    public static bool DeletesOnClose(DraftState d, DraftOwner owner, bool comment, bool empty)
+    {
+        ArgumentNullException.ThrowIfNull(d);
+        return owner == DraftOwner.Window && comment && empty && !d.Discard && d.DraftId is not null;
+    }
 
     /// <summary>
     /// The original a reply or forward refers to (compose.go <c>newWindow</c>:
@@ -538,12 +578,12 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
                 async () =>
                 {
                     var res = await client.CallAsync(API.DraftSave, new DraftSaveParams { Draft = wire }, API.DraftSave.Timeout, CancellationToken.None);
-                    if (Draft.Closed && wire.Comment is not null && Owner == DraftOwner.Window)
+                    if (Draft.Closed && wire.Comment is not null && Owner == DraftOwner.Window && Draft.ForgetLate)
                     {
-                        // The window went while a comment was being saved:
-                        // no Drafts folder keeps it, so the copy goes too.
-                        // The board's copy is the case's suggested reply: it
-                        // stays.
+                        // The window went while a comment was being saved,
+                        // and what it saved is not to be kept (discarded, or
+                        // nothing in it): the copy goes too. The board's copy
+                        // is the case's suggested reply: it stays.
                         FireOnTheWayOut(API.DraftDelete, new DraftDeleteParams { AccountId = wire.AccountId, DraftId = res.DraftId });
                     }
                     return res;
@@ -889,23 +929,14 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
     /// closeRequest keeps the window open while there are unsaved edits and
     /// asks what to do with them (<see cref="SaveDraftQuestion"/>). True when
     /// the window may close now (<see cref="Cleanup"/> has run); false when it
-    /// stays. A comment has no Save Draft: the question is whether to discard
-    /// it (<see cref="ConfirmDiscard"/>), and its saved copy goes too.
+    /// stays. A comment asks as an e-mail does: its saved draft is the
+    /// issue's draft card (<see cref="Model.ConversationDraftCard"/>).
     /// </summary>
     public async Task<bool> CloseRequestAsync()
     {
         scope.VerifyAccess();
         if (CanCloseWithoutAsking)
         {
-            Cleanup();
-            return true;
-        }
-        if (IsComment)
-        {
-            if (!await ConfirmDiscard(L10n.T("Discard this message?"), "", L10n.T("_Discard")) || Draft.Closed)
-            {
-                return false;
-            }
             Cleanup();
             return true;
         }
@@ -957,11 +988,11 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
         {
             return true;
         }
-        if (form.IsComment)
+        if (form.IsComment && !HasCommentText)
         {
-            // No Drafts folder keeps a comment: Quit asks its question
-            // (Discard this message?) unless it is empty.
-            return !HasCommentText;
+            // Nothing in it: it goes with the window (Cleanup). A comment
+            // with text is saved as an e-mail is, the issue's draft card.
+            return true;
         }
         if (!Draft.Dirty)
         {
@@ -1009,11 +1040,11 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
     /// cleanup runs when the window really closes: late replies are dropped,
     /// the autosave is disarmed, the inline pictures forgotten. Idempotent. A
     /// save whose outcome is still awaited (the close question's) is answered
-    /// with a cancellation so nobody waits for ever. A comment's saved copy
-    /// goes with the window unless it was sent (draft.go
-    /// <c>deletesOnClose</c>): no Drafts folder keeps it, the autosave is
-    /// only against a crash. The board keeps its draft always. A
-    /// <see cref="SettleAsync"/> waiting for a send goes on.
+    /// with a cancellation so nobody waits for ever. A window-owned comment's
+    /// saved copy goes with the window only when nothing is in it
+    /// (<see cref="DeletesOnClose"/>); otherwise it stays, the issue's draft
+    /// card. The board keeps its draft always. A <see cref="SettleAsync"/>
+    /// waiting for a send goes on.
     /// </summary>
     public void Cleanup()
     {
@@ -1022,11 +1053,14 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
         {
             return;
         }
-        if (Owner == DraftOwner.Window && IsComment && !Draft.Discard)
+        var comment = IsComment;
+        var empty = comment && !HasCommentText;
+        var forgetLate = Owner == DraftOwner.Window && comment && (empty || (Draft.Discard && !Draft.ExplicitSave));
+        if (DeletesOnClose(Draft, Owner, comment, empty))
         {
             DeleteDraft();
         }
-        Draft = Draft with { Closed = true };
+        Draft = Draft with { Closed = true, ForgetLate = forgetLate };
         CancelAutosave();
         foreach (var a in Form?.Attachments ?? [])
         {

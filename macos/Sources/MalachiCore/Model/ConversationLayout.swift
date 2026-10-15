@@ -263,6 +263,17 @@ extension ConversationLayout {
         }
     }
 
+    /// conversation_layout.go `convWithDrafts`: `items` (as the pane shows
+    /// them) with `count` draft cards at `at`, each a message card of the
+    /// user's own (an accent avatar), for `rails`: the timeline runs
+    /// through the drafts as through the cards.
+    public static func withDrafts(_ items: [Conversation.Item], at: Int, count: Int) -> [Conversation.Item] {
+        let at = max(0, min(at, items.count))
+        var draft = Conversation.Item(kind: .message)
+        draft.mine = true
+        return Array(items[..<at]) + Array(repeating: draft, count: max(0, count)) + Array(items[at...])
+    }
+
     /// The width of the cards in a pane `pane` wide: the column less the
     /// insets and the gutter; never negative.
     public static func cardWidth(pane: Double) -> Double {

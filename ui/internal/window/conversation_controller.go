@@ -130,6 +130,10 @@ type conversationController struct {
 	// from; sent the user's replies in Sent likewise.
 	members []api.MessageSummary
 	sent    []api.MessageSummary
+	// drafts are the draft cards of the user's unsent replies
+	// (threadMembers.drafts, conversation.Drafts), newest first; the pane
+	// shows them under what opened the conversation.
+	drafts []conversation.DraftCard
 	// quoted are the cards whose quoted history the user revealed (Show
 	// Quoted Text): kept through updates and a rebuild of the messages,
 	// forgotten with the conversation.
@@ -220,6 +224,7 @@ func (c *conversationController) reset() {
 	c.issue = nil
 	c.members = nil
 	c.sent = nil
+	c.drafts = nil
 	c.quoted.Clear()
 	c.loaded = map[api.MessageID]*loadedMessage{}
 	c.pending = map[api.MessageID]bool{}
@@ -286,7 +291,7 @@ func (c *conversationController) membersChanged() {
 	own, _ := c.host.convAccount(c.summary.AccountID)
 	if c.model == nil || c.listing {
 		c.listing = false
-		c.open(mem.list, mem.sent, own)
+		c.open(mem.list, mem.sent, mem.drafts, own)
 		return
 	}
 	current := *c.model
@@ -349,10 +354,13 @@ func (c *conversationController) membersChanged() {
 	if len(m.Items) == 0 && m.Earlier > 0 {
 		// Every shown member went while older ones are left out: what the
 		// list holds now is the conversation.
-		c.open(mem.list, mem.sent, own)
+		c.open(mem.list, mem.sent, mem.drafts, own)
 		return
 	}
-	if reflect.DeepEqual(m, current) {
+	drafts := conversation.Drafts(mem.drafts, own, c.tr)
+	sameDrafts := conversation.SameDrafts(drafts, c.drafts)
+	c.drafts = drafts
+	if reflect.DeepEqual(m, current) && sameDrafts {
 		return
 	}
 	c.model = &m
@@ -360,11 +368,12 @@ func (c *conversationController) membersChanged() {
 	c.emit(convUpdated)
 }
 
-// open builds the model from members and the user's replies in Sent and
-// announces it.
-func (c *conversationController) open(members, sent []api.MessageSummary, own api.Account) {
+// open builds the model from members and the user's replies in Sent, and
+// the draft cards from drafts, and announces it.
+func (c *conversationController) open(members, sent []api.MessageSummary, drafts []api.Draft, own api.Account) {
 	c.members = append([]api.MessageSummary(nil), members...)
 	c.sent = append([]api.MessageSummary(nil), sent...)
+	c.drafts = conversation.Drafts(drafts, own, c.tr)
 	m := conversation.Build(c.summary, c.members, c.sent, own, c.tr)
 	c.model = &m
 	c.issue = convIssueOf(c.summary, c.members)
@@ -380,7 +389,7 @@ func (c *conversationController) buildFromListing(mem *threadMembers) {
 	}
 	own, _ := c.host.convAccount(c.summary.AccountID)
 	c.listing = true
-	c.open(known, mem.sent, own)
+	c.open(known, mem.sent, mem.drafts, own)
 }
 
 // convIssueOf is the issue a model's card is built from, as

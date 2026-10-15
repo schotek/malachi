@@ -447,6 +447,34 @@ public sealed partial class ApiCodingTests
         Assert.True(asked.GetProperty("withSent").GetBoolean());
     }
 
+    /// <summary>
+    /// docs/api.md §4.4 (2026-10-15): <c>draftCount</c> on the summary (0 when
+    /// an older daemon leaves it out), <c>withDrafts</c> on the request (left
+    /// out when not asked for) and <c>drafts</c> on the answer (empty when
+    /// absent), a comment draft with its comment.
+    /// </summary>
+    [Fact]
+    public void ThreadDrafts()
+    {
+        Assert.Equal(0, Decode<ThreadSummary>(ThreadJson).DraftCount); // absent is 0
+        var withCount = ThreadJson.Replace("\"hasAttachments\":true", "\"hasAttachments\":true,\"draftCount\":2", StringComparison.Ordinal);
+        var t = Decode<ThreadSummary>(withCount);
+        Assert.Equal((2, 0, 3), (t.DraftCount, t.SentCount, t.MessageCount));
+        Assert.Equal(2, Decode<ThreadSummary>(JsonCoding.EncodeToString(t)).DraftCount);
+
+        const string draft = """{"id":"d_1","accountId":"acc_j","version":2,"to":[],"subject":"","textBody":"On it","inReplyTo":"m_1","comment":{"issue":{"key":"ITSD-1","url":"https://acme.atlassian.net/browse/ITSD-1","summary":"Printer","status":"Open"},"visibility":"internal"},"local":true,"updatedAt":"2026-10-15T09:00:00Z"}""";
+        var r = Decode<ThreadGetResult>($$$"""{"thread":{{{withCount}}},"messages":[{{{SummaryJson}}}],"drafts":[{{{draft}}}]}""");
+        var d = Assert.Single(r.Drafts);
+        Assert.Equal(("d_1", "m_1", "On it", "ITSD-1", CommentVisibility.Internal), (d.Id?.Value, d.InReplyTo?.Value, d.TextBody, d.Comment?.Issue.Key, d.Comment?.Visibility.Value));
+        Assert.Empty(r.Sent);
+        Assert.Empty(Decode<ThreadGetResult>($$$"""{"thread":{{{withCount}}},"messages":[]}""").Drafts);
+        Assert.Empty(Decode<ThreadGetResult>($$$"""{"thread":{{{withCount}}},"messages":[],"drafts":null}""").Drafts);
+
+        Assert.Null(Member(EncodeObject(new ThreadGetParams { AccountId = "a", ThreadId = "t", FolderId = "f", WithSent = true }), "withDrafts"));
+        var asked = EncodeObject(new ThreadGetParams { AccountId = "a", ThreadId = "t", FolderId = "f", WithSent = true, WithDrafts = true });
+        Assert.True(asked.GetProperty("withDrafts").GetBoolean());
+    }
+
     [Fact]
     public void DraftSaveExample()
     {
@@ -1289,7 +1317,10 @@ public sealed partial class ApiCodingTests
         Assert.Equal(API.AllMethods.Count, API.Methods.Count);
         Assert.Equal(API.SystemInfoName, API.SystemInfo.Name);
         Assert.Equal(
-            ["notify.newMessage", "notify.syncState", "notify.authRequired", "notify.accountsChanged", "notify.messagesChanged", "notify.boardChanged"],
+            [
+                "notify.newMessage", "notify.syncState", "notify.authRequired", "notify.accountsChanged", "notify.messagesChanged", "notify.boardChanged",
+                "notify.draftsChanged",
+            ],
             API.AllNotifications);
     }
 

@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of ui/internal/widget/pill.go (SetStatusPill, SetInternalPill,
-// SetBulkPill);
+// SetBulkPill) and the draft-pill of ui/internal/style (the Draft badge of
+// a conversation with the user's unsent reply);
 // macOS: Shared/IssuePill.swift (colours, paint). The pill's text and kind
 // as dependency properties, for x:Bind from a row or a card; the kind picks
 // the visual state (IssuePill.xaml).
@@ -13,7 +14,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace Malachi.App.Controls;
 
-/// <summary>A status pill or the Internal badge of an issue, or the neutral tag of a bulk message.</summary>
+/// <summary>A status pill or the Internal badge of an issue, the neutral tag of a bulk message, or the Draft badge.</summary>
 public sealed partial class IssuePill : UserControl
 {
     /// <summary>The pill's text; empty hides it.</summary>
@@ -34,6 +35,13 @@ public sealed partial class IssuePill : UserControl
     /// </summary>
     public static readonly DependencyProperty IsBulkProperty = DependencyProperty.Register(
         nameof(IsBulk), typeof(bool), typeof(IssuePill), new PropertyMetadata(false, OnChanged));
+
+    /// <summary>
+    /// The red Draft badge of a conversation with the user's unsent reply
+    /// (its row in the list, its draft card) instead of a status.
+    /// </summary>
+    public static readonly DependencyProperty IsDraftProperty = DependencyProperty.Register(
+        nameof(IsDraft), typeof(bool), typeof(IssuePill), new PropertyMetadata(false, OnChanged));
 
     /// <summary>An empty, hidden pill.</summary>
     public IssuePill()
@@ -70,6 +78,13 @@ public sealed partial class IssuePill : UserControl
         set => SetValue(IsBulkProperty, value);
     }
 
+    /// <summary>The red Draft badge instead of a status.</summary>
+    public bool IsDraft
+    {
+        get => (bool)GetValue(IsDraftProperty);
+        set => SetValue(IsDraftProperty, value);
+    }
+
     private static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) => ((IssuePill)d).Apply();
 
     // SetStatusPill / SetInternalPill: the text, its tooltip (a status's
@@ -79,8 +94,8 @@ public sealed partial class IssuePill : UserControl
         var text = Text ?? "";
         Label.Text = text;
         Visibility = text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        ToolTipService.SetToolTip(this, IsInternal || text.Length == 0 ? null : text);
-        var state = IsInternal ? "Internal" : IsBulk ? "Bulk" : StatusStyle switch
+        ToolTipService.SetToolTip(this, IsInternal || IsDraft || text.Length == 0 ? null : text);
+        var state = IsInternal ? "Internal" : IsDraft ? "Draft" : IsBulk ? "Bulk" : StatusStyle switch
         {
             JiraStatusStyle.InProgress => "InProgress",
             JiraStatusStyle.Done => "Done",

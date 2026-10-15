@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/API/Notifications.swift; Go:
-// backend/pkg/api/types.go ("Notifications (backend → client)") and
+// backend/pkg/api/types.go ("Notifications (backend → client)";
+// DraftsChangedNotification a Windows addition ahead of Swift) and
 // board.go (BoardChangedNotification, a Windows addition ahead of Swift);
 // contract: docs/api.md §5.
 //
@@ -10,6 +11,7 @@
 // resynchronises through sync.status, folder.list and message.list.
 
 using System;
+using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
@@ -71,6 +73,27 @@ public sealed record AuthRequiredNotification
 public sealed record AccountsChangedNotification;
 
 /// <summary>
+/// api.DraftsChangedNotification (<c>notify.draftsChanged</c>): drafts of the
+/// account that reply to a stored message were saved, deleted, sent, or
+/// linked to a board case or unlinked, from any client (the MCP bridge
+/// too): what <see cref="ThreadSummary.DraftCount"/> and thread.get's drafts
+/// return for <see cref="ThreadIds"/> may differ now. <see cref="ThreadIds"/>
+/// empty = any thread of the account. Clients showing one of those threads
+/// ask thread.get again.
+/// </summary>
+public sealed record DraftsChangedNotification
+{
+    /// <summary>The account.</summary>
+    [JsonPropertyName("accountId")]
+    public required AccountId AccountId { get; init; }
+
+    /// <summary>The threads; empty = any thread of the account.</summary>
+    [JsonPropertyName("threadIds")]
+    [JsonConverter(typeof(NullAsEmptyListConverter<ThreadId>))]
+    public IReadOnlyList<ThreadId> ThreadIds { get; init => field = value ?? []; } = [];
+}
+
+/// <summary>
 /// A decoded notification. <see cref="Unknown"/> carries the method of one
 /// this client does not know (a newer daemon); the raw notification is still
 /// available from the transport for a caller that wants it.
@@ -112,6 +135,13 @@ public abstract record DaemonNotification
     /// </summary>
     /// <param name="Payload">The accounts (empty = any).</param>
     public sealed record BoardChanged(BoardChangedNotification Payload) : DaemonNotification;
+
+    /// <summary>
+    /// <c>notify.draftsChanged</c>: the drafts that reply to threads of an
+    /// account changed (<see cref="DraftsChangedNotification"/>).
+    /// </summary>
+    /// <param name="Payload">The account and its threads (empty = any).</param>
+    public sealed record DraftsChanged(DraftsChangedNotification Payload) : DaemonNotification;
 
     /// <summary>A notification of a newer daemon.</summary>
     /// <param name="Method">Its method.</param>
@@ -155,13 +185,14 @@ public abstract record DaemonNotification
             API.Notify.AccountsChanged => new AccountsChanged(),
             API.Notify.MessagesChanged => new MessagesChanged(Params(method, parameters, ApiJsonContext.Wire.MessagesChangedNotification)),
             API.Notify.BoardChanged => new BoardChanged(BoardChangedParams(method, parameters)),
+            API.Notify.DraftsChanged => new DraftsChanged(Params(method, parameters, ApiJsonContext.Wire.DraftsChangedNotification)),
             _ => new Unknown(method),
         };
     }
 
     private static bool HasParams(string method) =>
         method is API.Notify.NewMessage or API.Notify.SyncState or API.Notify.AuthRequired or API.Notify.MessagesChanged
-            or API.Notify.BoardChanged;
+            or API.Notify.BoardChanged or API.Notify.DraftsChanged;
 
     // notify.boardChanged's params are all optional: absent or null = any account.
     private static BoardChangedNotification BoardChangedParams(string method, JsonElement? parameters) =>

@@ -36,11 +36,18 @@ public struct ThreadSummary: Codable, Sendable, Equatable {
     /// 0 in a sent folder, the outbox, a jira account and the account-wide
     /// summary of thread.get. Absent from an older daemon: 0.
     public var sentCount: Int
+    /// In a folder's scope: how many of the account's drafts reply to a
+    /// member of the thread (the user's unsent replies, on an issue the
+    /// unsent comments; a board case's suggested reply excepted), part of
+    /// no other field. 0 in a Drafts folder, the outbox and the
+    /// account-wide summary of thread.get. Absent from an older daemon: 0.
+    public var draftCount: Int
 
     public init(
         id: ThreadID, accountId: AccountID, subject: String, participants: [Address], messageCount: Int,
         unreadCount: Int, latestDate: Date, latest: MessageSummary, snippet: String, flags: [Flag],
-        hasAttachments: Bool, folderIds: [FolderID], issue: IssueInfo? = nil, sentCount: Int = 0
+        hasAttachments: Bool, folderIds: [FolderID], issue: IssueInfo? = nil, sentCount: Int = 0,
+        draftCount: Int = 0
     ) {
         self.id = id
         self.accountId = accountId
@@ -56,17 +63,18 @@ public struct ThreadSummary: Codable, Sendable, Equatable {
         self.folderIds = folderIds
         self.issue = issue
         self.sentCount = sentCount
+        self.draftCount = draftCount
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, accountId, subject, participants, messageCount, unreadCount, latestDate, latest, snippet, flags,
-             hasAttachments, folderIds, issue, sentCount
+             hasAttachments, folderIds, issue, sentCount, draftCount
     }
 
     /// The synthesised decoding would refuse a summary without
-    /// `sentCount` (a daemon from before the field, 2026-10-01); it is 0
-    /// then. Everything else decodes as before. The encoding stays
-    /// synthesised and always writes the key.
+    /// `sentCount` (a daemon from before the field, 2026-10-01) or
+    /// `draftCount` (2026-10-15); it is 0 then. Everything else decodes as
+    /// before. The encoding stays synthesised and always writes the keys.
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(ThreadID.self, forKey: .id)
@@ -83,6 +91,7 @@ public struct ThreadSummary: Codable, Sendable, Equatable {
         _folderIds = try c.decode(NullAsEmpty<FolderID>.self, forKey: .folderIds)
         issue = try c.decodeIfPresent(IssueInfo.self, forKey: .issue)
         sentCount = try c.decodeIfPresent(Int.self, forKey: .sentCount) ?? 0
+        draftCount = try c.decodeIfPresent(Int.self, forKey: .draftCount) ?? 0
     }
 }
 
@@ -121,18 +130,25 @@ public struct ThreadListResult: Codable, Sendable, Equatable {
 /// api.ThreadGetParams. `folderId` restricts the members and the summary to
 /// one folder; nil = every member of the account. `withSent`, with
 /// `folderId`, also returns the members `ThreadSummary.sentCount` counts
-/// (`ThreadGetResult.sent`); ignored without it, left out when nil.
+/// (`ThreadGetResult.sent`), and `withDrafts` the drafts
+/// `ThreadSummary.draftCount` counts (`ThreadGetResult.drafts`); ignored
+/// without it, left out when nil.
 public struct ThreadGetParams: Codable, Sendable, Equatable {
     public var accountId: AccountID
     public var threadId: ThreadID
     public var folderId: FolderID?
     public var withSent: Bool?
+    public var withDrafts: Bool?
 
-    public init(accountId: AccountID, threadId: ThreadID, folderId: FolderID? = nil, withSent: Bool? = nil) {
+    public init(
+        accountId: AccountID, threadId: ThreadID, folderId: FolderID? = nil, withSent: Bool? = nil,
+        withDrafts: Bool? = nil
+    ) {
         self.accountId = accountId
         self.threadId = threadId
         self.folderId = folderId
         self.withSent = withSent
+        self.withDrafts = withDrafts
     }
 }
 
@@ -142,15 +158,20 @@ public struct ThreadGetParams: Codable, Sendable, Equatable {
 /// the user's replies in the account's sent folders that the folder lacks,
 /// one per Message-ID, oldest first, at most `API.Limits.maxThreadMessages`
 /// (the newest), each with its sent folder's `folderId`: not members of the
-/// folder and in none of `thread`'s aggregates.
+/// folder and in none of `thread`'s aggregates. `drafts` (only with
+/// `withDrafts` and `folderId`; empty when the daemon leaves it out) are
+/// the drafts that reply to a member of the thread, as draft.list lists
+/// them, newest `updatedAt` first, at most `API.Limits.maxThreadDrafts`.
 public struct ThreadGetResult: Codable, Sendable, Equatable {
     public var thread: ThreadSummary
     @NullAsEmpty public var messages: [MessageSummary]
     @NullAsEmpty public var sent: [MessageSummary]
+    @NullAsEmpty public var drafts: [Draft]
 
-    public init(thread: ThreadSummary, messages: [MessageSummary], sent: [MessageSummary] = []) {
+    public init(thread: ThreadSummary, messages: [MessageSummary], sent: [MessageSummary] = [], drafts: [Draft] = []) {
         self.thread = thread
         self.messages = messages
         self.sent = sent
+        self.drafts = drafts
     }
 }

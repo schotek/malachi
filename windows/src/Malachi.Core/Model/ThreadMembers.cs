@@ -22,7 +22,12 @@ namespace Malachi.Core.Model;
 /// conversation takes them; only the conversation view shows them.
 /// <see cref="Complete"/> covers them too: a conversation the listing says
 /// has some (<see cref="ThreadSummary.SentCount"/>) is not complete before
-/// thread.get answered.
+/// thread.get answered. <see cref="Drafts"/> are the user's unsent replies
+/// to the conversation (thread.get with withDrafts,
+/// <see cref="ThreadSummary.DraftCount"/>), newest first: no members either,
+/// only the conversation view shows them as draft cards
+/// (<see cref="Conversation.Drafts"/>); <see cref="Complete"/> covers them as
+/// it covers <see cref="Sent"/>.
 /// </summary>
 /// <param name="List">The members known, oldest first; never changed once built.</param>
 /// <param name="Complete">Every folder member is known.</param>
@@ -31,4 +36,7 @@ public sealed record ThreadMembers(IReadOnlyList<MessageSummary> List, bool Comp
 {
     /// <summary>The user's replies in Sent the folder lacks, oldest first; never changed once built.</summary>
     public IReadOnlyList<MessageSummary> Sent { get; init; } = [];
+
+    /// <summary>The user's drafts that reply to the conversation, newest first; never changed once built.</summary>
+    public IReadOnlyList<Draft> Drafts { get; init; } = [];
 }

@@ -5,10 +5,10 @@
 // anchoredTop, pageTop, displayOrder, root, Metrics, rails, cardWidth,
 // compactDates); GTK: ui/internal/window/conversation_layout.go (liveCards,
 // anchoredTop, pageTop, convDisplayOrder, convRoot, convRails,
-// convCardWidth, convCompactDates and the constants), conversation_card.go
-// (picturesArrived) and conversation_rows.go (clampText). GTK's order is the
-// one shown (convDisplayOrder): what opened the conversation first, the rest
-// newest first.
+// convWithDrafts, convCardWidth, convCompactDates and the constants),
+// conversation_card.go (picturesArrived) and conversation_rows.go
+// (clampText). GTK's order is the one shown (convDisplayOrder): what
+// opened the conversation first, the rest newest first.
 //
 // The arithmetic of the conversation view that needs no WinUI: which cards
 // are near enough to the viewport to hold a body and a web view, where the
@@ -229,6 +229,27 @@ public static partial class ConversationLayout
                 Below: i < items.Count - 1);
         }
         return rails;
+    }
+
+    /// <summary>
+    /// convWithDrafts: <paramref name="items"/> (as the pane shows them) with
+    /// <paramref name="count"/> draft cards at <paramref name="at"/> (clamped
+    /// to the items), each a message card of the user's own (an accent
+    /// avatar), for <see cref="Rails"/>: the timeline runs through the drafts
+    /// as through the cards. <paramref name="items"/> is not changed.
+    /// </summary>
+    public static IReadOnlyList<ConversationItem> WithDrafts(IReadOnlyList<ConversationItem> items, int at, int count)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        at = Math.Max(0, Math.Min(at, items.Count));
+        var output = new List<ConversationItem>(items.Count + Math.Max(count, 0));
+        output.AddRange(items.Take(at));
+        for (var i = 0; i < count; i++)
+        {
+            output.Add(new ConversationItem { Kind = ConversationItemKind.Message, Mine = true });
+        }
+        output.AddRange(items.Skip(at));
+        return output;
     }
 
     /// <summary>convCardWidth: the width of the cards in a pane <paramref name="pane"/> wide: the column less the insets and the gutter; never negative.</summary>

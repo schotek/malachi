@@ -103,8 +103,9 @@ func (w *Window) toggleThread(tid api.ThreadID) {
 // ensureMembers makes the folder members of a conversation known,
 // through thread.get when needed, and runs then afterwards (at once when
 // they are). A failed fetch folds the row back and says why. thread.get
-// asks for the user's replies in Sent too (withSent), which the
-// conversation view shows beside the members (threadMembers.sent).
+// asks for the user's replies in Sent too (withSent) and for their drafts
+// (withDrafts), which the conversation view shows beside the members
+// (threadMembers.sent, drafts).
 func (w *Window) ensureMembers(tid api.ThreadID, then func()) {
 	mem := w.model.members[tid]
 	if mem == nil {
@@ -156,7 +157,7 @@ func (w *Window) fetchMembers(tid api.ThreadID, quiet bool) {
 	mem.fetching = true
 	k := w.model.listFolder
 	gen := w.model.listGen
-	params := api.ThreadGetParams{AccountID: k.Account, ThreadID: tid, FolderID: k.Folder, WithSent: true}
+	params := api.ThreadGetParams{AccountID: k.Account, ThreadID: tid, FolderID: k.Folder, WithSent: true, WithDrafts: true}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 		defer cancel()
@@ -185,7 +186,7 @@ func (w *Window) fetchMembers(tid api.ThreadID, quiet bool) {
 				w.syncRows()
 				return
 			}
-			w.model.setMembers(tid, res.Thread, res.Messages, res.Sent)
+			w.model.setMembers(tid, res.Thread, res.Messages, res.Sent, res.Drafts)
 			w.syncRows()
 			if row, ok := w.selectedRow(); ok && row.Key.Thread == tid {
 				w.setMessageActionsSensitive(true)

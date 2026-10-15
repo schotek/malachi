@@ -288,6 +288,35 @@ import Testing
         #expect(asked.contains(#""withSent":true"#))
     }
 
+    /// docs/api.md §4.4 (2026-10-15): `draftCount` on the summary (0 when
+    /// an older daemon leaves it out), `withDrafts` on the request (left out
+    /// when not asked for), `drafts` on the answer (empty when absent), and
+    /// notify.draftsChanged.
+    @Test func threadDrafts() throws {
+        #expect(try decode(ThreadSummary.self, Self.threadJSON).draftCount == 0, "absent is 0")
+        let withCount = Self.threadJSON.replacingOccurrences(of: #""hasAttachments":true"#, with: #""hasAttachments":true,"draftCount":1"#)
+        let t = try decode(ThreadSummary.self, withCount)
+        #expect(t.draftCount == 1)
+        #expect(try JSONCoding.decoder().decode(ThreadSummary.self, from: JSONCoding.encoder().encode(t)) == t)
+
+        let draft = #"{"id":"d_1","accountId":"acc_1","version":2,"to":[],"subject":"Re: x","textBody":"hi","inReplyTo":"m_1","updatedAt":"2026-10-15T10:00:00Z","comment":{"issue":{"key":"WEB-7","url":"","summary":"","status":"","statusCategory":"","type":"","priority":"","assignee":"","reporter":""},"visibility":"internal"},"local":true}"#
+        let r = try decode(ThreadGetResult.self, #"{"thread":\#(withCount),"messages":[],"drafts":[\#(draft)]}"#)
+        #expect(r.drafts.count == 1 && r.drafts[0].id == "d_1" && r.drafts[0].comment?.visibility == .internal)
+        #expect(try decode(ThreadGetResult.self, #"{"thread":\#(withCount),"messages":[]}"#).drafts.isEmpty)
+
+        let plain = String(decoding: try JSONCoding.encoder().encode(ThreadGetParams(accountId: "a", threadId: "t")), as: UTF8.self)
+        #expect(!plain.contains("withDrafts"))
+        let asked = String(
+            decoding: try JSONCoding.encoder().encode(ThreadGetParams(accountId: "a", threadId: "t", folderId: "f", withDrafts: true)),
+            as: UTF8.self)
+        #expect(asked.contains(#""withDrafts":true"#))
+
+        let n = try JSONCoding.decoder().decode(DraftsChangedNotification.self, from: Data(#"{"accountId":"acc_1","threadIds":["t_1"]}"#.utf8))
+        #expect(n.accountId == "acc_1" && n.threadIds == ["t_1"])
+        #expect(try JSONCoding.decoder().decode(DraftsChangedNotification.self, from: Data(#"{"accountId":"acc_1"}"#.utf8)).threadIds.isEmpty)
+        #expect(API.allNotifications.contains("notify.draftsChanged"))
+    }
+
     @Test func draftSaveExample() throws {
         let r = try decode(DraftSaveResult.self, #"""
         {"draftId":"d_1","version":2,"textBody":"hi","htmlBody":"<p>hi</p>",
@@ -1353,7 +1382,7 @@ import Testing
         #expect(API.systemInfo == API.SystemInfo.name)
         #expect(API.allNotifications == [
             "notify.newMessage", "notify.syncState", "notify.authRequired", "notify.accountsChanged", "notify.messagesChanged",
-            "notify.boardChanged",
+            "notify.boardChanged", "notify.draftsChanged",
         ])
         #expect(API.AccountDetectSite.name == "account.detectSite" && API.AccountListSpaces.name == "account.listSpaces")
         #expect(API.IssueTransitions.name == "issue.transitions" && API.IssueTransition.name == "issue.transition")

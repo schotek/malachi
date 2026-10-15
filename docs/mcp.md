@@ -107,8 +107,11 @@ registered at all, so it never appears in the client's tool list.
 
 A draft is inert: it lives in the daemon's store and, once it has rested
 for 30 seconds, as a copy in the account's Drafts folder, where the user
-finds it in Malachi Mail and in every other client; it is sent only by the
-user or by `send_message` under its flag. That is why creating one needs no
+finds it in Malachi Mail and in every other client; a reply is also shown
+in Malachi Mail as a draft card in its conversation (`thread.get`
+`withDrafts`, [api.md §4.4](api.md#44-thread)), where the user edits or
+discards it; it is sent only by the user or by `send_message` under its
+flag. That is why creating one needs no
 flag. A bridge started for the board (`-reply-only`, `-triage-run`) makes
 **local** drafts instead ([api.md §4.5](api.md#45-draft)): a board case's
 suggested reply is kept in Malachi Mail, on the board, not copied to the
@@ -535,7 +538,9 @@ own process:
   `omitQuote` are refused, and so is an empty `body`; `visibility` is
   `public` (the default) or `internal`, which only a service-desk issue
   takes. The output's fence names the issue (key, summary, status), the
-  visibility and the text. The other modes are refused on such an account
+  visibility and the text. The comment draft is local (no Drafts folder):
+  Malachi Mail shows it as a draft card in the issue's conversation, where
+  the user edits, posts or discards it. The other modes are refused on such an account
   with what to do instead: its message goes out by e-mail with `mode:
   forward` from a mail account, `messageAccountId` naming the issue
   tracker's account (the original is read, and its remote files

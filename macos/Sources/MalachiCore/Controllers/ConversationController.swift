@@ -91,6 +91,10 @@ public final class ConversationController {
     private var members: [MessageSummary] = []
     /// The user's replies in Sent the model was last built or merged from.
     private var sent: [MessageSummary] = []
+    /// The draft cards of the user's unsent replies (`ThreadMembers.drafts`,
+    /// `Conversation.drafts`), newest first; the pane shows them under what
+    /// opened the conversation.
+    public private(set) var drafts: [Conversation.DraftCard] = []
     /// The members whose entry was asked for and has not settled, and
     /// whether message.get was part of the request.
     private var pending: [MessageID: Bool] = [:]
@@ -182,6 +186,7 @@ public final class ConversationController {
         model = nil
         members = []
         sent = []
+        drafts = []
         loaded = [:]
         pending = [:]
         noGet = []
@@ -222,6 +227,7 @@ public final class ConversationController {
         listing = true
         members = known
         sent = list.mailbox.model.members[tid]?.sent ?? []
+        drafts = Conversation.drafts(list.mailbox.model.members[tid]?.drafts ?? [], account: account(t.accountId))
         model = Conversation.build(t, known, sent: sent, account: account(t.accountId))
         onChange?(.opened)
     }
@@ -257,6 +263,7 @@ public final class ConversationController {
             listing = false
             members = mem.list
             sent = mem.sent
+            drafts = Conversation.drafts(mem.drafts, account: own)
             model = Conversation.build(t, mem.list, sent: mem.sent, account: own)
             onChange?(.opened)
             if recovered {
@@ -306,7 +313,10 @@ public final class ConversationController {
             requestMembers(tid)
             return
         }
-        guard m != current else { return }
+        let newDrafts = Conversation.drafts(mem.drafts, account: own)
+        let sameDrafts = Conversation.sameDrafts(newDrafts, drafts)
+        drafts = newDrafts
+        guard m != current || !sameDrafts else { return }
         model = m
         onChange?(.updated)
     }

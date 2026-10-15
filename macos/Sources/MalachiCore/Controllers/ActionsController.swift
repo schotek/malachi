@@ -984,6 +984,57 @@ public final class ActionsController {
         }
     }
 
+    // MARK: Draft cards
+
+    /// A draft card's Edit (conversation_draft.go `editThreadDraft`): the
+    /// window that edits the draft already comes to the front; otherwise
+    /// the draft as draft.get has it now (the card may show an older
+    /// version) opens in the compose window, the comment window for a
+    /// comment draft. A draft that is gone says so; a second request while
+    /// one runs does nothing.
+    public func editThreadDraft(_ d: Draft) {
+        if raiseDraft?(d) == true {
+            return
+        }
+        guard let id = d.id, !id.rawValue.isEmpty, !findingDrafts.contains(id) else { return }
+        findingDrafts.insert(id)
+        mailbox.perform(API.DraftGet.self, DraftGetParams(accountId: d.accountId, draftId: id)) { [weak self] outcome in
+            guard let self else { return }
+            self.findingDrafts.remove(id)
+            switch outcome {
+            case .failure(let err):
+                self.log.warning("draft.get: \(String(describing: err), privacy: .public)")
+                if (err as? RPCError)?.code == .draftNotFound {
+                    self.toast(Conversation.draftGone())
+                    return
+                }
+                self.toast(rpcErrorText(L10n.T("Opening the draft"), err))
+            case .success(let res):
+                if self.raiseDraft?(res.draft) == true {
+                    return
+                }
+                self.openCompose?(fromDraft(kind: .edit, draft: res.draft, blocked: BlockedContent()))
+            }
+        }
+    }
+
+    /// A draft card's Discard (conversation_draft.go
+    /// `discardThreadDraft`): a draft a compose window edits is that
+    /// window's to discard (it comes to the front); otherwise, after the
+    /// question, draft.delete. notify.draftsChanged takes the card away.
+    public func discardThreadDraft(_ d: Draft, parent: AnyObject? = nil) {
+        if raiseDraft?(d) == true {
+            return
+        }
+        guard let id = d.id, !id.rawValue.isEmpty else { return }
+        ask(parent, heading: Conversation.discardQuestion(), body: "", label: Conversation.draftDiscardLabel()) {
+            [weak self] in
+            self?.call(
+                API.DraftDelete.self, DraftDeleteParams(accountId: d.accountId, draftId: id),
+                what: L10n.T("Discarding the draft"))
+        }
+    }
+
     // MARK: The assistant panel
 
     /// The assistant panel's Open Draft (ui/internal/assistant, the In App

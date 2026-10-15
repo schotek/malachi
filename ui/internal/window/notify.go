@@ -70,6 +70,13 @@ func (w *Window) handleNotification(method string, params json.RawMessage) {
 			return
 		}
 		w.boardChanged(n)
+	case api.NotifyDraftsChanged:
+		var n api.DraftsChangedNotification
+		if err := json.Unmarshal(params, &n); err != nil {
+			w.log.Warn("bad notify.draftsChanged payload", "err", err)
+			return
+		}
+		w.onDraftsChanged(n)
 	default:
 		w.log.Info("notification", "method", method)
 	}

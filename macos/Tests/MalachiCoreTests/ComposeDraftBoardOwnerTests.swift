@@ -242,10 +242,12 @@ private final class Harness {
         }
     }
 
-    @Test func theWindowStillDeletesAClosedComment() async throws {
-        // The contrast: a comment window's copy goes with the window.
+    @Test func theWindowStillDeletesAClosedEmptyComment() async throws {
+        // The contrast: an empty comment window's copy goes with the
+        // window (a comment with text stays, the issue's draft card).
         let h = try await Harness(owner: .window, comment: true)
         defer { Task { await h.stop() } }
+        h.form.text = "  "
         h.draft.cleanup()
         try await waitUntil { await h.script.deletes.count == 1 }
         #expect(await h.script.deletes.first?.draftId == boardDraft)

@@ -8,8 +8,9 @@ ConversationRow.swift and ConversationCardView.swift (the colours). The
 look of the conversation view, whose rows and cards are built in code: the
 timeline's line and dots (alpha(currentColor, 0.3): the disabled text
 colour), the card's small flat buttons (.conversation-card-button: 24 wide,
-20 high), the sender (.conversation-sender: semibold), the unread dot, and
-the texts in small secondary type. Merged into the conversation view with
+20 high), the sender (.conversation-sender: semibold), the unread dot, the
+texts in small secondary type, and the frame of a draft card (a message
+card's, for the card built in code). Merged into the conversation view with
 ChipStyles.xaml, so that the theme resources follow the window's colour
 scheme; not into App.xaml.
 -->
@@ -80,6 +81,14 @@ scheme; not into App.xaml.
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- A draft card (ConversationDraftView): the frame of a message card
+         (ConversationCard.xaml Frame), built in code. -->
+    <Style x:Key="ConversationDraftCardStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
     </Style>
     <Style x:Key="ConversationSenderStyle" TargetType="TextBlock">
         <Setter Property="FontWeight" Value="SemiBold" />

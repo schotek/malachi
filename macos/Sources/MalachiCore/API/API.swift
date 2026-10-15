@@ -621,12 +621,16 @@ public enum API {
         public static let messagesChanged = "notify.messagesChanged"
         /// `BoardChangedNotification`: what `board.list` returns changed.
         public static let boardChanged = "notify.boardChanged"
+        /// `DraftsChangedNotification`: drafts of the threads it names
+        /// changed; a conversation on show asks thread.get again
+        /// (`MailboxController.handleDraftsChanged`).
+        public static let draftsChanged = "notify.draftsChanged"
     }
 
     /// api.AllNotifications: every server-initiated notification name.
     public static let allNotifications: [String] = [
         Notify.newMessage, Notify.syncState, Notify.authRequired, Notify.accountsChanged, Notify.messagesChanged,
-        Notify.boardChanged,
+        Notify.boardChanged, Notify.draftsChanged,
     ]
 
     /// The limits the daemon enforces (types.go constants), for pre-checks.
@@ -649,6 +653,7 @@ public enum API {
         public static let maxAttachmentDataBytes = 16 << 20
         public static let maxThreadMessages = 500
         public static let maxThreadParticipants = 8
+        public static let maxThreadDrafts = 20
         public static let maxDraftAttributionBytes = 2048
         public static let maxDraftAttributionLines = 16
         /// The smallest non-zero `Preferences.syncIntervalSeconds`.

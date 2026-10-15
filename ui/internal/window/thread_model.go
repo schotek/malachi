@@ -54,10 +54,14 @@ type listRow struct {
 // the conversation takes them; only the conversation view shows them.
 // complete covers them too: a conversation the listing says has some
 // (api.ThreadSummary.SentCount) is not complete before thread.get
-// answered.
+// answered. drafts are the user's unsent replies to the conversation
+// (thread.get with withDrafts, api.ThreadSummary.DraftCount), newest
+// first: no members either, only the conversation view shows them as
+// draft cards; complete covers them as it covers sent.
 type threadMembers struct {
 	list     []api.MessageSummary
 	sent     []api.MessageSummary
+	drafts   []api.Draft
 	complete bool
 	fetching bool
 	// again: thread.get is asked once more when the one in flight answers
@@ -117,10 +121,10 @@ func (m *mailModel) setThreads(list []api.ThreadSummary, page api.PageInfo) {
 
 // membersFromListing is what thread.list tells of a conversation's folder
 // members: the newest one, which for a single-message conversation is all
-// of them, unless the user's replies in Sent are part of it: those only
-// thread.get returns.
+// of them, unless the user's replies in Sent or unsent drafts are part of
+// it: those only thread.get returns.
 func membersFromListing(t api.ThreadSummary) *threadMembers {
-	return &threadMembers{list: []api.MessageSummary{t.Latest}, complete: t.MessageCount <= 1 && t.SentCount <= 0}
+	return &threadMembers{list: []api.MessageSummary{t.Latest}, complete: t.MessageCount <= 1 && t.SentCount <= 0 && t.DraftCount <= 0}
 }
 
 // sameShape reports whether a conversation's listing has not changed in
@@ -128,11 +132,12 @@ func membersFromListing(t api.ThreadSummary) *threadMembers {
 // Jira conversation: its status, assignee or priority can move without a
 // new member (the account shows no events), and every member carries it.
 // It includes the count of the user's replies in Sent too (SentCount): the
-// fetched ones are kept with the members.
+// fetched ones are kept with the members; and so are the drafts
+// (DraftCount).
 func sameShape(a, b api.ThreadSummary) bool {
 	return a.MessageCount == b.MessageCount && a.UnreadCount == b.UnreadCount &&
 		a.LatestDate.Equal(b.LatestDate) && a.Latest.ID == b.Latest.ID &&
-		reflect.DeepEqual(a.Issue, b.Issue) && a.SentCount == b.SentCount
+		reflect.DeepEqual(a.Issue, b.Issue) && a.SentCount == b.SentCount && a.DraftCount == b.DraftCount
 }
 
 // forgetMembers forgets the fetched folder members of conversation tid:
@@ -207,10 +212,11 @@ func (m *mailModel) setExpanded(tid api.ThreadID, on bool) {
 }
 
 // setMembers stores the thread.get answer: the folder members, oldest
-// first, the user's replies in Sent the folder lacks (sent) and the
-// summary as the daemon aggregated it. An empty list means the
-// conversation left the folder meanwhile; its row goes.
-func (m *mailModel) setMembers(tid api.ThreadID, t api.ThreadSummary, list, sent []api.MessageSummary) {
+// first, the user's replies in Sent the folder lacks (sent), the user's
+// drafts replying to it (drafts) and the summary as the daemon aggregated
+// it. An empty list means the conversation left the folder meanwhile; its
+// row goes.
+func (m *mailModel) setMembers(tid api.ThreadID, t api.ThreadSummary, list, sent []api.MessageSummary, drafts []api.Draft) {
 	i, ok := m.tindex[tid]
 	if !ok {
 		return
@@ -222,7 +228,7 @@ func (m *mailModel) setMembers(tid api.ThreadID, t api.ThreadSummary, list, sent
 	}
 	m.threads[i] = t
 	m.members[tid] = &threadMembers{list: append([]api.MessageSummary(nil), list...),
-		sent: append([]api.MessageSummary(nil), sent...), complete: true}
+		sent: append([]api.MessageSummary(nil), sent...), drafts: append([]api.Draft(nil), drafts...), complete: true}
 	m.reindexMembers()
 	m.rebuildRows()
 }
@@ -542,7 +548,7 @@ func (m *mailModel) removeMessages(ids []api.MessageID) (removal, bool) {
 		mem := m.members[tid]
 		snap := threadSnapshot{index: i, summary: m.threads[i], expanded: m.expanded[tid],
 			members: threadMembers{list: append([]api.MessageSummary(nil), mem.list...),
-				sent: append([]api.MessageSummary(nil), mem.sent...), complete: true}}
+				sent: append([]api.MessageSummary(nil), mem.sent...), drafts: append([]api.Draft(nil), mem.drafts...), complete: true}}
 		gone := byThread[tid]
 		kept := mem.list[:0:0]
 		for _, s := range mem.list {
@@ -771,5 +777,15 @@ func summaryThread(t api.ThreadSummary, expanded, loading bool) widget.Thread {
 		HasAttachments: t.HasAttachments,
 		Expanded:       expanded,
 		Loading:        loading,
+		Draft:          threadDraftBadge(t),
 	}
+}
+
+// threadDraftBadge is the Draft badge of a conversation row with the
+// user's unsent reply (api.ThreadSummary.DraftCount), "" without.
+func threadDraftBadge(t api.ThreadSummary) string {
+	if t.DraftCount <= 0 {
+		return ""
+	}
+	return conversation.DraftBadge(i18n.Tr)
 }

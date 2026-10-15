@@ -231,6 +231,14 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
     public Action<AccountId>? RefreshShownSent { get; set; }
 
     /// <summary>
+    /// The list's <c>onDraftsChanged</c> (conversation_draft.go), installed
+    /// by the list half: notify.draftsChanged named threads of an account
+    /// (or any of them), whose conversations ask thread.get again for their
+    /// drafts (<see cref="HandleDraftsChanged"/>).
+    /// </summary>
+    public Action<DraftsChangedNotification>? RefreshDrafts { get; set; }
+
+    /// <summary>
     /// notify.messagesChanged for an account the window shows, before
     /// anything is listed or fetched again: whatever is cached of the
     /// account's messages may be stale (the daemon rebuilt them in place,
@@ -947,6 +955,9 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
             case DaemonNotification.MessagesChanged c:
                 HandleMessagesChanged(c.Payload);
                 break;
+            case DaemonNotification.DraftsChanged d:
+                HandleDraftsChanged(d.Payload);
+                break;
             case DaemonNotification.Unknown u:
                 LogUnknownNotification(logger, u.Method);
                 break;
@@ -1007,6 +1018,21 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
         }
         RefreshShown?.Invoke(n.AccountId);
         ReloadMessages?.Invoke();
+    }
+
+    /// <summary>
+    /// notify.draftsChanged (notify.go, conversation_draft.go
+    /// <c>onDraftsChanged</c>): drafts that reply to messages of the
+    /// account's threads were saved, deleted, sent or linked to a board case
+    /// from any client; the listed conversations it names, and the one on
+    /// show, ask thread.get again (<see cref="RefreshDrafts"/>), which brings
+    /// their draft count and drafts.
+    /// </summary>
+    public void HandleDraftsChanged(DraftsChangedNotification n)
+    {
+        ArgumentNullException.ThrowIfNull(n);
+        Scope.VerifyAccess();
+        RefreshDrafts?.Invoke(n);
     }
 
     // A fixed view of a Jira account (Assigned to Me, Watching, Open): it

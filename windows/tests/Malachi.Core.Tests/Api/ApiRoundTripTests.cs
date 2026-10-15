@@ -71,7 +71,7 @@ public sealed class ApiRoundTripTests
         """{"id":"d_1","accountId":"acc_1","version":3,"to":[@address@],"cc":[@address@],"bcc":[@address@],"subject":"Re: Lunch","textBody":"> hi","htmlBody":"<p>hi</p>","inReplyTo":"m_1","forwarding":"m_2","attachments":[@draftattachment@],"replaces":"m_9","comment":{"issue":@issue@,"visibility":"internal"},"local":true,"updatedAt":"2026-09-02T10:00:00.1234567Z"}""";
 
     private const string Thread =
-        """{"id":"t_9","accountId":"acc_1","subject":"Lunch","participants":[@address@],"messageCount":3,"unreadCount":1,"latestDate":"2026-09-02T10:00:00Z","latest":@summary@,"snippet":"plain","flags":["flagged","seen"],"hasAttachments":true,"folderIds":["f_inbox","f_sent"],"issue":@issue@,"sentCount":2}""";
+        """{"id":"t_9","accountId":"acc_1","subject":"Lunch","participants":[@address@],"messageCount":3,"unreadCount":1,"latestDate":"2026-09-02T10:00:00Z","latest":@summary@,"snippet":"plain","flags":["flagged","seen"],"hasAttachments":true,"folderIds":["f_inbox","f_sent"],"issue":@issue@,"sentCount":2,"draftCount":1}""";
 
     private const string Certificate =
         """{"sha256":"@pin@","subject":"127.0.0.1","issuer":"CA","dnsNames":["mail.example.org"],"ipAddresses":["127.0.0.1"],"notBefore":"2024-01-02T03:04:05Z","notAfter":"2044-01-02T03:04:05Z","selfSigned":true}""";
@@ -338,6 +338,7 @@ public sealed class ApiRoundTripTests
         [nameof(AuthRequiredNotification)] = Case<AuthRequiredNotification>(
             """{"accountId":"acc_1","reason":1200,"message":"token expired","authUrl":"https://login.example/x"}"""),
         [nameof(AccountsChangedNotification)] = Case<AccountsChangedNotification>("{}"),
+        [nameof(DraftsChangedNotification)] = Case<DraftsChangedNotification>("""{"accountId":"acc_1","threadIds":["t_9"]}"""),
         // RpcError.cs
         [nameof(RpcError)] = Case<RpcError>(Error),
         // Search.cs
@@ -362,8 +363,8 @@ public sealed class ApiRoundTripTests
         [nameof(ThreadSummary)] = Case<ThreadSummary>(Thread),
         [nameof(ThreadListParams)] = Case<ThreadListParams>("""{"accountId":"acc_1","folderId":"f_inbox","page":@page@,"sort":"dateDesc","filter":"flagged"}"""),
         [nameof(ThreadListResult)] = Case<ThreadListResult>("""{"threads":[@thread@],"page":@pageinfo@}"""),
-        [nameof(ThreadGetParams)] = Case<ThreadGetParams>("""{"accountId":"acc_1","threadId":"t_9","folderId":"f_inbox","withSent":true}"""),
-        [nameof(ThreadGetResult)] = Case<ThreadGetResult>("""{"thread":@thread@,"messages":[@summary@,@summary@],"sent":[@summary@]}"""),
+        [nameof(ThreadGetParams)] = Case<ThreadGetParams>("""{"accountId":"acc_1","threadId":"t_9","folderId":"f_inbox","withSent":true,"withDrafts":true}"""),
+        [nameof(ThreadGetResult)] = Case<ThreadGetResult>("""{"thread":@thread@,"messages":[@summary@,@summary@],"sent":[@summary@],"drafts":[@draft@]}"""),
         // Tls.cs
         [nameof(CertificateInfo)] = Case<CertificateInfo>(Certificate),
         [nameof(TlsErrorData)] = Case<TlsErrorData>("""{"reason":"pinMismatch","certificate":@certificate@,"expectedSha256":"@pin@"}"""),
@@ -393,18 +394,22 @@ public sealed class ApiRoundTripTests
         ["Preferences without the storage members"] = Case<Preferences>(
             """{"syncIntervalSeconds":0,"remoteContent":"block","offlineDays":0,"compressStore":null,"neverStoreAttachments":null}""",
             """{"syncIntervalSeconds":0,"remoteContent":"block","offlineDays":0}"""),
-        // A daemon from before the user's replies in Sent (2026-10-01): no
-        // sentCount (0), no sent (empty); a request that does not ask for
-        // them leaves withSent out.
+        // A daemon from before the user's replies in Sent (2026-10-01) and
+        // their drafts (2026-10-15): no sentCount and draftCount (0), no sent
+        // and drafts (empty); a request that does not ask for them leaves
+        // withSent and withDrafts out.
         ["ThreadSummary without sentCount"] = Case<ThreadSummary>(
             """{"id":"t","accountId":"a","subject":"","messageCount":1,"unreadCount":0,"latestDate":"2026-09-02T10:00:00Z","latest":@summary@,"snippet":"","hasAttachments":false}""",
-            """{"id":"t","accountId":"a","subject":"","participants":[],"messageCount":1,"unreadCount":0,"latestDate":"2026-09-02T10:00:00Z","latest":@summary@,"snippet":"","flags":[],"hasAttachments":false,"folderIds":[],"sentCount":0}"""),
+            """{"id":"t","accountId":"a","subject":"","participants":[],"messageCount":1,"unreadCount":0,"latestDate":"2026-09-02T10:00:00Z","latest":@summary@,"snippet":"","flags":[],"hasAttachments":false,"folderIds":[],"sentCount":0,"draftCount":0}"""),
         ["ThreadGetResult without sent"] = Case<ThreadGetResult>(
-            """{"thread":@thread@,"messages":[]}""",
-            """{"thread":@thread@,"messages":[],"sent":[]}"""),
+            """{"thread":@thread@,"messages":[],"drafts":null}""",
+            """{"thread":@thread@,"messages":[],"sent":[],"drafts":[]}"""),
         ["ThreadGetParams without withSent"] = Case<ThreadGetParams>(
-            """{"accountId":"a","threadId":"t","withSent":null}""",
+            """{"accountId":"a","threadId":"t","withSent":null,"withDrafts":null}""",
             """{"accountId":"a","threadId":"t"}"""),
+        ["DraftsChangedNotification for any thread"] = Case<DraftsChangedNotification>(
+            """{"accountId":"acc_1"}""",
+            """{"accountId":"acc_1","threadIds":[]}"""),
         // trimQuoted is asked for or left out, never false; a daemon that
         // cut nothing, or one from before the parameter, leaves
         // quotedTrimmed out.

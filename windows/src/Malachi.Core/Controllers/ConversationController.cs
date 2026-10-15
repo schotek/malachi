@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Controllers/ConversationController.swift;
-// GTK: ui/internal/window/conversation_controller.go (conversationController).
+// GTK: ui/internal/window/conversation_controller.go (conversationController;
+// its drafts, the draft cards, a Windows addition ahead of Swift).
 //
 // The conversation view of the reading pane, the controller half: which
 // conversation the pane shows, its model (Conversation, the port of
@@ -31,7 +32,9 @@ namespace Malachi.Core.Controllers;
 /// the actions), with the user's replies in Sent the folder lacks
 /// (<see cref="ThreadMembers.Sent"/>, cards with
 /// <see cref="ConversationItem.Sent"/>: never marked read, never among the
-/// members the actions take), the bodies from the message cache, one card at a time and
+/// members the actions take), and the user's drafts that reply to it
+/// (<see cref="ThreadMembers.Drafts"/>, <see cref="Drafts"/>: draft cards
+/// beside the model, never members), the bodies from the message cache, one card at a time and
 /// only for the cards the pane asks for (<see cref="NeedsBody"/>):
 /// <c>message.body</c> alone, and <c>message.get</c> too only for a card that
 /// needs what it adds to the summary (attachments, the unsubscribe offer of a
@@ -137,6 +140,14 @@ public sealed partial class ConversationController : IDisposable
     /// <summary>Its model; null while the members are on their way.</summary>
     public ConversationModel? Model { get; private set; }
 
+    /// <summary>
+    /// The draft cards of the user's unsent replies (<see cref="ThreadMembers.Drafts"/>,
+    /// <see cref="Conversation.Drafts"/>), newest first; the pane shows them
+    /// under what opened the conversation (<see cref="Conversation.DraftsFirst"/>).
+    /// Empty while nothing is shown.
+    /// </summary>
+    public IReadOnlyList<ConversationDraftCard> Drafts { get; private set; } = [];
+
     /// <summary>The cache entries of the cards whose body was asked for, by member.</summary>
     public IReadOnlyDictionary<MessageId, LoadedMessage> Loaded => loaded;
 
@@ -201,6 +212,7 @@ public sealed partial class ConversationController : IDisposable
         Model = null;
         members = [];
         sent = [];
+        Drafts = [];
         loaded.Clear();
         pending.Clear();
         noGet.Clear();
@@ -255,6 +267,7 @@ public sealed partial class ConversationController : IDisposable
         members = known;
         sent = mem?.Sent ?? [];
         Model = Conversation.Build(t, known, Account(t.AccountId), sent);
+        Drafts = Conversation.Drafts(mem?.Drafts, Account(t.AccountId));
         Changed?.Invoke(this, Change.Opened);
     }
 
@@ -276,7 +289,9 @@ public sealed partial class ConversationController : IDisposable
     /// of the folder already. A model
     /// built from the listing after such a failure is not merged into: the
     /// members build it anew (the row of older members it showed would stay
-    /// otherwise), and only then is the newest one marked read.
+    /// otherwise), and only then is the newest one marked read. The draft
+    /// cards (<see cref="Drafts"/>) are made anew from the members' drafts
+    /// every time, and a change of them alone is announced too.
     /// </summary>
     public void MembersChanged(ThreadId tid)
     {
@@ -309,6 +324,7 @@ public sealed partial class ConversationController : IDisposable
             members = mem.List;
             sent = mem.Sent;
             Model = Conversation.Build(t, mem.List, own, mem.Sent);
+            Drafts = Conversation.Drafts(mem.Drafts, own);
             Changed?.Invoke(this, Change.Opened);
             if (recovered)
             {
@@ -377,7 +393,12 @@ public sealed partial class ConversationController : IDisposable
             RequestMembers(tid);
             return;
         }
-        if (ReferenceEquals(m, current))
+        // The draft cards: announced when they changed, even when the model
+        // did not (a draft saved or deleted elsewhere).
+        var drafts = Conversation.Drafts(mem.Drafts, own);
+        var sameDrafts = Conversation.SameDrafts(drafts, Drafts);
+        Drafts = drafts;
+        if (ReferenceEquals(m, current) && sameDrafts)
         {
             return;
         }

@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/API/Threads.swift; Go:
-// backend/pkg/api/types.go ("Threads"); contract: docs/api.md §4.4.
+// backend/pkg/api/types.go ("Threads"; draftCount, withDrafts and drafts
+// a Windows addition ahead of Swift); contract: docs/api.md §4.4.
 //
 // Computed per account, listed per folder: every field of a summary a
 // folder listing returns describes the members in that folder, except
@@ -84,6 +85,17 @@ public sealed record ThreadSummary
     /// </summary>
     [JsonPropertyName("sentCount")]
     public int SentCount { get; init; }
+
+    /// <summary>
+    /// In a folder's scope: how many of the account's drafts reply to a
+    /// message of the thread (any folder), a board case's suggested reply
+    /// excepted: the user's unsent replies, and on an issue-tracker account
+    /// its unsent comments. Part of no other field. 0 in a Drafts folder, the
+    /// outbox and the account-wide summary of thread.get. Absent from an
+    /// older daemon (before 2026-10-15): 0.
+    /// </summary>
+    [JsonPropertyName("draftCount")]
+    public int DraftCount { get; init; }
 }
 
 /// <summary>
@@ -133,7 +145,9 @@ public sealed record ThreadListResult
 /// <see cref="WithSent"/>, with <see cref="FolderId"/>, also returns the
 /// members <see cref="ThreadSummary.SentCount"/> counts
 /// (<see cref="ThreadGetResult.Sent"/>); ignored without it, left out when
-/// null.
+/// null. <see cref="WithDrafts"/> likewise returns the drafts
+/// <see cref="ThreadSummary.DraftCount"/> counts
+/// (<see cref="ThreadGetResult.Drafts"/>).
 /// </summary>
 public sealed record ThreadGetParams
 {
@@ -152,6 +166,10 @@ public sealed record ThreadGetParams
     /// <summary>Also the user's replies in Sent the folder lacks.</summary>
     [JsonPropertyName("withSent")]
     public bool? WithSent { get; init; }
+
+    /// <summary>Also the user's drafts that reply to a member.</summary>
+    [JsonPropertyName("withDrafts")]
+    public bool? WithDrafts { get; init; }
 }
 
 /// <summary>
@@ -162,7 +180,12 @@ public sealed record ThreadGetParams
 /// folders that the folder lacks, one per Message-ID, oldest first, at most
 /// <see cref="API.Limits.MaxThreadMessages"/> (the newest), each with its sent
 /// folder's <c>folderId</c>: not members of the folder and in none of
-/// <see cref="Thread"/>'s aggregates.
+/// <see cref="Thread"/>'s aggregates. <see cref="Drafts"/> (only with
+/// <see cref="ThreadGetParams.WithDrafts"/> and a folder; empty when the
+/// daemon leaves it out) are the drafts that reply to a member, as
+/// <c>draft.list</c> lists them (a comment draft with its comment), newest
+/// <c>updatedAt</c> first, at most <see cref="API.Limits.MaxThreadDrafts"/>:
+/// never members of anything.
 /// </summary>
 public sealed record ThreadGetResult
 {
@@ -179,4 +202,9 @@ public sealed record ThreadGetResult
     [JsonPropertyName("sent")]
     [JsonConverter(typeof(NullAsEmptyListConverter<MessageSummary>))]
     public IReadOnlyList<MessageSummary> Sent { get; init => field = value ?? []; } = [];
+
+    /// <summary>The user's drafts that reply to a member, newest first.</summary>
+    [JsonPropertyName("drafts")]
+    [JsonConverter(typeof(NullAsEmptyListConverter<Draft>))]
+    public IReadOnlyList<Draft> Drafts { get; init => field = value ?? []; } = [];
 }

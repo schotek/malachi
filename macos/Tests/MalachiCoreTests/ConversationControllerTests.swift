@@ -157,7 +157,7 @@ private final class Harness {
         #expect(h.conversation.thread == "t1")
         #expect(h.changes == [.loading, .opened])
         #expect(await h.fixture.threadGetRequests == [
-            ThreadGetParams(accountId: "a", threadId: "t1", folderId: "in", withSent: true),
+            ThreadGetParams(accountId: "a", threadId: "t1", folderId: "in", withSent: true, withDrafts: true),
         ])
         #expect(shape(h.conversation.model) == ["a1", "a2", "a3"])
         #expect(h.conversation.model?.markRead == "a3")
@@ -285,6 +285,50 @@ private final class Harness {
         h.list.refetchMembers("t1")
         try await waitUntil { h.conversation.model?.index("r10") == -1 }
         #expect(sentShape(h.conversation.model) == ["a1", "a2", "a3"])
+    }
+
+    /// The user's unsent replies are draft cards beside the model, newest
+    /// first: one message and a draft reply to it are a conversation row,
+    /// a draft saved or deleted elsewhere (notify.draftsChanged) comes and
+    /// goes, and the members stay as they are (conversation_controller_test.go
+    /// TestConversationDraftsAreDraftCards).
+    @Test func draftsAreDraftCards() async throws {
+        let h = try await Harness()
+        defer { Task { await h.stop() } }
+        func draft(_ id: String, _ hours: Int, _ text: String) -> Draft {
+            Draft(
+                id: DraftID(id), accountId: account, version: 1, textBody: text, inReplyTo: "b1",
+                updatedAt: base.addingTimeInterval(Double(hours) * 3600))
+        }
+        try await h.select(ListKey(thread: "t2", message: "b1"))
+        #expect(h.shown == [false])
+
+        await h.fixture.setDrafts([draft("d1", 7, "On my way")], thread: "t2")
+        h.mailbox.handleDraftsChanged(DraftsChangedNotification(accountId: account, threadIds: ["t2"]))
+        try await waitUntil { h.list.selectedKey == ListKey(thread: "t2") && h.conversation.model != nil }
+        #expect(h.list.rows.first { $0.key == ListKey(thread: "t2") }?.summary?.draftCount == 1)
+        #expect(shape(h.conversation.model) == ["b1"])
+        #expect(h.conversation.drafts.map(\.draft.id) == ["d1"])
+        #expect(h.conversation.drafts.first?.text == "On my way")
+
+        // Another draft saved elsewhere, no thread named: the newest first.
+        await h.fixture.setDrafts([draft("d1", 7, "On my way"), draft("d2", 8, "Or not")], thread: "t2")
+        h.mailbox.handleDraftsChanged(DraftsChangedNotification(accountId: account))
+        try await waitUntil { h.conversation.drafts.count == 2 }
+        #expect(h.conversation.drafts.map(\.draft.id) == ["d2", "d1"])
+        #expect(h.changes.last == .updated)
+
+        // Deleted: the cards go, the member stays.
+        await h.fixture.setDrafts([], thread: "t2")
+        h.mailbox.handleDraftsChanged(DraftsChangedNotification(accountId: account, threadIds: ["t2"]))
+        try await waitUntil { h.conversation.drafts.isEmpty }
+        #expect(await h.fixture.threadGetRequests.allSatisfy { $0.withDrafts == true })
+
+        // Another account's notification asks nothing.
+        let asked = await h.fixture.threadGetRequests.count
+        h.mailbox.handleDraftsChanged(DraftsChangedNotification(accountId: "other", threadIds: ["t2"]))
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await h.fixture.threadGetRequests.count == asked)
     }
 
     @Test func membersFollowTheList() async throws {

@@ -65,6 +65,11 @@ type Thread struct {
 
 	// Tag is the tag of the latest member (bulkmail.Tag).
 	Tag string
+
+	// Draft is the badge of a conversation with the user's unsent reply
+	// (conversation.DraftBadge when api.ThreadSummary.DraftCount > 0); ""
+	// hides it.
+	Draft string
 }
 
 // Start margins of the row content: the plain one (message_row.blp), the
@@ -118,6 +123,7 @@ type MessageRow struct {
 	statusPill   *gtk.Label
 	bulkPill     *gtk.Label
 	internalPill *gtk.Label
+	draftPill    *gtk.Label
 	event        *gtk.Label
 
 	// thread says the row shows a conversation (the arrow is live), loading
@@ -163,6 +169,7 @@ func NewMessageRow() *MessageRow {
 		statusPill:   b.GetObject("status_pill").Cast().(*gtk.Label),
 		bulkPill:     b.GetObject("bulk_pill").Cast().(*gtk.Label),
 		internalPill: b.GetObject("internal_pill").Cast().(*gtk.Label),
+		draftPill:    b.GetObject("draft_pill").Cast().(*gtk.Label),
 		event:        b.GetObject("event_label").Cast().(*gtk.Label),
 
 		showAvatar:  true,
@@ -189,6 +196,7 @@ func (r *MessageRow) SetMessage(m Message) {
 	r.origin.SetTooltipText(m.OriginTooltip)
 	r.origin.SetVisible(m.Origin != "")
 	r.badge.SetVisible(false)
+	r.draftPill.SetVisible(false)
 	r.RemoveCSSClass("thread-row")
 	r.RemoveCSSClass("thread-expanded")
 	r.thread, r.loading = false, false
@@ -220,6 +228,8 @@ func (r *MessageRow) SetThread(t Thread) {
 	// TRANSLATORS: tooltip of the member count of a conversation row.
 	r.badge.SetTooltipText(fmt.Sprintf(i18n.N("%d message", "%d messages", t.Count), t.Count))
 	r.badge.SetVisible(t.Count >= 2)
+	r.draftPill.SetText(t.Draft)
+	r.draftPill.SetVisible(t.Draft != "")
 	r.AddCSSClass("thread-row")
 	r.thread, r.loading = true, t.Loading
 	r.issue = t.Issue

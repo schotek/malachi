@@ -54,6 +54,20 @@ public struct AccountsChangedNotification: Codable, Sendable, Equatable {
     public init() {}
 }
 
+/// api.DraftsChangedNotification (`notify.draftsChanged`): drafts of the
+/// account that reply to a stored message were saved, deleted, sent or
+/// linked to a board case, from any client (the MCP bridge too).
+/// `threadIds` empty = any thread of the account.
+public struct DraftsChangedNotification: Codable, Sendable, Equatable {
+    public var accountId: AccountID
+    @NullAsEmpty public var threadIds: [ThreadID]
+
+    public init(accountId: AccountID, threadIds: [ThreadID] = []) {
+        self.accountId = accountId
+        self.threadIds = threadIds
+    }
+}
+
 /// A decoded notification. `unknown` carries the method of one this client
 /// does not know (a newer daemon); the raw notification is still available
 /// from the transport for a caller that wants it.
@@ -68,6 +82,8 @@ public enum DaemonNotification: Sendable, Equatable {
     /// What `board.list` returns changed (`BoardChangedNotification`,
     /// API/BoardAPI.swift); no accounts = any.
     case boardChanged(BoardChangedNotification)
+    /// Drafts of the threads named changed (`DraftsChangedNotification`).
+    case draftsChanged(DraftsChangedNotification)
     case unknown(method: String)
 
     /// Decodes the params of a raw notification by its method. Throws when
@@ -88,6 +104,8 @@ public enum DaemonNotification: Sendable, Equatable {
             // Missing or null params mean "any account".
             let envelope = try JSONCoding.decoder().decode(OptionalParamsEnvelope<BoardChangedNotification>.self, from: raw.line)
             self = .boardChanged(envelope.params ?? BoardChangedNotification())
+        case API.Notify.draftsChanged:
+            self = .draftsChanged(try raw.params(DraftsChangedNotification.self))
         default:
             self = .unknown(method: raw.method)
         }

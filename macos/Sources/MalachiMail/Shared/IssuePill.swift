@@ -36,6 +36,13 @@ enum IssuePill {
         (.systemOrange, NSColor.systemOrange.withAlphaComponent(0.15))
     }
 
+    /// The Draft badge of a conversation with the user's unsent reply, red
+    /// as in mail clients that show drafts in their threads (style.go
+    /// `draft-pill`).
+    static var draftColours: Colours {
+        (.systemRed, NSColor.systemRed.withAlphaComponent(0.12))
+    }
+
     /// Paints `pill` in `c`; on a selected row (`emphasized`) in the
     /// selection's text colour on a translucent fill, as the count badge.
     static func paint(_ pill: PillLabel, _ c: Colours, emphasized: Bool) {

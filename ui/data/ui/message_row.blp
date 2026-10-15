@@ -203,6 +203,18 @@ ListBoxRow message_row {
             "internal-pill",
           ]
         }
+
+        // Draft badge of a conversation with an unsent reply
+        // (widget/message_row.go, conversation.DraftBadge).
+        Label draft_pill {
+          visible: false;
+          valign: center;
+
+          styles [
+            "issue-pill",
+            "draft-pill",
+          ]
+        }
       }
 
       Label preview_label {

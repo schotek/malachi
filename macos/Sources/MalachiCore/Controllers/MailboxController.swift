@@ -104,6 +104,9 @@ public final class MailboxController {
     /// (notify.messagesChanged), and the conversation shown may show the
     /// user's replies in it.
     public var refreshShownSent: (@MainActor (AccountID) -> Void)?
+    /// The list's `refreshDrafts`, installed by the list extension:
+    /// notify.draftsChanged named conversations of an account (none: any).
+    public var refreshDrafts: (@MainActor (DraftsChangedNotification) -> Void)?
     /// The backend went away: fold a conversation waiting for its members
     /// back (window.go `showConnectionState`, `collapseLoading` + `syncRows`).
     public var collapseLoading: (@MainActor () -> Void)?
@@ -604,9 +607,19 @@ public final class MailboxController {
             handleMessagesChanged(m)
         case .boardChanged:
             break  // the board's own controller listens (BoardController)
+        case .draftsChanged(let d):
+            handleDraftsChanged(d)
         case .unknown(let method):
             log.info("notification \(method, privacy: .public)")
         }
+    }
+
+    /// notify.draftsChanged: drafts of the account's conversations were
+    /// saved, deleted, sent or linked to a board case (window/
+    /// conversation_draft.go `onDraftsChanged`); the list asks the ones it
+    /// names for their drafts again (`refreshDrafts`).
+    public func handleDraftsChanged(_ n: DraftsChangedNotification) {
+        refreshDrafts?(n)
     }
 
     /// The account set changed under us (notify.accountsChanged): the

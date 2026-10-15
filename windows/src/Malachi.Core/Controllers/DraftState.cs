@@ -70,6 +70,13 @@ public sealed record DraftState
     /// <summary>The window is gone; late callbacks are dropped.</summary>
     public bool Closed { get; init; }
 
-    /// <summary>Close without asking.</summary>
+    /// <summary>Close without asking; for a comment it also says that its copy is settled (sent, or deleted already).</summary>
     public bool Discard { get; init; }
+
+    /// <summary>
+    /// The window closed with a comment not to be kept (discarded, or
+    /// nothing in it): a save that answers after the close deletes what it
+    /// stored.
+    /// </summary>
+    public bool ForgetLate { get; init; }
 }

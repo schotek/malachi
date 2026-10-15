@@ -409,6 +409,9 @@ final class Integration {
         tokens.append(hub.addAccountsChanged { [weak self] in
             self?.mailbox.handleAccountsChanged()
         })
+        tokens.append(hub.addDraftsChanged { [weak self] d in
+            self?.mailbox.handleDraftsChanged(d)
+        })
     }
 
     /// window.go `refreshListTitle`: the selected folder is the window's

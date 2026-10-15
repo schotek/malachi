@@ -75,6 +75,7 @@ type convWindow struct {
 	threads  map[api.ThreadID]api.ThreadSummary
 	members  map[api.ThreadID]*threadMembers
 	messages map[api.MessageID]api.MessageSummary // what the daemon holds
+	drafts   map[api.ThreadID][]api.Draft         // the daemon's drafts replying to a conversation
 	loaded   map[api.MessageID]*loadedMessage
 	accounts []api.Account
 	queue    []func()
@@ -114,6 +115,7 @@ func newConvWindow(t *testing.T, list []api.MessageSummary) *convWindow {
 		t:        t,
 		folder:   folderKey{Account: "a", Folder: "in"},
 		messages: map[api.MessageID]api.MessageSummary{},
+		drafts:   map[api.ThreadID][]api.Draft{},
 		loaded:   map[api.MessageID]*loadedMessage{},
 		accounts: []api.Account{{ID: "a", Enabled: true, Config: api.AccountConfig{Name: "Work", Email: "a@example.invalid"}}},
 	}
@@ -126,6 +128,9 @@ func newConvWindow(t *testing.T, list []api.MessageSummary) *convWindow {
 			res := api.ThreadGetResult{Thread: w.threadSummary(params.ThreadID), Messages: w.folderMembers(params.ThreadID)}
 			if params.WithSent {
 				res.Sent = w.sentMembers(params.ThreadID)
+			}
+			if params.WithDrafts {
+				res.Drafts = w.drafts[params.ThreadID]
 			}
 			return res, nil
 		},
@@ -193,14 +198,14 @@ func convReply(id string, hours int, thread string) api.MessageSummary {
 // answer (members, replies, summary) into the list, which the
 // conversation hears.
 func (w *convWindow) refetch(tid api.ThreadID) {
-	params := api.ThreadGetParams{AccountID: w.folder.Account, ThreadID: tid, FolderID: w.folder.Folder, WithSent: true}
+	params := api.ThreadGetParams{AccountID: w.folder.Account, ThreadID: tid, FolderID: w.folder.Folder, WithSent: true, WithDrafts: true}
 	var res api.ThreadGetResult
 	if err := w.caller.Call(context.Background(), api.MethodThreadGet, params, &res); err != nil {
 		return
 	}
 	w.queue = append(w.queue, func() {
 		w.threads[tid] = res.Thread
-		w.members[tid] = &threadMembers{list: res.Messages, sent: res.Sent, complete: true}
+		w.members[tid] = &threadMembers{list: res.Messages, sent: res.Sent, drafts: res.Drafts, complete: true}
 		w.listChanged()
 	})
 }
@@ -208,7 +213,7 @@ func (w *convWindow) refetch(tid api.ThreadID) {
 // threadSummary is the daemon's summary of tid in the folder.
 func (w *convWindow) threadSummary(tid api.ThreadID) api.ThreadSummary {
 	list := w.folderMembers(tid)
-	t := api.ThreadSummary{ID: tid, AccountID: "a", MessageCount: len(list), SentCount: len(w.sentMembers(tid))}
+	t := api.ThreadSummary{ID: tid, AccountID: "a", MessageCount: len(list), SentCount: len(w.sentMembers(tid)), DraftCount: len(w.drafts[tid])}
 	for _, s := range list {
 		if !hasFlag(s.Flags, api.FlagSeen) {
 			t.UnreadCount++
@@ -299,7 +304,7 @@ func (w *convWindow) convEnsureMembers(tid api.ThreadID, then func()) {
 		return
 	}
 	mem.fetching = true
-	params := api.ThreadGetParams{AccountID: w.folder.Account, ThreadID: tid, FolderID: w.folder.Folder, WithSent: true}
+	params := api.ThreadGetParams{AccountID: w.folder.Account, ThreadID: tid, FolderID: w.folder.Folder, WithSent: true, WithDrafts: true}
 	var res api.ThreadGetResult
 	err := w.caller.Call(context.Background(), api.MethodThreadGet, params, &res)
 	w.queue = append(w.queue, func() {
@@ -315,7 +320,7 @@ func (w *convWindow) convEnsureMembers(tid api.ThreadID, then func()) {
 			return
 		}
 		w.threads[tid] = res.Thread
-		w.members[tid] = &threadMembers{list: res.Messages, sent: res.Sent, complete: true}
+		w.members[tid] = &threadMembers{list: res.Messages, sent: res.Sent, drafts: res.Drafts, complete: true}
 		w.listChanged()
 		for _, fn := range waiters {
 			fn()
@@ -950,6 +955,66 @@ func TestConversationReplyArrivingInSentJoinsIt(t *testing.T) {
 	w.flush()
 	if got := sentShape(w.ctrl.model); !reflect.DeepEqual(got, []string{"a1", "a2", "a3"}) {
 		t.Errorf("after the reply went %v", got)
+	}
+}
+
+// The user's unsent replies are draft cards beside the model, newest
+// first: one message and a draft reply to it are a conversation row, a
+// draft saved or deleted elsewhere (notify.draftsChanged, refetchMembers)
+// comes and goes, and the members stay as they are. A port of the macOS
+// client's draftsAreDraftCards.
+func TestConversationDraftsAreDraftCards(t *testing.T) {
+	w := newConvWindow(t, convMessages())
+	draft := func(id string, hours int, text string) api.Draft {
+		return api.Draft{ID: api.DraftID(id), AccountID: "a", Version: 1, TextBody: text, InReplyTo: "b1",
+			UpdatedAt: convBase.Add(time.Duration(hours) * time.Hour)}
+	}
+	if w.selectRow(w.row("t2", "b1", false)) {
+		t.Fatal("a single message shows a conversation")
+	}
+	w.drafts["t2"] = []api.Draft{draft("d1", 7, "On my way")}
+	w.refetch("t2")
+	w.flush()
+	row := w.row("t2", "", false)
+	if !rowShowsConversation(row) || row.Summary.DraftCount != 1 {
+		t.Fatalf("a message and a draft reply are no conversation row: %+v", row.Summary)
+	}
+	w.selectRow(row)
+	if got := sentShape(w.ctrl.model); !reflect.DeepEqual(got, []string{"b1"}) {
+		t.Errorf("t2 shape %v", got)
+	}
+	if len(w.ctrl.drafts) != 1 || w.ctrl.drafts[0].Draft.ID != "d1" || w.ctrl.drafts[0].Text != "On my way" {
+		t.Fatalf("drafts %+v", w.ctrl.drafts)
+	}
+	if w.ctrl.model.MarkRead != "" {
+		t.Errorf("mark read %q", w.ctrl.model.MarkRead)
+	}
+
+	// Another draft saved elsewhere: the newest first.
+	w.drafts["t2"] = append(w.drafts["t2"], draft("d2", 8, "Or not"))
+	w.refetch("t2")
+	w.flush()
+	if len(w.ctrl.drafts) != 2 || w.ctrl.drafts[0].Draft.ID != "d2" || w.changes[len(w.changes)-1] != convUpdated {
+		t.Errorf("after a second draft: %+v, changes %v", w.ctrl.drafts, w.changes)
+	}
+	// The same answer again changes nothing.
+	n := len(w.changes)
+	w.refetch("t2")
+	w.flush()
+	if len(w.changes) != n {
+		t.Errorf("an unchanged answer was announced: %v", w.changes[n:])
+	}
+	// Deleted (sent, discarded): the cards go, the member stays.
+	w.drafts["t2"] = nil
+	w.refetch("t2")
+	w.flush()
+	if len(w.ctrl.drafts) != 0 || w.ctrl.model == nil || len(w.ctrl.model.Items) != 1 {
+		t.Errorf("after the drafts went: %+v %+v", w.ctrl.drafts, w.ctrl.model)
+	}
+	for _, c := range w.caller.calls {
+		if p, ok := c.params.(api.ThreadGetParams); ok && !p.WithDrafts {
+			t.Errorf("thread.get without withDrafts: %+v", p)
+		}
 	}
 }
 

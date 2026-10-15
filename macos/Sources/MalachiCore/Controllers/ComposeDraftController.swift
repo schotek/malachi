@@ -235,6 +235,16 @@ public final class ComposeDraftController {
     /// The window writes a comment (`ComposeForm.isComment`).
     public var isComment: Bool { form?.isComment ?? false }
 
+    /// compose/draft.go `forgetLate`, in a box a save in flight holds when
+    /// the controller is gone: the window closed with a comment not to be
+    /// kept (discarded, or nothing in it), so a save that answers after the
+    /// close deletes what it stored.
+    private final class LateSave: @unchecked Sendable {
+        var forget = false
+    }
+
+    private let lateSave = LateSave()
+
     /// The saved draft the window edits (compose.go `newWindow`:
     /// `Params.DraftID`, `Version`, `Replaces`): its id and version make
     /// the saves updates, and a draft opened from the Drafts folder is
@@ -246,17 +256,19 @@ public final class ComposeDraftController {
         draft.explicitSave = fromDrafts
     }
 
-    /// closeRequest's first branch: the window may go without a question.
-    /// A comment, which no Drafts folder keeps, goes unasked only while
-    /// there is nothing in it (`Jira.sendProblem`), a save under way or
-    /// not (its copy goes too, `cleanup`).
+    /// closeRequest's first branch: the window may go without a question
+    /// (compose/draft.go `closesUnasked`). A comment with nothing in it
+    /// (`Jira.sendProblem`) goes unasked, a save under way or not (its copy
+    /// goes too, `cleanup`); otherwise a comment is kept as an e-mail is:
+    /// unasked without unsaved edits or a save under way, its draft card in
+    /// the issue's conversation showing it (`Conversation.DraftCard`).
     public var canCloseWithoutAsking: Bool {
         if draft.discard || owner == .board {
             // The board keeps its draft: whoever closes it calls `finish`.
             return true
         }
-        if isComment {
-            return !hasCommentText
+        if isComment, !hasCommentText {
+            return true
         }
         return !draft.dirty && !draft.saving
     }
@@ -376,6 +388,7 @@ public final class ComposeDraftController {
             let client = self.client
             let log = self.log
             let owner = self.owner
+            let late = self.lateSave
             Task { [weak self] in
                 let outcome: Result<DraftSaveResult, any Error>
                 do {
@@ -384,10 +397,11 @@ public final class ComposeDraftController {
                     outcome = .failure(error)
                 }
                 guard let self, !self.draft.closed else {
-                    // The window went while a comment was being saved: no
-                    // Drafts folder keeps it, so the copy goes too. The
-                    // board's copy is the case's suggested reply: it stays.
-                    if owner == .window, wire.comment != nil, case .success(let res) = outcome {
+                    // The window went while a comment was being saved, and
+                    // what it saved is not to be kept (discarded, or
+                    // nothing in it): the copy goes too. The board's copy
+                    // is the case's suggested reply: it stays.
+                    if owner == .window, wire.comment != nil, late.forget, case .success(let res) = outcome {
                         Self.forget(client: client, log: log, accountID: wire.accountId, draftID: res.draftId)
                     }
                     return
@@ -677,16 +691,11 @@ public final class ComposeDraftController {
 
     /// closeRequest keeps the window open while there are unsaved edits
     /// and asks what to do with them. True when the window may close now
-    /// (`cleanup` has run); false when it stays. A comment has no Save
-    /// Draft: the question is whether to discard it.
+    /// (`cleanup` has run); false when it stays. A comment asks as an
+    /// e-mail does: its saved draft is the issue's draft card
+    /// (`Conversation.DraftCard`).
     public func closeRequest() async -> Bool {
         if canCloseWithoutAsking {
-            cleanup()
-            return true
-        }
-        if isComment {
-            let ok = await confirmDiscard(L10n.T("Discard this message?"), "", L10n.T("_Discard"))
-            guard ok, !draft.closed else { return false }
             cleanup()
             return true
         }
@@ -924,11 +933,15 @@ public final class ComposeDraftController {
     /// dropped, the autosave is disarmed, the inline pictures forgotten.
     /// Idempotent. A save whose outcome is still awaited (the close
     /// question's) is answered with a cancellation so nobody waits forever.
-    /// A comment's saved copy goes with the window unless it was sent: no
-    /// Drafts folder keeps it (the autosave is only for a crash).
+    /// A comment's saved copy goes with the window only when nothing is in
+    /// it (compose/draft.go `deletesOnClose`); otherwise it stays, the
+    /// issue's draft card. A save answering after this deletes what it
+    /// stored only for a comment not to be kept (`lateSave`).
     public func cleanup() {
         guard !draft.closed else { return }
-        if owner == .window, isComment, !draft.discard {
+        let empty = isComment && !hasCommentText
+        lateSave.forget = owner == .window && isComment && (empty || (draft.discard && !draft.explicitSave))
+        if owner == .window, isComment, empty, !draft.discard {
             deleteDraft()
         }
         draft.closed = true

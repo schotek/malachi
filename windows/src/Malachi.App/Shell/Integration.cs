@@ -199,6 +199,9 @@ public sealed partial class Integration : IDisposable
         tokens.Add(hub.AddSyncState(Mailbox.HandleSyncState));
         tokens.Add(hub.AddAuthRequired(Mailbox.HandleAuthRequired));
         tokens.Add(hub.AddMessagesChanged(Mailbox.HandleMessagesChanged));
+        // notify.draftsChanged: the conversations it names ask thread.get
+        // again for their drafts (conversation_draft.go onDraftsChanged).
+        tokens.Add(hub.AddDraftsChanged(Mailbox.HandleDraftsChanged));
         tokens.Add(hub.AddAccountsChanged(() =>
         {
             Mailbox.HandleAccountsChanged();

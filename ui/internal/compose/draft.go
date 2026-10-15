@@ -100,6 +100,10 @@ type draftState struct {
 	// discard closes without asking; for a comment it also says that its
 	// copy is settled (sent, or deleted already).
 	discard bool
+	// forgetLate: the pane closed with a comment not to be kept
+	// (discarded, or nothing in it): a save that answers after the close
+	// deletes what it stored.
+	forgetLate bool
 
 	// OwnerBoard only:
 	// lost: the draft was deleted elsewhere (draftNotFound).
@@ -291,25 +295,33 @@ func (c *draftController) canCloseWithoutAsking() bool {
 }
 
 // closesUnasked is canCloseWithoutAsking's pure core: the board keeps its
-// draft (never asks), a comment goes unasked only while there is nothing
-// in it (jira.SendProblem on text, the editor's last reported text), an
-// e-mail only without unsaved edits or a save under way.
+// draft (never asks), a comment with nothing in it (jira.SendProblem on
+// text, the editor's last reported text) goes unasked, and otherwise a
+// comment is kept as an e-mail is: unasked without unsaved edits or a save
+// under way, its draft card in the issue's conversation showing it
+// (conversation.DraftCard); with them the close asks to save it.
 func closesUnasked(d *draftState, owner Owner, comment bool, text string) bool {
 	if d.discard || owner == OwnerBoard {
 		return true
 	}
-	if comment {
-		return jira.SendProblem(text, i18n.Tr) != ""
+	if comment && emptyComment(text) {
+		return true
 	}
 	return !d.dirty && !d.saving
 }
 
+// emptyComment reports a comment with nothing in it to post.
+func emptyComment(text string) bool {
+	return jira.SendProblem(text, i18n.Tr) != ""
+}
+
 // deletesOnClose reports whether cleanup deletes the saved draft: a
-// window-owned comment's copy goes with the window unless it was sent or
-// deleted already; the board keeps its draft always, and an e-mail's draft
-// stays in Drafts.
-func deletesOnClose(d *draftState, owner Owner, comment bool) bool {
-	return owner == OwnerWindow && comment && !d.discard && d.draftID != ""
+// window-owned comment's copy goes with the window only when nothing is in
+// it (empty, the editor's last reported text) and it was not sent or
+// deleted already; otherwise it stays as the issue's draft card, as an
+// e-mail's draft stays in Drafts. The board keeps its draft always.
+func deletesOnClose(d *draftState, owner Owner, comment, empty bool) bool {
+	return owner == OwnerWindow && comment && empty && !d.discard && d.draftID != ""
 }
 
 // MARK: Dirty state and status
@@ -451,10 +463,11 @@ func (c *draftController) save(reason saveReason, done func(err error)) {
 			err := call.Call(ctx, api.MethodDraftSave, api.DraftSaveParams{Draft: *wire}, &res)
 			c.loop.Post(func() {
 				if c.draft.closed {
-					// The pane went while a comment was being saved: no
-					// Drafts folder keeps it, so the copy goes too. The
-					// board's copy is the case's suggested reply: it stays.
-					if owner == OwnerWindow && wire.Comment != nil && err == nil {
+					// The pane went while a comment was being saved, and
+					// what it saved is not to be kept (discarded, or
+					// nothing in it): the copy goes too. The board's copy
+					// is the case's suggested reply: it stays.
+					if owner == OwnerWindow && wire.Comment != nil && err == nil && c.draft.forgetLate {
 						c.forget(wire.AccountID, res.DraftID)
 					}
 					return
@@ -836,27 +849,12 @@ func (c *draftController) doSaveDraftQuestion(done func(draftCloseAnswer)) {
 // it). true blocks the close for now; the dialog's answer later calls
 // form.closeForm(), which the host turns into an actual close (which
 // re-enters closeRequest, now unblocked). false lets the close proceed at
-// once (cleanup already ran). A comment has no Save Draft: the question is
-// whether to discard it.
+// once (cleanup already ran). A comment asks as an e-mail does: its saved
+// draft is the issue's draft card (conversation.DraftCard).
 func (c *draftController) closeRequest() bool {
 	if c.canCloseWithoutAsking() {
 		c.cleanup()
 		return false
-	}
-	if c.isComment() {
-		c.doConfirmDiscard(i18n.T("Discard this message?"), "", i18n.T("_Discard"), func() {
-			if c.draft.closed {
-				return
-			}
-			if c.draft.draftID != "" {
-				c.deleteDraft()
-			}
-			c.draft.discard = true
-			if c.form != nil {
-				c.form.closeForm()
-			}
-		})
-		return true
 	}
 	c.doSaveDraftQuestion(func(answer draftCloseAnswer) {
 		switch answer {
@@ -885,14 +883,20 @@ func (c *draftController) closeRequest() bool {
 
 // cleanup runs when the pane really closes: late replies are dropped, the
 // autosave is disarmed, the inline pictures forgotten. Idempotent. A
-// window-owned comment's saved copy goes with the window unless it was
-// sent: no Drafts folder keeps it (the autosave is only for a crash). The
-// board never deletes here, even a late save after this answers.
+// window-owned comment's saved copy goes with the window only when nothing
+// is in it (deletesOnClose); otherwise it stays, the issue's draft card.
+// The board never deletes here, even a late save after this answers.
 func (c *draftController) cleanup() {
 	if c.draft.closed {
 		return
 	}
-	if deletesOnClose(&c.draft, c.owner, c.isComment()) {
+	text := ""
+	if c.form != nil {
+		text = c.form.editorText()
+	}
+	empty := c.isComment() && emptyComment(text)
+	c.draft.forgetLate = c.owner == OwnerWindow && c.isComment() && (empty || (c.draft.discard && !c.draft.explicitSave))
+	if deletesOnClose(&c.draft, c.owner, c.isComment(), empty) {
 		c.deleteDraft()
 	}
 	c.draft.closed = true

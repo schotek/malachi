@@ -48,13 +48,14 @@ import (
 type Translator = jira.Translator
 
 // IsConversationRow reports a listed conversation whose selection shows
-// the whole conversation: two or more messages, the members in the folder
-// and the user's replies in Sent it lacks (api.ThreadSummary.SentCount)
-// together, so that a message and the user's reply to it are a
-// conversation. The outbox is never grouped (the caller's rule, as for the
-// list).
+// the whole conversation: two or more messages, the members in the folder,
+// the user's replies in Sent it lacks (api.ThreadSummary.SentCount) and
+// the user's unsent replies to it (api.ThreadSummary.DraftCount, drafts.go)
+// together, so that a message and the user's reply to it, sent or not, are
+// a conversation. The outbox is never grouped (the caller's rule, as for
+// the list).
 func IsConversationRow(t api.ThreadSummary) bool {
-	return t.MessageCount+max(t.SentCount, 0) >= 2
+	return t.MessageCount+max(t.SentCount, 0)+max(t.DraftCount, 0) >= 2
 }
 
 // ItemKind is what an item of the stack is.

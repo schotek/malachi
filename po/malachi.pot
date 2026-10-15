@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-09 08:21+0200\n"
+"POT-Creation-Date: 2026-10-15 15:11+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -576,6 +576,7 @@ msgid "Open Draft"
 msgstr ""
 
 #: ui/internal/assistant/assistant.go:581
+#: ui/internal/conversation/drafts.go:126
 msgid "The draft is no longer there"
 msgstr ""
 
@@ -1140,7 +1141,7 @@ msgstr ""
 msgid "The editor crashed; your last text was restored"
 msgstr ""
 
-#: ui/internal/compose/pane.go:488 ui/internal/compose/draft.go:369
+#: ui/internal/compose/pane.go:488 ui/internal/compose/draft.go:381
 msgid "Using placeholder account"
 msgstr ""
 
@@ -1156,15 +1157,16 @@ msgstr ""
 #: ui/internal/compose/pane.go:703 ui/internal/compose/write.go:164
 #: ui/internal/widget/consent.go:47 ui/internal/widget/rpc.go:196
 #: ui/internal/window/assistant_panel.go:204
-#: ui/internal/window/board_quit.go:30 ui/internal/window/remote.go:269
-#: ui/internal/window/remote.go:295 ui/data/ui/account_wizard.ui:401
-#: ui/data/ui/jira_account.ui:25
+#: ui/internal/window/board_quit.go:30
+#: ui/internal/window/conversation_draft.go:213
+#: ui/internal/window/remote.go:269 ui/internal/window/remote.go:295
+#: ui/data/ui/account_wizard.ui:401 ui/data/ui/jira_account.ui:25
 msgid "_Cancel"
 msgstr ""
 
-#: ui/internal/compose/pane.go:704 ui/internal/compose/draft.go:735
-#: ui/internal/compose/draft.go:847 ui/internal/compose/rewrite.go:109
-#: ui/internal/compose/write.go:166 ui/internal/board/text.go:350
+#: ui/internal/compose/pane.go:704 ui/internal/compose/draft.go:748
+#: ui/internal/compose/rewrite.go:109 ui/internal/compose/write.go:166
+#: ui/internal/conversation/drafts.go:114 ui/internal/board/text.go:350
 #: ui/data/ui/compose.ui:121
 msgid "_Discard"
 msgstr ""
@@ -1219,62 +1221,63 @@ msgstr ""
 msgid "_Send"
 msgstr ""
 
-#: ui/internal/compose/draft.go:359 ui/internal/window/outbox.go:68
+#: ui/internal/compose/draft.go:371 ui/internal/window/outbox.go:68
 msgid "Sending…"
 msgstr ""
 
-#: ui/internal/compose/draft.go:363
+#: ui/internal/compose/draft.go:375
 msgid "Saving draft…"
 msgstr ""
 
-#: ui/internal/compose/draft.go:365
+#: ui/internal/compose/draft.go:377
 msgid "Unsaved changes"
 msgstr ""
 
-#: ui/internal/compose/draft.go:367
+#: ui/internal/compose/draft.go:379 ui/internal/conversation/drafts.go:132
 #, c-format
 msgid "Draft saved %s"
 msgstr ""
 
-#: ui/internal/compose/draft.go:528
+#: ui/internal/compose/draft.go:541
 msgid ""
 "This draft was changed elsewhere; your text will be saved as a new draft"
 msgstr ""
 
-#: ui/internal/compose/draft.go:536
+#: ui/internal/compose/draft.go:549
 msgid ""
 "This draft was removed elsewhere; your text will be saved as a new draft"
 msgstr ""
 
-#: ui/internal/compose/draft.go:562
+#: ui/internal/compose/draft.go:575
 msgid "Saving the draft"
 msgstr ""
 
-#: ui/internal/compose/draft.go:593
+#: ui/internal/compose/draft.go:606
 msgid "Fix the highlighted recipients"
 msgstr ""
 
-#: ui/internal/compose/draft.go:597
+#: ui/internal/compose/draft.go:610
 msgid "Add at least one recipient"
 msgstr ""
 
-#: ui/internal/compose/draft.go:670 ui/internal/compose/draft.go:1119
+#: ui/internal/compose/draft.go:683 ui/internal/compose/draft.go:1123
 msgid "Sending"
 msgstr ""
 
-#: ui/internal/compose/draft.go:695
+#: ui/internal/compose/draft.go:708
 msgid "Message queued for sending"
 msgstr ""
 
-#: ui/internal/compose/draft.go:735 ui/internal/compose/draft.go:847
+#: ui/internal/compose/draft.go:748 ui/internal/conversation/drafts.go:120
 msgid "Discard this message?"
 msgstr ""
 
-#: ui/internal/compose/draft.go:791 ui/internal/board/text.go:972
+#: ui/internal/compose/draft.go:804 ui/internal/board/text.go:972
+#: ui/internal/window/conversation_draft.go:230
 msgid "Discarding the draft"
 msgstr ""
 
-#: ui/internal/compose/draft.go:1129
+#: ui/internal/compose/draft.go:1133
 #, c-format
 msgid "%d unsafe element was removed from the message"
 msgid_plural "%d unsafe elements were removed from the message"
@@ -1282,7 +1285,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: %d is the number of files of the forwarded (or quoted) message that the new one lacks.
-#: ui/internal/compose/draft.go:1140
+#: ui/internal/compose/draft.go:1144
 #, c-format
 msgid "%d attachment of the original could not be attached"
 msgid_plural "%d attachments of the original could not be attached"
@@ -1358,7 +1361,8 @@ msgstr[1] ""
 msgid "Open in New Window"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:47 ui/data/ui/window.ui:534
+#: ui/internal/contextmenu/text.go:47 ui/internal/conversation/drafts.go:108
+#: ui/data/ui/window.ui:534
 msgid "Edit"
 msgstr ""
 
@@ -1463,13 +1467,13 @@ msgstr ""
 msgid "Add to Favourites"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:100 ui/internal/widget/message_row.go:331
+#: ui/internal/contextmenu/text.go:100 ui/internal/widget/message_row.go:341
 #: ui/internal/window/board_conversation.go:479
 #: ui/internal/window/conversation_card.go:464 ui/internal/window/folders.go:65
 msgid "Expand"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:102 ui/internal/widget/message_row.go:327
+#: ui/internal/contextmenu/text.go:102 ui/internal/widget/message_row.go:337
 #: ui/internal/window/board_conversation.go:482
 #: ui/internal/window/conversation_card.go:462 ui/internal/window/folders.go:62
 msgid "Collapse"
@@ -2066,12 +2070,18 @@ msgid "The status could not be changed: %s"
 msgstr ""
 
 #. TRANSLATORS: at the top of a conversation in the reading pane; only its newest messages are shown.
-#: ui/internal/conversation/conversation.go:379
+#: ui/internal/conversation/conversation.go:380
 #, c-format
 msgid "%d earlier message is not shown"
 msgid_plural "%d earlier messages are not shown"
 msgstr[0] ""
 msgstr[1] ""
+
+#. TRANSLATORS: a badge on a card of the user's unsent reply or comment in a conversation.
+#: ui/internal/conversation/drafts.go:103
+msgctxt "conversation"
+msgid "Draft"
+msgstr ""
 
 #. TRANSLATORS: a button above a conversation in the reading pane; folds every message to its header.
 #: ui/internal/conversation/fold.go:156
@@ -2156,7 +2166,7 @@ msgstr[1] ""
 #. TRANSLATORS: tooltip of the member count of a conversation row.
 #. TRANSLATORS: subtitle of the message list; %d is the number of
 #. messages in the folder.
-#: ui/internal/board/text.go:143 ui/internal/widget/message_row.go:221
+#: ui/internal/board/text.go:143 ui/internal/widget/message_row.go:229
 #: ui/internal/window/folders.go:342
 #, c-format
 msgid "%d message"
@@ -3359,8 +3369,8 @@ msgstr ""
 msgid "_Quit Anyway"
 msgstr ""
 
-#: ui/internal/board/view.go:849 ui/internal/widget/message_row.go:307
-#: ui/internal/window/message_view.go:580 ui/internal/window/notify.go:122
+#: ui/internal/board/view.go:849 ui/internal/widget/message_row.go:317
+#: ui/internal/window/message_view.go:580 ui/internal/window/notify.go:129
 msgid "(No subject)"
 msgstr ""
 
@@ -3881,7 +3891,8 @@ msgid_plural "+%d more"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/assistant_panel.go:980 ui/internal/window/drafts.go:77
+#: ui/internal/window/assistant_panel.go:980
+#: ui/internal/window/conversation_draft.go:190 ui/internal/window/drafts.go:77
 msgid "Opening the draft"
 msgstr ""
 
@@ -4228,7 +4239,7 @@ msgstr ""
 msgid "This folder is empty."
 msgstr ""
 
-#: ui/internal/window/notify.go:109
+#: ui/internal/window/notify.go:116
 msgid "New message"
 msgstr ""
 
@@ -4691,7 +4702,7 @@ msgstr ""
 msgid "%s needs attention"
 msgstr ""
 
-#: ui/internal/window/threads.go:183
+#: ui/internal/window/threads.go:184
 msgid "Loading the conversation"
 msgstr ""
 

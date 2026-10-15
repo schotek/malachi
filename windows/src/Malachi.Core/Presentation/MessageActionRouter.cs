@@ -5,7 +5,9 @@
 // (the MessageActions of the selection and the MessageActionDelegate of one
 // message: flags, reply, replyAll, forward, trash, junk, archive,
 // toggleFlag, markRead, markUnread, loadImages, trustSender,
-// downloadPictures, retryOutbox, isDraft, editDraft, newMessage); GTK: the
+// downloadPictures, retryOutbox, isDraft, editDraft, newMessage; the
+// draft cards' Edit and Discard are conversation_draft.go's, a Windows
+// addition ahead of Swift); GTK: the
 // win.* actions of window.go registerActions acting on the selected row,
 // and the msg.* actions of message_window.go acting on the window's
 // message. Everything that touches the model or the daemon is the
@@ -211,6 +213,22 @@ public sealed class MessageActionRouter
     /// does, in a window of its own, a draft in the compose window.
     /// </summary>
     public void OpenMessage(MessageSummary summary) => actions.OpenMessage(summary);
+
+    /// <summary>
+    /// A draft card's Edit, and a double click on its header, in the
+    /// conversation view (conversation_draft.go <c>editThreadDraft</c>): the
+    /// draft opens in the compose window, or the window editing it comes to
+    /// the front.
+    /// </summary>
+    public void EditThreadDraft(Draft draft) => actions.EditThreadDraft(draft);
+
+    /// <summary>
+    /// A draft card's Discard (conversation_draft.go <c>discardThreadDraft</c>):
+    /// after the question over <paramref name="window"/>, the draft is
+    /// deleted, unless a compose window edits it (that one comes to the
+    /// front).
+    /// </summary>
+    public void DiscardThreadDraft(Draft draft, object? window) => actions.DiscardThreadDraft(draft, window);
 
     /// <summary>
     /// An address chip's New Message (addresses.go <c>chip</c>): a new

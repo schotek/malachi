@@ -41,12 +41,14 @@ import Foundation
 public enum Conversation {
     /// conversation.IsConversationRow: a listed conversation whose
     /// selection shows the whole conversation: two or more messages, the
-    /// members in the folder and the user's replies in Sent it lacks
-    /// (`ThreadSummary.sentCount`) together, so that a message and the
-    /// user's reply to it are a conversation. The outbox is never grouped
-    /// (the caller's rule, as for the list).
+    /// members in the folder, the user's replies in Sent it lacks
+    /// (`ThreadSummary.sentCount`) and the user's unsent replies to it
+    /// (`ThreadSummary.draftCount`, ConversationDrafts.swift) together, so
+    /// that a message and the user's reply to it, sent or not, are a
+    /// conversation. The outbox is never grouped (the caller's rule, as for
+    /// the list).
     public static func isConversationRow(_ t: ThreadSummary) -> Bool {
-        t.messageCount + max(t.sentCount, 0) >= 2
+        t.messageCount + max(t.sentCount, 0) + max(t.draftCount, 0) >= 2
     }
 
     /// conversation.ItemKind: what an item of the stack is.

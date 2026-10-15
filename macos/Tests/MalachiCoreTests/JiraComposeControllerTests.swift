@@ -149,6 +149,7 @@ private final class Harness {
     var discardQuestions = 0
     var saveQuestions = 0
     var discardAnswer = true
+    var saveAnswer: DraftCloseAnswer = .save
 
     init(comment: Draft = commentDraft(), autosaveDelay: Duration = .milliseconds(50)) async throws {
         fake = try FakeDaemon()
@@ -175,7 +176,7 @@ private final class Harness {
         }
         draft.saveDraftQuestion = { [unowned self] in
             self.saveQuestions += 1
-            return .save
+            return self.saveAnswer
         }
     }
 
@@ -297,10 +298,13 @@ private final class Harness {
         #expect(h.form.toasts.last == "Sending was rejected: issue WEB-7 takes no internal comment")
     }
 
-    @Test func thereIsNoSaveDraftForAComment() async throws {
+    /// compose/draft.go `closesUnasked`, `deletesOnClose`: a comment with
+    /// text is kept as an e-mail is, its draft card in the issue's
+    /// conversation showing it.
+    @Test func aClosedCommentIsKeptLikeAnEmail() async throws {
         let h = try await Harness()
         defer { Task { await h.stop() } }
-        // The autosave keeps a copy against a crash, silently.
+        // The autosave keeps a copy, silently.
         h.draft.markDirty()
         try await waitUntil { await h.script.saves.count == 1 && !h.draft.draft.saving }
         #expect(h.draft.draft.draftID == "d1")
@@ -308,23 +312,48 @@ private final class Harness {
         #expect(!h.form.statuses.contains { $0.hasPrefix("Draft saved") })
         #expect(h.form.statuses.allSatisfy { $0.isEmpty })
 
-        // Closing with text asks whether to discard, never Save Draft;
-        // Cancel keeps the window.
-        #expect(!h.draft.canCloseWithoutAsking)
-        h.discardAnswer = false
-        #expect(await h.draft.closeRequest() == false)
-        #expect(h.discardQuestions == 1)
-        #expect(h.saveQuestions == 0)
-        #expect(await h.script.deletes.isEmpty)
-
-        // Discard: the saved copy goes with the window.
-        h.discardAnswer = true
+        // Nothing unsaved: it closes unasked and the draft stays.
+        #expect(h.draft.canCloseWithoutAsking)
         #expect(await h.draft.closeRequest())
-        #expect(h.discardQuestions == 2)
-        #expect(h.saveQuestions == 0)
+        #expect(h.discardQuestions == 0 && h.saveQuestions == 0)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(await h.script.deletes.isEmpty)
+        #expect(h.draft.draft.closed)
+    }
+
+    @Test func anEditedCommentAsksToSaveOrDiscard() async throws {
+        let h = try await Harness(autosaveDelay: .seconds(60))
+        defer { Task { await h.stop() } }
+        h.draft.markDirty()
+        h.draft.save(reason: .autosave)
+        try await waitUntil { await h.script.saves.count == 1 && !h.draft.draft.saving }
+        h.draft.markDirty()
+        #expect(!h.draft.canCloseWithoutAsking)
+
+        // Cancel keeps the window.
+        h.saveAnswer = .cancel
+        #expect(await h.draft.closeRequest() == false)
+        #expect(h.saveQuestions == 1 && h.discardQuestions == 0)
+
+        // Discard: never kept explicitly, so the autosaved copy goes.
+        h.saveAnswer = .discard
+        #expect(await h.draft.closeRequest())
+        #expect(h.saveQuestions == 2)
         try await waitUntil { await h.script.deletes.count == 1 }
         #expect(await h.script.deletes == [DraftDeleteParams(accountId: jiraAccount, draftId: "d1")])
         #expect(h.draft.draft.closed)
+    }
+
+    @Test func anEditedCommentSavedOnCloseStays() async throws {
+        let h = try await Harness(autosaveDelay: .seconds(60))
+        defer { Task { await h.stop() } }
+        h.draft.markDirty()
+        h.saveAnswer = .save
+        #expect(await h.draft.closeRequest())
+        #expect(h.saveQuestions == 1)
+        #expect(await h.script.saves.count == 1)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(await h.script.deletes.isEmpty)
     }
 
     @Test func anEmptyCommentClosesUnaskedAndLeavesNothing() async throws {
@@ -342,16 +371,28 @@ private final class Harness {
         #expect(await h.script.deletes.first?.draftId == "d1")
     }
 
-    @Test func aSaveUnderWayWhenTheWindowGoesIsDeletedToo() async throws {
+    @Test func aSaveUnderWayOfAnEmptiedCommentIsDeletedToo() async throws {
+        let h = try await Harness()
+        defer { Task { await h.stop() } }
+        await h.script.set(saveDelay: .milliseconds(100))
+        h.draft.save(reason: .autosave)
+        try await waitUntil { await h.script.saves.count == 1 }
+        h.form.text = " \u{200B}"
+        h.draft.cleanup()
+        // The first save had no id to delete; its answer brings one.
+        try await waitUntil { await h.script.deletes.count == 1 }
+        #expect(await h.script.deletes.first == DraftDeleteParams(accountId: jiraAccount, draftId: "d1"))
+    }
+
+    @Test func aSaveUnderWayOfACommentWithTextStays() async throws {
         let h = try await Harness()
         defer { Task { await h.stop() } }
         await h.script.set(saveDelay: .milliseconds(100))
         h.draft.save(reason: .autosave)
         try await waitUntil { await h.script.saves.count == 1 }
         h.draft.cleanup()
-        // The first save had no id to delete; its answer brings one.
-        try await waitUntil { await h.script.deletes.count == 1 }
-        #expect(await h.script.deletes.first == DraftDeleteParams(accountId: jiraAccount, draftId: "d1"))
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(await h.script.deletes.isEmpty)
     }
 
     @Test func aFailedAutosaveOfACommentSaysNothing() async throws {

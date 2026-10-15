@@ -98,6 +98,7 @@ import Testing
             (API.Notify.accountsChanged, "{}"),
             (API.Notify.messagesChanged, #"{"accountId":"acc_1","folderIds":["f_inbox"]}"#),
             (API.Notify.boardChanged, #"{"accountIds":["acc_1"]}"#),
+            (API.Notify.draftsChanged, #"{"accountId":"acc_1","threadIds":["t_1"]}"#),
         ]
         #expect(samples.map(\.0) == API.allNotifications)
         for (method, params) in samples {

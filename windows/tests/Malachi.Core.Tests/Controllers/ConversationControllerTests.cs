@@ -12,8 +12,9 @@
 // message.get only when needed and not again once it failed; a
 // conversation shown from the listing, after thread.get failed, is built
 // anew when its members arrive; the user's replies in Sent are sent cards
-// and a reply that lands in Sent joins the conversation; Show Quoted Text
-// holds for the conversation. Swift sleeps through the mark-as-read delay;
+// and a reply that lands in Sent joins the conversation; the user's unsent
+// replies are draft cards that follow notify.draftsChanged; Show Quoted
+// Text holds for the conversation. Swift sleeps through the mark-as-read delay;
 // here the clock is moved.
 
 using System;
@@ -492,6 +493,63 @@ public sealed class ConversationControllerTests
         Assert.Equal(["a1", "a2", "a3"], SentShape(c.Conversation.Model));
     }
 
+    // The user's unsent replies are draft cards beside the model, newest
+    // first: one message and a draft reply to it are a conversation row (with
+    // the Draft badge), a draft saved or deleted elsewhere
+    // (notify.draftsChanged, naming the thread or not) comes and goes, and
+    // the members stay as they are. A port of GTK's
+    // TestConversationDraftsAreDraftCards.
+    [Fact]
+    public async Task DraftsAreDraftCards()
+    {
+        await using var c = await Conv.StartAsync();
+        var h = c.H;
+        await c.SelectAsync(new ListKey("t2", "b1"));
+        Assert.Equal([false], c.Shown); // a single message shows no conversation
+
+        h.Fixture.SetThreadDrafts("t2", [DraftReply("d1", 7, "On my way")]);
+        await h.On(() => h.Mailbox.HandleDraftsChanged(new DraftsChangedNotification { AccountId = Account, ThreadIds = ["t2"] }));
+        await h.IdleAsync();
+        var row = await h.On(() => h.List.RowFor(new ListKey(Thread: "t2")));
+        Assert.True(row is { ShowsConversation: true, Summary.DraftCount: 1 }, "a message and a draft reply are no conversation row");
+        Assert.Equal("Draft", MailModel.SummaryThread(row!.Summary!, false, false).Draft);
+        Assert.Equal(new ListKey(Thread: "t2"), await h.On(() => h.List.SelectedKey));
+        Assert.Equal(["b1"], SentShape(c.Conversation.Model));
+        var card = Assert.Single(c.Conversation.Drafts);
+        Assert.Equal(("d1", "On my way", "a@example.invalid"), (card.Draft.Id?.Value, card.Text, card.Sender));
+        Assert.Null(c.Conversation.Model?.MarkRead);
+
+        // Another draft saved elsewhere, the notification naming no thread:
+        // the one on show asks again, the newest draft first.
+        h.Fixture.SetThreadDrafts("t2", [DraftReply("d1", 7, "On my way"), DraftReply("d2", 8, "Or not")]);
+        await h.On(() => h.Mailbox.HandleDraftsChanged(new DraftsChangedNotification { AccountId = Account }));
+        await h.IdleAsync();
+        Assert.Equal(["d2", "d1"], c.Conversation.Drafts.Select(d => d.Draft.Id?.Value ?? ""));
+        Assert.Equal(Change.Updated, c.Changes[^1]);
+
+        // The same answer again changes nothing.
+        var n = c.Changes.Count;
+        await h.On(() => h.List.RefetchMembers("t2"));
+        await h.IdleAsync();
+        Assert.Equal(n, c.Changes.Count);
+
+        // Another account's notification asks nothing.
+        var asked = h.Fixture.ThreadGetRequests.Count;
+        await h.On(() => h.Mailbox.HandleDraftsChanged(new DraftsChangedNotification { AccountId = "other", ThreadIds = ["t2"] }));
+        await h.IdleAsync();
+        Assert.Equal(asked, h.Fixture.ThreadGetRequests.Count);
+
+        // Deleted (sent, discarded): the cards go, the member stays (the row
+        // is a single message again, which may show it alone).
+        h.Fixture.SetThreadDrafts("t2", []);
+        await h.On(() => h.Mailbox.HandleDraftsChanged(new DraftsChangedNotification { AccountId = Account, ThreadIds = ["t2"] }));
+        await h.IdleAsync();
+        Assert.Empty(c.Conversation.Drafts);
+        Assert.Equal(0, await h.On(() => h.Mailbox.Model.Threads.Single(t => t.Id == "t2").DraftCount));
+        Assert.True(c.Conversation.Model is null || SentShape(c.Conversation.Model).SequenceEqual(["b1"]), "the member went with the drafts");
+        Assert.All(h.Fixture.ThreadGetRequests, q => Assert.True(q.WithDrafts));
+    }
+
     // Show Quoted Text on a card: the whole body is asked for and the choice
     // holds through the pane's asking again (every scroll) until another
     // conversation is shown; Hide shows the trimmed body held.
@@ -609,6 +667,10 @@ public sealed class ConversationControllerTests
     private static MessageSummary Reply(string id, int hours, string thread) => Msg(id, hours, thread, "a", Flag.Seen) with { FolderId = SentBox.Folder };
 
     private static NewMessageNotification InSent(MessageSummary s) => new() { AccountId = Account, FolderId = SentBox.Folder, Message = s };
+
+    // The user's draft replying to b1, saved at Base + hours.
+    private static Draft DraftReply(string id, int hours, string text) =>
+        new() { Id = id, AccountId = Account, Version = 1, TextBody = text, InReplyTo = "b1", UpdatedAt = Base.AddHours(hours) };
 
     // Shape with the sent cards marked "sent:".
     private static List<string> SentShape(ConversationModel? m) =>

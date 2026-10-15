@@ -514,13 +514,16 @@ public static class API
 
         /// <summary>api.NotifyBoardChanged.</summary>
         public const string BoardChanged = "notify.boardChanged";
+
+        /// <summary>api.NotifyDraftsChanged.</summary>
+        public const string DraftsChanged = "notify.draftsChanged";
     }
 
     /// <summary>api.AllNotifications: every server-initiated notification name.</summary>
     public static IReadOnlyList<string> AllNotifications { get; } =
     [
         Notify.NewMessage, Notify.SyncState, Notify.AuthRequired, Notify.AccountsChanged, Notify.MessagesChanged,
-        Notify.BoardChanged,
+        Notify.BoardChanged, Notify.DraftsChanged,
     ];
 
     /// <summary>
@@ -568,6 +571,12 @@ public static class API
 
         /// <summary>api.MaxThreadParticipants.</summary>
         public const int MaxThreadParticipants = 8;
+
+        /// <summary>
+        /// api.MaxThreadDrafts: the most drafts thread.get returns (the
+        /// newest); <see cref="ThreadSummary.DraftCount"/> still counts them all.
+        /// </summary>
+        public const int MaxThreadDrafts = 20;
 
         /// <summary>api.MaxDraftAttributionBytes.</summary>
         public const int MaxDraftAttributionBytes = 2048;

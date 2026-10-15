@@ -7,7 +7,8 @@ Port of ui/internal/widget/pill.go (NewPill, SetStatusPill,
 SetInternalPill, SetBulkPill); macOS: Shared/PillLabel and IssuePill.swift. A
 pill of an issue: its status in the colour of its category, or the Internal
 badge of a service-desk comment, or the neutral tag of a bulk message in the
-list; hidden while its text is empty. The fill is a
+list, or the red Draft badge of a conversation with the user's unsent reply
+(style.go draft-pill); hidden while its text is empty. The fill is a
 visual state's ThemeResource (Resources/Pills.xaml), so it follows the
 theme. The status is its own tooltip, since a long one is cut; the text is
 the site's, shown as plain text.
@@ -41,6 +42,13 @@ the site's, shown as plain text.
                 <VisualState x:Name="Internal">
                     <VisualState.Setters>
                         <Setter Target="Fill.Background" Value="{ThemeResource IssuePillInternalBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <!-- issue-pill.draft-pill: the error colour on a faint error fill. -->
+                <VisualState x:Name="Draft">
+                    <VisualState.Setters>
+                        <Setter Target="Fill.Background" Value="{ThemeResource IssuePillDraftBrush}" />
+                        <Setter Target="Label.Foreground" Value="{ThemeResource DraftPillForegroundBrush}" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>

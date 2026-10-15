@@ -50,6 +50,10 @@ actor MailFixture {
     /// What `message.get` returns per message; a message without an entry
     /// gets `Message(summary:)` of its listing.
     var details: [MessageID: Message] = [:]
+    /// The drafts replying to a conversation, by thread
+    /// (`ThreadSummary.draftCount` in a folder's scope, thread.get's
+    /// `drafts` with `withDrafts`).
+    private(set) var threadDrafts: [ThreadID: [Draft]] = [:]
     private(set) var listRequests: [MessageListParams] = []
     private(set) var threadListRequests: [ThreadListParams] = []
     private(set) var threadGetRequests: [ThreadGetParams] = []
@@ -142,6 +146,11 @@ actor MailFixture {
     }
 
     /// Adds one message to the folder its summary names.
+    /// The drafts replying to conversation `tid` from now on.
+    func setDrafts(_ drafts: [Draft], thread tid: ThreadID) {
+        threadDrafts[tid] = drafts
+    }
+
     func addMessage(_ s: MessageSummary) {
         let key = FolderKey(account: s.accountId, folder: s.folderId)
         messages[key, default: []].append(s)
@@ -213,6 +222,9 @@ actor MailFixture {
         case .boardChanged(let b):
             method = API.Notify.boardChanged
             params = try encode(b)
+        case .draftsChanged(let d):
+            method = API.Notify.draftsChanged
+            params = try encode(d)
         case .unknown(let m):
             method = m
             params = Data("{}".utf8)
@@ -532,7 +544,8 @@ actor MailFixture {
             messageCount: members.count, unreadCount: unread, latestDate: latest.date, latest: latest,
             snippet: latest.snippet, flags: flags, hasAttachments: attachments, folderIds: folderIds,
             issue: latest.issue?.info,
-            sentCount: folder.map { sent(tid, FolderKey(account: acc, folder: $0), members).count } ?? 0
+            sentCount: folder.map { sent(tid, FolderKey(account: acc, folder: $0), members).count } ?? 0,
+            draftCount: folder == nil ? 0 : threadDrafts[tid]?.count ?? 0
         )
     }
 
@@ -619,9 +632,10 @@ actor MailFixture {
         if p.withSent == true, let fid = p.folderId {
             replies = sent(p.threadId, FolderKey(account: p.accountId, folder: fid), members)
         }
+        let drafts = p.withDrafts == true && p.folderId != nil ? threadDrafts[p.threadId] ?? [] : []
         return ThreadGetResult(
             thread: summary, messages: Array(members.suffix(API.Limits.maxThreadMessages)),
-            sent: Array(replies.suffix(API.Limits.maxThreadMessages)))
+            sent: Array(replies.suffix(API.Limits.maxThreadMessages)), drafts: drafts)
     }
 
     private func encode<T: Encodable>(_ value: T) throws -> Data {

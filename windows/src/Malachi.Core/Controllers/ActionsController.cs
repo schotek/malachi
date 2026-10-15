@@ -9,8 +9,10 @@
 // (markFolderRead, emptyFolder), outbox.go (retryOutbox, cancelSendFrom),
 // remote.go (loadRemoteImages, trustSender, ensureKnownSendersPolicy,
 // downloadPictures), compose_open.go (openCompose, openComposeFrom),
-// drafts.go (openDraft), assistant_panel.go (openSavedDraft, findDraft) and
-// selection.go (cancelSends, forwardMessages, openSelection).
+// drafts.go (openDraft), assistant_panel.go (openSavedDraft, findDraft),
+// selection.go (cancelSends, forwardMessages, openSelection) and
+// conversation_draft.go (editThreadDraft, discardThreadDraft; a Windows
+// addition ahead of Swift).
 //
 // The per-message actions of the main window and the message windows,
 // minus the widgets: an optimistic change in the model and the rows,
@@ -50,6 +52,7 @@ using Malachi.Core.Platform;
 using Malachi.Core.Selections;
 using Malachi.Core.Settings;
 using Malachi.Core.Text;
+using Malachi.Core.Transport;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -1362,6 +1365,71 @@ public sealed partial class ActionsController
                 done(Outcome.Success<Draft?>(null));
             }
         });
+    }
+
+    // The draft cards of a conversation (conversation_draft.go)
+
+    /// <summary>
+    /// A draft card's Edit (conversation_draft.go <c>editThreadDraft</c>):
+    /// the window that edits <paramref name="draft"/> already comes to the
+    /// front (<see cref="RaiseDraft"/>); otherwise the draft as
+    /// <c>draft.get</c> has it now (the card may show an older version) opens
+    /// in a compose window, a comment window for a comment draft
+    /// (<see cref="Prefill.FromDraft"/>). A draft that is gone (sent or
+    /// deleted meanwhile) says so (<see cref="Conversation.DraftGone"/>). A
+    /// second request for the draft while one runs does nothing.
+    /// </summary>
+    public void EditThreadDraft(Draft draft)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        Mailbox.Scope.VerifyAccess();
+        if (RaiseDraft?.Invoke(draft) == true)
+        {
+            return;
+        }
+        if (draft.Id is not { } id || string.IsNullOrEmpty(id.Value) || !findingDrafts.Add(id))
+        {
+            return;
+        }
+        var parameters = new DraftGetParams { AccountId = draft.AccountId, DraftId = id };
+        Mailbox.Scope.Perform(Mailbox.Client, API.DraftGet, parameters, outcome =>
+        {
+            findingDrafts.Remove(id);
+            if (!outcome.TryGetValue(out var res, out var error))
+            {
+                LogCallFailed(logger, API.DraftGet.Name, error!);
+                toast(error is RpcException { Code.Value: ErrorCode.DraftNotFound }
+                    ? Conversation.DraftGone()
+                    : RpcErrorText.Text(L10n.T("Opening the draft"), error));
+                return;
+            }
+            if (RaiseDraft?.Invoke(res.Draft) == true)
+            {
+                return;
+            }
+            OpenComposeRequested?.Invoke(this, Prefill.FromDraft(ComposeKind.Edit, res.Draft, new BlockedContent()));
+        });
+    }
+
+    /// <summary>
+    /// A draft card's Discard (conversation_draft.go
+    /// <c>discardThreadDraft</c>): a draft a compose window edits is that
+    /// window's to discard (it comes to the front, <see cref="RaiseDraft"/>);
+    /// otherwise, after the question (<see cref="Conversation.DiscardQuestion"/>
+    /// over <paramref name="parent"/>, whatever the confirm-delete setting),
+    /// <c>draft.delete</c>. notify.draftsChanged takes the card away; a
+    /// failure is a toast.
+    /// </summary>
+    public void DiscardThreadDraft(Draft draft, object? parent = null)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        Mailbox.Scope.VerifyAccess();
+        if (RaiseDraft?.Invoke(draft) == true || draft.Id is not { } id || string.IsNullOrEmpty(id.Value))
+        {
+            return;
+        }
+        Ask(parent, Conversation.DiscardQuestion(), "", Conversation.DraftDiscardLabel(), () =>
+            Call(API.DraftDelete, new DraftDeleteParams { AccountId = draft.AccountId, DraftId = id }, L10n.T("Discarding the draft")));
     }
 
     // Plumbing

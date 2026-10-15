@@ -72,6 +72,7 @@ internal sealed class MailFixture : IAsyncDisposable
     private readonly Dictionary<FolderKey, List<MessageSummary>> messages = [];
     private readonly Dictionary<MessageId, MessageBodyResult> bodies = [];
     private readonly Dictionary<MessageId, Message> details = [];
+    private readonly Dictionary<ThreadId, List<Draft>> threadDrafts = [];
     private readonly Dictionary<string, RpcError> failures = [];
     private readonly Dictionary<string, TimeSpan> delays = [];
     private readonly List<SyncTriggerParams> triggers = [];
@@ -220,6 +221,24 @@ internal sealed class MailFixture : IAsyncDisposable
     /// <summary>What <c>message.get</c> returns for a message; without one it is the listing's summary.</summary>
     public void SetDetail(MessageId id, Message detail) => Locked(() => details[id] = detail);
 
+    /// <summary>
+    /// The user's drafts that reply to conversation <paramref name="tid"/>
+    /// (a folder-scoped thread.get counts them as draftCount and, with
+    /// withDrafts, returns them, newest first as the daemon orders them);
+    /// none for an empty list.
+    /// </summary>
+    public void SetThreadDrafts(ThreadId tid, IReadOnlyList<Draft> drafts) => Locked(() =>
+    {
+        if (drafts.Count == 0)
+        {
+            threadDrafts.Remove(tid);
+        }
+        else
+        {
+            threadDrafts[tid] = [.. drafts];
+        }
+    });
+
     /// <summary>Makes <paramref name="method"/> fail with <paramref name="error"/> until <see cref="Succeed"/>.</summary>
     public void Fail(string method, RpcError error) => Locked(() => failures[method] = error);
 
@@ -250,6 +269,7 @@ internal sealed class MailFixture : IAsyncDisposable
             DaemonNotification.AccountsChanged => (API.Notify.AccountsChanged, "{}"),
             DaemonNotification.MessagesChanged c => (API.Notify.MessagesChanged, JsonCoding.EncodeToString(c.Payload)),
             DaemonNotification.BoardChanged b => (API.Notify.BoardChanged, JsonCoding.EncodeToString(b.Payload)),
+            DaemonNotification.DraftsChanged d => (API.Notify.DraftsChanged, JsonCoding.EncodeToString(d.Payload)),
             DaemonNotification.Unknown u => (u.Method, "{}"),
             _ => throw new ArgumentException($"no such notification: {n}", nameof(n)),
         };
@@ -629,8 +649,13 @@ internal sealed class MailFixture : IAsyncDisposable
             FolderIds = folderIds,
             Issue = latest.Issue?.Info,
             SentCount = folder is { } f ? Sent(tid, new FolderKey(account, f), members).Count : 0,
+            DraftCount = folder is not null ? DraftsOf(tid).Count : 0,
         };
     }
+
+    // The drafts that reply to conversation tid, newest updatedAt first.
+    private List<Draft> DraftsOf(ThreadId tid) =>
+        threadDrafts.TryGetValue(tid, out var l) ? [.. l.OrderByDescending(d => d.UpdatedAt)] : [];
 
     /// <summary>
     /// The members of conversation <paramref name="tid"/> in the sent folders
@@ -736,11 +761,13 @@ internal sealed class MailFixture : IAsyncDisposable
         var members = Sorted(pool, SortOrder.DateAsc);
         var summary = Aggregate(p.ThreadId, members, p.AccountId, p.FolderId);
         List<MessageSummary> replies = p.WithSent == true && p.FolderId is { } folder ? Sent(p.ThreadId, new FolderKey(p.AccountId, folder), members) : [];
+        List<Draft> drafts = p.WithDrafts == true && p.FolderId is not null ? DraftsOf(p.ThreadId) : [];
         return new ThreadGetResult
         {
             Thread = summary,
             Messages = members.TakeLast(API.Limits.MaxThreadMessages).ToList(),
             Sent = replies.TakeLast(API.Limits.MaxThreadMessages).ToList(),
+            Drafts = drafts.Take(API.Limits.MaxThreadDrafts).ToList(),
         };
     }
 

@@ -146,9 +146,13 @@ func TestCloseAsksOnlyWithSomethingToLose(t *testing.T) {
 		// A mail window with text but nothing unsaved goes: the text is in
 		// the Drafts folder.
 		{"mail saved", draftState{draftID: "d1"}, OwnerWindow, false, text, true},
-		// A comment with text asks, saved or not: no Drafts folder keeps it.
-		{"comment with text", draftState{}, OwnerWindow, true, text, false},
-		{"comment saved", draftState{draftID: "d1"}, OwnerWindow, true, text, false},
+		// A comment with text is kept as an e-mail is (its draft card in the
+		// issue's conversation shows it): it asks only with unsaved edits or
+		// a save under way.
+		{"comment with text", draftState{}, OwnerWindow, true, text, true},
+		{"comment saved", draftState{draftID: "d1"}, OwnerWindow, true, text, true},
+		{"comment dirty", draftState{dirty: true, draftID: "d1"}, OwnerWindow, true, text, false},
+		{"comment saving with text", draftState{saving: true}, OwnerWindow, true, text, false},
 		// Nothing in it: it goes, unsaved edits and a save under way or not.
 		{"comment emptied", draftState{dirty: true, draftID: "d1"}, OwnerWindow, true, blank, true},
 		{"comment saving", draftState{saving: true}, OwnerWindow, true, "", true},
@@ -166,29 +170,34 @@ func TestCloseAsksOnlyWithSomethingToLose(t *testing.T) {
 	}
 }
 
-func TestTheCopyOfACommentGoesWithTheWindow(t *testing.T) {
+func TestOnlyAnEmptyCommentGoesWithTheWindow(t *testing.T) {
 	cases := []struct {
 		name    string
 		d       draftState
 		owner   Owner
 		comment bool
+		empty   bool
 		want    bool
 	}{
-		{"comment autosaved", draftState{draftID: "d1"}, OwnerWindow, true, true},
-		{"comment closed while dirty", draftState{draftID: "d1", dirty: true}, OwnerWindow, true, true},
+		// A comment with text stays: the issue's draft card shows it.
+		{"comment autosaved", draftState{draftID: "d1"}, OwnerWindow, true, false, false},
+		{"comment closed while dirty", draftState{draftID: "d1", dirty: true}, OwnerWindow, true, false, false},
+		// Nothing in it: its copy goes with the window.
+		{"comment emptied", draftState{draftID: "d1"}, OwnerWindow, true, true, true},
+		{"comment emptied while dirty", draftState{draftID: "d1", dirty: true}, OwnerWindow, true, true, true},
 		// Sent (or deleted already by Discard): nothing left to delete.
-		{"comment sent", draftState{draftID: "d1", discard: true}, OwnerWindow, true, false},
-		{"comment never saved", draftState{}, OwnerWindow, true, false},
+		{"comment sent", draftState{draftID: "d1", discard: true}, OwnerWindow, true, true, false},
+		{"comment never saved", draftState{}, OwnerWindow, true, true, false},
 		// An e-mail's draft stays in Drafts.
-		{"mail saved", draftState{draftID: "d1"}, OwnerWindow, false, false},
+		{"mail saved", draftState{draftID: "d1"}, OwnerWindow, false, true, false},
 		// The board never deletes here, even a late save after a Close
 		// answers (ComposeDraftBoardOwnerTests aLateSaveNeverDeletes); only
 		// Discard does, through discardBoard, not cleanup.
-		{"board comment autosaved", draftState{draftID: "d1"}, OwnerBoard, true, false},
-		{"board mail saved", draftState{draftID: "d1"}, OwnerBoard, false, false},
+		{"board comment autosaved", draftState{draftID: "d1"}, OwnerBoard, true, true, false},
+		{"board mail saved", draftState{draftID: "d1"}, OwnerBoard, false, true, false},
 	}
 	for _, c := range cases {
-		if got := deletesOnClose(&c.d, c.owner, c.comment); got != c.want {
+		if got := deletesOnClose(&c.d, c.owner, c.comment, c.empty); got != c.want {
 			t.Errorf("%s: deletesOnClose = %v, want %v", c.name, got, c.want)
 		}
 	}

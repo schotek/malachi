@@ -212,6 +212,10 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	b.WriteString("label.issue-pill.status-in-progress { background-color: alpha(@blue_3, 0.3); }\n")
 	b.WriteString("label.issue-pill.status-done { background-color: alpha(@green_4, 0.3); }\n")
 	b.WriteString("label.issue-pill.internal-pill { background-color: alpha(@orange_3, 0.35); }\n")
+	// The Draft badge of a conversation with the user's unsent reply (the
+	// list row and the draft card of the conversation view), red as in
+	// mail clients that show drafts in their threads.
+	b.WriteString("label.issue-pill.draft-pill { color: @error_color; background-color: alpha(@error_bg_color, 0.12); }\n")
 	// The issue card over a Jira message (window/issue_card.go): the
 	// card's own padding, the key as a link without a button's bulk, and
 	// the status pill as a menu button in the pill's shape and colours.

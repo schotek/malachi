@@ -348,6 +348,7 @@ final class NotificationHub {
     private var accountsChanged = HandlerList<Void>()
     private var messagesChanged = HandlerList<MessagesChangedNotification>()
     private var boardChanged = HandlerList<BoardChangedNotification>()
+    private var draftsChanged = HandlerList<DraftsChangedNotification>()
     private var connection = HandlerList<ConnectionController.ConnectionState>()
 
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "notify")
@@ -390,6 +391,12 @@ final class NotificationHub {
         boardChanged.add(f)
     }
 
+    /// notify.draftsChanged: the mailbox asks the conversations it names
+    /// for their drafts again (`MailboxController.handleDraftsChanged`).
+    func addDraftsChanged(_ f: @escaping @MainActor (DraftsChangedNotification) -> Void) -> Token {
+        draftsChanged.add(f)
+    }
+
     /// Fires on every connection state change, after `connectionState`
     /// was updated. A handler added later does not get the current state;
     /// read `connectionState` for that.
@@ -420,6 +427,8 @@ final class NotificationHub {
             messagesChanged.fire(m)
         case .boardChanged(let b):
             boardChanged.fire(b)
+        case .draftsChanged(let d):
+            draftsChanged.fire(d)
         case .unknown(let method):
             log.info("notification \(method, privacy: .public)")
         }

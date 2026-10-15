@@ -278,6 +278,14 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
         actions.openDraft(id)
     }
 
+    func editThreadDraft(_ draft: Draft) {
+        actions.editThreadDraft(draft)
+    }
+
+    func discardThreadDraft(_ draft: Draft, from window: NSWindow?) {
+        actions.discardThreadDraft(draft, parent: window)
+    }
+
     func openMessage(_ summary: MessageSummary) {
         actions.openMessage(summary)
     }

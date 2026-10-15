@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of ui/internal/widget/message_row.go (MessageRow: SetMessage,
-// SetThread, SetReserveExpander, fill, SetExpanded, SetMember, applyLead,
+// SetThread with its Draft badge, SetReserveExpander, fill, SetExpanded, SetMember, applyLead,
 // applyIssue, SetBulkPill (widget/pill.go), SetCompact, SetShowPreview,
 // SetShowAvatar; the margins and sizes of
 // message_row.blp), threads.go (the row a listRow becomes: newMessageRow,
@@ -82,6 +82,7 @@ public sealed partial class MessageRow : ObservableObject
         StatusText = "";
         BulkText = "";
         InternalText = "";
+        DraftText = "";
         EventText = "";
         EventTooltip = "";
         SubjectLineShown = true;
@@ -256,6 +257,14 @@ public sealed partial class MessageRow : ObservableObject
     public partial string InternalText { get; private set; }
 
     /// <summary>
+    /// The red Draft badge of a conversation with the user's unsent reply or
+    /// comment (<see cref="RowThread.Draft"/>); "" hides it, and a message row
+    /// never shows it.
+    /// </summary>
+    [ObservableProperty]
+    public partial string DraftText { get; private set; }
+
+    /// <summary>
     /// An event message of an issue (a status or assignee change), not a
     /// conversation: its actor where the sender goes, set small, and the
     /// change after it (<see cref="EventText"/>), no preview and no unread
@@ -312,6 +321,7 @@ public sealed partial class MessageRow : ObservableObject
             Expanded = t.Expanded;
             issue = t.Issue;
             tag = t.Tag;
+            DraftText = t.Draft;
         }
         else
         {
@@ -333,6 +343,7 @@ public sealed partial class MessageRow : ObservableObject
             Expanded = false;
             issue = message.Issue;
             tag = message.Tag;
+            DraftText = "";
         }
         IsThread = thread;
         Loading = thread && loading;
@@ -366,6 +377,7 @@ public sealed partial class MessageRow : ObservableObject
             parts.Add(StatusText);
             parts.Add(BulkText);
             parts.Add(InternalText);
+            parts.Add(DraftText);
         }
         if (Unread)
         {

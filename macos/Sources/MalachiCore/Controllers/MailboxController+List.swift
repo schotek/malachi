@@ -187,6 +187,7 @@ public final class ListController {
         mailbox.onNewMessageForList = { [weak self] n in self?.applyNewMessage(n) }
         mailbox.onNewMessageElsewhere = { [weak self] n in self?.applyNewMessageElsewhere(n) }
         mailbox.refreshShownSent = { [weak self] acc in self?.refreshShownSent(acc) }
+        mailbox.refreshDrafts = { [weak self] n in self?.refreshDrafts(n) }
         mailbox.refreshOutboxViews = { [weak self] acc in self?.refreshOutboxViews(acc) }
         mailbox.refreshShown = { [weak self] acc in self?.refreshShown(acc) }
         mailbox.collapseLoading = { [weak self] in self?.collapseLoadingRows() }
@@ -714,7 +715,8 @@ public final class ListController {
         guard let k = mailbox.model.listFolder else { return }
         mailbox.model.members[tid]?.fetching = true
         let gen = mailbox.model.listGen
-        let params = ThreadGetParams(accountId: k.account, threadId: tid, folderId: k.folder, withSent: true)
+        let params = ThreadGetParams(
+            accountId: k.account, threadId: tid, folderId: k.folder, withSent: true, withDrafts: true)
         mailbox.perform(API.ThreadGet.self, params) { [weak self] outcome in
             guard let self, gen == self.mailbox.model.listGen, self.mailbox.model.members[tid] != nil else { return }
             self.mailbox.model.members[tid]?.fetching = false
@@ -736,7 +738,7 @@ public final class ListController {
                     fn()
                 }
             case .success(let res):
-                self.mailbox.model.setMembers(tid, res.thread, res.messages, sent: res.sent)
+                self.mailbox.model.setMembers(tid, res.thread, res.messages, sent: res.sent, drafts: res.drafts)
                 self.syncRows()
                 if let row = self.selectedRow, row.key.thread == tid {
                     self.refreshActionFlags()
@@ -1080,6 +1082,29 @@ public final class ListController {
         guard mailbox.model.grouped, let row = selectedRow, row.message.accountId == acc, row.showsConversation,
               let tid = row.key.thread else { return }
         refetchMembers(tid)
+    }
+
+    /// notify.draftsChanged (conversation_draft.go `onDraftsChanged`): the
+    /// listed conversations it names, and with no names the one on show
+    /// and every listed one with drafts, ask thread.get again
+    /// (`refetchMembers`), which brings their `draftCount` and drafts.
+    /// Nothing in flat mode (no row shows a conversation) or for another
+    /// account than the listed folder's.
+    public func refreshDrafts(_ n: DraftsChangedNotification) {
+        let model = mailbox.model
+        guard model.grouped, !model.loading, let k = model.listFolder, k.account == n.accountId else { return }
+        var want = Set(n.threadIds)
+        if n.threadIds.isEmpty {
+            if let row = selectedRow, row.thread, let tid = row.key.thread {
+                want.insert(tid)
+            }
+            for t in model.threads where t.draftCount > 0 {
+                want.insert(t.id)
+            }
+        }
+        for tid in want.sorted(by: { $0.rawValue < $1.rawValue }) where model.tindex[tid] != nil {
+            refetchMembers(tid)
+        }
     }
 
     /// Changes the flags of the given messages in the model, refreshes their

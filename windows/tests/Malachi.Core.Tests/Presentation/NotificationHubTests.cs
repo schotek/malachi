@@ -76,6 +76,20 @@ public sealed class NotificationHubTests
     }
 
     [Fact]
+    public void DraftsChangedReachesItsHandlers()
+    {
+        using var hub = new NotificationHub();
+        var seen = new List<string>();
+        hub.AddDraftsChanged(n => seen.Add(n.AccountId.Value + ":" + string.Join(",", n.ThreadIds.Select(t => t.Value))));
+        hub.AddBoardChanged(_ => seen.Add("board"));
+        hub.Handle(Raw("notify.draftsChanged", """{"accountId":"acc_1","threadIds":["t_1","t_2"]}"""));
+        hub.Handle(Raw("notify.draftsChanged", """{"accountId":"acc_1"}"""));
+        hub.Handle(Raw("notify.draftsChanged", """{"threadIds":["t_1"]}""")); // no account: dropped
+        Assert.Equal(["acc_1:t_1,t_2", "acc_1:"], seen);
+        Assert.Empty(hub.Pending.TakeFaults());
+    }
+
+    [Fact]
     public void ABadPayloadAndAnUnknownMethodReachNoHandler()
     {
         using var hub = new NotificationHub();

@@ -123,6 +123,28 @@ public sealed class NotificationDecodeTests
         Assert.Throws<JsonException>(() => Raw("notify.boardChanged", "[]"));
     }
 
+    /// <summary>
+    /// Windows addition (docs/api.md §5, 2026-10-15): <c>notify.draftsChanged</c>
+    /// names the account and the threads whose drafts changed; none named, or
+    /// the list left out or null: any thread of the account.
+    /// </summary>
+    [Fact]
+    public void DraftsChanged()
+    {
+        var n = Raw("notify.draftsChanged", """{"accountId":"acc_1","threadIds":["t_1","t_2"]}""");
+        var p = Assert.IsType<DaemonNotification.DraftsChanged>(n).Payload;
+        Assert.Equal("acc_1", p.AccountId);
+        Assert.Equal<ThreadId>(["t_1", "t_2"], p.ThreadIds);
+        foreach (var parameters in new[] { """{"accountId":"acc_1"}""", """{"accountId":"acc_1","threadIds":[]}""", """{"accountId":"acc_1","threadIds":null}""" })
+        {
+            var any = Assert.IsType<DaemonNotification.DraftsChanged>(Raw("notify.draftsChanged", parameters)).Payload;
+            Assert.Equal("acc_1", any.AccountId);
+            Assert.Empty(any.ThreadIds);
+        }
+        Assert.Throws<JsonException>(() => Raw("notify.draftsChanged", """{"threadIds":["t_1"]}"""));
+        Assert.Throws<JsonException>(() => Raw("notify.draftsChanged", """{"accountId":"acc_1","threadIds":"t_1"}"""));
+    }
+
     [Fact]
     public void UnknownMethodIsKeptByName()
     {
@@ -148,6 +170,7 @@ public sealed class NotificationDecodeTests
             (API.Notify.AccountsChanged, "{}"),
             (API.Notify.MessagesChanged, """{"accountId":"acc_1","folderIds":["f_inbox"]}"""),
             (API.Notify.BoardChanged, """{"accountIds":["acc_1"]}"""),
+            (API.Notify.DraftsChanged, """{"accountId":"acc_1","threadIds":["t_1"]}"""),
         ];
         Assert.Equal(API.AllNotifications, samples.Select(s => s.Method));
         foreach (var (method, parameters) in samples)

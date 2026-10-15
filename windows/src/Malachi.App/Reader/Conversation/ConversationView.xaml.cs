@@ -3,8 +3,8 @@
 
 // Port of ui/internal/window/conversation_view.go (conversationView:
 // modelChanged, takeWebView, returnWebView, trimWebPool, open, update,
-// setCardFolded, apply, replaceRow, detach, removeAll, showIssue,
-// clearIssue, convFirstMember, pageBy, scrollBy, scheduleLiveUpdate,
+// setCardFolded, apply with the draft cards, replaceRow, detach, removeAll,
+// showIssue, clearIssue, convFirstMember, pageBy, scrollBy, scheduleLiveUpdate,
 // updateLive, afterLayout, hover, setZoom, startSpinner, stopSpinner) and
 // conversation_issue.go; macOS: MessageView/ConversationViewController.swift.
 //
@@ -16,7 +16,10 @@
 // replies in Sent that the folder lacks are cards among them by date,
 // folded. Every card folds and opens with its arrow (ConversationFolds,
 // fold.go), and one button above the conversation folds or opens them all
-// (Collapse All / Expand All, Conversation.FoldAllOffer). A Jira
+// (Collapse All / Expand All, Conversation.FoldAllOffer). The user's
+// unsent replies (and comments) are draft cards right under what opened the
+// conversation, newest first (ConversationDraftView, conversation_draft.go),
+// never folded and never live: their text is plain. A Jira
 // conversation has its issue card once on top; its description and
 // comments are cards (ConversationCard), its status and assignee changes
 // compact rows, and older members left out by thread.get's cap one row at
@@ -91,6 +94,11 @@ internal sealed partial class ConversationView : UserControl
     private readonly Dictionary<MessageId, ConversationCard> cards = [];
     private readonly Dictionary<MessageId, ConversationEventRow> events = [];
     private readonly Dictionary<MessageId, ConversationRow> rows = [];
+
+    // The draft cards of the user's unsent replies (ConversationDraftView)
+    // and their rows, by draft id (conversation_view.go drafts, draftRows).
+    private readonly Dictionary<DraftId, ConversationDraftView> drafts = [];
+    private readonly Dictionary<DraftId, ConversationRow> draftRows = [];
     private readonly List<CardWebView> webPool = [];
     private readonly List<SettingsChangeToken> tokens = [];
     private readonly DispatcherQueueTimer spinnerTimer;
@@ -458,10 +466,12 @@ internal sealed partial class ConversationView : UserControl
     }
 
     // apply: the model's items into the column in the order shown
-    // (DisplayOrder), reusing the rows of the members shown already, each
-    // with its piece of the timeline; every card folds as the user or the
-    // default says (ConversationFolds.State), and the Collapse All / Expand
-    // All button follows.
+    // (DisplayOrder), the draft cards of the user's unsent replies right
+    // under what opened it (Conversation.DraftsFirst), reusing the rows of
+    // the members and drafts shown already, each with its piece of the
+    // timeline; every card folds as the user or the default says
+    // (ConversationFolds.State), and the Collapse All / Expand All button
+    // follows.
     private void Apply(ConversationModel? m)
     {
         if (m is null)
@@ -473,14 +483,44 @@ internal sealed partial class ConversationView : UserControl
         var shown = display.Items;
         folds.Show(m.Thread);
         foldState = folds.State(shown, display.Opening);
-        var rails = L.Rails(shown);
+        var cardsOfDrafts = ctrl.Drafts;
+        var at = Math.Min(Core.Model.Conversation.DraftsFirst(display.Root), shown.Count);
+        var rails = L.Rails(L.WithDrafts(shown, at, cardsOfDrafts.Count));
         var monochrome = Services.State.Settings.MonochromeAvatars;
-        var desired = new List<ConversationRow>(shown.Count);
+        var desired = new List<ConversationRow>(shown.Count + cardsOfDrafts.Count);
         var cardIds = new HashSet<MessageId>();
         var eventIds = new HashSet<MessageId>();
+        var draftIds = new HashSet<DraftId>();
+        void PutDrafts()
+        {
+            for (var j = 0; j < cardsOfDrafts.Count; j++)
+            {
+                var card = cardsOfDrafts[j];
+                var id = card.Draft.Id ?? default;
+                draftIds.Add(id);
+                if (drafts.TryGetValue(id, out var view) && draftRows.TryGetValue(id, out var existing))
+                {
+                    view.Update(card);
+                }
+                else
+                {
+                    view = new ConversationDraftView(this, card, Look);
+                    drafts[id] = view;
+                    existing = new ConversationRow(view, RailMarker.Avatar, Look);
+                    draftRows[id] = existing;
+                }
+                existing.Show(rails[at + j], card.Sender, monochrome);
+                desired.Add(existing);
+            }
+        }
         for (var i = 0; i < shown.Count; i++)
         {
+            if (i == at)
+            {
+                PutDrafts();
+            }
             var it = shown[i];
+            var rail = rails[i < at ? i : i + cardsOfDrafts.Count];
             ConversationRow row;
             switch (it.Kind)
             {
@@ -543,12 +583,22 @@ internal sealed partial class ConversationView : UserControl
                 default:
                     continue;
             }
-            row.Show(rails[i], it.Sender, monochrome);
+            row.Show(rail, it.Sender, monochrome);
             if (row.Card is { } rowCard)
             {
                 rowCard.SetFold(Core.Model.Conversation.Foldable(it), foldState.GetValueOrDefault(rowCard.Id));
             }
             desired.Add(row);
+        }
+        if (at == shown.Count)
+        {
+            PutDrafts();
+        }
+        foreach (var id in draftRows.Keys.Where(id => !draftIds.Contains(id)).ToList())
+        {
+            Detach(draftRows[id]);
+            draftRows.Remove(id);
+            drafts.Remove(id);
         }
         foreach (var id in cards.Keys.Where(id => !cardIds.Contains(id)).ToList())
         {
@@ -712,10 +762,16 @@ internal sealed partial class ConversationView : UserControl
         {
             Detach(r);
         }
+        foreach (var r in draftRows.Values)
+        {
+            Detach(r);
+        }
         Detach(truncatedRow);
         cards.Clear();
         events.Clear();
         rows.Clear();
+        drafts.Clear();
+        draftRows.Clear();
         items = [];
         ClearIssue();
         Hover("");
@@ -917,6 +973,10 @@ internal sealed partial class ConversationView : UserControl
         foreach (var c in cards.Values)
         {
             c.ApplyBodyFont();
+        }
+        foreach (var d in drafts.Values)
+        {
+            d.ApplyBodyFont();
         }
     }
 

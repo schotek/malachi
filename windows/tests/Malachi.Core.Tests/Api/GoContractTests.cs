@@ -44,6 +44,7 @@ public sealed class GoContractTests
         Assert.Equal(API.Notify.AccountsChanged, constants["NotifyAccountsChanged"]);
         Assert.Equal(API.Notify.MessagesChanged, constants["NotifyMessagesChanged"]);
         Assert.Equal(API.Notify.BoardChanged, constants["NotifyBoardChanged"]);
+        Assert.Equal(API.Notify.DraftsChanged, constants["NotifyDraftsChanged"]);
     }
 
     [Fact]
@@ -156,7 +157,7 @@ public sealed class GoContractTests
     {
         var go = GoContract.IntConstants(GoContract.ApiSource("types.go"));
         var limits = typeof(API.Limits).GetFields(BindingFlags.Public | BindingFlags.Static).Where(f => f.IsLiteral).ToArray();
-        Assert.Equal(33, limits.Length);
+        Assert.Equal(34, limits.Length);
         foreach (var limit in limits)
         {
             // Go spells the identifier "IDs"; C# "Ids".

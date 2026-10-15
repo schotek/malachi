@@ -273,6 +273,7 @@ namespace Malachi.Core.Api;
 [JsonSerializable(typeof(SyncStateNotification))]
 [JsonSerializable(typeof(AuthRequiredNotification))]
 [JsonSerializable(typeof(AccountsChangedNotification))]
+[JsonSerializable(typeof(DraftsChangedNotification))]
 // RpcError.cs
 [JsonSerializable(typeof(RpcError))]
 // Search.cs

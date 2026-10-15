@@ -84,6 +84,10 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
     /// The rows of the cards and of the events: each with its piece of the
     /// timeline.
     private var rows: [MessageID: ConversationRow] = [:]
+    /// The draft cards of the user's unsent replies
+    /// (`ConversationController.drafts`) and their rows, by draft id.
+    private var draftCards: [DraftID: ConversationDraftCardView] = [:]
+    private var draftRows: [DraftID: ConversationRow] = [:]
     /// The rows of the model's items, in the order shown
     /// (`ConversationLayout.displayOrder`).
     private var itemViews: [NSView] = []
@@ -289,23 +293,49 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
 
     /// Puts `model`'s items into the stack in the order shown
     /// (`ConversationLayout.displayOrder`: what opened the conversation,
-    /// then the rest newest first), reusing the views of the members shown
-    /// already, each in a row with its piece of the timeline; every card
-    /// folds as the user or the default says (`Conversation.Folds.state`,
-    /// conversation_view.go `apply`), and the Collapse All / Expand All
-    /// button follows.
+    /// then the rest newest first), the draft cards of the user's unsent
+    /// replies right under what opened it (`Conversation.draftsFirst`),
+    /// reusing the views of the members and drafts shown already, each in a
+    /// row with its piece of the timeline; every card folds as the user or
+    /// the default says (`Conversation.Folds.state`, conversation_view.go
+    /// `apply`), and the Collapse All / Expand All button follows.
     private func apply(_ model: Conversation.Model) {
         showIssue(model)
         let display = shownOrder(model)
         let items = display.items
         folds.show(model.thread)
         foldState = folds.state(items, opening: display.opening)
-        let rails = ConversationLayout.rails(items)
+        let drafts = controller.drafts
+        let at = min(Conversation.draftsFirst(display.root), items.count)
+        let rails = ConversationLayout.rails(ConversationLayout.withDrafts(items, at: at, count: drafts.count))
         let monochrome = state.settings.monochromeAvatars
         var desired: [NSView] = []
         var cardIDs = Set<MessageID>()
         var eventIDs = Set<MessageID>()
-        for (item, rail) in zip(items, rails) {
+        var draftIDs = Set<DraftID>()
+        func putDrafts() {
+            for (j, card) in drafts.enumerated() {
+                guard let id = card.draft.id else { continue }
+                draftIDs.insert(id)
+                let row: ConversationRow
+                if let view = draftCards[id], let shown = draftRows[id] {
+                    view.update(card)
+                    row = shown
+                } else {
+                    let view = makeDraftCard(card)
+                    draftCards[id] = view
+                    row = ConversationRow(content: view, mark: .avatar)
+                    draftRows[id] = row
+                }
+                row.show(rails[at + j], name: card.sender, monochrome: monochrome)
+                desired.append(row)
+            }
+        }
+        for (i, item) in items.enumerated() {
+            if i == at {
+                putDrafts()
+            }
+            let rail = rails[i < at ? i : i + drafts.count]
             let row: ConversationRow
             switch item.kind {
             case .truncated:
@@ -347,6 +377,14 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
             }
             row.show(rail, name: item.sender, monochrome: monochrome)
             desired.append(row)
+        }
+        if at == items.count {
+            putDrafts()
+        }
+        for (id, row) in draftRows where !draftIDs.contains(id) {
+            detach(row)
+            draftRows[id] = nil
+            draftCards[id] = nil
         }
         for (id, card) in cards where !cardIDs.contains(id) {
             card.setLive(false)
@@ -429,12 +467,29 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
     /// changed).
     private func applyRails() {
         guard let model = controller.model else { return }
-        let items = shownOrder(model).items
+        let display = shownOrder(model)
+        let items = display.items
+        let drafts = controller.drafts
+        let at = min(Conversation.draftsFirst(display.root), items.count)
+        let rails = ConversationLayout.rails(ConversationLayout.withDrafts(items, at: at, count: drafts.count))
         let monochrome = state.settings.monochromeAvatars
-        for (item, rail) in zip(items, ConversationLayout.rails(items)) {
+        for (i, item) in items.enumerated() {
             let row = item.kind == .truncated ? truncatedItem : item.id.flatMap { rows[$0] }
-            row?.show(rail, name: item.sender, monochrome: monochrome)
+            row?.show(rails[i < at ? i : i + drafts.count], name: item.sender, monochrome: monochrome)
         }
+        for (j, card) in drafts.enumerated() {
+            guard let id = card.draft.id else { continue }
+            draftRows[id]?.show(rails[at + j], name: card.sender, monochrome: monochrome)
+        }
+    }
+
+    /// The card of a draft, its Edit and Discard wired to the actions
+    /// (conversation_draft.go).
+    private func makeDraftCard(_ card: Conversation.DraftCard) -> ConversationDraftCardView {
+        let view = ConversationDraftCardView(card, bodyFont: bodyFont)
+        view.onEdit = { [weak self] d in self?.delegate?.editThreadDraft(d) }
+        view.onDiscard = { [weak self] d, window in self?.delegate?.discardThreadDraft(d, from: window) }
+        return view
     }
 
     /// The card of `item`, yet to be folded and rendered (`apply`).
@@ -461,10 +516,15 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         for row in rows.values {
             detach(row)
         }
+        for row in draftRows.values {
+            detach(row)
+        }
         detach(truncatedItem)
         cards = [:]
         events = [:]
         rows = [:]
+        draftCards = [:]
+        draftRows = [:]
         itemViews = []
         folds = Conversation.Folds()
         foldState = [:]
@@ -723,6 +783,9 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         preservingAnchor {
             for card in cards.values {
                 card.applyFont(font, zoom: zoom)
+            }
+            for card in draftCards.values {
+                card.setBodyFont(font)
             }
         }
     }

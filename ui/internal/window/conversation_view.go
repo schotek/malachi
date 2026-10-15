@@ -106,6 +106,10 @@ type conversationView struct {
 	cards  map[api.MessageID]*convCard
 	events map[api.MessageID]*convEventRow
 	rows   map[api.MessageID]*convRow
+	// drafts are the draft cards (conversation_draft.go) and draftRows
+	// their rows, by draft id.
+	drafts    map[api.DraftID]*convDraftCard
+	draftRows map[api.DraftID]*convRow
 	// truncated is the row of the older members, made once.
 	truncated    *convTruncatedRow
 	truncatedRow *convRow
@@ -168,6 +172,8 @@ func (w *Window) conversationPane() *conversationView {
 		cards:         map[api.MessageID]*convCard{},
 		events:        map[api.MessageID]*convEventRow{},
 		rows:          map[api.MessageID]*convRow{},
+		drafts:        map[api.DraftID]*convDraftCard{},
+		draftRows:     map[api.DraftID]*convRow{},
 	}
 	cv.status.SetUseMarkup(false)
 	cv.foldAllButton.ConnectClicked(cv.foldAllClicked)
@@ -610,21 +616,50 @@ func (cv *conversationView) topAnchor() *convAnchor {
 
 // apply puts the model's items into the column in the order shown
 // (convDisplayOrder: what opened the conversation, then the rest newest
-// first), reusing the widgets of the members shown already, each in a row
-// with its piece of the timeline; every card folds as the user or the
-// default says (conversation.Folds.State), and the Collapse All / Expand
-// All button follows.
+// first), the draft cards of the user's unsent replies right under what
+// opened it (conversation.DraftsFirst), reusing the widgets of the members
+// and drafts shown already, each in a row with its piece of the timeline;
+// every card folds as the user or the default says
+// (conversation.Folds.State), and the Collapse All / Expand All button
+// follows.
 func (cv *conversationView) apply(m *conversation.Model) {
 	cv.showIssue(m)
 	display := convDisplayOrder(m.Items)
 	items := display.items
 	cv.folds.Show(m.Thread)
 	cv.foldState = cv.folds.State(items, display.opening)
-	rails := convRails(items)
-	desired := make([]*convRow, 0, len(items))
+	drafts := cv.ctrl.drafts
+	at := min(conversation.DraftsFirst(display.root), len(items))
+	rails := convRails(convWithDrafts(items, at, len(drafts)))
+	desired := make([]*convRow, 0, len(items)+len(drafts))
 	cardIDs := map[api.MessageID]bool{}
 	eventIDs := map[api.MessageID]bool{}
+	draftIDs := map[api.DraftID]bool{}
+	putDrafts := func() {
+		for j, card := range drafts {
+			id := card.Draft.ID
+			draftIDs[id] = true
+			row := cv.draftRows[id]
+			if dc := cv.drafts[id]; dc != nil && row != nil {
+				dc.update(card)
+			} else {
+				dc := newConvDraftCard(cv, card)
+				cv.drafts[id] = dc
+				row = newConvRow(dc.widget(), markAvatar)
+				cv.draftRows[id] = row
+			}
+			row.show(rails[at+j], card.Sender)
+			desired = append(desired, row)
+		}
+	}
 	for i, it := range items {
+		if i == at {
+			putDrafts()
+		}
+		rail := rails[i]
+		if i >= at {
+			rail = rails[i+len(drafts)]
+		}
 		var row *convRow
 		switch it.Kind {
 		case conversation.ItemTruncated:
@@ -668,11 +703,21 @@ func (cv *conversationView) apply(m *conversation.Model) {
 		default:
 			continue
 		}
-		row.show(rails[i], it.Sender)
+		row.show(rail, it.Sender)
 		if row.card != nil {
 			row.card.setFold(conversation.Foldable(it), cv.foldState[it.Message.ID])
 		}
 		desired = append(desired, row)
+	}
+	if at == len(items) {
+		putDrafts()
+	}
+	for id, row := range cv.draftRows {
+		if !draftIDs[id] {
+			cv.detach(row)
+			delete(cv.draftRows, id)
+			delete(cv.drafts, id)
+		}
 	}
 	for id, c := range cv.cards {
 		if !cardIDs[id] {
@@ -743,10 +788,15 @@ func (cv *conversationView) removeAll() {
 	for _, r := range cv.rows {
 		cv.detach(r)
 	}
+	for _, r := range cv.draftRows {
+		cv.detach(r)
+	}
 	cv.detach(cv.truncatedRow)
 	cv.cards = map[api.MessageID]*convCard{}
 	cv.events = map[api.MessageID]*convEventRow{}
 	cv.rows = map[api.MessageID]*convRow{}
+	cv.drafts = map[api.DraftID]*convDraftCard{}
+	cv.draftRows = map[api.DraftID]*convRow{}
 	cv.items = nil
 	cv.pinned, cv.last = nil, nil
 	cv.clearIssue()

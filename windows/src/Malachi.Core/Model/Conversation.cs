@@ -50,15 +50,17 @@ public static partial class Conversation
     /// <summary>
     /// conversation.IsConversationRow: a listed conversation whose selection
     /// shows the whole conversation: two or more messages, the members in the
-    /// folder and the user's replies in Sent it lacks
-    /// (<see cref="ThreadSummary.SentCount"/>) together, so that a message and
-    /// the user's reply to it are a conversation. The outbox is never grouped
-    /// (the caller's rule, as for the list).
+    /// folder, the user's replies in Sent it lacks
+    /// (<see cref="ThreadSummary.SentCount"/>) and the user's unsent replies
+    /// to it (<see cref="ThreadSummary.DraftCount"/>, Conversation.Drafts.cs)
+    /// together, so that a message and the user's reply to it, sent or not,
+    /// are a conversation. The outbox is never grouped (the caller's rule, as
+    /// for the list).
     /// </summary>
     public static bool IsConversationRow(ThreadSummary t)
     {
         ArgumentNullException.ThrowIfNull(t);
-        return t.MessageCount + Math.Max(t.SentCount, 0) >= 2;
+        return t.MessageCount + Math.Max(t.SentCount, 0) + Math.Max(t.DraftCount, 0) >= 2;
     }
 
     /// <summary>

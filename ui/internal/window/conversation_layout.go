@@ -267,6 +267,19 @@ func convRails(items []conversation.Item) []convRail {
 	return out
 }
 
+// convWithDrafts is items (as the pane shows them) with n draft cards at
+// at, each a message card of the user's own (an accent avatar), for
+// convRails: the timeline runs through the drafts as through the cards.
+func convWithDrafts(items []conversation.Item, at, n int) []conversation.Item {
+	at = max(0, min(at, len(items)))
+	out := make([]conversation.Item, 0, len(items)+n)
+	out = append(out, items[:at]...)
+	for range n {
+		out = append(out, conversation.Item{Kind: conversation.ItemMessage, Mine: true})
+	}
+	return append(out, items[at:]...)
+}
+
 // convCardWidth is the width of the cards in a pane pane wide: the column
 // less the insets and the gutter; never negative.
 func convCardWidth(pane float64) float64 {

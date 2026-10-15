@@ -47,6 +47,7 @@ public sealed partial class NotificationHub : IDisposable
     private readonly HandlerList<AccountsChangedNotification> accountsChanged;
     private readonly HandlerList<MessagesChangedNotification> messagesChanged;
     private readonly HandlerList<BoardChangedNotification> boardChanged;
+    private readonly HandlerList<DraftsChangedNotification> draftsChanged;
     private readonly HandlerList<ConnectionState> connection;
     private ConnectionController? attached;
 
@@ -63,6 +64,7 @@ public sealed partial class NotificationHub : IDisposable
         accountsChanged = new HandlerList<AccountsChangedNotification>(Pending);
         messagesChanged = new HandlerList<MessagesChangedNotification>(Pending);
         boardChanged = new HandlerList<BoardChangedNotification>(Pending);
+        draftsChanged = new HandlerList<DraftsChangedNotification>(Pending);
         connection = new HandlerList<ConnectionState>(Pending);
     }
 
@@ -112,6 +114,13 @@ public sealed partial class NotificationHub : IDisposable
     public IDisposable AddBoardChanged(Action<BoardChangedNotification> handler) => boardChanged.Add(handler);
 
     /// <summary>
+    /// Fires on every <c>notify.draftsChanged</c> (notify.go; a Windows
+    /// addition ahead of Swift): the conversations it names ask thread.get
+    /// again for their drafts.
+    /// </summary>
+    public IDisposable AddDraftsChanged(Action<DraftsChangedNotification> handler) => draftsChanged.Add(handler);
+
+    /// <summary>
     /// Fires on every connection state change, after
     /// <see cref="ConnectionState"/> was updated. A handler added later does
     /// not get the current state; read <see cref="ConnectionState"/> for that.
@@ -155,6 +164,9 @@ public sealed partial class NotificationHub : IDisposable
                 break;
             case DaemonNotification.BoardChanged b:
                 boardChanged.Fire(b.Payload);
+                break;
+            case DaemonNotification.DraftsChanged d:
+                draftsChanged.Fire(d.Payload);
                 break;
             case DaemonNotification.Unknown u:
                 LogUnknown(logger, u.Method);

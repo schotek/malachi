@@ -11,9 +11,10 @@ the fold arrow, its spinner, the avatar of 40 or 28), and the column
 (spacing 2) of line 1 (spacing 6: the sender, the member count pill, the
 attachment and star icons, the origin of a search result, the date, the
 unread dot), the subject line (with the neutral tag of a bulk message
-after the subject, bulk_pill) and the preview. A row of a Jira account
-has the issue's key before the subject and its status and Internal pills
-after it (subject_line), and an event row the change after its actor
+after the subject, bulk_pill; the red Draft badge of a conversation with
+the user's unsent reply at its end, draft_pill) and the preview. A row of a
+Jira account has the issue's key before the subject and its status and
+Internal pills after it (subject_line), and an event row the change after its actor
 (event_label), set small, without a preview. The hairline under every row
 but the last is window.blp's show-separators. What the row shows is Core's
 MessageRow; every text is set as plain text, the matched words of a search
@@ -206,11 +207,14 @@ result as bold runs built in code (never markup).
                         Visibility="{x:Bind res:Bind.Visible(Row.Unread), Mode=OneWay}" />
                 </Grid>
                 <!-- subject_line: on a row of a Jira account the key before the
-                     summary and the status (and Internal) pills after it. -->
+                     summary and the status (and Internal) pills after it; a
+                     conversation with the user's unsent reply ends it with the
+                     red Draft badge. -->
                 <Grid ColumnSpacing="6" Visibility="{x:Bind res:Bind.Visible(Row.SubjectLineShown), Mode=OneWay}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
@@ -250,6 +254,13 @@ result as bold runs built in code (never markup).
                         AutomationProperties.AccessibilityView="Raw"
                         IsInternal="True"
                         Text="{x:Bind Row.InternalText, Mode=OneWay}" />
+                    <!-- draft_pill (message_row.go SetThread, conversation.DraftBadge). -->
+                    <controls:IssuePill
+                        x:Name="DraftPill"
+                        Grid.Column="5"
+                        AutomationProperties.AccessibilityView="Raw"
+                        IsDraft="True"
+                        Text="{x:Bind Row.DraftText, Mode=OneWay}" />
                 </Grid>
                 <TextBlock
                     x:Name="PreviewLabel"

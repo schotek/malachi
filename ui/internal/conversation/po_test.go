@@ -55,6 +55,13 @@ func exercise(tr Translator) {
 	FoldAllExpand.Label(tr)
 	QuotedTextLabel(false, tr)
 	QuotedTextLabel(true, tr)
+	Drafts([]api.Draft{{ID: "d1", Comment: &api.DraftComment{Visibility: api.CommentInternal}}}, jiraAccount, tr)
+	DraftBadge(tr)
+	DraftEditLabel(tr)
+	DraftDiscardLabel(tr)
+	DiscardQuestion(tr)
+	DraftSaved("10:00", tr)
+	DraftGone(tr)
 }
 
 // template reads po/malachi.pot: every entry, and whether it names a file

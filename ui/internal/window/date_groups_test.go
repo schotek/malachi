@@ -125,7 +125,7 @@ func TestDateGroupsGTK(t *testing.T) {
 	w.model.grouped = true
 	w.model.setThreads([]api.ThreadSummary{thread}, api.PageInfo{Total: 1})
 	w.model.setExpanded("thread", true)
-	w.model.setMembers("thread", thread, []api.MessageSummary{a, b}, nil)
+	w.model.setMembers("thread", thread, []api.MessageSummary{a, b}, nil, nil)
 	w.syncRows()
 	if w.rows[listKey{Thread: "thread"}].Index() != 1 || w.rows[listKey{Thread: "thread", Message: "a"}].Index() != 2 || w.rows[listKey{Thread: "thread", Message: "b"}].Index() != 3 {
 		t.Fatal("conversation split across sections")

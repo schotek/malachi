@@ -67,19 +67,28 @@ public struct ListRow: Sendable, Equatable {
 /// so no action, count or mark-as-read of the conversation takes them; only
 /// the conversation view shows them. `complete` covers them too: a
 /// conversation the listing says has some (`ThreadSummary.sentCount`) is
-/// not complete before thread.get answered.
+/// not complete before thread.get answered. `drafts` are the user's unsent
+/// replies to the conversation (thread.get with `withDrafts`,
+/// `ThreadSummary.draftCount`), newest first: no members either, only the
+/// conversation view shows them as draft cards; `complete` covers them as
+/// it covers `sent`.
 public struct ThreadMembers: Sendable, Equatable {
     public var list: [MessageSummary]
     public var complete: Bool
     /// thread.get is in flight.
     public var fetching: Bool
     public var sent: [MessageSummary]
+    public var drafts: [Draft]
 
-    public init(list: [MessageSummary], complete: Bool, fetching: Bool = false, sent: [MessageSummary] = []) {
+    public init(
+        list: [MessageSummary], complete: Bool, fetching: Bool = false, sent: [MessageSummary] = [],
+        drafts: [Draft] = []
+    ) {
         self.list = list
         self.complete = complete
         self.fetching = fetching
         self.sent = sent
+        self.drafts = drafts
     }
 }
 
@@ -135,11 +144,15 @@ public struct RowThread: Sendable, Equatable {
     public var issue: Jira.IssueRow?
     /// The tag of the latest member (`Bulk.tag`).
     public var tag: String
+    /// The badge of a conversation with the user's unsent reply
+    /// (`Conversation.draftBadge()` when `ThreadSummary.draftCount` > 0);
+    /// "" hides it.
+    public var draft: String
 
     public init(
         participants: [Address], subject: String, snippet: String, date: Date, count: Int, unread: Int,
         flagged: Bool, hasAttachments: Bool, expanded: Bool, loading: Bool, issue: Jira.IssueRow? = nil,
-        tag: String = ""
+        tag: String = "", draft: String = ""
     ) {
         self.participants = participants
         self.subject = subject
@@ -153,6 +166,7 @@ public struct RowThread: Sendable, Equatable {
         self.loading = loading
         self.issue = issue
         self.tag = tag
+        self.draft = draft
     }
 }
 
@@ -163,16 +177,23 @@ public func summaryThread(_ t: ThreadSummary, expanded: Bool, loading: Bool) -> 
         participants: t.participants, subject: t.subject, snippet: t.snippet, date: t.latestDate,
         count: t.messageCount, unread: t.unreadCount, flagged: hasFlag(t.flags, .flagged),
         hasAttachments: t.hasAttachments, expanded: expanded, loading: loading, issue: Jira.threadRowIssue(t),
-        tag: Bulk.tag(t.latest.bulk)
+        tag: Bulk.tag(t.latest.bulk), draft: threadDraftBadge(t)
     )
+}
+
+/// The Draft badge of a conversation row with the user's unsent reply
+/// (`ThreadSummary.draftCount`), "" without (thread_model.go
+/// `threadDraftBadge`).
+public func threadDraftBadge(_ t: ThreadSummary) -> String {
+    t.draftCount > 0 ? Conversation.draftBadge() : ""
 }
 
 /// What thread.list tells of a conversation's folder members: the newest
 /// one, which for a single-message conversation is all of them
 /// (thread_model.go `membersFromListing`), unless the user's replies in
-/// Sent are part of it: those only thread.get returns.
+/// Sent or unsent drafts are part of it: those only thread.get returns.
 public func membersFromListing(_ t: ThreadSummary) -> ThreadMembers {
-    ThreadMembers(list: [t.latest], complete: t.messageCount <= 1 && t.sentCount <= 0)
+    ThreadMembers(list: [t.latest], complete: t.messageCount <= 1 && t.sentCount <= 0 && t.draftCount <= 0)
 }
 
 /// Whether a conversation's listing has not changed in what would
@@ -180,11 +201,12 @@ public func membersFromListing(_ t: ThreadSummary) -> ThreadMembers {
 /// includes the issue of a Jira conversation: its status, assignee or
 /// priority can move without a new member (the account shows no events),
 /// and every member carries it. It includes the count of the user's replies
-/// in Sent too (`sentCount`): the fetched ones are kept with the members.
+/// in Sent too (`sentCount`): the fetched ones are kept with the members;
+/// and so are the drafts (`draftCount`).
 public func sameShape(_ a: ThreadSummary, _ b: ThreadSummary) -> Bool {
     a.messageCount == b.messageCount && a.unreadCount == b.unreadCount
         && a.latestDate == b.latestDate && a.latest.id == b.latest.id
-        && a.issue == b.issue && a.sentCount == b.sentCount
+        && a.issue == b.issue && a.sentCount == b.sentCount && a.draftCount == b.draftCount
 }
 
 /// Places `s` among `list` (oldest first) by date (thread_model.go
@@ -349,11 +371,13 @@ extension MailModel {
     }
 
     /// Stores the thread.get answer: the folder members, oldest first, the
-    /// user's replies in Sent the folder lacks (`sent`) and the summary as
-    /// the daemon aggregated it. An empty list means the conversation left
-    /// the folder meanwhile; its row goes.
+    /// user's replies in Sent the folder lacks (`sent`), the user's drafts
+    /// replying to it (`drafts`) and the summary as the daemon aggregated
+    /// it. An empty list means the conversation left the folder meanwhile;
+    /// its row goes.
     public mutating func setMembers(
-        _ tid: ThreadID, _ t: ThreadSummary, _ list: [MessageSummary], sent: [MessageSummary] = []
+        _ tid: ThreadID, _ t: ThreadSummary, _ list: [MessageSummary], sent: [MessageSummary] = [],
+        drafts: [Draft] = []
     ) {
         guard let i = tindex[tid] else {
             return
@@ -364,7 +388,7 @@ extension MailModel {
             return
         }
         threads[i] = t
-        members[tid] = ThreadMembers(list: list, complete: true, sent: sent)
+        members[tid] = ThreadMembers(list: list, complete: true, sent: sent, drafts: drafts)
         reindexMembers()
         rebuildRows()
     }
@@ -586,7 +610,7 @@ extension MailModel {
                 continue
             }
             var snap = ThreadSnapshot(
-                index: i, summary: threads[i], members: ThreadMembers(list: mem.list, complete: true, sent: mem.sent),
+                index: i, summary: threads[i], members: ThreadMembers(list: mem.list, complete: true, sent: mem.sent, drafts: mem.drafts),
                 expanded: expanded.contains(tid)
             )
             let gone = Set(byThread[tid] ?? [])

@@ -6,7 +6,8 @@
 // membersFromListing, sameShape, insertByDate, frontParticipants,
 // unionFlags, applyFlagChange; ListKey, ListRow, ThreadMembers,
 // ThreadSnapshot, Removal and RowThread have files of their own); GTK:
-// ui/internal/window/thread_model.go.
+// ui/internal/window/thread_model.go (with threadDraftBadge; the drafts of
+// a conversation are a Windows addition ahead of Swift).
 //
 // The grouped message list: one row per conversation of the selected folder
 // (thread.list), expandable to the messages the folder holds (thread.get).
@@ -97,19 +98,31 @@ public sealed partial class MailModel
             HasAttachments = t.HasAttachments,
             Expanded = expanded,
             Loading = loading,
+            Draft = ThreadDraftBadge(t),
         };
+    }
+
+    /// <summary>
+    /// thread_model.go <c>threadDraftBadge</c>: the Draft badge of a
+    /// conversation row with the user's unsent reply
+    /// (<see cref="ThreadSummary.DraftCount"/>), "" without.
+    /// </summary>
+    public static string ThreadDraftBadge(ThreadSummary t)
+    {
+        ArgumentNullException.ThrowIfNull(t);
+        return t.DraftCount <= 0 ? "" : Conversation.DraftBadge();
     }
 
     /// <summary>
     /// What thread.list tells of a conversation's folder members: the newest
     /// one, which for a single-message conversation is all of them
     /// (thread_model.go <c>membersFromListing</c>), unless the user's replies
-    /// in Sent are part of it: those only thread.get returns.
+    /// in Sent or unsent drafts are part of it: those only thread.get returns.
     /// </summary>
     public static ThreadMembers MembersFromListing(ThreadSummary t)
     {
         ArgumentNullException.ThrowIfNull(t);
-        return new ThreadMembers([t.Latest], Complete: t.MessageCount <= 1 && t.SentCount <= 0);
+        return new ThreadMembers([t.Latest], Complete: t.MessageCount <= 1 && t.SentCount <= 0 && t.DraftCount <= 0);
     }
 
     /// <summary>
@@ -119,7 +132,8 @@ public sealed partial class MailModel
     /// or priority can move without a new member (the account shows no
     /// events), and every member carries it. It includes the count of the
     /// user's replies in Sent too (<see cref="ThreadSummary.SentCount"/>): the
-    /// fetched ones are kept with the members.
+    /// fetched ones are kept with the members; and so are the drafts
+    /// (<see cref="ThreadSummary.DraftCount"/>).
     /// </summary>
     public static bool SameShape(ThreadSummary a, ThreadSummary b)
     {
@@ -127,7 +141,7 @@ public sealed partial class MailModel
         ArgumentNullException.ThrowIfNull(b);
         return a.MessageCount == b.MessageCount && a.UnreadCount == b.UnreadCount
             && a.LatestDate == b.LatestDate && a.Latest.Id == b.Latest.Id
-            && SameIssue(a.Issue, b.Issue) && a.SentCount == b.SentCount;
+            && SameIssue(a.Issue, b.Issue) && a.SentCount == b.SentCount && a.DraftCount == b.DraftCount;
     }
 
     // The issue by value, as Go's reflect.DeepEqual compares it (a record
@@ -347,11 +361,13 @@ public sealed partial class MailModel
 
     /// <summary>
     /// Stores the thread.get answer: the folder members, oldest first, the
-    /// user's replies in Sent the folder lacks (<paramref name="sent"/>) and
-    /// the summary as the daemon aggregated it. An empty list means the
+    /// user's replies in Sent the folder lacks (<paramref name="sent"/>), the
+    /// user's drafts replying to it (<paramref name="drafts"/>) and the
+    /// summary as the daemon aggregated it. An empty list means the
     /// conversation left the folder meanwhile; its row goes.
     /// </summary>
-    public void SetMembers(ThreadId tid, ThreadSummary t, IReadOnlyList<MessageSummary> list, IReadOnlyList<MessageSummary>? sent = null)
+    public void SetMembers(
+        ThreadId tid, ThreadSummary t, IReadOnlyList<MessageSummary> list, IReadOnlyList<MessageSummary>? sent = null, IReadOnlyList<Draft>? drafts = null)
     {
         ArgumentNullException.ThrowIfNull(t);
         ArgumentNullException.ThrowIfNull(list);
@@ -366,7 +382,7 @@ public sealed partial class MailModel
             return;
         }
         threads[i] = t;
-        Members[tid] = new ThreadMembers([.. list], Complete: true) { Sent = [.. sent ?? []] };
+        Members[tid] = new ThreadMembers([.. list], Complete: true) { Sent = [.. sent ?? []], Drafts = [.. drafts ?? []] };
         ReindexMembers();
         RebuildRows();
     }
@@ -670,7 +686,7 @@ public sealed partial class MailModel
             {
                 continue;
             }
-            var snap = new ThreadSnapshot(i, threads[i], new ThreadMembers([.. mem.List], Complete: true) { Sent = mem.Sent }, expanded.Contains(tid));
+            var snap = new ThreadSnapshot(i, threads[i], new ThreadMembers([.. mem.List], Complete: true) { Sent = mem.Sent, Drafts = mem.Drafts }, expanded.Contains(tid));
             var gone = byThread[tid].ToHashSet();
             MessageSummary[] kept = [.. mem.List.Where(s => !gone.Contains(s.Id))];
             if (kept.Length == 0)

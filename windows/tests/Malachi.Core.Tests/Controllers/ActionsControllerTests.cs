@@ -1186,6 +1186,90 @@ public sealed class ActionsControllerTests
     }
 
     /// <summary>
+    /// conversation_draft.go (a Windows addition ahead of Swift): a draft
+    /// card's Edit opens the draft as draft.get has it now, once however often
+    /// asked while it runs, or raises the window that edits it; a draft gone
+    /// meanwhile says so. Discard raises that window, or asks (whatever the
+    /// confirm-delete setting) and deletes the draft.
+    /// </summary>
+    [Fact]
+    public async Task DraftCardsEditAndDiscard()
+    {
+        await using var h = await StartAsync(messages: In(Inbox, Msg("m1", 1, flags: Seen)));
+        var card = new Draft { Id = "d_1", AccountId = "a", Version = 1, Subject = "Re: s-m1", TextBody = "old", InReplyTo = "m1" };
+        var now = card with { Version = 3, TextBody = "new", HtmlBody = "<p>new</p>" };
+        var gets = new List<DraftGetParams>();
+        var deletes = new List<DraftDeleteParams>();
+        Answer(h, API.DraftGet.Name, p =>
+        {
+            lock (gets)
+            {
+                gets.Add(JsonCoding.Decode<DraftGetParams>(p));
+            }
+            return JsonCoding.EncodeToString(new DraftGetResult { Draft = now });
+        });
+        Answer(h, API.DraftDelete.Name, p =>
+        {
+            lock (deletes)
+            {
+                deletes.Add(JsonCoding.Decode<DraftDeleteParams>(p));
+            }
+            return "{}";
+        });
+
+        await h.Run(() =>
+        {
+            h.Actions.EditThreadDraft(card);
+            h.Actions.EditThreadDraft(card); // once while it runs
+        });
+        await h.IdleAsync();
+        var get = Assert.Single(Locked(gets));
+        Assert.Equal(("a", "d_1"), (get.AccountId.Value, get.DraftId.Value));
+        var edit = Assert.Single(h.Log.Composed);
+        Assert.True(edit.Kind == ComposeKind.Edit && edit.DraftId?.Value == "d_1" && edit.Version == 3 && edit.InReplyTo?.Value == "m1", "the draft as draft.get has it");
+        Assert.Empty(h.Log.Toasts);
+
+        // A window already editing it comes to the front, for Edit and Discard.
+        h.Log.Raise = true;
+        await h.Run(() =>
+        {
+            h.Actions.EditThreadDraft(card);
+            h.Actions.DiscardThreadDraft(card);
+        });
+        await h.IdleAsync();
+        Assert.Single(Locked(gets));
+        Assert.Single(h.Log.Composed);
+        Assert.Empty(h.Log.Confirmations);
+        h.Log.Raise = false;
+
+        // Discard asks; Cancel keeps the draft, Discard deletes it.
+        h.Log.Answer = false;
+        await h.Run(() => h.Actions.DiscardThreadDraft(card));
+        await h.IdleAsync();
+        Assert.Equal(new Confirmation("Discard this message?", "", "_Discard"), Assert.Single(h.Log.Confirmations));
+        Assert.Empty(Locked(deletes));
+        h.Log.Answer = true;
+        await h.Run(() => h.Actions.DiscardThreadDraft(card));
+        await h.IdleAsync();
+        var delete = Assert.Single(Locked(deletes));
+        Assert.Equal(("a", "d_1"), (delete.AccountId.Value, delete.DraftId.Value));
+
+        // Gone meanwhile (sent, deleted elsewhere).
+        Refuse(h, API.DraftGet.Name, ErrorCode.DraftNotFound, "no such draft");
+        await h.Run(() => h.Actions.EditThreadDraft(card));
+        await h.IdleAsync();
+        Assert.Equal(["The draft is no longer there"], h.Log.Toasts);
+        Assert.Single(h.Log.Composed);
+
+        // A failed delete is the usual sentence.
+        Refuse(h, API.DraftDelete.Name, ErrorCode.StorageError, "disk");
+        await h.Run(() => h.Actions.DiscardThreadDraft(card));
+        await h.IdleAsync();
+        Assert.Equal(2, h.Log.Toasts.Count);
+        Assert.StartsWith("Discarding the draft", h.Log.Toasts[1], StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Beyond Swift: the lookup ends at the last page (no cursor, or the one
     /// it asked with) and after <see cref="ActionsController.DraftListMaxPages"/>
     /// pages, as assistant_panel.go findDraft does; the draft is then gone.
