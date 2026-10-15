@@ -86,7 +86,7 @@ public sealed class DaemonBoardSourceTests
         await h.StartedAsync();
         var s = await h.SnapshotAsync();
         Assert.Equal(Phase.Ready, s.Phase);
-        Assert.Equal([new AccountInfo("acc_1", "Work", "IMAP")], s.Accounts); // enabled only
+        Assert.Equal([new AccountInfo("acc_1", "Work", "IMAP", CanDelete: true)], s.Accounts); // enabled only
         Assert.Equal([Id("1"), Id("2")], s.Cases.Select(c => c.Id));
         var c = Assert.IsType<Case>(await h.CAsync("1"));
         Assert.True(c.Person == "Person 1" && c.Subject == "Subject 1" && c.RuleState == State.You);
@@ -863,7 +863,7 @@ public sealed class DaemonBoardSourceTests
             Capabilities = caps,
         };
         var mail = DaemonBoardSource.Convert(A("a", new AccountConfig { Name = "", Email = " me@example.invalid " }));
-        Assert.Equal(new AccountInfo("a", "me@example.invalid", "IMAP", CanReply: true), mail);
+        Assert.Equal(new AccountInfo("a", "me@example.invalid", "IMAP", CanReply: true, CanDelete: true), mail);
         Assert.Equal("M365", DaemonBoardSource.Convert(A("g", new AccountConfig { Kind = AccountKind.Graph, Name = "Work", Email = "" })).Badge);
         var jira = DaemonBoardSource.Convert(A(
             "j", new AccountConfig { Kind = AccountKind.Jira, Name = "Issues", Email = "" },

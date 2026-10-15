@@ -78,10 +78,12 @@ public sealed class ComposeDraftBoardOwnerTests
     }
 
     [Fact]
-    public async Task TheWindowStillDeletesAClosedComment()
+    public async Task TheWindowStillDeletesAClosedEmptyComment()
     {
-        // The contrast: a comment window's copy goes with the window.
+        // The contrast: an empty comment window's copy goes with the
+        // window (a comment with text stays, the issue's draft card).
         await using var h = await Harness.StartAsync(owner: DraftOwner.Window, comment: true);
+        h.Form.Type("  ");
         await h.Run(() => h.Draft.Cleanup());
         await h.IdleAsync();
         Assert.Equal(BoardDraft, Assert.Single(h.Script.Deletes).DraftId.Value);

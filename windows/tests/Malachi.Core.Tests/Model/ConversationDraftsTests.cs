@@ -93,7 +93,7 @@ public sealed class ConversationDraftsTests
     public void DraftsTextPathological()
     {
         static Draft Text(string text) => new() { Id = "d", AccountId = "a1", UpdatedAt = At(0), TextBody = text };
-        const string text = "Hi‮ there\0\r\n\r\n\r\n\r\nBye ​<b>not markup</b> end";
+        const string text = "Hi‮ there\0\r\n\r\n\r\n\r\nBye ​<b>not markup</b>\u2028end";
         Assert.Equal("Hi there\n\nBye <b>not markup</b>\nend", Conversation.Drafts([Text(text)], MailAccount)[0].Text);
         var longText = Conversation.Drafts([Text(new string('é', Conversation.DraftTextBytes))], MailAccount)[0].Text;
         var bytes = Encoding.UTF8.GetByteCount(longText);

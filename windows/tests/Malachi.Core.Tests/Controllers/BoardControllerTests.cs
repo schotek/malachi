@@ -1124,6 +1124,8 @@ public sealed class BoardControllerTests
 
         public void Archive(BoardCaseId id) => SetDone(true, id);
 
+        public void Trash(BoardCaseId id) => SetDone(true, id);
+
         public void SetCommitmentDone(bool done, BoardCommitmentId id)
         {
         }

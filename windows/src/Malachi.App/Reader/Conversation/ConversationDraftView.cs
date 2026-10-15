@@ -21,6 +21,7 @@ using System;
 using System.Linq;
 using Malachi.App.Controls;
 using Malachi.App.Localization;
+using Malachi.Core.Api;
 using Malachi.Core.Model;
 using Malachi.Core.Text;
 using Microsoft.UI.Xaml;
@@ -34,7 +35,7 @@ using L = Malachi.Core.Model.ConversationLayout;
 namespace Malachi.App.Reader.Conversation;
 
 /// <summary>One draft card of the conversation view.</summary>
-internal sealed partial class ConversationDraftView : Border
+internal sealed partial class ConversationDraftView : UserControl
 {
     private readonly ConversationView pane;
     private readonly Grid header;
@@ -49,7 +50,6 @@ internal sealed partial class ConversationDraftView : Border
     {
         this.pane = pane;
         Card = card;
-        Style = look("ConversationDraftCardStyle");
         AutomationProperties.SetAutomationId(this, "ConversationDraft");
 
         // The header: the sender, the badges and the time on a line that
@@ -99,7 +99,8 @@ internal sealed partial class ConversationDraftView : Border
         var root = new StackPanel();
         root.Children.Add(header);
         root.Children.Add(text);
-        Child = root;
+        // Border is sealed in WinUI, so the card hosts its frame.
+        Content = new Border { Style = look("ConversationDraftCardStyle"), Child = root };
         DoubleTapped += OnDoubleTapped;
         ApplyBodyFont();
         Update(card);

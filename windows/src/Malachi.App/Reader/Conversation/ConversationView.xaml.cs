@@ -624,9 +624,9 @@ internal sealed partial class ConversationView : UserControl
         for (var i = 0; i < desired.Count; i++)
         {
             var r = desired[i];
-            var at = i + HeadViews;
+            var place = i + HeadViews;
             var now = children.IndexOf(r);
-            if (now == at)
+            if (now == place)
             {
                 continue;
             }
@@ -638,7 +638,7 @@ internal sealed partial class ConversationView : UserControl
             {
                 Scroller.RegisterAnchorCandidate(r);
             }
-            children.Insert(Math.Min(at, children.Count), r);
+            children.Insert(Math.Min(place, children.Count), r);
         }
         items = desired;
         ShowFoldAll();

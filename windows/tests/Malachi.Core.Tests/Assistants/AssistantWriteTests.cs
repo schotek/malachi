@@ -87,9 +87,9 @@ public sealed class AssistantWriteTests
     [Fact]
     public void WriteMessageEscapesAsGo()
     {
-        var msg = Assistant.WriteMessage(AssistantWriteMode.New, "Hi", "", "a b\tc\u0001/", "");
-        Assert.Equal("""{"existingText":"a b\tc\u0001/","instruction":"Hi","mode":"new","originalMessage":"","subject":""}""", msg);
-        Assert.Equal("a b\tc\u0001/", Fields(msg)["existingText"]);
+        var msg = Assistant.WriteMessage(AssistantWriteMode.New, "Hi", "", "a\u2028b\tc\u0001/", "");
+        Assert.Equal("""{"existingText":"a\u2028b\tc\u0001/","instruction":"Hi","mode":"new","originalMessage":"","subject":""}""", msg);
+        Assert.Equal("a\u2028b\tc\u0001/", Fields(msg)["existingText"]);
     }
 
     /// <summary>Every mode is named as macOS names its compose kind; anything else is refused.</summary>

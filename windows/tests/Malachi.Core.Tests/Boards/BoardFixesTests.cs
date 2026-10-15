@@ -125,7 +125,7 @@ public sealed class BoardFixesTests
     public void Keys()
     {
         var keys = BoardKeys();
-        Assert.Equal("12edr", new string([.. keys.Select(k => k.Rune)]));
+        Assert.Equal("12e\u007Fdr", new string([.. keys.Select(k => k.Rune)]));
         Assert.All(keys, k => Assert.NotEmpty(k.Title));
         Assert.Equal("Board", KeysGroup);
     }
