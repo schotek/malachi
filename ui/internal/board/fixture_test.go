@@ -58,7 +58,7 @@ const (
 )
 
 var testAccounts = []AccountInfo{
-	{ID: accountA, Name: "Alpha", Badge: "IMAP", CanReply: true},
+	{ID: accountA, Name: "Alpha", Badge: "IMAP", CanReply: true, CanDelete: true},
 	{ID: accountB, Name: "Beta", Badge: "JIRA", CanReply: true},
 }
 

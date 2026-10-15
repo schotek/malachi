@@ -599,6 +599,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         // The List's detail actions: on the selected case.
         case Action.boardDone, Action.boardRemind: return boardHasDetail
         case Action.boardArchive: return boardHasDetail && board.view.detail.map { boardActions.canArchive($0.id) } == true
+        case Action.boardTrash: return boardHasDetail && board.view.detail.map { boardActions.canDelete($0.id) } == true
         case Action.boardReply: return boardHasDetail && board.view.detail.map { boardActions.canReply($0.id) } == true
         case Action.boardTriage: return triageClickable
         default: return nil

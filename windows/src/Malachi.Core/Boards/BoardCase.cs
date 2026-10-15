@@ -171,7 +171,11 @@ public static partial class Board
     /// A reply can be written in it: a mail account's reply, an issue
     /// tracker's comment (the reply or comment capability).
     /// </param>
-    public sealed record AccountInfo(AccountId Id, string Name, string Badge = "", bool CanReply = true);
+    /// <param name="CanDelete">
+    /// Delete can move its messages to the trash (the delete capability; an
+    /// issue tracker has none).
+    /// </param>
+    public sealed record AccountInfo(AccountId Id, string Name, string Badge = "", bool CanReply = true, bool CanDelete = false);
 
     /// <summary>The issue behind a case of a Jira account.</summary>
     /// <param name="Key">The issue's key ("DEMO-14").</param>

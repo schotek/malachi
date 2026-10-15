@@ -149,9 +149,10 @@ func (c *boardColumns) sideways(delta int) bool {
 //     are surfaces of their own: a popover's parent is its anchor on this
 //     page, so this capture controller would see their keys first, and
 //     ownsKeys hands every key back while the keyboard is in one.
-//   - E, D and R (board.KeyFor): Archive, Done or Move Back to Board, and
-//     Remind…, on the selected case, never while the keyboard is in a text
-//     field or the editor. Ctrl+1 and Ctrl+2 are the window's.
+//   - E, Delete, D and R (board.KeyFor): Archive, Delete, Done or Move
+//     Back to Board, and Remind…, on the selected case, never while the
+//     keyboard is in a text field or the editor. Ctrl+1 and Ctrl+2 are the
+//     window's.
 //
 // Modifiers are read under gtk.AcceleratorGetDefaultModMask, so Caps Lock
 // and Num Lock never stop a key.
@@ -170,6 +171,9 @@ func (p *boardPage) wireBoardKeys() {
 			return p.escape()
 		}
 		r := rune(gdk.KeyvalToUnicode(val))
+		if val == gdk.KEY_Delete || val == gdk.KEY_KP_Delete {
+			r = board.DeleteRune
+		}
 		if r == 0 {
 			return false
 		}
@@ -268,6 +272,8 @@ func (p *boardPage) boardKey(action board.KeyAction) bool {
 	switch action {
 	case board.KeyArchive:
 		return activate("board-archive")
+	case board.KeyTrash:
+		return activate("board-trash")
 	case board.KeyDone:
 		if d.IsDone {
 			return activate("board-reopen")

@@ -894,7 +894,36 @@ public sealed record BoardArchiveResult
     public IReadOnlyList<BoardMoved>? Moved { get; init; }
 }
 
-/// <summary>api.BoardMoved: a message <c>board.archive</c> moved, with its folder before the move.</summary>
+/// <summary>api.BoardTrashParams: Delete (<c>board.trash</c>).</summary>
+public sealed record BoardTrashParams
+{
+    /// <summary>The case.</summary>
+    [JsonPropertyName("caseId")]
+    public required BoardCaseId CaseId { get; init; }
+}
+
+/// <summary>api.BoardTrashResult.</summary>
+public sealed record BoardTrashResult
+{
+    /// <summary>Messages moved to the trash folder.</summary>
+    [JsonPropertyName("trashed")]
+    public required int Trashed { get; init; }
+
+    /// <summary>The case after the change.</summary>
+    [JsonPropertyName("case")]
+    public required BoardCase Case { get; init; }
+
+    /// <summary>
+    /// Each message moved to the trash folder with the folder it was moved
+    /// from, so that Delete can be undone as an archive (<c>message.move</c>
+    /// back, then <c>board.setDone</c> with done false); null when nothing
+    /// was moved or the trash folder is not synchronised.
+    /// </summary>
+    [JsonPropertyName("moved")]
+    public IReadOnlyList<BoardMoved>? Moved { get; init; }
+}
+
+/// <summary>api.BoardMoved: a message <c>board.archive</c> or <c>board.trash</c> moved, with its folder before the move.</summary>
 public sealed record BoardMoved
 {
     /// <summary>The message.</summary>

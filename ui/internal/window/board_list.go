@@ -62,6 +62,7 @@ func (p *boardPage) bind(b *gtk.Builder) {
 	p.doneButton = b.GetObject("board_done_button").Cast().(*gtk.Button)
 	p.remindButton = b.GetObject("board_remind_button").Cast().(*gtk.MenuButton)
 	p.archiveButton = b.GetObject("board_archive_button").Cast().(*gtk.Button)
+	p.trashButton = b.GetObject("board_trash_button").Cast().(*gtk.Button)
 	p.detailMenu = b.GetObject("board_detail_menu").Cast().(*gtk.MenuButton)
 	p.replyButton = b.GetObject("board_reply_button").Cast().(*gtk.Button)
 	p.detailStack = b.GetObject("board_detail_stack").Cast().(*gtk.Stack)

@@ -93,6 +93,7 @@ func (l *lateSource) Remind(id CaseID, until *time.Time) {
 	})
 }
 func (l *lateSource) Archive(id CaseID)                             { l.SetDone(id, true) }
+func (l *lateSource) Trash(id CaseID)                               { l.SetDone(id, true) }
 func (l *lateSource) SetCommitmentDone(api.BoardCommitmentID, bool) {}
 func (l *lateSource) DiscardDraft(CaseID)                           {}
 func (l *lateSource) Unflag(CaseID)                                 {}
@@ -827,6 +828,24 @@ func TestArchiveMarksDoneAndToasts(t *testing.T) {
 	eq(t, "toasts", toasts, []string{"Archived 1 message."})
 	c.Archive("c2")
 	eq(t, "no archive", toasts[len(toasts)-1], "Marked as done. This account has no archive.")
+}
+
+// Delete: done, the selection moves on, the toast says what moved; an
+// account that cannot delete moves nothing.
+func TestTrashMarksDoneAndToasts(t *testing.T) {
+	c, src, _ := makeController(sampleCases(), false, nil)
+	var got []ArchiveOutcome
+	c.OnArchived = func(o ArchiveOutcome) { got = append(got, o) }
+	c.Select("c3")
+	c.Trash("c3")
+	check(t, caseIn(src.Snapshot(), "c3").Done(), "not done")
+	eq(t, "selection", c.State().Selection, CaseID("c2"))
+	if len(got) != 1 {
+		t.Fatalf("outcomes %v", got)
+	}
+	check(t, got[0].Trash && got[0].UndoLabel == "Undo" && got[0].Text == "Moved 1 message to Trash.", "outcome %+v", got[0])
+	c.UndoArchive(got[0])
+	check(t, !caseIn(src.Snapshot(), "c3").Done(), "still done after Undo")
 }
 
 func TestControllerSetCommitmentDone(t *testing.T) {

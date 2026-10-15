@@ -878,8 +878,34 @@ public struct BoardArchiveResult: Codable, Sendable, Equatable {
     }
 }
 
-/// api.BoardMoved: a message `board.archive` moved, with its folder before
-/// the move.
+/// api.BoardTrashParams: Delete (`board.trash`).
+public struct BoardTrashParams: Codable, Sendable, Equatable {
+    public var caseId: BoardCaseID
+
+    public init(caseId: BoardCaseID) {
+        self.caseId = caseId
+    }
+}
+
+/// api.BoardTrashResult.
+public struct BoardTrashResult: Codable, Sendable, Equatable {
+    /// Messages moved to the trash folder.
+    public var trashed: Int
+    public var `case`: BoardCase
+    /// Each message moved to the trash folder with the folder it came
+    /// from, for an undo as an archive's. nil when nothing was moved or
+    /// the trash folder is not synchronised.
+    public var moved: [BoardMoved]?
+
+    public init(trashed: Int, case: BoardCase, moved: [BoardMoved]? = nil) {
+        self.trashed = trashed
+        self.case = `case`
+        self.moved = moved
+    }
+}
+
+/// api.BoardMoved: a message `board.archive` or `board.trash` moved, with
+/// its folder before the move.
 public struct BoardMoved: Codable, Sendable, Equatable, Hashable {
     public var messageId: MessageID
     public var fromFolderId: FolderID

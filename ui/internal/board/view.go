@@ -291,7 +291,10 @@ type Detail struct {
 	RemindText string
 	// CanArchive: Archive moves messages; without, it only marks the case
 	// done.
-	CanArchive        bool
+	CanArchive bool
+	// CanDelete: the case's account can move its messages to the trash
+	// (Delete, board.trash).
+	CanDelete         bool
 	ConversationTitle string
 	// Messages are oldest first; the last loaded while a newer version
 	// loads.
@@ -1071,7 +1074,7 @@ func (ctx viewContext) detail(c Case) Detail {
 		TitleIsAssistant: t.assistant, SpokenTitle: t.spoken, Subject: shownSubject, Due: due, DueQuote: dueQuote,
 		Summary: summary, Tasks: tasks, Draft: draft, DraftID: draftID, CanUnstar: CanUnstar(c),
 		StaleNote: staleNote, IsDone: c.Visibility.IsDone(), IsSnoozed: snoozed, RemindText: remindText,
-		CanArchive: c.CanArchive, ConversationTitle: Conversation(max(1, c.MessageCount), tr), Messages: messages,
+		CanArchive: c.CanArchive, CanDelete: ctx.accounts[c.Account].CanDelete, ConversationTitle: Conversation(max(1, c.MessageCount), tr), Messages: messages,
 		MessagesLoading: !c.MessagesLoaded && !c.MessagesFailed, MessagesNote: messagesNote,
 		MessagesRetry: !c.MessagesLoaded && c.MessagesFailed,
 	}

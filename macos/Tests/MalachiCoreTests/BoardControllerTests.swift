@@ -76,6 +76,10 @@ private func sampleCases() -> [Board.Case] {
         setDone(true, of: id)
     }
 
+    func trash(_ id: Board.CaseID) {
+        setDone(true, of: id)
+    }
+
     func setCommitmentDone(_ done: Bool, of id: String) {}
     func discardDraft(of id: Board.CaseID) {}
     func unflag(_ id: Board.CaseID) {}
@@ -778,6 +782,24 @@ private func sampleCases() -> [Board.Case] {
         #expect(toasts == ["Archived 1 message."])
         c.archive(F.id("c2"))
         #expect(toasts.last == "Marked as done. This account has no archive.")
+    }
+
+    /// Delete (controller_test.go `TestTrashMarksDoneAndToasts`): done, the
+    /// selection moves on, the toast says what moved; Undo reopens.
+    @Test func trashMarksDoneAndToasts() {
+        let (c, source, _) = make(sampleCases())
+        var outcomes: [Board.ArchiveOutcome] = []
+        c.onArchived = { outcomes.append($0) }
+        c.select(F.id("c3"))
+        c.trash(F.id("c3"))
+        #expect(source.snapshot.cases.first { $0.id == F.id("c3") }?.done == true)
+        #expect(c.state.selection == F.id("c2"))
+        let o = try? #require(outcomes.first)
+        #expect(o?.trash == true && o?.undoLabel == "Undo" && o?.text == "Moved 1 message to Trash.")
+        if let o {
+            c.undoArchive(o)
+        }
+        #expect(source.snapshot.cases.first { $0.id == F.id("c3") }?.done == false)
     }
 
     @Test func setCommitmentDone() {

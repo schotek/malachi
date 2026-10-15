@@ -363,6 +363,16 @@ public final class BoardController {
         }
     }
 
+    /// Delete: the case's received messages go to the trash and it is
+    /// marked done; the toast says what it did. The selection moves on as
+    /// after done.
+    public func trash(_ id: Board.CaseID) {
+        let c = source.snapshot.cases.first { $0.id == id }
+        write(id, changes: c.map { !$0.visibility.isDone } ?? false) {
+            source.trash(id)
+        }
+    }
+
     /// Ticks a promise off, or reopens it.
     public func setCommitmentDone(_ id: String, done: Bool) {
         departure = nil

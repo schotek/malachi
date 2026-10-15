@@ -70,6 +70,10 @@ public final class BoardMessagesGate: BoardSource, BoardArchiveUndoer {
         inner.archive(id)
     }
 
+    public func trash(_ id: Board.CaseID) {
+        inner.trash(id)
+    }
+
     public func setCommitmentDone(_ done: Bool, of id: String) {
         inner.setCommitmentDone(done, of: id)
     }

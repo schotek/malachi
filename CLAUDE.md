@@ -1674,6 +1674,40 @@ posílá `sandbox: read-only`, `approvalPolicy: never`, `environments: []`,
 `ephemeral: true` (`docs/chatgpt-integration.md`), verze Codexu se jen
 ukazuje v Předvolbách a není bránou.
 
+Smazat na nástěnce (2026-10-15, všechny tři klienty;
+rozhodnutí vlastníka přes AskUserQuestion). Detail případu má za
+Archivovat tlačítko Smazat (msgid „Delete“), totéž v kontextovém menu
+případu, v liště panelu Sloupců a Dnes, v toolbaru Seznamu a na macOS
+v menu Board s ⌫ (v GTK a na Windows klávesa Delete; `board.DeleteRune`
+= U+007F v `KeyFor`, mimo textová pole jako E, D, R). Dělá totéž co
+Archivovat, jen do Koše a se **všemi přijatými zprávami případu**:
+nová kompatibilní metoda démonu `board.trash` (`core/board_service.go`
+`Trash`, `docs/api.md` §4.13) přesune přes `TrashMessages` (jako
+`message.delete`) každého viditelného člena vlákna ze kterékoli složky
+účtu kromě rolí sent, outbox, drafts a trash a kromě kopií vlastních
+zpráv (`TwinOfMine`), pak případ označí jako hotový; `moved` pro Zpět
+jako u archivace (ne u nesynchronizovaného koše), bez koše
+`folderNotFound`, účet bez capability `delete` (Jira) `invalidArgument`
+a klienti ho nenabízejí (`AccountInfo.CanDelete`, `Detail.CanDelete`;
+na hotovém případu ano). Ptá se jen se zapnutou předvolbou Pošty
+„Ptát se před přesunem do koše“ (`confirm-delete`; „Move to Trash?“,
+tělo předmět případu), oznámení má Zpět (`ArchiveOutcome.Trash`, jiný
+text při selhání vrácení). Reference `ui/internal/board` (`Trash`,
+`Trashed`, `TrashQuestion`, `UndoTrashFailed`, `ActionTrash`,
+`KeyTrash`), GTK `board_actions.go` (`win.board-trash`), `board_detail.go`,
+`board_keys.go`, `board_page.blp` (`board_trash_button`); macOS
+`BoardActions.trash`/`canDelete`/`confirmTrash`, `BoardToolbar`
+`boardTrash`, `BoardDetailViewController` (v úzkém panelu ustoupí Smazat
+první), `BoardCaseMenu`, `MainMenu` (⌫ jako „\u{8}“ sdílené s Message →
+Move to Trash, které je na nástěnce vypnuté). 5 nových msgid, česky.
+Ověřeno na Macu: Go testy démona celé (`TestBoardTrash*`,
+`TestBoardTrashOnTheWire`), `ui/internal/board`, `boardreply`,
+`boardtriage`, celé `swift test` (1571) a kontrola řetězců; GTK jen
+typová kontrola. Čeká: Toolbx `make build`, `go test
+./internal/window/...`, `make lint`, `make po`; ručně ve všech třech
+(tlačítko, kontextové menu, klávesa, otázka podle předvolby, Zpět, Jira
+bez Smazat) nad kopií dat.
+
 Archivace v Poště = Hotovo (2026-10-13, `feat/board`, necommitnuté; jen
 démon, klienti beze změny — všechny tři to dostanou přes
 `notify.boardChanged`). Vlastník archivoval vyřízenou poštu v Poště a

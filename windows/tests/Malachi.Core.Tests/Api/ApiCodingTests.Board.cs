@@ -141,6 +141,15 @@ public sealed partial class ApiCodingTests
         var onlyDone = Decode<BoardArchiveResult>($$$"""{"archived":0,"noArchive":true,"case":{{{BoardCaseJson}}}}""");
         Assert.True(onlyDone.NoArchive);
 
+        // board.trash (Delete): as board.archive's, moved left out when nothing moved.
+        AssertSameJson("""{"caseId":"c_1"}""", EncodeObject(new BoardTrashParams { CaseId = "c_1" }).GetRawText());
+        var trashed = Decode<BoardTrashResult>($$$"""
+            {"trashed":2,"case":{{{BoardCaseJson}}},"moved":[{"messageId":"m_5","fromFolderId":"f_archive"}]}
+            """);
+        Assert.Equal(2, trashed.Trashed);
+        Assert.Equal(new BoardMoved { MessageId = "m_5", FromFolderId = "f_archive" }, Assert.Single(trashed.Moved!));
+        Assert.Null(Decode<BoardTrashResult>($$$"""{"trashed":0,"case":{{{BoardCaseJson}}}}""").Moved);
+
         // board.unflag: nothing to clear is no error, 0 is sent.
         AssertSameJson("""{"caseId":"c_1"}""", EncodeObject(new BoardUnflagParams { CaseId = "c_1" }).GetRawText());
         var unflagged = Decode<BoardUnflagResult>($$$"""{"case":{{{BoardCaseJson}}},"unflagged":2}""");
@@ -339,7 +348,7 @@ public sealed partial class ApiCodingTests
         Assert.Null(run.EndedAt);
 
         var board = API.Methods.Where(m => m.Name.StartsWith("board.", StringComparison.Ordinal)).ToArray();
-        Assert.Equal(17, board.Length);
+        Assert.Equal(18, board.Length);
         Assert.All(board, m => Assert.Equal(RpcTimeouts.Default, m.Timeout));
         Assert.Same(API.BoardList, board[0]);
         Assert.Same(API.BoardRunEnd, board[^1]);

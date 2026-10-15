@@ -35,9 +35,9 @@ func SampleSnapshot(now time.Time, loc *time.Location) Snapshot {
 	club := api.AccountID("sample-club")
 	jiraAccount := api.AccountID("sample-jira")
 	accounts := []AccountInfo{
-		{ID: work, Name: "Contoso Ltd", Badge: microsoftBadge, CanReply: true},
-		{ID: home, Name: "Home", Badge: googleBadge, CanReply: true},
-		{ID: club, Name: "Rowing Club", Badge: imapBadge, CanReply: true},
+		{ID: work, Name: "Contoso Ltd", Badge: microsoftBadge, CanReply: true, CanDelete: true},
+		{ID: home, Name: "Home", Badge: googleBadge, CanReply: true, CanDelete: true},
+		{ID: club, Name: "Rowing Club", Badge: imapBadge, CanReply: true, CanDelete: true},
 		{ID: jiraAccount, Name: "Demo Jira", Badge: jira.KindBadge, CanReply: true},
 	}
 	msg := func(from string, date time.Time, text string) CaseMessage {

@@ -297,7 +297,7 @@ public final class DaemonBoardSource: BoardSource {
             self.accounts = res.accounts.filter(\.enabled).map {
                 Board.AccountInfo(
                     id: $0.id, name: accountLabel($0), badge: accountHeaderBadge($0),
-                    canReply: $0.can(.reply) || $0.can(.comment))
+                    canReply: $0.can(.reply) || $0.can(.comment), canDelete: $0.can(.delete))
             }
             self.publish()
         }
@@ -501,6 +501,27 @@ extension DaemonBoardSource {
             })
     }
 
+    /// Delete (`board.trash`): `onArchived` gets what it did, with the
+    /// moved messages for Undo (`undoArchive`, as an archive's).
+    public func trash(_ id: Board.CaseID) {
+        write(
+            API.BoardTrash.self, BoardTrashParams(caseId: Self.wireID(id)), .trash, id,
+            change: { c in
+                c.visibility = .done(at: nil)
+                c.remindedAt = nil
+            },
+            done: { [weak self] r in
+                let moved = r.moved ?? []
+                // Nothing moved, or a trash folder the daemon does not
+                // sync: the plain toast.
+                self?.notifyArchived(
+                    Board.ArchiveOutcome(
+                        caseID: id, account: r.case.accountId, moved: moved, text: Board.Text.trashed(r.trashed),
+                        undoLabel: moved.isEmpty ? nil : Board.Text.undo, trash: true))
+                return r.case
+            })
+    }
+
     public func discardDraft(of id: Board.CaseID) {
         write(
             API.BoardDiscardDraft.self, BoardDiscardDraftParams(caseId: Self.wireID(id)), .discardDraft, id,
@@ -665,8 +686,9 @@ extension DaemonBoardSource: BoardArchiveUndoer {
             guard let self else { return }
             self.writesInFlight -= 1
             guard !failed else {
-                // The mail is still archived: the case stays done.
-                self.onError?(Board.Text.undoFailed)
+                // The mail is still archived (or in the trash): the case
+                // stays done.
+                self.onError?(o.trash ? Board.Text.undoTrashFailed : Board.Text.undoFailed)
                 return
             }
             self.setDone(false, of: o.caseID)

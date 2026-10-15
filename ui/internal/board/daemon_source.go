@@ -408,7 +408,8 @@ func (d *DaemonSource) loadAccounts() {
 			}
 			accounts = append(accounts, AccountInfo{
 				ID: a.ID, Name: accountLabel(a), Badge: accountBadge(a),
-				CanReply: a.Can(api.CapabilityReply) || a.Can(api.CapabilityComment),
+				CanReply:  a.Can(api.CapabilityReply) || a.Can(api.CapabilityComment),
+				CanDelete: a.Can(api.CapabilityDelete),
 			})
 		}
 		d.accounts = accounts
@@ -667,6 +668,26 @@ func (d *DaemonSource) Archive(id CaseID) {
 		})
 }
 
+// Trash implements DataSource (board.trash): Handlers.Archived gets what
+// it did, with the moved messages for Undo (UndoArchive, as an archive's).
+func (d *DaemonSource) Trash(id CaseID) {
+	writeCase(d, api.MethodBoardTrash, api.BoardTrashParams{CaseID: id}, ActionTrash, id,
+		func(c *Case) { c.Visibility, c.RemindedAt = Visibility{Kind: VisibleDone}, time.Time{} },
+		func(r *api.BoardTrashResult) api.BoardCase {
+			o := ArchiveOutcome{
+				Case: id, Account: r.Case.AccountID, Moved: slices.Clone(r.Moved),
+				Text: Trashed(r.Trashed, d.tr), Trash: true,
+			}
+			// Nothing moved, or a trash folder the daemon does not sync:
+			// the plain toast.
+			if len(o.Moved) > 0 {
+				o.UndoLabel = Undo(d.tr)
+			}
+			notifyArchived(d.h, o)
+			return r.Case
+		})
+}
+
 // UndoArchive implements ArchiveUndoer: the calls of UndoArchive, the
 // moves first, then the case back on the board (optimistic, as SetDone;
 // a refusal is a toast). A move that fails stops the undo: the case stays
@@ -696,7 +717,11 @@ func (d *DaemonSource) UndoArchive(o ArchiveOutcome) {
 			d.writesInFlight--
 			if failed {
 				if d.h.Error != nil {
-					d.h.Error(UndoFailed(d.tr))
+					if o.Trash {
+						d.h.Error(UndoTrashFailed(d.tr))
+					} else {
+						d.h.Error(UndoFailed(d.tr))
+					}
 				}
 				return
 			}

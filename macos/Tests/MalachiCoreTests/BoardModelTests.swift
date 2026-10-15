@@ -36,7 +36,7 @@ enum BoardFixture {
     static let accountB = AccountID(rawValue: "b")
 
     static let accounts = [
-        Board.AccountInfo(id: accountA, name: "Alpha", badge: "IMAP"),
+        Board.AccountInfo(id: accountA, name: "Alpha", badge: "IMAP", canDelete: true),
         Board.AccountInfo(id: accountB, name: "Beta", badge: "JIRA"),
     ]
 

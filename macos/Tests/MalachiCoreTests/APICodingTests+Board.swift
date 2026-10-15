@@ -450,6 +450,6 @@ import Testing
             let timeout: Duration = m.timeout
             #expect(timeout == RPCTimeouts.default)
         }
-        #expect(board == 17)
+        #expect(board == 18)
     }
 }

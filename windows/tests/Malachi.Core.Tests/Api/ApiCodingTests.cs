@@ -1275,7 +1275,7 @@ public sealed partial class ApiCodingTests
         "contact.search",
         "issue.transitions", "issue.transition",
         "board.list", "board.get", "board.setState", "board.setDone", "board.remind",
-        "board.archive", "board.unflag", "board.discardDraft", "board.setDraft", "board.queue", "board.annotate",
+        "board.archive", "board.trash", "board.unflag", "board.discardDraft", "board.setDraft", "board.queue", "board.annotate",
         "board.commit", "board.setCommitment", "board.preferences", "board.setPreferences",
         "board.runStart", "board.runEnd",
     ];
@@ -1283,8 +1283,8 @@ public sealed partial class ApiCodingTests
     [Fact]
     public void MethodTableMatchesGo()
     {
-        Assert.Equal(74, API.AllMethods.Count);
-        Assert.Equal(74, API.AllMethods.Distinct().Count()); // no duplicates
+        Assert.Equal(75, API.AllMethods.Count);
+        Assert.Equal(75, API.AllMethods.Distinct().Count()); // no duplicates
         Assert.Equal(GoMethods, API.AllMethods);
         Assert.Equal(API.AllMethods.Count, API.Methods.Count);
         Assert.Equal(API.SystemInfoName, API.SystemInfo.Name);

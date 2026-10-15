@@ -43,10 +43,16 @@ public static partial class Board
         /// </summary>
         public string? UndoLabel { get; init; }
 
+        /// <summary>
+        /// Delete's outcome (<c>board.trash</c>), not Archive's; Undo takes
+        /// it back the same way (Go <c>ArchiveOutcome.Trash</c>).
+        /// </summary>
+        public bool Trash { get; init; }
+
         /// <summary>Whether both are the same outcome, the moved messages compared in order.</summary>
         public bool Equals(ArchiveOutcome? other) =>
             other is not null && Case == other.Case && Account == other.Account && SameList(Moved, other.Moved)
-            && Text == other.Text && UndoLabel == other.UndoLabel;
+            && Text == other.Text && UndoLabel == other.UndoLabel && Trash == other.Trash;
 
         /// <inheritdoc/>
         public override int GetHashCode() => HashCode.Combine(Case, Account, Moved.Count, Text);

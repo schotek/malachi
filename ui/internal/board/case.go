@@ -83,6 +83,9 @@ type AccountInfo struct {
 	// CanReply: a reply can be written in it, a mail account's reply or an
 	// issue tracker's comment (the reply or comment capability).
 	CanReply bool
+	// CanDelete: Delete can move its messages to the trash (the delete
+	// capability; an issue tracker has none).
+	CanDelete bool
 }
 
 // IssueInfo is the issue behind a case of a Jira account.

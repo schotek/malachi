@@ -127,6 +127,12 @@ extension MainWindowController {
         boardActions.archive(d.id)
     }
 
+    /// Delete (`BoardActions.trash`): asked first while Move to Trash asks.
+    @objc func boardTrash(_ sender: Any?) {
+        guard mode == .board, let d = board.view.detail else { return }
+        boardActions.trash(d.id)
+    }
+
     /// Reply: the suggested reply's inline editor takes the keyboard, or a
     /// compose window answers (`BoardActions.reply`).
     @objc func boardReply(_ sender: Any?) {
@@ -218,6 +224,14 @@ extension MainWindowController {
         actions.confirmDiscard = { [weak self] in
             await alerts.confirmDestructive(
                 on: self?.window, heading: L10n.T("Discard this message?"), body: "", confirmLabel: L10n.T("_Discard"))
+        }
+        // Delete asks as Mail's Move to Trash does, while its preference
+        // says so; the case's subject is the body.
+        let settings = state.settings
+        actions.confirmTrash = { [weak self] subject in
+            guard settings.confirmDelete else { return true }
+            let q = Board.Text.trashQuestion
+            return await alerts.confirmDestructive(on: self?.window, heading: q.heading, body: subject, confirmLabel: q.label)
         }
         return actions
     }

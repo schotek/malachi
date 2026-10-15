@@ -100,6 +100,7 @@ const (
 	MethodBoardSetDone        = "board.setDone"
 	MethodBoardRemind         = "board.remind"
 	MethodBoardArchive        = "board.archive"
+	MethodBoardTrash          = "board.trash"
 	MethodBoardUnflag         = "board.unflag"
 	MethodBoardDiscardDraft   = "board.discardDraft"
 	MethodBoardSetDraft       = "board.setDraft"
@@ -147,7 +148,7 @@ var AllMethods = []string{
 	MethodContactSearch,
 	MethodIssueTransitions, MethodIssueTransition,
 	MethodBoardList, MethodBoardGet, MethodBoardSetState, MethodBoardSetDone, MethodBoardRemind,
-	MethodBoardArchive, MethodBoardUnflag, MethodBoardDiscardDraft, MethodBoardSetDraft, MethodBoardQueue, MethodBoardAnnotate,
+	MethodBoardArchive, MethodBoardTrash, MethodBoardUnflag, MethodBoardDiscardDraft, MethodBoardSetDraft, MethodBoardQueue, MethodBoardAnnotate,
 	MethodBoardCommit, MethodBoardSetCommitment, MethodBoardPreferences, MethodBoardSetPreferences,
 	MethodBoardRunStart, MethodBoardRunEnd,
 }

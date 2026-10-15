@@ -27,7 +27,14 @@ extension Board {
         case done
         /// Opens Remind… on the selected case (R).
         case remind
+        /// Delete on the selected case (⌫, `deleteCharacter`).
+        case trash
     }
+
+    /// The Delete key as `keyFor` takes it: ⌫, whose key types DEL (Go
+    /// `DeleteRune`; Delete on Linux and Windows). A menu item's key
+    /// equivalent for it is "\u{8}", which the window maps to this.
+    public static let deleteCharacter: Character = "\u{7f}"
 
     /// A shortcut of the board.
     public struct Key: Sendable, Equatable {
@@ -35,7 +42,8 @@ extension Board {
         /// With the platform's primary modifier (⌘); else a single key
         /// without modifiers.
         public var primary: Bool
-        /// The key, lower case: "1", "2", "e", "d", "r".
+        /// The key, lower case: "1", "2", "e", "d", "r", or
+        /// `deleteCharacter`.
         public var character: Character
         /// Only while the board shows and the keyboard is not in a text
         /// field. The mode keys work in both modes.
@@ -50,6 +58,7 @@ extension Board {
             Key(action: .showMail, primary: true, character: "1", boardOnly: false, title: Text.showMailKey),
             Key(action: .showBoard, primary: true, character: "2", boardOnly: false, title: Text.showBoardKey),
             Key(action: .archive, primary: false, character: "e", boardOnly: true, title: Text.archive),
+            Key(action: .trash, primary: false, character: deleteCharacter, boardOnly: true, title: Text.delete),
             Key(action: .done, primary: false, character: "d", boardOnly: true, title: Text.doneKey),
             Key(action: .remind, primary: false, character: "r", boardOnly: true, title: Text.remind),
         ]

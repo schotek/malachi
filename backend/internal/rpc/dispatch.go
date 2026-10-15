@@ -127,6 +127,7 @@ func (s *Server) registerBackend(b api.Backend) {
 	s.handlers[api.MethodBoardSetDone] = wrap(brd.SetDone)
 	s.handlers[api.MethodBoardRemind] = wrap(brd.Remind)
 	s.handlers[api.MethodBoardArchive] = wrap(brd.Archive)
+	s.handlers[api.MethodBoardTrash] = wrap(brd.Trash)
 	s.handlers[api.MethodBoardUnflag] = wrap(brd.Unflag)
 	s.handlers[api.MethodBoardDiscardDraft] = wrap(brd.DiscardDraft)
 	s.handlers[api.MethodBoardSetDraft] = wrap(brd.SetDraft)

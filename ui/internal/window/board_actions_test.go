@@ -36,6 +36,8 @@ func TestBoardGatesFor(t *testing.T) {
 			boardActionGates{markDone: true, archive: true, showInMail: true, moveTo: true}},
 		{"star", board.Detail{CanUnstar: true}, false,
 			boardActionGates{markDone: true, archive: true, unflag: true, moveTo: true}},
+		{"an account that can delete, also done", board.Detail{IsDone: true, CanDelete: true}, false,
+			boardActionGates{reopen: true, trash: true}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

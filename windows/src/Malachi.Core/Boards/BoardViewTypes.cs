@@ -464,6 +464,9 @@ public static partial class Board
         /// <summary>Archive moves messages; without, it only marks the case done.</summary>
         public bool CanArchive { get; init; }
 
+        /// <summary>The case's account can move its messages to the trash (Delete, <c>board.trash</c>).</summary>
+        public bool CanDelete { get; init; }
+
         /// <summary>"Conversation · 3 messages".</summary>
         public required string ConversationTitle { get; init; }
 
@@ -494,6 +497,7 @@ public static partial class Board
             && SameList(Tasks, other.Tasks) && Draft == other.Draft && DraftId == other.DraftId
             && CanUnstar == other.CanUnstar && StaleNote == other.StaleNote && IsDone == other.IsDone
             && IsSnoozed == other.IsSnoozed && RemindText == other.RemindText && CanArchive == other.CanArchive
+            && CanDelete == other.CanDelete
             && ConversationTitle == other.ConversationTitle && SameList(Messages, other.Messages)
             && MessagesLoading == other.MessagesLoading && MessagesNote == other.MessagesNote
             && MessagesRetry == other.MessagesRetry;

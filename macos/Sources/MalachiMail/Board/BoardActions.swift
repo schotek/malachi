@@ -28,6 +28,9 @@ final class BoardActions {
     var onShowInMail: (@MainActor (Board.Case) -> Void)?
     /// Asks before Discard deletes the draft; nil asks nothing.
     var confirmDiscard: (@MainActor () async -> Bool)?
+    /// Asks before Delete with the case's subject (when Move to Trash
+    /// asks); nil asks nothing.
+    var confirmTrash: (@MainActor (String) async -> Bool)?
     /// A short message over the page.
     var onToast: (@MainActor (String) -> Void)?
     /// The board's Suggest Reply (the application's one); nil offers none.
@@ -75,6 +78,13 @@ final class BoardActions {
         return c.canArchive || !c.visibility.isDone
     }
 
+    /// Delete moves the case's received messages to the trash where its
+    /// account can delete (an issue tracker cannot), also on a done case.
+    func canDelete(_ id: Board.CaseID) -> Bool {
+        guard let c = boardCase(id) else { return false }
+        return controller.source.snapshot.accounts.first { $0.id == c.account }?.canDelete ?? false
+    }
+
     func canShowInMail(_ id: Board.CaseID) -> Bool {
         guard let c = boardCase(id) else { return false }
         return samples || ((c.reply != nil || c.latestMessage != nil) && onShowInMail != nil)
@@ -103,6 +113,23 @@ final class BoardActions {
     func archive(_ id: Board.CaseID) {
         guard canArchive(id) else { return }
         controller.archive(id)
+    }
+
+    /// Delete (`board.trash`), after `confirmTrash`; the toast offers Undo
+    /// as Archive's.
+    func trash(_ id: Board.CaseID) {
+        guard canDelete(id), let c = boardCase(id) else { return }
+        guard let confirmTrash else {
+            controller.trash(id)
+            return
+        }
+        // The case's subject, cleaned as the detail's title (a hostile
+        // string, shown as text).
+        let subject = Board.cleanLine(c.subject, max: 300)
+        Task { @MainActor [weak self] in
+            guard await confirmTrash(subject), let self, self.canDelete(id) else { return }
+            self.controller.trash(id)
+        }
     }
 
     /// With a suggested reply its inline editor takes the keyboard (the

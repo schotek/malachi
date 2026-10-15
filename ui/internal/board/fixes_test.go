@@ -175,7 +175,7 @@ func TestBoardKeys(t *testing.T) {
 		runes = append(runes, k.Rune)
 		check(t, k.Title != "", "%c has no title", k.Rune)
 	}
-	eq(t, "keys", string(runes), "12edr")
+	eq(t, "keys", string(runes), "12e\u007fdr")
 	cases := []struct {
 		r                     rune
 		primary, other, input bool
@@ -194,6 +194,10 @@ func TestBoardKeys(t *testing.T) {
 		{'E', false, false, false, ModeBoard, KeyArchive, true},
 		{'d', false, false, false, ModeBoard, KeyDone, true},
 		{'r', false, false, false, ModeBoard, KeyRemind, true},
+		{DeleteRune, false, false, false, ModeBoard, KeyTrash, true},
+		{DeleteRune, false, false, true, ModeBoard, 0, false}, // deleting typed text
+		{DeleteRune, false, false, false, ModeMail, 0, false}, // the mail's own key
+		{DeleteRune, true, false, false, ModeBoard, 0, false},
 		{'e', false, false, true, ModeBoard, 0, false}, // typing
 		{'e', false, false, false, ModeMail, 0, false}, // the mail's own key
 		{'e', true, false, false, ModeBoard, 0, false}, // Ctrl+E is not Archive

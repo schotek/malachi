@@ -476,6 +476,9 @@ public static partial class Board
         public string AccountName(AccountId id) =>
             CleanLine(accounts.TryGetValue(id, out var a) ? a.Name : "", Cap.Account);
 
+        // Delete can move the account's messages to the trash.
+        private bool AccountCanDelete(AccountId id) => accounts.TryGetValue(id, out var a) && a.CanDelete;
+
         // The case's subject, cleaned; "(No subject)" for none.
         private static string Subject(Case c)
         {
@@ -680,6 +683,7 @@ public static partial class Board
                 IsSnoozed = c.Visibility.RemindAt is not null,
                 RemindText = c.Visibility.RemindAt is { } at ? Text.SnoozedUntil(RemindLabel(at)) : "",
                 CanArchive = c.CanArchive,
+                CanDelete = AccountCanDelete(c.Account),
                 ConversationTitle = Text.Conversation(int.Max(1, c.MessageCount)),
                 Messages = messages,
                 MessagesLoading = c.Messages is null && !c.MessagesFailed,

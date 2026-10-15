@@ -567,6 +567,79 @@ func (s *boardService) Archive(ctx context.Context, p api.BoardArchiveParams) (*
 	return out, nil
 }
 
+// Trash moves the case's received messages to the trash folder the way
+// message.delete does (local first, the server through the operation
+// log) and marks the case done (board.trash, docs/api.md §4.13): every
+// visible member in a folder of the account other than those of role
+// sent, outbox, drafts and trash, a copy of the user's own message
+// excepted (a Bcc to oneself, a Gmail label). Moved names each for an
+// undo, unless the trash folder is not synchronised.
+func (s *boardService) Trash(ctx context.Context, p api.BoardTrashParams) (*api.BoardTrashResult, error) {
+	if _, err := s.requireBoard(ctx); err != nil {
+		return nil, err
+	}
+	c, err := s.caseOf(ctx, p.CaseID)
+	if err != nil {
+		return nil, err
+	}
+	a, err := s.b.store.GetAccount(ctx, c.AccountID)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return nil, api.NewError(api.CodeCaseNotFound, "the case's account is gone")
+	case err != nil:
+		return nil, api.NewError(api.CodeStorageError, "%v", err)
+	}
+	if err := requireCapability(a, api.CapabilityDelete); err != nil {
+		return nil, err
+	}
+	trash, err := s.b.store.FolderByRole(ctx, a.ID, api.RoleTrash)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return nil, api.NewError(api.CodeFolderNotFound, "account has no trash folder")
+	case err != nil:
+		return nil, api.NewError(api.CodeStorageError, "%v", err)
+	}
+	t, err := s.b.store.BoardCaseThread(ctx, c.ID)
+	if err != nil {
+		return nil, boardErr(err)
+	}
+	var ids []string
+	var moved []api.BoardMoved
+	for _, m := range t.Members {
+		if m.Mine || m.TwinOfMine || m.FolderID == trash.ID {
+			continue
+		}
+		switch m.Role {
+		case api.RoleSent, api.RoleOutbox, api.RoleDrafts, api.RoleTrash:
+			continue
+		}
+		ids = append(ids, m.ID)
+		moved = append(moved, api.BoardMoved{MessageID: api.MessageID(m.ID), FromFolderID: api.FolderID(m.FolderID)})
+	}
+	out := &api.BoardTrashResult{}
+	if len(ids) > 0 {
+		dropped, err := s.b.store.TrashMessages(ctx, a.ID, ids, trash.ID)
+		if err != nil {
+			return nil, mutationError(err)
+		}
+		s.b.boardDraftsDropped(ctx, a.ID, dropped) // as message.delete
+		s.b.Supervisor.Trigger(a.ID, "", false)
+		out.Trashed = len(ids)
+		// As board.archive: a trash folder that is never downloaded
+		// leaves nothing to move back.
+		if !trash.Unsynced {
+			out.Moved = moved
+		}
+	}
+	c, err = s.b.store.SetBoardDone(ctx, c.ID, true, s.b.boardNow())
+	if err != nil {
+		return nil, boardErr(err)
+	}
+	s.b.boardWritten(ctx, c)
+	out.Case = toAPIBoardCase(c, s.b.boardNow())
+	return out, nil
+}
+
 // Unflag clears the flag (the star) of every copy of the case's members
 // whose flag the rules read for hot.flagged (board.FlaggedCopies over the
 // thread exactly as the drain judges it): locally and, as message.flag

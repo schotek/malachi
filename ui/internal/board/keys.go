@@ -27,7 +27,13 @@ const (
 	KeyDone
 	// KeyRemind opens Remind… on the selected case (R).
 	KeyRemind
+	// KeyTrash is Delete on the selected case (the Delete key, DeleteRune).
+	KeyTrash
 )
+
+// DeleteRune is the Delete key as clients pass it to KeyFor: ⌫ on macOS
+// (its key types DEL), Delete on Linux and Windows.
+const DeleteRune = '\u007f'
 
 // Key is a shortcut of the board.
 type Key struct {
@@ -35,7 +41,7 @@ type Key struct {
 	// Primary: with the platform's primary modifier (Ctrl, ⌘); else a
 	// single key without modifiers.
 	Primary bool
-	// Rune is the key, lower case: '1', '2', 'e', 'd', 'r'.
+	// Rune is the key, lower case: '1', '2', 'e', 'd', 'r', or DeleteRune.
 	Rune rune
 	// BoardOnly: only while the board shows and the keyboard is not in a
 	// text field. The mode keys work in both modes.
@@ -50,6 +56,7 @@ func BoardKeys(tr Translator) []Key {
 		{Action: KeyShowMail, Primary: true, Rune: '1', Title: ShowMailKey(tr)},
 		{Action: KeyShowBoard, Primary: true, Rune: '2', Title: ShowBoardKey(tr)},
 		{Action: KeyArchive, Rune: 'e', BoardOnly: true, Title: Archive(tr)},
+		{Action: KeyTrash, Rune: DeleteRune, BoardOnly: true, Title: Delete(tr)},
 		{Action: KeyDone, Rune: 'd', BoardOnly: true, Title: DoneKey(tr)},
 		{Action: KeyRemind, Rune: 'r', BoardOnly: true, Title: Remind(tr)},
 	}

@@ -1356,7 +1356,7 @@ msgstr "Zpráva byla zařazena k odeslání"
 msgid "Discard this message?"
 msgstr "Zahodit tuto zprávu?"
 
-#: ui/internal/compose/draft.go:791 ui/internal/board/text.go:942
+#: ui/internal/compose/draft.go:791 ui/internal/board/text.go:972
 msgid "Discarding the draft"
 msgstr "Zahození konceptu"
 
@@ -1506,7 +1506,7 @@ msgid "Archive"
 msgstr "Archivovat"
 
 #. TRANSLATORS: a menu item whose submenu lists the board's states.
-#: ui/internal/contextmenu/text.go:71 ui/internal/board/text.go:995
+#: ui/internal/contextmenu/text.go:71 ui/internal/board/text.go:1027
 msgid "Move To"
 msgstr "Přesunout do"
 
@@ -1694,7 +1694,7 @@ msgid "Open %s in the Browser"
 msgstr "Otevřít %s v prohlížeči"
 
 #. TRANSLATORS: a field of a Jira issue.
-#: ui/internal/jira/jira.go:267 ui/internal/board/text.go:1005
+#: ui/internal/jira/jira.go:267 ui/internal/board/text.go:1037
 #: ui/data/ui/preferences.ui:528
 msgid "Status"
 msgstr "Stav"
@@ -2903,72 +2903,106 @@ msgstr "Zpět"
 msgid "Could not undo the archive."
 msgstr "Archivaci se nepodařilo vrátit."
 
-#: ui/internal/board/text.go:930
+#. TRANSLATORS: a button and menu item of the board: the case's received
+#. messages go to the trash and the case is done.
+#: ui/internal/board/text.go:879
+msgid "Delete"
+msgstr "Smazat"
+
+#: ui/internal/board/text.go:886
+msgid "Marked as done. No received message was left to delete."
+msgstr "Označeno jako hotové. Nezbyla žádná přijatá zpráva ke smazání."
+
+#: ui/internal/board/text.go:888
+#, c-format
+msgid "Moved %d message to Trash."
+msgid_plural "Moved %d messages to Trash."
+msgstr[0] "Do koše přesunuta %d zpráva."
+msgstr[1] "Do koše přesunuty %d zprávy."
+msgstr[2] "Do koše přesunuto %d zpráv."
+
+#: ui/internal/board/text.go:895 ui/internal/window/actions.go:42
+msgid "Move to Trash?"
+msgstr "Přesunout do koše?"
+
+#: ui/internal/board/text.go:895 ui/internal/window/actions.go:47
+msgid "Move to _Trash"
+msgstr "Přesunout do _koše"
+
+#: ui/internal/board/text.go:900
+msgid "Could not move the messages back from Trash."
+msgstr "Zprávy se nepodařilo vrátit z koše."
+
+#: ui/internal/board/text.go:960
 msgid "Moving the case"
 msgstr "Přesunutí případu"
 
-#: ui/internal/board/text.go:932
+#: ui/internal/board/text.go:962
 msgid "Marking the case done"
 msgstr "Označení případu jako hotového"
 
-#: ui/internal/board/text.go:934
+#: ui/internal/board/text.go:964
 msgid "Moving the case back to the board"
 msgstr "Vrácení případu na nástěnku"
 
-#: ui/internal/board/text.go:936
+#: ui/internal/board/text.go:966
 msgid "Setting the reminder"
 msgstr "Nastavení připomenutí"
 
-#: ui/internal/board/text.go:938
+#: ui/internal/board/text.go:968
 msgid "Archiving"
 msgstr "Archivování"
 
-#: ui/internal/board/text.go:940
+#: ui/internal/board/text.go:970
 msgid "Changing the promise"
 msgstr "Uložení změny slibu"
 
-#: ui/internal/board/text.go:944 ui/internal/window/actions.go:270
+#: ui/internal/board/text.go:974 ui/internal/window/actions.go:270
 msgid "Removing the star"
 msgstr "Odebrání hvězdičky"
 
-#: ui/internal/board/text.go:946
+#: ui/internal/board/text.go:976
 msgid "Changing the board’s settings"
 msgstr "Uložení nastavení nástěnky"
 
-#: ui/internal/board/text.go:955
+#: ui/internal/board/text.go:978
+msgid "Moving to Trash"
+msgstr "Přesunutí do koše"
+
+#: ui/internal/board/text.go:987
 msgid "the promise no longer exists"
 msgstr "slib už neexistuje"
 
-#: ui/internal/board/text.go:957
+#: ui/internal/board/text.go:989
 msgid "the mail backend is not running"
 msgstr "poštovní démon neběží"
 
-#: ui/internal/board/text.go:959
+#: ui/internal/board/text.go:991
 msgid "the mail backend did not answer in time"
 msgstr "poštovní démon neodpověděl včas"
 
-#: ui/internal/board/text.go:961
+#: ui/internal/board/text.go:993
 msgid "the case is no longer on the board"
 msgstr "případ už na nástěnce není"
 
-#: ui/internal/board/text.go:963
+#: ui/internal/board/text.go:995
 msgid "the board did not accept it"
 msgstr "nástěnka změnu nepřijala"
 
-#: ui/internal/board/text.go:965
+#: ui/internal/board/text.go:997
 msgid "this mail backend has no board"
 msgstr "tento poštovní démon nástěnku nemá"
 
-#: ui/internal/board/text.go:967
+#: ui/internal/board/text.go:999
 msgid "the mail backend could not save it"
 msgstr "poštovní démon změnu nedokázal uložit"
 
-#: ui/internal/board/text.go:969
+#: ui/internal/board/text.go:1001
 msgid "the draft no longer exists"
 msgstr "koncept už neexistuje"
 
 #. TRANSLATORS: a toast; %s is an action such as "Moving the case".
-#: ui/internal/board/text.go:982
+#: ui/internal/board/text.go:1014
 #, c-format
 msgid "%s failed."
 msgstr "%s selhalo."
@@ -2976,30 +3010,30 @@ msgstr "%s selhalo."
 #. TRANSLATORS: a toast; the first %s is an action such as "Moving the
 #. case", the second the reason, such as "the case is no longer on the
 #. board".
-#: ui/internal/board/text.go:987
+#: ui/internal/board/text.go:1019
 #, c-format
 msgid "%s failed: %s."
 msgstr "%s selhalo: %s."
 
-#: ui/internal/board/text.go:999
+#: ui/internal/board/text.go:1031
 msgid "Mark as Done"
 msgstr "Označit jako hotové"
 
-#: ui/internal/board/text.go:1002
+#: ui/internal/board/text.go:1034
 msgid "Remind Me"
 msgstr "Připomenout"
 
-#: ui/internal/board/text.go:1008 ui/data/ui/preferences.ui:15
+#: ui/internal/board/text.go:1040 ui/data/ui/preferences.ui:15
 msgid "Accounts"
 msgstr "Účty"
 
 #. TRANSLATORS: a button beside a promise the assistant found in the
 #. user's reply.
-#: ui/internal/board/text.go:1015
+#: ui/internal/board/text.go:1047
 msgid "Mark Promise as Done"
 msgstr "Označit slib jako splněný"
 
-#: ui/internal/board/text.go:1021
+#: ui/internal/board/text.go:1053
 #, c-format
 msgid "%d promise"
 msgid_plural "%d promises"
@@ -3009,14 +3043,14 @@ msgstr[2] "%d slibů"
 
 #. TRANSLATORS: quotation marks around a sentence quoted from a message;
 #. use your language's quotation marks.
-#: ui/internal/board/text.go:1028
+#: ui/internal/board/text.go:1060
 #, c-format
 msgid "“%s”"
 msgstr "„%s“"
 
 #. TRANSLATORS: under "Triage These Accounts" when the accounts chosen
 #. for the triage were all removed, so it triages nothing.
-#: ui/internal/board/text.go:1038
+#: ui/internal/board/text.go:1070
 msgid "No account is selected, so the triage reads nothing."
 msgstr "Není vybrán žádný účet, takže třídění nic nečte."
 
@@ -3502,7 +3536,7 @@ msgstr ""
 msgid "_Quit Anyway"
 msgstr "_Přesto ukončit"
 
-#: ui/internal/board/view.go:846 ui/internal/widget/message_row.go:307
+#: ui/internal/board/view.go:849 ui/internal/widget/message_row.go:307
 #: ui/internal/window/message_view.go:580 ui/internal/window/notify.go:122
 msgid "(No subject)"
 msgstr "(Bez předmětu)"
@@ -3517,19 +3551,19 @@ msgstr "%s, %s"
 
 #. TRANSLATORS: the shortcuts window: the key that shows the mail in the
 #. main window.
-#: ui/internal/board/keys.go:65
+#: ui/internal/board/keys.go:72
 msgid "Show Mail"
 msgstr "Zobrazit poštu"
 
 #. TRANSLATORS: the shortcuts window: the key that shows the board in the
 #. main window.
-#: ui/internal/board/keys.go:72
+#: ui/internal/board/keys.go:79
 msgid "Show Board"
 msgstr "Zobrazit nástěnku"
 
 #. TRANSLATORS: the shortcuts window: the key that marks the selected
 #. case done, or moves a done one back to the board.
-#: ui/internal/board/keys.go:79
+#: ui/internal/board/keys.go:86
 msgid "Mark as Done or Move Back to Board"
 msgstr "Označit jako hotové nebo vrátit na nástěnku"
 
@@ -3903,10 +3937,6 @@ msgstr "Chyba"
 msgid "Saving the account order"
 msgstr "Uložení pořadí účtů"
 
-#: ui/internal/window/actions.go:42
-msgid "Move to Trash?"
-msgstr "Přesunout do koše?"
-
 #. TRANSLATORS: %d is the number of messages of a conversation.
 #: ui/internal/window/actions.go:45
 #, c-format
@@ -3915,10 +3945,6 @@ msgid_plural "Move %d messages to Trash?"
 msgstr[0] "Přesunout %d zprávu do koše?"
 msgstr[1] "Přesunout %d zprávy do koše?"
 msgstr[2] "Přesunout %d zpráv do koše?"
-
-#: ui/internal/window/actions.go:47
-msgid "Move to _Trash"
-msgstr "Přesunout do _koše"
 
 #: ui/internal/window/actions.go:208
 msgid "Marking the message as read"

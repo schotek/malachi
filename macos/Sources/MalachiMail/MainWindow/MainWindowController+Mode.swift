@@ -185,7 +185,7 @@ extension MainWindowController {
     }
 
     /// The board's part of a menu item's validation: Show Board while the
-    /// board is off, and the board's keys (⌘1, ⌘2, and E, D, R, which act
+    /// board is off, and the board's keys (⌘1, ⌘2, and E, ⌫, D, R, which act
     /// only while the board shows and nothing takes typing:
     /// `Board.keyFor`); Done's title follows the case. False refuses the
     /// item; true leaves it to the rest of the validation.
@@ -201,9 +201,13 @@ extension MainWindowController {
             break
         }
         let mods = item.keyEquivalentModifierMask.intersection([.command, .shift, .option, .control])
-        guard let key = item.keyEquivalent.first, mods.subtracting(.command).isEmpty,
-              [Action.setWindowMode, Action.boardDone, Action.boardRemind, Action.boardArchive].contains(action)
+        guard var key = item.keyEquivalent.first, mods.subtracting(.command).isEmpty,
+              [Action.setWindowMode, Action.boardDone, Action.boardRemind, Action.boardArchive, Action.boardTrash]
+                .contains(action)
         else { return true }
+        if key == "\u{8}" {
+            key = Board.deleteCharacter // ⌫ as a key equivalent
+        }
         let inText = typing || (mode == .board && boardPage.replyHost.keyboardInLivePane() != nil)
         return Board.keyFor(key, primary: mods.contains(.command), other: false, inText: inText, mode: mode) != nil
     }
@@ -291,8 +295,8 @@ extension MainWindowController {
         switch action {
         case Action.setWindowMode:
             return .switchMode
-        case Action.setBoardStyle, Action.boardDone, Action.boardRemind, Action.boardArchive, Action.boardReply,
-             Action.boardTriage:
+        case Action.setBoardStyle, Action.boardDone, Action.boardRemind, Action.boardArchive, Action.boardTrash,
+             Action.boardReply, Action.boardTriage:
             return .boardView
         case Action.newMessage:
             return .newMessage

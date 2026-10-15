@@ -36,7 +36,16 @@ public static partial class Board
 
         /// <summary>Opens Remind… on the selected case (R).</summary>
         Remind,
+
+        /// <summary>Delete on the selected case (the Delete key, <see cref="DeleteRune"/>).</summary>
+        Trash,
     }
+
+    /// <summary>
+    /// The Delete key as <see cref="KeyFor"/> takes it: DEL, U+007F (Go
+    /// <c>DeleteRune</c>; ⌫ on macOS, whose key types it, VK_DELETE here).
+    /// </summary>
+    public const char DeleteRune = '\u007f';
 
     /// <summary>Where Escape goes on the board (<see cref="EscapeFor"/>).</summary>
     public enum EscapeTarget
@@ -57,7 +66,7 @@ public static partial class Board
     /// <summary>A shortcut of the board.</summary>
     /// <param name="Action">What it does.</param>
     /// <param name="Primary">With the platform's primary modifier (Ctrl); else a single key without modifiers.</param>
-    /// <param name="Rune">The key, lower case: '1', '2', 'e', 'd', 'r'.</param>
+    /// <param name="Rune">The key, lower case: '1', '2', 'e', 'd', 'r', or <see cref="DeleteRune"/>.</param>
     /// <param name="BoardOnly">Only while the board shows and the keyboard is not in a text field; the mode keys work in both modes.</param>
     /// <param name="Title">The shortcut's text in the shortcuts list.</param>
     public sealed record Key(KeyAction Action, bool Primary, char Rune, bool BoardOnly, string Title);
@@ -68,6 +77,7 @@ public static partial class Board
         new(KeyAction.ShowMail, true, '1', false, Text.ShowMailKey),
         new(KeyAction.ShowBoard, true, '2', false, Text.ShowBoardKey),
         new(KeyAction.Archive, false, 'e', true, Text.Archive),
+        new(KeyAction.Trash, false, DeleteRune, true, Text.Delete),
         new(KeyAction.Done, false, 'd', true, Text.DoneKey),
         new(KeyAction.Remind, false, 'r', true, Text.Remind),
     ];

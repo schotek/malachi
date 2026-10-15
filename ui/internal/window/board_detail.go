@@ -71,7 +71,7 @@ func (p *boardPage) keyboardIn(boxes ...*gtk.Box) bool {
 }
 
 // renderDetailHeader is the detail pane's own header bar: Done / Move Back
-// to Board, Remind…, Archive, Reply (or Comment), Show in Mail. The
+// to Board, Remind…, Archive, Delete, Reply (or Comment), Show in Mail. The
 // buttons act through the win.board-* actions, whose enabled state
 // (applyActionsSensitivity) is the buttons' sensitivity; the menus are set
 // once (wireDetailHeader), so a refresh never closes an open one.
@@ -93,6 +93,8 @@ func (p *boardPage) wireDetailHeader() {
 	p.remindButton.SetLabel(board.Remind(i18n.Tr))
 	p.archiveButton.SetLabel(board.Archive(i18n.Tr))
 	p.archiveButton.SetActionName("win.board-archive")
+	p.trashButton.SetLabel(board.Delete(i18n.Tr))
+	p.trashButton.SetActionName("win.board-trash")
 	p.replyButton.SetActionName("win.board-reply")
 	p.detailMenu.SetMenuModel(boardDetailMenu())
 	p.wireRemindButton()

@@ -412,6 +412,10 @@ public static class API
     public static readonly RpcMethod<BoardArchiveParams, BoardArchiveResult> BoardArchive =
         new("board.archive", RpcTimeouts.Default, Wire.BoardArchiveParams, Wire.BoardArchiveResult);
 
+    /// <summary><c>board.trash</c>: moves the case's received members to the trash (local first) and marks it done.</summary>
+    public static readonly RpcMethod<BoardTrashParams, BoardTrashResult> BoardTrash =
+        new("board.trash", RpcTimeouts.Default, Wire.BoardTrashParams, Wire.BoardTrashResult);
+
     /// <summary><c>board.unflag</c>: clears the flag of every copy that makes the case <c>hot.flagged</c>.</summary>
     public static readonly RpcMethod<BoardUnflagParams, BoardUnflagResult> BoardUnflag =
         new("board.unflag", RpcTimeouts.Default, Wire.BoardUnflagParams, Wire.BoardUnflagResult);
@@ -482,7 +486,7 @@ public static class API
         ContactSearch,
         IssueTransitions, IssueTransition,
         BoardList, BoardGet, BoardSetState, BoardSetDone, BoardRemind,
-        BoardArchive, BoardUnflag, BoardDiscardDraft, BoardSetDraft, BoardQueue, BoardAnnotate,
+        BoardArchive, BoardTrash, BoardUnflag, BoardDiscardDraft, BoardSetDraft, BoardQueue, BoardAnnotate,
         BoardCommit, BoardSetCommitment, BoardPreferences, BoardSetPreferences,
         BoardRunStart, BoardRunEnd,
     ];

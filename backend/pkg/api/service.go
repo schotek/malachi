@@ -121,6 +121,7 @@ type BoardService interface {
 	SetDone(ctx context.Context, p BoardSetDoneParams) (*BoardSetDoneResult, error)
 	Remind(ctx context.Context, p BoardRemindParams) (*BoardRemindResult, error)
 	Archive(ctx context.Context, p BoardArchiveParams) (*BoardArchiveResult, error)
+	Trash(ctx context.Context, p BoardTrashParams) (*BoardTrashResult, error)
 	Unflag(ctx context.Context, p BoardUnflagParams) (*BoardUnflagResult, error)
 	DiscardDraft(ctx context.Context, p BoardDiscardDraftParams) (*BoardDiscardDraftResult, error)
 	SetDraft(ctx context.Context, p BoardSetDraftParams) (*BoardSetDraftResult, error)

@@ -49,6 +49,7 @@ final class BoardToolbar: NSObject, NSToolbarDelegate, NSMenuDelegate {
         static let boardDone = NSToolbarItem.Identifier("boardDone")
         static let boardRemind = NSToolbarItem.Identifier("boardRemind")
         static let boardArchive = NSToolbarItem.Identifier("boardArchive")
+        static let boardTrash = NSToolbarItem.Identifier("boardTrash")
         static let boardReply = NSToolbarItem.Identifier("boardReply")
     }
 
@@ -58,7 +59,7 @@ final class BoardToolbar: NSObject, NSToolbarDelegate, NSMenuDelegate {
     ]
     /// The List's detail section.
     static let detailItems: [NSToolbarItem.Identifier] = [
-        ID.detailSeparator, ID.boardDone, ID.boardRemind, ID.boardArchive, .flexibleSpace, ID.boardReply,
+        ID.detailSeparator, ID.boardDone, ID.boardRemind, ID.boardArchive, ID.boardTrash, .flexibleSpace, ID.boardReply,
     ]
     /// The List: the navigation's section, the list's, the detail's.
     static let listItems: [NSToolbarItem.Identifier] = [
@@ -336,6 +337,10 @@ final class BoardToolbar: NSObject, NSToolbarDelegate, NSMenuDelegate {
             return it
         case ID.boardArchive:
             let it = textItem(id, title: Board.Text.archive, action: Action.boardArchive)
+            it.visibilityPriority = .low
+            return it
+        case ID.boardTrash:
+            let it = textItem(id, title: Board.Text.delete, action: Action.boardTrash)
             it.visibilityPriority = .low
             return it
         case ID.boardReply:

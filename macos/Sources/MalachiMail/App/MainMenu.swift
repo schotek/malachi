@@ -213,7 +213,7 @@ enum MainMenu {
             switch key.action {
             case .showMail: mode = .mail
             case .showBoard: mode = .board
-            case .archive, .done, .remind: continue
+            case .archive, .done, .remind, .trash: continue
             }
             let it = item(key.title, Action.setWindowMode, key: String(key.character))
             it.tag = mode.rawValue
@@ -254,7 +254,7 @@ enum MainMenu {
     }
 
     /// The board's case actions on the selected case, with the board's
-    /// single keys (`Board.boardKeys`: D, R, E), which the main window
+    /// single keys (`Board.boardKeys`: D, R, E, ⌫), which the main window
     /// refuses outside the Board and while the keyboard is in text
     /// (`Board.keyFor`). Done's title follows the case (Move Back to
     /// Board on a done one).
@@ -262,10 +262,17 @@ enum MainMenu {
         let m = NSMenu()
         let keys = Board.boardKeys()
         // In the order of the detail's buttons.
-        for (want, action) in [(Board.KeyAction.done, Action.boardDone), (.remind, Action.boardRemind), (.archive, Action.boardArchive)] {
+        let actions = [
+            (Board.KeyAction.done, Action.boardDone), (.remind, Action.boardRemind), (.archive, Action.boardArchive),
+            (.trash, Action.boardTrash),
+        ]
+        for (want, action) in actions {
             guard let key = keys.first(where: { $0.action == want }) else { continue }
             let title = want == .done ? Board.Text.done : key.title
-            m.addItem(item(title, action, key: String(key.character), mods: []))
+            // ⌫ is "\u{8}" as a key equivalent (Message ▸ Move to Trash's;
+            // that item is off on the board, so the key reaches this one).
+            let equivalent = key.character == Board.deleteCharacter ? "\u{8}" : String(key.character)
+            m.addItem(item(title, action, key: equivalent, mods: []))
         }
         m.addItem(.separator())
         m.addItem(item(Board.Text.reply, Action.boardReply))

@@ -60,6 +60,7 @@ import MalachiCore
     @objc optional func boardDone(_ sender: Any?)
     @objc optional func boardRemind(_ sender: Any?)
     @objc optional func boardArchive(_ sender: Any?)
+    @objc optional func boardTrash(_ sender: Any?)
     @objc optional func boardReply(_ sender: Any?)
     /// The board toolbars' Triage: what `BoardTriageController.view`
     /// offers (Triage, Stop, Sign In…, Get Claude Code…). Swift-first.
@@ -130,6 +131,7 @@ enum Action {
     static let boardDone = #selector(MalachiActions.boardDone(_:))
     static let boardRemind = #selector(MalachiActions.boardRemind(_:))
     static let boardArchive = #selector(MalachiActions.boardArchive(_:))
+    static let boardTrash = #selector(MalachiActions.boardTrash(_:))
     static let boardReply = #selector(MalachiActions.boardReply(_:))
     static let boardTriage = #selector(MalachiActions.boardTriage(_:))
 

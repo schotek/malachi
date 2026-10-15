@@ -153,9 +153,9 @@ type BoardCase struct {
 	// RemindedAt is when a remind came due (the remindAt it had), set
 	// while Visibility is live after that remind and until the user acts
 	// on the case (board.setState, board.setDone, board.remind, also with
-	// null, board.archive, board.unflag) or an inbound member that counts
-	// arrives. Clients list such a case first in its state, marked as
-	// reminded. Never set by a remind that new mail cancelled.
+	// null, board.archive, board.trash, board.unflag) or an inbound member
+	// that counts arrives. Clients list such a case first in its state,
+	// marked as reminded. Never set by a remind that new mail cancelled.
 	RemindedAt *time.Time `json:"remindedAt,omitempty"`
 	// Subject is the newest relevant member's (a note to self of the
 	// user's is passed over, BoardReason), Re:/Fwd: stripped as in
@@ -580,8 +580,24 @@ type BoardArchiveResult struct {
 	Moved []BoardMoved `json:"moved,omitempty"`
 }
 
-// BoardMoved is a message board.archive moved, with its folder before the
-// move.
+// BoardTrashParams asks board.trash to move the case's received messages
+// to the trash folder and mark the case done.
+type BoardTrashParams struct {
+	CaseID BoardCaseID `json:"caseId"`
+}
+
+type BoardTrashResult struct {
+	Trashed int       `json:"trashed"` // messages moved to the trash folder
+	Case    BoardCase `json:"case"`
+	// Moved names each message moved to the trash folder and the folder
+	// it was moved from, so that a client can undo it as board.archive's
+	// (message.move back, then board.setDone with done false). Absent when
+	// nothing was moved and when the trash folder is not synchronised.
+	Moved []BoardMoved `json:"moved,omitempty"`
+}
+
+// BoardMoved is a message board.archive or board.trash moved, with its
+// folder before the move.
 type BoardMoved struct {
 	MessageID    MessageID `json:"messageId"`
 	FromFolderID FolderID  `json:"fromFolderId"`

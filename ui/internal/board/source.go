@@ -50,6 +50,9 @@ type ArchiveOutcome struct {
 	Text string
 	// UndoLabel is the toast's button (Undo).
 	UndoLabel string
+	// Trash: Delete's outcome (board.trash), not Archive's; Undo takes it
+	// back the same way.
+	Trash bool
 }
 
 // UndoCalls are the daemon calls that take an archive back, in order:
@@ -125,6 +128,9 @@ type DataSource interface {
 	// Archive moves the case's inbox messages to the archive (where the
 	// account can) and marks it done; Handlers.Notice says what it did.
 	Archive(id CaseID)
+	// Trash is Delete: it moves the case's received messages to the trash
+	// and marks it done; Handlers.Archived says what it did.
+	Trash(id CaseID)
 	// SetCommitmentDone ticks a promise off (or reopens it).
 	SetCommitmentDone(id api.BoardCommitmentID, done bool)
 	// DiscardDraft drops the suggested reply (the draft itself, too).
@@ -244,6 +250,27 @@ func (m *InMemorySource) Archive(id CaseID) {
 	})
 	notifyArchived(m.h, ArchiveOutcome{
 		Case: id, Account: c.Account, Text: Archived(moved, !c.CanArchive, m.tr), UndoLabel: Undo(m.tr),
+	})
+}
+
+// Trash implements DataSource: the case done, said to have moved its
+// messages when its account can delete.
+func (m *InMemorySource) Trash(id CaseID) {
+	c, ok := m.snapshot.Case(id)
+	if !ok {
+		return
+	}
+	moved := 0
+	if i := slices.IndexFunc(m.snapshot.Accounts, func(a AccountInfo) bool { return a.ID == c.Account }); i >= 0 && m.snapshot.Accounts[i].CanDelete {
+		moved = max(1, c.MessageCount)
+	}
+	m.update(id, func(c *Case) {
+		c.Visibility = Visibility{Kind: VisibleDone}
+		c.CanArchive = false
+		c.RemindedAt = time.Time{}
+	})
+	notifyArchived(m.h, ArchiveOutcome{
+		Case: id, Account: c.Account, Text: Trashed(moved, m.tr), UndoLabel: Undo(m.tr), Trash: true,
 	})
 }
 

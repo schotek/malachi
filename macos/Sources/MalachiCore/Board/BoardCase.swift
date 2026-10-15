@@ -56,12 +56,16 @@ extension Board {
         /// A reply can be written in it: a mail account's reply, an issue
         /// tracker's comment (`Capability.reply` or `.comment`).
         public var canReply: Bool
+        /// Delete can move its messages to the trash (`Capability.delete`;
+        /// an issue tracker has none).
+        public var canDelete: Bool
 
-        public init(id: AccountID, name: String, badge: String, canReply: Bool = true) {
+        public init(id: AccountID, name: String, badge: String, canReply: Bool = true, canDelete: Bool = false) {
             self.id = id
             self.name = name
             self.badge = badge
             self.canReply = canReply
+            self.canDelete = canDelete
         }
     }
 

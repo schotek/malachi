@@ -498,6 +498,12 @@ public enum API {
         public static let name = "board.archive"
     }
 
+    public enum BoardTrash: RPCMethod {
+        public typealias Params = BoardTrashParams
+        public typealias Result = BoardTrashResult
+        public static let name = "board.trash"
+    }
+
     /// Removes the star that keeps a case hot.
     public enum BoardUnflag: RPCMethod {
         public typealias Params = BoardUnflagParams
@@ -595,7 +601,7 @@ public enum API {
         ContactSearch.self,
         IssueTransitions.self, IssueTransition.self,
         BoardList.self, BoardGet.self, BoardSetState.self, BoardSetDone.self, BoardRemind.self,
-        BoardArchive.self, BoardUnflag.self, BoardDiscardDraft.self, BoardSetDraft.self, BoardQueue.self, BoardAnnotate.self,
+        BoardArchive.self, BoardTrash.self, BoardUnflag.self, BoardDiscardDraft.self, BoardSetDraft.self, BoardQueue.self, BoardAnnotate.self,
         BoardCommit.self, BoardSetCommitment.self, BoardPreferencesGet.self, BoardSetPreferences.self,
         BoardRunStart.self, BoardRunEnd.self,
     ]

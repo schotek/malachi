@@ -42,6 +42,7 @@ private typealias F = BoardFixture
     func setDone(_ done: Bool, of id: Board.CaseID) { inner.setDone(done, of: id) }
     func remind(until: Date?, of id: Board.CaseID) { inner.remind(until: until, of: id) }
     func archive(_ id: Board.CaseID) { inner.archive(id) }
+    func trash(_ id: Board.CaseID) { inner.trash(id) }
     func setCommitmentDone(_ done: Bool, of id: String) { inner.setCommitmentDone(done, of: id) }
     func discardDraft(of id: Board.CaseID) { inner.discardDraft(of: id) }
     func unflag(_ id: Board.CaseID) { inner.unflag(id) }

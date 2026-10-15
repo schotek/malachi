@@ -640,6 +640,28 @@ public static partial class Board
         /// <summary>The toast when taking an archive back failed: the mail is still archived and the case stays done.</summary>
         public static string UndoFailed => L10n.T("Could not undo the archive.");
 
+        /// <summary>Delete: a case's received messages go to the trash (<c>board.trash</c>).</summary>
+        public static string Delete =>
+            // TRANSLATORS: a button and menu item of the board: the case's received
+            // messages go to the trash and the case is done.
+            L10n.T("Delete");
+
+        /// <summary>What Delete did: messages moved to the trash, or only marked done.</summary>
+        public static string Trashed(int n) =>
+            n < 1
+                ? L10n.T("Marked as done. No received message was left to delete.")
+                : L10n.N("Moved %d message to Trash.", "Moved %d messages to Trash.", n);
+
+        /// <summary>
+        /// The question before Delete while the mail's Move to Trash asks first
+        /// (the confirm-delete preference): its heading and button; the case's
+        /// subject is the body.
+        /// </summary>
+        public static (string Heading, string Label) TrashQuestion => (L10n.T("Move to Trash?"), L10n.T("Move to _Trash"));
+
+        /// <summary>The toast when taking a Delete back failed: the mail is still in the trash and the case stays done.</summary>
+        public static string UndoTrashFailed => L10n.T("Could not move the messages back from Trash.");
+
         /// <summary>What a write of the board did, for the toast of its failure (Swift <c>Board.Text.Action</c>).</summary>
         public enum Action
         {
@@ -669,6 +691,9 @@ public static partial class Board
 
             /// <summary>A change of the board's preferences (board.setPreferences).</summary>
             Preferences,
+
+            /// <summary>Delete (board.trash).</summary>
+            Trash,
         }
 
         /// <summary>
@@ -689,6 +714,7 @@ public static partial class Board
                 Action.DiscardDraft => L10n.T("Discarding the draft"),
                 Action.Unflag => L10n.T("Removing the star"),
                 Action.Preferences => L10n.T("Changing the board’s settings"),
+                Action.Trash => L10n.T("Moving to Trash"),
                 _ => "",
             };
             if (FailureReason(error, action) is not { } why)

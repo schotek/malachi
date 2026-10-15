@@ -30,13 +30,19 @@ extension Board {
         /// taken back (the daemon moved nothing it could move back, e.g. to
         /// an archive folder it does not sync): the plain toast then.
         public var undoLabel: String?
+        /// Delete's outcome (`board.trash`), not Archive's; Undo takes it
+        /// back the same way.
+        public var trash: Bool
 
-        public init(caseID: CaseID, account: AccountID, moved: [BoardMoved] = [], text: String, undoLabel: String?) {
+        public init(
+            caseID: CaseID, account: AccountID, moved: [BoardMoved] = [], text: String, undoLabel: String?, trash: Bool = false
+        ) {
             self.caseID = caseID
             self.account = account
             self.moved = moved
             self.text = text
             self.undoLabel = undoLabel
+            self.trash = trash
         }
     }
 
@@ -110,6 +116,9 @@ public protocol BoardSource: AnyObject {
     /// Moves the case's inbox messages to the archive (where the account
     /// can) and marks it done; `onArchived` says what it did.
     func archive(_ id: Board.CaseID)
+    /// Delete: moves the case's received messages to the trash and marks
+    /// it done; `onArchived` says what it did.
+    func trash(_ id: Board.CaseID)
     /// Ticks a promise off (or reopens it).
     func setCommitmentDone(_ done: Bool, of id: String)
     /// Drops the suggested reply (the draft itself, too).
@@ -216,6 +225,22 @@ public final class InMemoryBoardSource: BoardSource {
             Board.ArchiveOutcome(
                 caseID: id, account: c.account, text: Board.Text.archived(moved, noArchive: !c.canArchive),
                 undoLabel: Board.Text.undo))
+    }
+
+    /// The case done, said to have moved its messages when its account can
+    /// delete.
+    public func trash(_ id: Board.CaseID) {
+        guard let c = snapshot.cases.first(where: { $0.id == id }) else { return }
+        let canDelete = snapshot.accounts.first { $0.id == c.account }?.canDelete ?? false
+        let moved = canDelete ? max(1, c.messageCount) : 0
+        update(id) { c in
+            c.visibility = .done(at: nil)
+            c.canArchive = false
+            c.remindedAt = nil
+        }
+        notifyArchived(
+            Board.ArchiveOutcome(
+                caseID: id, account: c.account, text: Board.Text.trashed(moved), undoLabel: Board.Text.undo, trash: true))
     }
 
     public func setCommitmentDone(_ done: Bool, of id: String) {

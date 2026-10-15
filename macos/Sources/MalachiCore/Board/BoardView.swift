@@ -309,6 +309,9 @@ extension Board {
         public var remindText: String
         /// Archive moves messages; without, it only marks the case done.
         public var canArchive: Bool
+        /// The case's account can move its messages to the trash (Delete,
+        /// `board.trash`).
+        public var canDelete: Bool
         public var conversationTitle: String
         /// Oldest first; the last loaded while a newer version loads.
         public var messages: [MessageCard]
@@ -902,7 +905,8 @@ extension Board {
                 staleNote: stale ? Text.staleNotes : "", isDone: c.visibility.isDone,
                 isSnoozed: c.visibility.remindAt != nil,
                 remindText: c.visibility.remindAt.map { Text.snoozedUntil(remindLabel($0)) } ?? "",
-                canArchive: c.canArchive, conversationTitle: Text.conversation(max(1, c.messageCount)),
+                canArchive: c.canArchive, canDelete: accounts[c.account]?.canDelete ?? false,
+                conversationTitle: Text.conversation(max(1, c.messageCount)),
                 messages: messages, messagesLoading: c.messages == nil && !c.messagesFailed,
                 messagesNote: messagesNote, messagesRetry: c.messages == nil && c.messagesFailed
             )

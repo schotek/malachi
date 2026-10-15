@@ -54,6 +54,9 @@ public sealed class BoardTextTests
             (BText.Archived(3, false), "Archived 3 messages."),
             (BText.Archived(0, false), "Marked as done. No message was in the inbox."),
             (BText.Archived(5, true), "Marked as done. This account has no archive."),
+            (BText.Trashed(1), "Moved 1 message to Trash."),
+            (BText.Trashed(3), "Moved 3 messages to Trash."),
+            (BText.Trashed(0), "Marked as done. No received message was left to delete."),
         ];
         foreach (var (got, want) in cases)
         {
@@ -118,6 +121,10 @@ public sealed class BoardTextTests
             (BText.NewContact, "New contact"),
             (BText.Undo, "Undo"),
             (BText.UndoFailed, "Could not undo the archive."),
+            (BText.Delete, "Delete"),
+            (BText.TrashQuestion.Heading, "Move to Trash?"),
+            (BText.TrashQuestion.Label, "Move to _Trash"),
+            (BText.UndoTrashFailed, "Could not move the messages back from Trash."),
             (BText.TitleWithBadge("Work", "IMAP"), "Work (IMAP)"),
             (BText.TitleWithBadge("Work", ""), "Work"),
             (BText.PersonAndTime("Jana", "2 Oct"), "Jana · 2 Oct"),
@@ -255,6 +262,7 @@ public sealed class BoardTextTests
             (BText.Action.DiscardDraft, RpcErrorTextFailureException.Daemon(new ErrorCode(ErrorCode.DraftNotFound)), "Discarding the draft failed: the draft no longer exists."),
             (BText.Action.Unflag, RpcErrorTextFailureException.Daemon(new ErrorCode(ErrorCode.CaseNotFound)), "Removing the star failed: the case is no longer on the board."),
             (BText.Action.Unflag, RpcErrorTextFailureException.Daemon(new ErrorCode(ErrorCode.Conflict), "the daemon's words"), "Removing the star failed."),
+            (BText.Action.Trash, RpcErrorTextFailureException.Daemon(new ErrorCode(ErrorCode.CaseNotFound)), "Moving to Trash failed: the case is no longer on the board."),
         ];
         foreach (var (action, error, want) in cases)
         {

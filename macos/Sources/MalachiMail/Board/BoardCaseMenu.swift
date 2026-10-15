@@ -43,6 +43,11 @@ enum BoardCaseMenu {
         }
         archive.isEnabled = actions.canArchive(id)
         menu.addItem(archive)
+        if actions.canDelete(id) {
+            menu.addItem(BoardMenuAction.item(Board.Text.delete) {
+                actions.trash(id)
+            })
+        }
         if actions.canUnstar(id) {
             menu.addItem(BoardMenuAction.item(Board.Text.unstar) {
                 actions.unstar(id)

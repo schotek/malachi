@@ -75,6 +75,13 @@ public interface IBoardSource
     /// </summary>
     void Archive(BoardCaseId id);
 
+    /// <summary>
+    /// Delete: moves the case's received messages to the trash and marks it
+    /// done; <see cref="OnArchived"/> says what it did, with the moved
+    /// messages for Undo as an archive's.
+    /// </summary>
+    void Trash(BoardCaseId id);
+
     /// <summary>Ticks a promise off (or reopens it).</summary>
     void SetCommitmentDone(bool done, BoardCommitmentId id);
 

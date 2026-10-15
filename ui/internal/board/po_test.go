@@ -158,6 +158,11 @@ func exercise(tr Translator) {
 	Archived(2, false, tr)
 	Archived(0, false, tr)
 	Archived(0, true, tr)
+	Delete(tr)
+	Trashed(2, tr)
+	Trashed(0, tr)
+	TrashQuestion(tr)
+	UndoTrashFailed(tr)
 	for _, a := range Actions {
 		for w := WhyNone; w <= WhyDraftGone; w++ {
 			Failed(a, w, tr)

@@ -7,9 +7,9 @@
 // The board from the daemon (docs/api.md §4.13): board.list for the cases,
 // account.list for the accounts' names, board.get for a case's
 // conversation when it is selected, and the user's decisions written back
-// with board.setState, setDone, remind, archive, unflag, discardDraft and
-// setCommitment; an archive is taken back with message.move and
-// board.setDone (UndoArchive). Every user write ends the mark of a case back
+// with board.setState, setDone, remind, archive, trash, unflag,
+// discardDraft and setCommitment; an archive or a Delete is taken back with
+// message.move and board.setDone (UndoArchive). Every user write ends the mark of a case back
 // from a reminder (RemindedAt) at once, as the daemon does.
 //
 // It subscribes to nothing itself: the application's notification fan-out
@@ -370,15 +370,33 @@ public sealed partial class DaemonBoardSource : IBoardSource, IBoardArchiveUndoe
                     // plain toast.
                     UndoLabel = r.Moved is { Count: > 0 } ? Board.Text.Undo : null,
                 };
-                scope.Guard(() =>
+                NotifyArchived(outcome);
+                return r.Case;
+            });
+
+    /// <summary>
+    /// Delete (<c>board.trash</c>): <see cref="OnArchived"/> gets what it
+    /// did, with the moved messages for Undo (<see cref="UndoArchive"/>, as
+    /// an archive's).
+    /// </summary>
+    public void Trash(BoardCaseId id) =>
+        Write(
+            API.BoardTrash, new BoardTrashParams { CaseId = id }, Board.Text.Action.Trash, id,
+            c => c with { Visibility = Board.Visibility.Done(), RemindedAt = null },
+            r =>
+            {
+                var outcome = new Board.ArchiveOutcome
                 {
-                    if (OnArchived is { } archived)
-                    {
-                        archived(outcome);
-                        return;
-                    }
-                    OnNotice?.Invoke(outcome.Text);
-                });
+                    Case = id,
+                    Account = r.Case.AccountId,
+                    Moved = [.. r.Moved ?? []],
+                    Text = Board.Text.Trashed(r.Trashed),
+                    // Nothing moved, or a trash folder the daemon does not
+                    // sync: the plain toast.
+                    UndoLabel = r.Moved is { Count: > 0 } ? Board.Text.Undo : null,
+                    Trash = true,
+                };
+                NotifyArchived(outcome);
                 return r.Case;
             });
 
@@ -386,8 +404,10 @@ public sealed partial class DaemonBoardSource : IBoardSource, IBoardArchiveUndoe
     /// The toast's Undo: the calls of <see cref="Board.UndoArchive"/>, the
     /// moves first, then the case back on the board (optimistic, as
     /// <see cref="SetDone"/>; a refusal is a toast). A move that fails stops
-    /// the undo: the case stays done, because the mail is still archived,
-    /// and <see cref="OnError"/> says <see cref="Board.Text.UndoFailed"/>.
+    /// the undo: the case stays done, because the mail is still archived (or
+    /// in the trash), and <see cref="OnError"/> says
+    /// <see cref="Board.Text.UndoFailed"/> (<see cref="Board.Text.UndoTrashFailed"/>
+    /// after Delete).
     /// </summary>
     public void UndoArchive(Board.ArchiveOutcome outcome)
     {
@@ -423,13 +443,26 @@ public sealed partial class DaemonBoardSource : IBoardSource, IBoardArchiveUndoe
                 writesInFlight--;
                 if (failed)
                 {
-                    scope.Guard(() => OnError?.Invoke(Board.Text.UndoFailed));
+                    scope.Guard(() => OnError?.Invoke(outcome.Trash ? Board.Text.UndoTrashFailed : Board.Text.UndoFailed));
                     return;
                 }
                 SetDone(false, outcome.Case);
             });
         }
     }
+
+    // What Archive or Delete did, to the toast with Undo; without that
+    // observer, the plain notice.
+    private void NotifyArchived(Board.ArchiveOutcome outcome) =>
+        scope.Guard(() =>
+        {
+            if (OnArchived is { } archived)
+            {
+                archived(outcome);
+                return;
+            }
+            OnNotice?.Invoke(outcome.Text);
+        });
 
     /// <summary>Drops the suggested reply (the draft itself, too).</summary>
     public void DiscardDraft(BoardCaseId id) =>
@@ -659,12 +692,17 @@ public sealed partial class DaemonBoardSource : IBoardSource, IBoardArchiveUndoe
         };
     }
 
-    /// <summary>An account as the board names it: the sidebar's label and kind capsule, and whether a reply can be written in it.</summary>
+    /// <summary>
+    /// An account as the board names it: the sidebar's label and kind
+    /// capsule, whether a reply can be written in it and whether Delete can
+    /// move its messages to the trash.
+    /// </summary>
     public static Board.AccountInfo Convert(Account a)
     {
         ArgumentNullException.ThrowIfNull(a);
         return new Board.AccountInfo(
-            a.Id, FolderTree.AccountLabel(a), FolderTree.AccountHeaderBadge(a), a.Can(Capability.Reply) || a.Can(Capability.Comment));
+            a.Id, FolderTree.AccountLabel(a), FolderTree.AccountHeaderBadge(a), a.Can(Capability.Reply) || a.Can(Capability.Comment),
+            a.Can(Capability.Delete));
     }
 
     // Loading

@@ -872,6 +872,34 @@ func UndoFailed(tr Translator) string {
 	return tr.T("Could not undo the archive.")
 }
 
+// Delete moves a case's received messages to the trash (board.trash).
+func Delete(tr Translator) string {
+	// TRANSLATORS: a button and menu item of the board: the case's received
+	// messages go to the trash and the case is done.
+	return tr.T("Delete")
+}
+
+// Trashed says what Delete did: messages moved to the trash, or only
+// marked done.
+func Trashed(n int, tr Translator) string {
+	if n < 1 {
+		return tr.T("Marked as done. No received message was left to delete.")
+	}
+	return fmt.Sprintf(tr.N("Moved %d message to Trash.", "Moved %d messages to Trash.", n), n)
+}
+
+// TrashQuestion is the question before Delete while the mail's Move to
+// Trash asks first (the confirm-delete preference): its heading and its
+// button; the case's subject is the body.
+func TrashQuestion(tr Translator) (heading, label string) {
+	return tr.T("Move to Trash?"), tr.T("Move to _Trash")
+}
+
+// UndoTrashFailed is the toast when taking a Delete back failed.
+func UndoTrashFailed(tr Translator) string {
+	return tr.T("Could not move the messages back from Trash.")
+}
+
 // Action is what a write of the board did, for the toast of its failure
 // (Board.Text.Action).
 type Action int
@@ -889,12 +917,14 @@ const (
 	ActionUnflag
 	// ActionPreferences is a change of the board's preferences.
 	ActionPreferences
+	// ActionTrash is Delete (board.trash).
+	ActionTrash
 )
 
 // Actions lists every action.
 var Actions = []Action{
 	ActionMove, ActionDone, ActionReopen, ActionRemind, ActionArchive,
-	ActionCommitment, ActionDiscardDraft, ActionUnflag, ActionPreferences,
+	ActionCommitment, ActionDiscardDraft, ActionUnflag, ActionPreferences, ActionTrash,
 }
 
 // Why is why a write or load failed, as far as the error says; the client
@@ -944,6 +974,8 @@ func actionText(a Action, tr Translator) string {
 		return tr.T("Removing the star")
 	case ActionPreferences:
 		return tr.T("Changing the board’s settings")
+	case ActionTrash:
+		return tr.T("Moving to Trash")
 	}
 	return ""
 }

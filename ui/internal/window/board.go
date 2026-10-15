@@ -97,6 +97,7 @@ type boardPage struct {
 	remindButton    *gtk.MenuButton
 	remindPopover   *gtk.Popover
 	archiveButton   *gtk.Button
+	trashButton     *gtk.Button
 	detailMenu      *gtk.MenuButton
 	replyButton     *gtk.Button
 	detailStack     *gtk.Stack

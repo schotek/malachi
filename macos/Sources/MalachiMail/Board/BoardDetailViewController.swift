@@ -111,6 +111,7 @@ final class BoardDetailViewController: NSViewController {
     private let doneButton = NSButton()
     private let remindButton = NSButton()
     private let archiveButton = NSButton()
+    private let trashButton = NSButton()
     private let replyButton = NSButton()
     /// The state pill of the shown case, while there is one.
     private var statePill: IssueStatusPill?
@@ -159,13 +160,15 @@ final class BoardDetailViewController: NSViewController {
         configure(doneButton, title: Board.Text.done, action: #selector(doneClicked(_:)))
         configure(remindButton, title: Board.Text.remind, action: #selector(remindClicked(_:)))
         configure(archiveButton, title: Board.Text.archive, action: #selector(archiveClicked(_:)))
+        configure(trashButton, title: Board.Text.delete, action: #selector(trashClicked(_:)))
         configure(replyButton, title: Board.Text.reply, action: #selector(replyClicked(_:)))
         replyButton.bezelColor = .controlAccentColor
         closeButton.isHidden = presentation != .panel
         let spacer = NSView()
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         spacer.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(1), for: .horizontal)
-        actionBar.setViews([closeButton, doneButton, remindButton, archiveButton, spacer, replyButton], in: .leading)
+        actionBar.setViews(
+            [closeButton, doneButton, remindButton, archiveButton, trashButton, spacer, replyButton], in: .leading)
         actionBar.orientation = .horizontal
         actionBar.alignment = .centerY
         actionBar.spacing = 8
@@ -268,24 +271,28 @@ final class BoardDetailViewController: NSViewController {
         render()
     }
 
-    /// Archive and then Remind…, the least needed buttons, give way when
-    /// the bar has no room for all of them at their full titles (a narrow
-    /// panel, "Move Back to Board"). Measured with both counted in, so
-    /// hiding them cannot bring them back on the next pass. The context
-    /// menu keeps both.
+    /// Delete, Archive and then Remind…, the least needed buttons, give
+    /// way when the bar has no room for all of them at their full titles (a
+    /// narrow panel, "Move Back to Board"). Measured with all three counted
+    /// in, so hiding them cannot bring them back on the next pass. The
+    /// context menu keeps them.
     override func viewDidLayout() {
         super.viewDidLayout()
         guard presentation == .panel, !actionBar.isHidden else { return }
-        let optional = [archiveButton, remindButton]
-        let buttons = [closeButton, doneButton, remindButton, archiveButton, replyButton]
+        let optional = [trashButton, archiveButton, remindButton]
+        let buttons = [closeButton, doneButton, remindButton, archiveButton, trashButton, replyButton]
             .filter { optional.contains($0) || !$0.isHidden }
         let width = { (bs: [NSButton]) -> CGFloat in
             bs.reduce(CGFloat(0)) { $0 + $1.fittingSize.width } + self.actionBar.spacing * CGFloat(bs.count)
                 + self.actionBar.edgeInsets.left + self.actionBar.edgeInsets.right
         }
         let available = view.bounds.width
-        let hideArchive = width(buttons) > available
-        let hideRemind = hideArchive && width(buttons.filter { $0 !== archiveButton }) > available
+        let hideTrash = width(buttons) > available
+        let hideArchive = hideTrash && width(buttons.filter { $0 !== trashButton }) > available
+        let hideRemind = hideArchive && width(buttons.filter { $0 !== trashButton && $0 !== archiveButton }) > available
+        if trashButton.isHidden != hideTrash {
+            trashButton.isHidden = hideTrash
+        }
         if archiveButton.isHidden != hideArchive {
             archiveButton.isHidden = hideArchive
         }
@@ -378,6 +385,7 @@ final class BoardDetailViewController: NSViewController {
         doneButton.title = d.isDone ? Board.Text.notDone : Board.Text.done
         doneButton.setAccessibilityLabel(doneButton.title)
         archiveButton.isEnabled = actions.canArchive(d.id)
+        trashButton.isEnabled = actions.canDelete(d.id)
         replyButton.isEnabled = actions.canReply(d.id)
 
         upper.addArrangedSubview(headerLine(d))
@@ -884,6 +892,11 @@ final class BoardDetailViewController: NSViewController {
     @objc private func archiveClicked(_ sender: Any?) {
         guard let d = shown else { return }
         actions.archive(d.id)
+    }
+
+    @objc private func trashClicked(_ sender: Any?) {
+        guard let d = shown else { return }
+        actions.trash(d.id)
     }
 
     @objc private func replyClicked(_ sender: Any?) {

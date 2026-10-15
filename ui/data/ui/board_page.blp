@@ -287,7 +287,7 @@ Adw.BreakpointBin board_page_root {
                     tag: "detail";
 
                     // The ONE detail widget tree: the actions header
-                    // (Done/Remind/Archive/Menu/Reply, board_detail.go)
+                    // (Done/Remind/Archive/Delete/Menu/Reply, board_detail.go)
                     // and board_detail_stack. board_panel.go reparents it
                     // between here (the List style) and
                     // board_panel_content (Columns, Today) on every style
@@ -312,6 +312,9 @@ Adw.BreakpointBin board_page_root {
 
                         [start]
                         Button board_archive_button {}
+
+                        [start]
+                        Button board_trash_button {}
 
                         [end]
                         MenuButton board_detail_menu {

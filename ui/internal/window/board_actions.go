@@ -12,6 +12,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
+	"github.com/schotek/malachi/ui/internal/widget"
 )
 
 // The board's actions (win.board-*, enabled only in Board mode with a case
@@ -19,7 +20,7 @@ import (
 // Remind popover (a dynamic set of presets, like the detail header's
 // Remind… button) and the case row's context menu (right-click or long
 // press: Move To, Mark as Done / Move Back to Board, Remind Me, Archive,
-// Unstar, Reply, Show in Mail — the same targets as the header bar's
+// Delete, Unstar, Reply, Show in Mail — the same targets as the header bar's
 // buttons, acting on the selection a right-click makes first).
 
 // registerBoardActions adds the win.board-* actions, once. Their enabled
@@ -54,9 +55,32 @@ func (w *Window) registerBoardActions() {
 	w.addAction("board-mark-done", false, forSelection(func(p *boardPage, id board.CaseID) { p.ctl.MarkDone(id) }))
 	w.addAction("board-reopen", false, forSelection(func(p *boardPage, id board.CaseID) { p.ctl.Reopen(id) }))
 	w.addAction("board-archive", false, forSelection(func(p *boardPage, id board.CaseID) { p.ctl.Archive(id) }))
+	w.addAction("board-trash", false, forSelection(func(p *boardPage, id board.CaseID) { p.trash(id) }))
 	w.addAction("board-unflag", false, forSelection(func(p *boardPage, id board.CaseID) { p.ctl.Unflag(id) }))
 	w.addAction("board-reply", false, func() { w.boardReply() })
 	w.addAction("board-show-in-mail", false, func() { w.boardShowInMailSelected() })
+}
+
+// trash is Delete on case id: asked first while the mail's Move to Trash
+// asks (confirmTrash's setting; the case's subject is the body), then
+// Controller.Trash (board.trash), whose toast offers Undo.
+func (p *boardPage) trash(id board.CaseID) {
+	d := p.ctl.View().Detail
+	if d == nil || d.ID != id {
+		return
+	}
+	proceed := func() { p.ctl.Trash(id) }
+	if !p.w.settings.ConfirmDelete() {
+		proceed()
+		return
+	}
+	// The subject (hostile input, plain text); "" when the title shows it.
+	subject := d.Subject
+	if subject == "" {
+		subject = d.Title
+	}
+	heading, label := board.TrashQuestion(i18n.Tr)
+	widget.ConfirmDestructive(p.w, heading, subject, label, proceed)
 }
 
 // boardReply opens a reply or focuses the linked draft's inline editor
@@ -96,11 +120,11 @@ func (w *Window) boardShowInMailSelected() {
 // boardActionGates is which win.board-* actions a detail allows, pure and
 // tested without GTK (the macOS client's gating, BoardActions.swift):
 // Archive while the case is not done or the source still can archive it
-// (Detail.CanArchive); Reply with a message to answer or a linked draft
+// (Detail.CanArchive); Delete while its account can delete; Reply with a message to answer or a linked draft
 // to edit; Show in Mail with a message to show (the reply target, else the
 // newest), or on the samples, which only say they cannot.
 type boardActionGates struct {
-	markDone, reopen, archive, unflag, reply, showInMail, moveTo bool
+	markDone, reopen, archive, trash, unflag, reply, showInMail, moveTo bool
 }
 
 func boardGatesFor(d board.Detail, samples bool) boardActionGates {
@@ -108,6 +132,7 @@ func boardGatesFor(d board.Detail, samples bool) boardActionGates {
 		markDone:   !d.IsDone,
 		reopen:     d.IsDone,
 		archive:    d.CanArchive || !d.IsDone,
+		trash:      d.CanDelete,
 		unflag:     d.CanUnstar,
 		reply:      d.Reply != nil || d.DraftID != "",
 		showInMail: samples || d.Reply != nil || d.LatestMessage != "",
@@ -129,7 +154,7 @@ func (p *boardPage) applyActionsSensitivity(vm board.ViewModel) {
 		g = boardGatesFor(*vm.Detail, p.daemon == nil)
 	}
 	for name, enabled := range map[string]bool{
-		"board-mark-done": g.markDone, "board-reopen": g.reopen, "board-archive": g.archive,
+		"board-mark-done": g.markDone, "board-reopen": g.reopen, "board-archive": g.archive, "board-trash": g.trash,
 		"board-unflag": g.unflag, "board-reply": g.reply, "board-show-in-mail": g.showInMail,
 	} {
 		if a := p.w.actions[name]; a != nil {
@@ -280,6 +305,9 @@ func (p *boardPage) showCaseContextMenu(anchor *gtk.Widget, id board.CaseID, x, 
 	top.AppendItem(remindItem)
 	if boardGatesFor(*d, p.daemon == nil).archive {
 		top.Append(board.Archive(i18n.Tr), "win.board-archive")
+	}
+	if boardGatesFor(*d, p.daemon == nil).trash {
+		top.Append(board.Delete(i18n.Tr), "win.board-trash")
 	}
 	if d.CanUnstar {
 		top.Append(board.Unstar(i18n.Tr), "win.board-unflag")

@@ -304,7 +304,7 @@ import Testing
     // MARK: Keys and Escape (keys.go)
 
     @Test func boardKeys() {
-        #expect(String(Board.boardKeys().map(\.character)) == "12edr")
+        #expect(String(Board.boardKeys().map(\.character)) == "12e\u{7f}dr")
         #expect(Board.boardKeys().allSatisfy { !$0.title.isEmpty })
         #expect(Board.keysGroup == "Board")
         let cases: [(Character, Bool, Bool, Bool, Board.Mode, Board.KeyAction?)] = [
@@ -315,6 +315,10 @@ import Testing
             ("E", false, false, false, .board, .archive),
             ("d", false, false, false, .board, .done),
             ("r", false, false, false, .board, .remind),
+            (Board.deleteCharacter, false, false, false, .board, .trash),
+            (Board.deleteCharacter, false, false, true, .board, nil),  // deleting typed text
+            (Board.deleteCharacter, false, false, false, .mail, nil),  // the mail's own key
+            (Board.deleteCharacter, true, false, false, .board, nil),
             ("e", false, false, true, .board, nil),  // typing
             ("e", false, false, false, .mail, nil),  // the mail's own key
             ("e", true, false, false, .board, nil),  // ⌘E is not Archive

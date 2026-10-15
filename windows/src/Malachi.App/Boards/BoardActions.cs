@@ -6,8 +6,9 @@
 // GTK: window/board_actions.go (the win.board-* actions, boardReply,
 // remindPopoverFor). What the user can do with a case, in one place for the
 // three ways to ask: the detail's bar, its "…" menu and the context menus of
-// rows and cards. Done, Remind, Archive and Unstar go to the board
-// controller; Reply and Show in Mail need the mail, so the window installs
+// rows and cards. Done, Remind, Archive, Delete and Unstar go to the board
+// controller (Delete after ConfirmTrash, the question Mail's Move to Trash
+// asks while confirm-delete is on); Reply and Show in Mail need the mail, so the window installs
 // them (OnReply, OnShowInMail, from Integration.Board.cs). Reply on a case
 // whose suggested reply the inline editor edits gives that editor the
 // keyboard instead (InlineReply, stage 5's BoardReplyEditorHost). The
@@ -54,6 +55,12 @@ public sealed class BoardActions
     /// <summary>Asks before Discard deletes the samples' suggested reply; null asks nothing.</summary>
     public Func<Task<bool>>? ConfirmDiscard { get; set; }
 
+    /// <summary>
+    /// Asks before Delete, with the case's subject as the body (while Mail's
+    /// Move to Trash asks: the confirm-delete setting); null asks nothing.
+    /// </summary>
+    public Func<string, Task<bool>>? ConfirmTrash { get; set; }
+
     /// <summary>Whether a reply in account <paramref name="account"/> is a comment (an issue tracker's account); null: never.</summary>
     public Func<AccountId, bool>? CommentsOn { get; set; }
 
@@ -82,6 +89,26 @@ public sealed class BoardActions
     /// done case is already.
     /// </summary>
     public bool CanArchive(BoardCaseId id) => Case(id) is { } c && (c.CanArchive || !c.Visibility.IsDone);
+
+    /// <summary>
+    /// Delete moves the case's received messages to the trash where its
+    /// account can delete (an issue tracker cannot), also on a done case.
+    /// </summary>
+    public bool CanDelete(BoardCaseId id)
+    {
+        if (Case(id) is not { } c)
+        {
+            return false;
+        }
+        foreach (var a in Controller.Source.Snapshot.Accounts)
+        {
+            if (a.Id == c.Account)
+            {
+                return a.CanDelete;
+            }
+        }
+        return false;
+    }
 
     /// <summary>Show in Mail has a message to show.</summary>
     public bool CanShowInMail(BoardCaseId id) =>
@@ -122,6 +149,32 @@ public sealed class BoardActions
         {
             Controller.Archive(id);
         }
+    }
+
+    /// <summary>
+    /// Delete (<c>board.trash</c>), after <see cref="ConfirmTrash"/>; what it
+    /// did shows with Undo as Archive's.
+    /// </summary>
+    public void Trash(BoardCaseId id) => _ = TrashAsync(id);
+
+    // Delete once the question is answered; the case may have gone (or its
+    // account lost the delete capability) while it was asked.
+    private async Task TrashAsync(BoardCaseId id)
+    {
+        if (!CanDelete(id) || Case(id) is not { } c)
+        {
+            return;
+        }
+        if (ConfirmTrash is { } confirm)
+        {
+            // The case's subject, cleaned as the detail's title (a hostile
+            // string, shown as text).
+            if (!await confirm(Board.CleanLine(c.Subject, 300)) || !CanDelete(id))
+            {
+                return;
+            }
+        }
+        Controller.Trash(id);
     }
 
     /// <summary>Moves the case to <paramref name="state"/> (the state pill's and Move To's items).</summary>

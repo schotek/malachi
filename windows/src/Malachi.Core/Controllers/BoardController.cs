@@ -420,6 +420,16 @@ public sealed partial class BoardController
         Write(id, c is not null && !c.Visibility.IsDone, () => Source.Archive(id));
     }
 
+    /// <summary>
+    /// Delete: the case's received messages go to the trash and it is marked
+    /// done; the toast says what it did. The selection moves on as after done.
+    /// </summary>
+    public void Trash(BoardCaseId id)
+    {
+        var c = Source.Snapshot.FindCase(id);
+        Write(id, c is not null && !c.Visibility.IsDone, () => Source.Trash(id));
+    }
+
     /// <summary>Ticks a promise off, or reopens it.</summary>
     public void SetCommitmentDone(BoardCommitmentId id, bool done)
     {

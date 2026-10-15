@@ -211,6 +211,8 @@ public sealed class ApiRoundTripTests
         [nameof(BoardRemindResult)] = Case<BoardRemindResult>("""{"case":@boardcase@}"""),
         [nameof(BoardArchiveParams)] = Case<BoardArchiveParams>("""{"caseId":"@caseid@"}"""),
         [nameof(BoardArchiveResult)] = Case<BoardArchiveResult>("""{"archived":0,"noArchive":true,"case":@boardcase@,"moved":[@boardmoved@]}"""),
+        [nameof(BoardTrashParams)] = Case<BoardTrashParams>("""{"caseId":"@caseid@"}"""),
+        [nameof(BoardTrashResult)] = Case<BoardTrashResult>("""{"trashed":2,"case":@boardcase@,"moved":[@boardmoved@]}"""),
         [nameof(Malachi.Core.Api.BoardMoved)] = Case<BoardMoved>(BoardMoved),
         [nameof(BoardUnflagParams)] = Case<BoardUnflagParams>("""{"caseId":"@caseid@"}"""),
         [nameof(BoardUnflagResult)] = Case<BoardUnflagResult>("""{"case":@boardcase@,"unflagged":2}"""),

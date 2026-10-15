@@ -24,9 +24,9 @@ extension Board {
         let club = AccountID(rawValue: "sample-club")
         let jira = AccountID(rawValue: "sample-jira")
         let accounts = [
-            AccountInfo(id: work, name: "Contoso Ltd", badge: microsoftBadge),
-            AccountInfo(id: home, name: "Home", badge: googleBadge),
-            AccountInfo(id: club, name: "Rowing Club", badge: imapBadge),
+            AccountInfo(id: work, name: "Contoso Ltd", badge: microsoftBadge, canDelete: true),
+            AccountInfo(id: home, name: "Home", badge: googleBadge, canDelete: true),
+            AccountInfo(id: club, name: "Rowing Club", badge: imapBadge, canDelete: true),
             AccountInfo(id: jira, name: "Demo Jira", badge: Jira.kindBadge),
         ]
 

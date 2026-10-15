@@ -269,6 +269,14 @@ private final class Harness {
             ]
             return try JSONCoding.encoder().encode(BoardArchiveResult(archived: 2, case: c, moved: moved))
         }
+        await fake.on(API.BoardTrash.name) { p in
+            let q = try JSONCoding.decoder().decode(BoardTrashParams.self, from: p)
+            let c = try await s.write(API.BoardTrash.name, q.caseId) { $0.visibility = .done }
+            let moved = await s.archiveMovesNothing ? nil : [
+                BoardMoved(messageId: "m_a", fromFolderId: "f_inbox"), BoardMoved(messageId: "m_c", fromFolderId: "f_archive"),
+            ]
+            return try JSONCoding.encoder().encode(BoardTrashResult(trashed: 2, case: c, moved: moved))
+        }
         await fake.on(API.BoardDiscardDraft.name) { p in
             let q = try JSONCoding.decoder().decode(BoardDiscardDraftParams.self, from: p)
             let c = try await s.write(API.BoardDiscardDraft.name, q.caseId) { $0.draft = nil }
@@ -334,7 +342,7 @@ private final class Harness {
         let h = try await Harness().started()
         let s = h.source.snapshot
         #expect(s.phase == .ready)
-        #expect(s.accounts == [Board.AccountInfo(id: "acc_1", name: "Work", badge: "IMAP")])  // enabled only
+        #expect(s.accounts == [Board.AccountInfo(id: "acc_1", name: "Work", badge: "IMAP", canDelete: true)])  // enabled only
         #expect(s.cases.map(\.id) == [caseID("1"), caseID("2")])
         let c = try #require(h.c("1"))
         #expect(c.person == "Person 1" && c.subject == "Subject 1" && c.ruleState == .you)
@@ -688,6 +696,35 @@ private final class Harness {
         try await h.idle()
         #expect(h.errors == ["Could not undo the archive."])
         #expect(await h.count(API.BoardSetDone.name) == 0)
+        #expect(h.c("1")?.done == true)
+        await h.stop()
+    }
+
+    /// Delete is `board.trash`, said like an archive and taken back the same
+    /// way; a failed move back says so (Go `TestDaemonTrashCanBeUndone`).
+    @Test func trashCanBeUndone() async throws {
+        let h = try await Harness().started()
+        var outcomes: [Board.ArchiveOutcome] = []
+        h.source.onArchived = { outcomes.append($0) }
+        h.source.trash(caseID("1"))
+        #expect(h.c("1")?.done == true)
+        try await h.idle()
+        #expect(await h.count(API.BoardTrash.name) == 1)
+        let o = try #require(outcomes.first)
+        #expect(o.trash && o.text == "Moved 2 messages to Trash." && o.undoLabel == "Undo")
+        #expect(o.moved.map(\.fromFolderId) == ["f_inbox", "f_archive"])
+        h.source.undoArchive(o)
+        try await waitUntil { await h.count(API.BoardSetDone.name) == 1 }
+        try await h.idle()
+        #expect(await h.script.moves.count == 2)
+        #expect(h.c("1")?.done == false)
+
+        h.source.trash(caseID("1"))
+        try await h.idle()
+        await h.script.set(moveFailure: RPCError(code: .messageNotFound, message: "gone"))
+        h.source.undoArchive(o)
+        try await waitUntil { !h.errors.isEmpty }
+        #expect(h.errors == ["Could not move the messages back from Trash."])
         #expect(h.c("1")?.done == true)
         await h.stop()
     }

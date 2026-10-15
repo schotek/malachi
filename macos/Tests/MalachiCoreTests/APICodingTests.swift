@@ -1340,14 +1340,14 @@ import Testing
         "contact.search",
         "issue.transitions", "issue.transition",
         "board.list", "board.get", "board.setState", "board.setDone", "board.remind",
-        "board.archive", "board.unflag", "board.discardDraft", "board.setDraft", "board.queue", "board.annotate",
+        "board.archive", "board.trash", "board.unflag", "board.discardDraft", "board.setDraft", "board.queue", "board.annotate",
         "board.commit", "board.setCommitment", "board.preferences", "board.setPreferences",
         "board.runStart", "board.runEnd",
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 74)
-        #expect(Set(API.allMethods).count == 74, "no duplicates")
+        #expect(API.allMethods.count == 75)
+        #expect(Set(API.allMethods).count == 75, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)

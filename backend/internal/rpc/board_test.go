@@ -36,6 +36,11 @@ func (echoBoard) Archive(_ context.Context, p api.BoardArchiveParams) (*api.Boar
 		Moved: []api.BoardMoved{{MessageID: "m_1", FromFolderID: "f_inbox"}}}, nil
 }
 
+func (echoBoard) Trash(_ context.Context, p api.BoardTrashParams) (*api.BoardTrashResult, error) {
+	return &api.BoardTrashResult{Trashed: 1, Case: api.BoardCase{ID: p.CaseID, Visibility: api.BoardDone},
+		Moved: []api.BoardMoved{{MessageID: "m_2", FromFolderID: "f_archive"}}}, nil
+}
+
 func boardMethods() []string {
 	var out []string
 	for _, m := range api.AllMethods {
@@ -50,8 +55,8 @@ func boardMethods() []string {
 // notImplemented, and params that do not decode answer invalidParams
 // before anything reaches it.
 func TestBoardMethodsDispatch(t *testing.T) {
-	if n := len(boardMethods()); n != 17 {
-		t.Fatalf("%d board methods in api.AllMethods, want 17", n)
+	if n := len(boardMethods()); n != 18 {
+		t.Fatalf("%d board methods in api.AllMethods, want 18", n)
 	}
 	ts := startServer(t, nil, nil, nil)
 	c, r := dialAuthed(t, ts.sock)
@@ -139,5 +144,21 @@ func TestBoardChangedNotification(t *testing.T) {
 	}
 	if got.Method != api.NotifyBoardChanged || string(got.Params) != `{"accountIds":["acc_1"]}` {
 		t.Errorf("notification: %s", line)
+	}
+}
+
+// board.trash answers under its documented names.
+func TestBoardTrashOnTheWire(t *testing.T) {
+	ts := startServer(t, &boardBackend{}, nil, nil)
+	c, r := dialAuthed(t, ts.sock)
+	resp := call(t, c, r, api.MethodBoardTrash, api.BoardTrashParams{CaseID: "c_1"})
+	if resp.Error != nil {
+		t.Fatalf("board.trash: %+v", resp.Error)
+	}
+	raw := string(resp.Result)
+	for _, want := range []string{`"trashed":1`, `"moved":[{"messageId":"m_2","fromFolderId":"f_archive"}]`} {
+		if !strings.Contains(raw, want) {
+			t.Errorf("result %s lacks %s", raw, want)
+		}
 	}
 }

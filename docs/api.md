@@ -2994,8 +2994,8 @@ BoardMessage { "id": "m_3", "folderId": "f_inbox", "from": Address, "date": Time
   `mode: "reply"`): the newest inbound member that counts, else the newest
   member that counts; on a `jira` account that reply is a comment.
   `latestMessageId` is the newest member that counts.
-- `visibility`: `done` after `board.setDone`, `board.archive` or an archive
-  in the mail view (**Archived threads** above) until an inbound member
+- `visibility`: `done` after `board.setDone`, `board.archive`,
+  `board.trash` or an archive in the mail view (**Archived threads** above) until an inbound member
   that counts arrives later (by the time the daemon stored it, not by its
   `Date` header, so neither a forged date nor a backfill of old mail
   reopens a case; one that arrives archived waits until it is in the
@@ -3015,8 +3015,8 @@ BoardMessage { "id": "m_3", "folderId": "f_inbox", "from": Address, "date": Time
 - `remindedAt`: when a remind came due (the `remindAt` it had); present
   while the case is `live` after it, until the user acts on the case
   (`board.setState`, `board.setDone`, `board.remind` — also with null —,
-  `board.archive`, `board.unflag`) or an inbound member that counts
-  arrives. A client lists such a case first in its state, marked as
+  `board.archive`, `board.trash`, `board.unflag`) or an inbound member
+  that counts arrives. A client lists such a case first in its state, marked as
   reminded; it is no system notification.
 - `canArchive`: `board.archive` would move messages — the account has the
   `move` capability (§4.1) and a folder of role `archive`, and a member is
@@ -3272,6 +3272,37 @@ clears done). Archiving the same messages in the mail view
 (`message.move` into the archive folder, from any client) marks the case
 done as well (**Archived threads**, §4.13); `board.archive` differs in
 moving them itself and in naming `moved`.
+
+#### `board.trash`
+- params: `{ "caseId" }`
+- result: `{ "trashed": 2, "case": BoardCase,
+  "moved": [ { "messageId": "m_3", "fromFolderId": "f_archive" } ] (opt) }`
+- errors: invalidArgument (the board disabled, no `caseId`, an account
+  without the `delete` capability: a `jira` account), caseNotFound (also
+  when the case's account is gone), folderNotFound (the account has no
+  folder of role `trash`; nothing moved, the case is not marked done),
+  messageNotFound (a member left or was deleted while the move was
+  prepared; nothing moved, the case is not marked done), storageError
+
+Board's Delete: `board.archive`'s sibling for a case the user wants gone.
+Moves every received message of the case to the folder of role `trash`
+the way `message.delete` does (local first, through the operation log),
+then marks the case done as `board.archive` does (the remind cleared).
+Received means a visible member (not hidden) in any folder of the
+account — the inbox, the archive, a folder of the user's, the junk —
+other than those of role `sent`, `outbox`, `drafts` and `trash`, and
+not a copy of one of the user's own messages (its `Message-ID` is a
+member's in Sent: a Bcc to oneself, a Gmail label); the user's own
+messages, drafts and what is in the trash already stay. Only the
+thread's newest members are read, as `board.get` reads them. `trashed`
+counts the messages moved (0 when there is nothing left to move: the
+case is only marked done); `moved` names each and the folder it was
+moved from, so a client can undo it as an archive: `message.move` of
+each back to its folder, then `board.setDone` with `done: false`.
+`moved` is absent when nothing moved and when the trash folder is not
+synchronised (`Folder.synced` false). Clients offer it on an account
+with the `delete` capability; whether to ask first is the client's
+(its Move to Trash preference).
 
 #### `board.unflag`
 - params: `{ "caseId" }`
@@ -3890,6 +3921,10 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   the user edited it and is deleted when untouched. New `draft.get` (one draft as `draft.list` lists it) and
   `board.unflag` (clears the flags behind `hot.flagged`). No new error
   codes; `ProtocolVersion` stays 2.
+- **2** (2026-10-15, compatible addition: Delete on the board, §4.13):
+  new `board.trash` (every received message of a case to the trash from
+  whatever folder, the case marked done, `moved` for an undo as
+  `board.archive`'s). No new error codes; `ProtocolVersion` stays 2.
 - **2** (2026-10-14, compatible addition: forwarding several messages,
   §4.5): `draft.create` `messageIds` (mode `forward`, 2–20 messages of one
   account, each attached whole as `message/rfc822`, nothing downloaded,

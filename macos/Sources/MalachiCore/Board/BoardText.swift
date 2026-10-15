@@ -478,6 +478,31 @@ extension Board {
         /// not go through; the case stays done).
         public static var undoFailed: String { L10n.T("Could not undo the archive.") }
 
+        /// Delete: a case's received messages go to the trash
+        /// (`board.trash`).
+        public static var delete: String {
+            // TRANSLATORS: a button and menu item of the board: the case's received
+            // messages go to the trash and the case is done.
+            L10n.T("Delete")
+        }
+
+        /// What Delete did: messages moved to the trash, or only marked
+        /// done.
+        public static func trashed(_ n: Int) -> String {
+            guard n >= 1 else { return L10n.T("Marked as done. No received message was left to delete.") }
+            return L10n.N("Moved %d message to Trash.", "Moved %d messages to Trash.", n)
+        }
+
+        /// The question before Delete while the mail's Move to Trash asks
+        /// first (the confirm-delete preference): its heading and button;
+        /// the case's subject is the body.
+        public static var trashQuestion: (heading: String, label: String) {
+            (L10n.T("Move to Trash?"), L10n.T("Move to _Trash"))
+        }
+
+        /// The toast when taking a Delete back failed.
+        public static var undoTrashFailed: String { L10n.T("Could not move the messages back from Trash.") }
+
         /// What a write of the board did, for the toast of its failure.
         public enum Action: Sendable, CaseIterable {
             case move, done, reopen, remind, archive, commitment, discardDraft
@@ -485,6 +510,8 @@ extension Board {
             case unflag
             /// A change of the board's preferences (`board.setPreferences`).
             case preferences
+            /// Delete (`board.trash`).
+            case trash
         }
 
         /// The toast of a failed write or load: what failed and, when the
@@ -502,6 +529,7 @@ extension Board {
             case .discardDraft: what = L10n.T("Discarding the draft")
             case .unflag: what = L10n.T("Removing the star")
             case .preferences: what = L10n.T("Changing the board’s settings")
+            case .trash: what = L10n.T("Moving to Trash")
             }
             guard let why = failureReason(error, action) else { return L10n.T("%s failed.", what) }
             return L10n.T("%s failed: %s.", what, why)

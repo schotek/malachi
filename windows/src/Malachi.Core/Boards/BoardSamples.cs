@@ -39,9 +39,9 @@ public static partial class Board
         var jira = new AccountId("sample-jira");
         AccountInfo[] accounts =
         [
-            new(work, "Contoso Ltd", "M365"),
-            new(home, "Home", "GOOGLE"),
-            new(club, "Rowing Club", "IMAP"),
+            new(work, "Contoso Ltd", "M365", CanDelete: true),
+            new(home, "Home", "GOOGLE", CanDelete: true),
+            new(club, "Rowing Club", "IMAP", CanDelete: true),
             new(jira, "Demo Jira", Jira.KindBadge),
         ];
         static CaseMessage Msg(string from, DateTimeOffset date, string text) => new() { From = from, Date = date, Text = text };

@@ -350,6 +350,15 @@ func (f *fakeDaemon) serve(method string, params any) (any, error) {
 			moved = nil
 		}
 		return api.BoardArchiveResult{Archived: 2, Case: c, Moved: moved}, err
+	case api.MethodBoardTrash:
+		var p api.BoardTrashParams
+		_ = roundTrip(params, &p)
+		c, err := f.write(p.CaseID, func(c *api.BoardCase) { c.Visibility = api.BoardDone })
+		moved := []api.BoardMoved{{MessageID: "m_a", FromFolderID: "f_inbox"}, {MessageID: "m_c", FromFolderID: "f_archive"}}
+		if f.noMoved {
+			moved = nil
+		}
+		return api.BoardTrashResult{Trashed: 2, Case: c, Moved: moved}, err
 	case api.MethodMessageMove:
 		var p api.MessageMoveParams
 		_ = roundTrip(params, &p)
@@ -481,7 +490,7 @@ func TestDaemonLoadsTheBoardAndTheAccounts(t *testing.T) {
 	h := newHarness(t, true).started()
 	s := h.source.Snapshot()
 	eq(t, "phase", s.Phase, PhaseReady)
-	eq(t, "accounts", s.Accounts, []AccountInfo{{ID: "acc_1", Name: "Work", Badge: "IMAP", CanReply: true}}) // enabled only
+	eq(t, "accounts", s.Accounts, []AccountInfo{{ID: "acc_1", Name: "Work", Badge: "IMAP", CanReply: true, CanDelete: true}}) // enabled only
 	var ids []CaseID
 	for _, c := range s.Cases {
 		ids = append(ids, c.ID)
@@ -859,6 +868,48 @@ func TestDaemonArchiveWithoutMovedHasNoUndo(t *testing.T) {
 	h.source.Archive(caseID("1"))
 	h.idle()
 	check(t, outcome != nil && outcome.UndoLabel == "" && outcome.Text != "", "outcome %+v", outcome)
+}
+
+// TestDaemonTrashCanBeUndone: Delete is board.trash, said like an archive
+// and taken back the same way; a failed move back says so.
+func TestDaemonTrashCanBeUndone(t *testing.T) {
+	h := newHarness(t, true).started()
+	var outcome *ArchiveOutcome
+	h.source.SetHandlers(Handlers{
+		Change:   func() { h.reports++ },
+		Error:    func(s string) { h.errors = append(h.errors, s) },
+		Archived: func(o ArchiveOutcome) { outcome = &o },
+	})
+	h.source.Trash(caseID("1"))
+	check(t, h.c("1").Done(), "not done at once")
+	h.idle()
+	eq(t, "trash calls", h.fake.count(api.MethodBoardTrash), 1)
+	if outcome == nil {
+		t.Fatal("no outcome")
+	}
+	eq(t, "outcome", *outcome, ArchiveOutcome{
+		Case: caseID("1"), Account: "acc_1", Text: "Moved 2 messages to Trash.", UndoLabel: "Undo", Trash: true,
+		Moved: []api.BoardMoved{{MessageID: "m_a", FromFolderID: "f_inbox"}, {MessageID: "m_c", FromFolderID: "f_archive"}},
+	})
+	h.source.UndoArchive(*outcome)
+	h.idle()
+	eq(t, "moves", len(h.fake.moves), 2)
+	check(t, !h.c("1").Done(), "still done after Undo")
+
+	h.source.Trash(caseID("1"))
+	h.idle()
+	h.fake.set(func(f *fakeDaemon) { f.moveFailure = errors.New("messageNotFound") })
+	h.source.UndoArchive(*outcome)
+	h.idle()
+	check(t, h.c("1").Done(), "the case came back although the mail is still in the trash")
+	eq(t, "errors", h.errors, []string{"Could not move the messages back from Trash."})
+
+	// Nothing to take back: the plain toast.
+	h.fake.set(func(f *fakeDaemon) { f.noMoved = true })
+	outcome = nil
+	h.source.Trash(caseID("2"))
+	h.idle()
+	check(t, outcome != nil && outcome.UndoLabel == "" && outcome.Trash, "outcome %+v", outcome)
 }
 
 func TestDaemonRemindedAt(t *testing.T) {

@@ -76,6 +76,9 @@ func (stubBoard) Remind(context.Context, api.BoardRemindParams) (*api.BoardRemin
 func (stubBoard) Archive(context.Context, api.BoardArchiveParams) (*api.BoardArchiveResult, error) {
 	return nil, api.ErrNotImplemented
 }
+func (stubBoard) Trash(context.Context, api.BoardTrashParams) (*api.BoardTrashResult, error) {
+	return nil, api.ErrNotImplemented
+}
 func (stubBoard) Unflag(context.Context, api.BoardUnflagParams) (*api.BoardUnflagResult, error) {
 	return nil, api.ErrNotImplemented
 }

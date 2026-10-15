@@ -435,6 +435,14 @@ func (c *Controller) Archive(id CaseID) {
 	c.write(id, ok && !k.Visibility.IsDone(), func() { c.source.Archive(id) })
 }
 
+// Trash is Delete: the case's received messages go to the trash and it is
+// marked done; the toast says what it did. The selection moves on as
+// after done.
+func (c *Controller) Trash(id CaseID) {
+	k, ok := c.source.Snapshot().Case(id)
+	c.write(id, ok && !k.Visibility.IsDone(), func() { c.source.Trash(id) })
+}
+
 // SetCommitmentDone ticks a promise off, or reopens it.
 func (c *Controller) SetCommitmentDone(id api.BoardCommitmentID, done bool) {
 	c.departure = nil

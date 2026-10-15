@@ -8,7 +8,8 @@
 // A source over a snapshot held in memory: the dummy board
 // (MALACHI_BOARD_SAMPLES=1), and the tests. Writes are emulated locally
 // (Archive marks the case done and says it moved its messages when the case
-// can archive; its Undo only reopens the case). Every user write ends the
+// can archive, Delete when its account can delete; their Undo only reopens
+// the case). Every user write ends the
 // mark of a case back from a reminder (RemindedAt), as the daemon does. A write to an unknown case, or one that changes nothing, is
 // ignored and calls no one. A change makes new lists, so snapshots handed
 // out stay as they were.
@@ -89,6 +90,32 @@ public sealed class InMemoryBoardSource(Board.Snapshot snapshot) : IBoardSource
             Account = c.Account,
             Text = Board.Text.Archived(moved, !c.CanArchive),
             UndoLabel = Board.Text.Undo,
+        };
+        if (OnArchived is { } archived)
+        {
+            archived(outcome);
+            return;
+        }
+        OnNotice?.Invoke(outcome.Text);
+    }
+
+    /// <summary>Delete: the case done, said to have moved its messages when its account can delete.</summary>
+    public void Trash(BoardCaseId id)
+    {
+        if (Snapshot.FindCase(id) is not { } c)
+        {
+            return;
+        }
+        var canDelete = Snapshot.Accounts.FirstOrDefault(a => a.Id == c.Account)?.CanDelete ?? false;
+        var moved = canDelete ? int.Max(1, c.MessageCount) : 0;
+        Update(id, x => x with { Visibility = Board.Visibility.Done(), CanArchive = false, RemindedAt = null });
+        var outcome = new Board.ArchiveOutcome
+        {
+            Case = id,
+            Account = c.Account,
+            Text = Board.Text.Trashed(moved),
+            UndoLabel = Board.Text.Undo,
+            Trash = true,
         };
         if (OnArchived is { } archived)
         {
