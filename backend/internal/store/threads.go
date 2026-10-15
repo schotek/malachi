@@ -313,6 +313,9 @@ type ThreadRow struct {
 	// sent folders the folder lacks (sentScope, ThreadSentMessages); 0
 	// account-wide.
 	SentCount int
+	// DraftCount, in a folder's scope, counts the drafts that reply to a
+	// member of the thread (draftScope, ThreadDrafts); 0 account-wide.
+	DraftCount int
 }
 
 // threadGroup is one row of the grouped query.
@@ -647,7 +650,7 @@ func (s *Store) sentCounts(ctx context.Context, accountID, folderID string, ids 
 
 // threadRows completes the grouped rows with the newest member, the
 // participants, the flag union, the folders and, in a folder's scope, the
-// sent count, in the order given. folderID "" scopes the details to the
+// sent and draft counts, in the order given. folderID "" scopes the details to the
 // whole account but its virtual folders; the folders are every one with a
 // visible member.
 func (s *Store) threadRows(ctx context.Context, accountID, folderID string, groups []threadGroup) ([]ThreadRow, error) {
@@ -772,10 +775,13 @@ func (s *Store) threadRows(ctx context.Context, accountID, folderID string, grou
 		}
 	}
 
-	var sentCount map[string]int
+	var sentCount, draftCount map[string]int
 	if folderID != "" {
 		var err error
 		if sentCount, err = s.sentCounts(ctx, accountID, folderID, ids); err != nil {
+			return nil, err
+		}
+		if draftCount, err = s.draftCounts(ctx, accountID, folderID, ids); err != nil {
 			return nil, err
 		}
 	}
@@ -821,7 +827,7 @@ func (s *Store) threadRows(ctx context.Context, accountID, folderID string, grou
 			MessageCount: g.count, UnreadCount: g.unread,
 			Flags: normalizeFlags(d.flags), HasAttachments: g.att != 0,
 			Participants: d.participants, FolderIDs: d.folders,
-			SentCount: sentCount[g.id],
+			SentCount: sentCount[g.id], DraftCount: draftCount[g.id],
 		}
 		if row.Participants == nil {
 			row.Participants = []api.Address{}

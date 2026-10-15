@@ -649,8 +649,13 @@ func (b *Backend) boardDraftTouched(ctx context.Context, accountID, draftID stri
 
 // boardDraftsDropped is told the drafts a move, trash or delete of their
 // copies deleted (the store's draft sync): when a case links one of them,
-// it shows no draft now, and the clients are told once.
+// it shows no draft now, and the clients are told once. The drafts are
+// gone, and with them what they replied to: any thread of the account may
+// show one less (notify.draftsChanged).
 func (b *Backend) boardDraftsDropped(ctx context.Context, accountID string, draftIDs []string) {
+	if len(draftIDs) > 0 {
+		b.draftsChanged(accountID)
+	}
 	for _, id := range draftIDs {
 		linked, err := b.store.BoardDraftLinked(ctx, accountID, id)
 		if err != nil {

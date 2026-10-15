@@ -122,6 +122,7 @@ const (
 	NotifyAccountsChanged = "notify.accountsChanged"
 	NotifyMessagesChanged = "notify.messagesChanged"
 	NotifyBoardChanged    = "notify.boardChanged"
+	NotifyDraftsChanged   = "notify.draftsChanged"
 )
 
 // AllMethods lists every callable method. The RPC server uses it to register
@@ -156,5 +157,5 @@ var AllMethods = []string{
 // AllNotifications lists every server-initiated notification.
 var AllNotifications = []string{
 	NotifyNewMessage, NotifySyncState, NotifyAuthRequired, NotifyAccountsChanged, NotifyMessagesChanged,
-	NotifyBoardChanged,
+	NotifyBoardChanged, NotifyDraftsChanged,
 }

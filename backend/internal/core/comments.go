@@ -249,5 +249,6 @@ func (s *messageService) sendComment(ctx context.Context, a store.Account, p api
 		"visibility", d.CommentVisibility, "size", m.Size)
 	s.b.Delivery.Wake(a.ID)
 	s.b.outboxChanged(a.ID)
+	s.b.draftChanged(ctx, a.ID, d.InReplyTo)
 	return &api.MessageSendResult{OutboxID: api.MessageID(m.ID)}, nil
 }

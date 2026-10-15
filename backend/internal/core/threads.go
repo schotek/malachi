@@ -145,7 +145,30 @@ func (s *threadService) Get(ctx context.Context, p api.ThreadGetParams) (*api.Th
 			return nil, err
 		}
 	}
+	if p.WithDrafts && folderID != "" {
+		if res.Drafts, err = s.drafts(ctx, a, string(p.ThreadID), folderID); err != nil {
+			return nil, err
+		}
+	}
 	return res, nil
+}
+
+// drafts is the thread's drafts (store.ThreadDrafts) as draft.list lists
+// them; nil when there are none.
+func (s *threadService) drafts(ctx context.Context, a store.Account, threadID, folderID string) ([]api.Draft, error) {
+	rows, err := s.b.store.ThreadDrafts(ctx, a.ID, threadID, folderID, api.MaxThreadDrafts)
+	if err != nil {
+		return nil, api.NewError(api.CodeStorageError, "%v", err)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	out := make([]api.Draft, 0, len(rows))
+	for _, d := range rows {
+		out = append(out, toAPIDraft(d))
+	}
+	s.b.decorateDrafts(ctx, a.ID, rows, out)
+	return out, nil
 }
 
 // sent is the thread's members in the account's sent folders that the
@@ -194,5 +217,6 @@ func toAPIThread(r store.ThreadRow) api.ThreadSummary {
 		HasAttachments: r.HasAttachments,
 		FolderIDs:      folders,
 		SentCount:      r.SentCount,
+		DraftCount:     r.DraftCount,
 	}
 }

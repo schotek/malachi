@@ -138,6 +138,7 @@ func (s *messageService) Send(ctx context.Context, p api.MessageSendParams) (*ap
 	s.b.Delivery.Wake(a.ID)
 	s.b.outboxChanged(a.ID)
 	s.b.boardDraftTouched(ctx, a.ID, d.ID) // sent: a case linking it shows no draft now
+	s.b.draftChanged(ctx, a.ID, d.InReplyTo)
 	if !d.Copy.IsZero() {
 		// The draft's copy in the Drafts folder is a queued delete now.
 		s.b.triggerDrafts(a.ID)

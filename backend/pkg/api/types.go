@@ -1299,6 +1299,9 @@ const (
 	MaxThreadMessages = 500
 	// MaxThreadParticipants caps ThreadSummary.Participants.
 	MaxThreadParticipants = 8
+	// MaxThreadDrafts is the most drafts thread.get returns (the newest);
+	// ThreadSummary.DraftCount still counts them all.
+	MaxThreadDrafts = 20
 )
 
 type ThreadSummary struct {
@@ -1331,6 +1334,14 @@ type ThreadSummary struct {
 	// and in the account-wide scope of thread.get (the sent members are
 	// members there).
 	SentCount int `json:"sentCount"`
+	// DraftCount, in a folder's scope, is how many of the account's drafts
+	// reply to a message of the thread (Draft.InReplyTo, any folder),
+	// except a board case's suggested reply (board.setDraft): the user's
+	// unsent replies, and on an issue-tracker account its unsent comments.
+	// It is not part of MessageCount or any other aggregate. 0 in a Drafts
+	// folder (a draft's copy is a member there) and the outbox, and in the
+	// account-wide scope of thread.get.
+	DraftCount int `json:"draftCount"`
 }
 
 type ThreadListParams struct {
@@ -1357,6 +1368,10 @@ type ThreadGetParams struct {
 	// WithSent, with FolderID, also returns the members the summary's
 	// SentCount counts (ThreadGetResult.Sent). Ignored without FolderID.
 	WithSent bool `json:"withSent,omitempty"`
+	// WithDrafts, with FolderID, also returns the drafts the summary's
+	// DraftCount counts (ThreadGetResult.Drafts). Ignored without
+	// FolderID.
+	WithDrafts bool `json:"withDrafts,omitempty"`
 }
 
 type ThreadGetResult struct {
@@ -1370,6 +1385,11 @@ type ThreadGetResult struct {
 	// They are not part of Thread's aggregates and are never the folder's
 	// members (actions on the conversation are not theirs).
 	Sent []MessageSummary `json:"sent,omitempty"`
+	// Drafts are the drafts DraftCount counts, as draft.list lists them
+	// (a comment draft with its comment): newest updatedAt first, at most
+	// MaxThreadDrafts. Only with WithDrafts and FolderID; absent otherwise
+	// and when there are none. They are never members of the thread.
+	Drafts []Draft `json:"drafts,omitempty"`
 }
 
 // ---------------------------------------------------------------------------
@@ -2111,4 +2131,15 @@ type AccountsChangedNotification struct{}
 type MessagesChangedNotification struct {
 	AccountID AccountID  `json:"accountId"`
 	FolderIDs []FolderID `json:"folderIds,omitempty"`
+}
+
+// DraftsChangedNotification says that drafts of the account were saved,
+// deleted, sent or linked to a board case or unlinked, from any client
+// (the MCP bridge too): what ThreadSummary.DraftCount and thread.get's
+// drafts return for ThreadIDs may differ now. ThreadIDs empty = any
+// thread of the account. Clients showing one of those threads ask
+// thread.get again.
+type DraftsChangedNotification struct {
+	AccountID AccountID  `json:"accountId"`
+	ThreadIDs []ThreadID `json:"threadIds,omitempty"`
 }

@@ -1945,7 +1945,8 @@ ThreadSummary { "id": "t_9", "accountId": "acc_1",
                 "hasAttachments": true,
                 "folderIds": ["f_inbox", "f_sent"],
                 "issue": IssueInfo (opt),          // a jira account's thread
-                "sentCount": 1 }                   // the user's replies in Sent the folder lacks
+                "sentCount": 1,                    // the user's replies in Sent the folder lacks
+                "draftCount": 1 }                  // the user's unsent replies to its members
 ```
 
 - Order: by the date of the latest member in the folder, `dateDesc` by
@@ -1973,6 +1974,16 @@ ThreadSummary { "id": "t_9", "accountId": "acc_1",
   `participants`, … are the folder's). Always 0 in a folder of role
   `sent`, in the outbox, in a `jira` account (it has no sent folder) and in
   the account-wide summary of `thread.get`.
+- `draftCount`: how many of the account's drafts (§4.5) reply to a member
+  of the thread (`inReplyTo` names a stored message of the thread in any
+  folder of the account): the user's unsent replies, and on a `jira`
+  account the unsent comments on the issue, so that a client shows them
+  in the conversation. A board case's suggested reply (`board.setDraft`,
+  §4.13) does not count, nor does a forward or a new message (they reply
+  to nothing). Part of no other field, like `sentCount`. Always 0 in a
+  folder of role `drafts` (an uploaded copy of a draft is a member
+  there), in the outbox and in the account-wide summary of `thread.get`;
+  the views of a `jira` account count.
 - `filter`: `unread` keeps threads with an unread member in the folder,
   `flagged` those with a flagged member; `page.total` counts threads after
   the filter.
@@ -1981,9 +1992,10 @@ ThreadSummary { "id": "t_9", "accountId": "acc_1",
   and vice versa.
 
 #### `thread.get`
-- params: `{ "accountId", "threadId", "folderId" (opt), "withSent": bool (opt) }`
+- params: `{ "accountId", "threadId", "folderId" (opt), "withSent": bool (opt),
+  "withDrafts": bool (opt) }`
 - result: `{ "thread": ThreadSummary, "messages": [MessageSummary],
-  "sent": [MessageSummary] (opt) }`
+  "sent": [MessageSummary] (opt), "drafts": [Draft] (opt) }`
 - errors: invalidArgument, accountNotFound, folderNotFound (a `folderId`
   that is not the account's), threadNotFound (no member in the account,
   or none in `folderId` when given), storageError
@@ -2008,6 +2020,16 @@ conversation by date; they are not members of the folder, and nothing of
 `withSent`, in a sent folder, the outbox and a `jira` account. Nothing
 announces a change of them on its own: a client showing them asks again
 when `notify.newMessage` or a change in a sent folder names the thread.
+
+`withDrafts` (with `folderId`; ignored without it) adds `drafts`: the
+drafts `thread.draftCount` counts, each as `draft.list` lists it (a
+comment draft with `comment`), newest `updatedAt` first, at most
+`api.MaxThreadDrafts` (20). A client shows them in the conversation as
+the user's unsent replies; they are not members of anything, and the
+user edits one in a compose window (by its `id`, §4.5) or deletes it
+(`draft.delete`). `drafts` is absent when there are none, without
+`withDrafts`, in a Drafts folder and the outbox.
+`notify.draftsChanged` (§5) names the threads whose drafts changed.
 
 Actions stay per message: `message.flag`, `message.move` and
 `message.delete` take the `messageIds` of the members a client wants to
@@ -3535,6 +3557,7 @@ succeeds is followed by `notify.boardChanged`, so clients learn the new
 | `notify.accountsChanged` | `{}` |
 | `notify.messagesChanged` | `{ "accountId", "folderIds": ["f_1"] (opt) }` |
 | `notify.boardChanged` | `{ "accountIds": ["acc_1"] (opt) }` |
+| `notify.draftsChanged` | `{ "accountId", "threadIds": ["t_1"] (opt) }` |
 
 Notifications are sent only to connections that completed the handshake
 (§1.4).
@@ -3597,6 +3620,18 @@ came due, a change of the board preferences, a triage run started or
 ended. At most one per second; it carries no case, clients run
 `board.list` again (and `board.get` of a case they show whose `version`
 changed). A client that does not know it ignores it.
+
+`notify.draftsChanged` is sent when drafts of the account that reply to
+a stored message changed, from any client including the caller and the
+MCP bridge: saved (`draft.save`), deleted (`draft.delete`, a move or
+delete of a draft's copy in the Drafts folder, the sweep of unlinked
+suggested replies), sent (`message.send`), or linked to a board case
+(which takes them out of the conversation). `threadIds` names the
+threads (absent: any thread of the account, when the message a draft
+replied to is no longer known); a client showing one runs `thread.get`
+with `withDrafts` again, and one listing them reads their
+`draftCount` again. Changes within 250 ms are gathered into one
+notification per account. A client that does not know it ignores it.
 
 `notify.syncState` is sent immediately on every change of `status`,
 `folderId`, `error`, `lastSync`, `pendingOutbox` or `failedOutbox`, and for
@@ -3946,3 +3981,10 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   in `To`); `hot.flagged` whoever wrote last; the user's forwards in a
   thread passed over like notes to self (rules version 6). No new
   methods or error codes; `ProtocolVersion` stays 2.
+- **2** (2026-10-15, compatible addition: unsent drafts in a
+  conversation, §4.4): `ThreadSummary.draftCount` (`thread.list`,
+  `thread.get` with `folderId`) counts the drafts that reply to a member
+  of the thread, a board case's suggested reply excepted; `thread.get`
+  gained `withDrafts`, which returns them as `drafts` (as `draft.list`
+  lists them, at most `api.MaxThreadDrafts`); new notification
+  `notify.draftsChanged`. No new error codes; `ProtocolVersion` stays 2.

@@ -639,6 +639,7 @@ func (b *Backend) Close() {
 		}
 		b.stopDraftTimers()
 		b.stopIssueMail()
+		b.stopDraftNotify()
 		b.dl.close(b.log)
 		b.mem.close()
 	})

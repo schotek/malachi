@@ -193,6 +193,8 @@ type Backend struct {
 	im issueMail
 	// board is the state of the board's worker (board_worker.go).
 	board boardState
+	// dn gathers notify.draftsChanged (drafts_notify.go).
+	dn draftNotify
 }
 
 var _ api.Backend = (*Backend)(nil)

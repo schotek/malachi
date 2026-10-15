@@ -818,6 +818,7 @@ func (s *boardService) SetDraft(ctx context.Context, p api.BoardSetDraftParams) 
 	}
 	if stored.Version != c.Version {
 		s.b.boardWritten(ctx, stored)
+		s.b.draftsChanged(c.AccountID, c.ThreadID) // linked: the conversation no longer shows it
 	}
 	return &api.BoardSetDraftResult{Case: toAPIBoardCase(stored, s.b.boardNow())}, nil
 }
@@ -1106,6 +1107,9 @@ func (s *boardService) Annotate(ctx context.Context, p api.BoardAnnotateParams) 
 	}
 	if !wasLocal && stored.DraftID == in.DraftID {
 		s.b.draftMadeLocal(c.AccountID)
+	}
+	if in.DraftID != "" && stored.DraftID == in.DraftID {
+		s.b.draftsChanged(c.AccountID, c.ThreadID) // linked: the conversation no longer shows it
 	}
 	s.b.boardWritten(ctx, stored)
 	s.b.notifyBoard(true) // the run's counts

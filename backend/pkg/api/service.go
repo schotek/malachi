@@ -175,3 +175,9 @@ type Notifier interface {
 type BoardNotifier interface {
 	BoardChanged(n BoardChangedNotification)
 }
+
+// DraftsNotifier is the optional extension of Notifier for
+// notify.draftsChanged, asserted like BoardNotifier.
+type DraftsNotifier interface {
+	DraftsChanged(n DraftsChangedNotification)
+}

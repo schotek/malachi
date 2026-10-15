@@ -105,6 +105,15 @@ func testJiraComments(t *testing.T, mode jiratest.Mode) {
 	if _, has := outboxFolder(t, b, id); has {
 		t.Fatal("an outbox folder before anything was sent")
 	}
+	// The unsent comment is in the issue's conversation, in its space
+	// and in the views alike.
+	for _, folder := range []api.FolderID{webFolder.ID, byName["Open"].ID} {
+		conv, err := b.Threads().Get(ctx, api.ThreadGetParams{AccountID: id, ThreadID: desc.ThreadID, FolderID: folder, WithDrafts: true})
+		if err != nil || conv.Thread.DraftCount != 1 || len(conv.Drafts) != 1 || conv.Drafts[0].ID != saved.DraftID ||
+			conv.Drafts[0].Comment == nil || conv.Drafts[0].Comment.Issue.Key != web.Key || !conv.Drafts[0].Local {
+			t.Fatalf("comment draft in %s = %+v %v", folder, conv, err)
+		}
+	}
 
 	// message.send: queued, posted, stored, the row gone.
 	sent, err := b.Messages().Send(ctx, api.MessageSendParams{AccountID: id, DraftID: saved.DraftID, Version: saved.Version})
@@ -144,9 +153,12 @@ func testJiraComments(t *testing.T, mode jiratest.Mode) {
 			t.Errorf("wiki %v: %q", err, wiki)
 		}
 	}
-	thread, err := b.Threads().Get(ctx, api.ThreadGetParams{AccountID: id, ThreadID: desc.ThreadID, FolderID: webFolder.ID, WithSent: true})
+	thread, err := b.Threads().Get(ctx, api.ThreadGetParams{AccountID: id, ThreadID: desc.ThreadID, FolderID: webFolder.ID, WithSent: true, WithDrafts: true})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if thread.Drafts != nil || thread.Thread.DraftCount != 0 {
+		t.Errorf("a sent comment is no draft: %+v, count %d", thread.Drafts, thread.Thread.DraftCount)
 	}
 	// An issue tracker has no sent folder: the user's comment is a member.
 	if thread.Sent != nil || thread.Thread.SentCount != 0 {

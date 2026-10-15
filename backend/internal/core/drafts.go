@@ -132,6 +132,7 @@ func (s *draftService) Save(ctx context.Context, p api.DraftSaveParams) (*api.Dr
 	}
 	s.b.scheduleDraftSync(row.AccountID)
 	s.b.boardDraftTouched(ctx, row.AccountID, row.ID)
+	s.b.draftChanged(ctx, row.AccountID, row.InReplyTo)
 	if adoptLinked {
 		s.b.notifyBoard(false, row.AccountID)
 	}
@@ -222,6 +223,7 @@ func (s *draftService) Delete(ctx context.Context, p api.DraftDeleteParams) (*ap
 		s.b.triggerDrafts(string(p.AccountID))
 	}
 	s.b.boardDraftTouched(ctx, string(p.AccountID), string(p.DraftID))
+	s.b.draftChanged(ctx, string(p.AccountID), d.InReplyTo)
 	return &api.DraftDeleteResult{}, nil
 }
 
