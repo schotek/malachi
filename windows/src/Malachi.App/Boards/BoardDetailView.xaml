@@ -9,7 +9,7 @@ window/board_detail.go. The selected case in full, beside the List's list
 or in the sliding panel over Columns and Today (the page moves this one
 view between the two, as GTK moves board_detail_tree). Its bar: Close (the
 panel only), Done or Move Back to Board, Remind… (the presets), Archive,
-"…" (Show in Mail, Unstar) and Reply (Comment on an issue tracker's
+Delete (where the case's account can delete), "…" (Show in Mail, Unstar) and Reply (Comment on an issue tracker's
 account). Under it a scrolling column of three parts: Upper (the state
 pill with Move To, its badges (Reminded, New contact), when a snoozed
 case comes back, the account, the issue,
@@ -79,6 +79,7 @@ TextBlock.Text.
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
@@ -106,8 +107,13 @@ TextBlock.Text.
                 AutomationProperties.AutomationId="BoardArchive"
                 Click="OnArchiveClick" />
             <Button
-                x:Name="MoreButton"
+                x:Name="TrashButton"
                 Grid.Column="4"
+                AutomationProperties.AutomationId="BoardTrash"
+                Click="OnTrashClick" />
+            <Button
+                x:Name="MoreButton"
+                Grid.Column="5"
                 Width="40"
                 Padding="0"
                 AutomationProperties.AutomationId="BoardMore"
@@ -119,7 +125,7 @@ TextBlock.Text.
             </Button>
             <Button
                 x:Name="ReplyButton"
-                Grid.Column="6"
+                Grid.Column="7"
                 AutomationProperties.AutomationId="BoardReply"
                 Click="OnReplyClick"
                 Style="{StaticResource AccentButtonStyle}" />

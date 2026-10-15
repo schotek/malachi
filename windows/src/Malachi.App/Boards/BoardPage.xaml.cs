@@ -493,6 +493,7 @@ public sealed partial class BoardPage : UserControl
             WinKey.E => 'e',
             WinKey.D => 'd',
             WinKey.R => 'r',
+            WinKey.Delete => Board.DeleteRune,
             _ => '\0',
         };
         if (key == '\0' || e.KeyStatus.WasKeyDown)
@@ -517,6 +518,9 @@ public sealed partial class BoardPage : UserControl
                 break;
             case Board.KeyAction.Remind:
                 detail.OpenRemindMenu();
+                break;
+            case Board.KeyAction.Trash:
+                actions.Trash(id);
                 break;
         }
     }

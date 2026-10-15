@@ -6,8 +6,9 @@
 // (window/board_actions.go). The context menu of a row or a card: Move To ▸
 // (the four states, the current one checked; disabled for a done case,
 // which a new state would not take out of Done), Mark as Done or Move Back
-// to Board, Remind Me ▸, Archive, Unstar (only for a case on the board
-// because of a star and not done, Board.CanUnstar); Reply (Comment on an
+// to Board, Remind Me ▸, Archive, Delete (where the account can delete),
+// Unstar (only for a case on the board because of a star and not done,
+// Board.CanUnstar); Reply (Comment on an
 // issue tracker's account), Show in Mail. The items run BoardActions, as
 // the detail's buttons do; the controller reports the change.
 
@@ -46,6 +47,10 @@ internal static class BoardCaseMenu
         menu.Items.Add(remind);
         menu.Items.Add(BoardMenuItem.Make(
             Board.Text.Archive, () => actions.Archive(id), actions.CanArchive(id), "BoardMenuArchive"));
+        if (actions.CanDelete(id))
+        {
+            menu.Items.Add(BoardMenuItem.Make(Board.Text.Delete, () => actions.Trash(id), automationId: "BoardMenuTrash"));
+        }
         if (actions.CanUnstar(id))
         {
             menu.Items.Add(BoardMenuItem.Make(Board.Text.Unstar, () => actions.Unstar(id), automationId: "BoardMenuUnstar"));

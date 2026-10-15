@@ -59,6 +59,7 @@ public sealed partial class BoardDetailView : UserControl, IBoardConversationHos
         MnemonicLabel.Apply(CloseButton, Board.Text.Close);
         MnemonicLabel.Apply(RemindButton, Board.Text.Remind);
         MnemonicLabel.Apply(ArchiveButton, Board.Text.Archive);
+        MnemonicLabel.Apply(TrashButton, Board.Text.Delete);
         WhyLink.Content = Board.Text.WhyLink;
         UnstarLink.Content = Board.Text.Unstar;
         SummaryHeading.Text = Board.Text.SummaryHeading;
@@ -262,9 +263,14 @@ public sealed partial class BoardDetailView : UserControl, IBoardConversationHos
         var reply = actions.ReplyLabel(d.AccountId);
         MnemonicLabel.Apply(DoneButton, done);
         ArchiveButton.IsEnabled = actions.CanArchive(d.Id);
+        // An issue tracker's account cannot delete: no Delete at all.
+        var canDelete = actions.CanDelete(d.Id);
+        TrashButton.Visibility = canDelete ? Visibility.Visible : Visibility.Collapsed;
         MnemonicLabel.Apply(ReplyButton, reply);
         ReplyButton.IsEnabled = actions.CanReply(d.Id);
-        AssignAccessKeys([(DoneButton, done), (RemindButton, Board.Text.Remind), (ArchiveButton, Board.Text.Archive), (ReplyButton, reply)]);
+        AssignAccessKeys(canDelete
+            ? [(DoneButton, done), (RemindButton, Board.Text.Remind), (ArchiveButton, Board.Text.Archive), (TrashButton, Board.Text.Delete), (ReplyButton, reply)]
+            : [(DoneButton, done), (RemindButton, Board.Text.Remind), (ArchiveButton, Board.Text.Archive), (ReplyButton, reply)]);
     }
 
     // The bar's buttons as GTK labels (MnemonicLabel). Their msgids carry no
@@ -423,6 +429,14 @@ public sealed partial class BoardDetailView : UserControl, IBoardConversationHos
         if (shown is { } d)
         {
             actions?.Archive(d.Id);
+        }
+    }
+
+    private void OnTrashClick(object sender, RoutedEventArgs e)
+    {
+        if (shown is { } d)
+        {
+            actions?.Trash(d.Id);
         }
     }
 

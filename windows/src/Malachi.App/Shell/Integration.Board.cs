@@ -118,6 +118,10 @@ public sealed partial class Integration
         CommentsOn = account => Mailbox.Model.Account(account)?.Can(Capability.Comment) == true,
         // As the compose window asks before it discards a message.
         ConfirmDiscard = () => state.Alerts.ConfirmDestructiveAsync(mainWindow, L10n.T("Discard this message?"), "", L10n.T("_Discard")),
+        // As Mail's Move to Trash: only while confirm-delete is on.
+        ConfirmTrash = subject => state.Settings.ConfirmDelete
+            ? state.Alerts.ConfirmDestructiveAsync(mainWindow, Board.Text.TrashQuestion.Heading, subject, Board.Text.TrashQuestion.Label)
+            : Task.FromResult(true),
     };
 
     // The controller over its source, and the notifications the daemon's

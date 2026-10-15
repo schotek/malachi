@@ -43,6 +43,10 @@ public sealed partial class ComposeAssistantBar : UserControl
     public ComposeAssistantBar()
     {
         InitializeComponent();
+        // compose/write.go: assistant.ComposeTexts(tr).Replace.
+        var replace = Assistant.ComposeTexts().Replace;
+        ReplaceButton.Content = replace;
+        AutomationProperties.SetName(ReplaceButton, replace);
         SetMode(AssistantWriteMode.New);
         SetProvider(chatGpt: false);
         RenderDisclosure();
