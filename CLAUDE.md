@@ -72,7 +72,10 @@ logika v Go (`ui/internal/…`) a GTK jako reference, hned potom port do
 `MalachiCore`/`MalachiMail` a `Malachi.Core`/`Malachi.App` i s testy.
 Klient, který na tomto stroji nejde sestavit (Swift a C# na Linuxu,
 GTK na Windows), se napíše podle okolního kódu a v předávce se uvede, co
-zbývá sestavit a ověřit. Když zadání neříká, kterých klientů se změna
+zbývá sestavit a ověřit. Port je hotový, až je každá nová akce zapojená
+v UI (tlačítko, menu, kontextové menu, klávesa, otázka, toast), ne když
+ji má jádro s testy; chybějící kompilátor neomlouvá nezapojené UI
+(kontrolní seznam `docs/windows-port.md` §3.2). Když zadání neříká, kterých klientů se změna
 týká, zeptej se uživatele (v Claude Code přes `AskUserQuestion`), jestli
 ji dělat jen v jednom, nebo ve všech třech. Výjimky jsou jen odchylky
 z tabulek v `macos/README.md` a `windows/README.md` a věci, které na

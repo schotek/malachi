@@ -278,6 +278,45 @@ source. "Mirror" means what it means in [macos-port.md §3](macos-port.md#3-the-
   P/Invoke and COM through CsWin32 (`NativeMethods.txt`), never hand-written
   where CsWin32 can generate it.
 
+### 3.2 Handing over a port
+
+A feature is ported when the user can reach it, not when Core has it: a
+Core method with passing tests that no button, menu item or key calls is
+not ported. Not having `dotnet` (a port written on macOS or Linux) excuses
+an unbuilt port, never an unwired one. Before a hand-off says "all three
+clients", go through the GTK and Swift sides of the change and check, for
+each new action or element:
+
+- **Reached from the UI.** Every GTK action (`win.…`, `msg.…`, `app.…`)
+  and every macOS menu item, toolbar item and button the change adds has a
+  Windows counterpart that calls it: the XAML element with its `x:Name`
+  and handler, or the item in the code that builds the menu. Grep for the
+  callers of each new `BoardActions`, `ActionsController`,
+  `MessageActionRouter` or controller method; one that only its tests call
+  is a gap.
+- **Every way in.** The same action wherever GTK and macOS offer it: the
+  bar or toolbar, the detail's or panel's bar, the window's menu (`…`),
+  the context menu (right click, Shift+F10, the Menu key), the key
+  (`*KeyFor`, the page's `KeyDown`), the message window as well as the
+  main window's reader.
+- **Shown only where it applies.** Visibility and `IsEnabled` follow the
+  same rules as GTK (`Can…`, capabilities, a done case, a several-row
+  selection), recomputed where the view updates, not only once.
+- **Asks and reports.** The confirmation the other clients ask (and the
+  setting that turns it off, e.g. `confirm-delete`), the toast or InfoBar
+  with Undo, the error text when the daemon refuses.
+- **Keyboard and screen readers.** An access key that does not clash on its
+  bar, an `AutomationId` named like its neighbours, a name for an icon-only
+  button.
+- **Notifications followed.** A new notification (`notify.…`) the change
+  adds is subscribed to and refreshes what it names.
+- **Texts.** Every new msgid of the change is used or listed with a reason
+  in `windows/parity-exclusions.txt`.
+
+The hand-off lists, per action, where it is wired (file and handler), and
+says plainly what is not wired yet. A Core-only port is reported as
+exactly that, never as done.
+
 The eleven macOS deviations that its table does not list (the parity
 report's U1–U11) are resolved for Windows as follows: unlisted links are
 confirmed (U1, decided); the AI page reports bridge failures in the group
