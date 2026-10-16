@@ -319,6 +319,13 @@ public sealed partial class BoardController
             pendingAccount = string.IsNullOrEmpty(saved) ? null : saved;
         }
         var next = State with { Style = Board.StyleOnShow(defaultStyle(), lastStyle(), State.Style, picked) };
+        if (next.Style != State.Style && !KeepsSelection())
+        {
+            // As after the user's switch (ChangeStyle): the List's automatic
+            // first row, held until the board shows, must not slide the
+            // panel of Columns or Today in for a case nobody chose.
+            next = next with { Selection = null };
+        }
         if (next.Style != State.Style || pendingAccount is not null)
         {
             Apply(next);

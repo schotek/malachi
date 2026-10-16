@@ -272,6 +272,12 @@ public final class BoardController {
         var next = state
         next.style = Board.styleOnShow(
             defaultStyle: defaultStyle(), lastStyle: lastStyle(), current: state.style, pickedThisRun: pickedStyle)
+        if next.style != state.style && !keepsSelection() {
+            // As after the user's switch (`setStyle`): the List's automatic
+            // first row, held until the board shows, must not slide the
+            // panel of Columns or Today in for a case nobody chose.
+            next.selection = nil
+        }
         if next.style != state.style || !pendingAccount.isEmpty {
             apply(next)
         }

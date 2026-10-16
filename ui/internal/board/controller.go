@@ -342,6 +342,12 @@ func (c *Controller) BoardWillShow() {
 	}
 	next := c.state
 	next.Style = StyleOnShow(def, last, c.state.Style, c.picked)
+	if next.Style != c.state.Style && !c.keepsSelection() {
+		// As after the user's switch (setStyle): the List's automatic
+		// first row, held until the board shows, must not slide the
+		// panel of Columns or Today in for a case nobody chose.
+		next.Selection = ""
+	}
 	if next.Style != c.state.Style || c.pendingAccount != "" {
 		c.apply(next, true)
 	}

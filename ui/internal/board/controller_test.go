@@ -985,6 +985,8 @@ func TestDefaultStyleAtFirstShow(t *testing.T) {
 	c.BoardWillShow()
 	check(t, c.HasShown() && c.State().Style == StyleToday, "first show %d", c.State().Style)
 	check(t, slices.ContainsFunc(p.log, func(x Changes) bool { return x.Has(ChangeStyle) }), "no style change: %v", p.log)
+	// The List's automatic first row held until then opens no panel.
+	check(t, c.State().Selection == "" && !c.View().ShowsPanel, "first show opened a panel for the auto row")
 	// The default List changes nothing.
 	list, _, lp := defaultController()
 	list.BoardWillShow()

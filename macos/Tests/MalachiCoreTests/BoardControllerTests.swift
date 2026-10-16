@@ -936,6 +936,8 @@ private func sampleCases() -> [Board.Case] {
         #expect(c.hasShown)
         #expect(c.state.style == .today)
         #expect(probe.log.contains { $0.contains(.style) })
+        // The List's automatic first row held until then opens no panel.
+        #expect(c.state.selection == nil && !c.view.showsPanel)
         // The default List changes nothing.
         let list = make()
         list.c.boardWillShow()

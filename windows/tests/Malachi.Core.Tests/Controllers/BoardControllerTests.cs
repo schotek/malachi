@@ -982,6 +982,8 @@ public sealed class BoardControllerTests
         Assert.True(c.HasShown);
         Assert.Equal(BoardStyle.Today, c.State.Style);
         Assert.Contains(log, x => x.HasFlag(Changes.Style));
+        // The List's automatic first row held until then opens no panel.
+        Assert.True(c.State.Selection is null && !c.View.ShowsPanel);
         // The default List changes nothing.
         var list = Make();
         list.C.BoardWillShow();
