@@ -59,6 +59,9 @@ func TestArgsTriage(t *testing.T) {
 		t.Errorf("beyond the panel's tools: %q", extra)
 	}
 	for _, tool := range AllowedTools {
+		if slices.Contains(CalendarTools, tool) {
+			continue
+		}
 		if !slices.Contains(TriageTools, tool) {
 			t.Errorf("the panel's %q is not a triage tool", tool)
 		}

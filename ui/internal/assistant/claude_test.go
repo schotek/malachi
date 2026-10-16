@@ -30,6 +30,11 @@ func TestAllowedTools(t *testing.T) {
 		"mcp__malachi__read_message",
 		"mcp__malachi__get_attachment",
 		"mcp__malachi__create_draft",
+		"mcp__malachi__list_calendars",
+		"mcp__malachi__list_events",
+		"mcp__malachi__get_event",
+		"mcp__malachi__find_free_time",
+		"mcp__malachi__list_invitations",
 	}
 	if !slices.Equal(AllowedTools, want) {
 		t.Errorf("AllowedTools = %q, want %q", AllowedTools, want)
@@ -37,7 +42,7 @@ func TestAllowedTools(t *testing.T) {
 }
 
 func TestArgs(t *testing.T) {
-	const tools = "mcp__malachi__list_accounts,mcp__malachi__list_folders,mcp__malachi__list_messages,mcp__malachi__search_messages,mcp__malachi__read_message,mcp__malachi__get_attachment,mcp__malachi__create_draft"
+	const tools = "mcp__malachi__list_accounts,mcp__malachi__list_folders,mcp__malachi__list_messages,mcp__malachi__search_messages,mcp__malachi__read_message,mcp__malachi__get_attachment,mcp__malachi__create_draft,mcp__malachi__list_calendars,mcp__malachi__list_events,mcp__malachi__get_event,mcp__malachi__find_free_time,mcp__malachi__list_invitations"
 	tests := []struct {
 		name     string
 		o        Options

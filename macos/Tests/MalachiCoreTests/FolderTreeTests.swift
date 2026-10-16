@@ -219,6 +219,25 @@ func ids(_ entries: [FolderEntry]) -> [String] {
         var custom = mail
         custom.config.oauth2 = OAuth2Config(provider: .custom)
         #expect(accountHeaderBadge(custom) == "IMAP")
+        // A calendar-only CalDAV account (the Calendar's sidebar).
+        var caldav = mail
+        caldav.config.kind = .caldav
+        #expect(accountHeaderBadge(caldav) == "CALDAV")
+    }
+
+    /// A calendar-only CalDAV account is never in the Mail sidebar: no
+    /// header of its own, and it does not count towards the headers.
+    @Test func caldavAccountsAreNotInMail() {
+        var caldav = testAccount("c")
+        caldav.config.kind = .caldav
+        let accounts = [testAccount("a"), caldav]
+        let folders: [AccountID: [Folder]] = [
+            "a": [testFolder("in", path: "INBOX", role: .inbox)],
+            "c": [testFolder("in-c", path: "INBOX", role: .inbox)],
+        ]
+        #expect(ids(sortFolders(accounts, folders, CollapseState(), FavouriteState())) == ["in@0"])
+        #expect(mailSidebarAccounts(accounts).map(\.id) == ["a"])
+        #expect(enabledAccounts(accounts).count == 2)
     }
 
     @Test func initialFolderPrefersTheMailInbox() {

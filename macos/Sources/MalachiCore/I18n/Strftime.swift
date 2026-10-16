@@ -29,14 +29,48 @@ public enum Strftime {
                 literal.append("%")
                 break
             }
+            if d == "O" {
+                // %OB: the standalone month name (the nominative in Czech,
+                // "říjen 2026"), DateFormatter's LLLL.
+                guard let next = it.next() else {
+                    literal.append("%O")
+                    break
+                }
+                if next == "B" {
+                    flush()
+                    out.append("LLLL")
+                } else {
+                    literal.append("%O\(next)")
+                }
+                continue
+            }
             var noPad = false
+            var consumed = "%"
             if d == "-" {
                 noPad = true
+                consumed += "-"
                 guard let next = it.next() else {
-                    literal.append("%-")
+                    literal.append(consumed)
                     break
                 }
                 d = next
+            }
+            // A C length modifier ("%ld", "%-lld") that a catalogue
+            // generator may have added: the directive is the letter after it.
+            var lengths = 0
+            var ended = false
+            while d == "l" && lengths < 2 {
+                lengths += 1
+                consumed += "l"
+                guard let next = it.next() else {
+                    ended = true
+                    break
+                }
+                d = next
+            }
+            if ended {
+                literal.append(consumed)
+                break
             }
             if let field = field(d, noPad: noPad) {
                 flush()
@@ -45,7 +79,7 @@ public enum Strftime {
                 literal.append("%")
             } else {
                 // Not a directive we know: keep it as text rather than drop it.
-                literal.append(noPad ? "%-\(d)" : "%\(d)")
+                literal.append(consumed + String(d))
             }
         }
         flush()

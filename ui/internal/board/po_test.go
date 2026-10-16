@@ -61,7 +61,7 @@ func exercise(tr Translator) {
 		DefaultStyleTitle(d, tr)
 	}
 	StartModeSetting(tr)
-	for _, s := range StartModes {
+	for _, s := range StartModesWithCalendar {
 		StartModeTitle(s, tr)
 	}
 	ShowBoardSetting(tr)

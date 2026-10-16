@@ -138,13 +138,19 @@ public struct AccountConfig: Codable, Sendable, Equatable {
     public var graph: GraphConfig?
     /// Kind `jira` only.
     public var jira: JiraConfig?
+    /// Kind `caldav` only.
+    public var caldav: CalDAVConfig?
+    /// The calendar part of a graph or caldav account; nil on a graph
+    /// account = calendar sync off.
+    public var calendar: CalendarConfig?
     /// nil = the daemon's default.
     public var syncIntervalSeconds: Int?
 
     public init(
         name: String, email: String, displayName: String? = nil, kind: AccountKind? = nil,
         imap: ServerConfig? = nil, smtp: ServerConfig? = nil, oauth2: OAuth2Config? = nil,
-        graph: GraphConfig? = nil, jira: JiraConfig? = nil, syncIntervalSeconds: Int? = nil
+        graph: GraphConfig? = nil, jira: JiraConfig? = nil, caldav: CalDAVConfig? = nil,
+        calendar: CalendarConfig? = nil, syncIntervalSeconds: Int? = nil
     ) {
         self.name = name
         self.email = email
@@ -155,6 +161,8 @@ public struct AccountConfig: Codable, Sendable, Equatable {
         self.oauth2 = oauth2
         self.graph = graph
         self.jira = jira
+        self.caldav = caldav
+        self.calendar = calendar
         self.syncIntervalSeconds = syncIntervalSeconds
     }
 
@@ -380,11 +388,18 @@ public struct AccountOAuthStartParams: Codable, Sendable, Equatable {
     public var accountId: AccountID?
     public var config: AccountConfig?
     public var browserPage: OAuthBrowserPage?
+    /// Also asks for the calendar scopes (Microsoft Calendars.ReadWrite and
+    /// Calendars.Read.Shared); only a sign-in made for the calendar sets it.
+    public var calendar: Bool?
 
-    public init(accountId: AccountID? = nil, config: AccountConfig? = nil, browserPage: OAuthBrowserPage? = nil) {
+    public init(
+        accountId: AccountID? = nil, config: AccountConfig? = nil, browserPage: OAuthBrowserPage? = nil,
+        calendar: Bool? = nil
+    ) {
         self.accountId = accountId
         self.config = config
         self.browserPage = browserPage
+        self.calendar = calendar
     }
 }
 
@@ -481,17 +496,20 @@ public struct EndpointTestResult: Codable, Sendable, Equatable {
 /// api.AccountTestResult: `imap` and `smtp` for an IMAP account, `graph`
 /// for a Graph account, `jira` for a Jira account (its `capabilities`
 /// carry `cloud` or `datacenter`, and `gateway` when the gateway route was
-/// used).
+/// used), `caldav` for a CalDAV account (its `capabilities` among
+/// `calendar-access`, `calendar-auto-schedule` and `sync-collection`).
 public struct AccountTestResult: Codable, Sendable, Equatable {
     public var imap: EndpointTestResult?
     public var smtp: EndpointTestResult?
     public var graph: EndpointTestResult?
     public var jira: EndpointTestResult?
+    public var caldav: EndpointTestResult?
 
     public init(
         imap: EndpointTestResult? = nil, smtp: EndpointTestResult? = nil, graph: EndpointTestResult? = nil,
-        jira: EndpointTestResult? = nil
+        jira: EndpointTestResult? = nil, caldav: EndpointTestResult? = nil
     ) {
+        self.caldav = caldav
         self.imap = imap
         self.smtp = smtp
         self.graph = graph

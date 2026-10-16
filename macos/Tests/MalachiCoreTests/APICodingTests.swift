@@ -1266,19 +1266,22 @@ import Testing
         (-32700, "parseError"), (-32600, "invalidRequest"), (-32601, "methodNotFound"), (-32602, "invalidParams"),
         (-32603, "internalError"),
         (1000, "notImplemented"), (1001, "invalidArgument"), (1002, "conflict"), (1003, "cancelled"), (1004, "unavailable"),
-        (1005, "unauthenticated"),
+        (1005, "unauthenticated"), (1006, "readOnly"), (1007, "invitationsUnavailable"),
         (1100, "accountNotFound"), (1101, "folderNotFound"), (1102, "messageNotFound"), (1103, "threadNotFound"),
         (1104, "draftNotFound"), (1105, "attachmentNotFound"), (1106, "caseNotFound"),
+        (1107, "calendarNotFound"), (1108, "eventNotFound"),
         (1200, "authRequired"), (1201, "authFailed"), (1202, "keyringError"), (1203, "oauthClientMissing"),
+        (1204, "calendarConsentRequired"),
         (1300, "offline"), (1301, "networkError"), (1302, "serverError"), (1303, "tlsError"), (1304, "serverTimeout"),
-        (1305, "messageGone"),
+        (1305, "messageGone"), (1306, "eventGone"),
         (1400, "storageError"), (1401, "migrationFailed"),
         (1500, "malformedMessage"), (1501, "sanitizeFailed"), (1502, "attachmentTooBig"), (1503, "partNotFound"),
         (1504, "partNotDownloaded"), (1505, "unsubscribeFailed"), (1506, "quoteNotFound"),
+        (1507, "malformedCalendar"), (1508, "recurrenceUnsupported"),
     ]
 
     @Test func errorCodesAreNamed() {
-        #expect(ErrorCode.all.count == 37 && Set(ErrorCode.all).count == 37)
+        #expect(ErrorCode.all.count == 45 && Set(ErrorCode.all).count == 45)
         #expect(ErrorCode.all.map(\.rawValue) == Self.goCodes.map { $0.0 })
         #expect(ErrorCode.all.map(\.name) == Self.goCodes.map { $0.1 })
         for code in ErrorCode.all {
@@ -1372,17 +1375,24 @@ import Testing
         "board.archive", "board.trash", "board.unflag", "board.discardDraft", "board.setDraft", "board.queue", "board.annotate",
         "board.commit", "board.setCommitment", "board.preferences", "board.setPreferences",
         "board.runStart", "board.runEnd",
+        "account.discoverCalDAV", "account.listCalDAVCalendars",
+        "calendar.list", "calendar.update", "calendar.sync", "calendar.preferences",
+        "calendar.setPreferences", "calendar.freeBusy", "calendar.findFreeTime",
+        "event.list", "event.get", "event.search", "event.create", "event.update",
+        "event.delete", "event.respond", "event.snoozeAlert", "event.dismissAlert",
+        "invitation.list", "invitation.respond", "invitation.applyCancel",
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 75)
-        #expect(Set(API.allMethods).count == 75, "no duplicates")
+        #expect(API.allMethods.count == 96)
+        #expect(Set(API.allMethods).count == 96, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)
         #expect(API.allNotifications == [
             "notify.newMessage", "notify.syncState", "notify.authRequired", "notify.accountsChanged", "notify.messagesChanged",
             "notify.boardChanged", "notify.draftsChanged",
+            "notify.calendarChanged", "notify.calendarState", "notify.eventAlert", "notify.invitationsChanged",
         ])
         #expect(API.AccountDetectSite.name == "account.detectSite" && API.AccountListSpaces.name == "account.listSpaces")
         #expect(API.IssueTransitions.name == "issue.transitions" && API.IssueTransition.name == "issue.transition")
@@ -1421,7 +1431,10 @@ import Testing
                                     "account.add", "account.update", "account.discover", "account.test",
                                     "account.oauthStart", "account.oauthWait", "message.download",
                                     "account.detectSite", "account.listSpaces", "issue.transitions", "issue.transition",
-                                    "message.unsubscribe"]
+                                    "message.unsubscribe",
+                                    "account.discoverCalDAV", "account.listCalDAVCalendars", "calendar.freeBusy",
+                                    "calendar.findFreeTime", "event.create", "event.update", "event.delete",
+                                    "event.respond", "invitation.respond"]
         for m in API.methods where !special.contains(m.name) {
             #expect(m.timeout == RPCTimeouts.default, "\(m.name) should use the default timeout")
         }

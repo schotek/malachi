@@ -78,6 +78,10 @@ final class MessageViewController: NSViewController {
 
     let bodyTextView = MessageBodyTextView()
     let header = MessageHeaderView()
+    /// The invitation card above the header (docs/calendar.md §5.7; not
+    /// for an attached message), at the header's insets.
+    let invitation = InvitationCardPresenter(margins: NSEdgeInsets(
+        top: MessageHeaderView.spacing, left: MessageHeaderView.inset, bottom: 0, right: MessageHeaderView.inset))
 
     private let banner = BannerView()
     /// A message of the Drafts folder (window.blp `draft_banner`; the pane
@@ -173,6 +177,18 @@ final class MessageViewController: NSViewController {
         NSLayoutConstraint.activate(fill(textScroll, in: bodyContainer) + fill(loadingPage, in: bodyContainer))
 
         messagePage.spacing = 0
+        if mode != .embedded {
+            let invitationClamp = ClampView(maximum: 900, tight: 900, child: invitation.view)
+            invitationClamp.setContentHuggingPriority(.required, for: .vertical)
+            invitation.openLink = { [weak self] url in self?.openInvitationLink(url) }
+            // The clamp goes with the card (a hidden card keeps its height).
+            invitationClamp.isHidden = true
+            invitation.onChange = { [weak invitationClamp, weak self] render in
+                render()
+                invitationClamp?.isHidden = self?.invitation.view.isHidden ?? true
+            }
+            messagePage.addArrangedSubview(invitationClamp)
+        }
         messagePage.addArrangedSubview(headerClamp)
         messagePage.addArrangedSubview(bodyContainer)
         // Under the body area, which scrolls on its own (a web view): the
@@ -332,6 +348,7 @@ final class MessageViewController: NSViewController {
         emptyPage?.descriptionText = L10n.T("Select a message to read it here.")
         current = nil
         quoted.clear()
+        invitation.clear()
         shownLoaded = nil
         links = []
         renderedBody = nil
@@ -377,6 +394,7 @@ final class MessageViewController: NSViewController {
         _ = view
         shownLoaded = lm
         renderBulk(s, lm)
+        renderInvitation(s, lm?.msg)
         let issue = renderHeaders(s, lm?.msg)
         if let text = issue?.eventBody {
             renderEvent(text)

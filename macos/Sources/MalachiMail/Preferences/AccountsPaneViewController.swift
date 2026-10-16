@@ -10,6 +10,8 @@ import os
 /// add, edit, remove, pause and reorder. The page reloads after its own
 /// actions; the group stays insensitive until the first load succeeds.
 /// Positions always come from `accounts`, never from table indexes.
+/// Calendar-only (CalDAV) accounts are not listed: Settings → Calendar has
+/// them (docs/calendar.md §5.8); a reorder keeps them after the listed ones.
 @MainActor
 final class AccountsPaneViewController: PreferencesPaneViewController, NSTableViewDataSource, NSTableViewDelegate {
     private let client: RPCClient
@@ -26,6 +28,8 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
     private let emptyRow = PreferenceRowView(title: L10n.T("No accounts yet"), subtitle: L10n.T("Use the + button to add one"))
 
     private(set) var accounts: [Account] = []
+    /// The CalDAV accounts account.list returned besides, in its order.
+    private var calendarOnly: [AccountID] = []
     /// Accounts whose call is in flight: their rows are insensitive.
     private var pending: Set<AccountID> = []
     /// The window closed: late replies are dropped.
@@ -97,7 +101,8 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
                 self.group.isEnabled = false
             case .success(let accounts):
                 self.group.descriptionText = ""
-                self.setAccounts(accounts)
+                self.calendarOnly = accounts.filter { !Cal.Prefs.showsInAccountsTab($0) }.map(\.id)
+                self.setAccounts(accounts.filter(Cal.Prefs.showsInAccountsTab))
                 self.group.isEnabled = true
             }
         }
@@ -282,7 +287,7 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
             view.window?.makeFirstResponder(table)
         }
         group.isEnabled = false
-        let ids = reordered.map(\.id)
+        let ids = reordered.map(\.id) + calendarOnly
         let client = client
         Task { [weak self] in
             var failure: (any Error)?

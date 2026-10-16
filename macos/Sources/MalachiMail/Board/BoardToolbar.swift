@@ -63,7 +63,8 @@ final class BoardToolbar: NSObject, NSToolbarDelegate, NSMenuDelegate {
     ]
     /// The List: the navigation's section, the list's, the detail's.
     static let listItems: [NSToolbarItem.Identifier] = [
-        MainToolbar.ID.mode, .flexibleSpace, .toggleSidebar, .sidebarTrackingSeparator,
+        // The toggle after the separator, as in Mail's and the Calendar's.
+        MainToolbar.ID.mode, .flexibleSpace, .sidebarTrackingSeparator, .toggleSidebar,
         ID.boardStyle, .flexibleSpace, ID.boardAccount, ID.boardTriage,
     ] + detailItems
 
@@ -252,11 +253,14 @@ final class BoardToolbar: NSObject, NSToolbarDelegate, NSMenuDelegate {
     }
 
     /// AppKit makes the sidebar toggle itself (the delegate is not asked):
-    /// in a narrow List it stays beside the switch while the list's and
-    /// the detail's items give way.
+    /// in a narrow window it stays while the other items give way, and it
+    /// is navigational, so that right after the sidebar separator it comes
+    /// ahead of the section's other navigational items and the title.
+    /// Shared with the mail's and the Calendar's toolbars.
     static func keepSidebarToggle(in toolbar: NSToolbar) {
         for item in toolbar.items where item.itemIdentifier == .toggleSidebar {
             item.visibilityPriority = .high
+            item.isNavigational = true
         }
     }
 

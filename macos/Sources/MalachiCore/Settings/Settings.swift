@@ -75,6 +75,10 @@ public final class Settings {
         /// written whenever the board's account filter changes
         /// (`Board.filterOnShow`).
         case boardAccountFilter = "board-account-filter"
+        /// The calendar's view, `Cal.View`'s nicks (day, week, month,
+        /// agenda; default week); written whenever the view changes
+        /// (`CalendarController.setView`).
+        case calendarView = "calendar-view"
         /// macOS only: what ⌘R does (Settings → General → Keyboard).
         case commandR = "command-r"
         /// macOS only: the size of the window text (`Typo`, Settings →
@@ -157,6 +161,7 @@ public final class Settings {
             Key.boardStartMode.rawValue: Board.StartChoice.mail.nick,
             Key.boardLastMode.rawValue: Board.Mode.mail.nick,
             Key.boardAccountFilter.rawValue: "",
+            Key.calendarView.rawValue: Cal.defaultView.nick,
             Key.commandR.rawValue: CommandR.reply.rawValue,
             Key.uiTextSize.rawValue: TextSize.larger.rawValue,
         ]
@@ -399,6 +404,26 @@ public final class Settings {
     public var boardLastMode: Board.Mode {
         get { Board.parseMode(string(.boardLastMode)) ?? .mail }
         set { set(.boardLastMode, newValue.nick) }
+    }
+
+    /// Open at Launch as stored: `Board.StartChoice`'s nicks or
+    /// "calendar" (the Calendar mode, docs/calendar.md §5.2), which
+    /// `boardStartMode` reads as Mail until `Board.StartChoice` has it.
+    public var boardStartModeNick: String {
+        get { string(.boardStartMode) }
+        set { set(.boardStartMode, newValue) }
+    }
+
+    /// The mode shown last as stored: `Board.Mode`'s nicks or "calendar".
+    public var boardLastModeNick: String {
+        get { string(.boardLastMode) }
+        set { set(.boardLastMode, newValue) }
+    }
+
+    /// The calendar's view (`Cal.parseView`: an unknown nick is Week).
+    public var calendarView: Cal.View {
+        get { Cal.parseView(string(.calendarView)).0 }
+        set { set(.calendarView, newValue.nick) }
     }
 
     /// The board's saved account filter: the daemon's account id, "" for

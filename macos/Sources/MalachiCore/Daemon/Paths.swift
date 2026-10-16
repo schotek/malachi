@@ -40,6 +40,16 @@ public struct Paths: Sendable {
         self.keychainHelper = keychainHelper
     }
 
+    /// True when `MALACHI_DATA_DIR` is set and non-empty: an isolated
+    /// instance (the rule `resolve` uses for the data directory). Such a
+    /// process must not touch the login keychain's ChatGPT item.
+    public static func isIsolated(
+        environment env: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        if let d = env["MALACHI_DATA_DIR"], !d.isEmpty { return true }
+        return false
+    }
+
     public static func resolve(
         environment env: [String: String] = ProcessInfo.processInfo.environment,
         executable: URL? = Bundle.main.executableURL

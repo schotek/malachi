@@ -25,6 +25,12 @@ import MalachiCore
 /// mode. It is never the sync line's: it gives way first when the bar is
 /// too narrow for both (lower compression resistance), and is hidden when
 /// empty. macOS-only, like the board.
+///
+/// In the Calendar mode (`setCalendar`) the line's text is the calendars'
+/// state ("Calendars synced 2 min ago", an error, a sign-in needed) and
+/// the note leads with the unanswered invitations; the spinner, the
+/// connection icon and the popover (the accounts, the Outbox) stay the
+/// sync line's.
 @MainActor
 final class StatusBarViewController: NSViewController, NSPopoverDelegate {
     /// The bar's height, its 1 pt top line included.
@@ -58,6 +64,13 @@ final class StatusBarViewController: NSViewController, NSPopoverDelegate {
     /// mouse-down, the time of that mouse-down: the click's own action must
     /// not open the popover again.
     private var closedByLineClick: TimeInterval?
+    /// The calendars' state line while the window shows the Calendar, nil
+    /// otherwise (`setCalendar`).
+    private var calendarLine: String?
+    /// The calendar's part of the note (the unanswered count) and the
+    /// triage's (`setNote`).
+    private var calendarNote = ""
+    private var triageNote = ""
 
     init(sync: SyncController, mailbox: MailboxController) {
         self.sync = sync
@@ -165,6 +178,27 @@ final class StatusBarViewController: NSViewController, NSPopoverDelegate {
     /// The triage's line at the bar's trailing end; "" hides it. Only the
     /// counts and classes of the Core's triage view, never a run's output.
     func setNote(_ text: String) {
+        triageNote = text
+        applyNote()
+    }
+
+    /// The Calendar mode's texts: `line` in place of the sync line's text
+    /// (nil: the sync line again), `note` (the unanswered count) ahead of
+    /// the triage's note.
+    func setCalendar(line: String?, note: String) {
+        calendarNote = line == nil ? "" : note
+        if calendarLine != line {
+            calendarLine = line
+            if isViewLoaded {
+                show(sync.line)
+            }
+        }
+        applyNote()
+    }
+
+    private func applyNote() {
+        let text = calendarNote.isEmpty || triageNote.isEmpty
+            ? calendarNote + triageNote : Cal.Text.dot(calendarNote, triageNote)
         guard noteLabel.stringValue != text else { return }
         noteLabel.stringValue = text
         noteLabel.toolTip = text.isEmpty ? nil : text
@@ -181,8 +215,9 @@ final class StatusBarViewController: NSViewController, NSPopoverDelegate {
     /// popover. Without a connection the line cannot be clicked, and an open
     /// popover closes; while it is open its rows follow every change.
     private func show(_ line: StatusLine) {
-        statusButton.title = line.text
-        statusButton.setAccessibilityLabel(line.text)
+        let text = calendarLine ?? line.text
+        statusButton.title = text
+        statusButton.setAccessibilityLabel(text)
         spinner.isHidden = !line.spinning
         if line.spinning {
             spinner.start()

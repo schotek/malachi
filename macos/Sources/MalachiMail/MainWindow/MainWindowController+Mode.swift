@@ -4,10 +4,11 @@
 import AppKit
 import MalachiCore
 
-// The main window's two modes (MalachiCore `Board`): Mail shows the panes
+// The main window's modes (MalachiCore `Board`): Mail shows the panes
 // under the mail toolbar, Board a page in their place under toolbars of
-// its own (`BoardToolbar`, one for the List and one for Columns and Today);
-// the status bar stays. The switch is the first item of every toolbar
+// its own (`BoardToolbar`, one for the List and one for Columns and Today),
+// Calendar the calendar page under its toolbar (`CalendarToolbar`,
+// MainWindowController+Calendar); the status bar stays. The switch is the first item of every toolbar
 // (`ModeSwitch`), right after the window's buttons, and the View menu has
 // Mail and Board. The board takes the keyboard on entry and gets back what
 // had it there last (MainWindowController+Board). The panes leave the
@@ -19,26 +20,38 @@ import MalachiCore
 
 extension MainWindowController {
     /// Shows `newMode`; the current one changes nothing. The keyboard
-    /// leaves the panes before they hide and comes back to what had it
-    /// (`savedResponder`), else to the list (`mailFocusFallback`).
+    /// leaves the shown mode's views before they hide (each mode keeps what
+    /// had it: `savedResponder`, `boardResponder`, the calendar's) and comes
+    /// back to what had it in the new one, else to its main view
+    /// (`mailFocusFallback`, the board's table, the calendar's view).
     func setMode(_ newMode: Board.Mode) {
         // A refused change (a field that keeps the keyboard) leaves the
         // switches showing the mode the window is in.
         defer { syncModeSwitches() }
         guard newMode != mode, let window else { return }
-        switch newMode {
-        case .board:
-            let owner = Self.focusOwner(window.firstResponder)
-            // Before the panes leave the window: AppKit would hand the
-            // keyboard to the next key view (the status bar's button), and
-            // Space would press it.
-            guard window.makeFirstResponder(nil) else { return }
+        let owner = Self.focusOwner(window.firstResponder)
+        // Before the views leave the window: AppKit would hand the
+        // keyboard to the next key view (the status bar's button), and
+        // Space would press it; a field ends its editing.
+        guard window.makeFirstResponder(nil) else { return }
+        switch mode {
+        case .mail:
             savedResponder = owner
-            mode = .board
-            modeSwitched()
             // A Show in Mail still waiting selects nothing in the hidden
             // panes.
             boardMail.leftMail?()
+        case .board:
+            boardResponder = owner
+            boardExtras.gate?.isOpen = false
+        case .calendar:
+            calendarExtras.responder = owner
+            // The assistant panel goes back to the mail's split view (D28).
+            returnAssistantToMail()
+        }
+        mode = newMode
+        modeSwitched()
+        switch newMode {
+        case .board:
             // The first entry of the run opens the default style (Settings
             // → General → Board), later ones the user's last.
             board.boardWillShow()
@@ -62,22 +75,16 @@ extension MainWindowController {
             board.boardShown()
             boardToolbars.update()
             restoreBoardFocus(in: window)
+        case .calendar:
+            showCalendar(in: window)
         case .mail:
-            // The board's keyboard owner, for the next time it shows; then
-            // the board lets the keyboard go before the page leaves the
-            // window (a field ends its editing).
-            let owner = Self.focusOwner(window.firstResponder)
-            guard window.makeFirstResponder(nil) else { return }
-            boardResponder = owner
-            mode = .mail
-            modeSwitched()
-            boardExtras.gate?.isOpen = false
             content.setMode(.mail)
             split.messageContainer.setOverlay(toasts)
             window.toolbar = mailToolbar
             // The panes came back into the window: the sidebar separator
             // finds their split view again (`rebindSidebarSeparator`).
             BoardToolbar.rebindSidebarSeparator(in: mailToolbar)
+            BoardToolbar.keepSidebarToggle(in: mailToolbar)
             // What changed while the toolbar was away (stars, hidden items).
             mailToolbar.validateVisibleItems()
             restoreFocus(in: window)
@@ -89,12 +96,13 @@ extension MainWindowController {
         }
         applyTitle()
         updateTriageStrip()
+        updateCalendarStatus()
     }
 
     /// Every switch is remembered (`board-last-mode`, for Open at Launch's
     /// Last Used) and settles the mode the window opens in.
     private func modeSwitched() {
-        state.settings.boardLastMode = mode
+        state.settings.boardLastModeNick = mode.nick
         boardExtras.startDecided = true
     }
 
@@ -126,12 +134,12 @@ extension MainWindowController {
             guard let self, !self.boardExtras.startDecided else { return }
             let d = Board.startDecision(
                 start: settings.boardStartMode, lastMode: settings.boardLastMode, prefsKnown: prefs.stored != nil,
-                enabled: self.boardEnabled, userSwitched: self.mode == .board,
+                enabled: self.boardEnabled, userSwitched: self.mode != .mail,
                 userInteracted: self.boardExtras.interacted, waited: Date().timeIntervalSince(setUp))
             guard d.decided else { return }
             self.boardExtras.startDecided = true
-            if d.mode == .board, self.mode == .mail {
-                self.setMode(.board)
+            if d.mode != .mail, self.mode == .mail {
+                self.setMode(d.mode)
             }
         }
         boardExtras.prefsTokens = [
@@ -169,15 +177,12 @@ extension MainWindowController {
         }
     }
 
-    /// Show the Board changed (or may have): the switches follow, and a
-    /// board turned off gives the window back to Mail.
+    /// Show the Board changed (or may have): the switches follow (their
+    /// Board segment is disabled while the board is off, the switch stays
+    /// for Mail and Calendar), and a board turned off gives the window back
+    /// to Mail.
     private func boardEnabledChanged() {
         let on = boardEnabled
-        if #available(macOS 15, *) {
-            for item in modeSwitches where item.isHidden == on {
-                item.isHidden = !on
-            }
-        }
         window?.toolbar?.validateVisibleItems()
         if !on, mode == .board {
             setMode(.mail)
@@ -201,6 +206,10 @@ extension MainWindowController {
             break
         }
         let mods = item.keyEquivalentModifierMask.intersection([.command, .shift, .option, .control])
+        // ⌘1, ⌘2, ⌘3 work in every mode (`Board.modeForKey`).
+        if action == Action.setWindowMode, let key = item.keyEquivalent.first, mods == .command {
+            return Board.modeForKey(key, in: mode) != nil
+        }
         guard var key = item.keyEquivalent.first, mods.subtracting(.command).isEmpty,
               [Action.setWindowMode, Action.boardDone, Action.boardRemind, Action.boardArchive, Action.boardTrash]
                 .contains(action)
@@ -220,7 +229,8 @@ extension MainWindowController {
 
     /// The window's title and subtitle for the mode: the folder's name and
     /// counts in Mail, the board's name and its scope ("All Accounts · 23
-    /// cases", `Board.View.subtitle`) in Board.
+    /// cases", `Board.View.subtitle`) in Board, the shown range and its
+    /// week or count in Calendar (`CalendarController.title`/`subtitle`).
     /// The List shows no title in its toolbar (its sections are the
     /// columns'); the window keeps its title for the Window menu.
     func applyTitle() {
@@ -232,6 +242,9 @@ extension MainWindowController {
         case .board:
             window.title = Board.texts().board
             window.subtitle = board.view.subtitle
+        case .calendar:
+            window.title = calendarController.title
+            window.subtitle = calendarController.subtitle
         }
         let hidden = mode == .board && boardToolbarsMade && window.toolbar === boardToolbars.listToolbar
         let visibility: NSWindow.TitleVisibility = hidden ? .hidden : .visible
@@ -240,9 +253,9 @@ extension MainWindowController {
         }
     }
 
-    /// ⌘1 and ⌘2 by the key, not by the character the layout types there
-    /// (`Board.numberRowDigit`): on Czech QWERTZ those keys type "+" and
-    /// "ě" also with ⌘, so the View menu's key equivalents alone would not
+    /// ⌘1, ⌘2 and ⌘3 by the key, not by the character the layout types
+    /// there (`Board.modeKeyDigit`): on Czech QWERTZ those keys type "+",
+    /// "ě" and "š" also with ⌘, so the View menu's key equivalents alone would not
     /// match. A local monitor sees the key before the window and the menu;
     /// a layout whose ⌘ map types the digit is left to the menu item (its
     /// highlight). The monitor holds the controller weakly and acts only for
@@ -262,23 +275,19 @@ extension MainWindowController {
             return false
         }
         let mods = event.modifierFlags.intersection([.command, .shift, .option, .control])
-        guard mods == .command, let digit = Board.numberRowDigit(event.keyCode),
-              event.charactersIgnoringModifiers != String(digit)
+        guard mods == .command, let digit = Board.modeKeyDigit(event.keyCode),
+              event.charactersIgnoringModifiers != String(digit),
+              let target = Board.modeForKey(digit, in: mode)
         else { return false }
-        switch Board.keyFor(digit, primary: true, other: false, inText: false, mode: mode) {
-        case .showMail:
-            setMode(.mail)
-        case .showBoard:
-            guard boardEnabled else { return false }
-            setMode(.board)
-        default:
+        if target == .board, !boardEnabled {
             return false
         }
+        setMode(target)
         return true
     }
 
-    /// The toolbar's switch (the selected segment) and View ▸ Mail, Board
-    /// (the item's tag).
+    /// The toolbar's switch (the selected segment) and View ▸ Mail, Board,
+    /// Calendar (the item's tag).
     @objc func setWindowMode(_ sender: Any?) {
         guard let index = Self.chosenIndex(sender), let m = Board.Mode(rawValue: index) else {
             syncModeSwitches()
@@ -300,6 +309,8 @@ extension MainWindowController {
             return .boardView
         case Action.newMessage:
             return .newMessage
+        case CalendarAction.newEvent:
+            return .newEvent
         case Action.checkForNewMail:
             return .checkForNewMail
         case Action.toggleSidebar, Action.setMessageFilter, Action.findMessages, Action.toggleMessageList, Action.toggleInspector,
@@ -382,19 +393,20 @@ final class BoardWindowExtras {
     var account = Board.AccountFilter.all
 }
 
-/// The Mail/Board switch of the toolbars: two segments with icons (a text
-/// would not fit the sidebar's section at its 200 pt minimum next to the
-/// window's buttons and the sidebar toggle), the labels as tooltips and
-/// accessibility descriptions. A segment's index is the mode's raw value;
-/// the keys are View ▸ Show Mail (⌘1) and Show Board (⌘2).
+/// The Mail/Board/Calendar switch of the toolbars: three segments with
+/// icons (a text would not fit the sidebar's section at its 200 pt minimum
+/// next to the window's buttons and the sidebar toggle), the labels as
+/// tooltips and accessibility descriptions. A segment's index is the mode's
+/// raw value; the keys are View ▸ Show Mail (⌘1), Show Board (⌘2) and Show
+/// Calendar (⌘3).
 @MainActor
 enum ModeSwitch {
     static func item(_ id: NSToolbarItem.Identifier, selected: Board.Mode = Board.initialMode) -> NSToolbarItemGroup {
         let t = Board.texts()
         let modes = Board.Mode.allCases
-        let labels = modes.map { $0 == .mail ? t.mail : t.board }
+        let labels = modes.map(t.name)
         let images = modes.map { m in
-            Icon.symbol(m == .mail ? "envelope" : "square.grid.2x2", size: .toolbar, description: labels[m.rawValue])
+            Icon.symbol(symbol(m), size: .toolbar, description: labels[m.rawValue])
         }
         let group = NSToolbarItemGroup(
             itemIdentifier: id, images: images, selectionMode: .selectOne, labels: labels, target: nil,
@@ -403,6 +415,15 @@ enum ModeSwitch {
         group.selectedIndex = selected.rawValue
         tagSegments(group, titles: labels, action: Action.setWindowMode)
         return group
+    }
+
+    /// The SF Symbol of `mode`'s segment.
+    static func symbol(_ mode: Board.Mode) -> String {
+        switch mode {
+        case .mail: "envelope"
+        case .board: "square.grid.2x2"
+        case .calendar: "calendar"
+        }
     }
 
     /// Gives each segment of `group` its index as tag, its title as

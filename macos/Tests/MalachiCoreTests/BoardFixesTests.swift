@@ -279,6 +279,8 @@ import Testing
             ("last", "mail", true, .mail), ("last", "", true, .mail), ("last", "junk", true, .mail),
             ("", "board", true, .mail), ("junk", "board", true, .mail), ("board", "board", false, .mail),
             ("last", "board", false, .mail),
+            ("calendar", "mail", true, .calendar), ("calendar", "board", false, .calendar),
+            ("last", "calendar", true, .calendar), ("last", "calendar", false, .calendar),
         ]
         for (start, last, enabled, want) in cases {
             #expect(Board.startMode(start: start, last: last, boardEnabled: enabled) == want, "\(start) \(last) \(enabled)")
@@ -286,8 +288,8 @@ import Testing
         for m in Board.Mode.allCases {
             #expect(Board.parseMode(m.nick) == m)
         }
-        #expect(Board.startModes.map(\.nick) == ["mail", "board", "last"])
-        #expect(Board.startModes.map(Board.Text.startModeTitle) == ["Mail", "Board", "Last Used"])
+        #expect(Board.startModes.map(\.nick) == ["mail", "board", "calendar", "last"])
+        #expect(Board.startModes.map(Board.Text.startModeTitle) == ["Mail", "Board", "Calendar", "Last Used"])
         for s in Board.startModes {
             #expect(Board.parseStartChoice(s.nick) == s)
         }

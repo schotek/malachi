@@ -67,6 +67,9 @@ public struct AccountKind: WireEnum {
     /// An issue tracker (Jira Cloud or Data Center): issues and their
     /// comments as messages, spaces as folders; the account's `jira` block.
     public static let jira: AccountKind = "jira"
+    /// A calendar-only account on a CalDAV server (the `caldav` block): no
+    /// mail, no folders; never shown in Mail.
+    public static let caldav: AccountKind = "caldav"
 }
 
 /// api.GraphSource: who holds the OAuth2 session of a Graph account.
@@ -288,6 +291,9 @@ public struct Capability: WireEnum {
     /// The status of an issue can be changed (issue.transitions,
     /// issue.transition): the Change Status menu.
     public static let transition: Capability = "transition"
+    /// The account can have calendars (graph, caldav); it does not change
+    /// with consent or sync state. A caldav account has exactly this one.
+    public static let calendar: Capability = "calendar"
 }
 
 /// api.JiraDeployment: where a Jira site runs.

@@ -55,6 +55,14 @@
     <value nick="mail" value="0"/>
     <value nick="board" value="1"/>
     <value nick="last" value="2"/>
+    <value nick="calendar" value="3"/>
+  </enum>
+
+  <enum id="io.github.schotek.Malachi.CalendarView">
+    <value nick="day" value="0"/>
+    <value nick="week" value="1"/>
+    <value nick="month" value="2"/>
+    <value nick="agenda" value="3"/>
   </enum>
 
   <schema id="io.github.schotek.Malachi" path="/io/github/schotek/Malachi/">
@@ -242,12 +250,12 @@
     <key name="board-start-mode" enum="io.github.schotek.Malachi.BoardStartMode">
       <default>'mail'</default>
       <summary>What the main window shows at launch</summary>
-      <description>Mail, the Board, or the mode shown last (board-last-mode). Always Mail while the Board is turned off.</description>
+      <description>Mail, the Board, the Calendar, or the mode shown last (board-last-mode). The Board is replaced by Mail while it is turned off.</description>
     </key>
     <key name="board-last-mode" type="s">
       <default>'mail'</default>
       <summary>The mode the main window showed last</summary>
-      <description>"mail" or "board", written whenever the mode switches; read when board-start-mode is Last.</description>
+      <description>"mail", "board" or "calendar", written whenever the mode switches; read when board-start-mode is Last.</description>
     </key>
     <key name="board-account-filter" type="s">
       <default>''</default>
@@ -263,6 +271,11 @@
       <default>'sonnet'</default>
       <summary>The model the Board's triage uses</summary>
       <description>Sonnet, Haiku or Opus, passed to Claude Code; apart from the assistant panel's model.</description>
+    </key>
+    <key name="calendar-view" enum="io.github.schotek.Malachi.CalendarView">
+      <default>'week'</default>
+      <summary>The view the Calendar was shown in last</summary>
+      <description>Day, Week, Month or Agenda, written whenever the user changes the Calendar's view; applied when the Calendar shows.</description>
     </key>
   </schema>
 </schemalist>

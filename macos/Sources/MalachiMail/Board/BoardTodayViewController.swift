@@ -17,6 +17,9 @@ final class BoardTodayViewController: NSViewController, BoardStyleContent, NSTab
     /// The rows of the main column, in order.
     private enum Item {
         case header
+        /// "Today in Calendar" (`BoardTodayCalendarStrip`), while some
+        /// account has the calendar capability.
+        case calendar
         case tiles
         case section(title: String, count: Int, color: NSColor)
         case caseRow(Board.Row)
@@ -30,6 +33,8 @@ final class BoardTodayViewController: NSViewController, BoardStyleContent, NSTab
     private let table = BoardTodayTableView()
     private let scroll = NSScrollView()
     private let side = BoardTodaySideView()
+    /// The strip of today's events, over the window's calendar source.
+    private let calendarStrip = BoardTodayCalendarStrip()
     private var items: [Item] = []
     private var wiredButtons: [NSView] = []
     /// Set while this view moves the table's selection itself.
@@ -81,6 +86,7 @@ final class BoardTodayViewController: NSViewController, BoardStyleContent, NSTab
         scroll.automaticallyAdjustsContentInsets = false
 
         side.onSelect = { [weak self] id in self?.controller.select(id) }
+        wireCalendarStrip()
 
         let container = BoardTodayContainer(main: scroll, side: side)
         view = container
@@ -93,7 +99,66 @@ final class BoardTodayViewController: NSViewController, BoardStyleContent, NSTab
 
     override func viewWillAppear() {
         super.viewWillAppear()
+        attachCalendarStrip()
         render()
+    }
+
+    // MARK: Today in Calendar
+
+    /// The strip's hand-offs: Open Calendar › is the Calendar's Day view of
+    /// today; Respond selects the invitation's message in Mail, where its
+    /// card answers it.
+    private func wireCalendarStrip() {
+        calendarStrip.onChange = { [weak self] in
+            self?.calendarStripChanged()
+        }
+        calendarStrip.onOpenCalendar = { [weak self] in
+            self?.mainWindow?.showInCalendar(eventID: nil, recurrenceID: nil, day: Date())
+        }
+        calendarStrip.onRespond = { [weak self] ref in
+            guard let mw = self?.mainWindow, let reveal = mw.boardMail.reveal else { return }
+            mw.setMode(.mail)
+            guard mw.mode == .mail else { return }
+            reveal(ref.accountId, ref.messageId, nil, nil) {}
+        }
+    }
+
+    private var mainWindow: MainWindowController? {
+        view.window?.windowController as? MainWindowController
+    }
+
+    /// The strip follows the window's calendar source (started here, as
+    /// the Calendar mode starts it).
+    private func attachCalendarStrip(refresh: Bool = true) {
+        guard let mw = mainWindow else {
+            calendarStrip.trace()
+            return
+        }
+        mw.startCalendar()
+        calendarStrip.attach(mw.calendarController.source)
+        if refresh {
+            calendarStrip.refresh()
+        }
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        attachCalendarStrip()
+    }
+
+    /// Shown or hidden, or another number of rows: the row is measured
+    /// again, or the table is built again with or without it.
+    private func calendarStripChanged() {
+        guard isViewLoaded else { return }
+        let has = items.contains { if case .calendar = $0 { return true } else { return false } }
+        if has != calendarStrip.isShown {
+            render()
+        } else if let i = items.firstIndex(where: { if case .calendar = $0 { return true } else { return false } }) {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0
+                table.noteHeightOfRows(withIndexesChanged: IndexSet(integer: i))
+            }
+        }
     }
 
     // MARK: BoardStyleContent
@@ -116,8 +181,16 @@ final class BoardTodayViewController: NSViewController, BoardStyleContent, NSTab
     // MARK: Rendering
 
     private func render() {
+        // The board's page may put this view into the window without
+        // viewWillAppear: the strip follows the source from the first
+        // render in a window on.
+        attachCalendarStrip(refresh: false)
         let today = controller.view.today
-        var next: [Item] = [.header, .tiles]
+        var next: [Item] = [.header]
+        if calendarStrip.isShown {
+            next.append(.calendar)
+        }
+        next.append(.tiles)
         next.append(.section(title: Board.Text.stateName(.hot), count: today.hot.count, color: BoardPalette.accent(.hot)))
         if today.hot.isEmpty {
             let empty = controller.view.columns.first { $0.state == .hot }?.emptyText ?? Board.Text.sectionEmpty
@@ -247,6 +320,7 @@ final class BoardTodayViewController: NSViewController, BoardStyleContent, NSTab
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
         switch items[row] {
         case .header: return BoardTodayMetrics.headerRow
+        case .calendar: return max(calendarStrip.preferredHeight, 1)
         case .tiles: return BoardTodayMetrics.tilesRow
         case .section, .commitmentsHeading: return BoardMetrics.todaySectionHeader
         case .caseRow: return BoardMetrics.todayRow
@@ -279,6 +353,8 @@ final class BoardTodayViewController: NSViewController, BoardStyleContent, NSTab
             let today = controller.view.today
             cell.configure(title: today.title, phrase: today.phrase)
             return cell
+        case .calendar:
+            return calendarStrip
         case .tiles:
             let cell = reuse(BoardTodayTilesView.self, BoardTodayTilesView.reuseIdentifier) { BoardTodayTilesView() }
             cell.configure(controller.view.today.tiles)

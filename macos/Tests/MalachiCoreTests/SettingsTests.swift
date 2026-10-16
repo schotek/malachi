@@ -61,7 +61,8 @@ private final class Scratch {
         #expect(s.boardStartMode == .mail)
         #expect(s.boardLastMode == .mail)
         #expect(s.boardAccountFilter == "")
-        #expect(Settings.Key.allCases.count == 38)
+        #expect(s.calendarView == .week)
+        #expect(Settings.Key.allCases.count == 39)
         let providerDefaults = Settings.registrationDefaults()
         #expect(providerDefaults[Settings.Key.assistantProvider.rawValue] as? String == "claude")
         #expect(providerDefaults[Settings.Key.assistantCodexPath.rawValue] as? String == "")
@@ -198,6 +199,24 @@ private final class Scratch {
         #expect(s.boardLastMode == .mail && s.boardModeOnLaunch(boardEnabled: true) == .mail)
         s.boardStartMode = .mail
         s.boardLastMode = .mail
+        // "calendar" is stored and read back as is (the Calendar mode).
+        s.boardStartModeNick = "calendar"
+        #expect(scratch.defaults.string(forKey: "board-start-mode") == "calendar")
+        #expect(s.boardStartModeNick == "calendar")
+        s.boardLastModeNick = "calendar"
+        #expect(s.boardLastModeNick == "calendar")
+        s.boardStartMode = .mail
+        s.boardLastMode = .mail
+        #expect(s.boardStartModeNick == "mail" && s.boardLastModeNick == "mail")
+        // The calendar's view: the gschema's CalendarView nicks; anything
+        // else is Week.
+        for (nick, view) in [("day", Cal.View.day), ("week", .week), ("month", .month), ("agenda", .agenda), ("", .week), ("x", .week)] {
+            scratch.defaults.set(nick, forKey: "calendar-view")
+            #expect(s.calendarView == view, "\(nick)")
+        }
+        s.calendarView = .month
+        #expect(scratch.defaults.string(forKey: "calendar-view") == "month")
+        s.calendarView = .week
         // The account filter: any string, kept as is.
         s.boardAccountFilter = "acc_7"
         #expect(scratch.defaults.string(forKey: "board-account-filter") == "acc_7")

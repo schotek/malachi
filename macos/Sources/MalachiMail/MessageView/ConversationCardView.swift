@@ -135,6 +135,9 @@ final class ConversationCardView: NSView {
     private var chipViews: [NSView] = []
     /// The "•••" under the body (`quotedTextOffer`).
     private var quotedButton: QuotedTextButton?
+    /// The invitation card under the header (docs/calendar.md §5.7), made
+    /// for the first message.get with one.
+    private var invitation: InvitationCardPresenter?
 
     /// The body area for HTML and for the wait: the web view while live,
     /// else blank at `bodyHeight`.
@@ -158,7 +161,7 @@ final class ConversationCardView: NSView {
 
     /// The places in `content`, under the header and the preview.
     private enum Slot: Int, CaseIterable {
-        case bulk, banner, remote, pictures, text, body, quoted
+        case invitation, bulk, banner, remote, pictures, text, body, quoted
     }
 
     /// The hairline around the card. What the card holds keeps inside it:
@@ -582,12 +585,37 @@ final class ConversationCardView: NSView {
     /// folded card shows none of it (`setFolded` renders once it opens).
     func render(_ lm: LoadedMessage?) {
         guard !folded else { return }
+        renderInvitation(lm?.msg)
         renderDetails(lm?.msg)
         renderOutbox(lm?.msg)
         renderBody(lm)
         renderBars(lm)
         renderChips(lm)
         renderQuoted(lm)
+    }
+
+    /// The invitation card of message.get (`m`), when the account shows
+    /// them; an entry let go (nil) keeps the card as it was.
+    private func renderInvitation(_ m: Message?) {
+        guard let state = (host as? InvitationCardStateProviding)?.invitationState else { return }
+        let on = showsInvitationCard(host?.delegate?.account(summary.accountId))
+        if invitation == nil {
+            guard invitationReading(m, cardOn: on) != nil else { return }
+            let p = InvitationCardPresenter(margins: NSEdgeInsets(
+                top: 0, left: Self.paddingH, bottom: Self.headerBottom, right: Self.paddingH))
+            p.openLink = { [weak self] url in
+                self?.host?.delegate?.openLink(url, links: [], from: self?.window)
+            }
+            p.onChange = { [weak self] render in
+                guard let self else { return render() }
+                self.changingHeight(render)
+            }
+            changingHeight {
+                install(p.view, .invitation)
+            }
+            invitation = p
+        }
+        invitation?.show(summary, m, cardOn: on, state: state)
     }
 
     /// The "•••" under the body for what `lm` holds: Show Quoted Text when

@@ -10,7 +10,7 @@ import Testing
 @Suite struct BoardTests {
     @Test func initialMode() {
         #expect(Board.initialMode == .mail)
-        #expect(Board.Mode.allCases.map(\.rawValue) == [0, 1])
+        #expect(Board.Mode.allCases.map(\.rawValue) == [0, 1, 2])
     }
 
     @Test func allows() {
@@ -21,12 +21,21 @@ import Testing
             (.mailView, .mail, true),
             (.messageAction, .mail, true),
             (.boardView, .mail, false),
+            (.newEvent, .mail, true),
             (.switchMode, .board, true),
             (.newMessage, .board, true),
             (.checkForNewMail, .board, true),
             (.mailView, .board, false),
             (.messageAction, .board, false),
             (.boardView, .board, true),
+            (.newEvent, .board, false),
+            (.switchMode, .calendar, true),
+            (.newMessage, .calendar, true),
+            (.checkForNewMail, .calendar, true),
+            (.mailView, .calendar, false),
+            (.messageAction, .calendar, false),
+            (.boardView, .calendar, false),
+            (.newEvent, .calendar, true),
         ]
         #expect(cases.count == Board.Command.allCases.count * Board.Mode.allCases.count)
         for (command, mode, want) in cases {
@@ -44,6 +53,10 @@ import Testing
             (.openMessageWindow, .board, .board),
             (.compose, .mail, .mail),
             (.compose, .board, .board),
+            (.showOutbox, .calendar, .mail),
+            (.revealAssistant, .calendar, .mail),
+            (.openMessageWindow, .calendar, .calendar),
+            (.compose, .calendar, .calendar),
         ]
         #expect(cases.count == Board.Request.allCases.count * Board.Mode.allCases.count)
         for (request, current, want) in cases {
@@ -57,6 +70,8 @@ import Testing
             (.mail, false, false),
             (.board, true, false),
             (.board, false, false),
+            (.calendar, true, false),
+            (.calendar, false, false),
         ]
         for (mode, key, want) in cases {
             #expect(Board.viewsMail(mode, windowIsKey: key) == want, "viewsMail(\(mode), \(key))")
@@ -65,7 +80,7 @@ import Testing
 
     @Test func texts() {
         let t = Board.texts()
-        for s in [t.mail, t.board] {
+        for s in [t.mail, t.board, t.calendar] {
             #expect(!s.isEmpty)
         }
         #expect(t.mail != t.board)

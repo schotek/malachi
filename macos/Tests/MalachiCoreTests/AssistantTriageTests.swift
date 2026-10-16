@@ -78,7 +78,7 @@ private final class Harness {
         // Only the triage tools on top of the panel's read and draft tools.
         #expect(Set(Assistant.triageTools).subtracting(Assistant.allowedTools)
             == ["mcp__malachi__list_triage_queue", "mcp__malachi__annotate_case", "mcp__malachi__add_commitment"])
-        #expect(Set(Assistant.allowedTools).isSubset(of: Assistant.triageTools))
+        #expect(Set(Assistant.allowedTools).subtracting(Assistant.calendarTools).isSubset(of: Assistant.triageTools))
     }
 
     /// An automatic run's command line: the manual one without create_draft

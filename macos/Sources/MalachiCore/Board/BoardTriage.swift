@@ -395,13 +395,13 @@ extension Board {
     }
 
     /// The status strip's triage note for the window in `mode` with the
-    /// board in `phase`: in Mail only a run's progress; in Board a run's
+    /// board in `phase`: in Mail and Calendar only a run's progress; in Board a run's
     /// progress, else the sign-in waiting for the browser, else why
     /// automatic triage pauses, else the status line; nothing in Board
     /// while the board is off or the daemon has none, unless a run works.
     public static func triageStripText(_ v: TriageView, mode: Mode, phase: Phase) -> String {
         switch mode {
-        case .mail:
+        case .mail, .calendar:
             return v.running ? v.progress : ""
         case .board:
             if v.running {

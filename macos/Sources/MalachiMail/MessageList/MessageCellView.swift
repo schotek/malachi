@@ -97,6 +97,10 @@ final class MessageCellView: NSTableCellView {
     /// The Draft badge of a conversation with an unsent reply
     /// (`RowThread.draft`).
     private let draftPill = PillLabel()
+    /// The pill of a message with a calendar part (`InvitationPill`):
+    /// Invitation, Update, Cancelled (the subject struck through) or Reply,
+    /// after the subject (docs/calendar.md §5.7).
+    private let calendarPill = PillLabel()
     private let eventLabel = NSTextField(labelWithString: "")
     private let subjectLine = NSStackView()
 
@@ -125,6 +129,8 @@ final class MessageCellView: NSTableCellView {
     private var issue: Jira.IssueRow?
     /// The bulk tag of the row (`Bulk.tag`); "" for personal mail.
     private var bulkTag = ""
+    /// The invitation pill of the row's message (`invitationPill`).
+    private var invitation = Cal.InvitationPill.none
     private var event = false
     private var statusStyle = Jira.StatusStyle.plain
     private var emphasized = false
@@ -193,7 +199,7 @@ final class MessageCellView: NSTableCellView {
         issueKey.isHidden = true
         issueKey.setContentHuggingPriority(.required, for: .horizontal)
         issueKey.setContentCompressionResistancePriority(.required, for: .horizontal)
-        for pill in [statusPill, bulkPill, internalPill, draftPill] {
+        for pill in [statusPill, bulkPill, internalPill, draftPill, calendarPill] {
             pill.font = Typo.caption
             pill.isHidden = true
         }
@@ -250,7 +256,7 @@ final class MessageCellView: NSTableCellView {
         line.alignment = .centerY
         line.spacing = RowMetrics.lineSpacing
 
-        for v in [issueKey, subject, bulkPill, statusPill, internalPill, draftPill] {
+        for v in [issueKey, subject, calendarPill, bulkPill, statusPill, internalPill, draftPill] {
             subjectLine.addArrangedSubview(v)
         }
         subjectLine.orientation = .horizontal
@@ -293,6 +299,7 @@ final class MessageCellView: NSTableCellView {
     /// excerpt and the folder).
     func configure(_ row: ListRow, message: RowMessage, reserveExpander: Bool, appearance: RowAppearance) {
         applyAppearance(appearance)
+        invitation = invitationPill(row.message)
         if row.thread, let summary = row.summary {
             setThread(summaryThread(summary, expanded: row.expanded, loading: row.loading))
         } else {
@@ -529,6 +536,7 @@ final class MessageCellView: NSTableCellView {
         let secondary: NSColor = emphasized ? .alternateSelectedControlTextColor : Tint.secondary
         from.textColor = event ? secondary : primary
         subject.textColor = primary
+        applyInvitation(primary)
         issueKey.textColor = secondary
         eventLabel.textColor = secondary
         IssuePill.paint(statusPill, IssuePill.colours(statusStyle), emphasized: emphasized)
@@ -545,6 +553,20 @@ final class MessageCellView: NSTableCellView {
         badge.textColor = primary
         badge.fill = emphasized ? NSColor.alternateSelectedControlTextColor.withAlphaComponent(0.2) : Tint.fg(alpha: 0.1)
         expander.contentTintColor = emphasized ? .alternateSelectedControlTextColor : nil
+    }
+
+    /// The invitation pill, and a cancellation's subject struck through:
+    /// the subject's own text with a font, a colour and the line only.
+    private func applyInvitation(_ colour: NSColor) {
+        InvitationPill.show(invitation, in: calendarPill, emphasized: emphasized)
+        calendarPill.toolTip = nil
+        guard Cal.strikesSubject(invitation) else { return }
+        let style = NSMutableParagraphStyle()
+        style.lineBreakMode = .byTruncatingTail
+        subject.attributedStringValue = NSAttributedString(string: subject.stringValue, attributes: [
+            .font: subject.font ?? Typo.body, .foregroundColor: colour,
+            .strikethroughStyle: NSUnderlineStyle.single.rawValue, .paragraphStyle: style,
+        ])
     }
 
     override func prepareForReuse() {
