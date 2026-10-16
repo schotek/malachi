@@ -167,6 +167,9 @@ private final class Harness {
     }
 
     func select(_ k: FolderKey) async throws {
+        // As from the sidebar: only a folder the model knows, else its
+        // role is unknown and the outbox would be listed grouped.
+        try await waitUntil { self.mailbox.model.folder(k) != nil }
         mailbox.selectFolder(k, fav: false)
         try await waitUntil {
             self.mailbox.model.listFolder == k && !self.mailbox.model.loading && self.list.listState == .messages

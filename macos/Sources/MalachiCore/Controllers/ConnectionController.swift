@@ -104,6 +104,12 @@ public final class ConnectionController {
                 try? await Task.sleep(for: interval)
                 guard let self, !Task.isCancelled else { return }
                 if !self.clientConnected {
+                    // A connection whose `.connected` the state reader has
+                    // not delivered yet (a busy main actor) is no reason
+                    // for another attempt and another "Connecting…".
+                    if await client.state == .connected {
+                        continue
+                    }
                     self.reconnectNow()
                 }
             }
