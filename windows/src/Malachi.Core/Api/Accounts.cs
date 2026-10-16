@@ -212,6 +212,20 @@ public sealed record AccountConfig
     [JsonPropertyName("jira")]
     public JiraConfig? Jira { get; init; }
 
+    /// <summary>
+    /// The connection of a CalDAV account (kind <c>caldav</c> only); its
+    /// password is <see cref="Credentials.Password"/>.
+    /// </summary>
+    [JsonPropertyName("caldav")]
+    public CalDAVConfig? CalDAV { get; init; }
+
+    /// <summary>
+    /// The calendar part of a graph or caldav account (docs/api.md §4.14);
+    /// null on a graph account is calendar sync off.
+    /// </summary>
+    [JsonPropertyName("calendar")]
+    public CalendarConfig? Calendar { get; init; }
+
     /// <summary>Null is the daemon's default.</summary>
     [JsonPropertyName("syncIntervalSeconds")]
     public int? SyncIntervalSeconds { get; init; }
@@ -494,6 +508,14 @@ public sealed record AccountOAuthStartParams
     /// <summary>The texts of the page the browser shows at the end.</summary>
     [JsonPropertyName("browserPage")]
     public OAuthBrowserPage? BrowserPage { get; init; }
+
+    /// <summary>
+    /// Also asks for the calendar scopes (Microsoft Calendars.ReadWrite and
+    /// Calendars.Read.Shared); only a sign-in made for the calendar sets it.
+    /// Left out when null.
+    /// </summary>
+    [JsonPropertyName("calendar")]
+    public bool? Calendar { get; init; }
 }
 
 /// <summary>
@@ -614,7 +636,10 @@ public sealed record EndpointTestResult
 /// api.AccountTestResult: <see cref="Imap"/> and <see cref="Smtp"/> for an
 /// IMAP account, <see cref="Graph"/> for a Graph account, <see cref="Jira"/>
 /// for a Jira account (its capabilities carry <c>cloud</c> or
-/// <c>datacenter</c>, and <c>gateway</c> when the gateway route was used).
+/// <c>datacenter</c>, and <c>gateway</c> when the gateway route was used),
+/// <see cref="CalDAV"/> for a CalDAV account (its capabilities among
+/// <c>calendar-access</c>, <c>calendar-auto-schedule</c> and
+/// <c>sync-collection</c>).
 /// </summary>
 public sealed record AccountTestResult
 {
@@ -633,4 +658,8 @@ public sealed record AccountTestResult
     /// <summary>The Jira site's outcome.</summary>
     [JsonPropertyName("jira")]
     public EndpointTestResult? Jira { get; init; }
+
+    /// <summary>The CalDAV server's outcome.</summary>
+    [JsonPropertyName("caldav")]
+    public EndpointTestResult? CalDAV { get; init; }
 }

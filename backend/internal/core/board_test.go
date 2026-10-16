@@ -1094,7 +1094,7 @@ func TestBoardWorkerAndBackfill(t *testing.T) {
 	if err := x.b.backfillBoard(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if v, _, _ := x.b.store.GetMeta(x.ctx, metaBoardRules); v != boardRulesDone() || v != "7:done" {
+	if v, _, _ := x.b.store.GetMeta(x.ctx, metaBoardRules); v != boardRulesDone() || v != "8:done" {
 		t.Fatalf("meta = %q", v)
 	}
 	waitBoard(t, func() bool { r, c := x.list(); _, ok := c["t_old"]; return ok && r.Ready })

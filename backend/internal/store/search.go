@@ -120,6 +120,13 @@ func (s *Store) SearchMessages(ctx context.Context, f SearchFilter, cursor strin
 		items = items[:limit]
 		next = encodeSortCursor(searchCursorPrefix, stamps[limit-1], items[limit-1].ID)
 	}
+	page := make([]*Message, len(items))
+	for i := range items {
+		page[i] = &items[i].Message
+	}
+	if err := attachInvitationsTo(ctx, s.db, page); err != nil {
+		return nil, "", 0, err
+	}
 	return items, next, total, nil
 }
 

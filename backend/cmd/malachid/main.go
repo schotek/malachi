@@ -21,6 +21,9 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	// Embedded IANA tzdata, the same on every platform (Windows has no
+	// system zoneinfo): docs/calendar.md D4.
+	_ "time/tzdata"
 
 	"github.com/schotek/malachi/backend/internal/auth"
 	"github.com/schotek/malachi/backend/internal/auth/helper"
@@ -53,6 +56,12 @@ func run() error {
 		flagSocket  = flag.String("socket", paths.SocketFile(), "JSON-RPC unix socket; its connection key is written beside it as PATH.key")
 		flagVersion = flag.Bool("version", false, "print version and exit")
 	)
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
+		flag.PrintDefaults()
+		fmt.Fprintln(flag.CommandLine.Output(), "\nEnvironment:\n  "+envTimeZone+
+			"\n    \tthe user's IANA time zone (e.g. Europe/Prague), which the client passes; else TZ, else /etc/localtime")
+	}
 	flag.Parse()
 
 	if *flagVersion {
@@ -103,6 +112,7 @@ func run() error {
 	}()
 	log.Info("store ready", "path", st.Path())
 
+	setPreferredZone(log)
 	backend := core.New(version, st, cfg, log)
 	defer backend.Close() // idempotent; also on the early returns below
 	switch v := strings.ToLower(os.Getenv("MALACHI_KEYRING")); v {

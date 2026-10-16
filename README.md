@@ -67,6 +67,15 @@ work reliably anymore, and on Linux that is worse than anywhere else.
   you type: every word as a prefix, case and diacritics ignored ("priloh"
   finds "Přílohy"), plus `from:`, `to:`, `subject:`, `is:unread`,
   `has:attachment`, dates and `in:` a folder.
+- **Calendar** (in progress). The daemon
+  synchronises the calendars of Microsoft 365 / Outlook.com accounts
+  (when you switch them on) and of CalDAV servers (Nextcloud, iCloud,
+  Fastmail, Radicale and others, as a calendar-only account), keeps them
+  offline, and reads invitations that arrive in any mail account so you
+  can accept, tentatively accept or decline from the message; replies and
+  invitations go through the server or, where it does not send them, as
+  invitation mail through the Outbox. A Calendar mode beside Mail and the
+  Board comes to the macOS client first, then to GTK and Windows.
 - **AI agents, on a leash.** An optional MCP bridge lets an agent read and
   draft mail through the daemon. Read-only unless you say otherwise;
   marking, moving, deleting and sending each need a separate flag.
@@ -108,7 +117,7 @@ work reliably anymore, and on Linux that is worse than anywhere else.
 
 - A webmail or a hosted service.
 - Mobile versions.
-- Running a mail server, filtering spam server-side, calendaring.
+- Running a mail server, filtering spam server-side.
 
 ## Architecture
 

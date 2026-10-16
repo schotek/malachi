@@ -290,7 +290,7 @@ func TestAccountRemove(t *testing.T) {
 	if len(drafts.Drafts) != 0 {
 		t.Fatalf("drafts left: %+v", drafts.Drafts)
 	}
-	if len(k.deleted) != 2 || len(k.values) != 0 {
+	if len(k.deleted) != 3 || len(k.values) != 0 { // password, refresh token, granted scope
 		t.Fatalf("keyring deletes = %v, values = %v", k.deleted, k.values)
 	}
 	if _, err := b.Accounts().Remove(ctx, api.AccountRemoveParams{AccountID: res.AccountID}); errCode(t, err) != api.CodeAccountNotFound {

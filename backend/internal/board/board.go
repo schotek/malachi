@@ -42,8 +42,11 @@ import (
 // lie (Archived, NewestInboundInInbox), on which the store marks a case
 // done when the user archives the thread in the mail view and live again
 // when a message comes back into the inbox, and makes no case of a thread
-// archived already.
-const RulesVersion = "7"
+// archived already. 8: the store hands the rules no calendar mail (a
+// message with a cal_invitations row: an invitation, its update,
+// cancellation or reply, the user's own copies of them); a thread of
+// nothing else makes no case.
+const RulesVersion = "8"
 
 // Bulk classification values of messages.bulk the rules distinguish; any
 // other non-empty value is bulk mail (api.BulkKind).

@@ -209,6 +209,11 @@ const (
 	// assignee changes are its messages. JiraConfig says where and how;
 	// the token is Credentials.Password.
 	AccountJira AccountKind = "jira"
+	// AccountCalDAV is a calendar-only account on a CalDAV server
+	// (CalDAVConfig; the password is Credentials.Password). It has no
+	// mail: folder.list answers no folders, message methods
+	// invalidArgument, and clients never show it in Mail.
+	AccountCalDAV AccountKind = "caldav"
 )
 
 // GraphSource says who holds the OAuth2 session of a Graph account.
@@ -347,18 +352,23 @@ type StatusRef struct {
 // method.
 //
 // IMAP and SMTP are set for AccountIMAP only, Graph for AccountGraph only,
-// Jira for AccountJira only.
+// Jira for AccountJira only, CalDAV for AccountCalDAV only; Calendar only
+// for AccountGraph and AccountCalDAV.
 type AccountConfig struct {
-	Name         string        `json:"name"`  // display name of the account
-	Email        string        `json:"email"` // primary address
-	DisplayName  string        `json:"displayName,omitempty"`
-	Kind         AccountKind   `json:"kind,omitempty"` // "" = AccountIMAP
-	IMAP         *ServerConfig `json:"imap,omitempty"`
-	SMTP         *ServerConfig `json:"smtp,omitempty"`
-	OAuth2       *OAuth2Config `json:"oauth2,omitempty"`
-	Graph        *GraphConfig  `json:"graph,omitempty"`
-	Jira         *JiraConfig   `json:"jira,omitempty"`
-	SyncInterval int           `json:"syncIntervalSeconds,omitempty"` // 0 = default
+	Name        string        `json:"name"`  // display name of the account
+	Email       string        `json:"email"` // primary address
+	DisplayName string        `json:"displayName,omitempty"`
+	Kind        AccountKind   `json:"kind,omitempty"` // "" = AccountIMAP
+	IMAP        *ServerConfig `json:"imap,omitempty"`
+	SMTP        *ServerConfig `json:"smtp,omitempty"`
+	OAuth2      *OAuth2Config `json:"oauth2,omitempty"`
+	Graph       *GraphConfig  `json:"graph,omitempty"`
+	Jira        *JiraConfig   `json:"jira,omitempty"`
+	CalDAV      *CalDAVConfig `json:"caldav,omitempty"`
+	// Calendar is the calendar part of a graph or caldav account
+	// (docs/api.md §4.14); nil on a graph account = calendar sync off.
+	Calendar     *CalendarConfig `json:"calendar,omitempty"`
+	SyncInterval int             `json:"syncIntervalSeconds,omitempty"` // 0 = default
 }
 
 // Protocol returns Kind with the empty default resolved.
@@ -402,6 +412,10 @@ const (
 	// CapabilityTransition: the status of an issue can be changed through
 	// issue.transitions and issue.transition.
 	CapabilityTransition AccountCapability = "transition"
+	// CapabilityCalendar: the account can have calendars (graph, caldav);
+	// it does not change with consent or sync state. A caldav account has
+	// exactly this one.
+	CapabilityCalendar AccountCapability = "calendar"
 )
 
 // MailCapabilities is what a mail account (imap, graph) can do, and what a
@@ -569,6 +583,10 @@ type AccountOAuthStartParams struct {
 	AccountID   AccountID         `json:"accountId,omitempty"`
 	Config      *AccountConfig    `json:"config,omitempty"`
 	BrowserPage *OAuthBrowserPage `json:"browserPage,omitempty"`
+	// Calendar also asks for the calendar scopes (Microsoft
+	// Calendars.ReadWrite and Calendars.Read.Shared); only a sign-in made
+	// for the calendar sets it.
+	Calendar bool `json:"calendar,omitempty"`
 }
 
 // AccountOAuthStartResult: the UI opens AuthURL in the user's browser; the
@@ -640,12 +658,15 @@ type EndpointTestResult struct {
 // AccountTestResult carries one entry per endpoint of the account kind:
 // imap and smtp for an IMAP account, graph for a Graph account, jira for
 // a Jira account (its Capabilities carry "cloud" or "datacenter", and
-// "gateway" when the Atlassian API gateway route was used).
+// "gateway" when the Atlassian API gateway route was used), caldav for a
+// CalDAV account (its Capabilities among "calendar-access",
+// "calendar-auto-schedule" and "sync-collection").
 type AccountTestResult struct {
-	IMAP  *EndpointTestResult `json:"imap,omitempty"`
-	SMTP  *EndpointTestResult `json:"smtp,omitempty"`
-	Graph *EndpointTestResult `json:"graph,omitempty"`
-	Jira  *EndpointTestResult `json:"jira,omitempty"`
+	IMAP   *EndpointTestResult `json:"imap,omitempty"`
+	SMTP   *EndpointTestResult `json:"smtp,omitempty"`
+	Graph  *EndpointTestResult `json:"graph,omitempty"`
+	Jira   *EndpointTestResult `json:"jira,omitempty"`
+	CalDAV *EndpointTestResult `json:"caldav,omitempty"`
 }
 
 // AccountDetectSiteParams asks what kind of issue-tracker site a URL
@@ -847,6 +868,11 @@ type MessageSummary struct {
 	// mail from its headers (newsletter, mailing list, automated); absent
 	// for personal mail, issue-tracker items and rows not classified yet.
 	Bulk *BulkInfo `json:"bulk,omitempty"`
+	// Invitation is present only for a message with a calendar part
+	// (text/calendar or application/ics) the daemon read: what the list
+	// pill and a notification show. Message.Invitation shadows it with the
+	// whole card in message.get.
+	Invitation *InvitationSummary `json:"invitation,omitempty"`
 }
 
 // BulkKind is what kind of bulk mail a message is.
@@ -945,6 +971,10 @@ type Message struct {
 	// header offers a method the daemon can use (see message.unsubscribe),
 	// and never for a message in the junk folder.
 	Unsubscribe *UnsubscribeOffer `json:"unsubscribe,omitempty"`
+	// Invitation is the invitation card of a message with a calendar part
+	// (message.get, message.download); it takes the place of
+	// MessageSummary.Invitation on the wire.
+	Invitation *InvitationCard `json:"invitation,omitempty"`
 }
 
 // UnsubscribeMethod is how message.unsubscribe would act.

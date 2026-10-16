@@ -76,6 +76,7 @@ type session struct {
 	provider   Provider
 	clientID   string
 	tenant     string
+	calendar   bool // asked for the calendar scopes too
 	cfg        *oauth2.Config
 	verifier   string
 	state      string
@@ -147,6 +148,9 @@ func (m *manager) start(req StartRequest) (string, string, time.Time, error) {
 	if !knownProvider(req.Provider) {
 		return "", "", time.Time{}, api.NewError(api.CodeInvalidArgument, "unknown OAuth2 provider %q", string(req.Provider))
 	}
+	if req.Calendar && !SupportsCalendar(req.Provider) {
+		return "", "", time.Time{}, api.NewError(api.CodeInvalidArgument, "no calendar access for OAuth2 provider %q", string(req.Provider))
+	}
 	if req.Client.ID == "" {
 		return "", "", time.Time{}, api.NewError(api.CodeOAuthClientMissing, "no OAuth client id for provider %q", string(req.Provider))
 	}
@@ -162,7 +166,7 @@ func (m *manager) start(req StartRequest) (string, string, time.Time, error) {
 	if req.Key != "" {
 		if s := m.pendingByKeyLocked(req.Key); s != nil {
 			if s.provider == req.Provider && s.clientID == req.Client.ID && s.tenant == req.Client.Tenant &&
-				normalizeAddress(s.expect) == normalizeAddress(req.ExpectEmail) {
+				s.calendar == req.Calendar && normalizeAddress(s.expect) == normalizeAddress(req.ExpectEmail) {
 				if page != (PageTexts{}) {
 					s.page = page
 				}
@@ -170,7 +174,8 @@ func (m *manager) start(req StartRequest) (string, string, time.Time, error) {
 				return s.id, s.authURL, s.expires, nil
 			}
 			// Started for another provider, client or address (the account
-			// changed since): it must not complete for the new one.
+			// changed since), or with other scopes: it must not complete
+			// for the new one.
 			m.finishLocked(s, StatusCancelled, api.NewError(api.CodeCancelled, "sign-in replaced: the account changed"), "")
 			m.stopLocked(s)
 			m.log.Info("sign-in session replaced", "session", s.id, "key", req.Key)
@@ -203,7 +208,7 @@ func (m *manager) start(req StartRequest) (string, string, time.Time, error) {
 		ln.Close()
 		return "", "", time.Time{}, api.NewError(api.CodeInternalError, "unusable redirect address %q", redirect)
 	}
-	cfg := oauthConfig(req.Provider, req.Client, ep, redirect)
+	cfg := oauthConfig(req.Provider, req.Client, ep, redirect, req.Calendar)
 	verifier := oauth2.GenerateVerifier()
 	opts := append([]oauth2.AuthCodeOption{oauth2.S256ChallengeOption(verifier)}, authParams(req.Provider, req.LoginHint)...)
 
@@ -213,6 +218,7 @@ func (m *manager) start(req StartRequest) (string, string, time.Time, error) {
 		provider:   req.Provider,
 		clientID:   req.Client.ID,
 		tenant:     req.Client.Tenant,
+		calendar:   req.Calendar,
 		cfg:        cfg,
 		verifier:   verifier,
 		state:      state,
@@ -248,7 +254,7 @@ func (m *manager) start(req StartRequest) (string, string, time.Time, error) {
 	s.timer = time.AfterFunc(m.ttl, func() { m.onTimer(s) })
 
 	m.log.Info("sign-in session started", "session", s.id, "provider", string(s.provider), "key", s.key,
-		"listener", ln.Addr().String())
+		"calendar", s.calendar, "listener", ln.Addr().String())
 	return s.id, s.authURL, s.expires, nil
 }
 
@@ -463,6 +469,10 @@ func (m *manager) exchange(ctx context.Context, s *session, code string) (Grant,
 	}
 	g := grantFrom(tok, s.provider, m.now())
 	g.ClientID, g.Tenant = s.clientID, s.tenant
+	if g.Scope == "" {
+		// No scope in the response: it was granted as asked (RFC 6749 §5.1).
+		g.Scope = cleanScope(strings.Join(s.cfg.Scopes, " "))
+	}
 	if g.RefreshToken == "" {
 		return Grant{}, api.NewError(api.CodeAuthFailed, "the provider returned no refresh token"), api.CodeAuthFailed.String()
 	}
@@ -517,7 +527,16 @@ func grantFrom(tok *oauth2.Token, p Provider, now time.Time) Grant {
 	if id, ok := tok.Extra("id_token").(string); ok {
 		g.IDToken = id
 	}
+	g.Scope = responseScope(tok)
 	return g
+}
+
+// responseScope is the cleaned "scope" of a token response, "" without.
+func responseScope(tok *oauth2.Token) string {
+	if v, ok := tok.Extra("scope").(string); ok {
+		return cleanScope(v)
+	}
+	return ""
 }
 
 func expiryOf(tok *oauth2.Token, now time.Time) time.Time {

@@ -55,6 +55,11 @@ type Options struct {
 	Log        *slog.Logger
 	// Sleep is the wait used for Retry-After; tests inject a fast one.
 	Sleep func(ctx context.Context, d time.Duration) error
+	// Limiter, when set, bounds this client's requests together with
+	// every other client sharing it (one per account: mail syncer,
+	// outbox, calendar; docs/calendar.md D13). Requests of the mail
+	// methods run at PriorityHigh. nil = the client's own 4 slots.
+	Limiter *Limiter
 }
 
 // Client is a thin Microsoft Graph HTTP client: it adds the token and the
@@ -69,6 +74,7 @@ type Client struct {
 	log        *slog.Logger
 	sleep      func(ctx context.Context, d time.Duration) error
 	sem        chan struct{}
+	limiter    *Limiter
 }
 
 // NewClient builds a client from opts.
@@ -81,6 +87,7 @@ func NewClient(opts Options) *Client {
 		log:        opts.Log,
 		sleep:      opts.Sleep,
 		sem:        make(chan struct{}, maxConcurrent),
+		limiter:    opts.Limiter,
 	}
 	if c.base == "" {
 		c.base = DefaultBaseURL
@@ -253,12 +260,11 @@ func (c *Client) do(ctx context.Context, method, u string, body func() (io.Reade
 // the response body (streaming); otherwise the body is decoded into out
 // and closed here.
 func (c *Client) request(ctx context.Context, method, u string, body func() (io.Reader, error), contentType string, length int64, out any, timeout time.Duration, keep func(*http.Response) error) error {
-	select {
-	case c.sem <- struct{}{}:
-	case <-ctx.Done():
-		return ctx.Err()
+	release, err := c.acquire(ctx, PriorityHigh)
+	if err != nil {
+		return err
 	}
-	defer func() { <-c.sem }()
+	defer release()
 
 	refreshed := false
 	throttled := 0
@@ -311,6 +317,20 @@ func (c *Client) request(ctx context.Context, method, u string, body func() (io.
 			return api.NewError(api.CodeServerError, "graph: malformed response: %s", transport.CleanMessage(err.Error()))
 		}
 		return nil
+	}
+}
+
+// acquire takes a request slot: from the shared Limiter when there is
+// one, else from the client's own semaphore.
+func (c *Client) acquire(ctx context.Context, p Priority) (func(), error) {
+	if c.limiter != nil {
+		return c.limiter.Acquire(ctx, p)
+	}
+	select {
+	case c.sem <- struct{}{}:
+		return func() { <-c.sem }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 }
 

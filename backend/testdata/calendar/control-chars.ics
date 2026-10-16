@@ -1,0 +1,16 @@
+BEGIN:VCALENDAR
+X-MALACHI-TEST:control characters: kept in values (problem noted), a parame
+ ter with one drops the property
+VERSION:2.0
+PRODID:-//Malachi Test//Corpus//EN
+BEGIN:VEVENT
+UID:ctl-1@example.org
+DTSTAMP:20261016T080000Z
+DTSTART:20261020T090000Z
+DTEND:20261020T100000Z
+SUMMARY:Planning
+DESCRIPTION:bell escape[31m red
+LOCATION;X-HINT=ab:Room 4
+COMMENT:del
+END:VEVENT
+END:VCALENDAR

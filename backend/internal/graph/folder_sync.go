@@ -432,5 +432,6 @@ func summaryOf(m store.Message) api.MessageSummary {
 	if sum.Date.IsZero() {
 		sum.Date = m.InternalDate
 	}
+	sum.Invitation = m.Invitation // the pill and the notification text (docs/calendar.md §4.7)
 	return sum
 }

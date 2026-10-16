@@ -1,0 +1,15 @@
+BEGIN:VCALENDAR
+X-MALACHI-TEST:LOCATION and DESCRIPTION with URLs and escaped separators
+VERSION:2.0
+PRODID:-//Malachi Test//Corpus//EN
+BEGIN:VEVENT
+UID:lwu@example.org
+DTSTAMP:20261016T080000Z
+DTSTART:20261020T090000Z
+DTEND:20261020T100000Z
+SUMMARY:Planning
+LOCATION:Room 4\, Building B\; or https://meet.example.org/abc-defg
+DESCRIPTION:Join at https://meet.example.org/abc-defg\nPhone: +1 000 000 00
+ 00\nhttp://plain.example.org
+END:VEVENT
+END:VCALENDAR

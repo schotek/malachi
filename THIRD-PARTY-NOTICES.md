@@ -10,8 +10,10 @@ ships it beside `LICENSE` and `LICENSING.md`.
 It lists the components of `malachi-mcp`, the bridge that gives AI agents
 access to the mail: the Go modules linked into it, the Go standard
 library and runtime, and the build of PDFium embedded in it to read the
-text of PDF attachments. The other programs in the packages are not
-covered by this file yet.
+text of PDF attachments. Of the daemon `malachid` it lists so far only
+what the calendar added (a Go module and data from Unicode CLDR); its
+other components and the other programs in the packages are not covered
+by this file yet.
 
 ## Components
 
@@ -81,6 +83,13 @@ PDFium's built-in replacement fonts (`core/fxge/fontdata`) are part of
 PDFium and distributed under its licence; the font data of two of them
 carries the line "Copyright (c) 1990-1994 Adobe Systems Incorporated.
 All Rights Reserved."
+
+### Calendar code and data in `malachid`
+
+| Component | Version | Licence | Notice |
+|---|---|---|---|
+| `github.com/teambition/rrule-go`, the expansion of recurrence rules | v1.8.2 | MIT | [rrule-go](#rrule-go) |
+| Unicode CLDR `common/supplemental/windowsZones.xml`, generated into the Windows time-zone table `backend/internal/calendar/tz/windows_zones.go` | otherVersion 7e11800, typeVersion 2021a | Unicode-3.0 | [Unicode CLDR](#unicode-cldr) |
 
 ## Notices
 
@@ -2019,6 +2028,81 @@ system/lib/libc/musl/COPYRIGHT
 The third_party/ subdirectory contains code with other licenses. None of it is
 used by default, but certain options use it (e.g., the optional closure compiler
 flag will run closure compiler from third_party/).
+```
+
+### rrule-go
+
+```text
+MIT License
+
+Copyright (c) 2017-2023 Teambition
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### Unicode CLDR
+
+The Windows time-zone table of `malachid` is generated from CLDR's
+`windowsZones.xml` (https://github.com/unicode-org/cldr).
+
+```text
+UNICODE LICENSE V3
+
+COPYRIGHT AND PERMISSION NOTICE
+
+Copyright © 1991-2026 Unicode, Inc.
+
+NOTICE TO USER: Carefully read the following legal agreement. BY
+DOWNLOADING, INSTALLING, COPYING OR OTHERWISE USING DATA FILES, AND/OR
+SOFTWARE, YOU UNEQUIVOCALLY ACCEPT, AND AGREE TO BE BOUND BY, ALL OF THE
+TERMS AND CONDITIONS OF THIS AGREEMENT. IF YOU DO NOT AGREE, DO NOT
+DOWNLOAD, INSTALL, COPY, DISTRIBUTE OR USE THE DATA FILES OR SOFTWARE.
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of data files and any associated documentation (the "Data Files") or
+software and any associated documentation (the "Software") to deal in the
+Data Files or Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, and/or sell
+copies of the Data Files or Software, and to permit persons to whom the
+Data Files or Software are furnished to do so, provided that either (a)
+this copyright and permission notice appear with all copies of the Data
+Files or Software, or (b) this copyright and permission notice appear in
+associated Documentation.
+
+THE DATA FILES AND SOFTWARE ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF
+THIRD PARTY RIGHTS.
+
+IN NO EVENT SHALL THE COPYRIGHT HOLDER OR HOLDERS INCLUDED IN THIS NOTICE
+BE LIABLE FOR ANY CLAIM, OR ANY SPECIAL INDIRECT OR CONSEQUENTIAL DAMAGES,
+OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
+WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
+ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THE DATA
+FILES OR SOFTWARE.
+
+Except as contained in this notice, the name of a copyright holder shall
+not be used in advertising or otherwise to promote the sale, use or other
+dealings in these Data Files or Software without prior written
+authorization of the copyright holder.
+
+SPDX-License-Identifier: Unicode-3.0
 ```
 
 ### Apache License 2.0

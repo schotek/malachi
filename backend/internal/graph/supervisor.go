@@ -35,6 +35,9 @@ type SupervisorDeps struct {
 	// Stored: see Deps, with the account the message is of; nil =
 	// nothing.
 	Stored func(ctx context.Context, accountID, messageID string, pol ingest.Policy)
+	// Limiter returns the account's request limiter, shared with its
+	// outbox and calendar (docs/calendar.md D13); nil = one per syncer.
+	Limiter func(accountID string) *Limiter
 }
 
 // Supervisor owns one Syncer per started account. It satisfies
@@ -133,6 +136,9 @@ func (sv *Supervisor) Start(a store.Account) {
 		HTTP:       sv.deps.HTTP,
 		DraftQuiet: sv.deps.DraftQuiet,
 		Stored:     sv.storedFor(id),
+	}
+	if sv.deps.Limiter != nil {
+		deps.Limiter = sv.deps.Limiter(id)
 	}
 	if sv.deps.BuildDraft != nil {
 		deps.BuildDraft = func(ctx context.Context, draftID string) (store.DraftUpload, error) {

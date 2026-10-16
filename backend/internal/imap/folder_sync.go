@@ -836,6 +836,7 @@ func summaryOf(m store.Message) api.MessageSummary {
 		from = m.From[0].Address
 	}
 	sum.Bulk = bulk.Info(m.Bulk, m.ListID, from)
+	sum.Invitation = m.Invitation // the pill and the notification text (docs/calendar.md §4.7)
 	return sum
 }
 

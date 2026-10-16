@@ -100,8 +100,8 @@ registered at all, so it never appears in the client's tool list.
 
 | Tier | Flag | Tools |
 |---|---|---|
-| read and draft | always | `list_accounts`, `list_folders`, `list_messages`, `search_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `list_transitions`, `list_board`, `create_draft` |
-| modify | `-allow-modify` | `mark_messages`, `move_messages`, `delete_messages`, `transition_issue`, `unsubscribe` |
+| read and draft | always | `list_accounts`, `list_folders`, `list_messages`, `search_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `list_transitions`, `list_board`, `create_draft`, and the calendar tools `list_calendars`, `list_events`, `get_event`, `find_free_time`, `list_invitations` (not under `-reply-only` or `-triage-run`) |
+| modify | `-allow-modify` | `mark_messages`, `move_messages`, `delete_messages`, `transition_issue`, `unsubscribe`, `create_event` (attendees also need `-allow-send`) |
 | send | `-allow-send` | `send_message` |
 | triage | `-allow-triage` | `list_triage_queue`, `annotate_case`, `add_commitment` (and the prompt `triage_board`) |
 
@@ -486,6 +486,57 @@ own process:
   `notes: current` or `outdated`, the state in effect is never the
   assistant's, and the fence carries no title, summary, why, tasks,
   deadline quote or source; the header says the notes are withheld.
+
+### Calendar (`list_calendars`, `list_events`, `get_event`, `find_free_time`, `list_invitations`, `create_event`)
+
+The calendar tools read and write through `calendar.*`, `event.*` and
+`invitation.list` ([api.md §4.14 to §4.16](api.md)). The five read tools
+are always registered, except in a bridge started with `-reply-only` or
+`-triage-run`, which keep their fixed tool sets; `create_event` needs
+`-allow-modify`. Every string of an event, calendar or invitation (title,
+location, notes, names, addresses, calendar names) is written by an
+organiser or a server: it is cleaned and sits inside the fence; ids, times
+and enums (responses, status, kinds) stay outside, matched to the fenced
+texts by row number or id. Times are UTC; an all-day event shows its dates
+(`all-day 2026-10-15..2026-10-16`, the end exclusive). A video-call link is
+never given out (host and provider only), as with other links.
+
+- `list_calendars`: optional `accountId`. Accounts with a calendar (source,
+  sync state, how invitations leave), their calendars (id, access, kind,
+  visible, default) and the number of unanswered invitations.
+- `list_events`: `from`, `to` (RFC 3339, a local date-time or a date, at
+  most **62 days** apart), optional `calendarIds`, `query` (then
+  `event.search` within the range), `timeZone` (IANA, default the
+  bridge's zone; sets day boundaries), `limit` (1 to 200, default 100). A row
+  is time, the user's response, status when not confirmed, event id,
+  recurrence id for an instance of a series, calendar id; the fence has
+  title, location and calendar name. No notes.
+- `get_event`: `eventId`, optional `recurrenceId`, `timeZone`. Time,
+  status, recurrence, alerts, attendee responses outside the fence; title,
+  location, organiser, attendees and notes inside, **notes cut at 8 KiB**
+  with a marker.
+- `find_free_time`: `durationMinutes` (5 to 1440), `from`, `to` (at most 62
+  days), optional `attendees` (at most 20 addresses), `workingHoursOnly`
+  (default true, from the calendar preferences), `accountId`, `limit` (1
+  to 50, default 5). Attendees without known free/busy are listed.
+- `list_invitations`: optional `state` (default `unanswered`), `limit` (1
+  to 100, default 50). Message id (read it with `read_message`), method,
+  kind, time; title and organiser in the fence. Answering an invitation is
+  not offered.
+- `create_event` (`-allow-modify`): `calendarId`, `title`, timed
+  (`start`, `end` as local date-times, `timeZone`) or `allDay` with
+  `startDate` and `endDate` (the day after the last day, default the next
+  day), `location`, `notes`, a simple `recurrence` (`frequency`,
+  `interval`, `byDay`, `until` or `count`), `alerts` (minutes before the
+  start; omitted: the user's default, `[]`: none). **`attendees`
+  (address, name, role) are accepted only with `-allow-send` too**,
+  because the daemon then mails the invitations from the user's account;
+  without it the call is refused with a fixed text before the daemon is
+  asked, and the tool's description says so. The bridge sends no
+  invitation text: the daemon uses the event's title ([calendar.md
+  D9](calendar.md)). The tool is annotated like `send_message`
+  (destructive, open world) because it can reach other people. Update,
+  delete and answering are not offered.
 
 ### create_draft
 

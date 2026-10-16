@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/schotek/malachi/backend/internal/calsync"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -288,7 +289,7 @@ func (k *kindOutbox) Wake(accountID string) bool {
 
 // kindOrder is the order the dispatchers reach their supervisors in (Run,
 // Reload, States); a kind not listed comes after these, by name.
-var kindOrder = []api.AccountKind{api.AccountIMAP, api.AccountGraph, api.AccountJira}
+var kindOrder = []api.AccountKind{api.AccountIMAP, api.AccountGraph, api.AccountJira, api.AccountCalDAV}
 
 // sortedKinds is the keys of a dispatch table in kindOrder.
 func sortedKinds[V any](by map[api.AccountKind]V) []api.AccountKind {
@@ -309,4 +310,168 @@ func sortedKinds[V any](by map[api.AccountKind]V) []api.AccountKind {
 		return strings.Compare(string(a), string(b))
 	})
 	return kinds
+}
+
+// graphWithCalendar is the supervisor of the graph kind: the mail syncer,
+// and beside it the account's calendar in the calendar engine, which
+// starts only with calendar.sync on (calsync.HasCalendars) and is stopped
+// and restarted with the mail. Trigger and the states are the mail's: a
+// Graph account's calendar state is CalendarSyncState, never its
+// SyncState (docs/calendar.md §4.3). A second Run of the engine (it is the
+// caldav kind's supervisor too) only waits.
+type graphWithCalendar struct {
+	mail SyncSupervisor
+	cal  *calsync.Supervisor
+}
+
+var _ SyncSupervisor = (*graphWithCalendar)(nil)
+
+func (g *graphWithCalendar) Run(ctx context.Context) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); g.mail.Run(ctx) }()
+	go func() { defer wg.Done(); g.cal.Run(ctx) }()
+	wg.Wait()
+}
+
+func (g *graphWithCalendar) Start(a store.Account) {
+	g.mail.Start(a)
+	g.cal.Start(a)
+}
+
+func (g *graphWithCalendar) Stop(accountID string) {
+	g.mail.Stop(accountID)
+	g.cal.Stop(accountID)
+}
+
+func (g *graphWithCalendar) Restart(a store.Account) {
+	g.mail.Restart(a)
+	g.cal.Restart(a)
+}
+
+func (g *graphWithCalendar) Reload() {
+	g.mail.Reload()
+	g.cal.Reload()
+}
+
+func (g *graphWithCalendar) Trigger(accountID string, folder api.FolderID, full bool) bool {
+	return g.mail.Trigger(accountID, folder, full)
+}
+
+func (g *graphWithCalendar) State(accountID string) (api.SyncState, bool) {
+	return g.mail.State(accountID)
+}
+func (g *graphWithCalendar) States() []api.SyncState { return g.mail.States() }
+
+// TriggerIssue and RefreshIssueWait are the mail supervisor's, if any.
+func (g *graphWithCalendar) TriggerIssue(accountID, key string) bool {
+	is, ok := g.mail.(IssueSupervisor)
+	return ok && is.TriggerIssue(accountID, key)
+}
+
+func (g *graphWithCalendar) RefreshIssueWait(ctx context.Context, accountID, key string, d time.Duration) error {
+	if is, ok := g.mail.(IssueSupervisor); ok {
+		return is.RefreshIssueWait(ctx, accountID, key, d)
+	}
+	return api.NewError(api.CodeUnavailable, "account %s has no issues to refresh", accountID)
+}
+
+// mailOnlyMessages is the message service by account kind: an account
+// without mail (caldav, docs/calendar.md §4.3) answers every message
+// method invalidArgument; every other account goes to the service.
+type mailOnlyMessages struct {
+	inner api.MessageService
+	b     *Backend
+}
+
+var _ api.MessageService = mailOnlyMessages{}
+
+// refuse is invalidArgument for an account of a kind without mail; an
+// unknown account passes on (the service answers accountNotFound).
+func (m mailOnlyMessages) refuse(ctx context.Context, id api.AccountID) error {
+	if id == "" {
+		return nil
+	}
+	a, err := m.b.store.GetAccount(ctx, string(id))
+	if err == nil && a.Config.Protocol() == api.AccountCalDAV {
+		return api.NewError(api.CodeInvalidArgument, "account %q has no mail", id)
+	}
+	return nil
+}
+
+func (m mailOnlyMessages) List(ctx context.Context, p api.MessageListParams) (*api.MessageListResult, error) {
+	if err := m.refuse(ctx, p.AccountID); err != nil {
+		return nil, err
+	}
+	return m.inner.List(ctx, p)
+}
+
+func (m mailOnlyMessages) Get(ctx context.Context, p api.MessageGetParams) (*api.MessageGetResult, error) {
+	if err := m.refuse(ctx, p.AccountID); err != nil {
+		return nil, err
+	}
+	return m.inner.Get(ctx, p)
+}
+
+func (m mailOnlyMessages) Body(ctx context.Context, p api.MessageBodyParams) (*api.MessageBodyResult, error) {
+	if err := m.refuse(ctx, p.AccountID); err != nil {
+		return nil, err
+	}
+	return m.inner.Body(ctx, p)
+}
+
+func (m mailOnlyMessages) Part(ctx context.Context, p api.MessagePartParams) (*api.MessagePartResult, error) {
+	if err := m.refuse(ctx, p.AccountID); err != nil {
+		return nil, err
+	}
+	return m.inner.Part(ctx, p)
+}
+
+func (m mailOnlyMessages) Embedded(ctx context.Context, p api.MessageEmbeddedParams) (*api.MessageEmbeddedResult, error) {
+	if err := m.refuse(ctx, p.AccountID); err != nil {
+		return nil, err
+	}
+	return m.inner.Embedded(ctx, p)
+}
+
+func (m mailOnlyMessages) Download(ctx context.Context, p api.MessageDownloadParams) (*api.MessageDownloadResult, error) {
+	if err := m.refuse(ctx, p.AccountID); err != nil {
+		return nil, err
+	}
+	return m.inner.Download(ctx, p)
+}
+
+func (m mailOnlyMessages) Unsubscribe(ctx context.Context, p api.MessageUnsubscribeParams) (*api.MessageUnsubscribeResult, error) {
+	if err := m.refuse(ctx, p.AccountID); err != nil {
+		return nil, err
+	}
+	return m.inner.Unsubscribe(ctx, p)
+}
+
+func (m mailOnlyMessages) Flag(ctx context.Context, p api.MessageFlagParams) (*api.MessageFlagResult, error) {
+	if err := m.refuse(ctx, p.AccountID); err != nil {
+		return nil, err
+	}
+	return m.inner.Flag(ctx, p)
+}
+
+func (m mailOnlyMessages) Move(ctx context.Context, p api.MessageMoveParams) (*api.MessageMoveResult, error) {
+	if err := m.refuse(ctx, p.AccountID); err != nil {
+		return nil, err
+	}
+	return m.inner.Move(ctx, p)
+}
+
+func (m mailOnlyMessages) Delete(ctx context.Context, p api.MessageDeleteParams) (*api.MessageDeleteResult, error) {
+	if err := m.refuse(ctx, p.AccountID); err != nil {
+		return nil, err
+	}
+	return m.inner.Delete(ctx, p)
+}
+
+func (m mailOnlyMessages) Send(ctx context.Context, p api.MessageSendParams) (*api.MessageSendResult, error) {
+	if err := m.refuse(ctx, p.AccountID); err != nil {
+		return nil, err
+	}
+	return m.inner.Send(ctx, p)
 }

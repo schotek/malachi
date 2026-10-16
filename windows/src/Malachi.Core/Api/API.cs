@@ -6,7 +6,8 @@
 // backend/pkg/api/methods.go (Method*, Notify*, AllMethods,
 // AllNotifications), backend/pkg/api/types.go (the limits); contract:
 // docs/api.md §4, §5. The board methods (board.go, §4.13) have no Swift
-// descriptors yet.
+// descriptors yet; the calendar's (calendar.go, §4.1, §4.14 to §4.16) are
+// the Windows mirror written beside the Swift one.
 //
 // backend/pkg/api re-declared in C#: the method table of methods.go with the
 // params and result type of each, the notification names, the limits. The
@@ -460,6 +461,98 @@ public static class API
     public static readonly RpcMethod<BoardRunEndParams, EmptyResult> BoardRunEnd =
         new("board.runEnd", RpcTimeouts.Default, Wire.BoardRunEndParams, Wire.EmptyResult);
 
+    // Calendar accounts (docs/api.md §4.1)
+
+    /// <summary><c>account.discoverCalDAV</c>: finds the CalDAV server a URL names; nothing is stored.</summary>
+    public static readonly RpcMethod<AccountDiscoverCalDAVParams, AccountDiscoverCalDAVResult> AccountDiscoverCalDAV =
+        new("account.discoverCalDAV", CalendarTimeouts.Discover, Wire.AccountDiscoverCalDAVParams, Wire.AccountDiscoverCalDAVResult);
+
+    /// <summary><c>account.listCalDAVCalendars</c>: signs in to a CalDAV server and lists what the account settings choose from.</summary>
+    public static readonly RpcMethod<AccountListCalDAVCalendarsParams, AccountListCalDAVCalendarsResult> AccountListCalDAVCalendars =
+        new("account.listCalDAVCalendars", CalendarTimeouts.ListCalendars, Wire.AccountListCalDAVCalendarsParams, Wire.AccountListCalDAVCalendarsResult);
+
+    // Calendars (docs/api.md §4.14)
+
+    /// <summary><c>calendar.list</c>: the calendars of the accounts with the calendar capability, their state, and the count of unanswered invitations.</summary>
+    public static readonly RpcMethod<CalendarListParams, CalendarListResult> CalendarList =
+        new("calendar.list", RpcTimeouts.Default, Wire.CalendarListParams, Wire.CalendarListResult);
+
+    /// <summary><c>calendar.update</c>: the user's own settings of one calendar (visibility, colour).</summary>
+    public static readonly RpcMethod<CalendarUpdateParams, CalendarUpdateResult> CalendarUpdate =
+        new("calendar.update", RpcTimeouts.Default, Wire.CalendarUpdateParams, Wire.CalendarUpdateResult);
+
+    /// <summary><c>calendar.sync</c>: starts a pass in the background; <c>notify.calendarState</c> follows.</summary>
+    public static readonly RpcMethod<CalendarSyncParams, EmptyResult> CalendarSync =
+        new("calendar.sync", RpcTimeouts.Default, Wire.CalendarSyncParams, Wire.EmptyResult);
+
+    /// <summary><c>calendar.preferences</c>.</summary>
+    public static readonly RpcMethod<EmptyParams, CalendarPreferencesResult> CalendarPreferences =
+        new("calendar.preferences", RpcTimeouts.Default, Wire.EmptyParams, Wire.CalendarPreferencesResult);
+
+    /// <summary><c>calendar.setPreferences</c>: a member left out keeps its value.</summary>
+    public static readonly RpcMethod<CalendarSetPreferencesParams, CalendarSetPreferencesResult> CalendarSetPreferences =
+        new("calendar.setPreferences", RpcTimeouts.Default, Wire.CalendarSetPreferencesParams, Wire.CalendarSetPreferencesResult);
+
+    /// <summary><c>calendar.freeBusy</c>: who is busy when.</summary>
+    public static readonly RpcMethod<CalendarFreeBusyParams, CalendarFreeBusyResult> CalendarFreeBusy =
+        new("calendar.freeBusy", CalendarTimeouts.FreeBusy, Wire.CalendarFreeBusyParams, Wire.CalendarFreeBusyResult);
+
+    /// <summary><c>calendar.findFreeTime</c>: slots in which the user and the known attendees are free.</summary>
+    public static readonly RpcMethod<CalendarFindFreeTimeParams, CalendarFindFreeTimeResult> CalendarFindFreeTime =
+        new("calendar.findFreeTime", CalendarTimeouts.FreeBusy, Wire.CalendarFindFreeTimeParams, Wire.CalendarFindFreeTimeResult);
+
+    // Events (docs/api.md §4.15)
+
+    /// <summary><c>event.list</c>: the occurrences of a range.</summary>
+    public static readonly RpcMethod<EventListParams, EventListResult> EventList =
+        new("event.list", CalendarTimeouts.EventList, Wire.EventListParams, Wire.EventListResult);
+
+    /// <summary><c>event.get</c>: one event, or one instance of a series.</summary>
+    public static readonly RpcMethod<EventGetParams, EventGetResult> EventGet =
+        new("event.get", RpcTimeouts.Default, Wire.EventGetParams, Wire.EventGetResult);
+
+    /// <summary><c>event.search</c>: over title, location, notes and people of the stored events.</summary>
+    public static readonly RpcMethod<EventSearchParams, EventSearchResult> EventSearch =
+        new("event.search", RpcTimeouts.Default, Wire.EventSearchParams, Wire.EventSearchResult);
+
+    /// <summary><c>event.create</c>: server first; offline is an error.</summary>
+    public static readonly RpcMethod<EventCreateParams, EventCreateResult> EventCreate =
+        new("event.create", CalendarTimeouts.Write, Wire.EventCreateParams, Wire.EventCreateResult);
+
+    /// <summary><c>event.update</c>: replaces every member of the scope's target.</summary>
+    public static readonly RpcMethod<EventUpdateParams, EventUpdateResult> EventUpdate =
+        new("event.update", CalendarTimeouts.Write, Wire.EventUpdateParams, Wire.EventUpdateResult);
+
+    /// <summary><c>event.delete</c>: removes an event, or cancels it for its attendees.</summary>
+    public static readonly RpcMethod<EventDeleteParams, EventDeleteResult> EventDelete =
+        new("event.delete", CalendarTimeouts.Write, Wire.EventDeleteParams, Wire.EventDeleteResult);
+
+    /// <summary><c>event.respond</c>: the user's answer as an attendee of a stored event.</summary>
+    public static readonly RpcMethod<EventRespondParams, EventRespondResult> EventRespond =
+        new("event.respond", CalendarTimeouts.Write, Wire.EventRespondParams, Wire.EventRespondResult);
+
+    /// <summary><c>event.snoozeAlert</c>: the alert fires again after the minutes.</summary>
+    public static readonly RpcMethod<EventSnoozeAlertParams, EmptyResult> EventSnoozeAlert =
+        new("event.snoozeAlert", RpcTimeouts.Default, Wire.EventSnoozeAlertParams, Wire.EmptyResult);
+
+    /// <summary><c>event.dismissAlert</c>: every client gets <c>notify.eventAlert</c> dismissed.</summary>
+    public static readonly RpcMethod<EventDismissAlertParams, EmptyResult> EventDismissAlert =
+        new("event.dismissAlert", RpcTimeouts.Default, Wire.EventDismissAlertParams, Wire.EmptyResult);
+
+    // Invitations (docs/api.md §4.16)
+
+    /// <summary><c>invitation.list</c>: one per UID, the newest message of it.</summary>
+    public static readonly RpcMethod<InvitationListParams, InvitationListResult> InvitationList =
+        new("invitation.list", RpcTimeouts.Default, Wire.InvitationListParams, Wire.InvitationListResult);
+
+    /// <summary><c>invitation.respond</c>: answers an invitation where its event lives.</summary>
+    public static readonly RpcMethod<InvitationRespondParams, InvitationRespondResult> InvitationRespond =
+        new("invitation.respond", CalendarTimeouts.Write, Wire.InvitationRespondParams, Wire.InvitationRespondResult);
+
+    /// <summary><c>invitation.applyCancel</c>: removes from the user's calendar the event a cancellation names.</summary>
+    public static readonly RpcMethod<InvitationApplyCancelParams, InvitationApplyCancelResult> InvitationApplyCancel =
+        new("invitation.applyCancel", CalendarTimeouts.Write, Wire.InvitationApplyCancelParams, Wire.InvitationApplyCancelResult);
+
     // Tables
 
     /// <summary>Every method, in the order of methods.go.</summary>
@@ -489,6 +582,12 @@ public static class API
         BoardArchive, BoardTrash, BoardUnflag, BoardDiscardDraft, BoardSetDraft, BoardQueue, BoardAnnotate,
         BoardCommit, BoardSetCommitment, BoardPreferences, BoardSetPreferences,
         BoardRunStart, BoardRunEnd,
+        AccountDiscoverCalDAV, AccountListCalDAVCalendars,
+        CalendarList, CalendarUpdate, CalendarSync, CalendarPreferences,
+        CalendarSetPreferences, CalendarFreeBusy, CalendarFindFreeTime,
+        EventList, EventGet, EventSearch, EventCreate, EventUpdate,
+        EventDelete, EventRespond, EventSnoozeAlert, EventDismissAlert,
+        InvitationList, InvitationRespond, InvitationApplyCancel,
     ];
 
     /// <summary>api.AllMethods: every callable method name.</summary>
@@ -517,6 +616,18 @@ public static class API
 
         /// <summary>api.NotifyDraftsChanged.</summary>
         public const string DraftsChanged = "notify.draftsChanged";
+
+        /// <summary>api.NotifyCalendarChanged.</summary>
+        public const string CalendarChanged = "notify.calendarChanged";
+
+        /// <summary>api.NotifyCalendarState.</summary>
+        public const string CalendarState = "notify.calendarState";
+
+        /// <summary>api.NotifyEventAlert.</summary>
+        public const string EventAlert = "notify.eventAlert";
+
+        /// <summary>api.NotifyInvitationsChanged.</summary>
+        public const string InvitationsChanged = "notify.invitationsChanged";
     }
 
     /// <summary>api.AllNotifications: every server-initiated notification name.</summary>
@@ -524,6 +635,7 @@ public static class API
     [
         Notify.NewMessage, Notify.SyncState, Notify.AuthRequired, Notify.AccountsChanged, Notify.MessagesChanged,
         Notify.BoardChanged, Notify.DraftsChanged,
+        Notify.CalendarChanged, Notify.CalendarState, Notify.EventAlert, Notify.InvitationsChanged,
     ];
 
     /// <summary>
@@ -649,5 +761,89 @@ public static class API
         /// (<see cref="DraftCreateParams.MessageIds"/>).
         /// </summary>
         public const int MaxForwardMessages = 20;
+
+        /// <summary>api.MaxICSBytes: one iCalendar object or calendar part.</summary>
+        public const int MaxICSBytes = 1 << 20;
+
+        /// <summary>api.MaxEventTitleBytes: <see cref="EventInput.Title"/>, after cleaning.</summary>
+        public const int MaxEventTitleBytes = 1024;
+
+        /// <summary>api.MaxEventLocationBytes: <see cref="EventInput.Location"/>.</summary>
+        public const int MaxEventLocationBytes = 1024;
+
+        /// <summary>api.MaxEventNotesBytes: <see cref="EventInput.Notes"/>.</summary>
+        public const int MaxEventNotesBytes = 32 << 10;
+
+        /// <summary>api.MaxMailTextBytes: <see cref="MailText.Subject"/> and <see cref="MailText.Text"/>, each.</summary>
+        public const int MaxMailTextBytes = 4 << 10;
+
+        /// <summary>api.MaxCommentBytes: a comment of a response or a delete.</summary>
+        public const int MaxCommentBytes = 2 << 10;
+
+        /// <summary>api.MaxEventAttendeesIn: <see cref="EventInput.Attendees"/>.</summary>
+        public const int MaxEventAttendeesIn = 100;
+
+        /// <summary>api.MaxEventAttendeesStored: <see cref="CalendarEvent.Attendees"/> (the attendee count counts all).</summary>
+        public const int MaxEventAttendeesStored = 500;
+
+        /// <summary>api.MaxInvitationAttendees: <see cref="InvitationCard.Attendees"/>.</summary>
+        public const int MaxInvitationAttendees = 50;
+
+        /// <summary>api.MaxEventAlerts: the alerts of one event.</summary>
+        public const int MaxEventAlerts = 4;
+
+        /// <summary>api.MaxAlertMinutes: the longest lead of an alert, 4 weeks.</summary>
+        public const int MaxAlertMinutes = 40320;
+
+        /// <summary>api.MaxEventAttachments: the attachments of one event.</summary>
+        public const int MaxEventAttachments = 10;
+
+        /// <summary>api.MaxEventAttachmentBytes: one attachment of an event.</summary>
+        public const int MaxEventAttachmentBytes = 3 << 20;
+
+        /// <summary>api.MaxEventListDays: the longest range of <c>event.list</c>.</summary>
+        public const int MaxEventListDays = 400;
+
+        /// <summary>api.MaxEventListResults: the largest limit of <c>event.list</c>.</summary>
+        public const int MaxEventListResults = 5000;
+
+        /// <summary>api.DefaultEventListResults: the limit of <c>event.list</c> when none is given.</summary>
+        public const int DefaultEventListResults = 2000;
+
+        /// <summary>api.MaxEventSearchResults: the largest limit of <c>event.search</c>.</summary>
+        public const int MaxEventSearchResults = 200;
+
+        /// <summary>api.MaxSeriesOccurrences: per series per query window.</summary>
+        public const int MaxSeriesOccurrences = 1000;
+
+        /// <summary>api.MaxCalendarsPerAccount: the calendars of one account.</summary>
+        public const int MaxCalendarsPerAccount = 200;
+
+        /// <summary>api.MaxEventsPerCalendar: the events of one calendar.</summary>
+        public const int MaxEventsPerCalendar = 50000;
+
+        /// <summary>api.MaxFreeBusyAttendees: the attendees of <c>calendar.freeBusy</c>.</summary>
+        public const int MaxFreeBusyAttendees = 20;
+
+        /// <summary>api.MaxFreeBusyDays: the longest range of <c>calendar.freeBusy</c>.</summary>
+        public const int MaxFreeBusyDays = 62;
+
+        /// <summary>api.MaxFreeSlots: the largest limit of <c>calendar.findFreeTime</c>.</summary>
+        public const int MaxFreeSlots = 50;
+
+        /// <summary>api.MaxInvitationList: the largest limit of <c>invitation.list</c>.</summary>
+        public const int MaxInvitationList = 500;
+
+        /// <summary>api.CalendarFutureDays: the window's forward edge (docs/calendar.md §2.3).</summary>
+        public const int CalendarFutureDays = 400;
+
+        /// <summary>api.DefaultCalendarKeepDays: what <see cref="CalendarConfig.KeepDays"/> 0 means.</summary>
+        public const int DefaultCalendarKeepDays = 365;
+
+        /// <summary>api.MaxRecurrenceInterval: <see cref="Recurrence.Interval"/> in input.</summary>
+        public const int MaxRecurrenceInterval = 99;
+
+        /// <summary>api.MaxRecurrenceCount: <see cref="Recurrence.Count"/> in input.</summary>
+        public const int MaxRecurrenceCount = 999;
     }
 }

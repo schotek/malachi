@@ -47,7 +47,11 @@ public readonly record struct ErrorCode(int Value)
     /// <summary>The params decoded but are semantically wrong.</summary>
     public const int InvalidArgument = 1001;
 
-    /// <summary>Optimistic-concurrency conflict (drafts, sending).</summary>
+    /// <summary>
+    /// Optimistic-concurrency conflict (drafts, sending); for an event write
+    /// whose etag is not the server's current one, <c>data</c> is a
+    /// <see cref="ConflictEventData"/> with the current event.
+    /// </summary>
     public const int Conflict = 1002;
 
     /// <summary>The request was cancelled by shutdown.</summary>
@@ -62,6 +66,20 @@ public readonly record struct ErrorCode(int Value)
     /// answer. Not about mail accounts, whose sign-in problems are the 1200s.
     /// </summary>
     public const int Unauthenticated = 1005;
+
+    /// <summary>
+    /// The calendar or event cannot be changed by the user (a read-only or
+    /// shared calendar, a birthdays or holidays calendar, a change only the
+    /// organiser may make).
+    /// </summary>
+    public const int ReadOnly = 1006;
+
+    /// <summary>
+    /// The event has attendees, but neither the server schedules nor a mail
+    /// account can send the invitations
+    /// (<see cref="CalDAVConfig.MailAccountId"/> empty or not a compose account).
+    /// </summary>
+    public const int InvitationsUnavailable = 1007;
 
     // 1100–1199: not found.
 
@@ -89,6 +107,12 @@ public readonly record struct ErrorCode(int Value)
     /// </summary>
     public const int CaseNotFound = 1106;
 
+    /// <summary>No calendar with that id (removed, its account gone or its sync switched off).</summary>
+    public const int CalendarNotFound = 1107;
+
+    /// <summary>No stored event with that id, or the recurrence id names no occurrence of it.</summary>
+    public const int EventNotFound = 1108;
+
     // 1200–1299: authentication.
 
     /// <summary>Credentials missing or token expired; see notify.authRequired.</summary>
@@ -105,6 +129,12 @@ public readonly record struct ErrorCode(int Value)
     /// none is configured.
     /// </summary>
     public const int OAuthClientMissing = 1203;
+
+    /// <summary>
+    /// The account's sign-in does not allow calendar access; <c>data</c> is a
+    /// <see cref="CalendarConsentRequiredData"/>.
+    /// </summary>
+    public const int CalendarConsentRequired = 1204;
 
     // 1300–1399: network and remote servers.
 
@@ -128,6 +158,12 @@ public readonly record struct ErrorCode(int Value)
     /// moved it); the local copy goes with the next sync.
     /// </summary>
     public const int MessageGone = 1305;
+
+    /// <summary>
+    /// The server no longer has the event (deleted or moved elsewhere); the
+    /// next pass removes the local copy.
+    /// </summary>
+    public const int EventGone = 1306;
 
     // 1400–1499: local storage.
 
@@ -170,6 +206,19 @@ public readonly record struct ErrorCode(int Value)
     /// </summary>
     public const int QuoteNotFound = 1506;
 
+    /// <summary>
+    /// An iCalendar object or a server's calendar answer could not be read
+    /// even leniently; the data is withheld.
+    /// </summary>
+    public const int MalformedCalendar = 1507;
+
+    /// <summary>
+    /// The event's recurrence rule is outside what the daemon expands or
+    /// edits; the event shows its first instance only and may be edited with
+    /// scope <c>all</c> only.
+    /// </summary>
+    public const int RecurrenceUnsupported = 1508;
+
     private static readonly Dictionary<int, string> Names = new()
     {
         [ParseError] = "parseError",
@@ -183,6 +232,8 @@ public readonly record struct ErrorCode(int Value)
         [Cancelled] = "cancelled",
         [Unavailable] = "unavailable",
         [Unauthenticated] = "unauthenticated",
+        [ReadOnly] = "readOnly",
+        [InvitationsUnavailable] = "invitationsUnavailable",
         [AccountNotFound] = "accountNotFound",
         [FolderNotFound] = "folderNotFound",
         [MessageNotFound] = "messageNotFound",
@@ -190,16 +241,20 @@ public readonly record struct ErrorCode(int Value)
         [DraftNotFound] = "draftNotFound",
         [AttachmentNotFound] = "attachmentNotFound",
         [CaseNotFound] = "caseNotFound",
+        [CalendarNotFound] = "calendarNotFound",
+        [EventNotFound] = "eventNotFound",
         [AuthRequired] = "authRequired",
         [AuthFailed] = "authFailed",
         [KeyringError] = "keyringError",
         [OAuthClientMissing] = "oauthClientMissing",
+        [CalendarConsentRequired] = "calendarConsentRequired",
         [Offline] = "offline",
         [NetworkError] = "networkError",
         [ServerError] = "serverError",
         [TlsError] = "tlsError",
         [ServerTimeout] = "serverTimeout",
         [MessageGone] = "messageGone",
+        [EventGone] = "eventGone",
         [StorageError] = "storageError",
         [MigrationFailed] = "migrationFailed",
         [MalformedMessage] = "malformedMessage",
@@ -209,6 +264,8 @@ public readonly record struct ErrorCode(int Value)
         [PartNotDownloaded] = "partNotDownloaded",
         [UnsubscribeFailed] = "unsubscribeFailed",
         [QuoteNotFound] = "quoteNotFound",
+        [MalformedCalendar] = "malformedCalendar",
+        [RecurrenceUnsupported] = "recurrenceUnsupported",
     };
 
     /// <summary>
@@ -219,13 +276,14 @@ public readonly record struct ErrorCode(int Value)
     [
         ParseError, InvalidRequest, MethodNotFound, InvalidParams, InternalError,
         NotImplemented, InvalidArgument, Conflict, Cancelled, Unavailable, Unauthenticated,
+        ReadOnly, InvitationsUnavailable,
         AccountNotFound, FolderNotFound, MessageNotFound, ThreadNotFound, DraftNotFound, AttachmentNotFound,
-        CaseNotFound,
-        AuthRequired, AuthFailed, KeyringError, OAuthClientMissing,
-        Offline, NetworkError, ServerError, TlsError, ServerTimeout, MessageGone,
+        CaseNotFound, CalendarNotFound, EventNotFound,
+        AuthRequired, AuthFailed, KeyringError, OAuthClientMissing, CalendarConsentRequired,
+        Offline, NetworkError, ServerError, TlsError, ServerTimeout, MessageGone, EventGone,
         StorageError, MigrationFailed,
         MalformedMessage, SanitizeFailed, AttachmentTooBig, PartNotFound, PartNotDownloaded,
-        UnsubscribeFailed, QuoteNotFound,
+        UnsubscribeFailed, QuoteNotFound, MalformedCalendar, RecurrenceUnsupported,
     ];
 
     /// <summary>

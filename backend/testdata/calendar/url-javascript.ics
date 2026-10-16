@@ -1,0 +1,15 @@
+BEGIN:VCALENDAR
+X-MALACHI-TEST:URL and other URIs with javascript:, data: and file:
+VERSION:2.0
+PRODID:-//Malachi Test//Corpus//EN
+BEGIN:VEVENT
+UID:uj@example.org
+DTSTAMP:20261016T080000Z
+DTSTART:20261020T090000Z
+DTEND:20261020T100000Z
+SUMMARY:Planning
+URL:javascript:alert(document.cookie)
+IMAGE;VALUE=URI:data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=
+X-EXTRA-URL:file:///C:/Windows/system32/calc.exe
+END:VEVENT
+END:VCALENDAR

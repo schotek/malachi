@@ -1,0 +1,14 @@
+BEGIN:VCALENDAR
+X-MALACHI-TEST:bidi override and invisible characters in a summary parse un
+ changed (cleaning is later)
+VERSION:2.0
+PRODID:-//Malachi Test//Corpus//EN
+BEGIN:VEVENT
+UID:bidi-1@example.org
+DTSTAMP:20261016T080000Z
+DTSTART:20261020T090000Z
+DTEND:20261020T100000Z
+SUMMARY:Invoice ‮gnp.exe‬ ⁦paid⁩
+LOCATION:Room​ 4 next
+END:VEVENT
+END:VCALENDAR

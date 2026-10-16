@@ -83,6 +83,12 @@ type Message struct {
 	// envelope), BodyUpdate rewrites them; read only otherwise.
 	Bulk   string
 	ListID string
+
+	// Invitation is the summary of the message's calendar part
+	// (cal_invitations, migration 0020), filled by the listings
+	// (ListMessages, GetMessage, SearchMessages, the thread queries) for
+	// api.MessageSummary.Invitation; nil without one. Read only.
+	Invitation *api.InvitationSummary
 }
 
 // MessageRef identifies a message whose body is still to be fetched, by
@@ -1033,6 +1039,9 @@ func (s *Store) ListMessages(ctx context.Context, accountID, folderID, cursor st
 		items = items[:limit]
 		next = encodeSortCursor(prefix, stamps[limit-1], items[limit-1].ID)
 	}
+	if err := attachInvitations(ctx, s.db, items); err != nil {
+		return nil, "", 0, err
+	}
 	return items, next, total, nil
 }
 
@@ -1047,7 +1056,11 @@ func (s *Store) GetMessage(ctx context.Context, accountID, id string) (Message, 
 	if err != nil {
 		return Message{}, fmt.Errorf("get message: %w", err)
 	}
-	return m, nil
+	one := []Message{m}
+	if err := attachInvitations(ctx, s.db, one); err != nil {
+		return Message{}, err
+	}
+	return one[0], nil
 }
 
 // GetMessageText returns the plain-text body and its state. ErrNotFound

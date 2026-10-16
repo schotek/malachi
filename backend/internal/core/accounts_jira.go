@@ -189,8 +189,14 @@ func apiError(err error) error {
 // would mean "a daemon without capabilities" to a client).
 func capabilitiesFor(c api.AccountConfig) []api.AccountCapability {
 	switch c.Protocol() {
-	case api.AccountIMAP, api.AccountGraph:
+	case api.AccountIMAP:
 		return append([]api.AccountCapability{}, api.MailCapabilities...)
+	case api.AccountGraph:
+		// The calendar capability does not flicker with consent or sync
+		// state (docs/calendar.md D16).
+		return append(append([]api.AccountCapability{}, api.MailCapabilities...), api.CapabilityCalendar)
+	case api.AccountCalDAV:
+		return []api.AccountCapability{api.CapabilityCalendar}
 	case api.AccountJira:
 		return []api.AccountCapability{api.CapabilityComment, api.CapabilityForward, api.CapabilityTransition}
 	default:

@@ -491,6 +491,9 @@ func (s *Store) ThreadMessages(ctx context.Context, accountID, threadID, folderI
 	if len(out) == 0 {
 		return nil, ErrNotFound
 	}
+	if err := attachInvitations(ctx, s.db, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -610,6 +613,9 @@ func (s *Store) ThreadSentMessages(ctx context.Context, accountID, threadID, fol
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("thread sent messages: %w", err)
+	}
+	if err := attachInvitations(ctx, s.db, out); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -811,6 +817,9 @@ func (s *Store) threadRows(ctx context.Context, accountID, folderID string, grou
 		if err := rows.Err(); err != nil {
 			return nil, fmt.Errorf("thread heads: %w", err)
 		}
+	}
+	if err := attachInvitationHeads(ctx, s.db, latest); err != nil {
+		return nil, err
 	}
 
 	for _, g := range groups {

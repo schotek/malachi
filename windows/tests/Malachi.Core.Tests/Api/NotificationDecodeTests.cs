@@ -171,6 +171,10 @@ public sealed class NotificationDecodeTests
             (API.Notify.MessagesChanged, """{"accountId":"acc_1","folderIds":["f_inbox"]}"""),
             (API.Notify.BoardChanged, """{"accountIds":["acc_1"]}"""),
             (API.Notify.DraftsChanged, """{"accountId":"acc_1","threadIds":["t_1"]}"""),
+            (API.Notify.CalendarChanged, """{"accountIds":["acc_1"],"calendarIds":["cal_1"],"from":"2026-10-01T00:00:00Z","to":"2026-11-01T00:00:00Z"}"""),
+            (API.Notify.CalendarState, """{"state":{"accountId":"acc_1","status":"syncing","progress":-1}}"""),
+            (API.Notify.EventAlert, """{"alert":{"alertId":"al_1","state":"due","eventId":"ev_1","accountId":"acc_1","calendarId":"cal_1","title":"Standup","allDay":false,"minutesBefore":15}}"""),
+            (API.Notify.InvitationsChanged, """{"accountIds":["acc_1"]}"""),
         ];
         Assert.Equal(API.AllNotifications, samples.Select(s => s.Method));
         foreach (var (method, parameters) in samples)

@@ -1,0 +1,15 @@
+BEGIN:VCALENDAR
+X-MALACHI-TEST:ATTACH by URI (never fetched)
+VERSION:2.0
+PRODID:-//Malachi Test//Corpus//EN
+BEGIN:VEVENT
+UID:au@example.org
+DTSTAMP:20261016T080000Z
+DTSTART:20261020T090000Z
+DTEND:20261020T100000Z
+SUMMARY:Planning
+ATTACH;FMTTYPE=application/pdf:https://example.org/files/agenda.pdf
+ATTACH:file:///etc/passwd
+ATTACH:http://192.0.2.1/internal
+END:VEVENT
+END:VCALENDAR

@@ -158,6 +158,7 @@ func (im *issueMail) init() {
 func (b *Backend) afterMailStored(ctx context.Context, accountID, messageID string, pol ingest.Policy) {
 	b.storedUnder(ctx, messageID, pol)
 	b.noteIssueMail(ctx, accountID, messageID)
+	b.noteInvitation(ctx, accountID, messageID)
 }
 
 // afterIssueStored is the Stored hook of the issue-tracker syncer: the

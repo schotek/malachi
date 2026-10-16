@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- X-MALACHI-TEST: a sync-collection answer truncated by the server (507 for the collection, RFC 6578 section 3.6) -->
+<d:multistatus xmlns:d="DAV:">
+<d:response><d:href>/remote.php/dav/calendars/jana/personal/a.ics</d:href><d:propstat><d:prop><d:getetag>"a1"</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+<d:response><d:href>/remote.php/dav/calendars/jana/personal/b.ics</d:href><d:status>HTTP/1.1 404 Not Found</d:status></d:response>
+<d:response><d:href>/remote.php/dav/calendars/jana/personal/</d:href><d:status>HTTP/1.1 507 Insufficient Storage</d:status></d:response>
+<d:sync-token>http://sabre.io/ns/sync/1-17</d:sync-token>
+</d:multistatus>

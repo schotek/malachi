@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- X-MALACHI-TEST: a 207 whose XML breaks off and mismatches its tags -->
+<d:multistatus xmlns:d="DAV:"><d:response><d:href>/remote.php/dav/calendars/jana/personal/a.ics</d:href><d:propstat><d:prop><d:getetag>"1"</d:prop></d:propstat><d:response><d:href>

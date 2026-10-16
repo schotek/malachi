@@ -143,6 +143,36 @@ public abstract record DaemonNotification
     /// <param name="Payload">The account and its threads (empty = any).</param>
     public sealed record DraftsChanged(DraftsChangedNotification Payload) : DaemonNotification;
 
+    /// <summary>
+    /// <c>notify.calendarChanged</c>: stored calendars or occurrences changed
+    /// (<see cref="CalendarChangedNotification"/>, Calendar.cs); absent params
+    /// read as any account.
+    /// </summary>
+    /// <param name="Payload">The accounts, calendars and span that changed.</param>
+    public sealed record CalendarChanged(CalendarChangedNotification Payload) : DaemonNotification;
+
+    /// <summary>
+    /// <c>notify.calendarState</c>: an account's calendar synchronisation state
+    /// changed (<see cref="CalendarStateNotification"/>, Calendar.cs).
+    /// </summary>
+    /// <param name="State">The account's new calendar state.</param>
+    public sealed record CalendarState(CalendarSyncState State) : DaemonNotification;
+
+    /// <summary>
+    /// <c>notify.eventAlert</c>: an event alert is due, or was dismissed
+    /// (<see cref="EventAlertNotification"/>, Calendar.cs).
+    /// </summary>
+    /// <param name="Payload">The alert.</param>
+    public sealed record EventAlert(EventAlertNotification Payload) : DaemonNotification;
+
+    /// <summary>
+    /// <c>notify.invitationsChanged</c>: the unanswered invitations of some
+    /// accounts changed (<see cref="InvitationsChangedNotification"/>,
+    /// Calendar.cs); absent params read as any account.
+    /// </summary>
+    /// <param name="Payload">The accounts (empty = any).</param>
+    public sealed record InvitationsChanged(InvitationsChangedNotification Payload) : DaemonNotification;
+
     /// <summary>A notification of a newer daemon.</summary>
     /// <param name="Method">Its method.</param>
     public sealed record Unknown(string Method) : DaemonNotification;
@@ -186,19 +216,32 @@ public abstract record DaemonNotification
             API.Notify.MessagesChanged => new MessagesChanged(Params(method, parameters, ApiJsonContext.Wire.MessagesChangedNotification)),
             API.Notify.BoardChanged => new BoardChanged(BoardChangedParams(method, parameters)),
             API.Notify.DraftsChanged => new DraftsChanged(Params(method, parameters, ApiJsonContext.Wire.DraftsChangedNotification)),
+            API.Notify.CalendarChanged => new CalendarChanged(OptionalParams(method, parameters, ApiJsonContext.Wire.CalendarChangedNotification)),
+            API.Notify.CalendarState => new CalendarState(Params(method, parameters, ApiJsonContext.Wire.CalendarStateNotification).State),
+            API.Notify.EventAlert => new EventAlert(Params(method, parameters, ApiJsonContext.Wire.EventAlertNotification)),
+            API.Notify.InvitationsChanged => new InvitationsChanged(OptionalParams(method, parameters, ApiJsonContext.Wire.InvitationsChangedNotification)),
             _ => new Unknown(method),
         };
     }
 
     private static bool HasParams(string method) =>
         method is API.Notify.NewMessage or API.Notify.SyncState or API.Notify.AuthRequired or API.Notify.MessagesChanged
-            or API.Notify.BoardChanged or API.Notify.DraftsChanged;
+            or API.Notify.BoardChanged or API.Notify.DraftsChanged or API.Notify.CalendarChanged or API.Notify.CalendarState
+            or API.Notify.EventAlert or API.Notify.InvitationsChanged;
 
     // notify.boardChanged's params are all optional: absent or null = any account.
     private static BoardChangedNotification BoardChangedParams(string method, JsonElement? parameters) =>
         parameters is null or { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined }
             ? new BoardChangedNotification()
             : Params(method, parameters, ApiJsonContext.Wire.BoardChangedNotification);
+
+    // Params that are all optional (notify.calendarChanged,
+    // notify.invitationsChanged): absent or null = every member left out.
+    private static T OptionalParams<T>(string method, JsonElement? parameters, JsonTypeInfo<T> info)
+        where T : class, new() =>
+        parameters is null or { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined }
+            ? new T()
+            : Params(method, parameters, info);
 
     private static T Params<T>(string method, JsonElement? parameters, JsonTypeInfo<T> info)
         where T : class

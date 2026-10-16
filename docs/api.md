@@ -213,10 +213,12 @@ can read the key file.
 | -32603 | internalError | unexpected failure; details are logged, not returned |
 | 1000 | notImplemented | method is a stub |
 | 1001 | invalidArgument | params decoded but are semantically wrong |
-| 1002 | conflict | optimistic-concurrency failure (`draft.save`, `message.send`) |
+| 1002 | conflict | optimistic-concurrency failure (`draft.save`, `message.send`); for an event write (`event.update`, `event.delete`, `event.respond`) whose `etag` is not the server's current one, `data` = `{ "event": Event }` with the current event as `event.get` returns it (§4.15) |
 | 1003 | cancelled | request cancelled by shutdown |
 | 1004 | unavailable | daemon busy / shutting down; retry later |
 | 1005 | unauthenticated | the connection has not completed the handshake (§1.4), or it failed; the daemon closes the connection after this answer |
+| 1006 | readOnly | the calendar or event cannot be changed by the user (a read-only or shared calendar, a birthdays/holidays calendar, an event the user does not organise for a change only the organiser may make) |
+| 1007 | invitationsUnavailable | the event has attendees, but neither the server schedules nor a mail account can send the invitations (`CalDAVConfig.mailAccountId` empty or not a compose account) |
 | 1100 | accountNotFound | |
 | 1101 | folderNotFound | |
 | 1102 | messageNotFound | |
@@ -224,16 +226,20 @@ can read the key file.
 | 1104 | draftNotFound | |
 | 1105 | attachmentNotFound | unknown id, another account's, or already bound to a different draft |
 | 1106 | caseNotFound | no board case with that id (it left the board, its account is gone), or for `board.setCommitment` no such commitment (§4.13) |
+| 1107 | calendarNotFound | no calendar with that id (removed, its account gone or its sync switched off) |
+| 1108 | eventNotFound | no stored event with that id, or `recurrenceId` names no occurrence of it |
 | 1200 | authRequired | user interaction needed; a `notify.authRequired` was/will be sent |
 | 1201 | authFailed | server rejected credentials |
 | 1202 | keyringError | secret service unavailable |
 | 1203 | oauthClientMissing | the backend's own sign-in needs an OAuth client id for the provider and none is configured (§4.1) |
+| 1204 | calendarConsentRequired | the account's sign-in does not allow calendar access (Microsoft scope missing, consent withdrawn, GOA calendar disabled); `data` = `{ "accountId", "signIn": bool }` — `signIn` true when `account.oauthStart` with `calendar: true` can fix it (source `daemon`), false for GOA (the desktop's Online Accounts settings) |
 | 1300 | offline | daemon is in offline mode |
 | 1301 | networkError | connection failed |
 | 1302 | serverError | IMAP/SMTP server returned an error |
 | 1303 | tlsError | certificate or handshake problem; for IMAP/SMTP endpoints `data` = `TLSErrorData` (below) |
 | 1304 | serverTimeout | |
 | 1305 | messageGone | the mail server no longer has the message (another client deleted or moved it); the next sync removes the local copy |
+| 1306 | eventGone | the server no longer has the event (deleted or moved elsewhere); the next pass removes the local copy |
 | 1400 | storageError | SQLite failure |
 | 1401 | migrationFailed | store schema could not be upgraded |
 | 1500 | malformedMessage | MIME unparsable even leniently |
@@ -243,6 +249,12 @@ can read the key file.
 | 1504 | partNotDownloaded | the part's data is not stored on this device (`Attachment.remote`); `message.download` fetches it |
 | 1505 | unsubscribeFailed | `message.unsubscribe` reached the sender's server, which refused the one-click request (any answer but 2xx, a redirect included), or the daemon refused to connect to the address of the URL (not a public one: loopback, private, link-local, a single-label or local-network name); `message` carries the reason and is not for display |
 | 1506 | quoteNotFound | `board.annotate` or `board.commit` quoted text the daemon did not find verbatim where it must be; `data` = `{ "field": "due" \| "commitment" }` (§4.13) |
+| 1507 | malformedCalendar | an iCalendar object or a server's calendar answer could not be read even leniently; the data is withheld |
+| 1508 | recurrenceUnsupported | the event's recurrence rule is outside what the daemon expands or edits; the event shows its first instance only and may be edited with scope `all` only |
+
+`offline`, `networkError`, `serverError`, `serverTimeout`, `tlsError` (with
+`TLSErrorData` for CalDAV endpoints too), `authRequired`, `authFailed` and
+`keyringError` keep their meanings for the calendar methods (§4.14–§4.16).
 
 `tlsError` from an IMAP or SMTP endpoint (in `account.test` results and in a
 `SyncState`) carries:
@@ -303,9 +315,15 @@ Time      RFC 3339 string, UTC
   "flags": ["seen"], "hasAttachments": false, "size": 4321,
   "outbox": OutboxInfo (opt),
   "issue": MessageIssue (opt),
-  "bulk": BulkInfo (opt)
+  "bulk": BulkInfo (opt),
+  "invitation": InvitationSummary (opt)
 }
 ```
+
+`invitation` is present only for a message with a calendar part
+(`text/calendar` or `application/ics`) the daemon read: the summary a
+list pill and a notification are built from (§4.16). Listings carry it
+and so does `notify.newMessage`.
 
 `outbox` is present only for a message in the account's outbox folder
 (role `outbox`, §4.2) and describes its delivery:
@@ -412,7 +430,11 @@ BulkInfo { "kind": "newsletter|list|automated",
 `MessageSummary` plus `cc`, `bcc`, `replyTo`, `rfcMessageId`, `inReplyTo`,
 `references`, `attachments: [Attachment]`, `headers`, a curated
 map of a few interesting headers (`List-Unsubscribe`, `Auto-Submitted`, …),
-and `unsubscribe` (below). The raw header block is never returned.
+`unsubscribe` (below) and `invitation`. The raw header block is never returned.
+
+`invitation` of `message.get` and `message.download` is the whole
+`InvitationCard` (§4.16), which takes the place of the summary under the
+same key; it is rendered by a client from its fields, never from HTML.
 
 ```jsonc
 UnsubscribeOffer { "method": "oneClick|mailto|url",
@@ -593,11 +615,13 @@ Account { "id": "acc_1", "config": AccountConfig, "enabled": true, "state": Sync
           "capabilities": ["compose", "reply", "replyAll", "forward", "move", "delete"] }
 AccountConfig {
   "name": "Work", "email": "me@example.org", "displayName": "Me" (opt),
-  "kind": "imap|graph|jira" (opt, default imap),
+  "kind": "imap|graph|jira|caldav" (opt, default imap),
   "imap": ServerConfig (imap only), "smtp": ServerConfig (imap only),
   "oauth2": OAuth2Config (opt; imap, or graph with source daemon),
   "graph": GraphConfig (graph only),
   "jira": JiraConfig (jira only),
+  "caldav": CalDAVConfig (caldav only),
+  "calendar": CalendarConfig (opt; graph and caldav),
   "syncIntervalSeconds": 300 (opt)
 }
 ServerConfig { "host": "imap.example.org", "port": 993, "security": "tls|starttls|none",
@@ -621,6 +645,24 @@ JiraConfig {
 }
 SpaceRef  { "id": "10001", "key": "ITSD", "name": "IT Service Desk" (opt) }
 StatusRef { "id": "3", "name": "In Progress" (opt) }
+CalDAVConfig {
+  "serverUrl": "https://cloud.example.org/remote.php/dav",   // normalised (account.discoverCalDAV)
+  "principalUrl": "https://…/principals/users/jana/" (opt),  // from account.listCalDAVCalendars
+  "homeSetUrl": "https://…/calendars/jana/" (opt),
+  "username": "jana",
+  "certificateSha256": "64 hex digits" (opt),                // the pin, as ServerConfig
+  "mailAccountId": "acc_2" (opt),     // the mail account invitations and replies leave from (client scheduling)
+  "scheduling": "auto|server|client" (opt, default auto)
+}
+CalendarConfig {
+  "sync": bool,                       // graph: synchronise the calendars (default false); caldav: always true
+  "disabledCalendars": ["remote id or href"] (opt),          // ≤ 200; not synchronised
+  "defaultCalendar": "remote id or href" (opt),              // new events of this account
+  "keepDays": 365 (opt; 30, 90, 180, 365 or 730; 0 = 365),
+  "showUnanswered": true (opt, default true),                // draw unanswered invitations dashed
+  "invitationCard": true (opt, default true),                // graph/imap mail accounts: show the card in Mail
+  "afterAnswer": "keep|archive" (opt, default keep)          // move the invitation message after answering
+}
 ```
 
 `kind` selects the protocol behind the account. `imap` (the default when
@@ -712,6 +754,45 @@ access token, sent as a Bearer token. `email` is the user's own address
   their ids, on the next pass, which ends with `notify.messagesChanged`
   on the account (§5).
 
+`caldav` is a calendar-only account on a CalDAV server (RFC 4791): it
+has no mail. `folder.list` of a `caldav` account answers
+`{ "folders": [] }` and every message method `invalidArgument`. **Clients
+show in Mail only accounts of kind `imap`, `graph` and `jira`** (an
+unknown kind is hidden), in the Calendar only accounts with the
+`calendar` capability. The password is `credentials.password` (the
+keyring keeps it). Rules, checked by `account.add`, `account.update` and
+`account.test`:
+
+- `kind: caldav` has `caldav` and no `imap`, `smtp`, `oauth2`, `graph`,
+  `jira`; `credentials.password` is required on add. `email` is the
+  user's calendar address (the first `mailto:` of
+  `calendar-user-address-set`, else `username` when it is an address,
+  else what the client asks for); `name` is required.
+- `serverUrl`: `https` (or `http` for a loopback host), no user info,
+  query or fragment, trailing slash removed; ≤ 2048 bytes. The account's
+  realm (its uniqueness with `email`) is the lower-case host[:port] +
+  path of `serverUrl`.
+- `certificateSha256`: normalised as `ServerConfig.certificateSha256`;
+  not allowed with an `http` URL.
+- `mailAccountId`: an existing account with the `compose` capability, or
+  empty. Empty with `scheduling` resolving to `client` means events with
+  attendees answer `invitationsUnavailable`. `scheduling: auto` follows
+  the server: when it advertises `calendar-auto-schedule` (RFC 6638) the
+  server sends invitations and replies, otherwise the daemon sends iMIP
+  mail from `mailAccountId`.
+- `calendar` only on `graph` and `caldav` accounts (`invalidArgument`
+  elsewhere); `disabledCalendars` ≤ 200 entries of ≤ 2048 bytes.
+- The `SyncState` of a `caldav` account (`account.list`, `sync.status`,
+  `notify.syncState`) is its calendar state mapped onto the mail
+  statuses; a Graph account's `SyncState` stays the mail's and its
+  calendar state is `CalendarSyncState` (§4.14).
+- `account.update` that switches `calendar.sync` off, changes
+  `serverUrl`/`username`, or disables calendars deletes the cached
+  calendar rows concerned (calendar data is a cache of the server);
+  switching on starts a first pass; a Graph account whose sign-in lacks
+  the calendar scopes gets calendar state `consentRequired` (no error
+  from `account.update`).
+
 `capabilities` lists what a client may offer for the account's messages
 beyond reading them and setting flags; a client reads the list and never
 derives it from `kind`:
@@ -724,10 +805,12 @@ derives it from `kind`:
 | `comment` | reply writes a comment to the issue (`draft.create` `reply` returns a comment draft); a client names the action Comment |
 | `move`, `delete` | `message.move`, `message.delete` |
 | `transition` | the status of its issues can be changed (`issue.transitions`, `issue.transition`, §4.12) |
+| `calendar` | the account can have calendars (§4.14); it does not change with consent or sync state |
 
 `imap` and `graph` accounts have `["compose", "reply", "replyAll",
-"forward", "move", "delete"]`; a `jira` account `["comment", "forward",
-"transition"]`.
+"forward", "move", "delete"]`, a `graph` account `"calendar"` too; a
+`jira` account `["comment", "forward", "transition"]`; a `caldav` account
+exactly `["calendar"]`.
 Flags (`message.flag`) are always allowed, and so is `message.delete` of
 an account's outbox messages (cancelling a queued send or comment). Archiving and
 marking as junk still depend on folders with those roles, which a `jira`
@@ -1003,7 +1086,7 @@ site.
   empty `credentials.password`, the stored password of that account is
   used; for source `daemon` the token of `credentials.oauthSession`
   (read, not consumed) or, with `accountId`, the stored sign-in
-- result: `{ "imap": EndpointTestResult (imap), "smtp": EndpointTestResult (imap), "graph": EndpointTestResult (graph), "jira": EndpointTestResult (jira) }`
+- result: `{ "imap": EndpointTestResult (imap), "smtp": EndpointTestResult (imap), "graph": EndpointTestResult (graph), "jira": EndpointTestResult (jira), "caldav": EndpointTestResult (caldav) }`
 - errors: invalidArgument (also a `jira` account's `accountId` of another
   site); with `accountId` and `password` endpoints (or a `jira`
   account): accountNotFound, authRequired (no stored password),
@@ -1060,6 +1143,15 @@ no `accountId`), otherwise the network, TLS and server codes above
 `capabilities` is `["cloud"]` or `["datacenter"]`, plus `"gateway"` when
 the site was reached through the Atlassian API gateway.
 
+A CalDAV probe signs in to `serverUrl` with the password (with
+`accountId` and an empty `credentials.password`, the stored one, only for
+a `caldav` account of the same realm) and reads the principal. Its
+`error.code` is one of the IMAP codes above (`tlsError` with
+`TLSErrorData`, `serverError` also for a server that is not CalDAV);
+`capabilities` are those of `"calendar-access"`,
+`"calendar-auto-schedule"` and `"sync-collection"` the server
+advertises.
+
 #### `account.linked`
 Lists accounts other desktop services are signed in to and that Malachi
 can use: the Microsoft 365 and Google accounts of GNOME Online Accounts
@@ -1104,7 +1196,8 @@ token, which must carry `email_verified: true`; Microsoft: Graph `/me`'s
 `mail`, else its `userPrincipalName`), answers the browser with a short
 page and closes the listener.
 
-- params: `{ "config": AccountConfig (opt), "accountId": "acc_1" (opt), "browserPage": OAuthBrowserPage (opt) }` — exactly one of `config` and `accountId`
+- params: `{ "config": AccountConfig (opt), "accountId": "acc_1" (opt), "browserPage": OAuthBrowserPage (opt),
+  "calendar": bool (opt) }` — exactly one of `config` and `accountId`
 - result: `{ "sessionId": "s_…", "authUrl": "https://accounts.google.com/…", "expiresAt": "2026-09-25T10:10:00Z" }`
 - errors: invalidArgument (neither or both of `config`/`accountId`, a
   config that is not source `daemon` or fails `account.add` validation,
@@ -1131,6 +1224,14 @@ and replaces it otherwise. A completed re-sign-in stores the new refresh
 token, restarts the account's syncer and sender, and is followed by
 `notify.syncState`; if the account was changed to another address or
 client, or removed, meanwhile, nothing is stored and the session fails.
+
+`calendar: true` (only a sign-in made for the calendar sets it: the
+Calendar switch, or a `calendarConsentRequired` with `signIn: true`) also
+asks for the calendar scopes, Microsoft `Calendars.ReadWrite` and
+`Calendars.Read.Shared`. The grant records the scopes the provider gave;
+a sign-in without them leaves the account's calendar in state
+`consentRequired` and its mail running. Users who do not want the
+calendar never see a new consent screen.
 
 #### `account.oauthWait`
 Waits for a session to finish.
@@ -1222,6 +1323,58 @@ status is an open enum, as in §3. Every name is untrusted display text
 from the site; `user.email` is absent when the site does not reveal it (a
 Data Center wizard then asks for the address). A client allows the call
 45 s.
+
+#### `account.discoverCalDAV`
+Finds the CalDAV server a URL names, for the Add CalDAV Calendar sheet.
+Nothing is stored and nothing is authenticated.
+
+- params: `{ "url": "cloud.example.org", "certificateSha256": "64 hex digits" (opt) }` — a host or a full URL; `https` assumed
+- result: `{ "serverUrl": "https://cloud.example.org/remote.php/dav", "foundVia": "wellKnown|srv|url",
+  "needsCredentials": true, "certificate": CertificateInfo (opt) }`
+- errors: invalidArgument (not a usable URL), networkError, tlsError
+  (with `TLSErrorData`: the certificate-trust flow), serverTimeout,
+  serverError (the server answered but is not CalDAV)
+
+`certificate` describes the certificate the server presented when it was
+verified (its `issuer` for a "Verified" row). `serverUrl` may name
+another host than the typed URL when `.well-known` redirected there
+(iCloud does); a client shows it before any password is sent. A client
+allows the call 20 s.
+
+A server counts when its anonymous `OPTIONS` shows `calendar-access` in `DAV` (on a 2xx or a 401), or answers 401 with no `DAV` header at all (sabre/dav: Nextcloud, ownCloud, Baïkal authenticate before they answer `OPTIONS`); `account.listCalDAVCalendars` then verifies CalDAV with the password and is `serverError` when the home set has no calendars and the signed-in `OPTIONS` shows no `calendar-access`. A 2xx, or a 401 with a `DAV` header, without `calendar-access` is `serverError`.
+
+`certificateSha256` pins the server's certificate (normalised like
+`CalDAVConfig.certificateSha256`; malformed: invalidArgument), so that a
+client can run discovery again after Trust Certificate…; the pin applies
+only to the typed URL's origin, never to another host a redirect names.
+
+#### `account.listCalDAVCalendars`
+Signs in to the server of a `caldav` configuration and lists what the
+account settings choose from. Nothing is stored.
+
+- params: `{ "accountId" (opt), "config": AccountConfig, "credentials": { "password": "…" (opt) } }`
+- result: `{ "principalUrl": "…", "homeSetUrl": "…", "displayName": "Jana" (opt),
+  "addresses": ["jana@example.org"], "scheduling": "server|client",
+  "calendars": [CalDAVCalendar] }`
+- errors: invalidArgument (`config` not of kind `caldav`, its
+  connection fields fail the rules above, or `accountId` names an
+  account of another realm), authRequired (no password and no
+  `accountId`), authFailed, keyringError, accountNotFound, networkError,
+  tlsError, serverTimeout, serverError
+
+```jsonc
+CalDAVCalendar { "href": "/remote.php/dav/calendars/jana/personal/", "name": "Personal",
+                 "color": "#0082c9" (opt), "access": "owner|write|read",
+                 "isDefault": true (opt) }        // the server's schedule-default-calendar-URL
+```
+
+`addresses` are the `mailto:` values of the principal's
+`calendar-user-address-set` (a client offers the first as `email`).
+With `accountId` and no password the stored one is used only when that
+account is a `caldav` account of the same realm (a password never goes to
+another server). At most 200 calendars (`api.MaxCalendarsPerAccount`),
+VEVENT collections only. Every name is untrusted display text. A client
+allows the call 45 s.
 
 ### 4.2 folder
 
@@ -2780,7 +2933,11 @@ classification (§3 `bulk`) and the fields of an issue, never the words
 of a message (one exception: a question mark in the user's own text,
 `them.asked`). Which members count: not hidden, not in a folder of role
 `trash`, `junk` or `drafts`, not bulk mail, not waiting for the bulk
-classification (it counts once classified) and no `jira` event. A member is the user's own
+classification (it counts once classified) and no `jira` event. Calendar
+mail (a message with an invitation, §4.14: a request, an update, a
+cancellation, a reply, the user's own in `sent` or `outbox`) is no member
+at all: it neither makes a case nor decides or counts in one, and a thread
+of nothing else is no case. A member is the user's own
 (**mine**) only when it is in a folder of role `sent` or `outbox`, never
 because its `From` names the user. Copies of one message (one
 `Message-ID`) count once: when a copy is mine the message is the user's;
@@ -2942,7 +3099,7 @@ forward older than the user's 10 newest messages after the newest
 inbound member is judged without its text (only its subject and an
 attached message tell it).
 
-The rules have a version (`RulesVersion` in the daemon, now 6); a new
+The rules have a version (`RulesVersion` in the daemon, now 8); a new
 version makes the daemon judge every thread of the longest window again
 in the background (`ready` false meanwhile), keeping the user's states,
 done, reminds, annotations and commitments.
@@ -3547,6 +3704,520 @@ without usage, at its next start or after two hours. Every call that
 succeeds is followed by `notify.boardChanged`, so clients learn the new
 `usage24h`.
 
+### 4.14 calendar
+
+Calendar support: the calendars of a `graph` account (Microsoft 365 /
+Outlook.com, through Graph) and of a `caldav` account (§4.1), the events
+of those calendars (§4.15), and the invitations received in mail by any
+mail account (§4.16). The design is `docs/calendar.md`. Every method is
+a compatible addition to protocol 2; limits are the constants of
+`api` (`pkg/api/calendar.go`): exceeding an input limit is
+`invalidArgument`, a server's data over a stored limit is truncated (and
+counted) or skipped. The daemon talks to the servers; clients never do.
+
+Common types of §4.14–§4.16:
+
+```jsonc
+Date          "2026-10-14"                    // calendar date, no zone
+LocalDateTime "2026-10-14T10:00:00"           // wall-clock time, with a separate IANA zone
+TimeZone      "Europe/Prague"                 // IANA name; "" = floating
+
+CalendarSource "graph" | "caldav" | "google"  // open enum; "google" reserved, not produced yet
+CalendarAccess "owner" | "write" | "read"
+CalendarKind   "events" | "birthdays" | "holidays" | "other"   // open enum
+Response       "needsAction" | "accepted" | "tentative" | "declined" | "delegated"
+ShowAs         "free" | "tentative" | "busy" | "oof" | "workingElsewhere" | "unknown"
+EventStatus    "confirmed" | "tentative" | "cancelled"
+Scope          "this" | "thisAndFuture" | "all"
+
+Calendar {
+  "id": "cal_…", "accountId": "acc_1", "name": "Calendar",
+  "remoteId": "AAMkAD…" | "/remote.php/dav/calendars/jana/personal/",   // Graph calendar id or CalDAV href: the key of CalendarConfig
+  "disabled": true (opt),             // in the account's disabledCalendars: listed, no events stored
+  "color": "#1f6feb",                 // the user's colour if set, else the server's, else a palette colour by id
+  "serverColor": "#1f6feb" (opt), "userColor": "#e5534b" (opt),
+  "visible": true,                    // shown in the views (calendar.update)
+  "access": CalendarAccess, "kind": CalendarKind,
+  "owner": Address (opt),             // a calendar shared with the user
+  "isDefault": true (opt),            // the account's default calendar for new events (CalendarConfig.defaultCalendar, else the server's)
+  "timeZone": TimeZone (opt),
+  "onlineMeetingProviders": ["teamsForBusiness"] (opt)   // Graph allowedOnlineMeetingProviders; open enum
+}
+
+CalendarFeatures {                    // what the account's source can do
+  "freeBusy": bool,                   // calendar.freeBusy can ask about other people (Graph work/school)
+  "proposeNewTime": bool,             // some events may offer it (Graph)
+  "invitations": "server" | "mail" | "none",   // who delivers invitations and replies of its events
+  "mailAccountId": "acc_2" (opt),     // invitations "mail": the account they leave from
+  "onlineMeetings": bool              // "Add video call" can create a meeting (Graph)
+}
+
+CalendarSyncState {
+  "accountId": "acc_1",
+  "status": "idle|syncing|offline|authRequired|consentRequired|error|disabled",
+  "progress": 42,                     // 0–100, -1 unknown
+  "lastSync": Time (opt), "error": Error (opt)
+}
+
+CalendarAccount {                     // an account with the calendar capability (§4.1)
+  "accountId": "acc_1", "source": CalendarSource,
+  "sync": true,                       // CalendarConfig.sync (always true for caldav)
+  "state": CalendarSyncState, "features": CalendarFeatures,
+  "window": { "from": Date, "to": Date },   // what is stored: keepDays back, CalendarFutureDays (400) ahead
+  "calendars": [Calendar]             // server order; empty while sync is off
+}
+
+Recurrence {
+  "frequency": "daily|weekly|monthly|yearly",
+  "interval": 1,                      // 1–99 in input; up to 1000 read
+  "byDay": ["MO", "WE"] (opt),        // weekly: the days; monthly/yearly: with an ordinal, "2TU", "-1FR"
+  "byMonthDay": [14] (opt),           // monthly/yearly: -31..31, not 0
+  "byMonth": [10] (opt),              // yearly: 1–12
+  "until": Date (opt) | "count": 10 (opt),   // at most one; neither = no end
+  "weekStart": "MO" (opt),
+  "complex": true (opt),              // read only: the rule has more than this shape (hourly, BYSETPOS
+                                      // combinations, several ordinals, RDATE…); shown as "Custom", edited
+                                      // only with scope "all" and kept unless replaced
+  "exceptions": 3 (opt)               // read only: modified or removed instances in the window
+}
+
+Attendee {
+  "name": "Jana Nováková" (opt), "address": "jana@example.org",
+  "role": "required|optional|chair|nonParticipant",
+  "response": Response, "type": "person|room|resource|group|unknown",
+  "me": true (opt), "organizer": true (opt)
+}
+
+VideoCall { "url": "https://teams.microsoft.com/l/meetup-join/…",
+            "provider": "teams|zoom|meet|webex|jitsi|whereby|other", "host": "teams.microsoft.com" }
+
+Occurrence {                          // one instance in a view (event.list, event.search)
+  "eventId": "ev_…" (opt),            // absent for an invitation not in any calendar
+  "recurrenceId": Time | Date (opt),  // instance of a series: its original start
+  "seriesId": "ev_…" (opt),           // the master of a series instance
+  "calendarId": "cal_…" (opt), "accountId": "acc_1",
+  "title": "Standup",                 // "" when private and not the user's
+  "start": Time, "end": Time,         // timed: UTC instants; all-day: absent
+  "startDate": Date, "endDate": Date, // all-day only; endDate exclusive
+  "allDay": bool, "floating": bool (opt), "timeZone": TimeZone (opt),
+  "location": "Room B" (opt),
+  "status": EventStatus, "showAs": ShowAs,
+  "myResponse": Response (opt),       // absent: the user is not an attendee (own event, no attendees)
+  "organizer": bool (opt),            // the user organises it
+  "attendeeCount": 4 (opt),
+  "recurring": bool (opt), "videoCall": bool (opt), "private": bool (opt),
+  "alert": bool (opt),                // an alert is set
+  "readOnly": bool (opt),
+  "invitation": { "accountId", "messageId" } (opt)   // an invitation shown tentatively (not in a calendar)
+}
+
+Event = Occurrence + {                // event.get, event.create/update results
+  "etag": "opaque",                   // pass back on update/delete/respond
+  "notes": "plain text" (opt), "links": ["https://…"] (opt),
+  "videoCallLink": VideoCall (opt),
+  "organizerAddress": Address (opt),
+  "attendees": [Attendee] (opt), "attendeesTruncated": bool (opt),
+  "recurrence": Recurrence (opt),     // of the series (on any instance)
+  "alerts": [15] (opt),               // minutes before start
+  "responseRequested": bool (opt),
+  "canEdit": bool, "canDelete": bool, "canRespond": bool, "canProposeNewTime": bool,
+  "removeIsDelete": bool,             // Remove from Calendar deletes the event for everyone (the user organises it)
+  "invitationMessages": [{ "accountId", "messageId" }] (opt),   // Show Invitation in Mail
+  "created": Time (opt), "updated": Time (opt)
+}
+
+EventInput {                          // event.create, event.update
+  "title": "…",                       // ≤ 1024 bytes after cleaning; may be empty
+  "allDay": bool,
+  "start": LocalDateTime, "end": LocalDateTime, "timeZone": TimeZone,   // timed (timeZone required, "" refused)
+  "startDate": Date, "endDate": Date,                                    // all-day (endDate exclusive, > startDate)
+  "location": "…" (opt),              // ≤ 1024 bytes
+  "notes": "…" (opt),                 // plain text, ≤ 32 KiB
+  "recurrence": Recurrence (opt),     // without "complex"/"exceptions"; null/absent = none
+  "keepRecurrence": bool (opt),       // update of a complex rule: keep it as it is (recurrence ignored)
+  "alerts": [15] (opt),               // ≤ 4 values 0–40320; absent or null = the default alert (calendar.preferences); [] = none
+  "showAs": ShowAs (opt), "private": bool (opt),
+  "attendees": [{ "name" (opt), "address", "role": "required|optional" (opt) }] (opt),   // ≤ 100
+  "videoCall": { "mode": "none|create|link", "provider": "teamsForBusiness" (create), "url": "https://…" (link) } (opt),
+  "attachments": ["att_…"] (opt)      // attachment.import ids, ≤ 10, each ≤ 3 MiB
+}
+
+MailText { "subject": "…", "text": "…" }   // a client's localised iMIP subject and body (the daemon is language-neutral); both ≤ 4 KiB
+
+Availability {                        // calendar.freeBusy
+  "address": "jana@example.org",
+  "known": bool,                      // false: no free/busy for this person
+  "busy": [{ "start": Time, "end": Time, "showAs": ShowAs }]
+}
+
+EventAlert {
+  "alertId": "al_…", "state": "due|dismissed",
+  "eventId": "ev_…", "recurrenceId": Time | Date (opt),
+  "accountId", "calendarId", "title", "start": Time (opt), "end": Time (opt),
+  "startDate": Date (opt), "allDay": bool, "location" (opt), "videoCall": bool (opt),
+  "minutesBefore": 15
+}
+
+CalendarPreferences {
+  "weekStart": "locale|monday|sunday|saturday",
+  "defaultDurationMinutes": 60,       // 5–1440
+  "defaultAlertMinutes": 15,          // -1 none, 0–40320
+  "showDeclined": false,
+  "workingHours": { "days": ["MO","TU","WE","TH","FR"], "start": "08:00", "end": "17:00" }
+}
+```
+
+Every string of these types that comes from a server, an `.ics` or
+another person (titles, locations, notes, names, addresses' names,
+calendar names) is untrusted display text: cleaned by the daemon, shown
+as plain text. `color` values are `#rrggbb`, lower case, always valid.
+An unknown value of an open enum is treated as absent (`kind`, `provider`,
+`source`) or as `unknown` (`showAs`, attendee `type`).
+
+Times: `start`/`end` of a timed occurrence are UTC instants; a client
+formats them in the user's zone. All-day events are dates, the same
+everywhere. A floating event (no zone in the source) has `floating: true`
+and `start`/`end` computed in the zone the caller passed (`event.list`
+`timeZone`), so it shows at its wall-clock time.
+
+Limits (`api.*`): `MaxICSBytes` 1 MiB (one iCalendar object or calendar
+part), `MaxEventTitleBytes` and `MaxEventLocationBytes` 1024,
+`MaxEventNotesBytes` 32 KiB, `MaxMailTextBytes` 4 KiB (each of
+`MailText.subject` and `text`), `MaxCommentBytes` 2 KiB,
+`MaxEventAttendeesIn` 100, `MaxEventAttendeesStored` 500,
+`MaxInvitationAttendees` 50, `MaxEventAlerts` 4, `MaxAlertMinutes` 40320,
+`MaxEventAttachments` 10, `MaxEventAttachmentBytes` 3 MiB,
+`MaxEventListDays` 400, `MaxEventListResults` 5000,
+`DefaultEventListResults` 2000, `MaxEventSearchResults` 200,
+`MaxSeriesOccurrences` 1000 (per series per query window),
+`MaxCalendarsPerAccount` 200, `MaxEventsPerCalendar` 50000,
+`MaxFreeBusyAttendees` 20, `MaxFreeBusyDays` 62, `MaxFreeSlots` 50,
+`MaxInvitationList` 500, `CalendarFutureDays` 400 (the window's forward
+edge), `DefaultCalendarKeepDays` 365, `MaxRecurrenceInterval` 99 and
+`MaxRecurrenceCount` 999 (input).
+
+The calendars of accounts with the `calendar` capability, their state and
+the calendar preferences. Every method is local (the store) except
+`calendar.freeBusy`, which may ask Graph, and `calendar.sync`.
+
+#### `calendar.list`
+- params: `{ "accountId" (opt) }` — absent: every account with the capability, in the accounts' order
+- result: `{ "accounts": [CalendarAccount], "unanswered": 3 }` — `unanswered`:
+  invitations of enabled accounts waiting for an answer (`invitation.list`
+  with `state: "unanswered"`, counted)
+- errors: accountNotFound, invalidArgument (an account without the capability), storageError
+
+A Graph account with `sync: false` is listed with empty `calendars`, so
+that Preferences can offer the switch. Disabled calendars are listed with
+`disabled: true` and no occurrences; `remoteId` is the key for
+`CalendarConfig` (`disabledCalendars`, `defaultCalendar`). A paused account is listed with
+state `disabled`.
+
+#### `calendar.update`
+The user's own settings of one calendar; nothing goes to the server.
+
+- params: `{ "calendarId", "visible": bool (opt), "userColor": "#rrggbb" | "" (opt; "" clears) }`
+- result: `{ "calendar": Calendar }`
+- errors: calendarNotFound, invalidArgument (a colour that is not `#rrggbb`), storageError
+
+Followed by `notify.calendarChanged` naming the calendar (to every
+client, the caller too). Which calendars are synchronised and which is
+the default are account settings (`CalendarConfig`, `account.update`).
+
+#### `calendar.sync`
+- params: `{ "accountId" (opt), "calendarId" (opt) }` — absent: every account
+- result: `{}` — the pass runs in the background; `notify.calendarState` follows
+- errors: accountNotFound, calendarNotFound
+
+#### `calendar.preferences`
+- params: `{}`
+- result: `{ "preferences": CalendarPreferences }`
+
+#### `calendar.setPreferences`
+- params: `{ "preferences": CalendarPreferences }` — a missing field keeps its value
+- result: `{ "preferences": CalendarPreferences }`
+- errors: invalidArgument (a value out of range, `workingHours.end` not after `start`, no day)
+
+Followed by `notify.calendarChanged` without calendars (clients reread
+what depends on the preferences: alerts of new events, working hours).
+
+#### `calendar.freeBusy`
+Who is busy when: the user from the stored occurrences of every visible
+calendar of enabled accounts (not declined, not `showAs: free`), others
+through the source of `accountId` when it has `features.freeBusy`.
+
+- params: `{ "accountId", "attendees": ["jana@example.org"], "from": Time, "to": Time,
+  "intervalMinutes": 30 (opt; 15, 30 or 60) }` — ≤ 20 attendees, `to − from` ≤ 62 days
+- result: `{ "me": Availability, "attendees": [Availability] }` — in the order asked;
+  `known: false` for an attendee the source cannot answer for (or for every attendee
+  without `features.freeBusy`), never an error for that
+- errors: accountNotFound, invalidArgument, calendarConsentRequired
+  (only when `accountId`'s own calendar is unreadable). A failed or slow
+  free/busy request of the source is not an error: the attendees come
+  back `known: false` and `me` is still computed.
+
+A client allows 20 s and asks again at most every 2 s while the user
+edits.
+
+#### `calendar.findFreeTime`
+Slots in which the user and the known attendees are free.
+
+- params: `{ "accountId" (opt), "attendees": [] (opt), "durationMinutes": 30, "from": Time, "to": Time,
+  "workingHoursOnly": true (opt, default true), "limit": 5 (opt, ≤ 50) }`
+- result: `{ "slots": [{ "start": Time, "end": Time }], "unknown": ["address"] }` —
+  slots start on the quarter hour, inside working hours of the preferences
+  (in the daemon's local zone) when asked, earliest first; `unknown` lists
+  attendees without free/busy (not taken into account)
+- errors: those of `calendar.freeBusy`
+
+### 4.15 event
+
+#### `event.list`
+The occurrences of a range, from the stored window (`CalendarAccount.window`), online for a
+part outside it.
+
+- params: `{ "from": Time, "to": Time, "timeZone": TimeZone, "calendarIds": [] (opt), "accountIds": [] (opt),
+  "includeHidden": false (opt), "includeDeclined": bool (opt; default the preference),
+  "includeInvitations": true (opt), "limit": 2000 (opt, ≤ 5000) }` — `to − from` ≤ 400 days
+- result: `{ "occurrences": [Occurrence], "truncated": bool, "complete": bool }`
+- errors: invalidArgument (range, zone not IANA, unknown ids), storageError
+
+`occurrences` overlap `[from, to)` (an all-day one by its dates in
+`timeZone`), sorted by start (all-day first on their first day), then
+calendar order. Without `calendarIds` every visible calendar of enabled
+accounts (`includeHidden` adds the hidden ones). `includeInvitations`
+adds the unanswered invitations of accounts with `showUnanswered` that
+are not in any calendar (`invitation` set, `myResponse: "needsAction"`).
+An account whose `showUnanswered` is off contributes neither those nor
+the occurrences of its calendars still waiting for the user's answer
+(`myResponse: "needsAction"`, which Exchange adds to the calendar by
+itself); they are in the Invitations section only. Clients draw
+`needsAction` occurrences dashed with a "?" badge.
+`truncated`: `limit` reached. `complete: false`: a part of the range lies
+outside an account's window and could not be fetched (offline, an error);
+what is stored is returned. A client allows 10 s.
+
+#### `event.get`
+- params: `{ "eventId", "recurrenceId": Time | Date (opt), "timeZone": TimeZone (opt) }`
+- result: `{ "event": Event }`
+- errors: eventNotFound, storageError
+
+With `recurrenceId` the instance (its own fields if overridden, else the
+series'); without it on a series, the master as its first instance.
+
+#### `event.search`
+- params: `{ "query": "supplier", "from": Time (opt), "to": Time (opt), "calendarIds": [] (opt), "limit": 50 (opt, ≤ 200) }`
+- result: `{ "occurrences": [Occurrence], "total": 12 }`
+- errors: invalidArgument (query empty or > 256 bytes)
+
+Over title, location, notes and people's names and addresses of stored
+events (prefix match per word, diacritics ignored). One occurrence per
+event: a series' next instance from now (else its last), ordered:
+upcoming by start, then past, latest first. `total` ≤ 1000.
+
+#### `event.create`
+- params: `{ "calendarId", "event": EventInput, "sendInvitations": true (opt), "mail": MailText (opt) }`
+- result: `{ "event": Event, "invitations": { "via": "server|mail|none", "count": 3 } }`
+- errors: calendarNotFound, readOnly, invalidArgument, invitationsUnavailable,
+  attachmentNotFound, attachmentTooBig, calendarConsentRequired, authFailed,
+  offline, networkError, serverTimeout, serverError, tlsError, recurrenceUnsupported
+
+`sendInvitations: false` with attendees is refused on Graph (Exchange
+always sends, `invalidArgument`); on CalDAV with client scheduling it
+stores the attendees without mail. With `via: "mail"` the REQUEST is
+queued in the outbox of the mail account (it appears there), `mail`
+gives its subject and text (absent: the title, no text). The server
+answered before the result (calendar writes are server-first: offline is an error); a client allows 45 s.
+
+#### `event.update`
+- params: `{ "eventId", "recurrenceId" (opt), "scope": Scope, "etag", "event": EventInput,
+  "sendUpdates": true (opt), "mail": MailText (opt) }`
+- result: `{ "event": Event, "droppedExceptions": 0, "invitations": { "via", "count" } }`
+- errors: those of `event.create`, eventNotFound, eventGone, conflict (`data.event`)
+
+`event` replaces every field of the scope's target (the client sends the
+whole edited event). `scope` must be `all` for a non-recurring event and
+for a `complex` rule; `this` makes an exception; `thisAndFuture` splits
+the series (a new series with a new UID starts at the instance; on the first instance it is `all`; `RANGE=THISANDFUTURE` is never written). An attendee (not the
+organiser) may change only `alerts`, `showAs` and `private` (`readOnly`
+otherwise). `droppedExceptions`: overrides that no longer fit the
+changed rule (scope `all`). Updates to attendees follow `sendUpdates` as
+invitations do. A client allows 45 s.
+
+#### `event.delete`
+- params: `{ "eventId", "recurrenceId" (opt), "scope": Scope, "etag",
+  "notify": true (opt), "comment": "…" (opt, ≤ 2 KiB), "mail": MailText (opt) }`
+- result: `{ "invitations": { "via", "count" } }`
+- errors: eventNotFound, eventGone, conflict, readOnly, offline, networkError,
+  serverTimeout, serverError, calendarConsentRequired
+
+The organiser's delete of an event with attendees cancels it for them
+(Graph `cancel`, CalDAV server scheduling, or iMIP CANCEL) unless
+`notify: false`. An attendee's delete removes it from the user's calendar
+only; with `notify: true` it declines first (as `event.respond` declined,
+`sendResponse: true`) — the detail's Remove from Calendar asks which.
+
+#### `event.respond`
+The user's answer as an attendee of a stored event.
+
+- params: `{ "eventId", "recurrenceId" (opt), "scope": "this|all", "etag",
+  "response": "accepted|tentative|declined", "sendResponse": true (opt),
+  "comment": "…" (opt, ≤ 2 KiB), "proposedStart": Time (opt), "proposedEnd": Time (opt),
+  "mail": MailText (opt) }`
+- result: `{ "event": Event, "via": "server|mail|none" }`
+- errors: eventNotFound, eventGone, conflict, invalidArgument (the user is
+  not an attendee; a proposed time without `canProposeNewTime`, or only
+  one end of it), offline, networkError, serverTimeout, serverError,
+  calendarConsentRequired
+
+Graph: accept / tentativelyAccept / decline on the instance or the
+series. CalDAV: the user's `PARTSTAT` written with `If-Match`; with
+client scheduling an iMIP REPLY is queued (`via: "mail"`). The stored
+invitations of the event (`cal_responses`) take the answer too.
+
+#### `event.snoozeAlert`
+- params: `{ "alertId", "minutes": 5 }` — 1–1440
+- result: `{}` — the alert fires again then (`notify.eventAlert` `due`)
+- errors: invalidArgument (unknown or not fired)
+
+#### `event.dismissAlert`
+- params: `{ "alertId" }`
+- result: `{}` — every client gets `notify.eventAlert` `dismissed`
+- errors: invalidArgument (unknown)
+
+### 4.16 invitation
+
+An invitation is a stored message with a calendar part (docs/calendar.md §3.8): its
+summary rides on the message (`MessageSummary.invitation`), its card on
+`message.get` (`Message.invitation`).
+
+```jsonc
+InvitationKind  "invitation" | "update" | "cancelled" | "reply" | "other"
+InvitationState "unanswered" | "answered" | "outdated" | "cancelled" | "processed" | "invalid"
+
+MessageSummary += { "invitation": InvitationSummary (opt) }
+InvitationSummary {
+  "method": "request|reply|cancel|counter|declineCounter|refresh|add|publish|other",
+  "kind": InvitationKind,             // the list pill: request → invitation (update when it changes a known
+                                      // event or SEQUENCE > 0 of a known UID), cancel → cancelled,
+                                      // reply → reply, everything else other (no pill)
+  "state": InvitationState,
+  "title": "Q4 planning", "start": Time (opt), "end": Time (opt),
+  "startDate": Date (opt), "allDay": bool (opt),
+  "organizer": Address (opt), "replyFrom": Address (opt),  // reply: the attendee who answered
+  "ownEvent": bool (opt)              // the organiser is one of the user's addresses: a request is processed
+}
+
+Message += { "invitation": InvitationCard (opt) }   // message.get, message.download
+InvitationCard = InvitationSummary + {
+  "partId": "2",
+  "uid": "…", "recurrenceId": Time | Date (opt), "sequence": 0,
+  "end"/"endDate", "timeZone": TimeZone (opt), "recurrence": Recurrence (opt),
+  "location": "…" (opt), "videoCall": VideoCall (opt), "notes": "plain text" (opt),
+  "organizerMismatch": bool (opt),    // the organiser's domain is not the From domain
+  "attendeeCount": 4, "attendees": [Attendee] (opt),   // ≤ 50 shown
+  "me": { "address": "me@example.org", "response": Response } (opt),   // absent: the user is not on the list
+  "response": "accepted|tentative|declined" (opt), "respondedAt": Time (opt),   // the user's answer; of a reply card the attendee's (replyFrom), without respondedAt
+  "eventId": "ev_…" (opt), "calendarId": "cal_…" (opt),   // the stored event it is linked to
+  "previous": { "start": Time | Date (opt), "end": Time | Date (opt), "location": "…" (opt), "recurrence": Recurrence (opt) } (opt),   // update: what the linked event had before; start/end only when the time changed, location when it changed and was not empty, recurrence when the rule changed or is gone
+  "conflicts": [{ "title": "Standup" (opt), "start": Time, "end": Time, "calendarId", "eventId" }],   // ≤ 3
+  "day": { "from": Time, "to": Time, "busy": [{ "start": Time, "end": Time, "calendarId" (opt) }] },  // the mini strip
+  "targets": [{ "calendarId", "isDefault": bool (opt) }],   // "Add to:"; empty → the answer only
+  "fixedTarget": bool (opt),          // the server chose the calendar (Graph): the popup is a label
+  "canRespond": bool, "canProposeNewTime": bool,
+  "replyVia": "server|mail|none",     // how the answer leaves
+  "replyAccountId": "acc_1" (opt), "replyTo": Address (opt),   // the account it leaves from, the organiser it goes to
+  "replyApplied": bool (opt)          // reply: the attendee's answer was applied to the user's event
+}
+```
+
+- `state`: `unanswered` (a request the user has not answered, its event
+  not in the past), `answered`, `outdated` (a newer `SEQUENCE` of the
+  same UID arrived, or the event ended), `cancelled` (a cancel, or a
+  request whose event a later cancel cancelled), `processed` (a reply or
+  other message the daemon has nothing to ask about), `invalid` (the
+  part could not be read: no card, the message reads as usual).
+- *ownEvent.* A request whose `ORGANIZER` is one of the user's addresses
+  (the account's own, its Sent senders, the other accounts', read at
+  ingest and kept in the card JSON) is the user's own invitation (its
+  Sent copy, the copy Exchange keeps): `processed` (a CANCEL stays
+  `cancelled`, and so does a request a later cancel cancelled), never in
+  `invitation.list`'s unanswered, the count of `calendar.list` or the
+  tentative occurrences; its card has `canRespond`/`canProposeNewTime`
+  false, `targets: []`, `replyVia: none`, and links (`eventId`,
+  `calendarId`) to the event the user organises with that UID and
+  organiser, for Show in Calendar. The kind (invitation/update) is
+  unchanged. `calendar.ParserVersion` 3 rebuilds stored rows.
+- *Answered in another client.* A request without a local answer of its
+  `SEQUENCE` (`cal_responses`) whose linked event has the user's response
+  `accepted`, `tentative` or `declined` is `answered`: the summary's
+  `state`, `invitation.list` (which then leaves it out of `unanswered`)
+  and the card agree; the card's `response` is the event's, without
+  `respondedAt` (unknown). `needsAction` or no response stays
+  `unanswered`; a local answer of the sequence wins. The linked event is
+  `store.InvitationLinkedEvent`, one rule for card, summary and list: the
+  events of the UID in every account, the message's account first, then
+  by account order; per account the row the invitation names (the
+  override of its recurrence id, else the first master or single row,
+  else the first, by calendar, remote id, recurrence id); it counts when
+  the user does not organise it, its `ORGANIZER` is the invitation's, the
+  account is enabled and the calendar not disabled, else the next
+  account. (A daemon copy is not consulted: it exists only with a local
+  answer.)
+- *previous* (update, against the linked event, never a copy, the event's
+  `SEQUENCE` not above the invitation's): `start`/`end` only when the
+  time changed, `location` when it changed and was not empty, `recurrence`
+  (the stored rule, `until`/`count` included) when the rules differ by
+  canonical form (sorted lists, default interval and week start, without
+  `exceptions`) or the rule is gone; a new rule where there was none
+  reports nothing; absent when nothing is to report.
+- `conflicts` and `day` are computed at `message.get` from the stored
+  occurrences of visible calendars (`day` spans the working hours of the
+  invitation's day, widened to the invitation); private events of shared
+  calendars come without `title`.
+- `targets`: writable calendars that can take the event (an invitation on an IMAP account may be stored in a CalDAV calendar or, without attendees, in a Graph one), the
+  account's default first; Graph mailboxes: the one Exchange used, with
+  `fixedTarget`.
+- A message in a folder of role `junk` or `trash` has `canRespond:
+  false`.
+
+#### `invitation.list`
+- params: `{ "accountIds": [] (opt), "state": "unanswered" (opt), "limit": 200 (opt, ≤ 500) }`
+- result: `{ "invitations": [{ "accountId", "messageId", "summary": InvitationSummary }] }` —
+  one per UID (the newest message of it), by start
+- errors: invalidArgument
+
+#### `invitation.respond`
+- params: `{ "accountId", "messageId", "response": "accepted|tentative|declined",
+  "calendarId": "cal_…" (opt), "sendResponse": true (opt), "comment": "…" (opt, ≤ 2 KiB),
+  "proposedStart": Time (opt), "proposedEnd": Time (opt), "mail": MailText (opt) }`
+- result: `{ "invitation": InvitationCard, "eventId": "ev_…" (opt), "movedTo": FolderID (opt) }`
+- errors: messageNotFound, invalidArgument (no invitation, a reply/cancel,
+  `canRespond` false, a `calendarId` not in `targets`), malformedCalendar,
+  calendarNotFound, readOnly, eventGone, offline, networkError,
+  serverTimeout, serverError, calendarConsentRequired
+
+The path: an invitation is answered where its event lives — a linked event → as `event.respond` (scope of the
+invitation: the instance for an instance invitation, else `all`); else an
+iMIP REPLY queued from `replyAccountId` (unless `sendResponse: false`) and,
+with `calendarId` and an `accepted`/`tentative` answer, the event stored
+in that calendar. Decline removes a copy the daemon stored earlier. Then
+`cal_responses`, `afterAnswer` (`movedTo` when the message was archived),
+`notify.invitationsChanged`, `notify.calendarChanged`. A changed answer is
+just another call. A client allows 45 s.
+
+#### `invitation.applyCancel`
+Removes from the user's calendar the event a cancellation names.
+
+- params: `{ "accountId", "messageId" }` — a message with `kind: "cancelled"`
+- result: `{ "removed": bool }` — false when no stored event was linked
+- errors: messageNotFound, invalidArgument (not a cancellation), readOnly,
+  eventGone (already gone: `removed: false` instead), offline, networkError,
+  serverError
+
+Never sends anything (the organiser cancelled).
+
+
 ## 5. Notifications
 
 | Method | params |
@@ -3558,6 +4229,10 @@ succeeds is followed by `notify.boardChanged`, so clients learn the new
 | `notify.messagesChanged` | `{ "accountId", "folderIds": ["f_1"] (opt) }` |
 | `notify.boardChanged` | `{ "accountIds": ["acc_1"] (opt) }` |
 | `notify.draftsChanged` | `{ "accountId", "threadIds": ["t_1"] (opt) }` |
+| `notify.calendarChanged` | `{ "accountIds": ["acc_1"] (opt), "calendarIds": ["cal_1"] (opt), "from": Time (opt), "to": Time (opt) }` |
+| `notify.calendarState` | `{ "state": CalendarSyncState }` |
+| `notify.eventAlert` | `{ "alert": EventAlert }` |
+| `notify.invitationsChanged` | `{ "accountIds": ["acc_1"] (opt) }` |
 
 Notifications are sent only to connections that completed the handshake
 (§1.4).
@@ -3632,6 +4307,33 @@ replied to is no longer known); a client showing one runs `thread.get`
 with `withDrafts` again, and one listing them reads their
 `draftCount` again. Changes within 250 ms are gathered into one
 notification per account. A client that does not know it ignores it.
+
+`notify.calendarChanged` is sent when stored calendars or occurrences
+changed (a pass, a write by any client or the MCP bridge,
+`calendar.update`, the calendar preferences, an account's calendar
+settings); `from`/`to` bound the changed occurrences when known, and a
+client showing a range overlapping them (or any range when they are
+absent) runs `event.list` again. Without `calendarIds` after
+`calendar.setPreferences`: clients reread what depends on the
+preferences. Gathered per account within 1 s.
+
+`notify.calendarState` is sent on every change of an account's calendar
+state (`CalendarSyncState`, §4.14), progress-only changes at most every
+500 ms.
+
+`notify.eventAlert` is sent with `state: "due"` when an alert fires or a
+snooze ends, and with `state: "dismissed"` when any client dismissed it
+(`event.dismissAlert`): the other clients withdraw their notification.
+Once per state change.
+
+`notify.invitationsChanged` is sent when the unanswered invitations
+changed (arrived, answered, outdated, cancelled); a client reruns
+`invitation.list` / `calendar.list` for the count. Gathered within 1 s.
+`notify.newMessage` of a message with an invitation carries
+`message.invitation` (the summary), from which the invitation and
+cancellation notifications are built.
+
+A client that does not know the calendar notifications ignores them.
 
 `notify.syncState` is sent immediately on every change of `status`,
 `folderId`, `error`, `lastSync`, `pendingOutbox` or `failedOutbox`, and for
@@ -3988,3 +4690,22 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   gained `withDrafts`, which returns them as `drafts` (as `draft.list`
   lists them, at most `api.MaxThreadDrafts`); new notification
   `notify.draftsChanged`. No new error codes; `ProtocolVersion` stays 2.
+- **2** (2026-10-16, compatible addition: calendars, §4.14–§4.16): new
+  account kind `caldav` (`AccountConfig.caldav`, calendar only, never
+  shown in Mail) and capability `calendar`; `AccountConfig.calendar`
+  (`CalendarConfig`, graph and caldav), `AccountTestResult.caldav`,
+  `account.oauthStart` `calendar`; new methods `account.discoverCalDAV`,
+  `account.listCalDAVCalendars`, `calendar.list`, `calendar.update`,
+  `calendar.sync`, `calendar.preferences`, `calendar.setPreferences`,
+  `calendar.freeBusy`, `calendar.findFreeTime`, `event.list`,
+  `event.get`, `event.search`, `event.create`, `event.update`,
+  `event.delete`, `event.respond`, `event.snoozeAlert`,
+  `event.dismissAlert`, `invitation.list`, `invitation.respond`,
+  `invitation.applyCancel` (all `notImplemented` until implemented);
+  `MessageSummary.invitation` and `Message.invitation`; notifications
+  `notify.calendarChanged`, `notify.calendarState`, `notify.eventAlert`,
+  `notify.invitationsChanged`; error codes 1006 `readOnly`, 1007
+  `invitationsUnavailable`, 1107 `calendarNotFound`, 1108
+  `eventNotFound`, 1204 `calendarConsentRequired`, 1306 `eventGone`, 1507
+  `malformedCalendar`, 1508 `recurrenceUnsupported`, and `conflict` with
+  `data.event` for event writes. `ProtocolVersion` stays 2.

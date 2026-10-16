@@ -734,6 +734,80 @@ site (§2), and it is handled as mail is:
   it was stored for; the token is never logged and is redacted from the
   site's error texts (§6).
 
+### 4.3 Calendar data (iCalendar, CalDAV, Graph events)
+
+Calendar data ([calendar.md](calendar.md) §3.9, [architecture.md
+§3.8](architecture.md)) is written by whoever sends an invitation or can
+write to a shared calendar, and by the server; it is handled as mail is:
+
+- **Every `.ics`, multistatus and Graph event is hostile input.**
+  `calendar/ics` caps the object (`api.MaxICSBytes`, 1 MiB), a content
+  line (64 KiB), nesting (4), components, properties and parameters,
+  tolerates broken structure without ever using a partial component as
+  whole, and turns a panic into `ErrMalformed`; `calendar/recur` refuses
+  `SECONDLY`/`MINUTELY`, out-of-range parts and filters that never match
+  before rrule-go runs, caps every series at 1000 occurrences per window,
+  skips to the window instead of iterating years before it, and recovers
+  a panic as "unsupported"; `VTIMEZONE` rules are never interpreted
+  (`calendar/tz`). The CalDAV client caps every answer (32 MiB, depth
+  32, 200 000 elements), reads only the `DAV:`/CalDAV namespaces and
+  expands no entities. Fuzz targets and the corpora `testdata/calendar`
+  and `testdata/caldav` (and the `invite-*.eml` of `testdata/mime`) cover
+  them. A part that does not read gives an `invalid` invitation without a
+  card and never its raw text.
+- **No HTML to the UI.** Notes are plain text; Graph HTML bodies and
+  `STYLED-DESCRIPTION` leave only through the sanitiser's text,
+  `X-ALT-DESC` is never read. Every string (titles, locations, notes,
+  names, calendar names) is cleaned in `calendar/text.go` (control, bidi,
+  invisible and line-separator characters; caps of `pkg/api/calendar.go`
+  and `MaxNameBytes`) and shown by the clients as plain text only.
+- **Links.** Only `https:` URLs with an ASCII host, no user info, ≤ 2048
+  bytes become `links` or a video call; a video-call provider is named
+  only for the fixed host list of `calendar/text.go` (`videoHosts`), any
+  other https conference URL is `other`. Clients open every link, a
+  notification's Join included, through the "Open this link?"
+  confirmation. The MCP bridge never returns a video-call URL, only its
+  provider and host.
+- **Nothing is fetched or run from an object**: no `ATTACH`, `URL`,
+  `IMAGE`, `CONFERENCE`, `TZURL` or `X-*` URL, no non-`mailto:`
+  address; only `DISPLAY` and `AUDIO` alarms, which show a notification.
+- **iMIP.** A REPLY goes only to the stored `ORGANIZER`, never to `From`
+  or `Reply-To`, and the card warns when the organiser's domain differs
+  from the sender's. A received REPLY changes a stored attendee only
+  when it has exactly one `ATTENDEE`, the From is that attendee and the
+  event has it at no higher `SEQUENCE`; it never adds anyone. A CANCEL
+  marks an event cancelled, never deletes it, and only on the copy the
+  daemon stored for the invitation or on an event of the same organiser
+  in a calendar the daemon schedules for. An invitation is linked to an
+  existing event only when the user does not organise it and its
+  `ORGANIZER` is the invitation's, so reusing the UID of the user's own
+  event answers nothing. Junk and Trash never apply a REPLY or CANCEL and
+  never answer; an attached `message/rfc822` is not read. Nothing is
+  answered automatically, and declining offers *Decline Without Reply* so
+  that a spam invitation does not confirm the address
+  (`core/invitation_service.go`).
+- **CalDAV credentials.** Discovery sends no credentials; a
+  `.well-known` redirect to another server is followed anonymously and
+  the password goes there only after the user confirmed that server
+  (`account.listCalDAVCalendars` with its URL). Afterwards the password
+  goes only to `serverUrl`'s origin and to principal or home-set origins
+  on the same registrable domain over https (`calDAVOrigin`); hrefs on
+  other origins are dropped; redirects keep the origin, `PUT` and
+  `DELETE` are never redirected. A stored password serves `account.test`
+  and `account.listCalDAVCalendars` only for a `caldav` account of the
+  same realm. The server's free text never reaches `error.message`.
+- **Graph.** Calendar requests go only to Graph's built-in URL, a stored
+  deltaLink only on the client's own host; the calendar shares the
+  mailbox's request limiter (§7).
+- **Event privacy.** A private event of a calendar shared with the user
+  comes without title, location, notes and links unless the user
+  organises it.
+
+Explicitly not defended: an organiser who controls the invitation's
+`ORGANIZER` receiving the user's reply (that is how iTIP works; the card
+shows the address); a server that lies about scheduling and so receives
+or sends invitations twice.
+
 ## 5. Signatures and encryption (EFAIL and friends)
 
 Not implemented in phase 1. When PGP/S/MIME arrives:
@@ -834,6 +908,18 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   name on both — enforced by `account.add`, `account.update`,
   `account.test`, `account.oauthStart` and the `config.toml` import.
   Microsoft tokens go only to Graph, whose URL is built in.
+- Calendar scopes (`Calendars.ReadWrite`, `Calendars.Read.Shared`) are
+  asked for only by a sign-in started for the calendar
+  (`account.oauthStart` `calendar: true`, which the user's Calendar switch
+  starts; a re-sign-in asks for them while the account's `calendar.sync`
+  is on), never by an ordinary mail sign-in, and a refresh asks for no
+  scope, so it cannot widen a grant (`oauth2flow/scope.go`). The scope of
+  the token response is recorded in its own keyring item `oauth2.scope`,
+  written only while the grant allows the calendar and removed when a
+  later grant or refresh answer does not (no item = mail only); the
+  `oauth2.refresh_token` item always holds the bare token; without the scope, or on Graph's `ErrorAccessDenied`,
+  the calendar is `consentRequired` and the mail keeps running. For GOA
+  accounts the account's `CalendarDisabled` is read like `MailDisabled`.
 - The refresh token lives **only** in the keyring (key
   `oauth2.refresh_token`), written by `account.add` / `account.update`
   when they consume the completed session, by the completion hook of a
@@ -985,8 +1071,13 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   their own `config.toml`; and only for a password endpoint over TLS or
   STARTTLS — never for `security: none`, never for OAuth2 endpoints (a
   provider's token goes to the provider's servers only) and never for
-  Graph or the HTTP clients (discovery, sign-in, remote images), which
-  have no such setting. A pinned endpoint accepts exactly that certificate
+  Graph or the other HTTP clients (discovery, sign-in, remote images),
+  which have no such setting. CalDAV is the one HTTP client with a pin
+  (`CalDAVConfig.certificateSha256`, set by the same confirmation; not
+  with an `http` URL): it applies only to the host of `serverUrl` (in
+  discovery, of the typed URL), every other host is verified normally
+  (`calDAVTransport` in `core/accounts_caldav.go`), and a `tlsError` of a
+  CalDAV endpoint carries the same `error.data`. A pinned endpoint accepts exactly that certificate
   and checks neither issuer, name nor validity (a server with its own
   certificate, e.g. a mail bridge reached over a private network, has none
   worth checking); any other certificate fails with `tlsError` reason
@@ -998,7 +1089,7 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   treated as untrusted display data.
 - Every outbound connection goes through `internal/transport`: one
   `TLSConfig` (TLS 1.2+, system roots, host name verified, no insecure
-  knob) and, for IMAP/SMTP endpoints, `EndpointTLSConfig`, which is
+  knob) and, for IMAP/SMTP and CalDAV endpoints, `EndpointTLSConfig`, which is
   `TLSConfig` unless the endpoint pins a certificate — the only place
   that sets `InsecureSkipVerify`, always together with a
   `VerifyConnection` that compares the leaf's SHA-256 with the pin in
@@ -1543,6 +1634,16 @@ Defences:
   to the model;
   `send_message` accepts only drafts created by the same process, at the
   recorded version;
+- calendar tools ([mcp.md](mcp.md), *Calendar*): `list_calendars`,
+  `list_events`, `get_event`, `find_free_time` and `list_invitations`
+  only read, and are absent from a `--reply-only` or `--triage-run`
+  bridge; `create_event` needs `--allow-modify`, and attendees (whose
+  invitations the daemon mails from the user's account) `--allow-send`
+  too, refused with a fixed text before the daemon is asked; the bridge
+  passes no invitation text. No tool updates, deletes or answers an
+  event or invitation. Every event, calendar and invitation string is
+  cleaned and fenced (organisers write them), notes are cut at 8 KiB, and
+  a video-call URL is never returned, only its provider and host;
 - no account management, no configuration, no credentials or server
   settings in any output; the bridge makes no call before the daemon has
   proved the per-run key (§8), on every platform alike, so a process
@@ -1951,8 +2052,29 @@ Advisories) rather than a public issue. No bug bounty.
       errors through `transport`?
 - [ ] Does anything skip certificate verification outside the pinned path
       of `transport.EndpointTLSConfig`, or let a pin reach an OAuth2,
-      Graph or HTTP connection or be set without the user's confirmation
-      of that certificate?
+      Graph or HTTP connection (CalDAV's configured host excepted) or be
+      set without the user's confirmation of that certificate?
+- [ ] Change to what `internal/calendar` (`ics`, `recur`, `tz`, `imip`,
+      `text.go`), `internal/caldav` or `graph/calendar*.go` reads: is every
+      structural and volume cap kept, is every string cleaned and capped
+      before it is stored, does a parse failure withhold the data rather
+      than show raw text, and are there hostile samples in
+      `testdata/calendar`, `testdata/caldav` or `testdata/mime` and a
+      fuzz target?
+- [ ] New calendar link or URL field: https only through `calendar/text.go`,
+      a video-call provider only for its fixed host list, opened only
+      through the confirmation, never fetched by the daemon?
+- [ ] Change to iMIP or to invitation handling: does a REPLY still go only
+      to the stored `ORGANIZER`, is a received REPLY or CANCEL applied only
+      under D10 and the UID-reuse check, never from Junk or Trash, and is
+      nothing answered without the user?
+- [ ] Change to the CalDAV client or account: does the password go only
+      to the configured server's trusted origins, never during discovery
+      and never through a redirect to another origin, and does the pin
+      stay limited to the configured host?
+- [ ] Change to the OAuth2 scopes: are calendar scopes still asked for
+      only on the user's calendar opt-in, and is the recorded scope
+      still the one the provider granted?
 - [ ] New MCP tool or output field: is every mail-derived string cleaned
       and inside the nonce fence, is the tool behind the right flag, are
       its annotations set, and is its output capped?

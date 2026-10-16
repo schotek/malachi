@@ -25,7 +25,7 @@ public sealed class GoContractTests
         var source = GoContract.ApiSource("methods.go");
         var constants = GoContract.StringConstants(source);
         var goMethods = GoContract.SliceIdentifiers(source, "AllMethods").Select(name => constants[name]).ToArray();
-        Assert.Equal(75, goMethods.Length);
+        Assert.Equal(96, goMethods.Length);
         Assert.Equal(goMethods, API.AllMethods);
         Assert.Equal(goMethods, API.Methods.Select(m => m.Name));
         Assert.Equal(ApiCodingTests.GoMethods, goMethods); // the Swift test's copy is current
@@ -45,6 +45,10 @@ public sealed class GoContractTests
         Assert.Equal(API.Notify.MessagesChanged, constants["NotifyMessagesChanged"]);
         Assert.Equal(API.Notify.BoardChanged, constants["NotifyBoardChanged"]);
         Assert.Equal(API.Notify.DraftsChanged, constants["NotifyDraftsChanged"]);
+        Assert.Equal(API.Notify.CalendarChanged, constants["NotifyCalendarChanged"]);
+        Assert.Equal(API.Notify.CalendarState, constants["NotifyCalendarState"]);
+        Assert.Equal(API.Notify.EventAlert, constants["NotifyEventAlert"]);
+        Assert.Equal(API.Notify.InvitationsChanged, constants["NotifyInvitationsChanged"]);
     }
 
     [Fact]
@@ -116,6 +120,28 @@ public sealed class GoContractTests
         { nameof(BoardTrigger), "board.go", "BoardTrigger" },
         { nameof(BoardRunError), "board.go", "BoardRunError" },
         { nameof(QuoteField), "board.go", "QuoteField" },
+        { nameof(CalendarSource), "calendar.go", "CalendarSource" },
+        { nameof(CalendarAccess), "calendar.go", "CalendarAccess" },
+        { nameof(CalendarKind), "calendar.go", "CalendarKind" },
+        { nameof(EventResponse), "calendar.go", "EventResponse" },
+        { nameof(ShowAs), "calendar.go", "ShowAs" },
+        { nameof(EventStatus), "calendar.go", "EventStatus" },
+        { nameof(EditScope), "calendar.go", "EditScope" },
+        { nameof(InvitationMethod), "calendar.go", "InvitationMethod" },
+        { nameof(InvitationKind), "calendar.go", "InvitationKind" },
+        { nameof(InvitationState), "calendar.go", "InvitationState" },
+        { nameof(CalendarSyncStatus), "calendar.go", "CalendarSyncStatus" },
+        { nameof(InvitationsVia), "calendar.go", "InvitationsVia" },
+        { nameof(VideoProvider), "calendar.go", "VideoProvider" },
+        { nameof(CalDAVScheduling), "calendar.go", "CalDAVScheduling" },
+        { nameof(AfterAnswer), "calendar.go", "AfterAnswer" },
+        { nameof(WeekStart), "calendar.go", "WeekStart" },
+        { nameof(RecurrenceFrequency), "calendar.go", "RecurrenceFrequency" },
+        { nameof(AttendeeRole), "calendar.go", "AttendeeRole" },
+        { nameof(AttendeeType), "calendar.go", "AttendeeType" },
+        { nameof(EventAlertState), "calendar.go", "EventAlertState" },
+        { nameof(VideoCallMode), "calendar.go", "VideoCallMode" },
+        { nameof(CalDAVFoundVia), "calendar.go", "CalDAVFoundVia" },
     };
 
     /// <summary>
@@ -155,9 +181,17 @@ public sealed class GoContractTests
     [Fact]
     public void LimitsAreTheConstantsOfTypesGo()
     {
-        var go = GoContract.IntConstants(GoContract.ApiSource("types.go"));
+        // types.go, and calendar.go for the calendar's (docs/calendar.md §4.8).
+        var go = new Dictionary<string, long>(StringComparer.Ordinal);
+        foreach (var file in new[] { "types.go", "calendar.go" })
+        {
+            foreach (var (name, value) in GoContract.IntConstants(GoContract.ApiSource(file)))
+            {
+                go[name] = value;
+            }
+        }
         var limits = typeof(API.Limits).GetFields(BindingFlags.Public | BindingFlags.Static).Where(f => f.IsLiteral).ToArray();
-        Assert.Equal(34, limits.Length);
+        Assert.Equal(62, limits.Length);
         foreach (var limit in limits)
         {
             // Go spells the identifier "IDs"; C# "Ids".
@@ -222,12 +256,14 @@ public sealed class GoContractTests
     /// Every record of the API layer has exactly the JSON members of its Go
     /// struct (types.go, tls.go, errors.go, board.go), field by field, and a
     /// Go int64 is a long: the contract's names as backend/pkg/api spells them.
+    /// The calendar's (calendar.go) are among them; CalendarEvent is Go's Event.
     /// </summary>
     [Fact]
     public void EveryRecordHasTheMembersOfItsGoStruct()
     {
         var structs = GoContract.Structs(
-            GoContract.ApiSource("types.go"), GoContract.ApiSource("tls.go"), GoContract.ApiSource("errors.go"), GoContract.ApiSource("board.go"));
+            GoContract.ApiSource("types.go"), GoContract.ApiSource("tls.go"), GoContract.ApiSource("errors.go"), GoContract.ApiSource("board.go"),
+            GoContract.ApiSource("calendar.go"));
         var records = typeof(API).Assembly.GetTypes().Where(t =>
             t.Namespace == "Malachi.Core.Api" && t.IsClass && t.IsPublic && !t.IsAbstract
             && t.GetProperty("EqualityContract", BindingFlags.NonPublic | BindingFlags.Instance) is not null
@@ -239,6 +275,7 @@ public sealed class GoContractTests
             {
                 nameof(RpcError) => "Error",
                 nameof(TlsErrorData) => "TLSErrorData",
+                nameof(CalendarEvent) => "Event",
                 _ => record.Name,
             };
             Assert.True(structs.ContainsKey(goName), $"backend/pkg/api has no struct {goName} for {record.Name}");
@@ -299,6 +336,7 @@ public sealed class GoContractTests
                 ("rfcMessageId", nameof(Message.RfcMessageId)), ("inReplyTo", nameof(Message.InReplyTo)),
                 ("references", nameof(Message.References)), ("attachments", nameof(Message.Attachments)), ("headers", nameof(Message.Headers)),
                 ("unsubscribe", nameof(Message.Unsubscribe)),
+                ("invitation", nameof(Message.Invitation)), // shadows the summary's, the one key of the same name
             })
             {
                 yield return (json, typeof(Message).GetProperty(property)!.PropertyType);

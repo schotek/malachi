@@ -127,7 +127,7 @@ func managedObjects() map[dbus.ObjectPath]map[string]map[string]dbus.Variant {
 		},
 		msPath: {
 			ifaceAccount: props("ProviderType", ProviderMicrosoft365, "ProviderName", "Microsoft 365", "Identity", "me@contoso.com",
-				"PresentationIdentity", "me@contoso.com", "MailDisabled", false, "AttentionNeeded", true),
+				"PresentationIdentity", "me@contoso.com", "MailDisabled", false, "CalendarDisabled", true, "AttentionNeeded", true),
 			ifaceMail:   props("EmailAddress", "me@contoso.com", "Name", "Me Myself"),
 			ifaceOAuth2: props("ClientId", "b155a604"),
 		},
@@ -169,7 +169,7 @@ func TestAccounts(t *testing.T) {
 	}
 	ms := got[1]
 	if ms.ID != msID || ms.ProviderType != ProviderMicrosoft365 || ms.ProviderName != "Microsoft 365" ||
-		ms.Email != "me@contoso.com" || ms.Name != "Me Myself" || !ms.AttentionNeeded || ms.MailDisabled || !ms.OAuth2 {
+		ms.Email != "me@contoso.com" || ms.Name != "Me Myself" || !ms.AttentionNeeded || ms.MailDisabled || !ms.CalendarDisabled || !ms.OAuth2 {
 		t.Fatalf("microsoft = %+v", ms)
 	}
 	if ms.Mail != (MailSettings{}) {
@@ -186,6 +186,11 @@ func TestAccounts(t *testing.T) {
 	}
 	if g.Mail != want {
 		t.Fatalf("google mail = %+v, want %+v", g.Mail, want)
+	}
+	// Without the property (GOA before the Calendar switch) the calendar
+	// counts as enabled.
+	if g.CalendarDisabled {
+		t.Fatalf("google calendar disabled without the property")
 	}
 }
 

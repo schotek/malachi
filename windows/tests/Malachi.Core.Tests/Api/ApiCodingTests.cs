@@ -1146,22 +1146,25 @@ public sealed partial class ApiCodingTests
         (-32700, "parseError"), (-32600, "invalidRequest"), (-32601, "methodNotFound"), (-32602, "invalidParams"),
         (-32603, "internalError"),
         (1000, "notImplemented"), (1001, "invalidArgument"), (1002, "conflict"), (1003, "cancelled"), (1004, "unavailable"),
-        (1005, "unauthenticated"),
+        (1005, "unauthenticated"), (1006, "readOnly"), (1007, "invitationsUnavailable"),
         (1100, "accountNotFound"), (1101, "folderNotFound"), (1102, "messageNotFound"), (1103, "threadNotFound"),
-        (1104, "draftNotFound"), (1105, "attachmentNotFound"), (1106, "caseNotFound"),
+        (1104, "draftNotFound"), (1105, "attachmentNotFound"), (1106, "caseNotFound"), (1107, "calendarNotFound"),
+        (1108, "eventNotFound"),
         (1200, "authRequired"), (1201, "authFailed"), (1202, "keyringError"), (1203, "oauthClientMissing"),
+        (1204, "calendarConsentRequired"),
         (1300, "offline"), (1301, "networkError"), (1302, "serverError"), (1303, "tlsError"), (1304, "serverTimeout"),
-        (1305, "messageGone"),
+        (1305, "messageGone"), (1306, "eventGone"),
         (1400, "storageError"), (1401, "migrationFailed"),
         (1500, "malformedMessage"), (1501, "sanitizeFailed"), (1502, "attachmentTooBig"), (1503, "partNotFound"),
-        (1504, "partNotDownloaded"), (1505, "unsubscribeFailed"), (1506, "quoteNotFound"),
+        (1504, "partNotDownloaded"), (1505, "unsubscribeFailed"), (1506, "quoteNotFound"), (1507, "malformedCalendar"),
+        (1508, "recurrenceUnsupported"),
     ];
 
     [Fact]
     public void ErrorCodesAreNamed()
     {
-        Assert.Equal(37, ErrorCode.All.Count);
-        Assert.Equal(37, ErrorCode.All.Distinct().Count());
+        Assert.Equal(45, ErrorCode.All.Count);
+        Assert.Equal(45, ErrorCode.All.Distinct().Count());
         Assert.Equal(GoCodes.Select(c => c.Code), ErrorCode.All.Select(c => c.Value));
         Assert.Equal(GoCodes.Select(c => c.Name), ErrorCode.All.Select(c => c.Name));
         foreach (var code in ErrorCode.All)
@@ -1191,6 +1194,14 @@ public sealed partial class ApiCodingTests
         Assert.True(ErrorCode.UnsubscribeFailed == 1505 && new ErrorCode(1505).Name == "unsubscribeFailed");
         Assert.True(ErrorCode.CaseNotFound == 1106 && new ErrorCode(1106).Name == "caseNotFound");
         Assert.True(ErrorCode.QuoteNotFound == 1506 && new ErrorCode(1506).Name == "quoteNotFound");
+        Assert.True(ErrorCode.ReadOnly == 1006 && new ErrorCode(1006).Name == "readOnly");
+        Assert.True(ErrorCode.InvitationsUnavailable == 1007 && new ErrorCode(1007).Name == "invitationsUnavailable");
+        Assert.True(ErrorCode.CalendarNotFound == 1107 && new ErrorCode(1107).Name == "calendarNotFound");
+        Assert.True(ErrorCode.EventNotFound == 1108 && new ErrorCode(1108).Name == "eventNotFound");
+        Assert.True(ErrorCode.CalendarConsentRequired == 1204 && new ErrorCode(1204).Name == "calendarConsentRequired");
+        Assert.True(ErrorCode.EventGone == 1306 && new ErrorCode(1306).Name == "eventGone");
+        Assert.True(ErrorCode.MalformedCalendar == 1507 && new ErrorCode(1507).Name == "malformedCalendar");
+        Assert.True(ErrorCode.RecurrenceUnsupported == 1508 && new ErrorCode(1508).Name == "recurrenceUnsupported");
     }
 
     // MARK: Params encoding
@@ -1306,20 +1317,26 @@ public sealed partial class ApiCodingTests
         "board.archive", "board.trash", "board.unflag", "board.discardDraft", "board.setDraft", "board.queue", "board.annotate",
         "board.commit", "board.setCommitment", "board.preferences", "board.setPreferences",
         "board.runStart", "board.runEnd",
+        "account.discoverCalDAV", "account.listCalDAVCalendars",
+        "calendar.list", "calendar.update", "calendar.sync", "calendar.preferences",
+        "calendar.setPreferences", "calendar.freeBusy", "calendar.findFreeTime",
+        "event.list", "event.get", "event.search", "event.create", "event.update",
+        "event.delete", "event.respond", "event.snoozeAlert", "event.dismissAlert",
+        "invitation.list", "invitation.respond", "invitation.applyCancel",
     ];
 
     [Fact]
     public void MethodTableMatchesGo()
     {
-        Assert.Equal(75, API.AllMethods.Count);
-        Assert.Equal(75, API.AllMethods.Distinct().Count()); // no duplicates
+        Assert.Equal(96, API.AllMethods.Count);
+        Assert.Equal(96, API.AllMethods.Distinct().Count()); // no duplicates
         Assert.Equal(GoMethods, API.AllMethods);
         Assert.Equal(API.AllMethods.Count, API.Methods.Count);
         Assert.Equal(API.SystemInfoName, API.SystemInfo.Name);
         Assert.Equal(
             [
                 "notify.newMessage", "notify.syncState", "notify.authRequired", "notify.accountsChanged", "notify.messagesChanged", "notify.boardChanged",
-                "notify.draftsChanged",
+                "notify.draftsChanged", "notify.calendarChanged", "notify.calendarState", "notify.eventAlert", "notify.invitationsChanged",
             ],
             API.AllNotifications);
     }
@@ -1362,6 +1379,18 @@ public sealed partial class ApiCodingTests
         // One value for both, as in the GTK UI (issue_actions.go issueTimeout).
         Assert.Equal(TimeSpan.FromSeconds(45), API.IssueTransitions.Timeout);
         Assert.Equal(TimeSpan.FromSeconds(45), API.IssueTransition.Timeout);
+        // The calendar calls that talk to a server: docs/api.md says what a client allows.
+        Assert.Equal(TimeSpan.FromSeconds(20), API.AccountDiscoverCalDAV.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(45), API.AccountListCalDAVCalendars.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(20), API.CalendarFreeBusy.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(20), API.CalendarFindFreeTime.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(10), API.EventList.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(45), API.EventCreate.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(45), API.EventUpdate.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(45), API.EventDelete.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(45), API.EventRespond.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(45), API.InvitationRespond.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(45), API.InvitationApplyCancel.Timeout);
         var special = new HashSet<string>(StringComparer.Ordinal)
         {
             "system.info", "system.hello", "system.authenticate", "message.body",
@@ -1370,6 +1399,8 @@ public sealed partial class ApiCodingTests
             "account.oauthStart", "account.oauthWait", "message.download",
             "account.detectSite", "account.listSpaces", "issue.transitions", "issue.transition",
             "message.unsubscribe",
+            "account.discoverCalDAV", "account.listCalDAVCalendars", "calendar.freeBusy", "calendar.findFreeTime", "event.list",
+            "event.create", "event.update", "event.delete", "event.respond", "invitation.respond", "invitation.applyCancel",
         };
         foreach (var m in API.Methods.Where(m => !special.Contains(m.Name)))
         {

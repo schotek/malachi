@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- X-MALACHI-TEST: hrefs on another origin, scheme-relative, with dot segments, user info, javascript: and control characters are dropped; only good.ics stays -->
+<d:multistatus xmlns:d="DAV:">
+<d:response><d:href>https://evil.test/remote.php/dav/calendars/jana/personal/x.ics</d:href><d:propstat><d:prop><d:getetag>"1"</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+<d:response><d:href>//evil.test/y.ics</d:href><d:propstat><d:prop><d:getetag>"2"</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+<d:response><d:href>http://cloud.example.test/remote.php/dav/calendars/jana/personal/plain.ics</d:href><d:propstat><d:prop><d:getetag>"3"</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+<d:response><d:href>https://cloud.example.test:8443/remote.php/dav/calendars/jana/personal/port.ics</d:href><d:propstat><d:prop><d:getetag>"4"</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+<d:response><d:href>../../../../etc/passwd</d:href><d:propstat><d:prop><d:getetag>"5"</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+<d:response><d:href>https://jana:pw@cloud.example.test/remote.php/dav/calendars/jana/personal/userinfo.ics</d:href><d:propstat><d:prop><d:getetag>"6"</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+<d:response><d:href>javascript:alert(1)</d:href><d:propstat><d:prop><d:getetag>"7"</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+<d:response><d:href>/remote.php/dav/calendars/jana/personal/bad&#x202E;name.ics</d:href><d:propstat><d:prop><d:getetag>"8"</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+<d:response><d:href>good.ics</d:href><d:propstat><d:prop><d:getetag>"9"</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+</d:multistatus>

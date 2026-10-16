@@ -23,14 +23,25 @@ const (
 	// 1000–1099: general.
 	CodeNotImplemented  ErrorCode = 1000
 	CodeInvalidArgument ErrorCode = 1001
-	CodeConflict        ErrorCode = 1002 // optimistic-concurrency conflict (drafts)
-	CodeCancelled       ErrorCode = 1003
-	CodeUnavailable     ErrorCode = 1004 // backend busy / shutting down
+	// CodeConflict: optimistic-concurrency conflict (drafts); for an event
+	// write whose etag is not the server's current one, Error.Data is a
+	// ConflictEventData with the current event.
+	CodeConflict    ErrorCode = 1002
+	CodeCancelled   ErrorCode = 1003
+	CodeUnavailable ErrorCode = 1004 // backend busy / shutting down
 	// CodeUnauthenticated: the RPC connection has not completed the
 	// handshake (docs/api.md §1.4), or the handshake failed; the daemon
 	// closes the connection after this answer. It is not about mail
 	// accounts, whose sign-in problems are the 1200s.
 	CodeUnauthenticated ErrorCode = 1005
+	// CodeReadOnly: the calendar or event cannot be changed by the user (a
+	// read-only or shared calendar, a birthdays/holidays calendar, a change
+	// only the organiser may make).
+	CodeReadOnly ErrorCode = 1006
+	// CodeInvitationsUnavailable: the event has attendees, but neither the
+	// server schedules nor a mail account can send the invitations
+	// (CalDAVConfig.MailAccountID empty or not a compose account).
+	CodeInvitationsUnavailable ErrorCode = 1007
 
 	// 1100–1199: not found.
 	CodeAccountNotFound ErrorCode = 1100
@@ -45,6 +56,12 @@ const (
 	// commitment) with that id; the thread left the board or the account
 	// is gone (docs/api.md §4.13).
 	CodeCaseNotFound ErrorCode = 1106
+	// CodeCalendarNotFound: no calendar with that id (removed, its account
+	// gone or its sync switched off).
+	CodeCalendarNotFound ErrorCode = 1107
+	// CodeEventNotFound: no stored event with that id, or the recurrence id
+	// names no occurrence of it.
+	CodeEventNotFound ErrorCode = 1108
 
 	// 1200–1299: authentication.
 	CodeAuthRequired ErrorCode = 1200 // credentials missing or token expired; see notify.authRequired
@@ -54,6 +71,9 @@ const (
 	// client id for the provider and none is configured (config.toml
 	// [oauth2.*], the account's clientId, or a built-in one).
 	CodeOAuthClientMissing ErrorCode = 1203
+	// CodeCalendarConsentRequired: the account's sign-in does not allow
+	// calendar access; Error.Data is a CalendarConsentRequiredData.
+	CodeCalendarConsentRequired ErrorCode = 1204
 
 	// 1300–1399: network and remote servers.
 	CodeOffline      ErrorCode = 1300
@@ -67,6 +87,9 @@ const (
 	// client deleted or moved it); the local row and its text still exist
 	// until the next sync removes them.
 	CodeMessageGone ErrorCode = 1305
+	// CodeEventGone: the server no longer has the event (deleted or moved
+	// elsewhere); the next pass removes the local copy.
+	CodeEventGone ErrorCode = 1306
 
 	// 1400–1499: local storage.
 	CodeStorageError    ErrorCode = 1400
@@ -92,6 +115,13 @@ const (
 	// daemon did not find verbatim where it must be; Error.Data is a
 	// QuoteNotFoundData naming the field.
 	CodeQuoteNotFound ErrorCode = 1506
+	// CodeMalformedCalendar: an iCalendar object or a server's calendar
+	// answer could not be read even leniently; the data is withheld.
+	CodeMalformedCalendar ErrorCode = 1507
+	// CodeRecurrenceUnsupported: the event's recurrence rule is outside
+	// what the daemon expands or edits; the event shows its first instance
+	// only and may be edited with scope all only.
+	CodeRecurrenceUnsupported ErrorCode = 1508
 )
 
 // String returns the stable symbolic name of the code.
@@ -103,43 +133,51 @@ func (c ErrorCode) String() string {
 }
 
 var codeNames = map[ErrorCode]string{
-	CodeParseError:         "parseError",
-	CodeInvalidRequest:     "invalidRequest",
-	CodeMethodNotFound:     "methodNotFound",
-	CodeInvalidParams:      "invalidParams",
-	CodeInternalError:      "internalError",
-	CodeNotImplemented:     "notImplemented",
-	CodeInvalidArgument:    "invalidArgument",
-	CodeConflict:           "conflict",
-	CodeCancelled:          "cancelled",
-	CodeUnavailable:        "unavailable",
-	CodeUnauthenticated:    "unauthenticated",
-	CodeAccountNotFound:    "accountNotFound",
-	CodeFolderNotFound:     "folderNotFound",
-	CodeMessageNotFound:    "messageNotFound",
-	CodeThreadNotFound:     "threadNotFound",
-	CodeDraftNotFound:      "draftNotFound",
-	CodeAttachmentNotFound: "attachmentNotFound",
-	CodeCaseNotFound:       "caseNotFound",
-	CodeAuthRequired:       "authRequired",
-	CodeAuthFailed:         "authFailed",
-	CodeKeyringError:       "keyringError",
-	CodeOAuthClientMissing: "oauthClientMissing",
-	CodeOffline:            "offline",
-	CodeNetworkError:       "networkError",
-	CodeServerError:        "serverError",
-	CodeTLSError:           "tlsError",
-	CodeServerTimeout:      "serverTimeout",
-	CodeMessageGone:        "messageGone",
-	CodeStorageError:       "storageError",
-	CodeMigrationFailed:    "migrationFailed",
-	CodeMalformedMessage:   "malformedMessage",
-	CodeSanitizeFailed:     "sanitizeFailed",
-	CodeAttachmentTooBig:   "attachmentTooBig",
-	CodePartNotFound:       "partNotFound",
-	CodePartNotDownloaded:  "partNotDownloaded",
-	CodeUnsubscribeFailed:  "unsubscribeFailed",
-	CodeQuoteNotFound:      "quoteNotFound",
+	CodeParseError:              "parseError",
+	CodeInvalidRequest:          "invalidRequest",
+	CodeMethodNotFound:          "methodNotFound",
+	CodeInvalidParams:           "invalidParams",
+	CodeInternalError:           "internalError",
+	CodeNotImplemented:          "notImplemented",
+	CodeInvalidArgument:         "invalidArgument",
+	CodeConflict:                "conflict",
+	CodeCancelled:               "cancelled",
+	CodeUnavailable:             "unavailable",
+	CodeUnauthenticated:         "unauthenticated",
+	CodeReadOnly:                "readOnly",
+	CodeInvitationsUnavailable:  "invitationsUnavailable",
+	CodeAccountNotFound:         "accountNotFound",
+	CodeFolderNotFound:          "folderNotFound",
+	CodeMessageNotFound:         "messageNotFound",
+	CodeThreadNotFound:          "threadNotFound",
+	CodeDraftNotFound:           "draftNotFound",
+	CodeAttachmentNotFound:      "attachmentNotFound",
+	CodeCaseNotFound:            "caseNotFound",
+	CodeCalendarNotFound:        "calendarNotFound",
+	CodeEventNotFound:           "eventNotFound",
+	CodeAuthRequired:            "authRequired",
+	CodeAuthFailed:              "authFailed",
+	CodeKeyringError:            "keyringError",
+	CodeOAuthClientMissing:      "oauthClientMissing",
+	CodeCalendarConsentRequired: "calendarConsentRequired",
+	CodeOffline:                 "offline",
+	CodeNetworkError:            "networkError",
+	CodeServerError:             "serverError",
+	CodeTLSError:                "tlsError",
+	CodeServerTimeout:           "serverTimeout",
+	CodeMessageGone:             "messageGone",
+	CodeEventGone:               "eventGone",
+	CodeStorageError:            "storageError",
+	CodeMigrationFailed:         "migrationFailed",
+	CodeMalformedMessage:        "malformedMessage",
+	CodeSanitizeFailed:          "sanitizeFailed",
+	CodeAttachmentTooBig:        "attachmentTooBig",
+	CodePartNotFound:            "partNotFound",
+	CodePartNotDownloaded:       "partNotDownloaded",
+	CodeUnsubscribeFailed:       "unsubscribeFailed",
+	CodeQuoteNotFound:           "quoteNotFound",
+	CodeMalformedCalendar:       "malformedCalendar",
+	CodeRecurrenceUnsupported:   "recurrenceUnsupported",
 }
 
 // Error is the JSON-RPC error object. It implements the Go error interface so
