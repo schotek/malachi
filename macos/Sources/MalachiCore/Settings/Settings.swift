@@ -119,7 +119,10 @@ public final class Settings {
     public static func registrationDefaults() -> [String: Any] {
         [
             Key.launchAtLogin.rawValue: false,
-            Key.runInBackground.rawValue: false,
+            // macOS-only default (macos/README.md): closing the main window
+            // hides it and the Dock icon brings it back, as Mac apps do;
+            // the gschema's is false.
+            Key.runInBackground.rawValue: true,
             Key.markReadDelay.rawValue: 2,
             Key.confirmDelete.rawValue: true,
             Key.desktopNotifications.rawValue: true,

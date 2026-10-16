@@ -692,7 +692,9 @@ are those of `data/io.github.schotek.Malachi.gschema.xml`
 `collapsed-accounts`, `favourite-folders`, `assistant-menu`,
 `assistant-target`, the latter read through `Assistant.parseTarget`, so an
 unknown nick is Claude Desktop) plus one macOS-only key,
-`command-r` (`reply`, the default, or `refresh`; §3). The board adds
+`command-r` (`reply`, the default, or `refresh`; §3). One default differs
+from the schema: `run-in-background` is on (closing the main window hides
+it, the Dock icon brings it back; `macos/README.md`). The board adds
 `board-default-style` (`list`, the default, `columns` or `today`; Settings
 → General → Board), the style of its first show after launch, later shows
 keeping the user's last one. Numeric keys are

@@ -38,6 +38,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     let content: MainContentViewController
     /// The toast overlay of the message pane (window.blp `toast_overlay`).
     let toasts: ToastPresenter
+    /// Closed in full screen with "Run in Background": the window hides
+    /// once it has left full screen (`windowShouldClose`).
+    private var hidesAfterFullScreen = false
 
     /// The selection-based actions; nil (everything disabled) until the
     /// app installs them.
@@ -389,6 +392,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     /// Presents the window (a hidden one comes back) and activates the app.
     func showMainWindow() {
+        hidesAfterFullScreen = false
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate()
@@ -396,12 +400,28 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     // MARK: NSWindowDelegate
 
-    /// "Run in Background": closing hides the window; the application and
-    /// the daemon live on until Quit (window.go `ConnectCloseRequest`).
+    /// "Run in Background" (on by default on the Mac): closing hides the
+    /// window, the application keeps its Dock icon and the daemon lives on
+    /// until Quit; the Dock icon brings the window back
+    /// (`applicationShouldHandleReopen`; window.go `ConnectCloseRequest`).
+    /// A full-screen window leaves full screen first and hides after it
+    /// (`windowDidExitFullScreen`): hidden in place it would leave its
+    /// Space empty and black.
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard state.settings.runInBackground else { return true }
-        sender.orderOut(nil)
+        if sender.styleMask.contains(.fullScreen) {
+            hidesAfterFullScreen = true
+            sender.toggleFullScreen(nil)
+        } else {
+            sender.orderOut(nil)
+        }
         return false
+    }
+
+    func windowDidExitFullScreen(_ notification: Foundation.Notification) {
+        guard hidesAfterFullScreen else { return }
+        hidesAfterFullScreen = false
+        window?.orderOut(nil)
     }
 
     /// A resize by the user (or a tile, a zoom) to `frameSize`: the

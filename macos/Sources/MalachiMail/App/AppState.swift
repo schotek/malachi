@@ -281,9 +281,13 @@ final class AppState {
     /// Background") and brings the application to the front, like the
     /// GTK `app.show` action.
     func showMainWindow() {
-        mainWindow?.showWindow(nil)
-        mainWindow?.window?.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+        if let main = mainWindow as? MainWindowController {
+            main.showMainWindow()
+        } else {
+            mainWindow?.showWindow(nil)
+            mainWindow?.window?.makeKeyAndOrderFront(nil)
+            NSApp.activate()
+        }
     }
 }
 

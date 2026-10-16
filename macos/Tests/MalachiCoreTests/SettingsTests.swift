@@ -36,7 +36,7 @@ private final class Scratch {
         #expect(!s.groupByConversation)
         #expect(s.textZoom == 100)
         #expect(!s.launchAtLogin)
-        #expect(!s.runInBackground)
+        #expect(s.runInBackground)
         #expect(s.confirmDelete)
         #expect(s.desktopNotifications)
         #expect(!s.notificationSound)
