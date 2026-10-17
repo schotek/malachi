@@ -22,7 +22,10 @@ import (
 // "<v>:done"). A higher calendar.ParserVersion starts the scan over and
 // reads again every row an older parser wrote (InvitationsBelowVersion).
 
-// The pace of the pass; variables so that tests can change them.
+// The pace of the pass; variables so that tests can change them. Each
+// message read is written in the store's turn for background writers
+// (store.Paced): the scan runs beside the board's re-evaluation and the
+// calendar passes of the same first start.
 var (
 	invitationBackfillRows  = 2000
 	invitationBackfillPause = 20 * time.Millisecond
@@ -63,7 +66,7 @@ func (b *Backend) backfillInvitations(ctx context.Context) error {
 			if r.HasInvite || !since.IsZero() && invitationScanDate(r).Before(since) {
 				continue
 			}
-			if b.backfillInvitation(ctx, r.AccountID, r.MessageID) {
+			if b.backfillInvitationPaced(ctx, r.AccountID, r.MessageID) {
 				accounts[r.AccountID] = true
 			}
 		}
@@ -116,7 +119,7 @@ func (b *Backend) rereadInvitations(ctx context.Context) error {
 			if err != nil {
 				continue
 			}
-			if b.backfillInvitation(ctx, inv.AccountID, id) {
+			if b.backfillInvitationPaced(ctx, inv.AccountID, id) {
 				accounts[inv.AccountID] = true
 			}
 			if after, err := b.store.GetInvitation(ctx, id); err == nil && after.ParserVersion < calendar.ParserVersion {
@@ -136,6 +139,19 @@ func (b *Backend) rereadInvitations(ctx context.Context) error {
 		b.invitationsChanged(acc)
 	}
 	return nil
+}
+
+// backfillInvitationPaced is backfillInvitation in the store's turn for
+// background writers; false when ctx ended while waiting for it.
+func (b *Backend) backfillInvitationPaced(ctx context.Context, accountID, messageID string) bool {
+	wrote := false
+	if err := b.store.Paced(ctx, func() error {
+		wrote = b.backfillInvitation(ctx, accountID, messageID)
+		return nil
+	}); err != nil {
+		return false
+	}
+	return wrote
 }
 
 // backfillInvitation reads one message's invitation; true when a row was

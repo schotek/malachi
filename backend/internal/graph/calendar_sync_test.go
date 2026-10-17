@@ -251,6 +251,29 @@ func TestCalendarSyncDeltaFirstPassAndIncrement(t *testing.T) {
 	}
 }
 
+// The engine's sink fails with an *api.Error (storageError when the store
+// refused the write): Sync returns it with its code, not as the network's
+// (readError maps only what it does not know).
+func TestCalendarSyncSinkErrorKeepsItsCode(t *testing.T) {
+	f := newFakeCal(t)
+	f.calendars = []map[string]any{{"id": "CAL-A", "isDefaultCalendar": true}}
+	f.add("CAL-A", single("S1", calT0.Add(24*time.Hour), 30*time.Minute, nil))
+	p := f.provider(CalendarProviderOptions{})
+	sink := &recSink{err: api.NewError(api.CodeStorageError, "calsync: replace resource: database is locked")}
+	_, err := p.Sync(context.Background(), storedCal("CAL-A", true), calWin, sink)
+	var ae *api.Error
+	if !errors.As(err, &ae) || ae.Code != api.CodeStorageError {
+		t.Fatalf("sink's storageError came back as %v", err)
+	}
+	// A plain error of the sink would be the network's: that is why the
+	// engine never hands one over.
+	sink.err = errors.New("replace resource: database is locked")
+	_, err = p.Sync(context.Background(), storedCal("CAL-A", true), calWin, sink)
+	if !errors.As(err, &ae) || ae.Code != api.CodeNetworkError {
+		t.Fatalf("plain sink error came back as %v", err)
+	}
+}
+
 func TestCalendarSyncPerCalendarDeltaAndStaleToken(t *testing.T) {
 	f := newFakeCal(t)
 	f.calendars = []map[string]any{{"id": "CAL-A", "isDefaultCalendar": true}, {"id": "CAL-B"}}

@@ -31,8 +31,9 @@ var (
 
 func boardRulesDone() string { return board.RulesVersion + ":done" }
 
-// backfillBoard marks dirty, in batches of messages, the threads with a
-// visible member within the longest window of the preferences; the worker
+// backfillBoard marks dirty, in batches of messages (each in the store's
+// turn for background writers, store.Paced), the threads with a visible
+// member within the longest window of the preferences; the worker
 // evaluates them. The cursor is saved after every batch; an interrupted
 // pass resumes where it stopped. With the board off it does nothing (the
 // pass runs when it is turned on). A restart (restartBoardBackfill) while
@@ -78,7 +79,13 @@ func (b *Backend) backfillBoardPass(ctx context.Context, gen int64) (restarted b
 		if err := ctx.Err(); err != nil {
 			return false, err
 		}
-		last, visited, err := b.store.MarkBoardDirtyBatch(ctx, since, after, boardBackfillRows)
+		var last string
+		var visited int
+		err := b.store.Paced(ctx, func() error {
+			var err error
+			last, visited, err = b.store.MarkBoardDirtyBatch(ctx, since, after, boardBackfillRows)
+			return err
+		})
 		if err != nil {
 			return false, err
 		}

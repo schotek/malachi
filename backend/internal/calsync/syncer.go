@@ -237,8 +237,29 @@ func (s *syncer) checkVersion(ctx context.Context, cals []store.Calendar) (bool,
 	return true, nil
 }
 
+// storageError makes an *api.Error of a failure of the store (a locked
+// database, a row that vanished): storageError, with the message cleaned.
+// An *api.Error passes through, and so does a cancelled or expired
+// context, which fail says nothing about. The sink wraps the store's errors
+// with it before a provider sees them: a provider maps every error it does
+// not know onto its network class (graph.ToAPIError, caldav.ToAPIError —
+// "graph: replace resource: database is locked" was once offline /
+// networkError), and the account would wait for a network that is fine.
+func storageError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var ae *api.Error
+	if errors.As(err, &ae) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	return api.NewError(api.CodeStorageError, "calsync: %s", cleanMessage(err.Error()))
+}
+
 // statusOf classifies an error: offline, authRequired, consentRequired
-// (the account waits with backoff) or error.
+// (the account waits with backoff) or error (storageError among them: a
+// failure of the store is the calendar's error and backoff, never a wait
+// for the network).
 func statusOf(err error) (api.CalendarSyncStatus, *api.Error) {
 	var ae *api.Error
 	if !errors.As(err, &ae) {
@@ -627,7 +648,7 @@ func (s *syncer) syncCalendar(ctx context.Context, prov Provider, c store.Calend
 		cal.SyncToken, cal.CTag = "", ""
 	}
 	sk := newSink(s.sv, s.account, c, win)
-	sk.ctx = ctx
+	sk.ctx, sk.paced = ctx, true
 	res, err := prov.Sync(ctx, cal, win, sk)
 	defer func() {
 		s.sv.notify.calendarChanged(s.account.ID, sk.changedCalendars(), sk.span)
@@ -663,7 +684,9 @@ func (s *syncer) syncCalendar(ctx context.Context, prov Provider, c store.Calend
 	return nil
 }
 
-// sink writes one Sync's changes (Sink).
+// sink writes one Sync's changes (Sink). Every error it returns to the
+// provider is an *api.Error (storageError for the store's), so that the
+// provider's own mapping leaves it alone.
 type sink struct {
 	sv      *Supervisor
 	account store.Account
@@ -674,6 +697,20 @@ type sink struct {
 	seen    map[string]bool
 	span    span
 	changed bool
+	// paced: the writes take the store's turn for background writers
+	// (store.Paced) — a pass, which may write a whole calendar one object
+	// after another; not a user's write (ApplyWrite), which stores one
+	// result and answers.
+	paced bool
+}
+
+// write runs one object's writes: in the store's turn when the sink is
+// paced, and the error as the provider must see it.
+func (k *sink) write(fn func() error) error {
+	if !k.paced {
+		return storageError(fn())
+	}
+	return storageError(k.sv.opts.Store.Paced(k.ctx, fn))
 }
 
 func newSink(sv *Supervisor, a store.Account, cal store.Calendar, win Window) *sink {
@@ -694,45 +731,49 @@ func (k *sink) Upsert(obj Object) error {
 		return errors.New("calsync: object without a remote id")
 	}
 	k.seen[obj.RemoteID] = true
-	res, err := storeObject(k.ctx, k.sv.opts.Store, k.cal, obj, k.win, k.sv.loc, k.daemon)
-	if err != nil {
-		return err
-	}
-	k.span.merge(res.span)
-	if !res.span.empty {
-		k.changed = true
-	}
-	if k.daemon {
-		state := store.ResourceStored
-		if res.outside {
-			state = store.ResourceOutside
-		}
-		if err := k.sv.opts.Store.PutResources(k.ctx, k.cal.ID, []store.Resource{{Href: obj.RemoteID, ETag: obj.ETag, State: state}}); err != nil {
+	return k.write(func() error {
+		res, err := storeObject(k.ctx, k.sv.opts.Store, k.cal, obj, k.win, k.sv.loc, k.daemon)
+		if err != nil {
 			return err
 		}
-	}
-	return nil
+		k.span.merge(res.span)
+		if !res.span.empty {
+			k.changed = true
+		}
+		if k.daemon {
+			state := store.ResourceStored
+			if res.outside {
+				state = store.ResourceOutside
+			}
+			if err := k.sv.opts.Store.PutResources(k.ctx, k.cal.ID, []store.Resource{{Href: obj.RemoteID, ETag: obj.ETag, State: state}}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // Remove deletes one object's rows.
 func (k *sink) Remove(remoteID string) error {
 	k.seen[remoteID] = true
 	st := k.sv.opts.Store
-	old, err := st.EventsByRemoteID(k.ctx, k.cal.ID, remoteID)
-	if err != nil {
-		return err
-	}
-	if len(old) > 0 {
-		rowsSpan(&k.span, old)
-		k.changed = true
-		if _, err := st.RemoveResource(k.ctx, k.cal.ID, remoteID); err != nil {
+	return k.write(func() error {
+		old, err := st.EventsByRemoteID(k.ctx, k.cal.ID, remoteID)
+		if err != nil {
 			return err
 		}
-	}
-	if k.daemon {
-		return st.DeleteResources(k.ctx, k.cal.ID, []string{remoteID})
-	}
-	return nil
+		if len(old) > 0 {
+			rowsSpan(&k.span, old)
+			k.changed = true
+			if _, err := st.RemoveResource(k.ctx, k.cal.ID, remoteID); err != nil {
+				return err
+			}
+		}
+		if k.daemon {
+			return st.DeleteResources(k.ctx, k.cal.ID, []string{remoteID})
+		}
+		return nil
+	})
 }
 
 // removeUnseen removes what a Full pass did not name: stored events and

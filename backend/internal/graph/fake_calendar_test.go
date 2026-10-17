@@ -422,14 +422,29 @@ func (f *fakeCal) event(w http.ResponseWriter, r *http.Request, seg []string, bo
 	}
 }
 
-// recSink records what a Sync hands over.
+// recSink records what a Sync hands over; with err set, every Upsert and
+// Remove fails with it.
 type recSink struct {
 	upserts []calendar.Object
 	removes []string
+	err     error
 }
 
-func (s *recSink) Upsert(o calsync.Object) error { s.upserts = append(s.upserts, o); return nil }
-func (s *recSink) Remove(id string) error        { s.removes = append(s.removes, id); return nil }
+func (s *recSink) Upsert(o calsync.Object) error {
+	if s.err != nil {
+		return s.err
+	}
+	s.upserts = append(s.upserts, o)
+	return nil
+}
+
+func (s *recSink) Remove(id string) error {
+	if s.err != nil {
+		return s.err
+	}
+	s.removes = append(s.removes, id)
+	return nil
+}
 
 func (s *recSink) byID(id string) *calendar.Object {
 	for i := range s.upserts {

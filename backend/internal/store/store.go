@@ -85,6 +85,10 @@ type Store struct {
 	// not know that the sweep has reported (SweepMessageFiles), by account.
 	foreignDirs sync.Map
 
+	// turn is the background writers' turn (Paced): capacity 1, held while
+	// a paced write runs and pauses.
+	turn chan struct{}
+
 	// Test hooks; nil in the daemon. createFile makes every file the raw
 	// writers and the staging area write (a test runs it out of space),
 	// phaseACommit runs inside CommitMessageRaw's phase A just before a
@@ -132,7 +136,7 @@ func Open(ctx context.Context, path string, log *slog.Logger) (*Store, error) {
 	}
 	_ = os.Chmod(path, 0o600)
 
-	s := &Store{db: db, path: path, log: log.With("component", "store"), rawLocks: map[string]*rawLock{}}
+	s := &Store{db: db, path: path, log: log.With("component", "store"), rawLocks: map[string]*rawLock{}, turn: make(chan struct{}, 1)}
 	if err := s.migrate(ctx); err != nil {
 		db.Close()
 		return nil, err

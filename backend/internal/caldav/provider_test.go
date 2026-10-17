@@ -37,6 +37,7 @@ type fakeEngine struct {
 	objs    map[string]calendar.Object
 	res     map[string]store.Resource
 	failOn  string
+	failErr error // the error of failOn; nil = a plain one
 	removed int
 }
 
@@ -48,6 +49,9 @@ func (e *fakeEngine) Upsert(o calendar.Object) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.failOn != "" && strings.HasSuffix(o.RemoteID, e.failOn) {
+		if e.failErr != nil {
+			return e.failErr
+		}
 		return errors.New("sink failed")
 	}
 	e.ops = append(e.ops, "+"+o.RemoteID)
@@ -331,6 +335,14 @@ func TestProviderSinkErrorEndsPass(t *testing.T) {
 	e.failOn = "a.ics"
 	if _, err := p.Sync(t.Context(), store.Calendar{ID: "c", RemoteID: coll}, testWin, e); err == nil {
 		t.Fatal("sink error not returned")
+	}
+	// The engine's *api.Error (storageError for a failure of the store)
+	// keeps its code: the provider's mapping is for its own errors.
+	e.failErr = api.NewError(api.CodeStorageError, "calsync: database is locked")
+	_, err := p.Sync(t.Context(), store.Calendar{ID: "c", RemoteID: coll}, testWin, e)
+	var ae *api.Error
+	if !errors.As(err, &ae) || ae.Code != api.CodeStorageError {
+		t.Fatalf("sink's storageError came back as %v", err)
 	}
 }
 

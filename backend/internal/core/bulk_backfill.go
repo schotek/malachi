@@ -80,7 +80,7 @@ func (b *Backend) backfillBulk(ctx context.Context) error {
 				changed[c.AccountID] = true
 			}
 		}
-		if err := b.store.SetBulkBatch(ctx, verdicts); err != nil {
+		if err := b.store.Paced(ctx, func() error { return b.store.SetBulkBatch(ctx, verdicts) }); err != nil {
 			return err
 		}
 		classified += len(batch)

@@ -23,12 +23,14 @@ import (
 // The board's recomputation (docs/api.md §4.13): the store's triggers
 // mark threads dirty as messages are stored, moved, flagged, deleted or
 // merged; one worker drains the dirty set in small batches (each one write
-// transaction within the store's budgets, with a pause after it so that the
-// syncers' writes keep flowing), judging each thread with the rules
-// (board_adapter.go). It wakes when the notifier sees new mail, changed
-// messages or a sync pass ending, when a board method changed something,
-// on a ticker, and when the earliest remind comes due. What changed is told
-// to the clients by notify.boardChanged, at most once per boardNotifyEvery,
+// transaction within the store's budgets, in the store's turn for
+// background writers and followed by a pause at least as long as it took
+// — store.Paced — so that the syncers' writes keep flowing), judging each
+// thread with the rules (board_adapter.go). It wakes when the notifier
+// sees new mail, changed messages or a sync pass ending, when a board
+// method changed something, on a ticker, and when the earliest remind
+// comes due. What changed is told to the clients by notify.boardChanged,
+// at most once per boardNotifyEvery,
 // naming the accounts (absent: any).
 
 // The pace and the bounds; variables so that tests can change them.
@@ -243,9 +245,14 @@ func (b *Backend) drainBoard(ctx context.Context) error {
 		}
 		now := b.boardNow()
 		wants := &boardWants{}
-		d, err := b.store.DrainBoard(ctx, store.BoardDrainOptions{
-			Limit: boardBatch, Now: now, Since: boardSinceOf(now, prefs.Windows), Assistant: prefs.Assistant,
-		}, b.boardDecider(accounts, now, wants))
+		var d store.BoardDrain
+		err = b.store.Paced(ctx, func() error {
+			var err error
+			d, err = b.store.DrainBoard(ctx, store.BoardDrainOptions{
+				Limit: boardBatch, Now: now, Since: boardSinceOf(now, prefs.Windows), Assistant: prefs.Assistant,
+			}, b.boardDecider(accounts, now, wants))
+			return err
+		})
 		if err != nil {
 			return err
 		}

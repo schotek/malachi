@@ -35,7 +35,13 @@ func (b *Backend) backfillThreads(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		last, n, changed, err := b.store.LinkThreadsBatch(ctx, cursor, threadBackfillBatch)
+		var last string
+		var n, changed int
+		err := b.store.Paced(ctx, func() error {
+			var err error
+			last, n, changed, err = b.store.LinkThreadsBatch(ctx, cursor, threadBackfillBatch)
+			return err
+		})
 		if err != nil {
 			return err
 		}

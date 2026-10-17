@@ -404,7 +404,9 @@ func storeObject(ctx context.Context, st *store.Store, cal store.Calendar, obj O
 // resource of a calendar from cal_events, without network (meta
 // calendar.expand changed, or the window moved). Resources whose
 // expansion is empty keep their rows (TrimEvents decides). Returns the
-// number of resources rebuilt.
+// number of resources rebuilt. Each resource is written in the store's
+// turn for background writers (store.Paced): a calendar's rebuild is a
+// loop of short transactions.
 func rebuildCalendar(ctx context.Context, st *store.Store, cal store.Calendar, win Window, loc *time.Location, mastersOnly bool) (int, error) {
 	rows, err := st.CalendarEvents(ctx, cal.ID)
 	if err != nil {
@@ -430,7 +432,7 @@ func rebuildCalendar(ctx context.Context, st *store.Store, cal store.Calendar, w
 		for k := range group {
 			ids[k] = group[k].ID
 		}
-		if err := st.ReplaceOccurrences(ctx, ids, storeOccurrences(obj, group, occ)); err != nil {
+		if err := st.Paced(ctx, func() error { return st.ReplaceOccurrences(ctx, ids, storeOccurrences(obj, group, occ)) }); err != nil {
 			return n, err
 		}
 		n++
