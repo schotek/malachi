@@ -1800,6 +1800,32 @@ ručně ve všech třech nad kopií dat: koncept komentáře z MCP v konverzaci
 issue, Upravit, zavřít s uložením, Zahodit, odeslat, odpověď na e-mail
 z MCP, štítek v seznamu.
 
+Zobrazení konverzace jako chat (2026-10-17, větev `feat/chat-view`,
+necommitnuté; plán `docs/plans/chat-view.md`, D1–D17, rozhodnutí vlastníka;
+zatím jen macOS, výjimka z pravidla 6). Konverzace má druhé rozložení vedle
+časové osy (ta zůstává beze změny a výchozí): cizí zprávy jako bubliny
+vlevo, moje a odpovědi z Odeslaných vpravo, koncepty na konci, události Jiry
+a řádek starších zpráv uprostřed, od nejstarší, otevřeno na konci. Bublina
+je jen text (prostý `text` z `message.body` s `trimQuoted`, nevybíratelný,
+bez tlačítek, odkazů a webového pohledu); dvojklik otevře okno zprávy
+(koncept okno Nová zpráva); těla se žádají jen poblíž viditelné části.
+Přepínač „Show as Chat“ v pevném pruhu nad konverzací je trvalý (gschema
+`conversation-chat-layout`, výchozí vypnuto, bez řádku v Předvolbách; Go
+`settings.Store`, macOS `Settings`, Windows `SettingsStore`). Démon a API
+beze změny. Reference Go `ui/internal/conversation/chat.go` (`ChatRows`,
+`ChatScrollTo`, `BubbleText`, 2 nové msgid); macOS `MalachiCore/Model/
+ConversationChat.swift` (port) a `ConversationChatBody.swift` (Swift-first),
+`ConversationLayout.chatBubbleMax`, hostitel `MessageView/
+ConversationHostViewController` (jediný odběratel kontroleru, `trim` jen
+pro zobrazené rozložení, jedna karta issue na rozložení) s pruhem
+`ConversationStripView` a chat `ConversationChatViewController`,
+`ConversationChatRow`, `ConversationBubbleView`. Ověřeno na Macu: Go testy
+`ui/internal/conversation` (`settings` importuje gotk4 a bez cgo tu
+neběží; jeho testy čekají na kontejner), celé `swift test`,
+`check-strings.py` a izolovaný start; chat nad skutečnými daty zatím nikdo
+neviděl. Čeká: brána B1 vlastníka nad kopií dat, pak GTK (G1–G4) a Windows
+(W1–W3) podle plánu §6.2; v Toolbxu `make po` (má vyjít beze změny).
+
 Archivace v Poště = Hotovo (2026-10-13, `feat/board`, necommitnuté; jen
 démon, klienti beze změny — všechny tři to dostanou přes
 `notify.boardChanged`). Vlastník archivoval vyřízenou poštu v Poště a
@@ -2095,7 +2121,7 @@ frontě, odmítnutý vrátí jen svou změnu), `CalendarAccountController`
 a `AssistantPanelController.RunCalendar`/`OpenInCalendar`, karta
 `Controllers/CalendarContent.cs`. Mimo kalendář v Core: `Board.Mode.Calendar`
 (2) se `StartChoice.Calendar`, klíč `calendar-view`
-(`SettingsStore.CalendarView`, 43 klíčů gschema), Ctrl+3 jako
+(`SettingsStore.CalendarView`, 44 klíčů gschema), Ctrl+3 jako
 `ShortcutCommand.ShowCalendar` v `ShortcutMap`, `NotificationHub.AddCalendar`,
 `AccountsPageController` CalDAV účty nevypisuje (při přeřazení je drží za
 vypsanými), `FolderTree.AccountHeaderBadge` umí `CALDAV`, toasty zpráv

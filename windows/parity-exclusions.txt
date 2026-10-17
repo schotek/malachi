@@ -42,6 +42,8 @@ Message list density	gschema: a key's summary or description, for dconf editors,
 Show a one-line preview under each message in the list	gschema: a key's summary or description, for dconf editors, not the UI
 Group the message list by conversation	gschema: a key's summary or description, for dconf editors, not the UI
 Show one row per conversation in the selected folder; expanding it lists the messages the folder holds.	gschema: a key's summary or description, for dconf editors, not the UI
+Show conversations as a chat	gschema: a key's summary or description, for dconf editors, not the UI
+Others' messages on the left, yours on the right, oldest first; off shows the timeline.	gschema: a key's summary or description, for dconf editors, not the UI
 Where a search looks	gschema: a key's summary or description, for dconf editors, not the UI
 The selected folder, every folder of its account, or every account; the last choice made in the search bar.	gschema: a key's summary or description, for dconf editors, not the UI
 Show sender avatars in the message list	gschema: a key's summary or description, for dconf editors, not the UI
@@ -91,3 +93,5 @@ Zero means no permission to send board mail to OpenAI.	GSettings schema metadata
 Codex is unavailable in this Flatpak build.	Flatpak-only sandbox availability
 The view the Calendar was shown in last	gschema: a key's summary or description, for dconf editors, not the UI
 Day, Week, Month or Agenda, written whenever the user changes the Calendar's view; applied when the Calendar shows.	gschema: a key's summary or description, for dconf editors, not the UI
+Show as Chat	chat: Windows port pending
+Others on the left, your messages on the right; double-click opens the message	chat: Windows port pending

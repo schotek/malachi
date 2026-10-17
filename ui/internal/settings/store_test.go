@@ -30,6 +30,9 @@ func TestMemoryDefaults(t *testing.T) {
 	if got := s.TextZoom(); got != 100 {
 		t.Errorf("TextZoom = %d, want 100", got)
 	}
+	if s.GroupByConversation() || s.ConversationChatLayout() {
+		t.Errorf("conversation defaults wrong: group=%v chat=%v", s.GroupByConversation(), s.ConversationChatLayout())
+	}
 	if s.LaunchAtLogin() || s.RunInBackground() || !s.ConfirmDelete() || !s.DesktopNotifications() || s.NotificationSound() {
 		t.Error("general bool defaults wrong")
 	}
@@ -73,6 +76,22 @@ func TestMemorySetAndNotify(t *testing.T) {
 	s.SetTextZoom(130)
 	if calls != 1 {
 		t.Fatalf("removed handler still fired: calls=%d", calls)
+	}
+
+	chat := 0
+	removeChat := s.OnChanged(KeyConversationChatLayout, func() { chat++ })
+	defer removeChat()
+	s.SetConversationChatLayout(true)
+	if !s.ConversationChatLayout() || chat != 1 {
+		t.Fatalf("after set: chat=%v calls=%d", s.ConversationChatLayout(), chat)
+	}
+	s.SetConversationChatLayout(true) // unchanged: no notification
+	if chat != 1 {
+		t.Fatalf("unchanged set fired handler: calls=%d", chat)
+	}
+	s.SetConversationChatLayout(false)
+	if s.ConversationChatLayout() || chat != 2 {
+		t.Fatalf("after reset: chat=%v calls=%d", s.ConversationChatLayout(), chat)
 	}
 }
 

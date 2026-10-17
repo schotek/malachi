@@ -634,6 +634,65 @@ others keep the height they last had without a view. Why not one composed
 document of the whole conversation, and what a card may and may not do,
 is in [security.md §3.2](security.md#32-defences) (layer 2 on macOS).
 
+What the reading pane shows for a conversation is not that view alone but
+its **host** (`MessageView/ConversationHostViewController.swift`, one per
+pane), which holds two layouts of the same conversation over one
+`ConversationController`: the timeline above (`ConversationViewController`,
+the default, unchanged in what it shows) and the **chat**
+(`ConversationChatViewController`). The host owns what both share. A fixed
+strip (`ConversationStripView`) does not scroll with the content and keeps
+to its column (the 900 pt clamp and the side insets): Collapse All /
+Expand All of the timeline at its trailing end (only in the timeline, as
+before only with two or more foldable cards) and the *Show as Chat* toggle
+(`conversation-chat-layout`, always there while a conversation is shown).
+The toggle only writes the setting; the host listens to the setting's
+change and switches the layout, so a change from elsewhere switches too.
+The controller has a single `onChange` and a single `onLoaded`, so the
+host is its only subscriber: it hands every change to both layouts (the
+shown one acts at once, the hidden one catches up when shown) and the news
+of a body to the layout shown, and it alone trims the controller's bodies
+(`ConversationController.trim`) with the near set of the layout shown, so
+a hidden layout asks for no body. A hidden timeline lets go of its web
+views and, when shown again, reconciles with the controller and opens at
+its top with its folds and revealed quoted text as they were; the chat
+opens at its end. A Jira conversation's issue card is one
+`ConversationIssueBox` per layout (the timeline's beside its gutter, the
+chat's across the column), both refreshed by the host
+(`applyIssue`, `setIssueBusy`), because moving one card between two
+stacks would fight their anchors and scroll positions; the Change Status
+menus do not reach the layouts at all. Marking the conversation read stays
+with the list controller whichever layout shows, and Space and Shift-Space
+page the layout shown through the host (`page(up:)`).
+
+The chat shows no web view at all (the plan is
+[plans/chat-view.md](plans/chat-view.md), D1–D17; the pure rules are the Go
+reference `ui/internal/conversation/chat.go`, ported to
+`MalachiCore/Model/ConversationChat.swift`, plus the Swift-first
+`ConversationChatBody.swift`). Its rows come from `Conversation.chatRows`,
+oldest first: a message is a bubble on the left, or on the right when it is
+the user's own or their reply in Sent (whichever identity sent it), the
+drafts come last on the right, and an issue's events and the row of older
+messages left out are centred rows without a bubble. A bubble
+(`ConversationBubbleView`, in a `ConversationChatRow` that puts the avatar
+on its outer side) is **text only**: the header (unread dot, sender,
+paperclip, the Draft, Internal, *via …* and Edited badges, the date) and
+the plain `text` of `message.body`, asked for with `trimQuoted` so that the
+quoted history is cut, even when the timeline revealed it
+(`Conversation.chatBody` picks the variant, `Conversation.bubbleBody`
+the text or, until a body is there, the summary's snippet, dimmed); the
+body's other states and errors use the timeline cards' sentences. A bubble
+hugs its text, never wider than `ConversationLayout.chatBubbleMax` of the
+column, and its text is `stringValue` that cannot be selected: a double
+click anywhere in a bubble opens the message in its own window, a draft in
+the compose window (`MessageActionDelegate`), and nothing else in it is
+interactive (no buttons, chips, links or context menu). The chat opens at
+its end and stays there while the viewport shows the end as bodies and
+members arrive; scrolled away, the row under the viewport's top keeps its
+place. Bodies are fetched only for the bubbles within two viewport heights
+of the visible part (`ConversationLayout.live` over the rows' frames), from
+the cache the timeline uses, so switching layouts asks `thread.get`
+nothing.
+
 The [security review checklist](security.md#12-review-checklist-for-prs-touching-content-handling)
 applies to changes in `WebViews/`, `MessageView/`, `Compose/`,
 `Attachments/`, `MalachiKeychain` and `backend/internal/auth/helper`.
@@ -689,7 +748,9 @@ are those of `data/io.github.schotek.Malachi.gschema.xml`
 `color-scheme`, `message-list-density`, `show-preview-line`,
 `group-by-conversation`, `show-avatars`, `monochrome-avatars`,
 `monospace-plain-text`, `text-zoom`, `collapsed-folders`,
-`collapsed-accounts`, `favourite-folders`, `assistant-menu`,
+`collapsed-accounts`, `favourite-folders`, `conversation-chat-layout`
+(the *Show as Chat* toggle above a conversation, off by default, no row in
+Settings), `assistant-menu`,
 `assistant-target`, the latter read through `Assistant.parseTarget`, so an
 unknown nick is Claude Desktop) plus one macOS-only key,
 `command-r` (`reply`, the default, or `refresh`; §3). One default differs

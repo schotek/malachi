@@ -278,3 +278,10 @@ a vlastník. Commit 1 už nese klíč a exclusions pro Windows (T2), aby
 - **Karta issue** je jeden widget hostitele; volající z menu Změnit stav
   nesmí sahat na rozložení.
 - **Cache pod kontrolerem** (`maxLoaded` 64, 32 MiB v okně) se nemění.
+- 2026-10-17 commit 1 (T1, T2, T3a, M1–M4): Go reference, klíč nastavení,
+  šablona `po`, MalachiCore a macOS hostitel s chatem; revize kódu
+  (2 opravy, 4 drobnosti) zapracovaná; jedna karta issue na rozložení
+  místo jednoho widgetu hostitele; Swift-first pravidla `chatBody`,
+  `bubbleBody`, `bubbleMonospace`, `chatAtEnd`, `chatEndTop`,
+  `chatColumn`, `chatCompactDates`, `chatResize` (GTK a Windows je
+  portují ze Swiftu). Čeká B1.

@@ -62,6 +62,8 @@ func exercise(tr Translator) {
 	DiscardQuestion(tr)
 	DraftSaved("10:00", tr)
 	DraftGone(tr)
+	ChatToggleLabel(tr)
+	ChatToggleTooltip(tr)
 }
 
 // template reads po/malachi.pot: every entry, and whether it names a file

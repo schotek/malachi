@@ -70,6 +70,7 @@ public sealed class SettingsStore : IDisposable
         new(SettingsKey.Density, "message-list-density", "s", "comfortable", choices: Nicks<Density>.All),
         new(SettingsKey.ShowPreviewLine, "show-preview-line", "b", true),
         new(SettingsKey.GroupByConversation, "group-by-conversation", "b", false),
+        new(SettingsKey.ConversationChatLayout, "conversation-chat-layout", "b", false),
         new(SettingsKey.SearchScope, "search-scope", "s", "folder", choices: Nicks<SearchScope>.All),
         new(SettingsKey.ShowAvatars, "show-avatars", "b", true),
         new(SettingsKey.MonochromeAvatars, "monochrome-avatars", "b", false),
@@ -257,6 +258,13 @@ public sealed class SettingsStore : IDisposable
     {
         get => GetBoolean(SettingsKey.GroupByConversation);
         set => SetBoolean(SettingsKey.GroupByConversation, value);
+    }
+
+    /// <summary>Whether a conversation is shown as a chat (others on the left, yours on the right, oldest first) instead of the timeline.</summary>
+    public bool ConversationChatLayout
+    {
+        get => GetBoolean(SettingsKey.ConversationChatLayout);
+        set => SetBoolean(SettingsKey.ConversationChatLayout, value);
     }
 
     /// <summary>The scope last chosen for a search.</summary>

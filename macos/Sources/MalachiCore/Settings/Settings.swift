@@ -26,6 +26,10 @@ public final class Settings {
         case density = "message-list-density"
         case showPreviewLine = "show-preview-line"
         case groupByConversation = "group-by-conversation"
+        /// The conversation in the reading pane as a chat (others on the
+        /// left, the user's messages on the right) instead of the timeline
+        /// (ui/internal/conversation/chat.go).
+        case conversationChatLayout = "conversation-chat-layout"
         case searchScope = "search-scope"
         case showAvatars = "show-avatars"
         case monochromeAvatars = "monochrome-avatars"
@@ -135,6 +139,7 @@ public final class Settings {
             Key.density.rawValue: Density.comfortable.rawValue,
             Key.showPreviewLine.rawValue: true,
             Key.groupByConversation.rawValue: false,
+            Key.conversationChatLayout.rawValue: false,
             Key.searchScope.rawValue: SearchScope.folder.rawValue,
             Key.showAvatars.rawValue: true,
             Key.monochromeAvatars.rawValue: false,
@@ -276,6 +281,13 @@ public final class Settings {
     public var groupByConversation: Bool {
         get { bool(.groupByConversation) }
         set { set(.groupByConversation, newValue) }
+    }
+
+    /// Show the conversation as a chat instead of the timeline (the toggle
+    /// above it; no row in Settings).
+    public var conversationChatLayout: Bool {
+        get { bool(.conversationChatLayout) }
+        set { set(.conversationChatLayout, newValue) }
     }
 
     /// The last scope chosen for a search.

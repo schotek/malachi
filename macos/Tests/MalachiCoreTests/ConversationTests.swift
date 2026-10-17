@@ -707,9 +707,11 @@ private let port = repoRoot.appendingPathComponent("macos/Sources/MalachiCore/Mo
 private let foldPort = repoRoot.appendingPathComponent("macos/Sources/MalachiCore/Model/ConversationFold.swift")
 private let quotedPort = repoRoot.appendingPathComponent("macos/Sources/MalachiCore/Model/ConversationQuoted.swift")
 private let draftsPort = repoRoot.appendingPathComponent("macos/Sources/MalachiCore/Model/ConversationDrafts.swift")
+private let chatPort = repoRoot.appendingPathComponent("macos/Sources/MalachiCore/Model/ConversationChat.swift")
 private let haveSources = FileManager.default.fileExists(atPath: template.path)
     && FileManager.default.fileExists(atPath: port.path) && FileManager.default.fileExists(atPath: foldPort.path)
-    && FileManager.default.fileExists(atPath: quotedPort.path)
+    && FileManager.default.fileExists(atPath: quotedPort.path) && FileManager.default.fileExists(atPath: draftsPort.path)
+    && FileManager.default.fileExists(atPath: chatPort.path)
 
 struct ConversationTranslationTests {
     /// conversation_test.go TestBuildTruncated in Czech: the three plural
@@ -725,16 +727,16 @@ struct ConversationTranslationTests {
     }
 
     /// po_test.go TestMsgidsInTemplate for the port: its msgids are the
-    /// template's eleven entries that name ui/internal/conversation (the
+    /// template's thirteen entries that name ui/internal/conversation (the
     /// plural of the older members' row, conversation.go; Collapse All and
     /// Expand All, fold.go; Show and Hide Quoted Text, quoted.go; the six
-    /// texts of the draft cards, drafts.go), and the port asks for each the
-    /// same way.
+    /// texts of the draft cards, drafts.go; the chat toggle and its tooltip,
+    /// chat.go), and the port asks for each the same way.
     @Test(.enabled(if: haveSources, "po/malachi.pot or the port's source is not next to this file"))
     func portUsesTheTemplatesEntries() throws {
         let pot = try String(contentsOf: template, encoding: .utf8)
         let entries = pot.components(separatedBy: "\n\n").filter { $0.contains("ui/internal/conversation/") }
-        #expect(entries.count == 11, "po/malachi.pot names ui/internal/conversation in \(entries.count) entries")
+        #expect(entries.count == 13, "po/malachi.pot names ui/internal/conversation in \(entries.count) entries")
         let all = entries.joined(separator: "\n\n")
         #expect(all.contains("msgid \"%d earlier message is not shown\"\nmsgid_plural \"%d earlier messages are not shown\""))
         #expect(all.contains("msgid \"Collapse All\"\nmsgstr"))
@@ -765,5 +767,14 @@ struct ConversationTranslationTests {
         for msgid in ["Edit", "_Discard", "Discard this message?", "The draft is no longer there", "Draft saved %s"] {
             #expect(all.contains("msgid \"\(msgid)\"\nmsgstr"), "\(msgid)")
         }
+        #expect(all.contains("msgid \"Show as Chat\"\nmsgstr"))
+        #expect(all.contains("msgid \"\"\n\"Others on the left, your messages on the right; double-click opens the \"\n\"message\"\nmsgstr")
+            || all.contains("msgid \"Others on the left, your messages on the right; double-click opens the message\"\nmsgstr"))
+        let chat = try String(contentsOf: chatPort, encoding: .utf8)
+        let chatCalls = Array(chat.components(separatedBy: "L10n.").dropFirst()).map { $0.prefix(100) }
+        #expect(chatCalls.map { String($0.prefix(while: { $0 != ")" })) } == [
+            "T(\"Show as Chat\"",
+            "T(\"Others on the left, your messages on the right; double-click opens the message\"",
+        ])
     }
 }
