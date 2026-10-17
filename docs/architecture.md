@@ -1712,7 +1712,15 @@ Preferences are an `Adw.PreferencesDialog` (`app.preferences`, Ctrl+,)
 with *Accounts*, *General* and *Appearance* pages. The *Accounts* page lists
 `account.list`, pauses with `account.setEnabled` and removes with
 `account.remove` after an `Adw.AlertDialog` with a *delete local data*
-check; it reloads after its own actions and when opened.
+check; it reloads after its own actions and when opened. Since
+2026-10-17 it lists only the mail accounts (kind `imap` and `graph`) and
+its + button opens the mail assistant alone; every other account (Jira,
+CalDAV, any later kind) is on the *Integrations* page right after it,
+with a catalogue of services that can be added (Jira, CalDAV Calendar).
+A Jira row keeps its switch and settings, a CalDAV row has no switch and
+its Edit opens the *Calendar* page. A reorder on either page sends the
+whole order to `account.reorder`, mail accounts first (pure rules in
+`ui/internal/integrations`, ported to macOS and Windows).
 
 Adding an account is `internal/accountwizard`: an `Adw.Dialog` with an
 `Adw.NavigationView` (identity → server settings → connection test),

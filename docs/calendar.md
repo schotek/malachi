@@ -2838,8 +2838,10 @@ rows (server, username, Replace Password…, mail account for
 invitations, certificate with Forget) and Remove Account; at the bottom
 Add CalDAV Calendar…. Without such accounts an empty state "No calendars
 yet." replaces the sections. **CalDAV accounts are not in the Accounts
-tab.** The structure is `PreferencesLayout` in
-`ui/internal/calendar/preferences.go` (with `ShowsInAccountsTab`). The
+tab**; since 2026-10-17 they are listed on the Integrations page (no
+switch, Edit opens this page; `ui/internal/integrations`, which replaced
+`ShowsInAccountsTab`). The structure is `PreferencesLayout` in
+`ui/internal/calendar/preferences.go`. The
 bullets below are the earlier placement; their row details still hold.
 
 Preferences → Calendar is the only place that lists disabled calendars
@@ -3927,7 +3929,9 @@ again since 2026-10-17 (`WithDrafts: true` expected).
   Display group (row IDs; titles from `calendar.TabTitle`,
   `DisplayGroup`); per-account `Adw.PreferencesGroup`s added/removed from
   Go following `calendar.PreferencesLayout`; `accounts_page.go` drops
-  accounts where `ShowsInAccountsTab` is false; `NewPreferences` takes
+  accounts where `ShowsInAccountsTab` is false (since 2026-10-17
+  `integrations.ShowsInAccounts`, the rest on the Integrations page);
+  `NewPreferences` takes
   `cal func() calendardata.DataSource`.
 
 **Tasks.**

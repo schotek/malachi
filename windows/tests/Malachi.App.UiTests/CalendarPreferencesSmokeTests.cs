@@ -8,8 +8,11 @@
 // section per sample account with the calendar capability (Work, M365, with
 // its sync switch and the Invitations rows; Gmail; Nextcloud, CALDAV, with
 // its server and Remove Account), the Accounts page lists no CalDAV account
-// and its "+" menu offers no Add CalDAV Calendar… (docs/calendar.md §5.8,
-// as macOS); the Calendar page's Add CalDAV Calendar… opens the window,
+// and its "+" is a plain button that opens the mail account wizard; the
+// Integrations page (right after Accounts) has the empty row of Connected
+// Services over the empty data and a card per service of Available
+// Services, whose Add… opens the Jira account assistant and the Add CalDAV
+// Calendar window; the Calendar page's Add CalDAV Calendar… opens the window,
 // which Cancel closes, and Discover Calendars over the samples is refused
 // with the preview's "The preview cannot do that." in the window's error
 // bar. Elements are found by AutomationId (the names follow the user's
@@ -39,9 +42,6 @@ public sealed class CalendarPreferencesSmokeTests(CalendarSmokeFixture fixture) 
             return fixture.Session;
         }
     }
-
-    // The Escape key: closes an open menu.
-    private const byte VkEscape = 0x1B;
 
     // The main window in any mode (its title bar's switch).
     private AutomationElement Main => Uia.WindowWith(App.ProcessId, "ModeMail", AppSession.StartTimeout);
@@ -111,18 +111,18 @@ public sealed class CalendarPreferencesSmokeTests(CalendarSmokeFixture fixture) 
                 Uia.All(list, ControlType.ListItem).Cast<AutomationElement>(),
                 row => row.Current.Name.Contains("Nextcloud", StringComparison.Ordinal));
 
-            // The "+" menu: the two assistants and no Add CalDAV Calendar… item.
+            // The "+" is the mail account wizard, no menu of assistants.
             Uia.Invoke(add);
-            Assert.NotNull(Uia.Find(preferences, "AddMailAccount"));
-            var jira = Uia.Find(preferences, "AddJiraAccount");
+            var wizard = Uia.WindowWith(App.ProcessId, "Email");
+            Assert.Null(Uia.TryFind(preferences, "AddJiraAccount"));
             Assert.Null(Uia.TryFind(preferences, "AddCalDAVCalendar"));
-            Uia.PressKey(jira, App.ProcessId, VkEscape);
-            Uia.WaitFor(() => Uia.TryFind(preferences, "AddJiraAccount") is null, "Escape to close the menu");
+            Uia.Close(wizard);
+            Uia.WaitGone(wizard, what: "the account wizard");
 
             // The window is the Calendar page's.
             Uia.Select(Uia.Find(preferences, "CalendarPage"));
             Uia.Invoke(Uia.Find(preferences, "PrefsCalendarAddCalDAV"));
-            var wizard = Uia.WindowWith(App.ProcessId, "CalDAVWizard");
+            wizard = Uia.WindowWith(App.ProcessId, "CalDAVWizard");
             Assert.NotNull(Uia.Find(wizard, "CalDAVName"));
             Assert.NotNull(Uia.Find(wizard, "CalDAVServer"));
             Assert.NotNull(Uia.Find(wizard, "CalDAVUsername"));
@@ -131,6 +131,40 @@ public sealed class CalendarPreferencesSmokeTests(CalendarSmokeFixture fixture) 
             Assert.False(Uia.Find(wizard, "CalDAVAdd").Current.IsEnabled);
             Uia.Invoke(Uia.Find(wizard, "CalDAVCancel"));
             Uia.WaitGone(wizard, what: "the Add CalDAV Calendar window");
+        }
+        finally
+        {
+            ClosePreferences(preferences);
+        }
+    }
+
+    // Preferences → Integrations (Integrations.Catalog): over the empty data
+    // no account is connected; Jira's Add… opens the Jira account assistant
+    // and CalDAV Calendar's the Add CalDAV Calendar window over this
+    // window's calendar source, both cancelled again.
+    [Fact]
+    public void TheIntegrationsPageOffersTheServicesAndOpensTheirAssistants()
+    {
+        var preferences = OpenPreferences();
+        try
+        {
+            Uia.Select(Uia.Find(preferences, "IntegrationsPage"));
+            Assert.NotNull(Uia.Find(preferences, "IntegrationsList"));
+            var empty = Uia.Find(preferences, "IntegrationsEmpty");
+            Uia.WaitFor(() => !empty.Current.IsOffscreen, "the Integrations page's empty row");
+            Assert.NotNull(Uia.Find(preferences, "JiraService"));
+            Assert.NotNull(Uia.Find(preferences, "CalDAVService"));
+
+            Uia.Invoke(Uia.Find(preferences, "AddJiraIntegration"));
+            var jira = Uia.WindowWith(App.ProcessId, "JiraWizardHeader");
+            Uia.Close(jira);
+            Uia.WaitGone(jira, what: "the Jira account assistant");
+
+            Uia.Invoke(Uia.Find(preferences, "AddCalDAVIntegration"));
+            var caldav = Uia.WindowWith(App.ProcessId, "CalDAVWizard");
+            Assert.NotNull(Uia.Find(caldav, "CalDAVServer"));
+            Uia.Invoke(Uia.Find(caldav, "CalDAVCancel"));
+            Uia.WaitGone(caldav, what: "the Add CalDAV Calendar window");
         }
         finally
         {

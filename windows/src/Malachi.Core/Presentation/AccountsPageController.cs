@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiMail/Preferences/AccountsPaneViewController.swift
-// (loadAccounts, setAccounts, setAccountEnabled, removeAccount,
+// and IntegrationsPaneViewController.swift (loadAccounts, setAccounts,
+// setAccountEnabled, removeAccount,
 // moveSelected, moveAccount, reorderAccounts, acceptDrop, the pending set
 // and closed; the add and edit completions' toasts); GTK:
 // ui/internal/window/accounts_page.go (bindAccounts, loadAccounts,
-// setAccounts, setAccountEnabled, removeAccount, presentEdit) and
-// accounts_reorder.go (moveAccountBy, reorderAccounts). macOS keeps this
+// setAccounts, setListAccounts, setAccountEnabled, removeAccount,
+// presentEdit), integrations_page.go and accounts_reorder.go
+// (moveAccountBy, reorderAccounts, currentAccounts, accountsInOrder). macOS keeps this
 // in AppKit; on Windows it is a presentation class with tests
 // (docs/windows-port.md §7.4), and the page renders Rows with
 // KeyedListSync's view overload (§7.5).
@@ -33,17 +35,21 @@
 // it again (after an order being saved, which that load could otherwise
 // undo) and notify.syncState shows the account's new state in its row.
 //
-// Calendar-only (CalDAV) accounts are not listed (Cal.Prefs.ShowsInAccountsTab;
-// Preferences → Calendar has them, docs/calendar.md §5.8): account.list's
-// others are kept aside in its order, and a reorder sends them after the
-// listed ones (macOS calendarOnly).
+// One controller is one page (Integrations.Page; GTK's accountList): the
+// Accounts page lists the mail accounts, the Integrations page every other
+// account (Jira, CalDAV; Integrations.ShowsIn), each from its own
+// account.list. The rows are Integrations.RowFor's (AccountRow): a CalDAV
+// row has no Enabled switch, and the remove question's body names what
+// stays on the server by kind. A row moves only within its page, and a
+// reorder sends the whole order (Integrations.FullOrder): the mail accounts
+// first, then the integrations, the other page's in the order of the last
+// account.list, so that account.reorder never has to guess where they go.
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Malachi.Core.Api;
-using Malachi.Core.Calendars;
 using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
@@ -55,9 +61,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Malachi.Core.Presentation;
 
 /// <summary>
-/// The Accounts page of the preferences without the widgets: the rows, the
-/// group's sensitivity and description, and the account actions of the
-/// page. Create it, and call it, on the UI thread.
+/// The Accounts or the Integrations page of the preferences without the
+/// widgets: the rows, the group's sensitivity and description, and the
+/// account actions of the page. Create it, and call it, on the UI thread.
 /// </summary>
 public sealed partial class AccountsPageController : ObservableObject, IDisposable
 {
@@ -65,12 +71,12 @@ public sealed partial class AccountsPageController : ObservableObject, IDisposab
     private readonly ControllerScope scope;
     private readonly ILogger logger;
 
-    // The accounts in the daemon's order (or the order just asked for).
+    // The page's accounts in the daemon's order (or the order just asked for).
     private List<Account> accounts = [];
 
-    // The accounts the page does not list (CalDAV), in the daemon's order:
-    // a reorder keeps them after the listed ones.
-    private List<AccountId> calendarOnly = [];
+    // Every account of the last account.list, both pages', in the daemon's
+    // order (or the order just asked for): a reorder sends them all.
+    private List<Account> all = [];
 
     // Accounts whose call is in flight, with the switch state a pause or
     // resume asked for (null for a removal): their rows are insensitive.
@@ -90,10 +96,16 @@ public sealed partial class AccountsPageController : ObservableObject, IDisposab
     /// <param name="client">The daemon.</param>
     /// <param name="logger">Receives methods and codes, never an address.</param>
     /// <param name="pending">Counts the page's background work; one of its own when null.</param>
-    public AccountsPageController(RpcClient client, ILogger<AccountsPageController>? logger = null, PendingWork? pending = null)
+    /// <param name="page">Which accounts it lists: the mail accounts (Accounts) or the others (Integrations).</param>
+    public AccountsPageController(
+        RpcClient client,
+        ILogger<AccountsPageController>? logger = null,
+        PendingWork? pending = null,
+        Integrations.Page page = Integrations.Page.Accounts)
     {
         ArgumentNullException.ThrowIfNull(client);
         this.client = client;
+        Page = page;
         this.logger = (ILogger?)logger ?? NullLogger.Instance;
         scope = new ControllerScope(pending);
         Rows = [];
@@ -133,6 +145,9 @@ public sealed partial class AccountsPageController : ObservableObject, IDisposab
     [ObservableProperty]
     public partial AccountId? SelectedId { get; private set; }
 
+    /// <summary>The page: which accounts it lists.</summary>
+    public Integrations.Page Page { get; }
+
     /// <summary>The page closed: late replies are dropped (Swift <c>closed</c>).</summary>
     public bool IsClosed => scope.IsClosed;
 
@@ -168,8 +183,8 @@ public sealed partial class AccountsPageController : ObservableObject, IDisposab
             }
             loaded = true;
             Description = "";
-            calendarOnly = [.. res.Accounts.Where(a => !Cal.Prefs.ShowsInAccountsTab(a)).Select(a => a.Id)];
-            SetAccounts([.. res.Accounts.Where(Cal.Prefs.ShowsInAccountsTab)]);
+            all = [.. res.Accounts];
+            SetAccounts([.. res.Accounts.Where(a => Integrations.ShowsIn(Page, a))]);
             UpdateEnabled();
         });
     }
@@ -187,7 +202,8 @@ public sealed partial class AccountsPageController : ObservableObject, IDisposab
     /// and its switch shows <paramref name="want"/> meanwhile; a refusal
     /// flips it back and a toast says why; success leaves the account idle
     /// or disabled. A switch flipped where the row is insensitive (its call
-    /// in flight, an order being saved) is put back.
+    /// in flight, an order being saved) is put back, and so is one of an
+    /// account whose row has none (CalDAV, <see cref="Integrations.Row.OffersSwitch"/>).
     /// </summary>
     public void SetEnabled(AccountId id, bool want)
     {
@@ -196,7 +212,7 @@ public sealed partial class AccountsPageController : ObservableObject, IDisposab
         {
             return;
         }
-        if (!IsEnabled || pending.ContainsKey(id) || account.Enabled == want)
+        if (!IsEnabled || pending.ContainsKey(id) || account.Enabled == want || !Integrations.RowFor(account).OffersSwitch)
         {
             Publish();
             return;
@@ -232,7 +248,8 @@ public sealed partial class AccountsPageController : ObservableObject, IDisposab
     }
 
     /// <summary>
-    /// Asks "Remove this account?" through <paramref name="confirm"/>, then
+    /// Asks "Remove this account?" through <paramref name="confirm"/> (its
+    /// body by kind, <see cref="Integrations.Row.RemoveBody"/>), then
     /// calls <c>account.remove</c> with the check box as
     /// <c>deleteLocalData</c> and reloads (accounts_page.go
     /// <c>removeAccount</c>); a failure makes the row sensitive again and a
@@ -248,8 +265,7 @@ public sealed partial class AccountsPageController : ObservableObject, IDisposab
         }
         var prompt = new AccountRemovalPrompt(
             L10n.T("Remove this account?"),
-            // TRANSLATORS: %s is the account's e-mail address.
-            L10n.T("%s will be removed from Malachi Mail. Mail on the server is not affected.", account.Config.Email),
+            Integrations.RowFor(account).RemoveBody,
             L10n.T("_Remove"),
             L10n.T("Also delete _drafts and downloaded data"),
             ExtraDefault: true);
@@ -408,7 +424,8 @@ public sealed partial class AccountsPageController : ObservableObject, IDisposab
     public void Dispose() => Close();
 
     // accounts_reorder.go reorderAccounts: the rows show the new order at
-    // once, then account.reorder saves it and the daemon's
+    // once, then account.reorder saves the whole order (Integrations.FullOrder:
+    // this page's in its new order, the other page's as they were) and the daemon's
     // notify.accountsChanged reorders the main window's sidebar; a failure
     // reloads the page, and so does a change of the accounts that came
     // while the order was being saved.
@@ -431,7 +448,8 @@ public sealed partial class AccountsPageController : ObservableObject, IDisposab
         }
         saving = true;
         UpdateEnabled();
-        var ids = reordered.Select(a => a.Id).Concat(calendarOnly).ToList();
+        var ids = Integrations.FullOrder(all, Page, reordered.Select(a => a.Id));
+        all = InOrder(all, ids);
         scope.Perform(client, API.AccountReorder, new AccountReorderParams { AccountIds = ids }, outcome =>
         {
             saving = false;
@@ -479,6 +497,23 @@ public sealed partial class AccountsPageController : ObservableObject, IDisposab
     }
 
     private void UpdateEnabled() => IsEnabled = loaded && !saving;
+
+    // accounts_reorder.go accountsInOrder: accounts in the order of ids; an
+    // id that is not among them is skipped, an account ids omits goes last.
+    private static List<Account> InOrder(List<Account> accounts, IReadOnlyList<AccountId> ids)
+    {
+        var output = new List<Account>(accounts.Count);
+        var placed = new HashSet<AccountId>();
+        foreach (var id in ids)
+        {
+            if (accounts.FirstOrDefault(x => x.Id == id) is { } found && placed.Add(id))
+            {
+                output.Add(found);
+            }
+        }
+        output.AddRange(accounts.Where(a => !placed.Contains(a.Id)));
+        return output;
+    }
 
     private void Toast(string text) => scope.Raise(ToastRequested, this, text);
 

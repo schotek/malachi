@@ -19,7 +19,7 @@ import (
 // (accountwizard.NewJira, NewJiraEdit), which adds an account and, in its
 // edit mode, replaces the token. The main window reaches them from the
 // sign-in banner and the status popover, the preferences from an
-// account's row and the add menu. A mail account is edited in the mail
+// account's row and the Integrations page. A mail account is edited in the mail
 // assistant as before.
 
 // editJiraAccount opens what edits Jira account a from the main window:

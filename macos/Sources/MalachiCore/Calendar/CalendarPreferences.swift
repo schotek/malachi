@@ -151,8 +151,6 @@ extension Cal {
         }
         /// preferences.go `RemoveAccount` (the Accounts tab's msgid).
         public static var removeAccount: String { L10n.T("Remove Account") }
-        /// preferences.go `ShowsInAccountsTab`: every kind but caldav.
-        public static func showsInAccountsTab(_ a: Account) -> Bool { a.config.kind != .caldav }
         public static var mailAccountSetting: String { L10n.T("Mail Account for Invitations") }
         public static var noMailAccount: String { L10n.C("mail account", "None") }
     }

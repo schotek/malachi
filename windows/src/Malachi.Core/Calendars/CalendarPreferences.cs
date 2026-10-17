@@ -3,7 +3,7 @@
 
 // Port of macos/Sources/MalachiCore/Calendar/CalendarPreferences.swift;
 // GTK: ui/internal/calendar/preferences.go (PrefsSectionKind, PrefsRow,
-// PrefsSection, PreferencesLayout, ShowsInAccountsTab, TabTitle,
+// PrefsSection, PreferencesLayout, TabTitle,
 // DisplayGroup, NoCalendarsTitle, NoCalendarsBody, RemoveAccount,
 // WeekStartSetting, WeekStarts, WeekStartTitle, DurationSetting,
 // AlertSetting, DeclinedSetting, WorkingHoursSetting, WorkingHoursSubtitle,
@@ -21,7 +21,8 @@
 // calendar.preferences, then a section per account with the calendar
 // capability (its CalendarConfig, and for a CalDAV account its connection),
 // then Add CalDAV Calendar…. PreferencesLayout says what goes where; CalDAV
-// accounts are not in the Accounts tab at all (ShowsInAccountsTab). The
+// accounts are listed on Preferences → Integrations (Model/Integrations.cs),
+// whose Edit leads here, never on Accounts. The
 // functions of preferences.go are Cal.Prefs (Swift's namespace), its types
 // are Cal's (Go's names).
 
@@ -200,17 +201,6 @@ public static partial class Cal
             }
             output.Add(new PrefsSection { Kind = PrefsSectionKind.Add });
             return output;
-        }
-
-        /// <summary>
-        /// preferences.go <c>ShowsInAccountsTab</c>: an account the Accounts
-        /// tab lists: every kind but caldav (its section is in the Calendar
-        /// tab).
-        /// </summary>
-        public static bool ShowsInAccountsTab(Account a)
-        {
-            ArgumentNullException.ThrowIfNull(a);
-            return a.Config.ProtocolKind != Api.AccountKind.CalDAV;
         }
 
         /// <summary>preferences.go <c>TabTitle</c>: the Preferences tab's title.</summary>

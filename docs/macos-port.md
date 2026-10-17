@@ -748,7 +748,8 @@ format in one place for both clients.
 - `Tests/MalachiCoreTests/` (Swift Testing): the ports of the Go UI tests
   (`MailModelTests`, `ThreadModelTests`, `CollapseStateTests`,
   `FavouriteStateTests`, `FolderTreeTests`, `ActionHelpersTests`,
-  `AttachmentsTests`, `DownloadTests`, `AccountsPageTests`, `NotificationTextTests`,
+  `AttachmentsTests`, `DownloadTests`, `AccountsPageTests`, `IntegrationsTests`
+  (from `ui/internal/integrations/integrations_test.go`), `NotificationTextTests`,
   `NotifiedMessagesTests`, `OutboxTests`, `SyncStatusTests`,
   `ComposeSourceTests`,
   `AddressListTests`, `PrefillTests`, `MailtoTests`, `SuggestTests`,
@@ -853,6 +854,27 @@ file it names, `docs/api.md` for every method it calls, and
 [security.md](security.md) §3 for anything near HTML or attachments. The
 `.blp` files are the reference: when the Swift view and the Blueprint
 disagree and no deviation explains it, the Swift view is wrong.
+
+### The account pages of Settings
+
+Settings → Accounts lists only the mail accounts (kind imap, the empty
+kind, graph) and its *+* opens the mail assistant; Settings →
+Integrations, right after it, lists every other account (Jira, CalDAV,
+any later kind) as *Connected Services* and the catalogue of services
+that can be added as *Available Services* (owner's decision 2026-10-17).
+The rules are the 1:1 port of `ui/internal/integrations` in
+`MalachiCore/Model/Integrations.swift` (Go `ShowsInAccounts` →
+`Integrations.showsInAccounts`, `Split` → `split`, `FullOrder` →
+`fullOrder(_:page:order:)`, `Catalog` → `catalog()`, `RowFor` → `rowFor(_:)`,
+`Texts` → `texts()`; no translator parameter, the texts go through `L10n`).
+Both pages are one class, `Preferences/AccountsPaneViewController.swift`
+with a `page`, whose rows (`AccountRowCell`) take their symbol, switch,
+editor and remove sentence from `rowFor`; `IntegrationsPaneViewController`
+adds the description and the catalogue. A reorder sends every account
+(`fullOrder`), mail accounts first, and the window reloads the other
+account page, and after an Integrations page change the
+Calendar page's source (`PreferencesWindowController.wireAccountPages`).
+The `MALACHI_START` step `prefs-integrations` dumps the page.
 
 ### The calendar
 

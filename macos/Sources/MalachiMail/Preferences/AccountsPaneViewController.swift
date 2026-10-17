@@ -6,52 +6,74 @@ import MalachiCore
 import os
 
 /// The Accounts page of the settings (preferences.blp `accounts_page`,
-/// accounts_page.go, accounts_reorder.go): the daemon's accounts with
-/// add, edit, remove, pause and reorder. The page reloads after its own
-/// actions; the group stays insensitive until the first load succeeds.
-/// Positions always come from `accounts`, never from table indexes.
-/// Calendar-only (CalDAV) accounts are not listed: Settings → Calendar has
-/// them (docs/calendar.md §5.8); a reorder keeps them after the listed ones.
+/// accounts_page.go, accounts_reorder.go): the daemon's mail accounts
+/// (`Integrations.showsInAccounts`) with add, edit, remove, pause and
+/// reorder. The same class lists the other accounts as the Integrations
+/// page's Connected Services (`IntegrationsPaneViewController`, `page`
+/// `.integrations`); a row's switch, editor and remove sentence come from
+/// `Integrations.rowFor`. The page reloads after its own actions; the
+/// group stays insensitive until the first load succeeds. Positions
+/// always come from `accounts`, never from table indexes; a reorder sends
+/// every account (`Integrations.fullOrder`), mail accounts first.
 @MainActor
-final class AccountsPaneViewController: PreferencesPaneViewController, NSTableViewDataSource, NSTableViewDelegate {
-    private let client: RPCClient
+class AccountsPaneViewController: PreferencesPaneViewController, NSTableViewDataSource, NSTableViewDelegate {
+    let page: Integrations.Page
+    let client: RPCClient
     private let confirmRemoval: PrefsConfirmRemoval
-    private let confirmTrust: WizardConfirmTrust
-    private let toast: @MainActor (String) -> Void
+    let confirmTrust: WizardConfirmTrust
+    let toast: @MainActor (String) -> Void
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "preferences")
 
     private let group: PreferencesGroupView
-    private let addButton: NSButton
+    private let addButton: NSButton?
     private let table = AccountsTableView()
     private let tableScroll = NSScrollView()
     private var tableHeight: NSLayoutConstraint?
-    private let emptyRow = PreferenceRowView(title: L10n.T("No accounts yet"), subtitle: L10n.T("Use the + button to add one"))
+    private let emptyRow: PreferenceRowView
 
+    /// The page's rows.
     private(set) var accounts: [Account] = []
-    /// The CalDAV accounts account.list returned besides, in its order.
-    private var calendarOnly: [AccountID] = []
+    /// Every account account.list returned, in its order (for `fullOrder`).
+    private var allAccounts: [Account] = []
+    /// A CalDAV row's Edit: the settings window shows its Calendar page.
+    var onShowCalendar: (() -> Void)?
+    /// The page added or removed an account: the window reloads its other
+    /// account pages and the Calendar page's source.
+    var onAccountsChanged: (() -> Void)?
     /// Accounts whose call is in flight: their rows are insensitive.
     private var pending: Set<AccountID> = []
     /// The window closed: late replies are dropped.
     var closed = false
 
     init(
+        page: Integrations.Page = .accounts,
         client: RPCClient, confirmRemoval: @escaping PrefsConfirmRemoval, confirmTrust: @escaping WizardConfirmTrust,
         toast: @escaping @MainActor (String) -> Void
     ) {
+        self.page = page
         self.client = client
         self.confirmRemoval = confirmRemoval
         self.confirmTrust = confirmTrust
         self.toast = toast
-        addButton = NSButton(image: wizardSymbol("plus", pointSize: 14, weight: .medium), target: nil, action: nil)
-        addButton.isBordered = false
-        addButton.imagePosition = .imageOnly
-        addButton.contentTintColor = .labelColor
-        addButton.toolTip = L10n.T("Add Account")
-        group = PreferencesGroupView(title: L10n.T("Mail Accounts"), headerSuffix: addButton)
+        switch page {
+        case .accounts:
+            let add = NSButton(image: wizardSymbol("plus", pointSize: 14, weight: .medium), target: nil, action: nil)
+            add.isBordered = false
+            add.imagePosition = .imageOnly
+            add.contentTintColor = .labelColor
+            add.toolTip = L10n.T("Add Account")
+            addButton = add
+            group = PreferencesGroupView(title: L10n.T("Mail Accounts"), headerSuffix: add)
+            emptyRow = PreferenceRowView(title: L10n.T("No accounts yet"), subtitle: L10n.T("Use the + button to add one"))
+        case .integrations:
+            let tx = Integrations.texts()
+            addButton = nil
+            group = PreferencesGroupView(title: tx.connectedTitle)
+            emptyRow = PreferenceRowView(title: tx.emptyTitle, subtitle: tx.emptySubtitle)
+        }
         super.init(nibName: nil, bundle: nil)
-        addButton.target = self
-        addButton.action = #selector(addClicked(_:))
+        addButton?.target = self
+        addButton?.action = #selector(addMailAccount(_:))
     }
 
     @available(*, unavailable)
@@ -77,9 +99,22 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
         emptyRow.isEnabled = false
         group.setRows([tableScroll, emptyRow])
         group.isEnabled = false
+        addLeadingViews()
         addGroup(group)
+        addTrailingGroups()
         setAccounts([])
         loadAccounts()
+    }
+
+    /// What a subclass shows above the accounts' group.
+    func addLeadingViews() {}
+
+    /// What a subclass shows below the accounts' group.
+    func addTrailingGroups() {}
+
+    /// The page lists `a`.
+    private func lists(_ a: Account) -> Bool {
+        page == .accounts ? Integrations.showsInAccounts(a) : Integrations.showsInIntegrations(a)
     }
 
     // MARK: Loading
@@ -101,8 +136,8 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
                 self.group.isEnabled = false
             case .success(let accounts):
                 self.group.descriptionText = ""
-                self.calendarOnly = accounts.filter { !Cal.Prefs.showsInAccountsTab($0) }.map(\.id)
-                self.setAccounts(accounts.filter(Cal.Prefs.showsInAccountsTab))
+                self.allAccounts = accounts
+                self.setAccounts(accounts.filter(self.lists))
                 self.group.isEnabled = true
             }
         }
@@ -129,20 +164,8 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
 
     // MARK: Actions
 
-    /// The group's "+": a menu of the two assistants, a mail account or a
-    /// Jira account.
-    @objc private func addClicked(_ sender: Any?) {
-        let menu = NSMenu()
-        let mail = NSMenuItem(title: mn(L10n.T("_Add Account…")), action: #selector(addMailAccount(_:)), keyEquivalent: "")
-        let jira = NSMenuItem(title: mn(Jira.wizardTexts().addMenu), action: #selector(addJiraAccount(_:)), keyEquivalent: "")
-        for item in [mail, jira] {
-            item.target = self
-            menu.addItem(item)
-        }
-        let below = NSPoint(x: 0, y: addButton.isFlipped ? addButton.bounds.maxY + 4 : -4)
-        menu.popUp(positioning: nil, at: below, in: addButton)
-    }
-
+    /// The Accounts group's "+": the mail account assistant (Jira and
+    /// CalDAV are added from the Integrations page).
     @objc private func addMailAccount(_ sender: Any?) {
         guard let window = view.window else { return }
         AccountWizardController.present(from: window, client: client, confirmTrust: confirmTrust) { [weak self] id, cfg in
@@ -150,17 +173,11 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
         }
     }
 
-    @objc private func addJiraAccount(_ sender: Any?) {
-        guard let window = view.window else { return }
-        JiraWizardWindowController.present(from: window, client: client) { [weak self] id, cfg in
-            self?.added(id, cfg)
-        }
-    }
-
-    /// After account.add: the rows again, and the toast.
-    private func added(_ id: AccountID, _ cfg: AccountConfig) {
+    /// After account.add: the rows again, the other pages, and the toast.
+    func added(_ id: AccountID, _ cfg: AccountConfig) {
         guard !closed else { return }
         loadAccounts()
+        onAccountsChanged?()
         // TRANSLATORS: %s is the new account's e-mail address.
         toast(L10n.T("Added %s", cfg.email))
     }
@@ -197,8 +214,9 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
     /// Opens the wizard prefilled with the account (accounts_page.go
     /// `editAccount`); with `signIn` only the browser sign-in again
     /// (accounts_page.go `signInAccount`, NewEditSignIn).
-    /// A Jira account opens its settings (`accountEditor`,
-    /// `JiraAccountWindowController`), where its token is replaced too.
+    /// The row's editor (`Integrations.rowFor`): a Jira account opens its
+    /// settings (`JiraAccountWindowController`), where its token is
+    /// replaced too; a CalDAV account the Calendar page.
     private func editAccount(_ id: AccountID, signIn: Bool = false) {
         guard let window = view.window, let i = index(of: id) else { return }
         let saved: @MainActor (AccountID, AccountConfig) -> Void = { [weak self] _, cfg in
@@ -207,13 +225,17 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
             // TRANSLATORS: %s is the edited account's e-mail address.
             self.toast(L10n.T("Saved %s", cfg.email))
         }
-        switch accountEditor(accounts[i]) {
+        switch Integrations.rowFor(accounts[i]).editor {
         case .jira:
             JiraAccountWindowController.present(from: window, client: client, account: accounts[i], onDone: saved)
         case .mailWizard:
             AccountWizardController.present(
                 from: window, client: client, editing: accounts[i], signIn: signIn, confirmTrust: confirmTrust, onDone: saved
             )
+        case .calendarPage:
+            onShowCalendar?()
+        case .none:
+            break
         }
     }
 
@@ -221,11 +243,9 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
     /// deleteLocalData (accounts_page.go `removeAccount`).
     private func removeAccount(_ id: AccountID) {
         guard let i = index(of: id) else { return }
-        let email = accounts[i].config.email
         let prompt = PrefsConfirmation(
             heading: L10n.T("Remove this account?"),
-            // TRANSLATORS: %s is the account's e-mail address.
-            body: L10n.T("%s will be removed from Malachi Mail. Mail on the server is not affected.", email),
+            body: Integrations.rowFor(accounts[i]).removeBody,
             confirmLabel: wizardLabel("_Remove"),
             extraLabel: wizardLabel("Also delete _drafts and downloaded data"),
             extraDefault: true
@@ -252,6 +272,7 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
                 return
             }
             self.loadAccounts()
+            self.onAccountsChanged?()
         }
     }
 
@@ -287,7 +308,7 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
             view.window?.makeFirstResponder(table)
         }
         group.isEnabled = false
-        let ids = reordered.map(\.id) + calendarOnly
+        let ids = Integrations.fullOrder(allAccounts, page: page, order: reordered.map(\.id))
         let client = client
         Task { [weak self] in
             var failure: (any Error)?
@@ -301,7 +322,12 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
             if let failure {
                 self.toast(rpcErrorText(L10n.T("Saving the account order"), failure))
                 self.loadAccounts()
+                return
             }
+            // The order sent is the daemon's now; the other page follows it.
+            let byID = Dictionary(self.allAccounts.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            self.allAccounts = ids.compactMap { byID[$0] }
+            self.onAccountsChanged?()
         }
     }
 

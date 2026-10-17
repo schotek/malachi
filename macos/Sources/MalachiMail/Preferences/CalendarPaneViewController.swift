@@ -41,7 +41,12 @@ final class CalendarPaneViewController: PreferencesPaneViewController {
     private(set) var sectionViews: [(name: String, view: NSView)] = []
 
     private(set) var preferences: CalendarPreferencesController?
-    private var source: (any CalendarDataSource)?
+    /// The settings window's calendar source, once bound (the Integrations
+    /// page's Add CalDAV sheet works over it too).
+    private(set) var source: (any CalendarDataSource)?
+    /// The page added or removed a CalDAV account: the window reloads its
+    /// account pages (Accounts, Integrations).
+    var onAccountsChanged: (() -> Void)?
     /// Kept only when the application gives no source.
     private var ownSource: DaemonCalendarSource?
     private var token: CalendarObserverToken?
@@ -191,16 +196,17 @@ final class CalendarPaneViewController: PreferencesPaneViewController {
         CalDAVSheetController.present(from: window, source: source, confirmTrust: confirmTrust) { [weak self] _ in
             guard let self, !self.closed else { return }
             self.source?.refresh()
+            self.onAccountsChanged?()
         }
     }
 
-    /// Remove Account… of a CalDAV account: the Accounts page's question,
-    /// then account.remove; the section goes with the next snapshot.
+    /// Remove Account… of a CalDAV account: the Integrations page's
+    /// question (`Integrations.rowFor`), then account.remove; the section
+    /// goes with the next snapshot, the account pages reload.
     private func removeAccount(_ a: Account) {
         let prompt = PrefsConfirmation(
             heading: L10n.T("Remove this account?"),
-            // TRANSLATORS: %s is the account's e-mail address.
-            body: L10n.T("%s will be removed from Malachi Mail. Mail on the server is not affected.", accountRowTitle(a)),
+            body: Integrations.rowFor(a).removeBody,
             confirmLabel: wizardLabel("_Remove"),
             extraLabel: wizardLabel("Also delete _drafts and downloaded data"),
             extraDefault: true
@@ -222,6 +228,7 @@ final class CalendarPaneViewController: PreferencesPaneViewController {
             }
             guard !self.closed else { return }
             self.source?.refresh()
+            self.onAccountsChanged?()
         }
     }
 

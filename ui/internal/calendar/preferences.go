@@ -114,10 +114,6 @@ func PreferencesLayout(accounts []api.Account) []PrefsSection {
 	return append(out, PrefsSection{Kind: SectionAdd})
 }
 
-// ShowsInAccountsTab reports an account the Accounts tab lists: every
-// kind but caldav (its section is in the Calendar tab).
-func ShowsInAccountsTab(a api.Account) bool { return a.Config.Protocol() != api.AccountCalDAV }
-
 // TabTitle is the Preferences tab's title.
 func TabTitle(tr Translator) string { return ModeName(tr) }
 

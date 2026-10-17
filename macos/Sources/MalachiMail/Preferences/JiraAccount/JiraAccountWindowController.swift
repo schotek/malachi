@@ -4,7 +4,7 @@
 import AppKit
 import MalachiCore
 
-/// The settings of a Jira account as a sheet: what Settings ▸ Accounts and
+/// The settings of a Jira account as a sheet: what Settings ▸ Integrations and
 /// the main window open to edit such an account (`accountEditor`,
 /// `jiraEditor`). The page is `JiraAccountViewController` over
 /// `JiraAccountController`; Replace Token… opens the account assistant in

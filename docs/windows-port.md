@@ -2208,8 +2208,9 @@ Quit runs `ComposeController.SaveForQuitAsync` and asks the close
 question only of the windows it returns. The account wizard is an owned modal window (a window
 allows one `ContentDialog` at a time and the wizard nests the certificate
 prompt), five pages as GTK/macOS. Preferences is a single-instance window
-with Accounts (reorder by handle or Ctrl+Up/Ctrl+Down, a click selects the
-row), General (startup, reading, deleting, notifications and the daemon's
+with Accounts (the mail accounts only; reorder by handle or
+Ctrl+Up/Ctrl+Down, a click selects the row), Integrations (every other
+account and the services that can be added, §11.10), General (startup, reading, deleting, notifications and the daemon's
 mail settings in GTK's order, the storage rows included: *Keep Attachments
 Offline For*, *Never Store Attachments* and *Compress Stored Mail* shown
 once `config.get` reports them, *Disk Space Used* from `system.storage`;
@@ -2441,8 +2442,9 @@ Space Used row (`system.storage` when the window opens, after every change
 the daemon confirmed and every 5 s on the `TimeProvider` while the window
 is open, one call at a time; hidden for a daemon without the method; its
 texts `StorageUsage.StorageTexts`), the AI page `McpRegistrationController`, the
-Accounts page Core's `AccountsPageController` (§7.4) rendered with
-`KeyedListSync`; a row too wide for the page puts its status and its
+Accounts and the Integrations page each a Core `AccountsPageController`
+(§7.4) with its `Integrations.Page`, rendered with `KeyedListSync` by the
+list both share (`Preferences/AccountListSection`, §11.10); a row too wide for the page puts its status and its
 controls on a second line (`Preferences/AccountRowPanel`), as a
 `SettingsCard` wraps. The window stays open beside the main window, where
 accounts can be added and edited and change their state, so the page
@@ -2695,9 +2697,9 @@ the live cards, the rails, the height governor), and the controllers
 `ConversationController` and the comment mode of `ComposeController`,
 tested against the fake daemon. The app is thin over them:
 
-- **Adding and editing.** *Add Jira Account…* is in the primary menu `…`,
-  in the *+* menu of *Preferences → Accounts* and on the empty window
-  (`AddJiraAccountButton`); it opens `Wizard/JiraWizardWindow`, an owned
+- **Adding and editing.** *Add Jira Account…* is in the primary menu `…`
+  and on the empty window (`AddJiraAccountButton`), and Jira's *Add…* in
+  *Preferences → Integrations* (`AddJiraIntegration`, §11.10); it opens `Wizard/JiraWizardWindow`, an owned
   modal window like the account wizard (`ModalDialog`, shared by both)
   with the pages site, credentials and spaces. Every route that edits an
   account asks `AccountsPage.EditorOf` first (GTK's `accountEditor`): a
@@ -3168,8 +3170,10 @@ and Cancel, a real double click on empty time, both New Event windows in
 front of the main window with the keyboard in their title, a save and an
 answer over the samples saying *The preview cannot do that.*) and `CalendarPreferencesSmokeTests` (*Preferences →
 Calendar* with Display and the sample accounts, the Accounts page without
-CalDAV and the Calendar page opening its window, Discover over the
-samples); `CalendarBoardSmokeFixture` starts one with both sample sets for
+CalDAV, its plain "+" opening the mail account wizard and the Calendar
+page opening its window, *Preferences → Integrations* with its empty row
+and its catalogue opening the Jira assistant and the CalDAV window,
+Discover over the samples); `CalendarBoardSmokeFixture` starts one with both sample sets for
 `CalendarInvitationSmokeTests` (the Board's Today strip, a row showing its
 event in the Calendar, the assistant panel's two chips). With
 `MALACHI_DEVMAIL`, `DevmailTests.AnInvitationShowsItsCardWithAccept`
@@ -3207,6 +3211,69 @@ a question by cancelling its `Closing`, a full `build.ps1 test` run (the
 failures left in `Malachi.Platform.Windows.Tests`, four key-file and
 real-daemon tests and one shell-verdict file-type test, are environmental
 and predate the port) and ARM64.
+
+### 11.10 Preferences → Integrations
+
+As built (2026-10-17, written on a Mac without .NET as the port of the
+Go reference and the GTK page, with macOS's
+`IntegrationsPaneViewController.swift` written beside it): the
+Preferences split their account pages as GTK and macOS do. *Accounts*
+lists the mail accounts only (kind `imap`, the empty kind, `graph`), its
+*+* is a plain button that opens the mail account wizard (`AddAccount`;
+the menu with *Add Jira Account…* is gone from it, the msgid stays with
+the `…` menu and the No Accounts page). *Integrations*, right after
+Accounts in the navigation (`IntegrationsPage`, the Puzzle glyph U+EA86
+for GTK's `application-x-addon` in `IconGlyphs`), has the page's
+description, the group *Connected Services* with every other account
+(Jira, CalDAV, and a kind added later by itself) in `account.list`'s
+order, its empty row *No integrations yet* (`IntegrationsEmpty`), and the
+group *Available Services*: a `SettingsCard` per service of the catalogue
+(`JiraService`, `CalDAVService`) whose *Add…* opens the Jira account
+assistant (`AddJiraIntegration`; the page reloads and names the account)
+or the Add CalDAV Calendar window over this window's calendar source
+(`AddCalDAVIntegration`, `AppState.ShowAddCalDAVCalendar`).
+
+Core: `Model/Integrations.cs` is `ui/internal/integrations` one to one,
+Go's package a static class with its types nested under Go's names
+(`Integrations.Page`, `Service`, `Editor`, `Row`, `PageTexts`; the
+constants `PageAccounts`, `EditorJira`, … are the enums' members), its
+Translator `L10n`, plus `ShowsIn(page, account)` for the controller.
+`AccountsPage.AccountRowTitle`, `AccountRowSubtitle` and `AccountIcon`
+follow `RowFor` (a CalDAV row's subtitle is its server's host, its icon
+the calendar), and `Cal.Prefs.ShowsInAccountsTab` is gone, as Go's.
+`Presentation/AccountsPageController` is one page (`Page`, Accounts by
+default): it lists `Integrations.ShowsIn(Page, …)` of its own
+`account.list`, keeps every account in the daemon's order, and a reorder
+sends `Integrations.FullOrder` (the mail accounts first, the other page's
+as they were), which replaces the CalDAV-kept-behind trick; a switch of a
+row without one (CalDAV) is put back, and the remove question's body is
+the row's (`Integrations.Row.RemoveBody`: mail, Jira, CalDAV or an unknown
+kind). `AccountRow` carries `OffersSwitch`, `Editor`, `EditLabel` and
+`RemoveBody`; `CalendarAccountController.Remove` asks with the CalDAV
+sentence too.
+
+App: `Preferences/AccountListSection` is the list both pages share (GTK's
+`accountList`: the description, the `ListView` of cards, the empty row,
+the switch, Sign In…, Edit by `Row.Editor` — the mail wizard, a Jira
+account's `JiraAccountWindow`, or for CalDAV `PreferencesWindow.ShowCalendar`
+with the tooltip *Calendar Settings* —, Remove, the drag by the handle and
+Ctrl+Up/Ctrl+Down); `AccountsPage` and `IntegrationsPage` keep their
+headers and buttons. A row moves only within its own `ListView`. The
+window's `MoveUp`/`MoveDown` commands serve whichever of the two pages is
+shown. After an add or a removal on the Calendar page the two account
+pages reload through `notify.accountsChanged`, which they follow anyway,
+and an add from Integrations asks the Calendar page's snapshot anew through
+`ShowAddCalDAVCalendar`, so no hook between the pages was needed. Tests:
+`Model/IntegrationsTests` (the Go tests one to one, plus the
+`AccountsPage` helpers), `AccountsPageControllerTests` (both pages' lists
+and full orders, a CalDAV switch, the remove bodies; it replaces
+`CalDAVAccountsAreNotListedAndAReorderKeepsThemLast`),
+`CalendarAccountControllerTests` (the CalDAV sentence), the UI smoke
+`CalendarPreferencesSmokeTests.TheIntegrationsPageOffersTheServicesAndOpensTheirAssistants`
+and `SmokeTests.ThePrimaryMenuOpensThePreferences`. Not verified:
+everything (not built on Windows yet): `build.ps1 app`, `test`, `lint`,
+the UI smoke and a manual walk through both pages, and the Puzzle glyph
+against the font.
 
 ## 12. Tests
 

@@ -33,7 +33,8 @@ import (
 // event-popover (the detail of the shown range's first occurrence),
 // event-editor (New Event with today's defaults), event-editor:edit (Edit
 // of the first occurrence), caldav-dialog, prefs-calendar (Preferences on
-// the Calendar page), size=WxH, quit.
+// the Calendar page), prefs-integrations (Preferences on the Integrations
+// page), size=WxH, quit.
 
 const (
 	devStartEnv         = "MALACHI_GTK_START"
@@ -54,6 +55,7 @@ const (
 	devEventEdit
 	devCalDAV
 	devPrefsCalendar
+	devPrefsIntegrations
 	devSize
 	devQuit
 )
@@ -99,6 +101,8 @@ func parseDevStart(script string) ([]devStep, error) {
 			st.Kind = devCalDAV
 		case name == "prefs-calendar":
 			st.Kind = devPrefsCalendar
+		case name == "prefs-integrations":
+			st.Kind = devPrefsIntegrations
 		case strings.HasPrefix(name, "size="):
 			wh := strings.SplitN(strings.TrimPrefix(name, "size="), "x", 2)
 			if len(wh) != 2 {
@@ -217,6 +221,10 @@ func (w *Window) runDevStep(n int, st devStep) {
 	case devPrefsCalendar:
 		d := NewPreferences(w.settings, w.client, w.assist, w.log, w.calendarSource)
 		d.SetVisiblePageName("calendar")
+		d.Present(w)
+	case devPrefsIntegrations:
+		d := NewPreferences(w.settings, w.client, w.assist, w.log, w.calendarSource)
+		d.SetVisiblePageName("integrations")
 		d.Present(w)
 	case devSize:
 		w.SetDefaultSize(st.Width, st.Height)

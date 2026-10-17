@@ -47,11 +47,13 @@ import MalachiCore
 //   the label column, the grid's rows and the availability view, and
 //   closes it unsaved; `invitation-card` opens a window with one sample
 //   card per state (`Cal.sampleData(...).cards`) and dumps each card and
-//   its rows; `caldav-sheet` opens Settings → Accounts with the Add CalDAV
+//   its rows; `caldav-sheet` opens Settings → Integrations with the Add CalDAV
 //   Calendar sheet (state `entering`), dumps it and cancels;
 //   `prefs-calendar` opens Settings → Calendar (with
 //   MALACHI_CALENDAR_SAMPLES=1 the sample accounts' sections), dumps the
-//   Display group and each section, and closes Settings. Each prints
+//   Display group and each section, and closes Settings;
+//   `prefs-integrations` opens Settings → Integrations, dumps its
+//   connected rows and catalogue rows, and closes Settings. Each prints
 //   `LAYOUT:` lines and a `LAYOUT: shot <step> window <n>` line naming
 //   the window worth a screenshot (`DevelopmentCalendar`); the
 //   `calendar:*` dumps add `LAYOUT:` lines for the sidebar's sections,
@@ -904,6 +906,7 @@ enum DevelopmentCalendar {
         case "invitation-card": invitationCards(main)
         case "caldav-sheet": caldavSheet(main)
         case "prefs-calendar": prefsCalendar(main)
+        case "prefs-integrations": prefsIntegrations(main)
         default: return false
         }
         return true
@@ -1175,7 +1178,7 @@ enum DevelopmentCalendar {
     private static func caldavSheet(_ main: MainWindowController) {
         closeOpened()
         let prefs = Integration.showPreferences(main.state)
-        prefs.select(.accounts)
+        prefs.select(.integrations)
         guard let parent = prefs.window else {
             developmentPrint("LAYOUT: caldav-sheet no Settings window")
             return
@@ -1238,6 +1241,43 @@ extension DevelopmentCalendar {
                 developmentPrint("LAYOUT: prefs-calendar section '\(s.name)' (\(frame(s.view)))")
             }
             developmentPrint("LAYOUT: shot prefs-calendar window \(w.windowNumber)")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                MainActor.assumeIsolated {
+                    w.close()
+                }
+            }
+            }
+        }
+    }
+}
+
+extension DevelopmentCalendar {
+    // MARK: prefs-integrations
+
+    static func prefsIntegrations(_ main: MainWindowController) {
+        closeOpened()
+        let prefs = Integration.showPreferences(main.state)
+        prefs.select(.integrations)
+        guard let w = prefs.window else {
+            developmentPrint("LAYOUT: prefs-integrations no Settings window")
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            MainActor.assumeIsolated {
+            let pane = prefs.integrationsPane
+            @MainActor func frame(_ v: NSView) -> String {
+                guard let content = w.contentView else { return "?" }
+                return NSStringFromRect(v.convert(v.bounds, to: content))
+            }
+            developmentPrint("LAYOUT: prefs-integrations window \(w.windowNumber) frame \(NSStringFromRect(w.frame)) connected \(pane.accounts.count)")
+            for a in pane.accounts {
+                let row = Integrations.rowFor(a)
+                developmentPrint("LAYOUT: prefs-integrations connected '\(row.title)' kind \(row.kind.rawValue) switch \(row.offersSwitch) editor \(row.editor)")
+            }
+            for s in pane.serviceRows {
+                developmentPrint("LAYOUT: prefs-integrations service \(s.kind.rawValue) (\(frame(s.view)))")
+            }
+            developmentPrint("LAYOUT: shot prefs-integrations window \(w.windowNumber)")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 MainActor.assumeIsolated {
                     w.close()

@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Tests of AccountsPageController, the Accounts page of the preferences
-// (ui/internal/window/accounts_page.go and accounts_reorder.go, which the
+// Tests of AccountsPageController, the Accounts and the Integrations page
+// of the preferences (ui/internal/window/accounts_page.go,
+// integrations_page.go and accounts_reorder.go, which the
 // Go UI does not test beyond the pure functions of AccountsPageTests;
 // macOS keeps the page in AppKit, untested). Against a fake daemon that
 // serves account.list from a list the test changes and records every
@@ -16,6 +17,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers.Infrastructure;
+using Malachi.Core.Model;
 using Malachi.Core.Presentation;
 using Malachi.Core.Tests.Controllers;
 using Malachi.Core.Tests.Fixtures;
@@ -277,14 +279,25 @@ public sealed class AccountsPageControllerTests
         Assert.Equal([B, C], rec.Focus);
     }
 
-    // Preferences → Calendar has the CalDAV accounts (Cal.Prefs.ShowsInAccountsTab):
-    // the page lists the others, and a new order keeps them after those
-    // (macOS calendarOnly).
-    [Fact]
-    public async Task CalDAVAccountsAreNotListedAndAReorderKeepsThemLast()
-    {
-        await using var h = await Harness.StartAsync();
-        var caldav = TestAccount("d", name: "Nextcloud", email: "me@cloud.example.test") with
+    // A Jira and a CalDAV account among the mail accounts (integrations_test.go
+    // account): "j" between "a" and "d", "d" between "j" and "b".
+    private static readonly AccountId J = new("j");
+    private static readonly AccountId D = new("d");
+
+    private static IReadOnlyList<Account> MixedAccounts() =>
+    [
+        TestAccount("a", email: "a@example.test"),
+        TestAccount("j", email: "jana@acme.example") with
+        {
+            Config = new AccountConfig
+            {
+                Name = "",
+                Email = "jana@acme.example",
+                Kind = AccountKind.Jira,
+                Jira = new JiraConfig { SiteUrl = "https://acme.atlassian.net", Deployment = JiraDeployment.Cloud, Login = "jana@acme.example" },
+            },
+        },
+        TestAccount("d", email: "me@cloud.example.test") with
         {
             Config = new AccountConfig
             {
@@ -293,24 +306,112 @@ public sealed class AccountsPageControllerTests
                 Kind = AccountKind.CalDAV,
                 CalDAV = new CalDAVConfig { ServerUrl = "https://cloud.example.test", Username = "me" },
             },
-        };
-        h.Accounts =
-        [
-            TestAccount("a", email: "a@example.test"),
-            caldav,
-            TestAccount("b", email: "b@example.test"),
-            TestAccount("c", email: "c@example.test"),
-        ];
+        },
+        TestAccount("b", email: "b@example.test"),
+        TestAccount("c", email: "c@example.test"),
+    ];
+
+    // The Accounts page lists the mail accounts only (integrations.ShowsInAccounts);
+    // a new order sends the whole list, the integrations after the mail
+    // accounts in their order (integrations.FullOrder).
+    [Fact]
+    public async Task TheAccountsPageListsTheMailAccountsAndAReorderSendsTheIntegrationsAfterThem()
+    {
+        await using var h = await Harness.StartAsync();
+        h.Accounts = MixedAccounts();
         var (c, _) = await h.LoadedAsync();
         await h.Ui.RunAsync(() =>
         {
+            Assert.Equal(Integrations.Page.Accounts, c.Page);
             Assert.Equal([A, B, C], c.Rows.Select(r => r.Id));
-            Assert.Null(c.Account(new AccountId("d")));
+            Assert.Null(c.Account(J));
+            Assert.Null(c.Account(D));
+            Assert.All(c.Rows, r => Assert.True(r.OffersSwitch));
+            Assert.All(c.Rows, r => Assert.Equal(Integrations.Editor.MailWizard, r.Editor));
             Assert.True(c.MoveBy(A, 1));
             Assert.Equal([B, A, C], c.Rows.Select(r => r.Id));
         });
         await h.IdleAsync();
-        Assert.Equal(["{\"accountIds\":[\"b\",\"a\",\"c\",\"d\"]}"], h.Calls(API.AccountReorder.Name));
+        Assert.Equal(["{\"accountIds\":[\"b\",\"a\",\"c\",\"j\",\"d\"]}"], h.Calls(API.AccountReorder.Name));
+    }
+
+    // The Integrations page lists every other account in the daemon's
+    // order (integrations.ShowsInIntegrations, RowFor): a Jira row with the
+    // switch and the Jira settings, a CalDAV row without the switch and with
+    // the Calendar page; a new order sends the mail accounts first, as they
+    // were, then the page's.
+    [Fact]
+    public async Task TheIntegrationsPageListsTheRestAndAReorderSendsTheMailAccountsFirst()
+    {
+        await using var h = await Harness.StartAsync();
+        h.Accounts = MixedAccounts();
+        var (c, _) = await h.LoadedAsync(Integrations.Page.Integrations);
+        await h.Ui.RunAsync(() =>
+        {
+            Assert.Equal([J, D], c.Rows.Select(r => r.Id));
+            Assert.Null(c.Account(A));
+            Assert.Equal(["acme.atlassian.net", "Nextcloud"], c.Rows.Select(r => r.Title));
+            Assert.Equal(["jana@acme.example", "cloud.example.test"], c.Rows.Select(r => r.Subtitle));
+            Assert.Equal([true, false], c.Rows.Select(r => r.OffersSwitch));
+            Assert.Equal([Integrations.Editor.Jira, Integrations.Editor.CalendarPage], c.Rows.Select(r => r.Editor));
+            Assert.Equal(["Edit Account", "Calendar Settings"], c.Rows.Select(r => r.EditLabel));
+            Assert.Equal([Integrations.JiraIcon, Integrations.CalDAVIcon], c.Rows.Select(r => r.Icon));
+            Assert.True(c.MoveBy(D, -1));
+            Assert.Equal([D, J], c.Rows.Select(r => r.Id));
+            // A row moves only within its page.
+            Assert.False(c.MoveBy(A, 1));
+        });
+        await h.IdleAsync();
+        Assert.Equal(["{\"accountIds\":[\"a\",\"b\",\"c\",\"d\",\"j\"]}"], h.Calls(API.AccountReorder.Name));
+
+        // A second move starts from the order just sent, not the first load's.
+        await h.Ui.RunAsync(() => Assert.True(c.MoveTo(J, 0)));
+        await h.IdleAsync();
+        Assert.Equal("{\"accountIds\":[\"a\",\"b\",\"c\",\"j\",\"d\"]}", h.Calls(API.AccountReorder.Name)[^1]);
+    }
+
+    // A CalDAV account has no pause: a flip of a switch it does not show is
+    // put back and nothing is sent.
+    [Fact]
+    public async Task ACalDAVRowCannotBePaused()
+    {
+        await using var h = await Harness.StartAsync();
+        h.Accounts = MixedAccounts();
+        var (c, rec) = await h.LoadedAsync(Integrations.Page.Integrations);
+        var published = rec.Rows.Count;
+        await h.Ui.RunAsync(() => c.SetEnabled(D, false));
+        await h.IdleAsync();
+        Assert.Empty(h.Calls(API.AccountSetEnabled.Name));
+        Assert.True(rec.Rows.Count > published);
+        Assert.True(c.Rows[1].Enabled);
+        Assert.False(c.Rows[1].Busy);
+    }
+
+    // The remove question names what stays on the server, by kind.
+    [Fact]
+    public async Task TheRemoveQuestionSaysWhatStaysOnTheServerByKind()
+    {
+        await using var h = await Harness.StartAsync();
+        h.Accounts = MixedAccounts();
+        var (c, _) = await h.LoadedAsync(Integrations.Page.Integrations);
+        var bodies = new List<string>();
+        ConfirmAccountRemoval confirm = p =>
+        {
+            bodies.Add(p.Body);
+            return Task.FromResult((false, true));
+        };
+        await h.Ui.RunAsync(() => c.Remove(J, confirm));
+        await h.IdleAsync();
+        await h.Ui.RunAsync(() => c.Remove(D, confirm));
+        await h.IdleAsync();
+        Assert.Equal(
+            [
+                "acme.atlassian.net will be removed from Malachi Mail. Issues on the Jira site are not affected.",
+                "Nextcloud will be removed from Malachi Mail. Calendars on the server are not affected.",
+            ],
+            bodies);
+        Assert.Equal(c.Rows.Select(r => r.RemoveBody), bodies);
+        Assert.Empty(h.Calls(API.AccountRemove.Name));
     }
 
     [Fact]
@@ -662,18 +763,18 @@ public sealed class AccountsPageControllerTests
             return JsonCoding.EncodeToString(new AccountListResult { Accounts = list });
         });
 
-        public Task<(AccountsPageController, Recorder)> MakeAsync() => Ui.RunAsync(() =>
+        public Task<(AccountsPageController, Recorder)> MakeAsync(Integrations.Page page = Integrations.Page.Accounts) => Ui.RunAsync(() =>
         {
-            var c = new AccountsPageController(Client, pending: Pending);
+            var c = new AccountsPageController(Client, pending: Pending, page: page);
             var rec = new Recorder();
             rec.Attach(c);
             return (c, rec);
         });
 
         /// <summary>A page whose first load has answered.</summary>
-        public async Task<(AccountsPageController, Recorder)> LoadedAsync()
+        public async Task<(AccountsPageController, Recorder)> LoadedAsync(Integrations.Page page = Integrations.Page.Accounts)
         {
-            var (c, rec) = await MakeAsync();
+            var (c, rec) = await MakeAsync(page);
             await Ui.RunAsync(c.Load);
             await IdleAsync();
             Assert.True(c.IsEnabled);

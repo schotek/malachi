@@ -50,6 +50,9 @@ public static class IconGlyphs
         ["mail-unread"] = G(0xE715),
         ["mail-read"] = G(0xE8C3),
         ["system-users"] = G(0xE716),
+        // Preferences → Integrations (GTK application-x-addon, macOS
+        // puzzlepiece.extension): Puzzle.
+        ["application-x-addon"] = G(0xEA86),
         ["folder"] = G(0xE8B7),
         ["document-edit"] = G(0xE70F),
         ["mail-send"] = G(0xE724),

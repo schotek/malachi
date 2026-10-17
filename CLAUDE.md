@@ -2234,6 +2234,46 @@ testy souboru s klíčem a skutečného démona a jeden test typu souboru
 v shell verdiktu, jsou prostředí a předcházejí port) a ARM64. GTK port
 vznikl souběžně na Macu (GTK klient kalendáře výše).
 
+Předvolby → Integrace (2026-10-17, všechny tři klienty, necommitnuté;
+rozhodnutí vlastníka přes AskUserQuestion). Stránka Účty vypisuje jen
+poštovní účty (`imap`, `graph`) a její „+“ je prosté tlačítko poštovního
+průvodce; hned za ní je nová stránka Integrace (msgid „Integrations“)
+s každým jiným účtem — Jira, CalDAV, později eWay-CRM — ve skupině
+Připojené služby a katalogem Dostupné služby (Jira, Kalendář CalDAV)
+s tlačítky Přidat…, které otevírají stávající průvodce. Řádek Jira má
+přepínač, Upravit (nastavení) a Odebrat jako dřív; řádek CalDAV je bez
+přepínače, Upravit (tooltip „Nastavení kalendáře“) přepne na stránku
+Kalendář, kde zůstává server, heslo, certifikát i kalendáře; věta
+potvrzení odebrání je podle druhu (pošta / issues / kalendáře). Řazení
+přetažením a klávesami zůstává na obou stránkách, jen uvnitř stránky,
+a posílá `account.reorder` celé pořadí: poštovní účty první, pak
+integrace (`integrations.FullOrder`), takže Jira skončí v postranním
+panelu za poštou. Vstupy mimo Předvolby (prázdné okno, menu Soubor na
+macOS, nabídka … na Windows) ani stránka Kalendář se nemění, jen
+Kalendář po přidání či odebrání CalDAV obnoví obě stránky účtů.
+Reference je čistý `ui/internal/integrations` (`ShowsInAccounts`,
+`Split`, `FullOrder`, `Catalog`, `RowFor`, `Texts`; nahradil
+`calendar.ShowsInAccountsTab`), GTK `window/integrations_page.go`
+a sdílený `accountList` v `accounts_page.go`, `preferences.blp`
+`integrations_page` (ikona `application-x-addon-symbolic`), krok
+`MALACHI_GTK_START=prefs-integrations`; macOS
+`MalachiCore/Model/Integrations.swift`, `IntegrationsPaneViewController`
+jako podtřída `AccountsPaneViewController` s parametrem stránky, záložka
+`puzzlepiece.extension`, krok `MALACHI_START=prefs-integrations`; Windows
+`Malachi.Core/Model/Integrations.cs`, `AccountsPageController`
+s parametrem stránky, `Preferences/AccountListSection` sdílený oběma
+stránkami, `IntegrationsPage`, glyf Puzzle (U+EA86) pro
+`application-x-addon`. 14 nových msgid i česky. Ověřeno: GTK `make
+build`, cílené testy včetně smoke, `make po` a `make lint` v kontejneru;
+macOS `swift build` bez varování, filtrované `swift test` (43)
+a `check-strings.py`; Windows napsané bez `dotnet` — čeká `build.ps1
+app`/`test`/`lint` (`IntegrationsTests`, `AccountsPageControllerTests`,
+smoke `CalendarPreferencesSmokeTests`, `SmokeTests`), přičemž
+`IconGlyphsTests.EveryIconNameOfTheGtkUiHasAGlyph` padá už před touto
+prací na ikonách kalendáře. Ručně ve všech třech nad kopií dat: pořadí
+stránek, Účty jen pošta, Integrace s Jirou a CalDAV, Přidat…, odebrání
+s větou podle druhu, řazení a pořadí v postranním panelu.
+
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně
 komprese a příloh na vyžádání, Microsoft účty).
