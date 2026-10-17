@@ -234,9 +234,12 @@ builds and tests the GTK client in a Fedora 42 container with exactly these
 packages (`scripts/gtk-container/Containerfile`), through Apple's `container`
 CLI, Docker or Podman (`ENGINE=docker`); `gtk.sh build` makes the image,
 `gtk.sh make build` and `gtk.sh test-ui` run inside it, the Go and ccache
-caches stay in `~/.cache/malachi-gtk` so gotk4 compiles once. It cannot run
-the application against a desktop (no Secret Service, GOA or D-Bus session;
-`MALACHI_KEYRING=none`), only build and test it.
+caches stay in `~/.cache/malachi-gtk` so gotk4 compiles once. With XQuartz
+on the Mac, `gtk.sh x11` shows the application in a native window over
+sample data, and `gtk.sh x11 live` with `gtk.sh forward` against a daemon
+running on the Mac (`scripts/gtk-container/test-daemon.sh`); the container
+itself has no Secret Service, GOA or D-Bus session, so accounts, keyrings
+and notifications are the Mac daemon's or stay untested.
 
 ### Build and run
 

@@ -4,10 +4,13 @@
 package window
 
 import (
+	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
+	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
@@ -53,10 +56,21 @@ type calendarSidebar struct {
 	list       *gtk.ListBox
 	unanswered *gtk.ListBoxRow
 	addButton  *gtk.MenuButton
-	// shown is the model the rows were last built for (without its mini
-	// month), shownFilter the filter then.
-	shown       *calendarctl.Sidebar
-	shownFilter calendarctl.Filter
+	// shape is the structural key the rows were built for
+	// (sidebarShape); latest the last model update was given, which a
+	// coalesced rebuild builds from.
+	shape  string
+	latest calendarctl.Sidebar
+	// rebuildTimer is the pending coalesced rebuild (0 none).
+	rebuildTimer glib.SourceHandle
+	// The widgets updated in place: the Unanswered row's label and badge,
+	// each calendar's check button and note, each account's state row.
+	unansweredLabel *gtk.Label
+	unansweredBadge *gtk.Label
+	calRows         []sidebarCalendarRow
+	stateRows       []sidebarStateRow
+	// syncing is set while the sidebar sets the check buttons itself.
+	syncing bool
 	// selecting is set while the sidebar changes the list's selection
 	// itself.
 	selecting bool
@@ -244,46 +258,174 @@ func (s *calendarSidebar) setMiniMonth(m calendar.MiniMonth) {
 	}
 }
 
-// update shows sb (CalendarController.Sidebar).
+// sidebarRebuildDelay coalesces the sidebar's structural rebuilds: the
+// model changes with every sync retry (notify.calendarState).
+const sidebarRebuildDelay = 300 // milliseconds
+
+// sidebarCalendarRow is a calendar's row and its widgets updated in place.
+type sidebarCalendarRow struct {
+	row   *gtk.ListBoxRow
+	check *gtk.CheckButton
+	name  *gtk.Label
+	note  *gtk.Label
+}
+
+// sidebarStateRow is an account's state row (hidden without a state) and
+// its widgets updated in place.
+type sidebarStateRow struct {
+	row    *gtk.ListBoxRow
+	label  *gtk.Label
+	signIn *gtk.Button
+}
+
+// sidebarShape is the structural key of sb: the accounts in order with
+// their names and capsules, their calendars in order with ids, names,
+// colours and notes. The Unanswered row, the state rows and Add
+// Calendar… are always there; what they say is updated in place.
+func sidebarShape(sb calendarctl.Sidebar) string {
+	var b strings.Builder
+	b.WriteString(sb.InvitationsTitle + "\x1f" + sb.UnansweredTitle + "\x1e")
+	for _, a := range sb.Accounts {
+		fmt.Fprintf(&b, "a%s\x1f%s\x1f%s\x1e", a.AccountID, a.Name, calendarAccountBadge(a))
+		for _, c := range a.Calendars {
+			fmt.Fprintf(&b, "c%s\x1f%s\x1f%s\x1f%s\x1e", c.ID, c.Name, c.Color, c.Note)
+		}
+	}
+	return b.String()
+}
+
+// update shows sb (CalendarController.Sidebar): the rows are rebuilt only
+// when sb's structure changed (coalesced, never under a held button),
+// everything else is updated in place.
 func (s *calendarSidebar) update(sb calendarctl.Sidebar) {
 	s.setMiniMonth(sb.MiniMonth)
-	filter := s.page.ctl.Filter()
-	rows := sb
-	rows.MiniMonth = calendar.MiniMonth{}
-	if s.shown == nil || !reflect.DeepEqual(*s.shown, rows) {
-		s.shown = &rows
-		s.rebuild(rows)
+	s.latest = sb
+	key := sidebarShape(sb)
+	switch {
+	case s.shape == "":
+		s.rebuild(sb, key)
+	case key != s.shape:
+		s.scheduleRebuild()
+		// Until then the old rows keep what still fits them.
 	}
-	s.shownFilter = filter
+	s.refresh(s.latest)
+}
+
+// scheduleRebuild rebuilds the rows from the latest model after
+// sidebarRebuildDelay, later while a pointer button is held.
+func (s *calendarSidebar) scheduleRebuild() {
+	if s.rebuildTimer != 0 {
+		return
+	}
+	s.rebuildTimer = glib.TimeoutAdd(sidebarRebuildDelay, func() bool {
+		if calendarPointerDown() {
+			return true
+		}
+		s.rebuildTimer = 0
+		if key := sidebarShape(s.latest); key != s.shape {
+			s.rebuild(s.latest, key)
+			s.refresh(s.latest)
+		}
+		return false
+	})
+}
+
+// calendarPointerDown reports a pointer button held down: a rebuild then
+// would destroy the pressed widget.
+func calendarPointerDown() bool {
+	d := gdk.DisplayGetDefault()
+	if d == nil || d.DefaultSeat() == nil {
+		return false
+	}
+	ptr := gdk.BaseSeat(d.DefaultSeat()).Pointer()
+	if ptr == nil {
+		return false
+	}
+	const buttons = gdk.Button1Mask | gdk.Button2Mask | gdk.Button3Mask
+	return gdk.BaseDevice(ptr).ModifierState()&buttons != 0
+}
+
+// refresh updates the rows built for the current shape from sb in place:
+// the unanswered count, the check buttons, the state rows and the
+// Unanswered row's selection. Rows of a shape not yet rebuilt are matched
+// by calendar and account id; what has no row waits for the rebuild.
+func (s *calendarSidebar) refresh(sb calendarctl.Sidebar) {
+	tr := i18n.Tr
+	n := strconv.Itoa(sb.Unanswered)
+	s.unansweredBadge.SetText(n)
+	s.unansweredBadge.SetVisible(sb.Unanswered > 0)
+	name := sb.UnansweredTitle
+	if sb.Unanswered > 0 {
+		name = calendar.Dot(name, n, tr)
+	}
+	s.unanswered.UpdateProperty([]gtk.AccessibleProperty{gtk.AccessiblePropertyLabel},
+		[]coreglib.Value{*coreglib.NewValue(name)})
+
+	cals := map[api.CalendarID]calendarctl.SidebarCalendar{}
+	states := map[api.AccountID]calendarctl.SidebarAccount{}
+	for _, a := range sb.Accounts {
+		states[a.AccountID] = a
+		for _, c := range a.Calendars {
+			cals[c.ID] = c
+		}
+	}
+	s.syncing = true
+	for _, r := range s.calRows {
+		c, ok := cals[api.CalendarID(r.row.Name())]
+		if ok && r.check.Active() != c.Visible {
+			r.check.SetActive(c.Visible)
+		}
+	}
+	s.syncing = false
+	for _, r := range s.stateRows {
+		a := states[api.AccountID(r.row.Name())]
+		if r.label.Text() != a.StateLine {
+			r.label.SetText(a.StateLine)
+		}
+		r.row.SetVisible(a.StateLine != "")
+		r.signIn.SetVisible(a.OffersSignIn)
+	}
+
 	s.selecting = true
-	if filter == calendarctl.FilterUnanswered && s.unanswered != nil {
-		s.list.SelectRow(s.unanswered)
-	} else {
+	if s.page.ctl.Filter() == calendarctl.FilterUnanswered {
+		if s.list.SelectedRow() == nil {
+			s.list.SelectRow(s.unanswered)
+		}
+	} else if s.list.SelectedRow() != nil {
 		s.list.UnselectAll()
 	}
 	s.selecting = false
 }
 
-// rebuild makes the rows after the mini month for sb.
-func (s *calendarSidebar) rebuild(sb calendarctl.Sidebar) {
+// rebuild makes the rows after the mini month for sb, whose shape is key.
+func (s *calendarSidebar) rebuild(sb calendarctl.Sidebar, key string) {
 	tr := i18n.Tr
+	if s.rebuildTimer != 0 {
+		glib.SourceRemove(s.rebuildTimer)
+		s.rebuildTimer = 0
+	}
+	s.shape = key
 	s.selecting = true
 	s.list.RemoveAll()
 	s.selecting = false
+	s.calRows, s.stateRows = nil, nil
 
 	s.list.Append(calendarSidebarHeading(sb.InvitationsTitle, "", false))
-	s.unanswered = calendarUnansweredRow(sb.UnansweredTitle, sb.Unanswered)
+	s.unanswered, s.unansweredLabel, s.unansweredBadge = calendarUnansweredRow(sb.UnansweredTitle)
 	s.list.Append(s.unanswered)
 
 	for _, a := range sb.Accounts {
 		s.list.Append(calendarSidebarHeading(a.Name, calendarAccountBadge(a), true))
 		for _, c := range a.Calendars {
-			s.list.Append(s.calendarRow(c))
+			r := s.calendarRow(c)
+			s.calRows = append(s.calRows, r)
+			s.list.Append(r.row)
 		}
-		if a.StateLine != "" {
-			id := a.AccountID
-			s.list.Append(calendarStateRow(a.StateLine, a.OffersSignIn, tr, func() { s.page.ctl.SignIn(id) }))
-		}
+		id := a.AccountID
+		st := calendarStateRow(tr, func() { s.page.ctl.SignIn(id) })
+		st.row.SetName(string(id))
+		s.stateRows = append(s.stateRows, st)
+		s.list.Append(st.row)
 	}
 }
 
@@ -320,9 +462,9 @@ func calendarSidebarHeading(text, badge string, account bool) *gtk.ListBoxRow {
 	return row
 }
 
-// calendarUnansweredRow is Invitations ▸ Unanswered with its count badge
-// (none for 0).
-func calendarUnansweredRow(text string, count int) *gtk.ListBoxRow {
+// calendarUnansweredRow is Invitations ▸ Unanswered with its label and
+// its count badge (refresh sets the count).
+func calendarUnansweredRow(text string) (*gtk.ListBoxRow, *gtk.Label, *gtk.Label) {
 	row := gtk.NewListBoxRow()
 	row.AddCSSClass("cal-unanswered-row")
 	box := gtk.NewBox(gtk.OrientationHorizontal, 8)
@@ -333,26 +475,22 @@ func calendarUnansweredRow(text string, count int) *gtk.ListBoxRow {
 	label.SetHExpand(true)
 	label.SetEllipsize(pango.EllipsizeEnd)
 	box.Append(label)
-	name := text
-	if count > 0 {
-		n := strconv.Itoa(count)
-		badge := gtk.NewLabel(n)
-		badge.SetUseMarkup(false)
-		badge.SetVAlign(gtk.AlignCenter)
-		badge.AddCSSClass("cal-count-badge")
-		box.Append(badge)
-		name = calendar.Dot(text, n, i18n.Tr)
-	}
+	badge := gtk.NewLabel("")
+	badge.SetUseMarkup(false)
+	badge.SetVAlign(gtk.AlignCenter)
+	badge.AddCSSClass("cal-count-badge")
+	badge.SetVisible(false)
+	box.Append(badge)
 	row.SetChild(box)
-	row.UpdateProperty([]gtk.AccessibleProperty{gtk.AccessiblePropertyLabel},
-		[]coreglib.Value{*coreglib.NewValue(name)})
-	return row
+	return row, label, badge
 }
 
 // calendarRow is a calendar's row: a check button (calendar.update
-// visible) holding its colour square, its name and its note.
-func (s *calendarSidebar) calendarRow(c calendarctl.SidebarCalendar) *gtk.ListBoxRow {
+// visible) holding its colour square, its name and its note. The row's
+// widget name is the calendar's id (refresh matches by it).
+func (s *calendarSidebar) calendarRow(c calendarctl.SidebarCalendar) sidebarCalendarRow {
 	row := gtk.NewListBoxRow()
+	row.SetName(string(c.ID))
 	row.SetSelectable(false)
 	row.SetActivatable(false)
 	row.AddCSSClass("cal-calendar-row")
@@ -370,33 +508,39 @@ func (s *calendarSidebar) calendarRow(c calendarctl.SidebarCalendar) *gtk.ListBo
 	name.SetXAlign(0)
 	name.SetEllipsize(pango.EllipsizeEnd)
 	box.Append(name)
+	note := gtk.NewLabel(c.Note)
+	note.SetUseMarkup(false)
+	note.SetXAlign(0)
+	note.SetEllipsize(pango.EllipsizeEnd)
+	note.AddCSSClass("caption")
+	note.AddCSSClass("dim-label")
+	note.SetVisible(c.Note != "")
 	tip := c.Name
 	if c.Note != "" {
-		note := gtk.NewLabel(c.Note)
-		note.SetUseMarkup(false)
-		note.SetXAlign(0)
-		note.SetEllipsize(pango.EllipsizeEnd)
-		note.AddCSSClass("caption")
-		note.AddCSSClass("dim-label")
 		// The note gives way before the name.
 		name.SetWidthChars(6)
-		box.Append(note)
 		tip = calendar.Dot(c.Name, c.Note, i18n.Tr)
 	}
+	box.Append(note)
 	check.SetChild(box)
 	check.SetTooltipText(tip)
 	id := c.ID
-	check.ConnectToggled(func() { s.page.ctl.SetVisible(id, check.Active()) })
+	check.ConnectToggled(func() {
+		if !s.syncing {
+			s.page.ctl.SetVisible(id, check.Active())
+		}
+	})
 	row.SetChild(check)
-	return row
+	return sidebarCalendarRow{row: row, check: check, name: name, note: note}
 }
 
 // calendarStateRow is an account's state row ("Calendar access needs a
-// new sign-in") with Sign In… when offered.
-func calendarStateRow(text string, signIn bool, tr calendar.Translator, onSignIn func()) *gtk.ListBoxRow {
+// new sign-in") with Sign In…, both shown by refresh.
+func calendarStateRow(tr calendar.Translator, onSignIn func()) sidebarStateRow {
 	row := gtk.NewListBoxRow()
 	row.SetSelectable(false)
 	row.SetActivatable(false)
+	row.SetVisible(false)
 	row.AddCSSClass("cal-state-row")
 	col := gtk.NewBox(gtk.OrientationVertical, 4)
 	top := gtk.NewBox(gtk.OrientationHorizontal, 6)
@@ -404,7 +548,7 @@ func calendarStateRow(text string, signIn bool, tr calendar.Translator, onSignIn
 	icon.SetVAlign(gtk.AlignStart)
 	icon.AddCSSClass("warning")
 	top.Append(icon)
-	label := gtk.NewLabel(text)
+	label := gtk.NewLabel("")
 	label.SetUseMarkup(false)
 	label.SetXAlign(0)
 	label.SetWrap(true)
@@ -414,16 +558,15 @@ func calendarStateRow(text string, signIn bool, tr calendar.Translator, onSignIn
 	label.AddCSSClass("dim-label")
 	top.Append(label)
 	col.Append(top)
-	if signIn {
-		b := gtk.NewButtonWithLabel(calendar.SignIn(tr))
-		b.SetHAlign(gtk.AlignStart)
-		b.AddCSSClass("pill")
-		b.AddCSSClass("cal-sign-in")
-		b.ConnectClicked(onSignIn)
-		col.Append(b)
-	}
+	b := gtk.NewButtonWithLabel(calendar.SignIn(tr))
+	b.SetHAlign(gtk.AlignStart)
+	b.AddCSSClass("pill")
+	b.AddCSSClass("cal-sign-in")
+	b.SetVisible(false)
+	b.ConnectClicked(onSignIn)
+	col.Append(b)
 	row.SetChild(col)
-	return row
+	return sidebarStateRow{row: row, label: label, signIn: b}
 }
 
 // calendarAccountBadge is the capsule after an account's heading: CALDAV

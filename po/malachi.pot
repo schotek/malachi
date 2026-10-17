@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-17 08:20+0000\n"
+"POT-Creation-Date: 2026-10-17 09:56+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -686,7 +686,7 @@ msgstr ""
 
 #. TRANSLATORS: A button: the rewritten text replaces the original.
 #: ui/internal/assistant/assistant.go:655
-#: ui/internal/window/preferences_calendar.go:930
+#: ui/internal/window/preferences_calendar.go:1007
 msgid "Replace"
 msgstr ""
 
@@ -1210,8 +1210,8 @@ msgstr ""
 #: ui/internal/window/remote.go:269 ui/internal/window/remote.go:295
 #: ui/internal/window/calendar_detail.go:871
 #: ui/internal/window/calendar_detail.go:899
-#: ui/internal/window/preferences_calendar.go:477
-#: ui/internal/window/preferences_calendar.go:929
+#: ui/internal/window/preferences_calendar.go:478
+#: ui/internal/window/preferences_calendar.go:1006
 #: ui/data/ui/account_wizard.ui:401 ui/data/ui/jira_account.ui:25
 msgid "_Cancel"
 msgstr ""
@@ -5483,30 +5483,30 @@ msgid "Saved %s"
 msgstr ""
 
 #: ui/internal/window/accounts_page.go:282
-#: ui/internal/window/preferences_calendar.go:446
+#: ui/internal/window/preferences_calendar.go:447
 msgid "Also delete _drafts and downloaded data"
 msgstr ""
 
 #. TRANSLATORS: %s is the account's e-mail address.
 #: ui/internal/window/accounts_page.go:285
-#: ui/internal/window/preferences_calendar.go:449
+#: ui/internal/window/preferences_calendar.go:450
 #, c-format
 msgid ""
 "%s will be removed from Malachi Mail. Mail on the server is not affected."
 msgstr ""
 
 #: ui/internal/window/accounts_page.go:286
-#: ui/internal/window/preferences_calendar.go:450
+#: ui/internal/window/preferences_calendar.go:451
 msgid "Remove this account?"
 msgstr ""
 
 #: ui/internal/window/accounts_page.go:286
-#: ui/internal/window/preferences_calendar.go:450
+#: ui/internal/window/preferences_calendar.go:451
 msgid "_Remove"
 msgstr ""
 
 #: ui/internal/window/accounts_page.go:302
-#: ui/internal/window/preferences_calendar.go:463
+#: ui/internal/window/preferences_calendar.go:464
 msgid "Removing the account"
 msgstr ""
 
@@ -6514,7 +6514,7 @@ msgstr ""
 msgid "This year"
 msgstr ""
 
-#: ui/internal/window/preferences_calendar.go:575
+#: ui/internal/window/preferences_calendar.go:639
 #: ui/data/ui/account_wizard.ui:198 ui/data/ui/account_wizard.ui:255
 msgid "_Forget"
 msgstr ""

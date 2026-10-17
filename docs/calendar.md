@@ -11,9 +11,10 @@ P1, `malachi-rpc`) and the macOS client (M1–M11) are done and committed
 real Microsoft 365 and Nextcloud accounts (D29–D32). The GTK client
 (G1–G19, §6.5, as built in §5.12) is written, built and tested in the
 Fedora container on the Mac (`scripts/gtk-container/gtk.sh`; full
-`test-ui` green, every calendar smoke green, every view and window
-looked at under Broadway) and waits for the owner's run in the Toolbx
-against his accounts, then its commit. The Windows port is the owner's
+`test-ui` green, every calendar smoke green) and the owner clicked
+through it in an XQuartz window against his real accounts (a native
+test daemon over a copy of his data); his findings are fixed (§5.12,
+the last bullets). The Windows port is the owner's
 on his Windows machine (§6.4); nothing under `windows/` was touched.
 
 Contents:
@@ -898,6 +899,12 @@ differs from or adds to the text above and §3.7:
   owner), `responseStatus`, `isOrganizer` and `responseRequested` are the
   owner's: `myResponse` comes only from an attendee who is one of `Me`,
   `IAmOrganizer` from the organiser's address.
+- Stored shape of a Graph series: one resource per series (remote id =
+  master id): a `master` row, one `override` row per exception
+  (`recurrence_id` = `originalStart`, own `my_response`), plain
+  occurrences only in `cal_occurrences` (Graph's expansion). An item
+  naming a `seriesMasterId` is always an instance, whatever its `type`
+  (data version 3).
 - Limiter (D13): `graph.NewLimiter(4)` shared through `Options.Limiter`;
   mail requests and calendar writes, free/busy and `Range` run at
   `PriorityHigh`, calendar passes and `Calendars` at `PriorityLow`.
@@ -1928,13 +1935,21 @@ InvitationCard = InvitationSummary + {
   `unanswered`; a local answer of the sequence wins. The linked event is
   `store.InvitationLinkedEvent`, one rule for card, summary and list: the
   events of the UID in every account, the message's account first, then
-  by account order; per account the row the invitation names (the
-  override of its recurrence id, else the first master or single row,
-  else the first, by calendar, remote id, recurrence id); it counts when
+  by account order; per account the row the invitation names: for an
+  instance invitation (`RECURRENCE-ID`) the override of that id, else a
+  non-master row starting at that instant (a Graph instance or exception,
+  stored as a `single` row; an all-day one by date), else the master; for
+  a series invitation the master, else the first single row, else the
+  first (by calendar, remote id, recurrence id); it counts when
   the user does not organise it, its `ORGANIZER` is the invitation's, the
   account is enabled and the calendar not disabled, else the next
   account. (A daemon copy is not consulted: it exists only with a local
   answer.)
+  The series master's answer never answers an instance invitation. An
+  answer `event.respond` recorded through the linked row
+  (`cal_responses.event_id`, keyed by that row rather than the instance)
+  is the card's local answer when none is keyed by the invitation's
+  recurrence id.
 - *previous* (update, against the linked event, never a copy, the event's
   `SEQUENCE` not above the invitation's): `start`/`end` only when the
   time changed, `location` when it changed and was not empty, `recurrence`
@@ -2948,6 +2963,27 @@ macOS client or the plan:
   auto-selected and saved (the samples refuse writes and the error
   landed in the group's description); lists are now filled with tracking
   off and errors show as a toast only.
+- **Owner's live test in XQuartz** (2026-10-17): (1) an invitation for one
+  occurrence stayed unanswered after accepting it in the Calendar —
+  `event.respond` keyed the response by the stored row (recurrence "",
+  the event's sequence) while the card looked up UID + RECURRENCE-ID, and
+  the link picked the wrong row because Graph instances were stored as
+  `single`; now `store.InvitationLinkedEvent` links an occurrence
+  invitation to the override with that id, else a non-master row starting
+  at that instant, else the master (a master's answer never answers an
+  instance), and the card also takes a response row whose `event_id` is
+  the linked row; the Graph mapping treats every item with
+  `seriesMasterId` as an instance (an exception when its start moved),
+  `graphDataVersion` 3 rebuilds stored rows. (2) The Calendar sidebar and
+  Preferences → Calendar rebuilt their widgets on every
+  `notify.calendarState` (the state line flips with each sync retry), so
+  widgets died between press and release ("Broken accounting of active
+  state"); both now rebuild only on a structural change (accounts,
+  calendars, their ids/names/colours/notes/order), after 300 ms and never
+  while a button is held, and update texts, checks, badges and selection
+  in place. (3) Broadway in a browser is only good for screenshots at
+  launch: it loses input after popovers/drop-downs; interactive tests use
+  XQuartz (`gtk.sh x11 live`, `gtk.sh forward`, `test-daemon.sh`).
 
 ## 6. Work breakdown
 

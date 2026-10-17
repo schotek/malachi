@@ -8,14 +8,17 @@ import (
 	"log/slog"
 	"os"
 	"runtime"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
+	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/calendar"
@@ -121,10 +124,7 @@ func TestCalendarSidebarGTKSmoke(t *testing.T) {
 	sb := p.ctl.Sidebar()
 	want := 2
 	for _, a := range sb.Accounts {
-		want += 1 + len(a.Calendars)
-		if a.StateLine != "" {
-			want++
-		}
+		want += 2 + len(a.Calendars) // heading, calendars, state row
 	}
 	if n != want {
 		t.Errorf("sidebar has %d rows, want %d", n, want)
@@ -184,6 +184,66 @@ func TestCalendarSidebarGTKSmoke(t *testing.T) {
 	adj.SetValue(adj.Upper())
 	wait(300 * time.Millisecond)
 	t.Logf("LAYOUT: agenda pages %d → %d upper=%.0f", pages, p.ctl.AgendaPages(), adj.Upper())
+
+	// Sync retries (notify.calendarState) flip the first account's state
+	// between syncing and an error: the rows and the Agenda's rows stay
+	// the same widgets, only the state row's text changes.
+	natives := func() []uintptr {
+		var out []uintptr
+		for c := s.list.FirstChild(); c != nil; c = gtk.BaseWidget(c).NextSibling() {
+			out = append(out, coreglib.BaseObject(c).Native())
+		}
+		return out
+	}
+	agendaNatives := func() []uintptr {
+		var out []uintptr
+		for _, r := range a.rows {
+			out = append(out, coreglib.BaseObject(r).Native())
+		}
+		return out
+	}
+	beforeRows, beforeAgenda := natives(), agendaNatives()
+	base := src.Data()
+	texts := map[string]bool{}
+	for i := 0; i < 50; i++ {
+		d := src.Data()
+		d.Calendars.Accounts = slices.Clone(d.Calendars.Accounts)
+		st := &d.Calendars.Accounts[0].State
+		if i%2 == 0 {
+			st.Status, st.Error = api.CalendarSyncSyncing, nil
+		} else {
+			st.Status, st.Error = api.CalendarSyncError, &api.Error{Code: api.CodeServerError, Message: "keyring"}
+		}
+		src.Replace(d, calendardata.PhaseReady)
+		wait(10 * time.Millisecond)
+		if len(s.stateRows) > 0 {
+			texts[s.stateRows[0].label.Text()] = s.stateRows[0].row.Visible()
+		}
+	}
+	wait(500 * time.Millisecond)
+	if got := natives(); !slices.Equal(got, beforeRows) {
+		t.Errorf("50 state changes rebuilt the sidebar (%d rows → %d)", len(beforeRows), len(got))
+	}
+	if got := agendaNatives(); !slices.Equal(got, beforeAgenda) {
+		t.Error("50 state changes rebuilt the agenda's rows")
+	}
+	t.Logf("LAYOUT: churn rows kept=%v agenda kept=%v state texts=%d", slices.Equal(natives(), beforeRows),
+		slices.Equal(agendaNatives(), beforeAgenda), len(texts))
+	if len(texts) < 2 {
+		t.Errorf("the state row's text did not follow the state: %v", texts)
+	}
+	// A changed calendar set rebuilds (coalesced).
+	d := base
+	d.Calendars.Accounts = slices.Clone(d.Calendars.Accounts)
+	d.Calendars.Accounts[0].Calendars = d.Calendars.Accounts[0].Calendars[1:]
+	src.Replace(d, calendardata.PhaseReady)
+	wait(500 * time.Millisecond)
+	if slices.Equal(natives(), beforeRows) {
+		t.Error("a removed calendar did not rebuild the sidebar")
+	}
+	t.Logf("LAYOUT: calendar removed rows %d → %d", len(beforeRows), len(natives()))
+	src.Replace(base, calendardata.PhaseReady)
+	wait(500 * time.Millisecond)
 
 	// The Unanswered list.
 	s.unanswered.Activate()

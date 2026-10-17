@@ -4,6 +4,7 @@
 package window
 
 import (
+	"encoding/json"
 	"os"
 	"runtime"
 	"slices"
@@ -14,6 +15,7 @@ import (
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/calendar"
 	"github.com/schotek/malachi/ui/internal/calendardata"
@@ -95,6 +97,115 @@ func TestPreferencesCalendarGTKSmoke(t *testing.T) {
 	if len(p.dayButtons) != 7 {
 		t.Errorf("day toggles: %d", len(p.dayButtons))
 	}
+	// 50 calendarState notifications (the daemon's keyring retries) and 10
+	// reloads with the same accounts and calendars (accountsChanged)
+	// recreate no widget, register no observer and leave nothing running.
+	type ident struct {
+		groups []*adw.PreferencesGroup
+		rows   []*adw.ActionRow
+		shown  [][]any
+	}
+	snap := func() ident {
+		var id ident
+		id.groups = append(id.groups, p.display, p.empty, p.add)
+		for _, s := range p.sections {
+			id.groups = append(id.groups, s.group, s.invitations)
+			for _, w := range s.calWidgets {
+				id.rows = append(id.rows, w.row)
+			}
+			var sh []any
+			for _, w := range s.shown {
+				sh = append(sh, w)
+			}
+			id.shown = append(id.shown, sh)
+		}
+		return id
+	}
+	before, observers, pageBefore := snap(), src.Observers(), p.page
+	statuses := []api.CalendarSyncStatus{api.CalendarSyncSyncing, api.CalendarSyncError}
+	for i := range 50 {
+		st := api.CalendarSyncState{AccountID: calendar.SampleWork, Status: statuses[i%2], Progress: -1}
+		if st.Status == api.CalendarSyncError {
+			st.Error = &api.Error{Code: api.CodeInternalError, Message: "keyringError"}
+		}
+		raw, _ := json.Marshal(api.CalendarStateNotification{State: st})
+		src.Handle(api.NotifyCalendarState, raw)
+		flush()
+	}
+	for range 10 {
+		src.Replace(src.Data(), calendardata.PhaseReady)
+		flush()
+	}
+	settleIdle := func() {
+		end := time.Now().Add(prefsRebuildDelay*time.Millisecond + 400*time.Millisecond)
+		for time.Now().Before(end) {
+			glib.MainContextDefault().Iteration(false)
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	settleIdle()
+	after := snap()
+	if p.page != pageBefore || !slices.Equal(before.groups, after.groups) || !slices.Equal(before.rows, after.rows) ||
+		len(before.shown) != len(after.shown) {
+		t.Fatal("state notifications or reloads recreated widgets")
+	}
+	for i := range before.shown {
+		if !slices.Equal(before.shown[i], after.shown[i]) {
+			t.Errorf("section %d: rows recreated", i)
+		}
+	}
+	if src.Observers() != observers {
+		t.Errorf("observers %d → %d", observers, src.Observers())
+	}
+	for _, s := range p.sections {
+		if s.rebuildTimer != 0 {
+			t.Errorf("%s: a rebuild is still pending", s.layout.AccountID)
+		}
+	}
+	if glib.MainContextDefault().Pending() {
+		t.Error("the main loop is still busy after the notifications")
+	}
+
+	// Two snapshot changes of the same structure keep the row widgets; a
+	// changed calendar set rebuilds the section (after the debounce).
+	work := p.sections[0]
+	if len(work.calWidgets) < 2 {
+		t.Fatalf("work calendars: %d", len(work.calWidgets))
+	}
+	first, group := work.calWidgets[0].row, work.group
+	for range 2 {
+		src.Update(func(s *calendardata.Snapshot) {
+			s.CalendarAccounts = slices.Clone(s.CalendarAccounts)
+			s.CalendarAccounts[0].State.Status = api.CalendarSyncError
+			s.CalendarAccounts[0].State.Error = &api.Error{Code: 1, Message: "the system keyring is unavailable"}
+		})
+		flush()
+	}
+	settle := func() {
+		end := time.Now().Add(prefsRebuildDelay*time.Millisecond + 400*time.Millisecond)
+		for time.Now().Before(end) {
+			glib.MainContextDefault().Iteration(false)
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	settle()
+	if p.sections[0] != work || work.group != group || work.calWidgets[0].row != first {
+		t.Error("a state change rebuilt the rows")
+	}
+	src.Update(func(s *calendardata.Snapshot) {
+		s.CalendarAccounts = slices.Clone(s.CalendarAccounts)
+		a := s.CalendarAccounts[0]
+		a.Calendars = slices.Clone(a.Calendars[:len(a.Calendars)-1])
+		s.CalendarAccounts[0] = a
+	})
+	settle()
+	if len(work.calWidgets) == 0 || work.calWidgets[0].row == first {
+		t.Error("a changed calendar set did not rebuild the rows")
+	}
+	for _, l := range p.calendarLayoutLines() {
+		t.Log("LAYOUT (after removing a calendar): " + l)
+	}
+
 	// Without accounts the empty state replaces the sections.
 	empty := calendardata.NewEmptySource(time.Local, nil)
 	b2 := data.Builder("preferences.ui")

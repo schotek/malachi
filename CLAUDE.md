@@ -142,9 +142,25 @@ klientů naráz (`Controller.Waiting` → `waiting` → `IsWaiting`).
 
 ## Prostředí
 
-Vývoj probíhá v Fedora 42 Toolbx kontejneru (`toolbox enter malachi`).
-Kompilace a testy uvnitř, `flatpak-builder` a testování výsledného balíčku
-na hostiteli.
+GTK klient se od 2026-10-17 vyvíjí a testuje na Macu v kontejneru Fedora 42
+přes Apple `container` (rozhodnutí vlastníka; Fedora Toolbx už není
+k dispozici): `scripts/gtk-container/gtk.sh build` jednou postaví obraz
+`malachi-gtk:f42` (balíčky z `rpm.yml`, verze jako dřívější Toolbx),
+`gtk.sh make build` staví do `build/linux/` (cache Go a ccache
+v `~/.cache/malachi-gtk`, první překlad gotk4 asi 20 minut, další půl
+minuty), `gtk.sh test-ui` pouští testy `ui/` pod Xvfb (obrazovka
+1600×1200, smoke testy `MALACHI_GTK_SMOKE=1`), `make po` jde v obrazu
+`malachi-po:f42`. Okno ukazuje XQuartz: jednou `defaults write
+org.xquartz.X11 nolisten_tcp -bool false`, restart XQuartz, `gtk.sh
+xhost`, pak `gtk.sh x11` (vzorová data) nebo `gtk.sh x11 live` proti
+démonovi na Macu (`gtk.sh forward` přesměruje jeho socket do kontejneru;
+takový démon spouští vlastník sám z Terminálu skriptem
+`scripts/gtk-container/test-daemon.sh` nad kopií dat s podepsaným helperem
+klíčenky z `build/Malachi Mail.app`; po restartu démona restartovat
+i klienta, čte jeho klíč při startu). Broadway (`gtk4-broadwayd`) je jen
+na snímky při startu — v prohlížeči ztrácí vstup po popoverech. Po každé
+práci `container system stop`. Zmínky o Toolbxu níže jsou historické;
+`flatpak-builder` a balíčky zůstávají na linuxovém hostiteli.
 
 Ověřené verze (2026-09-02): Go 1.25, GTK 4.18, libadwaita 1.7, GLib 2.84,
 WebKitGTK 2.52 (API 6.0), Blueprint 0.16, SQLite 3.47, gsound 1.0.3
@@ -432,8 +448,8 @@ Pořadí prací:
     konceptem a ARM64
 11. Kalendář (Microsoft 365 přes Graph, CalDAV, pozvánky v poště, MCP)
     — démon a macOS hotové a ověřené vlastníkem (`feat/calendar`,
-    2026-10-16); GTK port napsaný a otestovaný v kontejneru (2026-10-17,
-    čeká na průchod vlastníka v Toolbxu); Windows port dělá vlastník
+    2026-10-16); GTK port hotový a ověřený vlastníkem v XQuartz
+    (2026-10-17); Windows port dělá vlastník
 
 Asistent (stav 2026-09-30, sloučeno do `main`; uživatel potvrdil, že
 funguje ve všech třech klientech). Na macOS je hotové a uživatelem otestované:
@@ -2006,9 +2022,14 @@ a okno) a prohlédnuto přes Broadway (`gtk4-broadwayd` v kontejneru,
 `GDK_BACKEND=broadway`, vývojové kroky `MALACHI_GTK_START` jako
 `MALACHI_START` na macOS: `calendar:week|day|month|agenda`, `event-popover`,
 `event-editor[:edit]`, `caldav-dialog`, `prefs-calendar`, `size=WxH`,
-`quit`). Čeká: průchod vlastníka v Toolbxu proti skutečným účtům (M365,
-Nextcloud), pak commit; do `windows/` GTK port nesáhl (Windows port běží
-jinde).
+`quit`). Vlastník prošel GTK klienta 2026-10-17 proti svým účtům v okně XQuartz
+(démon nad kopií dat): podle jeho nálezů přibylo propojení pozvánky na
+výskyt s řádkem Graphu podle času a odpověď z `event.respond` pod
+týmž klíčem (`store.InvitationLinkedEvent`), mapování výskytů Graphu se
+`seriesMasterId` jako výskytů řady (`graphDataVersion` 3), přestavba
+sidebaru a stránky Předvoleb jen při změně struktury (ne při každé změně
+stavu — jinak widgety mizí pod kurzorem). Do `windows/` GTK port nesáhl
+(Windows port běží jinde).
 
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně

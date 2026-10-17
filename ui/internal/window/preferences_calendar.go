@@ -12,6 +12,7 @@ import (
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/cairo"
+	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/diamondburned/gotk4/pkg/pango"
@@ -526,6 +527,69 @@ type calendarSection struct {
 	syncing   bool
 	pending   bool
 	lastErr   string
+	// calWidgets are the calendar rows shown, in s.calRows' order.
+	calWidgets []*prefsCalendarRow
+	// rebuildTimer is the pending coalesced rebuild (0 none).
+	rebuildTimer glib.SourceHandle
+	forceRebuild bool
+}
+
+// prefsRebuildDelay coalesces structural rebuilds of a section.
+const prefsRebuildDelay = 300 // milliseconds
+
+// scheduleRebuild rebuilds the section after prefsRebuildDelay (again
+// later while a pointer button is down on the dialog).
+func (s *calendarSection) scheduleRebuild() {
+	if s.rebuildTimer != 0 || s.p.closed {
+		return
+	}
+	s.rebuildTimer = glib.TimeoutAdd(prefsRebuildDelay, func() bool {
+		if s.p.closed {
+			s.rebuildTimer = 0
+			return false
+		}
+		if s.p.pointerDown() {
+			return true
+		}
+		s.rebuildTimer = 0
+		s.shape = "\x00" // differs from every key: render rebuilds now
+		s.forceRebuild = true
+		s.render()
+		return false
+	})
+}
+
+// pointerDown reports a pointer button held down (a press whose release
+// has not come yet): a rebuild then would destroy the pressed widget.
+func (p *calendarPrefs) pointerDown() bool {
+	d := gdk.DisplayGetDefault()
+	if d == nil || d.DefaultSeat() == nil {
+		return false
+	}
+	ptr := gdk.BaseSeat(d.DefaultSeat()).Pointer()
+	if ptr == nil {
+		return false
+	}
+	const buttons = gdk.Button1Mask | gdk.Button2Mask | gdk.Button3Mask
+	return gdk.BaseDevice(ptr).ModifierState()&buttons != 0
+}
+
+// prefsCalendarRow is one calendar's row and the widgets updated in place.
+type prefsCalendarRow struct {
+	row   *adw.ActionRow
+	check *gtk.CheckButton
+	note  *gtk.Label
+}
+
+func (r *prefsCalendarRow) update(cr calendarctl.CalendarRow) {
+	if r.check.Active() != cr.Enabled {
+		r.check.SetActive(cr.Enabled)
+	}
+	r.check.SetSensitive(cr.CanToggle())
+	if r.note.Text() != cr.Note {
+		r.note.SetText(cr.Note)
+	}
+	r.note.SetVisible(cr.Note != "")
 }
 
 func newCalendarSection(p *calendarPrefs, layout calendar.PrefsSection) *calendarSection {
@@ -709,9 +773,11 @@ func (s *calendarSection) render() {
 	consent := c.IsGraph() && c.SyncOn() && c.ConsentRequired()
 	mails := c.MailAccounts()
 	var shape strings.Builder
-	fmt.Fprintf(&shape, "%v|%v|%v|%v|%v\x1e", c.IsCalDAV(), c.ShowsSyncSwitch(), c.SyncOn(), consent, c.CertificatePinned())
+	// The structure only: the rows that exist and what each is. A state
+	// or value change (checkbox, note, error) is applied in place.
+	fmt.Fprintf(&shape, "%v|%v|%v|%v\x1e", c.IsCalDAV(), c.ShowsSyncSwitch(), c.SyncOn(), consent)
 	for _, r := range rows {
-		fmt.Fprintf(&shape, "%s\x1f%s\x1f%s\x1f%s\x1f%v\x1f%v\x1e", r.RemoteID, r.Name, r.Color, r.Note, r.Enabled, r.CanToggle())
+		fmt.Fprintf(&shape, "%s\x1f%s\x1f%s\x1f%v\x1e", r.RemoteID, r.Name, r.Color, r.CanToggle())
 	}
 	for _, r := range defaults {
 		fmt.Fprintf(&shape, "d%s\x1f%s\x1e", r.RemoteID, r.Name)
@@ -719,8 +785,13 @@ func (s *calendarSection) render() {
 	for _, m := range mails {
 		fmt.Fprintf(&shape, "m%s\x1f%s\x1e", m.ID, m.Name)
 	}
-	if shape.String() != s.shape {
-		s.shape = shape.String()
+	if key := shape.String(); key != s.shape && s.shape != "" && !s.forceRebuild {
+		// Coalesced, and never under a pressed button: the snapshot may
+		// change many times a second (sync retries).
+		s.scheduleRebuild()
+	} else if key != s.shape {
+		s.forceRebuild = false
+		s.shape = key
 		s.calRows, s.defaults = rows, defaults
 		s.rebuild(consent)
 		titles := []string{calendar.NoMailAccount(i18n.Tr)}
@@ -738,6 +809,11 @@ func (s *calendarSection) render() {
 		s.defaultCal.fill(dt, -1)
 	}
 
+	if s.rebuildTimer == 0 && len(rows) == len(s.calWidgets) {
+		for i, r := range rows {
+			s.calWidgets[i].update(r)
+		}
+	}
 	s.sync.SetActive(c.SyncOn())
 	def := -1
 	for i, r := range s.defaults {
@@ -786,7 +862,7 @@ func (s *calendarSection) rebuild(consent bool) {
 	for _, w := range s.inviteShown {
 		s.invitations.Remove(w)
 	}
-	s.shown, s.inviteShown, s.rowTitles = nil, nil, nil
+	s.shown, s.inviteShown, s.rowTitles, s.calWidgets = nil, nil, nil, nil
 	c := s.ctl
 	put := func(w gtk.Widgetter, title string) {
 		s.group.Add(w)
@@ -828,7 +904,9 @@ func (s *calendarSection) rebuild(consent bool) {
 			}
 		case calendar.RowCalendars:
 			for i, cr := range s.calRows {
-				put(s.calendarRow(i, cr), "• "+cr.Name)
+				w := s.calendarRow(i, cr)
+				s.calWidgets = append(s.calWidgets, w)
+				put(w.row, "• "+cr.Name)
 			}
 		case calendar.RowDefaultCalendar:
 			if c.SyncOn() && len(s.defaults) > 0 {
@@ -855,7 +933,7 @@ func (s *calendarSection) rebuild(consent bool) {
 
 // calendarRow is one calendar: its checkbox and colour square before the
 // name, the note after it.
-func (s *calendarSection) calendarRow(i int, cr calendarctl.CalendarRow) *adw.ActionRow {
+func (s *calendarSection) calendarRow(i int, cr calendarctl.CalendarRow) *prefsCalendarRow {
 	row := adw.NewActionRow()
 	row.SetUseMarkup(false)
 	row.SetTitle(cr.Name)
@@ -874,15 +952,14 @@ func (s *calendarSection) calendarRow(i int, cr calendarctl.CalendarRow) *adw.Ac
 	if cr.CanToggle() {
 		row.SetActivatableWidget(check)
 	}
-	if cr.Note != "" {
-		note := gtk.NewLabel(cr.Note)
-		note.SetUseMarkup(false)
-		note.SetEllipsize(pango.EllipsizeEnd)
-		note.AddCSSClass("dim-label")
-		note.AddCSSClass("caption")
-		row.AddSuffix(note)
-	}
-	return row
+	note := gtk.NewLabel(cr.Note)
+	note.SetUseMarkup(false)
+	note.SetEllipsize(pango.EllipsizeEnd)
+	note.AddCSSClass("dim-label")
+	note.AddCSSClass("caption")
+	note.SetVisible(cr.Note != "")
+	row.AddSuffix(note)
+	return &prefsCalendarRow{row: row, check: check, note: note}
 }
 
 // prefsSwatch is a 12 px rounded square of the colour hex ("#rrggbb").
