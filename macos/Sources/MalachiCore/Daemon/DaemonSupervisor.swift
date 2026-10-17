@@ -74,6 +74,11 @@ public actor DaemonSupervisor {
         (defaultCompressStoreEnv, "1"),
         (defaultAttachmentOfflineDaysEnv, "30"),
     ]
+    /// The daemon's time zone (docs/calendar.md T9a): the IANA name of the
+    /// user's zone, which the daemon prefers to its own guess from the
+    /// system, so that "today" and the calendar's local times are the
+    /// user's.
+    public static let timeZoneEnv = "MALACHI_TIME_ZONE"
     public static let startTimeout: Duration = .seconds(15)
     /// The daemon gives its syncers 10 s to log out.
     public static let stopTimeout: Duration = .seconds(15)
@@ -170,11 +175,17 @@ public actor DaemonSupervisor {
     /// one it runs with `MALACHI_KEYRING=none`, where adding an account with
     /// a password fails with keyringError. A `MALACHI_KEYRING` already in
     /// the environment wins, so a developer can still point the daemon
-    /// elsewhere.
-    public static func environment(base: [String: String], launch: Launch) -> [String: String] {
+    /// elsewhere. `MALACHI_TIME_ZONE` is `timeZone`'s identifier (the
+    /// user's current zone) unless the environment has one with a value.
+    public static func environment(
+        base: [String: String], launch: Launch, timeZone: TimeZone = .current
+    ) -> [String: String] {
         var env = base
         for (key, value) in storageDefaults where env[key]?.isEmpty ?? true {
             env[key] = value
+        }
+        if env[timeZoneEnv]?.isEmpty ?? true, !timeZone.identifier.isEmpty {
+            env[timeZoneEnv] = timeZone.identifier
         }
         guard env[keyringEnv] == nil else {
             return env

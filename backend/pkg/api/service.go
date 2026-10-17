@@ -33,6 +33,8 @@ type AccountService interface {
 	OAuthCancel(ctx context.Context, p AccountOAuthCancelParams) (*AccountOAuthCancelResult, error)
 	DetectSite(ctx context.Context, p AccountDetectSiteParams) (*AccountDetectSiteResult, error)
 	ListSpaces(ctx context.Context, p AccountListSpacesParams) (*AccountListSpacesResult, error)
+	DiscoverCalDAV(ctx context.Context, p AccountDiscoverCalDAVParams) (*AccountDiscoverCalDAVResult, error)
+	ListCalDAVCalendars(ctx context.Context, p AccountListCalDAVCalendarsParams) (*AccountListCalDAVCalendarsResult, error)
 }
 
 type FolderService interface {
@@ -135,6 +137,40 @@ type BoardService interface {
 	RunEnd(ctx context.Context, p BoardRunEndParams) (*BoardRunEndResult, error)
 }
 
+// CalendarService is the calendars of accounts with CapabilityCalendar,
+// their state and the calendar preferences (docs/api.md §4.14).
+type CalendarService interface {
+	List(ctx context.Context, p CalendarListParams) (*CalendarListResult, error)
+	Update(ctx context.Context, p CalendarUpdateParams) (*CalendarUpdateResult, error)
+	Sync(ctx context.Context, p CalendarSyncParams) (*CalendarSyncResult, error)
+	Preferences(ctx context.Context, p CalendarPreferencesParams) (*CalendarPreferencesResult, error)
+	SetPreferences(ctx context.Context, p CalendarSetPreferencesParams) (*CalendarSetPreferencesResult, error)
+	FreeBusy(ctx context.Context, p CalendarFreeBusyParams) (*CalendarFreeBusyResult, error)
+	FindFreeTime(ctx context.Context, p CalendarFindFreeTimeParams) (*CalendarFindFreeTimeResult, error)
+}
+
+// EventService is the events of the stored calendars and their alerts
+// (docs/api.md §4.15). Writes go to the server first.
+type EventService interface {
+	List(ctx context.Context, p EventListParams) (*EventListResult, error)
+	Get(ctx context.Context, p EventGetParams) (*EventGetResult, error)
+	Search(ctx context.Context, p EventSearchParams) (*EventSearchResult, error)
+	Create(ctx context.Context, p EventCreateParams) (*EventCreateResult, error)
+	Update(ctx context.Context, p EventUpdateParams) (*EventUpdateResult, error)
+	Delete(ctx context.Context, p EventDeleteParams) (*EventDeleteResult, error)
+	Respond(ctx context.Context, p EventRespondParams) (*EventRespondResult, error)
+	SnoozeAlert(ctx context.Context, p EventSnoozeAlertParams) (*EventSnoozeAlertResult, error)
+	DismissAlert(ctx context.Context, p EventDismissAlertParams) (*EventDismissAlertResult, error)
+}
+
+// InvitationService is the invitations received in mail (docs/api.md
+// §4.16).
+type InvitationService interface {
+	List(ctx context.Context, p InvitationListParams) (*InvitationListResult, error)
+	Respond(ctx context.Context, p InvitationRespondParams) (*InvitationRespondResult, error)
+	ApplyCancel(ctx context.Context, p InvitationApplyCancelParams) (*InvitationApplyCancelResult, error)
+}
+
 // Backend is the complete server-side surface. The connection handshake
 // (system.hello, system.authenticate; docs/api.md §1.4) is not part of it:
 // the transport (internal/rpc) answers the handshake before any call of a
@@ -155,6 +191,9 @@ type Backend interface {
 	Contacts() ContactService
 	Issues() IssueService
 	Board() BoardService
+	Calendars() CalendarService
+	Events() EventService
+	Invitations() InvitationService
 }
 
 // Notifier is how backend components push events to connected clients.
@@ -180,4 +219,15 @@ type BoardNotifier interface {
 // notify.draftsChanged, asserted like BoardNotifier.
 type DraftsNotifier interface {
 	DraftsChanged(n DraftsChangedNotification)
+}
+
+// CalendarNotifier is the optional extension of Notifier for the calendar
+// notifications (notify.calendarChanged, notify.calendarState,
+// notify.eventAlert, notify.invitationsChanged), asserted like
+// BoardNotifier.
+type CalendarNotifier interface {
+	CalendarChanged(n CalendarChangedNotification)
+	CalendarState(n CalendarStateNotification)
+	EventAlert(n EventAlertNotification)
+	InvitationsChanged(n InvitationsChangedNotification)
 }

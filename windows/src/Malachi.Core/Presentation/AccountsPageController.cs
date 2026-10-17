@@ -32,12 +32,18 @@
 // page is open. The page follows the daemon: notify.accountsChanged loads
 // it again (after an order being saved, which that load could otherwise
 // undo) and notify.syncState shows the account's new state in its row.
+//
+// Calendar-only (CalDAV) accounts are not listed (Cal.Prefs.ShowsInAccountsTab;
+// Preferences → Calendar has them, docs/calendar.md §5.8): account.list's
+// others are kept aside in its order, and a reorder sends them after the
+// listed ones (macOS calendarOnly).
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Malachi.Core.Api;
+using Malachi.Core.Calendars;
 using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
@@ -61,6 +67,10 @@ public sealed partial class AccountsPageController : ObservableObject, IDisposab
 
     // The accounts in the daemon's order (or the order just asked for).
     private List<Account> accounts = [];
+
+    // The accounts the page does not list (CalDAV), in the daemon's order:
+    // a reorder keeps them after the listed ones.
+    private List<AccountId> calendarOnly = [];
 
     // Accounts whose call is in flight, with the switch state a pause or
     // resume asked for (null for a removal): their rows are insensitive.
@@ -158,7 +168,8 @@ public sealed partial class AccountsPageController : ObservableObject, IDisposab
             }
             loaded = true;
             Description = "";
-            SetAccounts(res.Accounts);
+            calendarOnly = [.. res.Accounts.Where(a => !Cal.Prefs.ShowsInAccountsTab(a)).Select(a => a.Id)];
+            SetAccounts([.. res.Accounts.Where(Cal.Prefs.ShowsInAccountsTab)]);
             UpdateEnabled();
         });
     }
@@ -420,7 +431,7 @@ public sealed partial class AccountsPageController : ObservableObject, IDisposab
         }
         saving = true;
         UpdateEnabled();
-        var ids = reordered.Select(a => a.Id).ToList();
+        var ids = reordered.Select(a => a.Id).Concat(calendarOnly).ToList();
         scope.Perform(client, API.AccountReorder, new AccountReorderParams { AccountIds = ids }, outcome =>
         {
             saving = false;

@@ -33,6 +33,14 @@
 //    first instance takes redirected activations on a worker thread and
 //    hands them to the UI thread.
 // 6. The application, on a DispatcherQueueSynchronizationContext.
+//
+// A click on an event's alert toast (docs/calendar.md §5.9) names no
+// message: the app shows as for any notification, and the calendar's alerts
+// answer the click once the application runs (AppState.AnswerCalendarAlert:
+// the Calendar with the event, Join, Snooze), whether it came while the app
+// ran, started it or was redirected to it. Accept and Remove from Calendar of
+// a new invitation's or cancellation's toast are answered the same way, by
+// the message's invitation card (AppState.AnswerInvitation).
 
 using System;
 using System.Collections.Generic;
@@ -127,6 +135,7 @@ public static partial class Program
             return delivered ? 0 : 1;
         }
         key.Activated += OnRedirected;
+        AnswerAlertOf(activation);
 
         Application.Start(callback =>
         {
@@ -236,6 +245,24 @@ public static partial class Program
     {
         var request = RequestOf(activation, redirected: true);
         OnApp(a => a.Activate(request));
+        AnswerAlertOf(activation);
+    }
+
+    // A click on an event's alert, or on Accept or Remove from Calendar of an
+    // invitation's toast, that started the app or was redirected to it: the
+    // calendar's alerts, or the message's invitation card, answer it once the
+    // application runs.
+    private static void AnswerAlertOf(AppActivationArguments activation)
+    {
+        var clicked = PlatformServices.NotificationActivationFrom(activation);
+        if (clicked?.Alert is { } alert)
+        {
+            OnApp(a => a.State?.AnswerCalendarAlert(alert));
+        }
+        if (clicked?.Invitation is { } invitation)
+        {
+            OnApp(a => a.State?.AnswerInvitation(invitation));
+        }
     }
 
     // A notification clicked while the app runs (PlatformServices), on any thread.
@@ -244,6 +271,22 @@ public static partial class Program
     // whether it named one only is logged.
     private static void OnNotificationInvoked(NotificationActivation activation)
     {
+        if (activation.Alert is { } alert)
+        {
+            // An event's alert toast or one of its buttons: the calendar's
+            // alerts answer it (the Calendar, Join, Snooze).
+            LogAlertInvoked(logger, alert.Response);
+            OnApp(a => a.State?.AnswerCalendarAlert(alert));
+            return;
+        }
+        if (activation.Invitation is { } invitation)
+        {
+            // Accept or Remove from Calendar of an invitation's toast: the
+            // message's card answers it, without opening the message.
+            LogInvitationInvoked(logger, invitation.Response);
+            OnApp(a => a.State?.AnswerInvitation(invitation));
+            return;
+        }
         LogNotificationInvoked(logger, activation.MessageId is not null);
         OnApp(a => a.Activate(ActivationRequest.FromNotification(activation.AccountId, activation.MessageId, redirected: true)));
     }
@@ -301,6 +344,12 @@ public static partial class Program
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "a notification was clicked (for a message: {ForMessage})")]
     private static partial void LogNotificationInvoked(ILogger logger, bool forMessage);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "an event's alert was clicked ({Response})")]
+    private static partial void LogAlertInvoked(ILogger logger, CalendarAlertResponse response);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "an invitation's notification was answered ({Response})")]
+    private static partial void LogInvitationInvoked(ILogger logger, InvitationNotificationResponse response);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "exited")]
     private static partial void LogExited(ILogger logger);

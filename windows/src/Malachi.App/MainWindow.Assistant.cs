@@ -140,7 +140,7 @@ public sealed partial class MainWindow
     internal void RevealAssistant()
     {
         state.ShowMainWindow();
-        // The panel is the mail's: the board gives way (Board.ModeFor).
+        // The panel is the mail's: the board and the calendar give way (Board.ModeFor).
         ApplyModeRequest(Core.Boards.Board.Request.RevealAssistant);
         SetAssistantOpen(true);
     }

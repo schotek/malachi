@@ -801,10 +801,16 @@ func decodeBoardReferences(raw string, cut bool) []string {
 const boardMemberOrder = `(CASE WHEN COALESCE(i.via, '') != '' AND COALESCE(i.updated, '') != '' THEN i.updated ELSE m.date END)`
 
 // boardMembersFrom is the FROM and WHERE of a thread's visible members;
-// its parameters are the account id and the thread id.
+// its parameters are the account id and the thread id. Calendar mail is
+// no member (board.RulesVersion "8"): a message row with a cal_invitations
+// row — an invitation, an update, a cancellation, a reply, the user's own
+// copies in sent and outbox — neither makes a case nor decides one nor
+// counts; the calendar handles it. The rules never see it, so a thread of
+// nothing else has no members (an earlier case of it is orphaned).
 const boardMembersFrom = ` FROM messages m JOIN folders f ON f.id = m.folder_id
 	LEFT JOIN issue_items i ON m.remote_id != '' AND i.account_id = m.account_id AND i.remote_id = m.remote_id
-	WHERE m.account_id = ? AND m.thread_id = ? AND m.hidden = 0 AND f.virtual = ''`
+	WHERE m.account_id = ? AND m.thread_id = ? AND m.hidden = 0 AND f.virtual = ''
+		AND NOT EXISTS (SELECT 1 FROM cal_invitations ci WHERE ci.message_id = m.id)`
 
 // loadBoardMembersTx reads the newest limit visible members of a thread,
 // oldest first, and reports whether there were more.

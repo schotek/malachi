@@ -78,6 +78,22 @@ func (s *Store) MarkBoardThreadsDirty(ctx context.Context, accountID string, thr
 	return nil
 }
 
+// MarkBoardMessagesDirty marks dirty the threads of the given message rows
+// (unknown ids are skipped): for a change the triggers on messages do not
+// see, such as a cal_invitations row written or deleted after its message
+// was stored, which takes the message off the board or puts it back
+// (boardMembersFrom).
+func (s *Store) MarkBoardMessagesDirty(ctx context.Context, messageIDs []string) error {
+	for _, chunk := range chunkStrings(messageIDs, linkChunk) {
+		if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO board_dirty (account_id, thread_id)
+			SELECT DISTINCT account_id, thread_id FROM messages WHERE thread_id != '' AND id IN (`+inPlaceholders(len(chunk))+`)`,
+			toAny(chunk)...); err != nil {
+			return fmt.Errorf("mark board messages dirty: %w", err)
+		}
+	}
+	return nil
+}
+
 // MarkBoardAccountDirty marks dirty every thread of the account with a
 // visible member dated at or after since (zero: any) and every thread of
 // its cases (a change of the account's settings, folder roles or

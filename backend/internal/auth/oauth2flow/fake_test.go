@@ -49,12 +49,14 @@ type fakeProvider struct {
 	idClaims      map[string]any   // replace (or, with a nil value, drop) claims
 	now           func() time.Time // the ID token's exp is now + 1 h
 	noRefresh     bool             // exchange answers without refresh_token
+	exchangeScope string           // "scope" of the exchange's answer ("" = none)
 	// /token, refresh_token
 	refreshForms  []url.Values
 	refreshValid  map[string]bool
 	refreshError  string // error code answered to every refresh
 	refreshStatus int    // HTTP status of that answer (default 400)
 	rotate        bool
+	refreshScope  string        // "scope" of a refresh's answer ("" = none)
 	gate          chan struct{} // refreshes block until closed
 	seq           int
 	expiresIn     int
@@ -207,6 +209,9 @@ func (fp *fakeProvider) exchange(w http.ResponseWriter, form url.Values) {
 		}
 		resp["id_token"] = fakeIDToken(claims)
 	}
+	if fp.exchangeScope != "" {
+		resp["scope"] = fp.exchangeScope
+	}
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -249,6 +254,9 @@ func (fp *fakeProvider) refreshGrant(w http.ResponseWriter, form url.Values) {
 		nrt := fmt.Sprintf("refresh-%d-rot", fp.seq)
 		fp.refreshValid[nrt] = true
 		resp["refresh_token"] = nrt
+	}
+	if fp.refreshScope != "" {
+		resp["scope"] = fp.refreshScope
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

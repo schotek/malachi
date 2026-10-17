@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/MessageView/InvitationDayStripView.swift;
+GTK: none yet (docs/calendar.md §5.7, Cal.DayStripOf). The invitation
+card's mini day strip: an axis over the working hours of the invitation's
+day with its whole hours labelled underneath, the busy spans of the
+visible calendars as grey blocks, and the invitation's own slot as a
+dashed blue block with its time above it. Drawn in code on the canvas
+(InvitationDayStripView.xaml.cs); everything drawn is geometry and the
+application's own time strings. A screen reader reads the card's clock
+and conflict lines instead, so the strip is no element of its own.
+-->
+<UserControl
+    x:Class="Malachi.App.Reader.InvitationDayStripView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    AutomationProperties.AccessibilityView="Raw"
+    IsTabStop="False"
+    Visibility="Collapsed">
+    <Canvas
+        x:Name="Surface"
+        HorizontalAlignment="Stretch"
+        SizeChanged="OnSizeChanged" />
+</UserControl>

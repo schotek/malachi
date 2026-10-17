@@ -41,6 +41,15 @@ public static partial class Board
             // that need something, sorted into four states.
             L10n.T("Board");
 
+        /// <summary>
+        /// The mode switch's segment and menu item of the calendar, the
+        /// mode's name (Go <c>CalendarName</c>; the calendar's own texts are
+        /// <see cref="Calendars.Cal.Text"/>).
+        /// </summary>
+        public static string CalendarName =>
+            // TRANSLATORS: the window's third mode beside Mail and Board: the calendar.
+            L10n.T("Calendar");
+
         /// <summary>A state's name: its section, column, tile and pill.</summary>
         public static string StateName(State s) => s switch
         {
@@ -335,6 +344,7 @@ public static partial class Board
         public static string StartModeTitle(StartChoice s) => s switch
         {
             StartChoice.Board => BoardName,
+            StartChoice.Calendar => CalendarName,
             StartChoice.Last => LastUsed,
             _ => L10n.T("Mail"),
         };

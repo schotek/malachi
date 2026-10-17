@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Calendar/CalendarMonthView.swift; GTK:
+the calendar's views follow (docs/calendar.md §6.4). The Month view
+(docs/calendar.md §5.4): the weekday header (24), six rows of seven days
+(Cal.MonthCells) with the week numbers in a column of 28 at the left, in
+each day its pills (MonthCellView) and over the cells the bars of the
+all-day and multi-day occurrences of each week row (Cal.MonthLanes). The
+code behind builds the cells and the bars and asks Core what fits.
+-->
+<UserControl
+    x:Class="Malachi.App.Calendars.CalendarMonthView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    AutomationProperties.AutomationId="CalendarMonthView"
+    IsTabStop="False">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="24" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid x:Name="Headers" AutomationProperties.AccessibilityView="Raw">
+            <Rectangle
+                Height="1"
+                VerticalAlignment="Bottom"
+                Style="{StaticResource CalendarLineStyle}" />
+        </Grid>
+        <Grid
+            x:Name="Body"
+            Grid.Row="1"
+            SizeChanged="OnBodySizeChanged">
+            <Grid x:Name="Cells" />
+            <Rectangle
+                Width="1"
+                Margin="27,0,0,0"
+                HorizontalAlignment="Left"
+                Style="{StaticResource CalendarLineStyle}" />
+            <Canvas x:Name="Spans" Margin="28,0,0,0" />
+        </Grid>
+    </Grid>
+</UserControl>

@@ -24,15 +24,21 @@
 // §1), and BeginStopping lets the console handler stop restarts before the
 // daemon, which got the terminal's CTRL_CLOSE too, is seen to exit (§5
 // Console). Locate looks for malachid.exe and skips PATH entries that are
-// not fully qualified, as Go's LookPath refuses relative results.
+// not fully qualified, as Go's LookPath refuses relative results. The
+// daemon's MALACHI_TIME_ZONE (Swift's timeZoneEnv, docs/calendar.md §3) is
+// the IANA name of the system's zone, read at each start (ZoneName: a
+// Windows zone id is converted for the user's region, which Swift's
+// TimeZone.identifier names exactly).
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Malachi.Core.Calendars;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -63,6 +69,14 @@ public sealed partial class DaemonSupervisor : IDisposable
     /// searching PATH for <c>dbus-launch</c> on every call.
     /// </summary>
     public const string DBusEnv = "DBUS_SESSION_BUS_ADDRESS";
+
+    /// <summary>
+    /// The user's IANA zone ("Europe/Prague"), which the daemon prefers to
+    /// its own guess from the system (backend/cmd/malachid/timezone.go: before
+    /// TZ), so that "today" and the calendar's local times are the user's and
+    /// Windows zone names from Graph map to the user's own zone.
+    /// </summary>
+    public const string TimeZoneEnv = "MALACHI_TIME_ZONE";
 
     /// <summary>The daemon's executable name.</summary>
     public const string ExecutableName = "malachid.exe";
@@ -238,13 +252,26 @@ public sealed partial class DaemonSupervisor : IDisposable
     /// 30, for a Mac's often small disk): as with the GTK UI, the daemon's
     /// own defaults apply until the user changes the preferences, and values
     /// the environment has pass through (docs/windows-port.md §5).
+    /// <c>MALACHI_TIME_ZONE</c> is <paramref name="timeZone"/> (an IANA
+    /// name; null: the system's zone, <see cref="LocalZoneName"/>, read now)
+    /// unless the environment has one with a value, whatever the keyring; an
+    /// empty name sets nothing.
     /// </summary>
-    public static IReadOnlyDictionary<string, string> Environment(IReadOnlyDictionary<string, string?> @base, DaemonLaunch launch)
+    public static IReadOnlyDictionary<string, string> Environment(
+        IReadOnlyDictionary<string, string?> @base, DaemonLaunch launch, string? timeZone = null)
     {
         ArgumentNullException.ThrowIfNull(@base);
         ArgumentNullException.ThrowIfNull(launch);
         var env = ProcessEnvironment.Copy(@base);
         env.TryAdd(DBusEnv, "disabled:");
+        if (!env.TryGetValue(TimeZoneEnv, out var preset) || preset.Length == 0)
+        {
+            var zone = timeZone ?? LocalZoneName();
+            if (zone.Length > 0)
+            {
+                env[TimeZoneEnv] = zone;
+            }
+        }
         if (env.ContainsKey(KeyringEnv))
         {
             return env;
@@ -260,6 +287,35 @@ public sealed partial class DaemonSupervisor : IDisposable
             env.Remove(KeyringHelperEnv);
         }
         return env;
+    }
+
+    /// <summary>
+    /// The IANA name of the system's zone for <see cref="TimeZoneEnv"/>
+    /// (Swift's <c>TimeZone.current.identifier</c>): <see cref="ZoneName"/>
+    /// of <see cref="TimeZoneInfo.Local"/> and the user's region, read at the
+    /// daemon's start and nowhere in the logic.
+    /// </summary>
+    public static string LocalZoneName() => ZoneName(TimeZoneInfo.Local, RegionInfo.CurrentRegion.TwoLetterISORegionName);
+
+    /// <summary>
+    /// The IANA name of <paramref name="zone"/> for the daemon. Windows-only:
+    /// the system's zone has a Windows id ("Central Europe Standard Time"),
+    /// which names no city; converted for <paramref name="region"/> (a
+    /// two-letter region, "CZ": Europe/Prague) where CLDR maps it there,
+    /// else as <see cref="Cal.IanaZoneName"/> does (territory 001:
+    /// Europe/Budapest). "" when the zone has no IANA name: the daemon could
+    /// not load the id, and TZ stays its source.
+    /// </summary>
+    public static string ZoneName(TimeZoneInfo zone, string? region)
+    {
+        ArgumentNullException.ThrowIfNull(zone);
+        if (!zone.HasIanaId && !string.IsNullOrEmpty(region)
+            && TimeZoneInfo.TryConvertWindowsIdToIanaId(zone.Id, region, out var local))
+        {
+            return local;
+        }
+        var name = Cal.IanaZoneName(zone);
+        return zone.HasIanaId || name != zone.Id ? name : "";
     }
 
     /// <summary>

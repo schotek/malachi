@@ -14,9 +14,10 @@
 // assertions on the connection half of the line and on the sign-in
 // banner's texts become assertions on the connection and the notification
 // the mailbox handed over (those texts are SyncController's and are tested
-// with it). The last tests are Windows-only: the sidebar as keyed
-// snapshots, the highlighted row as a key, current when the rows arrive,
-// and a badge applied in place (docs/windows-port.md §7.5).
+// with it). EmptySidebarStatuses' calendar-only case is Windows-only, and
+// so are the last tests: the sidebar as keyed snapshots, the highlighted
+// row as a key, current when the rows arrive, and a badge applied in place
+// (docs/windows-port.md §7.5).
 
 using System;
 using System.Collections.Generic;
@@ -189,6 +190,22 @@ public sealed class MailboxControllerFoldersTests
                 new SidebarStatus.Status("system-users-symbolic", "No Enabled Accounts", "Enable an account in Preferences to see its folders here."),
                 pausedLog.Statuses[^1]);
             Assert.Equal(0, paused.Fixture.CallCount(API.FolderList.Name));
+        }
+
+        // Windows-only: calendar-only CalDAV accounts alone are no account
+        // in Mail (FolderTree.InMail): No Accounts, and no folder.list.
+        var calendarLog = new Log();
+        var caldav = TestAccount("c");
+        caldav = caldav with { Config = caldav.Config with { Kind = AccountKind.CalDAV } };
+        await using (var calendarOnly = await StartAsync(calendarLog, [caldav], new FolderMap()))
+        {
+            await calendarOnly.IdleAsync();
+            Assert.Equal(1, calendarLog.Rebuilds);
+            Assert.Equal(
+                new SidebarStatus.Status("system-users-symbolic", "No Accounts", "Add a mail account in Preferences to see its folders here."),
+                calendarLog.Statuses[^1]);
+            Assert.Equal(0, calendarOnly.Fixture.CallCount(API.FolderList.Name));
+            Assert.False(calendarOnly.Mailbox.HasAccounts);
         }
 
         // An enabled account that has not synchronised yet.

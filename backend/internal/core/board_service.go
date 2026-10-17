@@ -265,7 +265,8 @@ func localDay(t time.Time) (string, time.Time) {
 
 // triageAccounts are the accounts triage may read and annotate: the
 // enabled accounts the preferences name, or with none named every enabled
-// mail account.
+// mail account (not an issue tracker). A calendar-only account (caldav)
+// has no mail and no cases: it is never triaged, named or not.
 func (b *Backend) triageAccounts(ctx context.Context, p api.BoardPreferences) (map[string]store.Account, error) {
 	list, err := b.store.ListAccounts(ctx)
 	if err != nil {
@@ -277,7 +278,7 @@ func (b *Backend) triageAccounts(ctx context.Context, p api.BoardPreferences) (m
 	}
 	out := map[string]store.Account{}
 	for _, a := range list {
-		if !a.Enabled {
+		if !a.Enabled || isCalendarOnlyAccount(a) {
 			continue
 		}
 		if len(named) == 0 && isIssueAccount(a) {

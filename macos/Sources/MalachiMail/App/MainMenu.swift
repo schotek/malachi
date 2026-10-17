@@ -143,10 +143,16 @@ enum MainMenu {
     private static func fileMenu() -> NSMenu {
         let m = NSMenu()
         m.addItem(item(mn(L10n.T("_New Message")), Action.newMessage, key: "n"))
+        // New Event (docs/calendar.md §5.3): the main window allows it in
+        // Mail and Calendar (`Board.allows(.newEvent)`).
+        m.addItem(item(Cal.Text.newEvent, CalendarAction.newEvent, key: "n", mods: [.command, .option]))
         m.addItem(item(mn(L10n.T("_Add Account…")), Action.addAccount))
         let jira = item(mn(Jira.wizardTexts().addMenu), Action.addAccount)
         jira.tag = AddAccountTag.jira
         m.addItem(jira)
+        // Add CalDAV Calendar… (docs/calendar.md §5.8): the app delegate's
+        // `addCalDAVAccount:`, as the Calendar sidebar's fallback sends it.
+        m.addItem(item(Cal.Prefs.addCalDAV, #selector(AppDelegate.addCalDAVAccount(_:))))
         m.addItem(.separator())
         m.addItem(item("Close", #selector(NSWindow.performClose(_:)), key: "w")) // macOS-only string
         m.addItem(item(mn(L10n.T("_Save Draft")), Action.saveDraft, key: "s"))
@@ -207,7 +213,9 @@ enum MainMenu {
         let m = NSMenu()
         // The main window's modes (MalachiCore `Board`): the tag is the
         // mode, validation checks the current one; ⌘1 and ⌘2 as the
-        // board's keys (`Board.boardKeys`).
+        // board's keys (`Board.boardKeys`), ⌘3 as the calendar's
+        // (`Cal.calendarKeys`' Show Calendar). The window catches them by
+        // the physical key too (`Board.modeKeyDigit`).
         for key in Board.boardKeys() {
             let mode: Board.Mode
             switch key.action {
@@ -219,6 +227,9 @@ enum MainMenu {
             it.tag = mode.rawValue
             m.addItem(it)
         }
+        let calendar = item(Cal.showCalendarKey, Action.setWindowMode, key: "3")
+        calendar.tag = Board.Mode.calendar.rawValue
+        m.addItem(calendar)
         m.addItem(.separator())
         // The board's styles (MalachiCore `Board.Style`), disabled in Mail
         // (`Board.allows`): the tag is the style, validation checks the

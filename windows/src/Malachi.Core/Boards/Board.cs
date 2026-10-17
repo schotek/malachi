@@ -3,18 +3,23 @@
 
 // Port of macos/Sources/MalachiCore/Board/Board.swift and the style rules of
 // BoardView.swift (parseStyle, styleOnShow); GTK: ui/internal/board/mode.go
-// (InitialMode, ParseMode, StartChoice, StartModes, NickLast,
-// ParseStartChoice, StartMode, StartWait, StartDecision, Allows, ModeFor, ViewsMail, ParseStyle,
-// DefaultStyle, DefaultStyles, ParseDefaultStyle, StyleOnShow,
-// FilterOnShow) and text.go (Mail, BoardName). The nicks are
-// BoardModeNickExtensions, BoardStartChoiceExtensions and BoardDefaultStyleExtensions.
+// (InitialMode, ParseMode, StartChoice, StartModesWithCalendar, NickLast,
+// ParseStartChoice, StartMode, ResolveStartMode, StartWait, StartDecision,
+// Allows, ModeFor, ViewsMail, ParseStyle, DefaultStyle, DefaultStyles,
+// ParseDefaultStyle, StyleOnShow, FilterOnShow) and text.go (Mail,
+// BoardName, CalendarName). The nicks are BoardModeNickExtensions,
+// BoardStartChoiceExtensions and BoardDefaultStyleExtensions.
 //
-// The main window's two modes: Mail (the folders, the list, the reader and
-// the assistant panel, as always) and Board (a triage board). The window
-// shows one of them at a time under the same status bar; the title bar's
-// switch changes it. This is the part that needs no WinUI: which actions a
-// mode allows, which requests bring the mail back, and when the user counts
-// as looking at the folder.
+// The main window's three modes: Mail (the folders, the list, the reader
+// and the assistant panel, as always), Board (a triage board) and Calendar
+// (the calendar page, docs/calendar.md D27: Malachi.Core.Calendars). The
+// window shows one of them at a time under the same status bar; the title
+// bar's switch changes it. This is the part that needs no WinUI: which
+// actions a mode allows, which requests bring the mail back, and when the
+// user counts as looking at the folder. Ctrl+1, Ctrl+2 and Ctrl+3 (Swift's
+// modeKeyDigit and modeForKey, which read macOS key codes) are
+// ShortcutMap's ShowMail, ShowBoard and ShowCalendar: a VirtualKey is the
+// layout-independent key already.
 //
 // Swift's namespace enum Board is this class, as in the other ports of
 // the board. The namespace is Boards because a namespace Board would hide
@@ -46,6 +51,9 @@ public static partial class Board
 
         /// <summary>The triage board.</summary>
         Board,
+
+        /// <summary>The calendar page (docs/calendar.md D27): raw value 2, nick "calendar".</summary>
+        Calendar,
     }
 
     /// <summary>
@@ -62,7 +70,8 @@ public static partial class Board
 
     /// <summary>
     /// A value of Open at Launch (the key board-start-mode). The members'
-    /// names in lower case are the gschema's nicks, in its order.
+    /// names in lower case are the gschema's nicks, in its order (the
+    /// Calendar came last); Settings lists them as <see cref="StartModes"/>.
     /// </summary>
     public enum StartChoice
     {
@@ -74,10 +83,18 @@ public static partial class Board
 
         /// <summary>The mode shown last (the key board-last-mode).</summary>
         Last,
+
+        /// <summary>The Calendar (docs/calendar.md D27).</summary>
+        Calendar,
     }
 
-    /// <summary>The choices of Open at Launch in Settings' order.</summary>
-    public static IReadOnlyList<StartChoice> StartModes { get; } = [StartChoice.Mail, StartChoice.Board, StartChoice.Last];
+    /// <summary>
+    /// The choices of Open at Launch in Settings' order, the Calendar before
+    /// Last Used (Go <c>StartModesWithCalendar</c>: this client has the
+    /// Calendar, as Swift's <c>startModes</c>).
+    /// </summary>
+    public static IReadOnlyList<StartChoice> StartModes { get; } =
+        [StartChoice.Mail, StartChoice.Board, StartChoice.Calendar, StartChoice.Last];
 
     /// <summary>
     /// A value of Board View (the key board-default-style): a style, or the
@@ -109,6 +126,7 @@ public static partial class Board
     {
         "mail" => Mode.Mail,
         "board" => Mode.Board,
+        "calendar" => Mode.Calendar,
         _ => null,
     };
 
@@ -120,20 +138,20 @@ public static partial class Board
     /// The mode a new main window opens in: <paramref name="startMode"/> is
     /// the key board-start-mode, <paramref name="lastMode"/> the key
     /// board-last-mode (written whenever the mode switches). With the board
-    /// turned off (<paramref name="boardEnabled"/> false) always Mail.
+    /// turned off (<paramref name="boardEnabled"/> false) a Board start or
+    /// last mode is Mail; the Calendar does not depend on the board and
+    /// stays.
     /// </summary>
     public static Mode StartMode(StartChoice startMode, string? lastMode, bool boardEnabled)
     {
-        if (!boardEnabled)
-        {
-            return Mode.Mail;
-        }
-        return startMode switch
+        var m = startMode switch
         {
             StartChoice.Board => Mode.Board,
+            StartChoice.Calendar => Mode.Calendar,
             StartChoice.Last => ParseMode(lastMode) ?? Mode.Mail,
             _ => Mode.Mail,
         };
+        return m == Mode.Board && !boardEnabled ? Mode.Mail : m;
     }
 
     /// <summary>
@@ -142,6 +160,28 @@ public static partial class Board
     /// </summary>
     public static Mode StartMode(string? startMode, string? lastMode, bool boardEnabled) =>
         StartMode(ParseStartChoice(startMode), lastMode, boardEnabled);
+
+    /// <summary>
+    /// The mode a window opens in (Go <c>ResolveStartMode</c>):
+    /// <paramref name="choice"/> is Open at Launch, <paramref name="last"/>
+    /// the mode shown last. A client without the Calendar mode
+    /// (<paramref name="hasCalendar"/> false) reads a stored Calendar start
+    /// or last mode as Mail, so that a setting written by another client
+    /// never leaves the window on a page it cannot show. The Board's own
+    /// rules are <see cref="StartMode(StartChoice, string, bool)"/>'s and
+    /// <see cref="StartDecision"/>'s.
+    /// </summary>
+    public static Mode ResolveStartMode(StartChoice choice, Mode last, bool hasCalendar)
+    {
+        var m = choice switch
+        {
+            StartChoice.Board => Mode.Board,
+            StartChoice.Calendar => Mode.Calendar,
+            StartChoice.Last => last,
+            _ => Mode.Mail,
+        };
+        return m == Mode.Calendar && !hasCalendar ? Mode.Mail : m;
+    }
 
     /// <summary>
     /// How long a new main window waits for the daemon's board preferences
@@ -166,17 +206,24 @@ public static partial class Board
     /// Mail and never moves on its own again: a start that is Mail whatever
     /// the preferences say settles at once; the user's switch or act in Mail
     /// settles in Mail (the reader never jumps away from what the user is
-    /// doing); the preferences settle with <see cref="StartMode(StartChoice, string, bool)"/>;
+    /// doing); a start that is the Calendar (or Last Used with the Calendar
+    /// last) needs no daemon preferences and settles in the Calendar at
+    /// once; the preferences settle with <see cref="StartMode(StartChoice, string, bool)"/>;
     /// <see cref="StartWait"/> without them settles in Mail, with no later jump.
     /// </para>
     /// </summary>
     public static (Mode Mode, bool Decided) StartDecision(
         StartChoice start, Mode? lastMode, bool prefsKnown, bool enabled, bool userSwitched, bool userInteracted, TimeSpan waited)
     {
-        var lastNick = lastMode == Mode.Board ? "board" : "mail";
-        if (StartMode(start, lastNick, boardEnabled: true) == Mode.Mail || userSwitched || userInteracted)
+        var lastNick = lastMode is { } last ? last.Nick : Mode.Mail.Nick;
+        var wanted = StartMode(start, lastNick, boardEnabled: true);
+        if (wanted == Mode.Mail || userSwitched || userInteracted)
         {
             return (Mode.Mail, true);
+        }
+        if (wanted == Mode.Calendar)
+        {
+            return (Mode.Calendar, true);
         }
         if (prefsKnown)
         {
@@ -213,6 +260,9 @@ public static partial class Board
 
         /// <summary>The views of the board: its style (List, Columns, Today).</summary>
         BoardView,
+
+        /// <summary>New Event (the calendar's Ctrl+Shift+N, docs/calendar.md §5.1).</summary>
+        NewEvent,
     }
 
     /// <summary>Requests from elsewhere in the application that may reach the main window in either mode.</summary>
@@ -234,22 +284,34 @@ public static partial class Board
     /// <summary>The texts of the mode switch (Swift <c>Board.Texts</c>; the board's own are <see cref="Text"/>).</summary>
     /// <param name="Mail">The switch's segment and menu item for Mail.</param>
     /// <param name="Board">The switch's segment and menu item for Board, and the window's title in it.</param>
-    public sealed record ModeTexts(string Mail, string Board);
+    /// <param name="Calendar">The switch's segment and menu item for the Calendar (Go <c>CalendarName</c>).</param>
+    public sealed record ModeTexts(string Mail, string Board, string Calendar)
+    {
+        /// <summary>The name of <paramref name="mode"/>'s segment.</summary>
+        public string Name(Mode mode) => mode switch
+        {
+            Mode.Board => Board,
+            Mode.Calendar => Calendar,
+            _ => Mail,
+        };
+    }
 
     /// <summary>The texts of the mode switch (Swift <c>Board.texts()</c>).</summary>
-    public static ModeTexts Texts() => new(L10n.T("Mail"), Text.BoardName);
+    public static ModeTexts Texts() => new(L10n.T("Mail"), Text.BoardName, Text.CalendarName);
 
     /// <summary>
     /// Whether <paramref name="command"/> may run in <paramref name="mode"/>.
     /// Mail allows everything but the board's views; Board only what does
     /// not need the folders, the list and the reader: the list keeps its
     /// selection while hidden, and no key may act on a message the user
-    /// cannot see.
+    /// cannot see. Calendar keeps Switch Mode, New Message, Check for New
+    /// Mail and New Event; New Event is not a Board command.
     /// </summary>
     public static bool Allows(Command command, Mode mode) => mode switch
     {
-        Mode.Mail => command != Command.BoardView,
-        _ => command is Command.SwitchMode or Command.NewMessage or Command.CheckForNewMail or Command.BoardView,
+        Mode.Board => command is Command.SwitchMode or Command.NewMessage or Command.CheckForNewMail or Command.BoardView,
+        Mode.Calendar => command is Command.SwitchMode or Command.NewMessage or Command.CheckForNewMail or Command.NewEvent,
+        _ => command != Command.BoardView,
     };
 
     /// <summary>
@@ -267,7 +329,8 @@ public static partial class Board
     /// <summary>
     /// Whether the user looks at the selected folder: the main window shows
     /// the mail and is the active window. An active window showing the board
-    /// does not count, so the folder's desktop notifications stay.
+    /// or the calendar does not count, so the folder's desktop notifications
+    /// stay.
     /// </summary>
     public static bool ViewsMail(Mode mode, bool windowIsKey) => mode == Mode.Mail && windowIsKey;
 

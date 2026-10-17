@@ -58,8 +58,13 @@ final class AssistantPanelViewController: NSViewController {
     private let sendButton = NSButton()
     private let footer = assistantLabel(size: 11, color: .secondaryLabelColor)
 
-    /// The quick actions, in the order of the row.
-    static let quickActions: [Assistant.Action] = Assistant.panelActions
+    /// The quick actions, in the order of the row: the calendar's last,
+    /// shown only while `hasCalendar` says so.
+    static let quickActions: [Assistant.Action] = Assistant.panelActionsWith(hasCalendar: true)
+
+    /// Whether some account has the calendar capability (What's on Today
+    /// and Find a Free Slot show then); `AssistantPanelHost` installs it.
+    var hasCalendar: (@MainActor () -> Bool)?
 
     /// Whether the window has a folder Summarize Unread in This Folder can
     /// run on (the Assistant menu item's condition), and the action itself
@@ -133,7 +138,7 @@ final class AssistantPanelViewController: NSViewController {
 
         // The quick actions, wrapping when the panel is narrow.
         for a in Self.quickActions {
-            let b = NSButton(title: Assistant.label(a), target: self, action: #selector(quickAction(_:)))
+            let b = NSButton(title: Assistant.panelLabel(a), target: self, action: #selector(quickAction(_:)))
             b.bezelStyle = .push
             b.controlSize = .small
             b.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
@@ -294,6 +299,10 @@ final class AssistantPanelViewController: NSViewController {
             return AssistantDraftView(item.content) { [weak self] in
                 self?.controller.openDraft(id)
             }
+        case .calendar:
+            return AssistantCalendarView(item.content) { [weak self] in
+                self?.controller.openCalendar(id)
+            }
         case .error, .note:
             return AssistantMessageLineView(
                 item.content,
@@ -395,6 +404,8 @@ final class AssistantPanelViewController: NSViewController {
         let a = Self.quickActions[sender.tag]
         if a == .unread {
             onSummarizeUnread?()
+        } else if Assistant.isCalendarAction(a) {
+            controller.runCalendar(a)
         } else {
             controller.run(a)
         }
@@ -405,8 +416,19 @@ final class AssistantPanelViewController: NSViewController {
     /// when the folder changes.
     func updateQuickActions() {
         let folder = unreadFolderAvailable?() ?? false
+        let calendar = hasCalendar?() ?? false
         for (i, b) in actionButtons.enumerated() where Self.quickActions.indices.contains(i) {
-            b.isEnabled = Self.quickActions[i] == .unread
+            let a = Self.quickActions[i]
+            if Assistant.isCalendarAction(a) {
+                if b.isHidden == calendar {
+                    b.isHidden = !calendar
+                    actionsFlow.invalidateIntrinsicContentSize()
+                    actionsFlow.needsLayout = true
+                }
+                b.isEnabled = controller.canRunCalendarActions
+                continue
+            }
+            b.isEnabled = a == .unread
                 ? controller.canSummarizeUnread(folder: folder) : controller.canRunActions
         }
     }

@@ -854,6 +854,42 @@ file it names, `docs/api.md` for every method it calls, and
 `.blp` files are the reference: when the Swift view and the Blueprint
 disagree and no deviation explains it, the Swift view is wrong.
 
+### The calendar
+
+The calendar (`docs/calendar.md` §5) is Swift-first: Core keeps the
+port's contract (`MalachiCore/Calendar/` — the layouts of the week and
+month, the agenda, the detail, the editor, invitations, preferences, the
+CalDAV wizard — the source seam `CalendarSource.swift` with
+`DaemonCalendarSource` and `InMemoryCalendarSource`, and the controllers
+`CalendarController`, `EventDetailController`, `EventEditorController`,
+`InvitationController`, `CalDAVWizardController`,
+`CalendarAccountController`), AppKit only draws it:
+`MalachiMail/Calendar/` (page, sidebar, Week/Day, Month, Agenda,
+toolbar, detail popover), `MalachiMail/EventEditor/`,
+`MessageView/InvitationCardView.swift` with
+`MessageViewController+Invitation.swift`,
+`AccountWizard/CalDAV/CalDAVSheetController.swift`,
+`Preferences/CalendarAccountGroups.swift`, `Board/BoardTodayCalendarStrip.swift`,
+`MainWindow/MainWindowController+Calendar.swift` and
+`App/Integration+Calendar.swift` / `+CalDAV.swift`. The deviations from
+GTK are rows of the table in `macos/README.md`.
+
+`MALACHI_CALENDAR_SAMPLES=1` (read once at start) gives every window the
+invented sample calendar (`Cal.sampleData`, ported from
+`ui/internal/calendar/samples.go`); writes answer that the preview cannot
+do that. With the debug binary only (the `CLAUDE.md` procedure:
+`MALACHI_DAEMON=none`, an empty `MALACHI_DATA_DIR`, an own
+`MALACHI_SOCKET`, the `MalachiMail` defaults exported and imported back),
+the `MALACHI_START` steps `calendar:day|week|month|agenda`,
+`event-popover`, `event-editor`, `invitation-card` and `caldav-sheet`
+(`MainWindowController+DevStart.swift`, `DevelopmentCalendar`) print
+`LAYOUT:` lines with the frames to check against the wireframes and a
+`LAYOUT: shot <step> window <n>` line for `screencapture -x -l <n>`; the
+editor closes unsaved and the sheet is cancelled. For example:
+
+    MALACHI_START_SIZE=1280x820 MALACHI_START_INTERVAL=2 \
+    MALACHI_START='mail;calendar:week;calendar:month;calendar:agenda;event-popover;event-editor;invitation-card;caldav-sheet;board:today;mail;quit'
+
 ## 11. Build
 
 `make macos` at the root builds `build/malachid` and `build/malachi-mcp`

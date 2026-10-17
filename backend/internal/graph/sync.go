@@ -94,6 +94,9 @@ type Deps struct {
 	// body stored whole while NeverStoreAttachments was being switched on
 	// is judged again. nil = nothing.
 	Stored func(ctx context.Context, messageID string, pol ingest.Policy)
+	// Limiter is the account's request limiter shared with its outbox and
+	// calendar (docs/calendar.md D13); nil = the client's own slots.
+	Limiter *Limiter
 }
 
 // request is one queued pass.
@@ -159,7 +162,7 @@ func NewSyncer(account store.Account, deps Deps) *Syncer {
 	}
 	s.client = NewClient(Options{
 		BaseURL: deps.BaseURL, HTTP: deps.HTTP, Token: deps.Token, Invalidate: deps.Invalidate,
-		Log: s.log, Sleep: deps.Sleep,
+		Log: s.log, Sleep: deps.Sleep, Limiter: deps.Limiter,
 	})
 	return s
 }

@@ -15,8 +15,9 @@ import MalachiCore
 /// toolbar's tracking separators follow its dividers as before. The status
 /// bar's view controller is installed later by the app (`install(statusBar:)`),
 /// like the panes' contents; its slot keeps the bar's height meanwhile.
-/// In the Board mode a page takes the split view's place above the bar
-/// (`setMode`), and the split view leaves the window meanwhile.
+/// In the Board and Calendar modes a page takes the split view's place
+/// above the bar (`setMode`), and the split view leaves the window
+/// meanwhile.
 @MainActor
 final class MainContentViewController: NSViewController {
     let split: MainSplitViewController
@@ -85,22 +86,23 @@ final class MainContentViewController: NSViewController {
         ])
     }
 
-    // MARK: Board
+    // MARK: Modes
 
     /// The window's mode, as the window controller last set it.
     private(set) var mode: Board.Mode = .mail
-    /// The page shown in place of the split view in the Board mode, nil
-    /// while the panes show.
+    /// The page shown in place of the split view in the Board and Calendar
+    /// modes, nil while the panes show.
     private(set) var page: NSViewController?
 
-    /// Shows the board's `page` in place of the split view (`.board`), from
-    /// the top of the window down to the status bar, or the split view
-    /// again (`.mail`, `page` ignored).
+    /// Shows the mode's `page` (the board's, the calendar's) in place of
+    /// the split view (every mode but `.mail`), from the top of the window
+    /// down to the status bar, or the split view again (`.mail`, `page`
+    /// ignored).
     ///
-    /// In the Board mode the split view leaves the window: hidden, it would
+    /// Outside Mail the split view leaves the window: hidden, it would
     /// still be the window's sidebar split view, and the unified toolbar
     /// would keep its sidebar section reserved for it (and track its
-    /// divider instead of the board's own split view). Its controller stays
+    /// divider instead of the page's own split view). Its controller stays
     /// this one's child with all its state; nothing in the panes reacts to
     /// leaving the window (no pane controller overrides `viewWillAppear` /
     /// `viewDidDisappear`; `MainSplitViewController.viewDidAppear` applies
@@ -109,13 +111,13 @@ final class MainContentViewController: NSViewController {
     func setMode(_ newMode: Board.Mode, page newPage: NSViewController? = nil) {
         _ = view // the slot exists once the view is loaded
         mode = newMode
-        let shown = newMode == .board ? newPage : nil
+        let shown = newMode != .mail ? newPage : nil
         if shown !== page, let old = page {
             old.view.removeFromSuperview()
             old.removeFromParent()
             page = nil
         }
-        if newMode == .board {
+        if newMode != .mail {
             split.view.removeFromSuperview()
         } else {
             if split.view.superview !== view {
@@ -158,13 +160,18 @@ final class MainContentViewController: NSViewController {
     /// view's, nil otherwise, and nil where the mode does not allow the
     /// mail's views (`Board.allows`; the panes out of the window take no
     /// action, so the menu items disable themselves); in the board's List
-    /// the sidebar toggle goes to the List's own split view. Shared
+    /// the sidebar toggle goes to the List's own split view, in the
+    /// Calendar to the calendar page's. Shared
     /// with the window controller, which the chain reaches when no view of
     /// the window has the focus.
     func splitTarget(forAction action: Selector) -> Any? {
-        if mode == .board, action == Action.toggleSidebar {
-            // The board's List folds its own navigation column.
-            return (page as? BoardPageViewController)?.sidebarTarget
+        if mode != .mail, action == Action.toggleSidebar {
+            // The board's List folds its own navigation column, the
+            // calendar page its sidebar.
+            if let board = page as? BoardPageViewController {
+                return board.sidebarTarget
+            }
+            return page as? CalendarPageViewController
         }
         guard Board.allows(.mailView, in: mode),
               action == Action.toggleSidebar || action == Action.toggleMessageList || action == Action.toggleInspector,

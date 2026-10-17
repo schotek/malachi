@@ -1,0 +1,344 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// The Calendar mode's page (docs/calendar.md §5.3, §6.5 G9), built from
+// ui/internal/window/calendar.go and shown in window.blp's
+// calendar_page_bin. No translatable strings here on purpose: every text
+// (the view toggles, tooltips, the title and subtitle, the empty state,
+// the status strip) is set from Go through ui/internal/calendar, so this
+// file never grows a msgid of its own. Object IDs are looked up from Go;
+// keep them in sync.
+//
+// The views fill the empty bins of calendar_stack (calendar_week.go,
+// calendar_month.go, calendar_agenda.go) and sidebar_bin
+// (calendar_sidebar.go). Adw.BreakpointBin at the root for the same reason
+// as board_page.blp: only it hosts the page's own breakpoints inside the
+// window's mode_stack.
+Adw.BreakpointBin calendar_page_root {
+  width-request: 360;
+  height-request: 294;
+
+  // The header bar gives way as the page narrows (the macOS toolbar's
+  // overflow order, measured by calendar_gtk_smoke_test.go): the title and
+  // the view switch for the compact view menu first, then the sidebar
+  // folds and Today and the search toggle go (Ctrl+T and typing still
+  // reach them), then the main menu (in Mail's header bar too) and "+"
+  // (Ctrl+Shift+N), at last the view menu (Ctrl+Shift+1–4) and the
+  // sidebar toggle (the folded sidebar still swipes in). Later
+  // breakpoints repeat the earlier setters: the last one that matches
+  // applies alone.
+  Adw.Breakpoint {
+    condition ("max-width: 900sp")
+
+    setters {
+      calendar_header.show-title: false;
+      calendar_view_switch.visible: false;
+      calendar_view_menu.visible: true;
+    }
+  }
+
+  Adw.Breakpoint {
+    condition ("max-width: 720sp")
+
+    setters {
+      calendar_header.show-title: false;
+      calendar_view_switch.visible: false;
+      calendar_view_menu.visible: true;
+      calendar_split.collapsed: true;
+      calendar_assistant_split.collapsed: true;
+      calendar_today.visible: false;
+      calendar_search_toggle.visible: false;
+    }
+  }
+
+  Adw.Breakpoint {
+    condition ("max-width: 560sp")
+
+    setters {
+      calendar_header.show-title: false;
+      calendar_view_switch.visible: false;
+      calendar_view_menu.visible: true;
+      calendar_split.collapsed: true;
+      calendar_assistant_split.collapsed: true;
+      calendar_today.visible: false;
+      calendar_search_toggle.visible: false;
+      calendar_menu_button.visible: false;
+      calendar_new_event.visible: false;
+    }
+  }
+
+  Adw.Breakpoint {
+    condition ("max-width: 460sp")
+
+    setters {
+      calendar_header.show-title: false;
+      calendar_view_switch.visible: false;
+      calendar_split.collapsed: true;
+      calendar_assistant_split.collapsed: true;
+      calendar_today.visible: false;
+      calendar_search_toggle.visible: false;
+      calendar_menu_button.visible: false;
+      calendar_new_event.visible: false;
+      calendar_view_menu.visible: false;
+      calendar_sidebar_toggle.visible: false;
+    }
+  }
+
+  child: Adw.ToolbarView calendar_page {
+    [top]
+    Adw.HeaderBar calendar_header {
+      // Mirrors window.blp's mode_switch (icons only, tooltips from Go:
+      // the groups follow one state, window/board.go setMode).
+      [start]
+      Adw.ToggleGroup calendar_mode_switch {
+        Adw.Toggle {
+          name: "mail";
+          icon-name: "mail-unread-symbolic";
+        }
+
+        Adw.Toggle {
+          name: "board";
+          icon-name: "view-grid-symbolic";
+        }
+
+        Adw.Toggle {
+          name: "calendar";
+          icon-name: "x-office-calendar-symbolic";
+        }
+      }
+
+      [start]
+      ToggleButton calendar_sidebar_toggle {
+        icon-name: "sidebar-show-symbolic";
+        active: bind calendar_split.show-sidebar bidirectional;
+        margin-start: 6;
+      }
+
+      [start]
+      Button calendar_today {
+        margin-start: 6;
+      }
+
+      [start]
+      Box {
+        styles [
+          "linked",
+        ]
+
+        Button calendar_previous {
+          icon-name: "go-previous-symbolic";
+        }
+
+        Button calendar_next {
+          icon-name: "go-next-symbolic";
+        }
+      }
+
+      // Day / Week / Month / Agenda (calendar.Views); labels from Go
+      // (calendar.ViewTitle), names the views' nicks.
+      [start]
+      Adw.ToggleGroup calendar_view_switch {
+        margin-start: 6;
+
+        Adw.Toggle {
+          name: "day";
+        }
+
+        Adw.Toggle {
+          name: "week";
+        }
+
+        Adw.Toggle {
+          name: "month";
+        }
+
+        Adw.Toggle {
+          name: "agenda";
+        }
+      }
+
+      // The narrow page's view switch (the breakpoints above): the same
+      // views as a drop-down, model and selection from Go.
+      [start]
+      DropDown calendar_view_menu {
+        visible: false;
+        margin-start: 6;
+      }
+
+      title-widget: Adw.WindowTitle calendar_title {};
+
+      // The window's main menu, as in the board's header bar (model and
+      // tooltip from Go).
+      [end]
+      MenuButton calendar_menu_button {
+        icon-name: "open-menu-symbolic";
+        primary: true;
+      }
+
+      // The assistant panel (D28; calendar_assistant.go), shown while the
+      // panel may be.
+      [end]
+      Button calendar_assistant_button {
+        icon-name: "malachi-assistant-symbolic";
+        visible: false;
+      }
+
+      [end]
+      Button calendar_new_event {
+        icon-name: "list-add-symbolic";
+      }
+
+      [end]
+      ToggleButton calendar_search_toggle {
+        icon-name: "system-search-symbolic";
+        active: bind calendar_search_bar.search-mode-enabled bidirectional;
+      }
+    }
+
+    [top]
+    SearchBar calendar_search_bar {
+      key-capture-widget: calendar_page;
+
+      child: SearchEntry calendar_search_entry {
+        width-chars: 32;
+      };
+    }
+
+    // The status strip (window/status.go moveStatusStripTo): the
+    // calendars' state on the left, the unanswered count on the right; the
+    // accounts' popover moves here while the Calendar shows.
+    [bottom]
+    MenuButton calendar_status_button {
+      direction: up;
+      margin-start: 6;
+      margin-end: 6;
+      margin-top: 6;
+      margin-bottom: 6;
+
+      accessibility {
+        labelled-by: calendar_status_label;
+      }
+
+      styles [
+        "flat",
+        "status-line",
+      ]
+
+      child: Box {
+        spacing: 8;
+
+        Label calendar_status_label {
+          use-markup: false;
+          ellipsize: end;
+          xalign: 0;
+          hexpand: true;
+
+          styles [
+            "caption",
+            "dim-label",
+          ]
+        }
+
+        Label calendar_status_note {
+          use-markup: false;
+          ellipsize: end;
+          xalign: 1;
+          visible: false;
+
+          styles [
+            "caption",
+            "dim-label",
+          ]
+        }
+      };
+    }
+
+    // The window's assistant panel while the Calendar shows it (D28):
+    // calendar_assistant_move.go moves assistant_panel.blp's widget from
+    // Mail's assistant_panel_bin into calendar_assistant_bin and back.
+    content: Adw.OverlaySplitView calendar_assistant_split {
+      sidebar-position: end;
+      show-sidebar: false;
+      min-sidebar-width: 280;
+      max-sidebar-width: 480;
+      sidebar-width-fraction: 0.28;
+
+      content: Adw.OverlaySplitView calendar_split {
+        sidebar-width-unit: px;
+        min-sidebar-width: 240;
+        max-sidebar-width: 240;
+        show-sidebar: true;
+
+        sidebar: Adw.Bin sidebar_bin {
+          width-request: 240;
+
+          styles [
+            "navigation-sidebar",
+          ]
+        };
+
+        content: Box calendar_content {
+          orientation: vertical;
+          hexpand: true;
+
+          Adw.Banner calendar_banner {
+            revealed: false;
+            use-markup: false;
+          }
+
+          Stack calendar_stack {
+            vexpand: true;
+            hexpand: true;
+            transition-type: crossfade;
+
+            StackPage {
+              name: "week";
+              child: Adw.Bin week_bin {};
+            }
+
+            StackPage {
+              name: "day";
+              child: Adw.Bin day_bin {};
+            }
+
+            StackPage {
+              name: "month";
+              child: Adw.Bin month_bin {};
+            }
+
+            StackPage {
+              name: "agenda";
+              child: Adw.Bin agenda_bin {};
+            }
+
+            StackPage {
+              name: "search";
+              child: Adw.Bin search_bin {};
+            }
+
+            StackPage {
+              name: "empty";
+
+              child: Adw.StatusPage calendar_empty {
+                icon-name: "x-office-calendar-symbolic";
+
+                child: Button calendar_empty_button {
+                  halign: center;
+                  visible: false;
+                  action-name: "app.preferences";
+
+                  styles [
+                    "pill",
+                  ]
+                };
+              };
+            }
+          }
+        };
+      };
+
+      sidebar: Adw.Bin calendar_assistant_bin {};
+    };
+  };
+}

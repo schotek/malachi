@@ -477,8 +477,13 @@ inheritable pipe that `Process.Start` without the shell passes on does not
 arrive), and it can wait on the shell's dialogs, which must never hold up
 the daemon's start. The environment is the app's plus
 `MALACHI_KEYRING=helper`/`MALACHI_KEYRING_HELPER` (or `none` without the
-helper) and `DBUS_SESSION_BUS_ADDRESS=disabled:`, each left alone when
-already set, and nothing else: the macOS supervisor also gives its daemon
+helper), `DBUS_SESSION_BUS_ADDRESS=disabled:` and, since the Calendar
+(§11.9) and as the macOS supervisor does, `MALACHI_TIME_ZONE`: the IANA
+name of the system's zone for the user's region, read at each start
+(`DaemonSupervisor.ZoneName`: *Central Europe Standard Time* with `CZ` is
+`Europe/Prague`; nothing when the zone has no IANA name, and `TZ` stays the
+daemon's source). Each is left alone when already set, and nothing
+else is added: the macOS supervisor also gives its daemon
 `MALACHI_DEFAULT_COMPRESS_STORE=1` and
 `MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS=30`, because a Mac often has a
 small disk, while this one, as the GTK UI, sets no storage default (decided):
@@ -1552,7 +1557,21 @@ that shows the main window (tray, notification, redirected launch,
 background start) calls `AppWindow.Show()`, `Activate()` and then
 `SetForegroundWindow(hwnd)`: without the last, the window stays behind
 (measured with `ForegroundLockTimeout` at its maximum); WinAppSDK's
-`RedirectActivationToAsync` already grants the foreground right. Shown
+`RedirectActivationToAsync` already grants the foreground right. A window
+that a double click opens (New Event from the calendar's empty time or a
+Month cell; in Mail a message's own window, or a draft's compose window,
+from its row in the list or its card's header in a conversation, and a
+draft card's compose window) opens once the second press is released
+(`Controls/AfterRelease`, one per view: the list's, the conversation
+pane's for all its cards): WinUI raises `DoubleTapped` on that press, and
+its release hands the activation back to the window the gesture started
+in, so a window shown on the press came up behind it (the owner's finding
+of 2026-10-17, the calendar first and then Mail; measured with real
+input: New Event in front while the button was held, behind once it was
+released; a list row's message or compose window behind already while
+the button was held, the list item's own handling of the press taking the
+activation back; the cards' windows came up in front, and wait for the
+release so that every double click opens its window the same way). Shown
 again after `AppWindow.Hide()`, the window came back with the keyboard on
 its caption's input window instead of the XAML island, so no key worked
 until a click, and its first show after `--background` put WinUI's first
@@ -2961,6 +2980,234 @@ of triage and of a suggested reply, an inline reply over a real linked draft
 (autosave, send, discard, quitting with an unsaved one) and ARM64 on real
 hardware.
 
+### 11.9 The Calendar
+
+The Calendar (`feat/calendar`, 2026-10-16) is the fourth part of the
+client ported from macOS, where it was built first ([calendar.md §5](calendar.md#5-the-macos-client),
+whose "As built on Windows" notes W2–W9 say where this client differs, and
+§6.4). GTK had no calendar yet when this port was written (its port
+followed on 2026-10-17, calendar.md §5.12), so the rule is the Go reference
+`ui/internal/calendar` with its tests, and the source of every view is the
+macOS client (the exception to rule 6 the Board had as well). It is the
+main window's third mode: Calendar shows `CalendarPage` in place of the
+panes, the status line stays (the calendars' state as its text, the
+unanswered count ahead of the triage's note, `StatusBarView.SetCalendar`),
+and the hidden modes keep their state, the calendar's query included. The
+switch is the title bar's three-segment control (`ModeCalendarButton`);
+Mail, Board and Calendar are at the top of the sidebar's, the Board's and
+the Calendar's `…` menus, and Ctrl+3 is `ShortcutCommand.ShowCalendar` of
+`ShortcutMap`, run by the `CommandRouter` (`WindowCommands.ShowCalendar`).
+With *Show the Board* off the switch stays for Mail and Calendar with its
+Board segment disabled, as on macOS ([calendar.md §5.3](calendar.md#53-artboard-1--calendar--week-and-day));
+before the Calendar the Windows switch was hidden with the Board.
+
+**Layers.** As everywhere, three:
+
+1. `Malachi.Core.Calendars` (`Cal`, a static partial class with Swift's
+   type names and Go's function names: `Cal.View`, `Cal.Range`, `Cal.Env`,
+   `Cal.Text`, `Cal.Prefs`): the port of `ui/internal/calendar` file by
+   file (`Cal.cs` for `format.go` and `view.go`, `CalendarText`,
+   `CalendarWeekLayout`, `CalendarMonthGrid` and `CalendarMonthLayout`,
+   `CalendarAgenda`, `CalendarToday`, `CalendarDetail`, `CalendarRecurrence`,
+   `CalendarEditor`, `CalendarAvailability`, `CalendarInvitation`,
+   `CalendarInvitationReading` with `Model/InvitationReading`,
+   `CalendarNotificationText`, `CalendarPreferences`, `CalendarKeys`,
+   `CalendarActive`, `CalDAVWizard`, `MiniMonth`, `CalendarSampleData` and
+   `CalendarSamples`); the dates through the strftime writer of `Env`
+   (`CultureStrftime` over `I18n.Strftime`, `EnglishStrftime` in the tests),
+   the day arithmetic on `DateTimeOffset` and `TimeZoneInfo`, a Windows
+   zone named by its IANA name wherever it goes to the daemon
+   (`IanaZoneName`); and the source (`ICalendarDataSource`, `Cal.Snapshot`,
+   `Cal.SourceChange`, `CalendarObservers`, `InMemoryCalendarSource`,
+   `DaemonCalendarSource`). The API mirror is `Api/Calendar.cs` (its names
+   in calendar.md W2).
+2. The controllers in `Malachi.Core/Controllers`: `CalendarController`
+   (one per window: the view, the anchor, the selection, the search, the
+   filter, the sidebar's model, the keys), `EventDetailController`,
+   `EventEditorController`, `InvitationController`, `CalDAVWizardController`,
+   `CalendarPreferencesController`, `CalendarAccountController` and
+   `CalendarAlertsController` (one for the application, over
+   `ICalendarAlertNotifier`), all on the injected `TimeProvider` and
+   `ControllerScope`; the assistant's part is `Assistants/Assistant.Calendar.cs`
+   with `AssistantPanelController.RunCalendar` and `OpenInCalendar` and the
+   answer's card `CalendarContent`. As §7.4 has it, what macOS keeps in its
+   views moved into Core with tests: `CalendarAccountController` holds
+   Remove Account and the consent's sign-in URL, `AccountsPageController`
+   leaves CalDAV accounts out (kept after the listed ones on a reorder), and
+   `DesktopNotification` with `DesktopNotificationActions` gives a message
+   with a calendar part its toast's texts and buttons.
+3. `Malachi.App/Calendars` (the namespace `Malachi.App.Calendars`): the page
+   (`CalendarPage`, `CalendarBar`, `CalendarContentView`), the sidebar
+   (`CalendarSidebar`, `MiniMonthView`), the views (`CalendarWeekView`,
+   `CalendarMonthView` with its cells, bars and pills, `CalendarAgendaView`;
+   `OccurrenceView` under every block, bar and pill; `BlockBackground`,
+   `CalendarPalette`, `CalendarMetrics`, `CalendarStyles.xaml` with light,
+   dark and high-contrast resources), the detail (`EventDetailFlyout`,
+   `EventDetailPresenter`, `EventDetailView`) and the editor
+   (`EventEditor/EventEditorWindow`, `EventEditorManager`, `EventEditorPane`
+   with `.Dates`, `.Video` and `.Attendees`, `AvailabilityView`,
+   `TimeZonePicker`, `CustomRepeatView`); elsewhere in the app the invitation
+   card (`Reader/InvitationCardView`, `InvitationDayStripView`,
+   `InvitationCardPresenter`) and its pill (`Controls/InvitationPill`), the
+   Board's `Boards/BoardTodayCalendarStrip`, *Preferences → Calendar*
+   (`Preferences/CalendarPreferencesPage`, `CalendarAccountSection`,
+   `CalendarRowView`, `CalendarSwatch`), `Wizard/CalDAVWizardWindow`, the
+   toasts' `Platform/CalendarAlertNotifier`, the questions
+   (`Shell/AlertService.Calendar.cs`, `IAlerts.PasswordAsync`), and in the
+   window and the shell `MainWindow.Calendar.cs`, `.CalendarPage.cs`,
+   `.ShowInCalendar.cs`, `.EventDetail.cs`, `Shell/AppState.Calendar.cs`,
+   `.EventEditors.cs`, `.Invitations.cs`, `Integration.Calendar.cs` and
+   `.ShowInvitation.cs`.
+
+**The namespace.** A namespace `Calendar` would hide
+`System.Globalization.Calendar` from every namespace under it, as one named
+`Board` hid the class `Board` (§11.8); the namespaces are
+`Malachi.Core.Calendars`, `Malachi.App.Calendars` and, for the tests,
+`Malachi.Core.Tests.Calendars`, and the model's rules are the class `Cal`,
+as in Swift. For CA1716 Go's `Event` is `CalendarEvent` and Swift's
+`SourceChange` cases `event` and `error` are `EventChanged` and `Failed`.
+
+**The hub and the sources.** `NotificationHub.AddCalendar` hands the
+calendar's four notifications (`notify.calendarChanged`, `calendarState`,
+`eventAlert`, `invitationsChanged`) to `AppState.Calendar.cs`, which passes
+each to every window's source and then, once for the application, to the
+alerts; `notify.accountsChanged` and the connection reach the daemon's
+sources (`AccountsChanged`, `ConnectionChanged`) as for the Board. There is
+one source per window that shows the calendar (`AppState.CalendarSourceFor`:
+the main window, the Preferences window, a CalDAV window's owner), started
+on first use (`StartedCalendarSourceFor`, the main window's on its first
+entry into the Calendar or New Event from Mail) and disposed with its
+window; the alerts write Snooze and their dismissals through a source of
+their own that is never started, as on macOS. `DaemonCalendarSource`
+reports a snapshot only when its JSON changed, since the records compare
+their lists by reference, and its `Stop()` forgets a snapshot load on its
+way, which Swift's does not. With `MALACHI_CALENDAR_SAMPLES=1` (read once at
+start) every window's source is the `InMemoryCalendarSource` over the
+samples, and whatever would write answers *The preview cannot do that.*
+
+**The page.** The bar (`CalendarBar`) has the sidebar toggle, Today, ‹ ›,
+the four views as toggle buttons that become a `ComboBox` below 640 DIP,
+the title and subtitle, + and ✦, a toggle checked while the assistant
+panel shows in the page; it has no search field: the title bar's box, one
+for both modes, searches the events while the Calendar shows (the
+placeholder *Search Events*, the mail's text kept aside until Mail comes
+back). The sidebar is 240 DIP and not dragged; below 360 DIP of content the
+sidebar folds, then the panel. D28 is done by reparenting: ✦ takes the
+window's one `AssistantPanelView` out of the mail's split view into the
+page's slot, and every exit from the Calendar puts it back where it was.
+The Week and Day grid is 60 DIP an hour; the fills are opaque, so no grid
+line shows through. Since the owner's decision of 2026-10-17 after the
+Windows live test (the 18 % tint was too faint; macOS keeps it for every
+block), a normal block, all-day bar, month bar and all-day pill is the
+saturated calendar colour with white text, or near-black where white has
+less than 4.5:1 against it (`CalendarPalette.TextOn`), its colour bar 25 %
+darker; tentative is a light fill (the colour at 25 % over the surface)
+with the theme's text and a 4 DIP bar hatched at 45° in the colour and
+the surface (a timed month pill: a hollow dot; the owner's second finding
+of 2026-10-17 from the Month view over his Outlook calendars), unanswered
+the surface with a dashed outline and its text in the colour, declined
+and cancelled the colour at 18 % blended over the views' surface (`#F9F9F9` light, `#282828`
+dark), and the selection a 2 DIP accent ring (the deviation-table row in
+`windows/README.md`); the now line moves on a one-minute timer; the first
+scroll to the working hours is put back whenever the viewport's height
+changes until the user scrolls. The tentative bar's hatching is a
+`LinearGradientBrush` spread by `Reflect` (`BlockBackground.Hatch`), never
+by `Repeat`: while a repeating gradient is drawn, WinUI draws the solid
+fills, outlines, texts and icons rendered in the same pass with half their
+red, green and blue (measured 2026-10-17: every Week block that shared the
+grid with a tentative event came out dark). The detail
+is a WinUI `Flyout`, one for the application, to the right of its anchor,
+else to its left, else over it; its questions are `ContentDialog`s in
+Windows' order (§11.4), the series question's three choices buttons in the
+dialog's content. The event editor is a window tracked as a compose
+window, so its keys, its colour scheme and Quit's question
+(`QuitSteps.SaveDrafts`, beside the compose windows') are theirs.
+
+**Notifications.** `Platform/CalendarAlertNotifier` shows an alert as a
+toast with Join (only with a video call; the link is read with `event.get`
+and goes through "Open This Link?") and Snooze, plays the new-mail sound
+under its setting and outside quiet hours, and withdraws the toast when
+any client dismissed or snoozed the alert; its click opens the event in
+the Calendar. Windows raises nothing when an unpackaged app's toast is
+closed, so closing it does not dismiss the alert for the other clients
+(README, deviations). A new message with a calendar part gets the
+invitation's texts, capped as a message's, and its buttons: Accept and
+Show, or Remove from Calendar for a cancellation. `Malachi.Platform.Windows`
+carries them back (`Notifications/CalendarAlertActivation`,
+`CalendarAlertResponse`, `InvitationActivation`,
+`InvitationNotificationResponse`, `NotificationArguments.ForAlert` and
+`ForInvitation`), `Program` routes them to the UI thread, Accept and
+Remove go to `AppState.AnswerInvitation` (`message.get`, then an
+`InvitationController`), and Show or a click opens the message in its
+own window as for any new mail (§10).
+
+**Keyboard.** The calendar's keys are the page's: its `PreviewKeyDown`
+builds a `Cal.Press` (`Press.FromVirtualKey`; Shift stands for the
+reference's Alt and Control, since Ctrl+Alt is AltGr) and asks `Cal.KeyFor`
+and `CalendarController.HandleKey`: Ctrl+T Today, Ctrl+Left and Ctrl+Right,
+Ctrl+Shift+1 to 4 the views, Return the selection's detail, the arrows the
+selection in time order (only with the keyboard in the views), Escape in
+two steps (an open detail, then the search). Delete on the selection opens
+its detail, whose Remove asks, rather than asking at once. Every block,
+bar and pill is a keyboard stop (`OccurrenceView`), its focus the
+selection. The mail's single keys stand still in the Calendar
+(`Board.Allows`); Check for New Mail, New Message and New Event stay.
+Ctrl+3 is `ShortcutMap`'s and reaches the window from a WebView2 as well,
+and so does New Event's Ctrl+Shift+N (`ShortcutCommand.NewEvent`, the main
+window's in every mode and gated by `Board.Allows`; the page and the panes
+have no accelerator of their own for it).
+
+**The UI smoke tests** (§12), written for this port; those over the samples
+ran on 2026-10-17 (the verification status below):
+`CalendarSmokeFixture` starts one app with `MALACHI_CALENDAR_SAMPLES=1`
+for `CalendarSmokeTests` (Ctrl+3, the switch and the sidebar, the four
+views, Today and the arrows changing the title, a click selecting a block,
+the Unanswered row, the search box), `CalendarDetailSmokeTests` (the
+detail from a block, Edit opening the editor with the title, New Event
+and Cancel, a real double click on empty time, both New Event windows in
+front of the main window with the keyboard in their title, a save and an
+answer over the samples saying *The preview cannot do that.*) and `CalendarPreferencesSmokeTests` (*Preferences →
+Calendar* with Display and the sample accounts, the Accounts page without
+CalDAV and the Calendar page opening its window, Discover over the
+samples); `CalendarBoardSmokeFixture` starts one with both sample sets for
+`CalendarInvitationSmokeTests` (the Board's Today strip, a row showing its
+event in the Calendar, the assistant panel's two chips). With
+`MALACHI_DEVMAIL`, `DevmailTests.AnInvitationShowsItsCardWithAccept`
+submits a raw `.ics` invitation over SMTP (`DevmailSmtp`) and looks for
+its card with Accept, and
+`DevmailTests.ADoubleClickOnARowOpensTheMessageWindowInFront` double-clicks
+a row with real input (`Uia.DoubleClick`, the second press held) and
+expects the message window in front of the main window.
+
+**Verification status (2026-10-17).** Written by a team of agents on the
+Windows machine (Windows 11, .NET SDK 10.0.400). Every project builds with
+no warning and `build.ps1 app` has published the app several times;
+`build.ps1 lint` passes (`dotnet format --verify-no-changes` is clean and
+the conventions tests, 27/27, `StringsCheckTests` and `GschemaCoverageTests`
+among them; `windows/parity-exclusions.txt` has no "calendar: Windows port
+pending" line left, and `SettingsTests` counts 43 schema keys); the Core
+suite passes (7,433 tests, 9 skipped as always; about 614 in
+`Malachi.Core.Tests.Calendars`, the rest of the calendar's in
+`Controllers/Calendar*Tests` and `Boards/CalendarModeTests`); and the
+calendar UI smoke tests over `MALACHI_CALENDAR_SAMPLES=1` ran: 26 tests,
+0 failed, 1 skipped (the Today-strip row test skips on weekends). The owner
+tried the published app with his real Microsoft 365 (Graph) and Nextcloud
+(CalDAV) accounts, and his findings are the four fixes above: the saturated
+block colours with the 4.5:1 text rule, tentative as a light fill with a
+hatched bar, the `Reflect` hatch (verified by pixel-sampled screenshots of
+an isolated instance) and windows opened by a double click shown after the
+pointer's release (the event editor and the Mail message window; verified
+with real input). Closed since: the Mail sidebar leaves calendar-only
+CalDAV accounts out (`FolderTree.MailSidebarAccounts`, the port of
+macOS's `mailSidebarAccounts`), and Ctrl+Shift+N reaches the window from a
+WebView2 (above). Not verified: the hatch in the dark theme and at display
+scales other than 100 %, touch and pen double taps, declined and cancelled
+blocks on screen (the samples cannot show them), the flyout kept open under
+a question by cancelling its `Closing`, a full `build.ps1 test` run (the
+failures left in `Malachi.Platform.Windows.Tests`, four key-file and
+real-daemon tests and one shell-verdict file-type test, are environmental
+and predate the port) and ARM64.
+
 ## 12. Tests
 
 `make test-windows` (`build.ps1 test`) runs six test projects, 5,944
@@ -3518,6 +3765,20 @@ security.md §4), and clean subjects and display names in `draft.create`
 (a reply's To and Subject fields show, and send, the received text, an
 override included; only the daemon can change what is sent).
 
+The Calendar's port (§11.9, `feat/calendar`) changed nothing in `backend/`:
+the daemon already takes its zone from `MALACHI_TIME_ZONE`
+([calendar.md §3.8](calendar.md#38-core-service-and-invitations)), which
+`DaemonSupervisor.Environment` now sets (§5). What it changed in Core
+outside its own `Calendars/` and controllers: `NotificationHub.AddCalendar`
+(the calendar's four notifications to their own handlers, as Swift's
+`addCalendar`), `AccountsPageController` (CalDAV accounts not listed, kept
+after the listed ones on a reorder), `FolderTree.AccountHeaderBadge` (the
+`CALDAV` capsule), `DesktopNotification` and `DesktopNotificationActions`
+(a calendar part's toast), `MessageRow` (the invitation pill),
+`ShortcutMap` (Ctrl+3, `ShowCalendar`), `Board.Mode.Calendar` with
+`StartChoice.Calendar`, and the key `calendar-view`
+(`SettingsStore.CalendarView`).
+
 ## 15. How it was built
 
 The client was built on `feat/windows` in six phases, all done. Each phase
@@ -3635,3 +3896,12 @@ Code and a real Codex (triage and a suggested reply), an inline reply over
 a real linked draft, and, as for the rest of the client, ARM64 on real
 hardware (above). The Board adds nothing to the licence, signing or
 installer items.
+
+The Calendar, where the client trailed the daemon's API until 2026-10-16,
+is ported (§11.9) and built, `build.ps1 app` publishes it, and its Core,
+conventions and calendar UI smoke tests pass; the owner has tried it with
+his real accounts (Microsoft 365 through Graph, Nextcloud through CalDAV)
+and his findings are fixed. Open: a full `build.ps1 test` run, the hatch in
+the dark theme and at display scales other than 100 %, touch and pen
+double taps, declined and cancelled blocks on screen (§11.9 lists them);
+ARM64 as for the rest of the client (above).

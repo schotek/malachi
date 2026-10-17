@@ -604,7 +604,7 @@ public enum API {
         BoardArchive.self, BoardTrash.self, BoardUnflag.self, BoardDiscardDraft.self, BoardSetDraft.self, BoardQueue.self, BoardAnnotate.self,
         BoardCommit.self, BoardSetCommitment.self, BoardPreferencesGet.self, BoardSetPreferences.self,
         BoardRunStart.self, BoardRunEnd.self,
-    ]
+    ] + calendarMethods
 
     /// api.AllMethods: every callable method name.
     public static let allMethods: [String] = methods.map { $0.name }
@@ -625,12 +625,23 @@ public enum API {
         /// changed; a conversation on show asks thread.get again
         /// (`MailboxController.handleDraftsChanged`).
         public static let draftsChanged = "notify.draftsChanged"
+        /// `CalendarChangedNotification`: stored calendars or occurrences
+        /// changed.
+        public static let calendarChanged = "notify.calendarChanged"
+        /// `CalendarStateNotification`: an account's calendar sync state.
+        public static let calendarState = "notify.calendarState"
+        /// `EventAlertNotification`: an alert is due, or was dismissed.
+        public static let eventAlert = "notify.eventAlert"
+        /// `InvitationsChangedNotification`: the unanswered invitations of
+        /// these accounts changed.
+        public static let invitationsChanged = "notify.invitationsChanged"
     }
 
     /// api.AllNotifications: every server-initiated notification name.
     public static let allNotifications: [String] = [
         Notify.newMessage, Notify.syncState, Notify.authRequired, Notify.accountsChanged, Notify.messagesChanged,
         Notify.boardChanged, Notify.draftsChanged,
+        Notify.calendarChanged, Notify.calendarState, Notify.eventAlert, Notify.invitationsChanged,
     ]
 
     /// The limits the daemon enforces (types.go constants), for pre-checks.

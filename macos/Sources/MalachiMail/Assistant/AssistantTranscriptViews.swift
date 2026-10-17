@@ -754,3 +754,56 @@ final class AssistantTranscriptView: NSView {
 private final class AssistantDocumentView: NSView {
     override var isFlipped: Bool { true }
 }
+
+/// The event an answer listed or read (list_events, get_event): its day
+/// with Show in Calendar, which opens the Calendar's Day view of it
+/// (docs/calendar.md §5.9). The day is the daemon's, never text of an event.
+@MainActor
+final class AssistantCalendarView: NSView, AssistantItemView {
+    private let symbol = CalloutCard.symbolView()
+    private let label = assistantLabel()
+    let button: NSButton
+    private var open: (() -> Void)?
+
+    init(_ content: AssistantPanelController.Content, open: @escaping () -> Void) {
+        button = NSButton(title: Cal.showInCalendar, target: nil, action: nil)
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        CalloutCard.show("calendar", .info, in: symbol)
+        button.bezelStyle = .push
+        button.controlSize = .small
+        button.target = self
+        button.action = #selector(clicked(_:))
+        self.open = open
+        let row = NSStackView(views: [symbol, label, button])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.distribution = .fill
+        row.spacing = CalloutCard.spacing
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        button.setContentHuggingPriority(.required, for: .horizontal)
+        button.setContentCompressionResistancePriority(.required, for: .horizontal)
+        CalloutCard.install(row, in: self, margins: NSEdgeInsets())
+        update(content)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
+
+    @objc private func clicked(_ sender: Any?) {
+        open?()
+    }
+
+    func accepts(_ content: AssistantPanelController.Content) -> Bool {
+        if case .calendar = content { return true }
+        return false
+    }
+
+    func update(_ content: AssistantPanelController.Content) {
+        guard case .calendar(let ref) = content else { return }
+        let env = Cal.Env(zone: .current, locale: .current)
+        label.stringValue = ref.day(in: env.zone).map { Cal.Text.weekdayDate($0, env) } ?? ""
+    }
+}

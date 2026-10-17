@@ -41,6 +41,11 @@ type suggestions struct {
 	popover *gtk.Popover
 	list    *gtk.ListBox
 
+	// find, when set, runs contact.search in place of the compose pane's
+	// client (the event editor's attendee field, attendee_field.go); it
+	// answers on the main loop.
+	find func(token string, done func([]api.Contact, error))
+
 	contacts []api.Contact // what the rows show, in order
 	gen      uint64        // guards replies of a search the text has outrun
 	timer    glib.SourceHandle
@@ -51,8 +56,13 @@ type suggestions struct {
 // text being typed from the field's entry, shows its popover under the
 // whole row and hands a picked contact to the field as a badge.
 func newSuggestions(w *Pane, field *recipientField) *suggestions {
+	return newFieldSuggestions(field, &suggestions{w: w})
+}
+
+// newFieldSuggestions builds the completion of field into s.
+func newFieldSuggestions(field *recipientField, s *suggestions) *suggestions {
 	entry := field.entry
-	s := &suggestions{w: w, field: field, entry: entry}
+	s.field, s.entry = field, entry
 	s.popover = gtk.NewPopover()
 	s.popover.SetParent(field.scroll)
 	s.popover.SetAutohide(false)
@@ -107,6 +117,21 @@ func (s *suggestions) onChanged() {
 func (s *suggestions) search(token string) {
 	s.gen++
 	gen := s.gen
+	if s.find != nil {
+		s.find(token, func(contacts []api.Contact, err error) {
+			if gen != s.gen || err != nil {
+				if gen == s.gen {
+					s.hide()
+				}
+				return
+			}
+			if _, _, now := tokenAt(s.entry.Text(), s.entry.Position()); now != token {
+				return
+			}
+			s.show(contacts)
+		})
+		return
+	}
 	account := s.w.account().ID
 	s.w.rpc(func() (any, error) {
 		var res api.ContactSearchResult

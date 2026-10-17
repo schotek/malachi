@@ -102,7 +102,8 @@ extension Assistant {
     // MARK: The command line
 
     /// assistant.AllowedTools: the bridge's tools the panel lets Claude
-    /// Code run, in this order: reading and drafting only (--allowedTools).
+    /// Code run, in this order: reading and drafting only, and reading the
+    /// calendar (--allowedTools).
     /// The bridge the panel starts has no --allow-modify or --allow-send,
     /// so nothing else would exist anyway.
     public static let allowedTools: [String] = [
@@ -113,6 +114,14 @@ extension Assistant {
         "mcp__malachi__read_message",
         "mcp__malachi__get_attachment",
         "mcp__malachi__create_draft",
+        // The calendar's read-only tools (`calendarTools`, docs/calendar.md):
+        // the panel's conversation only, not the triage's or the suggested
+        // reply's.
+        "mcp__malachi__list_calendars",
+        "mcp__malachi__list_events",
+        "mcp__malachi__get_event",
+        "mcp__malachi__find_free_time",
+        "mcp__malachi__list_invitations",
     ]
 
     /// assistant.Options: what the command line is built from.

@@ -10,7 +10,7 @@ main window's Board mode, in place of the mail's panes and above the
 status line, under the title bar that holds the Mail/Board switch. Its
 bar: the style switch (List, Columns, Today), the board's name and scope
 ("All Accounts · 23 cases"), the account filter, ✦ Triage (wired by the
-triage's port; BoardTriageButton) and "…" (Mail Ctrl+1, Board Ctrl+2, Add Account…,
+triage's port; BoardTriageButton) and "…" (Mail Ctrl+1, Board Ctrl+2, Calendar Ctrl+3, Add Account…,
 Preferences, Quit: the window's sidebar with the primary menu is hidden
 here). Under the bar the notice while the cases are partial or old, and
 BoardTriageStrip, the triage's status (filled by the triage's port). The
@@ -127,6 +127,12 @@ selected case outside text fields (Board.KeyFor), and Escape in two steps
                             GroupName="WindowMode"
                             KeyboardAcceleratorTextOverride="Ctrl+2"
                             Text="{l:T Msgid='Board'}" />
+                        <RadioMenuFlyoutItem
+                            x:Name="MenuCalendar"
+                            AutomationProperties.AutomationId="BoardMenuCalendar"
+                            GroupName="WindowMode"
+                            KeyboardAcceleratorTextOverride="Ctrl+3"
+                            Text="{l:T Msgid='Calendar'}" />
                         <MenuFlyoutSeparator />
                         <MenuFlyoutItem x:Name="MenuAddAccount" l:MnemonicLabel.Text="{l:T Msgid='_Add Account…'}" />
                         <!-- Windows-only string: the key name beside the item. -->

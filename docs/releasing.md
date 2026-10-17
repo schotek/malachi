@@ -328,8 +328,8 @@ replaces the app by hand), an App Sandbox
 
 [`THIRD-PARTY-NOTICES.md`](../THIRD-PARTY-NOTICES.md) in the repository
 root carries the copyright notices and licence texts of the third-party
-code in `malachi-mcp`, which the permissive licences of that code require
-in a binary distribution. Every package ships it beside `LICENSE`, the
+code in `malachi-mcp` and of what the calendar added to `malachid`, which
+the permissive licences of that code require in a binary distribution. Every package ships it beside `LICENSE`, the
 daemon's licence and `LICENSING.md`: `Contents/Resources` of the macOS
 app (and so the DMG), the Windows app folder (and so its zip, checked by
 `build.ps1`'s `Test-AppFolder`), and through `scripts/build.sh install`
@@ -337,7 +337,7 @@ app (and so the DMG), the Windows app folder (and so its zip, checked by
 the deb and `/app/share/licenses/io.github.schotek.Malachi` in the
 Flatpak.
 
-It lists two kinds of components, and both must be checked before a
+It lists three kinds of components, and all must be checked before a
 release whenever `backend/go.mod` changed:
 
 - **The Go modules linked into the bridge.** The list is what
@@ -377,9 +377,17 @@ release whenever `backend/go.mod` changed:
   chromium.googlesource.com, and those of Emscripten and musl from
   Emscripten's repository. An upgrade of go-pdfium means doing this
   again, and a library that comes or goes changes the list.
+- **What the calendar added to `malachid`**: the module
+  `github.com/teambition/rrule-go` (its LICENSE from the module cache,
+  as above) and the CLDR data generated into
+  `backend/internal/calendar/tz/windows_zones.go` (Unicode License v3;
+  the CLDR versions are in the file's header, and a regeneration from a
+  newer `windowsZones.xml` updates the row and the copyright years).
+  They are listed because they came with new code; the daemon's other
+  modules are the gap below.
 
 The file does not yet cover the other programs, whose third-party code
-also asks for notices in a binary distribution: the Go modules of
+also asks for notices in a binary distribution: the other Go modules of
 `malachid` (among them `modernc.org/sqlite` and `modernc.org/libc`, the
 `emersion` mail libraries, `klauspost/compress`, `godbus/dbus`,
 `BurntSushi/toml`) and of the GTK interface (gotk4 and its bindings,

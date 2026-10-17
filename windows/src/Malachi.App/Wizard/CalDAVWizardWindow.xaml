@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/AccountWizard/CalDAV/CalDAVSheetController.swift
+(buildContent) and CalDAVBannerView.swift; GTK: none yet (Swift-first, the
+rules and texts are ui/internal/calendar/caldav.go, Core's Cal.CalDAVWizard).
+The Add CalDAV Calendar sheet (docs/calendar.md §5.8, artboard 7) as an
+owned modal window of 560×560 like the Jira account assistant
+(JiraWizardWindow.xaml): the title bar with the sheet's title; one
+scrolling column clamped to 512 px: the header (the calendar's icon, the
+title and the subtitle with the server examples); Account Name, Server
+Address, Username and Password as the wizards' cards (the password's
+keyring note under its label); Discover Calendars with the call under way;
+the error as a warning InfoBar (macOS's callout card); the line naming
+another host the discovery ended at; the Certificate row with Trust
+Certificate… after a tlsError; the found calendars (a check box with the
+colour and the name, the note at the end) under their heading and the
+status line; the mail account invitations leave from while the server
+leaves them to the client; the footer note. At the bottom Add (the
+default, accented) and Cancel, in the order of a Windows dialog. Everything
+from the server is plain text.
+-->
+<Window
+    x:Class="Malachi.App.Wizard.CalDAVWizardWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:compose="using:Malachi.App.Compose"
+    xmlns:controls="using:Malachi.App.Controls"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:res="using:Malachi.App.Resources"
+    xmlns:tk="using:CommunityToolkit.WinUI.Controls">
+    <Grid x:Name="Root" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.Resources>
+            <ResourceDictionary>
+                <ResourceDictionary.MergedDictionaries>
+                    <ResourceDictionary Source="ms-appx:///Preferences/SettingsStyles.xaml" />
+                </ResourceDictionary.MergedDictionaries>
+            </ResourceDictionary>
+        </Grid.Resources>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TitleBar
+            x:Name="Header"
+            Grid.Row="0"
+            AutomationProperties.AutomationId="CalDAVWizardHeader"
+            IsBackButtonVisible="False"
+            IsPaneToggleButtonVisible="False" />
+
+        <ScrollViewer
+            Grid.Row="1"
+            AutomationProperties.AutomationId="CalDAVWizard"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
+            IsTabStop="False"
+            VerticalScrollBarVisibility="Auto">
+            <!-- A Grid between the ScrollViewer and the clamped column: a ScrollViewer centres a child with a MaxWidth of its own off to the side. -->
+            <Grid>
+                <StackPanel
+                    MaxWidth="512"
+                    Padding="24,12,24,16"
+                    Spacing="14">
+                    <!-- The header: the calendar's symbol, the title, the subtitle. -->
+                    <Grid Margin="0,0,0,6" ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon
+                            VerticalAlignment="Center"
+                            AutomationProperties.AccessibilityView="Raw"
+                            FontSize="34"
+                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                            Glyph="{x:Bind res:Icons.Glyph('x-office-calendar')}" />
+                        <StackPanel
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Spacing="2">
+                            <TextBlock
+                                x:Name="TitleText"
+                                AutomationProperties.HeadingLevel="Level1"
+                                Style="{StaticResource Title1LabelStyle}"
+                                TextWrapping="WrapWholeWords" />
+                            <TextBlock
+                                x:Name="SubtitleText"
+                                Style="{StaticResource DimCaptionLabelStyle}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- The fields. -->
+                    <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                        <tk:SettingsCard x:Name="NameRow">
+                            <TextBox
+                                x:Name="NameBox"
+                                MinWidth="{StaticResource SettingsEntryWidth}"
+                                AutomationProperties.AutomationId="CalDAVName"
+                                IsSpellCheckEnabled="False"
+                                KeyDown="OnFieldKeyDown"
+                                TextChanged="OnFieldChanged" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="ServerRow">
+                            <TextBox
+                                x:Name="ServerBox"
+                                MinWidth="{StaticResource SettingsEntryWidth}"
+                                AutomationProperties.AutomationId="CalDAVServer"
+                                InputScope="Url"
+                                IsSpellCheckEnabled="False"
+                                IsTextPredictionEnabled="False"
+                                KeyDown="OnFieldKeyDown"
+                                TextChanged="OnFieldChanged" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="UsernameRow">
+                            <TextBox
+                                x:Name="UsernameBox"
+                                MinWidth="{StaticResource SettingsEntryWidth}"
+                                AutomationProperties.AutomationId="CalDAVUsername"
+                                IsSpellCheckEnabled="False"
+                                IsTextPredictionEnabled="False"
+                                KeyDown="OnFieldKeyDown"
+                                TextChanged="OnFieldChanged" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="PasswordRow">
+                            <PasswordBox
+                                x:Name="PasswordField"
+                                MinWidth="{StaticResource SettingsEntryWidth}"
+                                AutomationProperties.AutomationId="CalDAVPassword"
+                                KeyDown="OnFieldKeyDown"
+                                PasswordChanged="OnPasswordChanged" />
+                        </tk:SettingsCard>
+                    </StackPanel>
+
+                    <!-- Discover Calendars and the call under way. -->
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button
+                            x:Name="DiscoverButton"
+                            AutomationProperties.AutomationId="CalDAVDiscover"
+                            Click="OnDiscoverClick" />
+                        <ProgressRing
+                            x:Name="ProgressSpinner"
+                            Width="16"
+                            Height="16"
+                            VerticalAlignment="Center"
+                            IsActive="False"
+                            Visibility="Collapsed" />
+                        <TextBlock
+                            x:Name="ProgressText"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="CalDAVProgress"
+                            AutomationProperties.LiveSetting="Polite"
+                            Style="{StaticResource DimLabelStyle}"
+                            TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+
+                    <!-- The error (CalDAVBannerView). -->
+                    <InfoBar
+                        x:Name="ErrorBar"
+                        AutomationProperties.AutomationId="CalDAVError"
+                        IsClosable="False"
+                        IsOpen="False"
+                        Severity="Warning" />
+
+                    <!-- Discovery ended at another host than the one typed. -->
+                    <TextBlock
+                        x:Name="ServerChangedText"
+                        AutomationProperties.AutomationId="CalDAVServerChanged"
+                        Style="{StaticResource DimCaptionLabelStyle}"
+                        TextWrapping="Wrap"
+                        Visibility="Collapsed" />
+
+                    <!-- The certificate, with Trust Certificate… after a tlsError. -->
+                    <tk:SettingsCard x:Name="CertificateRow" Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock
+                                x:Name="CertificateText"
+                                MaxWidth="220"
+                                VerticalAlignment="Center"
+                                AutomationProperties.AutomationId="CalDAVCertificate"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                IsTextSelectionEnabled="True"
+                                TextTrimming="CharacterEllipsis" />
+                            <Button
+                                x:Name="TrustButton"
+                                AutomationProperties.AutomationId="CalDAVTrust"
+                                Click="OnTrustClick" />
+                        </StackPanel>
+                    </tk:SettingsCard>
+
+                    <!-- The found calendars and the status line. -->
+                    <StackPanel
+                        x:Name="CalendarsGroup"
+                        Spacing="{StaticResource SettingsCardSpacing}"
+                        Visibility="Collapsed">
+                        <TextBlock
+                            x:Name="CalendarsHeading"
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource SettingsGroupHeaderStyle}" />
+                        <TextBlock
+                            x:Name="FoundText"
+                            AutomationProperties.AutomationId="CalDAVFound"
+                            Style="{StaticResource SettingsGroupDescriptionStyle}" />
+                        <!-- A named group for UI Automation (a panel has no automation peer). -->
+                        <compose:ChipGroup x:Name="CalendarsBox" AutomationProperties.AutomationId="CalDAVCalendars">
+                            <StackPanel x:Name="CalendarsList" Spacing="{StaticResource SettingsCardSpacing}" />
+                        </compose:ChipGroup>
+                    </StackPanel>
+
+                    <!-- The mail account invitations leave from (client scheduling). -->
+                    <tk:SettingsCard x:Name="MailAccountRow" Visibility="Collapsed">
+                        <ComboBox
+                            x:Name="MailAccountBox"
+                            MinWidth="200"
+                            AutomationProperties.AutomationId="CalDAVMailAccount"
+                            SelectionChanged="OnMailAccountChanged" />
+                    </tk:SettingsCard>
+
+                    <TextBlock
+                        x:Name="FooterText"
+                        Style="{StaticResource DimCaptionLabelStyle}"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <!-- Add (the default) and Cancel, in the order of a Windows dialog. -->
+        <Grid
+            Grid.Row="2"
+            Margin="12"
+            ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button
+                x:Name="AddButton"
+                Grid.Column="1"
+                AutomationProperties.AutomationId="CalDAVAdd"
+                Click="OnAddClick"
+                IsEnabled="False"
+                Style="{StaticResource AccentButtonStyle}" />
+            <Button
+                x:Name="CancelButton"
+                Grid.Column="2"
+                l:MnemonicLabel.Text="{l:T Msgid='_Cancel'}"
+                AutomationProperties.AutomationId="CalDAVCancel"
+                Click="OnCancelClick" />
+        </Grid>
+
+        <controls:ToastHost x:Name="ToastsHost" Grid.Row="1" />
+    </Grid>
+</Window>

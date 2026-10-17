@@ -358,6 +358,7 @@ func TestTriageAccountsChecklist(t *testing.T) {
 	}
 	accounts := []api.Account{
 		acct("m1", "", true), acct("m2", api.AccountGraph, true), acct("j", api.AccountJira, true), acct("off", "", false),
+		acct("cal", api.AccountCalDAV, true),
 	}
 	ids := func(s ...string) []api.AccountID {
 		out := []api.AccountID{}
@@ -376,6 +377,14 @@ func TestTriageAccountsChecklist(t *testing.T) {
 	if TriageAccountChecked(ids("off"), accounts[3]) {
 		t.Error("a disabled account checked")
 	}
+	// A calendar-only account is never triaged, named or not, and never
+	// offered (TriageCandidates).
+	if TriageAccountChecked(ids("cal"), accounts[4]) {
+		t.Error("a calendar-only account checked")
+	}
+	if got := TriageCandidates(accounts); len(got) != 3 || got[0].ID != "m1" || got[1].ID != "m2" || got[2].ID != "j" {
+		t.Errorf("TriageCandidates = %v", got)
+	}
 	tests := []struct {
 		name   string
 		listed []api.AccountID
@@ -392,6 +401,8 @@ func TestTriageAccountsChecklist(t *testing.T) {
 		{"a disabled account cannot be toggled", ids("m1"), "off", true, ids("m1"), false},
 		{"a disabled listed account stays listed", ids("off", "m1"), "m2", true, ids("m1", "m2", "off"), true},
 		{"only the disabled one would be left", ids("off", "m1"), "m1", false, ids("off", "m1"), false},
+		{"a calendar-only account cannot be toggled", nil, "cal", true, nil, false},
+		{"a stale calendar-only id drops out", ids("cal", "m1"), "j", true, ids("m1", "j"), true},
 	}
 	for _, tt := range tests {
 		got, ok := ToggleTriageAccount(tt.listed, accounts, api.AccountID(tt.id), tt.on)
@@ -405,7 +416,9 @@ func TestTriageAccountsSubtitle(t *testing.T) {
 	acct := func(id string, kind api.AccountKind, enabled bool) api.Account {
 		return api.Account{ID: api.AccountID(id), Enabled: enabled, Config: api.AccountConfig{Kind: kind}}
 	}
-	accounts := []api.Account{acct("m1", "", true), acct("j", api.AccountJira, true), acct("off", "", false)}
+	accounts := []api.Account{
+		acct("m1", "", true), acct("j", api.AccountJira, true), acct("off", "", false), acct("cal", api.AccountCalDAV, true),
+	}
 	tests := []struct {
 		name     string
 		listed   []api.AccountID
@@ -419,6 +432,7 @@ func TestTriageAccountsSubtitle(t *testing.T) {
 		{"issue tracker listed", []api.AccountID{"j"}, accounts, TriageAccountsSome},
 		{"only removed accounts", []api.AccountID{"gone", "gone2"}, accounts, TriageAccountsNone},
 		{"only a disabled account", []api.AccountID{"off"}, accounts, TriageAccountsNone},
+		{"only a calendar-only account", []api.AccountID{"cal"}, accounts, TriageAccountsNone},
 		{"removed and present", []api.AccountID{"gone", "m1"}, accounts, TriageAccountsSome},
 		{"listed, no accounts at all", []api.AccountID{"m1"}, nil, TriageAccountsNone},
 	}

@@ -37,7 +37,13 @@ func (b *Backend) backfillSearch(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		last, n, err := b.store.IndexSearchBatch(ctx, cursor, searchBackfillRows, searchBackfillBytes)
+		var last string
+		var n int
+		err := b.store.Paced(ctx, func() error {
+			var err error
+			last, n, err = b.store.IndexSearchBatch(ctx, cursor, searchBackfillRows, searchBackfillBytes)
+			return err
+		})
 		if err != nil {
 			return err
 		}

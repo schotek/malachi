@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- X-MALACHI-TEST: WebDAV elements without the DAV: namespace are not a multistatus -->
+<multistatus><response><href>/remote.php/dav/calendars/jana/personal/</href><propstat><prop><displayname>Personal</displayname><getetag>"1"</getetag></prop><status>HTTP/1.1 200 OK</status></propstat></response></multistatus>

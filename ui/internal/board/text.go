@@ -65,6 +65,13 @@ func BoardName(tr Translator) string {
 	return tr.T("Board")
 }
 
+// CalendarName is the mode switch's segment and View menu item of the
+// calendar, the mode's name.
+func CalendarName(tr Translator) string {
+	// TRANSLATORS: the window's third mode beside Mail and Board: the calendar.
+	return tr.T("Calendar")
+}
+
 // StateName is a state's name: its section, column, tile and pill.
 func StateName(s State, tr Translator) string {
 	switch s {
@@ -456,6 +463,8 @@ func StartModeTitle(s StartChoice, tr Translator) string {
 	switch s {
 	case StartBoard:
 		return BoardName(tr)
+	case StartCalendar:
+		return CalendarName(tr)
 	case StartLast:
 		return LastUsed(tr)
 	}

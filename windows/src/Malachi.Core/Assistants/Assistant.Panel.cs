@@ -167,9 +167,10 @@ public static partial class Assistant
 
     /// <summary>
     /// The bridge's tools the panel lets Claude Code run, in this order:
-    /// reading and drafting only (<c>--allowedTools</c>; assistant.AllowedTools).
-    /// The bridge the panel starts has no <c>--allow-modify</c> or
-    /// <c>--allow-send</c>, so nothing else would exist anyway.
+    /// reading and drafting only, and reading the calendar
+    /// (<c>--allowedTools</c>; assistant.AllowedTools). The bridge the panel
+    /// starts has no <c>--allow-modify</c> or <c>--allow-send</c>, so nothing
+    /// else would exist anyway.
     /// </summary>
     public static IReadOnlyList<string> AllowedTools { get; } =
     [
@@ -180,6 +181,14 @@ public static partial class Assistant
         "mcp__malachi__read_message",
         "mcp__malachi__get_attachment",
         "mcp__malachi__create_draft",
+        // The calendar's read-only tools (CalendarTools, docs/calendar.md):
+        // the panel's conversation only, not the triage's or the suggested
+        // reply's.
+        "mcp__malachi__list_calendars",
+        "mcp__malachi__list_events",
+        "mcp__malachi__get_event",
+        "mcp__malachi__find_free_time",
+        "mcp__malachi__list_invitations",
     ];
 
     /// <summary>

@@ -13,6 +13,7 @@ require (
 	github.com/klauspost/compress v1.18.2
 	github.com/klippa-app/go-pdfium v1.19.8
 	github.com/modelcontextprotocol/go-sdk v1.7.0
+	github.com/teambition/rrule-go v1.8.2
 	github.com/tetratelabs/wazero v1.12.0
 	github.com/yuin/goldmark v1.8.6
 	golang.org/x/net v0.58.0

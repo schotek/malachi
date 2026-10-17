@@ -17,12 +17,13 @@
 // The Windows keys: Ctrl+R replies (the ctrl-r setting, default "reply",
 // gives it to Check for New Mail instead, as macOS's command-r does),
 // Ctrl+Shift+R replies to all, Ctrl+Shift+F forwards, F5 checks for new
-// mail, Ctrl+E searches besides Ctrl+F, and Ctrl+W closes a secondary
-// window besides Escape. The single keys (Delete, A, J, U, S) do nothing
-// while a text input has the focus, where they type (GTK
-// setTypingAccels); the compose editor counts as one, and keeps Escape for
-// its bridge (the bridge closes the window through its own message, as in
-// GTK and macOS).
+// mail, Ctrl+E searches besides Ctrl+F, Ctrl+W closes a secondary window
+// besides Escape, and Ctrl+Shift+N is the calendar's New Event (its
+// Primary+Alt+N, Shift standing for Alt as in Cal.Press). The single keys
+// (Delete, A, J, U, S) do nothing while a text input has the focus, where
+// they type (GTK setTypingAccels); the compose editor counts as one, and
+// keeps Escape for its bridge (the bridge closes the window through its own
+// message, as in GTK and macOS).
 
 using System;
 using System.Collections.Generic;
@@ -62,9 +63,15 @@ public static class ShortcutMap
         (KeyChord.Ctrl(VirtualKey.F), ShortcutCommand.Search),
         (KeyChord.Ctrl(VirtualKey.E), ShortcutCommand.Search),
         (KeyChord.Bare(VirtualKey.F10), ShortcutCommand.MainMenu),
-        // The mode switch (Board.BoardKeys): Ctrl chords, so no text input lifts them.
+        // The mode switch (Board.BoardKeys, the calendar's Ctrl+3): Ctrl
+        // chords, so no text input lifts them.
         (KeyChord.Ctrl(VirtualKey.Number1), ShortcutCommand.ShowMail),
         (KeyChord.Ctrl(VirtualKey.Number2), ShortcutCommand.ShowBoard),
+        (KeyChord.Ctrl(VirtualKey.Number3), ShortcutCommand.ShowCalendar),
+        // New Event in every mode, as macOS's File ▸ New Event: the
+        // command's gate (Board.Allows) keeps it to Mail and the Calendar,
+        // and a Ctrl chord, so no text input lifts it either.
+        (KeyChord.CtrlShift(VirtualKey.N), ShortcutCommand.NewEvent),
     ];
 
     private static readonly (KeyChord Chord, ShortcutCommand Command)[] Close =

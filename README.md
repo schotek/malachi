@@ -67,6 +67,15 @@ work reliably anymore, and on Linux that is worse than anywhere else.
   you type: every word as a prefix, case and diacritics ignored ("priloh"
   finds "Přílohy"), plus `from:`, `to:`, `subject:`, `is:unread`,
   `has:attachment`, dates and `in:` a folder.
+- **Calendar** (in progress). The daemon
+  synchronises the calendars of Microsoft 365 / Outlook.com accounts
+  (when you switch them on) and of CalDAV servers (Nextcloud, iCloud,
+  Fastmail, Radicale and others, as a calendar-only account), keeps them
+  offline, and reads invitations that arrive in any mail account so you
+  can accept, tentatively accept or decline from the message; replies and
+  invitations go through the server or, where it does not send them, as
+  invitation mail through the Outbox. A Calendar mode beside Mail and the
+  Board comes to the macOS client first, then to GTK and Windows.
 - **AI agents, on a leash.** An optional MCP bridge lets an agent read and
   draft mail through the daemon. Read-only unless you say otherwise;
   marking, moving, deleting and sending each need a separate flag.
@@ -108,7 +117,7 @@ work reliably anymore, and on Linux that is worse than anywhere else.
 
 - A webmail or a hosted service.
 - Mobile versions.
-- Running a mail server, filtering spam server-side, calendaring.
+- Running a mail server, filtering spam server-side.
 
 ## Architecture
 
@@ -219,6 +228,25 @@ sudo apt install golang-go gcc pkg-config git \
     libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev gir1.2-webkit-6.0 libgsound-dev \
     libgirepository1.0-dev libsqlite3-dev blueprint-compiler
 ```
+
+Without GTK on the machine (a Mac, Windows): `scripts/gtk-container/gtk.sh`
+builds and tests the GTK client in a Fedora 42 container with exactly these
+packages (`scripts/gtk-container/Containerfile`), through Apple's `container`
+CLI, Docker or Podman (`ENGINE=docker`); `gtk.sh build` makes the image,
+`gtk.sh make build` and `gtk.sh test-ui` run inside it, the Go and ccache
+caches stay in `~/.cache/malachi-gtk` so gotk4 compiles once. With XQuartz
+on the Mac, `make run-gtk` builds the client in the container and runs it
+in a native window with its own daemon and gnome-keyring as the Secret
+Service, all inside the container; the store, preferences and keyring stay
+in `~/.cache/malachi-gtk/data`, accounts are added in the wizard. A
+browser sign-in (Microsoft 365) opens GNOME Web inside the container, in an
+XQuartz window too, and its redirect reaches the daemon on the container's
+127.0.0.1. `make run-gtk-live` runs the same client against a daemon on the
+Mac over a copy of your data (`scripts/gtk-container/test-daemon.sh` and
+`gtk.sh forward`).
+`gtk.sh x11` alone shows sample data; GOA and notifications stay untested
+in the container. Both targets stop the container service afterwards
+(`gtk.sh stop`).
 
 ### Build and run
 

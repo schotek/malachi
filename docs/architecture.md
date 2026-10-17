@@ -169,7 +169,9 @@ backend/
                       dispatcher per account kind), the notification coalescer,
                       message.download and the background maintenance (§3.1)
   internal/graph      Microsoft Graph client + sync supervisor for Microsoft 365
-                      accounts, sendMail delivery (probe.go: mailbox test)
+                      accounts, sendMail delivery (probe.go: mailbox test),
+                      the calendar provider (calendar*.go) and the request
+                      limiter mail and calendar share (limiter.go)
   internal/imap       IMAP client + sync supervisor, one syncer per enabled
                       account (probe.go: connection test)
   internal/jira       Jira client (Cloud REST v3, Data Center REST v2) + sync
@@ -194,6 +196,12 @@ backend/
   internal/board      the board's rules (which thread is a case, its state
                       and reason), the verbatim quote check and the
                       cleaning of annotations; pure, no store (§3.7)
+  internal/calendar   iCalendar, time zones, recurrence, iTIP/iMIP, event
+                      model, cleaning, free/busy; pure, no store (§3.8)
+  internal/calsync    the calendar engine: providers, syncers, window,
+                      occurrences, alerts (§3.8)
+  internal/caldav     CalDAV client, discovery and provider; caldav/caldavtest
+                      is the fake server of the tests (§3.8)
   internal/sanitize   HTML sanitisation (security-critical)
   cmd/malachi-mcp     MCP (stdio) bridge for AI agents: a JSON-RPC client of
                       the socket with a flag-gated tool catalogue (docs/mcp.md)
@@ -205,6 +213,8 @@ backend/
   testdata/board      the user's own replies and forwards as the board's
                       rules read them (innerText quotes, forged quote
                       markers, question marks in quotes, URLs, signatures)
+  testdata/calendar   pathological .ics objects (§3.8)
+  testdata/caldav     hostile multistatus and XML answers (§3.8)
 ```
 
 Dependency direction: `cmd` → `rpc` → (`api` + service implementations);
@@ -1243,10 +1253,16 @@ before (`restartBoardBackfill`, which a pass under way notices before it
 records anything more). `board.list` says `ready: false` until the pass
 is done and the set is empty.
 
-**The rules** (`internal/board`, `RulesVersion` "7"). What counts: a
+**The rules** (`internal/board`, `RulesVersion` "8"). What counts: a
 visible member (not hidden, not in a virtual folder) outside the folders
 of role trash, junk and drafts that is the user's or classified as no bulk
-mail (§3.1, migration 0016), and on an issue no event. **Mine** is a row
+mail (§3.1, migration 0016), and on an issue no event. Calendar mail is
+no member at all: the store's member query leaves out every message with
+a `cal_invitations` row (an invitation, its update, cancellation or
+reply, the user's own copies in sent and outbox), so it makes, decides
+and counts nothing and a thread of nothing else makes no case; a row
+written after its message is judged marks the thread dirty
+(`MarkBoardMessagesDirty`). **Mine** is a row
 in a folder of role sent or outbox, never a `From` naming the user. Copies
 of one Message-ID are one message: the user's when a copy is mine, else
 represented by the copy stored first, so a later twin (another client's
@@ -1407,7 +1423,8 @@ runs annotated today (the clients' daily cap) and the size of the queue.
 `api.BoardPreferences`; not `config.get`/`config.set`): `enabled`
 (default on), `assistant` (off; a client turns it on only after the user's
 consent), the four windows, `triageAccounts` (empty: every enabled mail
-account; a `jira` account only when named), and `autoTriage`,
+account; a `jira` account only when named; a calendar-only `caldav`
+account never), and `autoTriage`,
 `autoTriageMinutes`, `autoTriageDailyCases`, which the daemon only stores
 for the client's schedule. With the board off nothing is computed, every
 method but the preferences refuses, and the user's decisions are kept.
@@ -1424,6 +1441,133 @@ they wrote, the upkeep for reminds, prunes and runs.
 `board.archive` carries `moved` (each message and the folder it left), from
 which a client builds its Undo: `message.move` back, then `board.setDone`
 with `done: false`.
+
+### 3.8 Calendar
+
+The calendar ([calendar.md](calendar.md) is the design with the "As
+built" notes of every task; [api.md §4.14 to §4.16](api.md)) gives
+accounts calendars: a Microsoft 365 account (`kind: graph`) its Graph
+calendars once the user switches `calendar.sync` on, and the new
+calendar-only kind `caldav` (capabilities exactly `["calendar"]`, no
+folders, every message method `invalidArgument`, never shown in Mail).
+Invitations that arrive in any mail account are read from the message's
+calendar part. The daemon is platform-neutral like the rest; the clients
+only show what it computed. Decisions D1 to D28 are summarised in §7.
+
+**Packages**, in dependency order (`calendar` ← `calsync` ← `caldav`,
+`graph` ← `core`; `store` imports neither):
+
+- `internal/calendar` — pure, no store, no network, the clock a
+  parameter: `ics` (own iCalendar parser and encoder with caps on bytes,
+  line length, nesting, components and properties; never panics),
+  `tz` (TZID resolution, the Windows zone table generated from CLDR
+  `windowsZones.xml` into `windows_zones.go`, the `VTIMEZONE` writer,
+  `SetPreferred` for the user's own zone), `recur` (RRULE parse and
+  validation, expansion through `github.com/teambition/rrule-go` with
+  `UNTIL` clamped to the window and whole cycles skipped before it),
+  `imip` (iTIP parse; REPLY, REQUEST and CANCEL builders), and
+  `event.go`, `expand.go`, `text.go` (cleaning, https links, video-call
+  hosts), `freebusy.go`.
+- `internal/calsync` — the engine: the frozen `Provider` interface
+  (`provider.go`), one syncer per account with calendars, the window,
+  materialised occurrences for daemon-expanded calendars, the alert
+  scheduler and the notifications.
+- `internal/caldav` — own client over `net/http` + `encoding/xml`,
+  discovery and the `Provider` (`caldav.NewProvider`); `caldavtest` is
+  the in-memory server of the tests with server profiles.
+- `internal/graph` `calendar*.go` — calendars, `calendarView/delta` per
+  calendar with a `list` fallback, masters, writes, responses,
+  `getSchedule`, recurrence patterns, `graph.NewCalendarProvider`;
+  `limiter.go` is the per-account request limiter shared with mail.
+- `internal/store` `calendar*.go` and migration
+  `0020_calendar.sql` — tables `cal_calendars`, `cal_events`,
+  `cal_occurrences`, `cal_resources`, `cal_alerts`, `cal_invitations`,
+  `cal_responses` and the contentless FTS5 `cal_events_fts` keyed through
+  `cal_events_fts_docs`; no column or trigger on an existing table.
+- `internal/core` — `accounts_caldav.go`, `calendar_service.go`,
+  `event_service.go`, `calendar_freebusy.go`, `invitation_service.go`,
+  `calendar_imip.go`, `calendar_backfill.go`, wiring in `backend.go` and
+  `dispatch.go`; `cmd/malachid/timezone.go`; `cmd/malachi-mcp`
+  `tools_calendar.go`.
+
+**Data.** Everything of a calendar account is cache of the server except
+the user's own columns (`visible`, `user_color`, `cal_responses`, alert
+state, meta `calendar.prefs`): switching sync off, a new server or user
+name, a disabled calendar or the account's removal deletes the rows
+(`dropCalendarCache`); switching on resynchronises. `cal_events` has FTS
+triggers and is never written with `INSERT OR REPLACE`. Each account has
+a window from `today − keepDays` (default 365) to `today + 400`; only
+objects with an occurrence in it are stored, `event.list` outside it asks
+the server once and stores nothing. Meta `calendar.expand`
+(`<recur.Version>.<calendar.ExpandVersion>:<Go version>`, the embedded
+tzdata comes with Go) rebuilds every daemon-expanded calendar's
+occurrences from `cal_events` when it changes.
+
+**Sync** (`internal/calsync`, `calsync.New` in `core/backend.go`). One
+syncer per enabled caldav account and per enabled graph account with
+`calendar.sync`; for `caldav` the engine is the kind's `SyncSupervisor`
+(`Mail()`), so `sync.status` and the status bar work as for mail, while a
+Graph account's calendar runs beside its mail (`graphWithCalendar`) with
+its own `CalendarSyncState` that never touches the mail state. Cadence:
+the Graph default calendar every 2 min, other Graph calendars every 10
+min, CalDAV every 5 min (ctag first), the calendar list every 10 min, a
+full reconcile daily; backoff 30 s to 1 h per calendar for its own
+errors, per account for network, sign-in and consent; there is no network
+monitor, `NetworkChanged` wakes offline syncers. Graph expands recurrences
+itself (`calendarView`); CalDAV objects are expanded by the daemon; both
+end in `cal_occurrences`, which `event.list` reads. CalDAV uses
+`sync-collection` when it has a token, else `calendar-query` with a
+`time-range`, `calendar-multiget` in batches of 50, and `cal_resources`
+to skip unchanged hrefs. Graph shares one `graph.NewLimiter(4)` per
+account (`graphLimiter`) with the mail syncer and the outbox; calendar
+passes run at low priority.
+
+**Writes** are server-first: `event.create/update/delete/respond` answer
+after the server did (≤ 30 s), offline is an error; the server's version
+wins (`If-Match`, 412 → `conflict` with the current event). The result is
+stored like a pass (`ApplyWrite`) and notified.
+
+**Invitations and iMIP.** The `Stored` hook (`afterMailStored` →
+`noteInvitation`) reads at most two calendar parts (≤ `MaxICSBytes`
+each) before `notify.newMessage`, parses them with `imip.ParseMessage` and
+writes one `cal_invitations` row per message; `ingest.Decide` never
+leaves such a part on the server. Older mail within `offlineDays` is
+scanned once in `core.Maintain` (meta `calendar.invites.scan`). Listings
+attach the summary per page by primary key. A REPLY updates a stored
+attendee only when its From is that attendee (D10); a CANCEL marks, never
+deletes. `invitation.respond` answers where the event lives: through
+Graph's own event, through the CalDAV provider, or by an iMIP REPLY to
+the stored `ORGANIZER`. iMIP mail is built by the daemon and queued in
+the existing outbox of a mail account of the user (`queueIMIP`,
+`smtp.BuildInput.Calendar` as the last alternative part); the CalDAV
+provider builds REQUEST and CANCEL itself and hands them to core after
+the server accepted the write, and sends none when the server schedules
+(`calendar-auto-schedule`). A message with a calendar part is never a
+counted member of a board case (`store.boardMembersFrom`, board rules
+"8"; the invitation service marks the message dirty with
+`MarkBoardMessagesDirty`).
+
+**Alerts.** The daemon schedules them (`calsync/alerts.go`): rows for
+occurrences of the next 7 days (read up to 7 days + 4 weeks ahead for long
+alarms), recomputed after every change and hourly, one timer,
+`notify.eventAlert` `due` / `dismissed` for every client; snooze and
+dismiss are daemon state. Only `DISPLAY` and `AUDIO` alarms count; hidden
+calendars, declined events and paused accounts have none.
+
+**Zone.** `malachid` gives `tz.SetPreferred` the user's zone from
+`MALACHI_TIME_ZONE` (the macOS and Windows clients set it), else `TZ`,
+else the `zoneinfo/` tail of `/etc/localtime`'s link, so that a Windows
+zone name of Graph resolves to the user's own IANA zone; floating events,
+working hours and free slots use the daemon's zone.
+
+**Limits** are `pkg/api/calendar.go` (api.md and calendar.md §4.8); the
+security rules are [security.md §4.3](security.md).
+
+**Clients.** The reference logic and every string are in
+`ui/internal/calendar` (Go, pure); the Calendar mode is a third value of
+the board's window mode (`board.ModeCalendar`, gschema
+`board-start-mode`, key `calendar-view`). The macOS client is built
+first; GTK and Windows follow after the owner's approval (§7).
 
 ## 4. Security boundary: HTML
 
@@ -2460,3 +2604,121 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   good, as emptying Trash does. A server-wide command (IMAP `1:*`, Graph
   paging) was weighed and left out: it needs a new operation kind, a table
   rebuild and a second path for every provider.
+- Calendar: **decided** (2026-10-16, [calendar.md](calendar.md) §1 and
+  §7) — Microsoft 365 through Graph on the existing `graph` account and
+  CalDAV as a calendar-only kind `caldav`; Google Calendar later under the
+  Gmail account, through another `calsync` provider without a contract
+  change. A third window mode, Calendar, beside Mail and Board; the macOS
+  client first, GTK and Windows after the owner approves it (the order of
+  the board, an exception to rule 6). The technical decisions, each with
+  its reason (calendar.md §1.2 has the full text):
+  - D1 own iCalendar parser and encoder, not `emersion/go-ical`: real
+    invitations break strict parsers, and hostile input needs our caps
+    and fuzz targets.
+  - D2 RRULE expansion through `teambition/rrule-go` (MIT) behind
+    `calendar/recur`, which validates the rule first and clamps `UNTIL`
+    to the window: BYxxx semantics are the largest correctness risk, and
+    rrule-go's unbounded loops are closed before it runs.
+  - D3 own CalDAV client, not `emersion/go-webdav`: byte and XML caps,
+    same-origin redirects without credentials elsewhere, the pin and
+    error mapping need control a 0.x library does not give.
+  - D4 Go's tzdata embedded (`time/tzdata`) and a Windows zone table from
+    CLDR; a `TZID` resolves by name, never by interpreting hostile
+    `VTIMEZONE` rules; writes use IANA names: every target server accepts
+    them.
+  - D5 Graph expands recurrences, the daemon expands CalDAV; both end in
+    `cal_occurrences`: one query path, Exchange authoritative for its own
+    quirks.
+  - D6 writes are server-first, offline is an error (iMIP mail excepted,
+    the outbox queues it): an edit with attendees is a message to people,
+    replaying it later is worse than refusing it.
+  - D7 the server wins conflicts (`If-Match`, `conflict` with the current
+    event): only the user's own columns are authoritative locally.
+  - D8 CalDAV scheduling by the server when it advertises
+    `calendar-auto-schedule`, else iMIP from a mail account
+    (`scheduling` override): otherwise every invitation would arrive
+    twice.
+  - D9 iMIP built by the daemon and sent through the outbox, subject and
+    text from the client: the backend stays language-neutral.
+  - D10 a REPLY goes only to the stored `ORGANIZER`; a received REPLY
+    changes only the attendee its From names: invitations can name
+    anyone.
+  - D11 event notes as plain text with https links listed apart, Graph
+    HTML through the sanitiser's text: no HTML crosses the API.
+  - D12 the daemon schedules alerts (`cal_alerts`, `notify.eventAlert`);
+    only `DISPLAY`/`AUDIO` count: one scheduler for three clients, an
+    alarm never sends or runs anything.
+  - D13 one Graph request limiter per account for mail, outbox and
+    calendar (4, Microsoft's per-mailbox limit): a third client would
+    slow mail with 429s.
+  - D14 Graph `calendarView/delta` per calendar, a `list` fallback by
+    `@odata.etag` for good when delta is refused: per-calendar delta was
+    documented only in beta (it works on v1.0, T0).
+  - D15 the calendar scopes only on the user's opt-in, recorded with the
+    refresh token (below); a missing grant is `consentRequired` and mail
+    keeps running: no new consent screen for users who do not want it.
+  - D16 account capability `calendar`; clients show in Mail only kinds
+    `imap`, `graph`, `jira`: a capability that does not flicker with
+    consent or sync state.
+  - D17 invitations detected in the `Stored` hook into `cal_invitations`,
+    calendar parts never left on the server: the pill and the
+    notification exist when the message is announced, and `messages`
+    (with its board triggers) is untouched.
+  - D18 an invitation is answered where its event lives (Graph's event,
+    the CalDAV copy, or iMIP), "Add to:" fixed for Graph: one rule.
+  - D19 recurring edits `this` / `thisAndFuture` (split into a new
+    series) / `all`, never `RANGE=THISANDFUTURE`: servers support the
+    split, not the range.
+  - D20 Propose New Time only for Graph events that allow it, no iMIP
+    `COUNTER`: organisers' clients handle it inconsistently.
+  - D21 attachments on new events (iMIP attachments, Graph event
+    attachments ≤ 3 MiB, ≤ 10), received ones not downloaded: no CalDAV
+    managed attachments, which few servers implement.
+  - D22 other people's free/busy only through Graph `getSchedule`: the
+    owner's decision.
+  - D23 calendar data is cache, deleted when sync goes off: no migration
+    of cached data is ever needed.
+  - D24 the one new Go dependency is rrule-go (MIT); the CLDR table and
+    `time/tzdata` the only new data: the core's licensing rules.
+  - D25 the calendar's display preferences are the daemon's
+    (`calendar.prefs`), only the chosen view a client key: the bridge and
+    three clients read one source.
+  - D26 the board's rules were to stay unchanged; the owner's answer to
+    Q1 changed that (below).
+  - D27 Calendar is a third value of the board's window mode, no rename:
+    a rename touches every board file for no behaviour.
+  - D28 one assistant panel per window, moved into the calendar page:
+    the transcript is shared.
+
+  The owner's answers of the same day (calendar.md §7): a message with a
+  calendar part is out of the board (rules "8"); existing Microsoft 365
+  accounts keep calendar sync off until the user turns it on; no drag to
+  move or resize in this iteration; CalDAV schedules on the server where
+  it can; *Decline Without Reply* stays. Where the build settled what the
+  design left open:
+  - **The granted scope is its own keyring item `oauth2.scope`**
+    (`oauth2flow/scope.go`, owner's decision 2026-10-16): the
+    `oauth2.refresh_token` item always holds the bare token, so every
+    daemon version, including one built from `main`, keeps reading it.
+    The scope item is written only while the grant allows the calendar
+    and removed when a later grant or refresh answer does not; no item
+    means mail scopes only. It costs one more Keychain item (and prompt
+    on macOS) per account with calendar access; `account.remove` deletes
+    it with the other secrets.
+    A re-sign-in asks for the calendar scopes whenever `calendar.sync` is
+    on.
+  - **Realm of `caldav`** is the lower-case host[:port] + path of
+    `serverUrl` (`store.RealmOf`), so the same address may have accounts
+    on two servers and a stored password never serves another server.
+  - **Trusted CalDAV hosts**: the password goes to `serverUrl`'s origin
+    and to principal and home-set origins only when they are https on the
+    same registrable domain (`calDAVOrigin`, `publicsuffix`), so iCloud's
+    `pNN-caldav` partitions work and another site gets no request; the
+    pin applies to the configured host only (`calDAVTransport`).
+  - **The local zone** comes from `MALACHI_TIME_ZONE`, `TZ` or
+    `/etc/localtime` (`cmd/malachid/timezone.go`), because CLDR maps a
+    Windows zone such as *Central Europe Standard Time* to one
+    representative IANA zone (`Europe/Budapest`) and the user's own zone
+    with the same rules should win.
+  - **No network monitor**: an offline calendar waits on its backoff;
+    adding a platform-neutral monitor was left out.

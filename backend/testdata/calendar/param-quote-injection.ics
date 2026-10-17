@@ -1,0 +1,18 @@
+BEGIN:VCALENDAR
+X-MALACHI-TEST:quotes in parameters: an unterminated quote and text after a
+  closing quote drop the property
+VERSION:2.0
+PRODID:-//Malachi Test//Corpus//EN
+BEGIN:VEVENT
+UID:quote-1@example.org
+DTSTAMP:20261016T080000Z
+DTSTART:20261020T090000Z
+DTEND:20261020T100000Z
+SUMMARY:Planning
+ATTENDEE;CN="Bo "evil:mailto:x@example.org";RSVP=TRUE:mailto:bo@example.org
+ATTENDEE;CN="unterminated:mailto:cy@example.org
+ATTENDEE;CN=a"b:mailto:dee@example.org
+ATTENDEE;CN="Fine, Quoted: Name";DELEGATED-FROM="mailto:ada@example.org","m
+ ailto:eve@example.org":mailto:fay@example.org
+END:VEVENT
+END:VCALENDAR

@@ -132,6 +132,20 @@ func FormatSize(n int64) string {
 	}
 }
 
+// Strftime writes t's wall clock (its date and time of day in t's own
+// zone, which the caller already chose) with a strftime format through
+// GLib, so day and month names, %OB's standalone month among them, follow
+// the locale: calendar.Env{Format: widget.Strftime}. The fields are handed
+// to GLib as they are, so %z and %Z name UTC and never t's zone; no
+// format of the calendar uses them.
+func Strftime(t time.Time, format string) string {
+	dt := glib.NewDateTimeUTC(t.Year(), int(t.Month()), t.Day(), t.Hour(), t.Minute(), float64(t.Second()))
+	if dt == nil {
+		return t.Format(time.RFC3339)
+	}
+	return dt.Format(format)
+}
+
 // strftime formats through GLib so month and day names follow the locale.
 func strftime(t time.Time, format string) string {
 	dt := glib.NewDateTimeFromUnixLocal(t.Unix())

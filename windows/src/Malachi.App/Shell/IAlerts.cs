@@ -16,6 +16,8 @@
 
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Malachi.Core.Api;
+using Malachi.Core.Calendars;
 using Malachi.Core.Controllers;
 using Malachi.Core.Wizard;
 using Microsoft.UI.Xaml;
@@ -69,8 +71,30 @@ public interface IAlerts
     Task<bool> ConfirmTrustCertificateAsync(
         Window? window, string heading, string body, IReadOnlyList<CertificateDetail> details, string confirmLabel);
 
+    /// <summary>
+    /// Asks for a password (a CalDAV account's Replace Password…, macOS's
+    /// alert with a secure field): <paramref name="confirmLabel"/> (the
+    /// default, enabled once something is typed) / Cancel; the password, or
+    /// null for Cancel. The field is emptied once the dialog is over.
+    /// </summary>
+    Task<string?> PasswordAsync(Window? window, string heading, string body, string fieldLabel, string confirmLabel);
+
     /// <summary>About Malachi Mail (app.about).</summary>
     Task ShowAboutAsync(Window? window);
+
+    /// <summary>
+    /// A question of the calendar (docs/calendar.md §5.5, §5.6): the
+    /// confirmation, the alternative when there is one, and Cancel;
+    /// <paramref name="confirmDefault"/> makes the confirmation the default
+    /// (the editor's close question), else Cancel is.
+    /// </summary>
+    Task<Cal.Answer> CalendarQuestionAsync(Window? window, Cal.Question question, bool confirmDefault);
+
+    /// <summary>The series question: one of its choices, or null for Cancel.</summary>
+    Task<EditScope?> CalendarScopeAsync(Window? window, Cal.ScopeQuestion question);
+
+    /// <summary>The event editor's Paste Link…: the link as typed, or null for Cancel.</summary>
+    Task<string?> VideoLinkAsync(Window? window, string initial);
 
     /// <summary>Whether one of <paramref name="window"/>'s dialogs is up or waiting.</summary>
     bool IsShowing(Window window);

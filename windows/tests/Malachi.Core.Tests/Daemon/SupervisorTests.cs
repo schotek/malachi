@@ -8,13 +8,15 @@
 // helper malachi-credentials.exe (Windows keeps no execute bits, so the
 // "not executable" case runs where there are some), PATH is split on the
 // system's separator, the socket limit is 107 bytes, the home is
-// USERPROFILE, and the daemon's environment disables D-Bus.
+// USERPROFILE, the daemon's environment disables D-Bus, and its time zone
+// is converted from the Windows id for the user's region (ZoneName).
 
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
+using Malachi.Core.Calendars;
 using Malachi.Core.Daemon;
 using Malachi.Core.TestDaemon;
 using Xunit;
@@ -258,5 +260,74 @@ public sealed class SupervisorTests
         Assert.Equal("1", withEmpty["MALACHI_DEFAULT_COMPRESS_STORE"]);
         // An empty one stays empty: the daemon reads it as no default.
         Assert.Equal("", withEmpty["MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS"]);
+    }
+
+    /// <summary>
+    /// Swift's environmentPassesTheTimeZone: the daemon gets the user's time
+    /// zone (MALACHI_TIME_ZONE, docs/calendar.md §3), whatever the keyring;
+    /// one already in the environment wins, an empty one counts as none, and
+    /// without a name the system's is read at the start.
+    /// </summary>
+    [Fact]
+    public void EnvironmentPassesTheTimeZone()
+    {
+        var launch = new DaemonLaunch
+        {
+            Executable = OperatingSystem.IsWindows() ? @"C:\nonexistent\malachid.exe" : "/nonexistent/malachid",
+            Socket = "s",
+            Config = "c",
+            Store = "d",
+        };
+        var home = Env(("USERPROFILE", OperatingSystem.IsWindows() ? @"C:\Users\u" : "/home/u"));
+        Assert.Equal("Europe/Prague", DaemonSupervisor.Environment(home, launch, "Europe/Prague")["MALACHI_TIME_ZONE"]);
+        // Set before the keyring's early return.
+        var keyring = Env(("MALACHI_KEYRING", "none"));
+        Assert.Equal("Europe/Prague", DaemonSupervisor.Environment(keyring, launch, "Europe/Prague")["MALACHI_TIME_ZONE"]);
+        var preset = Env(("MALACHI_TIME_ZONE", "Asia/Tokyo"));
+        Assert.Equal("Asia/Tokyo", DaemonSupervisor.Environment(preset, launch, "Europe/Prague")["MALACHI_TIME_ZONE"]);
+        var empty = Env(("MALACHI_TIME_ZONE", ""));
+        Assert.Equal("Europe/Prague", DaemonSupervisor.Environment(empty, launch, "Europe/Prague")["MALACHI_TIME_ZONE"]);
+        // A zone without an IANA name sets nothing: TZ stays the daemon's source.
+        Assert.False(DaemonSupervisor.Environment(home, launch, "").ContainsKey("MALACHI_TIME_ZONE"));
+        var local = DaemonSupervisor.LocalZoneName();
+        var env = DaemonSupervisor.Environment(home, launch);
+        if (local.Length > 0)
+        {
+            Assert.Equal(local, env["MALACHI_TIME_ZONE"]);
+        }
+        else
+        {
+            Assert.False(env.ContainsKey("MALACHI_TIME_ZONE"));
+        }
+    }
+
+    /// <summary>
+    /// The zone's IANA name (Windows-only): an IANA zone keeps its id; a
+    /// Windows id is converted for the user's region where CLDR maps it there
+    /// (Central Europe in Czechia is Europe/Prague, not territory 001's
+    /// Europe/Budapest), else as Cal.IanaZoneName.
+    /// </summary>
+    [Theory]
+    [InlineData("Central Europe Standard Time", "CZ", "Europe/Prague")]
+    [InlineData("Central Europe Standard Time", "HU", "Europe/Budapest")]
+    [InlineData("Central Europe Standard Time", "", "Europe/Budapest")]
+    [InlineData("Central Europe Standard Time", null, "Europe/Budapest")]
+    [InlineData("Pacific Standard Time", "US", "America/Los_Angeles")]
+    [InlineData("Pacific Standard Time", "CA", "America/Vancouver")]
+    [InlineData("Europe/Prague", "HU", "Europe/Prague")]
+    public void ZoneNamesAreIana(string id, string? region, string expected)
+    {
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(id);
+        Assert.Equal(expected, DaemonSupervisor.ZoneName(zone, region));
+    }
+
+    /// <summary>A zone with no IANA name has none: the daemon could not load its id.</summary>
+    [Fact]
+    public void AZoneWithoutAnIanaNameHasNone()
+    {
+        var custom = TimeZoneInfo.CreateCustomTimeZone("Malachi Test Standard Time", TimeSpan.FromHours(3), "Test", "Test");
+        Assert.Equal("Malachi Test Standard Time", Cal.IanaZoneName(custom));
+        Assert.Equal("", DaemonSupervisor.ZoneName(custom, "CZ"));
+        Assert.Equal("", DaemonSupervisor.ZoneName(custom, null));
     }
 }

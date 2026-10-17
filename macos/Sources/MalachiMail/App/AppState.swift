@@ -98,6 +98,9 @@ final class AppState {
     /// board"): one request at a time for the application, started from a
     /// case's detail; the main window lists the board again after it.
     let boardReply: BoardReplyController
+    /// The calendar (Integration+Calendar): the windows' sources, the
+    /// alerts, the routing of the calendar's notifications.
+    let calendar: AppCalendar
     private var boardTriageTokens: [NotificationHub.Token] = []
 
     var hooks = Hooks()
@@ -115,6 +118,7 @@ final class AppState {
         windows = WindowRegistry()
         notifications = NotificationHub()
         notifications.attach(to: connection)
+        calendar = AppCalendar(client: client, settings: settings, hub: notifications)
         let claudeCode = ClaudeCodeLocator(settings: settings, directory: ClaudeCodeLocator.defaultDirectory)
         self.claudeCode = claudeCode
         let assistant = AssistantController(
@@ -162,6 +166,7 @@ final class AppState {
         })
         Task { @MainActor [weak self] in try? await self?.chatGPT.load() }
         wireBoardTriage()
+        EventEditorManager.shared.state = self
     }
 
     var selectedProvider: (any AssistantProvider)? { settings.assistantProvider == .chatgpt ? codex : nil }
@@ -353,6 +358,7 @@ final class NotificationHub {
     private var messagesChanged = HandlerList<MessagesChangedNotification>()
     private var boardChanged = HandlerList<BoardChangedNotification>()
     private var draftsChanged = HandlerList<DraftsChangedNotification>()
+    private var calendarNotification = HandlerList<CalendarNotification>()
     private var connection = HandlerList<ConnectionController.ConnectionState>()
 
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "notify")
@@ -401,6 +407,13 @@ final class NotificationHub {
         draftsChanged.add(f)
     }
 
+    /// The calendar's notifications (notify.calendarChanged,
+    /// notify.calendarState, notify.eventAlert, notify.invitationsChanged),
+    /// decoded next to `DaemonNotification` (`CalendarNotification`).
+    func addCalendar(_ f: @escaping @MainActor (CalendarNotification) -> Void) -> Token {
+        calendarNotification.add(f)
+    }
+
     /// Fires on every connection state change, after `connectionState`
     /// was updated. A handler added later does not get the current state;
     /// read `connectionState` for that.
@@ -411,6 +424,15 @@ final class NotificationHub {
     // MARK: Internals
 
     private func handle(_ raw: RPCNotification) {
+        do {
+            if let c = try CalendarNotification(raw) {
+                calendarNotification.fire(c)
+                return
+            }
+        } catch {
+            log.warning("bad \(raw.method, privacy: .public) payload: \(String(describing: error), privacy: .public)")
+            return
+        }
         let n: DaemonNotification
         do {
             n = try DaemonNotification(raw)

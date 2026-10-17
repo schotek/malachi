@@ -97,6 +97,22 @@ type fakeBackend struct {
 	annotateCalls []api.BoardAnnotateParams
 	commitCalls   []api.BoardCommitParams
 
+	// Calendar (tools_calendar_test.go): the canned answers (nil =
+	// notImplemented) and what the calendar methods were asked.
+	calendarResult   *api.CalendarListResult
+	eventsResult     *api.EventListResult
+	eventSearchRes   *api.EventSearchResult
+	eventGetResult   *api.EventGetResult
+	freeTimeResult   *api.CalendarFindFreeTimeResult
+	invitationResult *api.InvitationListResult
+	calendarCalls    []api.CalendarListParams
+	eventListCalls   []api.EventListParams
+	eventSearchCalls []api.EventSearchParams
+	eventGetCalls    []api.EventGetParams
+	freeTimeCalls    []api.CalendarFindFreeTimeParams
+	invitationCalls  []api.InvitationListParams
+	eventCreateCalls []api.EventCreateParams
+
 	searchResults []api.SearchResult // what every search.query answers
 	searchCalls   []api.SearchQueryParams
 }
@@ -822,4 +838,133 @@ func setPart(fb *fakeBackend, msg api.MessageID, att api.Attachment, data []byte
 	m.HasAttachments = true
 	fb.messages[msg] = m
 	fb.parts[string(msg)+"/"+att.PartID] = api.MessagePartResult{PartID: att.PartID, ContentType: att.ContentType, Filename: att.Filename, Size: att.Size, Data: data}
+}
+
+// --- calendar --------------------------------------------------------------
+
+func (f *fakeBackend) Calendars() api.CalendarService {
+	return fakeCalendars{f.StubBackend.Calendars(), f}
+}
+func (f *fakeBackend) Events() api.EventService { return fakeEvents{f.StubBackend.Events(), f} }
+func (f *fakeBackend) Invitations() api.InvitationService {
+	return fakeInvitations{f.StubBackend.Invitations(), f}
+}
+
+type fakeCalendars struct {
+	api.CalendarService
+	f *fakeBackend
+}
+
+func (s fakeCalendars) List(_ context.Context, p api.CalendarListParams) (*api.CalendarListResult, error) {
+	s.f.record(func() { s.f.calendarCalls = append(s.f.calendarCalls, p) })
+	if err := s.f.gate(api.MethodCalendarList); err != nil {
+		return nil, err
+	}
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+	if s.f.calendarResult == nil {
+		return s.CalendarService.List(context.Background(), p)
+	}
+	r := *s.f.calendarResult
+	return &r, nil
+}
+
+func (s fakeCalendars) FindFreeTime(_ context.Context, p api.CalendarFindFreeTimeParams) (*api.CalendarFindFreeTimeResult, error) {
+	s.f.record(func() { s.f.freeTimeCalls = append(s.f.freeTimeCalls, p) })
+	if err := s.f.gate(api.MethodCalendarFindFreeTime); err != nil {
+		return nil, err
+	}
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+	if s.f.freeTimeResult == nil {
+		return s.CalendarService.FindFreeTime(context.Background(), p)
+	}
+	r := *s.f.freeTimeResult
+	return &r, nil
+}
+
+type fakeEvents struct {
+	api.EventService
+	f *fakeBackend
+}
+
+func (s fakeEvents) List(_ context.Context, p api.EventListParams) (*api.EventListResult, error) {
+	s.f.record(func() { s.f.eventListCalls = append(s.f.eventListCalls, p) })
+	if err := s.f.gate(api.MethodEventList); err != nil {
+		return nil, err
+	}
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+	if s.f.eventsResult == nil {
+		return s.EventService.List(context.Background(), p)
+	}
+	r := *s.f.eventsResult
+	return &r, nil
+}
+
+func (s fakeEvents) Search(_ context.Context, p api.EventSearchParams) (*api.EventSearchResult, error) {
+	s.f.record(func() { s.f.eventSearchCalls = append(s.f.eventSearchCalls, p) })
+	if err := s.f.gate(api.MethodEventSearch); err != nil {
+		return nil, err
+	}
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+	if s.f.eventSearchRes == nil {
+		return s.EventService.Search(context.Background(), p)
+	}
+	r := *s.f.eventSearchRes
+	return &r, nil
+}
+
+func (s fakeEvents) Get(_ context.Context, p api.EventGetParams) (*api.EventGetResult, error) {
+	s.f.record(func() { s.f.eventGetCalls = append(s.f.eventGetCalls, p) })
+	if err := s.f.gate(api.MethodEventGet); err != nil {
+		return nil, err
+	}
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+	if s.f.eventGetResult == nil {
+		return s.EventService.Get(context.Background(), p)
+	}
+	r := *s.f.eventGetResult
+	return &r, nil
+}
+
+func (s fakeEvents) Create(_ context.Context, p api.EventCreateParams) (*api.EventCreateResult, error) {
+	s.f.record(func() { s.f.eventCreateCalls = append(s.f.eventCreateCalls, p) })
+	if err := s.f.gate(api.MethodEventCreate); err != nil {
+		return nil, err
+	}
+	ev := api.Event{}
+	ev.EventID, ev.CalendarID, ev.AccountID, ev.Title, ev.AllDay = "ev_new", p.CalendarID, fxAccount, p.Event.Title, p.Event.AllDay
+	ev.StartDate, ev.EndDate = p.Event.StartDate, p.Event.EndDate
+	if !p.Event.AllDay {
+		st := time.Date(2026, 10, 14, 7, 0, 0, 0, time.UTC)
+		en := st.Add(time.Hour)
+		ev.Start, ev.End = &st, &en
+	}
+	res := &api.EventCreateResult{Event: ev}
+	if len(p.Event.Attendees) > 0 {
+		res.Invitations = api.InvitationsSent{Via: api.InvitationsViaMail, Count: len(p.Event.Attendees)}
+	}
+	return res, nil
+}
+
+type fakeInvitations struct {
+	api.InvitationService
+	f *fakeBackend
+}
+
+func (s fakeInvitations) List(_ context.Context, p api.InvitationListParams) (*api.InvitationListResult, error) {
+	s.f.record(func() { s.f.invitationCalls = append(s.f.invitationCalls, p) })
+	if err := s.f.gate(api.MethodInvitationList); err != nil {
+		return nil, err
+	}
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+	if s.f.invitationResult == nil {
+		return s.InvitationService.List(context.Background(), p)
+	}
+	r := *s.f.invitationResult
+	return &r, nil
 }

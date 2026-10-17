@@ -120,6 +120,10 @@ private typealias F = BoardFixture
             ("bound passed without prefs", .board, .mail, no, yes, no, no, w, .mail, yes),
             ("long after the bound", .last, .board, no, yes, no, no, 60, .mail, yes),
             ("just under the bound", .board, .mail, no, yes, no, no, w - 0.001, .mail, no),
+            ("calendar start decides at once", .calendar, .mail, no, yes, no, no, 0, .calendar, yes),
+            ("last used calendar decides at once", .last, .calendar, no, no, no, no, 0, .calendar, yes),
+            ("calendar start, user switched", .calendar, .mail, no, yes, yes, no, 0, .mail, yes),
+            ("calendar start, user acted in mail", .last, .calendar, no, yes, no, yes, 0, .mail, yes),
         ]
         for (name, start, last, known, enabled, sw, acted, waited, mode, decided) in cases {
             let got = Board.startDecision(

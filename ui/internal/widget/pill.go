@@ -7,6 +7,8 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/diamondburned/gotk4/pkg/pango"
 
+	"github.com/schotek/malachi/ui/internal/calendar"
+	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
 )
 
@@ -80,4 +82,52 @@ func SetBulkPill(l *gtk.Label, tag string, show bool) {
 	l.SetText(tag)
 	l.SetTooltipText(tag)
 	l.SetVisible(show && tag != "")
+}
+
+// invitationClasses are the colour classes of an invitation's pill
+// (style/calendar_card.go), by calendar.InvitationPill.
+var invitationClasses = map[calendar.InvitationPill]string{
+	calendar.PillInvitation: "invitation-pill",
+	calendar.PillUpdate:     "invitation-update",
+	calendar.PillCancelled:  "invitation-cancelled",
+	calendar.PillReply:      "invitation-reply",
+}
+
+// InvitationClass is the colour class of pill p ("" for none): the list
+// pill's and the invitation card's tile.
+func InvitationClass(p calendar.InvitationPill) string { return invitationClasses[p] }
+
+// SetInvitationClass puts the colour class of p on w, taking the others
+// off.
+func SetInvitationClass(w interface {
+	AddCSSClass(string)
+	RemoveCSSClass(string)
+}, p calendar.InvitationPill) {
+	for _, c := range invitationClasses {
+		w.RemoveCSSClass(c)
+	}
+	if c := invitationClasses[p]; c != "" {
+		w.AddCSSClass(c)
+	}
+}
+
+// SetInvitationPill shows the invitation pill p in l (docs/calendar.md
+// §5.7: Invitation blue, Update orange, Cancelled red, Reply grey); none
+// hides it. The text is the app's own (calendar.PillTitle).
+func SetInvitationPill(l *gtk.Label, p calendar.InvitationPill) {
+	SetInvitationClass(l, p)
+	title := calendar.PillTitle(p, i18n.Tr)
+	l.SetText(title)
+	l.SetVisible(title != "")
+}
+
+// StrikeAttrs is the Pango strike-through over a whole label's text, for
+// the subject of a cancelled event (never markup); nil when off.
+func StrikeAttrs(on bool) *pango.AttrList {
+	if !on {
+		return nil
+	}
+	list := pango.NewAttrList()
+	list.Insert(pango.NewAttrStrikethrough(true))
+	return list
 }

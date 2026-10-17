@@ -146,3 +146,16 @@ func ComposeAccounts(accounts []api.Account) []api.Account {
 func CanComposeNew(accounts []api.Account) bool {
 	return len(accounts) == 0 || len(ComposeAccounts(accounts)) > 0
 }
+
+// InMail reports whether Mail shows account a once it is enabled: every
+// kind but a calendar-only one (caldav), which has no mail and no folders
+// (docs/calendar.md D16; it shows in the Calendar's sidebar instead).
+// Mail asks it of switched-off accounts too, so that calendar-only
+// accounts alone count as no account in Mail (the empty sidebar, the No
+// Accounts page); the account name on an all-accounts search result, the
+// Reply All self address and the board's accounts (its account filter,
+// Triage These Accounts) go by it as well. macOS `inMail`, Windows
+// `FolderTree.InMail`.
+func InMail(a api.Account) bool {
+	return a.Config.Protocol() != api.AccountCalDAV
+}

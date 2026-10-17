@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/schotek/malachi/ui/internal/assistant"
+	"github.com/schotek/malachi/ui/internal/calendar"
 )
 
 func TestMemoryDefaults(t *testing.T) {
@@ -290,7 +291,7 @@ func TestBoardKeys(t *testing.T) {
 	if got := s.BoardStartMode(); got != BoardStartMail {
 		t.Errorf("BoardStartMode default = %q, want mail", got)
 	}
-	s.SetBoardStartMode("calendar")
+	s.SetBoardStartMode("planner")
 	if got := s.BoardStartMode(); got != BoardStartMail {
 		t.Errorf("invalid start mode accepted: %q", got)
 	}
@@ -333,5 +334,34 @@ func TestBoardKeys(t *testing.T) {
 	}
 	if got := s.AssistantModel(); got != assistant.Opus {
 		t.Errorf("AssistantModel = %q, want opus (must not follow BoardTriageModel)", got)
+	}
+}
+
+func TestCalendarView(t *testing.T) {
+	s := NewMemory()
+	if got := s.CalendarView(); got != calendar.DefaultView.Nick() {
+		t.Errorf("CalendarView default = %q, want %q", got, calendar.DefaultView.Nick())
+	}
+	if len(CalendarViews) != len(calendar.Views) {
+		t.Fatalf("CalendarViews = %v, calendar.Views has %d", CalendarViews, len(calendar.Views))
+	}
+	for i, v := range calendar.Views {
+		if CalendarViews[i] != v.Nick() {
+			t.Errorf("CalendarViews[%d] = %q, want %q", i, CalendarViews[i], v.Nick())
+		}
+	}
+	s.SetCalendarView("year")
+	if got := s.CalendarView(); got != "week" {
+		t.Errorf("invalid view accepted: %q", got)
+	}
+	for _, want := range CalendarViews {
+		s.SetCalendarView(want)
+		if got := s.CalendarView(); got != want {
+			t.Errorf("CalendarView = %q, want %q", got, want)
+		}
+	}
+	s.SetBoardStartMode(BoardStartCalendar)
+	if got := s.BoardStartMode(); got != BoardStartCalendar {
+		t.Errorf("BoardStartMode = %q, want calendar", got)
 	}
 }

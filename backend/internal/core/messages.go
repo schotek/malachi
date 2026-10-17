@@ -134,6 +134,9 @@ func (s *messageService) Get(ctx context.Context, p api.MessageGetParams) (*api.
 	if out.Unsubscribe, err = s.b.unsubscribeOffer(ctx, a, m); err != nil {
 		return nil, err
 	}
+	if err := s.b.attachInvitationCard(ctx, a, m, &out); err != nil {
+		return nil, err
+	}
 	return &api.MessageGetResult{Message: out}, nil
 }
 
@@ -458,6 +461,7 @@ func toAPISummary(m store.Message) api.MessageSummary {
 		Flags:          nonNilFlags(m.Flags),
 		HasAttachments: m.HasAttachments,
 		Size:           m.Size,
+		Invitation:     m.Invitation,
 	}
 }
 

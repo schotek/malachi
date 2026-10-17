@@ -20,7 +20,8 @@
 // rewrites the stand-in's script to sign it in; here auth status prints a
 // file the test rewrites. Swift's sleep before the check that a declined
 // consent started nothing is IdleAsync. Added: LocalDate, the count of a
-// Context, and a closed panel.
+// Context, a closed panel, and the calendar's quick actions and Show in
+// Calendar card (Swift has no test of them; docs/calendar.md §5.9).
 
 using System;
 using System.Collections.Generic;
@@ -262,6 +263,83 @@ public sealed class AssistantPanelControllerTests
             h.Panel.OpenDraftItem(card.Id);
         });
         Assert.Equal([draft], h.Opened);
+    }
+
+    /// <summary>
+    /// What's on Today sends at once, with today's date and no selection; the
+    /// first list_events result naming an event adds one Show in Calendar
+    /// card, which hands its event to the application.
+    /// </summary>
+    [Fact]
+    public async Task WhatsOnTodayAndItsCalendarCard()
+    {
+        RequireWindows();
+        const string Events =
+            "2 events from 2026-09-28T22:00:00Z to 2026-09-29T22:00:00Z\\n"
+            + "1. 2026-09-29T08:00:00Z..2026-09-29T09:00:00Z response=accepted eventId=e_1 calendarId=c1\\n"
+            + "2. 2026-09-29T10:00:00Z..2026-09-29T11:00:00Z response=accepted eventId=e_2 calendarId=c1";
+        await using var h = await Harness.CreateAsync(Fake(CannedStreamJson.Turn(
+            CannedStreamJson.Init,
+            CannedStreamJson.ToolUse("t1", "list_events"),
+            CannedStreamJson.ToolResult("t1", Events),
+            CannedStreamJson.ToolUse("t2", "get_event"),
+            CannedStreamJson.ToolResult("t2", "event e_2 calendarId=c1\\ntime: 2026-09-29T10:00:00Z..2026-09-29T11:00:00Z"),
+            CannedStreamJson.Text("Two meetings."),
+            CannedStreamJson.Result())));
+        await h.On(() =>
+        {
+            Assert.True(h.Panel.CanRunCalendarActions);
+            h.Panel.RunCalendar(AssistantAction.Summarize); // not a calendar action
+            Assert.Equal(Phase.Idle, h.Panel.CurrentPhase);
+            h.Panel.RunCalendar(AssistantAction.WhatsOnToday);
+            Assert.Null(h.Panel.Pending);
+            Assert.False(h.Panel.CanRunCalendarActions);
+        });
+        await h.TurnAsync();
+        Assert.Equal([Assistant.WhatsOnTodayPrompt("2026-09-29")], h.Prompts);
+        var cards = (await h.ContentsAsync()).OfType<CalendarContent>().ToList();
+        var card = Assert.Single(cards);
+        Assert.Equal("e_1", card.Calendar.EventId);
+        Assert.Equal(new DateTimeOffset(2026, 9, 29, 8, 0, 0, TimeSpan.Zero), card.Calendar.Start);
+        Assert.Equal(new UserContent("What's on Today", ""), (await h.ContentsAsync())[0]);
+        await h.On(() =>
+        {
+            var item = Assert.Single(h.Panel.Items, i => i.Content is CalendarContent);
+            h.Panel.OpenCalendarItem(item.Id);
+            h.Panel.OpenCalendarItem(h.Panel.Items[0].Id); // not a calendar card
+        });
+        Assert.Equal([card.Calendar], h.CalendarOpened);
+    }
+
+    /// <summary>
+    /// Find a Free Slot waits for the user's words (none sends nothing) and
+    /// then sends its prompt with them; a failed list_events adds no card.
+    /// </summary>
+    [Fact]
+    public async Task FindAFreeSlotWaitsForTheWords()
+    {
+        RequireWindows();
+        await using var h = await Harness.CreateAsync(Fake(CannedStreamJson.Turn(
+            CannedStreamJson.Init,
+            CannedStreamJson.ToolUse("t1", "list_events"),
+            CannedStreamJson.ToolResult("t1", "1 event from a to b\\n1. 2026-09-29T08:00:00Z..2026-09-29T09:00:00Z eventId=e_1", error: true),
+            CannedStreamJson.Text("Thursday at 10."),
+            CannedStreamJson.Result())));
+        await h.On(() =>
+        {
+            h.Panel.RunCalendar(AssistantAction.FindFreeSlot);
+            Assert.Equal(new PendingAction(AssistantAction.FindFreeSlot), h.Panel.Pending);
+            Assert.Equal("Find a Free Slot", h.Panel.PendingLabel);
+            Assert.Equal("What do you want to know?", h.Panel.Placeholder);
+            Assert.Equal(1, h.Focused);
+            Assert.False(h.Panel.Submit("   "), "a free slot needs words");
+            Assert.True(h.Panel.Submit("an hour with Jana"));
+        });
+        await h.TurnAsync();
+        Assert.Null(await h.On(() => h.Panel.Pending));
+        Assert.Equal([Assistant.FindFreeSlotPrompt("2026-09-29") + "an hour with Jana"], h.Prompts);
+        Assert.DoesNotContain(await h.ContentsAsync(), c => c is CalendarContent);
+        Assert.Equal(new UserContent("Find a Free Slot", "an hour with Jana"), (await h.ContentsAsync())[0]);
     }
 
     /// <summary>A failed create_draft, or one whose line is not the bridge's, adds no card.</summary>
@@ -1398,6 +1476,8 @@ public sealed class AssistantPanelControllerTests
 
         public List<DraftRef> Opened { get; } = [];
 
+        public List<Assistant.CalendarRef> CalendarOpened { get; } = [];
+
         /// <summary>The conversations the stand-in started.</summary>
         public int Starts => FakeClaudeScript.Starts(Dir.Path);
 
@@ -1452,6 +1532,11 @@ public sealed class AssistantPanelControllerTests
                 panel.OpenDraft = draft =>
                 {
                     h.Opened.Add(draft);
+                    h.Changed();
+                };
+                panel.OpenInCalendar = calendar =>
+                {
+                    h.CalendarOpened.Add(calendar);
                     h.Changed();
                 };
                 panel.RestoreInputRequested += (_, text) =>

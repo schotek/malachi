@@ -8,9 +8,9 @@
 // win.archive, win.junk, win.mark-unread, win.toggle-flag; the msg.* of
 // message_window.go; compose.blp's compose.send and compose.save; the
 // window.close of the Escape shortcut controllers; accounts_reorder.go's
-// Ctrl+Up/Down; the primary menu's F10, GtkWindow's own key), plus the
-// Windows keys for Reply, Reply All and Forward (macOS's reply:, replyAll:,
-// forward:).
+// Ctrl+Up/Down; the primary menu's F10, GtkWindow's own key; the
+// calendar's keys.go ShowCalendarKey and New Event), plus the Windows keys
+// for Reply, Reply All and Forward (macOS's reply:, replyAll:, forward:).
 
 namespace Malachi.Core.Presentation;
 
@@ -37,6 +37,16 @@ public enum ShortcutCommand
 
     /// <summary>The main window's Board mode (Ctrl+2, Board.BoardKeys).</summary>
     ShowBoard,
+
+    /// <summary>The main window's Calendar mode (Ctrl+3, the calendar's keys.go ShowCalendarKey).</summary>
+    ShowCalendar,
+
+    /// <summary>
+    /// New Event (Ctrl+Shift+N, Cal.CalendarKeys' Primary+Alt+N, macOS's
+    /// ⌥⌘N File ▸ New Event): the main window in every mode, where
+    /// Board.Allows says whether it runs.
+    /// </summary>
+    NewEvent,
 
     /// <summary>Opens the primary menu (window.blp's MenuButton with primary: true, F10).</summary>
     MainMenu,

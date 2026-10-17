@@ -1,0 +1,30 @@
+From: Ada Example <ada@example.org>
+To: Bo Tester <bo@example.org>
+Subject: Team offsite
+Date: Fri, 16 Oct 2026 08:00:00 +0000
+Message-ID: <0A1B2C3D-0000-4000-8000-000000000002@example.org>
+X-Mailer: Apple Mail (2.3826)
+MIME-Version: 1.0 (Mac OS X Mail 16.0)
+Content-Type: multipart/mixed; boundary="Apple-Mail=_0000"
+
+--Apple-Mail=_0000
+Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset=us-ascii
+
+Please join the offsite.
+
+--Apple-Mail=_0000
+Content-Disposition: attachment; filename=invite.ics
+Content-Type: text/calendar; name="invite.ics"
+Content-Transfer-Encoding: base64
+
+QkVHSU46VkNBTEVOREFSDQpWRVJTSU9OOjIuMA0KUFJPRElEOi0vL0FwcGxlIEluYy4vL21hY09T
+IDE1LjAvL0VODQpDQUxTQ0FMRTpHUkVHT1JJQU4NCk1FVEhPRDpSRVFVRVNUDQpCRUdJTjpWRVZF
+TlQNClVJRDo1RjJBN0MxRS0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDENCkRUU1RBTVA6MjAy
+NjEwMTZUMDgwMDAwWg0KRFRTVEFSVDtWQUxVRT1EQVRFOjIwMjYxMDMwDQpEVEVORDtWQUxVRT1E
+QVRFOjIwMjYxMDMxDQpTVU1NQVJZOlRlYW0gb2Zmc2l0ZQ0KT1JHQU5JWkVSO0NOPUFkYSBFeGFt
+cGxlOm1haWx0bzphZGFAZXhhbXBsZS5vcmcNCkFUVEVOREVFO0NOPUJvIFRlc3RlcjtDVVRZUEU9
+SU5ESVZJRFVBTDtQQVJUU1RBVD1ORUVEUy1BQ1RJT047Uk9MRT1SRVEtUEFSVElDSVBBTlQ7UlNW
+UD1UUlVFOm1haWx0bzpib0BleGFtcGxlLm9yZw0KU0VRVUVOQ0U6MA0KVFJBTlNQOlRSQU5TUEFS
+RU5UDQpFTkQ6VkVWRU5UDQpFTkQ6VkNBTEVOREFSDQo=
+--Apple-Mail=_0000--

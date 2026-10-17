@@ -14,6 +14,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistantpanel"
 	"github.com/schotek/malachi/ui/internal/board"
+	"github.com/schotek/malachi/ui/internal/capabilities"
 )
 
 // Caller is the daemon as this package needs it: one JSON-RPC call, a
@@ -443,19 +444,34 @@ func (p *Preferences) SetTriageAccounts(ids []api.AccountID, done func(stored bo
 	p.Update(false, func(b *api.BoardPreferences) { b.TriageAccounts = slices.Clone(list) }, done)
 }
 
+// TriageCandidates are the accounts Triage These Accounts lists: the
+// enabled accounts the triage could read, in order. A calendar-only CalDAV
+// account has no mail and no cases, so it is never offered, never checked
+// and never triaged, named or not (the daemon's triageAccounts;
+// capabilities.InMail).
+func TriageCandidates(accounts []api.Account) []api.Account {
+	out := []api.Account{}
+	for _, a := range accounts {
+		if a.Enabled && capabilities.InMail(a) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
 // triageByDefault says whether a is triaged when the preferences name no
 // account: an enabled mail account (the daemon's triageAccounts: not an
-// issue tracker).
+// issue tracker, not a calendar-only account).
 func triageByDefault(a api.Account) bool {
-	return a.Enabled && a.Config.Protocol() != api.AccountJira
+	return a.Enabled && capabilities.InMail(a) && a.Config.Protocol() != api.AccountJira
 }
 
 // TriageAccountChecked says whether account a is triaged under listed (the
 // preferences' TriageAccounts), as the daemon decides: a listed account
 // when some are listed, else every enabled mail account. A disabled
-// account is never triaged.
+// account is never triaged, nor a calendar-only one.
 func TriageAccountChecked(listed []api.AccountID, a api.Account) bool {
-	if !a.Enabled {
+	if !a.Enabled || !capabilities.InMail(a) {
 		return false
 	}
 	if len(listed) == 0 {
@@ -478,6 +494,10 @@ func ToggleTriageAccount(listed []api.AccountID, accounts []api.Account, id api.
 	enabled := 0
 	var checked, defaults []api.AccountID
 	for _, a := range accounts {
+		if !capabilities.InMail(a) {
+			// Never triaged, so never listed: a stale id drops out.
+			continue
+		}
 		if !a.Enabled {
 			if slices.Contains(listed, a.ID) {
 				checked = append(checked, a.ID)

@@ -77,9 +77,13 @@ type Account struct {
 	Email                string // Mail.EmailAddress; empty without the Mail interface
 	Name                 string // Mail.Name
 	MailDisabled         bool
-	AttentionNeeded      bool
-	OAuth2               bool         // implements OAuth2Based
-	Mail                 MailSettings // the Mail interface's servers; zero without it
+	// CalendarDisabled is the account's Calendar switch in Online
+	// Accounts (docs/calendar.md D15); GOA's tokens already carry the
+	// calendar scopes, so it alone says whether the calendar may be used.
+	CalendarDisabled bool
+	AttentionNeeded  bool
+	OAuth2           bool         // implements OAuth2Based
+	Mail             MailSettings // the Mail interface's servers; zero without it
 }
 
 // MailSettings is what the Mail interface says about the account's IMAP
@@ -281,6 +285,7 @@ func parseAccount(path dbus.ObjectPath, ifaces map[string]map[string]dbus.Varian
 	a.Identity = str(acc, "Identity")
 	a.PresentationIdentity = str(acc, "PresentationIdentity")
 	a.MailDisabled = boolean(acc, "MailDisabled")
+	a.CalendarDisabled = boolean(acc, "CalendarDisabled")
 	a.AttentionNeeded = boolean(acc, "AttentionNeeded")
 	if mail, ok := ifaces[ifaceMail]; ok {
 		a.Email = str(mail, "EmailAddress")

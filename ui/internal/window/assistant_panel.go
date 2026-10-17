@@ -47,8 +47,10 @@ import (
 // known; the controller asks resolve). Never an Outbox message: it is not
 // on the server yet.
 
-// quickActions are the panel's buttons, in order.
-var quickActions = assistant.PanelActions
+// quickActions are the panel's buttons, in order: the calendar's last,
+// shown only while the window's calendar is ready (calendarActionsShown,
+// calendar_assistant_move.go).
+var quickActions = assistant.PanelActionsWith(true)
 
 // glibLoop runs the panel's callbacks on the GTK main loop.
 type glibLoop struct{}
@@ -100,6 +102,13 @@ type assistantPanel struct {
 	w                 *Window
 	ctl               *assistantpanel.Controller
 	split             *adw.OverlaySplitView
+	// home is the panel's place in Mail (assistant_split, its
+	// assistant_panel_bin) and root its widget, which the Calendar
+	// borrows (calendar_assistant_move.go, D28); split is the split the
+	// panel is in now.
+	home     calendarAssistantHome
+	root     *adw.ToolbarView
+	borrowed bool
 	// toggle opens the panel from the message pane's header bar; hide
 	// folds it from the panel's own.
 	toggle *gtk.ToggleButton
@@ -152,7 +161,9 @@ func newAssistantPanel(w *Window, b *gtk.Builder) *assistantPanel {
 		send:         pb.GetObject("assistant_send").Cast().(*gtk.Button),
 		followsEnd:   true,
 	}
-	b.GetObject("assistant_panel_bin").Cast().(*adw.Bin).SetChild(pb.GetObject("assistant_panel").Cast().(*adw.ToolbarView))
+	p.root = pb.GetObject("assistant_panel").Cast().(*adw.ToolbarView)
+	p.home = calendarAssistantHome{split: p.split, bin: b.GetObject("assistant_panel_bin").Cast().(*adw.Bin)}
+	p.home.bin.SetChild(p.root)
 
 	as := w.assist
 	p.ctl = assistantpanel.New(assistantpanel.Config{
@@ -164,6 +175,7 @@ func newAssistantPanel(w *Window, b *gtk.Builder) *assistantPanel {
 	p.ctl.Consent = p.askConsent
 	p.ctl.ResolveContext = p.resolve
 	p.ctl.OpenDraft = w.openSavedDraft
+	p.ctl.OpenCalendar = w.openCalendarRef
 	p.ctl.OnChange = p.applyChange
 	p.ctl.OnState = p.updateState
 	p.ctl.OnFocusInput = func() {
@@ -187,7 +199,7 @@ func newAssistantPanel(w *Window, b *gtk.Builder) *assistantPanel {
 	actions := pb.GetObject("assistant_actions").Cast().(*adw.WrapBox)
 	for _, a := range quickActions {
 		a := a
-		btn := gtk.NewButtonWithLabel(assistant.Label(tr, a))
+		btn := gtk.NewButtonWithLabel(quickActionLabel(a))
 		btn.AddCSSClass("chip-action")
 		btn.ConnectClicked(func() { p.runQuick(a) })
 		actions.Append(btn)
@@ -217,6 +229,7 @@ func newAssistantPanel(w *Window, b *gtk.Builder) *assistantPanel {
 	p.syncShown()
 	p.updateToggle()
 	p.updateState()
+	w.watchCalendarForAssistant(p)
 	return p
 }
 
@@ -404,9 +417,7 @@ func (p *assistantPanel) updateState() {
 		p.chipRemove.SetVisible(c.EffectiveContext() != nil)
 	}
 	p.bar.SetVisible(c.AnotherSelected())
-	for i, b := range p.actions {
-		b.SetSensitive(p.canRunQuick(quickActions[i]))
-	}
+	p.syncQuickActions()
 	label := c.PendingLabel()
 	p.pendingLabel.SetText(label)
 	p.pending.SetVisible(label != "")
@@ -592,6 +603,8 @@ func (p *assistantPanel) makeRow(it assistantpanel.Item) *transcriptRow {
 		r = activityRow()
 	case assistantpanel.ContentDraft:
 		r = draftRow(func() { p.ctl.OpenDraftItem(id) })
+	case assistantpanel.ContentCalendar:
+		r = calendarCardRow(func() { p.ctl.OpenCalendarItem(id) })
 	default: // ContentError, ContentNote
 		r = lineRow(func() { p.ctl.Retry(id) }, func(o assistantpanel.Offer) { p.offered(id, o) })
 	}

@@ -521,3 +521,26 @@ func equalIDs(a, b []string) bool {
 	}
 	return true
 }
+
+func TestDeleteMeta(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	if err := s.SetMeta(ctx, "calendar.provider.acc_1", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetMeta(ctx, "calendar.provider.acc_2", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteMeta(ctx, "calendar.provider.acc_1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := s.GetMeta(ctx, "calendar.provider.acc_1"); err != nil || ok {
+		t.Fatalf("deleted key: %v %v", ok, err)
+	}
+	if v, ok, err := s.GetMeta(ctx, "calendar.provider.acc_2"); err != nil || !ok || v != "1" {
+		t.Fatalf("other key: %q %v %v", v, ok, err)
+	}
+	if err := s.DeleteMeta(ctx, "absent"); err != nil {
+		t.Fatalf("absent key: %v", err)
+	}
+}

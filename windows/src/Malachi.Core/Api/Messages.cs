@@ -6,6 +6,10 @@
 //
 // Everything here that came from a message is hostile input: display it as
 // plain text.
+//
+// Calendar (Windows, ahead of the Swift port): MessageSummary.Invitation is
+// the list pill's summary, Message.Invitation the whole card; they share the
+// wire key "invitation" as Go's Message shadows its embedded summary's.
 
 using System;
 using System.Collections.Generic;
@@ -131,6 +135,16 @@ public sealed record MessageSummary
     /// </summary>
     [JsonPropertyName("bulk")]
     public BulkInfo? Bulk { get; init; }
+
+    /// <summary>
+    /// Present only for a message with a calendar part (text/calendar or
+    /// application/ics) the daemon read: what the list pill and a
+    /// notification show. <see cref="Message.Invitation"/> takes its place
+    /// with the whole card in <c>message.get</c>; <see cref="Message.Summary"/>
+    /// leaves this null.
+    /// </summary>
+    [JsonPropertyName("invitation")]
+    public InvitationSummary? Invitation { get; init; }
 }
 
 /// <summary>
@@ -276,6 +290,15 @@ public sealed record Message
     /// and for issue-tracker accounts.
     /// </summary>
     public UnsubscribeOffer? Unsubscribe { get; init; }
+
+    /// <summary>
+    /// The invitation card of a message with a calendar part
+    /// (<c>message.get</c>, <c>message.download</c>). Go's Message shadows
+    /// the summary's <c>invitation</c> with it: on the wire the one key
+    /// <c>invitation</c> holds the card, so <see cref="MessageSummary.Invitation"/>
+    /// of <see cref="Summary"/> is null.
+    /// </summary>
+    public InvitationCard? Invitation { get; init; }
 }
 
 /// <summary>
@@ -294,6 +317,7 @@ public sealed class MessageConverter : JsonConverter<Message>
     private const string AttachmentsKey = "attachments";
     private const string HeadersKey = "headers";
     private const string UnsubscribeKey = "unsubscribe";
+    private const string InvitationKey = "invitation";
 
     /// <inheritdoc/>
     public override Message Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
@@ -307,7 +331,9 @@ public sealed class MessageConverter : JsonConverter<Message>
             ?? throw new JsonException("a message without its summary");
         return new Message
         {
-            Summary = summary,
+            // Go decodes "invitation" into Message.Invitation only, the key
+            // it shadows in the summary.
+            Summary = summary with { Invitation = null },
             Cc = Member<IReadOnlyList<Address>>(root, CcKey, options),
             Bcc = Member<IReadOnlyList<Address>>(root, BccKey, options),
             ReplyTo = Member<IReadOnlyList<Address>>(root, ReplyToKey, options),
@@ -317,6 +343,7 @@ public sealed class MessageConverter : JsonConverter<Message>
             Attachments = Member<IReadOnlyList<Attachment>>(root, AttachmentsKey, options) ?? [],
             Headers = Member<IReadOnlyDictionary<string, string>>(root, HeadersKey, options),
             Unsubscribe = Member<UnsubscribeOffer>(root, UnsubscribeKey, options),
+            Invitation = Member<InvitationCard>(root, InvitationKey, options),
         };
     }
 
@@ -328,6 +355,11 @@ public sealed class MessageConverter : JsonConverter<Message>
         writer.WriteStartObject();
         foreach (var member in JsonSerializer.SerializeToElement(value.Summary, Info<MessageSummary>(options)).EnumerateObject())
         {
+            // One "invitation" key goes out, the card's (Go's shadowing).
+            if (value.Invitation is not null && string.Equals(member.Name, InvitationKey, StringComparison.Ordinal))
+            {
+                continue;
+            }
             member.WriteTo(writer);
         }
         WriteMember(writer, CcKey, value.Cc, options);
@@ -339,6 +371,7 @@ public sealed class MessageConverter : JsonConverter<Message>
         WriteMember(writer, AttachmentsKey, value.Attachments ?? [], options);
         WriteMember(writer, HeadersKey, value.Headers, options);
         WriteMember(writer, UnsubscribeKey, value.Unsubscribe, options);
+        WriteMember(writer, InvitationKey, value.Invitation, options);
         writer.WriteEndObject();
     }
 

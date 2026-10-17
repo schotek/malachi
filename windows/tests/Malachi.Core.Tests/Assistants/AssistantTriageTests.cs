@@ -69,7 +69,8 @@ public sealed class AssistantTriageTests
         Assert.Equal(
             ["mcp__malachi__list_triage_queue", "mcp__malachi__annotate_case", "mcp__malachi__add_commitment"],
             Assistant.TriageToolsAll.Except(Assistant.AllowedTools));
-        Assert.Empty(Assistant.AllowedTools.Except(Assistant.TriageToolsAll));
+        // The panel's calendar tools are its own (triage_test.go skips CalendarTools).
+        Assert.Empty(Assistant.AllowedTools.Except(Assistant.CalendarTools).Except(Assistant.TriageToolsAll));
     }
 
     /// <summary>An automatic run's command line: the manual one without create_draft, with its own limit for the bridge.</summary>
@@ -172,7 +173,12 @@ public sealed class AssistantTriageTests
         }).ToList();
         var i = args.IndexOf("--mcp-config");
         Assert.True(i >= 0);
-        Assert.Contains(""""args":["--socket","/s.sock","--reply-only","m_7"]"""", args[i + 1], StringComparison.Ordinal);
+        Assert.Contains(
+            """
+            "args":["--socket","/s.sock","--reply-only","m_7"]
+            """,
+            args[i + 1],
+            StringComparison.Ordinal);
         var t = args.IndexOf("--allowedTools");
         Assert.Equal("mcp__malachi__read_message,mcp__malachi__list_messages,mcp__malachi__create_draft", args[t + 1]);
         Assert.Contains("--strict-mcp-config", args);

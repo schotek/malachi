@@ -233,6 +233,7 @@ extension Board {
             switch s {
             case .mail: return L10n.T("Mail")
             case .board: return boardName
+            case .calendar: return Cal.Text.modeName
             case .last: return lastUsed
             }
         }

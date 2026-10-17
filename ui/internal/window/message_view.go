@@ -203,6 +203,11 @@ type messageView struct {
 	// builder has no slot for it.
 	card *issueCard
 
+	// invitation is the invitation card above the headers of a message
+	// with a calendar part (invitation_card.go); nil on the view of an
+	// attached message, whose builder has no slot for it.
+	invitation *invitationCard
+
 	// The From, To and Cc chips (addresses.go).
 	addresses *addressHeader
 
@@ -299,6 +304,14 @@ func newMessageView(w *Window, parent *gtk.Window, b *gtk.Builder) *messageView 
 		// the headers' spacing and push the subject of a mail message down.
 		box.SetVisible(false)
 		v.card.NotifyProperty("visible", func() { box.SetVisible(v.card.Visible()) })
+	}
+	if slot := b.GetObject("invitation_card_slot"); slot != nil {
+		v.invitation = newInvitationCard(w, parent)
+		box := slot.Cast().(*gtk.Box)
+		box.Append(v.invitation.widget())
+		// As the issue card's slot: shown only with its card.
+		box.SetVisible(false)
+		v.invitation.widget().NotifyProperty("visible", func() { box.SetVisible(v.invitation.widget().Visible()) })
 	}
 	v.plain()
 	v.hint.SetLabel(i18n.T("The formatted version of this message could not be shown safely; this is its plain text."))
@@ -442,6 +455,11 @@ func (v *messageView) renderHeaders(s api.MessageSummary, m *api.Message) *issue
 	}
 	if v.card != nil {
 		v.card.show(issue, s.AccountID, v.win.issues.canTransition(s.AccountID))
+	}
+	if v.invitation != nil {
+		// Message.Invitation with the account's switch
+		// (calendar.CardModeOf over ShowsInvitationCard).
+		v.invitation.showMessage(s, m)
 	}
 	v.addresses.show(s.ID, s.AccountID, from, to, cc)
 	if date.IsZero() {

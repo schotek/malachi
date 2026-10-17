@@ -196,6 +196,12 @@ func Decide(p *mime.Parsed, t Target, pol Policy, now time.Time, onDemand bool) 
 			a.PartID == p.TextPartID || a.PartID == p.HTMLPartID {
 			continue
 		}
+		if a.Size <= api.MaxICSBytes && store.IsCalendarPart(a.ContentType, a.Filename) {
+			// An invitation's calendar part is read at once (the Stored
+			// hook, docs/calendar.md D17) and shown as the card: never left
+			// on the server, under any policy.
+			continue
+		}
 		if a.ContentID != "" && !pol.omitsShown(a.Size) {
 			if !refsLoaded {
 				var complete bool

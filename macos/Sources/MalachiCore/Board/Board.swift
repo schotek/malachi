@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The main window's two modes: Mail (the folders, the list, the reader and
-// the assistant panel, as always) and Board (a triage board:
-// BoardController, `Board.view`). The window shows one of them at a time under the same
+// The main window's modes: Mail (the folders, the list, the reader and
+// the assistant panel, as always), Board (a triage board:
+// BoardController, `Board.view`) and Calendar (the calendar page:
+// CalendarController, docs/calendar.md D27). The window shows one of them at a time under the same
 // status bar; the toolbar's switch and the View menu change it. This is the
 // part that needs no AppKit: which actions a mode allows, which requests
 // bring the mail back, and when the user counts as looking at the folder.
@@ -22,13 +23,17 @@ public enum Board {
     public enum Mode: Int, Sendable, CaseIterable {
         case mail
         case board
+        /// The calendar page (docs/calendar.md D27): raw value 2, nick
+        /// "calendar".
+        case calendar
 
         /// The mode's value in the settings (the key `board-last-mode`:
-        /// "mail", "board").
+        /// "mail", "board", "calendar").
         public var nick: String {
             switch self {
             case .mail: "mail"
             case .board: "board"
+            case .calendar: "calendar"
             }
         }
     }
@@ -51,20 +56,26 @@ public enum Board {
     public enum StartChoice: Sendable, CaseIterable {
         case mail
         case board
+        /// The Calendar (docs/calendar.md D27), before Last Used in
+        /// Settings' order (Go `StartModesWithCalendar`).
+        case calendar
         /// The mode shown last (the key `board-last-mode`).
         case last
 
-        /// The choice's value in the settings: "mail", "board", "last".
+        /// The choice's value in the settings: "mail", "board",
+        /// "calendar", "last".
         public var nick: String {
             switch self {
             case .mail: "mail"
             case .board: "board"
+            case .calendar: "calendar"
             case .last: Board.nickLast
             }
         }
     }
 
-    /// The choices of Open at Launch in Settings' order (Go `StartModes`).
+    /// The choices of Open at Launch in Settings' order (Go
+    /// `StartModesWithCalendar`: this client has the Calendar).
     public static let startModes = StartChoice.allCases
 
     /// The choice a stored nick names; an unknown or empty one is Mail.
@@ -75,14 +86,41 @@ public enum Board {
     /// The mode a new main window opens in: `start` is the key
     /// `board-start-mode`, `last` the key `board-last-mode` (written
     /// whenever the mode switches). With the board turned off
-    /// (`boardEnabled` false) always Mail.
+    /// (`boardEnabled` false) a Board start or last mode is Mail; the
+    /// Calendar does not depend on the board and stays (Go `StartMode`).
     public static func startMode(start: String, last: String, boardEnabled: Bool) -> Mode {
-        guard boardEnabled else { return .mail }
+        let m: Mode
         switch parseStartChoice(start) {
-        case .mail: return .mail
-        case .board: return .board
-        case .last: return parseMode(last) ?? .mail
+        case .mail: m = .mail
+        case .board: m = .board
+        case .calendar: m = .calendar
+        case .last: m = parseMode(last) ?? .mail
         }
+        if m == .board && !boardEnabled {
+            return .mail
+        }
+        return m
+    }
+
+    /// The mode a window opens in (Go `ResolveStartMode`): `choice` is
+    /// Open at Launch, `last` the mode shown last. A client without the
+    /// Calendar mode (`hasCalendar` false) reads a stored Calendar start
+    /// or last mode as Mail, so that a setting written by another client
+    /// never leaves the window on a page it cannot show. This client has
+    /// the Calendar and passes true. The Board's own rules are
+    /// `startMode`'s and `startDecision`'s.
+    public static func resolveStartMode(_ choice: StartChoice, last: Mode, hasCalendar: Bool) -> Mode {
+        let m: Mode
+        switch choice {
+        case .mail: m = .mail
+        case .board: m = .board
+        case .calendar: m = .calendar
+        case .last: m = last
+        }
+        if m == .calendar && !hasCalendar {
+            return .mail
+        }
+        return m
     }
 
     /// How long a new main window waits for the daemon's board
@@ -104,6 +142,9 @@ public enum Board {
     /// shows Mail and never moves on its own again:
     ///
     /// - a start that is Mail whatever the preferences say: Mail at once;
+    /// - a start that is the Calendar (or Last Used with the Calendar last)
+    ///   needs no daemon preferences: Calendar at once, unless the user
+    ///   switched or acted in Mail, then Mail;
     /// - the user switched, or acted in Mail: Mail (the reader never jumps
     ///   away from what the user is doing);
     /// - the preferences arrived: `startMode` with their Show the Board;
@@ -115,6 +156,9 @@ public enum Board {
         let wanted = startMode(start: start.nick, last: lastMode.nick, boardEnabled: true)
         if wanted == .mail || userSwitched || userInteracted {
             return (.mail, true)
+        }
+        if wanted == .calendar {
+            return (.calendar, true)
         }
         if prefsKnown {
             return (startMode(start: start.nick, last: lastMode.nick, boardEnabled: enabled), true)
@@ -132,12 +176,25 @@ public enum Board {
         /// The switch's segment and View menu item for Board, and the
         /// window's title in Board.
         public var board: String
+        /// The switch's segment and View menu item for the Calendar
+        /// (Go `CalendarName`).
+        public var calendar: String
+
+        /// The name of `mode`'s segment.
+        public func name(_ mode: Mode) -> String {
+            switch mode {
+            case .mail: mail
+            case .board: board
+            case .calendar: calendar
+            }
+        }
     }
 
     public static func texts() -> Texts {
         Texts(
             mail: L10n.T("Mail"),
-            board: Text.boardName
+            board: Text.boardName,
+            calendar: Cal.Text.modeName
         )
     }
 
@@ -159,12 +216,16 @@ public enum Board {
         case messageAction
         /// The views of the board: its style (List, Columns, Today).
         case boardView
+        /// New Event (⌥⌘N).
+        case newEvent
     }
 
     /// Whether `command` may run in `mode`. Mail allows everything but the
     /// board's views; Board only what does not need the folders, the list
     /// and the reader: the list keeps its selection while hidden, and no
-    /// key may act on a message the user cannot see.
+    /// key may act on a message the user cannot see. Calendar keeps Switch
+    /// Mode, New Message, Check for New Mail and New Event; New Event is
+    /// not a Board command (Go `Allows`).
     public static func allows(_ command: Command, in mode: Mode) -> Bool {
         switch mode {
         case .mail:
@@ -172,7 +233,12 @@ public enum Board {
         case .board:
             switch command {
             case .switchMode, .newMessage, .checkForNewMail, .boardView: return true
-            case .mailView, .messageAction: return false
+            case .mailView, .messageAction, .newEvent: return false
+            }
+        case .calendar:
+            switch command {
+            case .switchMode, .newMessage, .checkForNewMail, .newEvent: return true
+            case .mailView, .messageAction, .boardView: return false
             }
         }
     }
@@ -203,9 +269,40 @@ public enum Board {
 
     /// Whether the user looks at the selected folder: the main window shows
     /// the mail and is the key window (window.go, `is-active`). A key
-    /// window showing the board does not count, so the folder's desktop
-    /// notifications stay.
+    /// window showing the board or the calendar does not count, so the
+    /// folder's desktop notifications stay.
     public static func viewsMail(_ mode: Mode, windowIsKey: Bool) -> Bool {
         mode == .mail && windowIsKey
+    }
+
+    /// The layout-independent digit of a mode key's key code: ⌘1 and ⌘2
+    /// (`numberRowDigit`) and ⌘3 (`kVK_ANSI_3` 0x14 → "3", Show Calendar,
+    /// `Cal.keyFor`'s `showCalendar`), nil for any other key. On Czech
+    /// QWERTZ the key types "š" with ⌘ too, as for ⌘1 and ⌘2.
+    public static func modeKeyDigit(_ code: UInt16) -> Character? {
+        if let d = numberRowDigit(code) {
+            return d
+        }
+        return code == 0x14 ? "3" : nil
+    }
+
+    /// The mode ⌘ with `digit` (the layout-independent one) switches to in
+    /// `mode`: ⌘1 Mail, ⌘2 Board (`keyFor`), ⌘3 Calendar (`Cal.keyFor`).
+    public static func modeForKey(_ digit: Character, in mode: Mode) -> Mode? {
+        switch keyFor(digit, primary: true, other: false, inText: false, mode: mode) {
+        case .showMail: return .mail
+        case .showBoard: return .board
+        default: break
+        }
+        let press = Cal.Press(rune: digit, primary: true)
+        return Cal.keyFor(press, context: Cal.KeyContext(mode: mode)) == .showCalendar ? .calendar : nil
+    }
+}
+
+extension Cal.KeyContext {
+    /// The calendar's key context in the window's `mode` (Go `KeyContext`'s
+    /// `Mode == ModeCalendar`).
+    public init(mode: Board.Mode, inText: Bool = false, selected: Bool = false) {
+        self.init(calendarMode: mode == .calendar, inText: inText, selected: selected)
     }
 }

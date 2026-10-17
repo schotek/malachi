@@ -201,7 +201,7 @@ final class TriageDaemon {
                 id: AccountID(rawValue: id), config: AccountConfig(name: id, email: id + "@example.org", kind: kind),
                 enabled: enabled, state: SyncState(accountId: AccountID(rawValue: id), status: .idle))
         }
-        let accounts = [acct("m1", nil, true), acct("j", .jira, true), acct("off", nil, false)]
+        let accounts = [acct("m1", nil, true), acct("j", .jira, true), acct("off", nil, false), acct("cal", .caldav, true)]
         typealias C = BoardPreferencesController.TriageAccountsCoverage
         let cases: [(String, [AccountID], [Account], C)] = [
             ("nothing listed", [], accounts, .all),
@@ -210,6 +210,7 @@ final class TriageDaemon {
             ("issue tracker listed", ["j"], accounts, .some),
             ("only removed accounts", ["gone", "gone2"], accounts, .none),
             ("only a disabled account", ["off"], accounts, .none),
+            ("only a calendar-only account", ["cal"], accounts, .none),
             ("removed and present", ["gone", "m1"], accounts, .some),
             ("listed, no accounts at all", ["m1"], [], .none),
         ]
@@ -226,13 +227,20 @@ final class TriageDaemon {
                 id: AccountID(rawValue: id), config: AccountConfig(name: id, email: id + "@example.org", kind: kind),
                 enabled: enabled, state: SyncState(accountId: AccountID(rawValue: id), status: .idle))
         }
-        let accounts = [acct("m1", nil, true), acct("m2", .graph, true), acct("j", .jira, true), acct("off", nil, false)]
+        let accounts = [
+            acct("m1", nil, true), acct("m2", .graph, true), acct("j", .jira, true), acct("off", nil, false),
+            acct("cal", .caldav, true),
+        ]
         // Nothing listed: every enabled mail account, no issue tracker,
         // nothing disabled.
         for a in accounts {
             #expect(BoardPreferencesController.triageAccountChecked([], a) == (a.id == "m1" || a.id == "m2"), "\(a.id)")
         }
         #expect(!BoardPreferencesController.triageAccountChecked(["off"], accounts[3]))
+        // A calendar-only account is never triaged, named or not, and never
+        // offered (`triageCandidates`).
+        #expect(!BoardPreferencesController.triageAccountChecked(["cal"], accounts[4]))
+        #expect(BoardPreferencesController.triageCandidates(accounts).map(\.id) == ["m1", "m2", "j"])
         let cases: [(String, [AccountID], AccountID, Bool, [AccountID]?)] = [
             ("uncheck one of all", [], "m2", false, ["m1"]),
             ("check the tracker", [], "j", true, ["m1", "m2", "j"]),
@@ -242,6 +250,8 @@ final class TriageDaemon {
             ("a disabled account cannot be toggled", ["m1"], "off", true, nil),
             ("a disabled listed account stays listed", ["off", "m1"], "m2", true, ["m1", "m2", "off"]),
             ("only the disabled one would be left", ["off", "m1"], "m1", false, nil),
+            ("a calendar-only account cannot be toggled", [], "cal", true, nil),
+            ("a stale calendar-only id drops out", ["cal", "m1"], "j", true, ["m1", "j"]),
         ]
         for (name, listed, id, on, want) in cases {
             #expect(

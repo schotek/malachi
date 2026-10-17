@@ -548,6 +548,10 @@ func (w *Window) openAssistantPanel() {
 // under the condition of the Assistant menu's item (canSummarizeUnread),
 // the others on the panel's context.
 func (p *assistantPanel) runQuick(a assistant.Action) {
+	if assistant.IsCalendarAction(a) {
+		p.ctl.RunCalendar(a)
+		return
+	}
 	if a != assistant.Unread {
 		p.ctl.Run(a)
 		return
@@ -561,6 +565,9 @@ func (p *assistantPanel) runQuick(a assistant.Action) {
 // enabled: Summarize Unread in This Folder by the folder, the others by
 // the panel's context.
 func (p *assistantPanel) canRunQuick(a assistant.Action) bool {
+	if assistant.IsCalendarAction(a) {
+		return p.ctl.CanRunCalendarActions()
+	}
 	if a == assistant.Unread {
 		return p.ctl.CanSummarizeUnread(p.w.canSummarizeUnread())
 	}
@@ -575,9 +582,7 @@ func (w *Window) syncPanelActions() {
 	if p == nil {
 		return
 	}
-	for i, b := range p.actions {
-		b.SetSensitive(p.canRunQuick(quickActions[i]))
-	}
+	p.syncQuickActions()
 }
 
 // newestFirst is the ids of a row, newest first, as a prompt takes them: a

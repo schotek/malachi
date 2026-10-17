@@ -108,7 +108,7 @@ func (w *Window) loadAccounts() {
 			w.model.accounts = res.Accounts
 			w.model.folders = make(map[api.AccountID][]api.Folder, len(res.Accounts))
 			w.model.folderErr = make(map[api.AccountID]error)
-			w.hasAccounts = len(res.Accounts) > 0
+			w.hasAccounts = hasMailAccount(res.Accounts)
 			w.withdrawAccountNotifications()
 			// sync.status may have answered before the accounts were known,
 			// and the status line and its popover follow the account set
@@ -119,7 +119,7 @@ func (w *Window) loadAccounts() {
 				w.messageStack.SetVisibleChildName(w.emptyPageName())
 			}
 
-			enabled := w.model.enabledAccounts()
+			enabled := w.model.mailSidebarAccounts() // a calendar-only account has no folders to ask for
 			if len(enabled) == 0 {
 				w.rebuildFolderList()
 				return
@@ -178,6 +178,14 @@ func (w *Window) fetchFolders(acc api.AccountID, gen uint64, done func()) {
 	}()
 }
 
+// listedInMail reports whether Mail lists account a: an account whose only
+// capability is the calendar (a CalDAV account) has no mail and no
+// folders, so it is never in Mail's sidebar (docs/calendar.md §5.3, §6.5
+// G15; Swift mailSidebarAccounts); it shows in the Calendar's sidebar.
+func listedInMail(a api.Account) bool {
+	return !(len(a.Capabilities) == 1 && a.Capabilities[0] == api.CapabilityCalendar)
+}
+
 // rebuildFolderList recreates the sidebar rows from model.entries. One row
 // per entry, in order: the row-selected handler in New maps
 // row.Index() back onto model.entries. The selection is preserved when its
@@ -193,7 +201,7 @@ func (w *Window) rebuildFolderList() {
 	w.model.rebuildEntries()
 
 	// With several accounts a pinned "Inbox" says whose it is.
-	several := len(w.model.enabledAccounts()) >= 2
+	several := len(w.model.mailSidebarAccounts()) >= 2
 
 	w.reselecting = true
 	w.folderList.RemoveAll()
@@ -410,7 +418,7 @@ func newFolderRow(e folderEntry, subtitle string) *folderRow {
 // showEmptySidebarStatus explains an empty sidebar: no account, none
 // enabled, an error, or accounts that have not synchronised yet.
 func (w *Window) showEmptySidebarStatus() {
-	enabled := w.model.enabledAccounts()
+	enabled := w.model.mailSidebarAccounts()
 	switch {
 	case !w.hasAccounts:
 		w.showFolderStatus("system-users-symbolic", i18n.T("No Accounts"),

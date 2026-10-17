@@ -219,6 +219,54 @@ func ids(_ entries: [FolderEntry]) -> [String] {
         var custom = mail
         custom.config.oauth2 = OAuth2Config(provider: .custom)
         #expect(accountHeaderBadge(custom) == "IMAP")
+        // A calendar-only CalDAV account (the Calendar's sidebar).
+        var caldav = mail
+        caldav.config.kind = .caldav
+        #expect(accountHeaderBadge(caldav) == "CALDAV")
+    }
+
+    /// A calendar-only CalDAV account is never in the Mail sidebar: no
+    /// header of its own, and it does not count towards the headers.
+    @Test func caldavAccountsAreNotInMail() {
+        var caldav = testAccount("c")
+        caldav.config.kind = .caldav
+        let accounts = [testAccount("a"), caldav]
+        let folders: [AccountID: [Folder]] = [
+            "a": [testFolder("in", path: "INBOX", role: .inbox)],
+            "c": [testFolder("in-c", path: "INBOX", role: .inbox)],
+        ]
+        #expect(ids(sortFolders(accounts, folders, CollapseState(), FavouriteState())) == ["in@0"])
+        #expect(mailSidebarAccounts(accounts).map(\.id) == ["a"])
+        #expect(enabledAccounts(accounts).count == 2)
+    }
+
+    /// `inMail`, the rule of `mailSidebarAccounts`, holds for switched-off
+    /// accounts too (the mailbox asks it of them), the sidebar's list keeps
+    /// the order and leaves the switched-off accounts out, and a pin on a
+    /// CalDAV account makes no Favourites section (C#
+    /// InMailIsEveryKindButCalDAV, Go TestInMail).
+    @Test func inMailIsEveryKindButCalDAV() {
+        let imap = testAccount("a")
+        var graph = testAccount("g")
+        graph.config.kind = .graph
+        var jira = testAccount("j")
+        jira.config.kind = .jira
+        var caldav = testAccount("c")
+        caldav.config.kind = .caldav
+        var off = testAccount("off", enabled: false)
+        off.config.kind = .caldav
+        #expect(inMail(imap) && inMail(graph) && inMail(jira))
+        #expect(!inMail(caldav) && !inMail(off))
+
+        let accounts = [caldav, graph, testAccount("b", enabled: false), imap]
+        #expect(mailSidebarAccounts(accounts).map(\.id) == ["g", "a"])
+        #expect(MailModel(accounts: accounts, folders: [:]).mailSidebarAccounts.map(\.id) == ["g", "a"])
+        #expect(MailModel(accounts: accounts, folders: [:]).enabledAccounts.map(\.id) == ["c", "g", "a"])
+
+        var favourites = FavouriteState()
+        favourites.toggle(FolderKey(account: "c", folder: "in-c"))
+        let folders: [AccountID: [Folder]] = ["c": [testFolder("in-c", path: "INBOX", role: .inbox)]]
+        #expect(sortFolders([caldav], folders, CollapseState(), favourites).isEmpty)
     }
 
     @Test func initialFolderPrefersTheMailInbox() {

@@ -1076,11 +1076,11 @@ public sealed partial class ActionsController
         }
         var src = ComposeSources.ComposeSource(s, Cache.Loaded(id));
         // The account's own address, for Reply All exclusion; the first
-        // account's when the message's is unknown (compose.Manager
+        // mail account's when the message's is unknown (compose.Manager
         // SelfAddress).
         var me = Mailbox.Model.Account(from) is { } account
             ? FolderTree.SelfAddress(account)
-            : Mailbox.Model.EnabledAccounts is { Count: > 0 } enabled
+            : Mailbox.Model.MailSidebarAccounts is { Count: > 0 } enabled
                 ? FolderTree.SelfAddress(enabled[0])
                 : new Address { Email = "" };
         // The line above the quote, which the window keeps for the

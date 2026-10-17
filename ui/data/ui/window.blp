@@ -41,14 +41,20 @@ Adw.ApplicationWindow main_window {
     }
   }
 
-  // The window's two modes, Mail and Board (window/board.go): a plain
-  // Gtk.Stack rather than Adw.ViewStack, since the mode switch is the
-  // Adw.ToggleGroup below, not an AdwViewSwitcher title bar widget. "mail"
-  // is the tree below, unchanged; "board" is board_page.blp, put into
-  // board_page_bin by Go, as assistant_panel.blp is put into
-  // assistant_panel_bin.
+  // The window's three modes, Mail, Board and Calendar (window/board.go):
+  // a plain Gtk.Stack rather than Adw.ViewStack, since the mode switch is
+  // the Adw.ToggleGroup below, not an AdwViewSwitcher title bar widget.
+  // "mail" is the tree below, unchanged; "board" is board_page.blp, put
+  // into board_page_bin by Go, as assistant_panel.blp is put into
+  // assistant_panel_bin; "calendar" is calendar_page_bin, likewise.
   content: Stack mode_stack {
     transition-type: crossfade;
+    // Only the shown mode's page asks for room: the hidden Mail page's
+    // minimum (its splits, ~1040 px between its breakpoints) held the
+    // Calendar and the Board wider than the window (measured by
+    // calendar_gtk_smoke_test.go).
+    hhomogeneous: false;
+    vhomogeneous: false;
 
     StackPage {
       name: "mail";
@@ -77,9 +83,11 @@ Adw.ApplicationWindow main_window {
         child: Adw.ToolbarView {
           [top]
           Adw.HeaderBar {
-            // The window's two modes, Mail and Board (window/board.go):
-            // icons only, tooltips set from Go (board.Mail / BoardName, so
-            // this file needs no msgid of its own). Mirrors
+            // The window's three modes, Mail, Board and Calendar
+            // (window/board.go): icons only, tooltips set from Go
+            // (board.Mail / BoardName / CalendarName, so this file needs no
+            // msgid of its own); with Show the Board off the Board toggle
+            // is insensitive. Mirrors
             // board_mode_switch at the leading edge of the board page's own
             // header bar; the two groups follow one state.
             [start]
@@ -92,6 +100,11 @@ Adw.ApplicationWindow main_window {
               Adw.Toggle {
                 name: "board";
                 icon-name: "view-grid-symbolic";
+              }
+
+              Adw.Toggle {
+                name: "calendar";
+                icon-name: "x-office-calendar-symbolic";
               }
             }
 
@@ -771,6 +784,13 @@ Adw.ApplicationWindow main_window {
                           margin-end: 24;
                           margin-top: 24;
 
+                          // The invitation card of a message with a calendar part
+                          // (window/invitation_card.go), built from Go; hidden without one,
+                          // the slot with it (message_view.go).
+                          Box invitation_card_slot {
+                            orientation: vertical;
+                          }
+
                           // The issue card of a Jira message (window/issue_card.go), built
                           // from Go; hidden for mail, the slot with it (message_view.go), so
                           // that it takes no spacing above the subject.
@@ -1019,6 +1039,14 @@ Adw.ApplicationWindow main_window {
       // window/board.go puts board_page.blp's root into this bin, built
       // once on first use.
       child: Adw.Bin board_page_bin {};
+    }
+
+    StackPage {
+      name: "calendar";
+
+      // The Calendar mode's page (docs/calendar.md §6.5): empty until
+      // window/calendar.go puts calendar_page.blp's root into this bin.
+      child: Adw.Bin calendar_page_bin {};
     }
   };
 }

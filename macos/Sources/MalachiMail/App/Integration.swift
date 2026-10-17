@@ -44,7 +44,7 @@ final class Integration {
 
     private(set) weak var mainWindow: MainWindowController?
     /// Toasts over the main window's message pane (window.go `Toast`).
-    private let mainToast: @MainActor (String) -> Void
+    let mainToast: @MainActor (String) -> Void
     private var tokens: [NotificationHub.Token] = []
     /// Whether the message pane shows the "No Accounts" page (window.blp
     /// `no-accounts`) instead of the reader.
@@ -52,6 +52,9 @@ final class Integration {
     /// The message of a notification clicked before the connection to the
     /// daemon was up (`Integration+Notifications.swift`).
     var notifiedPending: (account: AccountID, message: MessageID)?
+    /// The invitations answered from a notification (Accept, Remove from
+    /// Calendar) until the daemon answers (`Integration+Calendar.swift`).
+    var notifiedAnswers: [InvitationController] = []
 
     init(state: AppState, mainWindow: MainWindowController) {
         self.state = state
@@ -107,6 +110,7 @@ final class Integration {
         }
         wireConnection()
         wireNotifications()
+        wireCalendarNotifications()
         wireMailbox()
         wireStatusBar()
         wireReading()
@@ -422,8 +426,11 @@ final class Integration {
             self.mainWindow?.folderTitle = title
             self.mainWindow?.folderSubtitle = subtitle
         }
-        mailbox.onAccountsLoaded = { [weak self] accounts in
-            self?.showNoAccountsPage(accounts.isEmpty)
+        mailbox.onAccountsLoaded = { [weak self] _ in
+            // Calendar-only CalDAV accounts alone are no account in Mail
+            // (`MailboxController.hasAccounts`, set before the call).
+            guard let self else { return }
+            self.showNoAccountsPage(!self.mailbox.hasAccounts)
         }
     }
 
@@ -470,7 +477,7 @@ final class Integration {
     /// Opens the settings window (or brings it to the front) with what
     /// its pages need from the application.
     @discardableResult
-    private static func showPreferences(_ state: AppState) -> PreferencesWindowController {
+    static func showPreferences(_ state: AppState) -> PreferencesWindowController {
         PreferencesWindowController.show(
             client: state.client, settings: state.settings, bridge: state.paths.mcpBridge?.path,
             assistant: state.assistant, claudeDesktop: state.claudeDesktop,
@@ -516,7 +523,12 @@ final class Integration {
                 title: mn(Jira.wizardTexts().addMenu), target: self, action: #selector(addJiraAccount(_:)))
             jira.bezelStyle = .rounded
             jira.controlSize = .large
-            let buttons = NSStackView(views: [button, jira])
+            // A CalDAV calendar is an account of its own (docs/calendar.md §5.8).
+            let caldav = NSButton(
+                title: Cal.Prefs.addCalDAV, target: self, action: #selector(addCalDAVCalendar(_:)))
+            caldav.bezelStyle = .rounded
+            caldav.controlSize = .large
+            let buttons = NSStackView(views: [button, jira, caldav])
             buttons.orientation = .vertical
             buttons.alignment = .centerX
             buttons.spacing = 12
@@ -535,5 +547,9 @@ final class Integration {
 
     @objc private func addJiraAccount(_ sender: Any?) {
         state.hooks.addJiraAccount?(mainWindow?.window)
+    }
+
+    @objc private func addCalDAVCalendar(_ sender: Any?) {
+        state.showAddCalDAVCalendar(from: mainWindow?.window)
     }
 }

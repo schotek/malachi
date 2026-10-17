@@ -55,6 +55,10 @@ internal static partial class GoContract
     public static IReadOnlyList<string> TypedStringConstants(string source, string goType) =>
         [.. StringConstant().Matches(source).Where(m => m.Groups["type"].Value == goType).Select(m => m.Groups["value"].Value)];
 
+    /// <summary>The names of the Go types declared <c>type Name string</c>, in the order of the source.</summary>
+    public static IReadOnlyList<string> StringTypes(string source) =>
+        [.. StringType().Matches(source).Select(m => m.Groups["name"].Value)];
+
     /// <summary>
     /// The identifiers listed in the Go slice <c>var name = []string{…}</c>,
     /// in order.
@@ -169,6 +173,9 @@ internal static partial class GoContract
 
     [GeneratedRegex(@"^\s*(?:const\s+)?(?<name>[A-Za-z]\w*)\s+(?:(?<type>[A-Z]\w*)\s+)?=\s*""(?<value>[^""]*)""", RegexOptions.Multiline)]
     private static partial Regex StringConstant();
+
+    [GeneratedRegex(@"^type\s+(?<name>\w+)\s+string\b", RegexOptions.Multiline)]
+    private static partial Regex StringType();
 
     [GeneratedRegex(@"\b[A-Z]\w*\b")]
     private static partial Regex Identifier();

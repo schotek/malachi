@@ -1,0 +1,15 @@
+BEGIN:VCALENDAR
+X-MALACHI-TEST:an X-ALT-DESC with HTML and script (never shown as HTML)
+VERSION:2.0
+PRODID:-//Malachi Test//Corpus//EN
+BEGIN:VEVENT
+UID:xad@example.org
+DTSTAMP:20261016T080000Z
+DTSTART:20261020T090000Z
+DTEND:20261020T100000Z
+SUMMARY:Planning
+DESCRIPTION:Plain text agenda\nline two
+X-ALT-DESC;FMTTYPE=text/html:<html><body><script>alert(1)</script><img src=
+ "https://example.org/track.gif"><p onclick="x()">Agenda</p></body></html>
+END:VEVENT
+END:VCALENDAR

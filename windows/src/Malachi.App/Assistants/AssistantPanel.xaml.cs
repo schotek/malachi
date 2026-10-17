@@ -13,6 +13,13 @@
 // Claude Code…). Everything the model or mail wrote is TextBlock.Text or a
 // Run set from code (AnswerRenderer), never markup.
 //
+// The calendar's quick actions, What's on Today and Find a Free Slot, end
+// the row while some account has the calendar capability (HasCalendar;
+// AssistantPanelViewController.quickActions), and an answer whose turn read
+// an event has a Show in Calendar card with the event's day
+// (AssistantTranscriptViews.swift AssistantCalendarView; docs/calendar.md
+// §5.9).
+//
 // Windows differences: Return sends and Shift+Return starts a new line in a
 // TextBox that accepts returns (GTK's text view the same); the user's
 // question is a tinted card like GTK's .assistant-user bubble; the activity
@@ -22,6 +29,7 @@ using System;
 using System.Collections.Generic;
 using Malachi.App.Resources;
 using Malachi.Core.Assistants;
+using Malachi.Core.Calendars;
 using Malachi.Core.Controllers;
 using Malachi.Core.I18n;
 using Malachi.Core.Presentation;
@@ -37,9 +45,10 @@ namespace Malachi.App.Assistants;
 /// <summary>The assistant panel of the main window (assistant_panel.blp).</summary>
 public sealed partial class AssistantPanel : UserControl
 {
-    // assistant_panel.go quickActions: the panel's buttons, in order
-    // (Assistant.PanelActions).
-    private static readonly IReadOnlyList<AssistantAction> QuickActions = Assistant.PanelActions;
+    // assistant_panel.go quickActions: the panel's buttons, in order, the
+    // calendar's last (Assistant.PanelActionsWith; shown only while
+    // HasCalendar says so).
+    private static readonly IReadOnlyList<AssistantAction> QuickActions = Assistant.PanelActionsWith(hasCalendar: true);
 
     // How close to its end the transcript counts as at its end (GTK 24 px).
     private const double EndSlack = 24;
@@ -66,7 +75,11 @@ public sealed partial class AssistantPanel : UserControl
         SetTip(ChipRemove, L10n.T("Remove"));
         foreach (var a in QuickActions)
         {
-            var button = new Button { Content = Assistant.Label(a) };
+            var button = new Button { Content = Assistant.PanelLabel(a) };
+            if (Assistant.IsCalendarAction(a))
+            {
+                AutomationProperties.SetAutomationId(button, a == AssistantAction.WhatsOnToday ? "AssistantWhatsOnToday" : "AssistantFindFreeSlot");
+            }
             button.Click += (_, _) => RunQuick(a);
             Actions.Children.Add(button);
             actionButtons.Add(button);
@@ -134,6 +147,13 @@ public sealed partial class AssistantPanel : UserControl
     public Action? SummarizeUnreadRequested { get; set; }
 
     /// <summary>
+    /// Whether some account has the calendar capability: What's on Today and
+    /// Find a Free Slot show then (macOS <c>hasCalendar</c>); the host
+    /// installs it.
+    /// </summary>
+    public Func<bool>? HasCalendar { get; set; }
+
+    /// <summary>
     /// Enables the quick actions: Summarize Unread in This Folder by the
     /// folder, the others by the panel's context. The main window calls it
     /// too when its folder changes.
@@ -141,10 +161,18 @@ public sealed partial class AssistantPanel : UserControl
     public void UpdateQuickActions()
     {
         var folder = UnreadFolderAvailable?.Invoke() ?? false;
+        var calendar = HasCalendar?.Invoke() ?? false;
         for (var i = 0; i < actionButtons.Count && i < QuickActions.Count; i++)
         {
+            var a = QuickActions[i];
+            if (Assistant.IsCalendarAction(a))
+            {
+                actionButtons[i].Visibility = calendar ? Visibility.Visible : Visibility.Collapsed;
+                actionButtons[i].IsEnabled = controller is { CanRunCalendarActions: true };
+                continue;
+            }
             actionButtons[i].IsEnabled = controller is { } c
-                && (QuickActions[i] == AssistantAction.Unread ? c.CanSummarizeUnread(folder) : c.CanRunActions);
+                && (a == AssistantAction.Unread ? c.CanSummarizeUnread(folder) : c.CanRunActions);
         }
     }
 
@@ -155,6 +183,11 @@ public sealed partial class AssistantPanel : UserControl
         if (a == AssistantAction.Unread)
         {
             SummarizeUnreadRequested?.Invoke();
+        }
+        else if (Assistant.IsCalendarAction(a))
+        {
+            // What's on Today sends at once, Find a Free Slot waits for the words.
+            controller?.RunCalendar(a);
         }
         else
         {
@@ -402,6 +435,7 @@ public sealed partial class AssistantPanel : UserControl
             AnswerContent => new AnswerRow(href => openLink?.Invoke(href)),
             ActivityContent => new ActivityRow(),
             DraftContent => new DraftRow(() => controller?.OpenDraftItem(id)),
+            CalendarContent => new CalendarRow(() => controller?.OpenCalendarItem(id)),
             _ => new LineRow(() => controller?.Retry(id), offer => Offered(id, offer)),
         };
         row.Kind = item.Content.GetType();
@@ -584,6 +618,54 @@ public sealed partial class AssistantPanel : UserControl
 
         public override void Update(AssistantPanelContent content)
         {
+        }
+    }
+
+    // An event a list_events or get_event result of the turn named: its day
+    // (the daemon's, never an event's text) with Show in Calendar
+    // (AssistantCalendarView).
+    private sealed class CalendarRow : Row
+    {
+        private readonly Border card;
+        private readonly TextBlock label = PlainLabel("BodyLabelStyle");
+
+        public CalendarRow(Action open)
+        {
+            var grid = new Grid { ColumnSpacing = 8 };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var icon = new FontIcon { Glyph = Icons.Glyph("x-office-calendar-symbolic"), FontSize = 16, VerticalAlignment = VerticalAlignment.Center };
+            label.VerticalAlignment = VerticalAlignment.Center;
+            var button = new Button { Content = Cal.ShowInCalendar, VerticalAlignment = VerticalAlignment.Center };
+            AutomationProperties.SetAutomationId(button, "AssistantShowInCalendar");
+            button.Click += (_, _) => open();
+            Grid.SetColumn(label, 1);
+            Grid.SetColumn(button, 2);
+            grid.Children.Add(icon);
+            grid.Children.Add(label);
+            grid.Children.Add(button);
+            card = new Border
+            {
+                Child = grid,
+                Padding = new Thickness(12, 8, 12, 8),
+                CornerRadius = new CornerRadius(8),
+                BorderThickness = new Thickness(1),
+                Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
+                BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+            };
+        }
+
+        public override UIElement Root => card;
+
+        public override void Update(AssistantPanelContent content)
+        {
+            if (content is not CalendarContent { Calendar: var calendar })
+            {
+                return;
+            }
+            var env = Malachi.App.Shell.AppState.CalendarEnv();
+            label.Text = calendar.Day(env.Zone) is { } day ? Cal.Text.WeekdayDateText(day, env) : "";
         }
     }
 

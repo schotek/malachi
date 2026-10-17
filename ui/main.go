@@ -19,6 +19,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/accountwizard"
+	"github.com/schotek/malachi/ui/internal/calendardata"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/compose"
 	"github.com/schotek/malachi/ui/internal/daemon"
@@ -83,7 +84,7 @@ func main() {
 		// apps are there and the bridge is registered; "Set Up the
 		// Assistant…" opens the AI page of the preferences.
 		assist = window.NewAssistant(prefs, log)
-		assist.AddActions(app, func() { openPreferences(app, prefs, rpc, assist, log, "ai") })
+		assist.AddActions(app, func() { openPreferences(app, prefs, rpc, assist, log, calendarOf(mainWin), "ai") })
 		assist.Refresh()
 		// The board's triage, once for the application (window/board_triage.go):
 		// its preferences in the daemon, the run and the automatic schedule.
@@ -202,7 +203,15 @@ func main() {
 		sup.Stop()
 	})
 
-	newMessage = addActions(app, rpc, log, func() *settings.Store { return prefs }, func() *window.Assistant { return assist }, show, func() *compose.Manager { return mgr }, openNotified, func() { requestExit(app.Quit) })
+	newMessage = addActions(app, rpc, log, func() *settings.Store { return prefs }, func() *window.Assistant { return assist }, show, func() *compose.Manager { return mgr }, func() calendardata.DataSource { return calendarOf(mainWin)() }, openNotified, func() { requestExit(app.Quit) })
+	// The calendar's notifications (window/calendar_alerts.go): a click
+	// that started the application presents the main window first.
+	addCalendarActions(app, func() *window.Window {
+		if mainWin == nil {
+			show()
+		}
+		return mainWin
+	})
 	os.Exit(app.Run(os.Args))
 }
 
@@ -230,7 +239,7 @@ func addUninstalledIconPath() {
 // settings store and the Assistant state, which exist only after startup
 // has run; show presents the main window. It returns app.compose, which
 // follows the accounts that write mail.
-func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, store func() *settings.Store, assist func() *window.Assistant, show func(), composer func() *compose.Manager, openNotified func(api.AccountID, api.MessageID), requestQuit func()) *gio.SimpleAction {
+func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, store func() *settings.Store, assist func() *window.Assistant, show func(), composer func() *compose.Manager, cal func() calendardata.DataSource, openNotified func(api.AccountID, api.MessageID), requestQuit func()) *gio.SimpleAction {
 	newMessage := gio.NewSimpleAction("compose", nil)
 	newMessage.ConnectActivate(func(*glib.Variant) { composer().Open(compose.Params{}) })
 	app.AddAction(newMessage)
@@ -273,7 +282,7 @@ func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, stor
 
 	prefs := gio.NewSimpleAction("preferences", nil)
 	prefs.ConnectActivate(func(*glib.Variant) {
-		openPreferences(app, store(), rpc, assist(), log, "")
+		openPreferences(app, store(), rpc, assist(), log, cal, "")
 	})
 	app.AddAction(prefs)
 	app.SetAccelsForAction("app.preferences", []string{"<Control>comma"})
@@ -316,8 +325,8 @@ func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, stor
 
 // openPreferences presents the preferences dialog over the active window,
 // on the page named page ("" for the first).
-func openPreferences(app *adw.Application, s *settings.Store, rpc *client.Client, assist *window.Assistant, log *slog.Logger, page string) {
-	d := window.NewPreferences(s, rpc, assist, log)
+func openPreferences(app *adw.Application, s *settings.Store, rpc *client.Client, assist *window.Assistant, log *slog.Logger, cal func() calendardata.DataSource, page string) {
+	d := window.NewPreferences(s, rpc, assist, log, cal)
 	if page != "" {
 		d.SetVisiblePageName(page)
 	}
@@ -335,4 +344,33 @@ func newLogger() *slog.Logger {
 		level = slog.LevelError
 	}
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+}
+
+// calendarOf is the calendar source of the main window w for the
+// Preferences (window.Window.CalendarSource), nil without a window.
+func calendarOf(w *window.Window) func() calendardata.DataSource {
+	return func() calendardata.DataSource {
+		if w == nil {
+			return nil
+		}
+		return w.CalendarSource()
+	}
+}
+
+// addCalendarActions registers the actions of the calendar's desktop
+// notifications (window.CalendarNotificationActions): app.calendar-open-event,
+// app.calendar-join and app.calendar-snooze with an alert's target,
+// app.calendar-accept-invitation and app.calendar-remove-cancelled with a
+// message's. win yields the main window, made when there is none.
+func addCalendarActions(app *adw.Application, win func() *window.Window) {
+	for _, a := range window.CalendarNotificationActions() {
+		action := gio.NewSimpleAction(a.Name, a.Type)
+		activate := a.Activate
+		action.ConnectActivate(func(p *glib.Variant) {
+			if w := win(); w != nil {
+				activate(w, p)
+			}
+		})
+		app.AddAction(action)
+	}
 }

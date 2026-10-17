@@ -1,0 +1,17 @@
+BEGIN:VCALENDAR
+X-MALACHI-TEST:a REPLY whose ATTENDEE is not the sender and that adds a new
+  attendee
+VERSION:2.0
+PRODID:-//Malachi Test//Corpus//EN
+METHOD:REPLY
+BEGIN:VEVENT
+UID:reply@example.org
+DTSTAMP:20261016T080000Z
+DTSTART:20261020T090000Z
+DTEND:20261020T100000Z
+SUMMARY:Planning
+ORGANIZER;CN=Ada Example:mailto:ada@example.org
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:someone-else@example.org
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:new-guest@example.org
+END:VEVENT
+END:VCALENDAR

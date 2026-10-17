@@ -67,6 +67,7 @@ using System.Globalization;
 using System.Linq;
 using Malachi.App.Assistants;
 using Malachi.App.Commands;
+using Malachi.App.Controls;
 using Malachi.App.Localization;
 using Malachi.Core.Api;
 using Malachi.Core.ContextMenus;
@@ -96,6 +97,7 @@ public sealed partial class MessageListPane : UserControl
     private const int MaxFocusAttempts = 8;
 
     private readonly Button retryButton;
+    private readonly AfterRelease afterRelease;
     private readonly MailDateList dateList = new();
     private readonly CollectionViewSource groupedSource;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer calendarTimer;
@@ -143,6 +145,7 @@ public sealed partial class MessageListPane : UserControl
         NameSelectorList(FilterBar);
         NameSelectorList(ScopeBar);
         MessageList.AddHandler(TappedEvent, new TappedEventHandler(OnRowTapped), handledEventsToo: true);
+        afterRelease = new AfterRelease(MessageList);
         // list_retry_button: a pill under the status page's texts.
         retryButton = new Button
         {
@@ -839,15 +842,18 @@ public sealed partial class MessageListPane : UserControl
         Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
 
     // rowDoubleClicked (window.go row-activated); a double click on the
-    // fold arrow is the arrow's.
+    // fold arrow is the arrow's. The row is activated once the second press
+    // is released (AfterRelease: the message or compose window opened on the
+    // press came up behind this one).
     private void OnDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
-        if (list is null || RowAt(e.OriginalSource as DependencyObject, out var inButton) is not { } row || inButton)
+        if (list is not { } l || RowAt(e.OriginalSource as DependencyObject, out var inButton) is not { } row || inButton)
         {
             return;
         }
-        list.Activate(row.Key);
         e.Handled = true;
+        var key = row.Key;
+        afterRelease.Run(() => l.Activate(key));
     }
 
     private MessageRow? RowAt(DependencyObject? source, out bool inButton)

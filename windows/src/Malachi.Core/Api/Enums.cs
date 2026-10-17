@@ -114,6 +114,14 @@ public readonly record struct AccountKind(string Value) : IWireEnumeration<Accou
     /// </summary>
     public const string Jira = "jira";
 
+    /// <summary>
+    /// A calendar-only account on a CalDAV server (the account's <c>caldav</c>
+    /// block; the password is <see cref="Credentials.Password"/>). It has no
+    /// mail: <c>folder.list</c> answers no folders, message methods
+    /// invalidArgument, and a client never shows it in Mail.
+    /// </summary>
+    public const string CalDAV = "caldav";
+
     /// <summary>The value of a wire string.</summary>
     public static implicit operator AccountKind(string value) => new(value);
 
@@ -534,6 +542,12 @@ public readonly record struct Capability(string Value) : IWireEnumeration<Capabi
     /// <c>issue.transition</c>): the Change Status menu.
     /// </summary>
     public const string Transition = "transition";
+
+    /// <summary>
+    /// The account can have calendars (graph, caldav); it does not change with
+    /// consent or sync state. A caldav account has exactly this one.
+    /// </summary>
+    public const string Calendar = "calendar";
 
     /// <summary>The value of a wire string.</summary>
     public static implicit operator Capability(string value) => new(value);

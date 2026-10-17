@@ -380,12 +380,16 @@ public final class SyncController {
     /// waiting on), or the notification's authUrl when the daemon cannot
     /// answer; only an https address is opened. The daemon completes the
     /// sign-in by itself and the banner goes with the next notify.syncState.
-    public func requestSignInURL(client: RPCClient, accountId: AccountID, fallbackURL: String?) async -> SignInURL {
+    /// `calendar` also asks for the calendar scopes (the Calendar's "Sign
+    /// In…", docs/calendar.md D15).
+    public func requestSignInURL(
+        client: RPCClient, accountId: AccountID, fallbackURL: String?, calendar: Bool = false
+    ) async -> SignInURL {
         var url = ""
         var failure: (any Error)?
         do {
             url = try await client.call(
-                API.AccountOAuthStart.self, AccountOAuthStartParams(accountId: accountId, browserPage: browserPage()),
+                API.AccountOAuthStart.self, AccountOAuthStartParams(accountId: accountId, browserPage: browserPage(), calendar: calendar ? true : nil),
                 timeout: RPCTimeouts.oauthStart
             ).authUrl
         } catch {

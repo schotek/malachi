@@ -302,6 +302,10 @@ public sealed class BoardTriageViewTests
         const string line = "Triaged by rules · refined by the assistant 5 minutes ago";
         Assert.Equal("", TriageStripText(idle, Mode.Mail, Phase.Ready));
         Assert.Equal("Triaging… 1 of 4", TriageStripText(running, Mode.Mail, Phase.Ready));
+        // The Calendar is Mail's: only a run's progress.
+        Assert.Equal("", TriageStripText(idle, Mode.Calendar, Phase.Ready));
+        Assert.Equal("", TriageStripText(paused, Mode.Calendar, Phase.Ready));
+        Assert.Equal("Triaging… 1 of 4", TriageStripText(running, Mode.Calendar, Phase.Ready));
         Assert.Equal(line, TriageStripText(idle, Mode.Board, Phase.Ready));
         Assert.Equal("Triaging… 1 of 4", TriageStripText(running, Mode.Board, Phase.Ready));
         Assert.Equal("Starting the triage…", TriageStripText(starting, Mode.Board, Phase.Ready));

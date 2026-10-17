@@ -16,6 +16,10 @@ func TestInitialMode(t *testing.T) {
 		t.Error("a window does not start in Mail")
 	}
 	eq(t, "Modes", Modes, []Mode{0, 1})
+	eq(t, "ModesWithCalendar", ModesWithCalendar, []Mode{0, 1, 2})
+	if ModeCalendar != 2 {
+		t.Errorf("ModeCalendar = %d, want 2", ModeCalendar)
+	}
 }
 
 func TestAllows(t *testing.T) {
@@ -30,15 +34,24 @@ func TestAllows(t *testing.T) {
 		{CommandMailView, ModeMail, true},
 		{CommandMessageAction, ModeMail, true},
 		{CommandBoardView, ModeMail, false},
+		{CommandNewEvent, ModeMail, true},
 		{CommandSwitchMode, ModeBoard, true},
 		{CommandNewMessage, ModeBoard, true},
 		{CommandCheckForNewMail, ModeBoard, true},
 		{CommandMailView, ModeBoard, false},
 		{CommandMessageAction, ModeBoard, false},
 		{CommandBoardView, ModeBoard, true},
+		{CommandNewEvent, ModeBoard, false},
+		{CommandSwitchMode, ModeCalendar, true},
+		{CommandNewMessage, ModeCalendar, true},
+		{CommandCheckForNewMail, ModeCalendar, true},
+		{CommandMailView, ModeCalendar, false},
+		{CommandMessageAction, ModeCalendar, false},
+		{CommandBoardView, ModeCalendar, false},
+		{CommandNewEvent, ModeCalendar, true},
 	}
-	if len(cases) != len(Commands)*len(Modes) {
-		t.Fatalf("%d cases for %d commands in %d modes", len(cases), len(Commands), len(Modes))
+	if len(cases) != len(Commands)*len(ModesWithCalendar) {
+		t.Fatalf("%d cases for %d commands in %d modes", len(cases), len(Commands), len(ModesWithCalendar))
 	}
 	for _, c := range cases {
 		if got := Allows(c.c, c.m); got != c.want {
@@ -60,9 +73,13 @@ func TestModeForRequest(t *testing.T) {
 		{RequestOpenMessageWindow, ModeBoard, ModeBoard},
 		{RequestCompose, ModeMail, ModeMail},
 		{RequestCompose, ModeBoard, ModeBoard},
+		{RequestShowOutbox, ModeCalendar, ModeMail},
+		{RequestRevealAssistant, ModeCalendar, ModeMail},
+		{RequestOpenMessageWindow, ModeCalendar, ModeCalendar},
+		{RequestCompose, ModeCalendar, ModeCalendar},
 	}
-	if len(cases) != len(Requests)*len(Modes) {
-		t.Fatalf("%d cases for %d requests in %d modes", len(cases), len(Requests), len(Modes))
+	if len(cases) != len(Requests)*len(ModesWithCalendar) {
+		t.Fatalf("%d cases for %d requests in %d modes", len(cases), len(Requests), len(ModesWithCalendar))
 	}
 	for _, c := range cases {
 		if got := ModeFor(c.r, c.current); got != c.want {
@@ -80,6 +97,8 @@ func TestViewsMail(t *testing.T) {
 		{ModeMail, false, false},
 		{ModeBoard, true, false},
 		{ModeBoard, false, false},
+		{ModeCalendar, true, false},
+		{ModeCalendar, false, false},
 	} {
 		if got := ViewsMail(c.m, c.key); got != c.out {
 			t.Errorf("ViewsMail(%d, %v) = %v", c.m, c.key, got)
@@ -152,13 +171,17 @@ func TestStartMode(t *testing.T) {
 		{"junk", "board", true, ModeMail},
 		{"board", "board", false, ModeMail},
 		{"last", "board", false, ModeMail},
+		{"calendar", "mail", true, ModeCalendar},
+		{"calendar", "mail", false, ModeCalendar},
+		{"last", "calendar", true, ModeCalendar},
+		{"last", "calendar", false, ModeCalendar},
 	}
 	for _, c := range cases {
 		if got := StartMode(c.start, c.last, c.enabled); got != c.want {
 			t.Errorf("StartMode(%q, %q, %v) = %d, want %d", c.start, c.last, c.enabled, got, c.want)
 		}
 	}
-	for _, m := range Modes {
+	for _, m := range ModesWithCalendar {
 		if got, ok := ParseMode(m.Nick()); !ok || got != m {
 			t.Errorf("ParseMode(%q) = %d, %v", m.Nick(), got, ok)
 		}
@@ -173,6 +196,62 @@ func TestStartMode(t *testing.T) {
 	}
 	eq(t, "start nicks", nicks, []string{"mail", "board", "last"})
 	eq(t, "start titles", titles, []string{"Mail", "Board", "Last Used"})
+	if got := StartModeTitle(StartCalendar, tr); got != "Calendar" || CalendarName(tr) != "Calendar" {
+		t.Errorf("the Calendar's title is %q", got)
+	}
+	nicks = nil
+	for _, s := range StartModesWithCalendar {
+		nicks = append(nicks, s.Nick())
+		if ParseStartChoice(s.Nick()) != s {
+			t.Errorf("ParseStartChoice(%q)", s.Nick())
+		}
+	}
+	eq(t, "start nicks with the calendar", nicks, []string{"mail", "board", "calendar", "last"})
+	if ParseStartChoice("Calendar") != StartMail {
+		t.Error("a nick is case sensitive")
+	}
+}
+
+func TestResolveStartMode(t *testing.T) {
+	cases := []struct {
+		choice      StartChoice
+		last        Mode
+		hasCalendar bool
+		want        Mode
+	}{
+		{StartMail, ModeCalendar, true, ModeMail},
+		{StartBoard, ModeCalendar, true, ModeBoard},
+		{StartCalendar, ModeMail, true, ModeCalendar},
+		{StartCalendar, ModeMail, false, ModeMail},
+		{StartLast, ModeCalendar, true, ModeCalendar},
+		{StartLast, ModeCalendar, false, ModeMail},
+		{StartLast, ModeBoard, false, ModeBoard},
+		{StartLast, ModeMail, false, ModeMail},
+	}
+	for _, c := range cases {
+		if got := ResolveStartMode(c.choice, c.last, c.hasCalendar); got != c.want {
+			t.Errorf("ResolveStartMode(%q, %q, %v) = %q, want %q", c.choice.Nick(), c.last.Nick(), c.hasCalendar, got.Nick(), c.want.Nick())
+		}
+	}
+}
+
+func TestStartDecisionCalendar(t *testing.T) {
+	for _, c := range []struct {
+		start                StartChoice
+		last                 Mode
+		switched, interacted bool
+		want                 Mode
+	}{
+		{StartCalendar, ModeMail, false, false, ModeCalendar},
+		{StartLast, ModeCalendar, false, false, ModeCalendar},
+		{StartCalendar, ModeMail, true, false, ModeMail},
+		{StartCalendar, ModeMail, false, true, ModeMail},
+	} {
+		got, decided := StartDecision(c.start, c.last, false, false, c.switched, c.interacted, 0)
+		if !decided || got != c.want {
+			t.Errorf("StartDecision(%q, %q, switched %v, interacted %v) = %q, %v", c.start.Nick(), c.last.Nick(), c.switched, c.interacted, got.Nick(), decided)
+		}
+	}
 }
 
 func TestFilterOnShow(t *testing.T) {
@@ -239,7 +318,7 @@ func TestStartDecision(t *testing.T) {
 }
 
 func TestNumberRowDigit(t *testing.T) {
-	for code, want := range map[uint]rune{10: '1', 11: '2', 9: 0, 12: 0, 0: 0, 49: 0} {
+	for code, want := range map[uint]rune{10: '1', 11: '2', 12: '3', 13: '4', 9: 0, 14: 0, 0: 0, 49: 0} {
 		if got := NumberRowDigit(code); got != want {
 			t.Errorf("NumberRowDigit(%d) = %q, want %q", code, got, want)
 		}

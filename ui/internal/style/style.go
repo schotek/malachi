@@ -299,6 +299,7 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	b.WriteString(".board-today-tile { border: 1px solid alpha(@window_fg_color, 0.12); border-radius: 10px; padding: 10px; }\n")
 	b.WriteString(".board-today-tile.board-today-tile-hot { background-color: alpha(@destructive_bg_color, 0.06); }\n")
 	b.WriteString("label.board-today-tile-count { font-size: 170%; font-weight: bold; }\n")
+	b.WriteString(calendarCardCSS)
 	fmt.Fprintf(&b, ".message-body { font-size: %d%%; }\n", textZoomPercent)
 	if monospace {
 		b.WriteString(".message-body { font-family: monospace; }\n")

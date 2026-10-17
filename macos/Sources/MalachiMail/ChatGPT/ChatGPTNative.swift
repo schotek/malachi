@@ -10,8 +10,12 @@ import MalachiCore
 @MainActor final class ChatGPTKeychain: ChatGPTCredentialStore {
     private let directory: URL
     private let service: String
-    init(directory: URL) {
+    /// An isolated instance (`MALACHI_DATA_DIR`) never reads, writes or
+    /// deletes the login keychain item: it is always signed out.
+    private let isolated: Bool
+    init(directory: URL, isolated: Bool = Paths.isIsolated()) {
         self.directory = directory
+        self.isolated = isolated
         let identity = SHA256.hash(data: Data(directory.standardizedFileURL.path.utf8)).map { String(format: "%02x", $0) }.joined()
         service = "io.github.schotek.Malachi.chatgpt." + identity
     }
@@ -36,6 +40,7 @@ import MalachiCore
         try CodexPrivateFiles.write(JSONEncoder().encode(value), directory: directory, name: "registration.json")
     }
     func tokens() throws -> ChatGPTTokens? {
+        if isolated { return nil }
         var request = query; request[kSecReturnData as String] = true; request[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: CFTypeRef?
         let status = SecItemCopyMatching(request as CFDictionary, &result)
@@ -44,6 +49,7 @@ import MalachiCore
         return try JSONDecoder().decode(ChatGPTTokens.self, from: data)
     }
     func saveTokens(_ value: ChatGPTTokens) throws {
+        if isolated { throw ChatGPTFailure("chatgpt_isolated") }
         let data = try JSONEncoder().encode(value)
         let update = [kSecValueData as String: data] as CFDictionary
         var status = SecItemUpdate(query as CFDictionary, update)
@@ -55,6 +61,7 @@ import MalachiCore
         guard status == errSecSuccess else { throw ChatGPTFailure("chatgpt_keychain") }
     }
     func deleteTokens() throws {
+        if isolated { return }
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { throw ChatGPTFailure("chatgpt_keychain") }
     }

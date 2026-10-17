@@ -278,13 +278,18 @@ func (b *Backend) backfillCollectedAddresses(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			for _, m := range items {
-				addrs := make([]api.Address, 0, len(m.To)+len(m.CC)+len(m.BCC))
-				addrs = append(append(append(addrs, m.To...), m.CC...), m.BCC...)
-				if err := b.store.TouchCollectedAddresses(ctx, addrs, m.Date); err != nil {
-					return err
+			if err := b.store.Paced(ctx, func() error {
+				for _, m := range items {
+					addrs := make([]api.Address, 0, len(m.To)+len(m.CC)+len(m.BCC))
+					addrs = append(append(append(addrs, m.To...), m.CC...), m.BCC...)
+					if err := b.store.TouchCollectedAddresses(ctx, addrs, m.Date); err != nil {
+						return err
+					}
+					messages++
 				}
-				messages++
+				return nil
+			}); err != nil {
+				return err
 			}
 			if next == "" {
 				break

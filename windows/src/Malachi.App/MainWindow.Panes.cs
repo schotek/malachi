@@ -111,7 +111,7 @@ public sealed partial class MainWindow
         // status.go showOutbox: the account's outbox, and the list it shows.
         StatusLine.OutboxRequested += (_, acc) =>
         {
-            // The outbox shows in the list: the board gives way (Board.ModeFor).
+            // The outbox shows in the list: the board and the calendar give way (Board.ModeFor).
             ApplyModeRequest(Core.Boards.Board.Request.ShowOutbox);
             if (integration.Mailbox.ShowOutbox(acc))
             {
@@ -139,14 +139,15 @@ public sealed partial class MainWindow
 
     // The window's first focus, which WinUI gives itself (programmatic,
     // nothing focused before; measured: it reports the keyboard as its
-    // device), goes past the search box to the sidebar. A click or Ctrl+F
+    // device), goes past the search box to the sidebar (the page of a window
+    // that opened in Board or Calendar, ModeFocusRoot). A click or Ctrl+F
     // first is the user's and stays.
     private void OnFirstFocus(UIElement sender, GettingFocusEventArgs args)
     {
         Root.GettingFocus -= OnFirstFocus;
         if (args.OldFocusedElement is null && args.FocusState == FocusState.Programmatic
             && IsWithin(args.NewFocusedElement, SearchBox)
-            && FocusManager.FindFirstFocusableElement(SidebarPane) is { } first)
+            && FocusManager.FindFirstFocusableElement(ModeFocusRoot) is { } first)
         {
             args.TrySetNewFocusedElement(first);
         }
@@ -166,15 +167,27 @@ public sealed partial class MainWindow
 
     private void OnSearchTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
-        if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
+        if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
         {
-            list?.SearchFieldChanged(sender.Text);
+            return;
         }
+        // While the calendar shows the box is its search (MainWindow.Calendar.cs).
+        if (SearchIsCalendars)
+        {
+            CalendarSearchChanged(sender.Text);
+            return;
+        }
+        list?.SearchFieldChanged(sender.Text);
     }
 
     // Return: the first result, without waiting for the pause.
     private void OnSearchSubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
     {
+        if (SearchIsCalendars)
+        {
+            CalendarSearchSubmitted(args.QueryText ?? "");
+            return;
+        }
         if (!converting)
         {
             list?.SearchFieldReturn(args.QueryText ?? "");
@@ -185,6 +198,12 @@ public sealed partial class MainWindow
     // keyboard (search.go onSearchModeChanged).
     private void OnSearchKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (e.Key == WinKey.Escape && SearchIsCalendars)
+        {
+            e.Handled = true;
+            CalendarSearchEnded();
+            return;
+        }
         if (e.Key != WinKey.Escape || list is null)
         {
             return;
@@ -288,6 +307,7 @@ public sealed partial class MainWindow
         }
         ListPane.Visibility = layout.ListVisible ? Visibility.Visible : Visibility.Collapsed;
         MessagePane.Visibility = layout.MessageVisible ? Visibility.Visible : Visibility.Collapsed;
+        // The pane and back buttons are the mail's panes' (none in Board and Calendar).
         AppTitleBar.IsPaneToggleButtonVisible = layout.PaneToggleVisible && mode == Core.Boards.Board.Mode.Mail;
         AppTitleBar.IsBackButtonVisible = layout.BackVisible && mode == Core.Boards.Board.Mode.Mail;
         // The narrow title bar has the back and pane buttons beside the box.

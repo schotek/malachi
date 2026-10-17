@@ -40,6 +40,8 @@ type boardToday struct {
 
 	dueBox    *gtk.Box
 	dueGroups []board.DueSection
+
+	calendar *todayCalendarStrip // board_today_calendar.go
 }
 
 // bindToday fetches Today's static widgets; called from ensureBoard after
@@ -51,6 +53,7 @@ func (p *boardPage) bindToday(b *gtk.Builder) {
 	t.tiles = b.GetObject("board_today_tiles").Cast().(*gtk.Box)
 	t.list = b.GetObject("board_today_list").Cast().(*gtk.ListBox)
 	t.dueBox = b.GetObject("board_today_due_box").Cast().(*gtk.Box)
+	t.calendar = p.bindTodayCalendar(b, t.title)
 	p.today = t
 }
 

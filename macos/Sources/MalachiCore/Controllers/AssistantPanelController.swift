@@ -121,6 +121,9 @@ public final class AssistantPanelController {
         case activity(label: String, done: Bool)
         /// A draft the bridge saved, with Open Draft.
         case draft(Assistant.DraftRef)
+        /// The first event a list_events or get_event result of the turn
+        /// named, with Show in Calendar (docs/calendar.md §5.9).
+        case calendar(Assistant.CalendarRef)
         /// What went wrong; `retry` offers Try Again, `offer` one more
         /// button.
         case error(String, retry: Bool, offer: Offer = .none)
@@ -235,6 +238,8 @@ public final class AssistantPanelController {
             case action(Assistant.Action)
             case unread(accountID: String, folderID: String)
             case attachment(accountID: String, messageID: String, partID: String)
+            /// What's on Today, Find a Free Slot (`Assistant.calendarPrompt`).
+            case calendar(Assistant.Action)
         }
 
         var kind: Kind
@@ -283,6 +288,9 @@ public final class AssistantPanelController {
     public var resolveContext: (@MainActor (Context, @escaping @MainActor (Assistant.Selection) -> Void) -> Void)?
     /// Open Draft of a draft card (`ActionsController.openSavedDraft`).
     public var openDraft: (@MainActor (Assistant.DraftRef) -> Void)?
+    /// Show in Calendar of a calendar card: Calendar mode, the Day view of
+    /// the event's day.
+    public var openInCalendar: (@MainActor (Assistant.CalendarRef) -> Void)?
     /// `items` changed.
     public var onChange: (@MainActor (Change) -> Void)?
     /// The phase, the context, the waiting action or the model changed.
@@ -332,6 +340,8 @@ public final class AssistantPanelController {
     /// The activity items by tool call id, and each call's tool.
     private var activities: [String: Int] = [:]
     private var toolNames: [String: String] = [:]
+    /// The turn has its calendar card.
+    private var calendarCarded = false
     /// The question of the turn under way (or the last that failed), for
     /// Try Again.
     private var lastRequest: Request?
@@ -516,7 +526,7 @@ public final class AssistantPanelController {
     /// The label over the question field while an action waits.
     public var pendingLabel: String {
         switch pending {
-        case .action(let a)?: return Assistant.label(a)
+        case .action(let a)?: return Assistant.panelLabel(a)
         case .attachment?: return Assistant.texts().askFile
         case nil: return ""
         }
@@ -637,6 +647,27 @@ public final class AssistantPanelController {
         }
     }
 
+    /// A calendar quick action (`Assistant.calendarActions`): What's on
+    /// Today sends at once, Find a Free Slot waits for the user's words
+    /// (how long, with whom, when). Neither needs a selection.
+    public func runCalendar(_ a: Assistant.Action) {
+        guard !closed, phase == .idle, Assistant.isCalendarAction(a) else { return }
+        if a == .whatsOnToday {
+            start(Request(
+                kind: .calendar(a), label: Assistant.calendarLabel(a), text: "", inEffect: effectiveContext, target: nil))
+            return
+        }
+        pending = .action(a)
+        pendingTarget = nil
+        onState?()
+        onFocusInput?()
+    }
+
+    /// Whether the calendar quick actions can run: nothing under way.
+    public var canRunCalendarActions: Bool {
+        phase == .idle && !closed
+    }
+
     /// Summarize Unread in This Folder, for a folder: sent at once.
     public func summarizeUnread(accountID: String, folderID: String) {
         guard !closed, phase == .idle, !accountID.isEmpty, !folderID.isEmpty else { return }
@@ -678,6 +709,10 @@ public final class AssistantPanelController {
         guard !closed, phase == .idle else { return false }
         let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
         switch pending {
+        case .action(let a)? where Assistant.isCalendarAction(a):
+            guard !words.isEmpty else { return false }
+            start(Request(
+                kind: .calendar(a), label: Assistant.calendarLabel(a), text: words, inEffect: effectiveContext, target: nil))
         case .action(let a)?:
             // A reply may be drafted without instructions.
             guard !words.isEmpty || a == .draftReply,
@@ -733,6 +768,12 @@ public final class AssistantPanelController {
     public func openDraft(_ itemID: Int) {
         guard let item = items.first(where: { $0.id == itemID }), case .draft(let ref) = item.content else { return }
         openDraft?(ref)
+    }
+
+    /// A calendar card's Show in Calendar.
+    public func openCalendar(_ itemID: Int) {
+        guard let item = items.first(where: { $0.id == itemID }), case .calendar(let ref) = item.content else { return }
+        openInCalendar?(ref)
     }
 
     /// Stop: ends the process and the turn under way. The conversation
@@ -1035,6 +1076,8 @@ public final class AssistantPanelController {
             return (try Assistant.prompt(.app, a, c.selection) + req.text, [key])
         case .unread(let acc, let folder):
             return (try Assistant.unreadPrompt(accountID: acc, folderID: folder), [])
+        case .calendar(let a):
+            return (try Assistant.calendarPrompt(a, date: today()) + req.text, [])
         case .attachment(let acc, let msg, let part):
             let p = try Assistant.attachmentPrompt(accountID: acc, messageID: msg, partID: part) + req.text
             if case .pinned(let key)? = req.target,
@@ -1056,7 +1099,7 @@ public final class AssistantPanelController {
         case .action:
             guard case .pinned(let key)? = req.target else { return [] }
             keys = [key]
-        case .unread, .attachment:
+        case .unread, .attachment, .calendar:
             return []
         }
         return keys.filter { pinnedContext($0)?.partial == true }
@@ -1177,6 +1220,10 @@ public final class AssistantPanelController {
                 let tool = toolNames.removeValue(forKey: e.toolUseID)
                 if tool == "create_draft", !e.isError, let ref = Assistant.parseDraftResult(e.resultText) {
                     append(.draft(ref))
+                } else if let tool, !e.isError, !calendarCarded,
+                          let ref = Assistant.parseCalendarResult(tool: tool, e.resultText) {
+                    calendarCarded = true
+                    append(.calendar(ref))
                 }
             case .result:
                 log.info("assistant turn: success \(e.success, privacy: .public), cost \(e.costUSD, privacy: .public) USD, \(e.denied.count, privacy: .public) denied")
@@ -1270,6 +1317,7 @@ public final class AssistantPanelController {
         }
         activities = [:]
         toolNames = [:]
+        calendarCarded = false
     }
 
     private func closeStreaming() {

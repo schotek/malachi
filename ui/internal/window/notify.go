@@ -62,7 +62,7 @@ func (w *Window) handleNotification(method string, params json.RawMessage) {
 		w.hideAuthBanner()
 		w.compose.Invalidate()
 		w.loadAccounts()
-		w.boardAccountsChanged()
+		w.modeAccountsChanged()
 	case api.NotifyBoardChanged:
 		var n api.BoardChangedNotification
 		if err := json.Unmarshal(params, &n); err != nil {
@@ -78,7 +78,7 @@ func (w *Window) handleNotification(method string, params json.RawMessage) {
 		}
 		w.onDraftsChanged(n)
 	default:
-		w.log.Info("notification", "method", method)
+		w.otherNotification(method, params)
 	}
 }
 
@@ -99,7 +99,7 @@ func (w *Window) notifyNewMessage(n api.NewMessageNotification) {
 		note.SetIcon(gio.NewThemedIcon("mail-unread-symbolic"))
 		// A click opens the message in its own window (notify_open.go).
 		note.SetDefaultActionAndTarget("app."+OpenMessageAction, NotificationTarget(n.AccountID, n.Message.ID))
-		w.app.SendNotification(notificationID(n.Message.ID), note)
+		w.app.SendNotification(notificationID(n.Message.ID), w.withInvitation(note, n)) // calendar_alerts.go
 		w.withdraw(w.notified.add(n.Message.ID, folderKey{Account: n.AccountID, Folder: n.FolderID}))
 	}
 	if w.settings.NotificationSound() {

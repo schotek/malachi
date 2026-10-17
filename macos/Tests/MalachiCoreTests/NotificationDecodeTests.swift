@@ -100,12 +100,24 @@ import Testing
             (API.Notify.boardChanged, #"{"accountIds":["acc_1"]}"#),
             (API.Notify.draftsChanged, #"{"accountId":"acc_1","threadIds":["t_1"]}"#),
         ]
-        #expect(samples.map(\.0) == API.allNotifications)
+        // The calendar notifications are decoded by `CalendarNotification`;
+        // `DaemonNotification` reads them as `.unknown`.
+        let calendarSamples: [(String, String)] = [
+            (API.Notify.calendarChanged, #"{"accountIds":["acc_1"],"calendarIds":["cal_1"],"from":"2026-10-01T00:00:00Z","to":"2026-11-01T00:00:00Z"}"#),
+            (API.Notify.calendarState, #"{"state":{"accountId":"acc_1","status":"idle","progress":-1}}"#),
+            (API.Notify.eventAlert, #"{"alert":{"alertId":"al_1","state":"due","eventId":"ev_1","accountId":"acc_1","calendarId":"cal_1","title":"T","start":"2026-10-14T07:00:00Z","allDay":false,"minutesBefore":10}}"#),
+            (API.Notify.invitationsChanged, #"{"accountIds":["acc_1"]}"#),
+        ]
+        #expect((samples + calendarSamples).map(\.0) == API.allNotifications)
         for (method, params) in samples {
             let n = try DaemonNotification(raw(method, params))
             if case .unknown = n {
                 Issue.record("\(method) decoded as unknown")
             }
+        }
+        for (method, params) in calendarSamples {
+            #expect(try CalendarNotification(raw(method, params)) != nil, "\(method) is not a calendar notification")
+            #expect(try DaemonNotification(raw(method, params)) == .unknown(method: method))
         }
     }
 }

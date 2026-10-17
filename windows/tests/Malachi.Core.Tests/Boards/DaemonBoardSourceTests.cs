@@ -86,7 +86,7 @@ public sealed class DaemonBoardSourceTests
         await h.StartedAsync();
         var s = await h.SnapshotAsync();
         Assert.Equal(Phase.Ready, s.Phase);
-        Assert.Equal([new AccountInfo("acc_1", "Work", "IMAP", CanDelete: true)], s.Accounts); // enabled only
+        Assert.Equal([new AccountInfo("acc_1", "Work", "IMAP", CanDelete: true)], s.Accounts); // enabled and in Mail only
         Assert.Equal([Id("1"), Id("2")], s.Cases.Select(c => c.Id));
         var c = Assert.IsType<Case>(await h.CAsync("1"));
         Assert.True(c.Person == "Person 1" && c.Subject == "Subject 1" && c.RuleState == State.You);
@@ -1178,16 +1178,22 @@ public sealed class DaemonBoardSourceTests
                 calls.Add(API.AccountList.Name);
                 name = AccountName;
             }
-            Account A(string id, string n, string email, bool on) => new()
+            Account A(string id, string n, string email, bool on, AccountKind? kind = null) => new()
             {
                 Id = id,
-                Config = new AccountConfig { Name = n, Email = email },
+                Config = new AccountConfig { Name = n, Email = email, Kind = kind },
                 Enabled = on,
                 State = new SyncState { AccountId = id, Status = SyncStatus.Idle },
+                Capabilities = kind == AccountKind.CalDAV ? [Capability.Calendar] : null,
             };
+            // acc_3 is a calendar-only CalDAV account: enabled, yet never a board account.
             return JsonCoding.EncodeToString(new AccountListResult
             {
-                Accounts = [A("acc_1", name, "me@example.invalid", true), A("acc_2", "Paused", "p@example.invalid", false)],
+                Accounts =
+                [
+                    A("acc_1", name, "me@example.invalid", true), A("acc_2", "Paused", "p@example.invalid", false),
+                    A("acc_3", "Calendar", "c@example.invalid", true, AccountKind.CalDAV),
+                ],
             });
         }
 

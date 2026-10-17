@@ -1,0 +1,14 @@
+BEGIN:VCALENDAR
+X-MALACHI-TEST:a UTF-8 sequence split by folding is whole again after unfol
+ ding
+VERSION:2.0
+PRODID:-//Malachi Test//Corpus//EN
+BEGIN:VEVENT
+UID:fold-1@example.org
+DTSTAMP:20261016T080000Z
+DTSTART:20261020T090000Z
+DTEND:20261020T100000Z
+SUMMARY:Sch�
+ �zka o rozpočtu – příští týden, místnost Žluťoučký kůň a další dlouhý text
+END:VEVENT
+END:VCALENDAR

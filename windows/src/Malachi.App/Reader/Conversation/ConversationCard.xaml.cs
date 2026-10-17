@@ -28,7 +28,11 @@
 // for no body. How it starts is the pane's (ConversationFolds): the card
 // that opened the conversation and the user's replies in Sent folded, the
 // rest open. The "•••" under the body shows or hides the quoted history the
-// daemon cut (renderQuoted; macOS ConversationCardView.renderQuoted).
+// daemon cut (renderQuoted; macOS ConversationCardView.renderQuoted). The
+// invitation card of a message with a calendar part sits under the header,
+// inside what folds (macOS ConversationCardView.renderInvitation;
+// docs/calendar.md §5.7): made for the first message.get with one, fed on
+// every render after it, let go with the card.
 
 using System;
 using System.Collections.Generic;
@@ -75,6 +79,10 @@ internal sealed partial class ConversationCard : UserControl
     private string html = "";
     private bool reload;
     private IReadOnlyList<Link> links = [];
+
+    // The invitation card under the header, made for the first message.get
+    // with one (renderInvitation).
+    private InvitationCardPresenter? invitation;
 
     // What the body shows, so that a render with the same body leaves it
     // alone.
@@ -269,6 +277,7 @@ internal sealed partial class ConversationCard : UserControl
         {
             return;
         }
+        RenderInvitation(lm?.Msg);
         RenderDetails(lm?.Msg);
         RenderBody(lm);
         RenderBars(lm);
@@ -379,8 +388,34 @@ internal sealed partial class ConversationCard : UserControl
         }
     }
 
-    /// <summary>The pane lets go of the card for good: its web view goes back to the pool.</summary>
-    public void Detach() => SetLive(false);
+    /// <summary>The pane lets go of the card for good: its web view goes back to the pool, its invitation card's controller goes.</summary>
+    public void Detach()
+    {
+        SetLive(false);
+        invitation?.Close();
+        invitation = null;
+    }
+
+    // renderInvitation: the invitation card of message.get, when the account
+    // shows them; an entry let go (null) keeps the card as it was. Join Video
+    // Call goes through the link confirmation of the pane's window.
+    private void RenderInvitation(Message? m)
+    {
+        var on = InvitationReading.ShowsInvitationCard(pane.Services.AccountOf(s.AccountId));
+        if (invitation is null)
+        {
+            if (InvitationReading.Read(m, on) is null)
+            {
+                return;
+            }
+            FindName(nameof(InvitationCard));
+            invitation = new InvitationCardPresenter(InvitationCard!, pane.Services.State, () => pane.HostWindow)
+            {
+                OpenLink = url => _ = pane.Services.Links.OpenAsync(new ActivatedLink(url, url), [], pane.HostWindow),
+            };
+        }
+        invitation.Show(s, m, on);
+    }
 
     // The hover buttons show while the pointer is over the card or one of
     // them has the focus.
@@ -440,7 +475,8 @@ internal sealed partial class ConversationCard : UserControl
 
     // openOnDoubleClick: a double click on the header opens the message as
     // one on its row in the list does (MessageActionRouter.OpenMessage): in
-    // a window of its own, a draft in the compose window. The handler is the
+    // a window of its own, a draft in the compose window, once the second
+    // press is released (the pane's AfterRelease). The handler is the
     // frame's, so that the padding around the header's line counts too.
     private void OnFrameDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
@@ -449,7 +485,8 @@ internal sealed partial class ConversationCard : UserControl
             return;
         }
         e.Handled = true;
-        pane.Services.Router.OpenMessage(s);
+        var message = s;
+        pane.AfterRelease.Run(() => pane.Services.Router.OpenMessage(message));
     }
 
     // onHeader: from the card's top edge to the bottom of the header's line,

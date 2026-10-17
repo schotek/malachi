@@ -480,18 +480,18 @@ func (w *Window) signInAgain(kind signin.Kind, reason api.ErrorCode, id api.Acco
 	}
 }
 
-// signInInBrowser opens the sign-in page of an account of the backend's
+// startBrowserSignIn (calendarScopes: with the calendar scopes) opens the sign-in page of an account of the backend's
 // own sign-in: a fresh one from account.oauthStart (the daemon hands back
 // the session it is already waiting on), or fallback, the notification's
 // authUrl, when the daemon cannot answer. The daemon completes the sign-in
 // by itself; the banner goes away with the next notify.syncState.
-func (w *Window) signInInBrowser(id api.AccountID, fallback string) {
+func (w *Window) startBrowserSignIn(id api.AccountID, fallback string, calendarScopes bool) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), signInStartTimeout)
 		defer cancel()
 		var res api.AccountOAuthStartResult
 		err := w.client.Call(ctx, api.MethodAccountOAuthStart,
-			api.AccountOAuthStartParams{AccountID: id, BrowserPage: accountwizard.BrowserPage()}, &res)
+			api.AccountOAuthStartParams{AccountID: id, BrowserPage: accountwizard.BrowserPage(), Calendar: calendarScopes}, &res)
 		glib.IdleAdd(func() {
 			uri := res.AuthURL
 			if err != nil {

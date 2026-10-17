@@ -199,3 +199,29 @@ func TestPolicyCutoff(t *testing.T) {
 		t.Errorf("cutoff %v, want %v", c, want)
 	}
 }
+
+// A calendar part (text/calendar, application/ics, a .ics name) up to
+// api.MaxICSBytes is never left on the server, under any policy; a larger
+// one is an attachment like any other.
+func TestDecideKeepsCalendarParts(t *testing.T) {
+	cal := func(id, ct, name string, size int64) api.Attachment {
+		return api.Attachment{PartID: id, Filename: name, ContentType: ct, Size: size}
+	}
+	p := parsedWith("",
+		cal("2", "text/calendar", "invite.ics", 300<<10),
+		cal("3", "application/ics", "x", 200<<10),
+		cal("4", "application/octet-stream", "Meeting.ICS", 150<<10),
+		cal("5", "text/calendar", "huge.ics", api.MaxICSBytes+1),
+		att("6", 2*api.LargeAttachmentMinBytes, ""),
+	)
+	for _, pol := range []Policy{{AttachmentOfflineDays: api.AttachmentOfflineNone}, {AttachmentOfflineDays: 30}, {NeverStore: true}} {
+		plan := Decide(p, oldTarget(), pol, policyNow, false)
+		if got := omitted(plan); !slices.Equal(got, []string{"5", "6"}) {
+			t.Errorf("%+v: omitted %v", pol, got)
+		}
+	}
+	small := parsedWith("", cal("2", "text/calendar", "invite.ics", 10))
+	if plan := Decide(small, oldTarget(), Policy{NeverStore: true}, policyNow, true); len(plan.Omit) != 0 || plan.CandidateBytes != 0 {
+		t.Errorf("never-store on demand: %+v", plan)
+	}
+}

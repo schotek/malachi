@@ -93,6 +93,7 @@ public sealed class ReaderHub : IDisposable
             Issues = integration.Issues,
             Bulk = integration.Bulk,
             IssueSite = id => integration.Mailbox.Model.Account(id)?.Config.Jira?.SiteUrl ?? "",
+            AccountOf = id => integration.Mailbox.Model.Account(id),
         };
         // The strip's Unsubscribe (window/bulk.go): the question over the
         // window of the click (not a destructive one: the button that sends
@@ -241,7 +242,9 @@ public sealed class ReaderHub : IDisposable
         list.ActivateMessage += (_, s) => registry.OpenMessage(s);
         list.ActivateDraft += (_, s) => integration.Actions.OpenDraft(s.Id);
         list.OutboxRefreshed += (_, account) => RefetchOutbox(account);
-        integration.Mailbox.AccountsLoaded += (_, accounts) => Pane.Reader.SetHasAccounts(accounts.Count > 0);
+        // Calendar-only CalDAV accounts alone are no account in Mail
+        // (MailboxController.HasAccounts, set before the event).
+        integration.Mailbox.AccountsLoaded += (_, _) => Pane.Reader.SetHasAccounts(integration.Mailbox.HasAccounts);
         // The cache's news reach the views and the conversation's card of the
         // message (window.go conversationShowLoaded, conversationRefreshBars,
         // conversationRefreshChips).

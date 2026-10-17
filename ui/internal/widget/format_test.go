@@ -102,3 +102,24 @@ func TestThreadCountText(t *testing.T) {
 		}
 	}
 }
+
+// TestStrftime writes the wall clock of t's own zone, whatever time.Local
+// is, through GLib (no display needed): %-d drops the padding and %OB is
+// the standalone month name (the C locale's English one here).
+func TestStrftime(t *testing.T) {
+	at := time.Date(2026, time.March, 5, 9, 7, 30, 0, time.FixedZone("UTC+13", 13*3600))
+	for format, want := range map[string]string{
+		"%-d":            "5",
+		"%d":             "05",
+		"%H:%M":          "09:07",
+		"%Y-%m-%d":       "2026-03-05",
+		"%-d %OB %Y":     "5 March 2026",
+		"%%":             "%",
+		"%-d. %OB":       "5. March",
+		"at %H:%M:%S %p": "at 09:07:30 AM",
+	} {
+		if got := Strftime(at, format); got != want {
+			t.Errorf("Strftime(%q) = %q, want %q", format, got, want)
+		}
+	}
+}

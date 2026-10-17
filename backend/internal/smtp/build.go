@@ -75,6 +75,22 @@ type BuildInput struct {
 	MessageID string    // bare id; NewMessageID(From.Address) when empty
 
 	Attachments []Attachment
+
+	// Calendar is an iMIP part (docs/calendar.md D9): the readable body
+	// becomes multipart/alternative[text/plain, (text/html,) text/calendar;
+	// method=…; charset=UTF-8], inside the mixed when there are files.
+	// nil = an ordinary message.
+	Calendar *CalendarPart
+}
+
+// CalendarPart is the text/calendar alternative of an iMIP message.
+type CalendarPart struct {
+	// Method is the iTIP METHOD of Data (REQUEST, REPLY, CANCEL); it
+	// becomes the media type's method parameter.
+	Method string
+	// Data is the encoded VCALENDAR (≤ api.MaxICSBytes), written base64 so
+	// that its CRLF lines reach the receiver unchanged.
+	Data []byte
 }
 
 // IsInline says whether the attachment is written as an inline picture of
@@ -95,6 +111,9 @@ func (in BuildInput) IsInline(a Attachment) bool {
 //
 // so a file is always part 2, 3, … of the mixed, and a picture 2.2, 2.3, …
 // of the alternative (1.2.2, … when a mixed wraps it).
+//
+// A Calendar part adds a last alternative (text/calendar after the text and
+// the HTML) and changes no other number.
 func PartIDs(in BuildInput) []string {
 	body := ""
 	for _, a := range in.Attachments {
@@ -266,8 +285,12 @@ func writeBody(w io.Writer, h mail.Header, in BuildInput) error {
 		}
 		return message.CreateWriter(w, h.Header)
 	}
+	cal, err := calendarPart(in.Calendar)
+	if err != nil {
+		return err
+	}
 	if len(files) == 0 {
-		return writeContent(root, text, html, pictures)
+		return writeContent(root, text, html, pictures, cal)
 	}
 
 	var mh message.Header
@@ -276,7 +299,7 @@ func writeBody(w io.Writer, h mail.Header, in BuildInput) error {
 	if err != nil {
 		return err
 	}
-	if err := writeContent(mw.CreatePart, text, html, pictures); err != nil {
+	if err := writeContent(mw.CreatePart, text, html, pictures, cal); err != nil {
 		return err
 	}
 	for i, a := range files {
@@ -287,11 +310,47 @@ func writeBody(w io.Writer, h mail.Header, in BuildInput) error {
 	return mw.Close()
 }
 
+// calendarMethods are the iTIP methods a CalendarPart may carry.
+var calendarMethods = map[string]bool{
+	"PUBLISH": true, "REQUEST": true, "REPLY": true, "ADD": true, "CANCEL": true,
+	"REFRESH": true, "COUNTER": true, "DECLINECOUNTER": true,
+}
+
+// calendarPart validates the Calendar part of a BuildInput.
+func calendarPart(c *CalendarPart) (*CalendarPart, error) {
+	if c == nil {
+		return nil, nil
+	}
+	m := strings.ToUpper(strings.TrimSpace(c.Method))
+	if !calendarMethods[m] {
+		return nil, api.NewError(api.CodeInvalidArgument, "calendar part has an invalid method")
+	}
+	if len(c.Data) == 0 || len(c.Data) > api.MaxICSBytes {
+		return nil, api.NewError(api.CodeInvalidArgument, "calendar part is empty or too big")
+	}
+	return &CalendarPart{Method: m, Data: c.Data}, nil
+}
+
+// writeCalendar writes the text/calendar alternative (base64).
+func writeCalendar(create partFunc, c *CalendarPart) error {
+	var ph message.Header
+	ph.SetContentType("text/calendar", map[string]string{"method": c.Method, "charset": "UTF-8"})
+	ph.Set("Content-Transfer-Encoding", "base64")
+	pw, err := create(ph)
+	if err != nil {
+		return err
+	}
+	if _, err := pw.Write(c.Data); err != nil {
+		return err
+	}
+	return pw.Close()
+}
+
 // writeContent writes the readable body: the text alone, or the
 // alternative with the HTML, or the alternative with the related group of
-// HTML and pictures.
-func writeContent(create partFunc, text, html string, pictures []Attachment) error {
-	if html == "" {
+// HTML and pictures; a calendar part is the alternative's last part.
+func writeContent(create partFunc, text, html string, pictures []Attachment, cal *CalendarPart) error {
+	if html == "" && cal == nil {
 		return writeText(create, "text/plain", text)
 	}
 	var ah message.Header
@@ -303,9 +362,20 @@ func writeContent(create partFunc, text, html string, pictures []Attachment) err
 	if err := writeText(aw.CreatePart, "text/plain", text); err != nil {
 		return err
 	}
+	if html == "" {
+		if err := writeCalendar(aw.CreatePart, cal); err != nil {
+			return err
+		}
+		return aw.Close()
+	}
 	if len(pictures) == 0 {
 		if err := writeText(aw.CreatePart, "text/html", html); err != nil {
 			return err
+		}
+		if cal != nil {
+			if err := writeCalendar(aw.CreatePart, cal); err != nil {
+				return err
+			}
 		}
 		return aw.Close()
 	}
@@ -325,6 +395,11 @@ func writeContent(create partFunc, text, html string, pictures []Attachment) err
 	}
 	if err := rw.Close(); err != nil {
 		return err
+	}
+	if cal != nil {
+		if err := writeCalendar(aw.CreatePart, cal); err != nil {
+			return err
+		}
 	}
 	return aw.Close()
 }

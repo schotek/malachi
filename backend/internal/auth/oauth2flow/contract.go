@@ -89,6 +89,9 @@ type Grant struct {
 	Expiry       time.Time
 	IDToken      string
 	Email        string
+	// Scope is the "scope" of the token response, cleaned (the requested
+	// set when the response named none); HasCalendarScope reads it.
+	Scope string
 }
 
 // IdentityFunc names the mailbox a fresh grant belongs to. Google's is
@@ -113,6 +116,12 @@ type StartRequest struct {
 	// differs in any of them is cancelled and a new one started. "" never
 	// deduplicates.
 	Key string
+	// Calendar also asks for the provider's calendar scopes
+	// (docs/calendar.md D15; Microsoft Calendars.ReadWrite and
+	// Calendars.Read.Shared). A provider without them (Google, for now)
+	// is invalidArgument. A pending session of the same Key is reused
+	// only with the same Calendar.
+	Calendar bool
 	// OnComplete, when set, runs once on success from the session's
 	// goroutine, before waiters are released. An error fails the session
 	// with it (an *api.Error keeps its code, anything else is
@@ -227,6 +236,24 @@ func NewTokenSource(o TokenSourceOptions) *TokenSource { return &TokenSource{imp
 // authRequired.
 func (t *TokenSource) AccessToken(ctx context.Context) (string, error) {
 	return t.impl.accessToken(ctx)
+}
+
+// GrantedScope is the scope recorded with the account's stored sign-in
+// ("" = mail scopes only: a grant from before the calendar or one made
+// without it), read from the keyring when the source has not read it yet.
+// A missing or rejected sign-in is authRequired.
+func (t *TokenSource) GrantedScope(ctx context.Context) (string, error) {
+	return t.impl.grantedScope(ctx)
+}
+
+// CalendarConsent reports whether the stored sign-in allows calendar
+// access (HasCalendarScope of GrantedScope).
+func (t *TokenSource) CalendarConsent(ctx context.Context) (bool, error) {
+	s, err := t.impl.grantedScope(ctx)
+	if err != nil {
+		return false, err
+	}
+	return HasCalendarScope(s), nil
 }
 
 // Invalidate drops the cached access token (a server refused it).

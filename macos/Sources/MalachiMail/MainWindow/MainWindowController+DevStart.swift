@@ -36,6 +36,26 @@ import MalachiCore
 //   over the web view goes, and the scroll position when an older card
 //   above the viewport opens with the same document (`DevelopmentBoardHTML`;
 //   10 s for MALACHI_START_INTERVAL).
+//   `calendar:day|week|month|agenda` shows the Calendar in that view
+//   and dumps the page's main frames (sidebar, content, assistant slot),
+//   the calendar split view's divider and where the toolbar's sidebar
+//   separator sits against it (`developmentCalendarLines`).
+//   `event-popover` (Calendar, best with MALACHI_CALENDAR_SAMPLES=1) shows
+//   the Week, clicks the block of the sample's "Call with the supplier"
+//   (else the first block) and dumps the detail popover's frame and rows;
+//   `event-editor` opens New Event with the defaults, dumps the window,
+//   the label column, the grid's rows and the availability view, and
+//   closes it unsaved; `invitation-card` opens a window with one sample
+//   card per state (`Cal.sampleData(...).cards`) and dumps each card and
+//   its rows; `caldav-sheet` opens Settings → Accounts with the Add CalDAV
+//   Calendar sheet (state `entering`), dumps it and cancels;
+//   `prefs-calendar` opens Settings → Calendar (with
+//   MALACHI_CALENDAR_SAMPLES=1 the sample accounts' sections), dumps the
+//   Display group and each section, and closes Settings. Each prints
+//   `LAYOUT:` lines and a `LAYOUT: shot <step> window <n>` line naming
+//   the window worth a screenshot (`DevelopmentCalendar`); the
+//   `calendar:*` dumps add `LAYOUT:` lines for the sidebar's sections,
+//   the day header, the all-day row, the first block and a month cell.
 //   MALACHI_START_SIZE=1600x900   (the window's size, optional)
 //   MALACHI_START_INTERVAL=3      (seconds per step, optional)
 //   MALACHI_START_TRACE=1         (every window resize to stderr; on a
@@ -130,6 +150,9 @@ extension MainWindowController {
             DevelopmentBoardHTML.run(in: self)
             return
         }
+        if DevelopmentCalendar.step(step, in: self) {
+            return
+        }
         if step.hasPrefix("size=") {
             developmentResize(String(step.dropFirst(5)))
             return
@@ -140,6 +163,14 @@ extension MainWindowController {
             setMode(.mail)
             DispatchQueue.main.async { developmentSplitTrace("next runloop", self.split) }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { developmentSplitTrace("0.6 s", self.split) }
+            return
+        }
+        if first == "calendar" {
+            setMode(.calendar)
+            let nick = parts.count > 1 ? parts[1] : Cal.defaultView.nick
+            if let v = Cal.View.allCases.first(where: { $0.nick == nick }), calendarController.view != v {
+                calendarController.setView(v)
+            }
             return
         }
         setMode(.board)
@@ -160,6 +191,138 @@ extension MainWindowController {
         if parts.contains("select") {
             developmentSelectLongestConversation()
         }
+    }
+
+    /// The Calendar's frames: the page's views, its split view's divider,
+    /// the toolbar's sidebar separator against it (whichever toolbar shows:
+    /// after Mail → Calendar → Board → Mail it must sit on the divider of
+    /// the split view in the window), and the controller's view and title.
+    private func developmentCalendarLines() -> [String] {
+        guard let window else { return [] }
+        var lines: [String] = []
+        var separator: NSRect?
+        func walk(_ v: NSView) {
+            if v.responds(to: NSSelectorFromString("item")), let item = v.value(forKey: "item") as? NSToolbarItem,
+               item.itemIdentifier == .sidebarTrackingSeparator, !v.isHiddenOrHasHiddenAncestor
+            {
+                separator = v.convert(v.bounds, to: nil)
+            }
+            v.subviews.forEach(walk)
+        }
+        if let frame = window.contentView?.superview {
+            walk(frame)
+        }
+        // The sidebar divider of the split view the window shows.
+        var divider: CGFloat?
+        if mode == .calendar, let page = calendarExtras.page, page.isViewLoaded, !page.sidebarItem.isCollapsed {
+            let v = page.sidebarContainer.view
+            divider = v.convert(v.bounds, to: nil).maxX
+        } else if mode == .mail, split.isViewLoaded, split.view.window != nil, let first = split.splitView.arrangedSubviews.first {
+            divider = first.convert(first.bounds, to: nil).maxX
+        } else if mode == .board, let list = boardPage.listSplitView, list.window != nil, let first = list.arrangedSubviews.first {
+            divider = first.convert(first.bounds, to: nil).maxX
+        }
+        // The toolbar's views AppKit lays out (their class names change
+        // between releases): every one whose class names a separator or an
+        // item, with its frame and item.
+        func toolbarViews(_ v: NSView) {
+            let cls = NSStringFromClass(type(of: v))
+            if cls.contains("Separator") || cls.contains("ItemView") || cls.contains("Tracking") {
+                var name = ""
+                if v.responds(to: NSSelectorFromString("item")), let item = v.value(forKey: "item") as? NSToolbarItem {
+                    name = item.itemIdentifier.rawValue
+                    if item.itemIdentifier == .sidebarTrackingSeparator, separator == nil {
+                        separator = v.convert(v.bounds, to: nil)
+                    }
+                }
+                let r = v.convert(v.bounds, to: nil)
+                lines.append(String(format: "    toolbar view %@ %@ %.0f..%.0f hidden %d", cls, name, r.minX, r.maxX,
+                                    v.isHiddenOrHasHiddenAncestor ? 1 : 0))
+            }
+            v.subviews.forEach(toolbarViews)
+        }
+        if let frame = window.contentView?.superview {
+            toolbarViews(frame)
+        }
+        for item in window.toolbar?.items ?? [] {
+            let f = item.view.map { v in
+                v.window == nil ? "off-window \(NSStringFromSize(v.frame.size))" : NSStringFromRect(v.convert(v.bounds, to: nil))
+            } ?? "no view"
+            var extra = ""
+            if let s = item as? NSSearchToolbarItem {
+                extra = String(format: " field %.0f preferred %.0f", s.searchField.frame.width, s.preferredWidthForSearchField)
+            }
+            lines.append("    toolbar item \(item.itemIdentifier.rawValue) visible \(item.isVisible ? 1 : 0) \(f)"
+                // Through KVC: the properties are deprecated, the values still useful.
+                + " min \((item.value(forKey: "minSize") as? NSValue)?.sizeValue ?? .zero)"
+                + " max \((item.value(forKey: "maxSize") as? NSValue)?.sizeValue ?? .zero)"
+                + " priority \(item.visibilityPriority.rawValue)\(extra)"
+                + (item is NSTrackingSeparatorToolbarItem ? " (tracking separator)" : ""))
+        }
+        if let title = window.standardWindowButton(.closeButton)?.superview {
+            func titles(_ v: NSView) {
+                if let t = v as? NSTextField, !t.stringValue.isEmpty, !v.isHiddenOrHasHiddenAncestor,
+                   t.stringValue == window.title || t.stringValue == window.subtitle
+                {
+                    let r = v.convert(v.bounds, to: nil)
+                    lines.append(String(format: "    title field '%@' %.0f..%.0f", t.stringValue, r.minX, r.maxX))
+                }
+                v.subviews.forEach(titles)
+            }
+            titles(title)
+        }
+        let sep = separator.map { String(format: "%.0f..%.0f", $0.minX, $0.maxX) } ?? "none"
+        let div = divider.map { String(format: "%.0f", $0) } ?? "none"
+        var on = "n/a"
+        if let separator, let divider {
+            on = abs(separator.maxX - divider) <= 2 || abs(separator.minX - divider) <= 2 ? "yes" : "NO"
+        }
+        lines.append("  sidebar separator \(sep) divider \(div) on divider \(on) (\(mode.nick))")
+        // On releases that draw no view for the tracking separator, the
+        // first item after it tells where it is bound: it starts at the
+        // divider (within the item spacing) when the separator tracks it.
+        var viewerX: [String: CGFloat] = [:]
+        func viewers(_ v: NSView) {
+            if v.responds(to: NSSelectorFromString("item")), let item = v.value(forKey: "item") as? NSToolbarItem,
+               !v.isHiddenOrHasHiddenAncestor, NSStringFromClass(type(of: v)).contains("ItemViewer")
+            {
+                viewerX[item.itemIdentifier.rawValue] = v.convert(v.bounds, to: nil).minX
+            }
+            v.subviews.forEach(viewers)
+        }
+        if let frame = window.contentView?.superview {
+            viewers(frame)
+        }
+        var after = "none"
+        if let items = window.toolbar?.items, let i = items.firstIndex(where: { $0.itemIdentifier == .sidebarTrackingSeparator }) {
+            if let next = items[(i + 1)...].first(where: { viewerX[$0.itemIdentifier.rawValue] != nil }),
+               let x = viewerX[next.itemIdentifier.rawValue]
+            {
+                let bound = divider.map { x >= $0 - 2 && x <= $0 + 16 ? "yes" : "NO" } ?? "n/a"
+                after = String(format: "%@ at %.0f bound %@", next.itemIdentifier.rawValue, x, bound)
+            }
+        } else {
+            after = "no tracking separator item"
+        }
+        lines.append("LAYOUT: tracking separator \(sep) sidebar divider \(div) on divider \(on);"
+            + " first item after it \(after) (\(mode.nick))")
+        if mode == .calendar, let page = calendarExtras.page {
+            lines += page.developmentFrames
+            if page.splitView.window != nil {
+                let edges = page.splitView.arrangedSubviews.dropLast().map {
+                    String(format: "%.0f", $0.convert($0.bounds, to: nil).maxX)
+                }
+                lines.append("  split calendar width \(Int(page.splitView.frame.width)) dividers \(edges.joined(separator: ", "))")
+            }
+            let c = calendarController
+            lines.append("  calendar view \(c.view.nick) title '\(c.title)' subtitle '\(c.subtitle)' status '\(c.statusLine)'"
+                + " unanswered '\(c.unansweredLine)' samples \(state.calendar.samples)")
+            lines += DevelopmentCalendar.pageLayout(page)
+            if let bar = content.statusBar as? StatusBarViewController {
+                lines.append("  status bar '\(bar.shownTexts.line)' note '\(bar.shownTexts.note)'")
+            }
+        }
+        return lines
     }
 
     /// `board:<style>:select`: the case whose conversation has the most
@@ -321,6 +484,7 @@ extension MainWindowController {
                                     item.isCollapsed ? 1 : 0, item.minimumThickness, item.maximumThickness))
             }
         }
+        lines += developmentCalendarLines()
         FileHandle.standardError.write(Data((lines.joined(separator: "\n") + "\n").utf8))
         developmentSplitTrace("dump \(label)", split)
     }
@@ -697,4 +861,395 @@ extension NSView {
         }
         return nil
     }
+}
+
+// MARK: - Calendar layout steps (docs/calendar.md §5.10, M11)
+
+/// DEVELOPMENT AID for the calendar's `MALACHI_START` steps: measures the
+/// wireframes' numbers (sidebar 240, day header 40, all-day 36, 60 pt an
+/// hour, block bar 3, popover 380, editor 760×800 with a 110 label column,
+/// CalDAV sheet 560×560, the invitation card's date tile at the left).
+/// Nothing is saved: the editor closes unsaved, the sheet is cancelled.
+@MainActor
+enum DevelopmentCalendar {
+    /// The windows a step opened, closed by the next calendar step.
+    private static var opened: [NSWindow] = []
+    private static var controllers: [InvitationController] = []
+
+    private static func r(_ v: NSView) -> String {
+        let f = v.convert(v.bounds, to: nil)
+        return String(format: "(%.0f,%.0f %.0fx%.0f)", f.minX, f.minY, f.width, f.height)
+    }
+
+    private static func all<T: NSView>(_ type: T.Type, under v: NSView) -> [T] {
+        var found: [T] = []
+        func walk(_ v: NSView) {
+            if let t = v as? T {
+                found.append(t)
+            }
+            v.subviews.forEach(walk)
+        }
+        walk(v)
+        return found
+    }
+
+    private static func firstText(_ v: NSView) -> String {
+        all(NSTextField.self, under: v).first { !$0.stringValue.isEmpty }?.stringValue ?? ""
+    }
+
+    static func step(_ step: String, in main: MainWindowController) -> Bool {
+        switch step {
+        case "event-popover": eventPopover(main)
+        case "event-editor": eventEditor(main)
+        case "invitation-card": invitationCards(main)
+        case "caldav-sheet": caldavSheet(main)
+        case "prefs-calendar": prefsCalendar(main)
+        default: return false
+        }
+        return true
+    }
+
+    /// The `calendar:*` dumps' layout lines.
+    static func pageLayout(_ page: CalendarPageViewController) -> [String] {
+        guard page.isViewLoaded, page.view.window != nil else { return [] }
+        var lines = ["LAYOUT: calendar sidebar \(r(page.sidebarContainer.view)) (wireframe width 240)"
+            + " content \(r(page.contentContainer.view))"]
+        for h in all(SidebarSectionHeading.self, under: page.sidebar.view) where !h.isHiddenOrHasHiddenAncestor {
+            lines.append("LAYOUT: calendar sidebar section '\(firstText(h))' \(r(h))")
+        }
+        let rows = all(SidebarCalendarRow.self, under: page.sidebar.view).filter { !$0.isHiddenOrHasHiddenAncestor }
+        if let first = rows.first {
+            lines.append("LAYOUT: calendar sidebar calendar rows \(rows.count) first \(r(first))")
+        }
+        let content = page.contentContainer.view
+        if let week = all(CalendarWeekView.self, under: content).first(where: { !$0.isHiddenOrHasHiddenAncestor }) {
+            lines.append("LAYOUT: calendar day header \(r(week.header)) (wireframe height 40)")
+            lines.append("LAYOUT: calendar all-day \(r(week.allDay)) (wireframe height 36 minimum)")
+            lines.append(String(format: "LAYOUT: calendar grid height %.0f for %d min = %.1f pt/hour (wireframe 60)",
+                                week.grid.frame.height, Cal.dayMinutes, week.grid.frame.height * 60 / CGFloat(Cal.dayMinutes)))
+            if let b = week.grid.blocks.first {
+                lines.append("LAYOUT: calendar first block \(r(b)) '\(b.accessibilityLabel() ?? "")' bar \(CalendarMetrics.blockBar)"
+                    + " tint \(CalendarMetrics.blockTint) (wireframe tint + 3 pt bar)")
+            }
+        }
+        if let month = all(CalendarMonthView.self, under: content).first(where: { !$0.isHiddenOrHasHiddenAncestor }) {
+            if let cell = month.cells.first {
+                lines.append("LAYOUT: calendar month cells \(month.cells.count) first cell \(r(cell)) month \(r(month))")
+            }
+        }
+        return lines
+    }
+
+    private static func closeOpened() {
+        EventDetailPopover.close()
+        for w in opened {
+            if let wc = w.windowController as? EventEditorWindowController {
+                wc.closeUnasked()
+            } else {
+                w.close()
+            }
+        }
+        opened = []
+        controllers = []
+    }
+
+    // MARK: event-popover
+
+    private static func eventPopover(_ main: MainWindowController) {
+        closeOpened()
+        main.setMode(.calendar)
+        if main.calendarController.view != .week {
+            main.calendarController.setView(.week)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            let content = main.calendarPage.contentContainer.view
+            let blocks = all(EventBlockView.self, under: content).filter { !$0.isHiddenOrHasHiddenAncestor }
+            guard let b = blocks.first(where: { ($0.accessibilityLabel() ?? "").localizedCaseInsensitiveContains("supplier") })
+                ?? blocks.first
+            else {
+                developmentPrint("LAYOUT: event-popover no block in the Week")
+                return
+            }
+            developmentPrint("LAYOUT: event-popover block \(r(b)) '\(b.accessibilityLabel() ?? "")'")
+            b.onClick?(b)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                guard let w = NSApp.windows.first(where: { NSStringFromClass(type(of: $0)).contains("Popover") && $0.isVisible }),
+                      let root = w.contentView
+                else {
+                    developmentPrint("LAYOUT: event-popover no popover shown (isShown \(EventDetailPopover.isShown))")
+                    return
+                }
+                let detail = all(EventDetailRootView.self, under: root).first
+                let stack = detail.flatMap { all(NSStackView.self, under: $0).first }
+                let rows = stack?.arrangedSubviews.filter { !$0.isHidden } ?? []
+                developmentPrint(String(format: "LAYOUT: event-popover window %ld frame %@ content %@ (wireframe width 380) rows %d",
+                                        w.windowNumber, NSStringFromRect(w.frame), detail.map(r) ?? "none", rows.count))
+                for (i, row) in rows.enumerated() {
+                    developmentPrint("LAYOUT: event-popover row \(i) \(r(row)) '\(firstText(row).prefix(40))'")
+                }
+                developmentPrint("LAYOUT: shot event-popover window \(main.window?.windowNumber ?? 0)")
+                developmentPrint("LAYOUT: shot event-popover-window window \(w.windowNumber)")
+            }
+        }
+    }
+
+    // MARK: event-editor
+
+    private static func eventEditor(_ main: MainWindowController) {
+        closeOpened()
+        let before = Set(NSApp.windows.map(ObjectIdentifier.init))
+        EventEditorManager.shared.openNew(main.calendarController.newEventDefaults())
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            guard let w = NSApp.windows.first(where: {
+                $0.windowController is EventEditorWindowController && !before.contains(ObjectIdentifier($0))
+            }), let root = w.contentView else {
+                developmentPrint("LAYOUT: event-editor no window")
+                return
+            }
+            opened.append(w)
+            developmentPrint(String(format: "LAYOUT: event-editor window %ld frame %@ content %@ (wireframe 760x800) title '%@'",
+                                    w.windowNumber, NSStringFromRect(w.frame), NSStringFromRect(root.frame), w.title))
+            if let grid = all(NSGridView.self, under: root).first {
+                for i in 0..<grid.numberOfRows {
+                    let label = grid.cell(atColumnIndex: 0, rowIndex: i).contentView
+                    let field = grid.cell(atColumnIndex: 1, rowIndex: i).contentView
+                    if grid.row(at: i).isHidden {
+                        continue
+                    }
+                    developmentPrint("LAYOUT: event-editor row \(i) label \(label.map(r) ?? "-") '\(label.map(firstText) ?? "")'"
+                        + " field \(field.map(r) ?? "-")")
+                }
+                if let l = grid.cell(atColumnIndex: 0, rowIndex: 1).contentView, let f = grid.cell(atColumnIndex: 1, rowIndex: 1).contentView {
+                    let lf = l.convert(l.bounds, to: nil), ff = f.convert(f.bounds, to: nil)
+                    developmentPrint(String(format: "LAYOUT: event-editor label column width %.0f (wireframe 110) label right %.0f field x %.0f grid %@",
+                                            grid.column(at: 0).width, lf.maxX, ff.minX, r(grid)))
+                }
+            }
+            if let a = all(AvailabilityView.self, under: root).first {
+                developmentPrint("LAYOUT: event-editor availability \(r(a)) hidden \(a.isHiddenOrHasHiddenAncestor)")
+            }
+            developmentPrint("LAYOUT: shot event-editor window \(w.windowNumber)")
+            // An all-day sample: the Alert popup's day-based items at 9:00.
+            if let wc = w.windowController as? EventEditorWindowController {
+                wc.controller.setAllDay(true)
+                developmentPrint("LAYOUT: event-editor alert \(wc.content.alertSummary)")
+            }
+            // An edit sample: the footer's buttons (left Delete; right Cancel, Save).
+            let source = main.state.calendarSource(for: main)
+            if let sample = (source as? InMemoryCalendarSource)?.data.events.first(where: { $0.canDelete }) {
+                let before = Set(NSApp.windows.map(ObjectIdentifier.init))
+                EventEditorManager.shared.openEdit(EventEditorManager.Edit(event: sample, scope: .all))
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    guard let ew = NSApp.windows.first(where: {
+                        $0.windowController is EventEditorWindowController && !before.contains(ObjectIdentifier($0))
+                    }), let ewc = ew.windowController as? EventEditorWindowController else {
+                        developmentPrint("LAYOUT: event-editor edit footer no window")
+                        return
+                    }
+                    opened.append(ew)
+                    developmentPrint("LAYOUT: event-editor edit footer \(ewc.content.footerButtons) (wireframe left Delete; right Cancel, Save)")
+                }
+            } else {
+                developmentPrint("LAYOUT: event-editor edit footer no sample (MALACHI_CALENDAR_SAMPLES=1)")
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                closeOpened()
+                developmentPrint("LAYOUT: event-editor closed unsaved, editor windows left"
+                    + " \(NSApp.windows.filter { $0.windowController is EventEditorWindowController && $0.isVisible }.count)")
+            }
+        }
+    }
+
+    // MARK: invitation-card
+
+    private static func invitationCards(_ main: MainWindowController) {
+        closeOpened()
+        let source = main.state.calendarSource(for: main)
+        let samples = Cal.sampleData(now: Date(), zone: .current).cards
+        var cards = samples
+        var labels = Cal.invitationStates.map { "\($0)" }
+        if let base = samples.first(where: { $0.state == .unanswered }) {
+            // An update that moved the room and changed the series: two
+            // Previous lines.
+            var update = base
+            update.kind = .update
+            update.sequence = 1
+            update.recurrence = Recurrence(frequency: .weekly, interval: 2)
+            update.previous = InvitationPrevious(
+                location: "Room B", recurrence: Recurrence(frequency: .weekly, interval: 1)) // macOS-only string
+            cards.append(update)
+            labels.append("update-room-series")
+            // Answered in another client: a response and the linked event,
+            // no respondedAt.
+            var elsewhere = base
+            elsewhere.state = .answered
+            elsewhere.response = .accepted
+            elsewhere.respondedAt = nil
+            elsewhere.eventId = "ev_sample_demo"
+            elsewhere.calendarId = Cal.samplePersonal
+            elsewhere.me?.response = .accepted
+            cards.append(elsewhere)
+            labels.append("answered-elsewhere")
+            // The user's own request, stored: "You organise this event."
+            // with Show in Calendar.
+            var own = base
+            own.kind = .update
+            own.sequence = 1
+            own.state = .processed
+            own.ownEvent = true
+            own.canRespond = false
+            own.targets = []
+            own.conflicts = []
+            own.eventId = "ev_sample_demo"
+            own.calendarId = Cal.samplePersonal
+            cards.append(own)
+            labels.append("own-event")
+        }
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 760),
+                         styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        w.isReleasedWhenClosed = false
+        w.title = "Invitation cards (development)" // macOS-only string
+        let stack = FlippedStack()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 16
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        var views: [InvitationCardView] = []
+        for (i, card) in cards.enumerated() {
+            let c = InvitationController(source: source, accountId: Cal.sampleWork,
+                                         messageId: MessageID(rawValue: "msg_sample_card_\(i)"), card: card)
+            controllers.append(c)
+            let v = InvitationCardView(margins: NSEdgeInsets(
+                top: MessageHeaderView.spacing, left: MessageHeaderView.inset, bottom: 0, right: MessageHeaderView.inset))
+            stack.addArrangedSubview(v)
+            v.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+            v.show(c)
+            views.append(v)
+        }
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.drawsBackground = true
+        scroll.documentView = stack
+        stack.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor).isActive = true
+        stack.trailingAnchor.constraint(equalTo: scroll.contentView.trailingAnchor).isActive = true
+        stack.topAnchor.constraint(equalTo: scroll.contentView.topAnchor).isActive = true
+        w.contentView = scroll
+        w.center()
+        w.makeKeyAndOrderFront(nil)
+        opened.append(w)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            w.contentView?.layoutSubtreeIfNeeded()
+            developmentPrint("LAYOUT: invitation-card window \(w.windowNumber) frame \(NSStringFromRect(w.frame)) cards \(views.count)")
+            for (i, v) in views.enumerated() {
+                let state = i < labels.count ? labels[i] : "?"
+                developmentPrint("LAYOUT: invitation-card \(i) \(state) \(r(v)) hidden \(v.isHidden)")
+                // The date tile: the card's first subview of 52 pt width.
+                for t in all(NSView.self, under: v) where NSStringFromClass(type(of: t)).contains("DateTile") {
+                    developmentPrint("LAYOUT: invitation-card \(i) date tile \(r(t)) (wireframe: at the left)")
+                }
+                if let column = all(FillStackView.self, under: v).first {
+                    for (j, row) in column.arrangedSubviews.enumerated() where !row.isHidden {
+                        developmentPrint("LAYOUT: invitation-card \(i) row \(j) \(r(row)) '\(firstText(row).prefix(40))'")
+                        // A stack of lines (Previous …, the reply note): each.
+                        if let lines = row as? FillStackView {
+                            for (k, l) in lines.arrangedSubviews.enumerated() where !l.isHidden {
+                                developmentPrint("LAYOUT: invitation-card \(i) row \(j).\(k) \(r(l)) '\(firstText(l).prefix(60))'")
+                            }
+                        }
+                    }
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                developmentPrint("LAYOUT: shot invitation-card window \(w.windowNumber)")
+                // The same as a screen rectangle (top-left origin), for
+                // `screencapture -R` where -l cannot read the window.
+                let h = NSScreen.screens.first?.frame.height ?? 0
+                developmentPrint(String(format: "LAYOUT: shotrect invitation-card %.0f,%.0f,%.0f,%.0f",
+                                        w.frame.minX, h - w.frame.maxY, w.frame.width, w.frame.height))
+            }
+        }
+    }
+
+    // MARK: caldav-sheet
+
+    private static func caldavSheet(_ main: MainWindowController) {
+        closeOpened()
+        let prefs = Integration.showPreferences(main.state)
+        prefs.select(.accounts)
+        guard let parent = prefs.window else {
+            developmentPrint("LAYOUT: caldav-sheet no Settings window")
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            main.state.showAddCalDAVCalendar(from: parent)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                guard let sheet = parent.attachedSheet, let root = sheet.contentView else {
+                    developmentPrint("LAYOUT: caldav-sheet no sheet on Settings")
+                    return
+                }
+                let phase = (sheet.windowController as? CalDAVSheetController).map { "\($0.wizard.wizard.phase)" } ?? "?"
+                developmentPrint(String(format: "LAYOUT: caldav-sheet window %ld frame %@ (wireframe 560x560) phase %@ parent %@",
+                                        sheet.windowNumber, NSStringFromRect(sheet.frame), phase, NSStringFromRect(parent.frame)))
+                for f in all(NSTextField.self, under: root) where f.isEditable && !f.isHiddenOrHasHiddenAncestor {
+                    developmentPrint("LAYOUT: caldav-sheet field \(r(f)) placeholder '\(f.placeholderString ?? "")'")
+                }
+                for b in all(NSButton.self, under: root) where !b.isHiddenOrHasHiddenAncestor && !b.title.isEmpty {
+                    developmentPrint("LAYOUT: caldav-sheet button '\(b.title)' \(r(b)) enabled \(b.isEnabled)")
+                }
+                // A sample error, to check the banner's label spans its card.
+                if let c = sheet.windowController as? CalDAVSheetController {
+                    c.banner.reveal(L10n.T("The server answered, but it is not a CalDAV server."))
+                    root.layoutSubtreeIfNeeded()
+                    developmentPrint("LAYOUT: caldav-sheet banner \(r(c.banner)) card \(c.banner.card.map(r) ?? "none") label \(r(c.banner.label))")
+                }
+                developmentPrint("LAYOUT: shot caldav-sheet window \(parent.windowNumber)")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    (sheet.windowController as? CalDAVSheetController)?.dismiss()
+                    parent.close()
+                    developmentPrint("LAYOUT: caldav-sheet cancelled, sheet left \(parent.attachedSheet != nil)")
+                }
+            }
+        }
+    }
+}
+
+extension DevelopmentCalendar {
+    // MARK: prefs-calendar
+
+    static func prefsCalendar(_ main: MainWindowController) {
+        closeOpened()
+        let prefs = Integration.showPreferences(main.state)
+        prefs.select(.calendar)
+        guard let w = prefs.window else {
+            developmentPrint("LAYOUT: prefs-calendar no Settings window")
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            MainActor.assumeIsolated {
+            let pane = prefs.calendarPane
+            let sections = pane.sectionViews
+            @MainActor func frame(_ v: NSView) -> String {
+                guard let content = w.contentView else { return "?" }
+                return NSStringFromRect(v.convert(v.bounds, to: content))
+            }
+            developmentPrint("LAYOUT: prefs-calendar window \(w.windowNumber) frame \(NSStringFromRect(w.frame)) sections \(sections.count)")
+            developmentPrint("LAYOUT: prefs-calendar display (\(frame(pane.displayGroup)))")
+            for s in sections {
+                developmentPrint("LAYOUT: prefs-calendar section '\(s.name)' (\(frame(s.view)))")
+            }
+            developmentPrint("LAYOUT: shot prefs-calendar window \(w.windowNumber)")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                MainActor.assumeIsolated {
+                    w.close()
+                }
+            }
+            }
+        }
+    }
+}
+
+/// The invitation window's document, top-down.
+@MainActor
+private final class FlippedStack: NSStackView {
+    override var isFlipped: Bool { true }
 }

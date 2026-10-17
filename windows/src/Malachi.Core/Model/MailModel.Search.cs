@@ -116,7 +116,7 @@ public sealed partial class MailModel
         if (Account(s.AccountId) is { } a)
         {
             tooltip += "\n" + FolderTree.AccountLabel(a);
-            if (Search.Effective == SearchScope.All && EnabledAccounts.Count > 1)
+            if (Search.Effective == SearchScope.All && MailSidebarAccounts.Count > 1)
             {
                 // TRANSLATORS: where a search result lies, shown in its row:
                 // the folder, then the account.

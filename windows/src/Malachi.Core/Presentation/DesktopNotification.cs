@@ -10,11 +10,20 @@
 // a toast's Tag and Group hold at most 64 characters, so an identifier that
 // is longer (the daemon's ids are opaque) keeps its start and ends in a hash
 // of the whole, which stays distinct and stable.
+//
+// A message with a calendar part (MessageSummary.Invitation; docs/calendar.md
+// §5.9, macOS post) says so: an invitation or an update the title and body
+// of Cal.InvitationNotification, with Accept and Show while it is not
+// answered; a cancellation those of Cal.CancellationNotification, with
+// Remove from Calendar while it is not processed (Actions). Windows caps
+// those texts as it caps a message's.
 
 using System;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Malachi.Core.Api;
+using Malachi.Core.Calendars;
 using Malachi.Core.Model;
 
 namespace Malachi.Core.Presentation;
@@ -57,11 +66,41 @@ public sealed record DesktopNotification
     /// <summary>The message, handed back when the notification is clicked.</summary>
     public required MessageId MessageId { get; init; }
 
-    /// <summary>The notification of <paramref name="n"/> (notify.go <c>notifyNewMessage</c>).</summary>
-    public static DesktopNotification For(NewMessageNotification n)
+    /// <summary>The toast's buttons: an invitation's or a cancellation's (macOS's categories); none for mail.</summary>
+    public DesktopNotificationActions Actions { get; init; }
+
+    /// <summary>
+    /// The notification of <paramref name="n"/> (notify.go
+    /// <c>notifyNewMessage</c>; for a calendar part macOS <c>post</c>), the
+    /// dates of an invitation in <paramref name="env"/> (the local zone and
+    /// the current culture when null).
+    /// </summary>
+    public static DesktopNotification For(NewMessageNotification n, Cal.Env? env = null)
     {
         ArgumentNullException.ThrowIfNull(n);
         var (title, body) = NotificationText.Of(n);
+        var actions = DesktopNotificationActions.None;
+        if (n.Message.Invitation is { } inv)
+        {
+            var e = env ?? Cal.Env.ForCulture(TimeZoneInfo.Local, CultureInfo.CurrentCulture);
+            switch (inv.Kind.Value)
+            {
+                case InvitationKind.Invitation or InvitationKind.Update:
+                    (title, body) = Capped(Cal.InvitationNotification(inv, e));
+                    if (inv.State == InvitationState.Unanswered)
+                    {
+                        actions = DesktopNotificationActions.Invitation;
+                    }
+                    break;
+                case InvitationKind.Cancelled:
+                    (title, body) = Capped(Cal.CancellationNotification(inv, e));
+                    if (inv.State != InvitationState.Processed)
+                    {
+                        actions = DesktopNotificationActions.Cancellation;
+                    }
+                    break;
+            }
+        }
         return new DesktopNotification
         {
             Title = title,
@@ -70,8 +109,13 @@ public sealed record DesktopNotification
             Tag = TagOf(n.Message.Id),
             AccountId = n.AccountId,
             MessageId = n.Message.Id,
+            Actions = actions,
         };
     }
+
+    // The calendar's texts capped as a message's (NotificationText).
+    private static (string Title, string Body) Capped(Cal.Notification text) =>
+        (NotificationText.Capped(text.Title), NotificationText.Capped(text.Body));
 
     /// <summary>
     /// The <see cref="Tag"/> of message <paramref name="id"/>'s notification:

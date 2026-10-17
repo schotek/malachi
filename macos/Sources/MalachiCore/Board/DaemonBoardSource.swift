@@ -294,7 +294,9 @@ public final class DaemonBoardSource: BoardSource {
                 self.accountsInFlight = nil
             }
             guard !self.stopped, generation == self.accountGeneration, let res else { return }
-            self.accounts = res.accounts.filter(\.enabled).map {
+            // A calendar-only CalDAV account has no mail and no cases
+            // (`inMail`): not in the account filter.
+            self.accounts = res.accounts.filter { $0.enabled && inMail($0) }.map {
                 Board.AccountInfo(
                     id: $0.id, name: accountLabel($0), badge: accountHeaderBadge($0),
                     canReply: $0.can(.reply) || $0.can(.comment), canDelete: $0.can(.delete))

@@ -15,7 +15,7 @@ import (
 )
 
 // Every account in account.list carries its capabilities: the mail set
-// for a mailbox, comment and forward for an issue tracker.
+// for a mailbox (plus calendar on graph), comment and forward for an issue tracker.
 func TestAccountListCapabilities(t *testing.T) {
 	ctx := context.Background()
 	b := newTestBackend(t, config.Default())
@@ -38,8 +38,10 @@ func TestAccountListCapabilities(t *testing.T) {
 	if err != nil || len(res.Accounts) != 3 {
 		t.Fatalf("list: %+v %v", res, err)
 	}
-	for _, a := range res.Accounts[:2] {
-		if !slices.Equal(a.Capabilities, api.MailCapabilities) {
+	// A Graph account can have calendars (docs/calendar.md D16).
+	wantCaps := [][]api.AccountCapability{api.MailCapabilities, append(slices.Clone(api.MailCapabilities), api.CapabilityCalendar)}
+	for i, a := range res.Accounts[:2] {
+		if !slices.Equal(a.Capabilities, wantCaps[i]) {
 			t.Errorf("%s: capabilities %v", a.Config.Protocol(), a.Capabilities)
 		}
 	}

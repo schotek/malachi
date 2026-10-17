@@ -45,11 +45,16 @@ private let attachmentAsk = "Using the Malachi Mail tools, read attachment %@ of
             "mcp__malachi__read_message",
             "mcp__malachi__get_attachment",
             "mcp__malachi__create_draft",
+            "mcp__malachi__list_calendars",
+            "mcp__malachi__list_events",
+            "mcp__malachi__get_event",
+            "mcp__malachi__find_free_time",
+            "mcp__malachi__list_invitations",
         ])
     }
 
     @Test func args() throws {
-        let tools = "mcp__malachi__list_accounts,mcp__malachi__list_folders,mcp__malachi__list_messages,mcp__malachi__search_messages,mcp__malachi__read_message,mcp__malachi__get_attachment,mcp__malachi__create_draft"
+        let tools = "mcp__malachi__list_accounts,mcp__malachi__list_folders,mcp__malachi__list_messages,mcp__malachi__search_messages,mcp__malachi__read_message,mcp__malachi__get_attachment,mcp__malachi__create_draft,mcp__malachi__list_calendars,mcp__malachi__list_events,mcp__malachi__get_event,mcp__malachi__find_free_time,mcp__malachi__list_invitations"
         let cases: [(String, Assistant.Options, String, [String])] = [
             ("with a socket",
              Assistant.Options(

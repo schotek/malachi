@@ -278,7 +278,7 @@ public sealed class BoardPreferencesControllerTests
             State = new SyncState { AccountId = new AccountId(id), Status = SyncStatus.Idle },
         };
         static AccountId[] Ids(params string[] s) => [.. s.Select(x => new AccountId(x))];
-        Account[] accounts = [A("m1", null, true), A("j", AccountKind.Jira, true), A("off", null, false)];
+        Account[] accounts = [A("m1", null, true), A("j", AccountKind.Jira, true), A("off", null, false), A("cal", AccountKind.CalDAV, true)];
         const BoardPreferencesController.TriageAccountsCoverage All = BoardPreferencesController.TriageAccountsCoverage.All;
         const BoardPreferencesController.TriageAccountsCoverage Some = BoardPreferencesController.TriageAccountsCoverage.Some;
         const BoardPreferencesController.TriageAccountsCoverage None = BoardPreferencesController.TriageAccountsCoverage.None;
@@ -290,6 +290,7 @@ public sealed class BoardPreferencesControllerTests
             ("issue tracker listed", Ids("j"), accounts, Some),
             ("only removed accounts", Ids("gone", "gone2"), accounts, None),
             ("only a disabled account", Ids("off"), accounts, None),
+            ("only a calendar-only account", Ids("cal"), accounts, None),
             ("removed and present", Ids("gone", "m1"), accounts, Some),
             ("listed, no accounts at all", Ids("m1"), [], None),
         ];
@@ -310,7 +311,11 @@ public sealed class BoardPreferencesControllerTests
             Enabled = enabled,
             State = new SyncState { AccountId = new AccountId(id), Status = SyncStatus.Idle },
         };
-        Account[] accounts = [A("m1", null, true), A("m2", AccountKind.Graph, true), A("j", AccountKind.Jira, true), A("off", null, false)];
+        Account[] accounts =
+        [
+            A("m1", null, true), A("m2", AccountKind.Graph, true), A("j", AccountKind.Jira, true), A("off", null, false),
+            A("cal", AccountKind.CalDAV, true),
+        ];
         static AccountId[] Ids(params string[] s) => [.. s.Select(x => new AccountId(x))];
         // Nothing listed: every enabled mail account, no issue tracker, nothing disabled.
         foreach (var a in accounts)
@@ -318,6 +323,10 @@ public sealed class BoardPreferencesControllerTests
             Assert.Equal(a.Id.Value is "m1" or "m2", BoardPreferencesController.TriageAccountChecked([], a));
         }
         Assert.False(BoardPreferencesController.TriageAccountChecked(Ids("off"), accounts[3]));
+        // A calendar-only account is never triaged, named or not, and never
+        // offered (TriageCandidates).
+        Assert.False(BoardPreferencesController.TriageAccountChecked(Ids("cal"), accounts[4]));
+        Assert.Equal(["m1", "m2", "j"], BoardPreferencesController.TriageCandidates(accounts).Select(a => a.Id.Value));
         (string Name, AccountId[] Listed, string Id, bool On, AccountId[]? Want)[] cases =
         [
             ("uncheck one of all", [], "m2", false, Ids("m1")),
@@ -328,6 +337,8 @@ public sealed class BoardPreferencesControllerTests
             ("a disabled account cannot be toggled", Ids("m1"), "off", true, null),
             ("a disabled listed account stays listed", Ids("off", "m1"), "m2", true, Ids("m1", "m2", "off")),
             ("only the disabled one would be left", Ids("off", "m1"), "m1", false, null),
+            ("a calendar-only account cannot be toggled", [], "cal", true, null),
+            ("a stale calendar-only id drops out", Ids("cal", "m1"), "j", true, Ids("m1", "j")),
         ];
         foreach (var (name, listed, id, on, want) in cases)
         {

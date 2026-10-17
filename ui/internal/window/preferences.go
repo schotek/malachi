@@ -27,6 +27,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/background"
 	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/boardtriage"
+	"github.com/schotek/malachi/ui/internal/calendardata"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/mcpsetup"
@@ -44,8 +45,10 @@ import (
 type PreferencesDialog struct {
 	*adw.PreferencesDialog
 
-	log    *slog.Logger
-	assist *Assistant
+	log          *slog.Logger
+	assist       *Assistant
+	cal          func() calendardata.DataSource // the main window's calendar source (Preferences → Calendar, G16); may be nil or return nil
+	calendarPage *calendarPrefs                 // the Calendar page while open (preferences_calendar.go)
 
 	accountsGroup *adw.PreferencesGroup
 	addAccount    *gtk.MenuButton
@@ -145,8 +148,8 @@ var mcpStatusRetryDelays = []time.Duration{time.Second, 2 * time.Second, 4 * tim
 
 // NewPreferences builds the dialog bound to s, for the Mail group and the
 // Accounts page to the daemon through c, and for the AI page to the
-// Assistant state as. Present it with Present(parent).
-func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slog.Logger) *PreferencesDialog {
+// Assistant state as, and for Calendar to cal. Present it with Present(parent).
+func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slog.Logger, cal func() calendardata.DataSource) *PreferencesDialog {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
@@ -155,7 +158,7 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 	d := &PreferencesDialog{
 		PreferencesDialog: b.GetObject("preferences_dialog").Cast().(*adw.PreferencesDialog),
 		log:               log.With("component", "preferences"),
-		assist:            as,
+		assist:            as, cal: cal,
 		accountsGroup:     b.GetObject("accounts_group").Cast().(*adw.PreferencesGroup),
 		addAccount:        b.GetObject("add_account_button").Cast().(*gtk.MenuButton),
 		accountsEmpty:     b.GetObject("accounts_empty_row").Cast().(*adw.ActionRow),
@@ -246,6 +249,7 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		d.bindMail(c, refreshStorage),
 		unbindStorage,
 		d.bindAccounts(c),
+		d.bindCalendar(b, c),
 		d.bindMCP(),
 		d.bindAssistant(s),
 		d.bindBoardTriage(s, c),

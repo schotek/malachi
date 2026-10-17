@@ -17,7 +17,11 @@
 // the main window, and Open Draft opens a draft only after draft.list has
 // it. A link of an answer is opened only after "Open This Link?" named its
 // destination, as a link the daemon did not list; Get Claude Code…, a page
-// the application itself names, opens as the sign-in pages do.
+// the application itself names, opens as the sign-in pages do. The
+// calendar's quick actions show while some account has the calendar
+// capability (followed as the sidebar's accounts change), and Show in
+// Calendar of an answer is the main window's Day view of the event's day
+// with the event's detail (docs/calendar.md §5.9).
 
 using System;
 using System.Collections.Generic;
@@ -26,6 +30,7 @@ using Malachi.App.Reader;
 using Malachi.App.Shell;
 using Malachi.Core.Api;
 using Malachi.Core.Assistants;
+using Malachi.Core.Calendars;
 using Malachi.Core.Controllers;
 using Malachi.Core.Daemon;
 using Malachi.Core.I18n;
@@ -44,6 +49,9 @@ internal sealed class AssistantPanelHost : IDisposable
     private readonly MainWindow window;
     private readonly ListController list;
     private readonly AppState state;
+    private readonly AssistantPanel view;
+    private readonly MailboxController mailbox;
+    private readonly Malachi.Core.Boards.BoardObserverToken calendarToken;
 
     /// <summary>
     /// The panel's conversation over <paramref name="state"/>, rendered by
@@ -54,6 +62,8 @@ internal sealed class AssistantPanelHost : IDisposable
     {
         this.window = window;
         this.state = state;
+        this.view = view;
+        mailbox = integration.Mailbox;
         list = integration.List;
         Controller = new AssistantPanelController(
             state.Settings,
@@ -71,6 +81,25 @@ internal sealed class AssistantPanelHost : IDisposable
         state.InAppProviderChanged += OnProviderChanged;
         Controller.ResolveContext = Resolve;
         Controller.OpenDraft = r => integration.Actions.OpenSavedDraft(new AccountId(r.AccountId), new DraftId(r.DraftId));
+        // Show in Calendar of an answer: the main window's Day view of the
+        // event's day with the event's detail.
+        Controller.OpenInCalendar = r => window.ShowInCalendar(
+            r.EventId.Length == 0 ? default(CalendarEventId?) : new CalendarEventId(r.EventId), r.Recurrence, r.Day(AppState.CalendarEnv().Zone));
+        // The calendar's quick actions while some account has a calendar.
+        // The calendar's quick actions while some account has a calendar: the
+        // mailbox's accounts, or the window's calendar source's (the samples
+        // of MALACHI_CALENDAR_SAMPLES have no account in the daemon).
+        var calendar = state.CalendarSourceFor(window);
+        view.HasCalendar = () =>
+            list.Mailbox.Model.Accounts.Any(a => a.Can(Capability.Calendar)) || Cal.ShowsTodayStrip(calendar.Snapshot.Accounts);
+        mailbox.EntriesChanged += OnEntriesChanged;
+        calendarToken = calendar.Observe(change =>
+        {
+            if (change is Cal.SourceChange.SnapshotChanged)
+            {
+                view.UpdateQuickActions();
+            }
+        });
         view.Attach(
             Controller,
             href => _ = reader.Links.OpenAsync(new ActivatedLink(href, href), [], window),
@@ -84,6 +113,8 @@ internal sealed class AssistantPanelHost : IDisposable
     public void Dispose()
     {
         state.InAppProviderChanged -= OnProviderChanged;
+        mailbox.EntriesChanged -= OnEntriesChanged;
+        calendarToken.Cancel();
         Controller.Close();
     }
 
@@ -105,6 +136,9 @@ internal sealed class AssistantPanelHost : IDisposable
     }
 
     private void OnProviderChanged(object? sender, EventArgs e) => Controller.Provider = state.InAppProvider;
+
+    // The accounts may have changed: the calendar's quick actions follow.
+    private void OnEntriesChanged(object? sender, EventArgs e) => view.UpdateQuickActions();
 
     // The context
 

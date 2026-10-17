@@ -184,7 +184,10 @@ public partial class App : Application
                 SettleBoardReplies = main.SettleBoardRepliesAsync,
                 // A Quit the user abandoned: the board shows its replies again.
                 Abandoned = main.QuitAbandoned,
-                SaveDrafts = integration.Compose.SaveForQuitAsync,
+                // The compose windows save their drafts; an event editor with
+                // changes cannot save without asking (Save sends invitations),
+                // so it is asked its close question with the drafts that failed.
+                SaveDrafts = async () => [.. await integration.Compose.SaveForQuitAsync(), .. s.EventEditors.ForQuit()],
                 BeginStopping = () =>
                 {
                     s.IsStopping = true;

@@ -32,6 +32,13 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     /// after this answer. Not about mail accounts, whose sign-in problems
     /// are the 1200s.
     public static let unauthenticated: ErrorCode = 1005
+    /// The calendar or event cannot be changed by the user (a read-only or
+    /// shared calendar, a birthdays/holidays calendar, a change only the
+    /// organiser may make).
+    public static let readOnly: ErrorCode = 1006
+    /// The event has attendees, but neither the server schedules nor a mail
+    /// account can send the invitations.
+    public static let invitationsUnavailable: ErrorCode = 1007
 
     // 1100–1199: not found.
     public static let accountNotFound: ErrorCode = 1100
@@ -44,6 +51,12 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     /// No board case with that id (it left the board, its account is
     /// gone), or for `board.setCommitment` no such commitment.
     public static let caseNotFound: ErrorCode = 1106
+    /// No calendar with that id (removed, its account gone or its sync
+    /// switched off).
+    public static let calendarNotFound: ErrorCode = 1107
+    /// No stored event with that id, or the recurrence id names no
+    /// occurrence of it.
+    public static let eventNotFound: ErrorCode = 1108
 
     // 1200–1299: authentication.
     /// Credentials missing or token expired; see notify.authRequired.
@@ -55,6 +68,9 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     /// The daemon's own sign-in needs an OAuth client id for the provider
     /// and none is configured.
     public static let oauthClientMissing: ErrorCode = 1203
+    /// The account's sign-in does not allow calendar access; `data` is
+    /// `CalendarConsentRequiredData` (`RPCError.calendarConsentRequired`).
+    public static let calendarConsentRequired: ErrorCode = 1204
 
     // 1300–1399: network and remote servers.
     public static let offline: ErrorCode = 1300
@@ -65,6 +81,9 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     /// The mail server no longer has the message (another client deleted
     /// or moved it); the local copy goes with the next sync.
     public static let messageGone: ErrorCode = 1305
+    /// The server no longer has the event (deleted or moved elsewhere); the
+    /// next pass removes the local copy.
+    public static let eventGone: ErrorCode = 1306
 
     // 1400–1499: local storage.
     public static let storageError: ErrorCode = 1400
@@ -88,6 +107,13 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     /// find verbatim where it must be; `data` is `QuoteNotFoundData`
     /// (`RPCError.quoteNotFound`).
     public static let quoteNotFound: ErrorCode = 1506
+    /// An iCalendar object or a server's calendar answer could not be read
+    /// even leniently; the data is withheld.
+    public static let malformedCalendar: ErrorCode = 1507
+    /// The event's recurrence rule is outside what the daemon expands or
+    /// edits; the event shows its first instance only and may be edited with
+    /// scope `all` only.
+    public static let recurrenceUnsupported: ErrorCode = 1508
 
     /// The stable symbolic name (api.ErrorCode.String): `"attachmentTooBig"`,
     /// or `"unknown(1234)"` for a code this client does not know.
@@ -102,13 +128,14 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     public static let all: [ErrorCode] = [
         .parseError, .invalidRequest, .methodNotFound, .invalidParams, .internalError,
         .notImplemented, .invalidArgument, .conflict, .cancelled, .unavailable, .unauthenticated,
+        .readOnly, .invitationsUnavailable,
         .accountNotFound, .folderNotFound, .messageNotFound, .threadNotFound, .draftNotFound, .attachmentNotFound,
-        .caseNotFound,
-        .authRequired, .authFailed, .keyringError, .oauthClientMissing,
-        .offline, .networkError, .serverError, .tlsError, .serverTimeout, .messageGone,
+        .caseNotFound, .calendarNotFound, .eventNotFound,
+        .authRequired, .authFailed, .keyringError, .oauthClientMissing, .calendarConsentRequired,
+        .offline, .networkError, .serverError, .tlsError, .serverTimeout, .messageGone, .eventGone,
         .storageError, .migrationFailed,
         .malformedMessage, .sanitizeFailed, .attachmentTooBig, .partNotFound, .partNotDownloaded,
-        .unsubscribeFailed, .quoteNotFound,
+        .unsubscribeFailed, .quoteNotFound, .malformedCalendar, .recurrenceUnsupported,
     ]
 
     private static let names: [ErrorCode: String] = [
@@ -123,6 +150,8 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .cancelled: "cancelled",
         .unavailable: "unavailable",
         .unauthenticated: "unauthenticated",
+        .readOnly: "readOnly",
+        .invitationsUnavailable: "invitationsUnavailable",
         .accountNotFound: "accountNotFound",
         .folderNotFound: "folderNotFound",
         .messageNotFound: "messageNotFound",
@@ -130,16 +159,20 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .draftNotFound: "draftNotFound",
         .attachmentNotFound: "attachmentNotFound",
         .caseNotFound: "caseNotFound",
+        .calendarNotFound: "calendarNotFound",
+        .eventNotFound: "eventNotFound",
         .authRequired: "authRequired",
         .authFailed: "authFailed",
         .keyringError: "keyringError",
         .oauthClientMissing: "oauthClientMissing",
+        .calendarConsentRequired: "calendarConsentRequired",
         .offline: "offline",
         .networkError: "networkError",
         .serverError: "serverError",
         .tlsError: "tlsError",
         .serverTimeout: "serverTimeout",
         .messageGone: "messageGone",
+        .eventGone: "eventGone",
         .storageError: "storageError",
         .migrationFailed: "migrationFailed",
         .malformedMessage: "malformedMessage",
@@ -149,6 +182,8 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .partNotDownloaded: "partNotDownloaded",
         .unsubscribeFailed: "unsubscribeFailed",
         .quoteNotFound: "quoteNotFound",
+        .malformedCalendar: "malformedCalendar",
+        .recurrenceUnsupported: "recurrenceUnsupported",
     ]
 }
 

@@ -85,6 +85,19 @@ final class AssistantPanelHost {
         controller.openDraft = { [weak actions] ref in
             actions?.openSavedDraft(account: AccountID(rawValue: ref.accountID), id: DraftID(rawValue: ref.draftID))
         }
+        // The calendar's quick actions while some account has a calendar;
+        // Show in Calendar of an answer: the main window's Day view of the
+        // event's day with the event's detail.
+        viewController.hasCalendar = { [weak list] in
+            list?.mailbox.model.accounts.contains { $0.can(.calendar) } ?? false
+        }
+        controller.openInCalendar = { [weak mainWindow] ref in
+            guard let mainWindow else { return }
+            mainWindow.showInCalendar(
+                eventID: ref.eventID.isEmpty ? nil : EventID(rawValue: ref.eventID),
+                recurrenceID: ref.recurrence,
+                day: ref.day(in: .current))
+        }
         viewController.onLink = { [weak messageActions] href, window in
             messageActions?.openLink(href, links: [], from: window)
         }

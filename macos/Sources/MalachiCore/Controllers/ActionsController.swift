@@ -797,10 +797,10 @@ public final class ActionsController {
         }
         let src = composeSource(summary: s, loaded: cache.loaded(id))
         // The account's own address, for Reply All exclusion; the first
-        // account's when the message's is unknown (compose.Manager
+        // mail account's when the message's is unknown (compose.Manager
         // `SelfAddress`).
         let me = mailbox.model.account(from).map(selfAddress)
-            ?? mailbox.model.enabledAccounts.first.map(selfAddress)
+            ?? mailbox.model.mailSidebarAccounts.first.map(selfAddress)
             ?? Address(address: "")
         let attributionLine = attribution(kind: kind, source: src)
         let fallback: @MainActor () -> Void = { [weak self] in

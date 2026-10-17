@@ -42,10 +42,11 @@ func boardDefaultStyleChoices() []settings.BoardStyle {
 }
 
 // boardStartModeChoices are Open at Launch's values in the order of the
-// combo row's items (board.StartModes: Mail, Board, Last Used).
+// combo row's items (board.StartModesWithCalendar: Mail, Board, Calendar,
+// Last Used).
 func boardStartModeChoices() []settings.BoardStartMode {
-	out := make([]settings.BoardStartMode, len(board.StartModes))
-	for i, m := range board.StartModes {
+	out := make([]settings.BoardStartMode, len(board.StartModesWithCalendar))
+	for i, m := range board.StartModesWithCalendar {
 		out[i] = settings.BoardStartMode(m.Nick())
 	}
 	return out
@@ -93,8 +94,8 @@ func (d *PreferencesDialog) bindBoard(s *settings.Store) (unbind func()) {
 	}
 	d.boardDefaultStyle.SetModel(gtk.NewStringList(styles))
 	d.boardStartMode.SetTitle(board.StartModeSetting(btr))
-	modes := make([]string, len(board.StartModes))
-	for i, m := range board.StartModes {
+	modes := make([]string, len(board.StartModesWithCalendar))
+	for i, m := range board.StartModesWithCalendar {
 		modes[i] = board.StartModeTitle(m, btr)
 	}
 	d.boardStartMode.SetModel(gtk.NewStringList(modes))
@@ -241,14 +242,10 @@ func (d *PreferencesDialog) bindTriageAccounts(c *client.Client, p *boardtriage.
 		syncing  bool
 		gen      int
 	)
-	enabledAccounts := func() []api.Account {
-		var out []api.Account
-		for _, a := range accounts {
-			if a.Enabled {
-				out = append(out, a)
-			}
-		}
-		return out
+	// The accounts the list offers: a calendar-only CalDAV account is
+	// never triaged (boardtriage.TriageCandidates).
+	candidates := func() []api.Account {
+		return boardtriage.TriageCandidates(accounts)
 	}
 	update := func() {
 		if d.closed {
@@ -270,7 +267,7 @@ func (d *PreferencesDialog) bindTriageAccounts(c *client.Client, p *boardtriage.
 			}
 		}
 		syncing = true
-		for i, a := range enabledAccounts() {
+		for i, a := range candidates() {
 			if i < len(rows) {
 				rows[i].SetActive(boardtriage.TriageAccountChecked(prefs.TriageAccounts, a))
 			}
@@ -283,7 +280,7 @@ func (d *PreferencesDialog) bindTriageAccounts(c *client.Client, p *boardtriage.
 		}
 		rows = rows[:0]
 		accounts = slices.Clone(list)
-		for _, a := range enabledAccounts() {
+		for _, a := range candidates() {
 			id := a.ID
 			row := adw.NewSwitchRow()
 			row.SetUseMarkup(false)

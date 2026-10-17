@@ -4,11 +4,14 @@
 // Port of macos/Tests/MalachiCoreTests/FolderTreeTests.swift, the
 // counterpart of ui/internal/window/folders_test.go (every test; the Swift
 // suite ports all of them): the sidebar layout the window relies on, where
-// ordering, depth and header placement must be exact. SortSiblingsGoOrder,
-// DeepChainDoesNotRecurse and AFoldersNameIsCleanedForDisplay are
-// Windows-only: they pin what the C# port had to do on purpose (Go's case
-// folding and byte order, a walk without recursion over a hostile server's
-// folder chain, the display-text rule over a server's folder name).
+// ordering, depth and header placement must be exact. CaldavAccountsAreNotInMail
+// is the Swift suite's calendar case (Swift-first, no Go counterpart yet).
+// SortSiblingsGoOrder, DeepChainDoesNotRecurse, AFoldersNameIsCleanedForDisplay
+// and InMailIsEveryKindButCalDAV are Windows-only: they pin what the C#
+// port had to do on purpose (Go's case folding and byte order, a walk
+// without recursion over a hostile server's folder chain, the display-text
+// rule over a server's folder name, the CalDAV rule over switched-off
+// accounts).
 
 using System.Collections.Generic;
 using System.Linq;
@@ -169,6 +172,56 @@ public sealed class FolderTreeTests
             ["ghost"] = [TestFolder("g", "INBOX", FolderRole.Inbox)],
         };
         Assert.Equal(["in@0"], Ids(FolderTree.SortFolders(accounts, folders, new CollapseState(), new FavouriteState())));
+    }
+
+    // A calendar-only CalDAV account of the tests.
+    private static Account CalDAVAccount(string id, bool enabled = true)
+    {
+        var a = TestAccount(id, enabled: enabled);
+        return a with { Config = a.Config with { Kind = AccountKind.CalDAV } };
+    }
+
+    /// <summary>
+    /// A calendar-only CalDAV account is never in the Mail sidebar: no
+    /// header of its own, and it does not count towards the headers.
+    /// </summary>
+    [Fact]
+    public void CaldavAccountsAreNotInMail()
+    {
+        Account[] accounts = [TestAccount("a"), CalDAVAccount("c")];
+        var folders = new FolderMap
+        {
+            ["a"] = [TestFolder("in", "INBOX", FolderRole.Inbox)],
+            ["c"] = [TestFolder("in-c", "INBOX", FolderRole.Inbox)],
+        };
+        Assert.Equal(["in@0"], Ids(FolderTree.SortFolders(accounts, folders, new CollapseState(), new FavouriteState())));
+        Assert.Equal(["a"], FolderTree.MailSidebarAccounts(accounts).Select(a => a.Id.Value));
+        Assert.Equal(2, FolderTree.EnabledAccounts(accounts).Count);
+    }
+
+    // InMail, the rule of MailSidebarAccounts, holds for switched-off
+    // accounts too, and the sidebar's list keeps the order and leaves the
+    // switched-off accounts out; a pin on a CalDAV account makes no
+    // Favourites section (Swift inMailIsEveryKindButCalDAV, Go TestInMail).
+    [Fact]
+    public void InMailIsEveryKindButCalDAV()
+    {
+        var imap = TestAccount("a");
+        var graph = TestAccount("g") with { Config = imap.Config with { Kind = AccountKind.Graph } };
+        Assert.True(FolderTree.InMail(imap));
+        Assert.True(FolderTree.InMail(graph));
+        Assert.True(FolderTree.InMail(TestAccount("j") with { Config = imap.Config with { Kind = AccountKind.Jira } }));
+        Assert.False(FolderTree.InMail(CalDAVAccount("c")));
+        Assert.False(FolderTree.InMail(CalDAVAccount("off", enabled: false)));
+
+        Account[] accounts = [CalDAVAccount("c"), graph, TestAccount("b", enabled: false), imap];
+        Assert.Equal(["g", "a"], FolderTree.MailSidebarAccounts(accounts).Select(a => a.Id.Value));
+        Assert.Equal(["g", "a"], new MailModel(accounts, new FolderMap()).MailSidebarAccounts.Select(a => a.Id.Value));
+
+        var favourites = new FavouriteState();
+        favourites.Toggle(new FolderKey("c", "in-c"));
+        var folders = new FolderMap { ["c"] = [TestFolder("in-c", "INBOX", FolderRole.Inbox)] };
+        Assert.Empty(FolderTree.SortFolders([CalDAVAccount("c")], folders, new CollapseState(), favourites));
     }
 
     [Fact]

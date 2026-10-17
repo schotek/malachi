@@ -9,10 +9,14 @@ package core
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -20,6 +24,9 @@ import (
 	"github.com/schotek/malachi/backend/internal/auth"
 	"github.com/schotek/malachi/backend/internal/auth/goa"
 	"github.com/schotek/malachi/backend/internal/auth/oauth2flow"
+	"github.com/schotek/malachi/backend/internal/board"
+	"github.com/schotek/malachi/backend/internal/caldav"
+	"github.com/schotek/malachi/backend/internal/calsync"
 	"github.com/schotek/malachi/backend/internal/config"
 	"github.com/schotek/malachi/backend/internal/contacts"
 	"github.com/schotek/malachi/backend/internal/contacts/eds"
@@ -96,6 +103,20 @@ type Backend struct {
 	ListJiraSpaces func(ctx context.Context, cfg api.JiraConfig, token string, counts bool) (api.AccountListSpacesResult, error)
 	ProbeJira      func(ctx context.Context, cfg api.JiraConfig, token string) (api.EndpointTestResult, error)
 
+	// CalDAVHTTP carries every request to a CalDAV server (discovery,
+	// listing, account.test, the calendar engine) when set; nil, in
+	// production, is per-host transports with the TLS policy and the
+	// account's pin (accounts_caldav.go). CalDAVResolver is the DNS of
+	// account.discoverCalDAV (nil = the system resolver). Tests point them
+	// at internal/caldav/caldavtest.
+	CalDAVHTTP     *http.Client
+	CalDAVResolver caldav.Resolver
+	// CalendarGraphBaseURL and CalendarGraphHTTP override the Graph
+	// endpoint of the calendar providers (tests; "" and nil = Microsoft
+	// Graph with the client's defaults).
+	CalendarGraphBaseURL string
+	CalendarGraphHTTP    *http.Client
+
 	// GOA is the GNOME Online Accounts client behind account.linked and the
 	// tokens of Graph accounts. It connects lazily; without a session bus
 	// every call reports unavailable. Tests substitute a fake.
@@ -129,6 +150,15 @@ type Backend struct {
 	// same hooks as Supervisor. New installs outbox.NewSupervisor; tests
 	// replace it with a recording fake.
 	Delivery OutboxSupervisor
+	// calSync is the calendar engine (internal/calsync): the caldav kind's
+	// supervisor behind Supervisor and the calendar of Graph accounts
+	// beside their mail (graphWithCalendar). calendarEngine returns it.
+	calSync *calsync.Supervisor
+	// graphLimiters are the request limiters of Graph accounts, one per
+	// account shared by its mail syncer, outbox and calendar (D13), under
+	// graphLimMu.
+	graphLimMu    sync.Mutex
+	graphLimiters map[string]*graph.Limiter
 	// jiraSync is the Jira supervisor New installed behind Supervisor:
 	// message.download rebuilds a Jira message through it
 	// (jira.Supervisor.FetchMessage), whatever a test put in Supervisor.
@@ -230,6 +260,7 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		tokenSources:      map[string]*oauth2flow.TokenSource{},
 		draftTimers:       map[string]*time.Timer{},
 		oauthSessions:     map[string]oauthSession{},
+		graphLimiters:     map[string]*graph.Limiter{},
 		rawKick:           make(chan struct{}, 1),
 	}
 	b.im.init()
@@ -287,6 +318,7 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		BuildDraft: b.buildDraft,
 		DraftQuiet: draftSyncQuiet,
 		Stored:     b.afterMailStored,
+		Limiter:    b.graphLimiter,
 	})
 	b.jiraSync = jira.NewSupervisor(jira.SupervisorDeps{
 		Store:    st,
@@ -303,8 +335,19 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 				AttachmentOfflineDays: pol.AttachmentOfflineDays, NeverStoreAttachments: pol.NeverStore}
 		},
 	})
+	// The calendar engine: the caldav kind's supervisor, and the calendar
+	// of a Graph account started and stopped with its mail.
+	b.calSync = calsync.New(calsync.Options{
+		Store:     st,
+		Providers: b.calendarProvider,
+		Notifier:  calendarNotifier{outboxAwareNotifier: notifier},
+		Log:       log,
+	})
 	b.Supervisor = newKindSupervisor(map[api.AccountKind]SyncSupervisor{
-		api.AccountIMAP: imapSync, api.AccountGraph: graphSync, api.AccountJira: b.jiraSync,
+		api.AccountIMAP:   imapSync,
+		api.AccountGraph:  &graphWithCalendar{mail: graphSync, cal: b.calSync},
+		api.AccountJira:   b.jiraSync,
+		api.AccountCalDAV: b.calSync.Mail(),
 	})
 	// Through b.Supervisor, not the values above: tests swap it.
 	trigger := func(id string, f api.FolderID, full bool) bool { return b.Supervisor.Trigger(id, f, full) }
@@ -375,6 +418,7 @@ func (b *Backend) graphDeliverFor(a store.Account) outbox.DeliverFunc {
 		Token:      func(ctx context.Context) (string, error) { return b.GraphTokenFor(ctx, id) },
 		Invalidate: func() { b.invalidateGraphTokenFor(id) },
 		Log:        b.log,
+		Limiter:    b.graphLimiter(id),
 	})
 	return func(ctx context.Context, _ api.ServerConfig, _ string, from string, rcpts []string, r io.Reader, size int64) error {
 		return graph.Deliver(ctx, client, from, rcpts, r, size)
@@ -570,7 +614,7 @@ func (b *Backend) Contacts() api.ContactService       { return &contactService{b
 func (b *Backend) Drafts() api.DraftService           { return &draftService{b} }
 func (b *Backend) Attachments() api.AttachmentService { return &attachmentService{b} }
 func (b *Backend) Folders() api.FolderService         { return &folderService{b} }
-func (b *Backend) Messages() api.MessageService       { return &messageService{b} }
+func (b *Backend) Messages() api.MessageService       { return mailOnlyMessages{&messageService{b}, b} }
 func (b *Backend) Threads() api.ThreadService         { return &threadService{b} }
 func (b *Backend) Search() api.SearchService          { return &searchService{b} }
 func (b *Backend) Sync() api.SyncService              { return &syncService{b} }
@@ -599,6 +643,9 @@ func (b *Backend) Maintain(ctx context.Context) {
 	}
 	if err := b.backfillBoard(ctx); err != nil && !isCancelled(err) {
 		b.log.Warn("backfill board", "err", err)
+	}
+	if err := b.backfillInvitations(ctx); err != nil && !isCancelled(err) {
+		b.log.Warn("backfill invitations", "err", err)
 	}
 	// The raw maintenance loop runs beside the attachment sweep; Maintain
 	// returns once it has stopped too.
@@ -631,4 +678,363 @@ func (b *Backend) Maintain(ctx context.Context) {
 			b.boardUpkeep(ctx)
 		}
 	}
+}
+
+// --- calendar engine (docs/calendar.md §3.8) --------------------------------
+
+// calendarEngine is the calendar engine New installed: the providers and
+// stored state behind calendar.*, event.* and invitation.* (T9b, T9c),
+// whatever a test put in Supervisor. Reload it after the calendar
+// preferences changed.
+func (b *Backend) calendarEngine() *calsync.Supervisor { return b.calSync }
+
+// graphLimiter is the request limiter of a Graph account, made on first
+// use: its mail syncer, outbox and calendar share it (D13, 4 slots, the
+// per-mailbox limit of Microsoft).
+func (b *Backend) graphLimiter(accountID string) *graph.Limiter {
+	b.graphLimMu.Lock()
+	defer b.graphLimMu.Unlock()
+	l, ok := b.graphLimiters[accountID]
+	if !ok {
+		l = graph.NewLimiter(4)
+		b.graphLimiters[accountID] = l
+	}
+	return l
+}
+
+// dropGraphLimiter forgets a removed account's limiter.
+func (b *Backend) dropGraphLimiter(accountID string) {
+	b.graphLimMu.Lock()
+	delete(b.graphLimiters, accountID)
+	b.graphLimMu.Unlock()
+}
+
+// calendarNotifier is what the calendar engine emits into: notify.syncState
+// and notify.authRequired of caldav accounts through the sync path
+// (outboxAwareNotifier, the coalescer), and the calendar notifications
+// (api.CalendarNotifier) to the notifier SetNotifier installed, when it
+// has them.
+type calendarNotifier struct {
+	outboxAwareNotifier
+}
+
+var _ api.CalendarNotifier = calendarNotifier{}
+
+func (n calendarNotifier) calendar() api.CalendarNotifier {
+	cn, _ := n.b.getNotifier().(api.CalendarNotifier)
+	return cn
+}
+
+func (n calendarNotifier) CalendarChanged(ev api.CalendarChangedNotification) {
+	if cn := n.calendar(); cn != nil {
+		cn.CalendarChanged(ev)
+	}
+}
+
+func (n calendarNotifier) CalendarState(ev api.CalendarStateNotification) {
+	if cn := n.calendar(); cn != nil {
+		cn.CalendarState(ev)
+	}
+}
+
+func (n calendarNotifier) EventAlert(ev api.EventAlertNotification) {
+	if cn := n.calendar(); cn != nil {
+		cn.EventAlert(ev)
+	}
+}
+
+func (n calendarNotifier) InvitationsChanged(ev api.InvitationsChangedNotification) {
+	if cn := n.calendar(); cn != nil {
+		cn.InvitationsChanged(ev)
+	}
+}
+
+// calendarProvider makes the calendar source of an account for the
+// engine (calsync.Options.Providers): caldav.NewProvider over the
+// account's server, or graph.NewCalendarProvider over the account's token
+// and limiter once its sign-in allows the calendar. Errors are *api.Error
+// and become the account's calendar state (calendarConsentRequired:
+// consentRequired).
+func (b *Backend) calendarProvider(ctx context.Context, a store.Account) (calsync.Provider, error) {
+	switch a.Config.Protocol() {
+	case api.AccountCalDAV:
+		return b.calDAVProvider(ctx, a)
+	case api.AccountGraph:
+		return b.graphCalendarProvider(ctx, a)
+	}
+	return nil, api.NewError(api.CodeInvalidArgument, "account %q has no calendars", a.ID)
+}
+
+// calDAVProvider: the client trusts the server and the origins of the
+// principal and home set the configuration names; the password is read
+// from the keyring once per provider (the engine makes a new one after an
+// authentication failure). iMIP of client scheduling leaves through the
+// mail account of the configuration (sendCalDAVIMIP).
+func (b *Backend) calDAVProvider(ctx context.Context, a store.Account) (calsync.Provider, error) {
+	cd := a.Config.CalDAV
+	if cd == nil {
+		return nil, api.NewError(api.CodeInvalidArgument, "caldav account %q without caldav settings", a.ID)
+	}
+	var mu sync.Mutex
+	var cached string
+	password := func(ctx context.Context) (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if cached != "" {
+			return cached, nil
+		}
+		pw, err := b.PasswordFor(ctx, a.ID)
+		if err != nil {
+			return "", err
+		}
+		cached = pw
+		return pw, nil
+	}
+	c, err := b.newCalDAVClient(*cd, calDAVConfiguredOrigins(*cd), password)
+	if err != nil {
+		return nil, err
+	}
+	addrs := []string{a.Config.Email}
+	addrs = append(addrs, b.userAddresses(ctx)...)
+	return caldav.NewProvider(c, caldav.ProviderOptions{
+		Addresses:     addrs,
+		Identity:      api.Address{Name: a.Config.DisplayName, Address: a.Config.Email},
+		Scheduling:    cd.Scheduling,
+		MailAccountID: cd.MailAccountID,
+		Resources:     b.store,
+		SendIMIP:      b.sendCalDAVIMIP,
+		Log:           b.log,
+	}), nil
+}
+
+// graphCalendarProvider: the account's sign-in must allow the calendar —
+// the scope its grant recorded (source daemon, CalendarConsent) or the
+// Calendar switch of its GNOME Online Accounts entry — else
+// calendarConsentRequired. The client shares the account's token and
+// limiter with its mail.
+func (b *Backend) graphCalendarProvider(ctx context.Context, a store.Account) (calsync.Provider, error) {
+	g := a.Config.Graph
+	if g == nil {
+		return nil, api.NewError(api.CodeInvalidArgument, "graph account %q without graph settings", a.ID)
+	}
+	signIn := g.Source == api.GraphSourceDaemon
+	allowed := true
+	switch g.Source {
+	case api.GraphSourceDaemon:
+		ok, err := b.CalendarConsent(ctx, a.ID)
+		if err != nil {
+			return nil, err
+		}
+		allowed = ok
+	case api.GraphSourceGOA:
+		disabled, err := b.goaCalendarDisabled(ctx, g.GOAAccountID)
+		if err != nil {
+			return nil, err
+		}
+		allowed = !disabled
+	}
+	if !allowed {
+		e := api.NewError(api.CodeCalendarConsentRequired, "the account's sign-in does not allow the calendar")
+		e.Data = api.CalendarConsentRequiredData{AccountID: api.AccountID(a.ID), SignIn: signIn}
+		return nil, e
+	}
+	id := a.ID
+	client := graph.NewClient(graph.Options{
+		BaseURL:    b.CalendarGraphBaseURL,
+		HTTP:       b.CalendarGraphHTTP,
+		Token:      func(ctx context.Context) (string, error) { return b.GraphTokenFor(ctx, id) },
+		Invalidate: func() { b.invalidateGraphTokenFor(id) },
+		Log:        b.log,
+		Limiter:    b.graphLimiter(id),
+	})
+	personal := false
+	if tok, err := b.GraphTokenFor(ctx, id); err == nil {
+		personal = graph.IsPersonalTenant(tokenTenant(tok))
+	} else {
+		return nil, err
+	}
+	me, err := b.boardOwn(ctx, a)
+	if err != nil {
+		me = []string{store.NormalizeAddress(a.Config.Email)}
+	}
+	return graph.NewCalendarProvider(client, graph.CalendarProviderOptions{
+		AccountID: api.AccountID(id),
+		SignIn:    signIn,
+		Personal:  personal,
+		Me:        me,
+		Known:     b.graphKnown,
+		Window:    func() calsync.Window { return b.calSync.Window(a) },
+	}), nil
+}
+
+// graphKnown is what the store holds of a Graph calendar for the
+// provider (graph.Known): the ETag of every object by remote id and the
+// object of every stored occurrence.
+func (b *Backend) graphKnown(ctx context.Context, cal store.Calendar) (graph.Known, error) {
+	events, err := b.store.CalendarEvents(ctx, cal.ID)
+	if err != nil {
+		return graph.Known{}, err
+	}
+	k := graph.Known{Objects: map[string]string{}, Instances: map[string]string{}}
+	byID := make(map[string]store.Event, len(events))
+	for _, e := range events {
+		byID[e.ID] = e
+		if e.Kind != store.EventOverride && e.RemoteID != "" {
+			k.Objects[e.RemoteID] = e.ETag
+		}
+	}
+	list, err := b.store.EventRange(ctx, store.OccurrenceQuery{
+		From: time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC), To: time.Date(2200, 1, 1, 0, 0, 0, 0, time.UTC),
+		CalendarIDs: []string{cal.ID}, IncludeHidden: true, IncludeDeclined: true,
+		Limit: api.MaxEventsPerCalendar * 4,
+	})
+	if err != nil {
+		return graph.Known{}, err
+	}
+	for _, o := range list.Occurrences {
+		if o.RemoteID == "" {
+			continue
+		}
+		e, ok := byID[o.EventID]
+		if !ok {
+			continue
+		}
+		if e.MasterID != "" {
+			if m, ok := byID[e.MasterID]; ok {
+				e = m
+			}
+		}
+		if e.RemoteID != "" {
+			k.Instances[o.RemoteID] = e.RemoteID
+		}
+	}
+	return k, nil
+}
+
+// tokenTenant is the "tid" claim of a JWT access token, "" when the token
+// is not a JWT (a personal account's token may be opaque: the provider
+// then learns from getSchedule). Nothing is verified: the claim only
+// chooses whether free/busy of others is offered.
+func tokenTenant(tok string) string {
+	parts := strings.Split(tok, ".")
+	if len(parts) != 3 || len(parts[1]) > 16<<10 {
+		return ""
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(parts[1], "="))
+	if err != nil {
+		return ""
+	}
+	var claims struct {
+		TID string `json:"tid"`
+	}
+	if json.Unmarshal(raw, &claims) != nil {
+		return ""
+	}
+	return claims.TID
+}
+
+// userAddresses are the user's addresses on every enabled account (each
+// account's own and the senders of its sent folders, boardOwn), lower
+// case, at most board.MaxSelfAddresses: "me" of a calendar.
+func (b *Backend) userAddresses(ctx context.Context) []string {
+	accounts, err := b.store.ListAccounts(ctx)
+	if err != nil {
+		b.log.Warn("list accounts for the user's addresses", "err", err)
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, a := range accounts {
+		if !a.Enabled {
+			continue
+		}
+		own, err := b.boardOwn(ctx, a)
+		if err != nil {
+			b.log.Warn("the user's addresses of an account", "account", a.ID, "err", err)
+			continue
+		}
+		for _, s := range own {
+			if !seen[s] && len(out) < board.MaxSelfAddresses {
+				seen[s] = true
+				out = append(out, s)
+			}
+		}
+	}
+	return out
+}
+
+// dropCalendarCache deletes the cached calendar rows an account update no
+// longer covers (D23): all of them when a Graph account's calendar sync
+// went off, when a caldav account's server or user name changed, or when
+// the account changed kind; the calendars newly in disabledCalendars
+// otherwise. The account's calendar syncer is stopped first; the caller
+// restarts it.
+func (b *Backend) dropCalendarCache(ctx context.Context, old, next store.Account) {
+	if b.calSync == nil {
+		return
+	}
+	all, cals := calendarCacheDropped(old.Config, next.Config)
+	if !all && len(cals) == 0 {
+		return
+	}
+	b.calSync.Stop(old.ID)
+	var changed []api.CalendarID
+	if all {
+		if err := b.store.DeleteAccountCalendars(ctx, old.ID); err != nil {
+			b.log.Warn("delete account calendars", "account", old.ID, "err", err)
+			return
+		}
+	} else {
+		stored, err := b.store.ListCalendars(ctx, old.ID)
+		if err != nil {
+			b.log.Warn("list calendars", "account", old.ID, "err", err)
+			return
+		}
+		for _, c := range stored {
+			if slices.Contains(cals, c.RemoteID) {
+				// The row stays (calendar.list shows it disabled); its contents go.
+				if err := b.store.DeleteCalendarContents(ctx, c.ID); err != nil {
+					b.log.Warn("delete calendar", "account", old.ID, "err", err)
+					continue
+				}
+				changed = append(changed, api.CalendarID(c.ID))
+			}
+		}
+		if len(changed) == 0 {
+			return
+		}
+	}
+	b.log.Info("calendar cache dropped", "account", old.ID, "all", all, "calendars", len(changed))
+	if cn, ok := b.getNotifier().(api.CalendarNotifier); ok {
+		cn.CalendarChanged(api.CalendarChangedNotification{AccountIDs: []api.AccountID{api.AccountID(old.ID)}, CalendarIDs: changed})
+	}
+}
+
+// calendarCacheDropped compares two configurations of an account: all
+// its calendar rows go, or those of the remote ids newly disabled.
+func calendarCacheDropped(old, next api.AccountConfig) (all bool, calendars []string) {
+	had := old.Protocol() == api.AccountCalDAV || (old.Protocol() == api.AccountGraph && old.Calendar != nil && old.Calendar.Sync)
+	if !had {
+		return false, nil
+	}
+	switch {
+	case old.Protocol() != next.Protocol():
+		return true, nil
+	case next.Protocol() == api.AccountGraph && (next.Calendar == nil || !next.Calendar.Sync):
+		return true, nil
+	case next.Protocol() == api.AccountCalDAV && !sameCalDAVLogin(old, next):
+		return true, nil
+	}
+	var before []string
+	if old.Calendar != nil {
+		before = old.Calendar.DisabledCalendars
+	}
+	if next.Calendar != nil {
+		for _, id := range next.Calendar.DisabledCalendars {
+			if !slices.Contains(before, id) && !slices.Contains(calendars, id) {
+				calendars = append(calendars, id)
+			}
+		}
+	}
+	return false, calendars
 }

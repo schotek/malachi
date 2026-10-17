@@ -54,10 +54,13 @@ import (
 // Save All and View, the download spinner and the bars' buttons act on
 // this card's message exactly as they do in the pane.
 
-// The top part's slots, in order: the header, the recipients, the chips,
-// the hint.
+// The top part's slots, in order: the header, the invitation card of a
+// message with a calendar part (invitation_card.go; under the header row,
+// inside what folds, as the macOS client), the recipients, the chips, the
+// hint.
 const (
 	cardSlotHeader = iota
+	cardSlotInvitation
 	cardSlotDetails
 	cardSlotChips
 	cardSlotHint
@@ -91,8 +94,14 @@ type convCard struct {
 	// the place the focus goes when one of them goes away.
 	mv          *messageView
 	detailsOpen bool
-	hint        *gtk.Label
-	bars        *gtk.Box
+
+	// invitation is the card's invitation card, made when its message
+	// first has one (renderInvitation), in its holder: the slot, shown
+	// while the card shows and the conversation card is open.
+	invitation       *invitationCard
+	invitationHolder *gtk.Box
+	hint             *gtk.Label
+	bars             *gtk.Box
 
 	// The fold of the card (setFold): the arrow in the header, the preview
 	// under it while folded, and the parts of the top the fold hid, shown
@@ -469,6 +478,7 @@ func (c *convCard) showFoldState() {
 	c.preview.SetText(snippet)
 	c.preview.SetVisible(c.folded && snippet != "")
 	c.disclosure.SetVisible(!c.folded)
+	c.showInvitationHolder()
 	c.bars.SetVisible(!c.folded)
 	c.body.SetVisible(!c.folded)
 	if c.quotedBox != nil {
@@ -580,10 +590,38 @@ func (c *convCard) render(lm *loadedMessage) {
 		m = lm.msg
 	}
 	c.renderDetails(m)
+	c.renderInvitation(m)
 	c.renderBody(lm)
 	c.renderBars(lm)
 	c.renderChips(lm)
 	c.renderQuoted(lm)
+}
+
+// renderInvitation shows the invitation card of m (message.get), made the
+// first time a message has one; nil m (not answered, or let go) keeps the
+// card as it was.
+func (c *convCard) renderInvitation(m *api.Message) {
+	if c.invitation == nil {
+		if m == nil || m.Invitation == nil {
+			return
+		}
+		w := c.cv.w
+		c.invitation = newInvitationCard(w, &w.ApplicationWindow.Window)
+		c.invitationHolder = gtk.NewBox(gtk.OrientationVertical, 0)
+		c.invitationHolder.Append(c.invitation.widget())
+		c.invitation.widget().NotifyProperty("visible", c.showInvitationHolder)
+		c.install(c.invitationHolder, cardSlotInvitation)
+	}
+	c.invitation.showMessage(c.s, m)
+}
+
+// showInvitationHolder shows the invitation card's slot while the card
+// shows and the conversation card is open (a hidden slot takes none of the
+// top's spacing).
+func (c *convCard) showInvitationHolder() {
+	if c.invitationHolder != nil {
+		c.invitationHolder.SetVisible(!c.folded && c.invitation.widget().Visible())
+	}
 }
 
 // renderQuoted shows the "•••" under the body for what lm holds: Show

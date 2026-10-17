@@ -5,7 +5,7 @@ package board
 
 import "time"
 
-// The main window's two modes: Mail (the folders, the list, the reader and
+// The main window's modes: Mail (the folders, the list, the reader and
 // the assistant panel, as always) and Board (the page of the board:
 // Controller, View). The window shows one of them at a time under the same
 // status bar; the toolbar's switch and the View menu change it. This is the
@@ -24,20 +24,30 @@ type Mode int
 const (
 	ModeMail Mode = iota
 	ModeBoard
+	// ModeCalendar is the calendar page (docs/calendar.md D27); raw
+	// value 2, nick "calendar".
+	ModeCalendar
 )
 
-// Modes lists every mode in the switch's order.
+// Modes lists the modes of a client without a Calendar in the switch's
+// order (GTK until its port); ModesWithCalendar adds the Calendar.
 var Modes = []Mode{ModeMail, ModeBoard}
+
+// ModesWithCalendar lists every mode in the switch's order.
+var ModesWithCalendar = []Mode{ModeMail, ModeBoard, ModeCalendar}
 
 // InitialMode is the mode a new main window starts in when nothing else
 // says (the default of the key board-start-mode); StartMode decides.
 const InitialMode = ModeMail
 
 // Nick is the mode's value in the settings (the key board-last-mode:
-// "mail", "board").
+// "mail", "board", "calendar").
 func (m Mode) Nick() string {
-	if m == ModeBoard {
+	switch m {
+	case ModeBoard:
 		return "board"
+	case ModeCalendar:
+		return "calendar"
 	}
 	return "mail"
 }
@@ -49,6 +59,8 @@ func ParseMode(nick string) (Mode, bool) {
 		return ModeMail, true
 	case "board":
 		return ModeBoard, true
+	case "calendar":
+		return ModeCalendar, true
 	}
 	return ModeMail, false
 }
@@ -62,20 +74,30 @@ const (
 	StartBoard
 	// StartLast opens the mode shown last (the key board-last-mode).
 	StartLast
+	// StartCalendar opens the Calendar (docs/calendar.md D27).
+	StartCalendar
 )
 
-// StartModes lists the choices in Settings' order.
+// StartModes lists the choices of a client without a Calendar in
+// Settings' order; StartModesWithCalendar adds the Calendar (before Last
+// Used).
 var StartModes = []StartChoice{StartMail, StartBoard, StartLast}
+
+// StartModesWithCalendar lists every choice in Settings' order.
+var StartModesWithCalendar = []StartChoice{StartMail, StartBoard, StartCalendar, StartLast}
 
 // NickLast is the stored value of a choice that takes what the user had
 // last (board-start-mode, board-default-style).
 const NickLast = "last"
 
-// Nick is the choice's value in the settings: "mail", "board", "last".
+// Nick is the choice's value in the settings: "mail", "board",
+// "calendar", "last".
 func (s StartChoice) Nick() string {
 	switch s {
 	case StartBoard:
 		return "board"
+	case StartCalendar:
+		return "calendar"
 	case StartLast:
 		return NickLast
 	}
@@ -85,7 +107,7 @@ func (s StartChoice) Nick() string {
 // ParseStartChoice is the choice a stored nick names; an unknown or empty
 // one is Mail.
 func ParseStartChoice(nick string) StartChoice {
-	for _, s := range StartModes {
+	for _, s := range StartModesWithCalendar {
 		if s.Nick() == nick {
 			return s
 		}
@@ -95,20 +117,46 @@ func ParseStartChoice(nick string) StartChoice {
 
 // StartMode is the mode a new main window opens in: startMode is the key
 // board-start-mode, lastMode the key board-last-mode (written whenever the
-// mode switches). With the board turned off (boardEnabled false) always
-// Mail.
+// mode switches). With the board turned off (boardEnabled false) a Board
+// start or last mode is Mail; the Calendar does not depend on the board
+// and stays. A client without a Calendar passes the choice through
+// ResolveStartMode instead.
 func StartMode(startMode, lastMode string, boardEnabled bool) Mode {
-	if !boardEnabled {
-		return ModeMail
-	}
+	var m Mode
 	switch ParseStartChoice(startMode) {
 	case StartBoard:
-		return ModeBoard
+		m = ModeBoard
+	case StartCalendar:
+		m = ModeCalendar
 	case StartLast:
-		m, _ := ParseMode(lastMode)
-		return m
+		m, _ = ParseMode(lastMode)
 	}
-	return ModeMail
+	if m == ModeBoard && !boardEnabled {
+		return ModeMail
+	}
+	return m
+}
+
+// ResolveStartMode is the mode a window opens in: choice is Open at Launch
+// (ParseStartChoice), last the mode shown last (ParseMode). A client that
+// has no Calendar mode (hasCalendar false: GTK until its port) reads a
+// stored Calendar start or last mode as Mail, so that a setting written by
+// another client never leaves the window on a page it cannot show. The
+// Board's own rules are StartMode's and StartDecision's.
+func ResolveStartMode(choice StartChoice, last Mode, hasCalendar bool) Mode {
+	var m Mode
+	switch choice {
+	case StartBoard:
+		m = ModeBoard
+	case StartCalendar:
+		m = ModeCalendar
+	case StartLast:
+		m = last
+	}
+	if m == ModeCalendar && !hasCalendar {
+		return ModeMail
+	}
+	return m
 }
 
 // StartWait is how long a new main window waits for the daemon's board
@@ -130,6 +178,9 @@ const StartWait = 5 * time.Second
 //
 //   - a start that is Mail whatever the preferences say (Mail, or Last
 //     Used with Mail last): Mail at once;
+//   - a start that is the Calendar (or Last Used with the Calendar last)
+//     needs no daemon preferences: Calendar at once, unless the user
+//     switched or acted in Mail, then Mail;
 //   - the user switched: settled, the window keeps what the user chose
 //     (mode is Mail: the start moves nothing);
 //   - the user acted in Mail: Mail, so the reader never jumps away from
@@ -142,6 +193,11 @@ func StartDecision(start StartChoice, lastMode Mode, prefsKnown, enabled, userSw
 	switch {
 	case wanted == ModeMail:
 		return ModeMail, true
+	case wanted == ModeCalendar:
+		if userSwitched || userInteracted {
+			return ModeMail, true
+		}
+		return ModeCalendar, true
 	case userSwitched, userInteracted:
 		return ModeMail, true
 	case prefsKnown:
@@ -175,22 +231,33 @@ const (
 	// CommandBoardView is a view of the board: its style (List, Columns,
 	// Today).
 	CommandBoardView
+	// CommandNewEvent is New Event (⌥⌘N in Calendar).
+	CommandNewEvent
 )
 
 // Commands lists every command.
 var Commands = []Command{
 	CommandSwitchMode, CommandNewMessage, CommandCheckForNewMail, CommandMailView, CommandMessageAction,
-	CommandBoardView,
+	CommandBoardView, CommandNewEvent,
 }
 
 // Allows reports whether command c may run in mode m. Mail allows
 // everything but the board's views; Board only what does not need the
 // folders, the list and the reader: the list keeps its selection while
-// hidden, and no key may act on a message the user cannot see.
+// hidden, and no key may act on a message the user cannot see. Calendar
+// keeps Switch Mode, New Message, Check for New Mail and New Event; New
+// Event is not a Board command.
 func Allows(c Command, m Mode) bool {
-	if m == ModeBoard {
+	switch m {
+	case ModeBoard:
 		switch c {
 		case CommandSwitchMode, CommandNewMessage, CommandCheckForNewMail, CommandBoardView:
+			return true
+		}
+		return false
+	case ModeCalendar:
+		switch c {
+		case CommandSwitchMode, CommandNewMessage, CommandCheckForNewMail, CommandNewEvent:
 			return true
 		}
 		return false

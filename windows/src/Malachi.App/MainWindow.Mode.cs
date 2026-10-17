@@ -2,38 +2,49 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiMail/MainWindow/MainWindowController+Mode.swift
-// (setMode, viewsMail, applyTitle, setWindowMode, command(_:), ModeSwitch)
-// and the window's part of MainWindowController+Board.swift (the board's
-// actions, its keyboard on the way back); GTK: window/board.go
-// (setupBoardMode, setMode, applyMessageAccels, messageAccelsAllowed).
+// (setMode, setupModeMemory, boardEnabledChanged, viewsMail, applyTitle,
+// setWindowMode, command(_:), ModeSwitch) and the window's part of
+// MainWindowController+Board.swift (the board's actions, its keyboard on
+// the way back); GTK: window/board.go (setupBoardMode, setMode,
+// applyMessageAccels, messageAccelsAllowed).
 //
-// The main window's two modes (Core's Board.Mode): Mail shows the panes
-// (AssistantSplit), Board the board's page (BoardView) in their place; the
-// status line stays. The hidden mode keeps its state: the mail's folder,
-// selection, scroll positions, reader, search and the assistant's
-// transcript are there on the way back, and so is the board's style. The
-// switch is the two-segment control at the start of the title bar (icons,
-// the modes' names as tooltips); the sidebar's primary menu and the
-// board's "…" menu have Mail and Board too, and Ctrl+1 and Ctrl+2 switch
-// (Board.BoardKeys; ShortcutMap's, so they reach the window from a
-// WebView2 that has the keyboard too). The window opens in Mail and
-// settles its start with Board.StartDecision (GTK window.go decideStart):
-// once the daemon's board preferences are known, in the mode Open at Launch
+// The main window's three modes (Core's Board.Mode): Mail shows the panes
+// (AssistantSplit), Board the board's page (BoardView) and Calendar the
+// calendar's page (CalendarView, MainWindow.Calendar.cs) in their place;
+// the status line stays. The hidden modes keep their state: the mail's
+// folder, selection, scroll positions, reader, search and the assistant's
+// transcript are there on the way back, and so are the board's style and
+// the calendar's query. The switch is the three-segment control at the
+// start of the title bar (icons, the modes' names as tooltips,
+// Board.ModeTexts); the sidebar's primary menu, the board's and the
+// calendar's "…" menus have Mail, Board and Calendar too, and Ctrl+1,
+// Ctrl+2 and Ctrl+3 switch (Board.BoardKeys, the calendar's
+// ShowCalendarKey; ShortcutMap's, so they reach the window from a WebView2
+// that has the keyboard too; a VirtualKey is the key whatever the layout,
+// as macOS's Board.modeKeyDigit). The window opens in Mail and settles its
+// start with Board.StartDecision (GTK window.go decideStart): a Calendar
+// start (or Last Used with the Calendar last) at once, a Board start once
+// the daemon's board preferences are known, in the mode Open at Launch
 // says (board-start-mode, board-last-mode, the board turned on), unless
 // the user switched or clicked or typed in Mail first, and in Mail when
 // Board.StartWait passes without them. Until then nothing is written to
 // board-last-mode (a Last Used Board survives a daemon that never
 // answers); from then on every switch writes it, and a start settled at
-// once writes the mode it opened in (GTK modeShown). With the board turned off (Settings →
-// General → Show the Board) the switch hides, Board is disabled and the
-// window shows Mail. While the board shows:
+// once writes the mode it opened in (GTK modeShown). With the board turned
+// off (Settings → General → Show the Board) the switch stays for Mail and
+// Calendar with its Board segment disabled (macOS As built, docs/calendar.md
+// §5.3), Board is disabled and a window showing it goes to Mail. While the
+// board or the calendar shows:
 //
 // - the mail's commands stand still (Board.Allows through AppCommand.Gate):
 //   the single keys of the list (A, J, U, S, Delete) and the reply keys
 //   act on no message the user cannot see; Check for New Mail and New
-//   Message stay; F10 opens the board's "…" menu;
-// - the title bar's search box hides (Find… is the mail's);
-// - the toasts lie over the board (BoardPage.ToastLayer);
+//   Message stay, and New Event in the Calendar; F10 opens the page's "…"
+//   menu;
+// - the title bar's search box hides in Board (Find… is the mail's) and
+//   searches the events in the Calendar, where it says so and keeps its
+//   own text (MainWindow.Calendar.cs);
+// - the toasts lie over the page (BoardPage.ToastLayer, CalendarPage.ToastLayer);
 // - the window does not count as looking at the folder (ViewsMail), so the
 //   folder's desktop notifications stay; back in Mail an active window
 //   withdraws them, as becoming active does;
@@ -49,12 +60,14 @@ using Malachi.Core.Boards;
 using Malachi.Core.Controllers;
 using Malachi.Core.Presentation;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 
 namespace Malachi.App;
 
-/// <summary>The main window's Mail and Board modes.</summary>
+/// <summary>The main window's Mail, Board and Calendar modes.</summary>
 public sealed partial class MainWindow
 {
     private Board.Mode mode = Board.InitialMode;
@@ -81,7 +94,7 @@ public sealed partial class MainWindow
     // The caption of Mail ("<folder> – Malachi Mail"), kept while the board shows.
     private string mailCaption = Core.AppIdentity.DisplayName;
 
-    /// <summary>What the window shows: the mail or the board.</summary>
+    /// <summary>What the window shows: the mail, the board or the calendar.</summary>
     public Board.Mode Mode => mode;
 
     /// <summary>
@@ -92,7 +105,8 @@ public sealed partial class MainWindow
 
     /// <summary>
     /// Shows <paramref name="next"/>; the current one changes nothing. The
-    /// board takes the keyboard on entry; Mail gives it back to the list.
+    /// board and the calendar take the keyboard on entry; Mail gives it back
+    /// to the list.
     /// </summary>
     public void SetMode(Board.Mode next)
     {
@@ -108,52 +122,87 @@ public sealed partial class MainWindow
             startSwitched = true;
             DecideStart(timedOut: false);
         }
+        var previous = mode;
+        switch (previous)
+        {
+            case Board.Mode.Mail:
+                // A Show in Mail still waiting selects nothing in the hidden
+                // panes; a search in the user's own words ends (the box is
+                // the mail's).
+                boardIntegration?.LeftMail();
+                CancelOwnWords();
+                break;
+            case Board.Mode.Board:
+                break;
+            case Board.Mode.Calendar:
+                LeaveCalendar();
+                break;
+        }
         mode = next;
         WriteLastMode();
-        // The board's conversation cards and inline reply follow the mode.
+        // The board's conversation cards and inline reply follow the mode:
+        // shown in Board only, settled and suspended in Mail and Calendar.
         SyncBoardParts();
-        if (next == Board.Mode.Board)
+        switch (next)
         {
-            // A Show in Mail still waiting selects nothing in the hidden panes.
-            boardIntegration?.LeftMail();
-            var controller = BoardView.Controller!;
-            // Board View (Settings → General → Board) until the user picks a
-            // style in this run, and the saved account filter the first time.
-            controller.BoardWillShow();
-            // The daemon's board is listed from the first entry on.
-            boardIntegration?.StartBoard();
-            AssistantSplit.Visibility = Visibility.Collapsed;
-            BoardView.Visibility = Visibility.Visible;
-            SearchArea.Visibility = Visibility.Collapsed;
-            AppTitleBar.IsPaneToggleButtonVisible = false;
-            AppTitleBar.IsBackButtonVisible = false;
-            MoveToasts(BoardView.ToastLayer);
-            BoardView.ApplyAll();
-            // The dates may have moved on (a new day); a board that could not
-            // be listed is asked for again.
-            controller.BoardShown();
-            Title = new ListHeading(Board.Text.BoardName, "").Caption;
-            DispatcherQueue.TryEnqueue(() => BoardView.FocusContent());
-        }
-        else
-        {
-            AssistantSplit.Visibility = Visibility.Visible;
-            BoardView.Visibility = Visibility.Collapsed;
-            SearchArea.Visibility = Visibility.Visible;
-            MoveToasts(MessagePane);
-            ApplyLayout();
-            Title = mailCaption;
-            DispatcherQueue.TryEnqueue(ListPane.FocusList);
-            // The user looks at the folder again: its notifications go, as
-            // when the window becomes active.
-            if (state.IsMainWindowActive && boardIntegration is { } integration && !integration.Mailbox.Scope.IsClosed)
-            {
-                integration.Mailbox.WithdrawViewedNotifications();
-            }
+            case Board.Mode.Board:
+                ShowBoardMode();
+                break;
+            case Board.Mode.Calendar:
+                EnterCalendar();
+                break;
+            case Board.Mode.Mail:
+                ShowMailMode();
+                break;
         }
         BoardView.ShowMode(mode);
+        CalendarView.ShowMode(mode);
         Commands.RefreshAll();
         SyncModeSwitch();
+        SyncOwnWordsMode();
+    }
+
+    // SetMode's part for the board.
+    private void ShowBoardMode()
+    {
+        var controller = BoardView.Controller!;
+        // Board View (Settings → General → Board) until the user picks a
+        // style in this run, and the saved account filter the first time.
+        controller.BoardWillShow();
+        // The daemon's board is listed from the first entry on.
+        boardIntegration?.StartBoard();
+        AssistantSplit.Visibility = Visibility.Collapsed;
+        CalendarView.Visibility = Visibility.Collapsed;
+        BoardView.Visibility = Visibility.Visible;
+        SearchArea.Visibility = Visibility.Collapsed;
+        AppTitleBar.IsPaneToggleButtonVisible = false;
+        AppTitleBar.IsBackButtonVisible = false;
+        MoveToasts(BoardView.ToastLayer);
+        BoardView.ApplyAll();
+        // The dates may have moved on (a new day); a board that could not
+        // be listed is asked for again.
+        controller.BoardShown();
+        Title = new ListHeading(Board.Text.BoardName, "").Caption;
+        DispatcherQueue.TryEnqueue(() => BoardView.FocusContent());
+    }
+
+    // SetMode's part for the mail.
+    private void ShowMailMode()
+    {
+        AssistantSplit.Visibility = Visibility.Visible;
+        BoardView.Visibility = Visibility.Collapsed;
+        CalendarView.Visibility = Visibility.Collapsed;
+        SearchArea.Visibility = Visibility.Visible;
+        MoveToasts(MessagePane);
+        ApplyLayout();
+        Title = mailCaption;
+        DispatcherQueue.TryEnqueue(ListPane.FocusList);
+        // The user looks at the folder again: its notifications go, as
+        // when the window becomes active.
+        if (state.IsMainWindowActive && boardIntegration is { } integration && !integration.Mailbox.Scope.IsClosed)
+        {
+            integration.Mailbox.WithdrawViewedNotifications();
+        }
     }
 
     /// <summary>
@@ -178,20 +227,24 @@ public sealed partial class MainWindow
         Commands.ShowMail.Handler = () => SetMode(Board.Mode.Mail);
         Commands.ShowBoard.Handler = () => SetMode(Board.Mode.Board);
         Commands.ShowBoard.CanExecute = () => boardEnabled;
-        // Ctrl+1 and Ctrl+2 are ShortcutMap's (the router: root accelerators,
-        // and the WebView2 keys while a page has the keyboard).
+        Commands.ShowCalendar.Handler = () => SetMode(Board.Mode.Calendar);
+        // Ctrl+1, Ctrl+2 and Ctrl+3 are ShortcutMap's (the router: root
+        // accelerators, and the WebView2 keys while a page has the keyboard).
         // A segment's click asks for its mode; the switch then shows the
-        // mode the window is in (a refused change, the same mode again).
-        ModeMailButton.Click += (_, _) =>
+        // mode the window is in (a refused change, the same mode again). Its
+        // name and tooltip are the mode's (macOS ModeSwitch).
+        var texts = Board.Texts();
+        foreach (var (button, segment, command) in ModeSegments)
         {
-            Commands.ShowMail.TryExecute();
-            SyncModeSwitch();
-        };
-        ModeBoardButton.Click += (_, _) =>
-        {
-            Commands.ShowBoard.TryExecute();
-            SyncModeSwitch();
-        };
+            var name = texts.Name(segment);
+            AutomationProperties.SetName(button, name);
+            ToolTipService.SetToolTip(button, name);
+            button.Click += (_, _) =>
+            {
+                command.TryExecute();
+                SyncModeSwitch();
+            };
+        }
         Func<bool> messageAction = () => Board.Allows(Board.Command.MessageAction, mode);
         Func<bool> mailView = () => Board.Allows(Board.Command.MailView, mode);
         foreach (var c in (AppCommand[])[
@@ -204,19 +257,34 @@ public sealed partial class MainWindow
         {
             c.Gate = mailView;
         }
-        // F10: the sidebar's primary menu in Mail, the board's "…" in Board.
+        // New Event: Mail and the Calendar (its handler is
+        // MainWindow.Calendar.cs's NewEvent).
+        Commands.NewEvent.Gate = () => Board.Allows(Board.Command.NewEvent, mode);
+        // F10: the sidebar's primary menu in Mail, the page's "…" in Board
+        // and Calendar.
         Commands.MainMenu.Handler = () =>
         {
-            if (mode == Board.Mode.Board)
+            switch (mode)
             {
-                BoardView.ShowMenu();
-            }
-            else
-            {
-                SidebarPane.ShowPrimaryMenu();
+                case Board.Mode.Board:
+                    BoardView.ShowMenu();
+                    break;
+                case Board.Mode.Calendar:
+                    CalendarView.ShowMenu();
+                    break;
+                case Board.Mode.Mail:
+                    SidebarPane.ShowPrimaryMenu();
+                    break;
             }
         };
-        Commands.MainMenu.CanExecute = () => mode == Board.Mode.Board || PaneSplit.IsPaneOpen;
+        Commands.MainMenu.CanExecute = () => mode switch
+        {
+            Board.Mode.Board or Board.Mode.Calendar => true,
+            // While the sidebar that holds its button is shown.
+            Board.Mode.Mail => PaneSplit.IsPaneOpen,
+            _ => false,
+        };
+        InitializeCalendar();
         SyncModeSwitch();
         BeginStart();
     }
@@ -306,9 +374,18 @@ public sealed partial class MainWindow
             AssistantSplit.RemoveHandler(UIElement.KeyDownEvent, startKey);
             startKey = null;
         }
-        if (start == Board.Mode.Board && mode == Board.Mode.Mail)
+        switch (start)
         {
-            SetMode(start);
+            case Board.Mode.Board:
+            case Board.Mode.Calendar:
+                // Never away from a mode the user chose meanwhile.
+                if (mode == Board.Mode.Mail)
+                {
+                    SetMode(start);
+                }
+                break;
+            case Board.Mode.Mail:
+                break;
         }
     }
 
@@ -343,8 +420,9 @@ public sealed partial class MainWindow
     }
 
     // The daemon's board preferences changed or came: the board on or off
-    // (window.go's mode memory and the hidden switch), and the mode of the
-    // launch the first time they are known.
+    // (window.go's mode memory; the switch keeps Mail and Calendar with its
+    // Board segment disabled, macOS boardEnabledChanged), and the mode of
+    // the launch the first time they are known.
     private void BoardPreferencesChanged()
     {
         var prefs = state.BoardPreferences.Preferences;
@@ -352,18 +430,29 @@ public sealed partial class MainWindow
         if (enabled != boardEnabled)
         {
             boardEnabled = enabled;
-            ModeSwitch.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
             if (!enabled && mode == Board.Mode.Board)
             {
                 SetMode(Board.Mode.Mail);
             }
             Commands.ShowBoard.Refresh();
+            SyncModeSwitch();
         }
         DecideStart(timedOut: false);
     }
 
+    // Where the keyboard goes when nothing in the window has it (the first
+    // show, past the search box): the sidebar's first tab stop in Mail, the
+    // page in Board and Calendar.
+    private UIElement ModeFocusRoot => mode switch
+    {
+        Board.Mode.Board => BoardView,
+        Board.Mode.Calendar => CalendarView,
+        Board.Mode.Mail => SidebarPane,
+        _ => SidebarPane,
+    };
+
     // The toast overlay over the visible mode: the message pane's content in
-    // Mail (window.blp's toast_overlay), the whole board in Board.
+    // Mail (window.blp's toast_overlay), the whole page in Board and Calendar.
     private void MoveToasts(Panel host)
     {
         if (ReferenceEquals(ToastsHost.Parent, host))
@@ -377,9 +466,22 @@ public sealed partial class MainWindow
         host.Children.Add(ToastsHost);
     }
 
+    // The switch's segments: the button, its mode and the command it runs.
+    private (ToggleButton Button, Board.Mode Mode, AppCommand Command)[] ModeSegments =>
+    [
+        (ModeMailButton, Board.Mode.Mail, Commands.ShowMail),
+        (ModeBoardButton, Board.Mode.Board, Commands.ShowBoard),
+        (ModeCalendarButton, Board.Mode.Calendar, Commands.ShowCalendar),
+    ];
+
+    // The segment of the mode shown is checked; Board's is disabled while the
+    // board is off (the switch stays for Mail and Calendar).
     private void SyncModeSwitch()
     {
-        ModeMailButton.IsChecked = mode == Board.Mode.Mail;
-        ModeBoardButton.IsChecked = mode == Board.Mode.Board;
+        foreach (var (button, segment, _) in ModeSegments)
+        {
+            button.IsChecked = mode == segment;
+        }
+        ModeBoardButton.IsEnabled = boardEnabled;
     }
 }

@@ -39,6 +39,8 @@ public sealed class WindowCommands
             [ShortcutCommand.Search] = Search,
             [ShortcutCommand.ShowMail] = ShowMail,
             [ShortcutCommand.ShowBoard] = ShowBoard,
+            [ShortcutCommand.ShowCalendar] = ShowCalendar,
+            [ShortcutCommand.NewEvent] = NewEvent,
             [ShortcutCommand.MainMenu] = MainMenu,
             [ShortcutCommand.Reply] = Reply,
             [ShortcutCommand.ReplyAll] = ReplyAll,
@@ -81,6 +83,9 @@ public sealed class WindowCommands
     /// <summary>app.add-jira-account: the Jira account assistant.</summary>
     public AppCommand AddJiraAccount { get; } = new(nameof(AddJiraAccount));
 
+    /// <summary>Add CalDAV Calendar… (macOS addCalDAVAccount:, docs/calendar.md §5.8): the Add CalDAV Calendar window.</summary>
+    public AppCommand AddCalDAVCalendar { get; } = new(nameof(AddCalDAVCalendar));
+
     /// <summary>app.about.</summary>
     public AppCommand About { get; } = new(nameof(About));
 
@@ -98,6 +103,16 @@ public sealed class WindowCommands
 
     /// <summary>The main window's Board mode (the title bar's switch, the menus' Board, Ctrl+2).</summary>
     public AppCommand ShowBoard { get; } = new(nameof(ShowBoard));
+
+    /// <summary>The main window's Calendar mode (the title bar's switch, the menus' Calendar, Ctrl+3).</summary>
+    public AppCommand ShowCalendar { get; } = new(nameof(ShowCalendar));
+
+    /// <summary>
+    /// New Event (Board.Command.NewEvent: the Mail and Calendar modes;
+    /// Ctrl+Shift+N, and the calendar's "+" and "…" menu, wired with the
+    /// calendar's page).
+    /// </summary>
+    public AppCommand NewEvent { get; } = new(nameof(NewEvent));
 
     /// <summary>The main window's primary menu (F10), while its button is shown.</summary>
     public AppCommand MainMenu { get; } = new(nameof(MainMenu));
@@ -185,7 +200,7 @@ public sealed class WindowCommands
     /// <summary>Every command, for re-validating them all (a hook was wired).</summary>
     public IEnumerable<AppCommand> All =>
     [
-        .. byShortcut.Values, AddAccount, AddJiraAccount, About, MarkRead, LoadImages, TrustSender, ChangeStatus
+        .. byShortcut.Values, AddAccount, AddJiraAccount, AddCalDAVCalendar, About, MarkRead, LoadImages, TrustSender, ChangeStatus
     ];
 
     /// <summary>Re-validates every command.</summary>

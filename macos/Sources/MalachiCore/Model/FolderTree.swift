@@ -52,6 +52,27 @@ public func enabledAccounts(_ accounts: [Account]) -> [Account] {
     accounts.filter(\.enabled)
 }
 
+/// The enabled accounts the Mail sidebar lists, keeping order: a
+/// calendar-only CalDAV account has no mail and no folders, so it is never
+/// in Mail (docs/calendar.md D16; it shows in the Calendar's sidebar with
+/// the CALDAV capsule). model.go `mailSidebarAccounts`, Windows
+/// `FolderTree.MailSidebarAccounts`.
+public func mailSidebarAccounts(_ accounts: [Account]) -> [Account] {
+    enabledAccounts(accounts).filter(inMail)
+}
+
+/// Whether Mail shows account `a` once it is enabled, the rule of
+/// `mailSidebarAccounts`: every kind but a calendar-only CalDAV account.
+/// Mail asks it of switched-off accounts too, so that CalDAV accounts
+/// alone count as no account in Mail (the empty sidebar, the reader's No
+/// Accounts page); the account name on an all-accounts search result, the
+/// Reply All self address and the board's accounts (its account filter,
+/// Triage These Accounts) go by it as well (Go `capabilities.InMail`,
+/// Windows `FolderTree.InMail`).
+public func inMail(_ a: Account) -> Bool {
+    a.config.protocolKind != .caldav
+}
+
 /// The folders the sidebar lists: an empty outbox is dropped (the folder
 /// exists from the first send on; it only earns a row while something is
 /// in it). The model keeps the full list so `folderByRole` still finds it
@@ -68,7 +89,8 @@ public func selfAddress(_ a: Account) -> Address {
 
 /// Lays the sidebar out (model.go `sortFolders`): the Favourites section
 /// when anything is pinned (`favouriteSection`), then the enabled accounts
-/// in list order, each preceded by a header row when there are at least
+/// in list order (`mailSidebarAccounts`: no calendar-only CalDAV account),
+/// each preceded by a header row when there are at least
 /// two of them or a Favourites section above them, then the account's
 /// folders as a tree. Roots are ordered by (roleRank, path); the children
 /// of a folder follow it, ordered the same way. Depth comes from `parentId`;
@@ -79,7 +101,7 @@ public func selfAddress(_ a: Account) -> Address {
 public func sortFolders(
     _ accounts: [Account], _ folders: [AccountID: [Folder]], _ collapsed: CollapseState, _ favourites: FavouriteState
 ) -> [FolderEntry] {
-    let enabled = enabledAccounts(accounts)
+    let enabled = mailSidebarAccounts(accounts)
     var out = favouriteSection(enabled, folders, favourites)
     // A single account needs no heading of its own, unless a Favourites
     // section sits above its folders and the two would run into each other.
@@ -308,10 +330,15 @@ public func folderIcon(_ f: Folder) -> String {
 /// kind of account it is (model.go `accountHeaderBadge`): "JIRA" for an
 /// issue-tracker account (`Jira.kindBadge`), the provider a mail account
 /// signs in with ("GOOGLE", "M365"; `accountProvider`), "IMAP" for a mail
-/// account with a password. Brand and protocol names, never translated.
+/// account with a password, "CALDAV" for a calendar-only CalDAV account
+/// (the Calendar's sidebar; Swift-first). Brand and protocol names, never
+/// translated.
 public func accountHeaderBadge(_ a: Account) -> String {
     if Jira.isJira(a.config) {
         return Jira.kindBadge
+    }
+    if a.config.protocolKind == .caldav {
+        return caldavBadge
     }
     switch accountProvider(a.config) {
     case .google?: return googleBadge
@@ -324,6 +351,7 @@ public func accountHeaderBadge(_ a: Account) -> String {
 let googleBadge = "GOOGLE"
 let microsoftBadge = "M365"
 let imapBadge = "IMAP"
+let caldavBadge = "CALDAV"
 
 /// The display name of a folder (folders.go `folderTitle`): the localised
 /// name for a role folder (whatever the server calls it) and for a fixed

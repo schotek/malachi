@@ -23,9 +23,11 @@ import Quartz
 /// searched as if typed and Return pressed.
 /// The window is one instance for the application's life: with "Run in
 /// Background" it hides instead of closing.
-/// It has two modes (MalachiCore `Board`, MainWindowController+Mode): Mail,
-/// all of the above, and Board, a page in place of the panes with toolbars
-/// of its own; the status bar stays in both. The window starts in Mail.
+/// It has three modes (MalachiCore `Board`, MainWindowController+Mode): Mail,
+/// all of the above; Board, a page in place of the panes with toolbars of
+/// its own; Calendar, the calendar page under its toolbar
+/// (MainWindowController+Calendar). The status bar stays in all three. The
+/// window starts in Mail.
 @MainActor
 final class MainWindowController: NSWindowController, NSWindowDelegate {
     static let defaultSize = NSSize(width: 1200, height: 760)
@@ -135,6 +137,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         }
         return page
     }()
+    /// The Calendar mode's controller, page and toolbar, made on first use
+    /// (MainWindowController+Calendar).
+    let calendarExtras = CalendarWindowExtras()
     /// What had the keyboard in the board when the window went back to
     /// Mail, given it back on the next entry.
     weak var boardResponder: NSResponder?
@@ -152,7 +157,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     private var assistantToken: AssistantController.Token?
     private var assistantTargetToken: Settings.ChangeToken?
     /// The assistant panel's view, for the Assistant button that opens it.
-    private weak var assistantPanel: AssistantPanelViewController?
+    private(set) weak var assistantPanel: AssistantPanelViewController?
     /// The search in the user's own words, made on first use.
     private var conversion: SearchConversion?
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "window")
@@ -197,6 +202,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         w.delegate = self
         modeKeyMonitor = installModeKeys()
         w.toolbar = mailToolbar
+        BoardToolbar.keepSidebarToggle(in: mailToolbar)
         // The GTK sizes are window sizes, header bars included: the frame
         // is set once the toolbar is part of it. With Auto Layout content
         // the window's minimum comes from the content's constraints, so the
@@ -317,6 +323,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         toolbarDelegate.setAssistantPanel(visible: allowed, in: mailToolbar)
         toolbarDelegate.setAssistant(
             opensPanel: Assistant.buttonOpensPanel(state.settings.assistantTarget, hasPanel: true), in: mailToolbar)
+        calendarAssistantAllowed(allowed)
         let ownWords = state.assistant.canRunInApp
         toolbarDelegate.setOwnWords(available: ownWords)
         if !ownWords, toolbarDelegate.converting {
@@ -380,10 +387,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         return c
     }
 
-    /// The Mail/Board switches of both toolbars, the ones made so far
+    /// The mode switches of every toolbar, the ones made so far
     /// (MainWindowController+Mode keeps their selection in step).
     var modeSwitches: [NSToolbarItemGroup] {
-        [toolbarDelegate.modeItem].compactMap { $0 } + (boardToolbarsMade ? boardToolbars.modeItems : [])
+        [toolbarDelegate.modeItem, calendarExtras.toolbar?.modeItem].compactMap { $0 }
+            + (boardToolbarsMade ? boardToolbars.modeItems : [])
     }
 
     private func setListSeparator(visible: Bool) {
@@ -425,10 +433,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     }
 
     /// A resize by the user (or a tile, a zoom) to `frameSize`: the
-    /// board's List folds its panes for the new width first.
+    /// board's List and the calendar page fold their panes for the new
+    /// width first.
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
         if mode == .board {
             boardPage.shownList?.willResize(toWidth: frameSize.width)
+        }
+        if mode == .calendar {
+            calendarExtras.page?.willResize(toWidth: frameSize.width)
         }
         return frameSize
     }

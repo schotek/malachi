@@ -1,0 +1,17 @@
+BEGIN:VCALENDAR
+X-MALACHI-TEST:ORGANIZER whose CN names another address and whose SENT-BY d
+ iffers
+VERSION:2.0
+PRODID:-//Malachi Test//Corpus//EN
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:os@example.org
+DTSTAMP:20261016T080000Z
+DTSTART:20261020T090000Z
+DTEND:20261020T100000Z
+SUMMARY:Planning
+ORGANIZER;CN="ceo@example.org (CEO)";SENT-BY="mailto:billing@example.org":m
+ ailto:invoices@mail.example.org
+ATTENDEE;CN=Bo Tester;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:bo@example.org
+END:VEVENT
+END:VCALENDAR

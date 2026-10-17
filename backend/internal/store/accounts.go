@@ -44,11 +44,27 @@ const accountColumns = `id, email, realm, name, enabled, config, position, creat
 // "jira.example.org:8443/jira"); the scheme and a default port do not
 // count. "" as well for a jira config without a usable site URL, which
 // AddAccount and UpdateAccount refuse.
+//
+// A calendar account (caldav, migration 0020) has the same form of its
+// CalDAVConfig.ServerURL: "cloud.example.org/remote.php/dav".
 func RealmOf(cfg api.AccountConfig) string {
-	if cfg.Protocol() != api.AccountJira || cfg.Jira == nil {
+	var site string
+	switch {
+	case cfg.Protocol() == api.AccountJira && cfg.Jira != nil:
+		site = cfg.Jira.SiteURL
+	case cfg.Protocol() == api.AccountCalDAV && cfg.CalDAV != nil:
+		site = cfg.CalDAV.ServerURL
+	default:
 		return ""
 	}
-	u, err := url.Parse(strings.TrimSpace(cfg.Jira.SiteURL))
+	return siteRealm(site)
+}
+
+// siteRealm is the lower-cased host[:port] and path of a site URL without
+// a trailing slash, the default port of its scheme left out; "" for a URL
+// without a host.
+func siteRealm(site string) string {
+	u, err := url.Parse(strings.TrimSpace(site))
 	if err != nil || u.Host == "" || u.Opaque != "" {
 		return ""
 	}
@@ -68,6 +84,9 @@ func accountRealm(a *Account) error {
 	a.Realm = RealmOf(a.Config)
 	if a.Realm == "" && a.Config.Protocol() == api.AccountJira {
 		return fmt.Errorf("jira account without a site URL")
+	}
+	if a.Realm == "" && a.Config.Protocol() == api.AccountCalDAV {
+		return fmt.Errorf("caldav account without a server URL")
 	}
 	return nil
 }
@@ -424,6 +443,11 @@ func (s *Store) DeleteAccount(ctx context.Context, id string, deleteLocalData bo
 	if err := deleteBoardAccountTx(ctx, tx, id); err != nil {
 		return err
 	}
+	// Calendars, events and their occurrences, alerts, invitations and
+	// answers (migration 0020); its messages took their invitations along.
+	if err := deleteCalendarAccountTx(ctx, tx, id); err != nil {
+		return err
+	}
 	if checkPathSegment(id) == nil {
 		// The raw files go after the commit, and what a reader keeps open
 		// (Windows) or a crash leaves goes with the sweep: the record says
@@ -487,6 +511,14 @@ func (s *Store) SetMeta(ctx context.Context, key, value string) error {
 		 ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
 	if err != nil {
 		return fmt.Errorf("set meta %q: %w", key, err)
+	}
+	return nil
+}
+
+// DeleteMeta removes a key of the meta table; an absent key is no error.
+func (s *Store) DeleteMeta(ctx context.Context, key string) error {
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM meta WHERE key = ?`, key); err != nil {
+		return fmt.Errorf("delete meta %q: %w", key, err)
 	}
 	return nil
 }

@@ -271,6 +271,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state?.hooks.addAccount?(NSApp.keyWindow)
     }
 
+    /// File ▸ Add CalDAV Calendar…, and the Calendar sidebar's Add CalDAV
+    /// Calendar… when its window set no handler: the sheet on the main
+    /// window (docs/calendar.md §5.8).
+    @objc func addCalDAVAccount(_ sender: Any?) {
+        state?.showAddCalDAVCalendar(from: nil)
+    }
+
     @objc func showPreferences(_ sender: Any?) {
         state?.hooks.openPreferences?()
     }

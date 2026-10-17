@@ -5,6 +5,8 @@
 // with the sample cases (MALACHI_BOARD_SAMPLES=1, InMemoryBoardSource over
 // BoardSamples; no account, no daemon's board): the title bar's switch into
 // the Board and the page's "…" menu back to Mail (the search box again),
+// the switch's third segment into the Calendar (its page, the search box
+// that stays) and the calendar's "…" menu back to Mail,
 // the three styles with a case selected and its detail (beside the List,
 // in the sliding panel over Columns and Today, which Escape and Close
 // close), Done and Move Back, a Remind preset that takes the case off the
@@ -59,6 +61,26 @@ public sealed class BoardSmokeTests(BoardSmokeFixture fixture) : IClassFixture<B
         Assert.Equal(ToggleState.On, ToggleOf(Uia.Find(main, "ModeBoard")));
 
         ShowMailFromTheMenu(main);
+        Assert.Equal(ToggleState.On, ToggleOf(Uia.Find(main, "ModeMail")));
+    }
+
+    [Fact]
+    public void TheSwitchShowsTheCalendarAndItsMenuGivesTheMailBack()
+    {
+        var main = Main;
+        ShowMail(main);
+        Uia.Toggle(Uia.Find(main, "ModeCalendar"));
+        // The calendar's page with its "…"; the search box stays (the
+        // calendar's search), the sidebar's primary menu goes.
+        var menu = Uia.Find(main, "CalendarMenuButton");
+        Assert.Equal(ToggleState.On, ToggleOf(Uia.Find(main, "ModeCalendar")));
+        Assert.NotNull(Uia.Find(main, "SearchBox"));
+        Uia.WaitFor(() => Uia.TryFind(main, "MainMenuButton") is null, "the mail's sidebar to hide");
+
+        Uia.Invoke(menu);
+        Choose(Uia.Find(main, "CalendarMenuMail"));
+        Uia.WaitFor(() => Uia.TryFind(main, "CalendarMenuButton") is null, "the calendar to give way to the mail");
+        Uia.Find(main, "MainMenuButton");
         Assert.Equal(ToggleState.On, ToggleOf(Uia.Find(main, "ModeMail")));
     }
 
@@ -204,21 +226,19 @@ public sealed class BoardSmokeTests(BoardSmokeFixture fixture) : IClassFixture<B
 
     private static bool ShowsBoard(AutomationElement main) => Uia.TryFind(main, "BoardStyleList") is not null;
 
-    // Back to Mail through the title bar's switch.
+    // Back to Mail through the title bar's switch (from the Board or the Calendar).
     private static void ShowMail(AutomationElement main)
     {
-        if (ShowsBoard(main))
+        if (ShowsBoard(main) || Uia.TryFind(main, "CalendarMenuButton") is not null)
         {
             Uia.Toggle(Uia.Find(main, "ModeMail"));
         }
         Uia.Find(main, "MainMenuButton");
     }
 
-    // Back to Mail through the board's "…" menu: the search box is back.
-    private static void ShowMailFromTheMenu(AutomationElement main)
+    // A mode's item of a "…" menu (a radio item: invoked, or toggled).
+    private static void Choose(AutomationElement item)
     {
-        Uia.Invoke(Uia.Find(main, "BoardPageMenu"));
-        var item = Uia.Find(main, "BoardMenuMail");
         if (item.TryGetCurrentPattern(InvokePattern.Pattern, out var invoke))
         {
             ((InvokePattern)invoke).Invoke();
@@ -227,6 +247,13 @@ public sealed class BoardSmokeTests(BoardSmokeFixture fixture) : IClassFixture<B
         {
             Uia.Toggle(item);
         }
+    }
+
+    // Back to Mail through the board's "…" menu: the search box is back.
+    private static void ShowMailFromTheMenu(AutomationElement main)
+    {
+        Uia.Invoke(Uia.Find(main, "BoardPageMenu"));
+        Choose(Uia.Find(main, "BoardMenuMail"));
         Uia.WaitFor(() => !ShowsBoard(main), "the board to give way to the mail");
         var search = Uia.Find(main, "SearchBox");
         Uia.WaitFor(() => !search.Current.IsOffscreen, "the search box to show again");

@@ -112,6 +112,35 @@ const (
 	MethodBoardSetPreferences = "board.setPreferences"
 	MethodBoardRunStart       = "board.runStart"
 	MethodBoardRunEnd         = "board.runEnd"
+
+	// Calendar accounts (docs/api.md §4.1).
+	MethodAccountDiscoverCalDAV      = "account.discoverCalDAV"
+	MethodAccountListCalDAVCalendars = "account.listCalDAVCalendars"
+
+	// Calendars (docs/api.md §4.14).
+	MethodCalendarList           = "calendar.list"
+	MethodCalendarUpdate         = "calendar.update"
+	MethodCalendarSync           = "calendar.sync"
+	MethodCalendarPreferences    = "calendar.preferences"
+	MethodCalendarSetPreferences = "calendar.setPreferences"
+	MethodCalendarFreeBusy       = "calendar.freeBusy"
+	MethodCalendarFindFreeTime   = "calendar.findFreeTime"
+
+	// Events (docs/api.md §4.15).
+	MethodEventList         = "event.list"
+	MethodEventGet          = "event.get"
+	MethodEventSearch       = "event.search"
+	MethodEventCreate       = "event.create"
+	MethodEventUpdate       = "event.update"
+	MethodEventDelete       = "event.delete"
+	MethodEventRespond      = "event.respond"
+	MethodEventSnoozeAlert  = "event.snoozeAlert"
+	MethodEventDismissAlert = "event.dismissAlert"
+
+	// Invitations (docs/api.md §4.16).
+	MethodInvitationList        = "invitation.list"
+	MethodInvitationRespond     = "invitation.respond"
+	MethodInvitationApplyCancel = "invitation.applyCancel"
 )
 
 // Notification names (backend → client, no reply expected).
@@ -123,6 +152,11 @@ const (
 	NotifyMessagesChanged = "notify.messagesChanged"
 	NotifyBoardChanged    = "notify.boardChanged"
 	NotifyDraftsChanged   = "notify.draftsChanged"
+
+	NotifyCalendarChanged    = "notify.calendarChanged"
+	NotifyCalendarState      = "notify.calendarState"
+	NotifyEventAlert         = "notify.eventAlert"
+	NotifyInvitationsChanged = "notify.invitationsChanged"
 )
 
 // AllMethods lists every callable method. The RPC server uses it to register
@@ -152,10 +186,17 @@ var AllMethods = []string{
 	MethodBoardArchive, MethodBoardTrash, MethodBoardUnflag, MethodBoardDiscardDraft, MethodBoardSetDraft, MethodBoardQueue, MethodBoardAnnotate,
 	MethodBoardCommit, MethodBoardSetCommitment, MethodBoardPreferences, MethodBoardSetPreferences,
 	MethodBoardRunStart, MethodBoardRunEnd,
+	MethodAccountDiscoverCalDAV, MethodAccountListCalDAVCalendars,
+	MethodCalendarList, MethodCalendarUpdate, MethodCalendarSync, MethodCalendarPreferences,
+	MethodCalendarSetPreferences, MethodCalendarFreeBusy, MethodCalendarFindFreeTime,
+	MethodEventList, MethodEventGet, MethodEventSearch, MethodEventCreate, MethodEventUpdate,
+	MethodEventDelete, MethodEventRespond, MethodEventSnoozeAlert, MethodEventDismissAlert,
+	MethodInvitationList, MethodInvitationRespond, MethodInvitationApplyCancel,
 }
 
 // AllNotifications lists every server-initiated notification.
 var AllNotifications = []string{
 	NotifyNewMessage, NotifySyncState, NotifyAuthRequired, NotifyAccountsChanged, NotifyMessagesChanged,
 	NotifyBoardChanged, NotifyDraftsChanged,
+	NotifyCalendarChanged, NotifyCalendarState, NotifyEventAlert, NotifyInvitationsChanged,
 }

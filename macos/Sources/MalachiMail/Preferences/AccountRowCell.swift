@@ -14,7 +14,8 @@ private final class PrefsPassThroughImageView: NSImageView {
 }
 
 /// One account of the Accounts page (accounts_page.go `accountRow`): the
-/// drag handle, the provider icon, name and address, the status, "Sign
+/// drag handle, the provider icon, name with the kind capsule (M365,
+/// GOOGLE, IMAP, JIRA, CALDAV; `accountHeaderBadge`) and address, the status, "Sign
 /// In…" for an account of the browser sign-in that needs it, the pause
 /// switch, and the edit and remove buttons. Everything shown comes from
 /// the daemon, so nothing is markup.
@@ -25,6 +26,7 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
     private let handle = PrefsPassThroughImageView()
     private let icon = PrefsPassThroughImageView()
     private let titleLabel = NSTextField(labelWithString: "")
+    private let kindBadge = PillLabel()
     private let subtitleLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "")
     private let toggle = NSSwitch()
@@ -93,8 +95,17 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
 
         // The text column takes the width between the icon and the trailing
         // cluster; the labels truncate rather than push the cluster out.
+        kindBadge.font = Typo.sidebarKindBadge
+        kindBadge.textColor = .secondaryLabelColor
+        kindBadge.setContentHuggingPriority(.required, for: .horizontal)
+        kindBadge.setContentCompressionResistancePriority(.required, for: .horizontal)
+        let titleRow = NSStackView(views: [titleLabel, kindBadge])
+        titleRow.orientation = .horizontal
+        titleRow.alignment = .centerY
+        titleRow.spacing = 6
+        titleRow.detachesHiddenViews = true
         let text = prefsColumn(spacing: 2)
-        prefsAddFilling(titleLabel, to: text)
+        prefsAddFilling(titleRow, to: text)
         prefsAddFilling(subtitleLabel, to: text)
         for label in [titleLabel, subtitleLabel] {
             label.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -147,9 +158,15 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
     func apply(_ a: Account) {
         // A Jira account: a ticket, and its site under the name (Swift-first:
         // mirror in accounts_page.go when GTK gets Jira accounts).
-        icon.image = wizardSymbol(accountEditor(a) == .jira ? "ticket" : "envelope", pointSize: 15)
+        // A CalDAV account (calendar only): a calendar, its server under the name.
+        let caldav = a.config.kind == .caldav
+        icon.image = wizardSymbol(caldav ? "calendar" : accountEditor(a) == .jira ? "ticket" : "envelope", pointSize: 15)
         titleLabel.stringValue = accountRowTitle(a)
-        subtitleLabel.stringValue = accountRowSubtitle(a)
+        let badge = accountHeaderBadge(a)
+        kindBadge.stringValue = badge
+        kindBadge.isHidden = badge.isEmpty
+        let host = caldav ? URLComponents(string: a.config.caldav?.serverUrl ?? "")?.host ?? "" : ""
+        subtitleLabel.stringValue = host.isEmpty ? accountRowSubtitle(a) : host
         reverting = true
         toggle.state = a.enabled ? .on : .off
         reverting = false

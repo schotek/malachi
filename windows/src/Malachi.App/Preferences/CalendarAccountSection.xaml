@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Preferences/CalendarAccountGroups.swift
+(build, views); GTK: none yet (Swift-first, the rules and texts are
+ui/internal/calendar/preferences.go, Core's Cal.Prefs). One account's
+section of Preferences → Calendar (docs/calendar.md §5.8, "As built (M9)"):
+the heading with the account's name, its kind capsule (M365, CALDAV) and
+the call under way; for a CalDAV account the group Account (Account Name,
+Server and Username shown, the password's Replace Password…, Mail Account
+for Invitations, the certificate with Forget for a pin); the group
+Calendar (Sync This Account's Calendars of a Microsoft 365 account, the
+consent's row with Sign In…, the calendars with their check boxes, colours
+and notes, Default Calendar for New Events, Keep Events); for a Microsoft
+365 account the group Invitations (the card, the tentative events, After
+Answering); for a CalDAV account Remove Account at the bottom. A refused
+change says why once, under the Account heading of a CalDAV account, else
+under the Calendar heading. The section is a named group for UI
+Automation (PrefsCalendarAccount:<id>). Everything from the server or the
+stored configuration is plain text.
+-->
+<UserControl
+    x:Class="Malachi.App.Preferences.CalendarAccountSection"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:compose="using:Malachi.App.Compose"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:main="using:Malachi.App.Main"
+    xmlns:tk="using:CommunityToolkit.WinUI.Controls"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Preferences/SettingsStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <!-- A named group for UI Automation (a panel has no automation peer). -->
+    <compose:ChipGroup x:Name="SectionGroup">
+        <StackPanel Spacing="12">
+            <!-- The heading: the account's name, its kind capsule, the call under way. -->
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <main:CapsulePanel VerticalAlignment="Center">
+                    <TextBlock
+                        x:Name="NameText"
+                        AutomationProperties.AutomationId="PrefsCalendarAccountTitle"
+                        AutomationProperties.HeadingLevel="Level2"
+                        MaxLines="1"
+                        Style="{StaticResource Title2LabelStyle}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap" />
+                    <!-- The account's kind for a screen reader too: the capsule is its own text. -->
+                    <Border x:Name="Capsule" Style="{StaticResource KindBadgeBorderStyle}">
+                        <TextBlock
+                            x:Name="CapsuleText"
+                            AutomationProperties.AutomationId="PrefsCalendarAccountKind"
+                            Style="{StaticResource KindBadgeTextStyle}" />
+                    </Border>
+                </main:CapsulePanel>
+                <ProgressRing
+                    x:Name="BusyRing"
+                    Grid.Column="1"
+                    Width="16"
+                    Height="16"
+                    IsActive="False"
+                    Visibility="Collapsed" />
+            </Grid>
+
+            <!-- Account (CalDAV). -->
+            <StackPanel x:Name="AccountGroup" Spacing="{StaticResource SettingsCardSpacing}">
+                <TextBlock
+                    AutomationProperties.HeadingLevel="Level3"
+                    Style="{StaticResource SettingsGroupHeaderStyle}"
+                    Text="{l:T Msgid='Account'}" />
+                <TextBlock
+                    x:Name="AccountError"
+                    AutomationProperties.AutomationId="PrefsCalendarAccountError"
+                    Style="{StaticResource SettingsGroupDescriptionStyle}"
+                    Visibility="Collapsed" />
+                <tk:SettingsCard x:Name="NameRow">
+                    <TextBox
+                        x:Name="NameBox"
+                        MinWidth="{StaticResource SettingsEntryWidth}"
+                        AutomationProperties.AutomationId="PrefsCalendarAccountName"
+                        IsSpellCheckEnabled="False"
+                        KeyDown="OnNameKeyDown"
+                        LostFocus="OnNameLostFocus" />
+                </tk:SettingsCard>
+                <tk:SettingsCard x:Name="ServerRow">
+                    <TextBlock
+                        x:Name="ServerText"
+                        MaxWidth="260"
+                        AutomationProperties.AutomationId="PrefsCalendarServer"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        IsTextSelectionEnabled="True"
+                        TextTrimming="CharacterEllipsis" />
+                </tk:SettingsCard>
+                <tk:SettingsCard x:Name="UsernameRow">
+                    <TextBlock
+                        x:Name="UsernameText"
+                        MaxWidth="260"
+                        AutomationProperties.AutomationId="PrefsCalendarUsername"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        IsTextSelectionEnabled="True"
+                        TextTrimming="CharacterEllipsis" />
+                </tk:SettingsCard>
+                <tk:SettingsCard x:Name="PasswordRow">
+                    <Button
+                        x:Name="ReplacePasswordButton"
+                        AutomationProperties.AutomationId="PrefsCalendarReplacePassword"
+                        Click="OnReplacePasswordClick" />
+                </tk:SettingsCard>
+                <tk:SettingsCard x:Name="MailAccountRow">
+                    <ComboBox
+                        x:Name="MailAccountBox"
+                        MinWidth="200"
+                        AutomationProperties.AutomationId="PrefsCalendarMailAccount"
+                        SelectionChanged="OnMailAccountChanged" />
+                </tk:SettingsCard>
+                <tk:SettingsCard x:Name="CertificateRow">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock
+                            x:Name="CertificateText"
+                            MaxWidth="220"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="PrefsCalendarCertificate"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            IsTextSelectionEnabled="True"
+                            TextTrimming="CharacterEllipsis" />
+                        <Button
+                            x:Name="ForgetButton"
+                            AutomationProperties.AutomationId="PrefsCalendarForget"
+                            Click="OnForgetClick" />
+                    </StackPanel>
+                </tk:SettingsCard>
+            </StackPanel>
+
+            <!-- Calendar. -->
+            <StackPanel x:Name="CalendarGroup" Spacing="{StaticResource SettingsCardSpacing}">
+                <TextBlock
+                    x:Name="CalendarHeading"
+                    AutomationProperties.HeadingLevel="Level3"
+                    Style="{StaticResource SettingsGroupHeaderStyle}" />
+                <TextBlock
+                    x:Name="CalendarError"
+                    AutomationProperties.AutomationId="PrefsCalendarCalendarError"
+                    Style="{StaticResource SettingsGroupDescriptionStyle}"
+                    Visibility="Collapsed" />
+                <tk:SettingsCard x:Name="SyncRow">
+                    <ToggleSwitch
+                        x:Name="SyncSwitch"
+                        AutomationProperties.AutomationId="PrefsCalendarSync"
+                        Toggled="OnSyncToggled" />
+                </tk:SettingsCard>
+                <tk:SettingsCard x:Name="ConsentRow">
+                    <Button
+                        x:Name="SignInButton"
+                        AutomationProperties.AutomationId="PrefsCalendarSignIn"
+                        Click="OnSignInClick" />
+                </tk:SettingsCard>
+                <StackPanel x:Name="CalendarList" Spacing="{StaticResource SettingsCardSpacing}" />
+                <tk:SettingsCard x:Name="DefaultRow">
+                    <ComboBox
+                        x:Name="DefaultBox"
+                        MinWidth="200"
+                        AutomationProperties.AutomationId="PrefsCalendarDefault"
+                        SelectionChanged="OnDefaultChanged" />
+                </tk:SettingsCard>
+                <tk:SettingsCard x:Name="KeepRow">
+                    <ComboBox
+                        x:Name="KeepBox"
+                        MinWidth="160"
+                        AutomationProperties.AutomationId="PrefsCalendarKeep"
+                        SelectionChanged="OnKeepChanged" />
+                </tk:SettingsCard>
+            </StackPanel>
+
+            <!-- Invitations (a Microsoft 365 account's). -->
+            <StackPanel x:Name="InvitationsGroup" Spacing="{StaticResource SettingsCardSpacing}">
+                <TextBlock
+                    x:Name="InvitationsHeading"
+                    AutomationProperties.HeadingLevel="Level3"
+                    Style="{StaticResource SettingsGroupHeaderStyle}" />
+                <tk:SettingsCard x:Name="CardRow">
+                    <ToggleSwitch
+                        x:Name="CardSwitch"
+                        AutomationProperties.AutomationId="PrefsCalendarCard"
+                        Toggled="OnCardToggled" />
+                </tk:SettingsCard>
+                <tk:SettingsCard x:Name="TentativeRow">
+                    <ToggleSwitch
+                        x:Name="TentativeSwitch"
+                        AutomationProperties.AutomationId="PrefsCalendarTentative"
+                        Toggled="OnTentativeToggled" />
+                </tk:SettingsCard>
+                <tk:SettingsCard x:Name="AfterRow">
+                    <ComboBox
+                        x:Name="AfterBox"
+                        MinWidth="200"
+                        AutomationProperties.AutomationId="PrefsCalendarAfterAnswer"
+                        SelectionChanged="OnAfterChanged" />
+                </tk:SettingsCard>
+            </StackPanel>
+
+            <!-- Remove Account (CalDAV): the Accounts page's question. -->
+            <Button
+                x:Name="RemoveButton"
+                HorizontalAlignment="Right"
+                AutomationProperties.AutomationId="PrefsCalendarRemove"
+                Click="OnRemoveClick"
+                Style="{StaticResource CalendarRemoveButtonStyle}" />
+        </StackPanel>
+    </compose:ChipGroup>
+</UserControl>

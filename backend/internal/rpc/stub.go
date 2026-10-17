@@ -39,6 +39,75 @@ func (b *StubBackend) Senders() api.SenderService         { return stubSenders{}
 func (b *StubBackend) Contacts() api.ContactService       { return stubContacts{} }
 func (b *StubBackend) Issues() api.IssueService           { return stubIssues{} }
 func (b *StubBackend) Board() api.BoardService            { return stubBoard{} }
+func (b *StubBackend) Calendars() api.CalendarService     { return stubCalendars{} }
+func (b *StubBackend) Events() api.EventService           { return stubEvents{} }
+func (b *StubBackend) Invitations() api.InvitationService { return stubInvitations{} }
+
+type stubCalendars struct{}
+
+func (stubCalendars) List(context.Context, api.CalendarListParams) (*api.CalendarListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubCalendars) Update(context.Context, api.CalendarUpdateParams) (*api.CalendarUpdateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubCalendars) Sync(context.Context, api.CalendarSyncParams) (*api.CalendarSyncResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubCalendars) Preferences(context.Context, api.CalendarPreferencesParams) (*api.CalendarPreferencesResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubCalendars) SetPreferences(context.Context, api.CalendarSetPreferencesParams) (*api.CalendarSetPreferencesResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubCalendars) FreeBusy(context.Context, api.CalendarFreeBusyParams) (*api.CalendarFreeBusyResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubCalendars) FindFreeTime(context.Context, api.CalendarFindFreeTimeParams) (*api.CalendarFindFreeTimeResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubEvents struct{}
+
+func (stubEvents) List(context.Context, api.EventListParams) (*api.EventListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubEvents) Get(context.Context, api.EventGetParams) (*api.EventGetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubEvents) Search(context.Context, api.EventSearchParams) (*api.EventSearchResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubEvents) Create(context.Context, api.EventCreateParams) (*api.EventCreateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubEvents) Update(context.Context, api.EventUpdateParams) (*api.EventUpdateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubEvents) Delete(context.Context, api.EventDeleteParams) (*api.EventDeleteResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubEvents) Respond(context.Context, api.EventRespondParams) (*api.EventRespondResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubEvents) SnoozeAlert(context.Context, api.EventSnoozeAlertParams) (*api.EventSnoozeAlertResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubEvents) DismissAlert(context.Context, api.EventDismissAlertParams) (*api.EventDismissAlertResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubInvitations struct{}
+
+func (stubInvitations) List(context.Context, api.InvitationListParams) (*api.InvitationListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubInvitations) Respond(context.Context, api.InvitationRespondParams) (*api.InvitationRespondResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubInvitations) ApplyCancel(context.Context, api.InvitationApplyCancelParams) (*api.InvitationApplyCancelResult, error) {
+	return nil, api.ErrNotImplemented
+}
 
 type stubContacts struct{}
 
@@ -129,6 +198,13 @@ func (stubSystem) Storage(context.Context, api.SystemStorageParams) (*api.System
 }
 
 type stubAccounts struct{}
+
+func (stubAccounts) DiscoverCalDAV(context.Context, api.AccountDiscoverCalDAVParams) (*api.AccountDiscoverCalDAVResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) ListCalDAVCalendars(context.Context, api.AccountListCalDAVCalendarsParams) (*api.AccountListCalDAVCalendarsResult, error) {
+	return nil, api.ErrNotImplemented
+}
 
 func (stubAccounts) List(context.Context, api.AccountListParams) (*api.AccountListResult, error) {
 	return nil, api.ErrNotImplemented

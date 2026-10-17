@@ -777,15 +777,16 @@ extension AIPaneViewController {
         }
     }
 
-    /// A checkbox per enabled account, titled as Settings → Accounts names
-    /// it (plain text).
+    /// A checkbox per account the triage could read
+    /// (`BoardPreferencesController.triageCandidates`: enabled, not
+    /// calendar-only), titled as Settings → Accounts names it (plain text).
     private func rebuildTriageAccounts(_ list: [Account]) {
         boardAccounts = list
         for (_, box) in boardAccountBoxes {
             boardAccountsStack.removeArrangedSubview(box)
             box.removeFromSuperview()
         }
-        boardAccountBoxes = list.filter(\.enabled).map { a in
+        boardAccountBoxes = BoardPreferencesController.triageCandidates(list).map { a in
             let box = NSButton(checkboxWithTitle: accountLabel(a), target: self, action: #selector(triageAccountToggled(_:)))
             box.lineBreakMode = .byTruncatingTail
             boardAccountsStack.addArrangedSubview(box)

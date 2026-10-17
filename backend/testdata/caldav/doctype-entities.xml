@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- X-MALACHI-TEST: entity expansion (billion laughs, external entity) must never happen -->
+<!DOCTYPE d:multistatus [
+<!ENTITY lol "lol">
+<!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+<!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+<!ENTITY xxe SYSTEM "file:///etc/passwd">
+]>
+<d:multistatus xmlns:d="DAV:"><d:response><d:href>/remote.php/dav/calendars/jana/personal/</d:href><d:propstat><d:prop><d:displayname>&lol3;&xxe;</d:displayname></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>

@@ -62,12 +62,17 @@ public struct MessageSummary: Codable, Sendable, Equatable {
     /// its headers (newsletter, mailing list, automated); absent for
     /// personal mail, issue-tracker items and rows not classified yet.
     public var bulk: BulkInfo?
+    /// Present only for a message with a calendar part the daemon read: what
+    /// the list pill and a notification show. In `message.get` the same JSON
+    /// key carries the whole card (`Message.invitation`); a `Message`'s
+    /// summary leaves this nil.
+    public var invitation: InvitationSummary?
 
     public init(
         id: MessageID, accountId: AccountID, folderId: FolderID, threadId: ThreadID? = nil,
         from: [Address], to: [Address]? = nil, subject: String, date: Date, snippet: String,
         flags: [Flag], hasAttachments: Bool, size: Int, outbox: OutboxInfo? = nil, issue: MessageIssue? = nil,
-        bulk: BulkInfo? = nil
+        bulk: BulkInfo? = nil, invitation: InvitationSummary? = nil
     ) {
         self.id = id
         self.accountId = accountId
@@ -84,6 +89,7 @@ public struct MessageSummary: Codable, Sendable, Equatable {
         self.outbox = outbox
         self.issue = issue
         self.bulk = bulk
+        self.invitation = invitation
     }
 }
 
@@ -205,11 +211,16 @@ public struct Message: Codable, Sendable, Equatable {
     /// Present only when the List-Unsubscribe header offers a method the
     /// daemon can use (`message.unsubscribe`); never in the junk folder.
     public var unsubscribe: UnsubscribeOffer?
+    /// The invitation card of a message with a calendar part
+    /// (`message.get`, `message.download`); it takes the place of
+    /// `MessageSummary.invitation` on the wire.
+    public var invitation: InvitationCard?
 
     public init(
         summary: MessageSummary, cc: [Address]? = nil, bcc: [Address]? = nil, replyTo: [Address]? = nil,
         rfcMessageId: String? = nil, inReplyTo: String? = nil, references: [String]? = nil,
-        attachments: [Attachment] = [], headers: [String: String]? = nil, unsubscribe: UnsubscribeOffer? = nil
+        attachments: [Attachment] = [], headers: [String: String]? = nil, unsubscribe: UnsubscribeOffer? = nil,
+        invitation: InvitationCard? = nil
     ) {
         self.summary = summary
         self.cc = cc
@@ -221,14 +232,17 @@ public struct Message: Codable, Sendable, Equatable {
         self.attachments = attachments
         self.headers = headers
         self.unsubscribe = unsubscribe
+        self.invitation = invitation
     }
 
     private enum CodingKeys: String, CodingKey {
-        case cc, bcc, replyTo, rfcMessageId, inReplyTo, references, attachments, headers, unsubscribe
+        case cc, bcc, replyTo, rfcMessageId, inReplyTo, references, attachments, headers, unsubscribe, invitation
     }
 
     public init(from decoder: any Decoder) throws {
         summary = try MessageSummary(from: decoder)
+        // The key holds the card here, not the summary the list carries.
+        summary.invitation = nil
         let c = try decoder.container(keyedBy: CodingKeys.self)
         cc = try c.decodeIfPresent([Address].self, forKey: .cc)
         bcc = try c.decodeIfPresent([Address].self, forKey: .bcc)
@@ -239,10 +253,13 @@ public struct Message: Codable, Sendable, Equatable {
         attachments = try c.decodeIfPresent([Attachment].self, forKey: .attachments) ?? []
         headers = try c.decodeIfPresent([String: String].self, forKey: .headers)
         unsubscribe = try c.decodeIfPresent(UnsubscribeOffer.self, forKey: .unsubscribe)
+        invitation = try c.decodeIfPresent(InvitationCard.self, forKey: .invitation)
     }
 
     public func encode(to encoder: any Encoder) throws {
-        try summary.encode(to: encoder)
+        var plain = summary
+        plain.invitation = nil
+        try plain.encode(to: encoder)
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encodeIfPresent(cc, forKey: .cc)
         try c.encodeIfPresent(bcc, forKey: .bcc)
@@ -253,6 +270,7 @@ public struct Message: Codable, Sendable, Equatable {
         try c.encode(attachments, forKey: .attachments)
         try c.encodeIfPresent(headers, forKey: .headers)
         try c.encodeIfPresent(unsubscribe, forKey: .unsubscribe)
+        try c.encodeIfPresent(invitation, forKey: .invitation)
     }
 }
 

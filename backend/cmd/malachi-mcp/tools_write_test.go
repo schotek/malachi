@@ -12,7 +12,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
-var readTools = []string{"create_draft", "get_attachment", "list_accounts", "list_board", "list_folders", "list_messages", "list_transitions", "read_message", "search_messages", "sync_status", "trigger_sync"}
+var readTools = []string{"create_draft", "find_free_time", "get_attachment", "get_event", "list_accounts", "list_board", "list_calendars", "list_events", "list_folders", "list_invitations", "list_messages", "list_transitions", "read_message", "search_messages", "sync_status", "trigger_sync"}
 
 const (
 	fxReplyAttribution   = "On Wed, 23 Sep 2026 10:00 UTC, Alice Example <alice@example.org> wrote:"
@@ -23,7 +23,7 @@ var triageTools = []string{"add_commitment", "annotate_case", "list_triage_queue
 
 func TestToolGatingByFlags(t *testing.T) {
 	with := func(extra ...string) []string { return append(append([]string{}, readTools...), extra...) }
-	modify := []string{"delete_messages", "mark_messages", "move_messages", "transition_issue", "unsubscribe"}
+	modify := []string{"create_event", "delete_messages", "mark_messages", "move_messages", "transition_issue", "unsubscribe"}
 	cases := []struct {
 		modify, send, triage bool
 		want                 []string
@@ -76,6 +76,9 @@ func TestAnnotations(t *testing.T) {
 		"list_triage_queue": {true, false, true, false},
 		"annotate_case":     {false, false, true, false},
 		"add_commitment":    {false, false, false, false},
+		"list_calendars":    {true, false, true, false}, "list_events": {true, false, true, false}, "get_event": {true, false, true, false},
+		"find_free_time": {true, false, true, false}, "list_invitations": {true, false, true, false},
+		"create_event": {false, true, true, true},
 	}
 	if len(tools) != len(want) {
 		t.Fatalf("%d tools, want %d", len(tools), len(want))

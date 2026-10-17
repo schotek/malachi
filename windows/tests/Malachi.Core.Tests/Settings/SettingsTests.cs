@@ -16,6 +16,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Malachi.Core.Assistants;
+using Malachi.Core.Calendars;
 using Malachi.Core.Settings;
 using Malachi.Core.Tests.Fixtures;
 using Xunit;
@@ -62,8 +63,9 @@ public sealed class SettingsTests
         Assert.False(s.WindowMaximized);
         Assert.Equal(240, s.FolderPaneWidth);
         Assert.Equal(380, s.MessageListWidth);
+        Assert.Equal(Cal.View.Week, s.CalendarView);
         // The shared settings and Windows' ctrl-r.
-        Assert.Equal(42, SettingsStore.Schema.Count);
+        Assert.Equal(43, SettingsStore.Schema.Count);
         Assert.Equal(Enum.GetValues<SettingsKey>().Length, SettingsStore.Schema.Count);
         Assert.Equal(
             SettingsStore.Schema.Select(k => k.Name).Order(StringComparer.Ordinal),
@@ -105,6 +107,42 @@ public sealed class SettingsTests
         s.AssistantChatGptConsentVersion = -1;
         Assert.Equal(0, s.AssistantChatGptConsentVersion);
         Assert.True(s.AssistantConsent);
+    }
+
+    /// <summary>The calendar's view: the gschema's CalendarView nicks; anything else is Week (Swift SettingsTests).</summary>
+    [Theory]
+    [InlineData("day", Cal.View.Day)]
+    [InlineData("week", Cal.View.Week)]
+    [InlineData("month", Cal.View.Month)]
+    [InlineData("agenda", Cal.View.Agenda)]
+    [InlineData("", Cal.View.Week)]
+    [InlineData("x", Cal.View.Week)]
+    [InlineData("Month", Cal.View.Week)]
+    public void CalendarViewNicks(string nick, Cal.View want)
+    {
+        var backend = new InMemorySettingsBackend();
+        using var s = new SettingsStore(backend, null);
+        backend.SetString("calendar-view", nick);
+        Assert.Equal(want, s.CalendarView);
+    }
+
+    [Fact]
+    public void CalendarViewIsStoredAsItsNick()
+    {
+        var backend = new InMemorySettingsBackend();
+        using var s = new SettingsStore(backend, null);
+        var fired = 0;
+        s.OnChange(SettingsKey.CalendarView, () => fired++);
+        s.CalendarView = Cal.View.Month;
+        Assert.True(backend.TryGetString("calendar-view", out var nick));
+        Assert.Equal("month", nick);
+        s.CalendarView = Cal.View.Month; // no change, no handler
+        s.CalendarView = (Cal.View)9; // outside the enum: ignored
+        Assert.Equal(1, fired);
+        Assert.Equal(Cal.View.Month, s.CalendarView);
+        var info = SettingsStore.Info(SettingsKey.CalendarView);
+        Assert.Equal(("calendar-view", "s", "week"), (info.Name, info.Type, (string)info.Default));
+        Assert.Equal(["day", "week", "month", "agenda"], info.Choices);
     }
 
     [Fact]

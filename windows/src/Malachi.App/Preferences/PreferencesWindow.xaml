@@ -9,7 +9,9 @@ GTK: preferences.blp preferences_dialog (Adw.PreferencesDialog titled
 with the icon and "Preferences"; below it a NavigationView whose pane
 holds the four pages of the Blueprint in its order, each with the icon
 GTK names (Accounts: system-users, General: preferences-system,
-Appearance: applications-graphics, AI: applications-science), and the
+Appearance: applications-graphics, AI: applications-science), with the
+Calendar page after General as macOS has it (x-office-calendar, the
+Calendar mode's icon; docs/calendar.md §5.8), and the
 visible page with the toast overlay over it. There is no search field
 (windows/README.md, as macOS) and no Settings item of the NavigationView's
 own. As Windows Settings does, the pane keeps its labels while the window
@@ -86,6 +88,15 @@ then.
                     Tag="general">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="{x:Bind res:Icons.Glyph('preferences-system')}" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    x:Name="CalendarItem"
+                    AutomationProperties.AutomationId="CalendarPage"
+                    Content="{l:T Msgid='Calendar'}"
+                    Tag="calendar">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="{x:Bind res:Icons.Glyph('x-office-calendar')}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem

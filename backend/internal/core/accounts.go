@@ -17,6 +17,7 @@ import (
 	"github.com/schotek/malachi/backend/internal/auth"
 	"github.com/schotek/malachi/backend/internal/auth/goa"
 	"github.com/schotek/malachi/backend/internal/auth/oauth2flow"
+	"github.com/schotek/malachi/backend/internal/calsync"
 	"github.com/schotek/malachi/backend/internal/config"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/internal/transport"
@@ -58,10 +59,23 @@ func (s *accountService) List(ctx context.Context, _ api.AccountListParams) (*ap
 // session at once (notify.authRequired with authUrl). A successfully added
 // account starts synchronising at once.
 func (s *accountService) Add(ctx context.Context, p api.AccountAddParams) (*api.AccountAddResult, error) {
+	if p.Config.Protocol() == api.AccountCalDAV {
+		if p.Credentials.Password == "" {
+			return nil, api.NewError(api.CodeInvalidArgument, "credentials.password is required for a caldav account")
+		}
+		// The address and home set the server reports, when the client
+		// did not pass them (accounts_caldav.go).
+		if err := s.b.prepareCalDAV(ctx, &p.Config, nil, p.Credentials.Password); err != nil {
+			return nil, err
+		}
+	}
 	if err := validateAccountConfig(&p.Config); err != nil {
 		return nil, err
 	}
 	if err := checkCredentials(p.Config, p.Credentials); err != nil {
+		return nil, err
+	}
+	if err := s.b.checkCalDAVMailAccount(ctx, p.Config, ""); err != nil {
 		return nil, err
 	}
 	_, daemon := daemonOAuth(p.Config)
@@ -138,7 +152,7 @@ func (s *accountService) Add(ctx context.Context, p api.AccountAddParams) (*api.
 // token), a sign-in session only for an account with the backend's own
 // sign-in.
 func checkCredentials(c api.AccountConfig, cr api.Credentials) error {
-	if cr.Password != "" && !usesAuth(c, api.AuthPassword) && c.Protocol() != api.AccountJira {
+	if cr.Password != "" && !usesAuth(c, api.AuthPassword) && c.Protocol() != api.AccountJira && c.Protocol() != api.AccountCalDAV {
 		return api.NewError(api.CodeInvalidArgument, "password given but no endpoint uses password authentication")
 	}
 	if _, daemon := daemonOAuth(c); cr.OAuthSession != "" && !daemon {
@@ -173,10 +187,16 @@ func (s *accountService) Remove(ctx context.Context, p api.AccountRemoveParams) 
 	case err != nil:
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
 	}
+	// The calendar engine's data version of the account goes too, so a
+	// re-added account starts clean (its calendars went with the rows).
+	if err := s.b.store.DeleteMeta(ctx, calsync.MetaProviderVersion(string(p.AccountID))); err != nil {
+		s.b.log.Warn("delete calendar provider version", "id", p.AccountID, "err", err)
+	}
 	unlock := s.b.lockSecrets(string(p.AccountID))
 	s.b.cancelReauth(string(p.AccountID))
 	s.b.dropTokenSource(string(p.AccountID))
-	for _, key := range []string{auth.KeyPassword, auth.KeyRefreshToken} {
+	s.b.dropGraphLimiter(string(p.AccountID))
+	for _, key := range []string{auth.KeyPassword, auth.KeyRefreshToken, oauth2flow.KeyGrantedScope} {
 		if err := s.b.Keyring.Delete(ctx, p.AccountID, key); err != nil && !errors.Is(err, api.ErrNotImplemented) {
 			s.b.log.Warn("delete account secret", "id", p.AccountID, "key", key, "err", err)
 		}
@@ -261,11 +281,14 @@ func (s *accountService) Update(ctx context.Context, p api.AccountUpdateParams) 
 	if p.AccountID == "" {
 		return nil, api.NewError(api.CodeInvalidArgument, "accountId is required")
 	}
-	if err := validateAccountConfig(&p.Config); err != nil {
-		return nil, err
-	}
-	if err := checkCredentials(p.Config, p.Credentials); err != nil {
-		return nil, err
+	caldavKind := p.Config.Protocol() == api.AccountCalDAV
+	if !caldavKind {
+		if err := validateAccountConfig(&p.Config); err != nil {
+			return nil, err
+		}
+		if err := checkCredentials(p.Config, p.Credentials); err != nil {
+			return nil, err
+		}
 	}
 	unlock := s.b.lockSecrets(string(p.AccountID))
 	defer unlock()
@@ -276,7 +299,23 @@ func (s *accountService) Update(ctx context.Context, p api.AccountUpdateParams) 
 	case err != nil:
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
 	}
-	if p.Credentials.Password == "" && secretMoves(existing.Config, p.Config) {
+	if caldavKind {
+		// The principal and home set of the stored login, or what the
+		// server reports (accounts_caldav.go), then the usual rules.
+		if err := s.b.prepareCalDAV(ctx, &p.Config, &existing, p.Credentials.Password); err != nil {
+			return nil, err
+		}
+		if err := validateAccountConfig(&p.Config); err != nil {
+			return nil, err
+		}
+		if err := checkCredentials(p.Config, p.Credentials); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.b.checkCalDAVMailAccount(ctx, p.Config, string(p.AccountID)); err != nil {
+		return nil, err
+	}
+	if p.Credentials.Password == "" && (secretMoves(existing.Config, p.Config) || calDAVSecretMoves(existing.Config, p.Config)) {
 		// The stored secret belongs to another site (or kind): it is
 		// never sent to this one.
 		return nil, api.NewError(api.CodeInvalidArgument, "the account's new site or server needs its own password or token")
@@ -359,6 +398,9 @@ func (s *accountService) Update(ctx context.Context, p api.AccountUpdateParams) 
 	}
 	s.b.log.Info("account updated", "id", p.AccountID, "passwordChanged", p.Credentials.Password != "",
 		"signedIn", p.Credentials.OAuthSession != "", "signInReset", rebound)
+	// Cached calendar rows the new configuration no longer covers go
+	// before the engine starts again (D23).
+	s.b.dropCalendarCache(ctx, existing, updated)
 	if updated.Enabled {
 		s.b.Supervisor.Restart(updated)
 		s.b.Delivery.Restart(updated)
@@ -443,6 +485,9 @@ func (s *accountService) Test(ctx context.Context, p api.AccountTestParams) (*ap
 	}
 	if p.Config.Protocol() == api.AccountJira {
 		return s.testJira(ctx, p)
+	}
+	if p.Config.Protocol() == api.AccountCalDAV {
+		return s.testCalDAV(ctx, p)
 	}
 	password := p.Credentials.Password
 	switch {
@@ -755,6 +800,12 @@ func validateAccountConfig(c *api.AccountConfig) error {
 	if k := c.Protocol(); c.Jira != nil && k != api.AccountJira {
 		return bad("jira settings do not apply to an %s account", k)
 	}
+	if k := c.Protocol(); c.CalDAV != nil && k != api.AccountCalDAV {
+		return bad("caldav settings do not apply to an %s account", k)
+	}
+	if err := validateCalendarConfig(c); err != nil {
+		return err
+	}
 	switch c.Protocol() {
 	case api.AccountIMAP:
 		if c.Graph != nil {
@@ -828,8 +879,12 @@ func validateAccountConfig(c *api.AccountConfig) error {
 		if err := validateJira(c); err != nil {
 			return err
 		}
+	case api.AccountCalDAV:
+		if err := validateCalDAV(c); err != nil {
+			return err
+		}
 	default:
-		return bad("kind must be imap, graph or jira")
+		return bad("kind must be imap, graph, jira or caldav")
 	}
 
 	if c.SyncInterval != 0 && c.SyncInterval < api.SyncIntervalMin {

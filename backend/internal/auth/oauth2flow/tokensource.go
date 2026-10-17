@@ -52,6 +52,8 @@ type tokenSource struct {
 	access    string
 	expiry    time.Time
 	refresh   string // "" = not read yet (or dropped)
+	scope     string // the recorded scope (KeyGrantedScope); "" = mail scopes only
+	scopeRead bool   // scope is known (read from the keyring or seeded)
 	needsAuth bool
 	gen       uint64 // bumped by seed: a refresh started before is stale
 	retired   bool   // set under storeMu and mu: no keyring writes, no hook
@@ -143,7 +145,7 @@ func errAuthRequired() *api.Error {
 
 // run performs one refresh and publishes its result.
 func (t *tokenSource) run(ctx context.Context, f *flight, gen uint64) {
-	tok, expiry, rotated, lost, err := t.refreshOnce(ctx, gen)
+	tok, expiry, rotated, scope, lost, err := t.refreshOnce(ctx, gen)
 
 	notify := false
 	t.mu.Lock()
@@ -160,7 +162,7 @@ func (t *tokenSource) run(ctx context.Context, f *flight, gen uint64) {
 	case err != nil:
 		if lost && !t.needsAuth {
 			t.needsAuth = true
-			t.refresh = ""
+			t.refresh, t.scope, t.scopeRead = "", "", false
 			t.access, t.expiry = "", time.Time{}
 			notify = !t.retired
 		}
@@ -168,6 +170,9 @@ func (t *tokenSource) run(ctx context.Context, f *flight, gen uint64) {
 		t.access, t.expiry = tok, expiry
 		if rotated != "" {
 			t.refresh = rotated
+		}
+		if scope != "" {
+			t.scope, t.scopeRead = scope, true
 		}
 	}
 	f.token, f.err = tok, err
@@ -192,57 +197,150 @@ func (t *tokenSource) run(ctx context.Context, f *flight, gen uint64) {
 	}
 }
 
-// refreshOnce reads the refresh token (lazily), asks the token endpoint
-// and persists a rotated refresh token. lost reports that the sign-in is
-// gone (nothing stored, or the provider rejected it).
-func (t *tokenSource) refreshOnce(ctx context.Context, gen uint64) (access string, expiry time.Time, rotated string, lost bool, err error) {
+// loadStored returns the refresh token, reading the keyring on first
+// use. lost reports that no sign-in is stored.
+func (t *tokenSource) loadStored(ctx context.Context, gen uint64) (rt string, lost bool, err error) {
 	t.mu.Lock()
-	rt := t.refresh
+	rt = t.refresh
 	t.mu.Unlock()
+	if rt != "" {
+		return rt, false, nil
+	}
+	v, kerr := t.keyring.Get(ctx, t.account, auth.KeyRefreshToken)
+	switch {
+	case errors.Is(kerr, auth.ErrNoSecret):
+		return "", true, errAuthRequired()
+	case kerr != nil:
+		return "", false, keyringReadErr(kerr, "read the refresh token")
+	case v == "":
+		return "", true, errAuthRequired()
+	}
+	t.mu.Lock()
+	if t.gen == gen && t.refresh == "" {
+		t.refresh = v
+	}
+	t.mu.Unlock()
+	return v, false, nil
+}
 
-	if rt == "" {
-		v, kerr := t.keyring.Get(ctx, t.account, auth.KeyRefreshToken)
-		switch {
-		case errors.Is(kerr, auth.ErrNoSecret):
-			return "", time.Time{}, "", true, errAuthRequired()
-		case kerr != nil:
-			var aerr *api.Error
-			if errors.As(kerr, &aerr) {
-				return "", time.Time{}, "", false, aerr
-			}
-			return "", time.Time{}, "", false, api.NewError(api.CodeKeyringError, "read the refresh token: %s", cleanMsg(kerr.Error()))
-		case v == "":
-			return "", time.Time{}, "", true, errAuthRequired()
-		}
-		rt = v
-		t.mu.Lock()
-		if t.gen == gen && t.refresh == "" {
-			t.refresh = rt
-		}
+// loadScope returns the recorded scope (KeyGrantedScope), reading the
+// keyring on first use; a missing item is "" (mail scopes only).
+func (t *tokenSource) loadScope(ctx context.Context, gen uint64) (string, error) {
+	t.mu.Lock()
+	if t.scopeRead {
+		s := t.scope
 		t.mu.Unlock()
+		return s, nil
+	}
+	t.mu.Unlock()
+	v, kerr := t.keyring.Get(ctx, t.account, KeyGrantedScope)
+	switch {
+	case errors.Is(kerr, auth.ErrNoSecret):
+		v = ""
+	case kerr != nil:
+		return "", keyringReadErr(kerr, "read the granted scope")
+	}
+	v = cleanScope(v)
+	t.mu.Lock()
+	if t.gen == gen && !t.scopeRead {
+		t.scope, t.scopeRead = v, true
+	}
+	t.mu.Unlock()
+	return v, nil
+}
+
+func keyringReadErr(err error, what string) *api.Error {
+	var aerr *api.Error
+	if errors.As(err, &aerr) {
+		return aerr
+	}
+	return api.NewError(api.CodeKeyringError, "%s: %s", what, cleanMsg(err.Error()))
+}
+
+// refreshOnce reads the refresh token (lazily), asks the token endpoint
+// and persists a rotated refresh token (bare, in its own item). When the
+// response names a scope that changes whether the calendar is granted,
+// KeyGrantedScope is written or removed to match. scope is the response's
+// scope ("" when it named none: the recorded one stands). lost reports
+// that the sign-in is gone (nothing stored, or the provider rejected it).
+func (t *tokenSource) refreshOnce(ctx context.Context, gen uint64) (access string, expiry time.Time, rotated, scope string, lost bool, err error) {
+	rt, lost, err := t.loadStored(ctx, gen)
+	if err != nil {
+		return "", time.Time{}, "", "", lost, err
 	}
 
 	ep := t.endpoints(t.provider, t.client.Tenant)
-	cfg := oauthConfig(t.provider, t.client, ep, "")
+	// The scopes of the config are never sent on a refresh
+	// (golang.org/x/oauth2): a refresh keeps the grant as it is.
+	cfg := oauthConfig(t.provider, t.client, ep, "", false)
 	tok, rerr := cfg.TokenSource(withHTTP(ctx, t.http), &oauth2.Token{RefreshToken: rt}).Token()
 	if rerr != nil {
 		aerr := classifyToken(ctx, phaseRefresh, rerr, rt, t.client.Secret)
-		return "", time.Time{}, "", aerr.Code == api.CodeAuthRequired, aerr
+		return "", time.Time{}, "", "", aerr.Code == api.CodeAuthRequired, aerr
 	}
 	if tok.AccessToken == "" {
-		return "", time.Time{}, "", false, api.NewError(api.CodeServerError, "token endpoint returned no access token")
+		return "", time.Time{}, "", "", false, api.NewError(api.CodeServerError, "token endpoint returned no access token")
 	}
 	expiry = expiryOf(tok, t.now())
+	scope = responseScope(tok)
 
 	if tok.RefreshToken != "" && tok.RefreshToken != rt {
 		rotated = tok.RefreshToken
 		t.storeRotated(ctx, gen, rotated)
 	}
-	return tok.AccessToken, expiry, rotated, false, nil
+	if scope != "" {
+		if stored, serr := t.loadScope(ctx, gen); serr == nil && HasCalendarScope(stored) != HasCalendarScope(scope) {
+			t.storeScope(ctx, gen, scope)
+		}
+	}
+	return tok.AccessToken, expiry, rotated, scope, false, nil
 }
 
-// storeRotated persists a rotated refresh token unless a Seed replaced
-// the sign-in since the refresh began or the source was retired.
+// grantedScope is the scope recorded with the stored sign-in.
+func (t *tokenSource) grantedScope(ctx context.Context) (string, error) {
+	t.mu.Lock()
+	if t.needsAuth {
+		t.mu.Unlock()
+		return "", errAuthRequired()
+	}
+	gen := t.gen
+	t.mu.Unlock()
+	if _, _, err := t.loadStored(ctx, gen); err != nil {
+		return "", err
+	}
+	return t.loadScope(ctx, gen)
+}
+
+// writeScope writes KeyGrantedScope for a grant with calendar access and
+// removes it otherwise; the caller holds storeMu.
+func (t *tokenSource) writeScope(ctx context.Context, scope string) error {
+	if HasCalendarScope(scope) {
+		return t.keyring.Set(ctx, t.account, KeyGrantedScope, scope)
+	}
+	if err := t.keyring.Delete(ctx, t.account, KeyGrantedScope); err != nil && !errors.Is(err, auth.ErrNoSecret) {
+		return err
+	}
+	return nil
+}
+
+// storeScope records a refresh's scope unless the sign-in was replaced or
+// the source retired since the refresh began.
+func (t *tokenSource) storeScope(ctx context.Context, gen uint64, scope string) {
+	t.storeMu.Lock()
+	defer t.storeMu.Unlock()
+	t.mu.Lock()
+	stale := t.gen != gen || t.retired
+	t.mu.Unlock()
+	if stale {
+		return
+	}
+	if err := t.writeScope(ctx, scope); err != nil {
+		t.log.Warn("could not record the granted scope", "code", keyringReadErr(err, "scope").Code.String())
+	}
+}
+
+// storeRotated persists a rotated refresh token unless a Seed replaced the sign-in since the refresh began or
+// the source was retired.
 func (t *tokenSource) storeRotated(ctx context.Context, gen uint64, rotated string) {
 	t.storeMu.Lock()
 	defer t.storeMu.Unlock()
@@ -304,9 +402,15 @@ func (t *tokenSource) seed(ctx context.Context, g Grant) error {
 		t.log.Warn("could not store the refresh token")
 		return api.NewError(api.CodeKeyringError, "store the refresh token: %s", cleanMsg(msg, g.RefreshToken, g.AccessToken))
 	}
+	scope := cleanScope(g.Scope)
+	if err := t.writeScope(ctx, scope); err != nil {
+		// The sign-in works for mail; the calendar asks for consent again
+		// after a restart (the recorded scope is what the keyring holds).
+		t.log.Warn("could not record the granted scope", "code", keyringReadErr(err, "scope").Code.String())
+	}
 	t.mu.Lock()
 	t.gen++
-	t.refresh = g.RefreshToken
+	t.refresh, t.scope, t.scopeRead = g.RefreshToken, scope, true
 	t.needsAuth = false
 	if g.AccessToken != "" && !g.Expiry.IsZero() {
 		t.access, t.expiry = g.AccessToken, g.Expiry

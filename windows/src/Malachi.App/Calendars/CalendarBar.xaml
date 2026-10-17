@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Calendar/CalendarToolbar.swift (the
+items after the mode switch); GTK: the calendar's bar follows
+(docs/calendar.md §6.4). The calendar's controls in the page's bar
+(CalendarPage.BarContent; the page keeps its "…" after them): the
+sidebar toggle, Today, ‹ ›, the views Day, Week, Month and Agenda (a
+menu below CalendarMetrics.BarCompactWidth: the bar has no overflow), the
+title and subtitle (the controller's), then New Event (+) and ✦ (the
+assistant panel, while the Assistant is shown and In App is chosen). The
+search field is the title bar's box ("Search Events").
+-->
+<UserControl
+    x:Class="Malachi.App.Calendars.CalendarBar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:res="using:Malachi.App.Resources"
+    AutomationProperties.AutomationId="CalendarBar"
+    IsTabStop="False">
+    <Grid
+        x:Name="BarRoot"
+        ColumnSpacing="6"
+        SizeChanged="OnBarSizeChanged">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <Button
+            x:Name="SidebarButton"
+            Width="36"
+            Height="32"
+            Padding="0"
+            VerticalAlignment="Center"
+            AutomationProperties.AutomationId="CalendarSidebarToggle"
+            Click="OnSidebarClick"
+            Style="{StaticResource SubtleButtonStyle}">
+            <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('sidebar-show')}" />
+        </Button>
+        <Button
+            x:Name="TodayButton"
+            Grid.Column="1"
+            VerticalAlignment="Center"
+            AutomationProperties.AutomationId="CalendarToday"
+            Click="OnTodayClick" />
+        <StackPanel
+            Grid.Column="2"
+            VerticalAlignment="Center"
+            Orientation="Horizontal"
+            Spacing="2">
+            <Button
+                x:Name="PreviousButton"
+                Width="32"
+                Height="32"
+                Padding="0"
+                AutomationProperties.AutomationId="CalendarPrevious"
+                Click="OnPreviousClick"
+                Style="{StaticResource SubtleButtonStyle}">
+                <FontIcon
+                    FlowDirection="RightToLeft"
+                    FontSize="12"
+                    Glyph="{x:Bind res:Icons.Glyph('go-next')}"
+                    MirroredWhenRightToLeft="True" />
+            </Button>
+            <Button
+                x:Name="NextButton"
+                Width="32"
+                Height="32"
+                Padding="0"
+                AutomationProperties.AutomationId="CalendarNext"
+                Click="OnNextClick"
+                Style="{StaticResource SubtleButtonStyle}">
+                <FontIcon FontSize="12" Glyph="{x:Bind res:Icons.Glyph('go-next')}" />
+            </Button>
+        </StackPanel>
+        <Grid Grid.Column="3" VerticalAlignment="Center">
+            <StackPanel
+                x:Name="ViewSwitch"
+                Orientation="Horizontal"
+                Spacing="2">
+                <ToggleButton
+                    x:Name="ViewDayButton"
+                    AutomationProperties.AutomationId="CalendarViewDay"
+                    Click="OnViewClick" />
+                <ToggleButton
+                    x:Name="ViewWeekButton"
+                    AutomationProperties.AutomationId="CalendarViewWeek"
+                    Click="OnViewClick" />
+                <ToggleButton
+                    x:Name="ViewMonthButton"
+                    AutomationProperties.AutomationId="CalendarViewMonth"
+                    Click="OnViewClick" />
+                <ToggleButton
+                    x:Name="ViewAgendaButton"
+                    AutomationProperties.AutomationId="CalendarViewAgenda"
+                    Click="OnViewClick" />
+            </StackPanel>
+            <ComboBox
+                x:Name="ViewChooser"
+                MinWidth="110"
+                AutomationProperties.AutomationId="CalendarViewChooser"
+                SelectionChanged="OnViewChosen"
+                Visibility="Collapsed" />
+        </Grid>
+        <StackPanel
+            Grid.Column="4"
+            Margin="8,0,0,0"
+            VerticalAlignment="Center">
+            <TextBlock
+                x:Name="TitleText"
+                AutomationProperties.AutomationId="CalendarTitle"
+                MaxLines="1"
+                Style="{StaticResource BodyStrongTextBlockStyle}"
+                TextTrimming="CharacterEllipsis" />
+            <TextBlock
+                x:Name="SubtitleText"
+                AutomationProperties.AutomationId="CalendarSubtitle"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                MaxLines="1"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+        <Button
+            x:Name="NewEventButton"
+            Grid.Column="5"
+            Width="36"
+            Height="32"
+            Padding="0"
+            VerticalAlignment="Center"
+            AutomationProperties.AutomationId="CalendarNewEvent"
+            Style="{StaticResource SubtleButtonStyle}">
+            <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('list-add')}" />
+        </Button>
+        <ToggleButton
+            x:Name="AssistantButton"
+            Grid.Column="6"
+            Width="36"
+            Height="32"
+            Padding="0"
+            VerticalAlignment="Center"
+            AutomationProperties.AutomationId="CalendarAssistant"
+            Click="OnAssistantClick"
+            Visibility="Collapsed">
+            <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('malachi-assistant')}" />
+        </ToggleButton>
+    </Grid>
+</UserControl>

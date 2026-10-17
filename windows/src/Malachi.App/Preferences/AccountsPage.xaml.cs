@@ -27,7 +27,9 @@
 // controller (docs/windows-port.md §7.5). The page follows the daemon's
 // notify.accountsChanged and notify.syncState while the window is open
 // (AccountsPageController), because the main window stays usable beside
-// it.
+// it. A CalDAV account is not listed (AccountsPageController, as macOS)
+// and the "+" menu has no Add CalDAV Calendar… (docs/calendar.md §5.8):
+// Preferences → Calendar has its section and its button.
 
 using System;
 using System.Collections.Generic;

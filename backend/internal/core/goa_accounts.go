@@ -227,3 +227,28 @@ func serverFilesSentCopy(cfg api.AccountConfig) bool {
 	}
 	return false
 }
+
+// goaCalendarDisabled reads the Calendar switch of a GNOME Online Accounts
+// entry (goa.Account.CalendarDisabled, read like MailDisabled): a Graph
+// account from GOA has calendar access unless the user switched it off
+// there (docs/calendar.md D15). No GOA is unavailable; an entry that is
+// gone is authRequired.
+func (b *Backend) goaCalendarDisabled(ctx context.Context, goaID string) (bool, error) {
+	if b.GOA == nil {
+		return false, api.NewError(api.CodeUnavailable, "GNOME Online Accounts is not available")
+	}
+	accounts, err := b.GOA.Accounts(ctx)
+	if err != nil {
+		var apiErr *api.Error
+		if errors.As(err, &apiErr) {
+			return false, apiErr
+		}
+		return false, api.NewError(api.CodeServerError, "%v", err)
+	}
+	for _, a := range accounts {
+		if a.ID == goaID {
+			return a.CalendarDisabled, nil
+		}
+	}
+	return false, api.NewError(api.CodeAuthRequired, "the GNOME Online Accounts entry of the account is gone")
+}

@@ -73,6 +73,40 @@ func daemonOAuth(c api.AccountConfig) (*api.OAuth2Config, bool) {
 	return nil, false
 }
 
+// calendarWanted reports that a daemon account's sign-in is made for the
+// calendar too: a Graph account whose calendar sync is on (docs/calendar.md
+// D15). Its re-sign-in asks for the calendar scopes again, so losing the
+// refresh token does not silently cost the calendar.
+func calendarWanted(c api.AccountConfig) bool {
+	o, ok := daemonOAuth(c)
+	return ok && c.Protocol() == api.AccountGraph && c.Calendar != nil && c.Calendar.Sync &&
+		oauth2flow.SupportsCalendar(oauth2flow.Provider(o.Provider))
+}
+
+// refuseCalendar is the invalidArgument of a calendar sign-in for a
+// provider without calendar scopes (Google, until it has a provider).
+func refuseCalendar(p oauth2flow.Provider) error {
+	return api.NewError(api.CodeInvalidArgument, "calendar sign-in is not available for OAuth2 provider %q", string(p))
+}
+
+// CalendarConsent reports whether a stored daemon account's sign-in
+// allows calendar access (the scope its grant recorded; a grant from before
+// the calendar is mail only). It reads the keyring at most once per token
+// source. An account that does not sign in through the backend is
+// invalidArgument (GOA: goa.Account.CalendarDisabled decides), a lost
+// sign-in authRequired.
+func (b *Backend) CalendarConsent(ctx context.Context, accountID string) (bool, error) {
+	a, err := b.requireAccount(ctx, accountID)
+	if err != nil {
+		return false, err
+	}
+	ts, err := b.tokenSourceFor(a.ID, a.Config)
+	if err != nil {
+		return false, err
+	}
+	return ts.CalendarConsent(ctx)
+}
+
 // resolveClient names the provider of a daemon OAuth2 block and resolves
 // its client: oauthClientMissing without any client id.
 func (b *Backend) resolveClient(o *api.OAuth2Config) (oauth2flow.Provider, oauth2flow.Client, error) {
@@ -199,12 +233,14 @@ func (b *Backend) keyringDisabled() bool {
 	return false
 }
 
-// deleteRefreshToken removes an account's stored refresh token, best
-// effort (logged); the caller holds the account's secret lock.
+// deleteRefreshToken removes an account's stored refresh token and its
+// recorded scope, best effort (logged); the caller holds the account's secret lock.
 func (b *Backend) deleteRefreshToken(ctx context.Context, accountID, why string) {
-	err := b.Keyring.Delete(ctx, api.AccountID(accountID), auth.KeyRefreshToken)
-	if err != nil && !errors.Is(err, auth.ErrNoSecret) && !errors.Is(err, api.ErrNotImplemented) {
-		b.log.Warn("delete refresh token", "id", accountID, "why", why, "err", err)
+	for _, key := range []string{auth.KeyRefreshToken, oauth2flow.KeyGrantedScope} {
+		err := b.Keyring.Delete(ctx, api.AccountID(accountID), key)
+		if err != nil && !errors.Is(err, auth.ErrNoSecret) && !errors.Is(err, api.ErrNotImplemented) {
+			b.log.Warn("delete refresh token", "id", accountID, "key", key, "why", why, "err", err)
+		}
 	}
 }
 
@@ -444,7 +480,10 @@ func (b *Backend) cancelReauth(accountID string) {
 // address; otherwise oauth2flow cancels it and starts a new one. Empty
 // page texts keep a reused session's. On success the new refresh token is
 // stored and the account restarted (onReauthComplete).
-func (b *Backend) startReauth(a store.Account, page oauth2flow.PageTexts) (string, string, time.Time, error) {
+//
+// calendar asks for the calendar scopes too; an account that wants the
+// calendar (calendarWanted) always does.
+func (b *Backend) startReauth(a store.Account, page oauth2flow.PageTexts, calendar bool) (string, string, time.Time, error) {
 	o, ok := daemonOAuth(a.Config)
 	if !ok {
 		return "", "", time.Time{}, api.NewError(api.CodeInvalidArgument, "account %q does not sign in through the backend", a.ID)
@@ -453,6 +492,10 @@ func (b *Backend) startReauth(a store.Account, page oauth2flow.PageTexts) (strin
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
+	calendar = calendar || calendarWanted(a.Config)
+	if calendar && !oauth2flow.SupportsCalendar(p) {
+		return "", "", time.Time{}, refuseCalendar(p)
+	}
 	id, authURL, expires, err := b.OAuth.Start(oauth2flow.StartRequest{
 		Provider:    p,
 		Client:      client,
@@ -460,6 +503,7 @@ func (b *Backend) startReauth(a store.Account, page oauth2flow.PageTexts) (strin
 		ExpectEmail: a.Config.Email,
 		Page:        page,
 		Key:         a.ID,
+		Calendar:    calendar,
 		OnComplete:  b.onReauthComplete(a.ID),
 	})
 	if err != nil {
@@ -487,7 +531,7 @@ func (b *Backend) ensureReauthSession(accountID string) {
 		return
 	}
 	before, _, waiting := b.OAuth.Pending(accountID)
-	id, _, _, err := b.startReauth(a, oauth2flow.PageTexts{})
+	id, _, _, err := b.startReauth(a, oauth2flow.PageTexts{}, false)
 	if err != nil {
 		b.log.Warn("cannot open a re-sign-in", "id", accountID, "err", err)
 		return
@@ -665,6 +709,19 @@ func cloneConfig(c api.AccountConfig) *api.AccountConfig {
 		v := *c.Graph
 		out.Graph = &v
 	}
+	if c.Calendar != nil {
+		v := *c.Calendar
+		v.DisabledCalendars = slices.Clone(v.DisabledCalendars)
+		if v.ShowUnanswered != nil {
+			b := *v.ShowUnanswered
+			v.ShowUnanswered = &b
+		}
+		if v.InvitationCard != nil {
+			b := *v.InvitationCard
+			v.InvitationCard = &b
+		}
+		out.Calendar = &v
+	}
 	return &out
 }
 
@@ -690,13 +747,13 @@ func (s *accountService) OAuthStart(ctx context.Context, p api.AccountOAuthStart
 		if _, ok := daemonOAuth(a.Config); !ok {
 			return nil, api.NewError(api.CodeInvalidArgument, "account %q does not sign in through the backend", p.AccountID)
 		}
-		if id, authURL, expires, err = s.b.startReauth(a, page); err != nil {
+		if id, authURL, expires, err = s.b.startReauth(a, page, p.Calendar); err != nil {
 			return nil, err
 		}
 		if p.BrowserPage != nil {
 			s.b.OAuth.SetPage(id, page)
 		}
-		s.b.log.Info("sign-in started", "session", id, "account", a.ID)
+		s.b.log.Info("sign-in started", "session", id, "account", a.ID, "calendar", p.Calendar)
 	} else {
 		cfg := cloneConfig(*p.Config)
 		if verr := validateAccountConfig(cfg); verr != nil {
@@ -710,18 +767,23 @@ func (s *accountService) OAuthStart(ctx context.Context, p api.AccountOAuthStart
 		if rerr != nil {
 			return nil, rerr
 		}
+		calendar := p.Calendar || calendarWanted(*cfg)
+		if calendar && !oauth2flow.SupportsCalendar(provider) {
+			return nil, refuseCalendar(provider)
+		}
 		id, authURL, expires, err = s.b.OAuth.Start(oauth2flow.StartRequest{
 			Provider:    provider,
 			Client:      client,
 			LoginHint:   cfg.Email,
 			ExpectEmail: cfg.Email,
 			Page:        page,
+			Calendar:    calendar,
 		})
 		if err != nil {
 			return nil, err
 		}
 		s.b.rememberSession(id, oauthSession{config: cfg})
-		s.b.log.Info("sign-in started", "session", id, "provider", provider)
+		s.b.log.Info("sign-in started", "session", id, "provider", provider, "calendar", p.Calendar)
 	}
 	return &api.AccountOAuthStartResult{SessionID: id, AuthURL: authURL, ExpiresAt: expires.UTC()}, nil
 }

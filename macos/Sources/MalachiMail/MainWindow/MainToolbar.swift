@@ -71,8 +71,12 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     /// the star is a view item). Mark as Junk has no button: it is in the
     /// menus only.
     static let defaultItems: [NSToolbarItem.Identifier] = [
-        ID.mode, .flexibleSpace, .toggleSidebar,
-        .sidebarTrackingSeparator,
+        // The mode switch alone in the sidebar's section: with three
+        // segments (134 pt) and the window's buttons there is no room for
+        // the sidebar toggle, which comes right after the separator
+        // (navigational, `BoardToolbar.keepSidebarToggle`).
+        ID.mode, .flexibleSpace,
+        .sidebarTrackingSeparator, .toggleSidebar,
         ID.newMessage, ID.filter, ID.refresh, .flexibleSpace,
         ID.listSeparator,
         ID.reply, ID.replyAll, ID.forward, .flexibleSpace,

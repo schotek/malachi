@@ -185,6 +185,24 @@ private func tempSocket() -> String {
         }
     }
 
+    /// The daemon gets the user's time zone (MALACHI_TIME_ZONE, T9a),
+    /// whatever the keyring; one already in the environment wins, an empty
+    /// one counts as none.
+    @Test func environmentPassesTheTimeZone() throws {
+        let daemon = URL(fileURLWithPath: "/nonexistent/malachid")
+        let launch = DaemonSupervisor.Launch(executable: daemon, socket: "/tmp/s", config: "/tmp/c", store: "/tmp/d")
+        let prague = try #require(TimeZone(identifier: "Europe/Prague"))
+        var env = DaemonSupervisor.environment(base: ["HOME": "/Users/u"], launch: launch, timeZone: prague)
+        #expect(env["MALACHI_TIME_ZONE"] == "Europe/Prague")
+        env = DaemonSupervisor.environment(base: ["MALACHI_KEYRING": "none"], launch: launch, timeZone: prague)
+        #expect(env["MALACHI_TIME_ZONE"] == "Europe/Prague", "set before the keyring's early return")
+        env = DaemonSupervisor.environment(base: ["MALACHI_TIME_ZONE": "Asia/Tokyo"], launch: launch, timeZone: prague)
+        #expect(env["MALACHI_TIME_ZONE"] == "Asia/Tokyo")
+        env = DaemonSupervisor.environment(base: ["MALACHI_TIME_ZONE": ""], launch: launch, timeZone: prague)
+        #expect(env["MALACHI_TIME_ZONE"] == "Europe/Prague")
+        #expect(DaemonSupervisor.environment(base: [:], launch: launch)["MALACHI_TIME_ZONE"] == TimeZone.current.identifier)
+    }
+
     /// The daemon of the app compresses its store and keeps the large
     /// attachments of the last 30 days (docs/api.md §4.8), whatever the
     /// keyring; values already in the environment win, an empty one

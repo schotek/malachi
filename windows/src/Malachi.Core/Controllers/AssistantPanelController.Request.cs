@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Controllers/AssistantPanelController.swift
-// (AssistantPanelController.Target, Request, Request.Kind); GTK:
+// (AssistantPanelController.Target, Request, Request.Kind with its calendar
+// case); GTK:
 // ui/internal/assistantpanel/controller.go (target, request, requestKind).
 // Swift's enums with associated values are closed record hierarchies,
 // private to the controller as they are internal to Swift's.
@@ -40,6 +41,8 @@ public sealed partial class AssistantPanelController
 
     /// <summary>A question about an attachment.</summary>
     private sealed record AttachmentRequest(string AccountId, string MessageId, string PartId) : RequestKind;
+
+    private sealed record CalendarRequest(AssistantAction Action) : RequestKind;
 
     /// <summary>One question, as sent and as retried (Swift <c>Request</c>).</summary>
     /// <param name="Kind">What it is.</param>

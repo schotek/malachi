@@ -139,4 +139,58 @@ func (s *Server) registerBackend(b api.Backend) {
 	s.handlers[api.MethodBoardSetPreferences] = wrap(brd.SetPreferences)
 	s.handlers[api.MethodBoardRunStart] = wrap(brd.RunStart)
 	s.handlers[api.MethodBoardRunEnd] = wrap(brd.RunEnd)
+
+	s.registerCalendar(b)
+}
+
+// registerCalendar binds the calendar methods (docs/api.md §4.1, §4.14–
+// §4.16) to the account, calendar, event and invitation services.
+func (s *Server) registerCalendar(b api.Backend) {
+	acc, cal, ev, inv := b.Accounts(), b.Calendars(), b.Events(), b.Invitations()
+
+	s.handlers[api.MethodAccountDiscoverCalDAV] = wrap(acc.DiscoverCalDAV)
+	s.handlers[api.MethodAccountListCalDAVCalendars] = wrap(acc.ListCalDAVCalendars)
+
+	s.handlers[api.MethodCalendarList] = wrap(cal.List)
+	s.handlers[api.MethodCalendarUpdate] = wrap(cal.Update)
+	s.handlers[api.MethodCalendarSync] = wrap(cal.Sync)
+	s.handlers[api.MethodCalendarPreferences] = wrap(cal.Preferences)
+	s.handlers[api.MethodCalendarSetPreferences] = wrap(cal.SetPreferences)
+	s.handlers[api.MethodCalendarFreeBusy] = wrap(cal.FreeBusy)
+	s.handlers[api.MethodCalendarFindFreeTime] = wrap(cal.FindFreeTime)
+
+	s.handlers[api.MethodEventList] = wrap(ev.List)
+	s.handlers[api.MethodEventGet] = wrap(ev.Get)
+	s.handlers[api.MethodEventSearch] = wrap(ev.Search)
+	s.handlers[api.MethodEventCreate] = wrap(ev.Create)
+	s.handlers[api.MethodEventUpdate] = wrap(ev.Update)
+	s.handlers[api.MethodEventDelete] = wrap(ev.Delete)
+	s.handlers[api.MethodEventRespond] = wrap(ev.Respond)
+	s.handlers[api.MethodEventSnoozeAlert] = wrap(ev.SnoozeAlert)
+	s.handlers[api.MethodEventDismissAlert] = wrap(ev.DismissAlert)
+
+	s.handlers[api.MethodInvitationList] = wrap(inv.List)
+	s.handlers[api.MethodInvitationRespond] = wrap(inv.Respond)
+	s.handlers[api.MethodInvitationApplyCancel] = wrap(inv.ApplyCancel)
+}
+
+// Server also implements the optional api.CalendarNotifier: like every
+// notification, these reach only connections that completed the
+// handshake (broadcast).
+var _ api.CalendarNotifier = (*Server)(nil)
+
+func (s *Server) CalendarChanged(n api.CalendarChangedNotification) {
+	s.broadcast(api.NotifyCalendarChanged, n)
+}
+
+func (s *Server) CalendarState(n api.CalendarStateNotification) {
+	s.broadcast(api.NotifyCalendarState, n)
+}
+
+func (s *Server) EventAlert(n api.EventAlertNotification) {
+	s.broadcast(api.NotifyEventAlert, n)
+}
+
+func (s *Server) InvitationsChanged(n api.InvitationsChangedNotification) {
+	s.broadcast(api.NotifyInvitationsChanged, n)
 }

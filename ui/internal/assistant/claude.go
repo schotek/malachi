@@ -66,6 +66,14 @@ var AllowedTools = []string{
 	"mcp__malachi__read_message",
 	"mcp__malachi__get_attachment",
 	"mcp__malachi__create_draft",
+	// The calendar's read-only tools (CalendarTools, docs/calendar.md):
+	// the panel's conversation only, not the triage's or the suggested
+	// reply's.
+	"mcp__malachi__list_calendars",
+	"mcp__malachi__list_events",
+	"mcp__malachi__get_event",
+	"mcp__malachi__find_free_time",
+	"mcp__malachi__list_invitations",
 }
 
 // Options are what Args builds the command line from.

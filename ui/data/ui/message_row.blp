@@ -170,6 +170,18 @@ ListBoxRow message_row {
           hexpand: true;
         }
 
+        // Pill of a message with a calendar part (widget/pill.go
+        // SetInvitationPill, calendar.PillKind): Invitation, Update,
+        // Cancelled (the subject then struck through), Reply.
+        Label invitation_pill {
+          visible: false;
+          valign: center;
+
+          styles [
+            "issue-pill",
+          ]
+        }
+
         // Tag of a bulk message (widget/message_row.go, bulkmail.Tag).
         Label bulk_pill {
           visible: false;

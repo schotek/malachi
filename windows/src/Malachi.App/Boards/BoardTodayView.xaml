@@ -10,7 +10,8 @@ and window/board_today.go. The board's Today style ("Dnes"): the greeting
 and the count tiles over one list of what is hot, the top of what waits
 for the user ("and N more"), and what the assistant says the user
 promised; beside it (under it below 760) the deadlines, grouped from
-Overdue on. Every text is a cleaned plain
+Overdue on. After the greeting the strip of today's events
+(BoardTodayCalendarStrip, docs/calendar.md §5.9). Every text is a cleaned plain
 string of the view model, set as TextBlock.Text.
 -->
 <UserControl
@@ -122,6 +123,10 @@ string of the view model, set as TextBlock.Text.
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Style="{StaticResource BodyTextBlockStyle}"
                         TextWrapping="Wrap" />
+                    <!-- "Today in Calendar" after the greeting (BoardTodayCalendarStrip;
+                         BoardTodayViewController's calendar row), while some
+                         account has the calendar capability. -->
+                    <boards:BoardTodayCalendarStrip x:Name="CalendarStrip" Margin="0,12,0,0" />
                     <Grid
                         x:Name="Tiles"
                         Margin="0,12,0,0"
