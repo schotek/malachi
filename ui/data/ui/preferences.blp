@@ -283,6 +283,77 @@ Adw.PreferencesDialog preferences_dialog {
     }
   }
 
+  // Preferences → Calendar (docs/calendar.md §5.8, window/preferences_calendar.go
+  // bindCalendar): every text is ui/internal/calendar's, set in Go. The
+  // Display group is static; one group per calendar account (and its
+  // Invitations group) is added from Go between it and the empty state,
+  // following calendar.PreferencesLayout. Hidden without a calendar source.
+  Adw.PreferencesPage calendar_page {
+    name: "calendar";
+    icon-name: "x-office-calendar-symbolic";
+
+    Adw.PreferencesGroup calendar_display_group {
+      Adw.ComboRow calendar_week_start {
+        use-markup: false;
+      }
+
+      Adw.ComboRow calendar_duration {
+        use-markup: false;
+      }
+
+      Adw.ComboRow calendar_alert {
+        use-markup: false;
+      }
+
+      Adw.SwitchRow calendar_declined {
+        use-markup: false;
+      }
+
+      // The seven day toggles (filled from Go); the last day stays on.
+      Adw.ActionRow calendar_work_days {
+        use-markup: false;
+
+        [suffix]
+        Box calendar_work_days_box {
+          valign: center;
+
+          styles [
+            "linked",
+          ]
+        }
+      }
+
+      // Half hours (CalendarPreferencesController.WorkingTimeChoices).
+      Adw.ComboRow calendar_work_start {
+        use-markup: false;
+      }
+
+      Adw.ComboRow calendar_work_end {
+        use-markup: false;
+      }
+    }
+
+    // calendar.NoCalendarsTitle / NoCalendarsBody without calendar accounts.
+    Adw.PreferencesGroup calendar_empty_group {
+      visible: false;
+
+      Adw.ActionRow calendar_empty_row {
+        use-markup: false;
+
+        styles [
+          "dim-label",
+        ]
+      }
+    }
+
+    Adw.PreferencesGroup calendar_add_group {
+      Adw.ButtonRow calendar_add_caldav {
+        use-markup: false;
+        start-icon-name: "list-add-symbolic";
+      }
+    }
+  }
+
   Adw.PreferencesPage appearance_page {
     name: "appearance";
     title: _("Appearance");

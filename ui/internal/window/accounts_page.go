@@ -15,6 +15,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/accountwizard"
+	"github.com/schotek/malachi/ui/internal/calendar"
 	"github.com/schotek/malachi/ui/internal/certtrust"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
@@ -128,11 +129,15 @@ func (d *PreferencesDialog) setAccounts(c *client.Client, accounts []api.Account
 	}
 	d.accountRows = d.accountRows[:0]
 	for _, a := range accounts {
+		// A CalDAV account's section is in Preferences → Calendar.
+		if !calendar.ShowsInAccountsTab(a) {
+			continue
+		}
 		row := d.newAccountRow(c, a)
 		d.accountRows = append(d.accountRows, row)
 		d.accountsGroup.Add(row)
 	}
-	d.accountsEmpty.SetVisible(len(accounts) == 0)
+	d.accountsEmpty.SetVisible(len(d.accountRows) == 0)
 }
 
 func (d *PreferencesDialog) newAccountRow(c *client.Client, a api.Account) *accountRow {

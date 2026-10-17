@@ -430,7 +430,7 @@ func TestConversationRowShowsTheWholeConversation(t *testing.T) {
 	if want := []convChange{convLoading, convOpened}; !reflect.DeepEqual(w.changes, want) {
 		t.Errorf("changes %v", w.changes)
 	}
-	if got := w.caller.calls; len(got) != 1 || !reflect.DeepEqual(got[0].params, api.ThreadGetParams{AccountID: "a", ThreadID: "t1", FolderID: "in", WithSent: true}) {
+	if got := w.caller.calls; len(got) != 1 || !reflect.DeepEqual(got[0].params, api.ThreadGetParams{AccountID: "a", ThreadID: "t1", FolderID: "in", WithSent: true, WithDrafts: true}) {
 		t.Errorf("thread.get: %+v", got)
 	}
 	m := w.ctrl.model

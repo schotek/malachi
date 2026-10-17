@@ -9,6 +9,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/bulkmail"
+	"github.com/schotek/malachi/ui/internal/calendar"
 	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
@@ -778,6 +779,7 @@ func summaryThread(t api.ThreadSummary, expanded, loading bool) widget.Thread {
 		Expanded:       expanded,
 		Loading:        loading,
 		Draft:          threadDraftBadge(t),
+		Invitation:     calendar.InvitationPillOf(t.Latest),
 	}
 }
 

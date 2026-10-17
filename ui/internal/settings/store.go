@@ -110,6 +110,20 @@ const (
 	KeyBoardTriageModel   = "board-triage-model"
 )
 
+// KeyCalendarView is the view the Calendar was shown in last: a nick of
+// calendar.View ("day", "week", "month", "agenda"), the gschema's
+// CalendarView enum. The calendar package reads the nick itself
+// (calendar.ParseView).
+const KeyCalendarView = "calendar-view"
+
+// CalendarViews are calendar-view's values in the order of the gschema's
+// CalendarView enum (calendar.Views' order); CalendarViewDefault is the
+// key's default.
+var CalendarViews = []string{"day", "week", "month", "agenda"}
+
+// CalendarViewDefault is calendar-view's default in the gschema.
+const CalendarViewDefault = "week"
+
 // ColorScheme is the nick of the ColorScheme enum in the gschema.
 type ColorScheme string
 
@@ -191,11 +205,14 @@ const (
 	BoardStartMail  BoardStartMode = "mail"
 	BoardStartBoard BoardStartMode = "board"
 	BoardStartLast  BoardStartMode = "last"
+	// BoardStartCalendar opens the Calendar (board.StartCalendar).
+	BoardStartCalendar BoardStartMode = "calendar"
 )
 
-// BoardStartModes are the values in the order of the gschema enum
-// (board.StartModes' order).
-var BoardStartModes = []BoardStartMode{BoardStartMail, BoardStartBoard, BoardStartLast}
+// BoardStartModes are the values in the order of the gschema enum (mail,
+// board, last, calendar); Settings lists them in
+// board.StartModesWithCalendar's order.
+var BoardStartModes = []BoardStartMode{BoardStartMail, BoardStartBoard, BoardStartLast, BoardStartCalendar}
 
 // defaults mirror the gschema defaults for the in-memory fallback.
 var defaults = map[string]any{
@@ -243,6 +260,8 @@ var defaults = map[string]any{
 	KeyBoardAccountFilter: "",
 	KeyBoardTriageConsent: false,
 	KeyBoardTriageModel:   string(assistant.Sonnet),
+
+	KeyCalendarView: CalendarViewDefault,
 }
 
 // Store reads and writes preferences. All methods must be called from the
@@ -518,6 +537,31 @@ func (s *Store) BoardAccountFilter() string { return s.str(KeyBoardAccountFilter
 func (s *Store) SetBoardAccountFilter(v string) {
 	if s.str(KeyBoardAccountFilter) != v {
 		s.set(KeyBoardAccountFilter, v)
+	}
+}
+
+// CalendarView is the nick of the Calendar's view (calendar.View.Nick);
+// an unknown or empty stored value is the default.
+func (s *Store) CalendarView() string {
+	v := s.str(KeyCalendarView)
+	for _, n := range CalendarViews {
+		if v == n {
+			return v
+		}
+	}
+	return CalendarViewDefault
+}
+
+// SetCalendarView writes a view's nick only when it changed; a value
+// outside the enum is ignored.
+func (s *Store) SetCalendarView(v string) {
+	for _, n := range CalendarViews {
+		if v == n {
+			if s.str(KeyCalendarView) != v {
+				s.set(KeyCalendarView, v)
+			}
+			return
+		}
 	}
 }
 

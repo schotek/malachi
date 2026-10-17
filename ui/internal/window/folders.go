@@ -178,6 +178,14 @@ func (w *Window) fetchFolders(acc api.AccountID, gen uint64, done func()) {
 	}()
 }
 
+// listedInMail reports whether Mail lists account a: an account whose only
+// capability is the calendar (a CalDAV account) has no mail and no
+// folders, so it is never in Mail's sidebar (docs/calendar.md §5.3, §6.5
+// G15; Swift mailSidebarAccounts); it shows in the Calendar's sidebar.
+func listedInMail(a api.Account) bool {
+	return !(len(a.Capabilities) == 1 && a.Capabilities[0] == api.CapabilityCalendar)
+}
+
 // rebuildFolderList recreates the sidebar rows from model.entries. One row
 // per entry, in order: the row-selected handler in New maps
 // row.Index() back onto model.entries. The selection is preserved when its

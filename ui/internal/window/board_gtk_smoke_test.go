@@ -34,8 +34,9 @@ func TestBoardGTKSmoke(t *testing.T) {
 	w := &Window{
 		ApplicationWindow: data.Builder("window.ui").GetObject("main_window").Cast().(*adw.ApplicationWindow),
 		log:               slog.Default(), mode: board.ModeBoard,
-		actions: make(map[string]*gio.SimpleAction),
-		toasts:  adw.NewToastOverlay(),
+		actions:           make(map[string]*gio.SimpleAction),
+		modeSwitchBoardOn: true,
+		toasts:            adw.NewToastOverlay(),
 	}
 	defer w.Destroy()
 	w.registerBoardActions()
@@ -114,6 +115,71 @@ func TestBoardGTKSmoke(t *testing.T) {
 	if p.stack.VisibleChildName() != "empty" {
 		t.Fatal("empty source did not replace the board")
 	}
+	smokeModeSwitch(t, w, p, flush)
+}
+
+// smokeModeSwitch moves the board page into window.blp's own mode stack
+// and switches through Mail, Board and Calendar the way setMode shows
+// them (syncModeSwitches, the stack's page by the mode's nick): both mode
+// switches follow, the Calendar's page is the empty calendar_page_bin, and
+// with Show the Board off the switches stay with the Board toggle
+// insensitive.
+func smokeModeSwitch(t *testing.T, w *Window, p *boardPage, flush func()) {
+	b := data.Builder("window.ui")
+	host := b.GetObject("main_window").Cast().(*adw.ApplicationWindow)
+	defer host.Destroy()
+	w.SetContent(nil)
+	b.GetObject("board_page_bin").Cast().(*adw.Bin).SetChild(p.root)
+	w.modeStack = b.GetObject("mode_stack").Cast().(*gtk.Stack)
+	w.modeSwitchMail = b.GetObject("mode_switch").Cast().(*adw.ToggleGroup)
+	w.calendarPageBin = b.GetObject("calendar_page_bin").Cast().(*adw.Bin)
+	wireModeSwitch(w, w.modeSwitchMail)
+	host.SetDefaultSize(1280, 900)
+	host.Present()
+	flush()
+	if w.calendarPageBin.Child() != nil {
+		t.Fatal("calendar_page_bin is not empty")
+	}
+	for _, m := range []board.Mode{board.ModeMail, board.ModeBoard, board.ModeCalendar, board.ModeMail} {
+		w.mode = m
+		w.syncModeSwitches(m)
+		w.modeStack.SetVisibleChildName(m.Nick())
+		flush()
+		if got := w.modeStack.VisibleChildName(); got != m.Nick() {
+			t.Fatalf("mode %s shows page %q", m.Nick(), got)
+		}
+		for _, g := range w.modeSwitches() {
+			if got := g.ActiveName(); got != m.Nick() {
+				t.Fatalf("mode %s: a switch shows %q", m.Nick(), got)
+			}
+			for _, n := range board.ModesWithCalendar {
+				if g.ToggleByName(n.Nick()) == nil {
+					t.Fatalf("a mode switch has no %q toggle", n.Nick())
+				}
+			}
+		}
+		if m == board.ModeCalendar {
+			if w.modeStack.VisibleChild() == nil || !gtk.BaseWidget(w.calendarPageBin).IsAncestor(w.modeStack) {
+				t.Fatal("the Calendar's page is not calendar_page_bin")
+			}
+		}
+	}
+	for _, on := range []bool{false, true} {
+		w.setModeSwitchBoardEnabled(on)
+		flush()
+		for _, g := range w.modeSwitches() {
+			if !g.Visible() {
+				t.Fatal("a mode switch hid with Show the Board off")
+			}
+			if got := g.ToggleByName("board").Enabled(); got != on {
+				t.Fatalf("Board toggle enabled = %v with Show the Board %v", got, on)
+			}
+			if !g.ToggleByName("calendar").Enabled() || !g.ToggleByName("mail").Enabled() {
+				t.Fatal("Show the Board turned the Mail or Calendar toggle off")
+			}
+		}
+	}
+	b.GetObject("board_page_bin").Cast().(*adw.Bin).SetChild(nil)
 }
 
 // smokeBoardFixes checks the 2026-10-08 fixes on the samples: the Snoozed

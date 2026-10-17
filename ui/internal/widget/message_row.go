@@ -13,6 +13,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
+	"github.com/schotek/malachi/ui/internal/calendar"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
 )
@@ -42,6 +43,11 @@ type Message struct {
 	// Tag is the neutral pill of a bulk message (bulkmail.Tag): "Bulk",
 	// "Mailing List", "Automated"; empty for personal mail.
 	Tag string
+
+	// Invitation is the pill of a message with a calendar part
+	// (calendar.InvitationPillOf); a cancellation strikes the subject
+	// through (calendar.StrikesSubject).
+	Invitation calendar.InvitationPill
 }
 
 // Thread is what a conversation row displays; a projection of
@@ -70,6 +76,10 @@ type Thread struct {
 	// (conversation.DraftBadge when api.ThreadSummary.DraftCount > 0); ""
 	// hides it.
 	Draft string
+
+	// Invitation is the pill of the newest member
+	// (calendar.InvitationPillOf over api.ThreadSummary.Latest).
+	Invitation calendar.InvitationPill
 }
 
 // Start margins of the row content: the plain one (message_row.blp), the
@@ -124,7 +134,10 @@ type MessageRow struct {
 	bulkPill     *gtk.Label
 	internalPill *gtk.Label
 	draftPill    *gtk.Label
-	event        *gtk.Label
+	// invitationPill is the pill of a message with a calendar part.
+	invitationPill *gtk.Label
+	invitation     calendar.InvitationPill
+	event          *gtk.Label
 
 	// thread says the row shows a conversation (the arrow is live), loading
 	// that its members are on their way (the spinner instead), reserve that
@@ -164,13 +177,14 @@ func NewMessageRow() *MessageRow {
 		spinner:    b.GetObject("expander_spinner").Cast().(*adw.Spinner),
 		badge:      b.GetObject("count_badge").Cast().(*gtk.Label),
 
-		subjectLine:  b.GetObject("subject_line").Cast().(*gtk.Box),
-		issueKey:     b.GetObject("issue_key").Cast().(*gtk.Label),
-		statusPill:   b.GetObject("status_pill").Cast().(*gtk.Label),
-		bulkPill:     b.GetObject("bulk_pill").Cast().(*gtk.Label),
-		internalPill: b.GetObject("internal_pill").Cast().(*gtk.Label),
-		draftPill:    b.GetObject("draft_pill").Cast().(*gtk.Label),
-		event:        b.GetObject("event_label").Cast().(*gtk.Label),
+		subjectLine:    b.GetObject("subject_line").Cast().(*gtk.Box),
+		issueKey:       b.GetObject("issue_key").Cast().(*gtk.Label),
+		statusPill:     b.GetObject("status_pill").Cast().(*gtk.Label),
+		bulkPill:       b.GetObject("bulk_pill").Cast().(*gtk.Label),
+		internalPill:   b.GetObject("internal_pill").Cast().(*gtk.Label),
+		draftPill:      b.GetObject("draft_pill").Cast().(*gtk.Label),
+		invitationPill: b.GetObject("invitation_pill").Cast().(*gtk.Label),
+		event:          b.GetObject("event_label").Cast().(*gtk.Label),
 
 		showAvatar:  true,
 		showPreview: true,
@@ -202,8 +216,10 @@ func (r *MessageRow) SetMessage(m Message) {
 	r.thread, r.loading = false, false
 	r.issue = m.Issue
 	r.tag = m.Tag
+	r.invitation = m.Invitation
 	r.applyLead()
 	r.applyIssue()
+	r.applyInvitation()
 }
 
 // SetThread displays a conversation: the participants where the sender
@@ -234,8 +250,10 @@ func (r *MessageRow) SetThread(t Thread) {
 	r.thread, r.loading = true, t.Loading
 	r.issue = t.Issue
 	r.tag = t.Tag
+	r.invitation = t.Invitation
 	r.applyLead()
 	r.applyIssue()
+	r.applyInvitation()
 	r.SetExpanded(t.Expanded)
 }
 
@@ -299,6 +317,30 @@ func (r *MessageRow) applyIssue() {
 		r.from.RemoveCSSClass("caption")
 	}
 	r.preview.SetVisible(r.showPreview && !r.eventRow)
+}
+
+// applyInvitation shows the invitation pill (hidden on a row of an issue
+// and for none) and strikes a cancelled event's subject through with a
+// Pango attribute, never markup (docs/calendar.md §5.7).
+func (r *MessageRow) applyInvitation() {
+	p := r.invitation
+	if r.issue != nil {
+		p = calendar.PillNone
+	}
+	SetInvitationPill(r.invitationPill, p)
+	r.subject.SetAttributes(StrikeAttrs(calendar.StrikesSubject(p)))
+}
+
+// InvitationPill is the pill the row shows and whether its subject is
+// struck through (tests).
+func (r *MessageRow) InvitationPill() (text string, struck bool) {
+	if r.invitationPill.Visible() {
+		text = r.invitationPill.Text()
+	}
+	if a := r.subject.Attributes(); a != nil {
+		struck = len(a.Attributes()) > 0
+	}
+	return text, struck
 }
 
 // SetReserveExpander makes a plain row keep the fold arrow's place, so its

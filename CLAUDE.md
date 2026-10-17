@@ -432,7 +432,8 @@ Pořadí prací:
     konceptem a ARM64
 11. Kalendář (Microsoft 365 přes Graph, CalDAV, pozvánky v poště, MCP)
     — démon a macOS hotové a ověřené vlastníkem (`feat/calendar`,
-    2026-10-16); Windows port dělá vlastník, GTK port zbývá
+    2026-10-16); GTK port napsaný a otestovaný v kontejneru (2026-10-17,
+    čeká na průchod vlastníka v Toolbxu); Windows port dělá vlastník
 
 Asistent (stav 2026-09-30, sloučeno do `main`; uživatel potvrdil, že
 funguje ve všech třech klientech). Na macOS je hotové a uživatelem otestované:
@@ -1967,6 +1968,47 @@ kalendáře jen v Předvolbách (`ActiveCalendars`) a vlastní banner listu
 CalDAV. Žádný `// macOS-only string` kalendář nezavedl; `po/cs.po` je
 úplné (1462). Strftime msgid musí mít `// xgettext:no-c-format`, jinak
 katalog macOS ukáže „%-ld“.
+
+GTK klient kalendáře (2026-10-17, `feat/calendar`, necommitnuté; úkoly
+G1–G19 podle `docs/calendar.md` §6.5, poznámky „As built (G…)“ v jeho
+§5.12): port macOS klienta se stejným rozložením (sidebar 240 px
+s minikalendářem, Pozvánky ▸ Nezodpovězené a kalendáři s kapslí druhu;
+týden/den 60 px na hodinu s neprůhlednými bloky; měsíc s pruhy přes dny;
+agenda od dneška; hledání; popover detailu 380 px; okno Nová/Upravit
+událost 760×800 se Smazat vlevo; karta a štítky pozvánek v Poště;
+Předvolby → Kalendář jako `Adw.PreferencesPage`; dialog Přidat kalendář
+CalDAV; pruh „Dnes v kalendáři“ na nástěnce; akce asistenta; notifikace
+s tlačítky). Čisté balíčky bez gotk4: `ui/internal/calendardata`
+(`DataSource`, `DaemonSource` nad `board.Caller`/`board.Loop`,
+`InMemorySource` se vzorovými daty `MALACHI_CALENDAR_SAMPLES=1`)
+a `ui/internal/calendarctl` (porty Swift kontrolerů: `CalendarController`,
+`EventDetailController`, `InvitationController`, `EventEditorController`,
+`CalDAVWizardController`, `CalendarPreferencesController`,
+`CalendarAccountController`, `CalendarAlertsController`; `Options`
+zmrazené, `Answer` v `detail.go`); pohledy v `ui/internal/window/calendar*.go`,
+`event_editor*.go`, `invitation_card.go`, `preferences_calendar.go`,
+`board_today_calendar.go` a Blueprinty `calendar_page.blp`,
+`event_detail.blp`, `event_editor.blp`, `invitation_card.blp`,
+`caldav_sheet.blp`; CSS v `ui/internal/style/calendar*.go` (třídy
+`.cal-c-N`, barvy ověřené regulárem, výplně `mix()`); třetí režim okna
+`board.ModeCalendar` (Ctrl+3, Ctrl+Shift+1–4 pohledy, klíč
+`calendar-view`); bloky týdne jako tlačítka v `Gtk.Overlay` nad
+`DrawingArea`, pruhy měsíce přes sloupcové rozpětí `Gtk.Grid`. Texty jen
+z `ui/internal/calendar` přes `i18n.Tr` (žádný nový msgid; do
+`po/POTFILES` přibyly `calendar_detail.go`, `event_editor_popovers.go`,
+`preferences_calendar.go`, `calendarctl/account.go`). Odchylky od macOS
+v §5.12 (hlavičkové lišty místo unified toolbaru, hledání jako
+`Gtk.SearchBar`, dialogy `Adw.Dialog`/`Adw.AlertDialog`, notifikace
+s tlačítky, `mode_stack` nehomogenní). Sestaveno a otestováno v kontejneru
+Fedora 42 na Macu (`scripts/gtk-container/gtk.sh make build` / `test-ui`,
+celá sada `ui/` zelená, smoke testy `MALACHI_GTK_SMOKE=1` pro každý pohled
+a okno) a prohlédnuto přes Broadway (`gtk4-broadwayd` v kontejneru,
+`GDK_BACKEND=broadway`, vývojové kroky `MALACHI_GTK_START` jako
+`MALACHI_START` na macOS: `calendar:week|day|month|agenda`, `event-popover`,
+`event-editor[:edit]`, `caldav-dialog`, `prefs-calendar`, `size=WxH`,
+`quit`). Čeká: průchod vlastníka v Toolbxu proti skutečným účtům (M365,
+Nextcloud), pak commit; do `windows/` GTK port nesáhl (Windows port běží
+jinde).
 
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně

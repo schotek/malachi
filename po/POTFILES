@@ -56,6 +56,7 @@ ui/internal/calendar/notifications.go
 ui/internal/calendar/preferences.go
 ui/internal/calendar/caldav.go
 ui/internal/calendar/keys.go
+ui/internal/calendarctl/account.go
 ui/internal/settingspanel/settingspanel.go
 ui/internal/widget/consent.go
 ui/internal/widget/format.go
@@ -97,3 +98,6 @@ ui/internal/window/threads.go
 ui/internal/window/window.go
 ui/internal/maildate/groups.go
 ui/internal/window/date_groups.go
+ui/internal/window/calendar_detail.go
+ui/internal/window/event_editor_popovers.go
+ui/internal/window/preferences_calendar.go

@@ -40,7 +40,7 @@ case "${1:-}" in
     set -- make "BUILD_DIR=$build_dir" "$@"
     ;;
   test-ui)
-    set -- sh -c "make BUILD_DIR=$build_dir blueprint schemas && cd ui && GSETTINGS_SCHEMA_DIR=/src/$build_dir/glib-2.0/schemas GSETTINGS_BACKEND=memory xvfb-run -a go test \$(pkg-config --exists gsound || echo -tags nosound) ./..."
+    set -- sh -c "make BUILD_DIR=$build_dir blueprint schemas && cd ui && GSETTINGS_SCHEMA_DIR=/src/$build_dir/glib-2.0/schemas GSETTINGS_BACKEND=memory xvfb-run -a -s \"-screen 0 1600x1200x24\" go test \$(pkg-config --exists gsound || echo -tags nosound) ./..."
     ;;
   shell)
     set -- bash

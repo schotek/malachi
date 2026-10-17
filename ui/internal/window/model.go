@@ -9,6 +9,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/bulkmail"
+	"github.com/schotek/malachi/ui/internal/calendar"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/signin"
@@ -528,6 +529,7 @@ func summaryMessage(s api.MessageSummary) widget.Message {
 		HasAttachments: s.HasAttachments,
 		Issue:          jira.RowIssue(s, i18n.Tr),
 		Tag:            bulkmail.Tag(s.Bulk, i18n.Tr),
+		Invitation:     calendar.InvitationPillOf(s),
 	}
 	if m.Issue != nil {
 		m.Unread = m.Issue.Unread
@@ -570,11 +572,12 @@ func matchesFilter(s api.MessageSummary, f api.MessageFilter) bool {
 	}
 }
 
-// enabledAccounts filters accounts to the enabled ones, keeping order.
+// enabledAccounts filters accounts to the enabled ones Mail lists
+// (listedInMail, folders.go), keeping order.
 func enabledAccounts(accounts []api.Account) []api.Account {
 	out := make([]api.Account, 0, len(accounts))
 	for _, a := range accounts {
-		if a.Enabled {
+		if a.Enabled && listedInMail(a) {
 			out = append(out, a)
 		}
 	}

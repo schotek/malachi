@@ -42,10 +42,11 @@ func boardDefaultStyleChoices() []settings.BoardStyle {
 }
 
 // boardStartModeChoices are Open at Launch's values in the order of the
-// combo row's items (board.StartModes: Mail, Board, Last Used).
+// combo row's items (board.StartModesWithCalendar: Mail, Board, Calendar,
+// Last Used).
 func boardStartModeChoices() []settings.BoardStartMode {
-	out := make([]settings.BoardStartMode, len(board.StartModes))
-	for i, m := range board.StartModes {
+	out := make([]settings.BoardStartMode, len(board.StartModesWithCalendar))
+	for i, m := range board.StartModesWithCalendar {
 		out[i] = settings.BoardStartMode(m.Nick())
 	}
 	return out
@@ -93,8 +94,8 @@ func (d *PreferencesDialog) bindBoard(s *settings.Store) (unbind func()) {
 	}
 	d.boardDefaultStyle.SetModel(gtk.NewStringList(styles))
 	d.boardStartMode.SetTitle(board.StartModeSetting(btr))
-	modes := make([]string, len(board.StartModes))
-	for i, m := range board.StartModes {
+	modes := make([]string, len(board.StartModesWithCalendar))
+	for i, m := range board.StartModesWithCalendar {
 		modes[i] = board.StartModeTitle(m, btr)
 	}
 	d.boardStartMode.SetModel(gtk.NewStringList(modes))

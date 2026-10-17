@@ -318,7 +318,7 @@ func TestStartDecision(t *testing.T) {
 }
 
 func TestNumberRowDigit(t *testing.T) {
-	for code, want := range map[uint]rune{10: '1', 11: '2', 9: 0, 12: 0, 0: 0, 49: 0} {
+	for code, want := range map[uint]rune{10: '1', 11: '2', 12: '3', 13: '4', 9: 0, 14: 0, 0: 0, 49: 0} {
 		if got := NumberRowDigit(code); got != want {
 			t.Errorf("NumberRowDigit(%d) = %q, want %q", code, got, want)
 		}

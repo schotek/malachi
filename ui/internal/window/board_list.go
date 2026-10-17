@@ -79,18 +79,13 @@ func (p *boardPage) bind(b *gtk.Builder) {
 // detail or the actions (board_detail.go, board_actions.go do their own).
 func (p *boardPage) wire() {
 	w := p.w
-	for _, m := range board.Modes {
-		if t := p.modeSwitch.ToggleByName(modeNick(m)); t != nil {
-			t.SetTooltip(modeTitle(m))
-		}
+	wireModeSwitch(w, p.modeSwitch)
+	w.settingModeSwitch = true
+	p.modeSwitch.SetActiveName(w.mode.Nick())
+	w.settingModeSwitch = false
+	if t := p.modeSwitch.ToggleByName(board.ModeBoard.Nick()); t != nil {
+		t.SetEnabled(w.modeSwitchBoardOn)
 	}
-	p.modeSwitch.SetActiveName(modeNick(w.mode))
-	p.modeSwitch.NotifyProperty("active-name", func() {
-		if w.settingModeSwitch {
-			return
-		}
-		w.setMode(parseModeNick(p.modeSwitch.ActiveName()))
-	})
 
 	for _, s := range board.Styles {
 		if t := p.styleSwitch.ToggleByName(styleNick(s)); t != nil {

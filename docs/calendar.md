@@ -5,13 +5,16 @@ built, how the daemon stores and synchronises calendars, the API contract
 the clients and the MCP bridge use, the macOS client (the reference client
 of this feature), and the tasks that implementation agents take one by one.
 
-Status (2026-10-16, end of day): branch `feat/calendar`. The daemon
-(T0–T12, U1/U2, P1, `malachi-rpc`) and the macOS client (M1–M11) are done;
-the owner passed gate 1 and gate 2 (§6.3) over his real Microsoft 365 and
-Nextcloud accounts, and the fixes his live test asked for are in (D29–D32,
-the "As built" notes of §3–§5). `go test ./...` of the backend and the full
-`swift test` are green. The Windows port is the owner's on his Windows
-machine (§6.4); the GTK port follows.
+Status (2026-10-17): branch `feat/calendar`. The daemon (T0–T12, U1/U2,
+P1, `malachi-rpc`) and the macOS client (M1–M11) are done and committed
+(0b414da, 7315d7c); the owner passed gate 1 and gate 2 (§6.3) over his
+real Microsoft 365 and Nextcloud accounts (D29–D32). The GTK client
+(G1–G19, §6.5, as built in §5.12) is written, built and tested in the
+Fedora container on the Mac (`scripts/gtk-container/gtk.sh`; full
+`test-ui` green, every calendar smoke green, every view and window
+looked at under Broadway) and waits for the owner's run in the Toolbx
+against his accounts, then its commit. The Windows port is the owner's
+on his Windows machine (§6.4); nothing under `windows/` was touched.
 
 Contents:
 
@@ -2731,6 +2734,221 @@ toolbar with the view segments, `NSPopover` detail, notification actions.
 
 ---
 
+### 5.12 The GTK client as built (tasks G1–G20, 2026-10-17)
+
+The GTK client follows §6.5. What each task left, where it differs from the
+macOS client or the plan:
+
+- **G1** (`ui/internal/calendar/minimonth.go`, `reading.go`;
+  `ui/internal/assistant/calendar_result.go`): pure ports of
+  `MiniMonth.swift`, `InvitationReading.swift` and `AssistantCalendar.swift`
+  with their tests — `MiniMonth`/`NewMiniMonth`/`StepMonth`,
+  `InvitationPillOf`, `ShowsInvitationCard`, `CardClockLine`, `DayStripOf`
+  (whole hours on the zone's clock, so half-hour zones tick right),
+  `CalendarRef`, `ParseCalendarResult`. No new msgids.
+- **G2** (`ui/internal/calendardata`): the `DataSource` interface (frozen:
+  `Snapshot`, `Observe`, `Refresh`, `Handle`, `Occurrences`,
+  `CachedOccurrences`, `Event`, `Search`, `FreeBusy`, `FindFreeTime`,
+  `SetVisible` without `done`, `SetColor`, `Sync`, `SetPreferences`,
+  `CreateEvent`, `UpdateEvent` (also move), `DeleteEvent`, `Respond`,
+  `SnoozeAlert`, `DismissAlert`, `RespondToInvitation` (also propose),
+  `ApplyCancel`, `DiscoverCalDAV`, `ListCalDAVCalendars`, `AddAccount`,
+  `UpdateAccount`, `ImportAttachment`), `Snapshot` helpers, `Phase`,
+  `Change`, `ErrPreview` (`calendar.PreviewOnly`), `InMemorySource` over
+  `calendar.SampleData` (+ `samples_remote.go` `WithRemoteIDs`). `Range`
+  carries `Loc`; `ZoneName` turns Go's "Local" into an IANA name (TZ or
+  `/etc/localtime`) because `event.list` refuses "Local". `AsError` maps
+  transport errors to `*api.Error`. `Occurrences` carries no `complete`
+  flag, so the GTK page shows no "some events may be missing" line.
+- **G3** (`calendardata/daemon.go`): `NewDaemonSource(board.Caller,
+  board.Loop, DaemonOptions{RetryDelay, CallTimeout, Loc, Log})`, `Start`,
+  `Stop`, `AccountsChanged`, `ConnectionChanged`, `ConflictEvent(*api.Error)`.
+  Only a failed load is retried (`board.RetryDelay`); offline is
+  `PhaseUnavailable` and reloads on `ConnectionChanged(true)`. `SetVisible`
+  also sends `ChangeOccurrences` on the optimistic change and on rollback.
+  A range dropped while in flight is forgotten (a new ask starts a fresh
+  call; Swift joins the stale one). Timeouts: `event.list` 10 s, free/busy,
+  find free time and CalDAV discovery 20 s, `account.add`/`update` 30 s,
+  `attachment.import` 60 s.
+- **G4** (`settings/store.go`, `window/board.go`, `mode_keys.go`,
+  `window.go`, `preferences_board.go`, `window.blp`, `board_page.blp`,
+  `widget/format.go`): `KeyCalendarView`, `BoardStartCalendar`; three modes
+  through one helper; Ctrl+3 and Ctrl+Shift+1–4 by physical key
+  (`board.NumberRowDigit` covers 3 and 4), `win.show-calendar`, Calendar in
+  "Open at Launch"; a third toggle in both switches, the `calendar_page_bin`
+  page; `widget.Strftime` exported; with Show the Board off the Board
+  toggle is insensitive and the switch stays. The board GTK smoke steps
+  through all three modes. Open: on a Czech layout `<Control>1` might also
+  fire on Ctrl+Shift+1 before the calendar's handler (unchecked by hand).
+- **G5** (`calendarctl/options.go`, `calendar.go`): `Options{Env, Now,
+  Loop, LocaleFirstDay, RPCText, View, SetView}` with `Clock()`, `Loc()`,
+  `After()`, `ErrorMessage()` — frozen; `CalendarController`
+  (`Start`/`Stop`, `SetView`, `Step`, `Today`, `GoTo`, `Show`,
+  `StepMiniMonth`, `LoadMoreAgenda`, `ShowUnanswered`, `ClearFilter`,
+  `SetVisible`, `SignIn`, `Select`, `MoveSelection`, `OpenDetail`,
+  `NewEvent(At)`, `SetSearch`/`ClearSearch`, `HandleKey`, `Reload`;
+  callbacks `OnChange`, `OnError`, `OnOpenDetail`, `OnRemove`, `OnNewEvent`,
+  `OnClosePopover`, `OnSignIn`), `Sidebar`/`SidebarAccount`/`SidebarCalendar`,
+  `SearchMinimum`, `SearchDebounce`, `AgendaPage`.
+- **G6** (`calendarctl/detail.go`, `invitation.go`): the package's `Answer`
+  (`AnswerCancel`, `AnswerConfirm`, `AnswerAlternative`) lives in detail.go;
+  `EventDetailController` (`NewEventDetailController`, `NewEventDetailFor`),
+  `InvitationController` (`TargetChoice`, `DefaultInvitationTarget`);
+  `OnShowInCalendar(eventID, rec, day)` passes the recurrence id;
+  `InvitationController.Stop()` silences `OnChange` after the card is gone;
+  a conflict uses the error's `ConflictEventData`, else reloads.
+- **G7** (`calendarctl/editor.go`): `NewEventEditor(src, opts, *Defaults,
+  calendarID)`, `EditEventEditor(src, opts, event, scope, findFreeSlot)`;
+  the editor never asks the scope (the detail chose it); `findFreeSlot`
+  runs Next Free Slot from `Start`; a conflict sets `Conflict()` and
+  `Reload()` hands the fresh event to `OnReload(fresh, scope)`; Save also
+  checks the attendee field's pending text (`Resolved()`); `OnError`
+  repeats each inline error.
+- **G8** (`calendarctl/caldav.go`, `preferences.go`, `account.go`,
+  `alerts.go`): `CalDAVWizardController` (`OnConfirmTrust(TrustRequest,
+  func(bool))` — only the first answer counts; `ErrorField` marks the
+  password for a refused sign-in, else the server), `CalendarPreferencesController`
+  with `PreferenceChoice[T]`, `CalendarAccountController` (`CalendarRow`;
+  `OnSignIn` and `OnRemove` hand the work to the window — the source has
+  no `oauthStart` nor account removal), `CalendarAlertsController`
+  (`AlertRequest`, `NotificationCategory`, `InvitationNotificationOf` from
+  `Message.Invitation`; `invitationsChanged` is recognised, nothing shown).
+  `account.go` uses a literal `tr.T` ("Saving the account") → POTFILES.
+- **G9** (`window/calendar.go`, `calendar_page.blp`, `calendar_keys.go`,
+  `calendar_notify.go`, `status.go`, `style/calendar.go`, `main.go`,
+  `preferences.go`, `data/data.go`, the stubs of wave C2 and the smoke
+  `calendar_gtk_smoke_test.go`): the page is an `Adw.BreakpointBin` →
+  `Adw.OverlaySplitView` (sidebar 240) whose header gives way in four
+  breakpoints (900, 720, 560, 460 sp; at 900 a view drop-down
+  `calendar_view_menu` replaces the toggles); the search entry is only
+  ever cleared by the controller, never overwritten while typing; the
+  window's one calendar source lives in `w.cal` and Preferences gets it
+  through `w.CalendarSource()`; notifications are routed through
+  `otherNotification`/`modeAccountsChanged`/`modeConnectionChanged`; the
+  sidebar toggle has no tooltip (no msgid fits — "Show Sidebar" would be
+  new). Frozen stub signatures: `newCalendarSidebar(page) *calendarSidebar`
+  + `update(calendarctl.Sidebar)`; `newCalendarAgenda(page)`,
+  `newCalendarWeek(page, day bool)`, `newCalendarMonth(page)` each with
+  `update()` and `anchorFor(key string) gtk.Widgetter`;
+  `(w *Window) showEventDetail(occ, anchor)`, `closeEventDetail()`,
+  `removeCalendarOccurrence(occ)`; `openEventEditor(defaults, calendarID)`,
+  `editEvent(e, scope, findFreeSlot)`; `showAddCalDAV(parent, onDone)`;
+  `askAboutEvent(e)`, `revealCalendarAssistant()`; `calendarAlert(raw)`.
+  The GTK smoke tests need `xvfb-run -a -s "-screen 0 1600x1200x24"`
+  (the default 640×480 screen cannot hold a 1280-wide window; `gtk.sh
+  test-ui` passes it).
+- **G10** (`calendar_sidebar.go`, `calendar_agenda.go`,
+  `style/calendar_sidebar.go`): the Agenda and the Unanswered list sit in
+  `agenda_bin`, the results in `search_bin`, two lists built the same way;
+  paging starts on scroll as on macOS; the sidebar has its own
+  `calendarAccountBadge` (the Mail `accountHeaderBadge` has no CALDAV case).
+- **G11** (`calendar_week.go`, `calendar_allday.go`,
+  `style/calendar_week.go`; `calendar/block.go` adds `BlockTitle`,
+  `BlockPlace`): blocks and all-day bars are buttons without the `flat`
+  class — Adwaita's `button.flat:hover` would outrank the opaque fill and
+  let the grid show through a hovered block — so `style/calendar_week.go`
+  strips the button look itself; a block shows only the lines that fit its
+  height and clips the rest. Measured: grid 1030×1440, overlap columns,
+  the now line last, first scroll 410 and 410 again after a resize, the
+  all-day bar of "Team offsite" spanning two columns.
+- **G12** (`calendar_month.go`, `style/calendar_month.go`): each week row
+  is an Overlay over a DrawingArea (shading, grid lines, the resize probe)
+  with a seven-column grid for day numbers, bars and pill boxes; pills and
+  bars are 17 px + 1 px gap; the double-click gesture sits on the Overlay
+  and derives the column from x; a row with no room still shows its
+  "+N more" line (clipped), as macOS. Measured: a bar across a week
+  boundary (before/after flags), capacity 3 at 129 px rows, 0 at 72 px.
+- **G13** (`calendar_detail.go`, `event_detail.blp`,
+  `style/calendar_detail.go`; `calendar.go` gained `windowCalendar.detail`
+  and `.reveal`, `calendar_keys.go` passes `w.eventDetailShown()`): links go
+  through `openEventLink` — `mailto:` opens a new message, anything else
+  asks "Open This Link?" first (plain `w.openLink` without a links list
+  would open unasked); while a question is up the popover closes so it
+  cannot cover the `Adw.AlertDialog`, and comes back after the answer; the
+  alert row shows `AlertTitleFor` titles joined by `Dot` (no alert-row
+  msgid exists). Measured: width 380, rows time/location/video/people/
+  notes/invitation/footer.
+- **G14** (`event_editor.go`, `event_editor_popovers.go`,
+  `event_editor_availability.go`, `event_editor.blp`,
+  `compose/attendee_field.go`, `style/calendar_editor.go`; `compose/suggest.go`
+  got a hook so the attendee field supplies its own contact search): an
+  `Adw.Window` 750×790 (the header bar takes the rest of 760×800); zones
+  from tzdata's `zone1970.tab`/`zone.tab` plus UTC and the local zone;
+  Custom… is a popover on the Repeat drop-down; times are hour/minute
+  spin buttons; Escape closes unless suggestions are showing; Find a Free
+  Slot, Ask the Assistant… and Assistant come from the `assistant` texts,
+  Done from `board.Done`; a literal `i18n.T("Remove")` in
+  `event_editor_popovers.go` → POTFILES. Measured: label column 110,
+  footer Delete at x 20, Cancel/Save at the right, the all-day alert items.
+- **G15** (`invitation_card.go`, `invitation_card.blp`,
+  `style/calendar_card.go`, `message_view.go`, `conversation_card.go`,
+  `widget/message_row.go` + `.blp`, `widget/pill.go`, `folders.go`,
+  `window.blp`, `message_window.blp`; one line each in `model.go`,
+  `thread_model.go`, `style/style.go`): no `Adw.AlertDialog` (the
+  controller asks no question); calendar-only accounts are filtered in
+  `enabledAccounts` through `listedInMail`; the card CSS lives in the main
+  stylesheet. Measured: the unanswered card 842×238 with the day strip,
+  the reply one-liner, the own-event line with Show in Calendar, the
+  accepted strip.
+- **G16** (`preferences_calendar.go`, `preferences.blp` `calendar_page`,
+  one bind line in `preferences.go`, `accounts_page.go`): an
+  `Adw.PreferencesPage`; each account gets its own group (name + kind
+  capsule) and an Invitations group; calendar colours are drawn squares,
+  not the CSS classes; Add CalDAV Calendar…, Sign In… and Remove go
+  through the main window (found via the board-triage state; without a
+  window the "preview cannot do that" toast); the working day's Starts /
+  Ends rows reuse the editor's "Starts:"/"Ends:" with the colon trimmed
+  (no own msgid — TODO(G20) if the owner wants proper ones).
+- **G17** (`calendar_caldav.go`, `caldav_sheet.blp`;
+  `accountwizard/trust.go` gained the exported `CertificateDetails`
+  wrapper): Cancel and Add sit in the header bar; the error card is a
+  full-width wrapping box; found calendars carry no colour dot; the Trust
+  Certificate… question reuses the account assistant's msgids. Measured:
+  560×560, error 447 wide, four phases.
+- **G19** (`board_today_calendar.go`, `calendar_assistant.go`,
+  `calendar_assistant_move.go`, `assistant_panel.go`, `assistant.go`,
+  `assistantpanel/controller.go` `RunCalendar`/`ContentCalendar`,
+  `calendar_page.blp` wrapped in `calendar_assistant_split`): the strip
+  stays visible on a day without events ("Nothing in the calendar
+  today.", as macOS); a row opens the event in Calendar; a panel open in
+  Mail moves into the Calendar page with its transcript and back.
+- **Width** (after the first Broadway run, 2026-10-17): the content stack
+  asked for 1038 px at a 1024 px window because pill, bar and block
+  labels had no ellipsis; now every such label ellipsizes
+  (`max-width-chars` 1, `hexpand`), and the views' measured minimums are
+  Week 242, Day 84, Month 91 px, asserted in their smoke tests, so the
+  page reaches its 560/460 sp breakpoints.
+- **Looking at the GTK client on the Mac**: `gtk4-broadwayd` in the
+  container + the app with `GDK_BACKEND=broadway` (the same
+  `XDG_RUNTIME_DIR` for both; `GSETTINGS_BACKEND=keyfile` presets
+  `window-width/height`, `board-start-mode` and `calendar-view`;
+  `gtk-enable-animations=0` in `gtk-4.0/settings.ini`), opened in a
+  browser. Broadway's screen is the browser viewport at connection time
+  (a 1280 window gets clamped to 1024 if the page connects late), and
+  automated clicks are unreliable (only the first after a page load
+  registers), so the views are checked by starting the app in each view
+  and the other windows through `MALACHI_GTK_START` (G9b), never by
+  clicking.
+- **G9b** (`window/devstart.go`): `MALACHI_GTK_START` = steps separated by
+  `;` run after the window shows, `MALACHI_GTK_START_INTERVAL` seconds
+  apart (default 3), nothing without the variable: `mail`, `board`,
+  `calendar`, `calendar:day|week|month|agenda`, `event-popover`,
+  `event-editor`, `event-editor:edit`, `caldav-dialog`, `prefs-calendar`,
+  `size=WxH`, `quit`; each prints `MALACHI_GTK_START step <n> <name>` and
+  `LAYOUT:` lines (page, sidebar, content, header minimum, stack child
+  minimums, toplevels, `dialog` for the in-window `Adw.Dialog`s). The
+  width finding was not the calendar's: the hidden Mail page of
+  `mode_stack` asked for 1038 px and the stack sized itself to it in every
+  mode; `mode_stack` is now `hhomogeneous: false`/`vhomogeneous: false`
+  (calendar page minimum 360, 536 with the header at a folded sidebar).
+  Mail alone still needs 1038 px between its own breakpoints — a
+  pre-existing limit, outside the calendar.
+- **Preferences on load** (G16 fix): the Keep Events and After Answering
+  rows were filled while change tracking was on, so the first item was
+  auto-selected and saved (the samples refuse writes and the error
+  landed in the group's description); lists are now filled with tracking
+  off and errors show as a toast only.
+
 ## 6. Work breakdown
 
 **Status after the daemon phase (2026-10-16).** Implemented, with the
@@ -3247,6 +3465,285 @@ client the source of the port):
 5. **Verification.** The DevStart steps of the macOS client (§5.10) are the
    measured reference; the Windows client checks the same layouts with its
    UI Automation smoke tests over `MALACHI_CALENDAR_SAMPLES=1`.
+
+### 6.5 The GTK port: tasks G1–G20 (plan 2026-10-17)
+
+The GTK client ports the macOS client (rule 6: the Go reference and the
+`.blp` are the pattern, the macOS client the source). Everything builds
+and tests in the Fedora 42 container (`scripts/gtk-container/gtk.sh make
+build`, `gtk.sh test-ui`; `make po` through `malachi-po:f42`;
+`container system stop` after each job); the orchestrator looks at the
+app under Broadway over `MALACHI_BOARD_SAMPLES=1 MALACHI_CALENDAR_SAMPLES=1`
+(the calendar's sample switch is read once at start, like the board's in
+`window/board.go`). Implementers never launch the app themselves.
+
+**Ground rules.** No `backend/` changes (the daemon's calendar API is
+complete). `SetUseMarkup(false)` on every label with server text (titles,
+places, notes, names); bold and strike-through through `pango.AttrList`,
+never markup; no HTML anywhere; links only through `w.openLink(parent,
+uri, nil)` ("Open this link?"). RPC callbacks reach the main loop only
+through `glib.IdleAdd` (the existing `glibLoop`). Every text comes from
+`ui/internal/calendar` through `i18n.Tr`; dates through
+`calendar.Env{Tr: i18n.Tr, Format: widget.Strftime, Loc: time.Local}`.
+New msgids only where nothing in `calendar`, `board` or the pot fits;
+implementers do not edit `po/*`, `po/POTFILES` or
+anything under `windows/` — they list new msgids and new Go files with
+literal `i18n.T` calls in their handoff, G20 applies them (Czech in
+`po/cs.po`, `// xgettext:no-c-format` on strftime msgids). **Nothing under
+`windows/` is touched by the GTK port** (owner, 2026-10-17: the Windows
+port is in progress on another machine, unpushed); a new msgid the GTK
+client needs is listed in the handoff for the Windows side to use or
+exclude after its push. No `MALACHI_TIME_ZONE`
+(the daemon reads TZ / `/etc/localtime` on Linux), no build tags,
+Blueprint only, SPDX headers. Tasks that write into one Go package in
+parallel (G5–G8 in `calendarctl`) write each file complete and compiling
+before running tests and never touch a sibling's file; a package that
+fails to compile because of a sibling's unfinished file is retried, not
+"fixed". `ui/internal/window/conversation_controller_test.go` is green
+again since 2026-10-17 (`WithDrafts: true` expected).
+
+**Architecture.**
+
+- *Data seam* `ui/internal/calendardata`: `DataSource` interface
+  (`Snapshot()`, `Observe(func(Change))`, `Refresh`, `Handle(method, raw)`,
+  `Occurrences(range, done)`, `CachedOccurrences`, `Event(id, rec, reload,
+  done)`, every write with `done(result, *api.Error)` on the main loop),
+  `Snapshot` (with `ActiveCalendarAccounts`, `VisibleCalendars`,
+  `WritableCalendars`, `AccountName`, `CalendarName`, `MyAddress`), `Phase`,
+  `Change`, `ErrPreview` (text `calendar.PreviewOnly`); `DaemonSource`
+  over `board.Caller` and `board.Loop` calling the raw `api.Method*`
+  names through `client.Call`; `InMemorySource` over `calendar.SampleData`.
+- *Controllers* `ui/internal/calendarctl`, one file per controller, plain
+  structs with callbacks (`OnChange`, `OnError`, `OnOpenDetail`,
+  `OnNewEvent`, `OnShowInvitation`, `OnShowInCalendar`, `OnOpenLink`,
+  `OnSignIn`); Swift's async questions become continuations
+  (`OnQuestion(q, answer func(Answer))`, `OnScope(q, func(*api.EditScope))`,
+  `OnConfirmTrust(func(bool))`); debounces through `Loop.After`, tests
+  drive a fake loop as `board/controller_test.go` does. Swift-first pure
+  helpers (`MiniMonth`, `InvitationReading`, `ParseCalendarResult`) go
+  into the reference packages (G1), so Windows gets a Go reference too.
+- *Week/Day drawing*: a `Gtk.Overlay` inside a vertical `ScrolledWindow`,
+  24 × 60 px tall; the main child a `Gtk.DrawingArea` (hour and half-hour
+  lines, day separators, weekend shading, today's tint); every block an
+  overlay child — a flat `Gtk.Button` with labels — positioned in
+  `ConnectGetChildPosition` from `calendar.LayoutDay` (exact on resize,
+  focusable, accessible label = `BlockLabel`); the now line the last
+  child with `can-target=false` and a one-minute timer. A custom
+  `GtkLayoutManager` is out (the pinned gotk4 has no constructor and the
+  repository never subclasses GObject types). First scroll
+  `ScrollMinute` px − 10, re-applied while the viewport height changes
+  until the user scrolls, reset on a day change. All-day row and month
+  bars: a `Gtk.Grid` with 7 homogeneous columns, bars attached at
+  `(StartCol, lane+1, span, 1)`; classes `cal-continues-before/after`
+  square the ends. Month rows: a DrawingArea base in an Overlay as the
+  resize probe feeding `CellCapacity`, pills rebuilt in an `IdleAdd` only
+  when the capacity changes. Keyboard: `calendar.KeyFor`,
+  `SelectionOrder`, `MoveSelection`; the view grabs focus on the key's
+  widget.
+- *CSS*: `ui/internal/style/calendar.go` installs a second `CSSProvider`
+  and a pure `CalendarCSS(colors []string) string`; calendars map to an
+  index, classes `.cal-c-N` (never the id in CSS); a colour is accepted
+  only when it matches `^#[0-9a-fA-F]{6}$`, else a fixed palette by index
+  (tests with hostile values); opaque fills `mix(@window_bg_color,
+  #rrggbb, 0.18)` (dark mode follows), the 3 px bar in the colour,
+  unanswered `border: 1px dashed` + "?" badge, tentative stripes. Each
+  view task owns its own `style/calendar_<view>.go` constants that
+  `CalendarCSS` concatenates.
+- *Invitation card*: `window/invitation_card.go` + `invitation_card.blp`
+  per instance through `data.Builder` (like `html_card`), over
+  `calendarctl.InvitationController` and the window's shared
+  `w.calendarSource()`; `message_view.go` binds an `invitation_card_slot`
+  above the headers exactly like `issue_card_slot` (`window.blp` and
+  `message_window.blp`; none in `embedded_window.blp`); `renderHeaders`
+  passes `Message.Invitation` and `calendar.CardModeOf(card,
+  ShowsInvitationCard(account))`; conversation cards put the card under
+  the card's header row, inside what folds, as macOS; `widget.MessageRow`
+  gains the invitation pill and a Pango strike-through on cancelled
+  subjects; a conversation row uses its newest member's pill
+  (`calendar.InvitationPillOf`).
+- *Preferences → Calendar*: `preferences.blp` gains
+  `Adw.PreferencesPage calendar_page` after `general_page` with a static
+  Display group (row IDs; titles from `calendar.TabTitle`,
+  `DisplayGroup`); per-account `Adw.PreferencesGroup`s added/removed from
+  Go following `calendar.PreferencesLayout`; `accounts_page.go` drops
+  accounts where `ShowsInAccountsTab` is false; `NewPreferences` takes
+  `cal func() calendardata.DataSource`.
+
+**Tasks.**
+
+Wave A (parallel): **G1** Swift-first pure catch-up
+(`ui/internal/calendar/minimonth.go`, `reading.go` + tests;
+`ui/internal/assistant/calendar_result.go` + test; ports `MiniMonth.swift`,
+`Model/InvitationReading.swift` — `InvitationPillOf`, `ShowsInvitationCard`,
+`CardClockLine`, `DayStripOf` —, `Assistant/AssistantCalendar.swift` —
+`CalendarRef`, `ParseCalendarResult`; tests from `InvitationReadingTests`,
+`AssistantEventsTests`, `CalendarHelpersTests`). **G2** data seam +
+in-memory source (`ui/internal/calendardata/{doc,source,snapshot,memory}.go`
++ tests; ports `CalendarSource.swift`, `InMemoryCalendarSource.swift`,
+`CalendarSamples.swift`; writes answer `ErrPreview` except visibility).
+**G4** settings and mode plumbing (`settings/store.go`: `KeyCalendarView`,
+`CalendarView()/SetCalendarView`, `BoardStartCalendar`; `window/board.go`:
+`Mode.Nick`/`ParseMode`, three modes, `w.enterCalendar/leaveCalendar`
+stubs in `window/calendar_mode.go`; `window/mode_keys.go`: Ctrl+3 and
+Ctrl+Shift+1–4 by physical key; `window/window.go` `win.show-calendar`;
+`window/preferences_board.go` `StartModesWithCalendar`; `window.blp`
+third `Adw.Toggle` "calendar" (`x-office-calendar-symbolic`) and
+`StackPage "calendar"` with `calendar_page_bin`; `board_page.blp` mirror
+toggle; `widget/format.go` exported `Strftime`; with Show the Board off
+the switch stays with its Board toggle insensitive; tests: nick
+round-trip, start decision, `Strftime` with `%-d` and `%OB`, the board
+smoke through all three modes).
+
+Wave B (after G2, parallel): **G3** `calendardata/daemon.go` + test
+(ports `DaemonCalendarSource.swift` + tests: `calendar.list`,
+`account.list`, `invitation.list`, `calendar.preferences`; `event.list`
+cached per range, `event.get` by etag; `calendarChanged` drops
+overlapping ranges; `calendarState`, `invitationsChanged`,
+`AccountsChanged`, `ConnectionChanged`; `board.RetryDelay`;
+`methodNotFound` → `PhaseUnsupported`; conflict reloads; consentRequired).
+**G5** `calendarctl/{options,calendar}.go` + test (ports
+`CalendarController.swift` + tests: view, anchor with `SwitchAnchor`,
+`Step/Today/GoTo`, selection, search (two characters, 300 ms), Unanswered
+filter, agenda paging in 30 days, the `Sidebar` model with
+`calendar.MiniMonth`, status and unanswered lines, `EmptyKind`, `KeyFor`,
+`EscapeFor`, `calendar-view` through an injected getter/setter). **G6**
+`calendarctl/{detail,invitation}.go` + tests (ports
+`EventDetailController.swift`, `InvitationController.swift` + tests:
+respond, scope question, Decline Without Reply, remove/delete questions
+with `confirm-delete` passed in, conflict reload; Add-to target, propose
+new time answering Tentative, apply cancel, own-event state). **G7**
+`calendarctl/editor.go` + test (ports `EventEditorController.swift` +
+tests: defaults, validation, all-day alert remap (D31), availability
+debounced 500 ms with `NextFreeSlot`, video-call modes, attachments
+through `attachment.import`, save paths and scope, `EditorDelete`, close
+question, `findFreeSlot`, conflict → reload). **G8**
+`calendarctl/{caldav,preferences,account,alerts}.go` + tests (ports
+`CalDAVWizardController`, `CalendarPreferencesController`,
+`CalendarAccountController` — checkboxes and default by `remoteId`,
+`account.listCalDAVCalendars`, sync switch → consent →
+`account.oauthStart{calendar:true}` —, `CalendarAlertsController` —
+notification models, snooze 5 min, dismiss/withdraw).
+
+Wave C1 (after G3, G4, G5): **G9** page shell and glue
+(`window/calendar.go`: `calendarPage`, `ensureCalendar`, the shared
+`w.calendarSource()` (samples or daemon), `showInCalendar(eventID, rec,
+day)`, `w.calendarEnv()`, replacing `calendar_mode.go`;
+`calendar_page.blp`: `Adw.BreakpointBin` → `Adw.OverlaySplitView` with a
+240 px sidebar, header bar with the mode-switch mirror, sidebar toggle,
+Today, ‹ ›, `Adw.ToggleGroup` Day/Week/Month/Agenda, `Adw.WindowTitle`,
+search toggle with `Gtk.SearchBar`, "+", ✦; content `Gtk.Stack`, banner,
+status-strip slot; `calendar_keys.go`, `calendar_notify.go` + a case group
+in `notify.go` routing the four notifications; `status.go`
+`moveStatusStripTo(mode)` with `calendar.StatusLine` and
+`UnansweredCount`; `style/calendar.go` + test; `main.go` and
+`preferences.go` signatures; `data/data.go`; stubs with frozen
+signatures for `calendar_sidebar.go`, `calendar_agenda.go`,
+`calendar_week.go`, `calendar_month.go`, `calendar_detail.go`
+(`w.showEventDetail(occ, anchor gtk.Widgetter)`), `event_editor.go`
+(`w.openEventEditor(defaults|edit)`), `calendar_caldav.go`
+(`w.showAddCalDAV(parent, onDone)`), `calendar_assistant.go`
+(`w.askAboutEvent`, `w.revealCalendarAssistant`) and stub blps
+`event_detail`, `event_editor`, `invitation_card`, `caldav_sheet`; test
+`calendar_gtk_smoke_test.go` building the page over the in-memory source,
+stepping through the views, logging `LAYOUT:` allocations).
+
+Wave C2 (after G9 and the named controllers; parallel, disjoint files):
+**G10** sidebar, agenda, search (`calendar_sidebar.go`,
+`calendar_agenda.go`, `style/calendar_sidebar.go`; ports
+`CalendarSidebarViewController`, `MiniMonthView`,
+`CalendarAgendaViewController`, `CalendarSearchController`: mini month as
+a `Gtk.Grid` of buttons with accessible day labels, Invitations ▸
+Unanswered with a count badge, accounts with the kind capsule and
+calendar `CheckButton`s with a colour square, consent row with Sign In…,
+Add Calendar… menu; agenda/results/unanswered as a `ListBox` with header
+rows and paging). **G11** week/day (`calendar_week.go`,
+`calendar_allday.go`, `style/calendar_week.go`; ports
+`CalendarTimeGridView`, `CalendarDayHeaderView`, `CalendarAllDayView`,
+`EventBlockView`: 60 px/hour, labels offset 10 px, all-day row up to five
+lanes, double-click on empty time → `openEventEditor(NewEventDefaults)`,
+click selects and `showEventDetail`; smoke: block rectangles of an
+overlap cluster, now line above blocks, first scroll). **G12** month
+(`calendar_month.go`, `style/calendar_month.go`; ports
+`CalendarMonthView`, `MonthCellView`: 6 rows, week numbers, spanning
+bars, pills, "+N more" popover from `CellItems`, today's ring,
+double-click → 9:00; smoke: a bar across a week boundary, capacity on
+resize). **G13** detail popover (`calendar_detail.go`, `event_detail.blp`,
+`style/calendar_detail.go`; ports `EventDetailPopover`,
+`EventDetailViewController`, `EventDetailViews`: one `Gtk.Popover` per
+window, 380 px, parented to the page, `SetPointingTo` from the anchor's
+`ComputeBounds`; two-line time row; attendee list collapsing beyond 6;
+the "You:" response `MenuButton`; notes as a non-editable `TextView` with
+link tags → `openLink`; Show Invitation in Mail through the board's
+reveal; Edit and Remove questions as `Adw.AlertDialog`; ✦ menu with Ask
+about This Event and Find Another Time; inline error). **G14** editor
+window (`event_editor.go`, `event_editor_availability.go`,
+`event_editor_popovers.go`, `event_editor.blp`,
+`compose/attendee_field.go` — an exported wrapper over `recipientField`
+and its suggestions, `recipient_field.go` unchanged —,
+`style/calendar_editor.go`; ports `EventEditor/*`: an `Adw.Window` 760×800
+with a registry raising an open edit; `Adw.EntryRow`/`ComboRow`/`SwitchRow`
+form; date pickers as `Gtk.Calendar` in popovers plus time spin buttons;
+time-zone search popover, Custom… repeat popover, Add Video Call
+`MenuButton`; availability rows with a DrawingArea axis; footer Delete,
+Cancel, primary; Ctrl+S / Ctrl+Return; close question Save / Discard /
+Cancel). **G15** invitations in Mail (`invitation_card.go`,
+`invitation_card.blp`, `message_view.go`, `window.blp` and
+`message_window.blp` slot only, `conversation_card.go`,
+`widget/message_row.go`, `widget/pill.go`, `folders.go` — the Mail
+sidebar leaves out calendar-only accounts —, `style/calendar_card.go`;
+ports `InvitationCardView`, `InvitationDayStripView`,
+`MessageViewController+Invitation`, `InvitationPill`: date tile,
+`PreviousLines`, conflict strip, day strip (`DayStripOf`), "Add to:",
+Accept/Tentative/Decline with Decline Without Reply, reply note, Propose
+New Time…, state strip with Change Response and Show in Calendar, the
+reply one-liner, cancellation with Remove from Calendar; smoke: a card for
+every `SampleData` card state). **G16** Preferences → Calendar
+(`preferences_calendar.go`, `preferences.blp`, `preferences.go` fields +
+one bind line, `accounts_page.go` CalDAV filter; ports
+`CalendarPaneViewController`, `CalendarAccountGroups`: Working Hours as
+half-hour combos plus seven day toggles with the last day kept on; CalDAV
+section with Server and Username, Replace Password… as an
+`Adw.AlertDialog` with `Adw.PasswordEntryRow`, Mail Account, Certificate
+with Forget, Remove Account; empty state; Add CalDAV Calendar…; a model
+test over the in-memory source). **G17** Add CalDAV sheet
+(`calendar_caldav.go`, `caldav_sheet.blp`; ports `CalDAVSheetController`,
+`CalDAVBannerView`: an `Adw.Dialog` 560×560 with fields, Discover,
+calendar list, found line, certificate row with the certtrust Trust
+Certificate… flow, mail-account popup, footer, Cancel/Add; smoke over a
+scripted controller). **G18** notifications (`calendar_alerts.go`,
+`main.go` app actions `app.calendar-open-event`, `-join`, `-snooze`,
+`-accept-invitation`, `-remove-cancelled` with variant targets; ports the
+calendar part of `NotificationService.swift` and `Integration+Calendar.swift`:
+`gio.Notification` with `AddButtonWithTarget`, Join only with a video
+call, Snooze, Accept and Show, Remove from Calendar; default action opens
+the event (Calendar mode + popover) or the message; withdraw on
+dismissed; respects `desktop-notifications` and the sound setting; test:
+action targets round-trip). **G19** board Today strip + assistant
+(`board_today_calendar.go`, `board_today.go`, `assistant_panel.go`
+`quickActions` from `PanelActionsWith(true)`, `assistantpanel/controller.go`
++ test (`RunCalendar`, a calendar card item from `ParseCalendarResult`),
+`calendar_assistant.go` replacing the stub; ports
+`BoardTodayCalendarStrip.swift`, the calendar parts of
+`AssistantPanelController.swift` and D28: the panel's widget moves into
+the calendar page's split and back on leaving; Today strip's Respond
+selects the message in Mail as macOS).
+
+Wave D: **G20** translations, docs, verification (`po/POTFILES`,
+`po/malachi.pot`, `po/cs.po` — never `windows/`,
+`docs/calendar.md` §5 "As built (G1–G19)" and §6.4 status, CLAUDE.md,
+`macos/README.md` GTK column, root README; done when `make lint` is
+green, `test-ui` green, all smoke tests green and the Broadway screenshots
+match artboards 1–8).
+
+**Deviations from macOS** (for "As built (G…)" and the READMEs): header
+bars per page instead of a unified toolbar; search a toggled
+`Gtk.SearchBar`; view shortcuts Ctrl+Shift+1–4 and New Event
+Ctrl+Shift+N (as the Go reference maps them); the detail a `Gtk.Popover`;
+the editor an `Adw.Window`; the CalDAV sheet an `Adw.Dialog`; questions
+`Adw.AlertDialog`s; notifications with per-notification buttons, not
+categories; Preferences → Calendar an `Adw.PreferencesPage`; calendar
+colours through CSS `mix()`.
+
 
 ## 7. Decisions on the open questions (owner, 2026-10-16)
 

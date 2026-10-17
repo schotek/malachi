@@ -184,3 +184,10 @@ func certificateDetails(c api.CertificateInfo, previous string) *gtk.Grid {
 	}
 	return g
 }
+
+// CertificateDetails is certificateDetails for the other places that
+// confirm a certificate the way this assistant does (the Add CalDAV
+// Calendar sheet, window/calendar_caldav.go).
+func CertificateDetails(c api.CertificateInfo, previous string) *gtk.Grid {
+	return certificateDetails(c, previous)
+}

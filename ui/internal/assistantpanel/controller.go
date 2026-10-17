@@ -45,6 +45,10 @@ const (
 	// ContentNote is a remark of the panel's own ("The conversation was
 	// stopped").
 	ContentNote
+	// ContentCalendar is the event the turn's first list_events or
+	// get_event result named (assistant.ParseCalendarResult), with Show in
+	// Calendar.
+	ContentCalendar
 )
 
 // Offer is the button of an error item beyond Try Again.
@@ -76,6 +80,8 @@ type Content struct {
 	Text                   string
 	Streaming, Done, Retry bool
 	Draft                  assistant.DraftRef
+	// Calendar is the calendar card's event.
+	Calendar assistant.CalendarRef
 	// Offer is the error's other button.
 	Offer Offer
 }
@@ -123,7 +129,7 @@ type PendingKind int
 const (
 	PendingNone PendingKind = iota
 	// PendingAction: Draft a Reply… or Ask About This Message… on the
-	// context.
+	// context, or Find a Free Slot (a calendar action, on no context).
 	PendingAction
 	// PendingAttachment: a question about an attachment.
 	PendingAttachment
@@ -216,6 +222,8 @@ const (
 	requestAction
 	requestUnread
 	requestAttachment
+	// requestCalendar: a calendar quick action (assistant.CalendarActions).
+	requestCalendar
 )
 
 // request is one question, as sent and as retried.
@@ -333,6 +341,8 @@ type Controller struct {
 	ResolveContext func(c Context, done func(assistant.Selection))
 	// OpenDraft is a draft card's Open Draft.
 	OpenDraft func(assistant.DraftRef)
+	// OpenCalendar is a calendar card's Show in Calendar.
+	OpenCalendar func(assistant.CalendarRef)
 	// OnChange: Items changed.
 	OnChange func(Change)
 	// OnState: the phase, the context, the waiting action or the like
@@ -399,6 +409,8 @@ type Controller struct {
 	// call's tool.
 	activities map[string]int
 	toolNames  map[string]string
+	// calendarCarded: the turn under way has its calendar card.
+	calendarCarded bool
 	// lastRequest is the question of the turn under way (or the last that
 	// failed), for Try Again.
 	lastRequest *request
@@ -672,6 +684,9 @@ func (c *Controller) Placeholder() string {
 func (c *Controller) PendingLabel() string {
 	switch c.pending.Kind {
 	case PendingAction:
+		if assistant.IsCalendarAction(c.pending.Action) {
+			return assistant.CalendarLabel(c.tr, c.pending.Action)
+		}
 		return assistant.Label(c.tr, c.pending.Action)
 	case PendingAttachment:
 		return assistant.Texts(c.tr).AskFile
@@ -835,6 +850,32 @@ func (c *Controller) perform(a assistant.Action, t target) {
 	}
 }
 
+// RunCalendar is a calendar quick action (assistant.CalendarActions):
+// What's on Today is sent at once, Find a Free Slot waits for the user's
+// words (how long, with whom, when). Neither needs a context; nothing
+// while a question is under way. macOS: runCalendar.
+func (c *Controller) RunCalendar(a assistant.Action) {
+	if !c.CanRunCalendarActions() || !assistant.IsCalendarAction(a) {
+		return
+	}
+	if a == assistant.WhatsOnToday {
+		c.start(request{kind: requestCalendar, action: a, label: assistant.CalendarLabel(c.tr, a), inEffect: c.EffectiveContext()}, true)
+		return
+	}
+	c.pending = Pending{Kind: PendingAction, Action: a}
+	c.pendingTarget = nil
+	c.state()
+	if c.OnFocusInput != nil {
+		c.OnFocusInput()
+	}
+}
+
+// CanRunCalendarActions says whether the calendar quick actions can run:
+// nothing under way.
+func (c *Controller) CanRunCalendarActions() bool {
+	return c.phase == PhaseIdle && !c.closed
+}
+
 // SummarizeUnread is Summarize Unread in This Folder, for a folder: sent at
 // once.
 func (c *Controller) SummarizeUnread(accountID, folderID string) {
@@ -888,6 +929,13 @@ func (c *Controller) Submit(text string) bool {
 	switch c.pending.Kind {
 	case PendingAction:
 		a := c.pending.Action
+		if assistant.IsCalendarAction(a) {
+			if words == "" {
+				return false
+			}
+			c.start(request{kind: requestCalendar, action: a, label: assistant.CalendarLabel(c.tr, a), text: words, inEffect: c.EffectiveContext()}, true)
+			return true
+		}
 		// A reply may be drafted without instructions.
 		if words == "" && a != assistant.DraftReply {
 			return false
@@ -961,6 +1009,15 @@ func (c *Controller) OpenDraftItem(itemID int) {
 		return
 	}
 	c.OpenDraft(c.items[idx].Content.Draft)
+}
+
+// OpenCalendarItem is a calendar card's Show in Calendar.
+func (c *Controller) OpenCalendarItem(itemID int) {
+	idx := c.indexOf(itemID)
+	if idx < 0 || c.items[idx].Content.Kind != ContentCalendar || c.OpenCalendar == nil {
+		return
+	}
+	c.OpenCalendar(c.items[idx].Content.Calendar)
 }
 
 func (c *Controller) indexOf(itemID int) int {
@@ -1356,6 +1413,12 @@ func (c *Controller) prompt(req request) (string, []int, error) {
 	case requestUnread:
 		p, err := assistant.UnreadPrompt(c.tr, req.accountID, req.folderID)
 		return p, nil, err
+	case requestCalendar:
+		p, err := assistant.CalendarPrompt(c.tr, req.action, c.Today())
+		if err != nil {
+			return "", nil, err
+		}
+		return p + req.text, nil, nil
 	default: // requestAttachment
 		p, err := assistant.AttachmentPrompt(c.tr, req.accountID, req.messageID, req.partID)
 		if err != nil {
@@ -1549,6 +1612,13 @@ func (c *Controller) handle(events []assistant.Event) {
 				if ref, ok := assistant.ParseDraftResult(e.ResultText); ok {
 					c.append(Content{Kind: ContentDraft, Draft: ref})
 				}
+			} else if tool != "" && !e.IsError && !c.calendarCarded {
+				// The first event a list_events or get_event result of the
+				// turn names, read only from the bridge's own lines.
+				if ref, ok := assistant.ParseCalendarResult(tool, e.ResultText); ok {
+					c.calendarCarded = true
+					c.append(Content{Kind: ContentCalendar, Calendar: ref})
+				}
 			}
 		case assistant.EventFailure:
 			// Claude Code's own words for a turn the API refused: the
@@ -1670,6 +1740,7 @@ func (c *Controller) closeTurn() {
 	}
 	c.activities = make(map[string]int)
 	c.toolNames = make(map[string]string)
+	c.calendarCarded = false
 }
 
 func (c *Controller) closeStreaming() {

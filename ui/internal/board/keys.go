@@ -151,18 +151,24 @@ func EscapeFor(focusInEditorOrRecipients, popupOpen, panelOpen bool) EscapeTarge
 	return EscapeNothing
 }
 
-// NumberRowDigit is the digit of a physical number-row key, 1 or 2, from
+// NumberRowDigit is the digit of a physical number-row key, 1 to 4, from
 // its hardware keycode as GTK reports it on Linux (evdev code + 8 under
-// both X11 and Wayland: KEY_1 is 2, so 10; KEY_2 is 3, so 11), whatever the
-// keyboard layout types there; 0 for any other key. The GTK client passes
-// it to KeyFor for Primary+1 and Primary+2 when the typed character is not
-// a digit (a Czech QWERTZ types + and ě on those keys).
+// both X11 and Wayland: KEY_1 is 2, so 10; KEY_2 is 3, so 11; up to KEY_4,
+// 13), whatever the keyboard layout types there; 0 for any other key. The
+// GTK client passes it to KeyFor for Primary+1 and Primary+2 when the
+// typed character is not a digit (a Czech QWERTZ types + and ě on those
+// keys), and to calendar.KeyFor for Primary+3 and the calendar's views
+// (Primary+Shift+1–4).
 func NumberRowDigit(keycode uint) rune {
 	switch keycode {
 	case 10:
 		return '1'
 	case 11:
 		return '2'
+	case 12:
+		return '3'
+	case 13:
+		return '4'
 	}
 	return 0
 }

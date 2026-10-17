@@ -1,0 +1,289 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// The invitation card above a message's headers (docs/calendar.md §5.7,
+// §6.5 G15; window/invitation_card.go), one per instance through
+// data.Builder like html_card: in the reading pane, a message window and a
+// conversation card, never in an attached message. Every text is set from
+// Go out of ui/internal/calendar; every label shows plain text (markup is
+// off by default and Go switches it off again). No translatable strings
+// here. CSS: style/calendar_card.go.
+Box invitation_card {
+  orientation: horizontal;
+  spacing: 12;
+  visible: false;
+
+  styles [
+    "card",
+    "invitation-card",
+  ]
+
+  // The date tile: the weekday on a band in the pill's colour, the day
+  // large, the month under it; hidden for a reply's one line.
+  Box invitation_tile {
+    orientation: vertical;
+    valign: start;
+
+    styles [
+      "invitation-tile",
+    ]
+
+    Label invitation_tile_weekday {
+      styles [
+        "invitation-tile-band",
+      ]
+    }
+
+    Label invitation_tile_day {
+      styles [
+        "invitation-tile-day",
+        "numeric",
+      ]
+    }
+
+    Label invitation_tile_month {
+      styles [
+        "caption",
+        "dim-label",
+        "invitation-tile-month",
+      ]
+    }
+  }
+
+  Box invitation_column {
+    orientation: vertical;
+    spacing: 4;
+    hexpand: true;
+
+    Box invitation_title_row {
+      orientation: horizontal;
+      spacing: 8;
+
+      Label invitation_pill {
+        valign: center;
+        visible: false;
+
+        styles [
+          "issue-pill",
+        ]
+      }
+
+      Label invitation_title {
+        xalign: 0;
+        hexpand: true;
+        wrap: true;
+        wrap-mode: word_char;
+        lines: 2;
+        ellipsize: end;
+        selectable: true;
+      }
+    }
+
+    Label invitation_clock {
+      xalign: 0;
+      wrap: true;
+      selectable: true;
+    }
+
+    // An update's former values, one grey line each (filled from Go).
+    Box invitation_previous {
+      orientation: vertical;
+      spacing: 2;
+      visible: false;
+    }
+
+    Box invitation_location_row {
+      orientation: horizontal;
+      spacing: 8;
+
+      Label invitation_location {
+        xalign: 0;
+        wrap: true;
+        selectable: true;
+      }
+
+      Button invitation_join {
+        valign: center;
+
+        styles [
+          "flat",
+          "invitation-link",
+        ]
+      }
+    }
+
+    Label invitation_people {
+      xalign: 0;
+      wrap: true;
+      selectable: true;
+
+      styles [
+        "caption",
+        "dim-label",
+      ]
+    }
+
+    Box invitation_conflict_row {
+      orientation: horizontal;
+      spacing: 6;
+      margin-top: 2;
+
+      Image invitation_conflict_icon {
+        valign: start;
+      }
+
+      Label invitation_conflict {
+        xalign: 0;
+        hexpand: true;
+        wrap: true;
+        selectable: true;
+
+        styles [
+          "caption",
+        ]
+      }
+    }
+
+    // The mini day strip (calendar.DayStripOf), drawn from Go.
+    DrawingArea invitation_day_strip {
+      content-height: 44;
+      hexpand: true;
+      margin-top: 2;
+      margin-bottom: 4;
+    }
+
+    Box invitation_state_row {
+      orientation: horizontal;
+      spacing: 8;
+
+      Label invitation_state {
+        xalign: 0;
+        hexpand: true;
+        wrap: true;
+        selectable: true;
+
+        styles [
+          "caption",
+          "dim-label",
+        ]
+      }
+
+      Button invitation_state_show {
+        valign: center;
+      }
+    }
+
+    Box invitation_actions {
+      orientation: horizontal;
+      spacing: 8;
+      margin-top: 4;
+
+      Label invitation_add_to {
+        styles [
+          "dim-label",
+        ]
+      }
+
+      DropDown invitation_target {
+        hexpand: false;
+      }
+
+      Label invitation_target_label {
+        xalign: 0;
+        ellipsize: end;
+        max-width-chars: 28;
+      }
+
+      Box {
+        hexpand: true;
+      }
+
+      Button invitation_accept {
+        styles [
+          "suggested-action",
+        ]
+      }
+
+      Button invitation_tentative {}
+
+      Adw.SplitButton invitation_decline {}
+
+      Adw.Spinner invitation_spinner {
+        visible: false;
+      }
+    }
+
+    Box invitation_strip_row {
+      orientation: horizontal;
+      spacing: 8;
+      margin-top: 4;
+
+      Image invitation_check {
+        icon-name: "emblem-ok-symbolic";
+
+        styles [
+          "success",
+        ]
+      }
+
+      Label invitation_strip {
+        xalign: 0;
+        hexpand: true;
+        wrap: true;
+        selectable: true;
+
+        styles [
+          "heading",
+        ]
+      }
+
+      MenuButton invitation_change {
+        valign: center;
+      }
+
+      Button invitation_show {
+        valign: center;
+      }
+    }
+
+    Box invitation_cancel_row {
+      orientation: horizontal;
+      margin-top: 4;
+
+      Button invitation_remove {
+        styles [
+          "destructive-action",
+        ]
+      }
+    }
+
+    // The reply note under the buttons (filled from Go).
+    Box invitation_notes {
+      orientation: vertical;
+      spacing: 2;
+      visible: false;
+    }
+
+    Box invitation_propose_row {
+      orientation: horizontal;
+
+      MenuButton invitation_propose {
+        styles [
+          "flat",
+        ]
+      }
+    }
+
+    Label invitation_error {
+      xalign: 0;
+      wrap: true;
+      visible: false;
+
+      styles [
+        "caption",
+        "error",
+      ]
+    }
+  }
+}

@@ -190,64 +190,98 @@ const boardSamplesEnv = "MALACHI_BOARD_SAMPLES"
 // from New, after the client and the Assistant's board triage exist.
 func (w *Window) setupBoardMode() {
 	w.registerBoardActions()
-	for _, m := range board.Modes {
-		if t := w.modeSwitchMail.ToggleByName(modeNick(m)); t != nil {
-			t.SetTooltip(modeTitle(m))
-		}
-	}
-	w.modeSwitchMail.SetActiveName(modeNick(board.InitialMode))
-	w.modeSwitchMail.NotifyProperty("active-name", func() {
-		if w.settingModeSwitch {
-			return
-		}
-		w.setMode(parseModeNick(w.modeSwitchMail.ActiveName()))
-	})
+	wireModeSwitch(w, w.modeSwitchMail)
+	w.modeSwitchMail.SetActiveName(board.InitialMode.Nick())
 	w.watchBoardAutoStart()
 }
 
-// modeNick and parseModeNick are the mode switch's "active-name" values.
-func modeNick(m board.Mode) string {
-	if m == board.ModeBoard {
-		return "board"
+// wireModeSwitch gives a mode switch (window.blp's mode_switch,
+// board_page.blp's board_mode_switch; the Calendar page's mirror later) its
+// tooltips and makes a click on it switch the window's mode. The toggles'
+// names are the modes' nicks (board.Mode.Nick, board.ParseMode).
+func wireModeSwitch(w *Window, g *adw.ToggleGroup) {
+	for _, m := range board.ModesWithCalendar {
+		if t := g.ToggleByName(m.Nick()); t != nil {
+			t.SetTooltip(modeTitle(m))
+		}
 	}
-	return "mail"
+	g.NotifyProperty("active-name", func() {
+		if w.settingModeSwitch {
+			return
+		}
+		m, _ := board.ParseMode(g.ActiveName())
+		w.setMode(m)
+	})
 }
 
-func parseModeNick(s string) board.Mode {
-	if s == "board" {
-		return board.ModeBoard
+// modeSwitches are the window's mode switches that exist so far: the
+// folders header bar's and, once built, the board page's and the
+// calendar page's.
+func (w *Window) modeSwitches() []*adw.ToggleGroup {
+	out := []*adw.ToggleGroup{w.modeSwitchMail}
+	if w.boardPage != nil && w.boardPage.modeSwitch != nil {
+		out = append(out, w.boardPage.modeSwitch)
 	}
-	return board.ModeMail
+	if w.cal.page != nil {
+		out = append(out, w.cal.page.modeSwitch)
+	}
+	return out
 }
 
-// modeTitle is a mode's tooltip and segment title (board.Mail / BoardName).
+// syncModeSwitches shows mode m on every mode switch without taking it as
+// the user's click.
+func (w *Window) syncModeSwitches(m board.Mode) {
+	w.settingModeSwitch = true
+	for _, g := range w.modeSwitches() {
+		g.SetActiveName(m.Nick())
+	}
+	w.settingModeSwitch = false
+}
+
+// setModeSwitchBoardEnabled follows Show the Board on every mode switch:
+// turned off, the switch stays (Mail and Calendar) with its Board toggle
+// insensitive, as on macOS (MainWindowController+Mode.swift).
+func (w *Window) setModeSwitchBoardEnabled(on bool) {
+	w.modeSwitchBoardOn = on
+	for _, g := range w.modeSwitches() {
+		if t := g.ToggleByName(board.ModeBoard.Nick()); t != nil {
+			t.SetEnabled(on)
+		}
+	}
+}
+
+// modeTitle is a mode's tooltip and segment title (board.Mail / BoardName /
+// CalendarName).
 func modeTitle(m board.Mode) string {
-	if m == board.ModeBoard {
+	switch m {
+	case board.ModeBoard:
 		return board.BoardName(i18n.Tr)
+	case board.ModeCalendar:
+		return board.CalendarName(i18n.Tr)
 	}
 	return board.Mail(i18n.Tr)
 }
 
-// setMode switches between Mail and Board (board.Mode): gates the mail-only
-// actions and shortcuts (applyMessageAccels), moves the status strip's
-// popover (status.go moveStatusStripToBoard/Mail) and tells the board
-// controller it is about to show or has left
-// (BoardWillShow/BoardShown; board.StyleOnShow). Requests from elsewhere
-// (the status strip's Outbox, the assistant panel, a notification) decide
-// their target mode with board.ModeFor before calling this.
+// setMode switches between Mail, Board and Calendar (board.Mode): gates
+// the mail-only actions and shortcuts (applyMessageAccels), moves the
+// status strip's popover (status.go moveStatusStripTo), tells
+// the board controller it is about to show or has left
+// (BoardWillShow/BoardShown; board.StyleOnShow) and the calendar page it
+// shows or has left (enterCalendar, leaveCalendar: calendar.go).
+// Requests from elsewhere (the status strip's Outbox, the assistant panel,
+// a notification) decide their target mode with board.ModeFor before
+// calling this.
 func (w *Window) setMode(m board.Mode) {
 	if m == w.mode {
 		return
 	}
 	leaving := w.mode
 	w.mode = m
-	w.settingModeSwitch = true
-	w.modeSwitchMail.SetActiveName(modeNick(m))
-	if w.boardPage != nil {
-		w.boardPage.modeSwitch.SetActiveName(modeNick(m))
-	}
-	w.settingModeSwitch = false
+	w.syncModeSwitches(m)
 	w.applyMessageAccels()
+	if leaving == board.ModeCalendar {
+		w.leaveCalendar()
+	}
 	if m == board.ModeBoard {
 		// Leaving Mail: a wait for a listing Show in Mail started no
 		// longer leads anywhere the user can see why.
@@ -257,24 +291,31 @@ func (w *Window) setMode(m board.Mode) {
 		w.ensureBoard()
 		// The conversation the board held back while in Mail.
 		w.boardPage.gate.flush()
-		w.moveStatusStripToBoard()
+		w.moveStatusStripTo(board.ModeBoard)
 		w.ResumeBoardReplies()
 		w.boardPage.ctl.BoardWillShow()
-		w.modeStack.SetVisibleChildName("board")
+		w.modeStack.SetVisibleChildName(board.ModeBoard.Nick())
 		w.boardPage.applyAll()
 		w.boardPage.ctl.BoardShown()
 		return
 	}
 	if w.boardPage != nil {
 		w.boardPage.suspendBoardReplies()
+		// Show in Mail's wait leads nowhere from the Calendar.
+		if m == board.ModeCalendar {
+			w.boardPage.reveal.cancel()
+		}
 	}
-	w.moveStatusStripToMail()
-	w.modeStack.SetVisibleChildName("mail")
+	if m == board.ModeCalendar {
+		w.enterCalendar()
+	}
+	w.moveStatusStripTo(m)
+	w.modeStack.SetVisibleChildName(m.Nick())
 	if w.boardPage != nil {
 		// win.board-* act on a selection only Board shows.
 		w.boardPage.applyActionsSensitivity(w.boardPage.ctl.View())
 	}
-	if leaving == board.ModeBoard {
+	if m == board.ModeMail {
 		w.refreshMessageActions()
 	}
 }
@@ -398,8 +439,8 @@ func (w *Window) boardConnectionChanged(connected bool) {
 // in the GTK panel). Called whenever something that moves the line
 // changes: refreshSyncLabel itself (sync.go), the board's own notify hooks
 // above, the triage's Observe (board_triage_button.go) and
-// moveStatusStripToBoard. Only while the board shows: switching to Board
-// refreshes it (moveStatusStripToBoard), so a hidden board costs nothing.
+// moveStatusStripTo. Only while the board shows: switching to Board
+// refreshes it (moveStatusStripTo), so a hidden board costs nothing.
 func (w *Window) refreshBoardStatusLabel() {
 	p := w.boardPage
 	if p == nil || p.replyClosed || w.mode != board.ModeBoard {

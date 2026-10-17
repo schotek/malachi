@@ -476,10 +476,10 @@ the strings and the confirmation dialogs.
 | An event's detail is an `NSPopover` (380 pt) anchored to the block, bar, pill or row, one per application; its questions are sheets on the main window | A popover in the page | Native popover |
 | New Event is a window (760 × 800, a 110 pt label column); the title row has no label (placeholder "Title"), *All Day:* stands right of the Calendar row, *Add Video Call ▾* is a pull-down, ⌘S and ⌘↩ are the menu bar's *Save Draft* and *Send* | A dialog | macOS window conventions |
 | Calendar notifications use categories with fixed actions: `EVENT_ALERT_JOIN` (Join, Snooze), `EVENT_ALERT` (Snooze), `INVITATION` (Accept, Show), `CANCELLATION` (Remove from Calendar) | Notification actions per notification | A category's actions are fixed on macOS |
-| The invitation card in a conversation card sits under the sender row (inside what folds); Change Response is a pull-down; Propose New Time answers Tentative | Above the message | `docs/calendar.md` §5.7 As built |
+| The invitation card in a conversation card sits under the sender row (inside what folds); Change Response is a pull-down; Propose New Time answers Tentative | The same since the GTK port (`docs/calendar.md` §5.12 G15) | `docs/calendar.md` §5.7 As built |
 | Settings has a Calendar page after General (SF Symbol `calendar`): Display (week start, duration, alert, declined events, working hours as a start and end in half hours plus seven day toggles), a section per account with the calendar capability headed by its name and kind capsule (M365 / CALDAV), the empty state, Add CalDAV Calendar…; CalDAV accounts are not in the Accounts page | The same layout (`calendar.PreferencesLayout`) | Owner's decision 2026-10-16, `docs/calendar.md` §5.8 As built |
 | The Add CalDAV Calendar sheet (560 × 560) is a sheet on the window it was asked from (Settings or the main window) | A dialog | Sheets, as the account wizard |
-| Respond in the board's Today strip selects the invitation's message in Mail, where its card answers it | A popover with the card's actions | `docs/calendar.md` §5.9 As built |
+| Respond in the board's Today strip selects the invitation's message in Mail, where its card answers it | The same since the GTK port (`docs/calendar.md` §5.12 G19) | `docs/calendar.md` §5.9 As built |
 
 The link under the pointer is shown at the bottom of the message view as
 in GTK (a user script that runs with content JavaScript off), and a masked

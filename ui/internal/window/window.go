@@ -26,6 +26,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/boardtriage"
+	"github.com/schotek/malachi/ui/internal/calendar"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/compose"
 	"github.com/schotek/malachi/ui/internal/conversation"
@@ -250,6 +251,14 @@ type Window struct {
 	modeStack         *gtk.Stack
 	modeSwitchMail    *adw.ToggleGroup
 	settingModeSwitch bool
+	// modeSwitchBoardOn is Show the Board as the mode switches show it
+	// (setModeSwitchBoardEnabled): a switch built later, the board page's,
+	// takes it over.
+	modeSwitchBoardOn bool
+	// calendarPageBin is window.blp's StackPage "calendar", which the
+	// Calendar's page fills; cal is the page and the source (calendar.go).
+	calendarPageBin *adw.Bin
+	cal             windowCalendar
 	// modeStart is the start mode's decision (setupModeMemory).
 	modeStart *modeStart
 	// mainMenu is window.blp's primary_menu, the main menu's model, which
@@ -324,9 +333,11 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		// lifts them from here on, so its baseline must agree.
 		typingAllowsAccels: true,
 
-		modeStack:      b.GetObject("mode_stack").Cast().(*gtk.Stack),
-		modeSwitchMail: b.GetObject("mode_switch").Cast().(*adw.ToggleGroup),
-		boardPageBin:   b.GetObject("board_page_bin").Cast().(*adw.Bin),
+		modeStack:         b.GetObject("mode_stack").Cast().(*gtk.Stack),
+		modeSwitchMail:    b.GetObject("mode_switch").Cast().(*adw.ToggleGroup),
+		boardPageBin:      b.GetObject("board_page_bin").Cast().(*adw.Bin),
+		calendarPageBin:   b.GetObject("calendar_page_bin").Cast().(*adw.Bin),
+		modeSwitchBoardOn: true,
 
 		outerSplit: b.GetObject("outer_split").Cast().(*adw.NavigationSplitView),
 		innerSplit: b.GetObject("inner_split").Cast().(*adw.NavigationSplitView),
@@ -592,13 +603,15 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	w.setupModeMemory()
 	w.wireModeKeys()
 	w.wireTypingGate()
+	w.startDevelopmentScript()
 	return w
 }
 
 // ModeAccels are the accelerators of the window's mode actions
-// (win.show-mail, win.show-board: Ctrl+1, Ctrl+2 from board.BoardKeys),
-// which main.go registers with the application. They work in both modes
-// and are never lifted.
+// (win.show-mail, win.show-board, win.show-calendar: Ctrl+1, Ctrl+2 from
+// board.BoardKeys, Ctrl+3 from calendar.CalendarKeys), which main.go
+// registers with the application. They work in every mode and are never
+// lifted; mode_keys.go makes them independent of the layout.
 func ModeAccels() map[string]string {
 	out := make(map[string]string)
 	for _, k := range board.BoardKeys(i18n.Tr) {
@@ -612,6 +625,11 @@ func ModeAccels() map[string]string {
 			out["win.show-board"] = "<Control>" + string(k.Rune)
 		}
 	}
+	for _, k := range calendar.CalendarKeys(i18n.Tr) {
+		if k.Action == calendar.KeyShowCalendar && k.Primary && !k.Alt && !k.Control {
+			out["win.show-calendar"] = "<Control>" + string(k.Rune)
+		}
+	}
 	return out
 }
 
@@ -623,7 +641,8 @@ func ModeAccels() map[string]string {
 // active does: board.ViewsMail). It also opens the window in the mode
 // board-start-mode asks for (modeStart, board.StartDecision) and keeps the
 // mode switch and win.show-board with the board's Show the Board
-// (BoardPreferences.Enabled): turned off, the switch hides and the window
+// (BoardPreferences.Enabled): turned off, the switch stays with its Board
+// toggle insensitive (setModeSwitchBoardEnabled) and a window on the Board
 // shows Mail.
 func (w *Window) setupModeMemory() {
 	lastMode, _ := board.ParseMode(w.settings.BoardLastMode())
@@ -653,10 +672,7 @@ func (w *Window) setupModeMemory() {
 	}
 	apply := func() {
 		on := enabled()
-		w.modeSwitchMail.SetVisible(on)
-		if w.boardPage != nil {
-			w.boardPage.modeSwitch.SetVisible(on)
-		}
+		w.setModeSwitchBoardEnabled(on)
 		if a := w.actions["show-board"]; a != nil {
 			a.SetEnabled(on)
 		}
@@ -707,7 +723,8 @@ func (w *Window) boardPreferences() *boardtriage.Preferences {
 
 // decideStart asks board.StartDecision again (the preferences arrived,
 // the user switched or acted in Mail, timedOut: the StartWait bound
-// fired) and, once decided, opens the Board if the decision says so.
+// fired) and, once decided, opens the Board or the Calendar if the
+// decision says so.
 func (w *Window) decideStart(timedOut bool) {
 	ms := w.modeStart
 	if ms == nil || ms.decided {
@@ -733,8 +750,8 @@ func (w *Window) decideStart(timedOut bool) {
 		ms.unwatch()
 		ms.unwatch = nil
 	}
-	if mode == board.ModeBoard && w.mode == board.ModeMail {
-		w.setMode(board.ModeBoard)
+	if mode != board.ModeMail && w.mode == board.ModeMail {
+		w.setMode(mode)
 	}
 }
 
@@ -858,10 +875,11 @@ func (w *Window) registerActions() {
 		return func() { w.selectedIDs(fn) }
 	}
 	w.addAction("refresh", true, w.triggerSync)
-	// The mode keys (Ctrl+1, Ctrl+2; ModeAccels). show-board follows Show
-	// the Board (setupModeMemory).
+	// The mode keys (Ctrl+1, Ctrl+2, Ctrl+3; ModeAccels). show-board
+	// follows Show the Board (setupModeMemory).
 	w.addAction("show-mail", true, func() { w.setMode(board.ModeMail) })
 	w.addAction("show-board", true, func() { w.setMode(board.ModeBoard) })
+	w.addAction("show-calendar", true, func() { w.setMode(board.ModeCalendar) })
 	w.addAction("search", true, w.startSearch)
 	w.addAction("trash", false, forRows(func(rows []listRow, ids []api.MessageID) { w.trashIDs(w, ids, selectionSubject(rows)) }))
 	w.addAction("archive", false, forRows(func(_ []listRow, ids []api.MessageID) { w.archiveIDs(ids) }))
@@ -1015,7 +1033,7 @@ func (w *Window) reconnect() {
 func (w *Window) showConnectionState(s client.State, err error) {
 	w.conn = nextConnView(w.conn, s, err)
 	w.logConnection(s, err)
-	w.boardConnectionChanged(s == client.Connected)
+	w.modeConnectionChanged(s == client.Connected)
 	defer w.refreshSyncLabel()
 	switch s {
 	case client.Connecting:

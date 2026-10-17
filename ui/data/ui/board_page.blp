@@ -46,7 +46,7 @@ Adw.BreakpointBin board_page_root {
   [top]
   Adw.HeaderBar board_header {
     // Mirrors window.blp's mode_switch (icons only, tooltips from Go: the
-    // two groups follow one state, window/board.go setMode).
+    // groups follow one state, window/board.go setMode).
     [start]
     Adw.ToggleGroup board_mode_switch {
       Adw.Toggle {
@@ -57,6 +57,11 @@ Adw.BreakpointBin board_page_root {
       Adw.Toggle {
         name: "board";
         icon-name: "view-grid-symbolic";
+      }
+
+      Adw.Toggle {
+        name: "calendar";
+        icon-name: "x-office-calendar-symbolic";
       }
     }
 
