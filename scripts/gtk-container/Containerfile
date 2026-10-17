@@ -4,7 +4,13 @@
 # Fedora 42 with the GTK toolchain of the development Toolbx (CLAUDE.md,
 # Prostředí), for building and testing the GTK client where no GTK is
 # installed — on a Mac through Apple's `container` CLI, or with Docker or
-# Podman. Build and use it through scripts/gtk-container/gtk.sh.
+# Podman — and for running the client with its daemon inside it
+# (`gtk.sh x11 dev`): gnome-keyring as the Secret Service, time zones, the
+# Czech and English locales, and GNOME Web (GTK4 and WebKitGTK 6.0, already
+# here) as the default http/https handler for the daemon's browser
+# sign-ins, whose redirect lands on the container's 127.0.0.1
+# (glib-networking is its TLS, a weak dependency the install leaves out).
+# Build and use it through scripts/gtk-container/gtk.sh.
 FROM registry.fedoraproject.org/fedora:42
 RUN dnf -y install --setopt=install_weak_deps=False \
       git golang gcc ccache make pkgconf-pkg-config gettext diffutils \
@@ -12,7 +18,12 @@ RUN dnf -y install --setopt=install_weak_deps=False \
       gtk4-devel libadwaita-devel webkitgtk6.0-devel gsound-devel \
       gobject-introspection-devel sqlite-devel blueprint-compiler \
       xorg-x11-server-Xvfb xauth dbus-daemon procps-ng \
+      gnome-keyring libsecret tzdata glibc-langpack-cs glibc-langpack-en \
+      epiphany glib-networking \
     && dnf clean all \
+    && test -f /usr/share/applications/org.gnome.Epiphany.desktop \
+    && printf '[Default Applications]\nx-scheme-handler/http=org.gnome.Epiphany.desktop\nx-scheme-handler/https=org.gnome.Epiphany.desktop\n' > /etc/xdg/mimeapps.list \
+    && update-desktop-database /usr/share/applications \
     && git config --global --add safe.directory '*'
 # The caches live on the host (gtk.sh mounts them): Go modules, the Go build
 # cache and ccache, so the long first compile of gotk4 happens once.

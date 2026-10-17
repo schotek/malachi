@@ -94,7 +94,7 @@ UI_TAGS     := -tags nosound
 $(warning gsound not found via pkg-config; building the UI without notification sound (install gsound-devel))
 endif
 
-.PHONY: all build backend mcp ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run deb rpm macos macos-dmg macos-notarize macos-go run-macos test-macos windows run-windows test-windows help FORCE
+.PHONY: all build backend mcp ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run deb rpm macos macos-dmg macos-notarize macos-go run-macos test-macos run-gtk run-gtk-live windows run-windows test-windows help FORCE
 
 all: build
 
@@ -292,6 +292,8 @@ endif
 ## macos-notarize: have Apple notarise that DMG and staple the ticket to it (macOS only; docs/releasing.md §8)
 ## run-macos: build the macOS app and run it from the terminal so the daemon log stays visible (macOS only)
 ## test-macos: run the Swift tests of the macOS client (macOS only)
+## run-gtk: build the GTK client in the Fedora container and run it in an XQuartz window with its own daemon and gnome-keyring there, data in ~/.cache/malachi-gtk/data (macOS only)
+## run-gtk-live: the same against a daemon on the Mac (test-daemon.sh + gtk.sh forward) (macOS only)
 ifeq ($(UNAME_S),Darwin)
 # ARCHS picks the architectures of the bundle. Empty, as for macos, it is
 # this Mac's own, with the Go binaries of the backend and mcp targets; with
@@ -335,9 +337,19 @@ run-macos: macos
 
 test-macos:
 	$(MAKE) -C macos test
+
+# The GTK client on a Mac (scripts/gtk-container/gtk.sh): the container
+# builds into build/linux by itself; its service is stopped afterwards
+# however the app ends, and the app's exit status is kept.
+run-gtk run-gtk-live:
+	@scripts/gtk-container/gtk.sh make build && scripts/gtk-container/gtk.sh x11 $(if $(filter run-gtk-live,$@),live,dev); \
+	status=$$?; scripts/gtk-container/gtk.sh stop; exit $$status
 else
 macos macos-dmg macos-notarize macos-go run-macos test-macos:
 	@echo "$@ needs macOS (this is $(UNAME_S)); see macos/README.md" >&2; exit 1
+
+run-gtk run-gtk-live:
+	@echo "$@ is the container route for a Mac; on Linux use make run-dev" >&2; exit 1
 endif
 
 # The Windows client (windows/, C#/WinUI 3) is a separate client of the

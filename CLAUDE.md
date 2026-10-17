@@ -151,15 +151,24 @@ v `~/.cache/malachi-gtk`, první překlad gotk4 asi 20 minut, další půl
 minuty), `gtk.sh test-ui` pouští testy `ui/` pod Xvfb (obrazovka
 1600×1200, smoke testy `MALACHI_GTK_SMOKE=1`), `make po` jde v obrazu
 `malachi-po:f42`. Okno ukazuje XQuartz: jednou `defaults write
-org.xquartz.X11 nolisten_tcp -bool false`, restart XQuartz, `gtk.sh
-xhost`, pak `gtk.sh x11` (vzorová data) nebo `gtk.sh x11 live` proti
+org.xquartz.X11 nolisten_tcp -bool false` a restart XQuartz; každý `gtk.sh
+x11` pak XQuartz sám spustí a kontejner autorizuje cookie displeje z `xauth`
+(xhost je jen záloha: hned po startu XQuartz první desítky `xhost +` tiše
+selžou). `gtk.sh x11` ukáže vzorová data, `gtk.sh x11 live` běží proti
 démonovi na Macu (`gtk.sh forward` přesměruje jeho socket do kontejneru;
 takový démon spouští vlastník sám z Terminálu skriptem
 `scripts/gtk-container/test-daemon.sh` nad kopií dat s podepsaným helperem
 klíčenky z `build/Malachi Mail.app`; po restartu démona restartovat
-i klienta, čte jeho klíč při startu). Broadway (`gtk4-broadwayd`) je jen
-na snímky při startu — v prohlížeči ztrácí vstup po popoverech. Po každé
-práci `container system stop`. Zmínky o Toolbxu níže jsou historické;
+i klienta, čte jeho klíč při startu). `make run-gtk` udělá všechno samo:
+sestaví klienta v kontejneru, spustí XQuartz a klienta s vlastním démonem
+a gnome-keyringem (Secret Service) uvnitř kontejneru, data v
+`~/.cache/malachi-gtk/data`; `make run-gtk-live` totéž proti démonovi na
+Macu. Přihlášení v prohlížeči (Microsoft 365) otevře GNOME Web
+v kontejneru, také v okně XQuartz, a přesměrování dojde na 127.0.0.1
+kontejneru, kde poslouchá démon. Broadway
+(`gtk4-broadwayd`) je jen na snímky při startu — v prohlížeči ztrácí vstup
+po popoverech. Po každé práci `container system stop` (`gtk.sh stop`; oba
+cíle ho volají samy). Zmínky o Toolbxu níže jsou historické;
 `flatpak-builder` a balíčky zůstávají na linuxovém hostiteli.
 
 Ověřené verze (2026-09-02): Go 1.25, GTK 4.18, libadwaita 1.7, GLib 2.84,

@@ -235,11 +235,18 @@ packages (`scripts/gtk-container/Containerfile`), through Apple's `container`
 CLI, Docker or Podman (`ENGINE=docker`); `gtk.sh build` makes the image,
 `gtk.sh make build` and `gtk.sh test-ui` run inside it, the Go and ccache
 caches stay in `~/.cache/malachi-gtk` so gotk4 compiles once. With XQuartz
-on the Mac, `gtk.sh x11` shows the application in a native window over
-sample data, and `gtk.sh x11 live` with `gtk.sh forward` against a daemon
-running on the Mac (`scripts/gtk-container/test-daemon.sh`); the container
-itself has no Secret Service, GOA or D-Bus session, so accounts, keyrings
-and notifications are the Mac daemon's or stay untested.
+on the Mac, `make run-gtk` builds the client in the container and runs it
+in a native window with its own daemon and gnome-keyring as the Secret
+Service, all inside the container; the store, preferences and keyring stay
+in `~/.cache/malachi-gtk/data`, accounts are added in the wizard. A
+browser sign-in (Microsoft 365) opens GNOME Web inside the container, in an
+XQuartz window too, and its redirect reaches the daemon on the container's
+127.0.0.1. `make run-gtk-live` runs the same client against a daemon on the
+Mac over a copy of your data (`scripts/gtk-container/test-daemon.sh` and
+`gtk.sh forward`).
+`gtk.sh x11` alone shows sample data; GOA and notifications stay untested
+in the container. Both targets stop the container service afterwards
+(`gtk.sh stop`).
 
 ### Build and run
 
