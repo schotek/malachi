@@ -7,7 +7,8 @@
 // TestPageTopStepsAViewportLessTheOverlap, TestConvRails*,
 // TestConvColumnKeepsToTheClampWithTheGutterInIt, TestWebHeight*,
 // TestPicturesArrived, TestClampText, TestConvDisplayOrder), itself a port
-// of the macOS client's ConversationLayoutTests.
+// of the macOS client's ConversationLayoutTests; the chat's measures
+// (chatBubbleKeepsAnEmptySide) are Swift-first.
 
 using System;
 using System.Collections.Generic;
@@ -179,6 +180,54 @@ public sealed class ConversationLayoutTests
         Assert.False(CompactDates(edge), "at the edge: full dates");
         Assert.True(CompactDates(300), "the pane at its narrowest: compact");
         Assert.False(CompactDates(2000), "a wide pane: full dates");
+    }
+
+    // ConversationLayoutTests.swift chatBubbleKeepsAnEmptySide
+    // (docs/plans/chat-view.md D4): a row of the chat is the avatar's
+    // gutter, the bubble and an empty side of at least 24 or a fifth of the
+    // column.
+    [Theory]
+    [InlineData(868, 173.6, 654.4)] // the clamp's 900 less the insets
+    [InlineData(300, 60, 200)]
+    [InlineData(100, 24, 36)]
+    [InlineData(50, 24, 0)] // never negative
+    [InlineData(0, 24, 0)]
+    public void ChatBubbleKeepsAnEmptySide(double column, double gap, double bubble)
+    {
+        Assert.Equal(gap, ChatGap(column), 1e-9);
+        Assert.Equal(bubble, ChatBubbleMax(column), 1e-9);
+    }
+
+    [Fact]
+    public void ChatGapIsContinuousAndTheBubbleNeverNarrower()
+    {
+        double[] measures = [ChatGapMin, ChatGapRatio];
+        Assert.Equal([24.0, 0.2], measures);
+        // The widest column: the pane's clamp less its two insets.
+        const double widest = MaxWidth - (2 * SideInset);
+        Assert.Equal(widest, ChatColumn(MaxWidth));
+        Assert.Equal(widest - Avatar - GutterGap - (0.2 * widest), ChatBubbleMax(widest), 1e-9);
+
+        // Continuous where the floor meets the share (a column of 120): no
+        // jump either side.
+        var edge = ChatGapMin / ChatGapRatio;
+        Assert.Equal(120, edge, 1e-9);
+        Assert.Equal(24, ChatGap(edge), 1e-9);
+        foreach (var d in new[] { 0.001, 0.01, 0.1 })
+        {
+            Assert.True(Math.Abs(ChatGap(edge - d) - 24) <= d, $"below the edge by {d}");
+            Assert.True(Math.Abs(ChatGap(edge + d) - 24) <= d, $"above the edge by {d}");
+            Assert.True(Math.Abs(ChatBubbleMax(edge + d) - ChatBubbleMax(edge - d)) <= 2 * d, $"the bubble around the edge by {d}");
+        }
+        Assert.Equal(120 - 40 - 24, ChatBubbleMax(edge), 1e-9);
+        // A wider column never gives a narrower bubble.
+        var last = -1.0;
+        for (var w = 0.0; w <= 1000; w += 0.5)
+        {
+            var b = ChatBubbleMax(w);
+            Assert.True(b >= last, $"at {w}");
+            last = b;
+        }
     }
 
     [Fact]

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of ui/data/ui/conversation_view.blp (conversation_chat); macOS:
+MessageView/ConversationChatViewController.swift (loadView). The chat
+layout of the conversation (docs/plans/chat-view.md), under the host's
+strip (ConversationView): the timeline's column (900 wide at most, 16 at
+the sides, 4 above, 16 below) without its gutter and line; the issue card
+of a Jira conversation on top across the column (12 below the top), the
+rows after it, oldest first, added in code (ConversationChatView.xaml.cs):
+the bubbles with their avatars (ConversationChatRow), the issue's events
+and the row of older messages centred (ConversationChatCenterRow). The
+view's anchor starts at its bottom (VerticalAnchorRatio 1: a chat at its
+end stays at its end as rows and bodies come); the code moves it to the top
+(0) once the user scrolls away from the end and back when the end shows.
+-->
+<UserControl
+    x:Class="Malachi.App.Reader.Conversation.ConversationChatView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:reader="using:Malachi.App.Reader"
+    AutomationProperties.AutomationId="ConversationChat"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Reader/Conversation/ConversationStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer
+        x:Name="Scroller"
+        AutomationProperties.AutomationId="ConversationChatScroller"
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalScrollMode="Disabled"
+        IsTabStop="False"
+        VerticalAnchorRatio="1"
+        VerticalScrollBarVisibility="Auto">
+        <Grid x:Name="Document">
+            <StackPanel
+                x:Name="Column"
+                MaxWidth="900"
+                Padding="16,4,16,16">
+                <!-- The issue card, across the column. -->
+                <reader:IssueCardView
+                    x:Name="IssueCard"
+                    Margin="0,12,0,0"
+                    AutomationProperties.AutomationId="ConversationChatIssueCard" />
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

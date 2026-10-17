@@ -81,12 +81,15 @@ public sealed class DevmailFixture : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    // The repository root baked in at build time.
-    private static string RepositoryRoot =>
+    // The repository root baked in at build time (also the chat suite's,
+    // ConversationChatFixture).
+    internal static string RepositoryRoot =>
         typeof(DevmailFixture).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().First(a => a.Key == "MalachiRoot").Value
         ?? throw new InvalidOperationException("no MalachiRoot");
 
-    private static async Task AddAccountAsync(string socket, DevmailServer devmail)
+    // The devmail account added over the app's socket (also the chat
+    // suite's, ConversationChatFixture).
+    internal static async Task AddAccountAsync(string socket, DevmailServer devmail)
     {
         ServerConfig Endpoint(int port) => new()
         {

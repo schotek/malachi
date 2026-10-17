@@ -1,140 +1,101 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Port of ui/internal/window/conversation_view.go (conversationView:
-// modelChanged, takeWebView, returnWebView, trimWebPool, open, update,
-// setCardFolded, apply with the draft cards, replaceRow, detach, removeAll,
-// showIssue, clearIssue, convFirstMember, pageBy, scrollBy, scheduleLiveUpdate,
-// updateLive, afterLayout, hover, setZoom, startSpinner, stopSpinner) and
-// conversation_issue.go; macOS: MessageView/ConversationViewController.swift.
+// Port of ui/internal/window/conversation_host.go (conversationHost:
+// showLayout, the strip, the spinner, hover, pageBy, shownIssueCard) and
+// conversation_fanout.go (convFanout: changed, loaded, trim); macOS:
+// MessageView/ConversationHostViewController.swift and
+// ConversationStripView.swift. Until the chat layout this class was the
+// timeline, which is ConversationTimelineView.xaml.cs now; the name stayed
+// with the page, so the reader's callers (ReaderHub, MessageView) did not
+// change.
 //
-// The whole conversation in the reading pane: selecting a folded
-// conversation row of the grouped list stacks every member the folder holds
-// as Jira shows an issue: what opened the conversation first, folded to its
-// header while more follows, then the rest newest first
-// (ConversationLayout.DisplayOrder), the pane opened at its top. The user's
-// replies in Sent that the folder lacks are cards among them by date,
-// folded. Every card folds and opens with its arrow (ConversationFolds,
-// fold.go), and one button above the conversation folds or opens them all
-// (Collapse All / Expand All, Conversation.FoldAllOffer). The user's
-// unsent replies (and comments) are draft cards right under what opened the
-// conversation, newest first (ConversationDraftView, conversation_draft.go),
-// never folded and never live: their text is plain. A Jira
-// conversation has its issue card once on top; its description and
-// comments are cards (ConversationCard), its status and assignee changes
-// compact rows, and older members left out by thread.get's cap one row at
-// the bottom (ConversationEventRow, the truncated row). The controller half
-// is Core's ConversationController; this view lays the cards out and tells
-// it which of them are near enough to need a body.
+// The conversation in the reading pane (docs/plans/chat-view.md §6.1): the
+// one page the pane shows for a selected conversation row. Above, a fixed
+// strip that does not scroll (D8): Collapse All / Expand All of the
+// timeline and the layout toggle, Show as Chat or Show as Thread as the
+// setting stands (D9, Conversation.ChatToggleLabel); below it, filling the
+// rest, the two layouts of the same conversation, of which one shows: the
+// timeline (ConversationTimelineView, the default) and the chat
+// (ConversationChatView). The setting conversation-chat-layout picks it
+// (SettingsStore.ConversationChatLayout, for every conversation and across
+// restarts): the toggle only writes the setting, and the layout follows the
+// setting's change (OnChange), not the click, so a change from elsewhere
+// switches too. The hidden layout stays alive, so the timeline's folds and
+// revealed quoted text outlive a visit to the chat (D10).
 //
-// A stack of native cards in one scrolling column, never one composed
-// document: each card's body is its own locked view with one sanitiser
-// output in it (CardWebView, docs/security.md §3.2). The cards are cheap: a
-// body is fetched only near the viewport and a web view exists only for the
-// nearest few HTML cards (ConversationLayout.LiveCards), from a pool; the
-// others keep the height they last had.
+// The host is the one subscriber of the conversation controller in the
+// pane (Core's ConversationController has multicast events, Swift and Go
+// one slot each): every change goes to both layouts, which act on it at
+// once while shown and catch up when shown again; the news of a body goes
+// to the layout shown, which renders every body held when it is shown. The
+// host alone trims the controller's bodies (ConversationController.Trim),
+// with the near set of the layout shown; a hidden layout asks for no body
+// and the hidden timeline lets go of its web views. Marking the
+// conversation read is not the views' business: the list controller arms
+// it when the members are known (ConversationModel.MarkRead), whichever
+// layout shows.
 //
-// Windows: while heights settle (bodies arriving, web views measuring their
-// documents) the item the user reads stays in place through the
-// ScrollViewer's own anchoring (every row an anchor candidate, the anchor at
-// the viewport's top), where GTK moves the adjustment back itself; at the
-// top of the conversation the view stays at the top, so an arrival under
-// the opening card is in view, as GTK's pinned anchor keeps it. A card the
-// user folds, alone or with Collapse All, whose top was above the viewport
-// is brought back with its header at the viewport's top (macOS
-// headerAnchor), which the ScrollViewer's anchoring alone would leave above
-// it. The wheel over a card whose document fits scrolls the column (the
-// card forwards it); the list keeps the keyboard, and Space and Shift+Space
-// page through the conversation.
+// The Jira issue card: each layout has its own (ConversationIssueBox) at
+// the top of its column, the timeline's beside its gutter, the chat's
+// across the column; the busy state and the refreshed issue of a transition
+// go to both (IssueBusyChanged, ApplyIssue, from ReaderHub), Change Status
+// in the menus pops up the card of the layout shown (OpenStatusMenu). Two
+// cards are simpler than moving one between the layouts' columns, whose
+// anchors and scroll positions it belongs to (macOS and GTK chose the
+// same). The fan-out of the message cache (ShowLoaded, RefreshBars,
+// RefreshChips, from ReaderHub) reaches the host, which keeps the
+// controller's entry (ConversationController.Adopt) and passes the news to
+// the layout shown. Space and Shift+Space from the list page the layout
+// shown (PageBy). The host owns the spinner while the members load and the
+// status label of the link under the pointer (only the timeline has links).
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using Malachi.App.Controls;
-using Malachi.App.WebViews;
+using Malachi.App.Resources;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers;
 using Malachi.Core.I18n;
-using Malachi.Core.IssueTrackers;
 using Malachi.Core.Model;
-using Malachi.Core.Presentation;
 using Malachi.Core.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
-using Windows.Foundation;
 using L = Malachi.Core.Model.ConversationLayout;
 
 namespace Malachi.App.Reader.Conversation;
 
-/// <summary>The conversation page of the main window's reading pane.</summary>
+/// <summary>The conversation page of the main window's reading pane: the strip and the two layouts.</summary>
 internal sealed partial class ConversationView : UserControl
 {
-    // convIdleWebViews: how many card views the pool keeps while no
-    // conversation is shown.
-    private const int IdleWebViews = 2;
-
-    // convLayoutTries: how many layouts UpdateLive waits for the rows to be
-    // laid out, so a card that never gets a size does not keep a callback.
-    private const int LayoutTries = 30;
-
     // convStatusMaxRunes: the most of a link the status shows.
     private const int StatusMaxChars = 512;
 
-    // libadwaita's body text, which the text-zoom setting scales.
-    private const double BaseBodyFontSize = 14;
-
-    // The children of the column before the model's items: the Collapse All
-    // button and the issue card (macOS headViews).
-    private const int HeadViews = 2;
-
+    private readonly ReaderServices services;
     private readonly ConversationController ctrl;
-    private readonly Dictionary<MessageId, ConversationCard> cards = [];
-    private readonly Dictionary<MessageId, ConversationEventRow> events = [];
-    private readonly Dictionary<MessageId, ConversationRow> rows = [];
-
-    // The draft cards of the user's unsent replies (ConversationDraftView)
-    // and their rows, by draft id (conversation_view.go drafts, draftRows).
-    private readonly Dictionary<DraftId, ConversationDraftView> drafts = [];
-    private readonly Dictionary<DraftId, ConversationRow> draftRows = [];
-    private readonly List<CardWebView> webPool = [];
-    private readonly List<SettingsChangeToken> tokens = [];
+    private readonly ConversationTimelineView timeline;
+    private readonly ConversationChatView chat;
     private readonly DispatcherQueueTimer spinnerTimer;
-    private List<ConversationRow> items = [];
-    private TextBlock? truncated;
-    private ConversationRow? truncatedRow;
+    private readonly ILogger logger;
+    private readonly EventHandler<ConversationController.Change> onChanged;
+    private readonly EventHandler<(MessageId Id, LoadedMessage Entry)> onLoaded;
+    private SettingsChangeToken? layoutToken;
 
-    // The user's folds and unfolds of the cards of the conversation on show
-    // (SetCardFolded, Collapse All / Expand All), which win over the default
-    // (Conversation.DefaultFolds) until another conversation is shown; the
-    // cards' fold state as last applied; what the button above offers.
-    private ConversationFolds folds = new();
-    private Dictionary<MessageId, bool> foldState = [];
-    private ConversationFoldAll foldAll;
-    private bool compact;
-    private double width = -1;
-    private bool liveScheduled;
-    private int layoutTries;
-    private bool waitingForLayout;
+    // The chat is the layout shown; started: ShowLayout ran once.
+    private bool chatShown;
+    private bool started;
 
-    // The issue card on show and the account it acts in.
-    private AccountId? issueAccount;
-
-    /// <summary>A pane over <paramref name="ctrl"/>, with the reader's services.</summary>
+    /// <summary>The page over <paramref name="ctrl"/>, with the reader's services.</summary>
     public ConversationView(ReaderServices services, ConversationController ctrl, Func<Window?> hostWindow, Action focusList)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(ctrl);
-        Services = services;
+        this.services = services;
         this.ctrl = ctrl;
         HostWindowOf = hostWindow;
-        FocusList = focusList;
-        Logger = services.State.Logs.CreateLogger<ConversationView>();
+        logger = services.State.Logs.CreateLogger<ConversationView>();
         InitializeComponent();
-        AfterRelease = new AfterRelease(this);
         spinnerTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
         spinnerTimer.IsRepeating = false;
         spinnerTimer.Interval = ReaderController.SpinnerDelay;
@@ -143,188 +104,143 @@ internal sealed partial class ConversationView : UserControl
             Spinner.IsActive = true;
             Spinner.Visibility = Visibility.Visible;
         };
-        IssueCard.Issues = services.Issues;
-        IssueCard.Subject = () => FirstMember(ctrl.Model) is { } first ? IssueActionsController.SubjectOf(first) : null;
-        IssueCard.OpenIssue = url => _ = OpenIssueAsync(url);
-        IssueCard.State = null;
+        ChatToggleGlyph.Glyph = Icons.Glyph("malachi-chat");
 
-        ctrl.Changed += (_, change) => ModelChanged(change);
-        ctrl.EntryLoaded += (_, e) =>
+        timeline = new ConversationTimelineView(this, services, ctrl, hostWindow, focusList);
+        chat = new ConversationChatView(this, services, ctrl);
+        Layouts.Children.Add(timeline);
+        Layouts.Children.Add(chat);
+        timeline.FoldAllChanged += (_, offer) =>
         {
-            if (cards.TryGetValue(e.Id, out var c))
+            if (!chatShown)
             {
-                c.Render(e.Entry);
+                ShowFoldAll(offer);
             }
         };
-        Scroller.ViewChanged += (_, _) => ScheduleLiveUpdate();
-        Scroller.SizeChanged += (_, _) => ScheduleLiveUpdate();
-        Column.SizeChanged += (_, _) => ScheduleLiveUpdate();
-        // Shown again (another page of the pane was on top): the cards near
-        // the viewport are looked at anew.
+        timeline.NearChanged += (_, near) =>
+        {
+            if (!chatShown)
+            {
+                ctrl.Trim(near);
+            }
+        };
+        chat.NearChanged += (_, near) =>
+        {
+            if (chatShown)
+            {
+                ctrl.Trim(near);
+            }
+        };
+
+        onChanged = (_, change) => ControllerChanged(change);
+        onLoaded = (_, e) => ControllerEntryLoaded(e.Id, e.Entry);
+        ctrl.Changed += onChanged;
+        ctrl.EntryLoaded += onLoaded;
+        layoutToken = services.State.Settings.OnChange(SettingsKey.ConversationChatLayout, () => ShowLayout());
+
+        // Shown again (another page of the pane was on top): the layout
+        // shown looks at what is near its viewport anew.
         RegisterPropertyChangedCallback(VisibilityProperty, (_, _) =>
         {
             if (Visibility == Visibility.Visible)
             {
-                ScheduleLiveUpdate();
+                if (chatShown)
+                {
+                    chat.PageShown();
+                }
+                else
+                {
+                    timeline.PageShown();
+                }
             }
         });
-        var settings = services.State.Settings;
-        tokens.Add(settings.OnChange(SettingsKey.TextZoom, () =>
-        {
-            ApplyBodyFont();
-            foreach (var c in cards.Values)
-            {
-                c.SetZoom(settings.TextZoom);
-            }
-        }));
-        tokens.Add(settings.OnChange(SettingsKey.MonospacePlainText, ApplyBodyFont));
-        tokens.Add(settings.OnChange(SettingsKey.MonochromeAvatars, () => Apply(ctrl.Model)));
-        services.Attachments.SavingAllChanged += OnSavingAllChanged;
+        ShowLayout(initial: true);
     }
-
-    /// <summary>The reader's services.</summary>
-    internal ReaderServices Services { get; }
 
     /// <summary>The window the pane is in: where its dialogs and toasts go.</summary>
     public Window? HostWindow => HostWindowOf();
 
-    /// <summary>Puts the keyboard back in the list (a chip that had it went).</summary>
-    internal Action FocusList { get; }
-
-    /// <summary>The pane's logger.</summary>
-    internal ILogger Logger { get; }
-
-    /// <summary>
-    /// What a double click on a card's header waits for before it opens a
-    /// window: the release of its second press, as the list's does (a window
-    /// opened on the press can come up behind this one).
-    /// </summary>
-    internal AfterRelease AfterRelease { get; }
-
-    /// <summary>The plain-text body's size (the text-zoom setting).</summary>
-    public double BodyFontSize => BaseBodyFontSize * Services.State.Settings.TextZoom / 100.0;
-
-    /// <summary>The plain-text body's family: monospace with its setting, else the default (null).</summary>
-    public FontFamily? BodyFontFamily =>
-        Services.State.Settings.MonospacePlainText && Application.Current.Resources.TryGetValue("MonospaceFontFamily", out var font) && font is FontFamily mono
-            ? mono
-            : null;
-
     /// <summary>Whether the pane shows a conversation (conversationShown).</summary>
     public bool Shown => ctrl.Thread is not null;
 
+    /// <summary>The page itself is the pane's page on show (the layouts measure and fetch only then).</summary>
+    internal bool PageVisible => Visibility == Visibility.Visible;
+
     private Func<Window?> HostWindowOf { get; }
-
-    /// <summary>The entry held for the card of member <paramref name="id"/>.</summary>
-    public LoadedMessage? Held(MessageId id) => ctrl.Loaded.GetValueOrDefault(id);
-
-    /// <summary>The role of the folder <paramref name="s"/> lies in (the bulk strip of its card changes in the junk folder).</summary>
-    public FolderRole RoleOf(MessageSummary s) => ctrl.FolderRoleOf(s);
-
-    /// <summary>The buttons the card of <paramref name="s"/> offers.</summary>
-    public CapabilityActions Actions(MessageSummary s) => ctrl.Actions(s);
-
-    /// <summary>The card of member <paramref name="id"/> is near and needs its body (and message.get with <paramref name="details"/>).</summary>
-    public void NeedsBody(MessageId id, bool details) => ctrl.NeedsBody(id, details);
-
-    /// <summary>
-    /// The card's "•••": the controller switches its body to the variant
-    /// asked for (<see cref="ConversationController.SetQuoted"/>), held or
-    /// fetched, and the card shows it when it arrives (EntryLoaded,
-    /// ShowLoaded; macOS <c>cardSetQuoted</c>).
-    /// </summary>
-    public void SetCardQuoted(ConversationCard card, bool on)
-    {
-        ArgumentNullException.ThrowIfNull(card);
-        ctrl.SetQuoted(card.Id, on, card.DetailsOpen);
-    }
 
     /// <summary>
     /// conversationShowLoaded: the cache has news about member
-    /// <paramref name="id"/> (the remote images, a download): its card's entry
-    /// is that one, and the card renders it.
+    /// <paramref name="id"/> (the remote images, a download): when the
+    /// layout shown displays it, the controller's entry is that one and the
+    /// layout renders it (macOS <c>showLoaded</c> after <c>displays</c>, GTK
+    /// conversationShowLoaded); news of a member it does not show is left to
+    /// the cache.
     /// </summary>
     public void ShowLoaded(MessageId id, LoadedMessage lm)
     {
-        if (cards.TryGetValue(id, out var c))
+        ArgumentNullException.ThrowIfNull(lm);
+        if (chatShown)
         {
-            ctrl.Adopt(id, lm);
-            c.Render(lm);
-        }
-    }
-
-    /// <summary>conversationRefreshBars: redraws the bars of the card of <paramref name="id"/>.</summary>
-    public void RefreshBars(MessageId id, LoadedMessage lm)
-    {
-        if (cards.TryGetValue(id, out var c))
-        {
-            c.RenderBars(lm);
-        }
-    }
-
-    /// <summary>conversationRefreshChips: redraws the chips of the card of <paramref name="id"/>.</summary>
-    public void RefreshChips(MessageId id, LoadedMessage? lm)
-    {
-        if (cards.TryGetValue(id, out var c))
-        {
-            c.RefreshChips(lm);
-        }
-    }
-
-    /// <summary>conversationSetIssueBusy: a transition started or ended on an issue; the issue card on top follows.</summary>
-    public void IssueBusyChanged(AccountId account, string key)
-    {
-        if (IssueCard.State is { } st && st.Account == account && st.Card.Key == Jira.Clean(key))
-        {
-            var busy = Services.Issues.IsBusy(account, key);
-            if (busy != st.Busy)
+            if (chat.Displays(id))
             {
-                IssueCard.State = st with { Busy = busy };
+                ctrl.Adopt(id, lm);
+                chat.EntryLoaded(id, lm);
             }
         }
+        else if (timeline.Displays(id))
+        {
+            ctrl.Adopt(id, lm);
+            timeline.ShowLoaded(id, lm);
+        }
     }
 
-    /// <summary>conversationApplyIssue: the refreshed issue of a transition on the issue card at once when it is the issue on show.</summary>
-    public void ApplyIssue(AccountId account, IssueInfo info)
+    /// <summary>conversationRefreshBars: redraws the bars of the timeline's card of <paramref name="id"/> (the chat has no bars).</summary>
+    public void RefreshBars(MessageId id, LoadedMessage lm)
     {
-        ArgumentNullException.ThrowIfNull(info);
-        if (IssueCard.State is not { } st || st.Account != account || st.Card.Key != Jira.Clean(info.Key))
+        if (!chatShown)
         {
-            return;
+            timeline.RefreshBars(id, lm);
         }
-        IssueCard.State = CardState(Jira.IssueCard(info, null), account);
-    }
-
-    /// <summary>win.change-status: the Change Status menu of the issue card on top; false when there is none.</summary>
-    public bool OpenStatusMenu() => Shown && IssueCard.OpenStatusMenu();
-
-    /// <summary>pageBy: one page down (or up) for Space (Shift+Space) in the list; true when the key was used.</summary>
-    public bool PageBy(bool up)
-    {
-        if (ctrl.Model is null)
-        {
-            return false;
-        }
-        var page = Scroller.ViewportHeight;
-        var top = L.PageTop(Scroller.VerticalOffset, up, page, Scroller.ExtentHeight, page * 0.1);
-        Scroller.ChangeView(null, top, null);
-        return true;
     }
 
     /// <summary>
-    /// scrollBy: scrolls the column by what a card whose document fits handed
-    /// on: <paramref name="wheelDelta"/> in the wheel's units (120 a step), a
-    /// step being GTK's own for a scrolled window (the viewport's height to
-    /// the power 2/3).
+    /// conversationRefreshChips: redraws the chips of the timeline's card of
+    /// <paramref name="id"/>; in the chat, the bubble's paperclip follows the
+    /// entry.
     /// </summary>
-    public void ScrollBy(double wheelDelta)
+    public void RefreshChips(MessageId id, LoadedMessage? lm)
     {
-        var step = Math.Pow(Math.Max(Scroller.ViewportHeight, 1), 2.0 / 3.0);
-        var to = Scroller.VerticalOffset + (wheelDelta / 120.0 * step);
-        Scroller.ChangeView(null, Math.Clamp(to, 0, Math.Max(0, Scroller.ScrollableHeight)), null);
+        if (!chatShown)
+        {
+            timeline.RefreshChips(id, lm);
+        }
+        else if (lm is not null)
+        {
+            chat.EntryLoaded(id, lm);
+        }
     }
 
-    /// <summary>hover: the link under the pointer of any card ("" hides it): plain text, capped.</summary>
+    /// <summary>conversationSetIssueBusy: a transition started or ended on an issue; both layouts' issue cards follow.</summary>
+    public void IssueBusyChanged(AccountId account, string key)
+    {
+        timeline.IssueBusyChanged(account, key);
+        chat.IssueBusyChanged(account, key);
+    }
+
+    /// <summary>conversationApplyIssue: the refreshed issue of a transition on both layouts' issue cards.</summary>
+    public void ApplyIssue(AccountId account, IssueInfo info)
+    {
+        timeline.ApplyIssue(account, info);
+        chat.ApplyIssue(account, info);
+    }
+
+    /// <summary>win.change-status: the Change Status menu of the issue card of the layout shown; false when there is none.</summary>
+    public bool OpenStatusMenu() => Shown && (chatShown ? chat.OpenStatusMenu() : timeline.OpenStatusMenu());
+
+    /// <summary>pageBy: one page of the layout shown down (or up) for Space (Shift+Space) in the list; true when the key was used.</summary>
+    public bool PageBy(bool up) => chatShown ? chat.PageBy(up) : timeline.PageBy(up);
+
+    /// <summary>hover: the link under the pointer of any card of the timeline ("" hides it): plain text, capped.</summary>
     public void Hover(string link)
     {
         var text = L.ClampText(link ?? "", StatusMaxChars);
@@ -332,660 +248,130 @@ internal sealed partial class ConversationView : UserControl
         StatusBox.Visibility = text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    /// <summary>
-    /// takeWebView: a card view for a card going live: one from the pool, its
-    /// zoom brought up to date, or a new one. Reusing them keeps their number
-    /// at the live window's however the cards come and go.
-    /// </summary>
-    public CardWebView TakeWebView()
-    {
-        var zoom = Services.State.Settings.TextZoom;
-        if (webPool.Count > 0)
-        {
-            var pooled = webPool[^1];
-            webPool.RemoveAt(webPool.Count - 1);
-            pooled.Zoom = zoom;
-            return pooled;
-        }
-        var web = new CardWebView { Zoom = zoom };
-        var cache = Services.Cache;
-        web.Parts = (part, token) => cache.FetchPartAsync(part.AccountId, part.MessageId, part.PartId, token);
-        return web;
-    }
-
-    /// <summary>returnWebView: takes a card view back (already out of its card): reset for the next card, or released when the pool is full.</summary>
-    public void ReturnWebView(CardWebView web)
-    {
-        ArgumentNullException.ThrowIfNull(web);
-        if (webPool.Count >= L.MaxLiveWebViews)
-        {
-            web.Release();
-            return;
-        }
-        web.Reset();
-        webPool.Add(web);
-    }
-
-    /// <summary>
-    /// setCardFolded: folds or opens a card at the user's request (its arrow,
-    /// a click on its preview); the choice holds while the conversation is
-    /// shown. An opened card asks for its body. Until the user scrolls the
-    /// top of the conversation stays in view; otherwise the card keeps its
-    /// header in view. The Collapse All / Expand All button follows.
-    /// </summary>
-    public void SetCardFolded(ConversationCard card, bool folded)
-    {
-        ArgumentNullException.ThrowIfNull(card);
-        folds.Set(card.Id, folded);
-        foldState[card.Id] = folded;
-        KeepingHeader(rows.GetValueOrDefault(card.Id), () => card.SetFolded(folded));
-        ShowFoldAll();
-        ScheduleLiveUpdate();
-    }
-
-    /// <summary>scheduleLiveUpdate: UpdateLive once the UI thread is free.</summary>
-    public void ScheduleLiveUpdate()
-    {
-        if (liveScheduled)
-        {
-            return;
-        }
-        liveScheduled = true;
-        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
-        {
-            liveScheduled = false;
-            UpdateLive();
-        });
-    }
+    /// <summary>issue_card.go openKey: the issue in the browser (a URL of the account's own site, the card checked it); a failure is a toast.</summary>
+    public void OpenIssue(string url) => _ = OpenIssueAsync(url);
 
     /// <summary>The pane's views go for good (the window closes).</summary>
     public void Close()
     {
-        foreach (var t in tokens)
-        {
-            t.Cancel();
-        }
-        tokens.Clear();
-        Services.Attachments.SavingAllChanged -= OnSavingAllChanged;
-        RemoveAll();
-        TrimWebPool(0);
+        ctrl.Changed -= onChanged;
+        ctrl.EntryLoaded -= onLoaded;
+        layoutToken?.Cancel();
+        layoutToken = null;
+        timeline.Close();
+        chat.Close();
         spinnerTimer.Stop();
     }
 
-    private void OnSavingAllChanged(object? sender, MessageId id)
+    // showLayout: the layout the setting asks for: the other one hidden
+    // first (it lets go of what it holds), then the one asked for shown (it
+    // catches up with the controller and opens at its start: the timeline's
+    // top, the chat's end), and the strip follows.
+    private void ShowLayout(bool initial = false)
     {
-        foreach (var c in cards.Values)
+        var on = services.State.Settings.ConversationChatLayout;
+        ShowToggle(on);
+        if (on == chatShown && started && !initial)
         {
-            c.SavingAllChanged(id);
+            return;
+        }
+        started = true;
+        chatShown = on;
+        if (on)
+        {
+            timeline.SetShown(false);
+            timeline.Visibility = Visibility.Collapsed;
+            chat.Visibility = Visibility.Visible;
+            ShowFoldAll(ConversationFoldAll.None);
+            chat.SetShown(true);
+        }
+        else
+        {
+            chat.SetShown(false);
+            chat.Visibility = Visibility.Collapsed;
+            timeline.Visibility = Visibility.Visible;
+            timeline.SetShown(true);
+            ShowFoldAll(timeline.FoldAllOffer);
         }
     }
 
-    // modelChanged: the controller's news.
-    private void ModelChanged(ConversationController.Change change)
+    // The toggle for the chat on or off: its state, its label, tooltip and
+    // accessible name (Conversation.ChatToggleLabel, ChatToggleTooltip).
+    private void ShowToggle(bool on)
+    {
+        ChatToggle.IsChecked = on;
+        var label = Core.Model.Conversation.ChatToggleLabel(on);
+        var tooltip = Core.Model.Conversation.ChatToggleTooltip(on);
+        ChatToggleText.Text = label;
+        ToolTipService.SetToolTip(ChatToggle, tooltip);
+        AutomationProperties.SetName(ChatToggle, label);
+        AutomationProperties.SetHelpText(ChatToggle, tooltip);
+    }
+
+    // A click writes the setting only; the layout and the toggle's state
+    // follow the setting's change (ShowLayout). A click that left the state
+    // where the setting has it already shows the setting's state again.
+    private void OnChatToggleClick(object sender, RoutedEventArgs e)
+    {
+        var on = ChatToggle.IsChecked == true;
+        if (on == services.State.Settings.ConversationChatLayout)
+        {
+            ShowToggle(on);
+            return;
+        }
+        services.State.Settings.ConversationChatLayout = on;
+    }
+
+    // What Collapse All / Expand All offers (None hides it: the chat is
+    // shown, or fewer than two cards fold).
+    private void ShowFoldAll(ConversationFoldAll offer)
+    {
+        var label = offer.Label;
+        FoldAllButton.Content = label;
+        AutomationProperties.SetName(FoldAllButton, label);
+        FoldAllButton.Visibility = offer == ConversationFoldAll.None ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void OnFoldAllClick(object sender, RoutedEventArgs e)
+    {
+        if (!chatShown)
+        {
+            timeline.FoldAll();
+        }
+    }
+
+    // convFanout.changed: the host's own part (the spinner), then both
+    // layouts.
+    private void ControllerChanged(ConversationController.Change change)
     {
         switch (change)
         {
             case ConversationController.Change.Loading:
-                RemoveAll();
+                Hover("");
                 StartSpinner();
                 break;
-            case ConversationController.Change.Opened:
-                StopSpinner();
-                Open();
-                break;
-            case ConversationController.Change.Updated:
-                StopSpinner();
-                Update();
-                break;
             case ConversationController.Change.Cleared:
+                Hover("");
                 StopSpinner();
-                RemoveAll();
-                // The pane shows something else: only a few views wait for
-                // the next conversation, the others' processes end.
-                TrimWebPool(IdleWebViews);
+                break;
+            default:
+                StopSpinner();
                 break;
         }
+        timeline.Changed(change);
+        chat.Changed(change);
     }
 
-    // open: a conversation built anew, laid out from its top.
-    private void Open()
+    // convFanout.loaded: the news of a body, for the layout shown only.
+    private void ControllerEntryLoaded(MessageId id, LoadedMessage lm)
     {
-        RemoveAll();
-        if (ctrl.Model is not { } m)
+        if (chatShown)
         {
-            return;
-        }
-        compact = L.CompactDates(Scroller.ActualWidth);
-        width = Scroller.ActualWidth;
-        Apply(m);
-        Scroller.ChangeView(null, 0, null, disableAnimation: true);
-        ScheduleLiveUpdate();
-    }
-
-    // update: the shown conversation changed; the cards are reconciled by id,
-    // and what the user reads stays in place (the ScrollViewer's anchor).
-    private void Update()
-    {
-        if (ctrl.Model is not { } m)
-        {
-            return;
-        }
-        Apply(m);
-        ScheduleLiveUpdate();
-    }
-
-    // apply: the model's items into the column in the order shown
-    // (DisplayOrder), the draft cards of the user's unsent replies right
-    // under what opened it (Conversation.DraftsFirst), reusing the rows of
-    // the members and drafts shown already, each with its piece of the
-    // timeline; every card folds as the user or the default says
-    // (ConversationFolds.State), and the Collapse All / Expand All button
-    // follows.
-    private void Apply(ConversationModel? m)
-    {
-        if (m is null)
-        {
-            return;
-        }
-        ShowIssue(m);
-        var display = L.DisplayOrder(m.Items);
-        var shown = display.Items;
-        folds.Show(m.Thread);
-        foldState = folds.State(shown, display.Opening);
-        var cardsOfDrafts = ctrl.Drafts;
-        var at = Math.Min(Core.Model.Conversation.DraftsFirst(display.Root), shown.Count);
-        var rails = L.Rails(L.WithDrafts(shown, at, cardsOfDrafts.Count));
-        var monochrome = Services.State.Settings.MonochromeAvatars;
-        var desired = new List<ConversationRow>(shown.Count + cardsOfDrafts.Count);
-        var cardIds = new HashSet<MessageId>();
-        var eventIds = new HashSet<MessageId>();
-        var draftIds = new HashSet<DraftId>();
-        void PutDrafts()
-        {
-            for (var j = 0; j < cardsOfDrafts.Count; j++)
-            {
-                var card = cardsOfDrafts[j];
-                var id = card.Draft.Id ?? default;
-                draftIds.Add(id);
-                if (drafts.TryGetValue(id, out var view) && draftRows.TryGetValue(id, out var existing))
-                {
-                    view.Update(card);
-                }
-                else
-                {
-                    view = new ConversationDraftView(this, card, Look);
-                    drafts[id] = view;
-                    existing = new ConversationRow(view, RailMarker.Avatar, Look);
-                    draftRows[id] = existing;
-                }
-                existing.Show(rails[at + j], card.Sender, monochrome);
-                desired.Add(existing);
-            }
-        }
-        for (var i = 0; i < shown.Count; i++)
-        {
-            if (i == at)
-            {
-                PutDrafts();
-            }
-            var it = shown[i];
-            var rail = rails[i < at ? i : i + cardsOfDrafts.Count];
-            ConversationRow row;
-            switch (it.Kind)
-            {
-                case ConversationItemKind.Truncated:
-                    if (truncatedRow is null)
-                    {
-                        truncated = new TextBlock
-                        {
-                            Style = Look("ConversationCaptionStyle"),
-                            TextWrapping = TextWrapping.Wrap,
-                            Margin = new Thickness(L.CardPaddingH, 0, L.CardPaddingH, 0),
-                        };
-                        truncatedRow = new ConversationRow(truncated, RailMarker.Dot, Look);
-                    }
-                    truncated!.Text = it.Text;
-                    row = truncatedRow;
-                    break;
-                case ConversationItemKind.Message:
-                    {
-                        var id = it.Message!.Id;
-                        cardIds.Add(id);
-                        if (cards.TryGetValue(id, out var c) && rows.TryGetValue(id, out var r) && r.Card is not null)
-                        {
-                            c.Update(it);
-                            row = r;
-                        }
-                        else
-                        {
-                            var card = new ConversationCard(this, it, compact);
-                            cards[id] = card;
-                            events.Remove(id);
-                            row = new ConversationRow(card, RailMarker.Avatar, Look) { Card = card };
-                            ReplaceRow(id, row);
-                            card.Render(Held(id));
-                        }
-                        break;
-                    }
-                case ConversationItemKind.Event:
-                    {
-                        var id = it.Message!.Id;
-                        eventIds.Add(id);
-                        if (events.TryGetValue(id, out var e) && rows.TryGetValue(id, out var r) && r.Card is null)
-                        {
-                            e.Update(it, compact);
-                            row = r;
-                        }
-                        else
-                        {
-                            var ev = new ConversationEventRow(it, compact, Look);
-                            events[id] = ev;
-                            if (cards.Remove(id, out var gone))
-                            {
-                                gone.Detach();
-                            }
-                            row = new ConversationRow(ev, RailMarker.Dot, Look);
-                            ReplaceRow(id, row);
-                        }
-                        break;
-                    }
-                default:
-                    continue;
-            }
-            row.Show(rail, it.Sender, monochrome);
-            if (row.Card is { } rowCard)
-            {
-                rowCard.SetFold(Core.Model.Conversation.Foldable(it), foldState.GetValueOrDefault(rowCard.Id));
-            }
-            desired.Add(row);
-        }
-        if (at == shown.Count)
-        {
-            PutDrafts();
-        }
-        foreach (var id in draftRows.Keys.Where(id => !draftIds.Contains(id)).ToList())
-        {
-            Detach(draftRows[id]);
-            draftRows.Remove(id);
-            drafts.Remove(id);
-        }
-        foreach (var id in cards.Keys.Where(id => !cardIds.Contains(id)).ToList())
-        {
-            cards[id].Detach();
-            cards.Remove(id);
-        }
-        foreach (var id in events.Keys.Where(id => !eventIds.Contains(id)).ToList())
-        {
-            events.Remove(id);
-        }
-        foreach (var id in rows.Keys.Where(id => !cardIds.Contains(id) && !eventIds.Contains(id)).ToList())
-        {
-            Detach(rows[id]);
-            rows.Remove(id);
-        }
-        if (truncatedRow is not null && !desired.Contains(truncatedRow))
-        {
-            Detach(truncatedRow);
-        }
-        // The column after the Collapse All button and the issue card, in the
-        // order shown.
-        var children = Column.Children;
-        for (var i = 0; i < desired.Count; i++)
-        {
-            var r = desired[i];
-            var place = i + HeadViews;
-            var now = children.IndexOf(r);
-            if (now == place)
-            {
-                continue;
-            }
-            if (now >= 0)
-            {
-                children.RemoveAt(now);
-            }
-            else
-            {
-                Scroller.RegisterAnchorCandidate(r);
-            }
-            children.Insert(Math.Min(place, children.Count), r);
-        }
-        items = desired;
-        ShowFoldAll();
-    }
-
-    // The Collapse All / Expand All button for the cards' fold state
-    // (Conversation.FoldAllOffer); hidden while fewer than two fold.
-    private void ShowFoldAll()
-    {
-        foldAll = Core.Model.Conversation.FoldAllOffer(foldState);
-        var label = foldAll.Label;
-        FoldAllButton.Content = label;
-        AutomationProperties.SetName(FoldAllButton, label);
-        FoldAllButton.Visibility = foldAll == ConversationFoldAll.None ? Visibility.Collapsed : Visibility.Visible;
-    }
-
-    // Collapse All or Expand All: every card of the conversation shown folds
-    // or opens (ConversationFolds.SetAll); a card that arrives later starts
-    // as its default. Until the user scrolls the top of the conversation
-    // stays in view; otherwise the item under the viewport's top keeps its
-    // header in view.
-    private void OnFoldAllClick(object sender, RoutedEventArgs e)
-    {
-        if (ctrl.Model is not { } m || foldAll == ConversationFoldAll.None)
-        {
-            return;
-        }
-        var display = L.DisplayOrder(m.Items);
-        folds.SetAll(display.Items, foldAll.Folded);
-        foldState = folds.State(display.Items, display.Opening);
-        KeepingHeader(RowAtTop(), () =>
-        {
-            foreach (var (id, card) in cards)
-            {
-                if (card.Foldable)
-                {
-                    card.SetFolded(foldState.GetValueOrDefault(id));
-                }
-            }
-        });
-        ShowFoldAll();
-        ScheduleLiveUpdate();
-    }
-
-    // The row under the viewport's top; null at the top of the conversation
-    // or above the rows (the button, the issue card).
-    private ConversationRow? RowAtTop()
-    {
-        var top = Scroller.VerticalOffset;
-        foreach (var r in items)
-        {
-            if (SpanOf(r) is { } span && span.Max > top + 0.5)
-            {
-                return span.Min <= top ? r : null;
-            }
-        }
-        return null;
-    }
-
-    // Runs change, which folds or opens cards, and brings row's header back
-    // to the viewport's top when the viewport began inside row (its top
-    // above the viewport's): a card that folds keeps its header where the
-    // user sees it (macOS headerAnchor). At the top of the conversation, and
-    // for a row whose top is in view, the ScrollViewer's own anchoring keeps
-    // what the user reads.
-    private void KeepingHeader(ConversationRow? row, Action change)
-    {
-        var top = Scroller.VerticalOffset;
-        var inside = row is not null && top > 0.5 && SpanOf(row) is { } before && before.Min < top;
-        change();
-        if (!inside)
-        {
-            return;
-        }
-        Scroller.UpdateLayout();
-        if (SpanOf(row!) is { } after)
-        {
-            Scroller.ChangeView(null, Math.Clamp(after.Min, 0, Math.Max(0, Scroller.ScrollableHeight)), null, disableAnimation: true);
-        }
-    }
-
-    // replaceRow: row is member id's; the one it had before (the member was
-    // a card and is an event now, or the other way round) goes.
-    private void ReplaceRow(MessageId id, ConversationRow row)
-    {
-        if (rows.TryGetValue(id, out var old))
-        {
-            Detach(old);
-        }
-        rows[id] = row;
-    }
-
-    // detach: a row out of the column.
-    private void Detach(ConversationRow? r)
-    {
-        if (r is null)
-        {
-            return;
-        }
-        var i = Column.Children.IndexOf(r);
-        if (i >= 0)
-        {
-            Scroller.UnregisterAnchorCandidate(r);
-            Column.Children.RemoveAt(i);
-        }
-    }
-
-    // removeAll: everything out (another conversation, or none).
-    private void RemoveAll()
-    {
-        folds = new ConversationFolds();
-        foldState = [];
-        foldAll = ConversationFoldAll.None;
-        FoldAllButton.Visibility = Visibility.Collapsed;
-        layoutTries = 0;
-        foreach (var c in cards.Values)
-        {
-            c.Detach();
-        }
-        foreach (var r in rows.Values)
-        {
-            Detach(r);
-        }
-        foreach (var r in draftRows.Values)
-        {
-            Detach(r);
-        }
-        Detach(truncatedRow);
-        cards.Clear();
-        events.Clear();
-        rows.Clear();
-        drafts.Clear();
-        draftRows.Clear();
-        items = [];
-        ClearIssue();
-        Hover("");
-    }
-
-    // showIssue: the issue card of a Jira conversation once on top; a mail
-    // conversation has none.
-    private void ShowIssue(ConversationModel m)
-    {
-        if (m.Issue is not { } card || FirstMember(m) is not { } first)
-        {
-            ClearIssue();
-            return;
-        }
-        var state = CardState(card, first.AccountId);
-        if (IssueCard.State is { } shown && issueAccount == first.AccountId && SameCard(shown, state))
-        {
-            return;
-        }
-        issueAccount = first.AccountId;
-        IssueCard.State = state;
-    }
-
-    private void ClearIssue()
-    {
-        issueAccount = null;
-        IssueCard.State = null;
-    }
-
-    // conversation_issue.go conversationIssueCard: the key a link on the
-    // account's own site only, the status pill the Change Status menu on an
-    // account that changes statuses.
-    private IssueCardState CardState(JiraCard card, AccountId account) => new()
-    {
-        Card = card,
-        Account = account,
-        Openable = card.Url.Length > 0 && Jira.IsIssueUrl(card.Url, ctrl.IssueSite(account)),
-        Menu = Services.Issues.CanTransition(account) && card.Status.Length > 0,
-        Busy = card.Key.Length > 0 && Services.Issues.IsBusy(account, card.Key),
-    };
-
-    // The same card, by value (a record compares its lists by reference, and
-    // JiraCard is no API type the JSON context could encode).
-    private static bool SameCard(IssueCardState a, IssueCardState b) =>
-        a.Account == b.Account && a.Openable == b.Openable && a.Menu == b.Menu && a.Busy == b.Busy
-        && a.Card with { Rows = NoRows } == b.Card with { Rows = NoRows }
-        && a.Card.Rows.SequenceEqual(b.Card.Rows);
-
-    private static readonly JiraCardRow[] NoRows = [];
-
-    // convFirstMember: the first member of m, which names the conversation's
-    // account (and its issue).
-    private static MessageSummary? FirstMember(ConversationModel? m) =>
-        m?.Items.FirstOrDefault(it => it.Kind != ConversationItemKind.Truncated)?.Message;
-
-    // issue_card.go openKey: the issue in the browser; a failure is a toast.
-    private async System.Threading.Tasks.Task OpenIssueAsync(string url)
-    {
-        var window = HostWindow;
-        try
-        {
-            await Services.State.Launcher.OpenLinkAsync(url, ReaderServices.Owner(window));
-        }
-        catch (Exception e) when (e is not OutOfMemoryException)
-        {
-            LogOpenIssueFailed(Logger, e.GetType().Name);
-            // TRANSLATORS: %s is a technical error message.
-            Services.ToastIn(window, L10n.T("The link could not be opened: %s", e.Message));
-        }
-    }
-
-    // updateLive: the bodies of the cards near the viewport, web views for
-    // the nearest HTML cards and none for the rest (LiveCards), far entries
-    // let go beyond the controller's budget, the pane's width followed (the
-    // short dates, the documents' reflow).
-    private void UpdateLive()
-    {
-        if (ctrl.Model is null || Visibility != Visibility.Visible || XamlRoot is null)
-        {
-            return;
-        }
-        var w = Scroller.ActualWidth;
-        if (Math.Abs(w - width) >= 0.5)
-        {
-            width = w;
-            var nowCompact = L.CompactDates(w);
-            if (nowCompact != compact)
-            {
-                compact = nowCompact;
-                foreach (var c in cards.Values)
-                {
-                    c.SetCompact(nowCompact);
-                }
-                foreach (var e in events.Values)
-                {
-                    e.SetCompact(nowCompact);
-                }
-            }
-        }
-        var visible = L.Span.Of(Scroller.VerticalOffset, Scroller.VerticalOffset + Scroller.ViewportHeight);
-        var ordered = new List<ConversationCard>();
-        var frames = new List<L.Span>();
-        var html = new List<bool>();
-        var unplaced = false;
-        foreach (var r in items)
-        {
-            if (r.Card is not { } card || card.Folded)
-            {
-                continue; // no body, no view while folded
-            }
-            if (SpanOf(card) is not { } span)
-            {
-                unplaced = true;
-                continue;
-            }
-            ordered.Add(card);
-            frames.Add(span);
-            html.Add(card.IsHtml);
-        }
-        var live = L.LiveCards(frames, html, visible, L.LiveScreens, L.MaxLiveWebViews);
-        var near = new HashSet<MessageId>();
-        for (var i = 0; i < ordered.Count; i++)
-        {
-            var c = ordered[i];
-            c.SetLive(live.Web.Contains(i));
-            if (live.Near.Contains(i))
-            {
-                near.Add(c.Id);
-                ctrl.NeedsBody(c.Id, c.DetailsOpen);
-            }
-        }
-        ctrl.Trim(near);
-        if (unplaced)
-        {
-            AfterLayout();
+            chat.EntryLoaded(id, lm);
         }
         else
         {
-            layoutTries = 0;
-        }
-    }
-
-    // A card's stretch of the column's document; null while it is not laid
-    // out yet, so nothing is decided from a place it does not have.
-    private L.Span? SpanOf(FrameworkElement e)
-    {
-        if (e.Parent is null && e.XamlRoot is null)
-        {
-            return null;
-        }
-        if (e.ActualHeight <= 0 && e.ActualWidth <= 0)
-        {
-            return null;
-        }
-        try
-        {
-            var top = e.TransformToVisual(Document).TransformPoint(new Point(0, 0)).Y;
-            return L.Span.Of(top, top + e.ActualHeight);
-        }
-        catch (ArgumentException)
-        {
-            return null; // not in the tree any more
-        }
-    }
-
-    // afterLayout: UpdateLive again after the next layout (cards that had no
-    // size yet were skipped, and nothing else may come to run it), a bounded
-    // number of times.
-    private void AfterLayout()
-    {
-        if (waitingForLayout || layoutTries >= LayoutTries)
-        {
-            return;
-        }
-        layoutTries++;
-        waitingForLayout = true;
-        Column.LayoutUpdated += OnceLaidOut;
-    }
-
-    private void OnceLaidOut(object? sender, object e)
-    {
-        Column.LayoutUpdated -= OnceLaidOut;
-        waitingForLayout = false;
-        ScheduleLiveUpdate();
-    }
-
-    private void TrimWebPool(int keep)
-    {
-        while (webPool.Count > keep)
-        {
-            var web = webPool[^1];
-            webPool.RemoveAt(webPool.Count - 1);
-            web.Release();
-        }
-    }
-
-    private void ApplyBodyFont()
-    {
-        foreach (var c in cards.Values)
-        {
-            c.ApplyBodyFont();
-        }
-        foreach (var d in drafts.Values)
-        {
-            d.ApplyBodyFont();
+            timeline.EntryLoaded(id, lm);
         }
     }
 
@@ -1003,8 +389,21 @@ internal sealed partial class ConversationView : UserControl
         Spinner.Visibility = Visibility.Collapsed;
     }
 
-    // A style of the pane's resources (ConversationStyles.xaml).
-    private Style Look(string key) => (Style)Resources[key];
+    // issue_card.go openKey: the issue in the browser; a failure is a toast.
+    private async System.Threading.Tasks.Task OpenIssueAsync(string url)
+    {
+        var window = HostWindow;
+        try
+        {
+            await services.State.Launcher.OpenLinkAsync(url, ReaderServices.Owner(window));
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            LogOpenIssueFailed(logger, e.GetType().Name);
+            // TRANSLATORS: %s is a technical error message.
+            services.ToastIn(window, L10n.T("The link could not be opened: %s", e.Message));
+        }
+    }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "opening an issue failed: {Kind}")]
     private static partial void LogOpenIssueFailed(ILogger logger, string kind);

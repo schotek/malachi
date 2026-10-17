@@ -58,7 +58,7 @@ namespace Malachi.App.Reader.Conversation;
 /// <summary>One card of the conversation view.</summary>
 internal sealed partial class ConversationCard : UserControl
 {
-    private readonly ConversationView pane;
+    private readonly ConversationTimelineView pane;
     private readonly AddressHeader addresses = new();
     private readonly MessageChips chips;
     private MessageSummary s;
@@ -91,7 +91,7 @@ internal sealed partial class ConversationCard : UserControl
     private bool renderedAny;
 
     /// <summary>newConvCard: the card of <paramref name="item"/> in <paramref name="pane"/>.</summary>
-    public ConversationCard(ConversationView pane, ConversationItem item, bool compact)
+    public ConversationCard(ConversationTimelineView pane, ConversationItem item, bool compact)
     {
         this.pane = pane;
         this.compact = compact;

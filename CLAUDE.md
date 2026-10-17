@@ -1803,7 +1803,7 @@ z MCP, štítek v seznamu.
 Zobrazení konverzace jako chat (2026-10-17, větev `feat/chat-view`,
 necommitnuté; plán `docs/plans/chat-view.md`, D1–D17, rozhodnutí vlastníka;
 výjimka z pravidla 6: macOS hotové a schválené vlastníkem v bráně B1, GTK
-napsané, Windows rozpracované — W1 Core napsané, W2 App se píše). Konverzace
+napsané, Windows napsané bez překladu). Konverzace
 má druhé rozložení vedle časové osy (ta zůstává beze změny a výchozí): cizí
 zprávy jako bubliny vlevo, moje a odpovědi z Odeslaných vpravo, koncepty na
 konci, události Jiry a řádek starších zpráv uprostřed, od nejstarší, otevřeno
@@ -1863,7 +1863,27 @@ s `FakeImportC` a revize kódu; nic nesestaveno ani nespuštěno. Čeká (G3 v
 kontejneru): `scripts/gtk-container/gtk.sh make build`, `gtk.sh test-ui`
 včetně smoke testu, `make po` (má změnit jen odkaz
 `conversation_view.ui:77` v `po/malachi.pot`) a `make lint`; pak B2 vlastníka
-v XQuartz. Windows podle plánu §6.2 (W1–W3), pak B3.
+v XQuartz. Windows (W1–W2, `docs/windows-port.md` §11.7 „The chat layout“,
+`docs/plans/chat-view.md` §8): Core `Malachi.Core/Model/` `ChatSide`,
+`ChatRowKind`, `ChatRow`, `Conversation.Chat.cs` (port `chat.go`, 4 msgid už
+nejsou v exclusions), Swift-first `Conversation.ChatBody.cs`, `BubbleBody`,
+`BubbleAttachments`, `ConversationLayout.Chat.cs`/`.ChatResize.cs`, glyf
+`malachi-chat` E8F2, `SettingsStore.ConversationChatLayout` (44 klíčů). App
+`Reader/Conversation/`: `ConversationView` je hostitel (pruh v řádku 0 s
+`FoldAllButton` a `ToggleButton ChatToggle`, obě rozložení v řádku 1, jediný
+odběratel `Changed`/`EntryLoaded`, `Trim` jen zobrazeného rozložení, karta
+issue na rozložení přes `ConversationIssueBox`, jeden spinner), dosavadní
+časová osa je `ConversationTimelineView` (`HeadViews` 1), chat
+`ConversationChatView` (`VerticalAnchorRatio` 1, otevření na konci, držení
+konce a místa čtení, `ChatResizeFor`, blízká těla přes `LiveCards`),
+`ConversationChatRow`/`ConversationChatCenterRow`/`ConversationBubbleView`
+(`TextBlock` bez výběru, dvojklik přes `AfterRelease`), štětce nádechu ve
+`ConversationStyles.xaml`. Odchylky (`windows/README.md`): kotva dole,
+skrytá časová osa ořezává i zásobník webových pohledů, přepínač s nádechem
+zvýraznění. Testy `ConversationChatTests`, `ConversationLayoutTests`,
+UI smoke `ConversationChatSmokeTests` (`MALACHI_DEVMAIL`). Napsáno bez
+`dotnet`, jen revize kódu; čeká `build.ps1 app`/`test`/`lint`, UI smoke s
+`MALACHI_DEVMAIL`, ruční průchod (viz sekce v `windows-port.md`) a B3.
 
 Archivace v Poště = Hotovo (2026-10-13, `feat/board`, necommitnuté; jen
 démon, klienti beze změny — všechny tři to dostanou přes

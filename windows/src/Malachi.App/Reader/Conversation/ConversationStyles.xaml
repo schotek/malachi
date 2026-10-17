@@ -10,7 +10,14 @@ timeline's line and dots (alpha(currentColor, 0.3): the disabled text
 colour), the card's small flat buttons (.conversation-card-button: 24 wide,
 20 high), the sender (.conversation-sender: semibold), the unread dot, the
 texts in small secondary type, and the frame of a draft card (a message
-card's, for the card built in code). Merged into the conversation view with
+card's, for the card built in code); for the chat layout
+(docs/plans/chat-view.md D3, D6; macOS ConversationBubbleView.swift and
+ConversationTint, GTK convCSS .chat-bubble, .chat-bubble-mine,
+.chat-placeholder) the bubble's frame, the user's own bubble (the card's
+fill under a tint of the accent colour at 12 % and a border of the accent
+colour; high contrast: the window's colours and the highlight's border),
+the dimmed placeholder, and the paperclip pill (the issue pill in the bulk
+tag's colours). Merged into the conversation view with
 ChipStyles.xaml, so that the theme resources follow the window's colour
 scheme; not into App.xaml.
 -->
@@ -19,7 +26,8 @@ scheme; not into App.xaml.
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!-- The recipients' disclosure is a flat toggle: open, it keeps the
          subtle tint of a pressed flat button rather than WinUI's accent
-         block (GTK's flat toggle). The view has no other ToggleButton.
+         block (GTK's flat toggle). The layout toggle of the strip
+         overrides these in its own resources (ConversationView.xaml).
          High contrast keeps WinUI's own. -->
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Default">
@@ -32,6 +40,8 @@ scheme; not into App.xaml.
             <StaticResource x:Key="ToggleButtonBorderBrushChecked" ResourceKey="SubtleFillColorTransparentBrush" />
             <StaticResource x:Key="ToggleButtonBorderBrushCheckedPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
             <StaticResource x:Key="ToggleButtonBorderBrushCheckedPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+            <SolidColorBrush x:Key="ConversationMineBubbleTintBrush" Opacity="0.12" Color="{ThemeResource SystemAccentColorLight2}" />
+            <StaticResource x:Key="ConversationMineBubbleBorderBrush" ResourceKey="AccentFillColorDefaultBrush" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
             <StaticResource x:Key="ToggleButtonBackgroundChecked" ResourceKey="SubtleFillColorSecondaryBrush" />
@@ -43,8 +53,13 @@ scheme; not into App.xaml.
             <StaticResource x:Key="ToggleButtonBorderBrushChecked" ResourceKey="SubtleFillColorTransparentBrush" />
             <StaticResource x:Key="ToggleButtonBorderBrushCheckedPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
             <StaticResource x:Key="ToggleButtonBorderBrushCheckedPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+            <SolidColorBrush x:Key="ConversationMineBubbleTintBrush" Opacity="0.12" Color="{ThemeResource SystemAccentColorDark1}" />
+            <StaticResource x:Key="ConversationMineBubbleBorderBrush" ResourceKey="AccentFillColorDefaultBrush" />
         </ResourceDictionary>
-        <ResourceDictionary x:Key="HighContrast" />
+        <ResourceDictionary x:Key="HighContrast">
+            <SolidColorBrush x:Key="ConversationMineBubbleTintBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="ConversationMineBubbleBorderBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+        </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
     <Style x:Key="ConversationLineStyle" TargetType="Rectangle">
         <Setter Property="Width" Value="1" />
@@ -100,5 +115,58 @@ scheme; not into App.xaml.
     <Style x:Key="ConversationCaptionStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+    </Style>
+    <!-- A bubble of the chat (ConversationBubbleView): someone else's is a
+         card, 1 px inside it to the padding of a card's header (13, 9). -->
+    <Style x:Key="ConversationBubbleStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
+    </Style>
+    <!-- The user's own bubble: the card's fill under the tint (its inner
+         layer, ConversationMineTintStyle) and a border of the accent colour. -->
+    <Style x:Key="ConversationMineBubbleStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource ConversationMineBubbleBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
+    </Style>
+    <Style x:Key="ConversationMineTintStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource ConversationMineBubbleTintBrush}" />
+        <Setter Property="CornerRadius" Value="9" />
+    </Style>
+    <!-- The bubble's text: the theme's text, or the snippet dimmed while the
+         body is not there (.chat-placeholder). -->
+    <Style x:Key="ConversationBubbleTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="IsTextSelectionEnabled" Value="False" />
+    </Style>
+    <Style x:Key="ConversationBubblePlaceholderStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="IsTextSelectionEnabled" Value="False" />
+    </Style>
+    <!-- The paperclip pill of a bubble's header (macOS ConversationClipPill):
+         an issue pill, a little tighter at the sides, in the bulk tag's
+         colours (BulkPillForegroundBrush on the plain fill). -->
+    <Style
+        x:Key="ConversationClipPillStyle"
+        BasedOn="{StaticResource IssuePillBorderStyle}"
+        TargetType="Border">
+        <Setter Property="Padding" Value="6,1,6,1" />
+    </Style>
+    <Style x:Key="ConversationClipIconStyle" TargetType="FontIcon">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="{ThemeResource BulkPillForegroundBrush}" />
+    </Style>
+    <Style
+        x:Key="ConversationClipCountStyle"
+        BasedOn="{StaticResource IssuePillTextStyle}"
+        TargetType="TextBlock">
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="{ThemeResource BulkPillForegroundBrush}" />
     </Style>
 </ResourceDictionary>

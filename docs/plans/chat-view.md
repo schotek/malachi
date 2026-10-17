@@ -300,6 +300,10 @@ a vlastník. Commit 1 už nese klíč a exclusions pro Windows (T2), aby
   bubliny je pilulka s počtem (`Conversation.bubbleAttachmentBadge`).
 - 2026-10-17 GTK G1–G2 napsané bez překladu (hostitel, pruh, chat, testy,
   smoke test); odchylky v §7; čeká G3 v kontejneru, pak B2.
+- 2026-10-17 Windows W1–W2 napsané bez `dotnet` (Core, hostitel, časová
+  osa, chat, bubliny, testy, smoke test) a prošlé revizí čtením; odchylky
+  v §8; čeká `build.ps1 app`/`test`/`lint`, UI smoke s `MALACHI_DEVMAIL`,
+  ruční průchod a B3.
 
 ## 7. As built — GTK (G1–G2)
 
@@ -338,3 +342,58 @@ container. Deviations from the rows of §6.2:
 Tests: `conversation_chat_test.go` and `conversation_chat_layout_test.go`
 over a fake `convWindow`; `MALACHI_GTK_SMOKE=1 TestConversationChatGTKSmoke`
 (real Blueprint, both layouts, toggle through the setting).
+
+## 8. As built — Windows (W1–W2)
+
+Written 2026-10-17 on the Mac without `dotnet` (from the macOS client, the
+GTK port and the Go reference, then read through by a reviewer); nothing
+under `windows/` has been compiled or run. `docs/windows-port.md` §11.7
+("The chat layout") describes the code; deviations from the rows of §6.2
+and from the other clients:
+
+- **Core**: the files are `ChatSide.cs`, `ChatRowKind.cs`, `ChatRow.cs`,
+  `Conversation.Chat.cs` (W1, port of `chat.go`) and the Swift-first
+  `Conversation.ChatBody.cs`, `BubbleBody.cs`, `BubbleAttachments.cs`,
+  `ConversationLayout.Chat.cs`, `ConversationLayout.ChatResize.cs`, not a
+  change to `ConversationLayout.cs`. Swift's `bubbleBody` and `chatResize`
+  are `BubbleBodyFor` and `ChatResizeFor`, the types they return being
+  `BubbleBody` and `ConversationLayout.ChatResize`. The glyph `malachi-chat`
+  (E8F2) is in `IconGlyphs`; the four msgids are out of
+  `windows/parity-exclusions.txt`, the gschema lines stay.
+- **Type names are the Swift ones**, not the `ChatBubble.cs` that row W2 names:
+  `ConversationBubbleView`, `ConversationChatRow` (avatar and bubble) and
+  `ConversationChatCenterRow`, because Core already has `ChatRow`;
+  `ConversationGroupPeer` is Windows-only (automation peer of the layouts
+  and bubbles). The centred row shows the lines of the change and then
+  "sender · date", as macOS.
+- **Host**: `ConversationView` stayed the class the reader holds and is the
+  host (strip in row 0 with `FoldAllButton` and `ChatToggle`, both layouts in
+  row 1); the old timeline is `ConversationTimelineView` (`HeadViews` 2→1).
+  The layouts' method for the controller's news of a body is `EntryLoaded`,
+  not `Loaded` (which would hide `FrameworkElement.Loaded`), and the rows'
+  is `SetColumnWidth`. One spinner in the host, as GTK (macOS has one per
+  layout). `ConversationIssueBox` drives the existing `IssueCardView`, one
+  per layout, as in macOS and GTK. `ReaderHub` did not change.
+- **Hidden timeline** also trims its pool of card views to the two idle ones
+  (`IdleWebViews`); GTK only lets go of the web views of its cards.
+- **Chat scrolling**: the `ScrollViewer` has `VerticalAnchorRatio="1"` on
+  top of the explicit moves (open at the end via `ChatEndTop`, follow the end
+  while pinned, keep the row read otherwise, `ChatResizeFor`); the pin ends
+  on the wheel, a press or a touch. Unverified that the anchor and the moves
+  do not fight.
+- **Toggle**: a `ToggleButton` with the chat glyph and the name of the
+  layout a click shows; checked, the accent tint through the button's own
+  brush resources (light, dark; high contrast keeps the system look), where
+  GTK uses the native checked state. Bubble tint likewise
+  (`ConversationMineBubbleTintBrush`, high contrast without tint and with the
+  system highlight as border).
+- **Double tap** on a bubble runs through `AfterRelease` (the window opens
+  when the second press is released), as the timeline's cards and the list.
+- **Tests**: `Model/ConversationChatTests.cs` (port of `chat_test.go` and
+  the Swift tests), `ConversationLayoutTests` (chat measures),
+  `ConversationChatSmokeTests` with `ConversationChatFixture` (opt-in,
+  `MALACHI_DEVMAIL`; `DevmailFixture.RepositoryRoot` and `AddAccountAsync`
+  became `internal` for it).
+- **Pending**: `build.ps1 app`/`test`/`lint`, the smoke test, the manual
+  pass listed in `docs/windows-port.md` §11.7, then B3 (plus Shift+F10 on a
+  bubble does nothing, dark theme, 125 % scale).
