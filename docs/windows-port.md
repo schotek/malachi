@@ -3157,7 +3157,8 @@ and so does New Event's Ctrl+Shift+N (`ShortcutCommand.NewEvent`, the main
 window's in every mode and gated by `Board.Allows`; the page and the panes
 have no accelerator of their own for it).
 
-**The UI smoke tests** (§12), written for this port and not yet run:
+**The UI smoke tests** (§12), written for this port; those over the samples
+ran on 2026-10-17 (the verification status below):
 `CalendarSmokeFixture` starts one app with `MALACHI_CALENDAR_SAMPLES=1`
 for `CalendarSmokeTests` (Ctrl+3, the switch and the sidebar, the four
 views, Today and the arrows changing the title, a click selecting a block,
@@ -3178,24 +3179,34 @@ its card with Accept, and
 a row with real input (`Uia.DoubleClick`, the second press held) and
 expects the message window in front of the main window.
 
-**Verification status (2026-10-16).** Written by a team of agents on the
+**Verification status (2026-10-17).** Written by a team of agents on the
 Windows machine (Windows 11, .NET SDK 10.0.400). Every project builds with
-no warning; the Core suite (about 7,430 tests, 9 skipped as always; about
-614 in `Malachi.Core.Tests.Calendars`, the rest of the calendar's in
-`Controllers/Calendar*Tests` and `Boards/CalendarModeTests`) and the
-conventions tests (27, `StringsCheckTests` and `GschemaCoverageTests` among
-them; `windows/parity-exclusions.txt` has no "calendar: Windows port
-pending" line left, and `SettingsTests` counts 43 schema keys) pass;
-`dotnet format --verify-no-changes` is clean. Not run: the UI smoke tests
-above, `build.ps1 app`, `test` and `lint` (heavy runs wait for the owner's
-permission), and the app itself: nobody has started it with
-the calendar, so no layout, flyout, dialog, toast or key of this section
-has been seen, the flyout kept open under a question by cancelling its
-`Closing` included. Closed since: the Mail sidebar leaves calendar-only
+no warning and `build.ps1 app` has published the app several times;
+`build.ps1 lint` passes (`dotnet format --verify-no-changes` is clean and
+the conventions tests, 27/27, `StringsCheckTests` and `GschemaCoverageTests`
+among them; `windows/parity-exclusions.txt` has no "calendar: Windows port
+pending" line left, and `SettingsTests` counts 43 schema keys); the Core
+suite passes (7,433 tests, 9 skipped as always; about 614 in
+`Malachi.Core.Tests.Calendars`, the rest of the calendar's in
+`Controllers/Calendar*Tests` and `Boards/CalendarModeTests`); and the
+calendar UI smoke tests over `MALACHI_CALENDAR_SAMPLES=1` ran: 26 tests,
+0 failed, 1 skipped (the Today-strip row test skips on weekends). The owner
+tried the published app with his real Microsoft 365 (Graph) and Nextcloud
+(CalDAV) accounts, and his findings are the four fixes above: the saturated
+block colours with the 4.5:1 text rule, tentative as a light fill with a
+hatched bar, the `Reflect` hatch (verified by pixel-sampled screenshots of
+an isolated instance) and windows opened by a double click shown after the
+pointer's release (the event editor and the Mail message window; verified
+with real input). Closed since: the Mail sidebar leaves calendar-only
 CalDAV accounts out (`FolderTree.MailSidebarAccounts`, the port of
 macOS's `mailSidebarAccounts`), and Ctrl+Shift+N reaches the window from a
-WebView2 (above). Then the owner tests his real accounts (Microsoft 365
-through Graph, Nextcloud through CalDAV) himself.
+WebView2 (above). Not verified: the hatch in the dark theme and at display
+scales other than 100 %, touch and pen double taps, declined and cancelled
+blocks on screen (the samples cannot show them), the flyout kept open under
+a question by cancelling its `Closing`, a full `build.ps1 test` run (the
+failures left in `Malachi.Platform.Windows.Tests`, four key-file and
+real-daemon tests and one shell-verdict file-type test, are environmental
+and predate the port) and ARM64.
 
 ## 12. Tests
 
@@ -3887,10 +3898,10 @@ hardware (above). The Board adds nothing to the licence, signing or
 installer items.
 
 The Calendar, where the client trailed the daemon's API until 2026-10-16,
-is ported (§11.9) and built, and its Core and conventions tests pass, but
-its UI has not run: open are the UI smoke tests that cover it,
-`build.ps1 app`, `test` and `lint`, a first start over the samples with a
-walk through every view (the two gaps §11.9 named, a CalDAV account in the
-Mail sidebar and Ctrl+Shift+N from a WebView2, are closed), and the
-owner's own check with his real accounts (Microsoft 365 through Graph,
-Nextcloud through CalDAV); ARM64 as for the rest of the client (above).
+is ported (§11.9) and built, `build.ps1 app` publishes it, and its Core,
+conventions and calendar UI smoke tests pass; the owner has tried it with
+his real accounts (Microsoft 365 through Graph, Nextcloud through CalDAV)
+and his findings are fixed. Open: a full `build.ps1 test` run, the hatch in
+the dark theme and at display scales other than 100 %, touch and pen
+double taps, declined and cancelled blocks on screen (§11.9 lists them);
+ARM64 as for the rest of the client (above).

@@ -449,9 +449,12 @@ Pořadí prací:
 11. Kalendář (Microsoft 365 přes Graph, CalDAV, pozvánky v poště, MCP)
     — démon a macOS hotové a ověřené vlastníkem (`feat/calendar`,
     2026-10-16); GTK port hotový a ověřený vlastníkem v XQuartz
-    (2026-10-17); Windows port napsaný a sestavený na Windows
-    (2026-10-16/17), čekají UI smoke testy, `build.ps1 app`/`test`/`lint`
-    a test vlastníka se skutečnými účty
+    (2026-10-17); Windows port napsaný, sestavený a prošlý na Windows
+    (2026-10-16/17): `build.ps1 app` a `lint`, sada Core a UI smoke testy
+    nad vzorky zelené, vlastník ho zkoušel nad svým M365 a Nextcloudem
+    (jeho nálezy jsou opravené); zbývá celé `build.ps1 test`, tmavý motiv
+    a jiná měřítka displeje, dotyk a pero, odmítnuté a zrušené bloky
+    na obrazovce a ARM64
 
 Asistent (stav 2026-09-30, sloučeno do `main`; uživatel potvrdil, že
 funguje ve všech třech klientech). Na macOS je hotové a uživatelem otestované:
@@ -1869,8 +1872,9 @@ bezpečnost `docs/security.md` §4.3). Démon a macOS klient jsou hotové
 a vlastníkem ověřené nad skutečnými účty (M365 přes Graph i Nextcloud
 přes CalDAV); GTK klient je hotový a vlastník ho prošel proti svým účtům
 v okně XQuartz (viz GTK klient kalendáře níže); Windows klient je
-portovaný, sestavený a s testy Core zelenými, jeho UI zatím neběželo (viz
-Windows klient kalendáře níže). Oba porty přišly až po macOS (výjimka
+portovaný, sestavený a otestovaný na Windows a vlastník ho zkoušel nad
+svými účty M365 a Nextcloud (viz Windows klient kalendáře níže). Oba
+porty přišly až po macOS (výjimka
 z pravidla 6 jako u nástěnky; `.blp` a Go reference `ui/internal/calendar`
 jsou mustr, macOS zdroj portu). Zdroje: Microsoft 365
 přes Graph na existujícím účtu `kind: graph` (přepínač `calendar.sync`,
@@ -2040,7 +2044,7 @@ Windows klient kalendáře (2026-10-16, `feat/calendar`; port macOS klienta
 podle pravidla 6 a `docs/calendar.md` §6.4, napsaný týmem agentů na stroji
 s Windows 11 a .NET SDK 10.0.400; poznámky „As built on Windows“ W2–W9
 v `docs/calendar.md` §5, `docs/windows-port.md` §11.9, odchylky v tabulce
-`windows/README.md` a jeho oddíl The Calendar; necommitnuté): zrcadlo API
+`windows/README.md` a jeho oddíl The Calendar): zrcadlo API
 `Malachi.Core/Api/Calendar.cs` (Go `Event` = `CalendarEvent`, `EventID`
 a `AlertID` = `CalendarEventId` a `CalendarAlertId`, `Date` = `CalendarDate`,
 `TimeZone` = `TimeZoneName`; vložené `Occurrence` a `InvitationSummary`
@@ -2188,32 +2192,38 @@ macOS M9). Testy: `tests/Malachi.Core.Tests/Calendars/*` (Go testy 1:1
 a případy Swiftu, asi 614), `Controllers/Calendar*Tests`,
 `Boards/CalendarModeTests`, `Platform.Windows.Tests/Notifications/
 CalendarAlertArgumentsTests` a `InvitationArgumentsTests`. Ověřeno na
-tomto stroji: všechny projekty se staví bez varování, sada Core (~7 430
-testů, 9 přeskočených jako vždy) a konvenční testy (27, včetně
-`StringsCheckTests` a `GschemaCoverageTests`; v
-`windows/parity-exclusions.txt` nezůstal žádný řádek „calendar: Windows port
-pending“) zelené, `dotnet format --verify-no-changes` čistý. Neověřeno:
-UI smoke testy nad `MALACHI_CALENDAR_SAMPLES=1` (`CalendarSmokeFixture`,
+tomto stroji (2026-10-17): všechny projekty se staví bez varování,
+`build.ps1 app` aplikaci opakovaně publikoval, `build.ps1 lint` prošel
+(formát čistý a konvenční testy 27/27, včetně `StringsCheckTests` a
+`GschemaCoverageTests`; v `windows/parity-exclusions.txt` nezůstal žádný
+řádek „calendar: Windows port pending“), sada Core je zelená (7 433
+testů, 9 přeskočených jako vždy) a UI smoke testy kalendáře nad
+`MALACHI_CALENDAR_SAMPLES=1` (`CalendarSmokeFixture`,
 `CalendarSmokeTests`, `CalendarDetailSmokeTests`,
 `CalendarInvitationSmokeTests` s `CalendarBoardSmokeFixture` nad oběma
-sadami vzorků, `CalendarPreferencesSmokeTests`, devmail
-`DevmailTests.AnInvitationShowsItsCardWithAccept`, který pošle surovou
-pozvánku `.ics` přes SMTP, `DevmailSmtp`) jsou napsané, ne spuštěné;
-`build.ps1 app`/`test`/`lint` neběžely (těžké běhy jen se svolením
-vlastníka); aplikaci s kalendářem zatím nikdo nespustil, takže žádné
-rozložení, flyout, dialog, toast ani klávesa nebyly vidět. Mezery jsou
-zavřené: poštovní postranní panel CalDAV účty vynechává
+sadami vzorků, `CalendarPreferencesSmokeTests`) proběhly: 26 testů,
+0 selhání, 1 přeskočený (test řádku pruhu Dnes se o víkendu přeskakuje).
+Vlastník zkoušel publikovanou aplikaci se svým M365 (Graph) i Nextcloudem
+(CalDAV) a podle jeho nálezů přibyly čtyři opravy: syté barvy bloků
+s pravidlem textu 4,5:1, nezávazné jako světlá výplň se šrafovaným
+proužkem, šrafování s `Reflect` (WinUI při kreslení přechodu `Repeat`
+zpolovičí ostatní plné barvy téhož průchodu; ověřeno změřenými snímky
+izolované instance) a okna otevřená dvojklikem (editor i okno zprávy
+v Poště), která se ukážou až po uvolnění tlačítka myši (ověřeno skutečným
+vstupem). Mezery jsou zavřené: poštovní postranní panel CalDAV účty vynechává
 (`FolderTree.MailSidebarAccounts`, port macOS `mailSidebarAccounts`);
 Ctrl+Shift+N je v `ShortcutMap` (`ShortcutCommand.NewEvent`, hlavní okno
 v každém režimu za `Board.Allows`, akcelerátory stránky zrušené; testy
 `CtrlShiftNIsNewEventOfTheMainWindowOnly`
 a `NewEventIsShortcutMapsChordInEveryMode`), takže do okna dojde, i když
 klávesnici drží WebView2; hlavička `Shell/AppState.Calendar.cs` popisuje
-vstupní body tak, jak fungují. Čeká: svolení k `build.ps1 app`, `test`
-a `lint` a k UI smoke testům, první spuštění se vzorovými daty a průchod
-všemi pohledy, pak vlastník nad kopií dat se skutečnými účty (M365 přes
-Graph, Nextcloud přes CalDAV). GTK port vznikl souběžně na Macu (GTK
-klient kalendáře výše).
+vstupní body tak, jak fungují. Neověřeno: šrafování v tmavém motivu
+a při jiném měřítku displeje než 100 %, dvojtapy dotykem a perem,
+odmítnuté a zrušené bloky na obrazovce (vzorky je neukážou), celé
+`build.ps1 test` (zbylá selhání v `Malachi.Platform.Windows.Tests`, čtyři
+testy souboru s klíčem a skutečného démona a jeden test typu souboru
+v shell verdiktu, jsou prostředí a předcházejí port) a ARM64. GTK port
+vznikl souběžně na Macu (GTK klient kalendáře výše).
 
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně

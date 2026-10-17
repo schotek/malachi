@@ -16,8 +16,12 @@ through it in an XQuartz window against his real accounts (a native
 test daemon over a copy of his data); his findings are fixed (§5.12,
 the last bullets); the GTK port touched nothing under `windows/`. The
 Windows client was ported on 2026-10-16 on the owner's Windows machine
-(§6.4, and the notes "As built on Windows" W2–W9 in §5): it builds,
-its Core and conventions tests pass, and its UI has not run yet.
+(§6.4, and the notes "As built on Windows" W2–W9 in §5): it builds and
+`build.ps1 app` publishes it, its Core, conventions and calendar UI smoke
+tests pass, and the owner tried it against his real Microsoft 365 and
+Nextcloud accounts (his findings are fixed); a full `build.ps1 test` run,
+the dark theme and other display scales, touch and pen, and ARM64 are not
+verified.
 
 Contents:
 
@@ -3796,23 +3800,32 @@ and with devmail `DevmailTests.AnInvitationShowsItsCardWithAccept`, which
 submits a raw `.ics` invitation over SMTP. The client's side of it is in
 docs/windows-port.md §11.9 and the deviations in `windows/README.md`.
 
-Verification status of the Windows port: every project builds with no
-warning; the Core suite (about 7,430 tests, 9 skipped as always; about 614
-of them in `Calendars/`) and the conventions tests (27, `StringsCheckTests`
-and `GschemaCoverageTests` among them) pass; `dotnet format
---verify-no-changes` is clean. Not run: the UI smoke tests (written only),
-`build.ps1 app`, `test` and `lint` (heavy runs wait for the owner's
-permission), and the app itself, which nobody has started with the
-calendar yet, so no view, flyout, dialog, toast or key of §5.3–§5.9 has
-been seen on Windows. Closed since: the Mail sidebar leaves calendar-only
+Verification status of the Windows port (2026-10-17): every project builds
+with no warning and `build.ps1 app` has published the app several times;
+`build.ps1 lint` passes (`dotnet format --verify-no-changes` is clean and
+the conventions tests, 27/27, `StringsCheckTests` and `GschemaCoverageTests`
+among them); the Core suite passes (7,433 tests, 9 skipped as always;
+about 614 of them in `Calendars/`); and the calendar UI smoke tests over
+`MALACHI_CALENDAR_SAMPLES=1` ran: 26 tests, 0 failed, 1 skipped (the
+Today-strip row test skips on weekends). The owner then tried the
+published app with his real Microsoft 365 (Graph) and Nextcloud (CalDAV)
+accounts, and his findings are fixed: saturated block colours with the
+4.5:1 text rule, tentative as a light fill with a hatched bar, the hatch
+spread by `Reflect` (WinUI halves the other solid colours of a render pass
+under a `Repeat` gradient; verified by pixel-sampled screenshots of an
+isolated instance), and windows opened by a double click shown after the
+pointer's release (the event editor and the Mail message window; verified
+with real input). Closed since: the Mail sidebar leaves calendar-only
 CalDAV accounts out (`FolderTree.MailSidebarAccounts`, W4), and
 Ctrl+Shift+N is `ShortcutMap`'s `NewEvent`, so it reaches the window
 while a WebView2 has the keyboard (W3).
-What remains: the UI smoke runs and `build.ps1 app`/`test`/`lint` once
-the owner allows them, a first start over the samples, then the owner's
-own test with his real accounts (Microsoft 365 through Graph, Nextcloud
-through CalDAV) over a copy of his data. The GTK port followed on
-2026-10-17 (§6.5, as built in §5.12).
+Not verified: the hatch in the dark theme and at display scales other than
+100 %, touch and pen double taps, declined and cancelled blocks on screen
+(the samples cannot show them), a full `build.ps1 test` run (the failures
+left in `Malachi.Platform.Windows.Tests`, four key-file and real-daemon
+tests and one shell-verdict file-type test, are environmental and predate
+the port) and ARM64. The GTK port followed on 2026-10-17 (§6.5, as built
+in §5.12).
 
 ### 6.5 The GTK port: tasks G1–G20 (plan 2026-10-17)
 

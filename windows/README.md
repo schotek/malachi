@@ -770,17 +770,20 @@ this week's events, three unanswered invitations) instead of the daemon's,
 for looking at the layout without accounts; whatever would write says
 *The preview cannot do that.*
 
-Verification status (2026-10-16): written by the port's agents on a
-Windows 11 machine; every project builds with no warning, the Core tests
-(about 7,430, of them about 614 in the calendar's namespace) and the
-conventions tests pass, and `dotnet format --verify-no-changes` is clean.
-Not run yet: the UI smoke tests over the samples (`CalendarSmokeTests`,
-`CalendarDetailSmokeTests`, `CalendarInvitationSmokeTests`,
-`CalendarPreferencesSmokeTests`, and with devmail an invitation's card),
-which are written; `build.ps1 app`, `test` and `lint`; and the app itself,
-which nobody has started with the calendar, so none of the above has been
-seen on screen. The owner tests his real accounts (Microsoft 365 through
-Graph, Nextcloud through CalDAV) afterwards.
+Verification status (2026-10-17): written by the port's agents on a
+Windows 11 machine; every project builds with no warning, `build.ps1 app`
+publishes the app, `build.ps1 lint` passes, the Core tests (7,433, of them
+about 614 in the calendar's namespace) pass, and the UI smoke tests over
+the samples (`CalendarSmokeTests`, `CalendarDetailSmokeTests`,
+`CalendarInvitationSmokeTests`, `CalendarPreferencesSmokeTests`) ran: 26
+tests, none failed, one skipped (the Today-strip row test skips on
+weekends). The owner tried the app with his real Microsoft 365 (Graph) and
+Nextcloud (CalDAV) accounts, and his findings are fixed. Not verified: the
+tentative hatch in the dark theme and at display scales other than 100 %,
+touch and pen double taps, declined and cancelled blocks on screen (the
+samples cannot show them), a full `build.ps1 test` run (the failures left
+in `Malachi.Platform.Windows.Tests` are environmental and predate the
+port) and ARM64 on real hardware.
 
 ### Inbox date sections (native verification pending)
 
