@@ -88,8 +88,9 @@ var _ calsync.Provider = (*CalendarProvider)(nil)
 // rows (calsync.Versioned): bump whenever the mapping of Graph events to
 // stored rows changes, so that the engine lists every calendar again.
 // 2: all-day dates, deduplicated locations, the user's own response in
-// calendars of others.
-const graphDataVersion = 2
+// calendars of others. 3: an item naming its series is always an
+// instance of it (an override when it is an exception), never a single.
+const graphDataVersion = 3
 
 // DataVersion implements calsync.Versioned.
 func (p *CalendarProvider) DataVersion() int { return graphDataVersion }

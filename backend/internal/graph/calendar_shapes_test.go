@@ -187,3 +187,33 @@ func TestCalendarProviderIsVersioned(t *testing.T) {
 		t.Fatalf("versioned %v", ok)
 	}
 }
+
+// Instances that name their series stay members of it even when the
+// service sends no (or an unexpected) type: the exception becomes an
+// override with its original start as recurrence id, the plain
+// occurrences are the series' own expansion, nothing is a single.
+func TestCalendarInstancesWithoutTypeJoinTheirSeries(t *testing.T) {
+	f := newFakeCal(t)
+	f.calendars = []map[string]any{{"id": "CAL-A", "isDefaultCalendar": true}}
+	seedSeries(f, "CAL-A")
+	for _, id := range []string{"O1", "O2", "O3"} {
+		f.edit(id, map[string]any{"type": nil, "iCalUId": "uid-M1"})
+	}
+	f.edit("O3", map[string]any{"type": "singleInstance"})
+	p := f.provider(CalendarProviderOptions{})
+	sink := &recSink{}
+	if _, err := p.Sync(context.Background(), storedCal("CAL-A", true), calWin, sink); err != nil {
+		t.Fatal(err)
+	}
+	if len(sink.upserts) != 1 {
+		t.Fatalf("%d objects, want the series only", len(sink.upserts))
+	}
+	ser := sink.byID("M1")
+	evs := calsync.StoreEvents(*ser)
+	if len(evs) != 2 || evs[0].Kind != "master" || evs[1].Kind != "override" || evs[1].RecurrenceID == "" || evs[1].RemoteID != "M1" {
+		t.Fatalf("rows %+v", evs)
+	}
+	if ser.Overrides[0].RecurrenceID != "2026-10-19T08:00:00Z" || len(ser.Occurrences) != 3 {
+		t.Errorf("series %+v", ser)
+	}
+}

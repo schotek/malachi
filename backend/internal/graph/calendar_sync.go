@@ -63,6 +63,7 @@ func (p *CalendarProvider) pages(ctx context.Context, first string, prio Priorit
 			return "", err
 		}
 		for i := range pg.Value {
+			normaliseType(&pg.Value[i])
 			if err := fn(&pg.Value[i]); err != nil {
 				return "", err
 			}
@@ -87,6 +88,7 @@ func (p *CalendarProvider) getEvent(ctx context.Context, id string, prio Priorit
 	if ge.ID == "" {
 		ge.ID = id
 	}
+	normaliseType(&ge)
 	return &ge, nil
 }
 
@@ -127,6 +129,33 @@ func (p *CalendarProvider) seriesObject(ctx context.Context, shared bool, id str
 		return obj, true, nil
 	}
 	return obj, false, nil
+}
+
+// normaliseType makes an item's type one of the four the provider
+// handles. An item that names its series (seriesMasterId) is an instance
+// of it whatever its type says or lacks: an exception when the service
+// says so or when it no longer starts at its original start, else an
+// occurrence; it is never stored as a single event of its own.
+func normaliseType(ge *graphEvent) {
+	t := strings.ToLower(strings.TrimSpace(ge.Type))
+	switch {
+	case t == "seriesmaster":
+		ge.Type = "seriesMaster"
+	case ge.SeriesMasterID != "" && ge.SeriesMasterID != ge.ID:
+		ge.Type = "occurrence"
+		if t == "exception" {
+			ge.Type = "exception"
+		} else if t != "occurrence" {
+			_, start, ok := parseGraphTime(ge.Start)
+			if orig := parseStamp(ge.OriginalStart); ok && !orig.IsZero() && !orig.Equal(start) {
+				ge.Type = "exception"
+			}
+		}
+	case t == "occurrence", t == "exception":
+		ge.Type = t
+	default:
+		ge.Type = "singleInstance"
+	}
 }
 
 // deltaRefused: the service does not offer delta for this calendar.

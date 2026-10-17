@@ -4157,13 +4157,21 @@ InvitationCard = InvitationSummary + {
   `unanswered`; a local answer of the sequence wins. The linked event is
   `store.InvitationLinkedEvent`, one rule for card, summary and list: the
   events of the UID in every account, the message's account first, then
-  by account order; per account the row the invitation names (the
-  override of its recurrence id, else the first master or single row,
-  else the first, by calendar, remote id, recurrence id); it counts when
+  by account order; per account the row the invitation names: for an
+  instance invitation (`RECURRENCE-ID`) the override of that id, else a
+  non-master row starting at that instant (a Graph instance or exception,
+  stored as a `single` row; an all-day one by date), else the master; for
+  a series invitation the master, else the first single row, else the
+  first (by calendar, remote id, recurrence id); it counts when
   the user does not organise it, its `ORGANIZER` is the invitation's, the
   account is enabled and the calendar not disabled, else the next
   account. (A daemon copy is not consulted: it exists only with a local
   answer.)
+  The series master's answer never answers an instance invitation. An
+  answer `event.respond` recorded through the linked row
+  (`cal_responses.event_id`, keyed by that row rather than the instance)
+  is the card's local answer when none is keyed by the invitation's
+  recurrence id.
 - *previous* (update, against the linked event, never a copy, the event's
   `SEQUENCE` not above the invitation's): `start`/`end` only when the
   time changed, `location` when it changed and was not empty, `recurrence`

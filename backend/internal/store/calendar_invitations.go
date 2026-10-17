@@ -600,6 +600,9 @@ func answeredElsewhere(ctx context.Context, q querier, inv Invitation, f *invita
 	if err != nil || !ok {
 		return err
 	}
+	if inv.RecurrenceID != "" && ev.Kind == EventMaster {
+		return nil // the series' answer does not answer one instance's invitation
+	}
 	if AnsweredResponse(ev.MyResponse) {
 		f.answeredSeq = inv.Sequence
 	}
@@ -649,7 +652,7 @@ func linkedEvent(ctx context.Context, q querier, firstAccount, uid, key, organiz
 		return Event{}, false, nil
 	}
 	rows, err := q.QueryContext(ctx, `SELECT e.id, e.account_id, e.kind, e.recurrence_id, e.i_am_organizer, e.organizer_json,
-			a.enabled, c.sync_mode
+			a.enabled, c.sync_mode, e.start_at, e.start_date, e.all_day
 		FROM cal_events e JOIN cal_calendars c ON c.id = e.calendar_id JOIN accounts a ON a.id = e.account_id
 		WHERE e.uid = ?
 		ORDER BY e.account_id != ?, a.position, a.created_at, a.id,
@@ -659,17 +662,19 @@ func linkedEvent(ctx context.Context, q querier, firstAccount, uid, key, organiz
 	}
 	type cand struct {
 		id, account, kind, rid, organizer, mode string
-		mine, enabled                           bool
+		start, startDate                        string
+		mine, enabled, allDay                   bool
 	}
 	var cands []cand
 	for rows.Next() {
 		var c cand
-		var mine, enabled int
-		if err := rows.Scan(&c.id, &c.account, &c.kind, &c.rid, &mine, &c.organizer, &enabled, &c.mode); err != nil {
+		var mine, enabled, allDay int
+		if err := rows.Scan(&c.id, &c.account, &c.kind, &c.rid, &mine, &c.organizer, &enabled, &c.mode,
+			&c.start, &c.startDate, &allDay); err != nil {
 			rows.Close()
 			return Event{}, false, fmt.Errorf("linked event: %w", err)
 		}
-		c.mine, c.enabled = mine != 0, enabled != 0
+		c.mine, c.enabled, c.allDay = mine != 0, enabled != 0, allDay != 0
 		cands = append(cands, c)
 	}
 	rows.Close()
@@ -685,12 +690,26 @@ func linkedEvent(ctx context.Context, q querier, firstAccount, uid, key, organiz
 		i = j
 		pick := -1
 		if key != "" {
-			for k, c := range group {
-				if c.kind == string(EventOverride) && c.rid == key {
-					pick = k
-					break
-				}
+			pick = instanceRow(group, func(c cand) bool { return c.kind == string(EventOverride) && c.rid == key })
+			if pick < 0 {
+				// A Graph instance or exception is stored as a single row
+				// whose start is the instance (the RECURRENCE-ID): compared
+				// as an instant, an all-day one by its date.
+				pick = instanceRow(group, func(c cand) bool {
+					if c.kind == string(EventMaster) {
+						return false
+					}
+					if len(key) == len("2006-01-02") {
+						return c.allDay && c.startDate == key
+					}
+					return !c.allDay && c.start != "" && c.start == key
+				})
 			}
+		}
+		if pick < 0 {
+			// The series (Graph stores its instances as single rows
+			// beside the master).
+			pick = instanceRow(group, func(c cand) bool { return c.kind == string(EventMaster) })
 		}
 		if pick < 0 {
 			for k, c := range group {
@@ -718,4 +737,31 @@ func linkedEvent(ctx context.Context, q querier, firstAccount, uid, key, organiz
 		}
 	}
 	return Event{}, false, nil
+}
+
+// instanceRow is the index of the first element ok accepts, -1 for none.
+func instanceRow[T any](list []T, ok func(T) bool) int {
+	for i, x := range list {
+		if ok(x) {
+			return i
+		}
+	}
+	return -1
+}
+
+// ResponseByEvent returns the user's answer recorded for an invitation's
+// UID through a stored event (cal_responses.event_id): event.respond keys
+// an answer through a Graph instance stored as a single row by the
+// instance's row, not by its recurrence id. ErrNotFound without one.
+func (s *Store) ResponseByEvent(ctx context.Context, accountID, uid, eventID string) (Response, error) {
+	var rid string
+	err := s.db.QueryRowContext(ctx, `SELECT recurrence_id FROM cal_responses WHERE account_id = ? AND uid = ? AND event_id = ?
+		ORDER BY responded_at DESC LIMIT 1`, accountID, uid, eventID).Scan(&rid)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Response{}, ErrNotFound
+	}
+	if err != nil {
+		return Response{}, fmt.Errorf("response by event: %w", err)
+	}
+	return s.GetResponse(ctx, accountID, uid, rid)
 }

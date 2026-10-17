@@ -686,7 +686,19 @@ func (b *Backend) invitationCard(ctx context.Context, a store.Account, m store.M
 		card.RespondedAt = &at
 	}
 	link := b.findInvitationLink(ctx, a, row, respPtr)
-	if link != nil && !link.copy && (respPtr == nil || respPtr.Sequence < row.Sequence) && store.AnsweredResponse(link.ev.MyResponse) {
+	instance := row.RecurrenceID != "" && link != nil && link.ev.Kind != store.EventMaster
+	if respPtr == nil && link != nil && !link.copy && (row.RecurrenceID == "" || instance) {
+		// An answer given through the linked event (event.respond on a
+		// Graph instance stored as a single row keys it by that row).
+		if r, err := b.store.ResponseByEvent(ctx, a.ID, row.UID, link.ev.ID); err == nil {
+			respPtr = &r
+			card.Response = r.Response
+			at := r.RespondedAt
+			card.RespondedAt = &at
+		}
+	}
+	if link != nil && !link.copy && (row.RecurrenceID == "" || instance) &&
+		(respPtr == nil || respPtr.Sequence < row.Sequence) && store.AnsweredResponse(link.ev.MyResponse) {
 		// Answered in another client (Outlook, a phone): the event's
 		// answer, when is unknown. A local answer of this SEQUENCE wins.
 		card.Response, card.RespondedAt = link.ev.MyResponse, nil

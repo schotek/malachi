@@ -850,3 +850,91 @@ func TestInvitationOwnEvent(t *testing.T) {
 		t.Errorf("own cancel %+v", cancel.Invitation)
 	}
 }
+
+// instanceInvite is a REQUEST for one instance (RECURRENCE-ID) of the
+// weekly series weekly@example.org organised by ada.
+func instanceInvite(rid string) []byte {
+	return []byte("From: Ada Example <ada@example.org>\r\nTo: bo@example.org\r\nSubject: Weekly status\r\nMIME-Version: 1.0\r\n" +
+		"Content-Type: text/calendar; charset=utf-8; method=REQUEST\r\n\r\n" +
+		"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//t//EN\r\nMETHOD:REQUEST\r\nBEGIN:VEVENT\r\nUID:weekly@example.org\r\n" +
+		"RECURRENCE-ID:" + rid + "\r\nDTSTAMP:20261016T090000Z\r\nDTSTART:" + rid + "\r\nDTEND:20261103T110000Z\r\nSEQUENCE:15\r\n" +
+		"SUMMARY:Weekly status\r\nORGANIZER;CN=Ada Example:mailto:ada@example.org\r\n" +
+		"ATTENDEE;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:bo@example.org\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+}
+
+// putRows stores the rows of one resource as given (kinds kept).
+func (x *invBox) putRows(remote string, rows ...store.Event) []store.Event {
+	x.t.Helper()
+	out, err := x.b.store.ReplaceResource(x.ctx, x.cal.ID, remote, rows, func(rows []store.Event) []store.Occurrence {
+		var occ []store.Occurrence
+		for _, r := range rows {
+			occ = append(occ, store.Occurrence{EventID: r.ID, CalendarID: x.cal.ID, AccountID: x.calAcc, StartAt: r.StartAt, EndAt: r.EndAt,
+				OccurrenceKey: r.RecurrenceID})
+		}
+		return occ
+	})
+	if err != nil {
+		x.t.Fatal(err)
+	}
+	return out
+}
+
+// An instance invitation links to the Graph-shaped instance (a single row
+// whose start is the RECURRENCE-ID), not to the series: the series'
+// answer does not answer it, the instance's answer (event.respond, keyed
+// by the row) does; the override shape of CalDAV still links.
+func TestInvitationInstanceLink(t *testing.T) {
+	x := newInvBox(t)
+	x.addCalDAV(nil)
+	org := &api.Address{Address: "ada@example.org"}
+	at := func(d int) time.Time { return time.Date(2026, 10, 6+d, 10, 0, 0, 0, time.UTC) }
+	base := store.Event{UID: "weekly@example.org", Title: "Weekly status", Status: api.EventStatusConfirmed, ShowAs: api.ShowAsBusy, Organizer: org}
+	master := base
+	master.Kind, master.StartAt, master.EndAt, master.MyResponse = store.EventMaster, at(0), at(0).Add(time.Hour), api.ResponseAccepted
+	master.RRule = "FREQ=WEEKLY"
+	x.putRows("/series", master)
+	var inst store.Event
+	for _, d := range []int{21, 28} { // 27 Oct and 3 Nov, each a single row of its own (Graph)
+		e := base
+		e.Kind, e.StartAt, e.EndAt = store.EventSingle, at(d), at(d).Add(time.Hour)
+		inst = x.putRows(fmt.Sprintf("/inst-%d", d), e)[0]
+	}
+	m := x.receive(x.inbox, instanceInvite("20261103T100000Z"))
+	if m.Invitation.State != api.InvitationUnanswered {
+		t.Errorf("the series' answer answered the instance: %+v", m.Invitation)
+	}
+	if c := x.card(m); c.EventID != api.EventID(inst.ID) || c.Response != "" {
+		t.Errorf("link %q (want the 3 Nov row %q), response %q", c.EventID, inst.ID, c.Response)
+	}
+	// As event.respond on the instance row: its response, keyed by the row.
+	if _, err := x.b.store.DB().ExecContext(x.ctx, `UPDATE cal_events SET my_response = 'accepted' WHERE id = ?`, inst.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := x.b.store.PutResponse(x.ctx, store.Response{AccountID: x.mail, UID: "weekly@example.org", Response: api.ResponseAccepted,
+		Via: "graph", CalendarID: x.cal.ID, EventID: inst.ID}); err != nil {
+		t.Fatal(err)
+	}
+	m = x.message(m.ID)
+	c := x.card(m)
+	if m.Invitation.State != api.InvitationAnswered || c.State != api.InvitationAnswered || c.Response != api.ResponseAccepted ||
+		c.EventID != api.EventID(inst.ID) || !c.CanRespond {
+		t.Errorf("after the instance's answer: %+v / %+v", m.Invitation, c)
+	}
+	if list, _ := x.b.Invitations().List(x.ctx, api.InvitationListParams{State: api.InvitationUnanswered}); len(list.Invitations) != 0 {
+		t.Errorf("still listed %+v", list.Invitations)
+	}
+
+	// The override shape (CalDAV): master + override of the instance.
+	y := newInvBox(t)
+	y.addCalDAV(nil)
+	ym := base
+	ym.Kind, ym.StartAt, ym.EndAt, ym.MyResponse = store.EventMaster, at(0), at(0).Add(time.Hour), api.ResponseAccepted
+	ym.RRule = "FREQ=WEEKLY"
+	ov := base
+	ov.Kind, ov.RecurrenceID, ov.StartAt, ov.EndAt, ov.MyResponse = store.EventOverride, "2026-11-03T10:00:00Z", at(28), at(28).Add(time.Hour), api.ResponseTentative
+	stored := y.putRows("/series", ym, ov)
+	ym2 := y.receive(y.inbox, instanceInvite("20261103T100000Z"))
+	if c := y.card(ym2); c.EventID != api.EventID(stored[1].ID) || c.Response != api.ResponseTentative || c.State != api.InvitationAnswered {
+		t.Errorf("override shape: %+v", c)
+	}
+}
