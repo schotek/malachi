@@ -298,3 +298,43 @@ a vlastník. Commit 1 už nese klíč a exclusions pro Windows (T2), aby
   (8 a 6 pt), popisek a tooltip přepínače sledují stav (*Show as Chat* /
   *Show as Thread*, 2 nové msgid, Windows exclusions), sponka v hlavičce
   bubliny je pilulka s počtem (`Conversation.bubbleAttachmentBadge`).
+- 2026-10-17 GTK G1–G2 napsané bez překladu (hostitel, pruh, chat, testy,
+  smoke test); odchylky v §7; čeká G3 v kontejneru, pak B2.
+
+## 7. As built — GTK (G1–G2)
+
+Written 2026-10-17 on the Mac without a build (`gofmt`, `gopls check`,
+`go/types` with `FakeImportC`, code review); G3 builds and tests it in the
+container. Deviations from the rows of §6.2:
+
+- **No `conversation_chat.blp`.** The chat rows are built in Go
+  (`conversation_chat_row.go`: `chatRow`, `chatBubble`, `chatCenterRow`);
+  `conversation_view.blp` holds the strip, the `Stack` of the two layouts
+  and the chat's scroller, clamp, column and issue slot.
+- **`convChatBubbleMax` lives in `conversation_chat_layout.go`**, not
+  `conversation_layout.go`, together with the ported Swift-first rules
+  (`chatBody`, `bubbleBody`, `bubbleMonospace`, `convChatAtEnd`,
+  `convChatCompactDates`, `convChatColumn`).
+- **`conversation.ChatScrollTo` is not called**: the chat opens by scrolling
+  to the document's end, which is equivalent (the last row, a draft or a
+  message, is at the end).
+- **The bubble cap** comes from the width of the clamp's child
+  (`column.Width()`), falling back to `convChatColumn` of the scroller's
+  width before the first allocation; each bubble sits in an `Adw.Clamp` in
+  pixels next to an expanding spacer.
+- **`convChatResize`** is kept as the tested port of Swift's `chatResize`
+  but the view does not use it (`followSize` and `convChatScroll.toEnd`
+  do the same).
+- **The toggle is not flat**: its checked state is the native
+  `GtkToggleButton` look (D9).
+- **Host files**: `conversation_fanout.go` (the rules without widgets,
+  tested with fake layouts) next to `conversation_host.go`; the issue card
+  per layout is `convIssueSlot` (`conversation_issue.go`);
+  `loadingMessageError` (`conversation_card.go`) is the one text of a failed
+  body for cards and bubbles.
+- **`po`**: `make po` in the container renumbers the
+  `conversation_view.ui:77` reference in `po/malachi.pot` and nothing else.
+
+Tests: `conversation_chat_test.go` and `conversation_chat_layout_test.go`
+over a fake `convWindow`; `MALACHI_GTK_SMOKE=1 TestConversationChatGTKSmoke`
+(real Blueprint, both layouts, toggle through the setting).

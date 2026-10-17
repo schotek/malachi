@@ -2,42 +2,51 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Gtk 4.0;
 using Adw 1;
-// The conversation page of the reading pane (window/conversation_view.go):
+// The conversation page of the reading pane (window/conversation_host.go):
 // a folded conversation row of the grouped list shows every member the
-// folder holds, stacked oldest first, as native cards on a timeline. The
-// window adds the page to message_stack as "conversation" and fills the
-// column from Go (conversation_card.go, conversation_rows.go): the issue
-// card of a Jira conversation in conversation_issue, then one row per
-// item; above them the Collapse All / Expand All button. The link under the pointer in any card shows in
-// conversation_status; the spinner stands in while the members load.
+// folder holds in one of two layouts (docs/plans/chat-view.md). On top a
+// fixed strip that does not scroll, its controls in the cards' column at
+// the trailing end: Collapse All / Expand All of the timeline (label from
+// Go, hidden in the chat and while fewer than two cards fold) and the
+// layout toggle, bound to the setting conversation-chat-layout, its label
+// and tooltip from Go as the setting stands (Show as Chat, Show as
+// Thread). Under it a stack with the two layouts: the timeline
+// (conversation_view.go: native cards on a timeline, the issue card of a
+// Jira conversation in conversation_issue, then one row per item, filled
+// from Go by conversation_card.go and conversation_rows.go) and the chat
+// (conversation_chat.go: plain-text bubbles, the issue card across the
+// column in conversation_chat_issue, rows from conversation_chat_row.go).
+// The window adds the page to message_stack as "conversation". The link
+// under the pointer in any card shows in conversation_status; the spinner
+// stands in while the members load.
 Overlay conversation_page {
   styles [
     "conversation-pane",
   ]
 
-  child: ScrolledWindow conversation_scroller {
-    hscrollbar-policy: never;
-    vexpand: true;
-    hexpand: true;
-    // The column is 900 wide at most, its gutter included, like the
-    // single message's.
-    child: Adw.Clamp conversation_clamp {
+  child: Box conversation_body {
+    orientation: vertical;
+
+    // The strip (docs/plans/chat-view.md D8, D9): in a clamp of the
+    // column's width with the column's side insets, so that its controls
+    // line up with the cards' trailing edge; 8 above, 6 below.
+    Adw.Clamp conversation_strip_clamp {
       maximum-size: 900;
       tightening-threshold: 900;
 
-      child: Box conversation_column {
-        orientation: vertical;
+      child: Box conversation_strip {
+        orientation: horizontal;
+        spacing: 12;
+        halign: end;
         margin-start: 16;
         margin-end: 16;
-        margin-top: 4;
-        margin-bottom: 16;
+        margin-top: 8;
+        margin-bottom: 6;
 
-        // Collapse All / Expand All (conversation_view.go showFoldAll): a
-        // small flat link at the trailing end above everything else,
-        // hidden while fewer than two cards fold; the label comes from Go.
+        // Collapse All / Expand All (conversation_host.go setFoldAll): a
+        // small flat link, hidden while it offers nothing.
         Button conversation_fold_all {
-          halign: end;
-          margin-top: 8;
+          valign: center;
           visible: false;
 
           styles [
@@ -46,15 +55,90 @@ Overlay conversation_page {
           ]
         }
 
-        // The issue card, in the cards' column (after the gutter).
-        Box conversation_issue {
-          orientation: vertical;
-          margin-start: 40;
-          margin-top: 12;
-          visible: false;
+        // The layout toggle: checked while the chat shows.
+        ToggleButton conversation_chat_toggle {
+          valign: center;
+
+          child: Adw.ButtonContent conversation_chat_toggle_content {
+            icon-name: "malachi-chat-symbolic";
+            can-shrink: true;
+          };
         }
       };
     };
+
+    Stack conversation_layouts {
+      vexpand: true;
+      hexpand: true;
+      hhomogeneous: false;
+      vhomogeneous: false;
+      transition-type: none;
+
+      StackPage {
+        name: "timeline";
+
+        child: ScrolledWindow conversation_scroller {
+          hscrollbar-policy: never;
+          vexpand: true;
+          hexpand: true;
+
+          // The column is 900 wide at most, its gutter included, like the
+          // single message's.
+          child: Adw.Clamp conversation_clamp {
+            maximum-size: 900;
+            tightening-threshold: 900;
+
+            child: Box conversation_column {
+              orientation: vertical;
+              margin-start: 16;
+              margin-end: 16;
+              margin-top: 4;
+              margin-bottom: 16;
+
+              // The issue card, in the cards' column (after the gutter).
+              Box conversation_issue {
+                orientation: vertical;
+                margin-start: 40;
+                margin-top: 12;
+                visible: false;
+              }
+            };
+          };
+        };
+      }
+
+      StackPage {
+        name: "chat";
+
+        child: ScrolledWindow conversation_chat_scroller {
+          hscrollbar-policy: never;
+          vexpand: true;
+          hexpand: true;
+
+          // The same column as the timeline's, without the gutter: the
+          // avatars stand beside the bubbles.
+          child: Adw.Clamp conversation_chat_clamp {
+            maximum-size: 900;
+            tightening-threshold: 900;
+
+            child: Box conversation_chat_column {
+              orientation: vertical;
+              margin-start: 16;
+              margin-end: 16;
+              margin-top: 4;
+              margin-bottom: 16;
+
+              // The issue card, across the column.
+              Box conversation_chat_issue {
+                orientation: vertical;
+                margin-top: 12;
+                visible: false;
+              }
+            };
+          };
+        };
+      }
+    }
   };
 
   [overlay]

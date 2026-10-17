@@ -6083,7 +6083,7 @@ msgstr "Komu"
 msgid "Cc"
 msgstr "Kopie"
 
-#: ui/internal/window/conversation_card.go:682
+#: ui/internal/window/conversation_card.go:983
 #: ui/internal/window/message_view.go:518
 msgid "Loading the message"
 msgstr "Načtení zprávy"

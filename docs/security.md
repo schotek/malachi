@@ -200,6 +200,11 @@ view keeps JavaScript off entirely. A composed document of the whole
 conversation was rejected for the reason given for macOS below: in a
 card the headers, badges and event rows are native widgets with plain
 text, and the body is one message's output.
+The conversation's chat layout (`ui/internal/window/conversation_chat*.go`)
+has no web view at all: a bubble shows only the daemon's plain `text` of
+`message.body` (asked for with `trimQuoted`) in a `GtkLabel` with markup
+off (`SetUseMarkup(false)`) that cannot be selected, with no link handling,
+so no HTML reaches it; the timeline above is unchanged.
 
 The GTK board's conversation cards use the same `htmlview.Card` and
 height governor as Mail. Only an open card fetches its message's body

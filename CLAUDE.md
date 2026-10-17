@@ -1802,32 +1802,68 @@ z MCP, štítek v seznamu.
 
 Zobrazení konverzace jako chat (2026-10-17, větev `feat/chat-view`,
 necommitnuté; plán `docs/plans/chat-view.md`, D1–D17, rozhodnutí vlastníka;
-zatím jen macOS, výjimka z pravidla 6). Konverzace má druhé rozložení vedle
-časové osy (ta zůstává beze změny a výchozí): cizí zprávy jako bubliny
-vlevo, moje a odpovědi z Odeslaných vpravo, koncepty na konci, události Jiry
-a řádek starších zpráv uprostřed, od nejstarší, otevřeno na konci. Bublina
-je jen text (prostý `text` z `message.body` s `trimQuoted`, nevybíratelný,
-bez tlačítek, odkazů a webového pohledu); dvojklik otevře okno zprávy
-(koncept okno Nová zpráva); těla se žádají jen poblíž viditelné části.
+výjimka z pravidla 6: macOS hotové a schválené vlastníkem v bráně B1, GTK
+napsané, Windows rozpracované — W1 Core napsané, W2 App se píše). Konverzace
+má druhé rozložení vedle časové osy (ta zůstává beze změny a výchozí): cizí
+zprávy jako bubliny vlevo, moje a odpovědi z Odeslaných vpravo, koncepty na
+konci, události Jiry a řádek starších zpráv uprostřed, od nejstarší, otevřeno
+na konci. Bublina je jen text (prostý `text` z `message.body` s `trimQuoted`,
+nevybíratelný, bez tlačítek, odkazů a webového pohledu); dvojklik otevře okno
+zprávy (koncept okno Nová zpráva); těla se žádají jen poblíž viditelné části.
 Přepínač v pevném pruhu nad konverzací („Show as Chat“, zapnutý „Show as
 Thread“; popisek i tooltip podle stavu) je trvalý (gschema
 `conversation-chat-layout`, výchozí vypnuto, bez řádku v Předvolbách; Go
 `settings.Store`, macOS `Settings`, Windows `SettingsStore`). Démon a API
 beze změny. Reference Go `ui/internal/conversation/chat.go` (`ChatRows`,
-`ChatScrollTo`, `BubbleText`, 4 nové msgid (popisek a tooltip přepínače podle stavu)); macOS `MalachiCore/Model/
+`ChatScrollTo`, `BubbleText`, 4 nové msgid); macOS `MalachiCore/Model/
 ConversationChat.swift` (port) a `ConversationChatBody.swift` (Swift-first),
 `ConversationLayout.chatBubbleMax`, hostitel `MessageView/
 ConversationHostViewController` (jediný odběratel kontroleru, `trim` jen
 pro zobrazené rozložení, jedna karta issue na rozložení) s pruhem
 `ConversationStripView` a chat `ConversationChatViewController`,
-`ConversationChatRow`, `ConversationBubbleView`. Ověřeno na Macu: Go testy
-`ui/internal/conversation` (`settings` importuje gotk4 a bez cgo tu
-neběží; jeho testy čekají na kontejner), celé `swift test`,
-`check-strings.py` a izolovaný start. Nálezy vlastníka z B1 opravené
-(odsazení pruhu, popisek přepínače podle stavu, sponka v bublině jako
-pilulka hned ze souhrnu a s počtem čipů po `message.get`,
-`Conversation.bubbleAttachmentBadge`). Čeká: nové ověření vlastníka, pak GTK (G1–G4) a Windows
-(W1–W3) podle plánu §6.2; v Toolbxu `make po` (má vyjít beze změny).
+`ConversationChatRow`, `ConversationBubbleView`. macOS ověřeno na Macu: Go
+testy `ui/internal/conversation`, celé `swift test`, `check-strings.py`,
+izolovaný start; nálezy vlastníka z B1 opravené (odsazení pruhu, popisek
+přepínače podle stavu, sponka v bublině jako pilulka s počtem).
+GTK (`ui/internal/window`, G1–G2, bez překladu): hostitel
+`conversation_host.go` (`conversationHost` nad `convFanout` z
+`conversation_fanout.go`: jediný odběratel kontroleru, `takeMarkRead` jednou
+při `convOpened` pro obě rozložení, `trim` jen s blízkou množinou zobrazeného
+rozložení, jedna karta issue na rozložení přes `convIssueSlot`, spinner a
+stavový popisek odkazu v hostiteli, mezerník přes `pageBy`); pruh v
+`conversation_view.blp` (vlastní `Adw.Clamp` 900 px s okraji sloupce,
+`conversation_fold_all` a `ToggleButton conversation_chat_toggle` s
+`Adw.ButtonContent` a ikonou `malachi-chat-symbolic`, nový
+`ui/data/icons/malachi-chat-symbolic.svg` instalovaný v `scripts/build.sh`;
+přepínač vázaný `settings.Bind`, rozložení se přepíná z `OnChanged`, takže i
+změna odjinud; není plochý, zaškrtnutý stav je nativní, D9) a `Stack` se
+stránkami časové osy a chatu (skryté rozložení zůstává naživu, takže sbalení
+a odhalená citace přežijí návštěvu chatu); chat `conversation_chat.go`
+(`conversationChat`), `conversation_chat_row.go` (`chatRow`/`chatBubble`/
+`chatCenterRow`, všechno z Go, žádný `conversation_chat.blp`; bublina v
+`Adw.Clamp` v pixelech vedle roztažného spaceru, strop
+`convChatBubbleMax(column.Width())` ze šířky potomka clampu, záloha
+`convChatColumn`; `GtkLabel` s `SetUseMarkup(false)` a `SetSelectable(false)`;
+`GestureClick` n == 2 → `convOpenMessage`/`convEditDraft` na rozhraní
+`convHost`, těla jen v blízkém okně přes `liveCards`) a
+`conversation_chat_layout.go` (Swift-first pravidla `chatBody`, `bubbleBody`,
+`bubbleMonospace`, `convChatAtEnd`, `convChatCompactDates`; `convChatResize`
+je otestovaný port a pohled ho nepoužívá; `conversation.ChatScrollTo` se
+nevolá, rolování na konec dokumentu je rovnocenné). Úpravy časové osy:
+`conversation_view.go` hlásí hostiteli sbalení, `conversation_controller.go`
+(`convHost` + `convOpenMessage`/`convEditDraft`), `conversation_issue.go`,
+`conversation_card.go` (`loadingMessageError`), `conversation_rows.go` (CSS
+`.chat-bubble`, `.chat-bubble-mine`, `.chat-placeholder`, `.chat-proportional`,
+`.chat-clip-pill`), `window.go`. Testy: jednotkové nad falešným `convWindow`
+(`conversation_chat_test.go`, `conversation_chat_layout_test.go`) a
+`MALACHI_GTK_SMOKE=1 go test ./internal/window -run
+'^TestConversationChatGTKSmoke$'` (skutečný Blueprint, obě rozložení,
+přepnutí). Ověřeno tady jen `gofmt`, `gopls check`, typová kontrola `go/types`
+s `FakeImportC` a revize kódu; nic nesestaveno ani nespuštěno. Čeká (G3 v
+kontejneru): `scripts/gtk-container/gtk.sh make build`, `gtk.sh test-ui`
+včetně smoke testu, `make po` (má změnit jen odkaz
+`conversation_view.ui:77` v `po/malachi.pot`) a `make lint`; pak B2 vlastníka
+v XQuartz. Windows podle plánu §6.2 (W1–W3), pak B3.
 
 Archivace v Poště = Hotovo (2026-10-13, `feat/board`, necommitnuté; jen
 démon, klienti beze změny — všechny tři to dostanou přes

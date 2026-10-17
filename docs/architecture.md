@@ -2722,3 +2722,22 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
     with the same rules should win.
   - **No network monitor**: an offline calendar waits on its backoff;
     adding a platform-neutral monitor was left out.
+- Chat layout of the conversation view (2026-10-17): **decided**, a second
+  layout over the same controller and body cache, beside the timeline,
+  which stays the default and unchanged
+  ([plans/chat-view.md](plans/chat-view.md), D1–D17). Plain-text bubbles
+  only (the daemon's `text` of `message.body` with `trimQuoted`; the client
+  never converts HTML, so rules 1 and 2 hold and no web view or height
+  measurement is needed), the side by `Mine || Sent` (drafts on the right,
+  Jira events and the older-members row centred), oldest first, open at the
+  end; a double click opens the message window, where everything else is.
+  No daemon or API change. The choice is a persistent key
+  (`conversation-chat-layout`, default off, no Preferences row), because
+  the owner wants an IM-like overview of a conversation for every
+  conversation and across restarts. Each client has one host that is the
+  controller's only subscriber (the controller has one change and one
+  loaded callback): it hands every change to both layouts, the news of a
+  body to the layout shown, arms the mark-read once per selection and
+  trims the held bodies only with the shown layout's near set; the Jira
+  issue card is one per layout. macOS first (accepted), GTK written
+  (`window/conversation_host.go`, `conversation_chat*.go`), Windows follows.

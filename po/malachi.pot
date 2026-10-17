@@ -5829,7 +5829,7 @@ msgstr ""
 msgid "Cc"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:682
+#: ui/internal/window/conversation_card.go:983
 #: ui/internal/window/message_view.go:518
 msgid "Loading the message"
 msgstr ""

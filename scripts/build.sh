@@ -71,6 +71,10 @@ if [[ "${1:-}" == "install" ]]; then
     # no sparkle of its own.
     install -Dm644 ui/data/icons/malachi-assistant-symbolic.svg \
         "$DESTDIR$PREFIX/share/icons/hicolor/scalable/actions/malachi-assistant-symbolic.svg"
+    # The layout toggle above a conversation (ui/internal/window/
+    # conversation_host.go); the theme has no pair of speech bubbles.
+    install -Dm644 ui/data/icons/malachi-chat-symbolic.svg \
+        "$DESTDIR$PREFIX/share/icons/hicolor/scalable/actions/malachi-chat-symbolic.svg"
     # Staging for a package: the schema is compiled by the package manager
     # (dpkg triggers on /usr/share/glib-2.0/schemas), and a compiled cache
     # inside the package would collide with every other application's.
