@@ -8,7 +8,8 @@ AccountRowCell.swift and AccountsTableView.swift; GTK: preferences.blp
 accounts_page and the rows of ui/internal/window/accounts_page.go. The
 group Mail Accounts (accounts_group) with its header suffix, the add
 button (add_account_button: list-add, "Add Account", a menu of the two
-assistants: a mail account or a Jira account), its description
+assistants: a mail account or a Jira account, and no Add CalDAV
+Calendar…, as macOS: docs/calendar.md §5.8), its description
 (a failed load), the accounts' rows and the empty row (accounts_empty_row:
 "No accounts yet", "Use the + button to add one", insensitive). A row, in
 the order of the GTK row: the drag handle (its tooltip names the keys),

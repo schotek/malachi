@@ -14,8 +14,10 @@ Fedora container on the Mac (`scripts/gtk-container/gtk.sh`; full
 `test-ui` green, every calendar smoke green) and the owner clicked
 through it in an XQuartz window against his real accounts (a native
 test daemon over a copy of his data); his findings are fixed (§5.12,
-the last bullets). The Windows port is the owner's
-on his Windows machine (§6.4); nothing under `windows/` was touched.
+the last bullets); the GTK port touched nothing under `windows/`. The
+Windows client was ported on 2026-10-16 on the owner's Windows machine
+(§6.4, and the notes "As built on Windows" W2–W9 in §5): it builds,
+its Core and conventions tests pass, and its UI has not run yet.
 
 Contents:
 
@@ -117,7 +119,7 @@ matter.
 | D13 | Graph: one request limiter per account shared by the mail syncer, the outbox and the calendar (4 concurrent, Microsoft's per-mailbox limit), a new `graph.Options.Limiter`. Calendar passes have lower priority than the inbox check. | Today syncer and outbox each have 4 slots; a third client would exceed the mailbox limit and slow mail with 429s. |
 | D14 | Graph sync: `GET /me/calendars/{id}/calendarView/delta` per calendar with a fixed window; a calendar whose delta is refused (400/404/501) falls back for good to a paged `calendarView` listing compared by `changeKey` (`delta_mode = list`). The default calendar uses the documented `/me/calendarView/delta`. Masters (`seriesMaster`) are fetched separately (`GET /me/events/{id}`) when a new `seriesMasterId` appears or its `changeKey` changes. | Per-calendar delta is documented only in beta (feasibility study); the fallback keeps every calendar working whatever Microsoft does. |
 | D15 | Microsoft scopes: `Calendars.ReadWrite` and `Calendars.Read.Shared` are requested only by a sign-in made for the calendar (`account.oauthStart` `calendar: true`, which the Calendar switch starts). The grant records the `scope` of the token response in the keyring item `oauth2.scope` (only while it grants the calendar; no item = mail only; `oauth2.refresh_token` stays the bare token); a Graph account whose grant lacks the calendar scope, or whose calendar call answers 403 `ErrorAccessDenied`, has calendar state `consentRequired` and its mail keeps running. GOA accounts: `CalendarDisabled` of the GOA account is read like `MailDisabled`; GOA `ms_graph` ≥ 3.52 tokens already carry the scopes. | Users who do not want the calendar never see a new consent screen; organisations that restrict consent keep mail. Existing refresh tokens keep working (golang.org/x/oauth2 sends no `scope` on refresh). |
-| D16 | Account capability `calendar` (new `AccountCapability`): the account can have calendars (graph, caldav; later imap with Google). A `caldav` account's capabilities are exactly `["calendar"]`. Clients show in Mail only accounts of the kinds `imap`, `graph`, `jira` (unknown kinds hidden). | A capability that does not flicker with consent or sync state; the Calendar group of Preferences keys on it. |
+| D16 | Account capability `calendar` (new `AccountCapability`): the account can have calendars (graph, caldav; later imap with Google). A `caldav` account's capabilities are exactly `["calendar"]`. Clients show in Mail every account but a calendar-only `caldav` one (Swift `inMail`/`mailSidebarAccounts`, C# `FolderTree.InMail`/`MailSidebarAccounts`, Go `capabilities.InMail`/`mailSidebarAccounts`), and that one rule holds wherever Mail counts accounts: the sidebar and its account headers, the empty sidebar and the reader's No Accounts page (calendar-only accounts alone are no account in Mail, and no `folder.list` is asked of them), the account name on an all-accounts search result, the Reply All self-address fallback. A calendar-only account is no board account either: the board's account filter, *Triage These Accounts* (`triageCandidates`) and the daemon's `triageAccounts` leave it out, named or not (docs/api.md §4.13). Amended 2026-10-17 (the Windows port's Mail-only semantics ported back to macOS and to the Go reference): the first wording, "only `imap`, `graph`, `jira`; unknown kinds hidden", is replaced by the rule the three clients implement; clients and daemon ship together, so no kind unknown to a client reaches it, and a kind added later decides then whether Mail shows it. | A capability that does not flicker with consent or sync state; the Calendar group of Preferences keys on it. |
 | D17 | Invitation detection happens in the `Stored` hook (`afterMailStored`, synchronous, before `notify.newMessage`): the daemon reads the message's `text/calendar` / `application/ics` parts (≤ 1 MiB each, at most 2), parses them and writes `cal_invitations`; `MessageSummary.invitation` is filled by a per-page primary-key lookup after each listing (§2.6; T5). `ingest.Decide` never leaves a calendar part ≤ `api.MaxICSBytes` on the server, under any policy. Mail stored before migration 0020 is scanned once in `core.Maintain` within `offlineDays` (meta `calendar.invites.scan`). | The pill and the notification text must be there when the message is announced; nothing is added to `messages` (whose board triggers stay untouched). |
 | D18 | An invitation received by a Graph account is answered through the Graph event Exchange created from it (found by `iCalUId`); its "Add to:" is fixed (the calendar Exchange chose). An invitation on an IMAP account is answered by iMIP and, when the user picks a target calendar, stored there: in a CalDAV calendar as the organiser's object with the own `PARTSTAT` (and `SCHEDULE-AGENT=CLIENT` on the `ORGANIZER` when the daemon sends the reply itself); in a Graph calendar as a plain copy without attendees (Graph cannot store an event organised by someone else), linked by UID so that updates of the organiser update the copy. Any invitation whose UID matches a stored event is answered through that event. | One rule: answer where the event lives. |
 | D19 | Edit scopes of a recurring event: `this` (an override / a Graph exception), `thisAndFuture` (the series is cut with `UNTIL` / Graph `range.endDate` the day before, a new series with a new UID starts at the occurrence), `all` (the master; overrides whose `RECURRENCE-ID` is no longer an instance are dropped and counted in the result). `RANGE=THISANDFUTURE` is never written. A rule outside what the editor can show (`recurrence.complex`) is edited only as `all` and kept as it is unless replaced. | `RANGE=THISANDFUTURE` is poorly supported by servers and clients; the split is what Apple Calendar and Outlook do. |
@@ -2260,6 +2262,68 @@ Preferences → Calendar): the sidebar's rows and visible-calendar set, the
 editor's Calendar popup, the detail's calendar name, the free/busy and
 search scopes and the counts use only the active ones.
 
+As built on Windows (W2, 2026-10-16; §5.1 and this section, in
+`windows/src/Malachi.Core`): the API mirror `Api/Calendar.cs` (task T1w,
+compiled since) names Go's `Event` `CalendarEvent` (a Visual Basic keyword
+otherwise, CA1716), `EventID` and `AlertID` `CalendarEventId` and
+`CalendarAlertId`, `Date` `CalendarDate` and `TimeZone` `TimeZoneName`;
+Go's embedded `Occurrence` and `InvitationSummary` are base records of
+`CalendarEvent` and `InvitationCard`, so the wire object stays flat.
+`GoContractTests` checks `calendar.go` from Go's side as well
+(`EveryEnumOfCalendarGoIsAWireEnum`, `EveryStructOfCalendarGoHasARecord`);
+the first build found one fault in the round-trip samples, a C# raw-string
+delimiter that swallowed the first quote of the JSON. The port of §5.1 is
+`Calendars/` in the namespace `Malachi.Core.Calendars` (a namespace
+`Calendar` would hide `System.Globalization.Calendar`), one `public static
+partial class Cal` with Swift's type names and Go's function names:
+`Cal.cs` (`format.go` and `view.go`: `Env` with the `StrftimeWriter`,
+`EnglishStrftime` for the tests and `CultureStrftime` over
+`I18n.Strftime`, `View` with its nick, `Range` carrying its zone,
+`ViewRange`, `Step`, `SwitchAnchor`, `WeekStart`, `WeekNumber`, `Title`,
+`Subtitle`, the day arithmetic on `DateTimeOffset` and `TimeZoneInfo`,
+`OccurrenceKey`), `CalendarText.cs` (`Cal.Text`), `CalendarWeekLayout.cs`,
+`CalendarMonthGrid.cs` and `CalendarMonthLayout.cs`, `CalendarAgenda.cs`,
+`CalendarToday.cs`, `CalendarDetail.cs`, `CalendarRecurrence.cs`,
+`CalendarEditor.cs` (with `IanaZoneName`, a Windows zone's IANA name),
+`CalendarAvailability.cs`, `CalendarInvitation.cs`,
+`CalendarInvitationReading.cs` and `Model/InvitationReading.cs`
+(Swift-first), `CalendarNotificationText.cs`, `CalendarPreferences.cs`
+(`Cal.Prefs`), `CalendarKeys.cs` (`Press.FromVirtualKey`; `KeyContext`
+takes `Board.Mode`), `CalendarActive.cs`, `CalDAVWizard.cs`, `MiniMonth.cs`,
+`CalendarSampleData.cs` and `CalendarSamples.cs` (`Cal.SampleData`, the
+type `Cal.Samples`). The seam is `ICalendarDataSource` with `Cal.Snapshot`,
+`Cal.SourceChange` (`SnapshotChanged`, `OccurrencesChanged`,
+`EventChanged`, `AlertChanged`, `Failed`: Swift's `event` and `error` are
+Visual Basic keywords for CA1716) and `Cal.SourceError`, the observers
+`CalendarObservers`, `InMemoryCalendarSource` (the samples, with knobs for
+the tests) and `DaemonCalendarSource`, which reports a snapshot only when
+its JSON changed (the records compare their lists by reference) and whose
+`Stop()` also forgets a snapshot load on its way, so that a start after a
+stop loads again (a fix over Swift, whose `stop` leaves `loadInFlight`
+set); `CalendarControllerTypes.cs` has `Cal.Answer`, `Cal.Sleep`,
+`Cal.OccurrenceOf` and `Cal.ConflictEventOf`. The controllers keep their
+Swift names: `CalendarController` (with `CalendarController.Sidebar.cs`;
+Swift's `Filter` and `Sidebar` types are `ContentFilter` and
+`SidebarModel`; `HandleKey(press, inText, popoverOpen)`),
+`CalendarAlertsController` over `ICalendarAlertNotifier`,
+`EventDetailController`, `EventEditorController` (`Mode.NewEvent` and
+`Mode.EditEvent`, `ShowsReloadEvent`, `ReloadEventAsync`, and
+`SetAttendees`, because the view's `RecipientTokenBox` owns its token
+model), `InvitationController` (its answers sent past the card's close,
+`PerformPastClose`), `CalDAVWizardController`,
+`CalendarPreferencesController` (writes queued, a refused one taking back
+only its own change) and `CalendarAccountController` (Remove Account and
+the consent's sign-in URL moved into Core, as docs/windows-port.md §7.4
+does with view-layer logic; `Saving` counts the calls under way). The mode
+is `Board.Mode.Calendar` (2) with `StartChoice.Calendar`, `Allows` and
+`ResolveStartMode`; the key `calendar-view` is `SettingsStore.CalendarView`;
+the four notifications reach the sources through `NotificationHub.AddCalendar`.
+The tests port every Go test 1:1 and the Swift cases
+(`tests/Malachi.Core.Tests/Calendars/`, about 614 cases;
+`Controllers/Calendar*Tests`; `Boards/CalendarModeTests`), and
+`windows/parity-exclusions.txt` has no "calendar: Windows port pending"
+line left.
+
 ### 5.3 Artboard 1 · Calendar · Week (and Day)
 
 - **Mode plumbing.** `MainContentViewController.setMode` generalised:
@@ -2352,6 +2416,72 @@ started on the first entry), `CalendarPageViewController.show(view:)`,
 `AppState.calendarSource(for:)` and `calendarAlerts` (`AppCalendar` in
 `App/Integration+Calendar.swift`, the hub's `addCalendar`).
 
+As built on Windows (W3, 2026-10-16; `windows/src/Malachi.App`, the
+namespace `Malachi.App.Calendars`), where it differs from macOS: the mode
+plumbing is `MainWindow.Mode.cs` (explicit switches over the three
+modes), the title bar's three-segment switch (`ModeCalendarButton`),
+Ctrl+3 as `ShortcutMap`'s `ShowCalendar` run by the `CommandRouter`
+(`WindowCommands.ShowCalendar`), and Mail, Board and Calendar at the top
+of the sidebar's, the Board's and the Calendar's `…` menus; with Show the
+Board off only the Board segment is disabled, as on macOS (before, the
+Windows switch was hidden). The page is `Calendars/CalendarPage` with
+`MainWindow.Calendar.cs` and `MainWindow.CalendarPage.cs`. Its bar
+`CalendarBar` holds the sidebar toggle, Today, ‹ ›, the views as toggle
+buttons that become a `ComboBox` below 640 DIP (a WinUI bar has no
+overflow), the title and subtitle, + and ✦ (a toggle, checked while the
+panel shows in the page); there is no search field in it: the title
+bar's one box searches the events while the Calendar shows, its
+placeholder swapped to *Search Events*, the mail's text kept aside and
+given back in Mail, Ctrl+F and Ctrl+E focusing it, the search in the
+user's own words staying the mail's. `CalendarContentView` holds the
+sidebar (`CalendarSidebar`, 240 DIP and not dragged; `MiniMonthView`, the
+Unanswered row with its count, the accounts with the kind capsules,
+`CALDAV` included, the calendars with a check box and the colour, the
+consent row, Add Calendar…'s menu), the views and the assistant's slot,
+and folds the sidebar, then the panel, below 360 DIP of content. D28 is
+done by reparenting: ✦ takes the window's one `AssistantPanelView` out of
+the mail's split view into the page's slot, and every exit from the
+Calendar puts it back where it was. The empty state (Core's `EmptyKind`,
+Open Preferences) lies over the views, and is all the page shows before
+the window's controller exists. `CalendarWeekView` draws Week and Day at
+60 DIP an hour; the fills are opaque (no grid line shows through), a
+tint being the calendar's colour at 18 % blended over the views' surface,
+`#F9F9F9` light and `#282828` dark (`CalendarPalette`;
+`CalendarStyles.xaml` has light, dark and high-contrast resources), and
+`BlockBackground` picks the fill of each kind; the red now line moves on a
+one-minute timer; the first scroll (`Cal.ScrollMinute` × 60 − 10 DIP) is
+put back whenever the viewport's height changes until the user scrolls,
+and a range of other days starts the rule again. Since the owner's
+decision of 2026-10-17 after the Windows live test (the 18 % tint was
+too faint; macOS keeps it), a normal block, all-day bar, month bar and
+all-day pill is filled with the saturated colour itself, its text white,
+or near-black where white has less than 4.5:1 against the colour
+(`CalendarPalette.TextOn`), its colour bar 25 % darker; tentative is a
+light fill, the colour at 25 % over the surface, with the theme's text
+and a 4 DIP bar hatched at 45° in the colour and the surface (a timed
+month pill: a hollow dot; the owner's second finding of 2026-10-17 from
+the Month view over his Outlook calendars), unanswered the surface with a
+1.5 DIP dashed outline and its text in the colour shaded to 4.5:1,
+declined and cancelled the 18 % tint, and the selection a 2 DIP accent
+ring with a 1 DIP gap in the surface's colour, the keyboard's focus
+visual 3 DIP outside the block (`windows/README.md`). Every block, bar
+and pill (`OccurrenceView`) is a keyboard stop and a UI Automation
+element named by its key (`CalendarBlock:<key>`, `CalendarAllDay:`,
+`CalendarMonthBar:`, `CalendarPill:`; the agenda's `CalendarAgendaRow:`, a cell's
+`CalendarMore:<date>`). The keys go through `Cal.KeyFor` in the page's
+`PreviewKeyDown` (Shift for the reference's ⌥ and ⌃): Ctrl+T,
+Ctrl+← / Ctrl+→, Ctrl+Shift+1–4, Return, the arrows and Escape in two
+steps (an open detail, then the search); Delete opens the selected
+event's detail, whose Remove asks, instead of asking at once; Ctrl+Shift+N
+is `ShortcutMap`'s `ShortcutCommand.NewEvent`, the main window's in every
+mode and gated by `Board.Allows`, so it reaches the window while a
+WebView2 has the keyboard as well (the page has no accelerator of its own
+for it). The status line takes
+`SetCalendar(line, note)`, the unanswered count joined with the triage's
+note. Entry points: `AppState.CalendarSourceFor`,
+`StartedCalendarSourceFor` and `CalendarAlerts`
+(`Shell/AppState.Calendar.cs`, one source per window), `CalendarEnv`.
+
 ### 5.4 Artboard 2 · Calendar · Month (and Agenda, Search)
 
 - **Month bars** (owner, 2026-10-16): all-day events and timed events
@@ -2412,8 +2542,35 @@ Add CalDAV Calendar… calls `CalendarSidebarViewController.onAddCalDAV`
 "Sync a Microsoft 365 account's calendars…" `onSyncMicrosoft` (unset:
 Settings). Calendar-only CalDAV accounts are left out of the Mail
 sidebar (`mailSidebarAccounts` in `FolderTree.swift`) and carry the
-`CALDAV` capsule. The mini month's days are not separate accessibility
-elements yet.
+`CALDAV` capsule; since 2026-10-17 (ported back from Windows, D16)
+`inMail` is the one rule wherever Mail counts accounts:
+`MailboxController.hasAccounts` and the reader's No Accounts page, no
+`folder.list` for such an account, the sidebar's `several`, the search
+origin, the Reply All self address, and on the board `DaemonBoardSource`'s
+account filter and `BoardPreferencesController.triageCandidates` (Triage
+These Accounts), with the Go reference in step (`capabilities.InMail`,
+`model.go` `mailSidebarAccounts`, `boardtriage.TriageCandidates`). The
+mini month's days are not separate accessibility elements yet.
+
+As built on Windows (W4, 2026-10-16), where it differs from macOS:
+`CalendarMonthView` (with `MonthCellView`, `MonthSpanBarView` and
+`MonthPillView`) draws the bars of `Cal.MonthLanes` under each row's day
+numbers, a lane without room left out as on macOS, and asks
+`Cal.CellCapacity` with each cell's real height whenever the cells change
+size; "+N more" is a button with a `Flyout` of that day. `CalendarAgendaView`
+is one list for the Agenda (Core's day groups, from today when switched
+to, 30-day pages applied by key so that a page keeps the scroll position;
+while its end is in view without scrolling it asks on after each page that
+added lines, where macOS asks only when the user scrolls), the Unanswered
+filter and the search results (one list under "Results" in the daemon's
+order, each row "day · time"). The search's field is the title bar's box
+(W3). `FolderTree.AccountHeaderBadge` gives a CalDAV account `CALDAV`, and
+`FolderTree.MailSidebarAccounts`, the port of macOS's
+`mailSidebarAccounts`, leaves calendar-only CalDAV accounts out of the
+Mail sidebar; `FolderTree.InMail` is the rule wherever Mail counts
+accounts (D16; macOS caught up on 2026-10-17), and on the board
+`DaemonBoardSource` and `BoardPreferencesController.TriageCandidates`
+leave such accounts out as well.
 
 ### 5.5 Artboard 3 · Event detail popover
 
@@ -2471,6 +2628,28 @@ it). Show Invitation in Mail goes through the
 board's `MainWindowController.boardMail.reveal` (`showInvitationInMail`).
 Join Video Call and the notes' links close the popover and go to the
 actions' `openLink` with no listed links.
+
+As built on Windows (W5, 2026-10-16), where it differs from macOS: the
+detail is a WinUI `Flyout`, one for the application
+(`Calendars/EventDetailFlyout`; `EventDetailPresenter` for the one that
+is open, `EventDetailView` over `EventDetailController`), placed to the
+right of its anchor when it fits, else to its left, else over the
+anchor's middle, inside the window; `MainWindow.EventDetail.cs` tells the
+page it is open, so that Escape closes it first. The questions are
+`ContentDialog`s on the main window (`Shell/AlertService.Calendar.cs`) in
+Windows' order, the confirmation on the left and Cancel the close button
+on the right, Cancel staying the default; the series question's three
+choices are buttons in the dialog's content (a `ContentDialog` has three
+buttons in all, Cancel among them), the first the default. The flyout is
+kept open while a question is up by cancelling its `Closing` (written,
+not yet seen at run time). The notes are a plain `TextBlock` with the
+daemon's links as buttons under it, each through "Open This Link?"; in
+the detail Return is Edit, and Delete or Backspace Remove. Find Another
+Time follows the macOS popover: Edit with the series question, then the
+editor with Next Free Slot. Ask about This Event fills the panel's field
+(`Assistants/AssistantPanel.Prefill.cs`) and sends nothing. Show
+Invitation in Mail is `Shell/Integration.ShowInvitation.cs`, over the
+Board's reveal.
 
 ### 5.6 Artboard 5 · New Event window
 
@@ -2544,6 +2723,24 @@ are dropped). ⌘S and ⌘↩ arrive as the menu bar's Save Draft and Send
 (the primary is the default button, Return; Notes grows from 72 pt to fill the window's height). The availability axis is 8:00–18:00
 of the start's day in the system zone, labels every two hours.
 
+As built on Windows (W6, 2026-10-16), where it differs from macOS:
+`Calendars/EventEditor/EventEditorWindow` (760×800, at least 560×520)
+with the registry `EventEditorManager` (`Shell/AppState.EventEditors.cs`;
+new windows cascade as the compose windows do) and the form
+`EventEditorPane` (`.Dates.cs` with a `CalendarDatePicker` and a
+`TimePicker` per end, `.Video.cs`, `.Attendees.cs` with the
+`RecipientTokenBox` and its suggestions, handed to the controller through
+`SetAttendees`), `AvailabilityView`, `TimeZonePicker` and
+`CustomRepeatView`. The window is tracked as a compose window: Ctrl+Enter
+is the primary (in Notes too, where it types no line break), Ctrl+S Save
+while there are no attendees, Escape and Ctrl+W the close request. Paste
+Link… is a dialog, prefilled from an https link on the clipboard; a link
+the controller refuses asks again with what was typed (macOS beeps). Quit
+asks each window with changes its close question through
+`QuitSteps.SaveDrafts`, beside the compose windows' (Cancel abandons the
+Quit); a Windows session end loses an editor's unsaved changes without a
+question, because Save would send invitations.
+
 ### 5.7 Artboard 4 · Invitation in Mail
 
 - **List pills**: `MessageList/MessageCellView` shows
@@ -2600,6 +2797,27 @@ of the start's day in the system zone, labels every two hours.
   Calendar: `MainWindowController.showInCalendar(eventID:recurrenceID:day:)`
   (`MainWindowController+ShowInCalendar.swift`: Calendar mode, the Day view
   with the event selected, `EventDetailPopover.show`).
+- As built on Windows (W7, 2026-10-16), where it differs from macOS: the
+  pill is `Controls/InvitationPill`, in the list row (`Main/MessageRowView`,
+  `Presentation/MessageRow` over `InvitationReading.Pill`) a column of its
+  own right after the subject. The card is `Reader/InvitationCardView` with
+  `InvitationDayStripView` (drawn on a canvas) and `InvitationCardPresenter`
+  (over the calendar source of the view's window, started on first use;
+  what it was fed last is compared with a new card by the contract's JSON,
+  so the card of an answer stays until `message.get` brings another). It is
+  the first part of the header area in the reading pane and the message
+  window (`Reader/MessageView`, inside the header scroller, which scrolls
+  on its own once the headers are taller than two thirds of the pane) and
+  the first bar inside what folds in a conversation card
+  (`ConversationCard`); an attached message shows none. "Add to:" is a
+  `ComboBox`, Decline a `SplitButton` (its arrow: Decline Without Reply),
+  Change Response a `DropDownButton` whose menu checks the current answer,
+  Propose New Time… a flyout with separate date and time pickers for each
+  end in the card's zone; the tile's band and the conflict strip take the
+  theme's attention, caution, critical and success colours. Show in
+  Calendar is `MainWindow.ShowInCalendar.cs` (the Calendar mode, the Day
+  view with the event selected, its detail opened once the day is laid
+  out).
 
 ### 5.8 Artboard 6 · Preferences → Calendar, Artboard 7 · Add CalDAV sheet
 
@@ -2676,6 +2894,32 @@ Preferences → Calendar is the only place that lists disabled calendars
   (`App/Integration+CalDAV.swift`): `AppState.showAddCalDAVCalendar(from:
   onDone:)` for the sheet, `AppState.showCalendarPreferences()` for the
   Calendar page.
+- As built on Windows (W8, 2026-10-16), where it differs from macOS:
+  *Preferences* has a Calendar navigation item after General
+  (`Preferences/CalendarPreferencesPage`, over the Preferences window's own
+  calendar source, started the first time the page shows): the Display
+  group, a section per account (`CalendarAccountSection`, its calendars as
+  `CalendarRowView` cards with a `CalendarSwatch`), the empty state and Add
+  CalDAV Calendar…. A CalDAV account's name is edited in its section
+  (Account Name), since the Accounts page no longer lists the account
+  (`AccountsPageController` keeps CalDAV accounts aside and sends them
+  after the listed ones on a reorder; the page's *+* menu has no Add
+  CalDAV Calendar…); Replace Password… is a `ContentDialog` with a password
+  box (`IAlerts.PasswordAsync`); Remove Account ends the section. For a
+  mail account with the `calendar` capability that is not Microsoft 365
+  (the samples' Gmail) the section has neither the sync switch nor the
+  Invitations rows, as macOS's view has it, although
+  `Cal.Prefs.PreferencesLayout` (and `PreferencesLayout` of the Go
+  reference) lists the Invitations rows for every account that is not
+  CalDAV: Core and the macOS view disagree, and the Windows view follows
+  macOS. The sheet is `Wizard/CalDAVWizardWindow`, an owned modal window
+  (560×560) through `ModalDialog`, as the Jira assistant: the error in an
+  `InfoBar`, Add then Cancel at the bottom, Enter runs Discover Calendars
+  until the calendars are listed and then Add, the mail-account combo box
+  only when the server leaves scheduling to the client, Trust
+  Certificate… through the account wizard's dialog. It opens from the
+  primary menu `…`, the No Accounts page, the Calendar sidebar's Add
+  Calendar… and Preferences → Calendar (`AppState.ShowAddCalDAVCalendar`).
 
 ### 5.9 Artboard 8 · Small integrations
 
@@ -2719,6 +2963,38 @@ Preferences → Calendar is the only place that lists disabled calendars
   from Calendar read the card with `message.get` and run it through an
   `InvitationController`. The macOS daemon gets `MALACHI_TIME_ZONE` (the
   user's zone) from `DaemonSupervisor.environment`.
+- As built on Windows (W9, 2026-10-16), where it differs from macOS: an
+  alert is a toast (`Platform/CalendarAlertNotifier` over the
+  application's `CalendarAlertsController`; `Malachi.Platform.Windows`
+  `Notifications/CalendarAlertActivation`, `CalendarAlertResponse` and
+  `NotificationArguments.ForAlert`) with Join only for a video call (its
+  link read with `event.get`, never carried by the toast, and opened
+  through "Open This Link?") and Snooze; a click opens the event in the
+  Calendar and dismisses the alert. An unpackaged app is not told that a
+  toast was closed, so closing one does not dismiss the alert for the
+  other clients (a row of `windows/README.md`). A new invitation's or
+  update's toast has Accept and Show, a cancellation's Remove from Calendar
+  (`Presentation/DesktopNotificationActions`; `DesktopNotification` caps
+  their texts as a message's; `InvitationActivation`,
+  `InvitationNotificationResponse`, `NotificationArguments.ForInvitation`);
+  Accept and Remove from Calendar go to `AppState.AnswerInvitation`
+  (`message.get`, then an `InvitationController`), Show and a click open
+  the message in a window of its own, as any new-mail toast does on
+  Windows and in GTK. The Today strip is `Boards/BoardTodayCalendarStrip`:
+  each row is a button that shows its event in the Calendar, Respond
+  selects the invitation in Mail, Open Calendar › shows today, and it also
+  lists the snapshot's unanswered invitations that today's `event.list`
+  does not (the owner's wireframe). The assistant panel's chips What's on
+  Today (sent at once) and Find a Free Slot (waiting for the user's words)
+  and the answer's Show in Calendar card are `Assistants/Assistant.Calendar.cs`
+  (`PanelActionsWith`, `CalendarTools` in `AllowedTools`,
+  `AskAboutEventPrompt`, `ParseCalendarResult`, `CalendarRef`),
+  `AssistantPanelController.RunCalendar` and `OpenInCalendar`, and
+  `Controllers/CalendarContent.cs`. The daemon's `MALACHI_TIME_ZONE` comes
+  from `DaemonSupervisor.Environment`: the IANA name of the Windows zone for
+  the user's region (`ZoneName`; Central Europe Standard Time with CZ is
+  Europe/Prague), nothing for a zone without one (`TZ` then stays the
+  daemon's source), and a value already in the environment is kept.
 
 ### 5.10 Sample data and the development script
 
@@ -3476,9 +3752,9 @@ client the source of the port):
 
 1. **The API mirror.** `windows/src/Malachi.Core/Api/Calendar.cs` (task
    T1w) mirrors `pkg/api/calendar.go` blind, with the round-trip samples in
-   `windows/tests/Malachi.Core.Tests/Api/CalendarRoundTripTests.cs`; it has
-   never been compiled — `build.ps1 app`/`test` first, then the
-   `GoContractTests` limits. GTK uses `pkg/api` directly.
+   `windows/tests/Malachi.Core.Tests/Api/CalendarRoundTripTests.cs`;
+   compiled and tested with the Windows port (below), the
+   `GoContractTests` limits included. GTK uses `pkg/api` directly.
 2. **The pure logic** of `ui/internal/calendar` (§5.1; every file lists its
    functions, every text its msgid) and `ui/internal/assistant/calendar_actions.go`,
    as `Malachi.Core` ports with the Go tests ported 1:1 (the Swift ports in
@@ -3495,12 +3771,48 @@ client the source of the port):
    the own-invitation card, Preferences → Calendar as its own tab).
 4. **Parity.** Every calendar msgid is in `windows/parity-exclusions.txt`
    with the reason "calendar: Windows port pending"; the port removes each
-   as it uses it. Strftime msgids keep `// xgettext:no-c-format` in the Go
+   as it uses it (the Windows port has removed them all). Strftime msgids
+   keep `// xgettext:no-c-format` in the Go
    source. The daemon's zone comes from `MALACHI_TIME_ZONE`, which the
    Windows client sets like the macOS supervisor does.
 5. **Verification.** The DevStart steps of the macOS client (§5.10) are the
    measured reference; the Windows client checks the same layouts with its
    UI Automation smoke tests over `MALACHI_CALENDAR_SAMPLES=1`.
+
+**The Windows port (2026-10-16).** Done the same day by a team of agents on
+the Windows machine (Windows 11, .NET SDK 10.0.400), the macOS client as
+its source and the Go reference as its rule, through the five steps above:
+the mirror compiled, with `GoContractTests` checking `calendar.go` from
+Go's side as well (1); the pure logic as `Malachi.Core.Calendars` with the
+Go tests ported 1:1 and the Swift cases (2); the source, the controllers
+and the views of §5.3–§5.9, each section's "As built on Windows" note
+(W2–W9) saying where Windows differs (3); no "calendar: Windows port
+pending" line left in `windows/parity-exclusions.txt`, and
+`MALACHI_TIME_ZONE` set by the Windows supervisor (4); the UI smoke tests
+over the samples written (5): `CalendarSmokeTests`,
+`CalendarDetailSmokeTests`, `CalendarInvitationSmokeTests` (with
+`CalendarBoardSmokeFixture`, both sample sets), `CalendarPreferencesSmokeTests`,
+and with devmail `DevmailTests.AnInvitationShowsItsCardWithAccept`, which
+submits a raw `.ics` invitation over SMTP. The client's side of it is in
+docs/windows-port.md §11.9 and the deviations in `windows/README.md`.
+
+Verification status of the Windows port: every project builds with no
+warning; the Core suite (about 7,430 tests, 9 skipped as always; about 614
+of them in `Calendars/`) and the conventions tests (27, `StringsCheckTests`
+and `GschemaCoverageTests` among them) pass; `dotnet format
+--verify-no-changes` is clean. Not run: the UI smoke tests (written only),
+`build.ps1 app`, `test` and `lint` (heavy runs wait for the owner's
+permission), and the app itself, which nobody has started with the
+calendar yet, so no view, flyout, dialog, toast or key of §5.3–§5.9 has
+been seen on Windows. Closed since: the Mail sidebar leaves calendar-only
+CalDAV accounts out (`FolderTree.MailSidebarAccounts`, W4), and
+Ctrl+Shift+N is `ShortcutMap`'s `NewEvent`, so it reaches the window
+while a WebView2 has the keyboard (W3).
+What remains: the UI smoke runs and `build.ps1 app`/`test`/`lint` once
+the owner allows them, a first start over the samples, then the owner's
+own test with his real accounts (Microsoft 365 through Graph, Nextcloud
+through CalDAV) over a copy of his data. The GTK port followed on
+2026-10-17 (§6.5, as built in §5.12).
 
 ### 6.5 The GTK port: tasks G1–G20 (plan 2026-10-17)
 
@@ -3779,7 +4091,6 @@ the editor an `Adw.Window`; the CalDAV sheet an `Adw.Dialog`; questions
 `Adw.AlertDialog`s; notifications with per-notification buttons, not
 categories; Preferences → Calendar an `Adw.PreferencesPage`; calendar
 colours through CSS `mix()`.
-
 
 ## 7. Decisions on the open questions (owner, 2026-10-16)
 

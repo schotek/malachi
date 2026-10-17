@@ -170,8 +170,12 @@ public sealed class ApiRoundTripTests
     private const string CalMessageRef =
         """{"accountId":"acc_1","messageId":"m_1"}""";
 
+    // The members of a record, without its braces, shared by the records that embed them. A multi-line
+    // raw string: on one line the opening quotes would swallow the first property name's quote.
     private const string CalOccurrenceMembers =
-        """"eventId":"ev_1","recurrenceId":"2026-10-14T08:00:00Z","seriesId":"ev_0","calendarId":"cal_1","accountId":"acc_1","title":"Standup","start":"2026-10-14T08:00:00Z","end":"2026-10-14T08:30:00Z","startDate":"2026-10-14","endDate":"2026-10-15","allDay":false,"floating":true,"timeZone":"Europe/Prague","location":"Room B","status":"confirmed","showAs":"busy","myResponse":"needsAction","organizer":true,"attendeeCount":4,"recurring":true,"videoCall":true,"private":true,"alert":true,"readOnly":true,"invitation":@calmessageref@"""";
+        """
+        "eventId":"ev_1","recurrenceId":"2026-10-14T08:00:00Z","seriesId":"ev_0","calendarId":"cal_1","accountId":"acc_1","title":"Standup","start":"2026-10-14T08:00:00Z","end":"2026-10-14T08:30:00Z","startDate":"2026-10-14","endDate":"2026-10-15","allDay":false,"floating":true,"timeZone":"Europe/Prague","location":"Room B","status":"confirmed","showAs":"busy","myResponse":"needsAction","organizer":true,"attendeeCount":4,"recurring":true,"videoCall":true,"private":true,"alert":true,"readOnly":true,"invitation":@calmessageref@
+        """;
 
     private const string CalOccurrence =
         """{@caloccurrencemembers@}""";
@@ -213,7 +217,9 @@ public sealed class ApiRoundTripTests
         """{"via":"mail","count":3}""";
 
     private const string CalInvitationSummaryMembers =
-        """"method":"request","kind":"update","state":"unanswered","title":"Workshop","start":"2026-10-14T08:00:00Z","end":"2026-10-14T08:30:00Z","startDate":"2026-10-14","allDay":true,"organizer":@address@,"replyFrom":@address@,"ownEvent":true"""";
+        """
+        "method":"request","kind":"update","state":"unanswered","title":"Workshop","start":"2026-10-14T08:00:00Z","end":"2026-10-14T08:30:00Z","startDate":"2026-10-14","allDay":true,"organizer":@address@,"replyFrom":@address@,"ownEvent":true
+        """;
 
     private const string CalInvitationSummary =
         """{@calinvitationsummarymembers@}""";

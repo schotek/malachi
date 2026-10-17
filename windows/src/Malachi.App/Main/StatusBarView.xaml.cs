@@ -12,7 +12,9 @@
 // while it is open its rows follow every change of the line. A screen
 // reader reads the line itself (window.blp: labelled by sync_label), or
 // the button's tooltip while the line is empty (no account), where GTK's
-// label would leave the button nameless.
+// label would leave the button nameless. In the Calendar mode the line's
+// text is the calendars' state and the note leads with the unanswered
+// invitations (SetCalendar, macOS setCalendar).
 
 using System;
 using Malachi.App.Resources;
@@ -37,6 +39,12 @@ public sealed partial class StatusBarView : UserControl
     private Action? afterClose;
     private StatusLine? shown;
     private string note = "";
+
+    // The Calendar mode's texts (SetCalendar): the calendars' state line in
+    // place of the sync line's text, null otherwise, and the unanswered
+    // count ahead of the triage's note.
+    private string? calendarLine;
+    private string calendarNote = "";
 
     /// <summary>An empty line; <see cref="Attach"/> connects it.</summary>
     public StatusBarView()
@@ -99,11 +107,36 @@ public sealed partial class StatusBarView : UserControl
         }
     }
 
+    /// <summary>
+    /// The Calendar mode's texts (macOS StatusBarViewController.setCalendar):
+    /// <paramref name="line"/> in place of the sync line's text (null: the
+    /// sync line again), <paramref name="calendar"/> (the unanswered count)
+    /// ahead of the triage's note ("%s · %s"). The spinner, the connection
+    /// glyph and the flyout (the accounts, the Outbox) stay the sync line's.
+    /// </summary>
+    public void SetCalendar(string? line, string calendar)
+    {
+        ArgumentNullException.ThrowIfNull(calendar);
+        var nextNote = line is null ? "" : calendar;
+        if (line == calendarLine && nextNote == calendarNote)
+        {
+            return;
+        }
+        calendarLine = line;
+        calendarNote = nextNote;
+        if (shown is { } current)
+        {
+            Show(current);
+        }
+    }
+
     // sync.go refreshSyncLabel.
     private void Show(StatusLine line)
     {
         shown = line;
-        SyncLabel.Text = line.Text.Length == 0 ? note : Core.Boards.Board.JoinedNote(line.Text, note);
+        var text = calendarLine ?? line.Text;
+        var notes = calendarNote.Length == 0 || note.Length == 0 ? calendarNote + note : Core.Calendars.Cal.Text.Dot(calendarNote, note);
+        SyncLabel.Text = text.Length == 0 ? notes : Core.Boards.Board.JoinedNote(text, notes);
         AutomationProperties.SetName(StatusButton, SyncLabel.Text.Length > 0 ? SyncLabel.Text : L10n.T("Sync Status"));
         SyncSpinner.IsActive = line.Spinning;
         SyncSpinner.Visibility = line.Spinning ? Visibility.Visible : Visibility.Collapsed;

@@ -157,6 +157,39 @@ internal sealed partial class AlertService : IAlerts
     }
 
     /// <inheritdoc/>
+    public async Task<string?> PasswordAsync(Window? window, string heading, string body, string fieldLabel, string confirmLabel)
+    {
+        // The secret stays in the box, never in a string kept here, until the answer.
+        var field = new PasswordBox { PlaceholderText = fieldLabel };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(field, fieldLabel);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(field, "PasswordDialogField");
+        var result = await ShowAsync(window, () =>
+        {
+            var panel = new StackPanel { Spacing = 12 };
+            if (body.Length > 0)
+            {
+                panel.Children.Add(Body(body));
+            }
+            panel.Children.Add(field);
+            var dialog = new ContentDialog
+            {
+                Title = Heading(heading),
+                Content = panel,
+                PrimaryButtonText = Mnemonic.Strip(confirmLabel),
+                CloseButtonText = Mnemonic.Strip(L10n.T("_Cancel")),
+                DefaultButton = ContentDialogButton.Primary,
+                IsPrimaryButtonEnabled = false,
+            };
+            field.PasswordChanged += (_, _) => dialog.IsPrimaryButtonEnabled = field.Password.Length > 0;
+            dialog.Opened += (_, _) => field.Focus(FocusState.Programmatic);
+            return dialog;
+        });
+        var password = result == ContentDialogResult.Primary && field.Password.Length > 0 ? field.Password : null;
+        field.Password = "";
+        return password;
+    }
+
+    /// <inheritdoc/>
     public async Task ShowAboutAsync(Window? window) => await ShowAsync(window, About);
 
     /// <summary>The Core hook of a destructive confirmation (ActionsController.Confirm and friends).</summary>

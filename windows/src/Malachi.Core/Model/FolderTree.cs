@@ -6,7 +6,8 @@
 // matchesFilter, enabledAccounts, visibleFolders, selfAddress, sortFolders,
 // favouriteSection, folderTree, markSubtree, badgeFor, sortSiblings,
 // roleRank, roleIcon, folderIcon, accountHeaderBadge, firstFolder) and
-// folders.go (folderTitle, folderCountsText).
+// folders.go (folderTitle, folderCountsText). mailSidebarAccounts is
+// Swift-first (the calendar's; the Go reference has no CalDAV yet).
 //
 // Swift's free functions are the static members of this class. Swift's
 // folderTree is FolderTreeRows: C# allows no member named like its type.
@@ -92,6 +93,31 @@ public static class FolderTree
     }
 
     /// <summary>
+    /// The enabled accounts the Mail sidebar lists, keeping order: a
+    /// calendar-only CalDAV account has no mail and no folders, so it is
+    /// never in Mail (docs/calendar.md §5.3; it shows in the Calendar's
+    /// sidebar with the CALDAV capsule). Swift <c>mailSidebarAccounts</c>.
+    /// </summary>
+    public static IReadOnlyList<Account> MailSidebarAccounts(IEnumerable<Account> accounts) =>
+        [.. EnabledAccounts(accounts).Where(InMail)];
+
+    /// <summary>
+    /// Whether Mail shows account <paramref name="a"/> once it is enabled,
+    /// the rule of <see cref="MailSidebarAccounts"/>: every kind but a
+    /// calendar-only CalDAV account. The mailbox asks it of switched-off
+    /// accounts too, so that CalDAV accounts alone count as no account in
+    /// Mail (the empty sidebar, the reader's No Accounts page); the account
+    /// name on an all-accounts search result, the Reply All self address
+    /// and the board's accounts (its account filter, Triage These Accounts)
+    /// go by it as well. Swift <c>inMail</c>, Go <c>capabilities.InMail</c>.
+    /// </summary>
+    public static bool InMail(Account a)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        return a.Config.ProtocolKind != AccountKind.CalDAV;
+    }
+
+    /// <summary>
     /// The folders the sidebar lists: an empty outbox is dropped (the folder
     /// exists from the first send on; it only earns a row while something is
     /// in it). The model keeps the full list so <c>FolderByRole</c> still
@@ -113,7 +139,8 @@ public static class FolderTree
     /// <summary>
     /// Lays the sidebar out (model.go <c>sortFolders</c>): the Favourites
     /// section when anything is pinned (<see cref="FavouriteSection"/>), then
-    /// the enabled accounts in list order, each preceded by a header row when
+    /// the enabled accounts in list order (<see cref="MailSidebarAccounts"/>:
+    /// no calendar-only CalDAV account), each preceded by a header row when
     /// there are at least two of them or a Favourites section above them,
     /// then the account's folders as a tree. Roots are ordered by (roleRank,
     /// path); the children of a folder follow it, ordered the same way. Depth
@@ -130,7 +157,7 @@ public static class FolderTree
     {
         ArgumentNullException.ThrowIfNull(folders);
         ArgumentNullException.ThrowIfNull(collapsed);
-        var enabled = EnabledAccounts(accounts);
+        var enabled = MailSidebarAccounts(accounts);
         var output = new List<FolderEntry>(FavouriteSection(enabled, folders, favourites));
         // A single account needs no heading of its own, unless a Favourites
         // section sits above its folders and the two would run into each other.
@@ -429,7 +456,9 @@ public static class FolderTree
     /// "JIRA" for an issue-tracker account (<see cref="Jira.KindBadge"/>),
     /// the provider a mail account signs in with ("GOOGLE", "M365";
     /// <see cref="Provider.AccountProvider"/>), "IMAP" for a mail account
-    /// with a password. Brand and protocol names, never translated.
+    /// with a password, "CALDAV" for a calendar-only CalDAV account (Swift
+    /// <c>accountHeaderBadge</c>; the Go reference has no CalDAV yet). Brand
+    /// and protocol names, never translated.
     /// </summary>
     public static string AccountHeaderBadge(Account a)
     {
@@ -437,6 +466,10 @@ public static class FolderTree
         if (Jira.IsJira(a.Config))
         {
             return Jira.KindBadge;
+        }
+        if (a.Config.ProtocolKind == AccountKind.CalDAV)
+        {
+            return CalDAVBadge;
         }
         return Provider.AccountProvider(a.Config)?.Value switch
         {
@@ -450,6 +483,7 @@ public static class FolderTree
     private const string GoogleBadge = "GOOGLE";
     private const string MicrosoftBadge = "M365";
     private const string ImapBadge = "IMAP";
+    private const string CalDAVBadge = "CALDAV";
 
     /// <summary>
     /// The display name of a folder (folders.go <c>folderTitle</c>): the

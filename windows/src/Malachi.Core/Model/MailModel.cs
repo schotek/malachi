@@ -146,8 +146,14 @@ public sealed partial class MailModel
     /// <summary>A further page is on its way.</summary>
     public bool LoadingMore { get; set; }
 
-    /// <summary>The accounts the sidebar shows, in list order.</summary>
+    /// <summary>The enabled accounts, in list order (calendar-only CalDAV ones included).</summary>
     public IReadOnlyList<Account> EnabledAccounts => FolderTree.EnabledAccounts(Accounts);
+
+    /// <summary>
+    /// The accounts the Mail sidebar shows, in list order
+    /// (<see cref="FolderTree.MailSidebarAccounts"/>).
+    /// </summary>
+    public IReadOnlyList<Account> MailSidebarAccounts => FolderTree.MailSidebarAccounts(Accounts);
 
     /// <summary>
     /// Projects a list summary onto what a row displays (model.go

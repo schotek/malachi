@@ -7,7 +7,9 @@
 // names are translated, the ids are not), the patterns the tests use, and
 // waiting with a deadline instead of sleeping. Only patterns, no synthetic
 // input: the tests run beside other windows and never need the foreground,
-// except PressKey for what only a key does (the board panel's Escape).
+// except PressKey for what only a key does (the board panel's Escape) and
+// DoubleClick for what only a real double click shows (where the window it
+// opens ends up).
 
 using System;
 using System.Collections.Generic;
@@ -134,6 +136,29 @@ internal static class Uia
             "the keyboard focus in the app");
         NativeMethods.KeybdEvent(key, 0, 0, 0);
         NativeMethods.KeybdEvent(key, 0, NativeMethods.KeyEventKeyUp, 0);
+    }
+
+    /// <summary>
+    /// A real double click at <paramref name="point"/> (screen coordinates)
+    /// whose second press is held for <paramref name="secondPressHeld"/>, as
+    /// a hand's is while a window opens: the other exception to patterns
+    /// only, for what only the gesture shows. DoubleTapped comes with the
+    /// second press, so only real input shows where the window it opens ends
+    /// up once the press is released (four events sent at once are handled
+    /// before the window shows, and it stays in front whatever the app does:
+    /// measured). The pointer stays there.
+    /// </summary>
+    public static void DoubleClick(System.Windows.Point point, TimeSpan secondPressHeld)
+    {
+        if (!NativeMethods.SetCursorPos((int)Math.Round(point.X), (int)Math.Round(point.Y)))
+        {
+            throw new InvalidOperationException("the pointer did not move");
+        }
+        NativeMethods.MouseEvent(NativeMethods.MouseEventLeftDown, 0, 0, 0, 0);
+        NativeMethods.MouseEvent(NativeMethods.MouseEventLeftUp, 0, 0, 0, 0);
+        NativeMethods.MouseEvent(NativeMethods.MouseEventLeftDown, 0, 0, 0, 0);
+        Thread.Sleep(secondPressHeld);
+        NativeMethods.MouseEvent(NativeMethods.MouseEventLeftUp, 0, 0, 0, 0);
     }
 
     /// <summary>Asks a window to close (its caption's Close, WM_CLOSE).</summary>

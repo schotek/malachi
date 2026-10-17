@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Calendar/CalendarPageViewController.swift
+(the page in place of the mail's split view, CalendarEmptyView) and of the
+window's part of CalendarToolbar.swift; GTK: the calendar page follows
+(window/board.go's mode switch is its reference). The main window's
+Calendar mode (docs/calendar.md §5.3, D27), in place of the mail's panes
+and above the status line, under the title bar that holds the
+Mail/Board/Calendar switch and the search box ("Search Events" here). Its
+bar: the calendar's controls (BarSlot: CalendarBar, with the sidebar
+toggle, Today, the arrows, the views, the title, New Event and ✦) and "…"
+(Mail Ctrl+1, Board Ctrl+2, Calendar Ctrl+3, New Event Ctrl+Shift+N, Add
+Account…, Preferences, Quit: the window's sidebar with the primary menu is
+hidden here, as in the Board). Under it the content (ContentSlot:
+CalendarContentView, the calendar's sidebar, views and the assistant
+panel's slot), and the empty state while there is nothing to show
+(Cal.Text.EmptyTitle and EmptyBody, Open Preferences where the remedy is
+there), which lies over the views once they came. The window's toasts lie
+over it all (ToastLayer). The page's keys: CalendarController.HandleKey.
+-->
+<UserControl
+    x:Class="Malachi.App.Calendars.CalendarPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:res="using:Malachi.App.Resources"
+    IsTabStop="False">
+    <Grid x:Name="PageRoot" PreviewKeyDown="OnPagePreviewKeyDown">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- The calendar's bar (macOS CalendarToolbar's items after the switch). -->
+        <Grid
+            x:Name="Bar"
+            Padding="12,6"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1"
+            ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <!-- The calendar's controls and its title (BarContent; until then the title). -->
+            <ContentControl
+                x:Name="BarSlot"
+                HorizontalContentAlignment="Stretch"
+                VerticalContentAlignment="Center"
+                IsTabStop="False">
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock
+                        x:Name="TitleText"
+                        AutomationProperties.AutomationId="CalendarTitle"
+                        MaxLines="1"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        TextTrimming="CharacterEllipsis" />
+                    <TextBlock
+                        x:Name="SubtitleText"
+                        AutomationProperties.AutomationId="CalendarSubtitle"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        MaxLines="1"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        TextTrimming="CharacterEllipsis"
+                        Visibility="Collapsed" />
+                </StackPanel>
+            </ContentControl>
+            <Button
+                x:Name="MoreButton"
+                Grid.Column="1"
+                Width="40"
+                Height="32"
+                Padding="0"
+                VerticalAlignment="Center"
+                AutomationProperties.AutomationId="CalendarMenuButton"
+                AutomationProperties.Name="{l:T Msgid='Main Menu'}"
+                Style="{StaticResource SubtleButtonStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Main Menu'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-more-symbolic')}" />
+                <Button.Flyout>
+                    <MenuFlyout x:Name="PageMenu" Placement="BottomEdgeAlignedRight">
+                        <!-- Windows-only strings: the key names beside the items (Board.BoardKeys, Cal.ShowCalendarKey). -->
+                        <RadioMenuFlyoutItem
+                            x:Name="MenuMail"
+                            AutomationProperties.AutomationId="CalendarMenuMail"
+                            GroupName="WindowMode"
+                            KeyboardAcceleratorTextOverride="Ctrl+1"
+                            Text="{l:T Msgid='Mail'}" />
+                        <RadioMenuFlyoutItem
+                            x:Name="MenuBoard"
+                            AutomationProperties.AutomationId="CalendarMenuBoard"
+                            GroupName="WindowMode"
+                            KeyboardAcceleratorTextOverride="Ctrl+2"
+                            Text="{l:T Msgid='Board'}" />
+                        <RadioMenuFlyoutItem
+                            x:Name="MenuCalendar"
+                            AutomationProperties.AutomationId="CalendarMenuCalendar"
+                            GroupName="WindowMode"
+                            IsChecked="True"
+                            KeyboardAcceleratorTextOverride="Ctrl+3"
+                            Text="{l:T Msgid='Calendar'}" />
+                        <MenuFlyoutSeparator />
+                        <!-- Windows-only string: the key name beside the item (Cal.CalendarKeys' New Event). -->
+                        <MenuFlyoutItem
+                            x:Name="MenuNewEvent"
+                            AutomationProperties.AutomationId="CalendarMenuNewEvent"
+                            KeyboardAcceleratorTextOverride="Ctrl+Shift+N"
+                            Text="{l:T Msgid='New Event'}" />
+                        <MenuFlyoutSeparator />
+                        <MenuFlyoutItem x:Name="MenuAddAccount" l:MnemonicLabel.Text="{l:T Msgid='_Add Account…'}" />
+                        <!-- Windows-only string: the key name beside the item. -->
+                        <MenuFlyoutItem
+                            x:Name="MenuPreferences"
+                            l:MnemonicLabel.Text="{l:T Msgid='_Preferences'}"
+                            KeyboardAcceleratorTextOverride="Ctrl+," />
+                        <MenuFlyoutSeparator />
+                        <!-- Windows-only strings: Quit has no GTK msgid (as the sidebar's primary menu). -->
+                        <MenuFlyoutItem
+                            x:Name="MenuQuit"
+                            l:MnemonicLabel.Text="_Quit"
+                            KeyboardAcceleratorTextOverride="Ctrl+Q" />
+                    </MenuFlyout>
+                </Button.Flyout>
+            </Button>
+        </Grid>
+
+        <Grid x:Name="ContentHost" Grid.Row="1">
+            <!-- The calendar's sidebar and views (Content; empty until they come). -->
+            <ContentControl
+                x:Name="ContentSlot"
+                HorizontalContentAlignment="Stretch"
+                VerticalContentAlignment="Stretch"
+                IsTabStop="False" />
+            <!-- The empty state (macOS CalendarEmptyView): the title, the
+                 explanation and Open Preferences, centred, at most 380 wide. -->
+            <ScrollViewer
+                x:Name="EmptyState"
+                AutomationProperties.AutomationId="CalendarEmptyState"
+                HorizontalScrollMode="Disabled"
+                VerticalScrollBarVisibility="Auto">
+                <StackPanel
+                    MaxWidth="380"
+                    Margin="12,36"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="10">
+                    <TextBlock
+                        x:Name="EmptyTitle"
+                        HorizontalAlignment="Center"
+                        AutomationProperties.HeadingLevel="Level1"
+                        Style="{StaticResource Title1LabelStyle}"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        x:Name="EmptyBody"
+                        HorizontalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource BodyLabelStyle}"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap" />
+                    <Button
+                        x:Name="OpenPreferencesButton"
+                        Margin="0,6,0,0"
+                        HorizontalAlignment="Center"
+                        AutomationProperties.AutomationId="CalendarOpenPreferences"
+                        Click="OnOpenPreferencesClick"
+                        Content="{l:T Msgid='Open Preferences'}" />
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- The window's toasts while the calendar shows (MainWindow.Mode.cs moves them here). -->
+        <Grid x:Name="ToastLayerGrid" Grid.Row="1" />
+    </Grid>
+</UserControl>

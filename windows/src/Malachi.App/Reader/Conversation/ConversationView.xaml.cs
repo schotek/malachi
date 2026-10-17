@@ -50,6 +50,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Malachi.App.Controls;
 using Malachi.App.WebViews;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers;
@@ -133,6 +134,7 @@ internal sealed partial class ConversationView : UserControl
         FocusList = focusList;
         Logger = services.State.Logs.CreateLogger<ConversationView>();
         InitializeComponent();
+        AfterRelease = new AfterRelease(this);
         spinnerTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
         spinnerTimer.IsRepeating = false;
         spinnerTimer.Interval = ReaderController.SpinnerDelay;
@@ -191,6 +193,13 @@ internal sealed partial class ConversationView : UserControl
 
     /// <summary>The pane's logger.</summary>
     internal ILogger Logger { get; }
+
+    /// <summary>
+    /// What a double click on a card's header waits for before it opens a
+    /// window: the release of its second press, as the list's does (a window
+    /// opened on the press can come up behind this one).
+    /// </summary>
+    internal AfterRelease AfterRelease { get; }
 
     /// <summary>The plain-text body's size (the text-zoom setting).</summary>
     public double BodyFontSize => BaseBodyFontSize * Services.State.Settings.TextZoom / 100.0;

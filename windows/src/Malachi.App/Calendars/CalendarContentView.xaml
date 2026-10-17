@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Calendar/CalendarPageViewController.swift
+(the split view: the sidebar item of 240, the content, the assistant
+panel's inspector item; CalendarContentViewController); GTK: the
+calendar's page follows (docs/calendar.md §6.4). The calendar page's
+content (CalendarPage.PageContent): the sidebar, the views on the opaque
+surface they are blended over (Week and Day, Month, Agenda with the
+Unanswered filter and the search results; the page's empty state lies in
+EmptyHost over them), and the slot of the window's assistant panel at the
+end while it shows here (D28). Below 360 of content the sidebar folds,
+then the panel.
+-->
+<UserControl
+    x:Class="Malachi.App.Calendars.CalendarContentView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:calendars="using:Malachi.App.Calendars"
+    IsTabStop="False"
+    SizeChanged="OnSizeChanged">
+    <Grid x:Name="Columns">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="SidebarColumn" Width="240" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition x:Name="AssistantColumn" Width="0" />
+        </Grid.ColumnDefinitions>
+
+        <calendars:CalendarSidebar x:Name="Sidebar" />
+
+        <Border
+            x:Name="ViewsLayer"
+            Grid.Column="1"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1,0,0,0"
+            Style="{StaticResource CalendarSurfaceStyle}">
+            <Grid x:Name="ViewsHost">
+                <calendars:CalendarWeekView x:Name="Week" Visibility="Collapsed" />
+                <calendars:CalendarMonthView x:Name="Month" Visibility="Collapsed" />
+                <calendars:CalendarAgendaView x:Name="Agenda" Visibility="Collapsed" />
+                <Grid x:Name="EmptyHostGrid" />
+            </Grid>
+        </Border>
+
+        <!-- The assistant panel's slot (D28): the window moves its panel in and back. -->
+        <Grid
+            x:Name="AssistantSlot"
+            Grid.Column="2"
+            Visibility="Collapsed">
+            <Border
+                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}"
+                BorderThickness="1,0,0,0" />
+            <Grid x:Name="AssistantHostGrid" />
+        </Grid>
+    </Grid>
+</UserControl>

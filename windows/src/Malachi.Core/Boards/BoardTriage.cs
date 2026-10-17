@@ -587,8 +587,8 @@ public static partial class Board
 
     /// <summary>
     /// The status strip's triage note for the window in <paramref name="mode"/>
-    /// with the board in <paramref name="phase"/>: in Mail only a run's
-    /// progress; in Board a run's progress, else the sign-in waiting for the
+    /// with the board in <paramref name="phase"/>: in Mail and in Calendar
+    /// only a run's progress; in Board a run's progress, else the sign-in waiting for the
     /// browser, else why automatic triage pauses, else the status line;
     /// nothing in Board while the board is off or the daemon has none,
     /// unless a run works.
@@ -596,7 +596,7 @@ public static partial class Board
     public static string TriageStripText(TriageView v, Mode mode, Phase phase)
     {
         ArgumentNullException.ThrowIfNull(v);
-        if (mode == Mode.Mail)
+        if (mode != Mode.Board)
         {
             return v.Running ? v.Progress : "";
         }

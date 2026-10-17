@@ -113,7 +113,8 @@ public sealed partial class MainWindow
         SyncBoardParts(force: true);
     }
 
-    // The parts are in sight while the window shows the board.
+    // The parts are in sight while the window shows the board; in Mail and
+    // in the Calendar they settle and wait, as in a hidden window.
     private void SyncBoardParts(bool force = false)
     {
         var shows = mode == Board.Mode.Board && AppWindow.IsVisible;

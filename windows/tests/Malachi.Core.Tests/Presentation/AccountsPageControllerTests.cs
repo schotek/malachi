@@ -277,6 +277,42 @@ public sealed class AccountsPageControllerTests
         Assert.Equal([B, C], rec.Focus);
     }
 
+    // Preferences → Calendar has the CalDAV accounts (Cal.Prefs.ShowsInAccountsTab):
+    // the page lists the others, and a new order keeps them after those
+    // (macOS calendarOnly).
+    [Fact]
+    public async Task CalDAVAccountsAreNotListedAndAReorderKeepsThemLast()
+    {
+        await using var h = await Harness.StartAsync();
+        var caldav = TestAccount("d", name: "Nextcloud", email: "me@cloud.example.test") with
+        {
+            Config = new AccountConfig
+            {
+                Name = "Nextcloud",
+                Email = "me@cloud.example.test",
+                Kind = AccountKind.CalDAV,
+                CalDAV = new CalDAVConfig { ServerUrl = "https://cloud.example.test", Username = "me" },
+            },
+        };
+        h.Accounts =
+        [
+            TestAccount("a", email: "a@example.test"),
+            caldav,
+            TestAccount("b", email: "b@example.test"),
+            TestAccount("c", email: "c@example.test"),
+        ];
+        var (c, _) = await h.LoadedAsync();
+        await h.Ui.RunAsync(() =>
+        {
+            Assert.Equal([A, B, C], c.Rows.Select(r => r.Id));
+            Assert.Null(c.Account(new AccountId("d")));
+            Assert.True(c.MoveBy(A, 1));
+            Assert.Equal([B, A, C], c.Rows.Select(r => r.Id));
+        });
+        await h.IdleAsync();
+        Assert.Equal(["{\"accountIds\":[\"b\",\"a\",\"c\",\"d\"]}"], h.Calls(API.AccountReorder.Name));
+    }
+
     [Fact]
     public async Task ADraggedRowSavesTheNewOrder()
     {

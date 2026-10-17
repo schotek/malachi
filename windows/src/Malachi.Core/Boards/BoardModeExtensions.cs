@@ -16,8 +16,13 @@ public static class BoardModeNickExtensions
 {
     extension(Board.Mode mode)
     {
-        /// <summary>The mode's value in the settings (board-last-mode): "mail", "board".</summary>
-        public string Nick => mode == Board.Mode.Board ? "board" : "mail";
+        /// <summary>The mode's value in the settings (board-last-mode): "mail", "board", "calendar".</summary>
+        public string Nick => mode switch
+        {
+            Board.Mode.Board => "board",
+            Board.Mode.Calendar => "calendar",
+            _ => "mail",
+        };
     }
 }
 
@@ -26,10 +31,11 @@ public static class BoardStartChoiceExtensions
 {
     extension(Board.StartChoice choice)
     {
-        /// <summary>The choice's value in the settings (board-start-mode): "mail", "board", "last".</summary>
+        /// <summary>The choice's value in the settings (board-start-mode): "mail", "board", "calendar", "last".</summary>
         public string Nick => choice switch
         {
             Board.StartChoice.Board => "board",
+            Board.StartChoice.Calendar => "calendar",
             Board.StartChoice.Last => Board.NickLast,
             _ => "mail",
         };

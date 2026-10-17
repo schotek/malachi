@@ -5,7 +5,8 @@
 // SetThread with its Draft badge, SetReserveExpander, fill, SetExpanded, SetMember, applyLead,
 // applyIssue, SetBulkPill (widget/pill.go), SetCompact, SetShowPreview,
 // SetShowAvatar; the margins and sizes of
-// message_row.blp), threads.go (the row a listRow becomes: newMessageRow,
+// message_row.blp), the invitation pill of macOS MessageCellView.swift
+// (applyInvitation, InvitationReading.Pill; docs/calendar.md §5.7), threads.go (the row a listRow becomes: newMessageRow,
 // syncRows) and widget/highlight.go (the matched words in bold); macOS:
 // MessageList/MessageCellView.swift, which keeps this in AppKit and Windows
 // in Core (docs/windows-port.md §7.4, §11.2).
@@ -23,6 +24,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Malachi.Core.Api;
+using Malachi.Core.Calendars;
 using Malachi.Core.I18n;
 using Malachi.Core.IssueTrackers;
 using Malachi.Core.Model;
@@ -83,6 +85,7 @@ public sealed partial class MessageRow : ObservableObject
         BulkText = "";
         InternalText = "";
         DraftText = "";
+        InvitationText = "";
         EventText = "";
         EventTooltip = "";
         SubjectLineShown = true;
@@ -265,6 +268,23 @@ public sealed partial class MessageRow : ObservableObject
     public partial string DraftText { get; private set; }
 
     /// <summary>
+    /// The pill of a message with a calendar part after the subject
+    /// (<see cref="InvitationReading.Pill(ListRow)"/>: on a conversation row
+    /// its newest member's): Invitation, Update, Cancelled or Reply; None
+    /// hides it.
+    /// </summary>
+    [ObservableProperty]
+    public partial Cal.InvitationPill InvitationPill { get; private set; }
+
+    /// <summary>The invitation pill's text (<see cref="Cal.PillTitle"/>); "" hides it.</summary>
+    [ObservableProperty]
+    public partial string InvitationText { get; private set; }
+
+    /// <summary>A cancellation: the subject is struck through (<see cref="Cal.StrikesSubject"/>).</summary>
+    [ObservableProperty]
+    public partial bool StrikesSubject { get; private set; }
+
+    /// <summary>
     /// An event message of an issue (a status or assignee change), not a
     /// conversation: its actor where the sender goes, set small, and the
     /// change after it (<see cref="EventText"/>), no preview and no unread
@@ -345,6 +365,12 @@ public sealed partial class MessageRow : ObservableObject
             tag = message.Tag;
             DraftText = "";
         }
+        // The invitation pill (MessageCellView.applyInvitation): the row's
+        // message's, a conversation's newest member's.
+        var pill = InvitationReading.Pill(row);
+        InvitationPill = pill;
+        InvitationText = Cal.PillTitle(pill);
+        StrikesSubject = Cal.StrikesSubject(pill);
         IsThread = thread;
         Loading = thread && loading;
         IsMember = row.Member;
@@ -374,6 +400,7 @@ public sealed partial class MessageRow : ObservableObject
         {
             parts.Add(IssueKey);
             parts.Add(Subject);
+            parts.Add(InvitationText);
             parts.Add(StatusText);
             parts.Add(BulkText);
             parts.Add(InternalText);

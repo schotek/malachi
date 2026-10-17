@@ -12,7 +12,9 @@ the fold arrow, its spinner, the avatar of 40 or 28), and the column
 attachment and star icons, the origin of a search result, the date, the
 unread dot), the subject line (with the neutral tag of a bulk message
 after the subject, bulk_pill; the red Draft badge of a conversation with
-the user's unsent reply at its end, draft_pill) and the preview. A row of a
+the user's unsent reply at its end, draft_pill; the pill of a message with a
+calendar part right after the subject, macOS MessageCellView's
+calendarPill, a cancellation's subject struck through) and the preview. A row of a
 Jira account has the issue's key before the subject and its status and
 Internal pills after it (subject_line), and an event row the change after its actor
 (event_label), set small, without a preview. The hairline under every row
@@ -209,11 +211,13 @@ result as bold runs built in code (never markup).
                 <!-- subject_line: on a row of a Jira account the key before the
                      summary and the status (and Internal) pills after it; a
                      conversation with the user's unsent reply ends it with the
-                     red Draft badge. -->
+                     red Draft badge; a message with a calendar part has its
+                     invitation pill right after the subject. -->
                 <Grid ColumnSpacing="6" Visibility="{x:Bind res:Bind.Visible(Row.SubjectLineShown), Mode=OneWay}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
@@ -232,32 +236,40 @@ result as bold runs built in code (never markup).
                         MaxLines="1"
                         Style="{StaticResource BodyLabelStyle}"
                         Text="{x:Bind Row.Subject, Mode=OneWay}"
+                        TextDecorations="{x:Bind main:MessageRowView.Strike(Row.StrikesSubject), Mode=OneWay}"
                         TextTrimming="CharacterEllipsis"
                         TextWrapping="NoWrap" />
+                    <!-- calendarPill (MessageCellView.applyInvitation): Invitation,
+                         Update, Cancelled or Reply; the row's name says it. -->
+                    <controls:InvitationPill
+                        x:Name="CalendarPill"
+                        Grid.Column="2"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Kind="{x:Bind Row.InvitationPill, Mode=OneWay}" />
                     <!-- bulk_pill: the neutral tag of a bulk message, before the
                          status of an issue (a row of an issue has none). -->
                     <controls:IssuePill
                         x:Name="BulkPill"
-                        Grid.Column="2"
+                        Grid.Column="3"
                         AutomationProperties.AccessibilityView="Raw"
                         IsBulk="True"
                         Text="{x:Bind Row.BulkText, Mode=OneWay}" />
                     <controls:IssuePill
                         x:Name="StatusPill"
-                        Grid.Column="3"
+                        Grid.Column="4"
                         AutomationProperties.AccessibilityView="Raw"
                         StatusStyle="{x:Bind Row.StatusStyle, Mode=OneWay}"
                         Text="{x:Bind Row.StatusText, Mode=OneWay}" />
                     <controls:IssuePill
                         x:Name="InternalPill"
-                        Grid.Column="4"
+                        Grid.Column="5"
                         AutomationProperties.AccessibilityView="Raw"
                         IsInternal="True"
                         Text="{x:Bind Row.InternalText, Mode=OneWay}" />
                     <!-- draft_pill (message_row.go SetThread, conversation.DraftBadge). -->
                     <controls:IssuePill
                         x:Name="DraftPill"
-                        Grid.Column="5"
+                        Grid.Column="6"
                         AutomationProperties.AccessibilityView="Raw"
                         IsDraft="True"
                         Text="{x:Bind Row.DraftText, Mode=OneWay}" />

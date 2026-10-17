@@ -145,7 +145,8 @@ internal sealed partial class ConversationDraftView : UserControl
         }
     }
 
-    // A double click on the header is Edit (convDraftCard's click gesture).
+    // A double click on the header is Edit (convDraftCard's click gesture),
+    // once the second press is released (the pane's AfterRelease).
     private void OnDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
         if (!OnHeader(e))
@@ -153,7 +154,8 @@ internal sealed partial class ConversationDraftView : UserControl
             return;
         }
         e.Handled = true;
-        pane.Services.Router.EditThreadDraft(Card.Draft);
+        var draft = Card.Draft;
+        pane.AfterRelease.Run(() => pane.Services.Router.EditThreadDraft(draft));
     }
 
     // onHeader: from the card's top edge to the bottom of the header's line,

@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Calendar/MiniMonthView.swift; GTK: the
+calendar's sidebar follows (docs/calendar.md §6.4). The sidebar's month
+(docs/calendar.md §5.3): the month's title with ‹ › (the month alone),
+the weekday headers and the 6 × 7 days of Cal.MiniMonth; today's number
+in a filled accent circle, the shown range banded (rounded at its row's
+first and last day), days of other months grey. A click on a day goes to
+it. The days are not separate accessibility elements (docs/calendar.md
+§5.4 As built); the arrows are buttons.
+-->
+<UserControl
+    x:Class="Malachi.App.Calendars.MiniMonthView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:res="using:Malachi.App.Resources"
+    AutomationProperties.AutomationId="CalendarMiniMonth"
+    IsTabStop="False">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="28" />
+            <RowDefinition Height="18" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid ColumnSpacing="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                x:Name="TitleText"
+                Margin="4,0,0,0"
+                VerticalAlignment="Center"
+                AutomationProperties.AutomationId="CalendarMiniMonthTitle"
+                MaxLines="1"
+                Style="{StaticResource BodyStrongTextBlockStyle}"
+                TextTrimming="CharacterEllipsis" />
+            <Button
+                x:Name="PreviousButton"
+                Grid.Column="1"
+                Width="24"
+                Height="24"
+                Padding="0"
+                AutomationProperties.AutomationId="CalendarMiniMonthPrevious"
+                Click="OnPreviousClick"
+                Style="{StaticResource SubtleButtonStyle}">
+                <FontIcon
+                    FlowDirection="RightToLeft"
+                    FontSize="10"
+                    Glyph="{x:Bind res:Icons.Glyph('go-next')}"
+                    MirroredWhenRightToLeft="True" />
+            </Button>
+            <Button
+                x:Name="NextButton"
+                Grid.Column="2"
+                Width="24"
+                Height="24"
+                Padding="0"
+                AutomationProperties.AutomationId="CalendarMiniMonthNext"
+                Click="OnNextClick"
+                Style="{StaticResource SubtleButtonStyle}">
+                <FontIcon FontSize="10" Glyph="{x:Bind res:Icons.Glyph('go-next')}" />
+            </Button>
+        </Grid>
+        <Grid
+            x:Name="HeaderGrid"
+            Grid.Row="1"
+            AutomationProperties.AccessibilityView="Raw" />
+        <Grid
+            x:Name="DaysGrid"
+            Grid.Row="2"
+            AutomationProperties.AccessibilityView="Raw" />
+    </Grid>
+</UserControl>

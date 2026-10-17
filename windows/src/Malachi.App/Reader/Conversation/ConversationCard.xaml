@@ -12,7 +12,9 @@ border) with the header (the fold arrow, every card's, the unread dot, the sende
 Jira badges via, Internal and Edited, which go to a second line where they
 do not fit, then the hover buttons, which keep their room while hidden, and
 the date), the recipients, the attachment chips and the hint; the folded
-card's preview; the bulk-mail, remote-image and pictures bars; and the body: the wait,
+card's preview; the invitation card of a message with a calendar part (inside
+what folds, under the header: docs/calendar.md §5.7, as built on macOS); the
+bulk-mail, remote-image and pictures bars; and the body: the wait,
 plain text, or the HTML host, white, in which the card's web view sits
 while the card is live; and under it the "•••" that shows or hides the
 quoted history the daemon cut (ConversationCardView.swift quotedButton). A
@@ -214,6 +216,12 @@ only); the web view gets the sanitiser's output only.
             <!-- The remote-image bar and the pictures bar (window.blp remote_bar,
                  pictures_bar), made when first shown. -->
             <StackPanel x:Name="Bars">
+                <!-- The invitation card under the header (ConversationCardView's
+                     invitation), made for the first message.get with one. -->
+                <reader:InvitationCardView
+                    x:Name="InvitationCard"
+                    Margin="13,0,13,8"
+                    x:Load="False" />
                 <!-- bulk_bar, the first of the bars (window/bulk.go makeBulkBar):
                      what the message is and the Unsubscribe button. -->
                 <reader:BulkStripView

@@ -87,16 +87,19 @@ public sealed partial class SidebarPane : UserControl
         actions = actionsController;
         CommandBinding.Bind(MenuMail, commands.ShowMail);
         CommandBinding.Bind(MenuBoard, commands.ShowBoard);
+        CommandBinding.Bind(MenuCalendar, commands.ShowCalendar);
         // The sidebar shows in Mail only: its menu checks Mail.
         PrimaryMenu.Opening += (_, _) =>
         {
             MenuMail.IsChecked = true;
             MenuBoard.IsChecked = false;
+            MenuCalendar.IsChecked = false;
         };
         CommandBinding.Bind(NewMessageButton, commands.NewMessage);
         CommandBinding.Bind(MenuNewMessage, commands.NewMessage);
         CommandBinding.Bind(MenuAddAccount, commands.AddAccount);
         CommandBinding.Bind(MenuAddJiraAccount, commands.AddJiraAccount);
+        CommandBinding.Bind(MenuAddCalDAVCalendar, commands.AddCalDAVCalendar);
         CommandBinding.Bind(MenuPreferences, commands.Preferences);
         CommandBinding.Bind(MenuAbout, commands.About);
         CommandBinding.Bind(MenuQuit, commands.Quit);
@@ -173,7 +176,7 @@ public sealed partial class SidebarPane : UserControl
         {
             return;
         }
-        var several = m.Model.EnabledAccounts.Count >= 2;
+        var several = m.Model.MailSidebarAccounts.Count >= 2;
         reselecting = true;
         try
         {

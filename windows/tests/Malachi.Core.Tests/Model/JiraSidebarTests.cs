@@ -144,6 +144,16 @@ public sealed class JiraSidebarTests
         // A provider this client does not name is a mail account like any.
         var custom = mail with { Config = mail.Config with { OAuth2 = new OAuth2Config { Source = OAuth2Source.Daemon, Provider = "custom" } } };
         Assert.Equal("IMAP", FolderTree.AccountHeaderBadge(custom));
+        // A calendar-only account says its protocol (Swift's caldavBadge).
+        var caldav = mail with
+        {
+            Config = mail.Config with
+            {
+                Kind = AccountKind.CalDAV,
+                CalDAV = new CalDAVConfig { ServerUrl = "https://cloud.example.invalid", Username = "me" },
+            },
+        };
+        Assert.Equal("CALDAV", FolderTree.AccountHeaderBadge(caldav));
     }
 
     [Fact]

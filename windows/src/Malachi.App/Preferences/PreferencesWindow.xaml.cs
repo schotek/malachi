@@ -10,7 +10,10 @@
 // window for the whole app (Show brings it to the front), named
 // Preferences as GTK names it, with no search field; the pages are built
 // when it opens, as GTK builds them, so the General page asks the daemon
-// at once, and the AI page asks the bridge whenever it comes up. On the
+// at once, and the AI page asks the bridge whenever it comes up; the
+// Calendar page (after General, as on macOS) binds this window's calendar
+// source at once, as macOS attaches it, and draws it again whenever it
+// comes up. On the
 // General page Windows decides some things (the Run value and the
 // default mail app): the page reads them again whenever it comes up and
 // whenever the window is activated (after a visit to Settings). Ctrl+Up
@@ -57,6 +60,7 @@ public sealed partial class PreferencesWindow : Window
     private readonly SettingBindings bindings;
     private readonly AccountsPage accounts;
     private readonly GeneralPage general;
+    private readonly CalendarPreferencesPage calendar;
     private readonly AppearancePage appearance;
     private readonly AiPage ai;
 
@@ -81,6 +85,7 @@ public sealed partial class PreferencesWindow : Window
         // Every page at once, as GTK builds them.
         accounts = new AccountsPage(state, this, ToastsHost);
         general = new GeneralPage(state, bindings, ToastsHost);
+        calendar = new CalendarPreferencesPage(state, this, ToastsHost);
         appearance = new AppearancePage(state, bindings);
         ai = new AiPage(state, bindings, ToastsHost, () => this);
 
@@ -106,8 +111,12 @@ public sealed partial class PreferencesWindow : Window
             bindings.Dispose();
             accounts.Close();
             general.Close();
+            calendar.Close();
             ai.Close();
         };
+        // The calendar page works over this window's calendar source from
+        // the start, as macOS attaches it (AppState.StartedCalendarSourceFor).
+        calendar.Refresh();
         Navigation.SelectedItem = AccountsItem;
     }
 
@@ -119,6 +128,16 @@ public sealed partial class PreferencesWindow : Window
 
     /// <summary>Shows the AI page (the Assistant menu's "Set Up the Assistant…", app.assistant-setup).</summary>
     public void ShowAi() => Navigation.SelectedItem = AiItem;
+
+    /// <summary>Shows the Accounts page (the calendar's empty state, Open Preferences).</summary>
+    public void ShowAccounts() => Navigation.SelectedItem = AccountsItem;
+
+    /// <summary>
+    /// Shows the Calendar page (macOS <c>select(.calendar)</c>: the calendar
+    /// page's empty state, the sidebar's Sync a Microsoft 365 Account's
+    /// Calendars…, AppState.ShowCalendarPreferences).
+    /// </summary>
+    public void ShowCalendar() => Navigation.SelectedItem = CalendarItem;
 
     /// <summary>
     /// Opens the Preferences, or brings the open window to the front
@@ -190,6 +209,7 @@ public sealed partial class PreferencesWindow : Window
         UIElement page = ((args.SelectedItem as NavigationViewItem)?.Tag as string) switch
         {
             "general" => general,
+            "calendar" => calendar,
             "appearance" => appearance,
             "ai" => ai,
             _ => accounts,
@@ -202,6 +222,10 @@ public sealed partial class PreferencesWindow : Window
         if (ReferenceEquals(page, general))
         {
             general.Refresh();
+        }
+        else if (ReferenceEquals(page, calendar))
+        {
+            calendar.Refresh();
         }
         else if (ReferenceEquals(page, ai))
         {

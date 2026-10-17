@@ -60,4 +60,7 @@ public enum AssistantError
 
     /// <summary>errWordsTooLong: the words are too long.</summary>
     WordsTooLong,
+
+    /// <summary>errNoDate: a calendar prompt without the user's date (calendar_actions.go).</summary>
+    NoDate,
 }

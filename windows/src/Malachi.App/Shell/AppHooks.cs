@@ -22,6 +22,7 @@ public sealed class AppHooks
     private Action? openPreferences;
     private Action<Window?>? addAccount;
     private Action<Window?>? addJiraAccount;
+    private Action<Window?>? addCalDAVCalendar;
     private Func<bool>? canComposeNew;
     private Action? composeNew;
     private Action? checkForNewMail;
@@ -50,6 +51,13 @@ public sealed class AppHooks
     {
         get => addJiraAccount;
         set => Set(ref addJiraAccount, value);
+    }
+
+    /// <summary>Opens the Add CalDAV Calendar window over a window (the main window when null; macOS addCalDAVAccount:).</summary>
+    public Action<Window?>? AddCalDAVCalendar
+    {
+        get => addCalDAVCalendar;
+        set => Set(ref addCalDAVCalendar, value);
     }
 
     /// <summary>

@@ -270,7 +270,9 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
     /// <summary>
     /// account.list returned at least one account (window.go
     /// <c>hasAccounts</c>); false until the first answer. The message pane's
-    /// No Accounts placeholder keys off it.
+    /// No Accounts placeholder keys off it. Calendar-only CalDAV accounts
+    /// are no account here (<see cref="FolderTree.InMail"/>): Mail never
+    /// shows them.
     /// </summary>
     [ObservableProperty]
     public partial bool HasAccounts { get; private set; }
@@ -417,7 +419,7 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
             Model.Accounts = res.Accounts;
             Model.Folders.Clear();
             Model.FolderErr.Clear();
-            HasAccounts = res.Accounts.Count > 0;
+            HasAccounts = System.Linq.Enumerable.Any(res.Accounts, FolderTree.InMail);
             WithdrawAccountNotifications();
             AccountsLoaded?.Invoke(this, res.Accounts);
             // sync.status may have answered before the accounts were known,
@@ -425,7 +427,8 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
             // (added, removed, paused, renamed).
             Sync.RefreshFooter();
 
-            var enabled = Model.EnabledAccounts;
+            // A calendar-only CalDAV account has no folders to ask for.
+            var enabled = Model.MailSidebarAccounts;
             if (enabled.Count == 0)
             {
                 RebuildFolderList();
@@ -610,7 +613,7 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
     public void ShowEmptySidebarStatus()
     {
         Scope.VerifyAccess();
-        var enabled = Model.EnabledAccounts;
+        var enabled = Model.MailSidebarAccounts;
         if (!HasAccounts)
         {
             ShowFolderStatus("system-users-symbolic", L10n.T("No Accounts"), L10n.T("Add a mail account in Preferences to see its folders here."));

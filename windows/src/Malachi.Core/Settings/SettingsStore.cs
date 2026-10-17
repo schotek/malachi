@@ -30,6 +30,7 @@ using System.Linq;
 using System.Threading;
 using Malachi.Core.Assistants;
 using Malachi.Core.Boards;
+using Malachi.Core.Calendars;
 
 namespace Malachi.Core.Settings;
 
@@ -92,6 +93,7 @@ public sealed class SettingsStore : IDisposable
         new(SettingsKey.BoardTriageModel, "board-triage-model", "s", "sonnet", choices: Nicks<AssistantModel>.All),
         new(SettingsKey.BoardChatGptModel, "board-triage-chatgpt-model", "s", ""),
         new(SettingsKey.BoardChatGptConsentVersion, "board-triage-chatgpt-consent-version", "i", 0, minimum: 0, maximum: int.MaxValue),
+        new(SettingsKey.CalendarView, "calendar-view", "s", "week", choices: Nicks<Cal.View>.All),
         new(SettingsKey.CtrlR, "ctrl-r", "s", "reply", choices: Nicks<CtrlR>.All, windowsOnly: true),
     ];
 
@@ -422,7 +424,7 @@ public sealed class SettingsStore : IDisposable
     }
 
     /// <summary>
-    /// The mode the main window showed last ("mail" or "board",
+    /// The mode the main window showed last ("mail", "board" or "calendar",
     /// <see cref="BoardModeNickExtensions"/>), written on every switch; read
     /// for <see cref="Board.StartChoice.Last"/>.
     /// </summary>
@@ -442,6 +444,19 @@ public sealed class SettingsStore : IDisposable
     {
         get => GetString(SettingsKey.BoardAccountFilter);
         set => SetString(SettingsKey.BoardAccountFilter, value);
+    }
+
+    // Calendar
+
+    /// <summary>
+    /// The view the Calendar was shown in last, written whenever the user
+    /// changes it and applied when the Calendar shows; an unknown nick reads
+    /// as Week, the default (<see cref="Cal.ParseView"/>).
+    /// </summary>
+    public Cal.View CalendarView
+    {
+        get => GetEnum<Cal.View>(SettingsKey.CalendarView);
+        set => SetEnum(SettingsKey.CalendarView, value);
     }
 
     // Sidebar state

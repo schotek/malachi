@@ -92,4 +92,22 @@ windows that use it, not into App.xaml.
         <Setter Property="Margin" Value="12" />
         <Setter Property="Spacing" Value="8" />
     </Style>
+
+    <!-- A calendar's colour square in Preferences → Calendar and the Add
+         CalDAV Calendar window (macOS PrefsColorSwatch: 12 px, rounded):
+         the dim text colour for a calendar without a colour of its own; a
+         calendar's #rrggbb replaces the background (CalendarSwatch). -->
+    <Style x:Key="CalendarSwatchStyle" TargetType="Border">
+        <Setter Property="Width" Value="12" />
+        <Setter Property="Height" Value="12" />
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Background" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+    </Style>
+
+    <!-- A CalDAV account's Remove Account button (macOS: the system red
+         text): its label in the critical colour. -->
+    <Style x:Key="CalendarRemoveButtonStyle" BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
+        <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+    </Style>
 </ResourceDictionary>

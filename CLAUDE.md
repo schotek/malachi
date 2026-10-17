@@ -449,7 +449,9 @@ Pořadí prací:
 11. Kalendář (Microsoft 365 přes Graph, CalDAV, pozvánky v poště, MCP)
     — démon a macOS hotové a ověřené vlastníkem (`feat/calendar`,
     2026-10-16); GTK port hotový a ověřený vlastníkem v XQuartz
-    (2026-10-17); Windows port dělá vlastník
+    (2026-10-17); Windows port napsaný a sestavený na Windows
+    (2026-10-16/17), čekají UI smoke testy, `build.ps1 app`/`test`/`lint`
+    a test vlastníka se skutečnými účty
 
 Asistent (stav 2026-09-30, sloučeno do `main`; uživatel potvrdil, že
 funguje ve všech třech klientech). Na macOS je hotové a uživatelem otestované:
@@ -1860,14 +1862,17 @@ odpovědi s Claude Code i Codexem. GTK nemá okno zkratek
 (`win.show-help-overlay` ukazuje nikam), takže Ctrl+1/2 a E/D/R nejsou
 nikde vypsané (rozhodnutí vlastníka).
 
-Kalendář (stav 2026-10-16, větev `feat/calendar`; návrh a poznámky „As
+Kalendář (stav 2026-10-17, větev `feat/calendar`; návrh a poznámky „As
 built“ každého úkolu v `docs/calendar.md`, rozhodnutí D1–D32 a odpovědi
 vlastníka v jeho §1.2 a §7, shrnutí v `docs/architecture.md` §3.8 a §7,
 bezpečnost `docs/security.md` §4.3). Démon a macOS klient jsou hotové
 a vlastníkem ověřené nad skutečnými účty (M365 přes Graph i Nextcloud
-přes CalDAV); Windows port dělá vlastník na stroji s Windows, GTK port
-zbývá (výjimka z pravidla 6 jako u nástěnky; `.blp` a Go reference
-`ui/internal/calendar` jsou mustr, macOS zdroj portu). Zdroje: Microsoft 365
+přes CalDAV); GTK klient je hotový a vlastník ho prošel proti svým účtům
+v okně XQuartz (viz GTK klient kalendáře níže); Windows klient je
+portovaný, sestavený a s testy Core zelenými, jeho UI zatím neběželo (viz
+Windows klient kalendáře níže). Oba porty přišly až po macOS (výjimka
+z pravidla 6 jako u nástěnky; `.blp` a Go reference `ui/internal/calendar`
+jsou mustr, macOS zdroj portu). Zdroje: Microsoft 365
 přes Graph na existujícím účtu `kind: graph` (přepínač `calendar.sync`,
 výchozí vypnuto i u stávajících účtů) a nový druh účtu `caldav` jen pro
 kalendář (capabilities přesně `["calendar"]`, žádné složky, každá metoda
@@ -1920,7 +1925,7 @@ registrovatelné doméně přes https (`calDAVOrigin`, iCloud `pNN-caldav`
 projde), objevování bez přihlašovacích údajů, pin certifikátu jen pro
 hostitele `serverUrl` (`calDAVTransport`; CalDAV je jediný HTTP klient
 s pinem), realm = host[:port] + cesta `serverUrl`. Zóna démona
-z `MALACHI_TIME_ZONE` (macOS a Windows klient ji mají nastavit), pak `TZ`,
+z `MALACHI_TIME_ZONE` (nastavuje ji macOS i Windows klient), pak `TZ`,
 pak `/etc/localtime` (`cmd/malachid/timezone.go`). Most MCP
 (`tools_calendar.go`, `docs/mcp.md` Calendar): `list_calendars`,
 `list_events`, `get_event`, `find_free_time`, `list_invitations` jen čtení
@@ -1941,7 +1946,7 @@ a opakování (D30), vlastní pozvánka je `ownEvent` a vyřízená (D32), karta
 REPLY nese odpověď účastníka, zjišťování CalDAV bere 401 bez hlavičky
 `DAV` jako kandidáta (Nextcloud). Nevyzkoušeno živě: `TestBoardDryRun`
 s pravidly "8"; C# zrcadlo API (`windows/src/Malachi.Core/Api/Calendar.cs`)
-je napsané bez překladu a čeká na `windows.yml`.
+je od Windows portu přeložené a otestované na stroji s Windows (viz níže).
 
 macOS klient kalendáře (2026-10-16, `feat/calendar`; M1–M11 podle
 `docs/calendar.md` §5 a jeho poznámek „As built“, ověřený vlastníkem): zrcadlo API
@@ -2030,6 +2035,185 @@ týmž klíčem (`store.InvitationLinkedEvent`), mapování výskytů Graphu se
 sidebaru a stránky Předvoleb jen při změně struktury (ne při každé změně
 stavu — jinak widgety mizí pod kurzorem). Do `windows/` GTK port nesáhl
 (Windows port běží jinde).
+
+Windows klient kalendáře (2026-10-16, `feat/calendar`; port macOS klienta
+podle pravidla 6 a `docs/calendar.md` §6.4, napsaný týmem agentů na stroji
+s Windows 11 a .NET SDK 10.0.400; poznámky „As built on Windows“ W2–W9
+v `docs/calendar.md` §5, `docs/windows-port.md` §11.9, odchylky v tabulce
+`windows/README.md` a jeho oddíl The Calendar; necommitnuté): zrcadlo API
+`Malachi.Core/Api/Calendar.cs` (Go `Event` = `CalendarEvent`, `EventID`
+a `AlertID` = `CalendarEventId` a `CalendarAlertId`, `Date` = `CalendarDate`,
+`TimeZone` = `TimeZoneName`; vložené `Occurrence` a `InvitationSummary`
+jsou základní záznamy `CalendarEvent` a `InvitationCard`), `GoContractTests`
+nově hlídá i směr Go → C# (`EveryEnumOfCalendarGoIsAWireEnum`,
+`EveryStructOfCalendarGoHasARecord`; první překlad našel chybu ve vzorcích
+round-trip: oddělovač raw stringu C# spolkl první uvozovku). Čistá logika
+je port `ui/internal/calendar` ve `public static partial class Cal`
+ve jmenném prostoru `Malachi.Core.Calendars` (jmenný prostor `Calendar` by
+skryl `System.Globalization.Calendar`; typy podle Swiftu, funkce podle Go):
+`Cal.cs` (`format.go` a `view.go`: `Env` se `StrftimeWriter`,
+`EnglishStrftime` a `CultureStrftime` nad `I18n.Strftime`, `View`,
+`Range` nesoucí zónu, `ViewRange`, `Step`, `SwitchAnchor`, `WeekStart`,
+`WeekNumber`, `Title`, `Subtitle`, dny nad `DateTimeOffset`/`TimeZoneInfo`,
+`OccurrenceKey`), `CalendarText.cs`, `CalendarWeekLayout.cs`,
+`CalendarMonthGrid.cs`, `CalendarMonthLayout.cs`, `CalendarAgenda.cs`,
+`CalendarToday.cs`, `CalendarDetail.cs`, `CalendarRecurrence.cs`,
+`CalendarEditor.cs` (`IanaZoneName` Windows → IANA),
+`CalendarAvailability.cs`, `CalendarInvitation.cs`,
+`CalendarInvitationReading.cs` + `Model/InvitationReading.cs` (Swift-first),
+`CalendarNotificationText.cs`, `CalendarPreferences.cs` (`Cal.Prefs`),
+`CalendarKeys.cs` (`Press.FromVirtualKey`: Shift zastupuje ⌥ a ⌃ reference,
+Nová událost je Ctrl+Shift+N, pohledy Ctrl+Shift+1–4), `CalendarActive.cs`,
+`CalDAVWizard.cs`, `MiniMonth.cs`, `CalendarSamples.cs`; zdroj
+`ICalendarDataSource` (`Cal.Snapshot`, `Cal.SourceChange` s případy
+`SnapshotChanged`/`OccurrencesChanged`/`EventChanged`/`AlertChanged`/`Failed`,
+protože Swiftové `event` a `error` jsou pro CA1716 klíčová slova VB,
+`InMemoryCalendarSource` nad vzorky, `DaemonCalendarSource`: snímky
+porovnává přes JSON, `Stop()` zapomene rozběhnuté načtení — oprava proti
+Swiftu). Kontrolery `CalendarController` (+ `.Sidebar.cs`; Swiftové
+`Filter`/`Sidebar` jsou `ContentFilter`/`SidebarModel`),
+`CalendarAlertsController` nad `ICalendarAlertNotifier`,
+`EventDetailController`, `EventEditorController` (`Mode.NewEvent`/
+`Mode.EditEvent`, `ShowsReloadEvent`, `SetAttendees`), `InvitationController`,
+`CalDAVWizardController`, `CalendarPreferencesController` (zápisy ve
+frontě, odmítnutý vrátí jen svou změnu), `CalendarAccountController`
+(Odebrat účet a přihlášení přesunuté do Core podle `docs/windows-port.md`
+§7.4); asistent `Assistants/Assistant.Calendar.cs`
+a `AssistantPanelController.RunCalendar`/`OpenInCalendar`, karta
+`Controllers/CalendarContent.cs`. Mimo kalendář v Core: `Board.Mode.Calendar`
+(2) se `StartChoice.Calendar`, klíč `calendar-view`
+(`SettingsStore.CalendarView`, 43 klíčů gschema), Ctrl+3 jako
+`ShortcutCommand.ShowCalendar` v `ShortcutMap`, `NotificationHub.AddCalendar`,
+`AccountsPageController` CalDAV účty nevypisuje (při přeřazení je drží za
+vypsanými), `FolderTree.AccountHeaderBadge` umí `CALDAV`, toasty zpráv
+s kalendářovou částí (`DesktopNotification`, `DesktopNotificationActions`),
+`DaemonSupervisor` nastaví `MALACHI_TIME_ZONE` z windowsové zóny a regionu
+uživatele (`ZoneName`: Central Europe Standard Time + CZ → Europe/Prague;
+bez IANA jména nic a zdrojem zůstane `TZ`; hodnota v prostředí vyhrává).
+Platform: `Notifications/CalendarAlertActivation`, `CalendarAlertResponse`,
+`InvitationActivation`, `InvitationNotificationResponse`,
+`NotificationArguments.ForAlert`/`ForInvitation`. App (jmenný prostor
+`Malachi.App.Calendars`): třísegmentový přepínač režimu
+(`ModeCalendarButton`; s vypnutou nástěnkou zůstává se zašedlým segmentem
+Nástěnka jako na macOS, dřív se na Windows schoval), Pošta/Nástěnka/Kalendář
+v nabídkách `…` postranního panelu, nástěnky i kalendáře
+(`MainWindow.Mode.cs`, `MainWindow.Calendar.cs`, `MainWindow.CalendarPage.cs`,
+`Shell/AppState.Calendar.cs` se zdrojem na okno a `MALACHI_CALENDAR_SAMPLES`,
+`Integration.Calendar.cs`); stránka `Calendars/CalendarPage` s lištou
+`CalendarBar` (přepínač postranního panelu, Dnes, ‹ ›, Den/Týden/Měsíc/Agenda
+jako přepínací tlačítka, pod 640 DIP `ComboBox`, nadpis s podtitulkem, +,
+✦ jako přepínač, nabídka `…`), hledání je pole titulkové lišty se zástupným
+textem Hledat události (jedno pole pro Poštu i Kalendář, text každého
+režimu zvlášť, hledání vlastními slovy zůstává poštovní), `CalendarContentView`
+s postranním panelem `CalendarSidebar` (240 DIP pevně, minikalendář
+`MiniMonthView`, Pozvánky ▸ Nezodpovězené, účty s kapslí včetně CALDAV,
+kalendáře s CheckBoxem, řádek souhlasu, Přidat kalendář…), pohledy
+`CalendarWeekView` (60 DIP na hodinu, neprůhledné výplně syté barvy
+kalendáře u bloků, celodenních pruhů, pruhů měsíce a pilulek s bílým
+textem, na světlé barvě téměř černým, kde bílá nemá 4,5:1
+(`CalendarPalette.TextOn`), barevný proužek o 25 % tmavší, nezávazné jako
+světlá výplň (25 % barvy přes povrch) s textem motivu a proužkem 4 DIP
+šrafovaným barvou a povrchem, časovaná pilulka měsíce jen dutou tečkou
+(druhý nález vlastníka 2026-10-17 v pohledu Měsíc nad kalendáři Outlooku),
+nezodpovězené jako povrch s čárkovaným obrysem a textem v barvě,
+odmítnuté a zrušené 18 % přes povrch #F9F9F9 / #282828, výběr 2 DIP kroužek
+v barvě zdůraznění (rozhodnutí vlastníka 2026-10-17 po živém testu na
+Windows, macOS zůstává na 18 % pro každý blok; řádek v tabulce
+`windows/README.md`), barvy v `CalendarPalette` a `CalendarStyles.xaml`
+se světlou, tmavou a vysoce kontrastní variantou, červená čára teď na
+minutovém časovači, první posun do pracovní doby, dokud uživatel
+nescrolluje), `CalendarMonthView` (pruhy z
+`MonthLanes`, štítky, „+N dalších“ ve `Flyout`, kapacita ze skutečné výšky
+buňky), `CalendarAgendaView` (skupiny, stránkování, výsledky hledání „den ·
+čas“, filtr Nezodpovězené); prázdný stav leží nad pohledy; výskyty jsou
+zastávky klávesnice a prvky UIA (`CalendarBlock:<klíč>`, `CalendarAllDay:`,
+`CalendarMonthBar:`, `CalendarPill:`, `CalendarAgendaRow:`,
+`CalendarMore:<datum>`); klávesy přes `Cal.KeyFor` v `PreviewKeyDown`
+stránky (Ctrl+T, Ctrl+←/→, Ctrl+Shift+1–4, Return, šipky, Escape
+dvoustupňově; Delete otevře detail, jehož Odebrat se zeptá, místo mazání);
+D28 přesunem `AssistantPanelView` okna do slotu stránky a zpět; pod 360 DIP
+obsahu se sbalí postranní panel, pak panel asistenta; stavový pruh
+`SetCalendar(řádek, poznámka)` spojený s poznámkou triage. Detail jako
+WinUI `Flyout`, jeden pro aplikaci (`EventDetailFlyout`,
+`EventDetailPresenter`, `EventDetailView`; vpravo od kotvy, jinak vlevo,
+jinak přes ni; otázky jako ContentDialog v pořadí Windows se Zrušit jako
+výchozí, tři volby série jako tlačítka v obsahu dialogu,
+`Shell/AlertService.Calendar.cs`; poznámky jako prostý `TextBlock`
+s odkazy jako tlačítky pod ním; během dialogu zůstává otevřený zrušením
+`Closing`, za běhu neověřené; Najít jiný termín jako na macOS přes Upravit
+s otázkou série a pak `findFreeSlot`). Okno `Calendars/EventEditor/EventEditorWindow`
++ `EventEditorManager` + `EventEditorPane` (`.Dates` s `CalendarDatePicker`
+a `TimePicker`, `.Video`, `.Attendees` s `RecipientTokenBox`),
+`AvailabilityView`, `TimeZonePicker`, `CustomRepeatView` (760×800, min.
+560×520; klávesy okna zprávy Ctrl+Enter = primární a Ctrl+S; Vložit
+odkaz… jako dialog; Konec se ptá přes `QuitSteps.SaveDrafts`; konec relace
+Windows neuložené změny ztratí bez otázky, protože Uložit by rozeslalo
+pozvánky). Karta pozvánky `Reader/InvitationCardView` +
+`InvitationDayStripView` + `InvitationCardPresenter` (v panelu čtení
+a okně zprávy uvnitř posuvné oblasti hlavičky, v kartě konverzace jako
+první pruh uvnitř sbalitelné části, ne u přiložené zprávy; „Přidat do:“
+`ComboBox`, Odmítnout `SplitButton`, Změnit odpověď `DropDownButton`,
+Navrhnout jiný čas… se zvláštním výběrem data a času; karty porovnané přes
+JSON, takže odpověď zůstane, dokud `message.get` nepřinese novou),
+štítek `Controls/InvitationPill` ve vlastním sloupci `Main/MessageRowView`
+za předmětem, Zobrazit v Kalendáři `MainWindow.ShowInCalendar.cs`.
+Toasty upozornění `Platform/CalendarAlertNotifier` (EVENT_ALERT
+a EVENT_ALERT_JOIN: Připojit se jen s videohovorem, Odložit; klik →
+Zobrazit v Kalendáři; zavření toastu se nebalené aplikaci nehlásí, takže
+upozornění pro ostatní klienty nezruší — řádek tabulky README) a pozvánek
+(INVITATION: Přijmout a Zobrazit, CANCELLATION: Odebrat z kalendáře; texty
+zkrácené jako u zprávy; Přijmout a Odebrat → `AppState.AnswerInvitation`
+přes `message.get` a `InvitationController`, Zobrazit a klik otevřou zprávu
+ve vlastním okně jako každý toast pošty). Pruh `Boards/BoardTodayCalendarStrip`
+(řádky klikatelné → Zobrazit v Kalendáři, Odpovědět → zpráva v Poště,
+Otevřít Kalendář ›, vypisuje i nezodpovězené pozvánky snímku), čipy panelu
+asistenta Co mě dnes čeká (pošle hned) a Najít volný termín (čeká na
+slova), Zeptat se na tuto událost vyplní pole panelu
+(`Assistants/AssistantPanel.Prefill.cs`), karta Zobrazit v Kalendáři.
+Předvolby → Kalendář za Obecné (`Preferences/CalendarPreferencesPage` nad
+vlastním zdrojem okna Předvoleb, `CalendarAccountSection`, `CalendarRowView`,
+`CalendarSwatch`; skupina Zobrazení, sekce účtů; název CalDAV účtu se
+edituje tady, protože ho Účty nevypisují; Nahradit heslo… jako dialog
+přes `IAlerts.PasswordAsync`; Odebrat účet na konci sekce; u IMAP účtu
+s capability `calendar` — vzorový Gmail — bez přepínače synchronizace
+a řádků Pozvánky jako na macOS, ač `Cal.Prefs.PreferencesLayout` i Go
+reference je vypisují pro každý účet mimo CalDAV: Core a pohled macOS se
+rozcházejí) a okno `Wizard/CalDAVWizardWindow` (modální 560×560 přes
+`ModalDialog`, chyby v InfoBaru, Přidat a pak Zrušit, Enter spustí Zjistit
+kalendáře a pak Přidat, výběr poštovního účtu jen když server nechá
+plánování klientovi, dialog důvěry certifikátu poštovního průvodce; vstupy:
+nabídka `…`, stránka Žádné účty, postranní panel kalendáře, Předvolby →
+Kalendář; nabídka „+“ v Předvolbách → Účty ho nemá, jako
+macOS M9). Testy: `tests/Malachi.Core.Tests/Calendars/*` (Go testy 1:1
+a případy Swiftu, asi 614), `Controllers/Calendar*Tests`,
+`Boards/CalendarModeTests`, `Platform.Windows.Tests/Notifications/
+CalendarAlertArgumentsTests` a `InvitationArgumentsTests`. Ověřeno na
+tomto stroji: všechny projekty se staví bez varování, sada Core (~7 430
+testů, 9 přeskočených jako vždy) a konvenční testy (27, včetně
+`StringsCheckTests` a `GschemaCoverageTests`; v
+`windows/parity-exclusions.txt` nezůstal žádný řádek „calendar: Windows port
+pending“) zelené, `dotnet format --verify-no-changes` čistý. Neověřeno:
+UI smoke testy nad `MALACHI_CALENDAR_SAMPLES=1` (`CalendarSmokeFixture`,
+`CalendarSmokeTests`, `CalendarDetailSmokeTests`,
+`CalendarInvitationSmokeTests` s `CalendarBoardSmokeFixture` nad oběma
+sadami vzorků, `CalendarPreferencesSmokeTests`, devmail
+`DevmailTests.AnInvitationShowsItsCardWithAccept`, který pošle surovou
+pozvánku `.ics` přes SMTP, `DevmailSmtp`) jsou napsané, ne spuštěné;
+`build.ps1 app`/`test`/`lint` neběžely (těžké běhy jen se svolením
+vlastníka); aplikaci s kalendářem zatím nikdo nespustil, takže žádné
+rozložení, flyout, dialog, toast ani klávesa nebyly vidět. Mezery jsou
+zavřené: poštovní postranní panel CalDAV účty vynechává
+(`FolderTree.MailSidebarAccounts`, port macOS `mailSidebarAccounts`);
+Ctrl+Shift+N je v `ShortcutMap` (`ShortcutCommand.NewEvent`, hlavní okno
+v každém režimu za `Board.Allows`, akcelerátory stránky zrušené; testy
+`CtrlShiftNIsNewEventOfTheMainWindowOnly`
+a `NewEventIsShortcutMapsChordInEveryMode`), takže do okna dojde, i když
+klávesnici drží WebView2; hlavička `Shell/AppState.Calendar.cs` popisuje
+vstupní body tak, jak fungují. Čeká: svolení k `build.ps1 app`, `test`
+a `lint` a k UI smoke testům, první spuštění se vzorovými daty a průchod
+všemi pohledy, pak vlastník nad kopií dat se skutečnými účty (M365 přes
+Graph, Nextcloud přes CalDAV). GTK port vznikl souběžně na Macu (GTK
+klient kalendáře výše).
 
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně

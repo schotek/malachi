@@ -32,6 +32,9 @@ public static class VirtualKey
     /// <summary>'2' of the main row.</summary>
     public const int Number2 = 0x32;
 
+    /// <summary>'3' of the main row.</summary>
+    public const int Number3 = 0x33;
+
     /// <summary>'A'.</summary>
     public const int A = 0x41;
 

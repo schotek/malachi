@@ -5,7 +5,8 @@
 // §11.5 over GTK's accelerators (ui/main.go, window.go MessageAccels,
 // message_window.go, the Escape controllers, compose.blp,
 // accounts_reorder.go) and macOS's command-r table (MainMenu.swift) and
-// bareKeyActions (Actions.swift).
+// bareKeyActions (Actions.swift), with the calendar's New Event
+// (Ctrl+Shift+N, keys.go's Primary+Alt+N).
 
 using System;
 using System.Linq;
@@ -112,6 +113,31 @@ public sealed class ShortcutMapTests
         {
             Assert.Null(ShortcutMap.Resolve(KeyChord.Ctrl(K.Number1), new ShortcutContext(window)));
             Assert.DoesNotContain(KeyChord.Ctrl(K.Number2), ShortcutMap.Chords(window));
+        }
+    }
+
+    [Fact]
+    public void CtrlShiftNIsNewEventOfTheMainWindowOnly()
+    {
+        // The map knows no mode: the key is the main window's in Mail, the
+        // Board and the Calendar alike, and the command's gate
+        // (Board.Allows) keeps it to Mail and the Calendar, as macOS's
+        // File ▸ New Event (⌥⌘N).
+        var chord = KeyChord.CtrlShift(K.N);
+        Assert.Equal(C.NewEvent, Resolve(chord));
+        // A Ctrl chord: a text input, the board's inline editor and the
+        // ctrl-r setting leave it alone.
+        Assert.Equal(C.NewEvent, Resolve(chord, Main with { TextInputFocused = true, CtrlR = CtrlR.Refresh }));
+        Assert.Equal(C.NewEvent, Resolve(chord, Main with { TextInputFocused = true, EditorFocused = true }));
+        Assert.False(ShortcutMap.IsSingleKey(C.NewEvent));
+        Assert.Contains(chord, ShortcutMap.Chords(WindowKind.Main));
+        // Ctrl+N stays New Message; Ctrl+Alt+N is no key.
+        Assert.Equal(C.NewMessage, Resolve(KeyChord.Ctrl(K.N)));
+        Assert.Null(Resolve(new KeyChord(K.N, KeyModifiers.Control | KeyModifiers.Alt)));
+        foreach (var window in Enum.GetValues<WindowKind>().Where(w => w != WindowKind.Main))
+        {
+            Assert.Null(ShortcutMap.Resolve(chord, new ShortcutContext(window)));
+            Assert.DoesNotContain(chord, ShortcutMap.Chords(window));
         }
     }
 

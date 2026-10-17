@@ -6,13 +6,15 @@
 // NotificationText (tested in NotificationTextTests, the port of
 // notify_test.go TestNotificationText), the account as the group,
 // "message-<id>" as the identity. Windows-only: the 64-character cap of a
-// toast's Tag and Group.
+// toast's Tag and Group. A message with a calendar part (macOS post): an
+// invitation's or a cancellation's texts and buttons (docs/calendar.md §5.9).
 
 using System;
 using System.Linq;
 using Malachi.Core.Api;
 using Malachi.Core.Presentation;
 using Xunit;
+using F = Malachi.Core.Tests.Calendars.CalFixture;
 
 namespace Malachi.Core.Tests.Presentation;
 
@@ -70,6 +72,71 @@ public sealed class DesktopNotificationTests
         Assert.Equal(new string('a', 46) + "~", id[..47]);
         Assert.DoesNotContain(id, char.IsSurrogate);
     }
+
+    [Fact]
+    public void AMessageWithoutACalendarPartHasNoButtons() =>
+        Assert.Equal(DesktopNotificationActions.None, DesktopNotification.For(New("a", "m", "Alice Example", "Lunch?")).Actions);
+
+    [Theory]
+    [InlineData(InvitationKind.Invitation, InvitationState.Unanswered, "New invitation from Jana Nováková", DesktopNotificationActions.Invitation)]
+    [InlineData(InvitationKind.Update, InvitationState.Unanswered, "Jana Nováková updated the event", DesktopNotificationActions.Invitation)]
+    [InlineData(InvitationKind.Invitation, InvitationState.Answered, "New invitation from Jana Nováková", DesktopNotificationActions.None)]
+    [InlineData(InvitationKind.Cancelled, InvitationState.Cancelled, "Jana Nováková cancelled the event", DesktopNotificationActions.Cancellation)]
+    [InlineData(InvitationKind.Cancelled, InvitationState.Processed, "Jana Nováková cancelled the event", DesktopNotificationActions.None)]
+    [InlineData(InvitationKind.Reply, InvitationState.Processed, "Alice Example", DesktopNotificationActions.None)]
+    public void AnInvitationSaysSoWithItsButtons(string kind, string state, string title, DesktopNotificationActions actions)
+    {
+        var start = F.At(2026, 10, 14, 10).ToUniversalTime();
+        var n = New("acc_1", "m_1", "Alice Example", "Invitation: Q4 planning");
+        n = n with
+        {
+            Message = n.Message with
+            {
+                Invitation = new InvitationSummary
+                {
+                    Method = new InvitationMethod("REQUEST"),
+                    Kind = new InvitationKind(kind),
+                    State = new InvitationState(state),
+                    Title = "Q4 planning",
+                    Start = start,
+                    End = start.AddHours(1),
+                    Organizer = new Address { Name = "Jana Nováková", Email = "jana@example.org" },
+                },
+            },
+        };
+        var d = DesktopNotification.For(n, F.Env());
+        Assert.Equal(title, d.Title);
+        Assert.Equal(kind == InvitationKind.Reply ? "Invitation: Q4 planning" : "Q4 planning · Wednesday 14 October 2026 · 10:00–11:00 · 1 h", d.Body);
+        Assert.Equal(actions, d.Actions);
+        // The click still names the message, as any mail's does.
+        Assert.Equal("message-m_1", d.Tag);
+        Assert.Equal(new MessageId("m_1"), d.MessageId);
+    }
+
+    [Fact]
+    public void AnInvitationsTextsAreCappedAsAMessagesAre()
+    {
+        var n = New("a", "m", null, "s");
+        n = n with
+        {
+            Message = n.Message with
+            {
+                Invitation = new InvitationSummary
+                {
+                    Method = new InvitationMethod("REQUEST"),
+                    Kind = InvitationKind.Invitation,
+                    State = InvitationState.Unanswered,
+                    Title = new string('x', 1000),
+                    Organizer = new Address { Name = new string('y', 1000), Email = "y@example.org" },
+                },
+            },
+        };
+        var d = DesktopNotification.For(n, F.Env());
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(d.Title) <= NotificationTextMax + 3);
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(d.Body) <= NotificationTextMax + 3);
+    }
+
+    private const int NotificationTextMax = Malachi.Core.Model.NotificationText.NotificationBodyMax;
 
     private static NewMessageNotification New(string account, string message, string? from, string subject) => new()
     {

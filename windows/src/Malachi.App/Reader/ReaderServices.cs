@@ -60,6 +60,13 @@ public sealed class ReaderServices
     public required Func<Malachi.Core.Api.AccountId, string> IssueSite { get; init; }
 
     /// <summary>
+    /// The account of an id as the mailbox knows it (model.go <c>account</c>;
+    /// macOS <c>delegate.account</c>), for its "Show the Invitation Card
+    /// above the Message in Mail"; null when unknown.
+    /// </summary>
+    public Func<Malachi.Core.Api.AccountId, Malachi.Core.Api.Account?> AccountOf { get; init; } = _ => null;
+
+    /// <summary>
     /// Shows <paramref name="text"/> in the toast overlay of
     /// <paramref name="window"/> when it has one, otherwise wherever the
     /// application's toasts go (macOS <c>windowToast</c>).

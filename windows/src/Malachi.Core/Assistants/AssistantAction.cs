@@ -5,7 +5,8 @@
 // (Assistant.Action); GTK: ui/internal/assistant (Action). Swift and Go keep
 // the action as a string so that an unknown one exists; a C# enum is open
 // the same way (any other value is unknown: Label is "" for it, Prompt
-// refuses it), and Assistant.ActionNick gives Go's string.
+// refuses it), and Assistant.ActionNick gives Go's string. The calendar's
+// two quick actions (calendar_actions.go) are members too.
 
 namespace Malachi.Core.Assistants;
 
@@ -26,4 +27,10 @@ public enum AssistantAction
 
     /// <summary><c>unread</c>: Summarize Unread in This Folder.</summary>
     Unread,
+
+    /// <summary><c>whats-on-today</c>: the panel's What's on Today (Assistant.Calendar.cs).</summary>
+    WhatsOnToday,
+
+    /// <summary><c>find-free-slot</c>: the panel's Find a Free Slot (Assistant.Calendar.cs).</summary>
+    FindFreeSlot,
 }

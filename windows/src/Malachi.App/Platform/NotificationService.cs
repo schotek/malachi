@@ -36,12 +36,33 @@
 // An outdated toast is withdrawn by its tag (Withdraw; notify.go
 // WithdrawNotification, Swift removeDeliveredNotifications), which the
 // mailbox asks for (MailboxController.Notifications.cs).
+//
+// An event's alert (docs/calendar.md §5.9, macOS presentAlert) is a toast
+// of its own (ShowAlert): the title and the body CalendarAlertsController
+// made, the buttons Join (only with a video call) and Snooze, the alert's
+// tag (CalendarAlertsController.Request.Tag) and the group "calendar"
+// (macOS's thread identifier); the toast and each button carry the alert
+// (NotificationArguments.ForAlert), and a click comes back through the same
+// handler as a message's, with NotificationActivation.Alert. Muted as well:
+// CalendarAlertNotifier plays the sound. Withdraw takes it back by its tag.
+//
+// A new message with a calendar part (docs/calendar.md §5.9, macOS's
+// categories INVITATION and CANCELLATION) is the message's own toast, with
+// the texts DesktopNotification made and its buttons: Accept and Show for an
+// invitation not answered yet, Remove from Calendar for a cancellation not
+// processed yet. Accept and Remove from Calendar carry their message and
+// action (NotificationArguments.ForInvitation; the app answers the card
+// without opening it, AppState.AnswerInvitation), Show the toast's own
+// pairs, so that it opens the message as a click on the toast does.
 
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using Malachi.Core;
+using Malachi.Core.Api;
+using Malachi.Core.Calendars;
+using Malachi.Core.Controllers;
 using Malachi.Core.Presentation;
 using Malachi.Platform.Windows.Notifications;
 using Microsoft.Extensions.Logging;
@@ -64,6 +85,9 @@ internal sealed partial class NotificationService : IDesktopNotifier
         this.onActivated = onActivated;
         this.logger = logger;
     }
+
+    /// <summary>The group of the events' alert toasts (macOS's thread identifier "calendar").</summary>
+    public const string AlertGroup = "calendar";
 
     /// <summary>The icon the notifications show, beside the executable.</summary>
     public static string IconPath { get; } = Path.Combine(AppContext.BaseDirectory, "Assets", "notification.png");
@@ -107,11 +131,18 @@ internal sealed partial class NotificationService : IDesktopNotifier
             {
                 builder.AddArgument(key, value);
             }
-            var toast = builder
-                .AddText(notification.Title)
-                .AddText(notification.Body)
-                .MuteAudio()
-                .BuildNotification();
+            builder.AddText(notification.Title).AddText(notification.Body).MuteAudio();
+            switch (notification.Actions)
+            {
+                case DesktopNotificationActions.Invitation:
+                    builder.AddButton(InvitationButton(Cal.ResponseAction(new EventResponse(EventResponse.Accepted)), notification, InvitationNotificationResponse.Accept));
+                    builder.AddButton(ShowButton(notification));
+                    break;
+                case DesktopNotificationActions.Cancellation:
+                    builder.AddButton(InvitationButton(Cal.RemoveFromCalendar, notification, InvitationNotificationResponse.RemoveFromCalendar));
+                    break;
+            }
+            var toast = builder.BuildNotification();
             toast.Tag = notification.Tag;
             toast.Group = notification.Group;
             AppNotificationManager.Default.Show(toast);
@@ -121,6 +152,44 @@ internal sealed partial class NotificationService : IDesktopNotifier
 #pragma warning restore CA1031
         {
             LogNotShown(logger, e.HResult, e);
+        }
+    }
+
+    /// <summary>
+    /// Shows an event's alert, or replaces the one shown under its tag
+    /// (macOS <c>presentAlert</c>): its title and body, Join when the event
+    /// has a video call, Snooze; muted. Never throws.
+    /// </summary>
+    public void ShowAlert(CalendarAlertsController.Request request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!supported)
+        {
+            return;
+        }
+        try
+        {
+            var builder = new AppNotificationBuilder();
+            foreach (var (key, value) in NotificationArguments.ForAlert(request, CalendarAlertResponse.Open))
+            {
+                builder.AddArgument(key, value);
+            }
+            builder.AddText(request.Title).AddText(request.Body).MuteAudio();
+            if (request.Join)
+            {
+                builder.AddButton(Button(Cal.Join, request, CalendarAlertResponse.Join));
+            }
+            builder.AddButton(Button(Cal.Snooze, request, CalendarAlertResponse.Snooze));
+            var toast = builder.BuildNotification();
+            toast.Tag = request.Tag;
+            toast.Group = AlertGroup;
+            AppNotificationManager.Default.Show(toast);
+        }
+#pragma warning disable CA1031 // An alert that cannot be shown is logged; the sound still follows.
+        catch (Exception e)
+#pragma warning restore CA1031
+        {
+            LogAlertNotShown(logger, e.HResult, e);
         }
     }
 
@@ -177,6 +246,40 @@ internal sealed partial class NotificationService : IDesktopNotifier
         {
             LogNotUnregistered(logger, e.HResult, e);
         }
+    }
+
+    // Accept or Remove from Calendar of a new message's toast: its text, the
+    // message and the action.
+    private static AppNotificationButton InvitationButton(string content, DesktopNotification n, InvitationNotificationResponse response)
+    {
+        var button = new AppNotificationButton(content);
+        foreach (var (key, value) in NotificationArguments.ForInvitation(n, response))
+        {
+            button.AddArgument(key, value);
+        }
+        return button;
+    }
+
+    // Show of an invitation's toast: the toast's own pairs (the message opens).
+    private static AppNotificationButton ShowButton(DesktopNotification n)
+    {
+        var button = new AppNotificationButton(Cal.Show);
+        foreach (var (key, value) in NotificationArguments.For(n))
+        {
+            button.AddArgument(key, value);
+        }
+        return button;
+    }
+
+    // A button of an alert toast: its text and the whole alert, with its action.
+    private static AppNotificationButton Button(string content, CalendarAlertsController.Request request, CalendarAlertResponse response)
+    {
+        var button = new AppNotificationButton(content);
+        foreach (var (key, value) in NotificationArguments.ForAlert(request, response))
+        {
+            button.AddArgument(key, value);
+        }
+        return button;
     }
 
     // Never throws: whatever the platform throws leaves the app without
@@ -257,6 +360,9 @@ internal sealed partial class NotificationService : IDesktopNotifier
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "notifications: a notification was not shown (0x{HResult:X8})")]
     private static partial void LogNotShown(ILogger logger, int hResult, Exception error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "notifications: an event's alert was not shown (0x{HResult:X8})")]
+    private static partial void LogAlertNotShown(ILogger logger, int hResult, Exception error);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "notifications: an outdated notification was not withdrawn (0x{HResult:X8})")]
     private static partial void LogNotWithdrawn(ILogger logger, int hResult, Exception error);

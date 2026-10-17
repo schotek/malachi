@@ -62,7 +62,7 @@ mailbox's entries (research 03 D-L5), its headings not selectable.
                 <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-more-symbolic')}" />
                 <Button.Flyout>
                     <MenuFlyout x:Name="PrimaryMenu" Placement="BottomEdgeAlignedRight">
-                        <!-- The window's modes at the top (macOS's View ▸ Mail, Board; no key). -->
+                        <!-- The window's modes at the top (macOS's View ▸ Mail, Board, Calendar; no key). -->
                         <RadioMenuFlyoutItem
                             x:Name="MenuMail"
                             AutomationProperties.AutomationId="MenuMail"
@@ -74,6 +74,11 @@ mailbox's entries (research 03 D-L5), its headings not selectable.
                             AutomationProperties.AutomationId="MenuBoard"
                             GroupName="WindowMode"
                             Text="{l:T Msgid='Board'}" />
+                        <RadioMenuFlyoutItem
+                            x:Name="MenuCalendar"
+                            AutomationProperties.AutomationId="MenuCalendar"
+                            GroupName="WindowMode"
+                            Text="{l:T Msgid='Calendar'}" />
                         <MenuFlyoutSeparator />
                         <!-- Windows-only strings: the key names beside the items. -->
                         <MenuFlyoutItem
@@ -82,6 +87,11 @@ mailbox's entries (research 03 D-L5), its headings not selectable.
                             KeyboardAcceleratorTextOverride="Ctrl+N" />
                         <MenuFlyoutItem x:Name="MenuAddAccount" l:MnemonicLabel.Text="{l:T Msgid='_Add Account…'}" />
                         <MenuFlyoutItem x:Name="MenuAddJiraAccount" l:MnemonicLabel.Text="{l:T Msgid='Add _Jira Account…'}" />
+                        <!-- macOS File ▸ Add CalDAV Calendar… (docs/calendar.md §5.8). -->
+                        <MenuFlyoutItem
+                            x:Name="MenuAddCalDAVCalendar"
+                            AutomationProperties.AutomationId="MenuAddCalDAVCalendar"
+                            Text="{l:T Msgid='Add CalDAV Calendar…'}" />
                         <MenuFlyoutSeparator />
                         <!-- Windows-only string: the key name beside the item. -->
                         <MenuFlyoutItem

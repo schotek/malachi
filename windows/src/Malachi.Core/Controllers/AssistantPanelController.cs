@@ -6,8 +6,9 @@
 // contextLabel, anotherSelected, canRunActions, quickTarget, pinnedLabel,
 // subjectLabel, messageCount, placeholder, pendingLabel, subtitle,
 // setContext, removeContext, addSelection, add, pinnedKey, pinnedContext,
-// newKey, run, run(_:on:), perform, summarizeUnread, askAttachment,
-// cancelPending, submit, retry, signIn, openDraft, stop, newConversation,
+// newKey, run, run(_:on:), perform, runCalendar, canRunCalendarActions,
+// summarizeUnread, askAttachment, cancelPending, submit, retry, signIn,
+// openDraft, openCalendar, stop, newConversation,
 // close, start, prepare, prompt, unresolved, resolvePinned, settle, resolve,
 // launch, handle, exited, fail, clearRetries, endProcess, endSignIn,
 // closeSignIn, closeTurn, closeStreaming, append, localDate, Once); GTK:
@@ -110,7 +111,10 @@ namespace Malachi.Core.Controllers;
 /// replaces it; a tool call is an activity line until its result; a
 /// create_draft result whose bridge line names a draft
 /// (<see cref="Assistant.ParseDraftResult"/>) adds a draft card, whose Open
-/// Draft the application checks (<see cref="OpenDraft"/>). The result ends
+/// Draft the application checks (<see cref="OpenDraft"/>); the first
+/// list_events or get_event result of a turn that names an event
+/// (<see cref="Assistant.ParseCalendarResult"/>) adds a calendar card, whose
+/// Show in Calendar the application runs (<see cref="OpenInCalendar"/>). The result ends
 /// the turn (<see cref="Phase.Idle"/>); one that is not a success adds "The
 /// assistant stopped: …". The process ending during a turn does the same
 /// with its stderr's first line. A message Claude Code wrote itself because
@@ -226,6 +230,9 @@ public sealed partial class AssistantPanelController : IDisposable
     // Again.
     private Request? lastRequest;
 
+    // The turn has its calendar card (Swift calendarCarded).
+    private bool calendarCarded;
+
     // The API refused the sign-in in the turn under way; refreshFailed:
     // Claude Code could not refresh it.
     private bool authFailed;
@@ -334,6 +341,12 @@ public sealed partial class AssistantPanelController : IDisposable
 
     /// <summary>Open Draft of a draft card (the application checks the draft is there and opens it).</summary>
     public Action<DraftRef>? OpenDraft { get; set; }
+
+    /// <summary>
+    /// Show in Calendar of a calendar card: Calendar mode, the Day view of
+    /// the event's day (Swift <c>openInCalendar</c>).
+    /// </summary>
+    public Action<Assistant.CalendarRef>? OpenInCalendar { get; set; }
 
     /// <summary>The date for the system prompt, YYYY-MM-DD: <see cref="LocalDate"/> on <see cref="Time"/> by default.</summary>
     public Func<string> Today { get; set; }
@@ -444,6 +457,9 @@ public sealed partial class AssistantPanelController : IDisposable
     /// </summary>
     public bool CanSummarizeUnread(bool folder) => folder && CurrentPhase == Phase.Idle && !IsClosed;
 
+    /// <summary>Whether the calendar quick actions can run: nothing under way (Swift <c>canRunCalendarActions</c>).</summary>
+    public bool CanRunCalendarActions => CurrentPhase == Phase.Idle && !IsClosed;
+
     /// <summary>The question field's placeholder for the waiting action.</summary>
     public string Placeholder
     {
@@ -462,7 +478,7 @@ public sealed partial class AssistantPanelController : IDisposable
     /// <summary>The label over the question field while an action waits; "" when none does.</summary>
     public string PendingLabel => Pending switch
     {
-        PendingAction a => Assistant.Label(a.Action),
+        PendingAction a => Assistant.PanelLabel(a.Action),
         PendingAttachment => Assistant.Texts().AskFile,
         _ => "",
     };
@@ -693,6 +709,30 @@ public sealed partial class AssistantPanelController : IDisposable
         }
     }
 
+    /// <summary>
+    /// A calendar quick action (<see cref="Assistant.CalendarActions"/>):
+    /// What's on Today sends at once, Find a Free Slot waits for the user's
+    /// words (how long, with whom, when). Neither needs a selection (Swift
+    /// <c>runCalendar</c>).
+    /// </summary>
+    public void RunCalendar(AssistantAction a)
+    {
+        scope.VerifyAccess();
+        if (IsClosed || CurrentPhase != Phase.Idle || !Assistant.IsCalendarAction(a))
+        {
+            return;
+        }
+        if (a == AssistantAction.WhatsOnToday)
+        {
+            Start(new Request(new CalendarRequest(a), Assistant.CalendarLabel(a), "", EffectiveContext, null));
+            return;
+        }
+        Pending = new PendingAction(a);
+        pendingTarget = null;
+        RaiseState();
+        Raise(FocusInputRequested);
+    }
+
     /// <summary>Summarize Unread in This Folder, for a folder: sent at once.</summary>
     public void SummarizeUnread(string accountId, string folderId)
     {
@@ -760,6 +800,13 @@ public sealed partial class AssistantPanelController : IDisposable
         var words = TrimSpace(text);
         switch (Pending)
         {
+            case PendingAction { Action: var calendar } when Assistant.IsCalendarAction(calendar):
+                if (words.Length == 0)
+                {
+                    return false;
+                }
+                Start(new Request(new CalendarRequest(calendar), Assistant.CalendarLabel(calendar), words, EffectiveContext, null));
+                break;
             case PendingAction { Action: var a }:
                 // A reply may be drafted without instructions.
                 if (words.Length == 0 && a != AssistantAction.DraftReply)
@@ -858,6 +905,17 @@ public sealed partial class AssistantPanelController : IDisposable
             return;
         }
         scope.Guard(() => open(draft));
+    }
+
+    /// <summary>A calendar card's Show in Calendar (Swift <c>openCalendar</c>).</summary>
+    public void OpenCalendarItem(int itemId)
+    {
+        scope.VerifyAccess();
+        if (items.Find(i => i.Id == itemId) is not { Content: CalendarContent { Calendar: var calendar } } || OpenInCalendar is not { } open)
+        {
+            return;
+        }
+        scope.Guard(() => open(calendar));
     }
 
     /// <summary>
@@ -1173,6 +1231,8 @@ public sealed partial class AssistantPanelController : IDisposable
                 return (Assistant.Prompt(AssistantTarget.App, a, c.Selection) + request.Text, [key]);
             case UnreadRequest(var account, var folder):
                 return (Assistant.UnreadPrompt(account, folder), []);
+            case CalendarRequest(var calendar):
+                return (Assistant.CalendarPrompt(calendar, Today()) + request.Text, []);
             case AttachmentRequest(var account, var message, var part):
                 var prompt = Assistant.AttachmentPrompt(account, message, part) + request.Text;
                 if (request.Target is PinnedTarget(var own)
@@ -1441,6 +1501,12 @@ public sealed partial class AssistantPanelController : IDisposable
                     {
                         Append(new DraftContent(draft));
                     }
+                    else if (tool is not null && !e.IsError && !calendarCarded
+                        && Assistant.ParseCalendarResult(tool, e.ResultText) is { } calendar)
+                    {
+                        calendarCarded = true;
+                        Append(new CalendarContent(calendar));
+                    }
                     break;
                 case AssistantEventKind.Failure:
                     // Claude Code's own words for a turn the API refused: the
@@ -1585,6 +1651,7 @@ public sealed partial class AssistantPanelController : IDisposable
         }
         activities.Clear();
         toolNames.Clear();
+        calendarCarded = false;
     }
 
     private void CloseStreaming()

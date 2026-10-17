@@ -137,6 +137,9 @@ public enum SettingsKey
     /// <summary><c>board-triage-chatgpt-consent-version</c>; separate OpenAI Board disclosure.</summary>
     BoardChatGptConsentVersion,
 
+    /// <summary><c>calendar-view</c>: <see cref="SettingsStore.CalendarView"/>.</summary>
+    CalendarView,
+
     /// <summary><c>ctrl-r</c>, Windows only: what Ctrl+R does.</summary>
     CtrlR,
 }

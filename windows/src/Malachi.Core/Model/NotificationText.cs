@@ -92,7 +92,7 @@ public static class NotificationText
     // an ellipsis when anything was cut (Go: strings.ToValidUTF8(s[:n], "")
     // + "…"). A lone surrogate counts as the three bytes of the U+FFFD the
     // encoder writes for it.
-    private static string Capped(string s)
+    internal static string Capped(string s)
     {
         if (Encoding.UTF8.GetByteCount(s) <= NotificationBodyMax)
         {

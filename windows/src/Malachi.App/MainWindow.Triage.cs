@@ -98,6 +98,8 @@ public sealed partial class MainWindow
         BoardView.Changed += (_, _) => RenderTriage();
         // The mode decides what the strip and the status line's note say.
         BoardView.RegisterPropertyChangedCallback(UIElement.VisibilityProperty, (_, _) => RenderTriage());
+        // The status line's note follows the mode (Mail and Calendar have it).
+        CalendarView.RegisterPropertyChangedCallback(UIElement.VisibilityProperty, (_, _) => RenderTriage());
         if (!TriageSamples)
         {
             triageToken = Triage.Observe(RenderTriage);
@@ -129,8 +131,23 @@ public sealed partial class MainWindow
         button.Visibility = v.Offered ? Visibility.Visible : Visibility.Collapsed;
         SetTriageButton(v.Title, v.ToolTip, v.Enabled && !triageSigningIn, v.Running);
         var phase = model?.Phase ?? Board.Phase.Loading;
-        ShowTriageStrip(mode == Board.Mode.Board ? Board.TriageStripText(v, Board.Mode.Board, phase) : "", v.Running);
-        StatusLine.SetNote(mode == Board.Mode.Mail ? Board.TriageStripText(v, Board.Mode.Mail, phase) : "");
+        var text = Board.TriageStripText(v, mode, phase);
+        switch (mode)
+        {
+            case Board.Mode.Board:
+                // The board's strip under its bar; the status line has no note.
+                ShowTriageStrip(text, v.Running);
+                StatusLine.SetNote("");
+                break;
+            case Board.Mode.Mail:
+            case Board.Mode.Calendar:
+                // A run's progress as the status line's note (macOS: in the
+                // Calendar after the unanswered count, which comes with the
+                // calendar's content).
+                ShowTriageStrip("", v.Running);
+                StatusLine.SetNote(text);
+                break;
+        }
     }
 
     private void SetTriageButton(string title, string toolTip, bool enabled, bool running)

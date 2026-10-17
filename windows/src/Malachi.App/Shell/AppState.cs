@@ -14,7 +14,8 @@
 // supervisor with its process host (MALACHI_DAEMON; the keyring helper
 // beside the app) and the transport with the Windows key-file policy, the
 // connection, the notification hub, the shell's services (toasts,
-// alerts, windows, hooks), and the Assistant (AppState.Assistant.cs). The
+// alerts, windows, hooks), the Assistant (AppState.Assistant.cs), the
+// board and the calendar's sources and alerts (AppState.Calendar.cs). The
 // main window and the Integration follow in App.OnLaunched.
 
 using System;
@@ -85,6 +86,7 @@ public sealed partial class AppState : IDisposable
         Windows.Alerts = alerts;
         InitializeAssistant();
         InitializeBoard();
+        InitializeCalendar();
     }
 
     /// <summary>The app's log.</summary>
@@ -287,6 +289,7 @@ public sealed partial class AppState : IDisposable
         CloseAssistant();
         Integration?.Dispose();
         CloseBoard();
+        CloseCalendar();
         Windows.Dispose();
         Notifications.Dispose();
         Connection.Dispose();

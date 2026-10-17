@@ -3,7 +3,8 @@
 
 // Port of ui/internal/widget/message_row.go (the preview's attributes from
 // widget/highlight.go: the matched words in bold, never markup;
-// ConnectExpander); macOS: MessageList/MessageCellView.swift. The view of
+// ConnectExpander); macOS: MessageList/MessageCellView.swift (with
+// applyInvitation: a cancellation's subject struck through). The view of
 // Core's MessageRow (MessageRowView.xaml); a ListView's recycled container
 // gets another row through Row, and the preview's runs follow it.
 
@@ -69,6 +70,10 @@ public sealed partial class MessageRowView : UserControl
 
     /// <summary>The actor of an event is set like the change (the caption class).</summary>
     public static double FromSize(bool eventRow) => eventRow ? 12 : 14;
+
+    /// <summary>A cancellation's subject is struck through (MessageCellView.applyInvitation).</summary>
+    public static Windows.UI.Text.TextDecorations Strike(bool on) =>
+        on ? Windows.UI.Text.TextDecorations.Strikethrough : Windows.UI.Text.TextDecorations.None;
 
     private static void OnRowChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {

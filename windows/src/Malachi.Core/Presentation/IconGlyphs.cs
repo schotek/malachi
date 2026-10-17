@@ -111,6 +111,9 @@ public static class IconGlyphs
         ["edit-select-all"] = G(0xE8B3),
         ["view-list"] = G(0xEA37),
         ["view-grid"] = G(0xE80A),
+        // The window's Calendar mode (macOS calendar; Adwaita's
+        // x-office-calendar): Calendar.
+        ["x-office-calendar"] = G(0xE787),
         // Jira accounts: Reply as Comment (macOS text.bubble), the account's
         // row (GTK's stand-in for a ticket, as Adwaita has none), the views
         // Assigned to Me, Watching and Open as saved queries (Filter), and

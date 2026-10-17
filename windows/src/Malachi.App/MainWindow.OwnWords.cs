@@ -43,6 +43,9 @@ public sealed partial class MainWindow
     private bool converting;
     private string typed = "";
 
+    // SetupOwnWords ran (the Assistant state exists).
+    private bool ownWordsSetUp;
+
     // The button and Alt+Enter; called once the Assistant state exists.
     private void SetupOwnWords()
     {
@@ -59,7 +62,18 @@ public sealed partial class MainWindow
             state.InAppProviderChanged -= OnSearchProviderChanged;
             searcher?.Dispose();
         };
+        ownWordsSetUp = true;
         SyncOwnWords();
+    }
+
+    // The window's mode changed: the button is the mail's search's (the
+    // calendar's box searches events, not in the mail's syntax).
+    private void SyncOwnWordsMode()
+    {
+        if (ownWordsSetUp)
+        {
+            SyncOwnWords();
+        }
     }
 
     private void OnSearchProviderChanged(object? sender, EventArgs e)
@@ -72,7 +86,7 @@ public sealed partial class MainWindow
     // Alt+Enter in the box, while the one-shot requests can run.
     private void OnOwnWordsKey(object sender, KeyRoutedEventArgs e)
     {
-        if (e.Key != VirtualKey.Enter || !state.Assistant.CanRunInApp
+        if (e.Key != VirtualKey.Enter || !OwnWordsOffered
             || !InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Menu).HasFlag(CoreVirtualKeyStates.Down))
         {
             return;
@@ -85,7 +99,7 @@ public sealed partial class MainWindow
     // are words; a conversion under way ends when they can no longer run.
     private void SyncOwnWords()
     {
-        var ok = state.Assistant.CanRunInApp;
+        var ok = OwnWordsOffered;
         OwnWordsButton.Visibility = ok ? Visibility.Visible : Visibility.Collapsed;
         OwnWordsButton.IsEnabled = ok && !converting && SearchBox.Text.Trim().Length > 0;
         if (!ok && converting)
@@ -94,10 +108,14 @@ public sealed partial class MainWindow
         }
     }
 
+    // While the one-shot requests can run and the box is the mail's (Mail;
+    // the Board hides it, the Calendar's searches events).
+    private bool OwnWordsOffered => state.Assistant.CanRunInApp && mode == Core.Boards.Board.Mode.Mail;
+
     // Converts the box's words and searches for the query.
     private void SearchInOwnWords()
     {
-        if (!state.Assistant.CanRunInApp || converting)
+        if (!OwnWordsOffered || converting)
         {
             return;
         }

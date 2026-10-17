@@ -5,7 +5,8 @@
 // ui/internal/board/mode_test.go (TestInitialMode, TestAllows,
 // TestModeForRequest, TestViewsMail, TestModeTexts, and those Swift
 // lacks: TestStyleOnShowRule, TestDefaultStyleNicks, TestStartMode,
-// TestFilterOnShow, TestStyleNicks, TestStartDecision).
+// TestFilterOnShow, TestStyleNicks, TestStartDecision), with the
+// Calendar's rows; the Calendar's own tests are CalendarModeTests.
 
 using System;
 using System.Linq;
@@ -22,7 +23,8 @@ public sealed class BoardTests
     public void InitialMode()
     {
         Assert.Equal(Mode.Mail, Board.InitialMode);
-        Assert.Equal([0, 1], Array.ConvertAll(Enum.GetValues<Mode>(), m => (int)m));
+        Assert.Equal([0, 1, 2], Array.ConvertAll(Enum.GetValues<Mode>(), m => (int)m));
+        Assert.Equal(2, (int)Mode.Calendar);
     }
 
     [Fact]
@@ -36,12 +38,21 @@ public sealed class BoardTests
             (Command.MailView, Mode.Mail, true),
             (Command.MessageAction, Mode.Mail, true),
             (Command.BoardView, Mode.Mail, false),
+            (Command.NewEvent, Mode.Mail, true),
             (Command.SwitchMode, Mode.Board, true),
             (Command.NewMessage, Mode.Board, true),
             (Command.CheckForNewMail, Mode.Board, true),
             (Command.MailView, Mode.Board, false),
             (Command.MessageAction, Mode.Board, false),
             (Command.BoardView, Mode.Board, true),
+            (Command.NewEvent, Mode.Board, false),
+            (Command.SwitchMode, Mode.Calendar, true),
+            (Command.NewMessage, Mode.Calendar, true),
+            (Command.CheckForNewMail, Mode.Calendar, true),
+            (Command.MailView, Mode.Calendar, false),
+            (Command.MessageAction, Mode.Calendar, false),
+            (Command.BoardView, Mode.Calendar, false),
+            (Command.NewEvent, Mode.Calendar, true),
         ];
         Assert.Equal(Enum.GetValues<Command>().Length * Enum.GetValues<Mode>().Length, cases.Length);
         foreach (var (command, mode, want) in cases)
@@ -63,6 +74,10 @@ public sealed class BoardTests
             (Request.OpenMessageWindow, Mode.Board, Mode.Board),
             (Request.Compose, Mode.Mail, Mode.Mail),
             (Request.Compose, Mode.Board, Mode.Board),
+            (Request.ShowOutbox, Mode.Calendar, Mode.Mail),
+            (Request.RevealAssistant, Mode.Calendar, Mode.Mail),
+            (Request.OpenMessageWindow, Mode.Calendar, Mode.Calendar),
+            (Request.Compose, Mode.Calendar, Mode.Calendar),
         ];
         Assert.Equal(Enum.GetValues<Request>().Length * Enum.GetValues<Mode>().Length, cases.Length);
         foreach (var (request, current, want) in cases)
@@ -76,6 +91,8 @@ public sealed class BoardTests
     [InlineData(Mode.Mail, false, false)]
     [InlineData(Mode.Board, true, false)]
     [InlineData(Mode.Board, false, false)]
+    [InlineData(Mode.Calendar, true, false)]
+    [InlineData(Mode.Calendar, false, false)]
     public void ViewsTheMail(Mode mode, bool key, bool want) => Assert.Equal(want, ViewsMail(mode, key));
 
     [Fact]
@@ -87,6 +104,8 @@ public sealed class BoardTests
         Assert.NotEqual(t.Mail, t.Board);
         Assert.Equal("Mail", t.Mail);
         Assert.Equal("Board", t.Board);
+        Assert.Equal("Calendar", t.Calendar);
+        Assert.Equal([t.Mail, t.Board, t.Calendar], Enum.GetValues<Mode>().Select(t.Name));
     }
 
     [Fact]
@@ -122,7 +141,7 @@ public sealed class BoardTests
         Assert.Equal(["Last Used", "List", "Columns", "Today"], DefaultStyles.Select(Board.Text.DefaultStyleTitle));
         // The settings' nicks are the members' names in lower case, in the gschema's order.
         Assert.Equal(["list", "columns", "today", "last"], Enum.GetValues<DefaultStyle>().Select(d => d.Nick));
-        Assert.Equal(["mail", "board", "last"], Enum.GetValues<StartChoice>().Select(c => c.Nick));
+        Assert.Equal(["mail", "board", "last", "calendar"], Enum.GetValues<StartChoice>().Select(c => c.Nick));
     }
 
     [Theory]
@@ -136,6 +155,10 @@ public sealed class BoardTests
     [InlineData("junk", "board", true, Mode.Mail)]
     [InlineData("board", "board", false, Mode.Mail)]
     [InlineData("last", "board", false, Mode.Mail)]
+    [InlineData("calendar", "mail", true, Mode.Calendar)]
+    [InlineData("calendar", "mail", false, Mode.Calendar)]
+    [InlineData("last", "calendar", true, Mode.Calendar)]
+    [InlineData("last", "calendar", false, Mode.Calendar)]
     public void StartModeRule(string start, string last, bool enabled, Mode want) => Assert.Equal(want, StartMode(start, last, enabled));
 
     /// <summary>The start of a new window while the preferences may still come (Go TestStartDecision).</summary>
@@ -165,13 +188,14 @@ public sealed class BoardTests
     [Fact]
     public void StartModeNicks()
     {
-        foreach (var m in new[] { Mode.Mail, Mode.Board })
+        foreach (var m in new[] { Mode.Mail, Mode.Board, Mode.Calendar })
         {
             Assert.Equal(m, ParseMode(m.Nick));
         }
         Assert.Null(ParseMode("junk"));
-        Assert.Equal(["mail", "board", "last"], StartModes.Select(s => s.Nick));
-        Assert.Equal(["Mail", "Board", "Last Used"], StartModes.Select(Board.Text.StartModeTitle));
+        Assert.Equal(["mail", "board", "calendar", "last"], StartModes.Select(s => s.Nick));
+        Assert.Equal(["Mail", "Board", "Calendar", "Last Used"], StartModes.Select(Board.Text.StartModeTitle));
+        Assert.Equal(StartChoice.Mail, ParseStartChoice("Calendar"));
         foreach (var s in StartModes)
         {
             Assert.Equal(s, ParseStartChoice(s.Nick));

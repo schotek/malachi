@@ -8,7 +8,8 @@
 // for the password) and jira_editors.go (editJiraAccount). The application's
 // entry points to the Preferences, the account wizard and the Jira account
 // assistant, registered in the shell's hooks: the primary menu's Preferences
-// (Ctrl+,), Add Account… and Add Jira Account…, the No Accounts page's
+// (Ctrl+,), Add Account…, Add Jira Account… and Add CalDAV Calendar…
+// (AppState.ShowAddCalDAVCalendar), the No Accounts page's
 // buttons, and the banners' and the status popover's Edit Account…
 // (AppHooks.EditAccount). A Jira account is edited in its settings
 // (AccountsPage.EditorOf), or in the assistant asking for a new token when
@@ -34,6 +35,15 @@ internal static class PreferencesEntryPoints
         // The sidebar learns of the new account through notify.accountsChanged.
         hooks.AddAccount = window => AccountWizardWindow.Show(state, window);
         hooks.AddJiraAccount = window => JiraWizardWindow.Show(state, window);
+        // Over the window's calendar source (docs/calendar.md §5.8); the
+        // calendar's sidebars learn of the account through notify.accountsChanged.
+        hooks.AddCalDAVCalendar = window =>
+        {
+            if ((window ?? state.MainWindow) is { } owner)
+            {
+                state.ShowAddCalDAVCalendar(owner, null);
+            }
+        };
         hooks.EditAccount = (window, id, reason) =>
         {
             if (state.Integration?.Mailbox.Model.Account(id) is not { } account)

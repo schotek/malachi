@@ -37,6 +37,13 @@
 // ProgressRing while the message downloads, after the size inside the
 // split button's main part, as GTK has it inside the chip's button (macOS
 // puts it after the control).
+//
+// The invitation card above the header (MessageViewController+Invitation.swift
+// renderInvitation, openInvitationLink; docs/calendar.md §5.7): every render
+// feeds it the card of message.get (InvitationCardPresenter), the account's
+// switch decides, an attached message's window shows none; Join Video Call
+// goes through the link confirmation of the view's window with no listed
+// links, Show in Calendar to the main window.
 
 using System;
 using System.Collections.Generic;
@@ -94,6 +101,9 @@ public sealed partial class MessageView : UserControl
     // The pane's conversation page (window.go convPageName), the pane only.
     private Conversation.ConversationView? conversation;
 
+    // The invitation card above the header; none in an attached message's view.
+    private readonly InvitationCardPresenter? invitation;
+
     /// <summary>A view of <paramref name="mode"/>; <paramref name="commands"/> drive its command row (none for an attached message).</summary>
     public MessageView(ReaderMode mode, ReaderServices services, WindowCommands? commands)
     {
@@ -124,6 +134,13 @@ public sealed partial class MessageView : UserControl
         IssueCard.Issues = services.Issues;
         IssueCard.Subject = () => Reader.Current is { } shown ? Malachi.Core.Controllers.IssueActionsController.SubjectOf(shown) : null;
         IssueCard.OpenIssue = OpenIssue;
+        if (mode != ReaderMode.Embedded)
+        {
+            invitation = new InvitationCardPresenter(InvitationCard, services.State, () => HostWindow)
+            {
+                OpenLink = OpenInvitationLink,
+            };
+        }
         WireCommands();
         // GTK SetFocusOnClick(false): a click leaves the focus where it was,
         // since the bar goes away the moment the images are in; the keyboard
@@ -232,6 +249,7 @@ public sealed partial class MessageView : UserControl
         Reader.Close();
         web?.Close();
         conversation?.Close();
+        invitation?.Close();
     }
 
     // The command row: the window's commands (window.blp's action-name and
@@ -249,6 +267,7 @@ public sealed partial class MessageView : UserControl
             // would replace the label with its own empty one.
             Main.CommandBinding.Bind(AddAccountButton, commands.AddAccount);
             Main.CommandBinding.Bind(AddJiraAccountButton, commands.AddJiraAccount);
+            Main.CommandBinding.Bind(AddCalDAVCalendarButton, commands.AddCalDAVCalendar);
         }
         if (commands is null || Reader.Mode == ReaderMode.Pane)
         {
@@ -364,6 +383,7 @@ public sealed partial class MessageView : UserControl
                 if (Reader.Page != ReaderPage.Message)
                 {
                     headersOf = null; // the next message, even the same one, starts at the top
+                    invitation?.Clear();
                 }
                 if (conversation is not null)
                 {
@@ -425,13 +445,33 @@ public sealed partial class MessageView : UserControl
     // box would; a re-render of the same one leaves them where they are.
     private void OnRendered(object? sender, ReaderRender r)
     {
-        if (closed || headersOf == r.Summary.Id)
+        if (closed)
+        {
+            return;
+        }
+        RenderInvitation(r);
+        if (headersOf == r.Summary.Id)
         {
             return;
         }
         headersOf = r.Summary.Id;
         HeaderScroller.ChangeView(null, 0, null, disableAnimation: true);
     }
+
+    // renderInvitation: the card of message.get and the account's switch;
+    // an attached message has none.
+    private void RenderInvitation(ReaderRender r)
+    {
+        if (invitation is null || Reader.Mode == ReaderMode.Embedded)
+        {
+            return;
+        }
+        invitation.Show(r.Summary, r.Loaded?.Msg, InvitationReading.ShowsInvitationCard(services.AccountOf(r.Summary.AccountId)));
+    }
+
+    // openInvitationLink: Join Video Call through the link confirmation of
+    // the view's window, as a link the daemon did not list.
+    private void OpenInvitationLink(string url) => _ = services.Links.OpenAsync(new ActivatedLink(url, url), [], HostWindow);
 
     // The headers' share of the page: past it they scroll.
     private void OnMessagePageSizeChanged(object sender, SizeChangedEventArgs e) =>

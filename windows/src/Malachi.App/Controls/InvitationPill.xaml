@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Shared/InvitationPill.swift (colours,
+show); GTK: none yet (ui/internal/calendar/invitation.go InvitationPill,
+PillTitle). The pill of a message with a calendar part (docs/calendar.md
+§5.7), a variant of IssuePill: an invitation in blue, an update in orange,
+a cancellation in red, a reply in the grey of a status to do; the fills
+are the colours at low alpha (macOS 0.15 and 0.12, libadwaita's blue_3,
+orange_3 and red_3 with their light and dark text colours), high contrast
+keeps the system's button face. Hidden while its text is empty. The text
+is the application's own (Cal.PillTitle), never the message's.
+-->
+<UserControl
+    x:Class="Malachi.App.Controls.InvitationPill"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    VerticalAlignment="Center"
+    AutomationProperties.AutomationId="InvitationPill"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <SolidColorBrush x:Key="InvitationPillInvitationBrush" Color="#2662A0EA" />
+                    <SolidColorBrush x:Key="InvitationPillInvitationTextBrush" Color="#FF99C1F1" />
+                    <SolidColorBrush x:Key="InvitationPillUpdateBrush" Color="#26FFA348" />
+                    <SolidColorBrush x:Key="InvitationPillUpdateTextBrush" Color="#FFFFBE6F" />
+                    <SolidColorBrush x:Key="InvitationPillCancelledBrush" Color="#1FF66151" />
+                    <SolidColorBrush x:Key="InvitationPillCancelledTextBrush" Color="#FFFF7B63" />
+                    <SolidColorBrush x:Key="InvitationPillReplyBrush" Color="#1AFFFFFF" />
+                    <SolidColorBrush x:Key="InvitationPillReplyTextBrush" Color="#BFFFFFFF" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="InvitationPillInvitationBrush" Color="#263584E4" />
+                    <SolidColorBrush x:Key="InvitationPillInvitationTextBrush" Color="#FF1A5FB4" />
+                    <SolidColorBrush x:Key="InvitationPillUpdateBrush" Color="#26FF7800" />
+                    <SolidColorBrush x:Key="InvitationPillUpdateTextBrush" Color="#FFC64600" />
+                    <SolidColorBrush x:Key="InvitationPillCancelledBrush" Color="#1FE01B24" />
+                    <SolidColorBrush x:Key="InvitationPillCancelledTextBrush" Color="#FFC01C28" />
+                    <SolidColorBrush x:Key="InvitationPillReplyBrush" Color="#1A000000" />
+                    <SolidColorBrush x:Key="InvitationPillReplyTextBrush" Color="#BF000000" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast">
+                    <SolidColorBrush x:Key="InvitationPillInvitationBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+                    <SolidColorBrush x:Key="InvitationPillInvitationTextBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
+                    <SolidColorBrush x:Key="InvitationPillUpdateBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+                    <SolidColorBrush x:Key="InvitationPillUpdateTextBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
+                    <SolidColorBrush x:Key="InvitationPillCancelledBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+                    <SolidColorBrush x:Key="InvitationPillCancelledTextBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
+                    <SolidColorBrush x:Key="InvitationPillReplyBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+                    <SolidColorBrush x:Key="InvitationPillReplyTextBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Border x:Name="Fill" Style="{StaticResource IssuePillBorderStyle}">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="Kinds">
+                <VisualState x:Name="Invitation">
+                    <VisualState.Setters>
+                        <Setter Target="Fill.Background" Value="{ThemeResource InvitationPillInvitationBrush}" />
+                        <Setter Target="Label.Foreground" Value="{ThemeResource InvitationPillInvitationTextBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Update">
+                    <VisualState.Setters>
+                        <Setter Target="Fill.Background" Value="{ThemeResource InvitationPillUpdateBrush}" />
+                        <Setter Target="Label.Foreground" Value="{ThemeResource InvitationPillUpdateTextBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Cancelled">
+                    <VisualState.Setters>
+                        <Setter Target="Fill.Background" Value="{ThemeResource InvitationPillCancelledBrush}" />
+                        <Setter Target="Label.Foreground" Value="{ThemeResource InvitationPillCancelledTextBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Reply">
+                    <VisualState.Setters>
+                        <Setter Target="Fill.Background" Value="{ThemeResource InvitationPillReplyBrush}" />
+                        <Setter Target="Label.Foreground" Value="{ThemeResource InvitationPillReplyTextBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+        <!-- The pill itself is the text element (InvitationPill.xaml.cs). -->
+        <TextBlock
+            x:Name="Label"
+            AutomationProperties.AccessibilityView="Raw"
+            Style="{StaticResource IssuePillTextStyle}" />
+    </Border>
+</UserControl>

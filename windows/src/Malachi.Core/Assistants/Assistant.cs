@@ -124,8 +124,9 @@ public static partial class Assistant
 
     /// <summary>
     /// Go's string of an action (the Swift raw value): <c>summarize</c>,
-    /// <c>draft-reply</c>, <c>tasks</c>, <c>ask</c>, <c>unread</c>; the
-    /// number of a value outside the enum.
+    /// <c>draft-reply</c>, <c>tasks</c>, <c>ask</c>, <c>unread</c>,
+    /// <c>whats-on-today</c>, <c>find-free-slot</c>; the number of a value
+    /// outside the enum.
     /// </summary>
     public static string ActionNick(AssistantAction a) => a switch
     {
@@ -134,6 +135,8 @@ public static partial class Assistant
         AssistantAction.Tasks => "tasks",
         AssistantAction.Ask => "ask",
         AssistantAction.Unread => "unread",
+        AssistantAction.WhatsOnToday => "whats-on-today",
+        AssistantAction.FindFreeSlot => "find-free-slot",
         _ => ((int)a).ToString(CultureInfo.InvariantCulture),
     };
 

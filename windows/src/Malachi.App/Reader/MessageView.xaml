@@ -472,6 +472,15 @@ gets the sanitiser's output only.
                     CornerRadius="18"
                     Style="{StaticResource SubtleButtonStyle}"
                     l:MnemonicLabel.Text="{l:T Msgid='Add _Jira Account…'}" />
+                <!-- A CalDAV calendar is an account of its own (docs/calendar.md §5.8, macOS's third button): flat. -->
+                <Button
+                    x:Name="AddCalDAVCalendarButton"
+                    Padding="24,8"
+                    HorizontalAlignment="Center"
+                    AutomationProperties.AutomationId="AddCalDAVCalendarButton"
+                    Content="{l:T Msgid='Add CalDAV Calendar…'}"
+                    CornerRadius="18"
+                    Style="{StaticResource SubtleButtonStyle}" />
             </StackPanel>
 
             <!-- "message": the headers stay put at the top; the body below
@@ -515,6 +524,11 @@ gets the sanitiser's output only.
                             Padding="24,12,24,12"
                             HorizontalAlignment="Stretch"
                             Spacing="12">
+                            <!-- The invitation card above the header (docs/calendar.md
+                                 §5.7; macOS MessageViewController's invitation):
+                                 a message with a calendar part, not in an
+                                 attached message's window. -->
+                            <local:InvitationCardView x:Name="InvitationCard" />
                             <!-- issue_card_slot: the issue card of a Jira message
                                  (window/issue_card.go); hidden for mail. -->
                             <local:IssueCardView x:Name="IssueCard" State="{x:Bind Reader.IssueCard, Mode=OneWay}" />

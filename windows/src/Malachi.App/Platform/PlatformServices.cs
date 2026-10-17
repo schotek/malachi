@@ -23,6 +23,9 @@
 //                       Background, or never shown after --background), false
 //                       when it is shown again; WithdrawNotifications(ids)
 //                       when the mailbox finds notifications outdated;
+//                       PresentAlert(request) and WithdrawAlert(id) for the
+//                       calendar's alerts (CalendarAlertNotifier), whose
+//                       clicks reach the same handler with their Alert;
 //   on the way out:     Stop(), on the UI thread (Main's thread after
 //                       Application.Start returned is the same one).
 // LaunchAtLogin, Mailto and OpenDefaultApps are for Preferences.
@@ -40,6 +43,7 @@ using System.Security;
 using System.Threading;
 using System.Threading.Tasks;
 using Malachi.Core.Api;
+using Malachi.Core.Controllers;
 using Malachi.Core.Presentation;
 using Malachi.Platform.Windows.Notifications;
 using Malachi.Platform.Windows.Registration;
@@ -199,6 +203,28 @@ public static partial class PlatformServices
         ArgumentNullException.ThrowIfNull(ids);
         notifier?.Withdraw([.. ids.Select(DesktopNotification.TagOf)]);
     }
+
+    /// <summary>
+    /// Shows an event's alert as a toast with Join (a video call) and Snooze,
+    /// or replaces the one shown under its tag (docs/calendar.md §5.9;
+    /// CalendarAlertNotifier, which plays the sound). Its clicks reach the
+    /// handler of <see cref="InitializeEarly"/> with
+    /// <see cref="NotificationActivation.Alert"/>. Call it on the UI thread;
+    /// nothing before <see cref="Start"/> or without notifications. Never throws.
+    /// </summary>
+    public static void PresentAlert(CalendarAlertsController.Request request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        (notifier as NotificationService)?.ShowAlert(request);
+    }
+
+    /// <summary>
+    /// Withdraws the toast of alert <paramref name="id"/> by its tag
+    /// (<see cref="CalendarAlertsController.TagOf"/>): dismissed by any
+    /// client, snoozed. Call it on the UI thread; nothing before
+    /// <see cref="Start"/>. Never throws.
+    /// </summary>
+    public static void WithdrawAlert(CalendarAlertId id) => notifier?.Withdraw([CalendarAlertsController.TagOf(id)]);
 
     /// <summary>
     /// Whether the app runs in the background with its main window hidden:

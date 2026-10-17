@@ -5,7 +5,8 @@
 // nicks of Board.DefaultStyle, an unknown one read as Last Used, the
 // default; Go board.ParseDefaultStyle), board-last-style (BoardStyle, an
 // unknown one the List), board-start-mode (Board.StartChoice, an unknown
-// one Mail), board-last-mode and board-account-filter (plain strings).
+// one Mail; "calendar" the Calendar), board-last-mode and
+// board-account-filter (plain strings).
 
 using Malachi.Core.Boards;
 using Malachi.Core.Settings;
@@ -63,5 +64,25 @@ public sealed class BoardSettingsTests
         Assert.Equal(Board.StartChoice.Mail, s.BoardStartMode);
         backend.SetString("board-last-style", "last");
         Assert.Equal(BoardStyle.List, s.BoardLastStyle);
+    }
+
+    /// <summary>The Calendar mode (docs/calendar.md D27): "calendar" in board-start-mode and board-last-mode.</summary>
+    [Fact]
+    public void TheCalendarIsAStartAndALastMode()
+    {
+        var backend = new InMemorySettingsBackend();
+        using var s = new SettingsStore(backend, null);
+        Assert.Equal(["mail", "board", "last", "calendar"], SettingsStore.Info(SettingsKey.BoardStartMode).Choices);
+        s.BoardStartMode = Board.StartChoice.Calendar;
+        Assert.True(backend.TryGetString("board-start-mode", out var start) && start == "calendar");
+        Assert.Equal(Board.StartChoice.Calendar, s.BoardStartMode);
+        Assert.Equal(Board.Mode.Calendar, Board.StartMode(s.BoardStartMode, s.BoardLastMode, boardEnabled: false));
+        s.BoardStartMode = Board.StartChoice.Last;
+        s.BoardLastMode = Board.Mode.Calendar.Nick;
+        Assert.True(backend.TryGetString("board-last-mode", out var last) && last == "calendar");
+        Assert.Equal(Board.Mode.Calendar, Board.ParseMode(s.BoardLastMode));
+        Assert.Equal(Board.Mode.Calendar, Board.StartMode(s.BoardStartMode, s.BoardLastMode, boardEnabled: true));
+        backend.SetString("board-start-mode", "calendar");
+        Assert.Equal(Board.StartChoice.Calendar, s.BoardStartMode);
     }
 }

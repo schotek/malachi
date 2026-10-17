@@ -15,7 +15,12 @@
 // called (docs/windows-port.md §7.5). os.Logger's lines are ILogger's, at
 // the same levels: a payload that does not decode is a warning (its method
 // and the decoder's message, never the payload), an unknown method is
-// information.
+// information. The calendar's four notifications (notify.calendarChanged,
+// notify.calendarState, notify.eventAlert, notify.invitationsChanged) go
+// to one handler kind as they were decoded (Swift addCalendar, which
+// decodes them as CalendarNotification next to DaemonNotification; here
+// they are DaemonNotification cases), for the calendar's sources and the
+// application's alerts.
 
 using System;
 using System.Collections.Generic;
@@ -48,6 +53,7 @@ public sealed partial class NotificationHub : IDisposable
     private readonly HandlerList<MessagesChangedNotification> messagesChanged;
     private readonly HandlerList<BoardChangedNotification> boardChanged;
     private readonly HandlerList<DraftsChangedNotification> draftsChanged;
+    private readonly HandlerList<DaemonNotification> calendar;
     private readonly HandlerList<ConnectionState> connection;
     private ConnectionController? attached;
 
@@ -65,6 +71,7 @@ public sealed partial class NotificationHub : IDisposable
         messagesChanged = new HandlerList<MessagesChangedNotification>(Pending);
         boardChanged = new HandlerList<BoardChangedNotification>(Pending);
         draftsChanged = new HandlerList<DraftsChangedNotification>(Pending);
+        calendar = new HandlerList<DaemonNotification>(Pending);
         connection = new HandlerList<ConnectionState>(Pending);
     }
 
@@ -121,6 +128,17 @@ public sealed partial class NotificationHub : IDisposable
     public IDisposable AddDraftsChanged(Action<DraftsChangedNotification> handler) => draftsChanged.Add(handler);
 
     /// <summary>
+    /// Fires on every one of the calendar's notifications, as decoded
+    /// (<see cref="DaemonNotification.CalendarChanged"/>,
+    /// <see cref="DaemonNotification.CalendarState"/>,
+    /// <see cref="DaemonNotification.EventAlert"/>,
+    /// <see cref="DaemonNotification.InvitationsChanged"/>; Swift
+    /// <c>addCalendar</c>): the calendar's sources and the application's
+    /// alerts take them.
+    /// </summary>
+    public IDisposable AddCalendar(Action<DaemonNotification> handler) => calendar.Add(handler);
+
+    /// <summary>
     /// Fires on every connection state change, after
     /// <see cref="ConnectionState"/> was updated. A handler added later does
     /// not get the current state; read <see cref="ConnectionState"/> for that.
@@ -167,6 +185,10 @@ public sealed partial class NotificationHub : IDisposable
                 break;
             case DaemonNotification.DraftsChanged d:
                 draftsChanged.Fire(d.Payload);
+                break;
+            case DaemonNotification.CalendarChanged or DaemonNotification.CalendarState
+                or DaemonNotification.EventAlert or DaemonNotification.InvitationsChanged:
+                calendar.Fire(n);
                 break;
             case DaemonNotification.Unknown u:
                 LogUnknown(logger, u.Method);

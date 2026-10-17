@@ -8,6 +8,8 @@
 // remove itself while being called (and the others of that round still
 // run), a payload that does not decode and an unknown method reach no
 // handler, and a handler that throws neither stops the others nor escapes.
+// The calendar's four notifications reach the calendar's handlers as
+// decoded (Swift addCalendar), and no other kind does.
 
 using System;
 using System.Collections.Generic;
@@ -86,6 +88,38 @@ public sealed class NotificationHubTests
         hub.Handle(Raw("notify.draftsChanged", """{"accountId":"acc_1"}"""));
         hub.Handle(Raw("notify.draftsChanged", """{"threadIds":["t_1"]}""")); // no account: dropped
         Assert.Equal(["acc_1:t_1,t_2", "acc_1:"], seen);
+        Assert.Empty(hub.Pending.TakeFaults());
+    }
+
+    [Fact]
+    public void TheCalendarsNotificationsReachTheirHandlersAsDecoded()
+    {
+        using var hub = new NotificationHub();
+        var seen = new List<string>();
+        hub.AddCalendar(n => seen.Add(n switch
+        {
+            DaemonNotification.CalendarChanged c => "changed " + string.Join(",", (c.Payload.CalendarIds ?? []).Select(id => id.Value)),
+            DaemonNotification.CalendarState s => "state " + s.State.AccountId.Value,
+            DaemonNotification.EventAlert a => "alert " + a.Payload.Alert.AlertId.Value + " " + a.Payload.Alert.State.Value,
+            DaemonNotification.InvitationsChanged => "invitations",
+            _ => "other " + n.GetType().Name,
+        }));
+        hub.AddCalendar(_ => seen.Add("second"));
+        hub.AddBoardChanged(_ => seen.Add("board"));
+        hub.AddAccountsChanged(() => seen.Add("accounts"));
+
+        hub.Handle(Raw("notify.calendarChanged", """{"calendarIds":["cal_1","cal_2"],"from":"2026-10-01T00:00:00Z"}"""));
+        hub.Handle(Raw("notify.calendarState", """{"state":{"accountId":"acc_1","status":"consentRequired","progress":-1}}"""));
+        hub.Handle(Raw(
+            "notify.eventAlert",
+            """{"alert":{"alertId":"al_1","state":"due","eventId":"ev_1","accountId":"acc_1","calendarId":"cal_1","title":"Standup","allDay":false,"minutesBefore":5}}"""));
+        hub.Handle(new RpcNotification("notify.invitationsChanged", Encoding.UTF8.GetBytes("""{"jsonrpc":"2.0","method":"notify.invitationsChanged"}""")));
+        hub.Handle(Raw("notify.accountsChanged", "{}"));
+        hub.Handle(Raw("notify.eventAlert", "{}")); // no alert: dropped
+
+        Assert.Equal(
+            ["changed cal_1,cal_2", "second", "state acc_1", "second", "alert al_1 due", "second", "invitations", "second", "accounts"],
+            seen);
         Assert.Empty(hub.Pending.TakeFaults());
     }
 

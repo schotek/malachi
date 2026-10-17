@@ -17,9 +17,10 @@ opened from the title bar at 900 or less; at 600 or less list and message
 are one stack with the title bar's back button (MainWindow.Panes.cs, Core's
 PaneLayout). The pane widths are dragged with the toolkit's sizers
 (window.blp's ranges on the columns). The panes are the Mail mode; the
-Board mode (Boards/BoardPage) takes their place under the same title bar,
-whose Mail/Board switch sits before the search box, and over the same
-status line (MainWindow.Mode.cs).
+Board mode (Boards/BoardPage) and the Calendar mode (Calendars/CalendarPage)
+take their place under the same title bar, whose Mail/Board/Calendar switch
+sits before the search box, and over the same status line
+(MainWindow.Mode.cs).
 -->
 <Window
     x:Class="Malachi.App.MainWindow"
@@ -27,6 +28,7 @@ status line (MainWindow.Mode.cs).
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:assistants="using:Malachi.App.Assistants"
     xmlns:boards="using:Malachi.App.Boards"
+    xmlns:calendars="using:Malachi.App.Calendars"
     xmlns:controls="using:Malachi.App.Controls"
     xmlns:l="using:Malachi.App.Localization"
     xmlns:main="using:Malachi.App.Main"
@@ -65,12 +67,14 @@ status line (MainWindow.Mode.cs).
             <TitleBar.IconSource>
                 <ImageIconSource ImageSource="ms-appx:///Assets/Malachi.ico" />
             </TitleBar.IconSource>
-            <!-- The Mail/Board switch at the start (window.blp mode_switch,
-                 macOS ModeSwitch: icons, the modes' names as tooltips;
-                 MainWindow.Mode.cs), then the box, and beside it window.blp's
-                 search_own_words: the assistant turns the typed words into a
-                 search (In App only; MainWindow.OwnWords.cs). The box hides
-                 while the board shows. -->
+            <!-- The Mail/Board/Calendar switch at the start (window.blp
+                 mode_switch, macOS ModeSwitch: icons, the modes' names as
+                 tooltips, set by MainWindow.Mode.cs), then the box, and beside
+                 it window.blp's search_own_words: the assistant turns the
+                 typed words into a search (In App only, in Mail;
+                 MainWindow.OwnWords.cs). The box hides while the board shows
+                 and searches the events in the Calendar
+                 (MainWindow.Calendar.cs). -->
             <Grid
                 HorizontalAlignment="Stretch"
                 VerticalAlignment="Center"
@@ -89,9 +93,7 @@ status line (MainWindow.Mode.cs).
                         Width="40"
                         Height="32"
                         Padding="0"
-                        AutomationProperties.AutomationId="ModeMail"
-                        AutomationProperties.Name="{l:T Msgid='Mail'}"
-                        ToolTipService.ToolTip="{l:T Msgid='Mail'}">
+                        AutomationProperties.AutomationId="ModeMail">
                         <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('mail-unread')}" />
                     </ToggleButton>
                     <ToggleButton
@@ -99,10 +101,16 @@ status line (MainWindow.Mode.cs).
                         Width="40"
                         Height="32"
                         Padding="0"
-                        AutomationProperties.AutomationId="ModeBoard"
-                        AutomationProperties.Name="{l:T Msgid='Board'}"
-                        ToolTipService.ToolTip="{l:T Msgid='Board'}">
+                        AutomationProperties.AutomationId="ModeBoard">
                         <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-grid')}" />
+                    </ToggleButton>
+                    <ToggleButton
+                        x:Name="ModeCalendarButton"
+                        Width="40"
+                        Height="32"
+                        Padding="0"
+                        AutomationProperties.AutomationId="ModeCalendar">
+                        <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('x-office-calendar')}" />
                     </ToggleButton>
                 </StackPanel>
                 <Grid
@@ -145,9 +153,10 @@ status line (MainWindow.Mode.cs).
             </Grid>
         </TitleBar>
 
-        <!-- The window's two modes (MainWindow.Mode.cs): the mail's panes
-             (AssistantSplit) or the board (BoardView), one shown at a time;
-             the hidden one keeps its state. -->
+        <!-- The window's three modes (MainWindow.Mode.cs): the mail's panes
+             (AssistantSplit), the board (BoardView) or the calendar
+             (CalendarView), one shown at a time; the hidden ones keep their
+             state. -->
         <Grid x:Name="ModeHost" Grid.Row="1">
             <!-- assistant_split: the assistant panel on the right of the panes
                  (window.blp; ui/internal/assistant, the In App target), a pane of
@@ -263,6 +272,10 @@ status line (MainWindow.Mode.cs).
             <boards:BoardPage
                 x:Name="BoardView"
                 AutomationProperties.AutomationId="BoardPage"
+                Visibility="Collapsed" />
+            <calendars:CalendarPage
+                x:Name="CalendarView"
+                AutomationProperties.AutomationId="CalendarPage"
                 Visibility="Collapsed" />
         </Grid>
 

@@ -14,8 +14,9 @@
 // - 1200×760 and at least 360×294 (window.blp), the size and the
 //   maximised state kept in the gschema keys GTK declares
 //   (window-width, window-height, window-maximized; U10);
-// - the two modes, Mail and Board (MainWindow.Mode.cs: the switch in the
-//   title bar, the board's page in place of the panes);
+// - the three modes, Mail, Board and Calendar (MainWindow.Mode.cs: the
+//   switch in the title bar, the board's and the calendar's pages in place
+//   of the panes; MainWindow.Calendar.cs);
 // - the panes (MainWindow.Panes.cs: the sidebar, the list, the message
 //   page's header bar, the status line and the adaptive layout), the
 //   reader's region the reader fills (wave 2, E4), the toast overlay over
@@ -140,7 +141,8 @@ public sealed partial class MainWindow : Window
     public void ShowListHeading(ListHeading heading)
     {
         // "<folder> – Malachi Mail", the folder isolated (docs/windows-port.md
-        // §11.1); kept for Mail while the board shows (MainWindow.Mode.cs).
+        // §11.1); kept for Mail while the board or the calendar shows
+        // (MainWindow.Mode.cs).
         mailCaption = heading.Caption;
         if (mode == Core.Boards.Board.Mode.Mail)
         {
@@ -297,7 +299,7 @@ public sealed partial class MainWindow : Window
         }
         var focused = FocusManager.GetFocusedElement(xamlRoot) as DependencyObject;
         if ((focused is null || (firstShow && IsWithin(focused, SearchBox)))
-            && FocusManager.FindFirstFocusableElement(SidebarPane) is UIElement first)
+            && FocusManager.FindFirstFocusableElement(ModeFocusRoot) is UIElement first)
         {
             first.Focus(FocusState.Programmatic);
         }
