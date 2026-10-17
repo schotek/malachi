@@ -456,8 +456,8 @@ Pořadí prací:
     návrhu odpovědi s Claude Code a Codexem, inline odpovědi nad skutečným
     konceptem a ARM64
 11. Kalendář (Microsoft 365 přes Graph, CalDAV, pozvánky v poště, MCP)
-    — démon a macOS hotové a ověřené vlastníkem (`feat/calendar`,
-    2026-10-16); GTK port hotový a ověřený vlastníkem v XQuartz
+    — sloučeno z `feat/calendar` do `main` 2026-10-17; démon a macOS
+    hotové a ověřené vlastníkem (2026-10-16); GTK port hotový a ověřený vlastníkem v XQuartz
     (2026-10-17); Windows port napsaný, sestavený a prošlý na Windows
     (2026-10-16/17): `build.ps1 app` a `lint`, sada Core a UI smoke testy
     nad vzorky zelené, vlastník ho zkoušel nad svým M365 a Nextcloudem
