@@ -229,6 +229,15 @@ sudo apt install golang-go gcc pkg-config git \
     libgirepository1.0-dev libsqlite3-dev blueprint-compiler
 ```
 
+Without GTK on the machine (a Mac, Windows): `scripts/gtk-container/gtk.sh`
+builds and tests the GTK client in a Fedora 42 container with exactly these
+packages (`scripts/gtk-container/Containerfile`), through Apple's `container`
+CLI, Docker or Podman (`ENGINE=docker`); `gtk.sh build` makes the image,
+`gtk.sh make build` and `gtk.sh test-ui` run inside it, the Go and ccache
+caches stay in `~/.cache/malachi-gtk` so gotk4 compiles once. It cannot run
+the application against a desktop (no Secret Service, GOA or D-Bus session;
+`MALACHI_KEYRING=none`), only build and test it.
+
 ### Build and run
 
 ```sh

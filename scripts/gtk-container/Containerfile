@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2026 Vladislav Janeček
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Fedora 42 with the GTK toolchain of the development Toolbx (CLAUDE.md,
+# Prostředí), for building and testing the GTK client where no GTK is
+# installed — on a Mac through Apple's `container` CLI, or with Docker or
+# Podman. Build and use it through scripts/gtk-container/gtk.sh.
+FROM registry.fedoraproject.org/fedora:42
+RUN dnf -y install --setopt=install_weak_deps=False \
+      git golang gcc ccache make pkgconf-pkg-config gettext diffutils \
+      desktop-file-utils appstream \
+      gtk4-devel libadwaita-devel webkitgtk6.0-devel gsound-devel \
+      gobject-introspection-devel sqlite-devel blueprint-compiler \
+      xorg-x11-server-Xvfb xauth dbus-daemon procps-ng \
+    && dnf clean all \
+    && git config --global --add safe.directory '*'
+# The caches live on the host (gtk.sh mounts them): Go modules, the Go build
+# cache and ccache, so the long first compile of gotk4 happens once.
+ENV GOPATH=/go \
+    GOMODCACHE=/go/pkg/mod \
+    GOCACHE=/gocache \
+    CCACHE_DIR=/ccache \
+    CC="ccache gcc" \
+    GOFLAGS=-buildvcs=false
+WORKDIR /src
