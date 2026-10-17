@@ -7,8 +7,10 @@ import MalachiCore
 /// A bubble of the chat layout (docs/plans/chat-view.md D3, D6, D14, D15):
 /// a message of the conversation, or the user's draft, as plain text only.
 /// The header has the unread dot (only of someone else's message), the
-/// sender, a paperclip with the number of attachments once message.get told
-/// it (the paperclip alone before), the Draft and Internal badges of a
+/// sender, a paperclip pill (`ConversationClipPill`: from the first moment
+/// when the summary has attachments, with the number of the timeline's
+/// chips once message.get told it, `Conversation.bubbleAttachmentBadge`),
+/// the Draft and Internal badges of a
 /// draft, the Internal badge, who relayed it ("via …") and Edited of an
 /// issue's comment, and at the trailing end the date (the list's short form
 /// in a narrow pane, the full one in the tooltip) or, for a draft, when it
@@ -46,8 +48,7 @@ final class ConversationBubbleView: NSView {
     private let header = NSStackView()
     private let unread = UnreadDot()
     private let senderLabel = NSTextField(labelWithString: "")
-    private let clipIcon = NSImageView()
-    private let clipCount = NSTextField(labelWithString: "")
+    private let clipPill = ConversationClipPill()
     private let draftPill = PillLabel()
     private let internalPill = PillLabel()
     private let viaLabel = NSTextField(labelWithString: "")
@@ -104,11 +105,11 @@ final class ConversationBubbleView: NSView {
         senderLabel.textColor = .labelColor
         dateLabel.font = Typo.caption
         dateLabel.textColor = Tint.secondary
-        for l in [viaLabel, editedLabel, clipCount] {
+        for l in [viaLabel, editedLabel] {
             l.font = Typo.caption
             l.textColor = Tint.secondary
         }
-        for l in [senderLabel, viaLabel, editedLabel, dateLabel, clipCount] {
+        for l in [senderLabel, viaLabel, editedLabel, dateLabel] {
             l.isSelectable = false
             l.lineBreakMode = .byTruncatingTail
             l.maximumNumberOfLines = 1
@@ -121,16 +122,7 @@ final class ConversationBubbleView: NSView {
         dateLabel.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(749), for: .horizontal)
         dateLabel.setContentHuggingPriority(.required, for: .horizontal)
 
-        clipIcon.image = NSImage(systemSymbolName: "paperclip", accessibilityDescription: nil)?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: Typo.captionSize, weight: .regular))
-        clipIcon.contentTintColor = Tint.secondary
-        clipIcon.setAccessibilityElement(true)
-        clipIcon.setAccessibilityRole(.image)
-        clipIcon.setAccessibilityLabel(L10n.T("Has attachments"))
-        for v in [clipIcon, clipCount] as [NSView] {
-            v.setContentHuggingPriority(.required, for: .horizontal)
-            v.isHidden = true
-        }
+        clipPill.isHidden = true
 
         draftPill.font = Typo.caption
         draftPill.stringValue = Conversation.draftBadge()
@@ -139,7 +131,7 @@ final class ConversationBubbleView: NSView {
         internalPill.font = Typo.caption
         IssuePill.paint(internalPill, IssuePill.internalColours, emphasized: false)
         internalPill.isHidden = true
-        for p in [draftPill, internalPill] {
+        for p in [draftPill, internalPill, clipPill] as [NSView] {
             p.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(600), for: .horizontal)
         }
         unread.isHidden = true
@@ -149,14 +141,13 @@ final class ConversationBubbleView: NSView {
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
         spacer.setContentCompressionResistancePriority(.init(1), for: .horizontal)
         for v in [
-            unread, senderLabel, clipIcon, clipCount, draftPill, internalPill, viaLabel, editedLabel, spacer, dateLabel,
+            unread, senderLabel, clipPill, draftPill, internalPill, viaLabel, editedLabel, spacer, dateLabel,
         ] as [NSView] {
             header.addArrangedSubview(v)
         }
         header.orientation = .horizontal
         header.alignment = .centerY
         header.spacing = 6
-        header.setCustomSpacing(2, after: clipIcon)
         header.setCustomSpacing(12, after: spacer)
         header.setHuggingPriority(Self.hugging, for: .horizontal)
 
@@ -226,21 +217,14 @@ final class ConversationBubbleView: NSView {
     // MARK: Content
 
     /// The header of a message (`item`, as the model has it now);
-    /// `attachments` is how many the message has once message.get told it
-    /// (nil: not yet, the paperclip shows alone).
-    func showMessage(_ item: Conversation.Item, attachments: Int?) {
+    /// `attachments` is its paperclip pill
+    /// (`Conversation.bubbleAttachmentBadge`).
+    func showMessage(_ item: Conversation.Item, attachments: Conversation.BubbleAttachments) {
         sender = item.sender
         senderLabel.stringValue = item.sender
         senderLabel.toolTip = item.sender.isEmpty ? nil : item.sender
         unread.isHidden = !item.unread || mine
-        let clip = item.message?.hasAttachments == true
-        clipIcon.isHidden = !clip
-        if clip, let n = attachments, n > 0 {
-            clipCount.stringValue = String(n)
-            clipCount.isHidden = false
-        } else {
-            clipCount.isHidden = true
-        }
+        clipPill.show(attachments)
         draftPill.isHidden = true
         internalPill.stringValue = item.internalLabel
         internalPill.isHidden = !item.internal
@@ -261,8 +245,7 @@ final class ConversationBubbleView: NSView {
         senderLabel.stringValue = card.sender
         senderLabel.toolTip = card.sender.isEmpty ? nil : card.sender
         unread.isHidden = true
-        clipIcon.isHidden = true
-        clipCount.isHidden = true
+        clipPill.show(.none)
         draftPill.isHidden = false
         internalPill.stringValue = card.internalLabel
         internalPill.isHidden = !card.internal
@@ -354,5 +337,95 @@ final class ConversationBubbleView: NSView {
     @objc private func doubleClicked(_ g: NSClickGestureRecognizer) {
         guard g.state == .ended else { return }
         onDoubleClick?()
+    }
+}
+
+/// The paperclip pill of a bubble's header (docs/plans/chat-view.md D3): a
+/// rounded badge drawn as the list's and the issue's pills are
+/// (`PillLabel`, in the colours of the bulk tag, `IssuePill.bulkColours`),
+/// so that it reads at a glance on someone else's bubble and on the user's
+/// tinted one: the paperclip alone while only the summary says the message
+/// has attachments, the paperclip and the number once message.get told it
+/// (`Conversation.BubbleAttachments`). One accessibility element, "Has
+/// attachments" (also its tooltip), with the number as its value.
+@MainActor
+final class ConversationClipPill: NSView {
+    private let icon = NSImageView()
+    private let count = NSTextField(labelWithString: "")
+    private let row = NSStackView()
+
+    init() {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        let colours = IssuePill.bulkColours
+        icon.image = NSImage(systemSymbolName: "paperclip", accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: Typo.captionSize, weight: .semibold))
+        icon.contentTintColor = colours.text
+        icon.setAccessibilityElement(false)
+        count.font = Typo.captionNumeric
+        count.textColor = colours.text
+        count.isSelectable = false
+        count.maximumNumberOfLines = 1
+        count.setAccessibilityElement(false)
+        count.isHidden = true
+        for v in [icon, count] as [NSView] {
+            v.setContentHuggingPriority(.required, for: .horizontal)
+            v.setContentCompressionResistancePriority(.required, for: .horizontal)
+            row.addArrangedSubview(v)
+        }
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 2
+        row.edgeInsets = NSEdgeInsets(top: 1, left: Self.padding, bottom: 1, right: Self.padding)
+        row.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(row)
+        NSLayoutConstraint.activate([
+            row.topAnchor.constraint(equalTo: topAnchor),
+            row.bottomAnchor.constraint(equalTo: bottomAnchor),
+            row.leadingAnchor.constraint(equalTo: leadingAnchor),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor),
+        ])
+        setContentHuggingPriority(.required, for: .horizontal)
+        let label = L10n.T("Has attachments")
+        toolTip = label
+        setAccessibilityElement(true)
+        setAccessibilityRole(.image)
+        setAccessibilityLabel(label)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
+
+    /// The pill's side padding, a little tighter than a text pill's: the
+    /// paperclip has room of its own.
+    private static let padding: CGFloat = RowMetrics.badgePadding - 1
+
+    /// Shows `badge`: hidden for `.none`, the paperclip for `.some`, the
+    /// paperclip and the number for `.count`.
+    func show(_ badge: Conversation.BubbleAttachments) {
+        switch badge {
+        case .none:
+            isHidden = true
+        case .some:
+            count.isHidden = true
+            setAccessibilityValue(nil)
+            isHidden = false
+        case .count(let n):
+            let text = String(n)
+            if count.stringValue != text {
+                count.stringValue = text
+            }
+            count.isHidden = false
+            setAccessibilityValue(text)
+            isHidden = false
+        }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let radius = bounds.height / 2
+        IssuePill.bulkColours.fill.setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
     }
 }

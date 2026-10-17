@@ -272,7 +272,7 @@ final class ConversationChatViewController: NSViewController {
                     bubbles[id] = view
                 }
                 view.bubble.compactDate = compactDates
-                view.bubble.showMessage(item, attachments: attachmentCount(id))
+                view.bubble.showMessage(item, attachments: attachments(id))
                 if !view.bubble.showsText {
                     let lm = controller.loaded[id]
                     view.bubble.showBody(
@@ -345,21 +345,22 @@ final class ConversationChatViewController: NSViewController {
     }
 
     /// The bubble of a member shows what its entry `lm` holds: the text
-    /// (`Conversation.bubbleBody`) and how many attachments it has.
+    /// (`Conversation.bubbleBody`) and its attachments pill.
     private func render(_ row: ConversationChatRow, _ lm: LoadedMessage?) {
         guard let id = row.id, let model = controller.model else { return }
         let i = model.index(id)
         guard i >= 0 else { return }
         let item = model.items[i]
-        row.bubble.showMessage(item, attachments: attachmentCount(id))
+        row.bubble.showMessage(item, attachments: attachments(id))
         row.bubble.showBody(Conversation.bubbleBody(lm, snippet: item.message?.snippet ?? ""), monospace: monospace(lm))
     }
 
-    /// How many attachments member `id` shows as chips, once message.get
-    /// told it (the timeline's chips, `ChipPlan`); nil before.
-    private func attachmentCount(_ id: MessageID) -> Int? {
-        guard let lm = controller.loaded[id], let m = lm.msg else { return nil }
-        return ChipPlan(m, lm.body).chips.count
+    /// The attachments pill of member `id`
+    /// (`Conversation.bubbleAttachmentBadge`): the paperclip from the
+    /// summary at once, the number of the timeline's chips once
+    /// message.get told it.
+    private func attachments(_ id: MessageID) -> Conversation.BubbleAttachments {
+        Conversation.bubbleAttachmentBadge(summary: controller.member(id), loaded: controller.loaded[id])
     }
 
     private func detach(_ v: NSView) {
@@ -547,7 +548,9 @@ final class ConversationChatViewController: NSViewController {
 
     /// Asks for the bodies of the bubbles near the viewport (within two of
     /// its heights, `ConversationLayout.live`) and tells the host which
-    /// they are. Only while this layout is shown.
+    /// they are; a message with attachments with message.get as well, as
+    /// the timeline's card asks for its chips, so that its pill gets its
+    /// number. Only while this layout is shown.
     private func updateNear() {
         guard shown, controller.model != nil else { return }
         let clip = scroll.contentView.bounds
@@ -564,7 +567,7 @@ final class ConversationChatViewController: NSViewController {
         var near = Set<MessageID>()
         for i in live.near.sorted() {
             near.insert(ids[i])
-            controller.needsBody(ids[i], details: false)
+            controller.needsBody(ids[i], details: controller.member(ids[i])?.hasAttachments == true)
         }
         onNear?(near)
         guard !resizing else { return }

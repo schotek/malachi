@@ -142,17 +142,28 @@ extension Conversation {
         return Board.cleanBlock(text, max: draftTextBytes)
     }
 
-    /// conversation.ChatToggleLabel: the toggle button above the
-    /// conversation that shows it as a chat (on) or as the timeline (off);
-    /// the button shows its state.
-    public static func chatToggleLabel() -> String {
-        // TRANSLATORS: a toggle button above a conversation in the reading pane; on, the messages show as chat bubbles.
-        L10n.T("Show as Chat")
+    /// conversation.ChatToggleLabel: the label of the toggle button above
+    /// the conversation that switches its layout: it names the layout a
+    /// click shows, so it follows the state (`on`: the chat is shown, "Show
+    /// as Thread" goes back to the timeline; off: "Show as Chat").
+    public static func chatToggleLabel(on: Bool) -> String {
+        if !on {
+            // TRANSLATORS: a toggle button above a conversation in the reading pane, off; a click shows the messages as chat bubbles.
+            return L10n.T("Show as Chat")
+        }
+        // TRANSLATORS: the same toggle button above a conversation, on (the messages show as chat bubbles); a click goes back to the conversation as cards.
+        return L10n.T("Show as Thread")
     }
 
-    /// conversation.ChatToggleTooltip: the tooltip of the toggle.
-    public static func chatToggleTooltip() -> String {
-        // TRANSLATORS: the tooltip of the "Show as Chat" toggle above a conversation.
-        L10n.T("Others on the left, your messages on the right; double-click opens the message")
+    /// conversation.ChatToggleTooltip: the tooltip of the toggle, which
+    /// follows its state as the label does: off, what the chat shows; on,
+    /// what a click goes back to.
+    public static func chatToggleTooltip(on: Bool) -> String {
+        if !on {
+            // TRANSLATORS: the tooltip of the "Show as Chat" toggle above a conversation.
+            return L10n.T("Others on the left, your messages on the right; double-click opens the message")
+        }
+        // TRANSLATORS: the tooltip of the "Show as Thread" toggle above a conversation shown as chat bubbles.
+        return L10n.T("Back to the timeline: the messages as cards, newest first")
     }
 }

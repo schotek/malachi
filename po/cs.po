@@ -2245,17 +2245,27 @@ msgstr "Stav změněn na %s"
 msgid "The status could not be changed: %s"
 msgstr "Stav se nepodařilo změnit: %s"
 
-#. TRANSLATORS: a toggle button above a conversation in the reading pane; on, the messages show as chat bubbles.
-#: ui/internal/conversation/chat.go:148
+#. TRANSLATORS: a toggle button above a conversation in the reading pane, off; a click shows the messages as chat bubbles.
+#: ui/internal/conversation/chat.go:151
 msgid "Show as Chat"
 msgstr "Zobrazit jako chat"
 
-#. TRANSLATORS: the tooltip of the "Show as Chat" toggle above a conversation.
+#. TRANSLATORS: the same toggle button above a conversation, on (the messages show as chat bubbles); a click goes back to the conversation as cards.
 #: ui/internal/conversation/chat.go:154
+msgid "Show as Thread"
+msgstr "Zobrazit jako vlákno"
+
+#. TRANSLATORS: the tooltip of the "Show as Chat" toggle above a conversation.
+#: ui/internal/conversation/chat.go:163
 msgid ""
 "Others on the left, your messages on the right; double-click opens the "
 "message"
 msgstr "Ostatní vlevo, vaše zprávy vpravo; dvojklik otevře zprávu"
+
+#. TRANSLATORS: the tooltip of the "Show as Thread" toggle above a conversation shown as chat bubbles.
+#: ui/internal/conversation/chat.go:166
+msgid "Back to the timeline: the messages as cards, newest first"
+msgstr "Zpět na časovou osu: zprávy jako karty, nejnovější první"
 
 #. TRANSLATORS: at the top of a conversation in the reading pane; only its newest messages are shown.
 #: ui/internal/conversation/conversation.go:380

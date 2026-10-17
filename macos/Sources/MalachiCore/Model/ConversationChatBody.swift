@@ -4,9 +4,10 @@
 import Foundation
 
 // The chat layout of the conversation view, the rules of the macOS view
-// that need no AppKit (docs/plans/chat-view.md D2, D13, D17): which variant
-// of a loaded body a message bubble reads, what its text is in every state
-// of that body, and whether the chat is at its end. Swift-first: chat.go
+// that need no AppKit (docs/plans/chat-view.md D2, D3, D13, D17): which
+// variant of a loaded body a message bubble reads, what its text is in every
+// state of that body, what its header shows of the attachments, and whether
+// the chat is at its end. Swift-first: chat.go
 // leaves these to the clients (`BubbleText` is the shared part), and the GTK
 // and Windows chats port them from here. Kept apart from
 // ConversationChat.swift, the port of chat.go, whose translated strings a
@@ -79,6 +80,42 @@ extension Conversation {
         let aside = lm.quotedShown && lm.otherBody != nil
         guard aside || lm.err == nil, let b = chatBody(of: lm, quotedRevealed: lm.quotedShown) else { return false }
         return b.bodyState == .fetched && !b.hasHtml
+    }
+}
+
+extension Conversation {
+    /// What the header of a message bubble shows of the message's
+    /// attachments (D3): a paperclip pill, with how many once known.
+    public enum BubbleAttachments: Sendable, Equatable {
+        /// No pill.
+        case none
+        /// The pill without a number: the summary says the message has
+        /// attachments, message.get has not told which yet.
+        case some
+        /// The pill with the number of chips the timeline's card shows for
+        /// the message (`ChipPlan`), more than zero.
+        case count(Int)
+    }
+
+    /// The attachments pill of the bubble of a message whose summary is
+    /// `summary` and whose cache entry is `lm` (nil: nothing asked for
+    /// yet, or let go). Once message.get answered (`lm.msg`), the number of
+    /// chips the timeline's card shows (`ChipPlan` of the message and the
+    /// body held), whatever the summary says: the summary's flag counts
+    /// only the attachments the daemon calls not inline (a part with a
+    /// Content-ID is inline to IMAP and the MIME parser, Microsoft Graph's
+    /// `hasAttachments` leaves out the inline ones), while a chip shows
+    /// every part the body does not show itself; none when there are no
+    /// chips. Before that, the pill alone when the summary has
+    /// `hasAttachments`, so that the bubble shows it from the first
+    /// moment; else none. A failed message.get leaves the summary's word.
+    @MainActor
+    public static func bubbleAttachmentBadge(summary: MessageSummary?, loaded lm: LoadedMessage?) -> BubbleAttachments {
+        if let lm, let m = lm.msg {
+            let n = ChipPlan(m, lm.body).chips.count
+            return n > 0 ? .count(n) : .none
+        }
+        return summary?.hasAttachments == true ? .some : .none
     }
 }
 

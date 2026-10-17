@@ -7,7 +7,8 @@ import MalachiCore
 /// The conversation in the reading pane (docs/plans/chat-view.md §6.1): the
 /// one view the pane shows for a selected conversation row. Above, a fixed
 /// strip that does not scroll (`ConversationStripView`: Collapse All /
-/// Expand All of the timeline, the Show as Chat toggle); below it, filling
+/// Expand All of the timeline, the layout toggle, Show as Chat or Show as
+/// Thread as the setting stands); below it, filling
 /// the rest, the two layouts of the same conversation, of which one shows:
 /// the timeline (`ConversationViewController`, the default) and the chat
 /// (`ConversationChatViewController`). The setting `conversation-chat-layout`

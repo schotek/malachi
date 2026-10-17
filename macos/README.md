@@ -218,7 +218,7 @@ macos/
                                 ReadingPaneViewController swaps between them,
                                 ConversationHostViewController: the host of the two
                                 layouts with ConversationStripView, its fixed strip
-                                with the Show as Chat toggle; the timeline,
+                                with the layout toggle; the timeline,
                                 ConversationViewController, ConversationCardView,
                                 ConversationCardHeader, ConversationEventRow,
                                 ConversationRow; the chat, ConversationChatViewController,

@@ -1809,11 +1809,12 @@ a řádek starších zpráv uprostřed, od nejstarší, otevřeno na konci. Bubl
 je jen text (prostý `text` z `message.body` s `trimQuoted`, nevybíratelný,
 bez tlačítek, odkazů a webového pohledu); dvojklik otevře okno zprávy
 (koncept okno Nová zpráva); těla se žádají jen poblíž viditelné části.
-Přepínač „Show as Chat“ v pevném pruhu nad konverzací je trvalý (gschema
+Přepínač v pevném pruhu nad konverzací („Show as Chat“, zapnutý „Show as
+Thread“; popisek i tooltip podle stavu) je trvalý (gschema
 `conversation-chat-layout`, výchozí vypnuto, bez řádku v Předvolbách; Go
 `settings.Store`, macOS `Settings`, Windows `SettingsStore`). Démon a API
 beze změny. Reference Go `ui/internal/conversation/chat.go` (`ChatRows`,
-`ChatScrollTo`, `BubbleText`, 2 nové msgid); macOS `MalachiCore/Model/
+`ChatScrollTo`, `BubbleText`, 4 nové msgid (popisek a tooltip přepínače podle stavu)); macOS `MalachiCore/Model/
 ConversationChat.swift` (port) a `ConversationChatBody.swift` (Swift-first),
 `ConversationLayout.chatBubbleMax`, hostitel `MessageView/
 ConversationHostViewController` (jediný odběratel kontroleru, `trim` jen
@@ -1822,8 +1823,10 @@ pro zobrazené rozložení, jedna karta issue na rozložení) s pruhem
 `ConversationChatRow`, `ConversationBubbleView`. Ověřeno na Macu: Go testy
 `ui/internal/conversation` (`settings` importuje gotk4 a bez cgo tu
 neběží; jeho testy čekají na kontejner), celé `swift test`,
-`check-strings.py` a izolovaný start; chat nad skutečnými daty zatím nikdo
-neviděl. Čeká: brána B1 vlastníka nad kopií dat, pak GTK (G1–G4) a Windows
+`check-strings.py` a izolovaný start. Nálezy vlastníka z B1 opravené
+(odsazení pruhu, popisek přepínače podle stavu, sponka v bublině jako
+pilulka hned ze souhrnu a s počtem čipů po `message.get`,
+`Conversation.bubbleAttachmentBadge`). Čeká: nové ověření vlastníka, pak GTK (G1–G4) a Windows
 (W1–W3) podle plánu §6.2; v Toolbxu `make po` (má vyjít beze změny).
 
 Archivace v Poště = Hotovo (2026-10-13, `feat/board`, necommitnuté; jen

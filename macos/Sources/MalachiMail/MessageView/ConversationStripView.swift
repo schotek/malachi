@@ -9,9 +9,14 @@ import MalachiCore
 /// keeps to their column (a clamp of the same width and the same side
 /// insets), at the trailing end: Collapse All / Expand All of the timeline
 /// (`setFoldAll`; hidden in the chat and while fewer than two cards fold),
-/// then the Show as Chat toggle, which is always there while a conversation
-/// is shown. The toggle only reports clicks (`onToggle`); its state is the
-/// setting's (`setChat`), so a change from elsewhere shows too.
+/// then the layout toggle, which is always there while a conversation is
+/// shown. The toggle names the layout a click shows: Show as Chat while the
+/// timeline shows, Show as Thread while the chat shows (pressed in and
+/// tinted with the accent colour), its tooltip and accessibility name
+/// following (`Conversation.chatToggleLabel(on:)`). The toggle only reports
+/// clicks (`onToggle`); its state is the setting's (`setChat`, called by the
+/// host when it shows and whenever the setting changes), so a change from
+/// elsewhere shows too.
 @MainActor
 final class ConversationStripView: NSView {
     /// Collapse All / Expand All was clicked.
@@ -23,9 +28,10 @@ final class ConversationStripView: NSView {
     private let foldAllButton = NSButton(title: "", target: nil, action: nil)
     private let toggle = NSButton(title: "", target: nil, action: nil)
 
-    /// Above and below the strip's controls.
-    private static let top: CGFloat = 6
-    private static let bottom: CGFloat = 2
+    /// Above and below the strip's controls, so that the toggle's bezel
+    /// touches neither the strip's top nor the content under it.
+    private static let top: CGFloat = 8
+    private static let bottom: CGFloat = 6
 
     override init(frame: NSRect) {
         let widest = CGFloat(ConversationLayout.Metrics.maxWidth)
@@ -52,10 +58,9 @@ final class ConversationStripView: NSView {
         foldAllButton.action = #selector(foldAllClicked(_:))
         foldAllButton.isHidden = true
 
-        // Show as Chat: a toggle with the bubbles symbol, its on state
-        // pressed in and tinted with the accent colour.
-        let label = Conversation.chatToggleLabel()
-        toggle.title = label
+        // The layout toggle: the bubbles symbol and the label of the layout
+        // a click shows (`render`), its on state pressed in and tinted with
+        // the accent colour.
         toggle.setButtonType(.pushOnPushOff)
         toggle.bezelStyle = .recessed
         toggle.showsBorderOnlyWhileMouseInside = false
@@ -65,9 +70,7 @@ final class ConversationStripView: NSView {
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: Typo.captionSize, weight: .regular))
         toggle.imagePosition = .imageLeading
         toggle.imageHugsTitle = true
-        toggle.toolTip = Conversation.chatToggleTooltip()
-        toggle.setAccessibilityLabel(label)
-        toggle.setAccessibilityHelp(Conversation.chatToggleTooltip())
+        render(chat: false)
         toggle.target = self
         toggle.action = #selector(toggleClicked(_:))
 
@@ -110,9 +113,25 @@ final class ConversationStripView: NSView {
         foldAllButton.isHidden = offer == .none
     }
 
-    /// The toggle shows the chat on or off.
+    /// The toggle shows the chat on or off: its state, its label, tooltip
+    /// and accessibility name.
     func setChat(_ on: Bool) {
         toggle.state = on ? .on : .off
+        render(chat: on)
+    }
+
+    /// The toggle's look for the chat on or off: the label and tooltip of
+    /// that state (`Conversation.chatToggleLabel(on:)`,
+    /// `chatToggleTooltip(on:)`) and, on, the accent tint.
+    private func render(chat on: Bool) {
+        let label = Conversation.chatToggleLabel(on: on)
+        let tooltip = Conversation.chatToggleTooltip(on: on)
+        if toggle.title != label {
+            toggle.title = label
+        }
+        toggle.toolTip = tooltip
+        toggle.setAccessibilityLabel(label)
+        toggle.setAccessibilityHelp(tooltip)
         toggle.contentTintColor = on ? .controlAccentColor : nil
     }
 
@@ -122,7 +141,7 @@ final class ConversationStripView: NSView {
 
     @objc private func toggleClicked(_ sender: Any?) {
         let on = toggle.state == .on
-        toggle.contentTintColor = on ? .controlAccentColor : nil
+        render(chat: on)
         onToggle?(on)
     }
 }

@@ -218,8 +218,12 @@ func TestBubbleTextCapAndParity(t *testing.T) {
 }
 
 func TestChatTexts(t *testing.T) {
-	if ChatToggleLabel(tr) != "Show as Chat" ||
-		ChatToggleTooltip(tr) != "Others on the left, your messages on the right; double-click opens the message" {
-		t.Error("chat texts")
+	if ChatToggleLabel(false, tr) != "Show as Chat" ||
+		ChatToggleTooltip(false, tr) != "Others on the left, your messages on the right; double-click opens the message" {
+		t.Error("chat texts, off")
+	}
+	if ChatToggleLabel(true, tr) != "Show as Thread" ||
+		ChatToggleTooltip(true, tr) != "Back to the timeline: the messages as cards, newest first" {
+		t.Error("chat texts, on")
 	}
 }

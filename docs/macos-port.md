@@ -643,8 +643,12 @@ the default, unchanged in what it shows) and the **chat**
 strip (`ConversationStripView`) does not scroll with the content and keeps
 to its column (the 900 pt clamp and the side insets): Collapse All /
 Expand All of the timeline at its trailing end (only in the timeline, as
-before only with two or more foldable cards) and the *Show as Chat* toggle
-(`conversation-chat-layout`, always there while a conversation is shown).
+before only with two or more foldable cards) and the layout toggle
+(`conversation-chat-layout`, always there while a conversation is shown),
+whose label and tooltip name the layout a click shows: *Show as Chat*
+while the timeline shows, *Show as Thread* while the chat shows
+(`Conversation.chatToggleLabel(on:)`, `chatToggleTooltip(on:)`), the on
+state tinted with the accent colour.
 The toggle only writes the setting; the host listens to the setting's
 change and switches the layout, so a change from elsewhere switches too.
 The controller has a single `onChange` and a single `onLoaded`, so the
@@ -675,7 +679,7 @@ drafts come last on the right, and an issue's events and the row of older
 messages left out are centred rows without a bubble. A bubble
 (`ConversationBubbleView`, in a `ConversationChatRow` that puts the avatar
 on its outer side) is **text only**: the header (unread dot, sender,
-paperclip, the Draft, Internal, *via …* and Edited badges, the date) and
+paperclip pill, the Draft, Internal, *via …* and Edited badges, the date) and
 the plain `text` of `message.body`, asked for with `trimQuoted` so that the
 quoted history is cut, even when the timeline revealed it
 (`Conversation.chatBody` picks the variant, `Conversation.bubbleBody`
@@ -691,7 +695,12 @@ members arrive; scrolled away, the row under the viewport's top keeps its
 place. Bodies are fetched only for the bubbles within two viewport heights
 of the visible part (`ConversationLayout.live` over the rows' frames), from
 the cache the timeline uses, so switching layouts asks `thread.get`
-nothing.
+nothing. The paperclip pill (`ConversationClipPill`, drawn as the list's
+pills) shows at once when the summary has `hasAttachments`, and the number
+of the timeline card's chips once `message.get` answered (asked for the
+bubbles with attachments in the near window, as for the cards), even when
+the summary's flag is false (it counts only parts the daemon calls not
+inline); `Conversation.bubbleAttachmentBadge` is the rule.
 
 The [security review checklist](security.md#12-review-checklist-for-prs-touching-content-handling)
 applies to changes in `WebViews/`, `MessageView/`, `Compose/`,
@@ -749,7 +758,7 @@ are those of `data/io.github.schotek.Malachi.gschema.xml`
 `group-by-conversation`, `show-avatars`, `monochrome-avatars`,
 `monospace-plain-text`, `text-zoom`, `collapsed-folders`,
 `collapsed-accounts`, `favourite-folders`, `conversation-chat-layout`
-(the *Show as Chat* toggle above a conversation, off by default, no row in
+(the *Show as Chat* / *Show as Thread* toggle above a conversation, off by default, no row in
 Settings), `assistant-menu`,
 `assistant-target`, the latter read through `Assistant.parseTarget`, so an
 unknown nick is Claude Desktop) plus one macOS-only key,

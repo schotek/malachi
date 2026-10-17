@@ -269,10 +269,13 @@ struct ConversationChatTests {
     }
 
     @Test func chatTexts() {
-        #expect(Conversation.chatToggleLabel() == "Show as Chat")
+        #expect(Conversation.chatToggleLabel(on: false) == "Show as Chat")
         #expect(
-            Conversation.chatToggleTooltip()
+            Conversation.chatToggleTooltip(on: false)
                 == "Others on the left, your messages on the right; double-click opens the message")
+        #expect(Conversation.chatToggleLabel(on: true) == "Show as Thread")
+        #expect(
+            Conversation.chatToggleTooltip(on: true) == "Back to the timeline: the messages as cards, newest first")
     }
 }
 
@@ -342,6 +345,55 @@ struct ConversationChatBodyTests {
         aside.showQuoted(true)
         aside.err = RPCClient.ClientError.timeout(method: "message.body")
         #expect(Conversation.bubbleBody(aside, snippet: snippet) == .text("Short"))
+    }
+
+    @Test func bubbleAttachmentBadge() {
+        func summary(_ has: Bool) -> MessageSummary {
+            MessageSummary(
+                id: "m1", accountId: "a1", folderId: "f1", from: [], subject: "", date: .goZero, snippet: "", flags: [],
+                hasAttachments: has, size: 0)
+        }
+        func file(_ part: String, cid: String? = nil) -> MalachiCore.Attachment {
+            MalachiCore.Attachment(
+                partId: part, filename: part + ".pdf", contentType: "application/pdf", size: 1000, inline: cid != nil,
+                contentId: cid)
+        }
+        // Nothing known but the summary: the pill alone, or none.
+        #expect(Conversation.bubbleAttachmentBadge(summary: summary(true), loaded: nil) == .some)
+        #expect(Conversation.bubbleAttachmentBadge(summary: summary(false), loaded: nil) == .none)
+        #expect(Conversation.bubbleAttachmentBadge(summary: nil, loaded: nil) == .none)
+        // The body alone (message.get not answered, or failed): still the
+        // summary's word.
+        let bodyOnly = LoadedMessage()
+        bodyOnly.store(body("Hi"), quoted: false)
+        #expect(Conversation.bubbleAttachmentBadge(summary: summary(true), loaded: bodyOnly) == .some)
+        #expect(Conversation.bubbleAttachmentBadge(summary: summary(false), loaded: bodyOnly) == .none)
+
+        // message.get answered: the number of the timeline's chips.
+        let two = LoadedMessage()
+        two.store(body("Hi"), quoted: false)
+        two.msg = Message(summary: summary(true), attachments: [file("2"), file("3")])
+        #expect(Conversation.bubbleAttachmentBadge(summary: summary(true), loaded: two) == .count(2))
+        #expect(Conversation.bubbleAttachmentBadge(summary: summary(true), loaded: two)
+            == .count(ChipPlan(two.msg, two.body).chips.count))
+
+        // A part the daemon calls inline (a Content-ID) leaves the
+        // summary's flag false, and the timeline still shows its chip
+        // (a plain-text body shows no part itself): so does the bubble.
+        let inline = LoadedMessage()
+        inline.store(body("See the attached"), quoted: false)
+        inline.msg = Message(summary: summary(false), attachments: [file("2", cid: "scan@x")])
+        #expect(Conversation.bubbleAttachmentBadge(summary: summary(false), loaded: inline) == .count(1))
+
+        // An image the HTML body shows through cid: no chip, no pill.
+        let shown = LoadedMessage()
+        shown.store(
+            MessageBodyResult(
+                messageId: "m1", bodyState: .fetched, hasHtml: true, html: "<img src=\"cid:logo@x\">", text: "",
+                inlineParts: ["logo@x": "2"], remoteContent: .block, sanitizerVersion: "1"),
+            quoted: false)
+        shown.msg = Message(summary: summary(false), attachments: [file("2", cid: "logo@x")])
+        #expect(Conversation.bubbleAttachmentBadge(summary: summary(true), loaded: shown) == .none)
     }
 
     @Test func chatEnd() {

@@ -33,8 +33,8 @@ a Windows).
 | D5 | **Avatar** stojí vně bubliny na její vnější straně (vlevo u cizích, vpravo u mých), zarovnaný k hornímu okraji; svislá čára časové osy v chatu není. Tečky událostí nejsou (řádek je uprostřed). | Avatar nese iniciály/monochrom podle dnešního nastavení; čára patří k časové ose. |
 | D6 | **Barva**: cizí bublina = dnešní karta; moje bublina = jemný nádech barvy zvýraznění (asi 12 % přes pozadí karty) a okraj v barvě zvýraznění, stejně jako je dnes tónovaný můj avatar; koncept (vždy můj) má týž nádech. Text bubliny je nativní text v barvě motivu (světlý i tmavý). | Žádný HTML papír: v chatu není webový pohled (D3). |
 | D7 | **Bez sbalení v chatu**: bubliny nemají šipku a *Sbalit vše / Rozbalit vše* je v chatu skryté (tlačítko se skrývá už dnes při méně než dvou kartách; přepínač zůstává). Dlouhý text se ukáže celý (citovaná historie je oříznutá, D13). Sbalení časové osy se nemění. | Textové bubliny jsou krátké samy od sebe; sbalení by přidalo stav, který chat nepotřebuje. |
-| D8 | **Pruh nahoře** je pevný (neroluje s obsahem): vpravo *Sbalit vše / Rozbalit vše* a vedle něj přepínač *Zobrazit jako chat*. Pruh je vidět vždy, když je konverzace zobrazená; tlačítko sbalení se samo skryje při méně než dvou kartách jako dnes, přepínač zůstává. | Chat je otevřený na konci; přepínač v rolujícím obsahu by byl mimo obraz. Malá odchylka od dnešního stavu, kdy tlačítko roluje s obsahem. |
-| D9 | **Přepínač** je přepínací tlačítko s ikonou bubliny a textem *Zobrazit jako chat* (msgid „Show as Chat“, zapnutý stav vizuálně zvýrazněný: macOS a Windows nádech barvy zvýraznění, GTK nativní zaškrtnutý stav `GtkToggleButton`); klíč gschema `conversation-chat-layout` (bool, výchozí false), zrcadlo v macOS `Settings` a Windows `SettingsStore`. Bez řádku v Předvolbách (přepínač je rozhraní). | Trvalé podle zadání; jeden msgid pro oba stavy, stav nese tlačítko. |
+| D8 | **Pruh nahoře** je pevný (neroluje s obsahem): vpravo *Sbalit vše / Rozbalit vše* a vedle něj přepínač *Zobrazit jako chat* / *Zobrazit jako vlákno* (D9). Pruh je vidět vždy, když je konverzace zobrazená; tlačítko sbalení se samo skryje při méně než dvou kartách jako dnes, přepínač zůstává. | Chat je otevřený na konci; přepínač v rolujícím obsahu by byl mimo obraz. Malá odchylka od dnešního stavu, kdy tlačítko roluje s obsahem. |
+| D9 | **Přepínač** je přepínací tlačítko s ikonou bubliny, jehož **popisek a tooltip sledují stav** (nález vlastníka v B1): vypnutý *Zobrazit jako chat* (msgid „Show as Chat“, tooltip „Others on the left, your messages on the right; double-click opens the message“), zapnutý *Zobrazit jako vlákno* (msgid „Show as Thread“, tooltip „Back to the timeline: the messages as cards, newest first“); zapnutý stav navíc vizuálně zvýrazněný (macOS a Windows nádech barvy zvýraznění, GTK nativní zaškrtnutý stav `GtkToggleButton`); klíč gschema `conversation-chat-layout` (bool, výchozí false), zrcadlo v macOS `Settings` a Windows `SettingsStore`. Bez řádku v Předvolbách (přepínač je rozhraní). | Trvalé podle zadání; popisek říká, kam klik vede (B1: jeden popisek pro oba stavy nebyl čitelný). |
 | D10 | **Přepnutí za běhu** zobrazí tutéž konverzaci v druhém rozložení bez nového dotazu na seznam členů: chat si bere `text` z těl, která kontroler už drží (jinak si je dožádá), časová osa si své karty a jejich stav (sbalení, odhalený citovaný text) drží, dokud je konverzace vybraná. Pohled se posune na začátek (časová osa) nebo konec (chat). | Dva pohledy nad jedním kontrolerem a jednou cache těl. |
 | D11 | **Jira**: karta issue nahoře přes celou šířku (jako dnes, s pilulkou stavu a jejími přechody); popis issue je první bublina (strana podle `Mine`); komentáře podle autora; komentář přes integraci (`via`) nikdy vpravo; události uprostřed. Koncept komentáře vpravo jako koncept pošty. | Totéž pravidlo `Mine` jako pro poštu. |
 | D12 | **Mimo rozsah**: blok konverzace na nástěnce (vlastní kód), přiložené zprávy, okno zprávy, oddělovače dnů („Dnes“, „Včera“) uprostřed chatu (kandidát na další krok), kontextové menu na bublině (kandidát: menu zprávy ze seznamu), klikací odkazy v bublině. | Držet první krok malý, aby šel ověřit na macOS. |
@@ -121,9 +121,11 @@ nic se nepushuje bez pokynu. Plán prošel revizí proti kódu
     `LoadedMessageText` (Downloading…, This message is too large…,
     could not be read, (Empty message), `RPCErrorText`); dokud tělo není
     ani žádané, `snippet` šedě jako zástupný text (D17).
-  - Texty jen dva, oba s `// TRANSLATORS:`: `ChatToggleLabel(tr)` =
-    msgid „Show as Chat“, `ChatToggleTooltip(tr)` = „Others on the left,
-    your messages on the right; double-click opens the message“.
+  - Texty čtyři, každý s `// TRANSLATORS:`: `ChatToggleLabel(on, tr)` =
+    msgid „Show as Chat“ (vypnuto) / „Show as Thread“ (zapnuto),
+    `ChatToggleTooltip(on, tr)` = „Others on the left, your messages on
+    the right; double-click opens the message“ / „Back to the timeline:
+    the messages as cards, newest first“ (D9, po B1).
     Přístupný název bubliny je „odesílatel, datum“ jako dnes (bez msgid);
     sponka má dnešní „Has attachments“.
   - Metriky a blízké okno **nejsou** v balíčku `conversation`
@@ -142,7 +144,8 @@ nic se nepushuje bez pokynu. Plán prošel revizí proti kódu
   rolovacím oknem uvnitř stránky konverzace, zarovnaný na sloupec karet
   (vlastní clamp 900 a okraje 16): vpravo *Sbalit vše / Rozbalit vše*
   (jen v časové ose a jen při ≥ 2 kartách jako dnes; stav dál počítá
-  časová osa a hlásí hostiteli) a přepínač *Zobrazit jako chat* (vždy,
+  časová osa a hlásí hostiteli) a přepínač *Zobrazit jako chat* /
+  *Zobrazit jako vlákno* (vždy,
   když je konverzace zobrazená). Přepínač je vázaný na klíč (GTK
   `settings.Bind`, macOS `Settings`, C# `bindings.Toggle`), rozložení
   se přepíná **z `OnChanged(key)`**, ne z kliknutí, takže funguje
@@ -161,8 +164,14 @@ nic se nepushuje bez pokynu. Plán prošel revizí proti kódu
   se opraví.
 - **Bublina** (každý klient nativně): hlavička = nepřečtená tečka (jen
   cizí nepřečtené), jméno odesílatele (`Item.Sender`, bez markup),
-  sponka (`HasAttachments`; počet z `message.get`, když je načtené,
-  jinak jen ikona), pilulky *Interní* / *via …* / *upraveno* u Jiry,
+  sponka jako dobře viditelná pilulka (ne slabý glyf; po B1): hned,
+  když má souhrn `HasAttachments`, bez počtu; jakmile odpoví
+  `message.get`, sponka + počet čipů, které by ukázala karta časové osy
+  (`ChipPlan`), a to i při `HasAttachments` false (díl s Content-ID je
+  pro IMAP a parser inline, Graph inline přílohy nepočítá), bez čipů
+  nic; bubliny s přílohami žádají v blízkém okně i `message.get` jako
+  karta časové osy (pravidlo Swift-first
+  `Conversation.bubbleAttachmentBadge`), pilulky *Interní* / *via …* / *upraveno* u Jiry,
   datum vpravo (plné, v úzkém sloupci krátké s tooltipem jako dnes);
   tělo = **nevybíratelný** prostý text (D15; macOS `NSTextField`, ne
   `MessageBodyTextView`; GTK `Label` `selectable: false`,
@@ -271,7 +280,7 @@ a vlastník. Commit 1 už nese klíč a exclusions pro Windows (T2), aby
   (`body`/`otherBody`).
 - **`Mine` je podle `From`** (padělatelné): bublina vpravo ukazuje jen
   umístění, nic víc.
-- **msgidy**: nové jen v `chat.go` (2, s `// TRANSLATORS:`) a gschema
+- **msgidy**: nové jen v `chat.go` (4 po B1, s `// TRANSLATORS:`) a gschema
   (2); `portUsesTheTemplatesEntries` a `TestMsgidsInTemplate`
   v týchž úkolech; `POTFILES` abecedně; Windows exclusions ve dvou
   krocích (T2 přidá, W1 odebere).
@@ -285,3 +294,7 @@ a vlastník. Commit 1 už nese klíč a exclusions pro Windows (T2), aby
   `bubbleBody`, `bubbleMonospace`, `chatAtEnd`, `chatEndTop`,
   `chatColumn`, `chatCompactDates`, `chatResize` (GTK a Windows je
   portují ze Swiftu). Čeká B1.
+- 2026-10-17 nálezy B1 (macOS): pruh má víc místa nad a pod přepínačem
+  (8 a 6 pt), popisek a tooltip přepínače sledují stav (*Show as Chat* /
+  *Show as Thread*, 2 nové msgid, Windows exclusions), sponka v hlavičce
+  bubliny je pilulka s počtem (`Conversation.bubbleAttachmentBadge`).
