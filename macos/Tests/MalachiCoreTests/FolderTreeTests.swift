@@ -240,6 +240,35 @@ func ids(_ entries: [FolderEntry]) -> [String] {
         #expect(enabledAccounts(accounts).count == 2)
     }
 
+    /// `inMail`, the rule of `mailSidebarAccounts`, holds for switched-off
+    /// accounts too (the mailbox asks it of them), the sidebar's list keeps
+    /// the order and leaves the switched-off accounts out, and a pin on a
+    /// CalDAV account makes no Favourites section (C#
+    /// InMailIsEveryKindButCalDAV, Go TestInMail).
+    @Test func inMailIsEveryKindButCalDAV() {
+        let imap = testAccount("a")
+        var graph = testAccount("g")
+        graph.config.kind = .graph
+        var jira = testAccount("j")
+        jira.config.kind = .jira
+        var caldav = testAccount("c")
+        caldav.config.kind = .caldav
+        var off = testAccount("off", enabled: false)
+        off.config.kind = .caldav
+        #expect(inMail(imap) && inMail(graph) && inMail(jira))
+        #expect(!inMail(caldav) && !inMail(off))
+
+        let accounts = [caldav, graph, testAccount("b", enabled: false), imap]
+        #expect(mailSidebarAccounts(accounts).map(\.id) == ["g", "a"])
+        #expect(MailModel(accounts: accounts, folders: [:]).mailSidebarAccounts.map(\.id) == ["g", "a"])
+        #expect(MailModel(accounts: accounts, folders: [:]).enabledAccounts.map(\.id) == ["c", "g", "a"])
+
+        var favourites = FavouriteState()
+        favourites.toggle(FolderKey(account: "c", folder: "in-c"))
+        let folders: [AccountID: [Folder]] = ["c": [testFolder("in-c", path: "INBOX", role: .inbox)]]
+        #expect(sortFolders([caldav], folders, CollapseState(), favourites).isEmpty)
+    }
+
     @Test func initialFolderPrefersTheMailInbox() {
         // The Jira account comes first and has no Inbox: the mail
         // account's Inbox still wins.

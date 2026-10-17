@@ -198,3 +198,39 @@ func TestFolderCountsText(t *testing.T) {
 		}
 	}
 }
+
+// A calendar-only CalDAV account is never in the Mail sidebar: no header
+// of its own, and it does not count towards the headers; a pin on it makes
+// no Favourites section. The rule (capabilities.InMail) holds for
+// switched-off accounts too: CalDAV accounts alone are no account in Mail
+// (Swift caldavAccountsAreNotInMail, inMailIsEveryKindButCalDAV).
+func TestSortFoldersLeavesCalendarOnlyAccountsOut(t *testing.T) {
+	caldav := api.Account{ID: "c", Enabled: true, Config: api.AccountConfig{Kind: api.AccountCalDAV}}
+	accounts := []api.Account{{ID: "a", Enabled: true}, caldav}
+	folders := map[api.AccountID][]api.Folder{
+		"a": {{ID: "in", Path: "INBOX", Role: api.RoleInbox, Selectable: true}},
+		"c": {{ID: "in-c", Path: "INBOX", Role: api.RoleInbox, Selectable: true}},
+	}
+	if got := ids(sortFolders(accounts, folders, newCollapseState(), newFavouriteState())); !equalIDs(got, []string{"in@0"}) {
+		t.Errorf("with a calendar-only account: %v", got)
+	}
+	if got := mailSidebarAccounts(accounts); len(got) != 1 || got[0].ID != "a" {
+		t.Errorf("mailSidebarAccounts = %v", got)
+	}
+	if got := enabledAccounts(accounts); len(got) != 2 {
+		t.Errorf("enabledAccounts = %v", got)
+	}
+	off := caldav
+	off.ID, off.Enabled = "off", false
+	if hasMailAccount([]api.Account{caldav, off}) {
+		t.Error("calendar-only accounts count as an account in Mail")
+	}
+	if !hasMailAccount([]api.Account{caldav, {ID: "b", Enabled: false}}) {
+		t.Error("a switched-off mail account is no account in Mail")
+	}
+	favourites := newFavouriteState()
+	favourites.set(folderKey{Account: "c", Folder: "in-c"}, true)
+	if got := sortFolders([]api.Account{caldav}, folders, newCollapseState(), favourites); len(got) != 0 {
+		t.Errorf("a pin on a calendar-only account: %v", ids(got))
+	}
+}

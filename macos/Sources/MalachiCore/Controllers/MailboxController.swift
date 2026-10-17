@@ -37,7 +37,8 @@ public final class MailboxController {
     public internal(set) var model: MailModel
     /// account.list returned at least one account (window.go `hasAccounts`);
     /// false until the first answer. The message pane's No Accounts
-    /// placeholder keys off it.
+    /// placeholder keys off it. Calendar-only CalDAV accounts are no
+    /// account here (`inMail`): Mail never shows them.
     public private(set) var hasAccounts = false
     /// What the sidebar shows right now.
     public private(set) var sidebarStatus: SidebarStatus = .folders
@@ -238,7 +239,7 @@ public final class MailboxController {
                 self.model.accounts = res.accounts
                 self.model.folders = [:]
                 self.model.folderErr = [:]
-                self.hasAccounts = !res.accounts.isEmpty
+                self.hasAccounts = res.accounts.contains(where: inMail)
                 self.withdrawAccountNotifications()
                 self.onAccountsLoaded?(res.accounts)
                 // sync.status may have answered before the accounts were
@@ -246,7 +247,8 @@ public final class MailboxController {
                 // account set (added, removed, paused, renamed).
                 self.sync.refreshFooter()
 
-                let enabled = self.model.enabledAccounts
+                // A calendar-only CalDAV account has no folders to ask for.
+                let enabled = self.model.mailSidebarAccounts
                 if enabled.isEmpty {
                     self.rebuildFolderList()
                     return
@@ -363,7 +365,7 @@ public final class MailboxController {
     /// account, none enabled, an error, or accounts that have not
     /// synchronised yet.
     public func showEmptySidebarStatus() {
-        let enabled = model.enabledAccounts
+        let enabled = model.mailSidebarAccounts
         if !hasAccounts {
             showFolderStatus(
                 "system-users-symbolic", L10n.T("No Accounts"),

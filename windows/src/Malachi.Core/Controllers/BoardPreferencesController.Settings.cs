@@ -3,20 +3,22 @@
 
 // Port of macos/Sources/MalachiCore/Controllers/BoardPreferencesController.swift
 // (defaultWindows, validWindows, setEnabled, setWindows, setTriageAccounts,
-// toggleTriageAccount); GTK:
+// triageCandidates, toggleTriageAccount); GTK:
 // ui/internal/boardtriage/preferences.go (DefaultWindows, ValidWindows,
-// SetEnabled, SetWindows, SetTriageAccounts, triageByDefault,
-// TriageAccountChecked, ToggleTriageAccount).
+// SetEnabled, SetWindows, SetTriageAccounts, TriageCandidates,
+// triageByDefault, TriageAccountChecked, ToggleTriageAccount).
 //
 // The board's preferences Settings writes: Show the Board, Keep cases for
 // (the windows of the states), Triage These Accounts. Each write is an
 // Update (optimistic, the whole object sent); the checklist's rules are
-// the daemon's: no account listed means every enabled mail account.
+// the daemon's: no account listed means every enabled mail account, and a
+// calendar-only CalDAV account is never triaged (FolderTree.InMail).
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using Malachi.Core.Api;
+using Malachi.Core.Model;
 
 namespace Malachi.Core.Controllers;
 
@@ -115,16 +117,31 @@ public sealed partial class BoardPreferencesController
     }
 
     /// <summary>
+    /// The accounts Triage These Accounts lists: the enabled accounts the
+    /// triage could read, in order. A calendar-only CalDAV account has no
+    /// mail and no cases, so it is never offered, never checked and never
+    /// triaged, named or not (the daemon's triageAccounts;
+    /// <see cref="FolderTree.InMail"/>). Swift <c>triageCandidates</c>, Go
+    /// <c>TriageCandidates</c>.
+    /// </summary>
+    public static IReadOnlyList<Account> TriageCandidates(IEnumerable<Account> accounts)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+        return [.. accounts.Where(a => a.Enabled && FolderTree.InMail(a))];
+    }
+
+    /// <summary>
     /// Whether <paramref name="account"/> is triaged under
     /// <paramref name="listed"/> (the preferences' TriageAccounts), as the
     /// daemon decides: a listed account when some are listed, else every
-    /// enabled mail account. A disabled account is never triaged.
+    /// enabled mail account. A disabled account is never triaged, nor a
+    /// calendar-only one.
     /// </summary>
     public static bool TriageAccountChecked(IReadOnlyList<AccountId> listed, Account account)
     {
         ArgumentNullException.ThrowIfNull(listed);
         ArgumentNullException.ThrowIfNull(account);
-        if (!account.Enabled)
+        if (!account.Enabled || !FolderTree.InMail(account))
         {
             return false;
         }
@@ -154,6 +171,11 @@ public sealed partial class BoardPreferencesController
         var defaults = new List<AccountId>();
         foreach (var a in accounts)
         {
+            if (!FolderTree.InMail(a))
+            {
+                // Never triaged, so never listed: a stale id drops out.
+                continue;
+            }
             if (!a.Enabled)
             {
                 if (listed.Contains(a.Id))
@@ -187,6 +209,7 @@ public sealed partial class BoardPreferencesController
 
     // Whether account a is triaged when the preferences name no account: an
     // enabled mail account (the daemon's triageAccounts: not an issue
-    // tracker).
-    private static bool TriageByDefault(Account a) => a.Enabled && a.Config.ProtocolKind.Value != AccountKind.Jira;
+    // tracker, not a calendar-only account).
+    private static bool TriageByDefault(Account a) =>
+        a.Enabled && FolderTree.InMail(a) && a.Config.ProtocolKind.Value != AccountKind.Jira;
 }

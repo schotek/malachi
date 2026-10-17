@@ -10,6 +10,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/bulkmail"
 	"github.com/schotek/malachi/ui/internal/calendar"
+	"github.com/schotek/malachi/ui/internal/capabilities"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/signin"
@@ -459,9 +460,16 @@ func (m *mailModel) account(id api.AccountID) (api.Account, bool) {
 	return api.Account{}, false
 }
 
-// enabledAccounts returns the accounts the sidebar shows, in list order.
+// enabledAccounts returns the enabled accounts Mail lists, in list order
+// (enabledAccounts).
 func (m *mailModel) enabledAccounts() []api.Account {
 	return enabledAccounts(m.accounts)
+}
+
+// mailSidebarAccounts returns the accounts the sidebar shows, in list
+// order (mailSidebarAccounts).
+func (m *mailModel) mailSidebarAccounts() []api.Account {
+	return mailSidebarAccounts(m.accounts)
 }
 
 // initialFolder is the folder to select when nothing is selected yet: the
@@ -584,8 +592,40 @@ func enabledAccounts(accounts []api.Account) []api.Account {
 	return out
 }
 
+// mailSidebarAccounts filters accounts to the enabled ones Mail lists,
+// keeping order: a calendar-only CalDAV account has no mail and no
+// folders, so it is never in Mail (capabilities.InMail; it shows in the
+// Calendar's sidebar with the CALDAV capsule). macOS `mailSidebarAccounts`,
+// Windows `FolderTree.MailSidebarAccounts`. enabledAccounts already leaves
+// such an account out by its capabilities (listedInMail); this adds the
+// other clients' rule by its kind, and the two name the same accounts
+// whenever the daemon reports capabilities.
+func mailSidebarAccounts(accounts []api.Account) []api.Account {
+	out := make([]api.Account, 0, len(accounts))
+	for _, a := range enabledAccounts(accounts) {
+		if capabilities.InMail(a) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// hasMailAccount reports whether account.list named an account Mail shows
+// (capabilities.InMail), switched off or not: calendar-only CalDAV
+// accounts alone are no account in Mail (the No Accounts page, the empty
+// sidebar).
+func hasMailAccount(accounts []api.Account) bool {
+	for _, a := range accounts {
+		if capabilities.InMail(a) {
+			return true
+		}
+	}
+	return false
+}
+
 // sortFolders lays the sidebar out: the Favourites section when anything is
-// pinned (favouriteSection), then the enabled accounts in list order, each
+// pinned (favouriteSection), then the enabled accounts in list order
+// (mailSidebarAccounts: no calendar-only CalDAV account), each
 // preceded by a header row when there are at least two of them or a
 // Favourites section above them, then the account's folders as a tree.
 // Roots are ordered by (roleRank, path); the children of a folder follow
@@ -594,7 +634,7 @@ func enabledAccounts(accounts []api.Account) []api.Account {
 // with a depth counted from their display path. Non-selectable containers
 // are kept so their children have somewhere to hang.
 func sortFolders(accounts []api.Account, folders map[api.AccountID][]api.Folder, collapsed collapseState, favourites favouriteState) []folderEntry {
-	enabled := enabledAccounts(accounts)
+	enabled := mailSidebarAccounts(accounts)
 	out := favouriteSection(enabled, folders, favourites)
 	// A single account needs no heading of its own, unless a Favourites
 	// section sits above its folders and the two would run into each other.

@@ -154,7 +154,11 @@ private actor BoardScript {
         let off = Account(
             id: "acc_2", config: AccountConfig(name: "Paused", email: "p@example.invalid"), enabled: false,
             state: SyncState(accountId: "acc_2", status: .idle))
-        return try! JSONCoding.encoder().encode(AccountListResult(accounts: [a, off]))
+        // A calendar-only CalDAV account: enabled, yet never a board account.
+        let cal = Account(
+            id: "acc_3", config: AccountConfig(name: "Calendar", email: "c@example.invalid", kind: .caldav), enabled: true,
+            state: SyncState(accountId: "acc_3", status: .idle), capabilities: [.calendar])
+        return try! JSONCoding.encoder().encode(AccountListResult(accounts: [a, off, cal]))
     }
 
     func list() async throws -> Data {
@@ -342,7 +346,7 @@ private final class Harness {
         let h = try await Harness().started()
         let s = h.source.snapshot
         #expect(s.phase == .ready)
-        #expect(s.accounts == [Board.AccountInfo(id: "acc_1", name: "Work", badge: "IMAP", canDelete: true)])  // enabled only
+        #expect(s.accounts == [Board.AccountInfo(id: "acc_1", name: "Work", badge: "IMAP", canDelete: true)])  // enabled and in Mail only
         #expect(s.cases.map(\.id) == [caseID("1"), caseID("2")])
         let c = try #require(h.c("1"))
         #expect(c.person == "Person 1" && c.subject == "Subject 1" && c.ruleState == .you)

@@ -258,6 +258,20 @@ private let inbox1 = FolderKey(account: "acc1", folder: "inbox")
         ))
         #expect(await paused.fixture.callCount(API.FolderList.name) == 0)
 
+        // Calendar-only CalDAV accounts alone are no account in Mail
+        // (`inMail`): No Accounts, and no folder.list.
+        var caldav = testAccount("c")
+        caldav.config.kind = .caldav
+        let calendarOnly = try await Harness(accounts: [caldav], folders: [:])
+        defer { Task { await calendarOnly.stop() } }
+        try await calendarOnly.settle(rebuilds: 1)
+        #expect(calendarOnly.log.statuses.last == .status(
+            icon: "system-users-symbolic", title: "No Accounts",
+            description: "Add a mail account in Preferences to see its folders here."
+        ))
+        #expect(await calendarOnly.fixture.callCount(API.FolderList.name) == 0)
+        #expect(!calendarOnly.mailbox.hasAccounts)
+
         // An enabled account that has not synchronised yet.
         let fresh = try await Harness(accounts: [testAccount("a")], folders: ["a": []])
         defer { Task { await fresh.stop() } }

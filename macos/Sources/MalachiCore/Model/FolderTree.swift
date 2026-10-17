@@ -54,11 +54,23 @@ public func enabledAccounts(_ accounts: [Account]) -> [Account] {
 
 /// The enabled accounts the Mail sidebar lists, keeping order: a
 /// calendar-only CalDAV account has no mail and no folders, so it is never
-/// in Mail (docs/calendar.md §5.3; it shows in the Calendar's sidebar with
-/// the CALDAV capsule). Swift-first: mirror in model.go with GTK's
-/// calendar.
+/// in Mail (docs/calendar.md D16; it shows in the Calendar's sidebar with
+/// the CALDAV capsule). model.go `mailSidebarAccounts`, Windows
+/// `FolderTree.MailSidebarAccounts`.
 public func mailSidebarAccounts(_ accounts: [Account]) -> [Account] {
-    enabledAccounts(accounts).filter { $0.config.protocolKind != .caldav }
+    enabledAccounts(accounts).filter(inMail)
+}
+
+/// Whether Mail shows account `a` once it is enabled, the rule of
+/// `mailSidebarAccounts`: every kind but a calendar-only CalDAV account.
+/// Mail asks it of switched-off accounts too, so that CalDAV accounts
+/// alone count as no account in Mail (the empty sidebar, the reader's No
+/// Accounts page); the account name on an all-accounts search result, the
+/// Reply All self address and the board's accounts (its account filter,
+/// Triage These Accounts) go by it as well (Go `capabilities.InMail`,
+/// Windows `FolderTree.InMail`).
+public func inMail(_ a: Account) -> Bool {
+    a.config.protocolKind != .caldav
 }
 
 /// The folders the sidebar lists: an empty outbox is dropped (the folder
@@ -77,7 +89,8 @@ public func selfAddress(_ a: Account) -> Address {
 
 /// Lays the sidebar out (model.go `sortFolders`): the Favourites section
 /// when anything is pinned (`favouriteSection`), then the enabled accounts
-/// in list order, each preceded by a header row when there are at least
+/// in list order (`mailSidebarAccounts`: no calendar-only CalDAV account),
+/// each preceded by a header row when there are at least
 /// two of them or a Favourites section above them, then the account's
 /// folders as a tree. Roots are ordered by (roleRank, path); the children
 /// of a folder follow it, ordered the same way. Depth comes from `parentId`;

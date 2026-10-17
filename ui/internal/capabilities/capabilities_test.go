@@ -181,3 +181,32 @@ func TestComposeAccounts(t *testing.T) {
 		}
 	}
 }
+
+// InMail (Swift inMailIsEveryKindButCalDAV, C# InMailIsEveryKindButCalDAV):
+// every kind but a calendar-only CalDAV account, switched off or not.
+func TestInMail(t *testing.T) {
+	caldav := api.Account{
+		ID: "c", Enabled: true, Config: api.AccountConfig{Kind: api.AccountCalDAV},
+		Capabilities: []api.AccountCapability{api.CapabilityCalendar},
+	}
+	off := caldav
+	off.ID, off.Enabled = "off", false
+	graph := api.Account{ID: "g", Enabled: true, Config: api.AccountConfig{Kind: api.AccountGraph}}
+	tests := []struct {
+		name string
+		acc  api.Account
+		want bool
+	}{
+		{"old daemon", oldMail, true},
+		{"mail", mail, true},
+		{"graph", graph, true},
+		{"issue tracker", jiraM2, true},
+		{"calendar-only", caldav, false},
+		{"calendar-only, switched off", off, false},
+	}
+	for _, tt := range tests {
+		if got := InMail(tt.acc); got != tt.want {
+			t.Errorf("%s: InMail = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}

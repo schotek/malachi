@@ -3342,7 +3342,9 @@ BoardPreferences {
 
 The values above are the defaults. `assistant` is turned on by a client
 only after the user agreed to have mail read by the assistant. A `jira`
-account is triaged only when `triageAccounts` names it. The daemon only
+account is triaged only when `triageAccounts` names it; a calendar-only
+`caldav` account is never triaged, named or not (it has no mail and no
+cases; the id stays in the list like any existing account's). The daemon only
 stores `autoTriage`, `autoTriageMinutes` and `autoTriageDailyCases`; the
 client's schedule reads them. While `enabled` is false the daemon
 computes nothing, `board.list` returns no cases, and every other board

@@ -1423,7 +1423,8 @@ runs annotated today (the clients' daily cap) and the size of the queue.
 `api.BoardPreferences`; not `config.get`/`config.set`): `enabled`
 (default on), `assistant` (off; a client turns it on only after the user's
 consent), the four windows, `triageAccounts` (empty: every enabled mail
-account; a `jira` account only when named), and `autoTriage`,
+account; a `jira` account only when named; a calendar-only `caldav`
+account never), and `autoTriage`,
 `autoTriageMinutes`, `autoTriageDailyCases`, which the daemon only stores
 for the client's schedule. With the board off nothing is computed, every
 method but the preferences refuses, and the user's decisions are kept.

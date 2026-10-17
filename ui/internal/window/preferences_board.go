@@ -242,14 +242,10 @@ func (d *PreferencesDialog) bindTriageAccounts(c *client.Client, p *boardtriage.
 		syncing  bool
 		gen      int
 	)
-	enabledAccounts := func() []api.Account {
-		var out []api.Account
-		for _, a := range accounts {
-			if a.Enabled {
-				out = append(out, a)
-			}
-		}
-		return out
+	// The accounts the list offers: a calendar-only CalDAV account is
+	// never triaged (boardtriage.TriageCandidates).
+	candidates := func() []api.Account {
+		return boardtriage.TriageCandidates(accounts)
 	}
 	update := func() {
 		if d.closed {
@@ -271,7 +267,7 @@ func (d *PreferencesDialog) bindTriageAccounts(c *client.Client, p *boardtriage.
 			}
 		}
 		syncing = true
-		for i, a := range enabledAccounts() {
+		for i, a := range candidates() {
 			if i < len(rows) {
 				rows[i].SetActive(boardtriage.TriageAccountChecked(prefs.TriageAccounts, a))
 			}
@@ -284,7 +280,7 @@ func (d *PreferencesDialog) bindTriageAccounts(c *client.Client, p *boardtriage.
 		}
 		rows = rows[:0]
 		accounts = slices.Clone(list)
-		for _, a := range enabledAccounts() {
+		for _, a := range candidates() {
 			id := a.ID
 			row := adw.NewSwitchRow()
 			row.SetUseMarkup(false)

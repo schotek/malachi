@@ -426,8 +426,11 @@ final class Integration {
             self.mainWindow?.folderTitle = title
             self.mainWindow?.folderSubtitle = subtitle
         }
-        mailbox.onAccountsLoaded = { [weak self] accounts in
-            self?.showNoAccountsPage(accounts.isEmpty)
+        mailbox.onAccountsLoaded = { [weak self] _ in
+            // Calendar-only CalDAV accounts alone are no account in Mail
+            // (`MailboxController.hasAccounts`, set before the call).
+            guard let self else { return }
+            self.showNoAccountsPage(!self.mailbox.hasAccounts)
         }
     }
 

@@ -123,7 +123,7 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
     private func rebuildRows() {
         let model = mailbox.model
         // With several accounts a pinned "Inbox" says whose it is.
-        let several = model.enabledAccounts.count >= 2
+        let several = model.mailSidebarAccounts.count >= 2
         isReselecting = true
         dataSource.rebuild(entries: model.entries, several: several)
         outline.reloadData()
@@ -136,7 +136,7 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
     /// changed, so the rows are reloaded in place and the selection stays.
     private func refreshBadges() {
         let model = mailbox.model
-        dataSource.rebuild(entries: model.entries, several: model.enabledAccounts.count >= 2)
+        dataSource.rebuild(entries: model.entries, several: model.mailSidebarAccounts.count >= 2)
         let rows = outline.numberOfRows
         guard rows > 0 else { return }
         isReselecting = true

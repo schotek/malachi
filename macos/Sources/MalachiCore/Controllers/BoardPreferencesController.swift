@@ -262,18 +262,28 @@ public final class BoardPreferencesController {
         update({ $0.triageAccounts = list }, completion: completion)
     }
 
+    /// The accounts Triage These Accounts lists: the enabled accounts the
+    /// triage could read, in order. A calendar-only CalDAV account has no
+    /// mail and no cases, so it is never offered, never checked and never
+    /// triaged, named or not (the daemon's `triageAccounts`; `inMail`). Go
+    /// `TriageCandidates`.
+    public nonisolated static func triageCandidates(_ accounts: [Account]) -> [Account] {
+        accounts.filter { $0.enabled && inMail($0) }
+    }
+
     /// Whether `a` is triaged when the preferences name no account: an
-    /// enabled mail account (not an issue tracker).
+    /// enabled mail account (not an issue tracker, not a calendar-only
+    /// account).
     private nonisolated static func triageByDefault(_ a: Account) -> Bool {
-        a.enabled && a.config.protocolKind != .jira
+        a.enabled && inMail(a) && a.config.protocolKind != .jira
     }
 
     /// Whether account `a` is triaged under `listed` (the preferences'
     /// `triageAccounts`), as the daemon decides: a listed account when some
     /// are listed, else every enabled mail account. A disabled account is
-    /// never triaged.
+    /// never triaged, nor a calendar-only one.
     public nonisolated static func triageAccountChecked(_ listed: [AccountID], _ a: Account) -> Bool {
-        guard a.enabled else { return false }
+        guard a.enabled, inMail(a) else { return false }
         return listed.isEmpty ? triageByDefault(a) : listed.contains(a.id)
     }
 
@@ -322,6 +332,8 @@ public final class BoardPreferencesController {
         var checked: [AccountID] = []
         var defaults: [AccountID] = []
         for a in accounts {
+            // Never triaged, so never listed: a stale id drops out.
+            guard inMail(a) else { continue }
             guard a.enabled else {
                 if listed.contains(a.id) {
                     checked.append(a.id)

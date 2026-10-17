@@ -275,7 +275,12 @@ func (f *fakeDaemon) serve(method string, params any) (any, error) {
 	case api.MethodAccountList:
 		a := api.Account{ID: "acc_1", Config: api.AccountConfig{Name: f.accountName, Email: "me@example.invalid"}, Enabled: true}
 		off := api.Account{ID: "acc_2", Config: api.AccountConfig{Name: "Paused", Email: "p@example.invalid"}}
-		return api.AccountListResult{Accounts: []api.Account{a, off}}, nil
+		// A calendar-only CalDAV account: enabled, yet never a board account.
+		cal := api.Account{
+			ID: "acc_3", Config: api.AccountConfig{Name: "Calendar", Email: "c@example.invalid", Kind: api.AccountCalDAV},
+			Enabled: true, Capabilities: []api.AccountCapability{api.CapabilityCalendar},
+		}
+		return api.AccountListResult{Accounts: []api.Account{a, off, cal}}, nil
 	case api.MethodBoardList:
 		// What the daemon has at the time of the call, sent when released.
 		var cases []api.BoardCase
@@ -490,7 +495,7 @@ func TestDaemonLoadsTheBoardAndTheAccounts(t *testing.T) {
 	h := newHarness(t, true).started()
 	s := h.source.Snapshot()
 	eq(t, "phase", s.Phase, PhaseReady)
-	eq(t, "accounts", s.Accounts, []AccountInfo{{ID: "acc_1", Name: "Work", Badge: "IMAP", CanReply: true, CanDelete: true}}) // enabled only
+	eq(t, "accounts", s.Accounts, []AccountInfo{{ID: "acc_1", Name: "Work", Badge: "IMAP", CanReply: true, CanDelete: true}}) // enabled and in Mail only
 	var ids []CaseID
 	for _, c := range s.Cases {
 		ids = append(ids, c.ID)

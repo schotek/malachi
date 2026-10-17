@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/capabilities"
 	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/signin"
 )
@@ -403,7 +404,9 @@ func (d *DaemonSource) loadAccounts() {
 		}
 		var accounts []AccountInfo
 		for _, a := range r.Accounts {
-			if !a.Enabled {
+			// A calendar-only CalDAV account has no mail and no cases
+			// (capabilities.InMail): not in the account filter.
+			if !a.Enabled || !capabilities.InMail(a) {
 				continue
 			}
 			accounts = append(accounts, AccountInfo{

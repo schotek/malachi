@@ -689,7 +689,7 @@ preference on (`board.preferences`), which a desktop app turns on only
 after the user agreed; with it off, or the board off, `list_triage_queue`
 answers that the assistant is switched off and the model is told to stop.
 Only the accounts in `triageAccounts` are offered (empty = every enabled
-mail account).
+mail account; a calendar-only `caldav` account never).
 
 Runs: started with `-triage-run ID` (or `MALACHI_MCP_TRIAGE_RUN`), the
 bridge passes `runId` to every `board.annotate` and `board.commit`, and the

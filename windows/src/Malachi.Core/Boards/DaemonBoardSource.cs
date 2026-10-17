@@ -794,7 +794,9 @@ public sealed partial class DaemonBoardSource : IBoardSource, IBoardArchiveUndoe
             {
                 return;
             }
-            accounts = [.. r.Accounts.Where(a => a.Enabled).Select(Convert)];
+            // A calendar-only CalDAV account has no mail and no cases
+            // (FolderTree.InMail): not in the account filter.
+            accounts = [.. r.Accounts.Where(a => a.Enabled && FolderTree.InMail(a)).Select(Convert)];
             Publish();
         });
     }

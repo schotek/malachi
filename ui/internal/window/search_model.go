@@ -144,7 +144,7 @@ func (m *mailModel) searchOrigin(s api.MessageSummary) (label, tooltip string) {
 	}
 	if a, ok := m.account(s.AccountID); ok {
 		tooltip += "\n" + accountLabel(a)
-		if m.search.effective == settings.SearchAll && len(m.enabledAccounts()) > 1 {
+		if m.search.effective == settings.SearchAll && len(m.mailSidebarAccounts()) > 1 {
 			// TRANSLATORS: where a search result lies, shown in its row:
 			// the folder, then the account.
 			label = fmt.Sprintf(i18n.C("search result origin", "%s · %s"), label, accountLabel(a))

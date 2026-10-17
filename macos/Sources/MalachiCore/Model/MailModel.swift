@@ -428,9 +428,15 @@ public struct MailModel: Sendable {
         accounts.first { $0.id == id }
     }
 
-    /// The accounts the sidebar shows, in list order.
+    /// The enabled accounts, in list order.
     public var enabledAccounts: [Account] {
         MalachiCore.enabledAccounts(accounts)
+    }
+
+    /// The accounts Mail shows, in list order (`mailSidebarAccounts`: the
+    /// enabled ones but a calendar-only CalDAV account).
+    public var mailSidebarAccounts: [Account] {
+        MalachiCore.mailSidebarAccounts(accounts)
     }
 
     /// The folder to select when nothing is selected yet: the first Inbox,

@@ -240,7 +240,8 @@ public sealed partial class AiPage
         boardAccountBoxes.Clear();
         boardAccounts.Clear();
         boardAccounts.AddRange(accounts);
-        foreach (var a in accounts.Where(a => a.Enabled))
+        // A box per account the triage could read: enabled, not calendar-only.
+        foreach (var a in BoardPreferencesController.TriageCandidates(accounts))
         {
             // The account's name as plain text (a string content is a TextBlock).
             var title = Malachi.Core.Model.AccountsPage.AccountRowTitle(a);

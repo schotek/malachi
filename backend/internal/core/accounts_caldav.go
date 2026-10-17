@@ -197,6 +197,13 @@ func calDAVSecretMoves(old, next api.AccountConfig) bool {
 	return false
 }
 
+// isCalendarOnlyAccount says whether the account has calendars and nothing
+// else (kind caldav): no mail, no folders, no messages, so no board case
+// and nothing for triage to read.
+func isCalendarOnlyAccount(a store.Account) bool {
+	return a.Config.Protocol() == api.AccountCalDAV
+}
+
 // sameCalDAVLogin: the same server (realm) and user name.
 func sameCalDAVLogin(a, b api.AccountConfig) bool {
 	return a.CalDAV != nil && b.CalDAV != nil && store.RealmOf(a) == store.RealmOf(b) &&
