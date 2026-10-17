@@ -98,7 +98,10 @@ cd /src && exec dbus-run-session -- env DISPLAY=$gw:0 GDK_BACKEND=x11 GSK_RENDER
     ;;
 esac
 
-opts=(--rm -w /src -v "$repo:/src" -v "$cache/gomod:/go/pkg/mod" -v "$cache/gocache:/gocache" -v "$cache/ccache:/ccache" "${x11_opts[@]}")
+# Every make inside the container writes to build/linux, never next to the
+# macOS or Windows products in build/ (MAKEFLAGS carries the variable to
+# a plain `make` run from a shell too).
+opts=(--rm -w /src -e "MAKEFLAGS=BUILD_DIR=$build_dir" -v "$repo:/src" -v "$cache/gomod:/go/pkg/mod" -v "$cache/gocache:/gocache" -v "$cache/ccache:/ccache" ${x11_opts[@]+"${x11_opts[@]}"})
 if [ "$engine" = container ]; then
   opts+=(--cpus "${CPUS:-8}" --memory "${MEMORY:-8G}")
 fi
