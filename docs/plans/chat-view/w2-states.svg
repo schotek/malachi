@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 760 649" role="img" aria-label="Konverzace Jira, koncept a úzký panel v rozložení chatu s textovými bublinami" font-size="11.5" font-family="Inter, Cantarell, 'Segoe UI', Helvetica, Arial, sans-serif"><rect width="100%" height="100%" fill="#ffffff"/><defs>
+<symbol id="i-bubble" viewBox="0 0 16 16"><path d="M3.2 3h9.6A1.7 1.7 0 0 1 14.5 4.7v5.1a1.7 1.7 0 0 1-1.7 1.7H7.2L4 14v-2.5h-.8A1.7 1.7 0 0 1 1.5 9.8V4.7A1.7 1.7 0 0 1 3.2 3z"/></symbol>
+<symbol id="i-clip" viewBox="0 0 16 16"><path d="M10.8 5.2 6.2 9.8a1.3 1.3 0 0 0 1.9 1.9l4.8-4.8a2.7 2.7 0 0 0-3.8-3.8L4.2 8a4 4 0 0 0 5.7 5.7l3.6-3.6"/></symbol>
+</defs><text x="24" y="28" font-size="15" font-weight="600" fill="#1f1f1f">Stavy chatu: Jira, koncept, úzký panel</text><text x="24" y="48" fill="#5c5c5c">Textové bubliny · strana podle Mine · události a starší zprávy uprostřed · koncept vždy vpravo</text>
+<clipPath id="clip1"><rect x="24" y="64" width="400" height="470" rx="10"/></clipPath><g clip-path="url(#clip1)">
+<rect x="24" y="64" width="400" height="470" rx="10" fill="#f6f5f4"/>
+<rect x="24" y="64" width="400" height="30" fill="#ffffff"/>
+<text x="40" y="84" font-size="12" font-weight="600" fill="#1f1f1f">Konverzace Jira (D11)</text>
+<line x1="24" y1="94" x2="424" y2="94" stroke="#deddda" stroke-width="1"/>
+<rect x="288.3" y="98" width="123.7" height="20" rx="6" fill="#2b76d2" fill-opacity="0.15" stroke="#2b76d2" stroke-width="1.2"/>
+<use xlink:href="#i-bubble" x="296.3" y="101" width="14" height="14" fill="none" stroke="#2b76d2" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="316.3" y="111.9" font-size="10.5" font-weight="600" fill="#2b76d2">Zobrazit jako chat</text>
+<line x1="24" y1="122" x2="424" y2="122" stroke="#deddda" stroke-width="1"/>
+<rect x="36" y="132" width="376" height="46" rx="10" fill="#ffffff" stroke="#deddda" stroke-width="1"/>
+<text x="48" y="151" font-size="11.5" font-weight="700" fill="#2b76d2">PROJ-128</text>
+<text x="112.3" y="151" font-size="11.5" font-weight="600" fill="#1f1f1f">Úprava kanceláří ve 2. patře</text>
+<rect x="48" y="157" width="48.9" height="15" rx="7.5" fill="#dbe8f8"/>
+<text x="72.4" y="167.9" font-size="9.5" font-weight="600" text-anchor="middle" fill="#1d5aa6">Probíhá</text>
+<text x="106" y="168.5" font-size="10" fill="#5c5c5c">Řešitel: Vladislav Janeček · Úkol</text>
+<text x="224" y="198" font-size="10.5" text-anchor="middle" fill="#5c5c5c">2 starší zprávy nejsou zobrazeny</text>
+<line x1="76" y1="194.5" x2="134.5" y2="194.5" stroke="#deddda" stroke-width="1"/>
+<line x1="313.5" y1="194.5" x2="372" y2="194.5" stroke="#deddda" stroke-width="1"/>
+<rect x="70" y="212" width="301" height="66" rx="10" fill="#ffffff" stroke="#deddda" stroke-width="1"/>
+<text x="82" y="230" font-size="11" font-weight="600" fill="#1f1f1f">Jana Nováková</text>
+<use xlink:href="#i-clip" x="171.9" y="220" width="12" height="12" fill="none" stroke="#5c5c5c" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="184.9" y="229.6" font-size="10" fill="#5c5c5c">2</text>
+<text x="359" y="229.8" font-size="10.5" text-anchor="end" fill="#5c5c5c">8. 10. 09:30</text>
+<text x="83" y="252" font-size="11" fill="#1f1f1f">Upravit dispozici kanceláří podle nového</text>
+<text x="83" y="267" font-size="11" fill="#1f1f1f">výkresu, termín do konce října.</text>
+<circle cx="49" cy="226" r="13" fill="#deddda"/>
+<text x="49" y="229.4" font-size="9.8" font-weight="700" text-anchor="middle" fill="#3d3d3d">JN</text>
+<text x="224" y="295" font-size="10" text-anchor="middle" fill="#5c5c5c">Petr Svoboda změnil stav z Otevřeno na Probíhá · 11. 10. 13:40</text>
+<rect x="70" y="304" width="256" height="66" rx="10" fill="#ffffff" stroke="#deddda" stroke-width="1"/>
+<text x="82" y="322" font-size="11" font-weight="600" fill="#1f1f1f">Vladislav Janeček</text>
+<rect x="185.6" y="310.5" width="79.7" height="15" rx="7.5" fill="#ebebeb"/>
+<text x="225.5" y="321.4" font-size="9.5" font-weight="600" text-anchor="middle" fill="#5c5c5c">via Issue Sync</text>
+<text x="314" y="321.8" font-size="10.5" text-anchor="end" fill="#5c5c5c">12. 10.</text>
+<text x="83" y="344" font-size="11" fill="#1f1f1f">Zákazník v ServiceDesku potvrdil</text>
+<text x="83" y="359" font-size="11" fill="#1f1f1f">předání 10. 11.</text>
+<circle cx="49" cy="318" r="13" fill="#deddda"/>
+<text x="49" y="321.4" font-size="9.8" font-weight="700" text-anchor="middle" fill="#3d3d3d">VJ</text>
+<rect x="167" y="378" width="211" height="51" rx="10" fill="#eaf1fb" stroke="#2b76d2" stroke-width="1"/>
+<text x="179" y="396" font-size="11" font-weight="600" fill="#1f1f1f">Vladislav Janeček</text>
+<text x="366" y="395.8" font-size="10.5" text-anchor="end" fill="#5c5c5c">dnes 9:15</text>
+<text x="180" y="418" font-size="11" fill="#1f1f1f">Výkres je u úkolu, prosím o kontrolu.</text>
+<circle cx="399" cy="392" r="13" fill="#d5e4f6"/>
+<text x="399" y="395.4" font-size="9.8" font-weight="700" text-anchor="middle" fill="#1d5aa6">VJ</text>
+<rect x="148" y="437" width="230" height="65" rx="10" fill="#eaf1fb" stroke="#2b76d2" stroke-width="1"/>
+<text x="160" y="455" font-size="11" font-weight="600" fill="#1f1f1f">Vladislav Janeček</text>
+<rect x="263.6" y="443.5" width="48.9" height="15" rx="7.5" fill="#fbe3e3"/>
+<text x="288.1" y="454.4" font-size="9.5" font-weight="600" text-anchor="middle" fill="#c01c28">Koncept</text>
+<rect x="317.5" y="443.5" width="42.8" height="15" rx="7.5" fill="#ebebeb"/>
+<text x="338.9" y="454.4" font-size="9.5" font-weight="600" text-anchor="middle" fill="#5c5c5c">Interní</text>
+<text x="160" y="468" font-size="10.5" fill="#5c5c5c">Koncept uložen v 9:58</text>
+<text x="161" y="491" font-size="11" fill="#1f1f1f">Rozpočet doplním zítra ráno.</text>
+<circle cx="399" cy="451" r="13" fill="#d5e4f6"/>
+<text x="399" y="454.4" font-size="9.8" font-weight="700" text-anchor="middle" fill="#1d5aa6">VJ</text>
+</g>
+<rect x="24" y="64" width="400" height="470" rx="10" fill="none" stroke="#b9b7ad" stroke-width="1.2"/>
+<clipPath id="clip2"><rect x="436" y="64" width="300" height="280" rx="10"/></clipPath><g clip-path="url(#clip2)">
+<rect x="436" y="64" width="300" height="280" rx="10" fill="#f6f5f4"/>
+<rect x="436" y="64" width="300" height="30" fill="#ffffff"/>
+<text x="452" y="84" font-size="12" font-weight="600" fill="#1f1f1f">Úzký panel (sloupec pod 420 px)</text>
+<line x1="436" y1="94" x2="736" y2="94" stroke="#deddda" stroke-width="1"/>
+<rect x="600.3" y="98" width="123.7" height="20" rx="6" fill="#2b76d2" fill-opacity="0.15" stroke="#2b76d2" stroke-width="1.2"/>
+<use xlink:href="#i-bubble" x="608.3" y="101" width="14" height="14" fill="none" stroke="#2b76d2" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="628.3" y="111.9" font-size="10.5" font-weight="600" fill="#2b76d2">Zobrazit jako chat</text>
+<line x1="436" y1="122" x2="736" y2="122" stroke="#deddda" stroke-width="1"/>
+<rect x="482" y="132" width="218" height="66" rx="10" fill="#ffffff" stroke="#deddda" stroke-width="1"/>
+<text x="494" y="150" font-size="11" font-weight="600" fill="#1f1f1f">Jana Nováková</text>
+<use xlink:href="#i-clip" x="583.9" y="140" width="12" height="12" fill="none" stroke="#5c5c5c" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="596.9" y="149.6" font-size="10" fill="#5c5c5c">1</text>
+<text x="688" y="149.8" font-size="10.5" text-anchor="end" fill="#5c5c5c">9. 10.</text>
+<text x="495" y="172" font-size="11" fill="#1f1f1f">Dobrý den, posílám nabídku na</text>
+<text x="495" y="187" font-size="11" fill="#1f1f1f">úpravu kanceláří ve 2. patře.</text>
+<circle cx="461" cy="146" r="13" fill="#deddda"/>
+<text x="461" y="149.4" font-size="9.8" font-weight="700" text-anchor="middle" fill="#3d3d3d">JN</text>
+<rect x="472" y="206" width="218" height="66" rx="10" fill="#eaf1fb" stroke="#2b76d2" stroke-width="1"/>
+<text x="484" y="224" font-size="11" font-weight="600" fill="#1f1f1f">Vladislav Janeček</text>
+<text x="678" y="223.8" font-size="10.5" text-anchor="end" fill="#5c5c5c">9. 10.</text>
+<text x="485" y="246" font-size="11" fill="#1f1f1f">Díky, podívám se na to a dám</text>
+<text x="485" y="261" font-size="11" fill="#1f1f1f">vědět do pátku.</text>
+<circle cx="711" cy="220" r="13" fill="#d5e4f6"/>
+<text x="711" y="223.4" font-size="9.8" font-weight="700" text-anchor="middle" fill="#1d5aa6">VJ</text>
+<rect x="482" y="280" width="153" height="51" rx="10" fill="#ffffff" stroke="#deddda" stroke-width="1"/>
+<circle cx="497" cy="294" r="3.5" fill="#2b76d2"/>
+<text x="504" y="298" font-size="11" font-weight="600" fill="#1f1f1f">Petr Svoboda</text>
+<text x="623" y="297.8" font-size="10.5" text-anchor="end" fill="#5c5c5c">10. 10.</text>
+<text x="495" y="320" font-size="11" fill="#1f1f1f">Super, díky!</text>
+<circle cx="461" cy="294" r="13" fill="#deddda"/>
+<text x="461" y="297.4" font-size="9.8" font-weight="700" text-anchor="middle" fill="#3d3d3d">PS</text>
+</g>
+<rect x="436" y="64" width="300" height="280" rx="10" fill="none" stroke="#b9b7ad" stroke-width="1.2"/>
+<line x1="702" y1="161" x2="724" y2="161" stroke="#e66100" stroke-width="1"/>
+<line x1="702" y1="158" x2="702" y2="164" stroke="#e66100" stroke-width="1"/>
+<line x1="724" y1="158" x2="724" y2="164" stroke="#e66100" stroke-width="1"/>
+<text x="713" y="172" font-size="8.5" font-weight="600" text-anchor="middle" fill="#e66100">24</text>
+<rect x="436" y="356" width="300" height="178" rx="10" fill="#ffffff" stroke="#b9b7ad" stroke-width="1.2"/>
+<text x="452" y="376" font-size="12" font-weight="600" fill="#1f1f1f">Co jde kam</text>
+<line x1="436" y1="386" x2="736" y2="386" stroke="#deddda" stroke-width="1"/>
+<text x="450" y="402.2" font-size="10.5" fill="#1f1f1f">Cizí zpráva</text>
+<rect x="608" y="392.4" width="26" height="12" rx="2" fill="none" stroke="#deddda" stroke-width="1"/>
+<rect x="610" y="394.4" width="14" height="8" rx="2" fill="#ffffff" stroke="#5c5c5c" stroke-width="0.8"/>
+<text x="640" y="401.7" font-size="10" fill="#5c5c5c">vlevo</text>
+<rect x="437" y="406.8" width="298" height="16.8" fill="#f2f1ef"/>
+<text x="450" y="418.9" font-size="10.5" fill="#1f1f1f">Moje zpráva (Mine)</text>
+<rect x="608" y="409.1" width="26" height="12" rx="2" fill="none" stroke="#deddda" stroke-width="1"/>
+<rect x="618" y="411.1" width="14" height="8" rx="2" fill="#eaf1fb" stroke="#2b76d2" stroke-width="0.8"/>
+<text x="640" y="418.4" font-size="10" fill="#5c5c5c">vpravo</text>
+<text x="450" y="435.7" font-size="10.5" fill="#1f1f1f">Odeslaná, složka ji nemá (Sent)</text>
+<rect x="608" y="425.9" width="26" height="12" rx="2" fill="none" stroke="#deddda" stroke-width="1"/>
+<rect x="618" y="427.9" width="14" height="8" rx="2" fill="#eaf1fb" stroke="#2b76d2" stroke-width="0.8"/>
+<text x="640" y="435.2" font-size="10" fill="#5c5c5c">vpravo</text>
+<rect x="437" y="440.2" width="298" height="16.8" fill="#f2f1ef"/>
+<text x="450" y="452.4" font-size="10.5" fill="#1f1f1f">Koncept</text>
+<rect x="608" y="442.6" width="26" height="12" rx="2" fill="none" stroke="#deddda" stroke-width="1"/>
+<rect x="618" y="444.6" width="14" height="8" rx="2" fill="#eaf1fb" stroke="#2b76d2" stroke-width="0.8"/>
+<text x="640" y="451.9" font-size="10" fill="#5c5c5c">vpravo</text>
+<text x="450" y="469.2" font-size="10.5" fill="#1f1f1f">Událost Jira</text>
+<rect x="608" y="459.4" width="26" height="12" rx="2" fill="none" stroke="#deddda" stroke-width="1"/>
+<line x1="615" y1="465.4" x2="627" y2="465.4" stroke="#5c5c5c" stroke-width="1.4"/>
+<text x="640" y="468.7" font-size="10" fill="#5c5c5c">uprostřed</text>
+<rect x="437" y="473.8" width="298" height="16.8" fill="#f2f1ef"/>
+<text x="450" y="485.9" font-size="10.5" fill="#1f1f1f">Starší zprávy</text>
+<rect x="608" y="476.1" width="26" height="12" rx="2" fill="none" stroke="#deddda" stroke-width="1"/>
+<line x1="615" y1="482.1" x2="627" y2="482.1" stroke="#5c5c5c" stroke-width="1.4"/>
+<text x="640" y="485.4" font-size="10" fill="#5c5c5c">nahoře uprostřed</text>
+<text x="450" y="502.7" font-size="10.5" fill="#1f1f1f">Karta issue</text>
+<rect x="608" y="492.9" width="26" height="12" rx="2" fill="none" stroke="#deddda" stroke-width="1"/>
+<rect x="610" y="494.9" width="22" height="8" rx="2" fill="#ffffff" stroke="#5c5c5c" stroke-width="0.8"/>
+<text x="640" y="502.2" font-size="10" fill="#5c5c5c">nahoře, celá šířka</text>
+<rect x="437" y="507.2" width="298" height="16.8" fill="#f2f1ef"/>
+<text x="450" y="519.4" font-size="10.5" fill="#1f1f1f">Komentář přes integraci (via)</text>
+<rect x="608" y="509.6" width="26" height="12" rx="2" fill="none" stroke="#deddda" stroke-width="1"/>
+<rect x="610" y="511.6" width="14" height="8" rx="2" fill="#ffffff" stroke="#5c5c5c" stroke-width="0.8"/>
+<text x="640" y="518.9" font-size="10" fill="#5c5c5c">vlevo</text>
+<circle cx="400" cy="146" r="8.5" fill="#e66100"/>
+<text x="400" y="149.6" font-size="10" font-weight="700" text-anchor="middle" fill="#ffffff">1</text>
+<circle cx="391.5" cy="232" r="8.5" fill="#e66100"/>
+<text x="391.5" y="235.6" font-size="10" font-weight="700" text-anchor="middle" fill="#ffffff">2</text>
+<circle cx="42" cy="291" r="8.5" fill="#e66100"/>
+<text x="42" y="294.6" font-size="10" font-weight="700" text-anchor="middle" fill="#ffffff">3</text>
+<circle cx="344" cy="337" r="8.5" fill="#e66100"/>
+<text x="344" y="340.6" font-size="10" font-weight="700" text-anchor="middle" fill="#ffffff">4</text>
+<circle cx="130" cy="469.5" r="8.5" fill="#e66100"/>
+<text x="130" y="473.1" font-size="10" font-weight="700" text-anchor="middle" fill="#ffffff">5</text>
+<circle cx="712" cy="189" r="8.5" fill="#e66100"/>
+<text x="712" y="192.6" font-size="10" font-weight="700" text-anchor="middle" fill="#ffffff">6</text>
+<circle cx="653" cy="305.5" r="8.5" fill="#e66100"/>
+<text x="653" y="309.1" font-size="10" font-weight="700" text-anchor="middle" fill="#ffffff">7</text>
+<circle cx="454" cy="108" r="8.5" fill="#e66100"/>
+<text x="454" y="111.6" font-size="10" font-weight="700" text-anchor="middle" fill="#ffffff">8</text>
+<circle cx="31" cy="556" r="7" fill="#e66100"/>
+<text x="31" y="559.2" font-size="9" font-weight="700" text-anchor="middle" fill="#ffffff">1</text>
+<text x="44" y="560" font-size="10.5" fill="#1f1f1f">Karta issue nahoře přes celou šířku (D11)</text>
+<circle cx="31" cy="573" r="7" fill="#e66100"/>
+<text x="31" y="576.2" font-size="9" font-weight="700" text-anchor="middle" fill="#ffffff">2</text>
+<text x="44" y="577" font-size="10.5" fill="#1f1f1f">Popis issue je první bublina, strana podle Mine</text>
+<circle cx="31" cy="590" r="7" fill="#e66100"/>
+<text x="31" y="593.2" font-size="9" font-weight="700" text-anchor="middle" fill="#ffffff">3</text>
+<text x="44" y="594" font-size="10.5" fill="#1f1f1f">Událost Jira uprostřed, bez bubliny a tečky (D1, D5)</text>
+<circle cx="31" cy="607" r="7" fill="#e66100"/>
+<text x="31" y="610.2" font-size="9" font-weight="700" text-anchor="middle" fill="#ffffff">4</text>
+<text x="44" y="611" font-size="10.5" fill="#1f1f1f">Komentář přes integraci (via) nikdy vpravo</text>
+<circle cx="403" cy="556" r="7" fill="#e66100"/>
+<text x="403" y="559.2" font-size="9" font-weight="700" text-anchor="middle" fill="#ffffff">5</text>
+<text x="416" y="560" font-size="10.5" fill="#1f1f1f">Koncept vpravo: Koncept, Interní, kdy uložen, text; bez</text>
+<text x="416" y="573" font-size="10.5" fill="#1f1f1f">tlačítek, dvojklik = Upravit (D14)</text>
+<circle cx="403" cy="586" r="7" fill="#e66100"/>
+<text x="403" y="589.2" font-size="9" font-weight="700" text-anchor="middle" fill="#ffffff">6</text>
+<text x="416" y="590" font-size="10.5" fill="#1f1f1f">Úzký sloupec: prázdná strana nejméně 24 px (D4)</text>
+<circle cx="403" cy="603" r="7" fill="#e66100"/>
+<text x="403" y="606.2" font-size="9" font-weight="700" text-anchor="middle" fill="#ffffff">7</text>
+<text x="416" y="607" font-size="10.5" fill="#1f1f1f">Krátká zpráva se smrští, krátká data (D4)</text>
+<circle cx="403" cy="620" r="7" fill="#e66100"/>
+<text x="403" y="623.2" font-size="9" font-weight="700" text-anchor="middle" fill="#ffffff">8</text>
+<text x="416" y="624" font-size="10.5" fill="#1f1f1f">V chatu jen přepínač, Sbalit vše skryté (D7, D8)</text>
+</svg>
