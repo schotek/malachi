@@ -1858,12 +1858,13 @@ nevolá, rolování na konec dokumentu je rovnocenné). Úpravy časové osy:
 (`conversation_chat_test.go`, `conversation_chat_layout_test.go`) a
 `MALACHI_GTK_SMOKE=1 go test ./internal/window -run
 '^TestConversationChatGTKSmoke$'` (skutečný Blueprint, obě rozložení,
-přepnutí). Ověřeno tady jen `gofmt`, `gopls check`, typová kontrola `go/types`
-s `FakeImportC` a revize kódu; nic nesestaveno ani nespuštěno. Čeká (G3 v
-kontejneru): `scripts/gtk-container/gtk.sh make build`, `gtk.sh test-ui`
-včetně smoke testu, `make po` (má změnit jen odkaz
-`conversation_view.ui:77` v `po/malachi.pot`) a `make lint`; pak B2 vlastníka
-v XQuartz. Windows (W1–W2, `docs/windows-port.md` §11.7 „The chat layout“,
+přepnutí). Ověřeno tady `gofmt`, `gopls check`, typová kontrola `go/types`
+s `FakeImportC`, revize kódu a ruční běh workflow `rpm.yml` na větvi
+(2026-10-18: GTK se ve Fedoře přeložilo pro x86_64 i aarch64 po opravě
+jednoho středníku v Blueprintu); testy `internal/window` včetně smoke testu
+nikde neběžely. Čeká (G3 v kontejneru): `gtk.sh test-ui`, `make po` (má
+změnit jen odkaz `conversation_view.ui:77` v `po/malachi.pot`) a `make
+lint`; pak B2 vlastníka v XQuartz. Windows (W1–W2, `docs/windows-port.md` §11.7 „The chat layout“,
 `docs/plans/chat-view.md` §8): Core `Malachi.Core/Model/` `ChatSide`,
 `ChatRowKind`, `ChatRow`, `Conversation.Chat.cs` (port `chat.go`, 4 msgid už
 nejsou v exclusions), Swift-first `Conversation.ChatBody.cs`, `BubbleBody`,
@@ -1882,8 +1883,14 @@ konce a místa čtení, `ChatResizeFor`, blízká těla přes `LiveCards`),
 skrytá časová osa ořezává i zásobník webových pohledů, přepínač s nádechem
 zvýraznění. Testy `ConversationChatTests`, `ConversationLayoutTests`,
 UI smoke `ConversationChatSmokeTests` (`MALACHI_DEVMAIL`). Napsáno bez
-`dotnet`, jen revize kódu; čeká `build.ps1 app`/`test`/`lint`, UI smoke s
-`MALACHI_DEVMAIL`, ruční průchod (viz sekce v `windows-port.md`) a B3.
+`dotnet`; ruční běh `windows.yml` na větvi (2026-10-18, po doplnění
+`using Malachi.Core.Presentation`) sestavil x64 i ARM64 a prošel testy Core
+(7 462), konvencí (27, včetně glyfů a pokrytí msgid) a Platform až na
+`RealDaemonTests.HandshakeCallAndNotification`, který na runneru padá i na
+`main` (prostředí), takže krok Lint neběžel; backend `go test` na Windows
+padá od sloučení kalendáře i na `main` (`calendar/tz` a `TestInvitationCard`,
+nesouvisí s chatem). Čeká `build.ps1 lint`, UI smoke s `MALACHI_DEVMAIL`,
+ruční průchod (viz sekce v `windows-port.md`) a B3.
 
 Archivace v Poště = Hotovo (2026-10-13, `feat/board`, necommitnuté; jen
 démon, klienti beze změny — všechny tři to dostanou přes
