@@ -4,7 +4,11 @@
 package tz
 
 import (
+	"archive/zip"
 	"errors"
+	"io"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -267,6 +271,59 @@ func TestSetPreferred(t *testing.T) {
 		}
 		if w, _ := WindowsName("Europe/Budapest"); w != "Central Europe Standard Time" {
 			t.Errorf("WindowsName changed: %q", w)
+		}
+	}
+}
+
+// TestWriteVTIMEZONESlimData: the zone files of Windows are Go's own (the
+// embedded time/tzdata, the zoneinfo.zip of GOROOT), which list no
+// transition past the last change of a zone's rules, so Time.ZoneBounds
+// answers there with the turn of each year, which is no observance (in a
+// leap year it is December 31 and stays there). The VTIMEZONE of such a
+// file is that of the zone file of a Linux or a Mac, which lists them.
+func TestWriteVTIMEZONESlimData(t *testing.T) {
+	zr, err := zip.OpenReader(filepath.Join(runtime.GOROOT(), "lib", "time", "zoneinfo.zip"))
+	if err != nil {
+		t.Skipf("no zoneinfo.zip in GOROOT: %v", err)
+	}
+	defer zr.Close()
+	for _, name := range []string{"Europe/Prague", "America/New_York", "Australia/Sydney", "Australia/Lord_Howe", "Asia/Tokyo", "Asia/Kolkata", "Europe/London"} {
+		f, err := zr.Open(name)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		data, err := io.ReadAll(f)
+		f.Close()
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		slim, err := time.LoadLocationFromTZData(name, data)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		for _, first := range []int{2026, 2027, 2028} {
+			from := time.Date(first, 5, 1, 9, 0, 0, 0, slim)
+			lines, err := WriteVTIMEZONE(slim, from, from.AddDate(MaxVTIMEZONEYears, 0, 0))
+			if err != nil {
+				t.Fatalf("%s %d: %v", name, first, err)
+			}
+			_, obs := parseVTIMEZONE(t, lines)
+			for i, o := range obs[1:] {
+				if o.from == o.to && o.name == obs[i].name {
+					t.Errorf("%s %d: observance %+v changes nothing", name, first, o)
+				}
+			}
+			real, err := time.LoadLocation(name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, err := WriteVTIMEZONE(real, time.Date(first, 5, 1, 9, 0, 0, 0, real), time.Date(first+MaxVTIMEZONEYears, 5, 1, 9, 0, 0, 0, real))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Join(lines, "\n") != strings.Join(want, "\n") {
+				t.Errorf("%s %d: the VTIMEZONE of the zoneinfo.zip differs from that of LoadLocation:\n%v\n%v", name, first, lines, want)
+			}
 		}
 	}
 }
