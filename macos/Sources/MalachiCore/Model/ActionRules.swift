@@ -62,6 +62,13 @@ public struct ActionFlags: Sendable, Equatable {
     /// (`Capabilities.supported`); with nothing selected, those of the
     /// listed folder's account. Empty for a mail account.
     public var unsupported: Set<MessageActionKind>
+    /// selection.Flags Crm and CrmSaved: Save to eWay-CRM can run (one
+    /// row: `CRM.canSave` with an eWay-CRM account available; several:
+    /// every row, at most `API.Limits.maxCrmMessages`), and the one row is
+    /// saved there (the saved-state items replace Save; never for
+    /// several). Filled by `ActionsController` from its `crm` state.
+    public var crm = false
+    public var crmSaved = false
 
     public init(
         count: Int = 0, open: Bool = false, on: Bool = false, outbox: Bool = false, flagged: Bool = false, reply: Bool = false, replyAll: Bool = false,

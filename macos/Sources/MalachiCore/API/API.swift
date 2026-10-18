@@ -604,7 +604,7 @@ public enum API {
         BoardArchive.self, BoardTrash.self, BoardUnflag.self, BoardDiscardDraft.self, BoardSetDraft.self, BoardQueue.self, BoardAnnotate.self,
         BoardCommit.self, BoardSetCommitment.self, BoardPreferencesGet.self, BoardSetPreferences.self,
         BoardRunStart.self, BoardRunEnd.self,
-    ] + calendarMethods
+    ] + calendarMethods + crmMethods
 
     /// api.AllMethods: every callable method name.
     public static let allMethods: [String] = methods.map { $0.name }

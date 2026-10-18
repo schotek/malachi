@@ -11,6 +11,8 @@ protocol ConversationCardHost: AnyObject {
     var cache: MessageCache { get }
     /// The Assistant, for "Ask the Assistant…" on the attachment chips.
     var assistant: AssistantController { get }
+    /// eWay-CRM, for the bar of a saved message (`CRMBarView`).
+    var crm: CRMState { get }
     /// The text-zoom setting, for a web view made now.
     var textZoom: Int { get }
     /// The plain-text body's font (text zoom, monospace).
@@ -128,6 +130,8 @@ final class ConversationCardView: NSView {
     private var chips: FlowView?
     private var hintLabel: NSTextField?
     private var bulkBar: BannerView?
+    /// The bar of a message saved in eWay-CRM, made when first needed.
+    private var crmBar: CRMBarView?
     private var banner: BannerView?
     private var remoteBar: RemoteBarView?
     private var picturesBar: RemoteBarView?
@@ -161,7 +165,7 @@ final class ConversationCardView: NSView {
 
     /// The places in `content`, under the header and the preview.
     private enum Slot: Int, CaseIterable {
-        case invitation, bulk, banner, remote, pictures, text, body, quoted
+        case invitation, bulk, crm, banner, remote, pictures, text, body, quoted
     }
 
     /// The hairline around the card. What the card holds keeps inside it:
@@ -649,6 +653,7 @@ final class ConversationCardView: NSView {
     func renderBars(_ lm: LoadedMessage?) {
         guard !folded else { return }
         renderBulk(lm)
+        renderCRM()
         guard isHTML, let lm else {
             remoteBar?.isHidden = true
             picturesBar?.isHidden = true
@@ -683,6 +688,26 @@ final class ConversationCardView: NSView {
             let bar = bulkBar ?? makeBulkBar()
             bar.showBulk(strip, busy: lm?.unsubscribing == true)
         }
+    }
+
+    /// The eWay-CRM bar of the card's message (`CRMState.record`), made
+    /// when first needed and not at all for a message saved nowhere.
+    func renderCRM() {
+        guard !folded, let crm = host?.crm else { return }
+        let record = crm.account == nil ? nil : crm.record(for: summary)
+        guard record != nil || crmBar != nil else { return }
+        changingHeight {
+            let bar = crmBar ?? makeCRMBar()
+            bar.show(record)
+        }
+    }
+
+    private func makeCRMBar() -> CRMBarView {
+        let b = CRMBarView()
+        b.openURL = { CRMBarView.open($0) }
+        crmBar = b
+        install(b, .crm)
+        return b
     }
 
     private func makeBulkBar() -> BannerView {

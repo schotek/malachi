@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-17 14:05+0000\n"
+"POT-Creation-Date: 2026-10-17 19:15+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -25,27 +25,31 @@ msgstr ""
 #: ui/internal/accountwizard/jira_flow.go:216
 #: ui/internal/accountwizard/wizard.go:249
 #: ui/internal/accountwizard/wizard.go:250
-#: ui/internal/integrations/integrations.go:208
-#: ui/internal/integrations/integrations.go:212
+#: ui/internal/integrations/integrations.go:223
+#: ui/internal/integrations/integrations.go:227
+#: ui/internal/integrations/integrations.go:236 ui/internal/crm/text.go:422
 msgid "Edit Account"
 msgstr ""
 
 #: ui/internal/accountwizard/jira_flow.go:243
-#: ui/internal/accountwizard/wizard.go:285 ui/data/ui/account_wizard.ui:291
-#: ui/data/ui/account_wizard.ui:343
+#: ui/internal/accountwizard/wizard.go:285 ui/internal/crm/text.go:423
+#: ui/data/ui/account_wizard.ui:291 ui/data/ui/account_wizard.ui:343
 msgid "Sign In"
 msgstr ""
 
-#: ui/internal/accountwizard/jira_flow.go:255 ui/data/ui/account_wizard.ui:567
+#: ui/internal/accountwizard/jira_flow.go:255 ui/internal/crm/text.go:434
+#: ui/data/ui/account_wizard.ui:567
 msgid "_Add Account"
 msgstr ""
 
 #: ui/internal/accountwizard/jira_flow.go:257
-#: ui/internal/accountwizard/wizard.go:252 ui/data/ui/jira_account.ui:31
+#: ui/internal/accountwizard/wizard.go:252 ui/internal/crm/text.go:129
+#: ui/internal/crm/text.go:435 ui/data/ui/jira_account.ui:31
 msgid "_Save"
 msgstr ""
 
-#: ui/internal/accountwizard/jira_flow.go:259 ui/data/ui/account_wizard.ui:116
+#: ui/internal/accountwizard/jira_flow.go:259 ui/internal/crm/text.go:433
+#: ui/data/ui/account_wizard.ui:116
 msgid "_Next"
 msgstr ""
 
@@ -158,7 +162,8 @@ msgid "The browser signed in to %s, not to this address"
 msgstr ""
 
 #. TRANSLATORS: progressive form for the RPC error text
-#: ui/internal/accountwizard/oauth.go:369
+#: ui/internal/accountwizard/oauth.go:369 ui/internal/crm/text.go:438
+#: ui/internal/crm/text.go:535
 msgid "Signing in"
 msgstr ""
 
@@ -177,7 +182,8 @@ msgstr ""
 msgid "No password is stored for this account. Enter it to continue."
 msgstr ""
 
-#: ui/internal/accountwizard/results.go:88 ui/internal/widget/rpc.go:103
+#: ui/internal/accountwizard/results.go:88 ui/internal/crm/text.go:556
+#: ui/internal/widget/rpc.go:103
 msgid "The server rejected the user name or password"
 msgstr ""
 
@@ -267,7 +273,7 @@ msgctxt "certificate"
 msgid "Self-signed"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:251
+#: ui/internal/accountwizard/wizard.go:251 ui/internal/crm/text.go:431
 msgid "New Password (leave empty to keep)"
 msgstr ""
 
@@ -279,7 +285,8 @@ msgstr ""
 msgid "_Test Connection"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:538
+#: ui/internal/accountwizard/wizard.go:538 ui/internal/crm/text.go:432
+#: ui/internal/crm/text.go:559
 msgid "Enter the password for this account"
 msgstr ""
 
@@ -338,12 +345,14 @@ msgstr ""
 
 #: ui/internal/accountwizard/wizard.go:773 ui/internal/jira/wizard.go:96
 #: ui/internal/jira/wizard.go:429 ui/internal/jira/settings.go:125
+#: ui/internal/crm/text.go:440 ui/internal/crm/text.go:539
 #: ui/internal/calendarctl/account.go:407
 msgid "Saving the account"
 msgstr ""
 
 #: ui/internal/accountwizard/wizard.go:775 ui/internal/jira/wizard.go:95
-#: ui/internal/jira/wizard.go:427
+#: ui/internal/jira/wizard.go:427 ui/internal/crm/text.go:439
+#: ui/internal/crm/text.go:537
 msgid "Adding the account"
 msgstr ""
 
@@ -487,7 +496,7 @@ msgid "The assistant stopped: %s"
 msgstr ""
 
 #. TRANSLATORS: The menu that hands the selected mail to Claude Desktop or Claude Code, and its settings group.
-#: ui/internal/assistant/assistant.go:470 ui/internal/contextmenu/text.go:80
+#: ui/internal/assistant/assistant.go:470 ui/internal/contextmenu/text.go:85
 msgid "Assistant"
 msgstr ""
 
@@ -1402,7 +1411,7 @@ msgid "Recently used"
 msgstr ""
 
 #. TRANSLATORS: In the menu of several selected messages: opens each in a window of its own; %d is their number.
-#: ui/internal/contextmenu/text.go:42
+#: ui/internal/contextmenu/text.go:47
 #, c-format
 msgid "Open %d Message in a New Window"
 msgid_plural "Open %d Messages in New Windows"
@@ -1410,148 +1419,148 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: In the menu of a message in the list: opens it in a window of its own.
-#: ui/internal/contextmenu/text.go:45
+#: ui/internal/contextmenu/text.go:50
 msgid "Open in New Window"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:47 ui/internal/conversation/drafts.go:108
+#: ui/internal/contextmenu/text.go:52 ui/internal/conversation/drafts.go:108
 #: ui/internal/calendar/detail.go:256 ui/data/ui/window.ui:542
 msgid "Edit"
 msgstr ""
 
 #. TRANSLATORS: the Reply action of an issue: writes a comment.
-#: ui/internal/contextmenu/text.go:50 ui/internal/jira/compose.go:162
+#: ui/internal/contextmenu/text.go:55 ui/internal/jira/compose.go:162
 msgid "Comment"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:52 ui/internal/jira/compose.go:164
+#: ui/internal/contextmenu/text.go:57 ui/internal/jira/compose.go:164
 #: ui/internal/board/text.go:374 ui/internal/window/conversation_card.go:293
 #: ui/data/ui/message_window.ui:38 ui/data/ui/window.ui:472
 msgid "Reply"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:54
+#: ui/internal/contextmenu/text.go:59
 #: ui/internal/window/conversation_card.go:294 ui/data/ui/message_window.ui:44
 #: ui/data/ui/window.ui:479
 msgid "Reply All"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:56
+#: ui/internal/contextmenu/text.go:61
 #: ui/internal/window/conversation_card.go:295 ui/data/ui/message_window.ui:50
 #: ui/data/ui/window.ui:486
 msgid "Forward"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:58 ui/data/ui/message_window.ui:456
+#: ui/internal/contextmenu/text.go:63 ui/data/ui/message_window.ui:456
 #: ui/data/ui/window.ui:1031
 msgid "Mark as _Read"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:60 ui/data/ui/message_window.ui:452
+#: ui/internal/contextmenu/text.go:65 ui/data/ui/message_window.ui:452
 #: ui/data/ui/window.ui:1027
 msgid "Mark as _Unread"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:63 ui/internal/board/text.go:351
+#: ui/internal/contextmenu/text.go:68 ui/internal/board/text.go:351
 #: ui/internal/window/actions.go:63
 msgid "Unstar"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:65 ui/internal/window/actions.go:66
+#: ui/internal/contextmenu/text.go:70 ui/internal/window/actions.go:66
 #: ui/data/ui/message_window.ui:68 ui/data/ui/window.ui:513
 msgid "Star"
 msgstr ""
 
 #. TRANSLATORS: menu of the status changes a Jira issue allows.
-#: ui/internal/contextmenu/text.go:67 ui/internal/jira/transitions.go:87
+#: ui/internal/contextmenu/text.go:72 ui/internal/jira/transitions.go:87
 #: ui/data/ui/message_window.ui:472 ui/data/ui/window.ui:1047
 msgid "Change Status"
 msgstr ""
 
 #. TRANSLATORS: After Answering, Move the Invitation Message: to the
 #. archive.
-#: ui/internal/contextmenu/text.go:69 ui/internal/board/text.go:795
+#: ui/internal/contextmenu/text.go:74 ui/internal/board/text.go:795
 #: ui/internal/calendar/preferences.go:318 ui/data/ui/message_window.ui:81
 #: ui/data/ui/window.ui:528
 msgid "Archive"
 msgstr ""
 
 #. TRANSLATORS: a menu item whose submenu lists the board's states.
-#: ui/internal/contextmenu/text.go:71 ui/internal/board/text.go:1036
+#: ui/internal/contextmenu/text.go:76 ui/internal/board/text.go:1036
 msgid "Move To"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:73 ui/data/ui/message_window.ui:446
+#: ui/internal/contextmenu/text.go:78 ui/data/ui/message_window.ui:446
 #: ui/data/ui/window.ui:1021
 msgid "Mark as Junk"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:76 ui/internal/window/outbox.go:240
+#: ui/internal/contextmenu/text.go:81 ui/internal/window/outbox.go:240
 msgid "Cancel Sending"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:78 ui/internal/window/outbox.go:242
+#: ui/internal/contextmenu/text.go:83 ui/internal/window/outbox.go:242
 #: ui/data/ui/message_window.ui:74 ui/data/ui/window.ui:520
 msgid "Move to Trash"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:82 ui/internal/window/status.go:269
+#: ui/internal/contextmenu/text.go:95 ui/internal/window/status.go:269
 #: ui/data/ui/preferences.ui:217 ui/data/ui/window.ui:245
 msgid "Check for New Mail"
 msgstr ""
 
 #. TRANSLATORS: In the menu of a folder in the sidebar.
-#: ui/internal/contextmenu/text.go:85
+#: ui/internal/contextmenu/text.go:98
 msgid "Mark All as Read"
 msgstr ""
 
 #. TRANSLATORS: In the menu of the Junk folder: deletes its messages for good.
-#: ui/internal/contextmenu/text.go:89
+#: ui/internal/contextmenu/text.go:102
 msgid "Empty Junk"
 msgstr ""
 
 #. TRANSLATORS: In the menu of the Trash folder: deletes its messages for good.
-#: ui/internal/contextmenu/text.go:92
+#: ui/internal/contextmenu/text.go:105
 msgid "Empty Trash"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:95 ui/internal/window/favourites.go:113
+#: ui/internal/contextmenu/text.go:108 ui/internal/window/favourites.go:113
 msgid "Remove from Favourites"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:97 ui/internal/window/favourites.go:111
+#: ui/internal/contextmenu/text.go:110 ui/internal/window/favourites.go:111
 msgid "Add to Favourites"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:100 ui/internal/widget/message_row.go:383
+#: ui/internal/contextmenu/text.go:113 ui/internal/widget/message_row.go:383
 #: ui/internal/window/board_conversation.go:479
 #: ui/internal/window/conversation_card.go:473 ui/internal/window/folders.go:65
 msgid "Expand"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:102 ui/internal/widget/message_row.go:379
+#: ui/internal/contextmenu/text.go:115 ui/internal/widget/message_row.go:379
 #: ui/internal/window/board_conversation.go:482
 #: ui/internal/window/conversation_card.go:471 ui/internal/window/folders.go:62
 msgid "Collapse"
 msgstr ""
 
 #. TRANSLATORS: The heading of the question before the Trash is emptied.
-#: ui/internal/contextmenu/text.go:119
+#: ui/internal/contextmenu/text.go:132
 msgid "Empty the Trash?"
 msgstr ""
 
 #. TRANSLATORS: The button that empties the Trash or the Junk folder.
-#: ui/internal/contextmenu/text.go:121
+#: ui/internal/contextmenu/text.go:134
 msgid "_Empty"
 msgstr ""
 
 #. TRANSLATORS: The heading of the question before the Junk folder is emptied.
-#: ui/internal/contextmenu/text.go:125
+#: ui/internal/contextmenu/text.go:138
 msgid "Empty the Junk Folder?"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of messages the folder shows.
-#: ui/internal/contextmenu/text.go:128
+#: ui/internal/contextmenu/text.go:141
 #, c-format
 msgid ""
 "%d message will be deleted for good. Older messages that are only on the "
@@ -1563,12 +1572,12 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: What failed when a message could not be moved to another folder.
-#: ui/internal/contextmenu/text.go:137
+#: ui/internal/contextmenu/text.go:150
 msgid "Moving the message"
 msgstr ""
 
 #. TRANSLATORS: What failed when messages could not be moved to another folder; %d is their number.
-#: ui/internal/contextmenu/text.go:140
+#: ui/internal/contextmenu/text.go:153
 #, c-format
 msgid "Moving %d message"
 msgid_plural "Moving %d messages"
@@ -1576,17 +1585,17 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: What failed when a folder could not be marked read.
-#: ui/internal/contextmenu/text.go:146
+#: ui/internal/contextmenu/text.go:159
 msgid "Marking the folder as read"
 msgstr ""
 
 #. TRANSLATORS: What failed when the Junk folder could not be emptied.
-#: ui/internal/contextmenu/text.go:153
+#: ui/internal/contextmenu/text.go:166
 msgid "Emptying the Junk folder"
 msgstr ""
 
 #. TRANSLATORS: What failed when the Trash could not be emptied.
-#: ui/internal/contextmenu/text.go:156
+#: ui/internal/contextmenu/text.go:169
 msgid "Emptying the Trash"
 msgstr ""
 
@@ -1839,6 +1848,7 @@ msgid "Enter the personal access token for this account"
 msgstr ""
 
 #: ui/internal/jira/wizard.go:161 ui/internal/jira/wizard.go:414
+#: ui/internal/crm/text.go:457 ui/internal/crm/text.go:564
 msgid "This is not a web address"
 msgstr ""
 
@@ -1905,8 +1915,8 @@ msgstr ""
 msgid "Jira Account"
 msgstr ""
 
-#: ui/internal/jira/settings.go:85 ui/internal/calendar/caldav.go:363
-#: ui/data/ui/account_wizard.ui:145
+#: ui/internal/jira/settings.go:85 ui/internal/crm/text.go:428
+#: ui/internal/calendar/caldav.go:363 ui/data/ui/account_wizard.ui:145
 msgid "Account Name"
 msgstr ""
 
@@ -2127,29 +2137,35 @@ msgstr ""
 
 #. TRANSLATORS: Preferences → Integrations: what a Jira
 #. account brings ("issues" as in Jira's own word).
-#: ui/internal/integrations/integrations.go:140
+#: ui/internal/integrations/integrations.go:143
 msgid "Issues read as mail, comments and status changes"
 msgstr ""
 
 #. TRANSLATORS: Preferences → Integrations: the name of the
 #. service in the list of services that can be added.
-#: ui/internal/integrations/integrations.go:147
+#: ui/internal/integrations/integrations.go:150
 msgid "CalDAV Calendar"
 msgstr ""
 
-#: ui/internal/integrations/integrations.go:148
+#: ui/internal/integrations/integrations.go:151
 msgid "Nextcloud, iCloud, Fastmail and other CalDAV servers"
 msgstr ""
 
+#. TRANSLATORS: Preferences → Integrations: what an eWay-CRM
+#. account brings ("deals" as eWay-CRM's sales opportunities).
+#: ui/internal/integrations/integrations.go:158
+msgid "Save messages to your CRM with their contacts, companies and deals"
+msgstr ""
+
 #. TRANSLATORS: %s is the account's e-mail address.
-#: ui/internal/integrations/integrations.go:210
+#: ui/internal/integrations/integrations.go:225
 #, c-format
 msgid ""
 "%s will be removed from Malachi Mail. Mail on the server is not affected."
 msgstr ""
 
 #. TRANSLATORS: %s is the account's name (or its site's host).
-#: ui/internal/integrations/integrations.go:214
+#: ui/internal/integrations/integrations.go:229
 #, c-format
 msgid ""
 "%s will be removed from Malachi Mail. Issues on the Jira site are not "
@@ -2157,55 +2173,324 @@ msgid ""
 msgstr ""
 
 #. TRANSLATORS: %s is the calendar account's name.
-#: ui/internal/integrations/integrations.go:219
+#: ui/internal/integrations/integrations.go:234
 #, c-format
 msgid ""
 "%s will be removed from Malachi Mail. Calendars on the server are not "
 "affected."
 msgstr ""
 
+#. TRANSLATORS: %s is the eWay-CRM account's name.
+#: ui/internal/integrations/integrations.go:238
+#, c-format
+msgid ""
+"%s will be removed from Malachi Mail. Messages saved in eWay-CRM stay there."
+msgstr ""
+
 #. TRANSLATORS: %s is the account's name.
-#: ui/internal/integrations/integrations.go:223
+#: ui/internal/integrations/integrations.go:242
 #, c-format
 msgid "%s will be removed from Malachi Mail."
 msgstr ""
 
 #. TRANSLATORS: a page of the preferences: services beside the
-#. mail, such as Jira and CalDAV calendars.
-#: ui/internal/integrations/integrations.go:276
+#. mail, such as Jira, CalDAV calendars and eWay-CRM.
+#: ui/internal/integrations/integrations.go:298
 msgid "Integrations"
 msgstr ""
 
-#: ui/internal/integrations/integrations.go:277
-msgid "Services beside your mail: issue trackers and calendars"
+#: ui/internal/integrations/integrations.go:299
+msgid "Services beside your mail: issue trackers, calendars and CRM"
 msgstr ""
 
-#: ui/internal/integrations/integrations.go:278
+#: ui/internal/integrations/integrations.go:300
 msgid "Connected Services"
 msgstr ""
 
-#: ui/internal/integrations/integrations.go:279
+#: ui/internal/integrations/integrations.go:301
 msgid "Available Services"
 msgstr ""
 
-#: ui/internal/integrations/integrations.go:280
+#: ui/internal/integrations/integrations.go:302
 msgid "No integrations yet"
 msgstr ""
 
-#: ui/internal/integrations/integrations.go:281
+#: ui/internal/integrations/integrations.go:303
 msgid "Add one from the list below"
 msgstr ""
 
 #. TRANSLATORS: the button of a service in Preferences →
 #. Integrations → Available Services.
-#: ui/internal/integrations/integrations.go:284
+#: ui/internal/integrations/integrations.go:306
 msgid "Add…"
 msgstr ""
 
 #. TRANSLATORS: tooltip of a CalDAV account's Edit button in
 #. Preferences → Integrations; it opens the Calendar page.
-#: ui/internal/integrations/integrations.go:293
+#: ui/internal/integrations/integrations.go:315
 msgid "Calendar Settings"
+msgstr ""
+
+#. TRANSLATORS: the button of a message that saves it to eWay-CRM (a CRM; a brand name).
+#: ui/internal/crm/text.go:37 ui/internal/crm/text.go:40
+#: ui/internal/crm/text.go:117
+msgid "Save to eWay-CRM"
+msgstr ""
+
+#. TRANSLATORS: tooltip of the button while the message is being saved to eWay-CRM.
+#: ui/internal/crm/text.go:42
+msgid "Saving to eWay-CRM…"
+msgstr ""
+
+#. TRANSLATORS: the button of a message saved in eWay-CRM; it opens a menu.
+#: ui/internal/crm/text.go:45
+msgid "In eWay-CRM"
+msgstr ""
+
+#. TRANSLATORS: the message is saved in eWay-CRM (pill tooltip, bar title).
+#: ui/internal/crm/text.go:55
+msgid "Saved in eWay-CRM"
+msgstr ""
+
+#. TRANSLATORS: opens the saved message (or an item) in eWay-CRM in the browser.
+#: ui/internal/crm/text.go:63
+msgid "Open in eWay-CRM"
+msgstr ""
+
+#. TRANSLATORS: menu item: change which contacts, companies, deals and projects the saved message is linked to.
+#: ui/internal/crm/text.go:66
+msgid "Edit Links…"
+msgstr ""
+
+#: ui/internal/crm/text.go:68
+msgid "Remove from eWay-CRM"
+msgstr ""
+
+#. TRANSLATORS: context menu of several selected messages; %d is their number.
+#: ui/internal/crm/text.go:87
+#, c-format
+msgid "Save %d Message to eWay-CRM…"
+msgid_plural "Save %d Messages to eWay-CRM…"
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: context menu of a message: opens the dialog that saves it to eWay-CRM.
+#: ui/internal/crm/text.go:90
+msgid "Save to eWay-CRM…"
+msgstr ""
+
+#. TRANSLATORS: placeholder of the search field of the Save to eWay-CRM dialog.
+#: ui/internal/crm/text.go:119
+msgid "Search eWay-CRM"
+msgstr ""
+
+#. TRANSLATORS: marks the one deal or project the message belongs under in eWay-CRM.
+#: ui/internal/crm/text.go:121
+msgid "Superior Item"
+msgstr ""
+
+#. TRANSLATORS: check box: the saved message is visible to its owner only in eWay-CRM.
+#: ui/internal/crm/text.go:123
+msgctxt "crm"
+msgid "Private"
+msgstr ""
+
+#: ui/internal/crm/text.go:124 ui/internal/crm/text.go:204
+msgid "Only you will see this message in eWay-CRM."
+msgstr ""
+
+#: ui/internal/crm/text.go:125
+msgid "Nothing in eWay-CRM matches these addresses."
+msgstr ""
+
+#: ui/internal/crm/text.go:126
+msgid "eWay-CRM did not answer in time; some suggestions may be missing."
+msgstr ""
+
+#. TRANSLATORS: under the groups of the Save to eWay-CRM dialog when no deal or project is listed.
+#: ui/internal/crm/text.go:128
+msgid "Deals and projects are added by searching above"
+msgstr ""
+
+#. TRANSLATORS: title of the dialog that changes a saved message's links in eWay-CRM.
+#: ui/internal/crm/text.go:133
+msgid "Edit Links"
+msgstr ""
+
+#. TRANSLATORS: eWay-CRM contacts (people).
+#: ui/internal/crm/text.go:143
+msgctxt "crm"
+msgid "Contacts"
+msgstr ""
+
+#. TRANSLATORS: eWay-CRM companies.
+#: ui/internal/crm/text.go:146
+msgctxt "crm"
+msgid "Companies"
+msgstr ""
+
+#. TRANSLATORS: eWay-CRM deals (sales opportunities, "Leads" in its API).
+#: ui/internal/crm/text.go:149
+msgctxt "crm"
+msgid "Deals"
+msgstr ""
+
+#. TRANSLATORS: eWay-CRM projects.
+#: ui/internal/crm/text.go:152
+msgctxt "crm"
+msgid "Projects"
+msgstr ""
+
+#. TRANSLATORS: toast after one message was saved to eWay-CRM.
+#: ui/internal/crm/text.go:254
+msgid "Saved to eWay-CRM"
+msgstr ""
+
+#. TRANSLATORS: toast after several messages were saved to eWay-CRM; %d is their number.
+#: ui/internal/crm/text.go:257
+#, c-format
+msgid "%d message saved to eWay-CRM"
+msgid_plural "%d messages saved to eWay-CRM"
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: toast after saving several messages to eWay-CRM, some of which failed; %d is the number that failed.
+#: ui/internal/crm/text.go:265
+#, c-format
+msgid "%d message was not saved to eWay-CRM."
+msgid_plural "%d messages were not saved to eWay-CRM."
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: toast after a message was removed from eWay-CRM.
+#: ui/internal/crm/text.go:271
+msgid "Removed from eWay-CRM"
+msgstr ""
+
+#: ui/internal/crm/text.go:289 ui/internal/board/view.go:849
+#: ui/internal/widget/message_row.go:359 ui/internal/window/message_view.go:598
+#: ui/internal/window/notify.go:129
+msgid "(No subject)"
+msgstr ""
+
+#. TRANSLATORS: heading of the question before a saved message is deleted from eWay-CRM.
+#: ui/internal/crm/text.go:293
+msgid "Remove from eWay-CRM?"
+msgstr ""
+
+#. TRANSLATORS: %s is the message's subject.
+#: ui/internal/crm/text.go:295
+#, c-format
+msgid ""
+"“%s” will be deleted from eWay-CRM with its links, for everyone who uses it. "
+"The message in Malachi Mail stays."
+msgstr ""
+
+#: ui/internal/crm/text.go:296 ui/internal/window/accounts_page.go:341
+#: ui/internal/window/preferences_calendar.go:460
+msgid "_Remove"
+msgstr ""
+
+#. TRANSLATORS: eWay-CRM refused the message as a duplicate of another saved item.
+#: ui/internal/crm/text.go:315
+msgid "eWay-CRM already has this message."
+msgstr ""
+
+#. TRANSLATORS: a contact, company, deal or project (or the saved message) was deleted in eWay-CRM meanwhile.
+#: ui/internal/crm/text.go:318
+msgid "eWay-CRM no longer has this item."
+msgstr ""
+
+#: ui/internal/crm/text.go:326
+msgid "This eWay-CRM does not allow access through its API."
+msgstr ""
+
+#: ui/internal/crm/text.go:328
+msgid ""
+"This eWay-CRM signs in with a Microsoft account, which Malachi Mail cannot "
+"do yet."
+msgstr ""
+
+#. TRANSLATORS: progressive form for an error text ("Searching eWay-CRM failed: …").
+#: ui/internal/crm/text.go:351
+msgid "Searching eWay-CRM"
+msgstr ""
+
+#. TRANSLATORS: progressive form for an error text ("Removing from eWay-CRM failed: …").
+#: ui/internal/crm/text.go:354
+msgid "Removing from eWay-CRM"
+msgstr ""
+
+#. TRANSLATORS: progressive form for an error text ("Downloading the message failed: …").
+#: ui/internal/crm/text.go:357
+msgid "Downloading the message"
+msgstr ""
+
+#. TRANSLATORS: progressive form for an error text ("Saving to eWay-CRM failed: …").
+#: ui/internal/crm/text.go:360
+msgid "Saving to eWay-CRM"
+msgstr ""
+
+#. TRANSLATORS: progress, and progressive form for an error text ("Contacting eWay-CRM failed: …").
+#: ui/internal/crm/text.go:366
+msgid "Contacting eWay-CRM"
+msgstr ""
+
+#. TRANSLATORS: status line: a message is downloaded before it is saved to eWay-CRM.
+#: ui/internal/crm/text.go:374
+msgid "Downloading the message first…"
+msgstr ""
+
+#. TRANSLATORS: status line: messages are downloaded before they are saved to eWay-CRM; %d is their number.
+#: ui/internal/crm/text.go:377
+#, c-format
+msgid "Downloading %d message first…"
+msgid_plural "Downloading %d messages first…"
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: title of the assistant that adds an eWay-CRM account.
+#: ui/internal/crm/text.go:421
+msgid "Add eWay-CRM Account"
+msgstr ""
+
+#. TRANSLATORS: the address of the eWay-CRM web service, the one its Outlook add-in uses.
+#: ui/internal/crm/text.go:425
+msgid "Web Service Address"
+msgstr ""
+
+#. TRANSLATORS: under the address field of the eWay-CRM assistant; where the address is found.
+#: ui/internal/crm/text.go:427
+msgid ""
+"The address of your eWay-CRM, such as https://hosting.eway-crm.com/company. "
+"In the web application, point at your company's name in your account panel "
+"to see it; in Outlook it is under eWay-CRM → Settings → Connection."
+msgstr ""
+
+#: ui/internal/crm/text.go:429 ui/data/ui/account_wizard.ui:187
+#: ui/data/ui/account_wizard.ui:244
+msgid "User Name"
+msgstr ""
+
+#: ui/internal/crm/text.go:430 ui/internal/calendar/caldav.go:361
+#: ui/data/ui/account_wizard.ui:94
+msgid "Password"
+msgstr ""
+
+#. TRANSLATORS: check box of the eWay-CRM account: once a message is saved, the later messages of its conversation are saved too.
+#: ui/internal/crm/text.go:442
+msgid "Also save later messages of saved conversations"
+msgstr ""
+
+#. TRANSLATORS: the line under the check box "Also save later messages of saved conversations".
+#: ui/internal/crm/text.go:444
+msgid ""
+"Replies and new messages in a conversation you saved are saved to eWay-CRM "
+"with the same links."
+msgstr ""
+
+#: ui/internal/crm/text.go:483
+msgid "Malachi Mail connects to eWay-CRM over https only."
 msgstr ""
 
 #. TRANSLATORS: at the top of a conversation in the reading pane; only its newest messages are shown.
@@ -3521,11 +3806,6 @@ msgstr ""
 
 #: ui/internal/board/reply.go:158
 msgid "_Quit Anyway"
-msgstr ""
-
-#: ui/internal/board/view.go:849 ui/internal/widget/message_row.go:359
-#: ui/internal/window/message_view.go:598 ui/internal/window/notify.go:129
-msgid "(No subject)"
 msgstr ""
 
 #. TRANSLATORS: a reminder preset's menu item: its name and when it
@@ -5137,10 +5417,6 @@ msgstr ""
 msgid "Username"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:361 ui/data/ui/account_wizard.ui:94
-msgid "Password"
-msgstr ""
-
 #: ui/internal/calendar/caldav.go:382
 msgid ""
 "The password goes to the system keyring. Malachi Mail never shows it again."
@@ -5560,65 +5836,60 @@ msgid "Resuming the account"
 msgstr ""
 
 #. TRANSLATORS: %s is the edited account's e-mail address.
-#: ui/internal/window/accounts_page.go:327
+#: ui/internal/window/accounts_page.go:331
 #: ui/internal/window/jira_editors.go:70
 #, c-format
 msgid "Saved %s"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:335
+#: ui/internal/window/accounts_page.go:339
 #: ui/internal/window/preferences_calendar.go:457
 msgid "Also delete _drafts and downloaded data"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:337
+#: ui/internal/window/accounts_page.go:341
 #: ui/internal/window/preferences_calendar.go:460
 msgid "Remove this account?"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:337
-#: ui/internal/window/preferences_calendar.go:460
-msgid "_Remove"
-msgstr ""
-
-#: ui/internal/window/accounts_page.go:353
+#: ui/internal/window/accounts_page.go:357
 #: ui/internal/window/preferences_calendar.go:473
 msgid "Removing the account"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:425 ui/internal/window/status.go:77
+#: ui/internal/window/accounts_page.go:429 ui/internal/window/status.go:77
 #: ui/internal/window/sync.go:214
 msgid "Paused"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:427 ui/internal/window/status.go:113
+#: ui/internal/window/accounts_page.go:431 ui/internal/window/status.go:113
 msgid "Syncing…"
 msgstr ""
 
 #. TRANSLATORS: account status in Settings → Accounts; %s says why.
 #. TRANSLATORS: status line of an account that cannot reach its
 #. server and keeps trying; %s is an account name.
-#: ui/internal/window/accounts_page.go:431 ui/internal/window/sync.go:248
+#: ui/internal/window/accounts_page.go:435 ui/internal/window/sync.go:248
 #, c-format
 msgid "Offline: %s"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:433
+#: ui/internal/window/accounts_page.go:437
 msgid "Offline"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:435 ui/internal/window/status.go:121
+#: ui/internal/window/accounts_page.go:439 ui/internal/window/status.go:121
 #: ui/internal/window/sync.go:229
 msgid "Sign-in required"
 msgstr ""
 
 #. TRANSLATORS: account status in Settings → Accounts; %s says why.
-#: ui/internal/window/accounts_page.go:439
+#: ui/internal/window/accounts_page.go:443
 #, c-format
 msgid "Error: %s"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:441
+#: ui/internal/window/accounts_page.go:445
 msgid "Error"
 msgstr ""
 
@@ -6648,10 +6919,6 @@ msgstr ""
 
 #: ui/data/ui/account_wizard.ui:179 ui/data/ui/account_wizard.ui:236
 msgid "None"
-msgstr ""
-
-#: ui/data/ui/account_wizard.ui:187 ui/data/ui/account_wizard.ui:244
-msgid "User Name"
 msgstr ""
 
 #: ui/data/ui/account_wizard.ui:192 ui/data/ui/account_wizard.ui:249

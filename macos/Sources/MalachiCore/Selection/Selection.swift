@@ -24,6 +24,9 @@ public enum Selection {
     ///   star only when every row allows them;
     /// - Forward forwards them all in one message, up to `maxForward`;
     ///   Open opens up to `maxOpen` windows;
+    /// - Save to eWay-CRM when every row can be saved, up to
+    ///   `API.Limits.maxCrmMessages` rows, as one save (never the
+    ///   saved-state items);
     /// - Reply, Reply All, Load Images and Trust Sender are for one
     ///   message, and off;
     /// - in the outbox Trash cancels the sending of them all, and nothing
@@ -47,6 +50,7 @@ public enum Selection {
             count: n, open: n <= maxOpen, on: true, outbox: true, flagged: true, forward: n <= maxForward,
             star: true, trash: true, move: true, toggleFlag: true, comment: rows[0].comment,
             unsupported: rows[0].unsupported)
+        out.crm = n <= API.Limits.maxCrmMessages
         for r in rows {
             out.outbox = out.outbox && r.outbox
             out.flagged = out.flagged && r.flagged
@@ -55,6 +59,7 @@ public enum Selection {
             out.toggleFlag = out.toggleFlag && r.toggleFlag
             out.trash = out.trash && r.trash
             out.move = out.move && r.move
+            out.crm = out.crm && r.crm
             out.archive = out.archive || r.archive
             out.junk = out.junk || r.junk
             out.markRead = out.markRead || r.markRead
@@ -69,6 +74,7 @@ public enum Selection {
             out.junk = false
             out.markRead = false
             out.markUnread = false
+            out.crm = false
         }
         return out
     }

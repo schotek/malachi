@@ -228,11 +228,13 @@ can read the key file.
 | 1106 | caseNotFound | no board case with that id (it left the board, its account is gone), or for `board.setCommitment` no such commitment (§4.13) |
 | 1107 | calendarNotFound | no calendar with that id (removed, its account gone or its sync switched off) |
 | 1108 | eventNotFound | no stored event with that id, or `recurrenceId` names no occurrence of it |
+| 1109 | crmItemNotFound | a CRM item named in `crm.save` (`link`, `superior`) is not an item of that CRM account, or for `crm.remove` the message is not saved there (§4.17) |
 | 1200 | authRequired | user interaction needed; a `notify.authRequired` was/will be sent |
 | 1201 | authFailed | server rejected credentials |
 | 1202 | keyringError | secret service unavailable |
 | 1203 | oauthClientMissing | the backend's own sign-in needs an OAuth client id for the provider and none is configured (§4.1) |
 | 1204 | calendarConsentRequired | the account's sign-in does not allow calendar access (Microsoft scope missing, consent withdrawn, GOA calendar disabled); `data` = `{ "accountId", "signIn": bool }` — `signIn` true when `account.oauthStart` with `calendar: true` can fix it (source `daemon`), false for GOA (the desktop's Online Accounts settings) |
+| 1205 | crmSignInUnsupported | the CRM instance cannot be signed in to by this version: `data` = `{ "reason": "microsoft" \| "plan" }` — `microsoft`: it signs in through Microsoft Entra; `plan`: its plan has no API access (§4.17) |
 | 1300 | offline | daemon is in offline mode |
 | 1301 | networkError | connection failed |
 | 1302 | serverError | IMAP/SMTP server returned an error |
@@ -240,13 +242,14 @@ can read the key file.
 | 1304 | serverTimeout | |
 | 1305 | messageGone | the mail server no longer has the message (another client deleted or moved it); the next sync removes the local copy |
 | 1306 | eventGone | the server no longer has the event (deleted or moved elsewhere); the next pass removes the local copy |
+| 1307 | crmDuplicate | the CRM refused the message as a duplicate of an item the daemon cannot find (one saved privately by someone else, or without a Message-ID; §4.17) |
 | 1400 | storageError | SQLite failure |
 | 1401 | migrationFailed | store schema could not be upgraded |
 | 1500 | malformedMessage | MIME unparsable even leniently |
 | 1501 | sanitizeFailed | sanitiser refused the body; **body is withheld**, never returned raw |
 | 1502 | attachmentTooBig | over a documented limit; `data` = `{ "limit": bytes, "size": bytes }` |
 | 1503 | partNotFound | `message.part` named a part the message does not have, or its content is no longer stored |
-| 1504 | partNotDownloaded | the part's data is not stored on this device (`Attachment.remote`); `message.download` fetches it |
+| 1504 | partNotDownloaded | the part's data is not stored on this device (`Attachment.remote`); `message.download` fetches it. From `crm.save`: messages not whole on this device, `data` = `{ "messageIds": ["m_1"] }` (§4.17) |
 | 1505 | unsubscribeFailed | `message.unsubscribe` reached the sender's server, which refused the one-click request (any answer but 2xx, a redirect included), or the daemon refused to connect to the address of the URL (not a public one: loopback, private, link-local, a single-label or local-network name); `message` carries the reason and is not for display |
 | 1506 | quoteNotFound | `board.annotate` or `board.commit` quoted text the daemon did not find verbatim where it must be; `data` = `{ "field": "due" \| "commitment" }` (§4.13) |
 | 1507 | malformedCalendar | an iCalendar object or a server's calendar answer could not be read even leniently; the data is withheld |
@@ -255,6 +258,9 @@ can read the key file.
 `offline`, `networkError`, `serverError`, `serverTimeout`, `tlsError` (with
 `TLSErrorData` for CalDAV endpoints too), `authRequired`, `authFailed` and
 `keyringError` keep their meanings for the calendar methods (§4.14–§4.16).
+They keep them for the CRM methods (§4.17) too, where `serverError` is
+also any answer of the CRM other than success (only its return code is
+in `message`, never the CRM's own text).
 
 `tlsError` from an IMAP or SMTP endpoint (in `account.test` results and in a
 `SyncState`) carries:
@@ -316,9 +322,17 @@ Time      RFC 3339 string, UTC
   "outbox": OutboxInfo (opt),
   "issue": MessageIssue (opt),
   "bulk": BulkInfo (opt),
-  "invitation": InvitationSummary (opt)
+  "invitation": InvitationSummary (opt),
+  "crmSaved": true (opt)
 }
 ```
+
+`crmSaved` is present (true) when the daemon's record says the message is
+saved in an enabled CRM account (§4.17): any copy with the same
+Message-ID (Inbox and Archive alike), or the message itself when it has
+none. It is a display cache; the CRM is the truth, and `crm.lookup`
+asks it. Listings, `thread.get` and `search.query` carry it; a change
+arrives as `notify.messagesChanged` (§5).
 
 `invitation` is present only for a message with a calendar part
 (`text/calendar` or `application/ics`) the daemon read: the summary a
@@ -430,7 +444,13 @@ BulkInfo { "kind": "newsletter|list|automated",
 `MessageSummary` plus `cc`, `bcc`, `replyTo`, `rfcMessageId`, `inReplyTo`,
 `references`, `attachments: [Attachment]`, `headers`, a curated
 map of a few interesting headers (`List-Unsubscribe`, `Auto-Submitted`, …),
-`unsubscribe` (below) and `invitation`. The raw header block is never returned.
+`unsubscribe` (below), `invitation` and `crm`. The raw header block is never returned.
+
+`crm` (`message.get` only) is the message's `CrmRecord` (§4.17) in each
+enabled CRM account where the daemon's record says it is saved; absent
+when it is saved nowhere. A record older than a day is checked against
+the CRM in the background, and `notify.messagesChanged` follows when the
+CRM no longer has it.
 
 `invitation` of `message.get` and `message.download` is the whole
 `InvitationCard` (§4.16), which takes the place of the summary under the
@@ -615,12 +635,13 @@ Account { "id": "acc_1", "config": AccountConfig, "enabled": true, "state": Sync
           "capabilities": ["compose", "reply", "replyAll", "forward", "move", "delete"] }
 AccountConfig {
   "name": "Work", "email": "me@example.org", "displayName": "Me" (opt),
-  "kind": "imap|graph|jira|caldav" (opt, default imap),
+  "kind": "imap|graph|jira|caldav|eway" (opt, default imap),
   "imap": ServerConfig (imap only), "smtp": ServerConfig (imap only),
   "oauth2": OAuth2Config (opt; imap, or graph with source daemon),
   "graph": GraphConfig (graph only),
   "jira": JiraConfig (jira only),
   "caldav": CalDAVConfig (caldav only),
+  "eway": EwayConfig (eway only),
   "calendar": CalendarConfig (opt; graph and caldav),
   "syncIntervalSeconds": 300 (opt)
 }
@@ -653,6 +674,12 @@ CalDAVConfig {
   "certificateSha256": "64 hex digits" (opt),                // the pin, as ServerConfig
   "mailAccountId": "acc_2" (opt),     // the mail account invitations and replies leave from (client scheduling)
   "scheduling": "auto|server|client" (opt, default auto)
+}
+EwayConfig {
+  "serviceUrl": "https://hosting.eway-crm.com/company",      // normalised (account.detectEway)
+  "username": "jan",
+  "userGuid": "GUID" (opt),                                  // set by the daemon at account.add; clients keep it
+  "followThreads": bool                                      // save later messages of saved conversations (§4.17)
 }
 CalendarConfig {
   "sync": bool,                       // graph: synchronise the calendars (default false); caldav: always true
@@ -793,6 +820,44 @@ keyring keeps it). Rules, checked by `account.add`, `account.update` and
   the calendar scopes gets calendar state `consentRequired` (no error
   from `account.update`).
 
+`eway` is a CRM account on an eWay-CRM instance: it has no mail, like a
+`caldav` account — `folder.list` answers `{ "folders": [] }`, every
+message method `invalidArgument`, and **clients never show it in Mail**;
+its only capability is `crm`, and messages of mail accounts are saved to
+it with the methods of §4.17. It synchronises nothing; its `SyncState`
+is the last sign-in's outcome (`idle`; `authRequired` with the error
+after a refused password, until the account is edited; `offline` after a
+network failure). The password is `credentials.password` (the keyring
+keeps it; the daemon sends only its MD5 hex, to `LogIn` of the account's
+own `serviceUrl`). Rules, checked by `account.add`, `account.update` and
+`account.test`:
+
+- `kind: eway` has `eway` and no `imap`, `smtp`, `oauth2`, `graph`,
+  `jira`, `caldav` or `calendar`; `credentials.password` is required on
+  add, and `account.add` signs in once with it (a refused password is
+  `authFailed`, an instance signing in through Microsoft
+  `crmSignInUnsupported` before the password is sent) and sets
+  `userGuid`. `email` may be left empty on add: it becomes the eWay-CRM
+  user's address, else `username` when it is an address, else it stays
+  empty (an eway account is the only kind without an address; a given
+  one must be valid); `name` is required (a client offers the last path
+  segment of `serviceUrl`).
+- `serviceUrl`: `https` only (`http` is invalidArgument, whose message
+  says so), no user info; query and fragment dropped; a trailing
+  `/API.svc` (with anything after it) or `/InsecureAPI.svc` cut off; host
+  lower case; no trailing slash; ≤ 2048 bytes. The account's realm is the
+  lower-case host[:port] + path of `serviceUrl`, so it may share its
+  address with a mailbox.
+- `username`: required, ≤ 256 bytes, no control characters.
+- `followThreads`: always sent by this daemon; clients send `true` for a
+  new account (the wizard's check box) and the account's value on edit.
+  Absent (an older client) is `false`. Switching it off stops what is
+  queued and running at once; messages saved already stay.
+- `account.update` that changes `serviceUrl` or `username` needs
+  `credentials.password` (the stored one is never sent elsewhere); it
+  clears a refused sign-in. Pausing the account (`account.setEnabled`)
+  signs it out, and `crm.*` naming it answer `unavailable`.
+
 `capabilities` lists what a client may offer for the account's messages
 beyond reading them and setting flags; a client reads the list and never
 derives it from `kind`:
@@ -806,11 +871,12 @@ derives it from `kind`:
 | `move`, `delete` | `message.move`, `message.delete` |
 | `transition` | the status of its issues can be changed (`issue.transitions`, `issue.transition`, §4.12) |
 | `calendar` | the account can have calendars (§4.14); it does not change with consent or sync state |
+| `crm` | messages of mail accounts can be saved to the account (§4.17) |
 
 `imap` and `graph` accounts have `["compose", "reply", "replyAll",
 "forward", "move", "delete"]`, a `graph` account `"calendar"` too; a
 `jira` account `["comment", "forward", "transition"]`; a `caldav` account
-exactly `["calendar"]`.
+exactly `["calendar"]`; an `eway` account exactly `["crm"]`.
 Flags (`message.flag`) are always allowed, and so is `message.delete` of
 an account's outbox messages (cancelling a queued send or comment). Archiving and
 marking as junk still depend on folders with those roles, which a `jira`
@@ -856,13 +922,16 @@ the backend. A `goa` account takes no credentials at all.
 - errors: invalidArgument, keyringError, conflict (same e-mail already configured in the same
   realm, case-insensitive: every mail account shares one realm, a `jira` account's realm is its
   site, so it may have the address of a mailbox), oauthClientMissing (source `daemon` and no
-  client id for the provider)
+  client id for the provider); for an `eway` account also authFailed,
+  crmSignInUnsupported, networkError, serverTimeout, tlsError and
+  serverError of its one sign-in
 
 Validation (all failures are invalidArgument; free-text fields are trimmed):
 - `name` required, `displayName` optional; both valid UTF-8, no CR/LF/NUL,
   at most 256 bytes;
 - `email` a bare, syntactically valid address (no display name);
-- `kind` absent, `imap`, `graph` or `jira`;
+- `kind` absent, `imap`, `graph`, `jira`, `caldav` or `eway` (the last two
+  as above);
 - for `imap`: `imap` and `smtp` required, `graph` and `jira` absent; `host` an IP
   literal or hostname of DNS labels (≤ 253 bytes), `port` 1–65535,
   `security` one of `tls|starttls|none` where `none` is accepted only for
@@ -951,6 +1020,9 @@ removed with the account; the syncer is stopped first. A `jira` account
 takes its issues with it, and the notification mails it hid in mail
 accounts (`notificationMail: "hide"`) are shown again
 (`notify.messagesChanged`).
+The CRM records of §4.17 go with either account: an `eway` account's,
+and a mail account's records of its messages (the items in the CRM
+stay). An `eway` account is signed out.
 `deleteLocalData: true` also deletes the account's drafts and attachments
 (rows and files); `false` keeps them, orphaned, until a later phase defines
 what happens to local data of a removed account. Keyring secrets are
@@ -1086,7 +1158,7 @@ site.
   empty `credentials.password`, the stored password of that account is
   used; for source `daemon` the token of `credentials.oauthSession`
   (read, not consumed) or, with `accountId`, the stored sign-in
-- result: `{ "imap": EndpointTestResult (imap), "smtp": EndpointTestResult (imap), "graph": EndpointTestResult (graph), "jira": EndpointTestResult (jira), "caldav": EndpointTestResult (caldav) }`
+- result: `{ "imap": EndpointTestResult (imap), "smtp": EndpointTestResult (imap), "graph": EndpointTestResult (graph), "jira": EndpointTestResult (jira), "caldav": EndpointTestResult (caldav), "eway": EndpointTestResult (eway) }`
 - errors: invalidArgument (also a `jira` account's `accountId` of another
   site); with `accountId` and `password` endpoints (or a `jira`
   account): accountNotFound, authRequired (no stored password),
@@ -1151,6 +1223,15 @@ a `caldav` account of the same realm) and reads the principal. Its
 `capabilities` are those of `"calendar-access"`,
 `"calendar-auto-schedule"` and `"sync-collection"` the server
 advertises.
+
+An eWay-CRM probe asks the instance how it signs in
+(`account.detectEway`), then signs in once with the password (with
+`accountId` and an empty `credentials.password`, the stored one, only
+for an `eway` account of the same instance and user: invalidArgument
+otherwise) and signs out. `error.code` is `authFailed` (refused),
+`crmSignInUnsupported` (Microsoft sign-in, or no API access in the
+plan), `authRequired` (no password and no `accountId`), otherwise the
+network, TLS and server codes above; no `capabilities`.
 
 #### `account.linked`
 Lists accounts other desktop services are signed in to and that Malachi
@@ -1375,6 +1456,26 @@ account is a `caldav` account of the same realm (a password never goes to
 another server). At most 200 calendars (`api.MaxCalendarsPerAccount`),
 VEVENT collections only. Every name is untrusted display text. A client
 allows the call 45 s.
+
+#### `account.detectEway`
+Asks an eWay-CRM instance how it signs in, for the add-account flow of an
+`eway` account. Nothing is stored and nothing is authenticated.
+
+- params: `{ "serviceUrl": "hosting.eway-crm.com/company" }` — what the user typed or pasted; `https` is assumed
+- result: `{ "serviceUrl": "https://hosting.eway-crm.com/company", "microsoftSignIn": bool, "version": "…" (opt) }`
+- errors: invalidArgument (not a usable address; `http` with a message
+  saying https only), networkError, tlsError, serverTimeout, serverError
+  (the address answered, but not as an eWay-CRM web service, or refused
+  the client)
+
+`serviceUrl` is the normalised address an `EwayConfig` needs (§4.1).
+The daemon asks `GET <serviceUrl>/API.svc/GetServiceAuthSettings`
+anonymously; `microsoftSignIn` true means the instance signs in through
+Microsoft Entra, which this version cannot do (`account.add` would
+answer `crmSignInUnsupported`, so the client says so before asking for a
+password). An older instance without that method is `microsoftSignIn:
+false`. `version` is untrusted display text. A client allows the call
+15 s.
 
 ### 4.2 folder
 
@@ -4228,6 +4329,183 @@ Removes from the user's calendar the event a cancellation names.
 Never sends anything (the organiser cancelled).
 
 
+### 4.17 crm
+
+Saving messages of mail accounts to a CRM account (kind `eway`,
+capability `crm`, §4.1) and reading what they are linked to there. The
+design is `docs/eway.md`; what it sends and to whom is
+`docs/security.md` §7.3. A message is saved only on an explicit
+`crm.save`; nothing is saved by a rule, in the background or by the MCP
+bridge.
+
+Every method takes the CRM account as `accountId`; empty means the first
+enabled `eway` account in `account.list` order (clients use exactly
+that one). An unknown one is accountNotFound (also when there is no
+enabled `eway` account), another kind invalidArgument, a paused one
+unavailable. The messages are those of one mail account
+(`messageAccountId`, kind `imap` or `graph`: any other kind is
+invalidArgument), 1–20 distinct ids (`api.MaxCrmMessages`), none in the
+Outbox or a Drafts folder (invalidArgument); Junk is allowed. Sign-in,
+network and CRM failures have the codes of §2 (`authFailed` after a
+refused password, which also latches: the daemon does not sign in again
+until the account is edited; `crmSignInUnsupported`; `networkError`,
+`serverTimeout`, `tlsError`, `serverError`).
+
+```jsonc
+CrmItem   { "kind": "contact|company|deal|project", "guid": "GUID", "name": "…",
+            "detail": "…" (opt),                              // a contact's or company's e-mail, a tracked domain
+            "reason": "address|domain|contact|company|search|saved" (opt),
+            "superior": true (opt),
+            "url": "https://open.eway-crm.com/?ws=…&l=…" }
+CrmRecord { "accountId": "acc_3", "itemGuid": "GUID", "savedAt": Time, "checkedAt": Time,
+            "private": bool, "auto": true (opt), "items": [CrmItem], "url": "https://open.eway-crm.com/?ws=…&l=…" }
+CrmItemRef { "kind": "contact|company|deal|project", "guid": "GUID" }
+```
+
+`deal` is eWay-CRM's Leads, `project` its Projects. `name` and `detail`
+are untrusted display text from the CRM, cleaned (no control, format,
+bidi or invisible characters, one line) and capped (256 and 512 bytes):
+shown as plain text only. `superior` marks the saved message's superior
+item (eWay-CRM's relation `OUTLOOKPROJECT`, one per message, a deal or a
+project); in suggestions the one open deal or project a client checks as
+superior in advance (only when exactly one was found). `url` opens the
+item in eWay-CRM: the daemon builds it from the account's `serviceUrl`
+and the item's GUID (base64url without padding, `ws` = the service URL,
+`l` = `eway://<Emails|Contacts|Companies|Leads|Projects>/<guid>`), never
+from anything the CRM returned, so a client opens it in the browser
+without asking. `CrmRecord.url` opens the saved e-mail item. `savedAt`
+is when this daemon first recorded the message as saved, `checkedAt`
+when it last read the record from the CRM. `auto` is true when the
+daemon saved the message by itself, following a saved conversation
+(below); a `crm.save` of the message makes it a manual record again.
+
+**Following a saved conversation.** With `followThreads` on, once a
+message of a conversation of a mail account is saved to the CRM account,
+the daemon saves the conversation's later messages there too — the
+user's replies (their Sent copies) and the other side's answers — with
+the links, superior item and privacy of the most recently saved member.
+A message counts when it is in the same mail account and thread
+(`threadId`), was stored after the conversation's first save and is not
+dated before it, is in a folder of role `inbox`, `sent`, `archive` or
+none (never drafts, the Outbox, junk or trash), was classified as
+personal mail (`bulk` absent: a newsletter, list or automated message is
+never saved by itself, and one not classified yet waits for the hourly
+pass), is not saved yet, and is
+whole on this device (else it is skipped; the user can save it by hand
+after `message.download`). The usual rules of `crm.save` apply, so the
+other side's message already saved from Outlook (same Message-ID, sender
+and date) is linked, not saved twice. It happens after a message is
+stored, one message at a time per CRM account, and an hourly pass
+catches up after offline time (conversations followed in the last 90
+days, at most 50 saves per pass). Each save ends with
+`notify.messagesChanged` as a manual one; no other notification.
+
+#### `crm.lookup`
+Asks the CRM whether each message is saved, and what the messages'
+addresses lead to: what the Save dialog shows.
+
+- params: `{ "accountId" (opt), "messageAccountId", "messageIds": ["m_1"] }`
+- result: `{ "accountId": "acc_3", "saved": [{ "messageId", "record": CrmRecord|null }],
+  "suggestions": [CrmItem], "partial": true (opt) }`
+- errors: as above; messageNotFound
+
+`saved` has one entry per message, in order: the item the daemon's
+record names, else the CRM's item with the message's Message-ID whose
+sender address and date (to the minute) are the message's; `null` when
+there is none (an item with the Message-ID but another sender or date is
+someone else's and is never taken for the message). The daemon's record
+is brought in step (written, or deleted with `notify.messagesChanged`
+when its item is gone from the CRM; a record is never moved to another
+item). `suggestions` are read from the
+addresses only — `From`, `Reply-To`, `To`, `Cc` of every message, without
+the user's own addresses of every account, at most 20 — never from the
+text: contacts with the address in any of their three e-mail fields
+(`reason: address`), companies with that e-mail (`address`), companies
+tracking the address's domain (`domain`; not for public mail providers),
+the companies of the found contacts (`contact`), and the open deals and
+projects related to any found contact or company (`contact`,
+`company`; at most 10 of each, the most recently changed first; open =
+neither completed nor lost). Ranked address > domain > contact >
+company, deals and projects last, at most 50. The lookup runs four
+requests at a time within 15 s; what is not done by then is left out
+and `partial` is true. What one address finds is reused for 10 minutes.
+
+#### `crm.search`
+Searches the CRM's items by name for the dialog's search field.
+
+- params: `{ "accountId" (opt), "query": "acme", "kinds": ["contact", "company", "deal", "project"] (opt; default all) }`
+- result: `{ "items": [CrmItem], "truncated": true (opt) }`
+- errors: as above; invalidArgument (`query` not 2–200 bytes of text
+  after trimming, an unknown or repeated kind)
+
+Items whose name contains the query, ignoring case (contacts also by
+their first e-mail, companies by their e-mail), `reason: search`, at most
+50; `truncated` when there were more.
+
+#### `crm.save`
+Saves messages to the CRM, or changes the links of a saved one.
+
+- params: `{ "accountId" (opt), "messageAccountId", "messageIds": ["m_1"],
+  "link": [CrmItemRef] (opt), "unlink": [CrmItemRef] (opt; one message only),
+  "superior": CrmItemRef (opt; a deal or a project), "private": bool (opt) }`
+- result: `{ "results": [{ "messageId", "record": CrmRecord (opt), "created": bool (opt), "error": Error (opt) }] }`
+- errors: as above; messageNotFound; invalidArgument (a GUID not of
+  GUID shape, a kind of `superior` other than deal or project, `unlink`
+  with several messages, more than 50 items in `link`, `unlink` and
+  `superior` together); crmItemNotFound (an item of `link` or `superior`
+  the CRM does not have: nothing is saved); partNotDownloaded with
+  `data` = `{ "messageIds": [...] }`; conflict (one of the messages is
+  being saved or removed already)
+
+Before anything goes out, every item of `link` and `superior` must exist
+in the CRM, and every message must be whole on this device:
+the copy `message.download` holds in memory, else the stored file when no
+part was left on the server. Otherwise the answer is `partNotDownloaded`
+naming the messages; the client runs `message.download` for each and
+calls `crm.save` again.
+
+Then, per message in turn (each read from disk only right before its
+upload): the item the daemon's record names, else the CRM's item with the
+message's Message-ID **and** its sender address and date (to the minute) —
+a Message-ID alone is no proof, any mail can claim one — is the saved
+message (nothing is uploaded again, `created` absent);
+otherwise the raw message goes up exactly as the mail server delivered
+it, as `<subject>.eml`, and an e-mail item is created with the subject,
+the sender's and recipients' addresses (To and Cc; never Bcc), the date,
+the Message-ID, the number of attachments, the message's plain text
+(≤ 32 KiB) and `private` (`created: true`). When the CRM refuses it as a
+duplicate of another item and the Message-ID does not find one that is
+this message, that message's `error` is `crmDuplicate`. `superior`
+becomes the message's superior item (replacing another one); each `link`
+item is linked (an existing link is kept); each `unlink` item's links are
+removed (for the superior item also its foreign key, set to null).
+`private` changes
+an item this call created, or a saved one the daemon's record knows (an
+edit), never one someone else saved. A message larger than 25 MiB is
+that message's `attachmentTooBig` (`data` `{limit, size}`).
+
+`record` is the message's record as the CRM has it afterwards. A sign-in
+or network failure before the first message is saved fails the call;
+after it, the remaining messages carry it as their `error`.
+`notify.messagesChanged` names the folders of the saved messages (§5).
+
+#### `crm.remove`
+Deletes a saved message's item from the CRM — with its links, for every
+user of the CRM, not only this one — and the daemon's record. The client
+asks the user first. The message in the mailbox stays.
+
+- params: `{ "accountId" (opt), "messageAccountId", "messageId" }`
+- result: `{}`
+- errors: as above; messageNotFound; crmItemNotFound (the CRM has no
+  such item; the daemon's record, if any, is deleted too); conflict
+
+Only the item the daemon's record names is deleted, else — without a
+record — the item with the message's Message-ID, sender and date; an item
+found by the Message-ID alone is never deleted.
+
+`notify.messagesChanged` names the folders of the message's copies.
+
+
 ## 5. Notifications
 
 | Method | params |
@@ -4271,7 +4549,7 @@ issue-tracker site (§4.1 `notificationMail: "hide"`) produces none.
 
 `notify.messagesChanged` is sent when messages of an account changed
 without arriving or leaving, or left a folder at the user's request all
-at once. Four cases. Messages were hidden or shown
+at once. Five cases. Messages were hidden or shown
 again: notification mails a `jira` account hides once their issue is
 stored, and shows again when its `notificationMail`, its senders or its
 spaces change, the issue leaves it, or the account is paused or removed;
@@ -4287,7 +4565,12 @@ after migration 0016 or a new rule version): sent once per account with
 such messages, when the pass ends, without `folderIds`. Or a client
 called `folder.markRead` or `folder.empty` (§4.2) and something changed:
 `folderIds` names that folder, except after `folder.markRead` on a `jira`
-account, whose copies in other folders changed too (absent). In every case
+account, whose copies in other folders changed too (absent). Or the
+daemon's CRM record of messages changed (§4.17: `crm.save`,
+`crm.remove`, `crm.lookup` finding a message saved or no longer saved,
+or the background check of an old record): `accountId` is the mail
+account, `folderIds` the folders holding the messages' copies; only
+`crmSaved` and `Message.crm` changed. In every case
 `folderIds` names
 the folders concerned (absent: any folder of the account); a client
 showing one drops what it cached of their messages (bodies, headers,
@@ -4719,3 +5002,18 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   `eventNotFound`, 1204 `calendarConsentRequired`, 1306 `eventGone`, 1507
   `malformedCalendar`, 1508 `recurrenceUnsupported`, and `conflict` with
   `data.event` for event writes. `ProtocolVersion` stays 2.
+- **2** (2026-10-17, compatible addition: CRM accounts and saving mail to
+  eWay-CRM, §4.1 and §4.17): new account kind `eway`
+  (`AccountConfig.eway`, `EwayConfig`; no mail, never shown in Mail) and
+  capability `crm`; `AccountTestResult.eway`; new methods
+  `account.detectEway`, `crm.lookup`, `crm.search`, `crm.save`,
+  `crm.remove`; `MessageSummary.crmSaved` and `Message.crm`
+  (`CrmRecord`); `notify.messagesChanged` also when the CRM record of
+  messages changed; error codes 1109 `crmItemNotFound`, 1205
+  `crmSignInUnsupported` (with `data.reason`), 1307 `crmDuplicate`, and
+  `partNotDownloaded` from `crm.save` with `data.messageIds`.
+  `ProtocolVersion` stays 2.
+- **2** (2026-10-17, compatible addition: following saved conversations,
+  §4.17): `EwayConfig.followThreads` and `CrmRecord.auto`; the daemon
+  saves later messages of a conversation the user saved when the switch
+  is on. `ProtocolVersion` stays 2.

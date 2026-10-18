@@ -108,10 +108,12 @@ func TestFullOrder(t *testing.T) {
 
 func TestCatalog(t *testing.T) {
 	c := Catalog(msgids{})
-	if len(c) != 2 || c[0].Kind != api.AccountJira || c[1].Kind != api.AccountCalDAV {
+	if len(c) != 3 || c[0].Kind != api.AccountJira || c[1].Kind != api.AccountCalDAV || c[2].Kind != api.AccountEway {
 		t.Fatalf("catalog %+v", c)
 	}
-	if c[0].Name != "Jira" || c[0].Icon != JiraIcon || c[1].Name != "CalDAV Calendar" || c[1].Icon != CalDAVIcon {
+	if c[0].Name != "Jira" || c[0].Icon != JiraIcon || c[1].Name != "CalDAV Calendar" || c[1].Icon != CalDAVIcon ||
+		c[2].Name != "eWay-CRM" || c[2].Icon != EwayIcon ||
+		c[2].Description != "Save messages to your CRM with their contacts, companies and deals" {
 		t.Errorf("catalog %+v", c)
 	}
 	for _, s := range c {
@@ -168,6 +170,22 @@ func TestRowForByKind(t *testing.T) {
 		t.Errorf("caldav without server %+v", r)
 	}
 
+	e := account("e", api.AccountEway)
+	e.Config.Eway = &api.EwayConfig{ServiceURL: "https://Hosting.eway-crm.com/acme", Username: "jana"}
+	r = RowFor(e, tr)
+	if r.Title != "e@example.invalid" || r.Subtitle != "hosting.eway-crm.com/acme" || !r.OffersSwitch ||
+		r.Editor != EditorEway || r.EditLabel != "Edit Account" || r.Icon != EwayIcon {
+		t.Errorf("eway %+v", r)
+	}
+	e.Config.Name = "Acme CRM"
+	if r = RowFor(e, tr); r.Title != "Acme CRM" ||
+		r.RemoveBody != "Acme CRM will be removed from Malachi Mail. Messages saved in eWay-CRM stay there." {
+		t.Errorf("named eway %+v", r)
+	}
+	if !ShowsInIntegrations(e) || ShowsInAccounts(e) {
+		t.Error("an eway account belongs on Integrations")
+	}
+
 	f := RowFor(account("f", "future"), tr)
 	if f.Editor != EditorNone || !f.OffersSwitch || f.RemoveBody != "f@example.invalid will be removed from Malachi Mail." {
 		t.Errorf("future %+v", f)
@@ -181,7 +199,8 @@ func TestTexts(t *testing.T) {
 			t.Errorf("empty text in %+v", x)
 		}
 	}
-	if x.Title != "Integrations" || x.Add != "Add…" || x.CalendarSettings != "Calendar Settings" {
+	if x.Title != "Integrations" || x.Add != "Add…" || x.CalendarSettings != "Calendar Settings" ||
+		x.Description != "Services beside your mail: issue trackers, calendars and CRM" {
 		t.Errorf("%+v", x)
 	}
 }

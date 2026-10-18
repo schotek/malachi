@@ -173,6 +173,13 @@ func TestJiraSidebar(t *testing.T) {
 	if accountLabel(mail) != "a@example.invalid" || accountHeaderBadge(mail) != "IMAP" {
 		t.Errorf("mail: %q, %q", accountLabel(mail), accountHeaderBadge(mail))
 	}
+	// An eWay-CRM account (Preferences → Integrations) is not mail: its
+	// capsule names the CRM, never IMAP (seen at Gate B 2026-10-17).
+	eway := api.Account{ID: "e", Enabled: true, Config: api.AccountConfig{Name: "Satomar", Kind: api.AccountEway,
+		Eway: &api.EwayConfig{ServiceURL: "https://hosting.eway-crm.com/satomar", Username: "vjanecek"}}}
+	if accountHeaderBadge(eway) != "EWAY" {
+		t.Errorf("eway badge %q", accountHeaderBadge(eway))
+	}
 	// A mail account names the provider it signs in with.
 	google := mail
 	google.Config.OAuth2 = &api.OAuth2Config{Provider: api.OAuth2ProviderGoogle}

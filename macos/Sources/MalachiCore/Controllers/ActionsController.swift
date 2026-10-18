@@ -116,13 +116,28 @@ public final class ActionsController {
     /// What the per-message header buttons and actions allow for the
     /// selected row (actions.go `setMessageActionsSensitive`).
     public func actionFlags(for row: ListRow?) -> ActionFlags {
-        messageActionState(row, model: mailbox.model)
+        withCrm(messageActionState(row, model: mailbox.model), row?.message)
     }
 
     /// `actionFlags` for a single message (a message window's `msg.*`
     /// group).
     public func flags(for s: MessageSummary) -> ActionFlags {
-        messageActionState(ListRow(key: ListKey(message: s.id), message: s), model: mailbox.model)
+        withCrm(messageActionState(ListRow(key: ListKey(message: s.id), message: s), model: mailbox.model), s)
+    }
+
+    /// The application's eWay-CRM state (docs/eway.md); nil leaves the
+    /// CRM flags off.
+    public var crm: CRMState?
+
+    /// `f` with selection.Flags Crm and CrmSaved of message `s`: it can be
+    /// saved (`CRM.offer(for:rows:)` of the one row), and it is saved.
+    private func withCrm(_ f: ActionFlags, _ s: MessageSummary?) -> ActionFlags {
+        guard f.on, let crm, let s else { return f }
+        var out = f
+        let o = crm.offer([s])
+        out.crm = o.enabled
+        out.crmSaved = o.saved
+        return out
     }
 
     // MARK: Seen

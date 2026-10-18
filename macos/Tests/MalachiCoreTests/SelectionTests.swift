@@ -129,4 +129,24 @@ struct SelectionTests {
         #expect(ContextMenu.label(.openMessage, .init(count: 3)) == "Open 3 Messages in New Windows")
         #expect(ContextMenu.label(.openMessage, .init(count: 1)) == "Open in New Window")
     }
+
+    /// Save to eWay-CRM for several: every row savable, at most 20, never
+    /// the saved-state items; not in the outbox (selection_test.go
+    /// `TestCombineCrm`).
+    @Test func combineCrm() {
+        var savable = mail
+        savable.crm = true
+        savable.crmSaved = true
+        let one = Selection.combine([savable])
+        #expect(one.crm && one.crmSaved)
+        let two = Selection.combine([savable, savable])
+        #expect(two.crm && !two.crmSaved)
+        #expect(!Selection.combine([savable, mail]).crm, "one row not savable")
+        let rows = Array(repeating: savable, count: API.Limits.maxCrmMessages + 1)
+        #expect(!Selection.combine(rows).crm)
+        #expect(Selection.combine(Array(rows.prefix(API.Limits.maxCrmMessages))).crm)
+        var queued = savable
+        queued.outbox = true
+        #expect(!Selection.combine([queued, queued]).crm, "outbox")
+    }
 }

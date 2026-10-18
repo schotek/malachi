@@ -3,7 +3,11 @@
 
 package contextmenu
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/schotek/malachi/ui/internal/crm"
+)
 
 // Translator is what the texts need of the catalogue (i18n.Tr in GTK,
 // L10n in the other clients); the tests pass one that returns the msgids.
@@ -27,7 +31,8 @@ type Labels struct {
 	Favourite bool
 	// Collapsed: Fold is Expand.
 	Collapsed bool
-	// Count: OpenMessage opens this many rows (2 or more).
+	// Count: OpenMessage opens, and CrmSave saves, this many rows (2 or
+	// more).
 	Count int
 }
 
@@ -78,6 +83,14 @@ func Label(tr Translator, id ItemID, l Labels) string {
 		return tr.T("Move to Trash")
 	case Assistant:
 		return tr.T("Assistant")
+	case CrmSave:
+		return crm.SaveMenuLabel(l.Count, tr)
+	case CrmOpen:
+		return crm.MenuLabel(crm.MenuOpen, tr)
+	case CrmEditLinks:
+		return crm.MenuLabel(crm.MenuEditLinks, tr)
+	case CrmRemove:
+		return crm.MenuLabel(crm.MenuRemove, tr)
 	case CheckMail:
 		return tr.T("Check for New Mail")
 	case MarkAllRead:

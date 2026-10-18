@@ -101,6 +101,10 @@ final class AppState {
     /// The calendar (Integration+Calendar): the windows' sources, the
     /// alerts, the routing of the calendar's notifications.
     let calendar: AppCalendar
+    /// eWay-CRM (docs/eway.md): the accounts, the messages a save or a
+    /// removal runs for, shared by every window's `CRMController`
+    /// (Integration+CRM wires it).
+    let crm = CRMState()
     private var boardTriageTokens: [NotificationHub.Token] = []
 
     var hooks = Hooks()

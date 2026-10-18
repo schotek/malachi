@@ -63,6 +63,9 @@ func (d *PreferencesDialog) addService(c *client.Client, kind api.AccountKind) {
 		d.addJiraAccount(c)
 	case api.AccountCalDAV:
 		d.addCalDAVAccount(c)
+	case api.AccountEway:
+		// TODO(T7, docs/eway.md §4): the eWay-CRM assistant
+		// (accountwizard ewayFlow); until then Add… does nothing in GTK.
 	}
 }
 

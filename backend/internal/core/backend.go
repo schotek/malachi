@@ -31,6 +31,7 @@ import (
 	"github.com/schotek/malachi/backend/internal/contacts"
 	"github.com/schotek/malachi/backend/internal/contacts/eds"
 	"github.com/schotek/malachi/backend/internal/discover"
+	"github.com/schotek/malachi/backend/internal/eway"
 	"github.com/schotek/malachi/backend/internal/graph"
 	"github.com/schotek/malachi/backend/internal/imap"
 	"github.com/schotek/malachi/backend/internal/jira"
@@ -116,6 +117,16 @@ type Backend struct {
 	// Graph with the client's defaults).
 	CalendarGraphBaseURL string
 	CalendarGraphHTTP    *http.Client
+
+	// EwayHTTP carries every request to an eWay-CRM instance (the eway
+	// supervisor's clients, account.detectEway, account.test,
+	// account.add) when set; nil, in production, is the default
+	// transport. Tests point it at internal/eway/ewaytest.
+	EwayHTTP *http.Client
+	// ewaySync is the eway kind's supervisor (clients, no syncer);
+	// crm is the state of the crm.* methods (crm_service.go).
+	ewaySync *eway.Supervisor
+	crm      crmState
 
 	// GOA is the GNOME Online Accounts client behind account.linked and the
 	// tokens of Graph accounts. It connects lazily; without a session bus
@@ -343,11 +354,21 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		Notifier:  calendarNotifier{outboxAwareNotifier: notifier},
 		Log:       log,
 	})
+	// eWay-CRM accounts synchronise nothing: the supervisor only holds
+	// their clients (docs/eway.md D21).
+	b.ewaySync = eway.NewSupervisor(eway.SupervisorDeps{
+		Password:  b.PasswordFor,
+		ClientID:  b.ewayClientID,
+		HTTP:      b.ewayHTTP(),
+		UserAgent: eway.UserAgent(version),
+		Log:       log.With("component", "eway"),
+	})
 	b.Supervisor = newKindSupervisor(map[api.AccountKind]SyncSupervisor{
 		api.AccountIMAP:   imapSync,
 		api.AccountGraph:  &graphWithCalendar{mail: graphSync, cal: b.calSync},
 		api.AccountJira:   b.jiraSync,
 		api.AccountCalDAV: b.calSync.Mail(),
+		api.AccountEway:   b.ewaySync,
 	})
 	// Through b.Supervisor, not the values above: tests swap it.
 	trigger := func(id string, f api.FolderID, full bool) bool { return b.Supervisor.Trigger(id, f, full) }
@@ -666,6 +687,7 @@ func (b *Backend) Maintain(ctx context.Context) {
 	sweep()
 	b.reevaluateIssueMail(ctx)
 	b.boardUpkeep(ctx)
+	b.crmFollowSweep(ctx)
 	t := time.NewTicker(time.Hour)
 	defer t.Stop()
 	for {
@@ -676,6 +698,7 @@ func (b *Backend) Maintain(ctx context.Context) {
 			sweep()
 			b.reevaluateIssueMail(ctx)
 			b.boardUpkeep(ctx)
+			b.crmFollowSweep(ctx)
 		}
 	}
 }

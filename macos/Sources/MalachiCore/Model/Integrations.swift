@@ -6,9 +6,9 @@ import Foundation
 /// The view logic of the two account pages of the settings, a 1:1 port of
 /// ui/internal/integrations: Accounts, which lists the mail accounts (kind
 /// imap, also the empty kind, and graph), and Integrations, which lists
-/// every other account — the services beside the mail, today Jira and
-/// CalDAV calendars; a kind added later lands there by itself — and the
-/// catalogue of services that can be added.
+/// every other account — the services beside the mail, today Jira, CalDAV
+/// calendars and eWay-CRM; a kind added later lands there by itself — and
+/// the catalogue of services that can be added.
 ///
 /// Both pages show rows of the same shape (`Row`): the switch, the editor
 /// and the sentence of the remove confirmation depend on the kind. The
@@ -84,11 +84,13 @@ public enum Integrations {
     public static let mailIcon = "mail-unread-symbolic"
     public static let jiraIcon = "checkbox-checked-symbolic"
     public static let calDAVIcon = "x-office-calendar-symbolic"
+    /// integrations.EwayIcon (`CRM.icon`; Adwaita has no CRM icon).
+    public static let ewayIcon = CRM.icon
 
     /// integrations.Service: one entry of the catalogue.
     public struct Service: Sendable, Equatable {
         public var kind: AccountKind
-        /// The service's name; Jira is a brand, not translated.
+        /// The service's name; Jira and eWay-CRM are brands, not translated.
         public var name: String
         public var description: String
         /// The GTK symbolic icon name.
@@ -105,6 +107,12 @@ public enum Integrations {
             Service(
                 kind: .caldav, name: L10n.T("CalDAV Calendar"),
                 description: L10n.T("Nextcloud, iCloud, Fastmail and other CalDAV servers"), icon: calDAVIcon),
+            Service(
+                kind: .eway, name: CRM.brand,
+                // TRANSLATORS: Preferences → Integrations: what an eWay-CRM
+                // account brings ("deals" as eWay-CRM's sales opportunities).
+                description: L10n.T("Save messages to your CRM with their contacts, companies and deals"),
+                icon: ewayIcon),
         ]
     }
 
@@ -122,6 +130,10 @@ public enum Integrations {
         /// The Calendar page of the settings, where a CalDAV account's
         /// server, password, certificate and calendars are.
         case calendarPage
+        /// The eWay-CRM account assistant in its edit mode
+        /// (`EWayWizardController`): the user name, the password and the
+        /// name; the service address stays.
+        case eway
     }
 
     /// integrations.Row: what an account's row on either page shows besides
@@ -132,8 +144,8 @@ public enum Integrations {
         public var title: String
         public var subtitle: String
         public var icon: String
-        /// The Enabled switch (account.setEnabled pauses the sync; CalDAV
-        /// has no pause).
+        /// The Enabled switch (account.setEnabled pauses the sync, or an
+        /// eWay-CRM account's saving; CalDAV has no pause).
         public var offersSwitch: Bool
         public var editor: Editor
         /// The Edit button's tooltip.
@@ -143,8 +155,9 @@ public enum Integrations {
 
     /// integrations.RowFor. Title: the account name as the user typed it
     /// (nothing trimmed), else the Jira site's host, else the address.
-    /// Subtitle: the host of the Jira site or of the CalDAV server, else —
-    /// and when the title shows the host already — the address.
+    /// Subtitle: the host of the Jira site or of the CalDAV server, the host
+    /// and path of the eWay-CRM service, else — and when the title shows
+    /// the host already — the address.
     public static func rowFor(_ a: Account) -> Row {
         let kind = a.config.protocolKind
         let t = title(a)
@@ -170,6 +183,12 @@ public enum Integrations {
             r.offersSwitch = false
             // TRANSLATORS: %s is the calendar account's name.
             r.removeBody = L10n.T("%s will be removed from Malachi Mail. Calendars on the server are not affected.", t)
+        case .eway:
+            r.icon = ewayIcon
+            r.editor = .eway
+            r.editLabel = L10n.T("Edit Account")
+            // TRANSLATORS: %s is the eWay-CRM account's name.
+            r.removeBody = L10n.T("%s will be removed from Malachi Mail. Messages saved in eWay-CRM stay there.", t)
         default:
             // TRANSLATORS: %s is the account's name.
             r.removeBody = L10n.T("%s will be removed from Malachi Mail.", t)
@@ -197,7 +216,9 @@ public enum Integrations {
     }
 
     /// The host the subtitle shows: a Jira account's site, a CalDAV
-    /// account's server; empty for anything else.
+    /// account's server, an eWay-CRM account's service (with its path,
+    /// which tells two instances on one host apart); empty for anything
+    /// else.
     static func host(_ a: Account) -> String {
         switch a.config.protocolKind {
         case .jira:
@@ -205,6 +226,8 @@ public enum Integrations {
         case .caldav:
             guard let c = a.config.caldav, let u = Jira.parseURL(Jira.trimSpace(c.serverUrl)) else { return "" }
             return Jira.clean(u.hostname.lowercased())
+        case .eway:
+            return CRM.serviceHost(a)
         default:
             return ""
         }
@@ -233,7 +256,7 @@ public enum Integrations {
     public static func texts() -> PageTexts {
         PageTexts(
             title: L10n.T("Integrations"),
-            description: L10n.T("Services beside your mail: issue trackers and calendars"),
+            description: L10n.T("Services beside your mail: issue trackers, calendars and CRM"),
             connectedTitle: L10n.T("Connected Services"),
             availableTitle: L10n.T("Available Services"),
             emptyTitle: L10n.T("No integrations yet"),

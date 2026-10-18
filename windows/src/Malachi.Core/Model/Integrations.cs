@@ -322,7 +322,7 @@ public static class Integrations
         // TRANSLATORS: a page of the preferences: services beside the
         // mail, such as Jira and CalDAV calendars.
         Title: L10n.T("Integrations"),
-        Description: L10n.T("Services beside your mail: issue trackers and calendars"),
+        Description: L10n.T("Services beside your mail: issue trackers, calendars and CRM"),
         ConnectedTitle: L10n.T("Connected Services"),
         AvailableTitle: L10n.T("Available Services"),
         EmptyTitle: L10n.T("No integrations yet"),

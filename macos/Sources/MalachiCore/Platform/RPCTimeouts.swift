@@ -51,4 +51,11 @@ public enum RPCTimeouts {
     /// talk to the sender's server (15 s) before it answers
     /// (window/bulk.go `unsubscribeTimeout`).
     public static let unsubscribe: Duration = .seconds(30)
+    /// `crm.lookup` and `crm.search`: the daemon gives the CRM 15 s for a
+    /// lookup and may wait for its sign-in first (docs/eway.md D9).
+    public static let crmLookup: Duration = .seconds(30)
+    /// `crm.save`: up to 20 messages saved one after the other, each upload
+    /// allowed 2 minutes (docs/eway.md D16); the daemon has no budget of
+    /// its own for the whole call.
+    public static let crmSave: Duration = .seconds(900)
 }

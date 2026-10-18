@@ -141,6 +141,15 @@ const (
 	MethodInvitationList        = "invitation.list"
 	MethodInvitationRespond     = "invitation.respond"
 	MethodInvitationApplyCancel = "invitation.applyCancel"
+
+	// CRM accounts (docs/api.md §4.1).
+	MethodAccountDetectEway = "account.detectEway"
+
+	// CRM (docs/api.md §4.17).
+	MethodCrmLookup = "crm.lookup"
+	MethodCrmSearch = "crm.search"
+	MethodCrmSave   = "crm.save"
+	MethodCrmRemove = "crm.remove"
 )
 
 // Notification names (backend → client, no reply expected).
@@ -192,6 +201,8 @@ var AllMethods = []string{
 	MethodEventList, MethodEventGet, MethodEventSearch, MethodEventCreate, MethodEventUpdate,
 	MethodEventDelete, MethodEventRespond, MethodEventSnoozeAlert, MethodEventDismissAlert,
 	MethodInvitationList, MethodInvitationRespond, MethodInvitationApplyCancel,
+	MethodAccountDetectEway,
+	MethodCrmLookup, MethodCrmSearch, MethodCrmSave, MethodCrmRemove,
 }
 
 // AllNotifications lists every server-initiated notification.

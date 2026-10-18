@@ -67,12 +67,16 @@ public struct MessageSummary: Codable, Sendable, Equatable {
     /// key carries the whole card (`Message.invitation`); a `Message`'s
     /// summary leaves this nil.
     public var invitation: InvitationSummary?
+    /// The daemon's record says the message (any copy with the same
+    /// Message-ID) is saved in an enabled CRM account (§4.17); a display
+    /// cache, the CRM is the truth.
+    @DefaultFalse public var crmSaved: Bool
 
     public init(
         id: MessageID, accountId: AccountID, folderId: FolderID, threadId: ThreadID? = nil,
         from: [Address], to: [Address]? = nil, subject: String, date: Date, snippet: String,
         flags: [Flag], hasAttachments: Bool, size: Int, outbox: OutboxInfo? = nil, issue: MessageIssue? = nil,
-        bulk: BulkInfo? = nil, invitation: InvitationSummary? = nil
+        bulk: BulkInfo? = nil, invitation: InvitationSummary? = nil, crmSaved: Bool = false
     ) {
         self.id = id
         self.accountId = accountId
@@ -90,6 +94,7 @@ public struct MessageSummary: Codable, Sendable, Equatable {
         self.issue = issue
         self.bulk = bulk
         self.invitation = invitation
+        self.crmSaved = crmSaved
     }
 }
 
@@ -215,12 +220,15 @@ public struct Message: Codable, Sendable, Equatable {
     /// (`message.get`, `message.download`); it takes the place of
     /// `MessageSummary.invitation` on the wire.
     public var invitation: InvitationCard?
+    /// The message's record in each CRM account where it is saved
+    /// (`message.get`, §4.17); nil when it is saved nowhere.
+    public var crm: [CrmRecord]?
 
     public init(
         summary: MessageSummary, cc: [Address]? = nil, bcc: [Address]? = nil, replyTo: [Address]? = nil,
         rfcMessageId: String? = nil, inReplyTo: String? = nil, references: [String]? = nil,
         attachments: [Attachment] = [], headers: [String: String]? = nil, unsubscribe: UnsubscribeOffer? = nil,
-        invitation: InvitationCard? = nil
+        invitation: InvitationCard? = nil, crm: [CrmRecord]? = nil
     ) {
         self.summary = summary
         self.cc = cc
@@ -233,10 +241,11 @@ public struct Message: Codable, Sendable, Equatable {
         self.headers = headers
         self.unsubscribe = unsubscribe
         self.invitation = invitation
+        self.crm = crm
     }
 
     private enum CodingKeys: String, CodingKey {
-        case cc, bcc, replyTo, rfcMessageId, inReplyTo, references, attachments, headers, unsubscribe, invitation
+        case cc, bcc, replyTo, rfcMessageId, inReplyTo, references, attachments, headers, unsubscribe, invitation, crm
     }
 
     public init(from decoder: any Decoder) throws {
@@ -254,6 +263,7 @@ public struct Message: Codable, Sendable, Equatable {
         headers = try c.decodeIfPresent([String: String].self, forKey: .headers)
         unsubscribe = try c.decodeIfPresent(UnsubscribeOffer.self, forKey: .unsubscribe)
         invitation = try c.decodeIfPresent(InvitationCard.self, forKey: .invitation)
+        crm = try c.decodeIfPresent([CrmRecord].self, forKey: .crm)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -271,6 +281,9 @@ public struct Message: Codable, Sendable, Equatable {
         try c.encodeIfPresent(headers, forKey: .headers)
         try c.encodeIfPresent(unsubscribe, forKey: .unsubscribe)
         try c.encodeIfPresent(invitation, forKey: .invitation)
+        if let crm, !crm.isEmpty {
+            try c.encode(crm, forKey: .crm)
+        }
     }
 }
 

@@ -9,7 +9,8 @@ import MalachiCore
 /// selects the row first (`MessageListViewController`), so the menu acts on
 /// the selection: its items are the window's own actions without a target,
 /// which `MainWindowController` validates and titles as it does in the menu
-/// bar (Comment, Unstar, Cancel Sending). Move To lists the account's
+/// bar (Comment, Unstar, Cancel Sending, Save N Messages to eWay-CRM…).
+/// Move To lists the account's
 /// folders; Change Status and the Assistant are the menu bar's submenus,
 /// made afresh (a menu has one supermenu), each kept alive by its item.
 @MainActor
@@ -28,6 +29,10 @@ enum MessageContextMenu {
         .archive: Action.archive,
         .junk: Action.markAsJunk,
         .trash: Action.moveToTrash,
+        .crmSave: Action.crmSave,
+        .crmOpen: Action.crmOpen,
+        .crmEditLinks: Action.crmEditLinks,
+        .crmRemove: Action.crmRemove,
     ]
 
     /// The menu of the selected rows (one or several; `flags` combined);
@@ -36,9 +41,11 @@ enum MessageContextMenu {
         guard let row = rows.first, flags.on else { return nil }
         let s = row.message
         let transitions = IssueTransitionMenu(state: state) { IssueTransitionMenu.keyWindowSubject() }
-        let model = ContextMenu.MessageState(
+        var model = ContextMenu.MessageState(
             flags: flags, draft: mailbox.model.inDrafts(s), changeStatus: rows.count == 1 && transitions.isOffered,
             assistant: state.assistant.shown)
+        // eWay-CRM: the rows' shown messages, as the toolbar's button.
+        model.setCrm(state.crm.offer(rows.map(\.message), conversations: Set(rows.filter(\.thread).map(\.message.id))))
         let labels = ContextMenu.Labels(comment: flags.comment, flagged: flags.flagged, outbox: flags.outbox, count: rows.count)
         // The folder all are in (Move To greys it out); none when they
         // differ (a search).

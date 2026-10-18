@@ -4,9 +4,10 @@
 // Package integrations is the view logic of the two account pages of the
 // preferences: Accounts, which lists the mail accounts (kind imap, the
 // empty kind, and graph), and Integrations, which lists every other
-// account — the services beside the mail, today Jira (kind jira) and
-// CalDAV calendars (kind caldav); a kind added later lands there by
-// itself — and the catalogue of services that can be added.
+// account — the services beside the mail, today Jira (kind jira), CalDAV
+// calendars (kind caldav) and eWay-CRM (kind eway); a kind added later
+// lands there by itself — and the catalogue of services that can be
+// added.
 //
 // Both pages show rows of the same shape (Row): the switch, the editor
 // and the sentence of the remove confirmation depend on the kind. The
@@ -27,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/crm"
 	"github.com/schotek/malachi/ui/internal/jira"
 )
 
@@ -119,12 +121,13 @@ const (
 	MailIcon   = "mail-unread-symbolic"
 	JiraIcon   = "checkbox-checked-symbolic" // Adwaita has no ticket
 	CalDAVIcon = "x-office-calendar-symbolic"
+	EwayIcon   = crm.Icon // Adwaita has no CRM
 )
 
 // Service is one entry of the catalogue on the Integrations page.
 type Service struct {
 	Kind        api.AccountKind
-	Name        string // the service's name; Jira is a brand, not translated
+	Name        string // the service's name; Jira and eWay-CRM are brands, not translated
 	Description string
 	Icon        string // GTK symbolic icon name
 }
@@ -147,6 +150,13 @@ func Catalog(tr Translator) []Service {
 			Name:        tr.T("CalDAV Calendar"),
 			Description: tr.T("Nextcloud, iCloud, Fastmail and other CalDAV servers"),
 			Icon:        CalDAVIcon,
+		},
+		{
+			Kind: api.AccountEway, Name: crm.Brand,
+			// TRANSLATORS: Preferences → Integrations: what an eWay-CRM
+			// account brings ("deals" as eWay-CRM's sales opportunities).
+			Description: tr.T("Save messages to your CRM with their contacts, companies and deals"),
+			Icon:        EwayIcon,
 		},
 	}
 }
@@ -171,11 +181,16 @@ const (
 	// where a CalDAV account's server, password, certificate and
 	// calendars are.
 	EditorCalendarPage
+	// EditorEway is the eWay-CRM account assistant in its edit mode
+	// (ui/internal/accountwizard eway_flow.go): the user name, the
+	// password and the name; the service address stays.
+	EditorEway
 )
 
 // Row is what an account's row on either page shows besides its status:
 // plain texts (nothing is markup), the icon, whether it has the Enabled
-// switch (account.setEnabled pauses the sync; CalDAV has no pause), what
+// switch (account.setEnabled pauses the sync, or an eWay-CRM account's
+// saving; CalDAV has no pause), what
 // its Edit button opens and is called, and the body of its remove
 // confirmation.
 type Row struct {
@@ -194,8 +209,8 @@ type Row struct {
 //
 // Title: the account name as the user typed it (nothing trimmed), else
 // the Jira site's host, else the address. Subtitle: the host of the Jira
-// site or of the CalDAV server, else — and when the title shows the host
-// already — the address.
+// site or of the CalDAV server, the host and path of the eWay-CRM service,
+// else — and when the title shows the host already — the address.
 func RowFor(a api.Account, tr Translator) Row {
 	kind := a.Config.Protocol()
 	r := Row{ID: a.ID, Kind: kind, Title: title(a), OffersSwitch: true}
@@ -217,6 +232,10 @@ func RowFor(a api.Account, tr Translator) Row {
 		r.OffersSwitch = false
 		// TRANSLATORS: %s is the calendar account's name.
 		r.RemoveBody = fmt.Sprintf(tr.T("%s will be removed from Malachi Mail. Calendars on the server are not affected."), r.Title)
+	case api.AccountEway:
+		r.Icon, r.Editor, r.EditLabel = EwayIcon, EditorEway, tr.T("Edit Account")
+		// TRANSLATORS: %s is the eWay-CRM account's name.
+		r.RemoveBody = fmt.Sprintf(tr.T("%s will be removed from Malachi Mail. Messages saved in eWay-CRM stay there."), r.Title)
 	default:
 		r.Icon = MailIcon
 		// TRANSLATORS: %s is the account's name.
@@ -238,7 +257,8 @@ func title(a api.Account) string {
 }
 
 // host is the host the subtitle shows: a Jira account's site, a CalDAV
-// account's server; empty for anything else.
+// account's server, an eWay-CRM account's service (with its path, which
+// tells two instances on one host apart); empty for anything else.
 func host(a api.Account) string {
 	switch a.Config.Protocol() {
 	case api.AccountJira:
@@ -252,6 +272,8 @@ func host(a api.Account) string {
 			return ""
 		}
 		return jira.Clean(strings.ToLower(u.Hostname()))
+	case api.AccountEway:
+		return crm.ServiceHost(a)
 	}
 	return ""
 }
@@ -272,9 +294,9 @@ type PageTexts struct {
 func Texts(tr Translator) PageTexts {
 	return PageTexts{
 		// TRANSLATORS: a page of the preferences: services beside the
-		// mail, such as Jira and CalDAV calendars.
+		// mail, such as Jira, CalDAV calendars and eWay-CRM.
 		Title:          tr.T("Integrations"),
-		Description:    tr.T("Services beside your mail: issue trackers and calendars"),
+		Description:    tr.T("Services beside your mail: issue trackers, calendars and CRM"),
 		ConnectedTitle: tr.T("Connected Services"),
 		AvailableTitle: tr.T("Available Services"),
 		EmptyTitle:     tr.T("No integrations yet"),

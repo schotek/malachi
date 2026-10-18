@@ -189,6 +189,7 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
         switch icon {
         case Integrations.jiraIcon: return "ticket"
         case Integrations.calDAVIcon: return "calendar"
+        case Integrations.ewayIcon: return Icon.crmSymbol
         default: return "envelope"
         }
     }

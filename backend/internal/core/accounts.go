@@ -69,6 +69,16 @@ func (s *accountService) Add(ctx context.Context, p api.AccountAddParams) (*api.
 			return nil, err
 		}
 	}
+	if p.Config.Protocol() == api.AccountEway {
+		if p.Credentials.Password == "" {
+			return nil, api.NewError(api.CodeInvalidArgument, "credentials.password is required for an eway account")
+		}
+		// One sign-in: the Microsoft check, the user's GUID and, when the
+		// client left it empty, the address (accounts_eway.go).
+		if err := s.b.prepareEway(ctx, &p.Config, p.Credentials.Password); err != nil {
+			return nil, err
+		}
+	}
 	if err := validateAccountConfig(&p.Config); err != nil {
 		return nil, err
 	}
@@ -152,7 +162,7 @@ func (s *accountService) Add(ctx context.Context, p api.AccountAddParams) (*api.
 // token), a sign-in session only for an account with the backend's own
 // sign-in.
 func checkCredentials(c api.AccountConfig, cr api.Credentials) error {
-	if cr.Password != "" && !usesAuth(c, api.AuthPassword) && c.Protocol() != api.AccountJira && c.Protocol() != api.AccountCalDAV {
+	if cr.Password != "" && !usesAuth(c, api.AuthPassword) && c.Protocol() != api.AccountJira && !hasNoMail(c) {
 		return api.NewError(api.CodeInvalidArgument, "password given but no endpoint uses password authentication")
 	}
 	if _, daemon := daemonOAuth(c); cr.OAuthSession != "" && !daemon {
@@ -315,7 +325,7 @@ func (s *accountService) Update(ctx context.Context, p api.AccountUpdateParams) 
 	if err := s.b.checkCalDAVMailAccount(ctx, p.Config, string(p.AccountID)); err != nil {
 		return nil, err
 	}
-	if p.Credentials.Password == "" && (secretMoves(existing.Config, p.Config) || calDAVSecretMoves(existing.Config, p.Config)) {
+	if p.Credentials.Password == "" && (secretMoves(existing.Config, p.Config) || calDAVSecretMoves(existing.Config, p.Config) || ewaySecretMoves(existing.Config, p.Config)) {
 		// The stored secret belongs to another site (or kind): it is
 		// never sent to this one.
 		return nil, api.NewError(api.CodeInvalidArgument, "the account's new site or server needs its own password or token")
@@ -339,6 +349,9 @@ func (s *accountService) Update(ctx context.Context, p api.AccountUpdateParams) 
 	// not be refreshed (or sent) for the new configuration.
 	rebound := wasDaemon && daemon && p.Credentials.OAuthSession == "" && s.b.signInRebound(existing.Config, p.Config)
 
+	if p.Config.Protocol() == api.AccountEway && sameEwayLogin(existing.Config, p.Config) && p.Config.Eway.UserGUID == "" {
+		p.Config.Eway.UserGUID = existing.Config.Eway.UserGUID // the daemon's, kept
+	}
 	updated := existing
 	updated.Name = p.Config.Name
 	updated.Email = store.NormalizeAddress(p.Config.Email)
@@ -488,6 +501,9 @@ func (s *accountService) Test(ctx context.Context, p api.AccountTestParams) (*ap
 	}
 	if p.Config.Protocol() == api.AccountCalDAV {
 		return s.testCalDAV(ctx, p)
+	}
+	if p.Config.Protocol() == api.AccountEway {
+		return s.testEway(ctx, p)
 	}
 	password := p.Credentials.Password
 	switch {
@@ -789,8 +805,14 @@ func validateAccountConfig(c *api.AccountConfig) error {
 		return bad("name must be valid UTF-8 without line breaks (limit %d bytes)", maxAccountNameBytes)
 	}
 	c.Email = strings.TrimSpace(c.Email)
-	if err := validateAddress(api.Address{Address: c.Email}); err != nil {
-		return err
+	// An eWay-CRM account needs no address: its user may have none in the
+	// CRM and its user name need not be one (docs/eway.md D2); every other
+	// kind has a mailbox or a sign-in address. A given address must still
+	// be one.
+	if c.Email != "" || c.Protocol() != api.AccountEway {
+		if err := validateAddress(api.Address{Address: c.Email}); err != nil {
+			return err
+		}
 	}
 	c.DisplayName = strings.TrimSpace(c.DisplayName)
 	if len(c.DisplayName) > maxAccountNameBytes || !utf8.ValidString(c.DisplayName) || hasHeaderBreak(c.DisplayName) {
@@ -802,6 +824,9 @@ func validateAccountConfig(c *api.AccountConfig) error {
 	}
 	if k := c.Protocol(); c.CalDAV != nil && k != api.AccountCalDAV {
 		return bad("caldav settings do not apply to an %s account", k)
+	}
+	if k := c.Protocol(); c.Eway != nil && k != api.AccountEway {
+		return bad("eway settings do not apply to an %s account", k)
 	}
 	if err := validateCalendarConfig(c); err != nil {
 		return err
@@ -883,8 +908,12 @@ func validateAccountConfig(c *api.AccountConfig) error {
 		if err := validateCalDAV(c); err != nil {
 			return err
 		}
+	case api.AccountEway:
+		if err := validateEway(c); err != nil {
+			return err
+		}
 	default:
-		return bad("kind must be imap, graph, jira or caldav")
+		return bad("kind must be imap, graph, jira, caldav or eway")
 	}
 
 	if c.SyncInterval != 0 && c.SyncInterval < api.SyncIntervalMin {

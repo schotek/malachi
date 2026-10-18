@@ -165,7 +165,8 @@ func TestCalendarErrorCodes(t *testing.T) {
 }
 
 // The calendar methods follow the board's in AllMethods, in the order of
-// docs/calendar.md §4.9; the notifications follow notify.draftsChanged.
+// docs/calendar.md §4.9, and only the CRM methods (crm_test.go) come after
+// them; the notifications follow notify.draftsChanged.
 func TestCalendarMethodsOrder(t *testing.T) {
 	methods := []string{
 		"account.discoverCalDAV", "account.listCalDAVCalendars",
@@ -175,9 +176,9 @@ func TestCalendarMethodsOrder(t *testing.T) {
 		"event.respond", "event.snoozeAlert", "event.dismissAlert",
 		"invitation.list", "invitation.respond", "invitation.applyCancel",
 	}
-	n := len(AllMethods)
-	if n < len(methods) || !reflect.DeepEqual(AllMethods[n-len(methods):], methods) {
-		t.Fatalf("AllMethods does not end with the calendar methods: %v", AllMethods[n-len(methods):])
+	n := len(AllMethods) - len(crmMethods)
+	if n < len(methods) || !reflect.DeepEqual(AllMethods[n-len(methods):n], methods) {
+		t.Fatalf("AllMethods does not end with the calendar methods: %v", AllMethods[n-len(methods):n])
 	}
 	if AllMethods[n-len(methods)-1] != MethodBoardRunEnd {
 		t.Fatalf("the calendar methods do not follow the board's")

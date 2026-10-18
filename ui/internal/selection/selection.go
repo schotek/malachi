@@ -41,6 +41,12 @@ type Flags struct {
 	Open bool
 	// Comment: Reply writes a comment (the account's capability).
 	Comment bool
+	// Crm: Save to eWay-CRM can run (for one row ui/internal/crm CanSave
+	// with an eWay-CRM account available; several: every row, at most
+	// api.MaxCrmMessages, as crm.OfferFor's Enabled). CrmSaved: the one
+	// row is saved there (the saved-state items replace Save); never for
+	// several.
+	Crm, CrmSaved bool
 }
 
 // Combine is what the window's actions allow for rows, the flags of each
@@ -53,6 +59,8 @@ type Flags struct {
 //     stay); Trash, Move To and the star only when every row allows them;
 //   - Forward forwards them all in one message, up to MaxForward rows;
 //     Open opens up to MaxOpen windows;
+//   - Save to eWay-CRM when every row can be saved, up to
+//     api.MaxCrmMessages rows, as one save (never the saved-state items);
 //   - Reply, Reply All, Change Status, Load Images and Trust Sender are
 //     for one message, and off;
 //   - in the outbox Trash cancels the sending of them all, and nothing
@@ -69,7 +77,8 @@ func Combine(rows []Flags) Flags {
 	}
 	n := len(rows)
 	out := Flags{Count: n, On: true, Outbox: true, Flagged: true, Comment: rows[0].Comment,
-		Forward: n <= MaxForward, Star: true, ToggleFlag: true, Trash: true, Move: true, Open: n <= MaxOpen}
+		Forward: n <= MaxForward, Star: true, ToggleFlag: true, Trash: true, Move: true, Open: n <= MaxOpen,
+		Crm: n <= api.MaxCrmMessages}
 	for _, r := range rows {
 		out.Outbox = out.Outbox && r.Outbox
 		out.Flagged = out.Flagged && r.Flagged
@@ -78,6 +87,7 @@ func Combine(rows []Flags) Flags {
 		out.ToggleFlag = out.ToggleFlag && r.ToggleFlag
 		out.Trash = out.Trash && r.Trash
 		out.Move = out.Move && r.Move
+		out.Crm = out.Crm && r.Crm
 		out.Archive = out.Archive || r.Archive
 		out.Junk = out.Junk || r.Junk
 		out.MarkRead = out.MarkRead || r.MarkRead
@@ -86,6 +96,7 @@ func Combine(rows []Flags) Flags {
 	if out.Outbox {
 		out.Forward, out.Star, out.ToggleFlag, out.Move = false, false, false, false
 		out.Archive, out.Junk, out.MarkRead, out.MarkUnread = false, false, false, false
+		out.Crm = false
 	}
 	return out
 }

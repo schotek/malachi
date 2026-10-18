@@ -43,6 +43,11 @@ enum IssuePill {
         (.systemRed, NSColor.systemRed.withAlphaComponent(0.12))
     }
 
+    /// The eWay pill of a message saved in eWay-CRM (`CRM.pillFor`).
+    static var crmColours: Colours {
+        (.systemTeal, NSColor.systemTeal.withAlphaComponent(0.14))
+    }
+
     /// Paints `pill` in `c`; on a selected row (`emphasized`) in the
     /// selection's text colour on a translucent fill, as the count badge.
     static func paint(_ pill: PillLabel, _ c: Colours, emphasized: Bool) {

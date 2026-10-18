@@ -16,6 +16,7 @@ import (
 	"slices"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/crm"
 )
 
 // ItemID names an item of a context menu.
@@ -49,6 +50,15 @@ const (
 	Trash ItemID = "trash"
 	// Assistant is the submenu of the Assistant's actions on the message.
 	Assistant ItemID = "assistant"
+	// CrmSave opens the Save to eWay-CRM dialog over the selection
+	// (ui/internal/crm Dialog); several rows save together.
+	CrmSave ItemID = "crmSave"
+	// CrmOpen, CrmEditLinks and CrmRemove replace CrmSave for one saved
+	// message: crm.SavedMenu's items (crm.MenuOpen, crm.MenuEditLinks,
+	// crm.MenuRemove), Remove after crm.RemoveQuestion.
+	CrmOpen      ItemID = "crmOpen"
+	CrmEditLinks ItemID = "crmEditLinks"
+	CrmRemove    ItemID = "crmRemove"
 )
 
 // The items of the sidebar's menus.
@@ -105,13 +115,25 @@ type MessageState struct {
 	ChangeStatus bool
 	// Assistant: the Assistant is shown (its submenu says what can run).
 	Assistant bool
+	// OfferCrm, Crm and CrmSaved are crm.OfferFor of the selected rows
+	// (Shown, Enabled, Saved; SetCrm): the eWay-CRM items are left out
+	// unless offered, Save is disabled unless Crm, and one saved message
+	// has the saved-state items instead of Save.
+	OfferCrm, Crm, CrmSaved bool
+}
+
+// SetCrm fills the eWay-CRM fields from crm.OfferFor of the selected rows.
+func (s *MessageState) SetCrm(o crm.Offer) {
+	s.OfferCrm, s.Crm, s.CrmSaved = o.Shown, o.Enabled, o.Saved
 }
 
 // MessageItems is the message menu in its groups: opening; answering;
-// read, star and status; where the message goes; the Assistant. Empty
-// groups are left out. For several rows Open opens each (Labels.Count),
-// Forward forwards them in one message, and Reply, Reply All and Change
-// Status, which are for one message, are not offered.
+// eWay-CRM; read, star and status; where the message goes; the
+// Assistant. Empty groups are left out. For several rows Open opens each
+// (Labels.Count), Forward forwards them in one message, Save to eWay-CRM
+// saves them together (Labels.Count), and Reply, Reply All, Change Status
+// and the saved-state eWay-CRM items, which are for one message, are not
+// offered.
 func MessageItems(s MessageState) [][]Item {
 	several := s.Count > 1
 	open := Item{ID: OpenMessage, Enabled: !several || s.Open}
@@ -127,6 +149,14 @@ func MessageItems(s MessageState) [][]Item {
 	}
 	if s.OfferForward {
 		answer = append(answer, Item{Forward, s.Forward})
+	}
+	var crmItems []Item
+	switch {
+	case !s.OfferCrm:
+	case s.CrmSaved && !several:
+		crmItems = []Item{{CrmOpen, true}, {CrmEditLinks, true}, {CrmRemove, true}}
+	default:
+		crmItems = []Item{{CrmSave, s.Crm}}
 	}
 	var mark []Item
 	if s.MarkRead {
@@ -156,7 +186,7 @@ func MessageItems(s MessageState) [][]Item {
 	if s.Assistant {
 		assistant = []Item{{Assistant, true}}
 	}
-	return groups([]Item{open}, answer, mark, move, assistant)
+	return groups([]Item{open}, answer, crmItems, mark, move, assistant)
 }
 
 // FolderState is what the sidebar knows of the folder clicked.

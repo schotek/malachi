@@ -216,7 +216,8 @@ class AccountsPaneViewController: PreferencesPaneViewController, NSTableViewData
     /// (accounts_page.go `signInAccount`, NewEditSignIn).
     /// The row's editor (`Integrations.rowFor`): a Jira account opens its
     /// settings (`JiraAccountWindowController`), where its token is
-    /// replaced too; a CalDAV account the Calendar page.
+    /// replaced too; a CalDAV account the Calendar page; an eWay-CRM
+    /// account its assistant in the edit mode (`EWayWizardWindowController`).
     private func editAccount(_ id: AccountID, signIn: Bool = false) {
         guard let window = view.window, let i = index(of: id) else { return }
         let saved: @MainActor (AccountID, AccountConfig) -> Void = { [weak self] _, cfg in
@@ -234,6 +235,14 @@ class AccountsPaneViewController: PreferencesPaneViewController, NSTableViewData
             )
         case .calendarPage:
             onShowCalendar?()
+        case .eway:
+            EWayWizardWindowController.present(from: window, client: client, editing: accounts[i]) { id, cfg in
+                var named = cfg
+                if named.email.isEmpty {
+                    named.email = named.name
+                }
+                saved(id, named)
+            }
         case .none:
             break
         }

@@ -684,7 +684,7 @@ import Testing
             "event.dismissAlert", "invitation.list", "invitation.respond", "invitation.applyCancel",
         ]
         #expect(names.count == 21)
-        #expect(Array(API.allMethods.suffix(21)) == names)
+        #expect(Array(API.allMethods.dropLast(API.crmMethods.count).suffix(21)) == names)
         #expect(API.calendarMethods.map { $0.name } == names)
         #expect(API.CalendarPreferencesGet.name == "calendar.preferences" && API.EventSnoozeAlert.name == "event.snoozeAlert")
         #expect(API.AccountDiscoverCalDAV.timeout == RPCTimeouts.discover && API.AccountListCalDAVCalendars.timeout == RPCTimeouts.test)

@@ -2234,8 +2234,8 @@ testy souboru s klíčem a skutečného démona a jeden test typu souboru
 v shell verdiktu, jsou prostředí a předcházejí port) a ARM64. GTK port
 vznikl souběžně na Macu (GTK klient kalendáře výše).
 
-Předvolby → Integrace (2026-10-17, všechny tři klienty, necommitnuté;
-rozhodnutí vlastníka přes AskUserQuestion). Stránka Účty vypisuje jen
+Předvolby → Integrace (2026-10-17, všechny tři klienty, commit `b9eb49b`
+v `main` po ověření vlastníkem; rozhodnutí přes AskUserQuestion). Stránka Účty vypisuje jen
 poštovní účty (`imap`, `graph`) a její „+“ je prosté tlačítko poštovního
 průvodce; hned za ní je nová stránka Integrace (msgid „Integrations“)
 s každým jiným účtem — Jira, CalDAV, později eWay-CRM — ve skupině
@@ -2273,6 +2273,48 @@ smoke `CalendarPreferencesSmokeTests`, `SmokeTests`), přičemž
 prací na ikonách kalendáře. Ručně ve všech třech nad kopií dat: pořadí
 stránek, Účty jen pošta, Integrace s Jirou a CalDAV, Přidat…, odebrání
 s větou podle druhu, řazení a pořadí v postranním panelu.
+
+eWay-CRM (větev `feat/eway` od `b9eb49b`, commitnuté jedním commitem 2026-10-18 po Gate B vlastníka, nepushnuté;
+návrh a rozhodnutí vlastníka v `docs/eway.md`, „As verified (T0)“ z testu
+na veřejné trial instanci eWay a „As built“ po úkolech). Účet `kind:
+eway` jen s capability `crm`, nikdy v Poště, spravovaný na stránce
+Integrace; heslo v klíčence, MD5 jen při `LogIn`, jedna session na účet
+vázaná na IP, instance s přihlášením Microsoft odmítnuté (1205
+`crmSignInUnsupported`). Metody `account.detectEway`, `crm.lookup`,
+`crm.search`, `crm.save`, `crm.remove` (`docs/api.md` §4.17, chyby 1109,
+1205, 1307), `MessageSummary.crmSaved`, `Message.crm`, migrace 0021
+`crm_links`. Uložení = nahrát surový `.eml` pod vlastním GUID, pak
+`SaveEmail` s povinnými poli, dedup přes Message-ID jen při shodě
+odesílatele a data, jedna nadřazená položka přes cizí klíč, ostatní vazby
+GENERAL, `DeleteRelation {relationDataGuid}`; klient `internal/eway`
+(bez přesměrování, strop 8 MiB, popisy chyb eWay se nelogují, obsahují
+session id), fake `ewaytest`, patologická data `backend/testdata/eway`,
+bezpečnost `docs/security.md` §7.3. Pořadí klientů podle vlastníka:
+Go reference `ui/internal/crm` (+ `contextmenu`, `selection`,
+`capabilities.InMail`, `integrations`, `accountwizard/eway_flow.go`,
+msgidy s češtinou) → **macOS první** → GTK a Windows až po jeho ověření;
+do té doby GTK ukáže účet eWay v Integracích bez akcí (`TODO(T7)`) a
+Windows `StringsCheckTests` hlásí nové msgidy jako nepoužité (T8).
+Ověřeno: démon `go vet`, `pkg/api`, `rpc`, `eway`, celé `store` i `core`;
+nezávislá revize démona s osmi opravenými nálezy; `make po`, `make lint`
+a `make build` GTK v kontejneru; macOS klient (T6: `MalachiCore/API/CRMAPI.swift`,
+`MalachiCore/CRM`, `CRMController`, `EWayWizardController`,
+`MalachiMail/CRM`, `AccountWizard/EWay`, tlačítko v toolbaru před ✦,
+položky v menu Zpráva a kontextovém menu, dialog vazeb jako sheet, pruh
+a štítek, průvodce jen ze Settings → Integrations; `swift build` bez
+varování, 202 filtrovaných testů, `check-strings`; vývojové kroky
+`crm-dialog`, `eway-wizard`). Z průchodu vlastníka (Gate B, „Gate B
+findings“ v `docs/eway.md`): účet eWay bez e-mailové adresy, hint k adresě
+webové služby, tlačítko jako vlastní kapsle toolbaru mezi Archivovat/Koš
+a hvězdičkou, sbalený řádek vlákna nic nenabízí, řádek „Obchody a
+projekty přidáte hledáním nahoře“ v dialogu, ukládání ze všech poštovních
+účtů jako Outlook. D22 sledování uložené konverzace (rozhodnutí
+vlastníka): `EwayConfig.followThreads` (zaškrtávátko v průvodci, výchozí
+zapnuto), démon po uložení zprávy ukládá i další zprávy téhož vlákna se
+stejnými vazbami (hook `Stored` jen zařadí do fronty, worker na účet,
+hodinový dosběr; nikdy koncepty, outbox, nevyžádanou, koš ani hromadnou
+poštu; `CrmRecord.auto`, migrace 0022). Čeká: dokončení Gate B vlastníka,
+pak porty GTK a Windows a commit.
 
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně

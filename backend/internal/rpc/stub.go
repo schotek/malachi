@@ -42,6 +42,22 @@ func (b *StubBackend) Board() api.BoardService            { return stubBoard{} }
 func (b *StubBackend) Calendars() api.CalendarService     { return stubCalendars{} }
 func (b *StubBackend) Events() api.EventService           { return stubEvents{} }
 func (b *StubBackend) Invitations() api.InvitationService { return stubInvitations{} }
+func (b *StubBackend) Crm() api.CrmService                { return stubCrm{} }
+
+type stubCrm struct{}
+
+func (stubCrm) Lookup(context.Context, api.CrmLookupParams) (*api.CrmLookupResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubCrm) Search(context.Context, api.CrmSearchParams) (*api.CrmSearchResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubCrm) Save(context.Context, api.CrmSaveParams) (*api.CrmSaveResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubCrm) Remove(context.Context, api.CrmRemoveParams) (*api.CrmRemoveResult, error) {
+	return nil, api.ErrNotImplemented
+}
 
 type stubCalendars struct{}
 
@@ -243,6 +259,9 @@ func (stubAccounts) OAuthCancel(context.Context, api.AccountOAuthCancelParams) (
 	return nil, api.ErrNotImplemented
 }
 func (stubAccounts) DetectSite(context.Context, api.AccountDetectSiteParams) (*api.AccountDetectSiteResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) DetectEway(context.Context, api.AccountDetectEwayParams) (*api.AccountDetectEwayResult, error) {
 	return nil, api.ErrNotImplemented
 }
 func (stubAccounts) ListSpaces(context.Context, api.AccountListSpacesParams) (*api.AccountListSpacesResult, error) {

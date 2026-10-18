@@ -14,6 +14,8 @@ import Testing
             cfg.jira = JiraConfig(siteUrl: "https://Acme.atlassian.net/", deployment: .cloud, login: id + "@example.invalid")
         } else if kind == .caldav {
             cfg.caldav = CalDAVConfig(serverUrl: "https://Cloud.example.org/remote.php/dav/", username: id)
+        } else if kind == .eway {
+            cfg.eway = EwayConfig(serviceUrl: "https://Hosting.eway-crm.com/acme", username: "jana")
         }
         return Account(id: AccountID(id), config: cfg, enabled: true, state: SyncState(accountId: AccountID(id), status: .idle))
     }
@@ -28,7 +30,7 @@ import Testing
     @Test func predicatesByKind() {
         let cases: [(AccountKind?, Bool)] = [
             (nil, true), (.imap, true), (.graph, true),
-            (.jira, false), (.caldav, false), (AccountKind(rawValue: "future"), false),
+            (.jira, false), (.caldav, false), (.eway, false), (AccountKind(rawValue: "future"), false),
         ]
         for (kind, mail) in cases {
             let a = account("a", kind)
@@ -64,10 +66,12 @@ import Testing
 
     @Test func catalog() throws {
         let c = Integrations.catalog()
-        try #require(c.count == 2)
-        #expect(c[0].kind == .jira && c[1].kind == .caldav)
+        try #require(c.count == 3)
+        #expect(c[0].kind == .jira && c[1].kind == .caldav && c[2].kind == .eway)
         #expect(c[0].name == "Jira" && c[0].icon == Integrations.jiraIcon)
         #expect(c[1].name == "CalDAV Calendar" && c[1].icon == Integrations.calDAVIcon)
+        #expect(c[2].name == "eWay-CRM" && c[2].icon == Integrations.ewayIcon && Integrations.ewayIcon == CRM.icon)
+        #expect(c[2].description == "Save messages to your CRM with their contacts, companies and deals")
         for s in c {
             #expect(!s.description.isEmpty, "\(s.kind)")
         }
@@ -103,6 +107,16 @@ import Testing
         r = Integrations.rowFor(c)
         #expect(r.title == "c@example.invalid" && r.subtitle == "c@example.invalid")
 
+        var e = account("e", .eway)
+        r = Integrations.rowFor(e)
+        #expect(r.title == "e@example.invalid" && r.subtitle == "hosting.eway-crm.com/acme" && r.offersSwitch)
+        #expect(r.editor == .eway && r.editLabel == "Edit Account" && r.icon == Integrations.ewayIcon)
+        e.config.name = "Acme CRM"
+        r = Integrations.rowFor(e)
+        #expect(r.title == "Acme CRM")
+        #expect(r.removeBody == "Acme CRM will be removed from Malachi Mail. Messages saved in eWay-CRM stay there.")
+        #expect(Integrations.showsInIntegrations(e) && !Integrations.showsInAccounts(e))
+
         let f = Integrations.rowFor(account("f", AccountKind(rawValue: "future")))
         #expect(f.editor == .none && f.offersSwitch && f.removeBody == "f@example.invalid will be removed from Malachi Mail.")
     }
@@ -121,5 +135,6 @@ import Testing
             #expect(!s.isEmpty)
         }
         #expect(x.title == "Integrations" && x.add == "Add…" && x.calendarSettings == "Calendar Settings")
+        #expect(x.description == "Services beside your mail: issue trackers, calendars and CRM")
     }
 }

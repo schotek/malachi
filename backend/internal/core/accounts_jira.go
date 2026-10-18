@@ -197,6 +197,8 @@ func capabilitiesFor(c api.AccountConfig) []api.AccountCapability {
 		return append(append([]api.AccountCapability{}, api.MailCapabilities...), api.CapabilityCalendar)
 	case api.AccountCalDAV:
 		return []api.AccountCapability{api.CapabilityCalendar}
+	case api.AccountEway:
+		return []api.AccountCapability{api.CapabilityCrm}
 	case api.AccountJira:
 		return []api.AccountCapability{api.CapabilityComment, api.CapabilityForward, api.CapabilityTransition}
 	default:

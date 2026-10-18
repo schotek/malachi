@@ -57,6 +57,9 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     /// No stored event with that id, or the recurrence id names no
     /// occurrence of it.
     public static let eventNotFound: ErrorCode = 1108
+    /// A CRM item named in crm.save (link, superior) is not an item of that
+    /// CRM account, or for crm.remove the saved message's item is gone.
+    public static let crmItemNotFound: ErrorCode = 1109
 
     // 1200–1299: authentication.
     /// Credentials missing or token expired; see notify.authRequired.
@@ -71,6 +74,9 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     /// The account's sign-in does not allow calendar access; `data` is
     /// `CalendarConsentRequiredData` (`RPCError.calendarConsentRequired`).
     public static let calendarConsentRequired: ErrorCode = 1204
+    /// The CRM instance cannot be signed in to by this version; `data` is
+    /// `CrmSignInUnsupportedData` (`RPCError.crmSignInUnsupported`).
+    public static let crmSignInUnsupported: ErrorCode = 1205
 
     // 1300–1399: network and remote servers.
     public static let offline: ErrorCode = 1300
@@ -84,6 +90,9 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     /// The server no longer has the event (deleted or moved elsewhere); the
     /// next pass removes the local copy.
     public static let eventGone: ErrorCode = 1306
+    /// The CRM refused the message as a duplicate of an item the daemon
+    /// cannot find.
+    public static let crmDuplicate: ErrorCode = 1307
 
     // 1400–1499: local storage.
     public static let storageError: ErrorCode = 1400
@@ -130,9 +139,10 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .notImplemented, .invalidArgument, .conflict, .cancelled, .unavailable, .unauthenticated,
         .readOnly, .invitationsUnavailable,
         .accountNotFound, .folderNotFound, .messageNotFound, .threadNotFound, .draftNotFound, .attachmentNotFound,
-        .caseNotFound, .calendarNotFound, .eventNotFound,
+        .caseNotFound, .calendarNotFound, .eventNotFound, .crmItemNotFound,
         .authRequired, .authFailed, .keyringError, .oauthClientMissing, .calendarConsentRequired,
-        .offline, .networkError, .serverError, .tlsError, .serverTimeout, .messageGone, .eventGone,
+        .crmSignInUnsupported,
+        .offline, .networkError, .serverError, .tlsError, .serverTimeout, .messageGone, .eventGone, .crmDuplicate,
         .storageError, .migrationFailed,
         .malformedMessage, .sanitizeFailed, .attachmentTooBig, .partNotFound, .partNotDownloaded,
         .unsubscribeFailed, .quoteNotFound, .malformedCalendar, .recurrenceUnsupported,
@@ -161,11 +171,13 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .caseNotFound: "caseNotFound",
         .calendarNotFound: "calendarNotFound",
         .eventNotFound: "eventNotFound",
+        .crmItemNotFound: "crmItemNotFound",
         .authRequired: "authRequired",
         .authFailed: "authFailed",
         .keyringError: "keyringError",
         .oauthClientMissing: "oauthClientMissing",
         .calendarConsentRequired: "calendarConsentRequired",
+        .crmSignInUnsupported: "crmSignInUnsupported",
         .offline: "offline",
         .networkError: "networkError",
         .serverError: "serverError",
@@ -173,6 +185,7 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .serverTimeout: "serverTimeout",
         .messageGone: "messageGone",
         .eventGone: "eventGone",
+        .crmDuplicate: "crmDuplicate",
         .storageError: "storageError",
         .migrationFailed: "migrationFailed",
         .malformedMessage: "malformedMessage",

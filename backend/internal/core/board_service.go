@@ -278,7 +278,7 @@ func (b *Backend) triageAccounts(ctx context.Context, p api.BoardPreferences) (m
 	}
 	out := map[string]store.Account{}
 	for _, a := range list {
-		if !a.Enabled || isCalendarOnlyAccount(a) {
+		if !a.Enabled || isCalendarOnlyAccount(a) || isCrmAccount(a) {
 			continue
 		}
 		if len(named) == 0 && isIssueAccount(a) {

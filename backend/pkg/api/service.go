@@ -35,6 +35,7 @@ type AccountService interface {
 	ListSpaces(ctx context.Context, p AccountListSpacesParams) (*AccountListSpacesResult, error)
 	DiscoverCalDAV(ctx context.Context, p AccountDiscoverCalDAVParams) (*AccountDiscoverCalDAVResult, error)
 	ListCalDAVCalendars(ctx context.Context, p AccountListCalDAVCalendarsParams) (*AccountListCalDAVCalendarsResult, error)
+	DetectEway(ctx context.Context, p AccountDetectEwayParams) (*AccountDetectEwayResult, error)
 }
 
 type FolderService interface {
@@ -171,6 +172,16 @@ type InvitationService interface {
 	ApplyCancel(ctx context.Context, p InvitationApplyCancelParams) (*InvitationApplyCancelResult, error)
 }
 
+// CrmService saves messages of mail accounts to a CRM account
+// (CapabilityCrm) and reads what they are linked to there (docs/api.md
+// §4.17).
+type CrmService interface {
+	Lookup(ctx context.Context, p CrmLookupParams) (*CrmLookupResult, error)
+	Search(ctx context.Context, p CrmSearchParams) (*CrmSearchResult, error)
+	Save(ctx context.Context, p CrmSaveParams) (*CrmSaveResult, error)
+	Remove(ctx context.Context, p CrmRemoveParams) (*CrmRemoveResult, error)
+}
+
 // Backend is the complete server-side surface. The connection handshake
 // (system.hello, system.authenticate; docs/api.md §1.4) is not part of it:
 // the transport (internal/rpc) answers the handshake before any call of a
@@ -194,6 +205,7 @@ type Backend interface {
 	Calendars() CalendarService
 	Events() EventService
 	Invitations() InvitationService
+	Crm() CrmService
 }
 
 // Notifier is how backend components push events to connected clients.

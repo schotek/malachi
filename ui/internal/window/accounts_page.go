@@ -310,6 +310,10 @@ func (d *PreferencesDialog) editAccount(c *client.Client, row *accountRow) {
 		d.showCalendarPage()
 	case integrations.EditorMailWizard:
 		d.presentEdit(c, accountwizard.NewEdit(c, d.log, row.account))
+	case integrations.EditorEway:
+		// TODO(T7, docs/eway.md §4): the eWay-CRM assistant in its edit
+		// mode (accountwizard ewayFlow); until then the row's Edit does
+		// nothing in GTK.
 	}
 }
 

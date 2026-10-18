@@ -48,6 +48,21 @@ final class WizardBannerView: NSView {
             isHidden = true
         }
     }
+
+    /// A wrapping `NSTextField` measures its intrinsic height from
+    /// `preferredMaxLayoutWidth`; without it a banner revealed before the
+    /// sheet's first layout keeps the narrow width of that first pass and
+    /// wraps its text into a tall column (seen in the eWay-CRM assistant,
+    /// 2026-10-17). Feed the label the width it actually got.
+    override func layout() {
+        super.layout()
+        let width = label.bounds.width
+        if width > 0, label.preferredMaxLayoutWidth != width {
+            label.preferredMaxLayoutWidth = width
+            label.invalidateIntrinsicContentSize()
+            needsLayout = true
+        }
+    }
 }
 
 /// `AdwStatusPage`: a large symbol or a spinner, a title, a description and

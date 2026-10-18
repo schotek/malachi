@@ -48,6 +48,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     /// app installs them.
     var messageActions: (any MessageActions)?
 
+    /// eWay-CRM on the selection (the toolbar's button, the Message menu,
+    /// the context menu); installed by the application (Integration+CRM).
+    var crm: CRMController?
+
     /// The window title: the selected folder's name (D1 of the plan).
     var folderTitle: String {
         didSet { applyTitle() }
@@ -199,6 +203,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
             showsPanel: state.assistant.panelShown)
         mailToolbar = toolbarDelegate.makeToolbar()
         super.init(window: w)
+        // The toolbar's CRM item asks this window's controller (installed
+        // by the application, Integration+CRM); a hidden item has no window
+        // to find it through.
+        toolbarDelegate.crmController = { [weak self] in self?.crm }
         w.delegate = self
         modeKeyMonitor = installModeKeys()
         w.toolbar = mailToolbar
@@ -595,6 +603,24 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         messageActions?.summarizeUnread()
     }
 
+    // eWay-CRM (CRMController) on the selection.
+
+    @objc func crmSave(_ sender: Any?) {
+        crm?.save()
+    }
+
+    @objc func crmOpen(_ sender: Any?) {
+        crm?.open()
+    }
+
+    @objc func crmEditLinks(_ sender: Any?) {
+        crm?.editLinks()
+    }
+
+    @objc func crmRemove(_ sender: Any?) {
+        crm?.remove()
+    }
+
     // MARK: Validation
 
     /// Whether `action` is allowed for the selection (actions.go
@@ -671,6 +697,9 @@ extension MainWindowController: NSUserInterfaceValidations {
                     menuItem.title = Assistant.labelFor(a, count: f.count)
                     menuItem.isHidden = !Assistant.messageActionsFor(f.count).contains(a)
                 }
+            case _ where Action.crmActions.contains(action):
+                // eWay-CRM: only in Mail, as `CRM.offer` has it.
+                return CRMMenuItems.validate(menuItem, action, mode == .mail ? crm : nil)
             default: break
             }
             ActionPresentation.present(menuItem, action, f)
@@ -709,3 +738,13 @@ extension MainWindowController: NSToolbarItemValidation {
 }
 
 extension MainWindowController: MalachiActions {}
+
+extension MainWindowController: CRMWindow {
+    /// The eWay-CRM button of the Mail toolbar after a save or removal
+    /// began or ended, or the selection's state changed.
+    func refreshCRM() {
+        for case let item as CRMToolbarItem in mailToolbar.items {
+            item.refresh()
+        }
+    }
+}

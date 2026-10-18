@@ -22,7 +22,7 @@ protocol ToastHosting: AnyObject {
 /// window; the body has the initial focus, so the selectable subject is
 /// not focused and select-all'd on open.
 @MainActor
-final class MessageWindowController: NSWindowController, NSWindowDelegate, ToastHosting {
+final class MessageWindowController: NSWindowController, NSWindowDelegate, ToastHosting, CRMWindow {
     static let defaultSize = NSSize(width: 820, height: 620)
     static let minimumSize = NSSize(width: 360, height: 294)
     static let toolbarIdentifier = NSToolbar.Identifier("message")
@@ -54,6 +54,10 @@ final class MessageWindowController: NSWindowController, NSWindowDelegate, Toast
     private let assistantMenu: AssistantMenu
     private var assistantToken: AssistantController.Token?
     private var escape: EscapeCloser?
+    /// eWay-CRM on this window's message (the toolbar's button, the
+    /// Message menu).
+    private(set) var crm: CRMController?
+    private var crmToken: CRMState.Token?
 
     init(state: AppState, cache: MessageCache, summary: MessageSummary) {
         self.state = state
@@ -92,6 +96,28 @@ final class MessageWindowController: NSWindowController, NSWindowDelegate, Toast
         messageView.onRender = { [weak self] s, lm in
             self?.rendered(s, lm)
         }
+        let crm = CRMController(client: state.client, state: state.crm)
+        crm.subjects = { [weak self] in
+            guard let self else { return [] }
+            return [self.messageView.current ?? self.summary]
+        }
+        let toasts = toasts
+        CRMWindowSupport.configure(crm, state: state, window: { [weak self] in self?.window }) { toasts.show($0) }
+        self.crm = crm
+        // The toolbar's CRM item asks this controller (a hidden item has
+        // no window to find it through).
+        toolbarDelegate.crmController = { [weak self] in self?.crm }
+        refreshCRM()
+        crmToken = state.crm.observe { [weak self] in self?.refreshCRM() }
+    }
+
+    /// The eWay-CRM button and bar after a save or removal began or ended.
+    func refreshCRM() {
+        guard !closed else { return }
+        for case let item as CRMToolbarItem in window?.toolbar?.items ?? [] {
+            item.refresh()
+        }
+        messageView.refreshCRM()
     }
 
     @available(*, unavailable)
@@ -130,6 +156,8 @@ final class MessageWindowController: NSWindowController, NSWindowDelegate, Toast
         escape = nil
         assistantToken?.cancel()
         assistantToken = nil
+        crmToken?.cancel()
+        crmToken = nil
         // The only timer that would outlive the window.
         messageView.close()
     }
@@ -194,6 +222,24 @@ final class MessageWindowController: NSWindowController, NSWindowDelegate, Toast
 
     @objc func trustSender(_ sender: Any?) {
         delegate?.trustSender(id)
+    }
+
+    // eWay-CRM (CRMController) on this window's message.
+
+    @objc func crmSave(_ sender: Any?) {
+        crm?.save()
+    }
+
+    @objc func crmOpen(_ sender: Any?) {
+        crm?.open()
+    }
+
+    @objc func crmEditLinks(_ sender: Any?) {
+        crm?.editLinks()
+    }
+
+    @objc func crmRemove(_ sender: Any?) {
+        crm?.remove()
     }
 
     /// The Assistant menu's message actions (the item's tag) on this
@@ -261,6 +307,8 @@ extension MessageWindowController: NSUserInterfaceValidations {
             switch action {
             case Action.toggleFlag: menuItem.title = starTitle(f)
             case Action.moveToTrash: menuItem.title = trashTitle(f)
+            case _ where Action.crmActions.contains(action):
+                return CRMMenuItems.validate(menuItem, action, crm)
             default: break
             }
             ActionPresentation.present(menuItem, action, f)

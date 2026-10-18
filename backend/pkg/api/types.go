@@ -214,6 +214,12 @@ const (
 	// mail: folder.list answers no folders, message methods
 	// invalidArgument, and clients never show it in Mail.
 	AccountCalDAV AccountKind = "caldav"
+	// AccountEway is a CRM account on an eWay-CRM instance (EwayConfig;
+	// the password is Credentials.Password). It has no mail, like a
+	// caldav account: folder.list answers no folders, message methods
+	// invalidArgument, and clients never show it in Mail. Its only
+	// capability is CapabilityCrm (docs/api.md §4.17).
+	AccountEway AccountKind = "eway"
 )
 
 // GraphSource says who holds the OAuth2 session of a Graph account.
@@ -352,8 +358,8 @@ type StatusRef struct {
 // method.
 //
 // IMAP and SMTP are set for AccountIMAP only, Graph for AccountGraph only,
-// Jira for AccountJira only, CalDAV for AccountCalDAV only; Calendar only
-// for AccountGraph and AccountCalDAV.
+// Jira for AccountJira only, CalDAV for AccountCalDAV only, Eway for
+// AccountEway only; Calendar only for AccountGraph and AccountCalDAV.
 type AccountConfig struct {
 	Name        string        `json:"name"`  // display name of the account
 	Email       string        `json:"email"` // primary address
@@ -365,6 +371,7 @@ type AccountConfig struct {
 	Graph       *GraphConfig  `json:"graph,omitempty"`
 	Jira        *JiraConfig   `json:"jira,omitempty"`
 	CalDAV      *CalDAVConfig `json:"caldav,omitempty"`
+	Eway        *EwayConfig   `json:"eway,omitempty"`
 	// Calendar is the calendar part of a graph or caldav account
 	// (docs/api.md §4.14); nil on a graph account = calendar sync off.
 	Calendar     *CalendarConfig `json:"calendar,omitempty"`
@@ -416,6 +423,10 @@ const (
 	// it does not change with consent or sync state. A caldav account has
 	// exactly this one.
 	CapabilityCalendar AccountCapability = "calendar"
+	// CapabilityCrm: messages of mail accounts can be saved to this
+	// account (crm.*, docs/api.md §4.17). An eway account has exactly this
+	// one.
+	CapabilityCrm AccountCapability = "crm"
 )
 
 // MailCapabilities is what a mail account (imap, graph) can do, and what a
@@ -660,13 +671,15 @@ type EndpointTestResult struct {
 // a Jira account (its Capabilities carry "cloud" or "datacenter", and
 // "gateway" when the Atlassian API gateway route was used), caldav for a
 // CalDAV account (its Capabilities among "calendar-access",
-// "calendar-auto-schedule" and "sync-collection").
+// "calendar-auto-schedule" and "sync-collection"), eway for an eWay-CRM
+// account (one sign-in).
 type AccountTestResult struct {
 	IMAP   *EndpointTestResult `json:"imap,omitempty"`
 	SMTP   *EndpointTestResult `json:"smtp,omitempty"`
 	Graph  *EndpointTestResult `json:"graph,omitempty"`
 	Jira   *EndpointTestResult `json:"jira,omitempty"`
 	CalDAV *EndpointTestResult `json:"caldav,omitempty"`
+	Eway   *EndpointTestResult `json:"eway,omitempty"`
 }
 
 // AccountDetectSiteParams asks what kind of issue-tracker site a URL
@@ -873,6 +886,10 @@ type MessageSummary struct {
 	// pill and a notification show. Message.Invitation shadows it with the
 	// whole card in message.get.
 	Invitation *InvitationSummary `json:"invitation,omitempty"`
+	// CrmSaved: the daemon's record says the message (any copy with the
+	// same Message-ID) is saved in an enabled CRM account (§4.17); a
+	// display cache, the CRM is the truth. Absent otherwise.
+	CrmSaved bool `json:"crmSaved,omitempty"`
 }
 
 // BulkKind is what kind of bulk mail a message is.
@@ -975,6 +992,9 @@ type Message struct {
 	// (message.get, message.download); it takes the place of
 	// MessageSummary.Invitation on the wire.
 	Invitation *InvitationCard `json:"invitation,omitempty"`
+	// Crm is the message's record in each CRM account where it is saved
+	// (message.get, §4.17); absent when it is saved nowhere.
+	Crm []CrmRecord `json:"crm,omitempty"`
 }
 
 // UnsubscribeMethod is how message.unsubscribe would act.

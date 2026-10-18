@@ -53,7 +53,9 @@ import MalachiCore
 //   MALACHI_CALENDAR_SAMPLES=1 the sample accounts' sections), dumps the
 //   Display group and each section, and closes Settings;
 //   `prefs-integrations` opens Settings → Integrations, dumps its
-//   connected rows and catalogue rows, and closes Settings. Each prints
+//   connected rows and catalogue rows, and closes Settings.
+//   `crm-dialog` and `eway-wizard`: MainWindowController+DevStartCRM.swift.
+//   Each prints
 //   `LAYOUT:` lines and a `LAYOUT: shot <step> window <n>` line naming
 //   the window worth a screenshot (`DevelopmentCalendar`); the
 //   `calendar:*` dumps add `LAYOUT:` lines for the sidebar's sections,
@@ -153,6 +155,9 @@ extension MainWindowController {
             return
         }
         if DevelopmentCalendar.step(step, in: self) {
+            return
+        }
+        if DevelopmentCRM.step(step, in: self) {
             return
         }
         if step.hasPrefix("size=") {

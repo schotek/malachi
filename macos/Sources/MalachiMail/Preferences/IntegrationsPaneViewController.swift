@@ -10,7 +10,8 @@ import MalachiCore
 /// Connected Services (the Accounts page's rows, `AccountsPaneViewController`
 /// with page `.integrations`: a Jira row edits its settings, a CalDAV row
 /// shows the Calendar page, which keeps the CalDAV account's server,
-/// password, certificate and calendars) and the catalogue of services
+/// password, certificate and calendars, an eWay-CRM row opens its
+/// assistant in the edit mode) and the catalogue of services
 /// that can be added (Available Services, `Integrations.catalog`), each
 /// with Add… opening its assistant.
 @MainActor
@@ -63,6 +64,7 @@ final class IntegrationsPaneViewController: AccountsPaneViewController {
         switch AccountKind(rawValue: sender.identifier?.rawValue ?? "") {
         case .jira: addJira()
         case .caldav: addCalDAV()
+        case .eway: addEway()
         default: break
         }
     }
@@ -72,6 +74,21 @@ final class IntegrationsPaneViewController: AccountsPaneViewController {
         guard let window = view.window, window.attachedSheet == nil else { return }
         JiraWizardWindowController.present(from: window, client: client) { [weak self] id, cfg in
             self?.added(id, cfg)
+        }
+    }
+
+    /// The eWay-CRM account assistant (docs/eway.md §2.4): only here, the
+    /// owner kept the other entry points for Mail accounts and Jira.
+    private func addEway() {
+        guard let window = view.window, window.attachedSheet == nil else { return }
+        EWayWizardWindowController.present(from: window, client: client) { [weak self] id, cfg in
+            // The daemon fills the address from the eWay-CRM user; the
+            // toast names the account until the list has it.
+            var named = cfg
+            if named.email.isEmpty {
+                named.email = named.name.isEmpty ? CRM.brand : named.name
+            }
+            self?.added(id, named)
         }
     }
 
