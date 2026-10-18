@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-17 09:56+0000\n"
+"POT-Creation-Date: 2026-10-18 19:08+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -5829,11 +5829,6 @@ msgstr ""
 msgid "Cc"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:983
-#: ui/internal/window/message_view.go:518
-msgid "Loading the message"
-msgstr ""
-
 #: ui/internal/window/conversation_card.go:737
 #: ui/internal/window/message_view.go:317
 msgid ""
@@ -5860,6 +5855,11 @@ msgstr ""
 #: ui/internal/window/conversation_card.go:797 ui/data/ui/message_window.ui:184
 #: ui/data/ui/window.ui:640
 msgid "_Download Pictures"
+msgstr ""
+
+#: ui/internal/window/conversation_card.go:983
+#: ui/internal/window/message_view.go:518
+msgid "Loading the message"
 msgstr ""
 
 #: ui/internal/window/drafts.go:75
@@ -6776,7 +6776,7 @@ msgstr ""
 msgid "Right"
 msgstr ""
 
-#: ui/data/ui/conversation_view.ui:77 ui/data/ui/embedded_window.ui:267
+#: ui/data/ui/conversation_view.ui:157 ui/data/ui/embedded_window.ui:267
 #: ui/data/ui/message_window.ui:395 ui/data/ui/window.ui:911
 msgctxt "accessibility"
 msgid "Loading the message"

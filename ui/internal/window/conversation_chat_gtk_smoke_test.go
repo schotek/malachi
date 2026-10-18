@@ -47,11 +47,16 @@ func TestConversationChatGTKSmoke(t *testing.T) {
 	adw.Init()
 	rpc := client.New(filepath.Join(t.TempDir(), "absent.sock"))
 	defer rpc.Close()
+	st := settings.NewMemory()
 	w := &Window{
 		ApplicationWindow: data.Builder("window.ui").GetObject("main_window").Cast().(*adw.ApplicationWindow),
 		log:               slog.Default(), mode: board.ModeMail,
-		client:        rpc,
-		settings:      settings.NewMemory(),
+		client:   rpc,
+		settings: st,
+		// The attachment chips of a timeline card bind their "Ask the
+		// Assistant" item to the window's Assistant, which the real window
+		// always has.
+		assist:        NewAssistant(st, slog.Default()),
 		actions:       make(map[string]*gio.SimpleAction),
 		toasts:        adw.NewToastOverlay(),
 		messageStack:  gtk.NewStack(),
@@ -198,10 +203,12 @@ func TestConversationChatGTKSmoke(t *testing.T) {
 		t.Errorf("the chat is not at its end: value %v page %v upper %v", adj.Value(), adj.PageSize(), adj.Upper())
 	}
 	// The widths: the long bubble stops at the maximum, the short one
-	// hugs its header and text.
+	// hugs its header and text. The bubble is its frame's border box
+	// (AllocatedWidth: the CSS padding and border in); Width is the content
+	// alone, 28 px less.
 	max := chat.bubbleMax()
-	longW := chat.bubbles["a1"].bubble.frame.Width()
-	shortW := chat.bubbles["r1"].bubble.frame.Width()
+	longW := chat.bubbles["a1"].bubble.frame.AllocatedWidth()
+	shortW := chat.bubbles["r1"].bubble.frame.AllocatedWidth()
 	t.Logf("LAYOUT: chat column=%v max=%d long=%d short=%d compact=%v value=%v page=%v upper=%v",
 		chat.columnWidth, max, longW, shortW, chat.compact, adj.Value(), adj.PageSize(), adj.Upper())
 	if max <= 0 || longW > max || longW < max-2 {

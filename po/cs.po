@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-17 09:56+0000\n"
+"POT-Creation-Date: 2026-10-18 19:08+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -6083,11 +6083,6 @@ msgstr "Komu"
 msgid "Cc"
 msgstr "Kopie"
 
-#: ui/internal/window/conversation_card.go:983
-#: ui/internal/window/message_view.go:518
-msgid "Loading the message"
-msgstr "Načtení zprávy"
-
 #: ui/internal/window/conversation_card.go:737
 #: ui/internal/window/message_view.go:317
 msgid ""
@@ -6117,6 +6112,11 @@ msgstr "Načíst vzdálené obrázky teď a vždy, když tento odesílatel napí
 #: ui/data/ui/window.ui:640
 msgid "_Download Pictures"
 msgstr "_Stáhnout obrázky"
+
+#: ui/internal/window/conversation_card.go:983
+#: ui/internal/window/message_view.go:518
+msgid "Loading the message"
+msgstr "Načtení zprávy"
 
 #: ui/internal/window/drafts.go:75
 msgid "The draft has not been downloaded yet; try again in a moment"
@@ -7050,7 +7050,7 @@ msgstr "Na střed"
 msgid "Right"
 msgstr "Vpravo"
 
-#: ui/data/ui/conversation_view.ui:77 ui/data/ui/embedded_window.ui:267
+#: ui/data/ui/conversation_view.ui:157 ui/data/ui/embedded_window.ui:267
 #: ui/data/ui/message_window.ui:395 ui/data/ui/window.ui:911
 msgctxt "accessibility"
 msgid "Loading the message"
