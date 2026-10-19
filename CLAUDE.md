@@ -1800,10 +1800,11 @@ ručně ve všech třech nad kopií dat: koncept komentáře z MCP v konverzaci
 issue, Upravit, zavřít s uložením, Zahodit, odeslat, odpověď na e-mail
 z MCP, štítek v seznamu.
 
-Zobrazení konverzace jako chat (2026-10-17, větev `feat/chat-view`,
-necommitnuté; plán `docs/plans/chat-view.md`, D1–D17, rozhodnutí vlastníka;
-výjimka z pravidla 6: macOS hotové a schválené vlastníkem v bráně B1, GTK
-napsané, Windows napsané bez překladu). Konverzace
+Zobrazení konverzace jako chat (2026-10-17 až 19, větev `feat/chat-view`
+sloučená do `main`; plán `docs/plans/chat-view.md`, D1–D17, rozhodnutí
+vlastníka; výjimka z pravidla 6: macOS hotové a schválené vlastníkem v bráně
+B1, GTK hotové a schválené v bráně B2, Windows sestavené a otestované jen
+v CI — brána B3 na skutečných Windows čeká). Konverzace
 má druhé rozložení vedle časové osy (ta zůstává beze změny a výchozí): cizí
 zprávy jako bubliny vlevo, moje a odpovědi z Odeslaných vpravo, koncepty na
 konci, události Jiry a řádek starších zpráv uprostřed, od nejstarší, otevřeno
@@ -1861,10 +1862,13 @@ nevolá, rolování na konec dokumentu je rovnocenné). Úpravy časové osy:
 přepnutí). Ověřeno tady `gofmt`, `gopls check`, typová kontrola `go/types`
 s `FakeImportC`, revize kódu a ruční běh workflow `rpm.yml` na větvi
 (2026-10-18: GTK se ve Fedoře přeložilo pro x86_64 i aarch64 po opravě
-jednoho středníku v Blueprintu); testy `internal/window` včetně smoke testu
-nikde neběžely. Čeká (G3 v kontejneru): `gtk.sh test-ui`, `make po` (má
-změnit jen odkaz `conversation_view.ui:77` v `po/malachi.pot`) a `make
-lint`; pak B2 vlastníka v XQuartz. Windows (W1–W2, `docs/windows-port.md` §11.7 „The chat layout“,
+jednoho středníku v Blueprintu); G3 v kontejneru na Macu (2026-10-18,
+`container` z instalace Davit s `CONTAINER_INSTALL_ROOT`, mimo sandbox
+agenta): `gtk.sh make build`, `gtk.sh test-ui` (celá sada `ui/`), smoke test
+(po dvou opravách testu: falešné okno dostalo `Assistant`, šířka bubliny se
+měří jako `AllocatedWidth`, tedy border box), `make po` (přečíslované odkazy)
+a `make lint` zelené; B2 vlastníka v XQuartz (`gtk.sh x11 dev`) prošla
+2026-10-19. Windows (W1–W2, `docs/windows-port.md` §11.7 „The chat layout“,
 `docs/plans/chat-view.md` §8): Core `Malachi.Core/Model/` `ChatSide`,
 `ChatRowKind`, `ChatRow`, `Conversation.Chat.cs` (port `chat.go`, 4 msgid už
 nejsou v exclusions), Swift-first `Conversation.ChatBody.cs`, `BubbleBody`,

@@ -397,3 +397,6 @@ and from the other clients:
 - **Pending**: `build.ps1 app`/`test`/`lint`, the smoke test, the manual
   pass listed in `docs/windows-port.md` §11.7, then B3 (plus Shift+F10 on a
   bubble does nothing, dark theme, 125 % scale).
+- 2026-10-19 B2 (GTK v XQuartz, `x11 dev`) prošla; G3 v kontejneru zelené
+  (testy, smoke, `make po`, `make lint`); `main` (PR #6, CI Windows) sloučený
+  do větve; sloučení do `main` s B3 na Windows nevyřízenou.
