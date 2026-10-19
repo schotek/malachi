@@ -114,6 +114,22 @@ public static class IconGlyphs
         // The window's Calendar mode (macOS calendar; Adwaita's
         // x-office-calendar): Calendar.
         ["x-office-calendar"] = G(0xE787),
+        // The Calendar's page, detail and invitation card (event_detail.blp,
+        // calendar_page.blp, calendar_sidebar.go, calendar_week.go,
+        // invitation_card.go): the previous day or month as go-next's
+        // mirror (ChevronLeft), search as edit-find's, the time zone the
+        // clock (Recent, as document-open-recent), the repeat RepeatAll,
+        // the place Location, a video call Video and its link Webcam, the
+        // reminder Ringer, the notes Document.
+        ["go-previous"] = G(0xE76B),
+        ["system-search"] = G(0xE721),
+        ["preferences-system-time"] = G(0xE823),
+        ["media-playlist-repeat"] = G(0xE8EE),
+        ["mark-location"] = G(0xE81D),
+        ["camera-video"] = G(0xE714),
+        ["camera-web"] = G(0xE8B8),
+        ["alarm"] = G(0xE7ED),
+        ["text-x-generic"] = G(0xE8A5),
         // Jira accounts: Reply as Comment (macOS text.bubble), the account's
         // row (GTK's stand-in for a ticket, as Adwaita has none), the views
         // Assigned to Me, Watching and Open as saved queries (Filter), and

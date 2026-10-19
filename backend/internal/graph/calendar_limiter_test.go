@@ -101,8 +101,11 @@ func TestLimiterPriority(t *testing.T) {
 	if a, b := <-order, <-order; a != "high" || b != "low" {
 		t.Fatalf("order %s, %s", a, b)
 	}
-	time.Sleep(10 * time.Millisecond)
-	if lim.InUse() != 0 {
-		t.Fatalf("%d slots in use", lim.InUse())
+	// The last holder lets go after its 5 ms, which are 15 ms where the
+	// clock ticks that coarsely (Windows): wait for it, up to a second.
+	for deadline := time.Now().Add(time.Second); lim.InUse() != 0; time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d slots in use", lim.InUse())
+		}
 	}
 }

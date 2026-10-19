@@ -30,45 +30,53 @@ public sealed class RealDaemonTests
     {
         using var daemon = RealDaemon.CreateOrSkip();
         await daemon.StartAsync(Ct);
-        using var client = new RpcClient(daemon.Socket, new WindowsKeyFilePolicy(), RealDaemon.HandshakeLimit);
-        await client.ConnectAsync(Ct);
-        Assert.Equal(new RpcClientState.Connected(), client.State);
-
-        var info = await client.CallAsync(API.SystemInfo, new EmptyParams(), Ct);
-        Assert.Equal(API.ProtocolVersion, info.ProtocolVersion);
-        Assert.Equal(daemon.Pid, info.Pid);
-        Assert.Equal(Path.GetFullPath(daemon.Store), Path.GetFullPath(info.StorePath));
-
-        // An account on a loopback port nobody serves, without a password:
-        // the daemon stores it and tells every client (notify.accountsChanged
-        // may come before the answer).
-        var added = await client.CallAsync(API.AccountAdd, new AccountAddParams
+        try
         {
-            Config = new AccountConfig
+            using var client = new RpcClient(daemon.Socket, new WindowsKeyFilePolicy(), RealDaemon.HandshakeLimit);
+            await client.ConnectAsync(Ct);
+            Assert.Equal(new RpcClientState.Connected(), client.State);
+
+            var info = await client.CallAsync(API.SystemInfo, new EmptyParams(), Ct);
+            Assert.Equal(API.ProtocolVersion, info.ProtocolVersion);
+            Assert.Equal(daemon.Pid, info.Pid);
+            Assert.Equal(Path.GetFullPath(daemon.Store), Path.GetFullPath(info.StorePath));
+
+            // An account on a loopback port nobody serves, without a password:
+            // the daemon stores it and tells every client (notify.accountsChanged
+            // may come before the answer).
+            var added = await client.CallAsync(API.AccountAdd, new AccountAddParams
             {
-                Name = "Test",
-                Email = "test@example.org",
-                Imap = new ServerConfig { Host = "127.0.0.1", Port = 1, Security = Security.None, Username = "test", AuthMethod = AuthMethod.Password },
-                Smtp = new ServerConfig { Host = "127.0.0.1", Port = 1, Security = Security.None, Username = "test", AuthMethod = AuthMethod.Password },
-            },
-        }, Ct);
-        Assert.False(string.IsNullOrEmpty(added.AccountId.Value));
-        using var wait = CancellationTokenSource.CreateLinkedTokenSource(Ct);
-        wait.CancelAfter(TimeSpan.FromSeconds(10));
-        while (true)
-        {
-            var n = await client.Notifications.ReadAsync(wait.Token);
-            if (n.Method == API.Notify.AccountsChanged)
+                Config = new AccountConfig
+                {
+                    Name = "Test",
+                    Email = "test@example.org",
+                    Imap = new ServerConfig { Host = "127.0.0.1", Port = 1, Security = Security.None, Username = "test", AuthMethod = AuthMethod.Password },
+                    Smtp = new ServerConfig { Host = "127.0.0.1", Port = 1, Security = Security.None, Username = "test", AuthMethod = AuthMethod.Password },
+                },
+            }, Ct);
+            Assert.False(string.IsNullOrEmpty(added.AccountId.Value));
+            using var wait = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+            wait.CancelAfter(TimeSpan.FromSeconds(10));
+            while (true)
             {
-                Assert.IsType<DaemonNotification.AccountsChanged>(n.Decode());
-                break;
+                var n = await client.Notifications.ReadAsync(wait.Token);
+                if (n.Method == API.Notify.AccountsChanged)
+                {
+                    Assert.IsType<DaemonNotification.AccountsChanged>(n.Decode());
+                    break;
+                }
             }
-        }
 
-        // The daemon's errors arrive as RpcException with the documented code.
-        var e = await Assert.ThrowsAsync<RpcException>(() =>
-            client.CallAsync(API.FolderList, new FolderListParams { AccountId = "nope" }, Ct));
-        Assert.Equal(ErrorCode.AccountNotFound, e.Code.Value);
+            // The daemon's errors arrive as RpcException with the documented code.
+            var e = await Assert.ThrowsAsync<RpcException>(() =>
+                client.CallAsync(API.FolderList, new FolderListParams { AccountId = "nope" }, Ct));
+            Assert.Equal(ErrorCode.AccountNotFound, e.Code.Value);
+        }
+        catch (RpcClientException e)
+        {
+            // A daemon that died says why in what it logged.
+            throw new InvalidOperationException($"{e.Message}\nthe daemon's log:\n{daemon.LogAfterExit()}", e);
+        }
     }
 
     /// <summary>

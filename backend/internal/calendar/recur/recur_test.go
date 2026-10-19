@@ -411,7 +411,9 @@ func TestPathologicalFixtures(t *testing.T) {
 			_, _, err = Expand(r, dt, loc, everything, 0)
 		}
 		elapsed := time.Since(start)
-		if elapsed > 100*time.Millisecond {
+		// 100 ms on a desktop; the hosted Windows runner took 190 ms once.
+		// A runaway expansion takes seconds, not a multiple of this.
+		if elapsed > 500*time.Millisecond {
 			t.Errorf("%s took %v", filepath.Base(p), elapsed)
 		}
 		t.Logf("%s %v", filepath.Base(p), elapsed)
@@ -455,7 +457,9 @@ func TestHeavyValidRules(t *testing.T) {
 		start := time.Now()
 		_, _, err := Expand(r, monday1900, prague, win, 0)
 		elapsed := time.Since(start)
-		if elapsed > 100*time.Millisecond {
+		// 100 ms on a desktop; the hosted Windows runner took 190 ms once.
+		// A runaway expansion takes seconds, not a multiple of this.
+		if elapsed > 500*time.Millisecond {
 			t.Errorf("%.60s took %v", s, elapsed)
 		}
 		t.Logf("%-60.60s %v", s, elapsed)

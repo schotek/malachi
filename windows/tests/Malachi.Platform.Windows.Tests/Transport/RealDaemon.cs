@@ -80,6 +80,17 @@ internal sealed class RealDaemon : IDisposable
         }
     }
 
+    /// <summary>
+    /// <see cref="Log"/> once a daemon that has stopped has been read to the
+    /// end (its last lines come through the output events a moment later).
+    /// </summary>
+    public string LogAfterExit()
+    {
+        process?.WaitForExit(3_000);
+        var state = process is { HasExited: true } p ? $"exited with {p.ExitCode}" : "still running";
+        return $"({state})\n{Log}";
+    }
+
     /// <summary>The daemon to test against, or a skipped test without one.</summary>
     public static RealDaemon CreateOrSkip()
     {

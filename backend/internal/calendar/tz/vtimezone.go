@@ -15,6 +15,10 @@ const MaxVTIMEZONEYears = 10
 // has more than a handful of transitions a year).
 const maxTransitions = 8 * MaxVTIMEZONEYears
 
+// maxSteps bounds the walk over them, which also steps over bounds that
+// are no transition.
+const maxSteps = 8 * maxTransitions
+
 // WriteVTIMEZONE returns the content lines of a VTIMEZONE component for
 // the IANA zone loc covering the calendar years from from.Year() to
 // to.Year() in loc, capped at MaxVTIMEZONEYears years from the first.
@@ -54,6 +58,10 @@ func WriteVTIMEZONE(loc *time.Location, from, to time.Time) ([]string, error) {
 
 	// The observance in effect at the start of the range.
 	zs, _ := start.ZoneBounds()
+	for i := 0; i < 8 && !zs.IsZero() && sameZone(zs.Add(-time.Second), start); i++ {
+		// The bound is the turn of a year, not the transition (see below).
+		zs, _ = zs.Add(-time.Second).ZoneBounds()
+	}
 	_, offTo := start.Zone()
 	offFrom := offTo
 	dtstart := "19700101T000000"
@@ -65,17 +73,42 @@ func WriteVTIMEZONE(loc *time.Location, from, to time.Time) ([]string, error) {
 	lines = observance(lines, start, offFrom, offTo, dtstart)
 
 	t := start
-	for n := 0; n < maxTransitions; n++ {
+	observances := 0
+	for n := 0; n < maxSteps && observances < maxTransitions; n++ {
 		_, next := t.ZoneBounds()
 		if next.IsZero() || !next.Before(end) {
 			break
 		}
+		if !next.After(t) {
+			// Past the last transition a zone file lists, ZoneBounds
+			// answers with the rules' bounds, and in a leap year the end
+			// of the year it gives is December 31, which it gives again
+			// from there; a day on gets it moving.
+			t = t.Add(24 * time.Hour)
+			continue
+		}
+		t = next
+		// The same bounds are the turn of each year, where the zone does
+		// not change (a "slim" zone file such as the zoneinfo.zip of
+		// GOROOT and the embedded time/tzdata, the only source on
+		// Windows): no observance.
+		if sameZone(next.Add(-time.Second), next) {
+			continue
+		}
 		_, before := next.Add(-time.Second).Zone()
 		_, after := next.Zone()
 		lines = observance(lines, next, before, after, localStamp(next, before))
-		t = next
+		observances++
 	}
 	return append(lines, "END:VTIMEZONE"), nil
+}
+
+// sameZone reports whether a and b are in the very same zone: offset,
+// abbreviation and daylight saving.
+func sameZone(a, b time.Time) bool {
+	abbrA, offA := a.Zone()
+	abbrB, offB := b.Zone()
+	return offA == offB && abbrA == abbrB && a.IsDST() == b.IsDST()
 }
 
 func observance(lines []string, at time.Time, from, to int, dtstart string) []string {
