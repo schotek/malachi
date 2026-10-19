@@ -679,7 +679,7 @@ func (c *convCard) renderBody(lm *loadedMessage) {
 	if lm.err != nil {
 		c.links = nil
 		c.setHint(false)
-		c.showText(widget.RPCErrorText(i18n.T("Loading the message"), lm.err))
+		c.showText(loadingMessageError(lm.err))
 		return
 	}
 	b := lm.body
@@ -975,4 +975,10 @@ func (c *convCard) forwardScroll() {
 		c.cv.kinetic(vy)
 	})
 	c.host.AddController(sc)
+}
+
+// loadingMessageError is what a card and a chat bubble show for a failed
+// message.body (conversation_chat_layout.go bubbleBody).
+func loadingMessageError(err error) string {
+	return widget.RPCErrorText(i18n.T("Loading the message"), err)
 }

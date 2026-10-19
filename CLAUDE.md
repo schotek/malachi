@@ -464,6 +464,12 @@ Pořadí prací:
     (jeho nálezy jsou opravené); zbývá celé `build.ps1 test`, tmavý motiv
     a jiná měřítka displeje, dotyk a pero, odmítnuté a zrušené bloky
     na obrazovce a ARM64
+12. Zobrazení konverzace jako chat (textové bubliny, přepínač nad
+    konverzací) — sloučeno z `feat/chat-view` do `main` 2026-10-19; Go
+    reference, macOS (brána B1) a GTK (brána B2) ověřené vlastníkem,
+    Windows sestavené a otestované jen v CI (`windows.yml` zelené včetně
+    Lintu); zbývá UI smoke s `MALACHI_DEVMAIL`, ruční průchod na Windows
+    (B3, seznam v `docs/windows-port.md` §11.7) a `make po` beze změny
 
 Asistent (stav 2026-09-30, sloučeno do `main`; uživatel potvrdil, že
 funguje ve všech třech klientech). Na macOS je hotové a uživatelem otestované:
@@ -1800,6 +1806,102 @@ ručně ve všech třech nad kopií dat: koncept komentáře z MCP v konverzaci
 issue, Upravit, zavřít s uložením, Zahodit, odeslat, odpověď na e-mail
 z MCP, štítek v seznamu.
 
+Zobrazení konverzace jako chat (2026-10-17 až 19, větev `feat/chat-view`
+sloučená do `main`; plán `docs/plans/chat-view.md`, D1–D17, rozhodnutí
+vlastníka; výjimka z pravidla 6: macOS hotové a schválené vlastníkem v bráně
+B1, GTK hotové a schválené v bráně B2, Windows sestavené a otestované jen
+v CI — brána B3 na skutečných Windows čeká). Konverzace
+má druhé rozložení vedle časové osy (ta zůstává beze změny a výchozí): cizí
+zprávy jako bubliny vlevo, moje a odpovědi z Odeslaných vpravo, koncepty na
+konci, události Jiry a řádek starších zpráv uprostřed, od nejstarší, otevřeno
+na konci. Bublina je jen text (prostý `text` z `message.body` s `trimQuoted`,
+nevybíratelný, bez tlačítek, odkazů a webového pohledu); dvojklik otevře okno
+zprávy (koncept okno Nová zpráva); těla se žádají jen poblíž viditelné části.
+Přepínač v pevném pruhu nad konverzací („Show as Chat“, zapnutý „Show as
+Thread“; popisek i tooltip podle stavu) je trvalý (gschema
+`conversation-chat-layout`, výchozí vypnuto, bez řádku v Předvolbách; Go
+`settings.Store`, macOS `Settings`, Windows `SettingsStore`). Démon a API
+beze změny. Reference Go `ui/internal/conversation/chat.go` (`ChatRows`,
+`ChatScrollTo`, `BubbleText`, 4 nové msgid); macOS `MalachiCore/Model/
+ConversationChat.swift` (port) a `ConversationChatBody.swift` (Swift-first),
+`ConversationLayout.chatBubbleMax`, hostitel `MessageView/
+ConversationHostViewController` (jediný odběratel kontroleru, `trim` jen
+pro zobrazené rozložení, jedna karta issue na rozložení) s pruhem
+`ConversationStripView` a chat `ConversationChatViewController`,
+`ConversationChatRow`, `ConversationBubbleView`. macOS ověřeno na Macu: Go
+testy `ui/internal/conversation`, celé `swift test`, `check-strings.py`,
+izolovaný start; nálezy vlastníka z B1 opravené (odsazení pruhu, popisek
+přepínače podle stavu, sponka v bublině jako pilulka s počtem).
+GTK (`ui/internal/window`, G1–G2, bez překladu): hostitel
+`conversation_host.go` (`conversationHost` nad `convFanout` z
+`conversation_fanout.go`: jediný odběratel kontroleru, `takeMarkRead` jednou
+při `convOpened` pro obě rozložení, `trim` jen s blízkou množinou zobrazeného
+rozložení, jedna karta issue na rozložení přes `convIssueSlot`, spinner a
+stavový popisek odkazu v hostiteli, mezerník přes `pageBy`); pruh v
+`conversation_view.blp` (vlastní `Adw.Clamp` 900 px s okraji sloupce,
+`conversation_fold_all` a `ToggleButton conversation_chat_toggle` s
+`Adw.ButtonContent` a ikonou `malachi-chat-symbolic`, nový
+`ui/data/icons/malachi-chat-symbolic.svg` instalovaný v `scripts/build.sh`;
+přepínač vázaný `settings.Bind`, rozložení se přepíná z `OnChanged`, takže i
+změna odjinud; není plochý, zaškrtnutý stav je nativní, D9) a `Stack` se
+stránkami časové osy a chatu (skryté rozložení zůstává naživu, takže sbalení
+a odhalená citace přežijí návštěvu chatu); chat `conversation_chat.go`
+(`conversationChat`), `conversation_chat_row.go` (`chatRow`/`chatBubble`/
+`chatCenterRow`, všechno z Go, žádný `conversation_chat.blp`; bublina v
+`Adw.Clamp` v pixelech vedle roztažného spaceru, strop
+`convChatBubbleMax(column.Width())` ze šířky potomka clampu, záloha
+`convChatColumn`; `GtkLabel` s `SetUseMarkup(false)` a `SetSelectable(false)`;
+`GestureClick` n == 2 → `convOpenMessage`/`convEditDraft` na rozhraní
+`convHost`, těla jen v blízkém okně přes `liveCards`) a
+`conversation_chat_layout.go` (Swift-first pravidla `chatBody`, `bubbleBody`,
+`bubbleMonospace`, `convChatAtEnd`, `convChatCompactDates`; `convChatResize`
+je otestovaný port a pohled ho nepoužívá; `conversation.ChatScrollTo` se
+nevolá, rolování na konec dokumentu je rovnocenné). Úpravy časové osy:
+`conversation_view.go` hlásí hostiteli sbalení, `conversation_controller.go`
+(`convHost` + `convOpenMessage`/`convEditDraft`), `conversation_issue.go`,
+`conversation_card.go` (`loadingMessageError`), `conversation_rows.go` (CSS
+`.chat-bubble`, `.chat-bubble-mine`, `.chat-placeholder`, `.chat-proportional`,
+`.chat-clip-pill`), `window.go`. Testy: jednotkové nad falešným `convWindow`
+(`conversation_chat_test.go`, `conversation_chat_layout_test.go`) a
+`MALACHI_GTK_SMOKE=1 go test ./internal/window -run
+'^TestConversationChatGTKSmoke$'` (skutečný Blueprint, obě rozložení,
+přepnutí). Ověřeno tady `gofmt`, `gopls check`, typová kontrola `go/types`
+s `FakeImportC`, revize kódu a ruční běh workflow `rpm.yml` na větvi
+(2026-10-18: GTK se ve Fedoře přeložilo pro x86_64 i aarch64 po opravě
+jednoho středníku v Blueprintu); G3 v kontejneru na Macu (2026-10-18,
+`container` z instalace Davit s `CONTAINER_INSTALL_ROOT`, mimo sandbox
+agenta): `gtk.sh make build`, `gtk.sh test-ui` (celá sada `ui/`), smoke test
+(po dvou opravách testu: falešné okno dostalo `Assistant`, šířka bubliny se
+měří jako `AllocatedWidth`, tedy border box), `make po` (přečíslované odkazy)
+a `make lint` zelené; B2 vlastníka v XQuartz (`gtk.sh x11 dev`) prošla
+2026-10-19. Windows (W1–W2, `docs/windows-port.md` §11.7 „The chat layout“,
+`docs/plans/chat-view.md` §8): Core `Malachi.Core/Model/` `ChatSide`,
+`ChatRowKind`, `ChatRow`, `Conversation.Chat.cs` (port `chat.go`, 4 msgid už
+nejsou v exclusions), Swift-first `Conversation.ChatBody.cs`, `BubbleBody`,
+`BubbleAttachments`, `ConversationLayout.Chat.cs`/`.ChatResize.cs`, glyf
+`malachi-chat` E8F2, `SettingsStore.ConversationChatLayout` (44 klíčů). App
+`Reader/Conversation/`: `ConversationView` je hostitel (pruh v řádku 0 s
+`FoldAllButton` a `ToggleButton ChatToggle`, obě rozložení v řádku 1, jediný
+odběratel `Changed`/`EntryLoaded`, `Trim` jen zobrazeného rozložení, karta
+issue na rozložení přes `ConversationIssueBox`, jeden spinner), dosavadní
+časová osa je `ConversationTimelineView` (`HeadViews` 1), chat
+`ConversationChatView` (`VerticalAnchorRatio` 1, otevření na konci, držení
+konce a místa čtení, `ChatResizeFor`, blízká těla přes `LiveCards`),
+`ConversationChatRow`/`ConversationChatCenterRow`/`ConversationBubbleView`
+(`TextBlock` bez výběru, dvojklik přes `AfterRelease`), štětce nádechu ve
+`ConversationStyles.xaml`. Odchylky (`windows/README.md`): kotva dole,
+skrytá časová osa ořezává i zásobník webových pohledů, přepínač s nádechem
+zvýraznění. Testy `ConversationChatTests`, `ConversationLayoutTests`,
+UI smoke `ConversationChatSmokeTests` (`MALACHI_DEVMAIL`). Napsáno bez
+`dotnet`; ruční běh `windows.yml` na větvi (2026-10-18, po doplnění
+`using Malachi.Core.Presentation`) sestavil x64 i ARM64 a prošel testy Core
+(7 462), konvencí (27, včetně glyfů a pokrytí msgid) a Platform až na
+`RealDaemonTests.HandshakeCallAndNotification`, který na runneru padá i na
+`main` (prostředí), takže krok Lint neběžel; backend `go test` na Windows
+padá od sloučení kalendáře i na `main` (`calendar/tz` a `TestInvitationCard`,
+nesouvisí s chatem). Čeká `build.ps1 lint`, UI smoke s `MALACHI_DEVMAIL`,
+ruční průchod (viz sekce v `windows-port.md`) a B3.
+
 Archivace v Poště = Hotovo (2026-10-13, `feat/board`, necommitnuté; jen
 démon, klienti beze změny — všechny tři to dostanou přes
 `notify.boardChanged`). Vlastník archivoval vyřízenou poštu v Poště a
@@ -2095,7 +2197,7 @@ frontě, odmítnutý vrátí jen svou změnu), `CalendarAccountController`
 a `AssistantPanelController.RunCalendar`/`OpenInCalendar`, karta
 `Controllers/CalendarContent.cs`. Mimo kalendář v Core: `Board.Mode.Calendar`
 (2) se `StartChoice.Calendar`, klíč `calendar-view`
-(`SettingsStore.CalendarView`, 43 klíčů gschema), Ctrl+3 jako
+(`SettingsStore.CalendarView`, 44 klíčů gschema), Ctrl+3 jako
 `ShortcutCommand.ShowCalendar` v `ShortcutMap`, `NotificationHub.AddCalendar`,
 `AccountsPageController` CalDAV účty nevypisuje (při přeřazení je drží za
 vypsanými), `FolderTree.AccountHeaderBadge` umí `CALDAV`, toasty zpráv

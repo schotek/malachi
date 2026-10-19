@@ -51,6 +51,10 @@ const (
 	// KeyGroupByConversation switches the message list to one row per
 	// conversation (thread.list) instead of one per message.
 	KeyGroupByConversation = "group-by-conversation"
+	// KeyConversationChatLayout shows a conversation as a chat (others'
+	// messages on the left, yours on the right, oldest first) instead of
+	// the timeline.
+	KeyConversationChatLayout = "conversation-chat-layout"
 	// KeySearchScope is where a search looks, as last chosen in the
 	// search bar.
 	KeySearchScope = "search-scope"
@@ -223,15 +227,16 @@ var defaults = map[string]any{
 	KeyDesktopNotifications: true,
 	KeyNotificationSound:    false,
 
-	KeyColorScheme:         string(ColorSchemeSystem),
-	KeyDensity:             string(DensityComfortable),
-	KeyShowPreviewLine:     true,
-	KeyShowAvatars:         true,
-	KeyMonochromeAvatars:   false,
-	KeyMonospacePlainText:  false,
-	KeyTextZoom:            100,
-	KeyGroupByConversation: false,
-	KeySearchScope:         string(SearchFolder),
+	KeyColorScheme:            string(ColorSchemeSystem),
+	KeyDensity:                string(DensityComfortable),
+	KeyShowPreviewLine:        true,
+	KeyShowAvatars:            true,
+	KeyMonochromeAvatars:      false,
+	KeyMonospacePlainText:     false,
+	KeyTextZoom:               100,
+	KeyGroupByConversation:    false,
+	KeyConversationChatLayout: false,
+	KeySearchScope:            string(SearchFolder),
 
 	KeyCollapsedFolders:  []string(nil),
 	KeyCollapsedAccounts: []string(nil),
@@ -382,6 +387,9 @@ func (s *Store) SetMonochromeAvatars(v bool) { s.set(KeyMonochromeAvatars, v) }
 
 func (s *Store) GroupByConversation() bool     { return s.boolean(KeyGroupByConversation) }
 func (s *Store) SetGroupByConversation(v bool) { s.set(KeyGroupByConversation, v) }
+
+func (s *Store) ConversationChatLayout() bool     { return s.boolean(KeyConversationChatLayout) }
+func (s *Store) SetConversationChatLayout(v bool) { s.set(KeyConversationChatLayout, v) }
 
 func (s *Store) MonospacePlainText() bool     { return s.boolean(KeyMonospacePlainText) }
 func (s *Store) SetMonospacePlainText(v bool) { s.set(KeyMonospacePlainText, v) }

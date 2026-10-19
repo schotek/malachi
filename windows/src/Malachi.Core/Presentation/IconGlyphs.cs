@@ -138,6 +138,10 @@ public static class IconGlyphs
         ["checkbox-checked"] = G(0xE73A),
         ["folder-saved-search"] = G(0xE71C),
         ["list-remove"] = G(0xE738),
+        // The layout toggle above a conversation (docs/plans/chat-view.md
+        // D9; macOS bubble.left.and.bubble.right, GTK's own
+        // malachi-chat-symbolic): ChatBubbles.
+        ["malachi-chat"] = G(0xE8F2),
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>Whether <paramref name="gtkName"/> has a glyph of its own.</summary>

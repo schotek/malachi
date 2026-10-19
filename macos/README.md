@@ -180,7 +180,9 @@ macos/
                                 search's prompts and answers from ui/internal/assistant);
                                 Model/ also holds the conversation view's model and layout
                                 (Conversation.swift, ConversationLayout.swift, the port of
-                                ui/internal/conversation), the capabilities rules
+                                ui/internal/conversation; ConversationChat.swift, the port of
+                                its chat.go, and the Swift-first ConversationChatBody.swift),
+                                the capabilities rules
                                 (Capabilities.swift, of ui/internal/capabilities) and the
                                 Jira parts of the reading pane, the list and the accounts
                                 page (IssueReading, ChipPlan, MailModel+Jira)
@@ -214,9 +216,14 @@ macos/
                                 MessageList/, MessageView/ (the single-message pane,
                                 IssueCardView, and the conversation view:
                                 ReadingPaneViewController swaps between them,
+                                ConversationHostViewController: the host of the two
+                                layouts with ConversationStripView, its fixed strip
+                                with the layout toggle; the timeline,
                                 ConversationViewController, ConversationCardView,
                                 ConversationCardHeader, ConversationEventRow,
-                                ConversationRow, MessageParts shared with the pane),
+                                ConversationRow; the chat, ConversationChatViewController,
+                                ConversationChatRow, ConversationBubbleView;
+                                ConversationIssueBox; MessageParts shared with the pane),
                                 Windows/ (MessageDisplay: the fan-out to a view showing
                                 several messages), Actions/, Assistant/, Attachments/,
                                 Compose/ (ComposePane: the compose content, also the
@@ -505,8 +512,15 @@ reference the Swift tests port:
 - `ui/internal/capabilities` — which message actions an account offers
   (`Account.capabilities`); the port is `MalachiCore/Model/Capabilities.swift`;
 - `ui/internal/conversation` — the items of a stacked conversation, the
-  member marked read, the scroll target, the truncated row; the port is
-  `MalachiCore/Model/Conversation.swift`.
+  member marked read, the scroll target, the truncated row, and in
+  `chat.go` the chat layout's rows, sides and bubble text; the ports are
+  `MalachiCore/Model/Conversation.swift` and `ConversationChat.swift`
+  (`ConversationChatBody.swift` is Swift-first: the rules of the chat the
+  Go reference leaves to the clients, which the GTK and Windows chats port
+  from there — `Conversation.chatBody` (the body variant a bubble reads),
+  `bubbleBody` (its text in every state), `bubbleMonospace`, and the
+  layout helpers `ConversationLayout.chatAtEnd`, `chatEndTop`,
+  `chatColumn`, `chatCompactDates` and `chatResize`).
 
 The msgids of those packages are in `po/POTFILES`, `po/malachi.pot` and
 `po/cs.po` (the GTK UI added none of its own); the Windows client uses

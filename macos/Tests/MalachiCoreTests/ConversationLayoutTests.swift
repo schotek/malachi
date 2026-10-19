@@ -186,6 +186,46 @@ struct ConversationTimelineTests {
         #expect(ConversationLayout.compactDates(pane: 300), "the pane at its narrowest")
         #expect(!ConversationLayout.compactDates(pane: 2000))
     }
+
+    /// docs/plans/chat-view.md D4: a row of the chat is the avatar's gutter,
+    /// the bubble and an empty side of at least 24 or a fifth of the column.
+    @Test func chatBubbleKeepsAnEmptySide() {
+        typealias M = ConversationLayout.Metrics
+        func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) < 1e-9 }
+        #expect(M.chatGapMin == 24 && M.chatGapRatio == 0.2)
+        let cases: [(column: Double, gap: Double, bubble: Double)] = [
+            (868, 173.6, 654.4),  // the clamp's 900 less the insets
+            (300, 60, 200),
+            (100, 24, 36),
+            (50, 24, 0),  // never negative
+            (0, 24, 0),
+        ]
+        for c in cases {
+            #expect(near(ConversationLayout.chatGap(column: c.column), c.gap), "gap at \(c.column)")
+            #expect(near(ConversationLayout.chatBubbleMax(column: c.column), c.bubble), "bubble at \(c.column)")
+        }
+        // The widest column: the pane's clamp less its two insets.
+        let widest = M.maxWidth - 2 * M.sideInset
+        #expect(near(ConversationLayout.chatBubbleMax(column: widest), widest - M.avatar - M.gutterGap - 0.2 * widest))
+
+        // Continuous where the floor meets the share (a column of 120): no
+        // jump either side.
+        let edge = M.chatGapMin / M.chatGapRatio
+        #expect(near(edge, 120) && near(ConversationLayout.chatGap(column: edge), 24))
+        for d in [0.001, 0.01, 0.1] {
+            #expect(abs(ConversationLayout.chatGap(column: edge - d) - 24) <= d)
+            #expect(abs(ConversationLayout.chatGap(column: edge + d) - 24) <= d)
+            #expect(abs(ConversationLayout.chatBubbleMax(column: edge + d) - ConversationLayout.chatBubbleMax(column: edge - d)) <= 2 * d)
+        }
+        #expect(near(ConversationLayout.chatBubbleMax(column: edge), 120 - 40 - 24))
+        // A wider column never gives a narrower bubble.
+        var last = -1.0
+        for w in stride(from: 0.0, through: 1000, by: 0.5) {
+            let b = ConversationLayout.chatBubbleMax(column: w)
+            #expect(b >= last, "at \(w)")
+            last = b
+        }
+    }
 }
 
 // MARK: The order shown

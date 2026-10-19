@@ -7,22 +7,22 @@ import MalachiCore
 /// The main window's reading pane: the single-message view
 /// (`MessageViewController`, with its "No Message Selected" page and its
 /// banners) or, for a selected conversation row, the whole conversation
-/// (`ConversationViewController`), whichever the list's selection asks for
+/// (`ConversationHostViewController`: the timeline or the chat), whichever the list's selection asks for
 /// (window.go `onMessageRowSelected`, extended by ui/internal/conversation).
 /// A member row and a single-message row keep the single-message view.
 @MainActor
 final class ReadingPaneViewController: NSViewController {
     let reader: MessageViewController
-    let conversationView: ConversationViewController
+    let conversation: ConversationHostViewController
     let controller: ConversationController
 
     /// The conversation view is the one on display.
     private(set) var showsConversation = false
 
-    init(reader: MessageViewController, conversationView: ConversationViewController) {
+    init(reader: MessageViewController, conversation: ConversationHostViewController) {
         self.reader = reader
-        self.conversationView = conversationView
-        controller = conversationView.controller
+        self.conversation = conversation
+        controller = conversation.controller
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -35,7 +35,7 @@ final class ReadingPaneViewController: NSViewController {
         let container = NSView()
         container.translatesAutoresizingMaskIntoConstraints = false
         view = container
-        for vc in [reader, conversationView] as [NSViewController] {
+        for vc in [reader, conversation] as [NSViewController] {
             addChild(vc)
             let v = vc.view
             v.translatesAutoresizingMaskIntoConstraints = false
@@ -47,7 +47,7 @@ final class ReadingPaneViewController: NSViewController {
                 v.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             ])
         }
-        conversationView.view.isHidden = true
+        conversation.view.isHidden = true
     }
 
     /// The list's selection (`ListController.onSelectedRowChanged`): a
@@ -86,13 +86,13 @@ final class ReadingPaneViewController: NSViewController {
     /// false when no conversation is shown (the key goes on as before).
     func page(up: Bool) -> Bool {
         guard showsConversation else { return false }
-        return conversationView.page(up: up)
+        return conversation.page(up: up)
     }
 
     private func setConversation(_ on: Bool) {
         guard on != showsConversation else { return }
         showsConversation = on
-        conversationView.view.isHidden = !on
+        conversation.view.isHidden = !on
         reader.view.isHidden = on
     }
 }

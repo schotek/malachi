@@ -34,6 +34,7 @@ private final class Scratch {
         #expect(!s.monochromeAvatars)
         #expect(!s.monospacePlainText)
         #expect(!s.groupByConversation)
+        #expect(!s.conversationChatLayout)
         #expect(s.textZoom == 100)
         #expect(!s.launchAtLogin)
         #expect(s.runInBackground)
@@ -62,7 +63,7 @@ private final class Scratch {
         #expect(s.boardLastMode == .mail)
         #expect(s.boardAccountFilter == "")
         #expect(s.calendarView == .week)
-        #expect(Settings.Key.allCases.count == 39)
+        #expect(Settings.Key.allCases.count == 40)
         let providerDefaults = Settings.registrationDefaults()
         #expect(providerDefaults[Settings.Key.assistantProvider.rawValue] as? String == "claude")
         #expect(providerDefaults[Settings.Key.assistantCodexPath.rawValue] as? String == "")
@@ -86,6 +87,18 @@ private final class Scratch {
         token.cancel()
         s.textZoom = 130
         #expect(calls == 1)
+
+        // The chat toggle switches the layout from its key's change.
+        var chat = 0
+        let chatToken = s.onChange(.conversationChatLayout) { chat += 1 }
+        s.conversationChatLayout = true
+        #expect(s.conversationChatLayout && chat == 1)
+        #expect(scratch.defaults.bool(forKey: "conversation-chat-layout"))
+        s.conversationChatLayout = true // unchanged: no notification
+        #expect(chat == 1)
+        s.conversationChatLayout = false
+        #expect(!s.conversationChatLayout && chat == 2)
+        chatToken.cancel()
     }
 
     @Test func validation() {

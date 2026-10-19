@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-17 09:56+0000\n"
+"POT-Creation-Date: 2026-10-18 19:08+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -2123,6 +2123,28 @@ msgstr ""
 #: ui/internal/jira/transitions.go:148
 #, c-format
 msgid "The status could not be changed: %s"
+msgstr ""
+
+#. TRANSLATORS: a toggle button above a conversation in the reading pane, off; a click shows the messages as chat bubbles.
+#: ui/internal/conversation/chat.go:151
+msgid "Show as Chat"
+msgstr ""
+
+#. TRANSLATORS: the same toggle button above a conversation, on (the messages show as chat bubbles); a click goes back to the conversation as cards.
+#: ui/internal/conversation/chat.go:154
+msgid "Show as Thread"
+msgstr ""
+
+#. TRANSLATORS: the tooltip of the "Show as Chat" toggle above a conversation.
+#: ui/internal/conversation/chat.go:163
+msgid ""
+"Others on the left, your messages on the right; double-click opens the "
+"message"
+msgstr ""
+
+#. TRANSLATORS: the tooltip of the "Show as Thread" toggle above a conversation shown as chat bubbles.
+#: ui/internal/conversation/chat.go:166
+msgid "Back to the timeline: the messages as cards, newest first"
 msgstr ""
 
 #. TRANSLATORS: at the top of a conversation in the reading pane; only its newest messages are shown.
@@ -5807,11 +5829,6 @@ msgstr ""
 msgid "Cc"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:682
-#: ui/internal/window/message_view.go:518
-msgid "Loading the message"
-msgstr ""
-
 #: ui/internal/window/conversation_card.go:737
 #: ui/internal/window/message_view.go:317
 msgid ""
@@ -5838,6 +5855,11 @@ msgstr ""
 #: ui/internal/window/conversation_card.go:797 ui/data/ui/message_window.ui:184
 #: ui/data/ui/window.ui:640
 msgid "_Download Pictures"
+msgstr ""
+
+#: ui/internal/window/conversation_card.go:983
+#: ui/internal/window/message_view.go:518
+msgid "Loading the message"
 msgstr ""
 
 #: ui/internal/window/drafts.go:75
@@ -6754,7 +6776,7 @@ msgstr ""
 msgid "Right"
 msgstr ""
 
-#: ui/data/ui/conversation_view.ui:77 ui/data/ui/embedded_window.ui:267
+#: ui/data/ui/conversation_view.ui:157 ui/data/ui/embedded_window.ui:267
 #: ui/data/ui/message_window.ui:395 ui/data/ui/window.ui:911
 msgctxt "accessibility"
 msgid "Loading the message"
@@ -7190,199 +7212,209 @@ msgid ""
 msgstr ""
 
 #: data/io.github.schotek.Malachi.gschema.xml:157
-msgid "Where a search looks"
+msgid "Show conversations as a chat"
 msgstr ""
 
 #: data/io.github.schotek.Malachi.gschema.xml:158
+msgid ""
+"Others' messages on the left, yours on the right, oldest first; off shows "
+"the timeline."
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:162
+msgid "Where a search looks"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:163
 msgid ""
 "The selected folder, every folder of its account, or every account; the last "
 "choice made in the search bar."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:162
+#: data/io.github.schotek.Malachi.gschema.xml:167
 msgid "Show sender avatars in the message list"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:166
+#: data/io.github.schotek.Malachi.gschema.xml:171
 msgid "Draw avatars in neutral grey instead of per-sender colours"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:170
+#: data/io.github.schotek.Malachi.gschema.xml:175
 msgid "Use a monospace font for plain-text message bodies"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:175
+#: data/io.github.schotek.Malachi.gschema.xml:180
 msgid "Message body text zoom in percent"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:181
+#: data/io.github.schotek.Malachi.gschema.xml:186
 msgid "Show the Assistant menu that hands mail to Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:182
+#: data/io.github.schotek.Malachi.gschema.xml:187
 msgid ""
 "The menu opens Claude Desktop or Claude Code on this computer with a "
 "prepared question about the selected mail."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:186
+#: data/io.github.schotek.Malachi.gschema.xml:191
 msgid "Where the Assistant menu opens Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:187
+#: data/io.github.schotek.Malachi.gschema.xml:192
 msgid ""
 "Claude Desktop, Claude Code in a terminal, or the panel in the app; the last "
 "choice made in the Assistant menu or in the settings."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:191
+#: data/io.github.schotek.Malachi.gschema.xml:196
 msgid "The model the assistant panel uses"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:192
+#: data/io.github.schotek.Malachi.gschema.xml:197
 msgid "Sonnet, Haiku or Opus, passed to Claude Code."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:196
+#: data/io.github.schotek.Malachi.gschema.xml:201
 msgid "Where Claude Code is"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:197
+#: data/io.github.schotek.Malachi.gschema.xml:202
 msgid ""
 "The claude executable the assistant panel runs; empty looks in the usual "
 "places."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:201
+#: data/io.github.schotek.Malachi.gschema.xml:206
 msgid "The assistant panel may send mail to Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:202
+#: data/io.github.schotek.Malachi.gschema.xml:207
 msgid "Set when the user allowed it the first time."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:207
+#: data/io.github.schotek.Malachi.gschema.xml:212
 msgid "The provider of the assistant in the app"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:208
+#: data/io.github.schotek.Malachi.gschema.xml:213
 msgid "The in-app provider; external Claude hand-off is independent."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:212
+#: data/io.github.schotek.Malachi.gschema.xml:217
 msgid "Where Codex is"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:213
+#: data/io.github.schotek.Malachi.gschema.xml:218
 msgid "The native Codex executable; empty looks in the usual places."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:217
+#: data/io.github.schotek.Malachi.gschema.xml:222
 msgid "The model the ChatGPT provider uses"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:218
-#: data/io.github.schotek.Malachi.gschema.xml:229
+#: data/io.github.schotek.Malachi.gschema.xml:223
+#: data/io.github.schotek.Malachi.gschema.xml:234
 msgid "Empty uses the provider's model default."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:223
+#: data/io.github.schotek.Malachi.gschema.xml:228
 msgid "The accepted ChatGPT mail consent version"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:224
+#: data/io.github.schotek.Malachi.gschema.xml:229
 msgid "Zero means no permission to send mail to OpenAI."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:228
+#: data/io.github.schotek.Malachi.gschema.xml:233
 msgid "The model ChatGPT uses for the board"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:234
+#: data/io.github.schotek.Malachi.gschema.xml:239
 msgid "The accepted OpenAI board consent version"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:235
+#: data/io.github.schotek.Malachi.gschema.xml:240
 msgid "Zero means no permission to send board mail to OpenAI."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:242
+#: data/io.github.schotek.Malachi.gschema.xml:247
 msgid "The style the Board opens in"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:243
+#: data/io.github.schotek.Malachi.gschema.xml:248
 msgid ""
 "Last Used (the style in board-last-style), List, Columns or Today; a changed "
 "choice applies the next time the Board is shown, unless a style was already "
 "picked in this run, which then stays until the app quits."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:247
+#: data/io.github.schotek.Malachi.gschema.xml:252
 msgid "The style the Board was shown in last"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:248
+#: data/io.github.schotek.Malachi.gschema.xml:253
 msgid ""
 "Written whenever the user changes the Board's style; read when board-default-"
 "style is Last Used."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:252
+#: data/io.github.schotek.Malachi.gschema.xml:257
 msgid "What the main window shows at launch"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:253
+#: data/io.github.schotek.Malachi.gschema.xml:258
 msgid ""
 "Mail, the Board, the Calendar, or the mode shown last (board-last-mode). The "
 "Board is replaced by Mail while it is turned off."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:257
+#: data/io.github.schotek.Malachi.gschema.xml:262
 msgid "The mode the main window showed last"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:258
+#: data/io.github.schotek.Malachi.gschema.xml:263
 msgid ""
 "\"mail\", \"board\" or \"calendar\", written whenever the mode switches; "
 "read when board-start-mode is Last."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:262
+#: data/io.github.schotek.Malachi.gschema.xml:267
 msgid "The account the Board is filtered to"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:263
+#: data/io.github.schotek.Malachi.gschema.xml:268
 msgid ""
 "The daemon's account id, written whenever the Board's account filter "
 "changes; empty means every account. Applied when the Board shows while that "
 "account still exists."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:267
+#: data/io.github.schotek.Malachi.gschema.xml:272
 msgid "The Board's triage may send mail to Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:268
+#: data/io.github.schotek.Malachi.gschema.xml:273
 msgid ""
 "Set when the user allowed it the first time, apart from the assistant "
 "panel's consent."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:272
+#: data/io.github.schotek.Malachi.gschema.xml:277
 msgid "The model the Board's triage uses"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:273
+#: data/io.github.schotek.Malachi.gschema.xml:278
 msgid ""
 "Sonnet, Haiku or Opus, passed to Claude Code; apart from the assistant "
 "panel's model."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:277
+#: data/io.github.schotek.Malachi.gschema.xml:282
 msgid "The view the Calendar was shown in last"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:278
+#: data/io.github.schotek.Malachi.gschema.xml:283
 msgid ""
 "Day, Week, Month or Agenda, written whenever the user changes the Calendar's "
 "view; applied when the Calendar shows."
