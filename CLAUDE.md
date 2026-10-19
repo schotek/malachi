@@ -464,6 +464,12 @@ Pořadí prací:
     (jeho nálezy jsou opravené); zbývá celé `build.ps1 test`, tmavý motiv
     a jiná měřítka displeje, dotyk a pero, odmítnuté a zrušené bloky
     na obrazovce a ARM64
+12. Zobrazení konverzace jako chat (textové bubliny, přepínač nad
+    konverzací) — sloučeno z `feat/chat-view` do `main` 2026-10-19; Go
+    reference, macOS (brána B1) a GTK (brána B2) ověřené vlastníkem,
+    Windows sestavené a otestované jen v CI (`windows.yml` zelené včetně
+    Lintu); zbývá UI smoke s `MALACHI_DEVMAIL`, ruční průchod na Windows
+    (B3, seznam v `docs/windows-port.md` §11.7) a `make po` beze změny
 
 Asistent (stav 2026-09-30, sloučeno do `main`; uživatel potvrdil, že
 funguje ve všech třech klientech). Na macOS je hotové a uživatelem otestované:
