@@ -997,6 +997,13 @@ func (b *Backend) dropCalendarCache(ctx context.Context, old, next store.Account
 					b.log.Warn("delete calendar", "account", old.ID, "err", err)
 					continue
 				}
+				// As the syncer marks it: enabling it again starts afresh.
+				// The syncer may not have passed since the update, and a
+				// row that kept its sync token would ask the server for
+				// the changes since then, none: the events would not come back.
+				if err := b.store.SetCalendarSyncState(ctx, c.ID, store.CalendarSyncState{SyncMode: calsync.SyncModeDisabled}); err != nil {
+					b.log.Warn("reset calendar sync state", "account", old.ID, "err", err)
+				}
 				changed = append(changed, api.CalendarID(c.ID))
 			}
 		}

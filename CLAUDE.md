@@ -2321,9 +2321,11 @@ klávesnici drží WebView2; hlavička `Shell/AppState.Calendar.cs` popisuje
 vstupní body tak, jak fungují. Neověřeno: šrafování v tmavém motivu
 a při jiném měřítku displeje než 100 %, dvojtapy dotykem a perem,
 odmítnuté a zrušené bloky na obrazovce (vzorky je neukážou), celé
-`build.ps1 test` (zbylá selhání v `Malachi.Platform.Windows.Tests`, čtyři
-testy souboru s klíčem a skutečného démona a jeden test typu souboru
-v shell verdiktu, jsou prostředí a předcházejí port) a ARM64. GTK port
+`build.ps1 test` na stroji vlastníka (zbylá selhání v
+`Malachi.Platform.Windows.Tests`, čtyři testy souboru s klíčem a skutečného
+démona a jeden test typu souboru v shell verdiktu, jsou prostředí a předcházejí
+port; na runneru `windows.yml` je celá sada od 2026-10-18 zelená, jen časově
+závislé testy občas spadnou, viz poznámka o Windows níže) a ARM64. GTK port
 vznikl souběžně na Macu (GTK klient kalendáře výše).
 
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
@@ -2470,6 +2472,21 @@ zůstanou; vlastníkovi to říct před testem): migrace 0017 je nevratná (tabu
   ověří při startu a zprávou jmenuje `MALACHI_SOCKET`. Soubor s klíčem na
   Windows dědí ACL adresáře: `MALACHI_SOCKET` v adresáři, kam smějí jiní
   (`D:\…` mimo profil), skončí „Backend unavailable“ s důvodem v logu.
+- Windows: Go tam čte časová pásma jen z vlastních dat (zabudované
+  `time/tzdata`, `zoneinfo.zip` v GOROOT), ne ze systémové databáze. Tyto
+  soubory jsou „slim“ (po poslední změně pravidel pásma nevypisují přechody)
+  a `Time.ZoneBounds` tam vrací za ně hranice roků (v přestupném roce 31. 12.
+  a pořád znovu), které nejsou přechod; systémová databáze Linuxu a macOSu
+  je „fat“, proto to tam nikdy nevyšlo. Kód, který chodí po přechodech
+  (`calendar/tz` `WriteVTIMEZONE`), s tím počítá; na Macu se Windows chování
+  zkouší `ZONEINFO=$(go env GOROOT)/lib/time/zoneinfo.zip go test ./…`. Testy,
+  které potřebují určité pásmo, si ho nastaví samy (runner je v UTC). Testy
+  s hodinami a spánky na sdíleném runneru počítají s taktem 15 ms a s tím, že
+  se běh zdrží o sekundy: `windows.yml` občas shodí
+  `RealDaemonTests.HandshakeCallAndNotification` („connection to malachid
+  lost“; zpráva selhání teď nese log démona) nebo
+  `ConnectionControllerTests.SystemInfoOfADroppedConnectionIsDropped`, stačí
+  job pustit znovu, než se hledá chyba.
 - Windows: každý `dotnet` příkaz běží z `windows\` (tam `global.json` vybírá
   SDK a Microsoft.Testing.Platform; jinde `dotnet test` spadne na VSTest).
   Varování jsou chyby, `build.ps1 lint` je `dotnet format --verify-no-changes`
