@@ -497,3 +497,31 @@ jako karty.
   `test`, `lint`, UI smoke a ruční průchod (`docs/windows-port.md` §11.8).
 - **Vlastník**: průchod ve všech třech (GTK v XQuartz `make run-gtk-live`,
   macOS nad kopií dat, Windows).
+
+## 10. Řádek rychlé odpovědi (návrh 2026-10-20, ke schválení)
+
+Zadání vlastníka: dole v chatovém rozložení klasický chatovací řádek
+s rychlou odpovědí — volba jen Odpovědět / Odpovědět všem, odeslání,
+a možnost otevřít velké okno (přeposlání, přílohy). Wireframe
+`docs/plans/chat-view/w4-quick-reply.svg`.
+
+| # | Rozhodnutí | Proč |
+|---|---|---|
+| Q1 | **Kde**: jen v chatovém rozložení Pošty, pevný řádek pod rolovací oblastí chatu, zarovnaný na sloupec (clamp 900, okraje 16), oddělený čarou. Časová osa ho nemá; chat na Nástěnce ne (ta má vlastní inline editor odpovědi); okno zprávy ne. | Zadání; Nástěnka už odpověď řeší jinak. |
+| Q2 | **Obsah** zleva: tlačítko režimu s nabídkou (ikona + text *Odpovědět* / *Odpovědět všem*, položka *Přeposlat…* otevře rovnou velké okno), textové pole na 1–5 řádků (roste, pak roluje) se zástupným textem *Napsat odpověď…* (u Jiry *Napsat komentář…*), tlačítko *Otevřít v okně* (ikona šipky ven) a *Odeslat* (ikona letadla, zvýrazněné, vypnuté při prázdném poli). | Vzor IM aplikací, nic navíc. |
+| Q3 | **Cíl** odpovědi: nejnovější člen konverzace, který není můj (`Item.Mine`/`Sent`); když takový není, nejnovější člen. *Odpovědět všem* jen když cíl má další příjemce (dnešní pravidla akcí karty, `conversation.CardActions`); Jira: jen *Komentovat* (veřejný), interní viditelnost až ve velkém okně. Cíl jmenuje tooltip tlačítka režimu („Odpověď pro: %s“, jméno v 1. pádu, protože jména z pošty klient neskloňuje); zástupný text pole zůstává *Napsat odpověď…*. | Rychlá odpověď míří na poslední cizí zprávu, jako v chatu. |
+| Q4 | **Klávesy**: Enter = nový řádek, ⌘/Ctrl+Enter = Odeslat (jako okno Nová zpráva), Escape vrátí klávesnici seznamu. Mezerník v poli píše (listování seznamu platí jen s klávesnicí v seznamu). | Shoda s oknem Nová zpráva; nic se neodešle omylem. |
+| Q5 | **Odeslání** = dnešní cesta démona: `draft.create` (`reply`/`replyAll` na cíl, u Jiry komentář) → `draft.save` s tělem z napsaného textu → `message.send`; toast „Message queued for sending“; pole se vyprázdní. Citovaný originál jde s odpovědí tak, jak ho `draft.create` připraví (výchozí „Zahrnout do odpovědi“ okna Nová zpráva), bez zaškrtávátka v řádku. | Jedna cesta odesílání; příjemci mimo chat čekají kontext. |
+| Q6 | **Tělo** z prostého textu dělá čistá funkce reference (`QuickReplyHTML`: odstavce `<p>`, řádky `<br>`, text escapovaný; vlastní text uživatele, ne pošta) s testy; porty 1:1. Žádný Markdown (`draft.markdown` ne). | Rychlá odpověď je prostý text; žádné překvapivé formátování. |
+| Q7 | **Odeslaná bublina**: v prvním kroku bez dočasné bubliny „Odesílá se…“; bublina přibude, až kopie dorazí do Odeslaných (dnešní pravidlo `thread.get withSent`). Dočasná bublina je kandidát na další krok. | Démon nedává klientu Message-ID odeslané zprávy; párování by bylo hádání. |
+| Q8 | **Otevřít v okně**: vytvoří koncept (`draft.create` v zvoleném režimu + `draft.save` s textem) a otevře ho v okně Nová zpráva (u Jiry okno komentáře), řádek se vyprázdní; dál platí pravidla okna (přílohy, Zahrnout, uložení). *Přeposlat…* z nabídky režimu otevře okno s konceptem přeposlání cíle a napsaným textem jako úvodem. | Vše, co řádek neumí, má okno. |
+| Q9 | **Rozepsaný text** drží klient v paměti na konverzaci (vlákno) až do odeslání, otevření v okně nebo vyprázdnění; přepnutí konverzace nebo rozložení ho nechá; ukončení aplikace ho ztratí (není to koncept démona). | Koncept démona by se v chatu ukázal jako bublina konceptu vedle řádku (zdvojení). |
+| Q10 | **Dostupnost**: řádek je skrytý, když účet neumí odpovědět (capability), když konverzace nemá cíl, při výběru více řádků, při hledání ve všech účtech beze změny (konverzace se tam neukazuje). Při odesílání je řádek dočasně vypnutý; chyba `draft.create`/`save`/`send` → toast, text zůstane. | Nic se neztratí potichu. |
+| Q11 | **Úzký panel**: tlačítko režimu jen ikona, pole se zúží, tlačítka zůstanou. | |
+| Q12 | **Texty**: nové msgidy jen „Write a reply…“ a „Write a comment…“ (zástupné texty), „Reply to: %s“ a „Reply all to: %s“ (tooltipy tlačítka režimu, jméno v 1. pádu), „Open in a Window“; *Reply*, *Reply All*, *Forward*, *Send*, *Comment* existují. | Nic z pošty se neskloňuje ani neskládá do vět. |
+| Q13 | **Přístupnost**: pole pojmenované zástupným textem, tlačítka tooltipem; řetězce z pošty (jméno cíle) jen jako prostý text. | Pravidlo 3. |
+| Q14 | **Mimo rozsah**: přílohy a formátování v řádku, dočasná bublina (Q7), rychlá odpověď v časové ose a na Nástěnce, našeptávač příjemců. | Malý první krok. |
+
+Odpovědi vlastníka (2026-10-20, wireframe schválen): Q5 citovaný originál
+ano, jako v okně; Q7 dočasná bublina až později; Q2 *Přeposlat…* v nabídce
+zůstává.
