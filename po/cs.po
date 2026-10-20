@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-20 09:28+0000\n"
+"POT-Creation-Date: 2026-10-20 10:58+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -1431,7 +1431,7 @@ msgstr "Zpráva byla zařazena k odeslání"
 msgid "Discard this message?"
 msgstr "Zahodit tuto zprávu?"
 
-#: ui/internal/compose/draft.go:804 ui/internal/board/text.go:981
+#: ui/internal/compose/draft.go:804 ui/internal/board/text.go:1010
 #: ui/internal/window/conversation_draft.go:230
 msgid "Discarding the draft"
 msgstr "Zahození konceptu"
@@ -1579,14 +1579,14 @@ msgstr "Změnit stav"
 
 #. TRANSLATORS: After Answering, Move the Invitation Message: to the
 #. archive.
-#: ui/internal/contextmenu/text.go:74 ui/internal/board/text.go:795
+#: ui/internal/contextmenu/text.go:74 ui/internal/board/text.go:824
 #: ui/internal/calendar/preferences.go:318 ui/data/ui/message_window.ui:132
 #: ui/data/ui/window.ui:574
 msgid "Archive"
 msgstr "Archivovat"
 
 #. TRANSLATORS: a menu item whose submenu lists the board's states.
-#: ui/internal/contextmenu/text.go:76 ui/internal/board/text.go:1036
+#: ui/internal/contextmenu/text.go:76 ui/internal/board/text.go:1065
 msgid "Move To"
 msgstr "Přesunout do"
 
@@ -1633,13 +1633,13 @@ msgid "Add to Favourites"
 msgstr "Přidat do oblíbených"
 
 #: ui/internal/contextmenu/text.go:113 ui/internal/widget/message_row.go:395
-#: ui/internal/window/board_conversation.go:479
+#: ui/internal/window/board_conversation.go:488
 #: ui/internal/window/conversation_card.go:473 ui/internal/window/folders.go:65
 msgid "Expand"
 msgstr "Rozbalit"
 
 #: ui/internal/contextmenu/text.go:115 ui/internal/widget/message_row.go:391
-#: ui/internal/window/board_conversation.go:482
+#: ui/internal/window/board_conversation.go:491
 #: ui/internal/window/conversation_card.go:471 ui/internal/window/folders.go:62
 msgid "Collapse"
 msgstr "Sbalit"
@@ -1774,7 +1774,7 @@ msgid "Open %s in the Browser"
 msgstr "Otevřít %s v prohlížeči"
 
 #. TRANSLATORS: a field of a Jira issue.
-#: ui/internal/jira/jira.go:267 ui/internal/board/text.go:1046
+#: ui/internal/jira/jira.go:267 ui/internal/board/text.go:1075
 #: ui/data/ui/preferences.ui:623
 msgid "Status"
 msgstr "Stav"
@@ -2498,8 +2498,8 @@ msgstr[2] "%d zpráv se nepodařilo uložit do eWay-CRM."
 msgid "Removed from eWay-CRM"
 msgstr "Odebráno z eWay-CRM"
 
-#: ui/internal/crm/text.go:289 ui/internal/board/view.go:849
-#: ui/internal/widget/message_row.go:371 ui/internal/window/message_view.go:604
+#: ui/internal/crm/text.go:289 ui/internal/board/view.go:859
+#: ui/internal/widget/message_row.go:371 ui/internal/window/message_view.go:608
 #: ui/internal/window/notify.go:129
 msgid "(No subject)"
 msgstr "(Bez předmětu)"
@@ -2634,17 +2634,17 @@ msgid "Malachi Mail connects to eWay-CRM over https only."
 msgstr "Malachi Mail se k eWay-CRM připojuje jen přes https."
 
 #. TRANSLATORS: a toggle button above a conversation in the reading pane, off; a click shows the messages as chat bubbles.
-#: ui/internal/conversation/chat.go:151
+#: ui/internal/conversation/chat.go:151 ui/internal/board/text.go:804
 msgid "Show as Chat"
 msgstr "Zobrazit jako chat"
 
 #. TRANSLATORS: the same toggle button above a conversation, on (the messages show as chat bubbles); a click goes back to the conversation as cards.
-#: ui/internal/conversation/chat.go:154
+#: ui/internal/conversation/chat.go:154 ui/internal/board/text.go:807
 msgid "Show as Thread"
 msgstr "Zobrazit jako vlákno"
 
 #. TRANSLATORS: the tooltip of the "Show as Chat" toggle above a conversation.
-#: ui/internal/conversation/chat.go:163
+#: ui/internal/conversation/chat.go:163 ui/internal/board/text.go:817
 msgid ""
 "Others on the left, your messages on the right; double-click opens the "
 "message"
@@ -2798,7 +2798,7 @@ msgstr "Po termínu"
 #. TRANSLATORS: a group of deadlines, a deadline's day, and the
 #. reminder preset of tomorrow 09:00.
 #. TRANSLATORS: the heading of tomorrow's events in the agenda.
-#: ui/internal/board/text.go:195 ui/internal/board/text.go:838
+#: ui/internal/board/text.go:195 ui/internal/board/text.go:867
 #: ui/internal/calendar/agenda.go:110
 msgid "Tomorrow"
 msgstr "Zítra"
@@ -3336,56 +3336,61 @@ msgstr "Zobrazení v Poště selhalo: zpráva už na serveru není."
 msgid "Show in Mail failed: the message could not be loaded."
 msgstr "Zobrazení v Poště selhalo: zprávu se nepodařilo načíst."
 
+#. TRANSLATORS: the tooltip of the "Show as Thread" toggle above the conversation of a case on the board shown as chat bubbles.
+#: ui/internal/board/text.go:820
+msgid "Back to the cards: the messages as cards, oldest first, the newest open"
+msgstr "Zpět na karty: zprávy jako karty, od nejstarší, nejnovější otevřená"
+
 #. TRANSLATORS: a filter and section of the board: the cases off the
 #. board until a reminder.
-#: ui/internal/board/text.go:801
+#: ui/internal/board/text.go:830
 msgid "Snoozed"
 msgstr "Odložené"
 
 #. TRANSLATORS: %s is a day and a time, such as "Tomorrow at 09:00" or
 #. "20 Oct at 09:00".
-#: ui/internal/board/text.go:809
+#: ui/internal/board/text.go:838
 #, c-format
 msgid "Back on the board: %s"
 msgstr "Zpět na nástěnce: %s"
 
 #. TRANSLATORS: a reminder preset: in three hours, rounded up to the
 #. hour, at 20:00 at the latest.
-#: ui/internal/board/text.go:836
+#: ui/internal/board/text.go:865
 msgid "Later Today"
 msgstr "Později dnes"
 
 #. TRANSLATORS: a reminder preset: next Monday at 09:00.
-#: ui/internal/board/text.go:841
+#: ui/internal/board/text.go:870
 msgid "Next Week"
 msgstr "Příští týden"
 
 #. TRANSLATORS: a reminder preset: today at 20:00.
-#: ui/internal/board/text.go:844
+#: ui/internal/board/text.go:873
 msgid "This Evening"
 msgstr "Dnes večer"
 
 #. TRANSLATORS: a reminder preset offered after midnight: today at
 #. 09:00.
-#: ui/internal/board/text.go:848
+#: ui/internal/board/text.go:877
 msgid "This Morning"
 msgstr "Dnes ráno"
 
 #. TRANSLATORS: a menu item of a snoozed case: it ends the reminder and
 #. the case is back on the board now.
-#: ui/internal/board/text.go:858
+#: ui/internal/board/text.go:887
 msgid "Back on the Board Now"
 msgstr "Vrátit na nástěnku hned"
 
-#: ui/internal/board/text.go:864
+#: ui/internal/board/text.go:893
 msgid "Marked as done. This account has no archive."
 msgstr "Označeno jako hotové. Tento účet nemá archiv."
 
-#: ui/internal/board/text.go:867
+#: ui/internal/board/text.go:896
 msgid "Marked as done. No message was in the inbox."
 msgstr "Označeno jako hotové. V doručené poště nebyla žádná zpráva."
 
-#: ui/internal/board/text.go:869
+#: ui/internal/board/text.go:898
 #, c-format
 msgid "Archived %d message."
 msgid_plural "Archived %d messages."
@@ -3395,26 +3400,26 @@ msgstr[2] "Archivováno %d zpráv."
 
 #. TRANSLATORS: the button of a toast that takes back what was just
 #. done (an archive).
-#: ui/internal/board/text.go:876
+#: ui/internal/board/text.go:905
 msgid "Undo"
 msgstr "Zpět"
 
-#: ui/internal/board/text.go:881
+#: ui/internal/board/text.go:910
 msgid "Could not undo the archive."
 msgstr "Archivaci se nepodařilo vrátit."
 
 #. TRANSLATORS: a button and menu item of the board: the case's received
 #. messages go to the trash and the case is done.
-#: ui/internal/board/text.go:888 ui/internal/calendar/detail.go:272
+#: ui/internal/board/text.go:917 ui/internal/calendar/detail.go:272
 #: ui/internal/calendar/detail.go:313
 msgid "Delete"
 msgstr "Smazat"
 
-#: ui/internal/board/text.go:895
+#: ui/internal/board/text.go:924
 msgid "Marked as done. No received message was left to delete."
 msgstr "Označeno jako hotové. Nezbyla žádná přijatá zpráva ke smazání."
 
-#: ui/internal/board/text.go:897
+#: ui/internal/board/text.go:926
 #, c-format
 msgid "Moved %d message to Trash."
 msgid_plural "Moved %d messages to Trash."
@@ -3422,88 +3427,88 @@ msgstr[0] "Do koše přesunuta %d zpráva."
 msgstr[1] "Do koše přesunuty %d zprávy."
 msgstr[2] "Do koše přesunuto %d zpráv."
 
-#: ui/internal/board/text.go:904 ui/internal/window/actions.go:42
+#: ui/internal/board/text.go:933 ui/internal/window/actions.go:42
 msgid "Move to Trash?"
 msgstr "Přesunout do koše?"
 
-#: ui/internal/board/text.go:904 ui/internal/window/actions.go:47
+#: ui/internal/board/text.go:933 ui/internal/window/actions.go:47
 msgid "Move to _Trash"
 msgstr "Přesunout do _koše"
 
-#: ui/internal/board/text.go:909
+#: ui/internal/board/text.go:938
 msgid "Could not move the messages back from Trash."
 msgstr "Zprávy se nepodařilo vrátit z koše."
 
-#: ui/internal/board/text.go:969
+#: ui/internal/board/text.go:998
 msgid "Moving the case"
 msgstr "Přesunutí případu"
 
-#: ui/internal/board/text.go:971
+#: ui/internal/board/text.go:1000
 msgid "Marking the case done"
 msgstr "Označení případu jako hotového"
 
-#: ui/internal/board/text.go:973
+#: ui/internal/board/text.go:1002
 msgid "Moving the case back to the board"
 msgstr "Vrácení případu na nástěnku"
 
-#: ui/internal/board/text.go:975
+#: ui/internal/board/text.go:1004
 msgid "Setting the reminder"
 msgstr "Nastavení připomenutí"
 
-#: ui/internal/board/text.go:977
+#: ui/internal/board/text.go:1006
 msgid "Archiving"
 msgstr "Archivování"
 
-#: ui/internal/board/text.go:979
+#: ui/internal/board/text.go:1008
 msgid "Changing the promise"
 msgstr "Uložení změny slibu"
 
-#: ui/internal/board/text.go:983 ui/internal/window/actions.go:270
+#: ui/internal/board/text.go:1012 ui/internal/window/actions.go:270
 msgid "Removing the star"
 msgstr "Odebrání hvězdičky"
 
-#: ui/internal/board/text.go:985
+#: ui/internal/board/text.go:1014
 msgid "Changing the board’s settings"
 msgstr "Uložení nastavení nástěnky"
 
-#: ui/internal/board/text.go:987
+#: ui/internal/board/text.go:1016
 msgid "Moving to Trash"
 msgstr "Přesunutí do koše"
 
-#: ui/internal/board/text.go:996
+#: ui/internal/board/text.go:1025
 msgid "the promise no longer exists"
 msgstr "slib už neexistuje"
 
-#: ui/internal/board/text.go:998
+#: ui/internal/board/text.go:1027
 msgid "the mail backend is not running"
 msgstr "poštovní démon neběží"
 
-#: ui/internal/board/text.go:1000
+#: ui/internal/board/text.go:1029
 msgid "the mail backend did not answer in time"
 msgstr "poštovní démon neodpověděl včas"
 
-#: ui/internal/board/text.go:1002
+#: ui/internal/board/text.go:1031
 msgid "the case is no longer on the board"
 msgstr "případ už na nástěnce není"
 
-#: ui/internal/board/text.go:1004
+#: ui/internal/board/text.go:1033
 msgid "the board did not accept it"
 msgstr "nástěnka změnu nepřijala"
 
-#: ui/internal/board/text.go:1006
+#: ui/internal/board/text.go:1035
 msgid "this mail backend has no board"
 msgstr "tento poštovní démon nástěnku nemá"
 
-#: ui/internal/board/text.go:1008
+#: ui/internal/board/text.go:1037
 msgid "the mail backend could not save it"
 msgstr "poštovní démon změnu nedokázal uložit"
 
-#: ui/internal/board/text.go:1010
+#: ui/internal/board/text.go:1039
 msgid "the draft no longer exists"
 msgstr "koncept už neexistuje"
 
 #. TRANSLATORS: a toast; %s is an action such as "Moving the case".
-#: ui/internal/board/text.go:1023
+#: ui/internal/board/text.go:1052
 #, c-format
 msgid "%s failed."
 msgstr "%s selhalo."
@@ -3511,30 +3516,30 @@ msgstr "%s selhalo."
 #. TRANSLATORS: a toast; the first %s is an action such as "Moving the
 #. case", the second the reason, such as "the case is no longer on the
 #. board".
-#: ui/internal/board/text.go:1028
+#: ui/internal/board/text.go:1057
 #, c-format
 msgid "%s failed: %s."
 msgstr "%s selhalo: %s."
 
-#: ui/internal/board/text.go:1040
+#: ui/internal/board/text.go:1069
 msgid "Mark as Done"
 msgstr "Označit jako hotové"
 
-#: ui/internal/board/text.go:1043
+#: ui/internal/board/text.go:1072
 msgid "Remind Me"
 msgstr "Připomenout"
 
-#: ui/internal/board/text.go:1049 ui/data/ui/preferences.ui:15
+#: ui/internal/board/text.go:1078 ui/data/ui/preferences.ui:15
 msgid "Accounts"
 msgstr "Účty"
 
 #. TRANSLATORS: a button beside a promise the assistant found in the
 #. user's reply.
-#: ui/internal/board/text.go:1056
+#: ui/internal/board/text.go:1085
 msgid "Mark Promise as Done"
 msgstr "Označit slib jako splněný"
 
-#: ui/internal/board/text.go:1062
+#: ui/internal/board/text.go:1091
 #, c-format
 msgid "%d promise"
 msgid_plural "%d promises"
@@ -3544,14 +3549,14 @@ msgstr[2] "%d slibů"
 
 #. TRANSLATORS: quotation marks around a sentence quoted from a message;
 #. use your language's quotation marks.
-#: ui/internal/board/text.go:1069
+#: ui/internal/board/text.go:1098
 #, c-format
 msgid "“%s”"
 msgstr "„%s“"
 
 #. TRANSLATORS: under "Triage These Accounts" when the accounts chosen
 #. for the triage were all removed, so it triages nothing.
-#: ui/internal/board/text.go:1079
+#: ui/internal/board/text.go:1108
 msgid "No account is selected, so the triage reads nothing."
 msgstr "Není vybrán žádný účet, takže třídění nic nečte."
 
@@ -6343,11 +6348,11 @@ msgstr "Uložit _jako…"
 msgid "Save _All"
 msgstr "Uložit _vše"
 
-#: ui/internal/window/attachments.go:335 ui/internal/window/message_view.go:616
+#: ui/internal/window/attachments.go:335 ui/internal/window/message_view.go:620
 msgid "This message is too large to download."
 msgstr "Tato zpráva je příliš velká ke stažení."
 
-#: ui/internal/window/attachments.go:337 ui/internal/window/message_view.go:618
+#: ui/internal/window/attachments.go:337 ui/internal/window/message_view.go:622
 msgid "This message could not be read."
 msgstr "Tuto zprávu se nepodařilo přečíst."
 
@@ -6449,7 +6454,7 @@ msgid "Cc"
 msgstr "Kopie"
 
 #: ui/internal/window/conversation_card.go:737
-#: ui/internal/window/message_view.go:321
+#: ui/internal/window/message_view.go:325
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
@@ -6479,7 +6484,7 @@ msgid "_Download Pictures"
 msgstr "_Stáhnout obrázky"
 
 #: ui/internal/window/conversation_card.go:984
-#: ui/internal/window/message_view.go:523
+#: ui/internal/window/message_view.go:527
 msgid "Loading the message"
 msgstr "Načtení zprávy"
 
@@ -6596,12 +6601,12 @@ msgstr "Zatím žádné složky"
 msgid "Folders appear after the first synchronisation."
 msgstr "Složky se objeví po první synchronizaci."
 
-#: ui/internal/window/message_view.go:610
-#: ui/internal/window/message_view.go:622
+#: ui/internal/window/message_view.go:614
+#: ui/internal/window/message_view.go:626
 msgid "(Empty message)"
 msgstr "(Prázdná zpráva)"
 
-#: ui/internal/window/message_view.go:614
+#: ui/internal/window/message_view.go:618
 msgid "Downloading…"
 msgstr "Stahuje se…"
 

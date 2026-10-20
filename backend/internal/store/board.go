@@ -1005,21 +1005,37 @@ func loadBoardIssueTx(ctx context.Context, tx *sql.Tx, t *BoardThread, issueID s
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("board: read issue items: %w", err)
 	}
-	var raw string
-	err = tx.QueryRowContext(ctx, `SELECT value FROM meta WHERE key = ?`, MetaIssueMePrefix+t.AccountID).Scan(&raw)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-	case err != nil:
-		return fmt.Errorf("board: read the jira user: %w", err)
-	default:
-		var me struct {
-			ID string `json:"id"`
-		}
-		if json.Unmarshal([]byte(raw), &me) == nil {
-			t.Me = me.ID
-		}
+	if t.Me, err = readIssueMe(ctx, tx, t.AccountID); err != nil {
+		return fmt.Errorf("board: %w", err)
 	}
 	return nil
+}
+
+// readIssueMe is the site's id of the account's user (meta
+// MetaIssueMePrefix + account): "" when the syncer has not asked the site
+// yet or the record is unreadable (nobody).
+func readIssueMe(ctx context.Context, q querier, accountID string) (string, error) {
+	rows, err := q.QueryContext(ctx, `SELECT value FROM meta WHERE key = ?`, MetaIssueMePrefix+accountID)
+	if err != nil {
+		return "", fmt.Errorf("read the jira user: %w", err)
+	}
+	defer rows.Close()
+	var raw string
+	if rows.Next() {
+		if err := rows.Scan(&raw); err != nil {
+			return "", fmt.Errorf("read the jira user: %w", err)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return "", fmt.Errorf("read the jira user: %w", err)
+	}
+	var me struct {
+		ID string `json:"id"`
+	}
+	if raw == "" || json.Unmarshal([]byte(raw), &me) != nil {
+		return "", nil
+	}
+	return me.ID, nil
 }
 
 // closeRepliedCommitmentsTx closes (replied) the case's open commitments

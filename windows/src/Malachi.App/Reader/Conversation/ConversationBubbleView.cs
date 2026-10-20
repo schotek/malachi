@@ -33,7 +33,9 @@
 // card is, and "Has attachments" while the paperclip shows (the pill, a
 // Border, is no automation element); its AutomationId is
 // "ConversationBubble:" and the message's id, or "ConversationDraftBubble:"
-// and the draft's.
+// and the draft's. The board's conversation block shows its chat in the
+// same bubbles (ShowPlain: the sender and date a case's member carries,
+// "BoardChatBubble:" and its index).
 
 using System;
 using System.Linq;
@@ -262,6 +264,30 @@ internal sealed partial class ConversationBubbleView : UserControl
         editedLabel.Visibility = item.Edited.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         ShowBadges();
         date = item.Message?.Date;
+        saved = null;
+        RenderDate();
+    }
+
+    /// <summary>
+    /// The header of a message of the board's conversation
+    /// (BoardConversationBlock's chat; GTK board_conversation_chat.go show):
+    /// <paramref name="sender"/> (You for the user's own) and
+    /// <paramref name="messageDate"/> (Go's zero shows none), no unread dot,
+    /// paperclip, badges or relay; its AutomationId is
+    /// <paramref name="automationId"/>. The board's members carry no more.
+    /// </summary>
+    public void ShowPlain(string automationId, string sender, DateTimeOffset messageDate)
+    {
+        AutomationProperties.SetAutomationId(this, automationId);
+        ShowSender(sender);
+        unread.Visibility = Visibility.Collapsed;
+        ShowClip(new BubbleAttachments.None());
+        draftPill.Text = "";
+        internalPill.Text = "";
+        viaLabel.Visibility = Visibility.Collapsed;
+        editedLabel.Visibility = Visibility.Collapsed;
+        ShowBadges();
+        date = messageDate;
         saved = null;
         RenderDate();
     }

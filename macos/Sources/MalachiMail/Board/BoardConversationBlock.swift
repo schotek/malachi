@@ -41,6 +41,18 @@ struct BoardMailBodies {
 /// anything else keeps the excerpt. The block is a `MessageDisplay`: a body
 /// that changes (remote images loaded in Mail) shows here too, and links go
 /// through Mail's `openLink` of the delegate it is given.
+///
+/// The heading row also has the layout toggle of Mail's conversation
+/// (`ConversationLayoutToggle`, left of Show in Mail), on the Mail key
+/// conversation-chat-layout: a click only writes the setting, and the
+/// block switches when the setting changes (`layoutChanged`), so a change
+/// in Mail switches the board too. The chat (`chatColumn`) is one bubble
+/// per member (`Board.chatRows`), oldest first like the cards, the user's
+/// own on the right, with the text the case carries (`MessageCard.text`):
+/// no body is fetched for it and no web view shown, and while it shows the
+/// cards hold none either (`live`), keeping their folds and HTML for the
+/// way back. A double click on a bubble opens the message in its own
+/// window (`openFromBubble`). The detail keeps opening at its top.
 @MainActor
 final class BoardConversationBlock: NSView, MessageDisplay {
     weak var delegate: (any MessageActionDelegate)?
@@ -70,6 +82,24 @@ final class BoardConversationBlock: NSView, MessageDisplay {
     private var registered = false
     private var zoomToken: Settings.ChangeToken?
 
+    /// The layout toggle, in the heading row left of Show in Mail.
+    private let toggle = ConversationLayoutToggle(
+        label: { Board.Text.chatToggleLabel(on: $0) }, tooltip: { Board.Text.chatToggleTooltip(on: $0) })
+    /// The chat layout's bubbles, after `cardsColumn`; exactly one of the
+    /// two shows (none while the conversation loads or failed).
+    private let chatColumn = FillStackView()
+    /// Same indices as `state.members` and `messages`.
+    private(set) var chatRows: [ConversationChatRow] = []
+    /// The members of the detail on show, for the bubbles' double click.
+    private var messages: [Board.MessageCard] = []
+    /// The chat shows (the setting, read when it changes).
+    private(set) var chatShown = false
+    /// The bubbles show the short date (`ConversationLayout.chatCompactDates`).
+    private var compactDates = false
+    private var compactPending = false
+    /// The layout, text zoom and avatar settings the chat follows.
+    private var chatTokens: [Settings.ChangeToken] = []
+
     /// What the status row shows.
     private struct Status: Equatable {
         var loading: Bool
@@ -96,7 +126,18 @@ final class BoardConversationBlock: NSView, MessageDisplay {
         showButton.setContentHuggingPriority(.required, for: .horizontal)
         showButton.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(450), for: .horizontal)
         showButton.setAccessibilityLabel(Board.Text.showInMail)
-        let top = NSStackView(views: [heading, showButton])
+        toggle.onToggle = { [weak self] on in
+            guard let self else { return }
+            // Only the setting: the block switches from its observer.
+            guard let env = self.actions.mailBodies else {
+                self.toggle.setChat(self.chatShown)
+                return
+            }
+            env.settings.conversationChatLayout = on
+        }
+        // Without Mail's settings there is no layout to switch.
+        toggle.isHidden = actions.mailBodies == nil
+        let top = NSStackView(views: [heading, toggle, showButton])
         top.orientation = .horizontal
         top.alignment = .centerY
         top.distribution = .fill
@@ -105,6 +146,9 @@ final class BoardConversationBlock: NSView, MessageDisplay {
         stack.spacing = 8
         stack.addArrangedSubview(top)
         stack.addArrangedSubview(cardsColumn)
+        chatColumn.spacing = 0
+        chatColumn.isHidden = true
+        stack.addArrangedSubview(chatColumn)
         addSubview(stack)
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: topAnchor),
@@ -125,11 +169,18 @@ final class BoardConversationBlock: NSView, MessageDisplay {
     func apply(_ d: Board.Detail?) {
         guard let d else {
             removeAllCards()
+            removeAllChatRows()
             state = Board.ConversationCards()
             account = nil
+            messages = []
             return
         }
         account = d.accountID
+        if let env = actions.mailBodies {
+            observeChat(env)
+            // The delegate a bubble's double click opens through.
+            register(env)
+        }
         if heading.stringValue != d.conversationTitle {
             heading.stringValue = d.conversationTitle
         }
@@ -144,14 +195,21 @@ final class BoardConversationBlock: NSView, MessageDisplay {
             // another case's go.
             if state.caseID != d.id {
                 removeAllCards()
+                removeAllChatRows()
                 state = Board.ConversationCards()
+                messages = []
             }
             cardsColumn.isHidden = true
+            chatColumn.isHidden = true
             return
         }
-        cardsColumn.isHidden = false
+        cardsColumn.isHidden = chatShown
+        chatColumn.isHidden = !chatShown
         var reloads: [Int] = []
-        switch state.apply(Board.ConversationCards.key(d)) {
+        let change = state.apply(Board.ConversationCards.key(d))
+        messages = d.messages
+        applyChat(change, d.messages)
+        switch change {
         case .none:
             break
         case .reset:
@@ -290,9 +348,9 @@ final class BoardConversationBlock: NSView, MessageDisplay {
     // MARK: What the cards show
 
     /// The block may hold web views now: in a window, not hidden, with
-    /// Mail's cache at hand.
+    /// Mail's cache at hand, and the cards shown (the chat holds none).
     private var live: Bool {
-        actions.mailBodies != nil && window != nil && !isHiddenOrHasHiddenAncestor
+        actions.mailBodies != nil && window != nil && !isHiddenOrHasHiddenAncestor && !chatShown
     }
 
     private var web: BoardCardWeb? {
@@ -390,6 +448,212 @@ final class BoardConversationBlock: NSView, MessageDisplay {
         fetchBodies()
     }
 
+    // MARK: The chat
+
+    /// Follows the layout setting (and the chat's fonts and avatars) from
+    /// the first detail on.
+    private func observeChat(_ env: BoardMailBodies) {
+        guard chatTokens.isEmpty else { return }
+        let settings = env.settings
+        chatShown = settings.conversationChatLayout
+        toggle.setChat(chatShown)
+        chatTokens.append(settings.onChange(.conversationChatLayout) { [weak self] in self?.layoutChanged() })
+        chatTokens.append(settings.onChange(.textZoom) { [weak self] in self?.applyChatFonts() })
+        chatTokens.append(settings.onChange(.monochromeAvatars) { [weak self] in self?.applyChatAvatars() })
+    }
+
+    /// The setting switched the layout (a click here, or in Mail): the
+    /// other column shows; the cards let their web views go or get them
+    /// back (`live`), on the next turn as any change of `live`.
+    private func layoutChanged() {
+        guard let env = actions.mailBodies else { return }
+        let on = env.settings.conversationChatLayout
+        toggle.setChat(on)
+        guard on != chatShown else { return }
+        chatShown = on
+        if status == nil, account != nil {
+            cardsColumn.isHidden = on
+            chatColumn.isHidden = !on
+        }
+        if on {
+            // The rows were left as they were while the cards showed.
+            for (i, row) in chatRows.enumerated() where messages.indices.contains(i) {
+                renderChatRow(row, messages[i])
+            }
+            scheduleCompactCheck()
+        }
+        liveChanged()
+    }
+
+    /// The bubbles' fonts at the text zoom; the board's text is an
+    /// excerpt, never shown monospaced (as Mail's snippet).
+    private var chatFonts: (normal: NSFont, monospace: NSFont) {
+        let zoom = actions.mailBodies?.settings.textZoom ?? 1
+        return (Typo.body(zoom: zoom, monospace: false), Typo.body(zoom: zoom, monospace: true))
+    }
+
+    private var monochrome: Bool { actions.mailBodies?.settings.monochromeAvatars ?? false }
+
+    /// The chat's rows after the same change as the cards: another case
+    /// builds them anew, new members add theirs and the others stay (a row
+    /// whose side changed is made anew: the side is its layout).
+    private func applyChat(_ change: Board.ConversationCards.Change, _ ms: [Board.MessageCard]) {
+        switch change {
+        case .none:
+            for (i, m) in ms.enumerated() where i < chatRows.count {
+                if chatRows[i].right == m.mine {
+                    if chatShown {
+                        renderChatRow(chatRows[i], m)
+                    }
+                } else {
+                    replaceChatRow(i, with: makeChatRow(m))
+                }
+            }
+        case .reset:
+            removeAllChatRows()
+            chatRows = ms.map { makeChatRow($0) }
+            for row in chatRows {
+                chatColumn.addArrangedSubview(row)
+            }
+        case .members(let kept, _):
+            var next: [ConversationChatRow] = []
+            var stays = Set<ObjectIdentifier>()
+            for (i, m) in ms.enumerated() {
+                if let old = kept[i], old < chatRows.count, chatRows[old].right == m.mine {
+                    if chatShown {
+                        renderChatRow(chatRows[old], m)
+                    }
+                    next.append(chatRows[old])
+                    stays.insert(ObjectIdentifier(chatRows[old]))
+                } else {
+                    next.append(makeChatRow(m))
+                }
+            }
+            for row in chatRows where !stays.contains(ObjectIdentifier(row)) {
+                chatColumn.removeArrangedSubview(row)
+                row.removeFromSuperview()
+            }
+            for (i, row) in next.enumerated() {
+                let arranged = chatColumn.arrangedSubviews
+                if i < arranged.count, arranged[i] === row {
+                    continue
+                }
+                if arranged.contains(where: { $0 === row }) {
+                    chatColumn.removeArrangedSubview(row)
+                }
+                chatColumn.insertArrangedSubview(row, at: i)
+            }
+            chatRows = next
+        }
+    }
+
+    private func replaceChatRow(_ i: Int, with row: ConversationChatRow) {
+        let old = chatRows[i]
+        chatColumn.removeArrangedSubview(old)
+        old.removeFromSuperview()
+        chatColumn.insertArrangedSubview(row, at: i)
+        chatRows[i] = row
+    }
+
+    private func makeChatRow(_ m: Board.MessageCard) -> ConversationChatRow {
+        let row = ConversationChatRow(id: m.id, draftID: nil, right: m.mine, fonts: chatFonts)
+        row.bubble.compactDate = compactDates
+        row.bubble.onDoubleClick = { [weak self, weak row] in
+            guard let self, let row, let i = self.chatRows.firstIndex(where: { $0 === row }),
+                  self.messages.indices.contains(i)
+            else { return }
+            self.openFromBubble(self.messages[i])
+        }
+        renderChatRow(row, m)
+        return row
+    }
+
+    /// A bubble shows `m`: the avatar of its real sender, the header of
+    /// its card's sender (You for the user's own) and date, its text.
+    private func renderChatRow(_ row: ConversationChatRow, _ m: Board.MessageCard) {
+        row.showAvatar(name: m.sender, monochrome: monochrome)
+        row.bubble.showPlain(sender: m.from, date: m.date == .distantPast ? nil : m.date)
+        row.bubble.showBody(.text(Conversation.bubbleText(m.text)), monospace: false)
+    }
+
+    private func removeAllChatRows() {
+        for row in chatRows {
+            chatColumn.removeArrangedSubview(row)
+            row.removeFromSuperview()
+        }
+        chatRows = []
+    }
+
+    private func applyChatFonts() {
+        let f = chatFonts
+        for row in chatRows {
+            row.bubble.setFonts(normal: f.normal, monospace: f.monospace)
+        }
+    }
+
+    private func applyChatAvatars() {
+        for (i, row) in chatRows.enumerated() where messages.indices.contains(i) {
+            let m = messages[i]
+            row.showAvatar(name: m.sender, monochrome: monochrome)
+        }
+    }
+
+    /// A double click on the bubble of `m` opens the message in its own
+    /// window as Mail's chat does, with the summary message.get gives (the
+    /// samples have none: the preview says it cannot).
+    private func openFromBubble(_ m: Board.MessageCard) {
+        guard Board.chatOpens(m), let id = m.id, let account, let env = actions.mailBodies else {
+            if actions.samples {
+                actions.onToast?(Board.Text.later)
+            }
+            return
+        }
+        register(env)
+        let caseID = state.caseID
+        env.cache.lookUpOutcome(accountId: account, id: id) { [weak self] outcome in
+            // A late answer after the user went elsewhere (Mail, another
+            // case, the block out of the window) does nothing.
+            guard let self, self.window != nil, !self.isHiddenOrHasHiddenAncestor, self.account == account,
+                  self.state.caseID == caseID, self.chatShown
+            else { return }
+            switch outcome {
+            case .found(let s):
+                self.delegate?.openMessage(s)
+            case .gone:
+                self.actions.onToast?(Board.Text.showInMailGone)
+            case .failed:
+                self.actions.onToast?(Board.Text.showInMailFailed)
+            }
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        scheduleCompactCheck()
+    }
+
+    /// Whether the bubbles show the short date, from the block's own width
+    /// (the stack, and with it the chat's column, is pinned edge to edge;
+    /// the column itself is 0 while hidden and sized after this pass), on
+    /// the next turn: never from inside the layout pass, as a date's label
+    /// changes width.
+    private func scheduleCompactCheck() {
+        guard !compactPending else { return }
+        compactPending = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.compactPending = false
+            let width = self.bounds.width
+            guard width > 0 else { return }
+            let compact = ConversationLayout.chatCompactDates(column: Double(width))
+            guard compact != self.compactDates else { return }
+            self.compactDates = compact
+            for row in self.chatRows {
+                row.bubble.compactDate = compact
+            }
+        }
+    }
+
     // MARK: Live
 
     override func viewDidMoveToWindow() {
@@ -469,6 +733,12 @@ final class BoardConversationBlock: NSView, MessageDisplay {
         guard actions.samples, cards.indices.contains(i) else { return }
         userFolded(cards[i], false)
     }
+
+    /// DEVELOPMENT AID: the layout toggle's label.
+    var developmentToggleLabel: String { toggle.title }
+
+    /// DEVELOPMENT AID: the members on show (the bubbles' texts and names).
+    var developmentMessages: [Board.MessageCard] { messages }
 
     /// DEVELOPMENT AID: the cards holding a web view now.
     var developmentLiveWebViews: Int {

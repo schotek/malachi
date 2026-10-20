@@ -9,9 +9,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/diamondburned/gotk4/pkg/gtk/v4"
+
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/client"
+	"github.com/schotek/malachi/ui/internal/conversation"
+	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/settings"
 )
 
 // Optional WebKit card integration within TestBoardGTKSmoke. Every body is
@@ -103,5 +108,175 @@ func smokeBoardConversationCards(t *testing.T, p *boardPage, flush func()) {
 	}
 	p.w.mode = board.ModeBoard
 	b.close()
+	flush()
+}
+
+// smokeBoardConversationChat switches the block to the chat layout through
+// the shared setting (conversation-chat-layout) and back: one bubble per
+// member on its side with the case's text, no card web view while the chat
+// shows, the cards and (withCards: invented cached HTML, a client that is
+// never connected) the newest card's web view back afterwards; a sample's
+// bubble opens no window. A settings store of its own in memory, only for
+// this block.
+func smokeBoardConversationChat(t *testing.T, p *boardPage, flush func(), withCards bool) {
+	t.Helper()
+	w := p.w
+	if p.conversation != nil {
+		p.conversation.close()
+		removeAllChildren(p.conversationBox)
+		p.conversation = nil
+	}
+	saved := w.settings
+	w.settings = settings.NewMemory()
+	defer func() { w.settings = saved }()
+	if withCards {
+		rpc := client.New(filepath.Join(t.TempDir(), "absent.sock"))
+		defer rpc.Close()
+		w.client = rpc
+		w.loaded = make(map[api.MessageID]*loadedMessage)
+		defer func() { w.client = nil }()
+	}
+	now := time.Now()
+	d := board.Detail{ID: "smoke-chat-case", AccountID: "smoke-account", ConversationTitle: "Invented chat"}
+	for i := 0; i < 4; i++ {
+		id := api.MessageID(fmt.Sprintf("smoke-chat-%d", i))
+		mine := i%2 == 1
+		m := board.MessageCard{ID: id, From: "Example sender", Sender: "Example sender",
+			Date: now.Add(time.Duration(i-4) * time.Hour), When: "today", Text: fmt.Sprintf("Invented chat text %d\nsecond line", i), Mine: mine}
+		if mine {
+			m.From, m.Sender = board.You(i18n.Tr), "Smoke User"
+		}
+		d.Messages = append(d.Messages, m)
+		if withCards {
+			w.loaded[id] = &loadedMessage{account: d.AccountID, body: &api.MessageBodyResult{
+				MessageID: id, BodyState: api.BodyFetched, HasHTML: true,
+				HTML: fmt.Sprintf("<p>Invented safe chat card %d</p>", i),
+			}}
+		}
+	}
+	p.renderDetailConversation(d)
+	b := p.conversation
+	defer func() {
+		b.close()
+		removeAllChildren(p.conversationBox)
+		p.conversation = nil
+	}()
+	p.detailStack.SetVisibleChildName("detail")
+	deadline := time.Now().Add(10 * time.Second)
+	for !p.conversationBox.Mapped() && time.Now().Before(deadline) {
+		flush()
+		time.Sleep(10 * time.Millisecond)
+	}
+	b.refresh()
+	flush()
+	if !b.chat.toggle.Visible() || b.chat.stack.VisibleChildName() != boardChatCards {
+		t.Fatal("the block does not start with the cards and its chat toggle")
+	}
+	if got := b.chat.toggleContent.Label(); got != board.ChatToggleLabel(false, i18n.Tr) {
+		t.Fatalf("toggle off says %q", got)
+	}
+	cards := append([]*boardConversationCard(nil), b.cards...)
+	if len(cards) != len(d.Messages) {
+		t.Fatalf("%d cards for %d messages", len(cards), len(d.Messages))
+	}
+	if withCards && cards[len(cards)-1].web == nil {
+		t.Fatal("newest card shows no web view before the chat")
+	}
+
+	w.settings.SetConversationChatLayout(true)
+	flush()
+	if b.chat.stack.VisibleChildName() != boardChatPage || !b.chat.toggle.Active() {
+		t.Fatal("the setting did not switch the block to the chat")
+	}
+	if got := b.chat.toggleContent.Label(); got != board.ChatToggleLabel(true, i18n.Tr) {
+		t.Fatalf("toggle on says %q", got)
+	}
+	if got := b.chat.toggle.TooltipText(); got != board.ChatToggleTooltip(true, i18n.Tr) {
+		t.Fatalf("toggle on has the tooltip %q", got)
+	}
+	checkRows := func() {
+		t.Helper()
+		if len(b.chat.rows) != len(d.Messages) {
+			t.Fatalf("%d bubbles for %d messages", len(b.chat.rows), len(d.Messages))
+		}
+		for i, r := range b.chat.rows {
+			m := d.Messages[i]
+			if r.right != m.Mine || r.Parent() == nil {
+				t.Fatalf("bubble %d on the wrong side or not in the column", i)
+			}
+			if got := r.bubble.text.Text(); got != conversation.BubbleText(m.Text) {
+				t.Fatalf("bubble %d shows %q", i, got)
+			}
+			if got := r.bubble.sender.Text(); got != m.From {
+				t.Fatalf("bubble %d names %q", i, got)
+			}
+			if got := r.avatar.Text(); got != m.Sender {
+				t.Fatalf("bubble %d's avatar is %q", i, got)
+			}
+		}
+	}
+	checkRows()
+	for i, c := range b.cards {
+		if c.web != nil {
+			t.Fatalf("card %d kept its web view under the chat", i)
+		}
+	}
+	rows := append([]*chatRow(nil), b.chat.rows...)
+	b.apply(&d)
+	flush()
+	checkRows()
+	for i, r := range b.chat.rows {
+		if r != rows[i] {
+			t.Fatal("an unchanged refresh rebuilt a bubble")
+		}
+	}
+	t.Logf("chat: %d bubbles, bubble max %d px, compact %v", len(rows), b.chat.bubbleMax(), b.chat.compact)
+
+	// The toggle writes the shared setting.
+	b.chat.toggle.SetActive(false)
+	flush()
+	if w.settings.ConversationChatLayout() || b.chat.stack.VisibleChildName() != boardChatCards {
+		t.Fatal("the toggle did not switch the setting and the block back to the cards")
+	}
+	for i, c := range b.cards {
+		if c != cards[i] {
+			t.Fatal("the chat replaced a card")
+		}
+	}
+	if withCards && b.cards[len(b.cards)-1].web == nil {
+		t.Fatal("the newest card did not show its web view again")
+	}
+
+	// A sample's bubble opens nothing.
+	sample := board.Detail{ID: "smoke-chat-sample", ConversationTitle: "Sample chat",
+		Messages: []board.MessageCard{{From: "Example sender", Sender: "Example sender", Text: "A sample"}}}
+	b.chat.toggle.SetActive(true)
+	b.apply(&sample)
+	flush()
+	if len(b.chat.rows) != 1 {
+		t.Fatal("the sample shows no bubble")
+	}
+	before := len(w.openMessages)
+	b.chat.activate(b.chat.rows[0])
+	flush()
+	if len(w.openMessages) != before {
+		t.Fatal("a sample's bubble opened a window")
+	}
+	// Samples to ids and back: the column holds only the detail's bubbles.
+	columnRows := func() int {
+		n := 0
+		for child := b.chat.column.FirstChild(); child != nil; child = gtk.BaseWidget(child).NextSibling() {
+			n++
+		}
+		return n
+	}
+	for _, next := range []*board.Detail{&d, &sample} {
+		b.apply(next)
+		flush()
+		if len(b.chat.rows) != len(next.Messages) || columnRows() != len(next.Messages) {
+			t.Fatalf("%s: %d rows, %d in the column, for %d messages", next.ID, len(b.chat.rows), columnRows(), len(next.Messages))
+		}
+	}
+	w.settings.SetConversationChatLayout(false)
 	flush()
 }

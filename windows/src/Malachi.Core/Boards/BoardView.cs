@@ -629,9 +629,17 @@ public static partial class Board
                 : null;
             var tasks = (a?.Tasks ?? []).Take(Cap.TaskScan).Select(t => CleanLine(t, Cap.Task))
                 .Where(t => t.Length > 0).Take(Cap.Tasks).ToList();
-            var messages = Newest(c.Messages ?? [], Cap.Messages).Select(m => new MessageCard(
-                m.Id, m.Mine ? Text.You : CleanLine(m.From, Cap.Person), DateFormat.FormatDate(m.Date, Now, culture, Zone),
-                CleanBlock(m.Text, Cap.Message), m.Mine)).ToList();
+            var messages = Newest(c.Messages ?? [], Cap.Messages).Select(m =>
+            {
+                var sender = CleanLine(m.From, Cap.Person);
+                return new MessageCard(
+                    m.Id, m.Mine ? Text.You : sender, DateFormat.FormatDate(m.Date, Now, culture, Zone),
+                    CleanBlock(m.Text, Cap.Message), m.Mine)
+                {
+                    Sender = sender,
+                    Date = m.Date,
+                };
+            }).ToList();
             var messagesNote = c.Messages is not null ? "" : c.MessagesFailed ? Text.MessagesFailed : Text.MessagesLoading;
             var stale = Annotated && c.Annotation is { Stale: true };
             var whyNotes = new List<string>(2);

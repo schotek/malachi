@@ -37,6 +37,8 @@ type boardConversation struct {
 	userChanging bool
 	zoomRemove   func()
 	widthRemove  func()
+	// chat is the chat layout and the toggle (board_conversation_chat.go).
+	chat *boardChat
 }
 
 type boardConversationStatus struct {
@@ -83,6 +85,8 @@ func newBoardConversation(p *boardPage) *boardConversation {
 	b.heading = plainLabel("", "heading")
 	b.heading.SetHExpand(true)
 	top.Append(b.heading)
+	b.chat = newBoardChat(b)
+	top.Append(b.chat.toggle)
 	show := gtk.NewButtonWithLabel(board.ShowInMail(i18n.Tr))
 	show.AddCSSClass("flat")
 	show.SetActionName("win.board-show-in-mail")
@@ -94,7 +98,7 @@ func newBoardConversation(p *boardPage) *boardConversation {
 	b.hover.SetVisible(false)
 	p.conversationBox.Append(top)
 	p.conversationBox.Append(b.status)
-	p.conversationBox.Append(b.column)
+	p.conversationBox.Append(b.chat.layouts(b.column))
 	p.conversationBox.Append(b.hover)
 	// Moving the detail between List and the panel unmaps it briefly: defer
 	// the decision, so a view that stays visible keeps its document.
@@ -109,9 +113,10 @@ func newBoardConversation(p *boardPage) *boardConversation {
 	// tree between List and the panel, so it is the same one throughout.
 	if scroller := p.boardReplyScroller(); scroller != nil {
 		adj := scroller.HAdjustment()
-		handler := adj.ConnectChanged(b.measureAll)
+		handler := adj.ConnectChanged(func() { b.measureAll(); b.chat.widthChanged() })
 		b.widthRemove = func() { adj.HandlerDisconnect(handler) }
 	}
+	b.chat.bind()
 	return b
 }
 
@@ -121,6 +126,7 @@ func (b *boardConversation) apply(d *board.Detail) {
 	}
 	if d == nil {
 		b.removeAll()
+		b.chat.apply(nil)
 		b.state = board.NewConversationCards(0)
 		b.account = ""
 		return
@@ -158,10 +164,12 @@ func (b *boardConversation) apply(d *board.Detail) {
 			b.state = board.NewConversationCards(0)
 		}
 		b.column.SetVisible(false)
+		b.chat.apply(nil)
 		b.refresh()
 		return
 	}
 	b.column.SetVisible(true)
+	b.chat.apply(d)
 	changes := b.state.Apply(board.ConversationKeyOf(*d))
 	switch changes.Kind {
 	case board.ConversationChangeReset:
@@ -214,7 +222,7 @@ func (b *boardConversation) apply(d *board.Detail) {
 }
 
 func (b *boardConversation) live() bool {
-	return !b.closed && !b.p.replyClosed && b.p.w.mode == board.ModeBoard && b.p.w.client != nil && b.p.conversationBox.Mapped() && b.column.Visible()
+	return !b.closed && !b.p.replyClosed && b.p.w.mode == board.ModeBoard && b.p.w.client != nil && b.p.conversationBox.Mapped() && b.column.Visible() && !b.chat.shown
 }
 func (b *boardConversation) scheduleRefresh() {
 	if b.pending || b.closed {
@@ -330,6 +338,7 @@ func (b *boardConversation) close() {
 	if !b.closed {
 		b.closed = true
 		b.removeAll()
+		b.chat.close()
 		if b.zoomRemove != nil {
 			b.zoomRemove()
 			b.zoomRemove = nil

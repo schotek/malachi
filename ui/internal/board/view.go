@@ -219,9 +219,19 @@ type AccountItem struct {
 // MessageCard is a message of the detail's conversation.
 type MessageCard struct {
 	// ID is "" for the samples.
-	ID   api.MessageID
+	ID api.MessageID
+	// From is the card's sender: You for the user's own messages, else
+	// the sender's cleaned name or address.
 	From string
+	// Sender is the sender's cleaned name or address for every message,
+	// the user's own too (where From says You): the chat bubble's avatar
+	// takes its initials from it.
+	Sender string
+	// When is the short date the cards show.
 	When string
+	// Date is the message's date: the chat bubble formats it as the chat
+	// of Mail does (in full, compact in a narrow column).
+	Date time.Time
 	Text string
 	Mine bool
 }
@@ -1018,13 +1028,14 @@ func (ctx viewContext) detail(c Case) Detail {
 	}
 	var messages []MessageCard
 	for _, m := range newestMessages(c.Messages, capMessages) {
+		sender := CleanLine(m.From, capPerson)
 		from := You(tr)
 		if !m.Mine {
-			from = CleanLine(m.From, capPerson)
+			from = sender
 		}
 		messages = append(messages, MessageCard{
-			ID: m.ID, From: from, When: ctx.dates.Date(m.Date, ctx.now), Text: CleanBlock(m.Text, capMessage),
-			Mine: m.Mine,
+			ID: m.ID, From: from, Sender: sender, When: ctx.dates.Date(m.Date, ctx.now), Date: m.Date,
+			Text: CleanBlock(m.Text, capMessage), Mine: m.Mine,
 		})
 	}
 	messagesNote := ""

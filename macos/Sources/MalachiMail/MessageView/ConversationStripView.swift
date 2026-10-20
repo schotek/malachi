@@ -26,7 +26,8 @@ final class ConversationStripView: NSView {
 
     private let clamp: ClampView
     private let foldAllButton = NSButton(title: "", target: nil, action: nil)
-    private let toggle = NSButton(title: "", target: nil, action: nil)
+    private let toggle = ConversationLayoutToggle(
+        label: { Conversation.chatToggleLabel(on: $0) }, tooltip: { Conversation.chatToggleTooltip(on: $0) })
 
     /// Above and below the strip's controls, so that the toggle's bezel
     /// touches neither the strip's top nor the content under it.
@@ -58,21 +59,9 @@ final class ConversationStripView: NSView {
         foldAllButton.action = #selector(foldAllClicked(_:))
         foldAllButton.isHidden = true
 
-        // The layout toggle: the bubbles symbol and the label of the layout
-        // a click shows (`render`), its on state pressed in and tinted with
-        // the accent colour.
-        toggle.setButtonType(.pushOnPushOff)
-        toggle.bezelStyle = .recessed
-        toggle.showsBorderOnlyWhileMouseInside = false
-        toggle.controlSize = .small
-        toggle.font = Typo.caption
-        toggle.image = NSImage(systemSymbolName: "bubble.left.and.bubble.right", accessibilityDescription: nil)?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: Typo.captionSize, weight: .regular))
-        toggle.imagePosition = .imageLeading
-        toggle.imageHugsTitle = true
-        render(chat: false)
-        toggle.target = self
-        toggle.action = #selector(toggleClicked(_:))
+        // The layout toggle (`ConversationLayoutToggle`, the same look as
+        // on the board).
+        toggle.onToggle = { [weak self] on in self?.onToggle?(on) }
 
         for b in [foldAllButton, toggle] {
             b.setContentHuggingPriority(.required, for: .horizontal)
@@ -116,32 +105,10 @@ final class ConversationStripView: NSView {
     /// The toggle shows the chat on or off: its state, its label, tooltip
     /// and accessibility name.
     func setChat(_ on: Bool) {
-        toggle.state = on ? .on : .off
-        render(chat: on)
-    }
-
-    /// The toggle's look for the chat on or off: the label and tooltip of
-    /// that state (`Conversation.chatToggleLabel(on:)`,
-    /// `chatToggleTooltip(on:)`) and, on, the accent tint.
-    private func render(chat on: Bool) {
-        let label = Conversation.chatToggleLabel(on: on)
-        let tooltip = Conversation.chatToggleTooltip(on: on)
-        if toggle.title != label {
-            toggle.title = label
-        }
-        toggle.toolTip = tooltip
-        toggle.setAccessibilityLabel(label)
-        toggle.setAccessibilityHelp(tooltip)
-        toggle.contentTintColor = on ? .controlAccentColor : nil
+        toggle.setChat(on)
     }
 
     @objc private func foldAllClicked(_ sender: Any?) {
         onFoldAll?()
-    }
-
-    @objc private func toggleClicked(_ sender: Any?) {
-        let on = toggle.state == .on
-        render(chat: on)
-        onToggle?(on)
     }
 }

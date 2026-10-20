@@ -664,10 +664,14 @@ func (s *Store) SetBoardDraft(ctx context.Context, id, draftID string) (BoardCas
 // BoardMessage is a member that counts as board.get and board.queue show
 // it; core trims the text and cleans it.
 type BoardMessage struct {
-	ID           string
-	FolderID     string
-	Role         api.FolderRole
-	Mine         bool // in a folder of role sent or outbox
+	ID       string
+	FolderID string
+	Role     api.FolderRole
+	// Mine: a mail row in a folder of role sent or outbox, or a Jira
+	// item (description or comment) the account's own user wrote on the
+	// site and no bot relayed (as api.MessageIssue.Mine; boardItemMine).
+	// Unlike BoardMember.Mine, which the rules read, it is only shown.
+	Mine         bool
 	From         []api.Address
 	To, CC       []api.Address
 	Subject      string
@@ -690,6 +694,26 @@ func (s *Store) BoardMessages(ctx context.Context, caseID string, limit int) ([]
 		return nil, err
 	}
 	return boardMessages(ctx, s.db, c.AccountID, c.ThreadID, limit)
+}
+
+// boardItemMe is the site's id of the account's user when one of the
+// members is a Jira item ("" when none is, or the syncer has not asked the
+// site yet, or the record is unreadable: nobody).
+func boardItemMe(ctx context.Context, q querier, accountID string, members []BoardMember) (string, error) {
+	if !slices.ContainsFunc(members, func(m BoardMember) bool { return m.ItemKind != "" }) {
+		return "", nil
+	}
+	me, err := readIssueMe(ctx, q, accountID)
+	if err != nil {
+		return "", fmt.Errorf("board messages: %w", err)
+	}
+	return me, nil
+}
+
+// boardItemMine: m is a Jira item (never an event) that the user me wrote
+// on the site and no bot relayed, as api.MessageIssue.Mine.
+func boardItemMine(m BoardMember, me string) bool {
+	return me != "" && m.ItemKind != "" && m.ItemKind != api.IssueItemEvent && m.ItemAuthorID == me && m.ItemVia == ""
 }
 
 // boardMessages is BoardMessages for a thread.
@@ -723,11 +747,16 @@ func boardMessages(ctx context.Context, q querier, accountID, threadID string, l
 	if len(picked) > limit {
 		picked = picked[:limit]
 	}
+	me, err := boardItemMe(ctx, q, accountID, picked)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]BoardMessage, len(picked))
 	ids := make([]string, len(picked))
 	for i, m := range picked {
 		k := len(picked) - 1 - i // oldest first
-		out[k] = BoardMessage{ID: m.ID, FolderID: m.FolderID, Role: m.Role, Mine: m.Mine, From: m.From, To: m.To, CC: m.CC,
+		mine := m.Mine || boardItemMine(m, me)
+		out[k] = BoardMessage{ID: m.ID, FolderID: m.FolderID, Role: m.Role, Mine: mine, From: m.From, To: m.To, CC: m.CC,
 			Subject: m.Subject, Date: m.Date, InternalDate: m.InternalDate, StoredAt: m.StoredAt, RFCMessageID: m.RFCMessageID, BodyState: m.BodyState}
 		ids[k] = m.ID
 	}

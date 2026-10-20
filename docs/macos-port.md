@@ -332,6 +332,24 @@ The board ([architecture.md §3.7](architecture.md#37-the-board), [api.md
   outside the detail's rebuild and changes cards only when the case or its
   members (id and excerpt) change; a card whose height changes above the
   viewport moves the scroll position by as much (`compensatedTop`).
+  *Conversation as chat on the board*: the block's heading row has Mail's
+  layout toggle (`ConversationLayoutToggle`, shared with
+  `ConversationStripView` so both look alike, left of Show in Mail; its
+  texts are `Board.Text.chatToggleLabel(on:)` / `chatToggleTooltip(on:)`)
+  on the same key as Mail, `conversation-chat-layout`: a click only writes
+  the setting and the block switches from its observer, so a change in
+  Mail switches the board too. The chat (`chatColumn`, rows from
+  `Board.chatRows`, port of `ui/internal/board/conversation_chat.go`) is
+  one `ConversationChatRow` per member, oldest first like the cards, the
+  user's own on the right, the avatar from `MessageCard.sender`, the
+  header `MessageCard.from` and `date` (`ConversationBubbleView.showPlain`),
+  the text the one `board.get` carries: no `message.body`, no web view,
+  no placeholder, so the samples read the same, and while it shows the
+  cards hold no web view either (`live`), keeping folds and HTML for the
+  way back. A double click on a bubble opens the message in its own
+  window (`MessageCache.lookUpOutcome`, then the delegate's
+  `openMessage`; a sample says the preview cannot). The detail keeps
+  opening at its top; the chat is never scrolled to its end.
   `BoardActions` is what can be done with a case from the toolbar, the
   panel's action bar and the context menus (`BoardCaseMenu`): Done,
   Remind… (Later Today, Tomorrow, Next Week), Archive, Unstar

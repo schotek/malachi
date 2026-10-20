@@ -2837,3 +2837,22 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   trims the held bodies only with the shown layout's near set; the Jira
   issue card is one per layout. macOS first (accepted), GTK written
   (`window/conversation_host.go`, `conversation_chat*.go`), Windows follows.
+- Chat layout of the board's conversation block (2026-10-20): **decided**,
+  the same second layout in the case detail, in all three clients at once.
+  A bubble shows the text the case already carries from `board.get`
+  (`MessageCard.Text`: quoted history cut as `trimQuoted`, signature cut,
+  at most 8000 B), not a `message.body` fetch: that text is already the
+  trimmed own text, a second fetch per bubble would only repeat it, and the
+  sample data behave identically. The toggle shares Mail's key
+  `conversation-chat-layout` (no new key), because it is one choice about
+  how conversations look. No scroll to the end: the detail keeps opening at
+  its top, the chat reads oldest first with the newest bubble where the
+  open card is in the cards layout. While the chat shows, the cards release
+  their web views but keep their fold and HTML state.
+- Jira `mine` in `board.get` and `board.queue` (2026-10-20): **decided**, a
+  Jira description or comment written by the account's own user (not relayed
+  by a bot) is marked `mine` in the two methods, like `issue.mine`, so the
+  chat puts it on the right. This is display only: the rules
+  (`BoardMember.Mine`), `board.commit` and `board.trash` keep the meaning
+  "in a folder of role `sent`/`outbox`". No API shape change
+  ([api.md](api.md) §4.13).

@@ -1914,6 +1914,52 @@ padá od sloučení kalendáře i na `main` (`calendar/tz` a `TestInvitationCard
 nesouvisí s chatem). Čeká `build.ps1 lint`, UI smoke s `MALACHI_DEVMAIL`,
 ruční průchod (viz sekce v `windows-port.md`) a B3.
 
+Chat v konverzaci Nástěnky (2026-10-20, všechny tři klienty, v `main` 2026-10-20;
+rozhodnutí vlastníka přes AskUserQuestion; mění D12 plánu
+`docs/plans/chat-view.md`, nová §9). Blok konverzace v detailu případu má
+rozložení chat jako Pošta: všechny tři klienty naráz, přepínač sdílí klíč
+`conversation-chat-layout` (žádný nový), sedí v řádku nadpisu bloku vpravo
+nalevo od „Zobrazit v Poště“ a vypadá jako přepínač Pošty; dvojklik na
+bublinu otevře zprávu v okně. Text bubliny je text, který případ nese z
+`board.get` (`MessageCard.Text`: citace ořezaná jako `trimQuoted`, podpis
+pryč, ≤ 8000 B), žádné `message.body`, žádný webový pohled ani zástupný
+text, vzorová data stejně; bez rolování na konec (detail se otevírá nahoře,
+chat čte od nejstarší, nejnovější bublina dole); při zobrazeném chatu karty
+uvolní všechny webové pohledy (brána `live`), ale drží sbalení i HTML.
+Avatary z nového `MessageCard.Sender` (skutečný odesílatel i u vlastních
+zpráv, jejichž hlavička říká „Vy“), datum z nového `MessageCard.Date`.
+Démon: popis a komentář Jiry, který napsal vlastní uživatel účtu (ne přes
+bota), je v `board.get` a `board.queue` `mine` jako `issue.mine`
+(`store/board_cases.go`, `boardItemMe`/`boardItemMine`, `docs/api.md`, test
+`TestBoardJiraMessagesMine`); jen zobrazení, pravidla, `board.commit` a
+`board.trash` zůstávají na roli složky. Jeden nový msgid (tooltip zapnutého
+stavu: „Back to the cards: …“, česky „Zpět na karty: …“), ostatní tři
+sdílené s `ui/internal/conversation/chat.go`. Reference Go
+`ui/internal/board/conversation_chat.go` (`ChatBubble`, `ChatRows`,
+`ChatOpens`), `text.go`, `view.go`. GTK `window/board_conversation_chat.go`
+(`boardChat`, nehomogenní `gtk.Stack`, řádky z `chatRow` Pošty, sdílené
+`Window.withMessage` vytažené z `notify_open.go`), brána v
+`board_conversation.go`; macOS `MalachiCore/Board/BoardConversationChat.swift`,
+`MalachiMail/Board/BoardConversationBlock.swift`, nový sdílený
+`MessageView/ConversationLayoutToggle.swift` (vytažený z
+`ConversationStripView`), `ConversationBubbleView.showPlain`, krok
+`board-chat`; Windows `Malachi.Core/Boards/BoardConversationChat.cs`,
+`Malachi.App/Boards/Conversation/BoardConversationBlock.cs`, sdílený styl
+přepínače `ConversationChatToggle.xaml` (používá i `ConversationView.xaml`),
+vzorová data teď blok dostanou. Ověřeno: GTK v kontejneru `gtk.sh make
+build`, `go test ./internal/window/... ./internal/board/...`, smoke s
+`MALACHI_GTK_CARDS_SMOKE=1` i bez, `make po`, `make lint`; macOS `swift
+build` bez varování, filtrované testy zelené, celá sada 1849 s jedním
+nesouvisejícím selháním (`AssistantControllerTests.
+closeDropsLateRepliesAndObservers`, časový test podprocesu), `check-strings`,
+jedno měření debug binárkou nad vzorky; Windows napsané bez `dotnet`,
+nepřeloženo. Čeká vlastník: GTK v XQuartz (`make run-gtk-live`), macOS nad
+kopií dat, Windows `build.ps1 app`/`test`/`lint`, UI smoke
+(`BoardSmokeTests`) a ruční průchod (`docs/windows-port.md` §11.8).
+Nesouvisející: backend `TestInvitationDetectionOfTheCorpus` padá od
+2026-10-20, protože fixtura `invite-two-calendar-parts.eml` končí
+2026-10-20T10:00Z a pravidlo `end ≤ now` ji bere jako prošlou.
+
 Archivace v Poště = Hotovo (2026-10-13, `feat/board`, necommitnuté; jen
 démon, klienti beze změny — všechny tři to dostanou přes
 `notify.boardChanged`). Vlastník archivoval vyřízenou poštu v Poště a

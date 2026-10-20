@@ -73,8 +73,19 @@ func (w *Window) OpenNotifiedMessage(acc api.AccountID, id api.MessageID) {
 		w.Present()
 		return
 	}
-	if _, ok := w.summary(id); ok {
-		w.openNotified(id)
+	w.withMessage(acc, id, func(api.MessageSummary) { w.openNotified(id) }, func(error) { w.Present() })
+}
+
+// withMessage calls found with the summary of message id of account acc:
+// at once when the window knows it (summary), else once message.get has
+// answered. The message need not be in any list the window shows. A
+// message the daemon could not give calls missing with message.get's
+// error instead (revealGone tells one it no longer has). Used by a
+// clicked notification and a double-click on a bubble of the board's
+// chat (board_conversation_chat.go).
+func (w *Window) withMessage(acc api.AccountID, id api.MessageID, found func(api.MessageSummary), missing func(error)) {
+	if s, ok := w.summary(id); ok {
+		found(s)
 		return
 	}
 	// The waiters of fetchMessage hear about each half (message.get,
@@ -87,10 +98,10 @@ func (w *Window) OpenNotifiedMessage(acc api.AccountID, id api.MessageID) {
 		}
 		decided = true
 		if lm.msg == nil {
-			w.Present()
+			missing(lm.getErr)
 			return
 		}
-		w.openNotified(id)
+		found(lm.msg.MessageSummary)
 	})
 }
 

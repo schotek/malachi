@@ -1354,6 +1354,78 @@ func TestBoardJiraThread(t *testing.T) {
 	}
 }
 
+// board.get's and board.queue's members of an issue are the user's when
+// the account's own user wrote the item on the site and no bot relayed
+// it, as issue.mine; the rules' Mine (sent or outbox) stays as it was.
+func TestBoardJiraMessagesMine(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	space, _, _ := jiraFolders(t, s, "jira")
+	at := boardNow.Add(-time.Hour)
+	desc := seedItem(t, s, space, "7", "i:7", "ITSD-7: Printer", at)
+	own := seedItem(t, s, space, "7", "c:1", "ITSD-7: Printer", at.Add(time.Minute))
+	other := seedItem(t, s, space, "7", "c:2", "ITSD-7: Printer", at.Add(2*time.Minute))
+	relayed := seedItem(t, s, space, "7", "c:3", "ITSD-7: Printer", at.Add(3*time.Minute))
+	if err := s.PutIssue(ctx, Issue{AccountID: "jira", IssueID: "7", Key: "ITSD-7", SpaceID: "10001", Status: "Open", StatusCategory: "new"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.PutIssueItems(ctx, "jira", []IssueItem{
+		{RemoteID: "i:7", IssueID: "7", Kind: api.IssueItemDescription, AuthorID: "me"},
+		{RemoteID: "c:1", IssueID: "7", Kind: api.IssueItemComment, AuthorID: "me"},
+		{RemoteID: "c:2", IssueID: "7", Kind: api.IssueItemComment, AuthorID: "u1"},
+		{RemoteID: "c:3", IssueID: "7", Kind: api.IssueItemComment, AuthorID: "me", Via: "Issue Sync"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{desc.ID: true, own.ID: true, other.ID: false, relayed.ID: false}
+	check := func(what string, msgs []BoardMessage) {
+		t.Helper()
+		if len(msgs) != len(want) {
+			t.Fatalf("%s: %d messages", what, len(msgs))
+		}
+		for _, m := range msgs {
+			if mine, ok := want[m.ID]; !ok || m.Mine != mine {
+				t.Errorf("%s: %s mine %v, want %v", what, m.ID, m.Mine, mine)
+			}
+		}
+	}
+	// Without the site's view of the user nothing is the user's.
+	drainAll(t, s, boardNow, testDecider)
+	c := caseOf(t, s, "jira", IssueThreadID("7"))
+	msgs, err := s.BoardMessages(ctx, c.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range msgs {
+		if m.Mine {
+			t.Errorf("without a jira user: %s is mine", m.ID)
+		}
+	}
+	if err := s.SetMeta(ctx, MetaIssueMePrefix+"jira", `{"id":"me","name":"Me"}`); err != nil {
+		t.Fatal(err)
+	}
+	var th BoardThread
+	drainAll(t, s, boardNow, func(x *BoardThread) (BoardVerdict, error) {
+		th = *x
+		return testDecider(x)
+	})
+	for _, m := range th.Members {
+		if m.Mine {
+			t.Errorf("the rules' member %s is mine", m.ID)
+		}
+	}
+	c = caseOf(t, s, "jira", IssueThreadID("7"))
+	if msgs, err = s.BoardMessages(ctx, c.ID, 0); err != nil {
+		t.Fatal(err)
+	}
+	check("board.get", msgs)
+	items, _, err := s.BoardQueue(ctx, BoardQueueQuery{AccountIDs: []string{"jira"}, Now: boardNow, Windows: boardWindows})
+	if err != nil || len(items) != 1 {
+		t.Fatalf("queue: %d %v", len(items), err)
+	}
+	check("board.queue", items[0].Messages)
+}
+
 func TestBoardOwnAddresses(t *testing.T) {
 	ctx := context.Background()
 	s := openTestStore(t)

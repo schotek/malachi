@@ -293,7 +293,10 @@ type BoardMessage struct {
 	FolderID FolderID  `json:"folderId"`
 	From     Address   `json:"from"`
 	Date     time.Time `json:"date"`
-	Mine     bool      `json:"mine"` // in a folder of role sent or outbox
+	// Mine: the user's own message: mail in a folder of role sent or
+	// outbox, or a Jira item the account's own user wrote on the site,
+	// not relayed by a bot (Via), as MessageIssue.Mine.
+	Mine bool `json:"mine"`
 	// Text is the message's own text: the quoted history cut off as
 	// message.body with trimQuoted cuts it (the stored plain text cut by
 	// the text rules when they find the quote in it, else the text of the
@@ -684,7 +687,7 @@ type BoardQueueMessage struct {
 	To        []Address `json:"to,omitempty"`
 	Cc        []Address `json:"cc,omitempty"`
 	Date      time.Time `json:"date"`
-	Mine      bool      `json:"mine"`
+	Mine      bool      `json:"mine"` // as BoardMessage.Mine
 	// Text as BoardMessage.Text but from the stored plain text only (the
 	// quoted history the plain-text rules find cut off, never the HTML
 	// part's), at most MaxBoardQueueMessageBytes and

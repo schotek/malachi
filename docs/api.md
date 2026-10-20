@@ -3350,7 +3350,11 @@ BoardMessage { "id": "m_3", "folderId": "f_inbox", "from": Address, "date": Time
   cleaned (no control, bidi or other invisible characters), at most
   `api.MaxBoardMessageTextBytes` (8000: an ordinary mail whole, so the
   detail shows it in full); `trimmed` says something was cut off. Never
-  HTML. `mine` as above. One `board.get` thus carries at most 50 × 8000
+  HTML. `mine` as above for mail; for a Jira item (an issue's
+  description or comment) it means the account's own user wrote it on
+  the site and no integration relayed it (`via`), as `issue.mine` in a
+  message summary (only shown: the rules, `board.commit` and
+  `board.trash` still go by the folder roles). One `board.get` thus carries at most 50 × 8000
   bytes of message text (400 kB; under 2.4 MB of JSON even if every
   character is escaped). `board.queue` keeps its own, smaller caps and
   reads the stored plain text only (the plain-text rules, never the
@@ -3687,7 +3691,9 @@ offer. Per item the newest `api.MaxBoardQueueMessages` (8) members that
 count, oldest first, each `text` the stored plain text with the quoted
 history the plain-text rules find and the signature cut off, cleaned (as
 `BoardMessage.text`, but never from the HTML part), at most 3000
-bytes and 12 KiB for the item together (`truncated` when cut), so one
+bytes and 12 KiB for the item together (`truncated` when cut), and
+`mine` as in `BoardMessage` (for a Jira item: the account's own user
+wrote it on the site, not relayed, as `issue.mine`), so one
 call carries at most about 60 KiB. This is the only method that hands mail
 text to an assistant, and only while `assistant` is on.
 

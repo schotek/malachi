@@ -34,23 +34,60 @@
 // it out of the tree (the Mail mode, a closed panel), which lets every web
 // view go, and Attach when it shows it again; Close ends it for good. The
 // block is the detail's conversation part (IBoardDetailPart) over the
-// daemon's board; the samples keep the plain-text excerpts.
+// daemon's board and over the samples (their members have no ids: the
+// cards keep their excerpts and nothing is fetched).
+//
+// The chat layout (Board.ChatRows; macOS
+// macos/Sources/MalachiCore/Board/BoardConversationChat.swift, GTK
+// ui/internal/window/board_conversation_chat.go boardChat): the toggle in
+// the heading row, left of Show in Mail, looks and reads as the toggle of
+// Mail's conversation strip (ConversationChatToggleStyle and
+// ConversationChatToggle.xaml, Board.Text.ChatToggleLabel and
+// ChatToggleTooltip) and shares Mail's key conversation-chat-layout: a
+// click only writes the setting, and the layout follows the setting
+// (ShowLayout), so a switch in Mail switches the board too. The chat column
+// stands where the cards stood (one of the two shows; the loading, failure
+// and empty notes stand in place of either), with Mail's bubble rows
+// (ConversationChatRow, ConversationBubbleView.ShowPlain) showing the text
+// the case carries (MessageCard.Text): no message.body, no web view, no
+// placeholder, so the samples read the same. The user's own on the right
+// with the real sender's initials (MessageCard.Sender), oldest first; the
+// detail keeps its place at the top and is never scrolled to the chat's
+// end. While the chat shows the block is not live, so every card lets its
+// web view go and no body is asked for; the cards' state (folds, what they
+// know) stays and shows again with the cards. A double tap on a bubble
+// opens the message in its own window once the press is released
+// (MessageCache.LookUp, then the router's OpenMessage, as Mail's chat);
+// a sample's says Board.Text.Later, a message the daemon no longer has
+// ShowInMailGone, one that could not be loaded ShowInMailFailed. The block
+// merges ConversationStyles.xaml into its own Resources for the bubbles'
+// styles; its theme dictionaries also set the nine ToggleButton*Checked*
+// brushes for every ToggleButton under the block (today only the chat
+// toggle, which sets them again from ConversationChatToggle.xaml), so a
+// ToggleButton added to the block or its cards later takes the
+// conversation view's subtle checked look unless it sets its own.
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Malachi.App.Controls;
 using Malachi.App.Reader;
+using Malachi.App.Reader.Conversation;
+using Malachi.App.Resources;
 using Malachi.App.WebViews;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers;
 using Malachi.Core.Model;
 using Malachi.Core.Presentation;
 using Malachi.Core.Settings;
+using Malachi.Core.Transport;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 using CoreBoard = Malachi.Core.Boards.Board;
@@ -63,15 +100,41 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
     // The link label's longest text (the conversation view's StatusMaxChars).
     private const int HoverMaxChars = 512;
 
+    // The bubbles' text size at 100 % text zoom (Mail's chat, BaseBodyFontSize).
+    private const double BaseBubbleFontSize = 14;
+
+    // The look of Mail's chat (bubbles, the toggle) and the toggle's checked
+    // colours.
+    private const string StylesUri = "ms-appx:///Reader/Conversation/ConversationStyles.xaml";
+    private const string ChatToggleUri = "ms-appx:///Reader/Conversation/ConversationChatToggle.xaml";
+
     private readonly IBoardConversationHost host;
     private readonly ReaderServices? services;
     private readonly TextBlock heading = new();
     private readonly Button showButton = new();
     private readonly StackPanel statusPanel = new() { Spacing = 4, Visibility = Visibility.Collapsed };
     private readonly StackPanel cardsColumn = new() { Spacing = 8 };
+    private readonly StackPanel chatColumn = new() { Visibility = Visibility.Collapsed };
+    private readonly ToggleButton chatToggle = new();
+    private readonly TextBlock chatToggleText = new() { VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock hover = new();
     private readonly List<BoardMessageCardView> cards = [];
+    private readonly ResourceDictionary styles = new() { Source = new Uri(StylesUri) };
+    private readonly AfterRelease afterRelease;
     private readonly HashSet<BoardMessageCardView> pendingHeights = [];
+
+    // The chat's bubbles, in order, and what each shows; the rows of members
+    // with an id by id (kept across refreshes).
+    private readonly List<ConversationChatRow> chatRows = [];
+    private readonly Dictionary<ConversationChatRow, CoreBoard.MessageCard> chatShows = [];
+    private readonly Dictionary<MessageId, ConversationChatRow> chatById = [];
+    private IReadOnlyList<CoreBoard.MessageCard> chatMessages = [];
+    private bool chatVisible;
+    private bool chatShown;
+    private bool layoutStarted;
+    private bool compactDates;
+    private SettingsChangeToken? layoutToken;
+    private SettingsChangeToken? avatarsToken;
     private CoreBoard.ConversationCards state = new();
     private AccountId? account;
     private Status? status;
@@ -102,11 +165,29 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         showButton.VerticalAlignment = VerticalAlignment.Center;
         AutomationProperties.SetAutomationId(showButton, "BoardShowInMail");
         showButton.Click += (_, _) => host.ShowInMail();
+
+        // The look of Mail's chat: the bubbles' styles, and the toggle as
+        // the strip of Mail's conversation view has it.
+        Resources.MergedDictionaries.Add(styles);
+        chatToggle.Style = Look("ConversationChatToggleStyle");
+        chatToggle.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri(ChatToggleUri) });
+        AutomationProperties.SetAutomationId(chatToggle, "BoardChatToggle");
+        var toggleGlyph = new FontIcon { Glyph = Icons.Glyph("malachi-chat"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+        AutomationProperties.SetAccessibilityView(toggleGlyph, AccessibilityView.Raw);
+        var toggleContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        toggleContent.Children.Add(toggleGlyph);
+        toggleContent.Children.Add(chatToggleText);
+        chatToggle.Content = toggleContent;
+        chatToggle.Click += OnChatToggleClick;
+
         var top = new Grid { ColumnSpacing = 8 };
         top.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        Grid.SetColumn(showButton, 1);
+        top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(chatToggle, 1);
+        Grid.SetColumn(showButton, 2);
         top.Children.Add(heading);
+        top.Children.Add(chatToggle);
         top.Children.Add(showButton);
 
         hover.FontSize = 12;
@@ -120,9 +201,12 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         root.Children.Add(top);
         root.Children.Add(statusPanel);
         root.Children.Add(cardsColumn);
+        root.Children.Add(chatColumn);
         root.Children.Add(hover);
         Content = root;
         AutomationProperties.SetAutomationId(this, "BoardConversation");
+        chatColumn.SizeChanged += (_, e) => ChatWidth(e.NewSize.Width);
+        afterRelease = new AfterRelease(this);
 
         // Moving the detail between List and the panel unloads it briefly:
         // the decision waits, so a view that stays keeps its document.
@@ -134,8 +218,19 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
             services.Cache.MessageLoaded += OnMessageLoaded;
             var settings = services.State.Settings;
             zoomToken = settings.OnChange(SettingsKey.TextZoom, () => SetZoom(settings.TextZoom));
+            layoutToken = settings.OnChange(SettingsKey.ConversationChatLayout, ShowLayout);
+            avatarsToken = settings.OnChange(SettingsKey.MonochromeAvatars, ApplyAvatars);
+            ShowLayout();
+        }
+        else
+        {
+            // No settings to keep the layout in: the cards stay.
+            chatToggle.Visibility = Visibility.Collapsed;
         }
     }
+
+    /// <summary>The chat layout is the one shown (the setting conversation-chat-layout).</summary>
+    public bool ChatShown => chatShown;
 
     /// <summary>The cards, oldest first (the same indices as the state's members).</summary>
     public IReadOnlyList<BoardMessageCardView> Cards => cards;
@@ -150,7 +245,7 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
     // Mail's cache at hand.
     private bool Live =>
         !closed && attached && services is not null && IsLoaded && XamlRoot is not null
-        && Visibility == Visibility.Visible && cardsColumn.Visibility == Visibility.Visible;
+        && Visibility == Visibility.Visible && !chatShown && cardsColumn.Visibility == Visibility.Visible;
 
     /// <inheritdoc/>
     public UIElement View => this;
@@ -182,6 +277,7 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
             RemoveAll();
             state = new CoreBoard.ConversationCards();
             account = null;
+            _ = ApplyChat(null);
             return had;
         }
         var changed = false;
@@ -209,20 +305,13 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
                 changed |= cards.Count > 0;
                 RemoveAll();
                 state = new CoreBoard.ConversationCards();
+                _ = ApplyChat(null);
             }
-            if (cardsColumn.Visibility != Visibility.Collapsed)
-            {
-                cardsColumn.Visibility = Visibility.Collapsed;
-                changed = true;
-            }
+            changed |= ShowColumns(false);
             Refresh();
             return changed;
         }
-        if (cardsColumn.Visibility != Visibility.Visible)
-        {
-            cardsColumn.Visibility = Visibility.Visible;
-            changed = true;
-        }
+        changed |= ShowColumns(true);
         IReadOnlyList<int> reloads = [];
         switch (state.Apply(CoreBoard.ConversationCards.KeyOf(d)))
         {
@@ -295,6 +384,7 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         {
             FetchBody(i);
         }
+        changed |= ApplyChat(d.Messages);
         return changed;
     }
 
@@ -334,12 +424,17 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         }
         closed = true;
         RemoveAll();
+        ClearChat();
         if (services is not null)
         {
             services.Cache.MessageLoaded -= OnMessageLoaded;
         }
         zoomToken?.Cancel();
         zoomToken = null;
+        layoutToken?.Cancel();
+        layoutToken = null;
+        avatarsToken?.Cancel();
+        avatarsToken = null;
     }
 
     // For the cards
@@ -414,7 +509,8 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
     {
         var text = ConversationLayout.ClampText(link ?? "", HoverMaxChars);
         hover.Text = text;
-        hover.Visibility = text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        // The chat has no links.
+        hover.Visibility = text.Length > 0 && !chatShown ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>
@@ -686,6 +782,323 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         {
             card.SetZoom(percent);
         }
+        var size = BubbleFontSize;
+        foreach (var row in chatRows)
+        {
+            row.Bubble.SetFonts(size, null);
+        }
+    }
+
+    // The chat layout
+
+    // The bubbles' text size: Mail's chat's, with the text zoom.
+    private double BubbleFontSize => BaseBubbleFontSize * (services?.State.Settings.TextZoom ?? 100) / 100.0;
+
+    // A style of Mail's chat (ConversationStyles.xaml).
+    private Style Look(string key) => (Style)styles[key];
+
+    // Shows the layout the setting asks for, and the toggle's label,
+    // tooltip and accessible name and description name what a click shows
+    // (Board.Text.ChatToggleLabel, ChatToggleTooltip), as Mail's
+    // ConversationView.ShowLayout does; also the setting's change from Mail.
+    private void ShowLayout()
+    {
+        if (closed || services is null)
+        {
+            return;
+        }
+        var on = services.State.Settings.ConversationChatLayout;
+        ShowToggle(on);
+        if (on == chatShown && layoutStarted)
+        {
+            return;
+        }
+        layoutStarted = true;
+        chatShown = on;
+        if (on)
+        {
+            Hover("");
+        }
+        _ = ShowColumns(chatVisible);
+        _ = RenderChat();
+        // The cards let go of their web views while the chat shows (Live),
+        // and open them again when they show.
+        Refresh();
+        FetchBodies();
+    }
+
+    private void ShowToggle(bool on)
+    {
+        chatToggle.IsChecked = on;
+        var label = CoreBoard.Text.ChatToggleLabel(on);
+        var tooltip = CoreBoard.Text.ChatToggleTooltip(on);
+        chatToggleText.Text = label;
+        ToolTipService.SetToolTip(chatToggle, tooltip);
+        AutomationProperties.SetName(chatToggle, label);
+        AutomationProperties.SetHelpText(chatToggle, tooltip);
+    }
+
+    // A click writes the setting only; the layout and the toggle's state
+    // follow the setting's change (ShowLayout). A click that left the state
+    // where the setting has it already shows the setting's state again.
+    private void OnChatToggleClick(object sender, RoutedEventArgs e)
+    {
+        if (services is null || closed)
+        {
+            return;
+        }
+        var on = chatToggle.IsChecked == true;
+        if (on == services.State.Settings.ConversationChatLayout)
+        {
+            ShowToggle(on);
+            return;
+        }
+        services.State.Settings.ConversationChatLayout = on;
+    }
+
+    // The cards' column or the chat's, as the layout says, while the
+    // conversation is there (any); neither while a note stands in their
+    // place. Returns whether anything changed.
+    private bool ShowColumns(bool any)
+    {
+        chatVisible = any;
+        var cardsShow = any && !chatShown ? Visibility.Visible : Visibility.Collapsed;
+        var chatShow = any && chatShown ? Visibility.Visible : Visibility.Collapsed;
+        var changed = cardsColumn.Visibility != cardsShow || chatColumn.Visibility != chatShow;
+        cardsColumn.Visibility = cardsShow;
+        chatColumn.Visibility = chatShow;
+        return changed;
+    }
+
+    // Follows the detail's conversation (null: no case; its bubbles go).
+    // Returns whether the chat shown changed.
+    private bool ApplyChat(IReadOnlyList<CoreBoard.MessageCard>? messages)
+    {
+        if (messages is null)
+        {
+            chatMessages = [];
+            var had = chatRows.Count > 0;
+            ClearChat();
+            return had;
+        }
+        chatMessages = messages;
+        return RenderChat();
+    }
+
+    // Shows the bubbles of the last detail while the chat shows (GTK
+    // boardChat.render): rows of members with an id are kept across
+    // refreshes (an inline autosave refreshes the detail) unless their side
+    // changed (a row's side is fixed), the samples' are rebuilt when they
+    // changed. Returns whether anything changed.
+    private bool RenderChat()
+    {
+        if (closed || !chatShown)
+        {
+            return false;
+        }
+        var msgs = chatMessages;
+        var keyed = msgs.All(CoreBoard.ChatOpens);
+        if (!keyed)
+        {
+            if (chatById.Count == 0 && chatRows.Count == msgs.Count
+                && chatRows.Select((r, i) => chatShows.TryGetValue(r, out var shows) && shows == msgs[i]).All(same => same))
+            {
+                return false;
+            }
+            ClearChat();
+        }
+        var changed = false;
+        var width = chatColumn.ActualWidth;
+        var monochrome = services?.State.Settings.MonochromeAvatars ?? false;
+        var next = new List<ConversationChatRow>(msgs.Count);
+        var nextById = new Dictionary<MessageId, ConversationChatRow>();
+        foreach (var bubble in CoreBoard.ChatRows(msgs))
+        {
+            var m = msgs[bubble.Index];
+            var key = keyed ? m.Id : null;
+            ConversationChatRow? row = null;
+            if (key is { } k && chatById.TryGetValue(k, out var old) && old.Right == bubble.Right)
+            {
+                row = old;
+                _ = chatById.Remove(k);
+            }
+            if (row is null)
+            {
+                row = MakeChatRow(m, bubble.Right);
+                changed = true;
+            }
+            if (!chatShows.TryGetValue(row, out var shown) || shown != m)
+            {
+                ShowChatRow(row, m, bubble.Index, monochrome);
+                changed = true;
+            }
+            else
+            {
+                // A kept row's place may have moved (an older member arrived).
+                AutomationProperties.SetAutomationId(row.Bubble, ChatBubbleId(bubble.Index));
+            }
+            row.SetColumnWidth(width);
+            next.Add(row);
+            if (key is { } added)
+            {
+                nextById[added] = row;
+            }
+        }
+        foreach (var gone in chatById.Values)
+        {
+            _ = chatColumn.Children.Remove(gone);
+            _ = chatShows.Remove(gone);
+            changed = true;
+        }
+        // In place: a row that stays is moved only when its place changed.
+        for (var i = 0; i < next.Count; i++)
+        {
+            var row = next[i];
+            if (i < chatColumn.Children.Count && ReferenceEquals(chatColumn.Children[i], row))
+            {
+                continue;
+            }
+            var at = chatColumn.Children.IndexOf(row);
+            if (at >= 0)
+            {
+                chatColumn.Children.RemoveAt(at);
+            }
+            chatColumn.Children.Insert(i, row);
+            changed = true;
+        }
+        // Whatever is left past the rows (a row two members with one id
+        // shared, any other stray) goes too.
+        while (chatColumn.Children.Count > next.Count)
+        {
+            if (chatColumn.Children[chatColumn.Children.Count - 1] is ConversationChatRow stray)
+            {
+                _ = chatShows.Remove(stray);
+            }
+            chatColumn.Children.RemoveAt(chatColumn.Children.Count - 1);
+            changed = true;
+        }
+        chatRows.Clear();
+        chatRows.AddRange(next);
+        chatById.Clear();
+        foreach (var (id, row) in nextById)
+        {
+            chatById[id] = row;
+        }
+        return changed;
+    }
+
+    private ConversationChatRow MakeChatRow(CoreBoard.MessageCard m, bool right)
+    {
+        var bubble = new ConversationBubbleView(right, Look, BubbleFontSize, null) { CompactDate = compactDates };
+        var row = new ConversationChatRow(m.Id, null, right, bubble);
+        bubble.Activate = () => OpenMember(row);
+        return row;
+    }
+
+    // The AutomationId of the bubble of member i.
+    private static string ChatBubbleId(int i) => "BoardChatBubble:" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    // Member m (index i) in row: the header names From
+    // ("You" for the user's own), the avatar's initials come from the real
+    // sender (Sender), the date as Mail's chat formats it, and the text is
+    // the case's own (never a placeholder, never the monospace setting's).
+    private void ShowChatRow(ConversationChatRow row, CoreBoard.MessageCard m, int i, bool monochrome)
+    {
+        chatShows[row] = m;
+        row.Bubble.ShowPlain(ChatBubbleId(i), m.From, m.Date);
+        row.Bubble.ShowBody(new BubbleBody.Text(Core.Model.Conversation.BubbleText(m.Text)), monospaceText: false);
+        row.ShowAvatar(m.Sender, monochrome);
+    }
+
+    // A double tap on a bubble: the message in its own window once the
+    // press is released (a sample opens nothing and says so, as Show in
+    // Mail does; a message that cannot be found says so).
+    private void OpenMember(ConversationChatRow row)
+    {
+        if (closed || !chatShows.TryGetValue(row, out var m))
+        {
+            return;
+        }
+        if (services is not { } svc || account is not { } acct || !CoreBoard.ChatOpens(m) || m.Id is not { } id)
+        {
+            host.Toast(CoreBoard.Text.Later);
+            return;
+        }
+        afterRelease.Run(() =>
+        {
+            // Closed between the double tap and the release: nothing is asked.
+            if (closed)
+            {
+                return;
+            }
+            svc.Cache.LookUp(acct, id, s =>
+            {
+                if (closed)
+                {
+                    return;
+                }
+                if (s is null)
+                {
+                    host.Toast(MissingText(svc.Cache.Loaded(id)?.GetErr));
+                    return;
+                }
+                svc.Router.OpenMessage(s);
+            });
+        });
+    }
+
+    // The toast of a bubble whose message could not be opened (GTK
+    // boardChatMissingText): gone from the daemon, or not loaded (Show in
+    // Mail's texts and codes, Integration.Board.cs).
+    private static string MissingText(Exception? error) =>
+        error is RpcException { Error.Code.Value: ErrorCode.MessageNotFound or ErrorCode.MessageGone }
+            ? CoreBoard.Text.ShowInMailGone
+            : CoreBoard.Text.ShowInMailFailed;
+
+    // The chat column's width: every bubble's widest, and the short dates
+    // of a narrow column (Mail's chat's rules).
+    private void ChatWidth(double width)
+    {
+        if (closed || width <= 0)
+        {
+            return;
+        }
+        var compact = ConversationLayout.ChatCompactDates(width);
+        var compactChanged = compact != compactDates;
+        compactDates = compact;
+        foreach (var row in chatRows)
+        {
+            if (compactChanged)
+            {
+                row.Bubble.CompactDate = compact;
+            }
+            row.SetColumnWidth(width);
+        }
+    }
+
+    // The avatars' setting: every row's avatar anew.
+    private void ApplyAvatars()
+    {
+        if (closed || services is null)
+        {
+            return;
+        }
+        var monochrome = services.State.Settings.MonochromeAvatars;
+        foreach (var row in chatRows)
+        {
+            if (chatShows.TryGetValue(row, out var m))
+            {
+                row.ShowAvatar(m.Sender, monochrome);
+            }
+        }
+    }
+
+    private void ClearChat()
+    {
+        chatColumn.Children.Clear();
+        chatRows.Clear();
+        chatShows.Clear();
+        chatById.Clear();
     }
 
     // What the status row shows.

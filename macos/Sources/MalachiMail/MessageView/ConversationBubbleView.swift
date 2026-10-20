@@ -238,6 +238,25 @@ final class ConversationBubbleView: NSView {
         renderDate()
     }
 
+    /// The header of a message known only by its sender and date, as a
+    /// member of a case's conversation on the board is
+    /// (`Board.MessageCard`): no unread dot, paperclip, badges, via or
+    /// Edited; `date` nil hides the date.
+    func showPlain(sender name: String, date when: Date?) {
+        sender = name
+        senderLabel.stringValue = name
+        senderLabel.toolTip = name.isEmpty ? nil : name
+        unread.isHidden = true
+        clipPill.show(.none)
+        draftPill.isHidden = true
+        internalPill.isHidden = true
+        viaLabel.isHidden = true
+        editedLabel.isHidden = true
+        date = when
+        saved = nil
+        renderDate()
+    }
+
     /// A draft of the user's (D14): its header with the Draft badge, the
     /// Internal one of an internal comment and when it was saved, its text.
     func showDraft(_ card: Conversation.DraftCard) {

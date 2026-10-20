@@ -238,7 +238,9 @@ public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCa
     /// <c>OpenNotifiedMessage</c>, Swift <c>lookUp</c>): the cached one at
     /// once, else <c>message.get</c>, whose answer the cache keeps as
     /// <see cref="Fetch"/>'s first half does. <paramref name="done"/> gets
-    /// null when the daemon no longer has the message (or cannot say).
+    /// null when the daemon no longer has the message (or cannot say);
+    /// <see cref="LoadedMessage.GetErr"/> of <see cref="Loaded"/> then holds
+    /// the failure.
     /// </summary>
     public void LookUp(AccountId accountId, MessageId id, Action<MessageSummary?> done)
     {
@@ -342,9 +344,11 @@ public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCa
             if (outcome.TryGetValue(out var res, out var err))
             {
                 lm.Msg = res.Message;
+                lm.GetErr = null;
             }
             else
             {
+                lm.GetErr = err;
                 LogGetFailed(logger, err!);
             }
             Settle(id, lm);

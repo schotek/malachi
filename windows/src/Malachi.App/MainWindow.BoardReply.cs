@@ -14,7 +14,8 @@
 // Over the daemon's board the detail's conversation is the HTML cards
 // (BoardConversationBlock over Mail's reader services) and its reply slot
 // the inline editor with Suggest Reply (BoardReplyEditorHost); the samples
-// keep their excerpts and their static block. Both follow what the user
+// get the block too (no ids: the cards keep their excerpts, the chat shows
+// their text) and keep their static reply block. Both follow what the user
 // sees: Mail mode and a hidden window detach the cards (every web view goes)
 // and retire the live reply pane (it is saved first, never dropped); the
 // board in sight again brings them back. Ctrl+Enter and Ctrl+S while the
@@ -80,14 +81,21 @@ public sealed partial class MainWindow
     {
         var detail = BoardView.Detail;
         detail.HostWindow = this;
-        if (integration.BoardSamples)
-        {
-            return;
-        }
+        // The samples get the block too (their members have no ids, so the
+        // cards keep their excerpts and nothing is fetched): its chat
+        // toggle and bubbles work over them.
         if (integration.Reader is { } reader)
         {
             boardConversation = new BoardConversationBlock(detail, reader.Services);
             detail.ConversationPart = boardConversation;
+        }
+        if (integration.BoardSamples)
+        {
+            ShownChanged += (_, _) => SyncBoardParts();
+            Closed += (_, _) => boardConversation?.Close();
+            boardPartsShown = true;
+            SyncBoardParts(force: true);
+            return;
         }
         var host = new BoardReplyEditorHost(actions, detail, state, integration.Compose, Toasts, () => this);
         boardReplies = host;

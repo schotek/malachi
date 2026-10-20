@@ -82,6 +82,10 @@ type loadedMessage struct {
 	// the daemon twice.
 	getting, fetching bool
 	waiters           []func(*loadedMessage)
+	// getErr is the failure of the last message.get (nil after an answer):
+	// withMessage tells a message the daemon no longer has from one it
+	// could not load.
+	getErr error
 
 	// loadingImages is set from the moment the user asks for the remote
 	// images (Load Images, Always From This Sender) until the daemon has
@@ -679,6 +683,7 @@ func (w *Window) fetchMessage(acc api.AccountID, id api.MessageID, done func(*lo
 			err := w.client.Call(ctx, api.MethodMessageGet, api.MessageGetParams{AccountID: acc, MessageID: id}, &res)
 			glib.IdleAdd(func() {
 				lm.getting = false
+				lm.getErr = err
 				if err != nil {
 					w.log.Warn("message.get", "err", err)
 				} else {

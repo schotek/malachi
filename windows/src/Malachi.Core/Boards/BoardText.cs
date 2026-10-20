@@ -585,6 +585,43 @@ public static partial class Board
         /// <summary>Show in Mail could not find the message: the daemon could not be asked.</summary>
         public static string ShowInMailFailed => L10n.T("Show in Mail failed: the message could not be loaded.");
 
+        /// <summary>
+        /// The label of the toggle in the heading row of the case's
+        /// conversation block, next to Show in Mail, that switches its layout
+        /// between the cards and the chat: the same button as the
+        /// conversation view of Mail has (Conversation.ChatToggleLabel, the
+        /// msgids shared). It names the layout a click shows
+        /// (<paramref name="on"/>: the chat is shown, "Show as Thread" goes
+        /// back to the cards; off: "Show as Chat").
+        /// </summary>
+        public static string ChatToggleLabel(bool on)
+        {
+            if (!on)
+            {
+                // TRANSLATORS: a toggle button above a conversation in the reading pane, off; a click shows the messages as chat bubbles.
+                return L10n.T("Show as Chat");
+            }
+            // TRANSLATORS: the same toggle button above a conversation, on (the messages show as chat bubbles); a click goes back to the conversation as cards.
+            return L10n.T("Show as Thread");
+        }
+
+        /// <summary>
+        /// The tooltip of the toggle, which follows its state as the label
+        /// does: off, what the chat shows (Mail's text); on, what a click goes
+        /// back to, naming the cards the way the board shows them (oldest
+        /// first, the newest open), not Mail's timeline.
+        /// </summary>
+        public static string ChatToggleTooltip(bool on)
+        {
+            if (!on)
+            {
+                // TRANSLATORS: the tooltip of the "Show as Chat" toggle above a conversation.
+                return L10n.T("Others on the left, your messages on the right; double-click opens the message");
+            }
+            // TRANSLATORS: the tooltip of the "Show as Thread" toggle above the conversation of a case on the board shown as chat bubbles.
+            return L10n.T("Back to the cards: the messages as cards, oldest first, the newest open");
+        }
+
         /// <summary>Archives a case's messages.</summary>
         public static string Archive => L10n.T("Archive");
 

@@ -106,6 +106,7 @@ func TestBoardGTKSmoke(t *testing.T) {
 	if os.Getenv("MALACHI_GTK_CARDS_SMOKE") == "1" {
 		smokeBoardConversationCards(t, p, flush)
 	}
+	smokeBoardConversationChat(t, p, flush, os.Getenv("MALACHI_GTK_CARDS_SMOKE") == "1")
 	if os.Getenv("MALACHI_GTK_EDITOR_SMOKE") == "1" {
 		smokeBoardReplyEditor(t, p, src, flush)
 	}

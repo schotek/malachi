@@ -791,6 +791,35 @@ func ShowInMailFailed(tr Translator) string {
 	return tr.T("Show in Mail failed: the message could not be loaded.")
 }
 
+// ChatToggleLabel is the label of the toggle in the heading row of the
+// case's conversation block, next to Show in Mail, that switches its
+// layout between the cards and the chat: the same button as the
+// conversation view of Mail has (conversation.ChatToggleLabel, the msgids
+// shared; board cannot import conversation). It names the layout a click
+// shows (on: the chat is shown, "Show as Thread" goes back to the cards;
+// off: "Show as Chat").
+func ChatToggleLabel(on bool, tr Translator) string {
+	if !on {
+		// TRANSLATORS: a toggle button above a conversation in the reading pane, off; a click shows the messages as chat bubbles.
+		return tr.T("Show as Chat")
+	}
+	// TRANSLATORS: the same toggle button above a conversation, on (the messages show as chat bubbles); a click goes back to the conversation as cards.
+	return tr.T("Show as Thread")
+}
+
+// ChatToggleTooltip is the tooltip of the toggle, which follows its state
+// as the label does: off, what the chat shows (Mail's text); on, what a
+// click goes back to, naming the cards the way the board shows them
+// (oldest first, the newest open), not Mail's timeline.
+func ChatToggleTooltip(on bool, tr Translator) string {
+	if !on {
+		// TRANSLATORS: the tooltip of the "Show as Chat" toggle above a conversation.
+		return tr.T("Others on the left, your messages on the right; double-click opens the message")
+	}
+	// TRANSLATORS: the tooltip of the "Show as Thread" toggle above the conversation of a case on the board shown as chat bubbles.
+	return tr.T("Back to the cards: the messages as cards, oldest first, the newest open")
+}
+
 // Archive archives a case's messages.
 func Archive(tr Translator) string { return tr.T("Archive") }
 

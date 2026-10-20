@@ -3084,6 +3084,63 @@ while the Board is hidden, `Attach` brings them back. The network canary has a
 document, its link, form, target, UNC and refresh and the corpus, and the
 assertions of the conversation card.
 
+**The conversation as chat on the board (2026-10-20).** The block has Mail's
+chat layout too (`docs/plans/chat-view.md`; Go reference
+`ui/internal/board/conversation_chat.go`, GTK
+`window/board_conversation_chat.go`, macOS
+`MalachiCore/Board/BoardConversationChat.swift`). Core:
+`Boards/BoardConversationChat.cs` (`Board.ChatBubble(Index, Right)`,
+`Board.ChatRows`, one bubble per member, oldest first, the user's own on the
+right, no centred rows and no drafts; `Board.ChatOpens`, a member with an id),
+`Board.Text.ChatToggleLabel`/`ChatToggleTooltip` (Mail's label and off
+tooltip, the on tooltip "Back to the cards: …" the board's own) and
+`Board.MessageCard.Sender` (the real sender's cleaned name, the user's own too,
+for the avatar's initials; `From` stays You) and `Date` (the bubble's date).
+App: the toggle stands in the block's heading row left of *Show in Mail*
+(`BoardChatToggle`), always there with Mail's reader services, and looks as
+the toggle of Mail's strip: both take `ConversationChatToggleStyle`
+(`ConversationStyles.xaml`, size and type) and merge
+`Reader/Conversation/ConversationChatToggle.xaml` (the accent tint of the
+checked states) into their own resources, since a `Style` cannot carry
+lightweight-styling resources. It shares Mail's key `conversation-chat-layout`:
+a click only writes the setting, and the block switches from its
+`Settings.OnChange` observer, so a switch in Mail switches the board. The chat
+column stands where the cards stood, one of the two shown (the loading and
+failure notes stand in place of either); its rows are Mail's
+`ConversationChatRow` and `ConversationBubbleView` with a new `ShowPlain`
+(the member's From and date, no unread dot, paperclip or badges;
+`BoardChatBubble:<index>`), showing the text `board.get` carries
+(`MessageCard.Text` through `Conversation.BubbleText`): no `message.body`, no
+web view, no placeholder, no monospace, so the samples read the same. Rows of
+members with an id are kept across refreshes (a row whose side changed is
+made anew), the samples' rebuilt when they changed. The detail keeps opening
+at its top: no scroll to the chat's end. While the chat shows the block is not
+live (`Live` checks it), so the cards let their web views go and ask for
+nothing; their folds and what they know stay and show again with the cards.
+A double tap on a bubble opens the message in its own window once the press
+is released (`AfterRelease`, `MessageCache.LookUp`, `MessageActionRouter.OpenMessage`,
+as Mail's chat; nothing is asked when the block closed before the release);
+a sample's says *Not in this preview yet*, a message the daemon no longer has
+(`message.get` failed with `messageNotFound` or `messageGone`, kept for the
+caller of `LookUp` as `LoadedMessage.GetErr`) *Show in Mail failed: the
+message is no longer on the server*, any other failure *Show in Mail failed:
+the message could not be loaded*, as Show in Mail tells them (all through the
+detail's toast, `IBoardConversationHost.Toast`). The block merges
+`ConversationStyles.xaml` into its own resources, whose theme dictionaries set
+the checked brushes of every `ToggleButton` under it (only the chat toggle
+today, which sets its own again). The
+samples now get the block too (`MainWindow.BoardReply.cs`; their members have
+no ids, the cards keep their excerpts), so the toggle works over
+`MALACHI_BOARD_SAMPLES=1`. The `board-card` canary is unchanged (no web view
+in the chat). Written on a Mac without .NET: it awaits `build.ps1 app`,
+`test` (`BoardConversationChatTests`, `BoardConversationCardsTests`,
+`StringsCheckTests`), `lint` and the UI smoke
+`BoardSmokeTests.TheConversationToggleShowsTheChatAndTheCardsAgain`; by
+hand: the toggle (its look against Mail's, label and tooltip both ways), the
+sides and avatars, a double tap opening the window, a switch in Mail
+reaching an open board, the cards back with their folds and HTML, the dark
+and high-contrast themes, a narrow detail's short dates.
+
 **Keyboard.** The mail's single keys and reply keys stand still while the
 Board shows (`Board.Allows` through `AppCommand.Gate`); Check for New Mail and
 New Message stay, F10 opens the Board's menu. Up and Down step through rows

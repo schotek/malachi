@@ -37,7 +37,7 @@ a Windows).
 | D9 | **Přepínač** je přepínací tlačítko s ikonou bubliny, jehož **popisek a tooltip sledují stav** (nález vlastníka v B1): vypnutý *Zobrazit jako chat* (msgid „Show as Chat“, tooltip „Others on the left, your messages on the right; double-click opens the message“), zapnutý *Zobrazit jako vlákno* (msgid „Show as Thread“, tooltip „Back to the timeline: the messages as cards, newest first“); zapnutý stav navíc vizuálně zvýrazněný (macOS a Windows nádech barvy zvýraznění, GTK nativní zaškrtnutý stav `GtkToggleButton`); klíč gschema `conversation-chat-layout` (bool, výchozí false), zrcadlo v macOS `Settings` a Windows `SettingsStore`. Bez řádku v Předvolbách (přepínač je rozhraní). | Trvalé podle zadání; popisek říká, kam klik vede (B1: jeden popisek pro oba stavy nebyl čitelný). |
 | D10 | **Přepnutí za běhu** zobrazí tutéž konverzaci v druhém rozložení bez nového dotazu na seznam členů: chat si bere `text` z těl, která kontroler už drží (jinak si je dožádá), časová osa si své karty a jejich stav (sbalení, odhalený citovaný text) drží, dokud je konverzace vybraná. Pohled se posune na začátek (časová osa) nebo konec (chat). | Dva pohledy nad jedním kontrolerem a jednou cache těl. |
 | D11 | **Jira**: karta issue nahoře přes celou šířku (jako dnes, s pilulkou stavu a jejími přechody); popis issue je první bublina (strana podle `Mine`); komentáře podle autora; komentář přes integraci (`via`) nikdy vpravo; události uprostřed. Koncept komentáře vpravo jako koncept pošty. | Totéž pravidlo `Mine` jako pro poštu. |
-| D12 | **Mimo rozsah**: blok konverzace na nástěnce (vlastní kód), přiložené zprávy, okno zprávy, oddělovače dnů („Dnes“, „Včera“) uprostřed chatu (kandidát na další krok), kontextové menu na bublině (kandidát: menu zprávy ze seznamu), klikací odkazy v bublině. | Držet první krok malý, aby šel ověřit na macOS. |
+| D12 | **Mimo rozsah**: blok konverzace na nástěnce (vlastní kód; **od 2026-10-20 má chat taky**, viz §9), přiložené zprávy, okno zprávy, oddělovače dnů („Dnes“, „Včera“) uprostřed chatu (kandidát na další krok), kontextové menu na bublině (kandidát: menu zprávy ze seznamu), klikací odkazy v bublině. | Držet první krok malý, aby šel ověřit na macOS. |
 | D15 | **Text bubliny není k označení** (ani kopírování): dvojklik kamkoli do bubliny otevře okno zprávy, kde text označit jde. Jinak by dvojklik ve vybíratelném textu označil slovo a zároveň otevřel okno. Lze obrátit (text k označení, dvojklik jen na řádek hlavičky). | Jedno gesto bez kolize. |
 | D16 | **Koncepty v chatu jsou na konci** (po všech zprávách, nejstarší uložený první): neodeslaná odpověď je to poslední v rozhovoru. V časové ose zůstávají hned pod úvodní kartou jako dnes. | Chronologie chatu. |
 | D17 | **Načítání textu**: chat ukazuje `snippet` zprávy šedě jako zástupný text, dokud nepřijde `message.body`; těla žádá jen pro bubliny do dvou výšek pohledu od viditelné oblasti (dnešní pravidlo blízkého okna, od konce), zbytek až při rolování. Načtená těla drží kontroler v jedné cache pro obě rozložení (strop 64 MiB jako dnes). | Konverzace má až `api.MaxThreadMessages` členů; sanitizace všech naráz by démona zbytečně zatížila. |
@@ -68,6 +68,8 @@ webových pohledů v režimu `sized`.
   doplněna D15–D17 a plán §6; §6 opravený podle revize proti kódu
   (28 nálezů: jeden odběratel změn kontroleru, pořadí commitů a lint
   Windows, šablona `po`, `Sent` vpravo, názvy polí, karta issue).
+- 2026-10-20 vlastník: chat dostal i blok konverzace v detailu případu
+  Nástěnky, ve všech třech klientech naráz (§9, mění D12).
 
 ## 6. Plán implementace
 
@@ -400,3 +402,98 @@ and from the other clients:
 - 2026-10-19 B2 (GTK v XQuartz, `x11 dev`) prošla; G3 v kontejneru zelené
   (testy, smoke, `make po`, `make lint`); `main` (PR #6, CI Windows) sloučený
   do větve; sloučení do `main` s B3 na Windows nevyřízenou.
+
+## 9. Nástěnka (2026-10-20)
+
+Blok konverzace v detailu případu Nástěnky (D12 ho dosud vynechával) má
+druhé rozložení, chat, ve všech třech klientech naráz. Necommitnuté,
+vlastník zatím neověřil. Rozhodnutí vlastníka přes AskUserQuestion:
+
+- **Všechny tři klienty najednou**, žádný sdílený základ v démonu nebo API.
+- **Sdílený klíč** `conversation-chat-layout` s Poštou, žádný nový klíč:
+  přepínač v Nástěnce a v Poště je jedna volba.
+- **Dvojklik na bublinu** otevře zprávu v samostatném okně (koncept okno
+  Nová zpráva) jako v Poště; bublina není k označení.
+- **Text bubliny** je text, který případ už nese z `board.get`
+  (`MessageCard.Text`: citovaná historie ořezaná jako `trimQuoted`, podpis
+  pryč, nejvýš 8000 B). Žádné `message.body`, žádný webový pohled, žádný
+  zástupný text a vzorová data se chovají stejně.
+- **Bez rolování na konec**: detail se otevírá nahoře jako dosud; chat čte
+  od nejstarší, nejnovější bublina je dole, kde je v kartách otevřená
+  nejnovější karta.
+- **Přepínač** je v řádku nadpisu bloku vpravo, nalevo od „Zobrazit v
+  Poště“, vzhledem jako přepínač Pošty.
+
+Rozhodnutí orchestrace: démon u Jiry označí popis a komentář, který napsal
+vlastní uživatel účtu (ne přes bota), jako `mine` v `board.get` i
+`board.queue`, jako už `issue.mine` (`backend/internal/store/board_cases.go`,
+`boardItemMe`, `boardItemMine`; `BoardMember.Mine` a pravidla beze změny;
+`docs/api.md`; test `TestBoardJiraMessagesMine`), aby jeho komentáře ležely
+vpravo. Zobrazení jen: pravidla, `board.commit` a `board.trash` dál berou
+„moje“ podle role složky. Avatary jako v Poště s iniciálami z nového
+`MessageCard.Sender` (skutečný odesílatel i u vlastních zpráv, jejichž
+hlavička dál říká „Vy“ = `From`); datum bubliny z nového `MessageCard.Date`
+ve formátu chatu Pošty (plné, v úzkém sloupci kompaktní). Jeden nový msgid:
+tooltip zapnutého stavu přepínače („Back to the cards: the messages as
+cards, oldest first, the newest open“, česky „Zpět na karty: zprávy jako
+karty, od nejstarší, nejnovější otevřená“); ostatní tři msgidy přepínače
+sdílí s `ui/internal/conversation/chat.go`.
+
+### Go reference
+
+`ui/internal/board/conversation_chat.go`: `ChatBubble{Index, Right}`,
+`ChatRows`, `ChatOpens`; `text.go` (`ChatToggleLabel`, `ChatToggleTooltip`),
+`view.go` (`MessageCard.Sender`, `Date`); testy `conversation_chat_test.go`.
+
+### Klienti
+
+Společné: karty a chat jsou dvě stránky téhož bloku, přepíná je klíč;
+skrytá stránka drží stav (sbalení, HTML), jen chat při zobrazení uvolní
+všechny webové pohledy karet (brána `live`) a karty je po přepnutí zpět
+znovu vyžádají. Řádky chatu se mění stejnou změnou `ConversationCards`
+jako karty.
+
+- **GTK** (`ui/internal/window/board_conversation_chat.go`, `boardChat`):
+  přepínač vázaný `settings.Bind` a `OnChanged`, nehomogenní `gtk.Stack`
+  se stránkami cards a chat, řádky znovu používají `chatRow` Pošty, dvojklik
+  přes sdílené `Window.withMessage` (vytažené z `notify_open.go`), toasty
+  `board.Later`, `ShowInMailGone`, `ShowInMailFailed`; brána `!chat.shown`
+  v `board_conversation.go`; smoke `smokeBoardConversationChat` v
+  `TestBoardGTKSmoke`, test `TestBoardChatMissingText`.
+- **macOS** (`MalachiCore/Board/BoardConversationChat.swift`, `BoardView`,
+  `BoardText`; `MalachiMail/Board/BoardConversationBlock.swift`: přepínač,
+  `chatColumn`, brána `live`, pozorovatel nastavení, dvojklik přes
+  `env.cache.lookUpOutcome` → `delegate?.openMessage`): nový sdílený
+  `MessageView/ConversationLayoutToggle.swift` vytažený z
+  `ConversationStripView`, `ConversationBubbleView.showPlain(sender:date:)`,
+  vývojový krok `board-chat`, testy `BoardConversationChatTests`.
+- **Windows** (`Malachi.Core/Boards/BoardConversationChat.cs`,
+  `BoardViewTypes.cs`, `BoardView.cs`, `BoardText.cs`;
+  `Malachi.App/Boards/Conversation/BoardConversationBlock.cs`: přepínač,
+  sloupec chatu, brána `Live`, `Settings.OnChange`, dvojklik přes
+  `AfterRelease` → `Cache.LookUp` → `Router.OpenMessage`,
+  `IBoardConversationHost.Toast`): `ConversationBubbleView.ShowPlain`,
+  sdílený styl `ConversationChatToggleStyle` v `ConversationStyles.xaml` a
+  štětce v novém `ConversationChatToggle.xaml` (používá i
+  `ConversationView.xaml`), vzorová data teď blok dostanou
+  (`MainWindow.BoardReply.cs`), testy `BoardConversationChatTests`, UI smoke
+  `BoardSmokeTests.TheConversationToggleShowsTheChatAndTheCardsAgain`.
+
+### Ověřeno a co čeká
+
+- **Go/GTK** v kontejneru Apple `container`: `gtk.sh make build`,
+  `go test ./internal/window/... ./internal/board/...`, smoke s
+  `MALACHI_GTK_CARDS_SMOKE=1` i bez (s ním v kontejneru
+  `WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1`), `make po` (přečíslování),
+  `make lint`. V XQuartz neviděno.
+- **macOS**: `swift build` bez varování, filtrované `swift test` (568),
+  celá sada 1849 s jedním nesouvisejícím selháním
+  (`AssistantControllerTests.closeDropsLateRepliesAndObservers`, časový
+  test podprocesu shellu, padá i samotný, kód se nezměnil),
+  `check-strings.py`, jedno měření debug binárkou nad vzorky (řádky chatu na
+  správných stranách, 0 živých webových pohledů, karty zpět se stejnými
+  rámci).
+- **Windows**: napsané bez `dotnet`, nepřeloženo; čeká `build.ps1 app`,
+  `test`, `lint`, UI smoke a ruční průchod (`docs/windows-port.md` §11.8).
+- **Vlastník**: průchod ve všech třech (GTK v XQuartz `make run-gtk-live`,
+  macOS nad kopií dat, Windows).

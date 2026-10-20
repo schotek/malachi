@@ -242,8 +242,18 @@ extension Board {
     public struct MessageCard: Sendable, Equatable {
         /// nil for the samples.
         public var id: MessageID?
+        /// The card's sender: `Text.you` for the user's own messages, else
+        /// the sender's cleaned name or address.
         public var from: String
+        /// The sender's cleaned name or address for every message, the
+        /// user's own too (where `from` says You): the chat bubble's avatar
+        /// takes its initials from it.
+        public var sender: String = ""
+        /// The short date the cards show.
         public var when: String
+        /// The message's date: the chat bubble formats it as the chat of
+        /// Mail does (in full, compact in a narrow column).
+        public var date: Date = .distantPast
         public var text: String
         public var mine: Bool
     }
@@ -868,9 +878,10 @@ extension Board {
             let tasks = (a?.tasks ?? []).prefix(Cap.taskScan).lazy.map { cleanLine($0, max: Cap.task) }
                 .filter { !$0.isEmpty }
             let messages = newest(c.messages ?? [], Cap.messages).map { m in
-                MessageCard(
-                    id: m.id, from: m.mine ? Text.you : cleanLine(m.from, max: Cap.person),
-                    when: formatDate(m.date, now: now, locale: locale, calendar: calendar),
+                let sender = cleanLine(m.from, max: Cap.person)
+                return MessageCard(
+                    id: m.id, from: m.mine ? Text.you : sender, sender: sender,
+                    when: formatDate(m.date, now: now, locale: locale, calendar: calendar), date: m.date,
                     text: cleanBlock(m.text, max: Cap.message), mine: m.mine)
             }
             let messagesNote: String

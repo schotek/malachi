@@ -955,6 +955,11 @@ func TestBoardJira(t *testing.T) {
 	if c := cases["jira:1"]; c.MessageCount != 2 || c.CanArchive || c.Subject != "ITSD-1: Printer" {
 		t.Errorf("jira:1: %+v", c)
 	}
+	// board.get: the user's own comment is mine, as issue.mine.
+	got, err := x.svc.Get(x.ctx, api.BoardGetParams{CaseID: cases["jira:2"].ID})
+	if err != nil || len(got.Messages) != 2 || got.Messages[0].Mine || !got.Messages[1].Mine {
+		t.Errorf("board.get of jira:2: %+v %v", got, err)
+	}
 	// Archive on jira only marks done.
 	a, err := x.svc.Archive(x.ctx, api.BoardArchiveParams{CaseID: cases["jira:1"].ID})
 	if err != nil || !a.NoArchive || a.Archived != 0 || a.Case.Visibility != api.BoardDone {

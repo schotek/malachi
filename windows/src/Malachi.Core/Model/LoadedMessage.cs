@@ -93,6 +93,14 @@ public sealed class LoadedMessage
     public bool Fetching { get; set; }
 
     /// <summary>
+    /// The last <c>message.get</c> failure, null after a success
+    /// (Windows-only: a caller of <c>MessageCache.LookUp</c>, the board's
+    /// chat, tells a message gone from one that could not be loaded, as Show
+    /// in Mail does).
+    /// </summary>
+    public Exception? GetErr { get; set; }
+
+    /// <summary>
     /// Set from the moment the user asks for the remote images (Load Images,
     /// Always From This Sender) until the daemon has answered; the bar shows
     /// it instead of the buttons (<see cref="RemoteBar.RemoteBarStateFor"/>).

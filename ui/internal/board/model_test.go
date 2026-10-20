@@ -637,7 +637,7 @@ func TestHostileStringsAreCleanedInTheView(t *testing.T) {
 		d.Why, d.Person, d.Title, d.DueQuote, d.Summary, d.Draft, d.Issue.Key, d.Issue.Status}
 	strs = append(strs, d.Tasks...)
 	for _, m := range d.Messages {
-		strs = append(strs, m.From, m.Text)
+		strs = append(strs, m.From, m.Sender, m.Text)
 	}
 	for _, k := range v.Commitments {
 		strs = append(strs, k.Text, k.Quote, k.From)

@@ -6,7 +6,7 @@
 // BoardConversationBlock (onShowInMail, onRetry, onHeightChanging, the
 // actions' canShowInMail) and of what GTK's boardConversation reads from its
 // boardPage (win.board-show-in-mail, ctl.RetryMessages,
-// boardReplyScroller).
+// boardReplyScroller, w.Toast).
 
 using Malachi.Core.Api;
 using Microsoft.UI.Xaml;
@@ -35,4 +35,10 @@ public interface IBoardConversationHost
 
     /// <summary>The note's Try Again when the conversation could not be loaded (GTK ctl.RetryMessages).</summary>
     void RetryMessages();
+
+    /// <summary>
+    /// A toast in the detail's window (GTK w.Toast): what a double tap on a
+    /// chat bubble says when it cannot open the message.
+    /// </summary>
+    void Toast(string text);
 }

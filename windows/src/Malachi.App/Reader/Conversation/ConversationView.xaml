@@ -65,42 +65,18 @@ while the members load.
                     FontSize="12"
                     Visibility="Collapsed" />
                 <!-- The layout toggle; its label, tooltip and name are set in
-                     code. Checked, the accent tint (not the subtle fill the
-                     view's other toggles have, ConversationStyles.xaml). -->
+                     code. Checked, the accent tint (ConversationChatToggle.xaml,
+                     shared with the board's conversation block). -->
                 <ToggleButton
                     x:Name="ChatToggle"
-                    Padding="8,3,8,4"
-                    VerticalAlignment="Center"
                     AutomationProperties.AutomationId="ConversationChatToggle"
                     Click="OnChatToggleClick"
-                    FontSize="12">
+                    Style="{StaticResource ConversationChatToggleStyle}">
                     <ToggleButton.Resources>
                         <ResourceDictionary>
-                            <ResourceDictionary.ThemeDictionaries>
-                                <ResourceDictionary x:Key="Default">
-                                    <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Opacity="0.16" Color="{ThemeResource SystemAccentColorLight2}" />
-                                    <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Opacity="0.22" Color="{ThemeResource SystemAccentColorLight2}" />
-                                    <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Opacity="0.28" Color="{ThemeResource SystemAccentColorLight2}" />
-                                    <StaticResource x:Key="ToggleButtonForegroundChecked" ResourceKey="AccentTextFillColorPrimaryBrush" />
-                                    <StaticResource x:Key="ToggleButtonForegroundCheckedPointerOver" ResourceKey="AccentTextFillColorPrimaryBrush" />
-                                    <StaticResource x:Key="ToggleButtonForegroundCheckedPressed" ResourceKey="AccentTextFillColorSecondaryBrush" />
-                                    <StaticResource x:Key="ToggleButtonBorderBrushChecked" ResourceKey="AccentFillColorDefaultBrush" />
-                                    <StaticResource x:Key="ToggleButtonBorderBrushCheckedPointerOver" ResourceKey="AccentFillColorDefaultBrush" />
-                                    <StaticResource x:Key="ToggleButtonBorderBrushCheckedPressed" ResourceKey="AccentFillColorDefaultBrush" />
-                                </ResourceDictionary>
-                                <ResourceDictionary x:Key="Light">
-                                    <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Opacity="0.12" Color="{ThemeResource SystemAccentColorDark1}" />
-                                    <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Opacity="0.18" Color="{ThemeResource SystemAccentColorDark1}" />
-                                    <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Opacity="0.24" Color="{ThemeResource SystemAccentColorDark1}" />
-                                    <StaticResource x:Key="ToggleButtonForegroundChecked" ResourceKey="AccentTextFillColorPrimaryBrush" />
-                                    <StaticResource x:Key="ToggleButtonForegroundCheckedPointerOver" ResourceKey="AccentTextFillColorPrimaryBrush" />
-                                    <StaticResource x:Key="ToggleButtonForegroundCheckedPressed" ResourceKey="AccentTextFillColorSecondaryBrush" />
-                                    <StaticResource x:Key="ToggleButtonBorderBrushChecked" ResourceKey="AccentFillColorDefaultBrush" />
-                                    <StaticResource x:Key="ToggleButtonBorderBrushCheckedPointerOver" ResourceKey="AccentFillColorDefaultBrush" />
-                                    <StaticResource x:Key="ToggleButtonBorderBrushCheckedPressed" ResourceKey="AccentFillColorDefaultBrush" />
-                                </ResourceDictionary>
-                                <ResourceDictionary x:Key="HighContrast" />
-                            </ResourceDictionary.ThemeDictionaries>
+                            <ResourceDictionary.MergedDictionaries>
+                                <ResourceDictionary Source="ms-appx:///Reader/Conversation/ConversationChatToggle.xaml" />
+                            </ResourceDictionary.MergedDictionaries>
                         </ResourceDictionary>
                     </ToggleButton.Resources>
                     <StackPanel Orientation="Horizontal" Spacing="6">

@@ -329,11 +329,27 @@ public static partial class Board
 
     /// <summary>A message of the detail's conversation.</summary>
     /// <param name="Id">The message; null for the samples.</param>
-    /// <param name="From">The sender, <see cref="Text.You"/> for the user.</param>
-    /// <param name="When">The list's date.</param>
+    /// <param name="From">The card's sender, <see cref="Text.You"/> for the user.</param>
+    /// <param name="When">The list's date (the cards' short date).</param>
     /// <param name="Text">The plain text.</param>
     /// <param name="Mine">The user wrote it.</param>
-    public sealed record MessageCard(MessageId? Id, string From, string When, string Text, bool Mine);
+    public sealed record MessageCard(MessageId? Id, string From, string When, string Text, bool Mine)
+    {
+        /// <summary>
+        /// The sender's cleaned name or address for every message, the
+        /// user's own too (where <see cref="From"/> says You): the chat
+        /// bubble's avatar takes its initials from it. Defaults to
+        /// <see cref="From"/>.
+        /// </summary>
+        public string Sender { get; init; } = From;
+
+        /// <summary>
+        /// The message's date: the chat bubble formats it as the chat of
+        /// Mail does (in full, compact in a narrow column); default
+        /// (Go's zero) shows none.
+        /// </summary>
+        public DateTimeOffset Date { get; init; }
+    }
 
     /// <summary>The selected case in full. An empty string hides its block.</summary>
     public sealed record Detail

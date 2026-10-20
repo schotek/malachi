@@ -9,7 +9,8 @@
 // that stays) and the calendar's "…" menu back to Mail,
 // the three styles with a case selected and its detail (beside the List,
 // in the sliding panel over Columns and Today, which Escape and Close
-// close), Done and Move Back, a Remind preset that takes the case off the
+// close), the conversation's chat toggle (the bubbles on their sides, the
+// cards back), Done and Move Back, a Remind preset that takes the case off the
 // board, and the Board groups of the Preferences (General's Board View, Open
 // at Launch, Show the Board and Keep cases for; AI's triage hidden while
 // Register with Claude is off and shown once it is on, over the session's
@@ -34,6 +35,8 @@ public sealed class BoardSmokeTests(BoardSmokeFixture fixture) : IClassFixture<B
     private const string Trailer = "Say whether you can bring the trailer";
     private const string Maintenance = "Maintenance on Sunday morning";
     private const string Figures = "Send Chris the Q4 budget figures";
+    private const string Laptops = "Quote for the new laptops from Jana";
+    private const string Jana = "Jana Sample";
 
     private const byte VkEscape = 0x1B;
 
@@ -93,6 +96,73 @@ public sealed class BoardSmokeTests(BoardSmokeFixture fixture) : IClassFixture<B
         Uia.Select(Case(list, Contract));
         AssertDetailShows(main, Contract);
     }
+
+    // The conversation block's toggle shows the case's messages as chat
+    // bubbles (the user's own right of the block's middle, the other
+    // person's left of it) and back as the cards. The toggle shares Mail's
+    // conversation-chat-layout, which the session starts off; the test
+    // leaves it off.
+    [Fact]
+    public void TheConversationToggleShowsTheChatAndTheCardsAgain()
+    {
+        var main = ShowBoard();
+        SetStyle(main, "BoardStyleList");
+        Uia.Select(Uia.Find(main, "BoardNavAll"));
+        var list = Uia.Find(main, "BoardList");
+        Uia.Select(Case(list, Laptops));
+        AssertDetailShows(main, Laptops);
+        var detail = Uia.Find(main, "BoardDetail");
+        var block = Uia.Find(detail, "BoardConversation");
+        var toggle = Uia.Find(block, "BoardChatToggle");
+        Assert.Equal(ToggleState.Off, ToggleOf(toggle));
+        var offName = toggle.Current.Name;
+        // The cards: Jana's is named by her (the samples' cards have no
+        // fold arrow, their excerpts are short).
+        Uia.WaitFor(() => Named(block, Jana), "the cards");
+
+        Uia.Toggle(toggle);
+        try
+        {
+            // You, Jana, you: oldest first.
+            var bubbles = Uia.Until(
+                () =>
+                {
+                    AutomationElement?[] found =
+                    [
+                        Uia.TryFind(block, "BoardChatBubble:0"),
+                        Uia.TryFind(block, "BoardChatBubble:1"),
+                        Uia.TryFind(block, "BoardChatBubble:2"),
+                    ];
+                    return found.All(b => b is not null) ? found : null;
+                },
+                TimeSpan.FromSeconds(10),
+                "the case's three bubbles");
+            Uia.WaitFor(() => ToggleOf(toggle) == ToggleState.On, "the toggle to be on");
+            Assert.NotEqual(offName, toggle.Current.Name);
+            var r = block.Current.BoundingRectangle;
+            var middle = r.Left + (r.Width / 2);
+            double Centre(AutomationElement? b) => b!.Current.BoundingRectangle.Left + (b.Current.BoundingRectangle.Width / 2);
+            Assert.True(Centre(bubbles[0]) > middle, "the user's first message on the right");
+            Assert.True(Centre(bubbles[1]) < middle, "Jana's message on the left");
+            Assert.True(Centre(bubbles[2]) > middle, "the user's reply on the right");
+            Assert.Contains(Jana, bubbles[1]!.Current.Name, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (ToggleOf(toggle) == ToggleState.On)
+            {
+                Uia.Toggle(toggle);
+            }
+        }
+        Uia.WaitFor(() => Uia.TryFind(block, "BoardChatBubble:0") is null, "the bubbles to go");
+        Uia.WaitFor(() => Named(block, Jana), "the cards again");
+        Assert.Equal(offName, toggle.Current.Name);
+    }
+
+    // Whether an element below root is named with text.
+    private static bool Named(AutomationElement root, string text) =>
+        root.FindAll(TreeScope.Descendants, Condition.TrueCondition).Cast<AutomationElement>()
+            .Any(e => e.Current.Name.Contains(text, StringComparison.Ordinal));
 
     [Fact]
     public void ColumnsShowTheDetailInThePanelThatEscapeCloses()

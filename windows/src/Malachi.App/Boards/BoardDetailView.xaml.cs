@@ -19,7 +19,7 @@
 // that follow the case in place; this view hands them every detail. It is
 // what the conversation's cards (BoardConversationBlock) ask of their
 // detail (IBoardConversationHost): its window, its scrolling column, Show
-// in Mail and Try Again.
+// in Mail, Try Again and a toast.
 
 using System;
 using System.Collections.Generic;
@@ -199,6 +199,9 @@ public sealed partial class BoardDetailView : UserControl, IBoardConversationHos
 
     /// <inheritdoc/>
     public void RetryMessages() => Controller?.RetryMessages();
+
+    /// <inheritdoc/>
+    public void Toast(string text) => actions?.OnToast?.Invoke(text);
 
     /// <summary>Renders the controller's detail.</summary>
     public void Render()

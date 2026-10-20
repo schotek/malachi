@@ -36,6 +36,15 @@ import MalachiCore
 //   over the web view goes, and the scroll position when an older card
 //   above the viewport opens with the same document (`DevelopmentBoardHTML`;
 //   10 s for MALACHI_START_INTERVAL).
+//   `board-chat` (Board with MALACHI_BOARD_SAMPLES=1 only) selects the
+//   sample case with the most messages in the List, feeds its newest card
+//   the invented HTML of `board-html`, switches the conversation-chat-layout
+//   setting on and dumps the chat's rows (frame, side, bubble width against
+//   `chatBubbleMax`, avatar name, text), the live web views (0 while the
+//   chat shows) and the toggle's label, switches it off and dumps the cards
+//   again, and restores the setting's previous value (`DevelopmentBoardChat`;
+//   it takes about 5.3 s, so give MALACHI_START_INTERVAL 8 s; a `quit`
+//   that comes sooner restores the setting before quitting).
 //   `calendar:day|week|month|agenda` shows the Calendar in that view
 //   and dumps the page's main frames (sidebar, content, assistant slot),
 //   the calendar split view's divider and where the toolbar's sidebar
@@ -135,6 +144,7 @@ extension MainWindowController {
 
     private func developmentStep(_ step: String) {
         if step == "quit" {
+            DevelopmentBoardChat.restore()
             // The application quits as from the menu (the daemon it
             // started stops with it). Not from inside this main-queue
             // block: `terminateLater` waits in a run loop while the main
@@ -152,6 +162,10 @@ extension MainWindowController {
         }
         if step == "board-html" {
             DevelopmentBoardHTML.run(in: self)
+            return
+        }
+        if step == "board-chat" {
+            DevelopmentBoardChat.run(in: self)
             return
         }
         if DevelopmentCalendar.step(step, in: self) {
@@ -710,6 +724,112 @@ private final class DevelopmentReplyPane {
             paneInClip.maxY <= clip.maxY + 1 && paneInClip.maxY >= clip.minY ? 1 : 0, responder, inEditor ? 1 : 0,
             pane.sendButton?.isEnabled == true ? 1 : 0, pane.sendButton?.keyEquivalent ?? "-",
             pane.header.fromPopup.isHiddenOrHasHiddenAncestor ? 0 : 1))
+    }
+}
+
+/// DEVELOPMENT AID for `board-chat`, samples only: the List's detail's
+/// conversation as chat and back, through the setting the toggle writes.
+/// The setting's previous value is restored at the end.
+@MainActor
+private enum DevelopmentBoardChat {
+    // macOS-only strings: development output on stderr, never shown.
+    static func run(in main: MainWindowController) {
+        guard main.boardSource == nil, let settings = main.boardActions.mailBodies?.settings else {
+            developmentPrint("MALACHI_START board-chat: samples only (MALACHI_BOARD_SAMPLES=1)")
+            return
+        }
+        main.setMode(.board)
+        if main.board.state.style != .list {
+            main.board.setStyle(.list)
+        }
+        let ids = main.board.view.sections.flatMap { $0.rows.map(\.id) }
+        var best: (Board.CaseID, Int)?
+        for id in ids {
+            main.board.select(id)
+            let n = main.board.view.detail?.messages.count ?? 0
+            if n > (best?.1 ?? 0) {
+                best = (id, n)
+            }
+        }
+        main.board.select(best?.0)
+        let before = settings.conversationChatLayout
+        pending = (settings, before)
+        settings.conversationChatLayout = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            guard let b = block(in: main), let newest = b.cards.indices.last else {
+                developmentPrint("MALACHI_START board-chat: no visible conversation block with cards")
+                restore()
+                return
+            }
+            b.developmentFeed(newest, html: DevelopmentBoardHTML.document)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                dump("cards (fed)", b)
+                settings.conversationChatLayout = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    dump("chat", b)
+                    settings.conversationChatLayout = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        dump("cards again", b)
+                        restore()
+                        developmentPrint("LAYOUT: board-chat setting restored to \(before)")
+                    }
+                }
+            }
+        }
+    }
+
+    /// The setting to put back, while the step runs.
+    private static var pending: (Settings, Bool)?
+
+    /// Puts the setting back as it was before the step (once; also from
+    /// `quit`, when the step had no time to finish).
+    static func restore() {
+        guard let (settings, before) = pending else { return }
+        pending = nil
+        settings.conversationChatLayout = before
+    }
+
+    private static func block(in main: MainWindowController) -> BoardConversationBlock? {
+        var found: BoardConversationBlock?
+        func walk(_ v: NSView) {
+            if let b = v as? BoardConversationBlock, b.window != nil, !b.isHiddenOrHasHiddenAncestor {
+                found = found ?? b
+            }
+            v.subviews.forEach(walk)
+        }
+        if let root = main.window?.contentView {
+            walk(root)
+        }
+        return found
+    }
+
+    private static func dump(_ label: String, _ b: BoardConversationBlock) {
+        b.window?.layoutIfNeeded()
+        let doc = b.enclosingScrollView?.documentView
+        developmentPrint(String(
+            format: "LAYOUT: board-chat %@: chatShown %d toggle '%@' cards %d (hidden %d) chat rows %d (hidden %d) live web views %d",
+            label, b.chatShown ? 1 : 0, b.developmentToggleLabel, b.cards.count,
+            b.cards.first?.isHiddenOrHasHiddenAncestor == true ? 1 : 0, b.chatRows.count,
+            b.chatRows.first?.isHiddenOrHasHiddenAncestor != false ? 1 : 0, b.developmentLiveWebViews))
+        guard b.chatShown else {
+            for (i, c) in b.cards.enumerated() {
+                let f = doc.map { c.convert(c.bounds, to: $0) } ?? .zero
+                developmentPrint(String(format: "LAYOUT:     card %d at %.0f..%.0f h %.0f", i, f.minY, f.maxY, f.height))
+            }
+            return
+        }
+        let ms = b.developmentMessages
+        for (i, row) in b.chatRows.enumerated() {
+            let f = doc.map { row.convert(row.bounds, to: $0) } ?? .zero
+            let bf = doc.map { row.bubble.convert(row.bubble.bounds, to: $0) } ?? .zero
+            let maxW = ConversationLayout.chatBubbleMax(column: Double(row.bounds.width))
+            let m = i < ms.count ? ms[i] : nil
+            let text = (m?.text ?? "").replacingOccurrences(of: "\n", with: " ").prefix(40)
+            developmentPrint(String(
+                format: "LAYOUT:     row %d %@ frame %.0f,%.0f %.0fx%.0f bubble x %.0f..%.0f w %.0f max %.0f avatar '%@' from '%@' text '%@'",
+                i, row.right ? "right" : "left", f.minX, f.minY, f.width, f.height, bf.minX, bf.maxX, bf.width, maxW,
+                m?.sender ?? "", m?.from ?? "", String(text)))
+        }
     }
 }
 

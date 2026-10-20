@@ -750,8 +750,10 @@ Limits per process, all counted in the bridge:
     case already has (open and done, not closed, at most 10: `commitmentId`,
     `messageId`, `state`, `due`; the procedure says to record none of
     them again), and per message
-    `messageId`, `date`, `mine` (true = in a folder of role `sent` or
-    `outbox`, the user's own) and `truncated`.
+    `messageId`, `date`, `mine` (true = the user's own: a mail message
+    in a folder of role `sent` or `outbox`, or an issue's description or
+    comment the user wrote on the site, not relayed; only the mail ones
+    take commitments) and `truncated`.
   - In the fence: `subject`, `issueStatus`, the recorded commitments'
     `text` and `quote` (spent from the case's budget right after the
     subject and the issue's fields), `yourAddresses` (the user's
@@ -810,7 +812,9 @@ Limits per process, all counted in the bridge:
 
 - input: `caseId`, `inputKey` (of a case the queue handed out in this
   process; any other is refused before the daemon is asked), `messageId`
-  (one of the user's own messages of the case, `mine: true`), `text` (the assistant's one-line
+  (one of the user's own mail messages of the case, `mine: true`; an
+  issue-tracker case takes no commitments, and the bridge refuses one
+  for it before the daemon is asked, as `board.commit` would), `text` (the assistant's one-line
   wording, ≤ 300 bytes), `quote` (the user's sentence, verbatim from their
   own words above any quoted history or signature, 10 to 300 bytes),
   optional `dueAt` (as above).

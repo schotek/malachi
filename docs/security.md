@@ -205,6 +205,11 @@ has no web view at all: a bubble shows only the daemon's plain `text` of
 `message.body` (asked for with `trimQuoted`) in a `GtkLabel` with markup
 off (`SetUseMarkup(false)`) that cannot be selected, with no link handling,
 so no HTML reaches it; the timeline above is unchanged.
+The board's chat layout (`ui/internal/window/board_conversation_chat.go`)
+is the same: the plain `text` the case already carries from `board.get`
+in a `GtkLabel` with markup off, not selectable, no web view, no link
+handling, no `message.body` request; a double click opens the message
+window.
 
 The GTK board's conversation cards use the same `htmlview.Card` and
 height governor as Mail. Only an open card fetches its message's body
@@ -300,6 +305,10 @@ for WKWebView, since nothing of the WebKitGTK configuration carries over:
   `trimQuoted`) through `stringValue` in a native label that cannot be
   selected, with no link handling and no context menu, so no HTML reaches
   it; the timeline above is unchanged.
+  The board's chat layout (`MalachiCore/Board/BoardConversationChat.swift`,
+  `Board/BoardConversationBlock.swift`) is the same: the plain `text` of
+  `board.get` through `stringValue`, not selectable, no web view, no links;
+  a double click opens the message window.
 
 Layer 2 on Windows (`windows/src/Malachi.App/WebViews`, the rules in
 `Malachi.Core.Presentation`; [windows-port.md §6](windows-port.md#6-the-webview2-security-layer))
