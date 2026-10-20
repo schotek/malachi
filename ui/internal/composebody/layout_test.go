@@ -60,3 +60,52 @@ func TestUnavailableOriginalDoesNotCreateAnEmptySection(t *testing.T) {
 		t.Errorf("%+v", l)
 	}
 }
+
+// A draft's body is its HTML when it has one; otherwise its text,
+// escaped, with its line breaks (CRLF too) as <br>.
+func TestDraftBody(t *testing.T) {
+	if got := DraftBody(api.Draft{HTMLBody: original, TextBody: "ignored"}); got != original {
+		t.Errorf("html: %q", got)
+	}
+	got := DraftBody(api.Draft{TextBody: "a <b>&\r\nc\nd"})
+	if want := "a &lt;b&gt;&amp;<br>c<br>d"; got != want {
+		t.Errorf("text: %q, want %q", got, want)
+	}
+	if got := DraftBody(api.Draft{}); got != "" {
+		t.Errorf("empty: %q", got)
+	}
+	if got := EscapeText(`<script>"x"</script>`); got != "&lt;script&gt;&#34;x&#34;&lt;/script&gt;" {
+		t.Errorf("EscapeText: %q", got)
+	}
+}
+
+// The user's own text replaces the editor's start, the original apart
+// stays, and the saved body is the own text above it; "" changes nothing.
+func TestWithOwn(t *testing.T) {
+	own := "<p>Thanks</p>"
+	l := New(api.ComposeReply, false, original).WithOwn(own)
+	if l.EditorHTML != own || l.QuotedHTML != original {
+		t.Errorf("reply: %+v", l)
+	}
+	if got := l.HTML(own, true); got != own+"\n"+original {
+		t.Errorf("reply body: %q", got)
+	}
+	if l := New(api.ComposeForward, false, original).WithOwn(""); l.EditorHTML != EmptyBody || l.QuotedHTML != original {
+		t.Errorf("no own text: %+v", l)
+	}
+	// Without an original the own text is the whole editor.
+	if l := New(api.ComposeReply, false, "").WithOwn(own); l.EditorHTML != own || l.HasQuote() {
+		t.Errorf("no original: %+v", l)
+	}
+	// A comment has no original apart: the own text is the body.
+	l = New(api.ComposeReply, true, "").WithOwn(own)
+	if l.EditorHTML != own || l.HasQuote() || l.HTML(own, true) != own {
+		t.Errorf("comment: %+v", l)
+	}
+	// The receiver is a copy.
+	base := New(api.ComposeReply, false, original)
+	_ = base.WithOwn(own)
+	if base.EditorHTML != EmptyBody {
+		t.Errorf("WithOwn changed its receiver: %+v", base)
+	}
+}

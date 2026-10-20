@@ -451,6 +451,18 @@ public final class ConversationController {
         return Conversation.cardActions(a, s, composeAccount: !Capabilities.forwardAccounts(m.accounts).isEmpty)
     }
 
+    /// What the chat's quick-reply bar needs of the conversation shown
+    /// (`QuickReplyController.update`): its model, the card actions of the
+    /// target the bar answers (`Conversation.quickReplyTarget`; none without
+    /// one) and the target's account. nil while no model is built.
+    public func quickReplyInput() -> (model: Conversation.Model, actions: Capabilities.Actions, account: Account?)? {
+        guard let m = model else { return nil }
+        guard let s = Conversation.quickReplyTarget(m)?.message else {
+            return (m, Capabilities.Actions(), nil)
+        }
+        return (m, actions(for: s), account(s.accountId))
+    }
+
     /// The site of the Jira account `id` ("" when unknown or not Jira):
     /// the only site the issue card's key may open.
     public func issueSite(_ id: AccountID) -> String {

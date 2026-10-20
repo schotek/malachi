@@ -962,6 +962,91 @@ private final class Harness {
         #expect(r.bodyHTML.contains("<div>" + escapeText(r.attribution) + "</div>"))
     }
 
+    /// compose_open.go `openComposeWith`: the user's own text (the chat's
+    /// quick-reply bar) reaches the window's params as `ownHTML`, from
+    /// draft.create and from the fallback alike, and `opened` runs right
+    /// after the window opened; never when no window opens (an unknown
+    /// message, one being prepared already). The plain overload has no own
+    /// text.
+    @Test func openComposeWithOwnTextCallsOpened() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1, .seen)]])
+        defer { Task { await h.stop() } }
+        let draft = Draft(accountId: "a", subject: "Re: s-m1", textBody: "quoted", htmlBody: "<p>quoted</p>", inReplyTo: "m1")
+        let created = try encode(DraftCreateResult(draft: draft, quoted: .html))
+        await h.fixture.on(API.DraftCreate.name) { _ in
+            try await Task.sleep(for: .milliseconds(50))
+            return created
+        }
+        var opened: [Int] = []
+        let own = "<p>Thanks</p>"
+        h.actions.openCompose(.replyAll, "m1", from: nil, ownHTML: own) { opened.append(h.log.composed.count) }
+        // Being prepared: a second request opens nothing and is never told.
+        h.actions.openCompose(.reply, "m1", from: nil, ownHTML: own) { opened.append(-1) }
+        h.actions.openCompose(.reply, "nope", from: nil, ownHTML: own) { opened.append(-2) }
+        try await waitUntil { h.log.composed.count == 1 }
+        // Called after the window opened, once.
+        #expect(opened == [1])
+        #expect(h.log.composed[0].kind == .replyAll)
+        #expect(h.log.composed[0].ownHTML == own)
+        #expect(h.log.composed[0].bodyHTML == "<p>quoted</p>")
+        #expect(ComposeBodyLayout(h.log.composed[0]).editorHTML == own)
+
+        // The plain overload: no own text.
+        h.actions.openCompose(.reply, "m1")
+        try await waitUntil { h.log.composed.count == 2 }
+        #expect(h.log.composed[1].ownHTML.isEmpty)
+
+        // The fallback carries it as well.
+        await h.fixture.on(API.DraftCreate.name) { _ in throw RPCError(code: .notImplemented, message: "no") }
+        h.actions.openCompose(.forward, "m1", from: nil, ownHTML: own) { opened.append(h.log.composed.count) }
+        try await waitUntil { h.log.composed.count == 3 }
+        #expect(opened == [1, 3])
+        #expect(h.log.composed[2].kind == .forward)
+        #expect(h.log.composed[2].ownHTML == own)
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(opened == [1, 3])
+    }
+
+    /// The quick-reply bar's halves of `openCompose`: the attribution the
+    /// window would hand draft.create, and the download before a reply
+    /// whose pictures are on the server only (its failure ignored).
+    @Test func replyAttributionAndPrepareReply() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1, .seen), msg("m2", 2, .seen)]])
+        defer { Task { await h.stop() } }
+        let line = h.actions.replyAttribution(.reply, "m1")
+        #expect(!line.isEmpty)
+        #expect(line == attribution(kind: .reply, source: composeSource(summary: try h.summary("m1"), loaded: nil)))
+        #expect(h.actions.replyAttribution(.forward, "m1").hasPrefix("---------- Forwarded message ----------"))
+        #expect(h.actions.replyAttribution(.reply, "nope").isEmpty)
+
+        // Nothing to download: `done` at once, no call.
+        let base = await h.fixture.calls().count
+        var done = 0
+        h.actions.prepareReply("m2") { done += 1 }
+        h.actions.prepareReply("nope") { done += 1 }
+        #expect(done == 2)
+
+        // A picture on the server: message.download first, then `done`,
+        // also when it fails.
+        let picture = MalachiCore.Attachment(
+            partId: "2", filename: "photo.jpg", contentType: "image/jpeg", size: 300_000, inline: true,
+            contentId: "photo@x", remote: true)
+        let original = Message(summary: try h.summary("m1"), attachments: [picture])
+        await h.fixture.setDetail(original)
+        var counted = body("m1", html: "<p><img src=\"malachi-cid:a/m1/2\"></p>", remote: .block)
+        counted.inlineParts = ["photo@x": "2"]
+        counted.remotePictures = 1
+        await h.fixture.setBody(counted)
+        await h.fixture.on(API.MessageDownload.name) { _ in throw RPCError(code: .offline, message: "no network") }
+        try await h.load("m1")
+        h.actions.prepareReply("m1") { done += 1 }
+        #expect(done == 2)
+        try await waitUntil { done == 3 }
+        let calls = Array(await h.fixture.calls().dropFirst(base))
+        #expect(calls.contains(API.MessageDownload.name))
+        #expect(h.log.toasts.isEmpty)
+    }
+
     @Test func flagsFollowTheRowAndTheMessage() async throws {
         var queued = msg("o1", 5)
         queued.outbox = OutboxInfo(state: .queued, attempts: 0)

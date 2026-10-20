@@ -708,10 +708,11 @@ private let foldPort = repoRoot.appendingPathComponent("macos/Sources/MalachiCor
 private let quotedPort = repoRoot.appendingPathComponent("macos/Sources/MalachiCore/Model/ConversationQuoted.swift")
 private let draftsPort = repoRoot.appendingPathComponent("macos/Sources/MalachiCore/Model/ConversationDrafts.swift")
 private let chatPort = repoRoot.appendingPathComponent("macos/Sources/MalachiCore/Model/ConversationChat.swift")
+private let replyPort = repoRoot.appendingPathComponent("macos/Sources/MalachiCore/Model/ConversationReply.swift")
 private let haveSources = FileManager.default.fileExists(atPath: template.path)
     && FileManager.default.fileExists(atPath: port.path) && FileManager.default.fileExists(atPath: foldPort.path)
     && FileManager.default.fileExists(atPath: quotedPort.path) && FileManager.default.fileExists(atPath: draftsPort.path)
-    && FileManager.default.fileExists(atPath: chatPort.path)
+    && FileManager.default.fileExists(atPath: chatPort.path) && FileManager.default.fileExists(atPath: replyPort.path)
 
 struct ConversationTranslationTests {
     /// conversation_test.go TestBuildTruncated in Czech: the three plural
@@ -727,16 +728,17 @@ struct ConversationTranslationTests {
     }
 
     /// po_test.go TestMsgidsInTemplate for the port: its msgids are the
-    /// template's thirteen entries that name ui/internal/conversation (the
+    /// template's twenty-one entries that name ui/internal/conversation (the
     /// plural of the older members' row, conversation.go; Collapse All and
     /// Expand All, fold.go; Show and Hide Quoted Text, quoted.go; the six
     /// texts of the draft cards, drafts.go; the chat toggle and its tooltip,
-    /// chat.go), and the port asks for each the same way.
+    /// chat.go; the six texts of the quick-reply bar, reply.go), and the port
+    /// asks for each the same way.
     @Test(.enabled(if: haveSources, "po/malachi.pot or the port's source is not next to this file"))
     func portUsesTheTemplatesEntries() throws {
         let pot = try String(contentsOf: template, encoding: .utf8)
         let entries = pot.components(separatedBy: "\n\n").filter { $0.contains("ui/internal/conversation/") }
-        #expect(entries.count == 15, "po/malachi.pot names ui/internal/conversation in \(entries.count) entries")
+        #expect(entries.count == 21, "po/malachi.pot names ui/internal/conversation in \(entries.count) entries")
         let all = entries.joined(separator: "\n\n")
         #expect(all.contains("msgid \"%d earlier message is not shown\"\nmsgid_plural \"%d earlier messages are not shown\""))
         #expect(all.contains("msgid \"Collapse All\"\nmsgstr"))
@@ -779,6 +781,22 @@ struct ConversationTranslationTests {
             "T(\"Show as Thread\"",
             "T(\"Others on the left, your messages on the right; double-click opens the message\"",
             "T(\"Back to the timeline: the messages as cards, newest first\"",
+        ])
+        for msgid in ["Write a comment…", "Write a reply…", "Open in a Window", "Forward…"] {
+            #expect(all.contains("msgid \"\(msgid)\"\nmsgstr"), "\(msgid)")
+        }
+        for msgid in ["Reply to: %s", "Reply all to: %s"] {
+            #expect(all.contains("#, c-format\nmsgid \"\(msgid)\"\nmsgstr"), "\(msgid)")
+        }
+        let reply = try String(contentsOf: replyPort, encoding: .utf8)
+        let replyCalls = Array(reply.components(separatedBy: "L10n.").dropFirst()).map { $0.prefix(100) }
+        #expect(replyCalls.map { String($0.prefix(while: { $0 != ")" })) } == [
+            "T(\"Write a comment…\"",
+            "T(\"Write a reply…\"",
+            "T(\"Reply to: %s\", sender",
+            "T(\"Reply all to: %s\", sender",
+            "T(\"Open in a Window\"",
+            "T(\"Forward…\"",
         ])
     }
 }

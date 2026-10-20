@@ -8,8 +8,10 @@ import MalachiCore
 /// the single-message view and the conversation (its host, with the
 /// timeline and the chat) takes the message pane's place, the
 /// conversation's cards and bubbles hear what the message cache learns
-/// (`MessageWindows`' fan-out, through the host), and Space in the list
-/// pages through the conversation.
+/// (`MessageWindows`' fan-out, through the host), Space in the list
+/// pages through the conversation, Escape in the chat's quick-reply
+/// bar gives the keyboard back to the list, and its Assistant button is
+/// the main window's toolbar ✦.
 extension Integration {
     /// Installs the reading pane in place of the single-message view the
     /// init installed first (no account list has arrived yet, so the "No
@@ -19,6 +21,12 @@ extension Integration {
         mainWindow?.install(message: readingPane)
         listView.onPageReader = { [weak self] up in
             self?.readingPane.page(up: up) ?? false
+        }
+        readingPane.conversation.onFocusList = { [weak listView] in
+            listView?.focusList()
+        }
+        readingPane.conversation.onAssistant = { [weak self] button in
+            self?.mainWindow?.showAssistant(from: button)
         }
     }
 }

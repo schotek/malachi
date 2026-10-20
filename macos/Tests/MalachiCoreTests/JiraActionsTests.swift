@@ -273,6 +273,32 @@ private final class Harness {
         #expect(await h.recorder.drafts.count == 2)
     }
 
+    /// compose_open.go `openCommentFor` with `ownHTML`: the quick-reply
+    /// bar's text goes into the comment window as the user's own, and
+    /// `opened` runs once it opened; a failed draft.create opens nothing
+    /// and never calls it.
+    @Test func aCommentCarriesTheOwnTextAndSaysItOpened() async throws {
+        let h = try await Harness()
+        defer { Task { await h.stop() } }
+        try await h.showIssue()
+        let template = Draft(accountId: jira, inReplyTo: "w1c", comment: DraftComment(issue: webIssue))
+        try await h.onDraftCreate(DraftCreateResult(draft: template, quoted: .none))
+        var opened = 0
+        h.actions.openCompose(.reply, "w1c", from: nil, ownHTML: "<p>Fixed</p>") { opened += 1 }
+        try await waitUntil { h.composed.count == 1 }
+        #expect(opened == 1)
+        #expect(h.composed[0].ownHTML == "<p>Fixed</p>")
+        #expect(h.composed[0].comment != nil)
+        #expect(ComposeBodyLayout(h.composed[0]).editorHTML == "<p>Fixed</p>")
+
+        try await h.onDraftCreate(error: RPCError(code: .serverError, message: "500"))
+        h.actions.openCompose(.reply, "w1c", from: nil, ownHTML: "<p>Again</p>") { opened += 1 }
+        try await waitUntil { h.toasts.count == 1 }
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(opened == 1)
+        #expect(h.composed.count == 1)
+    }
+
     @Test func forwardIsWrittenInAMailAccount() async throws {
         let h = try await Harness()
         defer { Task { await h.stop() } }

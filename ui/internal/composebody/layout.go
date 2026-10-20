@@ -13,7 +13,12 @@
 // widgets; package compose imports GTK.
 package composebody
 
-import "github.com/schotek/malachi/backend/pkg/api"
+import (
+	"html"
+	"strings"
+
+	"github.com/schotek/malachi/backend/pkg/api"
+)
 
 // EmptyBody is the editor's body above an original shown apart.
 const EmptyBody = "<p><br></p>"
@@ -40,6 +45,17 @@ func New(mode api.ComposeMode, comment bool, bodyHTML string) Layout {
 	return Layout{EditorHTML: bodyHTML}
 }
 
+// WithOwn is l with own, the user's own text written before the window
+// opened (the chat's quick-reply bar; already safe HTML, conversation
+// QuickReplyHTML), in the editor in place of what it would start with;
+// the original apart stays as it is. "" keeps l unchanged.
+func (l Layout) WithOwn(own string) Layout {
+	if own != "" {
+		l.EditorHTML = own
+	}
+	return l
+}
+
 // HasQuote says whether the window shows an original apart.
 func (l Layout) HasQuote() bool { return l.QuotedHTML != "" }
 
@@ -60,4 +76,22 @@ func (l Layout) Text(own, quote string, include bool) string {
 		return own + "\n\n" + quote
 	}
 	return own
+}
+
+// DraftBody is the body of a draft (draft.create, draft.open) as HTML for
+// a window or a quick reply: its HTMLBody, safe since the backend's
+// sanitiser produced it; a draft without one (the backend could not quote
+// formatted, or it is plain text) has its TextBody escaped (EscapeText).
+func DraftBody(d api.Draft) string {
+	if d.HTMLBody != "" {
+		return d.HTMLBody
+	}
+	return EscapeText(d.TextBody)
+}
+
+// EscapeText escapes plain text for HTML and turns newlines (CRLF
+// included) into <br>.
+func EscapeText(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	return strings.ReplaceAll(html.EscapeString(s), "\n", "<br>")
 }

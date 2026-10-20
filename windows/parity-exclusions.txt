@@ -93,3 +93,9 @@ Zero means no permission to send board mail to OpenAI.	GSettings schema metadata
 Codex is unavailable in this Flatpak build.	Flatpak-only sandbox availability
 The view the Calendar was shown in last	gschema: a key's summary or description, for dconf editors, not the UI
 Day, Week, Month or Agenda, written whenever the user changes the Calendar's view; applied when the Calendar shows.	gschema: a key's summary or description, for dconf editors, not the UI
+Write a reply…	quick reply: Windows port pending
+Write a comment…	quick reply: Windows port pending
+Reply to: %s	quick reply: Windows port pending
+Reply all to: %s	quick reply: Windows port pending
+Open in a Window	quick reply: Windows port pending
+Forward…	quick reply: Windows port pending

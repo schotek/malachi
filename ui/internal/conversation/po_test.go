@@ -66,6 +66,12 @@ func exercise(tr Translator) {
 	ChatToggleLabel(true, tr)
 	ChatToggleTooltip(false, tr)
 	ChatToggleTooltip(true, tr)
+	QuickReplyPlaceholder(false, tr)
+	QuickReplyPlaceholder(true, tr)
+	QuickReplyTargetTooltip(QuickReply, "Jana", tr)
+	QuickReplyTargetTooltip(QuickReplyAll, "Jana", tr)
+	QuickReplyOpenWindowLabel(tr)
+	QuickReplyForwardLabel(tr)
 }
 
 // template reads po/malachi.pot: every entry, and whether it names a file

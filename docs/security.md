@@ -309,6 +309,16 @@ for WKWebView, since nothing of the WebKitGTK configuration carries over:
   `Board/BoardConversationBlock.swift`) is the same: the plain `text` of
   `board.get` through `stringValue`, not selectable, no web view, no links;
   a double click opens the message window.
+  The quick-reply bar under the chat (`MessageView/ConversationQuickReplyBar.swift`)
+  is plain text both ways: its field is a plain-text `NSTextView` (no rich
+  text, pictures, data detectors or link detection), and what the user
+  types is their own text, never mail, which Core's
+  `Conversation.quickReplyHTML` turns into paragraphs and line breaks with
+  every character escaped (no Markdown) before `draft.save`; the quoted
+  original below it is the daemon's, prepared by `draft.create` and
+  sanitised there as for the compose window. The only string from mail the
+  bar shows is the target's sender in the mode button's tooltip
+  (`Item.sender`, one cleaned line).
 
 Layer 2 on Windows (`windows/src/Malachi.App/WebViews`, the rules in
 `Malachi.Core.Presentation`; [windows-port.md §6](windows-port.md#6-the-webview2-security-layer))

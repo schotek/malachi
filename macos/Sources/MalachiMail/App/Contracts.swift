@@ -125,6 +125,23 @@ protocol MessageActionDelegate: AnyObject {
     /// compose_open.go `openComposeFrom`: `window` receives "Forward
     /// Without Attachments?" when the download of the attachments fails.
     func forward(_ id: MessageID, from window: NSWindow?)
+    /// The chat's quick-reply bar (`QuickReplyHost`, the host's
+    /// `QuickReplyHostAdapter`): the attribution line the compose window
+    /// would hand draft.create for a reply (`kind`) to message `id`
+    /// (`ActionsController.replyAttribution`).
+    func quickReplyAttribution(_ kind: ComposeKind, _ id: MessageID) -> String
+    /// The bar's step before draft.create of a reply: the download a reply
+    /// from the compose window would make first (`ActionsController.
+    /// prepareReply`), then `done`.
+    func prepareQuickReply(_ id: MessageID, done: @escaping @MainActor () -> Void)
+    /// compose_open.go `openComposeWith`: the compose window with a reply,
+    /// reply all or forward (`kind`) of message `id` and `ownHTML` (safe
+    /// HTML, `Conversation.quickReplyHTML`) in its editor as the user's own
+    /// text; `opened` once a window really opened (never when none does).
+    /// `window` receives "Forward Without Attachments?".
+    func openCompose(
+        _ kind: ComposeKind, _ id: MessageID, ownHTML: String, from window: NSWindow?,
+        opened: @escaping @MainActor () -> Void)
     /// Moves to Trash, or cancels the send of an outbox message
     /// (`window` receives the confirmation sheet).
     func trash(_ id: MessageID, from window: NSWindow?)

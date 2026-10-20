@@ -256,6 +256,24 @@ private final class Harness {
         #expect(await h.fixture.threadGetRequests.allSatisfy { $0.withSent == true })
     }
 
+    /// The quick-reply bar's input: the target is the newest message of
+    /// someone else (not the user's newer reply in Sent), and the actions
+    /// and account are that card's.
+    @Test func quickReplyInputIsTheTargets() async throws {
+        let h = try await Harness(sent: [reply("r2", 6, thread: "t2")])
+        defer { Task { await h.stop() } }
+        #expect(h.conversation.quickReplyInput() == nil, "no model, no input")
+
+        try await h.select(ListKey(thread: "t2"))
+        let input = try #require(h.conversation.quickReplyInput())
+        #expect(sentShape(input.model) == ["b1", "sent:r2"])
+        #expect(Conversation.quickReplyTarget(input.model)?.message?.id == "b1")
+        let b1 = try #require(h.conversation.member("b1"))
+        #expect(input.actions == h.conversation.actions(for: b1))
+        #expect(input.actions.reply && input.actions.replyAll && input.actions.forward)
+        #expect(input.account?.id == account)
+    }
+
     /// A reply that lands in Sent asks for the conversation again: a single
     /// message the user answered becomes a conversation row, the selection
     /// moves to it, and the conversation shows the reply.

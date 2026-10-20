@@ -228,6 +228,21 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
         actions.openCompose(.forward, id, from: window)
     }
 
+    func quickReplyAttribution(_ kind: ComposeKind, _ id: MessageID) -> String {
+        actions.replyAttribution(kind, id)
+    }
+
+    func prepareQuickReply(_ id: MessageID, done: @escaping @MainActor () -> Void) {
+        actions.prepareReply(id, done: done)
+    }
+
+    func openCompose(
+        _ kind: ComposeKind, _ id: MessageID, ownHTML: String, from window: NSWindow?,
+        opened: @escaping @MainActor () -> Void
+    ) {
+        actions.openCompose(kind, id, from: window, ownHTML: ownHTML, opened: opened)
+    }
+
     func trash(_ id: MessageID, from window: NSWindow?) {
         actions.trash(id, parent: window)
     }

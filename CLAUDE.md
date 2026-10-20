@@ -1960,6 +1960,57 @@ Nesouvisející: backend `TestInvitationDetectionOfTheCorpus` padá od
 2026-10-20, protože fixtura `invite-two-calendar-parts.eml` končí
 2026-10-20T10:00Z a pravidlo `end ≤ now` ji bere jako prošlou.
 
+Řádek rychlé odpovědi v chatu (2026-10-20, větev `feat/chat-reply`,
+necommitnuté; plán `docs/plans/chat-view.md` §10–§11, rozhodnutí Q1–Q15
+vlastníka; macOS první, GTK a Windows následují — výjimka z pravidla 6).
+Pod chatovým rozložením Pošty (ne v časové ose, ne na Nástěnce) je pevný
+řádek: tlačítko režimu s nabídkou (Odpovědět / Odpovědět všem podle
+schopností účtu jako tlačítka karty, *Přeposlat…* otevře rovnou okno;
+u Jiry jen Komentovat), pole 1–5 řádků (Enter nový řádek, ⌘/Ctrl+Enter
+odešle, Escape vrátí klávesnici seznamu), tlačítko ✦ Asistent (Q15: totéž
+co ✦ v liště okna, jen když je Asistent zobrazený; macOS
+`MainWindowController.showAssistant(from:)`), *Otevřít v okně* a *Odeslat*.
+Cíl = nejnovější cizí zpráva, jinak nejnovější (`conversation.QuickReplyTarget`).
+Odeslání jde dnešní cestou démona bez změny API: `draft.create` (s
+`attribution` a stažením jako okno) → `draft.save` (tělo
+`QuickReplyBody` = vlastní text přes `QuickReplyHTML` jako `<p>`/`<br>` +
+citace přesně jako okno se zaškrtnutým Zahrnout, `attachments[].id`
+z create) → `message.send`; selhání odeslání smaže koncept (`draft.delete`)
+a text zůstane; výsledek vždy pro vlákno, v němž odeslání začalo (stav
+`text`/`mode`/`sending` na vlákno, jen v paměti). *Otevřít v okně* nic
+neukládá: nový `compose.Params.OwnHTML` (Swift `ownHTML`, C# `OwnHtml`)
+předvyplní vlastní text do editoru odpovědi/přeposlání/komentáře
+(`composebody.Layout.WithOwn`) a po načtení editoru označí koncept jako
+změněný (`pane.editorLoaded`, Swift `editorLoaded(ownText:)`), aby se okno
+při zavření ptalo; řádek se vyprázdní, až když se okno skutečně otevře
+(`openComposeWith(…, ownHTML, opened)`, `openComposeFrom` je obal). Reference
+Go: `ui/internal/conversation/reply.go` (6 nových msgid: „Write a reply…“,
+„Write a comment…“, „Reply to: %s“, „Reply all to: %s“, „Open in a Window“,
+„Forward…“), `composebody.DraftBody`/`EscapeText`/`WithOwn`, čistý
+kontroler `ui/internal/quickreply` (`Host`, `Controller`, `SaveDraft`;
+testy i s `-race`), GTK glue `window/quick_reply.go` (hostitel nad `*Window`,
+toasty přes `compose.QueuedText`/`SendFailedText`). macOS: Core
+`Model/ConversationReply.swift`, `Controllers/QuickReplyController.swift`
+(`QuickReplyHost`), `ComposeBodyLayout.withOwn`/`draftBody`,
+`ActionsController.replyAttribution`/`prepareReply`/`openCompose(…ownHTML:
+opened:)`, `ConversationController.quickReplyInput()`,
+`ConversationLayout.quickReplyIconOnly`; AppKit
+`MessageView/ConversationQuickReplyBar.swift` (nad `AssistantInputView`
+s `returnSends = false`, `sendMessage:` + `validateUserInterfaceItem`, takže
+Message ▸ Send platí jen s klávesnicí v poli), `QuickReplyHostAdapter.swift`,
+hostitel konverzace (chat.bottom == bar.top, skrytý řádek výška 0),
+`MessageActionDelegate` +3 metody, `BoardReplyEditorHost` bez vlastního
+`onReady` (dělal by dvojí flush). Ověřeno: Go testy `conversation`,
+`composebody`, `quickreply` na Macu a `compose`, `window` v kontejneru
+(překlad `ui/` zelený); celé `swift test` (1886), `check-strings`, izolovaný
+start a krok `MALACHI_START` `quick-reply` (bar nad vymyšlenou konverzací:
+šířky, menu, ikona v úzkém panelu, výška 0 skrytého). Čeká: brána R-B1
+vlastníka nad kopií dat (odpověď, všem, komentář, Otevřít v okně s otázkou
+při zavření, Přeposlat…, klávesy, démon zastavený, přepnutí během
+odesílání), pak GTK G1 (`quick_reply_bar.go`, `conversation_view.blp`)
+a Windows W1–W2 podle §11.2; `windows/parity-exclusions.txt` nese 6 řádků
+„quick reply: Windows port pending“ do W1.
+
 Archivace v Poště = Hotovo (2026-10-13, `feat/board`, necommitnuté; jen
 démon, klienti beze změny — všechny tři to dostanou přes
 `notify.boardChanged`). Vlastník archivoval vyřízenou poštu v Poště a
@@ -2596,6 +2647,9 @@ komprese a příloh na vyžádání, Microsoft účty).
   zpráva, `reply-pane` (se vzorovými daty) nechá skutečný
   `BoardReplyEditorHost` ukázat prázdný, nikdy neukládaný pane ve slotu
   Seznamu, píše do něj a vypíše výšky, polohu v detailu a kam míří Odeslat;
+  `quick-reply` ukáže řádek rychlé odpovědi sám v okně nad vymyšlenou
+  konverzací s hostitelem, který nic neodesílá, a vypíše šířky, nabídku a
+  výšku skrytého řádku;
   `board-html` (jen se vzorovými daty) dá nejnovější kartě vymyšlený
   HTML dokument cestou odpovědi `message.body` a vypíše výšky, živé web
   view, kolik jich vyrobila opakovaná obnova, kam jde kolečko a posun

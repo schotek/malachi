@@ -162,6 +162,10 @@ func TestCloseAsksOnlyWithSomethingToLose(t *testing.T) {
 		{"board dirty mail", draftState{dirty: true}, OwnerBoard, false, "", true},
 		{"board dirty comment", draftState{dirty: true}, OwnerBoard, true, text, true},
 		{"board saving", draftState{saving: true}, OwnerBoard, false, "", true},
+		// Own text from the quick-reply bar before the editor is ready: not
+		// yet dirty, and the editor reports nothing, but closing asks.
+		{"mail own text pending", draftState{ownTextPending: true}, OwnerWindow, false, "", false},
+		{"comment own text pending", draftState{ownTextPending: true}, OwnerWindow, true, "", false},
 	}
 	for _, c := range cases {
 		if got := closesUnasked(&c.d, c.owner, c.comment, c.text); got != c.want {

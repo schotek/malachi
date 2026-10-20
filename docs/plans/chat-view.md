@@ -521,10 +521,18 @@ a možnost otevřít velké okno (přeposlání, přílohy). Wireframe
 | Q12 | **Texty**: šest nových msgid: „Write a reply…“ a „Write a comment…“ (zástupné texty), „Reply to: %s“ a „Reply all to: %s“ (tooltipy tlačítka režimu, jméno v 1. pádu), „Open in a Window“ (tooltip), „Forward…“ (položka nabídky, otevírá okno); *Reply*, *Reply All*, *Comment*, *_Send* (bez mnemoniky mimo GTK), „Send (Ctrl+Enter)“, „Message queued for sending“ a `jira.CommentQueued` existují. | Nic z pošty se neskloňuje ani neskládá do vět. |
 | Q13 | **Přístupnost**: pole pojmenované zástupným textem, tlačítka tooltipem; řetězce z pošty (jméno cíle) jen jako prostý text. | Pravidlo 3. |
 | Q14 | **Mimo rozsah**: přílohy a formátování v řádku, dočasná bublina (Q7), rychlá odpověď v časové ose a na Nástěnce, našeptávač příjemců. | Malý první krok. |
+| Q15 | **Tlačítko ✦ Asistent** v řádku, totéž co ✦ v liště okna (otevře panel asistenta, nebo nabídku), jen když je Asistent zobrazený; rozhodnutí vlastníka 2026-10-20. Stojí vpravo od pole, vlevo od *Otevřít v okně* (pole zůstane široké). | Asistent je u odpovědi po ruce; jedno pravidlo s lištou (`assistant.ButtonOpensPanel`, `assistant.Shown`). |
 
 Odpovědi vlastníka (2026-10-20, wireframe schválen): Q5 citovaný originál
 ano, jako v okně; Q7 dočasná bublina až později; Q2 *Přeposlat…* v nabídce
 zůstává.
+
+Ověření Q5 v úložišti (2026-10-20, macOS nad ostrými daty vlastníka):
+rychlá odpověď uložená do Odeslaných nese citovaný originál v HTML
+(`<p>vlastní</p>` + `<p><br></p><div>atribuce</div><blockquote>…`) i v textové
+části (řádky `>`), stejně jako odpovědi z okna. Čtečka ji ve složce Odeslané
+schovává pod „•••“ (`trimQuoted`) jako u každé odpovědi; to není chyba
+rychlé odpovědi.
 
 ## 11. Plán implementace řádku rychlé odpovědi (2026-10-20, po revizi proti kódu)
 
@@ -624,7 +632,13 @@ a text je pryč) a řádek se vyprázdní až po skutečném otevření okna.
   asistenta: GTK `assistant_panel.blp` `propagate-natural-height` +
   přístupný popisek z Go, macOS znovu použije `AssistantInputView` s novým
   přepínačem `returnSends = false`, Windows `TextBox MaxHeight=112
-  AcceptsReturn TextWrapping=Wrap`), *Otevřít v okně* (ikona, tooltip),
+  AcceptsReturn TextWrapping=Wrap`), tlačítko ✦ Asistent (Q15: ikona,
+  tooltip a přístupný popisek tlačítka ✦ lišty, viditelné podle
+  `assistant.Shown` se stejným odběrem jako lišta; klik = akce ✦ lišty
+  hlavního okna, `assistant.ButtonOpensPanel`: panel s fokusem pole, jinak
+  nabídka Asistent lišty pod tlačítkem; macOS `showAssistant(from:)`
+  `MainWindowController` přes `onAssistant` hostitele, GTK a Windows
+  stejně přes akci okna), *Otevřít v okně* (ikona, tooltip),
   *Odeslat* (ikona letadla, zvýrazněné, vypnuté při `QuickReplyBlank` nebo
   `sending`; přístupný popisek `_Send` bez podtržítka, tooltip „Send
   (Ctrl+Enter)“, macOS „(⌘↩)“). Klávesy: Enter nový řádek; ⌘/Ctrl+Enter

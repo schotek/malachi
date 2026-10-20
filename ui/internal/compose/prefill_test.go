@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/composebody"
 )
 
 func TestSubjectPrefixes(t *testing.T) {
@@ -164,5 +165,35 @@ func TestFromDraftKeepsDraftIdentity(t *testing.T) {
 	}
 	if p := FromDraft(KindReply, api.Draft{AccountID: "a"}, api.BlockedContent{}); p.DraftID != "" || p.Version != 0 || p.Replaces != "" {
 		t.Errorf("template params = %+v", p)
+	}
+}
+
+// The user's own text (OwnHTML, from the chat's quick-reply bar) starts the
+// window's editor in place of the empty body, above the original apart,
+// for a reply, a forward and a comment; it does not reach the inline
+// layout, and a window without it is unchanged. FromDraft never sets it.
+func TestBodyLayoutStartsWithTheOwnText(t *testing.T) {
+	original := `<p><br></p><blockquote type="cite">hi</blockquote>`
+	own := "<p>Thanks</p>"
+	for _, kind := range []Kind{KindReply, KindReplyAll, KindForward} {
+		p := FromDraft(kind, api.Draft{HTMLBody: original}, api.BlockedContent{})
+		if p.OwnHTML != "" {
+			t.Fatalf("%v: FromDraft set OwnHTML %q", kind, p.OwnHTML)
+		}
+		if l := bodyLayout(p, LayoutWindow); l.EditorHTML != composebody.EmptyBody || l.QuotedHTML != original {
+			t.Errorf("%v without own text: %+v", kind, l)
+		}
+		p.OwnHTML = own
+		if l := bodyLayout(p, LayoutWindow); l.EditorHTML != own || l.QuotedHTML != original {
+			t.Errorf("%v: %+v", kind, l)
+		}
+		if l := bodyLayout(p, LayoutInline); l.EditorHTML != original || l.HasQuote() {
+			t.Errorf("%v inline: %+v", kind, l)
+		}
+	}
+	comment := FromDraft(KindReply, api.Draft{Comment: &api.DraftComment{Visibility: api.CommentPublic}}, api.BlockedContent{})
+	comment.OwnHTML = own
+	if l := bodyLayout(comment, LayoutWindow); l.EditorHTML != own || l.HasQuote() {
+		t.Errorf("comment: %+v", l)
 	}
 }

@@ -150,6 +150,15 @@ extension ConversationLayout {
         chatBubbleMax(column: column) - 2 * Metrics.cardPaddingH < Metrics.compactHeader
     }
 
+    /// Whether the quick-reply bar under the chat in a pane `pane` wide
+    /// shows its mode button as the icon alone (docs/plans/chat-view.md
+    /// Q11): when the bubbles show the short date (`chatCompactDates` of
+    /// the pane's `chatColumn`), the field keeps the room the label would
+    /// take.
+    public static func quickReplyIconOnly(pane: Double) -> Bool {
+        chatCompactDates(column: chatColumn(pane: pane))
+    }
+
     /// What a change of the chat's viewport size asks for
     /// (`chatResize`).
     public struct ChatResize: Sendable, Equatable {

@@ -2549,6 +2549,38 @@ msgstr ""
 msgid "Show Quoted Text"
 msgstr ""
 
+#. TRANSLATORS: the placeholder of the quick-reply field under an issue's conversation shown as chat; what is typed becomes a comment.
+#: ui/internal/conversation/reply.go:176
+msgid "Write a comment…"
+msgstr ""
+
+#. TRANSLATORS: the placeholder of the quick-reply field under a conversation shown as chat.
+#: ui/internal/conversation/reply.go:179
+msgid "Write a reply…"
+msgstr ""
+
+#. TRANSLATORS: the tooltip of the quick reply's mode button; %s is the sender of the message the reply goes to, as it shows in the conversation (no inflection).
+#: ui/internal/conversation/reply.go:193
+#, c-format
+msgid "Reply to: %s"
+msgstr ""
+
+#. TRANSLATORS: the tooltip of the quick reply's mode button set to reply to all; %s is the sender of the message the reply goes to, as it shows in the conversation (no inflection).
+#: ui/internal/conversation/reply.go:196
+#, c-format
+msgid "Reply all to: %s"
+msgstr ""
+
+#. TRANSLATORS: the tooltip of the quick-reply bar's button that moves the typed reply into the compose window.
+#: ui/internal/conversation/reply.go:205
+msgid "Open in a Window"
+msgstr ""
+
+#. TRANSLATORS: an item of the quick-reply bar's mode menu; opens the compose window with the message forwarded.
+#: ui/internal/conversation/reply.go:213
+msgid "Forward…"
+msgstr ""
+
 #: ui/internal/board/text.go:57 ui/data/ui/preferences.ui:213
 msgid "Mail"
 msgstr ""

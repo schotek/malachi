@@ -317,9 +317,9 @@ func NewPane(m *Manager, p Params, opts PaneOptions) *Pane {
 		if p.Kind != KindNew && p.Kind != KindEdit {
 			pn.editor.FocusStart()
 		}
-		if opts.Owner == OwnerBoard {
-			pn.dc.editorReady()
-		}
+		// The user's own text is marked once, not after a crash's reload.
+		pn.editorLoaded(opts.Owner, opts.Layout == LayoutWindow && p.OwnHTML != "")
+		p.OwnHTML = ""
 	}
 	pn.editor.OnCrashed = func() {
 		if pn.dc.draft.closed {
@@ -345,7 +345,7 @@ func NewPane(m *Manager, p Params, opts PaneOptions) *Pane {
 	// id and version make the saves updates, and closing never deletes it.
 	pn.dc.setOpened(p.DraftID, p.Version, p.Replaces, p.Kind == KindEdit)
 	pn.body = bodyLayout(p, opts.Layout)
-	pn.editor.Load(pn.body.EditorHTML)
+	pn.loadEditor(opts.Layout == LayoutWindow && p.OwnHTML != "")
 	pn.setAccounts(m.Accounts(), m.Placeholder())
 	// What the backend imported for the template (a quoted original's
 	// pictures, a forwarded message's files): listed and shown now, bound
@@ -1161,4 +1161,35 @@ func (glibLoop) After(d time.Duration, f func()) {
 		f()
 		return false
 	})
+}
+
+// editorLoaded: the editor reported ready for what it loaded. The board's
+// pane learns how the editor writes its draft (draftController.editorReady).
+// own says the window started with Params.OwnHTML, text the user wrote
+// before the window opened (the chat's quick-reply bar): the user's edit,
+// not a prefill, so the draft is marked dirty as after typing, and the
+// autosave and the question on close apply (closing unasked would lose
+// the text, which the bar let go once the window opened). One flush first,
+// so that the editor's own text is known (a comment whose editor never
+// reported any counts as empty and would close unasked) and the flush's
+// echo is not taken for another edit.
+func (p *Pane) editorLoaded(owner Owner, own bool) {
+	if owner == OwnerBoard {
+		p.dc.editorReady()
+	}
+	if own {
+		p.flushEditor(func() {
+			p.dc.markDirty()
+			p.dc.draft.ownTextPending = false
+		})
+	}
+}
+
+// loadEditor loads the editor with the body's editor HTML. own says it
+// holds Params.OwnHTML (editorLoaded): until the editor reports ready and
+// the draft is marked dirty, a close asks (draftState.ownTextPending), so
+// a window closed that soon does not lose the text the bar let go.
+func (p *Pane) loadEditor(own bool) {
+	p.dc.draft.ownTextPending = own
+	p.editor.Load(p.body.EditorHTML)
 }

@@ -168,6 +168,10 @@ extension MainWindowController {
             DevelopmentBoardChat.run(in: self)
             return
         }
+        if step == "quick-reply" {
+            DevelopmentQuickReply.run()
+            return
+        }
         if DevelopmentCalendar.step(step, in: self) {
             return
         }
@@ -1417,4 +1421,136 @@ extension DevelopmentCalendar {
 @MainActor
 private final class FlippedStack: NSStackView {
     override var isFlipped: Bool { true }
+}
+
+/// DEVELOPMENT AID for `quick-reply`: the chat's quick-reply bar alone in a
+/// window of its own, over a made-up conversation and a host that sends
+/// nothing, measured wide, narrow (the mode button's icon alone), with
+/// three lines typed, on an issue (the Comment label, without the Assistant
+/// button) and hidden (no height); and whether Message ▸ Send validates with the keyboard in its
+/// field. Nothing reaches a daemon.
+@MainActor
+private enum DevelopmentQuickReply {
+    private final class Host: QuickReplyHost {
+        func call<M: RPCMethod>(_ method: M.Type, _ params: M.Params, timeout: Duration) async throws -> M.Result {
+            throw CancellationError()
+        }
+
+        func post(_ f: @escaping @MainActor () -> Void) { Task { @MainActor in f() } }
+        func attribution(mode: Conversation.QuickReplyMode, id: MessageID) -> String { "" }
+        func beforeCreate(id: MessageID, done: @escaping @MainActor () -> Void) { done() }
+        func openCompose(
+            mode: Conversation.QuickReplyMode, id: MessageID, ownHTML: String, opened: @escaping @MainActor () -> Void
+        ) {}
+        func sent(comment: Bool) {}
+        func failed(_ error: any Error) {}
+    }
+
+    private static var kept: (Host, NSWindow, ConversationQuickReplyBar)?
+
+    static func run() {
+        let host = Host()
+        let controller = QuickReplyController(host: host)
+        let bar = ConversationQuickReplyBar(controller: controller)
+        bar.assistantShown = true
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 200), styleMask: [.titled, .resizable],
+            backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let content = NSView()
+        window.contentView = content
+        content.addSubview(bar.view)
+        NSLayoutConstraint.activate([
+            bar.view.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            bar.view.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            bar.view.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+        ])
+        kept = (host, window, bar)
+        window.orderFront(nil)
+
+        var m = Conversation.Model(thread: "dev")
+        var it = Conversation.Item(kind: .message, message: MessageSummary(
+            id: "dev1", accountId: "dev", folderId: "f", threadId: "dev", from: [], to: [], subject: "",
+            date: .goZero, snippet: "", flags: [], hasAttachments: false, size: 0))
+        it.sender = "Jana Nováková"
+        m.items = [it]
+        controller.setChatShown(true)
+        let mailAccount = Account(
+            id: "dev", config: AccountConfig(name: "Work", email: "dev@example.invalid"), enabled: true,
+            state: SyncState(accountId: "dev", status: .idle), capabilities: API.mailCapabilities)
+        let jiraAccount = Account(
+            id: "dev", config: AccountConfig(name: "Jira", email: "dev@example.invalid", kind: .jira), enabled: true,
+            state: SyncState(accountId: "dev", status: .idle), capabilities: [.comment, .forward, .transition])
+        let summary = it.message!
+        controller.update(
+            m, actions: Conversation.cardActions(mailAccount, summary, composeAccount: true), account: mailAccount)
+        measure("wide", window, bar)
+
+        window.setContentSize(NSSize(width: 500, height: 200))
+        measure("narrow", window, bar)
+
+        controller.setText("one\ntwo\nthree")
+        window.makeFirstResponder(firstTextView(in: bar.view))
+        let item = NSMenuItem(title: "", action: Action.sendMessage, keyEquivalent: "")
+        // The responder chain from the field, as the menu bar's Send walks
+        // it in the key window.
+        var target: NSResponder? = window.firstResponder
+        while let r = target, !r.responds(to: Action.sendMessage) {
+            target = r.nextResponder
+        }
+        let validates = (target as? NSUserInterfaceValidations)?.validateUserInterfaceItem(item) ?? false
+        developmentPrint("LAYOUT: quick-reply Send target \(target.map { String(describing: type(of: $0)) } ?? "none") validates \(validates)")
+        measure("three lines", window, bar)
+
+        controller.update(
+            m, actions: Conversation.cardActions(jiraAccount, summary, composeAccount: true), account: jiraAccount)
+        window.setContentSize(NSSize(width: 900, height: 200))
+        bar.assistantShown = false
+        measure("comment", window, bar)
+
+        controller.setChatShown(false)
+        measure("hidden", window, bar)
+        window.close()
+        kept = nil
+    }
+
+    private static func firstTextView(in v: NSView) -> NSTextView? {
+        if let tv = v as? NSTextView { return tv }
+        for sub in v.subviews {
+            if let tv = firstTextView(in: sub) { return tv }
+        }
+        return nil
+    }
+
+    private static func measure(_ what: String, _ window: NSWindow, _ bar: ConversationQuickReplyBar) {
+        window.contentView?.layoutSubtreeIfNeeded()
+        // The mode button's icon-alone flip lands on the next turn of the
+        // run loop (`viewDidLayout`).
+        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        window.contentView?.layoutSubtreeIfNeeded()
+        var line = "LAYOUT: quick-reply \(what): bar \(NSStringFromRect(bar.view.frame)) hidden \(bar.view.isHidden)"
+        func walk(_ v: NSView, _ depth: Int) {
+            for sub in v.subviews where !sub.isHidden {
+                if sub is NSButton || sub is NSPopUpButton || sub is AssistantInputView || sub is NSTextField {
+                    let r = sub.convert(sub.bounds, to: bar.view)
+                    var name = String(describing: type(of: sub))
+                    if let b = sub as? NSPopUpButton {
+                        name += " '" + b.itemTitle(at: 0) + "' tip '" + (b.toolTip ?? "") + "' items \(b.itemTitles.dropFirst())"
+                    } else if let b = sub as? NSButton {
+                        name += " '" + (b.toolTip ?? "") + "' enabled \(b.isEnabled)"
+                    } else if let f = sub as? NSTextField {
+                        name += " '" + f.stringValue + "'"
+                    }
+                    line += "\n    " + name + " " + NSStringFromRect(r)
+                    if sub is AssistantInputView || sub is NSPopUpButton { continue }
+                }
+                walk(sub, depth + 1)
+            }
+        }
+        walk(bar.view, 0)
+        if window.contentView?.hasAmbiguousLayout == true {
+            line += "\n    AMBIGUOUS"
+        }
+        developmentPrint(line)
+    }
 }
