@@ -36,6 +36,23 @@ func TestChatDocument(t *testing.T) {
 			t.Errorf("%s: the column keeps a padding", name)
 		}
 	}
+	if strings.Contains(card, "font-family: "+chatSystemFonts) {
+		t.Error("the card's document forces the bubbles' font")
+	}
+	if !strings.Contains(light, "* { font-family: "+chatSystemFonts+" !important; line-height: normal !important; }") {
+		t.Error("light: the system font is not forced")
+	}
+	font := ChatDocument("<p>x</p>", ChatStyle{Font: "Adwaita Sans", FontPx: 14.6667})
+	if !strings.Contains(font, `* { font-family: "Adwaita Sans", `+chatSystemFonts+` !important; line-height: normal !important; font-size: 14.67px !important; }`) {
+		t.Errorf("the bubbles' font is not forced:\n%s", font)
+	}
+	// A family that could break out of the sheet, and a silly size, fall
+	// back to the system stack and the documents' sizes.
+	bad := ChatDocument("<p>x</p>", ChatStyle{Font: `x"; } body { color: red`, FontPx: 500})
+	if strings.Contains(bad, "color: red") || strings.Contains(bad, "500") ||
+		!strings.Contains(bad, "* { font-family: "+chatSystemFonts+" !important; line-height: normal !important; }") {
+		t.Errorf("a hostile font is in the sheet:\n%s", bad)
+	}
 	if strings.Contains(light, "* { color:") {
 		t.Error("light: the message's colours are forced")
 	}

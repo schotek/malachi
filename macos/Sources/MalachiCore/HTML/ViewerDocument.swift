@@ -56,17 +56,30 @@ func viewerCSS(columnPadding: String) -> String {
     """
 }
 
-/// The colours a chat bubble's document takes in the dark appearance
-/// (`viewerChatCSS`): the bubble's own text and link colours as CSS values
-/// (the text bubbles' `labelColor` and `linkColor`, resolved by the view).
+/// What a chat bubble's document takes of the text bubbles
+/// (`viewerChatCSS`): their text and link colours in the dark appearance as
+/// CSS values (`labelColor` and `linkColor`, resolved by the view), and
+/// their body font size in points at 100 % text zoom (the view's page zoom
+/// scales it with the setting, as `Typo.body(zoom:)` scales the text
+/// bubbles').
 public struct ViewerChatColours: Sendable, Equatable {
     public var text: String
     public var link: String
+    public var fontSize: Double
 
-    public init(text: String, link: String) {
+    public init(text: String, link: String, fontSize: Double = 13) {
         self.text = text
         self.link = link
+        self.fontSize = fontSize
     }
+}
+
+/// The font rule of a chat bubble's document: every element in the system
+/// font at the text bubbles' size, whatever the message set (the owner's
+/// decision, 2026-10-20); weights, italics, underlines stay the message's.
+func viewerChatFontCSS(size: Double) -> String {
+    let px = size == size.rounded() ? String(Int(size)) : String(format: "%.1f", size)
+    return "html, body, * { font-family: -apple-system, system-ui, sans-serif !important; font-size: \(px)px !important; line-height: 1.3 !important; }"
 }
 
 /// The background rule of a chat bubble's document: every background of
@@ -102,6 +115,7 @@ public let viewerChatFitCSS = """
 func viewerChatCSS(_ colours: ViewerChatColours) -> String {
     viewerCSS(columnPadding: "0")
         + viewerChatFitCSS + "\n"
+        + viewerChatFontCSS(size: colours.fontSize) + "\n"
         + viewerChatBackgroundCSS + "\n"
         + "@media (prefers-color-scheme: dark) { * { color: \(colours.text) !important; } a, a * { color: \(colours.link) !important; } }\n"
 }

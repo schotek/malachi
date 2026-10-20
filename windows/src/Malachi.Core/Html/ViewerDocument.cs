@@ -119,9 +119,33 @@ public static class ViewerDocument
     /// bubble; null (the light theme) keeps the mail's colours. The fragment
     /// is the sanitiser's output of one message and nothing else.
     /// </summary>
-    public static string ChatDocument(string body, ChatPalette? palette)
+    public static string ChatDocument(string body, ChatPalette? palette) => ChatDocument(body, palette, ChatFontSize);
+
+    /// <summary>
+    /// The text bubbles' body size at 100 % text zoom, in CSS pixels (Mail's
+    /// chat BaseBodyFontSize, 14 DIPs); the text zoom scales it as it scales
+    /// the text bubbles, through the document's CSS zoom (ViewerZoom).
+    /// </summary>
+    public const double ChatFontSize = 14;
+
+    /// <summary>The text bubbles' font (the system UI font of WinUI's TextBlock), for every element of a chat bubble's document.</summary>
+    public const string ChatFontFamily = "\"Segoe UI Variable Text\", \"Segoe UI\", system-ui, sans-serif";
+
+    /// <summary>
+    /// <see cref="ChatDocument(string, ChatPalette?)"/> with the text bubbles'
+    /// font at <paramref name="fontSize"/> CSS pixels (before the text zoom)
+    /// forced on every element: the message's own families and sizes give
+    /// way, its weights, styles and decorations stay.
+    /// </summary>
+    public static string ChatDocument(string body, ChatPalette? palette, double fontSize)
     {
-        var css = ChatCss;
+        if (!(fontSize > 0) || double.IsInfinity(fontSize) || fontSize > 200)
+        {
+            fontSize = ChatFontSize;
+        }
+        var size = fontSize.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        var css = ChatCss + "\n* { font-family: " + ChatFontFamily + " !important; font-size: " + size
+            + "px !important; line-height: 1.33 !important; }";
         if (palette is not null && IsColor(palette.Text) && IsColor(palette.Link))
         {
             css += "\n* { color: " + palette.Text + " !important; }\na, a * { color: " + palette.Link + " !important; }";

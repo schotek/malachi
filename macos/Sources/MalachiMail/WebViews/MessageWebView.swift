@@ -415,15 +415,16 @@ final class MessageWebView: NSView {
             viewerDocument(body: body, compact: sized, chat: chat ? Self.chatColours() : nil), baseURL: nil)
     }
 
-    /// The colours of a chat bubble's document in the dark appearance: the
-    /// text bubbles' `labelColor` and `linkColor` there, as CSS.
+    /// The colours of a chat bubble's document in the dark appearance (the
+    /// text bubbles' `labelColor` and `linkColor` there, as CSS) and the
+    /// text bubbles' body size at 100 % (the page zoom adds the setting).
     private static func chatColours() -> ViewerChatColours {
         var text = "", link = ""
         (NSAppearance(named: .darkAqua) ?? NSAppearance.currentDrawing()).performAsCurrentDrawingAppearance {
             text = css(NSColor.labelColor)
             link = css(NSColor.linkColor)
         }
-        return ViewerChatColours(text: text, link: link)
+        return ViewerChatColours(text: text, link: link, fontSize: Double(Typo.bodySize))
     }
 
     /// `color` as a CSS rgba() value, in sRGB.

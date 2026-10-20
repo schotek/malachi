@@ -3008,7 +3008,13 @@ change when the bubble takes its widest) resize the view as a card's do:
 `CardWebView` measures again on load, on every served picture and on a
 change of width or zoom, `SizeReported` unfreezes the governor on a
 relayout, and the frozen `MinHeight` applies only to the text of a bubble
-without a view, never to the live view. The chat (`ConversationChatView`, through `IChatWebHost`) owns a pool
+without a view, never to the live view. The chat's document also ignores the message's fonts: `* { font-family:
+"Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif !important;
+font-size: 14px !important; line-height: 1.33 !important; }` (the text
+bubbles' font and body size, `ViewerDocument.ChatFontSize`; weights, styles
+and decorations stay, headings take the body size), and the document's CSS
+zoom (`ViewerZoom`, set live by `CardWebView.Zoom`) scales it with the text
+zoom as the text bubbles scale. The chat (`ConversationChatView`, through `IChatWebHost`) owns a pool
 like the timeline's (`TakeWebView`, `ReturnWebView`, `IdleWebViews` 2,
 emptied on Close), and `UpdateNear` runs the timeline's rule over the chat's
 rows: `LiveCards(frames, html, visible, LiveScreens, MaxLiveWebViews)` with

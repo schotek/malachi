@@ -99,7 +99,7 @@ struct HTMLLinksTests {
     /// reader's documents keep their white page.
     @Test func chatDocument() {
         let body = "<p>a &amp; b</p>"
-        let colours = ViewerChatColours(text: "rgba(255, 255, 255, 0.85)", link: "rgb(65, 156, 255)")
+        let colours = ViewerChatColours(text: "rgba(255, 255, 255, 0.85)", link: "rgb(65, 156, 255)", fontSize: 14)
         let chat = viewerDocument(body: body, compact: true, chat: colours)
         let card = viewerDocument(body: body, compact: true)
         let reader = viewerDocument(body: body)
@@ -119,6 +119,13 @@ struct HTMLLinksTests {
             #expect(chat.contains(want), "chat document lacks \(want)")
             #expect(!card.contains(want) && !reader.contains(want))
         }
+        // The text bubbles' font: the system family at their size.
+        let font = "html, body, * { font-family: -apple-system, system-ui, sans-serif !important; font-size: 14px !important; line-height: 1.3 !important; }"
+        #expect(chat.contains(font))
+        #expect(!card.contains("-apple-system") && !reader.contains("-apple-system"))
+        #expect(viewerDocument(body: body, chat: ViewerChatColours(text: "a", link: "b", fontSize: 13.5))
+            .contains("font-size: 13.5px !important;"))
+        #expect(!chat.contains("font-weight") && !chat.contains("font-style"), "weights and italics stay the message's")
         #expect(chat.range(of: "display: flow-root")!.lowerBound > chat.range(of: "display: block !important")!.lowerBound,
                 "flow-root comes after the base sheet's display: block")
         for other in [card, reader] {

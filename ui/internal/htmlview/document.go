@@ -3,7 +3,11 @@
 
 package htmlview
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
 
 // CSP is the document's Content-Security-Policy: no network at all, images
 // only from the application's own scheme (message parts) and data: URIs
@@ -87,6 +91,47 @@ type ChatStyle struct {
 	// content (dark text would sit on the dark bubble).
 	Dark       bool
 	Text, Link Colour
+	// Font is the family of the text bubbles (the label's Pango font; ""
+	// the system UI stack), FontPx their body size in CSS pixels before the
+	// view's zoom (0: the document's own); every element gets both
+	// (chatFontCSS), the weights, styles and decorations stay the message's.
+	Font   string
+	FontPx float64
+}
+
+// chatSystemFonts is the system UI stack after the bubbles' family.
+const chatSystemFonts = `system-ui, -apple-system, "Segoe UI", Cantarell, "Noto Sans", sans-serif`
+
+// chatFontFamily is a family name as a CSS string, or "" when it holds
+// anything but letters, digits, spaces, '-', '_' and '.' (no quote, no
+// backslash, nothing a sheet could read as syntax).
+func chatFontFamily(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || len(name) > 100 {
+		return ""
+	}
+	for _, r := range name {
+		ok := r == ' ' || r == '-' || r == '_' || r == '.' || (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+		if !ok {
+			return ""
+		}
+	}
+	return `"` + name + `"`
+}
+
+// chatFontCSS forces the text bubbles' family and size on every element,
+// with the line height of a label (normal); a size outside 6–96 px keeps
+// the documents' sizes.
+func chatFontCSS(s ChatStyle) string {
+	family := chatSystemFonts
+	if f := chatFontFamily(s.Font); f != "" {
+		family = f + ", " + family
+	}
+	css := "* { font-family: " + family + " !important; line-height: normal !important;"
+	if s.FontPx >= 6 && s.FontPx <= 96 {
+		css += " font-size: " + strconv.FormatFloat(s.FontPx, 'f', 2, 64) + "px !important;"
+	}
+	return css + " }"
 }
 
 // chatNeutralCSS takes every background of the content away, so that the
@@ -107,7 +152,7 @@ const chatFitCSS = `html, body { overflow: hidden !important; margin: 0 !importa
 // background neutralised and, in the dark style, the text and the links in
 // the theme's colours.
 func chatCSS(s ChatStyle) string {
-	css := columnCSS("0") + "\n" + chatNeutralCSS + "\n" + chatFitCSS
+	css := columnCSS("0") + "\n" + chatNeutralCSS + "\n" + chatFitCSS + "\n" + chatFontCSS(s)
 	if s.Dark {
 		css += "\n* { color: " + s.Text.css() + " !important; }\na, a * { color: " + s.Link.css() + " !important; }"
 	}

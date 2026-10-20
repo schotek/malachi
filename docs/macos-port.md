@@ -740,7 +740,10 @@ and the column's padding, and in the dark appearance sets the text and links
 to the bubble's `labelColor` and `linkColor`; the cards keep their white
 paper; the column is a `flow-root` whose first and last children have no
 outer margin and the page never scrolls (`viewerChatFitCSS`), so no margin
-collapses out of the column the size script measures; width
+collapses out of the column the size script measures; every element takes the
+text bubbles' font, `-apple-system` at `Typo.bodySize` (`viewerChatFontCSS`,
+the page zoom adding the text zoom), keeping the message's weights and
+italics; width
 `chatBubbleMax`). No bars and no fold. Web views follow the timeline's
 rule: `ConversationLayout.live(frames:html:visible:)` over the chat rows, at
 most `maxLiveWebViews` (8), the nearest first; a bubble outside them

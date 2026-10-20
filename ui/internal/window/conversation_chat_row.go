@@ -481,12 +481,36 @@ func (b *chatBubble) loadWeb() {
 func (b *chatBubble) chatStyle() htmlview.ChatStyle {
 	sm := adw.StyleManagerGetDefault()
 	s := htmlview.ChatStyle{Dark: sm.Dark()}
+	s.Font, s.FontPx = b.textFont()
 	if !s.Dark {
 		return s
 	}
 	s.Text = htmlColour(b.text.Color())
 	s.Link = htmlColour(adw.AccentColorToStandaloneRGBA(sm.AccentColor(), true))
 	return s
+}
+
+// textFont is the family of the bubble's text label and its size in CSS
+// pixels before the text zoom, which the view applies itself (SetZoom):
+// the document's text then matches the text bubbles' at every zoom.
+func (b *chatBubble) textFont() (string, float64) {
+	ctx := b.text.PangoContext()
+	if ctx == nil {
+		return "", 0
+	}
+	fd := ctx.FontDescription()
+	if fd == nil {
+		return "", 0
+	}
+	px := float64(fd.Size()) / pango.SCALE
+	if !fd.SizeIsAbsolute() {
+		px = px * 96 / 72
+	}
+	zoom := 100
+	if b.chat != nil {
+		zoom = zoomPercent(b.chat.chatZoom())
+	}
+	return fd.Family(), px * 100 / float64(zoom)
 }
 
 // htmlColour is c without its alpha (nil: white).

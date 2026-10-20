@@ -74,4 +74,19 @@ public sealed class ViewerDocumentChatTests
         var doc = ViewerDocument.ChatDocument(Body, new ChatPalette(text, link));
         Assert.Equal(ViewerDocument.ChatDocument(Body, palette: null), doc);
     }
+
+    // The text bubbles' font on every element of the chat's document, its
+    // size before the text zoom (the CSS zoom scales it); the card keeps
+    // the message's fonts.
+    [Fact]
+    public void TheChatVariantForcesTheBubblesFont()
+    {
+        const string font = "* { font-family: \"Segoe UI Variable Text\", \"Segoe UI\", system-ui, sans-serif !important; font-size: 14px !important; line-height: 1.33 !important; }";
+        Assert.Contains(font, ViewerDocument.ChatDocument(Body, palette: null), StringComparison.Ordinal);
+        Assert.Contains("font-size: 15.5px !important;", ViewerDocument.ChatDocument(Body, null, 15.5), StringComparison.Ordinal);
+        Assert.Contains("font-size: 14px !important;", ViewerDocument.ChatDocument(Body, null, double.NaN), StringComparison.Ordinal);
+        Assert.DoesNotContain("font-weight", ViewerDocument.ChatDocument(Body, palette: null), StringComparison.Ordinal);
+        Assert.DoesNotContain("font-size: 14px !important", ViewerDocument.CompactDocument(Body), StringComparison.Ordinal);
+        Assert.DoesNotContain("Segoe UI", ViewerDocument.CompactDocument(Body), StringComparison.Ordinal);
+    }
 }
