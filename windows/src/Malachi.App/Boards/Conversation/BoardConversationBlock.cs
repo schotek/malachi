@@ -152,6 +152,14 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
     private bool chatNearPending;
     private SettingsChangeToken? chatHtmlToken;
 
+    // Shorten My/Others' Messages in Chat: the bubbles the user expanded in the case
+    // shown (forgotten with another case, kept across a switch of the
+    // layout).
+    private readonly ConversationExpanded expanded = new();
+    private BoardCaseId? expandedCase;
+    private SettingsChangeToken? chatTruncateMineToken;
+    private SettingsChangeToken? chatTruncateOthersToken;
+
     // The chat's bubbles, in order, and what each shows; the rows of members
     // with an id by id (kept across refreshes).
     private readonly List<ConversationChatRow> chatRows = [];
@@ -250,6 +258,8 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
             layoutToken = settings.OnChange(SettingsKey.ConversationChatLayout, ShowLayout);
             avatarsToken = settings.OnChange(SettingsKey.MonochromeAvatars, ApplyAvatars);
             chatHtmlToken = settings.OnChange(SettingsKey.ConversationChatHtml, ApplyChatHtml);
+            chatTruncateMineToken = settings.OnChange(SettingsKey.ConversationChatTruncateMine, ApplyShortened);
+            chatTruncateOthersToken = settings.OnChange(SettingsKey.ConversationChatTruncateOthers, ApplyShortened);
             ShowLayout();
         }
         else
@@ -473,6 +483,10 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         zoomToken = null;
         chatHtmlToken?.Cancel();
         chatHtmlToken = null;
+        chatTruncateMineToken?.Cancel();
+        chatTruncateMineToken = null;
+        chatTruncateOthersToken?.Cancel();
+        chatTruncateOthersToken = null;
         Follow(null);
         chatBodies.Reset();
         chatSources.Clear();
@@ -942,6 +956,12 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
             return had;
         }
         chatMessages = messages;
+        if (state.CaseId != expandedCase)
+        {
+            // Another case: what the user expanded goes, as the folds do.
+            expanded.Reset();
+            expandedCase = state.CaseId;
+        }
         return RenderChat();
     }
 
@@ -997,6 +1017,7 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
                 // A kept row's place may have moved (an older member arrived).
                 AutomationProperties.SetAutomationId(row.Bubble, ChatBubbleId(bubble.Index));
             }
+            row.Bubble.SetShortened(ShortenedOf(m));
             row.SetColumnWidth(width);
             next.Add(row);
             if (key is { } added)
@@ -1059,6 +1080,7 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         }
         var row = new ConversationChatRow(m.Id, null, right, bubble);
         bubble.Activate = () => OpenMember(row);
+        bubble.Expand = () => ExpandRow(row);
         return row;
     }
 
@@ -1371,6 +1393,51 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
             }
             row.SetColumnWidth(width);
         }
+    }
+
+    // Whether member m's bubble shows the shortened preview: the preference
+    // of its side (the user's own, MessageCard.Mine, or the others') on and
+    // the bubble not expanded (a sample's is expanded only in its row).
+    private bool ShortenedOf(CoreBoard.MessageCard m) =>
+        Core.Model.Conversation.BubbleShortened(
+            services?.State.Settings.ConversationChatTruncateMine == true,
+            services?.State.Settings.ConversationChatTruncateOthers == true,
+            m.Mine,
+            expanded.Is(m.Id));
+
+    // A tap on a shortened bubble: recorded for the case (a member with an
+    // id), and the bubble shows the whole message.
+    private void ExpandRow(ConversationChatRow row)
+    {
+        if (closed || !chatShows.TryGetValue(row, out var m))
+        {
+            return;
+        }
+        if (m.Id is { } id)
+        {
+            expanded.Expand(id);
+        }
+        ChangingHeight(row.Bubble, () => row.Bubble.SetShortened(false));
+        ScheduleChatNear();
+    }
+
+    // The preference conversation-chat-truncate changed: every bubble
+    // shortened or whole anew.
+    private void ApplyShortened()
+    {
+        if (closed)
+        {
+            return;
+        }
+        foreach (var row in chatRows)
+        {
+            if (chatShows.TryGetValue(row, out var m))
+            {
+                var on = ShortenedOf(m);
+                ChangingHeight(row.Bubble, () => row.Bubble.SetShortened(on));
+            }
+        }
+        ScheduleChatNear();
     }
 
     // The avatars' setting: every row's avatar anew.

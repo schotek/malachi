@@ -409,16 +409,6 @@ Adw.PreferencesDialog preferences_dialog {
         };
       }
 
-      Adw.SwitchRow group_by_conversation {
-        title: _("Group by Conversation");
-        subtitle: _("One row per conversation; expand it to see its messages");
-      }
-
-      Adw.SwitchRow conversation_chat_html {
-        title: _("Render HTML in Chat");
-        subtitle: _("Messages in the chat layout as they were sent, in a locked web view, instead of their plain text");
-      }
-
       Adw.SwitchRow show_preview_line {
         title: _("Show Preview Line");
         active: true;
@@ -432,6 +422,30 @@ Adw.PreferencesDialog preferences_dialog {
       Adw.SwitchRow monochrome_avatars {
         title: _("Monochrome Avatars");
         subtitle: _("Neutral grey instead of a colour per sender");
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Conversations");
+
+      Adw.SwitchRow group_by_conversation {
+        title: _("Group by Conversation");
+        subtitle: _("One row per conversation; expand it to see its messages");
+      }
+
+      Adw.SwitchRow conversation_chat_html {
+        title: _("Render HTML in Chat");
+        subtitle: _("Messages in the chat layout as they were sent, in a locked web view, instead of their plain text");
+      }
+
+      Adw.SwitchRow conversation_chat_truncate_mine {
+        title: _("Shorten My Messages in Chat");
+        subtitle: _("About three lines of each message in its bubble; a click shows the whole message");
+      }
+
+      Adw.SwitchRow conversation_chat_truncate_others {
+        title: _("Shorten Others' Messages in Chat");
+        subtitle: _("About three lines of each message in its bubble; a click shows the whole message");
       }
     }
 

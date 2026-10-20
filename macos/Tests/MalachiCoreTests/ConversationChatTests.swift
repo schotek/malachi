@@ -282,6 +282,48 @@ struct ConversationChatTests {
                 == "Messages in the chat layout as they were sent, in a locked web view, instead of their plain text")
     }
 
+    /// chat_test.go: the shortened bubbles' rule, the expanded set and
+    /// the texts.
+    @Test func bubbleShortenedAndExpanded() {
+        #expect(Conversation.chatPreviewLines == 3)
+        // chat_test.go TestBubbleShortened: all 16 rows; the side's own
+        // setting, never once expanded.
+        for mineOn in [false, true] {
+            for othersOn in [false, true] {
+                for mine in [false, true] {
+                    for expanded in [false, true] {
+                        #expect(
+                            Conversation.bubbleShortened(mineOn: mineOn, othersOn: othersOn, mine: mine, expanded: expanded)
+                                == (!expanded && (mine ? mineOn : othersOn)),
+                            "mineOn \(mineOn) othersOn \(othersOn) mine \(mine) expanded \(expanded)")
+                    }
+                }
+            }
+        }
+        #expect(Conversation.bubbleShortened(mineOn: true, othersOn: false, mine: true, expanded: false))
+        #expect(!Conversation.bubbleShortened(mineOn: true, othersOn: false, mine: false, expanded: false))
+        var e = Conversation.Expanded()
+        #expect(!e.is(MessageID("m1")) && !e.isDraft(DraftID("d1")), "zero value usable")
+        e.expand(MessageID("m1"))
+        e.expand(MessageID(""))
+        e.expandDraft(DraftID("d1"))
+        e.expandDraft(DraftID(""))
+        #expect(e.is(MessageID("m1")) && !e.is(MessageID("m2")) && !e.is(MessageID("")))
+        #expect(e.isDraft(DraftID("d1")) && !e.isDraft(DraftID("m1")) && !e.isDraft(DraftID("")))
+        #expect(!e.is(MessageID("d1")), "a draft's id is not a message's")
+        e.expand(MessageID("m1"))
+        #expect(e.is(MessageID("m1")), "expanding again keeps it")
+        e.reset()
+        #expect(!e.is(MessageID("m1")) && !e.isDraft(DraftID("d1")))
+        #expect(e == Conversation.Expanded())
+        #expect(Conversation.chatShowMore() == "Show More")
+        #expect(Conversation.chatPreferencesGroupTitle() == "Conversations")
+        #expect(Conversation.chatTruncateMineRowTitle() == "Shorten My Messages in Chat")
+        #expect(Conversation.chatTruncateOthersRowTitle() == "Shorten Others' Messages in Chat")
+        #expect(Conversation.chatTruncateRowSubtitle()
+            == "About three lines of each message in its bubble; a click shows the whole message")
+    }
+
     /// chat_test.go TestBubbleRendersHTML: only the preference on, HTML
     /// present and not withheld.
     @Test func bubbleRendersHTML() {

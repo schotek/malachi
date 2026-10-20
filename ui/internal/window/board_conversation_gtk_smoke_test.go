@@ -277,6 +277,44 @@ func smokeBoardConversationChat(t *testing.T, p *boardPage, flush func(), withCa
 			t.Fatalf("%s: %d rows, %d in the column, for %d messages", next.ID, len(b.chat.rows), columnRows(), len(next.Messages))
 		}
 	}
+	// Shortened bubbles: every bubble shortened, a click expands it, the
+	// preference off shows them whole.
+	b.apply(&d)
+	flush()
+	w.settings.SetConversationChatTruncateMine(true)
+	w.settings.SetConversationChatTruncateOthers(true)
+	flush()
+	for i, r := range b.chat.rows {
+		if !r.bubble.short || r.bubble.text.Lines() != conversation.ChatPreviewLines {
+			t.Fatalf("bubble %d not shortened", i)
+		}
+	}
+	first := b.chat.rows[0]
+	first.bubble.onExpand()
+	flush()
+	if first.bubble.short || !b.chat.expanded.Is(d.Messages[0].ID) {
+		t.Fatal("a click did not expand the bubble")
+	}
+	b.apply(&d)
+	flush()
+	if b.chat.rows[0].bubble.short {
+		t.Fatal("a refresh of the case shortened the expanded bubble again")
+	}
+	// Mine off: only the others' bubbles (on the left) stay shortened.
+	w.settings.SetConversationChatTruncateMine(false)
+	flush()
+	for i, r := range b.chat.rows {
+		if i > 0 && r.bubble.short != !r.right {
+			t.Fatalf("mine off: bubble %d (right %v) shortened %v", i, r.right, r.bubble.short)
+		}
+	}
+	w.settings.SetConversationChatTruncateOthers(false)
+	flush()
+	for i, r := range b.chat.rows {
+		if r.bubble.short {
+			t.Fatalf("bubble %d shortened with both off", i)
+		}
+	}
 	if withCards {
 		smokeBoardChatHTML(t, b, &d, flush)
 	}

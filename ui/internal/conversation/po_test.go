@@ -68,6 +68,11 @@ func exercise(tr Translator) {
 	ChatToggleTooltip(true, tr)
 	ChatHTMLRowTitle(tr)
 	ChatHTMLRowSubtitle(tr)
+	ChatShowMore(tr)
+	ChatPreferencesGroupTitle(tr)
+	ChatTruncateMineRowTitle(tr)
+	ChatTruncateOthersRowTitle(tr)
+	ChatTruncateRowSubtitle(tr)
 }
 
 // template reads po/malachi.pot: every entry, and whether it names a file

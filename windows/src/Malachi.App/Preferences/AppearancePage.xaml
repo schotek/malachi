@@ -6,9 +6,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
 Port of macos/Sources/MalachiMail/Preferences/AppearancePaneViewController.swift;
 GTK: preferences.blp appearance_page. The Blueprint's groups in its order:
 Theme (color_scheme: Follow System, Light, Dark), Message List
-(list_density: Comfortable, Compact; group_by_conversation;
-conversation_chat_html;
-show_preview_line; show_avatars; monochrome_avatars) and Message View
+(list_density: Comfortable, Compact; show_preview_line; show_avatars;
+monochrome_avatars), Conversations (group_by_conversation;
+conversation_chat_html; conversation_chat_truncate_mine;
+conversation_chat_truncate_others) and Message View
 (monospace_plain_text; text_zoom, 50 to 200 percent in steps of 10). Every
 row is bound two-way to its settings key; the windows follow the keys
 live (the colour scheme on every window and its title bar).
@@ -72,18 +73,6 @@ live (the colour scheme on every window and its title bar).
                             <ComboBoxItem Content="{l:T Msgid='Compact'}" />
                         </ComboBox>
                     </tk:SettingsCard>
-                    <tk:SettingsCard Description="{l:T Msgid='One row per conversation; expand it to see its messages'}" Header="{l:T Msgid='Group by Conversation'}">
-                        <ToggleSwitch
-                            x:Name="GroupByConversationSwitch"
-                            AutomationProperties.AutomationId="GroupByConversation"
-                            AutomationProperties.Name="{l:T Msgid='Group by Conversation'}" />
-                    </tk:SettingsCard>
-                    <tk:SettingsCard Description="{l:T Msgid='Messages in the chat layout as they were sent, in a locked web view, instead of their plain text'}" Header="{l:T Msgid='Render HTML in Chat'}">
-                        <ToggleSwitch
-                            x:Name="ConversationChatHtmlSwitch"
-                            AutomationProperties.AutomationId="ConversationChatHtml"
-                            AutomationProperties.Name="{l:T Msgid='Render HTML in Chat'}" />
-                    </tk:SettingsCard>
                     <tk:SettingsCard Header="{l:T Msgid='Show Preview Line'}">
                         <ToggleSwitch
                             x:Name="ShowPreviewLineSwitch"
@@ -101,6 +90,39 @@ live (the colour scheme on every window and its title bar).
                             x:Name="MonochromeAvatarsSwitch"
                             AutomationProperties.AutomationId="MonochromeAvatars"
                             AutomationProperties.Name="{l:T Msgid='Monochrome Avatars'}" />
+                    </tk:SettingsCard>
+                </StackPanel>
+
+                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}"
+                        Text="{l:T Msgid='Conversations'}" />
+                    <tk:SettingsCard Description="{l:T Msgid='One row per conversation; expand it to see its messages'}" Header="{l:T Msgid='Group by Conversation'}">
+                        <ToggleSwitch
+                            x:Name="GroupByConversationSwitch"
+                            AutomationProperties.AutomationId="GroupByConversation"
+                            AutomationProperties.Name="{l:T Msgid='Group by Conversation'}" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard Description="{l:T Msgid='Messages in the chat layout as they were sent, in a locked web view, instead of their plain text'}" Header="{l:T Msgid='Render HTML in Chat'}">
+                        <ToggleSwitch
+                            x:Name="ConversationChatHtmlSwitch"
+                            AutomationProperties.AutomationId="ConversationChatHtml"
+                            AutomationProperties.Name="{l:T Msgid='Render HTML in Chat'}" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard Description="{l:T Msgid='About three lines of each message in its bubble; a click shows the whole message'}" Header="{l:T Msgid='Shorten My Messages in Chat'}">
+                        <ToggleSwitch
+                            x:Name="ConversationChatTruncateMineSwitch"
+                            AutomationProperties.AutomationId="ConversationChatTruncateMine"
+                            AutomationProperties.Name="{l:T Msgid='Shorten My Messages in Chat'}" />
+                    </tk:SettingsCard>
+                    <!-- Its title has an apostrophe, which a markup extension's
+                         quoted value cannot carry: set in code
+                         (Conversation.ChatTruncateOthersRowTitle). -->
+                    <tk:SettingsCard x:Name="ConversationChatTruncateOthersCard" Description="{l:T Msgid='About three lines of each message in its bubble; a click shows the whole message'}">
+                        <ToggleSwitch
+                            x:Name="ConversationChatTruncateOthersSwitch"
+                            AutomationProperties.AutomationId="ConversationChatTruncateOthers" />
                     </tk:SettingsCard>
                 </StackPanel>
 

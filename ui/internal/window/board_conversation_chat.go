@@ -89,6 +89,10 @@ type boardChat struct {
 	// heightPending the frames whose height change waits to be
 	// compensated; the watchers go with close.
 	htmlOn        bool
+	mineOn        bool
+	othersOn      bool
+	expanded      conversation.Expanded
+	expandedScope string
 	entries       map[api.MessageID]*loadedMessage
 	asked         map[api.MessageID]bool
 	heightPending map[*gtk.Frame]bool
@@ -139,8 +143,22 @@ func (c *boardChat) bind() {
 	c.unbind = s.Bind(settings.KeyConversationChatLayout, c.toggle.Object, "active")
 	c.remove = s.OnChanged(settings.KeyConversationChatLayout, c.applyLayout)
 	c.htmlOn = s.ConversationChatHTML()
+	c.mineOn, c.othersOn = s.ConversationChatTruncateMine(), s.ConversationChatTruncateOthers()
+	truncChanged := func() {
+		mine, others := s.ConversationChatTruncateMine(), s.ConversationChatTruncateOthers()
+		if (mine == c.mineOn && others == c.othersOn) || c.closed {
+			return
+		}
+		c.mineOn, c.othersOn = mine, others
+		for _, r := range c.rows {
+			c.shorten(r)
+		}
+		c.queueUpdate()
+	}
 	c.watchers = append(c.watchers,
 		s.OnChanged(settings.KeyConversationChatHTML, c.htmlChanged),
+		s.OnChanged(settings.KeyConversationChatTruncateMine, truncChanged),
+		s.OnChanged(settings.KeyConversationChatTruncateOthers, truncChanged),
 		s.OnChanged(settings.KeyTextZoom, func() {
 			for _, r := range c.rows {
 				r.bubble.setZoom(s.TextZoom())
@@ -220,6 +238,7 @@ func (c *boardChat) apply(d *board.Detail) {
 	}
 	c.visible = true
 	c.stack.SetVisible(true)
+	chatExpandedScope(&c.expanded, &c.expandedScope, string(d.ID))
 	if d.AccountID != c.account {
 		c.entries = map[api.MessageID]*loadedMessage{}
 		c.asked = map[api.MessageID]bool{}
@@ -277,6 +296,7 @@ func (c *boardChat) render() {
 		row.setMax(max)
 		row.setGap(c.bubbleGap())
 		c.show(row, m)
+		c.shorten(row)
 		c.renderHTML(row)
 		next = append(next, row)
 		if keyed {
@@ -494,6 +514,18 @@ func (c *boardChat) htmlChanged() {
 		c.renderHTML(r)
 	}
 	c.queueUpdate()
+}
+
+// shorten shows row shortened or whole as the preference and the user's
+// expanded bubbles in this case say, as Mail's chat (a sample's bubble,
+// without an id, only shows whole).
+func (c *boardChat) shorten(row *chatRow) {
+	row.bubble.onExpand = func() {
+		chatExpandRow(&c.expanded, row.row)
+		row.bubble.setShortened(false)
+		c.queueUpdate()
+	}
+	row.bubble.setShortened(chatRowShortened(c.mineOn, c.othersOn, &c.expanded, row.row))
 }
 
 // releaseAll lets every bubble's view go (its text shows).

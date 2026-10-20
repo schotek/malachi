@@ -289,4 +289,65 @@ public sealed class ConversationChatTests
     [InlineData(true, true, true, false)]
     public void BubbleRendersHtml(bool setting, bool hasHtml, bool withheld, bool want) =>
         Assert.Equal(want, Conversation.BubbleRendersHtml(setting, hasHtml, withheld));
+
+    // chat_test.go TestBubbleShortened: the setting of the bubble's side
+    // (a draft counts as mine) and not expanded; all 16 rows.
+    [Theory]
+    [InlineData(false, false, false, false, false)]
+    [InlineData(false, false, false, true, false)]
+    [InlineData(false, false, true, false, false)]
+    [InlineData(false, false, true, true, false)]
+    [InlineData(false, true, false, false, true)]
+    [InlineData(false, true, false, true, false)]
+    [InlineData(false, true, true, false, false)]
+    [InlineData(false, true, true, true, false)]
+    [InlineData(true, false, false, false, false)]
+    [InlineData(true, false, false, true, false)]
+    [InlineData(true, false, true, false, true)]
+    [InlineData(true, false, true, true, false)]
+    [InlineData(true, true, false, false, true)]
+    [InlineData(true, true, false, true, false)]
+    [InlineData(true, true, true, false, true)]
+    [InlineData(true, true, true, true, false)]
+    public void BubbleShortened(bool mineOn, bool othersOn, bool mine, bool expanded, bool want) =>
+        Assert.Equal(want, Conversation.BubbleShortened(mineOn, othersOn, mine, expanded));
+
+    [Fact]
+    public void ExpandedRemembersUntilReset()
+    {
+        var e = new ConversationExpanded();
+        Assert.False(e.Is(new MessageId("m1")));
+        Assert.False(e.Is(null));
+        e.Expand(new MessageId("m1"));
+        e.Expand(new MessageId(""));
+        e.ExpandDraft(new DraftId("d1"));
+        e.ExpandDraft(new DraftId(""));
+        Assert.True(e.Is(new MessageId("m1")));
+        Assert.False(e.Is(new MessageId("m2")));
+        Assert.False(e.Is(new MessageId("")));
+        Assert.True(e.IsDraft(new DraftId("d1")));
+        Assert.False(e.IsDraft(new DraftId("")));
+        Assert.False(e.IsDraft(null));
+        // A message id and a draft id are different sets.
+        Assert.False(e.IsDraft(new DraftId("m1")));
+        e.Reset();
+        Assert.False(e.Is(new MessageId("m1")));
+        Assert.False(e.IsDraft(new DraftId("d1")));
+    }
+
+    [Fact]
+    public void ChatTruncateTexts()
+    {
+        Assert.Equal(3, Conversation.ChatPreviewLines);
+        Assert.Equal("Show More", Conversation.ChatShowMore());
+        Assert.Equal("Shorten My Messages in Chat", Conversation.ChatTruncateMineRowTitle());
+        Assert.Equal("Shorten Others' Messages in Chat", Conversation.ChatTruncateOthersRowTitle());
+        Assert.Equal("About three lines of each message in its bubble; a click shows the whole message", Conversation.ChatTruncateRowSubtitle());
+        Assert.Equal("Conversations", Conversation.ChatPreferencesGroupTitle());
+        var pot = PoFile.Parse(File.ReadAllText(RepositoryPo.Pot), "malachi.pot");
+        foreach (var msgid in new[] { "Show More", "Shorten My Messages in Chat", "Shorten Others' Messages in Chat", "Conversations", "About three lines of each message in its bubble; a click shows the whole message" })
+        {
+            Assert.Single(pot.Entries, entry => entry.Msgid == msgid && entry.Msgctxt is null);
+        }
+    }
 }

@@ -40,6 +40,8 @@ public sealed class SettingsTests
         Assert.False(s.GroupByConversation);
         Assert.False(s.ConversationChatLayout);
         Assert.False(s.ConversationChatHtml);
+        Assert.False(s.ConversationChatTruncateMine);
+        Assert.False(s.ConversationChatTruncateOthers);
         Assert.Equal(100, s.TextZoom);
         Assert.False(s.LaunchAtLogin);
         Assert.False(s.RunInBackground);
@@ -67,7 +69,7 @@ public sealed class SettingsTests
         Assert.Equal(380, s.MessageListWidth);
         Assert.Equal(Cal.View.Week, s.CalendarView);
         // The shared settings and Windows' ctrl-r.
-        Assert.Equal(45, SettingsStore.Schema.Count);
+        Assert.Equal(47, SettingsStore.Schema.Count);
         Assert.Equal(Enum.GetValues<SettingsKey>().Length, SettingsStore.Schema.Count);
         Assert.Equal(
             SettingsStore.Schema.Select(k => k.Name).Order(StringComparer.Ordinal),
@@ -144,6 +146,36 @@ public sealed class SettingsTests
         Assert.True(restored.ConversationChatHtml);
         s.ConversationChatHtml = false;
         Assert.Equal(2, fired);
+        Assert.False(s.ConversationChatHtml);
+    }
+
+    [Fact]
+    public void ConversationChatTruncateMineAndOthersAreStoredAndNotify()
+    {
+        var backend = new InMemorySettingsBackend();
+        using var s = new SettingsStore(backend, null);
+        var mine = 0;
+        var others = 0;
+        s.OnChange(SettingsKey.ConversationChatTruncateMine, () => mine++);
+        s.OnChange(SettingsKey.ConversationChatTruncateOthers, () => others++);
+        s.ConversationChatTruncateMine = true;
+        s.ConversationChatTruncateMine = true;
+        Assert.Equal(1, mine);
+        Assert.Equal(0, others);
+        Assert.True(s.ConversationChatTruncateMine);
+        Assert.False(s.ConversationChatTruncateOthers);
+        s.ConversationChatTruncateOthers = true;
+        Assert.Equal(1, others);
+        Assert.Equal(1, mine);
+        using var restored = new SettingsStore(backend, null);
+        Assert.True(restored.ConversationChatTruncateMine);
+        Assert.True(restored.ConversationChatTruncateOthers);
+        s.ConversationChatTruncateMine = false;
+        s.ConversationChatTruncateOthers = false;
+        Assert.Equal(2, mine);
+        Assert.Equal(2, others);
+        Assert.False(s.ConversationChatTruncateMine);
+        Assert.False(s.ConversationChatTruncateOthers);
         Assert.False(s.ConversationChatHtml);
     }
 

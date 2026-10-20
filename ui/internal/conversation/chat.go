@@ -6,6 +6,7 @@ package conversation
 import (
 	"slices"
 
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/board"
 )
 
@@ -189,4 +190,115 @@ func ChatHTMLRowTitle(tr Translator) string {
 func ChatHTMLRowSubtitle(tr Translator) string {
 	// TRANSLATORS: the subtitle of the "Render HTML in Chat" switch in Preferences → Message list.
 	return tr.T("Messages in the chat layout as they were sent, in a locked web view, instead of their plain text")
+}
+
+// ChatPreviewLines is how many lines of a message a shortened bubble
+// shows (the preference conversation-chat-truncate): a text bubble that
+// many lines of its text with an ellipsis, an HTML bubble its document
+// clipped to that many lines' height with a fade, both with a "Show
+// More" hint under the body; a click anywhere in the bubble (not a
+// double-click, which opens the message) shows the whole message.
+const ChatPreviewLines = 3
+
+// BubbleShortened says whether a bubble shows the shortened preview: the
+// preference of the bubble's side is on (mine: the user's own message,
+// the bubble on the right, conversation-chat-truncate-mine; else the
+// other party's, conversation-chat-truncate-others) and the user has not
+// expanded that message. A draft counts as mine.
+func BubbleShortened(mineOn, othersOn, mine, expanded bool) bool {
+	if expanded {
+		return false
+	}
+	if mine {
+		return mineOn
+	}
+	return othersOn
+}
+
+// Expanded is the set of messages (and drafts) the user expanded in the
+// conversation shown; it is forgotten when another conversation or case
+// is selected (as Folds are), never persisted. Zero value usable. An
+// expanded bubble stays expanded: there is no collapsing back.
+type Expanded struct {
+	messages map[api.MessageID]bool
+	drafts   map[api.DraftID]bool
+}
+
+// Expand records that the user expanded the bubble of message id; an
+// empty id is ignored.
+func (e *Expanded) Expand(id api.MessageID) {
+	if id == "" {
+		return
+	}
+	if e.messages == nil {
+		e.messages = map[api.MessageID]bool{}
+	}
+	e.messages[id] = true
+}
+
+// Is says whether the user expanded the bubble of message id.
+func (e *Expanded) Is(id api.MessageID) bool {
+	return id != "" && e.messages[id]
+}
+
+// ExpandDraft records that the user expanded the bubble of draft id (a
+// ChatDraft row, whose id is a draft's, not a message's); an empty id is
+// ignored.
+func (e *Expanded) ExpandDraft(id api.DraftID) {
+	if id == "" {
+		return
+	}
+	if e.drafts == nil {
+		e.drafts = map[api.DraftID]bool{}
+	}
+	e.drafts[id] = true
+}
+
+// IsDraft says whether the user expanded the bubble of draft id.
+func (e *Expanded) IsDraft(id api.DraftID) bool {
+	return id != "" && e.drafts[id]
+}
+
+// Reset forgets every expanded bubble: another conversation or case is
+// selected.
+func (e *Expanded) Reset() {
+	e.messages = nil
+	e.drafts = nil
+}
+
+// ChatShowMore is the hint under a shortened bubble.
+func ChatShowMore(tr Translator) string {
+	// TRANSLATORS: the hint under a shortened message in the chat layout of a conversation; a click on the message shows all of it.
+	return tr.T("Show More")
+}
+
+// ChatPreferencesGroupTitle is the title of the group in Preferences →
+// Message list holding Group by conversation, Render HTML in Chat and the
+// two shortening switches.
+func ChatPreferencesGroupTitle(tr Translator) string {
+	// TRANSLATORS: the title of a group of switches in Preferences → Message list about conversations (grouping, the chat layout).
+	return tr.T("Conversations")
+}
+
+// ChatTruncateMineRowTitle is the title of the row of
+// conversation-chat-truncate-mine in Preferences → Message list, in the
+// group ChatPreferencesGroupTitle, after "Render HTML in Chat".
+func ChatTruncateMineRowTitle(tr Translator) string {
+	// TRANSLATORS: a switch in Preferences → Message list; on, the user's own messages in the chat layout of a conversation show only their first lines until clicked.
+	return tr.T("Shorten My Messages in Chat")
+}
+
+// ChatTruncateOthersRowTitle is the title of the row of
+// conversation-chat-truncate-others, right after ChatTruncateMineRowTitle.
+func ChatTruncateOthersRowTitle(tr Translator) string {
+	// TRANSLATORS: a switch in Preferences → Message list; on, the other party's messages in the chat layout of a conversation show only their first lines until clicked.
+	return tr.T("Shorten Others' Messages in Chat")
+}
+
+// ChatTruncateRowSubtitle is the subtitle of both shortening rows in
+// Preferences → Message list, under ChatTruncateMineRowTitle and
+// ChatTruncateOthersRowTitle.
+func ChatTruncateRowSubtitle(tr Translator) string {
+	// TRANSLATORS: the subtitle of the "Shorten My Messages in Chat" and "Shorten Others' Messages in Chat" switches in Preferences → Message list.
+	return tr.T("About three lines of each message in its bubble; a click shows the whole message")
 }

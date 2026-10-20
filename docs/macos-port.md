@@ -720,7 +720,7 @@ bubbles with attachments in the near window, as for the cards), even when
 the summary's flag is false (it counts only parts the daemon calls not
 inline); `Conversation.bubbleAttachmentBadge` is the rule.
 
-**HTML bubbles.** Settings → Appearance → Message List has *Render HTML in
+**HTML bubbles.** Settings → Appearance → Conversations has *Render HTML in
 Chat* under *Group by Conversation* (`Settings.conversationChatHTML`, gschema
 `conversation-chat-html`, off by default; texts
 `Conversation.chatHTMLRowTitle()`/`chatHTMLRowSubtitle()`). With it on, a
@@ -770,6 +770,31 @@ open cards do, `Board.ChatBodies` keeps who asked, and
 web views, through a `BoardBubbleWebHost` per row (links via the
 delegate, hover via `onHover`, heights via `onHeightChanging`); the
 `board.get` text is the fallback, and nothing is fetched with it off.
+
+**Shortened bubbles.** Settings → Appearance has a group *Conversations*
+(`Conversation.chatPreferencesGroupTitle()`) with *Group by Conversation*,
+*Render HTML in Chat*, *Shorten My Messages in Chat* and *Shorten Others'
+Messages in Chat* (`Settings.conversationChatTruncateMine` /
+`conversationChatTruncateOthers`, gschema `conversation-chat-truncate-mine` /
+`-others`, both off by default; one subtitle,
+`Conversation.chatTruncateRowSubtitle()`). With the setting of its side on
+(the right side, a draft included, is mine), a bubble of Mail's chat or of
+the board's chat shows about `Conversation.chatPreviewLines` (3) lines
+(`Conversation.bubbleShortened(mineOn:othersOn:mine:expanded:)`,
+`ConversationBubbleView.setShortened`): a text bubble limits its field to
+three lines with an ellipsis; an HTML bubble clips its slot to three lines
+of the chat font (3 × 1.3 × the bubble font's size) while its web view
+keeps the whole document's height under the clip, and a `BubbleFadeView`
+fades the bottom into the bubble's colour and takes the clicks off the
+document. A small *Show More* (`Conversation.chatShowMore()`) shows under
+the body only when there is more (the text's full height, the document's
+reported height). A single click anywhere in the bubble expands it; the
+chat records it in `Conversation.Expanded` (Mail's chat: forgotten with the
+conversation in `removeAll`, kept across a switch of the layout; the
+board: forgotten with the case, samples by index), and a double click still
+opens the window. A released shortened HTML bubble keeps its clipped
+height. Both chats observe both keys and re-shorten every bubble;
+heights change through `preserving` / `onHeightChanging`.
 
 The [security review checklist](security.md#12-review-checklist-for-prs-touching-content-handling)
 applies to changes in `WebViews/`, `MessageView/`, `Compose/`,

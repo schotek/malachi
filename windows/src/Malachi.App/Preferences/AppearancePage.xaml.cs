@@ -11,6 +11,7 @@
 using Malachi.App.Shell;
 using Malachi.Core.Model;
 using Malachi.Core.Settings;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Malachi.App.Preferences;
@@ -22,11 +23,16 @@ public sealed partial class AppearancePage : UserControl
     internal AppearancePage(AppState state, SettingBindings bindings)
     {
         InitializeComponent();
+        var othersTitle = Core.Model.Conversation.ChatTruncateOthersRowTitle();
+        ConversationChatTruncateOthersCard.Header = othersTitle;
+        AutomationProperties.SetName(ConversationChatTruncateOthersSwitch, othersTitle);
         var s = state.Settings;
         bindings.Choice(ColorSchemeBox, SettingsKey.ColorScheme, PreferenceChoices.ColorSchemeChoices, () => s.ColorScheme, v => s.ColorScheme = v);
         bindings.Choice(DensityBox, SettingsKey.Density, PreferenceChoices.DensityChoices, () => s.Density, v => s.Density = v);
         bindings.Toggle(GroupByConversationSwitch, SettingsKey.GroupByConversation, () => s.GroupByConversation, v => s.GroupByConversation = v);
         bindings.Toggle(ConversationChatHtmlSwitch, SettingsKey.ConversationChatHtml, () => s.ConversationChatHtml, v => s.ConversationChatHtml = v);
+        bindings.Toggle(ConversationChatTruncateMineSwitch, SettingsKey.ConversationChatTruncateMine, () => s.ConversationChatTruncateMine, v => s.ConversationChatTruncateMine = v);
+        bindings.Toggle(ConversationChatTruncateOthersSwitch, SettingsKey.ConversationChatTruncateOthers, () => s.ConversationChatTruncateOthers, v => s.ConversationChatTruncateOthers = v);
         bindings.Toggle(ShowPreviewLineSwitch, SettingsKey.ShowPreviewLine, () => s.ShowPreviewLine, v => s.ShowPreviewLine = v);
         bindings.Toggle(ShowAvatarsSwitch, SettingsKey.ShowAvatars, () => s.ShowAvatars, v => s.ShowAvatars = v);
         bindings.Toggle(MonochromeAvatarsSwitch, SettingsKey.MonochromeAvatars, () => s.MonochromeAvatars, v => s.MonochromeAvatars = v);

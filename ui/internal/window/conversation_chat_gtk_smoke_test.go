@@ -91,7 +91,7 @@ func TestConversationChatGTKSmoke(t *testing.T) {
 			return api.MessageBodyResult{MessageID: "r1", BodyState: api.BodyFetched, Text: "Ok"}, nil
 		case "a2":
 			return api.MessageBodyResult{MessageID: "a2", BodyState: api.BodyFetched, Text: "body of a2",
-				HTML: "<p>body of <b>a2</b></p>", HasHTML: true, QuotedTrimmed: true}, nil
+				HTML: "<p>body of <b>a2</b></p><p>second</p><p>third</p><p>fourth</p><p>fifth</p>", HasHTML: true, QuotedTrimmed: true}, nil
 		}
 		return body(p)
 	}
@@ -293,6 +293,45 @@ func TestConversationChatGTKSmoke(t *testing.T) {
 	run(800 * time.Millisecond)
 	if a2b.bubble.web == nil {
 		t.Error("preference on again, a2 has no view")
+	}
+
+	// Shortened bubbles: the long text to three lines with Show More, the
+	// HTML bubble clipped to the preview height; a click shows it whole;
+	// the preference off shows every bubble whole.
+	st.SetConversationChatTruncateMine(true)
+	st.SetConversationChatTruncateOthers(true)
+	run(800 * time.Millisecond)
+	a1b := chat.bubbles["a1"].bubble
+	if !a1b.short || a1b.text.Lines() != conversation.ChatPreviewLines || !a1b.more.Visible() {
+		t.Errorf("a1 not shortened: short %v lines %d more %v", a1b.short, a1b.text.Lines(), a1b.more.Visible())
+	}
+	if !a2b.bubble.short || a2b.bubble.html.Height() != a2b.bubble.shownHeight() ||
+		a2b.bubble.shownHeight() != chatShownHeight(a2b.bubble.webHeight, a2b.bubble.preview, true) {
+		t.Errorf("a2 not clipped: host %d shown %d preview %d document %d", a2b.bubble.html.Height(),
+			a2b.bubble.shownHeight(), a2b.bubble.preview, a2b.bubble.webHeight)
+	}
+	if a2b.bubble.webHeight <= a2b.bubble.preview || !a2b.bubble.fade.Visible() || !a2b.bubble.more.Visible() ||
+		a2b.bubble.html.Height() != a2b.bubble.preview {
+		t.Errorf("a2's clipped document shows no fade or Show More: host %d preview %d document %d fade %v more %v",
+			a2b.bubble.html.Height(), a2b.bubble.preview, a2b.bubble.webHeight, a2b.bubble.fade.Visible(), a2b.bubble.more.Visible())
+	}
+	t.Logf("LAYOUT: shortened a1 lines=%d more=%v; a2 preview=%d document=%d host=%d fade=%v",
+		a1b.text.Lines(), a1b.more.Visible(), a2b.bubble.preview, a2b.bubble.webHeight, a2b.bubble.html.Height(), a2b.bubble.fade.Visible())
+	a1b.onExpand()
+	run(300 * time.Millisecond)
+	if a1b.short || a1b.text.Lines() != -1 || a1b.more.Visible() || !chat.expanded.Is("a1") {
+		t.Errorf("a1 did not expand: short %v lines %d more %v", a1b.short, a1b.text.Lines(), a1b.more.Visible())
+	}
+	// Others' off: only the user's own (r1, on the right) stays shortened.
+	st.SetConversationChatTruncateOthers(false)
+	run(300 * time.Millisecond)
+	if a2b.bubble.short || chat.bubbles["a3"].bubble.short || !chat.bubbles["r1"].bubble.short {
+		t.Errorf("others off: a2 %v a3 %v r1 %v", a2b.bubble.short, chat.bubbles["a3"].bubble.short, chat.bubbles["r1"].bubble.short)
+	}
+	st.SetConversationChatTruncateMine(false)
+	run(300 * time.Millisecond)
+	if chat.bubbles["r1"].bubble.short || chat.drafts["d1"].bubble.short {
+		t.Error("both off left bubbles shortened")
 	}
 
 	// Back to the timeline: the fold kept, the chat lets go.

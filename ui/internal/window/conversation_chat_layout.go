@@ -434,3 +434,78 @@ func chatEventMeta(sender, when string) string {
 	}
 	return sender + " · " + when
 }
+
+// Shortened bubbles (the preference conversation-chat-truncate,
+// conversation.BubbleShortened).
+
+// chatRowShortened says whether the chat row r shows the shortened preview
+// with the preferences of the user's own bubbles (mineOn) and the other
+// party's (othersOn) and the bubbles the user expanded in e: a message's
+// bubble by its side (r.Side, the user's own on the right), a draft's as
+// the user's own, never a centred row (conversation.BubbleShortened).
+func chatRowShortened(mineOn, othersOn bool, e *conversation.Expanded, r conversation.ChatRow) bool {
+	switch r.Kind {
+	case conversation.ChatBubble:
+		return conversation.BubbleShortened(mineOn, othersOn, r.Side == conversation.ChatRight, e.Is(r.Item.Message.ID))
+	case conversation.ChatDraft:
+		return conversation.BubbleShortened(mineOn, othersOn, true, e.IsDraft(r.Draft.Draft.ID))
+	}
+	return false
+}
+
+// chatExpandRow records the user's click on the shortened bubble of r in
+// e (a message's or a draft's); false for a row nothing expands.
+func chatExpandRow(e *conversation.Expanded, r conversation.ChatRow) bool {
+	switch r.Kind {
+	case conversation.ChatBubble:
+		if r.Item.Message.ID == "" {
+			return false
+		}
+		e.Expand(r.Item.Message.ID)
+		return true
+	case conversation.ChatDraft:
+		if r.Draft.Draft.ID == "" {
+			return false
+		}
+		e.ExpandDraft(r.Draft.Draft.ID)
+		return true
+	}
+	return false
+}
+
+// chatExpandedScope forgets the expanded bubbles when the conversation
+// (or the board's case) shown is another than the one they belong to
+// (*scope); a layout switch keeps them.
+func chatExpandedScope(e *conversation.Expanded, scope *string, now string) {
+	if now != *scope {
+		e.Reset()
+		*scope = now
+	}
+}
+
+// chatPreviewHeight is the height of a shortened HTML bubble's document:
+// conversation.ChatPreviewLines lines of the chat's font (lineHeight, the
+// text label's line height in pixels); 0 for no known line height.
+func chatPreviewHeight(lineHeight float64) int {
+	if lineHeight <= 0 {
+		return 0
+	}
+	return int(math.Ceil(float64(conversation.ChatPreviewLines) * lineHeight))
+}
+
+// chatShownHeight is how tall an HTML bubble's view stands: the
+// document's height, clipped to the preview while shortened (preview 0:
+// not clipped).
+func chatShownHeight(document, preview int, shortened bool) int {
+	if shortened && preview > 0 && document > preview {
+		return preview
+	}
+	return document
+}
+
+// chatHTMLOverflows says whether a shortened HTML bubble hides part of its
+// document (the fade and "Show More"): the document reported a height
+// taller than the preview.
+func chatHTMLOverflows(reported bool, document, preview int, shortened bool) bool {
+	return shortened && reported && preview > 0 && document > preview
+}

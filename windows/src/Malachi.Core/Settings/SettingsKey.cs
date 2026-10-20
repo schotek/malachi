@@ -74,6 +74,12 @@ public enum SettingsKey
     /// <summary><c>conversation-chat-html</c>.</summary>
     ConversationChatHtml,
 
+    /// <summary><c>conversation-chat-truncate-mine</c>.</summary>
+    ConversationChatTruncateMine,
+
+    /// <summary><c>conversation-chat-truncate-others</c>.</summary>
+    ConversationChatTruncateOthers,
+
     /// <summary><c>search-scope</c>.</summary>
     SearchScope,
 

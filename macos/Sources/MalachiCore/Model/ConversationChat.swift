@@ -194,4 +194,102 @@ extension Conversation {
         // TRANSLATORS: the subtitle of the "Render HTML in Chat" switch in Preferences → Message list.
         L10n.T("Messages in the chat layout as they were sent, in a locked web view, instead of their plain text")
     }
+
+    /// conversation.ChatPreviewLines: how many lines of a message a
+    /// shortened bubble shows (the preferences `conversation-chat-truncate-mine` and `-others`):
+    /// a text bubble that many lines of its text with an ellipsis, an HTML
+    /// bubble its document clipped to that many lines' height with a fade,
+    /// both with a "Show More" hint under the body; a click anywhere in the
+    /// bubble (not a double-click, which opens the message) shows the whole
+    /// message.
+    public static let chatPreviewLines = 3
+
+    /// conversation.BubbleShortened: whether a bubble shows the shortened
+    /// preview: the preference of its side is on (`mine`, the right side,
+    /// a draft too: `mineOn`, conversation-chat-truncate-mine; else
+    /// `othersOn`, conversation-chat-truncate-others) and the user has not
+    /// expanded that message.
+    public static func bubbleShortened(mineOn: Bool, othersOn: Bool, mine: Bool, expanded: Bool) -> Bool {
+        if expanded {
+            return false
+        }
+        return mine ? mineOn : othersOn
+    }
+
+    /// conversation.Expanded: the messages (and drafts) the user expanded
+    /// in the conversation shown; forgotten when another conversation or
+    /// case is selected (as `Folds` are), never persisted. An expanded
+    /// bubble stays expanded: there is no collapsing back.
+    public struct Expanded: Sendable, Equatable {
+        private var messages: Set<MessageID> = []
+        private var drafts: Set<DraftID> = []
+
+        public init() {}
+
+        /// The user expanded the bubble of message `id`; an empty id is
+        /// ignored.
+        public mutating func expand(_ id: MessageID) {
+            guard !id.rawValue.isEmpty else { return }
+            messages.insert(id)
+        }
+
+        /// Whether the bubble of message `id` was expanded.
+        public func `is`(_ id: MessageID) -> Bool {
+            !id.rawValue.isEmpty && messages.contains(id)
+        }
+
+        /// The user expanded the bubble of draft `id`; an empty id is
+        /// ignored.
+        public mutating func expandDraft(_ id: DraftID) {
+            guard !id.rawValue.isEmpty else { return }
+            drafts.insert(id)
+        }
+
+        /// Whether the bubble of draft `id` was expanded.
+        public func isDraft(_ id: DraftID) -> Bool {
+            !id.rawValue.isEmpty && drafts.contains(id)
+        }
+
+        /// Forgets every expanded bubble: another conversation or case is
+        /// selected.
+        public mutating func reset() {
+            messages = []
+            drafts = []
+        }
+    }
+
+    /// conversation.ChatShowMore: the hint under a shortened bubble.
+    public static func chatShowMore() -> String {
+        // TRANSLATORS: the hint under a shortened message in the chat layout of a conversation; a click on the message shows all of it.
+        L10n.T("Show More")
+    }
+
+    /// conversation.ChatPreferencesGroupTitle: the title of the group of
+    /// Preferences → Message List with Group by Conversation, Render HTML
+    /// in Chat and the two shortening rows.
+    public static func chatPreferencesGroupTitle() -> String {
+        // TRANSLATORS: the title of a group of switches in Preferences → Message list about conversations (grouping, the chat layout).
+        L10n.T("Conversations")
+    }
+
+    /// conversation.ChatTruncateMineRowTitle: the row of
+    /// conversation-chat-truncate-mine, after "Render HTML in Chat".
+    public static func chatTruncateMineRowTitle() -> String {
+        // TRANSLATORS: a switch in Preferences → Message list; on, the user's own messages in the chat layout of a conversation show only their first lines until clicked.
+        L10n.T("Shorten My Messages in Chat")
+    }
+
+    /// conversation.ChatTruncateOthersRowTitle: the row of
+    /// conversation-chat-truncate-others, right after the mine row.
+    public static func chatTruncateOthersRowTitle() -> String {
+        // TRANSLATORS: a switch in Preferences → Message list; on, the other party's messages in the chat layout of a conversation show only their first lines until clicked.
+        L10n.T("Shorten Others' Messages in Chat")
+    }
+
+    /// conversation.ChatTruncateRowSubtitle: the subtitle of both
+    /// shortening rows.
+    public static func chatTruncateRowSubtitle() -> String {
+        // TRANSLATORS: the subtitle of the "Shorten My Messages in Chat" and "Shorten Others' Messages in Chat" switches in Preferences → Message list.
+        L10n.T("About three lines of each message in its bubble; a click shows the whole message")
+    }
 }

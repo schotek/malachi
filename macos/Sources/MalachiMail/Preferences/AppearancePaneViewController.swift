@@ -25,6 +25,8 @@ final class AppearancePaneViewController: PreferencesPaneViewController {
     let density = NSPopUpButton(frame: .zero, pullsDown: false)
     let groupByConversation = NSSwitch()
     let conversationChatHTML = NSSwitch()
+    let conversationChatTruncateMine = NSSwitch()
+    let conversationChatTruncateOthers = NSSwitch()
     let showPreviewLine = NSSwitch()
     let showAvatars = NSSwitch()
     let monochromeAvatars = NSSwitch()
@@ -92,13 +94,21 @@ final class AppearancePaneViewController: PreferencesPaneViewController {
         showAvatars.state = .on
         list.setRows([
             PreferenceRowView(title: L10n.T("Density"), trailing: density),
-            PreferenceRowView(title: L10n.T("Group by Conversation"), subtitle: L10n.T("One row per conversation; expand it to see its messages"), trailing: groupByConversation),
-            PreferenceRowView(title: Conversation.chatHTMLRowTitle(), subtitle: Conversation.chatHTMLRowSubtitle(), trailing: conversationChatHTML),
             PreferenceRowView(title: L10n.T("Show Preview Line"), trailing: showPreviewLine),
             PreferenceRowView(title: L10n.T("Show Avatars"), trailing: showAvatars),
             PreferenceRowView(title: L10n.T("Monochrome Avatars"), subtitle: L10n.T("Neutral grey instead of a colour per sender"), trailing: monochromeAvatars),
         ])
         addGroup(list)
+
+        // Conversations: the grouping of the list and the chat layout.
+        let conversations = PreferencesGroupView(title: Conversation.chatPreferencesGroupTitle())
+        conversations.setRows([
+            PreferenceRowView(title: L10n.T("Group by Conversation"), subtitle: L10n.T("One row per conversation; expand it to see its messages"), trailing: groupByConversation),
+            PreferenceRowView(title: Conversation.chatHTMLRowTitle(), subtitle: Conversation.chatHTMLRowSubtitle(), trailing: conversationChatHTML),
+            PreferenceRowView(title: Conversation.chatTruncateMineRowTitle(), subtitle: Conversation.chatTruncateRowSubtitle(), trailing: conversationChatTruncateMine),
+            PreferenceRowView(title: Conversation.chatTruncateOthersRowTitle(), subtitle: Conversation.chatTruncateRowSubtitle(), trailing: conversationChatTruncateOthers),
+        ])
+        addGroup(conversations)
 
         let messageView = PreferencesGroupView(title: L10n.T("Message View"))
         messageView.setRows([
@@ -151,6 +161,8 @@ final class AppearancePaneViewController: PreferencesPaneViewController {
         bindings.add(.bind(density, to: settings, .density, choices: densityChoices, \.density))
         bindings.add(.bind(groupByConversation, to: settings, .groupByConversation, \.groupByConversation))
         bindings.add(.bind(conversationChatHTML, to: settings, .conversationChatHTML, \.conversationChatHTML))
+        bindings.add(.bind(conversationChatTruncateMine, to: settings, .conversationChatTruncateMine, \.conversationChatTruncateMine))
+        bindings.add(.bind(conversationChatTruncateOthers, to: settings, .conversationChatTruncateOthers, \.conversationChatTruncateOthers))
         bindings.add(.bind(showPreviewLine, to: settings, .showPreviewLine, \.showPreviewLine))
         bindings.add(.bind(showAvatars, to: settings, .showAvatars, \.showAvatars))
         bindings.add(.bind(monochromeAvatars, to: settings, .monochromeAvatars, \.monochromeAvatars))

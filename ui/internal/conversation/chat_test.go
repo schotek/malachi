@@ -255,3 +255,85 @@ func TestChatHTMLRowTexts(t *testing.T) {
 		t.Errorf("subtitle %q", got)
 	}
 }
+
+func TestBubbleShortened(t *testing.T) {
+	for _, c := range []struct {
+		mineOn, othersOn, mine, expanded, want bool
+	}{
+		{false, false, false, false, false},
+		{false, false, true, false, false},
+		{true, false, true, false, true},
+		{true, false, false, false, false},
+		{false, true, false, false, true},
+		{false, true, true, false, false},
+		{true, true, true, false, true},
+		{true, true, false, false, true},
+		{true, true, true, true, false},
+		{true, true, false, true, false},
+		{true, false, true, true, false},
+		{false, true, false, true, false},
+		{false, false, true, true, false},
+		{false, false, false, true, false},
+		{true, false, false, true, false},
+		{false, true, true, true, false},
+	} {
+		if got := BubbleShortened(c.mineOn, c.othersOn, c.mine, c.expanded); got != c.want {
+			t.Errorf("BubbleShortened(%v, %v, %v, %v) = %v, want %v",
+				c.mineOn, c.othersOn, c.mine, c.expanded, got, c.want)
+		}
+	}
+	if ChatPreviewLines != 3 {
+		t.Errorf("ChatPreviewLines = %d", ChatPreviewLines)
+	}
+}
+
+func TestExpanded(t *testing.T) {
+	var e Expanded
+	if e.Is("m1") || e.IsDraft("d1") || e.Is("") || e.IsDraft("") {
+		t.Fatal("zero value expands something")
+	}
+	e.Expand("m1")
+	e.ExpandDraft("d1")
+	e.Expand("")
+	e.ExpandDraft("")
+	if !e.Is("m1") || e.Is("m2") || e.Is("") {
+		t.Error("messages")
+	}
+	if !e.IsDraft("d1") || e.IsDraft("d2") || e.IsDraft("") {
+		t.Error("drafts")
+	}
+	// A draft's id and a message's id are separate sets.
+	if e.Is(api.MessageID("d1")) || e.IsDraft(api.DraftID("m1")) {
+		t.Error("message and draft ids mixed")
+	}
+	e.Expand("m1") // again: still expanded, no collapsing back
+	if !e.Is("m1") {
+		t.Error("expanding twice collapsed")
+	}
+	e.Reset()
+	if e.Is("m1") || e.IsDraft("d1") {
+		t.Error("reset kept an expanded bubble")
+	}
+	e.Expand("m2")
+	if !e.Is("m2") {
+		t.Error("expand after reset")
+	}
+}
+
+func TestChatTruncateTexts(t *testing.T) {
+	if got := ChatShowMore(tr); got != "Show More" {
+		t.Errorf("show more %q", got)
+	}
+	if got := ChatPreferencesGroupTitle(tr); got != "Conversations" {
+		t.Errorf("group %q", got)
+	}
+	if got := ChatTruncateMineRowTitle(tr); got != "Shorten My Messages in Chat" {
+		t.Errorf("mine title %q", got)
+	}
+	if got := ChatTruncateOthersRowTitle(tr); got != "Shorten Others' Messages in Chat" {
+		t.Errorf("others title %q", got)
+	}
+	if got := ChatTruncateRowSubtitle(tr); got != "About three lines of each message in its bubble; a click shows the whole message" {
+		t.Errorf("subtitle %q", got)
+	}
+}

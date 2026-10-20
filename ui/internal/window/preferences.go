@@ -86,15 +86,17 @@ type PreferencesDialog struct {
 	storageRow     *adw.ActionRow
 	storageSize    *gtk.Label
 
-	colorScheme          *adw.ComboRow
-	density              *adw.ComboRow
-	showPreview          *adw.SwitchRow
-	groupByConversation  *adw.SwitchRow
-	conversationChatHTML *adw.SwitchRow
-	showAvatars          *adw.SwitchRow
-	monochrome           *adw.SwitchRow
-	monospace            *adw.SwitchRow
-	textZoom             *adw.SpinRow
+	colorScheme            *adw.ComboRow
+	density                *adw.ComboRow
+	showPreview            *adw.SwitchRow
+	groupByConversation    *adw.SwitchRow
+	conversationChatHTML   *adw.SwitchRow
+	conversationChatMine   *adw.SwitchRow
+	conversationChatOthers *adw.SwitchRow
+	showAvatars            *adw.SwitchRow
+	monochrome             *adw.SwitchRow
+	monospace              *adw.SwitchRow
+	textZoom               *adw.SpinRow
 
 	mcpSwitch *adw.SwitchRow
 
@@ -191,57 +193,59 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 			b.GetObject("board_window_them").Cast().(*adw.SpinRow),
 			b.GetObject("board_window_info").Cast().(*adw.SpinRow),
 		},
-		markReadDelay:        b.GetObject("mark_read_delay").Cast().(*adw.SpinRow),
-		confirmDelete:        b.GetObject("confirm_delete").Cast().(*adw.SwitchRow),
-		desktopNotifications: b.GetObject("desktop_notifications").Cast().(*adw.SwitchRow),
-		notificationSound:    b.GetObject("notification_sound").Cast().(*adw.SwitchRow),
-		mailGroup:            b.GetObject("mail_group").Cast().(*adw.PreferencesGroup),
-		checkInterval:        b.GetObject("check_interval").Cast().(*adw.ComboRow),
-		remoteImages:         b.GetObject("remote_images").Cast().(*adw.ComboRow),
-		offlineDays:          b.GetObject("offline_days").Cast().(*adw.ComboRow),
-		attachmentDays:       b.GetObject("attachment_days").Cast().(*adw.ComboRow),
-		neverStore:           b.GetObject("never_store_attachments").Cast().(*adw.SwitchRow),
-		compressStore:        b.GetObject("compress_store").Cast().(*adw.SwitchRow),
-		storageRow:           b.GetObject("storage_row").Cast().(*adw.ActionRow),
-		storageSize:          b.GetObject("storage_size").Cast().(*gtk.Label),
-		colorScheme:          b.GetObject("color_scheme").Cast().(*adw.ComboRow),
-		density:              b.GetObject("list_density").Cast().(*adw.ComboRow),
-		showPreview:          b.GetObject("show_preview_line").Cast().(*adw.SwitchRow),
-		groupByConversation:  b.GetObject("group_by_conversation").Cast().(*adw.SwitchRow),
-		conversationChatHTML: b.GetObject("conversation_chat_html").Cast().(*adw.SwitchRow),
-		showAvatars:          b.GetObject("show_avatars").Cast().(*adw.SwitchRow),
-		monochrome:           b.GetObject("monochrome_avatars").Cast().(*adw.SwitchRow),
-		monospace:            b.GetObject("monospace_plain_text").Cast().(*adw.SwitchRow),
-		textZoom:             b.GetObject("text_zoom").Cast().(*adw.SpinRow),
-		mcpSwitch:            b.GetObject("mcp_switch").Cast().(*adw.SwitchRow),
-		mcpGroup:             b.GetObject("mcp_group").Cast().(*adw.PreferencesGroup),
-		assistantGroup:       b.GetObject("assistant_group").Cast().(*adw.PreferencesGroup),
-		assistantProvider:    b.GetObject("assistant_provider").Cast().(*adw.ComboRow),
-		chatGPTGroup:         b.GetObject("chatgpt_group").Cast().(*adw.PreferencesGroup),
-		codexRow:             b.GetObject("codex_executable").Cast().(*adw.ActionRow),
-		codexChoose:          b.GetObject("codex_choose").Cast().(*gtk.Button),
-		codexInstall:         b.GetObject("codex_install").Cast().(*gtk.Button),
-		chatGPTConnection:    b.GetObject("chatgpt_connection").Cast().(*adw.ActionRow),
-		chatGPTSignIn:        b.GetObject("chatgpt_sign_in").Cast().(*gtk.Button),
-		chatGPTDisconnect:    b.GetObject("chatgpt_disconnect").Cast().(*gtk.Button),
-		chatGPTModel:         b.GetObject("chatgpt_model").Cast().(*adw.ComboRow),
-		chatGPTUsage:         b.GetObject("chatgpt_usage").Cast().(*adw.ActionRow),
-		chatGPTManageUsage:   b.GetObject("chatgpt_manage_usage").Cast().(*gtk.Button),
-		assistantMenu:        b.GetObject("assistant_menu_switch").Cast().(*adw.SwitchRow),
-		assistantTarget:      b.GetObject("assistant_target").Cast().(*adw.ComboRow),
-		claudeCodeRow:        b.GetObject("assistant_claude_code").Cast().(*adw.ActionRow),
-		claudeChoose:         b.GetObject("assistant_claude_choose").Cast().(*gtk.Button),
-		assistantModel:       b.GetObject("assistant_model").Cast().(*adw.ComboRow),
-		boardTriageGroup:     b.GetObject("board_triage_group").Cast().(*adw.PreferencesGroup),
-		boardTriageConsent:   b.GetObject("board_triage_consent").Cast().(*adw.SwitchRow),
-		boardTriageModel:     b.GetObject("board_triage_model").Cast().(*adw.ComboRow),
-		boardTriageAuto:      b.GetObject("board_triage_auto").Cast().(*adw.SwitchRow),
-		boardTriageAccounts:  b.GetObject("board_triage_accounts").Cast().(*adw.ExpanderRow),
-		boardTriageInterval:  b.GetObject("board_triage_interval").Cast().(*adw.ComboRow),
-		boardTriageDaily:     b.GetObject("board_triage_daily").Cast().(*adw.ComboRow),
-		boardTriageStatus:    b.GetObject("board_triage_status").Cast().(*adw.ActionRow),
-		boardTriageUsage:     b.GetObject("board_triage_usage").Cast().(*adw.ActionRow),
-		boardTriageTokens:    b.GetObject("board_triage_usage_value").Cast().(*gtk.Label),
+		markReadDelay:          b.GetObject("mark_read_delay").Cast().(*adw.SpinRow),
+		confirmDelete:          b.GetObject("confirm_delete").Cast().(*adw.SwitchRow),
+		desktopNotifications:   b.GetObject("desktop_notifications").Cast().(*adw.SwitchRow),
+		notificationSound:      b.GetObject("notification_sound").Cast().(*adw.SwitchRow),
+		mailGroup:              b.GetObject("mail_group").Cast().(*adw.PreferencesGroup),
+		checkInterval:          b.GetObject("check_interval").Cast().(*adw.ComboRow),
+		remoteImages:           b.GetObject("remote_images").Cast().(*adw.ComboRow),
+		offlineDays:            b.GetObject("offline_days").Cast().(*adw.ComboRow),
+		attachmentDays:         b.GetObject("attachment_days").Cast().(*adw.ComboRow),
+		neverStore:             b.GetObject("never_store_attachments").Cast().(*adw.SwitchRow),
+		compressStore:          b.GetObject("compress_store").Cast().(*adw.SwitchRow),
+		storageRow:             b.GetObject("storage_row").Cast().(*adw.ActionRow),
+		storageSize:            b.GetObject("storage_size").Cast().(*gtk.Label),
+		colorScheme:            b.GetObject("color_scheme").Cast().(*adw.ComboRow),
+		density:                b.GetObject("list_density").Cast().(*adw.ComboRow),
+		showPreview:            b.GetObject("show_preview_line").Cast().(*adw.SwitchRow),
+		groupByConversation:    b.GetObject("group_by_conversation").Cast().(*adw.SwitchRow),
+		conversationChatHTML:   b.GetObject("conversation_chat_html").Cast().(*adw.SwitchRow),
+		conversationChatMine:   b.GetObject("conversation_chat_truncate_mine").Cast().(*adw.SwitchRow),
+		conversationChatOthers: b.GetObject("conversation_chat_truncate_others").Cast().(*adw.SwitchRow),
+		showAvatars:            b.GetObject("show_avatars").Cast().(*adw.SwitchRow),
+		monochrome:             b.GetObject("monochrome_avatars").Cast().(*adw.SwitchRow),
+		monospace:              b.GetObject("monospace_plain_text").Cast().(*adw.SwitchRow),
+		textZoom:               b.GetObject("text_zoom").Cast().(*adw.SpinRow),
+		mcpSwitch:              b.GetObject("mcp_switch").Cast().(*adw.SwitchRow),
+		mcpGroup:               b.GetObject("mcp_group").Cast().(*adw.PreferencesGroup),
+		assistantGroup:         b.GetObject("assistant_group").Cast().(*adw.PreferencesGroup),
+		assistantProvider:      b.GetObject("assistant_provider").Cast().(*adw.ComboRow),
+		chatGPTGroup:           b.GetObject("chatgpt_group").Cast().(*adw.PreferencesGroup),
+		codexRow:               b.GetObject("codex_executable").Cast().(*adw.ActionRow),
+		codexChoose:            b.GetObject("codex_choose").Cast().(*gtk.Button),
+		codexInstall:           b.GetObject("codex_install").Cast().(*gtk.Button),
+		chatGPTConnection:      b.GetObject("chatgpt_connection").Cast().(*adw.ActionRow),
+		chatGPTSignIn:          b.GetObject("chatgpt_sign_in").Cast().(*gtk.Button),
+		chatGPTDisconnect:      b.GetObject("chatgpt_disconnect").Cast().(*gtk.Button),
+		chatGPTModel:           b.GetObject("chatgpt_model").Cast().(*adw.ComboRow),
+		chatGPTUsage:           b.GetObject("chatgpt_usage").Cast().(*adw.ActionRow),
+		chatGPTManageUsage:     b.GetObject("chatgpt_manage_usage").Cast().(*gtk.Button),
+		assistantMenu:          b.GetObject("assistant_menu_switch").Cast().(*adw.SwitchRow),
+		assistantTarget:        b.GetObject("assistant_target").Cast().(*adw.ComboRow),
+		claudeCodeRow:          b.GetObject("assistant_claude_code").Cast().(*adw.ActionRow),
+		claudeChoose:           b.GetObject("assistant_claude_choose").Cast().(*gtk.Button),
+		assistantModel:         b.GetObject("assistant_model").Cast().(*adw.ComboRow),
+		boardTriageGroup:       b.GetObject("board_triage_group").Cast().(*adw.PreferencesGroup),
+		boardTriageConsent:     b.GetObject("board_triage_consent").Cast().(*adw.SwitchRow),
+		boardTriageModel:       b.GetObject("board_triage_model").Cast().(*adw.ComboRow),
+		boardTriageAuto:        b.GetObject("board_triage_auto").Cast().(*adw.SwitchRow),
+		boardTriageAccounts:    b.GetObject("board_triage_accounts").Cast().(*adw.ExpanderRow),
+		boardTriageInterval:    b.GetObject("board_triage_interval").Cast().(*adw.ComboRow),
+		boardTriageDaily:       b.GetObject("board_triage_daily").Cast().(*adw.ComboRow),
+		boardTriageStatus:      b.GetObject("board_triage_status").Cast().(*adw.ActionRow),
+		boardTriageUsage:       b.GetObject("board_triage_usage").Cast().(*adw.ActionRow),
+		boardTriageTokens:      b.GetObject("board_triage_usage_value").Cast().(*gtk.Label),
 	}
 
 	// The dialog is rebuilt on every open while the store lives for the whole
@@ -256,6 +260,8 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		s.Bind(settings.KeyShowPreviewLine, d.showPreview.Object, "active"),
 		s.Bind(settings.KeyGroupByConversation, d.groupByConversation.Object, "active"),
 		s.Bind(settings.KeyConversationChatHTML, d.conversationChatHTML.Object, "active"),
+		s.Bind(settings.KeyConversationChatTruncateMine, d.conversationChatMine.Object, "active"),
+		s.Bind(settings.KeyConversationChatTruncateOthers, d.conversationChatOthers.Object, "active"),
 		s.Bind(settings.KeyShowAvatars, d.showAvatars.Object, "active"),
 		s.Bind(settings.KeyMonochromeAvatars, d.monochrome.Object, "active"),
 		s.Bind(settings.KeyMonospacePlainText, d.monospace.Object, "active"),

@@ -47,7 +47,10 @@ const convCaptionMiddle = 8
 // plain-text body (bubbleMonospace). The web view of an HTML bubble
 // (.chat-bubble-html) has no background of its own: the view is
 // transparent and the document's backgrounds neutralised
-// (htmlview.ChatDocument), so the bubble's background shows through. Like avatar.conversation-own over the
+// (htmlview.ChatDocument), so the bubble's background shows through. A
+// shortened HTML bubble's clipped document fades into the bubble's colour
+// (.chat-fade, the same two colours), "Show More" under a shortened bubble
+// is a small dimmed caption (.chat-show-more). Like avatar.conversation-own over the
 // monochrome avatars, it overrides internal/style's sheet because this one
 // is added to the display later at the same priority, and of two providers
 // of one priority the later one wins.
@@ -66,6 +69,9 @@ label.message-body.chat-proportional { font-family: inherit; }
 box.chat-clip-pill { padding: 0 6px; border-radius: 99px; font-size: 80%; background-color: alpha(@window_fg_color, 0.1); color: alpha(@window_fg_color, 0.75); }
 box.chat-clip-pill image { -gtk-icon-size: 12px; }
 overlay.chat-bubble-html { background: none; }
+frame.chat-bubble box.chat-fade { background-image: linear-gradient(to bottom, transparent 50%, mix(@card_bg_color, @window_fg_color, 0.06)); }
+frame.chat-bubble.chat-bubble-mine box.chat-fade { background-image: linear-gradient(to bottom, transparent 50%, mix(@card_bg_color, @accent_bg_color, 0.12)); }
+label.chat-show-more { font-weight: 600; }
 `
 
 var convCSSOnce sync.Once

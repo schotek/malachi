@@ -2926,7 +2926,7 @@ reference; the rules the Go package leaves to its clients are Swift-first
   `ChatBody`, `BubbleBodyFor`, `BubbleAttachmentBadge`, `BubbleMonospace`,
   `ChatAtEnd`, `ChatCompactDates`, `ChatResizeFor`), the chat's cases in
   `ConversationLayoutTests` (`ChatBubbleKeepsAnEmptySide`,
-  `ChatGapIsContinuousAndTheBubbleNeverNarrower`), `SettingsTests` (45 keys,
+  `ChatGapIsContinuousAndTheBubbleNeverNarrower`), `SettingsTests` (47 keys,
   `GschemaCoverageTests`, `StringsCheckTests`), and the opt-in UI smoke test
   `ConversationChatSmokeTests` over `MALACHI_DEVMAIL`
   (`ConversationChatFixture`: devmail with a two-message conversation, the
@@ -3062,6 +3062,46 @@ switch both ways while the chat shows, switching the theme while HTML
 bubbles show, and 125 % scale. Unverified assumption: that WinUI 3's
 `WebView2` renders `Colors.Transparent` as transparent (the old comment in
 `HardenedWebView` said it had no transparent WebView2).
+
+**Shortened bubbles (2026-10-20).** Preferences → Appearance has a new
+section *Conversations* (`Conversation.ChatPreferencesGroupTitle`, after
+Message List, as the Blueprint's group) holding *Group by Conversation*
+(moved from Message List), *Render HTML in Chat*, *Shorten My Messages in
+Chat* (`ConversationChatTruncateMineSwitch`, `SettingsStore.ConversationChatTruncateMine`)
+and *Shorten Others' Messages in Chat* (`ConversationChatTruncateOthersSwitch`,
+`ConversationChatTruncateOthers`; its title is set in code from
+`Conversation.ChatTruncateOthersRowTitle`, since a markup extension's quoted
+value cannot carry the apostrophe), both default off with the same subtitle;
+their msgids left `parity-exclusions.txt` (the gschema lines stay). Core
+ports Go's `ChatPreviewLines` (3), `BubbleShortened(mineOn, othersOn, mine,
+expanded)` (the setting of the bubble's side, a draft counting as mine, and
+not expanded; the 16-row table in `ConversationChatTests`), the texts and
+`Expanded` as `ConversationExpanded` (`Expand`/`Is`, `ExpandDraft`/`IsDraft`,
+`Reset`). `ConversationBubbleView.SetShortened`: a text bubble's `TextBlock`
+takes `MaxLines` 3 and `CharacterEllipsis`; an HTML bubble's slot is
+clipped (`Height` and a `RectangleGeometry` clip) to three lines of the chat
+font (`3 × size × 1.33`, the size with the text zoom) while the view keeps
+and measures the whole document, under a fade (`LinearGradientBrush` from
+transparent to the bubble's fill and tint composited over the theme's solid
+background; none in high contrast) that takes the presses while it shows;
+*Show More* under the body only when something is cut (`IsTextTrimmed`, the
+measured document taller than the preview); a released shortened HTML bubble
+keeps the clipped height. A tap (`Tapped`) anywhere in a shortened bubble
+asks the chat to expand it: Mail's chat records it in its
+`ConversationExpanded` (reset with the conversation in `RemoveAll`, kept
+across a layout switch) and shows it whole through `Preserving`; the board's
+block records it per case (reset when `state.CaseId` changes) through
+`ChangingHeight`; a double tap still opens the message (the first tap may
+expand it first). The side picks the key: Mail's chat by the row's side
+(`ConversationChatRow.Right`; drafts mine), the board by `MessageCard.Mine`.
+Both chats observe both keys (`OnChange`, tokens cancelled with the others)
+and shorten or show every bubble anew; centre rows are never shortened.
+Written blind; the chat smoke is not extended. By hand: the new section and
+its order, each switch alone (only its side shortens), long and short text
+bubbles (the hint only when cut), HTML bubbles (clipped with the fade, the
+hint, a tap expands, links work only once expanded), drafts (mine), the
+board's chat (another case forgets, the layout switch keeps), the switches
+while a chat shows, text zoom, the dark and high-contrast themes.
 
 ### 11.8 The Board
 

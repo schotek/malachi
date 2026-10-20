@@ -104,6 +104,11 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
     // its pictures were downloaded (ConversationLayout.PicturesArrived).
     private readonly Dictionary<MessageId, MessageBodyResult> sources = [];
 
+    // The bubbles the user expanded while Shorten My/Others' Messages in Chat shorten
+    // them; forgotten with the conversation (RemoveAll), as the timeline's
+    // folds, kept across a switch of the layout.
+    private readonly ConversationExpanded expanded = new();
+
     // The rows in the order shown, under the issue card.
     private List<FrameworkElement> rowViews = [];
     private bool compactDates;
@@ -157,6 +162,8 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
         tokens.Add(settings.OnChange(SettingsKey.MonospacePlainText, ApplyBodyFont));
         tokens.Add(settings.OnChange(SettingsKey.MonochromeAvatars, ApplyAvatars));
         tokens.Add(settings.OnChange(SettingsKey.ConversationChatHtml, ApplyHtmlSetting));
+        tokens.Add(settings.OnChange(SettingsKey.ConversationChatTruncateMine, ApplyShortened));
+        tokens.Add(settings.OnChange(SettingsKey.ConversationChatTruncateOthers, ApplyShortened));
     }
 
     /// <summary>The members whose bodies the bubbles near the viewport keep (the host trims the controller with them while the chat shows).</summary>
@@ -178,6 +185,13 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
 
     // The preference conversation-chat-html: bubbles with HTML render it.
     private bool HtmlSetting => services.State.Settings.ConversationChatHtml;
+
+    // The preferences conversation-chat-truncate-mine and -others: whether
+    // a bubble of that side (a draft is the user's own) shows a preview,
+    // unless the user expanded it.
+    private bool Shortened(bool mine, bool expandedOne) =>
+        Core.Model.Conversation.BubbleShortened(
+            services.State.Settings.ConversationChatTruncateMine, services.State.Settings.ConversationChatTruncateOthers, mine, expandedOne);
 
     /// <summary>
     /// A change of the controller, from the host. While hidden the rows are
@@ -437,8 +451,10 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
                             }
                             view = MakeRow(id, null, right);
                             view.Bubble.Activate = () => OpenMember(id);
+                            view.Bubble.Expand = () => ExpandMember(id);
                             bubbles[id] = view;
                         }
+                        view.Bubble.SetShortened(Shortened(view.Right, expanded.Is(id)));
                         view.Bubble.CompactDate = compactDates;
                         view.Bubble.ShowMessage(item, Attachments(id));
                         if (!view.Bubble.ShowsText)
@@ -479,8 +495,10 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
                         if (!draftRows.TryGetValue(id, out var view))
                         {
                             view = MakeRow(null, id, right: true);
+                            view.Bubble.Expand = () => ExpandDraft(id);
                             draftRows[id] = view;
                         }
+                        view.Bubble.SetShortened(Shortened(mine: true, expanded.IsDraft(id)));
                         var draft = card.Draft;
                         view.Bubble.Activate = () => AfterRelease.Run(() => services.Router.EditThreadDraft(draft));
                         view.Bubble.CompactDate = compactDates;
@@ -630,6 +648,7 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
         Detach(truncatedRow);
         bubbles.Clear();
         sources.Clear();
+        expanded.Reset();
         events.Clear();
         draftRows.Clear();
         rowViews = [];
@@ -980,6 +999,43 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
             }
         });
         ScheduleNear();
+    }
+
+    // A tap on a shortened bubble of member id (or draft id): recorded, and
+    // the bubble shows the whole message; nothing collapses back.
+    private void ExpandMember(MessageId id)
+    {
+        expanded.Expand(id);
+        if (bubbles.TryGetValue(id, out var row))
+        {
+            Preserving(() => row.Bubble.SetShortened(false));
+        }
+    }
+
+    private void ExpandDraft(DraftId id)
+    {
+        expanded.ExpandDraft(id);
+        if (draftRows.TryGetValue(id, out var row))
+        {
+            Preserving(() => row.Bubble.SetShortened(false));
+        }
+    }
+
+    // The preference conversation-chat-truncate changed: every bubble
+    // shortened or whole anew (the expanded ones stay whole).
+    private void ApplyShortened()
+    {
+        Preserving(() =>
+        {
+            foreach (var (id, row) in bubbles)
+            {
+                row.Bubble.SetShortened(Shortened(row.Right, expanded.Is(id)));
+            }
+            foreach (var (id, row) in draftRows)
+            {
+                row.Bubble.SetShortened(Shortened(mine: true, expanded.IsDraft(id)));
+            }
+        });
     }
 
     // The avatars' setting: every row's avatar anew.

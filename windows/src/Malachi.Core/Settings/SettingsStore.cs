@@ -72,6 +72,8 @@ public sealed class SettingsStore : IDisposable
         new(SettingsKey.GroupByConversation, "group-by-conversation", "b", false),
         new(SettingsKey.ConversationChatLayout, "conversation-chat-layout", "b", false),
         new(SettingsKey.ConversationChatHtml, "conversation-chat-html", "b", false),
+        new(SettingsKey.ConversationChatTruncateMine, "conversation-chat-truncate-mine", "b", false),
+        new(SettingsKey.ConversationChatTruncateOthers, "conversation-chat-truncate-others", "b", false),
         new(SettingsKey.SearchScope, "search-scope", "s", "folder", choices: Nicks<SearchScope>.All),
         new(SettingsKey.ShowAvatars, "show-avatars", "b", true),
         new(SettingsKey.MonochromeAvatars, "monochrome-avatars", "b", false),
@@ -273,6 +275,20 @@ public sealed class SettingsStore : IDisposable
     {
         get => GetBoolean(SettingsKey.ConversationChatHtml);
         set => SetBoolean(SettingsKey.ConversationChatHtml, value);
+    }
+
+    /// <summary>Whether a bubble of the user's own message (and a draft) in the chat layout shows about three lines until a click shows the whole message (Go <c>conversation.ChatPreviewLines</c>, <c>BubbleShortened</c>).</summary>
+    public bool ConversationChatTruncateMine
+    {
+        get => GetBoolean(SettingsKey.ConversationChatTruncateMine);
+        set => SetBoolean(SettingsKey.ConversationChatTruncateMine, value);
+    }
+
+    /// <summary>Whether a bubble of the other party's message in the chat layout shows about three lines until a click shows the whole message (Go <c>conversation.BubbleShortened</c>).</summary>
+    public bool ConversationChatTruncateOthers
+    {
+        get => GetBoolean(SettingsKey.ConversationChatTruncateOthers);
+        set => SetBoolean(SettingsKey.ConversationChatTruncateOthers, value);
     }
 
     /// <summary>The scope last chosen for a search.</summary>

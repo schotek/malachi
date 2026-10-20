@@ -2867,6 +2867,21 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   backgrounds (dark mode forces theme text and link colours), so the bubble
   colour shows; the column is a `flow-root` with `overflow: hidden`, since
   collapsed block margins otherwise made the view shorter than the document.
+- Shortening messages in the chat (2026-10-20): **decided**, two opt-in
+  preferences `conversation-chat-truncate-mine` and
+  `conversation-chat-truncate-others` (both default off, the owner split
+  them before the commit, since people want to skim others' long mail but
+  see their own whole) show about three lines of each bubble of that side
+  (a draft counts as mine), text and HTML, in Mail's chat and the board's; a
+  click expands it. It is a view-only choice, so it lives in the client with
+  a pure rule in the Go reference (`BubbleShortened(mineOn, othersOn, mine,
+  expanded)`); the daemon, the API
+  and the trust boundary are untouched. An HTML bubble still loads and
+  measures the whole document and only clips the view, so the height rules
+  and the cap of live views stay as they are. Expansions are remembered per
+  selected conversation or case, kept across a layout switch and never
+  persisted, and there is no collapsing back, which keeps one click one
+  meaning (a double click still opens the window).
 - Jira `mine` in `board.get` and `board.queue` (2026-10-20): **decided**, a
   Jira description or comment written by the account's own user (not relayed
   by a bot) is marked `mine` in the two methods, like `issue.mine`, so the

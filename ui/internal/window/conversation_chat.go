@@ -95,6 +95,15 @@ type conversationChat struct {
 
 	// htmlOn is the preference conversation-chat-html as last read.
 	htmlOn bool
+	// mineOn and othersOn are the preferences
+	// conversation-chat-truncate-mine and -others as last read,
+	// expanded the bubbles the user expanded in the conversation
+	// expandedScope (its thread; forgotten on another, kept across a
+	// layout switch).
+	mineOn        bool
+	othersOn      bool
+	expanded      conversation.Expanded
+	expandedScope string
 
 	nearScheduled bool
 	// layoutTick, layoutTries: as the timeline's afterLayout.
@@ -119,6 +128,10 @@ func newConversationChat(h *conversationHost, b *gtk.Builder) *conversationChat 
 	}
 	cv.htmlOn = h.w.settings.ConversationChatHTML()
 	h.w.settings.OnChanged(settings.KeyConversationChatHTML, cv.htmlChanged)
+	cv.mineOn = h.w.settings.ConversationChatTruncateMine()
+	cv.othersOn = h.w.settings.ConversationChatTruncateOthers()
+	h.w.settings.OnChanged(settings.KeyConversationChatTruncateMine, cv.truncChanged)
+	h.w.settings.OnChanged(settings.KeyConversationChatTruncateOthers, cv.truncChanged)
 	// The dark style and the accent colour are in the documents' sheet.
 	sm := adw.StyleManagerGetDefault()
 	sm.NotifyProperty("dark", cv.styleChanged)
@@ -263,6 +276,7 @@ func (cv *conversationChat) update() {
 // the issue card, reusing the rows of the members, events and drafts shown
 // already; a member whose side changed gets a new row.
 func (cv *conversationChat) apply(m *conversation.Model) {
+	chatExpandedScope(&cv.expanded, &cv.expandedScope, string(m.Thread))
 	cv.issue.show(cv.w, cv.ctrl, m)
 	rows := conversation.ChatRows(*m, cv.ctrl.drafts)
 	desired := make([]gtk.Widgetter, 0, len(rows))
@@ -294,6 +308,7 @@ func (cv *conversationChat) apply(m *conversation.Model) {
 				cv.bubbles[id] = row
 			}
 			row.row = r
+			cv.shorten(row)
 			row.setMax(bubbleMax)
 			row.setGap(cv.bubbleGap())
 			row.showMessage(r.Item, bubbleAttachmentBadge(r.Item.Message, cv.ctrl.loaded[id]), cv.compact)
@@ -325,6 +340,7 @@ func (cv *conversationChat) apply(m *conversation.Model) {
 				cv.drafts[id] = row
 			}
 			row.row = r
+			cv.shorten(row)
 			row.setMax(bubbleMax)
 			row.showDraft(r.Draft)
 			desired = append(desired, row)
@@ -412,6 +428,34 @@ func (cv *conversationChat) styleChanged() {
 			row.bubble.loadWeb()
 		}
 	}
+}
+
+// shorten shows row shortened or whole as the preference and the user's
+// expanded bubbles say (chatRowShortened); a click on a shortened bubble
+// expands it (chatExpandRow; a row nothing records only shows whole).
+func (cv *conversationChat) shorten(row *chatRow) {
+	row.bubble.onExpand = func() {
+		chatExpandRow(&cv.expanded, row.row)
+		row.bubble.setShortened(false)
+	}
+	row.bubble.setShortened(chatRowShortened(cv.mineOn, cv.othersOn, &cv.expanded, row.row))
+}
+
+// truncChanged follows the preferences conversation-chat-truncate-mine
+// and -others: every bubble shortened or whole anew.
+func (cv *conversationChat) truncChanged() {
+	mine, others := cv.w.settings.ConversationChatTruncateMine(), cv.w.settings.ConversationChatTruncateOthers()
+	if mine == cv.mineOn && others == cv.othersOn {
+		return
+	}
+	cv.mineOn, cv.othersOn = mine, others
+	for _, row := range cv.bubbles {
+		cv.shorten(row)
+	}
+	for _, row := range cv.drafts {
+		cv.shorten(row)
+	}
+	cv.scheduleNear()
 }
 
 // dropBubble takes a bubble's row out, its web view back to the pool.

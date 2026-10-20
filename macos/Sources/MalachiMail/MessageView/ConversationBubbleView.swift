@@ -48,6 +48,17 @@ protocol ConversationBubbleWebHost: AnyObject {
 /// takes its full width. The web view takes the clicks on the document, so
 /// a double click opens the window from the header and the padding only.
 ///
+/// With the preference of its side, Shorten My / Others' Messages in
+/// Chat, the bubble shows about
+/// three lines (`setShortened`, `Conversation.chatPreviewLines`): the text
+/// at most that many lines with an ellipsis, the HTML slot clipped to that
+/// many lines of the chat font (the web view keeps loading and measuring
+/// the whole document under the clip) behind a fade into the bubble's
+/// colour, which also takes the clicks off the document; a "Show More"
+/// hint under the body only when there is more. A single click anywhere
+/// expands it (`onExpand`, the chat records it); a double click still opens
+/// the window.
+///
 /// Every text is plain (`stringValue`) and none can be selected: a double
 /// click anywhere in the bubble opens the message in its own window, a
 /// draft in the compose window (`onDoubleClick`), where everything else is.
@@ -65,6 +76,8 @@ final class ConversationBubbleView: NSView {
     let mine: Bool
     /// A double click anywhere in the bubble.
     var onDoubleClick: (@MainActor () -> Void)?
+    /// A single click on a shortened bubble: the whole message, please.
+    var onExpand: (@MainActor () -> Void)?
 
     /// The short date of the list instead of the full date and time (a
     /// narrow pane, `ConversationLayout.compactDates`).
@@ -110,6 +123,17 @@ final class ConversationBubbleView: NSView {
     /// forth. Off with the HTML (`leaveHTML`: the setting off, a text body,
     /// `dropHTML`).
     private var frozenHeight: NSLayoutConstraint!
+    /// The web view's own height, the document's whole height even while
+    /// the slot clips it (`htmlHeight`).
+    private var webViewHeight: NSLayoutConstraint?
+
+    /// The bubble shows the shortened preview (`setShortened`).
+    private(set) var shortened = false
+    /// "Show More" under a shortened body that has more.
+    private let hintLabel = NSTextField(labelWithString: "")
+    /// The fade over the bottom of a clipped document, which also takes the
+    /// clicks the web view would.
+    private let fade = BubbleFadeView()
     /// The HTML body shown (`Conversation.BubbleBody.html`), and the text
     /// the bubble reads while it holds no web view.
     private var htmlBody: MessageBodyResult?
@@ -228,7 +252,17 @@ final class ConversationBubbleView: NSView {
         htmlSlot.isHidden = true
         htmlSlot.paper = false
 
-        let column = NSStackView(views: [header, bodyLabel, htmlSlot])
+        htmlSlot.layer?.masksToBounds = true
+        fade.translatesAutoresizingMaskIntoConstraints = false
+        fade.isHidden = true
+
+        hintLabel.stringValue = Conversation.chatShowMore()
+        hintLabel.font = Typo.caption
+        hintLabel.textColor = .linkColor
+        hintLabel.isSelectable = false
+        hintLabel.isHidden = true
+
+        let column = NSStackView(views: [header, bodyLabel, htmlSlot, hintLabel])
         column.orientation = .vertical
         column.alignment = .leading
         column.spacing = 6
@@ -260,6 +294,13 @@ final class ConversationBubbleView: NSView {
         doubleClick.delaysPrimaryMouseButtonEvents = false
         doubleClick.delegate = self
         addGestureRecognizer(doubleClick)
+        // A single click expands a shortened bubble at once (the double
+        // click's first click may expand it first: accepted).
+        let click = NSClickGestureRecognizer(target: self, action: #selector(clicked(_:)))
+        click.numberOfClicksRequired = 1
+        click.delaysPrimaryMouseButtonEvents = false
+        click.delegate = self
+        addGestureRecognizer(click)
 
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
@@ -279,6 +320,7 @@ final class ConversationBubbleView: NSView {
             layer?.backgroundColor = ConversationTint.theirsFill(in: self).cgColor
             layer?.borderColor = ConversationTint.cardBorder(in: self).cgColor
         }
+        fade.colour = mine ? ConversationTint.mineFill(in: self) : ConversationTint.theirsFill(in: self)
     }
 
     /// The widest the bubble may be (`ConversationLayout.chatBubbleMax`):
@@ -290,6 +332,74 @@ final class ConversationBubbleView: NSView {
         fullWidth.constant = w
         bodyLabel.preferredMaxLayoutWidth = w - 2 * Self.paddingH
         bodyLabel.invalidateIntrinsicContentSize()
+        applyShortening()
+    }
+
+    // MARK: Shortened
+
+    /// Shows the shortened preview (`on`, `Conversation.bubbleShortened`)
+    /// or the whole message.
+    func setShortened(_ on: Bool) {
+        guard on != shortened else { return }
+        shortened = on
+        applyShortening()
+    }
+
+    /// The preview's height of an HTML body: `chatPreviewLines` lines of
+    /// the chat document's font (the text bubbles' size at the text zoom,
+    /// line height 1.3, `viewerChatFontCSS`).
+    private var previewHeight: CGFloat {
+        (CGFloat(Conversation.chatPreviewLines) * 1.3 * fonts.normal.pointSize).rounded(.up)
+    }
+
+    /// The HTML slot's height: the document's, clipped to the preview while
+    /// shortened.
+    private var shownHTMLHeight: CGFloat {
+        shortened ? min(webHeight, previewHeight) : webHeight
+    }
+
+    /// The text, the slot, the fade and the hint as `shortened` asks.
+    private func applyShortening() {
+        bodyLabel.maximumNumberOfLines = shortened ? Conversation.chatPreviewLines : 0
+        bodyLabel.lineBreakMode = shortened ? .byTruncatingTail : .byWordWrapping
+        bodyLabel.cell?.truncatesLastVisibleLine = shortened
+        bodyLabel.cell?.wraps = true
+        bodyLabel.invalidateIntrinsicContentSize()
+        htmlHeight.constant = shownHTMLHeight
+        if frozenHeight.isActive {
+            frozenHeight.constant = shownHTMLHeight
+        }
+        let clipped = shortened && webView != nil && !htmlSlot.isHidden && webHeight > previewHeight + 0.5
+        fade.isHidden = !clipped
+        let more: Bool
+        if !shortened {
+            more = false
+        } else if rendersHTML, webHeightReported {
+            more = webHeight > previewHeight + 0.5
+        } else {
+            more = textExceeds()
+        }
+        hintLabel.isHidden = !more
+    }
+
+    /// The text needs more than `chatPreviewLines` lines at the width it
+    /// wraps at.
+    private func textExceeds() -> Bool {
+        let text = bodyLabel.stringValue
+        let width = bodyLabel.preferredMaxLayoutWidth
+        guard !text.isEmpty, !bodyLabel.isHidden || frozenHeight.isActive, width > 0, let font = bodyLabel.font else {
+            return false
+        }
+        let full = (text as NSString).boundingRect(
+            with: NSSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: font]).height
+        let line = NSLayoutManager().defaultLineHeight(for: font)
+        return full > line * CGFloat(Conversation.chatPreviewLines) + 0.5
+    }
+
+    @objc private func clicked(_ g: NSClickGestureRecognizer) {
+        guard g.state == .ended, shortened else { return }
+        onExpand?()
     }
 
     // MARK: Content
@@ -415,11 +525,12 @@ final class ConversationBubbleView: NSView {
     private func showLabel(_ s: String, color: NSColor) {
         htmlSlot.isHidden = true
         let freeze = rendersHTML && webHeightReported
-        frozenHeight.constant = webHeight
+        frozenHeight.constant = shownHTMLHeight
         frozenHeight.isActive = freeze
         bodyLabel.stringValue = s
         bodyLabel.textColor = color
         bodyLabel.isHidden = s.isEmpty && !freeze
+        applyShortening()
     }
 
     /// The body is no longer HTML: no web view, the bubble hugs its text.
@@ -468,8 +579,8 @@ final class ConversationBubbleView: NSView {
         let wv = webView ?? makeWebView(host)
         frozenHeight.isActive = false
         bodyLabel.isHidden = true
-        htmlHeight.constant = webHeight
         htmlSlot.isHidden = false
+        applyShortening()
         wv.load(body: html, reload: htmlReload)
         htmlReload = false
     }
@@ -484,11 +595,20 @@ final class ConversationBubbleView: NSView {
         wv.onHover = { [weak self] href in self?.webHost?.hover(href) }
         wv.onHeight = { [weak self] h in self?.webHeightChanged(h) }
         htmlSlot.addSubview(wv)
+        htmlSlot.addSubview(fade)
+        // The view as tall as the document; the slot clips it while the
+        // bubble is shortened.
+        let height = wv.heightAnchor.constraint(equalToConstant: webHeight)
+        webViewHeight = height
         NSLayoutConstraint.activate([
             wv.topAnchor.constraint(equalTo: htmlSlot.topAnchor),
-            wv.bottomAnchor.constraint(equalTo: htmlSlot.bottomAnchor),
+            height,
             wv.leadingAnchor.constraint(equalTo: htmlSlot.leadingAnchor),
             wv.trailingAnchor.constraint(equalTo: htmlSlot.trailingAnchor),
+            fade.topAnchor.constraint(equalTo: htmlSlot.topAnchor),
+            fade.bottomAnchor.constraint(equalTo: htmlSlot.bottomAnchor),
+            fade.leadingAnchor.constraint(equalTo: htmlSlot.leadingAnchor),
+            fade.trailingAnchor.constraint(equalTo: htmlSlot.trailingAnchor),
         ])
         webView = wv
         return wv
@@ -502,16 +622,22 @@ final class ConversationBubbleView: NSView {
         wv.onLink = nil
         wv.onUnavailable = nil
         wv.removeFromSuperview()
+        fade.removeFromSuperview()
+        webViewHeight = nil
         htmlSlot.isHidden = true
         webHost?.hover("")
     }
 
     private func webHeightChanged(_ h: CGFloat) {
         webHeightReported = true
-        guard h != webHeight || htmlHeight.constant != h else { return }
+        guard h != webHeight || webViewHeight?.constant != h else {
+            applyShortening()
+            return
+        }
         let apply = {
             self.webHeight = h
-            self.htmlHeight.constant = h
+            self.webViewHeight?.constant = h
+            self.applyShortening()
         }
         if let host = webHost {
             host.bubbleHeightChanging(apply)
@@ -535,7 +661,8 @@ final class ConversationBubbleView: NSView {
     /// The point `p` (the bubble's coordinates) is on the document of a
     /// live web view, which takes its clicks itself.
     private func onDocument(_ p: NSPoint) -> Bool {
-        guard webView != nil, !htmlSlot.isHidden else { return false }
+        // A shortened document is under the fade, which is the bubble's.
+        guard webView != nil, !htmlSlot.isHidden, !shortened else { return false }
         return htmlSlot.convert(htmlSlot.bounds, to: self).contains(p)
     }
 
@@ -561,6 +688,7 @@ final class ConversationBubbleView: NSView {
         fonts = (normal, monospace)
         bodyLabel.font = self.monospace ? monospace : normal
         bodyLabel.invalidateIntrinsicContentSize()
+        applyShortening()
     }
 
     /// The date (or a draft's saved time) at the header's end, and the
@@ -683,5 +811,27 @@ extension ConversationBubbleView: NSGestureRecognizerDelegate {
     /// and the padding still open the window.
     func gestureRecognizer(_ gestureRecognizer: NSGestureRecognizer, shouldAttemptToRecognizeWith event: NSEvent) -> Bool {
         !onDocument(convert(event.locationInWindow, from: nil))
+    }
+}
+
+/// The fade over the bottom of a shortened bubble's clipped document: from
+/// clear to the bubble's colour, over the lower half; it covers the whole
+/// slot so that a click lands on the bubble, not on the document.
+@MainActor
+final class BubbleFadeView: NSView {
+    var colour: NSColor = .clear {
+        didSet { needsDisplay = true }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let gradient = NSGradient(colors: [colour.withAlphaComponent(0), colour]) else { return }
+        let half = NSRect(x: 0, y: 0, width: bounds.width, height: bounds.height / 2)
+        // Flipped or not, the lower half (y up: the bottom is minY).
+        let rect = isFlipped ? half.offsetBy(dx: 0, dy: bounds.height / 2) : half
+        gradient.draw(in: rect, angle: isFlipped ? 90 : -90)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        isHidden ? nil : super.hitTest(point)
     }
 }

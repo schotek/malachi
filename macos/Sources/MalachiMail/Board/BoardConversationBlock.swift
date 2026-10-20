@@ -64,7 +64,10 @@ struct BoardMailBodies {
 /// holds a web view; the others, a hidden chat, the preference off and a
 /// block out of the window read the board.get text. Heights change through
 /// `onHeightChanging`, links go to the delegate's `openLink`, the link
-/// under the pointer to `onHover`.
+/// under the pointer to `onHover`. With Shorten My / Others'
+/// Messages in Chat (`conversation-chat-truncate-mine`, `-others`,
+/// observed) every bubble of that side shows about three
+/// lines until a click expands it (`expanded`, forgotten with the case).
 @MainActor
 final class BoardConversationBlock: NSView, MessageDisplay {
     weak var delegate: (any MessageActionDelegate)?
@@ -119,6 +122,10 @@ final class BoardConversationBlock: NSView, MessageDisplay {
     /// The clip view whose scrolling the HTML bubbles follow.
     private weak var observedClip: NSClipView?
     private var chatLivePending = false
+    /// The bubbles the user expanded in the case shown; a sample (no id)
+    /// by its index.
+    private var expanded = Conversation.Expanded()
+    private var expandedSamples = Set<Int>()
 
     /// What the status row shows.
     private struct Status: Equatable {
@@ -192,6 +199,7 @@ final class BoardConversationBlock: NSView, MessageDisplay {
             removeAllChatRows()
             state = Board.ConversationCards()
             chatBodies = Board.ChatBodies()
+            resetExpanded()
             account = nil
             messages = []
             return
@@ -219,6 +227,7 @@ final class BoardConversationBlock: NSView, MessageDisplay {
                 removeAllChatRows()
                 state = Board.ConversationCards()
                 chatBodies = Board.ChatBodies()
+                resetExpanded()
                 messages = []
             }
             cardsColumn.isHidden = true
@@ -229,6 +238,9 @@ final class BoardConversationBlock: NSView, MessageDisplay {
         chatColumn.isHidden = !chatShown
         var reloads: [Int] = []
         let change = state.apply(Board.ConversationCards.key(d))
+        if change == .reset {
+            resetExpanded()
+        }
         messages = d.messages
         chatBodies.apply(state.members)
         applyChat(change, d.messages)
@@ -485,6 +497,8 @@ final class BoardConversationBlock: NSView, MessageDisplay {
         chatTokens.append(settings.onChange(.textZoom) { [weak self] in self?.applyChatFonts() })
         chatTokens.append(settings.onChange(.monochromeAvatars) { [weak self] in self?.applyChatAvatars() })
         chatTokens.append(settings.onChange(.conversationChatHTML) { [weak self] in self?.chatHTMLChanged() })
+        chatTokens.append(settings.onChange(.conversationChatTruncateMine) { [weak self] in self?.chatShorteningChanged() })
+        chatTokens.append(settings.onChange(.conversationChatTruncateOthers) { [weak self] in self?.chatShorteningChanged() })
     }
 
     /// The setting switched the layout (a click here, or in Mail): the
@@ -592,6 +606,10 @@ final class BoardConversationBlock: NSView, MessageDisplay {
             bubbleHosts[ObjectIdentifier(row)] = host
             row.bubble.webHost = host
         }
+        row.bubble.onExpand = { [weak self, weak row] in
+            guard let self, let row, let i = self.chatRows.firstIndex(where: { $0 === row }) else { return }
+            self.expandBubble(i)
+        }
         row.bubble.onDoubleClick = { [weak self, weak row] in
             guard let self, let row, let i = self.chatRows.firstIndex(where: { $0 === row }),
                   self.messages.indices.contains(i)
@@ -609,7 +627,47 @@ final class BoardConversationBlock: NSView, MessageDisplay {
     private func renderChatRow(_ row: ConversationChatRow, _ m: Board.MessageCard, at i: Int?) {
         row.showAvatar(name: m.sender, monochrome: monochrome)
         row.bubble.showPlain(sender: m.from, date: m.date == .distantPast ? nil : m.date)
+        row.bubble.setShortened(shortened(m, at: i))
         row.bubble.showBody(chatBody(m, at: i), monospace: false)
+    }
+
+    /// Whether the bubble of `m` (member `i`) shows the shortened preview
+    /// (`Conversation.bubbleShortened`).
+    private func shortened(_ m: Board.MessageCard, at i: Int?) -> Bool {
+        let was = m.id.map { expanded.is($0) } ?? i.map { expandedSamples.contains($0) } ?? false
+        let settings = actions.mailBodies?.settings
+        return Conversation.bubbleShortened(
+            mineOn: settings?.conversationChatTruncateMine ?? false,
+            othersOn: settings?.conversationChatTruncateOthers ?? false, mine: m.mine, expanded: was)
+    }
+
+    private func resetExpanded() {
+        expanded.reset()
+        expandedSamples = []
+    }
+
+    /// A click on the shortened bubble of member `i`: the whole message
+    /// while the case shows.
+    private func expandBubble(_ i: Int) {
+        guard messages.indices.contains(i), i < chatRows.count else { return }
+        let m = messages[i]
+        if let id = m.id {
+            expanded.expand(id)
+        } else {
+            expandedSamples.insert(i)
+        }
+        let row = chatRows[i]
+        change(row) { row.bubble.setShortened(shortened(m, at: i)) }
+        scheduleChatLive()
+    }
+
+    /// Shorten My / Others' Messages in Chat switched: every bubble anew.
+    private func chatShorteningChanged() {
+        for (i, row) in chatRows.enumerated() where messages.indices.contains(i) {
+            let m = messages[i]
+            change(row) { row.bubble.setShortened(self.shortened(m, at: i)) }
+        }
+        scheduleChatLive()
     }
 
     /// What the bubble of member `i` shows: the board.get text, unless the

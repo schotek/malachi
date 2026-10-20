@@ -28,7 +28,11 @@ import MalachiCore
 /// of a hidden layout read their text. Links go through the delegate's
 /// "Open this link?" as the cards' do, the link under the pointer to the
 /// status label, and a document's height through `preserving`, which
-/// keeps the end or the reading place. The bodies are asked for only for the bubbles near the
+/// keeps the end or the reading place. With the preferences Shorten
+/// My / Others' Messages in Chat (`conversation-chat-truncate-mine`,
+/// `-others`, observed) every bubble of that side
+/// shows about three lines until a click expands it (`expanded`, forgotten
+/// with the conversation, kept across a switch of the layout). The bodies are asked for only for the bubbles near the
 /// viewport (`ConversationLayout.live` over the rows' frames, two heights
 /// of the view), from the same controller and cache of bodies as the
 /// timeline, so switching layouts asks thread.get nothing. A double click
@@ -78,6 +82,8 @@ final class ConversationChatViewController: NSViewController {
     private let statusBox = LinkStatusView()
     private var spinnerWork: DispatchWorkItem?
     private var settingsTokens: [Settings.ChangeToken] = []
+    /// The bubbles the user expanded in the conversation shown.
+    private var expanded = Conversation.Expanded()
 
     /// This layout is the one the host shows.
     private(set) var shown = false
@@ -167,6 +173,8 @@ final class ConversationChatViewController: NSViewController {
         settingsTokens.append(settings.onChange(.monospacePlainText) { [weak self] in self?.applyBodyFont() })
         settingsTokens.append(settings.onChange(.monochromeAvatars) { [weak self] in self?.applyAvatars() })
         settingsTokens.append(settings.onChange(.conversationChatHTML) { [weak self] in self?.applyHTMLSetting() })
+        settingsTokens.append(settings.onChange(.conversationChatTruncateMine) { [weak self] in self?.applyShortening() })
+        settingsTokens.append(settings.onChange(.conversationChatTruncateOthers) { [weak self] in self?.applyShortening() })
     }
 
     /// Above the first row's own gap.
@@ -295,6 +303,10 @@ final class ConversationChatViewController: NSViewController {
                     }
                     view = makeRow(id: id, draft: nil, right: right)
                     view.bubble.webHost = self
+                    view.bubble.onExpand = { [weak self, weak view] in
+                        guard let self, let view else { return }
+                        self.expand(view)
+                    }
                     view.bubble.onDoubleClick = { [weak self, weak view] in
                         guard let self, let id = view?.id, let s = self.controller.member(id) else { return }
                         self.delegate?.openMessage(s)
@@ -302,6 +314,7 @@ final class ConversationChatViewController: NSViewController {
                     bubbles[id] = view
                 }
                 view.bubble.compactDate = compactDates
+                view.bubble.setShortened(shortened(view))
                 view.bubble.showMessage(item, attachments: attachments(id))
                 if !view.bubble.showsText {
                     let lm = controller.loaded[id]
@@ -327,8 +340,13 @@ final class ConversationChatViewController: NSViewController {
                     view = shown
                 } else {
                     view = makeRow(id: nil, draft: id, right: true)
+                    view.bubble.onExpand = { [weak self, weak view] in
+                        guard let self, let view else { return }
+                        self.expand(view)
+                    }
                     draftRows[id] = view
                 }
+                view.bubble.setShortened(shortened(view))
                 view.bubble.onDoubleClick = { [weak self] in self?.delegate?.editThreadDraft(card.draft) }
                 view.bubble.compactDate = compactDates
                 view.bubble.draftMonospace = state.settings.monospacePlainText
@@ -409,6 +427,7 @@ final class ConversationChatViewController: NSViewController {
     /// Takes everything out (another conversation, or none).
     private func removeAll() {
         releaseWebViews()
+        expanded.reset()
         for v in rowViews {
             detach(v)
         }
@@ -732,6 +751,40 @@ final class ConversationChatViewController: NSViewController {
                 } else if !on {
                     row.bubble.dropHTML()
                 }
+            }
+        }
+    }
+}
+
+extension ConversationChatViewController {
+    /// Whether the bubble of `row` shows the shortened preview
+    /// (`Conversation.bubbleShortened`).
+    private func shortened(_ row: ConversationChatRow) -> Bool {
+        let was = row.id.map { expanded.is($0) } ?? row.draftID.map { expanded.isDraft($0) } ?? false
+        let settings = state.settings
+        return Conversation.bubbleShortened(
+            mineOn: settings.conversationChatTruncateMine, othersOn: settings.conversationChatTruncateOthers,
+            mine: row.right, expanded: was)
+    }
+
+    /// A click on a shortened bubble: the whole message, for as long as
+    /// the conversation shows.
+    private func expand(_ row: ConversationChatRow) {
+        if let id = row.id {
+            expanded.expand(id)
+        } else if let d = row.draftID {
+            expanded.expandDraft(d)
+        }
+        preserving {
+            row.bubble.setShortened(shortened(row))
+        }
+    }
+
+    /// Shorten My / Others' Messages in Chat switched: every bubble anew.
+    private func applyShortening() {
+        preserving {
+            for row in Array(bubbles.values) + Array(draftRows.values) {
+                row.bubble.setShortened(shortened(row))
             }
         }
     }

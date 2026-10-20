@@ -73,6 +73,7 @@ webových pohledů v režimu `sized`.
 - 2026-10-20 vlastník: volitelná předvolba „V chatu vykreslovat HTML“
   (§10; mění D3 jen na přání); téhož dne vlastník: „Ano, stejná
   předvolba“ i pro chat Nástěnky, a průhledný pohled bubliny.
+- 2026-10-20 vlastník: předvolba „Zkracovat zprávy v chatu“ (§11).
 
 ## 6. Plán implementace
 
@@ -376,6 +377,21 @@ container. Deviations from the rows of §6.2:
   `ConversationCompensatedTop` for heights above the viewport). Mail's
   cache news reach it through `boardConversation.loadedWithChat`
   (`Window.showLoaded`).
+- **Shortened bubbles** (2026-10-20, *Shorten My Messages in Chat* and
+  *Shorten Others' Messages in Chat*, `settings.KeyConversationChatTruncateMine`
+  / `…Others`, rows `conversation_chat_truncate_mine` / `_others` in the new
+  group *Conversations* of `preferences.blp` with *Group by Conversation* and
+  *Render HTML in Chat*): `chatRowShortened` (the bubble's side picks the
+  preference, a draft is the user's own)/`chatExpandRow`/`chatExpandedScope`
+  (`conversation_chat_layout.go`, over `conversation.BubbleShortened` and
+  `Expanded`, reset on another thread or case) decide, `chatBubble.setShortened`
+  shows it: a text label `SetLines(ChatPreviewLines)` with an ellipsis, an
+  HTML host clipped to `chatPreviewHeight` (three lines of the label's
+  Pango metrics; the document still measured whole, `chatShownHeight`)
+  under a `.chat-fade` overlay that takes the click, "Show More"
+  (`.chat-show-more`) only when it overflows (`Layout().IsEllipsized()`,
+  `chatHTMLOverflows`); a single click expands (`onExpand`), a double click
+  still opens the window. Mail's and the board's chat both, drafts too.
 
 Tests: `conversation_chat_test.go` and `conversation_chat_layout_test.go`
 over a fake `convWindow`; `MALACHI_GTK_SMOKE=1 TestConversationChatGTKSmoke`
@@ -630,3 +646,67 @@ seznam v `docs/windows-port.md` §11.7. Známé nedostatky: plynulý dojezd
 touchpadu nad HTML bublinou v GTK nejede dál; dokument leží na bílém
 papíru v zabarvené bublině (tmavý motiv vypadá jinak než textová bublina);
 zmrazená výška je jen minimum (delší text než dokument řádek zvětší).
+
+## 11. Předvolba „Zkracovat zprávy v chatu“ (2026-10-20)
+
+Bublina chatu smí ukázat jen asi tři řádky zprávy; klepnutí ukáže celou.
+Necommitnuté; vlastník reviduje sám ve všech třech klientech. Rozhodnutí
+vlastníka:
+
+- **Textové i HTML bubliny, chat Pošty i Nástěnky**; výchozí celé zprávy,
+  zvlášť pro moje a cizí zprávy.
+- **Dva klíče** místo jednoho (změna před commitem): `conversation-chat-truncate-mine`
+  a `conversation-chat-truncate-others` (bool, oba výchozí vypnuto; 47 klíčů,
+  Swift 43, C# 47). Řádky „Shorten My Messages in Chat“ / „Zkracovat moje
+  zprávy v chatu“ a „Shorten Others' Messages in Chat“ / „Zkracovat cizí
+  zprávy v chatu“ se společným podtitulkem „About three lines of each message
+  in its bubble; a click shows the whole message“ / „Asi tři řádky každé
+  zprávy v bublině; klepnutí ukáže celou zprávu“, nápověda „Show More“ /
+  „Zobrazit více“. Předvolby → Seznam zpráv mají skupinu „Conversations“ /
+  „Konverzace“ (GTK `Adw.PreferencesGroup` v `preferences.blp`, macOS
+  skupina ve stejném panelu, Windows sekce v `AppearancePage`, název řádku
+  Others se kvůli apostrofu nastavuje v kódu) s pořadím: Seskupovat podle
+  konverzací (přesunuto sem), V chatu vykreslovat HTML, Zkracovat moje,
+  Zkracovat cizí. Jediný klíč `conversation-chat-truncate` ani msgid
+  „Shorten Messages in Chat“ už nikde neexistují (šablona vyčištěná).
+- **Jedno klepnutí kamkoli v bublině ji rozbalí**; dvojklik dál otevře
+  okno (první klepnutí dvojklika smí rozbalit dřív, přijato). Zpět se
+  nesbaluje; rozbalení se zapomenou při výběru jiné konverzace či případu,
+  přežijí přepnutí rozložení a nikdy se neukládají.
+- Textová bublina ukáže 3 řádky s výpustkou. HTML bublina ořízne webový
+  pohled na 3 řádky písma chatu (dokument se dál načte a změří celý) a
+  přechod do barvy bubliny přebírá i klepnutí, protože webový pohled kliky
+  spolkne. „Zobrazit více“ jen když obsah náhled opravdu přesahuje;
+  středové řádky se nezkracují, koncepty ano; uvolněná zkrácená HTML
+  bublina drží oříznutou výšku; změna předvolby přeresluje všechny bubliny.
+
+Reference Go `ui/internal/conversation/chat.go`: `ChatPreviewLines = 3`,
+`BubbleShortened(mineOn, othersOn, mine, expanded)` = nastavení strany bubliny
+&& !expanded (koncept se počítá jako moje), `Expanded` (Expand/Is/ExpandDraft/
+IsDraft/Reset), `ChatShowMore`, `ChatTruncateMineRowTitle`/
+`ChatTruncateOthersRowTitle`/`ChatTruncateRowSubtitle`/
+`ChatPreferencesGroupTitle`; Swift `Conversation.chatPreviewLines`/
+`bubbleShortened(mineOn:othersOn:mine:expanded:)`/`Expanded`, C#
+`Conversation.ChatPreviewLines`/`BubbleShortened(mineOn, othersOn, mine,
+expanded)`/`ConversationExpanded.cs`.
+GTK: `conversation_chat_layout.go`, `conversation_chat_row.go`
+(`chatBubble.setShortened`, `.chat-fade`, `.chat-show-more`),
+`conversation_chat.go`, `board_conversation_chat.go`, `preferences.blp`.
+macOS: `ConversationBubbleView` (`BubbleFadeView`, nápověda, rozpoznávač
+jednoho klepnutí), `ConversationChatViewController`, `BoardConversationBlock`,
+`AppearancePaneViewController`. Windows: `ConversationBubbleView.SetShortened`,
+`ConversationChatView`, `BoardConversationBlock`, `AppearancePage`.
+
+Ověřeno. GTK v kontejneru: build, `go test ./internal/window/...`
+(`TestConversationChatShortenedBubbles`), smoke Pošty se skutečným WebKitem
+(`a1 lines=3 more=true; a2 preview=55 document=170 host=55 fade=true`,
+klepnutí rozbalí, vypnuto ukáže celé), smoke Nástěnky (zkráceno, klepnutí
+rozbalí, drží se přes obnovu případu), `make po`, `make lint`. macOS:
+`swift build` bez varování, 581 filtrovaných testů, `check-strings`.
+
+Čeká: revize vlastníka ve všech třech; Windows napsané bez `dotnet`
+(`build.ps1 app`/`test`/`lint`, smoke, ruční seznam v `docs/windows-port.md`
+§11.7). Nedostatky: nikdo to zatím neviděl na obrazovce; vzorové bubliny
+Nástěnky (bez id) jsou na macOS rozbalené podle indexu, na GTK a Windows se
+nepamatují; barva přechodu na Windows předpokládá barvu panelu
+(#F3F3F3 / #202020).

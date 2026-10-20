@@ -516,3 +516,93 @@ func TestConversationChatReleasedHTMLBubbleKeepsItsHeight(t *testing.T) {
 		t.Errorf("preference off: %d", h)
 	}
 }
+
+// Shortened bubbles: the preference shortens every message and draft
+// bubble (never a centred row) until the user expands it; expanding is
+// kept while the conversation stays (a layout switch keeps it) and
+// forgotten on another; the preference off shows every bubble whole.
+func TestConversationChatShortenedBubbles(t *testing.T) {
+	w := newConvWindow(t, convMessages())
+	w.drafts["t1"] = []api.Draft{{ID: "d1", AccountID: "a", Version: 1, TextBody: "Draft reply", InReplyTo: "a3",
+		UpdatedAt: convBase.Add(9 * time.Hour)}}
+	w.list()
+	w.selectRow(w.row("t1", "", false))
+	rows := conversation.ChatRows(*w.ctrl.model, w.ctrl.drafts)
+	var e conversation.Expanded
+	scope := ""
+	chatExpandedScope(&e, &scope, string(w.ctrl.model.Thread))
+	// Each preference shortens its side: the user's own (on the right) and
+	// the drafts with mine, the others' (on the left) with others.
+	for _, r := range rows {
+		bubble := r.Kind == conversation.ChatBubble || r.Kind == conversation.ChatDraft
+		mine := r.Kind == conversation.ChatDraft || (r.Kind == conversation.ChatBubble && r.Side == conversation.ChatRight)
+		if got := chatRowShortened(true, true, &e, r); got != bubble {
+			t.Errorf("%v shortened %v with both on", r.Kind, got)
+		}
+		if got := chatRowShortened(true, false, &e, r); got != (bubble && mine) {
+			t.Errorf("%v (mine %v) shortened %v with mine on", r.Kind, mine, got)
+		}
+		if got := chatRowShortened(false, true, &e, r); got != (bubble && !mine) {
+			t.Errorf("%v (mine %v) shortened %v with others on", r.Kind, mine, got)
+		}
+		if chatRowShortened(false, false, &e, r) {
+			t.Errorf("%v shortened with both off", r.Kind)
+		}
+	}
+	if chatRowShortened(true, true, &e, conversation.ChatRow{Kind: conversation.ChatTruncated}) {
+		t.Error("a centred row is shortened")
+	}
+	// A click expands a message and a draft.
+	var msg, draft conversation.ChatRow
+	for _, r := range rows {
+		switch r.Kind {
+		case conversation.ChatBubble:
+			msg = r
+		case conversation.ChatDraft:
+			draft = r
+		}
+	}
+	if !chatExpandRow(&e, msg) || !chatExpandRow(&e, draft) {
+		t.Fatal("nothing expanded")
+	}
+	if chatRowShortened(true, true, &e, msg) || chatRowShortened(true, true, &e, draft) {
+		t.Error("expanded bubbles still shortened")
+	}
+	if chatExpandRow(&e, conversation.ChatRow{Kind: conversation.ChatEvent}) {
+		t.Error("an event row expanded")
+	}
+	// The same conversation again (a layout switch, a refresh): kept.
+	chatExpandedScope(&e, &scope, string(w.ctrl.model.Thread))
+	if chatRowShortened(true, true, &e, msg) {
+		t.Error("the same conversation forgot the expanded bubble")
+	}
+	// Another conversation: forgotten.
+	w.selectRow(w.row("t3", "", false))
+	chatExpandedScope(&e, &scope, string(w.ctrl.model.Thread))
+	if !chatRowShortened(true, true, &e, msg) || !chatRowShortened(true, true, &e, draft) {
+		t.Error("another conversation kept the expanded bubbles")
+	}
+
+	// The HTML bubble's clipped height and its overflow.
+	preview := chatPreviewHeight(17.2)
+	if preview != 52 {
+		t.Fatalf("preview %d", preview)
+	}
+	if h := chatShownHeight(300, preview, true); h != preview {
+		t.Errorf("shortened document %d", h)
+	}
+	if h := chatShownHeight(40, preview, true); h != 40 {
+		t.Errorf("a short document clipped to %d", h)
+	}
+	if h := chatShownHeight(300, preview, false); h != 300 {
+		t.Errorf("whole document %d", h)
+	}
+	if !chatHTMLOverflows(true, 300, preview, true) || chatHTMLOverflows(true, 40, preview, true) ||
+		chatHTMLOverflows(false, 300, preview, true) || chatHTMLOverflows(true, 300, preview, false) {
+		t.Error("overflow rule")
+	}
+	// A released shortened bubble keeps the clipped height.
+	if h := bubbleFrozenHeight(true, false, true, chatShownHeight(300, preview, true)); h != preview {
+		t.Errorf("released shortened bubble keeps %d", h)
+	}
+}

@@ -30,9 +30,11 @@ func TestMemoryDefaults(t *testing.T) {
 	if got := s.TextZoom(); got != 100 {
 		t.Errorf("TextZoom = %d, want 100", got)
 	}
-	if s.GroupByConversation() || s.ConversationChatLayout() || s.ConversationChatHTML() {
-		t.Errorf("conversation defaults wrong: group=%v chat=%v html=%v",
-			s.GroupByConversation(), s.ConversationChatLayout(), s.ConversationChatHTML())
+	if s.GroupByConversation() || s.ConversationChatLayout() || s.ConversationChatHTML() ||
+		s.ConversationChatTruncateMine() || s.ConversationChatTruncateOthers() {
+		t.Errorf("conversation defaults wrong: group=%v chat=%v html=%v mine=%v others=%v",
+			s.GroupByConversation(), s.ConversationChatLayout(), s.ConversationChatHTML(),
+			s.ConversationChatTruncateMine(), s.ConversationChatTruncateOthers())
 	}
 	if s.LaunchAtLogin() || s.RunInBackground() || !s.ConfirmDelete() || !s.DesktopNotifications() || s.NotificationSound() {
 		t.Error("general bool defaults wrong")
@@ -109,6 +111,31 @@ func TestMemorySetAndNotify(t *testing.T) {
 	s.SetConversationChatHTML(false)
 	if s.ConversationChatHTML() || html != 2 || chat != 2 {
 		t.Fatalf("after reset: html=%v calls=%d chat calls=%d", s.ConversationChatHTML(), html, chat)
+	}
+
+	mine, others := 0, 0
+	removeMine := s.OnChanged(KeyConversationChatTruncateMine, func() { mine++ })
+	defer removeMine()
+	removeOthers := s.OnChanged(KeyConversationChatTruncateOthers, func() { others++ })
+	defer removeOthers()
+	s.SetConversationChatTruncateMine(true)
+	if !s.ConversationChatTruncateMine() || s.ConversationChatTruncateOthers() || mine != 1 || others != 0 {
+		t.Fatalf("after set mine: mine=%v others=%v calls=%d/%d",
+			s.ConversationChatTruncateMine(), s.ConversationChatTruncateOthers(), mine, others)
+	}
+	s.SetConversationChatTruncateMine(true) // unchanged: no notification
+	if mine != 1 {
+		t.Fatalf("unchanged set fired handler: calls=%d", mine)
+	}
+	s.SetConversationChatTruncateOthers(true)
+	if !s.ConversationChatTruncateOthers() || others != 1 || mine != 1 {
+		t.Fatalf("after set others: others=%v calls=%d/%d", s.ConversationChatTruncateOthers(), mine, others)
+	}
+	s.SetConversationChatTruncateMine(false)
+	s.SetConversationChatTruncateOthers(false)
+	if s.ConversationChatTruncateMine() || s.ConversationChatTruncateOthers() || mine != 2 || others != 2 || html != 2 {
+		t.Fatalf("after reset: mine=%v others=%v calls=%d/%d html calls=%d",
+			s.ConversationChatTruncateMine(), s.ConversationChatTruncateOthers(), mine, others, html)
 	}
 }
 

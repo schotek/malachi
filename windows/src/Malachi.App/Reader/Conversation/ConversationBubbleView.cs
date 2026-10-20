@@ -56,6 +56,16 @@
 // card's (WebHeightGovernor). The web view takes the presses over its
 // document, so a double tap opens the message from the header (the sender,
 // the date) and the padding around the document.
+//
+// Shortened (the preferences conversation-chat-truncate-mine and -others, Shorten My or Others' Messages in
+// Chat; Conversation.BubbleShortened, set by the chat with SetShortened): a
+// text shows Conversation.ChatPreviewLines lines with an ellipsis, an HTML
+// document is clipped to that many lines of the chat font (the view still
+// loads and measures it whole) under a fade into the bubble's colour, which
+// takes the presses while it shows; "Show More" under the body only when
+// something is cut (TextBlock.IsTextTrimmed, the measured document taller
+// than the preview). A tap anywhere in a shortened bubble asks the chat to
+// expand it (Expand); a double tap still opens the message.
 
 using System;
 using System.Linq;
@@ -112,6 +122,12 @@ internal sealed partial class ConversationBubbleView : UserControl
     // Never shown: its Foreground is the link colour of the bubbles' text in
     // the theme shown, which Palette reads.
     private readonly TextBlock linkProbe;
+
+    // Shortened: the hint under the body, and the fade over the clipped
+    // document (its two layers: the bubble's fill and its tint).
+    private readonly TextBlock showMore;
+    private readonly Grid fade;
+    private readonly RectangleGeometry htmlClip = new();
 
     // What the header names for automation and the date it shows; a draft's
     // "Draft saved …" in the date's place.
@@ -254,6 +270,21 @@ internal sealed partial class ConversationBubbleView : UserControl
             Visibility = Visibility.Collapsed,
         };
         linkProbe = new TextBlock { Style = look("ConversationBubbleLinkStyle"), Visibility = Visibility.Collapsed };
+        // The fade over a clipped document, on top of the view (the view goes
+        // in under it); while it shows it takes the presses the view would.
+        fade = new Grid { Visibility = Visibility.Collapsed, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
+        htmlHost.Children.Add(fade);
+        htmlHost.Clip = htmlClip;
+        htmlHost.SizeChanged += (_, e) => htmlClip.Rect = new Windows.Foundation.Rect(0, 0, e.NewSize.Width, e.NewSize.Height);
+        showMore = new TextBlock
+        {
+            Style = look("ConversationBubbleLinkStyle"),
+            FontSize = 12,
+            Margin = new Thickness(0, 4, 0, 0),
+            Text = Core.Model.Conversation.ChatShowMore(),
+            Visibility = Visibility.Collapsed,
+        };
+        bodyLabel.IsTextTrimmedChanged += (_, _) => UpdateShowMore();
         // The wheel over the web view of a document that fits (nothing to
         // scroll inside) goes on to the chat (the card's forwardScroll).
         htmlHost.AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnHtmlWheel), handledEventsToo: true);
@@ -262,6 +293,7 @@ internal sealed partial class ConversationBubbleView : UserControl
         column.Children.Add(header);
         column.Children.Add(bodyLabel);
         column.Children.Add(htmlHost);
+        column.Children.Add(showMore);
         column.Children.Add(linkProbe);
         // Border is sealed in WinUI, so the bubble hosts its frame; the
         // user's own has the tint as an inner layer over the card's fill.
@@ -278,6 +310,7 @@ internal sealed partial class ConversationBubbleView : UserControl
             Child = inner,
         };
         DoubleTapped += OnDoubleTapped;
+        Tapped += OnTapped;
         // An HTML bubble takes the widest the row allows (ApplyWidth).
         RegisterPropertyChangedCallback(MaxWidthProperty, (_, _) => ApplyWidth());
         // The theme changed: the document again with the theme's colours.
@@ -287,6 +320,7 @@ internal sealed partial class ConversationBubbleView : UserControl
             {
                 LoadWebView();
             }
+            PaintFade();
         };
     }
 
@@ -315,6 +349,30 @@ internal sealed partial class ConversationBubbleView : UserControl
 
     /// <summary>The bubble holds a web view (the chat's live set, <see cref="SetLive"/>).</summary>
     public bool IsLive { get; private set; }
+
+    /// <summary>The bubble shows the shortened preview (<see cref="SetShortened"/>).</summary>
+    public bool Shortened { get; private set; }
+
+    /// <summary>A tap on a shortened bubble: the chat records it as expanded and shows it whole.</summary>
+    public Action? Expand { get; set; }
+
+    /// <summary>
+    /// Shows the shortened preview (<paramref name="on"/>,
+    /// <see cref="Core.Model.Conversation.BubbleShortened"/>) or the whole
+    /// message; the chat runs it where heights change.
+    /// </summary>
+    public void SetShortened(bool on)
+    {
+        if (on == Shortened)
+        {
+            return;
+        }
+        Shortened = on;
+        bodyLabel.MaxLines = on ? Core.Model.Conversation.ChatPreviewLines : 0;
+        bodyLabel.TextTrimming = on ? TextTrimming.CharacterEllipsis : TextTrimming.None;
+        ApplyHtmlHeight();
+        ShowPage();
+    }
 
     /// <summary>The short date of the list instead of the full date and time (a narrow column, <see cref="ConversationLayout.ChatCompactDates"/>).</summary>
     public bool CompactDate
@@ -556,6 +614,7 @@ internal sealed partial class ConversationBubbleView : UserControl
         fontSize = size;
         monospaceFamily = monospaceFont;
         ApplyFont();
+        ApplyHtmlHeight();
     }
 
     /// <inheritdoc/>
@@ -622,12 +681,90 @@ internal sealed partial class ConversationBubbleView : UserControl
         bodyLabel.Visibility = !html && (bodyLabel.Text.Length > 0 || frozen is not null) ? Visibility.Visible : Visibility.Collapsed;
         if (frozen is { } h)
         {
-            bodyLabel.MinHeight = h;
+            // A shortened bubble keeps its clipped height.
+            bodyLabel.MinHeight = Shortened ? Math.Min(h, PreviewHeight) : h;
         }
         else
         {
             bodyLabel.ClearValue(FrameworkElement.MinHeightProperty);
         }
+        UpdateShowMore();
+    }
+
+    // The clipped document's height: ChatPreviewLines lines of the chat
+    // document's font (the bubbles' size with the text zoom, line-height
+    // 1.33 as ViewerDocument.ChatDocument sets it).
+    private double PreviewHeight => Math.Ceiling(Core.Model.Conversation.ChatPreviewLines * fontSize * 1.33);
+
+    // The HTML slot's height: the document's, or the preview's while
+    // shortened (the view keeps the document's height and is clipped), and
+    // the fade over the clipped part.
+    private void ApplyHtmlHeight()
+    {
+        var clipped = Shortened && webHeight > PreviewHeight;
+        htmlHost.Height = clipped ? PreviewHeight : webHeight;
+        fade.Visibility = clipped && web is not null ? Visibility.Visible : Visibility.Collapsed;
+        if (clipped)
+        {
+            PaintFade();
+        }
+        UpdateShowMore();
+    }
+
+    // "Show More" only while something is cut: the text trimmed, or the
+    // document taller than the preview.
+    private void UpdateShowMore()
+    {
+        var cut = Shortened && (web is not null ? webHeight > PreviewHeight : bodyLabel.IsTextTrimmed);
+        showMore.Visibility = cut ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // The fade into the bubble's colour over the lowest part of a clipped
+    // document: the bubble's fill and its tint as two gradients from
+    // transparent, over an opaque base of the theme (the pane's solid
+    // background), so that the document's last line fades out; high contrast
+    // keeps no gradient (the fade only takes the presses).
+    private void PaintFade()
+    {
+        fade.Children.Clear();
+        if (Accessibility.HighContrast || Content is not Border outer)
+        {
+            return;
+        }
+        var dark = ActualTheme == ElementTheme.Dark;
+        var under = dark ? Windows.UI.Color.FromArgb(255, 0x20, 0x20, 0x20) : Windows.UI.Color.FromArgb(255, 0xF3, 0xF3, 0xF3);
+        var color = under;
+        if (outer.Background is SolidColorBrush fill)
+        {
+            color = Over(color, fill.Color, fill.Opacity);
+        }
+        if (outer.Child is Border { Background: SolidColorBrush tint })
+        {
+            color = Over(color, tint.Color, tint.Opacity);
+        }
+        var brush = new LinearGradientBrush { StartPoint = new Windows.Foundation.Point(0, 0), EndPoint = new Windows.Foundation.Point(0, 1) };
+        brush.GradientStops.Add(new GradientStop { Color = Windows.UI.Color.FromArgb(0, color.R, color.G, color.B), Offset = 0.45 });
+        brush.GradientStops.Add(new GradientStop { Color = color, Offset = 1 });
+        fade.Children.Add(new Microsoft.UI.Xaml.Shapes.Rectangle { Fill = brush, IsHitTestVisible = false });
+    }
+
+    // over drawn at opacity over an opaque under.
+    private static Windows.UI.Color Over(Windows.UI.Color under, Windows.UI.Color over, double opacity)
+    {
+        var a = over.A / 255.0 * opacity;
+        byte Mix(byte u, byte o) => (byte)Math.Round((o * a) + (u * (1 - a)));
+        return Windows.UI.Color.FromArgb(255, Mix(under.R, over.R), Mix(under.G, over.G), Mix(under.B, over.B));
+    }
+
+    // A tap on a shortened bubble expands it (the double tap still opens it).
+    private void OnTapped(object sender, TappedRoutedEventArgs e)
+    {
+        if (!Shortened || Expand is not { } expand)
+        {
+            return;
+        }
+        e.Handled = true;
+        expand();
     }
 
     // An HTML bubble is as wide as the row allows (MaxWidth, the row's
@@ -663,8 +800,8 @@ internal sealed partial class ConversationBubbleView : UserControl
             web.OnSize = SizeReported;
             web.OnFailed = HtmlUnavailable;
             web.Height = webHeight;
-            htmlHost.Height = webHeight;
-            htmlHost.Children.Add(web);
+            htmlHost.Children.Insert(0, web);
+            ApplyHtmlHeight();
             webDoc = null;
         }
         if (!string.Equals(webDoc, h.Value, StringComparison.Ordinal) || reload)
@@ -762,11 +899,11 @@ internal sealed partial class ConversationBubbleView : UserControl
         {
             webHeight = h;
             frozenHeight = h;
-            htmlHost.Height = h;
             if (web is not null)
             {
                 web.Height = h;
             }
+            ApplyHtmlHeight();
         }
         if (WebHost is { } host)
         {

@@ -59,6 +59,14 @@ const (
 	// message's sanitized HTML in a locked web view instead of its plain
 	// text.
 	KeyConversationChatHTML = "conversation-chat-html"
+	// KeyConversationChatTruncateMine shortens a bubble of the user's own
+	// message (and a draft) in the chat layout to about three lines until
+	// a click shows the whole message (conversation.ChatPreviewLines,
+	// BubbleShortened).
+	KeyConversationChatTruncateMine = "conversation-chat-truncate-mine"
+	// KeyConversationChatTruncateOthers shortens a bubble of the other
+	// party's message in the chat layout the same way.
+	KeyConversationChatTruncateOthers = "conversation-chat-truncate-others"
 	// KeySearchScope is where a search looks, as last chosen in the
 	// search bar.
 	KeySearchScope = "search-scope"
@@ -231,17 +239,19 @@ var defaults = map[string]any{
 	KeyDesktopNotifications: true,
 	KeyNotificationSound:    false,
 
-	KeyColorScheme:            string(ColorSchemeSystem),
-	KeyDensity:                string(DensityComfortable),
-	KeyShowPreviewLine:        true,
-	KeyShowAvatars:            true,
-	KeyMonochromeAvatars:      false,
-	KeyMonospacePlainText:     false,
-	KeyTextZoom:               100,
-	KeyGroupByConversation:    false,
-	KeyConversationChatLayout: false,
-	KeyConversationChatHTML:   false,
-	KeySearchScope:            string(SearchFolder),
+	KeyColorScheme:                    string(ColorSchemeSystem),
+	KeyDensity:                        string(DensityComfortable),
+	KeyShowPreviewLine:                true,
+	KeyShowAvatars:                    true,
+	KeyMonochromeAvatars:              false,
+	KeyMonospacePlainText:             false,
+	KeyTextZoom:                       100,
+	KeyGroupByConversation:            false,
+	KeyConversationChatLayout:         false,
+	KeyConversationChatHTML:           false,
+	KeyConversationChatTruncateMine:   false,
+	KeyConversationChatTruncateOthers: false,
+	KeySearchScope:                    string(SearchFolder),
 
 	KeyCollapsedFolders:  []string(nil),
 	KeyCollapsedAccounts: []string(nil),
@@ -398,6 +408,20 @@ func (s *Store) SetConversationChatLayout(v bool) { s.set(KeyConversationChatLay
 
 func (s *Store) ConversationChatHTML() bool     { return s.boolean(KeyConversationChatHTML) }
 func (s *Store) SetConversationChatHTML(v bool) { s.set(KeyConversationChatHTML, v) }
+
+func (s *Store) ConversationChatTruncateMine() bool {
+	return s.boolean(KeyConversationChatTruncateMine)
+}
+func (s *Store) SetConversationChatTruncateMine(v bool) {
+	s.set(KeyConversationChatTruncateMine, v)
+}
+
+func (s *Store) ConversationChatTruncateOthers() bool {
+	return s.boolean(KeyConversationChatTruncateOthers)
+}
+func (s *Store) SetConversationChatTruncateOthers(v bool) {
+	s.set(KeyConversationChatTruncateOthers, v)
+}
 
 func (s *Store) MonospacePlainText() bool     { return s.boolean(KeyMonospacePlainText) }
 func (s *Store) SetMonospacePlainText(v bool) { s.set(KeyMonospacePlainText, v) }

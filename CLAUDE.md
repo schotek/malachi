@@ -1961,7 +1961,7 @@ Nesouvisející: backend `TestInvitationDetectionOfTheCorpus` padá od
 2026-10-20T10:00Z a pravidlo `end ≤ now` ji bere jako prošlou.
 
 Předvolba V chatu vykreslovat HTML (2026-10-20, všechny tři klienty,
-necommitnuté; vlastník reviduje sám; plán `docs/plans/chat-view.md` §10).
+v `main` 2026-10-20 jako `3641c4c4`; plán `docs/plans/chat-view.md` §10).
 Rozhodnutí vlastníka: chat Pošty i Nástěnky s touž předvolbou („Ano, stejná
 předvolba“), výchozí vypnuto. Nástěnka: bublina blízko viditelné části detailu
 se s předvolbou zeptá `message.body` přes cache Pošty jako otevřené karty,
@@ -2019,6 +2019,52 @@ smoke chatu a ruční seznam v `docs/windows-port.md` §11.7. Nedostatky: dojezd
 touchpadu nad HTML bublinou v GTK nejede dál; dokument leží na bílém papíru
 v zabarvené bublině (tmavý motiv vypadá jinak než textová); zmrazená výška je
 jen minimum.
+
+Předvolba Zkracovat zprávy v chatu (2026-10-20, všechny tři klienty,
+necommitnuté; vlastník reviduje sám; plán `docs/plans/chat-view.md` §11).
+Rozhodnutí vlastníka: textové i HTML bubliny, chat Pošty i Nástěnky, výchozí
+celé zprávy, zvlášť pro moje a cizí; jedno klepnutí kamkoli v bublině ji rozbalí (dvojklik dál otevře
+okno, první klepnutí dvojklika smí rozbalit dřív, přijato); zpět se nesbaluje,
+rozbalení se zapomenou při výběru jiné konverzace či případu, přežijí přepnutí
+rozložení a nikdy se neukládají. Dva klíče gschema `conversation-chat-truncate-mine` a
+`conversation-chat-truncate-others` (bool, oba výchozí vypnuto; 47 klíčů, Swift
+43, C# 47), řádky „Shorten My Messages in Chat“ („Zkracovat moje zprávy v
+chatu“) a „Shorten Others' Messages in Chat“ („Zkracovat cizí zprávy v chatu“)
+se společným podtitulkem; Předvolby → Seznam zpráv mají skupinu „Conversations“
+(„Konverzace“) s pořadím Seskupovat podle konverzací (přesunuto), V chatu
+vykreslovat HTML, Zkracovat moje, Zkracovat cizí (GTK `Adw.PreferencesGroup` v
+`preferences.blp`, macOS skupina v `AppearancePaneViewController`, Windows
+sekce v `AppearancePage`, název řádku Others se nastavuje v kódu kvůli
+apostrofu). Jediný klíč `conversation-chat-truncate` a msgid „Shorten Messages
+in Chat“ nikde neexistují. Reference Go `ui/internal/conversation/chat.go`:
+`ChatPreviewLines = 3`, `BubbleShortened(mineOn, othersOn, mine, expanded)` (nastavení strany
+bubliny && !expanded, koncept = moje), `Expanded`
+(Expand/Is/ExpandDraft/IsDraft/Reset), `ChatShowMore`, `ChatTruncateMineRowTitle`/`ChatTruncateOthersRowTitle`/
+`ChatTruncateRowSubtitle`/`ChatPreferencesGroupTitle`; Swift `Conversation.chatPreviewLines`/`bubbleShortened(mineOn:othersOn:mine:expanded:)`/`Expanded`,
+C# `Conversation.ChatPreviewLines`/`BubbleShortened`/`ConversationExpanded.cs`.
+Textová bublina ukáže 3 řádky s výpustkou; HTML bublina ořízne webový pohled na
+3 řádky písma chatu (dokument se dál načte a změří celý) a přechod do barvy
+bubliny přebírá i klepnutí (webový pohled kliky spolkne); „Zobrazit více“ jen
+když obsah náhled opravdu přesahuje; středové řádky se nezkracují, koncepty
+ano; uvolněná zkrácená HTML bublina drží oříznutou výšku; předvolba se
+pozoruje a přeresluje všechny bubliny. Soubory: GTK `conversation_chat_layout.go`
+(pravidla), `conversation_chat_row.go` (`chatBubble.setShortened`, `.chat-fade`,
+`.chat-show-more`), `conversation_chat.go`/`board_conversation_chat.go`
+(pozorovatelé, reset `Expanded`); macOS `ConversationBubbleView`
+(`BubbleFadeView`, nápověda, rozpoznávač jednoho klepnutí),
+`ConversationChatViewController`/`BoardConversationBlock` (`expanded`,
+pozorovatel); Windows `ConversationBubbleView.SetShortened`,
+`ConversationChatView`/`BoardConversationBlock`. Msgidy: oba řádky, podtitulek, „Conversations“ a „Show More“, česky v `cs.po`. Ověřeno: GTK v kontejneru build,
+`go test ./internal/window/...` (`TestConversationChatShortenedBubbles`), smoke
+Pošty se skutečným WebKitem (`a1 lines=3 more=true; a2 preview=55 document=170
+host=55 fade=true`, klepnutí rozbalí, vypnuto ukáže celé), smoke Nástěnky,
+`make po`, `make lint`; macOS `swift build` bez varování, 581 filtrovaných
+testů, `check-strings`. Čeká: revize vlastníka ve všech třech; Windows napsané
+bez `dotnet` (`build.ps1 app`/`test`/`lint`, smoke, ruční seznam v
+`docs/windows-port.md` §11.7). Nedostatky: nikdo to zatím neviděl na obrazovce;
+vzorové bubliny Nástěnky (bez id) jsou na macOS rozbalené podle indexu, na GTK a
+Windows se nepamatují; barva přechodu na Windows předpokládá barvu panelu
+(#F3F3F3 / #202020).
 
 Archivace v Poště = Hotovo (2026-10-13, `feat/board`, necommitnuté; jen
 démon, klienti beze změny — všechny tři to dostanou přes
@@ -2315,7 +2361,7 @@ frontě, odmítnutý vrátí jen svou změnu), `CalendarAccountController`
 a `AssistantPanelController.RunCalendar`/`OpenInCalendar`, karta
 `Controllers/CalendarContent.cs`. Mimo kalendář v Core: `Board.Mode.Calendar`
 (2) se `StartChoice.Calendar`, klíč `calendar-view`
-(`SettingsStore.CalendarView`, 45 klíčů gschema), Ctrl+3 jako
+(`SettingsStore.CalendarView`, 47 klíčů gschema), Ctrl+3 jako
 `ShortcutCommand.ShowCalendar` v `ShortcutMap`, `NotificationHub.AddCalendar`,
 `AccountsPageController` CalDAV účty nevypisuje (při přeřazení je drží za
 vypsanými), `FolderTree.AccountHeaderBadge` umí `CALDAV`, toasty zpráv

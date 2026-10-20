@@ -36,6 +36,8 @@ private final class Scratch {
         #expect(!s.groupByConversation)
         #expect(!s.conversationChatLayout)
         #expect(!s.conversationChatHTML)
+        #expect(!s.conversationChatTruncateMine)
+        #expect(!s.conversationChatTruncateOthers)
         #expect(s.textZoom == 100)
         #expect(!s.launchAtLogin)
         #expect(s.runInBackground)
@@ -64,7 +66,7 @@ private final class Scratch {
         #expect(s.boardLastMode == .mail)
         #expect(s.boardAccountFilter == "")
         #expect(s.calendarView == .week)
-        #expect(Settings.Key.allCases.count == 41)
+        #expect(Settings.Key.allCases.count == 43)
         let providerDefaults = Settings.registrationDefaults()
         #expect(providerDefaults[Settings.Key.assistantProvider.rawValue] as? String == "claude")
         #expect(providerDefaults[Settings.Key.assistantCodexPath.rawValue] as? String == "")
@@ -112,6 +114,25 @@ private final class Scratch {
         s.conversationChatHTML = false
         #expect(!s.conversationChatHTML && html == 2 && chat == 2)
         htmlToken.cancel()
+
+        // The two chat truncate preferences, each from its own key.
+        var mine = 0, others = 0
+        let mineToken = s.onChange(.conversationChatTruncateMine) { mine += 1 }
+        let othersToken = s.onChange(.conversationChatTruncateOthers) { others += 1 }
+        s.conversationChatTruncateMine = true
+        #expect(s.conversationChatTruncateMine && !s.conversationChatTruncateOthers && mine == 1 && others == 0)
+        #expect(scratch.defaults.bool(forKey: "conversation-chat-truncate-mine"))
+        s.conversationChatTruncateMine = true // unchanged: no notification
+        #expect(mine == 1)
+        s.conversationChatTruncateOthers = true
+        #expect(s.conversationChatTruncateOthers && others == 1 && mine == 1)
+        #expect(scratch.defaults.bool(forKey: "conversation-chat-truncate-others"))
+        s.conversationChatTruncateMine = false
+        s.conversationChatTruncateOthers = false
+        #expect(!s.conversationChatTruncateMine && !s.conversationChatTruncateOthers)
+        #expect(mine == 2 && others == 2 && html == 2)
+        mineToken.cancel()
+        othersToken.cancel()
     }
 
     @Test func validation() {

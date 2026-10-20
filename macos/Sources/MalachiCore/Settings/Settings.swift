@@ -34,6 +34,13 @@ public final class Settings {
         /// locked web view instead of its plain text
         /// (ui/internal/conversation/chat.go BubbleRendersHTML).
         case conversationChatHTML = "conversation-chat-html"
+        /// A bubble of the user's own message (and a draft) in the chat
+        /// layout shortened to about three lines until a click shows the
+        /// whole message (ui/internal/conversation/chat.go
+        /// ChatPreviewLines, BubbleShortened).
+        case conversationChatTruncateMine = "conversation-chat-truncate-mine"
+        /// The same for a bubble of the other party's message.
+        case conversationChatTruncateOthers = "conversation-chat-truncate-others"
         case searchScope = "search-scope"
         case showAvatars = "show-avatars"
         case monochromeAvatars = "monochrome-avatars"
@@ -145,6 +152,8 @@ public final class Settings {
             Key.groupByConversation.rawValue: false,
             Key.conversationChatLayout.rawValue: false,
             Key.conversationChatHTML.rawValue: false,
+            Key.conversationChatTruncateMine.rawValue: false,
+            Key.conversationChatTruncateOthers.rawValue: false,
             Key.searchScope.rawValue: SearchScope.folder.rawValue,
             Key.showAvatars.rawValue: true,
             Key.monochromeAvatars.rawValue: false,
@@ -301,6 +310,21 @@ public final class Settings {
     public var conversationChatHTML: Bool {
         get { bool(.conversationChatHTML) }
         set { set(.conversationChatHTML, newValue) }
+    }
+
+    /// Shorten a chat bubble of the user's own message (and a draft) to
+    /// about three lines until a click shows the whole message
+    /// (Settings → Message List → Conversations, after Render HTML in
+    /// Chat).
+    public var conversationChatTruncateMine: Bool {
+        get { bool(.conversationChatTruncateMine) }
+        set { set(.conversationChatTruncateMine, newValue) }
+    }
+
+    /// Shorten a chat bubble of the other party's message the same way.
+    public var conversationChatTruncateOthers: Bool {
+        get { bool(.conversationChatTruncateOthers) }
+        set { set(.conversationChatTruncateOthers, newValue) }
     }
 
     /// The last scope chosen for a search.

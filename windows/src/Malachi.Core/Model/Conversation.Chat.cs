@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of ui/internal/conversation/chat.go (ChatRows, ChatScrollTo,
-// BubbleText, ChatToggleLabel, ChatToggleTooltip, BubbleRendersHTML); macOS:
+// BubbleText, ChatToggleLabel, ChatToggleTooltip, BubbleRendersHTML,
+// ChatPreviewLines, BubbleShortened, ChatShowMore, ChatTruncateMineRowTitle,
+// ChatTruncateOthersRowTitle, ChatTruncateRowSubtitle,
+// ChatPreferencesGroupTitle; Expanded is ConversationExpanded.cs); macOS:
 // MalachiCore/Model/ConversationChat.swift. Its types are ChatSide,
 // ChatRowKind and ChatRow; the rules of the view that Go leaves to the
 // clients are Conversation.ChatBody.cs.
@@ -168,4 +171,48 @@ public static partial class Conversation
     /// placeholder) as without the preference.
     /// </summary>
     public static bool BubbleRendersHtml(bool setting, bool hasHtml, bool withheld) => setting && hasHtml && !withheld;
+
+    /// <summary>
+    /// conversation.ChatPreviewLines: how many lines of a message a shortened
+    /// bubble shows (the preferences conversation-chat-truncate-mine and -others): a text
+    /// bubble that many lines with an ellipsis, an HTML bubble its document
+    /// clipped to that many lines' height with a fade, both with a "Show
+    /// More" hint; a click anywhere in the bubble shows the whole message.
+    /// </summary>
+    public const int ChatPreviewLines = 3;
+
+    /// <summary>
+    /// conversation.BubbleShortened: the bubble shows the shortened preview:
+    /// the preference of its side is on (<paramref name="mineOn"/> for the
+    /// user's own, <paramref name="mine"/>, a draft counting as such;
+    /// <paramref name="othersOn"/> for the others') and the user has not
+    /// expanded it.
+    /// </summary>
+    public static bool BubbleShortened(bool mineOn, bool othersOn, bool mine, bool expanded) =>
+        !expanded && (mine ? mineOn : othersOn);
+
+    /// <summary>conversation.ChatShowMore: the hint under a shortened bubble.</summary>
+    public static string ChatShowMore() =>
+        // TRANSLATORS: the hint under a shortened message in the chat layout of a conversation; a click on the message shows all of it.
+        L10n.T("Show More");
+
+    /// <summary>conversation.ChatTruncateMineRowTitle: the row of the preference for the user's own bubbles (conversation-chat-truncate-mine).</summary>
+    public static string ChatTruncateMineRowTitle() =>
+        // TRANSLATORS: a switch in Preferences → Message list; on, the user's own messages in the chat layout of a conversation show only their first lines until clicked.
+        L10n.T("Shorten My Messages in Chat");
+
+    /// <summary>conversation.ChatTruncateOthersRowTitle: the row of the preference for the others' bubbles (conversation-chat-truncate-others).</summary>
+    public static string ChatTruncateOthersRowTitle() =>
+        // TRANSLATORS: a switch in Preferences → Message list; on, the other party's messages in the chat layout of a conversation show only their first lines until clicked.
+        L10n.T("Shorten Others' Messages in Chat");
+
+    /// <summary>conversation.ChatTruncateRowSubtitle: the subtitle of both rows.</summary>
+    public static string ChatTruncateRowSubtitle() =>
+        // TRANSLATORS: the subtitle of the "Shorten … Messages in Chat" switches in Preferences → Message list.
+        L10n.T("About three lines of each message in its bubble; a click shows the whole message");
+
+    /// <summary>conversation.ChatPreferencesGroupTitle: the group of the conversation's switches in Preferences → Message list.</summary>
+    public static string ChatPreferencesGroupTitle() =>
+        // TRANSLATORS: the title of a group of switches in Preferences → Message list about conversations (grouping, the chat layout).
+        L10n.T("Conversations");
 }

@@ -162,6 +162,16 @@
       <summary>Render HTML in the chat layout</summary>
       <description>In the chat layout of a conversation, show a message's HTML in a locked web view instead of its plain text; off shows the text.</description>
     </key>
+    <key name="conversation-chat-truncate-mine" type="b">
+      <default>false</default>
+      <summary>Shorten my messages in the chat layout</summary>
+      <description>In the chat layout of a conversation, show about three lines of each of the user's own messages in its bubble; a click shows the whole message.</description>
+    </key>
+    <key name="conversation-chat-truncate-others" type="b">
+      <default>false</default>
+      <summary>Shorten others' messages in the chat layout</summary>
+      <description>In the chat layout of a conversation, show about three lines of each message of the other party in its bubble; a click shows the whole message.</description>
+    </key>
     <key name="search-scope" enum="io.github.schotek.Malachi.SearchScope">
       <default>'folder'</default>
       <summary>Where a search looks</summary>

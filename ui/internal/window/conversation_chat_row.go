@@ -11,6 +11,7 @@ import (
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
+	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/diamondburned/gotk4/pkg/pango"
 
@@ -151,6 +152,12 @@ func newChatRow(right bool, activate func(*chatRow)) *chatRow {
 		// document is WebKit's.
 		if n == 2 && !r.bubble.inDocument(x, y) {
 			activate(r)
+			return
+		}
+		// A click on a shortened bubble shows it whole (the fade over a
+		// clipped document takes the click from WebKit).
+		if n == 1 && r.bubble.short && r.bubble.onExpand != nil && !r.bubble.inDocument(x, y) {
+			r.bubble.onExpand()
 		}
 	})
 	r.bubble.frame.AddController(click)
@@ -199,6 +206,7 @@ func (r *chatRow) setMax(max int) {
 	r.max = max
 	r.clamp.SetMaximumSize(max)
 	r.clamp.SetTighteningThreshold(max)
+	r.bubble.queueMore()
 }
 
 // showMessage shows item (the member as the model has it now) with its
@@ -271,6 +279,18 @@ type chatBubble struct {
 	// which the text keeps as its minimum height once the view goes
 	// (bubbleFrozenHeight).
 	reported bool
+
+	// The shortened preview (setShortened, the preference
+	// conversation-chat-truncate): short while it shows, preview the
+	// clipped document's height, more the "Show More" hint, fade the
+	// overlay over a clipped document (the fade into the bubble's colour,
+	// which takes the click), onExpand the chat's handler of a click.
+	short    bool
+	preview  int
+	more     *gtk.Label
+	fade     *gtk.Box
+	onExpand func()
+	moreTick uint
 }
 
 // newChatBubble is an empty bubble, the user's own (mine) or not.
@@ -349,11 +369,20 @@ func newChatBubble(mine bool) *chatBubble {
 	b.html.SetVisible(false)
 	b.webHeight = convInitialWebHeight
 	b.forwardScroll()
+	b.fade = gtk.NewBox(gtk.OrientationVertical, 0)
+	b.fade.AddCSSClass("chat-fade")
+	b.fade.SetVisible(false)
+	b.html.AddOverlay(b.fade)
+
+	b.more = plainLabel(conversation.ChatShowMore(i18n.Tr), "caption", "dim-label", "chat-show-more")
+	b.more.SetXAlign(0)
+	b.more.SetVisible(false)
 
 	column := gtk.NewBox(gtk.OrientationVertical, 6)
 	column.Append(header)
 	column.Append(b.text)
 	column.Append(b.html)
+	column.Append(b.more)
 	b.frame.SetChild(column)
 	return b
 }
@@ -424,6 +453,7 @@ func (b *chatBubble) sync() {
 		b.releaseWeb()
 	}
 	b.applyFrozen()
+	b.queueMore()
 }
 
 // applyFrozen keeps the text of an HTML bubble whose view went (far, or
@@ -431,7 +461,7 @@ func (b *chatBubble) sync() {
 // keeps its paper's height: the rows keep their allocations, so that the
 // live window does not flip the bubble between the view and the text.
 func (b *chatBubble) applyFrozen() {
-	if h := bubbleFrozenHeight(b.doc != nil, b.web != nil, b.reported, b.webHeight); h > 0 {
+	if h := bubbleFrozenHeight(b.doc != nil, b.web != nil, b.reported, b.shownHeight()); h > 0 {
 		b.text.SetSizeRequest(-1, h)
 	} else {
 		b.text.SetSizeRequest(-1, -1)
@@ -454,10 +484,12 @@ func (b *chatBubble) loadWeb() {
 		}
 		b.web.OnHover = host.chatHover
 		b.web.OnSize = b.sizeReported
-		b.web.SetHeight(b.webHeight)
 		b.html.AddOverlay(b.web.Widget())
+		// The fade stays above the view.
+		b.html.RemoveOverlay(b.fade)
+		b.html.AddOverlay(b.fade)
 		b.webDoc = ""
-		b.html.SetSizeRequest(-1, b.webHeight)
+		b.applyHeight()
 		b.html.SetVisible(true)
 		b.text.SetVisible(false)
 		if b.fill != nil {
@@ -534,6 +566,7 @@ func (b *chatBubble) releaseWeb() {
 	b.web = nil
 	b.html.RemoveOverlay(web.Widget())
 	b.html.SetVisible(false)
+	b.fade.SetVisible(false)
 	b.text.SetVisible(b.shownAny && b.shownText != "")
 	if b.fill != nil {
 		b.fill(false)
@@ -563,16 +596,18 @@ func (b *chatBubble) setWebHeight(h int) {
 		return
 	}
 	b.reported = true
+	b.queueMore()
 	if h == b.webHeight {
+		b.applyHeight()
 		return
 	}
-	change := func() {
-		b.webHeight = h
-		b.html.SetSizeRequest(-1, h)
-		if b.web != nil {
-			b.web.SetHeight(h)
-		}
+	shown := b.shownHeight()
+	b.webHeight = h
+	if b.shownHeight() == shown {
+		b.applyHeight()
+		return
 	}
+	change := b.applyHeight
 	if b.chat == nil {
 		change()
 		return
@@ -591,10 +626,104 @@ func (b *chatBubble) setZoom(percent int) {
 	}
 }
 
+// shownHeight is the view's height: the document's, clipped to the
+// preview while shortened (chatShownHeight).
+func (b *chatBubble) shownHeight() int {
+	return chatShownHeight(b.webHeight, b.preview, b.short)
+}
+
+// applyHeight gives the host and the view the shown height and shows the
+// fade over a clipped document.
+func (b *chatBubble) applyHeight() {
+	h := b.shownHeight()
+	b.html.SetSizeRequest(-1, h)
+	if b.web != nil {
+		b.web.SetHeight(h)
+	}
+	b.fade.SetVisible(b.web != nil && chatHTMLOverflows(b.reported, b.webHeight, b.preview, b.short))
+}
+
+// setShortened shows the shortened preview (on: ChatPreviewLines lines of
+// the text, the document clipped to as many lines of the text's font) or
+// the whole message.
+func (b *chatBubble) setShortened(on bool) {
+	preview := 0
+	if on {
+		preview = chatPreviewHeight(b.lineHeight())
+	}
+	if on == b.short && preview == b.preview {
+		return
+	}
+	change := func() {
+		b.short, b.preview = on, preview
+		if on {
+			b.text.SetLines(conversation.ChatPreviewLines)
+			b.text.SetEllipsize(pango.EllipsizeEnd)
+		} else {
+			b.text.SetLines(-1)
+			b.text.SetEllipsize(pango.EllipsizeNone)
+		}
+		b.applyHeight()
+		b.applyFrozen()
+	}
+	if b.chat == nil {
+		change()
+	} else {
+		b.chat.chatHeight(b.frame, change)
+	}
+	b.queueMore()
+}
+
+// lineHeight is the height of a line of the bubble's text in pixels (the
+// label's font, the text zoom in).
+func (b *chatBubble) lineHeight() float64 {
+	ctx := b.text.PangoContext()
+	if ctx == nil {
+		return 0
+	}
+	m := ctx.Metrics(ctx.FontDescription(), nil)
+	if m == nil {
+		return 0
+	}
+	return float64(m.Height()) / pango.SCALE
+}
+
+// queueMore checks after the next layout whether the "Show More" hint
+// shows (updateMore).
+func (b *chatBubble) queueMore() {
+	if b.moreTick != 0 {
+		return
+	}
+	b.moreTick = b.frame.AddTickCallback(func(gtk.Widgetter, gdk.FrameClocker) bool {
+		b.moreTick = 0
+		glib.IdleAdd(b.updateMore)
+		return false
+	})
+}
+
+// updateMore shows "Show More" under a shortened bubble whose content
+// does not fit the preview: the document taller than the preview, or the
+// text ellipsised.
+func (b *chatBubble) updateMore() {
+	more := false
+	if b.short {
+		if b.web != nil {
+			more = chatHTMLOverflows(b.reported, b.webHeight, b.preview, b.short)
+		} else if b.text.Visible() {
+			if l := b.text.Layout(); l != nil {
+				more = l.IsEllipsized()
+			}
+		}
+	}
+	b.more.SetVisible(more)
+	b.fade.SetVisible(b.web != nil && chatHTMLOverflows(b.reported, b.webHeight, b.preview, b.short))
+}
+
 // inDocument reports whether (x, y) in the bubble's frame is on the web
-// view of an HTML body (below the header).
+// view of an HTML body (below the header); not while the fade covers a
+// clipped document.
 func (b *chatBubble) inDocument(x, y float64) bool {
-	if b.web == nil || !b.html.IsVisible() {
+	if b.web == nil || !b.html.IsVisible() || b.fade.Visible() {
 		return false
 	}
 	r, ok := b.html.ComputeBounds(b.frame)
@@ -757,6 +886,7 @@ func (b *chatBubble) showBody(text string, placeholder, mono bool) {
 		b.text.RemoveCSSClass("chat-placeholder")
 	}
 	b.text.SetVisible(text != "" && b.web == nil)
+	b.queueMore()
 }
 
 // chatCenterRow is a row of the chat without a bubble (D1): an issue's
