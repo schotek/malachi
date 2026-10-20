@@ -1118,9 +1118,11 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
             reload = chatSources.TryGetValue(id, out var before) && ConversationLayout.PicturesArrived(before, now);
             chatSources[id] = now;
         }
-        return Core.Model.Conversation.BubbleBodyFor(lm, m.Text, renderHtml: true) is BubbleBody.Html h
-            ? h with { Fallback = text.Value }
-            : text;
+        if (Core.Model.Conversation.BubbleBodyFor(lm, m.Text, renderHtml: true) is BubbleBody.Html h)
+        {
+            return new BubbleBody.Html(h.Value, h.Links, text.Value);
+        }
+        return text;
     }
 
     // The bubble of row anew from what it shows and what the cache holds,
