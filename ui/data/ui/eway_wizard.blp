@@ -1,0 +1,254 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// The eWay-CRM account assistant: the web service address
+// (account.detectEway) → sign-in with the account's name, user name,
+// password and "Also save later messages of saved conversations"
+// (account.test, then account.add). Editing an account opens on the
+// sign-in page with the address fixed (account.update). Object IDs are
+// looked up from ui/internal/accountwizard/eway.go; keep them in sync. The
+// flow is eway_flow.go, and every text is set from Go (the reference is
+// ui/internal/crm WizardTexts), so this file has no translatable strings.
+// Everything from the daemon is plain text.
+Adw.Dialog eway_wizard {
+  content-width: 520;
+  content-height: 560;
+  focus-widget: eway_service_row;
+
+  child: Adw.NavigationView eway_nav {
+    Adw.NavigationPage eway_service_page {
+      tag: "service";
+
+      child: Adw.ToolbarView {
+        [top]
+        Adw.HeaderBar {}
+
+        content: Box {
+          orientation: vertical;
+
+          Adw.Banner eway_service_banner {
+            revealed: false;
+            use-markup: false;
+          }
+
+          ScrolledWindow {
+            hscrollbar-policy: never;
+            vexpand: true;
+
+            child: Adw.Clamp {
+              maximum-size: 480;
+
+              child: Box {
+                orientation: vertical;
+                spacing: 12;
+                margin-top: 24;
+                margin-bottom: 24;
+                margin-start: 24;
+                margin-end: 24;
+
+                ListBox {
+                  selection-mode: none;
+
+                  styles [
+                    "boxed-list",
+                  ]
+
+                  Adw.EntryRow eway_service_row {
+                    use-markup: false;
+                    input-purpose: url;
+                    input-hints: no_spellcheck;
+                  }
+                }
+
+                // What is wrong with the address; hidden while empty.
+                Label eway_service_problem {
+                  wrap: true;
+                  wrap-mode: word_char;
+                  xalign: 0;
+                  use-markup: false;
+                  visible: false;
+
+                  styles [
+                    "caption",
+                    "error",
+                  ]
+                }
+
+                // Where the address is found (crm WizardStrings.ServiceHint).
+                Label eway_service_hint {
+                  wrap: true;
+                  wrap-mode: word_char;
+                  xalign: 0;
+                  use-markup: false;
+
+                  styles [
+                    "caption",
+                    "dim-label",
+                  ]
+                }
+              };
+            };
+          }
+        };
+
+        [bottom]
+        CenterBox {
+          margin-top: 12;
+          margin-bottom: 12;
+          margin-start: 12;
+          margin-end: 12;
+
+          // The call under way: a spinner and its progress text.
+          [start]
+          Box eway_service_progress {
+            spacing: 6;
+            visible: false;
+
+            Adw.Spinner {}
+
+            Label eway_service_progress_label {
+              ellipsize: end;
+              use-markup: false;
+
+              styles [
+                "dim-label",
+              ]
+            }
+          }
+
+          [end]
+          Button eway_service_next {
+            use-underline: true;
+            sensitive: false;
+
+            styles [
+              "suggested-action",
+            ]
+          }
+        }
+      };
+    }
+
+    // The address found (read only), the account's name, the user name,
+    // the password (optional when editing), and the check box that has the
+    // daemon follow saved conversations (docs/eway.md D22).
+    Adw.NavigationPage eway_credentials_page {
+      tag: "credentials";
+
+      child: Adw.ToolbarView {
+        [top]
+        Adw.HeaderBar {}
+
+        content: Box {
+          orientation: vertical;
+
+          Adw.Banner eway_credentials_banner {
+            revealed: false;
+            use-markup: false;
+          }
+
+          ScrolledWindow {
+            hscrollbar-policy: never;
+            vexpand: true;
+
+            child: Adw.Clamp {
+              maximum-size: 480;
+
+              child: Box {
+                orientation: vertical;
+                spacing: 12;
+                margin-top: 24;
+                margin-bottom: 24;
+                margin-start: 24;
+                margin-end: 24;
+
+                ListBox {
+                  selection-mode: none;
+
+                  styles [
+                    "boxed-list",
+                  ]
+
+                  Adw.ActionRow eway_address_row {
+                    use-markup: false;
+                    subtitle-selectable: true;
+
+                    styles [
+                      "property",
+                    ]
+                  }
+
+                  Adw.EntryRow eway_name_row {
+                    use-markup: false;
+                  }
+
+                  Adw.EntryRow eway_user_row {
+                    use-markup: false;
+                    input-hints: no_spellcheck;
+                  }
+
+                  Adw.PasswordEntryRow eway_password_row {
+                    use-markup: false;
+                  }
+                }
+
+                ListBox {
+                  selection-mode: none;
+
+                  styles [
+                    "boxed-list",
+                  ]
+
+                  Adw.ActionRow eway_follow_row {
+                    use-markup: false;
+                    activatable-widget: eway_follow_check;
+
+                    [prefix]
+                    CheckButton eway_follow_check {
+                      valign: center;
+                    }
+                  }
+                }
+              };
+            };
+          }
+        };
+
+        [bottom]
+        CenterBox {
+          margin-top: 12;
+          margin-bottom: 12;
+          margin-start: 12;
+          margin-end: 12;
+
+          [start]
+          Box eway_credentials_progress {
+            spacing: 6;
+            visible: false;
+
+            Adw.Spinner {}
+
+            Label eway_credentials_progress_label {
+              ellipsize: end;
+              use-markup: false;
+
+              styles [
+                "dim-label",
+              ]
+            }
+          }
+
+          [end]
+          Button eway_credentials_next {
+            use-underline: true;
+
+            styles [
+              "suggested-action",
+            ]
+          }
+        }
+      };
+    }
+  };
+}

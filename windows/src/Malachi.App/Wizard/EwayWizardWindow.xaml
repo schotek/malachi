@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/AccountWizard/EWay/EWayWizardWindowController.swift
+(the sheet and EWayWizardRootViewController); GTK: eway_wizard.blp
+(docs/eway.md §2.6, written in T7). The eWay-CRM account assistant as the
+Jira one is (JiraWizardWindow.xaml): an owned modal window whose title bar
+is the pages' header bar (Back while there is a page to go back to, and the
+visible page's title), the close button and Escape cancel it; below it the
+Frame of the two pages (the web service address, the sign-in), which slide
+in by their order, and the toast overlay over them.
+-->
+<Window
+    x:Class="Malachi.App.Wizard.EwayWizardWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Malachi.App.Controls">
+    <Grid x:Name="Root" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TitleBar
+            x:Name="Header"
+            Grid.Row="0"
+            AutomationProperties.AutomationId="EwayWizardHeader"
+            BackRequested="OnBackRequested"
+            IsBackButtonVisible="False"
+            IsPaneToggleButtonVisible="False" />
+
+        <Frame
+            x:Name="Pages"
+            Grid.Row="1"
+            IsNavigationStackEnabled="False"
+            IsTabStop="False" />
+
+        <controls:ToastHost x:Name="ToastsHost" Grid.Row="1" />
+    </Grid>
+</Window>

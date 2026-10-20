@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/ContextMenu/ContextMenu.swift; GTK:
-// ui/internal/contextmenu/contextmenu.go (ItemID, Item, MessageState,
-// MessageItems, FolderState, FolderItems, AccountItems, groups, Entry,
+// ui/internal/contextmenu/contextmenu.go (ItemID, Item, MessageState and
+// its SetCrm, MessageItems, FolderState, FolderItems, AccountItems, groups, Entry,
 // Target, MoveTargets).
 //
 // What the right-click menus of the message list and of the sidebar offer,
@@ -23,6 +23,7 @@
 using System;
 using System.Collections.Generic;
 using Malachi.Core.Api;
+using Malachi.Core.Crm;
 using Malachi.Core.Model;
 
 namespace Malachi.Core.ContextMenus;
@@ -77,6 +78,25 @@ public static partial class ContextMenu
         /// <summary>The submenu of the Assistant's actions on the message.</summary>
         Assistant,
 
+        /// <summary>
+        /// Opens the Save to eWay-CRM dialog over the selection (CrmDialog);
+        /// several rows save together ("crmSave").
+        /// </summary>
+        CrmSave,
+
+        /// <summary>
+        /// Open in eWay-CRM: with <see cref="CrmEditLinks"/> and
+        /// <see cref="CrmRemove"/> it replaces <see cref="CrmSave"/> for one
+        /// saved message, CrmText.SavedMenu's items ("crmOpen").
+        /// </summary>
+        CrmOpen,
+
+        /// <summary>Edit Links… of one saved message ("crmEditLinks").</summary>
+        CrmEditLinks,
+
+        /// <summary>Remove from eWay-CRM of one saved message, after CrmText.RemoveQuestion ("crmRemove").</summary>
+        CrmRemove,
+
         // The sidebar's menus.
 
         /// <summary>Synchronises the folder clicked, or the whole account from its heading.</summary>
@@ -118,6 +138,10 @@ public static partial class ContextMenu
         ItemId.Junk => "junk",
         ItemId.Trash => "trash",
         ItemId.Assistant => "assistant",
+        ItemId.CrmSave => "crmSave",
+        ItemId.CrmOpen => "crmOpen",
+        ItemId.CrmEditLinks => "crmEditLinks",
+        ItemId.CrmRemove => "crmRemove",
         ItemId.CheckMail => "checkMail",
         ItemId.MarkAllRead => "markAllRead",
         ItemId.EmptyFolder => "empty",
@@ -213,6 +237,21 @@ public static partial class ContextMenu
         public bool Assistant { get; init; }
 
         /// <summary>
+        /// CrmOffer.Shown of the selected rows (<see cref="WithCrm"/>): the
+        /// eWay-CRM items are left out unless offered.
+        /// </summary>
+        public bool OfferCrm { get; init; }
+
+        /// <summary>CrmOffer.Enabled: Save to eWay-CRM can run now.</summary>
+        public bool Crm { get; init; }
+
+        /// <summary>CrmOffer.Saved: one saved message has the saved-state items instead of Save.</summary>
+        public bool CrmSaved { get; init; }
+
+        /// <summary>contextmenu.MessageState.SetCrm: this state with the eWay-CRM members of <paramref name="o"/> (CrmRules.OfferFor of the selected rows).</summary>
+        public MessageState WithCrm(CrmOffer o) => this with { OfferCrm = o.Shown, Crm = o.Enabled, CrmSaved = o.Saved };
+
+        /// <summary>
         /// Swift's <c>MessageState(flags:draft:changeStatus:assistant:)</c>:
         /// the state of the window's action flags (ActionRules.MessageActionState),
         /// what the account offers being what <see cref="ActionFlags.Unsupported"/>
@@ -253,10 +292,11 @@ public static partial class ContextMenu
 
     /// <summary>
     /// contextmenu.MessageItems: the message menu in its groups: opening;
-    /// answering; read, star and status; where the message goes; the
-    /// Assistant. Empty groups are left out. For several rows Open opens
+    /// answering; eWay-CRM; read, star and status; where the message goes;
+    /// the Assistant. Empty groups are left out. For several rows Open opens
     /// each (<see cref="Labels.Count"/>), Forward forwards them in one
-    /// message, and Reply, Reply All and Change Status, which are for one
+    /// message, Save to eWay-CRM saves them together, and Reply, Reply All,
+    /// Change Status and the saved-state eWay-CRM items, which are for one
     /// message, are not offered.
     /// </summary>
     public static IReadOnlyList<IReadOnlyList<Item>> MessageItems(MessageState s)
@@ -275,6 +315,17 @@ public static partial class ContextMenu
         if (s.OfferForward)
         {
             answer.Add(new Item(ItemId.Forward, s.Forward));
+        }
+        var crm = new List<Item>();
+        if (s.OfferCrm && s.CrmSaved && !several)
+        {
+            crm.Add(new Item(ItemId.CrmOpen, true));
+            crm.Add(new Item(ItemId.CrmEditLinks, true));
+            crm.Add(new Item(ItemId.CrmRemove, true));
+        }
+        else if (s.OfferCrm)
+        {
+            crm.Add(new Item(ItemId.CrmSave, s.Crm));
         }
         var mark = new List<Item>();
         if (s.MarkRead)
@@ -312,7 +363,7 @@ public static partial class ContextMenu
         {
             assistant.Add(new Item(ItemId.Assistant, true));
         }
-        return Groups([open], answer, mark, move, assistant);
+        return Groups([open], answer, crm, mark, move, assistant);
     }
 
     /// <summary>contextmenu.FolderState: what the sidebar knows of the folder clicked.</summary>

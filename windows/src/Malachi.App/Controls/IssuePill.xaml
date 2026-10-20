@@ -44,6 +44,13 @@ the site's, shown as plain text.
                         <Setter Target="Fill.Background" Value="{ThemeResource IssuePillInternalBrush}" />
                     </VisualState.Setters>
                 </VisualState>
+                <!-- The eWay pill of a message saved in eWay-CRM (macOS
+                     IssuePill.crmColours, a faint teal): the attention fill. -->
+                <VisualState x:Name="Crm">
+                    <VisualState.Setters>
+                        <Setter Target="Fill.Background" Value="{ThemeResource SystemFillColorAttentionBackgroundBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
                 <!-- issue-pill.draft-pill: the error colour on a faint error fill. -->
                 <VisualState x:Name="Draft">
                     <VisualState.Setters>

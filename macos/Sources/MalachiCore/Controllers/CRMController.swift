@@ -400,6 +400,11 @@ public final class CRMController {
         state.begin(m.accountId, [m.id])
         let params = CrmRemoveParams(accountId: crm, messageAccountId: m.accountId, messageId: m.id)
         let client = client
+        // The shared state outlives this controller: a message window closed
+        // while its removal runs must still release the busy mark and record
+        // the outcome, or the main window would show Saving for ever. Only
+        // the toast needs the window.
+        let state = state
         Task { [weak self] in
             var failure: (any Error)?
             do {
@@ -407,19 +412,19 @@ public final class CRMController {
             } catch {
                 failure = error
             }
-            guard let self else { return }
+            defer { state.end(m.accountId, [m.id]) }
             if let failure {
-                let t = CRM.errorText(failure)
                 if (failure as? RPCError)?.code == .crmItemNotFound {
                     // The daemon dropped its record too.
-                    self.state.setOverride(m.accountId, m.id, nil)
+                    state.setOverride(m.accountId, m.id, nil)
                 }
+                guard let self else { return }
+                let t = CRM.errorText(failure)
                 self.toast?(t.isEmpty ? rpcErrorText(CRM.actionText(.remove), failure) : t)
             } else {
-                self.state.setOverride(m.accountId, m.id, nil)
-                self.toast?(CRM.removedToast())
+                state.setOverride(m.accountId, m.id, nil)
+                self?.toast?(CRM.removedToast())
             }
-            self.state.end(m.accountId, [m.id])
         }
     }
 
@@ -431,24 +436,28 @@ public final class CRMController {
         let ids = params.messageIds
         state.begin(account, ids)
         let client = client
+        // As in runRemove: the state is released and told the outcome even
+        // when the window (and this controller) went away meanwhile.
+        let state = state
         Task { [weak self] in
             let outcome = await Self.save(client, params) { [weak self] n in
                 self?.toast?(CRM.downloadingText(n))
             }
-            guard let self else { return }
+            defer { state.end(account, ids) }
             switch outcome {
             case .success(let res):
                 for o in res.results where o.error == nil {
-                    self.state.setOverride(account, o.messageId, o.record)
+                    state.setOverride(account, o.messageId, o.record)
                 }
+                guard let self else { return }
                 let (text, err) = CRM.saveToast(CRM.summarize(res))
                 self.toast?(text ?? rpcErrorText(CRM.actionText(.save), err))
             case .failure(let error, let action):
+                guard let self else { return }
                 self.log.info("crm save failed: \((error as? RPCError)?.code.rawValue ?? 0, privacy: .public)")
                 let t = CRM.errorText(error)
                 self.toast?(t.isEmpty ? rpcErrorText(CRM.actionText(action), error) : t)
             }
-            self.state.end(account, ids)
         }
     }
 

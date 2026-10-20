@@ -9,6 +9,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/accountwizard"
 	"github.com/schotek/malachi/ui/internal/calendar"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
@@ -64,9 +65,35 @@ func (d *PreferencesDialog) addService(c *client.Client, kind api.AccountKind) {
 	case api.AccountCalDAV:
 		d.addCalDAVAccount(c)
 	case api.AccountEway:
-		// TODO(T7, docs/eway.md §4): the eWay-CRM assistant
-		// (accountwizard ewayFlow); until then Add… does nothing in GTK.
+		d.addEwayAccount(c)
 	}
+}
+
+// addEwayAccount opens the eWay-CRM assistant from the catalogue; both
+// account pages reload once it added the account (the preferences dialog
+// does not receive notify.accountsChanged). eWay-CRM accounts are added
+// only here (owner's decision 2026-10-17, as on macOS).
+func (d *PreferencesDialog) addEwayAccount(c *client.Client) {
+	wz := accountwizard.NewEway(c, d.log)
+	wz.OnDone = func(api.AccountID, api.AccountConfig) {
+		if !d.closed {
+			d.loadAccounts(c)
+		}
+	}
+	wz.Present(d)
+}
+
+// editEwayAccount opens the eWay-CRM assistant in its edit mode on account
+// a (the row's Edit): name, user name, a new password, following saved
+// conversations; the pages reload once it saved.
+func (d *PreferencesDialog) editEwayAccount(c *client.Client, a api.Account) {
+	wz := accountwizard.NewEwayEdit(c, d.log, a)
+	wz.OnDone = func(api.AccountID, api.AccountConfig) {
+		if !d.closed {
+			d.loadAccounts(c)
+		}
+	}
+	wz.Present(d)
 }
 
 // addCalDAVAccount opens the Add CalDAV sheet over the dialog (as the

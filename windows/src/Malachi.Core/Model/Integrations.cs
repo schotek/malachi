@@ -4,13 +4,15 @@
 // Port of macos/Sources/MalachiCore/Model/Integrations.swift; GTK:
 // ui/internal/integrations/integrations.go (ShowsInAccounts,
 // ShowsInIntegrations, Split, Page, FullOrder, MailIcon, JiraIcon,
-// CalDAVIcon, Service, Catalog, Editor, Row, RowFor, PageTexts, Texts).
+// CalDAVIcon, EwayIcon, Service, Catalog, Editor, Row, RowFor, PageTexts,
+// Texts).
 //
 // The view logic of the two account pages of the preferences: Accounts,
 // which lists the mail accounts (kind imap, the empty kind, and graph),
 // and Integrations, which lists every other account — the services beside
-// the mail, today Jira (kind jira) and CalDAV calendars (kind caldav); a
-// kind added later lands there by itself — and the catalogue of services
+// the mail, today Jira (kind jira), CalDAV calendars (kind caldav) and
+// eWay-CRM (kind eway); a kind added later lands there by itself — and the
+// catalogue of services
 // that can be added. Both pages show rows of the same shape (Row): the
 // switch, the editor and the sentence of the remove confirmation depend on
 // the kind. The order of the accounts is one list owned by the daemon; a
@@ -46,6 +48,9 @@ public static class Integrations
     /// <summary>integrations.CalDAVIcon: a CalDAV account's.</summary>
     public const string CalDAVIcon = "x-office-calendar-symbolic";
 
+    /// <summary>integrations.EwayIcon: an eWay-CRM account's (CrmRules.Icon; Adwaita has no CRM icon).</summary>
+    public const string EwayIcon = Crm.CrmRules.Icon;
+
     // The brand, never translated.
     private const string JiraName = "Jira";
 
@@ -80,11 +85,18 @@ public static class Integrations
         /// calendars are.
         /// </summary>
         CalendarPage,
+
+        /// <summary>
+        /// EditorEway: the eWay-CRM account assistant in its edit mode
+        /// (EwayWizardController): the user name, the password, the name and
+        /// the following of saved conversations; the service address stays.
+        /// </summary>
+        Eway,
     }
 
     /// <summary>integrations.Service: one entry of the catalogue on the Integrations page.</summary>
     /// <param name="Kind">The kind of account it adds.</param>
-    /// <param name="Name">The service's name; Jira is a brand, not translated.</param>
+    /// <param name="Name">The service's name; Jira and eWay-CRM are brands, not translated.</param>
     /// <param name="Description">What it brings.</param>
     /// <param name="Icon">A GTK symbolic icon name (IconGlyphs maps it).</param>
     public sealed record Service(AccountKind Kind, string Name, string Description, string Icon);
@@ -92,8 +104,8 @@ public static class Integrations
     /// <summary>
     /// integrations.Row: what an account's row on either page shows besides
     /// its status: plain texts (nothing is markup), the icon, whether it has
-    /// the Enabled switch (account.setEnabled pauses the sync; CalDAV has no
-    /// pause), what its Edit button opens and is called, and the body of its
+    /// the Enabled switch (account.setEnabled pauses the sync, or an eWay-CRM
+    /// account's saving; CalDAV has no pause), what its Edit button opens and is called, and the body of its
     /// remove confirmation.
     /// </summary>
     public sealed record Row
@@ -107,7 +119,7 @@ public static class Integrations
         /// <summary>The name, else the Jira site's host, else the address.</summary>
         public required string Title { get; init; }
 
-        /// <summary>The host of the Jira site or the CalDAV server, else the address.</summary>
+        /// <summary>The host of the Jira site or the CalDAV server, the host and path of the eWay-CRM service, else the address.</summary>
         public required string Subtitle { get; init; }
 
         /// <summary>A GTK symbolic icon name.</summary>
@@ -257,14 +269,21 @@ public static class Integrations
             L10n.T("CalDAV Calendar"),
             L10n.T("Nextcloud, iCloud, Fastmail and other CalDAV servers"),
             CalDAVIcon),
+        new Service(
+            AccountKind.Eway,
+            Crm.CrmRules.Brand,
+            // TRANSLATORS: Preferences → Integrations: what an eWay-CRM
+            // account brings ("deals" as eWay-CRM's sales opportunities).
+            L10n.T("Save messages to your CRM with their contacts, companies and deals"),
+            EwayIcon),
     ];
 
     /// <summary>
     /// integrations.RowFor: the row of account <paramref name="a"/>. Title:
     /// the account name as the user typed it (nothing trimmed), else the Jira
     /// site's host, else the address. Subtitle: the host of the Jira site or
-    /// of the CalDAV server, else — and when the title shows the host
-    /// already — the address.
+    /// of the CalDAV server, the host and path of the eWay-CRM service, else
+    /// — and when the title shows the host already — the address.
     /// </summary>
     public static Row RowFor(Account a)
     {
@@ -297,6 +316,11 @@ public static class Integrations
                 // TRANSLATORS: %s is the calendar account's name.
                 removeBody = L10n.T("%s will be removed from Malachi Mail. Calendars on the server are not affected.", title);
                 break;
+            case AccountKind.Eway:
+                (icon, editor, editLabel) = (EwayIcon, Editor.Eway, L10n.T("Edit Account"));
+                // TRANSLATORS: %s is the eWay-CRM account's name.
+                removeBody = L10n.T("%s will be removed from Malachi Mail. Messages saved in eWay-CRM stay there.", title);
+                break;
             default:
                 (icon, editor, editLabel) = (MailIcon, Editor.None, "");
                 // TRANSLATORS: %s is the account's name.
@@ -320,7 +344,7 @@ public static class Integrations
     /// <summary>integrations.Texts: the Integrations page's texts.</summary>
     public static PageTexts Texts() => new(
         // TRANSLATORS: a page of the preferences: services beside the
-        // mail, such as Jira and CalDAV calendars.
+        // mail, such as Jira, CalDAV calendars and eWay-CRM.
         Title: L10n.T("Integrations"),
         Description: L10n.T("Services beside your mail: issue trackers, calendars and CRM"),
         ConnectedTitle: L10n.T("Connected Services"),
@@ -356,14 +380,19 @@ public static class Integrations
         return host.Length > 0 ? host : a.Config.Email;
     }
 
-    // host: a Jira account's site, a CalDAV account's server; "" for
-    // anything else.
+    // host: a Jira account's site, a CalDAV account's server, an eWay-CRM
+    // account's service (with its path, which tells two instances on one
+    // host apart); "" for anything else.
     private static string HostOf(Account a)
     {
         var kind = KindOf(a);
         if (kind == AccountKind.Jira)
         {
             return Jira.SiteHost(a.Config);
+        }
+        if (kind == AccountKind.Eway)
+        {
+            return Crm.CrmRules.ServiceHost(a);
         }
         if (kind != AccountKind.CalDAV || a.Config.CalDAV is not { } caldav || UrlSyntax.Parse(caldav.ServerUrl.Trim()) is not { } u)
         {

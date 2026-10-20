@@ -7,13 +7,13 @@ Port of macos/Sources/MalachiMail/Preferences/IntegrationsPaneViewController.swi
 GTK: preferences.blp integrations_page (its texts set from
 ui/internal/integrations in ui/internal/window/integrations_page.go). The
 page's description under the navigation's title ("Services beside your
-mail: issue trackers and calendars"), the group Connected Services
+mail: issue trackers, calendars and CRM"), the group Connected Services
 (integrations_group) with every account that is not a mail account
 (AccountListSection: its description, the rows and the empty row
 integrations_empty_row, "No integrations yet", "Add one from the list
 below"), then the group Available Services (integrations_available_group):
 a card per service of the catalogue (Integrations.Catalog: Jira, CalDAV
-Calendar) with its icon, name and description and its Add… button, which
+Calendar, eWay-CRM) with its icon, name and description and its Add… button, which
 opens the service's assistant. Every text comes from Core's Integrations
 and is set from code.
 -->
@@ -67,6 +67,12 @@ and is set from code.
                             x:Name="AddCalDAVButton"
                             AutomationProperties.AutomationId="AddCalDAVIntegration"
                             Click="OnAddCalDAVClick" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="EwayService" AutomationProperties.AutomationId="EwayService">
+                        <Button
+                            x:Name="AddEwayButton"
+                            AutomationProperties.AutomationId="AddEwayIntegration"
+                            Click="OnAddEwayClick" />
                     </tk:SettingsCard>
                 </StackPanel>
             </StackPanel>

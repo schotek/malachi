@@ -24,6 +24,7 @@ public sealed class IntegrationsTests
         {
             AccountKind.Jira => config with { Jira = new JiraConfig { SiteUrl = "https://Acme.atlassian.net/", Deployment = JiraDeployment.Cloud } },
             AccountKind.CalDAV => config with { CalDAV = new CalDAVConfig { ServerUrl = "https://Cloud.example.org/remote.php/dav/", Username = "me" } },
+            AccountKind.Eway => config with { Eway = new EwayConfig { ServiceUrl = "https://Hosting.eway-crm.com/acme", Username = "jana" } },
             _ => config,
         };
         return new Account
@@ -52,6 +53,7 @@ public sealed class IntegrationsTests
     [InlineData(AccountKind.Graph, true)]
     [InlineData(AccountKind.Jira, false)]
     [InlineData(AccountKind.CalDAV, false)]
+    [InlineData(AccountKind.Eway, false)]
     [InlineData("future", false)]
     public void PredicatesByKind(string? kind, bool mail)
     {
@@ -104,9 +106,13 @@ public sealed class IntegrationsTests
     public void Catalog()
     {
         var c = Integrations.Catalog();
-        Assert.Equal(2, c.Count);
+        Assert.Equal(3, c.Count);
         Assert.Equal(new AccountKind(AccountKind.Jira), c[0].Kind);
         Assert.Equal(new AccountKind(AccountKind.CalDAV), c[1].Kind);
+        Assert.Equal(new AccountKind(AccountKind.Eway), c[2].Kind);
+        Assert.Equal("eWay-CRM", c[2].Name);
+        Assert.Equal(Integrations.EwayIcon, c[2].Icon);
+        Assert.Equal("Save messages to your CRM with their contacts, companies and deals", c[2].Description);
         Assert.Equal("Jira", c[0].Name);
         Assert.Equal(Integrations.JiraIcon, c[0].Icon);
         Assert.Equal("CalDAV Calendar", c[1].Name);
@@ -159,6 +165,21 @@ public sealed class IntegrationsTests
         r = Integrations.RowFor(c);
         Assert.Equal(("c@example.invalid", "c@example.invalid"), (r.Title, r.Subtitle));
 
+        // eWay-CRM (integrations_test.go TestRowForByKind "eway").
+        var e = Account("e", AccountKind.Eway);
+        r = Integrations.RowFor(e);
+        Assert.Equal(("e@example.invalid", "hosting.eway-crm.com/acme"), (r.Title, r.Subtitle));
+        Assert.True(r.OffersSwitch);
+        Assert.Equal(Integrations.Editor.Eway, r.Editor);
+        Assert.Equal("Edit Account", r.EditLabel);
+        Assert.Equal(Integrations.EwayIcon, r.Icon);
+        e = e with { Config = e.Config with { Name = "Acme CRM" } };
+        r = Integrations.RowFor(e);
+        Assert.Equal("Acme CRM", r.Title);
+        Assert.Equal("Acme CRM will be removed from Malachi Mail. Messages saved in eWay-CRM stay there.", r.RemoveBody);
+        Assert.True(Integrations.ShowsInIntegrations(e));
+        Assert.False(Integrations.ShowsInAccounts(e));
+
         var f = Integrations.RowFor(Account("f", "future"));
         Assert.Equal(Integrations.Editor.None, f.Editor);
         Assert.True(f.OffersSwitch);
@@ -175,6 +196,7 @@ public sealed class IntegrationsTests
         Assert.Equal("Integrations", x.Title);
         Assert.Equal("Add…", x.Add);
         Assert.Equal("Calendar Settings", x.CalendarSettings);
+        Assert.Equal("Services beside your mail: issue trackers, calendars and CRM", x.Description);
     }
 
     // AccountsPage's helpers follow RowFor (accounts_page.go accountRowTitle,

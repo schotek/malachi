@@ -6,7 +6,8 @@
 // applyIssue, SetBulkPill (widget/pill.go), SetCompact, SetShowPreview,
 // SetShowAvatar; the margins and sizes of
 // message_row.blp), the invitation pill of macOS MessageCellView.swift
-// (applyInvitation, InvitationReading.Pill; docs/calendar.md §5.7), threads.go (the row a listRow becomes: newMessageRow,
+// (applyInvitation, InvitationReading.Pill; docs/calendar.md §5.7), its
+// eWay pill (configure's crmPill, CRM.pillFor; docs/eway.md), threads.go (the row a listRow becomes: newMessageRow,
 // syncRows) and widget/highlight.go (the matched words in bold); macOS:
 // MessageList/MessageCellView.swift, which keeps this in AppKit and Windows
 // in Core (docs/windows-port.md §7.4, §11.2).
@@ -85,6 +86,8 @@ public sealed partial class MessageRow : ObservableObject
         BulkText = "";
         InternalText = "";
         DraftText = "";
+        CrmPillText = "";
+        CrmPillTooltip = "";
         InvitationText = "";
         EventText = "";
         EventTooltip = "";
@@ -268,6 +271,19 @@ public sealed partial class MessageRow : ObservableObject
     public partial string DraftText { get; private set; }
 
     /// <summary>
+    /// The eWay pill of a message saved in eWay-CRM, beside the bulk pill
+    /// (<see cref="Crm.CrmText.PillFor"/>; GTK crm_pill, macOS
+    /// MessageCellView's crmPill; a conversation's is its newest folder
+    /// member's): a brand, "" hides it.
+    /// </summary>
+    [ObservableProperty]
+    public partial string CrmPillText { get; private set; }
+
+    /// <summary>The eWay pill's tooltip, "Saved in eWay-CRM"; "" without the pill.</summary>
+    [ObservableProperty]
+    public partial string CrmPillTooltip { get; private set; }
+
+    /// <summary>
     /// The pill of a message with a calendar part after the subject
     /// (<see cref="InvitationReading.Pill(ListRow)"/>: on a conversation row
     /// its newest member's): Invitation, Update, Cancelled or Reply; None
@@ -371,6 +387,11 @@ public sealed partial class MessageRow : ObservableObject
         InvitationPill = pill;
         InvitationText = Cal.PillTitle(pill);
         StrikesSubject = Cal.StrikesSubject(pill);
+        // The eWay pill (MessageCellView.configure: CRM.pillFor of the
+        // row's message), a brand and a msgid, nothing from mail.
+        var crm = Crm.CrmText.PillFor(row.Message);
+        CrmPillText = crm?.Label ?? "";
+        CrmPillTooltip = crm?.Tooltip ?? "";
         IsThread = thread;
         Loading = thread && loading;
         IsMember = row.Member;
@@ -403,6 +424,7 @@ public sealed partial class MessageRow : ObservableObject
             parts.Add(InvitationText);
             parts.Add(StatusText);
             parts.Add(BulkText);
+            parts.Add(CrmPillTooltip);
             parts.Add(InternalText);
             parts.Add(DraftText);
         }

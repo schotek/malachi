@@ -261,6 +261,12 @@ public sealed partial class AccountListSection : UserControl
             case Integrations.Editor.MailWizard:
                 AccountWizardWindow.Show(state, window, account, done: (_, config) => Controller.AccountSaved(config));
                 break;
+            case Integrations.Editor.Eway:
+                // macOS editAccount .eway: an account without an address
+                // (docs/eway.md D2) is named by its name in the toast.
+                EwayWizardWindow.Show(state, window, account, done: (_, config) =>
+                    Controller.AccountSaved(config.Email.Length > 0 ? config : config with { Email = config.Name }));
+                break;
             case Integrations.Editor.None:
             default:
                 break;

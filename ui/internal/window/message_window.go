@@ -26,6 +26,10 @@ type MessageWindow struct {
 
 	id     api.MessageID
 	outbox bool
+	// s is the message's summary as last shown; crm the window's eWay-CRM
+	// controls on it (crm_actions.go).
+	s   api.MessageSummary
+	crm *crmControls
 
 	// markRead and markUnread follow the seen flag (setSeen), as in the
 	// main window.
@@ -67,6 +71,7 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 	mw := &MessageWindow{
 		Window: b.GetObject("message_window").Cast().(*adw.Window),
 		id:     id,
+		s:      s,
 		title:  b.GetObject("window_title").Cast().(*adw.WindowTitle),
 		star:   b.GetObject("star_button").Cast().(*gtk.ToggleButton),
 		menu:   b.GetObject("message_menu").Cast().(*gtk.MenuButton),
@@ -124,6 +129,9 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 		}
 	})
 	g.AddAction(ask)
+	mw.crm = newCrmControls(w, "msg", &mw.Window.Window, b, func(a *gio.SimpleAction) { g.AddAction(a) },
+		func() []crmSubject { return []crmSubject{{s: mw.s}} },
+		func(text string) { mw.toasts.AddToast(widget.PlainToast(text)) })
 	mw.InsertActionGroup("msg", g)
 	unbind := w.assist.bindAssistantButton(b.GetObject("assistant_button").Cast().(*gtk.MenuButton), "msg", false, func() {
 		_, ok := w.assist.pick(true)
@@ -201,6 +209,10 @@ func (mw *MessageWindow) show(s api.MessageSummary, lm *loadedMessage) {
 	mw.title.SetTitle(subject)
 	mw.SetTitle(subject)
 	setStar(mw.star, hasFlag(s.Flags, api.FlagFlagged))
+	mw.s = s
 	mw.view.render(s, lm)
 	renderOutboxBanner(mw.banner, msg)
+	if mw.crm != nil {
+		mw.crm.refresh()
+	}
 }

@@ -94,18 +94,21 @@ public static class FolderTree
 
     /// <summary>
     /// The enabled accounts the Mail sidebar lists, keeping order: a
-    /// calendar-only CalDAV account has no mail and no folders, so it is
-    /// never in Mail (docs/calendar.md §5.3; it shows in the Calendar's
-    /// sidebar with the CALDAV capsule). Swift <c>mailSidebarAccounts</c>.
+    /// calendar-only CalDAV account and an eWay-CRM account have no mail and
+    /// no folders, so they are never in Mail (docs/calendar.md §5.3,
+    /// docs/eway.md D1; a CalDAV account shows in the Calendar's sidebar with
+    /// the CALDAV capsule, an eWay-CRM one only on Preferences →
+    /// Integrations). Swift <c>mailSidebarAccounts</c>.
     /// </summary>
     public static IReadOnlyList<Account> MailSidebarAccounts(IEnumerable<Account> accounts) =>
         [.. EnabledAccounts(accounts).Where(InMail)];
 
     /// <summary>
     /// Whether Mail shows account <paramref name="a"/> once it is enabled,
-    /// the rule of <see cref="MailSidebarAccounts"/>: every kind but a
-    /// calendar-only CalDAV account. The mailbox asks it of switched-off
-    /// accounts too, so that CalDAV accounts alone count as no account in
+    /// the rule of <see cref="MailSidebarAccounts"/>: every kind with mail,
+    /// that is every kind but a calendar-only CalDAV account and an eWay-CRM
+    /// account. The mailbox asks it of switched-off accounts too, so that
+    /// such accounts alone count as no account in
     /// Mail (the empty sidebar, the reader's No Accounts page); the account
     /// name on an all-accounts search result, the Reply All self address
     /// and the board's accounts (its account filter, Triage These Accounts)
@@ -114,7 +117,8 @@ public static class FolderTree
     public static bool InMail(Account a)
     {
         ArgumentNullException.ThrowIfNull(a);
-        return a.Config.ProtocolKind != AccountKind.CalDAV;
+        var k = a.Config.ProtocolKind;
+        return k != AccountKind.CalDAV && k != AccountKind.Eway;
     }
 
     /// <summary>
@@ -457,8 +461,9 @@ public static class FolderTree
     /// the provider a mail account signs in with ("GOOGLE", "M365";
     /// <see cref="Provider.AccountProvider"/>), "IMAP" for a mail account
     /// with a password, "CALDAV" for a calendar-only CalDAV account (Swift
-    /// <c>accountHeaderBadge</c>; the Go reference has no CalDAV yet). Brand
-    /// and protocol names, never translated.
+    /// <c>accountHeaderBadge</c>; the Go reference has no CalDAV yet),
+    /// "EWAY" for an eWay-CRM account (<see cref="Crm.CrmRules.KindBadge"/>,
+    /// Go <c>crm.KindBadge</c>). Brand and protocol names, never translated.
     /// </summary>
     public static string AccountHeaderBadge(Account a)
     {
@@ -470,6 +475,10 @@ public static class FolderTree
         if (a.Config.ProtocolKind == AccountKind.CalDAV)
         {
             return CalDAVBadge;
+        }
+        if (a.Config.ProtocolKind == AccountKind.Eway)
+        {
+            return Crm.CrmRules.KindBadge;
         }
         return Provider.AccountProvider(a.Config)?.Value switch
         {

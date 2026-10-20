@@ -311,9 +311,7 @@ func (d *PreferencesDialog) editAccount(c *client.Client, row *accountRow) {
 	case integrations.EditorMailWizard:
 		d.presentEdit(c, accountwizard.NewEdit(c, d.log, row.account))
 	case integrations.EditorEway:
-		// TODO(T7, docs/eway.md §4): the eWay-CRM assistant in its edit
-		// mode (accountwizard ewayFlow); until then the row's Edit does
-		// nothing in GTK.
+		d.editEwayAccount(c, row.account)
 	}
 }
 
@@ -385,12 +383,17 @@ type editorKind int
 const (
 	editorMailWizard editorKind = iota
 	editorJira
+	// editorEway: the eWay-CRM assistant in its edit mode.
+	editorEway
 )
 
 // accountEditor is the editorKind of account a, by its kind.
 func accountEditor(a api.Account) editorKind {
-	if jira.IsJira(a.Config) {
+	switch {
+	case jira.IsJira(a.Config):
 		return editorJira
+	case a.Config.Protocol() == api.AccountEway:
+		return editorEway
 	}
 	return editorMailWizard
 }

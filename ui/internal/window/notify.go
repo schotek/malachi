@@ -165,6 +165,8 @@ func issueNotificationLine(issue *api.MessageIssue) string {
 // sent folder named without the selected one has the conversation shown
 // ask for the user's replies again (refreshShownSent).
 func (w *Window) handleMessagesChanged(n api.MessagesChangedNotification) {
+	// The CRM's records come with the messages asked for again (crm.go).
+	defer w.crmMessagesChanged(n.AccountID)
 	a, ok := w.model.account(n.AccountID)
 	if !ok || !a.Enabled {
 		return

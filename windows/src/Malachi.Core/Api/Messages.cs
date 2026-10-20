@@ -145,6 +145,19 @@ public sealed record MessageSummary
     /// </summary>
     [JsonPropertyName("invitation")]
     public InvitationSummary? Invitation { get; init; }
+
+    /// <summary>
+    /// True when the daemon's record says the message (any copy with the same
+    /// Message-ID) is saved in an enabled CRM account (docs/api.md §4.17); a
+    /// display cache, the CRM is the truth. Absent (null) otherwise; false is
+    /// written as absent, as Go's omitempty does.
+    /// </summary>
+    [JsonPropertyName("crmSaved")]
+    public bool? CrmSaved { get; init => field = value == true ? true : null; }
+
+    /// <summary>Whether <see cref="CrmSaved"/> is set.</summary>
+    [JsonIgnore]
+    public bool IsCrmSaved => CrmSaved == true;
 }
 
 /// <summary>
@@ -299,6 +312,13 @@ public sealed record Message
     /// of <see cref="Summary"/> is null.
     /// </summary>
     public InvitationCard? Invitation { get; init; }
+
+    /// <summary>
+    /// The message's record in each CRM account where it is saved
+    /// (<c>message.get</c>, docs/api.md §4.17); absent when it is saved
+    /// nowhere.
+    /// </summary>
+    public IReadOnlyList<CrmRecord>? Crm { get; init; }
 }
 
 /// <summary>
@@ -318,6 +338,7 @@ public sealed class MessageConverter : JsonConverter<Message>
     private const string HeadersKey = "headers";
     private const string UnsubscribeKey = "unsubscribe";
     private const string InvitationKey = "invitation";
+    private const string CrmKey = "crm";
 
     /// <inheritdoc/>
     public override Message Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
@@ -344,6 +365,7 @@ public sealed class MessageConverter : JsonConverter<Message>
             Headers = Member<IReadOnlyDictionary<string, string>>(root, HeadersKey, options),
             Unsubscribe = Member<UnsubscribeOffer>(root, UnsubscribeKey, options),
             Invitation = Member<InvitationCard>(root, InvitationKey, options),
+            Crm = Member<IReadOnlyList<CrmRecord>>(root, CrmKey, options),
         };
     }
 
@@ -372,6 +394,7 @@ public sealed class MessageConverter : JsonConverter<Message>
         WriteMember(writer, HeadersKey, value.Headers, options);
         WriteMember(writer, UnsubscribeKey, value.Unsubscribe, options);
         WriteMember(writer, InvitationKey, value.Invitation, options);
+        WriteMember(writer, CrmKey, value.Crm, options);
         writer.WriteEndObject();
     }
 

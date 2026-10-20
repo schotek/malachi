@@ -229,6 +229,10 @@ only); the web view gets the sanitiser's output only.
                     BarPadding="13,6"
                     x:Load="False"
                     ActionClicked="OnBulkClick" />
+                <!-- The bar of a message saved in eWay-CRM (macOS
+                     ConversationCardView's crm slot, after the bulk strip):
+                     a Crm.CrmBarView made when first needed (RenderCrm). -->
+                <Border x:Name="CrmSlot" Margin="13,0,13,8" Visibility="Collapsed" />
                 <Border
                     x:Name="RemoteBar"
                     Padding="13,6"

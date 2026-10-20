@@ -586,6 +586,8 @@ func (w *Window) setMessageActionsSensitive(on bool) {
 			a.SetEnabled(e)
 		}
 	}
+	// eWay-CRM follows the selection explicitly (crm.go refreshCRM).
+	w.refreshCRM()
 }
 
 // presentReply labels a Reply button: "Comment" with its own icon on an

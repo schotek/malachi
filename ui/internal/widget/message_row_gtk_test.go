@@ -12,6 +12,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/calendar"
+	"github.com/schotek/malachi/ui/internal/crm"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
 )
@@ -53,5 +54,38 @@ func TestInvitationPillRow(t *testing.T) {
 	r.SetMessage(Message{Subject: "KEY-1: Summary", Issue: &jira.IssueRow{Key: "KEY-1"}, Invitation: calendar.PillCancelled})
 	if got, struck := r.InvitationPill(); got != "" || struck {
 		t.Errorf("issue row: pill %q struck %v", got, struck)
+	}
+}
+
+// TestCrmPillRow checks, with a GTK display (MALACHI_GTK_SMOKE=1), the
+// pill of a message saved in eWay-CRM (crm.PillFor): shown on a message
+// row, not on a conversation row or a row of an issue.
+func TestCrmPillRow(t *testing.T) {
+	if os.Getenv("MALACHI_GTK_SMOKE") != "1" {
+		t.Skip("set MALACHI_GTK_SMOKE=1 with a GTK display to run the widget test")
+	}
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	adw.Init()
+	p, ok := crm.PillFor(api.MessageSummary{CrmSaved: true}, i18n.Tr)
+	if !ok {
+		t.Fatal("no pill for a saved message")
+	}
+	r := NewMessageRow()
+	r.SetMessage(Message{Subject: "Offer", Crm: p})
+	if !r.crmPill.Visible() || r.crmPill.Text() != crm.PillLabel || r.crmPill.TooltipText() != p.Tooltip {
+		t.Errorf("pill %q %q", r.crmPill.Text(), r.crmPill.TooltipText())
+	}
+	r.SetThread(Thread{Subject: "Offer", Count: 2})
+	if r.crmPill.Visible() {
+		t.Error("a conversation row has no pill")
+	}
+	r.SetMessage(Message{Subject: "Offer", Crm: p, Issue: &jira.IssueRow{Key: "ACME-1"}})
+	if r.crmPill.Visible() {
+		t.Error("a row of an issue has no pill")
+	}
+	r.SetMessage(Message{Subject: "Offer"})
+	if r.crmPill.Visible() {
+		t.Error("an unsaved message has no pill")
 	}
 }

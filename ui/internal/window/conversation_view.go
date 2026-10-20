@@ -334,6 +334,7 @@ func (v *messageView) leaveForConversation() {
 	v.setBarVisible(false)
 	v.showPicturesBar(picturesBarState{})
 	v.showBulk(bulkmail.Strip{}, false)
+	v.showCrmBar(nil)
 	v.showText("")
 	v.renderAttachments(api.MessageSummary{}, nil)
 	v.showQuotedButton(conversation.QuotedNone)

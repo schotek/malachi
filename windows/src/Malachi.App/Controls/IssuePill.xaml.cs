@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of ui/internal/widget/pill.go (SetStatusPill, SetInternalPill,
-// SetBulkPill) and the draft-pill of ui/internal/style (the Draft badge of
+// SetBulkPill), the crm_pill of docs/eway.md §2.6 and the draft-pill of ui/internal/style (the Draft badge of
 // a conversation with the user's unsent reply);
 // macOS: Shared/IssuePill.swift (colours, paint). The pill's text and kind
 // as dependency properties, for x:Bind from a row or a card; the kind picks
@@ -42,6 +42,18 @@ public sealed partial class IssuePill : UserControl
     /// </summary>
     public static readonly DependencyProperty IsDraftProperty = DependencyProperty.Register(
         nameof(IsDraft), typeof(bool), typeof(IssuePill), new PropertyMetadata(false, OnChanged));
+
+    /// <summary>
+    /// The eWay pill of a message saved in eWay-CRM (CrmText.PillFor; GTK
+    /// crm_pill, macOS IssuePill.crmColours) instead of a status; its tooltip
+    /// is <see cref="Hint"/>.
+    /// </summary>
+    public static readonly DependencyProperty IsCrmProperty = DependencyProperty.Register(
+        nameof(IsCrm), typeof(bool), typeof(IssuePill), new PropertyMetadata(false, OnChanged));
+
+    /// <summary>The tooltip of an eWay pill ("Saved in eWay-CRM").</summary>
+    public static readonly DependencyProperty HintProperty = DependencyProperty.Register(
+        nameof(Hint), typeof(string), typeof(IssuePill), new PropertyMetadata("", OnChanged));
 
     /// <summary>An empty, hidden pill.</summary>
     public IssuePill()
@@ -85,6 +97,20 @@ public sealed partial class IssuePill : UserControl
         set => SetValue(IsDraftProperty, value);
     }
 
+    /// <summary>The eWay pill instead of a status.</summary>
+    public bool IsCrm
+    {
+        get => (bool)GetValue(IsCrmProperty);
+        set => SetValue(IsCrmProperty, value);
+    }
+
+    /// <summary>The tooltip of an eWay pill.</summary>
+    public string Hint
+    {
+        get => (string)GetValue(HintProperty);
+        set => SetValue(HintProperty, value);
+    }
+
     private static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) => ((IssuePill)d).Apply();
 
     // SetStatusPill / SetInternalPill: the text, its tooltip (a status's
@@ -94,8 +120,8 @@ public sealed partial class IssuePill : UserControl
         var text = Text ?? "";
         Label.Text = text;
         Visibility = text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        ToolTipService.SetToolTip(this, IsInternal || IsDraft || text.Length == 0 ? null : text);
-        var state = IsInternal ? "Internal" : IsDraft ? "Draft" : IsBulk ? "Bulk" : StatusStyle switch
+        ToolTipService.SetToolTip(this, IsCrm ? (text.Length == 0 || string.IsNullOrEmpty(Hint) ? null : Hint) : IsInternal || IsDraft || text.Length == 0 ? null : text);
+        var state = IsCrm ? "Crm" : IsInternal ? "Internal" : IsDraft ? "Draft" : IsBulk ? "Bulk" : StatusStyle switch
         {
             JiraStatusStyle.InProgress => "InProgress",
             JiraStatusStyle.Done => "Done",

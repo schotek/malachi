@@ -3,7 +3,7 @@
 
 // Port of macos/Tests/MalachiCoreTests/SelectionTests.swift, the
 // counterpart of ui/internal/selection/selection_test.go
-// (TestCombineOneRowIsTheRow, TestCombineSeveral, TestCombineCaps,
+// (TestCombineOneRowIsTheRow, TestCombineSeveral, TestCombineCaps, TestCombineCrm,
 // TestCombineOutbox, TestRestrict, TestReconcile, TestTexts) and
 // ui/internal/assistant/selection_test.go (TestMessageActionsFor), with
 // Swift's combineKeepsTheAccountsOffer. The context menu of several rows
@@ -50,6 +50,27 @@ public sealed class SelectionTests
         Assert.Equal(ActionFlags.None, Selection.Combine([]));
         var one = Mail with { ChangeStatus = true, Comment = true };
         Assert.Equal(one with { Count = 1, Open = true }, Selection.Combine([one]));
+    }
+
+    /// <summary>
+    /// selection_test.go TestCombineCrm: Save to eWay-CRM for several: every
+    /// row savable, at most api.MaxCrmMessages, never the saved-state
+    /// items; not in the outbox.
+    /// </summary>
+    [Fact]
+    public void CombineCrm()
+    {
+        var savable = Mail with { Crm = true, CrmSaved = true };
+        var one = Selection.Combine([savable]);
+        Assert.True(one.Crm && one.CrmSaved);
+        var two = Selection.Combine([savable, savable]);
+        Assert.True(two.Crm && !two.CrmSaved);
+        Assert.False(Selection.Combine([savable, Mail]).Crm);
+        var rows = Enumerable.Repeat(savable, API.Limits.MaxCrmMessages + 1).ToArray();
+        Assert.False(Selection.Combine(rows).Crm);
+        Assert.True(Selection.Combine(rows[..API.Limits.MaxCrmMessages]).Crm);
+        var queued = savable with { Outbox = true };
+        Assert.False(Selection.Combine([queued, queued]).Crm);
     }
 
     [Fact]

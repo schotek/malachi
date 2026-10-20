@@ -24,5 +24,8 @@ public sealed partial class Integration
         tokens.Add(hub);
         // The Assistant's menus and panel act on the list and the reader.
         mainWindow.AttachAssistant(this, hub.Services);
+        // eWay-CRM: the shared state's readers, the main window's button,
+        // menus and bar (Integration.Crm.cs).
+        WireCrm(hub);
     }
 }

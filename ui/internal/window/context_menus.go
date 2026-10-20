@@ -39,6 +39,10 @@ var messageMenuActions = map[contextmenu.ItemID]string{
 	contextmenu.Archive:      "win.archive",
 	contextmenu.Junk:         "win.junk",
 	contextmenu.Trash:        "win.trash",
+	contextmenu.CrmSave:      "win." + crmActionSave,
+	contextmenu.CrmOpen:      "win." + crmActionOpen,
+	contextmenu.CrmEditLinks: "win." + crmActionEditLinks,
+	contextmenu.CrmRemove:    "win." + crmActionRemove,
 }
 
 // menuTriggers are the keys that open a row's menu.
@@ -153,6 +157,9 @@ func (w *Window) showMessageMenu(r *gtk.ListBoxRow, x, y float64) {
 		ChangeStatus:  st.changeStatus,
 		Assistant:     assistantShown,
 	}
+	// eWay-CRM by crm.OfferFor of the selected rows; a conversation's row
+	// offers nothing.
+	s.SetCrm(w.crmOffer(w.crmMainSubjects()))
 	labels := contextmenu.Labels{Comment: st.comment, Flagged: st.flagged, Outbox: st.outbox, Count: st.count}
 	m := gio.NewMenu()
 	for _, g := range contextmenu.MessageItems(s) {

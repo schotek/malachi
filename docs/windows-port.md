@@ -3275,6 +3275,101 @@ everything (not built on Windows yet): `build.ps1 app`, `test`, `lint`,
 the UI smoke and a manual walk through both pages, and the Puzzle glyph
 against the font.
 
+### 11.11 eWay-CRM
+
+As built (2026-10-19, task T8 of docs/eway.md, written on a Mac without
+.NET as the port of the Go reference `ui/internal/crm`,
+`accountwizard/eway_flow.go` and the macOS client of T6): the Windows
+client saves mail to eWay-CRM as macOS does.
+
+API: `Api/Crm.cs` mirrors `backend/pkg/api/crm.go` (`EwayConfig`,
+`CrmItemKind`, `CrmReason`, `CrmSignInReason`, `CrmItem`, `CrmItemRef`,
+`CrmRecord`, the params and results of `account.detectEway`, `crm.lookup`,
+`crm.search`, `crm.save` and `crm.remove` — its empty result is
+`EmptyResult` —, `CrmSignInUnsupportedData`, `MessagesNotDownloadedData`)
+with Go's `GUID` members as `ItemGuid`; `AccountKind.Eway`,
+`Capability.Crm`, `AccountConfig.Eway`, `AccountTestResult.Eway`,
+`MessageSummary.CrmSaved` (`IsCrmSaved`) and `Message.Crm` (one more key of
+`MessageConverter`), the error codes 1109, 1205 and 1307, the ten limits
+of crm.go in `API.Limits`, the five methods at the end of `API.Methods`
+(`account.detectEway` 15 s, `crm.lookup` and `crm.search` 30 s, `crm.save`
+15 min, `crm.remove` 30 s: `CrmTimeouts`, Swift's `RPCTimeouts.crmLookup`
+and `crmSave`). `GoContractTests` reads crm.go both ways
+(`EveryEnumOfCrmGoIsAWireEnum`, `EveryStructOfCrmGoHasARecord`, the limits),
+`ApiRoundTripTests` has a sample of every record.
+
+Core: `Crm/CrmRules.cs` (crm.go: `Accounts`, `Available`, `IsMailAccount`,
+`CanSave`, `OfferFor` with `CrmRow.Conversation`, `RecordOf`, `IsSaved`,
+`CrmInFlight`, `ButtonStateFor`, `NotDownloaded`, `SignInReason`,
+`OpenUrl`, `DefaultName`, `ServiceHost`, `KindBadge` "EWAY"),
+`Crm/CrmDialog.cs` (dialog.go: `Groups`, `Toggle`, `SetSuperior`,
+`Merge`, `Private`, `Changed`, `CanSave`, `SaveParams`, `SearchParams`,
+`OffersSearchHint`) and `Crm/CrmText.cs` (text.go: `ButtonFor`,
+`SavedMenu`, `SaveMenuLabel`, `DialogTexts`, `GroupTitle`, `BarFor`,
+`PillFor`, `Summarize`, `SaveToast`, `RemoveQuestion`, `ErrorText`,
+`ActionText`, `DownloadingText`, `WizardTexts` with `FollowThreads`,
+`CheckServiceInput`, `FailureOf`); Go's types are top-level with a `Crm`
+prefix, Go's "(value, ok)" nullable, Go's errors exceptions
+(`RpcErrorText.DaemonError`). The namespace is `Malachi.Core.Crm` and the
+functions' classes are `CrmRules`, `CrmDialog` and `CrmText`, as Swift
+splits the files: a class `Crm` would be hidden by the namespace (the
+reason Jira lives in `IssueTrackers`). `ContextMenu` gains `CrmSave`,
+`CrmOpen`, `CrmEditLinks`, `CrmRemove` and `MessageState.WithCrm`
+(Go's `SetCrm`), `Selection.Combine` and `ActionFlags` `Crm`/`CrmSaved`,
+`Integrations` the catalogue's third entry, `EwayIcon`, `Editor.Eway` and
+the eway row, `FolderTree.InMail` leaves eway accounts out and
+`AccountHeaderBadge` says "EWAY", `MessageRow.CrmPillText`/`CrmPillTooltip`
+the list's pill. `Controllers/CrmController.cs` holds `CrmState` (one for
+the app, `AppState.Crm`: the accounts, `RoleOf`, the cache's `Loaded`, the
+busy messages, a finished call's record for 10 s, `Changed`),
+`CrmDialogSession` (lookup, the search after 300 ms of quiet on the
+injected `TimeProvider`, from 2 bytes, Save, Cancel) and `CrmController`
+(one per window: `Subjects`, `Conversations`, `Button`, `Offer`, `Record`,
+`Save`/`EditLinks`, `Open`, `Remove` after `Confirm`, the partNotDownloaded
+round at most twice; a save or removal ends its busy mark even when its
+window closed — Swift skips the end then). `Controllers/EwayWizardController.cs`
+is `ewayFlow` with JiraWizardController's event names; an empty password
+goes as none.
+
+App: `Crm/CrmToolbarButton` (the button's states, `CrmButton` and
+`CrmSavedButton` with `CrmOpenItem`, `CrmEditLinksItem`, `CrmRemoveItem`),
+`Crm/CrmSaveDialog` (a `ContentDialog` built in code, `CrmDialog`,
+`CrmSearch`, `CrmItem:<kind>:<guid>`, `CrmSuperior:<kind>:<guid>`,
+`CrmPrivate`), `Crm/CrmBarView` (`CrmBar`, `CrmOpenButton`),
+`Crm/CrmWindowSupport` (a window's controller: the dialog through
+`IAlerts.ShowDialogAsync`, the question through `ConfirmDestructiveAsync`,
+the toasts, the bar's URL through the launcher), `MainWindow.Crm.cs` (the
+selection's subjects; the header bar's button between Trash and the Star;
+the list's context menu through `MessageListPane.Crm`), the message
+window's own controller (`MessageWindow.WireCrm`), the bar in
+`MessageView` (last in the header) and in a conversation's card
+(`CrmSlot` after the bulk strip, redrawn by `ConversationView` on
+`CrmState.Changed`), the pill (`IssuePill.IsCrm`, `MessageRowView`
+`CrmPill`), `Shell/AppState.Crm.cs` and `Shell/Integration.Crm.cs` (the
+state's readers; it tells every window on `notify.messagesChanged`,
+`notify.accountsChanged`, a loaded message and the accounts' load), the
+assistant `Wizard/EwayWizardWindow` with `EwayServicePage` and
+`EwayCredentialsPage` (`EwayService`, `EwayNext`, `EwayName`, `EwayUser`,
+`EwayPassword`, `EwayFollowThreads`, `EwaySignIn`), opened from
+`IntegrationsPage` (`AddEwayIntegration`) and the row's Edit
+(`AccountListSection`, `Integrations.Editor.Eway`), and the glyph
+ContactInfo (U+E779) for `x-office-address-book` in `IconGlyphs`. Not on
+Windows: the More Actions menu has no CRM items (the button is beside
+it), and there is no sample data for the dialog (Swift's
+`CRMDialogSession.sample()` is ported, `CrmDialogSession.Sample()`, but
+nothing opens it yet).
+
+Tests: `Crm/CrmRulesTests`, `CrmDialogTests`, `CrmTextTests` (crm_test.go,
+dialog_test.go, text_test.go one to one), `Controllers/CrmControllerTests`
+(the Swift suite and a closed window's save),
+`Controllers/EwayWizardControllerTests` (eway_flow_test.go),
+`ContextMenuTests.MessageItemsCrm`, `SelectionTests.CombineCrm`,
+`IntegrationsTests`, `FolderTreeTests.InMailIsEveryKindButCalDAV`,
+`JiraSidebarTests.AccountHeaderBadgeSaysTheKind`, `ApiCodingTests`,
+`GoContractTests`, `ApiRoundTripTests`. Not verified: everything (not
+built on Windows yet): `build.ps1 app`, `test`, `lint`, and a manual walk
+over a copy of the data against an eWay-CRM instance.
+
 ## 12. Tests
 
 `make test-windows` (`build.ps1 test`) runs six test projects, 5,944

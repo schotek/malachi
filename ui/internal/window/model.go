@@ -540,6 +540,9 @@ func summaryMessage(s api.MessageSummary) widget.Message {
 		Tag:            bulkmail.Tag(s.Bulk, i18n.Tr),
 		Invitation:     calendar.InvitationPillOf(s),
 	}
+	if p, ok := crm.PillFor(s, i18n.Tr); ok {
+		m.Crm = p
+	}
 	if m.Issue != nil {
 		m.Unread = m.Issue.Unread
 	}

@@ -1149,11 +1149,11 @@ public sealed partial class ApiCodingTests
         (1005, "unauthenticated"), (1006, "readOnly"), (1007, "invitationsUnavailable"),
         (1100, "accountNotFound"), (1101, "folderNotFound"), (1102, "messageNotFound"), (1103, "threadNotFound"),
         (1104, "draftNotFound"), (1105, "attachmentNotFound"), (1106, "caseNotFound"), (1107, "calendarNotFound"),
-        (1108, "eventNotFound"),
+        (1108, "eventNotFound"), (1109, "crmItemNotFound"),
         (1200, "authRequired"), (1201, "authFailed"), (1202, "keyringError"), (1203, "oauthClientMissing"),
-        (1204, "calendarConsentRequired"),
+        (1204, "calendarConsentRequired"), (1205, "crmSignInUnsupported"),
         (1300, "offline"), (1301, "networkError"), (1302, "serverError"), (1303, "tlsError"), (1304, "serverTimeout"),
-        (1305, "messageGone"), (1306, "eventGone"),
+        (1305, "messageGone"), (1306, "eventGone"), (1307, "crmDuplicate"),
         (1400, "storageError"), (1401, "migrationFailed"),
         (1500, "malformedMessage"), (1501, "sanitizeFailed"), (1502, "attachmentTooBig"), (1503, "partNotFound"),
         (1504, "partNotDownloaded"), (1505, "unsubscribeFailed"), (1506, "quoteNotFound"), (1507, "malformedCalendar"),
@@ -1163,8 +1163,8 @@ public sealed partial class ApiCodingTests
     [Fact]
     public void ErrorCodesAreNamed()
     {
-        Assert.Equal(45, ErrorCode.All.Count);
-        Assert.Equal(45, ErrorCode.All.Distinct().Count());
+        Assert.Equal(48, ErrorCode.All.Count);
+        Assert.Equal(48, ErrorCode.All.Distinct().Count());
         Assert.Equal(GoCodes.Select(c => c.Code), ErrorCode.All.Select(c => c.Value));
         Assert.Equal(GoCodes.Select(c => c.Name), ErrorCode.All.Select(c => c.Name));
         foreach (var code in ErrorCode.All)
@@ -1202,6 +1202,9 @@ public sealed partial class ApiCodingTests
         Assert.True(ErrorCode.EventGone == 1306 && new ErrorCode(1306).Name == "eventGone");
         Assert.True(ErrorCode.MalformedCalendar == 1507 && new ErrorCode(1507).Name == "malformedCalendar");
         Assert.True(ErrorCode.RecurrenceUnsupported == 1508 && new ErrorCode(1508).Name == "recurrenceUnsupported");
+        Assert.True(ErrorCode.CrmItemNotFound == 1109 && new ErrorCode(1109).Name == "crmItemNotFound");
+        Assert.True(ErrorCode.CrmSignInUnsupported == 1205 && new ErrorCode(1205).Name == "crmSignInUnsupported");
+        Assert.True(ErrorCode.CrmDuplicate == 1307 && new ErrorCode(1307).Name == "crmDuplicate");
     }
 
     // MARK: Params encoding
@@ -1323,13 +1326,15 @@ public sealed partial class ApiCodingTests
         "event.list", "event.get", "event.search", "event.create", "event.update",
         "event.delete", "event.respond", "event.snoozeAlert", "event.dismissAlert",
         "invitation.list", "invitation.respond", "invitation.applyCancel",
+        "account.detectEway",
+        "crm.lookup", "crm.search", "crm.save", "crm.remove",
     ];
 
     [Fact]
     public void MethodTableMatchesGo()
     {
-        Assert.Equal(96, API.AllMethods.Count);
-        Assert.Equal(96, API.AllMethods.Distinct().Count()); // no duplicates
+        Assert.Equal(101, API.AllMethods.Count);
+        Assert.Equal(101, API.AllMethods.Distinct().Count()); // no duplicates
         Assert.Equal(GoMethods, API.AllMethods);
         Assert.Equal(API.AllMethods.Count, API.Methods.Count);
         Assert.Equal(API.SystemInfoName, API.SystemInfo.Name);
@@ -1391,6 +1396,12 @@ public sealed partial class ApiCodingTests
         Assert.Equal(TimeSpan.FromSeconds(45), API.EventRespond.Timeout);
         Assert.Equal(TimeSpan.FromSeconds(45), API.InvitationRespond.Timeout);
         Assert.Equal(TimeSpan.FromSeconds(45), API.InvitationApplyCancel.Timeout);
+        // The CRM's (Swift RPCTimeouts.crmLookup, crmSave; eway_flow.go detectEwayTimeout).
+        Assert.Equal(TimeSpan.FromSeconds(15), API.AccountDetectEway.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(30), API.CrmLookup.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(30), API.CrmSearch.Timeout);
+        Assert.Equal(TimeSpan.FromMinutes(15), API.CrmSave.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(30), API.CrmRemove.Timeout);
         var special = new HashSet<string>(StringComparer.Ordinal)
         {
             "system.info", "system.hello", "system.authenticate", "message.body",
@@ -1401,6 +1412,7 @@ public sealed partial class ApiCodingTests
             "message.unsubscribe",
             "account.discoverCalDAV", "account.listCalDAVCalendars", "calendar.freeBusy", "calendar.findFreeTime", "event.list",
             "event.create", "event.update", "event.delete", "event.respond", "invitation.respond", "invitation.applyCancel",
+            "account.detectEway", "crm.lookup", "crm.search", "crm.save", "crm.remove",
         };
         foreach (var m in API.Methods.Where(m => !special.Contains(m.Name)))
         {

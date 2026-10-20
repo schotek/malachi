@@ -10,6 +10,12 @@
 # here) as the default http/https handler for the daemon's browser
 # sign-ins, whose redirect lands on the container's 127.0.0.1
 # (glib-networking is its TLS, a weak dependency the install leaves out).
+# The look of a GNOME desktop: librsvg2 is the SVG loader of gdk-pixbuf,
+# without which every SVG icon of the Adwaita theme (and the app's own)
+# renders as image-missing (seen 2026-10-20), adwaita-fonts-all is Adwaita
+# Sans and Mono, the UI font of GNOME 47+, google-noto-emoji-fonts the
+# emoji of mail subjects; the icon and cursor themes come with GTK.
+# `gtk.sh x11` writes the matching gtk-4.0/settings.ini.
 # Build and use it through scripts/gtk-container/gtk.sh.
 FROM registry.fedoraproject.org/fedora:42
 RUN dnf -y install --setopt=install_weak_deps=False \
@@ -20,6 +26,7 @@ RUN dnf -y install --setopt=install_weak_deps=False \
       xorg-x11-server-Xvfb xauth dbus-daemon procps-ng \
       gnome-keyring libsecret tzdata glibc-langpack-cs glibc-langpack-en \
       epiphany glib-networking \
+      librsvg2 adwaita-fonts-all google-noto-emoji-fonts \
     && dnf clean all \
     && test -f /usr/share/applications/org.gnome.Epiphany.desktop \
     && printf '[Default Applications]\nx-scheme-handler/http=org.gnome.Epiphany.desktop\nx-scheme-handler/https=org.gnome.Epiphany.desktop\n' > /etc/xdg/mimeapps.list \

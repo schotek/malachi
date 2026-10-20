@@ -104,6 +104,10 @@ public sealed partial class MessageView : UserControl
     // The invitation card above the header; none in an attached message's view.
     private readonly InvitationCardPresenter? invitation;
 
+    // The eWay-CRM bar under the header (Crm/CrmBarView); none in an
+    // attached message's view.
+    private readonly Crm.CrmBarView? crmBar;
+
     /// <summary>A view of <paramref name="mode"/>; <paramref name="commands"/> drive its command row (none for an attached message).</summary>
     public MessageView(ReaderMode mode, ReaderServices services, WindowCommands? commands)
     {
@@ -142,6 +146,16 @@ public sealed partial class MessageView : UserControl
             };
         }
         WireCommands();
+        if (mode != ReaderMode.Embedded)
+        {
+            // The bar of a message saved in eWay-CRM, last under the header
+            // (macOS MessageViewController's crmBar), redrawn whenever the
+            // application's CRM state changes.
+            crmBar = new Crm.CrmBarView(new Thickness(12, 6, 12, 6));
+            crmBar.OpenRequested += (_, url) => Crm.CrmWindowSupport.OpenUrl(services.State, HostWindow, url);
+            Headers.Children.Add(crmBar);
+            services.State.Crm.Changed += OnCrmChanged;
+        }
         // GTK SetFocusOnClick(false): a click leaves the focus where it was,
         // since the bar goes away the moment the images are in; the keyboard
         // still reaches them.
@@ -169,6 +183,9 @@ public sealed partial class MessageView : UserControl
 
     /// <summary>The Assistant's ✦ button of a message window's command row (message_window.blp assistant_button).</summary>
     public AppBarButton Assistant => AssistantButton;
+
+    /// <summary>The eWay-CRM button of a message window's command row (message_window.blp crm_button).</summary>
+    internal Crm.CrmToolbarButton CrmButton => CrmCommand;
 
     /// <summary>The window the view is in: where its dialogs and toasts go.</summary>
     public Window? HostWindow { get; set; }
@@ -246,6 +263,10 @@ public sealed partial class MessageView : UserControl
         }
         tokens.Clear();
         services.Attachments.SavingAllChanged -= OnSavingAllChanged;
+        if (crmBar is not null)
+        {
+            services.State.Crm.Changed -= OnCrmChanged;
+        }
         Reader.Close();
         web?.Close();
         conversation?.Close();
@@ -443,6 +464,21 @@ public sealed partial class MessageView : UserControl
 
     // Another message's headers start at their top, as a new page of GTK's
     // box would; a re-render of the same one leaves them where they are.
+    // The eWay-CRM bar of the message on display (CrmState.Record: the
+    // loaded message's record, or what a save or removal just reported);
+    // none without an enabled eWay-CRM account (macOS renderCRM).
+    private void RenderCrm()
+    {
+        if (crmBar is null || closed)
+        {
+            return;
+        }
+        var crm = services.State.Crm;
+        crmBar.Show(crm.Account is not null && Reader.Current is { } s ? crm.Record(s) : null);
+    }
+
+    private void OnCrmChanged(object? sender, EventArgs e) => RenderCrm();
+
     private void OnRendered(object? sender, ReaderRender r)
     {
         if (closed)
@@ -450,6 +486,7 @@ public sealed partial class MessageView : UserControl
             return;
         }
         RenderInvitation(r);
+        RenderCrm();
         if (headersOf == r.Summary.Id)
         {
             return;

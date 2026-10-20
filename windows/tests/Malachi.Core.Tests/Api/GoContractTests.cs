@@ -25,7 +25,7 @@ public sealed class GoContractTests
         var source = GoContract.ApiSource("methods.go");
         var constants = GoContract.StringConstants(source);
         var goMethods = GoContract.SliceIdentifiers(source, "AllMethods").Select(name => constants[name]).ToArray();
-        Assert.Equal(96, goMethods.Length);
+        Assert.Equal(101, goMethods.Length);
         Assert.Equal(goMethods, API.AllMethods);
         Assert.Equal(goMethods, API.Methods.Select(m => m.Name));
         Assert.Equal(ApiCodingTests.GoMethods, goMethods); // the Swift test's copy is current
@@ -149,6 +149,9 @@ public sealed class GoContractTests
         { nameof(EventAlertState), "calendar.go", "EventAlertState" },
         { nameof(VideoCallMode), "calendar.go", "VideoCallMode" },
         { nameof(CalDAVFoundVia), "calendar.go", "CalDAVFoundVia" },
+        { nameof(CrmItemKind), "crm.go", "CrmItemKind" },
+        { nameof(CrmReason), "crm.go", "CrmReason" },
+        { nameof(CrmSignInReason), "crm.go", "CrmSignInReason" },
     };
 
     /// <summary>
@@ -174,6 +177,22 @@ public sealed class GoContractTests
         foreach (var goType in enums)
         {
             AssertWireEnum(goType, "calendar.go", goType);
+        }
+    }
+
+    /// <summary>
+    /// crm.go declares no string type with constants that the table above
+    /// leaves out: each has a wire enum of the same name in Malachi.Core.Api.
+    /// </summary>
+    [Fact]
+    public void EveryEnumOfCrmGoIsAWireEnum()
+    {
+        var source = GoContract.ApiSource("crm.go");
+        var enums = GoContract.StringTypes(source).Where(t => GoContract.TypedStringConstants(source, t).Count > 0).ToArray();
+        Assert.Equal(["CrmItemKind", "CrmReason", "CrmSignInReason"], enums.Order(StringComparer.Ordinal));
+        foreach (var goType in enums)
+        {
+            AssertWireEnum(goType, "crm.go", goType);
         }
     }
 
@@ -207,9 +226,10 @@ public sealed class GoContractTests
     [Fact]
     public void LimitsAreTheConstantsOfTypesGo()
     {
-        // types.go, and calendar.go for the calendar's (docs/calendar.md §4.8).
+        // types.go, calendar.go for the calendar's (docs/calendar.md §4.8)
+        // and crm.go for the CRM's (docs/eway.md D16).
         var go = new Dictionary<string, long>(StringComparer.Ordinal);
-        foreach (var file in new[] { "types.go", "calendar.go" })
+        foreach (var file in new[] { "types.go", "calendar.go", "crm.go" })
         {
             foreach (var (name, value) in GoContract.IntConstants(GoContract.ApiSource(file)))
             {
@@ -217,7 +237,7 @@ public sealed class GoContractTests
             }
         }
         var limits = typeof(API.Limits).GetFields(BindingFlags.Public | BindingFlags.Static).Where(f => f.IsLiteral).ToArray();
-        Assert.Equal(62, limits.Length);
+        Assert.Equal(72, limits.Length);
         foreach (var limit in limits)
         {
             // Go spells the identifier "IDs"; C# "Ids".
@@ -233,6 +253,12 @@ public sealed class GoContractTests
         foreach (var name in calendar.Keys)
         {
             Assert.True(names.Contains(name), $"API.Limits has no {name} of calendar.go");
+        }
+        var crm = GoContract.IntConstants(GoContract.ApiSource("crm.go"));
+        Assert.Equal(10, crm.Count);
+        foreach (var name in crm.Keys)
+        {
+            Assert.True(names.Contains(name), $"API.Limits has no {name} of crm.go");
         }
         Assert.Equal(API.ProtocolVersion, GoContract.IntConstants(GoContract.ApiSource("doc.go"))["ProtocolVersion"]);
     }
@@ -298,7 +324,7 @@ public sealed class GoContractTests
     {
         var structs = GoContract.Structs(
             GoContract.ApiSource("types.go"), GoContract.ApiSource("tls.go"), GoContract.ApiSource("errors.go"), GoContract.ApiSource("board.go"),
-            GoContract.ApiSource("calendar.go"));
+            GoContract.ApiSource("calendar.go"), GoContract.ApiSource("crm.go"));
         var records = typeof(API).Assembly.GetTypes().Where(t =>
             t.Namespace == "Malachi.Core.Api" && t.IsClass && t.IsPublic && !t.IsAbstract
             && t.GetProperty("EqualityContract", BindingFlags.NonPublic | BindingFlags.Instance) is not null
@@ -352,6 +378,27 @@ public sealed class GoContractTests
         }
     }
 
+    /// <summary>
+    /// The other way round for the CRM: every struct of crm.go with members
+    /// has a record in Malachi.Core.Api; the one without (CrmRemoveResult) is
+    /// EmptyResult.
+    /// </summary>
+    [Fact]
+    public void EveryStructOfCrmGoHasARecord()
+    {
+        var structs = GoContract.Structs(GoContract.ApiSource("crm.go"));
+        var records = typeof(API).Assembly.GetTypes().Where(t =>
+            t.Namespace == "Malachi.Core.Api" && t.IsClass && t.IsPublic && !t.IsAbstract
+            && t.GetProperty("EqualityContract", BindingFlags.NonPublic | BindingFlags.Instance) is not null)
+            .Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+        Assert.True(structs.Count >= 18, $"crm.go has {structs.Count} structs");
+        foreach (var name in structs.Where(s => s.Value.Count > 0).Select(s => s.Key))
+        {
+            Assert.True(records.Contains(name), $"crm.go has a struct {name}, Malachi.Core.Api no record {name}");
+        }
+        Assert.Equal(["CrmRemoveResult"], structs.Where(s => s.Value.Count == 0).Select(s => s.Key));
+    }
+
     // The fields of a Go struct with its embedded structs' flattened in, as
     // encoding/json writes them.
     private static IEnumerable<(string Json, string GoType)> Flatten(
@@ -396,6 +443,7 @@ public sealed class GoContractTests
                 ("rfcMessageId", nameof(Message.RfcMessageId)), ("inReplyTo", nameof(Message.InReplyTo)),
                 ("references", nameof(Message.References)), ("attachments", nameof(Message.Attachments)), ("headers", nameof(Message.Headers)),
                 ("unsubscribe", nameof(Message.Unsubscribe)),
+                ("crm", nameof(Message.Crm)),
                 ("invitation", nameof(Message.Invitation)), // shadows the summary's, the one key of the same name
             })
             {

@@ -7,9 +7,13 @@ account on Preferences → Integrations. It follows the shape of
 [calendar.md](calendar.md): scope, decisions, architecture per layer,
 security, tasks with gates, open questions.
 
-Status (2026-10-17): branch `feat/eway`. T0 is done ("As verified (T0)"
-after §1); the daemon side T1–T4 is built (§6 "As built"); the clients
-(T5–T8) are not. The decisions of §1 stand as answered in §5.
+Status (2026-10-19): branch `feat/eway`. T0 is done ("As verified (T0)"
+after §1); the daemon side T1–T4 is built (§6 "As built"); the Go
+reference T5, the macOS client T6 (owner-verified, Gate B) and the GTK
+client T7 (owner-verified, Gate C, 2026-10-20) are built, the Windows
+client T8 is written and awaits the owner's build (Gate D; §2.7 "As
+built"). The
+decisions of §1 stand as answered in §5.
 The UI decisions of 2026-10-17 (wireframes approved: the toggle button on
 the message, the relations dialog, the pill and the bar, the account on
 Integrations) are taken and not reopened here; §1 only makes them precise.
@@ -1094,6 +1098,154 @@ Where the macOS client differs from the table above (details in
   (`MALACHI_START` `crm-dialog`, `eway-wizard`). Not checked: anything
   against a real daemon or eWay-CRM (Gate B), the toolbar button's
   states on screen.
+
+#### As built (T7, GTK, 2026-10-19)
+
+Where the GTK client differs from §2.6 (written before the macOS client;
+the port follows macOS as built, the deviation rows are in
+`macos/README.md`):
+
+- Files: `window/crm.go` (the application's state — the eWay account of
+  `account.list`, the messages a save or removal runs for, a finished
+  call's own answer kept 10 s — and `refreshCRM`, the one function that
+  redraws every control), `window/crm_actions.go` (`crmControls` per
+  window: the button, the actions `win.crm-save`, `win.crm-open`,
+  `win.crm-edit-links`, `win.crm-remove` and `msg.*`, the More Actions
+  section, save with download-and-retry at most twice, remove after the
+  question), `window/crm_dialog.go` + `ui/data/ui/crm_dialog.blp`,
+  `window/crm_bar.go`, `accountwizard/eway.go` + `eway_wizard.blp`; the
+  smoke tests `window/crm_gtk_smoke_test.go`,
+  `accountwizard/eway_gtk_smoke_test.go`, `widget` `TestCrmPillRow`.
+  There is no `ui/internal/ewayaccount`: as on macOS, the Integrations
+  row's Edit, the eWay catalogue row's Add… and the account's sign-in
+  and certificate banners open the assistant (`NewEway`, `NewEwayEdit`).
+- The button is `crm_slot` in the header bar of the reading pane and the
+  message window between Trash and the Star, a group of its own with
+  12 px margins on both sides (`[end]` children of an `Adw.HeaderBar`
+  pack right to left, so the slot is declared after `star_button`);
+  icon-only with the label as tooltip like every header-bar action, and
+  `has-frame: false` on both widgets (inside the slot's Box the bar's CSS
+  for its direct children does not flatten them; seen in Gate C); the
+  saved state shows the CRM icon with a check mark and opens the menu;
+  while saving a spinner replaces the icon and the button is off. Below
+  the 600 sp breakpoint (the main window's narrowest, the message window
+  got one of its own) the slot hides; More Actions always lists the items
+  (Save with the count of several rows, or Open / Edit Links… / Remove).
+- One message per selected row as on macOS; a folded conversation row
+  offers nothing (`crmSubject.conv` → `crm.Row.Conversation`), so the
+  main window's subjects are the shown messages of `selectedRows()`.
+- The dialog: Cancel and Save in the header, Enter in the search field
+  saves as the Mac's default button does, Superior Item is a radio suffix
+  on each deal or project row (one group across both), Private is an
+  `Adw.SwitchRow` with its hint as subtitle, the search delay is
+  `GtkSearchEntry`'s own 300 ms; the groups are rebuilt only when the
+  listed items change, so the keyboard focus stays while check boxes and
+  radios are set.
+- The bar is `crm_bar` under the header (`toolbar remote-bar crm-bar`
+  classes) in both Blueprints and made on first need on a conversation
+  card; Open in eWay-CRM launches the daemon's URL at once (the comment in
+  `crm_bar.go` says why: D15, `crm.OpenURL` https only).
+- Refresh: `refreshCRM` runs on every selection change
+  (`setMessageActionsSensitive`), every message load (`settleLoaded`),
+  the accounts loaded (`loadAccounts`) and `notify.messagesChanged`
+  (`crmMessagesChanged`: the cache let go of the account's messages, so
+  every open message window of it, and the pane when it does not reload
+  itself, asks `message.get` again — the body stays as shown — so the
+  saved state does not flip back once the 10 s override expires).
+- The pill is `crm_pill` after `bulk_pill` (teal, `label.issue-pill.crm-pill`),
+  only on message rows (`SetThread` clears it).
+- The assistant is an `Adw.Dialog` of the Jira assistant's shape
+  (520 × 560): Web Service Address with the hint and the problem line
+  under the field → Sign In with the address read only, name, user,
+  password (`Adw.PasswordEntryRow`) and the follow-conversations check box
+  as a prefix of an `Adw.ActionRow` with the hint as subtitle; the
+  header's Back, Escape and a swipe are the flow's Back.
+- Timeouts as on macOS: `crm.lookup` and `crm.search` 30 s, `crm.save`
+  15 min, `crm.remove` 30 s; the assistant's are `eway_flow.go`'s.
+- Dev steps `MALACHI_GTK_START=crm-dialog` (invented suggestions, no
+  daemon) and `eway-wizard`. No new msgid; `po/` changed in `#:` lines
+  only; nothing added to `po/POTFILES`.
+- Checked in the Apple container (2026-10-19): `gtk.sh make build`,
+  `make lint`, `make po` (no new msgid), the plain tests of `window`,
+  `widget`, `style`, `crm`, `integrations`, `contextmenu`, `selection`,
+  `accountwizard` and the smoke tests (`MALACHI_GTK_SMOKE=1`) of `window`,
+  `widget` and `accountwizard`; one headless run of `crm-dialog;eway-wizard`.
+- **Gate C passed** (owner, 2026-10-20): `make run-gtk-live` over a copy of
+  his data against his instance, in XQuartz. His two findings were in the
+  container image, not the client: the CRM icon drew as image-missing
+  because the image had no `librsvg2` (gdk-pixbuf's SVG loader; GTK's own
+  bundled icons are PNG, which hid it for every other icon), and the
+  button in its Box was not flattened by the header bar's CSS
+  (`has-frame: false` now). The image also gained Adwaita Sans and the
+  emoji fonts, and `gtk.sh x11` writes a GNOME-like `gtk-4.0/settings.ini`.
+
+#### As built (T8, Windows, 2026-10-19)
+
+Written on a Mac without .NET as the port of the Go reference and the
+macOS client; nothing compiled or run yet (Gate D on the owner's Windows
+machine). Details in `docs/windows-port.md` §11.11, the deviation rows in
+`windows/README.md`:
+
+- API: `Malachi.Core/Api/Crm.cs` (Go's `GUID` members are `ItemGuid`),
+  `AccountKind.Eway`, `Capability.Crm`, `AccountConfig.Eway`,
+  `AccountTestResult.Eway`, `MessageSummary.CrmSaved`, `Message.Crm`, the
+  codes 1109/1205/1307, the ten limits, five methods (101 in all);
+  `GoContractTests` reads crm.go both ways, `ApiRoundTripTests` has a
+  sample of every record.
+- Core: the package `crm` is three static classes in the namespace
+  `Malachi.Core.Crm` — `CrmRules` (crm.go), `CrmDialog` (dialog.go),
+  `CrmText` (text.go) — because a class `Crm` inside a namespace `Crm`
+  would be hidden from the other namespaces (as Jira in `IssueTrackers`);
+  types carry a `Crm` prefix (`CrmRow`, `CrmOffer`, `CrmInFlight`, …).
+  `Controllers/CrmController.cs` (`CrmState`, `CrmDialogSession`,
+  `CrmController`) and `EwayWizardController.cs` (`ewayFlow` with the Jira
+  wizard's event names). `ContextMenu` + `MessageState.WithCrm`,
+  `Selection.Combine` and `ActionFlags.Crm`/`CrmSaved` (filled by Combine,
+  not yet fed per row; the context menu reads the controller's offer
+  directly), `Integrations` (catalogue entry, `Editor.Eway`, the row),
+  `FolderTree.InMail` excludes eway, `AccountHeaderBadge` "EWAY",
+  `MessageRow.CrmPillText`/`CrmPillTooltip`.
+- App: `Crm/CrmToolbarButton` (Save / Saving with a `ProgressRing` / In
+  eWay-CRM as a `DropDownButton`), `Crm/CrmSaveDialog` (a `ContentDialog`
+  built in code, Save primary on the left, queued through
+  `IAlerts.ShowDialogAsync`), `Crm/CrmBarView`, `Crm/CrmWindowSupport`,
+  `MainWindow.Crm.cs` (the button between Trash and the Star, the context
+  menu through `MessageListPane.Crm`), the message window's own
+  controller, the bar last in the reader's header and after the bulk strip
+  on a conversation card, `IssuePill.IsCrm` (the attention fill: Windows
+  has no teal), `Wizard/EwayWizardWindow` + `EwayServicePage` +
+  `EwayCredentialsPage` (modal over Preferences), Integrations Add… and
+  Edit, glyph ContactInfo (U+E779) for `x-office-address-book`.
+- Deviations from macOS: More Actions has no CRM items (the button is
+  beside it and the command bar does not fold); a save or removal releases
+  its busy mark even when its window closed first (the Swift port had
+  skipped that — fixed on macOS the same day, `CRMController.runSave`/
+  `runRemove` capture the state, test
+  `endsTheBusyMarkWhenTheWindowCloses`); no UI smoke tests (no sample-data
+  hookup for the dialog; `CrmDialogSession.Sample()` exists unused).
+- msgids: every msgid the new code uses is in `po/malachi.pot` and every
+  eWay msgid of the template is used (checked by script both ways);
+  `windows/parity-exclusions.txt` unchanged.
+- Tests written: `Crm/CrmRulesTests`, `CrmDialogTests`, `CrmTextTests`,
+  `Controllers/CrmControllerTests`, `EwayWizardControllerTests`, and the
+  updated `ApiCodingTests` (101 methods, 48 codes), `GoContractTests` (72
+  limits), `ApiRoundTripTests`, `ContextMenuTests`, `SelectionTests`,
+  `IntegrationsTests`, `FolderTreeTests`, `JiraSidebarTests`.
+- Gate D (owner, from `windows\`): `build.ps1 app` (expect a few compile
+  fixes: collection expressions in tuple test cases, `default` passed to
+  `Assert.Equal`, controls built in code, the `Crm.` prefixes from
+  `Malachi.App.Reader`), `build.ps1 test` (the classes above;
+  `IconGlyphsTests.EveryIconNameOfTheGtkUiHasAGlyph` was failing before
+  this work on the calendar icons), `build.ps1 lint` (SPDX,
+  `StringsCheckTests`), the UI smoke tests (`CalendarPreferencesSmokeTests`:
+  the Integrations page has a third card; `SmokeTests`), then a manual walk
+  over a copy of the data against the owner's instance: wizard (http
+  refused, a Microsoft instance stopped on the address page, default
+  name, follow-conversations, wrong password, Add, Edit with an empty
+  password and a changed user), button states (hidden, Save, spinner,
+  drop-down, count, conversation row), dialog (spinner, groups, superior
+  radio, search, hints, Private, Save), bar and pill, Edit Links, Remove,
+  context menu, thread following.
 
 ### 2.8 MCP (later, T11)
 

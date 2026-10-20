@@ -1,0 +1,174 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// The Save to eWay-CRM dialog, and Edit Links over a saved message
+// (docs/eway.md §2.2, §2.6; window/crm_dialog.go over crm.Dialog, the
+// port of the macOS CRMDialogController): one line naming the messages,
+// the search field (crm.search after a pause in typing), the contacts,
+// companies, deals and projects as check rows in their groups (built from
+// Go into crm_groups; a deal or project has the Superior Item radio), the
+// hints, Private with its hint, and Cancel and Save in the header. A
+// spinner shows while crm.lookup runs; a failed one leaves its sentence
+// and only Cancel. Every text is set from Go (ui/internal/crm), so this
+// file has no translatable strings; everything from the CRM is plain text.
+Adw.Dialog crm_dialog {
+  content-width: 520;
+  content-height: 600;
+  focus-widget: crm_search;
+
+  child: Adw.ToolbarView {
+    [top]
+    Adw.HeaderBar {
+      show-start-title-buttons: false;
+      show-end-title-buttons: false;
+
+      [start]
+      Button crm_cancel {
+        use-underline: true;
+        can-shrink: true;
+      }
+
+      [end]
+      Button crm_save {
+        use-underline: true;
+        can-shrink: true;
+        sensitive: false;
+
+        styles [
+          "suggested-action",
+        ]
+      }
+    }
+
+    content: Box {
+      orientation: vertical;
+      spacing: 10;
+      margin-top: 6;
+      margin-bottom: 18;
+      margin-start: 18;
+      margin-end: 18;
+
+      Label crm_summary {
+        xalign: 0;
+        ellipsize: end;
+        use-markup: false;
+
+        styles [
+          "dim-label",
+        ]
+      }
+
+      Box {
+        orientation: horizontal;
+        spacing: 6;
+
+        SearchEntry crm_search {
+          hexpand: true;
+          search-delay: 300;
+          sensitive: false;
+        }
+
+        Adw.Spinner crm_search_spinner {
+          visible: false;
+          valign: center;
+        }
+      }
+
+      // Why the last search failed; hidden while it did not.
+      Label crm_search_problem {
+        xalign: 0;
+        wrap: true;
+        wrap-mode: word_char;
+        use-markup: false;
+        visible: false;
+
+        styles [
+          "caption",
+          "error",
+        ]
+      }
+
+      // crm.lookup on its way.
+      Box crm_loading {
+        orientation: horizontal;
+        spacing: 6;
+        halign: start;
+
+        Adw.Spinner {}
+
+        Label crm_loading_label {
+          use-markup: false;
+
+          styles [
+            "dim-label",
+          ]
+        }
+      }
+
+      // Nothing listed, or why crm.lookup failed.
+      Label crm_message {
+        xalign: 0;
+        wrap: true;
+        wrap-mode: word_char;
+        use-markup: false;
+        visible: false;
+
+        styles [
+          "dim-label",
+        ]
+      }
+
+      ScrolledWindow {
+        hscrollbar-policy: never;
+        vexpand: true;
+
+        child: Box crm_groups {
+          orientation: vertical;
+          spacing: 6;
+          margin-bottom: 6;
+        };
+      }
+
+      // Under the groups when no deal or project is listed
+      // (crm.Dialog.OffersSearchHint).
+      Label crm_search_hint {
+        xalign: 0;
+        wrap: true;
+        use-markup: false;
+        visible: false;
+
+        styles [
+          "caption",
+          "dim-label",
+        ]
+      }
+
+      // eWay-CRM did not answer every lookup in time.
+      Label crm_partial {
+        xalign: 0;
+        wrap: true;
+        use-markup: false;
+        visible: false;
+
+        styles [
+          "caption",
+          "dim-label",
+        ]
+      }
+
+      ListBox {
+        selection-mode: none;
+
+        styles [
+          "boxed-list",
+        ]
+
+        Adw.SwitchRow crm_private {
+          use-markup: false;
+          sensitive: false;
+        }
+      }
+    };
+  };
+}

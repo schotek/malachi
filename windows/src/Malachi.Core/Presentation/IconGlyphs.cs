@@ -125,6 +125,11 @@ public static class IconGlyphs
         ["checkbox-checked"] = G(0xE73A),
         ["folder-saved-search"] = G(0xE71C),
         ["list-remove"] = G(0xE738),
+        // eWay-CRM (CrmRules.Icon, GTK's x-office-address-book as Adwaita
+        // has no CRM; macOS person.crop.rectangle.stack): the button of a
+        // message, its menu items, the bar and the account's row and
+        // catalogue card on Preferences → Integrations: ContactInfo.
+        ["x-office-address-book"] = G(0xE779),
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>Whether <paramref name="gtkName"/> has a glyph of its own.</summary>

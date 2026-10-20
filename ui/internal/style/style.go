@@ -209,6 +209,8 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// under the default text colour, so they read in light and dark alike.
 	b.WriteString("label.issue-pill { padding: 0 7px; border-radius: 99px; font-size: 80%; background-color: alpha(@window_fg_color, 0.1); }\n")
 	b.WriteString("label.issue-pill.bulk-pill { color: alpha(@window_fg_color, 0.75); }\n")
+	// A message saved in eWay-CRM (crm_pill): teal, as the macOS pill.
+	b.WriteString("label.issue-pill.crm-pill { background-color: alpha(mix(@blue_3, @green_3, 0.5), 0.35); }\n")
 	b.WriteString("label.issue-pill.status-in-progress { background-color: alpha(@blue_3, 0.3); }\n")
 	b.WriteString("label.issue-pill.status-done { background-color: alpha(@green_4, 0.3); }\n")
 	b.WriteString("label.issue-pill.internal-pill { background-color: alpha(@orange_3, 0.35); }\n")

@@ -15,6 +15,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/accountwizard"
 	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/calendar"
 )
@@ -34,7 +35,9 @@ import (
 // event-editor (New Event with today's defaults), event-editor:edit (Edit
 // of the first occurrence), caldav-dialog, prefs-calendar (Preferences on
 // the Calendar page), prefs-integrations (Preferences on the Integrations
-// page), size=WxH, quit.
+// page), crm-dialog (the Save to eWay-CRM dialog over invented
+// suggestions, no daemon), eway-wizard (the eWay-CRM account assistant;
+// Next asks the daemon), size=WxH, quit.
 
 const (
 	devStartEnv         = "MALACHI_GTK_START"
@@ -56,6 +59,8 @@ const (
 	devCalDAV
 	devPrefsCalendar
 	devPrefsIntegrations
+	devCrmDialog
+	devEwayWizard
 	devSize
 	devQuit
 )
@@ -103,6 +108,10 @@ func parseDevStart(script string) ([]devStep, error) {
 			st.Kind = devPrefsCalendar
 		case name == "prefs-integrations":
 			st.Kind = devPrefsIntegrations
+		case name == "crm-dialog":
+			st.Kind = devCrmDialog
+		case name == "eway-wizard":
+			st.Kind = devEwayWizard
 		case strings.HasPrefix(name, "size="):
 			wh := strings.SplitN(strings.TrimPrefix(name, "size="), "x", 2)
 			if len(wh) != 2 {
@@ -226,6 +235,10 @@ func (w *Window) runDevStep(n int, st devStep) {
 		d := NewPreferences(w.settings, w.client, w.assist, w.log, w.calendarSource)
 		d.SetVisiblePageName("integrations")
 		d.Present(w)
+	case devCrmDialog:
+		w.showCrmSample()
+	case devEwayWizard:
+		accountwizard.NewEway(w.client, w.log).Present(w)
 	case devSize:
 		w.SetDefaultSize(st.Width, st.Height)
 	case devQuit:

@@ -38,6 +38,8 @@ Adw.ApplicationWindow main_window {
       assistant_split.collapsed: true;
       outer_split.collapsed: true;
       inner_split.collapsed: true;
+      // eWay-CRM's button moves into More Actions (window/crm_actions.go).
+      crm_slot.visible: false;
     }
   }
 
@@ -564,7 +566,53 @@ Adw.ApplicationWindow main_window {
                   sensitive: false;
                 }
 
-                // Two groups, Archive and Trash, then Star, the Assistant and
+                // eWay-CRM (window/crm_actions.go, ui/internal/crm): a group of its
+                // own between Archive/Trash and the Star. crm_button saves (its
+                // spinner while a save runs), crm_menu_button once saved opens Open
+                // in eWay-CRM, Edit Links… and Remove from eWay-CRM; icons, tooltips,
+                // menu and visibility come from Go, the gaps on both sides are the
+                // buttons' margins. Below the narrow breakpoint the slot hides and More
+                // Actions keeps the same items.
+                [end]
+                Box crm_slot {
+                  Button crm_button {
+                    visible: false;
+                    // Flat as the header bar's own buttons: inside the slot's Box the
+                    // bar's CSS for its direct children does not reach them.
+                    has-frame: false;
+                    margin-start: 12;
+                    margin-end: 12;
+
+                    child: Box {
+                      Image crm_button_icon {}
+
+                      Adw.Spinner crm_button_spinner {
+                        visible: false;
+                      }
+                    };
+                  }
+
+                  MenuButton crm_menu_button {
+                    visible: false;
+                    // Flat as the header bar's own buttons: inside the slot's Box the
+                    // bar's CSS for its direct children does not reach them.
+                    has-frame: false;
+                    margin-start: 12;
+                    margin-end: 12;
+
+                    child: Box {
+                      spacing: 2;
+
+                      Image crm_menu_icon {}
+
+                      Image {
+                        icon-name: "object-select-symbolic";
+                      }
+                    };
+                  }
+                }
+
+                // Archive and Trash, then eWay-CRM's group, then Star, the Assistant and
                 // More Actions: the gap is the trash button's margin. Mark as
                 // Junk has no button (More Actions and the J shortcut).
                 [end]
@@ -629,6 +677,67 @@ Adw.ApplicationWindow main_window {
 
                 Button bulk_action {
                   use-underline: true;
+                  visible: false;
+                }
+              }
+
+              // A message saved in eWay-CRM (window/crm_bar.go, crm.BarFor): the
+              // check mark, "Saved in eWay-CRM", the linked items' names, the
+              // private hint, and Open in eWay-CRM. Plain text only.
+              [top]
+              Box crm_bar {
+                orientation: horizontal;
+                spacing: 12;
+                visible: false;
+
+                styles [
+                  "toolbar",
+                  "remote-bar",
+                  "crm-bar",
+                ]
+
+                Image {
+                  icon-name: "object-select-symbolic";
+                  valign: center;
+                }
+
+                Box {
+                  orientation: vertical;
+                  spacing: 1;
+                  hexpand: true;
+                  valign: center;
+
+                  Label crm_bar_title {
+                    xalign: 0;
+                    wrap: true;
+                    wrap-mode: word_char;
+                  }
+
+                  Label crm_bar_names {
+                    xalign: 0;
+                    wrap: true;
+                    wrap-mode: word_char;
+
+                    styles [
+                      "caption",
+                      "dim-label",
+                    ]
+                  }
+
+                  Label crm_bar_note {
+                    xalign: 0;
+                    wrap: true;
+                    visible: false;
+
+                    styles [
+                      "caption",
+                      "dim-label",
+                    ]
+                  }
+                }
+
+                Button crm_bar_open {
+                  valign: center;
                   visible: false;
                 }
               }

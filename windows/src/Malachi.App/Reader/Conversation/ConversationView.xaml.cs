@@ -180,6 +180,9 @@ internal sealed partial class ConversationView : UserControl
         tokens.Add(settings.OnChange(SettingsKey.MonospacePlainText, ApplyBodyFont));
         tokens.Add(settings.OnChange(SettingsKey.MonochromeAvatars, () => Apply(ctrl.Model)));
         services.Attachments.SavingAllChanged += OnSavingAllChanged;
+        // The eWay-CRM bar of every open card follows the application's CRM
+        // state (a save or removal ended, a record arrived).
+        services.State.Crm.Changed += OnCrmChanged;
     }
 
     /// <summary>The reader's services.</summary>
@@ -407,9 +410,18 @@ internal sealed partial class ConversationView : UserControl
         }
         tokens.Clear();
         Services.Attachments.SavingAllChanged -= OnSavingAllChanged;
+        Services.State.Crm.Changed -= OnCrmChanged;
         RemoveAll();
         TrimWebPool(0);
         spinnerTimer.Stop();
+    }
+
+    private void OnCrmChanged(object? sender, EventArgs e)
+    {
+        foreach (var c in cards.Values)
+        {
+            c.RenderCrm();
+        }
     }
 
     private void OnSavingAllChanged(object? sender, MessageId id)

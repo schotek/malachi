@@ -122,6 +122,16 @@ public readonly record struct AccountKind(string Value) : IWireEnumeration<Accou
     /// </summary>
     public const string CalDAV = "caldav";
 
+    /// <summary>
+    /// A CRM account on an eWay-CRM instance (the account's <c>eway</c>
+    /// block, <see cref="EwayConfig"/>; the password is
+    /// <see cref="Credentials.Password"/>). It has no mail, like a caldav
+    /// account: <c>folder.list</c> answers no folders, message methods
+    /// invalidArgument, and a client never shows it in Mail. Its only
+    /// capability is <see cref="Capability.Crm"/> (docs/api.md §4.17).
+    /// </summary>
+    public const string Eway = "eway";
+
     /// <summary>The value of a wire string.</summary>
     public static implicit operator AccountKind(string value) => new(value);
 
@@ -548,6 +558,12 @@ public readonly record struct Capability(string Value) : IWireEnumeration<Capabi
     /// consent or sync state. A caldav account has exactly this one.
     /// </summary>
     public const string Calendar = "calendar";
+
+    /// <summary>
+    /// Messages of mail accounts can be saved to this account (<c>crm.*</c>,
+    /// docs/api.md §4.17). An eway account has exactly this one.
+    /// </summary>
+    public const string Crm = "crm";
 
     /// <summary>The value of a wire string.</summary>
     public static implicit operator Capability(string value) => new(value);

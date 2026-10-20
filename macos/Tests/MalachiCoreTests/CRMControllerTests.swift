@@ -148,6 +148,34 @@ private let savedRecordJSON = #"{"accountId":"e1","itemGuid":"00000000-0000-4000
         #expect(h.opened == ["https://open.eway-crm.com/?l=e"])
     }
 
+    @Test func endsTheBusyMarkWhenTheWindowCloses() async throws {
+        // A message window closed while its save runs takes its controller
+        // with it; the shared state must still release the message and keep
+        // the call's answer, or the main window would show Saving for ever.
+        let fake = try FakeDaemon()
+        try await fake.start()
+        defer { Task { await fake.stop() } }
+        let gate = Calls()
+        await fake.on(API.CrmSave.name) { p in
+            await gate.record(API.CrmSave.name, p)
+            try? await Task.sleep(for: .milliseconds(200))
+            return json(#"{"results":[{"messageId":"m_1","created":true,"record":\#(savedRecordJSON)}]}"#)
+        }
+        let client = try await connect(fake)
+        let state = CRMState()
+        state.accounts = { [crmImap, crmEwayA] }
+        state.folderRole = { _ in .inbox }
+        var controller: CRMController? = CRMController(client: client, state: state)
+        controller?.subjects = { [summary("m_1")] }
+        let params = CrmSaveParams(accountId: "e1", messageAccountId: "m1", messageIds: ["m_1"], link: [crmRef(.contact, 1)])
+        controller?.runSave(params)
+        #expect(state.inFlight.has("m1", "m_1"))
+        try await waitUntil { await gate.count(API.CrmSave.name) == 1 }
+        controller = nil
+        try await waitUntil { !state.inFlight.has("m1", "m_1") }
+        #expect(state.isSaved(summary("m_1")))
+    }
+
     @Test func removesAfterTheQuestion() async throws {
         let calls = Calls()
         let fake = try FakeDaemon()

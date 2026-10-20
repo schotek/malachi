@@ -15,7 +15,9 @@
 // that can be added (Available Services, Integrations.Catalog). A Jira row
 // pauses and resumes its sync and edits its settings; a CalDAV row has no
 // switch, and its Edit (Calendar Settings) shows the Calendar page, which
-// keeps the CalDAV account's server, password, certificate and calendars.
+// keeps the CalDAV account's server, password, certificate and calendars;
+// an eWay-CRM row pauses and resumes its saving and its Edit opens the
+// eWay-CRM assistant in its edit mode (EwayWizardWindow).
 // A row moves only within this page; the order sent puts the mail
 // accounts first (Integrations.FullOrder). A catalogue card's Add… opens
 // the service's assistant over the Preferences: the Jira account
@@ -23,7 +25,9 @@
 // addJiraAccount), or the Add CalDAV Calendar window over this window's
 // calendar source (AppState.ShowAddCalDAVCalendar, which asks the
 // Calendar page's snapshot anew; the page reloads, as GTK's
-// addCalDAVAccount, without a toast). Both pages also follow
+// addCalDAVAccount, without a toast), or the eWay-CRM account assistant
+// (EwayWizardWindow; the page reloads and names the account, as macOS's
+// addEway). Both pages also follow
 // notify.accountsChanged, so an account added or removed on the Calendar
 // page or in the main window shows here too.
 
@@ -78,6 +82,10 @@ public sealed partial class IntegrationsPage : UserControl
             {
                 ShowService(CalDAVService, AddCalDAVButton, service, texts.Add);
             }
+            else if (service.Kind == AccountKind.Eway)
+            {
+                ShowService(EwayService, AddEwayButton, service, texts.Add);
+            }
         }
     }
 
@@ -118,4 +126,15 @@ public sealed partial class IntegrationsPage : UserControl
     // the page reloads once it added the account.
     private void OnAddCalDAVClick(object sender, RoutedEventArgs e) =>
         state.ShowAddCalDAVCalendar(window, _ => Controller.HandleAccountsChanged());
+
+    // addService(eway) = macOS addEway: the eWay-CRM assistant; the page
+    // reloads once it added the account and names it. The daemon fills the
+    // address from the eWay-CRM user, which may have none (docs/eway.md D2):
+    // the toast names the account by its name, else the brand, until the
+    // list has it.
+    private void OnAddEwayClick(object sender, RoutedEventArgs e) =>
+        EwayWizardWindow.Show(state, window, done: (_, config) =>
+            Controller.AccountAdded(config.Email.Length > 0
+                ? config
+                : config with { Email = config.Name.Length > 0 ? config.Name : Malachi.Core.Crm.CrmRules.Brand }));
 }

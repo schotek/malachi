@@ -283,6 +283,10 @@ type Window struct {
 	// applyActionsSensitivity to show the selected case's state as its
 	// checked target.
 	boardMoveToAction *gio.SimpleAction
+	// crmState is the application's eWay-CRM state and crmMain the main
+	// window's CRM controls (crm.go, crm_actions.go).
+	crmState *crmState
+	crmMain  *crmControls
 	// RequestClose settles inline drafts before closing the main window.
 	RequestClose         func()
 	boardAutoStartRemove func()
@@ -411,6 +415,11 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	w.pane.toast = w.Toast
 	w.pane.onQuoted = w.setPaneQuoted
 	w.registerActions()
+	w.crmState = newCrmState()
+	w.crmMain = newCrmControls(w, "win", &w.ApplicationWindow.Window, b, func(a *gio.SimpleAction) {
+		w.AddAction(a)
+		w.actions[a.Name()] = a
+	}, w.crmMainSubjects, w.Toast)
 	// The main window lives as long as the application: no unbinding.
 	as.bindAssistantButton(w.assistButton, "win", true, w.syncAssistantActions, w.openAssistantPanel,
 		func() int { return len(w.selectedRows()) })

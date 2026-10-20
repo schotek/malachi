@@ -145,7 +145,12 @@ klientů naráz (`Controller.Waiting` → `waiting` → `IsWaiting`).
 GTK klient se od 2026-10-17 vyvíjí a testuje na Macu v kontejneru Fedora 42
 přes Apple `container` (rozhodnutí vlastníka; Fedora Toolbx už není
 k dispozici): `scripts/gtk-container/gtk.sh build` jednou postaví obraz
-`malachi-gtk:f42` (balíčky z `rpm.yml`, verze jako dřívější Toolbx),
+`malachi-gtk:f42` (balíčky z `rpm.yml`, verze jako dřívější Toolbx; od
+2026-10-20 i `librsvg2` — bez něj GTK každou SVG ikonu Adwaity i vlastní
+`malachi-*-symbolic.svg` kreslilo jako image-missing —, `adwaita-fonts-all`
+a emoji, `gtk.sh x11` zapíše `gtk-4.0/settings.ini` s písmem Adwaita Sans
+11, ikonami a kurzorem Adwaita a vyhlazováním GNOME; po změně Containerfile
+znovu `gtk.sh build`),
 `gtk.sh make build` staví do `build/linux/` (cache Go a ccache
 v `~/.cache/malachi-gtk`, první překlad gotk4 asi 20 minut, další půl
 minuty), `gtk.sh test-ui` pouští testy `ui/` pod Xvfb (obrazovka
@@ -2274,7 +2279,7 @@ prací na ikonách kalendáře. Ručně ve všech třech nad kopií dat: pořad�
 stránek, Účty jen pošta, Integrace s Jirou a CalDAV, Přidat…, odebrání
 s větou podle druhu, řazení a pořadí v postranním panelu.
 
-eWay-CRM (větev `feat/eway` od `b9eb49b`, commitnuté jedním commitem 2026-10-18 po Gate B vlastníka, nepushnuté;
+eWay-CRM (větev `feat/eway` od `b9eb49b`, commitnuté jedním commitem 2026-10-18 po Gate B vlastníka a pushnuté na `origin/feat/eway` (`18c3c75`);
 návrh a rozhodnutí vlastníka v `docs/eway.md`, „As verified (T0)“ z testu
 na veřejné trial instanci eWay a „As built“ po úkolech). Účet `kind:
 eway` jen s capability `crm`, nikdy v Poště, spravovaný na stránce
@@ -2292,9 +2297,8 @@ session id), fake `ewaytest`, patologická data `backend/testdata/eway`,
 bezpečnost `docs/security.md` §7.3. Pořadí klientů podle vlastníka:
 Go reference `ui/internal/crm` (+ `contextmenu`, `selection`,
 `capabilities.InMail`, `integrations`, `accountwizard/eway_flow.go`,
-msgidy s češtinou) → **macOS první** → GTK a Windows až po jeho ověření;
-do té doby GTK ukáže účet eWay v Integracích bez akcí (`TODO(T7)`) a
-Windows `StringsCheckTests` hlásí nové msgidy jako nepoužité (T8).
+msgidy s češtinou) → **macOS první** → GTK a Windows po jeho ověření
+(oba porty napsané 2026-10-19 ve dvou agentech, necommitnuté).
 Ověřeno: démon `go vet`, `pkg/api`, `rpc`, `eway`, celé `store` i `core`;
 nezávislá revize démona s osmi opravenými nálezy; `make po`, `make lint`
 a `make build` GTK v kontejneru; macOS klient (T6: `MalachiCore/API/CRMAPI.swift`,
@@ -2313,8 +2317,33 @@ vlastníka): `EwayConfig.followThreads` (zaškrtávátko v průvodci, výchozí
 zapnuto), démon po uložení zprávy ukládá i další zprávy téhož vlákna se
 stejnými vazbami (hook `Stored` jen zařadí do fronty, worker na účet,
 hodinový dosběr; nikdy koncepty, outbox, nevyžádanou, koš ani hromadnou
-poštu; `CrmRecord.auto`, migrace 0022). Čeká: dokončení Gate B vlastníka,
-pak porty GTK a Windows a commit.
+poštu; `CrmRecord.auto`, migrace 0022). GTK port (T7, „As built (T7)“
+v `docs/eway.md`): `window/crm.go` (stav aplikace, `refreshCRM`),
+`crm_actions.go` (akce `win.crm-save`/`crm-open`/`crm-edit-links`/
+`crm-remove` a `msg.*`, sekce v Dalších akcích, stažení a opakování
+nejvýš dvakrát), `crm_dialog.go` + `crm_dialog.blp`, `crm_bar.go`,
+`crm_pill` v `message_row.blp`, průvodce `accountwizard/eway.go` +
+`eway_wizard.blp` (Add… i Edit v Integracích a bannery účtu); tlačítko
+`crm_slot` v hlavičkové liště mezi Košem a Hvězdičkou (děti `[end]` se
+řadí zprava doleva, proto je deklarované za `star_button`), pod 600 sp
+se skryje a položky zůstanou v Dalších akcích; kroky `MALACHI_GTK_START=
+crm-dialog|eway-wizard`; žádný nový msgid. Ověřeno v kontejneru: `make
+build`, `make po` (jen `#:`), `make lint`, cílené i smoke testy. Windows
+port (T8, `docs/windows-port.md` §11.11, „As built (T8)“): `Api/Crm.cs`,
+`Malachi.Core/Crm` (`CrmRules`, `CrmDialog`, `CrmText` — třída `Crm` by
+se v namespace `Crm` skryla), `CrmController`, `EwayWizardController`,
+App `Crm/*`, `MainWindow.Crm.cs`, `Wizard/EwayWizardWindow`, pilulka
+`IssuePill.IsCrm`, glyf ContactInfo; napsané bez `dotnet` — čeká
+`build.ps1 app`/`test`/`lint`, smoke a ruční průchod vlastníka (Gate D).
+Revize portu Windows našla chybu macOS: zavřené okno zprávy během
+ukládání nechalo zprávu v ostatních oknech jako „Ukládá se“
+(`[weak self]` přeskočil `state.end`); opraveno v `CRMController.swift`
+(`runSave`/`runRemove` drží `state`, test
+`endsTheBusyMarkWhenTheWindowCloses`). Gate C prošel (vlastník
+2026-10-20, `make run-gtk-live` nad kopií; jeho dva nálezy byly v obrazu
+kontejneru: chybějící `librsvg2` a tlačítko v Boxu bez `has-frame:
+false`). Čeká: Gate D na Windows (`build.ps1 app`/`test`/`lint`, smoke,
+ruční průchod), pak merge do `main`.
 
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně

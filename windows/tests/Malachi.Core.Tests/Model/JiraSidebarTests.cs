@@ -154,6 +154,18 @@ public sealed class JiraSidebarTests
             },
         };
         Assert.Equal("CALDAV", FolderTree.AccountHeaderBadge(caldav));
+        // An eWay-CRM account (Preferences → Integrations) is not mail: its
+        // capsule names the CRM, never IMAP (jira_list_test.go, Gate B).
+        var eway = mail with
+        {
+            Config = mail.Config with
+            {
+                Name = "Satomar",
+                Kind = AccountKind.Eway,
+                Eway = new EwayConfig { ServiceUrl = "https://hosting.eway-crm.com/satomar", Username = "vjanecek" },
+            },
+        };
+        Assert.Equal("EWAY", FolderTree.AccountHeaderBadge(eway));
     }
 
     [Fact]

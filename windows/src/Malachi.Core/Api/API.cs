@@ -553,6 +553,30 @@ public static class API
     public static readonly RpcMethod<InvitationApplyCancelParams, InvitationApplyCancelResult> InvitationApplyCancel =
         new("invitation.applyCancel", CalendarTimeouts.Write, Wire.InvitationApplyCancelParams, Wire.InvitationApplyCancelResult);
 
+    // CRM accounts (docs/api.md §4.1)
+
+    /// <summary><c>account.detectEway</c>: asks an eWay-CRM instance anonymously whether it can be signed in to; nothing is stored.</summary>
+    public static readonly RpcMethod<AccountDetectEwayParams, AccountDetectEwayResult> AccountDetectEway =
+        new("account.detectEway", RpcTimeouts.DetectSite, Wire.AccountDetectEwayParams, Wire.AccountDetectEwayResult);
+
+    // CRM (docs/api.md §4.17)
+
+    /// <summary><c>crm.lookup</c>: what the messages are linked to in the CRM and what they could be linked to.</summary>
+    public static readonly RpcMethod<CrmLookupParams, CrmLookupResult> CrmLookup =
+        new("crm.lookup", CrmTimeouts.Lookup, Wire.CrmLookupParams, Wire.CrmLookupResult);
+
+    /// <summary><c>crm.search</c>: the CRM's items by name.</summary>
+    public static readonly RpcMethod<CrmSearchParams, CrmSearchResult> CrmSearch =
+        new("crm.search", CrmTimeouts.Lookup, Wire.CrmSearchParams, Wire.CrmSearchResult);
+
+    /// <summary><c>crm.save</c>: saves messages to the CRM, or changes a saved one's links; up to 20 uploads one after the other.</summary>
+    public static readonly RpcMethod<CrmSaveParams, CrmSaveResult> CrmSave =
+        new("crm.save", CrmTimeouts.Save, Wire.CrmSaveParams, Wire.CrmSaveResult);
+
+    /// <summary><c>crm.remove</c>: deletes a saved message's item from the CRM, for every user of it.</summary>
+    public static readonly RpcMethod<CrmRemoveParams, EmptyResult> CrmRemove =
+        new("crm.remove", RpcTimeouts.Remote, Wire.CrmRemoveParams, Wire.EmptyResult);
+
     // Tables
 
     /// <summary>Every method, in the order of methods.go.</summary>
@@ -588,6 +612,8 @@ public static class API
         EventList, EventGet, EventSearch, EventCreate, EventUpdate,
         EventDelete, EventRespond, EventSnoozeAlert, EventDismissAlert,
         InvitationList, InvitationRespond, InvitationApplyCancel,
+        AccountDetectEway,
+        CrmLookup, CrmSearch, CrmSave, CrmRemove,
     ];
 
     /// <summary>api.AllMethods: every callable method name.</summary>
@@ -845,5 +871,37 @@ public static class API
 
         /// <summary>api.MaxRecurrenceCount: <see cref="Recurrence.Count"/> in input.</summary>
         public const int MaxRecurrenceCount = 999;
+
+        // crm.go (docs/eway.md D16); exceeding an input limit is invalidArgument.
+
+        /// <summary>api.MaxCrmMessages: <see cref="CrmLookupParams.MessageIds"/>, <see cref="CrmSaveParams.MessageIds"/>.</summary>
+        public const int MaxCrmMessages = 20;
+
+        /// <summary>api.MaxCrmItems: <see cref="CrmSaveParams"/> link, unlink and superior together.</summary>
+        public const int MaxCrmItems = 50;
+
+        /// <summary>api.MaxCrmSuggestions: <see cref="CrmLookupResult.Suggestions"/>.</summary>
+        public const int MaxCrmSuggestions = 50;
+
+        /// <summary>api.MaxCrmSearchResults: <see cref="CrmSearchResult.Items"/>.</summary>
+        public const int MaxCrmSearchResults = 50;
+
+        /// <summary>api.MinCrmQueryBytes: <see cref="CrmSearchParams.Query"/>, after trimming.</summary>
+        public const int MinCrmQueryBytes = 2;
+
+        /// <summary>api.MaxCrmQueryBytes: <see cref="CrmSearchParams.Query"/>.</summary>
+        public const int MaxCrmQueryBytes = 200;
+
+        /// <summary>api.MaxCrmLookupAddresses: the addresses <c>crm.lookup</c> searches for.</summary>
+        public const int MaxCrmLookupAddresses = 20;
+
+        /// <summary>api.MaxCrmNoteBytes: the plain text sent with a saved message.</summary>
+        public const int MaxCrmNoteBytes = 32 << 10;
+
+        /// <summary>api.MaxCrmNameBytes: <see cref="CrmItem.Name"/>.</summary>
+        public const int MaxCrmNameBytes = 256;
+
+        /// <summary>api.MaxCrmDetailBytes: <see cref="CrmItem.Detail"/>.</summary>
+        public const int MaxCrmDetailBytes = 512;
     }
 }
