@@ -795,3 +795,74 @@ když je zároveň `Flyout` tlačítka lišty.
 - **Windows lint mezi C1 a C3**: šest exclusions v C1, pryč ve W1.
 - **Message ▸ Send na macOS** v hlavním okně: zapne se jen s klávesnicí
   v poli řádku.
+
+## 12. Řádek rychlé odpovědi i pod jednou zprávou (návrh 2026-10-20, ke schválení)
+
+Zadání vlastníka: řádek rychlé odpovědi má být i u klasické (jedné)
+zprávy, vždy dole v panelu čtení na stejném místě jako pod chatem.
+Rozhodnutí vlastníka 2026-10-20: **jedna zpráva a chat** (časová osa ne),
+**samostatné okno zprávy ne**, pořadí klientů stejné (macOS první, GTK,
+Windows; brány S-B1/S-B2/S-B3). Wireframe
+`docs/plans/chat-view/w5-quick-reply-message.svg`.
+
+| # | Rozhodnutí | Proč |
+|---|---|---|
+| S1 | **Kde**: řádek je potomkem panelu čtení, ne stránky konverzace — pod celým zásobníkem stránek (GTK `message_stack` v `toast_overlay`, macOS `ReadingPaneViewController`, Windows `MessageView` v režimu `Pane`), takže stojí na témže místě pod jednou zprávou i pod chatem. Ukazuje se se stránkou jedné zprávy a s chatem konverzace; skrytý na prázdné stránce, u „Vybráno N zpráv“, v časové ose, na Nástěnce a v samostatném okně zprávy (Q1, w5 D). | Zadání; jedno místo, jeden pohled, jeden kontroler. |
+| S2 | **Cíl u jedné zprávy** = zobrazená zpráva, i vlastní (ve složce Odeslané odpověď na vlastní zprávu, jako dnes `QuickReplyTarget` bez cizí zprávy). V Outboxu a Konceptech řádek není (zpráva nemá komu odpovídat; u konceptu je Upravit). Režimy podle schopností účtu jako dosud (`capabilities`), u Jira položky jen Komentovat; u události Jiry (řádek bez těla) řádek není. | Stejné pravidlo jako v chatu, jen s jedním členem. |
+| S3 | **Stav na vlákno** zůstává: jedna zpráva má `ThreadID`, takže rozepsaný text sdílí se svou konverzací (seskupené zobrazení) a přežije přepnutí seznamu, hledání i přepnutí rozložení; `sending` se páruje s vláknem jako dosud. | Žádný nový stav, žádná ztráta textu při přepnutí seskupování. |
+| S4 | **Vstup kontroleru**: `Update(model, actions, account)` dostane u jedné zprávy model s jedním členem (`conversation.Model` s jediným `ItemMessage`, `Mine` podle role složky jako v konverzaci), u chatu model konverzace jako dnes; `SetChatShown` se zobecní na `SetShown(bool)` (hostitel: stránka jedné zprávy ∨ chat konverzace). Reference `quickreply.Controller`, porty 1:1. | Nejmenší změna kontroleru; `QuickReplyTarget` platí beze změny. |
+| S5 | **Odeslání, Otevřít v okně, Přeposlat…, ✦, klávesy, úzký panel**: beze změny (Q4–Q8, Q11, Q15). Escape dá klávesnici seznamu stejně. Citace z `draft.create` jako v okně. | Nic nového k rozhodování. |
+| S6 | **Místo v rozložení**: pod tělem zprávy stojí dnes lišty (vzdálené obrázky, hromadná pošta, karta pozvánky, „•••“) uvnitř rolovací oblasti; řádek je **mimo ni**, pevně dole, čára nahoře, clamp a okraje sloupce jako v chatu. Rolovací oblast se o výšku řádku zkrátí; skrytý řádek nezabírá nic. | Jako w4: řádek je pevný, obsah roluje nad ním. |
+| S7 | **Časová osa konverzace** řádek nemá (rozhodnutí vlastníka; karty mají vlastní tlačítka). Přepnutí chat ↔ časová osa řádek ukáže / skryje bez ztráty textu (S3). | |
+| S8 | **Texty**: žádný nový msgid. Tooltipy, zástupné texty a popisky z §10 Q12. | |
+| S9 | **Mimo rozsah**: samostatné okno zprávy (rozhodnutí vlastníka), přiložená zpráva `.eml`, Nástěnka, dočasná bublina (Q7), časová osa. | |
+
+### 12.1 Plán implementace (S-R1 → S-M → S-G → S-W)
+
+Architektura: kontroler i pohled řádku zůstávají, mění se **hostitel**:
+
+- **Go/GTK**: řádek `conversation_reply_bar` odejde z `conversation_view.blp`
+  do nového `quick_reply_bar.blp` (fragment, stejné id widgetů) a vloží se
+  z Go pod `message_stack` — `toast_overlay.child` se stane svislý `Box`
+  s `message_stack` (`vexpand`) a řádkem; `quickReplyBar` a `quickreply.
+  Controller` vlastní `*Window` (`w.quickReply`), ne `conversationHost`.
+  Hostitel konverzace mu jen hlásí změny (`updateQuickReply` → `w.quickReply.
+  Update(...)`, `SetShown` podle chatu); `message_view.go` `showMessage`
+  / `clearMessage` / stránka výběru hlásí jednu zprávu (`quickReplyInputFor
+  (s api.MessageSummary)`: model s jedním členem přes `conversation.
+  SingleModel(s, mine)` — nová čistá funkce v `ui/internal/conversation`
+  s testem, porty Swift/C#), `SetShown(true)` na stránce „message“ bez
+  Outboxu/Konceptů/události, jinak `false`. `followWidth` z šířky panelu
+  čtení (`toast_overlay`), ne ze sloupce chatu. Smoke test: řádek pod
+  jednou zprávou (viditelnost podle stránky a složky, cíl = zpráva,
+  Ctrl+Enter → tři volání), přepnutí zpráva → konverzace → chat → časová
+  osa bez ztráty textu.
+- **macOS**: `ConversationQuickReplyBar` a `QuickReplyController` se
+  přesunou z `ConversationHostViewController` do `ReadingPaneViewController`
+  (řádek dole pod oběma potomky: `reader.view.bottom == bar.top`,
+  `conversation.view.bottom == bar.top`, skrytý řádek výška 0);
+  `show(_ row:)` krmí kontroler z `reader` (jedna zpráva:
+  `Conversation.singleModel(summary, mine:)`), `controller.changed` z
+  konverzace jako dnes; `setShown` podle stránky a rozložení.
+  `QuickReplyHostAdapter` beze změny. Krok `MALACHI_START` `quick-reply`
+  přidá variantu nad jednou zprávou.
+- **Windows**: `ConversationQuickReplyBar` z řádku 2 `ConversationView`
+  do `MessageView` (režim `Pane`; v režimu okna se nevytváří), pod
+  `Grid` se stránkami; `ReaderController` hlásí jednu zprávu,
+  `ConversationView.UpdateQuickReply` volá sdílený kontroler okna přes
+  `MessageView`; UI smoke: řádek pod jednou zprávou přes devmail.
+- **Démon a API beze změny**, žádný nový msgid.
+
+| ID | Úkol | Soubory | Testy / ověření | Agent | Po |
+|---|---|---|---|---|---|
+| S-R1 | Go reference + kontroler + GTK hostitel | `ui/internal/conversation/reply.go` (`SingleModel`), `reply_test.go`; `ui/internal/quickreply/controller.go` (`SetShown`), `_test.go` (jedna zpráva, Outbox/Koncepty, přepnutí stránek); `ui/data/ui/quick_reply_bar.blp` (z `conversation_view.blp`), `window.blp` (`toast_overlay` → Box), `window/quick_reply_bar.go` (hostitel `*Window`, šířka z panelu), `window/quick_reply.go`, `conversation_host.go` (jen hlášení), `message_view.go`, `selection.go`; smoke test | na Macu `go test ./internal/conversation/ ./internal/quickreply/`, `gopls check`; kontejner `gtk.sh make build`, `test-ui`, smoke, `make po` (jen odkazy), `make lint` | Opus | — |
+| S-M | MalachiCore + MalachiMail | `MalachiCore/Model/ConversationReply.swift` (`singleModel`), `Controllers/QuickReplyController.swift` (`setShown`), `ReadingPaneViewController` (řádek + kontroler), `ConversationHostViewController` (bez řádku), `MessageViewController` (hlášení jedné zprávy), `Integration+Conversation`, DevStart `quick-reply`; testy `ConversationReplyTests`, `QuickReplyControllerTests` (+ jedna zpráva), `check-strings`; docs `macos-port.md`, `security.md` §3.2 | `swift build`, `swift test`, izolovaný start | Opus | S-R1 |
+| S-C1 | Commit `feat: quick reply bar under a single message (Go reference, GTK, macOS)` + `CLAUDE.md`; **S-B1** vlastníka na macOS (jedna zpráva v Doručené, Odeslané, Outbox bez řádku, Jira položka, přepnutí seskupování bez ztráty textu, chat ↔ osa) | | | orchestrátor, vlastník | S-M |
+| S-G | GTK ověření | nic nového (S-R1 hotové v kontejneru); **S-B2** vlastníka v XQuartz | | vlastník | S-B1 |
+| S-W | Windows Core + App | `Conversation.Reply.cs` (`SingleModel`), `QuickReplyController.cs` (`SetShown`), `MessageView.xaml(.cs)` (řádek dole v režimu Pane), `ConversationView` (bez řádku, hlášení), `ReaderController`/`ReaderHub`, UI smoke; docs `windows-port.md` §11.7, `windows/README.md`, plán §12.2 | `windows.yml`; **S-B3** vlastníka na Windows | Opus | S-B1 |
+
+Rizika: GTK `toast_overlay.child` je dnes přímo `message_stack` a `Window`
+si ho bere z builderu — přestavba musí zachovat id a `vexpand`; macOS
+`ReadingPaneViewController` dosud jen skládá dva pohledy přes sebe,
+přibude třetí s omezením výšky; Windows `MessageView` je sdílený s oknem
+zprávy (režim `Window`) a řádek se smí vytvořit jen v `Pane`.

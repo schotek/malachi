@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 760 640" role="img" aria-label="Řádek rychlé odpovědi stojí dole v panelu čtení i pod jednou zprávou, na stejném místě jako pod chatem" font-size="11.5" font-family="Inter, Cantarell, 'Segoe UI', Helvetica, Arial, sans-serif"><rect width="100%" height="100%" fill="#ffffff"/><defs>
+<symbol id="i-reply" viewBox="0 0 16 16"><path d="M6.5 4 2.5 8l4 4M2.5 8H10a3.5 3.5 0 0 1 3.5 3.5V13"/></symbol>
+<symbol id="i-reply-all" viewBox="0 0 16 16"><path d="M8 4 4 8l4 4M4.5 4 .8 8l3.7 4M4 8h6.5a3.5 3.5 0 0 1 3.5 3.5V13"/></symbol>
+<symbol id="i-forward" viewBox="0 0 16 16"><path d="M9.5 4l4 4-4 4M13.5 8H6a3.5 3.5 0 0 0-3.5 3.5V13"/></symbol>
+<symbol id="i-trash" viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 9h5.6l.7-9"/></symbol>
+<symbol id="i-star" viewBox="0 0 16 16"><path d="M8 2.3l1.7 3.6 3.9.5-2.9 2.7.8 3.9L8 11.1 4.5 13l.8-3.9-2.9-2.7 3.9-.5z"/></symbol>
+<symbol id="i-more" viewBox="0 0 16 16"><path d="M3.5 8h.01M8 8h.01M12.5 8h.01" stroke-width="2.6"/></symbol>
+<symbol id="i-spark" viewBox="0 0 16 16"><path d="M8 1.8c.6 3.3 2.9 5.6 6.2 6.2-3.3.6-5.6 2.9-6.2 6.2-.6-3.3-2.9-5.6-6.2-6.2 3.3-.6 5.6-2.9 6.2-6.2z"/></symbol>
+<symbol id="i-sidebar" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M6 3v10"/></symbol>
+<symbol id="i-open" viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3"/></symbol>
+<symbol id="i-send" viewBox="0 0 16 16"><path d="M14.2 1.8 1.8 7l5 2.2 2.2 5zM14.2 1.8 6.8 9.2"/></symbol>
+<symbol id="i-clip" viewBox="0 0 16 16"><path d="M10.5 5.5 6 10a1.4 1.4 0 0 0 2 2l5-5a2.8 2.8 0 0 0-4-4L4 8a4.2 4.2 0 0 0 6 6l4-4"/></symbol>
+</defs>
+<text x="24" y="28" font-size="15" font-weight="600" fill="#1f1f1f">Řádek rychlé odpovědi pod jednou zprávou</text>
+<text x="24" y="48" fill="#5c5c5c">macOS · panel čtení · stejný řádek dole jako pod chatem (w4), teď i u vybrané jedné zprávy (návrh S1–S9)</text>
+
+<!-- A: single message -->
+<clipPath id="clipA"><rect x="24" y="64" width="712" height="300" rx="10"/></clipPath><g clip-path="url(#clipA)">
+<rect x="24" y="64" width="712" height="300" fill="#f6f5f4"/>
+<line x1="24" y1="108" x2="736" y2="108" stroke="#b9b7ad" stroke-width="1"/>
+<circle cx="42" cy="86" r="5.5" fill="#ec6a5e"/><circle cx="58" cy="86" r="5.5" fill="#f4bf4f"/><circle cx="74" cy="86" r="5.5" fill="#61c554"/>
+<use xlink:href="#i-sidebar" x="92" y="79" width="15" height="15" fill="none" stroke="#5c5c5c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="198" y="84" font-size="12.5" font-weight="700" fill="#1f1f1f">Doručená pošta</text>
+<text x="198" y="99" font-size="10" fill="#5c5c5c">Faktura za říjen · 1 zpráva</text>
+<g fill="none" stroke="#b9b7ad" stroke-width="1"><rect x="440" y="74" width="28" height="24" rx="6"/><rect x="472" y="74" width="28" height="24" rx="6"/><rect x="504" y="74" width="28" height="24" rx="6"/><rect x="548" y="74" width="28" height="24" rx="6"/><rect x="580" y="74" width="28" height="24" rx="6"/><rect x="624" y="74" width="28" height="24" rx="6"/><rect x="656" y="74" width="28" height="24" rx="6"/></g>
+<g fill="none" stroke="#1f1f1f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use xlink:href="#i-reply" x="447" y="79" width="14" height="14"/><use xlink:href="#i-reply-all" x="479" y="79" width="14" height="14"/><use xlink:href="#i-forward" x="511" y="79" width="14" height="14"/><use xlink:href="#i-trash" x="555" y="79" width="14" height="14"/><use xlink:href="#i-star" x="587" y="79" width="14" height="14"/><use xlink:href="#i-spark" x="631" y="79" width="14" height="14"/><use xlink:href="#i-more" x="663" y="79" width="14" height="14"/></g>
+<!-- sidebar + list -->
+<rect x="24" y="108" width="150" height="256" fill="#ecebe9"/>
+<rect x="174" y="108" width="186" height="256" fill="#ffffff"/><line x1="360" y1="108" x2="360" y2="364" stroke="#d9d7d2"/>
+<g font-size="10" fill="#5c5c5c"><text x="36" y="130">Doručená pošta</text><text x="36" y="148">Odeslané</text><text x="36" y="166">Koncepty</text></g>
+<rect x="178" y="116" width="178" height="44" rx="6" fill="#dfe8f7"/>
+<g font-size="10"><text x="188" y="131" font-weight="700" fill="#1f1f1f">Lucie Horáková</text><text x="188" y="145" fill="#1f1f1f">Faktura za říjen</text><text x="188" y="157" fill="#5c5c5c">Dobrý den, posílám fakturu…</text></g>
+<g font-size="10" fill="#5c5c5c"><text x="188" y="180">Petr Svoboda</text><text x="188" y="194">Re: Nabídka – 2. patro</text><text x="188" y="218">Jira</text><text x="188" y="232">PRJ-14: Export do CSV</text></g>
+<!-- reading pane: one message -->
+<g font-size="10.5"><text x="380" y="130" font-size="13" font-weight="700" fill="#1f1f1f">Faktura za říjen</text>
+<circle cx="389" cy="150" r="9" fill="#c9a0dc"/><text x="385" y="154" font-size="9" fill="#ffffff" font-weight="700">LH</text>
+<text x="404" y="147" fill="#1f1f1f" font-weight="600">Lucie Horáková</text><text x="404" y="159" fill="#5c5c5c">Komu: Vy · dnes 9:14</text>
+<rect x="640" y="140" width="84" height="18" rx="9" fill="#ffffff" stroke="#d9d7d2"/><use xlink:href="#i-clip" x="648" y="143" width="12" height="12" fill="none" stroke="#5c5c5c" stroke-width="1.6" stroke-linecap="round"/><text x="664" y="153" font-size="9.5" fill="#1f1f1f">faktura.pdf</text>
+<text x="380" y="186" fill="#1f1f1f">Dobrý den,</text><text x="380" y="202" fill="#1f1f1f">posílám fakturu za říjen. Splatnost je 14 dní. Kdyby něco</text><text x="380" y="218" fill="#1f1f1f">nesedělo, dejte vědět.</text><text x="380" y="242" fill="#1f1f1f">Lucie</text></g>
+<!-- the bar -->
+<line x1="360" y1="314" x2="736" y2="314" stroke="#d9d7d2"/>
+<rect x="360" y="314" width="376" height="50" fill="#f6f5f4"/>
+<rect x="372" y="327" width="94" height="24" rx="6" fill="#ffffff" stroke="#b9b7ad"/><use xlink:href="#i-reply" x="378" y="332" width="14" height="14" fill="none" stroke="#1f1f1f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><text x="396" y="343" fill="#1f1f1f">Odpovědět</text><text x="452" y="343" font-size="9" fill="#5c5c5c">▾</text>
+<rect x="474" y="327" width="152" height="24" rx="6" fill="#ffffff" stroke="#b9b7ad"/><text x="482" y="343" fill="#8a8a8a">Napsat odpověď…</text>
+<g fill="none" stroke="#b9b7ad"><rect x="634" y="327" width="28" height="24" rx="6"/><rect x="666" y="327" width="28" height="24" rx="6"/></g>
+<use xlink:href="#i-spark" x="641" y="332" width="14" height="14" fill="none" stroke="#1f1f1f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<use xlink:href="#i-open" x="673" y="332" width="14" height="14" fill="none" stroke="#1f1f1f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="698" y="327" width="28" height="24" rx="6" fill="#3584e4" opacity="0.45"/><use xlink:href="#i-send" x="705" y="332" width="14" height="14" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<rect x="24" y="64" width="712" height="300" rx="10" fill="none" stroke="#b9b7ad"/>
+<text x="24" y="382" font-size="10.5" fill="#1f1f1f"><tspan font-weight="700">A · jedna zpráva.</tspan> Řádek stojí dole v panelu čtení, pod tělem zprávy, na stejném místě jako pod chatem. Cíl = zobrazená zpráva;</text>
+<text x="24" y="396" font-size="10.5" fill="#1f1f1f">tooltip režimu „Odpověď pro: Lucie Horáková“. Odpovědět všem a Přeposlat… podle schopností účtu; u Jira položky jen Komentovat.</text>
+
+<!-- B: where it does not show -->
+<g font-size="10.5">
+<rect x="24" y="414" width="226" height="120" rx="8" fill="#f6f5f4" stroke="#b9b7ad"/>
+<text x="36" y="432" font-weight="700" fill="#1f1f1f">B · chat konverzace</text>
+<rect x="36" y="442" width="120" height="18" rx="9" fill="#e7e5e1"/><text x="44" y="454" fill="#1f1f1f">Můžete to poslat?</text>
+<rect x="110" y="466" width="128" height="18" rx="9" fill="#cfe1fb"/><text x="118" y="478" fill="#1f1f1f">Ano, dnes odpoledne.</text>
+<line x1="36" y1="496" x2="238" y2="496" stroke="#d9d7d2"/>
+<rect x="36" y="504" width="58" height="18" rx="5" fill="#ffffff" stroke="#b9b7ad"/><text x="42" y="516" font-size="9">Odpovědět ▾</text>
+<rect x="98" y="504" width="86" height="18" rx="5" fill="#ffffff" stroke="#b9b7ad"/><text x="104" y="516" font-size="9" fill="#8a8a8a">Napsat odpověď…</text>
+<rect x="188" y="504" width="14" height="18" rx="4" fill="none" stroke="#b9b7ad"/><rect x="206" y="504" width="14" height="18" rx="4" fill="none" stroke="#b9b7ad"/><rect x="224" y="504" width="14" height="18" rx="4" fill="#3584e4" opacity="0.45"/>
+<text x="36" y="546" fill="#5c5c5c">Beze změny (w4): stejný řádek, stejný stav.</text>
+
+<rect x="266" y="414" width="226" height="120" rx="8" fill="#f6f5f4" stroke="#b9b7ad"/>
+<text x="278" y="432" font-weight="700" fill="#1f1f1f">C · časová osa konverzace</text>
+<rect x="278" y="442" width="202" height="30" rx="6" fill="#ffffff" stroke="#d9d7d2"/><text x="286" y="454" font-size="9.5" fill="#1f1f1f">Petr Svoboda · Re: Nabídka</text><text x="286" y="466" font-size="9" fill="#5c5c5c">Odpovědět · Všem · Přeposlat</text>
+<rect x="278" y="478" width="202" height="30" rx="6" fill="#ffffff" stroke="#d9d7d2"/><text x="286" y="490" font-size="9.5" fill="#1f1f1f">Vy · Re: Nabídka</text>
+<text x="278" y="546" fill="#5c5c5c">Bez řádku: karty mají vlastní tlačítka.</text>
+
+<rect x="508" y="414" width="228" height="120" rx="8" fill="#f6f5f4" stroke="#b9b7ad"/>
+<text x="520" y="432" font-weight="700" fill="#1f1f1f">D · kde řádek není</text>
+<text x="520" y="452" fill="#1f1f1f">· prázdný panel, „Vybráno N zpráv“</text>
+<text x="520" y="468" fill="#1f1f1f">· Outbox a Koncepty (není komu odpovídat)</text>
+<text x="520" y="484" fill="#1f1f1f">· účet bez schopnosti odpovědět</text>
+<text x="520" y="500" fill="#1f1f1f">· samostatné okno zprávy, Nástěnka</text>
+<text x="520" y="516" fill="#1f1f1f">· přiložená zpráva (.eml) v okně</text>
+<text x="520" y="546" fill="#5c5c5c">Odeslané: ano, odpověď na vlastní zprávu.</text>
+</g>
+
+<g font-size="10.5" fill="#1f1f1f">
+<text x="24" y="574" font-weight="700">Co se nemění</text>
+<text x="24" y="590">Obsah řádku, klávesy (Enter nový řádek, ⌘/Ctrl+Enter odeslat, Escape do seznamu), odeslání přes draft.create → save → send s citací,</text>
+<text x="24" y="604">Otevřít v okně s předvyplněným textem, ✦ Asistent, úzký panel jen ikona. Rozepsaný text drží vlákno zprávy: zpráva a její konverzace</text>
+<text x="24" y="618">sdílejí týž text, přepnutí seznamu ho nechá; nic se neukládá do konceptů mimo Odeslat.</text>
+</g>
+</svg>
