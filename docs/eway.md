@@ -7,12 +7,17 @@ account on Preferences → Integrations. It follows the shape of
 [calendar.md](calendar.md): scope, decisions, architecture per layer,
 security, tasks with gates, open questions.
 
-Status (2026-10-19): branch `feat/eway`. T0 is done ("As verified (T0)"
-after §1); the daemon side T1–T4 is built (§6 "As built"); the Go
-reference T5, the macOS client T6 (owner-verified, Gate B) and the GTK
-client T7 (owner-verified, Gate C, 2026-10-20) are built, the Windows
-client T8 is built and tested on Windows (2026-10-20; Gate D's smoke
-tests and manual walk remain; §2.7 "As built"). The
+Status (2026-10-20): merged from `feat/eway` into `main` on 2026-10-20
+(the owner's decision after Gate C and the Windows build). T0 is done
+("As verified (T0)" after §1); the daemon side T1–T4 is built (§6 "As
+built"); the Go reference T5, the macOS client T6 (owner-verified, Gate
+B) and the GTK client T7 (owner-verified, Gate C) are built, the Windows
+client T8 is built, linted and Core-tested on the owner's Windows machine
+(Gate D's UI smoke tests and manual walk remain; §2.7 "As built"). The
+merge took `main`'s chat layout of the conversation view: the eWay bar
+of a card is redrawn from `ConversationTimelineView` (Windows), the
+conflicts of `po/`, `docs/architecture.md` §7 and `IconGlyphs.cs` were
+joined (the calendar glyphs are `main`'s). The
 decisions of §1 stand as answered in §5.
 The UI decisions of 2026-10-17 (wireframes approved: the toggle button on
 the message, the relations dialog, the pill and the bar, the account on

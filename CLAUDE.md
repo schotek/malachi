@@ -475,6 +475,13 @@ Pořadí prací:
     Windows sestavené a otestované jen v CI (`windows.yml` zelené včetně
     Lintu); zbývá UI smoke s `MALACHI_DEVMAIL`, ruční průchod na Windows
     (B3, seznam v `docs/windows-port.md` §11.7) a `make po` beze změny
+13. eWay-CRM (účet `kind: eway`, uložení pošty do CRM s vazbami na
+    kontakty, firmy, obchody a projekty, sledování uložené konverzace,
+    Předvolby → Integrace) — sloučeno z `feat/eway` do `main` 2026-10-20;
+    démon, Go reference, macOS (Gate B) a GTK (Gate C) ověřené vlastníkem,
+    Windows na jeho stroji sestavené, zlintované a s Core testy (Gate D
+    zčásti: zbývá UI smoke a ruční průchod); viz odstavec eWay-CRM níže
+    a `docs/eway.md`
 
 Asistent (stav 2026-09-30, sloučeno do `main`; uživatel potvrdil, že
 funguje ve všech třech klientech). Na macOS je hotové a uživatelem otestované:
@@ -2458,8 +2465,14 @@ ukládání nechalo zprávu v ostatních oknech jako „Ukládá se“
 `endsTheBusyMarkWhenTheWindowCloses`). Gate C prošel (vlastník
 2026-10-20, `make run-gtk-live` nad kopií; jeho dva nálezy byly v obrazu
 kontejneru: chybějící `librsvg2` a tlačítko v Boxu bez `has-frame:
-false`). Čeká: Gate D na Windows (smoke a ruční průchod; `build.ps1
-app`, `lint` a Core testy prošly 2026-10-20), pak merge do `main`.
+false`). Sloučeno do `main` 2026-10-20 (rozhodnutí vlastníka po Gate
+C a po sestavení na Windows); před tím `main` → `feat/eway` s konflikty
+v `po/` (cs.po slité `msgcat --use-first`, pak `make po`),
+`docs/architecture.md` (oba zápisy §7), `IconGlyphs.cs` (glyfy
+kalendáře z `main`) a `ConversationView.xaml.cs` (chat layout z `main`;
+hook pruhu eWay na kartách je teď v `ConversationTimelineView`, kde karty
+žijí). Zbývá na Windows UI smoke a ruční průchod (dokončení Gate D) a
+`windows.yml` nad `main` po sloučení.
 
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně
