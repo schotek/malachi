@@ -220,6 +220,10 @@ extension ConversationLayout {
         /// A header narrower than this shows the short date of the list
         /// instead of the full date and time.
         public static let compactHeader = 420.0
+        /// The chat's empty side of a row (`ConversationLayout.chatGap`): at
+        /// least this, else this share of the column.
+        public static let chatGapMin = 24.0
+        public static let chatGapRatio = 0.2
     }
 
     /// What marks an item on the line.
@@ -284,6 +288,24 @@ extension ConversationLayout {
     /// header is narrower than `Metrics.compactHeader`).
     public static func compactDates(pane: Double) -> Bool {
         cardWidth(pane: pane) - 2 * Metrics.cardPaddingH < Metrics.compactHeader
+    }
+
+    /// The chat's empty side of a row (docs/plans/chat-view.md D4): the
+    /// larger of `Metrics.chatGapMin` and `Metrics.chatGapRatio` of the
+    /// column, continuous (the two meet at a column of 120). `column` is
+    /// the clamp's inner width: the column at most `Metrics.maxWidth`, less
+    /// the two `Metrics.sideInset`.
+    public static func chatGap(column: Double) -> Double {
+        max(Metrics.chatGapMin, Metrics.chatGapRatio * column)
+    }
+
+    /// The widest a chat bubble gets in a column `column` wide (the clamp's
+    /// inner width, as `chatGap`): a row of the chat is the avatar's
+    /// gutter on the bubble's side (`Metrics.avatar` + `Metrics.gutterGap`),
+    /// the bubble, and the empty side of at least `chatGap(column:)`; never
+    /// negative. A short bubble shrinks to its text, not below its header.
+    public static func chatBubbleMax(column: Double) -> Double {
+        max(0, column - Metrics.avatar - Metrics.gutterGap - chatGap(column: column))
     }
 }
 

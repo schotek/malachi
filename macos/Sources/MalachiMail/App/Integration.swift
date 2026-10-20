@@ -90,7 +90,7 @@ final class Integration {
         conversation = ConversationController(list: list, cache: cache)
         readingPane = ReadingPaneViewController(
             reader: reader,
-            conversationView: ConversationViewController(state: state, cache: cache, controller: conversation))
+            conversation: ConversationHostViewController(state: state, cache: cache, controller: conversation))
         actions = ActionsController(mailbox: mailbox, list: list, cache: cache, settings: state.settings, toast: mainToast)
         messageActions = MessageActionsController(
             state: state, actions: actions, list: list, cache: cache, windows: windows

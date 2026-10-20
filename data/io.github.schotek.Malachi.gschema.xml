@@ -152,6 +152,11 @@
       <summary>Group the message list by conversation</summary>
       <description>Show one row per conversation in the selected folder; expanding it lists the messages the folder holds.</description>
     </key>
+    <key name="conversation-chat-layout" type="b">
+      <default>false</default>
+      <summary>Show conversations as a chat</summary>
+      <description>Others' messages on the left, yours on the right, oldest first; off shows the timeline.</description>
+    </key>
     <key name="search-scope" enum="io.github.schotek.Malachi.SearchScope">
       <default>'folder'</default>
       <summary>Where a search looks</summary>

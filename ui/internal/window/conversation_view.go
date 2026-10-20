@@ -5,7 +5,6 @@ package window
 
 import (
 	"math"
-	"reflect"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
@@ -13,14 +12,11 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
-	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/bulkmail"
 	"github.com/schotek/malachi/ui/internal/capabilities"
 	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/htmlview"
-	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
-	"github.com/schotek/malachi/ui/internal/settings"
 )
 
 // The whole conversation in the reading pane (ui/internal/conversation,
@@ -32,16 +28,26 @@ import (
 // member row and a single-message row keep the single-message view. The
 // user's replies in Sent that the folder lacks are cards among them by
 // date, folded. Every card folds and opens with its arrow
-// (conversation.Folds), and one button above the conversation folds or
-// opens them all (Collapse All / Expand All, conversation.FoldAllOffer).
+// (conversation.Folds), and one button in the strip above the conversation
+// folds or opens them all (Collapse All / Expand All,
+// conversation.FoldAllOffer; the strip is the host's, conversation_host.go).
 // Under an open card's body a "•••" shows the quoted history the daemon
 // cut from it (quoted.go). A Jira conversation has its issue card once on
 // top; its description and
 // comments are cards (conversation_card.go), its status and assignee
 // changes compact rows, and older members left out by thread.get's cap are
 // one row at the bottom (conversation_rows.go). Only the newest member that
-// is not an event is marked read. A port of the macOS client's
-// ConversationViewController.swift and ReadingPaneViewController.swift.
+// is not an event is marked read (the host arms it, conversation_fanout.go).
+// A port of the macOS client's ConversationViewController.swift and
+// ReadingPaneViewController.swift.
+//
+// This is the timeline, one of the two layouts of the conversation (the
+// other is the chat, conversation_chat.go, docs/plans/chat-view.md); the
+// host (conversation_host.go) shows one of them and hands the controller's
+// changes to both (changed). Hidden, the timeline builds nothing: it notes
+// what it has to catch up with (stale), lets go of its web views and asks
+// for no body; shown again, it catches up and opens at its top, its folds
+// and revealed quoted text kept while the conversation is the same (D10).
 //
 // The page (conversation_view.blp) is slightly grey and the messages are
 // cards on it, in one column no wider than 900, a gutter at its leading
@@ -62,7 +68,8 @@ import (
 // "changed" comes after the column's allocation, so the anchor is put
 // back within the same frame. The link under the pointer of any card
 // shows in one status label at the bottom of the pane. The list keeps the
-// keyboard: Space and Shift+Space page through the conversation.
+// keyboard: Space and Shift+Space page through the conversation (through
+// the host, which pages the layout shown).
 
 // convPageName is the page of message_stack the conversation view is.
 const convPageName = "conversation"
@@ -85,23 +92,23 @@ type convAnchor struct {
 // pane.
 type conversationView struct {
 	w    *Window
+	host *conversationHost
 	ctrl *conversationController
 
-	page     *gtk.Overlay
 	scroller *gtk.ScrolledWindow
 	clamp    *adw.Clamp
 	column   *gtk.Box
-	issueBox *gtk.Box
-	status   *gtk.Label
-	spinner  *adw.Spinner
-	// foldAllButton is Collapse All / Expand All above the conversation,
-	// hidden while fewer than two cards fold; foldAll what it offers now.
-	foldAllButton *gtk.Button
-	foldAll       conversation.FoldAll
+	// foldAll is what Collapse All / Expand All in the host's strip offers
+	// now (showFoldAll; hidden while fewer than two cards fold).
+	foldAll conversation.FoldAll
 
-	// The issue card on show and what it was built from.
-	issueCard  *issueCard
-	issueShown *convIssueKey
+	// issue is the issue card of a Jira conversation on top of the column.
+	issue convIssueSlot
+
+	// shown: the host shows this layout; stale is what a change while
+	// hidden left to do once shown.
+	shown bool
+	stale convStale
 
 	cards  map[api.MessageID]*convCard
 	events map[api.MessageID]*convEventRow
@@ -137,11 +144,23 @@ type conversationView struct {
 	// layoutTick is the frame callback that runs updateLive again once the
 	// rows are laid out (afterLayout), 0 when none is pending; layoutTries
 	// counts the frames it waited without every card laid out.
-	layoutTick   uint
-	layoutTries  int
-	spinnerTimer glib.SourceHandle
-	kineticID    uint
+	layoutTick  uint
+	layoutTries int
+	kineticID   uint
 }
+
+// convStale is what a change of the controller while the timeline was
+// hidden left to do once it is shown.
+type convStale int
+
+const (
+	// convFresh: nothing; the cards are as the model is.
+	convFresh convStale = iota
+	// convStaleOpen: the conversation was built anew; lay it out anew.
+	convStaleOpen
+	// convStaleUpdate: the conversation changed; reconcile the cards.
+	convStaleUpdate
+)
 
 // convIssueKey is what the issue card on show was built from.
 type convIssueKey struct {
@@ -150,52 +169,41 @@ type convIssueKey struct {
 	issue   api.IssueInfo
 }
 
-// conversationPane is the conversation view, made the first time a
-// conversation is shown: the page joins message_stack, the text zoom and
-// Space in the list reach it.
-func (w *Window) conversationPane() *conversationView {
-	if w.conv != nil {
-		return w.conv
-	}
-	installConvCSS()
-	b := data.Builder("conversation_view.ui")
+// newConversationView is the timeline layout over the host's controller,
+// from conversation_view.ui (b); the host shows it or the chat.
+func newConversationView(h *conversationHost, b *gtk.Builder) *conversationView {
 	cv := &conversationView{
-		w:             w,
-		page:          b.GetObject("conversation_page").Cast().(*gtk.Overlay),
-		scroller:      b.GetObject("conversation_scroller").Cast().(*gtk.ScrolledWindow),
-		clamp:         b.GetObject("conversation_clamp").Cast().(*adw.Clamp),
-		column:        b.GetObject("conversation_column").Cast().(*gtk.Box),
-		issueBox:      b.GetObject("conversation_issue").Cast().(*gtk.Box),
-		status:        b.GetObject("conversation_status").Cast().(*gtk.Label),
-		spinner:       b.GetObject("conversation_spinner").Cast().(*adw.Spinner),
-		foldAllButton: b.GetObject("conversation_fold_all").Cast().(*gtk.Button),
-		cards:         map[api.MessageID]*convCard{},
-		events:        map[api.MessageID]*convEventRow{},
-		rows:          map[api.MessageID]*convRow{},
-		drafts:        map[api.DraftID]*convDraftCard{},
-		draftRows:     map[api.DraftID]*convRow{},
-	}
-	cv.status.SetUseMarkup(false)
-	cv.foldAllButton.ConnectClicked(cv.foldAllClicked)
-	cv.ctrl = newConversationController(convWindowHost{w}, i18n.Tr)
-	cv.ctrl.onChange = cv.modelChanged
-	cv.ctrl.onLoaded = func(id api.MessageID, lm *loadedMessage) {
-		if c := cv.cards[id]; c != nil {
-			c.render(lm)
-		}
+		w:         h.w,
+		host:      h,
+		ctrl:      h.ctrl,
+		scroller:  b.GetObject("conversation_scroller").Cast().(*gtk.ScrolledWindow),
+		clamp:     b.GetObject("conversation_clamp").Cast().(*adw.Clamp),
+		column:    b.GetObject("conversation_column").Cast().(*gtk.Box),
+		issue:     convIssueSlot{box: b.GetObject("conversation_issue").Cast().(*gtk.Box)},
+		cards:     map[api.MessageID]*convCard{},
+		events:    map[api.MessageID]*convEventRow{},
+		rows:      map[api.MessageID]*convRow{},
+		drafts:    map[api.DraftID]*convDraftCard{},
+		draftRows: map[api.DraftID]*convRow{},
 	}
 
-	// Shown again (another page of the stack was on top): the cards near
+	// Shown again (another page of a stack was on top): the cards near
 	// the viewport are looked at anew.
-	cv.page.ConnectMap(cv.scheduleLiveUpdate)
+	cv.scroller.ConnectMap(cv.scheduleLiveUpdate)
 	adj := cv.scroller.VAdjustment()
 	adj.ConnectChanged(func() {
+		if !cv.shown {
+			return
+		}
 		// After the column's allocation: what the user reads goes back
 		// where it was, in the same frame.
 		cv.restore(cv.anchor())
 		cv.scheduleLiveUpdate()
 	})
 	adj.ConnectValueChanged(func() {
+		if !cv.shown {
+			return
+		}
 		if !cv.settingValue {
 			// The user scrolled (or GTK kept the view in the document):
 			// from now on the item under the viewport's top stays in place,
@@ -216,11 +224,6 @@ func (w *Window) conversationPane() *conversationView {
 		return false
 	})
 	cv.scroller.AddController(sc)
-
-	w.messageStack.AddNamed(cv.page, convPageName)
-	w.settings.OnChanged(settings.KeyTextZoom, func() { cv.setZoom(w.settings.TextZoom()) })
-	w.addConversationPaging()
-	w.conv = cv
 	return cv
 }
 
@@ -290,36 +293,43 @@ func (w *Window) conversationMessagesChanged(acc api.AccountID) {
 // The window's fan-out of message news (remote.go, download.go) to the
 // card of the message, when one shows it.
 
-// conversationShowLoaded re-renders the card of message id.
+// conversationShowLoaded re-renders the card or the bubble of message id
+// in the layout shown (the hidden one renders what the controller holds
+// once shown), which keeps lm as the member's entry.
 func (w *Window) conversationShowLoaded(id api.MessageID, lm *loadedMessage) {
 	if w.conv == nil {
 		return
 	}
-	if c := w.conv.cards[id]; c != nil {
-		w.conv.ctrl.adopt(id, lm)
-		c.render(lm)
-	}
+	w.conv.showLoaded(id, lm)
 }
 
-// conversationRefreshBars redraws the bars of the card of message id.
+// conversationRefreshBars redraws the bars of the card of message id (the
+// chat's bubbles have none).
 func (w *Window) conversationRefreshBars(id api.MessageID, lm *loadedMessage) {
-	if w.conv == nil {
+	if w.conv == nil || w.conv.chatShown {
 		return
 	}
-	if c := w.conv.cards[id]; c != nil {
+	if c := w.conv.timeline.cards[id]; c != nil {
 		c.renderBars(lm)
 	}
 }
 
-// conversationRefreshChips redraws the chips of the card of message id.
+// conversationRefreshChips redraws the chips of the card of message id, or
+// the paperclip of its bubble in the chat.
 func (w *Window) conversationRefreshChips(id api.MessageID, lm *loadedMessage) {
 	if w.conv == nil {
 		return
 	}
-	if c := w.conv.cards[id]; c != nil {
-		if lm == nil {
-			lm = w.conv.ctrl.loaded[id]
+	if lm == nil {
+		lm = w.conv.ctrl.loaded[id]
+	}
+	if w.conv.chatShown {
+		if lm != nil {
+			w.conv.chat.loaded(id, lm)
 		}
+		return
+	}
+	if c := w.conv.timeline.cards[id]; c != nil {
 		c.refreshChips(lm)
 	}
 }
@@ -399,6 +409,14 @@ func (h convWindowHost) convFetch(s api.MessageSummary, full, quoted bool, then 
 	h.w.fetchBodyOnly(s.AccountID, s.ID, then)
 }
 
+func (h convWindowHost) convOpenMessage(s api.MessageSummary) {
+	h.w.openMessage(s)
+}
+
+func (h convWindowHost) convEditDraft(d api.Draft) {
+	h.w.editThreadDraft(d)
+}
+
 // fetchBodyOnly is fetchMessage without message.get: the body half alone,
 // for a card that needs nothing the summary does not have. then runs on
 // the main loop after every answer for the entry, and at once when the
@@ -419,30 +437,101 @@ func (w *Window) fetchBodyOnly(acc api.AccountID, id api.MessageID, then func(*l
 	w.startBody(acc, id, lm)
 }
 
-// modelChanged follows the controller.
-func (cv *conversationView) modelChanged(ch convChange) {
+// changed follows the controller (through the host, conversation_fanout.go).
+// While hidden the cards are only taken out when the conversation goes;
+// what else changed is done once shown (setShown).
+func (cv *conversationView) changed(ch convChange) {
 	switch ch {
 	case convLoading:
+		cv.stale = convFresh
 		cv.removeAll()
-		cv.startSpinner()
 	case convOpened:
-		cv.stopSpinner()
-		cv.open()
-		// The newest member that is not an event, after the usual delay;
-		// once per selection.
-		if id := cv.ctrl.takeMarkRead(); id != "" {
-			cv.w.scheduleMarkRead(id)
+		if cv.shown {
+			cv.stale = convFresh
+			cv.open()
+		} else {
+			cv.removeAll()
+			cv.stale = convStaleOpen
 		}
 	case convUpdated:
-		cv.stopSpinner()
-		cv.update()
+		if cv.shown {
+			cv.update()
+		} else if cv.stale == convFresh {
+			cv.stale = convStaleUpdate
+		}
 	case convCleared:
-		cv.stopSpinner()
+		cv.stale = convFresh
 		cv.removeAll()
 		// The pane shows something else: only a few views wait for the
 		// next conversation, the others' processes end.
 		cv.trimWebPool(convIdleWebViews)
 	}
+}
+
+// loaded re-renders the card of member id with its entry's news (through
+// the host while this layout is shown).
+func (cv *conversationView) loaded(id api.MessageID, lm *loadedMessage) {
+	if c := cv.cards[id]; c != nil {
+		c.render(lm)
+	}
+}
+
+// setShown shows the timeline (on) or hides it for the chat. Hidden, the
+// cards let go of their web views and nothing is measured or fetched;
+// shown again, the cards catch up with the controller (built anew when the
+// conversation was, reconciled when it changed, every card rendered from
+// the entries held, its folds and revealed quoted text kept) and the pane
+// opens at the top of the conversation. A port of the macOS client's
+// ConversationViewController.setShown.
+func (cv *conversationView) setShown(on bool) {
+	if on == cv.shown {
+		return
+	}
+	cv.shown = on
+	if !on {
+		cv.stopKinetic()
+		for _, c := range cv.cards {
+			c.setLive(false)
+		}
+		cv.hover("")
+		return
+	}
+	was := cv.stale
+	cv.stale = convFresh
+	// The cards wait for their own layout again (afterLayout).
+	cv.layoutTries = 0
+	if was == convStaleOpen {
+		cv.open()
+		return
+	}
+	m := cv.ctrl.model
+	if m == nil {
+		return
+	}
+	// The width is looked at anew (updateLive) once the page is laid out.
+	cv.width = -1
+	cv.compact = convCompactDates(float64(cv.scroller.Width()))
+	for _, c := range cv.cards {
+		c.setCompact(cv.compact)
+	}
+	for _, e := range cv.events {
+		e.setCompact(cv.compact)
+	}
+	if was == convStaleUpdate {
+		cv.apply(m)
+	} else {
+		cv.showFoldAll()
+	}
+	// Only the entries held: a card whose entry was let go keeps what it
+	// shows (a render with nil would take its chips and bars).
+	for id, c := range cv.cards {
+		if lm := cv.ctrl.loaded[id]; lm != nil {
+			c.render(lm)
+		}
+	}
+	cv.pinned = cv.topAnchor()
+	cv.restore(cv.pinned)
+	cv.scheduleLiveUpdate()
 }
 
 // convIdleWebViews is how many card views the pool keeps while no
@@ -572,20 +661,12 @@ func (cv *conversationView) foldAllClicked() {
 	cv.scheduleLiveUpdate()
 }
 
-// showFoldAll shows the Collapse All / Expand All button for the cards'
-// fold state (conversation.FoldAllOffer); hidden while fewer than two
-// fold.
+// showFoldAll works out what Collapse All / Expand All offers for the
+// cards' fold state (conversation.FoldAllOffer; none while fewer than two
+// fold) and tells the host, whose strip shows the button.
 func (cv *conversationView) showFoldAll() {
 	cv.foldAll = conversation.FoldAllOffer(cv.foldState)
-	if cv.foldAll == conversation.FoldAllNone {
-		if cv.foldAllButton.HasFocus() {
-			cv.scroller.GrabFocus()
-		}
-		cv.foldAllButton.SetVisible(false)
-		return
-	}
-	cv.foldAllButton.SetLabel(cv.foldAll.Label(i18n.Tr))
-	cv.foldAllButton.SetVisible(true)
+	cv.host.setFoldAll(cv.foldAll)
 }
 
 // convHeaderAnchor is a with the item's top kept in view: a viewport
@@ -599,15 +680,13 @@ func convHeaderAnchor(a *convAnchor) *convAnchor {
 	return &convAnchor{widget: a.widget, offset: min(a.offset, 0)}
 }
 
-// topAnchor is the top of the conversation: the Collapse All / Expand All
-// button when it shows, else the issue card of a Jira conversation, else
-// the first item (the card that opened it, or the newest); nil for none.
+// topAnchor is the top of the conversation: the issue card of a Jira
+// conversation, else the first item (the card that opened it, or the
+// newest); nil for none. (Collapse All / Expand All is in the host's strip
+// above the scrolled window.)
 func (cv *conversationView) topAnchor() *convAnchor {
-	if cv.foldAllButton.IsVisible() {
-		return &convAnchor{widget: cv.foldAllButton}
-	}
-	if cv.issueBox.IsVisible() {
-		return &convAnchor{widget: cv.issueBox}
+	if cv.issue.box.IsVisible() {
+		return &convAnchor{widget: cv.issue.box}
 	}
 	if len(cv.items) > 0 {
 		return &convAnchor{widget: cv.items[0]}
@@ -624,7 +703,7 @@ func (cv *conversationView) topAnchor() *convAnchor {
 // (conversation.Folds.State), and the Collapse All / Expand All button
 // follows.
 func (cv *conversationView) apply(m *conversation.Model) {
-	cv.showIssue(m)
+	cv.issue.show(cv.w, cv.ctrl, m)
 	display := convDisplayOrder(m.Items)
 	items := display.items
 	cv.folds.Show(m.Thread)
@@ -745,7 +824,7 @@ func (cv *conversationView) apply(m *conversation.Model) {
 		cv.detach(cv.truncatedRow)
 	}
 	// The column after the issue box, in the model's order.
-	var prev gtk.Widgetter = cv.issueBox
+	var prev gtk.Widgetter = cv.issue.box
 	for _, r := range desired {
 		if r.Parent() == nil {
 			cv.column.InsertChildAfter(r, prev)
@@ -780,7 +859,7 @@ func (cv *conversationView) removeAll() {
 	cv.folds = conversation.Folds{}
 	cv.foldState = nil
 	cv.foldAll = conversation.FoldAllNone
-	cv.foldAllButton.SetVisible(false)
+	cv.host.setFoldAll(cv.foldAll)
 	// A conversation laid out anew waits for its own layout.
 	cv.layoutTries = 0
 	for _, c := range cv.cards {
@@ -800,40 +879,8 @@ func (cv *conversationView) removeAll() {
 	cv.draftRows = map[api.DraftID]*convRow{}
 	cv.items = nil
 	cv.pinned, cv.last = nil, nil
-	cv.clearIssue()
+	cv.issue.clear()
 	cv.hover("")
-}
-
-// showIssue shows the issue card of a Jira conversation once on top
-// (built by the window, issue_card.go); a mail conversation has none.
-func (cv *conversationView) showIssue(m *conversation.Model) {
-	info := cv.ctrl.issue
-	first, ok := convFirstMember(m)
-	if m.Issue == nil || info == nil || !ok {
-		cv.clearIssue()
-		return
-	}
-	key := &convIssueKey{card: *m.Issue, account: first.AccountID, issue: *info}
-	if cv.issueShown != nil && reflect.DeepEqual(*cv.issueShown, *key) {
-		return
-	}
-	account, _ := cv.w.model.account(first.AccountID)
-	cv.clearIssue()
-	card := cv.w.conversationIssueCard(*m.Issue, account, *info)
-	cv.issueCard = card
-	cv.issueShown = key
-	cv.issueBox.Append(card)
-	cv.issueBox.SetVisible(true)
-}
-
-// clearIssue takes the issue card out.
-func (cv *conversationView) clearIssue() {
-	if cv.issueCard != nil {
-		cv.issueBox.Remove(cv.issueCard)
-		cv.issueCard = nil
-	}
-	cv.issueShown = nil
-	cv.issueBox.SetVisible(false)
 }
 
 // convFirstMember is the first member of m, which names the conversation's
@@ -884,12 +931,9 @@ func (cv *conversationView) spanOf(w gtk.Widgetter) (convSpan, bool) {
 // how far below its top the viewport's top is.
 func (cv *conversationView) currentAnchor() *convAnchor {
 	top := cv.scroller.VAdjustment().Value()
-	candidates := make([]gtk.Widgetter, 0, len(cv.items)+2)
-	if cv.foldAllButton.IsVisible() {
-		candidates = append(candidates, cv.foldAllButton)
-	}
-	if cv.issueBox.IsVisible() {
-		candidates = append(candidates, cv.issueBox)
+	candidates := make([]gtk.Widgetter, 0, len(cv.items)+1)
+	if cv.issue.box.IsVisible() {
+		candidates = append(candidates, cv.issue.box)
 	}
 	for _, r := range cv.items {
 		candidates = append(candidates, r)
@@ -928,10 +972,10 @@ func (cv *conversationView) atStart() bool {
 	return cv.scroller.VAdjustment().Value() <= 1
 }
 
-// pageBy scrolls one page down (or up) for Space (Shift+Space) in the list.
-// True: the key was used.
+// pageBy scrolls one page down (or up) for Space (Shift+Space) in the list
+// (through the host). True: the key was used.
 func (cv *conversationView) pageBy(up bool) bool {
-	if cv.ctrl.model == nil {
+	if cv.ctrl.model == nil || !cv.shown {
 		return false
 	}
 	cv.stopKinetic()
@@ -1011,10 +1055,11 @@ func (cv *conversationView) scheduleLiveUpdate() {
 
 // updateLive asks for the bodies of the cards near the viewport, gives web
 // views to the nearest HTML cards and takes them from the rest
-// (liveCards), lets go of far entries beyond the controller's budget, and
-// follows the pane's width (the short dates, the documents' reflow).
+// (liveCards), has the host let go of far entries beyond the controller's
+// budget, and follows the pane's width (the short dates, the documents'
+// reflow). Only while this layout is shown.
 func (cv *conversationView) updateLive() {
-	if cv.ctrl.model == nil {
+	if cv.ctrl.model == nil || !cv.shown {
 		return
 	}
 	// Should no layout have put the pinned item in place yet.
@@ -1063,7 +1108,7 @@ func (cv *conversationView) updateLive() {
 			cv.ctrl.needsBody(c.id, c.detailsOpen)
 		}
 	}
-	cv.ctrl.trim(near, convHeldBytes)
+	cv.host.near(cv, near)
 	if cv.pinned == nil {
 		cv.last = cv.currentAnchor()
 	}
@@ -1100,12 +1145,10 @@ func (cv *conversationView) afterLayout() {
 
 // Other.
 
-// hover shows the link under the pointer of any card ("" hides it): plain
-// text, capped, the middle elided.
+// hover shows the link under the pointer of any card in the host's status
+// label ("" hides it).
 func (cv *conversationView) hover(uri string) {
-	text := clampText(uri, convStatusMaxRunes)
-	cv.status.SetText(text)
-	cv.status.SetVisible(text != "")
+	cv.host.hover(uri)
 }
 
 // setZoom follows the text-zoom setting: the web views and their heights
@@ -1114,24 +1157,4 @@ func (cv *conversationView) setZoom(percent int) {
 	for _, c := range cv.cards {
 		c.setZoom(percent)
 	}
-}
-
-// startSpinner shows the spinner once the members take long enough to
-// notice (bodySpinnerDelay).
-func (cv *conversationView) startSpinner() {
-	cv.stopSpinner()
-	cv.spinnerTimer = glib.TimeoutAdd(bodySpinnerDelay, func() bool {
-		cv.spinnerTimer = 0
-		cv.spinner.SetVisible(true)
-		return false
-	})
-}
-
-// stopSpinner hides the spinner and disarms its timer.
-func (cv *conversationView) stopSpinner() {
-	if cv.spinnerTimer != 0 {
-		glib.SourceRemove(cv.spinnerTimer)
-		cv.spinnerTimer = 0
-	}
-	cv.spinner.SetVisible(false)
 }

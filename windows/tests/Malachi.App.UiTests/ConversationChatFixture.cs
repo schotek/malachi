@@ -1,0 +1,115 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// The chat suite's world (MALACHI_DEVMAIL; docs/plans/chat-view.md):
+// devmail on ports of its own with a two-message conversation submitted
+// before the account is added (a message from someone else, and the user's
+// reply to it in the Inbox as well, so that the conversation has a member
+// on either side without a send), the app started with the list grouped by
+// conversation and the conversation shown as a chat
+// (group-by-conversation, conversation-chat-layout), and the devmail
+// account added as DevmailFixture adds it.
+
+using System;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Windows.Automation;
+using Microsoft.Win32;
+using Xunit;
+
+namespace Malachi.App.UiTests;
+
+/// <summary>devmail with a conversation, the app showing conversations as a chat.</summary>
+public sealed class ConversationChatFixture : IAsyncLifetime
+{
+    private DevmailServer? server;
+    private AppSession? session;
+
+    /// <summary>Why the suite does not run; null when it does.</summary>
+    public string? SkipReason { get; private set; }
+
+    /// <summary>The conversation's subject (its first message's; the reply's has "Re: ").</summary>
+    public string Subject { get; } = "Chat " + Guid.NewGuid().ToString("N")[..8];
+
+    /// <summary>The app.</summary>
+    internal AppSession Session => session ?? throw new InvalidOperationException(SkipReason);
+
+    /// <inheritdoc/>
+    public async ValueTask InitializeAsync()
+    {
+        SkipReason = UiEnvironment.SkipReason;
+        if (SkipReason is null)
+        {
+            var exe = DevmailServer.Executable;
+            if (exe is null)
+            {
+                SkipReason = $"opt-in: set {DevmailServer.FolderEnv} to a folder with devmail.exe to run the tests against a local mail server";
+            }
+            else if (!File.Exists(exe))
+            {
+                SkipReason = $"{DevmailServer.FolderEnv} names no devmail.exe: {exe}";
+            }
+        }
+        if (SkipReason is not null)
+        {
+            return;
+        }
+        try
+        {
+            var devmail = server = DevmailServer.Start(Path.Combine(DevmailFixture.RepositoryRoot, "backend", "testdata", "mime"));
+            var inbox = devmail.Total("INBOX");
+            var id = Subject[5..];
+            var first = "<chat-" + id + "@uitests.invalid>";
+            DevmailSmtp.Submit(devmail, Message(first, null, "Ada Example <ada@example.org>", "Test User <" + DevmailServer.User + ">", Subject, "Shall we meet on Friday?", DateTimeOffset.UtcNow.AddMinutes(-10)));
+            DevmailSmtp.Submit(devmail, Message("<chat-reply-" + id + "@uitests.invalid>", first, "Test User <" + DevmailServer.User + ">", "Ada Example <ada@example.org>, Test User <" + DevmailServer.User + ">", "Re: " + Subject, "Friday works for me.", DateTimeOffset.UtcNow.AddMinutes(-5)));
+            Uia.WaitFor(() => devmail.Total("INBOX") == inbox + 2, "the conversation in the server's INBOX", TimeSpan.FromSeconds(60));
+
+            session = AppSession.Start(preferences: k =>
+            {
+                k.SetValue("group-by-conversation", 1, RegistryValueKind.DWord);
+                k.SetValue("conversation-chat-layout", 1, RegistryValueKind.DWord);
+            });
+            session.WaitForDaemon();
+            await DevmailFixture.AddAccountAsync(session.Socket, devmail);
+            var list = Uia.Find(session.MainWindow, "MessageList", AppSession.StartTimeout);
+            Uia.WaitFor(() => Uia.All(list, ControlType.ListItem).Count > 5, "the Inbox's messages", AppSession.StartTimeout);
+        }
+        catch
+        {
+            await DisposeAsync();
+            session = null;
+            server = null;
+            throw;
+        }
+    }
+
+    /// <inheritdoc/>
+    public ValueTask DisposeAsync()
+    {
+        session?.Dispose();
+        server?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+
+    // A plain-text message; a reply names the message it answers.
+    private static string Message(string messageId, string? inReplyTo, string from, string to, string subject, string text, DateTimeOffset date)
+    {
+        var lines = new[]
+        {
+            "Message-ID: " + messageId,
+            "Date: " + date.ToString("r", CultureInfo.InvariantCulture),
+            "From: " + from,
+            "To: " + to,
+            "Subject: " + subject,
+        }.ToList();
+        if (inReplyTo is not null)
+        {
+            lines.Add("In-Reply-To: " + inReplyTo);
+            lines.Add("References: " + inReplyTo);
+        }
+        lines.AddRange(["MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "", text, ""]);
+        return string.Join("\r\n", lines);
+    }
+}

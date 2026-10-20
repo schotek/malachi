@@ -69,7 +69,7 @@ extension Integration {
                 v.applyIssue(info, account: account)
             }
             for d in self.windows.displays {
-                (d as? ConversationViewController)?.applyIssue(info, account: account)
+                (d as? ConversationHostViewController)?.applyIssue(info, account: account)
             }
         }
         issueActions.onBusy = { [weak self] account, key, busy in
@@ -78,7 +78,7 @@ extension Integration {
                 v.setIssueBusy(busy, account: account, key: key)
             }
             for d in self.windows.displays {
-                (d as? ConversationViewController)?.setIssueBusy(busy, account: account, key: key)
+                (d as? ConversationHostViewController)?.setIssueBusy(busy, account: account, key: key)
             }
         }
         // The hook keeps the controller alive with the application.

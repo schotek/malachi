@@ -2731,7 +2731,10 @@ tested against the fake daemon. The app is thin over them:
   while a search shows its flat results) shows the whole conversation in
   the reading pane (`ReaderHub`: `ReaderController.LeaveForConversation`
   lets go of the single message, `ConversationController.Show` of the
-  row); any other row clears it. `ConversationView` lays out Core's
+  row); any other row clears it. `ConversationView` is the host of the
+  page (since the chat layout, 2026-10-17: a fixed strip above two layouts
+  of the same conversation, "The chat layout" below); the timeline, which
+  was all of it before, is `ConversationTimelineView` and lays out Core's
   `ConversationModel`: the issue card once on top, then
   `ConversationLayout.DisplayOrder` (what opened the conversation, folded
   to its header and a preview while more follows, then the rest newest
@@ -2784,6 +2787,177 @@ API's JSON context, which does not know them, and a reload kept a
 conversation's members when only its issue had moved (a status change
 with the events off), in all three clients (`sameShape`). Not walked: a
 real Jira Cloud site (the owner's, with a token they enter).
+
+#### The chat layout (2026-10-17)
+
+The conversation has a second layout beside the timeline above: the chat
+(`docs/plans/chat-view.md`, D1-D17, the owner's decisions). Others' messages
+are bubbles on the left, the user's own on the right (`Item.Mine` or
+`Item.Sent`: a reply sent from another identity of the user stands on the
+right too), oldest first from the top, open at the end; the drafts come last
+on the right, an issue's events and the row of older messages are centred
+rows without a bubble. A bubble is plain text only (D3): the unread dot of
+someone else's message, the sender, a paperclip pill, the Jira badges, the
+date, and under them the message's text as the daemon derived it, with the
+quoted history cut (`message.body` with `trimQuoted`); no buttons, chips,
+web view, fold arrow or link, and the text cannot be selected (D15), so that
+a double tap anywhere in a bubble opens the message in a window of its own
+and a draft in the compose window (`AfterRelease`, as the timeline's card
+headers). The timeline is unchanged and stays the default. Written after
+the macOS client (which the owner passed in gate B1) and GTK (G1-G2), the
+Go `ui/internal/conversation/chat.go` and the plan's §7 being the
+reference; the rules the Go package leaves to its clients are Swift-first
+(`ConversationChatBody.swift`, `ConversationLayout.swift`).
+
+- **Core** (`Malachi.Core/Model/`, port of `chat.go` and
+  `MalachiCore/Model/ConversationChat.swift`): `ChatSide`, `ChatRowKind` and
+  `ChatRow` (one type per file, §3.1) and `Conversation.Chat.cs`
+  (`ChatRows`, `ChatScrollTo`, `BubbleText` over `Board.CleanBlock` with the
+  drafts' 64 KiB cap, `ChatToggleLabel`, `ChatToggleTooltip`, the four msgids
+  of the plan; the two toggle texts and their tooltips are no longer in
+  `windows/parity-exclusions.txt`). Swift-first, ported from
+  `ConversationChatBody.swift`: `Conversation.ChatBody.cs` (`ChatBody` picks
+  the variant of a loaded body without the quoted history, whether or not the
+  user revealed it on the timeline; `BubbleBodyFor` gives `BubbleBody`, the
+  snippet as a dimmed placeholder until the body or its error is there, the
+  cards' texts for a body that is on its way, too large, unreadable or empty;
+  `BubbleMonospace` keeps the plain-text font setting to bodies that are
+  plain text; `BubbleAttachmentBadge` gives `BubbleAttachments` `None`,
+  `Some` or `Count(n)`: the pill from the first moment when the summary has
+  attachments, the number of the timeline's chips once `message.get`
+  answered, whatever the summary says), `BubbleBody.cs` and
+  `BubbleAttachments.cs` (the Swift enums with associated values as closed
+  record hierarchies), `ConversationLayout.Chat.cs` (`ChatGap` = the larger
+  of 24 and a fifth of the column, `ChatBubbleMax` = the column less the
+  avatar's gutter and the gap, `ChatColumn`, `ChatCompactDates`,
+  `ChatAtEnd`, `ChatEndTop`, `ChatResizeFor`) and
+  `ConversationLayout.ChatResize.cs` (the `ChatResize` record; the Swift function
+  `chatResize` is `ChatResizeFor` because the type took its name, as
+  `bubbleBody` is `BubbleBodyFor`). The setting is `conversation-chat-layout`
+  (`SettingsKey.ConversationChatLayout`, `SettingsStore.ConversationChatLayout`,
+  bool, off; the 44th key, `SettingsTests` counts 44), without a row in
+  Preferences: the toggle is the interface. `IconGlyphs` maps `malachi-chat`
+  to E8F2 (ChatBubbles).
+- **The host** (`Reader/Conversation/ConversationView.xaml(.cs)`, still the
+  class `ReaderHub` and `MessageView` hold, so their callers did not
+  change; port of GTK's `conversation_host.go` and `conversation_fanout.go`
+  and of macOS's `ConversationHostViewController`). A two-row `Grid`: row 0
+  the strip, row 1 both layouts (`Layouts`), over them the status caption of
+  the link under the pointer and the one spinner of the members loading
+  (GTK's single spinner; macOS has one per layout). The strip does not
+  scroll (D8), keeps to the column of the cards (`MaxWidth` 900, padding
+  16,8,16,6) and has at its trailing end *Collapse All / Expand All*
+  (`FoldAllButton`, the timeline's only, offered while it shows and two
+  cards or more fold) and the toggle `ChatToggle` (`ToggleButton` with the
+  chat glyph and the name of the layout a click shows, *Show as Chat* or
+  *Show as Thread*; its tooltip, help text and accessible name follow the
+  state). The toggle only writes the setting; the layout follows the
+  setting's `OnChange`, not the click, so a change from elsewhere switches
+  too (`ShowLayout`). The host is the single subscriber of the controller's
+  multicast `Changed` and `EntryLoaded`: every change goes to both layouts,
+  which act on it at once while shown and catch up when shown again; the
+  news of a body (`EntryLoaded`) goes to the layout shown, which renders
+  every body held when it is shown. Only the host trims the controller's
+  bodies (`ConversationController.Trim`), and only with the near set of the
+  layout shown (`NearChanged` of either, filtered by `chatShown`). Marking
+  read is the list controller's, as before. Each layout has its own issue
+  card, driven by `ConversationIssueBox` over the existing `IssueCardView`
+  (the timeline's beside its gutter, the chat's across the column), and the
+  busy state and the refreshed issue of a transition go to both
+  (`IssueBusyChanged`, `ApplyIssue`); *Change Status* from the menus pops
+  up the card of the layout shown (`OpenStatusMenu`), `ShowLoaded`,
+  `RefreshBars` and `RefreshChips` of `ReaderHub` reach the host, and Space
+  and Shift+Space page the layout shown (`PageBy`). `ConversationGroupPeer`
+  is a Windows-only automation peer, so that the layouts (panes) and the
+  bubbles (groups) have their `AutomationId`.
+- **The timeline** (`ConversationTimelineView.xaml(.cs)`): the former
+  `ConversationView`, moved out whole, without the strip, the spinner and
+  the status label (`HeadViews` is 1 now: the issue card; Collapse All left
+  the column for the strip, the timeline reports its offer with
+  `FoldAllChanged`). Hidden, its cards let go of their web views and
+  nothing is measured or fetched, its folds and revealed quoted text
+  outlive a visit to the chat (D10), and it trims its pool of card views to
+  the two idle ones (`IdleWebViews`); `ConversationCard` and
+  `ConversationDraftView` only changed the type of their `pane`.
+- **The chat** (`ConversationChatView.xaml(.cs)`): the timeline's column
+  (900 at most, the same insets) without the gutter and the line, the issue
+  card on top, then the rows built by `Conversation.ChatRows`:
+  `ConversationChatRow` (the avatar on the bubble's outer side, top aligned,
+  then the bubble at that edge, as wide as its text up to
+  `ChatBubbleMax` of the column, the rest empty) and
+  `ConversationChatCenterRow` (the issue's lines, then "sender · date" as on
+  macOS, or the sentence of the older messages). The chat opens at the
+  end (`ChatEndTop`), stays there while the viewport shows the end and the
+  user has not scrolled away (the wheel, a press, a touch, Space), as bodies
+  and members arrive; scrolled up, the row under the viewport's top keeps
+  its place; a change of the pane's size keeps the end when it showed
+  before, else the row read (`ChatResizeFor`). The `ScrollViewer`'s own
+  anchoring follows the same state, so it never pulls against those moves:
+  `VerticalAnchorRatio` is 1 (the viewport's bottom) while the end is
+  pinned or in view (set when the chat opens and after each measure,
+  `UpdateNear`), and 0 (the viewport's top, the row the code keeps) as soon
+  as the user scrolls away (`Unpin`, `PageBy`). Bodies are asked for only for
+  the bubbles near the viewport (`ConversationLayout.LiveCards` over the
+  rows' spans, two heights of the view, no web views), as the timeline
+  asks for its cards, and `NeedsBody(id, details)` also asks for
+  `message.get` where the summary has attachments, for the pill's number.
+  The wheel scrolls the column; nothing in a row takes the keyboard.
+- **A bubble** (`ConversationBubbleView.cs`; macOS `ConversationBubbleView.swift`,
+  GTK `chatBubble`): a card on the pane's grey, rounded; the user's own
+  tinted with the accent colour (about 12 %, `ConversationMineBubbleTintBrush`
+  and `ConversationMineBubbleBorderBrush` in `ConversationStyles.xaml`, with a
+  light, a dark and a high-contrast variant, which has no tint and a border
+  of the system highlight), also for a draft. The header: the unread dot,
+  the sender (cut first when the row is too narrow), the paperclip pill with
+  the count, the *Draft* and *Internal* badges, who relayed it and *Edited*
+  (`IssuePills`), the date (the list's short form in a narrow column, the
+  full one as tooltip); the body a `TextBlock` with
+  `IsTextSelectionEnabled` false, the snippet dimmed until the body is
+  there. `AutomationId` `ConversationBubble:<message id>` and
+  `ConversationDraftBubble:<draft id>`; the bubble is one automation
+  group named by its sender and date. The type names are the Swift ones
+  (`ConversationChatRow`, `ConversationChatCenterRow`,
+  `ConversationBubbleView`) because Core already has `ChatRow`.
+- **Tests, written beside the code and not run**:
+  `Malachi.Core.Tests/Model/ConversationChatTests.cs` (the Go `chat_test.go`
+  and the Swift `ConversationChatTests`: rows and sides for mail, Jira with
+  `Mine` and `via`, events, truncated, drafts last, `BubbleText` cases and
+  its cap, the texts and that the toggle's msgids are the template's,
+  `ChatBody`, `BubbleBodyFor`, `BubbleAttachmentBadge`, `BubbleMonospace`,
+  `ChatAtEnd`, `ChatCompactDates`, `ChatResizeFor`), the chat's cases in
+  `ConversationLayoutTests` (`ChatBubbleKeepsAnEmptySide`,
+  `ChatGapIsContinuousAndTheBubbleNeverNarrower`), `SettingsTests` (44 keys,
+  `GschemaCoverageTests`, `StringsCheckTests`), and the opt-in UI smoke test
+  `ConversationChatSmokeTests` over `MALACHI_DEVMAIL`
+  (`ConversationChatFixture`: devmail with a two-message conversation, the
+  user's reply in the Inbox too, the app started with `group-by-conversation`
+  and `conversation-chat-layout` on; the folded row shows two bubbles, one
+  on each side of the column's middle and no timeline, and the toggle shows
+  the timeline).
+
+**Verification status (2026-10-17).** Nothing under `windows/` for the chat
+has been compiled or run: it was written on a Mac without `dotnet`, from
+the macOS client and the GTK port, and read through by a reviewer. Pending
+on Windows: `build.ps1 app`, `build.ps1 test` and `build.ps1 lint` (the
+Core tests above, the layout and settings tests, `StringsCheckTests` for the
+four msgids now used, `GschemaCoverageTests`, the SPDX headers), the UI smoke
+test with `MALACHI_DEVMAIL`, and a manual walk through, then gate B3. To
+check by hand: the toggle's look in the light, dark and high-contrast
+themes (the accent tint when checked); the chat opening at the end and
+staying there as bodies arrive; the reading position kept when scrolled up
+and a new member or body comes; resizing the pane (the end kept, the short
+dates in a narrow column); Space and Shift+Space from the list in both
+layouts; a double tap on a bubble (the message's own window, which comes up
+once the press is released) and on a draft bubble (the compose window); a
+Jira conversation's issue card and *Change Status* in both layouts; the
+pill's number after `message.get`; switching back to the timeline keeps its
+folds and revealed quoted text; Shift+F10 does nothing on a bubble (D12);
+125 % display scale. Guesses of the written-blind code that deserve a look:
+that the state-driven `VerticalAnchorRatio` keeps a body that arrives from
+moving what is read (at the end and scrolled up), that `DoubleTapped` on
+the `UserControl` reaches a tap on the `TextBlock`s of the bubble, and that
+the toggle's checked brushes are taken from the `ToggleButton`'s own
+resources.
 
 ### 11.8 The Board
 
@@ -3189,7 +3363,9 @@ no warning and `build.ps1 app` has published the app several times;
 `build.ps1 lint` passes (`dotnet format --verify-no-changes` is clean and
 the conventions tests, 27/27, `StringsCheckTests` and `GschemaCoverageTests`
 among them; `windows/parity-exclusions.txt` has no "calendar: Windows port
-pending" line left, and `SettingsTests` counts 43 schema keys); the Core
+pending" line left, and `SettingsTests` counts 44 schema keys: 43 when the
+calendar was verified, the 44th is the chat's `conversation-chat-layout`,
+§11.7); the Core
 suite passes (7,433 tests, 9 skipped as always; about 614 in
 `Malachi.Core.Tests.Calendars`, the rest of the calendar's in
 `Controllers/Calendar*Tests` and `Boards/CalendarModeTests`); and the

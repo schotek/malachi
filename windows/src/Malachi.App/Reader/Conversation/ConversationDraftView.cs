@@ -37,7 +37,7 @@ namespace Malachi.App.Reader.Conversation;
 /// <summary>One draft card of the conversation view.</summary>
 internal sealed partial class ConversationDraftView : UserControl
 {
-    private readonly ConversationView pane;
+    private readonly ConversationTimelineView pane;
     private readonly Grid header;
     private readonly StackPanel buttons;
     private readonly TextBlock senderLabel;
@@ -46,7 +46,7 @@ internal sealed partial class ConversationDraftView : UserControl
     private readonly TextBlock text;
 
     /// <summary>newConvDraftCard: the card of <paramref name="card"/> in <paramref name="pane"/>.</summary>
-    public ConversationDraftView(ConversationView pane, ConversationDraftCard card, Func<string, Style> look)
+    public ConversationDraftView(ConversationTimelineView pane, ConversationDraftCard card, Func<string, Style> look)
     {
         this.pane = pane;
         Card = card;

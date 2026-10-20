@@ -33,6 +33,7 @@ ui/internal/jira/settings.go
 ui/internal/jira/transitions.go
 ui/internal/integrations/integrations.go
 ui/internal/crm/text.go
+ui/internal/conversation/chat.go
 ui/internal/conversation/conversation.go
 ui/internal/conversation/drafts.go
 ui/internal/conversation/fold.go

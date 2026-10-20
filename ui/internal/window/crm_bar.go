@@ -167,12 +167,13 @@ func (c *convCard) renderCrm(m *api.Message) {
 	c.mv.crmBar.show(rec, c.body)
 }
 
-// conversationRefreshCrm redraws the bars of the conversation's cards.
+// conversationRefreshCrm redraws the bars of the conversation's cards
+// (the timeline's; the chat's bubbles carry no bars).
 func (w *Window) conversationRefreshCrm() {
-	if w.conv == nil {
+	if w.conv == nil || w.conv.timeline == nil {
 		return
 	}
-	for id, c := range w.conv.cards {
+	for id, c := range w.conv.timeline.cards {
 		if c.folded {
 			continue
 		}

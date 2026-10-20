@@ -26,6 +26,32 @@ enum ConversationTint {
         highContrast(view) ? .secondaryLabelColor : .tertiaryLabelColor
     }
 
+    /// How much of the accent colour tints the user's own chat bubble over
+    /// a card's background (docs/plans/chat-view.md D6); a little more with
+    /// increased contrast.
+    private static let mineTint: CGFloat = 0.12
+    private static let mineTintContrasted: CGFloat = 0.2
+
+    /// The background of the user's own chat bubble (and of a draft's): a
+    /// card's background with the accent colour over it, resolved for how
+    /// `view` is shown (light, dark, increased contrast). Call it where the
+    /// layer is painted (`updateLayer`).
+    static func mineFill(in view: NSView) -> NSColor {
+        var out = cardFill
+        let share = highContrast(view) ? mineTintContrasted : mineTint
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            guard let base = cardFill.usingColorSpace(.sRGB),
+                  let accent = NSColor.controlAccentColor.usingColorSpace(.sRGB),
+                  let mixed = base.blended(withFraction: share, of: accent) else { return }
+            out = mixed
+        }
+        return out
+    }
+
+    /// The border of the user's own chat bubble: the accent colour, as the
+    /// user's avatar is tinted with it.
+    static var mineBorder: NSColor { .controlAccentColor }
+
     private static let contrasted: [NSAppearance.Name] = [
         .accessibilityHighContrastAqua, .accessibilityHighContrastDarkAqua,
         .accessibilityHighContrastVibrantLight, .accessibilityHighContrastVibrantDark,

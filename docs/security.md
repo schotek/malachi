@@ -200,6 +200,11 @@ view keeps JavaScript off entirely. A composed document of the whole
 conversation was rejected for the reason given for macOS below: in a
 card the headers, badges and event rows are native widgets with plain
 text, and the body is one message's output.
+The conversation's chat layout (`ui/internal/window/conversation_chat*.go`)
+has no web view at all: a bubble shows only the daemon's plain `text` of
+`message.body` (asked for with `trimQuoted`) in a `GtkLabel` with markup
+off (`SetUseMarkup(false)`) that cannot be selected, with no link handling,
+so no HTML reaches it; the timeline above is unchanged.
 
 The GTK board's conversation cards use the same `htmlview.Card` and
 height governor as Mail. Only an open card fetches its message's body
@@ -289,6 +294,12 @@ for WKWebView, since nothing of the WebKitGTK configuration carries over:
   four alive at a time, the sender and the date native text, links
   through the same `openLink` as Mail's; every other card shows the
   plain-text excerpt of `board.get` through `stringValue`.
+  The conversation's chat layout (`MessageView/ConversationChat*.swift`,
+  `ConversationBubbleView.swift`) has no web view at all: a bubble shows
+  only the daemon's plain `text` of `message.body` (asked for with
+  `trimQuoted`) through `stringValue` in a native label that cannot be
+  selected, with no link handling and no context menu, so no HTML reaches
+  it; the timeline above is unchanged.
 
 Layer 2 on Windows (`windows/src/Malachi.App/WebViews`, the rules in
 `Malachi.Core.Presentation`; [windows-port.md §6](windows-port.md#6-the-webview2-security-layer))

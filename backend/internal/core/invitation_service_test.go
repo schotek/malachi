@@ -14,6 +14,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	_ "time/tzdata" // Europe/Prague on every platform, as in cmd/malachid
 
 	"github.com/schotek/malachi/backend/internal/caldav/caldavtest"
 	"github.com/schotek/malachi/backend/internal/calsync"
@@ -336,7 +337,19 @@ func TestInvitationMarksTheBoardDirty(t *testing.T) {
 
 // The card of message.get: static fields, conflicts and the day strip
 // from a stored occurrence, targets, the reply path.
+//
+// The day strip is the working hours of the daemon's zone, here Prague
+// (the invitation starts at 10:00 there, two hours into the
+// strip); on a machine in UTC, the hosted Windows runner's, the strip would
+// start at 08:00 UTC, the invitation's own start.
 func TestInvitationCard(t *testing.T) {
+	prague, zerr := time.LoadLocation("Europe/Prague")
+	if zerr != nil {
+		t.Fatal(zerr)
+	}
+	was := time.Local
+	time.Local = prague
+	t.Cleanup(func() { time.Local = was })
 	x := newInvBox(t)
 	x.addCalDAV(nil)
 	start := time.Date(2026, 10, 22, 8, 30, 0, 0, time.UTC)

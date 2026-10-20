@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- The chat layout of a conversation (ui/internal/window/conversation_host.go):
+       a bubble on the left with its tail at the bottom left, and behind it
+       a smaller one on the right with its tail at the bottom right. -->
+  <path fill="#222222" d="M 2.5 1 L 8.5 1 Q 10 1 10 2.5 L 10 6.5 Q 10 8 8.5 8 L 4.5 8 L 2 10 L 2 7.9 Q 1 7.6 1 6.5 L 1 2.5 Q 1 1 2.5 1 Z"/>
+  <path fill="#222222" d="M 11 5 L 13.5 5 Q 15 5 15 6.5 L 15 10.5 Q 15 11.6 14 11.9 L 14 14 L 11.5 12 L 7.5 12 Q 6 12 6 10.5 L 6 9.5 L 8.5 9.5 Q 11 9.5 11 7 Z"/>
+</svg>

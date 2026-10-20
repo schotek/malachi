@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-19 19:32+0000\n"
+"POT-Creation-Date: 2026-10-20 09:28+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -1524,7 +1524,7 @@ msgid "Open in New Window"
 msgstr "Otevřít v novém okně"
 
 #: ui/internal/contextmenu/text.go:52 ui/internal/conversation/drafts.go:108
-#: ui/internal/calendar/detail.go:256 ui/data/ui/window.ui:586
+#: ui/internal/calendar/detail.go:256 ui/data/ui/window.ui:588
 msgid "Edit"
 msgstr "Upravit"
 
@@ -1551,13 +1551,13 @@ msgstr "Odpovědět všem"
 msgid "Forward"
 msgstr "Přeposlat"
 
-#: ui/internal/contextmenu/text.go:63 ui/data/ui/message_window.ui:566
-#: ui/data/ui/window.ui:1136
+#: ui/internal/contextmenu/text.go:63 ui/data/ui/message_window.ui:568
+#: ui/data/ui/window.ui:1138
 msgid "Mark as _Read"
 msgstr "Označit jako _přečtené"
 
-#: ui/internal/contextmenu/text.go:65 ui/data/ui/message_window.ui:562
-#: ui/data/ui/window.ui:1132
+#: ui/internal/contextmenu/text.go:65 ui/data/ui/message_window.ui:564
+#: ui/data/ui/window.ui:1134
 msgid "Mark as _Unread"
 msgstr "Označit jako _nepřečtené"
 
@@ -1573,15 +1573,15 @@ msgstr "Přidat hvězdičku"
 
 #. TRANSLATORS: menu of the status changes a Jira issue allows.
 #: ui/internal/contextmenu/text.go:72 ui/internal/jira/transitions.go:87
-#: ui/data/ui/message_window.ui:582 ui/data/ui/window.ui:1152
+#: ui/data/ui/message_window.ui:584 ui/data/ui/window.ui:1154
 msgid "Change Status"
 msgstr "Změnit stav"
 
 #. TRANSLATORS: After Answering, Move the Invitation Message: to the
 #. archive.
 #: ui/internal/contextmenu/text.go:74 ui/internal/board/text.go:795
-#: ui/internal/calendar/preferences.go:318 ui/data/ui/message_window.ui:130
-#: ui/data/ui/window.ui:572
+#: ui/internal/calendar/preferences.go:318 ui/data/ui/message_window.ui:132
+#: ui/data/ui/window.ui:574
 msgid "Archive"
 msgstr "Archivovat"
 
@@ -1590,8 +1590,8 @@ msgstr "Archivovat"
 msgid "Move To"
 msgstr "Přesunout do"
 
-#: ui/internal/contextmenu/text.go:78 ui/data/ui/message_window.ui:556
-#: ui/data/ui/window.ui:1126
+#: ui/internal/contextmenu/text.go:78 ui/data/ui/message_window.ui:558
+#: ui/data/ui/window.ui:1128
 msgid "Mark as Junk"
 msgstr "Označit jako nevyžádanou"
 
@@ -1600,7 +1600,7 @@ msgid "Cancel Sending"
 msgstr "Zrušit odeslání"
 
 #: ui/internal/contextmenu/text.go:83 ui/internal/window/outbox.go:242
-#: ui/data/ui/message_window.ui:123 ui/data/ui/window.ui:564
+#: ui/data/ui/message_window.ui:125 ui/data/ui/window.ui:566
 msgid "Move to Trash"
 msgstr "Přesunout do koše"
 
@@ -1858,7 +1858,7 @@ msgid "The Jira site rejected the token of %s"
 msgstr "Web Jira odmítl token účtu %s"
 
 #. TRANSLATORS: menu item; "Jira" is a product name.
-#: ui/internal/jira/wizard.go:78 ui/data/ui/window.ui:795
+#: ui/internal/jira/wizard.go:78 ui/data/ui/window.ui:797
 msgid "Add _Jira Account…"
 msgstr "Přidat účet _Jira…"
 
@@ -2632,6 +2632,28 @@ msgstr ""
 #: ui/internal/crm/text.go:483
 msgid "Malachi Mail connects to eWay-CRM over https only."
 msgstr "Malachi Mail se k eWay-CRM připojuje jen přes https."
+
+#. TRANSLATORS: a toggle button above a conversation in the reading pane, off; a click shows the messages as chat bubbles.
+#: ui/internal/conversation/chat.go:151
+msgid "Show as Chat"
+msgstr "Zobrazit jako chat"
+
+#. TRANSLATORS: the same toggle button above a conversation, on (the messages show as chat bubbles); a click goes back to the conversation as cards.
+#: ui/internal/conversation/chat.go:154
+msgid "Show as Thread"
+msgstr "Zobrazit jako vlákno"
+
+#. TRANSLATORS: the tooltip of the "Show as Chat" toggle above a conversation.
+#: ui/internal/conversation/chat.go:163
+msgid ""
+"Others on the left, your messages on the right; double-click opens the "
+"message"
+msgstr "Ostatní vlevo, vaše zprávy vpravo; dvojklik otevře zprávu"
+
+#. TRANSLATORS: the tooltip of the "Show as Thread" toggle above a conversation shown as chat bubbles.
+#: ui/internal/conversation/chat.go:166
+msgid "Back to the timeline: the messages as cards, newest first"
+msgstr "Zpět na časovou osu: zprávy jako karty, nejnovější první"
 
 #. TRANSLATORS: at the top of a conversation in the reading pane; only its newest messages are shown.
 #: ui/internal/conversation/conversation.go:380
@@ -6280,7 +6302,7 @@ msgstr "Adresa zkopírována"
 msgid "_Copy Address"
 msgstr "_Kopírovat adresu"
 
-#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:1104
+#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:1106
 msgid "_New Message"
 msgstr "_Nová zpráva"
 
@@ -6409,27 +6431,22 @@ msgid "Preparing the reply"
 msgstr "Příprava odpovědi"
 
 #: ui/internal/window/conversation_card.go:562 ui/data/ui/compose_pane.ui:27
-#: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:342
-#: ui/data/ui/window.ui:854
+#: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:344
+#: ui/data/ui/window.ui:856
 msgid "From"
 msgstr "Od"
 
 #: ui/internal/window/conversation_card.go:562 ui/data/ui/compose_pane.ui:55
-#: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:368
-#: ui/data/ui/window.ui:880
+#: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:370
+#: ui/data/ui/window.ui:882
 msgid "To"
 msgstr "Komu"
 
 #: ui/internal/window/conversation_card.go:562 ui/data/ui/compose_pane.ui:101
-#: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:396
-#: ui/data/ui/window.ui:908
+#: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:398
+#: ui/data/ui/window.ui:910
 msgid "Cc"
 msgstr "Kopie"
-
-#: ui/internal/window/conversation_card.go:682
-#: ui/internal/window/message_view.go:523
-msgid "Loading the message"
-msgstr "Načtení zprávy"
 
 #: ui/internal/window/conversation_card.go:737
 #: ui/internal/window/message_view.go:321
@@ -6441,25 +6458,30 @@ msgstr ""
 "text."
 
 #: ui/internal/window/conversation_card.go:776 ui/data/ui/embedded_window.ui:61
-#: ui/data/ui/message_window.ui:257 ui/data/ui/message_window.ui:572
-#: ui/data/ui/window.ui:708 ui/data/ui/window.ui:1142
+#: ui/data/ui/message_window.ui:259 ui/data/ui/message_window.ui:574
+#: ui/data/ui/window.ui:710 ui/data/ui/window.ui:1144
 msgid "Load _Images"
 msgstr "Načíst _obrázky"
 
-#: ui/internal/window/conversation_card.go:777 ui/data/ui/message_window.ui:263
-#: ui/data/ui/window.ui:714
+#: ui/internal/window/conversation_card.go:777 ui/data/ui/message_window.ui:265
+#: ui/data/ui/window.ui:716
 msgid "Always From This _Sender"
 msgstr "Vždy od tohoto _odesílatele"
 
-#: ui/internal/window/conversation_card.go:778 ui/data/ui/message_window.ui:265
-#: ui/data/ui/window.ui:716
+#: ui/internal/window/conversation_card.go:778 ui/data/ui/message_window.ui:267
+#: ui/data/ui/window.ui:718
 msgid "Load remote images now and whenever this sender writes"
 msgstr "Načíst vzdálené obrázky teď a vždy, když tento odesílatel napíše"
 
-#: ui/internal/window/conversation_card.go:798 ui/data/ui/message_window.ui:294
-#: ui/data/ui/window.ui:745
+#: ui/internal/window/conversation_card.go:798 ui/data/ui/message_window.ui:296
+#: ui/data/ui/window.ui:747
 msgid "_Download Pictures"
 msgstr "_Stáhnout obrázky"
+
+#: ui/internal/window/conversation_card.go:984
+#: ui/internal/window/message_view.go:523
+msgid "Loading the message"
+msgstr "Načtení zprávy"
 
 #: ui/internal/window/drafts.go:75
 msgid "The draft has not been downloaded yet; try again in a moment"
@@ -6550,7 +6572,7 @@ msgstr[0] "%d nepřečtená z %d"
 msgstr[1] "%d nepřečtené z %d"
 msgstr[2] "%d nepřečtených z %d"
 
-#: ui/internal/window/folders.go:427 ui/data/ui/window.ui:774
+#: ui/internal/window/folders.go:427 ui/data/ui/window.ui:776
 msgid "No Accounts"
 msgstr "Žádné účty"
 
@@ -7389,8 +7411,8 @@ msgstr "Na střed"
 msgid "Right"
 msgstr "Vpravo"
 
-#: ui/data/ui/conversation_view.ui:77 ui/data/ui/embedded_window.ui:267
-#: ui/data/ui/message_window.ui:505 ui/data/ui/window.ui:1016
+#: ui/data/ui/conversation_view.ui:157 ui/data/ui/embedded_window.ui:267
+#: ui/data/ui/message_window.ui:507 ui/data/ui/window.ui:1018
 msgctxt "accessibility"
 msgid "Loading the message"
 msgstr "Načítání zprávy"
@@ -7403,7 +7425,7 @@ msgstr "Přiložená zpráva"
 msgid "Message"
 msgstr "Zpráva"
 
-#: ui/data/ui/message_window.ui:576 ui/data/ui/window.ui:1146
+#: ui/data/ui/message_window.ui:578 ui/data/ui/window.ui:1148
 msgid "Always Load Images From This _Sender"
 msgstr "Vždy načítat obrázky od tohoto _odesílatele"
 
@@ -7723,35 +7745,35 @@ msgstr "Nepřečtené"
 msgid "Load More"
 msgstr "Načíst další"
 
-#: ui/data/ui/window.ui:585
+#: ui/data/ui/window.ui:587
 msgid "This message is a draft"
 msgstr "Tato zpráva je koncept"
 
-#: ui/data/ui/window.ui:762
+#: ui/data/ui/window.ui:764
 msgid "No Message Selected"
 msgstr "Není vybrána žádná zpráva"
 
-#: ui/data/ui/window.ui:763
+#: ui/data/ui/window.ui:765
 msgid "Select a message to read it here."
 msgstr "Vyberte zprávu a přečtěte si ji zde."
 
-#: ui/data/ui/window.ui:775
+#: ui/data/ui/window.ui:777
 msgid "Add a mail account to start reading and sending mail."
 msgstr "Přidejte poštovní účet a začněte číst a posílat poštu."
 
-#: ui/data/ui/window.ui:783
+#: ui/data/ui/window.ui:785
 msgid "_Add Account…"
 msgstr "_Přidat účet…"
 
-#: ui/data/ui/window.ui:1110
+#: ui/data/ui/window.ui:1112
 msgid "_Preferences"
 msgstr "_Předvolby"
 
-#: ui/data/ui/window.ui:1114
+#: ui/data/ui/window.ui:1116
 msgid "_Keyboard Shortcuts"
 msgstr "_Klávesové zkratky"
 
-#: ui/data/ui/window.ui:1118
+#: ui/data/ui/window.ui:1120
 msgid "_About Malachi Mail"
 msgstr "_O aplikaci Malachi Mail"
 
@@ -7839,10 +7861,21 @@ msgstr ""
 "zprávy, které složka obsahuje."
 
 #: data/io.github.schotek.Malachi.gschema.xml:157
+msgid "Show conversations as a chat"
+msgstr "Zobrazovat konverzace jako chat"
+
+#: data/io.github.schotek.Malachi.gschema.xml:158
+msgid ""
+"Others' messages on the left, yours on the right, oldest first; off shows "
+"the timeline."
+msgstr ""
+"Zprávy ostatních vlevo, vaše vpravo, od nejstarší; vypnuto ukáže časovou osu."
+
+#: data/io.github.schotek.Malachi.gschema.xml:162
 msgid "Where a search looks"
 msgstr "Kde se hledá"
 
-#: data/io.github.schotek.Malachi.gschema.xml:158
+#: data/io.github.schotek.Malachi.gschema.xml:163
 msgid ""
 "The selected folder, every folder of its account, or every account; the last "
 "choice made in the search bar."
@@ -7850,27 +7883,27 @@ msgstr ""
 "Vybraná složka, všechny složky jejího účtu, nebo všechny účty; poslední "
 "volba v liště hledání."
 
-#: data/io.github.schotek.Malachi.gschema.xml:162
+#: data/io.github.schotek.Malachi.gschema.xml:167
 msgid "Show sender avatars in the message list"
 msgstr "Zobrazit avatary odesílatelů v seznamu zpráv"
 
-#: data/io.github.schotek.Malachi.gschema.xml:166
+#: data/io.github.schotek.Malachi.gschema.xml:171
 msgid "Draw avatars in neutral grey instead of per-sender colours"
 msgstr "Kreslit avatary neutrální šedou místo barvy pro každého odesílatele"
 
-#: data/io.github.schotek.Malachi.gschema.xml:170
+#: data/io.github.schotek.Malachi.gschema.xml:175
 msgid "Use a monospace font for plain-text message bodies"
 msgstr "Použít neproporcionální písmo pro těla zpráv v prostém textu"
 
-#: data/io.github.schotek.Malachi.gschema.xml:175
+#: data/io.github.schotek.Malachi.gschema.xml:180
 msgid "Message body text zoom in percent"
 msgstr "Přiblížení textu zprávy v procentech"
 
-#: data/io.github.schotek.Malachi.gschema.xml:181
+#: data/io.github.schotek.Malachi.gschema.xml:186
 msgid "Show the Assistant menu that hands mail to Claude"
 msgstr "Zobrazovat nabídku Asistent, která předává poštu do Claude"
 
-#: data/io.github.schotek.Malachi.gschema.xml:182
+#: data/io.github.schotek.Malachi.gschema.xml:187
 msgid ""
 "The menu opens Claude Desktop or Claude Code on this computer with a "
 "prepared question about the selected mail."
@@ -7878,11 +7911,11 @@ msgstr ""
 "Nabídka otevře Claude Desktop nebo Claude Code na tomto počítači s "
 "připraveným dotazem k vybrané poště."
 
-#: data/io.github.schotek.Malachi.gschema.xml:186
+#: data/io.github.schotek.Malachi.gschema.xml:191
 msgid "Where the Assistant menu opens Claude"
 msgstr "Kde nabídka Asistent otevírá Claude"
 
-#: data/io.github.schotek.Malachi.gschema.xml:187
+#: data/io.github.schotek.Malachi.gschema.xml:192
 msgid ""
 "Claude Desktop, Claude Code in a terminal, or the panel in the app; the last "
 "choice made in the Assistant menu or in the settings."
@@ -7890,19 +7923,19 @@ msgstr ""
 "Claude Desktop, Claude Code v terminálu, nebo panel v aplikaci; poslední "
 "volba v nabídce Asistent nebo v předvolbách."
 
-#: data/io.github.schotek.Malachi.gschema.xml:191
+#: data/io.github.schotek.Malachi.gschema.xml:196
 msgid "The model the assistant panel uses"
 msgstr "Model, který používá panel asistenta"
 
-#: data/io.github.schotek.Malachi.gschema.xml:192
+#: data/io.github.schotek.Malachi.gschema.xml:197
 msgid "Sonnet, Haiku or Opus, passed to Claude Code."
 msgstr "Sonnet, Haiku nebo Opus, předaný Claude Code."
 
-#: data/io.github.schotek.Malachi.gschema.xml:196
+#: data/io.github.schotek.Malachi.gschema.xml:201
 msgid "Where Claude Code is"
 msgstr "Kde je Claude Code"
 
-#: data/io.github.schotek.Malachi.gschema.xml:197
+#: data/io.github.schotek.Malachi.gschema.xml:202
 msgid ""
 "The claude executable the assistant panel runs; empty looks in the usual "
 "places."
@@ -7910,64 +7943,64 @@ msgstr ""
 "Spustitelný soubor claude, který panel asistenta spouští; prázdné hledá na "
 "obvyklých místech."
 
-#: data/io.github.schotek.Malachi.gschema.xml:201
+#: data/io.github.schotek.Malachi.gschema.xml:206
 msgid "The assistant panel may send mail to Claude"
 msgstr "Panel asistenta smí posílat poštu do Claude"
 
-#: data/io.github.schotek.Malachi.gschema.xml:202
+#: data/io.github.schotek.Malachi.gschema.xml:207
 msgid "Set when the user allowed it the first time."
 msgstr "Nastaví se, když to uživatel poprvé povolí."
 
-#: data/io.github.schotek.Malachi.gschema.xml:207
+#: data/io.github.schotek.Malachi.gschema.xml:212
 msgid "The provider of the assistant in the app"
 msgstr "Poskytovatel asistenta v aplikaci"
 
-#: data/io.github.schotek.Malachi.gschema.xml:208
+#: data/io.github.schotek.Malachi.gschema.xml:213
 msgid "The in-app provider; external Claude hand-off is independent."
 msgstr "Poskytovatel v aplikaci; předání do externího Claude je nezávislé."
 
-#: data/io.github.schotek.Malachi.gschema.xml:212
+#: data/io.github.schotek.Malachi.gschema.xml:217
 msgid "Where Codex is"
 msgstr "Kde je Codex"
 
-#: data/io.github.schotek.Malachi.gschema.xml:213
+#: data/io.github.schotek.Malachi.gschema.xml:218
 msgid "The native Codex executable; empty looks in the usual places."
 msgstr "Nativní spustitelný soubor Codexu; prázdné hledá na obvyklých místech."
 
-#: data/io.github.schotek.Malachi.gschema.xml:217
+#: data/io.github.schotek.Malachi.gschema.xml:222
 msgid "The model the ChatGPT provider uses"
 msgstr "Model, který používá poskytovatel ChatGPT"
 
-#: data/io.github.schotek.Malachi.gschema.xml:218
-#: data/io.github.schotek.Malachi.gschema.xml:229
+#: data/io.github.schotek.Malachi.gschema.xml:223
+#: data/io.github.schotek.Malachi.gschema.xml:234
 msgid "Empty uses the provider's model default."
 msgstr "Prázdné používá výchozí model poskytovatele."
 
-#: data/io.github.schotek.Malachi.gschema.xml:223
+#: data/io.github.schotek.Malachi.gschema.xml:228
 msgid "The accepted ChatGPT mail consent version"
 msgstr "Přijatá verze souhlasu s odesíláním pošty do ChatGPT"
 
-#: data/io.github.schotek.Malachi.gschema.xml:224
+#: data/io.github.schotek.Malachi.gschema.xml:229
 msgid "Zero means no permission to send mail to OpenAI."
 msgstr "Nula znamená, že odesílání pošty do OpenAI není povoleno."
 
-#: data/io.github.schotek.Malachi.gschema.xml:228
+#: data/io.github.schotek.Malachi.gschema.xml:233
 msgid "The model ChatGPT uses for the board"
 msgstr "Model, který ChatGPT používá pro nástěnku"
 
-#: data/io.github.schotek.Malachi.gschema.xml:234
+#: data/io.github.schotek.Malachi.gschema.xml:239
 msgid "The accepted OpenAI board consent version"
 msgstr "Přijatá verze souhlasu pro nástěnku v OpenAI"
 
-#: data/io.github.schotek.Malachi.gschema.xml:235
+#: data/io.github.schotek.Malachi.gschema.xml:240
 msgid "Zero means no permission to send board mail to OpenAI."
 msgstr "Nula znamená, že odesílání pošty z nástěnky do OpenAI není povoleno."
 
-#: data/io.github.schotek.Malachi.gschema.xml:242
+#: data/io.github.schotek.Malachi.gschema.xml:247
 msgid "The style the Board opens in"
 msgstr "Styl, ve kterém se Nástěnka otevírá"
 
-#: data/io.github.schotek.Malachi.gschema.xml:243
+#: data/io.github.schotek.Malachi.gschema.xml:248
 msgid ""
 "Last Used (the style in board-last-style), List, Columns or Today; a changed "
 "choice applies the next time the Board is shown, unless a style was already "
@@ -7977,11 +8010,11 @@ msgstr ""
 "změněná volba se projeví při dalším zobrazení Nástěnky, pokud v tomto běhu "
 "už nebyl zvolen styl, který pak platí do ukončení aplikace."
 
-#: data/io.github.schotek.Malachi.gschema.xml:247
+#: data/io.github.schotek.Malachi.gschema.xml:252
 msgid "The style the Board was shown in last"
 msgstr "Styl, ve kterém byla Nástěnka zobrazena naposledy"
 
-#: data/io.github.schotek.Malachi.gschema.xml:248
+#: data/io.github.schotek.Malachi.gschema.xml:253
 msgid ""
 "Written whenever the user changes the Board's style; read when board-default-"
 "style is Last Used."
@@ -7989,11 +8022,11 @@ msgstr ""
 "Zapisuje se při každé změně stylu Nástěnky; čte se, když je board-default-"
 "style Naposledy použité."
 
-#: data/io.github.schotek.Malachi.gschema.xml:252
+#: data/io.github.schotek.Malachi.gschema.xml:257
 msgid "What the main window shows at launch"
 msgstr "Co hlavní okno ukáže po spuštění"
 
-#: data/io.github.schotek.Malachi.gschema.xml:253
+#: data/io.github.schotek.Malachi.gschema.xml:258
 msgid ""
 "Mail, the Board, the Calendar, or the mode shown last (board-last-mode). The "
 "Board is replaced by Mail while it is turned off."
@@ -8001,11 +8034,11 @@ msgstr ""
 "Poštu, Nástěnku, Kalendář, nebo naposledy zobrazený režim (board-last-mode). "
 "Dokud je Nástěnka vypnutá, nahrazuje ji Pošta."
 
-#: data/io.github.schotek.Malachi.gschema.xml:257
+#: data/io.github.schotek.Malachi.gschema.xml:262
 msgid "The mode the main window showed last"
 msgstr "Režim, který hlavní okno ukazovalo naposledy"
 
-#: data/io.github.schotek.Malachi.gschema.xml:258
+#: data/io.github.schotek.Malachi.gschema.xml:263
 msgid ""
 "\"mail\", \"board\" or \"calendar\", written whenever the mode switches; "
 "read when board-start-mode is Last."
@@ -8013,11 +8046,11 @@ msgstr ""
 "„mail“, „board“ nebo „calendar“, zapisuje se při každém přepnutí režimu; čte "
 "se, když je board-start-mode Last."
 
-#: data/io.github.schotek.Malachi.gschema.xml:262
+#: data/io.github.schotek.Malachi.gschema.xml:267
 msgid "The account the Board is filtered to"
 msgstr "Účet, na který je Nástěnka filtrovaná"
 
-#: data/io.github.schotek.Malachi.gschema.xml:263
+#: data/io.github.schotek.Malachi.gschema.xml:268
 msgid ""
 "The daemon's account id, written whenever the Board's account filter "
 "changes; empty means every account. Applied when the Board shows while that "
@@ -8027,11 +8060,11 @@ msgstr ""
 "znamená všechny účty. Použije se při zobrazení Nástěnky, pokud účet ještě "
 "existuje."
 
-#: data/io.github.schotek.Malachi.gschema.xml:267
+#: data/io.github.schotek.Malachi.gschema.xml:272
 msgid "The Board's triage may send mail to Claude"
 msgstr "Třídění nástěnky smí posílat poštu do Claude"
 
-#: data/io.github.schotek.Malachi.gschema.xml:268
+#: data/io.github.schotek.Malachi.gschema.xml:273
 msgid ""
 "Set when the user allowed it the first time, apart from the assistant "
 "panel's consent."
@@ -8039,11 +8072,11 @@ msgstr ""
 "Nastaví se, když to uživatel poprvé povolí; nezávisle na souhlasu panelu "
 "asistenta."
 
-#: data/io.github.schotek.Malachi.gschema.xml:272
+#: data/io.github.schotek.Malachi.gschema.xml:277
 msgid "The model the Board's triage uses"
 msgstr "Model, který používá třídění nástěnky"
 
-#: data/io.github.schotek.Malachi.gschema.xml:273
+#: data/io.github.schotek.Malachi.gschema.xml:278
 msgid ""
 "Sonnet, Haiku or Opus, passed to Claude Code; apart from the assistant "
 "panel's model."
@@ -8051,11 +8084,11 @@ msgstr ""
 "Sonnet, Haiku nebo Opus, předaný Claude Code; nezávisle na modelu panelu "
 "asistenta."
 
-#: data/io.github.schotek.Malachi.gschema.xml:277
+#: data/io.github.schotek.Malachi.gschema.xml:282
 msgid "The view the Calendar was shown in last"
 msgstr "Zobrazení, ve kterém byl Kalendář zobrazen naposledy"
 
-#: data/io.github.schotek.Malachi.gschema.xml:278
+#: data/io.github.schotek.Malachi.gschema.xml:283
 msgid ""
 "Day, Week, Month or Agenda, written whenever the user changes the Calendar's "
 "view; applied when the Calendar shows."

@@ -741,3 +741,41 @@ func TestCalendarDisabledListed(t *testing.T) {
 	setDisabled(nil)
 	waitLong(t, "the team event back", func() bool { got, _ := list(); return slices.Contains(got, "Team event") })
 }
+
+// A calendar disabled and enabled again before its syncer has passed in
+// between (the syncer marks the row disabled only when it does) must not
+// keep the sync token of its dropped contents: a delta since then would be
+// empty, and the events would never come back (the hosted Windows runner
+// lost this race every time).
+func TestCalendarDroppedByTheAccountStartsAfresh(t *testing.T) {
+	ctx := context.Background()
+	srv := caldavtest.New(t, caldavtest.Nextcloud)
+	day := day0().AddDate(0, 0, 2)
+	stamp := day.Add(9 * time.Hour).Format("20060102T150405Z")
+	team := srv.CalendarHref("team-shared_by_petr")
+	srv.PutObject(team, "t1.ics", []byte("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//t//EN\r\nBEGIN:VEVENT\r\nUID:team-1\r\nDTSTAMP:"+stamp+
+		"\r\nDTSTART:"+stamp+"\r\nDURATION:PT1H\r\nSUMMARY:Team event\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"))
+	b, _, a := calDAVEndToEnd(t, srv)
+	row := func() store.Calendar {
+		t.Helper()
+		cals, err := b.store.ListCalendars(ctx, a.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range cals {
+			if c.RemoteID == team {
+				return c
+			}
+		}
+		t.Fatalf("no calendar %s in %+v", team, cals)
+		return store.Calendar{}
+	}
+	waitLong(t, "the team calendar synced", func() bool { return row().SyncToken != "" })
+
+	next := a
+	next.Config.Calendar = &api.CalendarConfig{Sync: true, DisabledCalendars: []string{team}}
+	b.dropCalendarCache(ctx, a, next)
+	if c := row(); c.SyncMode != calsync.SyncModeDisabled || c.SyncToken != "" || c.CTag != "" {
+		t.Errorf("the dropped calendar kept its sync state: %+v", c.CalendarSyncState)
+	}
+}

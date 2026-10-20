@@ -68,6 +68,9 @@ public enum SettingsKey
     /// <summary><c>group-by-conversation</c>.</summary>
     GroupByConversation,
 
+    /// <summary><c>conversation-chat-layout</c>.</summary>
+    ConversationChatLayout,
+
     /// <summary><c>search-scope</c>.</summary>
     SearchScope,
 

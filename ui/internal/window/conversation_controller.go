@@ -17,11 +17,13 @@ import (
 // The conversation view of the reading pane, the controller half: which
 // conversation the pane shows, its model (ui/internal/conversation), the
 // members' bodies as the cards ask for them, and the model kept in step
-// with the list while it is shown. No GTK: the pane
-// (conversation_view.go) lays the cards out and tells this controller
-// which of them are near enough to need a body; the window
-// (conversationHost in conversation_view.go) is its convHost. A port of
-// the macOS client's MalachiCore/Controllers/ConversationController.swift.
+// with the list while it is shown. No GTK: the pane's two layouts (the
+// timeline, conversation_view.go, and the chat, conversation_chat.go) lay
+// the cards or bubbles out and tell this controller which of them are near
+// enough to need a body; the host (conversation_host.go) is its only
+// subscriber (onChange, onLoaded) and hands its changes on; the window
+// (convWindowHost in conversation_view.go) is its convHost. A port of the
+// macOS client's MalachiCore/Controllers/ConversationController.swift.
 
 // convHeldBytes is the held entries' bodies beyond which the entries of
 // cards the pane does not keep near are let go (trim).
@@ -59,6 +61,15 @@ type convHost interface {
 	// the cache entry so far, and at once when the entry has what was
 	// asked for.
 	convFetch(s api.MessageSummary, full, quoted bool, then func(*loadedMessage))
+	// convOpenMessage opens message s as a double click on its row in the
+	// list does (Window.openMessage): in a window of its own, a message of
+	// a Drafts folder in the compose window. The chat's bubbles open their
+	// message with it (chatActivate).
+	convOpenMessage(s api.MessageSummary)
+	// convEditDraft opens the user's unsent reply d in the compose window,
+	// a comment draft in the comment window, or raises the window that
+	// edits it (Window.editThreadDraft): a double click on a draft bubble.
+	convEditDraft(d api.Draft)
 }
 
 // convChange is what changed, for the pane.
@@ -103,7 +114,7 @@ func rowShowsConversation(r listRow) bool {
 // while it is shown.
 //
 // Marking read is the window's delayed mark-read (scheduleMarkRead): the
-// pane arms it once per selection with takeMarkRead.
+// host arms it once per selection with takeMarkRead (conversation_fanout.go).
 type conversationController struct {
 	host convHost
 	tr   conversation.Translator

@@ -233,9 +233,9 @@ type Window struct {
 	outboxBanner   *adw.Banner
 	draftBanner    *adw.Banner // a message of the Drafts folder (drafts.go)
 
-	// conv is the pane's conversation view, made the first time a
-	// conversation is shown (conversation_view.go).
-	conv *conversationView
+	// conv is the pane's conversation host and its two layouts, made the
+	// first time a conversation is shown (conversation_host.go).
+	conv *conversationHost
 	// ownWords is the search in the user's own words (search_ownwords.go).
 	ownWords ownWords
 
@@ -927,8 +927,8 @@ func (w *Window) registerActions() {
 	w.addAction("change-status", false, func() {
 		switch {
 		case w.conversationShown():
-			if w.conv.issueCard != nil {
-				w.conv.issueCard.popupStatus()
+			if c := w.conv.shownIssueCard(); c != nil {
+				c.popupStatus()
 			}
 		case w.pane.card != nil:
 			w.pane.card.popupStatus()
