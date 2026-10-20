@@ -509,19 +509,166 @@ a možnost otevřít velké okno (přeposlání, přílohy). Wireframe
 |---|---|---|
 | Q1 | **Kde**: jen v chatovém rozložení Pošty, pevný řádek pod rolovací oblastí chatu, zarovnaný na sloupec (clamp 900, okraje 16), oddělený čarou. Časová osa ho nemá; chat na Nástěnce ne (ta má vlastní inline editor odpovědi); okno zprávy ne. | Zadání; Nástěnka už odpověď řeší jinak. |
 | Q2 | **Obsah** zleva: tlačítko režimu s nabídkou (ikona + text *Odpovědět* / *Odpovědět všem*, položka *Přeposlat…* otevře rovnou velké okno), textové pole na 1–5 řádků (roste, pak roluje) se zástupným textem *Napsat odpověď…* (u Jiry *Napsat komentář…*), tlačítko *Otevřít v okně* (ikona šipky ven) a *Odeslat* (ikona letadla, zvýrazněné, vypnuté při prázdném poli). | Vzor IM aplikací, nic navíc. |
-| Q3 | **Cíl** odpovědi: nejnovější člen konverzace, který není můj (`Item.Mine`/`Sent`); když takový není, nejnovější člen. *Odpovědět všem* jen když cíl má další příjemce (dnešní pravidla akcí karty, `conversation.CardActions`); Jira: jen *Komentovat* (veřejný), interní viditelnost až ve velkém okně. Cíl jmenuje tooltip tlačítka režimu („Odpověď pro: %s“, jméno v 1. pádu, protože jména z pošty klient neskloňuje); zástupný text pole zůstává *Napsat odpověď…*. | Rychlá odpověď míří na poslední cizí zprávu, jako v chatu. |
+| Q3 | **Cíl** odpovědi: nejnovější člen konverzace, který není můj (`Item.Mine`/`Sent`); když takový není, nejnovější člen. *Odpovědět všem* a *Přeposlat…* podle schopností účtu jako tlačítka karty (`conversation.CardActions`: jen capabilities; souhrn zprávy `Cc` nenese, takže pravidlo podle příjemců není možné — revize 2026-10-20); Jira: jen *Komentovat* (veřejný), interní viditelnost až ve velkém okně. Cíl jmenuje tooltip tlačítka režimu („Reply to: %s“, jméno v 1. pádu, bez jména, když `Item.Sender` chybí), zástupný text pole zůstává *Napsat odpověď…*. | Rychlá odpověď míří na poslední cizí zprávu, jako v chatu. |
 | Q4 | **Klávesy**: Enter = nový řádek, ⌘/Ctrl+Enter = Odeslat (jako okno Nová zpráva), Escape vrátí klávesnici seznamu. Mezerník v poli píše (listování seznamu platí jen s klávesnicí v seznamu). | Shoda s oknem Nová zpráva; nic se neodešle omylem. |
 | Q5 | **Odeslání** = dnešní cesta démona: `draft.create` (`reply`/`replyAll` na cíl, u Jiry komentář) → `draft.save` s tělem z napsaného textu → `message.send`; toast „Message queued for sending“; pole se vyprázdní. Citovaný originál jde s odpovědí tak, jak ho `draft.create` připraví (výchozí „Zahrnout do odpovědi“ okna Nová zpráva), bez zaškrtávátka v řádku. | Jedna cesta odesílání; příjemci mimo chat čekají kontext. |
 | Q6 | **Tělo** z prostého textu dělá čistá funkce reference (`QuickReplyHTML`: odstavce `<p>`, řádky `<br>`, text escapovaný; vlastní text uživatele, ne pošta) s testy; porty 1:1. Žádný Markdown (`draft.markdown` ne). | Rychlá odpověď je prostý text; žádné překvapivé formátování. |
 | Q7 | **Odeslaná bublina**: v prvním kroku bez dočasné bubliny „Odesílá se…“; bublina přibude, až kopie dorazí do Odeslaných (dnešní pravidlo `thread.get withSent`). Dočasná bublina je kandidát na další krok. | Démon nedává klientu Message-ID odeslané zprávy; párování by bylo hádání. |
-| Q8 | **Otevřít v okně**: vytvoří koncept (`draft.create` v zvoleném režimu + `draft.save` s textem) a otevře ho v okně Nová zpráva (u Jiry okno komentáře), řádek se vyprázdní; dál platí pravidla okna (přílohy, Zahrnout, uložení). *Přeposlat…* z nabídky režimu otevře okno s konceptem přeposlání cíle a napsaným textem jako úvodem. | Vše, co řádek neumí, má okno. |
+| Q8 | **Otevřít v okně** otevře okno Nová zpráva dnešní cestou odpovědi (`draft.create` v zvoleném režimu, citace v panelu) s napsaným textem předvyplněným v editoru jako vlastní text (`Params.OwnHTML`), označeným jako změna (autosave a otázka při zavření platí); řádek se vyprázdní, až když se okno skutečně otevře. Z řádku se nikdy neukládá koncept mimo Odeslat. *Přeposlat…* z nabídky totéž s konceptem přeposlání cíle a textem jako úvodem. | Vše, co řádek neumí, má okno; žádný osiřelý koncept. |
 | Q9 | **Rozepsaný text** drží klient v paměti na konverzaci (vlákno) až do odeslání, otevření v okně nebo vyprázdnění; přepnutí konverzace nebo rozložení ho nechá; ukončení aplikace ho ztratí (není to koncept démona). | Koncept démona by se v chatu ukázal jako bublina konceptu vedle řádku (zdvojení). |
 | Q10 | **Dostupnost**: řádek je skrytý, když účet neumí odpovědět (capability), když konverzace nemá cíl, při výběru více řádků, při hledání ve všech účtech beze změny (konverzace se tam neukazuje). Při odesílání je řádek dočasně vypnutý; chyba `draft.create`/`save`/`send` → toast, text zůstane. | Nic se neztratí potichu. |
 | Q11 | **Úzký panel**: tlačítko režimu jen ikona, pole se zúží, tlačítka zůstanou. | |
-| Q12 | **Texty**: nové msgidy jen „Write a reply…“ a „Write a comment…“ (zástupné texty), „Reply to: %s“ a „Reply all to: %s“ (tooltipy tlačítka režimu, jméno v 1. pádu), „Open in a Window“; *Reply*, *Reply All*, *Forward*, *Send*, *Comment* existují. | Nic z pošty se neskloňuje ani neskládá do vět. |
+| Q12 | **Texty**: šest nových msgid: „Write a reply…“ a „Write a comment…“ (zástupné texty), „Reply to: %s“ a „Reply all to: %s“ (tooltipy tlačítka režimu, jméno v 1. pádu), „Open in a Window“ (tooltip), „Forward…“ (položka nabídky, otevírá okno); *Reply*, *Reply All*, *Comment*, *_Send* (bez mnemoniky mimo GTK), „Send (Ctrl+Enter)“, „Message queued for sending“ a `jira.CommentQueued` existují. | Nic z pošty se neskloňuje ani neskládá do vět. |
 | Q13 | **Přístupnost**: pole pojmenované zástupným textem, tlačítka tooltipem; řetězce z pošty (jméno cíle) jen jako prostý text. | Pravidlo 3. |
 | Q14 | **Mimo rozsah**: přílohy a formátování v řádku, dočasná bublina (Q7), rychlá odpověď v časové ose a na Nástěnce, našeptávač příjemců. | Malý první krok. |
 
 Odpovědi vlastníka (2026-10-20, wireframe schválen): Q5 citovaný originál
 ano, jako v okně; Q7 dočasná bublina až později; Q2 *Přeposlat…* v nabídce
 zůstává.
+
+## 11. Plán implementace řádku rychlé odpovědi (2026-10-20, po revizi proti kódu)
+
+Větev `feat/chat-reply`. Pořadí jako u chatu: Go reference, macOS (brána
+R-B1 u vlastníka), pak GTK (R-B2 v XQuartz) a Windows (CI, R-B3 až na
+Windows). Každý úkol dělá subagent; nikdy dva ve stejných souborech.
+Revize plánu (2026-10-20) opravila dva blokující body: text předvyplněný
+do okna musí být označený jako změna (jinak se okno zavře bez otázky
+a text je pryč) a řádek se vyprázdní až po skutečném otevření okna.
+
+### 11.1 Architektura
+
+- **Démon a API beze změny.** Odeslání jde dnešní cestou: `draft.create`
+  (`reply`/`replyAll` na cíl s `attribution` jako okno; u Jiry `reply` =
+  koncept komentáře; před ním `message.download`, když `replyNeedsDownload`,
+  chyba stažení se ignoruje jako v okně) → `draft.save` s `created.Draft`,
+  v němž je `HTMLBody` nahrazené tělem níže, `TextBody` = vlastní text
+  (démon ho při HTML stejně odvodí), `Attachments` = `[{ID}]` z
+  `created.Draft.Attachments` (jinak obrázky citace propadnou), `To`
+  prázdné pole místo nil — zrcadlo `build()` v `compose/draft.go` →
+  `message.send {accountId, draftId, version}`; selhání `message.send`
+  po uložení → `draft.delete` (neznámý koncept není chyba) a toast
+  `RPCErrorText("Sending")`, text v řádku zůstane. Odeslání z řádku nikdy
+  nepadá na `compose.Prefill` jako okno; sdílí jen `composeSource`,
+  `compose.Attribution`, `replyNeedsDownload` a test komentáře.
+- **Čistá reference** `ui/internal/conversation/reply.go` (v `po/POTFILES`
+  za `quoted.go`; `po_test.go` `exercise()`), porty
+  `MalachiCore/Model/ConversationReply.swift` a
+  `Malachi.Core/Model/Conversation.Reply.cs` (+ typy po souborech):
+  - `QuickReplyTarget(m Model) (Item, bool)`: nejnovější `ItemMessage` s
+    `!Mine && !Sent`, jinak nejnovější `ItemMessage`; false bez položek.
+  - `QuickReplyMode` (`Reply`, `ReplyAll`, `Forward`) a
+    `QuickReplyModes(a capabilities.Actions) []QuickReplyMode` podle
+    `a.Reply`/`a.ReplyAll`/`a.Forward`; při `a.Comment` jen `Reply`
+    s popiskem `jira.ReplyLabel`.
+  - `QuickReplyHTML(text string) string`: vlastní text → odstavce oddělené
+    prázdným řádkem jako `<p>…</p>`, řádky uvnitř `<br>`, escapování
+    `html.EscapeString`, CRLF/CR → LF; prázdný vstup "". Nikdy neořezává:
+    nad `api.MaxDraftBodyBytes` odmítne uložení démon, uživatel dostane
+    toast a text zůstane.
+  - `QuickReplyBlank(text) bool` = test prázdnoty jako `jira.SendProblem`
+    (mezery, řídicí a formátovací znaky); Odeslat vypnuté, když platí.
+  - `QuickReplyBody(mode api.ComposeMode, own string, d api.Draft) string`
+    = `composebody.New(mode, d.Comment != nil, composebody.DraftBody(d))
+    .HTML(QuickReplyHTML(own), true)`, kde nové čisté
+    `composebody.DraftBody(d)` vrací `HTMLBody`, jinak escapovaný `TextBody`
+    (totéž, co dnes dělá `compose.FromDraft`, které ho nově volá). Výsledek
+    je bajt po bajtu to, co okno uloží se zaškrtnutým *Zahrnout*; u
+    komentáře jen vlastní HTML. Swift přes `ComposeBodyLayout(ComposeParams
+    (kind:bodyHTML:comment:))` + `escapeText`, C# `new ComposeBodyLayout(mode,
+    comment, body)` + `Prefill.EscapeText`.
+  - Texty (6 msgid, každý s `// TRANSLATORS:`; viz Q12). `reply.go` nesmí
+    přes `tr.T` znovu použít existující msgid (posunul by počet odkazů
+    v šabloně); *Reply*/*Reply All*/*Forward*/*_Send* bere pohled přímo
+    z `i18n`/`L10n`.
+- **Okno Nová zpráva dostane předvyplněný vlastní text** `Params.OwnHTML`
+  (Swift `ComposeParams.ownHTML`, C# `ComposeParams.OwnHtml`; ne
+  `EditorHTML`, to jméno už znamená vlastní text + citace): nastavuje ho
+  volající po `FromDraft`/`Prefill` jako dnes `Attribution`; uplatní se na
+  jednom místě na klienta — Go `compose/quoted.go` `bodyLayout`, Swift
+  `ComposeBodyLayout.init(_ params:)`, C# `ComposeBodyLayout(ComposeParams)`
+  — neprázdné nahradí `EmptyBody` v editoru u odpovědi, přeposlání
+  i komentáře (citace zůstává v panelu); po načtení editoru se koncept
+  označí jako změněný (`dc.markDirty()` po `wireActions` v `pane.go`, Swift
+  a C# `markDirty` v `ComposeDraftController`), aby autosave a otázka při
+  zavření platily jako po psaní (B1). Doc `Params.BodyHTML` doplní, že
+  bezpečné HTML dává i `QuickReplyHTML`. Kurzor zůstane na začátku
+  (`FocusStart`), přijatelné.
+- **Kontroler řádku jako čistý balíček** `ui/internal/quickreply` (jako
+  `boardreply`: injektovaný `Caller` a `Loop`, žádné gotk4, testy běží na
+  Macu), porty `MalachiCore/Controllers/QuickReplyController.swift` a
+  `Malachi.Core/Controllers/QuickReplyController.cs`: stav **na vlákno**
+  (`text`, `mode`, `sending`; odpověď démona se páruje s vláknem, v němž
+  odeslání začalo — při přepnutí konverzace během odesílání se vyprázdní
+  a toastuje to vlákno, ne zobrazené; test), `Update(model, actions, account)`
+  → `target`, `modes`, `visible` (chat zobrazený ∧ cíl ∧ `Reply`),
+  `Send(attribution)` (download → create → save → send → vyprázdnit, toast;
+  chyby výše), `OpenWindow()`/`Forward()` přes hostitele
+  `OpenCompose(kind, id, ownHTML, opened func())` — text se vyprázdní až
+  v `opened` (B2: `openComposeFrom` tiše končí při `composing[id]` nebo
+  chybějícím souhrnu a `openCommentFor` jen toastuje). Rozhraní hostitele
+  je malé a vlastní (volání, toast, download, otevření okna), ne rozšíření
+  `convHost`; GTK glue `window/quick_reply.go` ho plní z `*Window`
+  (`openComposeWith(parent, kind, id, ownHTML, opened)` jako nová funkce,
+  `openComposeFrom` je její obal — šest volajících beze změny; větev
+  komentáře předá `ownHTML` do `openCommentFor`). Swift přes
+  `MessageActionDelegate` (jediný implementátor `MessageActionsController`),
+  C# `MessageActionRouter` (+ `MessageActionRouterTests`). Hostitel
+  konverzace (jediný odběratel kontroleru) volá `Update` při každé změně
+  (`convFanout.onChange`, `changed(_:)`, handler `Changed`) s
+  `ctrl.actions(cíl)` / `actions(for:)` / `Actions(s)`.
+- **Pohled řádku** v každém klientu (jen chat Pošty; chat Nástěnky je
+  `boardChat` a řádek nedostane): pevně pod rolovací oblastí chatu,
+  zarovnaný na sloupec (clamp 900, okraje 16, čára nahoře): tlačítko režimu
+  s nabídkou (ikona + text, v úzkém sloupci jen ikona; tooltip „Reply to:
+  %s“), pole 1–5 řádků (`max-content-height`/`MaxHeight` 112 px jako panel
+  asistenta: GTK `assistant_panel.blp` `propagate-natural-height` +
+  přístupný popisek z Go, macOS znovu použije `AssistantInputView` s novým
+  přepínačem `returnSends = false`, Windows `TextBox MaxHeight=112
+  AcceptsReturn TextWrapping=Wrap`), *Otevřít v okně* (ikona, tooltip),
+  *Odeslat* (ikona letadla, zvýrazněné, vypnuté při `QuickReplyBlank` nebo
+  `sending`; přístupný popisek `_Send` bez podtržítka, tooltip „Send
+  (Ctrl+Enter)“, macOS „(⌘↩)“). Klávesy: Enter nový řádek; ⌘/Ctrl+Enter
+  Odeslat (GTK `EventControllerKey` ve fázi capture jako `assistant_panel.go`,
+  macOS `sendMessage:` + `validateUserInterfaceItem` na kontroleru řádku
+  v řetězci responderů, aby fungovala i položka Message ▸ Send; Windows
+  `PreviewKeyDown` s `Handled`); Escape → klávesnice do seznamu, je-li
+  vidět (macOS přes `textView(_:doCommandBy:)` jako `AssistantInputView`).
+  Jednoklávesové zkratky pošty v poli vypíná dnešní brána. macOS: chat
+  má `bottom == bar.top`, `bar.bottom == container.bottom`, skrytý řádek
+  se složí na nulu (výška 0, ne jen `isHidden`); GTK skrytý potomek
+  `conversation_body` a Windows `Collapsed` v řádku 2 `Root` se složí samy.
+- `created.Skipped` (necitované obrázky) se potichu přijme (okno toastuje;
+  u rychlé odpovědi bez panelu citace není co ukázat).
+
+### 11.2 Úkoly
+
+| ID | Úkol | Soubory | Testy / ověření | Agent | Po |
+|---|---|---|---|---|---|
+| R1 | Go reference + composebody + texty | `ui/internal/conversation/reply.go`, `reply_test.go`, `po_test.go`, `po/POTFILES`; `ui/internal/composebody` (`DraftBody`, `OwnHTML` v `Layout`/`New` nebo `WithOwn`), `layout_test.go`; `compose/prefill.go` (`Params.OwnHTML`, doc, `FromDraft` přes `DraftBody`), `compose/quoted.go` `bodyLayout`, `pane.go` (`markDirty` po načtení s `OwnHTML`); `po/malachi.pot`, `po/cs.po` skriptem jako T3a; `windows/parity-exclusions.txt` (+6 „quick reply: Windows port pending“) | na Macu: `go test ./internal/conversation/ ./internal/composebody/` (cíl, režimy, `QuickReplyHTML` patologické: CRLF, `<script>`, prázdné řádky, bidi, 1 MiB bez ořezu, `QuickReplyBlank`, `QuickReplyBody` bajt po bajtu proti `composebody`), `TestMsgidsInTemplate`; `compose` a `window` jen `gopls check` (cgo) | Opus | — |
+| R2 | Čistý kontroler řádku + GTK glue | `ui/internal/quickreply/controller.go` + `_test.go` (falešný hostitel: pořadí volání, `attachments[].id`, tělo s citací, `send` selže → `draft.delete`, text na vlákno, `sending` na vlákno při přepnutí, `opened` callback, Jira bez citace, download před create), `window/quick_reply.go` (hostitel nad `*Window`: volání přes `w.client`, toast, download, `openComposeWith`), `compose_open.go` (`openComposeWith`, `openCommentFor` s `ownHTML`), `po/POTFILES` pro `window/quick_reply*.go`, pokud volá `i18n.T` | `go test ./internal/quickreply/` na Macu; `gopls check` | Opus | R1 |
+| M1 | MalachiCore | `Model/ConversationReply.swift`, `Compose/ComposeParams` (`ownHTML`), `ComposeBodyLayout.init(_ params:)`, `ComposeDraftController` (`markDirty` po načtení), `Compose/Prefill.swift` (`draftBody`), `Controllers/QuickReplyController.swift` (port `quickreply`), `ActionsController` (`openCompose(kind, id, ownHTML:, opened:)` bez refaktoru `createDraft`), testy `ConversationReplyTests`, `QuickReplyControllerTests` (MailFixture `DraftCreate`/`DraftSave`/`MessageSend`/`DraftDelete` jako `JiraActionsTests.onDraftCreate`), `ComposeBodyLayoutTests` (+`ownHTML`), `ConversationTests.portUsesTheTemplatesEntries` (21 položek, `replyPort` 6 volání), `check-strings` | `swift test` | Opus | R1 |
+| M2 | MalachiMail | `MessageView/ConversationQuickReplyBar.swift` (nad `AssistantInputView` s `returnSends`, `NSPopUpButton` režimu, tlačítka), `ConversationHostViewController` (řádek pod chatem, omezení výšky, `Update` při změně), `sendMessage:` responder, Escape, `MessageActionsController` (`openCompose(… ownHTML:opened:)`), `Integration+Conversation`; docs `macos-port.md` §5, `security.md` §3.2, `macos/README.md` (⌘↩ tooltip) | `swift build`, `swift test`, izolovaný start; revize kódu | Opus | M1 |
+| C1 | Commit 1 `feat: quick reply bar of the chat layout (Go reference, macOS)` + `CLAUDE.md` odstavec | | | orchestrátor | M2 |
+| **R-B1** | **Brána vlastníka macOS**: odpověď, odpověď všem, Jira komentář, Otevřít v okně s textem (a zavření okna se ptá), Přeposlat…, ⌘↩, Enter, Escape, prázdné pole, démon zastavený → toast a text zůstane, přepnutí konverzace během odesílání, úzký panel, bublina po doručení do Odeslaných | | | vlastník | C1 |
+| G1 | GTK UI | `ui/data/ui/conversation_view.blp` (`conversation_reply_bar` v `conversation_body` pod `Stack`, `propagate-natural-height`, `max-content-height: 112`), `window/quick_reply_bar.go` (TextView, `MenuButton` režimu, tlačítka, `EventControllerKey` capture Ctrl+Enter a Escape, přístupné popisky), `conversation_host.go` (viditelnost, `Update`), `conversation_chat_gtk_smoke_test.go` (řádek přes injektovaný caller: psaní, Ctrl+Enter → `draft.create`/`save`/`send`, prázdné pole, Otevřít v okně) | kontejner (orchestrátor): `gtk.sh make build`, `test-ui`, smoke, `make po`, `make lint` | Opus | R-B1 |
+| C2 | Commit 2 + **R-B2** v XQuartz (`gtk.sh x11 dev`) | | | orchestrátor, vlastník | G1 |
+| W1 | Windows Core | `Model/Conversation.Reply.cs` + typy, `Compose/ComposeParams` (`OwnHtml`), `ComposeBodyLayout(ComposeParams)`, `ComposeDraftController` (`MarkDirty` po načtení), `Prefill` (`DraftBody`), `Controllers/QuickReplyController.cs`, `ActionsController` (`OpenCompose(kind, id, ownHtml, opened)`), `MessageActionRouter` + testy, FakeDaemon testy; `parity-exclusions.txt` bez šesti řádků | `windows.yml` | Opus | R-B1 |
+| W2 | Windows App | `Reader/Conversation/ConversationQuickReplyBar.xaml(.cs)`, `ConversationView.xaml` řádek 2 (`Auto`, `Collapsed` mimo chat), `ComposePane` (`OwnHtml`), UI smoke rozšíření (`ConversationChatSmokeTests` přes devmail: napsat, Ctrl+Enter, bublina), docs `windows-port.md` §11.7, `windows/README.md` | `windows.yml` (build, testy, lint), revize kódu | Opus | W1, G1 |
+| C3 | Commit 3, push, CI; **R-B3** na Windows u vlastníka | | | orchestrátor | W2 |
+
+### 11.3 Rizika
+
+- **Osiřelý koncept**: jediný `draft.save` je uvnitř Odeslat; po selhání
+  `message.send` se maže (selhání mazání nechá viditelnou bublinu konceptu,
+  ne tichou ztrátu). Otevřít v okně nic neukládá (`OwnHTML`) a okno se
+  po předvyplnění ptá při zavření (B1).
+- **Vypršení `message.send`** po skutečném zařazení: `draft.delete`
+  neznámého konceptu projde, toast selhání, text zůstane; nové odeslání by
+  zprávu zdvojilo. Vzácné; zapsat do dokumentace.
+- **`portUsesTheTemplatesEntries`** 15 → 21 a přesný seznam volání.
+- **Dvojí odeslání**: `sending` na vlákno; ⌘↩ při prázdném poli nic nedělá;
+  `composing[id]` hlídá jen okno (řádek odesílá bez okna, souběh s otevřeným
+  oknem téže zprávy je dovolený: dva různé koncepty).
+- **Windows lint mezi C1 a C3**: šest exclusions v C1, pryč ve W1.
+- **Message ▸ Send na macOS** v hlavním okně: zapne se jen s klávesnicí
+  v poli řádku.
