@@ -736,7 +736,7 @@ struct ConversationTranslationTests {
     func portUsesTheTemplatesEntries() throws {
         let pot = try String(contentsOf: template, encoding: .utf8)
         let entries = pot.components(separatedBy: "\n\n").filter { $0.contains("ui/internal/conversation/") }
-        #expect(entries.count == 15, "po/malachi.pot names ui/internal/conversation in \(entries.count) entries")
+        #expect(entries.count == 17, "po/malachi.pot names ui/internal/conversation in \(entries.count) entries")
         let all = entries.joined(separator: "\n\n")
         #expect(all.contains("msgid \"%d earlier message is not shown\"\nmsgid_plural \"%d earlier messages are not shown\""))
         #expect(all.contains("msgid \"Collapse All\"\nmsgstr"))
@@ -773,12 +773,15 @@ struct ConversationTranslationTests {
         #expect(all.contains("msgid \"Show as Thread\"\nmsgstr"))
         #expect(all.contains("msgid \"Back to the timeline: the messages as cards, newest first\"\nmsgstr"))
         let chat = try String(contentsOf: chatPort, encoding: .utf8)
-        let chatCalls = Array(chat.components(separatedBy: "L10n.").dropFirst()).map { $0.prefix(100) }
+        let chatCalls = Array(chat.components(separatedBy: "L10n.").dropFirst()).map { $0.prefix(120) }
         #expect(chatCalls.map { String($0.prefix(while: { $0 != ")" })) } == [
             "T(\"Show as Chat\"",
             "T(\"Show as Thread\"",
             "T(\"Others on the left, your messages on the right; double-click opens the message\"",
             "T(\"Back to the timeline: the messages as cards, newest first\"",
+            "T(\"Render HTML in Chat\"",
+            "T(\"Messages in the chat layout as they were sent, in a locked web view, instead of their plain text\"",
         ])
+        #expect(all.contains("msgid \"Render HTML in Chat\"\nmsgstr"))
     }
 }

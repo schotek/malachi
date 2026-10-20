@@ -26,6 +26,7 @@ public sealed partial class AppearancePage : UserControl
         bindings.Choice(ColorSchemeBox, SettingsKey.ColorScheme, PreferenceChoices.ColorSchemeChoices, () => s.ColorScheme, v => s.ColorScheme = v);
         bindings.Choice(DensityBox, SettingsKey.Density, PreferenceChoices.DensityChoices, () => s.Density, v => s.Density = v);
         bindings.Toggle(GroupByConversationSwitch, SettingsKey.GroupByConversation, () => s.GroupByConversation, v => s.GroupByConversation = v);
+        bindings.Toggle(ConversationChatHtmlSwitch, SettingsKey.ConversationChatHtml, () => s.ConversationChatHtml, v => s.ConversationChatHtml = v);
         bindings.Toggle(ShowPreviewLineSwitch, SettingsKey.ShowPreviewLine, () => s.ShowPreviewLine, v => s.ShowPreviewLine = v);
         bindings.Toggle(ShowAvatarsSwitch, SettingsKey.ShowAvatars, () => s.ShowAvatars, v => s.ShowAvatars = v);
         bindings.Toggle(MonochromeAvatarsSwitch, SettingsKey.MonochromeAvatars, () => s.MonochromeAvatars, v => s.MonochromeAvatars = v);

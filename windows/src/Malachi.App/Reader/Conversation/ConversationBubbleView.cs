@@ -36,14 +36,36 @@
 // and the draft's. The board's conversation block shows its chat in the
 // same bubbles (ShowPlain: the sender and date a case's member carries,
 // "BoardChatBubble:" and its index).
+//
+// HTML in the bubble (the preference conversation-chat-html,
+// Conversation.BubbleRendersHtml; docs/windows-port.md §11.7 "HTML in the
+// chat bubbles"): a body that is BubbleBody.Html shows its sanitized
+// fragment in a CardWebView, the timeline card's locked view, where the text
+// stands, inside the bubble's background with the same padding (the view
+// transparent and its document, ViewerDocument.ChatDocument, without any
+// background of the mail and without a frame, so the bubble's own colour,
+// the card's or the accent tint of the user's own, is the document's; in
+// the dark theme the text and links take the bubbles' text colours, in high
+// contrast the system's, the light theme keeps the mail's), while the
+// chat gives the bubble a web view (SetLive: near the viewport and within
+// the timeline's cap); otherwise, and when the view cannot show the
+// document, the message's text as without the preference. Such a bubble is
+// as wide as the row allows (no shrink-to-fit) and has no bars and no fold;
+// a link goes through the cards' link path (the chat's IChatWebHost), the
+// text zoom applies to the document, and the view's height is measured as a
+// card's (WebHeightGovernor). The web view takes the presses over its
+// document, so a double tap opens the message from the header (the sender,
+// the date) and the padding around the document.
 
 using System;
 using System.Linq;
 using Malachi.App.Controls;
 using Malachi.App.Resources;
+using Malachi.App.WebViews;
 using Malachi.Core.Api;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
+using Malachi.Core.Html;
 using Malachi.Core.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -85,6 +107,11 @@ internal sealed partial class ConversationBubbleView : UserControl
     private readonly StackPanel badges;
     private readonly TextBlock dateLabel;
     private readonly TextBlock bodyLabel;
+    private readonly Grid htmlHost;
+
+    // Never shown: its Foreground is the link colour of the bubbles' text in
+    // the theme shown, which Palette reads.
+    private readonly TextBlock linkProbe;
 
     // What the header names for automation and the date it shows; a draft's
     // "Draft saved …" in the date's place.
@@ -96,6 +123,28 @@ internal sealed partial class ConversationBubbleView : UserControl
     private double fontSize;
     private FontFamily? monospaceFamily;
     private bool monospace;
+
+    // The HTML body (BubbleBody.Html): the web view while the chat gives the
+    // bubble one, the height the document last had, what governs it, the
+    // document loaded, a reload of its pictures asked for, and whether the
+    // view could not show this document (the text then, until another one).
+    private CardWebView? web;
+    private WebHeightGovernor gov = new();
+    private double webHeight = ConversationLayout.InitialWebHeight;
+    private string? webDoc;
+    private bool reload;
+    private bool htmlFailed;
+
+    // The system's high-contrast setting (one for the app).
+    private static Windows.UI.ViewManagement.AccessibilitySettings? accessibility;
+
+    // The document's height measured while the bubble held a web view,
+    // kept as the text's MinHeight once the view goes while the body stays
+    // HTML (as a released card keeps its paper's height), so that the row's
+    // frame does not change and LiveCards does not flip the bubble between
+    // the view and its text; null when nothing was measured, the body is no
+    // longer HTML (the preference off, another body) or the view failed.
+    private double? frozenHeight;
 
     /// <summary>
     /// A bubble, the user's own (<paramref name="mine"/>) or not, styled from
@@ -195,9 +244,25 @@ internal sealed partial class ConversationBubbleView : UserControl
         };
         ApplyFont();
 
+        // The HTML body's slot, where the text stands (the same margin; no
+        // paper: the transparent view shows the bubble's background), shown
+        // only while the bubble holds a web view.
+        htmlHost = new Grid
+        {
+            Margin = new Thickness(0, 6, 0, 0),
+            Height = webHeight,
+            Visibility = Visibility.Collapsed,
+        };
+        linkProbe = new TextBlock { Style = look("ConversationBubbleLinkStyle"), Visibility = Visibility.Collapsed };
+        // The wheel over the web view of a document that fits (nothing to
+        // scroll inside) goes on to the chat (the card's forwardScroll).
+        htmlHost.AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnHtmlWheel), handledEventsToo: true);
+
         var column = new StackPanel();
         column.Children.Add(header);
         column.Children.Add(bodyLabel);
+        column.Children.Add(htmlHost);
+        column.Children.Add(linkProbe);
         // Border is sealed in WinUI, so the bubble hosts its frame; the
         // user's own has the tint as an inner layer over the card's fill.
         var inner = new Border
@@ -205,16 +270,24 @@ internal sealed partial class ConversationBubbleView : UserControl
             Padding = new Thickness(PaddingH - 1, PaddingV - 1, PaddingH - 1, PaddingV - 1),
             Child = column,
         };
-        if (mine)
-        {
-            inner.Style = look("ConversationMineTintStyle");
-        }
+        // The others' bubble is a light grey (ConversationOtherTintStyle).
+        inner.Style = look(mine ? "ConversationMineTintStyle" : "ConversationOtherTintStyle");
         Content = new Border
         {
             Style = look(mine ? "ConversationMineBubbleStyle" : "ConversationBubbleStyle"),
             Child = inner,
         };
         DoubleTapped += OnDoubleTapped;
+        // An HTML bubble takes the widest the row allows (ApplyWidth).
+        RegisterPropertyChangedCallback(MaxWidthProperty, (_, _) => ApplyWidth());
+        // The theme changed: the document again with the theme's colours.
+        ActualThemeChanged += (_, _) =>
+        {
+            if (web is not null)
+            {
+                LoadWebView();
+            }
+        };
     }
 
     /// <summary>The user's own message or draft (on the right, tinted).</summary>
@@ -228,6 +301,20 @@ internal sealed partial class ConversationBubbleView : UserControl
 
     /// <summary>The text shows in the monospaced font.</summary>
     public bool IsMonospace => monospace;
+
+    private static Windows.UI.ViewManagement.AccessibilitySettings Accessibility => accessibility ??= new();
+
+    /// <summary>The chat's side of the web view of an HTML body; without it (the board's chat) a bubble never renders HTML.</summary>
+    public IChatWebHost? WebHost { get; set; }
+
+    /// <summary>The body is HTML (<see cref="BubbleBody.Html"/>): the bubble is as wide as its row allows.</summary>
+    public bool RendersHtml => shownBody is BubbleBody.Html;
+
+    /// <summary>The body is HTML the view has not failed on: the bubble wants a web view while near (the chat's live set).</summary>
+    public bool WantsWebView => shownBody is BubbleBody.Html && !htmlFailed && WebHost is not null;
+
+    /// <summary>The bubble holds a web view (the chat's live set, <see cref="SetLive"/>).</summary>
+    public bool IsLive { get; private set; }
 
     /// <summary>The short date of the list instead of the full date and time (a narrow column, <see cref="ConversationLayout.ChatCompactDates"/>).</summary>
     public bool CompactDate
@@ -323,7 +410,15 @@ internal sealed partial class ConversationBubbleView : UserControl
     /// bubble keeps what it read). <paramref name="monospaceText"/> picks the
     /// monospaced font for the text (never for a placeholder).
     /// </summary>
-    public void ShowBody(BubbleBody body, bool monospaceText)
+    public void ShowBody(BubbleBody body, bool monospaceText) => ShowBody(body, monospaceText, reloadPictures: false);
+
+    /// <summary>
+    /// <see cref="ShowBody(BubbleBody, bool)"/>, and for an HTML body whose
+    /// pictures were downloaded (<paramref name="reloadPictures"/>,
+    /// <see cref="ConversationLayout.PicturesArrived"/>) the document loaded
+    /// again, as a card does.
+    /// </summary>
+    public void ShowBody(BubbleBody body, bool monospaceText, bool reloadPictures)
     {
         ArgumentNullException.ThrowIfNull(body);
         if (body is BubbleBody.Placeholder && ShowsText)
@@ -338,8 +433,15 @@ internal sealed partial class ConversationBubbleView : UserControl
         }
         if (body == shownBody)
         {
+            if (reloadPictures && body is BubbleBody.Html && web is not null)
+            {
+                reload = true;
+                LoadWebView();
+            }
             return;
         }
+        var wasHtml = shownBody is BubbleBody.Html;
+        var wanted = WantsWebView;
         shownBody = body;
         switch (body)
         {
@@ -347,14 +449,92 @@ internal sealed partial class ConversationBubbleView : UserControl
                 ShowsText = false;
                 bodyLabel.Style = look("ConversationBubblePlaceholderStyle");
                 bodyLabel.Text = p.Value;
-                bodyLabel.Visibility = p.Value.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
                 break;
             case BubbleBody.Text t:
                 ShowsText = true;
                 bodyLabel.Style = look("ConversationBubbleTextStyle");
                 bodyLabel.Text = t.Value;
-                bodyLabel.Visibility = t.Value.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
                 break;
+            case BubbleBody.Html h:
+                ShowsText = true;
+                bodyLabel.Style = look("ConversationBubbleTextStyle");
+                bodyLabel.Text = h.Fallback;
+                if (!string.Equals(webDoc, h.Value, StringComparison.Ordinal))
+                {
+                    htmlFailed = false;
+                }
+                reload = reload || reloadPictures;
+                break;
+        }
+        if (body is BubbleBody.Html)
+        {
+            if (IsLive)
+            {
+                LoadWebView();
+            }
+        }
+        else
+        {
+            // Not HTML: no web view, and none until the chat decides anew;
+            // the frozen height goes with it.
+            ReleaseWebView();
+            IsLive = false;
+            frozenHeight = null;
+        }
+        ShowPage();
+        if (wasHtml != (body is BubbleBody.Html))
+        {
+            ApplyWidth();
+        }
+        if (wanted != WantsWebView)
+        {
+            WebHost?.LiveChanged();
+        }
+    }
+
+    /// <summary>
+    /// An HTML body reads as its text again (the preference was turned off
+    /// while the bubble's entry was let go: no body to read it from anew);
+    /// any other body stays.
+    /// </summary>
+    public void DropHtml()
+    {
+        if (shownBody is BubbleBody.Html h)
+        {
+            ShowBody(new BubbleBody.Text(h.Fallback), monospaceText: false);
+        }
+    }
+
+    /// <summary>
+    /// Gives the bubble a web view (the chat's live set: near the viewport,
+    /// within the timeline's cap) or takes it: without one an HTML body shows
+    /// its text.
+    /// </summary>
+    public void SetLive(bool on)
+    {
+        if (on == IsLive)
+        {
+            return;
+        }
+        IsLive = on;
+        if (!on)
+        {
+            ReleaseWebView();
+        }
+        else if (WantsWebView)
+        {
+            LoadWebView();
+        }
+        ShowPage();
+    }
+
+    /// <summary>The text-zoom setting in percent: the web view's document scaled, its height measured again.</summary>
+    public void SetZoom(int percent)
+    {
+        if (web is not null)
+        {
+            gov.WidthChanged();
+            web.Zoom = percent;
         }
     }
 
@@ -430,6 +610,189 @@ internal sealed partial class ConversationBubbleView : UserControl
         var full = date is { } d && !d.IsGoZero ? Format.FormatDateTime(d) : "";
         var attachments = clipPill.Visibility == Visibility.Visible ? L10n.T("Has attachments") : "";
         AutomationProperties.SetName(this, string.Join(", ", new[] { senderName, full, attachments }.Where(t => t.Length > 0)));
+    }
+
+    // The text, or the HTML body's slot while the bubble holds a web view;
+    // an empty text hides it.
+    private void ShowPage()
+    {
+        var html = web is not null;
+        htmlHost.Visibility = html ? Visibility.Visible : Visibility.Collapsed;
+        var frozen = !html && RendersHtml && !htmlFailed ? frozenHeight : null;
+        bodyLabel.Visibility = !html && (bodyLabel.Text.Length > 0 || frozen is not null) ? Visibility.Visible : Visibility.Collapsed;
+        if (frozen is { } h)
+        {
+            bodyLabel.MinHeight = h;
+        }
+        else
+        {
+            bodyLabel.ClearValue(FrameworkElement.MinHeightProperty);
+        }
+    }
+
+    // An HTML bubble is as wide as the row allows (MaxWidth, the row's
+    // ConversationLayout.ChatBubbleMax); any other hugs its text.
+    private void ApplyWidth()
+    {
+        var max = MaxWidth;
+        if (RendersHtml && max > 0 && !double.IsInfinity(max))
+        {
+            Width = max;
+        }
+        else
+        {
+            ClearValue(WidthProperty);
+        }
+    }
+
+    // A view from the chat's pool (once while live) and the fragment loaded
+    // into it, as ConversationCard.LoadWebView.
+    private void LoadWebView()
+    {
+        if (WebHost is not { } host || shownBody is not BubbleBody.Html h || htmlFailed)
+        {
+            return;
+        }
+        if (web is null)
+        {
+            web = host.TakeWebView();
+            gov = new WebHeightGovernor(1);
+            var links = h.Links;
+            web.OnLink = link => host.OpenLink(link, (shownBody as BubbleBody.Html)?.Links ?? links);
+            web.OnHover = host.Hover;
+            web.OnSize = SizeReported;
+            web.OnFailed = HtmlUnavailable;
+            web.Height = webHeight;
+            htmlHost.Height = webHeight;
+            htmlHost.Children.Add(web);
+            webDoc = null;
+        }
+        if (!string.Equals(webDoc, h.Value, StringComparison.Ordinal) || reload)
+        {
+            gov.Reset();
+        }
+        web.Palette = Palette();
+        web.Load(h.Value, reload);
+        webDoc = h.Value;
+        reload = false;
+    }
+
+    // The colours the document's text and links take: the system's in high
+    // contrast (CSS system colours), the bubbles' text and link colours in
+    // the dark theme (the mail's dark text would sit on a dark bubble), none
+    // in the light theme (the mail's own).
+    private ChatPalette? Palette()
+    {
+        if (Accessibility.HighContrast)
+        {
+            return new ChatPalette("CanvasText", "LinkText");
+        }
+        if (ActualTheme != ElementTheme.Dark)
+        {
+            return null;
+        }
+        return CssColor(bodyLabel.Foreground) is { } text && CssColor(linkProbe.Foreground) is { } link ? new ChatPalette(text, link) : null;
+    }
+
+    private static string? CssColor(Brush? brush) =>
+        brush is SolidColorBrush { Color: var c }
+            ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"rgba({c.R},{c.G},{c.B},{c.A / 255.0:0.###})")
+            : null;
+
+    // The view goes back to the chat's pool; the document's height is kept
+    // for the next view.
+    private void ReleaseWebView()
+    {
+        if (web is not { } view)
+        {
+            return;
+        }
+        web = null;
+        webDoc = null;
+        htmlHost.Children.Remove(view);
+        WebHost?.ReturnWebView(view);
+        WebHost?.Hover("");
+    }
+
+    // The view could not show the document (it could not be created, or the
+    // body failed again after its one reload): the text, as the card's plain
+    // text, until another document.
+    private void HtmlUnavailable()
+    {
+        if (shownBody is not BubbleBody.Html h)
+        {
+            return;
+        }
+        WebHost?.Reflow(this, () =>
+        {
+            ReleaseWebView();
+            htmlFailed = true;
+            frozenHeight = null;
+            webDoc = h.Value;
+            ShowPage();
+        });
+        WebHost?.LiveChanged();
+    }
+
+    // The document's height from the view; the governor decides the view's
+    // height (capped, frozen for a document that grows with the view).
+    private void SizeReported(double css, bool viewport, bool relayout)
+    {
+        if (web is null)
+        {
+            return;
+        }
+        if (relayout)
+        {
+            gov.WidthChanged();
+        }
+        if (gov.Report(css, viewport) is { } h)
+        {
+            SetWebHeight(h);
+        }
+    }
+
+    private void SetWebHeight(double h)
+    {
+        if (h <= 0 || h == webHeight)
+        {
+            return;
+        }
+        void Apply()
+        {
+            webHeight = h;
+            frozenHeight = h;
+            htmlHost.Height = h;
+            if (web is not null)
+            {
+                web.Height = h;
+            }
+        }
+        if (WebHost is { } host)
+        {
+            host.Reflow(this, Apply);
+        }
+        else
+        {
+            Apply();
+        }
+    }
+
+    // The wheel over the web view of a document that fits goes on to the
+    // chat, which the view would otherwise swallow.
+    private void OnHtmlWheel(object sender, PointerRoutedEventArgs e)
+    {
+        if (web is null || !gov.Fits || WebHost is not { } host)
+        {
+            return;
+        }
+        var delta = e.GetCurrentPoint(htmlHost).Properties.MouseWheelDelta;
+        if (delta == 0)
+        {
+            return;
+        }
+        host.ScrollBy(-delta);
+        e.Handled = true;
     }
 
     private void ApplyFont()

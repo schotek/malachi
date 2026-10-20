@@ -277,6 +277,82 @@ func smokeBoardConversationChat(t *testing.T, p *boardPage, flush func(), withCa
 			t.Fatalf("%s: %d rows, %d in the column, for %d messages", next.ID, len(b.chat.rows), columnRows(), len(next.Messages))
 		}
 	}
+	if withCards {
+		smokeBoardChatHTML(t, b, &d, flush)
+	}
 	w.settings.SetConversationChatLayout(false)
+	flush()
+}
+
+// smokeBoardChatHTML: with Render HTML in Chat on, the bubbles near the
+// detail's visible part show their cached HTML in live views (at most the
+// board's cap), and the preference off lets every view go, the case's
+// text back. Real WebKit (the cards' environment).
+func smokeBoardChatHTML(t *testing.T, b *boardConversation, d *board.Detail, flush func()) {
+	t.Helper()
+	w := b.p.w
+	// Six members, all with cached HTML: more than the cap.
+	d6 := *d
+	d6.ID = "smoke-chat-html"
+	d6.Messages = append([]board.MessageCard(nil), d.Messages...)
+	for i := 4; i < 6; i++ {
+		id := api.MessageID(fmt.Sprintf("smoke-chat-%d", i))
+		d6.Messages = append(d6.Messages, board.MessageCard{ID: id, From: "Example sender", Sender: "Example sender",
+			Date: time.Now(), When: "today", Text: fmt.Sprintf("Invented chat text %d", i)})
+		w.loaded[id] = &loadedMessage{account: d6.AccountID, body: &api.MessageBodyResult{
+			MessageID: id, BodyState: api.BodyFetched, HasHTML: true, HTML: fmt.Sprintf("<p>Invented safe chat card %d</p>", i)}}
+	}
+	w.settings.SetConversationChatLayout(true)
+	b.apply(&d6)
+	flush()
+	countLive := func() int {
+		n := 0
+		for _, r := range b.chat.rows {
+			if r.bubble.web != nil {
+				n++
+			}
+		}
+		return n
+	}
+	if n := countLive(); n != 0 {
+		t.Fatalf("preference off: %d live views", n)
+	}
+	w.settings.SetConversationChatHTML(true)
+	for i := 0; i < 5; i++ {
+		flush()
+		time.Sleep(50 * time.Millisecond)
+	}
+	n := countLive()
+	t.Logf("chat html: %d live views of %d bubbles", n, len(b.chat.rows))
+	if n == 0 || n > board.ConversationMaxLiveWebViews {
+		t.Fatalf("preference on: %d live views (cap %d)", n, board.ConversationMaxLiveWebViews)
+	}
+	// The detail reads from the top, so the bubbles nearest the visible
+	// part are not necessarily the newest; one of them shows its HTML.
+	var shown *chatRow
+	var shownIndex int
+	for i, r := range b.chat.rows {
+		if r.bubble.web != nil {
+			shown, shownIndex = r, i
+			break
+		}
+	}
+	if shown == nil || shown.bubble.text.Visible() || !shown.fill || !shown.bubble.html.Visible() {
+		t.Fatal("a live bubble does not show its HTML")
+	}
+	for i, c := range b.cards {
+		if c.web != nil {
+			t.Fatalf("card %d has a web view under the chat", i)
+		}
+	}
+	w.settings.SetConversationChatHTML(false)
+	flush()
+	if n := countLive(); n != 0 {
+		t.Fatalf("preference off again: %d live views", n)
+	}
+	if !shown.bubble.text.Visible() || shown.bubble.text.Text() != conversation.BubbleText(d6.Messages[shownIndex].Text) {
+		t.Fatalf("the text did not come back: %q", shown.bubble.text.Text())
+	}
+	b.apply(d)
 	flush()
 }

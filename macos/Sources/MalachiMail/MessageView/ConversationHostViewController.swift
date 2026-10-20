@@ -76,7 +76,7 @@ final class ConversationHostViewController: NSViewController, MessageDisplay {
         self.state = state
         self.controller = controller
         timeline = ConversationViewController(state: state, cache: cache, controller: controller)
-        chat = ConversationChatViewController(state: state, controller: controller)
+        chat = ConversationChatViewController(state: state, cache: cache, controller: controller)
         super.init(nibName: nil, bundle: nil)
     }
 

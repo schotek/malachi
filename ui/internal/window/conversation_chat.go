@@ -13,6 +13,8 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/conversation"
+	"github.com/schotek/malachi/ui/internal/htmlview"
+	"github.com/schotek/malachi/ui/internal/settings"
 )
 
 // The chat layout of the conversation in the reading pane
@@ -26,9 +28,15 @@ import (
 // no wider than 900, the same insets), without its gutter and line: the
 // avatars stand beside the bubbles (conversation_chat_row.go).
 //
-// A bubble is plain text, never a web view: the message's text as the
-// daemon derived it, without its quoted history (bubbleBody), the
-// summary's snippet dimmed until the body is there. The bodies are asked
+// A bubble is plain text: the message's text as the daemon derived it,
+// without its quoted history (bubbleBody), the summary's snippet dimmed
+// until the body is there. With the preference conversation-chat-html
+// (htmlOn, observed: a change renders every bubble anew), a bubble whose
+// body has HTML (bubbleHTML) shows it in a locked web view of the
+// timeline's pool while it is among the convMaxLiveWebViews HTML bubbles
+// nearest the viewport (chatLive, measured from the end); far, beyond the
+// cap, the preference off or the chat hidden, it lets the view go and
+// shows its text (conversation_chat_row.go). The bodies are asked
 // for only for the bubbles near the viewport (chatNear: liveCards over the
 // rows' frames, two heights of the view), from the same controller and
 // cache of bodies as the timeline, so switching layouts asks thread.get
@@ -85,6 +93,9 @@ type conversationChat struct {
 	columnWidth float64
 	compact     bool
 
+	// htmlOn is the preference conversation-chat-html as last read.
+	htmlOn bool
+
 	nearScheduled bool
 	// layoutTick, layoutTries: as the timeline's afterLayout.
 	layoutTick  uint
@@ -106,6 +117,12 @@ func newConversationChat(h *conversationHost, b *gtk.Builder) *conversationChat 
 		drafts:   map[api.DraftID]*chatRow{},
 		events:   map[api.MessageID]*chatCenterRow{},
 	}
+	cv.htmlOn = h.w.settings.ConversationChatHTML()
+	h.w.settings.OnChanged(settings.KeyConversationChatHTML, cv.htmlChanged)
+	// The dark style and the accent colour are in the documents' sheet.
+	sm := adw.StyleManagerGetDefault()
+	sm.NotifyProperty("dark", cv.styleChanged)
+	sm.NotifyProperty("accent-color", cv.styleChanged)
 	cv.scroller.ConnectMap(cv.scheduleNear)
 	adj := cv.scroller.VAdjustment()
 	adj.ConnectChanged(func() {
@@ -182,7 +199,30 @@ func (cv *conversationChat) setShown(on bool) {
 	cv.shown = on
 	if on {
 		cv.open()
+		return
 	}
+	// Hidden: every web view goes back to the pool.
+	for _, row := range cv.bubbles {
+		row.bubble.setLive(false)
+	}
+}
+
+// htmlChanged follows the preference conversation-chat-html: every bubble
+// renders anew (off: every web view let go, the text back; on: the near
+// HTML bubbles get views at the next updateNear).
+func (cv *conversationChat) htmlChanged() {
+	on := cv.w.settings.ConversationChatHTML()
+	if on == cv.htmlOn {
+		return
+	}
+	cv.htmlOn = on
+	for id, row := range cv.bubbles {
+		if !on {
+			row.bubble.setLive(false)
+		}
+		cv.renderHTML(row, cv.ctrl.loaded[id])
+	}
+	cv.scheduleNear()
 }
 
 // open shows the conversation anew (a new one, or this layout shown): the
@@ -247,19 +287,22 @@ func (cv *conversationChat) apply(m *conversation.Model) {
 			row := cv.bubbles[id]
 			if row == nil || row.right != right {
 				if row != nil {
-					cv.detach(row)
+					cv.dropBubble(row)
 				}
 				row = newChatRow(right, cv.activate)
+				row.bubble.chat = cv
 				cv.bubbles[id] = row
 			}
 			row.row = r
 			row.setMax(bubbleMax)
+			row.setGap(cv.bubbleGap())
 			row.showMessage(r.Item, bubbleAttachmentBadge(r.Item.Message, cv.ctrl.loaded[id]), cv.compact)
 			if !row.bubble.showsText {
 				lm := cv.ctrl.loaded[id]
 				text, placeholder := bubbleBody(lm, r.Item.Message.Snippet)
 				row.bubble.showBody(text, placeholder, bubbleMonospace(lm, true))
 			}
+			cv.renderHTML(row, cv.ctrl.loaded[id])
 			desired = append(desired, row)
 			members = append(members, row)
 		case conversation.ChatEvent:
@@ -289,7 +332,7 @@ func (cv *conversationChat) apply(m *conversation.Model) {
 	}
 	for id, row := range cv.bubbles {
 		if !bubbleIDs[id] {
-			cv.detach(row)
+			cv.dropBubble(row)
 			delete(cv.bubbles, id)
 		}
 	}
@@ -343,6 +386,73 @@ func (cv *conversationChat) render(row *chatRow, lm *loadedMessage) {
 	row.showMessage(item, bubbleAttachmentBadge(item.Message, lm), cv.compact)
 	text, placeholder := bubbleBody(lm, item.Message.Snippet)
 	row.bubble.showBody(text, placeholder, bubbleMonospace(lm, true))
+	cv.renderHTML(row, lm)
+}
+
+// renderHTML gives the bubble of row the HTML body lm holds (bubbleHTML;
+// nil: its text): an entry let go or not settled yet keeps what the bubble
+// has, unless the preference is off. A bubble that wants a view now has
+// updateNear decide whether it gets one.
+func (cv *conversationChat) renderHTML(row *chatRow, lm *loadedMessage) {
+	if cv.htmlOn && (lm == nil || !lm.bodySettled()) {
+		return
+	}
+	was := row.bubble.wantsHTML()
+	row.bubble.setHTML(bubbleHTML(lm, cv.htmlOn))
+	if row.bubble.wantsHTML() && !was {
+		cv.scheduleNear()
+	}
+}
+
+// styleChanged loads the documents of the bubbles showing one again with
+// the style's colours (htmlview.ChatDocument).
+func (cv *conversationChat) styleChanged() {
+	for _, row := range cv.bubbles {
+		if row.bubble.web != nil {
+			row.bubble.loadWeb()
+		}
+	}
+}
+
+// dropBubble takes a bubble's row out, its web view back to the pool.
+func (cv *conversationChat) dropBubble(row *chatRow) {
+	row.bubble.setLive(false)
+	cv.detach(row)
+}
+
+// setZoom follows the text-zoom setting in the web views of the bubbles.
+func (cv *conversationChat) setZoom(percent int) {
+	for _, row := range cv.bubbles {
+		row.bubble.setZoom(percent)
+	}
+}
+
+// The bubbles' web views (chatWebHost): the timeline's pool, the window's
+// link question, the host's status label, this scroller. The chat keeps
+// its place itself on the adjustment's "changed" (followSize, settle), so
+// a height runs as it comes.
+func (cv *conversationChat) chatTakeWeb(zoom int) *htmlview.Card {
+	return cv.host.timeline.takeWebView(zoom)
+}
+func (cv *conversationChat) chatGiveWeb(web *htmlview.Card) { cv.host.timeline.returnWebView(web) }
+func (cv *conversationChat) chatZoom() int                  { return cv.w.settings.TextZoom() }
+func (cv *conversationChat) chatHover(uri string)           { cv.host.hover(uri) }
+func (cv *conversationChat) chatLink(uri string, links []api.Link) {
+	cv.w.openLink(&cv.w.ApplicationWindow.Window, uri, links)
+}
+func (cv *conversationChat) chatScrollBy(dy float64, unit gdk.ScrollUnit) { cv.scrollBy(dy, unit) }
+func (cv *conversationChat) chatHeight(_ *gtk.Frame, change func())       { change() }
+
+// scrollBy scrolls the chat by what a bubble whose document fits handed
+// on: dy steps of the wheel, or dy pixels of a touchpad (the timeline's
+// scrollBy).
+func (cv *conversationChat) scrollBy(dy float64, unit gdk.ScrollUnit) {
+	adj := cv.scroller.VAdjustment()
+	if unit == gdk.ScrollUnitWheel {
+		dy *= math.Pow(adj.PageSize(), 2.0/3.0)
+	}
+	cv.scroll.scrolled()
+	adj.SetValue(adj.Value() + dy)
 }
 
 // activate is a double click on a bubble (chatActivate).
@@ -361,7 +471,7 @@ func (cv *conversationChat) detach(w gtk.Widgetter) {
 // removeAll takes everything out (another conversation, or none).
 func (cv *conversationChat) removeAll() {
 	for _, row := range cv.bubbles {
-		cv.detach(row)
+		cv.dropBubble(row)
 	}
 	for _, row := range cv.drafts {
 		cv.detach(row)
@@ -395,6 +505,16 @@ func (cv *conversationChat) bubbleMax() int {
 	return int(math.Floor(convChatBubbleMax(cv.columnWidth)))
 }
 
+// bubbleGap is the empty side of a row whose bubble fills its maximum (an
+// HTML body, chatRow.setFill): the column less the avatar's gutter and
+// bubbleMax; 0 while the column has no width yet.
+func (cv *conversationChat) bubbleGap() int {
+	if cv.columnWidth <= 0 {
+		return 0
+	}
+	return max(0, int(math.Floor(cv.columnWidth))-convAvatar-convGutterGap-cv.bubbleMax())
+}
+
 // followSize follows the column's width: a change sizes the bubbles anew
 // (convChatBubbleMax) and may switch the short dates
 // (convChatCompactDates). The column is the clamp's child as allocated
@@ -416,11 +536,13 @@ func (cv *conversationChat) followSize() {
 	}
 	cv.columnWidth = column
 	max := cv.bubbleMax()
+	gap := cv.bubbleGap()
 	compact := convChatCompactDates(column)
 	compactChanged := compact != cv.compact
 	cv.compact = compact
 	for _, row := range cv.bubbles {
 		row.setMax(max)
+		row.setGap(gap)
 		if compactChanged {
 			row.bubble.setCompact(compact)
 		}
@@ -572,6 +694,8 @@ func (cv *conversationChat) updateNear() {
 	visible := convSpanOf(adj.Value(), adj.Value()+adj.PageSize())
 	ids := make([]api.MessageID, 0, len(cv.members))
 	frames := make([]convSpan, 0, len(cv.members))
+	html := make([]bool, 0, len(cv.members))
+	placed := make([]*chatRow, 0, len(cv.members))
 	unplaced := false
 	for _, row := range cv.members {
 		s, ok := cv.spanOf(row)
@@ -581,9 +705,14 @@ func (cv *conversationChat) updateNear() {
 		}
 		ids = append(ids, row.row.Item.Message.ID)
 		frames = append(frames, s)
+		html = append(html, cv.htmlOn && row.bubble.wantsHTML())
+		placed = append(placed, row)
 	}
-	near := chatNear(cv.ctrl, ids, frames, visible)
-	cv.host.near(cv, near)
+	live := chatLive(cv.ctrl, ids, frames, html, visible)
+	for i, row := range placed {
+		row.bubble.setLive(live.web[ids[i]])
+	}
+	cv.host.near(cv, live.near)
 	cv.measure()
 	if unplaced {
 		cv.afterLayout()

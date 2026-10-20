@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of ui/internal/conversation/chat.go (ChatRows, ChatScrollTo,
-// BubbleText, ChatToggleLabel, ChatToggleTooltip); macOS:
+// BubbleText, ChatToggleLabel, ChatToggleTooltip, BubbleRendersHTML); macOS:
 // MalachiCore/Model/ConversationChat.swift. Its types are ChatSide,
 // ChatRowKind and ChatRow; the rules of the view that Go leaves to the
 // clients are Conversation.ChatBody.cs.
@@ -18,7 +18,9 @@
 // end (ChatScrollTo). A bubble is plain text only: the sender, the date, the
 // unread dot, a paperclip, the Jira badges and the message's text as the
 // daemon derived it, with the quoted history cut (message.body's text with
-// trimQuoted; BubbleText). It has no buttons, no attachment chips, no web
+// trimQuoted; BubbleText), or, with the preference conversation-chat-html
+// (SettingsStore.ConversationChatHtml, BubbleRendersHtml), the sanitized HTML
+// of the timeline's card in the same locked web view. It has no buttons, no attachment chips, no web
 // view and folds never; its text cannot be selected, so that a double click
 // anywhere in it opens the message in its own window (a draft in the
 // compose window), where everything else is. Events and the row of older
@@ -153,4 +155,17 @@ public static partial class Conversation
         // TRANSLATORS: the tooltip of the "Show as Thread" toggle above a conversation shown as chat bubbles.
         return L10n.T("Back to the timeline: the messages as cards, newest first");
     }
+
+    /// <summary>
+    /// conversation.BubbleRendersHTML: whether a bubble of the chat layout
+    /// shows the message's sanitized HTML in the locked web view the
+    /// timeline's cards use (the same document as the card: the trimQuoted
+    /// variant) instead of its plain text: the preference
+    /// conversation-chat-html is on (<paramref name="setting"/>), the loaded
+    /// body has HTML (<paramref name="hasHtml"/>) and it is not withheld
+    /// (<paramref name="withheld"/>). A text-only message, a withheld or
+    /// failed body and a body not loaded yet read as text (the snippet as
+    /// placeholder) as without the preference.
+    /// </summary>
+    public static bool BubbleRendersHtml(bool setting, bool hasHtml, bool withheld) => setting && hasHtml && !withheld;
 }

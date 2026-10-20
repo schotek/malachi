@@ -50,7 +50,8 @@
 // and empty notes stand in place of either), with Mail's bubble rows
 // (ConversationChatRow, ConversationBubbleView.ShowPlain) showing the text
 // the case carries (MessageCard.Text): no message.body, no web view, no
-// placeholder, so the samples read the same. The user's own on the right
+// placeholder, so the samples read the same (unless Render HTML in Chat is
+// on, below). The user's own on the right
 // with the real sender's initials (MessageCard.Sender), oldest first; the
 // detail keeps its place at the top and is never scrolled to the chat's
 // end. While the chat shows the block is not live, so every card lets its
@@ -66,6 +67,23 @@
 // toggle, which sets them again from ConversationChatToggle.xaml), so a
 // ToggleButton added to the block or its cards later takes the
 // conversation view's subtle checked look unless it sets its own.
+//
+// HTML in the chat (the Mail preference conversation-chat-html, Render HTML
+// in Chat; docs/windows-port.md §11.8): with it on, a bubble of a member
+// with an id near the visible part of the detail (ConversationLayout.LiveCards
+// over the bubbles' frames in the detail's scroller, two viewport heights)
+// asks message.body through Mail's cache as an open card does (the same stub
+// summary, FetchBody; Board.ChatBodies keeps what was asked) and, when
+// Model.Conversation.BubbleRendersHtml says so, shows the chat document of
+// Mail's chat (CardWebView(chat: true), transparent, ViewerDocument.ChatDocument)
+// in ConversationBubbleView's HTML slot, for at most
+// ConversationCards.MaxLiveWebViews bubbles (the cards' views are gone while
+// the chat shows); the board.get text stays the fallback and what every
+// other bubble shows. The block is the bubbles' IChatWebHost: its own pool
+// of chat views, the cards' link path, the hover label, the wheel, and
+// ChangingHeight for their heights. A bubble far away or over the cap, the
+// cards shown again, the block detached or closed and the preference off
+// give the views back; with the preference off nothing is fetched.
 
 using System;
 using System.Collections.Generic;
@@ -95,7 +113,7 @@ using CoreBoard = Malachi.Core.Boards.Board;
 namespace Malachi.App.Boards;
 
 /// <summary>The conversation of the board's detail (BoardConversationBlock).</summary>
-public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPart
+public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPart, IChatWebHost
 {
     // The link label's longest text (the conversation view's StatusMaxChars).
     private const int HoverMaxChars = 512;
@@ -121,7 +139,18 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
     private readonly List<BoardMessageCardView> cards = [];
     private readonly ResourceDictionary styles = new() { Source = new Uri(StylesUri) };
     private readonly AfterRelease afterRelease;
-    private readonly HashSet<BoardMessageCardView> pendingHeights = [];
+    private readonly HashSet<FrameworkElement> pendingHeights = [];
+
+    // HTML in the chat: the views of the bubbles' documents waiting for a
+    // bubble, the bodies asked for, the body each bubble rendered last (a
+    // reload when its pictures arrived), and the detail's scroller while
+    // the near bubbles are followed.
+    private readonly List<CardWebView> chatPool = [];
+    private readonly CoreBoard.ChatBodies chatBodies = new();
+    private readonly Dictionary<MessageId, MessageBodyResult> chatSources = [];
+    private ScrollViewer? followed;
+    private bool chatNearPending;
+    private SettingsChangeToken? chatHtmlToken;
 
     // The chat's bubbles, in order, and what each shows; the rows of members
     // with an id by id (kept across refreshes).
@@ -220,6 +249,7 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
             zoomToken = settings.OnChange(SettingsKey.TextZoom, () => SetZoom(settings.TextZoom));
             layoutToken = settings.OnChange(SettingsKey.ConversationChatLayout, ShowLayout);
             avatarsToken = settings.OnChange(SettingsKey.MonochromeAvatars, ApplyAvatars);
+            chatHtmlToken = settings.OnChange(SettingsKey.ConversationChatHtml, ApplyChatHtml);
             ShowLayout();
         }
         else
@@ -246,6 +276,16 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
     private bool Live =>
         !closed && attached && services is not null && IsLoaded && XamlRoot is not null
         && Visibility == Visibility.Visible && !chatShown && cardsColumn.Visibility == Visibility.Visible;
+
+    // The chat's bubbles may render HTML now: the chat shown and live as the
+    // cards would be, and the preference on.
+    private bool ChatLive =>
+        !closed && attached && services is not null && IsLoaded && XamlRoot is not null
+        && Visibility == Visibility.Visible && chatShown && chatColumn.Visibility == Visibility.Visible
+        && services.State.Settings.ConversationChatHtml;
+
+    // The preference conversation-chat-html.
+    private bool ChatHtml => services?.State.Settings.ConversationChatHtml == true;
 
     /// <inheritdoc/>
     public UIElement View => this;
@@ -431,6 +471,16 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         }
         zoomToken?.Cancel();
         zoomToken = null;
+        chatHtmlToken?.Cancel();
+        chatHtmlToken = null;
+        Follow(null);
+        chatBodies.Reset();
+        chatSources.Clear();
+        foreach (var web in chatPool)
+        {
+            web.Release();
+        }
+        chatPool.Clear();
         layoutToken?.Cancel();
         layoutToken = null;
         avatarsToken?.Cancel();
@@ -510,7 +560,8 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         var text = ConversationLayout.ClampText(link ?? "", HoverMaxChars);
         hover.Text = text;
         // The chat has no links.
-        hover.Visibility = text.Length > 0 && !chatShown ? Visibility.Visible : Visibility.Collapsed;
+        // The chat's HTML bubbles have links too.
+        hover.Visibility = text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>
@@ -536,7 +587,7 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
     /// (Board.ConversationCards.CompensatedTop), so what the user reads stays
     /// in place. Changes of one card before the layout settled count as one.
     /// </summary>
-    internal void ChangingHeight(BoardMessageCardView card, Action change)
+    internal void ChangingHeight(FrameworkElement card, Action change)
     {
         var scroller = host.Scroller;
         if (userChanging || closed || pendingHeights.Contains(card) || scroller?.Content is not UIElement content
@@ -629,6 +680,9 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         {
             return;
         }
+        // The chat's HTML bubbles follow the same moments (shown, hidden,
+        // detached, another layout).
+        ScheduleChatNear();
         var live = Live;
         var canFetch = services is not null;
         for (var i = 0; i < cards.Count; i++)
@@ -726,6 +780,11 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
     // other variant of the quoted history).
     private void OnMessageLoaded(object? sender, MessageCacheEntry e)
     {
+        // A chat bubble that asked for its body: what the cache holds now.
+        if (!closed && chatBodies.WasAsked(e.Id) && chatById.TryGetValue(e.Id, out var bubbleRow))
+        {
+            RenderChatBody(bubbleRow);
+        }
         if (closed || state.IndexOf(e.Id) is not { } i || state.BodyOf(i) == CoreBoard.ConversationCards.Body.Unknown)
         {
             return;
@@ -786,6 +845,7 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         foreach (var row in chatRows)
         {
             row.Bubble.SetFonts(size, null);
+            row.Bubble.SetZoom(percent);
         }
     }
 
@@ -946,6 +1006,7 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         }
         foreach (var gone in chatById.Values)
         {
+            gone.Bubble.SetLive(false);
             _ = chatColumn.Children.Remove(gone);
             _ = chatShows.Remove(gone);
             changed = true;
@@ -972,6 +1033,7 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         {
             if (chatColumn.Children[chatColumn.Children.Count - 1] is ConversationChatRow stray)
             {
+                stray.Bubble.SetLive(false);
                 _ = chatShows.Remove(stray);
             }
             chatColumn.Children.RemoveAt(chatColumn.Children.Count - 1);
@@ -990,6 +1052,11 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
     private ConversationChatRow MakeChatRow(CoreBoard.MessageCard m, bool right)
     {
         var bubble = new ConversationBubbleView(right, Look, BubbleFontSize, null) { CompactDate = compactDates };
+        if (CoreBoard.ChatOpens(m))
+        {
+            // A member with an id may render its HTML; a sample never does.
+            bubble.WebHost = this;
+        }
         var row = new ConversationChatRow(m.Id, null, right, bubble);
         bubble.Activate = () => OpenMember(row);
         return row;
@@ -1006,9 +1073,239 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
     {
         chatShows[row] = m;
         row.Bubble.ShowPlain(ChatBubbleId(i), m.From, m.Date);
-        row.Bubble.ShowBody(new BubbleBody.Text(Core.Model.Conversation.BubbleText(m.Text)), monospaceText: false);
+        var body = ChatBodyOf(m, out var reload);
+        row.Bubble.ShowBody(body, monospaceText: false, reloadPictures: reload);
         row.ShowAvatar(m.Sender, monochrome);
     }
+
+    // What member m's bubble shows: the case's text, or, with the preference
+    // on and its body asked and in Mail's cache, the message's HTML
+    // (Conversation.BubbleBodyFor with renderHtml) with the case's text as
+    // the fallback; reload says its pictures arrived since the last render.
+    private BubbleBody ChatBodyOf(CoreBoard.MessageCard m, out bool reload)
+    {
+        reload = false;
+        var text = new BubbleBody.Text(Core.Model.Conversation.BubbleText(m.Text));
+        if (services is null || !ChatHtml || m.Id is not { } id || !chatBodies.WasAsked(id)
+            || services.Cache.Loaded(id) is not { BodySettled: true, Fetching: false } lm)
+        {
+            return text;
+        }
+        if (Core.Model.Conversation.ChatBody(lm, lm.QuotedShown) is { } now)
+        {
+            reload = chatSources.TryGetValue(id, out var before) && ConversationLayout.PicturesArrived(before, now);
+            chatSources[id] = now;
+        }
+        return Core.Model.Conversation.BubbleBodyFor(lm, m.Text, renderHtml: true) is BubbleBody.Html h
+            ? h with { Fallback = text.Value }
+            : text;
+    }
+
+    // The bubble of row anew from what it shows and what the cache holds,
+    // its height through ChangingHeight.
+    private void RenderChatBody(ConversationChatRow row)
+    {
+        if (closed || !chatShows.TryGetValue(row, out var m))
+        {
+            return;
+        }
+        var body = ChatBodyOf(m, out var reload);
+        ChangingHeight(row.Bubble, () => row.Bubble.ShowBody(body, monospaceText: false, reloadPictures: reload));
+        ScheduleChatNear();
+    }
+
+    // message.body of member m for its bubble, through Mail's cache as a
+    // card asks for its own; the answer shows in place.
+    private void FetchChatBody(CoreBoard.MessageCard m)
+    {
+        if (services is null || account is not { } acct || m.Id is not { } id)
+        {
+            return;
+        }
+        var caseId = state.CaseId;
+        services.Cache.FetchBody(Summary(id, acct), _ =>
+        {
+            if (closed || account != acct || state.CaseId != caseId || !ChatHtml)
+            {
+                return;
+            }
+            if (chatById.TryGetValue(id, out var row))
+            {
+                RenderChatBody(row);
+            }
+        });
+    }
+
+    private void ScheduleChatNear()
+    {
+        if (chatNearPending || closed)
+        {
+            return;
+        }
+        chatNearPending = true;
+        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, UpdateChatNear);
+    }
+
+    // The bubbles near the visible part of the detail ask for their bodies
+    // and the nearest HTML ones hold a view (LiveCards, the board's cap);
+    // the others, and every one while the chat is not live, give theirs
+    // back. The detail's scroller is followed only while the chat is live.
+    private void UpdateChatNear()
+    {
+        chatNearPending = false;
+        var scroller = host.Scroller;
+        if (!ChatLive || scroller?.Content is not UIElement content)
+        {
+            Follow(null);
+            foreach (var row in chatRows)
+            {
+                row.Bubble.SetLive(false);
+            }
+            return;
+        }
+        Follow(scroller);
+        var placed = new List<ConversationChatRow>();
+        var frames = new List<ConversationLayout.Span>();
+        var html = new List<bool>();
+        foreach (var row in chatRows)
+        {
+            if (!row.IsLoaded || row.ActualHeight <= 0)
+            {
+                continue;
+            }
+            double top;
+            try
+            {
+                top = row.TransformToVisual(content).TransformPoint(new Point(0, 0)).Y;
+            }
+            catch (ArgumentException)
+            {
+                continue;
+            }
+            placed.Add(row);
+            frames.Add(ConversationLayout.Span.Of(top, top + row.ActualHeight));
+            html.Add(row.Bubble.WantsWebView);
+        }
+        var visible = ConversationLayout.Span.Of(scroller.VerticalOffset, scroller.VerticalOffset + scroller.ViewportHeight);
+        var live = ConversationLayout.LiveCards(frames, html, visible, ConversationLayout.LiveScreens, CoreBoard.ConversationCards.MaxLiveWebViews);
+        // The losers first, so that the pool has their views.
+        for (var i = 0; i < placed.Count; i++)
+        {
+            if (!live.Web.Contains(i) && placed[i].Bubble.IsLive)
+            {
+                var bubble = placed[i].Bubble;
+                ChangingHeight(bubble, () => bubble.SetLive(false));
+            }
+        }
+        for (var i = 0; i < placed.Count; i++)
+        {
+            var row = placed[i];
+            if (live.Web.Contains(i) && !row.Bubble.IsLive)
+            {
+                var bubble = row.Bubble;
+                ChangingHeight(bubble, () => bubble.SetLive(true));
+            }
+            if (live.Near.Contains(i) && chatShows.TryGetValue(row, out var m)
+                && chatBodies.NeedsBody(state.CaseId, m, setting: true, near: true) && m.Id is { } id)
+            {
+                chatBodies.Asked(id);
+                FetchChatBody(m);
+            }
+        }
+    }
+
+    // Follows the detail's scroller (null: none): its scrolling and size
+    // decide which bubbles are near.
+    private void Follow(ScrollViewer? scroller)
+    {
+        if (ReferenceEquals(scroller, followed))
+        {
+            return;
+        }
+        if (followed is not null)
+        {
+            followed.ViewChanged -= OnFollowedViewChanged;
+            followed.SizeChanged -= OnFollowedSizeChanged;
+        }
+        followed = scroller;
+        if (scroller is not null)
+        {
+            scroller.ViewChanged += OnFollowedViewChanged;
+            scroller.SizeChanged += OnFollowedSizeChanged;
+        }
+    }
+
+    private void OnFollowedViewChanged(object? sender, ScrollViewerViewChangedEventArgs e) => ScheduleChatNear();
+
+    private void OnFollowedSizeChanged(object sender, SizeChangedEventArgs e) => ScheduleChatNear();
+
+    // The preference conversation-chat-html changed: off, nothing is asked
+    // any more and every bubble shows the case's text (its view given back);
+    // on, the near bubbles ask.
+    private void ApplyChatHtml()
+    {
+        if (closed)
+        {
+            return;
+        }
+        if (!ChatHtml)
+        {
+            chatBodies.Reset();
+            chatSources.Clear();
+        }
+        foreach (var row in chatRows)
+        {
+            RenderChatBody(row);
+        }
+        ScheduleChatNear();
+    }
+
+    /// <inheritdoc/>
+    CardWebView IChatWebHost.TakeWebView()
+    {
+        var zoom = services?.State.Settings.TextZoom ?? 100;
+        if (chatPool.Count > 0)
+        {
+            var pooled = chatPool[^1];
+            chatPool.RemoveAt(chatPool.Count - 1);
+            pooled.Zoom = zoom;
+            return pooled;
+        }
+        var web = new CardWebView(chat: true) { Zoom = zoom };
+        if (services?.Cache is { } cache)
+        {
+            web.Parts = (part, token) => cache.FetchPartAsync(part.AccountId, part.MessageId, part.PartId, token);
+        }
+        return web;
+    }
+
+    /// <inheritdoc/>
+    void IChatWebHost.ReturnWebView(CardWebView web)
+    {
+        ArgumentNullException.ThrowIfNull(web);
+        if (closed || chatPool.Count >= CoreBoard.ConversationCards.MaxLiveWebViews)
+        {
+            web.Release();
+            return;
+        }
+        web.Reset();
+        chatPool.Add(web);
+    }
+
+    /// <inheritdoc/>
+    void IChatWebHost.OpenLink(ActivatedLink link, IReadOnlyList<Link> links) => OpenLink(link, links);
+
+    /// <inheritdoc/>
+    void IChatWebHost.Hover(string link) => Hover(link);
+
+    /// <inheritdoc/>
+    void IChatWebHost.ScrollBy(double wheelDelta) => ScrollBy(wheelDelta);
+
+    /// <inheritdoc/>
+    void IChatWebHost.Reflow(FrameworkElement bubble, Action change) => ChangingHeight(bubble, change);
+
+    /// <inheritdoc/>
+    void IChatWebHost.LiveChanged() => ScheduleChatNear();
 
     // A double tap on a bubble: the message in its own window once the
     // press is released (a sample opens nothing and says so, as Show in
@@ -1095,6 +1392,10 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
 
     private void ClearChat()
     {
+        foreach (var row in chatRows)
+        {
+            row.Bubble.SetLive(false);
+        }
         chatColumn.Children.Clear();
         chatRows.Clear();
         chatShows.Clear();

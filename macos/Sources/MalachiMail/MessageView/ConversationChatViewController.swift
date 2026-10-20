@@ -15,10 +15,20 @@ import MalachiCore
 /// than 900 points, the same insets), without its gutter and line: the
 /// avatars stand beside the bubbles (`ConversationChatRow`).
 ///
-/// A bubble is plain text, never a web view (`ConversationBubbleView`): the
-/// message's text as the daemon derived it, without its quoted history
+/// A bubble is plain text (`ConversationBubbleView`): the message's text as
+/// the daemon derived it, without its quoted history
 /// (`Conversation.bubbleBody`), the summary's snippet dimmed until the body
-/// is there. The bodies are asked for only for the bubbles near the
+/// is there. With the preference Render HTML in Chat
+/// (`conversation-chat-html`, observed: flipping it renders every bubble
+/// anew) a bubble whose body has HTML shows the timeline card's document
+/// in a locked `MessageWebView` of its own in the sized mode
+/// (`Conversation.bubbleRendersHTML`); web views exist only for the
+/// nearest of those bubbles, at most `ConversationLayout.maxLiveWebViews`
+/// (`ConversationLayout.live` over the rows), the others and every bubble
+/// of a hidden layout read their text. Links go through the delegate's
+/// "Open this link?" as the cards' do, the link under the pointer to the
+/// status label, and a document's height through `preserving`, which
+/// keeps the end or the reading place. The bodies are asked for only for the bubbles near the
 /// viewport (`ConversationLayout.live` over the rows' frames, two heights
 /// of the view), from the same controller and cache of bodies as the
 /// timeline, so switching layouts asks thread.get nothing. A double click
@@ -36,6 +46,7 @@ import MalachiCore
 @MainActor
 final class ConversationChatViewController: NSViewController {
     let state: AppState
+    let cache: MessageCache
     let controller: ConversationController
 
     /// The actions of the messages: opening one, editing a draft (set by
@@ -64,6 +75,7 @@ final class ConversationChatViewController: NSViewController {
     private var rowViews: [NSView] = []
     private var compactDates = false
     private let loadingSpinner = Spinner(size: 32)
+    private let statusBox = LinkStatusView()
     private var spinnerWork: DispatchWorkItem?
     private var settingsTokens: [Settings.ChangeToken] = []
 
@@ -85,8 +97,9 @@ final class ConversationChatViewController: NSViewController {
     /// The views of the stack before the rows: the issue card.
     private static let headViews = 1
 
-    init(state: AppState, controller: ConversationController) {
+    init(state: AppState, cache: MessageCache, controller: ConversationController) {
         self.state = state
+        self.cache = cache
         self.controller = controller
         let widest = CGFloat(ConversationLayout.Metrics.maxWidth)
         clamp = ClampView(maximum: widest, tight: widest)
@@ -135,6 +148,7 @@ final class ConversationChatViewController: NSViewController {
         let container = ConversationSurfaceView()
         container.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(scroll)
+        container.addSubview(statusBox)
         container.addSubview(loadingSpinner)
         NSLayoutConstraint.activate([
             scroll.topAnchor.constraint(equalTo: container.topAnchor),
@@ -144,12 +158,15 @@ final class ConversationChatViewController: NSViewController {
             loadingSpinner.centerXAnchor.constraint(equalTo: container.centerXAnchor),
             loadingSpinner.centerYAnchor.constraint(equalTo: container.centerYAnchor),
         ])
+        // The link under the pointer in an HTML bubble, as the timeline's.
+        NSLayoutConstraint.activate(statusBox.pin(in: container))
         view = container
 
         let settings = state.settings
         settingsTokens.append(settings.onChange(.textZoom) { [weak self] in self?.applyBodyFont() })
         settingsTokens.append(settings.onChange(.monospacePlainText) { [weak self] in self?.applyBodyFont() })
         settingsTokens.append(settings.onChange(.monochromeAvatars) { [weak self] in self?.applyAvatars() })
+        settingsTokens.append(settings.onChange(.conversationChatHTML) { [weak self] in self?.applyHTMLSetting() })
     }
 
     /// Above the first row's own gap.
@@ -202,7 +219,18 @@ final class ConversationChatViewController: NSViewController {
         shown = on
         if on {
             open()
+        } else {
+            releaseWebViews()
         }
+    }
+
+    /// Every bubble lets go of its web view and reads its text (the layout
+    /// hidden, the preference off).
+    private func releaseWebViews() {
+        for row in bubbles.values {
+            row.bubble.setLive(false)
+        }
+        statusBox.show("")
     }
 
     /// The conversation shown anew (a new one, or this layout shown): the
@@ -262,9 +290,11 @@ final class ConversationChatViewController: NSViewController {
                     view = shown
                 } else {
                     if let old = bubbles[id] {
+                        old.bubble.setLive(false)
                         detach(old)
                     }
                     view = makeRow(id: id, draft: nil, right: right)
+                    view.bubble.webHost = self
                     view.bubble.onDoubleClick = { [weak self, weak view] in
                         guard let self, let id = view?.id, let s = self.controller.member(id) else { return }
                         self.delegate?.openMessage(s)
@@ -275,8 +305,7 @@ final class ConversationChatViewController: NSViewController {
                 view.bubble.showMessage(item, attachments: attachments(id))
                 if !view.bubble.showsText {
                     let lm = controller.loaded[id]
-                    view.bubble.showBody(
-                        Conversation.bubbleBody(lm, snippet: item.message?.snippet ?? ""), monospace: monospace(lm))
+                    view.bubble.showBody(bubbleBody(lm, item), monospace: monospace(lm))
                 }
                 view.showAvatar(name: item.sender, monochrome: monochrome)
                 view.setColumn(column)
@@ -310,6 +339,7 @@ final class ConversationChatViewController: NSViewController {
             }
         }
         for (id, view) in bubbles where !bubbleIDs.contains(id) {
+            view.bubble.setLive(false)
             detach(view)
             bubbles[id] = nil
         }
@@ -352,7 +382,14 @@ final class ConversationChatViewController: NSViewController {
         guard i >= 0 else { return }
         let item = model.items[i]
         row.bubble.showMessage(item, attachments: attachments(id))
-        row.bubble.showBody(Conversation.bubbleBody(lm, snippet: item.message?.snippet ?? ""), monospace: monospace(lm))
+        row.bubble.showBody(bubbleBody(lm, item), monospace: monospace(lm))
+    }
+
+    /// What the bubble of `item`, whose entry is `lm`, shows
+    /// (`Conversation.bubbleBody` with the preference Render HTML in Chat).
+    private func bubbleBody(_ lm: LoadedMessage?, _ item: Conversation.Item) -> Conversation.BubbleBody {
+        Conversation.bubbleBody(
+            lm, snippet: item.message?.snippet ?? "", html: state.settings.conversationChatHTML)
     }
 
     /// The attachments pill of member `id`
@@ -371,6 +408,7 @@ final class ConversationChatViewController: NSViewController {
 
     /// Takes everything out (another conversation, or none).
     private func removeAll() {
+        releaseWebViews()
         for v in rowViews {
             detach(v)
         }
@@ -555,15 +593,31 @@ final class ConversationChatViewController: NSViewController {
         guard shown, controller.model != nil else { return }
         let clip = scroll.contentView.bounds
         var ids: [MessageID] = []
+        var rows: [ConversationChatRow] = []
         var frames: [ConversationLayout.Span] = []
+        var html: [Bool] = []
+        let htmlOn = state.settings.conversationChatHTML
         for v in rowViews {
             guard let row = v as? ConversationChatRow, let id = row.id else { continue }
             let f = frameInDocument(row)
             ids.append(id)
+            rows.append(row)
             frames.append(ConversationLayout.Span(Double(f.minY), Double(f.maxY)))
+            html.append(htmlOn && row.bubble.rendersHTML)
         }
         let live = ConversationLayout.live(
-            frames: frames, html: [], visible: ConversationLayout.Span(Double(clip.minY), Double(clip.maxY)))
+            frames: frames, html: html, visible: ConversationLayout.Span(Double(clip.minY), Double(clip.maxY)))
+        // The nearest HTML bubbles get their web views, the rest let go
+        // (their text again); the heights change, so the end or the place
+        // read is kept, and the near set is looked at once more after.
+        let changes = rows.indices.filter { rows[$0].bubble.live != live.web.contains($0) }
+        if !changes.isEmpty {
+            preserving {
+                for i in changes {
+                    rows[i].bubble.setLive(live.web.contains(i))
+                }
+            }
+        }
         var near = Set<MessageID>()
         for i in live.near.sorted() {
             near.insert(ids[i])
@@ -633,7 +687,7 @@ final class ConversationChatViewController: NSViewController {
         let setting = state.settings.monospacePlainText
         preserving {
             for row in bubbles.values {
-                row.bubble.setFonts(normal: f.normal, monospace: f.monospace)
+                row.bubble.setFonts(normal: f.normal, monospace: f.monospace, zoom: state.settings.textZoom)
                 let lm = row.id.flatMap { controller.loaded[$0] }
                 row.bubble.setMonospace(lm.map { monospace($0) } ?? (setting && row.bubble.isMonospace))
             }
@@ -659,5 +713,42 @@ final class ConversationChatViewController: NSViewController {
                 draftRows[id]?.showAvatar(name: card.sender, monochrome: monochrome)
             }
         }
+    }
+
+    /// Render HTML in Chat switched: every bubble anew from the entry it
+    /// has (on: `.html` where the body has HTML, the web views come with
+    /// the next near update; off: every web view let go, the text back,
+    /// also for a bubble whose entry was let go).
+    private func applyHTMLSetting() {
+        guard controller.model != nil else { return }
+        let on = state.settings.conversationChatHTML
+        preserving {
+            if !on {
+                releaseWebViews()
+            }
+            for (id, row) in bubbles {
+                if let lm = controller.loaded[id] {
+                    render(row, lm)
+                } else if !on {
+                    row.bubble.dropHTML()
+                }
+            }
+        }
+    }
+}
+
+extension ConversationChatViewController: ConversationBubbleWebHost {
+    var textZoom: Int { state.settings.textZoom }
+
+    func openLink(_ href: String, links: [Link], from window: NSWindow?) {
+        delegate?.openLink(href, links: links, from: window)
+    }
+
+    func hover(_ href: String) {
+        statusBox.show(href)
+    }
+
+    func bubbleHeightChanging(_ change: () -> Void) {
+        preserving(change)
     }
 }

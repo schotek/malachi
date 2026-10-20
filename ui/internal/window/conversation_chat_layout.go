@@ -174,6 +174,49 @@ func bubbleBody(lm *loadedMessage, snippet string) (text string, placeholder boo
 	return bodyText(nil), false
 }
 
+// bubbleHTML is the body whose sanitised HTML the bubble of a message
+// whose cache entry is lm shows in a locked web view (the preference
+// conversation-chat-html, setting; conversation.BubbleRendersHTML), the
+// document the timeline's card of the message would show for the variant
+// the chat reads (chatBody: without the quoted history); nil when the
+// bubble reads as text (bubbleBody): the preference off, nothing loaded
+// yet, an error of message.body, a body in a state other than fetched, a
+// text-only message or withheld HTML. The view gives a web view only to
+// the bubbles near the viewport with such a body, at most
+// convMaxLiveWebViews (chatLive); the others show bubbleBody's text.
+func bubbleHTML(lm *loadedMessage, setting bool) *api.MessageBodyResult {
+	if !setting || lm == nil {
+		return nil
+	}
+	if !chatBodyAside(lm) && lm.err != nil {
+		return nil
+	}
+	b := chatBody(lm)
+	if b == nil || b.BodyState != api.BodyFetched {
+		return nil
+	}
+	if !conversation.BubbleRendersHTML(setting, b.HTML != "", b.HTMLWithheld) {
+		return nil
+	}
+	return b
+}
+
+// bubbleFrozenHeight is the minimum height of the text of a bubble that
+// wants its HTML (wantsHTML: bubbleHTML gave it a body) but shows no web
+// view now (web false: far from the viewport or beyond the cap): the
+// document's height as last reported (reported, height), as a released
+// card keeps its paper's height, so that the row keeps its allocation and
+// the live window (chatLive) cannot flip the bubble between the view and
+// the text. 0 (no minimum) while the view shows, before the document
+// reported a height, and once the bubble wants no HTML (the preference
+// off, a body that cannot render it).
+func bubbleFrozenHeight(wantsHTML, web, reported bool, height int) int {
+	if !wantsHTML || web || !reported || height <= 0 {
+		return 0
+	}
+	return height
+}
+
 // bubbleMonospace reports whether the bubble of a message whose cache
 // entry is lm shows its text in the monospaced font: only with the setting
 // for plain text (monospace) and only for a body that is plain text, not
@@ -269,23 +312,65 @@ func (s *convChatScroll) toEnd() bool {
 
 // chatNear asks for the bodies of the bubbles near the viewport: the
 // messages ids whose rows are at frames (same indices) within
-// convLiveScreens heights of visible (liveCards, no web view in the chat),
-// each with message.get as well when the summary has attachments, as the
-// timeline's card asks for its chips, so that the paperclip gets its
-// number (conversationController.needsBody). The near set is returned for
-// the host's trim.
+// convLiveScreens heights of visible, each with message.get as well when
+// the summary has attachments, as the timeline's card asks for its chips,
+// so that the paperclip gets its number (conversationController.needsBody).
+// The near set is returned for the host's trim. chatLive without web
+// views.
 func chatNear(ctrl *conversationController, ids []api.MessageID, frames []convSpan, visible convSpan) map[api.MessageID]bool {
-	live := liveCards(frames, nil, visible, convLiveScreens, 0)
-	near := map[api.MessageID]bool{}
+	return chatLive(ctrl, ids, frames, nil, visible).near
+}
+
+// chatLiveSet is what chatLive decided: the bubbles near the viewport
+// (their bodies are asked for) and those of them that show their HTML in a
+// web view.
+type chatLiveSet struct {
+	near, web map[api.MessageID]bool
+}
+
+// chatLive is chatNear and, of the bubbles near the viewport whose body
+// renders as HTML (html, same indices as ids; bubbleHTML), the ones that
+// get a web view: the timeline's rule (liveCards, convMaxLiveWebViews at
+// most, the nearest to the visible part first) measured from the end, so
+// that of bubbles equally near (in view) the newest win, as the chat opens
+// at its end. The others show their text.
+func chatLive(ctrl *conversationController, ids []api.MessageID, frames []convSpan, html []bool, visible convSpan) chatLiveSet {
+	live := chatLiveRows(frames, html, visible, convMaxLiveWebViews)
+	out := chatLiveSet{near: map[api.MessageID]bool{}, web: map[api.MessageID]bool{}}
 	for i, id := range ids {
 		if !live.Near[i] {
 			continue
 		}
-		near[id] = true
+		out.near[id] = true
+		if live.Web[i] {
+			out.web[id] = true
+		}
 		s, _ := ctrl.member(id)
 		ctrl.needsBody(id, s.HasAttachments)
 	}
-	return near
+	return out
+}
+
+// chatLiveRows is liveCards for the rows of a chat (indices as frames),
+// measured from the end: of rows equally near the visible part the
+// newest (the last) get the limit's web views first. Mail's chat
+// (chatLive, convMaxLiveWebViews) and the board's (boardChat,
+// board.ConversationMaxLiveWebViews) share it.
+func chatLiveRows(frames []convSpan, html []bool, visible convSpan, limit int) convLive {
+	n := len(frames)
+	revFrames := make([]convSpan, n)
+	revHTML := make([]bool, n)
+	for i := 0; i < n; i++ {
+		revFrames[n-1-i] = frames[i]
+		revHTML[n-1-i] = i < len(html) && html[i]
+	}
+	rev := liveCards(revFrames, revHTML, visible, convLiveScreens, limit)
+	out := convLive{Near: map[int]bool{}, Web: map[int]bool{}}
+	for i := 0; i < n; i++ {
+		out.Near[i] = rev.Near[n-1-i]
+		out.Web[i] = rev.Web[n-1-i]
+	}
+	return out
 }
 
 // chatActivate is a double click on the bubble of row (D3, D14): a

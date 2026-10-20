@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Model/ConversationChatBody.swift
-// (chatBody, bubbleBody, bubbleMonospace, bubbleAttachmentBadge); the
+// (chatBody, bubbleBody, bubbleMonospace, bubbleAttachmentBadge; the HTML
+// variant of bubbleBody with the preference conversation-chat-html); the
 // layout half of that file (chatAtEnd, chatColumn, chatCompactDates,
 // chatResize, chatEndTop) is ConversationLayout.Chat.cs. Swift-first:
 // ui/internal/conversation/chat.go leaves these to the clients (BubbleText
@@ -60,7 +61,19 @@ public static partial class Conversation
     /// left. The error belongs to <see cref="LoadedMessage.Body"/>, so it does
     /// not hide the trimmed variant kept aside.
     /// </summary>
-    public static BubbleBody BubbleBodyFor(LoadedMessage? lm, string? snippet)
+    public static BubbleBody BubbleBodyFor(LoadedMessage? lm, string? snippet) => BubbleBodyFor(lm, snippet, renderHtml: false);
+
+    /// <summary>
+    /// <see cref="BubbleBodyFor(LoadedMessage?, string?)"/> with the
+    /// preference conversation-chat-html (<paramref name="renderHtml"/>,
+    /// <see cref="BubbleRendersHtml"/>): a fetched body with HTML that is not
+    /// withheld is <see cref="BubbleBody.Html"/> (its fragment, its links and
+    /// the text the bubble shows without a web view); every other state reads
+    /// as without the preference. The variant is the one the bubble reads
+    /// (<see cref="ChatBody"/>): the timeline card's document of the trimmed
+    /// body.
+    /// </summary>
+    public static BubbleBody BubbleBodyFor(LoadedMessage? lm, string? snippet, bool renderHtml)
     {
         var placeholder = new BubbleBody.Placeholder(BubbleText(snippet));
         if (lm is null)
@@ -84,7 +97,12 @@ public static partial class Conversation
                 return new BubbleBody.Text(LoadedMessageText.BodyText(b));
         }
         var text = BubbleText(b.Text);
-        return new BubbleBody.Text(text.Length == 0 ? LoadedMessageText.BodyText(null) : text);
+        var shown = text.Length == 0 ? LoadedMessageText.BodyText(null) : text;
+        if (BubbleRendersHtml(renderHtml, b.HasHtml, b.HtmlWithheld == true) && LoadedMessageText.ShowsHtml(b))
+        {
+            return new BubbleBody.Html(b.Html!, b.Links, shown);
+        }
+        return new BubbleBody.Text(shown);
     }
 
     /// <summary>

@@ -56,12 +56,65 @@ func viewerCSS(columnPadding: String) -> String {
     """
 }
 
+/// The colours a chat bubble's document takes in the dark appearance
+/// (`viewerChatCSS`): the bubble's own text and link colours as CSS values
+/// (the text bubbles' `labelColor` and `linkColor`, resolved by the view).
+public struct ViewerChatColours: Sendable, Equatable {
+    public var text: String
+    public var link: String
+
+    public init(text: String, link: String) {
+        self.text = text
+        self.link = link
+    }
+}
+
+/// The background rule of a chat bubble's document: every background of
+/// the content goes, so the bubble's own (the card colour, the user's
+/// accent tint) shows through the transparent web view, whatever the
+/// message painted (the owner's decision, 2026-10-20).
+public let viewerChatBackgroundCSS =
+    "html, body, *, *::before, *::after { background-color: transparent !important; background-image: none !important; }"
+
+/// The sizing rules of a chat bubble's document (`viewerChatCSS`).
+public let viewerChatFitCSS = """
+    html, body { overflow: hidden !important; margin: 0 !important; }
+    #malachi-column { display: flow-root !important; }
+    #malachi-column > :first-child { margin-top: 0 !important; }
+    #malachi-column > :last-child { margin-bottom: 0 !important; }
+    """
+
+/// The sheet of a chat bubble (macOS-first; `viewerDocument(body:compact:chat:)`):
+/// the compact sheet with no column padding (the bubble's own padding is
+/// around the web view, so the document lines up with a text bubble's
+/// text), no backgrounds (`viewerChatBackgroundCSS`), and in the dark
+/// appearance the text and links in the bubble's colours, since a mail's
+/// dark text would sit on the dark bubble. In the light appearance the
+/// message keeps its text colours.
+///
+/// Without padding, the column's first and last children's margins would
+/// collapse through it, and the size script, which measures where the
+/// column ends, would miss the last one: the document would be taller
+/// than the view and scroll. The column is therefore a block formatting
+/// context of its own (`flow-root`), its first and last children have no
+/// outer margin (the bubble's padding is the gap), and the page never
+/// scrolls (`viewerChatFitCSS`).
+func viewerChatCSS(_ colours: ViewerChatColours) -> String {
+    viewerCSS(columnPadding: "0")
+        + viewerChatFitCSS + "\n"
+        + viewerChatBackgroundCSS + "\n"
+        + "@media (prefers-color-scheme: dark) { * { color: \(colours.text) !important; } a, a * { color: \(colours.link) !important; } }\n"
+}
+
 /// htmlview.Document: wraps a sanitised body fragment in the page the view
 /// loads. The fragment is inserted verbatim: it is the sanitiser's output
 /// and nothing else may ever be passed here. `compact` takes the sheet of
-/// a conversation card (`viewerCompactCSS`); the policy is the same.
-public func viewerDocument(body: String, compact: Bool = false) -> String {
-    "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\""
-        + viewerCSP + "\"><style>" + (compact ? viewerCompactCSS : viewerBaseCSS)
+/// a conversation card (`viewerCompactCSS`); `chat` the sheet of a chat
+/// bubble with its dark colours (`viewerChatCSS`, over `compact`); the
+/// policy is the same.
+public func viewerDocument(body: String, compact: Bool = false, chat: ViewerChatColours? = nil) -> String {
+    let css = chat.map(viewerChatCSS) ?? (compact ? viewerCompactCSS : viewerBaseCSS)
+    return "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\""
+        + viewerCSP + "\"><style>" + css
         + "</style></head><body><div id=\"malachi-column\">" + body + "</div></body></html>"
 }

@@ -2926,7 +2926,7 @@ reference; the rules the Go package leaves to its clients are Swift-first
   `ChatBody`, `BubbleBodyFor`, `BubbleAttachmentBadge`, `BubbleMonospace`,
   `ChatAtEnd`, `ChatCompactDates`, `ChatResizeFor`), the chat's cases in
   `ConversationLayoutTests` (`ChatBubbleKeepsAnEmptySide`,
-  `ChatGapIsContinuousAndTheBubbleNeverNarrower`), `SettingsTests` (44 keys,
+  `ChatGapIsContinuousAndTheBubbleNeverNarrower`), `SettingsTests` (45 keys,
   `GschemaCoverageTests`, `StringsCheckTests`), and the opt-in UI smoke test
   `ConversationChatSmokeTests` over `MALACHI_DEVMAIL`
   (`ConversationChatFixture`: devmail with a two-message conversation, the
@@ -2958,6 +2958,104 @@ moving what is read (at the end and scrolled up), that `DoubleTapped` on
 the `UserControl` reaches a tap on the `TextBlock`s of the bubble, and that
 the toggle's checked brushes are taken from the `ToggleButton`'s own
 resources.
+
+**HTML in the chat bubbles (2026-10-20).** Preferences → Appearance →
+Message List has *Render HTML in Chat* (`AppearancePage.xaml`
+`ConversationChatHtmlSwitch`, AutomationId `ConversationChatHtml`, bound
+like *Group by Conversation* to `SettingsStore.ConversationChatHtml`, gschema
+`conversation-chat-html`, default off; its two msgids left
+`parity-exclusions.txt`). The rule is Go's `BubbleRendersHTML`
+(`Conversation.BubbleRendersHtml(setting, hasHtml, withheld)` in
+`Conversation.Chat.cs`, truth table in `ConversationChatTests`), applied by
+the Swift-first body rule: `Conversation.BubbleBodyFor(lm, snippet,
+renderHtml)` (`Conversation.ChatBody.cs`) gives `BubbleBody.Html(Value,
+Links, Fallback)` (`BubbleBody.cs`) for a fetched body with HTML not
+withheld, of the variant the chat reads (the trimmed one: the timeline
+card's document); a text-only, withheld, failed or not yet loaded body
+reads as before (`ConversationChatBodyTests.BubbleBodyHtml`). The bubble
+(`ConversationBubbleView`: `WebHost`, `ShowBody(body, mono, reloadPictures)`,
+`SetLive`, `SetZoom`, `DropHtml`, `WantsWebView`, `RendersHtml`) shows the
+fragment in a `CardWebView` where the `TextBlock` is, inside the bubble's
+background and padding; it then takes its row's widest (`ChatBubbleMax`, no
+shrink-to-fit) and has no bars and no fold. The owner's rule after the
+macOS test: the bubble ignores the message's backgrounds. The chat's views
+are `new CardWebView(chat: true)`: transparent (`HardenedWebView`'s new
+`transparent` option sets the WinUI `WebView2.DefaultBackgroundColor` to
+`Colors.Transparent` when the control is made, before its controller and
+first navigation, and again for every replacement control), with no paper
+behind them, so the bubble's card colour or accent tint shows through; their
+document is `ViewerDocument.ChatDocument(body, palette)` (Core, beside the
+unchanged `CompactDocument` the cards keep): `ChatCss` = the column's CSS
+with padding 0 (the bubble's padding frames it as it frames text) plus
+`ChatNeutralCss` (`html, body, *, *::before, *::after { background-color:
+transparent !important; background-image: none !important; }`). In the
+light theme the mail's text colours stay; in the dark theme `* { color }`
+and `a, a * { color }` take the colours of the bubbles' text
+(`TextFillColorPrimaryBrush` of the text `TextBlock`, the accent text brush
+of a hidden probe with `ConversationBubbleLinkStyle`), in high contrast the
+CSS system colours `CanvasText` and `LinkText`; `ChatPalette` only lets a
+colour through (`ViewerDocument.IsColor`), the view loads again when the
+palette changes, and the bubble reloads on `ActualThemeChanged`
+(`ViewerDocumentChatTests`). `CardSize` measures the document as before.
+After the owner saw a scroll bar inside some macOS HTML bubbles, the chat's
+document also carries `ChatFitCss`: `html, body { overflow: hidden
+!important; margin: 0 !important; }`, so a rounding difference never shows
+a bar, and `#malachi-column { display: flow-root !important; }`, so that
+without the column's padding the first and last blocks' margins stay inside
+the column `CardSize` measures (a collapsed bottom margin would leave the
+view shorter than its document). Late reports (fonts, pictures, the width
+change when the bubble takes its widest) resize the view as a card's do:
+`CardWebView` measures again on load, on every served picture and on a
+change of width or zoom, `SizeReported` unfreezes the governor on a
+relayout, and the frozen `MinHeight` applies only to the text of a bubble
+without a view, never to the live view. The chat (`ConversationChatView`, through `IChatWebHost`) owns a pool
+like the timeline's (`TakeWebView`, `ReturnWebView`, `IdleWebViews` 2,
+emptied on Close), and `UpdateNear` runs the timeline's rule over the chat's
+rows: `LiveCards(frames, html, visible, LiveScreens, MaxLiveWebViews)` with
+`html` true for the bubbles that want a view; a bubble far from the viewport
+or beyond the cap gives its view back and shows its text, kept at the last
+measured document height (its `MinHeight`, as a released card keeps its
+paper's height) so that the rows' frames do not change and `LiveCards`
+cannot flip it between view and text; the frozen height goes when the body
+is no longer HTML (the preference off, another body) or the view failed.
+Links go through `services.Links.OpenAsync` with the body's links (the
+cards' confirmation), the link under the pointer to the pane's status, the
+wheel over a document that fits on to the chat, the text zoom to every live
+view, a body whose pictures were downloaded reloads
+(`ConversationLayout.PicturesArrived`), and a view that fails shows the text
+until another document. Every height change runs through the chat's
+`Preserving` (`Reflow`), so the end or the row read stays in place along
+with `VerticalAnchorRatio`; a hidden chat, a removed bubble and another
+conversation release every view. The observer
+`OnChange(SettingsKey.ConversationChatHtml, …)`, cancelled with the other
+tokens, renders every bubble anew (off: every view released, the text back,
+also for bubbles whose entry was let go). WebView2 takes the presses over
+the document, so a double tap opens the message from the bubble's header
+(sender, date) and its padding (`DoubleTapped` on the bubble, then
+`AfterRelease`). The network canary has a `chat-bubble` view
+(`CanaryRunner`, `CanaryFixture`, `NetworkCanaryTests`: the hostile
+document passive and active, links, form, target, UNC, refresh, a measured
+height). The web view has no AutomationId of its own, as a card's has none.
+Written on a Mac without `dotnet`. Pending on Windows: `build.ps1 app`,
+`test`, `lint`, the canary, the chat smoke and by hand: the switch, HTML
+bubbles near the end and while scrolling up (no jumps, the end kept as
+documents measure), the bubble's own background behind the document in
+both bubble kinds with no white flash on load, a mail with its own body
+background (none shows), no scroll bar inside any HTML bubble (documents
+with large top or bottom margins, late pictures, a resize), the dark theme (white text, accent links on the
+dark bubble), high contrast (system colours), the document's text aligned
+with a text bubble's (no extra frame), the others' bubbles light grey
+(`ConversationOtherTintStyle`: black at 6 % in the light theme, white at 6 %
+in the dark, transparent in high contrast, over the card fill) in Mail's and
+the board's chat with the grey showing through an HTML document, a long
+conversation with more than eight HTML bubbles
+(views given back far away, the text at the document's height), a link with
+its confirmation, the hover status, pictures (`malachi-cid:`), the wheel
+over a short document, text zoom, a double tap on the header, flipping the
+switch both ways while the chat shows, switching the theme while HTML
+bubbles show, and 125 % scale. Unverified assumption: that WinUI 3's
+`WebView2` renders `Colors.Transparent` as transparent (the old comment in
+`HardenedWebView` said it had no transparent WebView2).
 
 ### 11.8 The Board
 
@@ -3131,8 +3229,8 @@ the checked brushes of every `ToggleButton` under it (only the chat toggle
 today, which sets its own again). The
 samples now get the block too (`MainWindow.BoardReply.cs`; their members have
 no ids, the cards keep their excerpts), so the toggle works over
-`MALACHI_BOARD_SAMPLES=1`. The `board-card` canary is unchanged (no web view
-in the chat). Written on a Mac without .NET: it awaits `build.ps1 app`,
+`MALACHI_BOARD_SAMPLES=1`. The `board-card` canary is unchanged (the chat's
+web view, with *Render HTML in Chat* on, is `chat-bubble`'s, below). Written on a Mac without .NET: it awaits `build.ps1 app`,
 `test` (`BoardConversationChatTests`, `BoardConversationCardsTests`,
 `StringsCheckTests`), `lint` and the UI smoke
 `BoardSmokeTests.TheConversationToggleShowsTheChatAndTheCardsAgain`; by
@@ -3140,6 +3238,45 @@ hand: the toggle (its look against Mail's, label and tooltip both ways), the
 sides and avatars, a double tap opening the window, a switch in Mail
 reaching an open board, the cards back with their folds and HTML, the dark
 and high-contrast themes, a narrow detail's short dates.
+
+**HTML in the board's chat (2026-10-20).** The owner's decision: Mail's
+preference *Render HTML in Chat* (`conversation-chat-html`,
+`SettingsStore.ConversationChatHtml`) applies to the board's chat too.
+Off, the board's chat is exactly as above (nothing fetched, no web view).
+On, `BoardConversationBlock` follows the detail's scroller
+(`IBoardConversationHost.Scroller`, `ViewChanged` and `SizeChanged`,
+subscribed only while the chat is live, `ChatLive`, and dropped otherwise
+and in `Close`), measures the bubbles' frames in its content
+(`TransformToVisual`) and runs Mail's rule
+`ConversationLayout.LiveCards(frames, html, visible, LiveScreens,
+ConversationCards.MaxLiveWebViews)` (4; the cards' views are already gone
+while the chat shows): a near bubble of a member with an id asks
+`message.body` through Mail's cache as an open card does (the same stub
+summary, `MessageCache.FetchBody`; `Board.ChatBodies` in
+`BoardConversationChat.cs` keeps what was asked per case and never asks with
+the preference off or for a sample, `BoardConversationChatTests.ChatBodiesAskOncePerCaseOnlyWithTheSetting`),
+and the bubble shows `Conversation.BubbleBodyFor(lm, text, renderHtml:
+true)` when it is `BubbleBody.Html`, with the `board.get` text as its
+fallback (no placeholder state), in the HTML slot of Mail's chat
+(`CardWebView(chat: true)`, transparent, `ViewerDocument.ChatDocument`,
+frozen `MinHeight` on release). The block is the bubbles' `IChatWebHost`
+(explicitly implemented): its own pool of chat views (at most four kept,
+released in `Close`), the cards' link path (`OpenLink`, the reader's
+`LinkOpener`), the hover label (now shown in the chat too), the wheel
+(`ScrollBy`) and `ChangingHeight` for every height change, so the detail
+compensates for a bubble above the viewport (`IChatWebHost.Reflow` now names
+the bubble; Mail's chat ignores it). The cache's `MessageLoaded` renders an
+asked bubble anew (pictures reload through `PicturesArrived`). A bubble far
+away or over the cap, the cards shown again, the block detached and the
+preference turned off give the views back; off also forgets what was asked
+and shows the `board.get` text everywhere. The canary needs no entry of its
+own: the board's chat uses the same view and document as `chat-bubble`.
+Written on a Mac without .NET; by hand: the preference on and off with the
+board's chat open, HTML bubbles near the top and after scrolling (no jump of
+the detail when a bubble above the viewport measures), more than four HTML
+members (views given back far away, the text at the document's height),
+links and the hover label, the samples (text only, nothing asked), the
+Mail mode and back, the dark and high-contrast themes.
 
 **Keyboard.** The mail's single keys and reply keys stand still while the
 Board shows (`Board.Allows` through `AppCommand.Gate`); Check for New Mail and

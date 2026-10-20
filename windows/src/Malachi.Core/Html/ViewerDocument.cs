@@ -3,7 +3,8 @@
 
 // Port of macos/Sources/MalachiCore/HTML/ViewerDocument.swift; GTK:
 // ui/internal/htmlview/document.go (CSP, columnCSS, baseCSS, compactCSS,
-// Document, CompactDocument).
+// Document, CompactDocument); ChatDocument, the chat bubble's variant
+// (the preference conversation-chat-html), is the clients' own.
 //
 // The page the message viewer loads, byte for byte GTK's and macOS's with
 // one addition: a fixed <title> right after the charset (docs/windows-port.md
@@ -14,6 +15,7 @@
 // CSP as a response header as well.
 
 using System;
+using System.Linq;
 
 namespace Malachi.Core.Html;
 
@@ -78,6 +80,80 @@ public static class ViewerDocument
     /// </summary>
     public static string CompactDocument(string body) => Page(body, CompactCss);
 
+    /// <summary>
+    /// The stylesheet that neutralises every background of a message in a
+    /// bubble of the chat layout (the preference conversation-chat-html): the
+    /// bubble's own background (the card colour, the accent tint of the
+    /// user's own) shows through the transparent view, whatever the mail
+    /// paints. The cards keep their white paper and never get it.
+    /// </summary>
+    public const string ChatNeutralCss =
+        "html, body, *, *::before, *::after { background-color: transparent !important; background-image: none !important; }";
+
+    /// <summary>
+    /// The guard of a bubble's document against a scroll bar of its own: the
+    /// view is as tall as the document (CardSize, the governor), and a
+    /// rounding difference must never show a bar; the column is a block
+    /// formatting context (flow-root), so that without its padding the
+    /// margins of the message's first and last blocks stay inside it and
+    /// CardSize, which measures the column, covers the whole document.
+    /// </summary>
+    public const string ChatFitCss =
+        "html, body { overflow: hidden !important; margin: 0 !important; }\n"
+        + "#malachi-column { display: flow-root !important; }";
+
+    /// <summary>
+    /// <see cref="CompactCss"/> for a bubble of the chat layout: no padding
+    /// of the column (the bubble's own padding frames the document, as it
+    /// does its text), <see cref="ChatNeutralCss"/> and
+    /// <see cref="ChatFitCss"/>.
+    /// </summary>
+    public const string ChatCss = ColumnHead + "0" + ColumnTail + "\n" + ChatNeutralCss + "\n" + ChatFitCss;
+
+    /// <summary>
+    /// <see cref="CompactDocument"/> for a bubble of the chat layout
+    /// (<see cref="ChatCss"/>): the same policy and fragment, no background of
+    /// the mail, no frame of its own. <paramref name="palette"/> (the dark
+    /// theme, high contrast) forces the text and the links to the colours of
+    /// the bubbles' text, because the mail's dark text would sit on a dark
+    /// bubble; null (the light theme) keeps the mail's colours. The fragment
+    /// is the sanitiser's output of one message and nothing else.
+    /// </summary>
+    public static string ChatDocument(string body, ChatPalette? palette)
+    {
+        var css = ChatCss;
+        if (palette is not null && IsColor(palette.Text) && IsColor(palette.Link))
+        {
+            css += "\n* { color: " + palette.Text + " !important; }\na, a * { color: " + palette.Link + " !important; }";
+        }
+        return Page(body, css);
+    }
+
+    // A colour the app passes in (never the mail's): rgb()/rgba() with
+    // numbers, #rrggbb(aa), or a CSS keyword such as CanvasText; anything
+    // else is left out, so nothing but a colour reaches the stylesheet.
+    internal static bool IsColor(string? c)
+    {
+        if (string.IsNullOrEmpty(c) || c.Length > 40)
+        {
+            return false;
+        }
+        if (c.All(char.IsAsciiLetter))
+        {
+            return true;
+        }
+        if (c[0] == '#')
+        {
+            return c.Length is 7 or 9 && c.Skip(1).All(char.IsAsciiHexDigit);
+        }
+        if ((c.StartsWith("rgb(", StringComparison.Ordinal) || c.StartsWith("rgba(", StringComparison.Ordinal)) && c[^1] == ')')
+        {
+            var inner = c[(c.IndexOf('(', StringComparison.Ordinal) + 1)..^1];
+            return inner.All(ch => char.IsAsciiDigit(ch) || ch is ',' or '.' or ' ');
+        }
+        return false;
+    }
+
     private static string Page(string body, string css)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -86,3 +162,12 @@ public static class ViewerDocument
             + "</style></head><body><div id=\"malachi-column\">" + body + "</div></body></html>";
     }
 }
+
+/// <summary>
+/// The colours a bubble of the chat layout forces on its document
+/// (<see cref="ViewerDocument.ChatDocument"/>): the bubbles' text and link
+/// colours of the dark theme, or the system colours of high contrast.
+/// </summary>
+/// <param name="Text">The text's colour (rgb(a), #hex or a CSS keyword).</param>
+/// <param name="Link">The links' colour.</param>
+public sealed record ChatPalette(string Text, string Link);

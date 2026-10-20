@@ -3,6 +3,8 @@
 
 package htmlview
 
+import "fmt"
+
 // CSP is the document's Content-Security-Policy: no network at all, images
 // only from the application's own scheme (message parts) and data: URIs
 // (what the daemon inlined), styles only inline. The same string is the
@@ -69,4 +71,52 @@ func CompactDocument(body string) string {
 func document(body, css string) string {
 	return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="` +
 		CSP + `"><style>` + css + `</style></head><body><div id="malachi-column">` + body + `</div></body></html>`
+}
+
+// Colour is an sRGB colour for the chat's document (ChatStyle), written to
+// the sheet as #rrggbb, so that nothing but six hex digits ever reaches it.
+type Colour struct{ R, G, B uint8 }
+
+func (c Colour) css() string { return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B) }
+
+// ChatStyle is how a bubble of the chat layout shows a message's HTML
+// (ChatDocument): on the bubble's own background, whichever the message
+// set, and in the dark style in the theme's text and link colours.
+type ChatStyle struct {
+	// Dark: the dark style; Text and Link then replace every colour of the
+	// content (dark text would sit on the dark bubble).
+	Dark       bool
+	Text, Link Colour
+}
+
+// chatNeutralCSS takes every background of the content away, so that the
+// transparent view shows the bubble's background (card colour for the
+// others, the accent tint for the user's own).
+const chatNeutralCSS = `html, body, *, *::before, *::after { background-color: transparent !important; background-image: none !important; }`
+
+// chatFitCSS keeps a bubble's document from ever showing a scrollbar (the
+// view is sized to it; a rounding difference must not show a bar) and
+// makes the column contain its children's margins (flow-root): without
+// the cards' padding a last paragraph's bottom margin would collapse
+// through the column, past where sizeScript measures it ends.
+const chatFitCSS = `html, body { overflow: hidden !important; margin: 0 !important; }
+#malachi-column { display: flow-root !important; }`
+
+// chatCSS is the sheet of a chat bubble's document: the cards' sheet with
+// no padding of its own (the bubble's padding is the text's), every
+// background neutralised and, in the dark style, the text and the links in
+// the theme's colours.
+func chatCSS(s ChatStyle) string {
+	css := columnCSS("0") + "\n" + chatNeutralCSS + "\n" + chatFitCSS
+	if s.Dark {
+		css += "\n* { color: " + s.Text.css() + " !important; }\na, a * { color: " + s.Link.css() + " !important; }"
+	}
+	return css
+}
+
+// ChatDocument is CompactDocument for a bubble of the chat layout: the same
+// policy (the CSP as a <meta>), the sheet chatCSS. The fragment is the
+// sanitiser's output of one message and nothing else.
+func ChatDocument(body string, s ChatStyle) string {
+	return document(body, chatCSS(s))
 }

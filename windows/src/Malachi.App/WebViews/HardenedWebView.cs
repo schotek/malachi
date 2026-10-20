@@ -82,9 +82,25 @@ public abstract partial class HardenedWebView : UserControl
     private CancellationTokenSource generationCancel = new();
     private bool closed;
 
+    // The control's default background is transparent (a chat bubble's
+    // view: the bubble's own background shows through), else white.
+    private readonly bool transparent;
+
     /// <summary>A view of <paramref name="kind"/>, not yet initialised (that starts once it is loaded).</summary>
     private protected HardenedWebView(WebViewKind kind)
+        : this(kind, transparent: false)
     {
+    }
+
+    /// <summary>
+    /// A view of <paramref name="kind"/> whose default background is
+    /// transparent (<paramref name="transparent"/>: the control's
+    /// DefaultBackgroundColor, set before its CoreWebView2 exists, so no
+    /// first frame is white) or white.
+    /// </summary>
+    private protected HardenedWebView(WebViewKind kind, bool transparent)
+    {
+        this.transparent = transparent;
         Kind = kind;
         Gate = new RequestGate(kind);
         log = WebViewEnvironment.LoggerFactory.CreateLogger("Malachi.App.WebViews." + kind);
@@ -354,8 +370,12 @@ public abstract partial class HardenedWebView : UserControl
     {
         var web = new WebView2
         {
-            // WinUI 3 has no transparent WebView2; the pages' canvas is white.
-            DefaultBackgroundColor = Colors.White,
+            // The pages' canvas is white; a chat bubble's view is transparent
+            // (WinUI's WebView2 hands the colour to its controller's
+            // DefaultBackgroundColor when it creates it, before the first
+            // navigation; every renderer replacement makes the control anew
+            // with the same colour).
+            DefaultBackgroundColor = transparent ? Colors.Transparent : Colors.White,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
         };

@@ -7,7 +7,7 @@ import Foundation
 // that need no AppKit (docs/plans/chat-view.md D2, D3, D13, D17): which
 // variant of a loaded body a message bubble reads, what its text is in every
 // state of that body, what its header shows of the attachments, and whether
-// the chat is at its end. Swift-first: chat.go
+// the chat is at its end, and whether a bubble shows its HTML. Swift-first: chat.go
 // leaves these to the clients (`BubbleText` is the shared part), and the GTK
 // and Windows chats port them from here. Kept apart from
 // ConversationChat.swift, the port of chat.go, whose translated strings a
@@ -25,6 +25,14 @@ extension Conversation {
         /// cards show for the state of the body (on its way, too large,
         /// unreadable, empty) or for the error of the call.
         case text(String)
+        /// The preference `conversation-chat-html` is on and the body has
+        /// HTML that was not withheld (`bubbleRendersHTML`): `body` is the
+        /// variant the chat reads (`chatBody`), whose sanitized `html`,
+        /// `links` and pictures the view hands to the locked web view as the
+        /// timeline's card does; `text` is what the bubble reads while it
+        /// holds no web view (far from the viewport, beyond the cap, the
+        /// layout hidden), the text of the `.text` case.
+        case html(body: MessageBodyResult, text: String)
     }
 
     /// The variant of `lm`'s body a bubble reads: the one without the quoted
@@ -49,8 +57,12 @@ extension Conversation {
     /// body's text cleaned (`bubbleText`), "(Empty message)" when nothing is
     /// left. The error belongs to `lm.body`, so it does not hide the
     /// trimmed variant kept aside.
+    ///
+    /// `html` is the preference `conversation-chat-html`: with it on, a
+    /// fetched body with HTML that was not withheld is `.html`
+    /// (`bubbleRendersHTML`, the HTML as the cards' `showsHTML` reads it).
     @MainActor
-    public static func bubbleBody(_ lm: LoadedMessage?, snippet: String) -> BubbleBody {
+    public static func bubbleBody(_ lm: LoadedMessage?, snippet: String, html: Bool = false) -> BubbleBody {
         let placeholder = BubbleBody.placeholder(bubbleText(snippet))
         guard let lm else { return placeholder }
         let aside = lm.quotedShown && lm.otherBody != nil
@@ -62,8 +74,14 @@ extension Conversation {
         case .pending, .tooBig, .failed:
             return .text(bodyText(b))
         default:
-            let text = bubbleText(b.text)
-            return .text(text.isEmpty ? bodyText(nil) : text)
+            var text = bubbleText(b.text)
+            if text.isEmpty {
+                text = bodyText(nil)
+            }
+            if bubbleRendersHTML(setting: html, hasHTML: showsHTML(b), withheld: b.htmlWithheld == true) {
+                return .html(body: b, text: text)
+            }
+            return .text(text)
         }
     }
 

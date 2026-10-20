@@ -114,7 +114,10 @@ func (w *Window) conversationPane() *conversationHost {
 	h.applyLayout()
 
 	w.messageStack.AddNamed(h.page, convPageName)
-	w.settings.OnChanged(settings.KeyTextZoom, func() { h.timeline.setZoom(w.settings.TextZoom()) })
+	w.settings.OnChanged(settings.KeyTextZoom, func() {
+		h.timeline.setZoom(w.settings.TextZoom())
+		h.chat.setZoom(w.settings.TextZoom())
+	})
 	w.addConversationPaging()
 	w.conv = h
 	return h

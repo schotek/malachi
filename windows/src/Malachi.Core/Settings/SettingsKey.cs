@@ -71,6 +71,9 @@ public enum SettingsKey
     /// <summary><c>conversation-chat-layout</c>.</summary>
     ConversationChatLayout,
 
+    /// <summary><c>conversation-chat-html</c>.</summary>
+    ConversationChatHtml,
+
     /// <summary><c>search-scope</c>.</summary>
     SearchScope,
 

@@ -35,6 +35,7 @@ private final class Scratch {
         #expect(!s.monospacePlainText)
         #expect(!s.groupByConversation)
         #expect(!s.conversationChatLayout)
+        #expect(!s.conversationChatHTML)
         #expect(s.textZoom == 100)
         #expect(!s.launchAtLogin)
         #expect(s.runInBackground)
@@ -63,7 +64,7 @@ private final class Scratch {
         #expect(s.boardLastMode == .mail)
         #expect(s.boardAccountFilter == "")
         #expect(s.calendarView == .week)
-        #expect(Settings.Key.allCases.count == 40)
+        #expect(Settings.Key.allCases.count == 41)
         let providerDefaults = Settings.registrationDefaults()
         #expect(providerDefaults[Settings.Key.assistantProvider.rawValue] as? String == "claude")
         #expect(providerDefaults[Settings.Key.assistantCodexPath.rawValue] as? String == "")
@@ -99,6 +100,18 @@ private final class Scratch {
         s.conversationChatLayout = false
         #expect(!s.conversationChatLayout && chat == 2)
         chatToken.cancel()
+
+        // The chat HTML preference, from its key's change as well.
+        var html = 0
+        let htmlToken = s.onChange(.conversationChatHTML) { html += 1 }
+        s.conversationChatHTML = true
+        #expect(s.conversationChatHTML && html == 1)
+        #expect(scratch.defaults.bool(forKey: "conversation-chat-html"))
+        s.conversationChatHTML = true // unchanged: no notification
+        #expect(html == 1)
+        s.conversationChatHTML = false
+        #expect(!s.conversationChatHTML && html == 2 && chat == 2)
+        htmlToken.cancel()
     }
 
     @Test func validation() {

@@ -6,9 +6,11 @@ package window
 import (
 	"errors"
 	"math"
+	"reflect"
 	"testing"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/i18n"
 )
 
@@ -345,5 +347,83 @@ func TestChatTexts(t *testing.T) {
 	}
 	if got := chatAccessibleName("", ""); got != "" {
 		t.Errorf("empty name %q", got)
+	}
+}
+
+// bubbleHTML: the HTML body of the variant the chat reads, only with the
+// preference on and only for a fetched body with HTML that is not
+// withheld; everything else reads as text.
+func TestBubbleHTML(t *testing.T) {
+	html := func(state api.BodyState, doc string, withheld bool) *loadedMessage {
+		lm := &loadedMessage{}
+		lm.store(&api.MessageBodyResult{MessageID: "m1", BodyState: state, Text: "t", HTML: doc, HasHTML: true, HTMLWithheld: withheld, QuotedTrimmed: true}, false, false)
+		return lm
+	}
+	if b := bubbleHTML(html(api.BodyFetched, "<p>x</p>", false), true); b == nil || b.HTML != "<p>x</p>" {
+		t.Errorf("html: %+v", b)
+	}
+	cases := map[string]struct {
+		lm      *loadedMessage
+		setting bool
+	}{
+		"off":         {html(api.BodyFetched, "<p>x</p>", false), false},
+		"nil":         {nil, true},
+		"not loaded":  {&loadedMessage{}, true},
+		"withheld":    {html(api.BodyFetched, "", true), true},
+		"text only":   {html(api.BodyFetched, "", false), true},
+		"pending":     {html(api.BodyPending, "<p>x</p>", false), true},
+		"failed body": {html(api.BodyFailed, "<p>x</p>", false), true},
+		"error":       {&loadedMessage{err: errors.New("timeout")}, true},
+	}
+	for name, c := range cases {
+		if b := bubbleHTML(c.lm, c.setting); b != nil {
+			t.Errorf("%s: html %+v", name, b)
+		}
+	}
+
+	// Revealed in the timeline: the trimmed variant kept aside is the
+	// document, as for the text.
+	lm := html(api.BodyFetched, "<p>short</p>", false)
+	lm.showQuoted(true)
+	lm.store(&api.MessageBodyResult{MessageID: "m1", BodyState: api.BodyFetched, HTML: "<p>short</p><blockquote>old</blockquote>", HasHTML: true}, true, false)
+	if b := bubbleHTML(lm, true); b == nil || b.HTML != "<p>short</p>" {
+		t.Errorf("revealed: %+v", b)
+	}
+}
+
+// chatLiveRows, the board chat's rule: the near HTML rows within the
+// limit, measured from the end (the newest of rows equally near first);
+// text rows and far rows get no view.
+func TestChatLiveRowsBoardCap(t *testing.T) {
+	frames := convStacked(8, 100)
+	html := []bool{true, true, true, true, true, false, true, true}
+	live := chatLiveRows(frames, html, convSpanOf(0, 800), board.ConversationMaxLiveWebViews)
+	var got []int
+	for i := range frames {
+		if live.Web[i] {
+			got = append(got, i)
+		}
+	}
+	if want := []int{3, 4, 6, 7}; !reflect.DeepEqual(got, want) {
+		t.Errorf("views %v, want %v", got, want)
+	}
+	// A short viewport at the top: the rows near it only.
+	live = chatLiveRows(frames, html, convSpanOf(0, 100), board.ConversationMaxLiveWebViews)
+	got = nil
+	for i := range frames {
+		if live.Web[i] {
+			got = append(got, i)
+		}
+		if live.Near[i] != (i <= 3) {
+			t.Errorf("row %d near %v", i, live.Near[i])
+		}
+	}
+	if want := []int{0, 1, 2, 3}; !reflect.DeepEqual(got, want) {
+		t.Errorf("views at the top %v, want %v", got, want)
+	}
+	// Nothing is HTML (the preference off): no view.
+	live = chatLiveRows(frames, nil, convSpanOf(0, 800), board.ConversationMaxLiveWebViews)
+	if len(convSet(live.Web)) != 0 {
+		t.Errorf("views without HTML: %v", convSet(live.Web))
 	}
 }

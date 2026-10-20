@@ -26,11 +26,11 @@ namespace Malachi.App.Canary;
 
 public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<CanaryFixture>
 {
-    private static readonly string[] Views = ["viewer", "editor", "preview", "card", "board-card"];
+    private static readonly string[] Views = ["viewer", "editor", "preview", "card", "board-card", "chat-bubble"];
 
     // The views that hand links on (the reader, the conversation view, the
     // board detail's conversation).
-    private static readonly string[] LinkViews = ["viewer", "card", "board-card"];
+    private static readonly string[] LinkViews = ["viewer", "card", "board-card", "chat-bubble"];
 
     // Vectors an unprotected WebView2 reached in every run of the spike
     // (SPIKES.md §2c, column base) and of this canary; the preconnect (a
@@ -192,6 +192,7 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
         Assert.Contains(results.Events, e => e.Kind == HostEvent.Kinds.NewWindow && e.Phase == "viewer-blank");
         Assert.Contains(results.Events, e => e.Kind == HostEvent.Kinds.NewWindow && e.Phase == "card-blank");
         Assert.Contains(results.Events, e => e.Kind == HostEvent.Kinds.NewWindow && e.Phase == "board-card-blank");
+        Assert.Contains(results.Events, e => e.Kind == HostEvent.Kinds.NewWindow && e.Phase == "chat-bubble-blank");
         Assert.DoesNotContain(results.Events, e => e.Kind == HostEvent.Kinds.Window);
     }
 
@@ -234,7 +235,7 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
                 served += e.Detail == "200" ? 1 : 0;
                 Assert.True(e.Detail is "200" or "403", "document answered " + e.Detail);
             }
-            else if ((e.View is "viewer" or "card" or "board-card" && uri.StartsWith("malachi-cid:", StringComparison.Ordinal))
+            else if ((e.View is "viewer" or "card" or "board-card" or "chat-bubble" && uri.StartsWith("malachi-cid:", StringComparison.Ordinal))
                 || (e.View == "editor" && uri.StartsWith("cid:", StringComparison.Ordinal)))
             {
                 // Served (at once when the stand-in fetcher answers
@@ -269,6 +270,10 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
         Assert.DoesNotContain(links, e => e.Phase is "card-form" or "card-refresh");
         Assert.Contains(links, e => e.View == "board-card" && e.Phase == "board-card-nav" && e.Uri == nav && e.Detail == nav);
         Assert.DoesNotContain(links, e => e.Phase is "board-card-form" or "board-card-refresh");
+        Assert.Contains(links, e => e.View == "chat-bubble" && e.Phase == "chat-bubble-nav" && e.Uri == nav && e.Detail == nav);
+        Assert.DoesNotContain(links, e => e.Phase is "chat-bubble-form" or "chat-bubble-refresh");
+        Assert.Contains(results.Events, e => e.Kind == HostEvent.Kinds.Hover && e.View == "chat-bubble" && e.Phase == "chat-bubble-hover"
+            && e.Detail is { Length: > 0 } d && d.Contains("/hover", StringComparison.Ordinal));
         Assert.Contains(results.Events, e => e.Kind == HostEvent.Kinds.Hover && e.View == "board-card" && e.Phase == "board-card-hover"
             && e.Detail is { Length: > 0 } d && d.Contains("/hover", StringComparison.Ordinal));
         Assert.Contains(results.Events, e => e.Kind == HostEvent.Kinds.Hover && e.Phase == "viewer-hover"
@@ -296,6 +301,9 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
         var board = results.Events.Where(e => e.Kind == HostEvent.Kinds.Size && e.View == "board-card" && e.Phase == "board-card-size").Select(Height).ToList();
         Assert.NotEmpty(board);
         Assert.InRange(board.Max(), 500, 540);
+        var bubble = results.Events.Where(e => e.Kind == HostEvent.Kinds.Size && e.View == "chat-bubble" && e.Phase == "chat-bubble-size").Select(Height).ToList();
+        Assert.NotEmpty(bubble);
+        Assert.InRange(bubble.Max(), 500, 540);
     }
 
     // The security audit's masked links (F3 §1): the viewer hands each to
@@ -520,7 +528,7 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
 
     // Where a view's documents are served: its profile's host (a card, the
     // board's too, is in the viewer's profile, WebViewKind.Viewer).
-    private static string DocumentsOf(string view) => "malachi-doc://" + (view is "card" or "board-card" ? "viewer" : view) + "/";
+    private static string DocumentsOf(string view) => "malachi-doc://" + (view is "card" or "board-card" or "chat-bubble" ? "viewer" : view) + "/";
 
     // The embedded resource of the previewer's own page (its PDF).
     private static bool IsPreviewContent(HostEvent e) =>

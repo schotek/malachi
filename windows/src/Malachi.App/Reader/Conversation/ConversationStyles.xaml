@@ -16,6 +16,8 @@ ConversationTint, GTK convCSS .chat-bubble, .chat-bubble-mine,
 .chat-placeholder) the bubble's frame, the user's own bubble (the card's
 fill under a tint of the accent colour at 12 % and a border of the accent
 colour; high contrast: the window's colours and the highlight's border),
+the others' bubble (the card's fill under 6 % of the text colour, a light
+grey; high contrast: the window's colour),
 the dimmed placeholder, and the paperclip pill (the issue pill in the bulk
 tag's colours), and the chat layout's toggle (its size and type,
 ConversationChatToggleStyle; its checked colours are
@@ -45,6 +47,7 @@ App.xaml.
             <StaticResource x:Key="ToggleButtonBorderBrushCheckedPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
             <StaticResource x:Key="ToggleButtonBorderBrushCheckedPressed" ResourceKey="SubtleFillColorTransparentBrush" />
             <SolidColorBrush x:Key="ConversationMineBubbleTintBrush" Opacity="0.12" Color="{ThemeResource SystemAccentColorLight2}" />
+            <SolidColorBrush x:Key="ConversationOtherBubbleTintBrush" Opacity="0.06" Color="White" />
             <StaticResource x:Key="ConversationMineBubbleBorderBrush" ResourceKey="AccentFillColorDefaultBrush" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
@@ -58,10 +61,12 @@ App.xaml.
             <StaticResource x:Key="ToggleButtonBorderBrushCheckedPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
             <StaticResource x:Key="ToggleButtonBorderBrushCheckedPressed" ResourceKey="SubtleFillColorTransparentBrush" />
             <SolidColorBrush x:Key="ConversationMineBubbleTintBrush" Opacity="0.12" Color="{ThemeResource SystemAccentColorDark1}" />
+            <SolidColorBrush x:Key="ConversationOtherBubbleTintBrush" Opacity="0.06" Color="Black" />
             <StaticResource x:Key="ConversationMineBubbleBorderBrush" ResourceKey="AccentFillColorDefaultBrush" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
             <SolidColorBrush x:Key="ConversationMineBubbleTintBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="ConversationOtherBubbleTintBrush" Color="Transparent" />
             <SolidColorBrush x:Key="ConversationMineBubbleBorderBrush" Color="{ThemeResource SystemColorHighlightColor}" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
@@ -149,12 +154,25 @@ App.xaml.
         <Setter Property="Background" Value="{ThemeResource ConversationMineBubbleTintBrush}" />
         <Setter Property="CornerRadius" Value="9" />
     </Style>
+    <!-- The others' bubble: a light grey, 6 % of the text's colour (black
+         in the light theme, white in the dark) over the card's fill, so it
+         stands apart from the white cards and the pane; high contrast keeps
+         the system's window colour. A transparent chat web view shows it. -->
+    <Style x:Key="ConversationOtherTintStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource ConversationOtherBubbleTintBrush}" />
+        <Setter Property="CornerRadius" Value="9" />
+    </Style>
     <!-- The bubble's text: the theme's text, or the snippet dimmed while the
          body is not there (.chat-placeholder). -->
     <Style x:Key="ConversationBubbleTextStyle" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
         <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="IsTextSelectionEnabled" Value="False" />
+    </Style>
+    <!-- The links of a bubble's HTML document in the dark theme (its
+         Foreground is read, ConversationBubbleView.Palette). -->
+    <Style x:Key="ConversationBubbleLinkStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
     </Style>
     <Style x:Key="ConversationBubblePlaceholderStyle" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />

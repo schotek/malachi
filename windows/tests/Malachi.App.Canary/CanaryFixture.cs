@@ -249,6 +249,22 @@ public sealed class CanaryFixture : IAsyncLifetime
         steps.Add(new HostStep { View = "board-card", Op = "await", Phase = "board-card-size", Target = HostEvent.Kinds.Size, Ms = LinkLimit, InPhase = true });
         Add("board-card", "wait", "board-card-size", ms: 300);
 
+        // The chat bubble rendering HTML (the conversation's chat layout,
+        // the same CardWebView): the same run as the board card's.
+        Add("chat-bubble", "load", "chat-bubble-passive", passive, ms: 2500);
+        Add("chat-bubble", "load", "chat-bubble-hover", active, ms: 200);
+        Add("chat-bubble", "hover", target: "hover", ms: 1200);
+        Add("chat-bubble", "click", "chat-bubble-nav", target: "pinglink");
+        steps.Add(new HostStep { View = "chat-bubble", Op = "await", Phase = "chat-bubble-nav", Target = HostEvent.Kinds.Link, Ms = LinkLimit, InPhase = true });
+        Add("chat-bubble", "wait", "chat-bubble-nav", ms: 1200);
+        Add("chat-bubble", "click", "chat-bubble-form", target: "sub", ms: 1200);
+        Add("chat-bubble", "click", "chat-bubble-blank", target: "blank", ms: 800);
+        Add("chat-bubble", "click", "chat-bubble-unc", target: "unc", ms: 800);
+        Add("chat-bubble", "load", "chat-bubble-refresh", refresh, ms: 2000);
+        Add("chat-bubble", "load", "chat-bubble-size", "<div style='height:500px'>tall</div>");
+        steps.Add(new HostStep { View = "chat-bubble", Op = "await", Phase = "chat-bubble-size", Target = HostEvent.Kinds.Size, Ms = LinkLimit, InPhase = true });
+        Add("chat-bubble", "wait", "chat-bubble-size", ms: 300);
+
         // The viewer's text zoom, set while a message is on display.
         Add("viewer", "load", "viewer-zoom", "<p>zoom</p>", ms: 200);
         steps.Add(new HostStep { View = "viewer", Op = "zoom", X = 150, Ms = 200 });

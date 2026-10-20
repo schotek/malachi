@@ -26,7 +26,9 @@
 // the view, counted from the end), as the timeline does for its cards.
 // Where the bubbles stand and what is near are the client's measures
 // (`ConversationLayout.chatBubbleMax`), not this file's. Go's zero values of
-// a row's item and draft are nil here.
+// a row's item and draft are nil here. With the preference
+// `conversation-chat-html` on, a bubble whose loaded body has HTML shows it
+// in the timeline card's locked web view instead (`bubbleRendersHTML`).
 
 import Foundation
 
@@ -165,5 +167,31 @@ extension Conversation {
         }
         // TRANSLATORS: the tooltip of the "Show as Thread" toggle above a conversation shown as chat bubbles.
         return L10n.T("Back to the timeline: the messages as cards, newest first")
+    }
+
+    /// conversation.BubbleRendersHTML: whether a bubble of the chat layout
+    /// shows the message's sanitized HTML in the locked web view the
+    /// timeline's cards use (sized mode, the same document as the card:
+    /// the trimQuoted variant) instead of its plain text: the preference
+    /// `conversation-chat-html` is on (`setting`), the loaded body has
+    /// HTML (`hasHTML`) and it is not withheld (`withheld`). A text-only
+    /// message, a withheld or failed body and a body not loaded yet read as
+    /// text (the snippet as placeholder) as without the preference.
+    public static func bubbleRendersHTML(setting: Bool, hasHTML: Bool, withheld: Bool) -> Bool {
+        setting && hasHTML && !withheld
+    }
+
+    /// conversation.ChatHTMLRowTitle: the title of the preference's row in
+    /// Preferences → Message List, next to Group by Conversation.
+    public static func chatHTMLRowTitle() -> String {
+        // TRANSLATORS: a switch in Preferences → Message list; on, a message in the chat layout of a conversation shows its formatting (HTML) instead of plain text.
+        L10n.T("Render HTML in Chat")
+    }
+
+    /// conversation.ChatHTMLRowSubtitle: the subtitle of the preference's
+    /// row, under `chatHTMLRowTitle`.
+    public static func chatHTMLRowSubtitle() -> String {
+        // TRANSLATORS: the subtitle of the "Render HTML in Chat" switch in Preferences → Message list.
+        L10n.T("Messages in the chat layout as they were sent, in a locked web view, instead of their plain text")
     }
 }

@@ -2849,6 +2849,24 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   its top, the chat reads oldest first with the newest bubble where the
   open card is in the cards layout. While the chat shows, the cards release
   their web views but keep their fold and HTML state.
+- HTML in the chat layout (2026-10-20): **decided**, an opt-in preference
+  `conversation-chat-html` (default off) lets a bubble of Mail's chat show
+  the message's sanitised HTML. Opt-in because the chat was decided as text
+  only (D3) and plain text is the safer, faster reading; the owner reviews
+  the HTML variant before it is anything more. It reuses the very document
+  (`message.body` with `trimQuoted`) and the locked, sized web view of the
+  timeline cards, with their cap of live views, so the trust boundary and
+  the daemon API stay as they are (no new method, no raw HTML). A released
+  bubble keeps the document's last height as a minimum, as a card keeps its
+  paper height, so the near set cannot oscillate between text and document
+  heights. The board's chat follows the same preference (owner: same
+  preference): with it on, a board bubble near the visible part asks
+  `message.body` through Mail's cache like the open cards, with its own cap
+  of four live views and the `board.get` text as fallback; off, no request.
+  The web view is transparent and the chat document neutralises content
+  backgrounds (dark mode forces theme text and link colours), so the bubble
+  colour shows; the column is a `flow-root` with `overflow: hidden`, since
+  collapsed block margins otherwise made the view shorter than the document.
 - Jira `mine` in `board.get` and `board.queue` (2026-10-20): **decided**, a
   Jira description or comment written by the account's own user (not relayed
   by a bot) is marked `mine` in the two methods, like `issue.mine`, so the

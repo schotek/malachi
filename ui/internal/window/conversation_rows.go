@@ -36,13 +36,18 @@ const convCaptionMiddle = 8
 //
 // The chat (conversation_chat_row.go, docs/plans/chat-view.md D6): a
 // bubble is a card (a frame, its own border and padding instead of the
-// theme's frame), the user's own tinted with the accent colour, about 12 %
+// theme's frame) in a subtle grey (the card colour with 6 % of the text
+// colour: light grey in the light style, a little lighter than the pane in
+// the dark one), the user's own tinted with the accent colour, about 12 %
 // over the card's background, and bordered with it; the snippet that
 // stands in until the body arrives dimmed; the paperclip a pill in the
 // bulk tag's neutral colours. A bubble's text is a .message-body label (the
 // text zoom and the monospace setting of internal/style); .chat-proportional
 // takes the monospace setting's family away again from a text that is no
-// plain-text body (bubbleMonospace). Like avatar.conversation-own over the
+// plain-text body (bubbleMonospace). The web view of an HTML bubble
+// (.chat-bubble-html) has no background of its own: the view is
+// transparent and the document's backgrounds neutralised
+// (htmlview.ChatDocument), so the bubble's background shows through. Like avatar.conversation-own over the
 // monochrome avatars, it overrides internal/style's sheet because this one
 // is added to the display later at the same priority, and of two providers
 // of one priority the later one wins.
@@ -54,12 +59,13 @@ const convCSS = `.conversation-pane { background-color: @window_bg_color; }
 .conversation-sender { font-weight: 600; }
 .conversation-card-button { min-width: 24px; min-height: 20px; padding: 0 2px; }
 avatar.conversation-own { background-image: none; background-color: @accent_bg_color; color: @accent_fg_color; }
-frame.chat-bubble { background-color: @card_bg_color; border: 1px solid alpha(currentColor, 0.15); border-radius: 10px; padding: 9px 13px; box-shadow: none; }
+frame.chat-bubble { background-color: mix(@card_bg_color, @window_fg_color, 0.06); border: 1px solid alpha(currentColor, 0.15); border-radius: 10px; padding: 9px 13px; box-shadow: none; }
 frame.chat-bubble.chat-bubble-mine { background-color: mix(@card_bg_color, @accent_bg_color, 0.12); border-color: @accent_bg_color; }
 label.chat-placeholder { opacity: 0.55; }
 label.message-body.chat-proportional { font-family: inherit; }
 box.chat-clip-pill { padding: 0 6px; border-radius: 99px; font-size: 80%; background-color: alpha(@window_fg_color, 0.1); color: alpha(@window_fg_color, 0.75); }
 box.chat-clip-pill image { -gtk-icon-size: 12px; }
+overlay.chat-bubble-html { background: none; }
 `
 
 var convCSSOnce sync.Once

@@ -48,6 +48,31 @@ enum ConversationTint {
         return out
     }
 
+    /// How much of the text colour greys someone else's chat bubble over a
+    /// card's background: 6 % in the light appearance, 8 % in the dark one
+    /// (the white text colour lifts the dark card a shade lighter than the
+    /// pane).
+    private static let theirsTint: CGFloat = 0.06
+    private static let theirsTintDark: CGFloat = 0.08
+
+    /// The background of someone else's chat bubble: a card's background
+    /// (`controlBackgroundColor`) with `labelColor` over it, a subtle grey
+    /// in both appearances, resolved for how `view` is shown. Call it where
+    /// the layer is painted (`updateLayer`).
+    static func theirsFill(in view: NSView) -> NSColor {
+        var out = cardFill
+        let dark = view.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua, .accessibilityHighContrastAqua,
+                                                             .accessibilityHighContrastDarkAqua])
+        let share = dark == .darkAqua || dark == .accessibilityHighContrastDarkAqua ? theirsTintDark : theirsTint
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            guard let base = cardFill.usingColorSpace(.sRGB),
+                  let label = NSColor.labelColor.usingColorSpace(.sRGB),
+                  let mixed = base.blended(withFraction: share, of: label.withAlphaComponent(1)) else { return }
+            out = mixed
+        }
+        return out
+    }
+
     /// The border of the user's own chat bubble: the accent colour, as the
     /// user's avatar is tinted with it.
     static var mineBorder: NSColor { .controlAccentColor }

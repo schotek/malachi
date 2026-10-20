@@ -276,6 +276,25 @@ struct ConversationChatTests {
         #expect(Conversation.chatToggleLabel(on: true) == "Show as Thread")
         #expect(
             Conversation.chatToggleTooltip(on: true) == "Back to the timeline: the messages as cards, newest first")
+        #expect(Conversation.chatHTMLRowTitle() == "Render HTML in Chat")
+        #expect(
+            Conversation.chatHTMLRowSubtitle()
+                == "Messages in the chat layout as they were sent, in a locked web view, instead of their plain text")
+    }
+
+    /// chat_test.go TestBubbleRendersHTML: only the preference on, HTML
+    /// present and not withheld.
+    @Test func bubbleRendersHTML() {
+        for setting in [false, true] {
+            for hasHTML in [false, true] {
+                for withheld in [false, true] {
+                    #expect(
+                        Conversation.bubbleRendersHTML(setting: setting, hasHTML: hasHTML, withheld: withheld)
+                            == (setting && hasHTML && !withheld),
+                        "setting \(setting), hasHTML \(hasHTML), withheld \(withheld)")
+                }
+            }
+        }
     }
 }
 
@@ -345,6 +364,52 @@ struct ConversationChatBodyTests {
         aside.showQuoted(true)
         aside.err = RPCClient.ClientError.timeout(method: "message.body")
         #expect(Conversation.bubbleBody(aside, snippet: snippet) == .text("Short"))
+    }
+
+    @Test func bubbleBodyHTML() {
+        func html(_ state: BodyState = .fetched, withheld: Bool = false, html: String? = "<p>Hi</p>") -> MessageBodyResult {
+            MessageBodyResult(
+                messageId: "m1", bodyState: state, hasHtml: true, html: withheld ? nil : html,
+                htmlWithheld: withheld ? true : nil, text: "Hi", remoteContent: .block, sanitizerVersion: "1",
+                quotedTrimmed: true)
+        }
+        let snippet = "Hi there"
+        let lm = LoadedMessage()
+        lm.store(html(), quoted: false)
+        // The preference off (the default): the text, as before.
+        #expect(Conversation.bubbleBody(lm, snippet: snippet) == .text("Hi"))
+        #expect(Conversation.bubbleBody(lm, snippet: snippet, html: false) == .text("Hi"))
+        // On: the body the card shows, and the text for a bubble without a web view.
+        #expect(Conversation.bubbleBody(lm, snippet: snippet, html: true) == .html(body: html(), text: "Hi"))
+
+        // Withheld, empty HTML, a text-only body: the text.
+        lm.store(html(withheld: true), quoted: false)
+        #expect(Conversation.bubbleBody(lm, snippet: snippet, html: true) == .text("Hi"))
+        lm.store(html(html: ""), quoted: false)
+        #expect(Conversation.bubbleBody(lm, snippet: snippet, html: true) == .text("Hi"))
+        lm.store(body("Plain"), quoted: false)
+        #expect(Conversation.bubbleBody(lm, snippet: snippet, html: true) == .text("Plain"))
+        // On its way: the cards' sentence, never a web view.
+        lm.store(html(.pending), quoted: false)
+        #expect(Conversation.bubbleBody(lm, snippet: snippet, html: true) == .text("Downloading…"))
+
+        // Nothing loaded yet, or the call failed: the placeholder, the error.
+        #expect(Conversation.bubbleBody(nil, snippet: snippet, html: true) == .placeholder("Hi there"))
+        let failed = LoadedMessage()
+        failed.err = RPCClient.ClientError.timeout(method: "message.body")
+        #expect(Conversation.bubbleBody(failed, snippet: snippet, html: true)
+            == .text(rpcErrorText("Loading the message", RPCClient.ClientError.timeout(method: "message.body"))))
+
+        // The quoted history revealed in the timeline: the trimmed variant
+        // kept aside is the document, as for the text.
+        let aside = LoadedMessage()
+        aside.store(html(), quoted: false)
+        aside.showQuoted(true)
+        aside.store(MessageBodyResult(
+            messageId: "m1", bodyState: .fetched, hasHtml: true, html: "<p>Hi</p><blockquote>q</blockquote>",
+            text: "Hi\n> q", remoteContent: .block, sanitizerVersion: "1"), quoted: true)
+        #expect(Conversation.bubbleBody(aside, snippet: snippet, html: true) == .html(body: html(), text: "Hi"))
+        #expect(!Conversation.bubbleMonospace(aside, setting: true))
     }
 
     @Test func bubbleAttachmentBadge() {

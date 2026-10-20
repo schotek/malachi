@@ -70,6 +70,9 @@ webových pohledů v režimu `sized`.
   Windows, šablona `po`, `Sent` vpravo, názvy polí, karta issue).
 - 2026-10-20 vlastník: chat dostal i blok konverzace v detailu případu
   Nástěnky, ve všech třech klientech naráz (§9, mění D12).
+- 2026-10-20 vlastník: volitelná předvolba „V chatu vykreslovat HTML“
+  (§10; mění D3 jen na přání); téhož dne vlastník: „Ano, stejná
+  předvolba“ i pro chat Nástěnky, a průhledný pohled bubliny.
 
 ## 6. Plán implementace
 
@@ -341,9 +344,43 @@ container. Deviations from the rows of §6.2:
 - **`po`**: `make po` in the container renumbers the
   `conversation_view.ui:77` reference in `po/malachi.pot` and nothing else.
 
+- **HTML bubbles** (2026-10-20, Preferences → Message list → *Render HTML
+  in Chat*, `settings.KeyConversationChatHTML`, row `conversation_chat_html`
+  in `preferences.blp`): `bubbleHTML` (`conversation_chat_layout.go`, over
+  `conversation.BubbleRendersHTML` and `chatBody`) picks the trimmed body's
+  sanitised HTML; `chatLive` gives a view to the near HTML bubbles, at most
+  `convMaxLiveWebViews`, measured from the end (`liveCards` over the rows
+  reversed); `chatBubble` (`conversation_chat_row.go`) holds an
+  `htmlview.Card` from the timeline's pool in an overlay host
+  (`.chat-bubble-html`; the view transparent through `Card.SetChat`, the
+  document `htmlview.ChatDocument`: no padding of its own, every background
+  neutralised, in the dark style the theme's text and link colours) with
+  the card's `webHeightGovernor`,
+  links through `openLink`, text zoom, wheel forwarded for a document that
+  fits (no glide); the row fills the bubble's maximum (`chatRow.setFill`,
+  the spacer keeps `bubbleGap`). Far, beyond the cap, the preference off
+  (`htmlChanged` observes it) or the chat hidden, the view goes back to the
+  pool and the text shows, kept at the document's last height
+  (`bubbleFrozenHeight`) until the bubble wants no HTML. WebKit takes the
+  clicks inside the document: in an HTML bubble a double click on the
+  header opens the message (`chatBubble.inDocument`).
+- **HTML bubbles on the board** (2026-10-20, owner decision: the same
+  preference): `boardChat` (`board_conversation_chat.go`) asks
+  `message.body` through Mail's cache (`fetchBodyOnly`, trimQuoted) only
+  with the preference on, for the bubbles near the detail scroller's
+  visible part, decides with `bubbleHTML` and gives views by
+  `chatLiveRows` (shared with Mail's `chatLive`) with the board's cap
+  `board.ConversationMaxLiveWebViews`; the bubble's HTML slot is Mail's,
+  behind the `chatWebHost` interface (Mail: the timeline's pool; board:
+  own views released when let go, the window's link question, the cards'
+  `ConversationCompensatedTop` for heights above the viewport). Mail's
+  cache news reach it through `boardConversation.loadedWithChat`
+  (`Window.showLoaded`).
+
 Tests: `conversation_chat_test.go` and `conversation_chat_layout_test.go`
 over a fake `convWindow`; `MALACHI_GTK_SMOKE=1 TestConversationChatGTKSmoke`
-(real Blueprint, both layouts, toggle through the setting).
+(real Blueprint, both layouts, toggle through the setting, an HTML bubble
+with real WebKit).
 
 ## 8. As built — Windows (W1–W2)
 
@@ -497,3 +534,99 @@ jako karty.
   `test`, `lint`, UI smoke a ruční průchod (`docs/windows-port.md` §11.8).
 - **Vlastník**: průchod ve všech třech (GTK v XQuartz `make run-gtk-live`,
   macOS nad kopií dat, Windows).
+
+## 10. Předvolba „V chatu vykreslovat HTML“ (2026-10-20)
+
+Bublina chatu v Poště smí ukázat sanitizované HTML zprávy místo prostého
+textu (D3 dosud: jen text). Necommitnuté; vlastník reviduje sám ve všech
+třech klientech. Rozhodnutí vlastníka:
+
+- **Chat Pošty i Nástěnky, jedna předvolba** (vlastník: „Ano, stejná
+  předvolba“). Nástěnka: bublina blízko viditelné části detailu se zeptá
+  `message.body` přes cache Pošty jako otevřené karty, rozhodne stejným
+  pravidlem a ukáže stejný dokument ve slotu HTML sdílené bubliny, s
+  vlastním stropem 4 živých pohledů (pohledy karet se při chatu uvolní);
+  uvolní se při vzdálení, nad stropem, skrytí, vypnutí předvolby i
+  zavření bloku, výška zůstane jako minimum, záloha je text z
+  `board.get`; vypnuto = žádný dotaz jako dřív.
+- **Průhledný pohled** (připomínka vlastníka, všechny tři klienty): pozadí
+  bubliny prosvítá (barva karty u cizích, tón zvýraznění u vlastních),
+  CSS dokumentu chatu ruší každé pozadí obsahu (`background-color:
+  transparent`, `background-image: none` na všem), v tmavém motivu vynutí
+  barvu textu motivu a odkazů; karty mají dál bílý papír. Sloupec chatu je
+  `display: flow-root` s nulovými okraji prvního a posledního bloku a
+  `html, body { overflow: hidden; margin: 0 }`, protože bez odsazení
+  sloupce se okraje bloků sbalily ven z měřeného sloupce a pohled vyšel
+  kratší než dokument (posuvníky v bublinách). GTK `htmlview.Card.SetChat`/
+  `ChatDocument`, macOS `MessageWebView(chat:)`, `viewerDocument(… chat:)`,
+  `viewerChatFitCSS`, Windows `HardenedWebView` (průhledná volba),
+  `ViewerDocument.ChatDocument`.
+- **Výchozí vypnuto**, klíč gschema `conversation-chat-html` (bool, 45
+  klíčů), v Předvolbách → Seznam zpráv hned za „Seskupovat podle
+  konverzací“ (msgid „Render HTML in Chat“ / „V chatu vykreslovat HTML“,
+  podtitulek „Messages in the chat layout as they were sent, in a locked
+  web view, instead of their plain text“ / „Zprávy v rozložení chat tak,
+  jak byly odeslány, v uzamčeném webovém pohledu místo prostého textu“).
+- **Týž dokument a týž uzamčený webový pohled jako karta časové osy**
+  (sanitizované HTML s `trimQuoted`, režim `sized`, strop 4000, nejvýš 8
+  živých pohledů, nejbližší nejdřív); hranice důvěry se nemění.
+- Pravidlo (Go reference): `conversation.BubbleRendersHTML(setting,
+  hasHTML, withheld)` = setting && hasHTML && !withheld; textová,
+  zadržená, selhaná a dosud nenačtená těla se čtou jako text. Daleko
+  vzdálená bublina (nebo nad stropem) uvolní pohled a ukáže text s
+  poslední výškou dokumentu jako minimem (jako karta drží výšku papíru,
+  aby se blízká množina nerozkmitala); skryté rozložení i vypnutí
+  předvolby uvolní všechny pohledy. HTML bublina bere plnou maximální
+  šířku; žádné pruhy (Načíst obrázky, hromadná pošta, pozvánka) — má je
+  okno zprávy; odkazy jdou cestou karty („Otevřít tento odkaz?“); webový
+  pohled spolkne kliky v dokumentu, proto dvojklik na záhlaví (odesílatel,
+  datum) otevře okno zprávy.
+
+Soubory. Go: `ui/internal/settings/store.go` (`KeyConversationChatHTML`),
+`ui/internal/conversation/chat.go` (`BubbleRendersHTML`,
+`ChatHTMLRowTitle`/`Subtitle`). GTK: `conversation_chat_layout.go`
+(`bubbleHTML`, `chatLive`, `bubbleFrozenHeight`), `conversation_chat_row.go`
+(hostitel HTML v `chatBubble`, `setFill`, `inDocument`),
+`conversation_chat.go` (`updateNear`, `renderHTML`, `htmlChanged`),
+`conversation_host.go` (zoom), `preferences.blp`/`preferences.go`
+(`conversation_chat_html`); karta z poolu časové osy, `htmlview.Card` s
+`webHeightGovernor`. macOS: `MalachiCore/Model/ConversationChat.swift`
+(`bubbleRendersHTML`), `ConversationChatBody.swift` (`BubbleBody.html`),
+`ConversationBubbleView.swift` (`ConversationBubbleWebHost`, slot HTML,
+`frozenHeight`), `ConversationChatViewController.swift` (`updateNear`,
+`applyHTMLSetting`, `LinkStatusView`), `AppearancePaneViewController`,
+`Settings.conversationChatHTML`. Nástěnka: GTK `window/board_conversation_chat.go` (`chatLiveRows` sdílené
+s `chatLive` Pošty, rozhraní `chatWebHost` ve sdílené bublině,
+`loadedWithChat`), doc komentář `ui/internal/board/conversation_chat.go`;
+macOS `MalachiCore/Board/BoardConversationChat.swift` (`Board.ChatBodies`,
+`live`, strop 4), `BoardConversationBlock.swift` (`BoardBubbleWebHost`,
+pravidlo blízkosti proti clip view, pozorovatel
+`.conversationChatHTML`); Windows `Malachi.Core/Boards/
+BoardConversationChat.cs` (`Board.ChatBodies`), `BoardConversationBlock.cs`
+implementuje `IChatWebHost` (vlastní pool, `LiveCards` strop 4, sleduje
+`host.Scroller`). Windows: `Conversation.Chat.cs`
+(`BubbleRendersHtml`), `BubbleBody.cs` (`Html`), `Conversation.ChatBody.cs`
+(`BubbleBodyFor(lm, snippet, renderHtml)`), `Malachi.App/Reader/Conversation/
+IChatWebHost.cs` (nový), `ConversationBubbleView.cs`,
+`ConversationChatView.xaml.cs`, `Preferences/AppearancePage`,
+`SettingsStore.ConversationChatHtml`, kanárek `chat-bubble`
+(`CanaryRunner`, `CanaryFixture`, `NetworkCanaryTests`);
+`windows/parity-exclusions.txt` drží jen dva řádky gschema.
+
+Ověřeno. Go: `go test ./internal/conversation/...`. GTK v kontejneru:
+`gtk.sh make build`, `go test ./internal/window/...` (nové `TestBubbleHTML`,
+`TestConversationChatHTMLBubblesNearTheEnd`,
+`TestConversationChatReleasedHTMLBubbleKeepsItsHeight`),
+`TestConversationChatGTKSmoke` se skutečným WebKitem
+(`WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1`; HTML bublina 654 px z 654,
+výška WebKitu 61 px), `TestBoardGTKSmoke` (prostředí karet: „4 live views of 6 bubbles“, vypnutí uvolní vše), `go test` board/htmlview, `make po` (bez nového msgid
+mimo čtyři, jen `#:`), `make lint`. macOS: `swift build` bez varování,
+filtrované `swift test` 211 (po Nástěnce 580) zelených (`bubbleRendersHTML`,
+`bubbleBodyHTML`, `chatTexts`), `check-strings.py`.
+
+Čeká: revize vlastníka ve všech třech klientech (macOS build už viděl: pozadí v pořádku, posuvníky opravené potom; chat Nástěnky s předvolbou nikdo neviděl); Windows je napsané bez
+`dotnet` — `build.ps1 app`/`test`/`lint`, kanárek, UI smoke chatu a ruční
+seznam v `docs/windows-port.md` §11.7. Známé nedostatky: plynulý dojezd
+touchpadu nad HTML bublinou v GTK nejede dál; dokument leží na bílém
+papíru v zabarvené bublině (tmavý motiv vypadá jinak než textová bublina);
+zmrazená výška je jen minimum (delší text než dokument řádek zvětší).

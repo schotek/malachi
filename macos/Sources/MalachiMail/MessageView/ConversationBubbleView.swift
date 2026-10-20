@@ -4,6 +4,25 @@
 import AppKit
 import MalachiCore
 
+/// What a bubble showing HTML needs from the chat it sits in
+/// (`ConversationBubbleView.setLive`): what a timeline card asks of its
+/// `ConversationCardHost` for its web view.
+@MainActor
+protocol ConversationBubbleWebHost: AnyObject {
+    /// The cache the web view's `malachi-cid:` scheme handler reads.
+    var cache: MessageCache { get }
+    /// The text-zoom setting, for a web view made now.
+    var textZoom: Int { get }
+    /// A link the user activated in the bubble's document, with the
+    /// body's links (the card's "Open this link?").
+    func openLink(_ href: String, links: [Link], from window: NSWindow?)
+    /// The link under the pointer ("" when none).
+    func hover(_ href: String)
+    /// Runs `change`, which alters the bubble's height, keeping the
+    /// chat's end or the row the user reads in place.
+    func bubbleHeightChanging(_ change: () -> Void)
+}
+
 /// A bubble of the chat layout (docs/plans/chat-view.md D3, D6, D14, D15):
 /// a message of the conversation, or the user's draft, as plain text only.
 /// The header has the unread dot (only of someone else's message), the
@@ -18,10 +37,22 @@ import MalachiCore
 /// body is there (`Conversation.bubbleBody`), then the message's text
 /// without its quoted history, or the draft's.
 ///
+/// With the preference Render HTML in Chat (`conversation-chat-html`) a
+/// message whose body has HTML (`Conversation.BubbleBody.html`) shows the
+/// same body as its timeline card, in a transparent `MessageWebView` of its
+/// own in the sized mode where the text is (the chat's sheet: no
+/// backgrounds of the message, the bubble's padding, its colours in the
+/// dark appearance), while the chat keeps the bubble live
+/// (`setLive`: near the viewport, within the timeline's cap); otherwise,
+/// and until the web view exists, the bubble reads its text. Such a bubble
+/// takes its full width. The web view takes the clicks on the document, so
+/// a double click opens the window from the header and the padding only.
+///
 /// Every text is plain (`stringValue`) and none can be selected: a double
 /// click anywhere in the bubble opens the message in its own window, a
 /// draft in the compose window (`onDoubleClick`), where everything else is.
-/// The bubble is a card on the pane's grey (a hairline, rounded corners);
+/// The bubble is a light grey card on the pane (`ConversationTint.theirsFill`,
+/// a hairline, rounded corners);
 /// the user's own is tinted with the accent colour and has a border of it
 /// (`ConversationTint.mineFill`). It hugs its text, never wider than the
 /// row allows (`setMaxWidth`, `ConversationLayout.chatBubbleMax`) and never
@@ -56,6 +87,40 @@ final class ConversationBubbleView: NSView {
     private let dateLabel = NSTextField(labelWithString: "")
     private let bodyLabel = NSTextField(wrappingLabelWithString: "")
     private var widthLimit: NSLayoutConstraint!
+    /// The bubble takes its whole width (`widthLimit`'s): its body is HTML.
+    private var fullWidth: NSLayoutConstraint!
+
+    /// The chat, for the web view of an HTML body.
+    weak var webHost: (any ConversationBubbleWebHost)?
+    /// The body area of HTML: the web view while live.
+    private let htmlSlot = WebPaperView()
+    private var htmlHeight: NSLayoutConstraint!
+    private var webView: MessageWebView?
+    /// The height the document last reported, kept while no web view is
+    /// live.
+    private var webHeight = CGFloat(ConversationLayout.initialWebHeight)
+    /// The document reported its height (`webHeight` is measured, not the
+    /// estimate).
+    private var webHeightReported = false
+    /// While an HTML bubble holds no web view after it had one, its text
+    /// keeps the document's last height (`webHeight`), as a timeline card
+    /// keeps its paper at its last height (`ConversationCardView.setLive`):
+    /// the row's frame does not change when the chat's live window lets go
+    /// of the view, so `ConversationLayout.live` cannot take it back and
+    /// forth. Off with the HTML (`leaveHTML`: the setting off, a text body,
+    /// `dropHTML`).
+    private var frozenHeight: NSLayoutConstraint!
+    /// The HTML body shown (`Conversation.BubbleBody.html`), and the text
+    /// the bubble reads while it holds no web view.
+    private var htmlBody: MessageBodyResult?
+    private var htmlText = ""
+    private var htmlReload = false
+    /// The bubble holds a web view (set by the chat's live window).
+    private(set) var live = false
+    /// The bubble holds a web view now.
+    var holdsWebView: Bool { webView != nil }
+    /// The body is HTML: the bubble wants a web view while near.
+    var rendersHTML: Bool { htmlBody != nil }
 
     /// What the header names for accessibility and the date it shows.
     private var sender = ""
@@ -158,7 +223,12 @@ final class ConversationBubbleView: NSView {
         bodyLabel.lineBreakMode = .byWordWrapping
         bodyLabel.isHidden = true
 
-        let column = NSStackView(views: [header, bodyLabel])
+        // No paper: the transparent web view shows the bubble's own
+        // background, as the text does.
+        htmlSlot.isHidden = true
+        htmlSlot.paper = false
+
+        let column = NSStackView(views: [header, bodyLabel, htmlSlot])
         column.orientation = .vertical
         column.alignment = .leading
         column.spacing = 6
@@ -168,12 +238,18 @@ final class ConversationBubbleView: NSView {
         column.translatesAutoresizingMaskIntoConstraints = false
         addSubview(column)
         widthLimit = widthAnchor.constraint(lessThanOrEqualToConstant: 10_000)
+        fullWidth = widthAnchor.constraint(equalToConstant: 10_000)
+        fullWidth.priority = .defaultHigh
+        htmlHeight = htmlSlot.heightAnchor.constraint(equalToConstant: webHeight)
+        frozenHeight = bodyLabel.heightAnchor.constraint(equalToConstant: webHeight)
         NSLayoutConstraint.activate([
             column.topAnchor.constraint(equalTo: topAnchor),
             column.bottomAnchor.constraint(equalTo: bottomAnchor),
             column.leadingAnchor.constraint(equalTo: leadingAnchor),
             column.trailingAnchor.constraint(equalTo: trailingAnchor),
             header.widthAnchor.constraint(equalTo: column.widthAnchor, constant: -2 * Self.paddingH),
+            htmlSlot.widthAnchor.constraint(equalTo: column.widthAnchor, constant: -2 * Self.paddingH),
+            htmlHeight,
             widthLimit,
         ])
 
@@ -182,6 +258,7 @@ final class ConversationBubbleView: NSView {
         let doubleClick = NSClickGestureRecognizer(target: self, action: #selector(doubleClicked(_:)))
         doubleClick.numberOfClicksRequired = 2
         doubleClick.delaysPrimaryMouseButtonEvents = false
+        doubleClick.delegate = self
         addGestureRecognizer(doubleClick)
 
         setAccessibilityElement(true)
@@ -199,7 +276,7 @@ final class ConversationBubbleView: NSView {
             }
             layer?.borderColor = border
         } else {
-            layer?.backgroundColor = ConversationTint.cardFill.cgColor
+            layer?.backgroundColor = ConversationTint.theirsFill(in: self).cgColor
             layer?.borderColor = ConversationTint.cardBorder(in: self).cgColor
         }
     }
@@ -210,6 +287,7 @@ final class ConversationBubbleView: NSView {
         let w = max(width, 2 * Self.paddingH + 1)
         guard widthLimit.constant != w else { return }
         widthLimit.constant = w
+        fullWidth.constant = w
         bodyLabel.preferredMaxLayoutWidth = w - 2 * Self.paddingH
         bodyLabel.invalidateIntrinsicContentSize()
     }
@@ -303,15 +381,162 @@ final class ConversationBubbleView: NSView {
         switch body {
         case .placeholder(let s):
             showsText = false
-            bodyLabel.stringValue = s
-            bodyLabel.textColor = Tint.secondary
-            bodyLabel.isHidden = s.isEmpty
+            leaveHTML()
+            showLabel(s, color: Tint.secondary)
         case .text(let s):
             showsText = true
-            bodyLabel.stringValue = s
-            bodyLabel.textColor = .labelColor
-            bodyLabel.isHidden = s.isEmpty
+            leaveHTML()
+            showLabel(s, color: .labelColor)
+        case .html(let b, let text):
+            showsText = true
+            let before = htmlBody
+            htmlBody = b
+            htmlText = text
+            htmlReload = htmlReload || picturesArrived(before, b)
+            fullWidth.isActive = true
+            if live {
+                loadWebView()
+            } else {
+                showLabel(text, color: .labelColor)
+            }
         }
+    }
+
+    /// The HTML body shown goes back to its text: the preference was
+    /// switched off while the entry was let go (nothing to render anew).
+    func dropHTML() {
+        guard rendersHTML else { return }
+        let text = htmlText
+        shownBody = .text(text)
+        leaveHTML()
+        showLabel(text, color: .labelColor)
+    }
+
+    private func showLabel(_ s: String, color: NSColor) {
+        htmlSlot.isHidden = true
+        let freeze = rendersHTML && webHeightReported
+        frozenHeight.constant = webHeight
+        frozenHeight.isActive = freeze
+        bodyLabel.stringValue = s
+        bodyLabel.textColor = color
+        bodyLabel.isHidden = s.isEmpty && !freeze
+    }
+
+    /// The body is no longer HTML: no web view, the bubble hugs its text.
+    private func leaveHTML() {
+        releaseWebView()
+        htmlBody = nil
+        htmlText = ""
+        htmlReload = false
+        fullWidth.isActive = false
+        frozenHeight.isActive = false
+        webHeightReported = false
+        webHeight = CGFloat(ConversationLayout.initialWebHeight)
+    }
+
+    /// The same body again after its pictures kept on the mail server were
+    /// downloaded: the same HTML, whose `malachi-cid:` pictures load now
+    /// (ConversationCardView `picturesArrived`).
+    private func picturesArrived(_ before: MessageBodyResult?, _ now: MessageBodyResult) -> Bool {
+        guard let before, before.messageId == now.messageId else { return false }
+        return before.remotePictureCount > 0 && before != now
+    }
+
+    // MARK: Web view
+
+    /// Whether the bubble holds a web view (the chat's live window,
+    /// `ConversationLayout.live`): made and loaded when it becomes live
+    /// with an HTML body, let go when it does not stay, the text shown
+    /// again.
+    func setLive(_ on: Bool) {
+        guard on != live else { return }
+        live = on
+        if on {
+            if rendersHTML {
+                loadWebView()
+            }
+        } else {
+            releaseWebView()
+            if rendersHTML {
+                showLabel(htmlText, color: .labelColor)
+            }
+        }
+    }
+
+    private func loadWebView() {
+        guard let b = htmlBody, let html = b.html, let host = webHost else { return }
+        let wv = webView ?? makeWebView(host)
+        frozenHeight.isActive = false
+        bodyLabel.isHidden = true
+        htmlHeight.constant = webHeight
+        htmlSlot.isHidden = false
+        wv.load(body: html, reload: htmlReload)
+        htmlReload = false
+    }
+
+    private func makeWebView(_ host: any ConversationBubbleWebHost) -> MessageWebView {
+        let wv = MessageWebView(cache: host.cache, zoom: host.textZoom, chat: true)
+        wv.onLink = { [weak self] link in
+            guard let self else { return }
+            self.webHost?.openLink(link.href, links: self.htmlBody?.links ?? [], from: self.window)
+        }
+        wv.onUnavailable = { [weak self] in self?.htmlUnavailable() }
+        wv.onHover = { [weak self] href in self?.webHost?.hover(href) }
+        wv.onHeight = { [weak self] h in self?.webHeightChanged(h) }
+        htmlSlot.addSubview(wv)
+        NSLayoutConstraint.activate([
+            wv.topAnchor.constraint(equalTo: htmlSlot.topAnchor),
+            wv.bottomAnchor.constraint(equalTo: htmlSlot.bottomAnchor),
+            wv.leadingAnchor.constraint(equalTo: htmlSlot.leadingAnchor),
+            wv.trailingAnchor.constraint(equalTo: htmlSlot.trailingAnchor),
+        ])
+        webView = wv
+        return wv
+    }
+
+    private func releaseWebView() {
+        guard let wv = webView else { return }
+        webView = nil
+        wv.onHeight = nil
+        wv.onHover = nil
+        wv.onLink = nil
+        wv.onUnavailable = nil
+        wv.removeFromSuperview()
+        htmlSlot.isHidden = true
+        webHost?.hover("")
+    }
+
+    private func webHeightChanged(_ h: CGFloat) {
+        webHeightReported = true
+        guard h != webHeight || htmlHeight.constant != h else { return }
+        let apply = {
+            self.webHeight = h
+            self.htmlHeight.constant = h
+        }
+        if let host = webHost {
+            host.bubbleHeightChanging(apply)
+        } else {
+            apply()
+        }
+    }
+
+    /// The web view cannot show HTML at all (its content rule list did not
+    /// compile): the text instead, as the card does.
+    private func htmlUnavailable() {
+        guard rendersHTML else { return }
+        let change = { self.dropHTML() }
+        if let host = webHost {
+            host.bubbleHeightChanging(change)
+        } else {
+            change()
+        }
+    }
+
+    /// The point `p` (the bubble's coordinates) is on the document of a
+    /// live web view, which takes its clicks itself.
+    private func onDocument(_ p: NSPoint) -> Bool {
+        guard webView != nil, !htmlSlot.isHidden else { return false }
+        return htmlSlot.convert(htmlSlot.bounds, to: self).contains(p)
     }
 
     /// The text shows in the monospaced font.
@@ -329,7 +554,10 @@ final class ConversationBubbleView: NSView {
 
     /// The text-zoom setting changed: both fonts anew, the text in the one
     /// it shows in.
-    func setFonts(normal: NSFont, monospace: NSFont) {
+    func setFonts(normal: NSFont, monospace: NSFont, zoom: Int? = nil) {
+        if let zoom {
+            webView?.setZoom(zoom)
+        }
         fonts = (normal, monospace)
         bodyLabel.font = self.monospace ? monospace : normal
         bodyLabel.invalidateIntrinsicContentSize()
@@ -446,5 +674,14 @@ final class ConversationClipPill: NSView {
         let radius = bounds.height / 2
         IssuePill.bulkColours.fill.setFill()
         NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
+    }
+}
+
+extension ConversationBubbleView: NSGestureRecognizerDelegate {
+    /// The double click reads every click on the bubble but those on the
+    /// document of its live web view (word selection, links): the header
+    /// and the padding still open the window.
+    func gestureRecognizer(_ gestureRecognizer: NSGestureRecognizer, shouldAttemptToRecognizeWith event: NSEvent) -> Bool {
+        !onDocument(convert(event.locationInWindow, from: nil))
     }
 }

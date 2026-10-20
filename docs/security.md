@@ -204,12 +204,29 @@ The conversation's chat layout (`ui/internal/window/conversation_chat*.go`)
 has no web view at all: a bubble shows only the daemon's plain `text` of
 `message.body` (asked for with `trimQuoted`) in a `GtkLabel` with markup
 off (`SetUseMarkup(false)`) that cannot be selected, with no link handling,
-so no HTML reaches it; the timeline above is unchanged.
+so no HTML reaches it; the timeline above is unchanged. With the
+preference `conversation-chat-html` on (off by default)
+a bubble may instead show that message's sanitised HTML, the same
+`trimQuoted` document as the timeline card, in the same locked
+`htmlview.Card` from the timeline's pool: the same CSP, network cut-off
+and scheme handlers, no JavaScript of the content, sized mode with the
+4000 px cap and the height governor, and the same cap and nearness rule
+for live views; text-only, withheld, failed and not yet loaded bodies stay
+plain text, there are no bars in a bubble, links go through the card's
+"Open this link?" path, and since the web view consumes clicks inside the
+document a double click on the header opens the message window. Nothing
+else in the trust boundary changes.
 The board's chat layout (`ui/internal/window/board_conversation_chat.go`)
 is the same: the plain `text` the case already carries from `board.get`
 in a `GtkLabel` with markup off, not selectable, no web view, no link
 handling, no `message.body` request; a double click opens the message
-window.
+window. With `conversation-chat-html` on, a board bubble near the visible
+part of the detail may instead show the message's sanitised HTML (a
+`message.body` request through Mail's cache, as the open cards do) in the
+same locked `htmlview.Card` through the shared bubble's web host, with the
+board's cap of four live views (the cards' views are released while the
+chat shows); off means no request, and the `board.get` text is the
+fallback. The trust boundary is unchanged.
 
 The GTK board's conversation cards use the same `htmlview.Card` and
 height governor as Mail. Only an open card fetches its message's body
@@ -304,11 +321,21 @@ for WKWebView, since nothing of the WebKitGTK configuration carries over:
   only the daemon's plain `text` of `message.body` (asked for with
   `trimQuoted`) through `stringValue` in a native label that cannot be
   selected, with no link handling and no context menu, so no HTML reaches
-  it; the timeline above is unchanged.
+  it; the timeline above is unchanged. With `conversation-chat-html` on
+  (off by default) a bubble may show the message's
+  sanitised HTML in the same locked `MessageWebView` in sized mode as the
+  cards (same CSP, network cut-off, `malachi-cid:` handler, no JavaScript
+  of the content, 4000 pt cap, at most eight alive, nearest first); text-only,
+  withheld or failed bodies stay plain text, a bubble has no bars, links
+  go through the cards' `openLink`, and a double click on the header opens
+  the message window. The trust boundary is otherwise unchanged.
   The board's chat layout (`MalachiCore/Board/BoardConversationChat.swift`,
   `Board/BoardConversationBlock.swift`) is the same: the plain `text` of
   `board.get` through `stringValue`, not selectable, no web view, no links;
-  a double click opens the message window.
+  a double click opens the message window. With `conversation-chat-html`
+  on, a board bubble near the visible part may show the sanitised HTML of
+  `message.body` in the same locked `MessageWebView` (`BoardBubbleWebHost`,
+  cap of four live, the text as fallback); off, no request is made.
 
 Layer 2 on Windows (`windows/src/Malachi.App/WebViews`, the rules in
 `Malachi.Core.Presentation`; [windows-port.md §6](windows-port.md#6-the-webview2-security-layer))
@@ -432,6 +459,15 @@ fetch a page, both unseen by the filter:
   (4000 px, beyond it the card scrolls inside) and frozen for a document
   that grows with the view, so a message cannot grow the pane without
   end ([windows-port.md §6.7](windows-port.md#67-conversation-card-cardwebview));
+- the chat layout's bubble (`ConversationBubbleView`) is native text; with
+  `conversation-chat-html` on (off by default) it may
+  instead host the same `CardWebView` through `IChatWebHost`, with every
+  protection above (sanitised `trimQuoted` document, script off, network
+  cut-off, sized mode, cap of eight alive, nearest first); text-only,
+  withheld or failed bodies stay text, a bubble has no bars, links go
+  through the cards' link path, a double click on the header opens the
+  message window; the board's chat uses the same host with its own pool
+  (`BoardConversationBlock`, cap of four), and the canary also runs a chat bubble (`chat-bubble`);
 - the **network canary** (`Malachi.App.Canary`, part of `make
   test-windows`) runs the real viewer, a conversation card's view, the
   editor and the previewer against a

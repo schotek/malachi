@@ -94,6 +94,42 @@ struct HTMLLinksTests {
         #expect(viewerDocument(body: body, compact: false) == reader)
     }
 
+    /// A chat bubble's document: no backgrounds, no column padding, the
+    /// bubble's colours in the dark appearance; the cards' and the
+    /// reader's documents keep their white page.
+    @Test func chatDocument() {
+        let body = "<p>a &amp; b</p>"
+        let colours = ViewerChatColours(text: "rgba(255, 255, 255, 0.85)", link: "rgb(65, 156, 255)")
+        let chat = viewerDocument(body: body, compact: true, chat: colours)
+        let card = viewerDocument(body: body, compact: true)
+        let reader = viewerDocument(body: body)
+        let neutral = "html, body, *, *::before, *::after { background-color: transparent !important; background-image: none !important; }"
+        #expect(viewerChatBackgroundCSS == neutral)
+        #expect(chat.contains(neutral))
+        #expect(chat.contains("@media (prefers-color-scheme: dark) { * { color: rgba(255, 255, 255, 0.85) !important; } a, a * { color: rgb(65, 156, 255) !important; } }"))
+        #expect(chat.contains("padding: 0 !important;"), "the bubble's padding only")
+        // The view is as tall as the document: no margin collapses out of
+        // the measured column, and the page never scrolls.
+        for want in [
+            "html, body { overflow: hidden !important; margin: 0 !important; }",
+            "#malachi-column { display: flow-root !important; }",
+            "#malachi-column > :first-child { margin-top: 0 !important; }",
+            "#malachi-column > :last-child { margin-bottom: 0 !important; }",
+        ] {
+            #expect(chat.contains(want), "chat document lacks \(want)")
+            #expect(!card.contains(want) && !reader.contains(want))
+        }
+        #expect(chat.range(of: "display: flow-root")!.lowerBound > chat.range(of: "display: block !important")!.lowerBound,
+                "flow-root comes after the base sheet's display: block")
+        for other in [card, reader] {
+            #expect(!other.contains("background-color: transparent"))
+            #expect(!other.contains("prefers-color-scheme"))
+            #expect(other.contains("background: #ffffff;"))
+        }
+        #expect(chat.contains(viewerCSP) && chat.contains("<body><div id=\"malachi-column\"><p>a &amp; b</p></div></body>"))
+        #expect(chat.hasPrefix("<!DOCTYPE html>") && chat.hasSuffix("</body></html>"))
+    }
+
     /// The decision over an activated link (remote.go `openLink`, plus
     /// the unlisted case macOS confirms): the attribute as written is
     /// what the daemon lists, so it must be matched, not WebKit's

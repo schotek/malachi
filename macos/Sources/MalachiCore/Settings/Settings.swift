@@ -30,6 +30,10 @@ public final class Settings {
         /// left, the user's messages on the right) instead of the timeline
         /// (ui/internal/conversation/chat.go).
         case conversationChatLayout = "conversation-chat-layout"
+        /// A bubble of the chat layout as the message's sanitized HTML in a
+        /// locked web view instead of its plain text
+        /// (ui/internal/conversation/chat.go BubbleRendersHTML).
+        case conversationChatHTML = "conversation-chat-html"
         case searchScope = "search-scope"
         case showAvatars = "show-avatars"
         case monochromeAvatars = "monochrome-avatars"
@@ -140,6 +144,7 @@ public final class Settings {
             Key.showPreviewLine.rawValue: true,
             Key.groupByConversation.rawValue: false,
             Key.conversationChatLayout.rawValue: false,
+            Key.conversationChatHTML.rawValue: false,
             Key.searchScope.rawValue: SearchScope.folder.rawValue,
             Key.showAvatars.rawValue: true,
             Key.monochromeAvatars.rawValue: false,
@@ -288,6 +293,14 @@ public final class Settings {
     public var conversationChatLayout: Bool {
         get { bool(.conversationChatLayout) }
         set { set(.conversationChatLayout, newValue) }
+    }
+
+    /// Render a chat bubble's HTML in a locked web view instead of its
+    /// plain text (Settings → Message List, next to Group by
+    /// Conversation).
+    public var conversationChatHTML: Bool {
+        get { bool(.conversationChatHTML) }
+        set { set(.conversationChatHTML, newValue) }
     }
 
     /// The last scope chosen for a search.

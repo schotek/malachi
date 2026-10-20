@@ -71,6 +71,7 @@ public sealed class SettingsStore : IDisposable
         new(SettingsKey.ShowPreviewLine, "show-preview-line", "b", true),
         new(SettingsKey.GroupByConversation, "group-by-conversation", "b", false),
         new(SettingsKey.ConversationChatLayout, "conversation-chat-layout", "b", false),
+        new(SettingsKey.ConversationChatHtml, "conversation-chat-html", "b", false),
         new(SettingsKey.SearchScope, "search-scope", "s", "folder", choices: Nicks<SearchScope>.All),
         new(SettingsKey.ShowAvatars, "show-avatars", "b", true),
         new(SettingsKey.MonochromeAvatars, "monochrome-avatars", "b", false),
@@ -265,6 +266,13 @@ public sealed class SettingsStore : IDisposable
     {
         get => GetBoolean(SettingsKey.ConversationChatLayout);
         set => SetBoolean(SettingsKey.ConversationChatLayout, value);
+    }
+
+    /// <summary>Whether a bubble of the chat layout shows the message's sanitized HTML in a locked web view instead of its plain text (Go <c>conversation.BubbleRendersHTML</c>).</summary>
+    public bool ConversationChatHtml
+    {
+        get => GetBoolean(SettingsKey.ConversationChatHtml);
+        set => SetBoolean(SettingsKey.ConversationChatHtml, value);
     }
 
     /// <summary>The scope last chosen for a search.</summary>

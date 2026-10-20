@@ -55,6 +55,10 @@ const (
 	// messages on the left, yours on the right, oldest first) instead of
 	// the timeline.
 	KeyConversationChatLayout = "conversation-chat-layout"
+	// KeyConversationChatHTML renders a bubble of the chat layout as the
+	// message's sanitized HTML in a locked web view instead of its plain
+	// text.
+	KeyConversationChatHTML = "conversation-chat-html"
 	// KeySearchScope is where a search looks, as last chosen in the
 	// search bar.
 	KeySearchScope = "search-scope"
@@ -236,6 +240,7 @@ var defaults = map[string]any{
 	KeyTextZoom:               100,
 	KeyGroupByConversation:    false,
 	KeyConversationChatLayout: false,
+	KeyConversationChatHTML:   false,
 	KeySearchScope:            string(SearchFolder),
 
 	KeyCollapsedFolders:  []string(nil),
@@ -390,6 +395,9 @@ func (s *Store) SetGroupByConversation(v bool) { s.set(KeyGroupByConversation, v
 
 func (s *Store) ConversationChatLayout() bool     { return s.boolean(KeyConversationChatLayout) }
 func (s *Store) SetConversationChatLayout(v bool) { s.set(KeyConversationChatLayout, v) }
+
+func (s *Store) ConversationChatHTML() bool     { return s.boolean(KeyConversationChatHTML) }
+func (s *Store) SetConversationChatHTML(v bool) { s.set(KeyConversationChatHTML, v) }
 
 func (s *Store) MonospacePlainText() bool     { return s.boolean(KeyMonospacePlainText) }
 func (s *Store) SetMonospacePlainText(v bool) { s.set(KeyMonospacePlainText, v) }

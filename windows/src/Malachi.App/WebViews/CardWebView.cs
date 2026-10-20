@@ -77,10 +77,29 @@ public sealed partial class CardWebView : HardenedWebView
     private double width = -1;
     private double height = -1;
 
+    // A chat bubble's view (the preference conversation-chat-html):
+    // transparent, its document ViewerDocument.ChatDocument.
+    private readonly bool chat;
+
+    // The palette the loaded document was built with (a chat bubble's).
+    private ChatPalette? loadedPalette;
+
     /// <summary>A card's view with no document; <see cref="Parts"/> serves its pictures.</summary>
     public CardWebView()
-        : base(WebViewKind.Viewer)
+        : this(chat: false)
     {
+    }
+
+    /// <summary>
+    /// A card's view, or a chat bubble's (<paramref name="chat"/>): then the
+    /// view is transparent, so the bubble's background shows through, and its
+    /// document is <see cref="ViewerDocument.ChatDocument"/> (no background of
+    /// the mail, no frame, the text and links in <see cref="Palette"/>).
+    /// </summary>
+    public CardWebView(bool chat)
+        : base(WebViewKind.Viewer, transparent: chat)
+    {
+        this.chat = chat;
         measureTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
         measureTimer.IsRepeating = false;
         measureTimer.Interval = MeasureDelay;
@@ -105,6 +124,14 @@ public sealed partial class CardWebView : HardenedWebView
 
     /// <summary>The view could not show its document (<see cref="HardenedWebView.Unavailable"/>): the card shows the plain text.</summary>
     public Action? OnFailed { get; set; }
+
+    /// <summary>
+    /// A chat bubble's colours of the text and the links (the dark theme,
+    /// high contrast; null in the light theme: the mail's own), used by the
+    /// next <see cref="Load"/>, which loads again when they changed. A card's
+    /// view ignores it.
+    /// </summary>
+    public ChatPalette? Palette { get; set; }
 
     /// <summary>Serves the <c>malachi-cid:</c> pictures; null answers 404.</summary>
     public PartFetcher? Parts { get; set; }
@@ -145,15 +172,18 @@ public sealed partial class CardWebView : HardenedWebView
     public void Load(string body, bool reload)
     {
         ArgumentNullException.ThrowIfNull(body);
-        if (IsReady && !needsReload && !reload && string.Equals(loadedBody, body, StringComparison.Ordinal))
+        var palette = chat ? Palette : null;
+        if (IsReady && !needsReload && !reload && string.Equals(loadedBody, body, StringComparison.Ordinal) && palette == loadedPalette)
         {
             return;
         }
         needsReload = false;
         loadedBody = body;
+        loadedPalette = palette;
         loadedGeneration = null;
         relayout = true;
-        var document = ViewerZoom.Apply(ViewerDocument.CompactDocument(body), zoom);
+        var page = chat ? ViewerDocument.ChatDocument(body, palette) : ViewerDocument.CompactDocument(body);
+        var document = ViewerZoom.Apply(page, zoom);
         LoadDocument(Encoding.UTF8.GetBytes(document), "text/html; charset=utf-8", ViewerDocument.Csp);
     }
 
@@ -171,6 +201,7 @@ public sealed partial class CardWebView : HardenedWebView
         OnFailed = null;
         measureTimer.Stop();
         loadedBody = null;
+        loadedPalette = null;
         loadedGeneration = null;
         DropDocument();
         width = -1;

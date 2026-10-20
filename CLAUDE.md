@@ -1960,6 +1960,66 @@ Nesouvisející: backend `TestInvitationDetectionOfTheCorpus` padá od
 2026-10-20, protože fixtura `invite-two-calendar-parts.eml` končí
 2026-10-20T10:00Z a pravidlo `end ≤ now` ji bere jako prošlou.
 
+Předvolba V chatu vykreslovat HTML (2026-10-20, všechny tři klienty,
+necommitnuté; vlastník reviduje sám; plán `docs/plans/chat-view.md` §10).
+Rozhodnutí vlastníka: chat Pošty i Nástěnky s touž předvolbou („Ano, stejná
+předvolba“), výchozí vypnuto. Nástěnka: bublina blízko viditelné části detailu
+se s předvolbou zeptá `message.body` přes cache Pošty jako otevřené karty,
+rozhodne stejným pravidlem, strop 4 živých pohledů (pohledy karet se při
+chatu uvolní), záloha text z `board.get`, vypnuto = žádný dotaz (GTK
+`board_conversation_chat.go` `chatLiveRows`/`chatWebHost`/`loadedWithChat`;
+macOS `Board.ChatBodies`, `BoardBubbleWebHost`; Windows `Board.ChatBodies`,
+`BoardConversationBlock` jako `IChatWebHost`). Průhledný pohled bubliny (vlastník):
+barva bubliny prosvítá, CSS chatu ruší pozadí obsahu a v tmavém motivu vynutí
+barvu textu a odkazů motivu (karty mají dál bílý papír), sloupec je
+`display: flow-root` s `overflow: hidden` (bez toho se okraje bloků sbalily a
+pohled vyšel kratší, posuvníky; GTK `htmlview.Card.SetChat`/`ChatDocument`, macOS
+`MessageWebView(chat:)`/`viewerChatFitCSS`, Windows `HardenedWebView`,
+`ViewerDocument.ChatDocument`). Vlastník viděl macOS build (pozadí v pořádku,
+posuvníky opravené potom); chat Nástěnky s předvolbou nikdo neviděl. Klíč gschema `conversation-chat-html` (bool,
+45 klíčů) v Předvolbách → Seznam zpráv hned za Seskupovat podle konverzací
+(GTK `preferences.blp` `conversation_chat_html` v `preferences.go`, macOS
+přepínač v `AppearancePaneViewController` nad `Settings.conversationChatHTML`,
+Windows `ToggleSwitch` v `AppearancePage` nad `SettingsStore.ConversationChatHtml`).
+Zapnutá: bublina ukáže sanitizované HTML zprávy (tentýž dokument `trimQuoted`
+jako karta časové osy) v témže uzamčeném webovém pohledu jako karty v režimu
+`sized` (GTK `htmlview.Card` z poolu časové osy s `webHeightGovernor`, macOS
+`MessageWebView`, Windows `CardWebView`; strop 4000, nejvýš 8 živých, nejbližší
+nejdřív), jinak prostý text. Pravidlo, reference Go
+`conversation.BubbleRendersHTML(setting, hasHTML, withheld)` = setting &&
+hasHTML && !withheld (Swift `Conversation.bubbleRendersHTML`, C#
+`Conversation.BubbleRendersHtml`): textová, zadržená, selhaná a dosud nenačtená
+těla zůstávají textem. Vzdálená bublina uvolní pohled a ukáže text s poslední
+výškou dokumentu jako minimem (jako karta drží výšku papíru, aby se blízká
+množina nerozkmitala); skryté rozložení i vypnutí předvolby uvolní všechny
+pohledy; HTML bublina bere plnou šířku; bez pruhů (Načíst obrázky, hromadná
+pošta, pozvánka), odkazy cestou karty („Otevřít tento odkaz?“), webový pohled
+spolkne kliky, proto dvojklik na záhlaví otevře okno zprávy. Soubory: Go
+`ui/internal/settings/store.go`, `conversation/chat.go` (`ChatHTMLRowTitle`/
+`Subtitle`); GTK `window/conversation_chat_layout.go` (`bubbleHTML`, `chatLive`,
+`bubbleFrozenHeight`), `conversation_chat_row.go`, `conversation_chat.go`
+(`updateNear`, `renderHTML`, `htmlChanged`), `conversation_host.go`; macOS
+`ConversationChat.swift`, `ConversationChatBody.swift` (`BubbleBody.html`),
+`ConversationBubbleView.swift` (`ConversationBubbleWebHost`, `frozenHeight`),
+`ConversationChatViewController.swift` (`updateNear`, `applyHTMLSetting`,
+`LinkStatusView`); Windows `Conversation.Chat.cs`, `BubbleBody.cs` (`Html`),
+`Conversation.ChatBody.cs` (`BubbleBodyFor(lm, snippet, renderHtml)`),
+`Reader/Conversation/IChatWebHost.cs`, `ConversationBubbleView.cs`,
+`ConversationChatView.xaml.cs`, kanárek `chat-bubble`; v
+`windows/parity-exclusions.txt` zůstaly jen dva řádky gschema. Msgidy: „Render HTML in Chat“
+a jeho podtitulek, česky v `cs.po` (čtyři nové záznamy `po/`). Ověřeno: Go `go test ./internal/conversation/...`;
+GTK v kontejneru `gtk.sh make build`, `go test ./internal/window/...`
+(`TestBubbleHTML`, `TestConversationChatHTMLBubblesNearTheEnd`,
+`TestConversationChatReleasedHTMLBubbleKeepsItsHeight`), smoke se skutečným
+WebKitem (`WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1`), `TestBoardGTKSmoke`,
+`make po`, `make lint`; macOS `swift build` bez varování, filtrované `swift test`
+211 zelených (580 po Nástěnce), board smoky GTK („4 live views of 6 bubbles“), `check-strings.py`. Čeká: revize vlastníka ve všech třech;
+Windows napsané bez `dotnet` — `build.ps1 app`/`test`/`lint`, kanárek, UI
+smoke chatu a ruční seznam v `docs/windows-port.md` §11.7. Nedostatky: dojezd
+touchpadu nad HTML bublinou v GTK nejede dál; dokument leží na bílém papíru
+v zabarvené bublině (tmavý motiv vypadá jinak než textová); zmrazená výška je
+jen minimum.
+
 Archivace v Poště = Hotovo (2026-10-13, `feat/board`, necommitnuté; jen
 démon, klienti beze změny — všechny tři to dostanou přes
 `notify.boardChanged`). Vlastník archivoval vyřízenou poštu v Poště a
@@ -2255,7 +2315,7 @@ frontě, odmítnutý vrátí jen svou změnu), `CalendarAccountController`
 a `AssistantPanelController.RunCalendar`/`OpenInCalendar`, karta
 `Controllers/CalendarContent.cs`. Mimo kalendář v Core: `Board.Mode.Calendar`
 (2) se `StartChoice.Calendar`, klíč `calendar-view`
-(`SettingsStore.CalendarView`, 44 klíčů gschema), Ctrl+3 jako
+(`SettingsStore.CalendarView`, 45 klíčů gschema), Ctrl+3 jako
 `ShortcutCommand.ShowCalendar` v `ShortcutMap`, `NotificationHub.AddCalendar`,
 `AccountsPageController` CalDAV účty nevypisuje (při přeřazení je drží za
 vypsanými), `FolderTree.AccountHeaderBadge` umí `CALDAV`, toasty zpráv

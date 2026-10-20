@@ -39,6 +39,7 @@ public sealed class SettingsTests
         Assert.False(s.MonospacePlainText);
         Assert.False(s.GroupByConversation);
         Assert.False(s.ConversationChatLayout);
+        Assert.False(s.ConversationChatHtml);
         Assert.Equal(100, s.TextZoom);
         Assert.False(s.LaunchAtLogin);
         Assert.False(s.RunInBackground);
@@ -66,7 +67,7 @@ public sealed class SettingsTests
         Assert.Equal(380, s.MessageListWidth);
         Assert.Equal(Cal.View.Week, s.CalendarView);
         // The shared settings and Windows' ctrl-r.
-        Assert.Equal(44, SettingsStore.Schema.Count);
+        Assert.Equal(45, SettingsStore.Schema.Count);
         Assert.Equal(Enum.GetValues<SettingsKey>().Length, SettingsStore.Schema.Count);
         Assert.Equal(
             SettingsStore.Schema.Select(k => k.Name).Order(StringComparer.Ordinal),
@@ -126,6 +127,24 @@ public sealed class SettingsTests
         s.ConversationChatLayout = false;
         Assert.Equal(2, fired);
         Assert.False(s.ConversationChatLayout);
+    }
+
+    [Fact]
+    public void ConversationChatHtmlIsStoredAndNotifies()
+    {
+        var backend = new InMemorySettingsBackend();
+        using var s = new SettingsStore(backend, null);
+        var fired = 0;
+        s.OnChange(SettingsKey.ConversationChatHtml, () => fired++);
+        s.ConversationChatHtml = true;
+        s.ConversationChatHtml = true;
+        Assert.Equal(1, fired);
+        Assert.True(s.ConversationChatHtml);
+        using var restored = new SettingsStore(backend, null);
+        Assert.True(restored.ConversationChatHtml);
+        s.ConversationChatHtml = false;
+        Assert.Equal(2, fired);
+        Assert.False(s.ConversationChatHtml);
     }
 
     /// <summary>The calendar's view: the gschema's CalendarView nicks; anything else is Week (Swift SettingsTests).</summary>

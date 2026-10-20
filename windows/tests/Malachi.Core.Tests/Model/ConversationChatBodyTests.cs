@@ -238,4 +238,57 @@ public sealed class ConversationChatBodyTests
         aside.Err = Timeout();
         Assert.True(Conversation.BubbleMonospace(aside, monospace: true));
     }
+
+    // The HTML variant of a bubble's body (the preference
+    // conversation-chat-html): the card's fragment and links with the text as
+    // its fallback, only for a fetched body with HTML not withheld; every
+    // other state as without the preference.
+    [Fact]
+    public void BubbleBodyHtml()
+    {
+        const string snippet = "Snip";
+        IReadOnlyList<Link> links = [new Link { Text = "here", Href = "https://example.com/" }];
+        var html = new LoadedMessage();
+        html.Store(Body("Hello\r\n", html: true) with { Html = "<p>Hello</p>", Links = links }, quoted: false);
+        Assert.Equal(new BubbleBody.Html("<p>Hello</p>", links, "Hello"), Conversation.BubbleBodyFor(html, snippet, renderHtml: true));
+        // Off: the text, as before.
+        Assert.Equal(new BubbleBody.Text("Hello"), Conversation.BubbleBodyFor(html, snippet, renderHtml: false));
+        Assert.Equal(new BubbleBody.Text("Hello"), Conversation.BubbleBodyFor(html, snippet));
+
+        // An empty text falls back to the cards' sentence.
+        var empty = new LoadedMessage();
+        empty.Store(Body(" ", html: true) with { Html = "<img src=\"malachi-cid:x\">" }, quoted: false);
+        var picture = Assert.IsType<BubbleBody.Html>(Conversation.BubbleBodyFor(empty, snippet, renderHtml: true));
+        Assert.Equal("<img src=\"malachi-cid:x\">", picture.Value);
+        Assert.Equal("(Empty message)", picture.Fallback);
+
+        // Withheld: the text (the daemon keeps the HTML back).
+        var withheld = new LoadedMessage();
+        withheld.Store(Body("Plain", html: true) with { HtmlWithheld = true }, quoted: false);
+        Assert.Equal(new BubbleBody.Text("Plain"), Conversation.BubbleBodyFor(withheld, snippet, renderHtml: true));
+
+        // Text only: the text.
+        var plain = new LoadedMessage();
+        plain.Store(Body("Plain"), quoted: false);
+        Assert.Equal(new BubbleBody.Text("Plain"), Conversation.BubbleBodyFor(plain, snippet, renderHtml: true));
+
+        // Not loaded yet, failed, on its way: as without the preference.
+        Assert.Equal(new BubbleBody.Placeholder("Snip"), Conversation.BubbleBodyFor(null, snippet, renderHtml: true));
+        var failed = new LoadedMessage { Err = Timeout() };
+        Assert.IsType<BubbleBody.Text>(Conversation.BubbleBodyFor(failed, snippet, renderHtml: true));
+        var pending = new LoadedMessage();
+        pending.Store(Body("", BodyState.Pending, html: true) with { Html = "<p>x</p>" }, quoted: false);
+        Assert.Equal(new BubbleBody.Text("Downloading…"), Conversation.BubbleBodyFor(pending, snippet, renderHtml: true));
+
+        // The variant the bubble reads: the trimmed one kept aside after a
+        // reveal, as the text.
+        var aside = new LoadedMessage();
+        aside.Store(Body("Short", html: true, trimmed: true) with { Html = "<p>Short</p>" }, quoted: false);
+        aside.ShowQuoted(true);
+        aside.Store(Body("Short\n> quoted", html: true) with { Html = "<p>Short</p><blockquote>q</blockquote>" }, quoted: true);
+        Assert.Equal("<p>Short</p>", Assert.IsType<BubbleBody.Html>(Conversation.BubbleBodyFor(aside, snippet, renderHtml: true)).Value);
+
+        // Never monospaced: the text derived from HTML.
+        Assert.False(Conversation.BubbleMonospace(html, monospace: true));
+    }
 }

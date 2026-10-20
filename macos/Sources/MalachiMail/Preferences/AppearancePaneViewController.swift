@@ -24,6 +24,7 @@ final class AppearancePaneViewController: PreferencesPaneViewController {
     // Message List
     let density = NSPopUpButton(frame: .zero, pullsDown: false)
     let groupByConversation = NSSwitch()
+    let conversationChatHTML = NSSwitch()
     let showPreviewLine = NSSwitch()
     let showAvatars = NSSwitch()
     let monochromeAvatars = NSSwitch()
@@ -92,6 +93,7 @@ final class AppearancePaneViewController: PreferencesPaneViewController {
         list.setRows([
             PreferenceRowView(title: L10n.T("Density"), trailing: density),
             PreferenceRowView(title: L10n.T("Group by Conversation"), subtitle: L10n.T("One row per conversation; expand it to see its messages"), trailing: groupByConversation),
+            PreferenceRowView(title: Conversation.chatHTMLRowTitle(), subtitle: Conversation.chatHTMLRowSubtitle(), trailing: conversationChatHTML),
             PreferenceRowView(title: L10n.T("Show Preview Line"), trailing: showPreviewLine),
             PreferenceRowView(title: L10n.T("Show Avatars"), trailing: showAvatars),
             PreferenceRowView(title: L10n.T("Monochrome Avatars"), subtitle: L10n.T("Neutral grey instead of a colour per sender"), trailing: monochromeAvatars),
@@ -148,6 +150,7 @@ final class AppearancePaneViewController: PreferencesPaneViewController {
         textSizeToken = settings.onChange(.uiTextSize) { [weak self] in self?.offerRestart() }
         bindings.add(.bind(density, to: settings, .density, choices: densityChoices, \.density))
         bindings.add(.bind(groupByConversation, to: settings, .groupByConversation, \.groupByConversation))
+        bindings.add(.bind(conversationChatHTML, to: settings, .conversationChatHTML, \.conversationChatHTML))
         bindings.add(.bind(showPreviewLine, to: settings, .showPreviewLine, \.showPreviewLine))
         bindings.add(.bind(showAvatars, to: settings, .showAvatars, \.showAvatars))
         bindings.add(.bind(monochromeAvatars, to: settings, .monochromeAvatars, \.monochromeAvatars))

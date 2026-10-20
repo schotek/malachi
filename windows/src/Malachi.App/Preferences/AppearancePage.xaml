@@ -7,6 +7,7 @@ Port of macos/Sources/MalachiMail/Preferences/AppearancePaneViewController.swift
 GTK: preferences.blp appearance_page. The Blueprint's groups in its order:
 Theme (color_scheme: Follow System, Light, Dark), Message List
 (list_density: Comfortable, Compact; group_by_conversation;
+conversation_chat_html;
 show_preview_line; show_avatars; monochrome_avatars) and Message View
 (monospace_plain_text; text_zoom, 50 to 200 percent in steps of 10). Every
 row is bound two-way to its settings key; the windows follow the keys
@@ -76,6 +77,12 @@ live (the colour scheme on every window and its title bar).
                             x:Name="GroupByConversationSwitch"
                             AutomationProperties.AutomationId="GroupByConversation"
                             AutomationProperties.Name="{l:T Msgid='Group by Conversation'}" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard Description="{l:T Msgid='Messages in the chat layout as they were sent, in a locked web view, instead of their plain text'}" Header="{l:T Msgid='Render HTML in Chat'}">
+                        <ToggleSwitch
+                            x:Name="ConversationChatHtmlSwitch"
+                            AutomationProperties.AutomationId="ConversationChatHtml"
+                            AutomationProperties.Name="{l:T Msgid='Render HTML in Chat'}" />
                     </tk:SettingsCard>
                     <tk:SettingsCard Header="{l:T Msgid='Show Preview Line'}">
                         <ToggleSwitch

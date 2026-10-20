@@ -157,6 +157,11 @@
       <summary>Show conversations as a chat</summary>
       <description>Others' messages on the left, yours on the right, oldest first; off shows the timeline.</description>
     </key>
+    <key name="conversation-chat-html" type="b">
+      <default>false</default>
+      <summary>Render HTML in the chat layout</summary>
+      <description>In the chat layout of a conversation, show a message's HTML in a locked web view instead of its plain text; off shows the text.</description>
+    </key>
     <key name="search-scope" enum="io.github.schotek.Malachi.SearchScope">
       <default>'folder'</default>
       <summary>Where a search looks</summary>

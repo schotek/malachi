@@ -177,7 +177,7 @@ func (w *Window) refreshRemoteBar(id api.MessageID, lm *loadedMessage) {
 // when it is the selected message, and its own window when one is open.
 func (w *Window) showLoaded(id api.MessageID, lm *loadedMessage) {
 	if w.boardPage != nil && w.boardPage.conversation != nil {
-		w.boardPage.conversation.loaded(id, lm)
+		w.boardPage.conversation.loadedWithChat(id, lm)
 	}
 	w.conversationShowLoaded(id, lm)
 	if s, ok := w.selectedMessage(); ok && s.ID == id && !w.conversationShown() {

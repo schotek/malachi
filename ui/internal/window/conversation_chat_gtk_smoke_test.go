@@ -37,7 +37,12 @@ import (
 // switches to the chat with the toggle (through the setting), checks the
 // strip, the bubbles' sides, their bodies near the end, the end in view,
 // the width of a short and a long bubble, a double click's plumbing, and
-// switches back to find the fold kept; LAYOUT: lines log the allocations.
+// switches back to find the fold kept; with the preference
+// conversation-chat-html on, a2's HTML bubble holds a live web view (real
+// WebKit: in the container with WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1)
+// at the bubble's maximum width, the text-only bubbles none, and the
+// preference off or the chat hidden lets it go; LAYOUT: lines log the
+// allocations.
 func TestConversationChatGTKSmoke(t *testing.T) {
 	if os.Getenv("MALACHI_GTK_SMOKE") != "1" {
 		t.Skip("set MALACHI_GTK_SMOKE=1 with a GTK display to run the widget smoke test")
@@ -84,6 +89,9 @@ func TestConversationChatGTKSmoke(t *testing.T) {
 			return api.MessageBodyResult{MessageID: "a1", BodyState: api.BodyFetched, Text: long}, nil
 		case "r1":
 			return api.MessageBodyResult{MessageID: "r1", BodyState: api.BodyFetched, Text: "Ok"}, nil
+		case "a2":
+			return api.MessageBodyResult{MessageID: "a2", BodyState: api.BodyFetched, Text: "body of a2",
+				HTML: "<p>body of <b>a2</b></p>", HasHTML: true, QuotedTrimmed: true}, nil
 		}
 		return body(p)
 	}
@@ -241,9 +249,65 @@ func TestConversationChatGTKSmoke(t *testing.T) {
 	}
 	run(100 * time.Millisecond)
 
+	// HTML in the chat: off by default, no bubble has a view.
+	for id, row := range chat.bubbles {
+		if row.bubble.web != nil {
+			t.Errorf("%s has a web view with the preference off", id)
+		}
+	}
+	st.SetConversationChatHTML(true)
+	run(1500 * time.Millisecond)
+	a2b := chat.bubbles["a2"]
+	if a2b.bubble.web == nil || !a2b.bubble.html.Visible() || a2b.bubble.text.Visible() || !a2b.fill {
+		t.Errorf("a2 is no HTML bubble: web %v html %v text %v fill %v", a2b.bubble.web != nil,
+			a2b.bubble.html.Visible(), a2b.bubble.text.Visible(), a2b.fill)
+	}
+	for _, id := range []api.MessageID{"a1", "a3", "r1"} {
+		if chat.bubbles[id].bubble.web != nil {
+			t.Errorf("text-only %s has a web view", id)
+		}
+	}
+	htmlW := a2b.bubble.frame.AllocatedWidth()
+	t.Logf("LAYOUT: chat html bubble width=%d max=%d webHeight=%d host=%dx%d", htmlW, chat.bubbleMax(),
+		a2b.bubble.webHeight, a2b.bubble.html.Width(), a2b.bubble.html.Height())
+	if !a2b.bubble.reported || a2b.bubble.html.Height() != a2b.bubble.webHeight {
+		t.Errorf("a2's view is %d tall, its document %d (reported %v)", a2b.bubble.html.Height(),
+			a2b.bubble.webHeight, a2b.bubble.reported)
+	}
+	if max := chat.bubbleMax(); htmlW > max || htmlW < max-2 {
+		t.Errorf("the HTML bubble is %d wide, the maximum %d", htmlW, max)
+	}
+	// Off: the view goes, the text is back.
+	st.SetConversationChatHTML(false)
+	run(300 * time.Millisecond)
+	if a2b.bubble.web != nil || a2b.bubble.html.Visible() || !a2b.bubble.text.Visible() || a2b.fill {
+		t.Errorf("preference off, a2 keeps its view: web %v text %v", a2b.bubble.web != nil, a2b.bubble.text.Visible())
+	}
+	if _, h := a2b.bubble.text.SizeRequest(); h != -1 {
+		t.Errorf("preference off, a2's text keeps a frozen height %d", h)
+	}
+	if got := a2b.bubble.text.Text(); got != "body of a2" {
+		t.Errorf("a2 reads %q", got)
+	}
+	st.SetConversationChatHTML(true)
+	run(800 * time.Millisecond)
+	if a2b.bubble.web == nil {
+		t.Error("preference on again, a2 has no view")
+	}
+
 	// Back to the timeline: the fold kept, the chat lets go.
 	w.settings.SetConversationChatLayout(false)
 	run(500 * time.Millisecond)
+	for id, row := range chat.bubbles {
+		if row.bubble.web != nil {
+			t.Errorf("the hidden chat keeps %s's web view", id)
+		}
+	}
+	// Released while it still wants its HTML: the text keeps the
+	// document's height.
+	if _, h := a2b.bubble.text.SizeRequest(); a2b.bubble.reported && h != a2b.bubble.webHeight {
+		t.Errorf("released a2's text is %d tall, the document was %d", h, a2b.bubble.webHeight)
+	}
 	if h.chatShown || h.layouts.VisibleChildName() != convTimelinePage || h.toggle.Active() {
 		t.Fatalf("the timeline did not come back: %q active %v", h.layouts.VisibleChildName(), h.toggle.Active())
 	}

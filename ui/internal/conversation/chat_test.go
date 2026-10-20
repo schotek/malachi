@@ -227,3 +227,31 @@ func TestChatTexts(t *testing.T) {
 		t.Error("chat texts, on")
 	}
 }
+
+func TestBubbleRendersHTML(t *testing.T) {
+	for _, c := range []struct {
+		setting, hasHTML, withheld, want bool
+	}{
+		{false, false, false, false},
+		{false, true, false, false},
+		{false, true, true, false},
+		{false, false, true, false},
+		{true, false, false, false},
+		{true, true, false, true},
+		{true, true, true, false},
+		{true, false, true, false},
+	} {
+		if got := BubbleRendersHTML(c.setting, c.hasHTML, c.withheld); got != c.want {
+			t.Errorf("BubbleRendersHTML(%v, %v, %v) = %v, want %v", c.setting, c.hasHTML, c.withheld, got, c.want)
+		}
+	}
+}
+
+func TestChatHTMLRowTexts(t *testing.T) {
+	if got := ChatHTMLRowTitle(tr); got != "Render HTML in Chat" {
+		t.Errorf("title %q", got)
+	}
+	if got := ChatHTMLRowSubtitle(tr); got != "Messages in the chat layout as they were sent, in a locked web view, instead of their plain text" {
+		t.Errorf("subtitle %q", got)
+	}
+}

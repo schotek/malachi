@@ -14,13 +14,20 @@
 // the timeline's (no wider than 900, the same insets), without its gutter
 // and line: the avatars stand beside the bubbles (ConversationChatRow).
 //
-// A bubble is plain text, never a web view (ConversationBubbleView): the
-// message's text as the daemon derived it, without its quoted history
-// (Conversation.BubbleBodyFor), the summary's snippet dimmed until the body
-// is there. The bodies are asked for only for the bubbles near the
-// viewport (ConversationLayout.LiveCards over the rows' spans, two heights
-// of the view, no web views), from the same controller and cache of bodies
-// as the timeline, so switching layouts asks thread.get nothing. A double
+// A bubble is plain text (ConversationBubbleView): the message's text as the
+// daemon derived it, without its quoted history (Conversation.BubbleBodyFor),
+// the summary's snippet dimmed until the body is there. With the preference
+// conversation-chat-html (SettingsStore.ConversationChatHtml,
+// Conversation.BubbleRendersHtml) a body with HTML not withheld shows the
+// timeline card's document instead, in a CardWebView from this view's pool
+// (IChatWebHost), for the bubbles the timeline's rule makes live
+// (ConversationLayout.LiveCards with the HTML bubbles marked, at most
+// MaxLiveWebViews); the others show their text, and the setting is observed,
+// so flipping it renders every bubble anew. A hidden chat lets go of every
+// web view. The bodies are asked for only for the bubbles near the viewport
+// (LiveCards over the rows' spans, two heights of the view), from the same
+// controller and cache of bodies as the timeline, so switching layouts asks
+// thread.get nothing. A double
 // tap anywhere in a bubble opens the message in its own window, a draft in
 // the compose window (MessageActionRouter.OpenMessage, EditThreadDraft,
 // once the second press is released, AfterRelease); nothing else is
@@ -49,6 +56,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Malachi.App.Controls;
+using Malachi.App.WebViews;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers;
 using Malachi.Core.Model;
@@ -65,8 +73,12 @@ using L = Malachi.Core.Model.ConversationLayout;
 namespace Malachi.App.Reader.Conversation;
 
 /// <summary>The chat layout of the conversation page of the main window's reading pane.</summary>
-internal sealed partial class ConversationChatView : UserControl
+internal sealed partial class ConversationChatView : UserControl, IChatWebHost
 {
+    // convIdleWebViews: how many web views the pool keeps while no
+    // conversation shows (the timeline's).
+    private const int IdleWebViews = 2;
+
     // libadwaita's body text, which the text-zoom setting scales (as the
     // timeline's plain-text bodies).
     private const double BaseBodyFontSize = 14;
@@ -86,6 +98,11 @@ internal sealed partial class ConversationChatView : UserControl
     private readonly Dictionary<DraftId, ConversationChatRow> draftRows = [];
     private readonly ConversationChatCenterRow truncatedRow;
     private readonly List<SettingsChangeToken> tokens = [];
+    private readonly List<CardWebView> webPool = [];
+
+    // The body each bubble rendered last, for a reload of its document when
+    // its pictures were downloaded (ConversationLayout.PicturesArrived).
+    private readonly Dictionary<MessageId, MessageBodyResult> sources = [];
 
     // The rows in the order shown, under the issue card.
     private List<FrameworkElement> rowViews = [];
@@ -132,9 +149,14 @@ internal sealed partial class ConversationChatView : UserControl
         Scroller.DirectManipulationStarted += (_, _) => Unpin();
 
         var settings = services.State.Settings;
-        tokens.Add(settings.OnChange(SettingsKey.TextZoom, ApplyBodyFont));
+        tokens.Add(settings.OnChange(SettingsKey.TextZoom, () =>
+        {
+            ApplyBodyFont();
+            ApplyZoom();
+        }));
         tokens.Add(settings.OnChange(SettingsKey.MonospacePlainText, ApplyBodyFont));
         tokens.Add(settings.OnChange(SettingsKey.MonochromeAvatars, ApplyAvatars));
+        tokens.Add(settings.OnChange(SettingsKey.ConversationChatHtml, ApplyHtmlSetting));
     }
 
     /// <summary>The members whose bodies the bubbles near the viewport keep (the host trims the controller with them while the chat shows).</summary>
@@ -153,6 +175,9 @@ internal sealed partial class ConversationChatView : UserControl
     // The column's inner width (ConversationLayout.ChatColumn): the clamp
     // less its side insets.
     private double ColumnWidth => L.ChatColumn(Scroller.ActualWidth);
+
+    // The preference conversation-chat-html: bubbles with HTML render it.
+    private bool HtmlSetting => services.State.Settings.ConversationChatHtml;
 
     /// <summary>
     /// A change of the controller, from the host. While hidden the rows are
@@ -184,6 +209,9 @@ internal sealed partial class ConversationChatView : UserControl
                 break;
             case ConversationController.Change.Cleared:
                 RemoveAll();
+                // The pane shows something else: only a few views wait for
+                // the next conversation, the others' processes end.
+                TrimWebPool(IdleWebViews);
                 break;
         }
     }
@@ -213,7 +241,15 @@ internal sealed partial class ConversationChatView : UserControl
         if (on)
         {
             Open();
+            return;
         }
+        // Hidden: every bubble lets go of its web view (they show their text).
+        foreach (var row in bubbles.Values)
+        {
+            row.Bubble.SetLive(false);
+        }
+        TrimWebPool(IdleWebViews);
+        host.Hover("");
     }
 
     /// <summary>The page of the pane is shown again: the bubbles near the viewport are looked at anew.</summary>
@@ -259,10 +295,67 @@ internal sealed partial class ConversationChatView : UserControl
             waitingForLayout = false;
         }
         RemoveAll();
+        TrimWebPool(0);
     }
 
     /// <inheritdoc/>
     protected override AutomationPeer OnCreateAutomationPeer() => new ConversationGroupPeer(this, nameof(ConversationChatView), AutomationControlType.Pane);
+
+    /// <summary>The timeline's takeWebView: a view from the pool, its zoom brought up to date, or a new one.</summary>
+    public CardWebView TakeWebView()
+    {
+        var zoom = services.State.Settings.TextZoom;
+        if (webPool.Count > 0)
+        {
+            var pooled = webPool[^1];
+            webPool.RemoveAt(webPool.Count - 1);
+            pooled.Zoom = zoom;
+            return pooled;
+        }
+        // A chat bubble's view: transparent, the chat's document.
+        var web = new CardWebView(chat: true) { Zoom = zoom };
+        var cache = services.Cache;
+        web.Parts = (part, token) => cache.FetchPartAsync(part.AccountId, part.MessageId, part.PartId, token);
+        return web;
+    }
+
+    /// <summary>The timeline's returnWebView: reset for the next bubble, or released when the pool is full.</summary>
+    public void ReturnWebView(CardWebView web)
+    {
+        ArgumentNullException.ThrowIfNull(web);
+        if (webPool.Count >= L.MaxLiveWebViews)
+        {
+            web.Release();
+            return;
+        }
+        web.Reset();
+        webPool.Add(web);
+    }
+
+    /// <summary>A link activated in a bubble's document: the cards' link path (the confirmation, the browser).</summary>
+    public void OpenLink(ActivatedLink link, IReadOnlyList<Link> links) => _ = services.Links.OpenAsync(link, links, host.HostWindow);
+
+    /// <summary>The link under the pointer of a bubble's document ("" hides it), in the host's status.</summary>
+    public void Hover(string link) => host.Hover(link);
+
+    /// <summary>The timeline's scrollBy: the wheel a bubble whose document fits handed on, in the wheel's units (120 a step).</summary>
+    public void ScrollBy(double wheelDelta)
+    {
+        Unpin();
+        var step = Math.Pow(Math.Max(Scroller.ViewportHeight, 1), 2.0 / 3.0);
+        var to = Scroller.VerticalOffset + (wheelDelta / 120.0 * step);
+        Scroller.ChangeView(null, Math.Clamp(to, 0, Math.Max(0, Scroller.ScrollableHeight)), null);
+    }
+
+    /// <summary>A bubble's height changes: the end or the row read keeps its place.</summary>
+    public void Reflow(FrameworkElement bubble, Action change)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+        Preserving(change);
+    }
+
+    /// <summary>A bubble's want of a web view changed: the live ones are decided anew.</summary>
+    public void LiveChanged() => ScheduleNear();
 
     // The conversation shown anew (a new one, or this layout shown): the rows
     // as the model has them, the viewport at the end, the bubbles near it
@@ -339,6 +432,7 @@ internal sealed partial class ConversationChatView : UserControl
                         {
                             if (view is not null)
                             {
+                                view.Bubble.SetLive(false);
                                 Detach(view);
                             }
                             view = MakeRow(id, null, right);
@@ -350,7 +444,7 @@ internal sealed partial class ConversationChatView : UserControl
                         if (!view.Bubble.ShowsText)
                         {
                             var lm = ctrl.Loaded.GetValueOrDefault(id);
-                            view.Bubble.ShowBody(Core.Model.Conversation.BubbleBodyFor(lm, s.Snippet), Monospace(lm));
+                            view.Bubble.ShowBody(Core.Model.Conversation.BubbleBodyFor(lm, s.Snippet, HtmlSetting), Monospace(lm), PicturesArrived(id, lm));
                         }
                         view.ShowAvatar(item.Sender, monochrome);
                         view.SetColumnWidth(column);
@@ -400,8 +494,10 @@ internal sealed partial class ConversationChatView : UserControl
         }
         foreach (var id in bubbles.Keys.Where(id => !bubbleIds.Contains(id)).ToList())
         {
+            bubbles[id].Bubble.SetLive(false);
             Detach(bubbles[id]);
             bubbles.Remove(id);
+            sources.Remove(id);
         }
         foreach (var id in events.Keys.Where(id => !eventIds.Contains(id)).ToList())
         {
@@ -444,6 +540,11 @@ internal sealed partial class ConversationChatView : UserControl
     private ConversationChatRow MakeRow(MessageId? id, DraftId? draft, bool right)
     {
         var bubble = new ConversationBubbleView(right, Look, BodyFontSize, MonospaceFamily) { CompactDate = compactDates };
+        if (id is not null)
+        {
+            // A message's bubble may render its HTML; a draft's never does.
+            bubble.WebHost = this;
+        }
         return new ConversationChatRow(id, draft, right, bubble);
     }
 
@@ -473,7 +574,21 @@ internal sealed partial class ConversationChatView : UserControl
         }
         var item = m.Items[i];
         row.Bubble.ShowMessage(item, Attachments(id));
-        row.Bubble.ShowBody(Core.Model.Conversation.BubbleBodyFor(lm, item.Message?.Snippet ?? ""), Monospace(lm));
+        row.Bubble.ShowBody(Core.Model.Conversation.BubbleBodyFor(lm, item.Message?.Snippet ?? "", HtmlSetting), Monospace(lm), PicturesArrived(id, lm));
+    }
+
+    // Whether the pictures of the body member id's bubble reads were
+    // downloaded since it rendered last (its document loads again); the body
+    // is remembered for the next time.
+    private bool PicturesArrived(MessageId id, LoadedMessage? lm)
+    {
+        if (lm is null || Core.Model.Conversation.ChatBody(lm, lm.QuotedShown) is not { } now)
+        {
+            return false;
+        }
+        var arrived = sources.TryGetValue(id, out var before) && L.PicturesArrived(before, now);
+        sources[id] = now;
+        return arrived;
     }
 
     // The attachments pill of member id (Conversation.BubbleAttachmentBadge):
@@ -500,6 +615,10 @@ internal sealed partial class ConversationChatView : UserControl
     // Takes everything out (another conversation, or none).
     private void RemoveAll()
     {
+        foreach (var row in bubbles.Values)
+        {
+            row.Bubble.SetLive(false);
+        }
         foreach (var v in rowViews)
         {
             Detach(v);
@@ -510,6 +629,7 @@ internal sealed partial class ConversationChatView : UserControl
         }
         Detach(truncatedRow);
         bubbles.Clear();
+        sources.Clear();
         events.Clear();
         draftRows.Clear();
         rowViews = [];
@@ -715,7 +835,9 @@ internal sealed partial class ConversationChatView : UserControl
         }
         var visible = L.Span.Of(Scroller.VerticalOffset, Scroller.VerticalOffset + Scroller.ViewportHeight);
         var ids = new List<MessageId>();
+        var placed = new List<ConversationChatRow>();
         var frames = new List<L.Span>();
+        var html = new List<bool>();
         var unplaced = false;
         foreach (var v in rowViews)
         {
@@ -729,9 +851,32 @@ internal sealed partial class ConversationChatView : UserControl
                 continue;
             }
             ids.Add(id);
+            placed.Add(row);
             frames.Add(span);
+            html.Add(row.Bubble.WantsWebView);
         }
-        var live = L.LiveCards(frames, null, visible, L.LiveScreens, L.MaxLiveWebViews);
+        // The timeline's rule: web views for the nearest HTML bubbles, at
+        // most its cap; a bubble far away or beyond it shows its text.
+        var live = L.LiveCards(frames, html, visible, L.LiveScreens, L.MaxLiveWebViews);
+        var changes = new List<(ConversationBubbleView Bubble, bool On)>();
+        for (var i = 0; i < placed.Count; i++)
+        {
+            var on = live.Web.Contains(i);
+            if (placed[i].Bubble.IsLive != on)
+            {
+                changes.Add((placed[i].Bubble, on));
+            }
+        }
+        if (changes.Count > 0)
+        {
+            Preserving(() =>
+            {
+                foreach (var (bubble, on) in changes)
+                {
+                    bubble.SetLive(on);
+                }
+            });
+        }
         var near = new HashSet<MessageId>();
         foreach (var i in live.Near.Order())
         {
@@ -802,6 +947,41 @@ internal sealed partial class ConversationChatView : UserControl
         });
     }
 
+    // The text-zoom setting: the documents of the bubbles' web views scaled.
+    private void ApplyZoom()
+    {
+        var zoom = services.State.Settings.TextZoom;
+        foreach (var row in bubbles.Values)
+        {
+            row.Bubble.SetZoom(zoom);
+        }
+    }
+
+    // The preference conversation-chat-html changed: every bubble rendered
+    // anew from the body held (on: HTML bubbles, which UpdateNear gives web
+    // views; off: the text, every web view let go). A bubble whose entry was
+    // let go reads its text when the preference goes off, and its HTML once
+    // its body is fetched again (it is near) when it goes on.
+    private void ApplyHtmlSetting()
+    {
+        var on = HtmlSetting;
+        Preserving(() =>
+        {
+            foreach (var (id, row) in bubbles)
+            {
+                if (ctrl.Loaded.GetValueOrDefault(id) is { } lm)
+                {
+                    Render(row, lm);
+                }
+                else if (!on)
+                {
+                    row.Bubble.DropHtml();
+                }
+            }
+        });
+        ScheduleNear();
+    }
+
     // The avatars' setting: every row's avatar anew.
     private void ApplyAvatars()
     {
@@ -824,6 +1004,16 @@ internal sealed partial class ConversationChatView : UserControl
             {
                 row.ShowAvatar(card.Sender, monochrome);
             }
+        }
+    }
+
+    private void TrimWebPool(int keep)
+    {
+        while (webPool.Count > keep)
+        {
+            var web = webPool[^1];
+            webPool.RemoveAt(webPool.Count - 1);
+            web.Release();
         }
     }
 

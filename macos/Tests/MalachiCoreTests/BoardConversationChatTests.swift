@@ -76,4 +76,44 @@ private typealias F = BoardFixture
         let rows = Board.chatRows(d.messages)
         #expect(rows[1].right && !rows[0].right)
     }
+
+    /// Render HTML in Chat on the board: who asks message.body, once, and
+    /// the board's cap of web views.
+    @Test func chatBodies() {
+        typealias M = Board.ConversationCards.Member
+        let a = M(id: MessageID("ma"), text: "a"), b = M(id: MessageID("mb"), text: "b"), sample = M(id: nil, text: "s")
+        var bodies = Board.ChatBodies()
+        bodies.apply([a, b, sample])
+        // Never with the preference off, never far, never a sample.
+        #expect(!bodies.needsBody(0, near: true, setting: false))
+        #expect(!bodies.needsBody(0, near: false, setting: true))
+        #expect(!bodies.needsBody(2, near: true, setting: true))
+        #expect(!bodies.needsBody(9, near: true, setting: true))
+        #expect(bodies.needsBody(0, near: true, setting: true))
+        bodies.asked(0)
+        #expect(!bodies.needsBody(0, near: true, setting: true), "asked once")
+        #expect(bodies.wasAsked(0) && !bodies.wasAsked(1))
+        // A member rebuilt by the daemon (another excerpt) asks again; the
+        // one that stayed keeps its answer.
+        let a2 = M(id: MessageID("ma"), text: "a, edited")
+        bodies.asked(1)
+        bodies.apply([a2, b])
+        #expect(bodies.needsBody(0, near: true, setting: true))
+        #expect(bodies.wasAsked(1))
+        // Off forgets: on again asks anew.
+        bodies.forget()
+        #expect(bodies.needsBody(1, near: true, setting: true))
+
+        // The board's cap: four web views, the nearest first (all in view:
+        // by position), and only near ones.
+        let frames = (0..<6).map { ConversationLayout.Span(Double($0) * 100, Double($0) * 100 + 90) }
+        let all = Array(repeating: true, count: 6)
+        let live = Board.ChatBodies.live(frames: frames, html: all, visible: ConversationLayout.Span(0, 600))
+        #expect(live.web == [0, 1, 2, 3])
+        #expect(live.near == Set(0..<6))
+        let end = Board.ChatBodies.live(frames: frames, html: all, visible: ConversationLayout.Span(500, 600))
+        #expect(end.near == [3, 4, 5], "two viewport heights around the visible part")
+        #expect(end.web == [3, 4, 5])
+        #expect(Board.ChatBodies.live(frames: frames, html: [], visible: ConversationLayout.Span(0, 100)).web.isEmpty)
+    }
 }

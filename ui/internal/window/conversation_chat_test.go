@@ -376,3 +376,143 @@ func TestConversationChatReadsTheControllersBodies(t *testing.T) {
 		t.Errorf("a2 reads %q (placeholder %v)", text, placeholder)
 	}
 }
+
+// convChatHTMLFlags are the bubbles of ids whose held body renders as HTML
+// with the preference at setting (bubbleHTML), as updateNear counts them.
+func convChatHTMLFlags(ctrl *conversationController, ids []api.MessageID, setting bool) []bool {
+	out := make([]bool, len(ids))
+	for i, id := range ids {
+		out[i] = bubbleHTML(ctrl.loaded[id], setting) != nil
+	}
+	return out
+}
+
+// convChatWeb is the sorted ids that got a web view.
+func convChatWeb(live chatLiveSet) []string {
+	var out []string
+	for id, on := range live.web {
+		if on {
+			out = append(out, string(id))
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// With the preference conversation-chat-html the bubbles near the viewport
+// whose body has HTML get a web view, at most convMaxLiveWebViews, the
+// newest first (the chat measures from its end); a text-only or withheld
+// body, a body not loaded and a bubble far from the viewport read as text;
+// the preference off gives no bubble a view.
+func TestConversationChatHTMLBubblesNearTheEnd(t *testing.T) {
+	w := newConvWindow(t, convBigThread(30))
+	// Every even member has HTML, m26 is withheld, the odd ones text only.
+	w.caller.handlers[api.MethodMessageBody] = func(p any) (any, error) {
+		id := p.(api.MessageBodyParams).MessageID
+		res := api.MessageBodyResult{MessageID: id, BodyState: api.BodyFetched, Text: "body of " + string(id), HasHTML: true}
+		var n int
+		fmt.Sscanf(string(id), "m%d", &n)
+		switch {
+		case id == "m26":
+			res.HTMLWithheld = true
+		case n%2 == 0:
+			res.HTML = "<p>" + string(id) + "</p>"
+		default:
+			res.HasHTML = false
+		}
+		return res, nil
+	}
+	w.selectRow(w.row("big", "", false))
+	if w.ctrl.model == nil {
+		t.Fatal("no conversation")
+	}
+	ids := convChatIDs(conversation.ChatRows(*w.ctrl.model, w.ctrl.drafts))
+	frames := convStacked(len(ids), 100)
+	viewport, document := 400.0, 3000.0
+	end := convSpanOf(convChatEndTop(viewport, document), document)
+
+	// Nothing loaded yet: no HTML, no view.
+	if got := convChatWeb(chatLive(w.ctrl, ids, frames, convChatHTMLFlags(w.ctrl, ids, true), end)); len(got) != 0 {
+		t.Fatalf("views before any body: %v", got)
+	}
+	w.flush()
+
+	// The preference off: no view ever.
+	if got := convChatWeb(chatLive(w.ctrl, ids, frames, convChatHTMLFlags(w.ctrl, ids, false), end)); len(got) != 0 {
+		t.Errorf("preference off: views %v", got)
+	}
+
+	// On: the near HTML bubbles (m17…m29 are near; the even ones but the
+	// withheld m26), at most the cap, the newest first.
+	live := chatLive(w.ctrl, ids, frames, convChatHTMLFlags(w.ctrl, ids, true), end)
+	want := []string{"m18", "m20", "m22", "m24", "m28"}
+	if got := convChatWeb(live); !reflect.DeepEqual(got, want) {
+		t.Errorf("views at the end %v, want %v", got, want)
+	}
+	if !live.near["m17"] || live.near["m16"] {
+		t.Errorf("near %v", live.near)
+	}
+
+	// A taller viewport sees more HTML bubbles than the cap: the newest
+	// keep a view.
+	all := convSpanOf(0, document)
+	chatNear(w.ctrl, ids, frames, all)
+	w.flush()
+	html := convChatHTMLFlags(w.ctrl, ids, true)
+	live = chatLive(w.ctrl, ids, frames, html, all)
+	want = []string{"m12", "m14", "m16", "m18", "m20", "m22", "m24", "m28"}
+	if got := convChatWeb(live); !reflect.DeepEqual(got, want) || len(got) != convMaxLiveWebViews {
+		t.Errorf("views of the whole chat %v, want %v", got, want)
+	}
+
+	// Scrolled to the top: the views go to the bubbles there; those at
+	// the end read as text again.
+	live = chatLive(w.ctrl, ids, frames, html, convSpanOf(0, viewport))
+	want = []string{"m00", "m02", "m04", "m06", "m08", "m10", "m12"}
+	if got := convChatWeb(live); !reflect.DeepEqual(got, want) {
+		t.Errorf("views at the top %v, want %v", got, want)
+	}
+}
+
+// A bubble whose view went while it still wants its HTML (far, beyond the
+// cap) keeps the document's last height as its text's minimum, as a
+// released card keeps its paper; the preference off (no HTML wanted) or no
+// height reported yet keeps none, nor does a bubble showing its view.
+func TestConversationChatReleasedHTMLBubbleKeepsItsHeight(t *testing.T) {
+	w := newConvWindow(t, convBigThread(30))
+	w.caller.handlers[api.MethodMessageBody] = func(p any) (any, error) {
+		id := p.(api.MessageBodyParams).MessageID
+		return api.MessageBodyResult{MessageID: id, BodyState: api.BodyFetched, Text: "t", HTML: "<p>x</p>", HasHTML: true}, nil
+	}
+	w.selectRow(w.row("big", "", false))
+	ids := convChatIDs(conversation.ChatRows(*w.ctrl.model, w.ctrl.drafts))
+	frames := convStacked(len(ids), 100)
+	end := convSpanOf(2600, 3000)
+	chatNear(w.ctrl, ids, frames, end)
+	w.flush()
+	live := chatLive(w.ctrl, ids, frames, convChatHTMLFlags(w.ctrl, ids, true), end)
+	if !live.web["m29"] {
+		t.Fatal("m29 has no view at the end")
+	}
+	wants := bubbleHTML(w.ctrl.loaded["m29"], true) != nil
+	if h := bubbleFrozenHeight(wants, true, true, 340); h != 0 {
+		t.Errorf("a live view frozen at %d", h)
+	}
+	// Scrolled to the top: m29 lets its view go and keeps 340.
+	live = chatLive(w.ctrl, ids, frames, convChatHTMLFlags(w.ctrl, ids, true), convSpanOf(0, 400))
+	if live.web["m29"] {
+		t.Fatal("m29 kept its view far up")
+	}
+	if h := bubbleFrozenHeight(wants, live.web["m29"], true, 340); h != 340 {
+		t.Errorf("released far row: %d, want 340", h)
+	}
+	// Never reported: nothing to keep.
+	if h := bubbleFrozenHeight(wants, false, false, 340); h != 0 {
+		t.Errorf("unreported: %d", h)
+	}
+	// The preference off: the bubble wants no HTML, the height goes.
+	off := bubbleHTML(w.ctrl.loaded["m29"], false) != nil
+	if h := bubbleFrozenHeight(off, false, true, 340); h != 0 {
+		t.Errorf("preference off: %d", h)
+	}
+}

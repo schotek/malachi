@@ -686,7 +686,7 @@ menus do not reach the layouts at all. Marking the conversation read stays
 with the list controller whichever layout shows, and Space and Shift-Space
 page the layout shown through the host (`page(up:)`).
 
-The chat shows no web view at all (the plan is
+By default the chat shows no web view at all (the plan is
 [plans/chat-view.md](plans/chat-view.md), D1–D17; the pure rules are the Go
 reference `ui/internal/conversation/chat.go`, ported to
 `MalachiCore/Model/ConversationChat.swift`, plus the Swift-first
@@ -719,6 +719,54 @@ of the timeline card's chips once `message.get` answered (asked for the
 bubbles with attachments in the near window, as for the cards), even when
 the summary's flag is false (it counts only parts the daemon calls not
 inline); `Conversation.bubbleAttachmentBadge` is the rule.
+
+**HTML bubbles.** Settings → Appearance → Message List has *Render HTML in
+Chat* under *Group by Conversation* (`Settings.conversationChatHTML`, gschema
+`conversation-chat-html`, off by default; texts
+`Conversation.chatHTMLRowTitle()`/`chatHTMLRowSubtitle()`). With it on, a
+bubble whose loaded body has HTML that was not withheld
+(`Conversation.bubbleRendersHTML(setting:hasHTML:withheld:)`, the Go
+`BubbleRendersHTML`; `Conversation.bubbleBody(_:snippet:html:)` answers
+`.html(body:text:)`) shows the timeline card's document — the `trimQuoted`
+variant, the same `MessageWebView` (CSP, content rules, `malachi-cid:` from
+the shared `MessageCache`, pictures per policy) in the sized mode — where the
+text is, inside the bubble's padding, and takes the bubble's full width
+(the view is transparent, `MessageWebView(…, chat: true)`, over the
+bubble's background: someone else's a light grey, `ConversationTint.theirsFill`,
+`labelColor` at 6 % (dark 8 %) over `controlBackgroundColor`, the user's own
+the accent tint; and its sheet,
+`viewerDocument(body:compact:chat:)`, drops every background of the message
+and the column's padding, and in the dark appearance sets the text and links
+to the bubble's `labelColor` and `linkColor`; the cards keep their white
+paper; the column is a `flow-root` whose first and last children have no
+outer margin and the page never scrolls (`viewerChatFitCSS`), so no margin
+collapses out of the column the size script measures; width
+`chatBubbleMax`). No bars and no fold. Web views follow the timeline's
+rule: `ConversationLayout.live(frames:html:visible:)` over the chat rows, at
+most `maxLiveWebViews` (8), the nearest first; a bubble outside them
+(`ConversationBubbleView.setLive(false)`), every bubble of the hidden layout
+(`setShown(false)`) and every bubble when the setting goes off let go of the
+web view and read their text again; a bubble whose document had reported
+its height keeps that height for its text (clipped), as a card keeps its
+paper, so letting go of the view changes no frame and the live window
+cannot flip it back and forth (the frozen height goes with the HTML: the
+setting off, a text body, `dropHTML`). A text-only, withheld, failed or
+unloaded body reads as before. The chat observes the setting and renders
+every bubble anew. Document heights and live changes go through the chat's
+`preserving` (pinned end or the row read). Links go to the delegate's
+`openLink` with the body's links ("Open this link?", as the cards), the
+link under the pointer to the chat's `LinkStatusView`, text zoom to
+`setZoom`. The web view takes the clicks on its document, so the bubble's
+double-click recogniser ignores clicks on it
+(`shouldAttemptToRecognizeWith`): the header and the padding still open the
+message window. The same preference applies to the board's chat
+(`BoardConversationBlock`): with it on, the bubbles near the visible part
+of the detail's scroll view ask `message.body` through Mail's cache as the
+open cards do, `Board.ChatBodies` keeps who asked, and
+`Board.ChatBodies.live` (Mail's rule with the board's cap of 4) picks the
+web views, through a `BoardBubbleWebHost` per row (links via the
+delegate, hover via `onHover`, heights via `onHeightChanging`); the
+`board.get` text is the fallback, and nothing is fetched with it off.
 
 The [security review checklist](security.md#12-review-checklist-for-prs-touching-content-handling)
 applies to changes in `WebViews/`, `MessageView/`, `Compose/`,

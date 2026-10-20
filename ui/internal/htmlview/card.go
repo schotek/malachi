@@ -9,6 +9,7 @@ import (
 	"github.com/diamondburned/gotk4-webkitgtk/pkg/javascriptcore/v6"
 	"github.com/diamondburned/gotk4-webkitgtk/pkg/webkit/v6"
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
+	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/ui/data"
@@ -63,6 +64,9 @@ type Card struct {
 	// released says the view is gone for good (Release): its web process
 	// was ended on purpose.
 	released bool
+	// chat is the style of a chat bubble's document (SetChat), nil for a
+	// card's.
+	chat *ChatStyle
 
 	// OnLink is called, on the main loop, with the target of a link the
 	// user activated: an http(s) or mailto URL. The view never follows one.
@@ -143,12 +147,39 @@ func (c *Card) Widget() gtk.Widgetter { return c.web }
 // on the mail server were downloaded: the same malachi-cid: URLs have
 // something to serve now) or the web process went away.
 func (c *Card) Load(body string, reload bool) {
-	if c.hasLoaded && !reload && !c.needsReload && c.loaded == body {
+	doc := CompactDocument(body)
+	if c.chat != nil {
+		doc = ChatDocument(body, *c.chat)
+	}
+	if c.hasLoaded && !reload && !c.needsReload && c.loaded == doc {
 		return
 	}
-	c.loaded, c.hasLoaded, c.needsReload = body, true, false
+	c.loaded, c.hasLoaded, c.needsReload = doc, true, false
 	c.committed = false
-	c.web.LoadHtml(CompactDocument(body), "")
+	c.web.LoadHtml(doc, "")
+}
+
+// SetChat makes the view a chat bubble's (s, ChatDocument from the next
+// Load on) or a card's again (nil, the default): a bubble's view is fully
+// transparent, so that the bubble's background shows through the
+// document's neutralised backgrounds, a card's is white. Call it before the
+// Load that should use it, so nothing flashes white.
+func (c *Card) SetChat(s *ChatStyle) {
+	if s == nil {
+		if c.chat == nil {
+			return
+		}
+		c.chat = nil
+		white := gdk.NewRGBA(1, 1, 1, 1)
+		c.web.SetBackgroundColor(&white)
+		return
+	}
+	v := *s
+	if c.chat == nil {
+		clear := gdk.NewRGBA(0, 0, 0, 0)
+		c.web.SetBackgroundColor(&clear)
+	}
+	c.chat = &v
 }
 
 // SetZoom scales the content; percent is the text-zoom setting.
@@ -180,6 +211,7 @@ func (c *Card) Reset() {
 	c.hasLoaded, c.committed = false, false
 	c.width = 0
 	c.SetHeight(0)
+	c.SetChat(nil)
 }
 
 // Release lets go of the view for good: the size messages stop, the

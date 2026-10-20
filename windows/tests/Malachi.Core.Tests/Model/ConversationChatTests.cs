@@ -275,4 +275,18 @@ public sealed class ConversationChatTests
         // The bubble's error reuses the cards' msgid.
         Assert.Single(pot.Entries, e => e.Msgid == "Loading the message" && e.Msgctxt is null);
     }
+
+    // chat_test.go TestBubbleRendersHTML: the HTML only with the setting, a
+    // body with HTML, and that HTML not withheld.
+    [Theory]
+    [InlineData(false, false, false, false)]
+    [InlineData(false, false, true, false)]
+    [InlineData(false, true, false, false)]
+    [InlineData(false, true, true, false)]
+    [InlineData(true, false, false, false)]
+    [InlineData(true, false, true, false)]
+    [InlineData(true, true, false, true)]
+    [InlineData(true, true, true, false)]
+    public void BubbleRendersHtml(bool setting, bool hasHtml, bool withheld, bool want) =>
+        Assert.Equal(want, Conversation.BubbleRendersHtml(setting, hasHtml, withheld));
 }

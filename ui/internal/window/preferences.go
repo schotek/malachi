@@ -86,14 +86,15 @@ type PreferencesDialog struct {
 	storageRow     *adw.ActionRow
 	storageSize    *gtk.Label
 
-	colorScheme         *adw.ComboRow
-	density             *adw.ComboRow
-	showPreview         *adw.SwitchRow
-	groupByConversation *adw.SwitchRow
-	showAvatars         *adw.SwitchRow
-	monochrome          *adw.SwitchRow
-	monospace           *adw.SwitchRow
-	textZoom            *adw.SpinRow
+	colorScheme          *adw.ComboRow
+	density              *adw.ComboRow
+	showPreview          *adw.SwitchRow
+	groupByConversation  *adw.SwitchRow
+	conversationChatHTML *adw.SwitchRow
+	showAvatars          *adw.SwitchRow
+	monochrome           *adw.SwitchRow
+	monospace            *adw.SwitchRow
+	textZoom             *adw.SpinRow
 
 	mcpSwitch *adw.SwitchRow
 
@@ -207,6 +208,7 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		density:              b.GetObject("list_density").Cast().(*adw.ComboRow),
 		showPreview:          b.GetObject("show_preview_line").Cast().(*adw.SwitchRow),
 		groupByConversation:  b.GetObject("group_by_conversation").Cast().(*adw.SwitchRow),
+		conversationChatHTML: b.GetObject("conversation_chat_html").Cast().(*adw.SwitchRow),
 		showAvatars:          b.GetObject("show_avatars").Cast().(*adw.SwitchRow),
 		monochrome:           b.GetObject("monochrome_avatars").Cast().(*adw.SwitchRow),
 		monospace:            b.GetObject("monospace_plain_text").Cast().(*adw.SwitchRow),
@@ -253,6 +255,7 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		s.Bind(settings.KeyNotificationSound, d.notificationSound.Object, "active"),
 		s.Bind(settings.KeyShowPreviewLine, d.showPreview.Object, "active"),
 		s.Bind(settings.KeyGroupByConversation, d.groupByConversation.Object, "active"),
+		s.Bind(settings.KeyConversationChatHTML, d.conversationChatHTML.Object, "active"),
 		s.Bind(settings.KeyShowAvatars, d.showAvatars.Object, "active"),
 		s.Bind(settings.KeyMonochromeAvatars, d.monochrome.Object, "active"),
 		s.Bind(settings.KeyMonospacePlainText, d.monospace.Object, "active"),

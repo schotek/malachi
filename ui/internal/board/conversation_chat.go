@@ -9,7 +9,12 @@ package board
 // conversation-chat-layout) switches to. A bubble's text is the member's
 // MessageCard.Text, the text board.get carries (the quoted history cut as
 // trimQuoted cuts it, the signature cut, at most 8000 bytes): the chat
-// fetches no body and shows no web view, so the samples read the same.
+// fetches no body and shows no web view, so the samples read the same,
+// unless the preference conversation-chat-html (Mail's Render HTML in
+// Chat) is on: then the bubbles near the visible part show the message's
+// HTML as Mail's chat does (the rule conversation.BubbleRendersHTML, at
+// most ConversationMaxLiveWebViews of them, the newest first), the text
+// from board.get the fallback.
 // The detail keeps its place at the top; the chat reads down from the
 // oldest bubble to the newest, never scrolled to its end.
 

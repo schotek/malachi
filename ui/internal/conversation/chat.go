@@ -165,3 +165,28 @@ func ChatToggleTooltip(on bool, tr Translator) string {
 	// TRANSLATORS: the tooltip of the "Show as Thread" toggle above a conversation shown as chat bubbles.
 	return tr.T("Back to the timeline: the messages as cards, newest first")
 }
+
+// BubbleRendersHTML says whether a bubble of the chat layout shows the
+// message's sanitized HTML in the locked web view the timeline cards use
+// (sized mode, the same document as the card: the trimQuoted variant)
+// instead of its plain text: the preference conversation-chat-html is
+// on, the loaded body has HTML and it is not withheld. A text-only
+// message, a withheld or failed body and a body not loaded yet read as
+// text (the snippet as placeholder) as without the preference.
+func BubbleRendersHTML(setting, hasHTML, withheld bool) bool {
+	return setting && hasHTML && !withheld
+}
+
+// ChatHTMLRowTitle is the title of the preference's row in Preferences →
+// Message list, next to Group by conversation.
+func ChatHTMLRowTitle(tr Translator) string {
+	// TRANSLATORS: a switch in Preferences → Message list; on, a message in the chat layout of a conversation shows its formatting (HTML) instead of plain text.
+	return tr.T("Render HTML in Chat")
+}
+
+// ChatHTMLRowSubtitle is the subtitle of the preference's row in
+// Preferences → Message list, under ChatHTMLRowTitle.
+func ChatHTMLRowSubtitle(tr Translator) string {
+	// TRANSLATORS: the subtitle of the "Render HTML in Chat" switch in Preferences → Message list.
+	return tr.T("Messages in the chat layout as they were sent, in a locked web view, instead of their plain text")
+}

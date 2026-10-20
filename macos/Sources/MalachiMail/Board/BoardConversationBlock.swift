@@ -53,6 +53,18 @@ struct BoardMailBodies {
 /// cards hold none either (`live`), keeping their folds and HTML for the
 /// way back. A double click on a bubble opens the message in its own
 /// window (`openFromBubble`). The detail keeps opening at its top.
+///
+/// With Mail's preference Render HTML in Chat (`conversation-chat-html`,
+/// observed) the bubbles near the visible part of the detail's scroll view
+/// ask message.body through the cache as the open cards do (the same stub
+/// summary, the cache entry's variant) and one whose body renders HTML
+/// (`Conversation.bubbleBody(_:snippet:html:)`) shows it in the bubble's
+/// transparent web view as Mail's chat does: `Board.ChatBodies` keeps who
+/// asked, `Board.ChatBodies.live` (Mail's rule, the board's cap of 4) who
+/// holds a web view; the others, a hidden chat, the preference off and a
+/// block out of the window read the board.get text. Heights change through
+/// `onHeightChanging`, links go to the delegate's `openLink`, the link
+/// under the pointer to `onHover`.
 @MainActor
 final class BoardConversationBlock: NSView, MessageDisplay {
     weak var delegate: (any MessageActionDelegate)?
@@ -99,6 +111,14 @@ final class BoardConversationBlock: NSView, MessageDisplay {
     private var compactPending = false
     /// The layout, text zoom and avatar settings the chat follows.
     private var chatTokens: [Settings.ChangeToken] = []
+    /// Which bubbles asked message.body for Render HTML in Chat.
+    private(set) var chatBodies = Board.ChatBodies()
+    /// The web views' hosts of the bubbles (made with Mail's cache), one
+    /// per row, so that a height change names its row to the detail.
+    private var bubbleHosts: [ObjectIdentifier: BoardBubbleWebHost] = [:]
+    /// The clip view whose scrolling the HTML bubbles follow.
+    private weak var observedClip: NSClipView?
+    private var chatLivePending = false
 
     /// What the status row shows.
     private struct Status: Equatable {
@@ -171,6 +191,7 @@ final class BoardConversationBlock: NSView, MessageDisplay {
             removeAllCards()
             removeAllChatRows()
             state = Board.ConversationCards()
+            chatBodies = Board.ChatBodies()
             account = nil
             messages = []
             return
@@ -197,6 +218,7 @@ final class BoardConversationBlock: NSView, MessageDisplay {
                 removeAllCards()
                 removeAllChatRows()
                 state = Board.ConversationCards()
+                chatBodies = Board.ChatBodies()
                 messages = []
             }
             cardsColumn.isHidden = true
@@ -208,7 +230,9 @@ final class BoardConversationBlock: NSView, MessageDisplay {
         var reloads: [Int] = []
         let change = state.apply(Board.ConversationCards.key(d))
         messages = d.messages
+        chatBodies.apply(state.members)
         applyChat(change, d.messages)
+        scheduleChatLive()
         switch change {
         case .none:
             break
@@ -460,6 +484,7 @@ final class BoardConversationBlock: NSView, MessageDisplay {
         chatTokens.append(settings.onChange(.conversationChatLayout) { [weak self] in self?.layoutChanged() })
         chatTokens.append(settings.onChange(.textZoom) { [weak self] in self?.applyChatFonts() })
         chatTokens.append(settings.onChange(.monochromeAvatars) { [weak self] in self?.applyChatAvatars() })
+        chatTokens.append(settings.onChange(.conversationChatHTML) { [weak self] in self?.chatHTMLChanged() })
     }
 
     /// The setting switched the layout (a click here, or in Mail): the
@@ -478,7 +503,7 @@ final class BoardConversationBlock: NSView, MessageDisplay {
         if on {
             // The rows were left as they were while the cards showed.
             for (i, row) in chatRows.enumerated() where messages.indices.contains(i) {
-                renderChatRow(row, messages[i])
+                renderChatRow(row, messages[i], at: i)
             }
             scheduleCompactCheck()
         }
@@ -503,7 +528,7 @@ final class BoardConversationBlock: NSView, MessageDisplay {
             for (i, m) in ms.enumerated() where i < chatRows.count {
                 if chatRows[i].right == m.mine {
                     if chatShown {
-                        renderChatRow(chatRows[i], m)
+                        renderChatRow(chatRows[i], m, at: i)
                     }
                 } else {
                     replaceChatRow(i, with: makeChatRow(m))
@@ -521,7 +546,7 @@ final class BoardConversationBlock: NSView, MessageDisplay {
             for (i, m) in ms.enumerated() {
                 if let old = kept[i], old < chatRows.count, chatRows[old].right == m.mine {
                     if chatShown {
-                        renderChatRow(chatRows[old], m)
+                        renderChatRow(chatRows[old], m, at: i)
                     }
                     next.append(chatRows[old])
                     stays.insert(ObjectIdentifier(chatRows[old]))
@@ -530,6 +555,8 @@ final class BoardConversationBlock: NSView, MessageDisplay {
                 }
             }
             for row in chatRows where !stays.contains(ObjectIdentifier(row)) {
+                row.bubble.setLive(false)
+                bubbleHosts[ObjectIdentifier(row)] = nil
                 chatColumn.removeArrangedSubview(row)
                 row.removeFromSuperview()
             }
@@ -549,6 +576,8 @@ final class BoardConversationBlock: NSView, MessageDisplay {
 
     private func replaceChatRow(_ i: Int, with row: ConversationChatRow) {
         let old = chatRows[i]
+        old.bubble.setLive(false)
+        bubbleHosts[ObjectIdentifier(old)] = nil
         chatColumn.removeArrangedSubview(old)
         old.removeFromSuperview()
         chatColumn.insertArrangedSubview(row, at: i)
@@ -558,26 +587,50 @@ final class BoardConversationBlock: NSView, MessageDisplay {
     private func makeChatRow(_ m: Board.MessageCard) -> ConversationChatRow {
         let row = ConversationChatRow(id: m.id, draftID: nil, right: m.mine, fonts: chatFonts)
         row.bubble.compactDate = compactDates
+        if let env = actions.mailBodies {
+            let host = BoardBubbleWebHost(env: env, block: self, row: row)
+            bubbleHosts[ObjectIdentifier(row)] = host
+            row.bubble.webHost = host
+        }
         row.bubble.onDoubleClick = { [weak self, weak row] in
             guard let self, let row, let i = self.chatRows.firstIndex(where: { $0 === row }),
                   self.messages.indices.contains(i)
             else { return }
             self.openFromBubble(self.messages[i])
         }
-        renderChatRow(row, m)
+        renderChatRow(row, m, at: nil)
         return row
     }
 
-    /// A bubble shows `m`: the avatar of its real sender, the header of
-    /// its card's sender (You for the user's own) and date, its text.
-    private func renderChatRow(_ row: ConversationChatRow, _ m: Board.MessageCard) {
+    /// A bubble shows `m` (member `i`, nil: a new row, nothing asked yet):
+    /// the avatar of its real sender, the header of its card's sender (You
+    /// for the user's own) and date, its text, or with Render HTML in Chat
+    /// the HTML its body has (`chatBody`).
+    private func renderChatRow(_ row: ConversationChatRow, _ m: Board.MessageCard, at i: Int?) {
         row.showAvatar(name: m.sender, monochrome: monochrome)
         row.bubble.showPlain(sender: m.from, date: m.date == .distantPast ? nil : m.date)
-        row.bubble.showBody(.text(Conversation.bubbleText(m.text)), monospace: false)
+        row.bubble.showBody(chatBody(m, at: i), monospace: false)
     }
 
+    /// What the bubble of member `i` shows: the board.get text, unless the
+    /// preference is on, the bubble asked and the cache's entry renders
+    /// HTML (`Conversation.bubbleBody`); the text stays its fallback (no
+    /// placeholder: it is the trimmed text already).
+    private func chatBody(_ m: Board.MessageCard, at i: Int?) -> Conversation.BubbleBody {
+        let text = Conversation.bubbleText(m.text)
+        guard htmlOn, let i, chatBodies.wasAsked(i), let id = m.id, let lm = actions.mailBodies?.cache.loaded(id),
+              case .html(let b, _) = Conversation.bubbleBody(lm, snippet: m.text, html: true)
+        else { return .text(text) }
+        return .html(body: b, text: text)
+    }
+
+    /// Render HTML in Chat.
+    private var htmlOn: Bool { actions.mailBodies?.settings.conversationChatHTML ?? false }
+
     private func removeAllChatRows() {
+        bubbleHosts = [:]
         for row in chatRows {
+            row.bubble.setLive(false)
             chatColumn.removeArrangedSubview(row)
             row.removeFromSuperview()
         }
@@ -586,8 +639,9 @@ final class BoardConversationBlock: NSView, MessageDisplay {
 
     private func applyChatFonts() {
         let f = chatFonts
+        let zoom = actions.mailBodies?.settings.textZoom
         for row in chatRows {
-            row.bubble.setFonts(normal: f.normal, monospace: f.monospace)
+            row.bubble.setFonts(normal: f.normal, monospace: f.monospace, zoom: zoom)
         }
     }
 
@@ -685,6 +739,7 @@ final class BoardConversationBlock: NSView, MessageDisplay {
             self.liveChangePending = false
             self.refreshCards()
             self.fetchBodies()
+            self.updateChatLive()
         }
     }
 
@@ -697,6 +752,9 @@ final class BoardConversationBlock: NSView, MessageDisplay {
     }
 
     func showLoaded(_ id: MessageID, _ lm: LoadedMessage) {
+        if let i = chatBodies.members.firstIndex(where: { $0.id == id }), chatBodies.wasAsked(i) {
+            chatLoaded(chatBodies.members[i], lm)
+        }
         guard let i = state.index(of: id), state.body(i) != .unknown else { return }
         loaded(state.members[i], lm)
     }
@@ -740,8 +798,167 @@ final class BoardConversationBlock: NSView, MessageDisplay {
     /// DEVELOPMENT AID: the members on show (the bubbles' texts and names).
     var developmentMessages: [Board.MessageCard] { messages }
 
-    /// DEVELOPMENT AID: the cards holding a web view now.
+    /// DEVELOPMENT AID: the cards and the chat's bubbles holding a web
+    /// view now.
     var developmentLiveWebViews: Int {
-        cards.filter { $0.webView != nil }.count
+        cards.filter { $0.webView != nil }.count + chatRows.filter(\.bubble.holdsWebView).count
+    }
+
+    // MARK: HTML in the chat
+
+    /// The chat may hold web views and ask bodies now: Mail's cache at
+    /// hand, in a window, shown, the chat shown with its members.
+    private var chatLive: Bool {
+        actions.mailBodies != nil && window != nil && !isHiddenOrHasHiddenAncestor && chatShown && status == nil
+            && account != nil
+    }
+
+    /// Render HTML in Chat switched: off, every web view goes, nothing is
+    /// asked any more and the bubbles read the board.get text; on, the near
+    /// bubbles ask (`updateChatLive`).
+    private func chatHTMLChanged() {
+        if !htmlOn {
+            chatBodies.forget()
+        }
+        for (i, row) in chatRows.enumerated() where messages.indices.contains(i) {
+            let m = messages[i]
+            change(row) {
+                if !self.htmlOn {
+                    row.bubble.setLive(false)
+                }
+                self.renderChatRow(row, m, at: i)
+            }
+        }
+        scheduleChatLive()
+    }
+
+    /// Runs `change` of row's height through the detail.
+    private func change(_ row: NSView, _ change: () -> Void) {
+        if let host = onHeightChanging {
+            host(row, change)
+        } else {
+            change()
+        }
+    }
+
+    private func scheduleChatLive() {
+        guard !chatLivePending else { return }
+        chatLivePending = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.chatLivePending = false
+            self.updateChatLive()
+        }
+    }
+
+    /// Follows the detail's scrolling while HTML bubbles may show.
+    private func observeClip(_ on: Bool) {
+        let clip = on ? enclosingScrollView?.contentView : nil
+        guard clip !== observedClip else { return }
+        if let old = observedClip {
+            NotificationCenter.default.removeObserver(self, name: NSView.boundsDidChangeNotification, object: old)
+        }
+        observedClip = clip
+        if let clip {
+            clip.postsBoundsChangedNotifications = true
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(clipScrolled(_:)), name: NSView.boundsDidChangeNotification, object: clip)
+        }
+    }
+
+    @objc private func clipScrolled(_ note: Notification) {
+        scheduleChatLive()
+    }
+
+    /// The near bubbles ask their bodies, the nearest HTML ones (at most
+    /// the board's cap) hold web views, every other lets its view go
+    /// (`Board.ChatBodies.live` over the rows' frames against the detail's
+    /// visible part). Outside `chatLive` or with the preference off, none.
+    private func updateChatLive() {
+        let on = chatLive && htmlOn
+        observeClip(on)
+        guard on, let clip = observedClip else {
+            for row in chatRows where row.bubble.live {
+                change(row) { row.bubble.setLive(false) }
+            }
+            return
+        }
+        let v = convert(clip.bounds, from: clip)
+        let visible = ConversationLayout.Span(Double(v.minY), Double(v.maxY))
+        var frames: [ConversationLayout.Span] = []
+        var html: [Bool] = []
+        for row in chatRows {
+            let f = row.convert(row.bounds, to: self)
+            frames.append(ConversationLayout.Span(Double(f.minY), Double(f.maxY)))
+            html.append(row.bubble.rendersHTML)
+        }
+        let live = Board.ChatBodies.live(frames: frames, html: html, visible: visible)
+        for i in live.near.sorted() where chatBodies.needsBody(i, near: true, setting: true) {
+            chatBodies.asked(i)
+            chatFetch(i)
+        }
+        for (i, row) in chatRows.enumerated() where row.bubble.live != live.web.contains(i) {
+            change(row) { row.bubble.setLive(live.web.contains(i)) }
+        }
+    }
+
+    /// message.body for bubble `i` through the cache, as a card asks.
+    private func chatFetch(_ i: Int) {
+        guard let env = actions.mailBodies, let account, chatBodies.members.indices.contains(i),
+              let id = chatBodies.members[i].id
+        else { return }
+        register(env)
+        let member = chatBodies.members[i]
+        env.cache.fetchBody(Self.summary(id, account: account)) { [weak self] lm in
+            self?.chatLoaded(member, lm)
+        }
+    }
+
+    /// The cache's answer for a bubble's member: the bubble shows it (HTML
+    /// or the text) and the web views are looked at again.
+    private func chatLoaded(_ member: Board.ConversationCards.Member, _ lm: LoadedMessage) {
+        guard lm.bodySettled, !lm.fetching, let i = chatBodies.members.firstIndex(of: member),
+              chatBodies.wasAsked(i), i < chatRows.count, messages.indices.contains(i)
+        else { return }
+        let row = chatRows[i]
+        let m = messages[i]
+        change(row) { renderChatRow(row, m, at: i) }
+        scheduleChatLive()
+    }
+}
+
+/// The web views' host of the board chat's bubbles: Mail's cache and text
+/// zoom, links through the block's delegate (one per row) (the cards' "Open this
+/// link?"), hover and height changes through the block.
+@MainActor
+final class BoardBubbleWebHost: ConversationBubbleWebHost {
+    private let env: BoardMailBodies
+    private weak var block: BoardConversationBlock?
+    private weak var row: NSView?
+
+    init(env: BoardMailBodies, block: BoardConversationBlock, row: NSView) {
+        self.env = env
+        self.block = block
+        self.row = row
+    }
+
+    var cache: MessageCache { env.cache }
+
+    var textZoom: Int { env.settings.textZoom }
+
+    func openLink(_ href: String, links: [Link], from window: NSWindow?) {
+        block?.delegate?.openLink(href, links: links, from: window)
+    }
+
+    func hover(_ href: String) {
+        block?.onHover?(href)
+    }
+
+    func bubbleHeightChanging(_ change: () -> Void) {
+        guard let block, let row, let host = block.onHeightChanging else {
+            change()
+            return
+        }
+        host(row, change)
     }
 }

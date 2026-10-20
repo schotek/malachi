@@ -151,15 +151,28 @@ final class MessageWebView: NSView {
     ]
     """
 
+    /// A bubble of the conversation's chat layout: the view draws no
+    /// background (the bubble's shows through) and loads the chat's sheet
+    /// (`viewerDocument(body:compact:chat:)`: no backgrounds of the
+    /// content, the bubble's padding, its colours in the dark appearance).
+    let chat: Bool
+
     /// - Parameter sized: the sized mode of a conversation card (see the
     ///   type's comment); the reading pane and the message windows use the
     ///   view unsized.
-    init(cache: MessageCache, zoom: Int, sized: Bool = false) {
-        self.sized = sized
+    /// - Parameter chat: a chat bubble's view (`chat`), sized as well.
+    init(cache: MessageCache, zoom: Int, sized: Bool = false, chat: Bool = false) {
+        self.sized = sized || chat
+        self.chat = chat
         governor = WebHeightGovernor(zoom: Self.pageZoom(zoom))
         handler = PartSchemeHandler(cache: cache)
-        let config = Self.makeConfiguration(handler: handler, messages: messages, sized: sized)
+        let config = Self.makeConfiguration(handler: handler, messages: messages, sized: sized || chat)
         web = ViewerWebView(frame: .zero, configuration: config)
+        if chat {
+            // Transparent before the first load, so nothing flashes white.
+            web.setValue(false, forKey: "drawsBackground")
+            web.underPageBackgroundColor = .clear
+        }
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         messages.target = self
@@ -398,7 +411,27 @@ final class MessageWebView: NSView {
         needsReload = false
         loadedBody = body
         governor.reset()
-        web.loadHTMLString(viewerDocument(body: body, compact: sized), baseURL: nil)
+        web.loadHTMLString(
+            viewerDocument(body: body, compact: sized, chat: chat ? Self.chatColours() : nil), baseURL: nil)
+    }
+
+    /// The colours of a chat bubble's document in the dark appearance: the
+    /// text bubbles' `labelColor` and `linkColor` there, as CSS.
+    private static func chatColours() -> ViewerChatColours {
+        var text = "", link = ""
+        (NSAppearance(named: .darkAqua) ?? NSAppearance.currentDrawing()).performAsCurrentDrawingAppearance {
+            text = css(NSColor.labelColor)
+            link = css(NSColor.linkColor)
+        }
+        return ViewerChatColours(text: text, link: link)
+    }
+
+    /// `color` as a CSS rgba() value, in sRGB.
+    private static func css(_ color: NSColor) -> String {
+        guard let c = color.usingColorSpace(.sRGB) else { return "#ffffff" }
+        func byte(_ v: CGFloat) -> Int { Int((min(max(v, 0), 1) * 255).rounded()) }
+        let alpha = String(format: "%.3f", Double(min(max(c.alphaComponent, 0), 1)))
+        return "rgba(\(byte(c.redComponent)), \(byte(c.greenComponent)), \(byte(c.blueComponent)), \(alpha))"
     }
 
     /// Drops the current document (and its pictures). Without the rule

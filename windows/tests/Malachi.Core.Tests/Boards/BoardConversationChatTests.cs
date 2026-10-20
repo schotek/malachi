@@ -88,4 +88,31 @@ public sealed class BoardConversationChatTests
         var rows = ChatRows(d.Messages);
         Assert.True(rows[1].Right && !rows[0].Right, "sides");
     }
+
+    // ChatBodies: a near member with an id asks once per case, only with the
+    // preference on; a sample never asks; another case or a reset starts over.
+    [Fact]
+    public void ChatBodiesAskOncePerCaseOnlyWithTheSetting()
+    {
+        var bodies = new ChatBodies();
+        var a = new MessageCard(new MessageId("ma"), "Ann", "", "Hi", false);
+        var sample = new MessageCard(null, "Ann", "", "Hi", false);
+        var c1 = new BoardCaseId("c_1");
+        Assert.False(bodies.NeedsBody(c1, a, setting: false, near: true), "the setting off never fetches");
+        Assert.False(bodies.NeedsBody(c1, a, setting: true, near: false), "far");
+        Assert.False(bodies.NeedsBody(c1, sample, setting: true, near: true), "a sample");
+        Assert.True(bodies.NeedsBody(c1, a, setting: true, near: true));
+        bodies.Asked(a.Id!.Value);
+        Assert.True(bodies.WasAsked(a.Id));
+        Assert.False(bodies.WasAsked(null));
+        Assert.False(bodies.NeedsBody(c1, a, setting: true, near: true), "asked once");
+        // Another case forgets.
+        var c2 = new BoardCaseId("c_2");
+        Assert.True(bodies.NeedsBody(c2, a, setting: true, near: true));
+        Assert.False(bodies.WasAsked(a.Id));
+        bodies.Asked(a.Id!.Value);
+        bodies.Reset();
+        Assert.Null(bodies.CaseId);
+        Assert.False(bodies.WasAsked(a.Id));
+    }
 }
