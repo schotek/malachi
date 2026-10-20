@@ -157,7 +157,7 @@ public sealed partial class MainWindow
         {
             return;
         }
-        OpenAssistantPanel();
+        OpenAssistantPanelFocused();
     }
 
     /// <summary>
@@ -179,7 +179,7 @@ public sealed partial class MainWindow
         }
         if (Assistant.ButtonOpensPanel(assistant.Settings.AssistantTarget, hasPanel: true))
         {
-            OpenAssistantPanel();
+            OpenAssistantPanelFocused();
             return;
         }
         assistantMenu?.Flyout.ShowAt(anchor, new Microsoft.UI.Xaml.Controls.Primitives.FlyoutShowOptions
@@ -189,8 +189,10 @@ public sealed partial class MainWindow
     }
 
     // The panel unfolds and its question field takes the keyboard (the ✦
-    // button with In App chosen).
-    private void OpenAssistantPanel()
+    // button with In App chosen). Not OpenAssistantPanel of
+    // MainWindow.EventDetail.cs, which only reveals the panel (and in the
+    // Calendar brings the window to Mail first).
+    private void OpenAssistantPanelFocused()
     {
         if (!state.Assistant.PanelShown)
         {

@@ -470,7 +470,9 @@ public sealed class ConversationControllerTests
         Assert.Null(await h.On(() => c.Conversation.QuickReplyInput()));
 
         await c.SelectAsync(new ListKey(Thread: "t2"));
-        var input = Assert.NotNull(await h.On(() => c.Conversation.QuickReplyInput()));
+        var maybe = await h.On(() => c.Conversation.QuickReplyInput());
+        Assert.NotNull(maybe);
+        var input = maybe.Value;
         Assert.Equal(["b1", "sent:r2"], SentShape(input.Model));
         Assert.Equal("b1", Conversation.QuickReplyTarget(input.Model)?.Id?.Value);
         var b1 = Assert.NotNull(await h.On(() => c.Conversation.Member("b1")));
