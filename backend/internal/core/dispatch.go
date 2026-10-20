@@ -289,7 +289,7 @@ func (k *kindOutbox) Wake(accountID string) bool {
 
 // kindOrder is the order the dispatchers reach their supervisors in (Run,
 // Reload, States); a kind not listed comes after these, by name.
-var kindOrder = []api.AccountKind{api.AccountIMAP, api.AccountGraph, api.AccountJira, api.AccountCalDAV}
+var kindOrder = []api.AccountKind{api.AccountIMAP, api.AccountGraph, api.AccountJira, api.AccountCalDAV, api.AccountEway}
 
 // sortedKinds is the keys of a dispatch table in kindOrder.
 func sortedKinds[V any](by map[api.AccountKind]V) []api.AccountKind {
@@ -378,7 +378,8 @@ func (g *graphWithCalendar) RefreshIssueWait(ctx context.Context, accountID, key
 
 // mailOnlyMessages is the message service by account kind: an account
 // without mail (caldav, docs/calendar.md §4.3) answers every message
-// method invalidArgument; every other account goes to the service.
+// method invalidArgument (an eway account too, docs/eway.md D1); every
+// other account goes to the service.
 type mailOnlyMessages struct {
 	inner api.MessageService
 	b     *Backend
@@ -393,7 +394,7 @@ func (m mailOnlyMessages) refuse(ctx context.Context, id api.AccountID) error {
 		return nil
 	}
 	a, err := m.b.store.GetAccount(ctx, string(id))
-	if err == nil && a.Config.Protocol() == api.AccountCalDAV {
+	if err == nil && hasNoMail(a.Config) {
 		return api.NewError(api.CodeInvalidArgument, "account %q has no mail", id)
 	}
 	return nil

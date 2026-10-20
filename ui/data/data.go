@@ -18,7 +18,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/i18n"
 )
 
-//go:generate blueprint-compiler batch-compile ui ui ui/window.blp ui/message_window.blp ui/embedded_window.blp ui/message_row.blp ui/preferences.blp ui/editor.blp ui/html_view.blp ui/compose.blp ui/compose_pane.blp ui/compose_extras.blp ui/account_wizard.blp ui/jira_wizard.blp ui/jira_account.blp ui/html_card.blp ui/conversation_view.blp ui/assistant_panel.blp ui/board_page.blp ui/board_row.blp ui/board_suggest_reply.blp ui/mail_date_header.blp ui/calendar_page.blp ui/event_detail.blp ui/event_editor.blp ui/invitation_card.blp ui/caldav_sheet.blp
+//go:generate blueprint-compiler batch-compile ui ui ui/window.blp ui/message_window.blp ui/embedded_window.blp ui/message_row.blp ui/preferences.blp ui/editor.blp ui/html_view.blp ui/compose.blp ui/compose_pane.blp ui/compose_extras.blp ui/account_wizard.blp ui/jira_wizard.blp ui/jira_account.blp ui/html_card.blp ui/conversation_view.blp ui/assistant_panel.blp ui/board_page.blp ui/board_row.blp ui/board_suggest_reply.blp ui/mail_date_header.blp ui/calendar_page.blp ui/event_detail.blp ui/event_editor.blp ui/invitation_card.blp ui/caldav_sheet.blp ui/crm_dialog.blp ui/eway_wizard.blp
 
 //go:embed ui/*.ui
 var ui embed.FS

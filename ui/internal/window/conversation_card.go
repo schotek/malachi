@@ -747,6 +747,7 @@ func (c *convCard) setHint(on bool) {
 // and leaves the body alone; the bars are made when first shown.
 func (c *convCard) renderBars(lm *loadedMessage) {
 	c.renderBulk(lm)
+	c.renderCrm(c.cv.w.crmMessage(c.id, lm))
 	if !c.isHTML || lm == nil {
 		if c.mv.bar != nil {
 			c.mv.setBarVisible(false)

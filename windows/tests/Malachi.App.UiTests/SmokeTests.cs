@@ -58,6 +58,7 @@ public sealed class SmokeTests(SmokeFixture fixture) : IClassFixture<SmokeFixtur
         App.MenuItem("MenuPreferences");
         var preferences = Uia.WindowWith(App.ProcessId, "PreferencesNavigation");
         Assert.NotNull(Uia.Find(preferences, "AccountsPage"));
+        Assert.NotNull(Uia.Find(preferences, "IntegrationsPage"));
         Assert.NotNull(Uia.Find(preferences, "GeneralPage"));
         Uia.Close(preferences);
         Uia.WaitGone(preferences, what: "the Preferences");

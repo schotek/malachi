@@ -115,6 +115,9 @@ func (w *Window) loadAccounts() {
 			// (added, removed, paused, renamed).
 			w.refreshCertBanner()
 			w.refreshSyncLabel()
+			// The eWay-CRM account among them decides whether its
+			// controls show at all.
+			w.refreshCRM()
 			if len(w.messageList.SelectedRows()) == 0 {
 				w.messageStack.SetVisibleChildName(w.emptyPageName())
 			}

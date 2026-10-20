@@ -11,6 +11,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/bulkmail"
 	"github.com/schotek/malachi/ui/internal/calendar"
 	"github.com/schotek/malachi/ui/internal/capabilities"
+	"github.com/schotek/malachi/ui/internal/crm"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/signin"
@@ -539,6 +540,9 @@ func summaryMessage(s api.MessageSummary) widget.Message {
 		Tag:            bulkmail.Tag(s.Bulk, i18n.Tr),
 		Invitation:     calendar.InvitationPillOf(s),
 	}
+	if p, ok := crm.PillFor(s, i18n.Tr); ok {
+		m.Crm = p
+	}
 	if m.Issue != nil {
 		m.Unread = m.Issue.Unread
 	}
@@ -867,6 +871,9 @@ func folderIcon(f api.Folder) string {
 func accountHeaderBadge(a api.Account) string {
 	if jira.IsJira(a.Config) {
 		return jira.KindBadge
+	}
+	if a.Config.Protocol() == api.AccountEway {
+		return crm.KindBadge
 	}
 	switch signin.Provider(a.Config) {
 	case signin.ProviderGoogle:

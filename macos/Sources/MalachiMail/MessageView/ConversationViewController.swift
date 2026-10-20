@@ -811,6 +811,8 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
 
     var assistant: AssistantController { state.assistant }
 
+    var crm: CRMState { state.crm }
+
     func actions(for s: MessageSummary) -> Capabilities.Actions {
         controller.actions(for: s)
     }

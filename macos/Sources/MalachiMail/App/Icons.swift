@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AppKit
+import MalachiCore
 import os
 
 /// The symbol sizes of the UI. GTK symbolic icons are 16 px; the sidebar's
@@ -146,4 +147,11 @@ enum Icon {
     static var star: NSImage { image("non-starred", size: .toolbar) }
     static var starFilled: NSImage { image("starred", size: .toolbar) }
     static var moreActions: NSImage { image("view-more", size: .toolbar) }
+
+    /// eWay-CRM (`CRM.icon`, GTK's address book): a stack of cards with a
+    /// person, apart from the address book of contacts.
+    nonisolated static let crmSymbol = "person.crop.rectangle.stack"
+    /// A message saved in eWay-CRM (the button's Saved state, the bar).
+    nonisolated static let crmSavedSymbol = "checkmark.circle"
+    static var crm: NSImage { symbol(crmSymbol, size: .toolbar, description: CRM.brand) }
 }

@@ -10,6 +10,7 @@
 // underscore, as the same items do in the window's other menus; the views
 // show it as an access key (MnemonicLabel).
 
+using Malachi.Core.Crm;
 using Malachi.Core.I18n;
 
 namespace Malachi.Core.ContextMenus;
@@ -37,7 +38,7 @@ public static partial class ContextMenu
         /// <summary>Fold is Expand.</summary>
         public bool Collapsed { get; init; }
 
-        /// <summary>OpenMessage opens this many rows (2 or more).</summary>
+        /// <summary>OpenMessage opens, and CrmSave saves, this many rows (2 or more).</summary>
         public int Count { get; init; }
     }
 
@@ -65,6 +66,10 @@ public static partial class ContextMenu
         ItemId.Junk => L10n.T("Mark as Junk"),
         ItemId.Trash => l.Outbox ? L10n.T("Cancel Sending") : L10n.T("Move to Trash"),
         ItemId.Assistant => L10n.T("Assistant"),
+        ItemId.CrmSave => CrmText.SaveMenuLabel(l.Count),
+        ItemId.CrmOpen => CrmText.MenuLabel(CrmMenuId.Open),
+        ItemId.CrmEditLinks => CrmText.MenuLabel(CrmMenuId.EditLinks),
+        ItemId.CrmRemove => CrmText.MenuLabel(CrmMenuId.Remove),
         ItemId.CheckMail => L10n.T("Check for New Mail"),
         // TRANSLATORS: In the menu of a folder in the sidebar.
         ItemId.MarkAllRead => L10n.T("Mark All as Read"),

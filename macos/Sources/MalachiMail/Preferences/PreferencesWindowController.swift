@@ -5,15 +5,15 @@ import AppKit
 import MalachiCore
 
 /// The settings window (preferences.blp `preferences_dialog`): a
-/// toolbar-style tab view with the Accounts, General, Calendar (macOS
-/// first, docs/calendar.md §5.8), Appearance and AI pages, 600 pt wide, titled "Settings" as macOS calls it. One instance
+/// toolbar-style tab view with the Accounts, Integrations, General,
+/// Calendar (docs/calendar.md §5.8), Appearance and AI pages, 600 pt wide, titled "Settings" as macOS calls it. One instance
 /// at a time; `show` brings it to the front. There is no search (deviation
 /// D9).
 @MainActor
 final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
     /// The pages, in the order of the tabs.
     enum Page: Int {
-        case accounts, general, calendar, appearance, ai
+        case accounts, integrations, general, calendar, appearance, ai
     }
 
     private static var shared: PreferencesWindowController?
@@ -23,6 +23,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
     static var open: PreferencesWindowController? { shared }
 
     let accountsPane: AccountsPaneViewController
+    let integrationsPane: IntegrationsPaneViewController
     let generalPane = GeneralPaneViewController()
     let calendarPane: CalendarPaneViewController
     let appearancePane = AppearancePaneViewController()
@@ -77,6 +78,9 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
         accountsPane = AccountsPaneViewController(client: client, confirmRemoval: confirmRemoval, confirmTrust: confirmTrust) { text in
             toasts.show(text)
         }
+        integrationsPane = IntegrationsPaneViewController(client: client, confirmRemoval: confirmRemoval, confirmTrust: confirmTrust) { text in
+            toasts.show(text)
+        }
         calendarPane = CalendarPaneViewController(client: client, confirmRemoval: confirmRemoval, confirmTrust: confirmTrust) { text in
             toasts.show(text)
         }
@@ -116,6 +120,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
         tabs.transitionOptions = []
         let pages: [(NSViewController, String, String)] = [
             (accountsPane, L10n.T("Accounts"), "person.2"),
+            (integrationsPane, Integrations.texts().title, "puzzlepiece.extension"),
             (generalPane, L10n.T("General"), "gearshape"),
             (calendarPane, Cal.Prefs.tabTitle, "calendar"),
             (appearancePane, L10n.T("Appearance"), "paintpalette"),
@@ -131,6 +136,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
         // The calendar page works over the application's calendar source
         // for this window (AppState.startedCalendarSource).
         calendarPane.attach(window: self)
+        wireAccountPages()
         tabs.selectedTabViewItemIndex = 0
         window.delegate = self
         if let content = window.contentView {
@@ -150,8 +156,40 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
         tabs.selectedTabViewItemIndex = page.rawValue
     }
 
+    /// The account pages follow each other (integrations_page.go): what
+    /// one adds, removes or reorders, the others load again; a CalDAV
+    /// row's Edit shows the Calendar page, and its Add CalDAV sheet works
+    /// over the Calendar page's source.
+    private func wireAccountPages() {
+        let calendar = calendarPane
+        let accounts = accountsPane
+        let integrations = integrationsPane
+        @MainActor func reload(_ pane: AccountsPaneViewController) {
+            guard pane.isViewLoaded, !pane.closed else { return }
+            pane.loadAccounts()
+        }
+        @MainActor func refreshCalendar() {
+            guard !calendar.closed else { return }
+            calendar.source?.refresh()
+        }
+        accountsPane.onAccountsChanged = { [weak integrations] in
+            if let integrations { reload(integrations) }
+        }
+        integrationsPane.onAccountsChanged = { [weak accounts] in
+            if let accounts { reload(accounts) }
+            refreshCalendar()
+        }
+        calendarPane.onAccountsChanged = { [weak accounts, weak integrations] in
+            if let accounts { reload(accounts) }
+            if let integrations { reload(integrations) }
+        }
+        integrationsPane.onShowCalendar = { [weak self] in self?.select(.calendar) }
+        integrationsPane.calendarSource = { [weak calendar] in calendar?.source }
+    }
+
     func windowWillClose(_ notification: Foundation.Notification) {
         accountsPane.closed = true
+        integrationsPane.closed = true
         generalPane.closed = true
         calendarPane.closed = true
         appearancePane.closed = true

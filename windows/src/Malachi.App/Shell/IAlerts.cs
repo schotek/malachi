@@ -53,6 +53,14 @@ public interface IAlerts
     /// </summary>
     Task InformAsync(Window? window, string heading, string body, string closeLabel);
 
+    /// <summary>
+    /// The Save to eWay-CRM dialog (Crm/CrmSaveDialog), made by
+    /// <paramref name="make"/> when its turn on the window comes (one
+    /// dialog at a time per window); true when it closed with its primary
+    /// button (Save).
+    /// </summary>
+    Task<bool> ShowDialogAsync(Window? window, System.Func<Microsoft.UI.Xaml.Controls.ContentDialog> make);
+
     /// <summary>"Save changes to this draft?": Save Draft (the default) / Discard / Cancel.</summary>
     Task<DraftCloseAnswer> SaveDraftQuestionAsync(Window? window);
 

@@ -75,6 +75,8 @@ enum MainMenu {
     /// The Assistant submenu's delegate, which fills it on open; the menu
     /// holds its delegate weakly.
     private static var assistantMenu: AssistantMenu?
+    /// The Message menu's delegate for its eWay-CRM group.
+    private static let crmMenuDelegate = CRMMenuDelegate()
 
     static func build(_ state: AppState) -> NSMenu {
         let bar = NSMenu()
@@ -298,6 +300,9 @@ enum MainMenu {
         m.addItem(item(L10n.T("Reply"), Action.reply, id: ItemID.reply))
         m.addItem(item(L10n.T("Reply All"), Action.replyAll, id: ItemID.replyAll))
         m.addItem(item(L10n.T("Forward"), Action.forward, id: ItemID.forward))
+        // eWay-CRM (docs/eway.md): validated by the key window.
+        CRMMenuItems.add(to: m)
+        m.delegate = crmMenuDelegate
         m.addItem(.separator())
         m.addItem(item(mn(L10n.T("Mark as _Read")), Action.markAsRead))
         // The bare letters of the GTK accelerators (a, j, u, s, Delete);

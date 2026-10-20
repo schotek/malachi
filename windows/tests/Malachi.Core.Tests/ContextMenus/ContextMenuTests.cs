@@ -3,7 +3,7 @@
 
 // Port of macos/Tests/MalachiCoreTests/ContextMenuTests.swift, the
 // counterpart of ui/internal/contextmenu/contextmenu_test.go
-// (TestMessageItems, TestMessageItemsSeveral, TestFolderItems,
+// (TestMessageItems, TestMessageItemsSeveral, TestMessageItemsCrm, TestFolderItems,
 // TestMoveTargets, TestLabels, TestEmptyQuestion, TestProgressTexts), with
 // Swift's messageStateOfFlags and SelectionTests.contextMenuOfSeveral.
 // Go passes a translator that returns the msgids; the process-wide
@@ -15,6 +15,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Malachi.Core.Api;
+using Malachi.Core.Crm;
 using Malachi.Core.Model;
 using Malachi.Core.Tests.Model;
 using Xunit;
@@ -138,6 +139,31 @@ public sealed class ContextMenuTests
         Assert.Equal("Open in New Window", Label(ItemId.OpenMessage, new Labels { Count = 1 }));
     }
 
+    /// <summary>
+    /// contextmenu_test.go TestMessageItemsCrm (crm.OfferFor): Save after the
+    /// answers, the saved-state items for one saved message, Save with the
+    /// count for several (saved or not), nothing when not offered.
+    /// </summary>
+    [Fact]
+    public void MessageItemsCrm()
+    {
+        var s = Mail.WithCrm(new CrmOffer(Shown: true, Enabled: true, Count: 1, Saved: false));
+        Assert.Equal("open | reply replyAll forward | crmSave | markUnread toggleFlag | archive moveTo junk trash | assistant", Show(MessageItems(s)));
+        s = Mail.WithCrm(new CrmOffer(Shown: true, Enabled: true, Count: 1, Saved: true));
+        Assert.Equal("open | reply replyAll forward | crmOpen crmEditLinks crmRemove | markUnread toggleFlag | archive moveTo junk trash | assistant", Show(MessageItems(s)));
+        s = s with { Count = 3, Open = true, Reply = false, ReplyAll = false };
+        s = s.WithCrm(new CrmOffer(Shown: true, Enabled: false, Count: 3, Saved: true));
+        Assert.Equal("open | forward | crmSave- | markUnread toggleFlag | archive moveTo junk trash | assistant", Show(MessageItems(s)));
+        s = s.WithCrm(default);
+        Assert.DoesNotContain("crm", Show(MessageItems(s)), StringComparison.Ordinal);
+        Assert.Equal("Open in eWay-CRM", Label(ItemId.CrmOpen, new Labels()));
+        Assert.Equal("Edit Links…", Label(ItemId.CrmEditLinks, new Labels()));
+        Assert.Equal("Remove from eWay-CRM", Label(ItemId.CrmRemove, new Labels()));
+        Assert.Equal("Save to eWay-CRM…", Label(ItemId.CrmSave, new Labels()));
+        Assert.Equal("Save 4 Messages to eWay-CRM…", Label(ItemId.CrmSave, new Labels { Count = 4 }));
+        Assert.Equal(("crmSave", "crmOpen", "crmEditLinks", "crmRemove"), (Name(ItemId.CrmSave), Name(ItemId.CrmOpen), Name(ItemId.CrmEditLinks), Name(ItemId.CrmRemove)));
+    }
+
     public static TheoryData<string, FolderState, string> FolderCases => new()
     {
         { "inbox with unread mail", new FolderState { Selectable = true, Role = FolderRole.Inbox, Unread = 3, Total = 9, CanDelete = true, Foldable = true }, "checkMail | markAllRead | favourite fold" },
@@ -235,7 +261,7 @@ public sealed class ContextMenuTests
         Assert.Equal("", Label((ItemId)999, new Labels()));
         Assert.Equal(
             "open edit reply replyAll forward markRead markUnread toggleFlag changeStatus archive moveTo junk trash assistant "
-            + "checkMail markAllRead empty favourite fold",
+            + "crmSave crmOpen crmEditLinks crmRemove checkMail markAllRead empty favourite fold",
             string.Join(" ", Enum.GetValues<ItemId>().Select(Name)));
         Assert.Equal("", Name((ItemId)999));
     }

@@ -153,3 +153,34 @@ func TestTexts(t *testing.T) {
 		t.Error(fmt.Sprint(MaxForward))
 	}
 }
+
+// Save to eWay-CRM for several: every row savable, at most
+// api.MaxCrmMessages, never the saved-state items; not in the outbox.
+func TestCombineCrm(t *testing.T) {
+	savable := mail
+	savable.Crm, savable.CrmSaved = true, true
+	if c := Combine([]Flags{savable}); !c.Crm || !c.CrmSaved {
+		t.Errorf("one: %+v", c)
+	}
+	if c := Combine([]Flags{savable, savable}); !c.Crm || c.CrmSaved {
+		t.Errorf("two: %+v", c)
+	}
+	if c := Combine([]Flags{savable, mail}); c.Crm {
+		t.Errorf("one row not savable: %+v", c)
+	}
+	rows := make([]Flags, api.MaxCrmMessages+1)
+	for i := range rows {
+		rows[i] = savable
+	}
+	if c := Combine(rows); c.Crm {
+		t.Errorf("%d rows: %+v", len(rows), c)
+	}
+	if c := Combine(rows[:api.MaxCrmMessages]); !c.Crm {
+		t.Errorf("%d rows: %+v", api.MaxCrmMessages, c)
+	}
+	queued := savable
+	queued.Outbox = true
+	if c := Combine([]Flags{queued, queued}); c.Crm {
+		t.Errorf("outbox: %+v", c)
+	}
+}

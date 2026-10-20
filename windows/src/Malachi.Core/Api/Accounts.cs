@@ -220,6 +220,14 @@ public sealed record AccountConfig
     public CalDAVConfig? CalDAV { get; init; }
 
     /// <summary>
+    /// The instance of an eWay-CRM account (kind <c>eway</c> only); its
+    /// password is <see cref="Credentials.Password"/> and its
+    /// <see cref="Email"/> may be empty (the eWay-CRM user may have none).
+    /// </summary>
+    [JsonPropertyName("eway")]
+    public EwayConfig? Eway { get; init; }
+
+    /// <summary>
     /// The calendar part of a graph or caldav account (docs/api.md §4.14);
     /// null on a graph account is calendar sync off.
     /// </summary>
@@ -639,7 +647,8 @@ public sealed record EndpointTestResult
 /// <c>datacenter</c>, and <c>gateway</c> when the gateway route was used),
 /// <see cref="CalDAV"/> for a CalDAV account (its capabilities among
 /// <c>calendar-access</c>, <c>calendar-auto-schedule</c> and
-/// <c>sync-collection</c>).
+/// <c>sync-collection</c>), <see cref="Eway"/> for an eWay-CRM account
+/// (one sign-in).
 /// </summary>
 public sealed record AccountTestResult
 {
@@ -662,4 +671,8 @@ public sealed record AccountTestResult
     /// <summary>The CalDAV server's outcome.</summary>
     [JsonPropertyName("caldav")]
     public EndpointTestResult? CalDAV { get; init; }
+
+    /// <summary>The eWay-CRM instance's outcome (one sign-in).</summary>
+    [JsonPropertyName("eway")]
+    public EndpointTestResult? Eway { get; init; }
 }

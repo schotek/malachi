@@ -10,6 +10,8 @@ import MalachiCore
 /// act through the responder chain and are validated by whichever
 /// responder owns the action (the window controller). The search field
 /// reports to the window, which hands the text to the list.
+/// The eWay-CRM button (`CRMToolbarItem`, docs/eway.md) sits right before
+/// the Assistant, in the main window's and the message windows' toolbars.
 /// The Assistant button (ui/internal/assistant; GTK `assistant_button`) sits
 /// right before More Actions while the `assistant-menu` setting is on;
 /// its menu is the window's `AssistantMenu`. While the assistant panel
@@ -40,6 +42,9 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         static let archive = NSToolbarItem.Identifier("archive")
         static let star = NSToolbarItem.Identifier("star")
         static let assistant = NSToolbarItem.Identifier("assistant")
+        /// eWay-CRM's button (`CRMToolbarItem`), before the Assistant;
+        /// hidden without an eWay-CRM account.
+        static let crm = NSToolbarItem.Identifier("crm")
         static let moreActions = NSToolbarItem.Identifier("moreActions")
     }
 
@@ -80,7 +85,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         ID.newMessage, ID.filter, ID.refresh, .flexibleSpace,
         ID.listSeparator,
         ID.reply, ID.replyAll, ID.forward, .flexibleSpace,
-        ID.archive, ID.trash, .space, ID.star, ID.assistant, ID.moreActions, ID.search,
+        ID.archive, ID.trash, .space, ID.crm, .space, ID.star, ID.assistant, ID.moreActions, ID.search,
     ]
 
     /// The inspector section after the search field while the assistant
@@ -93,7 +98,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     /// The items of the message section, for the message window's toolbar.
     static let messageSectionItems: [NSToolbarItem.Identifier] = [
         ID.reply, ID.replyAll, ID.forward, .flexibleSpace,
-        ID.archive, ID.trash, .space, ID.star, ID.assistant, ID.moreActions,
+        ID.archive, ID.trash, .space, ID.crm, .space, ID.star, ID.assistant, ID.moreActions,
     ]
 
     private weak var splitView: NSSplitView?
@@ -148,6 +153,10 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     private var searchExpanded = false
     /// The toolbar `makeToolbar` made, where the two search items swap.
     private weak var toolbar: NSToolbar?
+    /// The window's eWay-CRM controller for the CRM item (`CRMToolbarItem`),
+    /// set by the window controller; nil until the application installed
+    /// one, and then the item stays hidden.
+    var crmController: (@MainActor () -> CRMController?)?
 
     /// - Parameters:
     ///   - splitView: the split view whose dividers 0 and 1 the tracking
@@ -378,6 +387,10 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
             return button(id, image: Icon.archive, label: L10n.T("Archive"), action: Action.archive)
         case ID.star:
             return StarToolbarItem(itemIdentifier: id)
+        case ID.crm:
+            let it = CRMToolbarItem(itemIdentifier: id)
+            it.controllerProvider = crmController
+            return it
         case ID.assistant:
             // The Assistant menu (ui/internal/assistant), filled on open.
             guard let assistantMenu else { return nil }

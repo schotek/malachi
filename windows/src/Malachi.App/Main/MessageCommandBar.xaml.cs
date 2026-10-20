@@ -99,6 +99,9 @@ public sealed partial class MessageCommandBar : UserControl
     /// <summary>The Assistant's ✦ button (window.blp assistant_button); the main window gives it its menu.</summary>
     public Button Assistant => AssistantButton;
 
+    /// <summary>The eWay-CRM button (crm_button); the main window binds it to its CrmController.</summary>
+    internal Crm.CrmToolbarButton CrmButton => CrmCommand;
+
     /// <summary>The assistant panel's toggle (window.blp assistant_panel_button).</summary>
     public ToggleButton AssistantPanel => AssistantPanelToggle;
 

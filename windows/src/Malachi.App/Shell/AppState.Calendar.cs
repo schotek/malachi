@@ -184,8 +184,10 @@ public sealed partial class AppState
 
     /// <summary>
     /// The Add CalDAV Calendar dialog over <paramref name="owner"/> (macOS
-    /// <c>showAddCalDAVCalendar(from:onDone:)</c>): Preferences → Accounts
-    /// "+", the Calendar sidebar's Add Calendar…; <paramref name="onDone"/>
+    /// <c>showAddCalDAVCalendar(from:onDone:)</c>): Preferences → Calendar's
+    /// Add CalDAV Calendar…, Preferences → Integrations' CalDAV Calendar
+    /// Add…, the … menus' and the No Accounts page's Add CalDAV Calendar…,
+    /// the Calendar sidebar's Add Calendar…; <paramref name="onDone"/>
     /// runs after account.add with the new account.
     /// </summary>
     public void ShowAddCalDAVCalendar(Window owner, Action<AccountId>? onDone)

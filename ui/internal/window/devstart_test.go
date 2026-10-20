@@ -35,6 +35,10 @@ func TestParseDevStart(t *testing.T) {
 			t.Errorf("%q parsed", bad)
 		}
 	}
+	crmSteps, err := parseDevStart("crm-dialog;eway-wizard")
+	if err != nil || len(crmSteps) != 2 || crmSteps[0].Kind != devCrmDialog || crmSteps[1].Kind != devEwayWizard {
+		t.Errorf("crm steps %+v %v", crmSteps, err)
+	}
 	if s, err := parseDevStart(""); err != nil || len(s) != 0 {
 		t.Errorf("empty script: %v %v", s, err)
 	}

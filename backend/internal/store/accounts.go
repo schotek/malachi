@@ -46,7 +46,9 @@ const accountColumns = `id, email, realm, name, enabled, config, position, creat
 // AddAccount and UpdateAccount refuse.
 //
 // A calendar account (caldav, migration 0020) has the same form of its
-// CalDAVConfig.ServerURL: "cloud.example.org/remote.php/dav".
+// CalDAVConfig.ServerURL: "cloud.example.org/remote.php/dav". A CRM
+// account (eway, migration 0021) that of EwayConfig.ServiceURL:
+// "hosting.eway-crm.com/company".
 func RealmOf(cfg api.AccountConfig) string {
 	var site string
 	switch {
@@ -54,6 +56,8 @@ func RealmOf(cfg api.AccountConfig) string {
 		site = cfg.Jira.SiteURL
 	case cfg.Protocol() == api.AccountCalDAV && cfg.CalDAV != nil:
 		site = cfg.CalDAV.ServerURL
+	case cfg.Protocol() == api.AccountEway && cfg.Eway != nil:
+		site = cfg.Eway.ServiceURL
 	default:
 		return ""
 	}
@@ -87,6 +91,9 @@ func accountRealm(a *Account) error {
 	}
 	if a.Realm == "" && a.Config.Protocol() == api.AccountCalDAV {
 		return fmt.Errorf("caldav account without a server URL")
+	}
+	if a.Realm == "" && a.Config.Protocol() == api.AccountEway {
+		return fmt.Errorf("eway account without a service URL")
 	}
 	return nil
 }
@@ -131,7 +138,9 @@ func (s *Store) AddAccount(ctx context.Context, a *Account) error {
 	if a.Email == "" {
 		a.Email = NormalizeAddress(a.Config.Email)
 	}
-	if a.Email == "" {
+	// An eway account is the only kind without an address (its user may
+	// have none in the CRM; the realm alone tells it apart).
+	if a.Email == "" && a.Config.Protocol() != api.AccountEway {
 		return fmt.Errorf("add account: empty e-mail")
 	}
 	if err := accountRealm(a); err != nil {
@@ -242,7 +251,7 @@ func (s *Store) UpdateAccount(ctx context.Context, a *Account) error {
 	if a.Email == "" {
 		a.Email = NormalizeAddress(a.Config.Email)
 	}
-	if a.Email == "" {
+	if a.Email == "" && a.Config.Protocol() != api.AccountEway {
 		return fmt.Errorf("update account: empty e-mail")
 	}
 	if err := accountRealm(a); err != nil {
@@ -446,6 +455,10 @@ func (s *Store) DeleteAccount(ctx context.Context, id string, deleteLocalData bo
 	// Calendars, events and their occurrences, alerts, invitations and
 	// answers (migration 0020); its messages took their invitations along.
 	if err := deleteCalendarAccountTx(ctx, tx, id); err != nil {
+		return err
+	}
+	// Its CRM links (migration 0021), as the CRM account or the mail one.
+	if err := deleteCrmLinksTx(ctx, tx, id); err != nil {
 		return err
 	}
 	if checkPathSegment(id) == nil {

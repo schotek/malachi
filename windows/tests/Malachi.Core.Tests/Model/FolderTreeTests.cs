@@ -213,6 +213,12 @@ public sealed class FolderTreeTests
         Assert.True(FolderTree.InMail(TestAccount("j") with { Config = imap.Config with { Kind = AccountKind.Jira } }));
         Assert.False(FolderTree.InMail(CalDAVAccount("c")));
         Assert.False(FolderTree.InMail(CalDAVAccount("off", enabled: false)));
+        // An eWay-CRM account has no mail either (Go TestInMail "crm",
+        // docs/eway.md D1), switched off or not.
+        var crm = TestAccount("e") with { Config = imap.Config with { Kind = AccountKind.Eway } };
+        Assert.False(FolderTree.InMail(crm));
+        Assert.False(FolderTree.InMail(crm with { Enabled = false }));
+        Assert.Equal(["a"], FolderTree.MailSidebarAccounts([crm, imap]).Select(a => a.Id.Value));
 
         Account[] accounts = [CalDAVAccount("c"), graph, TestAccount("b", enabled: false), imap];
         Assert.Equal(["g", "a"], FolderTree.MailSidebarAccounts(accounts).Select(a => a.Id.Value));

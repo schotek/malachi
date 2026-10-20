@@ -23,51 +23,40 @@ public static class AccountsPage
 {
     /// <summary>
     /// The account name, or the address when unnamed (accounts_page.go
-    /// <c>accountRowTitle</c>); an unnamed Jira account shows its site's host
-    /// before the address (<see cref="Jira.SiteHost"/>). Unlike the sidebar's
-    /// account label (<c>accountLabel</c>) nothing is trimmed: this is the
-    /// name as the user typed it.
+    /// <c>accountRowTitle</c>, now <see cref="Integrations.RowFor"/>); an
+    /// unnamed Jira account shows its site's host before the address
+    /// (<see cref="Jira.SiteHost"/>). Unlike the sidebar's account label
+    /// (<c>accountLabel</c>) nothing is trimmed: this is the name as the user
+    /// typed it.
     /// </summary>
-    public static string AccountRowTitle(Account a)
-    {
-        ArgumentNullException.ThrowIfNull(a);
-        if (a.Config.Name.Length > 0)
-        {
-            return a.Config.Name;
-        }
-        var host = Jira.SiteHost(a.Config);
-        return host.Length > 0 ? host : a.Config.Email;
-    }
+    public static string AccountRowTitle(Account a) => Integrations.RowFor(a).Title;
 
     /// <summary>
-    /// The line under an account's name in Preferences → Accounts
-    /// (accounts_page.go <c>accountRowSubtitle</c>): the address of a mail
-    /// account, the site's host of a Jira account (its address when the title
+    /// The line under an account's name in Preferences → Accounts and
+    /// Integrations (accounts_page.go <c>accountRowSubtitle</c>, now
+    /// <see cref="Integrations.RowFor"/>): the address of a mail account, the
+    /// host of a Jira site or a CalDAV server (the address when the title
     /// shows the host already).
     /// </summary>
-    public static string AccountRowSubtitle(Account a)
-    {
-        ArgumentNullException.ThrowIfNull(a);
-        var host = Jira.SiteHost(a.Config);
-        return host.Length == 0 || host == AccountRowTitle(a) ? a.Config.Email : host;
-    }
+    public static string AccountRowSubtitle(Account a) => Integrations.RowFor(a).Subtitle;
 
     /// <summary>
     /// accounts_page.go <c>jiraAccountIcon</c>: the icon of a Jira account's
     /// row (Adwaita has no ticket; a GTK name, which IconGlyphs maps).
     /// </summary>
-    public const string JiraAccountIcon = "checkbox-checked-symbolic";
+    public const string JiraAccountIcon = Integrations.JiraIcon;
 
     /// <summary>
-    /// The row icon by account kind (accounts_page.go <c>accountIcon</c>): a
-    /// task list for a Jira account, the provider's icon otherwise
-    /// (<see cref="Provider.ProviderIcon"/>, the generic mail icon on
-    /// Windows, U6).
+    /// The row icon by account kind (accounts_page.go <c>accountIcon</c>): for
+    /// a mail account the provider's icon (<see cref="Provider.ProviderIcon"/>,
+    /// the generic mail icon on Windows, U6), for any other kind its icon
+    /// from <see cref="Integrations.RowFor"/> (a task list for Jira, a
+    /// calendar for CalDAV).
     /// </summary>
     public static string AccountIcon(Account a)
     {
         ArgumentNullException.ThrowIfNull(a);
-        return Jira.IsJira(a.Config) ? JiraAccountIcon : Provider.ProviderIcon(Provider.AccountProvider(a.Config));
+        return Integrations.ShowsInAccounts(a) ? Provider.ProviderIcon(Provider.AccountProvider(a.Config)) : Integrations.RowFor(a).Icon;
     }
 
     /// <summary>

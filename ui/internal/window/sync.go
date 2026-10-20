@@ -345,8 +345,12 @@ func (w *Window) editAccount(id api.AccountID) {
 	if !ok {
 		return
 	}
-	if accountEditor(a) == editorJira {
+	switch accountEditor(a) {
+	case editorJira:
 		w.editJiraAccount(a, 0)
+		return
+	case editorEway:
+		accountwizard.NewEwayEdit(w.client, w.log, a).Present(w)
 		return
 	}
 	accountwizard.NewEdit(w.client, w.log, a).Present(w)
@@ -455,6 +459,12 @@ func (w *Window) signInAgain(kind signin.Kind, reason api.ErrorCode, id api.Acco
 	// like a mail account's.
 	if a, ok := w.model.account(id); ok && accountEditor(a) == editorJira && editsPassword(kind, reason) {
 		w.editJiraAccount(a, reason)
+		return
+	}
+	// An eWay-CRM account's password is entered again in its own
+	// assistant (the mail assistant has no page for it).
+	if a, ok := w.model.account(id); ok && accountEditor(a) == editorEway {
+		accountwizard.NewEwayEdit(w.client, w.log, a).Present(w)
 		return
 	}
 	if editsPassword(kind, reason) {

@@ -70,6 +70,10 @@ public struct AccountKind: WireEnum {
     /// A calendar-only account on a CalDAV server (the `caldav` block): no
     /// mail, no folders; never shown in Mail.
     public static let caldav: AccountKind = "caldav"
+    /// A CRM account on an eWay-CRM instance (the `eway` block): no mail,
+    /// no folders; never shown in Mail, only on Settings → Integrations
+    /// (docs/eway.md D1).
+    public static let eway: AccountKind = "eway"
 }
 
 /// api.GraphSource: who holds the OAuth2 session of a Graph account.
@@ -294,6 +298,9 @@ public struct Capability: WireEnum {
     /// The account can have calendars (graph, caldav); it does not change
     /// with consent or sync state. A caldav account has exactly this one.
     public static let calendar: Capability = "calendar"
+    /// Messages of mail accounts can be saved to this account (crm.*,
+    /// docs/api.md §4.17). An eway account has exactly this one.
+    public static let crm: Capability = "crm"
 }
 
 /// api.JiraDeployment: where a Jira site runs.

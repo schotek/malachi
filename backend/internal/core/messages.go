@@ -137,6 +137,9 @@ func (s *messageService) Get(ctx context.Context, p api.MessageGetParams) (*api.
 	if err := s.b.attachInvitationCard(ctx, a, m, &out); err != nil {
 		return nil, err
 	}
+	// The CRM records of the message (crm_service.go): the local cache,
+	// checked again in the background when old.
+	out.Crm = s.b.crmRecordsOf(ctx, a, m)
 	return &api.MessageGetResult{Message: out}, nil
 }
 
@@ -462,6 +465,7 @@ func toAPISummary(m store.Message) api.MessageSummary {
 		HasAttachments: m.HasAttachments,
 		Size:           m.Size,
 		Invitation:     m.Invitation,
+		CrmSaved:       m.CrmSaved,
 	}
 }
 

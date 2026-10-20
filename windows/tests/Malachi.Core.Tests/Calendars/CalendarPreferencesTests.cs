@@ -157,9 +157,6 @@ public sealed class CalendarPreferencesTests
         Assert.Equal(3, empty.Count);
         Assert.Equal(Cal.PrefsSectionKind.Empty, empty[1].Kind);
         Assert.Equal(Cal.PrefsSectionKind.Add, empty[2].Kind);
-        Assert.False(P.ShowsInAccountsTab(s.Accounts[2]));
-        Assert.True(P.ShowsInAccountsTab(s.Accounts[0]));
-        Assert.True(P.ShowsInAccountsTab(imap));
         Assert.Equal("Display", P.DisplayGroup);
         Assert.Equal("Remove Account", P.RemoveAccount);
         Assert.Equal("No calendars yet.", P.NoCalendarsTitle);

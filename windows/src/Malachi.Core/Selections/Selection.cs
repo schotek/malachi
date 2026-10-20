@@ -55,6 +55,9 @@ public static class Selection
     /// <item>Forward forwards them all in one message, up to
     /// <see cref="MaxForward"/> rows; Open opens up to
     /// <see cref="MaxOpen"/> windows;</item>
+    /// <item>Save to eWay-CRM when every row can be saved, up to
+    /// <see cref="API.Limits.MaxCrmMessages"/> rows, as one save (never the
+    /// saved-state items);</item>
     /// <item>Reply, Reply All, Change Status, Load Images and Trust Sender are
     /// for one message, and off;</item>
     /// <item>in the outbox Trash cancels the sending of them all, and nothing
@@ -85,6 +88,7 @@ public static class Selection
         var junk = false;
         var markRead = false;
         var markUnread = false;
+        var crm = n <= API.Limits.MaxCrmMessages;
         foreach (var r in rows)
         {
             outbox = outbox && r.Outbox;
@@ -94,6 +98,7 @@ public static class Selection
             toggleFlag = toggleFlag && r.ToggleFlag;
             trash = trash && r.Trash;
             move = move && r.Move;
+            crm = crm && r.Crm;
             archive = archive || r.Archive;
             junk = junk || r.Junk;
             markRead = markRead || r.MarkRead;
@@ -109,6 +114,7 @@ public static class Selection
             junk = false;
             markRead = false;
             markUnread = false;
+            crm = false;
         }
         return new ActionFlags
         {
@@ -128,6 +134,7 @@ public static class Selection
             ToggleFlag = toggleFlag,
             Comment = rows[0].Comment,
             Unsupported = rows[0].Unsupported,
+            Crm = crm,
         };
     }
 

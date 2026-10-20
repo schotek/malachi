@@ -93,6 +93,11 @@ final class MessageViewController: NSViewController {
     /// (window.blp `bulk_bar`; not for an attached message), after the draft
     /// banner and before the remote-image bar.
     private let bulkBanner = BannerView()
+    /// The bar of a message saved in eWay-CRM, under the header
+    /// (`CRMBarView`; not for an attached message).
+    private let crmBar = CRMBarView(margins: NSEdgeInsets(
+        top: 2, left: MessageHeaderView.inset, bottom: 4, right: MessageHeaderView.inset))
+    private var crmClamp: ClampView?
     private let remoteBar: RemoteBarView
     /// The pictures kept on the mail server only (window.blp
     /// `pictures_bar`), below the remote-image bar; both may show.
@@ -190,6 +195,14 @@ final class MessageViewController: NSViewController {
             messagePage.addArrangedSubview(invitationClamp)
         }
         messagePage.addArrangedSubview(headerClamp)
+        if mode != .embedded {
+            let clamp = ClampView(maximum: 900, tight: 900, child: crmBar)
+            clamp.setContentHuggingPriority(.required, for: .vertical)
+            clamp.isHidden = true
+            crmBar.openURL = { CRMBarView.open($0) }
+            crmClamp = clamp
+            messagePage.addArrangedSubview(clamp)
+        }
         messagePage.addArrangedSubview(bodyContainer)
         // Under the body area, which scrolls on its own (a web view): the
         // button stays in sight at the bottom of the message.
@@ -357,6 +370,8 @@ final class MessageViewController: NSViewController {
         banner.reveal(false)
         draftBanner.reveal(false)
         bulkBanner.reveal(false)
+        crmBar.show(nil)
+        crmClamp?.isHidden = true
         hideBars()
         webView?.clear() // drop the pictures of the message before
         setPage(message: false)
@@ -394,6 +409,7 @@ final class MessageViewController: NSViewController {
         _ = view
         shownLoaded = lm
         renderBulk(s, lm)
+        renderCRM(s)
         renderInvitation(s, lm?.msg)
         let issue = renderHeaders(s, lm?.msg)
         if let text = issue?.eventBody {
@@ -430,6 +446,23 @@ final class MessageViewController: NSViewController {
     func refreshRemoteBar(_ lm: LoadedMessage) {
         renderRemoteBar(lm)
         renderPicturesBar(lm)
+    }
+
+    /// The eWay-CRM bar of `s` (`CRMState.record`): the loaded message's
+    /// record, or what a save or removal just reported; none without an
+    /// enabled eWay-CRM account or for an attached message.
+    private func renderCRM(_ s: MessageSummary) {
+        guard mode != .embedded else { return }
+        let crm = state.crm
+        crmBar.show(crm.account == nil ? nil : crm.record(for: s))
+        crmClamp?.isHidden = crmBar.isHidden
+    }
+
+    /// Redraws the eWay-CRM bar of the message on display (a save or a
+    /// removal ended) and leaves the rest alone.
+    func refreshCRM() {
+        guard mode != .embedded, let s = current else { return }
+        renderCRM(s)
     }
 
     /// Redraws the bulk strip of the message on display from `lm` and

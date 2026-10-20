@@ -101,6 +101,9 @@ final class MessageCellView: NSTableCellView {
     /// Invitation, Update, Cancelled (the subject struck through) or Reply,
     /// after the subject (docs/calendar.md §5.7).
     private let calendarPill = PillLabel()
+    /// The eWay pill of a message saved in eWay-CRM (`CRM.pillFor`; GTK
+    /// `crm_pill`), beside the Draft and Jira pills.
+    private let crmPill = PillLabel()
     private let eventLabel = NSTextField(labelWithString: "")
     private let subjectLine = NSStackView()
 
@@ -199,7 +202,7 @@ final class MessageCellView: NSTableCellView {
         issueKey.isHidden = true
         issueKey.setContentHuggingPriority(.required, for: .horizontal)
         issueKey.setContentCompressionResistancePriority(.required, for: .horizontal)
-        for pill in [statusPill, bulkPill, internalPill, draftPill, calendarPill] {
+        for pill in [statusPill, bulkPill, internalPill, draftPill, calendarPill, crmPill] {
             pill.font = Typo.caption
             pill.isHidden = true
         }
@@ -256,7 +259,7 @@ final class MessageCellView: NSTableCellView {
         line.alignment = .centerY
         line.spacing = RowMetrics.lineSpacing
 
-        for v in [issueKey, subject, calendarPill, bulkPill, statusPill, internalPill, draftPill] {
+        for v in [issueKey, subject, calendarPill, bulkPill, statusPill, internalPill, draftPill, crmPill] {
             subjectLine.addArrangedSubview(v)
         }
         subjectLine.orientation = .horizontal
@@ -300,6 +303,11 @@ final class MessageCellView: NSTableCellView {
     func configure(_ row: ListRow, message: RowMessage, reserveExpander: Bool, appearance: RowAppearance) {
         applyAppearance(appearance)
         invitation = invitationPill(row.message)
+        // A brand and a msgid: nothing from mail.
+        let pill = CRM.pillFor(row.message)
+        crmPill.stringValue = pill?.label ?? ""
+        crmPill.toolTip = pill?.tooltip
+        crmPill.isHidden = pill == nil
         if row.thread, let summary = row.summary {
             setThread(summaryThread(summary, expanded: row.expanded, loading: row.loading))
         } else {
@@ -543,6 +551,7 @@ final class MessageCellView: NSTableCellView {
         IssuePill.paint(bulkPill, IssuePill.bulkColours, emphasized: emphasized)
         IssuePill.paint(internalPill, IssuePill.internalColours, emphasized: emphasized)
         IssuePill.paint(draftPill, IssuePill.draftColours, emphasized: emphasized)
+        IssuePill.paint(crmPill, IssuePill.crmColours, emphasized: emphasized)
         date.textColor = secondary
         origin.textColor = secondary
         preview.textColor = secondary

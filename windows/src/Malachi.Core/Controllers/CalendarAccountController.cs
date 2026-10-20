@@ -487,7 +487,7 @@ public sealed partial class CalendarAccountController : IDisposable
     }
 
     /// <summary>
-    /// Remove Account (a CalDAV account's button): the Accounts page's
+    /// Remove Account (a CalDAV account's button): the Integrations page's
     /// question through <paramref name="confirm"/>, then account.remove with
     /// its check box as <c>deleteLocalData</c>; the section goes with the
     /// source's next snapshot (asked for at once). A failure is
@@ -508,8 +508,8 @@ public sealed partial class CalendarAccountController : IDisposable
         }
         var prompt = new AccountRemovalPrompt(
             L10n.T("Remove this account?"),
-            // TRANSLATORS: %s is the account's e-mail address.
-            L10n.T("%s will be removed from Malachi Mail. Mail on the server is not affected.", AccountsPage.AccountRowTitle(account)),
+            // The CalDAV sentence of the Integrations page (preferences_calendar.go removeAccount).
+            Integrations.RowFor(account).RemoveBody,
             L10n.T("_Remove"),
             L10n.T("Also delete _drafts and downloaded data"),
             ExtraDefault: true);

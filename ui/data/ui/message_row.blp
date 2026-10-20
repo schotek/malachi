@@ -195,6 +195,18 @@ ListBoxRow message_row {
           ]
         }
 
+        // A message saved in eWay-CRM (widget/message_row.go, crm.PillFor):
+        // the brand "eWay", tooltip "Saved in eWay-CRM".
+        Label crm_pill {
+          visible: false;
+          valign: center;
+
+          styles [
+            "issue-pill",
+            "crm-pill",
+          ]
+        }
+
         Label status_pill {
           visible: false;
           valign: center;

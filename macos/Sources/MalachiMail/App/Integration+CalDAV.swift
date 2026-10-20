@@ -5,9 +5,12 @@ import AppKit
 import MalachiCore
 
 /// The application's entry to the Add CalDAV Calendar sheet
-/// (docs/calendar.md §5.8): Settings → Accounts "+", the inset of an
-/// account without a calendar, the Calendar sidebar's Add Calendar… and
-/// any menu item call `showAddCalDAVCalendar(from:)`. The sheet works over
+/// (docs/calendar.md §5.8): the File menu's Add CalDAV Account…, the
+/// empty window's button, the inset of an account without a calendar,
+/// the Calendar sidebar's Add Calendar… and any menu item call
+/// `showAddCalDAVCalendar(from:)`; Settings → Integrations and Settings →
+/// Calendar present the sheet themselves over the settings' calendar
+/// source. The sheet works over
 /// the calendar source of the window it opens on (its snapshot lists the
 /// mail accounts invitations can leave from); the sidebars follow
 /// notify.accountsChanged after account.add.

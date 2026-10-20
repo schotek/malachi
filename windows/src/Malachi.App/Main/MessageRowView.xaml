@@ -222,6 +222,7 @@ result as bold runs built in code (never markup).
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBlock
                         x:Name="IssueKeyLabel"
@@ -273,6 +274,16 @@ result as bold runs built in code (never markup).
                         AutomationProperties.AccessibilityView="Raw"
                         IsDraft="True"
                         Text="{x:Bind Row.DraftText, Mode=OneWay}" />
+                    <!-- crm_pill (docs/eway.md §2.6): the eWay pill of a message
+                         saved in eWay-CRM, beside the bulk pill; the row's
+                         name says it (MessageRow.ToString). -->
+                    <controls:IssuePill
+                        x:Name="CrmPill"
+                        Grid.Column="7"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Hint="{x:Bind Row.CrmPillTooltip, Mode=OneWay}"
+                        IsCrm="True"
+                        Text="{x:Bind Row.CrmPillText, Mode=OneWay}" />
                 </Grid>
                 <TextBlock
                     x:Name="PreviewLabel"

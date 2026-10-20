@@ -30,6 +30,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/calendardata"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/integrations"
 	"github.com/schotek/malachi/ui/internal/mcpsetup"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/widget"
@@ -50,10 +51,15 @@ type PreferencesDialog struct {
 	cal          func() calendardata.DataSource // the main window's calendar source (Preferences → Calendar, G16); may be nil or return nil
 	calendarPage *calendarPrefs                 // the Calendar page while open (preferences_calendar.go)
 
-	accountsGroup *adw.PreferencesGroup
-	addAccount    *gtk.MenuButton
-	accountsEmpty *adw.ActionRow
-	accountRows   []*accountRow
+	// The account rows: mailList on Accounts, integrationList on
+	// Integrations (accounts_page.go); allAccounts is the last
+	// account.list in the daemon's order, rpc the client they are bound to.
+	rpc                  *client.Client
+	allAccounts          []api.Account
+	mailList             *accountList
+	integrationList      *accountList
+	integrationsPage     *adw.PreferencesPage
+	integrationsServices *adw.PreferencesGroup
 
 	launchAtLogin     *adw.SwitchRow
 	runInBackground   *adw.SwitchRow
@@ -159,16 +165,25 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		PreferencesDialog: b.GetObject("preferences_dialog").Cast().(*adw.PreferencesDialog),
 		log:               log.With("component", "preferences"),
 		assist:            as, cal: cal,
-		accountsGroup:     b.GetObject("accounts_group").Cast().(*adw.PreferencesGroup),
-		addAccount:        b.GetObject("add_account_button").Cast().(*gtk.MenuButton),
-		accountsEmpty:     b.GetObject("accounts_empty_row").Cast().(*adw.ActionRow),
-		launchAtLogin:     b.GetObject("launch_at_login").Cast().(*adw.SwitchRow),
-		runInBackground:   b.GetObject("run_in_background").Cast().(*adw.SwitchRow),
-		boardGroup:        b.GetObject("board_group").Cast().(*adw.PreferencesGroup),
-		boardShow:         b.GetObject("board_show").Cast().(*adw.SwitchRow),
-		boardDefaultStyle: b.GetObject("board_default_style").Cast().(*adw.ComboRow),
-		boardStartMode:    b.GetObject("board_start_mode").Cast().(*adw.ComboRow),
-		boardWindowsGroup: b.GetObject("board_windows_group").Cast().(*adw.PreferencesGroup),
+		mailList: &accountList{
+			page:  integrations.PageAccounts,
+			group: b.GetObject("accounts_group").Cast().(*adw.PreferencesGroup),
+			empty: b.GetObject("accounts_empty_row").Cast().(*adw.ActionRow),
+		},
+		integrationList: &accountList{
+			page:  integrations.PageIntegrations,
+			group: b.GetObject("integrations_group").Cast().(*adw.PreferencesGroup),
+			empty: b.GetObject("integrations_empty_row").Cast().(*adw.ActionRow),
+		},
+		integrationsPage:     b.GetObject("integrations_page").Cast().(*adw.PreferencesPage),
+		integrationsServices: b.GetObject("integrations_available_group").Cast().(*adw.PreferencesGroup),
+		launchAtLogin:        b.GetObject("launch_at_login").Cast().(*adw.SwitchRow),
+		runInBackground:      b.GetObject("run_in_background").Cast().(*adw.SwitchRow),
+		boardGroup:           b.GetObject("board_group").Cast().(*adw.PreferencesGroup),
+		boardShow:            b.GetObject("board_show").Cast().(*adw.SwitchRow),
+		boardDefaultStyle:    b.GetObject("board_default_style").Cast().(*adw.ComboRow),
+		boardStartMode:       b.GetObject("board_start_mode").Cast().(*adw.ComboRow),
+		boardWindowsGroup:    b.GetObject("board_windows_group").Cast().(*adw.PreferencesGroup),
 		boardWindows: [4]*adw.SpinRow{
 			b.GetObject("board_window_hot").Cast().(*adw.SpinRow),
 			b.GetObject("board_window_you").Cast().(*adw.SpinRow),
@@ -249,6 +264,7 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		d.bindMail(c, refreshStorage),
 		unbindStorage,
 		d.bindAccounts(c),
+		d.bindIntegrations(c),
 		d.bindCalendar(b, c),
 		d.bindMCP(),
 		d.bindAssistant(s),

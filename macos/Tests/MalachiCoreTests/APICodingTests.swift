@@ -1269,11 +1269,11 @@ import Testing
         (1005, "unauthenticated"), (1006, "readOnly"), (1007, "invitationsUnavailable"),
         (1100, "accountNotFound"), (1101, "folderNotFound"), (1102, "messageNotFound"), (1103, "threadNotFound"),
         (1104, "draftNotFound"), (1105, "attachmentNotFound"), (1106, "caseNotFound"),
-        (1107, "calendarNotFound"), (1108, "eventNotFound"),
+        (1107, "calendarNotFound"), (1108, "eventNotFound"), (1109, "crmItemNotFound"),
         (1200, "authRequired"), (1201, "authFailed"), (1202, "keyringError"), (1203, "oauthClientMissing"),
-        (1204, "calendarConsentRequired"),
+        (1204, "calendarConsentRequired"), (1205, "crmSignInUnsupported"),
         (1300, "offline"), (1301, "networkError"), (1302, "serverError"), (1303, "tlsError"), (1304, "serverTimeout"),
-        (1305, "messageGone"), (1306, "eventGone"),
+        (1305, "messageGone"), (1306, "eventGone"), (1307, "crmDuplicate"),
         (1400, "storageError"), (1401, "migrationFailed"),
         (1500, "malformedMessage"), (1501, "sanitizeFailed"), (1502, "attachmentTooBig"), (1503, "partNotFound"),
         (1504, "partNotDownloaded"), (1505, "unsubscribeFailed"), (1506, "quoteNotFound"),
@@ -1281,7 +1281,7 @@ import Testing
     ]
 
     @Test func errorCodesAreNamed() {
-        #expect(ErrorCode.all.count == 45 && Set(ErrorCode.all).count == 45)
+        #expect(ErrorCode.all.count == 48 && Set(ErrorCode.all).count == 48)
         #expect(ErrorCode.all.map(\.rawValue) == Self.goCodes.map { $0.0 })
         #expect(ErrorCode.all.map(\.name) == Self.goCodes.map { $0.1 })
         for code in ErrorCode.all {
@@ -1381,11 +1381,13 @@ import Testing
         "event.list", "event.get", "event.search", "event.create", "event.update",
         "event.delete", "event.respond", "event.snoozeAlert", "event.dismissAlert",
         "invitation.list", "invitation.respond", "invitation.applyCancel",
+        "account.detectEway",
+        "crm.lookup", "crm.search", "crm.save", "crm.remove",
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 96)
-        #expect(Set(API.allMethods).count == 96, "no duplicates")
+        #expect(API.allMethods.count == 101)
+        #expect(Set(API.allMethods).count == 101, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)
@@ -1434,7 +1436,8 @@ import Testing
                                     "message.unsubscribe",
                                     "account.discoverCalDAV", "account.listCalDAVCalendars", "calendar.freeBusy",
                                     "calendar.findFreeTime", "event.create", "event.update", "event.delete",
-                                    "event.respond", "invitation.respond"]
+                                    "event.respond", "invitation.respond",
+                                    "account.detectEway", "crm.lookup", "crm.search", "crm.save", "crm.remove"]
         for m in API.methods where !special.contains(m.name) {
             #expect(m.timeout == RPCTimeouts.default, "\(m.name) should use the default timeout")
         }

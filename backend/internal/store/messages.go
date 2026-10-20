@@ -89,6 +89,11 @@ type Message struct {
 	// (ListMessages, GetMessage, SearchMessages, the thread queries) for
 	// api.MessageSummary.Invitation; nil without one. Read only.
 	Invitation *api.InvitationSummary
+
+	// CrmSaved: a CRM link of an enabled account names the message's key
+	// (crm_links, migration 0021), filled by the listings with Invitation
+	// for api.MessageSummary.CrmSaved. Read only.
+	CrmSaved bool
 }
 
 // MessageRef identifies a message whose body is still to be fetched, by

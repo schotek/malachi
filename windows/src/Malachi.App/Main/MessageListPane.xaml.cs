@@ -286,6 +286,15 @@ public sealed partial class MessageListPane : UserControl
     /// </summary>
     internal AssistantMenu? AssistantMenu { get; set; }
 
+    /// <summary>
+    /// The main window's eWay-CRM actions (MainWindow.Crm.cs): the message
+    /// menu's Save to eWay-CRM… of the selection, or for one saved message
+    /// Open in eWay-CRM, Edit Links… and Remove from eWay-CRM
+    /// (contextmenu.go CrmSave, CrmOpen, CrmEditLinks, CrmRemove); none
+    /// before the Integration.
+    /// </summary>
+    internal Malachi.Core.Controllers.CrmController? Crm { get; set; }
+
     /// <summary>A conversation row's fold arrow (threads.go toggleThread).</summary>
     internal void ToggleThread(MessageRow row)
     {
@@ -909,6 +918,11 @@ public sealed partial class MessageListPane : UserControl
         var flags = c.Flags;
         var assistant = AssistantMenu is { Shown: true } shown ? shown : null;
         var state = ContextMenu.MessageState.Of(flags, draft: l.Mailbox.Model.InDrafts(first.Message), assistant: assistant is not null);
+        if (Crm is { } crm)
+        {
+            // crm.OfferFor of the selected rows (MessageState.SetCrm).
+            state = state.WithCrm(crm.Offer);
+        }
         var labels = new ContextMenu.Labels { Comment = flags.Comment, Flagged = flags.Flagged, Outbox = flags.Outbox, Count = rows.Count };
         var menu = new MenuFlyout();
         foreach (var group in ContextMenu.MessageItems(state))
@@ -972,6 +986,14 @@ public sealed partial class MessageListPane : UserControl
                     item = sub;
                     break;
                 }
+            case ContextMenu.ItemId.CrmSave or ContextMenu.ItemId.CrmOpen or ContextMenu.ItemId.CrmEditLinks or ContextMenu.ItemId.CrmRemove:
+                {
+                    var crm = new MenuFlyoutItem { IsEnabled = it.Enabled && Crm is not null };
+                    var id = it.Id;
+                    crm.Click += (_, _) => RunCrm(id);
+                    item = crm;
+                    break;
+                }
             default:
                 {
                     var command = CommandOf(c, it.Id);
@@ -984,6 +1006,31 @@ public sealed partial class MessageListPane : UserControl
         MnemonicLabel.Apply(item, ContextMenu.Label(it.Id, labels));
         AutomationProperties.SetAutomationId(item, "ContextMenu." + ContextMenu.Name(it.Id));
         return item;
+    }
+
+    // context_menus.go messageMenuActions: the eWay-CRM items run the main
+    // window's CrmController over the selection.
+    private void RunCrm(ContextMenu.ItemId id)
+    {
+        if (Crm is not { } c)
+        {
+            return;
+        }
+        switch (id)
+        {
+            case ContextMenu.ItemId.CrmSave:
+                c.Save();
+                break;
+            case ContextMenu.ItemId.CrmOpen:
+                c.Open();
+                break;
+            case ContextMenu.ItemId.CrmEditLinks:
+                c.EditLinks();
+                break;
+            case ContextMenu.ItemId.CrmRemove:
+                c.Remove();
+                break;
+        }
     }
 
     // context_menus.go messageMenuActions: the window's command of an item.

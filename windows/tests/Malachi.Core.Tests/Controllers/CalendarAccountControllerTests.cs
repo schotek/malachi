@@ -412,7 +412,7 @@ public sealed class CalendarAccountControllerTests
         Assert.Equal(0, h.Params.Count(API.AccountRemove.Name));
         var prompt = Assert.Single(prompts);
         Assert.Equal("Remove this account?", prompt.Heading);
-        Assert.Equal("Nextcloud will be removed from Malachi Mail. Mail on the server is not affected.", prompt.Body);
+        Assert.Equal("Nextcloud will be removed from Malachi Mail. Calendars on the server are not affected.", prompt.Body);
         Assert.True(prompt.ExtraDefault);
 
         // Confirmed without the local data.

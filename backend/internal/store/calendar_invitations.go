@@ -442,6 +442,10 @@ func attachInvitationsTo(ctx context.Context, q querier, msgs []*Message) error 
 	if len(msgs) == 0 {
 		return nil
 	}
+	// Every listing passes here; the CRM flag (migration 0021) rides along.
+	if err := attachCrmSavedTo(ctx, q, msgs); err != nil {
+		return err
+	}
 	ids := make([]string, 0, len(msgs))
 	at := make(map[string][]*Message, len(msgs))
 	for _, m := range msgs {

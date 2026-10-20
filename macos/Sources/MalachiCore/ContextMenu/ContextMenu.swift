@@ -40,6 +40,15 @@ public enum ContextMenu {
         case trash
         /// The submenu of the Assistant's actions on the message.
         case assistant
+        /// Opens the Save to eWay-CRM dialog over the selection
+        /// (`CRM.Dialog`); several rows save together.
+        case crmSave
+        /// `crmOpen`, `crmEditLinks` and `crmRemove` replace `crmSave` for
+        /// one saved message: `CRM.savedMenu()`'s items, Remove after
+        /// `CRM.removeQuestion`.
+        case crmOpen
+        case crmEditLinks
+        case crmRemove
         // The sidebar's menus.
         /// Synchronises the folder clicked, or the account from its heading.
         case checkMail
@@ -88,8 +97,20 @@ public enum ContextMenu {
         public var trash = false
         public var changeStatus = false
         public var assistant = false
+        /// `CRM.offer(for:rows:)` of the selected rows (`shown`, `enabled`,
+        /// `saved`; `setCrm`): the eWay-CRM items are left out unless
+        /// offered, Save is disabled unless `crm`, and one saved message
+        /// has the saved-state items instead of Save.
+        public var offerCrm = false, crm = false, crmSaved = false
 
         public init() {}
+
+        /// contextmenu.MessageState.SetCrm.
+        public mutating func setCrm(_ o: CRM.Offer) {
+            offerCrm = o.shown
+            crm = o.enabled
+            crmSaved = o.saved
+        }
 
         /// The state of the window's action flags (`messageActionState`).
         public init(flags f: ActionFlags, draft: Bool, changeStatus: Bool, assistant: Bool) {
@@ -119,10 +140,12 @@ public enum ContextMenu {
         }
     }
 
-    /// contextmenu.MessageItems: opening; answering; read, star and status;
-    /// where the message goes; the Assistant. Empty groups are left out.
-    /// For several rows Open opens each, Forward forwards them in one
-    /// message, and Reply, Reply All and Change Status are not offered.
+    /// contextmenu.MessageItems: opening; answering; eWay-CRM; read, star
+    /// and status; where the message goes; the Assistant. Empty groups are
+    /// left out. For several rows Open opens each, Forward forwards them in
+    /// one message, Save to eWay-CRM saves them together, and Reply, Reply
+    /// All, Change Status and the saved-state eWay-CRM items are not
+    /// offered.
     public static func messageItems(_ s: MessageState) -> [[Item]] {
         let several = s.count > 1
         let open = Item(s.draft && !several ? .editDraft : .openMessage, !several || s.open)
@@ -130,6 +153,12 @@ public enum ContextMenu {
         if s.offerReply, !several { answer.append(Item(.reply, s.reply)) }
         if s.offerReplyAll, !several { answer.append(Item(.replyAll, s.replyAll)) }
         if s.offerForward { answer.append(Item(.forward, s.forward)) }
+        var crmItems: [Item] = []
+        if s.offerCrm {
+            crmItems = s.crmSaved && !several
+                ? [Item(.crmOpen, true), Item(.crmEditLinks, true), Item(.crmRemove, true)]
+                : [Item(.crmSave, s.crm)]
+        }
         var mark: [Item] = []
         if s.markRead { mark.append(Item(.markRead, true)) }
         if s.markUnread { mark.append(Item(.markUnread, true)) }
@@ -141,7 +170,7 @@ public enum ContextMenu {
         if s.offerJunk { move.append(Item(.junk, s.junk)) }
         if s.offerTrash || s.outbox { move.append(Item(.trash, s.trash)) }
         let assistant = s.assistant ? [Item(.assistant, true)] : []
-        return [[open], answer, mark, move, assistant].filter { !$0.isEmpty }
+        return [[open], answer, crmItems, mark, move, assistant].filter { !$0.isEmpty }
     }
 
     /// contextmenu.FolderState: what the sidebar knows of the folder

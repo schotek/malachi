@@ -158,6 +158,9 @@ internal sealed partial class ConversationTimelineView : UserControl
         tokens.Add(settings.OnChange(SettingsKey.MonospacePlainText, ApplyBodyFont));
         tokens.Add(settings.OnChange(SettingsKey.MonochromeAvatars, OnMonochromeChanged));
         services.Attachments.SavingAllChanged += OnSavingAllChanged;
+        // The eWay-CRM bar of every open card follows the application's CRM
+        // state (a save or removal ended, a record arrived; docs/eway.md).
+        services.State.Crm.Changed += OnCrmChanged;
     }
 
     /// <summary>What Collapse All / Expand All offers changed (the host's strip shows it while the timeline shows).</summary>
@@ -526,6 +529,7 @@ internal sealed partial class ConversationTimelineView : UserControl
         }
         tokens.Clear();
         Services.Attachments.SavingAllChanged -= OnSavingAllChanged;
+        Services.State.Crm.Changed -= OnCrmChanged;
         if (waitingForLayout)
         {
             Column.LayoutUpdated -= OnceLaidOut;
@@ -537,6 +541,14 @@ internal sealed partial class ConversationTimelineView : UserControl
 
     /// <inheritdoc/>
     protected override AutomationPeer OnCreateAutomationPeer() => new ConversationGroupPeer(this, nameof(ConversationTimelineView), AutomationControlType.Pane);
+
+    private void OnCrmChanged(object? sender, EventArgs e)
+    {
+        foreach (var c in cards.Values)
+        {
+            c.RenderCrm();
+        }
+    }
 
     private void OnSavingAllChanged(object? sender, MessageId id)
     {

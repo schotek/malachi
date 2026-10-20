@@ -5,8 +5,10 @@ using Adw 1;
 // Preferences dialog, opened by the app.preferences action (Ctrl+,). Object
 // IDs are looked up from ui/internal/window/preferences.go; keep them in sync.
 //
-// The "Accounts" page is owned by the daemon (account.list / account.remove
-// / account.setEnabled; rows are built in ui/internal/window/accounts_page.go).
+// The "Accounts" page (mail accounts) and the "Integrations" page (every
+// other account) are owned by the daemon (account.list / account.remove /
+// account.setEnabled / account.reorder; rows are built in
+// ui/internal/window/accounts_page.go).
 // The other pages are bound to GSettings (ui/internal/settings), except the
 // "Mail" group, which is owned by the daemon and goes through config.get /
 // config.set, and "Launch at Login", whose state is decided by the
@@ -32,13 +34,13 @@ Adw.PreferencesDialog preferences_dialog {
     Adw.PreferencesGroup accounts_group {
       title: _("Mail Accounts");
 
-      // A menu of the two assistants: a mail account or a Jira account
-      // (window/accounts_page.go, the "prefs" action group).
-      header-suffix: MenuButton add_account_button {
+      // The mail account assistant (window/accounts_page.go, the "prefs"
+      // action group); Jira and CalDAV are added on the Integrations page.
+      header-suffix: Button add_account_button {
         icon-name: "list-add-symbolic";
         tooltip-text: _("Add Account");
         valign: center;
-        menu-model: add_account_menu;
+        action-name: "prefs.add-account";
 
         styles [
           "flat",
@@ -51,6 +53,24 @@ Adw.PreferencesDialog preferences_dialog {
         sensitive: false;
       }
     }
+  }
+
+  // Every account that is not a mail account (Jira, CalDAV) and the
+  // catalogue of services that can be added. Its texts come from
+  // ui/internal/integrations, set in Go (window/integrations_page.go); the
+  // rows are built there and in window/accounts_page.go.
+  Adw.PreferencesPage integrations_page {
+    name: "integrations";
+    icon-name: "application-x-addon-symbolic";
+
+    Adw.PreferencesGroup integrations_group {
+      Adw.ActionRow integrations_empty_row {
+        use-markup: false;
+        sensitive: false;
+      }
+    }
+
+    Adw.PreferencesGroup integrations_available_group {}
   }
 
   Adw.PreferencesPage general_page {
@@ -558,20 +578,6 @@ Adw.PreferencesDialog preferences_dialog {
           ]
         }
       }
-    }
-  }
-}
-
-menu add_account_menu {
-  section {
-    item {
-      label: _("_Add Account…");
-      action: "prefs.add-account";
-    }
-
-    item {
-      label: _("Add _Jira Account…");
-      action: "prefs.add-jira-account";
     }
   }
 }

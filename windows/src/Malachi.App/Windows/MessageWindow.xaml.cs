@@ -3,7 +3,7 @@
 
 // Port of macos/Sources/MalachiMail/Windows/MessageWindowController.swift
 // (init, show, rendered, refreshStar, windowWillClose, the actions and
-// their validation); GTK: ui/internal/window/message_window.go
+// their validation, the eWay-CRM item); GTK: ui/internal/window/message_window.go
 // (newMessageWindow: the msg.* group, the star, the outbox banner's retry,
 // the reply buttons, the single-key shortcuts; setSeen; show) and
 // message_view.go openMessageWindow's close-request. One message in its
@@ -59,6 +59,7 @@ public sealed partial class MessageWindow : Window, IMessageWindowHandle
         ViewHost.Content = View;
         WireCommands();
         WireAssistant();
+        WireCrm();
         View.Reader.Rendered += (_, r) => Rendered(r);
         Activated += (_, e) =>
         {
@@ -115,6 +116,17 @@ public sealed partial class MessageWindow : Window, IMessageWindowHandle
         // msg.change-status: the Change Status menu of this window's card.
         c.ChangeStatus.Handler = () => View.OpenStatusMenu();
         RefreshActions();
+    }
+
+    // The eWay-CRM button of this window's command row (macOS
+    // MessageWindowController's CRM item, GTK message_window.blp crm_button):
+    // its own CrmController over this window's message, redrawn on the
+    // application's CRM state and on every render.
+    private void WireCrm()
+    {
+        var c = Crm.CrmWindowSupport.Make(services.State, this, ToastsHost, () => [View.Reader.Current ?? summary]);
+        var refresh = Crm.CrmWindowSupport.Bind(View.CrmButton, c, services.State, this);
+        View.Reader.Rendered += (_, _) => refresh();
     }
 
     // assistant.go bindAssistantButton for a message window: the Assistant

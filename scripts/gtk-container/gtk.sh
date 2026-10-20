@@ -207,6 +207,15 @@ keyfile=$XDG_CONFIG_HOME/glib-2.0/settings/keyfile
 if [ "$X11_MODE" != dev ] || [ ! -f "$keyfile" ]; then
   printf "[io/github/schotek/Malachi]\nwindow-width=1280\nwindow-height=820\n" > "$keyfile"
 fi
+# GTK under X11 has no settings daemon to ask, so the look of a GNOME
+# desktop comes from gtk-4.0/settings.ini: the UI font of GNOME 47+
+# (adwaita-fonts-all in the image), the Adwaita icon and cursor themes and
+# GNOME'"'"'s font rendering. dev keeps the user'"'"'s own file once written.
+gtkini=$XDG_CONFIG_HOME/gtk-4.0/settings.ini
+if [ "$X11_MODE" != dev ] || [ ! -f "$gtkini" ]; then
+  mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
+  printf "[Settings]\ngtk-font-name=Adwaita Sans 11\ngtk-icon-theme-name=Adwaita\ngtk-cursor-theme-name=Adwaita\ngtk-cursor-theme-size=24\ngtk-xft-antialias=1\ngtk-xft-hinting=1\ngtk-xft-hintstyle=hintslight\ngtk-xft-rgba=rgb\ngtk-hint-font-metrics=1\n" > "$gtkini"
+fi
 gw=$(python3 -c "import struct,socket
 for l in open(\"/proc/net/route\").read().splitlines()[1:]:
     f=l.split()

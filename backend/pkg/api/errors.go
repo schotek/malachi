@@ -62,6 +62,10 @@ const (
 	// CodeEventNotFound: no stored event with that id, or the recurrence id
 	// names no occurrence of it.
 	CodeEventNotFound ErrorCode = 1108
+	// CodeCrmItemNotFound: a CRM item named in crm.save (link, superior)
+	// is not an item of that CRM account, or the saved message's item is
+	// gone from the CRM (crm.remove).
+	CodeCrmItemNotFound ErrorCode = 1109
 
 	// 1200–1299: authentication.
 	CodeAuthRequired ErrorCode = 1200 // credentials missing or token expired; see notify.authRequired
@@ -74,6 +78,9 @@ const (
 	// CodeCalendarConsentRequired: the account's sign-in does not allow
 	// calendar access; Error.Data is a CalendarConsentRequiredData.
 	CodeCalendarConsentRequired ErrorCode = 1204
+	// CodeCrmSignInUnsupported: the CRM instance cannot be signed in to by
+	// this version; Error.Data is a CrmSignInUnsupportedData.
+	CodeCrmSignInUnsupported ErrorCode = 1205
 
 	// 1300–1399: network and remote servers.
 	CodeOffline      ErrorCode = 1300
@@ -90,6 +97,10 @@ const (
 	// CodeEventGone: the server no longer has the event (deleted or moved
 	// elsewhere); the next pass removes the local copy.
 	CodeEventGone ErrorCode = 1306
+	// CodeCrmDuplicate: the CRM refused the message as a duplicate of an
+	// item the daemon cannot find (someone's private item, or one saved
+	// without a Message-ID).
+	CodeCrmDuplicate ErrorCode = 1307
 
 	// 1400–1499: local storage.
 	CodeStorageError    ErrorCode = 1400
@@ -155,11 +166,13 @@ var codeNames = map[ErrorCode]string{
 	CodeCaseNotFound:            "caseNotFound",
 	CodeCalendarNotFound:        "calendarNotFound",
 	CodeEventNotFound:           "eventNotFound",
+	CodeCrmItemNotFound:         "crmItemNotFound",
 	CodeAuthRequired:            "authRequired",
 	CodeAuthFailed:              "authFailed",
 	CodeKeyringError:            "keyringError",
 	CodeOAuthClientMissing:      "oauthClientMissing",
 	CodeCalendarConsentRequired: "calendarConsentRequired",
+	CodeCrmSignInUnsupported:    "crmSignInUnsupported",
 	CodeOffline:                 "offline",
 	CodeNetworkError:            "networkError",
 	CodeServerError:             "serverError",
@@ -167,6 +180,7 @@ var codeNames = map[ErrorCode]string{
 	CodeServerTimeout:           "serverTimeout",
 	CodeMessageGone:             "messageGone",
 	CodeEventGone:               "eventGone",
+	CodeCrmDuplicate:            "crmDuplicate",
 	CodeStorageError:            "storageError",
 	CodeMigrationFailed:         "migrationFailed",
 	CodeMalformedMessage:        "malformedMessage",

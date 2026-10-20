@@ -141,6 +141,19 @@ func (s *Server) registerBackend(b api.Backend) {
 	s.handlers[api.MethodBoardRunEnd] = wrap(brd.RunEnd)
 
 	s.registerCalendar(b)
+	s.registerCrm(b)
+}
+
+// registerCrm binds the CRM methods (docs/api.md §4.1, §4.17).
+func (s *Server) registerCrm(b api.Backend) {
+	acc, crm := b.Accounts(), b.Crm()
+
+	s.handlers[api.MethodAccountDetectEway] = wrap(acc.DetectEway)
+
+	s.handlers[api.MethodCrmLookup] = wrap(crm.Lookup)
+	s.handlers[api.MethodCrmSearch] = wrap(crm.Search)
+	s.handlers[api.MethodCrmSave] = wrap(crm.Save)
+	s.handlers[api.MethodCrmRemove] = wrap(crm.Remove)
 }
 
 // registerCalendar binds the calendar methods (docs/api.md §4.1, §4.14–

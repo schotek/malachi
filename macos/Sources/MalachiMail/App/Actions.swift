@@ -75,6 +75,15 @@ import MalachiCore
     @objc optional func setAssistantTarget(_ sender: Any?)
     @objc optional func setUpAssistant(_ sender: Any?)
 
+    // eWay-CRM (ui/internal/crm, docs/eway.md): Save to eWay-CRM… on the
+    // selection (several together) or a message window's message, and for
+    // one saved message Open in eWay-CRM, Edit Links… and Remove from
+    // eWay-CRM. The main window and the message windows answer them.
+    @objc optional func crmSave(_ sender: Any?)
+    @objc optional func crmOpen(_ sender: Any?)
+    @objc optional func crmEditLinks(_ sender: Any?)
+    @objc optional func crmRemove(_ sender: Any?)
+
     // Compose window (compose.blp).
     @objc optional func sendMessage(_ sender: Any?)
     @objc optional func saveDraft(_ sender: Any?)
@@ -139,6 +148,12 @@ enum Action {
     static let summarizeUnread = #selector(MalachiActions.summarizeUnread(_:))
     static let setAssistantTarget = #selector(MalachiActions.setAssistantTarget(_:))
     static let setUpAssistant = #selector(MalachiActions.setUpAssistant(_:))
+
+    static let crmSave = #selector(MalachiActions.crmSave(_:))
+    static let crmOpen = #selector(MalachiActions.crmOpen(_:))
+    static let crmEditLinks = #selector(MalachiActions.crmEditLinks(_:))
+    static let crmRemove = #selector(MalachiActions.crmRemove(_:))
+    static let crmActions: Set<Selector> = [crmSave, crmOpen, crmEditLinks, crmRemove]
 
     static let sendMessage = #selector(MalachiActions.sendMessage(_:))
     static let saveDraft = #selector(MalachiActions.saveDraft(_:))

@@ -34,7 +34,7 @@ public sealed class ApiRoundTripTests
         """{"source":"daemon","goaAccountId":"account_1","provider":"office365","clientId":"c","tenantId":"common","authUrl":"https://a","tokenUrl":"https://t","scopes":["s1","s2"]}""";
 
     private const string Config =
-        """{"name":"Work","email":"me@example.org","displayName":"Me","kind":"imap","imap":@server@,"smtp":@server@,"oauth2":@oauth2@,"graph":{"source":"goa","goaAccountId":"account_1"},"jira":@jira@,"caldav":@calcaldavconfig@,"calendar":@calconfig@,"syncIntervalSeconds":300}""";
+        """{"name":"Work","email":"me@example.org","displayName":"Me","kind":"imap","imap":@server@,"smtp":@server@,"oauth2":@oauth2@,"graph":{"source":"goa","goaAccountId":"account_1"},"jira":@jira@,"caldav":@calcaldavconfig@,"eway":@ewayconfig@,"calendar":@calconfig@,"syncIntervalSeconds":300}""";
 
     private const string Error = """{"code":1302,"message":"550 no","data":{"limit":1,"size":2}}""";
 
@@ -46,7 +46,7 @@ public sealed class ApiRoundTripTests
     private const string Outbox = """{"state":"failed","attempts":3,"nextAttemptAt":"2026-09-02T12:00:00.5Z","error":@error@}""";
 
     private const string Summary =
-        """{"id":"m_1","accountId":"acc_1","folderId":"f_outbox","threadId":"t_9","from":[@address@],"to":[{"address":"me@example.org"}],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen","pinned"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"issue":@itemissue@,"bulk":@bulk@,"invitation":@calinvitationsummary@}""";
+        """{"id":"m_1","accountId":"acc_1","folderId":"f_outbox","threadId":"t_9","from":[@address@],"to":[{"address":"me@example.org"}],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen","pinned"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"issue":@itemissue@,"bulk":@bulk@,"invitation":@calinvitationsummary@,"crmSaved":true}""";
 
     private const string Bulk = """{"kind":"list","listId":"golang-nuts.googlegroups.com","domain":"googlegroups.com"}""";
 
@@ -56,7 +56,7 @@ public sealed class ApiRoundTripTests
         """{"partId":"2.1","filename":"image001.png","contentType":"image/png","size":100,"inline":true,"contentId":"image001@example.org","remote":true}""";
 
     private const string Message =
-        """{"id":"m_1","accountId":"acc_1","folderId":"f_inbox","threadId":"t_9","from":[@address@],"to":[@address@],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"issue":@itemissue@,"cc":[@address@],"bcc":[@address@],"replyTo":[@address@],"rfcMessageId":"<x@example.org>","inReplyTo":"<w@example.org>","references":["<v@example.org>","<w@example.org>"],"attachments":[@attachment@],"headers":{"Auto-Submitted":"no"},"bulk":@bulk@,"unsubscribe":@unsubscribe@,"invitation":@calinvitationcard@}""";
+        """{"id":"m_1","accountId":"acc_1","folderId":"f_inbox","threadId":"t_9","from":[@address@],"to":[@address@],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"issue":@itemissue@,"cc":[@address@],"bcc":[@address@],"replyTo":[@address@],"rfcMessageId":"<x@example.org>","inReplyTo":"<w@example.org>","references":["<v@example.org>","<w@example.org>"],"attachments":[@attachment@],"headers":{"Auto-Submitted":"no"},"bulk":@bulk@,"unsubscribe":@unsubscribe@,"invitation":@calinvitationcard@,"crm":[@crmrecord@],"crmSaved":true}""";
 
     private const string Blocked =
         """{"remoteImages":3,"remoteStyles":1,"remoteFonts":0,"scripts":1,"forms":0,"eventHandlers":2,"dangerousUrls":0,"embeddedFrames":0,"trackingPixels":1}""";
@@ -245,6 +245,19 @@ public sealed class ApiRoundTripTests
     private const string CalInvitationCard =
         """{@calinvitationsummarymembers@,"partId":"2","uid":"abc@example.org","recurrenceId":"2026-10-14T08:00:00Z","sequence":2,"endDate":"2026-10-15","timeZone":"Europe/Prague","recurrence":@calrecurrence@,"location":"Room B","videoCall":@calvideocall@,"notes":"Agenda","organizerMismatch":true,"attendeeCount":4,"attendees":[@calattendee@],"me":@calinvitationme@,"response":"needsAction","respondedAt":"2026-10-14T09:00:00Z","eventId":"ev_1","calendarId":"cal_1","previous":@calinvitationprevious@,"conflicts":[@calinvitationconflict@],"day":@calinvitationday@,"targets":[@calinvitationtarget@],"fixedTarget":true,"canRespond":true,"canProposeNewTime":true,"replyVia":"mail","replyAccountId":"acc_2","replyTo":@address@,"replyApplied":true}""";
 
+    // The CRM (Crm.cs): every member named, optional ones present.
+
+    private const string EwayConfig =
+        """{"serviceUrl":"https://hosting.eway-crm.com/acme","username":"jana","userGuid":"0b9e3d2c-1a2b-4c3d-8e9f-001122334455","followThreads":true}""";
+
+    private const string CrmItem =
+        """{"kind":"deal","guid":"00000000-0000-4000-8000-000000000005","name":"Fleet renewal","detail":"Open","reason":"contact","superior":true,"url":"https://open.eway-crm.com/?l=5"}""";
+
+    private const string CrmItemRef = """{"kind":"contact","guid":"00000000-0000-4000-8000-000000000001"}""";
+
+    private const string CrmRecord =
+        """{"accountId":"acc_e","itemGuid":"00000000-0000-4000-8000-000000000100","savedAt":"2026-10-17T10:00:00Z","checkedAt":"2026-10-17T11:00:00Z","private":true,"auto":true,"items":[@crmitem@],"url":"https://open.eway-crm.com/?l=e"}""";
+
     // Every record: a JSON document and, when the encoding adds members, what it encodes to.
     private static readonly Dictionary<string, Sample> Samples = new(StringComparer.Ordinal)
     {
@@ -289,7 +302,7 @@ public sealed class ApiRoundTripTests
         [nameof(AccountTestParams)] = Case<AccountTestParams>("""{"accountId":"acc_1","config":@config@,"credentials":{"oauthSession":"s_1"}}"""),
         [nameof(EndpointTestResult)] = Case<EndpointTestResult>("""{"ok":false,"error":@error@,"capabilities":["IDLE","CONDSTORE"],"latencyMs":120}"""),
         [nameof(AccountTestResult)] = Case<AccountTestResult>(
-            """{"imap":{"ok":true,"latencyMs":1},"smtp":{"ok":false,"error":{"code":1201,"message":"535"},"latencyMs":2},"graph":{"ok":true,"capabilities":["graph"],"latencyMs":3},"jira":{"ok":true,"capabilities":["cloud","gateway"],"latencyMs":4},"caldav":{"ok":true,"capabilities":["calendar-access","sync-collection"],"latencyMs":5}}"""),
+            """{"imap":{"ok":true,"latencyMs":1},"smtp":{"ok":false,"error":{"code":1201,"message":"535"},"latencyMs":2},"graph":{"ok":true,"capabilities":["graph"],"latencyMs":3},"jira":{"ok":true,"capabilities":["cloud","gateway"],"latencyMs":4},"caldav":{"ok":true,"capabilities":["calendar-access","sync-collection"],"latencyMs":5},"eway":{"ok":true,"latencyMs":6}}"""),
         // Attachments.cs
         [nameof(AttachmentImportParams)] = Case<AttachmentImportParams>("""{"accountId":"acc_1","path":"C:\\Users\\u\\a.pdf","data":"AQID","filename":"a.bin","inline":true}"""),
         [nameof(AttachmentImportResult)] = Case<AttachmentImportResult>("""{"attachment":@draftattachment@}"""),
@@ -416,6 +429,25 @@ public sealed class ApiRoundTripTests
         [nameof(IssueTransitionParams)] = Case<IssueTransitionParams>("""{"accountId":"acc_j","messageId":"m_j1","transitionId":"11"}"""),
         [nameof(IssueTransitionResult)] = Case<IssueTransitionResult>("""{"issue":@issue@}"""),
         [nameof(MessagesChangedNotification)] = Case<MessagesChangedNotification>("""{"accountId":"acc_1","folderIds":["f_inbox"]}"""),
+        // Crm.cs
+        [nameof(Malachi.Core.Api.EwayConfig)] = Case<EwayConfig>(EwayConfig),
+        [nameof(Malachi.Core.Api.CrmItem)] = Case<CrmItem>(CrmItem),
+        [nameof(Malachi.Core.Api.CrmItemRef)] = Case<CrmItemRef>(CrmItemRef),
+        [nameof(Malachi.Core.Api.CrmRecord)] = Case<CrmRecord>(CrmRecord),
+        [nameof(AccountDetectEwayParams)] = Case<AccountDetectEwayParams>("""{"serviceUrl":"hosting.eway-crm.com/acme/API.svc"}"""),
+        [nameof(AccountDetectEwayResult)] = Case<AccountDetectEwayResult>("""{"serviceUrl":"https://hosting.eway-crm.com/acme","microsoftSignIn":false,"version":"10.0.0.84"}"""),
+        [nameof(CrmSignInUnsupportedData)] = Case<CrmSignInUnsupportedData>("""{"reason":"microsoft"}"""),
+        [nameof(MessagesNotDownloadedData)] = Case<MessagesNotDownloadedData>("""{"messageIds":["m_1","m_2"]}"""),
+        [nameof(CrmLookupParams)] = Case<CrmLookupParams>("""{"accountId":"acc_e","messageAccountId":"acc_1","messageIds":["m_1"]}"""),
+        [nameof(CrmSavedMessage)] = Case<CrmSavedMessage>("""{"messageId":"m_1","record":@crmrecord@}"""),
+        [nameof(CrmLookupResult)] = Case<CrmLookupResult>("""{"accountId":"acc_e","saved":[{"messageId":"m_1","record":@crmrecord@}],"suggestions":[@crmitem@],"partial":true}"""),
+        [nameof(CrmSearchParams)] = Case<CrmSearchParams>("""{"accountId":"acc_e","query":"fleet","kinds":["deal","project"]}"""),
+        [nameof(CrmSearchResult)] = Case<CrmSearchResult>("""{"items":[@crmitem@],"truncated":true}"""),
+        [nameof(CrmSaveParams)] = Case<CrmSaveParams>(
+            """{"accountId":"acc_e","messageAccountId":"acc_1","messageIds":["m_1"],"link":[@crmitemref@],"unlink":[@crmitemref@],"superior":{"kind":"deal","guid":"00000000-0000-4000-8000-000000000005"},"private":true}"""),
+        [nameof(CrmSaveOutcome)] = Case<CrmSaveOutcome>("""{"messageId":"m_1","record":@crmrecord@,"created":true,"error":@error@}"""),
+        [nameof(CrmSaveResult)] = Case<CrmSaveResult>("""{"results":[{"messageId":"m_1","error":{"code":1307,"message":"duplicate"}}]}"""),
+        [nameof(CrmRemoveParams)] = Case<CrmRemoveParams>("""{"accountId":"acc_e","messageAccountId":"acc_1","messageId":"m_1"}"""),
         // Messages.cs
         [nameof(Malachi.Core.Api.Address)] = Case<Address>(Address),
         [nameof(OutboxInfo)] = Case<OutboxInfo>(Outbox),
@@ -606,6 +638,18 @@ public sealed class ApiRoundTripTests
         ["MessageSummary without an invitation"] = Case<MessageSummary>(
             """{"id":"m","accountId":"a","folderId":"f","from":[],"subject":"","date":"2026-09-02T10:00:00Z","snippet":"","flags":[],"hasAttachments":false,"size":0,"invitation":null}""",
             """{"id":"m","accountId":"a","folderId":"f","from":[],"subject":"","date":"2026-09-02T10:00:00Z","snippet":"","flags":[],"hasAttachments":false,"size":0}"""),
+        // The CRM: an unsaved message of a lookup carries a null record,
+        // which goes out as absent; false booleans Go leaves out stay out.
+        ["CrmSavedMessage not saved"] = Case<CrmSavedMessage>("""{"messageId":"m_1","record":null}""", """{"messageId":"m_1"}"""),
+        ["CrmItem without its optional members"] = Case<CrmItem>(
+            """{"kind":"contact","guid":"g","name":"Jan","detail":"","superior":false,"url":""}""",
+            """{"kind":"contact","guid":"g","name":"Jan","url":""}"""),
+        ["EwayConfig of an older client"] = Case<EwayConfig>(
+            """{"serviceUrl":"https://crm.example.org","username":"jana"}""",
+            """{"serviceUrl":"https://crm.example.org","username":"jana","followThreads":false}"""),
+        ["MessageSummary not saved in a CRM"] = Case<MessageSummary>(
+            """{"id":"m","accountId":"a","folderId":"f","from":[],"subject":"","date":"2026-09-02T10:00:00Z","snippet":"","flags":[],"hasAttachments":false,"size":0,"crmSaved":false}""",
+            """{"id":"m","accountId":"a","folderId":"f","from":[],"subject":"","date":"2026-09-02T10:00:00Z","snippet":"","flags":[],"hasAttachments":false,"size":0}"""),
         ["SyncState without failedOutbox"] = Case<SyncState>(
             """{"accountId":"a","status":"idle","progress":-1,"pendingOutbox":0}""",
             """{"accountId":"a","status":"idle","progress":-1,"pendingOutbox":0,"failedOutbox":0}"""),
@@ -735,7 +779,7 @@ public sealed class ApiRoundTripTests
         var sample = ApiJson.Parse(Samples[type].Json);
         var names = type == nameof(Malachi.Core.Api.Message)
             ? [.. WireNames(TypeInfo(nameof(MessageSummary))),
-                "cc", "bcc", "replyTo", "rfcMessageId", "inReplyTo", "references", "attachments", "headers", "unsubscribe"]
+                "cc", "bcc", "replyTo", "rfcMessageId", "inReplyTo", "references", "attachments", "headers", "unsubscribe", "crm"]
             : WireNames(info);
         Assert.Equal(names.Order(StringComparer.Ordinal), ApiJson.Keys(sample));
     }
@@ -909,6 +953,7 @@ public sealed class ApiRoundTripTests
             ("@pageinfo@", PageInfo), ("@page@", Page), ("@pin@", Pin),
             ("@jira@", Jira), ("@itemissue@", ItemIssue), ("@issue@", Issue),
             ("@bulk@", Bulk), ("@unsubscribe@", Unsubscribe),
+            ("@ewayconfig@", EwayConfig), ("@crmrecord@", CrmRecord), ("@crmitemref@", CrmItemRef), ("@crmitem@", CrmItem),
             ("@caseid@", CaseId), ("@boardissue@", BoardIssue), ("@boarddue@", BoardDue), ("@boardannotation@", BoardAnnotation),
             ("@boardcase@", BoardCase), ("@boardcommitment@", BoardCommitment), ("@boardmessage@", BoardMessage),
             ("@boardrun@", BoardRun), ("@boardtriage@", BoardTriage), ("@boardwindows@", BoardWindows),

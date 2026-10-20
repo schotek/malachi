@@ -289,6 +289,7 @@ internal sealed partial class ConversationCard : UserControl
     public void RenderBars(LoadedMessage? lm)
     {
         RenderBulk(lm);
+        RenderCrm();
         if (!IsHtml || lm is null)
         {
             if (RemoteBar is not null)
@@ -311,6 +312,33 @@ internal sealed partial class ConversationCard : UserControl
         {
             ShowPicturesBar(pictures);
         }
+    }
+
+    /// <summary>
+    /// renderCRM: the eWay-CRM bar of the card's message (CrmState.Record),
+    /// made when first needed and not at all for a message saved nowhere; a
+    /// folded card shows none (SetFolded renders once it opens).
+    /// </summary>
+    public void RenderCrm()
+    {
+        if (Folded)
+        {
+            return;
+        }
+        var crm = pane.Services.State.Crm;
+        var record = crm.Account is null ? null : crm.Record(s);
+        if (record is null && CrmSlot.Child is null)
+        {
+            return;
+        }
+        if (CrmSlot.Child is not Crm.CrmBarView bar)
+        {
+            bar = new Crm.CrmBarView(new Thickness(12, 6, 12, 6));
+            bar.OpenRequested += (_, url) => Crm.CrmWindowSupport.OpenUrl(pane.Services.State, pane.HostWindow, url);
+            CrmSlot.Child = bar;
+        }
+        bar.Show(record);
+        CrmSlot.Visibility = bar.Visibility;
     }
 
     // renderBulk: the strip of bulk mail, from the summary alone until

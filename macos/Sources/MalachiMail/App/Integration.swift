@@ -121,6 +121,7 @@ final class Integration {
         wireJira()
         wireConversation()
         wireBoard()
+        wireCRM()
     }
 
     /// window.go 337-360 and 411-433: the toolbar and menu act on the

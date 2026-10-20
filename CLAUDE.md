@@ -145,7 +145,12 @@ klientů naráz (`Controller.Waiting` → `waiting` → `IsWaiting`).
 GTK klient se od 2026-10-17 vyvíjí a testuje na Macu v kontejneru Fedora 42
 přes Apple `container` (rozhodnutí vlastníka; Fedora Toolbx už není
 k dispozici): `scripts/gtk-container/gtk.sh build` jednou postaví obraz
-`malachi-gtk:f42` (balíčky z `rpm.yml`, verze jako dřívější Toolbx),
+`malachi-gtk:f42` (balíčky z `rpm.yml`, verze jako dřívější Toolbx; od
+2026-10-20 i `librsvg2` — bez něj GTK každou SVG ikonu Adwaity i vlastní
+`malachi-*-symbolic.svg` kreslilo jako image-missing —, `adwaita-fonts-all`
+a emoji, `gtk.sh x11` zapíše `gtk-4.0/settings.ini` s písmem Adwaita Sans
+11, ikonami a kurzorem Adwaita a vyhlazováním GNOME; po změně Containerfile
+znovu `gtk.sh build`),
 `gtk.sh make build` staví do `build/linux/` (cache Go a ccache
 v `~/.cache/malachi-gtk`, první překlad gotk4 asi 20 minut, další půl
 minuty), `gtk.sh test-ui` pouští testy `ui/` pod Xvfb (obrazovka
@@ -470,6 +475,13 @@ Pořadí prací:
     Windows sestavené a otestované jen v CI (`windows.yml` zelené včetně
     Lintu); zbývá UI smoke s `MALACHI_DEVMAIL`, ruční průchod na Windows
     (B3, seznam v `docs/windows-port.md` §11.7) a `make po` beze změny
+13. eWay-CRM (účet `kind: eway`, uložení pošty do CRM s vazbami na
+    kontakty, firmy, obchody a projekty, sledování uložené konverzace,
+    Předvolby → Integrace) — sloučeno z `feat/eway` do `main` 2026-10-20;
+    démon, Go reference, macOS (Gate B) a GTK (Gate C) ověřené vlastníkem,
+    Windows na jeho stroji sestavené, zlintované a s Core testy (Gate D
+    zčásti: zbývá UI smoke a ruční průchod); viz odstavec eWay-CRM níže
+    a `docs/eway.md`
 
 Asistent (stav 2026-09-30, sloučeno do `main`; uživatel potvrdil, že
 funguje ve všech třech klientech). Na macOS je hotové a uživatelem otestované:
@@ -2337,6 +2349,130 @@ démona a jeden test typu souboru v shell verdiktu, jsou prostředí a předchá
 port; na runneru `windows.yml` je celá sada od 2026-10-18 zelená, jen časově
 závislé testy občas spadnou, viz poznámka o Windows níže) a ARM64. GTK port
 vznikl souběžně na Macu (GTK klient kalendáře výše).
+
+Předvolby → Integrace (2026-10-17, všechny tři klienty, commit `b9eb49b`
+v `main` po ověření vlastníkem; rozhodnutí přes AskUserQuestion). Stránka Účty vypisuje jen
+poštovní účty (`imap`, `graph`) a její „+“ je prosté tlačítko poštovního
+průvodce; hned za ní je nová stránka Integrace (msgid „Integrations“)
+s každým jiným účtem — Jira, CalDAV, později eWay-CRM — ve skupině
+Připojené služby a katalogem Dostupné služby (Jira, Kalendář CalDAV)
+s tlačítky Přidat…, které otevírají stávající průvodce. Řádek Jira má
+přepínač, Upravit (nastavení) a Odebrat jako dřív; řádek CalDAV je bez
+přepínače, Upravit (tooltip „Nastavení kalendáře“) přepne na stránku
+Kalendář, kde zůstává server, heslo, certifikát i kalendáře; věta
+potvrzení odebrání je podle druhu (pošta / issues / kalendáře). Řazení
+přetažením a klávesami zůstává na obou stránkách, jen uvnitř stránky,
+a posílá `account.reorder` celé pořadí: poštovní účty první, pak
+integrace (`integrations.FullOrder`), takže Jira skončí v postranním
+panelu za poštou. Vstupy mimo Předvolby (prázdné okno, menu Soubor na
+macOS, nabídka … na Windows) ani stránka Kalendář se nemění, jen
+Kalendář po přidání či odebrání CalDAV obnoví obě stránky účtů.
+Reference je čistý `ui/internal/integrations` (`ShowsInAccounts`,
+`Split`, `FullOrder`, `Catalog`, `RowFor`, `Texts`; nahradil
+`calendar.ShowsInAccountsTab`), GTK `window/integrations_page.go`
+a sdílený `accountList` v `accounts_page.go`, `preferences.blp`
+`integrations_page` (ikona `application-x-addon-symbolic`), krok
+`MALACHI_GTK_START=prefs-integrations`; macOS
+`MalachiCore/Model/Integrations.swift`, `IntegrationsPaneViewController`
+jako podtřída `AccountsPaneViewController` s parametrem stránky, záložka
+`puzzlepiece.extension`, krok `MALACHI_START=prefs-integrations`; Windows
+`Malachi.Core/Model/Integrations.cs`, `AccountsPageController`
+s parametrem stránky, `Preferences/AccountListSection` sdílený oběma
+stránkami, `IntegrationsPage`, glyf Puzzle (U+EA86) pro
+`application-x-addon`. 14 nových msgid i česky. Ověřeno: GTK `make
+build`, cílené testy včetně smoke, `make po` a `make lint` v kontejneru;
+macOS `swift build` bez varování, filtrované `swift test` (43)
+a `check-strings.py`; Windows napsané bez `dotnet`, na Windows pak
+2026-10-20 s eWay portem prošly `build.ps1 app`, `lint` a Core testy
+(`IntegrationsTests`, `AccountsPageControllerTests`) — čeká smoke
+(`CalendarPreferencesSmokeTests`, `SmokeTests`);
+`IconGlyphsTests.EveryIconNameOfTheGtkUiHasAGlyph`, který od portu
+kalendáře padal na devíti ikonách GTK bez glyfu, je od 2026-10-20
+zelený (skupina Kalendář v `IconGlyphs`).
+Ručně ve všech třech nad kopií dat: pořadí
+stránek, Účty jen pošta, Integrace s Jirou a CalDAV, Přidat…, odebrání
+s větou podle druhu, řazení a pořadí v postranním panelu.
+
+eWay-CRM (větev `feat/eway` od `b9eb49b`, commitnuté jedním commitem 2026-10-18 po Gate B vlastníka a pushnuté na `origin/feat/eway` (`18c3c75`);
+návrh a rozhodnutí vlastníka v `docs/eway.md`, „As verified (T0)“ z testu
+na veřejné trial instanci eWay a „As built“ po úkolech). Účet `kind:
+eway` jen s capability `crm`, nikdy v Poště, spravovaný na stránce
+Integrace; heslo v klíčence, MD5 jen při `LogIn`, jedna session na účet
+vázaná na IP, instance s přihlášením Microsoft odmítnuté (1205
+`crmSignInUnsupported`). Metody `account.detectEway`, `crm.lookup`,
+`crm.search`, `crm.save`, `crm.remove` (`docs/api.md` §4.17, chyby 1109,
+1205, 1307), `MessageSummary.crmSaved`, `Message.crm`, migrace 0021
+`crm_links`. Uložení = nahrát surový `.eml` pod vlastním GUID, pak
+`SaveEmail` s povinnými poli, dedup přes Message-ID jen při shodě
+odesílatele a data, jedna nadřazená položka přes cizí klíč, ostatní vazby
+GENERAL, `DeleteRelation {relationDataGuid}`; klient `internal/eway`
+(bez přesměrování, strop 8 MiB, popisy chyb eWay se nelogují, obsahují
+session id), fake `ewaytest`, patologická data `backend/testdata/eway`,
+bezpečnost `docs/security.md` §7.3. Pořadí klientů podle vlastníka:
+Go reference `ui/internal/crm` (+ `contextmenu`, `selection`,
+`capabilities.InMail`, `integrations`, `accountwizard/eway_flow.go`,
+msgidy s češtinou) → **macOS první** → GTK a Windows po jeho ověření
+(oba porty napsané 2026-10-19 ve dvou agentech, necommitnuté).
+Ověřeno: démon `go vet`, `pkg/api`, `rpc`, `eway`, celé `store` i `core`;
+nezávislá revize démona s osmi opravenými nálezy; `make po`, `make lint`
+a `make build` GTK v kontejneru; macOS klient (T6: `MalachiCore/API/CRMAPI.swift`,
+`MalachiCore/CRM`, `CRMController`, `EWayWizardController`,
+`MalachiMail/CRM`, `AccountWizard/EWay`, tlačítko v toolbaru před ✦,
+položky v menu Zpráva a kontextovém menu, dialog vazeb jako sheet, pruh
+a štítek, průvodce jen ze Settings → Integrations; `swift build` bez
+varování, 202 filtrovaných testů, `check-strings`; vývojové kroky
+`crm-dialog`, `eway-wizard`). Z průchodu vlastníka (Gate B, „Gate B
+findings“ v `docs/eway.md`): účet eWay bez e-mailové adresy, hint k adresě
+webové služby, tlačítko jako vlastní kapsle toolbaru mezi Archivovat/Koš
+a hvězdičkou, sbalený řádek vlákna nic nenabízí, řádek „Obchody a
+projekty přidáte hledáním nahoře“ v dialogu, ukládání ze všech poštovních
+účtů jako Outlook. D22 sledování uložené konverzace (rozhodnutí
+vlastníka): `EwayConfig.followThreads` (zaškrtávátko v průvodci, výchozí
+zapnuto), démon po uložení zprávy ukládá i další zprávy téhož vlákna se
+stejnými vazbami (hook `Stored` jen zařadí do fronty, worker na účet,
+hodinový dosběr; nikdy koncepty, outbox, nevyžádanou, koš ani hromadnou
+poštu; `CrmRecord.auto`, migrace 0022). GTK port (T7, „As built (T7)“
+v `docs/eway.md`): `window/crm.go` (stav aplikace, `refreshCRM`),
+`crm_actions.go` (akce `win.crm-save`/`crm-open`/`crm-edit-links`/
+`crm-remove` a `msg.*`, sekce v Dalších akcích, stažení a opakování
+nejvýš dvakrát), `crm_dialog.go` + `crm_dialog.blp`, `crm_bar.go`,
+`crm_pill` v `message_row.blp`, průvodce `accountwizard/eway.go` +
+`eway_wizard.blp` (Add… i Edit v Integracích a bannery účtu); tlačítko
+`crm_slot` v hlavičkové liště mezi Košem a Hvězdičkou (děti `[end]` se
+řadí zprava doleva, proto je deklarované za `star_button`), pod 600 sp
+se skryje a položky zůstanou v Dalších akcích; kroky `MALACHI_GTK_START=
+crm-dialog|eway-wizard`; žádný nový msgid. Ověřeno v kontejneru: `make
+build`, `make po` (jen `#:`), `make lint`, cílené i smoke testy. Windows
+port (T8, `docs/windows-port.md` §11.11, „As built (T8)“): `Api/Crm.cs`,
+`Malachi.Core/Crm` (`CrmRules`, `CrmDialog`, `CrmText` — třída `Crm` by
+se v namespace `Crm` skryla), `CrmController`, `EwayWizardController`,
+App `Crm/*`, `MainWindow.Crm.cs`, `Wizard/EwayWizardWindow`, pilulka
+`IssuePill.IsCrm`, glyf ContactInfo; napsané bez `dotnet`, na Windows
+sestavené a otestované 2026-10-20 po sedmi opravách kompilace (`cond ?
+wireStruct : null` prochází implicitním převodem ze `string` a `null`
+by nikdy nevrátil — `(T?)null`; `Daemon(…)` z `using static DaemonHarness`
+stíní namespace `Tests.Daemon`; lambda `_ => throw` je mezi oběma `On`
+nejednoznačná; duplicitní glyf `x-office-address-book`; chybějící `using`
+Fixtures; očekávaná id v `ContextMenuTests.NamesAreGos`; literály
+`Message` wizardu jako konstanty kvůli `StringsCheckTests`): `build.ps1
+app` (Release x64 i NativeAOT helper) a `lint` zelené, sada Core 7 586
+z 7 587 a po doplnění devíti glyfů ikon kalendáře do `IconGlyphs`
+(2026-10-20) celá; čeká smoke a ruční průchod vlastníka (Gate D).
+Revize portu Windows našla chybu macOS: zavřené okno zprávy během
+ukládání nechalo zprávu v ostatních oknech jako „Ukládá se“
+(`[weak self]` přeskočil `state.end`); opraveno v `CRMController.swift`
+(`runSave`/`runRemove` drží `state`, test
+`endsTheBusyMarkWhenTheWindowCloses`). Gate C prošel (vlastník
+2026-10-20, `make run-gtk-live` nad kopií; jeho dva nálezy byly v obrazu
+kontejneru: chybějící `librsvg2` a tlačítko v Boxu bez `has-frame:
+false`). Sloučeno do `main` 2026-10-20 (rozhodnutí vlastníka po Gate
+C a po sestavení na Windows); před tím `main` → `feat/eway` s konflikty
+v `po/` (cs.po slité `msgcat --use-first`, pak `make po`),
+`docs/architecture.md` (oba zápisy §7), `IconGlyphs.cs` (glyfy
+kalendáře z `main`) a `ConversationView.xaml.cs` (chat layout z `main`;
+hook pruhu eWay na kartách je teď v `ConversationTimelineView`, kde karty
+žijí). Zbývá na Windows UI smoke a ruční průchod (dokončení Gate D) a
+`windows.yml` nad `main` po sloučení.
 
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně

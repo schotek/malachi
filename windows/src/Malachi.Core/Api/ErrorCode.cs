@@ -113,6 +113,13 @@ public readonly record struct ErrorCode(int Value)
     /// <summary>No stored event with that id, or the recurrence id names no occurrence of it.</summary>
     public const int EventNotFound = 1108;
 
+    /// <summary>
+    /// A CRM item named in <c>crm.save</c> (link, superior) is not an item of
+    /// that CRM account, or the saved message's item is gone from the CRM
+    /// (<c>crm.remove</c>).
+    /// </summary>
+    public const int CrmItemNotFound = 1109;
+
     // 1200–1299: authentication.
 
     /// <summary>Credentials missing or token expired; see notify.authRequired.</summary>
@@ -135,6 +142,12 @@ public readonly record struct ErrorCode(int Value)
     /// <see cref="CalendarConsentRequiredData"/>.
     /// </summary>
     public const int CalendarConsentRequired = 1204;
+
+    /// <summary>
+    /// The CRM instance cannot be signed in to by this version; <c>data</c>
+    /// is a <see cref="CrmSignInUnsupportedData"/>.
+    /// </summary>
+    public const int CrmSignInUnsupported = 1205;
 
     // 1300–1399: network and remote servers.
 
@@ -164,6 +177,13 @@ public readonly record struct ErrorCode(int Value)
     /// next pass removes the local copy.
     /// </summary>
     public const int EventGone = 1306;
+
+    /// <summary>
+    /// The CRM refused the message as a duplicate of an item the daemon
+    /// cannot find (someone's private item, or one saved without a
+    /// Message-ID).
+    /// </summary>
+    public const int CrmDuplicate = 1307;
 
     // 1400–1499: local storage.
 
@@ -243,11 +263,13 @@ public readonly record struct ErrorCode(int Value)
         [CaseNotFound] = "caseNotFound",
         [CalendarNotFound] = "calendarNotFound",
         [EventNotFound] = "eventNotFound",
+        [CrmItemNotFound] = "crmItemNotFound",
         [AuthRequired] = "authRequired",
         [AuthFailed] = "authFailed",
         [KeyringError] = "keyringError",
         [OAuthClientMissing] = "oauthClientMissing",
         [CalendarConsentRequired] = "calendarConsentRequired",
+        [CrmSignInUnsupported] = "crmSignInUnsupported",
         [Offline] = "offline",
         [NetworkError] = "networkError",
         [ServerError] = "serverError",
@@ -255,6 +277,7 @@ public readonly record struct ErrorCode(int Value)
         [ServerTimeout] = "serverTimeout",
         [MessageGone] = "messageGone",
         [EventGone] = "eventGone",
+        [CrmDuplicate] = "crmDuplicate",
         [StorageError] = "storageError",
         [MigrationFailed] = "migrationFailed",
         [MalformedMessage] = "malformedMessage",
@@ -278,9 +301,9 @@ public readonly record struct ErrorCode(int Value)
         NotImplemented, InvalidArgument, Conflict, Cancelled, Unavailable, Unauthenticated,
         ReadOnly, InvitationsUnavailable,
         AccountNotFound, FolderNotFound, MessageNotFound, ThreadNotFound, DraftNotFound, AttachmentNotFound,
-        CaseNotFound, CalendarNotFound, EventNotFound,
-        AuthRequired, AuthFailed, KeyringError, OAuthClientMissing, CalendarConsentRequired,
-        Offline, NetworkError, ServerError, TlsError, ServerTimeout, MessageGone, EventGone,
+        CaseNotFound, CalendarNotFound, EventNotFound, CrmItemNotFound,
+        AuthRequired, AuthFailed, KeyringError, OAuthClientMissing, CalendarConsentRequired, CrmSignInUnsupported,
+        Offline, NetworkError, ServerError, TlsError, ServerTimeout, MessageGone, EventGone, CrmDuplicate,
         StorageError, MigrationFailed,
         MalformedMessage, SanitizeFailed, AttachmentTooBig, PartNotFound, PartNotDownloaded,
         UnsubscribeFailed, QuoteNotFound, MalformedCalendar, RecurrenceUnsupported,

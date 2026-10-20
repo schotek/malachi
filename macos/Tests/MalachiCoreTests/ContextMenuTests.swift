@@ -59,6 +59,39 @@ struct ContextMenuTests {
         }
     }
 
+    /// eWay-CRM (`CRM.offer(for:rows:)`): Save after the answers, the
+    /// saved-state items for one saved message, Save with the count for
+    /// several (saved or not), nothing when not offered
+    /// (contextmenu_test.go `TestMessageItemsCrm`).
+    @Test func messageItemsCrm() {
+        var s = mail
+        s.setCrm(CRM.Offer(shown: true, enabled: true, count: 1))
+        #expect(show(ContextMenu.messageItems(s))
+            == "openMessage | reply replyAll forward | crmSave | markUnread toggleFlag | archive moveTo junk trash | assistant")
+        s.setCrm(CRM.Offer(shown: true, enabled: true, count: 1, saved: true))
+        #expect(show(ContextMenu.messageItems(s))
+            == "openMessage | reply replyAll forward | crmOpen crmEditLinks crmRemove | markUnread toggleFlag | archive moveTo junk trash | assistant")
+        s.count = 3
+        s.open = true
+        s.reply = false
+        s.replyAll = false
+        s.setCrm(CRM.Offer(shown: true, count: 3, saved: true))
+        #expect(show(ContextMenu.messageItems(s))
+            == "openMessage | forward | crmSave- | markUnread toggleFlag | archive moveTo junk trash | assistant")
+        s.setCrm(CRM.Offer())
+        #expect(!show(ContextMenu.messageItems(s)).contains("crm"))
+        let labels: [(ContextMenu.ItemID, ContextMenu.Labels, String)] = [
+            (.crmOpen, ContextMenu.Labels(), "Open in eWay-CRM"),
+            (.crmEditLinks, ContextMenu.Labels(), "Edit Links…"),
+            (.crmRemove, ContextMenu.Labels(), "Remove from eWay-CRM"),
+            (.crmSave, ContextMenu.Labels(), "Save to eWay-CRM…"),
+            (.crmSave, ContextMenu.Labels(count: 4), "Save 4 Messages to eWay-CRM…"),
+        ]
+        for (id, l, want) in labels {
+            #expect(ContextMenu.label(id, l) == want, "\(id)")
+        }
+    }
+
     /// The state taken from the window's action flags.
     @Test func messageStateOfFlags() {
         let f = ActionFlags(on: true, outbox: false, flagged: true, reply: true, replyAll: false, forward: true,

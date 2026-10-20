@@ -255,6 +255,10 @@ type messageView struct {
 	bulkAction *gtk.Button
 	bulk       func()
 
+	// The eWay-CRM bar (crm_bar.go); nil on the view of an attached
+	// message, and on a conversation card until it needs one.
+	crmBar *crmBar
+
 	// toast shows a message in the owning window, when it wired one.
 	toast func(string)
 
@@ -344,6 +348,7 @@ func newMessageView(w *Window, parent *gtk.Window, b *gtk.Builder) *messageView 
 		v.bindBulk()
 		v.bulk = func() { w.unsubscribe(v.parent, v.shown.ID, v.bulkSay) }
 	}
+	v.crmBar = bindCrmBar(b, func(u string) { w.launchURI(v.parent, u) })
 	if bar := b.GetObject("pictures_bar"); bar != nil {
 		v.picturesBar = bar.Cast().(*gtk.Box)
 		v.picturesLabel = b.GetObject("pictures_label").Cast().(*gtk.Label)
@@ -540,6 +545,7 @@ func (v *messageView) renderBody(lm *loadedMessage) {
 func (v *messageView) render(s api.MessageSummary, lm *loadedMessage) {
 	v.shown, v.shownLoaded = s, lm
 	v.renderBulk(s, lm)
+	v.renderCrm(s, v.win.crmMessage(s.ID, lm))
 	if lm == nil {
 		if issue := v.renderHeaders(s, nil); issue != nil && issue.event {
 			v.renderEvent(issue.eventBody)
@@ -756,6 +762,7 @@ func (w *Window) settleLoaded(id api.MessageID, lm *loadedMessage) {
 	if !lm.getting && !lm.fetching {
 		lm.waiters = nil
 	}
+	defer w.refreshCRM() // a loaded message brings its CRM record
 	for _, done := range waiters {
 		done(lm)
 	}

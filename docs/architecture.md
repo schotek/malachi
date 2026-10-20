@@ -1569,6 +1569,77 @@ the board's window mode (`board.ModeCalendar`, gschema
 `board-start-mode`, key `calendar-view`). The macOS client is built
 first; GTK and Windows follow after the owner's approval (§7).
 
+### 3.9 CRM accounts (`kind: eway`)
+
+Messages of mail accounts can be saved to the user's eWay-CRM, as its
+Outlook add-in does: the raw message and its metadata become an e-mail
+item of the CRM, linked to contacts, companies and a deal or project.
+Design and decisions: [eway.md](eway.md); contract:
+[api.md §4.17](api.md); security: [security.md §7.3](security.md).
+
+**Account.** Kind `eway` (`EwayConfig`: `serviceUrl`, `username`, the
+daemon's `userGuid`), capability `crm` only, no mail: `folder.list` is
+empty and every message method `invalidArgument`
+(`mailOnlyMessages.refuse` refuses every kind without mail, `hasNoMail`).
+Realm = host[:port] + path of the service URL (`store.RealmOf`). The
+password is in the keyring (`auth.KeyPassword`); the daemon sends its
+MD5 hex to `LogIn` of the account's own origin only. `account.add` signs
+in once (Microsoft-Entra instances are refused before, through the
+anonymous `GetServiceAuthSettings`), `account.detectEway` only asks how
+the instance signs in.
+
+**No syncer.** The kind's entry in the supervisor table is
+`eway.Supervisor` (D21): `Start` builds the account's `eway.Client`
+without network, `State` is the last sign-in's outcome, `Trigger` does
+nothing, `Stop` and shutdown sign out. No outbox worker.
+
+**`internal/eway`** is the client: one session per account in memory,
+lazy `LogIn`, one new `LogIn` on `rcBadSession`, a latch after
+`rcLoginFailed` until the account is edited, four requests in flight,
+`Retry-After` honoured twice up to 60 s, no redirect of a POST and a GET
+only within the origin, answers ≤ 8 MiB, every string cleaned
+(`calendar.CleanLine`), every GUID shape-checked. Typed `Query` objects
+are structs with `__type` first (WCF needs it). Saving (`SaveMessage`):
+the item with the Message-ID if the CRM has one, else upload of the raw
+`.eml` under a fresh GUID (`SaveBinaryAttachment`) and then `SaveEmail`
+naming it; the superior deal or project goes through the e-mail's
+foreign key (`Leads_OutlookProjectGuid` / `Projects_OutlookProjectGuid`,
+which creates and replaces the one `OUTLOOKPROJECT` relation), other
+links as `GENERAL` relations, unlinking through `DeleteRelation` by the
+relation's `RelationDataGUID`. Suggestions (`Suggest`) read addresses
+only: contacts by their three e-mail fields, companies by e-mail and by
+tracked domain (typed `LIKE` query, then an exact match of the domain;
+no freemail), the contacts' companies, and their open deals and projects
+(neither `IsCompleted` nor `IsLost`), within 15 s, cached per address
+for 10 minutes. `ewaytest` is a fake service with the trial's behaviour.
+
+**Core** (`core/accounts_eway.go`, `core/crm_service.go`): the four
+`crm.*` methods, `crm.save` checks that every message is whole on this
+device (the memory copy of `message.download`, else a stored file
+without remote parts) before anything goes out, else
+`partNotDownloaded` with `messageIds`; a save or removal per message is
+exclusive (`conflict`). Outbox, Drafts and messages of other kinds are
+refused.
+
+**Local record** (migration 0021, `store/crm_links.go`): `crm_links`
+keyed by (CRM account, mail account, Message-ID or `id:<message id>`),
+so every copy of a message shows as saved; a display cache, the CRM is
+the truth. Listings fill `MessageSummary.crmSaved` with the
+invitations' per-page pass (one `EXISTS` on an empty table);
+`message.get` returns `Message.crm` and checks a record older than a day
+in the background. Changes go out as `notify.messagesChanged` of the
+mail account. The rows go with either account.
+
+**Following a saved conversation** (`core/crm_follow.go`, D22, migration
+0022 `crm_links.auto`): the mail syncers' `Stored` hook only enqueues a
+message whose thread a following CRM account has saved (one query,
+`store.CrmFollowedBy`); a worker per CRM account drains the queue
+serially through `crm.save`'s path with the template of the thread's
+most recently saved member (`store.CrmFollowedThreadTemplate`), and an
+hourly pass in `core.Maintain` catches up (`CrmFollowedThreads`,
+`CrmUnsavedMembers`; 90 days, 50 saves). Nothing of it runs on the sync
+path, and it stops with the account's client.
+
 ## 4. Security boundary: HTML
 
 HTML in mail is hostile input. It is sanitised **in the backend**
@@ -1712,7 +1783,15 @@ Preferences are an `Adw.PreferencesDialog` (`app.preferences`, Ctrl+,)
 with *Accounts*, *General* and *Appearance* pages. The *Accounts* page lists
 `account.list`, pauses with `account.setEnabled` and removes with
 `account.remove` after an `Adw.AlertDialog` with a *delete local data*
-check; it reloads after its own actions and when opened.
+check; it reloads after its own actions and when opened. Since
+2026-10-17 it lists only the mail accounts (kind `imap` and `graph`) and
+its + button opens the mail assistant alone; every other account (Jira,
+CalDAV, any later kind) is on the *Integrations* page right after it,
+with a catalogue of services that can be added (Jira, CalDAV Calendar).
+A Jira row keeps its switch and settings, a CalDAV row has no switch and
+its Edit opens the *Calendar* page. A reorder on either page sends the
+whole order to `account.reorder`, mail accounts first (pure rules in
+`ui/internal/integrations`, ported to macOS and Windows).
 
 Adding an account is `internal/accountwizard`: an `Adw.Dialog` with an
 `Adw.NavigationView` (identity → server settings → connection test),
@@ -2722,6 +2801,23 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
     with the same rules should win.
   - **No network monitor**: an offline calendar waits on its backoff;
     adding a platform-neutral monitor was left out.
+- eWay-CRM: **decided** (2026-10-17, [eway.md](eway.md) §1 and §5) —
+  a CRM is an account of its own kind (`eway`, capability `crm`, no
+  mail), not a block on a mail account, so it keeps one credential per
+  account and lives on Preferences → Integrations; one eWay-CRM account
+  per installation in the clients (the daemon does not forbid more).
+  Saving is explicit only (no rules, no background save, no MCP tool in
+  v1). The raw message goes as delivered (byte-identical: signatures and
+  eWay-CRM's duplicate hash stay intact), with addresses, not names, in
+  the metadata and never Bcc. One superior item per message through the
+  e-mail's foreign key (the CRM allows one `OUTLOOKPROJECT` relation and
+  replaces it when the other key is set), further deals and projects as
+  plain links. The local record is a cache keyed by Message-ID; the
+  server is the truth. No OAuth for Microsoft-Entra instances (a client
+  secret per application, which an open-source client cannot keep), no
+  certificate pinning (as Jira). The sign-in sends the MD5 hex of the
+  password, which is eWay-CRM's protocol; the password itself stays in
+  the keyring.
 - Chat layout of the conversation view (2026-10-17): **decided**, a second
   layout over the same controller and body cache, beside the timeline,
   which stays the default and unchanged

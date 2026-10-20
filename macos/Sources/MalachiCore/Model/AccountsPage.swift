@@ -6,32 +6,21 @@ import Foundation
 // The pure parts of the Accounts page of the preferences
 // (ui/internal/window/accounts_page.go, accounts_reorder.go).
 
-/// The account name, or the address when unnamed (accounts_page.go
-/// `accountRowTitle`); an unnamed Jira account shows its site's host
-/// before the address (`Jira.siteHost`). Unlike `accountLabel` nothing is
-/// trimmed: this is the name as the user typed it. Swift-first: mirror in
-/// accounts_page.go when GTK gets Jira accounts.
+/// The account name, or the address when unnamed; an unnamed Jira
+/// account shows its site's host before the address. Unlike
+/// `accountLabel` nothing is trimmed: this is the name as the user typed
+/// it. The title of `Integrations.rowFor`, for the places that show an
+/// account's name without its row.
 public func accountRowTitle(_ a: Account) -> String {
-    if !a.config.name.isEmpty {
-        return a.config.name
-    }
-    let host = Jira.siteHost(a.config)
-    if !host.isEmpty {
-        return host
-    }
-    return a.config.email
+    Integrations.title(a)
 }
 
-/// The line under an account's name in Settings → Accounts: the address
-/// of a mail account, the site's host of a Jira account (its address when
-/// the title shows the host already). Swift-first: mirror in
-/// accounts_page.go when GTK gets Jira accounts.
+/// The line under an account's name in Settings → Accounts and
+/// Integrations: the address of a mail account, the host of a Jira site
+/// or CalDAV server (the address when the title shows the host already).
+/// The subtitle of `Integrations.rowFor`.
 public func accountRowSubtitle(_ a: Account) -> String {
-    let host = Jira.siteHost(a.config)
-    if host.isEmpty || host == accountRowTitle(a) {
-        return a.config.email
-    }
-    return host
+    Integrations.subtitle(a)
 }
 
 /// What edits an account: the mail account wizard, or what a Jira
@@ -60,8 +49,10 @@ public func jiraEditor(requestToken: ErrorCode?) -> JiraEditor {
     requestToken == nil ? .settings : .token
 }
 
-/// `AccountEditor` of an account, by its kind. Swift-first: mirror in
-/// accounts_page.go when GTK gets Jira accounts.
+/// `AccountEditor` of an account, by its kind, for the "edit account"
+/// routes outside the settings (banners, the status popover), which
+/// never see a CalDAV account; the settings' rows ask
+/// `Integrations.rowFor(_:).editor`.
 public func accountEditor(_ a: Account) -> AccountEditor {
     Jira.isJira(a.config) ? .jira : .mailWizard
 }

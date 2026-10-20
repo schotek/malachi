@@ -15,7 +15,8 @@ extension ContextMenu {
         public var junk = false
         public var favourite = false
         public var collapsed = false
-        /// Open opens this many rows (2 or more).
+        /// Open opens, and Save to eWay-CRM saves, this many rows (2 or
+        /// more).
         public var count = 0
 
         public init(comment: Bool = false, flagged: Bool = false, outbox: Bool = false, junk: Bool = false,
@@ -53,6 +54,10 @@ extension ContextMenu {
         case .junk: L10n.T("Mark as Junk")
         case .trash: l.outbox ? L10n.T("Cancel Sending") : L10n.T("Move to Trash")
         case .assistant: L10n.T("Assistant")
+        case .crmSave: CRM.saveMenuLabel(l.count)
+        case .crmOpen: CRM.menuLabel(.open)
+        case .crmEditLinks: CRM.menuLabel(.editLinks)
+        case .crmRemove: CRM.menuLabel(.remove)
         case .checkMail: L10n.T("Check for New Mail")
         case .markAllRead:
             // TRANSLATORS: In the menu of a folder in the sidebar.

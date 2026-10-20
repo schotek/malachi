@@ -21,10 +21,12 @@
 //
 // Windows (named in windows/README.md): the dialogs are ContentDialogs on
 // the Preferences window (Replace Password… with a PasswordBox, the
-// consent's Sign In… / Cancel, the Accounts page's removal question with
+// consent's Sign In… / Cancel, the account pages' removal question with
 // its check box); a CalDAV account's name is edited here (Account Name,
-// committed on Enter and when the field loses the keyboard), since the
-// Accounts page does not list the account; Remove Account sits at the end
+// committed on Enter and when the field loses the keyboard), since this
+// is where the account's row on the Integrations page leads (its Edit,
+// Calendar Settings); Remove Account, with the Integrations page's CalDAV
+// sentence (Integrations.RowFor), sits at the end
 // of the section, as PreferencesLayout orders it, where macOS ends the
 // Account group with it; the calendar rows' check boxes carry the colour
 // and the name as their label (a click on the name toggles them).

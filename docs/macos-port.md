@@ -818,7 +818,8 @@ format in one place for both clients.
 - `Tests/MalachiCoreTests/` (Swift Testing): the ports of the Go UI tests
   (`MailModelTests`, `ThreadModelTests`, `CollapseStateTests`,
   `FavouriteStateTests`, `FolderTreeTests`, `ActionHelpersTests`,
-  `AttachmentsTests`, `DownloadTests`, `AccountsPageTests`, `NotificationTextTests`,
+  `AttachmentsTests`, `DownloadTests`, `AccountsPageTests`, `IntegrationsTests`
+  (from `ui/internal/integrations/integrations_test.go`), `NotificationTextTests`,
   `NotifiedMessagesTests`, `OutboxTests`, `SyncStatusTests`,
   `ComposeSourceTests`,
   `AddressListTests`, `PrefillTests`, `MailtoTests`, `SuggestTests`,
@@ -924,6 +925,27 @@ file it names, `docs/api.md` for every method it calls, and
 `.blp` files are the reference: when the Swift view and the Blueprint
 disagree and no deviation explains it, the Swift view is wrong.
 
+### The account pages of Settings
+
+Settings → Accounts lists only the mail accounts (kind imap, the empty
+kind, graph) and its *+* opens the mail assistant; Settings →
+Integrations, right after it, lists every other account (Jira, CalDAV,
+any later kind) as *Connected Services* and the catalogue of services
+that can be added as *Available Services* (owner's decision 2026-10-17).
+The rules are the 1:1 port of `ui/internal/integrations` in
+`MalachiCore/Model/Integrations.swift` (Go `ShowsInAccounts` →
+`Integrations.showsInAccounts`, `Split` → `split`, `FullOrder` →
+`fullOrder(_:page:order:)`, `Catalog` → `catalog()`, `RowFor` → `rowFor(_:)`,
+`Texts` → `texts()`; no translator parameter, the texts go through `L10n`).
+Both pages are one class, `Preferences/AccountsPaneViewController.swift`
+with a `page`, whose rows (`AccountRowCell`) take their symbol, switch,
+editor and remove sentence from `rowFor`; `IntegrationsPaneViewController`
+adds the description and the catalogue. A reorder sends every account
+(`fullOrder`), mail accounts first, and the window reloads the other
+account page, and after an Integrations page change the
+Calendar page's source (`PreferencesWindowController.wireAccountPages`).
+The `MALACHI_START` step `prefs-integrations` dumps the page.
+
 ### The calendar
 
 The calendar (`docs/calendar.md` §5) is Swift-first: Core keeps the
@@ -959,6 +981,69 @@ editor closes unsaved and the sheet is cancelled. For example:
 
     MALACHI_START_SIZE=1280x820 MALACHI_START_INTERVAL=2 \
     MALACHI_START='mail;calendar:week;calendar:month;calendar:agenda;event-popover;event-editor;invitation-card;caldav-sheet;board:today;mail;quit'
+
+### eWay-CRM
+
+Saving mail to eWay-CRM (`docs/eway.md`, task T6) came to macOS first,
+the GTK and Windows ports after the owner approved it (an exception to
+rule 6 of `CLAUDE.md`, like the board and the calendar); the pure Go
+package `ui/internal/crm` stays the reference for the rules and the
+msgids. The port:
+
+- API mirror `MalachiCore/API/CRMAPI.swift` (`EwayConfig`, `CrmItemKind`,
+  `CrmReason`, `CrmItem`, `CrmItemRef`, `CrmRecord`, the params and
+  results of `account.detectEway` and `crm.lookup` / `search` / `save` /
+  `remove`, `CrmSignInUnsupportedData`, `MessagesNotDownloadedData` with
+  `RPCError.crmSignInUnsupported` / `.messagesNotDownloaded`, the limits),
+  plus `AccountKind.eway`, `Capability.crm`, `AccountConfig.eway`,
+  `AccountTestResult.eway`, `MessageSummary.crmSaved`, `Message.crm` and
+  the codes 1109, 1205, 1307; round trips in `APICodingTests+CRM.swift`.
+- `MalachiCore/CRM/` is `ui/internal/crm` one to one in the enum `CRM`
+  (`CRM.swift` = crm.go and util.go, `CRMDialog.swift` = dialog.go,
+  `CRMText.swift` = text.go; Go `Available` → `CRM.available`, `OfferFor`
+  → `offer(for:rows:)`, `ButtonStateFor` → `buttonState(_:_:busy:)`,
+  `ButtonFor` → `buttonFor`, `NewDialog` → `CRM.Dialog(_:)`, `BarFor` →
+  `barFor`, `PillFor` → `pillFor`, `SaveToast` → `saveToast` returning
+  `(text, error)`, `WizardTexts` → `wizardTexts()`, `FailureOf` →
+  `failureOf(_:_:editing:)`; `PillLabel` is `pillBrand`; no translator
+  parameter, the texts go through `L10n` with the Go msgids), tests
+  `CRMTests`, `CRMDialogTests`, `CRMTextTests` from crm_test.go,
+  dialog_test.go and text_test.go. The context menu (`crmSave`,
+  `crmOpen`, `crmEditLinks`, `crmRemove`, `MessageState.setCrm`), the
+  selection's flags (`ActionFlags.crm` / `crmSaved`, `Selection.combine`),
+  `Integrations` (the catalogue's third entry, `Editor.eway`,
+  `ewayIcon`) and `inMail` (no eway) follow T5.
+- `Controllers/EWayWizardController.swift` is `accountwizard/eway_flow.go`
+  with its tests against the fake daemon (`EWayWizardControllerTests`); its
+  sign-in page carries the D22 check box `followThreads` (on for a new
+  account, the account's value when editing).
+- `Controllers/CRMController.swift`: `CRMState` (one for the application:
+  the accounts, the folders' roles, the cache's messages, the busy
+  messages and, for ten seconds, what a call reported, so the button
+  turns before notify.messagesChanged has refreshed the list), and
+  `CRMController` (one per main window and per message window over its
+  `subjects`: the shown message of each selected row, or the window's
+  message): `button`, `offer`, `save()` (crm.lookup into a
+  `CRMDialogSession`, then crm.save in the background with the
+  partNotDownloaded round: message.download of every message the error
+  names, then crm.save again, at most twice), `open()`, `editLinks()`,
+  `remove()` after the question. `CRMDialogSession` holds the dialog's
+  phases (loading, ready, failed) and the search (300 ms pause, from 2
+  bytes). Tests `CRMControllerTests`.
+- AppKit `MalachiMail/CRM/`: `CRMToolbarItem` (the toolbar button, which
+  asks its own window's `CRMWindow.crm`; `CRMMenuItems` and
+  `CRMMenuDelegate` for the Message menu), `CRMDialogController` (the
+  sheet), `CRMBarView` (the bar, and `CRMWindowSupport`: the sheet, the
+  question, the toasts and the browser for a window's controller);
+  `AccountWizard/EWay/EWayWizardWindowController.swift` (the assistant);
+  the pill in `MessageCellView`; the bar in `MessageViewController` and
+  `ConversationCardView`; the Integrations page's *Add…* and the row's
+  Edit; `App/Integration+CRM.swift` wires it.
+
+The deviations are rows of the table in `macos/README.md`. With the debug
+binary (the `CLAUDE.md` procedure) the `MALACHI_START` steps `crm-dialog`
+(the sheet over invented suggestions, `CRMDialogSession.sample`) and
+`eway-wizard` print `LAYOUT:` lines (`MainWindowController+DevStartCRM.swift`).
 
 ## 11. Build
 

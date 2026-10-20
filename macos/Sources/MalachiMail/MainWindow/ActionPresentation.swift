@@ -50,6 +50,12 @@ enum ActionPresentation {
     }
 
     private static func apply(_ it: NSToolbarItem, _ f: ActionFlags) {
+        // The eWay-CRM button hides itself; a hidden item is not validated,
+        // so it is asked here too.
+        if let crm = it as? CRMToolbarItem {
+            crm.refresh()
+            return
+        }
         guard let action = it.action, let kind = kind(action) else { return }
         if #available(macOS 15, *) {
             let hidden = f.unsupported.contains(kind)

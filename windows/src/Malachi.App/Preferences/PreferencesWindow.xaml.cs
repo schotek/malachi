@@ -16,10 +16,13 @@
 // comes up. On the
 // General page Windows decides some things (the Run value and the
 // default mail app): the page reads them again whenever it comes up and
-// whenever the window is activated (after a visit to Settings). Ctrl+Up
-// and Ctrl+Down are the window's MoveUp and MoveDown commands, which move
-// the selected account while the Accounts list has the focus. Closing the
-// window ends every binding and drops every late reply.
+// whenever the window is activated (after a visit to Settings). The
+// Integrations page (after Accounts, as GTK and macOS have it) lists the
+// accounts that are not mail accounts and the services that can be added;
+// a CalDAV row's Edit shows the Calendar page (ShowCalendar). Ctrl+Up and
+// Ctrl+Down are the window's MoveUp and MoveDown commands, which move the
+// selected account while the Accounts or the Integrations list has the
+// focus. Closing the window ends every binding and drops every late reply.
 
 using System;
 using System.IO;
@@ -59,6 +62,7 @@ public sealed partial class PreferencesWindow : Window
 
     private readonly SettingBindings bindings;
     private readonly AccountsPage accounts;
+    private readonly IntegrationsPage integrations;
     private readonly GeneralPage general;
     private readonly CalendarPreferencesPage calendar;
     private readonly AppearancePage appearance;
@@ -84,16 +88,17 @@ public sealed partial class PreferencesWindow : Window
 
         // Every page at once, as GTK builds them.
         accounts = new AccountsPage(state, this, ToastsHost);
+        integrations = new IntegrationsPage(state, this, ToastsHost);
         general = new GeneralPage(state, bindings, ToastsHost);
         calendar = new CalendarPreferencesPage(state, this, ToastsHost);
         appearance = new AppearancePage(state, bindings);
         ai = new AiPage(state, bindings, ToastsHost, () => this);
 
         var commands = Tracked.Commands;
-        commands.MoveUp.Handler = () => accounts.MoveSelected(-1);
-        commands.MoveUp.CanExecute = () => ReferenceEquals(PageHost.Content, accounts) && accounts.CanMove;
-        commands.MoveDown.Handler = () => accounts.MoveSelected(1);
-        commands.MoveDown.CanExecute = () => ReferenceEquals(PageHost.Content, accounts) && accounts.CanMove;
+        commands.MoveUp.Handler = () => MoveSelected(-1);
+        commands.MoveUp.CanExecute = CanMove;
+        commands.MoveDown.Handler = () => MoveSelected(1);
+        commands.MoveDown.CanExecute = CanMove;
 
         Activated += (_, e) =>
         {
@@ -110,6 +115,7 @@ public sealed partial class PreferencesWindow : Window
             }
             bindings.Dispose();
             accounts.Close();
+            integrations.Close();
             general.Close();
             calendar.Close();
             ai.Close();
@@ -126,11 +132,17 @@ public sealed partial class PreferencesWindow : Window
     /// <summary>The Accounts page.</summary>
     public AccountsPage Accounts => accounts;
 
+    /// <summary>The Integrations page.</summary>
+    public IntegrationsPage Integrations => integrations;
+
     /// <summary>Shows the AI page (the Assistant menu's "Set Up the Assistant…", app.assistant-setup).</summary>
     public void ShowAi() => Navigation.SelectedItem = AiItem;
 
     /// <summary>Shows the Accounts page (the calendar's empty state, Open Preferences).</summary>
     public void ShowAccounts() => Navigation.SelectedItem = AccountsItem;
+
+    /// <summary>Shows the Integrations page (Jira and CalDAV accounts, the services that can be added).</summary>
+    public void ShowIntegrations() => Navigation.SelectedItem = IntegrationsItem;
 
     /// <summary>
     /// Shows the Calendar page (macOS <c>select(.calendar)</c>: the calendar
@@ -183,6 +195,24 @@ public sealed partial class PreferencesWindow : Window
             area.X + ((area.Width - size.Width) / 2), area.Y + ((area.Height - size.Height) / 2), size.Width, size.Height));
     }
 
+    // Ctrl+Up and Ctrl+Down: the selected row of the shown account page
+    // moves, while its list has the focus.
+    private bool CanMove() =>
+        (ReferenceEquals(PageHost.Content, accounts) && accounts.CanMove)
+        || (ReferenceEquals(PageHost.Content, integrations) && integrations.CanMove);
+
+    private void MoveSelected(int delta)
+    {
+        if (ReferenceEquals(PageHost.Content, integrations))
+        {
+            integrations.MoveSelected(delta);
+        }
+        else
+        {
+            accounts.MoveSelected(delta);
+        }
+    }
+
     // The pane is its icons only (Auto below 720 px): its button opens it
     // over the page with the labels. Expanded, the pane has no button and
     // is open, also after it was closed over the page while compact (the
@@ -208,6 +238,7 @@ public sealed partial class PreferencesWindow : Window
     {
         UIElement page = ((args.SelectedItem as NavigationViewItem)?.Tag as string) switch
         {
+            "integrations" => integrations,
             "general" => general,
             "calendar" => calendar,
             "appearance" => appearance,

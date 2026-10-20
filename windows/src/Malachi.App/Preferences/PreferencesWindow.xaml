@@ -7,11 +7,12 @@ Port of macos/Sources/MalachiMail/Preferences/PreferencesWindowController.swift;
 GTK: preferences.blp preferences_dialog (Adw.PreferencesDialog titled
 "Preferences"). One window for the whole app, on Mica, its title bar
 with the icon and "Preferences"; below it a NavigationView whose pane
-holds the four pages of the Blueprint in its order, each with the icon
-GTK names (Accounts: system-users, General: preferences-system,
-Appearance: applications-graphics, AI: applications-science), with the
-Calendar page after General as macOS has it (x-office-calendar, the
-Calendar mode's icon; docs/calendar.md §5.8), and the
+holds the pages of the Blueprint in its order, each with the icon GTK
+names (Accounts: system-users, Integrations: application-x-addon,
+General: preferences-system, Appearance: applications-graphics, AI:
+applications-science), with the Calendar page after General as macOS has
+it (x-office-calendar, the Calendar mode's icon; docs/calendar.md §5.8),
+and the
 visible page with the toast overlay over it. There is no search field
 (windows/README.md, as macOS) and no Settings item of the NavigationView's
 own. As Windows Settings does, the pane keeps its labels while the window
@@ -79,6 +80,15 @@ then.
                     Tag="accounts">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="{x:Bind res:Icons.Glyph('system-users')}" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    x:Name="IntegrationsItem"
+                    AutomationProperties.AutomationId="IntegrationsPage"
+                    Content="{l:T Msgid='Integrations'}"
+                    Tag="integrations">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="{x:Bind res:Icons.Glyph('application-x-addon')}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem

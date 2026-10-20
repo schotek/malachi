@@ -15,6 +15,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/integrations"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -24,8 +25,11 @@ import (
 //
 // The drag payload is the account id as a string, because it is the only
 // identifier that survives setAccounts tearing every row down. Positions
-// come from the d.accountRows slice, never from ListBoxRow.Index(), which
-// counts the hidden "no accounts yet" row of the blueprint as well.
+// come from the rows of the row's list (accountList.rows), never from
+// ListBoxRow.Index(), which counts the hidden "no accounts yet" row of the
+// blueprint as well. A row moves only within its page; the order sent is
+// the whole list of accounts (integrations.FullOrder), mail accounts
+// first.
 
 // addRowReorder makes the row draggable by its handle and a drop target for
 // the other rows, and binds Ctrl+Up / Ctrl+Down. Called from newAccountRow.
@@ -103,7 +107,7 @@ func (d *PreferencesDialog) addRowReorder(c *client.Client, row *accountRow) {
 			if d.closed {
 				return
 			}
-			d.reorderAccounts(c, from, to, false)
+			d.reorderAccounts(c, row.list, from, to, false)
 		})
 		return true
 	})
@@ -119,7 +123,7 @@ func (d *PreferencesDialog) addRowReorder(c *client.Client, row *accountRow) {
 		sc.AddShortcut(gtk.NewShortcut(
 			gtk.NewShortcutTriggerParseString(s.trigger),
 			gtk.NewCallbackAction(func(gtk.Widgetter, *glib.Variant) bool {
-				return d.moveAccountBy(c, row.account.ID, delta)
+				return d.moveAccountBy(c, row.list, row.account.ID, delta)
 			}),
 		))
 	}
@@ -141,26 +145,27 @@ func onHandle(row *accountRow, x, y float64) bool {
 	return bounds.ContainsPoint(p)
 }
 
-// dropTarget resolves a drag payload against the current rows: the index it
-// comes from and the index it would land on when dropped on row at height y.
-// It reports false for anything that is not one of our account ids — the
-// target accepts strings, so text dragged in from another application ends
-// up here too.
+// dropTarget resolves a drag payload against the current rows of row's
+// list: the index it comes from and the index it would land on when
+// dropped on row at height y. It reports false for anything that is not
+// one of the list's account ids — the target accepts strings, so text
+// dragged in from another application ends up here too, and so does a row
+// of the other page's list.
 func (d *PreferencesDialog) dropTarget(value *coreglib.Value, row *accountRow, y float64) (from, to int, ok bool) {
 	if value == nil || value.Type() != coreglib.TypeString {
 		return 0, 0, false
 	}
-	from = d.rowIndex(api.AccountID(value.String()))
-	target := d.rowIndex(row.account.ID)
+	from = row.list.rowIndex(api.AccountID(value.String()))
+	target := row.list.rowIndex(row.account.ID)
 	if from < 0 || target < 0 {
 		return 0, 0, false
 	}
 	return from, insertIndex(from, target, y < float64(row.Height())/2), true
 }
 
-// rowIndex is the position of the account among the rows, or -1.
-func (d *PreferencesDialog) rowIndex(id api.AccountID) int {
-	for i, row := range d.accountRows {
+// rowIndex is the position of the account among the list's rows, or -1.
+func (l *accountList) rowIndex(id api.AccountID) int {
+	for i, row := range l.rows {
 		if row.account.ID == id {
 			return i
 		}
@@ -168,10 +173,12 @@ func (d *PreferencesDialog) rowIndex(id api.AccountID) int {
 	return -1
 }
 
-// clearDropHints removes every insertion line.
+// clearDropHints removes every insertion line of both pages.
 func (d *PreferencesDialog) clearDropHints() {
-	for _, row := range d.accountRows {
-		row.setDropHint(hintNone)
+	for _, l := range d.accountLists() {
+		for _, row := range l.rows {
+			row.setDropHint(hintNone)
+		}
 	}
 }
 
@@ -193,32 +200,34 @@ func insertIndex(from, target int, above bool) int {
 // moveAccountBy shifts the account by delta positions (the keyboard path).
 // It reports whether it moved anything, so the shortcut is not swallowed at
 // the ends of the list.
-func (d *PreferencesDialog) moveAccountBy(c *client.Client, id api.AccountID, delta int) bool {
-	from := d.rowIndex(id)
+func (d *PreferencesDialog) moveAccountBy(c *client.Client, l *accountList, id api.AccountID, delta int) bool {
+	from := l.rowIndex(id)
 	if from < 0 {
 		return false
 	}
 	to := from + delta
-	if to < 0 || to >= len(d.accountRows) {
+	if to < 0 || to >= len(l.rows) {
 		return false
 	}
-	d.reorderAccounts(c, from, to, true)
+	d.reorderAccounts(c, l, from, to, true)
 	return true
 }
 
-// reorderAccounts moves the row at from to to: the rows are rebuilt at once
-// so the gesture feels immediate, then account.reorder saves the order and
-// the daemon's notify.accountsChanged reorders the main window's sidebar. A
-// failure reloads the page, because the daemon's order is the truth. With
-// focusMoved the moved row takes the focus again, so holding Ctrl+Down keeps
-// walking the account down the list.
-func (d *PreferencesDialog) reorderAccounts(c *client.Client, from, to int, focusMoved bool) {
-	if from == to || from < 0 || to < 0 || from >= len(d.accountRows) || to >= len(d.accountRows) {
+// reorderAccounts moves the row of list l at from to to: the list's rows
+// are rebuilt at once so the gesture feels immediate, then account.reorder
+// saves the whole order (integrations.FullOrder: the mail accounts, then
+// the integrations, the other page's in their current order) and the
+// daemon's notify.accountsChanged reorders the main window's sidebar. A
+// failure reloads the pages, because the daemon's order is the truth. With
+// focusMoved the moved row takes the focus again, so holding Ctrl+Down
+// keeps walking the account down the list.
+func (d *PreferencesDialog) reorderAccounts(c *client.Client, l *accountList, from, to int, focusMoved bool) {
+	if from == to || from < 0 || to < 0 || from >= len(l.rows) || to >= len(l.rows) {
 		return
 	}
-	// Snapshot the accounts, not the rows: setAccounts destroys the rows.
-	accounts := make([]api.Account, 0, len(d.accountRows))
-	for _, row := range d.accountRows {
+	// Snapshot the accounts, not the rows: setListAccounts destroys the rows.
+	accounts := make([]api.Account, 0, len(l.rows))
+	for _, row := range l.rows {
 		accounts = append(accounts, row.account)
 	}
 	moved := accounts[from].ID
@@ -227,30 +236,75 @@ func (d *PreferencesDialog) reorderAccounts(c *client.Client, from, to int, focu
 	for i, a := range accounts {
 		ids[i] = a.ID
 	}
+	full := integrations.FullOrder(d.currentAccounts(), l.page, ids)
+	d.allAccounts = accountsInOrder(d.currentAccounts(), full)
 
-	d.setAccounts(c, accounts)
+	d.setListAccounts(c, l, accounts)
 	if focusMoved {
-		if i := d.rowIndex(moved); i >= 0 {
-			d.accountRows[i].GrabFocus()
+		if i := l.rowIndex(moved); i >= 0 {
+			l.rows[i].GrabFocus()
 		}
 	}
-	d.accountsGroup.SetSensitive(false)
+	l.group.SetSensitive(false)
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 		defer cancel()
 		err := c.Call(ctx, api.MethodAccountReorder,
-			api.AccountReorderParams{AccountIDs: ids}, &api.AccountReorderResult{})
+			api.AccountReorderParams{AccountIDs: full}, &api.AccountReorderResult{})
 		glib.IdleAdd(func() {
 			if d.closed {
 				return
 			}
-			d.accountsGroup.SetSensitive(true)
+			l.group.SetSensitive(true)
 			if err != nil {
 				d.AddToast(widget.PlainToast(widget.RPCErrorText(i18n.T("Saving the account order"), err)))
 				d.loadAccounts(c)
 			}
 		})
 	}()
+}
+
+// currentAccounts are the accounts of the last account.list in its order,
+// each as its row shows it now (a row's switch updates its account).
+func (d *PreferencesDialog) currentAccounts() []api.Account {
+	shown := map[api.AccountID]api.Account{}
+	for _, l := range d.accountLists() {
+		for _, row := range l.rows {
+			shown[row.account.ID] = row.account
+		}
+	}
+	out := make([]api.Account, len(d.allAccounts))
+	for i, a := range d.allAccounts {
+		if s, ok := shown[a.ID]; ok {
+			a = s
+		}
+		out[i] = a
+	}
+	return out
+}
+
+// accountsInOrder returns accounts in the order of ids; an id that is not
+// among accounts is skipped and an account ids omits goes last, in its
+// order. The input is left alone.
+func accountsInOrder(accounts []api.Account, ids []api.AccountID) []api.Account {
+	byID := make(map[api.AccountID]api.Account, len(accounts))
+	for _, a := range accounts {
+		byID[a.ID] = a
+	}
+	out := make([]api.Account, 0, len(accounts))
+	placed := make(map[api.AccountID]bool, len(accounts))
+	for _, id := range ids {
+		if a, ok := byID[id]; ok && !placed[id] {
+			placed[id] = true
+			out = append(out, a)
+		}
+	}
+	for _, a := range accounts {
+		if !placed[a.ID] {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // moveAccount returns accounts with the entry at from moved to to. The

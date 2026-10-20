@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/crm"
 )
 
 // identity returns the msgids; N picks English's form.
@@ -108,6 +109,44 @@ func TestMessageItemsSeveral(t *testing.T) {
 	}
 	if got := Label(identity{}, OpenMessage, Labels{Count: 1}); got != "Open in New Window" {
 		t.Errorf("label of one: %q", got)
+	}
+}
+
+// eWay-CRM (ui/internal/crm OfferFor): Save after the answers, the
+// saved-state items for one saved message, Save with the count for
+// several (saved or not), nothing when not offered.
+func TestMessageItemsCrm(t *testing.T) {
+	s := mail
+	s.SetCrm(crm.Offer{Shown: true, Enabled: true, Count: 1})
+	if got := show(MessageItems(s)); got != "open | reply replyAll forward | crmSave | markUnread toggleFlag | archive moveTo junk trash | assistant" {
+		t.Errorf("not saved: %s", got)
+	}
+	s.SetCrm(crm.Offer{Shown: true, Enabled: true, Count: 1, Saved: true})
+	if got := show(MessageItems(s)); got != "open | reply replyAll forward | crmOpen crmEditLinks crmRemove | markUnread toggleFlag | archive moveTo junk trash | assistant" {
+		t.Errorf("saved: %s", got)
+	}
+	s.Count, s.Open, s.Reply, s.ReplyAll = 3, true, false, false
+	s.SetCrm(crm.Offer{Shown: true, Count: 3, Saved: true})
+	if got := show(MessageItems(s)); got != "open | forward | crmSave- | markUnread toggleFlag | archive moveTo junk trash | assistant" {
+		t.Errorf("several, too many or unsavable: %s", got)
+	}
+	s.SetCrm(crm.Offer{})
+	if got := show(MessageItems(s)); strings.Contains(got, "crm") {
+		t.Errorf("not offered: %s", got)
+	}
+	tr := identity{}
+	for id, want := range map[ItemID]string{
+		CrmOpen: "Open in eWay-CRM", CrmEditLinks: "Edit Links…", CrmRemove: "Remove from eWay-CRM",
+	} {
+		if got := Label(tr, id, Labels{}); got != want {
+			t.Errorf("%s: %q", id, got)
+		}
+	}
+	if got := Label(tr, CrmSave, Labels{}); got != "Save to eWay-CRM…" {
+		t.Errorf("save one: %q", got)
+	}
+	if got := Label(tr, CrmSave, Labels{Count: 4}); got != "Save 4 Messages to eWay-CRM…" {
+		t.Errorf("save several: %q", got)
 	}
 }
 

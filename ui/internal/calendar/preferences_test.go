@@ -104,9 +104,6 @@ func TestPreferencesLayout(t *testing.T) {
 	if len(empty) != 3 || empty[1].Kind != SectionEmpty || empty[2].Kind != SectionAdd {
 		t.Errorf("empty layout %+v", empty)
 	}
-	if ShowsInAccountsTab(s.Accounts[2]) || !ShowsInAccountsTab(s.Accounts[0]) || !ShowsInAccountsTab(imap) {
-		t.Error("ShowsInAccountsTab")
-	}
 	if DisplayGroup(en{}) != "Display" || RemoveAccount(en{}) != "Remove Account" || NoCalendarsTitle(en{}) != "No calendars yet." {
 		t.Error("tab texts")
 	}

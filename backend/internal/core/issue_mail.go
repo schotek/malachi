@@ -159,6 +159,7 @@ func (b *Backend) afterMailStored(ctx context.Context, accountID, messageID stri
 	b.storedUnder(ctx, messageID, pol)
 	b.noteIssueMail(ctx, accountID, messageID)
 	b.noteInvitation(ctx, accountID, messageID)
+	b.noteCrmFollow(ctx, accountID, messageID)
 }
 
 // afterIssueStored is the Stored hook of the issue-tracker syncer: the
@@ -176,6 +177,7 @@ func (b *Backend) afterIssueStored(ctx context.Context, accountID, messageID str
 // invalidateIssueTrackers forgets the accounts read for the matcher: an
 // account changed.
 func (b *Backend) invalidateIssueTrackers() {
+	b.crm.follow.invalidate()
 	b.im.mu.Lock()
 	b.im.loaded = false
 	b.im.settled = map[string]bool{}

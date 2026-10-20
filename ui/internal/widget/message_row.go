@@ -14,6 +14,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/calendar"
+	"github.com/schotek/malachi/ui/internal/crm"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
 )
@@ -48,6 +49,10 @@ type Message struct {
 	// (calendar.InvitationPillOf); a cancellation strikes the subject
 	// through (calendar.StrikesSubject).
 	Invitation calendar.InvitationPill
+
+	// Crm is the pill of a message saved in eWay-CRM (crm.PillFor): its
+	// label and tooltip; empty when the message is not saved.
+	Crm crm.Pill
 }
 
 // Thread is what a conversation row displays; a projection of
@@ -134,6 +139,9 @@ type MessageRow struct {
 	bulkPill     *gtk.Label
 	internalPill *gtk.Label
 	draftPill    *gtk.Label
+	// crmPill is the pill of a message saved in eWay-CRM.
+	crmPill *gtk.Label
+	crm     crm.Pill
 	// invitationPill is the pill of a message with a calendar part.
 	invitationPill *gtk.Label
 	invitation     calendar.InvitationPill
@@ -183,6 +191,7 @@ func NewMessageRow() *MessageRow {
 		bulkPill:       b.GetObject("bulk_pill").Cast().(*gtk.Label),
 		internalPill:   b.GetObject("internal_pill").Cast().(*gtk.Label),
 		draftPill:      b.GetObject("draft_pill").Cast().(*gtk.Label),
+		crmPill:        b.GetObject("crm_pill").Cast().(*gtk.Label),
 		invitationPill: b.GetObject("invitation_pill").Cast().(*gtk.Label),
 		event:          b.GetObject("event_label").Cast().(*gtk.Label),
 
@@ -217,6 +226,7 @@ func (r *MessageRow) SetMessage(m Message) {
 	r.issue = m.Issue
 	r.tag = m.Tag
 	r.invitation = m.Invitation
+	r.crm = m.Crm
 	r.applyLead()
 	r.applyIssue()
 	r.applyInvitation()
@@ -251,6 +261,7 @@ func (r *MessageRow) SetThread(t Thread) {
 	r.issue = t.Issue
 	r.tag = t.Tag
 	r.invitation = t.Invitation
+	r.crm = crm.Pill{}
 	r.applyLead()
 	r.applyIssue()
 	r.applyInvitation()
@@ -269,6 +280,7 @@ func (r *MessageRow) applyIssue() {
 	issue := r.issue
 	r.eventRow = issue != nil && issue.Event && !r.thread
 	SetBulkPill(r.bulkPill, r.tag, issue == nil)
+	SetCrmPill(r.crmPill, r.crm, issue == nil)
 	if issue == nil {
 		r.issueKey.SetVisible(false)
 		r.statusPill.SetVisible(false)

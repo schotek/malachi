@@ -8,6 +8,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/pango"
 
 	"github.com/schotek/malachi/ui/internal/calendar"
+	"github.com/schotek/malachi/ui/internal/crm"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
 )
@@ -82,6 +83,16 @@ func SetBulkPill(l *gtk.Label, tag string, show bool) {
 	l.SetText(tag)
 	l.SetTooltipText(tag)
 	l.SetVisible(show && tag != "")
+}
+
+// SetCrmPill shows the pill of a message saved in eWay-CRM (crm.PillFor:
+// the brand, never translated, with "Saved in eWay-CRM" as its tooltip);
+// an empty pill, or show false (a row of an issue), hides it.
+func SetCrmPill(l *gtk.Label, p crm.Pill, show bool) {
+	l.SetUseMarkup(false)
+	l.SetText(p.Label)
+	l.SetTooltipText(p.Tooltip)
+	l.SetVisible(show && p.Label != "")
 }
 
 // invitationClasses are the colour classes of an invitation's pill

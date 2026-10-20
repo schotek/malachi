@@ -997,6 +997,20 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   the account's settings (the token is not refreshable). Atlassian's
   developer terms leave no room for an OAuth client of the project's
   own ([architecture.md §7](architecture.md#7-open-decisions)).
+- An `eway` account (§7.3) keeps its eWay-CRM password as
+  `credentials.password` in the keyring and never elsewhere. The daemon
+  sends only the password's MD5 hex, which is what eWay-CRM's `LogIn`
+  takes (password-equivalent for that CRM, but not the password a user
+  may reuse elsewhere), and only to `LogIn` of the account's own
+  service URL over https; the session id lives in memory and goes only
+  in request bodies and the upload's query to that origin. `account.update`
+  that changes the service URL or the user name needs a new password,
+  and `account.test` with `accountId` uses the stored one only for the
+  same instance and user. A refused sign-in latches the account until
+  it is edited, so a wrong password cannot lock the user out. Neither
+  the password, its hash nor the session id is logged or part of an
+  error, and the user record eWay-CRM returns (which carries fields such
+  as `Server_Password`) is read for the user's address only.
 - Log lines are scrubbed: authentication commands are logged as
   `AUTHENTICATE <redacted>`.
 - `account.list` never returns secrets; `Credentials` is write-only.
@@ -1261,6 +1275,99 @@ sender gains nothing beyond what the message itself offers.
 - **Remembered unsubscriptions** record only that the user unsubscribed
   from a list or sender through the daemon (not a page opened in the
   browser) and when; they go with the account.
+
+### 7.3 Saving mail to a CRM
+
+`crm.save` ([api.md §4.17](api.md#417-crm)) is a new outbound flow: until
+it, a whole received message left the device only as a forward the user
+sent. It sends the message as received — every header, the body, every
+attachment, every recipient visible in it — to the user's eWay-CRM, where
+everyone with access to that CRM can read it (unless saved as private).
+
+- **Only on an explicit action** of the user on the named messages, with
+  the one exception below; no other rule, no MCP tool in v1. The dialog shows the CRM
+  account it goes to. Removing (`crm.remove`) deletes the item for every
+  user of the CRM, after a question that says so.
+- **Following a saved conversation** (`EwayConfig.followThreads`,
+  docs/eway.md D22) is the only automatic outbound mail flow of v1: after
+  the user saved a message of a conversation, the daemon saves the
+  conversation's later messages (replies the user sends, answers that
+  arrive) to the same CRM account with the links, superior item and
+  privacy the user chose for the saved message. It is bounded to that
+  mail account and that CRM account — never another mail account's
+  messages, never another CRM — to messages stored after the first save
+  and not dated before it, in folders of role inbox, sent, archive or
+  none (never drafts, the Outbox, junk or trash), to messages whole on
+  this device, and to messages the bulk-mail classifier judged personal:
+  a newsletter, list or automated message (`internal/bulk`) is never saved
+  by itself, even when it forged `In-Reply-To` or `References` into the
+  conversation, and one not classified yet waits for the hourly pass; the
+  user can still save either by hand. The switch is per CRM account, on by default for a new
+  account and shown in the account's settings (Integrations → Edit);
+  switching it off or pausing the account stops what is queued and
+  running at once. The hourly catch-up looks back 90 days and saves at
+  most 50 messages per pass; failures are logged by class only. A mail
+  that only claims to belong to the conversation (forged `In-Reply-To` or
+  `References`) joins the thread locally like any reply and would be
+  saved with the conversation: the user who saved the conversation chose
+  to share it, and such a message is already in that user's mailbox.
+- **What goes**: the raw message exactly as the mail server delivered it
+  (`<subject>.eml`), and an item with the subject, the sender's and the
+  To and Cc addresses (no names), the date, the Message-ID, the number of
+  attachments, the message's plain text (≤ 32 KiB) and the privacy flag.
+  Bcc is never in a stored message and is never sent. Nothing else about
+  the user or the device goes with it.
+- **https only**, to the account's service URL; `http`, `InsecureAPI.svc`
+  and a redirect of a request are refused (a GET follows a redirect only
+  within the service's origin, never to http). No certificate pinning
+  (system trust store, as for Jira).
+- **Credentials only to the origin**: §6. Logged are the method, the
+  return code class (`rc…`), the HTTP status or transport class and
+  counts — never subjects, addresses, names, item GUIDs of contacts,
+  bodies, or the CRM's `Description` (eWay-CRM puts the session id into
+  the text of `rcBadSession`).
+- **The CRM is untrusted input.** Every string from it (names, e-mails,
+  tracked domains, version) is cleaned of control, format, bidi and
+  invisible characters and capped (`internal/eway/clean.go`); GUIDs are
+  shape-checked; a malformed answer (not JSON, a wrong type, data that is
+  not a list) is an error, never an empty success; answers are capped at
+  8 MiB. Clients show the strings as plain text only. The CRM's parse of
+  the stored file (`GetEmailMessage`, its `HtmlBody`) is never requested:
+  Malachi shows its own stored copy. Hostile samples are in
+  `testdata/eway` and the answer decoder has a fuzz target.
+- **Suggestions read addresses only**, never the text of a message; the
+  user's own addresses are not searched; lookups go only to the user's
+  own CRM; public mail providers' domains are never matched against
+  companies.
+- **The open link is never taken from server data**: the daemon builds
+  `https://open.eway-crm.com/?ws=…&l=…` from the stored service URL and a
+  GUID of fixed shape, so clients open it without the "Open this link?"
+  question. eWay-CRM's link service learns the service URL and the item
+  GUID; that is its purpose.
+- **What the CRM learns about the device**: a random client id kept in
+  the store (`meta` `eway.clientId`), the constant machine name "Malachi
+  Mail" (not the host name), the application version, and the
+  User-Agent `MalachiMail/<version> (+https://github.com/schotek/malachi)`
+  (Cloudflare in front of the hosted instances refuses Go's default).
+- **A Message-ID is no proof.** Any mail can carry the Message-ID of
+  someone else's message. An item found by Message-ID is taken for the
+  user's message — shown as saved, linked, removed — only when its sender
+  address and date (to the minute) are the message's too; otherwise the
+  message counts as not saved and saving creates its own item. With a
+  local record only the recorded item is ever read, changed or deleted.
+- **Orphaned uploads.** The raw message is uploaded before the item that
+  names it exists. When eWay-CRM then refuses the item (a duplicate by
+  its hash that the Message-ID does not find, another refusal), or the
+  upload or `SaveEmail` fails in transport (whether the server kept
+  anything is then unknown), the daemon asks it to delete the GUID, with
+  a short context of its own; the service answers success whether
+  or not anything was removed and has no call to list or delete a bare
+  upload, so an invisible copy of the message may stay on the CRM's
+  server. The user's CRM is the destination anyway; the risk is
+  storage, not disclosure to someone new.
+- **The local record** (`crm_links`) holds only the CRM item's GUID, the
+  linked items' names as last read, the times and the privacy flag; it
+  goes with either account.
 
 ## 8. Local storage
 
@@ -2086,6 +2193,12 @@ Advisories) rather than a public issue. No bug bounty.
 - [ ] Change to the OAuth2 scopes: are calendar scopes still asked for
       only on the user's calendar opt-in, and is the recorded scope
       still the one the provider granted?
+- [ ] Change to `internal/eway` or `crm.*`: does anything send a message
+      to the CRM without an explicit `crm.save`, does every string from
+      the CRM pass `clean.go`, does a GUID or URL from an answer reach a
+      client unchecked, do the password, its hash, the session id or a
+      `Description` reach a log or an error, and does a request follow a
+      redirect off the service's origin?
 - [ ] New MCP tool or output field: is every mail-derived string cleaned
       and inside the nonce fence, is the tool behind the right flag, are
       its annotations set, and is its output capped?

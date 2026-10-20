@@ -13,7 +13,8 @@ private final class PrefsPassThroughImageView: NSImageView {
     }
 }
 
-/// One account of the Accounts page (accounts_page.go `accountRow`): the
+/// One account of the Accounts or Integrations page (accounts_page.go
+/// `accountRow`): the
 /// drag handle, the provider icon, name with the kind capsule (M365,
 /// GOOGLE, IMAP, JIRA, CALDAV; `accountHeaderBadge`) and address, the status, "Sign
 /// In…" for an account of the browser sign-in that needs it, the pause
@@ -154,19 +155,22 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
         fatalError("not used")
     }
 
-    /// Shows the account's current state (accounts_page.go `accountRow.apply`).
+    /// Shows the account's current state (accounts_page.go `accountRow.apply`)
+    /// as `Integrations.rowFor` describes its row: the kind's symbol (an
+    /// envelope, a ticket for Jira, a calendar for CalDAV), name and host
+    /// or address, the switch only where the kind can pause, and the Edit
+    /// button only where there is an editor, its tooltip naming it.
     func apply(_ a: Account) {
-        // A Jira account: a ticket, and its site under the name (Swift-first:
-        // mirror in accounts_page.go when GTK gets Jira accounts).
-        // A CalDAV account (calendar only): a calendar, its server under the name.
-        let caldav = a.config.kind == .caldav
-        icon.image = wizardSymbol(caldav ? "calendar" : accountEditor(a) == .jira ? "ticket" : "envelope", pointSize: 15)
-        titleLabel.stringValue = accountRowTitle(a)
+        let row = Integrations.rowFor(a)
+        icon.image = wizardSymbol(AccountRowCell.symbol(for: row.icon), pointSize: 15)
+        titleLabel.stringValue = row.title
         let badge = accountHeaderBadge(a)
         kindBadge.stringValue = badge
         kindBadge.isHidden = badge.isEmpty
-        let host = caldav ? URLComponents(string: a.config.caldav?.serverUrl ?? "")?.host ?? "" : ""
-        subtitleLabel.stringValue = host.isEmpty ? accountRowSubtitle(a) : host
+        subtitleLabel.stringValue = row.subtitle
+        toggle.isHidden = !row.offersSwitch
+        editButton.isHidden = row.editor == .none
+        editButton.toolTip = row.editLabel
         reverting = true
         toggle.state = a.enabled ? .on : .off
         reverting = false
@@ -178,6 +182,16 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
         statusLabel.isHidden = status.isEmpty
         signInButton.isHidden = !accountRowOffersSignIn(a)
         toolTip = a.config.email
+    }
+
+    /// The SF Symbol of an `Integrations` icon name.
+    static func symbol(for icon: String) -> String {
+        switch icon {
+        case Integrations.jiraIcon: return "ticket"
+        case Integrations.calDAVIcon: return "calendar"
+        case Integrations.ewayIcon: return Icon.crmSymbol
+        default: return "envelope"
+        }
     }
 
     /// The row's own sensitivity (while its call runs).

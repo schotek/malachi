@@ -223,6 +223,11 @@ func ids(_ entries: [FolderEntry]) -> [String] {
         var caldav = mail
         caldav.config.kind = .caldav
         #expect(accountHeaderBadge(caldav) == "CALDAV")
+        // An eWay-CRM account (Settings → Integrations) is not mail: its
+        // capsule names the CRM, never IMAP (seen at Gate B 2026-10-17).
+        var eway = mail
+        eway.config.kind = .eway
+        #expect(accountHeaderBadge(eway) == "EWAY")
     }
 
     /// A calendar-only CalDAV account is never in the Mail sidebar: no
@@ -255,13 +260,18 @@ func ids(_ entries: [FolderEntry]) -> [String] {
         caldav.config.kind = .caldav
         var off = testAccount("off", enabled: false)
         off.config.kind = .caldav
+        // A CRM account (eway) has no mail either (docs/eway.md D1).
+        var crm = testAccount("e")
+        crm.config.kind = .eway
+        var crmOff = testAccount("e0", enabled: false)
+        crmOff.config.kind = .eway
         #expect(inMail(imap) && inMail(graph) && inMail(jira))
-        #expect(!inMail(caldav) && !inMail(off))
+        #expect(!inMail(caldav) && !inMail(off) && !inMail(crm) && !inMail(crmOff))
 
-        let accounts = [caldav, graph, testAccount("b", enabled: false), imap]
+        let accounts = [caldav, graph, crm, testAccount("b", enabled: false), imap]
         #expect(mailSidebarAccounts(accounts).map(\.id) == ["g", "a"])
         #expect(MailModel(accounts: accounts, folders: [:]).mailSidebarAccounts.map(\.id) == ["g", "a"])
-        #expect(MailModel(accounts: accounts, folders: [:]).enabledAccounts.map(\.id) == ["c", "g", "a"])
+        #expect(MailModel(accounts: accounts, folders: [:]).enabledAccounts.map(\.id) == ["c", "g", "e", "a"])
 
         var favourites = FavouriteState()
         favourites.toggle(FolderKey(account: "c", folder: "in-c"))

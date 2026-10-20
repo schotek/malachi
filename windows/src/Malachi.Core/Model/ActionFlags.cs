@@ -4,7 +4,7 @@
 // Port of macos/Sources/MalachiCore/Model/ActionRules.swift (ActionFlags);
 // GTK: ui/internal/window/actions.go (setMessageActionsSensitive),
 // action_rules.go (actionState) and ui/internal/selection (Flags: Count,
-// Open).
+// Open, Crm, CrmSaved).
 
 namespace Malachi.Core.Model;
 
@@ -107,4 +107,18 @@ public readonly record struct ActionFlags
     /// folder's account. None for a mail account.
     /// </summary>
     public MessageActionKind Unsupported { get; init; }
+
+    /// <summary>
+    /// selection.Flags Crm: Save to eWay-CRM can run (one row:
+    /// CrmRules.CanSave with an eWay-CRM account available; several: every
+    /// row, at most <see cref="Api.API.Limits.MaxCrmMessages"/>). Filled by
+    /// ActionsController from its CRM state.
+    /// </summary>
+    public bool Crm { get; init; }
+
+    /// <summary>
+    /// selection.Flags CrmSaved: the one row is saved in eWay-CRM (the
+    /// saved-state items replace Save); never for several.
+    /// </summary>
+    public bool CrmSaved { get; init; }
 }

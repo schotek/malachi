@@ -4,9 +4,12 @@
 package window
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/integrations"
 	"github.com/schotek/malachi/ui/internal/signin"
 )
 
@@ -241,5 +244,42 @@ func TestJiraAuthBannerNamesTheToken(t *testing.T) {
 	}
 	if got := authBannerButton(signin.KindOf(a.Config), api.CodeKeyringError); got != "Open Preferences" {
 		t.Errorf("keyring button %q", got)
+	}
+}
+
+func TestAccountsInOrder(t *testing.T) {
+	acc := func(id string) api.Account { return api.Account{ID: api.AccountID(id)} }
+	in := []api.Account{acc("a"), acc("b"), acc("c"), acc("d")}
+	got := accountsInOrder(in, []api.AccountID{"c", "x", "a", "c"})
+	var ids []api.AccountID
+	for _, a := range got {
+		ids = append(ids, a.ID)
+	}
+	if want := []api.AccountID{"c", "a", "b", "d"}; !slices.Equal(ids, want) {
+		t.Errorf("%v, want %v", ids, want)
+	}
+	if in[0].ID != "a" {
+		t.Error("input changed")
+	}
+}
+
+// The rows of the Integrations page by kind: a CalDAV account has no
+// switch and its Edit opens the Calendar page; a Jira account keeps the
+// switch and its settings.
+func TestIntegrationRowsByKind(t *testing.T) {
+	caldav := api.Account{ID: "c", Config: api.AccountConfig{Name: "Nextcloud", Email: "jana@example.org", Kind: api.AccountCalDAV,
+		CalDAV: &api.CalDAVConfig{ServerURL: "https://cloud.example.org/remote.php/dav"}}}
+	r := integrations.RowFor(caldav, i18n.Tr)
+	if r.OffersSwitch || r.Editor != integrations.EditorCalendarPage || accountIcon(caldav) != integrations.CalDAVIcon ||
+		accountRowSubtitle(caldav) != "cloud.example.org" {
+		t.Errorf("caldav %+v", r)
+	}
+	j := integrations.RowFor(jiraTestAccount(), i18n.Tr)
+	if !j.OffersSwitch || j.Editor != integrations.EditorJira {
+		t.Errorf("jira %+v", j)
+	}
+	mail, other := integrations.Split([]api.Account{jiraTestAccount(), caldav, {ID: "m"}})
+	if len(mail) != 1 || mail[0].ID != "m" || len(other) != 2 {
+		t.Errorf("split %v / %v", mail, other)
 	}
 }

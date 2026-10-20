@@ -24,6 +24,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/calendardata"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/integrations"
 	"github.com/schotek/malachi/ui/internal/style"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
@@ -418,8 +419,17 @@ func (p *calendarPrefs) addCalDAV() {
 	w.showAddCalDAV(p.d, func() {
 		if !p.closed {
 			p.src.Refresh()
+			p.reloadAccountPages()
 		}
 	})
+}
+
+// reloadAccountPages lists the accounts of the Accounts and Integrations
+// pages again after this page added or removed a CalDAV account.
+func (p *calendarPrefs) reloadAccountPages() {
+	if p.d.rpc != nil {
+		p.d.loadAccounts(p.d.rpc)
+	}
 }
 
 // signIn is a consent row's Sign In…: the main window's browser sign-in
@@ -446,8 +456,7 @@ func (p *calendarPrefs) removeAccount(id api.AccountID) {
 	}
 	check := gtk.NewCheckButtonWithMnemonic(i18n.T("Also delete _drafts and downloaded data"))
 	check.SetActive(true)
-	// TRANSLATORS: %s is the account's e-mail address.
-	body := fmt.Sprintf(i18n.T("%s will be removed from Malachi Mail. Mail on the server is not affected."), accountRowTitle(a))
+	body := integrations.RowFor(a, i18n.Tr).RemoveBody
 	widget.ConfirmDestructiveExtra(p.d, i18n.T("Remove this account?"), body, i18n.T("_Remove"), check, func() {
 		deleteLocal := check.Active()
 		c := p.rpc
@@ -465,6 +474,7 @@ func (p *calendarPrefs) removeAccount(id api.AccountID) {
 					return
 				}
 				p.src.Refresh()
+				p.reloadAccountPages()
 			})
 		}()
 	})
