@@ -123,6 +123,10 @@ final class MessageViewController: NSViewController {
     /// The messages whose quoted history the user revealed here; the pane
     /// forgets them when it shows another message.
     private var quoted = QuotedReveal()
+    /// The button's clamp in the page: hidden with the button (a clamp
+    /// around a hidden child keeps its height, and under a message without
+    /// quoted text the quick-reply bar's line would show that band).
+    private var quotedClamp: ClampView?
     private let loadingPage = NSView()
     private let loadingSpinner = Spinner(size: 32)
     private let bodyContainer = NSView()
@@ -219,9 +223,11 @@ final class MessageViewController: NSViewController {
         // button stays in sight at the bottom of the message.
         let quotedClamp = ClampView(maximum: 900, tight: 900, child: quotedButton)
         quotedClamp.setContentHuggingPriority(.required, for: .vertical)
+        quotedClamp.isHidden = true
         quotedButton.onToggle = { [weak self] in self?.toggleQuoted() }
         if mode != .embedded {
             messagePage.addArrangedSubview(quotedClamp)
+            self.quotedClamp = quotedClamp
         }
 
         pages.translatesAutoresizingMaskIntoConstraints = false
@@ -435,6 +441,7 @@ final class MessageViewController: NSViewController {
             renderOutboxBanner(lm?.msg)
         }
         quotedButton.show(mode == .embedded || issue?.eventBody != nil ? nil : quotedTextOffer(lm))
+        quotedClamp?.isHidden = quotedButton.isHidden
         onRender?(s, lm)
     }
 
