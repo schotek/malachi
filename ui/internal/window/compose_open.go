@@ -38,7 +38,7 @@ func (w *Window) openCompose(kind compose.Kind, id api.MessageID) {
 	w.openComposeFrom(w, kind, id)
 }
 
-// openComposeFrom opens a reply or forward of message id; parent is the
+// openComposeWith opens a reply or forward of message id; parent is the
 // window the request came from, for the question below. The template comes
 // from the backend; a second click while it is being prepared does
 // nothing (one window will appear). A forward that needs the original
@@ -52,15 +52,15 @@ func (w *Window) openCompose(kind compose.Kind, id api.MessageID) {
 // A reply on an account that comments (an issue) is a comment
 // (openComment); a forward of a message whose account writes no mail is
 // written in a mail account (forwardAccount), and draft.create finds the
-// message by MessageAccountID.
-func (w *Window) openComposeFrom(parent gtk.Widgetter, kind compose.Kind, id api.MessageID) {
+// message by MessageAccountID. ownHTML and opened: openWith (below).
+func (w *Window) openComposeWith(parent gtk.Widgetter, kind compose.Kind, id api.MessageID, ownHTML string, opened func()) {
 	s, ok := w.summary(id)
 	if !ok || w.composing[id] {
 		return
 	}
 	own, known := w.model.account(s.AccountID)
 	if kind == compose.KindReply && known && own.Can(api.CapabilityComment) {
-		w.openComment(s)
+		w.openCommentFor(s.AccountID, s.ID, ownHTML, opened)
 		return
 	}
 	// The account the draft is written in.
@@ -86,8 +86,8 @@ func (w *Window) openComposeFrom(parent gtk.Widgetter, kind compose.Kind, id api
 	fallback := func() {
 		p := compose.Prefill(kind, src, self)
 		p.AccountID = from
-		p.Attribution = attribution
-		w.compose.Open(p)
+		p.Attribution, p.OwnHTML = attribution, ownHTML
+		w.openWith(p, opened)
 	}
 
 	params := api.DraftCreateParams{
@@ -117,8 +117,8 @@ func (w *Window) openComposeFrom(parent gtk.Widgetter, kind compose.Kind, id api
 				p := compose.FromDraft(kind, res.Draft, res.Blocked)
 				p.AccountID = from
 				p.Skipped = len(res.Skipped)
-				p.Attribution = attribution
-				w.compose.Open(p)
+				p.Attribution, p.OwnHTML = attribution, ownHTML
+				w.openWith(p, opened)
 			})
 		}()
 	}
@@ -184,7 +184,7 @@ func (w *Window) forwardAccount() (api.Account, bool) {
 // attribution, and no fallback either: without a comment draft from the
 // daemon there is nothing to write, only the toast.
 func (w *Window) openComment(s api.MessageSummary) {
-	w.openCommentFor(s.AccountID, s.ID)
+	w.openCommentFor(s.AccountID, s.ID, "", nil)
 }
 
 // openReply opens a reply to message msg of account acc, or (comment) a
@@ -199,7 +199,7 @@ func (w *Window) openComment(s api.MessageSummary) {
 // would have given (compose.Attribution's name-only branch).
 func (w *Window) openReply(acc api.AccountID, msg api.MessageID, comment bool, person string) {
 	if comment {
-		w.openCommentFor(acc, msg)
+		w.openCommentFor(acc, msg, "", nil)
 		return
 	}
 	if w.composing[msg] {
@@ -236,8 +236,8 @@ func (w *Window) openReply(acc api.AccountID, msg api.MessageID, comment bool, p
 }
 
 // openCommentFor is openComment without needing a cached summary (the
-// board's own comment, through openReply).
-func (w *Window) openCommentFor(acc api.AccountID, msg api.MessageID) {
+// board's own comment, through openReply); ownHTML, opened: openWith.
+func (w *Window) openCommentFor(acc api.AccountID, msg api.MessageID, ownHTML string, opened func()) {
 	if w.composing[msg] {
 		return
 	}
@@ -256,8 +256,8 @@ func (w *Window) openCommentFor(acc api.AccountID, msg api.MessageID) {
 				return
 			}
 			p := compose.FromDraft(compose.KindReply, res.Draft, res.Blocked)
-			p.AccountID = acc
-			w.compose.Open(p)
+			p.AccountID, p.OwnHTML = acc, ownHTML
+			w.openWith(p, opened)
 		})
 	}()
 }
@@ -352,4 +352,24 @@ func composeFallbackText(what string, err error) string {
 		return ""
 	}
 	return widget.RPCErrorText(what, err)
+}
+
+// openComposeFrom opens a reply or forward of message id from parent
+// (openComposeWith) with an empty editor.
+func (w *Window) openComposeFrom(parent gtk.Widgetter, kind compose.Kind, id api.MessageID) {
+	w.openComposeWith(parent, kind, id, "", nil)
+}
+
+// openWith opens the compose window with p and then calls opened (nil for
+// none): ownHTML of openComposeWith is the user's own text written before
+// the window (the chat's quick-reply bar, compose.Params.OwnHTML), and
+// opened tells the bar that a window holds it now, so the bar may let it
+// go. It is called only here, when a window really opens: never when
+// openComposeWith returns early (no summary, one being prepared already),
+// nor after a comment's failed draft.create, which opens nothing.
+func (w *Window) openWith(p compose.Params, opened func()) {
+	w.compose.Open(p)
+	if opened != nil {
+		opened()
+	}
 }

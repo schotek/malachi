@@ -160,6 +160,13 @@ public sealed partial class MainWindow : Window
     public void FocusMessageList() => ListPane.FocusList();
 
     /// <summary>
+    /// Whether the message list is on screen (the folded layouts hide it
+    /// behind the reading pane): the quick-reply bar's Escape gives it the
+    /// keyboard only then.
+    /// </summary>
+    internal bool MessageListOnScreen => ListPane.Visibility == Visibility.Visible && ListPane.ActualWidth > 0;
+
+    /// <summary>
     /// window.go addConversationPaging: Space and Shift+Space in the message
     /// list page through the conversation shown; <paramref name="page"/>
     /// answers whether it used the key.

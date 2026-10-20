@@ -153,7 +153,48 @@ public sealed partial class MainWindow
     // has its flyout, and the click only opens it.
     private void OnAssistantButtonClick()
     {
-        if (MessageCommands.Assistant.Flyout is not null || !state.Assistant.PanelShown)
+        if (MessageCommands.Assistant.Flyout is not null)
+        {
+            return;
+        }
+        OpenAssistantPanelFocused();
+    }
+
+    /// <summary>
+    /// The ✦ button of the chat's quick-reply bar (docs/plans/chat-view.md
+    /// Q15): what the toolbar's ✦ does (macOS <c>showAssistant(from:)</c>,
+    /// GTK bindAssistantButton): with In App chosen
+    /// (Assistant.ButtonOpensPanel) the panel unfolds with its question
+    /// field focused, otherwise the toolbar's Assistant menu pops up over
+    /// <paramref name="anchor"/> (above it: the bar is at the bottom of the
+    /// pane). Nothing while the Assistant is not shown.
+    /// </summary>
+    internal void ShowAssistantFrom(FrameworkElement anchor)
+    {
+        ArgumentNullException.ThrowIfNull(anchor);
+        var assistant = state.Assistant;
+        if (!assistant.Shown)
+        {
+            return;
+        }
+        if (Assistant.ButtonOpensPanel(assistant.Settings.AssistantTarget, hasPanel: true))
+        {
+            OpenAssistantPanelFocused();
+            return;
+        }
+        assistantMenu?.Flyout.ShowAt(anchor, new Microsoft.UI.Xaml.Controls.Primitives.FlyoutShowOptions
+        {
+            Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.TopEdgeAlignedRight,
+        });
+    }
+
+    // The panel unfolds and its question field takes the keyboard (the ✦
+    // button with In App chosen). Not OpenAssistantPanel of
+    // MainWindow.EventDetail.cs, which only reveals the panel (and in the
+    // Calendar brings the window to Mail first).
+    private void OpenAssistantPanelFocused()
+    {
+        if (!state.Assistant.PanelShown)
         {
             return;
         }

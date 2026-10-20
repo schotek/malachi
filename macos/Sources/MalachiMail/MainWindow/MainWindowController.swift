@@ -318,6 +318,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         assistantPanel?.focusInput()
     }
 
+    /// The Assistant button of the chat's quick-reply bar does what the
+    /// toolbar's ✦ does (`Assistant.buttonOpensPanel`, as
+    /// `setAssistant(opensPanel:in:)` decides for the toolbar): with In App
+    /// the panel opens and its field takes the keyboard
+    /// (`openAssistantPanel`), otherwise the toolbar's own Assistant menu
+    /// (`assistantMenu`, its items validated by this window for the
+    /// selection, the conversation shown) pops up under `button`.
+    func showAssistant(from button: NSView) {
+        if Assistant.buttonOpensPanel(state.settings.assistantTarget, hasPanel: true) {
+            openAssistantPanel()
+            return
+        }
+        let below = button.isFlipped ? button.bounds.maxY + 4 : button.bounds.minY - 4
+        assistantMenu.menu.popUp(positioning: nil, at: NSPoint(x: button.bounds.minX, y: below), in: button)
+    }
+
     /// The panel and its toolbar toggle exist while the Assistant is shown
     /// and In App is chosen; otherwise the panel folds.
     private var providerGeneration = -1

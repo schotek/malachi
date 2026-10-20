@@ -77,6 +77,16 @@ func convChatCompactDates(column float64) bool {
 	return convChatBubbleMax(column)-2*convCardPaddingH < convCompactHeader
 }
 
+// convQuickReplyIconOnly reports whether the quick-reply bar under the
+// chat in a pane pane wide shows its mode button as the icon alone
+// (docs/plans/chat-view.md Q11): when the bubbles show the short date
+// (convChatCompactDates of the pane's convChatColumn), the field keeps the
+// room the label would take. The macOS client's
+// `ConversationLayout.quickReplyIconOnly(pane:)`.
+func convQuickReplyIconOnly(pane float64) bool {
+	return convChatCompactDates(convChatColumn(pane))
+}
+
 // convChatAtEnd reports whether a viewport viewport tall whose top is at
 // top shows the end of a document document tall (within slack); a document
 // no taller than the viewport is always at its end.

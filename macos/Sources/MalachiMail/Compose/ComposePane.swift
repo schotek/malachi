@@ -206,6 +206,9 @@ final class ComposePane: NSViewController, NSTextFieldDelegate {
         // id and version make the saves updates, and closing never deletes it.
         draft.setOpened(draftID: params.draftID, version: params.version, replaces: params.replaces,
                         fromDrafts: params.kind == .edit)
+        // Until the editor reported `ready` and `editorLoaded` marked the
+        // user's own text as an edit, closing the window asks.
+        draft.ownTextPending = options.layout == .window && !params.ownHTML.isEmpty
         editor.load(bodyHTML: bodyLayout.editorHTML)
         if let quotedEditor {
             quotedEditor.load(bodyHTML: bodyLayout.quotedHTML)
@@ -526,8 +529,16 @@ final class ComposePane: NSViewController, NSTextFieldDelegate {
             self.draft.markDirty()
         }
         editor.onReady = { [weak self] in
-            guard let self, self.params.kind != .new, self.params.kind != .edit else { return }
-            self.editor.focusStart()
+            guard let self else { return }
+            if self.params.kind != .new, self.params.kind != .edit {
+                self.editor.focusStart()
+            }
+            // The draft controller learns how the editor wrote what it was
+            // given (the board's pane, `editorReady`), and text the user
+            // typed before the window opened (the chat's quick-reply bar,
+            // `ComposeParams.ownHTML`) counts as an edit, so the autosave
+            // and the question on close apply.
+            self.draft.editorLoaded(ownText: self.options.layout == .window && !self.params.ownHTML.isEmpty)
         }
         editor.onCrashed = { [weak self] in
             guard let self, !self.draft.draft.closed else { return }

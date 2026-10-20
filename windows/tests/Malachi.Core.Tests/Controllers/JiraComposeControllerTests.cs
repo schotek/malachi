@@ -231,6 +231,10 @@ public sealed class JiraComposeControllerTests
             ("comment emptied", new DraftState { Dirty = true, DraftId = "d1" }, DraftOwner.Window, true, blank, true),
             ("comment saving", new DraftState { Saving = true }, DraftOwner.Window, true, "", true),
             ("comment sent", new DraftState { Discard = true, DraftId = "d1" }, DraftOwner.Window, true, text, true),
+            // Own text still to be marked (OwnTextPending, the quick-reply
+            // bar's text in the editor): it asks, an empty comment too.
+            ("mail own text pending", new DraftState { OwnTextPending = true }, DraftOwner.Window, false, "", false),
+            ("comment own text pending", new DraftState { OwnTextPending = true }, DraftOwner.Window, true, "", false),
             // The board keeps its draft: closing never asks, whatever is in it.
             ("board dirty mail", new DraftState { Dirty = true }, DraftOwner.Board, false, "", true),
             ("board dirty comment", new DraftState { Dirty = true }, DraftOwner.Board, true, text, true),

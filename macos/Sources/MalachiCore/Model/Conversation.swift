@@ -458,6 +458,13 @@ public enum Conversation {
         return nil
     }
 
+    /// conversation.mine for the caller of `singleModel` (the reading
+    /// pane's page of a single message, docs/plans/chat-view.md §12):
+    /// whether the user of `account` wrote `s`, by the rule of `Item.mine`.
+    public static func isMine(_ s: MessageSummary, account: Account?) -> Bool {
+        mine(s, account)
+    }
+
     /// conversation.mine: whether the user of `account` wrote member `s`
     /// (`Item.mine`).
     private static func mine(_ s: MessageSummary, _ account: Account?) -> Bool {
@@ -478,8 +485,9 @@ public enum Conversation {
     }
 
     /// conversation.sender: the cleaned display name (else address) of the
-    /// first address that has one.
-    private static func sender(_ from: [Address]) -> String {
+    /// first address that has one (`singleModel` in ConversationReply.swift
+    /// uses it too).
+    static func sender(_ from: [Address]) -> String {
         for a in from {
             let name = Jira.clean(a.name ?? "")
             if !name.isEmpty {

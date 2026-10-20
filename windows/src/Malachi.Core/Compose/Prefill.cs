@@ -38,11 +38,7 @@ public static partial class Prefill
     {
         ArgumentNullException.ThrowIfNull(draft);
         ArgumentNullException.ThrowIfNull(blocked);
-        var body = draft.HtmlBody ?? "";
-        if (body.Length == 0)
-        {
-            body = EscapeText(draft.TextBody);
-        }
+        var body = ComposeBodyLayout.DraftBody(draft);
         return new ComposeParams
         {
             Kind = kind,

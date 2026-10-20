@@ -9,8 +9,8 @@
 import Foundation
 
 /// compose.FromDraft: turns a draft.create or draft.open result into
-/// window parameters. A draft without HTML (the backend could not quote
-/// formatted, or it is plain text) shows its text.
+/// window parameters; its body is `ComposeBodyLayout.draftBody` (the text,
+/// escaped, of a draft without HTML). It never sets `ownHTML`.
 public func fromDraft(kind: ComposeKind, draft d: Draft, blocked: BlockedContent) -> ComposeParams {
     var p = ComposeParams(
         kind: kind,
@@ -19,7 +19,7 @@ public func fromDraft(kind: ComposeKind, draft d: Draft, blocked: BlockedContent
         cc: d.cc ?? [],
         bcc: d.bcc ?? [],
         subject: d.subject,
-        bodyHTML: d.htmlBody ?? "",
+        bodyHTML: ComposeBodyLayout.draftBody(d),
         inReplyTo: d.inReplyTo,
         forwarding: d.forwarding,
         attachments: d.attachments ?? [],
@@ -28,9 +28,6 @@ public func fromDraft(kind: ComposeKind, draft d: Draft, blocked: BlockedContent
         version: d.version,
         replaces: d.replaces
     )
-    if p.bodyHTML.isEmpty {
-        p.bodyHTML = escapeText(d.textBody)
-    }
     // A comment draft (draft.create reply on an account that comments)
     // opens the window's comment mode.
     p.comment = d.comment

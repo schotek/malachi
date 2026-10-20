@@ -16,9 +16,10 @@ using Adw 1;
 // from Go by conversation_card.go and conversation_rows.go) and the chat
 // (conversation_chat.go: plain-text bubbles, the issue card across the
 // column in conversation_chat_issue, rows from conversation_chat_row.go).
-// The window adds the page to message_stack as "conversation". The link
-// under the pointer in any card shows in conversation_status; the spinner
-// stands in while the members load.
+// The quick-reply bar under the chat is the reading pane's, not the page's
+// (quick_reply_bar.blp under message_stack). The window adds the page to
+// message_stack as "conversation". The link under the pointer in any card shows in
+// conversation_status; the spinner stands in while the members load.
 Overlay conversation_page {
   styles [
     "conversation-pane",

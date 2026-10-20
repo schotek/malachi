@@ -68,6 +68,9 @@ final class ConversationChatViewController: NSViewController {
     }
 
     private let scroll = ConversationScrollView()
+    /// What takes the keyboard while the chat is shown and the quick-reply
+    /// bar hides (`ReadingPaneViewController.keyboardTarget`).
+    var keyboardTarget: NSView { scroll }
     private let clamp: ClampView
     private let stack = FillStackView()
     private let issueBox: ConversationIssueBox

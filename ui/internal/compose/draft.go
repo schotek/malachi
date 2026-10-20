@@ -60,8 +60,7 @@ const (
 	OwnerBoard
 )
 
-// draftCloseAnswer is what the user answered to "Save changes to this
-// draft?".
+// draftCloseAnswer is what the user answered to "Save changes to this draft?".
 type draftCloseAnswer int
 
 const (
@@ -89,9 +88,10 @@ type draftState struct {
 	// autosave stored, which would otherwise live on in the Drafts folder.
 	explicitSave bool
 
-	dirty   bool // edits not yet persisted
-	saving  bool // draft.save in flight
-	sending bool
+	dirty          bool // edits not yet persisted
+	saving         bool // draft.save in flight
+	sending        bool
+	ownTextPending bool // Params.OwnHTML not yet marked dirty: closing asks
 
 	lastSaved time.Time
 	lastError string // last autosave error shown as a toast
@@ -296,18 +296,18 @@ func (c *draftController) canCloseWithoutAsking() bool {
 
 // closesUnasked is canCloseWithoutAsking's pure core: the board keeps its
 // draft (never asks), a comment with nothing in it (jira.SendProblem on
-// text, the editor's last reported text) goes unasked, and otherwise a
-// comment is kept as an e-mail is: unasked without unsaved edits or a save
-// under way, its draft card in the issue's conversation showing it
-// (conversation.DraftCard); with them the close asks to save it.
+// the editor's last reported text) goes unasked, and otherwise a comment
+// is kept as an e-mail is: unasked without unsaved edits, a save under way
+// or own text still to be marked (ownTextPending), its draft card showing
+// it (conversation.DraftCard); with them the close asks to save it.
 func closesUnasked(d *draftState, owner Owner, comment bool, text string) bool {
 	if d.discard || owner == OwnerBoard {
 		return true
 	}
-	if comment && emptyComment(text) {
+	if comment && emptyComment(text) && !d.ownTextPending {
 		return true
 	}
-	return !d.dirty && !d.saving
+	return !d.dirty && !d.saving && !d.ownTextPending
 }
 
 // emptyComment reports a comment with nothing in it to post.
@@ -1144,3 +1144,12 @@ func skippedSummary(n int) string {
 	return fmt.Sprintf(i18n.N("%d attachment of the original could not be attached",
 		"%d attachments of the original could not be attached", n), n)
 }
+
+// QueuedText is the toast after Send went through (queuedText), for what
+// sends without a window: the chat's quick-reply bar.
+func QueuedText(comment bool) string { return queuedText(comment) }
+
+// SendFailedText is the toast after a failed send, the window's Sending
+// sentence with err (commentSaveFailure of an explicit save), for what
+// sends without a window: the chat's quick-reply bar.
+func SendFailedText(err error) string { return commentSaveFailure(saveExplicit, err) }

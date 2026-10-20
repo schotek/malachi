@@ -73,6 +73,12 @@ func exercise(tr Translator) {
 	ChatTruncateMineRowTitle(tr)
 	ChatTruncateOthersRowTitle(tr)
 	ChatTruncateRowSubtitle(tr)
+	QuickReplyPlaceholder(false, tr)
+	QuickReplyPlaceholder(true, tr)
+	QuickReplyTargetTooltip(QuickReply, "Jana", tr)
+	QuickReplyTargetTooltip(QuickReplyAll, "Jana", tr)
+	QuickReplyOpenWindowLabel(tr)
+	QuickReplyForwardLabel(tr)
 }
 
 // template reads po/malachi.pot: every entry, and whether it names a file

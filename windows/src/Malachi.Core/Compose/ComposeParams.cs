@@ -37,10 +37,10 @@ public sealed record ComposeParams
     public string Subject { get; init => field = value ?? ""; } = "";
 
     /// <summary>
-    /// Inserted into the editor document verbatim and therefore already safe:
-    /// only the daemon (<see cref="Prefill.FromDraft"/>),
-    /// <see cref="Prefill.Create"/> and <see cref="Mailto.ParseMailto"/>
-    /// produce it.
+    /// Inserted into the editor document verbatim and must be safe: only the
+    /// daemon's sanitiser (<see cref="Prefill.FromDraft"/> through
+    /// <see cref="ComposeBodyLayout.DraftBody"/>), <see cref="Prefill.Create"/>
+    /// and <see cref="Mailto.ParseMailto"/> produce it.
     /// </summary>
     public string BodyHtml { get; init => field = value ?? ""; } = "";
 
@@ -94,6 +94,22 @@ public sealed record ComposeParams
     /// </summary>
     public string Attribution { get; init => field = value ?? ""; } = "";
 
+    /// <summary>
+    /// The user's own text to start the editor with (compose.Params
+    /// <c>OwnHTML</c>): safe HTML from
+    /// <see cref="Model.Conversation.QuickReplyHtml"/> (the chat's
+    /// quick-reply bar), set by the caller after
+    /// <see cref="Prefill.FromDraft"/> or <see cref="Prefill.Create"/> like
+    /// <see cref="Attribution"/>; "" = the editor starts as it would. Only the
+    /// window layout applies it (<see cref="ComposeBodyLayout(ComposeParams)"/>),
+    /// in place of the empty editor above the original apart (or of a
+    /// comment's body), and the draft is marked as edited once the editor
+    /// loaded it (<see cref="Controllers.ComposeDraftController.EditorLoaded"/>,
+    /// with <see cref="Controllers.ComposeDraftController.OwnTextPending"/>
+    /// set before the editor loads).
+    /// </summary>
+    public string OwnHtml { get; init => field = value ?? ""; } = "";
+
     /// <inheritdoc/>
     public bool Equals(ComposeParams? other) =>
         other is not null && Kind == other.Kind && AccountId == other.AccountId
@@ -103,7 +119,8 @@ public sealed record ComposeParams
         && InReplyTo == other.InReplyTo && Forwarding == other.Forwarding
         && Attachments.SequenceEqual(other.Attachments) && Blocked == other.Blocked
         && DraftId == other.DraftId && Version == other.Version && Replaces == other.Replaces
-        && Skipped == other.Skipped && string.Equals(Attribution, other.Attribution, StringComparison.Ordinal);
+        && Skipped == other.Skipped && string.Equals(Attribution, other.Attribution, StringComparison.Ordinal)
+        && string.Equals(OwnHtml, other.OwnHtml, StringComparison.Ordinal);
 
     /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(Kind, AccountId, To.Count, Subject, BodyHtml, DraftId, Version);
@@ -118,7 +135,7 @@ public sealed record ComposeParams
         $"ComposeParams(kind: {Kind}, accountId: {Id(AccountId)}, to: {To.Count}, cc: {Cc.Count}, bcc: {Bcc.Count}, "
         + $"subject: {Subject.Length} chars, bodyHtml: {BodyHtml.Length} chars, inReplyTo: {Id(InReplyTo)}, "
         + $"forwarding: {Id(Forwarding)}, attachments: {Attachments.Count}, draftId: {Id(DraftId)}, version: {Version}, "
-        + $"replaces: {Id(Replaces)}, skipped: {Skipped}, attribution: {Attribution.Length} chars)");
+        + $"replaces: {Id(Replaces)}, skipped: {Skipped}, attribution: {Attribution.Length} chars, ownHtml: {OwnHtml.Length} chars)");
 
     private static string Id<T>(T? id)
         where T : struct => id is { } value ? value.ToString() ?? "" : "null";

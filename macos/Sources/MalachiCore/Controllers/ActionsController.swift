@@ -729,10 +729,25 @@ public final class ActionsController {
     /// (a reply on an account that comments) quotes nothing and downloads
     /// nothing.
     public func openCompose(_ kind: ComposeKind, _ id: MessageID, from parent: AnyObject? = nil) {
+        openCompose(kind, id, from: parent, ownHTML: "", opened: nil)
+    }
+
+    /// `openCompose(_:_:from:)` with `ownHTML` in the window's editor as the
+    /// user's own text (compose_open.go `openComposeWith`;
+    /// `ComposeParams.ownHTML`, safe HTML from
+    /// `Conversation.quickReplyHTML`), the comment's as well. `opened` is
+    /// called right after the window opened (`openCompose` hook, `openWith`),
+    /// and never when none does: the message is unknown, one is being
+    /// prepared for it already, a forward was refused, or a comment's
+    /// draft.create failed. The chat's quick-reply bar clears its text then.
+    public func openCompose(
+        _ kind: ComposeKind, _ id: MessageID, from parent: AnyObject?, ownHTML: String,
+        opened: (@MainActor () -> Void)?
+    ) {
         guard let s = summary(id), !composing.contains(id) else { return }
         composing.insert(id)
         if kind == .reply, mailbox.model.account(s.accountId)?.can(.comment) == true {
-            createDraft(kind, s)
+            createDraft(kind, s, ownHTML: ownHTML, opened: opened)
             return
         }
         if kind == .reply || kind == .replyAll, replyNeedsDownload(cache.loaded(id)) {
@@ -740,12 +755,12 @@ public final class ActionsController {
             Task { @MainActor [weak self] in
                 // download() logs a failure; the reply goes on without.
                 _ = try? await cache.download(accountID: s.accountId, messageID: id)
-                self?.createDraft(kind, s)
+                self?.createDraft(kind, s, ownHTML: ownHTML, opened: opened)
             }
             return
         }
         guard kind == .forward, forwardNeedsDownload(cache.loaded(id)) else {
-            createDraft(kind, s)
+            createDraft(kind, s, ownHTML: ownHTML, opened: opened)
             return
         }
         let cache = cache
@@ -758,13 +773,41 @@ public final class ActionsController {
             }
             guard let self else { return }
             guard let err = failure, askForwardWithout(err) else {
-                self.createDraft(kind, s)
+                self.createDraft(kind, s, ownHTML: ownHTML, opened: opened)
                 return
             }
             self.composing.remove(id)
             guard await self.confirmForwardWithout(parent, err), !self.composing.contains(id) else { return }
             self.composing.insert(id)
-            self.createDraft(kind, s)
+            self.createDraft(kind, s, ownHTML: ownHTML, opened: opened)
+        }
+    }
+
+    /// The line the compose window puts above the quote of a reply (or
+    /// forward, `kind`) to message `id`: `attribution(kind:source:)` over
+    /// `composeSource(summary:loaded:)` of what the window knows of it, as
+    /// `createDraft` computes it; "" for an unknown message. The chat's
+    /// quick-reply bar hands it to draft.create (`QuickReplyHost.attribution`).
+    public func replyAttribution(_ kind: ComposeKind, _ id: MessageID) -> String {
+        guard let s = summary(id) else { return "" }
+        return attribution(kind: kind, source: composeSource(summary: s, loaded: cache.loaded(id)))
+    }
+
+    /// What `openCompose` does before draft.create of a reply, for the
+    /// chat's quick-reply bar (`QuickReplyHost.beforeCreate`): message `id`
+    /// is downloaded first when its pictures are kept on the mail server
+    /// only (`replyNeedsDownload`), the outcome ignored (the download logs a
+    /// failure), then `done` runs on the main actor; at once otherwise, and
+    /// for an unknown message.
+    public func prepareReply(_ id: MessageID, done: @escaping @MainActor () -> Void) {
+        guard let s = summary(id), replyNeedsDownload(cache.loaded(id)) else {
+            done()
+            return
+        }
+        let cache = cache
+        Task { @MainActor in
+            _ = try? await cache.download(accountID: s.accountId, messageID: id)
+            done()
         }
     }
 
@@ -788,12 +831,15 @@ public final class ActionsController {
     /// A reply on an account that comments (an issue) is a comment
     /// (`createComment`); a forward of a message whose account writes no
     /// mail is written in a mail account (`forwardAccount`), and
-    /// draft.create finds the message by `messageAccountId`.
-    private func createDraft(_ kind: ComposeKind, _ s: MessageSummary) {
+    /// draft.create finds the message by `messageAccountId`. `ownHTML` and
+    /// `opened`: `openCompose(_:_:from:ownHTML:opened:)`.
+    private func createDraft(
+        _ kind: ComposeKind, _ s: MessageSummary, ownHTML: String = "", opened: (@MainActor () -> Void)? = nil
+    ) {
         let id = s.id
         let own = mailbox.model.account(s.accountId)
         if kind == .reply, own?.can(.comment) == true {
-            createComment(s)
+            createComment(s, ownHTML: ownHTML, opened: opened)
             return
         }
         // The account the draft is written in.
@@ -823,7 +869,8 @@ public final class ActionsController {
             var p = prefill(kind: kind, source: src, self: me)
             p.accountID = from
             p.attribution = attributionLine
-            self.openCompose?(p)
+            p.ownHTML = ownHTML
+            self.openWith(p, opened)
         }
 
         let params = DraftCreateParams(
@@ -846,7 +893,8 @@ public final class ActionsController {
                 p.accountID = from
                 p.skipped = res.skipped?.count ?? 0
                 p.attribution = attributionLine
-                self.openCompose?(p)
+                p.ownHTML = ownHTML
+                self.openWith(p, opened)
             }
         }
     }
@@ -910,8 +958,9 @@ public final class ActionsController {
     /// (draft.create reply there): the compose window in comment mode
     /// (`ComposeParams.comment`). Nothing is quoted, so there is no
     /// attribution, and no fallback either: without a comment draft from
-    /// the daemon there is nothing to write, only the toast.
-    private func createComment(_ s: MessageSummary) {
+    /// the daemon there is nothing to write, only the toast (and no
+    /// `opened`).
+    private func createComment(_ s: MessageSummary, ownHTML: String = "", opened: (@MainActor () -> Void)? = nil) {
         let id = s.id
         let params = DraftCreateParams(accountId: s.accountId, mode: .reply, messageId: id)
         mailbox.perform(API.DraftCreate.self, params, timeout: RPCTimeouts.compose) { [weak self] outcome in
@@ -924,9 +973,20 @@ public final class ActionsController {
             case .success(let res):
                 var p = fromDraft(kind: .reply, draft: res.draft, blocked: res.blocked)
                 p.accountID = s.accountId
-                self.openCompose?(p)
+                p.ownHTML = ownHTML
+                self.openWith(p, opened)
             }
         }
+    }
+
+    /// compose_open.go `openWith`: opens the compose window with `p`, then
+    /// calls `opened` (nil for none), which tells the chat's quick-reply bar
+    /// that a window holds its text now — never when no window can open
+    /// (no `openCompose` host).
+    private func openWith(_ p: ComposeParams, _ opened: (@MainActor () -> Void)?) {
+        guard let openCompose else { return }
+        openCompose(p)
+        opened?()
     }
 
     /// `openCompose` for a message the list and the cache may not know (the

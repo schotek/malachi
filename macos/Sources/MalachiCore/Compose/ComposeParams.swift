@@ -68,9 +68,10 @@ public struct ComposeParams: Sendable, Equatable {
     public var cc: [Address]
     public var bcc: [Address]
     public var subject: String
-    /// Inserted into the editor document verbatim and therefore already
-    /// safe: only the backend (`fromDraft`), `prefill` and `parseMailto`
-    /// produce it.
+    /// Inserted into the editor document verbatim and must be safe: only
+    /// the backend's sanitiser (`fromDraft` through
+    /// `ComposeBodyLayout.draftBody`), `prefill` and `parseMailto` produce
+    /// it.
     public var bodyHTML: String
     public var inReplyTo: MessageID?
     public var forwarding: MessageID?
@@ -104,6 +105,15 @@ public struct ComposeParams: Sendable, Equatable {
     /// (ui/internal/assistant): the user's own text is what the editor
     /// holds above it.
     public var attribution: String
+    /// The user's own text to start the editor with (compose.Params
+    /// `OwnHTML`): safe HTML from `Conversation.quickReplyHTML` (the chat's
+    /// quick-reply bar), set by the caller after `fromDraft`/`prefill` like
+    /// `attribution`; "" = the editor starts as it would. Only the window
+    /// layout applies it (`ComposeBodyLayout.init(_:)`), in place of the
+    /// empty editor above the original apart (or of a comment's body), and
+    /// the draft is marked as edited once the editor loaded it
+    /// (`ComposeDraftController.editorLoaded(ownText:)`).
+    public var ownHTML = ""
 
     public init(
         kind: ComposeKind = .new, accountID: AccountID? = nil, to: [Address] = [], cc: [Address] = [],

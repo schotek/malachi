@@ -5,7 +5,11 @@
 // showLayout, the strip, the spinner, hover, pageBy, shownIssueCard) and
 // conversation_fanout.go (convFanout: changed, loaded, trim); macOS:
 // MessageView/ConversationHostViewController.swift and
-// ConversationStripView.swift. Until the chat layout this class was the
+// ConversationStripView.swift; what the reading pane's quick-reply bar
+// learns of the conversation: GTK conversation_host.go (updateQuickReply,
+// applyLayout's SetShown), macOS ConversationHostViewController
+// (onQuickReplyChange) and ConversationViewController (the keyboard of a
+// hiding bar). Until the chat layout this class was the
 // timeline, which is ConversationTimelineView.xaml.cs now; the name stayed
 // with the page, so the reader's callers (ReaderHub, MessageView) did not
 // change.
@@ -49,6 +53,21 @@
 // the layout shown. Space and Shift+Space from the list page the layout
 // shown (PageBy). The host owns the spinner while the members load and the
 // status label of the link under the pointer (only the timeline has links).
+//
+// The quick-reply bar (docs/plans/chat-view.md §10–§12) is the reading
+// pane's, not this page's: it stands under the page of a single message and
+// under the chat in the same place (MessageView in ReaderMode.Pane owns it
+// and its controller). This page only tells the pane that what the bar shows
+// of it may have changed (QuickReplyChanged: every change of the
+// conversation controller but Cleared, and every switch of the layout); the
+// pane then reads the conversation (Controller, ChatShown) and feeds the
+// bar's controller. Cleared is not told: the hub clears the conversation
+// only for a row that is no conversation, and the page the pane shows next
+// (the message, the empty page, the count of several rows) feeds the bar, so
+// that the bar never flickers hidden on the way from a conversation to a
+// message of the same thread (macOS switches the page before clearing for
+// the same reason). A bar hiding with the keyboard gives it to the layout
+// shown (TakeKeyboard).
 
 using System;
 using Malachi.App.Resources;
@@ -167,6 +186,12 @@ internal sealed partial class ConversationView : UserControl
     /// <summary>The page itself is the pane's page on show (the layouts measure and fetch only then).</summary>
     internal bool PageVisible => Visibility == Visibility.Visible;
 
+    /// <summary>The conversation controller of the pane (the quick-reply bar's input: Thread, ThreadAccount, QuickReplyInput).</summary>
+    internal ConversationController Controller => ctrl;
+
+    /// <summary>The chat is the layout shown (the quick-reply bar stands under it, not under the timeline).</summary>
+    internal bool ChatShown => chatShown;
+
     private Func<Window?> HostWindowOf { get; }
 
     /// <summary>
@@ -252,6 +277,49 @@ internal sealed partial class ConversationView : UserControl
     /// <summary>issue_card.go openKey: the issue in the browser (a URL of the account's own site, the card checked it); a failure is a toast.</summary>
     public void OpenIssue(string url) => _ = OpenIssueAsync(url);
 
+    /// <summary>
+    /// What the reading pane's quick-reply bar shows of the conversation may
+    /// have changed: a change of the conversation controller other than
+    /// <see cref="ConversationController.Change.Cleared"/>, or the layout
+    /// shown (updateQuickReply, applyLayout).
+    /// </summary>
+    internal event EventHandler? QuickReplyChanged;
+
+    /// <summary>
+    /// A hiding quick-reply bar had the keyboard: the layout shown takes it
+    /// (its scroller, which is no Tab stop: macOS
+    /// ConversationScrollView, GTK shownScroller().GrabFocus()); false when
+    /// it could not.
+    /// </summary>
+    internal bool TakeKeyboard() => chatShown ? chat.TakeKeyboard() : timeline.TakeKeyboard();
+
+    /// <summary>
+    /// Gives <paramref name="scroller"/>, a scroller that is no Tab stop, the
+    /// keyboard: it is a Tab stop while it holds it (WinUI focuses no control
+    /// that is none) and stops being one when the keyboard leaves it, so
+    /// that Tab still never stops there; false when it could not take it.
+    /// </summary>
+    internal static bool FocusScroller(ScrollViewer scroller)
+    {
+        ArgumentNullException.ThrowIfNull(scroller);
+        if (scroller.Visibility != Visibility.Visible)
+        {
+            return false;
+        }
+        if (scroller.IsTabStop)
+        {
+            return scroller.Focus(FocusState.Programmatic);
+        }
+        scroller.IsTabStop = true;
+        if (!scroller.Focus(FocusState.Programmatic))
+        {
+            scroller.IsTabStop = false;
+            return false;
+        }
+        scroller.LostFocus += OnTakenScrollerLostFocus;
+        return true;
+    }
+
     /// <summary>The pane's views go for good (the window closes).</summary>
     public void Close()
     {
@@ -294,6 +362,7 @@ internal sealed partial class ConversationView : UserControl
             timeline.SetShown(true);
             ShowFoldAll(timeline.FoldAllOffer);
         }
+        QuickReplyChanged?.Invoke(this, EventArgs.Empty);
     }
 
     // The toggle for the chat on or off: its state, its label, tooltip and
@@ -361,6 +430,10 @@ internal sealed partial class ConversationView : UserControl
         }
         timeline.Changed(change);
         chat.Changed(change);
+        if (change != ConversationController.Change.Cleared)
+        {
+            QuickReplyChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     // convFanout.loaded: the news of a body, for the layout shown only.
@@ -374,6 +447,14 @@ internal sealed partial class ConversationView : UserControl
         {
             timeline.EntryLoaded(id, lm);
         }
+    }
+
+    // The keyboard left a scroller FocusScroller made a Tab stop: no longer one.
+    private static void OnTakenScrollerLostFocus(object sender, RoutedEventArgs e)
+    {
+        var scroller = (ScrollViewer)sender;
+        scroller.LostFocus -= OnTakenScrollerLostFocus;
+        scroller.IsTabStop = false;
     }
 
     // startSpinner: the spinner once the members take long enough to notice.

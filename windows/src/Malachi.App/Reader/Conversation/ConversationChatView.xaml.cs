@@ -281,6 +281,13 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
     /// <summary>win.change-status: the Change Status menu of the chat's issue card; false when there is none.</summary>
     public bool OpenStatusMenu() => issue.OpenStatusMenu();
 
+    /// <summary>
+    /// A hiding quick-reply bar had the keyboard: this layout's scroller
+    /// takes it (<see cref="ConversationView.FocusScroller"/>); false when it
+    /// could not.
+    /// </summary>
+    internal bool TakeKeyboard() => ConversationView.FocusScroller(Scroller);
+
     /// <summary>Space (or Shift+Space, <paramref name="up"/>) from the list: one page of the chat down (up); true when the key was used.</summary>
     public bool PageBy(bool up)
     {

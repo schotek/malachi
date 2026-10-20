@@ -170,6 +170,10 @@ public sealed partial class ComposePane : UserControl, IComposeForm
             // A draft opened from the Drafts folder is the user's already: its id
             // and version make the saves updates, and closing never deletes it.
             draft.SetOpened(p.DraftId, p.Version, p.Replaces, fromDrafts: p.Kind == ComposeKind.Edit);
+            // The user's own text (the chat's quick-reply bar), for the
+            // window layout only: closing asks from now on, and the editor's
+            // Ready marks it as an edit (OnEditorReady, EditorLoaded).
+            draft.OwnTextPending = HasOwnText;
             editor.Load(BodyLayout.EditorHtml);
             quoted?.Load(BodyLayout.QuotedHtml);
             SetAccounts(compose.Accounts, compose.Placeholder);
@@ -348,6 +352,11 @@ public sealed partial class ComposePane : UserControl, IComposeForm
     IReadOnlyList<DraftAttachment> IComposeForm.Attachments => attachments.Attachments;
 
     private bool IsInline => PaneOptions.Layout == Layout.Inline;
+
+    // The window starts with the user's own text (ComposeParams.OwnHtml:
+    // the chat's quick-reply bar; compose/pane.go loadEditor); the board's
+    // inline pane never does.
+    private bool HasOwnText => !IsInline && parameters.OwnHtml.Length > 0;
 
     // The draft is cleaned up or the widgets are released: late callbacks do nothing.
     private bool Gone => tornDown || draft.Draft.Closed;

@@ -50,6 +50,16 @@ import (
 // the layout shown (shownIssueCard). A port of the macOS client's
 // ConversationHostViewController.swift and ConversationStripView.swift
 // (which also chose two cards over moving one between the layouts).
+//
+// Under the chat, and only there in a conversation, the reading pane's
+// quick-reply bar (quick_reply_bar.go, docs/plans/chat-view.md §10–§12):
+// the window owns it, under message_stack, so that it stands in the same
+// place under a single message; the host only reports every change of the
+// conversation and every switch of the layout (Window.updateQuickReply,
+// which reads the conversation shown, its model, the actions of the card
+// the reply goes to and its account from quickReplyInput, and shows the
+// bar with the chat only). A hidden bar takes no room, so the timeline
+// fills the pane whatever the bar does.
 type conversationHost struct {
 	convFanout
 	w *Window
@@ -103,7 +113,10 @@ func (w *Window) conversationPane() *conversationHost {
 	h.chat = newConversationChat(h, b)
 	h.timelineLayout, h.chatLayout = h.timeline, h.chat
 	h.markRead = w.scheduleMarkRead
-	h.onChange = h.spin
+	h.onChange = func(ch convChange) {
+		h.spin(ch)
+		w.updateQuickReply()
+	}
 	h.attach()
 
 	h.foldAllButton.ConnectClicked(h.timeline.foldAllClicked)
@@ -147,6 +160,7 @@ func (h *conversationHost) applyLayout() {
 	}
 	h.showLayout(on)
 	h.showFoldAll()
+	h.w.updateQuickReply()
 }
 
 // setFoldAll is what the timeline's Collapse All / Expand All offers now

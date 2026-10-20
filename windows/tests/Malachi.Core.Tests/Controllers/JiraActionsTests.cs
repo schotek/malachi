@@ -130,6 +130,34 @@ public sealed class JiraActionsTests
         Assert.Equal(2, j.Drafts.Count);
     }
 
+    // compose_open.go openCommentFor with ownHTML: the quick-reply bar's text
+    // goes into the comment window as the user's own, and opened runs once
+    // it opened; a failed draft.create opens nothing and never calls it.
+    [Fact]
+    public async Task ACommentCarriesTheOwnTextAndSaysItOpened()
+    {
+        await using var j = await Harness.StartAsync();
+        var h = j.H;
+        await j.ShowIssueAsync();
+        var template = new Draft { AccountId = Jira, InReplyTo = "w1c", Comment = new DraftComment { Issue = WebIssue } };
+        j.OnDraftCreate(new DraftCreateResult { Draft = template, Quoted = QuoteForm.None });
+        var opened = 0;
+        await h.Run(() => h.Actions.OpenCompose(ComposeKind.Reply, "w1c", null, "<p>Fixed</p>", () => opened++));
+        await h.IdleAsync();
+        Assert.Equal(1, opened);
+        var p = Assert.Single(h.Log.Composed);
+        Assert.Equal("<p>Fixed</p>", p.OwnHtml);
+        Assert.NotNull(p.Comment);
+        Assert.Equal("<p>Fixed</p>", new ComposeBodyLayout(p).EditorHtml);
+
+        j.OnDraftCreate(error: DaemonHarness.Daemon(ErrorCode.ServerError, "500"));
+        await h.Run(() => h.Actions.OpenCompose(ComposeKind.Reply, "w1c", null, "<p>Again</p>", () => opened++));
+        await h.IdleAsync();
+        Assert.Single(h.Log.Toasts);
+        Assert.Equal(1, opened);
+        Assert.Single(h.Log.Composed);
+    }
+
     [Fact]
     public async Task ForwardIsWrittenInAMailAccount()
     {

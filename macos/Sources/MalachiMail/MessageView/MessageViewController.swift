@@ -77,6 +77,17 @@ final class MessageViewController: NSViewController {
     let toasts: ToastPresenter?
 
     let bodyTextView = MessageBodyTextView()
+    /// What takes the keyboard when the quick-reply bar hides under the
+    /// page of the message (`ReadingPaneViewController.keyboardTarget`):
+    /// the HTML body while it shows, else the read-only text body (no
+    /// editable text view, so the window's single keys act on the message,
+    /// as when the user clicks into the body).
+    var keyboardTarget: NSView {
+        if let webView, !webView.isHidden {
+            return webView
+        }
+        return bodyTextView
+    }
     let header = MessageHeaderView()
     /// The invitation card above the header (docs/calendar.md §5.7; not
     /// for an attached message), at the header's insets.
@@ -112,6 +123,10 @@ final class MessageViewController: NSViewController {
     /// The messages whose quoted history the user revealed here; the pane
     /// forgets them when it shows another message.
     private var quoted = QuotedReveal()
+    /// The button's clamp in the page: hidden with the button (a clamp
+    /// around a hidden child keeps its height, and under a message without
+    /// quoted text the quick-reply bar's line would show that band).
+    private var quotedClamp: ClampView?
     private let loadingPage = NSView()
     private let loadingSpinner = Spinner(size: 32)
     private let bodyContainer = NSView()
@@ -208,9 +223,11 @@ final class MessageViewController: NSViewController {
         // button stays in sight at the bottom of the message.
         let quotedClamp = ClampView(maximum: 900, tight: 900, child: quotedButton)
         quotedClamp.setContentHuggingPriority(.required, for: .vertical)
+        quotedClamp.isHidden = true
         quotedButton.onToggle = { [weak self] in self?.toggleQuoted() }
         if mode != .embedded {
             messagePage.addArrangedSubview(quotedClamp)
+            self.quotedClamp = quotedClamp
         }
 
         pages.translatesAutoresizingMaskIntoConstraints = false
@@ -424,6 +441,7 @@ final class MessageViewController: NSViewController {
             renderOutboxBanner(lm?.msg)
         }
         quotedButton.show(mode == .embedded || issue?.eventBody != nil ? nil : quotedTextOffer(lm))
+        quotedClamp?.isHidden = quotedButton.isHidden
         onRender?(s, lm)
     }
 

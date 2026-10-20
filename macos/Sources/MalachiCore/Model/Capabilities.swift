@@ -76,6 +76,10 @@ public enum Capabilities {
         /// Reply writes a comment on the issue: the client labels it
         /// "Comment" (`Jira.replyLabel`).
         public var comment = false
+
+        /// No action at all: Go's zero Actions (the app has no memberwise
+        /// initialiser).
+        public static let empty = Actions()
     }
 
     /// capabilities.Supported: the actions the account offers at all,

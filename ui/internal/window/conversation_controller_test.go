@@ -424,8 +424,8 @@ func TestConversationRowShowsTheWholeConversation(t *testing.T) {
 	if !w.selectRow(w.row("t1", "", false)) {
 		t.Fatal("the conversation row is not shown as a conversation")
 	}
-	if w.ctrl.thread != "t1" {
-		t.Errorf("thread %q", w.ctrl.thread)
+	if w.ctrl.thread != "t1" || w.ctrl.account != "a" {
+		t.Errorf("thread %q of %q", w.ctrl.thread, w.ctrl.account)
 	}
 	if want := []convChange{convLoading, convOpened}; !reflect.DeepEqual(w.changes, want) {
 		t.Errorf("changes %v", w.changes)
@@ -458,8 +458,8 @@ func TestConversationRowShowsTheWholeConversation(t *testing.T) {
 	if w.selectRow(w.row("t2", "b1", false)) {
 		t.Error("a plain row shows a conversation")
 	}
-	if w.ctrl.thread != "" || w.ctrl.model != nil || w.changes[len(w.changes)-1] != convCleared {
-		t.Errorf("not cleared: %q %v", w.ctrl.thread, w.changes)
+	if w.ctrl.thread != "" || w.ctrl.account != "" || w.ctrl.model != nil || w.changes[len(w.changes)-1] != convCleared {
+		t.Errorf("not cleared: %q %q %v", w.ctrl.thread, w.ctrl.account, w.changes)
 	}
 	w.ctrl.show(w.row("t1", "", false))
 	if got := convShape(w.ctrl.model); !reflect.DeepEqual(got, []string{"a1", "a2", "a3"}) {

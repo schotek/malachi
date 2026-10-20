@@ -192,6 +192,16 @@ public final class ComposeDraftController {
     /// `.board`: the editor's own rendering of the loaded draft is known
     /// (`editorReady`), so what it reports from now on is comparable.
     private var editorRendered = false
+    /// `editorLoaded` marked the user's own text (`ComposeParams.ownHTML`)
+    /// as an edit already.
+    private var ownTextMarked = false
+    /// The editor is loading the user's own text (`ComposeParams.ownHTML`)
+    /// and `editorLoaded` has not marked it dirty yet: closing asks, so a
+    /// window closed before its editor reported `ready` does not lose the
+    /// text the quick-reply bar let go once the window opened. The form
+    /// sets it before it loads the editor (compose/pane.go `loadEditor`);
+    /// `editorLoaded` clears it after `markDirty`.
+    public var ownTextPending = false
     /// A send is under way and has not answered (`draft.sending` stays set
     /// after a success, while the form closes).
     private var sendPending = false
@@ -260,17 +270,18 @@ public final class ComposeDraftController {
     /// (compose/draft.go `closesUnasked`). A comment with nothing in it
     /// (`Jira.sendProblem`) goes unasked, a save under way or not (its copy
     /// goes too, `cleanup`); otherwise a comment is kept as an e-mail is:
-    /// unasked without unsaved edits or a save under way, its draft card in
-    /// the issue's conversation showing it (`Conversation.DraftCard`).
+    /// unasked without unsaved edits, a save under way or own text still to
+    /// be marked (`ownTextPending`), its draft card in the issue's
+    /// conversation showing it (`Conversation.DraftCard`).
     public var canCloseWithoutAsking: Bool {
         if draft.discard || owner == .board {
             // The board keeps its draft: whoever closes it calls `finish`.
             return true
         }
-        if isComment, !hasCommentText {
+        if isComment, !hasCommentText, !ownTextPending {
             return true
         }
-        return !draft.dirty && !draft.saving
+        return !draft.dirty && !draft.saving && !ownTextPending
     }
 
     /// The comment holds more than white space and invisible characters
@@ -907,6 +918,32 @@ public final class ComposeDraftController {
         editorRendered = false
         form.flushEditor { [weak self] in
             self?.editorRendered = true
+        }
+    }
+
+    /// compose/pane.go `editorLoaded`: the editor reported `ready` for what
+    /// it loaded (the form calls this from every `ready`, after a crash's
+    /// reload too). The board's pane learns how the editor writes its draft
+    /// (`editorReady`). `ownText` says the window started with
+    /// `ComposeParams.ownHTML`, text the user wrote before the window opened
+    /// (the chat's quick-reply bar; the form passes it only for the window
+    /// layout): the user's edit, not a prefill, so the draft is marked dirty
+    /// as after typing, and the autosave and the question on close apply
+    /// (closing unasked would lose the text, which the bar let go once the
+    /// window opened). One flush first, so that the editor's own text is
+    /// known (a comment whose editor never reported any counts as empty and
+    /// would close unasked) and the flush's echo is not taken for another
+    /// edit (the form drops it). Once: a later `ready` (a crash's reload)
+    /// does not mark it again, as Go clears `Params.OwnHTML`.
+    public func editorLoaded(ownText: Bool) {
+        if owner == .board {
+            editorReady()
+        }
+        guard ownText, !ownTextMarked, let form, !draft.closed else { return }
+        ownTextMarked = true
+        form.flushEditor { [weak self] in
+            self?.markDirty()
+            self?.ownTextPending = false
         }
     }
 

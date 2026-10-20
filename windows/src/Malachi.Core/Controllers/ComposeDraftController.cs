@@ -52,6 +52,14 @@
 // save decide whether there is anything to save, never a draft.save without
 // a real change (the daemon takes every save of a linked suggestion as the
 // user's edit). Swift's finish and settle are FinishAsync and SettleAsync.
+//
+// The user's own text a window starts with (ComposeParams.OwnHtml, the
+// chat's quick-reply bar; Swift's ownTextPending and
+// editorLoaded(ownText:), GTK pane.go's loadEditor and editorLoaded):
+// the form sets OwnTextPending before it loads the editor, and its Ready
+// goes to EditorLoaded, which is EditorReady and, the first time with own
+// text, marks the draft dirty behind the same flush, so that the autosave
+// and the question on close apply as after typing.
 
 using System;
 using System.Collections.Generic;
@@ -142,6 +150,11 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
     // A send is under way and has not answered (sendPending): Draft.Sending
     // stays set after a success, while the form closes.
     private bool sendPending;
+
+    // EditorLoaded marked the user's own text (ComposeParams.OwnHtml) as an
+    // edit already (Swift's ownTextMarked): a later Ready (a crash's reload)
+    // does not mark it again, as Go clears Params.OwnHTML.
+    private bool ownTextMarked;
 
     /// <param name="client">The transport.</param>
     /// <param name="settings"><c>ConfirmDelete</c> decides whether Discard asks.</param>
@@ -247,6 +260,26 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
     /// <summary>The window writes a comment (<see cref="IComposeForm.IsComment"/>).</summary>
     public bool IsComment => Form?.IsComment ?? false;
 
+    /// <summary>
+    /// The editor is loading the user's own text
+    /// (<see cref="ComposeParams.OwnHtml"/>) and <see cref="EditorLoaded"/>
+    /// has not marked it dirty yet (<see cref="DraftState.OwnTextPending"/>):
+    /// closing asks, so a window closed before its editor reported ready does
+    /// not lose the text the quick-reply bar let go once the window opened.
+    /// The form sets it before it loads the editor (compose/pane.go
+    /// <c>loadEditor</c>); <see cref="EditorLoaded"/> clears it after
+    /// <see cref="MarkDirty"/>.
+    /// </summary>
+    public bool OwnTextPending
+    {
+        get => Draft.OwnTextPending;
+        set
+        {
+            scope.VerifyAccess();
+            Draft = Draft with { OwnTextPending = value };
+        }
+    }
+
     // The comment holds more than white space and invisible characters (the
     // editor's last reported text).
     private bool HasCommentText => !EmptyComment(Form?.EditorText() ?? "");
@@ -255,9 +288,11 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
     /// draft.go <c>closesUnasked</c>, <see cref="CanCloseWithoutAsking"/>'s
     /// pure core: the board keeps its draft (never asks), a comment with
     /// nothing in it (<see cref="EmptyComment"/> on <paramref name="text"/>,
-    /// the editor's last reported text) goes unasked, and otherwise a comment
-    /// is kept as an e-mail is: unasked without unsaved edits or a save under
-    /// way, its draft card in the issue's conversation showing it
+    /// the editor's last reported text) goes unasked unless own text is
+    /// still to be marked (<see cref="DraftState.OwnTextPending"/>), and
+    /// otherwise a comment is kept as an e-mail is: unasked without unsaved
+    /// edits, a save under way or own text still to be marked, its draft card
+    /// in the issue's conversation showing it
     /// (<see cref="Model.ConversationDraftCard"/>); with them the close asks
     /// to save it.
     /// </summary>
@@ -268,11 +303,11 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
         {
             return true;
         }
-        if (comment && EmptyComment(text))
+        if (comment && EmptyComment(text) && !d.OwnTextPending)
         {
             return true;
         }
-        return !d.Dirty && !d.Saving;
+        return !d.Dirty && !d.Saving && !d.OwnTextPending;
     }
 
     /// <summary>draft.go <c>emptyComment</c>: a comment with nothing in it to post (<see cref="Jira.SendProblem"/>).</summary>
@@ -352,21 +387,55 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
     /// can tell an edit the editor reported only with its flush from that
     /// normalisation; nothing is saved for it.
     /// </summary>
-    public void EditorReady()
+    public void EditorReady() => EditorLoaded(ownText: false);
+
+    /// <summary>
+    /// compose/pane.go <c>editorLoaded</c>: the editor's <c>Ready</c> for
+    /// what it loaded (the window forwards every one, after a crash's reload
+    /// too), <see cref="EditorReady"/>'s flush for every owner.
+    /// <paramref name="ownText"/> says the window started with
+    /// <see cref="ComposeParams.OwnHtml"/>, text the user wrote before the
+    /// window opened (the chat's quick-reply bar; the form passes it only for
+    /// the window layout): the user's edit, not a prefill, so behind the same
+    /// flush the draft is marked dirty as after typing, and the autosave and
+    /// the question on close apply (closing unasked would lose the text,
+    /// which the bar let go once the window opened), and
+    /// <see cref="OwnTextPending"/> is cleared. The flush makes the editor's
+    /// own text known first (a comment whose editor never reported any counts
+    /// as empty and would close unasked), and its report is the echo
+    /// recorded before its <c>Changed</c>, so it is not taken for another
+    /// edit. Once: a later <c>Ready</c> (a crash's reload) does not mark it
+    /// again, as Go clears <c>Params.OwnHTML</c>. Swift calls its
+    /// <c>editorReady</c> for the board's owner only; the Windows window has
+    /// always recorded this baseline for every owner (see
+    /// <see cref="SaveForQuitAsync"/>).
+    /// </summary>
+    public void EditorLoaded(bool ownText)
     {
         scope.VerifyAccess();
         if (Draft.Closed || Form is not { } form)
         {
             return;
         }
+        var mark = ownText && !ownTextMarked;
+        if (mark)
+        {
+            ownTextMarked = true;
+        }
         editorRendered = false;
         form.FlushEditor(() =>
         {
             // Runs before the Changed of the same report (EditorChannel).
-            if (!Draft.Closed)
+            if (Draft.Closed)
             {
-                flushed.Record(form.EditorHtml());
-                editorRendered = true;
+                return;
+            }
+            flushed.Record(form.EditorHtml());
+            editorRendered = true;
+            if (mark)
+            {
+                MarkDirty();
+                Draft = Draft with { OwnTextPending = false };
             }
         });
     }

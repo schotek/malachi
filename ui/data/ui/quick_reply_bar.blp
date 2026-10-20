@@ -1,0 +1,129 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// The quick-reply bar of the reading pane (window/quick_reply_bar.go,
+// docs/plans/chat-view.md §10, §11, §12; wireframes w4-quick-reply.svg and
+// w5-quick-reply-message.svg). The window appends it to reading_column in
+// window.blp under message_stack, so that it is a fixed row at the bottom
+// of the pane under a single message and under a conversation shown as
+// chat (hidden on every other page and in the timeline), a line above it,
+// its content in a clamp of the column's width with the column's side
+// insets. From the leading end: the mode button (icon and label, its menu
+// built from Go: Reply, Reply All, Forward…; the icon alone in a narrow
+// pane), on an issue a plain Comment label instead; the field of one to
+// five lines (the assistant panel's, then it scrolls) with its
+// placeholder; the Assistant, the toolbar's ✦ (icon, tooltip, menu and
+// visibility from Go); Open in a Window; Send. Hidden while the controller
+// hides it, and then it takes no room; texts from Go except Send's
+// tooltip.
+Box conversation_reply_bar {
+  orientation: vertical;
+  visible: false;
+
+  Separator {}
+
+  Adw.Clamp conversation_reply_clamp {
+    maximum-size: 900;
+    tightening-threshold: 900;
+
+    child: Box conversation_reply_row {
+      orientation: horizontal;
+      spacing: 8;
+      margin-start: 16;
+      margin-end: 16;
+      margin-top: 8;
+      margin-bottom: 8;
+
+      MenuButton conversation_reply_mode {
+        valign: end;
+
+        child: Adw.ButtonContent conversation_reply_mode_content {
+          icon-name: "mail-reply-sender-symbolic";
+          can-shrink: true;
+        };
+      }
+
+      // An issue's only mode, a public comment: a label, no menu
+      // (the icon of the pane's Comment action, actions.go commentIcon).
+      Box conversation_reply_comment {
+        orientation: horizontal;
+        spacing: 6;
+        valign: end;
+        margin-bottom: 8;
+        visible: false;
+
+        Image {
+          icon-name: "chat-message-new-symbolic";
+
+          styles [
+            "dim-label",
+          ]
+        }
+
+        Label conversation_reply_comment_label {
+          use-markup: false;
+        }
+      }
+
+      Overlay {
+        hexpand: true;
+
+        child: ScrolledWindow conversation_reply_scroller {
+          hscrollbar-policy: never;
+          propagate-natural-height: true;
+          max-content-height: 112;
+
+          styles [
+            "assistant-input",
+          ]
+
+          child: TextView conversation_reply_text {
+            wrap-mode: word_char;
+            accepts-tab: false;
+            top-margin: 6;
+            bottom-margin: 6;
+            left-margin: 8;
+            right-margin: 8;
+          };
+        };
+
+        [overlay]
+        Label conversation_reply_placeholder {
+          use-markup: false;
+          halign: start;
+          valign: start;
+          margin-top: 6;
+          margin-start: 9;
+          ellipsize: end;
+          can-target: false;
+
+          styles [
+            "dim-label",
+          ]
+        }
+      }
+
+      MenuButton conversation_reply_assistant {
+        valign: end;
+        visible: false;
+      }
+
+      Button conversation_reply_open {
+        icon-name: "window-new-symbolic";
+        valign: end;
+      }
+
+      Button conversation_reply_send {
+        icon-name: "mail-send-symbolic";
+        tooltip-text: _("Send (Ctrl+Enter)");
+        valign: end;
+        sensitive: false;
+
+        styles [
+          "suggested-action",
+        ]
+      }
+    };
+  }
+}

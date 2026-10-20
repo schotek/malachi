@@ -52,14 +52,14 @@ type barWidgets struct {
 }
 
 // bodyLayout lays the window's body out: only the window layout shows an
-// original apart; a draft opened from Drafts keeps its body whole
-// (KindEdit's mode is api.ComposeNew).
+// original apart and starts with the user's own text (OwnHTML); a draft
+// opened from Drafts keeps its body whole (KindEdit's mode is ComposeNew).
 func bodyLayout(p Params, layout Layout) composebody.Layout {
-	mode := p.Kind.Mode()
+	mode, own := p.Kind.Mode(), p.OwnHTML
 	if layout != LayoutWindow {
-		mode = api.ComposeNew
+		mode, own = api.ComposeNew, ""
 	}
-	return composebody.New(mode, p.Comment != nil, p.BodyHTML)
+	return composebody.New(mode, p.Comment != nil, p.BodyHTML).WithOwn(own)
 }
 
 // writeMode is the kind as the assistant's bar names it.

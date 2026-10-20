@@ -332,13 +332,10 @@ final class BoardReplyEditorHost {
             }
         }
         // Once the editor shows the draft, the draft controller learns how
-        // the editor writes it (`editorReady`): only a real edit is saved,
-        // never the editor's normalisation of the HTML it was given.
-        let ready = pane.editor.onReady
-        pane.editor.onReady = { [weak pane] in
-            ready?()
-            pane?.draft.editorReady()
-        }
+        // the editor writes it (`editorReady`, which the pane's own `ready`
+        // runs for a draft kept by the board, `editorLoaded(ownText:)`):
+        // only a real edit is saved, never the editor's normalisation of
+        // the HTML it was given.
         pane.draft.onSendFailed = { [weak self, weak pane] in
             guard let self, let pane else { return }
             self.panes?.sendFailed(pane)

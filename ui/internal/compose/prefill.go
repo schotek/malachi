@@ -5,13 +5,13 @@ package compose
 
 import (
 	"fmt"
-	"html"
 	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/composebody"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
@@ -61,9 +61,9 @@ type Params struct {
 	AccountID   api.AccountID
 	To, CC, BCC []api.Address
 	Subject     string
-	// BodyHTML is inserted into the editor document verbatim and must
-	// therefore already be safe: only the backend (FromDraft), Prefill and
-	// ParseMailto produce it.
+	// BodyHTML is inserted into the editor document verbatim and must be
+	// safe: only the backend's sanitiser (FromDraft through
+	// composebody.DraftBody), Prefill and ParseMailto produce it.
 	BodyHTML   string
 	InReplyTo  api.MessageID
 	Forwarding api.MessageID
@@ -94,11 +94,14 @@ type Params struct {
 	// known (a new message, a draft opened from Drafts): the assistant's
 	// rewrite takes the user's own text as what the editor holds above it.
 	Attribution string
+	// OwnHTML is the user's own text to start the editor with, safe HTML
+	// from composebody / conversation.QuickReplyHTML; set by the caller after
+	// FromDraft/Prefill like Attribution; empty = the editor starts empty.
+	OwnHTML string
 }
 
 // FromDraft turns a draft.create or draft.open result into window
-// parameters. A draft without HTML (the backend could not quote formatted,
-// or it is plain text) shows its text.
+// parameters; its body is composebody.DraftBody (the text without HTML).
 func FromDraft(kind Kind, d api.Draft, blocked api.BlockedContent) Params {
 	p := Params{
 		Kind:        kind,
@@ -107,7 +110,7 @@ func FromDraft(kind Kind, d api.Draft, blocked api.BlockedContent) Params {
 		CC:          d.CC,
 		BCC:         d.BCC,
 		Subject:     d.Subject,
-		BodyHTML:    d.HTMLBody,
+		BodyHTML:    composebody.DraftBody(d),
 		InReplyTo:   d.InReplyTo,
 		Forwarding:  d.Forwarding,
 		Attachments: d.Attachments,
@@ -115,9 +118,6 @@ func FromDraft(kind Kind, d api.Draft, blocked api.BlockedContent) Params {
 		DraftID:     d.ID,
 		Version:     d.Version,
 		Replaces:    d.Replaces,
-	}
-	if p.BodyHTML == "" {
-		p.BodyHTML = escapeText(d.TextBody)
 	}
 	// A comment draft (draft.create reply on an account that comments)
 	// opens the window's comment mode.
@@ -251,11 +251,9 @@ func forwardHTML(kind Kind, src Source) string {
 	return b.String()
 }
 
-// escapeText escapes plain text for HTML and turns newlines into <br>.
-func escapeText(s string) string {
-	s = strings.ReplaceAll(s, "\r\n", "\n")
-	return strings.ReplaceAll(html.EscapeString(s), "\n", "<br>")
-}
+// escapeText escapes plain text for HTML and turns newlines into <br>
+// (composebody.EscapeText, which a draft's text body shares).
+func escapeText(s string) string { return composebody.EscapeText(s) }
 
 func displayNames(addrs []api.Address) string {
 	names := make([]string, 0, len(addrs))

@@ -5,7 +5,9 @@
 // (the MessageActions of the selection and the MessageActionDelegate of one
 // message: flags, reply, replyAll, forward, trash, junk, archive,
 // toggleFlag, markRead, markUnread, loadImages, trustSender,
-// downloadPictures, retryOutbox, isDraft, editDraft, newMessage; the
+// downloadPictures, retryOutbox, isDraft, editDraft, newMessage, and the
+// quick-reply bar's quickReplyAttribution, prepareQuickReply and
+// openCompose(_:_:ownHTML:from:opened:); the
 // draft cards' Edit and Discard are conversation_draft.go's, a Windows
 // addition ahead of Swift); GTK: the
 // win.* actions of window.go registerActions acting on the selected row,
@@ -151,6 +153,36 @@ public sealed class MessageActionRouter
     /// the download of the attachments fails.
     /// </summary>
     public void Forward(MessageId id, object? window) => actions.OpenCompose(ComposeKind.Forward, id, window);
+
+    /// <summary>
+    /// The chat's quick-reply bar (<see cref="IQuickReplyHost.Attribution"/>):
+    /// the attribution line the compose window would hand <c>draft.create</c>
+    /// for a reply (<paramref name="kind"/>) to message <paramref name="id"/>
+    /// (<see cref="ActionsController.ReplyAttribution"/>).
+    /// </summary>
+    public string QuickReplyAttribution(ComposeKind kind, MessageId id) => actions.ReplyAttribution(kind, id);
+
+    /// <summary>
+    /// The bar's step before <c>draft.create</c> of a reply
+    /// (<see cref="IQuickReplyHost.BeforeCreate"/>): the download a reply from
+    /// the compose window would make first
+    /// (<see cref="ActionsController.PrepareReply"/>), then
+    /// <paramref name="done"/>.
+    /// </summary>
+    public void PrepareQuickReply(MessageId id, Action done) => actions.PrepareReply(id, done);
+
+    /// <summary>
+    /// compose_open.go <c>openComposeWith</c> (<see cref="IQuickReplyHost.OpenCompose"/>):
+    /// the compose window with a reply, reply all or forward
+    /// (<paramref name="kind"/>) of message <paramref name="id"/> and
+    /// <paramref name="ownHtml"/> (safe HTML,
+    /// <see cref="Conversation.QuickReplyHtml"/>) in its editor as the user's
+    /// own text; <paramref name="opened"/> once a window really opened (never
+    /// when none does). <paramref name="window"/> receives "Forward Without
+    /// Attachments?".
+    /// </summary>
+    public void OpenCompose(ComposeKind kind, MessageId id, string ownHtml, object? window, Action opened) =>
+        actions.OpenCompose(kind, id, window, ownHtml, opened);
 
     /// <summary>msg.trash, confirmed over <paramref name="window"/>; Cancel Sending for an outbox message.</summary>
     public void Trash(MessageId id, object? window) => actions.Trash(id, window);

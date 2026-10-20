@@ -477,7 +477,15 @@ a real store, since migration 0017 cannot be undone:
   closes a blank compose window; `reply-pane`, with the samples, has the
   real `BoardReplyEditorHost` show a blank, never saved pane in the
   List's reply slot, types into it and prints its heights, its place in
-  the detail and where Send goes), `MALACHI_START_SIZE` sets
+  the detail and where Send goes; `quick-reply` measures the chat's
+  quick-reply bar alone in a window of its own over a made-up conversation
+  and a host that sends nothing: wide, narrow, three lines, an issue,
+  hidden, and whether Message ▸ Send reaches it from the field;
+  `quick-reply-message` has the main window's reading pane show a made-up
+  single message with the bar under it and prints the pane, the reader and
+  the bar wide, narrow, for the user's own message, an issue's event and
+  comment, the Outbox and nothing selected),
+  `MALACHI_START_SIZE` sets
   its size, `MALACHI_START_INTERVAL` the seconds per step (3) and
   `MALACHI_START_TRACE` logs every resize; after each step the toolbar
   items', the dividers' and the board's and triage's state go to stderr,
@@ -799,6 +807,86 @@ at the strength of the user's accent tint, a red border), without *Show
 More*, and a single click opens it in the compose window as a double click
 does (`editThreadDraft`); drafts are never in `Expanded`. Both chats observe both keys and re-shorten every bubble;
 heights change through `preserving` / `onHeightChanging`.
+Under the chat and under the page of a single message (not the timeline,
+not the empty page or several selected rows, not the board's chat, not a
+message window), the reading pane puts the **quick-reply bar**
+(`MessageView/ConversationQuickReplyBar.swift`; plan
+[plans/chat-view.md](plans/chat-view.md) §10–§12, Q1–Q15 and S1–S9): a fixed row
+with a separator line above it, kept to the cards' column (the 900 pt
+clamp, the side insets, 8 pt above and below): the mode button, a
+pull-down with the mode's icon and label (Reply, Reply All; its menu the
+modes the account offers for the target and, after a separator,
+*Forward…*, which opens the compose window at once), on an issue a plain
+*Comment* label without a menu; the field (`AssistantInputView` with
+`returnSends` off, one to five lines, then it scrolls; placeholder and
+accessible name `Conversation.quickReplyPlaceholder(comment:)`); while the Assistant is
+shown (`AssistantController.shown` and its `onChange`, the toolbar's rule
+and observer, followed by the reading pane) the Assistant button, the toolbar's ✦
+with its `sparkles` icon and its tooltip, which calls the main window's
+`showAssistant(from:)` (through the reading pane's `onAssistant`,
+Integration+Conversation): `Assistant.buttonOpensPanel` as for the toolbar,
+so with In App the panel opens with its field focused
+(`openAssistantPanel`), otherwise the toolbar's own `AssistantMenu` pops up
+under the button, its items validated by the window for the selection;
+*Open in a Window* (`arrow.up.forward.square`); Send (`paperplane.fill`, tinted with
+the accent colour, off while the text is blank or a reply is on its way).
+The buttons sit on the field's last line. The mode button's tooltip names
+the target's sender (`Conversation.quickReplyTargetTooltip`); in a narrow
+pane (`ConversationLayout.quickReplyIconOnly`, the bubbles' short-date
+rule) it shows its icon alone. What the bar shows and does is Core's
+`QuickReplyController` (port of `ui/internal/quickreply`): the text per
+conversation in memory, the target (`Conversation.quickReplyTarget`), the
+modes, Send (`draft.create` → one `draft.save` with the typed text above
+the original quoted → `message.send`, `draft.delete` after a failed send)
+and the compose window with the typed text as the user's own
+(`ComposeParams.ownHTML`; the pane's `ready` calls
+`ComposeDraftController.editorLoaded(ownText:)`, which marks it as an edit,
+so the autosave and the question on close apply; from before the editor
+loads until then `ownTextPending` makes a close ask too). The reading pane
+(`ReadingPaneViewController`) owns the bar and its controller, so the bar
+stands in the same place under a message and under the chat: the
+single-message view and the conversation host both end at the bar's top,
+the bar at the pane's bottom, and a hidden bar collapses to no height (the
+pane's background follows the view shown, the reader's colour or the
+conversation's surface). A single row feeds the controller a model of one
+member (`ConversationController.quickReplyInput(single:)`:
+`Conversation.singleModel` with `mine` by the rule of `Item.mine`,
+`Conversation.isMine`, the card actions and account of the message, and
+`setShown` off in the Outbox and Drafts); a conversation row feeds every
+change the host reports (`onQuickReplyChange`:
+`ConversationController.quickReplyInput()` and `setShown(chatShown)`, so
+the timeline has no bar); the empty page and several rows hide it
+(`show(nil, "")`, `setShown(false)`); without a model yet (the members
+on their way) the bar gets the empty model and hides, so it never keeps
+the target of the single message shown a moment before. An issue's event shown alone has no target
+(the model makes it an event) and an account without Reply none either.
+The text stays per account and thread (a thread id is unique only within
+its account: `show(_ account:, _ t:)`, `ConversationController.account`),
+so a message and its conversation share it across grouping and layout
+switches, and the same thread id of two accounts never does. The
+controller's host is `QuickReplyHostAdapter`: Send's calls through the
+application's client, the attribution line and the download before a reply
+(`ActionsController.replyAttribution`, `prepareReply`) and the compose
+window (`ActionsController.openCompose(_:_:from:ownHTML:opened:)`) through
+`MessageActionDelegate`, and the compose window's toasts ("Message queued
+for sending" or the comment's, the failed send's) on the main window.
+Keys: Return is a new line; ⌘↩ is the menu bar's Message ▸ Send, which the
+bar's view controller answers (`sendMessage:` and
+`validateUserInterfaceItem`, off with nothing to send) because it is the
+next responder of the field, so it works only with the keyboard in the
+field, as the compose window's pane does; the Send button has no key
+equivalent of its own. Escape in the field gives the keyboard to the
+message list (`MessageListViewController.focusList`, nothing while the
+list is hidden); a bar that hides on its own while its field has the keyboard (a page
+without a bar, a conversation going to the timeline) gives the keyboard to
+the view the pane shows (`ReadingPaneViewController.keyboardTarget`: the
+message's body, the layout's `ConversationScrollView`), as GTK gives it to
+the shown scroller, and leaves it with the window only when that view
+refuses; the single-key actions of the main window are off while
+the field has the keyboard (`isTyping`), and Space types. The board's
+inline reply pane now learns how its editor wrote the draft from the
+pane's own `ready` too (`editorLoaded` runs `editorReady` for the board's
+owner), so `BoardReplyEditorHost` no longer wraps `onReady`.
 
 The [security review checklist](security.md#12-review-checklist-for-prs-touching-content-handling)
 applies to changes in `WebViews/`, `MessageView/`, `Compose/`,

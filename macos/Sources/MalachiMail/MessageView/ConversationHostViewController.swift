@@ -47,6 +47,13 @@ import MalachiCore
 /// shown (`page(up:)`). Each layout has its own loading spinner; the
 /// timeline has the status label of the link under the pointer (the chat
 /// has no links).
+///
+/// Under the chat the reading pane puts the quick-reply bar
+/// (`ReadingPaneViewController`, docs/plans/chat-view.md §10–§12): the
+/// pane owns the bar and its controller, below the host as below the
+/// single-message view, and the host tells it of every change of the
+/// conversation and of the layout shown (`onQuickReplyChange`); the pane
+/// reads `ConversationController.quickReplyInput` and `chatShown`.
 @MainActor
 final class ConversationHostViewController: NSViewController, MessageDisplay {
     let state: AppState
@@ -60,6 +67,10 @@ final class ConversationHostViewController: NSViewController, MessageDisplay {
             chat.delegate = delegate
         }
     }
+
+    /// After every change of the conversation and of the layout shown: the
+    /// reading pane's quick-reply bar follows (`ReadingPaneViewController`).
+    var onQuickReplyChange: (@MainActor () -> Void)?
 
     var onOpenEmbedded: (@MainActor (_ containing: MessageSummary, _ attachment: Attachment, _ remote: Bool, _ chip: NSView?) -> Void)? {
         didSet {
@@ -102,12 +113,18 @@ final class ConversationHostViewController: NSViewController, MessageDisplay {
             v.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(v)
             NSLayoutConstraint.activate([
-                v.topAnchor.constraint(equalTo: strip.bottomAnchor),
-                v.bottomAnchor.constraint(equalTo: container.bottomAnchor),
                 v.leadingAnchor.constraint(equalTo: container.leadingAnchor),
                 v.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             ])
         }
+        // Both layouts fill the rest (the pane ends the host at its
+        // quick-reply bar).
+        NSLayoutConstraint.activate([
+            timeline.view.topAnchor.constraint(equalTo: strip.bottomAnchor),
+            timeline.view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            chat.view.topAnchor.constraint(equalTo: strip.bottomAnchor),
+            chat.view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
         view = container
 
         strip.onFoldAll = { [weak self] in self?.timeline.foldAllClicked() }
@@ -150,6 +167,7 @@ final class ConversationHostViewController: NSViewController, MessageDisplay {
         }
         hidden.view.isHidden = true
         shown.view.isHidden = false
+        onQuickReplyChange?()
         if on {
             strip.setFoldAll(.none)
             chat.setShown(true)
@@ -165,6 +183,7 @@ final class ConversationHostViewController: NSViewController, MessageDisplay {
         _ = view
         timeline.changed(change)
         chat.changed(change)
+        onQuickReplyChange?()
     }
 
     private func loaded(_ id: MessageID, _ lm: LoadedMessage) {
@@ -181,6 +200,12 @@ final class ConversationHostViewController: NSViewController, MessageDisplay {
     /// shown. True: the key was used.
     func page(up: Bool) -> Bool {
         chatShown ? chat.page(up: up) : timeline.page(up: up)
+    }
+
+    /// What takes the keyboard when the quick-reply bar hides under the
+    /// conversation: the scroll view of the layout shown.
+    var keyboardTarget: NSView {
+        chatShown ? chat.keyboardTarget : timeline.keyboardTarget
     }
 
     // MARK: Issue

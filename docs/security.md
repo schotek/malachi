@@ -227,6 +227,13 @@ same locked `htmlview.Card` through the shared bubble's web host, with the
 board's cap of four live views (the cards' views are released while the
 chat shows); off means no request, and the `board.get` text is the
 fallback. The trust boundary is unchanged.
+The quick-reply bar under the chat (`ui/internal/window/quick_reply_bar.go`)
+is plain text both ways: its field is a plain `GtkTextView`, and what the
+user types is their own text, never mail, which
+`conversation.QuickReplyHTML` turns into paragraphs and line breaks with
+every character escaped (no Markdown) before `draft.save`; its labels have
+markup off, and the only string from mail it shows is the target's sender
+in the mode button's tooltip (`Item.Sender`, one cleaned line).
 
 The GTK board's conversation cards use the same `htmlview.Card` and
 height governor as Mail. Only an open card fetches its message's body
@@ -336,6 +343,17 @@ for WKWebView, since nothing of the WebKitGTK configuration carries over:
   on, a board bubble near the visible part may show the sanitised HTML of
   `message.body` in the same locked `MessageWebView` (`BoardBubbleWebHost`,
   cap of four live, the text as fallback); off, no request is made.
+  The quick-reply bar of the reading pane, under the chat and under a single
+  message (`MessageView/ConversationQuickReplyBar.swift`, owned by
+  `ReadingPaneViewController`) is plain text both ways: its field is a plain-text `NSTextView` (no rich
+  text, pictures, data detectors or link detection), and what the user
+  types is their own text, never mail, which Core's
+  `Conversation.quickReplyHTML` turns into paragraphs and line breaks with
+  every character escaped (no Markdown) before `draft.save`; the quoted
+  original below it is the daemon's, prepared by `draft.create` and
+  sanitised there as for the compose window. The only string from mail the
+  bar shows is the target's sender in the mode button's tooltip
+  (`Item.sender`, one cleaned line).
 
 Layer 2 on Windows (`windows/src/Malachi.App/WebViews`, the rules in
 `Malachi.Core.Presentation`; [windows-port.md §6](windows-port.md#6-the-webview2-security-layer))

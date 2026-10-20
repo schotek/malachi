@@ -8,7 +8,10 @@ import MalachiCore
 /// In App target; GTK assistant_panel.blp `assistant_input`): plain text in
 /// a rounded box that grows from one line to five and scrolls beyond.
 /// Return sends (`onSubmit`), Shift-Return (and Option-Return) starts a new
-/// line, Escape drops a waiting message action (`onCancel`). The
+/// line, Escape drops a waiting message action (`onCancel`). With
+/// `returnSends` off (the chat's quick-reply bar) Return is a new line too
+/// and only ⌘↩ sends, through the menu bar's Send (`sendMessage:` of a
+/// responder above the field), as in the compose window. The
 /// placeholder is a label over the empty field. Nothing typed here is
 /// formatted: no rich text, no pictures, no data detectors.
 @MainActor
@@ -24,7 +27,9 @@ final class AssistantInputView: NSView, NSTextViewDelegate {
     private var heightConstraint: NSLayoutConstraint?
     private let lineHeight: CGFloat
 
-    /// Return in the field.
+    /// Return sends (`onSubmit`); off, Return starts a new line.
+    var returnSends = true
+    /// Return in the field (with `returnSends`).
     var onSubmit: (@MainActor () -> Void)?
     /// Escape in the field.
     var onCancel: (@MainActor () -> Void)?
@@ -37,6 +42,22 @@ final class AssistantInputView: NSView, NSTextViewDelegate {
         set {
             textView.string = newValue
             textChanged()
+        }
+    }
+
+    /// The field takes input; off, it keeps its text and the keyboard but
+    /// refuses every edit (the quick-reply bar while its reply is on its
+    /// way). The text view stays editable, so that the window still counts
+    /// the keyboard as typing and keeps its single-key actions off.
+    var isEnabled = true {
+        didSet {
+            guard isEnabled != oldValue else { return }
+            let color: NSColor = isEnabled ? .labelColor : .disabledControlTextColor
+            textView.textColor = color
+            // An emptied view has no text to colour: what is typed next
+            // takes the typing attributes, which would stay grey after a
+            // send cleared the field while it was off.
+            textView.typingAttributes[.foregroundColor] = color
         }
     }
 
@@ -135,7 +156,9 @@ final class AssistantInputView: NSView, NSTextViewDelegate {
 
     // MARK: Height
 
-    private var minimumHeight: CGFloat {
+    /// One line of text with its insets: the field's height while it holds
+    /// one line (the quick-reply bar centres its buttons on that line).
+    var minimumHeight: CGFloat {
         lineHeight + 2 * Self.textInset.height
     }
 
@@ -171,6 +194,10 @@ final class AssistantInputView: NSView, NSTextViewDelegate {
         textChanged()
     }
 
+    func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString: String?) -> Bool {
+        isEnabled
+    }
+
     /// Return sends; Shift-Return is a new line (Option-Return is one
     /// already, `insertNewlineIgnoringFieldEditor:`); Escape drops the
     /// waiting action. A composition in progress (marked text) keeps its
@@ -178,6 +205,16 @@ final class AssistantInputView: NSView, NSTextViewDelegate {
     func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         switch commandSelector {
         case #selector(NSResponder.insertNewline(_:)):
+            if !returnSends {
+                guard isEnabled else { return true }
+                // ⌘↩ reaches the field only when the menu bar's Send is
+                // off (nothing to send): it does nothing, as a Return
+                // never should be taken for it.
+                if NSApp.currentEvent?.modifierFlags.contains(.command) != true {
+                    textView.insertNewlineIgnoringFieldEditor(nil)
+                }
+                return true
+            }
             if NSApp.currentEvent?.modifierFlags.contains(.shift) == true {
                 textView.insertNewlineIgnoringFieldEditor(nil)
             } else {

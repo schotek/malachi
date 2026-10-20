@@ -8,7 +8,14 @@
 // on either side without a send), the app started with the list grouped by
 // conversation and the conversation shown as a chat
 // (group-by-conversation, conversation-chat-layout), and the devmail
-// account added as DevmailFixture adds it.
+// account added as DevmailFixture adds it. A second conversation of the same
+// shape is the quick-reply bar's (ReplySubject), so that its sent reply
+// does not add a bubble to the first one: its first message, from Ada, has
+// Reply-To the user, so the quick reply goes to the seeded mailbox and
+// devmail delivers it as it delivers the suite's other sends. A lone message
+// of the same kind (SingleSubject) is the bar's under a single message
+// (docs/plans/chat-view.md §12): a plain row until its quick reply lands in
+// Sent and makes it a conversation.
 
 using System;
 using System.Globalization;
@@ -32,6 +39,15 @@ public sealed class ConversationChatFixture : IAsyncLifetime
 
     /// <summary>The conversation's subject (its first message's; the reply's has "Re: ").</summary>
     public string Subject { get; } = "Chat " + Guid.NewGuid().ToString("N")[..8];
+
+    /// <summary>The quick-reply bar's conversation's subject (its first message's).</summary>
+    public string ReplySubject { get; } = "Quick " + Guid.NewGuid().ToString("N")[..8];
+
+    /// <summary>The lone message's subject: the quick-reply bar under a single message.</summary>
+    public string SingleSubject { get; } = "Single " + Guid.NewGuid().ToString("N")[..8];
+
+    /// <summary>devmail (the quick-reply test counts the server's Sent).</summary>
+    internal DevmailServer Server => server ?? throw new InvalidOperationException(SkipReason);
 
     /// <summary>The app.</summary>
     internal AppSession Session => session ?? throw new InvalidOperationException(SkipReason);
@@ -64,7 +80,13 @@ public sealed class ConversationChatFixture : IAsyncLifetime
             var first = "<chat-" + id + "@uitests.invalid>";
             DevmailSmtp.Submit(devmail, Message(first, null, "Ada Example <ada@example.org>", "Test User <" + DevmailServer.User + ">", Subject, "Shall we meet on Friday?", DateTimeOffset.UtcNow.AddMinutes(-10)));
             DevmailSmtp.Submit(devmail, Message("<chat-reply-" + id + "@uitests.invalid>", first, "Test User <" + DevmailServer.User + ">", "Ada Example <ada@example.org>, Test User <" + DevmailServer.User + ">", "Re: " + Subject, "Friday works for me.", DateTimeOffset.UtcNow.AddMinutes(-5)));
-            Uia.WaitFor(() => devmail.Total("INBOX") == inbox + 2, "the conversation in the server's INBOX", TimeSpan.FromSeconds(60));
+            var quick = ReplySubject[6..];
+            var quickFirst = "<quick-" + quick + "@uitests.invalid>";
+            DevmailSmtp.Submit(devmail, Message(quickFirst, null, "Ada Example <ada@example.org>", "Test User <" + DevmailServer.User + ">", ReplySubject, "Can you send me the agenda?", DateTimeOffset.UtcNow.AddMinutes(-9), replyTo: "Test User <" + DevmailServer.User + ">"));
+            DevmailSmtp.Submit(devmail, Message("<quick-reply-" + quick + "@uitests.invalid>", quickFirst, "Test User <" + DevmailServer.User + ">", "Ada Example <ada@example.org>, Test User <" + DevmailServer.User + ">", "Re: " + ReplySubject, "Let me look for it.", DateTimeOffset.UtcNow.AddMinutes(-8)));
+            var single = SingleSubject[7..];
+            DevmailSmtp.Submit(devmail, Message("<single-" + single + "@uitests.invalid>", null, "Ada Example <ada@example.org>", "Test User <" + DevmailServer.User + ">", SingleSubject, "Are you coming tomorrow?", DateTimeOffset.UtcNow.AddMinutes(-7), replyTo: "Test User <" + DevmailServer.User + ">"));
+            Uia.WaitFor(() => devmail.Total("INBOX") == inbox + 5, "the conversations in the server's INBOX", TimeSpan.FromSeconds(60));
 
             session = AppSession.Start(preferences: k =>
             {
@@ -93,8 +115,9 @@ public sealed class ConversationChatFixture : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    // A plain-text message; a reply names the message it answers.
-    private static string Message(string messageId, string? inReplyTo, string from, string to, string subject, string text, DateTimeOffset date)
+    // A plain-text message; a reply names the message it answers, and a
+    // message may name where replies go.
+    private static string Message(string messageId, string? inReplyTo, string from, string to, string subject, string text, DateTimeOffset date, string? replyTo = null)
     {
         var lines = new[]
         {
@@ -104,6 +127,10 @@ public sealed class ConversationChatFixture : IAsyncLifetime
             "To: " + to,
             "Subject: " + subject,
         }.ToList();
+        if (replyTo is not null)
+        {
+            lines.Add("Reply-To: " + replyTo);
+        }
         if (inReplyTo is not null)
         {
             lines.Add("In-Reply-To: " + inReplyTo);

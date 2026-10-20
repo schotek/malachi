@@ -4,7 +4,7 @@
 // Port of macos/Sources/MalachiCore/Model/ConversationLayout.swift
 // (Metrics.chatGapMin, Metrics.chatGapRatio, chatGap, chatBubbleMax) and
 // ConversationChatBody.swift (chatEndSlack, chatAtEnd, chatColumn,
-// chatCompactDates, chatResize, chatEndTop). Swift-first:
+// chatCompactDates, chatResize, chatEndTop, quickReplyIconOnly). Swift-first:
 // ui/internal/conversation/chat.go leaves where the bubbles stand and how
 // wide they are to the clients; GTK has the same measures in its window
 // package. Swift's chatResize is ChatResizeFor here: the type it returns is
@@ -70,6 +70,15 @@ public static partial class ConversationLayout
     /// measured on the bubble, which is narrower than a card).
     /// </summary>
     public static bool ChatCompactDates(double column) => ChatBubbleMax(column) - (2 * CardPaddingH) < CompactHeader;
+
+    /// <summary>
+    /// Whether the quick-reply bar under the chat in a pane
+    /// <paramref name="pane"/> wide shows its mode button as the icon alone
+    /// (docs/plans/chat-view.md Q11): when the bubbles show the short date
+    /// (<see cref="ChatCompactDates"/> of the pane's <see cref="ChatColumn"/>),
+    /// the field keeps the room the label would take.
+    /// </summary>
+    public static bool QuickReplyIconOnly(double pane) => ChatCompactDates(ChatColumn(pane));
 
     /// <summary>
     /// Whether a viewport <paramref name="viewportHeight"/> tall whose top is
