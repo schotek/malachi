@@ -141,6 +141,14 @@ func TestConversationChatGTKSmoke(t *testing.T) {
 	}
 	defer w.Destroy()
 
+	// The reading pane's column: the pages over the quick-reply bar, as
+	// window.blp's reading_column holds them.
+	column := gtk.NewBox(gtk.OrientationVertical, 0)
+	column.SetHExpand(true)
+	w.messageStack.SetVExpand(true)
+	column.Append(w.messageStack)
+	w.attachQuickReply(column)
+
 	h := w.conversationPane()
 	var marked []api.MessageID
 	h.markRead = func(id api.MessageID) { marked = append(marked, id) }
@@ -178,17 +186,16 @@ func TestConversationChatGTKSmoke(t *testing.T) {
 	// The quick-reply bar over a fake host (the window's client is never
 	// connected).
 	replyHost := newSmokeReplyHost()
-	h.useQuickReply(quickreply.New(replyHost))
-	bar := h.replyBar
+	w.useQuickReply(quickreply.New(replyHost))
+	bar := w.quickReplyBar
 
 	// The list beside the reading pane, so that it is on screen (Escape in
 	// the quick-reply field gives it the keyboard).
 	w.messageList.Append(gtk.NewLabel("row"))
 	w.messageList.SetSizeRequest(200, -1)
-	w.messageStack.SetHExpand(true)
 	content := gtk.NewBox(gtk.OrientationHorizontal, 0)
 	content.Append(w.messageList)
-	content.Append(w.messageStack)
+	content.Append(column)
 	w.SetContent(content)
 	w.messageStack.SetVisibleChildName(convPageName)
 	w.SetDefaultSize(1000, 800)
@@ -258,7 +265,7 @@ func TestConversationChatGTKSmoke(t *testing.T) {
 		}
 	}
 
-	quickReplySmoke(t, w, h, replyHost, run)
+	quickReplySmoke(t, w, replyHost, run)
 
 	// The rows: the others on the left, the reply in Sent on the right,
 	// the draft last on the right.
@@ -373,14 +380,17 @@ func TestConversationChatGTKSmoke(t *testing.T) {
 // Forward… move the text into the compose window; Escape gives the
 // keyboard to the list only while it is on screen; the Assistant button
 // shows as the Assistant does.
-func quickReplySmoke(t *testing.T, w *Window, h *conversationHost, host *smokeReplyHost, run func(time.Duration)) {
+func quickReplySmoke(t *testing.T, w *Window, host *smokeReplyHost, run func(time.Duration)) {
 	t.Helper()
-	bar := h.replyBar
+	bar := w.quickReplyBar
 	buf := bar.text.Buffer()
 	if !bar.root.Visible() {
 		t.Fatal("the quick-reply bar does not show in the chat")
 	}
-	st := h.reply.State()
+	if !bar.root.HasCSSClass("conversation-pane") {
+		t.Error("the bar under the chat lacks the conversation's background")
+	}
+	st := w.quickReply.State()
 	if st.Target.Message.ID != "a3" || st.Mode != conversation.QuickReply || len(st.Modes) != 3 {
 		t.Errorf("state: target %q mode %v modes %v", st.Target.Message.ID, st.Mode, st.Modes)
 	}
@@ -405,8 +415,8 @@ func quickReplySmoke(t *testing.T, w *Window, h *conversationHost, host *smokeRe
 	// Typing (the buffer's own change, as a key would make it).
 	buf.SetText("Thanks, see you\nat <five>")
 	run(50 * time.Millisecond)
-	if !bar.send.Sensitive() || bar.placeholder.Visible() || h.reply.State().Text != "Thanks, see you\nat <five>" {
-		t.Errorf("typing: Send %v, placeholder %v, text %q", bar.send.Sensitive(), bar.placeholder.Visible(), h.reply.State().Text)
+	if !bar.send.Sensitive() || bar.placeholder.Visible() || w.quickReply.State().Text != "Thanks, see you\nat <five>" {
+		t.Errorf("typing: Send %v, placeholder %v, text %q", bar.send.Sensitive(), bar.placeholder.Visible(), w.quickReply.State().Text)
 	}
 	// Return alone is the field's (a new line).
 	if bar.key(gdk.KEY_Return, gdk.NoModifierMask) {
@@ -417,8 +427,8 @@ func quickReplySmoke(t *testing.T, w *Window, h *conversationHost, host *smokeRe
 	if !bar.key(gdk.KEY_Return, gdk.ControlMask) {
 		t.Error("Ctrl+Enter was not used")
 	}
-	if !h.reply.State().Sending || bar.send.Sensitive() || bar.open.Sensitive() {
-		t.Errorf("sending: %v, Send %v, Open %v", h.reply.State().Sending, bar.send.Sensitive(), bar.open.Sensitive())
+	if !w.quickReply.State().Sending || bar.send.Sensitive() || bar.open.Sensitive() {
+		t.Errorf("sending: %v, Send %v, Open %v", w.quickReply.State().Sending, bar.send.Sensitive(), bar.open.Sensitive())
 	}
 	buf.InsertAtCursor("zzz")
 	if got := bar.textOf(); got != "Thanks, see you\nat <five>" {
@@ -450,7 +460,7 @@ func quickReplySmoke(t *testing.T, w *Window, h *conversationHost, host *smokeRe
 	if send := calls[2].params.(api.MessageSendParams); send.DraftID != "q1" || send.Version != 2 || send.AccountID != "a" {
 		t.Errorf("message.send %+v", send)
 	}
-	if bar.textOf() != "" || bar.send.Sensitive() || !bar.placeholder.Visible() || h.reply.State().Sending {
+	if bar.textOf() != "" || bar.send.Sensitive() || !bar.placeholder.Visible() || w.quickReply.State().Sending {
 		t.Errorf("after sending: text %q, Send %v", bar.textOf(), bar.send.Sensitive())
 	}
 
@@ -471,9 +481,9 @@ func quickReplySmoke(t *testing.T, w *Window, h *conversationHost, host *smokeRe
 	// Reply All from the menu, and back.
 	bar.modeAction.Activate(glib.NewVariantString(quickReplyModeReplyAll))
 	run(20 * time.Millisecond)
-	if h.reply.State().Mode != conversation.QuickReplyAll ||
+	if w.quickReply.State().Mode != conversation.QuickReplyAll ||
 		bar.mode.TooltipText() != conversation.QuickReplyTargetTooltip(conversation.QuickReplyAll, "carol", i18n.Tr) {
-		t.Errorf("Reply All: mode %v, tooltip %q", h.reply.State().Mode, bar.mode.TooltipText())
+		t.Errorf("Reply All: mode %v, tooltip %q", w.quickReply.State().Mode, bar.mode.TooltipText())
 	}
 	bar.modeAction.Activate(glib.NewVariantString(quickReplyModeReply))
 	run(20 * time.Millisecond)

@@ -13,18 +13,20 @@ import (
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/quickreply"
 )
 
-// The quick-reply bar under a conversation shown as chat in Mail
-// (docs/plans/chat-view.md §10, §11; wireframe
-// docs/plans/chat-view/w4-quick-reply.svg): the widgets of
-// conversation_reply_bar in conversation_view.blp, a fixed row under the
-// chat's scrolled window, a line above it, its content in the column's
-// clamp. From the leading end: the mode button (icon and label, Reply or
+// The quick-reply bar of Mail's reading pane, under a single message and
+// under a conversation shown as chat (docs/plans/chat-view.md §10, §11,
+// §12; wireframes docs/plans/chat-view/w4-quick-reply.svg and
+// w5-quick-reply-message.svg): the widgets of quick_reply_bar.blp, which
+// the window owns and appends under message_stack (quick_reply.go
+// attachQuickReply), a fixed row at the bottom of the pane, a line above
+// it, its content in the column's clamp. From the leading end: the mode button (icon and label, Reply or
 // Reply All; its menu the modes the account offers and, after a separator,
 // Forward…, which opens the compose window at once), on an issue a plain
 // label Comment with no menu; the field of one to five lines (the
@@ -42,7 +44,21 @@ import (
 // Everything it shows is the controller's (quickreply.Controller.State,
 // read again on every OnChange); the bar reports typing, the mode, Send,
 // Open in a Window and Forward… to it and decides nothing. A hidden bar is
-// a hidden child of conversation_body and takes no room.
+// a hidden child of the pane's column and takes no room; its background is
+// the page's above it (the conversation page's under the chat,
+// setConversationSurface). Hidden with the keyboard in its field, the bar
+// gives the keyboard to the view the pane shows (Window.focusReadingView:
+// the message's body, the conversation's layout), else to nobody, never
+// keeping it on a hidden widget and never giving it to the list (only
+// Escape does that).
+//
+// The width (followWidth): the mode button shows its icon alone while the
+// bar, which spans the reading pane, is narrow. The field's scrolled
+// window reports every change of its width through its horizontal
+// adjustment ("changed", from the text view's allocation), and the field
+// is as wide as the pane allows, so the bar measures itself on the next
+// idle after each such report (queueFollowWidth): one trigger for the
+// page of a message and for the chat, and none while the bar is hidden.
 //
 // Keys, in the field's capture phase (as assistant_panel.go's): Ctrl+Enter
 // sends (only while Send is enabled; the key is used either way, so it
@@ -59,7 +75,7 @@ import (
 // controller (conversation.QuickReplyHTML, escaped), never here. A port of
 // the macOS client's ConversationQuickReplyBar.swift.
 
-// quickReplyBar is the quick-reply bar of the conversation page.
+// quickReplyBar is the quick-reply bar of the reading pane.
 type quickReplyBar struct {
 	w    *Window
 	ctrl *quickreply.Controller
@@ -70,6 +86,7 @@ type quickReplyBar struct {
 	comment      *gtk.Box
 	commentLabel *gtk.Label
 	text         *gtk.TextView
+	scroller     *gtk.ScrolledWindow
 	placeholder  *gtk.Label
 	assistant    *gtk.MenuButton
 	open         *gtk.Button
@@ -86,8 +103,15 @@ type quickReplyBar struct {
 	// sending: the state last rendered is sending (inputGate refuses
 	// typing).
 	sending bool
-	// iconOnly: the mode button shows its icon alone (a narrow pane).
-	iconOnly bool
+	// iconOnly: the mode button shows its icon alone (a narrow pane);
+	// widthQueued: a measure of the bar's width waits for an idle.
+	iconOnly    bool
+	widthQueued bool
+	// holding: the window feeds the controller several steps at once
+	// (hold); the bar renders once at the end, heldChange says whether
+	// anything changed meanwhile.
+	holding    bool
+	heldChange bool
 	// shownMode is what the mode button was last built for, so that a
 	// change of the text alone does not touch it; shownModes the modes its
 	// menu was last built from (the menu is replaced only when they
@@ -170,7 +194,7 @@ func quickReplyModeLabel(m conversation.QuickReplyMode) string {
 	return i18n.T("Reply")
 }
 
-// newQuickReplyBar binds the bar of conversation_view.ui (b) to ctrl.
+// newQuickReplyBar binds the bar of quick_reply_bar.ui (b) to ctrl.
 func newQuickReplyBar(w *Window, b *gtk.Builder, ctrl *quickreply.Controller) *quickReplyBar {
 	get := func(id string) any { return b.GetObject(id).Cast() }
 	bar := &quickReplyBar{
@@ -181,6 +205,7 @@ func newQuickReplyBar(w *Window, b *gtk.Builder, ctrl *quickreply.Controller) *q
 		comment:      get("conversation_reply_comment").(*gtk.Box),
 		commentLabel: get("conversation_reply_comment_label").(*gtk.Label),
 		text:         get("conversation_reply_text").(*gtk.TextView),
+		scroller:     get("conversation_reply_scroller").(*gtk.ScrolledWindow),
 		placeholder:  get("conversation_reply_placeholder").(*gtk.Label),
 		assistant:    get("conversation_reply_assistant").(*gtk.MenuButton),
 		open:         get("conversation_reply_open").(*gtk.Button),
@@ -231,6 +256,7 @@ func newQuickReplyBar(w *Window, b *gtk.Builder, ctrl *quickreply.Controller) *q
 	}
 
 	bar.bindInput()
+	bar.scroller.HAdjustment().ConnectChanged(bar.queueFollowWidth)
 	bar.setController(ctrl)
 	return bar
 }
@@ -312,10 +338,24 @@ func (bar *quickReplyBar) focusList() bool {
 	return true
 }
 
-// followWidth follows the pane's width pane: the mode button shows its
-// icon alone in a narrow one (convQuickReplyIconOnly). Called by the host
-// when the chat's column changes its width; a pane without a width yet
-// changes nothing.
+// queueFollowWidth measures the bar on the next idle (followWidth): the
+// field's adjustment reports from inside the allocation, which must not
+// change the bar's content.
+func (bar *quickReplyBar) queueFollowWidth() {
+	if bar.widthQueued {
+		return
+	}
+	bar.widthQueued = true
+	glib.IdleAdd(func() {
+		bar.widthQueued = false
+		bar.followWidth(bar.root.Width())
+	})
+}
+
+// followWidth follows the pane's width pane (the bar's own: it spans the
+// reading pane): the mode button shows its icon alone in a narrow one
+// (convQuickReplyIconOnly). A bar without a width yet (hidden, not laid
+// out) changes nothing.
 func (bar *quickReplyBar) followWidth(pane int) {
 	if pane <= 0 {
 		return
@@ -328,8 +368,42 @@ func (bar *quickReplyBar) followWidth(pane int) {
 	bar.render()
 }
 
+// hold runs f, which feeds the controller several steps
+// (Window.updateQuickReply), and renders once afterwards if any of them
+// changed the state: a step in between must not hide the bar.
+func (bar *quickReplyBar) hold(f func()) {
+	if bar.holding {
+		f()
+		return
+	}
+	bar.holding, bar.heldChange = true, false
+	defer func() {
+		bar.holding = false
+		if bar.heldChange {
+			bar.heldChange = false
+			bar.render()
+		}
+	}()
+	f()
+}
+
+// setConversationSurface gives the bar the conversation page's background
+// (on: under the chat) or none, so that it shows the pane's own under a
+// message (convCSS, .conversation-pane).
+func (bar *quickReplyBar) setConversationSurface(on bool) {
+	if on {
+		bar.root.AddCSSClass("conversation-pane")
+	} else {
+		bar.root.RemoveCSSClass("conversation-pane")
+	}
+}
+
 // render shows the controller's state.
 func (bar *quickReplyBar) render() {
+	if bar.holding {
+		bar.heldChange = true
+		return
+	}
 	s := bar.ctrl.State()
 	bar.setVisible(s.Visible)
 	bar.sending = s.Sending
@@ -436,14 +510,45 @@ func setQuickReplyTooltip(w *gtk.Widget, text string) {
 }
 
 // setVisible shows or hides the bar; a field that had the keyboard as the
-// bar hides on its own (another conversation, the timeline) lets it go to
-// the layout shown, never to the list (only Escape does that).
+// bar hides on its own (another page, the timeline, a reply that made the
+// message a conversation) lets it go to the view the pane shows
+// (Window.focusReadingView), else to nobody, never to the list (only
+// Escape does that) and never kept on a hidden widget.
 func (bar *quickReplyBar) setVisible(on bool) {
 	if bar.root.Visible() == on {
 		return
 	}
-	if !on && bar.text.HasFocus() && bar.w.conv != nil {
-		bar.w.conv.shownScroller().GrabFocus()
+	if !on && bar.holdsKeyboard() && !bar.w.focusReadingView() {
+		bar.w.SetFocus(nil)
 	}
 	bar.root.SetVisible(on)
+}
+
+// leaveIfOther hands the keyboard off (as setVisible does on hiding) when
+// the bar holds it and the pane is about to show another conversation
+// (account, t) than the one whose text the field holds: hold renders
+// once after the switch, with the bar still visible, so the field would
+// otherwise keep the keyboard while its text silently becomes the other
+// conversation's (a message that left the list under the user's hands:
+// moved elsewhere, trashed, a neighbour selected instead). The macOS bar
+// renders every step and lets the keyboard go the same way.
+func (bar *quickReplyBar) leaveIfOther(account api.AccountID, t api.ThreadID) {
+	st := bar.ctrl.State()
+	if st.Thread == "" || (st.Account == account && st.Thread == t) || !bar.holdsKeyboard() {
+		return
+	}
+	if !bar.w.focusReadingView() {
+		bar.w.SetFocus(nil)
+	}
+}
+
+// holdsKeyboard reports whether the window's keyboard is in the bar (the
+// field or one of its buttons); the window's focus widget, not HasFocus,
+// so that it holds for a window that is not active as well.
+func (bar *quickReplyBar) holdsKeyboard() bool {
+	f := bar.w.Focus()
+	if f == nil {
+		return false
+	}
+	return coreglib.BaseObject(f).Eq(bar.root) || gtk.BaseWidget(f).IsAncestor(bar.root)
 }

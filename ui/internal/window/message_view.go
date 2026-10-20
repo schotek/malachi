@@ -643,7 +643,7 @@ func (w *Window) showMessage(id api.MessageID) {
 	labels.render(s, nil)
 	w.outboxBanner.SetRevealed(false)
 	w.draftBanner.SetRevealed(w.model.inDrafts(s))
-	w.messageStack.SetVisibleChildName("message")
+	w.showPaneMessage(s) // the page, and the quick-reply bar under it
 	if readsWithoutBody(s) {
 		// A status or assignee change: its changes are the whole message,
 		// there is no body to fetch.

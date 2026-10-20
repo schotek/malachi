@@ -859,7 +859,7 @@ Architektura: kontroler i pohled řádku zůstávají, mění se **hostitel**:
 | S-M | MalachiCore + MalachiMail | `MalachiCore/Model/ConversationReply.swift` (`singleModel`), `Controllers/QuickReplyController.swift` (`setShown`), `ReadingPaneViewController` (řádek + kontroler), `ConversationHostViewController` (bez řádku), `MessageViewController` (hlášení jedné zprávy), `Integration+Conversation`, DevStart `quick-reply`; testy `ConversationReplyTests`, `QuickReplyControllerTests` (+ jedna zpráva), `check-strings`; docs `macos-port.md`, `security.md` §3.2 | `swift build`, `swift test`, izolovaný start | Opus | S-R1 |
 | S-C1 | Commit `feat: quick reply bar under a single message (Go reference, macOS)` + `CLAUDE.md`; **S-B1** vlastníka na macOS (jedna zpráva v Doručené, Odeslané, Outbox bez řádku, Jira položka, přepnutí seskupování bez ztráty textu, chat ↔ osa) | | | orchestrátor, vlastník | S-M |
 | S-G | GTK hostitel | `ui/data/ui/quick_reply_bar.blp` (z `conversation_view.blp`, stejná id), `ui/data/data.go` (`go:generate` seznam), `window.blp` (`toast_overlay` → svislý Box s `message_stack` a řádkem), `window/quick_reply_bar.go` (vlastní ho `*Window`, šířka z panelu čtení), `window/quick_reply.go`, `conversation_host.go` (jen hlášení `Update`/`SetShown`), `message_view.go` (jedna zpráva přes `conversation.SingleModel`), `selection.go`; smoke testy (`TestConversationChatGTKSmoke` přes `w.quickReplyBar`, nový pod jednou zprávou) | kontejner `gtk.sh make build`, `test-ui`, smoke, `make po` (jen odkazy), `make lint`; **S-B2** vlastníka v XQuartz | Opus | S-B1 |
-| S-W | Windows Core + App | `Conversation.Reply.cs` (`SingleModel`), `QuickReplyController.cs` (`SetShown`), `MessageView.xaml(.cs)` (řádek dole v režimu Pane), `ConversationView` (bez řádku, hlášení), `ReaderController`/`ReaderHub`, UI smoke; docs `windows-port.md` §11.7, `windows/README.md`, poznámka As built v §12 | `windows.yml`; **S-B3** vlastníka na Windows | Opus | S-B1 |
+| S-W | Windows Core + App | `Conversation.Reply.cs` (`SingleModel`), `QuickReplyController.cs` (`SetShown`), `MessageView.xaml(.cs)` (řádek dole v režimu Pane), `ConversationView` (bez řádku, hlášení), `ReaderController`/`ReaderHub`, UI smoke; docs `windows-port.md` §11.7, `windows/README.md`, poznámka As built v §12 | předávka Windows agentovi vlastníka (`build.ps1 app`/`test`/`lint`, UI smoke; nikdy `windows.yml` — rozhodnutí vlastníka 2026-10-20), pak **S-B3** | Opus | S-B1 |
 
 Rizika: GTK `toast_overlay.child` je dnes přímo `message_stack` a `Window`
 si ho bere z builderu — přestavba musí zachovat id a `vexpand`; macOS
@@ -1069,3 +1069,259 @@ z řádku konverzaci a panel ji ukáže v časové ose, řádek s rozepsaným
 textem (třeba P.S.) zmizí uživateli pod rukama; text zůstane, klávesnice
 přejde na zobrazený pohled. Má řádek s neprázdným textem zůstat vidět i
 v časové ose? S7 zatím platí beze změny.
+
+### 12.4 As built — GTK (S-G)
+
+Napsané na Macu bez cgo a bez Blueprintu (jen `gofmt`, `gopls check`
+a Go testy čistých balíčků); démon, API, `po/*.po*` ani msgid se nemění.
+
+- **Co se přesunulo kam.** Widgety řádku (stejná id `conversation_reply_*`,
+  jediný přeložitelný `_("Send (Ctrl+Enter)")`) odešly
+  z `conversation_view.blp` do nového fragmentu `ui/data/ui/quick_reply_bar.blp`
+  (kořen `Box conversation_reply_bar`, zapsaný v `go:generate` seznamu
+  `ui/data/data.go`; Makefile bere `*.blp` zástupným znakem, takže build
+  i `make po` ho najdou samy). Ve `window.blp` je dítě `toast_overlay`
+  svislý `Box reading_column` s `message_stack` (`vexpand: true`); řádek
+  do něj vloží Go jako posledního potomka (`Window.attachQuickReply`,
+  volané v `New` po navázání ✦ lišty). Zvolil jsem fragment místo zápisu
+  přímo do `window.blp`: řádek má jedinou definici v Blueprintu a smoke
+  testy si ho postaví do vlastního sloupce. `*Window` vlastní
+  `quickReply` (`quickreply.Controller` nad `quickReplyHost`) a
+  `quickReplyBar`; `conversationHost` je už nevlastní a jen hlásí změny.
+- **Jedno místo, které krmí kontroler**: `Window.updateQuickReply`
+  (`window/quick_reply.go`) podle stránky `message_stack`: „message“ →
+  `Show(účet, vlákno)` zobrazené zprávy (`w.paneMessage`, nastavuje ho
+  `showPaneMessage` ze `showMessage` ještě před přepnutím stránky),
+  `Update(mailModel.singleQuickReplyInput(s))` a `SetShown` (ne Outbox,
+  ne Koncepty, ne prázdný souhrn); stránka konverzace → `Show`/`Update`
+  z `conversationController.quickReplyInput()` (bez modelu prázdný model)
+  a `SetShown(chatShown)`; každá jiná stránka (prázdná, bez účtů, výběr
+  více řádků) → `Show("", "")`, `SetShown(false)`. Spouští ho
+  `notify::visible-child-name` zásobníku, `showPaneMessage` (zpráva po
+  zprávě stránku nemění) a hostitel konverzace při každé změně kontroleru
+  i přepnutí rozložení. Vyčištěná konverzace (`hideConversation` běží dřív,
+  než se vybere další stránka) nehlásí nic (`ctrl.thread == ""`), takže
+  řádek při přechodu konverzace → zpráva téhož vlákna nezmizí a nepustí
+  klávesnici (oprava macOS ze S-M jinou cestou). Kroky jednoho hlášení se
+  vykreslí najednou (`quickReplyBar.hold`), aby `Show` jiného vlákna před
+  jeho modelem řádek na okamžik neschoval.
+- **Jedna zpráva**: `singleQuickReplyInput` = `conversation.SingleModel(s,
+  mine)`, kde `mine` je pravidlo `Item.Mine` (nové
+  `conversation.IsMine`, port Swiftu `Conversation.isMine`, na konci
+  `reply.go` pod posledním msgid) nebo složka role `sent`; akce jako karta
+  konverzace (`conversation.CardActions`, pro neznámý účet žádné, událost
+  Jiry žádné a `SingleModel` jí nedá cíl); účet z `mailModel.account`.
+  Zpráva bez `ThreadID` řádek nemá (kontroler bez vlákna nic nedrží).
+- **Šířka**: řádek měří sám sebe — `followWidth(bar.root.Width())` (řádek
+  je široký jako panel čtení) na nejbližším idle po každém `changed`
+  vodorovné adjustace rolovacího okna pole (`queueFollowWidth`; textové
+  pole ji nastavuje při každé alokaci a je tak široké, jak panel dovolí).
+  Jeden spouštěč pro stránku zprávy i chat, skrytý řádek nic nepočítá;
+  `chatColumnChanged` hostitele a jeho volání z `followSize` zmizely.
+- **Klávesnice při skrytí**: drží-li ji řádek (fokus okna je v něm —
+  `holdsKeyboard`, ne `HasFocus`, aby platilo i pro neaktivní okno),
+  dostane ji pohled, který panel ukazuje (`Window.focusReadingView`: tělo
+  zprávy `pane.stack`, rolovací okno zobrazeného rozložení konverzace,
+  jinak cokoli na stránce), a když ji nic nevezme, nikdo
+  (`SetFocus(nil)`); nikdy seznam (ten jen Escape, beze změny).
+- **Pozadí**: pod chatem dostane řádek třídu `conversation-pane`
+  (`setConversationSurface`), pod zprávou nic, takže ladí se stránkou nad
+  sebou jako na macOS.
+- **„•••“ (nález S-B1 z macOS)**: v GTK je `quoted_row` `Adw.Clamp` mimo
+  rolovací tělo, ale skrývá se celý (`showQuotedButton` → `SetVisible(false)`
+  na řádku) a skrytý widget v GTK místo nezabírá, takže pás nad řádkem
+  nevzniká a oprava není potřeba.
+- **Testy**: `quick_reply_bar_test.go` + `TestSingleQuickReplyInput`
+  (Doručená, vlastní zpráva v Odeslaných i z aliasu, Outbox podle složky
+  i značky, Koncepty, neznámý účet, žádná zpráva, událost Jiry);
+  `TestIsMine` v `ui/internal/conversation`. `TestConversationChatGTKSmoke`
+  staví sloupec se zásobníkem a řádkem (`attachQuickReply`,
+  `w.useQuickReply`, `w.quickReplyBar`) a navíc hlídá pozadí pod chatem.
+  Nový `MALACHI_GTK_SMOKE=1 TestQuickReplyMessageGTKSmoke` nad skutečným
+  `window.blp` (`reading_column`) a `quick_reply_bar.blp`: řádek je
+  potomek sloupce hned za `message_stack`, skrytý na prázdné stránce;
+  pod zprávou a3 viditelný, tooltip jmenuje carol, výška zásobníku + řádku
+  = sloupec, pravidlo ikony odpovídá vlastní šířce; Ctrl+Enter →
+  `draft.create` (MessageID a3, účet a, reply) / `draft.save` /
+  `message.send` přes falešného hostitele; rozepsaný text projde
+  konverzací téhož vlákna v chatu (přepnutí stránky ani
+  `hideConversation` řádek nehnou) a zpět; skrytý na prázdné stránce a pod
+  zprávou v Outboxu i s klávesnicí mimo řádek a bez místa ve sloupci;
+  skrytý u výběru více řádků a v Konceptech; v Odeslaných pro vlastní r1
+  viditelný se stejným textem vlákna; zpráva bez vlákna bez řádku.
+- **Čeká** (kontejner, orchestrátor): `gtk.sh make build` (Blueprint
+  přeloží `quick_reply_bar.blp` a nový `window.blp` poprvé), `gtk.sh
+  test-ui`, oba smoke testy (`MALACHI_GTK_SMOKE=1 go test ./internal/window
+  -run '^(TestConversationChatGTKSmoke|TestQuickReplyMessageGTKSmoke)$'
+  -count=1 -v`), `make po` (posunou se jen odkazy `#:` — `window.go`,
+  `quick_reply_bar.go`, nový `.ui` pro „Send (Ctrl+Enter)“) a `make lint`.
+  Nevyzkoušené: zda `notify::visible-child-name` přijde i z prvního
+  `AddNamed` (smoke test s tím počítá jen jako s neškodným hlášením), zda
+  `pane.stack.GrabFocus()` pod zprávou opravdu vezme klávesnici (jinak
+  `SetFocus(nil)`), přepočet ikony při zúžení okna (smoke test kontroluje
+  jen shodu s vlastní šířkou při 1200 px) a skutečné odeslání nad daty.
+  Pak brána **S-B2** vlastníka v XQuartz (body S-B1 1–12 v GTK, navíc
+  pozadí řádku pod zprávou a pod chatem).
+
+Z nezávislé revize GTK (2026-10-20): řádek, který drží klávesnici,
+ji při výměně konverzace pod rukama (zpráva zmizela ze seznamu, soused
+vybraný místo ní; `hold` vykreslí až po přepnutí, takže by pole tiše
+dostalo text jiného vlákna) předá zobrazenému pohledu jako macOS
+(`quickReplyBar.leaveIfOther`); `focusReadingView` už nemá obecnou zálohu
+na box stránky (dala by klávesnici vybíratelnému popisku předmětu).
+Ponecháno a pojmenováno: po skrytí řádku s klávesnicí (seskupený seznam,
+příchod kopie do Odeslaných nebo cizí odpovědi mění řádek na konverzaci
+v časové ose) jde klávesnice na tělo či rolovací pohled a brána psaní
+zapne jednoklávesové zkratky (`a`, `j`, `s`, `u`, Delete) nad konverzací
+— stejně jako macOS; rozhodnutí vlastníka v S-B2 (viz otázka v §12.3:
+řádek s textem nebo klávesnicí by mohl zůstat viditelný i v časové ose).
+Vstup jedné zprávy se počítá při `showMessage`, ne při pozdějším načtení
+rolí složek nebo účtů (jako banner konceptu); dorovná se při další změně
+zprávy či stránky.
+
+### 12.5 As built — Windows (S-W)
+
+Napsané na Macu bez `dotnet`, podle okolního kódu; nic se nepřeložilo ani
+nespustilo. Podle pravidla vlastníka se Windows klient neověřuje přes
+GitHub Actions: tahle sekce je předávka agentovi vlastníka na stroji
+s Windows. Démon, API, texty ani `po/` beze změny (žádný nový msgid; české
+„Napsat rychlou odpověď…“ je jen v `po/cs.po`).
+
+- **Core (port Go 1:1)**: `Model/Conversation.Reply.cs`
+  `Conversation.SingleModel(MessageSummary, bool mine)` (jedna položka
+  `Message`, událost Jiry `Event` bez vět, takže bez cíle; zpráva bez id
+  prázdný model; bez `ThreadId` vlákno ""), `Model/Conversation.cs`
+  `Conversation.IsMine` (Swift `isMine`, obal soukromého `Mine`).
+  `Controllers/QuickReplyController.cs`: stav pod klíčem (účet, vlákno)
+  (soukromý `Key`, `None`), `Show(AccountId?, ThreadId)` (vlákno "" = nic
+  bez ohledu na účet), `Update` převezme vlákno modelu s účtem z argumentu
+  a účet zobrazenému vláknu bez účtu, `SetShown(bool)` místo
+  `SetChatShown`, `IsKept(account, thread)` (Swift `isKept`), `KeptThreads`
+  dál vlákna libovolného účtu; Send a Otevřít v okně si klíč zachytí.
+  `QuickReplyState.Account` (v `Equals`, `GetHashCode` — vnořené
+  `HashCode.Combine`, osm argumentů je strop — a `ToString`).
+  `Controllers/ConversationController.cs`: `ThreadAccount` (Swift a Go
+  `account`; jméno `Account` drží metoda vyhledání účtu) se nastavuje
+  s `Thread` z řádku (účet nejnovějšího člena, jinak souhrnu), totožnost
+  řádku je (účet, vlákno), maže se v `Reset`; nové přetížení
+  `QuickReplyInput(MessageSummary single)` vrací model jedné zprávy, akce
+  karty, účet a `Shown` (ne `MailModel.InOutbox`, ne `InDrafts`). Odkazy
+  `cref` na `QuickReplyInput` mají kvůli přetížení závorky.
+- **App (hostitel)**: řádek i kontroler vlastní `Reader/MessageView.xaml(.cs)`
+  jen v `ReaderMode.Pane` (okno zprávy a přiložené zprávy ho nemají):
+  poslední řádek `Auto` mřížky `Root` (nový osmý `RowDefinition`, řádek
+  přidaný z kódu `Grid.SetRow(bar, 7)`), pod `Pages` a mimo každou
+  rolovací oblast; sbalený nezabírá místo. `FeedQuickReply` při každé
+  změně `ReaderController.Page` (po přepnutí viditelnosti stránek)
+  a každém `Rendered`: stránka zprávy → `Show(s.AccountId, s.ThreadId)`,
+  `Update(QuickReplyInput(s))`, `SetShown(Shown)`; stránka konverzace →
+  `Show(ThreadAccount, Thread)`, `Update(QuickReplyInput())` nebo prázdný
+  model, `SetShown(ChatShown)`; prázdná stránka, Žádné účty a počet více
+  řádků → `Show(null, "")`, `SetShown(false)`.
+  `Reader/Conversation/ConversationView.xaml(.cs)` už řádek nemá (třetí
+  řádek mřížky pryč, `ListOnScreen` pryč): hlásí `QuickReplyChanged` při
+  každé změně kontroleru kromě `Cleared` a při každém přepnutí rozložení,
+  dává `Controller`, `ChatShown` a `TakeKeyboard()`. Proč ne `Cleared`: hub
+  maže konverzaci jen pro řádek, který konverzací není, a stránka, kterou
+  čtečka ukáže hned potom (zpráva, prázdná, počet), řádek nakrmí sama;
+  odpovídá macOS opravě „přepnout stránku před `controller.clear()`“, takže
+  řádek při přechodu konverzace → zpráva téhož vlákna neproblikne skrytý.
+  `ReaderHub` dává `FocusList` a `ListOnScreen` panelu (`MessageView`), ne
+  konverzaci. `ConversationQuickReplyBar` zůstal ve složce
+  `Reader/Conversation` se stejnými AutomationId; šířku pro ikonu bez
+  popisku dostává od panelu (`SetPaneWidth` ze `SizeChanged` `MessageView`,
+  i když je sbalený, takže se ukáže hned správně), vlastní `SizeChanged`
+  zmizel.
+- **Klávesnice skrývajícího se řádku**: `Render`, který řádek sbalí
+  s fokusem uvnitř (`OwnsFocus`), zavolá `KeyboardTarget`; panel ji předá
+  až po tahu (`DispatcherQueue.TryEnqueue`), protože čtečka jde ze zprávy
+  do konverzace přes prázdnou stránku (`LeaveForConversation` volá
+  `Clear()`), a dá ji zobrazenému pohledu: tělu zprávy (`FocusBody`),
+  rolovací oblasti zobrazeného rozložení konverzace
+  (`ConversationView.FocusScroller`: `Scroller` není zastávka Tabu, takže se
+  jí stane jen na dobu fokusu a při `LostFocus` přestane, jako macOS
+  `ConversationScrollView`), jinak seznamu, je-li na obrazovce.
+- **Pás nad řádkem (nález S-B1)**: na Windows není co opravovat. `QuotedRow`
+  („•••“) leží mimo rolovací tělo, ale startuje `Collapsed` a sbaluje se
+  spolu s tlačítkem (`QuotedRow.Visibility = QuotedButton.Visibility`),
+  ostatní lišty jsou nad tělem. Pozadí: `ConversationView` je průhledná,
+  řádek leží pod zprávou i pod chatem na pozadí `Root` panelu, takže
+  sledování pozadí jako na macOS není potřeba.
+- **Testy**: `Malachi.Core.Tests` `Model/ConversationReplyTests.SingleModel`
+  (port `TestSingleModel` + `IsMine` a zpráva bez vlákna),
+  `Controllers/QuickReplyControllerTests` `SingleMessage`, `SetShown`,
+  `TextKeptAcrossPages`, `OutboxAndDraftsHaveNoBar`, `SendEndsWhileHidden`,
+  `SameThreadOfTwoAccounts`, `UpdateAdoptsTheAccount`,
+  `EmptyModelHidesAndKeepsText` (ostatní volají `SetShown` a
+  `Show(MailAcc.Id, …)`), `Controllers/ConversationControllerTests`
+  (`ThreadAccount` po výběru a vyčištění, `QuickReplyInputOfASingleMessage`;
+  harness umí `extraFolders`); UI smoke
+  `ConversationChatSmokeTests.TheQuickReplyBarStandsUnderASingleMessage`
+  nad osamělou zprávou `ConversationChatFixture.SingleSubject` (od Ady
+  s `Reply-To` na testovacího uživatele; INBOX serveru teď čeká + 5): řádek
+  pod stránkou zprávy a ne konverzace, Odeslat vypnuté a po psaní zapnuté,
+  text zůstane přes jiný řádek a zpět, stránka více řádků bez řádku
+  (`SelectionItemPattern.AddToSelection`), Ctrl+Enter → Sent a INBOX
+  serveru + 1, řádek se stane konverzací v chatu s řádkem a text napsaný
+  tam přežije návštěvu časové osy. Outbox a Koncepty jen v Core testech
+  (fixtura se k nim nedostane).
+
+**Ručně zkontrolováno na Macu**: každý použitý člen existuje (včetně
+`MailModel.InOutbox`/`InDrafts`, `Jira.IsEvent`, `Conversation.Sender`/`Mine`,
+`MainWindow.ShowAssistantFrom`, `MessageListOnScreen`, `FocusMessageList`),
+nullable (`AccountId?` a `ThreadId?` normalizované na "", `Normal`), stínění
+pole `account` parametrem `Show` (`this.account`), složené závorky a
+závorky všech změněných souborů, hlavičky SPDX beze změny (žádný nový
+soubor), jmenné prostory XAML beze změny, žádný literál `L10n.` navíc
+v `Conversation.Reply.cs` (test `TheTextsAreTheTemplatesMsgids` počítá
+volání), žádný nový řetězec pro uživatele.
+
+**Pro agenta na Windows** (z `windows\`): `build.ps1 app`, `build.ps1 test`
+(hlavně výše jmenované sady a `ApiCodingTests`/`GoContractTests` beze změny),
+`build.ps1 lint` (formát, konvence, `IconGlyphsTests` proti novému
+`ui/data/ui/quick_reply_bar.blp` z S-G — ikony v něm mají glyf), UI smoke
+s `MALACHI_DEVMAIL` (`ConversationChatSmokeTests` celé třídy, i dosavadní
+`TheQuickReplyBarSendsAndOpensTheComposeWindow`, kterému se změnil hostitel)
+a ruční průchod níže.
+
+**Brána S-B3 (ruční průchod na Windows, nad kopií dat nebo devmailem)**:
+
+1. Jedna zpráva v Doručené: řádek dole v panelu čtení, tooltip režimu
+   jmenuje odesílatele; Odpovědět, Odpovědět všem (podle účtu), Ctrl+Enter
+   odešle, toast, pole se vyprázdní, odpověď dorazí do Odeslaných s citací.
+2. Zpráva v Odeslaných: řádek je, odpověď jde na vlastní zprávu.
+3. Outbox a Koncepty: řádek není (u konceptu pruh Upravit).
+4. Jira: popis a komentář issue → *Komentovat*, komentář odejde; událost
+   bez řádku.
+5. Rozepsaný text u zprávy → zapnout/vypnout seskupování: text zůstane
+   u konverzace v chatu, zmizí v časové ose a vrátí se po přepnutí;
+   jiné vlákno začíná prázdné.
+6. Prázdný výběr a výběr více zpráv (Ctrl/Shift-klik): řádek není;
+   rozběhnuté odeslání doběhne (toast).
+7. Úzký panel (900/600 px skládání): tlačítko režimu jen ikona, i když se
+   řádek objeví až po zúžení.
+8. Escape v poli dá klávesnici seznamu (seznam vidět; ve složeném
+   rozložení nic); Enter nový řádek; prázdné pole Ctrl+Enter nic.
+9. *Otevřít v okně* a *Přeposlat…* pod jednou zprávou: okno s textem,
+   zavření se ptá, řádek se vyprázdní až po otevření okna.
+10. ✦ v řádku dělá totéž co ✦ v liště, pod zprávou i pod chatem.
+11. Odeslat zpod jedné zprávy se seskupeným seznamem v časové ose: řádek
+    zmizí s příchodem kopie do Odeslaných a klávesnice skončí v rolovací
+    oblasti časové osy (šipky rolují), ne na skrytém poli a ne v seznamu;
+    Tab z ní jde dál a zpět se na ni nevrací.
+12. Přechod chat → zpráva téhož vlákna (rozbalit konverzaci a vybrat člena)
+    s fokusem v poli: řádek nepoblikne a fokus zůstane v poli.
+13. Hledání ve všech účtech se stejným id vlákna ve dvou účtech: text
+    napsaný u jednoho se u druhého neukáže.
+14. Okno zprávy (dvojklik) řádek nemá; tmavý a vysoce kontrastní motiv.
+
+**Hádané chování WinUI (k ověření)**: že `Focus(Programmatic)` na
+`ScrollViewer`, kterému se `IsTabStop` zapne těsně předtím, projde a že
+`LostFocus` (bublá i od potomků) ho spolehlivě vrátí; že sbalení
+zaměřeného `TextBox` nepřesune fokus někam dřív, než doběhne odložené
+předání (přebije ho, ale mohl by problikat fokusový rámeček); že
+`Rendered` čtečky chodí pro každou zobrazenou zprávu (krmení i při změně
+zprávy beze změny stránky); že `SizeChanged` `MessageView` přichází i ve
+složeném rozložení; že UIA `AddToSelection` na `ListViewItem` v režimu
+`Extended` udělá výběr více řádků (jinak ať smoke test použije Ctrl-klik);
+dosavadní hádání z §11.2.2 platí dál.

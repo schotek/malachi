@@ -32,6 +32,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/maildate"
+	"github.com/schotek/malachi/ui/internal/quickreply"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/signin"
 	"github.com/schotek/malachi/ui/internal/sound"
@@ -236,6 +237,14 @@ type Window struct {
 	// conv is the pane's conversation host and its two layouts, made the
 	// first time a conversation is shown (conversation_host.go).
 	conv *conversationHost
+	// quickReply and quickReplyBar are the reading pane's quick-reply bar
+	// under a single message and under a conversation shown as chat
+	// (quick_reply.go, quick_reply_bar.go), made with the window;
+	// paneMessage is the single message the pane's page "message" shows
+	// (showPaneMessage), for the bar.
+	quickReply    *quickreply.Controller
+	quickReplyBar *quickReplyBar
+	paneMessage   api.MessageSummary
 	// ownWords is the search in the user's own words (search_ownwords.go).
 	ownWords ownWords
 
@@ -426,6 +435,9 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	w.assistantPanel = newAssistantPanel(w, b)
 	// Sign In… on the panel's "Reconnect to ChatGPT" line (chatgpt.go).
 	w.assistantPanel.ctl.ReconnectProvider = as.reconnectChatGPT
+	// The quick-reply bar under the reading pane's pages (its ✦ is bound
+	// as the toolbar's above).
+	w.attachQuickReply(b.GetObject("reading_column").Cast().(*gtk.Box))
 	// A Claude app may have been installed or registered meanwhile.
 	w.NotifyProperty("is-active", func() {
 		if w.IsActive() {

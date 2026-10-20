@@ -415,9 +415,6 @@ func (cv *conversationChat) followSize() {
 		return
 	}
 	cv.columnWidth = column
-	if cv.host != nil {
-		cv.host.chatColumnChanged()
-	}
 	max := cv.bubbleMax()
 	compact := convChatCompactDates(column)
 	compactChanged := compact != cv.compact

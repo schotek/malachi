@@ -249,3 +249,34 @@ func TestSingleModel(t *testing.T) {
 		t.Error("an empty model has a target")
 	}
 }
+
+// IsMine is Item.Mine's rule for the window's single message: the
+// account's address (any case, spaces trimmed), on an issue the daemon's
+// mine unless an integration relayed it.
+func TestIsMine(t *testing.T) {
+	acc := api.Account{ID: "acc", Config: api.AccountConfig{Email: " Me@Example.invalid "}}
+	s := api.MessageSummary{ID: "m1", AccountID: "acc", From: []api.Address{{Address: "me@example.INVALID"}}}
+	if !IsMine(s, acc) {
+		t.Error("the account's address is not mine")
+	}
+	s.From = []api.Address{{Name: "Me", Address: "someone@example.invalid"}}
+	if IsMine(s, acc) {
+		t.Error("another address is mine")
+	}
+	s.From = nil
+	if IsMine(s, acc) || IsMine(s, api.Account{}) {
+		t.Error("no sender, or an account without an address, is mine")
+	}
+	s.Issue = &api.MessageIssue{Mine: true}
+	if !IsMine(s, acc) {
+		t.Error("the issue's own comment is not mine")
+	}
+	s.Issue.Via = "Issue Sync"
+	if IsMine(s, acc) {
+		t.Error("a relayed comment is mine")
+	}
+	if got := SingleModel(api.MessageSummary{ID: "m2", ThreadID: "t", From: []api.Address{{Address: "me@example.invalid"}}},
+		IsMine(api.MessageSummary{From: []api.Address{{Address: "me@example.invalid"}}}, acc)); !got.Items[0].Mine {
+		t.Error("SingleModel did not take Mine")
+	}
+}

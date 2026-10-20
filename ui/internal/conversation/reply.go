@@ -241,3 +241,11 @@ func SingleModel(s api.MessageSummary, mine bool) Model {
 	m.ScrollTo = 0
 	return m
 }
+
+// IsMine reports whether the user of account wrote message s, by the rule
+// of Item.Mine (the account's address; on an issue the daemon's mine,
+// never a comment an integration relayed): the window's Mine for
+// SingleModel. The macOS client's Conversation.isMine.
+func IsMine(s api.MessageSummary, account api.Account) bool {
+	return mine(s, account)
+}

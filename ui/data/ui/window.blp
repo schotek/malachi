@@ -816,319 +816,329 @@ Adw.ApplicationWindow main_window {
               }
 
               content: Adw.ToastOverlay toast_overlay {
-                child: Stack message_stack {
-                  transition-type: crossfade;
+                // The reading pane's column: the pages over the quick-reply
+                // bar (docs/plans/chat-view.md §12), which window/quick_reply.go
+                // appends from quick_reply_bar.blp under message_stack, so that
+                // it stands in one place under a single message and under a
+                // conversation shown as chat; a hidden bar takes no room.
+                child: Box reading_column {
+                  orientation: vertical;
 
-                  StackPage {
-                    name: "empty";
+                  Stack message_stack {
+                    vexpand: true;
+                    transition-type: crossfade;
 
-                    child: Adw.StatusPage {
-                      icon-name: "mail-unread-symbolic";
-                      title: _("No Message Selected");
-                      description: _("Select a message to read it here.");
-                    };
-                  }
+                    StackPage {
+                      name: "empty";
 
-                  // Shown instead of "empty" while account.list is empty.
-                  StackPage {
-                    name: "no-accounts";
-
-                    child: Adw.StatusPage no_accounts_page {
-                      icon-name: "system-users-symbolic";
-                      title: _("No Accounts");
-                      description: _("Add a mail account to start reading and sending mail.");
-
-                      child: Box {
-                        orientation: vertical;
-                        spacing: 12;
-                        halign: center;
-
-                        Button {
-                          label: _("_Add Account…");
-                          use-underline: true;
-                          halign: center;
-                          action-name: "app.add-account";
-
-                          styles [
-                            "suggested-action",
-                            "pill",
-                          ]
-                        }
-
-                        // An issue tracker instead (the Jira assistant).
-                        Button {
-                          label: _("Add _Jira Account…");
-                          use-underline: true;
-                          halign: center;
-                          action-name: "app.add-jira-account";
-
-                          styles [
-                            "flat",
-                            "pill",
-                          ]
-                        }
+                      child: Adw.StatusPage {
+                        icon-name: "mail-unread-symbolic";
+                        title: _("No Message Selected");
+                        description: _("Select a message to read it here.");
                       };
-                    };
-                  }
+                    }
 
-                  // The headers stay put at the top; the body below scrolls
-                  // on its own, because a WebKit view scrolls itself and
-                  // would have no height inside a scrolled window.
-                  StackPage {
-                    name: "message";
+                    // Shown instead of "empty" while account.list is empty.
+                    StackPage {
+                      name: "no-accounts";
 
-                    child: Box {
-                      orientation: vertical;
-
-                      Adw.Clamp {
-                        maximum-size: 900;
-                        // Equal to the maximum: min(width, 900), the width htmlview's
-                        // baseCSS gives an HTML body, so its text lines up with these.
-                        tightening-threshold: 900;
+                      child: Adw.StatusPage no_accounts_page {
+                        icon-name: "system-users-symbolic";
+                        title: _("No Accounts");
+                        description: _("Add a mail account to start reading and sending mail.");
 
                         child: Box {
                           orientation: vertical;
                           spacing: 12;
-                          margin-start: 24;
-                          margin-end: 24;
-                          margin-top: 24;
+                          halign: center;
 
-                          // The invitation card of a message with a calendar part
-                          // (window/invitation_card.go), built from Go; hidden without one,
-                          // the slot with it (message_view.go).
-                          Box invitation_card_slot {
-                            orientation: vertical;
-                          }
-
-                          // The issue card of a Jira message (window/issue_card.go), built
-                          // from Go; hidden for mail, the slot with it (message_view.go), so
-                          // that it takes no spacing above the subject.
-                          Box issue_card_slot {
-                            orientation: vertical;
-                          }
-
-                          Label message_subject {
-                            xalign: 0;
-                            wrap: true;
-                            selectable: true;
+                          Button {
+                            label: _("_Add Account…");
+                            use-underline: true;
+                            halign: center;
+                            action-name: "app.add-account";
 
                             styles [
-                              "title-2",
+                              "suggested-action",
+                              "pill",
                             ]
                           }
 
-                          // Sender and recipients as chips, built from Go
-                          // (window/addresses.go); a row without addresses is hidden.
-                          Grid message_addresses {
-                            column-spacing: 12;
-                            row-spacing: 6;
-
-                            Label message_from_label {
-                              label: _("From");
-                              xalign: 0;
-                              valign: start;
-
-                              layout {
-                                column: 0;
-                                row: 0;
-                              }
-
-                              styles [
-                                "dim-label",
-                                "address-label",
-                              ]
-                            }
-
-                            Adw.WrapBox message_from {
-                              child-spacing: 4;
-                              line-spacing: 4;
-                              hexpand: true;
-
-                              layout {
-                                column: 1;
-                                row: 0;
-                              }
-                            }
-
-                            Label message_to_label {
-                              label: _("To");
-                              xalign: 0;
-                              valign: start;
-                              visible: false;
-
-                              layout {
-                                column: 0;
-                                row: 1;
-                              }
-
-                              styles [
-                                "dim-label",
-                                "address-label",
-                              ]
-                            }
-
-                            Adw.WrapBox message_to {
-                              child-spacing: 4;
-                              line-spacing: 4;
-                              hexpand: true;
-                              visible: false;
-
-                              layout {
-                                column: 1;
-                                row: 1;
-                              }
-                            }
-
-                            Label message_cc_label {
-                              label: _("Cc");
-                              xalign: 0;
-                              valign: start;
-                              visible: false;
-
-                              layout {
-                                column: 0;
-                                row: 2;
-                              }
-
-                              styles [
-                                "dim-label",
-                                "address-label",
-                              ]
-                            }
-
-                            Adw.WrapBox message_cc {
-                              child-spacing: 4;
-                              line-spacing: 4;
-                              hexpand: true;
-                              visible: false;
-
-                              layout {
-                                column: 1;
-                                row: 2;
-                              }
-                            }
-                          }
-
-                          Label message_date {
-                            xalign: 0;
+                          // An issue tracker instead (the Jira assistant).
+                          Button {
+                            label: _("Add _Jira Account…");
+                            use-underline: true;
+                            halign: center;
+                            action-name: "app.add-jira-account";
 
                             styles [
-                              "caption",
-                              "dim-label",
+                              "flat",
+                              "pill",
                             ]
                           }
-
-                          // Attachment chips, built from Go
-                          // (window/attachments.go); hidden without any.
-                          Adw.WrapBox message_attachments {
-                            child-spacing: 6;
-                            line-spacing: 6;
-                            visible: false;
-                          }
-
-                          // Why only the plain text is shown; hidden otherwise.
-                          Label body_hint {
-                            xalign: 0;
-                            wrap: true;
-                            visible: false;
-
-                            styles [
-                              "caption",
-                              "dim-label",
-                            ]
-                          }
-
-                          Separator {}
                         };
-                      }
+                      };
+                    }
 
-                      // "text": the plain-text body; "html": the sanitised
-                      // HTML in a WebKit view appended from Go when the
-                      // first HTML message is shown (window/message_view.go).
-                      Stack body_stack {
-                        vexpand: true;
+                    // The headers stay put at the top; the body below scrolls
+                    // on its own, because a WebKit view scrolls itself and
+                    // would have no height inside a scrolled window.
+                    StackPage {
+                      name: "message";
 
-                        StackPage {
-                          name: "text";
+                      child: Box {
+                        orientation: vertical;
 
-                          child: ScrolledWindow {
-                            hscrollbar-policy: never;
+                        Adw.Clamp {
+                          maximum-size: 900;
+                          // Equal to the maximum: min(width, 900), the width htmlview's
+                          // baseCSS gives an HTML body, so its text lines up with these.
+                          tightening-threshold: 900;
 
-                            child: Adw.Clamp {
-                              maximum-size: 900;
-                              tightening-threshold: 900;
+                          child: Box {
+                            orientation: vertical;
+                            spacing: 12;
+                            margin-start: 24;
+                            margin-end: 24;
+                            margin-top: 24;
 
-                              child: Label message_body {
+                            // The invitation card of a message with a calendar part
+                            // (window/invitation_card.go), built from Go; hidden without one,
+                            // the slot with it (message_view.go).
+                            Box invitation_card_slot {
+                              orientation: vertical;
+                            }
+
+                            // The issue card of a Jira message (window/issue_card.go), built
+                            // from Go; hidden for mail, the slot with it (message_view.go), so
+                            // that it takes no spacing above the subject.
+                            Box issue_card_slot {
+                              orientation: vertical;
+                            }
+
+                            Label message_subject {
+                              xalign: 0;
+                              wrap: true;
+                              selectable: true;
+
+                              styles [
+                                "title-2",
+                              ]
+                            }
+
+                            // Sender and recipients as chips, built from Go
+                            // (window/addresses.go); a row without addresses is hidden.
+                            Grid message_addresses {
+                              column-spacing: 12;
+                              row-spacing: 6;
+
+                              Label message_from_label {
+                                label: _("From");
                                 xalign: 0;
-                                yalign: 0;
-                                wrap: true;
-                                wrap-mode: word_char;
-                                selectable: true;
-                                vexpand: true;
-                                margin-start: 24;
-                                margin-end: 24;
-                                margin-top: 12;
-                                margin-bottom: 24;
-                                // Zoom and font come from ui/internal/style.
+                                valign: start;
+
+                                layout {
+                                  column: 0;
+                                  row: 0;
+                                }
+
                                 styles [
-                                  "message-body",
+                                  "dim-label",
+                                  "address-label",
                                 ]
+                              }
+
+                              Adw.WrapBox message_from {
+                                child-spacing: 4;
+                                line-spacing: 4;
+                                hexpand: true;
+
+                                layout {
+                                  column: 1;
+                                  row: 0;
+                                }
+                              }
+
+                              Label message_to_label {
+                                label: _("To");
+                                xalign: 0;
+                                valign: start;
+                                visible: false;
+
+                                layout {
+                                  column: 0;
+                                  row: 1;
+                                }
+
+                                styles [
+                                  "dim-label",
+                                  "address-label",
+                                ]
+                              }
+
+                              Adw.WrapBox message_to {
+                                child-spacing: 4;
+                                line-spacing: 4;
+                                hexpand: true;
+                                visible: false;
+
+                                layout {
+                                  column: 1;
+                                  row: 1;
+                                }
+                              }
+
+                              Label message_cc_label {
+                                label: _("Cc");
+                                xalign: 0;
+                                valign: start;
+                                visible: false;
+
+                                layout {
+                                  column: 0;
+                                  row: 2;
+                                }
+
+                                styles [
+                                  "dim-label",
+                                  "address-label",
+                                ]
+                              }
+
+                              Adw.WrapBox message_cc {
+                                child-spacing: 4;
+                                line-spacing: 4;
+                                hexpand: true;
+                                visible: false;
+
+                                layout {
+                                  column: 1;
+                                  row: 2;
+                                }
+                              }
+                            }
+
+                            Label message_date {
+                              xalign: 0;
+
+                              styles [
+                                "caption",
+                                "dim-label",
+                              ]
+                            }
+
+                            // Attachment chips, built from Go
+                            // (window/attachments.go); hidden without any.
+                            Adw.WrapBox message_attachments {
+                              child-spacing: 6;
+                              line-spacing: 6;
+                              visible: false;
+                            }
+
+                            // Why only the plain text is shown; hidden otherwise.
+                            Label body_hint {
+                              xalign: 0;
+                              wrap: true;
+                              visible: false;
+
+                              styles [
+                                "caption",
+                                "dim-label",
+                              ]
+                            }
+
+                            Separator {}
+                          };
+                        }
+
+                        // "text": the plain-text body; "html": the sanitised
+                        // HTML in a WebKit view appended from Go when the
+                        // first HTML message is shown (window/message_view.go).
+                        Stack body_stack {
+                          vexpand: true;
+
+                          StackPage {
+                            name: "text";
+
+                            child: ScrolledWindow {
+                              hscrollbar-policy: never;
+
+                              child: Adw.Clamp {
+                                maximum-size: 900;
+                                tightening-threshold: 900;
+
+                                child: Label message_body {
+                                  xalign: 0;
+                                  yalign: 0;
+                                  wrap: true;
+                                  wrap-mode: word_char;
+                                  selectable: true;
+                                  vexpand: true;
+                                  margin-start: 24;
+                                  margin-end: 24;
+                                  margin-top: 12;
+                                  margin-bottom: 24;
+                                  // Zoom and font come from ui/internal/style.
+                                  styles [
+                                    "message-body",
+                                  ]
+                                };
                               };
                             };
-                          };
+                          }
+
+                          StackPage {
+                            name: "loading";
+
+                            child: Adw.Spinner body_spinner {
+                              halign: center;
+                              valign: center;
+                              width-request: 32;
+                              height-request: 32;
+
+                              accessibility {
+                                label: C_("accessibility", "Loading the message");
+                              }
+                            };
+                          }
+
+                          StackPage {
+                            name: "html";
+
+                            child: Box html_slot {
+                              orientation: vertical;
+                            };
+                          }
                         }
 
-                        StackPage {
-                          name: "loading";
+                        // The "•••" under the body (window/quoted.go): shows or
+                        // hides the quoted history the daemon cut from it;
+                        // hidden while there is nothing to offer. Under the
+                        // body area, which scrolls on its own (a web view), so
+                        // it stays in sight at the bottom of the message. Its
+                        // face, tooltip and accessible name come from Go.
+                        Adw.Clamp quoted_row {
+                          maximum-size: 900;
+                          tightening-threshold: 900;
+                          visible: false;
 
-                          child: Adw.Spinner body_spinner {
-                            halign: center;
-                            valign: center;
-                            width-request: 32;
-                            height-request: 32;
+                          child: Box {
+                            margin-start: 24;
+                            margin-end: 24;
+                            margin-top: 4;
+                            margin-bottom: 8;
 
-                            accessibility {
-                              label: C_("accessibility", "Loading the message");
+                            Button quoted_button {
+                              halign: start;
+
+                              styles [
+                                "quoted-text",
+                              ]
                             }
                           };
                         }
-
-                        StackPage {
-                          name: "html";
-
-                          child: Box html_slot {
-                            orientation: vertical;
-                          };
-                        }
-                      }
-
-                      // The "•••" under the body (window/quoted.go): shows or
-                      // hides the quoted history the daemon cut from it;
-                      // hidden while there is nothing to offer. Under the
-                      // body area, which scrolls on its own (a web view), so
-                      // it stays in sight at the bottom of the message. Its
-                      // face, tooltip and accessible name come from Go.
-                      Adw.Clamp quoted_row {
-                        maximum-size: 900;
-                        tightening-threshold: 900;
-                        visible: false;
-
-                        child: Box {
-                          margin-start: 24;
-                          margin-end: 24;
-                          margin-top: 4;
-                          margin-bottom: 8;
-
-                          Button quoted_button {
-                            halign: start;
-
-                            styles [
-                              "quoted-text",
-                            ]
-                          }
-                        };
-                      }
-                    };
+                      };
+                    }
                   }
                 };
               };

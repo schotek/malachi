@@ -11,10 +11,8 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
-	"github.com/schotek/malachi/ui/internal/capabilities"
 	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/i18n"
-	"github.com/schotek/malachi/ui/internal/quickreply"
 	"github.com/schotek/malachi/ui/internal/settings"
 )
 
@@ -53,15 +51,15 @@ import (
 // ConversationHostViewController.swift and ConversationStripView.swift
 // (which also chose two cards over moving one between the layouts).
 //
-// Under the chat, and only there, the quick-reply bar (quick_reply_bar.go,
-// docs/plans/chat-view.md §10, §11), the last child of conversation_body:
-// the host owns its controller (quickreply.Controller over the window,
-// quick_reply.go), hands it every change of the conversation
-// (updateQuickReply: the conversation shown, its model, the actions of the
-// card the reply goes to and its account; quickReplyInput) and the layout
-// shown (applyLayout), and the chat's width (chatColumnChanged: the mode
-// button's icon alone in a narrow pane). A hidden bar takes no room, so
-// the timeline fills the page whatever the bar does.
+// Under the chat, and only there in a conversation, the reading pane's
+// quick-reply bar (quick_reply_bar.go, docs/plans/chat-view.md §10–§12):
+// the window owns it, under message_stack, so that it stands in the same
+// place under a single message; the host only reports every change of the
+// conversation and every switch of the layout (Window.updateQuickReply,
+// which reads the conversation shown, its model, the actions of the card
+// the reply goes to and its account from quickReplyInput, and shows the
+// bar with the chat only). A hidden bar takes no room, so the timeline
+// fills the pane whatever the bar does.
 type conversationHost struct {
 	convFanout
 	w *Window
@@ -82,10 +80,6 @@ type conversationHost struct {
 	status        *gtk.Label
 	spinner       *adw.Spinner
 	spinnerTimer  glib.SourceHandle
-
-	// reply is the quick-reply bar's controller, replyBar its widgets.
-	reply    *quickreply.Controller
-	replyBar *quickReplyBar
 }
 
 // The pages of conversation_layouts.
@@ -118,12 +112,10 @@ func (w *Window) conversationPane() *conversationHost {
 	h.timeline = newConversationView(h, b)
 	h.chat = newConversationChat(h, b)
 	h.timelineLayout, h.chatLayout = h.timeline, h.chat
-	h.reply = newQuickReply(w)
-	h.replyBar = newQuickReplyBar(w, b, h.reply)
 	h.markRead = w.scheduleMarkRead
 	h.onChange = func(ch convChange) {
 		h.spin(ch)
-		h.updateQuickReply()
+		w.updateQuickReply()
 	}
 	h.attach()
 
@@ -165,50 +157,7 @@ func (h *conversationHost) applyLayout() {
 	}
 	h.showLayout(on)
 	h.showFoldAll()
-	h.reply.SetShown(on)
-}
-
-// updateQuickReply has the quick-reply bar follow the conversation shown:
-// its account and id first (a new one has no target until its model is
-// built), then its model, the actions of the card the reply goes to and
-// its account. Without a model (the members are on their way, or
-// thread.get failed with nothing to build from) the bar gets the empty
-// model and hides until the real one: the same thread shown a moment ago
-// as a single message must not lend it its target.
-func (h *conversationHost) updateQuickReply() {
-	if h.reply == nil {
-		return
-	}
-	h.reply.Show(h.ctrl.account, h.ctrl.thread)
-	m, actions, account, ok := h.ctrl.quickReplyInput()
-	if !ok {
-		m, actions, account = conversation.Model{}, capabilities.Actions{}, api.Account{}
-	}
-	h.reply.Update(m, actions, account)
-}
-
-// useQuickReply makes ctrl the bar's controller (the smoke test's, over a
-// fake host) and brings it up to date with the conversation and layout.
-func (h *conversationHost) useQuickReply(ctrl *quickreply.Controller) {
-	h.reply = ctrl
-	h.replyBar.setController(ctrl)
-	ctrl.SetShown(h.chatShown)
-	h.updateQuickReply()
-}
-
-// chatColumnChanged: the chat's column changed its width (followSize), so
-// the pane did; the quick-reply bar's mode button follows it. followSize
-// runs from the scrolled window's adjustment, inside the page's
-// allocation, so the bar changes on the next idle, not in that pass.
-func (h *conversationHost) chatColumnChanged() {
-	if h.replyBar == nil {
-		return
-	}
-	glib.IdleAdd(func() {
-		if h.replyBar != nil {
-			h.replyBar.followWidth(h.page.Width())
-		}
-	})
+	h.w.updateQuickReply()
 }
 
 // setFoldAll is what the timeline's Collapse All / Expand All offers now

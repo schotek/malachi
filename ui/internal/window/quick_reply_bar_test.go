@@ -6,6 +6,7 @@ package window
 import (
 	"testing"
 
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/conversation"
 )
 
@@ -90,5 +91,73 @@ func TestQuickReplyInput(t *testing.T) {
 	w.accounts = nil
 	if _, actions, _, ok := w.ctrl.quickReplyInput(); !ok || actions.Reply {
 		t.Errorf("unknown account: %v %+v", ok, actions)
+	}
+}
+
+// A single message on the pane's page "message" gives the bar its model of
+// one member, the actions of its card, its account and whether the page
+// has the bar (mailModel.singleQuickReplyInput): not in the Outbox or
+// Drafts, a reply to the user's own message in Sent, nothing to answer for
+// an event of an issue or an unknown account.
+func TestSingleQuickReplyInput(t *testing.T) {
+	m := &mailModel{
+		accounts: []api.Account{{ID: "a", Enabled: true, Config: api.AccountConfig{Name: "Work", Email: "a@example.invalid"}}},
+		folders: map[api.AccountID][]api.Folder{"a": {
+			{ID: "in", Role: api.RoleInbox}, {ID: "sent", Role: api.RoleSent},
+			{ID: "out", Role: api.RoleOutbox}, {ID: "dr", Role: api.RoleDrafts},
+		}},
+	}
+	msg := func(id, folder, from string) api.MessageSummary {
+		return api.MessageSummary{ID: api.MessageID(id), AccountID: "a", FolderID: api.FolderID(folder), ThreadID: "t1",
+			From: []api.Address{{Name: from, Address: from + "@example.invalid"}}}
+	}
+
+	model, actions, account, shown := m.singleQuickReplyInput(msg("m1", "in", "carol"))
+	target, ok := conversation.QuickReplyTarget(model)
+	if !shown || !ok || target.Message.ID != "m1" || target.Mine || target.Sender != "carol" || model.Thread != "t1" {
+		t.Errorf("inbox: shown %v, target %+v", shown, target)
+	}
+	if !actions.Reply || !actions.ReplyAll || !actions.Forward || actions.Comment || account.ID != "a" {
+		t.Errorf("inbox: actions %+v, account %q", actions, account.ID)
+	}
+
+	// The user's own message in Sent: answered all the same, mine.
+	model, _, _, shown = m.singleQuickReplyInput(msg("r1", "sent", "a"))
+	if target, ok := conversation.QuickReplyTarget(model); !shown || !ok || target.Message.ID != "r1" || !target.Mine {
+		t.Errorf("sent: shown %v, target %+v", shown, target)
+	}
+	// Sent from an alias: mine by the folder.
+	if model, _, _, _ := m.singleQuickReplyInput(msg("r2", "sent", "alias")); !model.Items[0].Mine {
+		t.Error("a message of Sent is not mine")
+	}
+
+	// No bar in the Outbox (by folder or by the daemon's mark) or Drafts.
+	for _, s := range []api.MessageSummary{msg("o1", "out", "a"), msg("d1", "dr", "a")} {
+		if _, _, _, shown := m.singleQuickReplyInput(s); shown {
+			t.Errorf("%s has a bar", s.ID)
+		}
+	}
+	queued := msg("o2", "in", "a")
+	queued.Outbox = &api.OutboxInfo{}
+	if _, _, _, shown := m.singleQuickReplyInput(queued); shown {
+		t.Error("a queued message has a bar")
+	}
+
+	// An unknown account offers nothing; no message has no place.
+	other := msg("x1", "in", "carol")
+	other.AccountID = "gone"
+	if _, actions, _, _ := m.singleQuickReplyInput(other); actions.Reply {
+		t.Errorf("unknown account: %+v", actions)
+	}
+	if _, _, _, shown := m.singleQuickReplyInput(api.MessageSummary{}); shown {
+		t.Error("no message has a bar")
+	}
+
+	// An event of an issue: no target, no actions.
+	event := msg("e1", "in", "jira")
+	event.Issue = &api.MessageIssue{Item: api.IssueItemEvent}
+	model, actions, _, _ = m.singleQuickReplyInput(event)
+	if _, ok := conversation.QuickReplyTarget(model); ok || actions.Reply {
+		t.Errorf("event: target %v, actions %+v", ok, actions)
 	}
 }
