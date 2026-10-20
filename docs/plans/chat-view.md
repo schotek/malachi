@@ -1332,3 +1332,7 @@ a `SelectionPage`, což jsou panely bez UIA peeru (čeká teď na
 `MessageBodyScroller`, u více řádků jen na zmizení řádku), a `FocusBody`
 vrací `bool`, takže skrývající se řádek předá klávesnici seznamu, když je
 tělo zprávy sbalené (načítání, chyba, HTML bez prohlížeče).
+
+Stav bran (2026-10-20): S-B1 (macOS) i S-B2 (GTK v XQuartz) prošly;
+Windows (S-W) předáno Windows agentovi vlastníka k sestavení, testům,
+UI smoke a bráně S-B3.

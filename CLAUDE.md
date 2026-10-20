@@ -2110,7 +2110,8 @@ konverzace pod rukama (`leaveIfOther`) předá zobrazenému pohledu, nikdy
 popisku předmětu); `conversationHost` jen hlásí; smoke testy
 `TestConversationChatGTKSmoke` a nový `TestQuickReplyMessageGTKSmoke`;
 ověřeno v kontejneru (build, celá sada, oba smoke, `make po` jen odkazy,
-`make lint`); čeká brána S-B2 vlastníka v XQuartz. Windows (S-W, napsané
+`make lint`); brána S-B2 vlastníka v XQuartz prošla 2026-10-20 (tím
+i R-B2 původního řádku pod chatem). Windows (S-W, napsané
 bez `dotnet`, plán §12.5 je předávka pro Windows agenta vlastníka,
 `docs/windows-port.md` §11.7): Core `Conversation.SingleModel`/`IsMine`,
 `QuickReplyController.Show(account, thread)`/`SetShown`/`IsKept`,
@@ -2123,7 +2124,7 @@ i `Rendered`, `SetPaneWidth`, odložené předání klávesnice přes
 `TheQuickReplyBarStandsUnderASingleMessage`; **Windows klient se nikdy
 nestaví přes `windows.yml`** (rozhodnutí vlastníka 2026-10-20): sestavení,
 testy, lint, UI smoke i opravy překladu dělá Windows agent po předávce,
-pak brána S-B3. Otevřená otázka pro vlastníka (všechny tři klienty, plán
+pak brána S-B3 (Windows část předána agentovi 2026-10-20). Otevřená otázka pro vlastníka (všechny tři klienty, plán
 §12.3/§12.4): řádek, který se skryje s klávesnicí v poli (seskupený
 seznam, příchod kopie do Odeslaných nebo cizí odpovědi změní řádek na
 konverzaci v časové ose), předá klávesnici zobrazenému pohledu a tím
