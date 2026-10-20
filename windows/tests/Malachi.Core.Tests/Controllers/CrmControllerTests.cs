@@ -24,6 +24,7 @@ using Malachi.Core.Api;
 using Malachi.Core.Controllers;
 using Malachi.Core.Crm;
 using Malachi.Core.Tests.Api;
+using Malachi.Core.Tests.Fixtures;
 using Malachi.Core.Text;
 using Malachi.Core.Transport;
 using Microsoft.Extensions.Time.Testing;
@@ -191,7 +192,7 @@ public sealed class CrmControllerTests
         await h.IdleAsync();
         var failing = rec.Sessions[^1];
         Assert.Equal(CrmDialogSession.SessionPhase.Failed, failing.Phase);
-        Assert.Equal(RpcErrorText.Text("Contacting eWay-CRM", Daemon(ErrorCode.NetworkError, "dial")), failing.Failure);
+        Assert.Equal(RpcErrorText.Text("Contacting eWay-CRM", DaemonHarness.Daemon(ErrorCode.NetworkError, "dial")), failing.Failure);
         await h.Ui.RunAsync(failing.Save);
         Assert.False(failing.Finished, "nothing to save");
     }

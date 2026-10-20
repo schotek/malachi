@@ -3366,9 +3366,16 @@ dialog_test.go, text_test.go one to one), `Controllers/CrmControllerTests`
 `ContextMenuTests.MessageItemsCrm`, `SelectionTests.CombineCrm`,
 `IntegrationsTests`, `FolderTreeTests.InMailIsEveryKindButCalDAV`,
 `JiraSidebarTests.AccountHeaderBadgeSaysTheKind`, `ApiCodingTests`,
-`GoContractTests`, `ApiRoundTripTests`. Not verified: everything (not
-built on Windows yet): `build.ps1 app`, `test`, `lint`, and a manual walk
-over a copy of the data against an eWay-CRM instance.
+`GoContractTests`, `ApiRoundTripTests`. Built on Windows 2026-10-20
+after seven compile fixes (`docs/eway.md`, "As built (T8)", Gate D):
+`build.ps1 app` and `lint` pass, and the Core suite passes:
+`IconGlyphsTests.EveryIconNameOfTheGtkUiHasAGlyph`, which had failed
+since the calendar port over nine GTK icons without a glyph, is green
+since 2026-10-20 (the Calendar group of `IconGlyphs`: the detail rows'
+glyphs of the app's `EventGlyphs`, ChevronLeft, Search, Reminder). Not
+verified: the full
+`build.ps1 test`, the UI smoke tests, and a manual walk over a copy of
+the data against an eWay-CRM instance.
 
 ## 12. Tests
 

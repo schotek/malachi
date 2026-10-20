@@ -234,7 +234,13 @@ public static class CrmRules
         {
             return null;
         }
-        return d.Reason.Value is CrmSignInReason.Microsoft or CrmSignInReason.Plan ? d.Reason : null;
+        // Not a conditional with null: the string conversion of CrmSignInReason
+        // would take the null and the result would never be null.
+        if (d.Reason.Value is CrmSignInReason.Microsoft or CrmSignInReason.Plan)
+        {
+            return d.Reason;
+        }
+        return null;
     }
 
     /// <summary>

@@ -2271,11 +2271,14 @@ stránkami, `IntegrationsPage`, glyf Puzzle (U+EA86) pro
 `application-x-addon`. 14 nových msgid i česky. Ověřeno: GTK `make
 build`, cílené testy včetně smoke, `make po` a `make lint` v kontejneru;
 macOS `swift build` bez varování, filtrované `swift test` (43)
-a `check-strings.py`; Windows napsané bez `dotnet` — čeká `build.ps1
-app`/`test`/`lint` (`IntegrationsTests`, `AccountsPageControllerTests`,
-smoke `CalendarPreferencesSmokeTests`, `SmokeTests`), přičemž
-`IconGlyphsTests.EveryIconNameOfTheGtkUiHasAGlyph` padá už před touto
-prací na ikonách kalendáře. Ručně ve všech třech nad kopií dat: pořadí
+a `check-strings.py`; Windows napsané bez `dotnet`, na Windows pak
+2026-10-20 s eWay portem prošly `build.ps1 app`, `lint` a Core testy
+(`IntegrationsTests`, `AccountsPageControllerTests`) — čeká smoke
+(`CalendarPreferencesSmokeTests`, `SmokeTests`);
+`IconGlyphsTests.EveryIconNameOfTheGtkUiHasAGlyph`, který od portu
+kalendáře padal na devíti ikonách GTK bez glyfu, je od 2026-10-20
+zelený (skupina Kalendář v `IconGlyphs`).
+Ručně ve všech třech nad kopií dat: pořadí
 stránek, Účty jen pošta, Integrace s Jirou a CalDAV, Přidat…, odebrání
 s větou podle druhu, řazení a pořadí v postranním panelu.
 
@@ -2333,8 +2336,17 @@ port (T8, `docs/windows-port.md` §11.11, „As built (T8)“): `Api/Crm.cs`,
 `Malachi.Core/Crm` (`CrmRules`, `CrmDialog`, `CrmText` — třída `Crm` by
 se v namespace `Crm` skryla), `CrmController`, `EwayWizardController`,
 App `Crm/*`, `MainWindow.Crm.cs`, `Wizard/EwayWizardWindow`, pilulka
-`IssuePill.IsCrm`, glyf ContactInfo; napsané bez `dotnet` — čeká
-`build.ps1 app`/`test`/`lint`, smoke a ruční průchod vlastníka (Gate D).
+`IssuePill.IsCrm`, glyf ContactInfo; napsané bez `dotnet`, na Windows
+sestavené a otestované 2026-10-20 po sedmi opravách kompilace (`cond ?
+wireStruct : null` prochází implicitním převodem ze `string` a `null`
+by nikdy nevrátil — `(T?)null`; `Daemon(…)` z `using static DaemonHarness`
+stíní namespace `Tests.Daemon`; lambda `_ => throw` je mezi oběma `On`
+nejednoznačná; duplicitní glyf `x-office-address-book`; chybějící `using`
+Fixtures; očekávaná id v `ContextMenuTests.NamesAreGos`; literály
+`Message` wizardu jako konstanty kvůli `StringsCheckTests`): `build.ps1
+app` (Release x64 i NativeAOT helper) a `lint` zelené, sada Core 7 586
+z 7 587 a po doplnění devíti glyfů ikon kalendáře do `IconGlyphs`
+(2026-10-20) celá; čeká smoke a ruční průchod vlastníka (Gate D).
 Revize portu Windows našla chybu macOS: zavřené okno zprávy během
 ukládání nechalo zprávu v ostatních oknech jako „Ukládá se“
 (`[weak self]` přeskočil `state.end`); opraveno v `CRMController.swift`
@@ -2342,8 +2354,8 @@ ukládání nechalo zprávu v ostatních oknech jako „Ukládá se“
 `endsTheBusyMarkWhenTheWindowCloses`). Gate C prošel (vlastník
 2026-10-20, `make run-gtk-live` nad kopií; jeho dva nálezy byly v obrazu
 kontejneru: chybějící `librsvg2` a tlačítko v Boxu bez `has-frame:
-false`). Čeká: Gate D na Windows (`build.ps1 app`/`test`/`lint`, smoke,
-ruční průchod), pak merge do `main`.
+false`). Čeká: Gate D na Windows (smoke a ruční průchod; `build.ps1
+app`, `lint` a Core testy prošly 2026-10-20), pak merge do `main`.
 
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně

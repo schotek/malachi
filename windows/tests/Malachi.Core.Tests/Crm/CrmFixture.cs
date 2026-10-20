@@ -28,7 +28,7 @@ internal static class CrmFixture
     {
         Id = id,
         Enabled = enabled,
-        Config = new AccountConfig { Name = "", Email = email, Kind = kind is null ? null : new AccountKind(kind), Eway = eway },
+        Config = new AccountConfig { Name = "", Email = email, Kind = kind is null ? (AccountKind?)null : new AccountKind(kind), Eway = eway },
         State = new SyncState { AccountId = id, Status = SyncStatus.Idle },
     };
 
@@ -40,7 +40,7 @@ internal static class CrmFixture
         Kind = kind,
         ItemGuid = Guid(n),
         Name = name,
-        Reason = reason is null ? null : new CrmReason(reason),
+        Reason = reason is null ? (CrmReason?)null : new CrmReason(reason),
         Url = "https://open.eway-crm.com/?l=" + Guid(n),
     };
 

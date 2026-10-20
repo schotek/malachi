@@ -19,7 +19,7 @@ public sealed class IntegrationsTests
     // integrations_test.go account: an account of the kind with its block.
     private static Account Account(string id, string? kind)
     {
-        var config = new AccountConfig { Name = "", Kind = kind is null ? null : new AccountKind(kind), Email = id + "@example.invalid" };
+        var config = new AccountConfig { Name = "", Kind = kind is null ? (AccountKind?)null : new AccountKind(kind), Email = id + "@example.invalid" };
         config = kind switch
         {
             AccountKind.Jira => config with { Jira = new JiraConfig { SiteUrl = "https://Acme.atlassian.net/", Deployment = JiraDeployment.Cloud } },

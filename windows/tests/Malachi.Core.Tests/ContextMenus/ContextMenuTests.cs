@@ -261,7 +261,7 @@ public sealed class ContextMenuTests
         Assert.Equal("", Label((ItemId)999, new Labels()));
         Assert.Equal(
             "open edit reply replyAll forward markRead markUnread toggleFlag changeStatus archive moveTo junk trash assistant "
-            + "checkMail markAllRead empty favourite fold",
+            + "crmSave crmOpen crmEditLinks crmRemove checkMail markAllRead empty favourite fold",
             string.Join(" ", Enum.GetValues<ItemId>().Select(Name)));
         Assert.Equal("", Name((ItemId)999));
     }

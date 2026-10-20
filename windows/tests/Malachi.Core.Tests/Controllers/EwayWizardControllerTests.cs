@@ -156,7 +156,7 @@ public sealed class EwayWizardControllerTests
             w.Next();
         });
         await h.IdleAsync();
-        Assert.Equal((CrmWizardPage.Service, (string?)RpcErrorText.Text("Contacting eWay-CRM", Daemon(ErrorCode.NetworkError, "dial"))), rec.Banners[^1]);
+        Assert.Equal((CrmWizardPage.Service, (string?)RpcErrorText.Text("Contacting eWay-CRM", DaemonHarness.Daemon(ErrorCode.NetworkError, "dial"))), rec.Banners[^1]);
 
         // A wrong password (in the test's endpoint result) flags the password.
         h.On(API.AccountDetectEway.Name, _ => DetectedJson);
@@ -176,7 +176,7 @@ public sealed class EwayWizardControllerTests
 
         // A plan without API access, at add (the daemon signs in again).
         h.On(API.AccountTest.Name, _ => TestOkJson);
-        h.On(API.AccountAdd.Name, _ => throw new RpcException(new RpcError { Code = ErrorCode.CrmSignInUnsupported, Message = "plan", Data = ApiJson.Parse("""{"reason":"plan"}""") }));
+        h.On(API.AccountAdd.Name, (Func<string, string>)(_ => throw new RpcException(new RpcError { Code = ErrorCode.CrmSignInUnsupported, Message = "plan", Data = ApiJson.Parse("""{"reason":"plan"}""") })));
         await h.Ui.RunAsync(() =>
         {
             w.SetCredentials("jana", "right");
@@ -188,7 +188,7 @@ public sealed class EwayWizardControllerTests
         Assert.Empty(rec.Done);
 
         // Microsoft found only by account.add: back to the address page.
-        h.On(API.AccountAdd.Name, _ => throw new RpcException(new RpcError { Code = ErrorCode.CrmSignInUnsupported, Message = "ms", Data = ApiJson.Parse("""{"reason":"microsoft"}""") }));
+        h.On(API.AccountAdd.Name, (Func<string, string>)(_ => throw new RpcException(new RpcError { Code = ErrorCode.CrmSignInUnsupported, Message = "ms", Data = ApiJson.Parse("""{"reason":"microsoft"}""") })));
         await h.Ui.RunAsync(w.Next);
         await h.IdleAsync();
         Assert.Equal([CrmWizardPage.Service], rec.Pages[^1]);
@@ -327,7 +327,7 @@ public sealed class EwayWizardControllerTests
             var (w, rec) = await h.StartWizardAsync(acc);
             await h.Ui.RunAsync(w.Next);
             await h.IdleAsync();
-            Assert.Equal(RpcErrorText.Text("Saving the account", Daemon(ErrorCode.InternalError, "boom")), rec.Banners[^1].Text);
+            Assert.Equal(RpcErrorText.Text("Saving the account", DaemonHarness.Daemon(ErrorCode.InternalError, "boom")), rec.Banners[^1].Text);
             Assert.Empty(rec.Done);
             Assert.Equal(CrmWizardPage.Credentials, w.Top);
         }

@@ -52,6 +52,13 @@ namespace Malachi.Core.Controllers;
 /// </remarks>
 public sealed partial class EwayWizardController : IDisposable
 {
+    // The messages of the controller's own RpcErrors: technical and never
+    // shown, like the daemon's (RpcErrorText speaks for the code).
+    private const string NoServiceAddressCode = "no service address";
+    private const string MicrosoftSignInCode = "microsoft sign-in";
+    private const string NoEwayResultCode = "no eway result";
+    private const string EwayTestFailedCode = "eway test failed";
+
     private readonly ControllerScope scope;
     private readonly ILogger logger;
     private string password = "";
@@ -432,7 +439,7 @@ public sealed partial class EwayWizardController : IDisposable
         }
         if (res.ServiceUrl.Length == 0)
         {
-            Fail(CrmWizardStep.Detect, new RpcException(new RpcError { Code = ErrorCode.ServerError, Message = "no service address" }));
+            Fail(CrmWizardStep.Detect, new RpcException(new RpcError { Code = ErrorCode.ServerError, Message = NoServiceAddressCode }));
             return;
         }
         if (res.MicrosoftSignIn)
@@ -440,7 +447,7 @@ public sealed partial class EwayWizardController : IDisposable
             Fail(CrmWizardStep.Detect, new RpcException(new RpcError
             {
                 Code = ErrorCode.CrmSignInUnsupported,
-                Message = "microsoft sign-in",
+                Message = MicrosoftSignInCode,
                 Data = System.Text.Json.JsonSerializer.SerializeToElement(
                     new CrmSignInUnsupportedData { Reason = CrmSignInReason.Microsoft }, ApiJsonContext.Wire.CrmSignInUnsupportedData),
             }));
@@ -518,11 +525,11 @@ public sealed partial class EwayWizardController : IDisposable
                 var res = await Client.CallAsync(API.AccountTest, parameters, CrmTimeouts.Test, ct);
                 if (res.Eway is not { } eway)
                 {
-                    throw new RpcException(new RpcError { Code = ErrorCode.ServerError, Message = "no eway result" });
+                    throw new RpcException(new RpcError { Code = ErrorCode.ServerError, Message = NoEwayResultCode });
                 }
                 if (!eway.Ok)
                 {
-                    throw new RpcException(eway.Error ?? new RpcError { Code = ErrorCode.ServerError, Message = "eway test failed" });
+                    throw new RpcException(eway.Error ?? new RpcError { Code = ErrorCode.ServerError, Message = EwayTestFailedCode });
                 }
                 return res;
             },

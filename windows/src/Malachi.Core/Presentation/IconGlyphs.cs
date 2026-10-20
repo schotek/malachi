@@ -90,6 +90,11 @@ public static class IconGlyphs
         ["insert-link"] = G(0xE71B),
         ["insert-image"] = G(0xE8B9),
         ["edit-clear"] = G(0xE75C),
+        // The address book of the recipient suggestions and eWay-CRM
+        // (CrmRules.Icon, GTK's x-office-address-book as Adwaita has no
+        // CRM; macOS person.crop.rectangle.stack): the button of a message,
+        // its menu items, the bar and the account's row and catalogue card
+        // on Preferences → Integrations: ContactInfo.
         ["x-office-address-book"] = G(0xE779),
         ["document-open-recent"] = G(0xE823),
         ["image-x-generic"] = G(0xE91B),
@@ -117,6 +122,31 @@ public static class IconGlyphs
         // The window's Calendar mode (macOS calendar; Adwaita's
         // x-office-calendar): Calendar.
         ["x-office-calendar"] = G(0xE787),
+        // The Calendar (ui/internal/window/calendar*.go, event_detail.blp,
+        // calendar_page.blp). The event detail's rows take the glyphs the
+        // app's EventGlyphs draws them with (macOS clock, repeat,
+        // mappin.and.ellipse, link, note.text), so an icon looks the same
+        // whichever way it is drawn: the time row Recent (as
+        // document-open-recent), the recurrence row RepeatAll (the week
+        // block's symbol goes through view-refresh in EventBlockView), the
+        // location row MapPin, the notes row QuickNote. The Windows client
+        // draws a video call as the link to join, in the detail's row and in
+        // the day view's block (insert-link) alike, so GTK's camera-web (the
+        // row) and camera-video (the block) are the same Link. The alerts
+        // row is GTK's alone (neither macOS nor Windows has one): Reminder,
+        // the bell. Previous of the bar, the mini month and the invitation's
+        // day picker: ChevronLeft (CalendarBar and MiniMonthView draw
+        // go-next mirrored, the same shape). The search toggle, which
+        // Windows has not (the title bar's box): Search, as edit-find.
+        ["preferences-system-time"] = G(0xE823),
+        ["media-playlist-repeat"] = G(0xE8EE),
+        ["mark-location"] = G(0xE707),
+        ["camera-web"] = G(0xE71B),
+        ["camera-video"] = G(0xE71B),
+        ["text-x-generic"] = G(0xE70B),
+        ["alarm"] = G(0xEB50),
+        ["go-previous"] = G(0xE76B),
+        ["system-search"] = G(0xE721),
         // Jira accounts: Reply as Comment (macOS text.bubble), the account's
         // row (GTK's stand-in for a ticket, as Adwaita has none), the views
         // Assigned to Me, Watching and Open as saved queries (Filter), and
@@ -125,11 +155,6 @@ public static class IconGlyphs
         ["checkbox-checked"] = G(0xE73A),
         ["folder-saved-search"] = G(0xE71C),
         ["list-remove"] = G(0xE738),
-        // eWay-CRM (CrmRules.Icon, GTK's x-office-address-book as Adwaita
-        // has no CRM; macOS person.crop.rectangle.stack): the button of a
-        // message, its menu items, the bar and the account's row and
-        // catalogue card on Preferences → Integrations: ContactInfo.
-        ["x-office-address-book"] = G(0xE779),
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>Whether <paramref name="gtkName"/> has a glyph of its own.</summary>

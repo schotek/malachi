@@ -11,8 +11,8 @@ Status (2026-10-19): branch `feat/eway`. T0 is done ("As verified (T0)"
 after §1); the daemon side T1–T4 is built (§6 "As built"); the Go
 reference T5, the macOS client T6 (owner-verified, Gate B) and the GTK
 client T7 (owner-verified, Gate C, 2026-10-20) are built, the Windows
-client T8 is written and awaits the owner's build (Gate D; §2.7 "As
-built"). The
+client T8 is built and tested on Windows (2026-10-20; Gate D's smoke
+tests and manual walk remain; §2.7 "As built"). The
 decisions of §1 stand as answered in §5.
 The UI decisions of 2026-10-17 (wireframes approved: the toggle button on
 the message, the relations dialog, the pill and the bar, the account on
@@ -1236,7 +1236,8 @@ machine). Details in `docs/windows-port.md` §11.11, the deviation rows in
   `Assert.Equal`, controls built in code, the `Crm.` prefixes from
   `Malachi.App.Reader`), `build.ps1 test` (the classes above;
   `IconGlyphsTests.EveryIconNameOfTheGtkUiHasAGlyph` was failing before
-  this work on the calendar icons), `build.ps1 lint` (SPDX,
+  this work on the calendar icons and is green since 2026-10-20),
+  `build.ps1 lint` (SPDX,
   `StringsCheckTests`), the UI smoke tests (`CalendarPreferencesSmokeTests`:
   the Integrations page has a third card; `SmokeTests`), then a manual walk
   over a copy of the data against the owner's instance: wizard (http
@@ -1246,6 +1247,25 @@ machine). Details in `docs/windows-port.md` §11.11, the deviation rows in
   drop-down, count, conversation row), dialog (spinner, groups, superior
   radio, search, hints, Private, Save), bar and pill, Edit Links, Remove,
   context menu, thread following.
+- Gate D, the build (2026-10-20, on the owner's Windows machine): seven
+  compile fixes, none in behaviour — `cond ? wireStruct : null` compiles
+  through the struct's implicit conversion from `string` and would never
+  yield null (`CrmRules.SignInReason` as an `if`, `(AccountKind?)null` and
+  `(CrmReason?)null` in the fixtures), the `Daemon(…)` of `using static
+  DaemonHarness` is shadowed by the namespace `Tests.Daemon`
+  (`DaemonHarness.Daemon`), a `_ => throw` lambda is ambiguous between the
+  two `On` overloads (`(Func<string, string>)`), `IconGlyphs` already had
+  `x-office-address-book` (CA2244), `CrmControllerTests` lacked `using
+  …Tests.Fixtures`, `ContextMenuTests.NamesAreGos` expected the ids
+  without the four CRM items, and the wizard's own `RpcError` messages are
+  `private const`s so `StringsCheckTests` does not read them as text
+  sinks. Then `build.ps1 app` publishes (Release x64 with the NativeAOT
+  helper), `build.ps1 lint` passes with no warning, and the Core suite
+  passes whole — its one failure,
+  `IconGlyphsTests.EveryIconNameOfTheGtkUiHasAGlyph` over the calendar's
+  GTK icons and older than this work, got its nine glyphs the same day
+  (the Calendar group of `IconGlyphs`). Open: the UI smoke tests and the
+  manual walk.
 
 ### 2.8 MCP (later, T11)
 
