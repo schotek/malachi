@@ -459,6 +459,26 @@ public sealed class ConversationControllerTests
         Assert.All(h.Fixture.ThreadGetRequests, q => Assert.True(q.WithSent));
     }
 
+    // The quick-reply bar's input (Swift quickReplyInputIsTheTargets): the
+    // target is the newest message of someone else (not the user's newer
+    // reply in Sent), and the actions and account are that card's.
+    [Fact]
+    public async Task QuickReplyInputIsTheTargets()
+    {
+        await using var c = await Conv.StartAsync(sent: [Reply("r2", 6, "t2")]);
+        var h = c.H;
+        Assert.Null(await h.On(() => c.Conversation.QuickReplyInput()));
+
+        await c.SelectAsync(new ListKey(Thread: "t2"));
+        var input = Assert.NotNull(await h.On(() => c.Conversation.QuickReplyInput()));
+        Assert.Equal(["b1", "sent:r2"], SentShape(input.Model));
+        Assert.Equal("b1", Conversation.QuickReplyTarget(input.Model)?.Id?.Value);
+        var b1 = Assert.NotNull(await h.On(() => c.Conversation.Member("b1")));
+        Assert.Equal(await h.On(() => c.Conversation.Actions(b1)), input.Actions);
+        Assert.True(input.Actions.Reply && input.Actions.ReplyAll && input.Actions.Forward);
+        Assert.Equal(Account, input.Account?.Id);
+    }
+
     // A reply that lands in Sent asks for the conversation again: a single
     // message the user answered becomes a conversation row, the selection
     // moves to it, and the conversation shows the reply.

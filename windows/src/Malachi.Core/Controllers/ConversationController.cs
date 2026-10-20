@@ -3,7 +3,8 @@
 
 // Port of macos/Sources/MalachiCore/Controllers/ConversationController.swift;
 // GTK: ui/internal/window/conversation_controller.go (conversationController;
-// its drafts, the draft cards, a Windows addition ahead of Swift).
+// its drafts, the draft cards, a Windows addition ahead of Swift; the
+// quick-reply bar's input, Swift's quickReplyInput).
 //
 // The conversation view of the reading pane, the controller half: which
 // conversation the pane shows, its model (Conversation, the port of
@@ -600,6 +601,26 @@ public sealed partial class ConversationController : IDisposable
             return default;
         }
         return Conversation.CardActions(a, s, Capabilities.ForwardAccounts(Mail.Accounts).Count > 0);
+    }
+
+    /// <summary>
+    /// What the chat's quick-reply bar needs of the conversation shown
+    /// (<see cref="QuickReplyController.Update"/>): its model, the card
+    /// actions of the target the bar answers
+    /// (<see cref="Conversation.QuickReplyTarget"/>; none without one) and the
+    /// target's account. Null while no model is built.
+    /// </summary>
+    public (ConversationModel Model, CapabilityActions Actions, Account? Account)? QuickReplyInput()
+    {
+        if (Model is not { } m)
+        {
+            return null;
+        }
+        if (Conversation.QuickReplyTarget(m)?.Message is not { } s)
+        {
+            return (m, default(CapabilityActions), (Account?)null);
+        }
+        return (m, Actions(s), Account(s.AccountId));
     }
 
     /// <summary>

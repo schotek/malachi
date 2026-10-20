@@ -5,7 +5,11 @@
 // showLayout, the strip, the spinner, hover, pageBy, shownIssueCard) and
 // conversation_fanout.go (convFanout: changed, loaded, trim); macOS:
 // MessageView/ConversationHostViewController.swift and
-// ConversationStripView.swift. Until the chat layout this class was the
+// ConversationStripView.swift; the quick-reply bar's host: GTK
+// conversation_host.go (updateQuickReply, applyLayout's SetChatShown,
+// chatColumnChanged), macOS ConversationHostViewController (the bar under
+// the chat) and App/Integration+Conversation.swift (the host adapter,
+// onFocusList, onAssistant, assistantShown). Until the chat layout this class was the
 // timeline, which is ConversationTimelineView.xaml.cs now; the name stayed
 // with the page, so the reader's callers (ReaderHub, MessageView) did not
 // change.
@@ -49,6 +53,18 @@
 // the layout shown. Space and Shift+Space from the list page the layout
 // shown (PageBy). The host owns the spinner while the members load and the
 // status label of the link under the pointer (only the timeline has links).
+//
+// The quick-reply bar (docs/plans/chat-view.md §10, §11) is the page's last
+// row, under the chat only: its controller (QuickReplyController, one per
+// window, over QuickReplyHostAdapter) follows the conversation shown on
+// every change of the conversation controller (Show, then Update with
+// ConversationController.QuickReplyInput) and the layout shown
+// (SetChatShown); the bar (ConversationQuickReplyBar) renders the
+// controller's state and is collapsed, taking no room, while the timeline
+// shows or the controller hides it. Its ✦ is the toolbar's
+// (MainWindow.ShowAssistantFrom), shown while the Assistant is; its Escape
+// gives the keyboard to the message list while the list is on screen
+// (ListOnScreen, from the reader hub).
 
 using System;
 using Malachi.App.Resources;
@@ -81,6 +97,9 @@ internal sealed partial class ConversationView : UserControl
     private readonly ILogger logger;
     private readonly EventHandler<ConversationController.Change> onChanged;
     private readonly EventHandler<(MessageId Id, LoadedMessage Entry)> onLoaded;
+    private readonly QuickReplyController quickReply;
+    private readonly ConversationQuickReplyBar replyBar;
+    private readonly EventHandler onAssistantChanged;
     private SettingsChangeToken? layoutToken;
 
     // The chat is the layout shown; started: ShowLayout ran once.
@@ -133,6 +152,20 @@ internal sealed partial class ConversationView : UserControl
             }
         };
 
+        // The quick-reply bar in the last row, under the chat.
+        quickReply = new QuickReplyController(new QuickReplyHostAdapter(services, hostWindow));
+        replyBar = new ConversationQuickReplyBar(quickReply)
+        {
+            FocusList = focusList,
+            ListOnScreen = () => ListOnScreen?.Invoke() ?? true,
+            OpenAssistant = anchor => (HostWindow as MainWindow)?.ShowAssistantFrom(anchor),
+            AssistantShown = services.State.Assistant.Shown,
+        };
+        Grid.SetRow(replyBar, 2);
+        Root.Children.Add(replyBar);
+        onAssistantChanged = (_, _) => replyBar.AssistantShown = services.State.Assistant.Shown;
+        services.State.Assistant.Changed += onAssistantChanged;
+
         onChanged = (_, change) => ControllerChanged(change);
         onLoaded = (_, e) => ControllerEntryLoaded(e.Id, e.Entry);
         ctrl.Changed += onChanged;
@@ -166,6 +199,13 @@ internal sealed partial class ConversationView : UserControl
 
     /// <summary>The page itself is the pane's page on show (the layouts measure and fetch only then).</summary>
     internal bool PageVisible => Visibility == Visibility.Visible;
+
+    /// <summary>
+    /// Whether the message list is on screen (MainWindow.MessageListOnScreen):
+    /// the quick-reply bar's Escape gives it the keyboard only then; null
+    /// counts as on screen.
+    /// </summary>
+    internal Func<bool>? ListOnScreen { get; set; }
 
     private Func<Window?> HostWindowOf { get; }
 
@@ -257,8 +297,10 @@ internal sealed partial class ConversationView : UserControl
     {
         ctrl.Changed -= onChanged;
         ctrl.EntryLoaded -= onLoaded;
+        services.State.Assistant.Changed -= onAssistantChanged;
         layoutToken?.Cancel();
         layoutToken = null;
+        replyBar.Close();
         timeline.Close();
         chat.Close();
         spinnerTimer.Stop();
@@ -294,6 +336,7 @@ internal sealed partial class ConversationView : UserControl
             timeline.SetShown(true);
             ShowFoldAll(timeline.FoldAllOffer);
         }
+        quickReply.SetChatShown(on);
     }
 
     // The toggle for the chat on or off: its state, its label, tooltip and
@@ -361,6 +404,19 @@ internal sealed partial class ConversationView : UserControl
         }
         timeline.Changed(change);
         chat.Changed(change);
+        UpdateQuickReply();
+    }
+
+    // updateQuickReply: the quick-reply bar follows the conversation shown:
+    // its id first (a new one has no target until its model is built), then
+    // its model, the actions of the card the reply goes to and its account.
+    private void UpdateQuickReply()
+    {
+        quickReply.Show(ctrl.Thread ?? new ThreadId(""));
+        if (ctrl.QuickReplyInput() is { } input)
+        {
+            quickReply.Update(input.Model, input.Actions, input.Account);
+        }
     }
 
     // convFanout.loaded: the news of a body, for the layout shown only.

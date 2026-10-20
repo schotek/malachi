@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of ui/data/ui/conversation_view.blp (conversation_reply_bar); macOS:
+MessageView/ConversationQuickReplyBar.swift (loadView, buildRow). The
+quick-reply bar under a conversation shown as chat in Mail
+(docs/plans/chat-view.md §10, §11; wireframe
+docs/plans/chat-view/w4-quick-reply.svg): a fixed row in the last row of the
+conversation page (ConversationView), a line above it, its content kept to
+the column of the cards and bubbles (900 wide at most, 16 at the sides, 8
+above and below). From the leading end: the mode button (icon and label,
+Reply or Reply All; its flyout the modes the account offers and, after a
+separator, Forward…, which opens the compose window at once), on an issue a
+plain label Comment with its icon and no flyout; the field of one to five
+lines (Return is a new line, Ctrl+Enter sends), which grows with what is
+typed and then scrolls; the Assistant's ✦, shown while the Assistant is;
+Open in a Window; Send, tinted with the accent colour. The buttons sit at
+the bottom, on the field's last line. Every text, tooltip and accessible
+name is set in code (ConversationQuickReplyBar.xaml.cs); the only text from
+mail is the target's sender in the mode button's tooltip, a plain string.
+-->
+<UserControl
+    x:Class="Malachi.App.Reader.Conversation.ConversationQuickReplyBar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Malachi.App.Reader.Conversation"
+    AutomationProperties.AutomationId="QuickReplyBar"
+    IsTabStop="False"
+    Visibility="Collapsed">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- The line above the bar, across the pane. -->
+        <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+        <!-- The row, in the column's clamp. -->
+        <Grid
+            Grid.Row="1"
+            MaxWidth="900"
+            Padding="16,8,16,8"
+            ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- The mode button; its flyout's items are built in code. -->
+            <DropDownButton
+                x:Name="ModeButton"
+                MinHeight="32"
+                VerticalAlignment="Bottom"
+                AutomationProperties.AutomationId="QuickReplyMode">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon
+                        x:Name="ModeGlyph"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AccessibilityView="Raw"
+                        FontSize="16" />
+                    <TextBlock x:Name="ModeText" VerticalAlignment="Center" />
+                </StackPanel>
+                <DropDownButton.Flyout>
+                    <MenuFlyout x:Name="ModeMenu" Placement="TopEdgeAlignedLeft" />
+                </DropDownButton.Flyout>
+            </DropDownButton>
+
+            <!-- On an issue: Comment, a label with no menu (one text
+                 element for UI Automation, named in code). -->
+            <local:QuickReplyCommentLabel
+                x:Name="CommentBox"
+                MinHeight="32"
+                Padding="4,0,4,0"
+                VerticalAlignment="Bottom"
+                AutomationProperties.AutomationId="QuickReplyComment"
+                Background="Transparent"
+                Orientation="Horizontal"
+                Spacing="6"
+                Visibility="Collapsed">
+                <FontIcon
+                    x:Name="CommentGlyph"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AccessibilityView="Raw"
+                    FontSize="16"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock
+                    x:Name="CommentText"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AccessibilityView="Raw" />
+            </local:QuickReplyCommentLabel>
+
+            <!-- The field: one line, up to five (112 as the assistant
+                 panel's), then it scrolls. -->
+            <TextBox
+                x:Name="Field"
+                Grid.Column="1"
+                MaxHeight="112"
+                VerticalAlignment="Bottom"
+                AcceptsReturn="True"
+                AutomationProperties.AutomationId="QuickReplyText"
+                IsSpellCheckEnabled="True"
+                ScrollViewer.VerticalScrollBarVisibility="Auto"
+                TextWrapping="Wrap" />
+
+            <!-- The Assistant's ✦ (the toolbar's), shown while the Assistant is. -->
+            <Button
+                x:Name="AssistantButton"
+                Grid.Column="2"
+                Width="36"
+                Height="32"
+                Padding="0"
+                VerticalAlignment="Bottom"
+                AutomationProperties.AutomationId="QuickReplyAssistant"
+                Visibility="Collapsed">
+                <FontIcon x:Name="AssistantGlyph" FontSize="16" />
+            </Button>
+
+            <!-- Open in a Window. -->
+            <Button
+                x:Name="OpenButton"
+                Grid.Column="3"
+                Width="36"
+                Height="32"
+                Padding="0"
+                VerticalAlignment="Bottom"
+                AutomationProperties.AutomationId="QuickReplyOpen">
+                <FontIcon x:Name="OpenGlyph" FontSize="16" />
+            </Button>
+
+            <!-- Send. -->
+            <Button
+                x:Name="SendButton"
+                Grid.Column="4"
+                Width="36"
+                Height="32"
+                Padding="0"
+                VerticalAlignment="Bottom"
+                AutomationProperties.AutomationId="QuickReplySend"
+                Style="{StaticResource AccentButtonStyle}">
+                <FontIcon x:Name="SendGlyph" FontSize="16" />
+            </Button>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -9,7 +9,7 @@
 // ActionsControllerTests'; this checks that each command reaches the right
 // messages with the right subject and window, for one row and for several
 // (selection.go: one question without a subject, the star of them all,
-// Forward in one message).
+// Forward in one message), and the quick-reply bar's three commands.
 
 using System;
 using System.Collections.Generic;
@@ -155,6 +155,32 @@ public sealed class MessageActionRouterTests
         await h.IdleAsync();
         Assert.Equal("Mark as junk?", Assert.Single(h.Log.Confirmations).Heading);
         Assert.Equal(["m2"], h.Log.ClosedWindows.Select(id => id.Value));
+    }
+
+    // The chat's quick-reply bar (MessageActionDelegate's
+    // quickReplyAttribution, prepareQuickReply and openCompose with own text):
+    // each reaches the actions with the message, the kind and the text.
+    [Fact]
+    public async Task TheQuickReplyBarsCommandsReachTheActions()
+    {
+        await using var h = await StartAsync(messages: In(Inbox, Msg("m1", 1)));
+        var router = Router(h);
+        var line = await h.Ui.RunAsync(() => router.QuickReplyAttribution(ComposeKind.Reply, "m1"));
+        Assert.Equal(await h.Ui.RunAsync(() => h.Actions.ReplyAttribution(ComposeKind.Reply, "m1")), line);
+        Assert.EndsWith("alice wrote:", line, StringComparison.Ordinal);
+
+        var done = 0;
+        await h.Run(() => router.PrepareQuickReply("m1", () => done++));
+        Assert.Equal(1, done);
+
+        var opened = 0;
+        await h.Run(() => router.OpenCompose(ComposeKind.ReplyAll, "m1", "<p>Thanks</p>", "window", () => opened++));
+        await h.IdleAsync();
+        Assert.Equal(1, opened);
+        var p = Assert.Single(h.Log.Composed);
+        Assert.Equal(ComposeKind.ReplyAll, p.Kind);
+        Assert.Equal("<p>Thanks</p>", p.OwnHtml);
+        Assert.Equal("m1", p.InReplyTo?.Value);
     }
 
     [Fact]

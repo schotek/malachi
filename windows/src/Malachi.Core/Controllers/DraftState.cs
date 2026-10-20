@@ -79,4 +79,14 @@ public sealed record DraftState
     /// stored.
     /// </summary>
     public bool ForgetLate { get; init; }
+
+    /// <summary>
+    /// draftState.ownTextPending: the editor is loading the user's own text
+    /// (<see cref="Compose.ComposeParams.OwnHtml"/>) and
+    /// <see cref="ComposeDraftController.EditorLoaded"/> has not marked it
+    /// dirty yet: closing asks (<see cref="ComposeDraftController.ClosesUnasked"/>),
+    /// so a window closed before its editor reported ready does not lose the
+    /// text the quick-reply bar let go once the window opened.
+    /// </summary>
+    public bool OwnTextPending { get; init; }
 }

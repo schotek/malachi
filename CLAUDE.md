@@ -2029,9 +2029,28 @@ existující msgid). Testy `quick_reply_bar_test.go` a rozšířený
 `MALACHI_GTK_SMOKE=1 TestConversationChatGTKSmoke` (řádek přes falešného
 hostitele: viditelnost v chatu a časové ose, psaní, Ctrl+Enter → tři
 volání a vyprázdnění, odmítnutá úprava během odesílání, prázdný text,
-Odpovědět všem, Otevřít v okně, Přeposlat…, Escape, tlačítko ✦). Čeká
-kontejner: `gtk.sh make build`, `test-ui`, smoke, `make po`, `make lint`,
-pak brána R-B2 v XQuartz.
+Odpovědět všem, Otevřít v okně, Přeposlat…, Escape, tlačítko ✦).
+Ověřeno v kontejneru (`gtk.sh make build`, celá sada `test-ui`, smoke,
+`make po` jen s odkazy, `make lint`; commit `ce3dbaf0`, nezávislá revize
+s opravami: `focus-on-click` vypnuté na tlačítkách řádku, nabídka
+přestavěná jen při změně režimů, přepočet ikony přes `glib.IdleAdd`, undo
+během odesílání vypnuté, ikona Komentovat); čeká brána R-B2 vlastníka
+v XQuartz. Windows (W1–W2, napsané bez `dotnet`, `docs/windows-port.md`
+§11.7 „The quick-reply bar“, plán §11.2.2): Core `Model/Conversation.Reply.cs`,
+`QuickReplyMode`, `Controllers/QuickReplyController.cs` + `IQuickReplyHost`
++ `QuickReplyState`, `ComposeParams.OwnHtml`, `ComposeDraftController.
+OwnTextPending`/`EditorLoaded(bool)`, `ActionsController.OpenCompose(…,
+ownHtml, opened)`/`ReplyAttribution`/`PrepareReply`,
+`MessageActionRouter.QuickReplyAttribution`/`PrepareQuickReply`/`OpenCompose`,
+`ConversationController.QuickReplyInput()`; App
+`Reader/Conversation/ConversationQuickReplyBar.xaml(.cs)` (řádek 2
+`ConversationView`, `DropDownButton` režimu s radio flyoutem, pole
+`TextBox`, které během odesílání drží klávesnici a odmítá úpravy přes
+zrušené `BeforeTextChanging`, ✦ přes `MainWindow.ShowAssistantFrom`),
+`QuickReplyHostAdapter.cs`, `ComposePane` s `OwnTextPending`, glyf
+`window-new` E8A7, UI smoke `ConversationChatSmokeTests.
+TheQuickReplyBarSendsAndOpensTheComposeWindow` (devmail); šest exclusions
+pryč. Čeká `build.ps1 app`/`test`/`lint`, smoke a brána R-B3.
 
 Archivace v Poště = Hotovo (2026-10-13, `feat/board`, necommitnuté; jen
 démon, klienti beze změny — všechny tři to dostanou přes

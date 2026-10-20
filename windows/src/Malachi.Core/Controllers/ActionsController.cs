@@ -8,7 +8,9 @@
 // moveIDsTo, movable, moveListTo, call, callThen), context_menus.go
 // (markFolderRead, emptyFolder), outbox.go (retryOutbox, cancelSendFrom),
 // remote.go (loadRemoteImages, trustSender, ensureKnownSendersPolicy,
-// downloadPictures), compose_open.go (openCompose, openComposeFrom),
+// downloadPictures), compose_open.go (openCompose, openComposeFrom,
+// openComposeWith, openWith, and the quick-reply bar's halves of openCompose:
+// replyAttribution, prepareReply),
 // drafts.go (openDraft), assistant_panel.go (openSavedDraft, findDraft),
 // selection.go (cancelSends, forwardMessages, openSelection) and
 // conversation_draft.go (editThreadDraft, discardThreadDraft; a Windows
@@ -966,8 +968,26 @@ public sealed partial class ActionsController
     /// an account that comments) quotes nothing and downloads nothing.
     /// </para>
     /// </remarks>
-    public void OpenCompose(ComposeKind kind, MessageId id, object? parent = null)
+    public void OpenCompose(ComposeKind kind, MessageId id, object? parent = null) =>
+        OpenCompose(kind, id, parent, "", null);
+
+    /// <summary>
+    /// <see cref="OpenCompose(ComposeKind, MessageId, object?)"/> with
+    /// <paramref name="ownHtml"/> in the window's editor as the user's own
+    /// text (compose_open.go <c>openComposeWith</c>;
+    /// <see cref="ComposeParams.OwnHtml"/>, safe HTML from
+    /// <see cref="Conversation.QuickReplyHtml"/>), the comment's as well, and
+    /// on the fallback's params too. <paramref name="opened"/> is called right
+    /// after a window was asked for (<see cref="OpenComposeRequested"/>
+    /// raised with a handler; compose_open.go <c>openWith</c>), and never when
+    /// none is: the message is unknown, one is being prepared for it already,
+    /// a forward was refused or found no mail account, or a comment's
+    /// <c>draft.create</c> failed. The chat's quick-reply bar clears its text
+    /// then.
+    /// </summary>
+    public void OpenCompose(ComposeKind kind, MessageId id, object? parent, string ownHtml, Action? opened)
     {
+        ArgumentNullException.ThrowIfNull(ownHtml);
         Mailbox.Scope.VerifyAccess();
         if (Summary(id) is not { } s || composing.Contains(id))
         {
@@ -976,7 +996,7 @@ public sealed partial class ActionsController
         composing.Add(id);
         if (kind == ComposeKind.Reply && Mailbox.Model.Account(s.AccountId)?.Can(Capability.Comment) == true)
         {
-            CreateDraft(kind, s);
+            CreateDraft(kind, s, ownHtml, opened);
             return;
         }
         var lm = Cache.Loaded(id);
@@ -988,14 +1008,14 @@ public sealed partial class ActionsController
                 await DownloadQuietlyAsync(s);
                 if (!Mailbox.Scope.IsClosed)
                 {
-                    CreateDraft(kind, s);
+                    CreateDraft(kind, s, ownHtml, opened);
                 }
             });
             return;
         }
         if (kind != ComposeKind.Forward || !ComposeSources.ForwardNeedsDownload(lm))
         {
-            CreateDraft(kind, s);
+            CreateDraft(kind, s, ownHtml, opened);
             return;
         }
         Mailbox.Scope.Run(async _ =>
@@ -1007,7 +1027,7 @@ public sealed partial class ActionsController
             }
             if (!ComposeSources.AskForwardWithout(failure))
             {
-                CreateDraft(kind, s);
+                CreateDraft(kind, s, ownHtml, opened);
                 return;
             }
             composing.Remove(id);
@@ -1020,9 +1040,53 @@ public sealed partial class ActionsController
                 {
                     if (composing.Add(id))
                     {
-                        CreateDraft(kind, s);
+                        CreateDraft(kind, s, ownHtml, opened);
                     }
                 });
+        });
+    }
+
+    /// <summary>
+    /// The line the compose window puts above the quote of a reply (or
+    /// forward, <paramref name="kind"/>) to message <paramref name="id"/>:
+    /// <see cref="Prefill.Attribution"/> over
+    /// <see cref="ComposeSources.ComposeSource"/> of what the window knows of
+    /// it, as <see cref="OpenCompose(ComposeKind, MessageId, object?)"/>
+    /// computes it; "" for an unknown message. The chat's quick-reply bar
+    /// hands it to <c>draft.create</c> (<see cref="IQuickReplyHost.Attribution"/>).
+    /// </summary>
+    public string ReplyAttribution(ComposeKind kind, MessageId id)
+    {
+        Mailbox.Scope.VerifyAccess();
+        return Summary(id) is { } s ? Prefill.Attribution(kind, ComposeSources.ComposeSource(s, Cache.Loaded(id))) : "";
+    }
+
+    /// <summary>
+    /// What <see cref="OpenCompose(ComposeKind, MessageId, object?)"/> does
+    /// before <c>draft.create</c> of a reply, for the chat's quick-reply bar
+    /// (<see cref="IQuickReplyHost.BeforeCreate"/>): message
+    /// <paramref name="id"/> is downloaded first when its pictures are kept
+    /// on the mail server only (<see cref="ComposeSources.ReplyNeedsDownload"/>),
+    /// the outcome ignored (the cache logs a failure), then
+    /// <paramref name="done"/> runs on the UI thread; at once otherwise, and
+    /// for an unknown message. Not once the mailbox closed.
+    /// </summary>
+    public void PrepareReply(MessageId id, Action done)
+    {
+        ArgumentNullException.ThrowIfNull(done);
+        Mailbox.Scope.VerifyAccess();
+        if (Summary(id) is not { } s || !ComposeSources.ReplyNeedsDownload(Cache.Loaded(id)))
+        {
+            done();
+            return;
+        }
+        Mailbox.Scope.Run(async _ =>
+        {
+            await DownloadQuietlyAsync(s);
+            if (!Mailbox.Scope.IsClosed)
+            {
+                done();
+            }
         });
     }
 
@@ -1048,14 +1112,14 @@ public sealed partial class ActionsController
     // an account that comments (an issue) is a comment (CreateComment); a
     // forward of a message whose account writes no mail is written in a
     // mail account (ForwardAccount), and draft.create finds the message by
-    // MessageAccountId.
-    private void CreateDraft(ComposeKind kind, MessageSummary s)
+    // MessageAccountId. ownHtml and opened: OpenCompose's.
+    private void CreateDraft(ComposeKind kind, MessageSummary s, string ownHtml, Action? opened)
     {
         var id = s.Id;
         var own = Mailbox.Model.Account(s.AccountId);
         if (kind == ComposeKind.Reply && own?.Can(Capability.Comment) == true)
         {
-            CreateComment(s);
+            CreateComment(s, ownHtml, opened);
             return;
         }
         // The account the draft is written in.
@@ -1086,11 +1150,12 @@ public sealed partial class ActionsController
         // The line above the quote, which the window keeps for the
         // assistant's rewrite (the user's own text is what is above it).
         var attribution = Prefill.Attribution(kind, src);
-        void Fallback() => OpenComposeRequested?.Invoke(this, Prefill.Create(kind, src, me) with
+        void Fallback() => OpenWith(Prefill.Create(kind, src, me) with
         {
             AccountId = from,
             Attribution = attribution,
-        });
+            OwnHtml = ownHtml,
+        }, opened);
 
         var parameters = new DraftCreateParams
         {
@@ -1114,13 +1179,28 @@ public sealed partial class ActionsController
                 Fallback();
                 return;
             }
-            OpenComposeRequested?.Invoke(this, Prefill.FromDraft(kind, res.Draft, res.Blocked) with
+            OpenWith(Prefill.FromDraft(kind, res.Draft, res.Blocked) with
             {
                 AccountId = from,
                 Skipped = res.Skipped?.Count ?? 0,
                 Attribution = attribution,
-            });
+                OwnHtml = ownHtml,
+            }, opened);
         }, RpcTimeouts.Compose);
+    }
+
+    // compose_open.go openWith: asks for the compose window with p, then
+    // calls opened (null for none), which tells the chat's quick-reply bar
+    // that a window holds its text now; never when no window can open (no
+    // handler of OpenComposeRequested).
+    private void OpenWith(ComposeParams p, Action? opened)
+    {
+        if (OpenComposeRequested is not { } open)
+        {
+            return;
+        }
+        open(this, p);
+        opened?.Invoke();
     }
 
     // The mail account a message of an account that writes no mail (an
@@ -1138,8 +1218,8 @@ public sealed partial class ActionsController
     // (draft.create reply there): the compose window in comment mode
     // (ComposeParams.Comment). Nothing is quoted, so there is no attribution,
     // and no fallback either: without a comment draft from the daemon there
-    // is nothing to write, only the toast.
-    private void CreateComment(MessageSummary s)
+    // is nothing to write, only the toast (and no opened).
+    private void CreateComment(MessageSummary s, string ownHtml, Action? opened)
     {
         var id = s.Id;
         var parameters = new DraftCreateParams { AccountId = s.AccountId, Mode = ComposeMode.Reply, MessageId = id };
@@ -1152,7 +1232,7 @@ public sealed partial class ActionsController
                 toast(RpcErrorText.Text(ComposeSources.ComposeWhat(ComposeKind.Reply), error));
                 return;
             }
-            OpenComposeRequested?.Invoke(this, Prefill.FromDraft(ComposeKind.Reply, res.Draft, res.Blocked) with { AccountId = s.AccountId });
+            OpenWith(Prefill.FromDraft(ComposeKind.Reply, res.Draft, res.Blocked) with { AccountId = s.AccountId, OwnHtml = ownHtml }, opened);
         }, RpcTimeouts.Compose);
     }
 

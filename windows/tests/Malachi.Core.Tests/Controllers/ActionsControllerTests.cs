@@ -27,7 +27,10 @@
 // (assistant_panel.go findDraft), and the context menus' Move To and folder
 // actions are refused with their toasts (moveToAFolder, folderActions);
 // Swift's tests of several selected rows (severalRowsTrashAndCountPerFolder,
-// severalRowsForwardAndOpen) are the last two before the helpers. The
+// severalRowsForwardAndOpen) are the last two before the helpers, and its
+// quick-reply bar's (openComposeWithOwnTextCallsOpened,
+// replyAttributionAndPrepareReply) come before flagsFollowTheRowAndTheMessage
+// as in Swift. The
 // cache is the real MessageCache, as in Swift, so the downloads of a
 // forward or a reply and Download Pictures go through it.
 
@@ -918,6 +921,130 @@ public sealed class ActionsControllerTests
         Assert.Contains("alice wrote:", r.BodyHtml, StringComparison.Ordinal);
         Assert.EndsWith("alice wrote:", r.Attribution, StringComparison.Ordinal);
         Assert.Contains("<div>" + Prefill.EscapeText(r.Attribution) + "</div>", r.BodyHtml, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// compose_open.go <c>openComposeWith</c>: the user's own text (the chat's
+    /// quick-reply bar) reaches the window's params as OwnHtml, from
+    /// draft.create and from the fallback alike, and opened runs right after
+    /// the window was asked for; never when no window opens (an unknown
+    /// message, one being prepared already). The plain overload has no own
+    /// text.
+    /// </summary>
+    [Fact]
+    public async Task OpenComposeWithOwnTextCallsOpened()
+    {
+        await using var h = await StartAsync(messages: In(Inbox, Msg("m1", 1, flags: Seen)));
+        var draft = new Draft { AccountId = "a", Subject = "Re: s-m1", TextBody = "quoted", HtmlBody = "<p>quoted</p>", InReplyTo = "m1" };
+        var created = JsonCoding.EncodeToString(new DraftCreateResult { Draft = draft, Quoted = QuoteForm.Html });
+        var requests = new List<DraftCreateParams>();
+        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        h.Fixture.On(API.DraftCreate.Name, async p =>
+        {
+            lock (requests)
+            {
+                requests.Add(JsonCoding.Decode<DraftCreateParams>(p));
+            }
+            await held.Task;
+            return created;
+        });
+        var opened = new List<int>();
+        const string own = "<p>Thanks</p>";
+        await h.Run(() => h.Actions.OpenCompose(ComposeKind.ReplyAll, "m1", null, own, () => opened.Add(h.Log.Composed.Count)));
+        await Eventually.Holds(() => Locked(requests).Count == 1);
+        // Being prepared: a second request opens nothing and is never told;
+        // neither is one for an unknown message.
+        await h.Run(() =>
+        {
+            h.Actions.OpenCompose(ComposeKind.Reply, "m1", null, own, () => opened.Add(-1));
+            h.Actions.OpenCompose(ComposeKind.Reply, "nope", null, own, () => opened.Add(-2));
+        });
+        held.SetResult();
+        await h.IdleAsync();
+        // Called after the window was asked for, once.
+        Assert.Equal([1], opened);
+        var p = Assert.Single(h.Log.Composed);
+        Assert.Equal(ComposeKind.ReplyAll, p.Kind);
+        Assert.Equal(own, p.OwnHtml);
+        Assert.Equal("<p>quoted</p>", p.BodyHtml);
+        Assert.Equal(own, new ComposeBodyLayout(p).EditorHtml);
+        Assert.Equal("<p>quoted</p>", new ComposeBodyLayout(p).QuotedHtml);
+
+        // The plain overload: no own text.
+        await h.Run(() => h.Actions.OpenCompose(ComposeKind.Reply, "m1"));
+        await h.IdleAsync();
+        Assert.Equal(2, h.Log.Composed.Count);
+        Assert.Equal("", h.Log.Composed[1].OwnHtml);
+
+        // The fallback carries it as well.
+        Refuse(h, API.DraftCreate.Name, ErrorCode.NotImplemented, "no");
+        await h.LoadAsync("m1");
+        await h.Run(() => h.Actions.OpenCompose(ComposeKind.Forward, "m1", null, own, () => opened.Add(h.Log.Composed.Count)));
+        await h.IdleAsync();
+        Assert.Equal([1, 3], opened);
+        Assert.Equal(ComposeKind.Forward, h.Log.Composed[2].Kind);
+        Assert.Equal(own, h.Log.Composed[2].OwnHtml);
+        Assert.Empty(h.Log.Toasts);
+    }
+
+    /// <summary>
+    /// The quick-reply bar's halves of OpenCompose: the attribution the
+    /// window would hand draft.create, and the download before a reply whose
+    /// pictures are on the server only (its failure ignored).
+    /// </summary>
+    [Fact]
+    public async Task ReplyAttributionAndPrepareReply()
+    {
+        await using var h = await StartAsync(messages: In(Inbox, Msg("m1", 1, flags: Seen), Msg("m2", 2, flags: Seen)));
+        var line = await h.Ui.RunAsync(() => h.Actions.ReplyAttribution(ComposeKind.Reply, "m1"));
+        Assert.NotEmpty(line);
+        Assert.Equal(Prefill.Attribution(ComposeKind.Reply, ComposeSources.ComposeSource(h.Summary("m1"), null)), line);
+        Assert.StartsWith("---------- Forwarded message ----------", await h.Ui.RunAsync(() => h.Actions.ReplyAttribution(ComposeKind.Forward, "m1")), StringComparison.Ordinal);
+        Assert.Equal("", await h.Ui.RunAsync(() => h.Actions.ReplyAttribution(ComposeKind.Reply, "nope")));
+
+        // Nothing to download: done at once, no call.
+        var calls = h.Fixture.Calls().Count;
+        var done = 0;
+        await h.Run(() =>
+        {
+            h.Actions.PrepareReply("m2", () => done++);
+            h.Actions.PrepareReply("nope", () => done++);
+            Assert.Equal(2, done);
+        });
+        await h.IdleAsync();
+        Assert.Equal(calls, h.Fixture.Calls().Count);
+
+        // A picture on the server: message.download first, then done, also
+        // when it fails.
+        var picture = new Attachment
+        {
+            PartId = "2",
+            Filename = "photo.jpg",
+            ContentType = "image/jpeg",
+            Size = 300_000,
+            Inline = true,
+            ContentId = "photo@x",
+            Remote = true,
+        };
+        h.Fixture.SetDetail("m1", new Message { Summary = h.Summary("m1"), Attachments = [picture] });
+        var counted = Body("m1", "<p><img src=\"malachi-cid:a/m1/2\"></p>", RemoteContentPolicy.Block) with
+        {
+            InlineParts = new Dictionary<string, string> { ["photo@x"] = "2" },
+            RemotePictures = 1,
+        };
+        h.Fixture.SetBody("m1", counted);
+        Refuse(h, API.MessageDownload.Name, ErrorCode.Offline, "no network");
+        await h.LoadAsync("m1");
+        var before = h.Fixture.Calls().Count;
+        await h.Run(() =>
+        {
+            h.Actions.PrepareReply("m1", () => done++);
+            Assert.Equal(2, done);
+        });
+        await h.IdleAsync();
+        Assert.Equal(3, done);
+        Assert.Contains(API.MessageDownload.Name, h.Fixture.Calls().Skip(before));
+        Assert.Empty(h.Log.Toasts);
     }
 
     [Fact]

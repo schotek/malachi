@@ -2959,6 +2959,116 @@ the `UserControl` reaches a tap on the `TextBlock`s of the bubble, and that
 the toggle's checked brushes are taken from the `ToggleButton`'s own
 resources.
 
+#### The quick-reply bar (2026-10-20)
+
+Under the chat layout of Mail (not the timeline, not the board's chat, not
+the message window) a fixed row answers the conversation without the compose
+window (`docs/plans/chat-view.md` §10, Q1-Q15, and §11; macOS first, GTK G1,
+then Windows W1-W2). The reply goes to the newest message of someone else
+(`Conversation.QuickReplyTarget`), Send takes the daemon's usual way
+(`draft.create` with the window's attribution, one `draft.save` whose body
+is the typed text above the original quoted, `message.send`; a failed send
+deletes the saved draft and keeps the text), and *Open in a Window* moves
+the text into the compose window as the user's own (`ComposeParams.OwnHtml`),
+marked as an edit, so that closing asks. The daemon and the API did not
+change.
+
+- **Core (W1)**: `Model/Conversation.Reply.cs` (port of
+  `ui/internal/conversation/reply.go`: `QuickReplyTarget`, `QuickReplyModes`,
+  `QuickReplyHtml`, `QuickReplyBlank`, `QuickReplyBody`, the six msgids,
+  which left `windows/parity-exclusions.txt`), `QuickReplyMode` with
+  `QuickReplyModeExtensions` (`ComposeMode`, `ComposeKind`),
+  `ConversationLayout.QuickReplyIconOnly`, `ComposeParams.OwnHtml` (applied
+  by `ComposeBodyLayout(ComposeParams)` only), `ComposeBodyLayout.DraftBody`,
+  `ComposeDraftController.OwnTextPending` and `EditorLoaded(bool ownText)`
+  (`EditorReady` is `EditorLoaded(false)`; it flushes for every owner, as
+  the Windows window always did), `ConversationController.QuickReplyInput`,
+  `Controllers/QuickReplyController.cs` with `IQuickReplyHost` and
+  `QuickReplyState` (port of `ui/internal/quickreply`; Swift's `onChange` is
+  the event `Changed`, `failed(_ error:)` is `Failed(Exception)`; Send's
+  calls run in a fire-and-forget task that reports through `Post`), and
+  `ActionsController.OpenCompose(kind, id, parent, ownHtml, opened)`,
+  `ReplyAttribution`, `PrepareReply` behind `MessageActionRouter`
+  (`QuickReplyAttribution`, `PrepareQuickReply`, `OpenCompose(kind, id,
+  ownHtml, window, opened)`; `PrepareReply` does not call back once the
+  mailbox scope is closed).
+- **The bar (W2)**: `Reader/Conversation/ConversationQuickReplyBar.xaml(.cs)`
+  in row 2 of `ConversationView`'s grid (a third, `Auto` row; collapsed while
+  the timeline shows or the controller hides it, so it takes no room), a
+  line above it and its content in the column (`MaxWidth` 900, padding 16,8).
+  From the leading end: the mode `DropDownButton` (glyph and label, *Reply*
+  or *Reply All*; its `MenuFlyout` has the reply modes as
+  `RadioMenuFlyoutItem`s and, after a separator, *Forward…*, built again only
+  when the modes offered change), on an issue the label *Comment* with the
+  Comment glyph and no flyout (`QuickReplyCommentLabel`, a `StackPanel` that
+  is one text element for UI Automation); the `TextBox` (`AcceptsReturn`,
+  wrapping, `MaxHeight` 112 as the assistant panel's field, then it
+  scrolls); the ✦ (shown while `AssistantController.Shown`; a click is
+  `MainWindow.ShowAssistantFrom`, the toolbar's ✦: the panel with its field
+  focused with In App, else the toolbar's `AssistantMenu` flyout above the
+  button); *Open in a Window* (glyph `window-new`, E8A7, new in
+  `IconGlyphs`, OpenInNewWindow); *Send* (accent style, glyph `mail-send`,
+  tooltip "Send (Ctrl+Enter)", accessible name `_Send` without its
+  mnemonic). The mode button's tooltip is
+  `Conversation.QuickReplyTargetTooltip` (none when empty); in a narrow pane
+  (`QuickReplyIconOnly` of the bar's width, on every `SizeChanged`) it shows
+  its glyph alone. The bar renders `QuickReplyController.State` on every
+  `Changed` and decides nothing; the buttons take no focus on a click
+  (`AllowFocusOnInteraction` false). Keys in the field's `PreviewKeyDown`:
+  Return is a new line, Ctrl+Enter sends (always consumed; the controller
+  sends only with something to send), Escape gives the keyboard to the
+  message list only while it is on screen (`MainWindow.MessageListOnScreen`,
+  handed to the host by `ReaderHub` as `ListOnScreen`) and is left alone
+  otherwise. The field reports its text through `TextChanging`
+  (synchronous, never for the bar's own render), and once more before each
+  action.
+- **While a Send is on its way** the buttons are disabled and the field
+  keeps the keyboard and stays enabled, so that the window's typing gate
+  (`KeyboardRouting.IsTextInput`) keeps the single-key commands off, but it
+  refuses every edit: `BeforeTextChanging` is cancelled for anything but
+  the bar's render, and Ctrl+Z and Ctrl+Y are swallowed. `IsReadOnly` would
+  keep the focus too, but drops the caret and looks disabled.
+- **The host** (`ConversationView`) makes the controller per window over
+  `QuickReplyHostAdapter` (`CallAsync` over `AppState.Client`, `Post` over
+  the window's `DispatcherQueue`, the attribution, the download and the
+  compose window through `MessageActionRouter`, `Sent` the compose window's
+  toast "Message queued for sending" or `Jira.CommentQueued`, `Failed` the
+  toast `RpcErrorText.Text("Sending", …)` and a log line with the
+  exception's type only); on every change of the conversation controller it
+  calls `Show(thread)` and `Update(QuickReplyInput())`, and `ShowLayout`
+  calls `SetChatShown`.
+- **The compose window**: `ComposePane` sets `draft.OwnTextPending` before it
+  loads the editor when the window (never the board's inline pane) starts
+  with `OwnHtml`, and its editor's `Ready` calls `draft.EditorLoaded(ownText)`
+  instead of `EditorReady()`.
+- **Tests**: Core (W1) `ConversationReplyTests`, `QuickReplyControllerTests`,
+  `ComposeDraftOwnTextTests`, `ComposeBodyLayoutTests`, `PrefillTests`,
+  `ActionsControllerTests`, `JiraActionsTests`, `JiraComposeControllerTests`,
+  `ConversationControllerTests`, `MessageActionRouterTests`; the UI smoke
+  test `ConversationChatSmokeTests.TheQuickReplyBarSendsAndOpensTheComposeWindow`
+  (`MALACHI_DEVMAIL`, a second conversation of `ConversationChatFixture`
+  whose first message has `Reply-To` the seeded user, so that devmail
+  delivers the reply): the bar under the chat and not under the timeline,
+  Send enabled by typing, *Open in a Window* opening the reply's compose
+  window and emptying the field, closing it asking (Discard), Ctrl+Enter
+  (`Uia.PressKey` with a modifier) emptying the field, the reply in the
+  server's Sent and INBOX and its bubble in the chat.
+
+**Verification status (2026-10-20).** Written on a Mac without `dotnet`, by
+the surrounding code; nothing was compiled or run. Pending on Windows:
+`build.ps1 app`, `test` and `lint` (`IconGlyphsTests` with `window-new`,
+`StringsCheckTests` for the six msgids, the SPDX headers), the smoke test
+with `MALACHI_DEVMAIL`, and a manual pass, then gate R-B3: reply, reply all,
+a Jira comment, *Open in a Window* with the question on close, *Forward…*,
+Ctrl+Enter, Return, Escape (list shown and folded away), an empty field, the
+daemon stopped (a toast, the text kept), switching the conversation while
+sending, a narrow pane, the ✦ with In App and with a Claude app, the dark
+and high-contrast themes. Guesses that deserve a look: that `TextChanging`
+reports every edit (IME composition included), that the cancelled
+`BeforeTextChanging` leaves the caret and the focus where they were, and
+that the assistant menu's flyout shown at the bar's ✦ (`ShowAt` with
+`TopEdgeAlignedRight`) while also the toolbar button's `Flyout` behaves.
+
 ### 11.8 The Board
 
 The Board (`feat/board`, 2026-10-06) is the third part of the client ported

@@ -123,7 +123,14 @@ internal static class Uia
     /// element's window to the foreground; the key goes out only once that
     /// window of <paramref name="processId"/> has it, never to another one.
     /// </summary>
-    public static void PressKey(AutomationElement element, int processId, byte key)
+    public static void PressKey(AutomationElement element, int processId, byte key) => PressKey(element, processId, key, modifier: 0);
+
+    /// <summary>
+    /// <see cref="PressKey(AutomationElement, int, byte)"/> with virtual key
+    /// <paramref name="modifier"/> held down around it (0 for none): the
+    /// quick-reply bar's Ctrl+Enter.
+    /// </summary>
+    public static void PressKey(AutomationElement element, int processId, byte key, byte modifier)
     {
         ArgumentNullException.ThrowIfNull(element);
         element.SetFocus();
@@ -134,8 +141,16 @@ internal static class Uia
                 return owner == processId && element.Current.HasKeyboardFocus;
             },
             "the keyboard focus in the app");
+        if (modifier != 0)
+        {
+            NativeMethods.KeybdEvent(modifier, 0, 0, 0);
+        }
         NativeMethods.KeybdEvent(key, 0, 0, 0);
         NativeMethods.KeybdEvent(key, 0, NativeMethods.KeyEventKeyUp, 0);
+        if (modifier != 0)
+        {
+            NativeMethods.KeybdEvent(modifier, 0, NativeMethods.KeyEventKeyUp, 0);
+        }
     }
 
     /// <summary>

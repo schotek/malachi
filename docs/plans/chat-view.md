@@ -707,6 +707,78 @@ Komentovat (`chat-message-new-symbolic`). Nechané: IME (preedit mimo
 buffer, jako panel asistenta) a změna id vlákna pod zobrazenou konverzací
 (text zůstane pod starým id).
 
+### 11.2.2 As built — Windows (W1–W2)
+
+Napsané na Macu bez `dotnet`, podle okolního kódu; nic se nepřeložilo ani
+nespustilo (`docs/windows-port.md` §11.7 „The quick-reply bar“). **W1
+(Core)**: `Model/Conversation.Reply.cs` (port `reply.go`, šest msgid pryč
+z `parity-exclusions.txt`), `QuickReplyMode` + `QuickReplyModeExtensions`
+(`ComposeMode`, `ComposeKind`), `ConversationLayout.QuickReplyIconOnly`,
+`ComposeParams.OwnHtml` (uplatní jen `ComposeBodyLayout(ComposeParams)`),
+`ComposeBodyLayout.DraftBody`, `ComposeDraftController.OwnTextPending`
+(drží ho `DraftState`) a `EditorLoaded(bool ownText)` (flush pro každého
+vlastníka, jak to Windows dělal vždy; `EditorReady` = `EditorLoaded(false)`),
+`ConversationController.QuickReplyInput`, `QuickReplyController`
++ `IQuickReplyHost` + `QuickReplyState` (Swiftové `onChange` je událost
+`Changed`, `failed` je `Failed(Exception)`, `KeptThreads` veřejné, volání
+Odeslat běží v úloze bez čekání a výsledek vrací přes `Post`),
+`ActionsController.OpenCompose(kind, id, parent, ownHtml, opened)`,
+`ReplyAttribution`, `PrepareReply` (po zavření scope schránky `done`
+nezavolá) a za nimi `MessageActionRouter` (`QuickReplyAttribution`,
+`PrepareQuickReply`, `OpenCompose`); testy `ConversationReplyTests`,
+`QuickReplyControllerTests`, `ComposeDraftOwnTextTests` a rozšířené
+`ComposeBodyLayoutTests`, `PrefillTests`, `ActionsControllerTests`,
+`JiraActionsTests`, `JiraComposeControllerTests`,
+`ConversationControllerTests`, `MessageActionRouterTests`. **W2 (App)**:
+`Reader/Conversation/ConversationQuickReplyBar.xaml(.cs)` v řádku 2 mřížky
+`ConversationView` (třetí řádek `Auto`, `Collapsed` mimo chat a při
+vypnutém `Visible`, takže nezabírá místo), čára nahoře, obsah ve sloupci
+(900, okraje 16): `DropDownButton` režimu s `MenuFlyout` (režimy odpovědi
+jako `RadioMenuFlyoutItem`, oddělovač, *Přeposlat…*; přestavba jen při
+změně nabízených režimů), u Jiry popisek *Komentovat* s ikonou akce
+(`QuickReplyCommentLabel`, `StackPanel` jako jeden textový prvek UIA),
+`TextBox` (`AcceptsReturn`, `MaxHeight` 112), ✦ (viditelné podle
+`AssistantController.Shown`, klik = nové `MainWindow.ShowAssistantFrom`:
+s cílem V aplikaci panel s fokusem pole, jinak nabídka `AssistantMenu`
+lišty nad tlačítkem), *Otevřít v okně* (glyf `window-new` E8A7, nový
+v `IconGlyphs`, jinak by padal `EveryIconNameOfTheGtkUiHasAGlyph` kvůli
+`conversation_view.blp`) a *Odeslat* (accent, tooltip „Send (Ctrl+Enter)“,
+přístupný popisek `_Send` bez mnemoniky). Tooltip tlačítka režimu je
+`QuickReplyTargetTooltip`; v úzkém panelu jen glyf (`QuickReplyIconOnly`
+šířky řádku při každém `SizeChanged`). Tlačítka si klikem fokus neberou
+(`AllowFocusOnInteraction`). Klávesy v `PreviewKeyDown` pole: Enter nový
+řádek, Ctrl+Enter odešle (spotřebuje se vždy), Escape dá klávesnici
+seznamu, jen když je na obrazovce (`MainWindow.MessageListOnScreen`, do
+hostitele ho dává `ReaderHub` jako `ListOnScreen`), jinak ho nechá být.
+Text hlásí pole přes `TextChanging` (synchronně, nikdy při vlastním
+vykreslení) a znovu před každou akcí. Během odesílání jsou tlačítka
+vypnutá, pole drží klávesnici a zůstává zapnuté (brána psaní
+`KeyboardRouting.IsTextInput` dál vypíná jednoklávesové zkratky), ale
+`BeforeTextChanging` každou úpravu mimo vlastní vykreslení zruší a Ctrl+Z
+a Ctrl+Y spolkne; `IsReadOnly` by fokus také držel, ale schová kurzor
+a vypadá jako vypnuté. Hostitel (`ConversationView`) vytvoří kontroler
+na okno nad `QuickReplyHostAdapter` (volání přes `AppState.Client`,
+`Post` přes `DispatcherQueue` okna, atribuce, stažení a okno přes
+`MessageActionRouter`, `Sent` toast okna Nová zpráva nebo
+`Jira.CommentQueued`, `Failed` toast `RpcErrorText.Text("Sending", …)`
+a řádek logu jen s typem výjimky), při každé změně kontroleru konverzace
+volá `Show` a `Update(QuickReplyInput())`, `ShowLayout` volá
+`SetChatShown`. `ComposePane` nastaví `draft.OwnTextPending` před načtením
+editoru (jen okno, nikdy inline pane Nástěnky) a `Ready` editoru volá
+`draft.EditorLoaded(ownText)`. UI smoke
+`ConversationChatSmokeTests.TheQuickReplyBarSendsAndOpensTheComposeWindow`
+nad druhou konverzací `ConversationChatFixture` (první zpráva má
+`Reply-To` na testovacího uživatele, aby devmail odpověď doručil):
+řádek pod chatem a ne pod časovou osou, psaní zapne Odeslat, *Otevřít
+v okně* otevře okno odpovědi a vyprázdní pole, zavření se ptá (Zahodit),
+Ctrl+Enter (`Uia.PressKey` s modifikátorem) vyprázdní pole, odpověď
+v Odeslaných a v INBOX serveru a její bublina v chatu. Odchylka v tabulce
+`windows/README.md`. Čeká: `windows.yml` / `build.ps1 app`, `test`, `lint`,
+smoke s `MALACHI_DEVMAIL`, ruční průchod a brána R-B3 (seznam v
+`windows-port.md`); hádané chování: `TextChanging` u IME, kurzor po
+zrušeném `BeforeTextChanging`, `ShowAt` nabídky Asistenta u ✦ řádku,
+když je zároveň `Flyout` tlačítka lišty.
+
 ### 11.3 Rizika
 
 - **Osiřelý koncept**: jediný `draft.save` je uvnitř Odeslat; po selhání

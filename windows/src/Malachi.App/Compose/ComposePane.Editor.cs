@@ -6,8 +6,9 @@
 // editor callbacks: OnState, OnChanged, OnDropFiles, OnReady, OnCrashed;
 // wireToolbar) and pane_layout.go (wireSizedEditor). The compose pane's
 // side of the editor of docs/windows-port.md §6.5: Ready and Changed go to
-// the draft controller (EditorReady, the Windows baseline of the flush echo
-// and, for the board, the editor's own rendering of the loaded draft; and
+// the draft controller (EditorLoaded, the Windows baseline of the flush echo
+// and, for the board, the editor's own rendering of the loaded draft, the
+// window's own text from the quick-reply bar marked as an edit; and
 // EditorChanged), the formatting at the caret to the bar, the bridge's
 // Escape to the host (EscapePressed: the window's close request) and its
 // Ctrl+K to the link popover, dropped files to attachment.import, the
@@ -71,12 +72,14 @@ public sealed partial class ComposePane
         AutomationProperties.SetAutomationId(editor.Web, "ComposeEditor");
     }
 
-    // OnReady: the flush echo's baseline (Windows; the board's editorReady),
-    // and for a reply or a forward the caret at the start of the body
-    // (compose.go).
+    // OnReady: the flush echo's baseline (Windows; the board's editorReady)
+    // and, for a window that started with the user's own text
+    // (ComposeParams.OwnHtml, the chat's quick-reply bar), that text marked
+    // as an edit (pane.go editorLoaded, Swift editorLoaded(ownText:)); for a
+    // reply or a forward the caret at the start of the body (compose.go).
     private void OnEditorReady()
     {
-        draft.EditorReady();
+        draft.EditorLoaded(HasOwnText);
         if (parameters.Kind is not (ComposeKind.New or ComposeKind.Edit))
         {
             editor.FocusStart();
