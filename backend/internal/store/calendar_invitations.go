@@ -436,6 +436,23 @@ func attachInvitationHeads(ctx context.Context, q querier, heads map[string]Mess
 	return nil
 }
 
+// invitationNow is the clock of the listings' outdated rule; tests of other
+// packages move it with SetInvitationClock.
+var invitationNow = time.Now
+
+// SetInvitationClock replaces the clock the message listings judge whether
+// an invitation's event has ended with (nil = time.Now) and returns the
+// function that puts the previous one back. For tests, which must not
+// depend on the date they run on.
+func SetInvitationClock(now func() time.Time) (restore func()) {
+	was := invitationNow
+	if now == nil {
+		now = time.Now
+	}
+	invitationNow = now
+	return func() { invitationNow = was }
+}
+
 // attachInvitationsTo is attachInvitations over pointers (a search page,
 // the heads of a thread list).
 func attachInvitationsTo(ctx context.Context, q querier, msgs []*Message) error {
@@ -454,7 +471,7 @@ func attachInvitationsTo(ctx context.Context, q querier, msgs []*Message) error 
 		}
 		at[m.ID] = append(at[m.ID], m)
 	}
-	now := time.Now()
+	now := invitationNow()
 	var found []foundInvitation
 	for _, chunk := range chunkStrings(ids, 500) {
 		rows, err := q.QueryContext(ctx, `SELECT `+invitationColumns+invitationFacts+`

@@ -86,6 +86,9 @@ func newInvBox(t *testing.T) *invBox {
 	was := invitationsChangedDelay
 	invitationsChangedDelay = 5 * time.Millisecond
 	t.Cleanup(func() { invitationsChangedDelay = was })
+	// The fixtures' events lie in October 2026: judge "outdated" from a
+	// fixed day before them, not from the day the test runs on.
+	t.Cleanup(store.SetInvitationClock(func() time.Time { return time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC) }))
 	srv := caldavtest.New(t, caldavtest.Nextcloud)
 	b, _, out, _ := newCalDAVBackend(t, srv)
 	rec := &invRecorder{}
