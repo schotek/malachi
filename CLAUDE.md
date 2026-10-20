@@ -2009,7 +2009,29 @@ vlastníka nad kopií dat (odpověď, všem, komentář, Otevřít v okně s ot�
 při zavření, Přeposlat…, klávesy, démon zastavený, přepnutí během
 odesílání), pak GTK G1 (`quick_reply_bar.go`, `conversation_view.blp`)
 a Windows W1–W2 podle §11.2; `windows/parity-exclusions.txt` nese 6 řádků
-„quick reply: Windows port pending“ do W1.
+„quick reply: Windows port pending“ do W1. GTK (G1, napsané na Macu bez
+překladu): řádek `conversation_reply_bar` jako poslední potomek
+`conversation_body` v `conversation_view.blp` (oddělovač, `Adw.Clamp` 900,
+`MenuButton` režimu s `Adw.ButtonContent`, u Jiry popisek Komentovat, pole
+jako panel asistenta, `MenuButton` ✦ vázaný týmž
+`Assistant.bindAssistantButton` jako ✦ lišty, *Otevřít v okně*
+`window-new-symbolic`, *Odeslat* `mail-send-symbolic`), pohled
+`window/quick_reply_bar.go` (nabídka z Go nad skupinou akcí `qr.mode`/
+`qr.forward`; `EventControllerKey` ve fázi capture: Ctrl+Enter odešle,
+Escape dá klávesnici seznamu, jen když je namapovaný; během odesílání pole
+drží klávesnici a zůstává editovatelné kvůli bráně psaní, ale buffer
+zastaví `insert-text`/`delete-range`; ikona bez popisku podle
+`convQuickReplyIconOnly` při změně šířky sloupce chatu), hostitel
+(`conversation_host.go` `updateQuickReply` při každé změně kontroleru přes
+`conversationController.quickReplyInput`, `SetChatShown` v `applyLayout`,
+`useQuickReply` pro test); `po/POTFILES` + `quick_reply_bar.go` (jen
+existující msgid). Testy `quick_reply_bar_test.go` a rozšířený
+`MALACHI_GTK_SMOKE=1 TestConversationChatGTKSmoke` (řádek přes falešného
+hostitele: viditelnost v chatu a časové ose, psaní, Ctrl+Enter → tři
+volání a vyprázdnění, odmítnutá úprava během odesílání, prázdný text,
+Odpovědět všem, Otevřít v okně, Přeposlat…, Escape, tlačítko ✦). Čeká
+kontejner: `gtk.sh make build`, `test-ui`, smoke, `make po`, `make lint`,
+pak brána R-B2 v XQuartz.
 
 Archivace v Poště = Hotovo (2026-10-13, `feat/board`, necommitnuté; jen
 démon, klienti beze změny — všechny tři to dostanou přes

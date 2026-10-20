@@ -91,6 +91,7 @@ ui/internal/window/notify.go
 ui/internal/window/outbox.go
 ui/internal/window/preferences.go
 ui/internal/window/preferences_chatgpt.go
+ui/internal/window/quick_reply_bar.go
 ui/internal/window/remote.go
 ui/internal/window/search.go
 ui/internal/window/search_ownwords.go

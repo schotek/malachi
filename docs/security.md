@@ -210,6 +210,13 @@ is the same: the plain `text` the case already carries from `board.get`
 in a `GtkLabel` with markup off, not selectable, no web view, no link
 handling, no `message.body` request; a double click opens the message
 window.
+The quick-reply bar under the chat (`ui/internal/window/quick_reply_bar.go`)
+is plain text both ways: its field is a plain `GtkTextView`, and what the
+user types is their own text, never mail, which
+`conversation.QuickReplyHTML` turns into paragraphs and line breaks with
+every character escaped (no Markdown) before `draft.save`; its labels have
+markup off, and the only string from mail it shows is the target's sender
+in the mode button's tooltip (`Item.Sender`, one cleaned line).
 
 The GTK board's conversation cards use the same `htmlview.Card` and
 height governor as Mail. Only an open card fetches its message's body

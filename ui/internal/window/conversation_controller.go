@@ -585,3 +585,22 @@ func (c *conversationController) actions(s api.MessageSummary) capabilities.Acti
 	}
 	return conversation.CardActions(a, s, c.host.convComposeAccount())
 }
+
+// quickReplyInput is what the quick-reply bar needs of the conversation
+// shown (quickreply.Controller.Update): its model, the actions of the card
+// the reply goes to (conversation.QuickReplyTarget; none without a target)
+// and that card's account. False while there is no model (the members are
+// on their way, or nothing is shown). The macOS client's
+// ConversationController.quickReplyInput.
+func (c *conversationController) quickReplyInput() (conversation.Model, capabilities.Actions, api.Account, bool) {
+	if c.model == nil {
+		return conversation.Model{}, capabilities.Actions{}, api.Account{}, false
+	}
+	m := *c.model
+	target, ok := conversation.QuickReplyTarget(m)
+	if !ok {
+		return m, capabilities.Actions{}, api.Account{}, true
+	}
+	account, _ := c.host.convAccount(target.Message.AccountID)
+	return m, c.actions(target.Message), account, true
+}

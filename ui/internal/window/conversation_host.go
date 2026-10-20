@@ -13,6 +13,7 @@ import (
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/quickreply"
 	"github.com/schotek/malachi/ui/internal/settings"
 )
 
@@ -50,6 +51,16 @@ import (
 // the layout shown (shownIssueCard). A port of the macOS client's
 // ConversationHostViewController.swift and ConversationStripView.swift
 // (which also chose two cards over moving one between the layouts).
+//
+// Under the chat, and only there, the quick-reply bar (quick_reply_bar.go,
+// docs/plans/chat-view.md §10, §11), the last child of conversation_body:
+// the host owns its controller (quickreply.Controller over the window,
+// quick_reply.go), hands it every change of the conversation
+// (updateQuickReply: the conversation shown, its model, the actions of the
+// card the reply goes to and its account; quickReplyInput) and the layout
+// shown (applyLayout), and the chat's width (chatColumnChanged: the mode
+// button's icon alone in a narrow pane). A hidden bar takes no room, so
+// the timeline fills the page whatever the bar does.
 type conversationHost struct {
 	convFanout
 	w *Window
@@ -70,6 +81,10 @@ type conversationHost struct {
 	status        *gtk.Label
 	spinner       *adw.Spinner
 	spinnerTimer  glib.SourceHandle
+
+	// reply is the quick-reply bar's controller, replyBar its widgets.
+	reply    *quickreply.Controller
+	replyBar *quickReplyBar
 }
 
 // The pages of conversation_layouts.
@@ -102,8 +117,13 @@ func (w *Window) conversationPane() *conversationHost {
 	h.timeline = newConversationView(h, b)
 	h.chat = newConversationChat(h, b)
 	h.timelineLayout, h.chatLayout = h.timeline, h.chat
+	h.reply = newQuickReply(w)
+	h.replyBar = newQuickReplyBar(w, b, h.reply)
 	h.markRead = w.scheduleMarkRead
-	h.onChange = h.spin
+	h.onChange = func(ch convChange) {
+		h.spin(ch)
+		h.updateQuickReply()
+	}
 	h.attach()
 
 	h.foldAllButton.ConnectClicked(h.timeline.foldAllClicked)
@@ -144,6 +164,44 @@ func (h *conversationHost) applyLayout() {
 	}
 	h.showLayout(on)
 	h.showFoldAll()
+	h.reply.SetChatShown(on)
+}
+
+// updateQuickReply has the quick-reply bar follow the conversation shown:
+// its id first (a new one has no target until its model is built), then
+// its model, the actions of the card the reply goes to and its account.
+func (h *conversationHost) updateQuickReply() {
+	if h.reply == nil {
+		return
+	}
+	h.reply.Show(h.ctrl.thread)
+	if m, actions, account, ok := h.ctrl.quickReplyInput(); ok {
+		h.reply.Update(m, actions, account)
+	}
+}
+
+// useQuickReply makes ctrl the bar's controller (the smoke test's, over a
+// fake host) and brings it up to date with the conversation and layout.
+func (h *conversationHost) useQuickReply(ctrl *quickreply.Controller) {
+	h.reply = ctrl
+	h.replyBar.setController(ctrl)
+	ctrl.SetChatShown(h.chatShown)
+	h.updateQuickReply()
+}
+
+// chatColumnChanged: the chat's column changed its width (followSize), so
+// the pane did; the quick-reply bar's mode button follows it. followSize
+// runs from the scrolled window's adjustment, inside the page's
+// allocation, so the bar changes on the next idle, not in that pass.
+func (h *conversationHost) chatColumnChanged() {
+	if h.replyBar == nil {
+		return
+	}
+	glib.IdleAdd(func() {
+		if h.replyBar != nil {
+			h.replyBar.followWidth(h.page.Width())
+		}
+	})
 }
 
 // setFoldAll is what the timeline's Collapse All / Expand All offers now

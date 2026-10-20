@@ -670,6 +670,43 @@ a text je pryč) a řádek se vyprázdní až po skutečném otevření okna.
 | W2 | Windows App | `Reader/Conversation/ConversationQuickReplyBar.xaml(.cs)`, `ConversationView.xaml` řádek 2 (`Auto`, `Collapsed` mimo chat), `ComposePane` (`OwnHtml`), UI smoke rozšíření (`ConversationChatSmokeTests` přes devmail: napsat, Ctrl+Enter, bublina), docs `windows-port.md` §11.7, `windows/README.md` | `windows.yml` (build, testy, lint), revize kódu | Opus | W1, G1 |
 | C3 | Commit 3, push, CI; **R-B3** na Windows u vlastníka | | | orchestrátor | W2 |
 
+### 11.2.1 As built — GTK (G1)
+
+Řádek je poslední potomek `conversation_body` (`conversation_view.blp`
+`conversation_reply_bar`, skrytý mimo chat a při `Visible` vypnutém
+kontroleru, takže časová osa vyplní stránku). `window/quick_reply_bar.go`:
+nabídka režimu z Go nad akcemi `qr.mode` (radio, cíl `reply`/`reply-all`)
+a `qr.forward`; u Jiry místo tlačítka popisek *Komentovat* bez nabídky
+(jako macOS); ✦ je `MenuButton` vázaný týmž `Assistant.bindAssistantButton`
+(předpona `win`) jako ✦ lišty, takže panel, nabídka i viditelnost platí
+stejně. Klávesy v `EventControllerKey` ve fázi capture: Ctrl+Enter odešle
+(spotřebuje se vždy, jen při povoleném Odeslat volá `Send`), Escape dá
+klávesnici seznamu, jen když je namapovaný. Během odesílání pole drží
+klávesnici a zůstává editovatelné (brána psaní tak dál vypíná
+jednoklávesové zkratky), ale buffer zastaví `insert-text`
+a `delete-range`; tlačítka jsou necitlivá. Ikona bez popisku podle
+`convQuickReplyIconOnly(šířka stránky)`, přepočtená při změně šířky
+sloupce chatu (`followSize` → `chatColumnChanged`). Hostitel volá
+`Show`/`Update` při každé změně kontroleru
+(`conversationController.quickReplyInput`, port Swiftu) a `SetChatShown`
+v `applyLayout`. Smoke test vymění kontroler přes `useQuickReply` za jeden
+nad falešným hostitelem a ověřuje psaní, Ctrl+Enter → `draft.create`/
+`draft.save`/`message.send`, odmítnutou úpravu během odesílání, prázdný
+text, Odpovědět všem, Otevřít v okně, Přeposlat…, Escape a ✦.
+Ověřeno v kontejneru Fedora 42 (2026-10-20): `gtk.sh make build`, celá
+sada `test-ui`, smoke test, `make po` (jen nové odkazy `#:`) a `make lint`;
+jediná oprava byla v testu: `gtk.Button.Activate()` vyšle `clicked` až po
+250 ms stisku, takže test klepe `Emit("clicked")` jako ostatní smoke testy.
+Z nezávislé revize: tlačítka řádku mají `focus-on-click` vypnuté (klik na
+Odeslat by při znecitlivění tlačítka pustil klávesnici a brána psaní by
+zapnula jednoklávesové zkratky), nabídka režimu se staví znovu jen při
+změně nabízených režimů (přestavba zavírá otevřený popover), přepočet
+ikony bez popisku jde přes `glib.IdleAdd` (hlásí se z alokace), undo
+bufferu je během odesílání vypnuté a popisek Komentovat má ikonu akce
+Komentovat (`chat-message-new-symbolic`). Nechané: IME (preedit mimo
+buffer, jako panel asistenta) a změna id vlákna pod zobrazenou konverzací
+(text zůstane pod starým id).
+
 ### 11.3 Rizika
 
 - **Osiřelý koncept**: jediný `draft.save` je uvnitř Odeslat; po selhání

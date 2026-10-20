@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-20 10:58+0000\n"
+"POT-Creation-Date: 2026-10-20 14:11+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -1375,7 +1375,8 @@ msgid "Attaching %s"
 msgstr "Přiložení souboru %s"
 
 #: ui/internal/compose/pane_layout.go:42
-#: ui/internal/window/assistant_panel.go:452 ui/data/ui/compose.ui:65
+#: ui/internal/window/assistant_panel.go:452
+#: ui/internal/window/quick_reply_bar.go:220 ui/data/ui/compose.ui:65
 msgid "_Send"
 msgstr "_Odeslat"
 
@@ -1535,12 +1536,14 @@ msgstr "Komentovat"
 
 #: ui/internal/contextmenu/text.go:57 ui/internal/jira/compose.go:164
 #: ui/internal/board/text.go:374 ui/internal/window/conversation_card.go:293
-#: ui/data/ui/message_window.ui:44 ui/data/ui/window.ui:473
+#: ui/internal/window/quick_reply_bar.go:170 ui/data/ui/message_window.ui:44
+#: ui/data/ui/window.ui:473
 msgid "Reply"
 msgstr "Odpovědět"
 
 #: ui/internal/contextmenu/text.go:59
-#: ui/internal/window/conversation_card.go:294 ui/data/ui/message_window.ui:50
+#: ui/internal/window/conversation_card.go:294
+#: ui/internal/window/quick_reply_bar.go:168 ui/data/ui/message_window.ui:50
 #: ui/data/ui/window.ui:480
 msgid "Reply All"
 msgstr "Odpovědět všem"
@@ -7344,7 +7347,7 @@ msgstr "_Zkusit znovu"
 msgid "Add _Anyway"
 msgstr "Přidat _přesto"
 
-#: ui/data/ui/compose.ui:61
+#: ui/data/ui/compose.ui:61 ui/data/ui/conversation_view.ui:238
 msgid "Send (Ctrl+Enter)"
 msgstr "Odeslat (Ctrl+Enter)"
 
@@ -7448,7 +7451,7 @@ msgstr "Na střed"
 msgid "Right"
 msgstr "Vpravo"
 
-#: ui/data/ui/conversation_view.ui:157 ui/data/ui/embedded_window.ui:267
+#: ui/data/ui/conversation_view.ui:277 ui/data/ui/embedded_window.ui:267
 #: ui/data/ui/message_window.ui:507 ui/data/ui/window.ui:1018
 msgctxt "accessibility"
 msgid "Loading the message"
