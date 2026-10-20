@@ -73,9 +73,9 @@ using Malachi.App.Controls;
 using Malachi.App.Resources;
 using Malachi.App.WebViews;
 using Malachi.Core.Api;
+using Malachi.Core.Html;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
-using Malachi.Core.Html;
 using Malachi.Core.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -752,9 +752,24 @@ internal sealed partial class ConversationBubbleView : UserControl
         {
             return;
         }
+        var color = BubbleColor();
+        var brush = new LinearGradientBrush { StartPoint = new Windows.Foundation.Point(0, 0), EndPoint = new Windows.Foundation.Point(0, 1) };
+        brush.GradientStops.Add(new GradientStop { Color = Windows.UI.Color.FromArgb(0, color.R, color.G, color.B), Offset = 0.45 });
+        brush.GradientStops.Add(new GradientStop { Color = color, Offset = 1 });
+        fade.Children.Add(new Microsoft.UI.Xaml.Shapes.Rectangle { Fill = brush, IsHitTestVisible = false });
+    }
+
+    // The bubble's colour, opaque: its fill and its tint over an opaque
+    // base of the theme (the pane's solid background). The fade ends in it
+    // and the web view paints it under the document (Backdrop).
+    private Windows.UI.Color BubbleColor()
+    {
         var dark = ActualTheme == ElementTheme.Dark;
-        var under = dark ? Windows.UI.Color.FromArgb(255, 0x20, 0x20, 0x20) : Windows.UI.Color.FromArgb(255, 0xF3, 0xF3, 0xF3);
-        var color = under;
+        var color = dark ? Windows.UI.Color.FromArgb(255, 0x20, 0x20, 0x20) : Windows.UI.Color.FromArgb(255, 0xF3, 0xF3, 0xF3);
+        if (Content is not Border outer)
+        {
+            return color;
+        }
         if (outer.Background is SolidColorBrush fill)
         {
             color = Over(color, fill.Color, fill.Opacity);
@@ -763,10 +778,7 @@ internal sealed partial class ConversationBubbleView : UserControl
         {
             color = Over(color, tint.Color, tint.Opacity);
         }
-        var brush = new LinearGradientBrush { StartPoint = new Windows.Foundation.Point(0, 0), EndPoint = new Windows.Foundation.Point(0, 1) };
-        brush.GradientStops.Add(new GradientStop { Color = Windows.UI.Color.FromArgb(0, color.R, color.G, color.B), Offset = 0.45 });
-        brush.GradientStops.Add(new GradientStop { Color = color, Offset = 1 });
-        fade.Children.Add(new Microsoft.UI.Xaml.Shapes.Rectangle { Fill = brush, IsHitTestVisible = false });
+        return color;
     }
 
     // over drawn at opacity over an opaque under.
@@ -840,6 +852,7 @@ internal sealed partial class ConversationBubbleView : UserControl
             gov.Reset();
         }
         web.Palette = Palette();
+        web.Backdrop = Accessibility.HighContrast ? null : BubbleColor();
         web.Load(h.Value, reload);
         webDoc = h.Value;
         reload = false;

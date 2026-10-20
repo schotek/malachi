@@ -86,6 +86,10 @@ public abstract partial class HardenedWebView : UserControl
     // view: the bubble's own background shows through), else white.
     private readonly bool transparent;
 
+    // The colour a transparent view paints under its document instead
+    // (Backdrop), or null.
+    private Windows.UI.Color? backdrop;
+
     /// <summary>A view of <paramref name="kind"/>, not yet initialised (that starts once it is loaded).</summary>
     private protected HardenedWebView(WebViewKind kind)
         : this(kind, transparent: false)
@@ -142,6 +146,28 @@ public abstract partial class HardenedWebView : UserControl
     /// browser process crash). Callers never navigate it.
     /// </summary>
     public WebView2 Web { get; private set; }
+
+    /// <summary>
+    /// The opaque colour a transparent view (a chat bubble's) paints under
+    /// its document, or null for transparent: WinUI's WebView2 does not
+    /// compose its transparent pixels with the XAML under it (they show the
+    /// window's background, a grey slab in the bubble), so the bubble hands
+    /// its own colour, flattened over the pane. Kept across a renderer
+    /// replacement; a white view ignores it.
+    /// </summary>
+    public Windows.UI.Color? Backdrop
+    {
+        get => backdrop;
+        set
+        {
+            if (!transparent || backdrop == value)
+            {
+                return;
+            }
+            backdrop = value;
+            Web.DefaultBackgroundColor = value ?? Colors.Transparent;
+        }
+    }
 
     /// <summary>The initialised core, or null (not yet, unavailable, closed).</summary>
     public CoreWebView2? CoreWebView => closed ? null : core;
@@ -375,7 +401,7 @@ public abstract partial class HardenedWebView : UserControl
             // DefaultBackgroundColor when it creates it, before the first
             // navigation; every renderer replacement makes the control anew
             // with the same colour).
-            DefaultBackgroundColor = transparent ? Colors.Transparent : Colors.White,
+            DefaultBackgroundColor = transparent ? backdrop ?? Colors.Transparent : Colors.White,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
         };
