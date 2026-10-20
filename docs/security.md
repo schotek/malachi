@@ -316,8 +316,9 @@ for WKWebView, since nothing of the WebKitGTK configuration carries over:
   `Board/BoardConversationBlock.swift`) is the same: the plain `text` of
   `board.get` through `stringValue`, not selectable, no web view, no links;
   a double click opens the message window.
-  The quick-reply bar under the chat (`MessageView/ConversationQuickReplyBar.swift`)
-  is plain text both ways: its field is a plain-text `NSTextView` (no rich
+  The quick-reply bar of the reading pane, under the chat and under a single
+  message (`MessageView/ConversationQuickReplyBar.swift`, owned by
+  `ReadingPaneViewController`) is plain text both ways: its field is a plain-text `NSTextView` (no rich
   text, pictures, data detectors or link detection), and what the user
   types is their own text, never mail, which Core's
   `Conversation.quickReplyHTML` turns into paragraphs and line breaks with

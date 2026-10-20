@@ -193,8 +193,8 @@ func newShown(h *fakeHost) (*Controller, *int) {
 	c := New(h)
 	n := 0
 	c.OnChange = func() { n++ }
-	c.SetChatShown(true)
-	c.Show("t1")
+	c.SetShown(true)
+	c.Show(mailAcc.ID, "t1")
 	c.Update(model("t1", mailAcc.ID), mailActions, mailAcc)
 	return c, &n
 }
@@ -244,11 +244,11 @@ func TestVisibility(t *testing.T) {
 	if c.State().Visible {
 		t.Error("visible in the timeline")
 	}
-	c.SetChatShown(true)
+	c.SetShown(true)
 	if s := c.State(); !s.Visible || s.Thread != "t1" {
 		t.Errorf("Update did not show t1: %+v", s)
 	}
-	c.Show("t2")
+	c.Show(mailAcc.ID, "t2")
 	if s := c.State(); s.Visible || s.Target.Message.ID != "" {
 		t.Errorf("a target before Update: %+v", s)
 	}
@@ -256,7 +256,7 @@ func TestVisibility(t *testing.T) {
 	if c.State().Visible {
 		t.Error("visible without a target")
 	}
-	c.Show("")
+	c.Show("", "")
 	c.SetText("lost")
 	if s := c.State(); s.Visible || s.Text != "" || len(c.threads) != 0 {
 		t.Errorf("no conversation: %+v %v", s, c.threads)
@@ -283,8 +283,8 @@ func TestOnChange(t *testing.T) {
 	c.SetMode(conversation.QuickReplyAll)
 	c.SetMode(conversation.QuickReplyAll)
 	c.SetMode(conversation.QuickForward) // ignored
-	c.SetChatShown(true)                 // no change
-	c.Show("t1")                         // no change
+	c.SetShown(true)                     // no change
+	c.Show(mailAcc.ID, "t1")             // no change
 	if got := *n - before; got != 2 {
 		t.Errorf("OnChange fired %d times, want 2", got)
 	}
@@ -295,14 +295,14 @@ func TestTextAndModePerThread(t *testing.T) {
 	c.SetText("for t1")
 	c.SetMode(conversation.QuickReplyAll)
 
-	c.Show("t2")
+	c.Show(mailAcc.ID, "t2")
 	c.Update(model("t2", mailAcc.ID), mailActions, mailAcc)
 	if s := c.State(); s.Text != "" || s.Mode != conversation.QuickReply {
 		t.Fatalf("t2 starts with %+v", s)
 	}
 	c.SetText("for t2")
 
-	c.Show("t1")
+	c.Show(mailAcc.ID, "t1")
 	c.Update(model("t1", mailAcc.ID), mailActions, mailAcc)
 	if s := c.State(); s.Text != "for t1" || s.Mode != conversation.QuickReplyAll {
 		t.Errorf("t1 back: %+v", s)
@@ -317,18 +317,18 @@ func TestTextAndModePerThread(t *testing.T) {
 	if s := c.State(); s.Mode != conversation.QuickReplyAll {
 		t.Errorf("the chosen mode was forgotten: %v", s.Mode)
 	}
-	c.Show("t2")
+	c.Show(mailAcc.ID, "t2")
 	if s := c.State(); s.Text != "for t2" {
 		t.Errorf("t2 back: %+v", s)
 	}
 	// An emptied conversation is forgotten.
 	c.SetText("")
-	if _, ok := c.threads["t2"]; ok {
+	if _, ok := c.threads[key{mailAcc.ID, "t2"}]; ok {
 		t.Error("t2 kept with nothing in it")
 	}
 	// Choosing the mode of the zero state keeps nothing either.
 	c.SetMode(conversation.QuickReply)
-	if _, ok := c.threads["t2"]; ok {
+	if _, ok := c.threads[key{mailAcc.ID, "t2"}]; ok {
 		t.Error("t2 kept for the default mode")
 	}
 }
@@ -411,7 +411,7 @@ func TestSendComment(t *testing.T) {
 	h.results[api.MethodDraftCreate] = api.DraftCreateResult{Draft: tmpl}
 	h.results[api.MethodDraftSave] = api.DraftSaveResult{DraftID: "d1", Version: 1}
 	c := New(h)
-	c.SetChatShown(true)
+	c.SetShown(true)
 	c.Update(model("t1", jiraAcc.ID), commentActions, jiraAcc)
 	c.SetText("Fixed in 1.2\n\nThanks")
 	c.Send()
@@ -478,9 +478,9 @@ func TestSendGuards(t *testing.T) {
 	c.SetText(" \n ")
 	c.Send()
 	c.SetText("text")
-	c.SetChatShown(false)
+	c.SetShown(false)
 	c.Send()
-	c.SetChatShown(true)
+	c.SetShown(true)
 	c.Update(model("t1", mailAcc.ID), capabilities.Actions{}, mailAcc)
 	c.Send()
 	if len(h.log) != 0 || len(h.methods()) != 0 {
@@ -498,25 +498,25 @@ func TestSendingPerThreadAcrossASwitch(t *testing.T) {
 	c.SetText("to t1")
 	c.Send()
 
-	c.Show("t2")
+	c.Show(mailAcc.ID, "t2")
 	c.Update(model("t2", mailAcc.ID), mailActions, mailAcc)
 	if s := c.State(); s.Sending || s.Text != "" {
 		t.Fatalf("t2 sending: %+v", s)
 	}
 	c.SetText("to t2")
 	c.Send() // t2 sends on its own
-	c.Show("t1")
+	c.Show(mailAcc.ID, "t1")
 	if s := c.State(); !s.Sending {
 		t.Fatal("t1 not sending")
 	}
-	c.Show("t2")
+	c.Show(mailAcc.ID, "t2")
 	close(gate)
 	h.drain(t)
 	h.drain(t)
 	if s := c.State(); s.Sending || s.Text != "" {
 		t.Errorf("t2 after: %+v", s)
 	}
-	c.Show("t1")
+	c.Show(mailAcc.ID, "t1")
 	if s := c.State(); s.Sending || s.Text != "" {
 		t.Errorf("t1 after: %+v", s)
 	}
@@ -533,7 +533,7 @@ func TestFailureAfterASwitch(t *testing.T) {
 	c, _ := newShown(h)
 	c.SetText("to t1")
 	c.Send()
-	c.Show("t2")
+	c.Show(mailAcc.ID, "t2")
 	c.Update(model("t2", mailAcc.ID), mailActions, mailAcc)
 	c.SetText("to t2")
 	h.beforeDone[0]() // the download ends while t2 is shown
@@ -544,7 +544,7 @@ func TestFailureAfterASwitch(t *testing.T) {
 	if s := c.State(); s.Text != "to t2" || s.Sending {
 		t.Errorf("t2: %+v", s)
 	}
-	c.Show("t1")
+	c.Show(mailAcc.ID, "t1")
 	if s := c.State(); s.Text != "to t1" || s.Sending || len(h.failed) != 1 {
 		t.Errorf("t1: %+v failed %v", s, h.failed)
 	}
@@ -601,14 +601,14 @@ func TestOpenWindowAndForward(t *testing.T) {
 	}
 
 	// Opened after the conversation changed: it clears its own text only.
-	c.Show("t2")
+	c.Show(mailAcc.ID, "t2")
 	c.Update(model("t2", mailAcc.ID), mailActions, mailAcc)
 	c.SetText("t2 text")
 	o.opened()
 	if s := c.State(); s.Text != "t2 text" {
 		t.Errorf("t2: %+v", s)
 	}
-	c.Show("t1")
+	c.Show(mailAcc.ID, "t1")
 	if s := c.State(); s.Text != "" {
 		t.Errorf("t1: %+v", s)
 	}
@@ -629,7 +629,7 @@ func TestOpenGuards(t *testing.T) {
 	c := New(h)
 	c.Update(model("t1", mailAcc.ID), mailActions, mailAcc)
 	c.OpenWindow() // timeline: hidden
-	c.SetChatShown(true)
+	c.SetShown(true)
 	c.Update(model("t1", mailAcc.ID), capabilities.Actions{Reply: true}, mailAcc)
 	c.Forward() // the account does not forward
 	if len(h.opens) != 0 {
@@ -651,5 +651,265 @@ func TestOpenGuards(t *testing.T) {
 	c.OpenWindow()
 	if len(h.opens) != 1 || h.opens[0].mode != conversation.QuickReply {
 		t.Errorf("comment %v", h.opens)
+	}
+}
+
+// single is message id of thread t of the mail account shown alone.
+func single(id string, t api.ThreadID, mine bool) conversation.Model {
+	return conversation.SingleModel(api.MessageSummary{
+		ID: api.MessageID(id), AccountID: mailAcc.ID, ThreadID: t,
+		From: []api.Address{{Name: "Jana " + id, Address: "jana@example.org"}},
+	}, mine)
+}
+
+// showSingle is what the host does for the page of a single message.
+func showSingle(c *Controller, m conversation.Model) {
+	c.Show(mailAcc.ID, m.Thread)
+	c.Update(m, mailActions, mailAcc)
+	c.SetShown(true)
+}
+
+// The page of a single message (docs/plans/chat-view.md §12): the bar
+// answers the message shown, the user's own too, and Send goes to it.
+func TestSingleMessage(t *testing.T) {
+	h := mailHost()
+	c := New(h)
+	showSingle(c, single("m7", "t1", false))
+	s := c.State()
+	if !s.Visible || s.Thread != "t1" || s.Target.Message.ID != "m7" || s.Target.Sender != "Jana m7" || s.Comment {
+		t.Fatalf("single: %+v", s)
+	}
+	if len(s.Modes) != 3 {
+		t.Errorf("modes %v", s.Modes)
+	}
+	c.SetText("Thanks")
+	c.Send()
+	h.drain(t)
+	if p, ok := h.params(api.MethodDraftCreate).(api.DraftCreateParams); !ok || p.MessageID != "m7" || p.Mode != api.ComposeReply || p.AccountID != mailAcc.ID {
+		t.Errorf("draft.create %+v", h.params(api.MethodDraftCreate))
+	}
+	if len(h.sent) != 1 || c.State().Text != "" {
+		t.Errorf("sent %v, text %q", h.sent, c.State().Text)
+	}
+
+	// The user's own message (Sent): a reply to it.
+	showSingle(c, single("s1", "t2", true))
+	if s := c.State(); !s.Visible || s.Target.Message.ID != "s1" || !s.Target.Mine {
+		t.Errorf("own: %+v", s)
+	}
+
+	// An issue's event alone has no target: hidden whatever the host says.
+	ev := conversation.SingleModel(api.MessageSummary{ID: "e1", AccountID: jiraAcc.ID, ThreadID: "tj",
+		Issue: &api.MessageIssue{Item: api.IssueItemEvent}}, false)
+	c.Show(jiraAcc.ID, ev.Thread)
+	c.Update(ev, commentActions, jiraAcc)
+	if s := c.State(); s.Visible {
+		t.Errorf("event: %+v", s)
+	}
+	// An issue's comment: a comment.
+	cm := conversation.SingleModel(api.MessageSummary{ID: "c1", AccountID: jiraAcc.ID, ThreadID: "tj",
+		Issue: &api.MessageIssue{Item: api.IssueItemComment}}, false)
+	c.Update(cm, commentActions, jiraAcc)
+	if s := c.State(); !s.Visible || !s.Comment || s.Target.Message.ID != "c1" {
+		t.Errorf("comment: %+v", s)
+	}
+}
+
+// SetShown alone hides and shows the bar; what was typed stays.
+func TestSetShown(t *testing.T) {
+	c := New(newFakeHost())
+	n := 0
+	c.OnChange = func() { n++ }
+	showSingle(c, single("m1", "t1", false))
+	c.SetText("draft")
+	before := n
+	c.SetShown(false)
+	if s := c.State(); s.Visible || s.Text != "draft" {
+		t.Errorf("hidden: %+v", s)
+	}
+	c.SetShown(false) // no change
+	c.SetShown(true)
+	if s := c.State(); !s.Visible || s.Text != "draft" {
+		t.Errorf("shown again: %+v", s)
+	}
+	if got := n - before; got != 2 {
+		t.Errorf("OnChange fired %d times, want 2", got)
+	}
+}
+
+// The text typed under a single message is its thread's: it stays through
+// the conversation of the same thread in the timeline (no bar) and in the
+// chat (the bar with the text), back to another message of the thread, and
+// through a message of another thread.
+func TestTextKeptAcrossPages(t *testing.T) {
+	c := New(newFakeHost())
+	showSingle(c, single("m2", "t1", false))
+	c.SetText("half a reply")
+	c.SetMode(conversation.QuickReplyAll)
+
+	// The grouped list: the conversation t1, in the timeline.
+	c.Show(mailAcc.ID, "t1")
+	c.Update(model("t1", mailAcc.ID), mailActions, mailAcc)
+	c.SetShown(false)
+	if s := c.State(); s.Visible || s.Text != "half a reply" {
+		t.Errorf("timeline: %+v", s)
+	}
+	// The chat layout.
+	c.SetShown(true)
+	if s := c.State(); !s.Visible || s.Text != "half a reply" || s.Mode != conversation.QuickReplyAll || s.Target.Message.ID != "m2" {
+		t.Errorf("chat: %+v", s)
+	}
+	// The timeline again, then the flat list with m1 of t1 alone.
+	c.SetShown(false)
+	showSingle(c, single("m1", "t1", false))
+	if s := c.State(); !s.Visible || s.Text != "half a reply" || s.Target.Message.ID != "m1" {
+		t.Errorf("m1: %+v", s)
+	}
+	// A message of another thread starts empty; back to t1 the text is there.
+	showSingle(c, single("x1", "t9", false))
+	if s := c.State(); s.Text != "" || s.Mode != conversation.QuickReply {
+		t.Errorf("t9: %+v", s)
+	}
+	showSingle(c, single("m2", "t1", false))
+	if s := c.State(); s.Text != "half a reply" || s.Mode != conversation.QuickReplyAll {
+		t.Errorf("t1 back: %+v", s)
+	}
+}
+
+// The Outbox and Drafts have no bar: the host says SetShown(false) for a
+// message there, and nothing sends or opens; the text of its thread stays.
+func TestOutboxAndDraftsHaveNoBar(t *testing.T) {
+	h := mailHost()
+	c := New(h)
+	showSingle(c, single("m1", "t1", false))
+	c.SetText("kept")
+	// A queued message of the same thread in the Outbox.
+	c.Show(mailAcc.ID, "t1")
+	c.Update(single("o1", "t1", true), mailActions, mailAcc)
+	c.SetShown(false)
+	c.Send()
+	c.OpenWindow()
+	c.Forward()
+	if s := c.State(); s.Visible || s.Text != "kept" {
+		t.Errorf("outbox: %+v", s)
+	}
+	if len(h.log) != 0 || len(h.methods()) != 0 || len(h.opens) != 0 {
+		t.Errorf("acted while hidden: %v %v %v", h.log, h.methods(), h.opens)
+	}
+}
+
+// A Send on its way when the host hides the bar (the user selected the
+// empty page or several messages) ends as usual: the text clears, the
+// toast says so.
+func TestSendEndsWhileHidden(t *testing.T) {
+	h := mailHost()
+	gate := make(chan struct{})
+	h.gate[api.MethodDraftCreate] = gate
+	c := New(h)
+	showSingle(c, single("m1", "t1", false))
+	c.SetText("go")
+	c.Send()
+	c.Show("", "")
+	c.SetShown(false)
+	close(gate)
+	h.drain(t)
+	if len(h.sent) != 1 || len(h.failed) != 0 {
+		t.Fatalf("sent %v failed %v", h.sent, h.failed)
+	}
+	showSingle(c, single("m1", "t1", false))
+	if s := c.State(); s.Text != "" || s.Sending || !s.Visible {
+		t.Errorf("after: %+v", s)
+	}
+}
+
+// A thread id is unique only within its account (an issue's jira:<id> of
+// two sites, a search over all accounts): the same id of two accounts has
+// its own text, mode and Send, and a Send ends in the account it started
+// in.
+func TestSameThreadOfTwoAccounts(t *testing.T) {
+	other := api.Account{ID: "acc2", Capabilities: api.MailCapabilities}
+	h := mailHost()
+	gate := make(chan struct{})
+	h.gate[api.MethodDraftCreate] = gate
+	c, _ := newShown(h)
+	c.SetText("for acc")
+	c.SetMode(conversation.QuickReplyAll)
+
+	c.Show(other.ID, "t1")
+	c.Update(model("t1", other.ID), mailActions, other)
+	s := c.State()
+	if s.Account != other.ID || s.Thread != "t1" || s.Text != "" || s.Mode != conversation.QuickReply || s.Sending {
+		t.Fatalf("acc2 starts with %+v", s)
+	}
+	c.SetText("for acc2")
+	c.Send()
+	if !c.State().Sending {
+		t.Fatal("acc2 not sending")
+	}
+
+	c.Show(mailAcc.ID, "t1")
+	c.Update(model("t1", mailAcc.ID), mailActions, mailAcc)
+	if s := c.State(); s.Account != mailAcc.ID || s.Text != "for acc" || s.Mode != conversation.QuickReplyAll || s.Sending {
+		t.Errorf("acc back: %+v", s)
+	}
+	close(gate)
+	h.drain(t)
+	if p, ok := h.params(api.MethodDraftCreate).(api.DraftCreateParams); !ok || p.AccountID != other.ID {
+		t.Errorf("draft.create %+v", h.params(api.MethodDraftCreate))
+	}
+	if s := c.State(); s.Text != "for acc" || s.Sending {
+		t.Errorf("acc after acc2's send: %+v", s)
+	}
+	c.Show(other.ID, "t1")
+	c.Update(model("t1", other.ID), mailActions, other)
+	if s := c.State(); s.Text != "" || s.Sending {
+		t.Errorf("acc2 after its send: %+v", s)
+	}
+	if _, ok := c.threads[key{other.ID, "t1"}]; ok {
+		t.Error("acc2 kept after its send")
+	}
+}
+
+// A conversation shown without its account takes the account of the
+// first Update; one shown with its account keeps it.
+func TestUpdateAdoptsTheAccount(t *testing.T) {
+	c := New(newFakeHost())
+	c.SetShown(true)
+	c.Update(model("t1", mailAcc.ID), mailActions, mailAcc)
+	if s := c.State(); s.Account != mailAcc.ID || s.Thread != "t1" {
+		t.Errorf("adopted %+v", s)
+	}
+	c.Show("", "t2")
+	c.Update(model("t2", mailAcc.ID), mailActions, mailAcc)
+	if s := c.State(); s.Account != mailAcc.ID || s.Thread != "t2" {
+		t.Errorf("adopted the account: %+v", s)
+	}
+	c.Show(jiraAcc.ID, "t3")
+	c.Update(model("t3", mailAcc.ID), mailActions, mailAcc)
+	if s := c.State(); s.Account != jiraAcc.ID {
+		t.Errorf("replaced the account: %+v", s)
+	}
+	c.Show(jiraAcc.ID, "")
+	if s := c.State(); s.Account != "" || s.Thread != "" {
+		t.Errorf("a thread \"\" is none: %+v", s)
+	}
+}
+
+// While a conversation's members are on their way the host gives the
+// empty model: the bar hides (it must not answer what was shown before,
+// such as the single message of the same thread) and the text stays.
+func TestEmptyModelHidesAndKeepsText(t *testing.T) {
+	c, _ := newShown(newFakeHost())
+	c.SetText("draft")
+	c.Update(conversation.Model{}, capabilities.Actions{}, api.Account{})
+	s := c.State()
+	if s.Visible || s.Target.Message.ID != "" || s.Text != "draft" || s.Thread != "t1" || s.Account != mailAcc.ID {
+		t.Fatalf("empty model: %+v", s)
+	}
+	c.Send()
+	c.OpenWindow()
+	c.Update(model("t1", mailAcc.ID), mailActions, mailAcc)
+	if s := c.State(); !s.Visible || s.Text != "draft" || s.Target.Message.ID != "m2" {
+		t.Errorf("model back: %+v", s)
 	}
 }

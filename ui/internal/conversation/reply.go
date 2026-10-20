@@ -212,3 +212,32 @@ func QuickReplyForwardLabel(tr Translator) string {
 	// TRANSLATORS: an item of the quick-reply bar's mode menu; opens the compose window with the message forwarded.
 	return tr.T("Forward…")
 }
+
+// SingleModel is the model of one message for the quick-reply bar under
+// the reading pane's page of a single message (docs/plans/chat-view.md
+// §12, S2, S4): the bar answers that message, whoever wrote it (in Sent a
+// reply to the user's own message), so Update takes the same model shape
+// as for a conversation and QuickReplyTarget needs no rule of its own. The
+// model's Thread is the message's (the bar keeps the typed text per
+// thread, shared with the message's conversation); its one item is an
+// ItemMessage with the cleaned sender (Item.Sender, which names the target
+// in the mode button's tooltip) and Mine as the caller says (the rule of
+// Item.Mine: the window decides it as for a conversation's member). An event of an issue (a row without a
+// body) is an ItemEvent without its sentences, so that the bar finds no
+// target and hides; a message without an id makes an empty model. The
+// model is for the bar only: no issue card, nothing to mark read, never
+// rendered.
+func SingleModel(s api.MessageSummary, mine bool) Model {
+	m := Model{Thread: s.ThreadID, ScrollTo: -1}
+	if s.ID == "" {
+		return m
+	}
+	it := Item{Kind: ItemMessage, Message: s, Sender: sender(s.From), Mine: mine,
+		Unread: !hasFlag(s.Flags, api.FlagSeen)}
+	if s.Issue != nil && s.Issue.Item == api.IssueItemEvent { // jira.IsEvent
+		it.Kind, it.Unread = ItemEvent, false
+	}
+	m.Items = []Item{it}
+	m.ScrollTo = 0
+	return m
+}

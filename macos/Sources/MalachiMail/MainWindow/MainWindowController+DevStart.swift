@@ -63,6 +63,13 @@ import MalachiCore
 //   Display group and each section, and closes Settings;
 //   `prefs-integrations` opens Settings → Integrations, dumps its
 //   connected rows and catalogue rows, and closes Settings.
+//   `quick-reply` shows the chat's quick-reply bar alone in a window over a
+//   made-up conversation (`DevelopmentQuickReply`); `quick-reply-message`
+//   has the main window's reading pane show a made-up single message with
+//   the bar under it (a made-up mail account, a host that sends nothing)
+//   and dumps the pane, the reader and the bar wide, narrow, for the user's
+//   own message, for an issue's event (no bar), in the Outbox (no bar) and
+//   with nothing selected (`DevelopmentQuickReplyMessage`).
 //   `crm-dialog` and `eway-wizard`: MainWindowController+DevStartCRM.swift.
 //   Each prints
 //   `LAYOUT:` lines and a `LAYOUT: shot <step> window <n>` line naming
@@ -170,6 +177,10 @@ extension MainWindowController {
         }
         if step == "quick-reply" {
             DevelopmentQuickReply.run()
+            return
+        }
+        if step == "quick-reply-message" {
+            DevelopmentQuickReplyMessage.run(in: self)
             return
         }
         if DevelopmentCalendar.step(step, in: self) {
@@ -1423,6 +1434,122 @@ private final class FlippedStack: NSStackView {
     override var isFlipped: Bool { true }
 }
 
+/// DEVELOPMENT AID for `quick-reply-message`: the main window's reading
+/// pane (found in its views) shows a made-up message on its single-message
+/// page and the quick-reply bar under it, fed as `show(_:)` feeds it but
+/// with a made-up mail account (no daemon knows one), and dumps the pane's,
+/// the reader's and the bar's frames, whether the reader ends at the bar's
+/// top, and the mode button's title and tooltip: wide, narrow (the icon
+/// alone), the user's own message (Sent), an issue's event (no target, no
+/// bar), the Outbox (no place of the bar) and nothing selected. Send and
+/// Open in a Window go to the window's real actions, so nothing is clicked.
+@MainActor
+private enum DevelopmentQuickReplyMessage {
+    static func run(in main: MainWindowController) {
+        main.setMode(.mail)
+        guard let window = main.window, let content = window.contentView, let pane = find(in: content) else {
+            developmentPrint("LAYOUT: quick-reply-message no reading pane")
+            return
+        }
+        let mail = Account(
+            id: "dev", config: AccountConfig(name: "Work", email: "dev@example.invalid"), enabled: true,
+            state: SyncState(accountId: "dev", status: .idle), capabilities: API.mailCapabilities)
+        let jira = Account(
+            id: "devj", config: AccountConfig(name: "Jira", email: "dev@example.invalid", kind: .jira), enabled: true,
+            state: SyncState(accountId: "devj", status: .idle), capabilities: [.comment, .forward, .transition])
+        func message(_ id: String, from: Address, issue: MessageIssue? = nil, account: AccountID = "dev") -> MessageSummary {
+            MessageSummary(
+                id: MessageID(id), accountId: account, folderId: "dev-inbox", threadId: "dev-t1", from: [from],
+                to: [], subject: "Faktura za říjen", date: .goZero, snippet: "", flags: [.seen], hasAttachments: false,
+                size: 0, issue: issue)
+        }
+        func feed(_ s: MessageSummary, _ acc: Account, shown: Bool) {
+            pane.showSingleReply(
+                Conversation.singleModel(s, mine: Conversation.isMine(s, account: acc)),
+                actions: Conversation.cardActions(acc, s, composeAccount: true), account: acc, shown: shown)
+        }
+        let size = window.frame.size
+        let lucie = message("dev-m1", from: Address(name: "Lucie Horáková", address: "lucie@example.invalid"))
+        // The page of the message (its headers; the body's fetch fails
+        // without a daemon), then the bar as `show(_:)` feeds it.
+        pane.reader.show(lucie)
+        feed(lucie, mail, shown: true)
+        measure("single", window, pane)
+
+        window.setContentSize(NSSize(width: 900, height: size.height))
+        measure("narrow", window, pane)
+        window.setFrame(NSRect(origin: window.frame.origin, size: size), display: true)
+
+        let own = message("dev-s1", from: Address(name: "Me", address: "dev@example.invalid"))
+        feed(own, mail, shown: true)
+        measure("own", window, pane)
+
+        let issue = IssueInfo(key: "DEV-1", url: "", summary: "", status: "")
+        let event = message("dev-e1", from: Address(name: "Jira", address: ""), issue: MessageIssue(
+            info: issue, item: .event, changes: [IssueChange(field: .status, from: "Open", to: "Done")]),
+            account: "devj")
+        feed(event, jira, shown: true)
+        measure("event", window, pane)
+        let comment = message("dev-c1", from: Address(name: "Petr", address: ""), issue: MessageIssue(
+            info: issue, item: .comment), account: "devj")
+        feed(comment, jira, shown: true)
+        measure("comment", window, pane)
+
+        feed(lucie, mail, shown: false)
+        measure("outbox", window, pane)
+
+        pane.show(nil)
+        measure("none", window, pane)
+    }
+
+    private static func find(in v: NSView) -> ReadingPaneViewController? {
+        if let pane = v.nextResponder as? ReadingPaneViewController {
+            return pane
+        }
+        for sub in v.subviews {
+            if let pane = find(in: sub) { return pane }
+        }
+        return nil
+    }
+
+    private static func measure(_ what: String, _ window: NSWindow, _ pane: ReadingPaneViewController) {
+        window.contentView?.layoutSubtreeIfNeeded()
+        // The mode button's icon-alone flip lands on the next turn of the
+        // run loop (`viewDidLayout`).
+        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        window.contentView?.layoutSubtreeIfNeeded()
+        let bar = pane.replyBar.view
+        let reader = pane.reader.view
+        var line = "LAYOUT: quick-reply-message \(what): pane \(NSStringFromRect(pane.view.frame))"
+            + " reader \(NSStringFromRect(reader.frame)) bar \(NSStringFromRect(bar.frame)) hidden \(bar.isHidden)"
+            + " reader ends at bar \(reader.frame.minY == bar.frame.maxY) visible \(pane.quickReply.state.visible)"
+            + " target '\(pane.quickReply.state.target?.message?.id.rawValue ?? "")'"
+        func walk(_ v: NSView) {
+            for sub in v.subviews where !sub.isHidden {
+                if let b = sub as? NSPopUpButton {
+                    line += "\n    mode '\(b.itemTitle(at: 0))' tip '\(b.toolTip ?? "")' \(NSStringFromRect(b.frame))"
+                    continue
+                }
+                if let f = sub as? NSTextField, !f.isEditable {
+                    line += "\n    label '\(f.stringValue)'"
+                }
+                if let input = sub as? AssistantInputView {
+                    line += "\n    field '\(input.placeholderText)' \(NSStringFromRect(input.frame))"
+                    continue
+                }
+                walk(sub)
+            }
+        }
+        if !bar.isHidden {
+            walk(bar)
+        }
+        if window.contentView?.hasAmbiguousLayout == true {
+            line += "\n    AMBIGUOUS"
+        }
+        developmentPrint(line)
+    }
+}
+
 /// DEVELOPMENT AID for `quick-reply`: the chat's quick-reply bar alone in a
 /// window of its own, over a made-up conversation and a host that sends
 /// nothing, measured wide, narrow (the mode button's icon alone), with
@@ -1474,7 +1601,7 @@ private enum DevelopmentQuickReply {
             date: .goZero, snippet: "", flags: [], hasAttachments: false, size: 0))
         it.sender = "Jana Nováková"
         m.items = [it]
-        controller.setChatShown(true)
+        controller.setShown(true)
         let mailAccount = Account(
             id: "dev", config: AccountConfig(name: "Work", email: "dev@example.invalid"), enabled: true,
             state: SyncState(accountId: "dev", status: .idle), capabilities: API.mailCapabilities)
@@ -1508,7 +1635,7 @@ private enum DevelopmentQuickReply {
         bar.assistantShown = false
         measure("comment", window, bar)
 
-        controller.setChatShown(false)
+        controller.setShown(false)
         measure("hidden", window, bar)
         window.close()
         kept = nil

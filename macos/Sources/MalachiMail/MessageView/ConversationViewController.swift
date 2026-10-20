@@ -87,6 +87,9 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
     var onNear: (@MainActor (Set<MessageID>) -> Void)?
 
     private let scroll = ConversationScrollView()
+    /// What takes the keyboard while the timeline is shown and the
+    /// quick-reply bar hides (`ReadingPaneViewController.keyboardTarget`).
+    var keyboardTarget: NSView { scroll }
     private let clamp: ClampView
     private let stack = FillStackView()
     /// What the button offers now.
@@ -901,6 +904,14 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
 @MainActor
 final class ConversationScrollView: NSScrollView {
     var onUserScroll: (@MainActor () -> Void)?
+
+    /// It can hold the keyboard (the reading pane gives it the keyboard
+    /// when the quick-reply bar hides under the user's hands:
+    /// `ReadingPaneViewController.keyboardTarget`), so that the keyboard
+    /// never stays in the hidden field; it is no stop of the key-view loop
+    /// (Tab goes to the cards' controls as before).
+    override var acceptsFirstResponder: Bool { true }
+    override var canBecomeKeyView: Bool { false }
 
     override func scrollWheel(with event: NSEvent) {
         onUserScroll?()

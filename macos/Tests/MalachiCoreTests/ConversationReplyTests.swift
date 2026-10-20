@@ -55,6 +55,21 @@ private func mailThread(_ count: Int) -> ThreadSummary {
         folderIds: [])
 }
 
+private let issueInfo = IssueInfo(key: "ITSD-42", url: "", summary: "Printer jams", status: "In Progress")
+
+/// A member of the issue ITSD-42 (thread tj of account j1), of item `item`.
+private func issueMsg(_ id: String, _ min: Int, _ seen: Bool, _ item: MessageIssue) -> MessageSummary {
+    MessageSummary(
+        id: MessageID(id), accountId: "j1", folderId: "space-itsd", threadId: "tj",
+        from: [Address(name: "Jana Dvořáková", address: "")], subject: "ITSD-42: Printer jams",
+        date: at(min), snippet: "", flags: seen ? [.seen] : [], hasAttachments: false, size: 0, issue: item)
+}
+
+private func statusEvent(_ id: String, _ min: Int, _ from: String, _ to: String) -> MessageSummary {
+    issueMsg(id, min, false, MessageIssue(
+        info: issueInfo, item: .event, changes: [IssueChange(field: .status, from: from, to: to)]))
+}
+
 /// reply_test.go msgItem.
 private func msgItem(_ id: String, mine: Bool, sent: Bool) -> Conversation.Item {
     var it = Conversation.Item(kind: .message, message: mail(id, 0, true))
@@ -226,5 +241,49 @@ struct ConversationReplyTests {
         #expect(ConversationLayout.quickReplyIconOnly(pane: 641))
         #expect(ConversationLayout.quickReplyIconOnly(pane: 400))
         #expect(ConversationLayout.quickReplyIconOnly(pane: 0))
+    }
+
+    /// reply_test.go TestSingleModel: one message shown alone is a model of
+    /// one message card, which is the quick reply's target whoever wrote
+    /// it; an issue's event has none.
+    @Test func singleModel() {
+        var s = mail("m1", 0, false)
+        s.from = [Address(name: "Jana" + rlo + " Dvořáková\n", address: "jana@acme.example")]
+        var m = Conversation.singleModel(s, mine: false)
+        #expect(m.thread == "t1" && m.items.count == 1 && m.scrollTo == 0 && m.markRead == nil && m.issue == nil
+            && m.earlier == 0)
+        let it = m.items[0]
+        #expect(it.kind == .message && it.message?.id == "m1" && !it.mine && it.unread && !it.sent)
+        #expect(it.sender == Conversation.sender(s.from) && !it.sender.contains(rlo) && !it.sender.contains("\n"))
+        #expect(Conversation.quickReplyTarget(m)?.message?.id == "m1")
+
+        // The user's own message (Sent): still the target.
+        var own = mail("m2", 5, true)
+        own.from = [petr]
+        m = Conversation.singleModel(own, mine: true)
+        let target = Conversation.quickReplyTarget(m)
+        #expect(target?.message?.id == "m2" && target?.mine == true && target?.unread == false)
+        // `isMine` is the rule of `Item.mine` (the account's own address).
+        #expect(Conversation.isMine(own, account: mailAccount) && !Conversation.isMine(s, account: mailAccount))
+        #expect(!Conversation.isMine(own, account: nil))
+
+        // An issue's description is a message; an event is none.
+        let desc = issueMsg("d", 0, true, MessageIssue(info: issueInfo, item: .description))
+        #expect(Conversation.quickReplyTarget(Conversation.singleModel(desc, mine: false))?.message?.id == "d")
+        let ev = Conversation.singleModel(statusEvent("e", 1, "Open", "Done"), mine: false)
+        #expect(ev.items.count == 1 && ev.items.first?.kind == .event && ev.items.first?.unread == false
+            && ev.thread == "tj")
+        #expect(Conversation.quickReplyTarget(ev) == nil, "an event is a target")
+
+        // No id: an empty model, no target.
+        let empty = Conversation.singleModel(MessageSummary(
+            id: "", accountId: "a1", folderId: "f1", threadId: "t9", from: [], to: [], subject: "", date: at(0),
+            snippet: "", flags: [], hasAttachments: false, size: 0), mine: false)
+        #expect(empty.items.isEmpty && empty.thread == "t9" && empty.scrollTo == -1)
+        #expect(Conversation.quickReplyTarget(empty) == nil, "an empty model has a target")
+        // No thread: the model's thread is "".
+        var orphan = mail("m3", 0, true)
+        orphan.threadId = nil
+        #expect(Conversation.singleModel(orphan, mine: false).thread == "")
     }
 }

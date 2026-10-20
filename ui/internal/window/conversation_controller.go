@@ -120,10 +120,12 @@ type conversationController struct {
 	tr   conversation.Translator
 
 	// thread is the conversation on display, "" when the pane shows
-	// something else; model its model, nil while the members are on
+	// something else, and account its account (a thread id is unique only
+	// within its account); model its model, nil while the members are on
 	// their way.
-	thread api.ThreadID
-	model  *conversation.Model
+	thread  api.ThreadID
+	account api.AccountID
+	model   *conversation.Model
 	// issue is what the model's issue card was built from (the thread's
 	// issue, or a member's): the widget of the card needs the whole of it.
 	issue *api.IssueInfo
@@ -204,18 +206,27 @@ func (c *conversationController) show(row listRow) bool {
 		c.clear()
 		return false
 	}
-	tid := row.Key.Thread
-	if tid == c.thread {
+	tid, acc := row.Key.Thread, rowAccount(row)
+	if tid == c.thread && acc == c.account {
 		c.summary = row.Summary
 		return true
 	}
 	c.reset()
-	c.thread = tid
+	c.thread, c.account = tid, acc
 	c.quoted.Show(string(tid))
 	c.summary = row.Summary
 	c.emit(convLoading)
 	c.requestMembers()
 	return true
+}
+
+// rowAccount is the account of a conversation row: its newest member's,
+// else its summary's.
+func rowAccount(row listRow) api.AccountID {
+	if row.Message.AccountID != "" {
+		return row.Message.AccountID
+	}
+	return row.Summary.AccountID
 }
 
 // clear shows nothing (another kind of row, or none, is selected).
@@ -231,6 +242,7 @@ func (c *conversationController) clear() {
 func (c *conversationController) reset() {
 	c.gen++
 	c.thread = ""
+	c.account = ""
 	c.model = nil
 	c.issue = nil
 	c.members = nil

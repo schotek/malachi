@@ -480,7 +480,11 @@ a real store, since migration 0017 cannot be undone:
   the detail and where Send goes; `quick-reply` measures the chat's
   quick-reply bar alone in a window of its own over a made-up conversation
   and a host that sends nothing: wide, narrow, three lines, an issue,
-  hidden, and whether Message ▸ Send reaches it from the field),
+  hidden, and whether Message ▸ Send reaches it from the field;
+  `quick-reply-message` has the main window's reading pane show a made-up
+  single message with the bar under it and prints the pane, the reader and
+  the bar wide, narrow, for the user's own message, an issue's event and
+  comment, the Outbox and nothing selected),
   `MALACHI_START_SIZE` sets
   its size, `MALACHI_START_INTERVAL` the seconds per step (3) and
   `MALACHI_START_TRACE` logs every resize; after each step the toolbar
@@ -724,10 +728,11 @@ bubbles with attachments in the near window, as for the cards), even when
 the summary's flag is false (it counts only parts the daemon calls not
 inline); `Conversation.bubbleAttachmentBadge` is the rule.
 
-Under the chat, and only there (not the timeline, not the board's chat,
-not a message window), the host puts the **quick-reply bar**
+Under the chat and under the page of a single message (not the timeline,
+not the empty page or several selected rows, not the board's chat, not a
+message window), the reading pane puts the **quick-reply bar**
 (`MessageView/ConversationQuickReplyBar.swift`; plan
-[plans/chat-view.md](plans/chat-view.md) §10 and §11, Q1–Q15): a fixed row
+[plans/chat-view.md](plans/chat-view.md) §10–§12, Q1–Q15 and S1–S9): a fixed row
 with a separator line above it, kept to the cards' column (the 900 pt
 clamp, the side insets, 8 pt above and below): the mode button, a
 pull-down with the mode's icon and label (Reply, Reply All; its menu the
@@ -737,9 +742,9 @@ modes the account offers for the target and, after a separator,
 `returnSends` off, one to five lines, then it scrolls; placeholder and
 accessible name `Conversation.quickReplyPlaceholder(comment:)`); while the Assistant is
 shown (`AssistantController.shown` and its `onChange`, the toolbar's rule
-and observer, followed by the host) the Assistant button, the toolbar's ✦
+and observer, followed by the reading pane) the Assistant button, the toolbar's ✦
 with its `sparkles` icon and its tooltip, which calls the main window's
-`showAssistant(from:)` (through the host's `onAssistant`,
+`showAssistant(from:)` (through the reading pane's `onAssistant`,
 Integration+Conversation): `Assistant.buttonOpensPanel` as for the toolbar,
 so with In App the panel opens with its field focused
 (`openAssistantPanel`), otherwise the toolbar's own `AssistantMenu` pops up
@@ -758,12 +763,28 @@ and the compose window with the typed text as the user's own
 (`ComposeParams.ownHTML`; the pane's `ready` calls
 `ComposeDraftController.editorLoaded(ownText:)`, which marks it as an edit,
 so the autosave and the question on close apply; from before the editor
-loads until then `ownTextPending` makes a close ask too). The host owns the
-controller and hands it every change of the conversation
-(`ConversationController.quickReplyInput`: the model, the card actions of
-the target and its account) and the layout shown (`setChatShown`); the
-chat ends at the bar's top, the bar at the container's bottom, and a hidden
-bar (no target, no Reply, the timeline shown) collapses to no height. The
+loads until then `ownTextPending` makes a close ask too). The reading pane
+(`ReadingPaneViewController`) owns the bar and its controller, so the bar
+stands in the same place under a message and under the chat: the
+single-message view and the conversation host both end at the bar's top,
+the bar at the pane's bottom, and a hidden bar collapses to no height (the
+pane's background follows the view shown, the reader's colour or the
+conversation's surface). A single row feeds the controller a model of one
+member (`ConversationController.quickReplyInput(single:)`:
+`Conversation.singleModel` with `mine` by the rule of `Item.mine`,
+`Conversation.isMine`, the card actions and account of the message, and
+`setShown` off in the Outbox and Drafts); a conversation row feeds every
+change the host reports (`onQuickReplyChange`:
+`ConversationController.quickReplyInput()` and `setShown(chatShown)`, so
+the timeline has no bar); the empty page and several rows hide it
+(`show(nil, "")`, `setShown(false)`); without a model yet (the members
+on their way) the bar gets the empty model and hides, so it never keeps
+the target of the single message shown a moment before. An issue's event shown alone has no target
+(the model makes it an event) and an account without Reply none either.
+The text stays per account and thread (a thread id is unique only within
+its account: `show(_ account:, _ t:)`, `ConversationController.account`),
+so a message and its conversation share it across grouping and layout
+switches, and the same thread id of two accounts never does. The
 controller's host is `QuickReplyHostAdapter`: Send's calls through the
 application's client, the attribution line and the download before a reply
 (`ActionsController.replyAttribution`, `prepareReply`) and the compose
@@ -777,8 +798,12 @@ next responder of the field, so it works only with the keyboard in the
 field, as the compose window's pane does; the Send button has no key
 equivalent of its own. Escape in the field gives the keyboard to the
 message list (`MessageListViewController.focusList`, nothing while the
-list is hidden); a bar that hides on its own (another conversation, none)
-only clears the window's first responder; the single-key actions of the main window are off while
+list is hidden); a bar that hides on its own while its field has the keyboard (a page
+without a bar, a conversation going to the timeline) gives the keyboard to
+the view the pane shows (`ReadingPaneViewController.keyboardTarget`: the
+message's body, the layout's `ConversationScrollView`), as GTK gives it to
+the shown scroller, and leaves it with the window only when that view
+refuses; the single-key actions of the main window are off while
 the field has the keyboard (`isTyping`), and Space types. The board's
 inline reply pane now learns how its editor wrote the draft from the
 pane's own `ready` too (`editorLoaded` runs `editorReady` for the board's

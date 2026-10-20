@@ -1,11 +1,22 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Package quickreply is the quick-reply bar under a conversation shown as
-// chat in Mail (docs/plans/chat-view.md §10 and §11) without its widgets:
-// what the bar shows (its target, modes and text, per conversation) and
-// what its buttons do — Send through the daemon's usual way, Open in a
-// Window and Forward… through the compose window.
+// Package quickreply is the quick-reply bar of Mail's reading pane
+// (docs/plans/chat-view.md §10, §11 and §12) without its widgets: what the
+// bar shows (its target, modes and text, per conversation) and what its
+// buttons do — Send through the daemon's usual way, Open in a Window and
+// Forward… through the compose window. The bar stands under the pane's
+// page of a single message and under a conversation shown as chat (never
+// under the timeline, the board or a message window); which of them shows
+// is the host's to say (SetShown), and a single message comes as a model
+// of one member (conversation.SingleModel), so the rules are the same for
+// both. A single message's thread is its conversation's: the text typed
+// under the message is the text under its conversation. A thread id is
+// unique only within its account (an issue's jira:<id> repeats on another
+// site, Graph's conversationId is the server's), so the state is kept per
+// account and thread (key), never per thread alone: a search over all
+// accounts may show the same thread id of two accounts one after the
+// other.
 //
 // The rules of the bar's content are ui/internal/conversation's
 // (QuickReplyTarget, QuickReplyModes, QuickReplyHTML, QuickReplyBlank,
@@ -75,12 +86,16 @@ type Host interface {
 	Failed(err error)
 }
 
-// State is what the bar shows, for the conversation shown (Thread).
+// State is what the bar shows, for the conversation shown (Account,
+// Thread).
 type State struct {
-	// Thread is the conversation shown; "" for none.
-	Thread api.ThreadID
-	// Visible: the chat layout is shown, the conversation has a target and
-	// its account answers it (Reply). The bar is hidden otherwise.
+	// Account and Thread are the conversation shown; both "" for none.
+	Account api.AccountID
+	Thread  api.ThreadID
+	// Visible: the host shows the bar's place (SetShown: a single
+	// message's page or a conversation's chat), the conversation has a
+	// target and its account answers it (Reply). The bar is hidden
+	// otherwise.
 	Visible bool
 	// Target is the message a quick reply answers
 	// (conversation.QuickReplyTarget); the zero Item without one. Its
@@ -105,6 +120,12 @@ type State struct {
 	Comment bool
 }
 
+// key is one conversation: a thread of an account. The zero key is none.
+type key struct {
+	account api.AccountID
+	thread  api.ThreadID
+}
+
 // thread is the bar's state of one conversation, kept in memory until the
 // text is sent, moved into a window or cleared (Q9).
 type thread struct {
@@ -121,9 +142,11 @@ type Controller struct {
 
 	host Host
 
-	// shown is the conversation shown; chatShown says the chat layout is.
-	shown     api.ThreadID
-	chatShown bool
+	// shown is the conversation shown (a single message's thread, with
+	// its account); paneShown says the host shows the bar's place
+	// (SetShown).
+	shown     key
+	paneShown bool
 	// What Update learnt of the shown conversation.
 	target  conversation.Item
 	hasTgt  bool
@@ -132,34 +155,46 @@ type Controller struct {
 	comment bool
 	account api.Account
 
-	threads map[api.ThreadID]*thread
+	threads map[key]*thread
 }
 
 // New makes a controller over host.
 func New(host Host) *Controller {
-	return &Controller{host: host, threads: map[api.ThreadID]*thread{}}
+	return &Controller{host: host, threads: map[key]*thread{}}
 }
 
-// Show says which conversation the pane shows now ("" for none). Its
-// target is unknown until the next Update; the text and mode of every
-// conversation stay.
-func (c *Controller) Show(t api.ThreadID) {
-	if t == c.shown {
+// Show says which conversation the pane shows now: thread t of account
+// (for a single message its thread and account; both "" for none, and a
+// thread "" is none whatever the account). Its target is unknown until
+// the next Update; the text and mode of every conversation stay.
+func (c *Controller) Show(account api.AccountID, t api.ThreadID) {
+	k := key{account, t}
+	if t == "" {
+		k = key{}
+	}
+	if k == c.shown {
 		return
 	}
-	c.shown = t
+	c.shown = k
 	c.target, c.hasTgt, c.modes, c.reply, c.comment = conversation.Item{}, false, nil, false, false
 	c.account = api.Account{}
 	c.changed()
 }
 
-// Update takes the shown conversation's model m, the actions of its
-// target's card (conversation.CardActions for the target) and its account.
+// Update takes the shown conversation's model m (a single message's:
+// conversation.SingleModel), the actions of its target's card
+// (conversation.CardActions for the target) and its account.
 // A model of another conversation (m.Thread neither "" nor the one shown)
-// shows that one first, as Show does.
+// shows that one, of account, first, as Show does; a conversation shown
+// without its account (Show with account "") takes account's. A model
+// without a target (the empty model) hides the bar until the next one and
+// keeps the text: the host gives it while the conversation's members are
+// on their way, so that the bar never answers what was shown before.
 func (c *Controller) Update(m conversation.Model, actions capabilities.Actions, account api.Account) {
-	if m.Thread != "" && m.Thread != c.shown {
-		c.shown = m.Thread
+	if m.Thread != "" && m.Thread != c.shown.thread {
+		c.shown = key{account.ID, m.Thread}
+	} else if c.shown.thread != "" && c.shown.account == "" {
+		c.shown.account = account.ID
 	}
 	c.target, c.hasTgt = conversation.QuickReplyTarget(m)
 	c.modes = conversation.QuickReplyModes(actions)
@@ -169,19 +204,23 @@ func (c *Controller) Update(m conversation.Model, actions capabilities.Actions, 
 	c.changed()
 }
 
-// SetChatShown says whether the chat layout is shown (the timeline has no
-// bar).
-func (c *Controller) SetChatShown(shown bool) {
-	if shown == c.chatShown {
+// SetShown says whether the pane shows a place of the bar: the page of a
+// single message whose folder can be answered from (not the Outbox, not
+// Drafts), or a conversation in the chat layout. The empty page, the page
+// of several selected messages and the timeline have no bar; neither has
+// the board. Hiding keeps the text and mode of every conversation, and a
+// Send on its way ends as usual.
+func (c *Controller) SetShown(shown bool) {
+	if shown == c.paneShown {
 		return
 	}
-	c.chatShown = shown
+	c.paneShown = shown
 	c.changed()
 }
 
 // SetText is what the field holds now, for the conversation shown.
 func (c *Controller) SetText(text string) {
-	if c.shown == "" {
+	if c.shown.thread == "" {
 		return
 	}
 	st := c.threads[c.shown]
@@ -204,7 +243,7 @@ func (c *Controller) SetText(text string) {
 // the conversation shown; anything else (QuickForward, a mode not
 // offered) is ignored.
 func (c *Controller) SetMode(mode conversation.QuickReplyMode) {
-	if c.shown == "" || mode == conversation.QuickForward || !slices.Contains(c.modes, mode) {
+	if c.shown.thread == "" || mode == conversation.QuickForward || !slices.Contains(c.modes, mode) {
 		return
 	}
 	st := c.threads[c.shown]
@@ -226,13 +265,14 @@ func (c *Controller) SetMode(mode conversation.QuickReplyMode) {
 // State is what the bar shows now.
 func (c *Controller) State() State {
 	s := State{
-		Thread:  c.shown,
+		Account: c.shown.account,
+		Thread:  c.shown.thread,
 		Target:  c.target,
 		Modes:   slices.Clone(c.modes),
 		Comment: c.comment,
 		Mode:    c.mode(),
 	}
-	if st := c.threads[c.shown]; st != nil && c.shown != "" {
+	if st := c.threads[c.shown]; st != nil && c.shown.thread != "" {
 		s.Text, s.Sending = st.text, st.sending
 	}
 	s.Blank = conversation.QuickReplyBlank(s.Text)
@@ -242,7 +282,7 @@ func (c *Controller) State() State {
 
 // visible: the bar shows (State.Visible).
 func (c *Controller) visible() bool {
-	return c.chatShown && c.shown != "" && c.hasTgt && c.reply
+	return c.paneShown && c.shown.thread != "" && c.hasTgt && c.reply
 }
 
 // mode is the chosen mode of the conversation shown when it is still
@@ -272,14 +312,14 @@ func (c *Controller) mode() conversation.QuickReplyMode {
 // and a failed message.send first deletes the saved draft (draft.delete,
 // its error ignored) so that no draft the user never saw stays behind. The
 // outcome goes to the conversation Send started in, whichever is shown by
-// then. Nothing happens when the bar is hidden, the text is blank or a
+// then (its account and thread). Nothing happens when the bar is hidden, the text is blank or a
 // Send of this conversation is on its way.
 func (c *Controller) Send() {
 	st := c.threads[c.shown]
 	if !c.visible() || st == nil || st.sending || conversation.QuickReplyBlank(st.text) {
 		return
 	}
-	t, target, text, comment := c.shown, c.target, st.text, c.comment
+	k, target, text, comment := c.shown, c.target, st.text, c.comment
 	mode := c.mode()
 	acc := target.Message.AccountID
 	if acc == "" {
@@ -296,7 +336,7 @@ func (c *Controller) Send() {
 		}
 		go func() {
 			err := deliver(c.host, params, text)
-			c.host.Post(func() { c.finish(t, text, comment, err) })
+			c.host.Post(func() { c.finish(k, text, comment, err) })
 		}()
 	}
 	if comment {
@@ -374,12 +414,12 @@ func SaveDraft(mode api.ComposeMode, text string, d api.Draft) api.Draft {
 	return out
 }
 
-// finish ends a Send of conversation t whose text was text.
-func (c *Controller) finish(t api.ThreadID, text string, comment bool, err error) {
-	st := c.threads[t]
+// finish ends a Send of conversation k whose text was text.
+func (c *Controller) finish(k key, text string, comment bool, err error) {
+	st := c.threads[k]
 	if st == nil {
 		st = &thread{}
-		c.threads[t] = st
+		c.threads[k] = st
 	}
 	st.sending = false
 	if err == nil {
@@ -392,7 +432,7 @@ func (c *Controller) finish(t api.ThreadID, text string, comment bool, err error
 	} else {
 		c.host.Failed(err)
 	}
-	c.prune(t)
+	c.prune(k)
 	c.changed()
 }
 
@@ -420,28 +460,28 @@ func (c *Controller) open(mode conversation.QuickReplyMode) {
 	if !c.visible() {
 		return
 	}
-	t, text := c.shown, ""
-	if st := c.threads[t]; st != nil {
+	k, text := c.shown, ""
+	if st := c.threads[k]; st != nil {
 		if st.sending {
 			return
 		}
 		text = st.text
 	}
 	c.host.OpenCompose(mode, c.target.Message.ID, conversation.QuickReplyHTML(text), func() {
-		st := c.threads[t]
+		st := c.threads[k]
 		if st == nil || st.text != text || text == "" {
 			return
 		}
 		st.text = ""
-		c.prune(t)
+		c.prune(k)
 		c.changed()
 	})
 }
 
 // prune forgets a conversation whose state is the zero one.
-func (c *Controller) prune(t api.ThreadID) {
-	if st := c.threads[t]; st != nil && *st == (thread{}) {
-		delete(c.threads, t)
+func (c *Controller) prune(k key) {
+	if st := c.threads[k]; st != nil && *st == (thread{}) {
+		delete(c.threads, k)
 	}
 }
 

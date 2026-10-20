@@ -4,10 +4,13 @@
 import AppKit
 import MalachiCore
 
-/// The quick-reply bar under a conversation shown as chat in Mail
-/// (docs/plans/chat-view.md §10, §11; wireframe
-/// docs/plans/chat-view/w4-quick-reply.svg): a fixed row under the bubbles'
-/// scroll view, a separator line above it, its content kept to the cards'
+/// The quick-reply bar of Mail's reading pane, under a conversation shown
+/// as chat and under the page of a single message
+/// (docs/plans/chat-view.md §10–§12; wireframes
+/// docs/plans/chat-view/w4-quick-reply.svg and w5-quick-reply-message.svg):
+/// a fixed row at the bottom of the pane (`ReadingPaneViewController`, which
+/// owns it), under the bubbles' or the message's scroll view, a separator
+/// line above it, its content kept to the cards'
 /// column (a clamp of `ConversationLayout.Metrics.maxWidth`, the column's
 /// side insets). From the leading end: the mode button, a pull-down with the
 /// mode's icon and label (Reply, Reply All; its menu the modes the account
@@ -35,9 +38,12 @@ import MalachiCore
 /// controller is its view's next responder), as the compose window's pane
 /// does; the item is off while there is nothing to send. Escape in the
 /// field gives the keyboard to the message list (`onFocusList`, which does
-/// nothing while the list is hidden); a bar that hides on its own (the
-/// conversation cleared or another shown) only lets the keyboard go
-/// (the window's first responder), never moves it to the list. The
+/// nothing while the list is hidden); a bar that hides on its own while
+/// its field has the keyboard (the selection moved to a page without a bar,
+/// the conversation went to the timeline) gives it to the view the pane
+/// shows (`keyboardTarget`: the message's body, the layout's scroll view),
+/// as GTK's bar gives it to the shown scroller, never to the window alone
+/// and never to the list. The
 /// single-key actions of the main
 /// window are off while the field has the keyboard (the window's
 /// `isTyping`), and Space types.
@@ -51,6 +57,9 @@ final class ConversationQuickReplyBar: NSViewController {
     let controller: QuickReplyController
     /// Escape in the field: the message list takes the keyboard.
     var onFocusList: (@MainActor () -> Void)?
+    /// The bar hides while its field has the keyboard: the view that takes
+    /// it, the one the pane shows now (`ReadingPaneViewController`).
+    var keyboardTarget: (@MainActor () -> NSView?)?
     /// The Assistant button, with itself to show a menu under: the main
     /// window's `showAssistant(from:)` (Integration+Conversation).
     var onAssistant: (@MainActor (NSView) -> Void)?
@@ -274,8 +283,9 @@ final class ConversationQuickReplyBar: NSViewController {
         b.setContentCompressionResistancePriority(.required, for: .horizontal)
     }
 
-    /// A change of width that flips the mode button to its icon alone (or
-    /// back) is rendered on the next turn of the run loop: changing the
+    /// The bar spans the reading pane, so its width is the pane's
+    /// (`quickReplyIconOnly(pane:)`). A change of width that flips the mode
+    /// button to its icon alone (or back) is rendered on the next turn of the run loop: changing the
     /// pull-down's menu and title inside layout would ask for layout again
     /// while it runs.
     override func viewDidLayout() {
@@ -402,7 +412,12 @@ final class ConversationQuickReplyBar: NSViewController {
         guard appliedVisible != on else { return }
         appliedVisible = on
         if !on, let window = view.window, window.firstResponder === input.textView {
-            window.makeFirstResponder(nil)
+            // The view shown takes the keyboard. Only when it refuses does
+            // the window take it: a hidden field must never keep it (what
+            // is typed would land in the bar unseen).
+            if keyboardTarget?().map({ window.makeFirstResponder($0) }) != true {
+                window.makeFirstResponder(nil)
+            }
         }
         view.isHidden = !on
         if on {

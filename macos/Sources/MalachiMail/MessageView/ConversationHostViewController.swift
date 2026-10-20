@@ -48,17 +48,12 @@ import MalachiCore
 /// timeline has the status label of the link under the pointer (the chat
 /// has no links).
 ///
-/// Under the chat, and only there, the quick-reply bar
-/// (`ConversationQuickReplyBar`, docs/plans/chat-view.md §10, §11): the
-/// chat ends at its top, the bar at the container's bottom, and a hidden
-/// bar collapses to no height (the timeline ends at the bottom whatever
-/// it does). The host owns its controller (`QuickReplyController`, over
-/// `QuickReplyHostAdapter`, which reaches the window through the
-/// delegate), hands it every change of the conversation
-/// (`ConversationController.quickReplyInput`: the model, the actions of
-/// the card the reply goes to, its account) and the layout shown, and
-/// shows its Assistant button while the Assistant is shown (the toolbar's
-/// rule and observer: `AssistantController.shown`, `onChange`).
+/// Under the chat the reading pane puts the quick-reply bar
+/// (`ReadingPaneViewController`, docs/plans/chat-view.md §10–§12): the
+/// pane owns the bar and its controller, below the host as below the
+/// single-message view, and the host tells it of every change of the
+/// conversation and of the layout shown (`onQuickReplyChange`); the pane
+/// reads `ConversationController.quickReplyInput` and `chatShown`.
 @MainActor
 final class ConversationHostViewController: NSViewController, MessageDisplay {
     let state: AppState
@@ -70,29 +65,12 @@ final class ConversationHostViewController: NSViewController, MessageDisplay {
         didSet {
             timeline.delegate = delegate
             chat.delegate = delegate
-            quickReplyHost.delegate = delegate
         }
     }
 
-    /// Escape in the quick-reply bar's field: the message list takes the
-    /// keyboard (Integration+Conversation).
-    var onFocusList: (@MainActor () -> Void)? {
-        get { replyBar.onFocusList }
-        set { replyBar.onFocusList = newValue }
-    }
-
-    /// The quick-reply bar's Assistant button, with the button: the main
-    /// window's `showAssistant(from:)`, the toolbar's ✦
-    /// (Integration+Conversation).
-    var onAssistant: (@MainActor (NSView) -> Void)? {
-        get { replyBar.onAssistant }
-        set { replyBar.onAssistant = newValue }
-    }
-
-    private let quickReplyHost: QuickReplyHostAdapter
-    /// The quick-reply bar's state (its host is weak: held here).
-    let quickReply: QuickReplyController
-    private let replyBar: ConversationQuickReplyBar
+    /// After every change of the conversation and of the layout shown: the
+    /// reading pane's quick-reply bar follows (`ReadingPaneViewController`).
+    var onQuickReplyChange: (@MainActor () -> Void)?
 
     var onOpenEmbedded: (@MainActor (_ containing: MessageSummary, _ attachment: Attachment, _ remote: Bool, _ chip: NSView?) -> Void)? {
         didSet {
@@ -104,20 +82,13 @@ final class ConversationHostViewController: NSViewController, MessageDisplay {
     /// The chat is the layout shown.
     private(set) var chatShown = false
     private var settingsToken: Settings.ChangeToken?
-    /// The Assistant shown or not (the bar's Assistant button), as the main
-    /// window's toolbar hears it.
-    private var assistantToken: AssistantController.Token?
 
     init(state: AppState, cache: MessageCache, controller: ConversationController) {
         self.state = state
         self.controller = controller
         timeline = ConversationViewController(state: state, cache: cache, controller: controller)
         chat = ConversationChatViewController(state: state, controller: controller)
-        quickReplyHost = QuickReplyHostAdapter(state: state)
-        quickReply = QuickReplyController(host: quickReplyHost)
-        replyBar = ConversationQuickReplyBar(controller: quickReply)
         super.init(nibName: nil, bundle: nil)
-        quickReplyHost.window = { [weak self] in self?.view.window }
     }
 
     @available(*, unavailable)
@@ -136,7 +107,7 @@ final class ConversationHostViewController: NSViewController, MessageDisplay {
             strip.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             strip.trailingAnchor.constraint(equalTo: container.trailingAnchor),
         ])
-        for vc in [timeline, chat, replyBar] as [NSViewController] {
+        for vc in [timeline, chat] as [NSViewController] {
             addChild(vc)
             let v = vc.view
             v.translatesAutoresizingMaskIntoConstraints = false
@@ -146,14 +117,13 @@ final class ConversationHostViewController: NSViewController, MessageDisplay {
                 v.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             ])
         }
-        // The timeline fills the rest; the chat ends at the quick-reply
-        // bar, which ends at the bottom (no height while hidden).
+        // Both layouts fill the rest (the pane ends the host at its
+        // quick-reply bar).
         NSLayoutConstraint.activate([
             timeline.view.topAnchor.constraint(equalTo: strip.bottomAnchor),
             timeline.view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             chat.view.topAnchor.constraint(equalTo: strip.bottomAnchor),
-            chat.view.bottomAnchor.constraint(equalTo: replyBar.view.topAnchor),
-            replyBar.view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            chat.view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
         view = container
 
@@ -177,11 +147,6 @@ final class ConversationHostViewController: NSViewController, MessageDisplay {
         controller.onChange = { [weak self] change in self?.changed(change) }
         controller.onLoaded = { [weak self] id, lm in self?.loaded(id, lm) }
         settingsToken = state.settings.onChange(.conversationChatLayout) { [weak self] in self?.applyLayout() }
-        replyBar.assistantShown = state.assistant.shown
-        assistantToken = state.assistant.onChange { [weak self] in
-            guard let self else { return }
-            self.replyBar.assistantShown = self.state.assistant.shown
-        }
         applyLayout(initial: true)
     }
 
@@ -202,7 +167,7 @@ final class ConversationHostViewController: NSViewController, MessageDisplay {
         }
         hidden.view.isHidden = true
         shown.view.isHidden = false
-        quickReply.setChatShown(on)
+        onQuickReplyChange?()
         if on {
             strip.setFoldAll(.none)
             chat.setShown(true)
@@ -218,17 +183,7 @@ final class ConversationHostViewController: NSViewController, MessageDisplay {
         _ = view
         timeline.changed(change)
         chat.changed(change)
-        updateQuickReply()
-    }
-
-    /// The quick-reply bar follows the conversation shown: its id first
-    /// (a new one has no target until its model is built), then its model,
-    /// the actions of the card the reply goes to and its account.
-    private func updateQuickReply() {
-        quickReply.show(controller.thread ?? "")
-        if let input = controller.quickReplyInput() {
-            quickReply.update(input.model, actions: input.actions, account: input.account)
-        }
+        onQuickReplyChange?()
     }
 
     private func loaded(_ id: MessageID, _ lm: LoadedMessage) {
@@ -245,6 +200,12 @@ final class ConversationHostViewController: NSViewController, MessageDisplay {
     /// shown. True: the key was used.
     func page(up: Bool) -> Bool {
         chatShown ? chat.page(up: up) : timeline.page(up: up)
+    }
+
+    /// What takes the keyboard when the quick-reply bar hides under the
+    /// conversation: the scroll view of the layout shown.
+    var keyboardTarget: NSView {
+        chatShown ? chat.keyboardTarget : timeline.keyboardTarget
     }
 
     // MARK: Issue

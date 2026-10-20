@@ -90,14 +90,17 @@ private final class Harness {
 
     static let info = SystemInfo(version: "fake", protocolVersion: API.protocolVersion, pid: 7, storePath: "/tmp/s.db")
 
-    init(messages list: [MessageSummary] = messages(), sent: [MessageSummary] = [], grouped: Bool = true) async throws {
+    init(
+        messages list: [MessageSummary] = messages(), sent: [MessageSummary] = [], grouped: Bool = true,
+        extraFolders: [Folder] = []
+    ) async throws {
         fixture = try MailFixture()
         await fixture.setAccounts([testAccount("a", email: "a@example.invalid")])
         await fixture.setFolders([
             testFolder("in", path: "INBOX", role: .inbox),
             testFolder("sent", path: "Sent", role: .sent),
             testFolder("trash", path: "Trash", role: .trash),
-        ], for: account)
+        ] + extraFolders, for: account)
         await fixture.setMessages(list, in: inbox)
         await fixture.setMessages(sent, in: sentBox)
         try await fixture.start()
@@ -154,7 +157,7 @@ private final class Harness {
 
         try await h.select(ListKey(thread: "t1"))
         #expect(h.shown == [true])
-        #expect(h.conversation.thread == "t1")
+        #expect(h.conversation.thread == "t1" && h.conversation.account == "a")
         #expect(h.changes == [.loading, .opened])
         #expect(await h.fixture.threadGetRequests == [
             ThreadGetParams(accountId: "a", threadId: "t1", folderId: "in", withSent: true, withDrafts: true),
@@ -174,7 +177,7 @@ private final class Harness {
         // Known members: no second thread.get for another visit.
         try await h.select(ListKey(thread: "t2", message: "b1"))
         #expect(h.shown == [true, false])
-        #expect(h.conversation.thread == nil && h.conversation.model == nil)
+        #expect(h.conversation.thread == nil && h.conversation.account == nil && h.conversation.model == nil)
         #expect(h.changes.last == .cleared)
         try await h.select(ListKey(thread: "t1"))
         #expect(await h.fixture.threadGetRequests.count == 1)
@@ -272,6 +275,39 @@ private final class Harness {
         #expect(input.actions == h.conversation.actions(for: b1))
         #expect(input.actions.reply && input.actions.replyAll && input.actions.forward)
         #expect(input.account?.id == account)
+    }
+
+    /// The quick-reply bar under a message shown alone
+    /// (docs/plans/chat-view.md §12): the model of the one message, which
+    /// is the target, the user's own too; its card's actions and account;
+    /// no place of the bar in Drafts and the Outbox.
+    @Test func quickReplyInputOfASingleMessage() async throws {
+        let h = try await Harness(extraFolders: [
+            testFolder("drafts", path: "Drafts", role: .drafts), testFolder("outbox", path: "Outbox", role: .outbox),
+        ])
+        defer { Task { await h.stop() } }
+        try await h.select(ListKey(thread: "t2", message: "b1"))
+        let b1 = try #require(h.list.selectedRow?.message)
+        let input = h.conversation.quickReplyInput(single: b1)
+        #expect(input.shown && input.model.thread == "t2" && input.model.items.count == 1)
+        #expect(Conversation.quickReplyTarget(input.model)?.message?.id == "b1")
+        #expect(input.model.items.first?.mine == false && input.model.items.first?.sender == "dave")
+        #expect(input.actions == h.conversation.actions(for: b1) && input.actions.reply)
+        #expect(input.account?.id == account)
+        #expect(h.conversation.model == nil, "a single message builds no conversation")
+
+        // The user's own message in Sent: the target, marked as the user's.
+        let own = h.conversation.quickReplyInput(single: reply("r1", 7, thread: "t2"))
+        #expect(own.shown && own.model.items.first?.mine == true)
+        #expect(Conversation.quickReplyTarget(own.model)?.message?.id == "r1")
+
+        // Drafts and the Outbox: no bar.
+        var draft = b1
+        draft.folderId = "drafts"
+        #expect(!h.conversation.quickReplyInput(single: draft).shown)
+        var queued = b1
+        queued.folderId = "outbox"
+        #expect(!h.conversation.quickReplyInput(single: queued).shown)
     }
 
     /// A reply that lands in Sent asks for the conversation again: a single

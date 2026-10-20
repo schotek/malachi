@@ -178,6 +178,33 @@ private func created(_ acc: AccountID) -> DraftCreateResult {
     ), quoted: .html)
 }
 
+/// quickreply single: message `id` of thread `t` of the mail account shown
+/// alone.
+private func single(_ id: String, _ t: ThreadID, mine: Bool) -> Conversation.Model {
+    Conversation.singleModel(MessageSummary(
+        id: MessageID(id), accountId: mailAcc.id, folderId: "f", threadId: t,
+        from: [Address(name: "Jana " + id, address: "jana@example.org")], to: [], subject: "",
+        date: .goZero, snippet: "", flags: [], hasAttachments: false, size: 0), mine: mine)
+}
+
+/// A message of the issue tracker's thread tj shown alone, of item `kind`.
+private func issueSingle(_ id: String, _ kind: IssueItemKind) -> Conversation.Model {
+    Conversation.singleModel(MessageSummary(
+        id: MessageID(id), accountId: jiraAcc.id, folderId: "f", threadId: "tj", from: [], to: [], subject: "",
+        date: .goZero, snippet: "", flags: [], hasAttachments: false, size: 0,
+        issue: MessageIssue(info: IssueInfo(key: "PRJ-1", url: "", summary: "", status: ""), item: kind)),
+        mine: false)
+}
+
+/// quickreply showSingle: what the host does for the page of a single
+/// message.
+@MainActor
+private func showSingle(_ c: QuickReplyController, _ m: Conversation.Model) {
+    c.show(mailAcc.id, m.thread)
+    c.update(m, actions: mailActions, account: mailAcc)
+    c.setShown(true)
+}
+
 /// A fixture with the four handlers, a connected client and the fake host.
 @MainActor
 private final class Harness {
@@ -210,8 +237,8 @@ private final class Harness {
     func shown() -> QuickReplyController {
         let c = QuickReplyController(host: host)
         c.onChange = { [unowned self] in self.changes += 1 }
-        c.setChatShown(true)
-        c.show("t1")
+        c.setShown(true)
+        c.show(mailAcc.id, "t1")
         c.update(model("t1", mailAcc.id), actions: mailActions, account: mailAcc)
         return c
     }
@@ -251,13 +278,13 @@ private final class Harness {
         let c = QuickReplyController(host: h.host)
         c.update(model("t1", mailAcc.id), actions: mailActions, account: mailAcc)
         #expect(!c.state.visible, "visible in the timeline")
-        c.setChatShown(true)
+        c.setShown(true)
         #expect(c.state.visible && c.state.thread == "t1", "Update did not show t1")
-        c.show("t2")
+        c.show(mailAcc.id, "t2")
         #expect(!c.state.visible && c.state.target == nil, "a target before Update")
         c.update(Conversation.Model(thread: "t2"), actions: mailActions, account: mailAcc)
         #expect(!c.state.visible, "visible without a target")
-        c.show("")
+        c.show(nil, "")
         c.setText("lost")
         #expect(!c.state.visible && c.state.text.isEmpty && c.keptThreads.isEmpty)
     }
@@ -285,8 +312,8 @@ private final class Harness {
         c.setMode(.replyAll)
         c.setMode(.replyAll)
         c.setMode(.forward) // ignored
-        c.setChatShown(true) // no change
-        c.show("t1") // no change
+        c.setShown(true) // no change
+        c.show(mailAcc.id, "t1") // no change
         #expect(h.changes - before == 2)
     }
 
@@ -297,12 +324,12 @@ private final class Harness {
         c.setText("for t1")
         c.setMode(.replyAll)
 
-        c.show("t2")
+        c.show(mailAcc.id, "t2")
         c.update(model("t2", mailAcc.id), actions: mailActions, account: mailAcc)
         #expect(c.state.text.isEmpty && c.state.mode == .reply, "t2 starts with \(c.state)")
         c.setText("for t2")
 
-        c.show("t1")
+        c.show(mailAcc.id, "t1")
         c.update(model("t1", mailAcc.id), actions: mailActions, account: mailAcc)
         #expect(c.state.text == "for t1" && c.state.mode == .replyAll)
         // A mode no longer offered falls back to the first.
@@ -311,7 +338,7 @@ private final class Harness {
         c.setMode(.replyAll) // not offered: ignored
         c.update(model("t1", mailAcc.id), actions: mailActions, account: mailAcc)
         #expect(c.state.mode == .replyAll, "the chosen mode was forgotten")
-        c.show("t2")
+        c.show(mailAcc.id, "t2")
         #expect(c.state.text == "for t2")
         // An emptied conversation is forgotten.
         c.setText("")
@@ -371,7 +398,7 @@ private final class Harness {
         try await h.script.set(API.DraftSave.name, result: DraftSaveResult(draftId: "d1", version: 1, textBody: ""))
         try await h.script.set(API.MessageSend.name, result: MessageSendResult(outboxId: "o1"))
         let c = QuickReplyController(host: h.host)
-        c.setChatShown(true)
+        c.setShown(true)
         c.update(model("t1", jiraAcc.id), actions: commentActions, account: jiraAcc)
         c.setText("Fixed in 1.2\n\nThanks")
         c.send()
@@ -416,9 +443,9 @@ private final class Harness {
         c.setText(" \n ")
         c.send()
         c.setText("text")
-        c.setChatShown(false)
+        c.setShown(false)
         c.send()
-        c.setChatShown(true)
+        c.setShown(true)
         c.update(model("t1", mailAcc.id), actions: Capabilities.Actions(), account: mailAcc)
         c.send()
         try await Task.sleep(for: .milliseconds(30))
@@ -435,19 +462,19 @@ private final class Harness {
         c.setText("to t1")
         c.send()
 
-        c.show("t2")
+        c.show(mailAcc.id, "t2")
         c.update(model("t2", mailAcc.id), actions: mailActions, account: mailAcc)
         #expect(!c.state.sending && c.state.text.isEmpty, "t2 sending")
         c.setText("to t2")
         c.send() // t2 sends on its own
-        c.show("t1")
+        c.show(mailAcc.id, "t1")
         #expect(c.state.sending, "t1 not sending")
-        c.show("t2")
+        c.show(mailAcc.id, "t2")
         await h.script.open(API.MessageSend.name)
         try await h.host.drain()
         try await h.host.drain()
         #expect(!c.state.sending && c.state.text.isEmpty, "t2 after")
-        c.show("t1")
+        c.show(mailAcc.id, "t1")
         #expect(!c.state.sending && c.state.text.isEmpty, "t1 after")
         #expect(h.host.sent.count == 2 && c.keptThreads.isEmpty)
     }
@@ -462,14 +489,14 @@ private final class Harness {
         let c = h.shown()
         c.setText("to t1")
         c.send()
-        c.show("t2")
+        c.show(mailAcc.id, "t2")
         c.update(model("t2", mailAcc.id), actions: mailActions, account: mailAcc)
         c.setText("to t2")
         h.host.beforeDone[0]() // the download ends while t2 is shown
         #expect(h.host.attributions == ["m2"])
         try await h.host.drain()
         #expect(c.state.text == "to t2" && !c.state.sending, "t2")
-        c.show("t1")
+        c.show(mailAcc.id, "t1")
         #expect(c.state.text == "to t1" && !c.state.sending && h.host.failed.count == 1, "t1")
     }
 
@@ -512,12 +539,12 @@ private final class Harness {
         #expect(c.state.text == "fyi" && c.state.mode == .replyAll)
 
         // Opened after the conversation changed: it clears its own text only.
-        c.show("t2")
+        c.show(mailAcc.id, "t2")
         c.update(model("t2", mailAcc.id), actions: mailActions, account: mailAcc)
         c.setText("t2 text")
         o.opened()
         #expect(c.state.text == "t2 text")
-        c.show("t1")
+        c.show(mailAcc.id, "t1")
         #expect(c.state.text.isEmpty)
 
         // An empty bar opens an empty editor; no draft is saved by the bar.
@@ -533,7 +560,7 @@ private final class Harness {
         let c = QuickReplyController(host: h.host)
         c.update(model("t1", mailAcc.id), actions: mailActions, account: mailAcc)
         c.openWindow() // timeline: hidden
-        c.setChatShown(true)
+        c.setShown(true)
         c.update(model("t1", mailAcc.id), actions: Capabilities.Actions(reply: true), account: mailAcc)
         c.forward() // the account does not forward
         try #require(h.host.opens.isEmpty)
@@ -550,5 +577,217 @@ private final class Harness {
         c.update(model("t1", jiraAcc.id), actions: commentActions, account: jiraAcc)
         c.openWindow()
         #expect(h.host.opens.count == 1 && h.host.opens.first?.mode == .reply)
+    }
+
+    /// The page of a single message (docs/plans/chat-view.md §12): the bar
+    /// answers the message shown, the user's own too, and Send goes to it.
+    @Test func singleMessage() async throws {
+        let h = try await Harness()
+        defer { Task { await h.stop() } }
+        let c = QuickReplyController(host: h.host)
+        showSingle(c, single("m7", "t1", mine: false))
+        var s = c.state
+        try #require(s.visible && s.thread == "t1" && s.target?.message?.id == "m7" && s.target?.sender == "Jana m7"
+            && !s.comment, "single: \(s)")
+        #expect(s.modes.count == 3)
+        c.setText("Thanks")
+        c.send()
+        try await h.host.drain()
+        #expect(h.host.creates.first?.messageId == "m7" && h.host.creates.first?.mode == .reply
+            && h.host.creates.first?.accountId == mailAcc.id)
+        #expect(h.host.sent.count == 1 && c.state.text.isEmpty)
+
+        // The user's own message (Sent): a reply to it.
+        showSingle(c, single("s1", "t2", mine: true))
+        s = c.state
+        #expect(s.visible && s.target?.message?.id == "s1" && s.target?.mine == true, "own: \(s)")
+
+        // An issue's event alone has no target: hidden whatever the host
+        // says.
+        let ev = issueSingle("e1", .event)
+        c.show(jiraAcc.id, ev.thread)
+        c.update(ev, actions: commentActions, account: jiraAcc)
+        #expect(!c.state.visible, "event: \(c.state)")
+        // An issue's comment: a comment.
+        c.update(issueSingle("c1", .comment), actions: commentActions, account: jiraAcc)
+        s = c.state
+        #expect(s.visible && s.comment && s.target?.message?.id == "c1", "comment: \(s)")
+    }
+
+    /// SetShown alone hides and shows the bar; what was typed stays.
+    @Test func setShown() async throws {
+        let h = try await Harness()
+        defer { Task { await h.stop() } }
+        let c = QuickReplyController(host: h.host)
+        var n = 0
+        c.onChange = { n += 1 }
+        showSingle(c, single("m1", "t1", mine: false))
+        c.setText("draft")
+        let before = n
+        c.setShown(false)
+        #expect(!c.state.visible && c.state.text == "draft", "hidden: \(c.state)")
+        c.setShown(false) // no change
+        c.setShown(true)
+        #expect(c.state.visible && c.state.text == "draft", "shown again: \(c.state)")
+        #expect(n - before == 2)
+    }
+
+    /// The text typed under a single message is its thread's: it stays
+    /// through the conversation of the same thread in the timeline (no bar)
+    /// and in the chat (the bar with the text), back to another message of
+    /// the thread, and through a message of another thread.
+    @Test func textKeptAcrossPages() async throws {
+        let h = try await Harness()
+        defer { Task { await h.stop() } }
+        let c = QuickReplyController(host: h.host)
+        showSingle(c, single("m2", "t1", mine: false))
+        c.setText("half a reply")
+        c.setMode(.replyAll)
+
+        // The grouped list: the conversation t1, in the timeline.
+        c.show(mailAcc.id, "t1")
+        c.update(model("t1", mailAcc.id), actions: mailActions, account: mailAcc)
+        c.setShown(false)
+        var s = c.state
+        #expect(!s.visible && s.text == "half a reply", "timeline: \(s)")
+        // The chat layout.
+        c.setShown(true)
+        s = c.state
+        #expect(s.visible && s.text == "half a reply" && s.mode == .replyAll && s.target?.message?.id == "m2",
+                "chat: \(s)")
+        // The timeline again, then the flat list with m1 of t1 alone.
+        c.setShown(false)
+        showSingle(c, single("m1", "t1", mine: false))
+        s = c.state
+        #expect(s.visible && s.text == "half a reply" && s.target?.message?.id == "m1", "m1: \(s)")
+        // A message of another thread starts empty; back to t1 the text is
+        // there.
+        showSingle(c, single("x1", "t9", mine: false))
+        #expect(c.state.text.isEmpty && c.state.mode == .reply, "t9: \(c.state)")
+        showSingle(c, single("m2", "t1", mine: false))
+        #expect(c.state.text == "half a reply" && c.state.mode == .replyAll, "t1 back: \(c.state)")
+    }
+
+    /// The Outbox and Drafts have no bar: the host says `setShown(false)`
+    /// for a message there, and nothing sends or opens; the text of its
+    /// thread stays.
+    @Test func outboxAndDraftsHaveNoBar() async throws {
+        let h = try await Harness()
+        defer { Task { await h.stop() } }
+        let c = QuickReplyController(host: h.host)
+        showSingle(c, single("m1", "t1", mine: false))
+        c.setText("kept")
+        // A queued message of the same thread in the Outbox.
+        c.show(mailAcc.id, "t1")
+        c.update(single("o1", "t1", mine: true), actions: mailActions, account: mailAcc)
+        c.setShown(false)
+        c.send()
+        c.openWindow()
+        c.forward()
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(!c.state.visible && c.state.text == "kept", "outbox: \(c.state)")
+        #expect(h.host.log.isEmpty && h.host.methods.isEmpty && h.host.opens.isEmpty)
+    }
+
+    /// A Send on its way when the host hides the bar (the user selected the
+    /// empty page or several messages) ends as usual: the text clears, the
+    /// toast says so.
+    @Test func sendEndsWhileHidden() async throws {
+        let h = try await Harness()
+        defer { Task { await h.stop() } }
+        await h.script.gate(API.DraftCreate.name)
+        let c = QuickReplyController(host: h.host)
+        showSingle(c, single("m1", "t1", mine: false))
+        c.setText("go")
+        c.send()
+        c.show(nil, "")
+        c.setShown(false)
+        await h.script.open(API.DraftCreate.name)
+        try await h.host.drain()
+        try #require(h.host.sent.count == 1 && h.host.failed.isEmpty)
+        showSingle(c, single("m1", "t1", mine: false))
+        let s = c.state
+        #expect(s.text.isEmpty && !s.sending && s.visible, "after: \(s)")
+    }
+
+    /// A thread id is unique only within its account (an issue's jira:<id>
+    /// of two sites, a search over all accounts): the same id of two
+    /// accounts has its own text, mode and Send, and a Send ends in the
+    /// account it started in.
+    @Test func sameThreadOfTwoAccounts() async throws {
+        let other = Account(
+            id: "acc2", config: AccountConfig(name: "Home", email: "petr@example.net"), enabled: true,
+            state: SyncState(accountId: "acc2", status: .idle), capabilities: API.mailCapabilities)
+        let h = try await Harness()
+        defer { Task { await h.stop() } }
+        await h.script.gate(API.DraftCreate.name)
+        let c = h.shown()
+        c.setText("for acc")
+        c.setMode(.replyAll)
+
+        c.show(other.id, "t1")
+        c.update(model("t1", other.id), actions: mailActions, account: other)
+        var s = c.state
+        try #require(s.account == other.id && s.thread == "t1" && s.text.isEmpty && s.mode == .reply && !s.sending,
+                     "acc2 starts with \(s)")
+        c.setText("for acc2")
+        c.send()
+        try #require(c.state.sending, "acc2 not sending")
+
+        c.show(mailAcc.id, "t1")
+        c.update(model("t1", mailAcc.id), actions: mailActions, account: mailAcc)
+        s = c.state
+        #expect(s.account == mailAcc.id && s.text == "for acc" && s.mode == .replyAll && !s.sending, "acc back: \(s)")
+        await h.script.open(API.DraftCreate.name)
+        try await h.host.drain()
+        #expect(h.host.creates.first?.accountId == other.id)
+        s = c.state
+        #expect(s.text == "for acc" && !s.sending, "acc after acc2's send: \(s)")
+        c.show(other.id, "t1")
+        c.update(model("t1", other.id), actions: mailActions, account: other)
+        s = c.state
+        #expect(s.text.isEmpty && !s.sending, "acc2 after its send: \(s)")
+        #expect(!c.isKept(other.id, "t1") && c.isKept(mailAcc.id, "t1"))
+    }
+
+    /// A conversation shown without its account takes the account of the
+    /// first `update`; one shown with its account keeps it.
+    @Test func updateAdoptsTheAccount() async throws {
+        let h = try await Harness()
+        defer { Task { await h.stop() } }
+        let c = QuickReplyController(host: h.host)
+        c.setShown(true)
+        c.update(model("t1", mailAcc.id), actions: mailActions, account: mailAcc)
+        #expect(c.state.account == mailAcc.id && c.state.thread == "t1", "adopted \(c.state)")
+        c.show(nil, "t2")
+        c.update(model("t2", mailAcc.id), actions: mailActions, account: mailAcc)
+        #expect(c.state.account == mailAcc.id && c.state.thread == "t2", "adopted the account: \(c.state)")
+        c.show(jiraAcc.id, "t3")
+        c.update(model("t3", mailAcc.id), actions: mailActions, account: mailAcc)
+        #expect(c.state.account == jiraAcc.id, "replaced the account: \(c.state)")
+        c.show(jiraAcc.id, "")
+        #expect(c.state.account.rawValue.isEmpty && c.state.thread.rawValue.isEmpty, "a thread \"\" is none: \(c.state)")
+    }
+
+    /// While a conversation's members are on their way the host gives the
+    /// empty model: the bar hides (it must not answer what was shown
+    /// before, such as the single message of the same thread) and the text
+    /// stays.
+    @Test func emptyModelHidesAndKeepsText() async throws {
+        let h = try await Harness()
+        defer { Task { await h.stop() } }
+        let c = h.shown()
+        c.setText("draft")
+        c.update(Conversation.Model(thread: ""), actions: Capabilities.Actions(), account: nil)
+        var s = c.state
+        try #require(!s.visible && s.target == nil && s.text == "draft" && s.thread == "t1" && s.account == mailAcc.id,
+                     "empty model: \(s)")
+        c.send()
+        c.openWindow()
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(h.host.methods.isEmpty && h.host.opens.isEmpty)
+        c.update(model("t1", mailAcc.id), actions: mailActions, account: mailAcc)
+        s = c.state
+        #expect(s.visible && s.text == "draft" && s.target?.message?.id == "m2", "model back: \(s)")
     }
 }

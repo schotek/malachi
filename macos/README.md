@@ -222,8 +222,10 @@ macos/
                                 ConversationViewController, ConversationCardView,
                                 ConversationCardHeader, ConversationEventRow,
                                 ConversationRow; the chat, ConversationChatViewController,
-                                ConversationChatRow, ConversationBubbleView, under it
-                                ConversationQuickReplyBar with QuickReplyHostAdapter;
+                                ConversationChatRow, ConversationBubbleView;
+                                ConversationQuickReplyBar with QuickReplyHostAdapter,
+                                owned by ReadingPaneViewController under the chat
+                                and under a single message;
                                 ConversationIssueBox; MessageParts shared with the pane),
                                 Windows/ (MessageDisplay: the fan-out to a view showing
                                 several messages), Actions/, Assistant/, Attachments/,
@@ -495,7 +497,7 @@ the strings and the confirmation dialogs.
 | A message saved in eWay-CRM has the *eWay* pill after the subject in the list (teal, tooltip *Saved in eWay-CRM*, `MessageCellView`), and the bar under the header (a card like the bulk-mail strip: check mark, *Saved in eWay-CRM*, the linked items' names, *Open in eWay-CRM*; `CRM/CRMBarView.swift`) in the reading pane, the message window and the conversation's cards, not for an attached message | `crm_pill` after `bulk_pill` and the bar `crm_bar` (`window/crm_bar.go`) | The Mac's pill and banner shapes |
 | eWay-CRM accounts are added only from *Settings → Integrations* (*Add…* on the eWay-CRM row of *Available Services*) and edited from their row there: a sheet (520 × 560, `AccountWizard/EWay/`, `EWayWizardController`) with the pages *Web Service Address* and *Sign In* (the address read only, the account's name, user name and password, which may stay empty when editing, and the check box *Also save later messages of saved conversations* with its hint, checked for a new account and the account's value when editing, sent as `EwayConfig.followThreads`, docs/eway.md D22) in the Jira sheet's shape; the row has the CRM symbol and the host and path of the service under the name | The same flow in an `Adw.Dialog` of the Jira assistant's shape (`accountwizard/eway.go`, `eway_wizard.blp`, `eway_flow.go`); the account's sign-in and certificate banners open it in edit mode too | Owner's decision 2026-10-17: no File menu item or empty-window button for it |
 | Respond in the board's Today strip selects the invitation's message in Mail, where its card answers it | The same since the GTK port (`docs/calendar.md` §5.12 G19) | `docs/calendar.md` §5.9 As built |
-| The chat's quick-reply bar: ⌘↩ is the menu bar's *Message ▸ Send*, on only while the keyboard is in the bar's field and there is something to send, and Send's tooltip says *Send (⌘↩)* as the compose window's; the mode button is a pull-down (`NSPopUpButton`) whose face is the mode's icon and label, on an issue a plain *Comment* label without a menu | Ctrl+Enter in the field (a key controller in the capture phase), tooltip *Send (Ctrl+Enter)*, a menu button | The menu bar carries every key on macOS, as in the compose window; a pull-down is the AppKit control for a choice that also acts (*Forward…*) |
+| The quick-reply bar (under the chat and a single message): ⌘↩ is the menu bar's *Message ▸ Send*, on only while the keyboard is in the bar's field and there is something to send, and Send's tooltip says *Send (⌘↩)* as the compose window's; the mode button is a pull-down (`NSPopUpButton`) whose face is the mode's icon and label, on an issue a plain *Comment* label without a menu | Ctrl+Enter in the field (a key controller in the capture phase), tooltip *Send (Ctrl+Enter)*, a menu button | The menu bar carries every key on macOS, as in the compose window; a pull-down is the AppKit control for a choice that also acts (*Forward…*) |
 
 The link under the pointer is shown at the bottom of the message view as
 in GTK (a user script that runs with content JavaScript off), and a masked

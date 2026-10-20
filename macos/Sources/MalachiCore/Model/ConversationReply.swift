@@ -7,7 +7,9 @@
 // Forward…, which opens the compose window straight away), a field of one
 // to five lines for plain text, a button that opens the compose window with
 // what was typed, and Send. The timeline, the board's chat and the message
-// window have no bar.
+// window have no bar. The same bar stands under the reading pane's page of
+// a single message (docs/plans/chat-view.md §12), which comes to it as a
+// model of one member (`singleModel`).
 //
 // The reply goes to the newest message of someone else in the conversation
 // (the newest message when the user wrote all of them; `quickReplyTarget`),
@@ -230,5 +232,38 @@ extension Conversation {
     public static func quickReplyForwardLabel() -> String {
         // TRANSLATORS: an item of the quick-reply bar's mode menu; opens the compose window with the message forwarded.
         L10n.T("Forward…")
+    }
+
+    /// conversation.SingleModel: the model of one message for the
+    /// quick-reply bar under the reading pane's page of a single message
+    /// (docs/plans/chat-view.md §12, S2, S4): the bar answers that message,
+    /// whoever wrote it (in Sent a reply to the user's own message), so
+    /// `QuickReplyController.update` takes the same model shape as for a
+    /// conversation and `quickReplyTarget` needs no rule of its own. The
+    /// model's thread is the message's (the bar keeps the typed text per
+    /// thread, shared with the message's conversation; "" without one); its
+    /// one item is a `.message` with the cleaned sender (`Item.sender`,
+    /// which names the target in the mode button's tooltip) and `mine` as
+    /// the caller says (the rule of `Item.mine`: `isMine(_:account:)`). An
+    /// event of an issue (a row without a body) is an `.event` without its
+    /// sentences, so that the bar finds no target and hides; a message
+    /// without an id makes an empty model. The model is for the bar only:
+    /// no issue card, nothing to mark read, never rendered.
+    public static func singleModel(_ s: MessageSummary, mine: Bool) -> Model {
+        var m = Model(thread: s.threadId ?? "")
+        if s.id.rawValue.isEmpty {
+            return m
+        }
+        var it = Item(kind: .message, message: s)
+        it.sender = sender(s.from)
+        it.mine = mine
+        it.unread = !hasFlag(s.flags, .seen)
+        if Jira.isEvent(s.issue) {
+            it.kind = .event
+            it.unread = false
+        }
+        m.items = [it]
+        m.scrollTo = 0
+        return m
     }
 }

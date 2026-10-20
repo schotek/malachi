@@ -198,3 +198,54 @@ func TestQuickReplyTexts(t *testing.T) {
 		t.Errorf("forward %q", got)
 	}
 }
+
+// One message shown alone: a model of one message card, which is the
+// quick reply's target whoever wrote it; an issue's event has none.
+func TestSingleModel(t *testing.T) {
+	s := mail("m1", 0, false)
+	s.From = []api.Address{{Name: "Jana‮ Dvořáková\n", Address: "jana@acme.example"}}
+	m := SingleModel(s, false)
+	if m.Thread != "t1" || len(m.Items) != 1 || m.ScrollTo != 0 || m.MarkRead != "" || m.Issue != nil || m.Earlier != 0 {
+		t.Fatalf("model %+v", m)
+	}
+	it := m.Items[0]
+	if it.Kind != ItemMessage || it.Message.ID != "m1" || it.Mine || !it.Unread || it.Sent {
+		t.Errorf("item %+v", it)
+	}
+	if it.Sender != sender(s.From) || strings.ContainsAny(it.Sender, "‮\n") {
+		t.Errorf("sender %q", it.Sender)
+	}
+	if got, ok := QuickReplyTarget(m); !ok || got.Message.ID != "m1" {
+		t.Errorf("target %q %v", got.Message.ID, ok)
+	}
+
+	// The user's own message (Sent): still the target.
+	own := mail("m2", 5, true)
+	own.From = []api.Address{petr}
+	m = SingleModel(own, true)
+	if got, ok := QuickReplyTarget(m); !ok || got.Message.ID != "m2" || !got.Mine || got.Unread {
+		t.Errorf("own target %+v %v", got, ok)
+	}
+
+	// An issue's description is a message; an event is none.
+	desc := issueMsg("d", 0, true, api.MessageIssue{Item: api.IssueItemDescription})
+	if got, ok := QuickReplyTarget(SingleModel(desc, false)); !ok || got.Message.ID != "d" {
+		t.Errorf("description %q %v", got.Message.ID, ok)
+	}
+	ev := SingleModel(statusEvent("e", 1, "Open", "Done"), false)
+	if len(ev.Items) != 1 || ev.Items[0].Kind != ItemEvent || ev.Items[0].Unread || ev.Thread != "tj" {
+		t.Errorf("event model %+v", ev)
+	}
+	if _, ok := QuickReplyTarget(ev); ok {
+		t.Error("an event is a target")
+	}
+
+	// No id: an empty model, no target.
+	empty := SingleModel(api.MessageSummary{ThreadID: "t9"}, false)
+	if len(empty.Items) != 0 || empty.Thread != "t9" || empty.ScrollTo != -1 {
+		t.Errorf("empty %+v", empty)
+	}
+	if _, ok := QuickReplyTarget(empty); ok {
+		t.Error("an empty model has a target")
+	}
+}

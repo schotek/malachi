@@ -11,6 +11,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
+	"github.com/schotek/malachi/ui/internal/capabilities"
 	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/quickreply"
@@ -164,20 +165,26 @@ func (h *conversationHost) applyLayout() {
 	}
 	h.showLayout(on)
 	h.showFoldAll()
-	h.reply.SetChatShown(on)
+	h.reply.SetShown(on)
 }
 
 // updateQuickReply has the quick-reply bar follow the conversation shown:
-// its id first (a new one has no target until its model is built), then
-// its model, the actions of the card the reply goes to and its account.
+// its account and id first (a new one has no target until its model is
+// built), then its model, the actions of the card the reply goes to and
+// its account. Without a model (the members are on their way, or
+// thread.get failed with nothing to build from) the bar gets the empty
+// model and hides until the real one: the same thread shown a moment ago
+// as a single message must not lend it its target.
 func (h *conversationHost) updateQuickReply() {
 	if h.reply == nil {
 		return
 	}
-	h.reply.Show(h.ctrl.thread)
-	if m, actions, account, ok := h.ctrl.quickReplyInput(); ok {
-		h.reply.Update(m, actions, account)
+	h.reply.Show(h.ctrl.account, h.ctrl.thread)
+	m, actions, account, ok := h.ctrl.quickReplyInput()
+	if !ok {
+		m, actions, account = conversation.Model{}, capabilities.Actions{}, api.Account{}
 	}
+	h.reply.Update(m, actions, account)
 }
 
 // useQuickReply makes ctrl the bar's controller (the smoke test's, over a
@@ -185,7 +192,7 @@ func (h *conversationHost) updateQuickReply() {
 func (h *conversationHost) useQuickReply(ctrl *quickreply.Controller) {
 	h.reply = ctrl
 	h.replyBar.setController(ctrl)
-	ctrl.SetChatShown(h.chatShown)
+	ctrl.SetShown(h.chatShown)
 	h.updateQuickReply()
 }
 

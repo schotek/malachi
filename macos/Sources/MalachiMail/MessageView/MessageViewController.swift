@@ -77,6 +77,17 @@ final class MessageViewController: NSViewController {
     let toasts: ToastPresenter?
 
     let bodyTextView = MessageBodyTextView()
+    /// What takes the keyboard when the quick-reply bar hides under the
+    /// page of the message (`ReadingPaneViewController.keyboardTarget`):
+    /// the HTML body while it shows, else the read-only text body (no
+    /// editable text view, so the window's single keys act on the message,
+    /// as when the user clicks into the body).
+    var keyboardTarget: NSView {
+        if let webView, !webView.isHidden {
+            return webView
+        }
+        return bodyTextView
+    }
     let header = MessageHeaderView()
     /// The invitation card above the header (docs/calendar.md §5.7; not
     /// for an attached message), at the header's insets.

@@ -71,6 +71,9 @@ public final class ConversationController {
 
     /// The conversation on display; nil when the pane shows something else.
     public private(set) var thread: ThreadID?
+    /// Its account (a thread id is unique only within its account; the
+    /// row's newest member's); nil with `thread`.
+    public private(set) var account: AccountID?
     /// Its model; nil while the members are on their way.
     public private(set) var model: Conversation.Model?
     /// The cache entries of the cards whose body was asked for, by member.
@@ -155,7 +158,8 @@ public final class ConversationController {
             clear()
             return false
         }
-        if tid == thread {
+        let acc = row.message.accountId.rawValue.isEmpty ? row.summary?.accountId : row.message.accountId
+        if tid == thread, acc == account {
             if let s = row.summary {
                 summary = s
             }
@@ -163,6 +167,7 @@ public final class ConversationController {
         }
         reset()
         thread = tid
+        account = acc
         quoted.show(tid.rawValue)
         summary = row.summary
         onChange?(.loading)
@@ -183,6 +188,7 @@ public final class ConversationController {
     private func reset() {
         gen += 1
         thread = nil
+        account = nil
         model = nil
         members = []
         sent = []
@@ -461,6 +467,26 @@ public final class ConversationController {
             return (m, Capabilities.Actions(), nil)
         }
         return (m, actions(for: s), account(s.accountId))
+    }
+
+    /// What the quick-reply bar needs of a message the reading pane shows
+    /// alone (docs/plans/chat-view.md §12, S2, S4; the conversation of
+    /// this controller has nothing to do with it, its lookups are the
+    /// ones the bar needs): the model of the one message
+    /// (`Conversation.singleModel`, `mine` by the rule of `Item.mine`
+    /// against its account), the actions of its card and its account, and
+    /// whether the page is a place of the bar (`shown`): not for a message
+    /// of the Outbox (queued, `MailModel.inOutbox`) or of Drafts (its
+    /// page offers Edit). An account that does not answer is the
+    /// controller's to hide (no Reply among the actions), an issue's event
+    /// the model's (no target).
+    public func quickReplyInput(single s: MessageSummary) -> (
+        model: Conversation.Model, actions: Capabilities.Actions, account: Account?, shown: Bool
+    ) {
+        let acc = account(s.accountId)
+        let m = list.mailbox.model
+        return (Conversation.singleModel(s, mine: Conversation.isMine(s, account: acc)), actions(for: s), acc,
+                !m.inOutbox(s) && !m.inDrafts(s))
     }
 
     /// The site of the Jira account `id` ("" when unknown or not Jira):

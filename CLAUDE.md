@@ -2052,6 +2052,52 @@ zrušené `BeforeTextChanging`, ✦ přes `MainWindow.ShowAssistantFrom`),
 TheQuickReplyBarSendsAndOpensTheComposeWindow` (devmail); šest exclusions
 pryč. Čeká `build.ps1 app`/`test`/`lint`, smoke a brána R-B3.
 
+Řádek rychlé odpovědi i pod jednou zprávou (2026-10-20, větev
+`feat/chat-reply`; plán `docs/plans/chat-view.md` §12, rozhodnutí S1–S9
+vlastníka: jedna zpráva a chat, časová osa ne, samostatné okno zprávy ne,
+pořadí macOS → GTK → Windows s branami S-B1/S-B2/S-B3). Řádek je potomkem
+celého panelu čtení, ne stránky konverzace, takže stojí na témže místě pod
+jednou zprávou i pod chatem; skrytý na prázdné stránce, u „Vybráno N
+zpráv“, v časové ose, v Outboxu a Konceptech, u události Jiry a u účtu bez
+schopnosti odpovědět; v Odeslaných odpověď na vlastní zprávu. Cíl u jedné
+zprávy je ta zpráva; rozepsaný text drží vlákno (`ThreadID`), takže zpráva
+a její konverzace sdílejí týž text a přepnutí seskupování ani rozložení ho
+neztratí. Démon, API a msgidy beze změny. Reference Go:
+`conversation.SingleModel(s, mine)` (model s jedním členem, událost Jiry
+jako `ItemEvent` bez cíle) a `quickreply.Controller.SetShown(bool)` místo
+`SetChatShown` (hostitel rozhodne: stránka jedné zprávy ∨ chat; Outbox
+a Koncepty jsou věc hostitele, souhrn nenese roli složky); stav řádku je
+od revize klíčovaný dvojicí (účet, vlákno) — `Show(account, thread)`,
+`State.Account`, `conversationController.account` —, protože id vlákna je
+unikátní jen v účtu (Jira `jira:<id>` kolidují mezi sites, hledání ve
+všech účtech je ukáže vedle sebe); bez modelu (členové na cestě) dostane
+kontroler prázdný model, takže řádek čeká se skrytým, ne zastaralým cílem;
+zpráva bez `threadId` (nepropojená starším démonem) řádek nemá; testy
+`TestSingleModel`, `TestSingleMessage`, `TestSetShown`,
+`TestTextKeptAcrossPages`, `TestOutboxAndDraftsHaveNoBar`,
+`TestSendEndsWhileHidden`; GTK zatím jen přejmenované volání v
+`conversation_host.go` (řádek dál jen pod chatem; přesun pod `message_stack`
+je úkol S-G po bráně S-B1). macOS (S-M, port 1:1 + Swift-first
+`ConversationController.quickReplyInput(single:)` a `Conversation.isMine`):
+řádek, kontroler, adaptér i pozorovatel ✦ patří `ReadingPaneViewController`
+(reader i konverzace končí na `bar.top`, skrytý řádek výška 0, pozadí
+panelu podle zobrazeného pohledu), `ConversationHostViewController` jen
+hlásí `onQuickReplyChange`, jeden řádek seznamu krmí kontroler přes
+`quickReplyInput(single:)`, `nil` a výběr více řádků volají `show(nil, "")`
+a `setShown(false)`; skrývající se řádek dá klávesnici pohledu, který panel
+ukazuje (webový pohled či `bodyTextView` zprávy, rolovací pohled rozložení
+konverzace; `ConversationScrollView` přijímá first responder), nikdy
+`nil` — po doručení kopie odpovědi do Odeslaných se řádek v seskupeném
+seznamu s časovou osou skryje, text zůstane v paměti vlákna (otevřená
+otázka pro vlastníka v plánu §12.3, S7 beze změny); krok `MALACHI_START`
+`quick-reply-message` (jedna
+zpráva, vlastní, událost, komentář, Outbox, úzký panel, prázdno). Ověřeno
+na Macu: Go testy `conversation` a `quickreply` (`-race`), kontejner
+(`gtk.sh make build`, testy `window`, smoke, `make lint`), `swift build`
+bez varování, celé `swift test` (1897), `check-strings` beze změny proti
+HEAD, izolovaný start s měřením rozložení. Čeká brána S-B1 vlastníka
+(seznam v plánu §12.3), pak S-G (GTK) a S-W (Windows).
+
 Archivace v Poště = Hotovo (2026-10-13, `feat/board`, necommitnuté; jen
 démon, klienti beze změny — všechny tři to dostanou přes
 `notify.boardChanged`). Vlastník archivoval vyřízenou poštu v Poště a
