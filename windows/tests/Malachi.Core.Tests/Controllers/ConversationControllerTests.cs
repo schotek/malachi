@@ -52,6 +52,7 @@ public sealed class ConversationControllerTests
         await c.SelectAsync(new ListKey(Thread: "t1"));
         Assert.Equal([true], c.Shown);
         Assert.Equal("t1", c.Conversation.Thread?.Value);
+        Assert.Equal(Account, c.Conversation.ThreadAccount);
         Assert.Equal([Change.Loading, Change.Opened], c.Changes);
         var asked = Assert.Single(h.Fixture.ThreadGetRequests);
         Assert.Equal(("a", "t1", "in", (bool?)true), (asked.AccountId.Value, asked.ThreadId.Value, asked.FolderId?.Value, asked.WithSent));
@@ -70,7 +71,7 @@ public sealed class ConversationControllerTests
         // Known members: no second thread.get for another visit.
         await c.SelectAsync(new ListKey("t2", "b1"));
         Assert.Equal([true, false], c.Shown);
-        Assert.True(c.Conversation.Thread is null && c.Conversation.Model is null);
+        Assert.True(c.Conversation.Thread is null && c.Conversation.ThreadAccount is null && c.Conversation.Model is null);
         Assert.Equal(Change.Cleared, c.Changes[^1]);
         await c.SelectAsync(new ListKey(Thread: "t1"));
         Assert.Single(h.Fixture.ThreadGetRequests);
@@ -482,6 +483,43 @@ public sealed class ConversationControllerTests
         Assert.Equal(Account, input.Account?.Id);
     }
 
+    // The quick-reply bar under a message shown alone
+    // (docs/plans/chat-view.md §12; Swift quickReplyInputOfASingleMessage):
+    // the model of the one message, which is the target, the user's own too;
+    // its card's actions and account; no place of the bar in Drafts and the
+    // Outbox.
+    [Fact]
+    public async Task QuickReplyInputOfASingleMessage()
+    {
+        await using var c = await Conv.StartAsync(extraFolders:
+        [
+            TestFolder("drafts", "Drafts", FolderRole.Drafts) with { AccountId = Account },
+            TestFolder("outbox", "Outbox", FolderRole.Outbox) with { AccountId = Account },
+        ]);
+        var h = c.H;
+        await c.SelectAsync(new ListKey("t2", "b1"));
+        var b1 = await h.On(() => h.List.SelectedRow?.Message);
+        Assert.NotNull(b1);
+        var input = await h.On(() => c.Conversation.QuickReplyInput(b1));
+        Assert.True(input.Shown && input.Model.Thread == "t2" && input.Model.Items.Count == 1);
+        Assert.Equal("b1", Conversation.QuickReplyTarget(input.Model)?.Id?.Value);
+        Assert.False(input.Model.Items[0].Mine);
+        Assert.Equal("dave", input.Model.Items[0].Sender);
+        Assert.Equal(await h.On(() => c.Conversation.Actions(b1)), input.Actions);
+        Assert.True(input.Actions.Reply);
+        Assert.Equal(Account, input.Account?.Id);
+        Assert.True(c.Conversation.Model is null, "a single message builds no conversation");
+
+        // The user's own message in Sent: the target, marked as the user's.
+        var own = await h.On(() => c.Conversation.QuickReplyInput(Reply("r1", 7, "t2")));
+        Assert.True(own.Shown && own.Model.Items[0].Mine);
+        Assert.Equal("r1", Conversation.QuickReplyTarget(own.Model)?.Id?.Value);
+
+        // Drafts and the Outbox: no bar.
+        Assert.False((await h.On(() => c.Conversation.QuickReplyInput(b1 with { FolderId = "drafts" }))).Shown);
+        Assert.False((await h.On(() => c.Conversation.QuickReplyInput(b1 with { FolderId = "outbox" }))).Shown);
+    }
+
     // A reply that lands in Sent asks for the conversation again: a single
     // message the user answered becomes a conversation row, the selection
     // moves to it, and the conversation shows the reply.
@@ -727,7 +765,8 @@ public sealed class ConversationControllerTests
 
         public List<MessageId> Loads { get; } = [];
 
-        public static async Task<Conv> StartAsync(MessageSummary[]? messages = null, bool grouped = true, MessageSummary[]? sent = null)
+        public static async Task<Conv> StartAsync(
+            MessageSummary[]? messages = null, bool grouped = true, MessageSummary[]? sent = null, Folder[]? extraFolders = null)
         {
             Conv? c = null;
             var h = await MailboxControllerHarness.StartAsync(
@@ -739,6 +778,7 @@ public sealed class ConversationControllerTests
                         TestFolder("in", "INBOX", FolderRole.Inbox) with { AccountId = Account },
                         TestFolder("sent", "Sent", FolderRole.Sent) with { AccountId = Account },
                         TestFolder("trash", "Trash", FolderRole.Trash) with { AccountId = Account },
+                        .. extraFolders ?? [],
                     ],
                     Account);
                     f.SetMessages(messages ?? Messages(), Account, Inbox.Folder);

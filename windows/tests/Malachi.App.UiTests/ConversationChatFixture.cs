@@ -12,7 +12,10 @@
 // shape is the quick-reply bar's (ReplySubject), so that its sent reply
 // does not add a bubble to the first one: its first message, from Ada, has
 // Reply-To the user, so the quick reply goes to the seeded mailbox and
-// devmail delivers it as it delivers the suite's other sends.
+// devmail delivers it as it delivers the suite's other sends. A lone message
+// of the same kind (SingleSubject) is the bar's under a single message
+// (docs/plans/chat-view.md §12): a plain row until its quick reply lands in
+// Sent and makes it a conversation.
 
 using System;
 using System.Globalization;
@@ -39,6 +42,9 @@ public sealed class ConversationChatFixture : IAsyncLifetime
 
     /// <summary>The quick-reply bar's conversation's subject (its first message's).</summary>
     public string ReplySubject { get; } = "Quick " + Guid.NewGuid().ToString("N")[..8];
+
+    /// <summary>The lone message's subject: the quick-reply bar under a single message.</summary>
+    public string SingleSubject { get; } = "Single " + Guid.NewGuid().ToString("N")[..8];
 
     /// <summary>devmail (the quick-reply test counts the server's Sent).</summary>
     internal DevmailServer Server => server ?? throw new InvalidOperationException(SkipReason);
@@ -78,7 +84,9 @@ public sealed class ConversationChatFixture : IAsyncLifetime
             var quickFirst = "<quick-" + quick + "@uitests.invalid>";
             DevmailSmtp.Submit(devmail, Message(quickFirst, null, "Ada Example <ada@example.org>", "Test User <" + DevmailServer.User + ">", ReplySubject, "Can you send me the agenda?", DateTimeOffset.UtcNow.AddMinutes(-9), replyTo: "Test User <" + DevmailServer.User + ">"));
             DevmailSmtp.Submit(devmail, Message("<quick-reply-" + quick + "@uitests.invalid>", quickFirst, "Test User <" + DevmailServer.User + ">", "Ada Example <ada@example.org>, Test User <" + DevmailServer.User + ">", "Re: " + ReplySubject, "Let me look for it.", DateTimeOffset.UtcNow.AddMinutes(-8)));
-            Uia.WaitFor(() => devmail.Total("INBOX") == inbox + 4, "the conversations in the server's INBOX", TimeSpan.FromSeconds(60));
+            var single = SingleSubject[7..];
+            DevmailSmtp.Submit(devmail, Message("<single-" + single + "@uitests.invalid>", null, "Ada Example <ada@example.org>", "Test User <" + DevmailServer.User + ">", SingleSubject, "Are you coming tomorrow?", DateTimeOffset.UtcNow.AddMinutes(-7), replyTo: "Test User <" + DevmailServer.User + ">"));
+            Uia.WaitFor(() => devmail.Total("INBOX") == inbox + 5, "the conversations in the server's INBOX", TimeSpan.FromSeconds(60));
 
             session = AppSession.Start(preferences: k =>
             {

@@ -15,14 +15,22 @@ using Malachi.Core.Model;
 
 namespace Malachi.Core.Controllers;
 
-/// <summary>quickreply.State: what the quick-reply bar shows, for the conversation shown (<see cref="Thread"/>).</summary>
+/// <summary>
+/// quickreply.State: what the quick-reply bar shows, for the conversation
+/// shown (<see cref="Account"/>, <see cref="Thread"/>).
+/// </summary>
 public sealed record QuickReplyState
 {
+    /// <summary>The account of the conversation shown; "" for none.</summary>
+    public AccountId Account { get; init; } = new("");
+
     /// <summary>The conversation shown; "" for none.</summary>
     public ThreadId Thread { get; init; } = new("");
 
     /// <summary>
-    /// The chat layout is shown, the conversation has a target and its
+    /// The host shows the bar's place
+    /// (<see cref="QuickReplyController.SetShown"/>: a single message's page
+    /// or a conversation's chat), the conversation has a target and its
     /// account answers it (Reply). The bar is hidden otherwise.
     /// </summary>
     public bool Visible { get; init; }
@@ -63,13 +71,13 @@ public sealed record QuickReplyState
 
     /// <inheritdoc/>
     public bool Equals(QuickReplyState? other) =>
-        other is not null && Thread == other.Thread && Visible == other.Visible && Target == other.Target
+        other is not null && Account == other.Account && Thread == other.Thread && Visible == other.Visible && Target == other.Target
         && Modes.SequenceEqual(other.Modes) && Mode == other.Mode
         && string.Equals(Text, other.Text, StringComparison.Ordinal)
         && Blank == other.Blank && Sending == other.Sending && Comment == other.Comment;
 
     /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine(Thread, Visible, Modes.Count, Mode, Text, Blank, Sending, Comment);
+    public override int GetHashCode() => HashCode.Combine(Account, Thread, Visible, Modes.Count, Mode, Text, HashCode.Combine(Blank, Sending, Comment));
 
     /// <summary>
     /// The state without the text: never what was typed (docs/windows-port.md
@@ -77,7 +85,7 @@ public sealed record QuickReplyState
     /// </summary>
     public override string ToString() => string.Create(
         CultureInfo.InvariantCulture,
-        $"QuickReplyState(thread: {Thread}, visible: {Visible}, target: {Target?.Id?.ToString() ?? "null"}, "
+        $"QuickReplyState(account: {Account}, thread: {Thread}, visible: {Visible}, target: {Target?.Id?.ToString() ?? "null"}, "
         + $"modes: [{string.Join(", ", Modes)}], mode: {Mode}, text: {Text.Length} chars, blank: {Blank}, "
         + $"sending: {Sending}, comment: {Comment})");
 }

@@ -3,7 +3,8 @@
 
 // Port of ui/internal/conversation/reply_test.go (TestQuickReplyTarget,
 // TestQuickReplyTargetOfABuiltModel, TestQuickReplyModes, TestQuickReplyHTML,
-// TestQuickReplyBlank, TestQuickReplyBody, TestQuickReplyTexts) and of
+// TestQuickReplyBlank, TestQuickReplyBody, TestQuickReplyTexts,
+// TestSingleModel) and of
 // macos/Tests/MalachiCoreTests/ConversationReplyTests.swift (the same, its
 // composeKind cases, the window's fromDraft layout in quickReplyBody and
 // quickReplyIconOnly), with po_test.go TestMsgidsInTemplate for reply.go.
@@ -265,6 +266,47 @@ public sealed class ConversationReplyTests
                 "T(\"Forward…\"",
             ],
             calls);
+    }
+
+    // TestSingleModel (and Swift singleModel): one message shown alone is a
+    // model of one message card, which is the quick reply's target whoever
+    // wrote it; an issue's event has none.
+    [Fact]
+    public void SingleModel()
+    {
+        var s = Mail("m1", 0, false) with { From = [new Address { Name = "Jana" + Rlo + " Dvořáková\n", Email = "jana@acme.example" }] };
+        var m = Conversation.SingleModel(s, false);
+        Assert.True(m.Thread == "t1" && m.Items.Count == 1 && m.ScrollTo == 0 && m.MarkRead is null && m.Issue is null && m.Earlier == 0, m.ToString());
+        var it = m.Items[0];
+        Assert.True(it.Kind == ConversationItemKind.Message && it.Id?.Value == "m1" && !it.Mine && it.Unread && !it.Sent, it.ToString());
+        Assert.Equal(Malachi.Core.IssueTrackers.Jira.Clean("Jana" + Rlo + " Dvořáková\n"), it.Sender);
+        Assert.DoesNotContain(Rlo, it.Sender, StringComparison.Ordinal);
+        Assert.DoesNotContain("\n", it.Sender, StringComparison.Ordinal);
+        Assert.Equal("m1", Conversation.QuickReplyTarget(m)?.Id?.Value);
+
+        // The user's own message (Sent): still the target.
+        var own = Mail("m2", 5, true) with { From = [Petr] };
+        m = Conversation.SingleModel(own, true);
+        var target = Conversation.QuickReplyTarget(m);
+        Assert.True(target is { Mine: true, Unread: false } && target.Id?.Value == "m2", target?.ToString());
+        // IsMine is the rule of ConversationItem.Mine (the account's own address).
+        Assert.True(Conversation.IsMine(own, MailAccount));
+        Assert.False(Conversation.IsMine(s, MailAccount));
+        Assert.False(Conversation.IsMine(own, null));
+
+        // An issue's description is a message; an event is none.
+        var desc = IssueMsg("d", 0, true, Item(IssueItemKind.Description));
+        Assert.Equal("d", Conversation.QuickReplyTarget(Conversation.SingleModel(desc, false))?.Id?.Value);
+        var ev = Conversation.SingleModel(StatusEvent("e", 1, "Open", "Done"), false);
+        Assert.True(ev.Items.Count == 1 && ev.Items[0].Kind == ConversationItemKind.Event && !ev.Items[0].Unread && ev.Thread == "tj", ev.ToString());
+        Assert.True(Conversation.QuickReplyTarget(ev) is null, "an event is a target");
+
+        // No id: an empty model, no target.
+        var empty = Conversation.SingleModel(Mail("", 0, true) with { ThreadId = "t9" }, false);
+        Assert.True(empty.Items.Count == 0 && empty.Thread == "t9" && empty.ScrollTo == -1, empty.ToString());
+        Assert.True(Conversation.QuickReplyTarget(empty) is null, "an empty model has a target");
+        // No thread: the model's thread is "".
+        Assert.Equal("", Conversation.SingleModel(Mail("m3", 0, true) with { ThreadId = null }, false).Thread.Value);
     }
 
     private static byte[] Bytes(string s) => Encoding.UTF8.GetBytes(s);

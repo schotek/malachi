@@ -136,16 +136,18 @@ public sealed class ReaderHub : IDisposable
         registry.MakeMessageWindow = s => new MessageWindow(Services, s);
         registry.MakeEmbeddedWindow = (containing, attachment, result) => new EmbeddedMessageWindow(Services, containing, attachment, result);
 
-        Pane = new MessageView(ReaderMode.Pane, Services, mainWindow.Commands) { HostWindow = mainWindow };
+        Pane = new MessageView(ReaderMode.Pane, Services, mainWindow.Commands)
+        {
+            HostWindow = mainWindow,
+            // The quick-reply bar's Escape: the list takes the keyboard only while it is on screen.
+            FocusList = mainWindow.FocusMessageList,
+            ListOnScreen = () => mainWindow.MessageListOnScreen,
+        };
         registry.Track(Pane.Reader);
         mainWindow.Reader = Pane;
         // The pane's conversation page (window.go conversationPane); the list
         // keeps the keyboard (a chip that had it gives it back there).
-        Conversation = new Conversation.ConversationView(Services, integration.Conversation, () => mainWindow, mainWindow.FocusMessageList)
-        {
-            // The quick-reply bar's Escape: the list takes the keyboard only while it is on screen.
-            ListOnScreen = () => mainWindow.MessageListOnScreen,
-        };
+        Conversation = new Conversation.ConversationView(Services, integration.Conversation, () => mainWindow, mainWindow.FocusMessageList);
         Pane.HostConversation(Conversation);
         var conversation = Conversation;
         mainWindow.SetConversationPaging(up => conversation.Shown && conversation.PageBy(up));

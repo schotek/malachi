@@ -2,18 +2,24 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiMail/MessageView/ConversationQuickReplyBar.swift
-// (render, renderMode, modeLabel, modeIcon, setVisible, viewDidLayout, the
-// actions and sendMessage:); GTK: ui/internal/window/quick_reply_bar.go
+// (render, renderMode, modeLabel, modeIcon, setVisible with keyboardTarget,
+// the actions and sendMessage:); GTK: ui/internal/window/quick_reply_bar.go
 // (quickReplyBar: render, renderMode, buildMenu, the key controller and the
 // input gate).
 //
-// The quick-reply bar under a conversation shown as chat in Mail
-// (docs/plans/chat-view.md §10, §11): what ConversationQuickReplyBar.xaml
-// lays out, filled from the controller. Everything it shows is
-// QuickReplyController.State, read again on every Changed; the bar reports
-// typing, the mode, Send, Open in a Window and Forward… to it and decides
-// nothing. A hidden bar (State.Visible off) is collapsed and takes no room
-// in the conversation page's last row.
+// The quick-reply bar of Mail's reading pane (docs/plans/chat-view.md §10–
+// §12): under the page of a single message and under a conversation shown
+// as chat, in the same place, the last row of the pane (MessageView in
+// ReaderMode.Pane makes it; a message window has none). What
+// ConversationQuickReplyBar.xaml lays out, filled from the controller.
+// Everything it shows is QuickReplyController.State, read again on every
+// Changed; the bar reports typing, the mode, Send, Open in a Window and
+// Forward… to it and decides nothing. A hidden bar (State.Visible off) is
+// collapsed and takes no room. A bar that hides while the keyboard is in it
+// hands the keyboard to the view the pane shows (KeyboardTarget: the
+// message's body, the conversation's layout), never leaving it on a
+// collapsed control, where the window's single-key commands would act on
+// the selection unseen.
 //
 // The mode button is a DropDownButton whose flyout has the reply modes the
 // account offers as radio items and, after a separator, Forward…, which
@@ -24,8 +30,10 @@
 // way to a plain label, Comment with the Comment icon, and no flyout. Its
 // tooltip names the sender of the message the reply goes to
 // (Conversation.QuickReplyTargetTooltip); none when that is empty. In a
-// narrow pane (ConversationLayout.QuickReplyIconOnly of the bar's width,
-// again on every change of it) the mode button shows its icon alone.
+// narrow pane (ConversationLayout.QuickReplyIconOnly of the pane's width,
+// which the pane passes on every change of it, SetPaneWidth, also while the
+// bar is collapsed, so that it shows right the first time) the mode button
+// shows its icon alone.
 //
 // Keys, in the field's PreviewKeyDown: Return is a new line (the TextBox
 // accepts returns); Ctrl+Enter sends (the controller sends only while Send
@@ -72,13 +80,14 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using L = Malachi.Core.Model.ConversationLayout;
 using Rules = Malachi.Core.Model.Conversation;
 using WinUIKey = Windows.System.VirtualKey;
 
 namespace Malachi.App.Reader.Conversation;
 
-/// <summary>The quick-reply bar under the chat layout of the conversation page.</summary>
+/// <summary>The quick-reply bar of the reading pane: under a single message and under the chat layout of a conversation.</summary>
 internal sealed partial class ConversationQuickReplyBar : UserControl
 {
     // The radio group of the mode flyout's reply items.
@@ -154,15 +163,6 @@ internal sealed partial class ConversationQuickReplyBar : UserControl
             controller.OpenWindow();
         };
         SendButton.Click += (_, _) => Send();
-        SizeChanged += (_, e) =>
-        {
-            var narrow = L.QuickReplyIconOnly(e.NewSize.Width);
-            if (narrow != iconOnly)
-            {
-                iconOnly = narrow;
-                Render();
-            }
-        };
 
         onChanged = (_, _) => Render();
         controller.Changed += onChanged;
@@ -181,6 +181,12 @@ internal sealed partial class ConversationQuickReplyBar : UserControl
     /// </summary>
     public Action<FrameworkElement>? OpenAssistant { get; set; }
 
+    /// <summary>
+    /// The bar hid while the keyboard was in it: the pane gives the keyboard
+    /// to the view it shows (macOS <c>keyboardTarget</c>).
+    /// </summary>
+    public Action? KeyboardTarget { get; set; }
+
     /// <summary>The ✦ button shows: the Assistant is shown (<see cref="AssistantController.Shown"/>, as the toolbar's ✦).</summary>
     public bool AssistantShown
     {
@@ -195,6 +201,22 @@ internal sealed partial class ConversationQuickReplyBar : UserControl
     /// </summary>
     protected override AutomationPeer OnCreateAutomationPeer() =>
         new ConversationGroupPeer(this, nameof(ConversationQuickReplyBar), AutomationControlType.Group);
+
+    /// <summary>
+    /// The reading pane is <paramref name="width"/> wide (its SizeChanged):
+    /// the mode button shows its icon alone in a narrow pane
+    /// (<see cref="Malachi.Core.Model.ConversationLayout.QuickReplyIconOnly"/>).
+    /// </summary>
+    public void SetPaneWidth(double width)
+    {
+        var narrow = L.QuickReplyIconOnly(width);
+        if (narrow == iconOnly)
+        {
+            return;
+        }
+        iconOnly = narrow;
+        Render();
+    }
 
     /// <summary>The bar stops following the controller (the window closes).</summary>
     public void Close()
@@ -211,6 +233,9 @@ internal sealed partial class ConversationQuickReplyBar : UserControl
             return;
         }
         var s = controller.State;
+        // Hiding with the keyboard in it: the pane's view takes it once the
+        // bar is drawn (below).
+        var handOff = !s.Visible && Visibility == Visibility.Visible && OwnsFocus();
         Visibility = s.Visible ? Visibility.Visible : Visibility.Collapsed;
         // The gate first: the text of a Send that went through is cleared
         // in the same change that ends it.
@@ -235,6 +260,27 @@ internal sealed partial class ConversationQuickReplyBar : UserControl
         OpenButton.IsEnabled = !s.Sending;
         SendButton.IsEnabled = !s.Blank && !s.Sending;
         RenderMode(s);
+        if (handOff)
+        {
+            KeyboardTarget?.Invoke();
+        }
+    }
+
+    // Whether the keyboard is in the bar (its field or a button).
+    private bool OwnsFocus()
+    {
+        if (XamlRoot is null || FocusManager.GetFocusedElement(XamlRoot) is not DependencyObject focused)
+        {
+            return false;
+        }
+        for (var e = focused; e is not null; e = VisualTreeHelper.GetParent(e))
+        {
+            if (ReferenceEquals(e, this))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     // The mode button, or on an issue the Comment label.

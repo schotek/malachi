@@ -24,10 +24,9 @@ which one shows, added in code (ConversationView.xaml.cs): the timeline
 (ConversationTimelineView, the default) and the chat (ConversationChatView).
 Over them, the link under the pointer in any card of the timeline at the
 bottom left (an OSD caption, plain text, cut in the middle) and the spinner
-while the members load. Under them, in the last row (conversation_reply_bar),
-the quick-reply bar of the chat (ConversationQuickReplyBar), added in code:
-collapsed, so taking no room, while the timeline shows or it has nothing to
-answer.
+while the members load. The quick-reply bar under the chat is the reading
+pane's (MessageView, docs/plans/chat-view.md §12), under this page as under
+the page of a single message.
 -->
 <UserControl
     x:Class="Malachi.App.Reader.Conversation.ConversationView"
@@ -47,7 +46,6 @@ answer.
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- conversation_strip: Collapse All / Expand All and the layout toggle. -->

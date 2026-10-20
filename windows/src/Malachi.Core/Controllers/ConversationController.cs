@@ -4,7 +4,9 @@
 // Port of macos/Sources/MalachiCore/Controllers/ConversationController.swift;
 // GTK: ui/internal/window/conversation_controller.go (conversationController;
 // its drafts, the draft cards, a Windows addition ahead of Swift; the
-// quick-reply bar's input, Swift's quickReplyInput).
+// quick-reply bar's input, Swift's quickReplyInput and
+// quickReplyInput(single:); Swift's account is ThreadAccount, since Account
+// is the lookup of an account here).
 //
 // The conversation view of the reading pane, the controller half: which
 // conversation the pane shows, its model (Conversation, the port of
@@ -138,6 +140,13 @@ public sealed partial class ConversationController : IDisposable
     /// <summary>The conversation on display; null when the pane shows something else.</summary>
     public ThreadId? Thread { get; private set; }
 
+    /// <summary>
+    /// Its account (a thread id is unique only within its account; the row's
+    /// newest member's, else the row summary's); null with
+    /// <see cref="Thread"/> (Swift and Go <c>account</c>).
+    /// </summary>
+    public AccountId? ThreadAccount { get; private set; }
+
     /// <summary>Its model; null while the members are on their way.</summary>
     public ConversationModel? Model { get; private set; }
 
@@ -177,7 +186,8 @@ public sealed partial class ConversationController : IDisposable
             Clear();
             return false;
         }
-        if (tid == Thread)
+        AccountId? acc = string.IsNullOrEmpty(row.Message.AccountId.Value) ? row.Summary?.AccountId : row.Message.AccountId;
+        if (tid == Thread && acc == ThreadAccount)
         {
             if (row.Summary is { } s)
             {
@@ -187,6 +197,7 @@ public sealed partial class ConversationController : IDisposable
         }
         Reset();
         Thread = tid;
+        ThreadAccount = acc;
         quoted.Show(tid.Value);
         summary = row.Summary;
         Changed?.Invoke(this, Change.Loading);
@@ -210,6 +221,7 @@ public sealed partial class ConversationController : IDisposable
     {
         gen++;
         Thread = null;
+        ThreadAccount = null;
         Model = null;
         members = [];
         sent = [];
@@ -621,6 +633,31 @@ public sealed partial class ConversationController : IDisposable
             return (m, default(CapabilityActions), (Account?)null);
         }
         return (m, Actions(s), Account(s.AccountId));
+    }
+
+    /// <summary>
+    /// What the quick-reply bar needs of a message the reading pane shows
+    /// alone (docs/plans/chat-view.md §12, S2, S4; Swift
+    /// <c>quickReplyInput(single:)</c>; the conversation of this controller
+    /// has nothing to do with it, its lookups are the ones the bar needs):
+    /// the model of the one message (<see cref="Conversation.SingleModel"/>,
+    /// <c>mine</c> by the rule of <see cref="ConversationItem.Mine"/> against
+    /// its account), the actions of its card and its account, and whether
+    /// the page is a place of the bar (<c>Shown</c>): not for a message of
+    /// the Outbox (queued, <see cref="MailModel.InOutbox"/>) or of Drafts
+    /// (its page offers Edit, <see cref="MailModel.InDrafts"/>). An account
+    /// that does not answer is the bar controller's to hide (no Reply among
+    /// the actions), an issue's event the model's (no target).
+    /// </summary>
+    public (ConversationModel Model, CapabilityActions Actions, Account? Account, bool Shown) QuickReplyInput(MessageSummary single)
+    {
+        ArgumentNullException.ThrowIfNull(single);
+        var acc = Account(single.AccountId);
+        return (
+            Conversation.SingleModel(single, Conversation.IsMine(single, acc)),
+            Actions(single),
+            acc,
+            !Mail.InOutbox(single) && !Mail.InDrafts(single));
     }
 
     /// <summary>

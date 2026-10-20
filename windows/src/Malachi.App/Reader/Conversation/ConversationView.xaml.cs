@@ -5,11 +5,11 @@
 // showLayout, the strip, the spinner, hover, pageBy, shownIssueCard) and
 // conversation_fanout.go (convFanout: changed, loaded, trim); macOS:
 // MessageView/ConversationHostViewController.swift and
-// ConversationStripView.swift; the quick-reply bar's host: GTK
-// conversation_host.go (updateQuickReply, applyLayout's SetChatShown,
-// chatColumnChanged), macOS ConversationHostViewController (the bar under
-// the chat) and App/Integration+Conversation.swift (the host adapter,
-// onFocusList, onAssistant, assistantShown). Until the chat layout this class was the
+// ConversationStripView.swift; what the reading pane's quick-reply bar
+// learns of the conversation: GTK conversation_host.go (updateQuickReply,
+// applyLayout's SetShown), macOS ConversationHostViewController
+// (onQuickReplyChange) and ConversationViewController (the keyboard of a
+// hiding bar). Until the chat layout this class was the
 // timeline, which is ConversationTimelineView.xaml.cs now; the name stayed
 // with the page, so the reader's callers (ReaderHub, MessageView) did not
 // change.
@@ -54,17 +54,20 @@
 // shown (PageBy). The host owns the spinner while the members load and the
 // status label of the link under the pointer (only the timeline has links).
 //
-// The quick-reply bar (docs/plans/chat-view.md §10, §11) is the page's last
-// row, under the chat only: its controller (QuickReplyController, one per
-// window, over QuickReplyHostAdapter) follows the conversation shown on
-// every change of the conversation controller (Show, then Update with
-// ConversationController.QuickReplyInput) and the layout shown
-// (SetChatShown); the bar (ConversationQuickReplyBar) renders the
-// controller's state and is collapsed, taking no room, while the timeline
-// shows or the controller hides it. Its ✦ is the toolbar's
-// (MainWindow.ShowAssistantFrom), shown while the Assistant is; its Escape
-// gives the keyboard to the message list while the list is on screen
-// (ListOnScreen, from the reader hub).
+// The quick-reply bar (docs/plans/chat-view.md §10–§12) is the reading
+// pane's, not this page's: it stands under the page of a single message and
+// under the chat in the same place (MessageView in ReaderMode.Pane owns it
+// and its controller). This page only tells the pane that what the bar shows
+// of it may have changed (QuickReplyChanged: every change of the
+// conversation controller but Cleared, and every switch of the layout); the
+// pane then reads the conversation (Controller, ChatShown) and feeds the
+// bar's controller. Cleared is not told: the hub clears the conversation
+// only for a row that is no conversation, and the page the pane shows next
+// (the message, the empty page, the count of several rows) feeds the bar, so
+// that the bar never flickers hidden on the way from a conversation to a
+// message of the same thread (macOS switches the page before clearing for
+// the same reason). A bar hiding with the keyboard gives it to the layout
+// shown (TakeKeyboard).
 
 using System;
 using Malachi.App.Resources;
@@ -97,9 +100,6 @@ internal sealed partial class ConversationView : UserControl
     private readonly ILogger logger;
     private readonly EventHandler<ConversationController.Change> onChanged;
     private readonly EventHandler<(MessageId Id, LoadedMessage Entry)> onLoaded;
-    private readonly QuickReplyController quickReply;
-    private readonly ConversationQuickReplyBar replyBar;
-    private readonly EventHandler onAssistantChanged;
     private SettingsChangeToken? layoutToken;
 
     // The chat is the layout shown; started: ShowLayout ran once.
@@ -152,20 +152,6 @@ internal sealed partial class ConversationView : UserControl
             }
         };
 
-        // The quick-reply bar in the last row, under the chat.
-        quickReply = new QuickReplyController(new QuickReplyHostAdapter(services, hostWindow));
-        replyBar = new ConversationQuickReplyBar(quickReply)
-        {
-            FocusList = focusList,
-            ListOnScreen = () => ListOnScreen?.Invoke() ?? true,
-            OpenAssistant = anchor => (HostWindow as MainWindow)?.ShowAssistantFrom(anchor),
-            AssistantShown = services.State.Assistant.Shown,
-        };
-        Grid.SetRow(replyBar, 2);
-        Root.Children.Add(replyBar);
-        onAssistantChanged = (_, _) => replyBar.AssistantShown = services.State.Assistant.Shown;
-        services.State.Assistant.Changed += onAssistantChanged;
-
         onChanged = (_, change) => ControllerChanged(change);
         onLoaded = (_, e) => ControllerEntryLoaded(e.Id, e.Entry);
         ctrl.Changed += onChanged;
@@ -200,12 +186,11 @@ internal sealed partial class ConversationView : UserControl
     /// <summary>The page itself is the pane's page on show (the layouts measure and fetch only then).</summary>
     internal bool PageVisible => Visibility == Visibility.Visible;
 
-    /// <summary>
-    /// Whether the message list is on screen (MainWindow.MessageListOnScreen):
-    /// the quick-reply bar's Escape gives it the keyboard only then; null
-    /// counts as on screen.
-    /// </summary>
-    internal Func<bool>? ListOnScreen { get; set; }
+    /// <summary>The conversation controller of the pane (the quick-reply bar's input: Thread, ThreadAccount, QuickReplyInput).</summary>
+    internal ConversationController Controller => ctrl;
+
+    /// <summary>The chat is the layout shown (the quick-reply bar stands under it, not under the timeline).</summary>
+    internal bool ChatShown => chatShown;
 
     private Func<Window?> HostWindowOf { get; }
 
@@ -292,15 +277,56 @@ internal sealed partial class ConversationView : UserControl
     /// <summary>issue_card.go openKey: the issue in the browser (a URL of the account's own site, the card checked it); a failure is a toast.</summary>
     public void OpenIssue(string url) => _ = OpenIssueAsync(url);
 
+    /// <summary>
+    /// What the reading pane's quick-reply bar shows of the conversation may
+    /// have changed: a change of the conversation controller other than
+    /// <see cref="ConversationController.Change.Cleared"/>, or the layout
+    /// shown (updateQuickReply, applyLayout).
+    /// </summary>
+    internal event EventHandler? QuickReplyChanged;
+
+    /// <summary>
+    /// A hiding quick-reply bar had the keyboard: the layout shown takes it
+    /// (its scroller, which is no Tab stop: macOS
+    /// ConversationScrollView, GTK shownScroller().GrabFocus()); false when
+    /// it could not.
+    /// </summary>
+    internal bool TakeKeyboard() => chatShown ? chat.TakeKeyboard() : timeline.TakeKeyboard();
+
+    /// <summary>
+    /// Gives <paramref name="scroller"/>, a scroller that is no Tab stop, the
+    /// keyboard: it is a Tab stop while it holds it (WinUI focuses no control
+    /// that is none) and stops being one when the keyboard leaves it, so
+    /// that Tab still never stops there; false when it could not take it.
+    /// </summary>
+    internal static bool FocusScroller(ScrollViewer scroller)
+    {
+        ArgumentNullException.ThrowIfNull(scroller);
+        if (scroller.Visibility != Visibility.Visible)
+        {
+            return false;
+        }
+        if (scroller.IsTabStop)
+        {
+            return scroller.Focus(FocusState.Programmatic);
+        }
+        scroller.IsTabStop = true;
+        if (!scroller.Focus(FocusState.Programmatic))
+        {
+            scroller.IsTabStop = false;
+            return false;
+        }
+        scroller.LostFocus += OnTakenScrollerLostFocus;
+        return true;
+    }
+
     /// <summary>The pane's views go for good (the window closes).</summary>
     public void Close()
     {
         ctrl.Changed -= onChanged;
         ctrl.EntryLoaded -= onLoaded;
-        services.State.Assistant.Changed -= onAssistantChanged;
         layoutToken?.Cancel();
         layoutToken = null;
-        replyBar.Close();
         timeline.Close();
         chat.Close();
         spinnerTimer.Stop();
@@ -336,7 +362,7 @@ internal sealed partial class ConversationView : UserControl
             timeline.SetShown(true);
             ShowFoldAll(timeline.FoldAllOffer);
         }
-        quickReply.SetChatShown(on);
+        QuickReplyChanged?.Invoke(this, EventArgs.Empty);
     }
 
     // The toggle for the chat on or off: its state, its label, tooltip and
@@ -404,18 +430,9 @@ internal sealed partial class ConversationView : UserControl
         }
         timeline.Changed(change);
         chat.Changed(change);
-        UpdateQuickReply();
-    }
-
-    // updateQuickReply: the quick-reply bar follows the conversation shown:
-    // its id first (a new one has no target until its model is built), then
-    // its model, the actions of the card the reply goes to and its account.
-    private void UpdateQuickReply()
-    {
-        quickReply.Show(ctrl.Thread ?? new ThreadId(""));
-        if (ctrl.QuickReplyInput() is { } input)
+        if (change != ConversationController.Change.Cleared)
         {
-            quickReply.Update(input.Model, input.Actions, input.Account);
+            QuickReplyChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -430,6 +447,14 @@ internal sealed partial class ConversationView : UserControl
         {
             timeline.EntryLoaded(id, lm);
         }
+    }
+
+    // The keyboard left a scroller FocusScroller made a Tab stop: no longer one.
+    private static void OnTakenScrollerLostFocus(object sender, RoutedEventArgs e)
+    {
+        var scroller = (ScrollViewer)sender;
+        scroller.LostFocus -= OnTakenScrollerLostFocus;
+        scroller.IsTabStop = false;
     }
 
     // startSpinner: the spinner once the members take long enough to notice.

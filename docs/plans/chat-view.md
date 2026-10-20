@@ -1325,3 +1325,10 @@ zprávy beze změny stránky); že `SizeChanged` `MessageView` přichází i ve
 složeném rozložení; že UIA `AddToSelection` na `ListViewItem` v režimu
 `Extended` udělá výběr více řádků (jinak ať smoke test použije Ctrl-klik);
 dosavadní hádání z §11.2.2 platí dál.
+
+Z nezávislé revize Windows (2026-10-20, čtením): Core odpovídá Go i Swiftu
+1:1, hostitel v pořádku; opraveno: UI smoke test čekal na `MessagePage`
+a `SelectionPage`, což jsou panely bez UIA peeru (čeká teď na
+`MessageBodyScroller`, u více řádků jen na zmizení řádku), a `FocusBody`
+vrací `bool`, takže skrývající se řádek předá klávesnici seznamu, když je
+tělo zprávy sbalené (načítání, chyba, HTML bez prohlížeče).

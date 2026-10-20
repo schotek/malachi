@@ -395,6 +395,13 @@ internal sealed partial class ConversationTimelineView : UserControl
     /// <summary>win.change-status: the Change Status menu of the issue card on top; false when there is none.</summary>
     public bool OpenStatusMenu() => issue.OpenStatusMenu();
 
+    /// <summary>
+    /// A hiding quick-reply bar had the keyboard: this layout's scroller
+    /// takes it (<see cref="ConversationView.FocusScroller"/>); false when it
+    /// could not.
+    /// </summary>
+    internal bool TakeKeyboard() => ConversationView.FocusScroller(Scroller);
+
     /// <summary>pageBy: one page down (or up) for Space (Shift+Space) in the list; true when the key was used.</summary>
     public bool PageBy(bool up)
     {

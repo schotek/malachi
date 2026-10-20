@@ -14,6 +14,14 @@
 // the text into a compose window that asks before it closes, and Ctrl+Enter
 // sending a reply that devmail delivers and stores in Sent, the field
 // emptied and the reply's bubble added to the chat.
+//
+// The same bar under a single message (docs/plans/chat-view.md §12), on the
+// fixture's lone message: the bar under the message page (Send off, on once
+// something is typed), the text kept per thread across another row and
+// back, no bar on the page of several selected rows, Ctrl+Enter sending a
+// reply that devmail delivers and stores in Sent; the reply turns the row
+// into a conversation, whose chat has the bar again, and text typed there
+// outlives a visit to the timeline (which has no bar).
 
 using System;
 using System.Linq;
@@ -147,6 +155,92 @@ public sealed class ConversationChatSmokeTests(ConversationChatFixture fixture) 
         Uia.WaitFor(() => Uia.TryFind(main, "QuickReplyBar") is null, "the bar to go with the chat");
         Uia.Toggle(toggle);
         Uia.WaitFor(() => Uia.TryFind(main, "QuickReplyBar") is not null, "the bar with the chat again");
+    }
+
+    [Fact]
+    public void TheQuickReplyBarStandsUnderASingleMessage()
+    {
+        var app = App;
+        var main = app.MainWindow;
+        var server = fixture.Server;
+        var list = Uia.Find(main, "MessageList");
+        AutomationElement RowOf(string subject, string what) => Uia.Until(
+            () => Uia.All(list, ControlType.ListItem).Cast<AutomationElement>()
+                .FirstOrDefault(r => r.Current.Name.Contains(subject, StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(120),
+            what);
+
+        // The lone message: the message page and the bar under it, not the
+        // conversation page.
+        Uia.Select(RowOf(fixture.SingleSubject, "the lone message's row"));
+        // The page itself is a panel without an automation peer: its body
+        // scroller (a plain-text devmail message) stands for it.
+        Uia.Find(main, "MessageBodyScroller", TimeSpan.FromSeconds(30));
+        var bar = Uia.Find(main, "QuickReplyBar", TimeSpan.FromSeconds(30));
+        Assert.Null(Uia.TryFind(main, "ConversationChat"));
+        var field = Uia.Find(bar, "QuickReplyText");
+        var send = Uia.Find(bar, "QuickReplySend");
+        Assert.NotNull(Uia.TryFind(bar, "QuickReplyMode"));
+        Assert.NotNull(Uia.TryFind(bar, "QuickReplyOpen"));
+        Assert.False(send.Current.IsEnabled);
+        Uia.SetValue(field, "Kept for this thread");
+        Uia.WaitFor(() => send.Current.IsEnabled, "Send to be enabled after typing");
+
+        // Another conversation (in the chat) starts empty; back to the lone
+        // message, its text is there.
+        Uia.Select(RowOf(fixture.Subject, "the chat conversation's row"));
+        var toggle = Uia.Find(main, "ConversationChatToggle", TimeSpan.FromSeconds(30));
+        if (((TogglePattern)toggle.GetCurrentPattern(TogglePattern.Pattern)).Current.ToggleState != ToggleState.On)
+        {
+            Uia.Toggle(toggle);
+        }
+        Uia.Find(main, "ConversationChat", TimeSpan.FromSeconds(30));
+        Uia.WaitFor(
+            () => Uia.TryFind(main, "QuickReplyBar") is { } b && Uia.TryFind(b, "QuickReplyText") is { } f && Uia.Value(f).Length == 0,
+            "the other conversation's empty bar",
+            TimeSpan.FromSeconds(30));
+        Uia.Select(RowOf(fixture.SingleSubject, "the lone message's row"));
+        Uia.WaitFor(
+            () => Uia.TryFind(main, "QuickReplyBar") is { } b && Uia.TryFind(b, "QuickReplyText") is { } f && Uia.Value(f) == "Kept for this thread",
+            "the lone message's text back",
+            TimeSpan.FromSeconds(30));
+
+        // Several rows: the count page, no bar; one row again, the bar.
+        ((SelectionItemPattern)RowOf(fixture.Subject, "the chat conversation's row").GetCurrentPattern(SelectionItemPattern.Pattern)).AddToSelection();
+        // The count page is a panel without a peer: the bar's absence is
+        // what the page shows to UI Automation.
+        Uia.WaitFor(() => Uia.TryFind(main, "QuickReplyBar") is null, "no bar on the page of several rows", TimeSpan.FromSeconds(30));
+        Uia.Select(RowOf(fixture.SingleSubject, "the lone message's row"));
+        bar = Uia.Find(main, "QuickReplyBar", TimeSpan.FromSeconds(30));
+        field = Uia.Find(bar, "QuickReplyText");
+        send = Uia.Find(bar, "QuickReplySend");
+
+        // Ctrl+Enter sends the reply to the message shown.
+        var inbox = server.Total("INBOX");
+        var sent = server.Total("Sent");
+        Uia.SetValue(field, "Single reply " + Guid.NewGuid().ToString("N")[..8]);
+        Uia.WaitFor(() => send.Current.IsEnabled, "Send to be enabled before Ctrl+Enter");
+        Uia.PressKey(field, app.ProcessId, VkReturn, VkControl);
+        Uia.WaitFor(() => Uia.Value(field).Length == 0, "the bar's field to empty after the send", TimeSpan.FromSeconds(30));
+        Uia.WaitFor(() => server.Total("Sent") == sent + 1, "the reply's copy in the server's Sent", TimeSpan.FromSeconds(60));
+        Uia.WaitFor(() => server.Total("INBOX") == inbox + 1, "the reply in the server's INBOX", TimeSpan.FromSeconds(60));
+
+        // The reply makes the row a conversation, shown as chat with the bar;
+        // what is typed there stays through the timeline, which has none.
+        var chat = Uia.Find(main, "ConversationChat", TimeSpan.FromSeconds(120));
+        Uia.WaitFor(() => Bubbles(chat).Length >= 2, "the lone message's conversation in the chat", TimeSpan.FromSeconds(120));
+        bar = Uia.Find(main, "QuickReplyBar", TimeSpan.FromSeconds(30));
+        field = Uia.Find(bar, "QuickReplyText");
+        Uia.SetValue(field, "P.S.");
+        Uia.Toggle(toggle);
+        Uia.WaitFor(() => Uia.TryFind(main, "ConversationTimeline") is not null, "the timeline after the toggle");
+        Uia.WaitFor(() => Uia.TryFind(main, "QuickReplyBar") is null, "the bar to go with the chat");
+        Uia.Toggle(toggle);
+        Uia.WaitFor(
+            () => Uia.TryFind(main, "QuickReplyBar") is { } b && Uia.TryFind(b, "QuickReplyText") is { } f && Uia.Value(f) == "P.S.",
+            "the bar with its text in the chat again",
+            TimeSpan.FromSeconds(30));
+        Uia.SetValue(Uia.Find(Uia.Find(main, "QuickReplyBar"), "QuickReplyText"), "");
     }
 
     // The chat's message bubbles (ConversationBubble:<message id>).

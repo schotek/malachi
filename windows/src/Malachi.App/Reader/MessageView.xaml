@@ -22,7 +22,12 @@ No Message Selected, No Accounts and the count of several selected rows
 headers stay put in a clamp of 900 (sides 24, top 12,
 docs/windows-port.md §11.3), scrolling on their own only past two thirds
 of the page, while the body below scrolls on its own in the same clamp:
-the plain text, the spinner after 400 ms, or the viewer. Everything shown
+the plain text, the spinner after 400 ms, or the viewer. Under the message
+stack, in the pane only, the quick-reply bar (docs/plans/chat-view.md §12,
+S1, S6): outside every scrolled area, on the same place under the page of a
+single message and under the chat of a conversation, a line above it; a
+message window has none. The "•••" row under the body is collapsed with its
+button, so no empty band stands above the bar. Everything shown
 is server data and set as plain text (Text properties only); the viewer
 gets the sanitiser's output only.
 -->
@@ -99,6 +104,10 @@ gets the sanitiser's output only.
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <!-- The quick-reply bar of the pane (ConversationQuickReplyBar),
+                 added in code in ReaderMode.Pane only; collapsed or absent,
+                 the row takes no room. -->
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- window.blp message_page's Adw.HeaderBar (message_window.blp's):

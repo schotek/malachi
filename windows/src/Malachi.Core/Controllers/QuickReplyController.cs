@@ -4,15 +4,26 @@
 // Port of macos/Sources/MalachiCore/Controllers/QuickReplyController.swift
 // (QuickReplyController, callTimeout, saveDraft); GTK:
 // ui/internal/quickreply/controller.go (Controller, New, Show, Update,
-// SetChatShown, SetText, SetMode, State, Send, SaveDraft, OpenWindow,
+// SetShown, SetText, SetMode, State, Send, SaveDraft, OpenWindow,
 // Forward, CallTimeout). Swift's onChange is the event Changed, its
-// keptThreads the property KeptThreads (Core has no InternalsVisibleTo).
+// keptThreads the property KeptThreads and its isKept IsKept (Core has no
+// InternalsVisibleTo).
 //
-// The quick-reply bar under a conversation shown as chat in Mail
-// (docs/plans/chat-view.md §10 and §11) without its widgets: what the bar
-// shows (its target, modes and text, per conversation) and what its buttons
-// do — Send through the daemon's usual way, Open in a Window and Forward…
-// through the compose window. The rules of the bar's content are
+// The quick-reply bar of Mail's reading pane (docs/plans/chat-view.md §10,
+// §11 and §12) without its widgets: what the bar shows (its target, modes
+// and text, per conversation) and what its buttons do — Send through the
+// daemon's usual way, Open in a Window and Forward… through the compose
+// window. The bar stands under the pane's page of a single message and under
+// a conversation shown as chat (never under the timeline, the board or a
+// message window); which of them shows is the host's to say (SetShown), and a
+// single message comes as a model of one member (Conversation.SingleModel),
+// so the rules are the same for both. A single message's thread is its
+// conversation's: the text typed under the message is the text under its
+// conversation. A thread id is unique only within its account (an issue's
+// jira:<id> repeats on another site, Graph's conversationId is the
+// server's), so the state is kept per account and thread (Key), never per
+// thread alone: a search over all accounts may show the same thread id of
+// two accounts one after the other. The rules of the bar's content are
 // Conversation's (QuickReplyTarget, QuickReplyModes, QuickReplyHtml,
 // QuickReplyBlank, QuickReplyBody); the texts are its too and the view's
 // (L10n): this file has none, the host says what happened (Sent, Failed)
@@ -53,14 +64,18 @@ public sealed class QuickReplyController
 
     private readonly IQuickReplyHost host;
 
-    // The bar's state of each conversation, kept in memory until the text is
-    // sent, moved into a window or cleared (Q9); a conversation in its zero
-    // state is forgotten (Prune).
-    private readonly Dictionary<ThreadId, ThreadState> threads = [];
+    // quickreply key: no conversation.
+    private static readonly Key None = new(new AccountId(""), new ThreadId(""));
 
-    // The conversation shown; chatShown says the chat layout is.
-    private ThreadId shown = new("");
-    private bool chatShown;
+    // The bar's state of each conversation (a thread of an account), kept in
+    // memory until the text is sent, moved into a window or cleared (Q9); a
+    // conversation in its zero state is forgotten (Prune).
+    private readonly Dictionary<Key, ThreadState> threads = [];
+
+    // The conversation shown (a single message's thread, with its account);
+    // paneShown says the host shows the bar's place (SetShown).
+    private Key shown = None;
+    private bool paneShown;
 
     // What Update learnt of the shown conversation.
     private ConversationItem? target;
@@ -79,8 +94,8 @@ public sealed class QuickReplyController
     /// <summary>Raised after every change of <see cref="State"/> (the view reads it again), on the UI thread.</summary>
     public event EventHandler? Changed;
 
-    /// <summary>The conversations whose state is kept (tests: a conversation emptied is forgotten).</summary>
-    public IReadOnlyCollection<ThreadId> KeptThreads => [.. threads.Keys];
+    /// <summary>The threads whose state is kept, of any account (tests: a conversation emptied is forgotten).</summary>
+    public IReadOnlyCollection<ThreadId> KeptThreads => [.. threads.Keys.Select(k => k.Thread)];
 
     /// <summary>quickreply.State: what the bar shows now.</summary>
     public QuickReplyState State
@@ -89,14 +104,15 @@ public sealed class QuickReplyController
         {
             var text = "";
             var sending = false;
-            if (!IsEmpty(shown) && threads.TryGetValue(shown, out var st))
+            if (!IsEmpty(shown.Thread) && threads.TryGetValue(shown, out var st))
             {
                 text = st.Text;
                 sending = st.Sending;
             }
             return new QuickReplyState
             {
-                Thread = shown,
+                Account = shown.Account,
+                Thread = shown.Thread,
                 Visible = Visible,
                 Target = target,
                 Modes = modes,
@@ -110,7 +126,7 @@ public sealed class QuickReplyController
     }
 
     // The bar shows (QuickReplyState.Visible).
-    private bool Visible => chatShown && !IsEmpty(shown) && target is not null && reply;
+    private bool Visible => paneShown && !IsEmpty(shown.Thread) && target is not null && reply;
 
     // The chosen mode of the conversation shown when it is still offered,
     // else the first mode offered that is not Forward, else Reply; on an
@@ -139,41 +155,57 @@ public sealed class QuickReplyController
     }
 
     /// <summary>
-    /// quickreply.Show: which conversation the pane shows now ("" for none).
-    /// Its target is unknown until the next <see cref="Update"/>; the text and
-    /// mode of every conversation stay.
+    /// quickreply.Show: which conversation the pane shows now: thread
+    /// <paramref name="thread"/> of <paramref name="account"/> (for a single
+    /// message its thread and account; null or "" and "" for none, and a
+    /// thread "" is none whatever the account). Its target is unknown until
+    /// the next <see cref="Update"/>; the text and mode of every conversation
+    /// stay.
     /// </summary>
-    public void Show(ThreadId thread)
+    public void Show(AccountId? account, ThreadId thread)
     {
         var t = Normal(thread);
-        if (t == shown)
+        var k = IsEmpty(t) ? None : new Key(Normal(account), t);
+        if (k == shown)
         {
             return;
         }
-        shown = t;
+        shown = k;
         target = null;
         modes = [];
         reply = false;
         comment = false;
-        account = null;
+        this.account = null;
         RaiseChanged();
     }
 
     /// <summary>
     /// quickreply.Update: takes the shown conversation's model
-    /// <paramref name="m"/>, the actions of its target's card
-    /// (<see cref="Conversation.CardActions"/> for the target,
-    /// <see cref="ConversationController.QuickReplyInput"/>) and its account.
-    /// A model of another conversation (its thread neither "" nor the one
-    /// shown) shows that one first, as <see cref="Show"/> does.
+    /// <paramref name="m"/> (a single message's:
+    /// <see cref="Conversation.SingleModel"/>), the actions of its target's
+    /// card (<see cref="Conversation.CardActions"/> for the target,
+    /// <see cref="ConversationController.QuickReplyInput()"/>,
+    /// <see cref="ConversationController.QuickReplyInput(MessageSummary)"/>)
+    /// and its account. A model of another conversation (its thread neither
+    /// "" nor the one shown) shows that one, of <paramref name="account"/>,
+    /// first, as <see cref="Show"/> does; a conversation shown without its
+    /// account (<see cref="Show"/> with none) takes
+    /// <paramref name="account"/>'s. A model without a target (the empty
+    /// model) hides the bar until the next one and keeps the text: the host
+    /// gives it while the conversation's members are on their way, so that
+    /// the bar never answers what was shown before.
     /// </summary>
     public void Update(ConversationModel m, CapabilityActions actions, Account? account)
     {
         ArgumentNullException.ThrowIfNull(m);
         var t = Normal(m.Thread);
-        if (!IsEmpty(t) && t != shown)
+        if (!IsEmpty(t) && t != shown.Thread)
         {
-            shown = t;
+            shown = new Key(Normal(account?.Id), t);
+        }
+        else if (!IsEmpty(shown.Thread) && IsEmpty(shown.Account))
+        {
+            shown = shown with { Account = Normal(account?.Id) };
         }
         target = Conversation.QuickReplyTarget(m);
         modes = Conversation.QuickReplyModes(actions);
@@ -183,22 +215,35 @@ public sealed class QuickReplyController
         RaiseChanged();
     }
 
-    /// <summary>quickreply.SetChatShown: whether the chat layout is shown (the timeline has no bar).</summary>
-    public void SetChatShown(bool shownNow)
+    /// <summary>
+    /// quickreply.SetShown: whether the pane shows a place of the bar: the
+    /// page of a single message whose folder can be answered from (not the
+    /// Outbox, not Drafts), or a conversation in the chat layout. The empty
+    /// page, the page of several selected messages and the timeline have no
+    /// bar; neither has the board. Hiding keeps the text and mode of every
+    /// conversation, and a Send on its way ends as usual.
+    /// </summary>
+    public void SetShown(bool shownNow)
     {
-        if (shownNow == chatShown)
+        if (shownNow == paneShown)
         {
             return;
         }
-        chatShown = shownNow;
+        paneShown = shownNow;
         RaiseChanged();
     }
+
+    /// <summary>
+    /// Whether the state of thread <paramref name="thread"/> of
+    /// <paramref name="account"/> is kept (tests; Swift <c>isKept</c>).
+    /// </summary>
+    public bool IsKept(AccountId account, ThreadId thread) => threads.ContainsKey(new Key(Normal(account), Normal(thread)));
 
     /// <summary>quickreply.SetText: what the field holds now, for the conversation shown.</summary>
     public void SetText(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
-        if (IsEmpty(shown))
+        if (IsEmpty(shown.Thread))
         {
             return;
         }
@@ -224,7 +269,7 @@ public sealed class QuickReplyController
     /// </summary>
     public void SetMode(QuickReplyMode mode)
     {
-        if (IsEmpty(shown) || mode == QuickReplyMode.Forward || !modes.Contains(mode))
+        if (IsEmpty(shown.Thread) || mode == QuickReplyMode.Forward || !modes.Contains(mode))
         {
             return;
         }
@@ -253,8 +298,8 @@ public sealed class QuickReplyController
     /// <see cref="IQuickReplyHost.Failed"/> and keeps the text, and a failed
     /// <c>message.send</c> first deletes the saved draft (<c>draft.delete</c>,
     /// its error ignored) so that no draft the user never saw stays behind.
-    /// The outcome goes to the conversation Send started in, whichever is
-    /// shown by then. Nothing happens when the bar is hidden, the text is
+    /// The outcome goes to the conversation Send started in (its account and
+    /// thread), whichever is shown by then. Nothing happens when the bar is hidden, the text is
     /// blank or a Send of this conversation is on its way.
     /// </summary>
     public void Send()
@@ -264,7 +309,7 @@ public sealed class QuickReplyController
         {
             return;
         }
-        var t = shown;
+        var k = shown;
         var text = st.Text;
         var isComment = comment;
         var mode = CurrentMode;
@@ -274,7 +319,7 @@ public sealed class QuickReplyController
             acc = account?.Id ?? new AccountId("");
         }
         var id = message.Id;
-        threads[t] = st with { Sending = true };
+        threads[k] = st with { Sending = true };
         RaiseChanged();
 
         void Start()
@@ -285,7 +330,7 @@ public sealed class QuickReplyController
                 var line = host.Attribution(mode, id);
                 parameters = parameters with { Attribution = line.Length == 0 ? null : line };
             }
-            _ = DeliverThenFinishAsync(parameters, t, text, isComment);
+            _ = DeliverThenFinishAsync(parameters, k, text, isComment);
         }
         if (isComment)
         {
@@ -371,11 +416,11 @@ public sealed class QuickReplyController
     // Send's calls, after the caller's turn: draft.create, draft.save,
     // message.send, and draft.delete after a failed message.send; then the
     // outcome on the UI thread.
-    private async Task DeliverThenFinishAsync(DraftCreateParams parameters, ThreadId t, string text, bool isComment)
+    private async Task DeliverThenFinishAsync(DraftCreateParams parameters, Key k, string text, bool isComment)
     {
         await Task.Yield();
         var failure = await DeliverAsync(host, parameters, text);
-        host.Post(() => Finish(t, text, isComment, failure));
+        host.Post(() => Finish(k, text, isComment, failure));
     }
 
     // Send's calls; null when all went through. Touches nothing of the
@@ -432,17 +477,17 @@ public sealed class QuickReplyController
 #pragma warning restore CA1031
     }
 
-    // Ends a Send of conversation t whose text was text.
-    private void Finish(ThreadId t, string text, bool isComment, Exception? failure)
+    // Ends a Send of conversation k whose text was text.
+    private void Finish(Key k, string text, bool isComment, Exception? failure)
     {
-        var st = threads.GetValueOrDefault(t) with { Sending = false };
+        var st = threads.GetValueOrDefault(k) with { Sending = false };
         // What was typed meanwhile (the field is disabled while sending, but
         // a view may still pass a change) stays.
         if (failure is null && string.Equals(st.Text, text, StringComparison.Ordinal))
         {
             st = st with { Text = "" };
         }
-        threads[t] = st;
+        threads[k] = st;
         if (failure is not null)
         {
             host.Failed(failure);
@@ -451,7 +496,7 @@ public sealed class QuickReplyController
         {
             host.Sent(isComment);
         }
-        Prune(t);
+        Prune(k);
         RaiseChanged();
     }
 
@@ -461,9 +506,9 @@ public sealed class QuickReplyController
         {
             return;
         }
-        var t = shown;
+        var k = shown;
         var text = "";
-        if (threads.TryGetValue(t, out var st))
+        if (threads.TryGetValue(k, out var st))
         {
             if (st.Sending)
             {
@@ -473,22 +518,22 @@ public sealed class QuickReplyController
         }
         host.OpenCompose(mode, message.Id, Conversation.QuickReplyHtml(text), () =>
         {
-            if (text.Length == 0 || !threads.TryGetValue(t, out var now) || !string.Equals(now.Text, text, StringComparison.Ordinal))
+            if (text.Length == 0 || !threads.TryGetValue(k, out var now) || !string.Equals(now.Text, text, StringComparison.Ordinal))
             {
                 return;
             }
-            threads[t] = now with { Text = "" };
-            Prune(t);
+            threads[k] = now with { Text = "" };
+            Prune(k);
             RaiseChanged();
         });
     }
 
     // Forgets a conversation whose state is the zero one.
-    private void Prune(ThreadId t)
+    private void Prune(Key k)
     {
-        if (threads.TryGetValue(t, out var st) && st == default)
+        if (threads.TryGetValue(k, out var st) && st == default)
         {
-            threads.Remove(t);
+            threads.Remove(k);
         }
     }
 
@@ -496,8 +541,17 @@ public sealed class QuickReplyController
 
     private static bool IsEmpty(ThreadId t) => string.IsNullOrEmpty(t.Value);
 
+    private static bool IsEmpty(AccountId a) => string.IsNullOrEmpty(a.Value);
+
     // "" for default(ThreadId), so that the two never differ as keys.
     private static ThreadId Normal(ThreadId t) => t.Value is null ? new ThreadId("") : t;
+
+    // "" for null and default(AccountId), so that they never differ as keys.
+    private static AccountId Normal(AccountId? a) => a is { Value: not null } id ? id : new AccountId("");
+
+    // quickreply key: one conversation, a thread of an account; None is no
+    // conversation.
+    private readonly record struct Key(AccountId Account, ThreadId Thread);
 
     // quickreply thread: the bar's state of one conversation; the default is
     // the zero state (no text, Reply, not sending). An empty text is kept as

@@ -7,7 +7,12 @@
 // TestTextAndModePerThread, TestSend, TestSaveDraftToNeverNil,
 // TestSendComment, TestSendFailures, TestSendGuards,
 // TestSendingPerThreadAcrossASwitch, TestFailureAfterASwitch,
-// TestTextTypedWhileSendingStays, TestOpenWindowAndForward, TestOpenGuards):
+// TestTextTypedWhileSendingStays, TestOpenWindowAndForward, TestOpenGuards,
+// and of the single-message page, docs/plans/chat-view.md §12:
+// TestSingleMessage, TestSetShown, TestTextKeptAcrossPages,
+// TestOutboxAndDraftsHaveNoBar, TestSendEndsWhileHidden,
+// TestSameThreadOfTwoAccounts, TestUpdateAdoptsTheAccount,
+// TestEmptyModelHidesAndKeepsText):
 // the quick-reply bar's controller over a fake host whose calls go to a fake
 // daemon with scripted handlers for draft.create, draft.save, message.send
 // and draft.delete. The host's UI thread is the test: Post queues, DrainAsync
@@ -79,13 +84,13 @@ public sealed class QuickReplyControllerTests
         var c = new QuickReplyController(h.Host);
         c.Update(Model("t1", MailAcc.Id), MailActions, MailAcc);
         Assert.False(c.State.Visible, "visible in the timeline");
-        c.SetChatShown(true);
+        c.SetShown(true);
         Assert.True(c.State.Visible && c.State.Thread == "t1", "Update did not show t1");
-        c.Show("t2");
+        c.Show(MailAcc.Id, "t2");
         Assert.True(!c.State.Visible && c.State.Target is null, "a target before Update");
         c.Update(new ConversationModel { Thread = "t2" }, MailActions, MailAcc);
         Assert.False(c.State.Visible, "visible without a target");
-        c.Show("");
+        c.Show(null, "");
         c.SetText("lost");
         Assert.True(!c.State.Visible && c.State.Text.Length == 0 && c.KeptThreads.Count == 0);
     }
@@ -121,8 +126,8 @@ public sealed class QuickReplyControllerTests
         c.SetMode(QuickReplyMode.ReplyAll);
         c.SetMode(QuickReplyMode.ReplyAll);
         c.SetMode(QuickReplyMode.Forward); // ignored
-        c.SetChatShown(true); // no change
-        c.Show("t1"); // no change
+        c.SetShown(true); // no change
+        c.Show(MailAcc.Id, "t1"); // no change
         Assert.Equal(2, h.Changes - before);
     }
 
@@ -134,12 +139,12 @@ public sealed class QuickReplyControllerTests
         c.SetText("for t1");
         c.SetMode(QuickReplyMode.ReplyAll);
 
-        c.Show("t2");
+        c.Show(MailAcc.Id, "t2");
         c.Update(Model("t2", MailAcc.Id), MailActions, MailAcc);
         Assert.True(c.State.Text.Length == 0 && c.State.Mode == QuickReplyMode.Reply, $"t2 starts with {c.State}");
         c.SetText("for t2");
 
-        c.Show("t1");
+        c.Show(MailAcc.Id, "t1");
         c.Update(Model("t1", MailAcc.Id), MailActions, MailAcc);
         Assert.Equal("for t1", c.State.Text);
         Assert.Equal(QuickReplyMode.ReplyAll, c.State.Mode);
@@ -149,7 +154,7 @@ public sealed class QuickReplyControllerTests
         c.SetMode(QuickReplyMode.ReplyAll); // not offered: ignored
         c.Update(Model("t1", MailAcc.Id), MailActions, MailAcc);
         Assert.True(c.State.Mode == QuickReplyMode.ReplyAll, "the chosen mode was forgotten");
-        c.Show("t2");
+        c.Show(MailAcc.Id, "t2");
         Assert.Equal("for t2", c.State.Text);
         // An emptied conversation is forgotten.
         c.SetText("");
@@ -240,7 +245,7 @@ public sealed class QuickReplyControllerTests
         h.Script.Set(API.DraftSave.Name, new DraftSaveResult { DraftId = "d1", Version = 1, TextBody = "" });
         h.Script.Set(API.MessageSend.Name, new MessageSendResult { OutboxId = "o1" });
         var c = new QuickReplyController(h.Host);
-        c.SetChatShown(true);
+        c.SetShown(true);
         c.Update(Model("t1", JiraAcc.Id), CommentActions, JiraAcc);
         c.SetText("Fixed in 1.2\n\nThanks");
         c.Send();
@@ -298,9 +303,9 @@ public sealed class QuickReplyControllerTests
         c.SetText(" \n ");
         c.Send();
         c.SetText("text");
-        c.SetChatShown(false);
+        c.SetShown(false);
         c.Send();
-        c.SetChatShown(true);
+        c.SetShown(true);
         c.Update(Model("t1", MailAcc.Id), default, MailAcc);
         c.Send();
         await h.IdleAsync();
@@ -322,19 +327,19 @@ public sealed class QuickReplyControllerTests
         c.SetText("to t1");
         c.Send();
 
-        c.Show("t2");
+        c.Show(MailAcc.Id, "t2");
         c.Update(Model("t2", MailAcc.Id), MailActions, MailAcc);
         Assert.True(!c.State.Sending && c.State.Text.Length == 0, "t2 sending");
         c.SetText("to t2");
         c.Send(); // t2 sends on its own
-        c.Show("t1");
+        c.Show(MailAcc.Id, "t1");
         Assert.True(c.State.Sending, "t1 not sending");
-        c.Show("t2");
+        c.Show(MailAcc.Id, "t2");
         held.Release();
         await h.Host.DrainAsync();
         await h.Host.DrainAsync();
         Assert.True(!c.State.Sending && c.State.Text.Length == 0, "t2 after");
-        c.Show("t1");
+        c.Show(MailAcc.Id, "t1");
         Assert.True(!c.State.Sending && c.State.Text.Length == 0, "t1 after");
         Assert.Equal(2, h.Host.Sent.Count);
         Assert.Empty(c.KeptThreads);
@@ -350,14 +355,14 @@ public sealed class QuickReplyControllerTests
         var c = h.Shown();
         c.SetText("to t1");
         c.Send();
-        c.Show("t2");
+        c.Show(MailAcc.Id, "t2");
         c.Update(Model("t2", MailAcc.Id), MailActions, MailAcc);
         c.SetText("to t2");
         h.Host.BeforeDone[0](); // the download ends while t2 is shown
         Assert.Equal(["m2"], h.Host.Attributions.Select(id => id.Value));
         await h.Host.DrainAsync();
         Assert.True(c.State.Text == "to t2" && !c.State.Sending, "t2");
-        c.Show("t1");
+        c.Show(MailAcc.Id, "t1");
         Assert.True(c.State.Text == "to t1" && !c.State.Sending && h.Host.Failures.Count == 1, "t1");
     }
 
@@ -403,12 +408,12 @@ public sealed class QuickReplyControllerTests
         Assert.Equal(QuickReplyMode.ReplyAll, c.State.Mode);
 
         // Opened after the conversation changed: it clears its own text only.
-        c.Show("t2");
+        c.Show(MailAcc.Id, "t2");
         c.Update(Model("t2", MailAcc.Id), MailActions, MailAcc);
         c.SetText("t2 text");
         o.Opened();
         Assert.Equal("t2 text", c.State.Text);
-        c.Show("t1");
+        c.Show(MailAcc.Id, "t1");
         Assert.Equal("", c.State.Text);
 
         // An empty bar opens an empty editor; no draft is saved by the bar.
@@ -425,7 +430,7 @@ public sealed class QuickReplyControllerTests
         var c = new QuickReplyController(h.Host);
         c.Update(Model("t1", MailAcc.Id), MailActions, MailAcc);
         c.OpenWindow(); // timeline: hidden
-        c.SetChatShown(true);
+        c.SetShown(true);
         c.Update(Model("t1", MailAcc.Id), new CapabilityActions { Reply = true }, MailAcc);
         c.Forward(); // the account does not forward
         Assert.Empty(h.Host.Opens);
@@ -442,6 +447,269 @@ public sealed class QuickReplyControllerTests
         c.Update(Model("t1", JiraAcc.Id), CommentActions, JiraAcc);
         c.OpenWindow();
         Assert.Equal(QuickReplyMode.Reply, Assert.Single(h.Host.Opens).Mode);
+    }
+
+    // The page of a single message (docs/plans/chat-view.md §12;
+    // TestSingleMessage): the bar answers the message shown, the user's own
+    // too, and Send goes to it.
+    [Fact]
+    public async Task SingleMessage()
+    {
+        await using var h = await Harness.StartAsync();
+        var c = new QuickReplyController(h.Host);
+        ShowSingle(c, SingleOf("m7", "t1", false));
+        var s = c.State;
+        Assert.True(s.Visible && s.Thread == "t1" && s.Account == MailAcc.Id && s.Target?.Id?.Value == "m7" && s.Target?.Sender == "Jana m7" && !s.Comment, s.ToString());
+        Assert.Equal(3, s.Modes.Count);
+        c.SetText("Thanks");
+        c.Send();
+        await h.Host.DrainAsync();
+        var create = Assert.Single(h.Daemon.Params.All<DraftCreateParams>(API.DraftCreate.Name));
+        Assert.Equal((MailAcc.Id, ComposeMode.Reply, (MessageId?)"m7"), (create.AccountId, create.Mode.Value, create.MessageId));
+        Assert.Single(h.Host.Sent);
+        Assert.Equal("", c.State.Text);
+
+        // The user's own message (Sent): a reply to it.
+        ShowSingle(c, SingleOf("s1", "t2", true));
+        s = c.State;
+        Assert.True(s.Visible && s.Target?.Id?.Value == "s1" && s.Target?.Mine == true, s.ToString());
+
+        // An issue's event alone has no target: hidden whatever the host says.
+        var ev = Conversation.SingleModel(IssueSummary("e1", IssueItemKind.Event), false);
+        c.Show(JiraAcc.Id, ev.Thread);
+        c.Update(ev, CommentActions, JiraAcc);
+        Assert.False(c.State.Visible, c.State.ToString());
+        // An issue's comment: a comment.
+        var cm = Conversation.SingleModel(IssueSummary("c1", IssueItemKind.Comment), false);
+        c.Update(cm, CommentActions, JiraAcc);
+        s = c.State;
+        Assert.True(s.Visible && s.Comment && s.Target?.Id?.Value == "c1", s.ToString());
+    }
+
+    // SetShown alone hides and shows the bar; what was typed stays
+    // (TestSetShown).
+    [Fact]
+    public async Task SetShown()
+    {
+        await using var h = await Harness.StartAsync();
+        var c = new QuickReplyController(h.Host);
+        var n = 0;
+        c.Changed += (_, _) => n++;
+        ShowSingle(c, SingleOf("m1", "t1", false));
+        c.SetText("draft");
+        var before = n;
+        c.SetShown(false);
+        Assert.True(!c.State.Visible && c.State.Text == "draft", c.State.ToString());
+        c.SetShown(false); // no change
+        c.SetShown(true);
+        Assert.True(c.State.Visible && c.State.Text == "draft", c.State.ToString());
+        Assert.Equal(2, n - before);
+    }
+
+    // The text typed under a single message is its thread's: it stays
+    // through the conversation of the same thread in the timeline (no bar)
+    // and in the chat (the bar with the text), back to another message of the
+    // thread, and through a message of another thread
+    // (TestTextKeptAcrossPages).
+    [Fact]
+    public async Task TextKeptAcrossPages()
+    {
+        await using var h = await Harness.StartAsync();
+        var c = new QuickReplyController(h.Host);
+        ShowSingle(c, SingleOf("m2", "t1", false));
+        c.SetText("half a reply");
+        c.SetMode(QuickReplyMode.ReplyAll);
+
+        // The grouped list: the conversation t1, in the timeline.
+        c.Show(MailAcc.Id, "t1");
+        c.Update(Model("t1", MailAcc.Id), MailActions, MailAcc);
+        c.SetShown(false);
+        Assert.True(!c.State.Visible && c.State.Text == "half a reply", $"timeline: {c.State}");
+        // The chat layout.
+        c.SetShown(true);
+        var s = c.State;
+        Assert.True(s.Visible && s.Text == "half a reply" && s.Mode == QuickReplyMode.ReplyAll && s.Target?.Id?.Value == "m2", $"chat: {s}");
+        // The timeline again, then the flat list with m1 of t1 alone.
+        c.SetShown(false);
+        ShowSingle(c, SingleOf("m1", "t1", false));
+        s = c.State;
+        Assert.True(s.Visible && s.Text == "half a reply" && s.Target?.Id?.Value == "m1", $"m1: {s}");
+        // A message of another thread starts empty; back to t1 the text is there.
+        ShowSingle(c, SingleOf("x1", "t9", false));
+        Assert.True(c.State.Text.Length == 0 && c.State.Mode == QuickReplyMode.Reply, $"t9: {c.State}");
+        ShowSingle(c, SingleOf("m2", "t1", false));
+        Assert.True(c.State.Text == "half a reply" && c.State.Mode == QuickReplyMode.ReplyAll, $"t1 back: {c.State}");
+    }
+
+    // The Outbox and Drafts have no bar: the host says SetShown(false) for a
+    // message there, and nothing sends or opens; the text of its thread stays
+    // (TestOutboxAndDraftsHaveNoBar).
+    [Fact]
+    public async Task OutboxAndDraftsHaveNoBar()
+    {
+        await using var h = await Harness.StartAsync();
+        var c = new QuickReplyController(h.Host);
+        ShowSingle(c, SingleOf("m1", "t1", false));
+        c.SetText("kept");
+        // A queued message of the same thread in the Outbox.
+        c.Show(MailAcc.Id, "t1");
+        c.Update(SingleOf("o1", "t1", true), MailActions, MailAcc);
+        c.SetShown(false);
+        c.Send();
+        c.OpenWindow();
+        c.Forward();
+        Assert.True(!c.State.Visible && c.State.Text == "kept", c.State.ToString());
+        await h.IdleAsync();
+        Assert.Empty(h.Host.Log);
+        Assert.Empty(h.Host.Methods);
+        Assert.Empty(h.Host.Opens);
+    }
+
+    // A Send on its way when the host hides the bar (the user selected the
+    // empty page or several messages) ends as usual: the text clears, the
+    // toast says so (TestSendEndsWhileHidden).
+    [Fact]
+    public async Task SendEndsWhileHidden()
+    {
+        await using var h = await Harness.StartAsync();
+        var held = h.Script.Hold(API.DraftCreate.Name, h.Daemon);
+        var c = new QuickReplyController(h.Host);
+        ShowSingle(c, SingleOf("m1", "t1", false));
+        c.SetText("go");
+        c.Send();
+        c.Show(null, "");
+        c.SetShown(false);
+        held.Release();
+        await h.Host.DrainAsync();
+        Assert.Single(h.Host.Sent);
+        Assert.Empty(h.Host.Failures);
+        ShowSingle(c, SingleOf("m1", "t1", false));
+        var s = c.State;
+        Assert.True(s.Text.Length == 0 && !s.Sending && s.Visible, $"after: {s}");
+    }
+
+    // A thread id is unique only within its account (an issue's jira:<id> of
+    // two sites, a search over all accounts): the same id of two accounts has
+    // its own text, mode and Send, and a Send ends in the account it started
+    // in (TestSameThreadOfTwoAccounts).
+    [Fact]
+    public async Task SameThreadOfTwoAccounts()
+    {
+        var other = TestAccount("acc2", name: "Home", email: "petr@example.net");
+        await using var h = await Harness.StartAsync();
+        var held = h.Script.Hold(API.DraftCreate.Name, h.Daemon);
+        var c = h.Shown();
+        c.SetText("for acc");
+        c.SetMode(QuickReplyMode.ReplyAll);
+
+        c.Show(other.Id, "t1");
+        c.Update(Model("t1", other.Id), MailActions, other);
+        var s = c.State;
+        Assert.True(s.Account == other.Id && s.Thread == "t1" && s.Text.Length == 0 && s.Mode == QuickReplyMode.Reply && !s.Sending, $"acc2 starts with {s}");
+        c.SetText("for acc2");
+        c.Send();
+        Assert.True(c.State.Sending, "acc2 not sending");
+
+        c.Show(MailAcc.Id, "t1");
+        c.Update(Model("t1", MailAcc.Id), MailActions, MailAcc);
+        s = c.State;
+        Assert.True(s.Account == MailAcc.Id && s.Text == "for acc" && s.Mode == QuickReplyMode.ReplyAll && !s.Sending, $"acc back: {s}");
+        held.Release();
+        await h.Host.DrainAsync();
+        var create = Assert.Single(h.Daemon.Params.All<DraftCreateParams>(API.DraftCreate.Name));
+        Assert.Equal(other.Id, create.AccountId);
+        Assert.True(c.State.Text == "for acc" && !c.State.Sending, $"acc after acc2's send: {c.State}");
+        c.Show(other.Id, "t1");
+        c.Update(Model("t1", other.Id), MailActions, other);
+        Assert.True(c.State.Text.Length == 0 && !c.State.Sending, $"acc2 after its send: {c.State}");
+        Assert.False(c.IsKept(other.Id, "t1"), "acc2 kept after its send");
+        Assert.True(c.IsKept(MailAcc.Id, "t1"));
+    }
+
+    // A conversation shown without its account takes the account of the
+    // first Update; one shown with its account keeps it
+    // (TestUpdateAdoptsTheAccount).
+    [Fact]
+    public async Task UpdateAdoptsTheAccount()
+    {
+        await using var h = await Harness.StartAsync();
+        var c = new QuickReplyController(h.Host);
+        c.SetShown(true);
+        c.Update(Model("t1", MailAcc.Id), MailActions, MailAcc);
+        Assert.True(c.State.Account == MailAcc.Id && c.State.Thread == "t1", $"adopted {c.State}");
+        c.Show(null, "t2");
+        c.Update(Model("t2", MailAcc.Id), MailActions, MailAcc);
+        Assert.True(c.State.Account == MailAcc.Id && c.State.Thread == "t2", $"adopted the account: {c.State}");
+        c.Show(JiraAcc.Id, "t3");
+        c.Update(Model("t3", MailAcc.Id), MailActions, MailAcc);
+        Assert.True(c.State.Account == JiraAcc.Id, $"replaced the account: {c.State}");
+        c.Show(JiraAcc.Id, "");
+        Assert.True(c.State.Account.Value.Length == 0 && c.State.Thread.Value.Length == 0, $"a thread \"\" is none: {c.State}");
+    }
+
+    // While a conversation's members are on their way the host gives the
+    // empty model: the bar hides (it must not answer what was shown before,
+    // such as the single message of the same thread) and the text stays
+    // (TestEmptyModelHidesAndKeepsText).
+    [Fact]
+    public async Task EmptyModelHidesAndKeepsText()
+    {
+        await using var h = await Harness.StartAsync();
+        var c = h.Shown();
+        c.SetText("draft");
+        c.Update(new ConversationModel(), default, null);
+        var s = c.State;
+        Assert.True(!s.Visible && s.Target is null && s.Text == "draft" && s.Thread == "t1" && s.Account == MailAcc.Id, $"empty model: {s}");
+        c.Send();
+        c.OpenWindow();
+        c.Update(Model("t1", MailAcc.Id), MailActions, MailAcc);
+        s = c.State;
+        Assert.True(s.Visible && s.Text == "draft" && s.Target?.Id?.Value == "m2", $"model back: {s}");
+        await h.IdleAsync();
+        Assert.Empty(h.Host.Methods);
+        Assert.Empty(h.Host.Opens);
+    }
+
+    // quickreply single: message id of thread t of the mail account shown
+    // alone.
+    private static ConversationModel SingleOf(string id, ThreadId thread, bool mine) => Conversation.SingleModel(
+        new MessageSummary
+        {
+            Id = id,
+            AccountId = MailAcc.Id,
+            FolderId = "f",
+            ThreadId = thread,
+            From = [new Address { Name = "Jana " + id, Email = "jana@example.org" }],
+            Subject = "",
+            Date = DateTimeOffset.GoZero,
+            Snippet = "",
+            HasAttachments = false,
+            Size = 0,
+        },
+        mine);
+
+    // An item of an issue of the Jira account (thread tj), of kind.
+    private static MessageSummary IssueSummary(string id, IssueItemKind kind) => new()
+    {
+        Id = id,
+        AccountId = JiraAcc.Id,
+        FolderId = "space",
+        ThreadId = "tj",
+        Subject = "",
+        Date = DateTimeOffset.GoZero,
+        Snippet = "",
+        HasAttachments = false,
+        Size = 0,
+        Issue = MessageIssue.Of(new IssueInfo { Key = "PRJ-1", Url = "", Summary = "", Status = "" }, kind),
+    };
+
+    // quickreply showSingle: what the host does for the page of a single
+    // message.
+    private static void ShowSingle(QuickReplyController c, ConversationModel m)
+    {
+        c.Show(MailAcc.Id, m.Thread);
+        c.Update(m, MailActions, MailAcc);
+        c.SetShown(true);
     }
 
     // A message card of someone else (or the user's).
@@ -706,8 +974,8 @@ public sealed class QuickReplyControllerTests
         {
             var c = new QuickReplyController(Host);
             c.Changed += (_, _) => Changes++;
-            c.SetChatShown(true);
-            c.Show("t1");
+            c.SetShown(true);
+            c.Show(MailAcc.Id, "t1");
             c.Update(Model("t1", MailAcc.Id), MailActions, MailAcc);
             return c;
         }

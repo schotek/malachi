@@ -360,6 +360,19 @@ public static partial class Conversation
         return null;
     }
 
+    /// <summary>
+    /// conversation.mine for the caller of <see cref="SingleModel"/> (the
+    /// reading pane's page of a single message, docs/plans/chat-view.md §12;
+    /// Swift <c>isMine</c>): whether the user of <paramref name="account"/>
+    /// wrote <paramref name="s"/>, by the rule of
+    /// <see cref="ConversationItem.Mine"/>.
+    /// </summary>
+    public static bool IsMine(MessageSummary s, Account? account)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        return Mine(s, account);
+    }
+
     // mine: whether the user of account wrote member s (ConversationItem.Mine).
     private static bool Mine(MessageSummary s, Account? account)
     {

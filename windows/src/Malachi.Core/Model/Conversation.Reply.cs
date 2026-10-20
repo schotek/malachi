@@ -4,7 +4,8 @@
 // Port of ui/internal/conversation/reply.go (QuickReplyTarget,
 // QuickReplyModes, QuickReplyHTML, QuickReplyBlank, QuickReplyBody,
 // QuickReplyPlaceholder, QuickReplyTargetTooltip, QuickReplyOpenWindowLabel,
-// QuickReplyForwardLabel); macOS: MalachiCore/Model/ConversationReply.swift.
+// QuickReplyForwardLabel, SingleModel); macOS:
+// MalachiCore/Model/ConversationReply.swift.
 // Its type is QuickReplyMode (with QuickReplyModeExtensions); the bar's
 // state and buttons are Controllers/QuickReplyController.cs. Go's (Item,
 // bool) is a nullable item here.
@@ -14,7 +15,9 @@
 // mode (Reply, Reply All, and Forward…, which opens the compose window
 // straight away), a field of one to five lines for plain text, a button that
 // opens the compose window with what was typed, and Send. The timeline, the
-// board's chat and the message window have no bar.
+// board's chat and the message window have no bar. The same bar stands under
+// the reading pane's page of a single message (docs/plans/chat-view.md §12),
+// which comes to it as a model of one member (SingleModel).
 //
 // The reply goes to the newest message of someone else in the conversation
 // (the newest message when the user wrote all of them; QuickReplyTarget), in
@@ -34,6 +37,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Malachi.Core.Api;
 using Malachi.Core.Compose;
@@ -245,4 +249,47 @@ public static partial class Conversation
     public static string QuickReplyForwardLabel() =>
         // TRANSLATORS: an item of the quick-reply bar's mode menu; opens the compose window with the message forwarded.
         L10n.T("Forward…");
+
+    /// <summary>
+    /// conversation.SingleModel: the model of one message for the quick-reply
+    /// bar under the reading pane's page of a single message
+    /// (docs/plans/chat-view.md §12, S2, S4): the bar answers that message,
+    /// whoever wrote it (in Sent a reply to the user's own message), so
+    /// <see cref="Controllers.QuickReplyController.Update"/> takes the same
+    /// model shape as for a conversation and <see cref="QuickReplyTarget"/>
+    /// needs no rule of its own. The model's thread is the message's (the bar
+    /// keeps the typed text per account and thread, shared with the
+    /// message's conversation; "" without one); its one item is a
+    /// <see cref="ConversationItemKind.Message"/> with the cleaned sender
+    /// (<see cref="ConversationItem.Sender"/>, which names the target in the
+    /// mode button's tooltip) and <paramref name="mine"/> as the caller says
+    /// (the rule of <see cref="ConversationItem.Mine"/>:
+    /// <see cref="IsMine"/>). An event of an issue (a row without a body) is
+    /// an <see cref="ConversationItemKind.Event"/> without its sentences, so
+    /// that the bar finds no target and hides; a message without an id makes
+    /// an empty model. The model is for the bar only: no issue card, nothing
+    /// to mark read, never rendered.
+    /// </summary>
+    public static ConversationModel SingleModel(MessageSummary s, bool mine)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        var m = new ConversationModel { Thread = s.ThreadId ?? new ThreadId("") };
+        if (string.IsNullOrEmpty(s.Id.Value))
+        {
+            return m;
+        }
+        var it = new ConversationItem
+        {
+            Kind = ConversationItemKind.Message,
+            Message = s,
+            Sender = Sender(s.From),
+            Mine = mine,
+            Unread = !s.Flags.Contains(Flag.Seen),
+        };
+        if (Jira.IsEvent(s.Issue))
+        {
+            it = it with { Kind = ConversationItemKind.Event, Unread = false };
+        }
+        return m with { Items = [it], ScrollTo = 0 };
+    }
 }

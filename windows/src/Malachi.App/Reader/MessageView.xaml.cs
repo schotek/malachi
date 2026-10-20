@@ -44,6 +44,28 @@
 // switch decides, an attached message's window shows none; Join Video Call
 // goes through the link confirmation of the view's window with no listed
 // links, Show in Calendar to the main window.
+//
+// The quick-reply bar of the pane (docs/plans/chat-view.md §12, S1–S9;
+// macOS ReadingPaneViewController: the bar, its controller, the host
+// adapter, the ✦ observer, show(_ row:), conversationChanged,
+// showSingleReply, keyboardTarget; GTK S-G's window-owned bar): the last
+// row of the pane, under the message stack and outside every scrolled
+// area, made in ReaderMode.Pane only (a message window has none). Its
+// controller (QuickReplyController over QuickReplyHostAdapter) follows the
+// page the reader shows: the page of a single message feeds it the model of
+// that message (ConversationController.QuickReplyInput(MessageSummary):
+// Show with the message's account and thread, Update, SetShown false in the
+// Outbox and Drafts), on every change of the page and every render; the
+// conversation page feeds it the conversation (Show with
+// ConversationController.ThreadAccount and Thread, Update with
+// QuickReplyInput() or, while the members load, the empty model, SetShown
+// while the chat shows) on every report of the page (QuickReplyChanged);
+// the empty page, No Accounts and the count of several rows hide it
+// (Show of none, SetShown false). The text typed is kept per account and
+// thread, so it is the same under a message and under its conversation.
+// The bar's icon-only mode follows the pane's width; a bar hiding with the
+// keyboard gives it to the view shown (FocusBody, the conversation's
+// layout, else the list).
 
 using System;
 using System.Collections.Generic;
@@ -100,6 +122,11 @@ public sealed partial class MessageView : UserControl
 
     // The pane's conversation page (window.go convPageName), the pane only.
     private Conversation.ConversationView? conversation;
+
+    // The quick-reply bar and its controller (the pane only).
+    private readonly Malachi.Core.Controllers.QuickReplyController? quickReply;
+    private readonly Conversation.ConversationQuickReplyBar? replyBar;
+    private readonly EventHandler? onAssistantChanged;
 
     // The invitation card above the header; none in an attached message's view.
     private readonly InvitationCardPresenter? invitation;
@@ -172,6 +199,26 @@ public sealed partial class MessageView : UserControl
             }
         };
 
+        if (mode == ReaderMode.Pane)
+        {
+            // The quick-reply bar, last under the message stack.
+            quickReply = new Malachi.Core.Controllers.QuickReplyController(new Conversation.QuickReplyHostAdapter(services, () => HostWindow));
+            var bar = new Conversation.ConversationQuickReplyBar(quickReply)
+            {
+                FocusList = () => FocusList?.Invoke(),
+                ListOnScreen = () => ListOnScreen?.Invoke() ?? true,
+                OpenAssistant = anchor => (HostWindow as MainWindow)?.ShowAssistantFrom(anchor),
+                AssistantShown = services.State.Assistant.Shown,
+                KeyboardTarget = TakeKeyboardFromBar,
+            };
+            replyBar = bar;
+            Grid.SetRow(bar, 7);
+            Root.Children.Add(bar);
+            onAssistantChanged = (_, _) => bar.AssistantShown = services.State.Assistant.Shown;
+            services.State.Assistant.Changed += onAssistantChanged;
+            SizeChanged += (_, e) => bar.SetPaneWidth(e.NewSize.Width);
+        }
+
         var settings = services.State.Settings;
         ApplyBodyFont();
         tokens.Add(settings.OnChange(SettingsKey.TextZoom, ApplyBodyFont));
@@ -189,6 +236,16 @@ public sealed partial class MessageView : UserControl
 
     /// <summary>The window the view is in: where its dialogs and toasts go.</summary>
     public Window? HostWindow { get; set; }
+
+    /// <summary>The quick-reply bar's Escape (and the last resort of its keyboard): the message list takes the keyboard.</summary>
+    internal Action? FocusList { get; set; }
+
+    /// <summary>
+    /// Whether the message list is on screen (MainWindow.MessageListOnScreen):
+    /// the quick-reply bar's Escape gives it the keyboard only then; null
+    /// counts as on screen.
+    /// </summary>
+    internal Func<bool>? ListOnScreen { get; set; }
 
     /// <summary>
     /// win.change-status / msg.change-status: pops up the Change Status menu
@@ -209,6 +266,81 @@ public sealed partial class MessageView : UserControl
         conversation = view;
         view.Visibility = ReaderBind.PageVisible(Reader.Page, nameof(ReaderPage.Conversation));
         Pages.Children.Add(view);
+        view.QuickReplyChanged += (_, _) =>
+        {
+            if (Reader.Page == ReaderPage.Conversation)
+            {
+                FeedQuickReply();
+            }
+        };
+    }
+
+    // The quick-reply bar follows the page shown (ReadingPaneViewController
+    // show(_ row:), conversationChanged, showSingleReply): a single message,
+    // the conversation (its id first: a new one has no target until its
+    // model is built, and the empty model meanwhile), or nothing.
+    private void FeedQuickReply()
+    {
+        if (quickReply is null || closed)
+        {
+            return;
+        }
+        switch (Reader.Page)
+        {
+            case ReaderPage.Message when Reader.Current is { } s && conversation is not null:
+            {
+                var input = conversation.Controller.QuickReplyInput(s);
+                quickReply.Show(s.AccountId, s.ThreadId ?? new ThreadId(""));
+                quickReply.Update(input.Model, input.Actions, input.Account);
+                quickReply.SetShown(input.Shown);
+                return;
+            }
+            case ReaderPage.Conversation when conversation is not null:
+            {
+                var ctrl = conversation.Controller;
+                quickReply.Show(ctrl.ThreadAccount, ctrl.Thread ?? new ThreadId(""));
+                if (ctrl.QuickReplyInput() is { } input)
+                {
+                    quickReply.Update(input.Model, input.Actions, input.Account);
+                }
+                else
+                {
+                    quickReply.Update(new ConversationModel(), default, null);
+                }
+                quickReply.SetShown(conversation.ChatShown);
+                return;
+            }
+        }
+        quickReply.Show(null, new ThreadId(""));
+        quickReply.SetShown(false);
+    }
+
+    // The bar hid with the keyboard in it (macOS keyboardTarget): the view
+    // shown takes it, the message's body or the conversation's layout; the
+    // list when neither can (never a collapsed control). After the turn: the
+    // reader passes through the empty page on its way from a message to a
+    // conversation (LeaveForConversation clears first), and the keyboard goes
+    // to the page it lands on, not to the list for the empty page between.
+    private void TakeKeyboardFromBar() => DispatcherQueue.TryEnqueue(GiveKeyboardToShownView);
+
+    private void GiveKeyboardToShownView()
+    {
+        // Shown again within the turn (the bar came back): nothing to hand.
+        if (closed || replyBar?.Visibility == Visibility.Visible)
+        {
+            return;
+        }
+        switch (Reader.Page)
+        {
+            case ReaderPage.Message when FocusBody():
+                return;
+            case ReaderPage.Conversation when conversation is not null && conversation.TakeKeyboard():
+                return;
+        }
+        if (ListOnScreen?.Invoke() != false)
+        {
+            FocusList?.Invoke();
+        }
     }
 
     // issue_card.go openKey: the issue in the browser (a URL of the
@@ -233,17 +365,18 @@ public sealed partial class MessageView : UserControl
     /// <summary>
     /// Puts the keyboard in the body (message_window.blp focus-widget:
     /// message_scroller), so the selectable subject is not what has it.
+    /// False when nothing could take it: the text scroller is collapsed
+    /// while the body loads, failed or is HTML without a viewer yet, and
+    /// a collapsed control refuses the focus silently.
     /// </summary>
-    public void FocusBody()
+    public bool FocusBody()
     {
         if (Reader.BodyPage == ReaderBodyPage.Html && web is not null)
         {
             web.FocusPage();
+            return true;
         }
-        else
-        {
-            TextScroller.Focus(FocusState.Programmatic);
-        }
+        return TextScroller.Visibility == Visibility.Visible && TextScroller.Focus(FocusState.Programmatic);
     }
 
     /// <summary>
@@ -263,6 +396,11 @@ public sealed partial class MessageView : UserControl
         }
         tokens.Clear();
         services.Attachments.SavingAllChanged -= OnSavingAllChanged;
+        if (onAssistantChanged is not null)
+        {
+            services.State.Assistant.Changed -= onAssistantChanged;
+        }
+        replyBar?.Close();
         if (crmBar is not null)
         {
             services.State.Crm.Changed -= OnCrmChanged;
@@ -418,6 +556,7 @@ public sealed partial class MessageView : UserControl
                     ReaderPage.Conversation when conversation is not null => conversation,
                     _ => MessagePage,
                 });
+                FeedQuickReply();
                 break;
         }
     }
@@ -485,6 +624,9 @@ public sealed partial class MessageView : UserControl
         {
             return;
         }
+        // Another message on the same page (no change of the page), or the
+        // same one with what loaded since: the bar answers it.
+        FeedQuickReply();
         RenderInvitation(r);
         RenderCrm();
         if (headersOf == r.Summary.Id)

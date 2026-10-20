@@ -3,12 +3,14 @@
 SPDX-FileCopyrightText: 2026 Vladislav Janeček
 SPDX-License-Identifier: GPL-3.0-or-later
 
-Port of ui/data/ui/conversation_view.blp (conversation_reply_bar); macOS:
+Port of ui/data/ui/conversation_view.blp (conversation_reply_bar, moving
+to quick_reply_bar.blp with S-G); macOS:
 MessageView/ConversationQuickReplyBar.swift (loadView, buildRow). The
-quick-reply bar under a conversation shown as chat in Mail
-(docs/plans/chat-view.md §10, §11; wireframe
-docs/plans/chat-view/w4-quick-reply.svg): a fixed row in the last row of the
-conversation page (ConversationView), a line above it, its content kept to
+quick-reply bar of Mail's reading pane (docs/plans/chat-view.md §10–§12;
+wireframes docs/plans/chat-view/w4-quick-reply.svg and
+w5-quick-reply-message.svg): a fixed row in the last row of the pane
+(MessageView in ReaderMode.Pane), under the page of a single message and
+under a conversation shown as chat alike, a line above it, its content kept to
 the column of the cards and bubbles (900 wide at most, 16 at the sides, 8
 above and below). From the leading end: the mode button (icon and label,
 Reply or Reply All; its flyout the modes the account offers and, after a

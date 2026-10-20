@@ -2095,8 +2095,40 @@ zpráva, vlastní, událost, komentář, Outbox, úzký panel, prázdno). Ověř
 na Macu: Go testy `conversation` a `quickreply` (`-race`), kontejner
 (`gtk.sh make build`, testy `window`, smoke, `make lint`), `swift build`
 bez varování, celé `swift test` (1897), `check-strings` beze změny proti
-HEAD, izolovaný start s měřením rozložení. Čeká brána S-B1 vlastníka
-(seznam v plánu §12.3), pak S-G (GTK) a S-W (Windows).
+HEAD, izolovaný start s měřením rozložení. Brána S-B1 vlastníka prošla
+(jeden nález: klamp skrytého tlačítka „•••“ pod tělem držel výšku,
+`quotedClamp` se teď skrývá s ním; český zástupný text je „Napsat rychlou
+odpověď…“, msgid beze změny). GTK (S-G, commit `c5331173`, plán §12.4):
+řádek je v `ui/data/ui/quick_reply_bar.blp`, `window.blp` má pod
+`toast_overlay` sloupec `reading_column` s `message_stack` a řádkem,
+kontroler i řádek vlastní `*Window` (`window/quick_reply.go`:
+`attachQuickReply`, `updateQuickReply` podle stránky, `showPaneMessage`,
+`singleQuickReplyInput` nad `conversation.SingleModel` a novým
+`conversation.IsMine`; řádek si měří šířku sám přes hadjustment pole,
+vykresluje jednou na stránku (`hold`), klávesnici při skrytí i při výměně
+konverzace pod rukama (`leaveIfOther`) předá zobrazenému pohledu, nikdy
+popisku předmětu); `conversationHost` jen hlásí; smoke testy
+`TestConversationChatGTKSmoke` a nový `TestQuickReplyMessageGTKSmoke`;
+ověřeno v kontejneru (build, celá sada, oba smoke, `make po` jen odkazy,
+`make lint`); čeká brána S-B2 vlastníka v XQuartz. Windows (S-W, napsané
+bez `dotnet`, plán §12.5 je předávka pro Windows agenta vlastníka,
+`docs/windows-port.md` §11.7): Core `Conversation.SingleModel`/`IsMine`,
+`QuickReplyController.Show(account, thread)`/`SetShown`/`IsKept`,
+`QuickReplyState.Account`, `ConversationController.ThreadAccount`
+a `QuickReplyInput(MessageSummary)`; App řádek v posledním řádku `Root`
+`MessageView` jen v režimu `Pane` (`FeedQuickReply` při změně stránky
+i `Rendered`, `SetPaneWidth`, odložené předání klávesnice přes
+`DispatcherQueue`, `FocusBody` vrací `bool`), `ConversationView` bez
+řádku (`QuickReplyChanged`, `TakeKeyboard`, `FocusScroller`), UI smoke
+`TheQuickReplyBarStandsUnderASingleMessage`; **Windows klient se nikdy
+nestaví přes `windows.yml`** (rozhodnutí vlastníka 2026-10-20): sestavení,
+testy, lint, UI smoke i opravy překladu dělá Windows agent po předávce,
+pak brána S-B3. Otevřená otázka pro vlastníka (všechny tři klienty, plán
+§12.3/§12.4): řádek, který se skryje s klávesnicí v poli (seskupený
+seznam, příchod kopie do Odeslaných nebo cizí odpovědi změní řádek na
+konverzaci v časové ose), předá klávesnici zobrazenému pohledu a tím
+zapne jednoklávesové zkratky nad konverzací; alternativa je nechat řádek
+s textem nebo klávesnicí viditelný i v časové ose (změna S7).
 
 Archivace v Poště = Hotovo (2026-10-13, `feat/board`, necommitnuté; jen
 démon, klienti beze změny — všechny tři to dostanou přes
