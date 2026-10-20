@@ -350,6 +350,13 @@ internal sealed partial class ConversationBubbleView : UserControl
     /// <summary>The bubble holds a web view (the chat's live set, <see cref="SetLive"/>).</summary>
     public bool IsLive { get; private set; }
 
+    /// <summary>
+    /// A draft's bubble (<see cref="ShowDraft"/>): light red, always
+    /// shortened by the chat, no "Show More", and a tap opens the draft
+    /// (<see cref="Activate"/>) instead of expanding it.
+    /// </summary>
+    public bool IsDraft { get; private set; }
+
     /// <summary>The bubble shows the shortened preview (<see cref="SetShortened"/>).</summary>
     public bool Shortened { get; private set; }
 
@@ -446,6 +453,19 @@ internal sealed partial class ConversationBubbleView : UserControl
     public void ShowDraft(ConversationDraftCard card, bool monospaceText)
     {
         ArgumentNullException.ThrowIfNull(card);
+        if (!IsDraft)
+        {
+            // The draft's look: the critical red tint and border.
+            IsDraft = true;
+            if (Content is Border outer)
+            {
+                outer.Style = look("ConversationDraftBubbleStyle");
+                if (outer.Child is Border inner)
+                {
+                    inner.Style = look("ConversationDraftTintStyle");
+                }
+            }
+        }
         AutomationProperties.SetAutomationId(this, DraftPrefix + (card.Draft.Id?.ToString() ?? ""));
         ShowSender(card.Sender);
         unread.Visibility = Visibility.Collapsed;
@@ -715,7 +735,8 @@ internal sealed partial class ConversationBubbleView : UserControl
     // document taller than the preview.
     private void UpdateShowMore()
     {
-        var cut = Shortened && (web is not null ? webHeight > PreviewHeight : bodyLabel.IsTextTrimmed);
+        // Never on a draft: a tap opens it whole in the compose window.
+        var cut = Shortened && !IsDraft && (web is not null ? webHeight > PreviewHeight : bodyLabel.IsTextTrimmed);
         showMore.Visibility = cut ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -756,9 +777,19 @@ internal sealed partial class ConversationBubbleView : UserControl
         return Windows.UI.Color.FromArgb(255, Mix(under.R, over.R), Mix(under.G, over.G), Mix(under.B, over.B));
     }
 
-    // A tap on a shortened bubble expands it (the double tap still opens it).
+    // A tap on a shortened bubble expands it (the double tap still opens
+    // it); on a draft's it opens the draft, as the double tap does.
     private void OnTapped(object sender, TappedRoutedEventArgs e)
     {
+        if (IsDraft)
+        {
+            if (Activate is { } open)
+            {
+                e.Handled = true;
+                open();
+            }
+            return;
+        }
         if (!Shortened || Expand is not { } expand)
         {
             return;

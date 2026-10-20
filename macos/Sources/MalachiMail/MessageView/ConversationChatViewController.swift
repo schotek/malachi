@@ -340,10 +340,6 @@ final class ConversationChatViewController: NSViewController {
                     view = shown
                 } else {
                     view = makeRow(id: nil, draft: id, right: true)
-                    view.bubble.onExpand = { [weak self, weak view] in
-                        guard let self, let view else { return }
-                        self.expand(view)
-                    }
                     draftRows[id] = view
                 }
                 view.bubble.setShortened(shortened(view))
@@ -760,7 +756,11 @@ extension ConversationChatViewController {
     /// Whether the bubble of `row` shows the shortened preview
     /// (`Conversation.bubbleShortened`).
     private func shortened(_ row: ConversationChatRow) -> Bool {
-        let was = row.id.map { expanded.is($0) } ?? row.draftID.map { expanded.isDraft($0) } ?? false
+        // A draft's bubble is always shortened (`ConversationBubbleView.isDraft`).
+        if row.draftID != nil {
+            return true
+        }
+        let was = row.id.map { expanded.is($0) } ?? false
         let settings = state.settings
         return Conversation.bubbleShortened(
             mineOn: settings.conversationChatTruncateMine, othersOn: settings.conversationChatTruncateOthers,
@@ -770,11 +770,8 @@ extension ConversationChatViewController {
     /// A click on a shortened bubble: the whole message, for as long as
     /// the conversation shows.
     private func expand(_ row: ConversationChatRow) {
-        if let id = row.id {
-            expanded.expand(id)
-        } else if let d = row.draftID {
-            expanded.expandDraft(d)
-        }
+        guard let id = row.id else { return }
+        expanded.expand(id)
         preserving {
             row.bubble.setShortened(shortened(row))
         }

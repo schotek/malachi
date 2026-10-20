@@ -2064,7 +2064,7 @@ bez `dotnet` (`build.ps1 app`/`test`/`lint`, smoke, ruční seznam v
 `docs/windows-port.md` §11.7). Nedostatky: nikdo to zatím neviděl na obrazovce;
 vzorové bubliny Nástěnky (bez id) jsou na macOS rozbalené podle indexu, na GTK a
 Windows se nepamatují; barva přechodu na Windows předpokládá barvu panelu
-(#F3F3F3 / #202020).
+(#F3F3F3 / #202020). Koncepty v chatu (2026-10-20, rozhodnutí vlastníka): bublina konceptu je vždy zkrácená bez ohledu na obě předvolby, bez nápisu Zobrazit více, s lehce červeným nádechem (barva chyby ve stejné síle jako nádech zvýraznění vlastních bublin) a jeden klik ji nerozbalí, ale otevře okno konceptu jako dvojklik (`editThreadDraft`); `Expanded` drží jen zprávy (`ExpandDraft`/`IsDraft` zrušeny).
 
 Archivace v Poště = Hotovo (2026-10-13, `feat/board`, necommitnuté; jen
 démon, klienti beze změny — všechny tři to dostanou přes

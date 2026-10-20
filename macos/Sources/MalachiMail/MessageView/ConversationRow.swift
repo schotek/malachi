@@ -37,11 +37,26 @@ enum ConversationTint {
     /// `view` is shown (light, dark, increased contrast). Call it where the
     /// layer is painted (`updateLayer`).
     static func mineFill(in view: NSView) -> NSColor {
+        tinted(.controlAccentColor, in: view)
+    }
+
+    /// The background of a draft's chat bubble: as the user's own, with
+    /// `systemRed` at the same strength instead of the accent colour.
+    static func draftFill(in view: NSView) -> NSColor {
+        tinted(.systemRed, in: view)
+    }
+
+    /// The border of a draft's chat bubble.
+    static var draftBorder: NSColor { .systemRed }
+
+    /// A card's background with `colour` over it at the user's bubble's
+    /// strength (`mineTint`).
+    private static func tinted(_ colour: NSColor, in view: NSView) -> NSColor {
         var out = cardFill
         let share = highContrast(view) ? mineTintContrasted : mineTint
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             guard let base = cardFill.usingColorSpace(.sRGB),
-                  let accent = NSColor.controlAccentColor.usingColorSpace(.sRGB),
+                  let accent = colour.usingColorSpace(.sRGB),
                   let mixed = base.blended(withFraction: share, of: accent) else { return }
             out = mixed
         }

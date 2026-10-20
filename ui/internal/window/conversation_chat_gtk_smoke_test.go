@@ -330,9 +330,19 @@ func TestConversationChatGTKSmoke(t *testing.T) {
 	}
 	st.SetConversationChatTruncateMine(false)
 	run(300 * time.Millisecond)
-	if chat.bubbles["r1"].bubble.short || chat.drafts["d1"].bubble.short {
+	if chat.bubbles["r1"].bubble.short {
 		t.Error("both off left bubbles shortened")
 	}
+	// A draft: always shortened, tinted, no Show More; a click opens it.
+	db := chat.drafts["d1"].bubble
+	if !db.short || db.more.Visible() || !db.frame.HasCSSClass("chat-bubble-draft") {
+		t.Errorf("the draft: short %v more %v draft class %v", db.short, db.more.Visible(), db.frame.HasCSSClass("chat-bubble-draft"))
+	}
+	db.onExpand()
+	if got := convWindowEdited[fake]; len(got) != 1 || got[0].ID != "d1" || !db.short {
+		t.Errorf("a click on the draft edited %+v (short %v)", got, db.short)
+	}
+	delete(convWindowEdited, fake)
 
 	// Back to the timeline: the fold kept, the chat lets go.
 	w.settings.SetConversationChatLayout(false)

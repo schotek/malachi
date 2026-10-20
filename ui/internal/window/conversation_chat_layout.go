@@ -441,20 +441,28 @@ func chatEventMeta(sender, when string) string {
 // chatRowShortened says whether the chat row r shows the shortened preview
 // with the preferences of the user's own bubbles (mineOn) and the other
 // party's (othersOn) and the bubbles the user expanded in e: a message's
-// bubble by its side (r.Side, the user's own on the right), a draft's as
-// the user's own, never a centred row (conversation.BubbleShortened).
+// bubble by its side (r.Side, the user's own on the right,
+// conversation.BubbleShortened), a draft's always (a click opens it,
+// chatClickOpens), never a centred row.
 func chatRowShortened(mineOn, othersOn bool, e *conversation.Expanded, r conversation.ChatRow) bool {
 	switch r.Kind {
 	case conversation.ChatBubble:
 		return conversation.BubbleShortened(mineOn, othersOn, r.Side == conversation.ChatRight, e.Is(r.Item.Message.ID))
 	case conversation.ChatDraft:
-		return conversation.BubbleShortened(mineOn, othersOn, true, e.IsDraft(r.Draft.Draft.ID))
+		return true
 	}
 	return false
 }
 
+// chatClickOpens says whether a single click on the bubble of r opens it
+// (a draft, in the compose window: chatActivate) instead of expanding it.
+func chatClickOpens(r conversation.ChatRow) bool {
+	return r.Kind == conversation.ChatDraft
+}
+
 // chatExpandRow records the user's click on the shortened bubble of r in
-// e (a message's or a draft's); false for a row nothing expands.
+// e (a message's); false for a row nothing expands (a draft opens
+// instead, chatClickOpens).
 func chatExpandRow(e *conversation.Expanded, r conversation.ChatRow) bool {
 	switch r.Kind {
 	case conversation.ChatBubble:
@@ -462,12 +470,6 @@ func chatExpandRow(e *conversation.Expanded, r conversation.ChatRow) bool {
 			return false
 		}
 		e.Expand(r.Item.Message.ID)
-		return true
-	case conversation.ChatDraft:
-		if r.Draft.Draft.ID == "" {
-			return false
-		}
-		e.ExpandDraft(r.Draft.Draft.ID)
 		return true
 	}
 	return false

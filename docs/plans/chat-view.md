@@ -391,7 +391,10 @@ container. Deviations from the rows of §6.2:
   under a `.chat-fade` overlay that takes the click, "Show More"
   (`.chat-show-more`) only when it overflows (`Layout().IsEllipsized()`,
   `chatHTMLOverflows`); a single click expands (`onExpand`), a double click
-  still opens the window. Mail's and the board's chat both, drafts too.
+  still opens the window. Mail's and the board's chat both. A draft bubble
+  is always shortened, tinted `.chat-bubble-draft` (the error colour as the
+  accent of the user's own), without "Show More"; a click opens it
+  (`chatClickOpens`).
 
 Tests: `conversation_chat_test.go` and `conversation_chat_layout_test.go`
 over a fake `convWindow`; `MALACHI_GTK_SMOKE=1 TestConversationChatGTKSmoke`
@@ -652,6 +655,8 @@ zmrazená výška je jen minimum (delší text než dokument řádek zvětší).
 Bublina chatu smí ukázat jen asi tři řádky zprávy; klepnutí ukáže celou.
 Necommitnuté; vlastník reviduje sám ve všech třech klientech. Rozhodnutí
 vlastníka:
+
+Koncepty (2026-10-20, dodatek vlastníka): bublina konceptu je vždy zkrácená bez ohledu na obě předvolby, bez nápisu Zobrazit více, s lehce červeným nádechem (barva chyby, stejná síla jako nádech vlastních bublin) a jeden klik ji nerozbalí, ale otevře okno konceptu jako dvojklik; `Expanded` drží jen zprávy. GTK `.chat-bubble-draft`, macOS `ConversationTint.draftFill`, Windows `ConversationDraftTintStyle`.
 
 - **Textové i HTML bubliny, chat Pošty i Nástěnky**; výchozí celé zprávy,
   zvlášť pro moje a cizí zprávy.

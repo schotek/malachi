@@ -778,7 +778,7 @@ Messages in Chat* (`Settings.conversationChatTruncateMine` /
 `conversationChatTruncateOthers`, gschema `conversation-chat-truncate-mine` /
 `-others`, both off by default; one subtitle,
 `Conversation.chatTruncateRowSubtitle()`). With the setting of its side on
-(the right side, a draft included, is mine), a bubble of Mail's chat or of
+(the right side is mine), a bubble of Mail's chat or of
 the board's chat shows about `Conversation.chatPreviewLines` (3) lines
 (`Conversation.bubbleShortened(mineOn:othersOn:mine:expanded:)`,
 `ConversationBubbleView.setShortened`): a text bubble limits its field to
@@ -793,7 +793,11 @@ chat records it in `Conversation.Expanded` (Mail's chat: forgotten with the
 conversation in `removeAll`, kept across a switch of the layout; the
 board: forgotten with the case, samples by index), and a double click still
 opens the window. A released shortened HTML bubble keeps its clipped
-height. Both chats observe both keys and re-shorten every bubble;
+height. A draft's bubble in Mail's chat is always shortened
+whatever the settings, light red (`ConversationTint.draftFill`, `systemRed`
+at the strength of the user's accent tint, a red border), without *Show
+More*, and a single click opens it in the compose window as a double click
+does (`editThreadDraft`); drafts are never in `Expanded`. Both chats observe both keys and re-shorten every bubble;
 heights change through `preserving` / `onHeightChanging`.
 
 The [security review checklist](security.md#12-review-checklist-for-prs-touching-content-handling)

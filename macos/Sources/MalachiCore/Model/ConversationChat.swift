@@ -216,13 +216,13 @@ extension Conversation {
         return mine ? mineOn : othersOn
     }
 
-    /// conversation.Expanded: the messages (and drafts) the user expanded
-    /// in the conversation shown; forgotten when another conversation or
-    /// case is selected (as `Folds` are), never persisted. An expanded
-    /// bubble stays expanded: there is no collapsing back.
+    /// conversation.Expanded: the messages the user expanded in the
+    /// conversation shown; forgotten when another conversation or case is
+    /// selected (as `Folds` are), never persisted. An expanded bubble stays
+    /// expanded: there is no collapsing back. A draft's bubble is never
+    /// expanded (always shortened; a click opens the draft).
     public struct Expanded: Sendable, Equatable {
         private var messages: Set<MessageID> = []
-        private var drafts: Set<DraftID> = []
 
         public init() {}
 
@@ -238,23 +238,10 @@ extension Conversation {
             !id.rawValue.isEmpty && messages.contains(id)
         }
 
-        /// The user expanded the bubble of draft `id`; an empty id is
-        /// ignored.
-        public mutating func expandDraft(_ id: DraftID) {
-            guard !id.rawValue.isEmpty else { return }
-            drafts.insert(id)
-        }
-
-        /// Whether the bubble of draft `id` was expanded.
-        public func isDraft(_ id: DraftID) -> Bool {
-            !id.rawValue.isEmpty && drafts.contains(id)
-        }
-
         /// Forgets every expanded bubble: another conversation or case is
         /// selected.
         public mutating func reset() {
             messages = []
-            drafts = []
         }
     }
 

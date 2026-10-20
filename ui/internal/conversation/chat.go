@@ -193,18 +193,28 @@ func ChatHTMLRowSubtitle(tr Translator) string {
 }
 
 // ChatPreviewLines is how many lines of a message a shortened bubble
-// shows (the preference conversation-chat-truncate): a text bubble that
-// many lines of its text with an ellipsis, an HTML bubble its document
-// clipped to that many lines' height with a fade, both with a "Show
-// More" hint under the body; a click anywhere in the bubble (not a
-// double-click, which opens the message) shows the whole message.
+// shows: a text bubble that many lines of its text with an ellipsis, an
+// HTML bubble its document clipped to that many lines' height with a
+// fade. A shortened message bubble (BubbleShortened) has a "Show More"
+// hint under the body, and a click anywhere in it (not a double-click,
+// which opens the message) shows the whole message.
+//
+// A draft bubble (ChatDraft) is always shortened to these lines, whatever
+// the two preferences and Expanded say (they govern message bubbles
+// only): it shows no "Show More" hint, it has a light red tint (the error
+// colour at the same strength as the accent tint of the user's own
+// bubbles), and a single click opens the draft in its window (the compose
+// window, as the assistant's "Open draft" card does), the same action as
+// its double-click (editThreadDraft); it never expands.
 const ChatPreviewLines = 3
 
-// BubbleShortened says whether a bubble shows the shortened preview: the
-// preference of the bubble's side is on (mine: the user's own message,
-// the bubble on the right, conversation-chat-truncate-mine; else the
-// other party's, conversation-chat-truncate-others) and the user has not
-// expanded that message. A draft counts as mine.
+// BubbleShortened says whether a message bubble (ChatBubble) shows the
+// shortened preview: the preference of the bubble's side is on (mine:
+// the user's own message, the bubble on the right,
+// conversation-chat-truncate-mine; else the other party's,
+// conversation-chat-truncate-others) and the user has not expanded that
+// message. It is not asked for a draft bubble, which is always shortened
+// and never expanded (see ChatPreviewLines).
 func BubbleShortened(mineOn, othersOn, mine, expanded bool) bool {
 	if expanded {
 		return false
@@ -215,13 +225,14 @@ func BubbleShortened(mineOn, othersOn, mine, expanded bool) bool {
 	return othersOn
 }
 
-// Expanded is the set of messages (and drafts) the user expanded in the
-// conversation shown; it is forgotten when another conversation or case
-// is selected (as Folds are), never persisted. Zero value usable. An
-// expanded bubble stays expanded: there is no collapsing back.
+// Expanded is the set of messages the user expanded in the conversation
+// shown; it is forgotten when another conversation or case is selected
+// (as Folds are), never persisted. Zero value usable. An expanded bubble
+// stays expanded: there is no collapsing back. It holds message bubbles
+// only: a draft bubble is always shortened and a click on it opens the
+// draft (see ChatPreviewLines).
 type Expanded struct {
 	messages map[api.MessageID]bool
-	drafts   map[api.DraftID]bool
 }
 
 // Expand records that the user expanded the bubble of message id; an
@@ -241,32 +252,14 @@ func (e *Expanded) Is(id api.MessageID) bool {
 	return id != "" && e.messages[id]
 }
 
-// ExpandDraft records that the user expanded the bubble of draft id (a
-// ChatDraft row, whose id is a draft's, not a message's); an empty id is
-// ignored.
-func (e *Expanded) ExpandDraft(id api.DraftID) {
-	if id == "" {
-		return
-	}
-	if e.drafts == nil {
-		e.drafts = map[api.DraftID]bool{}
-	}
-	e.drafts[id] = true
-}
-
-// IsDraft says whether the user expanded the bubble of draft id.
-func (e *Expanded) IsDraft(id api.DraftID) bool {
-	return id != "" && e.drafts[id]
-}
-
 // Reset forgets every expanded bubble: another conversation or case is
 // selected.
 func (e *Expanded) Reset() {
 	e.messages = nil
-	e.drafts = nil
 }
 
-// ChatShowMore is the hint under a shortened bubble.
+// ChatShowMore is the hint under a shortened message bubble (never under
+// a draft bubble).
 func ChatShowMore(tr Translator) string {
 	// TRANSLATORS: the hint under a shortened message in the chat layout of a conversation; a click on the message shows all of it.
 	return tr.T("Show More")

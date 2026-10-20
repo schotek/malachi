@@ -434,6 +434,12 @@ func (cv *conversationChat) styleChanged() {
 // expanded bubbles say (chatRowShortened); a click on a shortened bubble
 // expands it (chatExpandRow; a row nothing records only shows whole).
 func (cv *conversationChat) shorten(row *chatRow) {
+	if chatClickOpens(row.row) {
+		// A draft: always shortened, a click opens it.
+		row.bubble.onExpand = func() { cv.activate(row) }
+		row.bubble.setShortened(true)
+		return
+	}
 	row.bubble.onExpand = func() {
 		chatExpandRow(&cv.expanded, row.row)
 		row.bubble.setShortened(false)

@@ -289,29 +289,20 @@ func TestBubbleShortened(t *testing.T) {
 
 func TestExpanded(t *testing.T) {
 	var e Expanded
-	if e.Is("m1") || e.IsDraft("d1") || e.Is("") || e.IsDraft("") {
+	if e.Is("m1") || e.Is("") {
 		t.Fatal("zero value expands something")
 	}
 	e.Expand("m1")
-	e.ExpandDraft("d1")
 	e.Expand("")
-	e.ExpandDraft("")
 	if !e.Is("m1") || e.Is("m2") || e.Is("") {
 		t.Error("messages")
-	}
-	if !e.IsDraft("d1") || e.IsDraft("d2") || e.IsDraft("") {
-		t.Error("drafts")
-	}
-	// A draft's id and a message's id are separate sets.
-	if e.Is(api.MessageID("d1")) || e.IsDraft(api.DraftID("m1")) {
-		t.Error("message and draft ids mixed")
 	}
 	e.Expand("m1") // again: still expanded, no collapsing back
 	if !e.Is("m1") {
 		t.Error("expanding twice collapsed")
 	}
 	e.Reset()
-	if e.Is("m1") || e.IsDraft("d1") {
+	if e.Is("m1") {
 		t.Error("reset kept an expanded bubble")
 	}
 	e.Expand("m2")

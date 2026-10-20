@@ -320,19 +320,11 @@ public sealed class ConversationChatTests
         Assert.False(e.Is(null));
         e.Expand(new MessageId("m1"));
         e.Expand(new MessageId(""));
-        e.ExpandDraft(new DraftId("d1"));
-        e.ExpandDraft(new DraftId(""));
         Assert.True(e.Is(new MessageId("m1")));
         Assert.False(e.Is(new MessageId("m2")));
         Assert.False(e.Is(new MessageId("")));
-        Assert.True(e.IsDraft(new DraftId("d1")));
-        Assert.False(e.IsDraft(new DraftId("")));
-        Assert.False(e.IsDraft(null));
-        // A message id and a draft id are different sets.
-        Assert.False(e.IsDraft(new DraftId("m1")));
         e.Reset();
         Assert.False(e.Is(new MessageId("m1")));
-        Assert.False(e.IsDraft(new DraftId("d1")));
     }
 
     [Fact]

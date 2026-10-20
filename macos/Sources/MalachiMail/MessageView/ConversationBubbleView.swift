@@ -57,7 +57,8 @@ protocol ConversationBubbleWebHost: AnyObject {
 /// colour, which also takes the clicks off the document; a "Show More"
 /// hint under the body only when there is more. A single click anywhere
 /// expands it (`onExpand`, the chat records it); a double click still opens
-/// the window.
+/// the window. A draft's bubble is always shortened, light red, without
+/// the hint, and a single click opens the draft (`onDoubleClick`).
 ///
 /// Every text is plain (`stringValue`) and none can be selected: a double
 /// click anywhere in the bubble opens the message in its own window, a
@@ -129,6 +130,9 @@ final class ConversationBubbleView: NSView {
 
     /// The bubble shows the shortened preview (`setShortened`).
     private(set) var shortened = false
+    /// The bubble is a draft's (`showDraft`): always shortened, light red,
+    /// no "Show More", and a single click opens the draft (`onDoubleClick`).
+    private(set) var isDraft = false
     /// "Show More" under a shortened body that has more.
     private let hintLabel = NSTextField(labelWithString: "")
     /// The fade over the bottom of a clipped document, which also takes the
@@ -309,6 +313,16 @@ final class ConversationBubbleView: NSView {
     override var wantsUpdateLayer: Bool { true }
 
     override func updateLayer() {
+        if isDraft {
+            layer?.backgroundColor = ConversationTint.draftFill(in: self).cgColor
+            var border = ConversationTint.draftBorder.cgColor
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                border = ConversationTint.draftBorder.cgColor
+            }
+            layer?.borderColor = border
+            fade.colour = ConversationTint.draftFill(in: self)
+            return
+        }
         if mine {
             layer?.backgroundColor = ConversationTint.mineFill(in: self).cgColor
             var border = ConversationTint.mineBorder.cgColor
@@ -340,6 +354,7 @@ final class ConversationBubbleView: NSView {
     /// Shows the shortened preview (`on`, `Conversation.bubbleShortened`)
     /// or the whole message.
     func setShortened(_ on: Bool) {
+        let on = on || isDraft
         guard on != shortened else { return }
         shortened = on
         applyShortening()
@@ -379,7 +394,19 @@ final class ConversationBubbleView: NSView {
         } else {
             more = textExceeds()
         }
-        hintLabel.isHidden = !more
+        hintLabel.isHidden = !more || isDraft
+    }
+
+    /// Whether the bubble is a draft's (`showDraft` sets it, the others
+    /// clear it).
+    private func setDraft(_ on: Bool) {
+        guard on != isDraft else { return }
+        isDraft = on
+        needsDisplay = true
+        if on {
+            shortened = true
+        }
+        applyShortening()
     }
 
     /// The text needs more than `chatPreviewLines` lines at the width it
@@ -398,8 +425,13 @@ final class ConversationBubbleView: NSView {
     }
 
     @objc private func clicked(_ g: NSClickGestureRecognizer) {
-        guard g.state == .ended, shortened else { return }
-        onExpand?()
+        guard g.state == .ended else { return }
+        if isDraft {
+            // A draft opens in the compose window at once.
+            onDoubleClick?()
+        } else if shortened {
+            onExpand?()
+        }
     }
 
     // MARK: Content
@@ -408,6 +440,7 @@ final class ConversationBubbleView: NSView {
     /// `attachments` is its paperclip pill
     /// (`Conversation.bubbleAttachmentBadge`).
     func showMessage(_ item: Conversation.Item, attachments: Conversation.BubbleAttachments) {
+        setDraft(false)
         sender = item.sender
         senderLabel.stringValue = item.sender
         senderLabel.toolTip = item.sender.isEmpty ? nil : item.sender
@@ -431,6 +464,7 @@ final class ConversationBubbleView: NSView {
     /// (`Board.MessageCard`): no unread dot, paperclip, badges, via or
     /// Edited; `date` nil hides the date.
     func showPlain(sender name: String, date when: Date?) {
+        setDraft(false)
         sender = name
         senderLabel.stringValue = name
         senderLabel.toolTip = name.isEmpty ? nil : name
@@ -448,6 +482,7 @@ final class ConversationBubbleView: NSView {
     /// A draft of the user's (D14): its header with the Draft badge, the
     /// Internal one of an internal comment and when it was saved, its text.
     func showDraft(_ card: Conversation.DraftCard) {
+        setDraft(true)
         sender = card.sender
         senderLabel.stringValue = card.sender
         senderLabel.toolTip = card.sender.isEmpty ? nil : card.sender

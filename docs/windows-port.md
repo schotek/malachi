@@ -3076,8 +3076,8 @@ their msgids left `parity-exclusions.txt` (the gschema lines stay). Core
 ports Go's `ChatPreviewLines` (3), `BubbleShortened(mineOn, othersOn, mine,
 expanded)` (the setting of the bubble's side, a draft counting as mine, and
 not expanded; the 16-row table in `ConversationChatTests`), the texts and
-`Expanded` as `ConversationExpanded` (`Expand`/`Is`, `ExpandDraft`/`IsDraft`,
-`Reset`). `ConversationBubbleView.SetShortened`: a text bubble's `TextBlock`
+`Expanded` as `ConversationExpanded` (`Expand`/`Is`, `Reset`; drafts are
+never expanded). `ConversationBubbleView.SetShortened`: a text bubble's `TextBlock`
 takes `MaxLines` 3 and `CharacterEllipsis`; an HTML bubble's slot is
 clipped (`Height` and a `RectangleGeometry` clip) to three lines of the chat
 font (`3 × size × 1.33`, the size with the text zoom) while the view keeps
@@ -3093,13 +3093,22 @@ across a layout switch) and shows it whole through `Preserving`; the board's
 block records it per case (reset when `state.CaseId` changes) through
 `ChangingHeight`; a double tap still opens the message (the first tap may
 expand it first). The side picks the key: Mail's chat by the row's side
-(`ConversationChatRow.Right`; drafts mine), the board by `MessageCard.Mine`.
+(`ConversationChatRow.Right`), the board by `MessageCard.Mine`. A draft's
+bubble in Mail's chat (`ConversationBubbleView.ShowDraft`, `IsDraft`) is
+always shortened whatever the switches, never shows *Show More*, is light
+red (`ConversationDraftBubbleStyle` and `ConversationDraftTintStyle`:
+`SystemFillColorCritical` at 12 % over the card fill, a
+`SystemFillColorCriticalBrush` border; high contrast the window's colours
+and the highlight's border), and a tap opens it in the compose window
+through the same `Activate` as the double tap (`AfterRelease`,
+`MessageActionRouter.EditThreadDraft`) instead of expanding it.
 Both chats observe both keys (`OnChange`, tokens cancelled with the others)
 and shorten or show every bubble anew; centre rows are never shortened.
 Written blind; the chat smoke is not extended. By hand: the new section and
 its order, each switch alone (only its side shortens), long and short text
 bubbles (the hint only when cut), HTML bubbles (clipped with the fade, the
-hint, a tap expands, links work only once expanded), drafts (mine), the
+hint, a tap expands, links work only once expanded), drafts (always short,
+light red in light and dark, a single tap opens the compose window), the
 board's chat (another case forgets, the layout switch keeps), the switches
 while a chat shows, text zoom, the dark and high-contrast themes.
 

@@ -151,7 +151,10 @@ func newChatRow(right bool, activate func(*chatRow)) *chatRow {
 		// In an HTML bubble only the header opens the message: the
 		// document is WebKit's.
 		if n == 2 && !r.bubble.inDocument(x, y) {
-			activate(r)
+			// A draft opened on the first click already.
+			if !r.bubble.draft {
+				activate(r)
+			}
 			return
 		}
 		// A click on a shortened bubble shows it whole (the fade over a
@@ -706,7 +709,7 @@ func (b *chatBubble) queueMore() {
 // text ellipsised.
 func (b *chatBubble) updateMore() {
 	more := false
-	if b.short {
+	if b.short && !b.draft {
 		if b.web != nil {
 			more = chatHTMLOverflows(b.reported, b.webHeight, b.preview, b.short)
 		} else if b.text.Visible() {
@@ -753,6 +756,7 @@ func (b *chatBubble) forwardScroll() {
 // now) and its attachments pill.
 func (b *chatBubble) showMessage(item conversation.Item, att bubbleAttachments, compact bool) {
 	b.draft = false
+	b.frame.RemoveCSSClass("chat-bubble-draft")
 	b.senderName = item.Sender
 	b.sender.SetText(item.Sender)
 	b.sender.SetTooltipText(item.Sender)
@@ -782,6 +786,7 @@ func (b *chatBubble) showMessage(item conversation.Item, att bubbleAttachments, 
 // does.
 func (b *chatBubble) showDraft(card conversation.DraftCard) {
 	b.draft = true
+	b.frame.AddCSSClass("chat-bubble-draft")
 	b.senderName = card.Sender
 	b.sender.SetText(card.Sender)
 	b.sender.SetTooltipText(card.Sender)

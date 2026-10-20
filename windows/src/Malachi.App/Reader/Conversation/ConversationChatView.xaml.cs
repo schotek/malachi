@@ -495,10 +495,10 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
                         if (!draftRows.TryGetValue(id, out var view))
                         {
                             view = MakeRow(null, id, right: true);
-                            view.Bubble.Expand = () => ExpandDraft(id);
                             draftRows[id] = view;
                         }
-                        view.Bubble.SetShortened(Shortened(mine: true, expanded.IsDraft(id)));
+                        // A draft is always shortened; a tap opens it.
+                        view.Bubble.SetShortened(true);
                         var draft = card.Draft;
                         view.Bubble.Activate = () => AfterRelease.Run(() => services.Router.EditThreadDraft(draft));
                         view.Bubble.CompactDate = compactDates;
@@ -1001,8 +1001,9 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
         ScheduleNear();
     }
 
-    // A tap on a shortened bubble of member id (or draft id): recorded, and
-    // the bubble shows the whole message; nothing collapses back.
+    // A tap on a shortened bubble of member id: recorded, and the bubble
+    // shows the whole message; nothing collapses back (a draft's tap opens
+    // the draft instead, ConversationBubbleView.IsDraft).
     private void ExpandMember(MessageId id)
     {
         expanded.Expand(id);
@@ -1012,17 +1013,9 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
         }
     }
 
-    private void ExpandDraft(DraftId id)
-    {
-        expanded.ExpandDraft(id);
-        if (draftRows.TryGetValue(id, out var row))
-        {
-            Preserving(() => row.Bubble.SetShortened(false));
-        }
-    }
-
-    // The preference conversation-chat-truncate changed: every bubble
-    // shortened or whole anew (the expanded ones stay whole).
+    // The preferences conversation-chat-truncate-mine or -others changed:
+    // every message bubble shortened or whole anew (the expanded ones stay
+    // whole; drafts are always shortened).
     private void ApplyShortened()
     {
         Preserving(() =>
@@ -1030,10 +1023,6 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
             foreach (var (id, row) in bubbles)
             {
                 row.Bubble.SetShortened(Shortened(row.Right, expanded.Is(id)));
-            }
-            foreach (var (id, row) in draftRows)
-            {
-                row.Bubble.SetShortened(Shortened(mine: true, expanded.IsDraft(id)));
             }
         });
     }

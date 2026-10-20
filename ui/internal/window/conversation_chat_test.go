@@ -531,11 +531,27 @@ func TestConversationChatShortenedBubbles(t *testing.T) {
 	var e conversation.Expanded
 	scope := ""
 	chatExpandedScope(&e, &scope, string(w.ctrl.model.Thread))
-	// Each preference shortens its side: the user's own (on the right) and
-	// the drafts with mine, the others' (on the left) with others.
+	// Each preference shortens its side: the user's own (on the right)
+	// with mine, the others' (on the left) with others; a draft always,
+	// both preferences off too.
 	for _, r := range rows {
-		bubble := r.Kind == conversation.ChatBubble || r.Kind == conversation.ChatDraft
-		mine := r.Kind == conversation.ChatDraft || (r.Kind == conversation.ChatBubble && r.Side == conversation.ChatRight)
+		isDraft := r.Kind == conversation.ChatDraft
+		if isDraft {
+			for _, on := range [][2]bool{{false, false}, {true, false}, {false, true}, {true, true}} {
+				if !chatRowShortened(on[0], on[1], &e, r) {
+					t.Errorf("a draft not shortened with %v", on)
+				}
+			}
+			if !chatClickOpens(r) || chatExpandRow(&e, r) {
+				t.Error("a click on a draft expands it instead of opening it")
+			}
+			continue
+		}
+		if chatClickOpens(r) {
+			t.Errorf("a click on %v opens it", r.Kind)
+		}
+		bubble := r.Kind == conversation.ChatBubble
+		mine := bubble && r.Side == conversation.ChatRight
 		if got := chatRowShortened(true, true, &e, r); got != bubble {
 			t.Errorf("%v shortened %v with both on", r.Kind, got)
 		}
@@ -552,7 +568,7 @@ func TestConversationChatShortenedBubbles(t *testing.T) {
 	if chatRowShortened(true, true, &e, conversation.ChatRow{Kind: conversation.ChatTruncated}) {
 		t.Error("a centred row is shortened")
 	}
-	// A click expands a message and a draft.
+	// A click expands a message; a draft stays shortened (it opens).
 	var msg, draft conversation.ChatRow
 	for _, r := range rows {
 		switch r.Kind {
@@ -562,12 +578,18 @@ func TestConversationChatShortenedBubbles(t *testing.T) {
 			draft = r
 		}
 	}
-	if !chatExpandRow(&e, msg) || !chatExpandRow(&e, draft) {
-		t.Fatal("nothing expanded")
+	if !chatExpandRow(&e, msg) || chatExpandRow(&e, draft) {
+		t.Fatal("the message did not expand, or the draft did")
 	}
-	if chatRowShortened(true, true, &e, msg) || chatRowShortened(true, true, &e, draft) {
-		t.Error("expanded bubbles still shortened")
+	if chatRowShortened(true, true, &e, msg) || !chatRowShortened(false, false, &e, draft) {
+		t.Error("the expanded message is shortened, or the draft is not")
 	}
+	// The click on a draft opens it in the compose window.
+	chatActivate(w.ctrl, draft)
+	if got := convWindowEdited[w]; len(got) != 1 || got[0].ID != "d1" {
+		t.Errorf("a click on the draft edited %+v", got)
+	}
+	delete(convWindowEdited, w)
 	if chatExpandRow(&e, conversation.ChatRow{Kind: conversation.ChatEvent}) {
 		t.Error("an event row expanded")
 	}
@@ -579,8 +601,8 @@ func TestConversationChatShortenedBubbles(t *testing.T) {
 	// Another conversation: forgotten.
 	w.selectRow(w.row("t3", "", false))
 	chatExpandedScope(&e, &scope, string(w.ctrl.model.Thread))
-	if !chatRowShortened(true, true, &e, msg) || !chatRowShortened(true, true, &e, draft) {
-		t.Error("another conversation kept the expanded bubbles")
+	if !chatRowShortened(true, true, &e, msg) {
+		t.Error("another conversation kept the expanded bubble")
 	}
 
 	// The HTML bubble's clipped height and its overflow.

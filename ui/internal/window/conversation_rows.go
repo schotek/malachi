@@ -39,7 +39,8 @@ const convCaptionMiddle = 8
 // theme's frame) in a subtle grey (the card colour with 6 % of the text
 // colour: light grey in the light style, a little lighter than the pane in
 // the dark one), the user's own tinted with the accent colour, about 12 %
-// over the card's background, and bordered with it; the snippet that
+// over the card's background, and bordered with it, a draft's
+// (.chat-bubble-draft) likewise in the error colour; the snippet that
 // stands in until the body arrives dimmed; the paperclip a pill in the
 // bulk tag's neutral colours. A bubble's text is a .message-body label (the
 // text zoom and the monospace setting of internal/style); .chat-proportional
@@ -64,6 +65,7 @@ const convCSS = `.conversation-pane { background-color: @window_bg_color; }
 avatar.conversation-own { background-image: none; background-color: @accent_bg_color; color: @accent_fg_color; }
 frame.chat-bubble { background-color: mix(@card_bg_color, @window_fg_color, 0.06); border: 1px solid alpha(currentColor, 0.15); border-radius: 10px; padding: 9px 13px; box-shadow: none; }
 frame.chat-bubble.chat-bubble-mine { background-color: mix(@card_bg_color, @accent_bg_color, 0.12); border-color: @accent_bg_color; }
+frame.chat-bubble.chat-bubble-draft { background-color: mix(@card_bg_color, @error_bg_color, 0.12); border-color: @error_bg_color; }
 label.chat-placeholder { opacity: 0.55; }
 label.message-body.chat-proportional { font-family: inherit; }
 box.chat-clip-pill { padding: 0 6px; border-radius: 99px; font-size: 80%; background-color: alpha(@window_fg_color, 0.1); color: alpha(@window_fg_color, 0.75); }
@@ -71,6 +73,7 @@ box.chat-clip-pill image { -gtk-icon-size: 12px; }
 overlay.chat-bubble-html { background: none; }
 frame.chat-bubble box.chat-fade { background-image: linear-gradient(to bottom, transparent 50%, mix(@card_bg_color, @window_fg_color, 0.06)); }
 frame.chat-bubble.chat-bubble-mine box.chat-fade { background-image: linear-gradient(to bottom, transparent 50%, mix(@card_bg_color, @accent_bg_color, 0.12)); }
+frame.chat-bubble.chat-bubble-draft box.chat-fade { background-image: linear-gradient(to bottom, transparent 50%, mix(@card_bg_color, @error_bg_color, 0.12)); }
 label.chat-show-more { font-weight: 600; }
 `
 

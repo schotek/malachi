@@ -48,6 +48,8 @@ App.xaml.
             <StaticResource x:Key="ToggleButtonBorderBrushCheckedPressed" ResourceKey="SubtleFillColorTransparentBrush" />
             <SolidColorBrush x:Key="ConversationMineBubbleTintBrush" Opacity="0.12" Color="{ThemeResource SystemAccentColorLight2}" />
             <SolidColorBrush x:Key="ConversationOtherBubbleTintBrush" Opacity="0.06" Color="White" />
+            <SolidColorBrush x:Key="ConversationDraftBubbleTintBrush" Opacity="0.12" Color="{ThemeResource SystemFillColorCritical}" />
+            <StaticResource x:Key="ConversationDraftBubbleBorderBrush" ResourceKey="SystemFillColorCriticalBrush" />
             <StaticResource x:Key="ConversationMineBubbleBorderBrush" ResourceKey="AccentFillColorDefaultBrush" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
@@ -62,11 +64,15 @@ App.xaml.
             <StaticResource x:Key="ToggleButtonBorderBrushCheckedPressed" ResourceKey="SubtleFillColorTransparentBrush" />
             <SolidColorBrush x:Key="ConversationMineBubbleTintBrush" Opacity="0.12" Color="{ThemeResource SystemAccentColorDark1}" />
             <SolidColorBrush x:Key="ConversationOtherBubbleTintBrush" Opacity="0.06" Color="Black" />
+            <SolidColorBrush x:Key="ConversationDraftBubbleTintBrush" Opacity="0.12" Color="{ThemeResource SystemFillColorCritical}" />
+            <StaticResource x:Key="ConversationDraftBubbleBorderBrush" ResourceKey="SystemFillColorCriticalBrush" />
             <StaticResource x:Key="ConversationMineBubbleBorderBrush" ResourceKey="AccentFillColorDefaultBrush" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
             <SolidColorBrush x:Key="ConversationMineBubbleTintBrush" Color="Transparent" />
             <SolidColorBrush x:Key="ConversationOtherBubbleTintBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="ConversationDraftBubbleTintBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="ConversationDraftBubbleBorderBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="ConversationMineBubbleBorderBrush" Color="{ThemeResource SystemColorHighlightColor}" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
@@ -152,6 +158,20 @@ App.xaml.
     </Style>
     <Style x:Key="ConversationMineTintStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource ConversationMineBubbleTintBrush}" />
+        <Setter Property="CornerRadius" Value="9" />
+    </Style>
+    <!-- A draft's bubble (the user's unsent reply): the card's fill under
+         the system's critical red at the strength of the user's own accent
+         tint, and a border of it; high contrast: the window's colours and
+         the highlight's border. -->
+    <Style x:Key="ConversationDraftBubbleStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource ConversationDraftBubbleBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
+    </Style>
+    <Style x:Key="ConversationDraftTintStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource ConversationDraftBubbleTintBrush}" />
         <Setter Property="CornerRadius" Value="9" />
     </Style>
     <!-- The others' bubble: a light grey, 6 % of the text's colour (black
