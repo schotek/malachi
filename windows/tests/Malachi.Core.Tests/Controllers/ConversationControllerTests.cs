@@ -475,7 +475,9 @@ public sealed class ConversationControllerTests
         var input = maybe.Value;
         Assert.Equal(["b1", "sent:r2"], SentShape(input.Model));
         Assert.Equal("b1", Conversation.QuickReplyTarget(input.Model)?.Id?.Value);
-        var b1 = Assert.NotNull(await h.On(() => c.Conversation.Member("b1")));
+        var member = await h.On(() => c.Conversation.Member("b1"));
+        Assert.NotNull(member);
+        var b1 = member.Value;
         Assert.Equal(await h.On(() => c.Conversation.Actions(b1)), input.Actions);
         Assert.True(input.Actions.Reply && input.Actions.ReplyAll && input.Actions.Forward);
         Assert.Equal(Account, input.Account?.Id);
