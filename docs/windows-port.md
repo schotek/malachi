@@ -2195,9 +2195,9 @@ Compose (760×640): From, To/Cc/Bcc with the recipient popup of
 format toolbar, the editor of §6.5 (at least 100 px), for a new reply or
 forward the prepared original read-only under it (`ComposePane.Quote.cs`
 over Core's `ComposeBodyLayout`, the port of `ui/internal/composebody`:
-*Quoted Message*, a disclosure that only hides the view, and *Include in
-Reply* / *Include in Forward*, which decides whether the draft and the
-message include it and marks the draft dirty; a draft opened from Drafts,
+*Quoted Message*, a disclosure (collapsed at first) that only hides the
+view, and *Include in Reply* / *Include in Forward*, which decides
+whether the draft and the message include it and marks the draft dirty; a draft opened from Drafts,
 a comment and the Board's inline reply keep the body whole in the editor),
 attachment chips, the assistant's bar (§11.6), *Save changes to this
 draft?* on close. The window forwards the editor's Ready and Changed to

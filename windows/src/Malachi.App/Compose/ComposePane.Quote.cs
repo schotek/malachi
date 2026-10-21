@@ -35,8 +35,9 @@ namespace Malachi.App.Compose;
 /// <summary>The prepared original under the editor of a compose pane.</summary>
 public sealed partial class ComposePane
 {
-    // The view of the original is shown (the disclosure).
-    private bool quoteExpanded = true;
+    // The view of the original is shown (the disclosure); collapsed at
+    // first.
+    private bool quoteExpanded;
 
     /// <summary>The plain text of the prepared original ("" without one).</summary>
     public string QuotedText => quoted?.Text ?? "";

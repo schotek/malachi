@@ -103,7 +103,8 @@ final class ComposePane: NSViewController, NSTextFieldDelegate {
     private let quoteSection = FillStackView()
     private let quoteDisclosure = NSButton()
     private let includeQuote = NSButton(checkboxWithTitle: "", target: nil, action: nil)
-    private var quoteExpanded = true
+    /// The view of the original is shown; collapsed at first.
+    private var quoteExpanded = false
     /// The window layout's assistant bar; the window wires and shows it.
     let composeAssistantBar = ComposeAssistantBar()
     let draft: ComposeDraftController
@@ -359,7 +360,6 @@ final class ComposePane: NSViewController, NSTextFieldDelegate {
         quoteDisclosure.bezelStyle = .inline
         quoteDisclosure.isBordered = false
         quoteDisclosure.font = .systemFont(ofSize: 13, weight: .semibold)
-        quoteDisclosure.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)
         quoteDisclosure.imagePosition = .imageLeading
         quoteDisclosure.target = self
         quoteDisclosure.action = #selector(toggleQuote(_:))
@@ -378,11 +378,16 @@ final class ComposePane: NSViewController, NSTextFieldDelegate {
         height.priority = .defaultHigh
         height.isActive = true
         quotedEditor.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        renderQuoteDisclosure()
         return quoteSection
     }
 
     @objc private func toggleQuote(_ sender: Any?) {
         quoteExpanded.toggle()
+        renderQuoteDisclosure()
+    }
+
+    private func renderQuoteDisclosure() {
         quotedEditor?.isHidden = !quoteExpanded
         quoteDisclosure.image = NSImage(systemSymbolName: quoteExpanded ? "chevron.down" : "chevron.right", accessibilityDescription: nil)
         quoteDisclosure.setAccessibilityValue(quoteExpanded ? L10n.T("Expanded") : L10n.T("Collapsed"))

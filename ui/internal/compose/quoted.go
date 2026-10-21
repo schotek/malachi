@@ -105,13 +105,12 @@ func (p *Pane) buildWindowParts() {
 	if p.body.HasQuote() {
 		texts := assistant.WriteTexts(i18n.Catalog{}, p.params.Kind.writeMode())
 		q := &quotedPart{
-			section:  b.GetObject("quote_section").Cast().(*gtk.Box),
-			toggle:   b.GetObject("quote_disclosure").Cast().(*gtk.Button),
-			content:  b.GetObject("quote_disclosure_content").Cast().(*adw.ButtonContent),
-			include:  b.GetObject("include_quote").Cast().(*gtk.CheckButton),
-			slot:     b.GetObject("quoted_slot").Cast().(*gtk.Box),
-			view:     editor.New(p.log),
-			expanded: true,
+			section: b.GetObject("quote_section").Cast().(*gtk.Box),
+			toggle:  b.GetObject("quote_disclosure").Cast().(*gtk.Button),
+			content: b.GetObject("quote_disclosure_content").Cast().(*adw.ButtonContent),
+			include: b.GetObject("include_quote").Cast().(*gtk.CheckButton),
+			slot:    b.GetObject("quoted_slot").Cast().(*gtk.Box),
+			view:    editor.New(p.log),
 		}
 		q.content.SetLabel(texts.Quoted)
 		q.include.SetLabel(texts.Include)
@@ -129,7 +128,8 @@ func (p *Pane) buildWindowParts() {
 				p.dc.markDirty()
 			}
 		})
-		q.setExpanded(true)
+		// Collapsed at first: the user's own text has the window.
+		q.setExpanded(false)
 		q.view.Load(p.body.QuotedHTML)
 		p.quoted = q
 		p.root.InsertChildAfter(q.section, p.editorSlot)
