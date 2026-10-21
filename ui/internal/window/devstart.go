@@ -35,7 +35,7 @@ import (
 // event-editor (New Event with today's defaults), event-editor:edit (Edit
 // of the first occurrence), caldav-dialog, prefs-calendar (Preferences on
 // the Calendar page), prefs-integrations (Preferences on the Integrations
-// page), crm-dialog (the Save to eWay-CRM dialog over invented
+// page), prefs-ai (Preferences on the AI page, About You on top), crm-dialog (the Save to eWay-CRM dialog over invented
 // suggestions, no daemon), eway-wizard (the eWay-CRM account assistant;
 // Next asks the daemon), size=WxH, quit.
 
@@ -59,6 +59,7 @@ const (
 	devCalDAV
 	devPrefsCalendar
 	devPrefsIntegrations
+	devPrefsAI
 	devCrmDialog
 	devEwayWizard
 	devSize
@@ -108,6 +109,8 @@ func parseDevStart(script string) ([]devStep, error) {
 			st.Kind = devPrefsCalendar
 		case name == "prefs-integrations":
 			st.Kind = devPrefsIntegrations
+		case name == "prefs-ai":
+			st.Kind = devPrefsAI
 		case name == "crm-dialog":
 			st.Kind = devCrmDialog
 		case name == "eway-wizard":
@@ -234,6 +237,10 @@ func (w *Window) runDevStep(n int, st devStep) {
 	case devPrefsIntegrations:
 		d := NewPreferences(w.settings, w.client, w.assist, w.log, w.calendarSource)
 		d.SetVisiblePageName("integrations")
+		d.Present(w)
+	case devPrefsAI:
+		d := NewPreferences(w.settings, w.client, w.assist, w.log, w.calendarSource)
+		d.SetVisiblePageName("ai")
 		d.Present(w)
 	case devCrmDialog:
 		w.showCrmSample()

@@ -113,6 +113,7 @@ func (a *Assistant) AttachBoardTriage(rpc *client.Client, mainWindow func() *Win
 		Bridge: a.bridge, Socket: rpc.Socket, Available: a.triageAvailable, Number: formatTokens,
 	})
 	b.ctl.Language = uiLanguage
+	b.ctl.Profile = a.Profile
 	b.ctl.ConsentIdentity = a.RuntimeGeneration
 	b.ctl.Source = func() string {
 		if a.usesChatGPT() {
@@ -225,6 +226,8 @@ func (b *BoardTriage) ConnectionChanged(connected bool) {
 	}
 	b.connected = connected
 	b.prefs.ConnectionChanged(connected)
+	// The profile follows the same poll (assistant_profile.go).
+	b.assistant.profileConnectionChanged(connected)
 }
 
 // OnManualRunEnded calls f with the result of every manual run that ended

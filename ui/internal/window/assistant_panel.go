@@ -93,6 +93,9 @@ type transcriptRow struct {
 	kind   assistantpanel.ContentKind
 	root   gtk.Widgetter
 	update func(assistantpanel.Content)
+	// refresh: the profile store changed (a proposal card); nil for the
+	// other rows.
+	refresh func()
 }
 
 // assistantPanel is the panel's widgets and its controller.
@@ -114,22 +117,25 @@ type assistantPanel struct {
 	toggle *gtk.ToggleButton
 	hide   *gtk.Button
 
-	title        *adw.WindowTitle
-	newButton    *gtk.Button
-	chipIcon     *gtk.Image
-	chipLabel    *gtk.Label
-	chipRemove   *gtk.Button
-	actions      []*gtk.Button
-	bar          *gtk.Box
-	scroller     *gtk.ScrolledWindow
-	transcript   *gtk.Box
-	rows         []*transcriptRow
-	waiting      *adw.Spinner
-	pending      *gtk.Box
-	pendingLabel *gtk.Label
-	input        *gtk.TextView
-	placeholder  *gtk.Label
-	send         *gtk.Button
+	title     *adw.WindowTitle
+	newButton *gtk.Button
+	// profileButton opens Preferences → AI → About You
+	// (assistant_panel_profile.go).
+	profileButton *gtk.Button
+	chipIcon      *gtk.Image
+	chipLabel     *gtk.Label
+	chipRemove    *gtk.Button
+	actions       []*gtk.Button
+	bar           *gtk.Box
+	scroller      *gtk.ScrolledWindow
+	transcript    *gtk.Box
+	rows          []*transcriptRow
+	waiting       *adw.Spinner
+	pending       *gtk.Box
+	pendingLabel  *gtk.Label
+	input         *gtk.TextView
+	placeholder   *gtk.Label
+	send          *gtk.Button
 
 	// followsEnd: the transcript was at its end, and stays there as items
 	// arrive; a user who scrolled up to read is left where they are.
@@ -172,6 +178,7 @@ func newAssistantPanel(w *Window, b *gtk.Builder) *assistantPanel {
 		Provider: as.Provider,
 	})
 	p.ctl.Language = uiLanguage
+	p.ctl.Profile = as.Profile
 	p.ctl.Consent = p.askConsent
 	p.ctl.ResolveContext = p.resolve
 	p.ctl.OpenDraft = w.openSavedDraft
@@ -230,6 +237,7 @@ func newAssistantPanel(w *Window, b *gtk.Builder) *assistantPanel {
 	p.updateToggle()
 	p.updateState()
 	w.watchCalendarForAssistant(p)
+	p.bindProfile(pb.GetObject("assistant_profile").Cast().(*gtk.Button))
 	return p
 }
 
@@ -605,6 +613,8 @@ func (p *assistantPanel) makeRow(it assistantpanel.Item) *transcriptRow {
 		r = draftRow(func() { p.ctl.OpenDraftItem(id) })
 	case assistantpanel.ContentCalendar:
 		r = calendarCardRow(func() { p.ctl.OpenCalendarItem(id) })
+	case assistantpanel.ContentProposal:
+		r = p.proposalRow(it.Content.Proposal)
 	default: // ContentError, ContentNote
 		r = lineRow(func() { p.ctl.Retry(id) }, func(o assistantpanel.Offer) { p.offered(id, o) })
 	}

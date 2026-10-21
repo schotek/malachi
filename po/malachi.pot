@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-21 06:56+0000\n"
+"POT-Creation-Date: 2026-10-21 07:41+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,7 +18,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: ui/main.go:278
+#: ui/main.go:279
 msgid "A native mail client for the GNOME desktop."
 msgstr ""
 
@@ -1329,7 +1329,7 @@ msgid "The sender's server refused the request."
 msgstr ""
 
 #: ui/internal/compose/pane.go:223 ui/internal/compose/pane.go:1053
-#: ui/internal/jira/settings.go:123 ui/internal/window/assistant_panel.go:197
+#: ui/internal/jira/settings.go:123 ui/internal/window/assistant_panel.go:204
 #: ui/internal/window/event_editor_popovers.go:36
 msgid "Remove"
 msgstr ""
@@ -1351,9 +1351,9 @@ msgstr ""
 msgid "Save changes to this draft?"
 msgstr ""
 
-#: ui/internal/compose/pane.go:703 ui/internal/compose/write.go:164
+#: ui/internal/compose/pane.go:703 ui/internal/compose/write.go:167
 #: ui/internal/widget/consent.go:47 ui/internal/widget/rpc.go:196
-#: ui/internal/window/assistant_panel.go:216
+#: ui/internal/window/assistant_panel.go:223
 #: ui/internal/window/board_quit.go:30
 #: ui/internal/window/conversation_draft.go:213
 #: ui/internal/window/remote.go:269 ui/internal/window/remote.go:295
@@ -1366,7 +1366,7 @@ msgid "_Cancel"
 msgstr ""
 
 #: ui/internal/compose/pane.go:704 ui/internal/compose/draft.go:748
-#: ui/internal/compose/rewrite.go:109 ui/internal/compose/write.go:166
+#: ui/internal/compose/rewrite.go:112 ui/internal/compose/write.go:169
 #: ui/internal/conversation/drafts.go:114 ui/internal/board/text.go:357
 #: ui/data/ui/compose.ui:121
 msgid "_Discard"
@@ -1418,7 +1418,7 @@ msgid "Attaching %s"
 msgstr ""
 
 #: ui/internal/compose/pane_layout.go:42
-#: ui/internal/window/assistant_panel.go:452
+#: ui/internal/window/assistant_panel.go:460
 #: ui/internal/window/quick_reply_bar.go:245 ui/data/ui/compose.ui:65
 msgid "_Send"
 msgstr ""
@@ -1807,7 +1807,7 @@ msgstr ""
 
 #. TRANSLATORS: a field of a Jira issue.
 #: ui/internal/jira/jira.go:267 ui/internal/board/text.go:1075
-#: ui/data/ui/preferences.ui:646
+#: ui/data/ui/preferences.ui:654
 msgid "Status"
 msgstr ""
 
@@ -2511,7 +2511,7 @@ msgstr ""
 
 #: ui/internal/crm/text.go:289 ui/internal/board/view.go:859
 #: ui/internal/widget/message_row.go:371 ui/internal/window/message_view.go:608
-#: ui/internal/window/notify.go:129
+#: ui/internal/window/notify.go:136
 msgid "(No subject)"
 msgstr ""
 
@@ -2770,7 +2770,7 @@ msgstr ""
 #. TRANSLATORS: the window's second mode beside Mail: the conversations
 #. that need something, sorted into four states.
 #: ui/internal/board/text.go:65 ui/data/ui/preferences.ui:85
-#: ui/data/ui/preferences.ui:612
+#: ui/data/ui/preferences.ui:620
 msgid "Board"
 msgstr ""
 
@@ -3358,7 +3358,7 @@ msgstr ""
 msgid "The conversation could not be loaded."
 msgstr ""
 
-#: ui/internal/board/text.go:766 ui/internal/window/assistant_panel.go:697
+#: ui/internal/board/text.go:766 ui/internal/window/assistant_panel.go:707
 #: ui/internal/window/status.go:324 ui/data/ui/window.ui:442
 msgid "Try Again"
 msgstr ""
@@ -6251,7 +6251,7 @@ msgstr ""
 msgid "_New Message"
 msgstr ""
 
-#: ui/internal/window/assistant_panel.go:993
+#: ui/internal/window/assistant_panel.go:1003
 #: ui/internal/window/conversation_draft.go:190 ui/internal/window/drafts.go:77
 msgid "Opening the draft"
 msgstr ""
@@ -6599,7 +6599,7 @@ msgstr ""
 msgid "This folder is empty."
 msgstr ""
 
-#: ui/internal/window/notify.go:116
+#: ui/internal/window/notify.go:123
 msgid "New message"
 msgstr ""
 
@@ -6784,7 +6784,7 @@ msgstr[1] ""
 msgid "Loading more results"
 msgstr ""
 
-#: ui/internal/window/search.go:310 ui/internal/window/search_ownwords.go:153
+#: ui/internal/window/search.go:310 ui/internal/window/search_ownwords.go:154
 #: ui/data/ui/window.ui:270
 msgid "Search Mail"
 msgstr ""
@@ -7597,21 +7597,21 @@ msgstr ""
 msgid "AI"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:512
+#: ui/data/ui/preferences.ui:520
 msgid "MCP"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:513
+#: ui/data/ui/preferences.ui:521
 msgid ""
 "Lets AI assistants read your mail and prepare drafts through the Model "
 "Context Protocol."
 msgstr ""
 
-#: ui/data/ui/preferences.ui:516
+#: ui/data/ui/preferences.ui:524
 msgid "Register with Claude"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:517
+#: ui/data/ui/preferences.ui:525
 msgid ""
 "Adds the malachi-mcp bridge to Claude Desktop and Claude Code on this "
 "computer"

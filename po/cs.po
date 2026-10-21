@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-21 06:56+0000\n"
+"POT-Creation-Date: 2026-10-21 07:41+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -16,7 +16,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
 
-#: ui/main.go:278
+#: ui/main.go:279
 msgid "A native mail client for the GNOME desktop."
 msgstr "Nativní poštovní klient pro prostředí GNOME."
 
@@ -1149,7 +1149,9 @@ msgstr "O mně"
 msgid ""
 "The assistant gets this in the app (Claude Code, ChatGPT) and, if you allow "
 "it below, in apps connected over MCP; only with your consent."
-msgstr "Asistent to dostane v aplikaci (Claude Code, ChatGPT) a, pokud to níže povolíte, v aplikacích připojených přes MCP; jen s vaším souhlasem."
+msgstr ""
+"Asistent to dostane v aplikaci (Claude Code, ChatGPT) a, pokud to níže "
+"povolíte, v aplikacích připojených přes MCP; jen s vaším souhlasem."
 
 #. TRANSLATORS: A row of Preferences → AI → About You: the grammatical gender the user writes in (Czech verbs and adjectives depend on it).
 #: ui/internal/assistant/profile.go:204
@@ -1202,7 +1204,9 @@ msgstr "Posílat profil i aplikacím přes MCP"
 msgid ""
 "Claude Desktop and other apps registered over MCP; a change applies after "
 "they restart."
-msgstr "Claude Desktop a další aplikace registrované přes MCP; změna platí po jejich restartu."
+msgstr ""
+"Claude Desktop a další aplikace registrované přes MCP; změna platí po jejich "
+"restartu."
 
 #. TRANSLATORS: A heading in Preferences → AI → About You: notes the assistant proposed that the user has not saved or dismissed.
 #: ui/internal/assistant/profile.go:224
@@ -1425,7 +1429,7 @@ msgid "The sender's server refused the request."
 msgstr "Server odesílatele žádost odmítl."
 
 #: ui/internal/compose/pane.go:223 ui/internal/compose/pane.go:1053
-#: ui/internal/jira/settings.go:123 ui/internal/window/assistant_panel.go:197
+#: ui/internal/jira/settings.go:123 ui/internal/window/assistant_panel.go:204
 #: ui/internal/window/event_editor_popovers.go:36
 msgid "Remove"
 msgstr "Odebrat"
@@ -1447,9 +1451,9 @@ msgstr "Nová zpráva"
 msgid "Save changes to this draft?"
 msgstr "Uložit změny v tomto konceptu?"
 
-#: ui/internal/compose/pane.go:703 ui/internal/compose/write.go:164
+#: ui/internal/compose/pane.go:703 ui/internal/compose/write.go:167
 #: ui/internal/widget/consent.go:47 ui/internal/widget/rpc.go:196
-#: ui/internal/window/assistant_panel.go:216
+#: ui/internal/window/assistant_panel.go:223
 #: ui/internal/window/board_quit.go:30
 #: ui/internal/window/conversation_draft.go:213
 #: ui/internal/window/remote.go:269 ui/internal/window/remote.go:295
@@ -1462,7 +1466,7 @@ msgid "_Cancel"
 msgstr "_Zrušit"
 
 #: ui/internal/compose/pane.go:704 ui/internal/compose/draft.go:748
-#: ui/internal/compose/rewrite.go:109 ui/internal/compose/write.go:166
+#: ui/internal/compose/rewrite.go:112 ui/internal/compose/write.go:169
 #: ui/internal/conversation/drafts.go:114 ui/internal/board/text.go:357
 #: ui/data/ui/compose.ui:121
 msgid "_Discard"
@@ -1514,7 +1518,7 @@ msgid "Attaching %s"
 msgstr "Přiložení souboru %s"
 
 #: ui/internal/compose/pane_layout.go:42
-#: ui/internal/window/assistant_panel.go:452
+#: ui/internal/window/assistant_panel.go:460
 #: ui/internal/window/quick_reply_bar.go:245 ui/data/ui/compose.ui:65
 msgid "_Send"
 msgstr "_Odeslat"
@@ -1917,7 +1921,7 @@ msgstr "Otevřít %s v prohlížeči"
 
 #. TRANSLATORS: a field of a Jira issue.
 #: ui/internal/jira/jira.go:267 ui/internal/board/text.go:1075
-#: ui/data/ui/preferences.ui:646
+#: ui/data/ui/preferences.ui:654
 msgid "Status"
 msgstr "Stav"
 
@@ -2642,7 +2646,7 @@ msgstr "Odebráno z eWay-CRM"
 
 #: ui/internal/crm/text.go:289 ui/internal/board/view.go:859
 #: ui/internal/widget/message_row.go:371 ui/internal/window/message_view.go:608
-#: ui/internal/window/notify.go:129
+#: ui/internal/window/notify.go:136
 msgid "(No subject)"
 msgstr "(Bez předmětu)"
 
@@ -2913,7 +2917,7 @@ msgstr "Pošta"
 #. TRANSLATORS: the window's second mode beside Mail: the conversations
 #. that need something, sorted into four states.
 #: ui/internal/board/text.go:65 ui/data/ui/preferences.ui:85
-#: ui/data/ui/preferences.ui:612
+#: ui/data/ui/preferences.ui:620
 msgid "Board"
 msgstr "Nástěnka"
 
@@ -3528,7 +3532,7 @@ msgstr "Načítá se konverzace…"
 msgid "The conversation could not be loaded."
 msgstr "Konverzaci se nepodařilo načíst."
 
-#: ui/internal/board/text.go:766 ui/internal/window/assistant_panel.go:697
+#: ui/internal/board/text.go:766 ui/internal/window/assistant_panel.go:707
 #: ui/internal/window/status.go:324 ui/data/ui/window.ui:442
 msgid "Try Again"
 msgstr "Zkusit znovu"
@@ -6523,7 +6527,7 @@ msgstr "_Kopírovat adresu"
 msgid "_New Message"
 msgstr "_Nová zpráva"
 
-#: ui/internal/window/assistant_panel.go:993
+#: ui/internal/window/assistant_panel.go:1003
 #: ui/internal/window/conversation_draft.go:190 ui/internal/window/drafts.go:77
 msgid "Opening the draft"
 msgstr "Otevření konceptu"
@@ -6878,7 +6882,7 @@ msgstr "Žádné zprávy"
 msgid "This folder is empty."
 msgstr "Tato složka je prázdná."
 
-#: ui/internal/window/notify.go:116
+#: ui/internal/window/notify.go:123
 msgid "New message"
 msgstr "Nová zpráva"
 
@@ -7066,7 +7070,7 @@ msgstr[2] "%d obrázků této zprávy je jen na serveru"
 msgid "Loading more results"
 msgstr "Načtení dalších výsledků"
 
-#: ui/internal/window/search.go:310 ui/internal/window/search_ownwords.go:153
+#: ui/internal/window/search.go:310 ui/internal/window/search_ownwords.go:154
 #: ui/data/ui/window.ui:270
 msgid "Search Mail"
 msgstr "Hledat v poště"
@@ -7896,11 +7900,11 @@ msgstr "Procenta"
 msgid "AI"
 msgstr "AI"
 
-#: ui/data/ui/preferences.ui:512
+#: ui/data/ui/preferences.ui:520
 msgid "MCP"
 msgstr "MCP"
 
-#: ui/data/ui/preferences.ui:513
+#: ui/data/ui/preferences.ui:521
 msgid ""
 "Lets AI assistants read your mail and prepare drafts through the Model "
 "Context Protocol."
@@ -7908,11 +7912,11 @@ msgstr ""
 "Umožňuje asistentům AI číst vaši poštu a připravovat koncepty přes Model "
 "Context Protocol."
 
-#: ui/data/ui/preferences.ui:516
+#: ui/data/ui/preferences.ui:524
 msgid "Register with Claude"
 msgstr "Registrovat v Claude"
 
-#: ui/data/ui/preferences.ui:517
+#: ui/data/ui/preferences.ui:525
 msgid ""
 "Adds the malachi-mcp bridge to Claude Desktop and Claude Code on this "
 "computer"

@@ -280,6 +280,28 @@ instrukce po restartu, návrh z Claude Desktop v Předvolbách), smazání
   (žádný krok `MALACHI_START`), běh se skutečným Claude Code a démonem;
   čeká brána P-B1 vlastníka nad kopií dat.
 
+### As built (krok 4, GTK, 2026-10-21)
+
+- `window/assistant_profile.go`: `Assistant.AttachProfile` (z `main.go`),
+  `ProfileStore`, `Profile`, `RefreshProfile`, `OnProfileChange`; připojení
+  hlásí poll triage (`BoardTriage.ConnectionChanged`), `notify.go` čte profil
+  znovu při `notify.assistantProfileChanged` a `notify.accountsChanged`.
+  Profil v promptech: panel, triage, návrh odpovědi, hledání vlastními
+  slovy, přepis a pruh psaní (`compose.Assistant.Profile`, účet okna).
+- Panel: karta návrhu `window/assistant_panel_profile.go` (Uložit,
+  Upravit… jako `Adw.AlertDialog`, Zahodit), tlačítko `assistant_profile`
+  v záhlaví `assistant_panel.blp` přes `app.assistant-setup`, tooltip
+  s počtem návrhů (jako macOS, nabídka v panelu není).
+- Předvolby → AI: `window/preferences_profile.go`, sloty
+  `about_you_group` a `about_you_pending_group` v `preferences.blp`
+  (rod jako `Adw.ComboRow`, text v `GtkTextView` s počítadlem, doplňky
+  účtů jako `Adw.ExpanderRow`, `Adw.SwitchRow` pro MCP, skupina návrhů);
+  vývojový krok `MALACHI_GTK_START=prefs-ai`.
+- Ověřeno v kontejneru: `gtk.sh make build`, celé `gtk.sh test-ui`, smoke
+  testy, `make po` (jen odkazy a zalomení), `make lint`. **Neověřeno:**
+  skupina ani karta na obrazovce se skutečným démonem (žádný smoke test
+  panelu asistenta); čeká brána P-B2 vlastníka v XQuartz.
+
 ## 8. Mimo rozsah
 
 - Návrhy, které se do profilu zapíší bez potvrzení uživatele.

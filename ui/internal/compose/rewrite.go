@@ -29,6 +29,9 @@ type Assistant interface {
 	EnsureAssistantConsent(gtk.Widgetter, func(bool))
 	AskAssistantConsent(gtk.Widgetter, func(bool))
 	RuntimeGeneration() int
+	// Profile is the user's profile; a request gets the note of the
+	// window's account only (assistant.Profile.For).
+	Profile() assistant.Profile
 }
 
 // assistantIcon is the Assistant's icon (window/assistant.go).
@@ -211,6 +214,9 @@ func (u *rewriteUI) rewriterFor() *assistantpanel.Rewriter {
 	req := u.w.m.Assistant.NewRequest()
 	req.Consent = func(done func(bool)) { u.w.m.Assistant.AskAssistantConsent(u.w, done) }
 	u.rewriter = assistantpanel.NewRewriter(i18n.Catalog{}, req)
+	u.rewriter.Profile = func() assistant.Profile {
+		return u.w.m.Assistant.Profile().For(string(u.w.pane.account().ID))
+	}
 	u.rewriter.OnState = func(assistantpanel.RewriteState) { u.render() }
 	return u.rewriter
 }

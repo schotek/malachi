@@ -45,6 +45,7 @@ func (a *Assistant) AttachBoardReply(rpc *client.Client, mainWindow func() *Wind
 		}
 		return mainWindow()
 	}
+	b.ctl.Profile = a.Profile
 	b.ctl.Consent = func(done func(bool)) {
 		var parent gtk.Widgetter
 		if w := window(); w != nil {

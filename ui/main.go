@@ -91,6 +91,7 @@ func main() {
 		// Toasts and the consent sheet go to the main window once there is one.
 		assist.AttachBoardTriage(rpc, func() *window.Window { return mainWin })
 		assist.AttachBoardReply(rpc, func() *window.Window { return mainWin })
+		assist.AttachProfile(rpc)
 		mgr = compose.NewManager(app, rpc, log, prefs)
 		// New Message needs an account that writes mail
 		// (capabilities.CanComposeNew): a Jira account only comments.

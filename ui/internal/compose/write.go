@@ -106,6 +106,9 @@ func (u *writeUI) writerFor() *assistantpanel.Writer {
 	req := u.w.m.Assistant.NewRequest()
 	req.Consent = func(done func(bool)) { u.w.m.Assistant.AskAssistantConsent(u.w, done) }
 	u.writer = assistantpanel.NewWriter(i18n.Catalog{}, req)
+	u.writer.Profile = func() assistant.Profile {
+		return u.w.m.Assistant.Profile().For(string(u.w.pane.account().ID))
+	}
 	u.writer.OnState = func(assistantpanel.RewriteState) { u.render() }
 	return u.writer
 }
