@@ -216,7 +216,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// The Dock icon, or a second launch: the (possibly hidden) main window.
+    /// A click on a notification brings a reopen event as well, right
+    /// after the click opened its own window (a message's, the Calendar):
+    /// that one leaves the main window as it is.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if integration?.notifications.answeredJustNow() == true {
+            return false
+        }
         showMainWindow()
         return false
     }

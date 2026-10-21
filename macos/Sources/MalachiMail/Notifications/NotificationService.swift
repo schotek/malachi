@@ -58,6 +58,20 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// Remove from Calendar of a cancellation's notification.
     var onApplyCancel: (@MainActor ((account: AccountID, message: MessageID)) -> Void)?
 
+    /// When the user last answered a notification (a click or one of its
+    /// buttons, not the close button). The click also brings the
+    /// application a reopen event, as the Dock icon does, which must not
+    /// present the main window over the window the click opened
+    /// (`answeredJustNow`, `applicationShouldHandleReopen`).
+    private var answeredAt: Date?
+
+    /// Whether a notification was answered within the last `interval`
+    /// seconds: the reopen event that follows such a click is the click's.
+    func answeredJustNow(within interval: TimeInterval = 2) -> Bool {
+        guard let answeredAt else { return false }
+        return Date().timeIntervalSince(answeredAt) < interval
+    }
+
     /// The categories of the calendar's notifications. An alert without a
     /// video call has no Join, so it has a category of its own.
     enum Category {
@@ -271,6 +285,11 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         let action = response.actionIdentifier
         let info = response.notification.request.content.userInfo
+        if action != UNNotificationDismissActionIdentifier {
+            await MainActor.run {
+                self.answeredAt = Date()
+            }
+        }
         if let alert = NotificationService.alertTarget(info) {
             let r: AlertResponse
             switch action {
