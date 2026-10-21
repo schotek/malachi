@@ -28,7 +28,7 @@ func TestArgsTriage(t *testing.T) {
 		"--tools", "", "--disallowedTools", "LSP", "--disable-slash-commands", "--setting-sources", "",
 		"--strict-mcp-config",
 		"--mcp-config",
-		`{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":["--socket","/s.sock","--allow-triage","--triage-run","run_1","--triage-max","40"]}}}`,
+		`{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":["--socket","/s.sock","--in-app","--allow-triage","--triage-run","run_1","--triage-max","40"]}}}`,
 		"--allowedTools",
 		"mcp__malachi__list_accounts,mcp__malachi__list_folders,mcp__malachi__list_messages,mcp__malachi__search_messages," +
 			"mcp__malachi__read_message,mcp__malachi__get_attachment,mcp__malachi__create_draft," +
@@ -59,7 +59,7 @@ func TestArgsTriage(t *testing.T) {
 		t.Errorf("beyond the panel's tools: %q", extra)
 	}
 	for _, tool := range AllowedTools {
-		if slices.Contains(CalendarTools, tool) {
+		if slices.Contains(CalendarTools, tool) || slices.Contains(ProfileTools, tool) {
 			continue
 		}
 		if !slices.Contains(TriageTools, tool) {
@@ -84,7 +84,7 @@ func TestArgsTriageAutomatic(t *testing.T) {
 		"--tools", "", "--disallowedTools", "LSP", "--disable-slash-commands", "--setting-sources", "",
 		"--strict-mcp-config",
 		"--mcp-config",
-		`{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":["--socket","/s.sock","--allow-triage","--triage-run","run_2","--triage-max","5"]}}}`,
+		`{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":["--socket","/s.sock","--in-app","--allow-triage","--triage-run","run_2","--triage-max","5"]}}}`,
 		"--allowedTools",
 		"mcp__malachi__list_accounts,mcp__malachi__list_folders,mcp__malachi__list_messages,mcp__malachi__search_messages," +
 			"mcp__malachi__read_message,mcp__malachi__get_attachment," +
@@ -128,10 +128,10 @@ func TestMCPConfigExtra(t *testing.T) {
 		want           string
 	}{
 		{"/b", "", []string{"--allow-triage", "--triage-run", "r"},
-			`{"mcpServers":{"malachi":{"type":"stdio","command":"/b","args":["--allow-triage","--triage-run","r"]}}}`},
+			`{"mcpServers":{"malachi":{"type":"stdio","command":"/b","args":["--in-app","--allow-triage","--triage-run","r"]}}}`},
 		{"/b", "/s", []string{`a"b\`},
-			`{"mcpServers":{"malachi":{"type":"stdio","command":"/b","args":["--socket","/s","a\"b\\"]}}}`},
-		{"/b", "", nil, `{"mcpServers":{"malachi":{"type":"stdio","command":"/b","args":[]}}}`},
+			`{"mcpServers":{"malachi":{"type":"stdio","command":"/b","args":["--socket","/s","--in-app","a\"b\\"]}}}`},
+		{"/b", "", nil, `{"mcpServers":{"malachi":{"type":"stdio","command":"/b","args":["--in-app"]}}}`},
 	}
 	for _, tt := range tests {
 		if got := mcpConfig(tt.bridge, tt.socket, tt.extra...); got != tt.want {

@@ -578,6 +578,9 @@ type RewriteState struct {
 type Rewriter struct {
 	// OnState: the state changed.
 	OnState func(RewriteState)
+	// Profile is the user's profile with the note of the account the
+	// window writes from (assistant.Profile.For); nil: none.
+	Profile func() assistant.Profile
 
 	tr      assistant.Translator
 	request *Request
@@ -623,7 +626,7 @@ func (w *Rewriter) Start(r assistant.Rewrite, custom, passage string) bool {
 		return true
 	}
 	w.set(RewriteState{Kind: RewriteRunning})
-	w.request.Start(assistant.RewriteSystemPrompt(), message, "", func(text string) {
+	w.request.Start(assistant.WithProfile(assistant.RewriteSystemPrompt(), profileOf(w.Profile)), message, "", func(text string) {
 		if w.Running() {
 			w.set(RewriteState{Kind: RewriteRunning, Text: assistant.CleanRewrite(text)})
 		}
@@ -640,6 +643,14 @@ func (w *Rewriter) Cancel() {
 
 func (w *Rewriter) finished(o Outcome) {
 	w.set(answerState(w.tr, o))
+}
+
+// profileOf is the profile f returns, none for nil.
+func profileOf(f func() assistant.Profile) assistant.Profile {
+	if f == nil {
+		return assistant.Profile{}
+	}
+	return f()
 }
 
 // answerState is the state a rewrite or the compose window's writing
@@ -692,6 +703,9 @@ type SearchOutcome struct {
 type Searcher struct {
 	// Today is the date for the system prompt, YYYY-MM-DD.
 	Today func() string
+	// Profile is the user's profile; the search gets it without account
+	// notes (assistant.Profile.Global). nil: none.
+	Profile func() assistant.Profile
 
 	tr      assistant.Translator
 	request *Request
@@ -722,7 +736,7 @@ func (s *Searcher) Convert(words string, completion func(SearchOutcome)) bool {
 		s.request.loop.Post(func() { completion(SearchOutcome{Kind: SearchFailed, Text: text}) })
 		return true
 	}
-	s.request.Start(assistant.SearchSystemPrompt(s.Today()), message, assistant.SearchSchema, nil, func(o Outcome) {
+	s.request.Start(assistant.WithProfile(assistant.SearchSystemPrompt(s.Today()), profileOf(s.Profile).Global()), message, assistant.SearchSchema, nil, func(o Outcome) {
 		completion(searchOutcome(s.tr, o))
 	})
 	return true

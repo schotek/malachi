@@ -20,6 +20,9 @@ import "github.com/schotek/malachi/ui/internal/assistant"
 type Writer struct {
 	// OnState: the state changed.
 	OnState func(RewriteState)
+	// Profile is the user's profile with the note of the account the
+	// window writes from (assistant.Profile.For); nil: none.
+	Profile func() assistant.Profile
 
 	tr      assistant.Translator
 	request *Request
@@ -61,7 +64,7 @@ func (w *Writer) Start(mode assistant.WriteMode, instruction, subject, own, quot
 		return
 	}
 	w.set(RewriteState{Kind: RewriteRunning})
-	w.request.Start(assistant.WriteSystemPrompt(), message, "", func(text string) {
+	w.request.Start(assistant.WithProfile(assistant.WriteSystemPrompt(), profileOf(w.Profile)), message, "", func(text string) {
 		if w.Running() {
 			w.set(RewriteState{Kind: RewriteRunning, Text: assistant.CleanRewrite(text)})
 		}

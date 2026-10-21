@@ -217,6 +217,41 @@ instrukce po restartu, návrh z Claude Desktop v Předvolbách), smazání
 - Testy: `internal/core/assistant_profile_test.go`,
   `cmd/malachi-mcp/tools_profile_test.go`, `pkg/api/assistant_test.go`.
 
+### As built (krok 2, Go reference, 2026-10-21)
+
+- `ui/internal/assistant/profile.go`: `Profile` (+ `AccountNote`,
+  `ProfileFrom`, `Empty`, `Global`, `For`), `WithProfile` (blok podle P7,
+  prázdný profil nechá prompt bajt po bajtu), `ParseProposalResult`
+  (pevný první řádek mostu `profile note proposal <id> is pending; …`,
+  most proto vrací text místo JSON), `ProfileTools`, `ProfileTexts`,
+  `ProfileCounter`, `ProfileProposalCount`; nové řádky aktivity
+  v `ActivityLabel`. **Odchylka od P6:** funkce `*SystemPrompt` se
+  nemění; volající obalí jejich výsledek `WithProfile` (prompty i jejich
+  testy zůstaly beze změny).
+- **Rozsah doplňků (P8) v praxi:** panel dostane doplňky všech účtů
+  (rozhovor může přejít mezi účty a každý doplněk jmenuje svůj účet),
+  triage taky; přepis a pruh psaní `For(účet okna)` (nastaví okno),
+  návrh odpovědi `For(účet případu)`, hledání `Global()`.
+- Volající: `assistantpanel.Controller.Profile`, `Rewriter.Profile`,
+  `Writer.Profile`, `Searcher.Profile`, `boardtriage.Controller.Profile`,
+  `boardreply.Controller.Profile` (nil = bez profilu). Panel ukládá kartu
+  návrhu jako `ContentProposal` s `Proposal` (id). `AllowedTools` panelu
+  má navíc `get_user_profile` a `propose_profile_note`; most z aplikace
+  dostává vždy `--in-app` (`mcpConfig`, ChatGPT `startRPC`).
+- `assistantpanel.ProfileStore`: sdílený stav profilu pro aplikaci
+  (`Refresh`, `Set`, `Resolve`, `Profile`, `Proposals`, `Limits`,
+  `Supported` pro starší démon).
+- `po/`: 25 nových msgid česky (`make po` v kontejneru), v
+  `windows/parity-exclusions.txt` do portu na Windows. Ověřeno: testy
+  `assistant`, `assistantpanel` (i `-race` u `ProfileStore`),
+  `boardtriage`, `boardreply`, `board`; v kontejneru `chatgpt` a
+  `make lint`. Okna (GTK, macOS, Windows) profil zatím nenapojují.
+- **Pozor pro porty:** Windows `GoContractTests` čte `methods.go`
+  za běhu, takže od kroku 1 padá (čeká 105 metod a `notify.assistantProfileChanged`
+  v C# zrcadle `Api/`), dokud Windows port nepřidá API. macOS
+  `APICodingTests.methodTableMatchesGo` má kopii tabulky, zůstává zelený,
+  ale je zastaralý: krok 3 ho musí doplnit spolu se Swift zrcadlem.
+
 ## 8. Mimo rozsah
 
 - Návrhy, které se do profilu zapíší bez potvrzení uživatele.

@@ -161,6 +161,9 @@ type Controller struct {
 	Timeout time.Duration
 	// OnRefresh asks the board to list again (after a draft was linked).
 	OnRefresh func()
+	// Profile is the user's profile; a request gets the note of the
+	// case's account only. nil: none.
+	Profile func() assistant.Profile
 
 	caller    Caller
 	settings  assistantpanel.Settings
@@ -200,6 +203,15 @@ type Controller struct {
 
 // NewController builds the application's one suggested-reply request,
 // idle.
+
+// profileFor is the user's profile with the note of the account only.
+func (c *Controller) profileFor(accountID string) assistant.Profile {
+	if c.Profile == nil {
+		return assistant.Profile{}
+	}
+	return c.Profile().For(accountID)
+}
+
 func NewController(cfg Config) *Controller {
 	c := &Controller{
 		Timeout:    assistant.SuggestReplyTimeout,
@@ -484,7 +496,7 @@ func (c *Controller) gotCase(my int, id board.CaseID, instruction string, r api.
 	c.request.StartCall(assistantpanel.Call{
 		// A case waiting on the other side gets a follow-up on the user's
 		// own last message.
-		SystemPrompt: assistant.SuggestReplySystemPromptFor(board.IsFollowUpWire(r.Case, c.annotated)),
+		SystemPrompt: assistant.WithProfile(assistant.SuggestReplySystemPromptFor(board.IsFollowUpWire(r.Case, c.annotated)), c.profileFor(string(r.Case.AccountID))),
 		Message:      message,
 		Tools: &assistantpanel.Tools{
 			Bridge: c.bridge, Socket: c.socket,

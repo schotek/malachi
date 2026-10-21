@@ -12,6 +12,7 @@ ui/internal/assistant/assistant.go
 ui/internal/assistant/calendar_actions.go
 ui/internal/assistant/chatgpt.go
 ui/internal/assistant/compose_write.go
+ui/internal/assistant/profile.go
 ui/internal/assistant/selection.go
 ui/internal/background/background.go
 ui/internal/bulkmail/bulkmail.go

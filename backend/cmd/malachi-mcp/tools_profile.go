@@ -266,9 +266,8 @@ func (b *bridge) proposeProfileNote(ctx context.Context, _ *mcp.CallToolRequest,
 		return toolError(err), nil, nil
 	}
 	b.proposals.n++
-	return jsonResult(struct {
-		ProposalID string `json:"proposalId"`
-		Status     string `json:"status"`
-		Note       string `json:"note"`
-	}{res.Proposal.ID, "pending", "The user accepts or dismisses the note in Malachi Mail; it is not part of the profile until then."}), nil, nil
+	// The first line is the bridge's own, fixed text: the app's panel
+	// reads the id from it (ui/internal/assistant ParseProposalResult) and
+	// the proposal's text from the daemon.
+	return textResult("profile note proposal " + oneLine(res.Proposal.ID) + " is pending; the user accepts or dismisses it in Malachi Mail, and it is not part of the profile until then."), nil, nil
 }

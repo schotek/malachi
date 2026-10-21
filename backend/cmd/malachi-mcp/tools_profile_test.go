@@ -122,7 +122,9 @@ func TestProfileSharedWithAnotherClient(t *testing.T) {
 	mustContain(t, h.ok(t, "list_accounts", nil), `"assistantNote": "`+fxProfileNote+`"`)
 
 	out = h.ok(t, "propose_profile_note", map[string]any{"text": "Schůzky v pondělí.", "accountId": "a1"})
-	mustContain(t, out, `"proposalId": "p_1"`, `"status": "pending"`)
+	if !strings.HasPrefix(out, "profile note proposal p_1 is pending; ") {
+		t.Fatalf("propose_profile_note %q", out)
+	}
 	if got := as.proposed(); len(got) != 1 || got[0].Source != api.ProfileFromMCP || got[0].AccountID != fxAccount {
 		t.Fatalf("proposed %+v", got)
 	}

@@ -586,7 +586,7 @@ accepts it in Malachi Mail (the panel shows a card, Preferences → AI →
 About You lists the pending ones); the daemon keeps at most 20.
 
 - input: `{text, accountId?}`
-- output: JSON `{proposalId, status: "pending", note}`
+- output: the line `profile note proposal <id> is pending; …` (the app reads the id from it, the text from the daemon)
 - Offered only to the app's panel (`-in-app`) and to another client
   while the profile was shared at the start of the session; never under
   `-reply-only` or `-triage-run` (those sessions read other people's
