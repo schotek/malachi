@@ -57,6 +57,12 @@ public sealed partial class SearchConversion : IDisposable
     /// <summary>The date for the system prompt, YYYY-MM-DD: <see cref="AssistantPanelController.LocalDate"/> on the request's clock by default.</summary>
     public Func<string> Today { get; set; }
 
+    /// <summary>
+    /// The user's profile; the search gets it without account notes
+    /// (<see cref="UserProfile.Global"/>). Empty by default.
+    /// </summary>
+    public Func<UserProfile> Profile { get; set; } = () => UserProfile.Empty;
+
     /// <summary>A conversion is under way.</summary>
     public bool Running => Request.Running;
 
@@ -116,7 +122,7 @@ public sealed partial class SearchConversion : IDisposable
             return true;
         }
         Request.Start(
-            Assistant.SearchSystemPrompt(Today()),
+            Assistant.WithProfile(Assistant.SearchSystemPrompt(Today()), Profile().Global()),
             message,
             outcome => completion(OutcomeOf(outcome)),
             jsonSchema: Assistant.SearchSchema);

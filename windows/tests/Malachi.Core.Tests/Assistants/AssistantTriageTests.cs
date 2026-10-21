@@ -53,7 +53,7 @@ public sealed class AssistantTriageTests
         [
             .. Head,
             "--mcp-config",
-            """{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":["--socket","/s.sock","--allow-triage","--triage-run","run_1","--triage-max","40"]}}}""",
+            """{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":["--socket","/s.sock","--in-app","--allow-triage","--triage-run","run_1","--triage-max","40"]}}}""",
             "--allowedTools",
             "mcp__malachi__list_accounts,mcp__malachi__list_folders,mcp__malachi__list_messages,mcp__malachi__search_messages,"
                 + "mcp__malachi__read_message,mcp__malachi__get_attachment,mcp__malachi__create_draft,"
@@ -70,7 +70,7 @@ public sealed class AssistantTriageTests
             ["mcp__malachi__list_triage_queue", "mcp__malachi__annotate_case", "mcp__malachi__add_commitment"],
             Assistant.TriageToolsAll.Except(Assistant.AllowedTools));
         // The panel's calendar tools are its own (triage_test.go skips CalendarTools).
-        Assert.Empty(Assistant.AllowedTools.Except(Assistant.CalendarTools).Except(Assistant.TriageToolsAll));
+        Assert.Empty(Assistant.AllowedTools.Except(Assistant.CalendarTools).Except(Assistant.ProfileTools).Except(Assistant.TriageToolsAll));
     }
 
     /// <summary>An automatic run's command line: the manual one without create_draft, with its own limit for the bridge.</summary>
@@ -91,7 +91,7 @@ public sealed class AssistantTriageTests
         [
             .. Head,
             "--mcp-config",
-            """{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":["--socket","/s.sock","--allow-triage","--triage-run","run_2","--triage-max","5"]}}}""",
+            """{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":["--socket","/s.sock","--in-app","--allow-triage","--triage-run","run_2","--triage-max","5"]}}}""",
             "--allowedTools",
             "mcp__malachi__list_accounts,mcp__malachi__list_folders,mcp__malachi__list_messages,mcp__malachi__search_messages,"
                 + "mcp__malachi__read_message,mcp__malachi__get_attachment,"
@@ -113,14 +113,14 @@ public sealed class AssistantTriageTests
     public void McpConfigExtra()
     {
         Assert.Equal(
-            """{"mcpServers":{"malachi":{"type":"stdio","command":"/b","args":["--allow-triage","--triage-run","r"]}}}""",
+            """{"mcpServers":{"malachi":{"type":"stdio","command":"/b","args":["--in-app","--allow-triage","--triage-run","r"]}}}""",
             McpConfig("/b", "", ["--allow-triage", "--triage-run", "r"]));
         Assert.Equal(
-            """{"mcpServers":{"malachi":{"type":"stdio","command":"/b","args":["--socket","/s","a\"b\\"]}}}""",
+            """{"mcpServers":{"malachi":{"type":"stdio","command":"/b","args":["--socket","/s","--in-app","a\"b\\"]}}}""",
             McpConfig("/b", "/s", ["a\"b\\"]));
         // Unchanged without extra arguments.
         Assert.Equal(McpConfig("/b", "/s", []), McpConfig("/b", "/s"));
-        Assert.Equal("""{"mcpServers":{"malachi":{"type":"stdio","command":"/b","args":[]}}}""", McpConfig("/b", ""));
+        Assert.Equal("""{"mcpServers":{"malachi":{"type":"stdio","command":"/b","args":["--in-app"]}}}""", McpConfig("/b", ""));
         // Without a bridge, neither the extra arguments nor the tools count.
         var oneShot = Assistant.Args(new AssistantOptions { Bridge = "", SystemPrompt = "P", BridgeArgs = ["--allow-triage"], Tools = Assistant.TriageToolsAll });
         Assert.Equal(Assistant.Args(new AssistantOptions { Bridge = "", SystemPrompt = "P" }), oneShot);
@@ -175,7 +175,7 @@ public sealed class AssistantTriageTests
         Assert.True(i >= 0);
         Assert.Contains(
             """
-            "args":["--socket","/s.sock","--reply-only","m_7"]
+            "args":["--socket","/s.sock","--in-app","--reply-only","m_7"]
             """,
             args[i + 1],
             StringComparison.Ordinal);

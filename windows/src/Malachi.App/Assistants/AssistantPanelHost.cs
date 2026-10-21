@@ -26,6 +26,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Malachi.App.Preferences;
 using Malachi.App.Reader;
 using Malachi.App.Shell;
 using Malachi.Core.Api;
@@ -76,6 +77,8 @@ internal sealed class AssistantPanelHost : IDisposable
             directories: new PrivateDirectory(),
             processLogger: state.Logs.CreateLogger<ClaudeCodeProcess>());
         Controller.Provider = state.InAppProvider;
+        // Every conversation carries the user's profile, every account's note.
+        Controller.Profile = () => state.CurrentProfile;
         Controller.Consent = () => state.AskAssistantConsentAsync(window);
         Controller.ReconnectProvider = ReconnectChatGptAsync;
         state.InAppProviderChanged += OnProviderChanged;
@@ -100,6 +103,10 @@ internal sealed class AssistantPanelHost : IDisposable
                 view.UpdateQuickActions();
             }
         });
+        view.AttachProfile(
+            state.Profile,
+            text => ProfileDialogs.EditProposalAsync(state.Alerts, window, text, state.Profile.Limits.Proposal),
+            () => PreferencesWindow.Show(state)?.ShowAi());
         view.Attach(
             Controller,
             href => _ = reader.Links.OpenAsync(new ActivatedLink(href, href), [], window),
@@ -115,6 +122,7 @@ internal sealed class AssistantPanelHost : IDisposable
         state.InAppProviderChanged -= OnProviderChanged;
         mailbox.EntriesChanged -= OnEntriesChanged;
         calendarToken.Cancel();
+        view.DetachProfile();
         Controller.Close();
     }
 

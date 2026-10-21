@@ -302,6 +302,32 @@ instrukce po restartu, návrh z Claude Desktop v Předvolbách), smazání
   skupina ani karta na obrazovce se skutečným démonem (žádný smoke test
   panelu asistenta); čeká brána P-B2 vlastníka v XQuartz.
 
+### As built (krok 5, Windows, 2026-10-21; napsané na Macu bez `dotnet`)
+
+- Core (`windows/src/Malachi.Core`): `Api/AssistantProfile.cs` (záznamy,
+  wire enumy, metody na konci tabulky, `Notify.AssistantProfileChanged`,
+  registrace v `ApiJsonContext`), `Assistants/Assistant.Profile.cs`
+  (`UserProfile`, `ProfileNote`, `WithProfile`, `ParseProposalResult`,
+  `ProfileTexts`…), `Controllers/ProfileStore.cs`, `Func<UserProfile>
+  Profile` na šesti controllerech, `ProposalContent` panelu, `--in-app`
+  v `Assistant.McpConfig` i `CodexAssistantSession`,
+  `NotificationHub.AddAssistantProfileChanged`. Testy: nové
+  `AssistantProfileTests`, `ProfileStoreTests`, `AssistantProfileApiTests`,
+  `AssistantRequestTests.Profile`, rozšířené testy panelu, API (105 metod)
+  a `GoContractTests`. Z `windows/parity-exclusions.txt` zmizelo všech 25
+  řádků profilu. Popis v `docs/windows-port.md` §11.12.
+- App (`windows/src/Malachi.App`): `Shell/AppState.Profile.cs`,
+  `Assistants/AssistantPanel.Profile.cs` (karta a tlačítko `AssistantProfile`
+  v záhlaví), `Assistants/ProfileDialogs.cs`, `Preferences/AiPage.Profile.cs`
+  (skupina O mně a návrhy v kódu, sloty v `AiPage.xaml`), profil pro přepis
+  a pruh psaní (`ComposePane.WritingAccount`) a hledání vlastními slovy.
+- **Nepřeloženo a nespuštěno.** Předává se Windows agentovi vlastníka
+  (nikdy `windows.yml`): `build.ps1 app`/`test`/`lint`, UI smoke a ruční
+  průchod, pak brána P-B3. Nejisté body: vazba konstruktoru
+  `ProfileAccountNote` ve zdrojovém generátoru JSON, CA1716 u
+  `UserProfile.For`, chování `FakeDaemon` u vyhozené `RpcException`,
+  styly skupiny v `AiPage` přes `Resources.TryGetValue`, `dotnet format`.
+
 ## 8. Mimo rozsah
 
 - Návrhy, které se do profilu zapíší bez potvrzení uživatele.

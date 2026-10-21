@@ -237,6 +237,12 @@ public sealed partial class BoardReplyController : IDisposable
     public Action? OnRefresh { get; set; }
 
     /// <summary>
+    /// The user's profile; a request gets the note of the case's account only
+    /// (<see cref="UserProfile.For"/>). Empty by default.
+    /// </summary>
+    public Func<UserProfile> Profile { get; set; } = () => UserProfile.Empty;
+
+    /// <summary>
     /// How long a request may take (<see cref="Assistant.SuggestReplyTimeout"/>).
     /// The controller keeps the time itself, so the end of a request that
     /// runs out of it is the controller's, created draft and all; the
@@ -550,7 +556,9 @@ public sealed partial class BoardReplyController : IDisposable
         Request.Start(
             // A case waiting on the other side gets a follow-up on the user's
             // own last message.
-            Assistant.SuggestReplySystemPromptFor(Board.IsFollowUpWire(r.Case, annotated)),
+            Assistant.WithProfile(
+                Assistant.SuggestReplySystemPromptFor(Board.IsFollowUpWire(r.Case, annotated)),
+                Profile().For(r.Case.AccountId.Value)),
             message,
             outcome => Answered(my, id, outcome),
             tools: new AssistantRequest.Tools

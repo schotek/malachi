@@ -173,6 +173,13 @@ public abstract record DaemonNotification
     /// <param name="Payload">The accounts (empty = any).</param>
     public sealed record InvitationsChanged(InvitationsChangedNotification Payload) : DaemonNotification;
 
+    /// <summary>
+    /// <c>notify.assistantProfileChanged</c>: the assistant profile or its
+    /// pending proposals changed (AssistantProfile.cs); no params, the
+    /// application's <c>ProfileStore</c> reads it again.
+    /// </summary>
+    public sealed record AssistantProfileChanged : DaemonNotification;
+
     /// <summary>A notification of a newer daemon.</summary>
     /// <param name="Method">Its method.</param>
     public sealed record Unknown(string Method) : DaemonNotification;
@@ -220,6 +227,7 @@ public abstract record DaemonNotification
             API.Notify.CalendarState => new CalendarState(Params(method, parameters, ApiJsonContext.Wire.CalendarStateNotification).State),
             API.Notify.EventAlert => new EventAlert(Params(method, parameters, ApiJsonContext.Wire.EventAlertNotification)),
             API.Notify.InvitationsChanged => new InvitationsChanged(OptionalParams(method, parameters, ApiJsonContext.Wire.InvitationsChangedNotification)),
+            API.Notify.AssistantProfileChanged => new AssistantProfileChanged(),
             _ => new Unknown(method),
         };
     }

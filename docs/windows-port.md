@@ -3975,6 +3975,61 @@ verified: the full
 `build.ps1 test`, the UI smoke tests, and a manual walk over a copy of
 the data against an eWay-CRM instance.
 
+### 11.12 The assistant profile
+
+As built (2026-10-21, step 5 of docs/plans/assistant-profile.md, Core part,
+written on a Mac without .NET as the port of the macOS client of step 3 and
+the Go reference `ui/internal/assistant/profile.go` and
+`ui/internal/assistantpanel/profile_store.go`; nothing here was compiled).
+
+API: `Api/AssistantProfile.cs` mirrors `backend/pkg/api/assistant.go`
+(`ProfileGender`, `ProfileSource`, `ProfileAccountNote`, `AssistantProfile`
+with `ShareWithMcp` true when absent, `ProfileProposal`, `ProfileLimits`,
+the params and results of `assistant.profileGet`, `profileSet`,
+`profilePropose` and `profileResolve`); the four methods end `API.Methods`
+(after the CRM's), `API.Notify.AssistantProfileChanged` ends
+`AllNotifications` and decodes as `DaemonNotification.AssistantProfileChanged`
+(no params), `NotificationHub.AddAssistantProfileChanged` fans it out; the
+four limits are in `API.Limits`. `GoContractTests` reads assistant.go (the
+two wire enums, the limits, 105 methods), `ApiRoundTripTests` has a sample
+of every record, `AssistantProfileApiTests` the Go/Swift JSON cases.
+
+Core: `Assistants/UserProfile.cs` (Swift `Assistant.Profile` is
+`UserProfile`, its `AccountNote` is `ProfileNote`: `From`, `Global`, `For`,
+`IsEmpty`, `Empty`) and `Assistants/Assistant.Profile.cs` (`WithProfile`,
+`ParseProposalResult`, `ProfileTools`, `ProposeProfileTool`,
+`ProfileTexts` → `ProfileStrings` with `GenderLabel`, `ProfileCounter`,
+`ProfileProposalCount`; the strings byte for byte as Go, names quoted as
+Go's `%q` for the characters the daemon's names can hold);
+`Controllers/ProfileStore.cs` (one per application: `Refresh`, `SetAsync`,
+`ResolveAsync` returning the daemon's `RpcError` or null, `Changed`,
+`Loaded`, `Supported`, `Stored`, `Proposals`, `Limits`, `Profile`,
+`Proposal(id)`; an older daemon is `Supported` false, a transient failure
+keeps the profile, newer answers win). `Func<UserProfile> Profile` on
+`AssistantPanelController` (both the Claude Code and the provider path),
+`ComposeRewriteController`, `ComposeWriteController`, `SearchConversion`
+(`Global`), `BoardTriageController` and `BoardReplyController` (`For` the
+case's account); the panel's `ProposalContent(Proposal)` for a
+`propose_profile_note` result; `--in-app` in `Assistant.McpConfig` and in
+`CodexAssistantSession`'s bridge; `AllowedTools` gains the two profile tools,
+`ActivityLabel` their lines. The 25 msgids of the profile left
+`windows/parity-exclusions.txt`.
+
+Tests (Malachi.Core.Tests): `AssistantProfileTests` (profile_test.go),
+`ProfileStoreTests` (profile_store_test.go against `FakeDaemon`),
+`AssistantPanelControllerTests.SystemPromptCarriesTheProfile` and
+`ProposalCard`, `AssistantRequestTests.OneShotsCarryTheProfile`, and the
+updated `AssistantPanelLogicTests`, `AssistantTriageTests`,
+`ApiCodingTests`, `GoContractTests`, `NotificationDecodeTests`.
+
+The Windows agent builds and checks: `build.ps1 app`, `test` (the tests
+above first), `lint` (formatting, `StringsCheckTests` with the exclusions
+gone, conventions), then the App part (Preferences → AI → About You, the
+proposal card and the panel's profile button, the `ProfileStore` in
+`AppState` wired to the connection, `notify.assistantProfileChanged` and
+`notify.accountsChanged`, and the controllers' `Profile`), UI smoke and gate
+P-B3 of the plan.
+
 ## 12. Tests
 
 `make test-windows` (`build.ps1 test`) runs six test projects, 5,944

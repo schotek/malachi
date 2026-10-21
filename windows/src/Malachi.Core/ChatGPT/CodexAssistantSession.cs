@@ -100,6 +100,8 @@ public sealed class CodexAssistantSession : IAssistantSession, IAsyncDisposable
             // This peer is a sibling, not a Codex descendant: no access token
             // or even the local inference credential ever enters its environment.
             List<string> bridgeArgs = options.Socket.Length > 0 ? ["--socket", options.Socket] : [];
+            // The application's own bridge (Assistant.McpConfig does the same).
+            bridgeArgs.Add("--in-app");
             bridgeArgs.AddRange(spec.BridgeArgs);
             bridge = new CodexJsonRpc(options.Bridge, bridgeArgs,
                 Assistant.ChildEnvironment(options.Environment, options.Bridge), work);

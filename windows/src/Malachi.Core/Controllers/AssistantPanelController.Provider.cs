@@ -50,7 +50,7 @@ public sealed partial class AssistantPanelController
                 providerStop = stop;
                 var session = await selected.OpenAsync(new AssistantSessionSpec
                 {
-                    SystemPrompt = Assistant.SystemPrompt(Language(), Today()),
+                    SystemPrompt = NewConversationSystemPrompt(),
                     ToolPolicy = AssistantToolPolicy.Panel,
                 }, stop.Token);
                 if (my != gen || !ReferenceEquals(selected, Provider))

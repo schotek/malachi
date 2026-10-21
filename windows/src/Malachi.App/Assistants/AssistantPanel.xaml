@@ -40,6 +40,7 @@ reaches the screen as TextBlock.Text or Runs set from code, never markup.
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel VerticalAlignment="Center">
                 <TextBlock
@@ -52,9 +53,22 @@ reaches the screen as TextBlock.Text or Runs set from code, never markup.
                     Style="{StaticResource DimCaptionLabelStyle}"
                     TextTrimming="CharacterEllipsis" />
             </StackPanel>
+            <!-- The user's profile (AssistantPanel.Profile.cs): Preferences → AI. -->
+            <Button
+                x:Name="ProfileButton"
+                Grid.Column="1"
+                Width="36"
+                Height="32"
+                Padding="0"
+                VerticalAlignment="Center"
+                AutomationProperties.AutomationId="AssistantProfile"
+                Style="{StaticResource SubtleButtonStyle}"
+                Visibility="Collapsed">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('avatar-default-symbolic')}" />
+            </Button>
             <Button
                 x:Name="NewButton"
-                Grid.Column="1"
+                Grid.Column="2"
                 Width="36"
                 Height="32"
                 Padding="0"

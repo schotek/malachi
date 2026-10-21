@@ -358,6 +358,13 @@ public sealed partial class AssistantPanelController : IDisposable
     /// </summary>
     public Func<string> Language { get; set; }
 
+    /// <summary>
+    /// The user's profile, for the system prompt of a new conversation: every
+    /// account's note (the conversation may span accounts; each note names
+    /// its account). Empty by default.
+    /// </summary>
+    public Func<UserProfile> Profile { get; set; } = () => UserProfile.Empty;
+
     /// <summary>How long <see cref="ResolveContext"/> is waited for (<see cref="DefaultResolveTimeout"/>).</summary>
     public TimeSpan ResolveTimeout { get; set; } = DefaultResolveTimeout;
 
@@ -1397,6 +1404,10 @@ public sealed partial class AssistantPanelController : IDisposable
         }
     }
 
+    // The system prompt of a new conversation, with the user's profile.
+    private string NewConversationSystemPrompt() =>
+        Assistant.WithProfile(Assistant.SystemPrompt(Language(), Today()), Profile());
+
     // Starts Claude Code for a new conversation, in the private directory.
     private ClaudeCodeProcess Launch(string path, string bridgePath)
     {
@@ -1413,7 +1424,7 @@ public sealed partial class AssistantPanelController : IDisposable
             Bridge = bridgePath,
             Socket = socket,
             Model = Settings.AssistantModel,
-            SystemPrompt = Assistant.SystemPrompt(Language(), Today()),
+            SystemPrompt = NewConversationSystemPrompt(),
         };
         var p = new ClaudeCodeProcess(
             path, Assistant.Args(options), Assistant.ChildEnvironment(environment, path), directory, killGrace, Time, processLogger);
@@ -1500,6 +1511,10 @@ public sealed partial class AssistantPanelController : IDisposable
                     if (tool == "create_draft" && !e.IsError && Assistant.ParseDraftResult(e.ResultText) is { } draft)
                     {
                         Append(new DraftContent(draft));
+                    }
+                    else if (tool == Assistant.ProposeProfileTool && !e.IsError && Assistant.ParseProposalResult(e.ResultText) is { } proposal)
+                    {
+                        Append(new ProposalContent(proposal));
                     }
                     else if (tool is not null && !e.IsError && !calendarCarded
                         && Assistant.ParseCalendarResult(tool, e.ResultText) is { } calendar)

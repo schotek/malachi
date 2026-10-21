@@ -387,6 +387,7 @@ public sealed partial class AssistantPanel : UserControl
     {
         Transcript.Children.Clear();
         rows.Clear();
+        proposalRows.Clear();
         if (controller is { } c)
         {
             foreach (var item in c.Items)
@@ -405,6 +406,10 @@ public sealed partial class AssistantPanel : UserControl
 
     private void ReplaceRow(int index, AssistantPanelController.Item item)
     {
+        if (rows[index] is ProposalRow old)
+        {
+            proposalRows.Remove(old);
+        }
         var row = MakeRow(item);
         Transcript.Children[index] = row.Root;
         rows[index] = row;
@@ -436,6 +441,7 @@ public sealed partial class AssistantPanel : UserControl
             ActivityContent => new ActivityRow(),
             DraftContent => new DraftRow(() => controller?.OpenDraftItem(id)),
             CalendarContent => new CalendarRow(() => controller?.OpenCalendarItem(id)),
+            ProposalContent => MakeProposalRow(),
             _ => new LineRow(() => controller?.Retry(id), offer => Offered(id, offer)),
         };
         row.Kind = item.Content.GetType();

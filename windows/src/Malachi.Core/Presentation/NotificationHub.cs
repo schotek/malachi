@@ -54,6 +54,7 @@ public sealed partial class NotificationHub : IDisposable
     private readonly HandlerList<BoardChangedNotification> boardChanged;
     private readonly HandlerList<DraftsChangedNotification> draftsChanged;
     private readonly HandlerList<DaemonNotification> calendar;
+    private readonly HandlerList<DaemonNotification> assistantProfile;
     private readonly HandlerList<ConnectionState> connection;
     private ConnectionController? attached;
 
@@ -72,6 +73,7 @@ public sealed partial class NotificationHub : IDisposable
         boardChanged = new HandlerList<BoardChangedNotification>(Pending);
         draftsChanged = new HandlerList<DraftsChangedNotification>(Pending);
         calendar = new HandlerList<DaemonNotification>(Pending);
+        assistantProfile = new HandlerList<DaemonNotification>(Pending);
         connection = new HandlerList<ConnectionState>(Pending);
     }
 
@@ -139,6 +141,17 @@ public sealed partial class NotificationHub : IDisposable
     public IDisposable AddCalendar(Action<DaemonNotification> handler) => calendar.Add(handler);
 
     /// <summary>
+    /// Fires on every <c>notify.assistantProfileChanged</c> (Swift
+    /// <c>addAssistantProfileChanged</c>): the application's
+    /// <see cref="ProfileStore"/> reads the profile again.
+    /// </summary>
+    public IDisposable AddAssistantProfileChanged(Action handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        return assistantProfile.Add(_ => handler());
+    }
+
+    /// <summary>
     /// Fires on every connection state change, after
     /// <see cref="ConnectionState"/> was updated. A handler added later does
     /// not get the current state; read <see cref="ConnectionState"/> for that.
@@ -189,6 +202,9 @@ public sealed partial class NotificationHub : IDisposable
             case DaemonNotification.CalendarChanged or DaemonNotification.CalendarState
                 or DaemonNotification.EventAlert or DaemonNotification.InvitationsChanged:
                 calendar.Fire(n);
+                break;
+            case DaemonNotification.AssistantProfileChanged:
+                assistantProfile.Fire(n);
                 break;
             case DaemonNotification.Unknown u:
                 LogUnknown(logger, u.Method);

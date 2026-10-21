@@ -25,7 +25,7 @@ public sealed class GoContractTests
         var source = GoContract.ApiSource("methods.go");
         var constants = GoContract.StringConstants(source);
         var goMethods = GoContract.SliceIdentifiers(source, "AllMethods").Select(name => constants[name]).ToArray();
-        Assert.Equal(101, goMethods.Length);
+        Assert.Equal(105, goMethods.Length);
         Assert.Equal(goMethods, API.AllMethods);
         Assert.Equal(goMethods, API.Methods.Select(m => m.Name));
         Assert.Equal(ApiCodingTests.GoMethods, goMethods); // the Swift test's copy is current
@@ -56,6 +56,7 @@ public sealed class GoContractTests
         Assert.Equal(API.Notify.CalendarState, constants["NotifyCalendarState"]);
         Assert.Equal(API.Notify.EventAlert, constants["NotifyEventAlert"]);
         Assert.Equal(API.Notify.InvitationsChanged, constants["NotifyInvitationsChanged"]);
+        Assert.Equal(API.Notify.AssistantProfileChanged, constants["NotifyAssistantProfileChanged"]);
     }
 
     [Fact]
@@ -152,6 +153,8 @@ public sealed class GoContractTests
         { nameof(CrmItemKind), "crm.go", "CrmItemKind" },
         { nameof(CrmReason), "crm.go", "CrmReason" },
         { nameof(CrmSignInReason), "crm.go", "CrmSignInReason" },
+        { nameof(ProfileGender), "assistant.go", "ProfileGender" },
+        { nameof(ProfileSource), "assistant.go", "ProfileSource" },
     };
 
     /// <summary>
@@ -227,9 +230,10 @@ public sealed class GoContractTests
     public void LimitsAreTheConstantsOfTypesGo()
     {
         // types.go, calendar.go for the calendar's (docs/calendar.md §4.8)
-        // and crm.go for the CRM's (docs/eway.md D16).
+        // crm.go for the CRM's (docs/eway.md D16) and assistant.go for the
+        // assistant profile's (docs/api.md §4.18).
         var go = new Dictionary<string, long>(StringComparer.Ordinal);
-        foreach (var file in new[] { "types.go", "calendar.go", "crm.go" })
+        foreach (var file in new[] { "types.go", "calendar.go", "crm.go", "assistant.go" })
         {
             foreach (var (name, value) in GoContract.IntConstants(GoContract.ApiSource(file)))
             {
@@ -237,7 +241,7 @@ public sealed class GoContractTests
             }
         }
         var limits = typeof(API.Limits).GetFields(BindingFlags.Public | BindingFlags.Static).Where(f => f.IsLiteral).ToArray();
-        Assert.Equal(72, limits.Length);
+        Assert.Equal(76, limits.Length);
         foreach (var limit in limits)
         {
             // Go spells the identifier "IDs"; C# "Ids".
@@ -259,6 +263,12 @@ public sealed class GoContractTests
         foreach (var name in crm.Keys)
         {
             Assert.True(names.Contains(name), $"API.Limits has no {name} of crm.go");
+        }
+        var profile = GoContract.IntConstants(GoContract.ApiSource("assistant.go"));
+        Assert.Equal(4, profile.Count);
+        foreach (var name in profile.Keys)
+        {
+            Assert.True(names.Contains(name), $"API.Limits has no {name} of assistant.go");
         }
         Assert.Equal(API.ProtocolVersion, GoContract.IntConstants(GoContract.ApiSource("doc.go"))["ProtocolVersion"]);
     }

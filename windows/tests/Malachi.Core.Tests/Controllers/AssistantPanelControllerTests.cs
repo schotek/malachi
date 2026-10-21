@@ -361,6 +361,64 @@ public sealed class AssistantPanelControllerTests
         Assert.DoesNotContain(await h.ContentsAsync(), c => c is DraftContent);
     }
 
+    /// <summary>
+    /// A new conversation carries the user's profile with every account's
+    /// note (Go TestPanelSystemPromptCarriesTheProfile), and the bridge is the
+    /// app's own (--in-app).
+    /// </summary>
+    [Fact]
+    public async Task SystemPromptCarriesTheProfile()
+    {
+        RequireWindows();
+        var profile = new UserProfile("Píšu stručně.", Malachi.Core.Api.ProfileGender.Feminine,
+        [
+            new ProfileNote("acc_1", "Studio", "s@example.org", "Podepisuj jako studio."),
+            new ProfileNote("acc_2", "Osobní", "me@example.org", "Tykej."),
+        ]);
+        await using var h = await Harness.CreateAsync(Fake(CannedStreamJson.AnswerTurn("ok")));
+        await h.On(() => { h.Panel.Profile = () => profile; });
+        Assert.True(await h.On(() => h.Panel.Submit("Ahoj")));
+        await h.TurnAsync();
+        Assert.Equal(
+            Assistant.Args(new AssistantOptions
+            {
+                Bridge = TestBridge,
+                Socket = TestSocket,
+                Model = AssistantModel.Sonnet,
+                SystemPrompt = Assistant.WithProfile(Assistant.SystemPrompt("Czech", "2026-09-29"), profile),
+            }),
+            FakeClaudeScript.Args(h.Dir.Path));
+        Assert.Contains(FakeClaudeScript.Args(h.Dir.Path), a => a.Contains("\"--in-app\"", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A proposal the bridge stored is a card, by its id; a failed call, a
+    /// line that is not the bridge's or another tool's result is none (Go
+    /// TestPanelProposalCard).
+    /// </summary>
+    [Fact]
+    public async Task ProposalCard()
+    {
+        RequireWindows();
+        await using var h = await Harness.CreateAsync(Fake(CannedStreamJson.Turn(
+            CannedStreamJson.Init,
+            CannedStreamJson.ToolUse("t1", "propose_profile_note"),
+            CannedStreamJson.ToolResult("t1", "profile note proposal p_1 is pending; the user accepts or dismisses it in Malachi Mail."),
+            CannedStreamJson.ToolUse("t2", "propose_profile_note"),
+            CannedStreamJson.ToolResult("t2", "profile note proposal p_2 is pending; …", error: true),
+            CannedStreamJson.ToolUse("t3", "read_message"),
+            CannedStreamJson.ToolResult("t3", "profile note proposal p_3 is pending; …"),
+            CannedStreamJson.ToolUse("t4", "propose_profile_note"),
+            CannedStreamJson.ToolResult("t4", "I proposed p_4 for you"),
+            CannedStreamJson.Text("Noted."),
+            CannedStreamJson.Result())));
+        Assert.True(await h.On(() => h.Panel.Submit("Pamatuj si, že schůzky chci v pondělí.")));
+        await h.TurnAsync();
+        var contents = await h.ContentsAsync();
+        Assert.Equal(["p_1"], contents.OfType<ProposalContent>().Select(c => c.Proposal));
+        Assert.Contains(new ActivityContent("Suggesting a note for your profile…", true), contents);
+    }
+
     /// <summary>Ask About This Message…, an attachment and Summarize Unread; the removed context takes a waiting message action with it.</summary>
     [Fact]
     public async Task PendingActionsAndPrompts()

@@ -1328,13 +1328,14 @@ public sealed partial class ApiCodingTests
         "invitation.list", "invitation.respond", "invitation.applyCancel",
         "account.detectEway",
         "crm.lookup", "crm.search", "crm.save", "crm.remove",
+        "assistant.profileGet", "assistant.profileSet", "assistant.profilePropose", "assistant.profileResolve",
     ];
 
     [Fact]
     public void MethodTableMatchesGo()
     {
-        Assert.Equal(101, API.AllMethods.Count);
-        Assert.Equal(101, API.AllMethods.Distinct().Count()); // no duplicates
+        Assert.Equal(105, API.AllMethods.Count);
+        Assert.Equal(105, API.AllMethods.Distinct().Count()); // no duplicates
         Assert.Equal(GoMethods, API.AllMethods);
         Assert.Equal(API.AllMethods.Count, API.Methods.Count);
         Assert.Equal(API.SystemInfoName, API.SystemInfo.Name);
@@ -1342,6 +1343,7 @@ public sealed partial class ApiCodingTests
             [
                 "notify.newMessage", "notify.syncState", "notify.authRequired", "notify.accountsChanged", "notify.messagesChanged", "notify.boardChanged",
                 "notify.draftsChanged", "notify.calendarChanged", "notify.calendarState", "notify.eventAlert", "notify.invitationsChanged",
+                "notify.assistantProfileChanged",
             ],
             API.AllNotifications);
     }
