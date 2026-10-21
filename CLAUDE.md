@@ -486,6 +486,39 @@ Pořadí prací:
     Windows na jeho stroji sestavené, zlintované a s Core testy (Gate D
     zčásti: zbývá UI smoke a ruční průchod); viz odstavec eWay-CRM níže
     a `docs/eway.md`
+14. Profil pro asistenta (O mně, doplněk k účtu, návrhy) — sloučeno
+    z `feat/assistant-profile` do `main` 2026-10-21; démon, most, Go
+    reference, macOS, GTK i Windows ověřené vlastníkem na obrazovce týž
+    den; viz odstavec Profil pro asistenta níže a
+    `docs/plans/assistant-profile.md`
+
+Profil pro asistenta (2026-10-21, všechny tři klienty, sloučeno do `main`;
+plán, rozhodnutí P1–P16, Q1–Q10 a „As built“ v
+`docs/plans/assistant-profile.md`). Uživatel napíše, co má asistent o něm
+vědět (nejvýš 2000 znaků), zvolí rod, ve kterém píše, a k účtům pošty
+a Jiry doplněk (nejvýš 500 znaků). Démon (`docs/api.md` §4.18,
+`internal/core/assistant_profile.go`, `meta` `assistant.profile`
+a `assistant.profile.proposals`, bez migrace): `assistant.profileGet`,
+`profileSet`, `profilePropose`, `profileResolve`,
+`notify.assistantProfileChanged`; text čistí (NFC, bez řídicích a bidi
+znaků a řádků ve tvaru ohrady mostu), nad limit odmítne, nikdy neloguje;
+odebrání účtu smaže jeho doplněk a návrhy. Prompty: `assistant.WithProfile`
+(Go `ui/internal/assistant/profile.go`, Swift `AssistantProfile.swift`,
+C# `Assistant.Profile.cs`) připojí blok na konec systémového promptu jako
+přání uživatele, které nepřebíjí pevná pravidla; panel a triage
+s doplňky všech účtů, přepis a pruh psaní s doplňkem účtu okna, návrh
+odpovědi s doplňkem účtu případu, hledání vlastními slovy bez doplňků.
+Most z aplikace dostává vždy `--in-app`; cizí klient MCP dostane profil
+v instrukcích jen se zapnutým „Posílat profil i aplikacím přes MCP“
+(`shareWithMcp`, výchozí zapnuto), vždy `get_user_profile`
+a `assistantNote` v `list_accounts`. Návrhy (`propose_profile_note`)
+jen z panelu a sdílených relací, nikdy pod `--triage-run`
+a `--reply-only`, nejvýš 3 na proces a 20 čekajících, do profilu jen
+po kliknutí uživatele (`docs/security.md` §10.3). Sdílený stav profilu
+`ProfileStore` (Go `assistantpanel`, Swift, C#); UI: karta návrhu
+v panelu (Uložit, Upravit…, Zahodit), tlačítko profilu v záhlaví panelu,
+Předvolby → AI → O mně (rod, text s počítadlem, doplňky účtů, přepínač
+MCP, Navrhl asistent).
 
 Asistent (stav 2026-09-30, sloučeno do `main`; uživatel potvrdil, že
 funguje ve všech třech klientech). Na macOS je hotové a uživatelem otestované:

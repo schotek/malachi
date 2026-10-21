@@ -1,8 +1,10 @@
 # Profil pro asistenta („O mně“ a doplněk k účtu) — návrh
 
-Stav: návrh, otázky Q1–Q10 rozhodl vlastník 2026-10-21 (§9)
-a rozhodnutí v §2 jsou podle nich upravená. Nic z toho není
-implementované.
+Stav: hotovo ve všech třech klientech, sloučeno z `feat/assistant-profile`
+do `main` 2026-10-21 (`a5b04aaf`); brány P-B1 (macOS), P-B2 (GTK) a P-B3
+(Windows) ověřil vlastník na obrazovce týž den. Otázky Q1–Q10 rozhodl
+vlastník 2026-10-21 (§9); rozhodnutí v §2 jsou podle nich upravená, co se
+při stavbě změnilo, říkají oddíly „As built“ v §7.
 
 ## 1. Co se mění
 
@@ -276,9 +278,8 @@ instrukce po restartu, návrh z Claude Desktop v Předvolbách), smazání
   odmítnutý zápis jen pípne (pro chybu není msgid).
 - Ověřeno na Macu: `swift build` bez nových varování, filtrované
   `swift test` (243) a celé `swift test` (1918 + 8) zelené,
-  `check-strings.py` bez nových varování. **Neověřeno:** rozložení
-  (žádný krok `MALACHI_START`), běh se skutečným Claude Code a démonem;
-  čeká brána P-B1 vlastníka nad kopií dat.
+  `check-strings.py` bez nových varování. Brána P-B1 (vlastník na
+  obrazovce) prošla 2026-10-21.
 
 ### As built (krok 4, GTK, 2026-10-21)
 
@@ -298,9 +299,9 @@ instrukce po restartu, návrh z Claude Desktop v Předvolbách), smazání
   účtů jako `Adw.ExpanderRow`, `Adw.SwitchRow` pro MCP, skupina návrhů);
   vývojový krok `MALACHI_GTK_START=prefs-ai`.
 - Ověřeno v kontejneru: `gtk.sh make build`, celé `gtk.sh test-ui`, smoke
-  testy, `make po` (jen odkazy a zalomení), `make lint`. **Neověřeno:**
-  skupina ani karta na obrazovce se skutečným démonem (žádný smoke test
-  panelu asistenta); čeká brána P-B2 vlastníka v XQuartz.
+  testy, `make po` (jen odkazy a zalomení), `make lint`. Smoke test
+  panelu asistenta neexistuje; brána P-B2 (vlastník v XQuartz) prošla
+  2026-10-21.
 
 ### As built (krok 5, Windows, 2026-10-21; napsané na Macu bez `dotnet`)
 
@@ -321,12 +322,15 @@ instrukce po restartu, návrh z Claude Desktop v Předvolbách), smazání
   v záhlaví), `Assistants/ProfileDialogs.cs`, `Preferences/AiPage.Profile.cs`
   (skupina O mně a návrhy v kódu, sloty v `AiPage.xaml`), profil pro přepis
   a pruh psaní (`ComposePane.WritingAccount`) a hledání vlastními slovy.
-- **Nepřeloženo a nespuštěno.** Předává se Windows agentovi vlastníka
-  (nikdy `windows.yml`): `build.ps1 app`/`test`/`lint`, UI smoke a ruční
-  průchod, pak brána P-B3. Nejisté body: vazba konstruktoru
-  `ProfileAccountNote` ve zdrojovém generátoru JSON, CA1716 u
-  `UserProfile.For`, chování `FakeDaemon` u vyhozené `RpcException`,
-  styly skupiny v `AiPage` přes `Resources.TryGetValue`, `dotnet format`.
+- Windows agent vlastníka ho na Windows sestavil (`d8169ca9`, nikdy
+  `windows.yml`): `build.ps1 app` a `lint` prošly, sada Core zelená (7808).
+  Opravy při stavbě: `ProfileStore` loguje selhání jen se zapnutým
+  logováním (CA1873); metoda řádku návrhu v `AiPage` přejmenovaná na
+  `ProposalRow` (kolize s `PendingRow`, CS0102); `AssistantProfile` čte
+  chybějící rod jako `unset` a chybějící `shareWithMcp` jako true
+  (`ShareWithMcp` má setter kvůli zdrojovému generátoru); `GoContractTests`
+  čte i struktury `assistant.go`; `IconGlyphs` má `application-x-addon`.
+  Brána P-B3 (vlastník na obrazovce) prošla 2026-10-21.
 
 ## 8. Mimo rozsah
 
