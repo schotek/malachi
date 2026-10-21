@@ -22,7 +22,7 @@ import (
 func (b *bridge) registerReadTools(srv *mcp.Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "list_accounts",
-		Description: "List the configured mail accounts: id, name, address, kind, sync status and capabilities (what create_draft can do with the account: compose, reply, replyAll, forward; comment for an issue tracker, whose reply is a comment on the issue). Call this first; every other tool needs an accountId.",
+		Description: "List the configured mail accounts: id, name, address, kind, sync status, capabilities (what create_draft can do with the account: compose, reply, replyAll, forward; comment for an issue tracker, whose reply is a comment on the issue) and the user's own note for the account (assistantNote, from their profile, when they share it). Call this first; every other tool needs an accountId.",
 		Annotations: annRead(),
 	}, b.listAccounts)
 	mcp.AddTool(srv, &mcp.Tool{
@@ -88,6 +88,9 @@ type accountOut struct {
 	Enabled      bool     `json:"enabled"`
 	Status       string   `json:"status"`
 	Capabilities []string `json:"capabilities"`
+	// AssistantNote is the user's note for the account from their profile
+	// (tools_profile.go), when they share it.
+	AssistantNote string `json:"assistantNote,omitempty"`
 }
 
 func (b *bridge) listAccounts(ctx context.Context, _ *mcp.CallToolRequest, _ noArgs) (*mcp.CallToolResult, any, error) {
@@ -102,16 +105,18 @@ func (b *bridge) listAccounts(ctx context.Context, _ *mcp.CallToolRequest, _ noA
 	out := struct {
 		Accounts []accountOut `json:"accounts"`
 	}{Accounts: make([]accountOut, 0, len(res.Accounts))}
+	notes := b.accountNotes(ctx)
 	for _, a := range res.Accounts {
 		out.Accounts = append(out.Accounts, accountOut{
-			ID:           string(a.ID),
-			Name:         oneLine(a.Config.Name),
-			Email:        oneLine(a.Config.Email),
-			DisplayName:  oneLine(a.Config.DisplayName),
-			Kind:         string(a.Config.Protocol()),
-			Enabled:      a.Enabled,
-			Status:       string(a.State.Status),
-			Capabilities: capabilitiesOf(a),
+			ID:            string(a.ID),
+			Name:          oneLine(a.Config.Name),
+			Email:         oneLine(a.Config.Email),
+			DisplayName:   oneLine(a.Config.DisplayName),
+			Kind:          string(a.Config.Protocol()),
+			Enabled:       a.Enabled,
+			Status:        string(a.State.Status),
+			Capabilities:  capabilitiesOf(a),
+			AssistantNote: notes[a.ID],
 		})
 	}
 	return jsonResult(out), nil, nil

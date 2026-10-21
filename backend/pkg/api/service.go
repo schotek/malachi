@@ -182,6 +182,14 @@ type CrmService interface {
 	Remove(ctx context.Context, p CrmRemoveParams) (*CrmRemoveResult, error)
 }
 
+// AssistantService is the assistant profile (docs/api.md §4.18).
+type AssistantService interface {
+	ProfileGet(ctx context.Context, p AssistantProfileGetParams) (*AssistantProfileGetResult, error)
+	ProfileSet(ctx context.Context, p AssistantProfileSetParams) (*AssistantProfileSetResult, error)
+	ProfilePropose(ctx context.Context, p AssistantProfileProposeParams) (*AssistantProfileProposeResult, error)
+	ProfileResolve(ctx context.Context, p AssistantProfileResolveParams) (*AssistantProfileResolveResult, error)
+}
+
 // Backend is the complete server-side surface. The connection handshake
 // (system.hello, system.authenticate; docs/api.md §1.4) is not part of it:
 // the transport (internal/rpc) answers the handshake before any call of a
@@ -206,6 +214,7 @@ type Backend interface {
 	Events() EventService
 	Invitations() InvitationService
 	Crm() CrmService
+	Assistant() AssistantService
 }
 
 // Notifier is how backend components push events to connected clients.
@@ -231,6 +240,12 @@ type BoardNotifier interface {
 // notify.draftsChanged, asserted like BoardNotifier.
 type DraftsNotifier interface {
 	DraftsChanged(n DraftsChangedNotification)
+}
+
+// AssistantNotifier is the optional extension of Notifier for
+// notify.assistantProfileChanged, asserted like BoardNotifier.
+type AssistantNotifier interface {
+	AssistantProfileChanged(n AssistantProfileChangedNotification)
 }
 
 // CalendarNotifier is the optional extension of Notifier for the calendar

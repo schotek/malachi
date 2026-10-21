@@ -212,6 +212,7 @@ func (s *accountService) Remove(ctx context.Context, p api.AccountRemoveParams) 
 		}
 	}
 	unlock()
+	s.b.forgetProfileAccount(ctx, string(p.AccountID))
 	s.b.log.Info("account removed", "id", p.AccountID, "deleteLocalData", p.DeleteLocalData)
 	s.b.notifyBoard(false, string(p.AccountID)) // its cases went with it
 	s.b.accountsChanged()

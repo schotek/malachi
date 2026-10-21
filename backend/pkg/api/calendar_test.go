@@ -165,8 +165,10 @@ func TestCalendarErrorCodes(t *testing.T) {
 }
 
 // The calendar methods follow the board's in AllMethods, in the order of
-// docs/calendar.md §4.9, and only the CRM methods (crm_test.go) come after
-// them; the notifications follow notify.draftsChanged.
+// docs/calendar.md §4.9, and only the CRM and assistant profile methods
+// (crm_test.go, assistant_test.go) come after them; the notifications
+// follow notify.draftsChanged, and only the assistant profile's comes
+// after them.
 func TestCalendarMethodsOrder(t *testing.T) {
 	methods := []string{
 		"account.discoverCalDAV", "account.listCalDAVCalendars",
@@ -176,7 +178,7 @@ func TestCalendarMethodsOrder(t *testing.T) {
 		"event.respond", "event.snoozeAlert", "event.dismissAlert",
 		"invitation.list", "invitation.respond", "invitation.applyCancel",
 	}
-	n := len(AllMethods) - len(crmMethods)
+	n := len(AllMethods) - len(crmMethods) - len(assistantMethods)
 	if n < len(methods) || !reflect.DeepEqual(AllMethods[n-len(methods):n], methods) {
 		t.Fatalf("AllMethods does not end with the calendar methods: %v", AllMethods[n-len(methods):n])
 	}
@@ -184,8 +186,8 @@ func TestCalendarMethodsOrder(t *testing.T) {
 		t.Fatalf("the calendar methods do not follow the board's")
 	}
 	notes := []string{"notify.calendarChanged", "notify.calendarState", "notify.eventAlert", "notify.invitationsChanged"}
-	m := len(AllNotifications)
-	if !reflect.DeepEqual(AllNotifications[m-len(notes):], notes) || AllNotifications[m-len(notes)-1] != NotifyDraftsChanged {
+	m := len(AllNotifications) - 1
+	if !reflect.DeepEqual(AllNotifications[m-len(notes):m], notes) || AllNotifications[m-len(notes)-1] != NotifyDraftsChanged {
 		t.Fatalf("AllNotifications: %v", AllNotifications)
 	}
 }

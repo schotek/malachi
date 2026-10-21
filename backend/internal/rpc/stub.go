@@ -43,6 +43,22 @@ func (b *StubBackend) Calendars() api.CalendarService     { return stubCalendars
 func (b *StubBackend) Events() api.EventService           { return stubEvents{} }
 func (b *StubBackend) Invitations() api.InvitationService { return stubInvitations{} }
 func (b *StubBackend) Crm() api.CrmService                { return stubCrm{} }
+func (b *StubBackend) Assistant() api.AssistantService    { return stubAssistant{} }
+
+type stubAssistant struct{}
+
+func (stubAssistant) ProfileGet(context.Context, api.AssistantProfileGetParams) (*api.AssistantProfileGetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAssistant) ProfileSet(context.Context, api.AssistantProfileSetParams) (*api.AssistantProfileSetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAssistant) ProfilePropose(context.Context, api.AssistantProfileProposeParams) (*api.AssistantProfileProposeResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAssistant) ProfileResolve(context.Context, api.AssistantProfileResolveParams) (*api.AssistantProfileResolveResult, error) {
+	return nil, api.ErrNotImplemented
+}
 
 type stubCrm struct{}
 

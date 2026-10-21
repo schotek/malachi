@@ -2192,6 +2192,36 @@ ownership, are recorded in [chatgpt-integration.md](chatgpt-integration.md)
 §11–12. Synthetic native-CLI canaries are not a substitute for live SIWC
 and published-app validation on each platform.
 
+### 10.3 The user's profile
+
+The assistant profile ([api.md §4.18](api.md#418-assistant)) is the only
+text in an assistant's prompt that the model is told to follow as the
+user's wish rather than treat as data. The clients put it at the end of
+the system prompt, after the fixed rules, with the statement that it
+never overrides them; the bridge does the same in its instructions.
+
+- It cannot widen anything: the tools a model may call, the bridge's
+  tiers (`--allow-*`, `--triage-run`, `--reply-only`) and the rules of
+  triage and suggested replies are enforced by the client's allow-list
+  and by the bridge, not by the prompt, so "send it right away" in the
+  profile sends nothing.
+- The daemon cleans it on the way in (no control, bidi or invisible
+  characters, NFC, no line shaped like the bridge's fence of untrusted
+  content) and refuses it over the limits; it never logs it, and the
+  bridge logs no profile or proposal text either.
+- It goes only to providers the user consented to (the panel's and the
+  board's consents), and over MCP only to clients the user registered,
+  and only while *Send the profile to apps over MCP* is on.
+- **Proposals** are the way text from a message could try to get into
+  every later prompt. They are therefore never written to the profile
+  without the user's click; only the panel and MCP sessions the user
+  talks to may make them, never triage or a suggested reply (which read
+  other people's mail in bulk); at most 3 per bridge process and 20
+  pending; and the clients show them as plain text, with where they came
+  from.
+- Anyone who can write to the daemon's socket can change the profile,
+  as they can change everything else (§8).
+
 ## 11. Reporting
 
 Security issues: open a private report on the GitHub repository (Security →

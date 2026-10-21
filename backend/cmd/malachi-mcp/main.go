@@ -76,6 +76,9 @@ type config struct {
 	// message (tools_replyonly.go); never with the modify, send or triage
 	// tiers.
 	replyOnly api.MessageID
+	// inApp (--in-app): started by Malachi Mail itself, whose prompts carry
+	// the user's profile (tools_profile.go).
+	inApp bool
 }
 
 // instructions is serverInstructions, with the triage paragraph when the
@@ -129,13 +132,16 @@ func run(args []string, stdout, stderr io.Writer) error {
 
 	log := newLogger(stderr)
 	log.Info("starting malachi-mcp", "version", version, "socket", cfg.socket,
-		"allowModify", cfg.allowModify, "allowSend", cfg.allowSend, "allowTriage", cfg.allowTriage, "triageRun", cfg.triageRun != "", "triageMax", cfg.triageMax, "replyOnly", cfg.replyOnly != "")
+		"allowModify", cfg.allowModify, "allowSend", cfg.allowSend, "allowTriage", cfg.allowTriage, "triageRun", cfg.triageRun != "", "triageMax", cfg.triageMax, "replyOnly", cfg.replyOnly != "", "inApp", cfg.inApp)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	b := newBridge(cfg, log)
 	defer b.rpc.close()
+	// The instructions are fixed when the session starts, so the profile
+	// they carry is read now.
+	b.loadStartupProfile(ctx)
 	// Run returns when the client closes stdin or the context ends. Either
 	// way the session is over and there is nothing to retry: the reason is
 	// logged (it is a transport-level text, never mail content) and the
@@ -171,6 +177,7 @@ func parseServerFlags(args []string, stderr io.Writer) (cfg config, showVersion 
 	fs.StringVar(&triageMax, "triage-max", os.Getenv("MALACHI_MCP_TRIAGE_MAX"), "with -allow-triage: how many cases this process may annotate, 1-200; the queue hands out no more than that allows; default $MALACHI_MCP_TRIAGE_MAX, else 200")
 	// No environment default: the message is per request.
 	replyOnly := fs.String("reply-only", "", "make create_draft only one reply (mode reply or replyAll, no other recipients or subject) to this message id, at most once (the read tools stay); not with -allow-modify, -allow-send or -allow-triage")
+	fs.BoolVar(&cfg.inApp, "in-app", false, "started by Malachi Mail itself, whose prompts carry the user's profile: the profile stays out of the instructions, get_user_profile reads it whether or not the user shares it with MCP apps, and proposals are marked as from the app's panel")
 	version := fs.Bool("version", false, "print version and exit")
 	if err := fs.Parse(args); err != nil {
 		return config{}, false, err
@@ -223,6 +230,10 @@ type bridge struct {
 	docs      *docCache
 	triage    *sessionTriage
 	reply     replyOnce // the one draft of a --reply-only process
+	// startProfile is the profile read before the session started
+	// (loadStartupProfile); nil when it was not read.
+	startProfile *profileSnapshot
+	proposals    sessionProposals
 }
 
 func newBridge(cfg config, log *slog.Logger) *bridge {
@@ -248,12 +259,13 @@ func newBridge(cfg config, log *slog.Logger) *bridge {
 func (b *bridge) mcpServer() *mcp.Server {
 	srv := mcp.NewServer(
 		&mcp.Implementation{Name: "malachi", Title: "Malachi Mail", Version: version},
-		&mcp.ServerOptions{Instructions: b.cfg.instructions()},
+		&mcp.ServerOptions{Instructions: b.instructions()},
 	)
 	b.registerReadTools(srv)
 	b.registerIssueReadTools(srv)
 	b.registerBoardReadTools(srv)
 	b.registerDraftTools(srv)
+	b.registerProfileTools(srv)
 	// --reply-only and --triage-run keep their fixed tool sets: no calendar
 	// tools there.
 	calendarTools := b.cfg.replyOnly == "" && b.cfg.triageRun == ""

@@ -12,7 +12,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
-var readTools = []string{"create_draft", "find_free_time", "get_attachment", "get_event", "list_accounts", "list_board", "list_calendars", "list_events", "list_folders", "list_invitations", "list_messages", "list_transitions", "read_message", "search_messages", "sync_status", "trigger_sync"}
+var readTools = []string{"create_draft", "find_free_time", "get_attachment", "get_event", "get_user_profile", "list_accounts", "list_board", "list_calendars", "list_events", "list_folders", "list_invitations", "list_messages", "list_transitions", "read_message", "search_messages", "sync_status", "trigger_sync"}
 
 const (
 	fxReplyAttribution   = "On Wed, 23 Sep 2026 10:00 UTC, Alice Example <alice@example.org> wrote:"
@@ -78,7 +78,8 @@ func TestAnnotations(t *testing.T) {
 		"add_commitment":    {false, false, false, false},
 		"list_calendars":    {true, false, true, false}, "list_events": {true, false, true, false}, "get_event": {true, false, true, false},
 		"find_free_time": {true, false, true, false}, "list_invitations": {true, false, true, false},
-		"create_event": {false, true, true, true},
+		"create_event":     {false, true, true, true},
+		"get_user_profile": {true, false, true, false},
 	}
 	if len(tools) != len(want) {
 		t.Fatalf("%d tools, want %d", len(tools), len(want))

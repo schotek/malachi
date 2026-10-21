@@ -236,6 +236,10 @@ type Backend struct {
 	board boardState
 	// dn gathers notify.draftsChanged (drafts_notify.go).
 	dn draftNotify
+
+	// profileMu serialises the writes of the assistant profile and its
+	// proposals (assistant_profile.go).
+	profileMu sync.Mutex
 }
 
 var _ api.Backend = (*Backend)(nil)

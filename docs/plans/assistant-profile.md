@@ -192,6 +192,31 @@ Claude Desktop přes most se sdílením i bez (`get_user_profile`,
 instrukce po restartu, návrh z Claude Desktop v Předvolbách), smazání
 účtu s doplňkem.
 
+### As built (krok 1, démon a most, 2026-10-21)
+
+- API `pkg/api/assistant.go`, `AssistantService` (`Backend.Assistant()`),
+  metody `assistant.profileGet/Set/Propose/Resolve` a
+  `notify.assistantProfileChanged` (`api.AssistantNotifier`); `docs/api.md`
+  §4.18, §5 a changelog. Pořadí v `AllMethods`: za CRM
+  (`assistant_test.go`, testy pořadí CRM a kalendáře upravené).
+- `internal/core/assistant_profile.go`: `meta` `assistant.profile` (JSON
+  s `notes` podle id účtu) a `assistant.profile.proposals`, zápisy pod
+  `Backend.profileMu`. Čištění `cleanProfileText`: NFC,
+  `calendar.CleanBlock`, pryč řádky `---…UNTRUSTED…`, celý text oříznutý;
+  délka se počítá v znacích výsledku, delší = `invalidArgument`. Druh účtu
+  podle `AccountConfig.Protocol()` (prázdný = imap). Odebrání účtu volá
+  `forgetProfileAccount`. **Odchylka od §3:** notifikace jde hned, bez
+  koalescence 250 ms (zápisy dělá uživatel s 1 s klidem a návrhů je
+  nejvýš 3 na proces).
+- Most: přepínač `--in-app`, `tools_profile.go` (`get_user_profile` vždy,
+  `propose_profile_note` jen s `--in-app` nebo se sdílením zapnutým při
+  startu, nikdy pod `--reply-only`/`--triage-run`, nejvýš 3 na proces),
+  profil se čte před startem relace s limitem 3 s (`loadStartupProfile`)
+  a jde do instrukcí jen cizímu klientovi se sdílením; `list_accounts`
+  `assistantNote`; `docs/mcp.md` a `docs/security.md` §10.3.
+- Testy: `internal/core/assistant_profile_test.go`,
+  `cmd/malachi-mcp/tools_profile_test.go`, `pkg/api/assistant_test.go`.
+
 ## 8. Mimo rozsah
 
 - Návrhy, které se do profilu zapíší bez potvrzení uživatele.

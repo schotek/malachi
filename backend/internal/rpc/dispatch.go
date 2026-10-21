@@ -142,6 +142,17 @@ func (s *Server) registerBackend(b api.Backend) {
 
 	s.registerCalendar(b)
 	s.registerCrm(b)
+	s.registerAssistant(b)
+}
+
+// registerAssistant binds the assistant profile methods (docs/api.md
+// §4.18).
+func (s *Server) registerAssistant(b api.Backend) {
+	as := b.Assistant()
+	s.handlers[api.MethodAssistantProfileGet] = wrap(as.ProfileGet)
+	s.handlers[api.MethodAssistantProfileSet] = wrap(as.ProfileSet)
+	s.handlers[api.MethodAssistantProfilePropose] = wrap(as.ProfilePropose)
+	s.handlers[api.MethodAssistantProfileResolve] = wrap(as.ProfileResolve)
 }
 
 // registerCrm binds the CRM methods (docs/api.md §4.1, §4.17).
