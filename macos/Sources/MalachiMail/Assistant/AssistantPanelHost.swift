@@ -65,7 +65,9 @@ final class AssistantPanelHost {
             state.triage.recheckSignIn()
             return true
         }
-        viewController = AssistantPanelViewController(controller: controller)
+        controller.profile = { [weak state] in state?.profile.profile ?? Assistant.Profile() }
+        viewController = AssistantPanelViewController(controller: controller, profile: state.profile)
+        viewController.onOpenProfile = { [weak state] in state?.hooks.openAISettings?() }
 
         controller.consent = { [weak state, weak mainWindow] in
             await state?.assistantConsent(on: mainWindow?.window) ?? false

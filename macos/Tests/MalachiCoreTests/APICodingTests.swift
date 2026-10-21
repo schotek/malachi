@@ -1383,11 +1383,12 @@ import Testing
         "invitation.list", "invitation.respond", "invitation.applyCancel",
         "account.detectEway",
         "crm.lookup", "crm.search", "crm.save", "crm.remove",
+        "assistant.profileGet", "assistant.profileSet", "assistant.profilePropose", "assistant.profileResolve",
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 101)
-        #expect(Set(API.allMethods).count == 101, "no duplicates")
+        #expect(API.allMethods.count == 105)
+        #expect(Set(API.allMethods).count == 105, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)
@@ -1395,6 +1396,7 @@ import Testing
             "notify.newMessage", "notify.syncState", "notify.authRequired", "notify.accountsChanged", "notify.messagesChanged",
             "notify.boardChanged", "notify.draftsChanged",
             "notify.calendarChanged", "notify.calendarState", "notify.eventAlert", "notify.invitationsChanged",
+            "notify.assistantProfileChanged",
         ])
         #expect(API.AccountDetectSite.name == "account.detectSite" && API.AccountListSpaces.name == "account.listSpaces")
         #expect(API.IssueTransitions.name == "issue.transitions" && API.IssueTransition.name == "issue.transition")

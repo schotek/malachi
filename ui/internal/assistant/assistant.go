@@ -309,6 +309,12 @@ func ActivityLabel(tr Translator, tool string) string {
 		return tr.T("Reading an attachment…")
 	case "create_draft":
 		return tr.T("Saving a draft…")
+	case "get_user_profile":
+		// TRANSLATORS: The assistant panel's activity line while the assistant reads what the user wrote about themselves.
+		return tr.T("Reading your profile…")
+	case "propose_profile_note":
+		// TRANSLATORS: The assistant panel's activity line while the assistant suggests a note for the user's profile.
+		return tr.T("Suggesting a note for your profile…")
 	}
 	return tr.T("Using a tool…")
 }

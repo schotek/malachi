@@ -475,6 +475,13 @@ Adw.PreferencesDialog preferences_dialog {
     title: _("AI");
     icon-name: "applications-science-symbolic";
 
+    // About You (window/preferences_profile.go fills both from Go).
+    Adw.PreferencesGroup about_you_group {}
+
+    Adw.PreferencesGroup about_you_pending_group {
+      visible: false;
+    }
+
     Adw.PreferencesGroup mcp_group {
       title: _("MCP");
       description: _("Lets AI assistants read your mail and prepare drafts through the Model Context Protocol.");

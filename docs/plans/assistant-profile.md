@@ -192,6 +192,142 @@ Claude Desktop přes most se sdílením i bez (`get_user_profile`,
 instrukce po restartu, návrh z Claude Desktop v Předvolbách), smazání
 účtu s doplňkem.
 
+### As built (krok 1, démon a most, 2026-10-21)
+
+- API `pkg/api/assistant.go`, `AssistantService` (`Backend.Assistant()`),
+  metody `assistant.profileGet/Set/Propose/Resolve` a
+  `notify.assistantProfileChanged` (`api.AssistantNotifier`); `docs/api.md`
+  §4.18, §5 a changelog. Pořadí v `AllMethods`: za CRM
+  (`assistant_test.go`, testy pořadí CRM a kalendáře upravené).
+- `internal/core/assistant_profile.go`: `meta` `assistant.profile` (JSON
+  s `notes` podle id účtu) a `assistant.profile.proposals`, zápisy pod
+  `Backend.profileMu`. Čištění `cleanProfileText`: NFC,
+  `calendar.CleanBlock`, pryč řádky `---…UNTRUSTED…`, celý text oříznutý;
+  délka se počítá v znacích výsledku, delší = `invalidArgument`. Druh účtu
+  podle `AccountConfig.Protocol()` (prázdný = imap). Odebrání účtu volá
+  `forgetProfileAccount`. **Odchylka od §3:** notifikace jde hned, bez
+  koalescence 250 ms (zápisy dělá uživatel s 1 s klidem a návrhů je
+  nejvýš 3 na proces).
+- Most: přepínač `--in-app`, `tools_profile.go` (`get_user_profile` vždy,
+  `propose_profile_note` jen s `--in-app` nebo se sdílením zapnutým při
+  startu, nikdy pod `--reply-only`/`--triage-run`, nejvýš 3 na proces),
+  profil se čte před startem relace s limitem 3 s (`loadStartupProfile`)
+  a jde do instrukcí jen cizímu klientovi se sdílením; `list_accounts`
+  `assistantNote`; `docs/mcp.md` a `docs/security.md` §10.3.
+- Testy: `internal/core/assistant_profile_test.go`,
+  `cmd/malachi-mcp/tools_profile_test.go`, `pkg/api/assistant_test.go`.
+
+### As built (krok 2, Go reference, 2026-10-21)
+
+- `ui/internal/assistant/profile.go`: `Profile` (+ `AccountNote`,
+  `ProfileFrom`, `Empty`, `Global`, `For`), `WithProfile` (blok podle P7,
+  prázdný profil nechá prompt bajt po bajtu), `ParseProposalResult`
+  (pevný první řádek mostu `profile note proposal <id> is pending; …`,
+  most proto vrací text místo JSON), `ProfileTools`, `ProfileTexts`,
+  `ProfileCounter`, `ProfileProposalCount`; nové řádky aktivity
+  v `ActivityLabel`. **Odchylka od P6:** funkce `*SystemPrompt` se
+  nemění; volající obalí jejich výsledek `WithProfile` (prompty i jejich
+  testy zůstaly beze změny).
+- **Rozsah doplňků (P8) v praxi:** panel dostane doplňky všech účtů
+  (rozhovor může přejít mezi účty a každý doplněk jmenuje svůj účet),
+  triage taky; přepis a pruh psaní `For(účet okna)` (nastaví okno),
+  návrh odpovědi `For(účet případu)`, hledání `Global()`.
+- Volající: `assistantpanel.Controller.Profile`, `Rewriter.Profile`,
+  `Writer.Profile`, `Searcher.Profile`, `boardtriage.Controller.Profile`,
+  `boardreply.Controller.Profile` (nil = bez profilu). Panel ukládá kartu
+  návrhu jako `ContentProposal` s `Proposal` (id). `AllowedTools` panelu
+  má navíc `get_user_profile` a `propose_profile_note`; most z aplikace
+  dostává vždy `--in-app` (`mcpConfig`, ChatGPT `startRPC`).
+- `assistantpanel.ProfileStore`: sdílený stav profilu pro aplikaci
+  (`Refresh`, `Set`, `Resolve`, `Profile`, `Proposals`, `Limits`,
+  `Supported` pro starší démon).
+- `po/`: 25 nových msgid česky (`make po` v kontejneru), v
+  `windows/parity-exclusions.txt` do portu na Windows. Ověřeno: testy
+  `assistant`, `assistantpanel` (i `-race` u `ProfileStore`),
+  `boardtriage`, `boardreply`, `board`; v kontejneru `chatgpt` a
+  `make lint`. Okna (GTK, macOS, Windows) profil zatím nenapojují.
+- **Pozor pro porty:** Windows `GoContractTests` čte `methods.go`
+  za běhu, takže od kroku 1 padá (čeká 105 metod a `notify.assistantProfileChanged`
+  v C# zrcadle `Api/`), dokud Windows port nepřidá API. macOS
+  `APICodingTests.methodTableMatchesGo` má kopii tabulky, zůstává zelený,
+  ale je zastaralý: krok 3 ho musí doplnit spolu se Swift zrcadlem.
+
+### As built (krok 3, macOS, 2026-10-21)
+
+- MalachiCore: zrcadlo API `API/AssistantProfileAPI.swift` (metody na konci
+  tabulky, `Notify.assistantProfileChanged`, limity), port `profile.go`
+  `Assistant/AssistantProfile.swift` (`Assistant.Profile`, `withProfile`,
+  `parseProposalResult`, `profileTexts`…; řetězce bajt po bajtu jako Go),
+  `Controllers/ProfileStore.swift` (port `assistantpanel.ProfileStore`).
+  Profil v promptech: `AssistantPanelController.profile`,
+  `ComposeRewriteController.profile`, `SearchConversion.profile` (global),
+  `BoardTriageController.profile`, `BoardReplyController.profile` (účet
+  případu), pruh psaní v `ComposeWindowController` (účet okna); `--in-app`
+  v `Assistant.mcpConfig` i `CodexProvider`; panel `Content.proposal`.
+- MalachiMail: `AppState.profile` (načtení po připojení,
+  `notify.assistantProfileChanged` zpracované v `NotificationHub` podle jména
+  před `DaemonNotification`, `notify.accountsChanged`), karta
+  `Assistant/AssistantProposalView.swift`, skupina
+  `Preferences/AboutYouGroup.swift` na začátku Předvoleb → AI (rod, text
+  s počítadlem, doplňky účtů imap/graph/jira jako rozbalovací řádky,
+  přepínač MCP, skupina návrhů). **Odchylky:** panel nemá nabídku, proto
+  „Upravit, co o vás asistent ví…“ je ikona v záhlaví panelu (tooltip
+  s počtem návrhů); řádky účtů bez barevné tečky (macOS barvu účtu nemá);
+  odmítnutý zápis jen pípne (pro chybu není msgid).
+- Ověřeno na Macu: `swift build` bez nových varování, filtrované
+  `swift test` (243) a celé `swift test` (1918 + 8) zelené,
+  `check-strings.py` bez nových varování. **Neověřeno:** rozložení
+  (žádný krok `MALACHI_START`), běh se skutečným Claude Code a démonem;
+  čeká brána P-B1 vlastníka nad kopií dat.
+
+### As built (krok 4, GTK, 2026-10-21)
+
+- `window/assistant_profile.go`: `Assistant.AttachProfile` (z `main.go`),
+  `ProfileStore`, `Profile`, `RefreshProfile`, `OnProfileChange`; připojení
+  hlásí poll triage (`BoardTriage.ConnectionChanged`), `notify.go` čte profil
+  znovu při `notify.assistantProfileChanged` a `notify.accountsChanged`.
+  Profil v promptech: panel, triage, návrh odpovědi, hledání vlastními
+  slovy, přepis a pruh psaní (`compose.Assistant.Profile`, účet okna).
+- Panel: karta návrhu `window/assistant_panel_profile.go` (Uložit,
+  Upravit… jako `Adw.AlertDialog`, Zahodit), tlačítko `assistant_profile`
+  v záhlaví `assistant_panel.blp` přes `app.assistant-setup`, tooltip
+  s počtem návrhů (jako macOS, nabídka v panelu není).
+- Předvolby → AI: `window/preferences_profile.go`, sloty
+  `about_you_group` a `about_you_pending_group` v `preferences.blp`
+  (rod jako `Adw.ComboRow`, text v `GtkTextView` s počítadlem, doplňky
+  účtů jako `Adw.ExpanderRow`, `Adw.SwitchRow` pro MCP, skupina návrhů);
+  vývojový krok `MALACHI_GTK_START=prefs-ai`.
+- Ověřeno v kontejneru: `gtk.sh make build`, celé `gtk.sh test-ui`, smoke
+  testy, `make po` (jen odkazy a zalomení), `make lint`. **Neověřeno:**
+  skupina ani karta na obrazovce se skutečným démonem (žádný smoke test
+  panelu asistenta); čeká brána P-B2 vlastníka v XQuartz.
+
+### As built (krok 5, Windows, 2026-10-21; napsané na Macu bez `dotnet`)
+
+- Core (`windows/src/Malachi.Core`): `Api/AssistantProfile.cs` (záznamy,
+  wire enumy, metody na konci tabulky, `Notify.AssistantProfileChanged`,
+  registrace v `ApiJsonContext`), `Assistants/Assistant.Profile.cs`
+  (`UserProfile`, `ProfileNote`, `WithProfile`, `ParseProposalResult`,
+  `ProfileTexts`…), `Controllers/ProfileStore.cs`, `Func<UserProfile>
+  Profile` na šesti controllerech, `ProposalContent` panelu, `--in-app`
+  v `Assistant.McpConfig` i `CodexAssistantSession`,
+  `NotificationHub.AddAssistantProfileChanged`. Testy: nové
+  `AssistantProfileTests`, `ProfileStoreTests`, `AssistantProfileApiTests`,
+  `AssistantRequestTests.Profile`, rozšířené testy panelu, API (105 metod)
+  a `GoContractTests`. Z `windows/parity-exclusions.txt` zmizelo všech 25
+  řádků profilu. Popis v `docs/windows-port.md` §11.12.
+- App (`windows/src/Malachi.App`): `Shell/AppState.Profile.cs`,
+  `Assistants/AssistantPanel.Profile.cs` (karta a tlačítko `AssistantProfile`
+  v záhlaví), `Assistants/ProfileDialogs.cs`, `Preferences/AiPage.Profile.cs`
+  (skupina O mně a návrhy v kódu, sloty v `AiPage.xaml`), profil pro přepis
+  a pruh psaní (`ComposePane.WritingAccount`) a hledání vlastními slovy.
+- **Nepřeloženo a nespuštěno.** Předává se Windows agentovi vlastníka
+  (nikdy `windows.yml`): `build.ps1 app`/`test`/`lint`, UI smoke a ruční
+  průchod, pak brána P-B3. Nejisté body: vazba konstruktoru
+  `ProfileAccountNote` ve zdrojovém generátoru JSON, CA1716 u
+  `UserProfile.For`, chování `FakeDaemon` u vyhozené `RpcException`,
+  styly skupiny v `AiPage` přes `Resources.TryGetValue`, `dotnet format`.
+
 ## 8. Mimo rozsah
 
 - Návrhy, které se do profilu zapíší bez potvrzení uživatele.

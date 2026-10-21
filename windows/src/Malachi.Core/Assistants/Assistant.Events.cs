@@ -373,7 +373,7 @@ public static partial class Assistant
     /// An id of the bridge's head: non-empty, no white space or control
     /// characters (Go's unicode.IsSpace and unicode.IsControl).
     /// </summary>
-    private static bool ValidId(ReadOnlySpan<byte> b, int lo, int hi)
+    internal static bool ValidId(ReadOnlySpan<byte> b, int lo, int hi)
     {
         if (hi <= lo)
         {

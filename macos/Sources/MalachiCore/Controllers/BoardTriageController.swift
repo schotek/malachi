@@ -190,6 +190,8 @@ public final class BoardTriageController {
     /// Asks the board to list again (after a run ended). The application
     /// wires it to its board sources' `refresh()`.
     public var onRefresh: (@MainActor () -> Void)?
+    /// The user's profile, every account's note (each names its account).
+    public var profile: @MainActor () -> Assistant.Profile = { Assistant.Profile() }
 
     /// How the clock of relative times sleeps (tests replace it).
     public typealias Sleep = @Sendable (Duration) async -> Void
@@ -732,7 +734,7 @@ public final class BoardTriageController {
         // 3. The request.
         let drafts = Assistant.triageDrafts(for: trigger)
         request.start(
-            systemPrompt: Assistant.triageSystemPrompt(language: language(), today: today()),
+            systemPrompt: Assistant.withProfile(Assistant.triageSystemPrompt(language: language(), today: today()), profile()),
             message: Assistant.triageMessage(maxCases: limit, drafts: drafts),
             tools: AssistantRequest.Tools(
                 bridge: bridge, socket: socket,

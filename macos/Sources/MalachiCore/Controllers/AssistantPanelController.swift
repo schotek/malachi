@@ -124,6 +124,10 @@ public final class AssistantPanelController {
         /// The first event a list_events or get_event result of the turn
         /// named, with Show in Calendar (docs/calendar.md §5.9).
         case calendar(Assistant.CalendarRef)
+        /// A note the assistant proposed for the user's profile
+        /// (propose_profile_note), by its id: the view reads its text from
+        /// the `ProfileStore` and offers Save, Edit… and Dismiss.
+        case proposal(String)
         /// What went wrong; `retry` offers Try Again, `offer` one more
         /// button.
         case error(String, retry: Bool, offer: Offer = .none)
@@ -305,6 +309,10 @@ public final class AssistantPanelController {
     public var today: @MainActor () -> String = AssistantPanelController.localDate
     /// The UI language's English name for the system prompt.
     public var language: @MainActor () -> String = { Assistant.languageName(L10n.catalogue.language) }
+    /// The user's profile, for the system prompt of a new conversation:
+    /// every account's note (the conversation may span accounts; each note
+    /// names its account).
+    public var profile: @MainActor () -> Assistant.Profile = { Assistant.Profile() }
     /// How long `resolveContext` is waited for.
     public var resolveTimeout: Duration = AssistantPanelController.defaultResolveTimeout
 
@@ -947,7 +955,7 @@ public final class AssistantPanelController {
         do {
             if providerSession?.running != true {
                 let session = try await provider.start(AssistantSessionSpec(
-                    systemPrompt: Assistant.systemPrompt(language: language(), today: today()),
+                    systemPrompt: systemPrompt(),
                     tools: AssistantRequest.Tools(bridge: bridge, socket: socket, bridgeArgs: [], allowed: Assistant.allowedTools),
                     modelID: settings.assistantChatGPTModel))
                 guard my == gen else { session.terminate(); return }
@@ -1154,13 +1162,18 @@ public final class AssistantPanelController {
         }
     }
 
+    /// The system prompt of a new conversation, with the user's profile.
+    private func systemPrompt() -> String {
+        Assistant.withProfile(Assistant.systemPrompt(language: language(), today: today()), profile())
+    }
+
     /// Starts Claude Code for a new conversation.
     private func launch(_ path: String, _ bridge: String) throws -> ClaudeCodeProcess {
         try FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         let options = Assistant.Options(
             bridge: bridge, socket: socket, model: settings.assistantModel,
-            systemPrompt: Assistant.systemPrompt(language: language(), today: today()))
+            systemPrompt: systemPrompt())
         let p = ClaudeCodeProcess(
             executable: path, arguments: Assistant.args(options),
             environment: Assistant.childEnvironment(environment, claudePath: path), directory: directory,
@@ -1220,6 +1233,8 @@ public final class AssistantPanelController {
                 let tool = toolNames.removeValue(forKey: e.toolUseID)
                 if tool == "create_draft", !e.isError, let ref = Assistant.parseDraftResult(e.resultText) {
                     append(.draft(ref))
+                } else if tool == Assistant.proposeProfileTool, !e.isError, let id = Assistant.parseProposalResult(e.resultText) {
+                    append(.proposal(id))
                 } else if let tool, !e.isError, !calendarCarded,
                           let ref = Assistant.parseCalendarResult(tool: tool, e.resultText) {
                     calendarCarded = true

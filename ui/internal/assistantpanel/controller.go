@@ -49,6 +49,10 @@ const (
 	// get_event result named (assistant.ParseCalendarResult), with Show in
 	// Calendar.
 	ContentCalendar
+	// ContentProposal is a note the assistant proposed for the user's
+	// profile (propose_profile_note), by its id: the view reads its text
+	// from the daemon and offers Save, Edit… and Dismiss.
+	ContentProposal
 )
 
 // Offer is the button of an error item beyond Try Again.
@@ -84,6 +88,8 @@ type Content struct {
 	Calendar assistant.CalendarRef
 	// Offer is the error's other button.
 	Offer Offer
+	// Proposal is the proposal card's id.
+	Proposal string
 }
 
 // Item is one entry of the transcript; ID stays with it.
@@ -367,6 +373,10 @@ type Controller struct {
 	Today func() string
 	// Language is the UI language's English name for the system prompt.
 	Language func() string
+	// Profile is the user's profile, for the system prompt of a new
+	// conversation: every account's note (the conversation may span
+	// accounts; each note names its account).
+	Profile func() assistant.Profile
 	// ResolveTimeout is how long ResolveContext is waited for.
 	ResolveTimeout time.Duration
 
@@ -458,6 +468,7 @@ func New(cfg Config) *Controller {
 	return &Controller{
 		Today:           func() string { return time.Now().Format("2006-01-02") },
 		Language:        func() string { return "" },
+		Profile:         func() assistant.Profile { return assistant.Profile{} },
 		ResolveTimeout:  DefaultResolveTimeout,
 		tr:              cfg.Translator,
 		providerFactory: cfg.Provider,
@@ -1531,6 +1542,12 @@ func (c *Controller) resolve(ctx Context, done func(assistant.Selection)) {
 	c.loop.After(c.ResolveTimeout, func() { once(ctx.Selection) })
 }
 
+// systemPrompt is the system prompt of a new conversation, with the
+// user's profile.
+func (c *Controller) systemPrompt() string {
+	return assistant.WithProfile(assistant.SystemPrompt(c.Language(), c.Today()), c.Profile())
+}
+
 // launch starts Claude Code for a new conversation.
 func (c *Controller) launch(path string) (*Process, error) {
 	if err := ensureDirectory(c.directory); err != nil {
@@ -1538,7 +1555,7 @@ func (c *Controller) launch(path string) (*Process, error) {
 	}
 	args := assistant.Args(assistant.Options{
 		Bridge: c.bridge, Socket: c.socket, Model: c.settings.AssistantModel(),
-		SystemPrompt: assistant.SystemPrompt(c.Language(), c.Today()),
+		SystemPrompt: c.systemPrompt(),
 	})
 	p := NewProcess(c.loop, c.log, path, args, assistant.ChildEnv(c.env, path), c.directory, c.killGrace)
 	p.OnEvents = func(events []assistant.Event) {
@@ -1611,6 +1628,10 @@ func (c *Controller) handle(events []assistant.Event) {
 			if tool == "create_draft" && !e.IsError {
 				if ref, ok := assistant.ParseDraftResult(e.ResultText); ok {
 					c.append(Content{Kind: ContentDraft, Draft: ref})
+				}
+			} else if tool == "propose_profile_note" && !e.IsError {
+				if id, ok := assistant.ParseProposalResult(e.ResultText); ok {
+					c.append(Content{Kind: ContentProposal, Proposal: id})
 				}
 			} else if tool != "" && !e.IsError && !c.calendarCarded {
 				// The first event a list_events or get_event result of the

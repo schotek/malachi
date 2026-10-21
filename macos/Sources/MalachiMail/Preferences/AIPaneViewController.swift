@@ -85,6 +85,10 @@ import MalachiCore
 @MainActor
 final class AIPaneViewController: PreferencesPaneViewController {
     private var chatGPTPreferences: ChatGPTPreferences?
+    /// About You and the assistant's suggestions (`AboutYouSection`), at
+    /// the top of the page once `configureProfile` gave the store.
+    private var aboutYou: AboutYouSection?
+    private var profileStore: ProfileStore?
     let registerSwitch = NSSwitch()
     let mcpGroup = PreferencesGroupView(
         title: L10n.T("MCP"),
@@ -280,6 +284,35 @@ final class AIPaneViewController: PreferencesPaneViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         bindIfReady()
+        installAboutYou()
+    }
+
+    /// The application's profile for About You; may come before or after
+    /// the view loaded.
+    func configureProfile(_ store: ProfileStore) {
+        guard profileStore == nil else { return }
+        profileStore = store
+        installAboutYou()
+    }
+
+    /// About You and its suggestions go above every other group.
+    private func installAboutYou() {
+        guard aboutYou == nil, isViewLoaded, let store = profileStore else { return }
+        let section = AboutYouSection(store: store, client: client)
+        aboutYou = section
+        for (i, g) in [section.group, section.proposalsGroup].enumerated() {
+            contentStack.insertArrangedSubview(g, at: i)
+            prefsFillWidth(g, in: contentStack)
+        }
+        if view.window != nil {
+            section.appeared(in: view.window)
+        }
+    }
+
+    /// What was typed in About You is written when the page goes.
+    override func viewWillDisappear() {
+        super.viewWillDisappear()
+        aboutYou?.disappearing()
     }
 
     /// The controller ends with the window.
@@ -292,6 +325,7 @@ final class AIPaneViewController: PreferencesPaneViewController {
     /// handlers are looked up again.
     override func viewDidAppear() {
         super.viewDidAppear()
+        aboutYou?.appeared(in: view.window)
         registration?.load()
         // Claude Code may have been installed or signed in meanwhile.
         assistant?.locator?.refresh()

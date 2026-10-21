@@ -150,6 +150,12 @@ const (
 	MethodCrmSearch = "crm.search"
 	MethodCrmSave   = "crm.save"
 	MethodCrmRemove = "crm.remove"
+
+	// Assistant profile (docs/api.md §4.18).
+	MethodAssistantProfileGet     = "assistant.profileGet"
+	MethodAssistantProfileSet     = "assistant.profileSet"
+	MethodAssistantProfilePropose = "assistant.profilePropose"
+	MethodAssistantProfileResolve = "assistant.profileResolve"
 )
 
 // Notification names (backend → client, no reply expected).
@@ -166,6 +172,8 @@ const (
 	NotifyCalendarState      = "notify.calendarState"
 	NotifyEventAlert         = "notify.eventAlert"
 	NotifyInvitationsChanged = "notify.invitationsChanged"
+
+	NotifyAssistantProfileChanged = "notify.assistantProfileChanged"
 )
 
 // AllMethods lists every callable method. The RPC server uses it to register
@@ -203,6 +211,7 @@ var AllMethods = []string{
 	MethodInvitationList, MethodInvitationRespond, MethodInvitationApplyCancel,
 	MethodAccountDetectEway,
 	MethodCrmLookup, MethodCrmSearch, MethodCrmSave, MethodCrmRemove,
+	MethodAssistantProfileGet, MethodAssistantProfileSet, MethodAssistantProfilePropose, MethodAssistantProfileResolve,
 }
 
 // AllNotifications lists every server-initiated notification.
@@ -210,4 +219,5 @@ var AllNotifications = []string{
 	NotifyNewMessage, NotifySyncState, NotifyAuthRequired, NotifyAccountsChanged, NotifyMessagesChanged,
 	NotifyBoardChanged, NotifyDraftsChanged,
 	NotifyCalendarChanged, NotifyCalendarState, NotifyEventAlert, NotifyInvitationsChanged,
+	NotifyAssistantProfileChanged,
 }

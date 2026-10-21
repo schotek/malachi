@@ -26,7 +26,7 @@ func TestSuggestReplyCommandLine(t *testing.T) {
 		BridgeArgs: SuggestReplyBridgeArgs("m_7"), Tools: SuggestReplyTools,
 	})
 	i := slices.Index(args, "--mcp-config")
-	if i < 0 || !strings.Contains(args[i+1], `"args":["--socket","/s.sock","--reply-only","m_7"]`) {
+	if i < 0 || !strings.Contains(args[i+1], `"args":["--socket","/s.sock","--in-app","--reply-only","m_7"]`) {
 		t.Errorf("--mcp-config: %q", args)
 	}
 	j := slices.Index(args, "--allowedTools")

@@ -60,6 +60,12 @@ public sealed partial class ComposeRewriteController : IDisposable
     /// <summary>Where the rewrite is.</summary>
     public RewriteState State { get; private set; } = new RewriteState.Idle();
 
+    /// <summary>
+    /// The user's profile with the note of the account the window writes
+    /// from (<see cref="UserProfile.For"/>); empty by default.
+    /// </summary>
+    public Func<UserProfile> Profile { get; set; } = () => UserProfile.Empty;
+
     /// <summary>Whether an answer is awaited.</summary>
     public bool Running => State is RewriteState.Running;
 
@@ -92,7 +98,7 @@ public sealed partial class ComposeRewriteController : IDisposable
         }
         Set(new RewriteState.Running(""));
         Request.Start(
-            Assistant.RewriteSystemPrompt(),
+            Assistant.WithProfile(Assistant.RewriteSystemPrompt(), Profile()),
             message,
             Finished,
             onText: text =>

@@ -257,6 +257,8 @@ func (s *session) initialize(ctx context.Context, executable string) error {
 		if t.Socket != "" {
 			args = append(args, "--socket", t.Socket)
 		}
+		// The application's own bridge (assistant mcpConfig does the same).
+		args = append(args, "--in-app")
 		args = append(args, t.BridgeArgs...)
 		bridge, err := startRPC(t.Bridge, args, assistant.ChildEnv(s.options.Env, t.Bridge), s.work)
 		if err != nil {

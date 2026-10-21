@@ -577,6 +577,24 @@ public static class API
     public static readonly RpcMethod<CrmRemoveParams, EmptyResult> CrmRemove =
         new("crm.remove", RpcTimeouts.Remote, Wire.CrmRemoveParams, Wire.EmptyResult);
 
+    // Assistant profile (docs/api.md §4.18)
+
+    /// <summary><c>assistant.profileGet</c>: the profile, the pending proposals and the limits.</summary>
+    public static readonly RpcMethod<EmptyParams, AssistantProfileGetResult> AssistantProfileGet =
+        new("assistant.profileGet", RpcTimeouts.Default, Wire.EmptyParams, Wire.AssistantProfileGetResult);
+
+    /// <summary><c>assistant.profileSet</c>: changes the fields it carries.</summary>
+    public static readonly RpcMethod<AssistantProfileSetParams, AssistantProfileSetResult> AssistantProfileSet =
+        new("assistant.profileSet", RpcTimeouts.Default, Wire.AssistantProfileSetParams, Wire.AssistantProfileSetResult);
+
+    /// <summary><c>assistant.profilePropose</c>: stores a proposal (the bridge's; clients do not call it).</summary>
+    public static readonly RpcMethod<AssistantProfileProposeParams, AssistantProfileProposeResult> AssistantProfilePropose =
+        new("assistant.profilePropose", RpcTimeouts.Default, Wire.AssistantProfileProposeParams, Wire.AssistantProfileProposeResult);
+
+    /// <summary><c>assistant.profileResolve</c>: accepts or dismisses a pending proposal.</summary>
+    public static readonly RpcMethod<AssistantProfileResolveParams, AssistantProfileResolveResult> AssistantProfileResolve =
+        new("assistant.profileResolve", RpcTimeouts.Default, Wire.AssistantProfileResolveParams, Wire.AssistantProfileResolveResult);
+
     // Tables
 
     /// <summary>Every method, in the order of methods.go.</summary>
@@ -614,6 +632,7 @@ public static class API
         InvitationList, InvitationRespond, InvitationApplyCancel,
         AccountDetectEway,
         CrmLookup, CrmSearch, CrmSave, CrmRemove,
+        AssistantProfileGet, AssistantProfileSet, AssistantProfilePropose, AssistantProfileResolve,
     ];
 
     /// <summary>api.AllMethods: every callable method name.</summary>
@@ -654,6 +673,9 @@ public static class API
 
         /// <summary>api.NotifyInvitationsChanged.</summary>
         public const string InvitationsChanged = "notify.invitationsChanged";
+
+        /// <summary>api.NotifyAssistantProfileChanged: the profile or its proposals changed; no params.</summary>
+        public const string AssistantProfileChanged = "notify.assistantProfileChanged";
     }
 
     /// <summary>api.AllNotifications: every server-initiated notification name.</summary>
@@ -662,6 +684,7 @@ public static class API
         Notify.NewMessage, Notify.SyncState, Notify.AuthRequired, Notify.AccountsChanged, Notify.MessagesChanged,
         Notify.BoardChanged, Notify.DraftsChanged,
         Notify.CalendarChanged, Notify.CalendarState, Notify.EventAlert, Notify.InvitationsChanged,
+        Notify.AssistantProfileChanged,
     ];
 
     /// <summary>
@@ -903,5 +926,17 @@ public static class API
 
         /// <summary>api.MaxCrmDetailBytes: <see cref="CrmItem.Detail"/>.</summary>
         public const int MaxCrmDetailBytes = 512;
+
+        /// <summary>api.MaxProfileText: <see cref="AssistantProfile.Text"/>, in characters.</summary>
+        public const int MaxProfileText = 2000;
+
+        /// <summary>api.MaxProfileAccountNote: <see cref="ProfileAccountNote.Note"/>, in characters.</summary>
+        public const int MaxProfileAccountNote = 500;
+
+        /// <summary>api.MaxProfileProposal: <see cref="ProfileProposal.Text"/>, in characters.</summary>
+        public const int MaxProfileProposal = 300;
+
+        /// <summary>api.MaxProfileProposals: the pending proposals; the oldest goes.</summary>
+        public const int MaxProfileProposals = 20;
     }
 }

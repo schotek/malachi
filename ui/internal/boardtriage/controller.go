@@ -224,6 +224,9 @@ type Controller struct {
 	Now      func() time.Time
 	Language func() string
 	Today    func() string
+	// Profile is the user's profile, every account's note (each names its
+	// account); nil: none.
+	Profile func() assistant.Profile
 
 	caller    Caller
 	settings  Settings
@@ -296,6 +299,14 @@ type Controller struct {
 	clockGen     int
 	clockRunning bool
 	clockTick    time.Duration
+}
+
+// profile is the user's profile, none without Profile.
+func (c *Controller) profile() assistant.Profile {
+	if c.Profile == nil {
+		return assistant.Profile{}
+	}
+	return c.Profile()
 }
 
 // New is the application's triage, idle.
@@ -1030,7 +1041,7 @@ func (c *Controller) ask(my int, t Trigger, limit int, queueKnown bool, id api.B
 		modelID = c.ModelID()
 	}
 	c.request.StartCall(assistantpanel.Call{
-		SystemPrompt: assistant.TriageSystemPrompt(c.Language(), c.Today()),
+		SystemPrompt: assistant.WithProfile(assistant.TriageSystemPrompt(c.Language(), c.Today()), c.profile()),
 		Message:      assistant.TriageMessage(limit, drafts),
 		Tools: &assistantpanel.Tools{
 			Bridge: c.bridge, Socket: c.socket,

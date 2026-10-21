@@ -189,6 +189,9 @@ public static partial class Assistant
         "mcp__malachi__get_event",
         "mcp__malachi__find_free_time",
         "mcp__malachi__list_invitations",
+        // The user's profile (ProfileTools): the panel's conversation only.
+        "mcp__malachi__get_user_profile",
+        "mcp__malachi__propose_profile_note",
     ];
 
     /// <summary>
@@ -234,9 +237,8 @@ public static partial class Assistant
     /// <summary>
     /// The JSON of <c>--mcp-config</c>, as encoding/json writes it
     /// (assistant.mcpConfig): the bridge as the stdio server "malachi", with
-    /// <c>--socket</c> when <paramref name="socket"/> is set and then
-    /// <paramref name="extra"/> (the args an empty array otherwise, never
-    /// null).
+    /// <c>--socket</c> when <paramref name="socket"/> is set, <c>--in-app</c>
+    /// and then <paramref name="extra"/>.
     /// </summary>
     internal static string McpConfig(string bridge, string socket, IReadOnlyList<string>? extra = null)
     {
@@ -250,6 +252,9 @@ public static partial class Assistant
             args.Add("--socket");
             args.Add(socket);
         }
+        // The application's own bridge: its prompts carry the user's profile
+        // (WithProfile), so the bridge keeps it out of its instructions.
+        args.Add("--in-app");
         args.AddRange(extra ?? []);
         for (var i = 0; i < args.Count; i++)
         {
@@ -773,6 +778,8 @@ public static partial class Assistant
             "list_folders" => L10n.T("Listing folders…"),
             "get_attachment" => L10n.T("Reading an attachment…"),
             "create_draft" => L10n.T("Saving a draft…"),
+            "get_user_profile" => L10n.T("Reading your profile…"),
+            "propose_profile_note" => L10n.T("Suggesting a note for your profile…"),
             _ => L10n.T("Using a tool…"),
         };
     }

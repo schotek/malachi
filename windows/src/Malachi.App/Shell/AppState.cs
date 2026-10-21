@@ -86,6 +86,7 @@ public sealed partial class AppState : IDisposable
         Windows.Alerts = alerts;
         InitializeAssistant();
         InitializeBoard();
+        InitializeProfile();
         InitializeCalendar();
     }
 
@@ -288,6 +289,7 @@ public sealed partial class AppState : IDisposable
     {
         CloseAssistant();
         Integration?.Dispose();
+        CloseProfile();
         CloseBoard();
         CloseCalendar();
         Windows.Dispose();

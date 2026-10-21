@@ -122,6 +122,9 @@ extension Assistant {
         "mcp__malachi__get_event",
         "mcp__malachi__find_free_time",
         "mcp__malachi__list_invitations",
+        // The user's profile (`profileTools`): the panel's conversation only.
+        "mcp__malachi__get_user_profile",
+        "mcp__malachi__propose_profile_note",
     ]
 
     /// assistant.Options: what the command line is built from.
@@ -201,7 +204,7 @@ extension Assistant {
 
     /// mcpConfig: the JSON of --mcp-config, as encoding/json writes it: the
     /// bridge as the stdio server "malachi", with --socket when `socket` is
-    /// set and then `extra` (the args an empty array otherwise, never null).
+    /// set, --in-app, and then `extra`.
     static func mcpConfig(bridge: String, socket: String, extra: [String] = []) -> String {
         var out = Array(#"{"mcpServers":{"malachi":{"type":"stdio","command":"#.utf8)
         appendJSONString(bridge, to: &out)
@@ -210,6 +213,10 @@ extension Assistant {
         if !socket.isEmpty {
             args += ["--socket", socket]
         }
+        // The application's own bridge: its prompts carry the user's
+        // profile (`withProfile`), so the bridge keeps it out of its
+        // instructions.
+        args += ["--in-app"]
         args += extra
         for (i, a) in args.enumerated() {
             if i > 0 {
@@ -785,6 +792,8 @@ extension Assistant {
         case "list_folders": return L10n.T("Listing folders…")
         case "get_attachment": return L10n.T("Reading an attachment…")
         case "create_draft": return L10n.T("Saving a draft…")
+        case "get_user_profile": return L10n.T("Reading your profile…")
+        case "propose_profile_note": return L10n.T("Suggesting a note for your profile…")
         default: return L10n.T("Using a tool…")
         }
     }

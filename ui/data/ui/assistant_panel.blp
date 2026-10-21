@@ -28,6 +28,15 @@ Adw.ToolbarView assistant_panel {
     Button assistant_new {
       icon-name: "document-edit-symbolic";
     }
+
+    // Preferences → AI → About You; tooltip from Go, hidden without the
+    // profile (assistant_panel_profile.go).
+    [end]
+    Button assistant_profile {
+      icon-name: "avatar-default-symbolic";
+      action-name: "app.assistant-setup";
+      visible: false;
+    }
   }
 
   content: Box {

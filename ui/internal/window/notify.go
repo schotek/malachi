@@ -63,6 +63,9 @@ func (w *Window) handleNotification(method string, params json.RawMessage) {
 		w.compose.Invalidate()
 		w.loadAccounts()
 		w.modeAccountsChanged()
+		if w.assist != nil {
+			w.assist.RefreshProfile()
+		}
 	case api.NotifyBoardChanged:
 		var n api.BoardChangedNotification
 		if err := json.Unmarshal(params, &n); err != nil {
@@ -77,6 +80,10 @@ func (w *Window) handleNotification(method string, params json.RawMessage) {
 			return
 		}
 		w.onDraftsChanged(n)
+	case api.NotifyAssistantProfileChanged:
+		if w.assist != nil {
+			w.assist.RefreshProfile()
+		}
 	default:
 		w.otherNotification(method, params)
 	}

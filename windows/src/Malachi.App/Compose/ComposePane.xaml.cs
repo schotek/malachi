@@ -403,6 +403,12 @@ public sealed partial class ComposePane : UserControl, IComposeForm
     // pane was opened for, whose store holds its template's files.
     private AccountId CallAccount => compose.Placeholder && parameters.AccountId is { } opened ? opened : Account.Id;
 
+    /// <summary>
+    /// The account the window writes from, whose note of the user's profile
+    /// the rewrite and the writing bar carry (UserProfile.For).
+    /// </summary>
+    internal AccountId WritingAccount => Account.Id;
+
     private nint Handle => Host?.HostWindow is { } w ? WindowPresenter.Handle(w) : 0;
 
     /// <inheritdoc/>

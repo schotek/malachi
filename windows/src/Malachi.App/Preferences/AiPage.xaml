@@ -17,6 +17,9 @@ Code…) and Model. Its texts come from ui/internal/assistant, set in code
 (AiPage.xaml.cs). The group Board (board_triage_group, AiPage.Board.cs):
 the board's triage, its consent, model, automatic runs, status and the
 tokens of the last 24 hours; its texts come from ui/internal/board.
+Above them the group About You (about_you_group) and the assistant's
+proposals (about_you_pending_group), built in code (AiPage.Profile.cs);
+their texts come from ui/internal/assistant profile.go.
 -->
 <UserControl
     x:Class="Malachi.App.Preferences.AiPage"
@@ -43,6 +46,16 @@ tokens of the last 24 hours; its texts come from ui/internal/board.
                 MaxWidth="{StaticResource SettingsPageMaxWidth}"
                 Padding="{StaticResource SettingsPagePadding}"
                 Spacing="{StaticResource SettingsGroupSpacing}">
+                <!-- About You and the assistant's proposals (AiPage.Profile.cs), built in code. -->
+                <StackPanel
+                    x:Name="AboutYouGroup"
+                    AutomationProperties.AutomationId="AboutYouGroup"
+                    Spacing="{StaticResource SettingsCardSpacing}" />
+                <StackPanel
+                    x:Name="ProfilePendingGroup"
+                    AutomationProperties.AutomationId="ProfilePendingGroup"
+                    Spacing="{StaticResource SettingsCardSpacing}"
+                    Visibility="Collapsed" />
                 <StackPanel x:Name="McpGroup" Spacing="{StaticResource SettingsCardSpacing}">
                     <TextBlock
                         AutomationProperties.HeadingLevel="Level2"

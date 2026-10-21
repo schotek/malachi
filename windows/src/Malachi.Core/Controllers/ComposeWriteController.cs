@@ -61,6 +61,12 @@ public sealed class ComposeWriteController : IDisposable
     /// <summary>Where the writing is.</summary>
     public RewriteState State { get; private set; } = new RewriteState.Idle();
 
+    /// <summary>
+    /// The user's profile with the note of the account the window writes
+    /// from (<see cref="UserProfile.For"/>); empty by default.
+    /// </summary>
+    public Func<UserProfile> Profile { get; set; } = () => UserProfile.Empty;
+
     /// <summary>Whether an answer is awaited.</summary>
     public bool Running => State is RewriteState.Running;
 
@@ -108,7 +114,7 @@ public sealed class ComposeWriteController : IDisposable
         }
         Set(new RewriteState.Running(""));
         Request.Start(
-            Assistant.WriteSystemPrompt(),
+            Assistant.WithProfile(Assistant.WriteSystemPrompt(), Profile()),
             message,
             outcome => Set(ComposeRewriteController.AnswerState(outcome)),
             onText: text =>

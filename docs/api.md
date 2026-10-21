@@ -4512,6 +4512,88 @@ found by the Message-ID alone is never deleted.
 `notify.messagesChanged` names the folders of the message's copies.
 
 
+### 4.18 assistant
+
+The assistant profile: what the user wrote about themselves for an
+assistant, the grammatical gender they write in, a note for each mail
+and Jira account, and the notes an assistant proposed for it. The
+clients put it into every prompt of their assistant; the MCP bridge
+gives it to MCP clients (`docs/mcp.md`, The user's profile). The design
+is `docs/plans/assistant-profile.md`; the daemon itself sends it nowhere.
+
+```jsonc
+AssistantProfile   { "text": "…", "gender": "unset|masculine|feminine|neutral",
+                     "accounts": [ProfileAccountNote], "shareWithMcp": bool,
+                     "updatedAt": Time (opt) }
+ProfileAccountNote { "accountId": "acc_1", "note": "…" }
+ProfileProposal    { "id": "p_…", "text": "…", "accountId": "acc_1" (opt),
+                     "source": "panel|mcp", "createdAt": Time }
+ProfileLimits      { "text": 2000, "accountNote": 500, "proposal": 300 }
+```
+
+Every string is plain text, cleaned by the daemon on the way in: valid
+UTF-8 in NFC, no control, format, bidi or invisible characters, line
+breaks kept (`\n`), each line without trailing whitespace, at most one
+empty line in a row and none at either end, and no line that starts
+with `---` and contains `UNTRUSTED` (the shape of the bridge's fence
+around mail content). The limits (`api.MaxProfile*`) count characters
+of the cleaned text; a longer text is invalidArgument, never cut. Only
+accounts of kind `imap`, `graph` and `jira` have a note
+(`api.ProfileNoteKinds`); `accounts` lists those that exist and have
+one, in `account.list` order. `shareWithMcp` (default true) lets the
+bridge give the profile to MCP clients other than Malachi Mail itself.
+`updatedAt` is when the profile last changed (absent: never). Removing
+an account removes its note and its proposals. The daemon never logs
+the profile or a proposal.
+
+A **proposal** is a note an assistant suggested ("schedule meetings on
+Mondays"); it becomes part of the profile only when the user accepts it.
+At most 20 are pending (`api.MaxProfileProposals`): a new one beyond
+that drops the oldest. A proposal whose text equals a pending one of
+the same account (ignoring case and whitespace) is not added again; the
+pending one is returned.
+
+#### `assistant.profileGet`
+- params: `{}`
+- result: `{ "profile": AssistantProfile, "proposals": [ProfileProposal], "limits": ProfileLimits }`
+
+`proposals` are the pending ones, oldest first.
+
+#### `assistant.profileSet`
+Changes the fields it carries; an absent field stays.
+
+- params: `{ "text" (opt), "gender" (opt), "accounts": [ProfileAccountNote] (opt), "shareWithMcp" (opt) }`
+- result: `{ "profile": AssistantProfile }`
+- errors: invalidArgument (over a limit, an unknown `gender`, an account
+  named twice, an account of another kind); accountNotFound
+
+`accounts` sets the note of each account it names (`""` removes it) and
+leaves the others. A change sends `notify.assistantProfileChanged`;
+writing what is stored sends nothing.
+
+#### `assistant.profilePropose`
+Stores a proposal. The bridge calls it for an assistant
+(`propose_profile_note`); clients do not.
+
+- params: `{ "text", "accountId" (opt), "source": "panel|mcp" }`
+- result: `{ "proposal": ProfileProposal }`
+- errors: invalidArgument (empty or over 300 characters after cleaning,
+  an unknown `source`, an account of another kind); accountNotFound
+
+#### `assistant.profileResolve`
+Accepts or dismisses a pending proposal.
+
+- params: `{ "id", "accept": bool, "text" (opt) }`
+- result: `{ "profile": AssistantProfile, "proposals": [ProfileProposal] }`
+- errors: invalidArgument (no such proposal; with `accept`, a `text`
+  empty or over 300 characters, or a profile text or note that would
+  exceed its limit — the proposal then stays); accountNotFound (the
+  proposal's account is gone; the proposal is dropped)
+
+Accepting appends the proposal's text — or `text`, the user's edit of
+it — to the profile's text (or the account's note) as a new line.
+Dismissing drops it. Either way `notify.assistantProfileChanged` follows.
+
 ## 5. Notifications
 
 | Method | params |
@@ -4527,6 +4609,7 @@ found by the Message-ID alone is never deleted.
 | `notify.calendarState` | `{ "state": CalendarSyncState }` |
 | `notify.eventAlert` | `{ "alert": EventAlert }` |
 | `notify.invitationsChanged` | `{ "accountIds": ["acc_1"] (opt) }` |
+| `notify.assistantProfileChanged` | `{}` |
 
 Notifications are sent only to connections that completed the handshake
 (§1.4).
@@ -4633,6 +4716,13 @@ changed (arrived, answered, outdated, cancelled); a client reruns
 cancellation notifications are built.
 
 A client that does not know the calendar notifications ignores them.
+
+`notify.assistantProfileChanged` is sent to every client, the caller
+included, when the assistant profile or its pending proposals changed
+(§4.18): `assistant.profileSet`, `assistant.profilePropose`,
+`assistant.profileResolve`, or an account removed with its note or
+proposals. It carries no payload; clients run `assistant.profileGet`
+again. A client that does not know it ignores it.
 
 `notify.syncState` is sent immediately on every change of `status`,
 `folderId`, `error`, `lastSync`, `pendingOutbox` or `failedOutbox`, and for
@@ -5023,3 +5113,8 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   §4.17): `EwayConfig.followThreads` and `CrmRecord.auto`; the daemon
   saves later messages of a conversation the user saved when the switch
   is on. `ProtocolVersion` stays 2.
+- **2** (2026-10-21, compatible addition: the assistant profile,
+  §4.18): new methods `assistant.profileGet`, `assistant.profileSet`,
+  `assistant.profilePropose`, `assistant.profileResolve` and the
+  notification `notify.assistantProfileChanged`. No new error codes;
+  `ProtocolVersion` stays 2.

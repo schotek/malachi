@@ -74,6 +74,9 @@ var AllowedTools = []string{
 	"mcp__malachi__get_event",
 	"mcp__malachi__find_free_time",
 	"mcp__malachi__list_invitations",
+	// The user's profile (ProfileTools): the panel's conversation only.
+	"mcp__malachi__get_user_profile",
+	"mcp__malachi__propose_profile_note",
 }
 
 // Options are what Args builds the command line from.
@@ -141,8 +144,7 @@ func Args(o Options) []string {
 }
 
 // mcpConfig is the JSON of --mcp-config: the bridge as the stdio server
-// "malachi", with --socket when socket is set and then extra (the args an
-// empty array otherwise, never null).
+// "malachi", with --socket when socket is set, --in-app, and then extra.
 func mcpConfig(bridge, socket string, extra ...string) string {
 	type server struct {
 		Type    string   `json:"type"`
@@ -153,6 +155,9 @@ func mcpConfig(bridge, socket string, extra ...string) string {
 	if socket != "" {
 		args = []string{"--socket", socket}
 	}
+	// The application's own bridge: its prompts carry the user's profile
+	// (WithProfile), so the bridge keeps it out of its instructions.
+	args = append(args, "--in-app")
 	args = append(args, extra...)
 	cfg := struct {
 		MCPServers map[string]server `json:"mcpServers"`

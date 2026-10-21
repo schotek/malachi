@@ -448,6 +448,20 @@ public sealed class ApiRoundTripTests
         [nameof(CrmSaveOutcome)] = Case<CrmSaveOutcome>("""{"messageId":"m_1","record":@crmrecord@,"created":true,"error":@error@}"""),
         [nameof(CrmSaveResult)] = Case<CrmSaveResult>("""{"results":[{"messageId":"m_1","error":{"code":1307,"message":"duplicate"}}]}"""),
         [nameof(CrmRemoveParams)] = Case<CrmRemoveParams>("""{"accountId":"acc_e","messageAccountId":"acc_1","messageId":"m_1"}"""),
+        // AssistantProfile.cs
+        [nameof(ProfileAccountNote)] = Case<ProfileAccountNote>("""{"accountId":"acc_1","note":"Studio."}"""),
+        [nameof(AssistantProfile)] = Case<AssistantProfile>("""{"text":"Píšu stručně.","gender":"masculine","accounts":[{"accountId":"acc_1","note":"Studio."}],"shareWithMcp":false,"updatedAt":"2026-10-21T08:00:00Z"}"""),
+        [nameof(ProfileProposal)] = Case<ProfileProposal>("""{"id":"p_1","text":"Schůzky v pondělí.","accountId":"acc_1","source":"panel","createdAt":"2026-10-21T08:00:00Z"}"""),
+        [nameof(ProfileLimits)] = Case<ProfileLimits>("""{"text":2000,"accountNote":500,"proposal":300}"""),
+        [nameof(AssistantProfileGetResult)] = Case<AssistantProfileGetResult>(
+            """{"profile":{"text":"Píšu stručně.","gender":"masculine","accounts":[{"accountId":"acc_1","note":"Studio."}],"shareWithMcp":false,"updatedAt":"2026-10-21T08:00:00Z"},"proposals":[{"id":"p_1","text":"Schůzky v pondělí.","accountId":"acc_1","source":"panel","createdAt":"2026-10-21T08:00:00Z"}],"limits":{"text":2000,"accountNote":500,"proposal":300}}"""),
+        [nameof(AssistantProfileSetParams)] = Case<AssistantProfileSetParams>(
+            """{"text":"T","gender":"neutral","accounts":[{"accountId":"acc_1","note":""}],"shareWithMcp":true}"""),
+        [nameof(AssistantProfileSetResult)] = Case<AssistantProfileSetResult>("""{"profile":{"text":"Píšu stručně.","gender":"masculine","accounts":[{"accountId":"acc_1","note":"Studio."}],"shareWithMcp":false,"updatedAt":"2026-10-21T08:00:00Z"}}"""),
+        [nameof(AssistantProfileProposeParams)] = Case<AssistantProfileProposeParams>("""{"text":"x","accountId":"acc_1","source":"mcp"}"""),
+        [nameof(AssistantProfileProposeResult)] = Case<AssistantProfileProposeResult>("""{"proposal":{"id":"p_1","text":"Schůzky v pondělí.","accountId":"acc_1","source":"panel","createdAt":"2026-10-21T08:00:00Z"}}"""),
+        [nameof(AssistantProfileResolveParams)] = Case<AssistantProfileResolveParams>("""{"id":"p_1","accept":true,"text":"edited"}"""),
+        [nameof(AssistantProfileResolveResult)] = Case<AssistantProfileResolveResult>("""{"profile":{"text":"Píšu stručně.","gender":"masculine","accounts":[{"accountId":"acc_1","note":"Studio."}],"shareWithMcp":false,"updatedAt":"2026-10-21T08:00:00Z"},"proposals":[{"id":"p_1","text":"Schůzky v pondělí.","accountId":"acc_1","source":"panel","createdAt":"2026-10-21T08:00:00Z"}]}"""),
         // Messages.cs
         [nameof(Malachi.Core.Api.Address)] = Case<Address>(Address),
         [nameof(OutboxInfo)] = Case<OutboxInfo>(Outbox),

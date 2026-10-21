@@ -424,6 +424,13 @@ func (s *Server) DraftsChanged(n api.DraftsChangedNotification) {
 	s.broadcast(api.NotifyDraftsChanged, n)
 }
 
+// Server also implements the optional api.AssistantNotifier.
+var _ api.AssistantNotifier = (*Server)(nil)
+
+func (s *Server) AssistantProfileChanged(n api.AssistantProfileChangedNotification) {
+	s.broadcast(api.NotifyAssistantProfileChanged, n)
+}
+
 // --- connection ----------------------------------------------------------
 
 type conn struct {

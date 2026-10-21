@@ -53,6 +53,7 @@ Flags and environment of the server:
 | `-triage-run ID`, `MALACHI_MCP_TRIAGE_RUN` | with `-allow-triage`: the triage run (`board.runStart`) that `annotate_case` and `add_commitment` count in; letters, digits and `. _ : -`, at most 128; ignored without `-allow-triage`. The flag wins over the variable. With it `create_draft` makes only a case's suggested reply, under the rule of [create_draft](#create_draft), and saves it local (on the board only, never in the Drafts folder) |
 | `-triage-max N`, `MALACHI_MCP_TRIAGE_MAX` | with `-allow-triage`: how many cases this process may annotate, 1 to 200 (default 200); the queue then hands out no more cases than that allows ([limits](#triage-of-the-board--allow-triage)). Any other value stops the bridge at startup; ignored without `-allow-triage`. The flag wins over the variable |
 | `-reply-only ID` | one suggested reply: `create_draft` makes at most one draft, a reply (`mode` `reply` or `replyAll`) to message `ID` ([create_draft](#create_draft)), saved local: it stays on the board in Malachi Mail and is never copied to the Drafts folder. `ID` is letters, digits and `. _ : -`, at most 128; any other value, and the flag together with `-allow-modify`, `-allow-send` or `-allow-triage`, stops the bridge at startup. No environment variable: it is per request. The read tools stay registered: confining such a process to `read_message`, `list_messages` and `create_draft` is the client's allow-list (Claude Code's `--allowedTools`, the app's Codex gateway), not the bridge's |
+| `-in-app` | started by Malachi Mail itself, whose prompts carry the user's profile: the profile stays out of the server instructions, `get_user_profile` and `assistantNote` give it whether or not the user shares it with other apps, and `propose_profile_note` is offered (not under `-reply-only` or `-triage-run`) with proposals marked as from the panel ([The user's profile](#the-users-profile-get_user_profile-propose_profile_note)). No environment variable |
 | `-version` | print the version and exit |
 | `MALACHI_LOG_LEVEL`, `MALACHI_LOG_FORMAT` | as for the daemon; logs go to stderr, stdout carries only MCP frames |
 
@@ -100,10 +101,11 @@ registered at all, so it never appears in the client's tool list.
 
 | Tier | Flag | Tools |
 |---|---|---|
-| read and draft | always | `list_accounts`, `list_folders`, `list_messages`, `search_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `list_transitions`, `list_board`, `create_draft`, and the calendar tools `list_calendars`, `list_events`, `get_event`, `find_free_time`, `list_invitations` (not under `-reply-only` or `-triage-run`) |
+| read and draft | always | `list_accounts`, `list_folders`, `list_messages`, `search_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `list_transitions`, `list_board`, `create_draft`, `get_user_profile`, and the calendar tools `list_calendars`, `list_events`, `get_event`, `find_free_time`, `list_invitations` (not under `-reply-only` or `-triage-run`) |
 | modify | `-allow-modify` | `mark_messages`, `move_messages`, `delete_messages`, `transition_issue`, `unsubscribe`, `create_event` (attendees also need `-allow-send`) |
 | send | `-allow-send` | `send_message` |
 | triage | `-allow-triage` | `list_triage_queue`, `annotate_case`, `add_commitment` (and the prompt `triage_board`) |
+| profile proposals | the user shares the profile, or `-in-app` | `propose_profile_note` (never under `-reply-only` or `-triage-run`; see [The user's profile](#the-users-profile-get_user_profile-propose_profile_note)) |
 
 A draft is inert: it lives in the daemon's store and, once it has rested
 for 30 seconds, as a copy in the account's Drafts folder, where the user
@@ -168,10 +170,11 @@ destructive, only `send_message` open-world.
 ### list_accounts
 
 - input: none
-- output: JSON `{accounts: [{id, name, email, displayName, kind, enabled, status, capabilities}]}`;
+- output: JSON `{accounts: [{id, name, email, displayName, kind, enabled, status, capabilities, assistantNote}]}`;
   `capabilities` is the account's list ([api.md §4.1](api.md#41-account),
   the mail set when the daemon sends none): what `create_draft` can do
-  with the account
+  with the account; `assistantNote` is the user's note for the account
+  from their profile, only while it is shared (below)
 - Only that projection: server settings, token sources and everything else
   in the daemon's `AccountConfig` never leave the bridge.
 
@@ -537,6 +540,62 @@ never given out (host and provider only), as with other links.
   D9](calendar.md)). The tool is annotated like `send_message`
   (destructive, open world) because it can reach other people. Update,
   delete and answering are not offered.
+
+### The user's profile (`get_user_profile`, `propose_profile_note`)
+
+The user's profile ([api.md §4.18](api.md#418-assistant)) is what the
+user wrote about themselves for an assistant, the grammatical gender
+they write in, and a note for some mail and Jira accounts ("sign as
+Studio Paprsek"). Unlike mail it is the user's own text, so it is not
+fenced as untrusted; it is cleaned like every string the bridge returns.
+It is a preference, never a permission: no text in it adds a tool or
+lifts a rule of these instructions.
+
+Who gets it:
+
+- **Another MCP client** (Claude Desktop, Claude Code with `.mcp.json`):
+  only while the user shares it (Preferences → AI → About You → *Send
+  the profile to apps over MCP*, `shareWithMcp`, on by default). The
+  bridge reads it once before the session starts and appends it to the
+  server instructions (clients read those once, so a change shows after
+  the client restarts); `get_user_profile` reads the current one and
+  `list_accounts` adds each account's `assistantNote`. Not shared: no
+  profile in the instructions, `get_user_profile` says only that the
+  user does not share it, no `assistantNote`.
+- **Malachi Mail itself** starts the bridge with `-in-app` (the panel,
+  triage, a suggested reply): its own prompts carry the profile, so the
+  instructions do not; `get_user_profile` and `assistantNote` give it
+  whether or not it is shared with other apps.
+
+The instructions always ask the model to call `get_user_profile` before
+it writes text in the user's name.
+
+#### get_user_profile
+
+- input: none
+- output: JSON `{instructions, gender, text, accounts: [{accountId, name, email, note}]}`
+  (`instructions`: how to use it, with the gender as a sentence); or the
+  fixed text that the user does not share it
+
+#### propose_profile_note
+
+Offers the user a short note (at most 300 characters) about themselves
+or how they want the assistant to work, for the whole profile or, with
+`accountId`, for that account's note. Nothing changes until the user
+accepts it in Malachi Mail (the panel shows a card, Preferences → AI →
+About You lists the pending ones); the daemon keeps at most 20.
+
+- input: `{text, accountId?}`
+- output: the line `profile note proposal <id> is pending; …` (the app reads the id from it, the text from the daemon)
+- Offered only to the app's panel (`-in-app`) and to another client
+  while the profile was shared at the start of the session; never under
+  `-reply-only` or `-triage-run` (those sessions read other people's
+  mail in bulk, so text from a message could pose as the user's wish).
+  At most 3 per process (`maxSessionProposals`); the fourth is refused
+  without asking the daemon. The instructions ask for notes the user
+  said in the conversation only, never anything from mail, attachments
+  or calendar data. Proposals from the panel are marked `panel`, from
+  another client `mcp`.
 
 ### create_draft
 

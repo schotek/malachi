@@ -43,6 +43,9 @@ public final class ComposeRewriteController {
 
     /// `state` changed.
     public var onState: (@MainActor (State) -> Void)?
+    /// The user's profile with the note of the account the window writes
+    /// from (`Assistant.Profile.for`).
+    public var profile: @MainActor () -> Assistant.Profile = { Assistant.Profile() }
 
     public init(request: AssistantRequest) {
         self.request = request
@@ -74,7 +77,7 @@ public final class ComposeRewriteController {
         }
         state = .running(preview: "")
         request.start(
-            systemPrompt: Assistant.rewriteSystemPrompt(), message: message,
+            systemPrompt: Assistant.withProfile(Assistant.rewriteSystemPrompt(), profile()), message: message,
             onText: { [weak self] text in
                 guard let self, self.running else { return }
                 self.state = .running(preview: Assistant.cleanRewrite(text))

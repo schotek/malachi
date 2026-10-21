@@ -316,6 +316,9 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
     /// <summary>The one-shot request the runs use.</summary>
     public AssistantRequest Request { get; }
 
+    /// <summary>The user's profile, every account's note (each names its account); empty by default.</summary>
+    public Func<UserProfile> Profile { get; set; } = () => UserProfile.Empty;
+
     /// <summary>Where the application's run is.</summary>
     public Board.TriageState State
     {
@@ -975,7 +978,7 @@ public sealed partial class BoardTriageController : IBoardAutoTriageTarget, IDis
         // 3. The request.
         var drafts = Assistant.TriageDrafts(trigger == Boards.Board.TriageTrigger.Manual);
         Request.Start(
-            Assistant.TriageSystemPrompt(language(), today()),
+            Assistant.WithProfile(Assistant.TriageSystemPrompt(language(), today()), Profile()),
             Assistant.TriageMessage(limit, drafts),
             o => Answered(my, trigger, o),
             tools: new AssistantRequest.Tools

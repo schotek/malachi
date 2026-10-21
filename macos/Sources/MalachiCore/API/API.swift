@@ -604,7 +604,7 @@ public enum API {
         BoardArchive.self, BoardTrash.self, BoardUnflag.self, BoardDiscardDraft.self, BoardSetDraft.self, BoardQueue.self, BoardAnnotate.self,
         BoardCommit.self, BoardSetCommitment.self, BoardPreferencesGet.self, BoardSetPreferences.self,
         BoardRunStart.self, BoardRunEnd.self,
-    ] + calendarMethods + crmMethods
+    ] + calendarMethods + crmMethods + assistantProfileMethods
 
     /// api.AllMethods: every callable method name.
     public static let allMethods: [String] = methods.map { $0.name }
@@ -635,6 +635,9 @@ public enum API {
         /// `InvitationsChangedNotification`: the unanswered invitations of
         /// these accounts changed.
         public static let invitationsChanged = "notify.invitationsChanged"
+        /// The assistant profile or its proposals changed; the
+        /// application's `ProfileStore` reads it again.
+        public static let assistantProfileChanged = "notify.assistantProfileChanged"
     }
 
     /// api.AllNotifications: every server-initiated notification name.
@@ -642,6 +645,7 @@ public enum API {
         Notify.newMessage, Notify.syncState, Notify.authRequired, Notify.accountsChanged, Notify.messagesChanged,
         Notify.boardChanged, Notify.draftsChanged,
         Notify.calendarChanged, Notify.calendarState, Notify.eventAlert, Notify.invitationsChanged,
+        Notify.assistantProfileChanged,
     ]
 
     /// The limits the daemon enforces (types.go constants), for pre-checks.

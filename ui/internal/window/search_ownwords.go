@@ -125,6 +125,7 @@ func (w *Window) searcher() *assistantpanel.Searcher {
 		req := w.assist.NewRequest()
 		req.Consent = func(done func(bool)) { w.assist.AskAssistantConsent(w, done) }
 		o.searcher = assistantpanel.NewSearcher(tr, req)
+		o.searcher.Profile = w.assist.Profile
 	}
 	return o.searcher
 }

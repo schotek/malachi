@@ -30,6 +30,9 @@ public final class SearchConversion {
     public let request: AssistantRequest
     /// The date for the system prompt, YYYY-MM-DD.
     public var today: @MainActor () -> String = AssistantPanelController.localDate
+    /// The user's profile; the search gets it without account notes
+    /// (`Assistant.Profile.global`).
+    public var profile: @MainActor () -> Assistant.Profile = { Assistant.Profile() }
 
     public init(request: AssistantRequest) {
         self.request = request
@@ -58,7 +61,7 @@ public final class SearchConversion {
             return true
         }
         request.start(
-            systemPrompt: Assistant.searchSystemPrompt(today: today()), message: message,
+            systemPrompt: Assistant.withProfile(Assistant.searchSystemPrompt(today: today()), profile().global), message: message,
             jsonSchema: Assistant.searchSchema,
             completion: { outcome in
                 completion(Self.outcome(outcome))

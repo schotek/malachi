@@ -105,6 +105,12 @@ final class AppState {
     /// removal runs for, shared by every window's `CRMController`
     /// (Integration+CRM wires it).
     let crm = CRMState()
+    /// The user's profile for the assistant (docs/api.md §4.18): every
+    /// prompt carries it, Settings → AI → About You edits it, the panel's
+    /// proposal cards resolve through it. Read when the connection comes
+    /// and on notify.assistantProfileChanged and notify.accountsChanged.
+    let profile: ProfileStore
+    private var profileTokens: [NotificationHub.Token] = []
     private var boardTriageTokens: [NotificationHub.Token] = []
 
     var hooks = Hooks()
@@ -123,6 +129,7 @@ final class AppState {
         notifications = NotificationHub()
         notifications.attach(to: connection)
         calendar = AppCalendar(client: client, settings: settings, hub: notifications)
+        profile = ProfileStore(client: client)
         let claudeCode = ClaudeCodeLocator(settings: settings, directory: ClaudeCodeLocator.defaultDirectory)
         self.claudeCode = claudeCode
         let assistant = AssistantController(
@@ -170,6 +177,7 @@ final class AppState {
         })
         Task { @MainActor [weak self] in try? await self?.chatGPT.load() }
         wireBoardTriage()
+        wireProfile()
         EventEditorManager.shared.state = self
     }
 
@@ -237,6 +245,24 @@ final class AppState {
             guard let self else { return false }
             return await self.assistantConsent(on: self.mainWindow?.window)
         }
+    }
+
+    /// The profile follows the connection and the daemon's notifications;
+    /// the triage and Suggest Reply carry it in their prompts.
+    private func wireProfile() {
+        let store = profile
+        profileTokens.append(notifications.addConnectionState { s in
+            if Self.isConnected(s) {
+                store.refresh()
+            }
+        })
+        profileTokens.append(notifications.addAssistantProfileChanged { store.refresh() })
+        profileTokens.append(notifications.addAccountsChanged { store.refresh() })
+        if Self.isConnected(notifications.connectionState) {
+            store.refresh()
+        }
+        triage.profile = { [weak store] in store?.profile ?? Assistant.Profile() }
+        boardReply.profile = { [weak store] in store?.profile ?? Assistant.Profile() }
     }
 
     /// Whether the daemon can be asked in connection state `s`.
@@ -363,6 +389,7 @@ final class NotificationHub {
     private var boardChanged = HandlerList<BoardChangedNotification>()
     private var draftsChanged = HandlerList<DraftsChangedNotification>()
     private var calendarNotification = HandlerList<CalendarNotification>()
+    private var assistantProfileChanged = HandlerList<Void>()
     private var connection = HandlerList<ConnectionController.ConnectionState>()
 
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "notify")
@@ -411,6 +438,12 @@ final class NotificationHub {
         draftsChanged.add(f)
     }
 
+    /// notify.assistantProfileChanged: the application's `ProfileStore`
+    /// reads the profile again.
+    func addAssistantProfileChanged(_ f: @escaping @MainActor () -> Void) -> Token {
+        assistantProfileChanged.add { _ in f() }
+    }
+
     /// The calendar's notifications (notify.calendarChanged,
     /// notify.calendarState, notify.eventAlert, notify.invitationsChanged),
     /// decoded next to `DaemonNotification` (`CalendarNotification`).
@@ -428,6 +461,10 @@ final class NotificationHub {
     // MARK: Internals
 
     private func handle(_ raw: RPCNotification) {
+        if raw.method == API.Notify.assistantProfileChanged {
+            assistantProfileChanged.fire(())
+            return
+        }
         do {
             if let c = try CalendarNotification(raw) {
                 calendarNotification.fire(c)

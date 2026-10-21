@@ -275,7 +275,7 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		d.bindAccounts(c),
 		d.bindIntegrations(c),
 		d.bindCalendar(b, c),
-		d.bindMCP(),
+		d.bindMCP(), d.bindProfile(b, c),
 		d.bindAssistant(s),
 		d.bindBoardTriage(s, c),
 	}

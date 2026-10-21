@@ -50,26 +50,28 @@ private let attachmentAsk = "Using the Malachi Mail tools, read attachment %@ of
             "mcp__malachi__get_event",
             "mcp__malachi__find_free_time",
             "mcp__malachi__list_invitations",
+            "mcp__malachi__get_user_profile",
+            "mcp__malachi__propose_profile_note",
         ])
     }
 
     @Test func args() throws {
-        let tools = "mcp__malachi__list_accounts,mcp__malachi__list_folders,mcp__malachi__list_messages,mcp__malachi__search_messages,mcp__malachi__read_message,mcp__malachi__get_attachment,mcp__malachi__create_draft,mcp__malachi__list_calendars,mcp__malachi__list_events,mcp__malachi__get_event,mcp__malachi__find_free_time,mcp__malachi__list_invitations"
+        let tools = "mcp__malachi__list_accounts,mcp__malachi__list_folders,mcp__malachi__list_messages,mcp__malachi__search_messages,mcp__malachi__read_message,mcp__malachi__get_attachment,mcp__malachi__create_draft,mcp__malachi__list_calendars,mcp__malachi__list_events,mcp__malachi__get_event,mcp__malachi__find_free_time,mcp__malachi__list_invitations,mcp__malachi__get_user_profile,mcp__malachi__propose_profile_note"
         let cases: [(String, Assistant.Options, String, [String])] = [
             ("with a socket",
              Assistant.Options(
                 bridge: "/Applications/Malachi Mail.app/Contents/MacOS/malachi-mcp", socket: "/Users/u/.cache/malachi/run/rpc.sock",
                 model: .opus, systemPrompt: "Be brief."),
-             "opus", ["--socket", "/Users/u/.cache/malachi/run/rpc.sock"]),
+             "opus", ["--socket", "/Users/u/.cache/malachi/run/rpc.sock", "--in-app"]),
             ("without a socket",
              Assistant.Options(bridge: "/usr/bin/malachi-mcp", socket: "", model: .haiku, systemPrompt: "Be brief."),
-             "haiku", []),
+             "haiku", ["--in-app"]),
             ("an unknown model is sonnet",
              Assistant.Options(bridge: "/b", socket: "", model: Assistant.Model("--dangerously-skip-permissions"), systemPrompt: "Be brief."),
-             "sonnet", []),
+             "sonnet", ["--in-app"]),
             ("no model is sonnet",
              Assistant.Options(bridge: #"/odd "path"/<malachi>&/čeština/malachi-mcp"#, socket: #"/tmp/a b/"s".sock"#, systemPrompt: "Be brief."),
-             "sonnet", ["--socket", #"/tmp/a b/"s".sock"#]),
+             "sonnet", ["--socket", #"/tmp/a b/"s".sock"#, "--in-app"]),
         ]
         for (name, o, model, wantArgs) in cases {
             let got = Assistant.args(o)
@@ -102,14 +104,14 @@ private let attachmentAsk = "Using the Malachi Mail tools, read attachment %@ of
             #expect(!config.utf8.contains(0x0A), "\(name): --mcp-config spans lines")
         }
 
-        // The exact JSON without a socket: the args are an empty array, not
-        // null, in encoding/json's member order.
+        // The exact JSON without a socket: the args are --in-app alone, in
+        // encoding/json's member order.
         let got = Assistant.args(Assistant.Options(bridge: "/b/malachi-mcp", systemPrompt: ""))
         #expect(got[try #require(got.firstIndex(of: "--mcp-config")) + 1]
-            == #"{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":[]}}}"#)
+            == #"{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":["--in-app"]}}}"#)
         // encoding/json's escapes: HTML characters, U+2028 and U+2029.
         #expect(Assistant.mcpConfig(bridge: "/a<b>&c\u{2028}\"\\", socket: "/s")
-            == #"{"mcpServers":{"malachi":{"type":"stdio","command":"/a\u003cb\u003e\u0026c\u2028\"\\","args":["--socket","/s"]}}}"#)
+            == #"{"mcpServers":{"malachi":{"type":"stdio","command":"/a\u003cb\u003e\u0026c\u2028\"\\","args":["--socket","/s","--in-app"]}}}"#)
     }
 
     @Test func systemPrompt() {
@@ -405,6 +407,8 @@ private let attachmentAsk = "Using the Malachi Mail tools, read attachment %@ of
             ("get_attachment", "Reading an attachment…"),
             ("create_draft", "Saving a draft…"),
             ("mcp__malachi__create_draft", "Saving a draft…"),
+            ("get_user_profile", "Reading your profile…"),
+            ("propose_profile_note", "Suggesting a note for your profile…"),
             ("send_message", "Using a tool…"),
             ("Bash", "Using a tool…"),
             ("mcp__other__read_message", "Using a tool…"),

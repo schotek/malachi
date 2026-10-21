@@ -35,6 +35,8 @@ func TestAllowedTools(t *testing.T) {
 		"mcp__malachi__get_event",
 		"mcp__malachi__find_free_time",
 		"mcp__malachi__list_invitations",
+		"mcp__malachi__get_user_profile",
+		"mcp__malachi__propose_profile_note",
 	}
 	if !slices.Equal(AllowedTools, want) {
 		t.Errorf("AllowedTools = %q, want %q", AllowedTools, want)
@@ -42,7 +44,7 @@ func TestAllowedTools(t *testing.T) {
 }
 
 func TestArgs(t *testing.T) {
-	const tools = "mcp__malachi__list_accounts,mcp__malachi__list_folders,mcp__malachi__list_messages,mcp__malachi__search_messages,mcp__malachi__read_message,mcp__malachi__get_attachment,mcp__malachi__create_draft,mcp__malachi__list_calendars,mcp__malachi__list_events,mcp__malachi__get_event,mcp__malachi__find_free_time,mcp__malachi__list_invitations"
+	const tools = "mcp__malachi__list_accounts,mcp__malachi__list_folders,mcp__malachi__list_messages,mcp__malachi__search_messages,mcp__malachi__read_message,mcp__malachi__get_attachment,mcp__malachi__create_draft,mcp__malachi__list_calendars,mcp__malachi__list_events,mcp__malachi__get_event,mcp__malachi__find_free_time,mcp__malachi__list_invitations,mcp__malachi__get_user_profile,mcp__malachi__propose_profile_note"
 	tests := []struct {
 		name     string
 		o        Options
@@ -53,25 +55,25 @@ func TestArgs(t *testing.T) {
 			name:     "with a socket",
 			o:        Options{Bridge: "/Applications/Malachi Mail.app/Contents/MacOS/malachi-mcp", Socket: "/Users/u/.cache/malachi/run/rpc.sock", Model: Opus, SystemPrompt: "Be brief."},
 			model:    "opus",
-			wantArgs: []string{"--socket", "/Users/u/.cache/malachi/run/rpc.sock"},
+			wantArgs: []string{"--socket", "/Users/u/.cache/malachi/run/rpc.sock", "--in-app"},
 		},
 		{
 			name:     "without a socket",
 			o:        Options{Bridge: "/usr/bin/malachi-mcp", Model: Haiku, SystemPrompt: "Be brief."},
 			model:    "haiku",
-			wantArgs: []string{},
+			wantArgs: []string{"--in-app"},
 		},
 		{
 			name:     "an unknown model is sonnet",
 			o:        Options{Bridge: "/b", Model: Model("--dangerously-skip-permissions"), SystemPrompt: "Be brief."},
 			model:    "sonnet",
-			wantArgs: []string{},
+			wantArgs: []string{"--in-app"},
 		},
 		{
 			name:     "no model is sonnet",
 			o:        Options{Bridge: `/odd "path"/<malachi>&/čeština/malachi-mcp`, Socket: `/tmp/a b/"s".sock`, SystemPrompt: "Be brief."},
 			model:    "sonnet",
-			wantArgs: []string{"--socket", `/tmp/a b/"s".sock`},
+			wantArgs: []string{"--socket", `/tmp/a b/"s".sock`, "--in-app"},
 		},
 	}
 	for _, tt := range tests {
@@ -120,10 +122,9 @@ func TestArgs(t *testing.T) {
 		})
 	}
 
-	// The exact JSON without a socket: the args are an empty array, not
-	// null.
+	// The exact JSON without a socket: the args are --in-app alone.
 	got := Args(Options{Bridge: "/b/malachi-mcp"})
-	if c := got[slices.Index(got, "--mcp-config")+1]; c != `{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":[]}}}` {
+	if c := got[slices.Index(got, "--mcp-config")+1]; c != `{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":["--in-app"]}}}` {
 		t.Errorf("--mcp-config = %s", c)
 	}
 }
@@ -137,7 +138,7 @@ func TestArgsPanelUnchanged(t *testing.T) {
 		"--input-format", "stream-json",
 		"--tools", "", "--disallowedTools", "LSP", "--disable-slash-commands", "--setting-sources", "",
 		"--strict-mcp-config",
-		"--mcp-config", `{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":["--socket","/s.sock"]}}}`,
+		"--mcp-config", `{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":["--socket","/s.sock","--in-app"]}}}`,
 		"--allowedTools", strings.Join(AllowedTools, ","),
 		"--permission-mode", "dontAsk", "--no-session-persistence",
 		"--model", "opus", "--system-prompt", "P",

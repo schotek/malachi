@@ -35,7 +35,7 @@ private let searchPromptFor20260929 = "You turn what the user wants to find in t
             "--input-format", "stream-json",
             "--tools", "", "--disallowedTools", "LSP", "--disable-slash-commands", "--setting-sources", "",
             "--strict-mcp-config",
-            "--mcp-config", #"{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":["--socket","/s.sock"]}}}"#,
+            "--mcp-config", #"{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":["--socket","/s.sock","--in-app"]}}}"#,
             "--allowedTools", Assistant.allowedTools.joined(separator: ","),
             "--permission-mode", "dontAsk", "--no-session-persistence",
             "--model", "opus", "--system-prompt", "P",

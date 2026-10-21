@@ -79,7 +79,7 @@ func (c *Controller) providerPrompt(my int, prompt string, told []int) {
 	ctx, cancel := context.WithCancel(context.Background())
 	c.cancelProvider = cancel
 	provider := c.selectedProvider
-	spec := SessionSpec{SystemPrompt: assistant.SystemPrompt(c.Language(), c.Today()), Tools: &Tools{Bridge: c.bridge, Socket: c.socket, Allowed: append([]string{}, assistant.AllowedTools...)}}
+	spec := SessionSpec{SystemPrompt: c.systemPrompt(), Tools: &Tools{Bridge: c.bridge, Socket: c.socket, Allowed: append([]string{}, assistant.AllowedTools...)}}
 	go func() {
 		session, err := provider.Open(ctx, spec)
 		c.loop.Post(func() {

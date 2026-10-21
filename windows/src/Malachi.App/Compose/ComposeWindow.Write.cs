@@ -121,7 +121,10 @@ public sealed partial class ComposeWindow
         }
         var request = state.NewAssistantRequest();
         request.Consent = AskConsentAsync;
-        var made = new ComposeWriteController(request);
+        var made = new ComposeWriteController(request)
+        {
+            Profile = () => state.CurrentProfile.For(pane.WritingAccount.Value),
+        };
         made.StateChanged += (_, s) => RenderWrite(s);
         writer = made;
         return made;

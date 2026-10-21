@@ -10,13 +10,14 @@ import (
 	"time"
 )
 
-// crmMethods end AllMethods, after the calendar's (docs/eway.md D13).
+// crmMethods follow the calendar's in AllMethods (docs/eway.md D13);
+// only the assistant profile's (assistant_test.go) come after them.
 var crmMethods = []string{"account.detectEway", "crm.lookup", "crm.search", "crm.save", "crm.remove"}
 
 func TestCrmMethodsOrder(t *testing.T) {
-	n := len(AllMethods)
-	if !reflect.DeepEqual(AllMethods[n-len(crmMethods):], crmMethods) {
-		t.Fatalf("AllMethods does not end with the CRM methods: %v", AllMethods[n-len(crmMethods):])
+	n := len(AllMethods) - len(assistantMethods)
+	if !reflect.DeepEqual(AllMethods[n-len(crmMethods):n], crmMethods) {
+		t.Fatalf("AllMethods does not end with the CRM methods: %v", AllMethods[n-len(crmMethods):n])
 	}
 	if AllMethods[n-len(crmMethods)-1] != MethodInvitationApplyCancel {
 		t.Fatal("the CRM methods do not follow the calendar's")

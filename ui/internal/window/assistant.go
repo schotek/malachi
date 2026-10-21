@@ -113,6 +113,9 @@ type Assistant struct {
 
 	observers map[int]func()
 	nextID    int
+
+	// profile is the user's profile (assistant_profile.go).
+	profile profileState
 }
 
 // NewAssistant looks for the bridge and follows the assistant keys of s;
