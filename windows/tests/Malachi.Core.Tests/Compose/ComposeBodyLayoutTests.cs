@@ -172,7 +172,8 @@ public sealed class ComposeBodyLayoutTests
         var comment = Prefill.FromDraft(
             ComposeKind.Reply,
             new Draft { AccountId = "", Comment = new DraftComment { Issue = issue, Visibility = CommentVisibility.Public } },
-            new BlockedContent()) with { OwnHtml = "<p>Thanks</p>" };
+            new BlockedContent()) with
+        { OwnHtml = "<p>Thanks</p>" };
         var l = new ComposeBodyLayout(comment);
         Assert.Equal("<p>Thanks</p>", l.EditorHtml);
         Assert.Equal("", l.QuotedHtml);

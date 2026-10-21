@@ -325,7 +325,7 @@ public sealed class GoContractTests
 
     /// <summary>
     /// Every record of the API layer has exactly the JSON members of its Go
-    /// struct (types.go, tls.go, errors.go, board.go), field by field, and a
+    /// struct (types.go, tls.go, errors.go, board.go, crm.go, assistant.go), field by field, and a
     /// Go int64 is a long: the contract's names as backend/pkg/api spells them.
     /// The calendar's (calendar.go) are among them; CalendarEvent is Go's Event.
     /// </summary>
@@ -334,7 +334,7 @@ public sealed class GoContractTests
     {
         var structs = GoContract.Structs(
             GoContract.ApiSource("types.go"), GoContract.ApiSource("tls.go"), GoContract.ApiSource("errors.go"), GoContract.ApiSource("board.go"),
-            GoContract.ApiSource("calendar.go"), GoContract.ApiSource("crm.go"));
+            GoContract.ApiSource("calendar.go"), GoContract.ApiSource("crm.go"), GoContract.ApiSource("assistant.go"));
         var records = typeof(API).Assembly.GetTypes().Where(t =>
             t.Namespace == "Malachi.Core.Api" && t.IsClass && t.IsPublic && !t.IsAbstract
             && t.GetProperty("EqualityContract", BindingFlags.NonPublic | BindingFlags.Instance) is not null

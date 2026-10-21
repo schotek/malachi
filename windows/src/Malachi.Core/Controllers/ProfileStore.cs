@@ -104,7 +104,7 @@ public sealed partial class ProfileStore : IDisposable
             }
             catch (Exception e) when (e is RpcException or RpcClientException or TimeoutException)
             {
-                LogCallFailed(logger, API.AccountList.Name, CodeOf(e));
+                LogFailure(API.AccountList.Name, e);
             }
         }
         catch (Exception e) when (e is RpcException or RpcClientException or OperationCanceledException or TimeoutException)
@@ -138,7 +138,7 @@ public sealed partial class ProfileStore : IDisposable
         else
         {
             // A transient failure keeps what was read before.
-            LogCallFailed(logger, API.AssistantProfileGet.Name, CodeOf(error));
+            LogFailure(API.AssistantProfileGet.Name, error);
         }
         scope.Guard(() => Changed?.Invoke(this, EventArgs.Empty));
     }
@@ -164,7 +164,7 @@ public sealed partial class ProfileStore : IDisposable
         }
         catch (Exception e) when (e is RpcException or RpcClientException or OperationCanceledException or TimeoutException)
         {
-            LogCallFailed(logger, API.AssistantProfileSet.Name, CodeOf(e));
+            LogFailure(API.AssistantProfileSet.Name, e);
             return ErrorOf(e);
         }
     }
@@ -193,7 +193,7 @@ public sealed partial class ProfileStore : IDisposable
         }
         catch (Exception e) when (e is RpcException or RpcClientException or OperationCanceledException or TimeoutException)
         {
-            LogCallFailed(logger, API.AssistantProfileResolve.Name, CodeOf(e));
+            LogFailure(API.AssistantProfileResolve.Name, e);
             return ErrorOf(e);
         }
     }
@@ -208,7 +208,13 @@ public sealed partial class ProfileStore : IDisposable
     private static RpcError ErrorOf(Exception e) =>
         e is RpcException r ? r.Error : new RpcError { Code = ErrorCode.Unavailable };
 
-    private static int CodeOf(Exception? e) => e is RpcException r ? r.Error.Code.Value : 0;
+    private void LogFailure(string method, Exception? e)
+    {
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            LogCallFailed(logger, method, e is RpcException r ? r.Error.Code.Value : 0);
+        }
+    }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "{Method} failed (code {Code})")]
     private static partial void LogCallFailed(ILogger logger, string method, int code);

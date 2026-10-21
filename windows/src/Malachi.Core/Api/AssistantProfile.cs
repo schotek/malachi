@@ -93,7 +93,7 @@ public sealed record AssistantProfile
 
     /// <summary>The gender the user writes in.</summary>
     [JsonPropertyName("gender")]
-    public ProfileGender Gender { get; init; } = ProfileGender.Unset;
+    public ProfileGender Gender { get; init => field = value.Value is null ? ProfileGender.Unset : value; } = ProfileGender.Unset;
 
     /// <summary>The notes of the accounts.</summary>
     [JsonPropertyName("accounts")]
@@ -102,10 +102,12 @@ public sealed record AssistantProfile
 
     /// <summary>
     /// The MCP bridge gives the profile to MCP clients other than Malachi Mail
-    /// itself. Default true (absent reads true).
+    /// itself. Default true (absent reads true). A setter, not init: the
+    /// source-generated reader hands an absent init-only member to the
+    /// object initializer as false, and false cannot be told from absent.
     /// </summary>
     [JsonPropertyName("shareWithMcp")]
-    public bool ShareWithMcp { get; init; } = true;
+    public bool ShareWithMcp { get; set; } = true;
 
     /// <summary>When the profile last changed; null: never.</summary>
     [JsonPropertyName("updatedAt")]

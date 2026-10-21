@@ -440,11 +440,11 @@ public sealed partial class AiPage
         ProfilePendingGroup.Children.Add(heading);
         foreach (var q in proposals)
         {
-            ProfilePendingGroup.Children.Add(PendingRow(q, t));
+            ProfilePendingGroup.Children.Add(ProposalRow(q, t));
         }
     }
 
-    private Border PendingRow(ProfileProposal q, ProfileStrings t)
+    private Border ProposalRow(ProfileProposal q, ProfileStrings t)
     {
         var text = new TextBlock { Text = q.Text, TextWrapping = TextWrapping.WrapWholeWords };
         var source = q.Source == ProfileSource.Panel ? t.FromPanel : t.FromOtherApp;

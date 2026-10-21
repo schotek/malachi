@@ -649,15 +649,15 @@ public sealed partial class ConversationController : IDisposable
     /// that does not answer is the bar controller's to hide (no Reply among
     /// the actions), an issue's event the model's (no target).
     /// </summary>
-    public (ConversationModel Model, CapabilityActions Actions, Account? Account, bool Shown) QuickReplyInput(MessageSummary single)
+    public (ConversationModel Model, CapabilityActions Actions, Account? Account, bool Shown) QuickReplyInput(MessageSummary message)
     {
-        ArgumentNullException.ThrowIfNull(single);
-        var acc = Account(single.AccountId);
+        ArgumentNullException.ThrowIfNull(message);
+        var acc = Account(message.AccountId);
         return (
-            Conversation.SingleModel(single, Conversation.IsMine(single, acc)),
-            Actions(single),
+            Conversation.SingleModel(message, Conversation.IsMine(message, acc)),
+            Actions(message),
             acc,
-            !Mail.InOutbox(single) && !Mail.InDrafts(single));
+            !Mail.InOutbox(message) && !Mail.InDrafts(message));
     }
 
     /// <summary>

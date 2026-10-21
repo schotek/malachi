@@ -158,7 +158,7 @@ public sealed partial class MessageView : UserControl
         Reader.Addresses.RowChanged += (_, kind) => FillAddressRow(kind);
         services.Attachments.SavingAllChanged += OnSavingAllChanged;
         InitializeComponent();
-        chips = new MessageChips(services, this, () => HostWindow, FocusBody, logger);
+        chips = new MessageChips(services, this, () => HostWindow, () => FocusBody(), logger);
 
         // The issue card of a Jira message (issue_card.go): its menu acts on
         // the message on display, its key opens the issue in the browser.
@@ -288,28 +288,28 @@ public sealed partial class MessageView : UserControl
         switch (Reader.Page)
         {
             case ReaderPage.Message when Reader.Current is { } s && conversation is not null:
-            {
-                var input = conversation.Controller.QuickReplyInput(s);
-                quickReply.Show(s.AccountId, s.ThreadId ?? new ThreadId(""));
-                quickReply.Update(input.Model, input.Actions, input.Account);
-                quickReply.SetShown(input.Shown);
-                return;
-            }
-            case ReaderPage.Conversation when conversation is not null:
-            {
-                var ctrl = conversation.Controller;
-                quickReply.Show(ctrl.ThreadAccount, ctrl.Thread ?? new ThreadId(""));
-                if (ctrl.QuickReplyInput() is { } input)
                 {
+                    var input = conversation.Controller.QuickReplyInput(s);
+                    quickReply.Show(s.AccountId, s.ThreadId ?? new ThreadId(""));
                     quickReply.Update(input.Model, input.Actions, input.Account);
+                    quickReply.SetShown(input.Shown);
+                    return;
                 }
-                else
+            case ReaderPage.Conversation when conversation is not null:
                 {
-                    quickReply.Update(new ConversationModel(), default, null);
+                    var ctrl = conversation.Controller;
+                    quickReply.Show(ctrl.ThreadAccount, ctrl.Thread ?? new ThreadId(""));
+                    if (ctrl.QuickReplyInput() is { } input)
+                    {
+                        quickReply.Update(input.Model, input.Actions, input.Account);
+                    }
+                    else
+                    {
+                        quickReply.Update(new ConversationModel(), default, null);
+                    }
+                    quickReply.SetShown(conversation.ChatShown);
+                    return;
                 }
-                quickReply.SetShown(conversation.ChatShown);
-                return;
-            }
         }
         quickReply.Show(null, new ThreadId(""));
         quickReply.SetShown(false);
