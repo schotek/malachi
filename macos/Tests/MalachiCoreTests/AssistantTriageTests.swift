@@ -64,7 +64,7 @@ private final class Harness {
             "--tools", "", "--disallowedTools", "LSP", "--disable-slash-commands", "--setting-sources", "",
             "--strict-mcp-config",
             "--mcp-config",
-            #"{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":["--socket","/s.sock","--allow-triage","--triage-run","run_1","--triage-max","40"]}}}"#,
+            #"{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":["--socket","/s.sock","--in-app","--allow-triage","--triage-run","run_1","--triage-max","40"]}}}"#,
             "--allowedTools",
             "mcp__malachi__list_accounts,mcp__malachi__list_folders,mcp__malachi__list_messages,mcp__malachi__search_messages,"
                 + "mcp__malachi__read_message,mcp__malachi__get_attachment,mcp__malachi__create_draft,"
@@ -78,7 +78,8 @@ private final class Harness {
         // Only the triage tools on top of the panel's read and draft tools.
         #expect(Set(Assistant.triageTools).subtracting(Assistant.allowedTools)
             == ["mcp__malachi__list_triage_queue", "mcp__malachi__annotate_case", "mcp__malachi__add_commitment"])
-        #expect(Set(Assistant.allowedTools).subtracting(Assistant.calendarTools).isSubset(of: Assistant.triageTools))
+        #expect(Set(Assistant.allowedTools).subtracting(Assistant.calendarTools).subtracting(Assistant.profileTools)
+            .isSubset(of: Assistant.triageTools))
     }
 
     /// An automatic run's command line: the manual one without create_draft
@@ -95,7 +96,7 @@ private final class Harness {
             "--tools", "", "--disallowedTools", "LSP", "--disable-slash-commands", "--setting-sources", "",
             "--strict-mcp-config",
             "--mcp-config",
-            #"{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":["--socket","/s.sock","--allow-triage","--triage-run","run_2","--triage-max","5"]}}}"#,
+            #"{"mcpServers":{"malachi":{"type":"stdio","command":"/b/malachi-mcp","args":["--socket","/s.sock","--in-app","--allow-triage","--triage-run","run_2","--triage-max","5"]}}}"#,
             "--allowedTools",
             "mcp__malachi__list_accounts,mcp__malachi__list_folders,mcp__malachi__list_messages,mcp__malachi__search_messages,"
                 + "mcp__malachi__read_message,mcp__malachi__get_attachment,"
@@ -115,13 +116,13 @@ private final class Harness {
     /// without it; the JSON escapes them as encoding/json does.
     @Test func mcpConfigExtra() {
         #expect(Assistant.mcpConfig(bridge: "/b", socket: "", extra: ["--allow-triage", "--triage-run", "r"])
-            == #"{"mcpServers":{"malachi":{"type":"stdio","command":"/b","args":["--allow-triage","--triage-run","r"]}}}"#)
+            == #"{"mcpServers":{"malachi":{"type":"stdio","command":"/b","args":["--in-app","--allow-triage","--triage-run","r"]}}}"#)
         #expect(Assistant.mcpConfig(bridge: "/b", socket: "/s", extra: ["a\"b\\"])
-            == #"{"mcpServers":{"malachi":{"type":"stdio","command":"/b","args":["--socket","/s","a\"b\\"]}}}"#)
+            == #"{"mcpServers":{"malachi":{"type":"stdio","command":"/b","args":["--socket","/s","--in-app","a\"b\\"]}}}"#)
         // Unchanged without extra arguments.
         #expect(Assistant.mcpConfig(bridge: "/b", socket: "/s") == Assistant.mcpConfig(bridge: "/b", socket: "/s", extra: []))
         #expect(Assistant.mcpConfig(bridge: "/b", socket: "")
-            == #"{"mcpServers":{"malachi":{"type":"stdio","command":"/b","args":[]}}}"#)
+            == #"{"mcpServers":{"malachi":{"type":"stdio","command":"/b","args":["--in-app"]}}}"#)
         // Without a bridge, neither the extra arguments nor the tools count.
         let oneShot = Assistant.args(Assistant.Options(
             bridge: "", systemPrompt: "P", bridgeArgs: ["--allow-triage"], tools: Assistant.triageTools))

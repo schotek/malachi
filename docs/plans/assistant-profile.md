@@ -252,6 +252,34 @@ instrukce po restartu, návrh z Claude Desktop v Předvolbách), smazání
   `APICodingTests.methodTableMatchesGo` má kopii tabulky, zůstává zelený,
   ale je zastaralý: krok 3 ho musí doplnit spolu se Swift zrcadlem.
 
+### As built (krok 3, macOS, 2026-10-21)
+
+- MalachiCore: zrcadlo API `API/AssistantProfileAPI.swift` (metody na konci
+  tabulky, `Notify.assistantProfileChanged`, limity), port `profile.go`
+  `Assistant/AssistantProfile.swift` (`Assistant.Profile`, `withProfile`,
+  `parseProposalResult`, `profileTexts`…; řetězce bajt po bajtu jako Go),
+  `Controllers/ProfileStore.swift` (port `assistantpanel.ProfileStore`).
+  Profil v promptech: `AssistantPanelController.profile`,
+  `ComposeRewriteController.profile`, `SearchConversion.profile` (global),
+  `BoardTriageController.profile`, `BoardReplyController.profile` (účet
+  případu), pruh psaní v `ComposeWindowController` (účet okna); `--in-app`
+  v `Assistant.mcpConfig` i `CodexProvider`; panel `Content.proposal`.
+- MalachiMail: `AppState.profile` (načtení po připojení,
+  `notify.assistantProfileChanged` zpracované v `NotificationHub` podle jména
+  před `DaemonNotification`, `notify.accountsChanged`), karta
+  `Assistant/AssistantProposalView.swift`, skupina
+  `Preferences/AboutYouGroup.swift` na začátku Předvoleb → AI (rod, text
+  s počítadlem, doplňky účtů imap/graph/jira jako rozbalovací řádky,
+  přepínač MCP, skupina návrhů). **Odchylky:** panel nemá nabídku, proto
+  „Upravit, co o vás asistent ví…“ je ikona v záhlaví panelu (tooltip
+  s počtem návrhů); řádky účtů bez barevné tečky (macOS barvu účtu nemá);
+  odmítnutý zápis jen pípne (pro chybu není msgid).
+- Ověřeno na Macu: `swift build` bez nových varování, filtrované
+  `swift test` (243) a celé `swift test` (1918 + 8) zelené,
+  `check-strings.py` bez nových varování. **Neověřeno:** rozložení
+  (žádný krok `MALACHI_START`), běh se skutečným Claude Code a démonem;
+  čeká brána P-B1 vlastníka nad kopií dat.
+
 ## 8. Mimo rozsah
 
 - Návrhy, které se do profilu zapíší bez potvrzení uživatele.

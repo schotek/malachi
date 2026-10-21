@@ -479,7 +479,7 @@ final class Integration {
     /// its pages need from the application.
     @discardableResult
     static func showPreferences(_ state: AppState) -> PreferencesWindowController {
-        PreferencesWindowController.show(
+        let c = PreferencesWindowController.show(
             client: state.client, settings: state.settings, bridge: state.paths.mcpBridge?.path,
             assistant: state.assistant, claudeDesktop: state.claudeDesktop,
             confirmRestart: { window in
@@ -499,6 +499,8 @@ final class Integration {
             },
             confirmTrust: Integration.confirmTrust(state.alerts)
         )
+        c.aiPane.configureProfile(state.profile)
+        return c
     }
 
     // MARK: No Accounts page

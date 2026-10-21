@@ -99,6 +99,9 @@ public final class BoardReplyController {
     /// Asks the board to list again (after a draft was linked). The
     /// application wires it to its board source's `refresh()`.
     public var onRefresh: (@MainActor () -> Void)?
+    /// The user's profile; a request gets the note of the case's account
+    /// only.
+    public var profile: @MainActor () -> Assistant.Profile = { Assistant.Profile() }
 
     /// How long the request may take (`Assistant.suggestReplyTimeout`).
     /// The controller keeps the time itself (`sleep`), so the end of a
@@ -381,8 +384,10 @@ public final class BoardReplyController {
         request.start(
             // A case shown waiting on the other side (the effective state)
             // answers the user's own last message: a follow-up.
-            systemPrompt: Assistant.suggestReplySystemPrompt(
-                followUp: Board.isFollowUp(DaemonBoardSource.convert(c), annotated: annotated)),
+            systemPrompt: Assistant.withProfile(
+                Assistant.suggestReplySystemPrompt(
+                    followUp: Board.isFollowUp(DaemonBoardSource.convert(c), annotated: annotated)),
+                profile().for(c.accountId.rawValue)),
             message: message,
             tools: AssistantRequest.Tools(
                 bridge: bridge, socket: socket,

@@ -407,6 +407,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
             return await self.state.assistantConsent(on: self.window)
         }
         let c = SearchConversion(request: request)
+        c.profile = { [weak state] in state?.profile.profile ?? Assistant.Profile() }
         conversion = c
         return c
     }

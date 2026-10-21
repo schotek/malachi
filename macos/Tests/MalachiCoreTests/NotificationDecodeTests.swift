@@ -108,7 +108,15 @@ import Testing
             (API.Notify.eventAlert, #"{"alert":{"alertId":"al_1","state":"due","eventId":"ev_1","accountId":"acc_1","calendarId":"cal_1","title":"T","start":"2026-10-14T07:00:00Z","allDay":false,"minutesBefore":10}}"#),
             (API.Notify.invitationsChanged, #"{"accountIds":["acc_1"]}"#),
         ]
-        #expect((samples + calendarSamples).map(\.0) == API.allNotifications)
+        // notify.assistantProfileChanged has no payload; the application's
+        // hub reads it by name before decoding (`ProfileStore` refreshes),
+        // so `DaemonNotification` reads it as `.unknown`.
+        let profileSamples: [(String, String)] = [(API.Notify.assistantProfileChanged, "{}")]
+        #expect((samples + calendarSamples + profileSamples).map(\.0) == API.allNotifications)
+        for (method, params) in profileSamples {
+            #expect(try CalendarNotification(raw(method, params)) == nil)
+            #expect(try DaemonNotification(raw(method, params)) == .unknown(method: method))
+        }
         for (method, params) in samples {
             let n = try DaemonNotification(raw(method, params))
             if case .unknown = n {

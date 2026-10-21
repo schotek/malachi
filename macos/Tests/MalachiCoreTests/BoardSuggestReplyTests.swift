@@ -136,7 +136,7 @@ private func mailCase(_ state: Board.State = .you) -> Board.Case {
             bridge: "/b/malachi-mcp", socket: "/s.sock", model: .sonnet, systemPrompt: Assistant.suggestReplySystemPrompt(),
             bridgeArgs: Assistant.suggestReplyBridgeArgs(messageID: "m_7"), tools: Assistant.suggestReplyTools))
         let i = try! #require(args.firstIndex(of: "--mcp-config"))
-        #expect(args[i + 1].contains(#""args":["--socket","/s.sock","--reply-only","m_7"]"#))
+        #expect(args[i + 1].contains(#""args":["--socket","/s.sock","--in-app","--reply-only","m_7"]"#))
         let t = try! #require(args.firstIndex(of: "--allowedTools"))
         #expect(args[t + 1] == "mcp__malachi__read_message,mcp__malachi__list_messages,mcp__malachi__create_draft")
         #expect(args.contains("--strict-mcp-config") && args.contains("--no-session-persistence"))

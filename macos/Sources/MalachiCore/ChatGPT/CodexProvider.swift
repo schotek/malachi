@@ -115,7 +115,8 @@ import Darwin
         try privateDirectory(home); try privateDirectory(work)
         var catalog: [[String: Any]] = []
         if let tools = spec.tools {
-            var args = tools.socket.isEmpty ? [] : ["--socket", tools.socket]; args += tools.bridgeArgs
+            // The application's own bridge (`Assistant.mcpConfig` does the same).
+            var args = tools.socket.isEmpty ? [] : ["--socket", tools.socket]; args += ["--in-app"]; args += tools.bridgeArgs
             let peer = try CodexJSONRPC(executable: tools.bridge, arguments: args, environment: CodexPolicy.environment(ProcessInfo.processInfo.environment), directory: work)
             bridge = peer; bridgeExited = false
             peer.onExit = { [weak self] in self?.bridgeExited = true; self?.terminate() }

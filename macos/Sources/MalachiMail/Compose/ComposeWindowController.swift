@@ -199,7 +199,9 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, Toast
                 self.writingRequest = request
             }
             bar.show(text: "", running: true)
-            self.writingRequest?.start(systemPrompt: ComposeAssistantPrompt.system, message: message,
+            let system = Assistant.withProfile(
+                ComposeAssistantPrompt.system, self.state.profile.profile.for(self.pane.account.id.rawValue))
+            self.writingRequest?.start(systemPrompt: system, message: message,
                 onText: { text in
                     bar.show(text: Assistant.cleanRewrite(text), running: true)
                 }, completion: { [weak self] outcome in
@@ -260,6 +262,12 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, Toast
             await self?.askConsent() ?? false
         }
         let c = ComposeRewriteController(request: request)
+        // The note of the account the window writes from, as it is when
+        // the rewrite starts.
+        c.profile = { [weak self] in
+            guard let self else { return Assistant.Profile() }
+            return self.state.profile.profile.for(self.pane.account.id.rawValue)
+        }
         rewrite = c
         return c
     }

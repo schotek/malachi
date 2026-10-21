@@ -46,6 +46,12 @@ final class AssistantPanelViewController: NSViewController {
     private let titleLabel = PrefsWrappingLabel("", size: 13, weight: .semibold)
     private let subtitleLabel = PrefsWrappingLabel("", size: 11, color: .secondaryLabelColor)
     private let newButton = NSButton()
+    /// "Edit What the Assistant Knows About You…" (with the count of the
+    /// suggestions waiting): Settings → AI → About You through
+    /// `onOpenProfile`; the panel has no menu, so it is a header button.
+    private let profileButton = NSButton()
+    private var profileToken: BoardObserverToken?
+    var onOpenProfile: (@MainActor () -> Void)?
     private let chip = AssistantContextChip()
     private let actionsFlow = FlowView(spacing: 6, lineSpacing: 6)
     private var actionButtons: [NSButton] = []
@@ -72,8 +78,13 @@ final class AssistantPanelViewController: NSViewController {
     var unreadFolderAvailable: (@MainActor () -> Bool)?
     var onSummarizeUnread: (@MainActor () -> Void)?
 
-    init(controller: AssistantPanelController) {
+    /// The application's profile, for the proposal cards; nil shows them
+    /// without their text.
+    let profile: ProfileStore?
+
+    init(controller: AssistantPanelController, profile: ProfileStore? = nil) {
         self.controller = controller
+        self.profile = profile
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -107,15 +118,30 @@ final class AssistantPanelViewController: NSViewController {
         newButton.setContentHuggingPriority(.required, for: .horizontal)
         newButton.setContentCompressionResistancePriority(.required, for: .horizontal)
 
+        profileButton.image = Icon.symbol("person.text.rectangle", size: .regular, description: Assistant.profileTexts().editProfile)
+        profileButton.imagePosition = .imageOnly
+        profileButton.bezelStyle = .accessoryBarAction
+        profileButton.isBordered = false
+        profileButton.target = self
+        profileButton.action = #selector(openProfile(_:))
+        profileButton.translatesAutoresizingMaskIntoConstraints = false
+        profileButton.setContentHuggingPriority(.required, for: .horizontal)
+        profileButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        updateProfileButton()
+        profileToken = profile?.observe { [weak self] in self?.updateProfileButton() }
+
         let header = NSView()
         header.translatesAutoresizingMaskIntoConstraints = false
         header.addSubview(titles)
+        header.addSubview(profileButton)
         header.addSubview(newButton)
         NSLayoutConstraint.activate([
             titles.topAnchor.constraint(equalTo: header.topAnchor),
             titles.bottomAnchor.constraint(equalTo: header.bottomAnchor),
             titles.leadingAnchor.constraint(equalTo: header.leadingAnchor),
-            titles.trailingAnchor.constraint(equalTo: newButton.leadingAnchor, constant: -8),
+            titles.trailingAnchor.constraint(equalTo: profileButton.leadingAnchor, constant: -8),
+            profileButton.trailingAnchor.constraint(equalTo: newButton.leadingAnchor, constant: -4),
+            profileButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
             newButton.trailingAnchor.constraint(equalTo: header.trailingAnchor),
             newButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
             newButton.topAnchor.constraint(greaterThanOrEqualTo: header.topAnchor),
@@ -303,6 +329,8 @@ final class AssistantPanelViewController: NSViewController {
             return AssistantCalendarView(item.content) { [weak self] in
                 self?.controller.openCalendar(id)
             }
+        case .proposal:
+            return AssistantProposalView(item.content, store: profile)
         case .error, .note:
             return AssistantMessageLineView(
                 item.content,
@@ -397,6 +425,19 @@ final class AssistantPanelViewController: NSViewController {
 
     @objc private func newConversation(_ sender: Any?) {
         controller.newConversation()
+    }
+
+    @objc private func openProfile(_ sender: Any?) {
+        onOpenProfile?()
+    }
+
+    /// The button's label counts the suggestions waiting; hidden with a
+    /// daemon that has no profile.
+    private func updateProfileButton() {
+        let label = Assistant.profileProposalCount(profile?.proposals.count ?? 0)
+        profileButton.toolTip = label
+        profileButton.setAccessibilityLabel(label)
+        profileButton.isHidden = profile == nil || (profile?.loaded == true && profile?.supported == false)
     }
 
     @objc private func quickAction(_ sender: NSButton) {

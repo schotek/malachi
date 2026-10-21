@@ -413,7 +413,7 @@ extension Assistant {
 
     /// An id of the bridge's head: non-empty, no white space or control
     /// characters (Go's unicode.IsSpace and unicode.IsControl).
-    private static func validID(_ b: [UInt8], _ lo: Int, _ hi: Int) -> Bool {
+    static func validID(_ b: [UInt8], _ lo: Int, _ hi: Int) -> Bool {
         guard hi > lo else { return false }
         var i = lo
         while i < hi {

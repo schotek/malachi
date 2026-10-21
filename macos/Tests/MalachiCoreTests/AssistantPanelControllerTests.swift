@@ -1242,3 +1242,57 @@ private func folded(
         return session
     }
 }
+
+// MARK: The user's profile (Go profile_test.go of assistantpanel)
+
+extension AssistantPanelControllerTests {
+    /// A new conversation carries the profile with every account's note;
+    /// the bridge is the app's own (--in-app).
+    @Test func systemPromptCarriesTheProfile() async throws {
+        let fake = try FakeClaude(turns: [answerTurn("ok")])
+        let h = try PanelHarness(fake: fake)
+        defer { h.stop() }
+        let profile = Assistant.Profile(
+            text: "Píšu stručně.", gender: .feminine,
+            accounts: [
+                Assistant.AccountNote(accountID: "acc_1", name: "Studio", email: "s@example.org", note: "Podepisuj jako studio."),
+                Assistant.AccountNote(accountID: "acc_2", name: "Osobní", email: "me@example.org", note: "Tykej."),
+            ])
+        h.panel.profile = { profile }
+        #expect(h.panel.submit("Ahoj"))
+        try await h.turn()
+        let args = fake.args.joined(separator: "\n")
+        let want = Assistant.withProfile(Assistant.systemPrompt(language: "Czech", today: "2026-09-29"), profile)
+        let i = try #require(args.range(of: "\n--system-prompt\n"))
+        #expect(String(args[i.upperBound...]).hasPrefix(want))
+        #expect(args.contains(#""--in-app""#))
+    }
+
+    /// A proposal the bridge stored is a card, by its id; a failed call,
+    /// a line that is not the bridge's or another tool's result is none.
+    @Test func proposalCard() async throws {
+        let fake = try FakeClaude(turns: [FakeTurn(lines: [
+            fakeInit,
+            fakeToolUse("t1", "propose_profile_note"),
+            fakeToolResult("t1", "profile note proposal p_1 is pending; the user accepts or dismisses it in Malachi Mail."),
+            fakeToolUse("t2", "propose_profile_note"),
+            fakeToolResult("t2", "profile note proposal p_2 is pending; …", error: true),
+            fakeToolUse("t3", "read_message"),
+            fakeToolResult("t3", "profile note proposal p_3 is pending; …"),
+            fakeToolUse("t4", "propose_profile_note"),
+            fakeToolResult("t4", "I proposed p_4 for you"),
+            fakeText("Noted."), fakeResult(),
+        ])])
+        let h = try PanelHarness(fake: fake)
+        defer { h.stop() }
+        #expect(h.panel.submit("Pamatuj si, že schůzky chci v pondělí."))
+        try await h.turn()
+        let ids = h.contents.compactMap { c -> String? in
+            if case .proposal(let id) = c { return id }
+            return nil
+        }
+        #expect(ids == ["p_1"])
+        #expect(h.contents.contains(.activity(label: "Suggesting a note for your profile…", done: true)))
+    }
+}
+

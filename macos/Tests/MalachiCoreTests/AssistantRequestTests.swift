@@ -430,3 +430,42 @@ private final class Outcomes {
         #expect(SearchConversion.outcome(.answered(text: "", structured: nil)) == O.failed("The search could not be converted: the answer holds no query"))
     }
 }
+
+// MARK: The user's profile (Go TestOneShotsCarryTheProfile)
+
+extension AssistantRequestTests {
+    /// A rewrite gets the profile as the window scoped it; a search gets it
+    /// without account notes.
+    @Test func oneShotsCarryTheProfile() async throws {
+        let fake = try FakeClaude(turns: [
+            FakeTurn(lines: [fakeInit, fakeResult("Dobrý den.")]),
+            FakeTurn(lines: [fakeInit, fakeResult(#"{\"query\":\"is:unread\"}"#)]),
+        ])
+        let h = try RequestHarness(fake: fake)
+        defer { h.stop() }
+        let profile = Assistant.Profile(
+            text: "Píšu stručně.", gender: .feminine,
+            accounts: [
+                Assistant.AccountNote(accountID: "acc_1", name: "Studio", email: "s@example.org", note: "Podepisuj jako studio."),
+                Assistant.AccountNote(accountID: "acc_2", name: "Osobní", email: "me@example.org", note: "Tykej."),
+            ])
+        let rewrite = ComposeRewriteController(request: h.request)
+        rewrite.profile = { profile.for("acc_1") }
+        #expect(rewrite.start(rewrite: .politer, custom: "", passage: "Ahoj."))
+        try await waitFor { !rewrite.running }
+        let want = Assistant.withProfile(Assistant.rewriteSystemPrompt(), profile.for("acc_1"))
+        #expect(fake.args.joined(separator: "\n") == Assistant.args(Assistant.Options(
+            bridge: "", model: .haiku, systemPrompt: want)).joined(separator: "\n"))
+        #expect(want.contains("Podepisuj jako studio.") && !want.contains("Tykej."))
+
+        let search = SearchConversion(request: h.request)
+        search.today = { "2026-09-29" }
+        search.profile = { profile }
+        let got = Box<[SearchConversion.Outcome]>([])
+        #expect(search.convert("nepřečtené") { got.value.append($0) })
+        try await waitFor { got.value.count == 1 }
+        let args = fake.args.joined(separator: "\n")
+        #expect(args.contains("Píšu stručně.") && !args.contains("For the account"))
+    }
+}
+
