@@ -133,8 +133,21 @@ inline reply, top to bottom:
             Margin="0,4,0,0"
             AllowDrop="True"
             Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+            DragLeave="OnEditorDragLeave"
             DragOver="OnEditorDragOver"
             Drop="OnEditorDrop" />
+
+        <!-- The accent outline over the editor while files it takes are
+             dragged over it (GTK .compose-editor:drop(active)); laid over
+             the slot so the editor does not move, and never hit. -->
+        <Border
+            x:Name="EditorDropOutline"
+            Grid.Row="3"
+            Margin="0,4,0,0"
+            BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+            BorderThickness="2"
+            IsHitTestVisible="False"
+            Visibility="Collapsed" />
 
         <!-- quote_section: the prepared original (the window layout, with
              one); its texts are set in code (Assistant.WriteTexts). -->

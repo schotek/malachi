@@ -79,7 +79,16 @@ final class ComposeWebView: WKWebView {
     var onBridgeMessage: (@MainActor (Any) -> Void)?
     /// Files dropped onto the view, taken away from WebKit. Without a
     /// handler (a comment takes no attachments) a file drag is refused.
-    var onDropFiles: (@MainActor ([URL]) -> Void)?
+    var onDropFiles: (@MainActor ([URL]) -> Void)? {
+        didSet {
+            if onDropFiles == nil {
+                setFileDragOver(false)
+            }
+        }
+    }
+    /// A file drag the view would take entered (true) or left, was dropped
+    /// or cancelled (false); the editor highlights itself meanwhile.
+    var onFileDragOver: (@MainActor (Bool) -> Void)?
     /// The web content process died; the page is gone until the next load.
     var onCrashed: (@MainActor () -> Void)?
     /// A document handed to `loadDocument` was dropped because the content
@@ -319,11 +328,28 @@ final class ComposeWebView: WKWebView {
     private static let fileURLReading: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        isFileDrag(sender) ? fileDragOperation : super.draggingEntered(sender)
+        guard isFileDrag(sender) else {
+            return super.draggingEntered(sender)
+        }
+        setFileDragOver(onDropFiles != nil)
+        return fileDragOperation
     }
 
     override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        isFileDrag(sender) ? fileDragOperation : super.draggingUpdated(sender)
+        guard isFileDrag(sender) else {
+            return super.draggingUpdated(sender)
+        }
+        setFileDragOver(onDropFiles != nil)
+        return fileDragOperation
+    }
+
+    /// Whether a file drag the view takes is over it (`onFileDragOver`).
+    private var fileDragOver = false
+
+    private func setFileDragOver(_ over: Bool) {
+        guard over != fileDragOver else { return }
+        fileDragOver = over
+        onFileDragOver?(over)
     }
 
     /// Copy while someone takes the files, nothing otherwise.
@@ -333,6 +359,7 @@ final class ComposeWebView: WKWebView {
 
     override func draggingExited(_ sender: (any NSDraggingInfo)?) {
         if let sender, isFileDrag(sender) {
+            setFileDragOver(false)
             return
         }
         super.draggingExited(sender)
@@ -346,6 +373,7 @@ final class ComposeWebView: WKWebView {
         guard isFileDrag(sender) else {
             return super.performDragOperation(sender)
         }
+        setFileDragOver(false)
         let objects = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: Self.fileURLReading) ?? []
         let urls = objects.compactMap { $0 as? URL }
         if !urls.isEmpty {
@@ -356,6 +384,7 @@ final class ComposeWebView: WKWebView {
 
     override func concludeDragOperation(_ sender: (any NSDraggingInfo)?) {
         if let sender, isFileDrag(sender) {
+            setFileDragOver(false)
             return
         }
         super.concludeDragOperation(sender)

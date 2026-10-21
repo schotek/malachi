@@ -108,14 +108,26 @@ final class ComposeEditorView: NSView, EditorView {
                 return self.enclosingScrollView
             }
         }
+        web.onFileDragOver = { [weak self] over in
+            self?.dropHighlight.isHidden = !over
+        }
         addSubview(web)
+        addSubview(dropHighlight)
         NSLayoutConstraint.activate([
             web.topAnchor.constraint(equalTo: topAnchor),
             web.bottomAnchor.constraint(equalTo: bottomAnchor),
             web.leadingAnchor.constraint(equalTo: leadingAnchor),
             web.trailingAnchor.constraint(equalTo: trailingAnchor),
+            dropHighlight.topAnchor.constraint(equalTo: topAnchor),
+            dropHighlight.bottomAnchor.constraint(equalTo: bottomAnchor),
+            dropHighlight.leadingAnchor.constraint(equalTo: leadingAnchor),
+            dropHighlight.trailingAnchor.constraint(equalTo: trailingAnchor),
         ])
     }
+
+    /// The outline over the editor while files are dragged over it (GTK
+    /// `webkitwebview.compose-editor:drop(active)`).
+    private let dropHighlight = DropHighlightView()
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
@@ -359,5 +371,41 @@ final class ComposeEditorView: NSView, EditorView {
         }
         reportedUnavailable = true
         onCrashed?()
+    }
+}
+
+/// An accent outline drawn over the editor while a file drag it takes is
+/// over it. It never takes a click or a drag: hit testing passes through to
+/// the web view below, which stays the drag destination.
+@MainActor
+private final class DropHighlightView: NSView {
+    static let width: CGFloat = 2
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        isHidden = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        layer?.borderWidth = Self.width
+        layer?.borderColor = NSColor.controlAccentColor.cgColor
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
     }
 }

@@ -56,11 +56,16 @@ public sealed partial class ComposePane
         {
             e.AcceptedOperation = DataPackageOperation.Copy;
             e.Handled = true;
+            EditorDropOutline.Visibility = Visibility.Visible;
         }
     }
 
+    private void OnEditorDragLeave(object sender, DragEventArgs e) =>
+        EditorDropOutline.Visibility = Visibility.Collapsed;
+
     private void OnEditorDrop(object sender, DragEventArgs e)
     {
+        EditorDropOutline.Visibility = Visibility.Collapsed;
         if (IsComment || !e.DataView.Contains(StandardDataFormats.StorageItems))
         {
             return;

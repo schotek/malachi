@@ -121,6 +121,11 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// text caret still says which field takes typing.
 	b.WriteString("box.compose-headers entry, box.compose-headers entry:focus-within { outline: none; box-shadow: none; }\n")
 	b.WriteString("box.compose-headers button:focus-visible, box.compose-headers dropdown > button:focus-visible { outline: none; }\n")
+	// A file drag the editor takes is over it (editor.New): an accent
+	// outline inside its edge. GTK draws the outline after the content, so
+	// it shows over the web page, where a background or inset shadow would
+	// sit underneath.
+	b.WriteString(".compose-editor:drop(active) { outline: 2px solid @accent_color; outline-offset: -2px; }\n")
 	// Recipient suggestions (compose): a popover the width of the row, its
 	// list flush with the popover's edges rather than inset like a menu,
 	// and compact two-line rows — it is a list to pick from, not a dialog.

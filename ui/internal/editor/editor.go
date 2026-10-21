@@ -105,9 +105,14 @@ func New(log *slog.Logger) *Editor {
 
 	// A file drop is the caller's business (attachments): WebKit would
 	// insert or navigate to the file: URL. Capture phase, so this target
-	// decides before WebKit's own; it takes file lists only.
+	// decides before WebKit's own; it takes file lists only, and none
+	// without OnDropFiles (a comment), so the view is outlined while a
+	// drag it takes is over it (:drop(active), style.CSS) and only then.
 	drop := gtk.NewDropTarget(gdk.GTypeFileList, gdk.ActionCopy)
 	drop.SetPropagationPhase(gtk.PhaseCapture)
+	drop.ConnectAccept(func(d gdk.Dropper) bool {
+		return e.OnDropFiles != nil && gdk.BaseDrop(d).Formats().ContainGType(gdk.GTypeFileList)
+	})
 	drop.ConnectDrop(func(value *coreglib.Value, _, _ float64) bool {
 		list, ok := value.GoValue().(*gdk.FileList)
 		if !ok || e.OnDropFiles == nil {
