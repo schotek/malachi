@@ -1,6 +1,6 @@
 # Profil pro asistenta („O mně“ a doplněk k účtu) — návrh
 
-Stav: návrh, otevřené otázky Q1–Q8 rozhodl vlastník 2026-10-21 (§9)
+Stav: návrh, otázky Q1–Q10 rozhodl vlastník 2026-10-21 (§9)
 a rozhodnutí v §2 jsou podle nich upravená. Nic z toho není
 implementované.
 
@@ -54,7 +54,7 @@ mají jako porty 1:1.
 | P13 | **Rod** (Q2): enum `gender` = `unset` (výchozí) / `masculine` / `feminine` / `neutral`. Do promptu jde jako pevná anglická věta („When writing in the user's name in a language with grammatical gender, use the masculine forms.“, u `neutral` „…avoid gendered forms where the language allows it.“), u `unset` nic. Platí i pro jednorázové žádosti (přepis, psaní). | Do češtiny nejčastější potřeba; strukturované pole jde spolehlivě vložit i tam, kde by volný text model přehlédl. |
 | P14 | **Návrhy do profilu** (Q3): asistent smí jen **navrhnout** krátký text (nejvýš 300 znaků) do globální části nebo do doplňku jednoho účtu. Démon: `assistant.profilePropose {text, accountId?, source}` uloží návrh do fronty (nejvýš 20, nejstarší vypadne, duplicity podle normalizovaného textu se slijí), `assistant.profileResolve {id, accept, text?}` ho přijme (připojí jako nový řádek; s `text` upravený uživatelem) nebo zahodí. Přijetí nad limitem profilu = `invalidArgument`, návrh zůstane. Nic se do profilu nezapíše bez kliknutí uživatele. | Asistent se „učí“, ale uživatel zůstává jediným autorem profilu. |
 | P15 | **Kdo smí navrhovat**: nástroj mostu `propose_profile_note` jen v panelu aplikace (most s `--in-app`) a v klientech MCP se zapnutým `shareWithMCP`; **nikdy** pod `--triage-run`, `--reply-only` ani v jednorázových žádostech (přepis, psaní, hledání nemají nástroje). Nejvýš 3 návrhy na proces mostu. Instrukce řeknou, ať model navrhuje jen to, co uživatel v rozhovoru sám řekl o sobě nebo o tom, jak chce pracovat, nikdy obsah pošty. `source` = `panel` / `mcp`. | Triage a návrh odpovědi čtou cizí poštu ve velkém, takže vložený text z e-mailu by se snadno přeměnil v „návrh“. Potvrzení uživatelem je hlavní ochrana, omezení kanálů druhá. |
-| P16 | **Zobrazení návrhů**: v panelu karta pod odpovědí („Asistent navrhuje zapamatovat si: …“, u doplňku jméno účtu) s tlačítky Uložit, Upravit… a Zahodit; v Předvolbách → AI → O mně seznam čekajících návrhů se stejnými tlačítky (návrhy z MCP se jinde neukážou). Text návrhu je vždy prostý text. | Návrh z panelu uživatel vyřídí hned; návrh z Claude Desktop najde v Předvolbách. |
+| P16 | **Zobrazení návrhů**: v panelu karta pod odpovědí („Asistent navrhuje zapamatovat si: …“, u doplňku jméno účtu) s tlačítky Uložit, Upravit… (upraví jen text návrhu, Q9) a Zahodit; v Předvolbách → AI → O mně seznam čekajících návrhů se stejnými tlačítky; položka nabídky panelu „Upravit, co o vás asistent ví…“ nese počet čekajících návrhů. Návrhy z MCP se jinde neohlašují: žádná notifikace ani odznak (Q10). Text návrhu je vždy prostý text. | Návrh z panelu uživatel vyřídí hned; návrh z Claude Desktop najde v Předvolbách. |
 
 ## 3. Démon (`backend/`)
 
@@ -131,7 +131,8 @@ záložka s podzáložkami (Q6).
     v aplikaci (Claude Code, ChatGPT) a podle přepínače i v aplikacích
     připojených přes MCP, jen s vaším souhlasem.“
 - **Panel asistenta**: karta návrhu (P16) v přepisu; v nabídce panelu
-  položka „Upravit, co o vás asistent ví…“, která otevře skupinu O mně.
+  položka „Upravit, co o vás asistent ví…“ (s počtem čekajících návrhů,
+  když nějaké jsou), která otevře skupinu O mně.
 - Skupina je vidět, i když asistent není zapnutý (profil pak používá
   jen most), ale pole jsou neaktivní, dokud démon neodpoví.
 - Text profilu i návrhů se ukazuje jen jako prostý text
@@ -212,9 +213,11 @@ instrukce po restartu, návrh z Claude Desktop v Předvolbách), smazání
 | Q7 | Pořadí ve třech klientech? | **macOS první**, pak GTK a Windows, s branami P-B1 až P-B3 (výjimka z pravidla 6 jako u chatu). | §7 |
 | Q8 | Limity délky? | **2000 znaků globálně, 500 na účet** (návrh 300). | P2, §3 |
 
-Nové otevřené otázky z rozhodnutí:
+Otázky, které z rozhodnutí vyplynuly (rozhodnuté 2026-10-21):
 
-| # | Otázka | Návrh |
-|---|---|---|
-| Q9 | Má přijatý návrh jít na konec textu, nebo má uživatel při Uložit vidět celý profil s návrhem na konci (jen Upravit… to dnes ukazuje)? | Na konec jako nový řádek; Upravit… otevře jen text návrhu. |
-| Q10 | Mají se návrhy z MCP (Claude Desktop) nějak ohlásit, třeba odznakem na položce Předvolby → AI nebo notifikací? | Ne; jen seznam v Předvolbách a počet v nabídce panelu. |
+| # | Otázka | Rozhodnutí | Kde v plánu |
+|---|---|---|---|
+| Q9 | Kam se zapíše přijatý návrh a co ukáže Upravit…? | **Uložit připojí návrh na konec** profilu (nebo doplňku účtu) jako nový řádek; **Upravit… otevře jen text návrhu**, ne celý profil. | P14, P16 |
+| Q10 | Jak ohlásit návrhy z MCP (Claude Desktop)? | **Jen seznam v Předvolbách → AI → O mně a počet čekajících v nabídce panelu**; žádná notifikace ani odznak. | P16, §5 |
+
+Žádná otázka teď otevřená není.
