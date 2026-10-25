@@ -26,8 +26,8 @@ name: macOS
 
 on:
   push:
-    branches: [main]
-    tags: ['v*']
+    # Only release tags (v1.2.3); pushes to main build nothing.
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
   pull_request:
     paths:
       - macos/**

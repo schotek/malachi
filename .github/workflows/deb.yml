@@ -16,15 +16,8 @@ name: Debian package
 
 on:
   push:
-    branches: [main]
-    tags: ['v*']
-    # The other clients cannot change a Linux package. Path filters do not
-    # apply to tags, so a release still builds.
-    paths-ignore:
-      - windows/**
-      - macos/**
-      - .github/workflows/windows.yml
-      - .github/workflows/macos.yml
+    # Only release tags (v1.2.3); pushes to main build nothing.
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
   pull_request:
     paths:
       - packaging/debian/**

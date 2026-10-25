@@ -110,8 +110,7 @@ falls back to the `.version` file that `make flatpak` writes.
 ## 5. Builds from CI
 
 `.github/workflows/flatpak.yml` builds the Flatpak for **x86_64** and
-**aarch64** on every push to `main` (except one that changes nothing but
-the Windows or macOS client), on `v*` tags, on a manual
+**aarch64** on version tags (`vX.Y.Z`; pushes to `main` build nothing), on a manual
 `workflow_dispatch`, and on pull requests that touch the packaging. Each job
 attaches a `malachi-<version>-<arch>.flatpak` bundle as a workflow artifact
 (kept 30 days); installable with
@@ -192,7 +191,7 @@ nothing ARM64 has run on real hardware yet.
 
 `.github/workflows/windows.yml` does the same in CI: it tests the daemon
 on Windows, builds, tests and lints the Windows client, and zips its app
-folder for **x64** and **arm64**, on pushes to `main`, on `v*` tags, by
+folder for **x64** and **arm64**, on version tags (`vX.Y.Z`), by
 hand and on pull requests that touch what the client is built from; what
 each job does is in [windows-port.md §13](windows-port.md#13-build-and-ci).
 A tag build keeps both zips as the run's artifacts (30 days) and attaches
@@ -275,8 +274,8 @@ codesign --force --sign - --options runtime \
 ```
 
 `.github/workflows/macos.yml` does the same in CI on the `macos-26` runner
-(Xcode 26, whose SDK gives the app its macOS 26 design), on pushes to
-`main`, on `v*` tags, by hand and on pull requests that touch what the
+(Xcode 26, whose SDK gives the app its macOS 26 design), on version
+tags (`vX.Y.Z`), by hand and on pull requests that touch what the
 client is built from: `make test-macos`, then `make macos-dmg`, signed and
 notarised when the repository has the five secrets below and the run is
 not a pull request, otherwise ad hoc. The DMG is the run's artifact; a tag

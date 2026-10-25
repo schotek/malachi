@@ -4331,7 +4331,7 @@ toolset as of 2026-09-28), which is what the NativeAOT keyring helper links
 with. The label is named, not `windows-latest`, so the move to the next
 Windows Server is an edit of the workflow; the image's tools (Visual
 Studio, the WebView2 runtime) are still updated with it every week or two.
-The workflow runs on pushes to `main`, on `v*` tags, by hand
+The workflow runs on version tags (`vX.Y.Z`), by hand
 (`workflow_dispatch`) and on pull requests that touch `windows/`,
 `backend/`, `po/`, `docs/malachi_icon.png`, the Makefile or the workflow,
 or what the tests read outside `windows/`: the GTK UI's sources (the drift
