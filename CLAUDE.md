@@ -961,7 +961,10 @@ a Shift+mezerník v seznamu listují), karta `htmlview/card.go`
 jediný skript aplikace ve světě `malachi-size` s handlerem `size`
 registrovaným jen tam (`size.go`, Go bere jen ověřené číslo), strop
 4000 px a zmrazení výšky (`webHeightGovernor`); samostatný pohled zprávy
-má JS dál vypnutý úplně (`docs/security.md` §3.2). `MALACHI_DATA_DIR` přebíjí
+má od 2026-10-25 stejné nastavení a skript (`htmlview.View.OnSize`), ale
+výšku nebere, jen podle ní okno dá oblasti těla nejvýš tolik místa, kolik
+dokument potřebuje, aby „•••“ citované historie stálo hned pod posledním
+řádkem (`window/message_view_fit.go`, `docs/security.md` §3.2). `MALACHI_DATA_DIR` přebíjí
 datový adresář i na macOS (`Daemon/Paths.swift`, jako na Windows).
 macOS dorovnaný na GTK port (2026-09-30; Windows port bere toto chování
 jako výchozí): řazení konverzace se sbalenou úvodní kartou (šipka

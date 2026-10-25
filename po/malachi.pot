@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-21 07:41+0000\n"
+"POT-Creation-Date: 2026-10-25 20:35+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1593,13 +1593,13 @@ msgstr ""
 msgid "Forward"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:63 ui/data/ui/message_window.ui:568
-#: ui/data/ui/window.ui:1144
+#: ui/internal/contextmenu/text.go:63 ui/data/ui/message_window.ui:592
+#: ui/data/ui/window.ui:1168
 msgid "Mark as _Read"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:65 ui/data/ui/message_window.ui:564
-#: ui/data/ui/window.ui:1140
+#: ui/internal/contextmenu/text.go:65 ui/data/ui/message_window.ui:588
+#: ui/data/ui/window.ui:1164
 msgid "Mark as _Unread"
 msgstr ""
 
@@ -1615,7 +1615,7 @@ msgstr ""
 
 #. TRANSLATORS: menu of the status changes a Jira issue allows.
 #: ui/internal/contextmenu/text.go:72 ui/internal/jira/transitions.go:87
-#: ui/data/ui/message_window.ui:584 ui/data/ui/window.ui:1160
+#: ui/data/ui/message_window.ui:608 ui/data/ui/window.ui:1184
 msgid "Change Status"
 msgstr ""
 
@@ -1632,8 +1632,8 @@ msgstr ""
 msgid "Move To"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:78 ui/data/ui/message_window.ui:558
-#: ui/data/ui/window.ui:1134
+#: ui/internal/contextmenu/text.go:78 ui/data/ui/message_window.ui:582
+#: ui/data/ui/window.ui:1158
 msgid "Mark as Junk"
 msgstr ""
 
@@ -2510,7 +2510,7 @@ msgid "Removed from eWay-CRM"
 msgstr ""
 
 #: ui/internal/crm/text.go:289 ui/internal/board/view.go:859
-#: ui/internal/widget/message_row.go:371 ui/internal/window/message_view.go:608
+#: ui/internal/widget/message_row.go:371 ui/internal/window/message_view.go:615
 #: ui/internal/window/notify.go:136
 msgid "(No subject)"
 msgstr ""
@@ -6247,7 +6247,7 @@ msgstr ""
 msgid "_Copy Address"
 msgstr ""
 
-#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:1112
+#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:1136
 msgid "_New Message"
 msgstr ""
 
@@ -6287,11 +6287,11 @@ msgstr ""
 msgid "Save _All"
 msgstr ""
 
-#: ui/internal/window/attachments.go:335 ui/internal/window/message_view.go:620
+#: ui/internal/window/attachments.go:335 ui/internal/window/message_view.go:627
 msgid "This message is too large to download."
 msgstr ""
 
-#: ui/internal/window/attachments.go:337 ui/internal/window/message_view.go:622
+#: ui/internal/window/attachments.go:337 ui/internal/window/message_view.go:629
 msgid "This message could not be read."
 msgstr ""
 
@@ -6392,15 +6392,15 @@ msgid "Cc"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:737
-#: ui/internal/window/message_view.go:325
+#: ui/internal/window/message_view.go:330
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:776 ui/data/ui/embedded_window.ui:61
-#: ui/data/ui/message_window.ui:259 ui/data/ui/message_window.ui:574
-#: ui/data/ui/window.ui:710 ui/data/ui/window.ui:1150
+#: ui/data/ui/message_window.ui:259 ui/data/ui/message_window.ui:598
+#: ui/data/ui/window.ui:710 ui/data/ui/window.ui:1174
 msgid "Load _Images"
 msgstr ""
 
@@ -6420,7 +6420,7 @@ msgid "_Download Pictures"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:984
-#: ui/internal/window/message_view.go:527
+#: ui/internal/window/message_view.go:534
 msgid "Loading the message"
 msgstr ""
 
@@ -6535,12 +6535,12 @@ msgstr ""
 msgid "Folders appear after the first synchronisation."
 msgstr ""
 
-#: ui/internal/window/message_view.go:614
-#: ui/internal/window/message_view.go:626
+#: ui/internal/window/message_view.go:621
+#: ui/internal/window/message_view.go:633
 msgid "(Empty message)"
 msgstr ""
 
-#: ui/internal/window/message_view.go:618
+#: ui/internal/window/message_view.go:625
 msgid "Downloading…"
 msgstr ""
 
@@ -7335,7 +7335,7 @@ msgid "Right"
 msgstr ""
 
 #: ui/data/ui/conversation_view.ui:157 ui/data/ui/embedded_window.ui:267
-#: ui/data/ui/message_window.ui:507 ui/data/ui/window.ui:1022
+#: ui/data/ui/message_window.ui:509 ui/data/ui/window.ui:1024
 msgctxt "accessibility"
 msgid "Loading the message"
 msgstr ""
@@ -7348,7 +7348,7 @@ msgstr ""
 msgid "Message"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:578 ui/data/ui/window.ui:1154
+#: ui/data/ui/message_window.ui:602 ui/data/ui/window.ui:1178
 msgid "Always Load Images From This _Sender"
 msgstr ""
 
@@ -7680,15 +7680,15 @@ msgstr ""
 msgid "_Add Account…"
 msgstr ""
 
-#: ui/data/ui/window.ui:1118
+#: ui/data/ui/window.ui:1142
 msgid "_Preferences"
 msgstr ""
 
-#: ui/data/ui/window.ui:1122
+#: ui/data/ui/window.ui:1146
 msgid "_Keyboard Shortcuts"
 msgstr ""
 
-#: ui/data/ui/window.ui:1126
+#: ui/data/ui/window.ui:1150
 msgid "_About Malachi Mail"
 msgstr ""
 

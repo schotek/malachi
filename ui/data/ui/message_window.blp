@@ -485,12 +485,16 @@ Adw.Window message_window {
         // WebKit view appended from Go (window/message_view.go).
         Stack body_stack {
           vexpand: true;
+          // Each page its own height: the text and HTML pages take what their
+          // body needs while it fits (window/message_view_fit.go).
+          vhomogeneous: false;
 
           StackPage {
             name: "text";
 
             child: ScrolledWindow message_scroller {
               hscrollbar-policy: never;
+              propagate-natural-height: true;
               // Receives the initial focus (see focus-widget on the window)
               // so the selectable subject label is not focused and
               // select-all'd on open.
@@ -538,16 +542,33 @@ Adw.Window message_window {
           StackPage {
             name: "html";
 
-            child: Box html_slot {
-              orientation: vertical;
+            // html_scroll holds the view at its document's height while that
+            // fits (no scrollbar of its own, and no minimum height, so the window
+            // may still shrink); html_probe tells Go the room the page has.
+            child: Overlay {
+              child: ScrolledWindow html_scroll {
+                hscrollbar-policy: never;
+                vscrollbar-policy: external;
+                propagate-natural-height: true;
+
+                child: Box html_slot {
+                  orientation: vertical;
+                };
+              };
+
+              [overlay]
+              DrawingArea html_probe {
+                can-target: false;
+              }
             };
           }
         }
 
         // The "•••" under the body (window/quoted.go): shows or hides the
         // quoted history the daemon cut from it; hidden while there is
-        // nothing to offer. Under the body area, which scrolls on its own (a
-        // web view), so it stays in sight at the bottom of the message. Its
+        // nothing to offer. Right under the body, whose area takes no more
+        // room than the body needs (window/message_view_fit.go): after its
+        // last line, or at the bottom when the body scrolls. Its
         // face, tooltip and accessible name come from Go.
         Adw.Clamp quoted_row {
           maximum-size: 900;
@@ -568,6 +589,13 @@ Adw.Window message_window {
               ]
             }
           };
+        }
+
+        // The room under a body that needs less than the page has; hidden
+        // while the body area takes it all (window/message_view_fit.go).
+        Box body_filler {
+          vexpand: true;
+          visible: false;
         }
       };
     };

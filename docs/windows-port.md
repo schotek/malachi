@@ -4030,6 +4030,57 @@ proposal card and the panel's profile button, the `ProfileStore` in
 `notify.accountsChanged`, and the controllers' `Profile`), UI smoke and gate
 P-B3 of the plan.
 
+### 11.13 The "•••" right under the body
+
+Written 2026-10-25 on a Mac without .NET (nothing here was compiled), the
+port of macOS `MessageViewController` (`textFit`, `htmlFit`, `bodySpacer`,
+`MessageWebView(measures:)`) and GTK `window/message_view_fit.go`, both
+built and measured. The "•••" of the quoted history stood at the bottom of
+the reading pane and the message window, under a body area that always
+took the whole page; now the body area takes no more room than its body
+needs while that fits, the button right under its last line, and a longer
+body takes the whole area and scrolls with the button at the bottom, as
+before.
+
+Core: `Presentation/BodyFit.cs` (`BodyFitMode` Fill / Content / Height,
+`BodyFit.ModeFor(page, html)`: the text page Content, the HTML page Height
+once its document is measured, Fill before that and for the spinner;
+`BodyFit.Height(mode, room, desired, height)`), tests
+`Presentation/BodyFitTests.cs`. App: `Reader/BodyFitPanel.cs` (a panel of
+two children, the body area and the row under it, measuring the row first
+and giving the body `BodyFit.Height` of the rest; a Grid row is either Auto,
+which never lets a long body scroll, or star, which always takes it all);
+`MessageView.xaml` puts `BodyArea` and `QuotedRow` in it (`BodyFitArea`,
+row 2 of `MessagePage`, whose fourth row is gone);
+`MessageView.xaml.cs` `UpdateBodyFit()` on `BodyPage` and on the viewer's
+`ContentHeightChanged`; `WebViews/MessageWebView.cs` measures as
+`CardWebView` does (`CardSize.Script` through `EvaluateAsync` 40 ms after
+the document loaded, a picture was served, the width or the zoom changed;
+not on a change of the height alone, so a document sized by the viewport
+does not chase the area) and reports `ContentHeight` in DIPs (null while
+loading). Page script stays off; the host script only reads.
+
+Assumed, to check on Windows: that a `ScrollViewer` measured with a finite
+height reports min(its content, that height) as `DesiredSize` (the text
+page relies on it; if it reports the whole bound, the text page needs the
+`TextBlock`'s desired height instead); that `CardSize`'s height of the
+viewer's non-compact document includes the column's padding (macOS and GTK
+measured 128 and 126 px for two short paragraphs); that the `Border` with
+`MaxWidth` 900 still centres in the panel as it did in the Grid.
+
+The Windows agent builds and checks: `build.ps1 app`, `test`
+(`BodyFitTests` first), `lint`; then by hand in the reading pane and a
+message window, light and dark, 100 % and 150 %: a short plain-text and a
+short HTML message with quoted history cut (the button right under the
+last line, nothing between it and the quick-reply bar but empty pane), a
+long one of each (the body scrolls, the button at the bottom), Show and
+Hide Quoted Text on a short message (the area grows and shrinks with it),
+a window made smaller and larger over a short HTML message (it switches to
+scrolling and back), the text zoom over a short HTML message, an HTML
+message whose pictures arrive late, and the spinner of a slow body
+(centred in the whole area). The UI smoke `DevmailTests` and
+`ConversationChatSmokeTests` (`QuotedRow`) must stay green.
+
 ## 12. Tests
 
 `make test-windows` (`build.ps1 test`) runs six test projects, 5,944

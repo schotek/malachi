@@ -183,6 +183,10 @@ extension MainWindowController {
             DevelopmentQuickReplyMessage.run(in: self)
             return
         }
+        if step == "reader-quoted" {
+            DevelopmentReaderQuoted.run(in: self)
+            return
+        }
         if DevelopmentCalendar.step(step, in: self) {
             return
         }
@@ -1679,5 +1683,81 @@ private enum DevelopmentQuickReply {
             line += "\n    AMBIGUOUS"
         }
         developmentPrint(line)
+    }
+}
+
+/// DEVELOPMENT AID for the `MALACHI_START` step `reader-quoted`: renders
+/// made-up short and long bodies, text and HTML, with quoted history cut
+/// into the reading pane and prints where the "•••" lands against the
+/// body area and the pane (`LAYOUT:` lines). Nothing is fetched or saved.
+@MainActor
+private enum DevelopmentReaderQuoted {
+    static func run(in main: MainWindowController) {
+        main.setMode(.mail)
+        guard let window = main.window, let content = window.contentView,
+              let pane = find(in: content) else {
+            developmentPrint("LAYOUT: reader-quoted no reading pane")
+            return
+        }
+        let s = MessageSummary(
+            id: MessageID("dev-q1"), accountId: "dev", folderId: "dev-inbox", threadId: "dev-t1",
+            from: [Address(name: "Pavel Tomek", address: "pavel@example.invalid")], to: [],
+            subject: "FW: Finální adresa API", date: .goZero, snippet: "", flags: [.seen], hasAttachments: false, size: 0)
+        func body(_ id: String, html: String?, text: String) -> LoadedMessage {
+            LoadedMessage(body: MessageBodyResult(
+                messageId: MessageID(id), bodyState: .fetched, hasHtml: html != nil, html: html, text: text,
+                remoteContent: .block, sanitizerVersion: "1", quotedTrimmed: true))
+        }
+        let long = Array(repeating: "Řádek dlouhé zprávy.", count: 200)
+        let cases: [(String, LoadedMessage)] = [
+            ("text-short", body("dev-q1", html: nil, text: "Děkuji za odpověď\n\nPT")),
+            ("html-short", body("dev-q1", html: "<p>Děkuji za odpověď</p><p>PT</p>", text: "")),
+            ("text-long", body("dev-q1", html: nil, text: long.joined(separator: "\n"))),
+            ("html-long", body("dev-q1", html: long.map { "<p>\($0)</p>" }.joined(), text: "")),
+        ]
+        // One case at a time, each measured a moment later on the main
+        // queue: the web view reports its document's height through it.
+        func step(_ i: Int) {
+            guard i < cases.count else { return }
+            pane.reader.render(s, cases[i].1)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                measure(cases[i].0, window, pane)
+                step(i + 1)
+            }
+        }
+        step(0)
+    }
+
+    private static func find(in v: NSView) -> ReadingPaneViewController? {
+        if let pane = v.nextResponder as? ReadingPaneViewController {
+            return pane
+        }
+        for sub in v.subviews {
+            if let pane = find(in: sub) { return pane }
+        }
+        return nil
+    }
+
+    private static func button(in v: NSView) -> QuotedTextButton? {
+        if let b = v as? QuotedTextButton { return b }
+        for sub in v.subviews {
+            if let b = button(in: sub) { return b }
+        }
+        return nil
+    }
+
+    private static func measure(_ what: String, _ window: NSWindow, _ pane: ReadingPaneViewController) {
+        window.contentView?.layoutSubtreeIfNeeded()
+        let reader = pane.reader.view
+        guard let b = button(in: reader) else {
+            developmentPrint("LAYOUT: reader-quoted \(what): no button")
+            return
+        }
+        let r = b.convert(b.bounds, to: reader)
+        let top = reader.isFlipped ? r.minY : reader.bounds.height - r.maxY
+        let gapBelow = reader.isFlipped ? reader.bounds.height - r.maxY : r.minY
+        developmentPrint(String(
+            format: "LAYOUT: reader-quoted %@: reader %.0f high, button top %.0f, room below %.0f, hidden %d",
+            what, reader.bounds.height, top, gapBelow, b.isHidden ? 1 : 0))
     }
 }

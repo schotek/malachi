@@ -127,6 +127,19 @@ final class MessageViewController: NSViewController {
     /// around a hidden child keeps its height, and under a message without
     /// quoted text the quick-reply bar's line would show that band).
     private var quotedClamp: ClampView?
+    /// The body area takes the height of what it shows while that fits
+    /// (`textFit` for the text page, `htmlFit` with the document's height
+    /// for the web view, everything for the spinner), so the "•••" under
+    /// it follows the message's last line; a longer body is squeezed to
+    /// the room there is and scrolls, the button then at the bottom. Below
+    /// the button nothing but `bodySpacer` takes the rest.
+    private var textFit: NSLayoutConstraint?
+    private var htmlFit: NSLayoutConstraint?
+    private let bodySpacer = NSView()
+    /// Below the window's hold on its size (`windowSizeStayPut`, 500), or
+    /// a long body would grow the window; above the body's hugging (250).
+    private static let fitPriority = NSLayoutConstraint.Priority(450)
+    private static let fillHeight: CGFloat = 100_000
     private let loadingPage = NSView()
     private let loadingSpinner = Spinner(size: 32)
     private let bodyContainer = NSView()
@@ -229,6 +242,23 @@ final class MessageViewController: NSViewController {
             messagePage.addArrangedSubview(quotedClamp)
             self.quotedClamp = quotedClamp
         }
+        bodySpacer.translatesAutoresizingMaskIntoConstraints = false
+        bodySpacer.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .vertical)
+        bodySpacer.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(1), for: .vertical)
+        messagePage.addArrangedSubview(bodySpacer)
+        // Auto Layout would otherwise take height from the spacer below
+        // zero to give the body more.
+        bodySpacer.heightAnchor.constraint(greaterThanOrEqualToConstant: 0).isActive = true
+        // Above the body's own compression resistance and hugging, below
+        // every other row's and the window's: the headers and the bars
+        // keep their height, the window its size.
+        let textFit = bodyContainer.heightAnchor.constraint(equalTo: textClamp.heightAnchor)
+        textFit.priority = Self.fitPriority
+        let htmlFit = bodyContainer.heightAnchor.constraint(equalToConstant: Self.fillHeight)
+        htmlFit.priority = Self.fitPriority
+        self.textFit = textFit
+        self.htmlFit = htmlFit
+        textFit.isActive = true
 
         pages.translatesAutoresizingMaskIntoConstraints = false
         pages.setContentHuggingPriority(.defaultLow, for: .vertical)
@@ -642,6 +672,11 @@ final class MessageViewController: NSViewController {
     }
 
     private func setBodyPage(_ page: BodyPage) {
+        textFit?.isActive = page == .text
+        htmlFit?.isActive = page != .text
+        if page == .loading {
+            htmlFit?.constant = Self.fillHeight
+        }
         textScroll.isHidden = page != .text
         loadingPage.isHidden = page != .loading
         if page == .loading {
@@ -676,9 +711,12 @@ final class MessageViewController: NSViewController {
         if let webView {
             return webView
         }
-        let wv = MessageWebView(cache: cache, zoom: state.settings.textZoom)
+        let wv = MessageWebView(cache: cache, zoom: state.settings.textZoom, measures: true)
         wv.onLink = { [weak self] link in self?.openLink(link) }
         wv.onUnavailable = { [weak self] in self?.htmlUnavailable() }
+        wv.onContentHeight = { [weak self] h in
+            self?.htmlFit?.constant = h.map { ceil($0) } ?? Self.fillHeight
+        }
         wv.isHidden = true
         bodyContainer.addSubview(wv)
         NSLayoutConstraint.activate(fill(wv, in: bodyContainer))

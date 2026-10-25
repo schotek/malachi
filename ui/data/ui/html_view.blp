@@ -7,8 +7,15 @@ using WebKit 6.0;
 // content manager, settings, default CSP) can only be set here: the Go
 // binding has no g_object_new with properties.
 //
-// No JavaScript at all: the document is sanitised and inert, and nothing in
-// the application needs to run inside it. The CSP allows images from the
+// The document can run no script: it is sanitised and inert. The
+// JavaScript engine is on for one script of the application's own, as in
+// html_card.blp: htmlview adds it from Go to html_ucm in an isolated world
+// ("malachi-size") with the only message handler ("size") registered in
+// that world, and it only reads the layout (the document's height, so the
+// body area needs no more room than the document). enable-javascript-markup
+// off makes the parser drop every script element, event-handler attribute
+// and javascript: URL; the CSP (default-src 'none') refuses inline and
+// external script besides (docs/security.md §3.2). The CSP allows images from the
 // application's own malachi-cid: scheme (served through message.part) and
 // data: URIs (what the daemon inlined), inline styles, and nothing else; the
 // Go side additionally points the network session at an unreachable proxy
@@ -26,8 +33,11 @@ WebKit.WebView html_view {
   default-content-security-policy: "default-src 'none'; img-src malachi-cid: data:; style-src 'unsafe-inline'";
 
   settings: WebKit.Settings {
-    enable-javascript: false;
+    // The application's isolated-world script only; see above.
+    enable-javascript: true;
     enable-javascript-markup: false;
+    javascript-can-open-windows-automatically: false;
+    javascript-can-access-clipboard: false;
     enable-developer-extras: false;
     enable-html5-local-storage: false;
     enable-html5-database: false;

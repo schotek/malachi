@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-21 07:41+0000\n"
+"POT-Creation-Date: 2026-10-25 20:35+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -1697,13 +1697,13 @@ msgstr "Odpovědět všem"
 msgid "Forward"
 msgstr "Přeposlat"
 
-#: ui/internal/contextmenu/text.go:63 ui/data/ui/message_window.ui:568
-#: ui/data/ui/window.ui:1144
+#: ui/internal/contextmenu/text.go:63 ui/data/ui/message_window.ui:592
+#: ui/data/ui/window.ui:1168
 msgid "Mark as _Read"
 msgstr "Označit jako _přečtené"
 
-#: ui/internal/contextmenu/text.go:65 ui/data/ui/message_window.ui:564
-#: ui/data/ui/window.ui:1140
+#: ui/internal/contextmenu/text.go:65 ui/data/ui/message_window.ui:588
+#: ui/data/ui/window.ui:1164
 msgid "Mark as _Unread"
 msgstr "Označit jako _nepřečtené"
 
@@ -1719,7 +1719,7 @@ msgstr "Přidat hvězdičku"
 
 #. TRANSLATORS: menu of the status changes a Jira issue allows.
 #: ui/internal/contextmenu/text.go:72 ui/internal/jira/transitions.go:87
-#: ui/data/ui/message_window.ui:584 ui/data/ui/window.ui:1160
+#: ui/data/ui/message_window.ui:608 ui/data/ui/window.ui:1184
 msgid "Change Status"
 msgstr "Změnit stav"
 
@@ -1736,8 +1736,8 @@ msgstr "Archivovat"
 msgid "Move To"
 msgstr "Přesunout do"
 
-#: ui/internal/contextmenu/text.go:78 ui/data/ui/message_window.ui:558
-#: ui/data/ui/window.ui:1134
+#: ui/internal/contextmenu/text.go:78 ui/data/ui/message_window.ui:582
+#: ui/data/ui/window.ui:1158
 msgid "Mark as Junk"
 msgstr "Označit jako nevyžádanou"
 
@@ -2645,7 +2645,7 @@ msgid "Removed from eWay-CRM"
 msgstr "Odebráno z eWay-CRM"
 
 #: ui/internal/crm/text.go:289 ui/internal/board/view.go:859
-#: ui/internal/widget/message_row.go:371 ui/internal/window/message_view.go:608
+#: ui/internal/widget/message_row.go:371 ui/internal/window/message_view.go:615
 #: ui/internal/window/notify.go:136
 msgid "(No subject)"
 msgstr "(Bez předmětu)"
@@ -6523,7 +6523,7 @@ msgstr "Adresa zkopírována"
 msgid "_Copy Address"
 msgstr "_Kopírovat adresu"
 
-#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:1112
+#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:1136
 msgid "_New Message"
 msgstr "_Nová zpráva"
 
@@ -6564,11 +6564,11 @@ msgstr "Uložit _jako…"
 msgid "Save _All"
 msgstr "Uložit _vše"
 
-#: ui/internal/window/attachments.go:335 ui/internal/window/message_view.go:620
+#: ui/internal/window/attachments.go:335 ui/internal/window/message_view.go:627
 msgid "This message is too large to download."
 msgstr "Tato zpráva je příliš velká ke stažení."
 
-#: ui/internal/window/attachments.go:337 ui/internal/window/message_view.go:622
+#: ui/internal/window/attachments.go:337 ui/internal/window/message_view.go:629
 msgid "This message could not be read."
 msgstr "Tuto zprávu se nepodařilo přečíst."
 
@@ -6670,7 +6670,7 @@ msgid "Cc"
 msgstr "Kopie"
 
 #: ui/internal/window/conversation_card.go:737
-#: ui/internal/window/message_view.go:325
+#: ui/internal/window/message_view.go:330
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
@@ -6679,8 +6679,8 @@ msgstr ""
 "text."
 
 #: ui/internal/window/conversation_card.go:776 ui/data/ui/embedded_window.ui:61
-#: ui/data/ui/message_window.ui:259 ui/data/ui/message_window.ui:574
-#: ui/data/ui/window.ui:710 ui/data/ui/window.ui:1150
+#: ui/data/ui/message_window.ui:259 ui/data/ui/message_window.ui:598
+#: ui/data/ui/window.ui:710 ui/data/ui/window.ui:1174
 msgid "Load _Images"
 msgstr "Načíst _obrázky"
 
@@ -6700,7 +6700,7 @@ msgid "_Download Pictures"
 msgstr "_Stáhnout obrázky"
 
 #: ui/internal/window/conversation_card.go:984
-#: ui/internal/window/message_view.go:527
+#: ui/internal/window/message_view.go:534
 msgid "Loading the message"
 msgstr "Načtení zprávy"
 
@@ -6817,12 +6817,12 @@ msgstr "Zatím žádné složky"
 msgid "Folders appear after the first synchronisation."
 msgstr "Složky se objeví po první synchronizaci."
 
-#: ui/internal/window/message_view.go:614
-#: ui/internal/window/message_view.go:626
+#: ui/internal/window/message_view.go:621
+#: ui/internal/window/message_view.go:633
 msgid "(Empty message)"
 msgstr "(Prázdná zpráva)"
 
-#: ui/internal/window/message_view.go:618
+#: ui/internal/window/message_view.go:625
 msgid "Downloading…"
 msgstr "Stahuje se…"
 
@@ -7633,7 +7633,7 @@ msgid "Right"
 msgstr "Vpravo"
 
 #: ui/data/ui/conversation_view.ui:157 ui/data/ui/embedded_window.ui:267
-#: ui/data/ui/message_window.ui:507 ui/data/ui/window.ui:1022
+#: ui/data/ui/message_window.ui:509 ui/data/ui/window.ui:1024
 msgctxt "accessibility"
 msgid "Loading the message"
 msgstr "Načítání zprávy"
@@ -7646,7 +7646,7 @@ msgstr "Přiložená zpráva"
 msgid "Message"
 msgstr "Zpráva"
 
-#: ui/data/ui/message_window.ui:578 ui/data/ui/window.ui:1154
+#: ui/data/ui/message_window.ui:602 ui/data/ui/window.ui:1178
 msgid "Always Load Images From This _Sender"
 msgstr "Vždy načítat obrázky od tohoto _odesílatele"
 
@@ -7986,15 +7986,15 @@ msgstr "Přidejte poštovní účet a začněte číst a posílat poštu."
 msgid "_Add Account…"
 msgstr "_Přidat účet…"
 
-#: ui/data/ui/window.ui:1118
+#: ui/data/ui/window.ui:1142
 msgid "_Preferences"
 msgstr "_Předvolby"
 
-#: ui/data/ui/window.ui:1122
+#: ui/data/ui/window.ui:1146
 msgid "_Keyboard Shortcuts"
 msgstr "_Klávesové zkratky"
 
-#: ui/data/ui/window.ui:1126
+#: ui/data/ui/window.ui:1150
 msgid "_About Malachi Mail"
 msgstr "_O aplikaci Malachi Mail"
 

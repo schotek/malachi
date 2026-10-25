@@ -38,6 +38,15 @@
 //
 // Dark theme: the page stays on a white canvas (baseCSS, PreferredColorScheme
 // Light), as in GTK and macOS.
+//
+// The document's height (GTK View.OnSize, macOS measured mode): the reader
+// gives the body area no more room than the document needs while that fits,
+// so the "•••" under it follows its last line (BodyFitPanel). GTK and macOS
+// run their measuring script in an isolated world; page script is off here,
+// so the host measures as CardWebView does (CardSize's host script, whenever
+// the height may have changed: the document loaded, a picture was served,
+// the view's width or the zoom changed) and reports it as ContentHeight.
+// The view itself keeps scrolling its document in whatever height it gets.
 
 using System;
 using System.Text;
@@ -48,6 +57,7 @@ using Malachi.Core.I18n;
 using Malachi.Core.Model;
 using Malachi.Core.Presentation;
 using Microsoft.UI;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -59,9 +69,18 @@ namespace Malachi.App.WebViews;
 /// <summary>The viewer of a message's sanitised HTML body (htmlview.View, MessageWebView).</summary>
 public sealed partial class MessageWebView : HardenedWebView
 {
+    // How long the view waits for more causes before it measures (CardWebView).
+    private static readonly TimeSpan MeasureDelay = TimeSpan.FromMilliseconds(40);
+
     private readonly TextBlock status;
     private readonly Border statusBox;
+    private readonly DispatcherQueueTimer measureTimer;
     private int zoom = 100;
+
+    // The generation whose document completed its load: only its height is
+    // reported; the width the document was last measured at.
+    private long? loadedGeneration;
+    private double width = -1;
 
     // The body on display, so a re-render of the same message does not
     // reload the document (and lose its scroll position) for nothing
@@ -100,8 +119,23 @@ public sealed partial class MessageWebView : HardenedWebView
             Child = status,
         };
         Root.Children.Add(statusBox);
+        measureTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
+        measureTimer.IsRepeating = false;
+        measureTimer.Interval = MeasureDelay;
+        measureTimer.Tick += (_, _) => _ = MeasureAsync();
+        SizeChanged += OnSizeChanged;
         SetAccessibleName(Web);
     }
+
+    /// <summary>Raised when <see cref="ContentHeight"/> changes.</summary>
+    public event EventHandler? ContentHeightChanged;
+
+    /// <summary>
+    /// The document's height in device-independent pixels, the text zoom
+    /// included (CSS pixels of the viewport, CardSize); null while a document
+    /// is loading or none is shown (GTK View.OnSize -1).
+    /// </summary>
+    public double? ContentHeight { get; private set; }
 
     /// <summary>
     /// A link the user activated, an http(s) or mailto target that
@@ -142,6 +176,7 @@ public sealed partial class MessageWebView : HardenedWebView
             if (loadedBody is not null && IsReady)
             {
                 Run(ViewerZoom.Script(p));
+                ScheduleMeasure();
             }
         }
     }
@@ -173,6 +208,9 @@ public sealed partial class MessageWebView : HardenedWebView
         }
         needsReload = false;
         loadedBody = body;
+        loadedGeneration = null;
+        measureTimer.Stop();
+        SetContentHeight(null);
         var document = ViewerZoom.Apply(ViewerDocument.Document(body), zoom);
         LoadDocument(Encoding.UTF8.GetBytes(document), "text/html; charset=utf-8", ViewerDocument.Csp);
     }
@@ -192,7 +230,15 @@ public sealed partial class MessageWebView : HardenedWebView
     private protected override void OnUnavailable()
     {
         loadedBody = null;
+        loadedGeneration = null;
+        SetContentHeight(null);
         ShowStatus("");
+    }
+
+    private protected override void OnDocumentLoaded()
+    {
+        loadedGeneration = Gate.Generation;
+        ScheduleMeasure();
     }
 
     // The body's one reload (RendererRecovery).
@@ -239,7 +285,64 @@ public sealed partial class MessageWebView : HardenedWebView
         finally
         {
             deferral.Complete();
+            if (loadedGeneration is not null)
+            {
+                ScheduleMeasure();
+            }
         }
+    }
+
+    // The view's width reflows the document (CardWebView.OnSizeChanged); its
+    // height alone is not measured again, so a document sized by the
+    // viewport does not grow the body area with every report.
+    private void OnSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var w = e.NewSize.Width;
+        if (Math.Abs(w - width) < 0.5)
+        {
+            return;
+        }
+        width = w;
+        if (loadedGeneration is not null)
+        {
+            ScheduleMeasure();
+        }
+    }
+
+    private void ScheduleMeasure()
+    {
+        if (IsClosed)
+        {
+            return;
+        }
+        measureTimer.Stop();
+        measureTimer.Start();
+    }
+
+    // CardSize's host script for the document on display; the height goes to
+    // ContentHeight when the view still shows that document.
+    private async Task MeasureAsync()
+    {
+        if (loadedGeneration is not { } generation || IsClosed)
+        {
+            return;
+        }
+        var json = await EvaluateAsync(CardSize.Script);
+        if (IsClosed || loadedGeneration != generation || Gate.Generation != generation || CardSize.Parse(json) is not { } css)
+        {
+            return;
+        }
+        SetContentHeight(Math.Ceiling(css));
+    }
+
+    private void SetContentHeight(double? h)
+    {
+        if (h == ContentHeight)
+        {
+            return;
+        }
+        ContentHeight = h;
+        ContentHeightChanged?.Invoke(this, EventArgs.Empty);
     }
 
     // The link the page's focus is on after a cancelled activation, if it

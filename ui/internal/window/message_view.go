@@ -279,6 +279,10 @@ type messageView struct {
 
 	// spinner is the pending "reveal the spinner" timer, 0 when none.
 	spinner glib.SourceHandle
+
+	// fit gives the body area no more height than the body needs
+	// (message_view_fit.go).
+	fit bodyFit
 }
 
 // newMessageView binds the widgets of one message display from a builder;
@@ -304,6 +308,7 @@ func newMessageView(w *Window, parent *gtk.Window, b *gtk.Builder) *messageView 
 	}
 	v.addresses = newAddressHeader(v, b)
 	v.bindQuotedButton(b)
+	v.bindBodyFit(b)
 	if slot := b.GetObject("issue_card_slot"); slot != nil {
 		v.card = newIssueCard(w, parent, func() (issueSubject, bool) { return subjectOf(v.shown) })
 		box := slot.Cast().(*gtk.Box)
@@ -411,6 +416,8 @@ func (v *messageView) htmlView() *htmlview.View {
 		v.html = htmlview.New(v.win.log, v.win.fetchPart)
 		v.html.OnLink = func(uri string) { v.win.openLink(v.parent, uri, v.links) }
 		v.html.SetZoom(v.win.settings.TextZoom())
+		v.html.OnSize = v.fit.setHTMLHeight
+		v.fit.size = func(px int) { v.html.SetSizeRequest(-1, px) }
 		v.slot.Append(v.html)
 	}
 	return v.html
@@ -435,7 +442,7 @@ func (v *messageView) setZoom(percent int) {
 // showText shows plain text in the body area.
 func (v *messageView) showText(text string) {
 	v.body.SetLabel(text)
-	v.stack.SetVisibleChildName("text")
+	v.setBodyPage("text")
 	if v.html != nil {
 		v.html.Clear() // drop the pictures of the previous message
 	}
@@ -531,7 +538,7 @@ func (v *messageView) renderBody(lm *loadedMessage) {
 		v.links = b.Links
 		v.hint.SetVisible(false)
 		v.htmlView().Load(b.HTML)
-		v.stack.SetVisibleChildName("html")
+		v.setBodyPage("html")
 		renderRemoteBar(v, lm)
 		renderPicturesBar(v, lm)
 		return
@@ -586,7 +593,7 @@ func (v *messageView) loading() {
 	v.showText("")
 	v.spinner = glib.TimeoutAdd(bodySpinnerDelay, func() bool {
 		v.spinner = 0
-		v.stack.SetVisibleChildName("loading")
+		v.setBodyPage("loading")
 		return false
 	})
 }

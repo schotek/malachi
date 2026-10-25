@@ -85,6 +85,13 @@ import WebKit
 /// scroll view at its full height; the scroll wheel goes on to that scroll
 /// view while the document fits, and the link under the pointer goes to
 /// `onHover` for the conversation's one status label.
+///
+/// The measured mode (`measures`, the reading pane and the message
+/// windows) runs the same `sizeScript` and reports the document's height
+/// to `onContentHeight`, but the view stays unsized and scrolls its
+/// document itself: the owner only stops giving it more height than the
+/// document needs, so what comes under the body (the "•••" of the quoted
+/// history) follows its last line.
 @MainActor
 final class MessageWebView: NSView {
     /// Called with a link the user activated, an http(s) or mailto target
@@ -105,9 +112,17 @@ final class MessageWebView: NSView {
     /// owner's status label; the view shows none of its own then.
     var onHover: (@MainActor (String) -> Void)?
 
+    /// Measured mode: the document's height in points at the current zoom
+    /// whenever it changes, nil when a new document starts loading and its
+    /// height is not known yet.
+    var onContentHeight: (@MainActor (CGFloat?) -> Void)?
+
     /// The view takes the height of its document (a conversation card)
     /// instead of scrolling it in whatever height it is given.
     let sized: Bool
+
+    /// Reports the document's height (`onContentHeight`) without taking it.
+    let measures: Bool
 
     private let web: ViewerWebView
     private let handler: PartSchemeHandler
@@ -131,6 +146,10 @@ final class MessageWebView: NSView {
     private var governor: WebHeightGovernor
     /// Sized mode: the width the document was last laid out at.
     private var laidOutWidth: CGFloat = 0
+    /// Measured mode: the page zoom and the document's last height in CSS
+    /// pixels, for reporting it again at a new zoom.
+    private var zoomFactor: Double = 1
+    private var measuredCSS: Double?
 
     static let hoverHandlerName = "hover"
     static let linkHandlerName = "link"
@@ -161,12 +180,15 @@ final class MessageWebView: NSView {
     ///   type's comment); the reading pane and the message windows use the
     ///   view unsized.
     /// - Parameter chat: a chat bubble's view (`chat`), sized as well.
-    init(cache: MessageCache, zoom: Int, sized: Bool = false, chat: Bool = false) {
+    /// - Parameter measures: the measured mode of an unsized view (see the
+    ///   type's comment).
+    init(cache: MessageCache, zoom: Int, sized: Bool = false, chat: Bool = false, measures: Bool = false) {
         self.sized = sized || chat
+        self.measures = measures && !(sized || chat)
         self.chat = chat
         governor = WebHeightGovernor(zoom: Self.pageZoom(zoom))
         handler = PartSchemeHandler(cache: cache)
-        let config = Self.makeConfiguration(handler: handler, messages: messages, sized: sized || chat)
+        let config = Self.makeConfiguration(handler: handler, messages: messages, sized: sized || chat || measures)
         web = ViewerWebView(frame: .zero, configuration: config)
         if chat {
             // Transparent before the first load, so nothing flashes white.
@@ -337,7 +359,7 @@ final class MessageWebView: NSView {
     })();
     """
 
-    /// The sized mode's second script, in the view's own world like
+    /// The sized and measured modes' second script, in the view's own world like
     /// `viewerScript`: it reports the document's height in CSS pixels to
     /// the `size` handler whenever it changes (a ResizeObserver on the
     /// document and on the column `viewerDocument` puts the message in, and
@@ -411,6 +433,10 @@ final class MessageWebView: NSView {
         needsReload = false
         loadedBody = body
         governor.reset()
+        if measures {
+            measuredCSS = nil
+            onContentHeight?(nil)
+        }
         web.loadHTMLString(
             viewerDocument(body: body, compact: sized, chat: chat ? Self.chatColours() : nil), baseURL: nil)
     }
@@ -450,6 +476,10 @@ final class MessageWebView: NSView {
     func setZoom(_ percent: Int) {
         let z = Self.pageZoom(percent)
         web.pageZoom = CGFloat(z)
+        zoomFactor = z
+        if measures, let css = measuredCSS {
+            onContentHeight?(CGFloat(css * z))
+        }
         // Sized mode: the last height at the new zoom at once; the document
         // reports what it reflowed to.
         if sized, let h = governor.setZoom(z) {
@@ -472,8 +502,14 @@ final class MessageWebView: NSView {
         }
     }
 
-    /// Sized mode: the document's height from `sizeScript`.
+    /// Sized and measured modes: the document's height from `sizeScript`.
     private func sizeReported(css: Double, viewport: Bool) {
+        if measures {
+            guard css.isFinite, css >= 0 else { return }
+            measuredCSS = css
+            onContentHeight?(CGFloat(css * zoomFactor))
+            return
+        }
         guard sized, let h = governor.report(css: css, viewport: viewport) else { return }
         onHeight?(CGFloat(h))
     }
@@ -489,7 +525,7 @@ final class MessageWebView: NSView {
             guard let dict = body as? [String: Any], let resolved = dict["resolved"] as? String else { return }
             linkActivated(ActivatedLink(raw: dict["raw"] as? String, resolved: resolved))
         case Self.sizeHandlerName:
-            guard sized, let dict = body as? [String: Any], let h = (dict["h"] as? NSNumber)?.doubleValue else { return }
+            guard sized || measures, let dict = body as? [String: Any], let h = (dict["h"] as? NSNumber)?.doubleValue else { return }
             sizeReported(css: h, viewport: (dict["v"] as? Bool) ?? false)
         default:
             log.debug("script message from an unknown handler")

@@ -158,6 +158,7 @@ public sealed partial class MessageView : UserControl
         Reader.Addresses.RowChanged += (_, kind) => FillAddressRow(kind);
         services.Attachments.SavingAllChanged += OnSavingAllChanged;
         InitializeComponent();
+        UpdateBodyFit();
         chips = new MessageChips(services, this, () => HostWindow, () => FocusBody(), logger);
 
         // The issue card of a Jira message (issue_card.go): its menu acts on
@@ -500,6 +501,9 @@ public sealed partial class MessageView : UserControl
         }
         switch (e.PropertyName)
         {
+            case nameof(ReaderController.BodyPage):
+                UpdateBodyFit();
+                break;
             case nameof(ReaderController.Html):
                 if (Reader.Html is { } html)
                 {
@@ -669,9 +673,20 @@ public sealed partial class MessageView : UserControl
         view.Zoom = services.State.Settings.TextZoom;
         view.LinkActivated += (_, link) => _ = services.Links.OpenAsync(link, Reader.Links, HostWindow);
         view.Unavailable += (_, _) => Reader.HtmlUnavailable();
+        view.ContentHeightChanged += (_, _) => UpdateBodyFit();
         HtmlSlot.Children.Add(view);
         web = view;
         return view;
+    }
+
+    // The body area's height for the page on display (message_view_fit.go
+    // bodyFit.apply): the text's, the document's while it is known, the
+    // whole area otherwise; the "•••" follows it (BodyFitPanel).
+    private void UpdateBodyFit()
+    {
+        var html = web?.ContentHeight;
+        BodyFitArea.Mode = BodyFit.ModeFor(Reader.BodyPage, html);
+        BodyFitArea.FitHeight = html ?? 0;
     }
 
     // The text-zoom and monospace settings, for the text body and the viewer

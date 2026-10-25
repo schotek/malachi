@@ -75,3 +75,20 @@ func TestSizeScript(t *testing.T) {
 		t.Error("the script does not observe the column")
 	}
 }
+
+func TestSizePixels(t *testing.T) {
+	for _, c := range []struct {
+		css, zoom float64
+		want      int
+	}{
+		{0, 1, 0},
+		{128, 1, 128},
+		{100.2, 1, 101},
+		{100, 1.25, 125},
+		{101, 0.5, 51},
+	} {
+		if got := sizePixels(c.css, c.zoom); got != c.want {
+			t.Errorf("sizePixels(%v, %v) = %d, want %d", c.css, c.zoom, got, c.want)
+		}
+	}
+}

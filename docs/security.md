@@ -140,8 +140,12 @@ defence. Requirements are listed in that package's documentation; summary:
 
 Layer 2 — **the UI webview** (WebKitGTK 6.0):
 
-- JavaScript disabled in `WebKitSettings`; plugins, media, WebGL, WebAudio,
-  local storage, databases, DNS prefetching and hyperlink auditing off;
+- no script of the document: `enable-javascript-markup` off, the CSP
+  without `script-src` and the sanitiser (see the conversation cards below
+  for why the engine itself is on, for one script of the application's own
+  in an isolated world that only reads the document's height); plugins,
+  media, WebGL, WebAudio, local storage, databases, DNS prefetching and
+  hyperlink auditing off;
 - Content-Security-Policy `default-src 'none'; img-src malachi-cid: data:;
   style-src 'unsafe-inline'`, set both as the view's default policy and as
   a `<meta>` in the loaded document; `data:` covers only what the daemon
@@ -196,7 +200,12 @@ sanitiser output (the column's padding cut to the card's), `malachi-cid:`
 pictures through `message.part` only, `decide-policy` refusing every
 navigation but the initial load (a user's link goes through the viewer's
 masked-link check), and the reduced context menu. The single-message
-view keeps JavaScript off entirely. A composed document of the whole
+view (`htmlview.View`, `html_view.blp`) has the same configuration and
+the same script in the same world since 2026-10-25, but takes nothing from
+it but the number (`View.OnSize`): it keeps scrolling its document and the
+window only gives the body area no more room than the document needs, so
+that the "•••" of the quoted history follows the body's last line
+(`window/message_view_fit.go`). A composed document of the whole
 conversation was rejected for the reason given for macOS below: in a
 card the headers, badges and event rows are native widgets with plain
 text, and the body is one message's output.
@@ -289,7 +298,11 @@ for WKWebView, since nothing of the WebKitGTK configuration carries over:
   refused; the context menu keeps Copy and Copy Link only;
 - the view's script and its message handlers live in a content world of
   their own (`WKContentWorld.defaultClient`), so nothing of the document
-  could reach them even if content JavaScript were ever on;
+  could reach them even if content JavaScript were ever on; the reading
+  pane and the message windows also run the cards' read-only size script
+  there (`measures`), only so the body area takes no more height than the
+  document needs and the "•••" of the quoted history follows its last
+  line;
 - the plain-text body and the selectable header labels keep the system's
   text services out (a context menu of Copy and Select All only, no
   Services requestor, no Look Up preview), so a selection of mail text is
@@ -473,7 +486,9 @@ fetch a page, both unseen by the filter:
   outside by a host script (`CardSize`, through the prototypes' own
   accessors, changing nothing) when the document loaded, a picture
   arrived or the view's width, height or zoom changed, since no listener
-  an injected script set up would ever run; the height is capped
+  an injected script set up would ever run (the reader's viewer runs the
+  same host script, `MessageWebView.ContentHeight`, only to fit its body
+  area, never to size the view itself); the height is capped
   (4000 px, beyond it the card scrolls inside) and frozen for a document
   that grows with the view, so a message cannot grow the pane without
   end ([windows-port.md §6.7](windows-port.md#67-conversation-card-cardwebview));

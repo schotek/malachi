@@ -522,7 +522,6 @@ gets the sanitiser's output only.
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <ScrollViewer
@@ -659,58 +658,62 @@ gets the sanitiser's output only.
                     <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
                 </Border>
 
-                <!-- body_stack: "text", "loading", "html". -->
-                <Grid x:Name="BodyArea" Grid.Row="2">
-                    <ScrollViewer
-                        x:Name="TextScroller"
-                        AutomationProperties.AutomationId="MessageBodyScroller"
-                        AutomationProperties.Name="{l:T Msgid='Message'}"
-                        HorizontalScrollBarVisibility="Disabled"
-                        IsTabStop="True"
-                        VerticalScrollBarVisibility="Auto"
-                        Visibility="{x:Bind local:ReaderBind.BodyVisible(Reader.BodyPage, 'Text'), Mode=OneWay}">
-                        <!-- The same clamp as the headers: a panel as wide
-                             as the pane centres the text in it. -->
-                        <Grid>
-                            <TextBlock
-                                x:Name="BodyLabel"
-                                MaxWidth="900"
-                                Padding="24,12,24,24"
-                                HorizontalAlignment="Stretch"
-                                AutomationProperties.AutomationId="MessageBody"
-                                IsTextSelectionEnabled="True"
-                                Text="{x:Bind Reader.BodyText, Mode=OneWay}"
-                                TextWrapping="Wrap" />
-                        </Grid>
-                    </ScrollViewer>
-                    <ProgressRing
-                        x:Name="BodySpinner"
-                        Width="32"
-                        Height="32"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        AutomationProperties.Name="{l:T Msgid='Loading the message', Context='accessibility'}"
-                        IsActive="{x:Bind local:ReaderBind.IsLoading(Reader.BodyPage), Mode=OneWay}"
-                        Visibility="{x:Bind local:ReaderBind.BodyVisible(Reader.BodyPage, 'Loading'), Mode=OneWay}" />
-                    <Grid
-                        x:Name="HtmlSlot"
-                        Visibility="{x:Bind local:ReaderBind.BodyVisible(Reader.BodyPage, 'Html'), Mode=OneWay}" />
-                </Grid>
+                <!-- body_stack and quoted_row: the body area takes no more
+                     room than its body needs while that fits, the "•••"
+                     right under it (BodyFitPanel, message_view_fit.go). -->
+                <local:BodyFitPanel x:Name="BodyFitArea" Grid.Row="2">
+                    <!-- body_stack: "text", "loading", "html". -->
+                    <Grid x:Name="BodyArea">
+                        <ScrollViewer
+                            x:Name="TextScroller"
+                            AutomationProperties.AutomationId="MessageBodyScroller"
+                            AutomationProperties.Name="{l:T Msgid='Message'}"
+                            HorizontalScrollBarVisibility="Disabled"
+                            IsTabStop="True"
+                            VerticalScrollBarVisibility="Auto"
+                            Visibility="{x:Bind local:ReaderBind.BodyVisible(Reader.BodyPage, 'Text'), Mode=OneWay}">
+                            <!-- The same clamp as the headers: a panel as wide
+                                 as the pane centres the text in it. -->
+                            <Grid>
+                                <TextBlock
+                                    x:Name="BodyLabel"
+                                    MaxWidth="900"
+                                    Padding="24,12,24,24"
+                                    HorizontalAlignment="Stretch"
+                                    AutomationProperties.AutomationId="MessageBody"
+                                    IsTextSelectionEnabled="True"
+                                    Text="{x:Bind Reader.BodyText, Mode=OneWay}"
+                                    TextWrapping="Wrap" />
+                            </Grid>
+                        </ScrollViewer>
+                        <ProgressRing
+                            x:Name="BodySpinner"
+                            Width="32"
+                            Height="32"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="{l:T Msgid='Loading the message', Context='accessibility'}"
+                            IsActive="{x:Bind local:ReaderBind.IsLoading(Reader.BodyPage), Mode=OneWay}"
+                            Visibility="{x:Bind local:ReaderBind.BodyVisible(Reader.BodyPage, 'Loading'), Mode=OneWay}" />
+                        <Grid
+                            x:Name="HtmlSlot"
+                            Visibility="{x:Bind local:ReaderBind.BodyVisible(Reader.BodyPage, 'Html'), Mode=OneWay}" />
+                    </Grid>
 
-                <!-- The "•••" under the body, which scrolls on its own: it
-                     shows or hides the quoted history the daemon cut
-                     (MessageViewController.swift quotedButton), in sight at
-                     the bottom of the message, in the same clamp. Never in
-                     an attached message's window. -->
-                <Border
-                    x:Name="QuotedRow"
-                    Grid.Row="3"
-                    MaxWidth="900"
-                    Padding="24,4,24,8"
-                    HorizontalAlignment="Stretch"
-                    Visibility="Collapsed">
-                    <local:QuotedTextButton x:Name="QuotedButton" Click="OnQuotedClick" />
-                </Border>
+                    <!-- The "•••" under the body: it shows or hides the quoted
+                         history the daemon cut (MessageViewController.swift
+                         quotedButton), after the body's last line, or at the
+                         bottom when the body scrolls, in the same clamp. Never
+                         in an attached message's window. -->
+                    <Border
+                        x:Name="QuotedRow"
+                        MaxWidth="900"
+                        Padding="24,4,24,8"
+                        HorizontalAlignment="Stretch"
+                        Visibility="Collapsed">
+                        <local:QuotedTextButton x:Name="QuotedButton" Click="OnQuotedClick" />
+                    </Border>
+                </local:BodyFitPanel>
             </Grid>
         </Grid>
     </Grid>
