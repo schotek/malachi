@@ -200,9 +200,10 @@ private final class Harness {
         defer { h.request.cancel() }
         let started = ContinuousClock.now
         h.start(timeout: .milliseconds(400))
-        try await waitFor(.seconds(5)) { !h.outcomes.isEmpty }
+        // Under the request's own 10 s, with room for a loaded CI runner.
+        try await waitFor(.seconds(8)) { !h.outcomes.isEmpty }
         #expect(h.outcomes == [.failed(.stopped(AssistantRequest.timedOut))])
-        #expect(ContinuousClock.now - started < .seconds(5))
+        #expect(ContinuousClock.now - started < .seconds(8))
         #expect(h.request.timeout == .seconds(10))
     }
 

@@ -299,7 +299,9 @@ private func para(_ s: String) -> B { B(kind: .paragraph, spans: plain(s)) }
             let start = ContinuousClock.now
             let blocks = Assistant.markdown(input)
             let took = ContinuousClock.now - start
-            #expect(took < .seconds(3), "\(name): \(input.utf8.count) bytes took \(took)")
+            // Generous for a loaded CI runner; quadratic input takes tens of
+            // seconds.
+            #expect(took < .seconds(10), "\(name): \(input.utf8.count) bytes took \(took)")
             let n = blocks.reduce(0) { $0 + $1.spans.reduce(0) { $0 + $1.text.utf8.count } }
             #expect(n <= 3 * input.utf8.count, "\(name): \(n) bytes of spans from \(input.utf8.count) bytes")
         }

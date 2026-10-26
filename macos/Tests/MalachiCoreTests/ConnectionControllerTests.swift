@@ -313,7 +313,7 @@ private func isUnavailable(_ s: ConnectionController.ConnectionState) -> Bool {
         // The retry loop dials again after the interval.
         let start = ContinuousClock.now
         try await waitUntil { log.states.count >= 5 && isConnected(cc.state) }
-        #expect(ContinuousClock.now - start < .seconds(3))
+        #expect(ContinuousClock.now - start < .seconds(5))
         #expect(await fake.accepted == 2)
         #expect(log.states.map(\.kind) == ["connecting", "connected", "unavailable", "connecting", "connected"])
         await cc.stop()

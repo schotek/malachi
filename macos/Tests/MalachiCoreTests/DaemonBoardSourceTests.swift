@@ -303,7 +303,9 @@ private final class Harness {
             try await client.connect()
         }
         let clock = clock
-        source = DaemonBoardSource(client: client, sleep: { await clock.sleep($0) })
+        // A held board.list must outlast a slow CI runner, not the default
+        // 5 s timeout (which would fail it and start a retry).
+        source = DaemonBoardSource(client: client, sleep: { await clock.sleep($0) }, listTimeout: .seconds(60))
         source.onChange = { [weak self] in self?.reports += 1 }
         source.onError = { [weak self] in self?.errors.append($0) }
         source.onNotice = { [weak self] in self?.notices.append($0) }

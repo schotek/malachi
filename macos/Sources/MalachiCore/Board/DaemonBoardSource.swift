@@ -73,6 +73,9 @@ public final class DaemonBoardSource: BoardSource {
     private let debounce: Duration
     private let sleep: Sleep
     private let retryDelay: @Sendable (Int) -> Duration
+    /// board.list's timeout; nil = the method's own. Tests that hold the
+    /// reply for a while pass a longer one.
+    private let listTimeout: Duration?
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "board")
 
     /// The daemon's data as last answered (board.list, then each write's
@@ -125,12 +128,14 @@ public final class DaemonBoardSource: BoardSource {
     public init(
         client: RPCClient, debounce: Duration = DaemonBoardSource.defaultDebounce,
         sleep: @escaping Sleep = DaemonBoardSource.taskSleep,
-        retryDelay: @escaping @Sendable (Int) -> Duration = DaemonBoardSource.retryDelay
+        retryDelay: @escaping @Sendable (Int) -> Duration = DaemonBoardSource.retryDelay,
+        listTimeout: Duration? = nil
     ) {
         self.client = client
         self.debounce = debounce
         self.sleep = sleep
         self.retryDelay = retryDelay
+        self.listTimeout = listTimeout
     }
 
     /// Writes whose answer has not arrived.
@@ -229,10 +234,11 @@ public final class DaemonBoardSource: BoardSource {
         let generation = listGeneration
         listInFlight = generation
         let client = client
+        let timeout = listTimeout
         Task { [weak self] in
             let outcome: Result<BoardListResult, any Error>
             do {
-                outcome = .success(try await client.call(API.BoardList.self, BoardListParams()))
+                outcome = .success(try await client.call(API.BoardList.self, BoardListParams(), timeout: timeout))
             } catch {
                 outcome = .failure(error)
             }
