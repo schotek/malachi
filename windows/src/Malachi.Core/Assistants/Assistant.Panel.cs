@@ -580,6 +580,14 @@ public static partial class Assistant
         "LANG", "LC_ALL", "LC_CTYPE",
     ];
 
+    /// <summary>
+    /// Makes Claude Code connect its MCP servers before the init event and
+    /// the first turn: Claude Code 2.1.178 starts them in the background by
+    /// default, init reports the bridge "pending" with no tool, and the
+    /// model, offered no tool, writes its calls out as text.
+    /// </summary>
+    private const string McpBlocking = "MCP_CONNECTION_NONBLOCKING=false";
+
     /// <summary><see cref="ChildEnvKeys"/> by any spelling of their names.</summary>
     private static readonly Dictionary<string, string> ChildEnvKeySpelling =
         ChildEnvKeys.ToDictionary(k => k, k => k, StringComparer.OrdinalIgnoreCase);
@@ -599,7 +607,8 @@ public static partial class Assistant
     /// path (<see cref="CleanWindowsPath"/> leaves it as it is) without a ';',
     /// and <c>C:\Windows</c> otherwise. The directory of claude is left out
     /// unless <paramref name="claudePath"/> is such a path too and its
-    /// directory holds no ';'. Nothing else: no CLAUDE* or ANTHROPIC*
+    /// directory holds no ';'. And <c>MCP_CONNECTION_NONBLOCKING=false</c>
+    /// (<see cref="McpBlocking"/>). Nothing else: no CLAUDE* or ANTHROPIC*
     /// variable of a surrounding session, no MALACHI_* (the socket goes on
     /// the command line), not the parent's PATH.
     /// </remarks>
@@ -629,7 +638,7 @@ public static partial class Assistant
                 path = dir + ";" + path;
             }
         }
-        return [.. kept.Select(kv => kv.Key + "=" + kv.Value).Append("PATH=" + path).Order(CodePoints.Comparer)];
+        return [.. kept.Select(kv => kv.Key + "=" + kv.Value).Append("PATH=" + path).Append(McpBlocking).Order(CodePoints.Comparer)];
     }
 
     /// <summary>Whether <paramref name="dir"/> is clean and drive-absolute and can stand in a PATH (no ';').</summary>

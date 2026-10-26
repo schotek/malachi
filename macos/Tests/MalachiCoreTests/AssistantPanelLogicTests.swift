@@ -290,6 +290,7 @@ private let attachmentAsk = "Using the Malachi Mail tools, read attachment %@ of
             "ANTHROPIC_BASE_URL=https://proxy.example",
             "MALACHI_SOCKET=/tmp/s.sock",
             "MALACHI_MCP_ALLOW_SEND=1",
+            "MCP_CONNECTION_NONBLOCKING=true",
             "NODE_OPTIONS=--require /tmp/evil.js",
             "DYLD_INSERT_LIBRARIES=/tmp/evil.dylib",
             "home=/lower/case",
@@ -304,6 +305,7 @@ private let attachmentAsk = "Using the Malachi Mail tools, read attachment %@ of
             "LC_ALL=",
             "LC_CTYPE=UTF-8",
             "LOGNAME=u",
+            "MCP_CONNECTION_NONBLOCKING=false",
             "PATH=/Users/u/.nvm/versions/node/v20.19.0/bin:/usr/bin:/bin:/usr/sbin:/sbin",
             "SHELL=/bin/zsh",
             "TMPDIR=/var/folders/x/T/",
@@ -320,11 +322,11 @@ private let attachmentAsk = "Using the Malachi Mail tools, read attachment %@ of
             ("/odd:dir/claude", "/usr/bin:/bin:/usr/sbin:/sbin"),
         ]
         for (claude, path) in cases {
-            #expect(Assistant.childEnv([], claudePath: claude) == ["PATH=" + path], "\(claude)")
+            #expect(Assistant.childEnv([], claudePath: claude) == ["MCP_CONNECTION_NONBLOCKING=false", "PATH=" + path], "\(claude)")
         }
         // Swift only: the dictionary form for Foundation.Process.
         let dict = Assistant.childEnvironment(["HOME": "/h", "ANTHROPIC_BASE_URL": "x"], claudePath: "/opt/homebrew/bin/claude")
-        #expect(dict == ["HOME": "/h", "PATH": "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"])
+        #expect(dict == ["HOME": "/h", "MCP_CONNECTION_NONBLOCKING": "false", "PATH": "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"])
     }
 
     /// The sign-in opens the browser: ChildEnv and the desktop session,
@@ -356,6 +358,7 @@ private let attachmentAsk = "Using the Malachi Mail tools, read attachment %@ of
             "DISPLAY=:0",
             "HOME=/home/u",
             "LANG=cs_CZ.UTF-8",
+            "MCP_CONNECTION_NONBLOCKING=false",
             "PATH=/home/u/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
             "WAYLAND_DISPLAY=wayland-0",
             "XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.X",
@@ -372,7 +375,7 @@ private let attachmentAsk = "Using the Malachi Mail tools, read attachment %@ of
         // Swift only: the dictionary form for Foundation.Process.
         let dict = Assistant.signInEnvironment(
             ["HOME": "/h", "BROWSER": "firefox", "ANTHROPIC_API_KEY": "x"], claudePath: "/opt/homebrew/bin/claude")
-        #expect(dict == ["HOME": "/h", "BROWSER": "firefox", "PATH": "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"])
+        #expect(dict == ["HOME": "/h", "BROWSER": "firefox", "MCP_CONNECTION_NONBLOCKING": "false", "PATH": "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"])
     }
 
     // MARK: assistant_test.go, the panel's half

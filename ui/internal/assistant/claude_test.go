@@ -410,6 +410,7 @@ func TestChildEnv(t *testing.T) {
 		"ANTHROPIC_BASE_URL=https://proxy.example",
 		"MALACHI_SOCKET=/tmp/s.sock",
 		"MALACHI_MCP_ALLOW_SEND=1",
+		"MCP_CONNECTION_NONBLOCKING=true",
 		"NODE_OPTIONS=--require /tmp/evil.js",
 		"DYLD_INSERT_LIBRARIES=/tmp/evil.dylib",
 		"home=/lower/case",
@@ -424,6 +425,7 @@ func TestChildEnv(t *testing.T) {
 		"LC_ALL=",
 		"LC_CTYPE=UTF-8",
 		"LOGNAME=u",
+		"MCP_CONNECTION_NONBLOCKING=false",
 		"PATH=/Users/u/.nvm/versions/node/v20.19.0/bin:/usr/bin:/bin:/usr/sbin:/sbin",
 		"SHELL=/bin/zsh",
 		"TMPDIR=/var/folders/x/T/",
@@ -448,7 +450,7 @@ func TestChildEnv(t *testing.T) {
 	}
 	for _, tt := range tests {
 		got := ChildEnv(nil, tt.claude)
-		if want := []string{"PATH=" + tt.path}; !slices.Equal(got, want) {
+		if want := []string{"MCP_CONNECTION_NONBLOCKING=false", "PATH=" + tt.path}; !slices.Equal(got, want) {
 			t.Errorf("ChildEnv(nil, %q) = %q, want %q", tt.claude, got, want)
 		}
 	}
@@ -484,6 +486,7 @@ func TestSignInEnv(t *testing.T) {
 		"DISPLAY=:0",
 		"HOME=/home/u",
 		"LANG=cs_CZ.UTF-8",
+		"MCP_CONNECTION_NONBLOCKING=false",
 		"PATH=/home/u/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
 		"WAYLAND_DISPLAY=wayland-0",
 		"XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.X",

@@ -400,6 +400,12 @@ var childEnvKeys = map[string]bool{
 	"LC_ALL": true, "LC_CTYPE": true, "TMPDIR": true, "SHELL": true,
 }
 
+// mcpBlocking makes Claude Code connect its MCP servers before the init
+// event and the first turn: Claude Code 2.1.178 starts them in the
+// background by default, init reports the bridge "pending" with no tool,
+// and the model, offered no tool, writes its calls out as text.
+const mcpBlocking = "MCP_CONNECTION_NONBLOCKING=false"
+
 // systemPath is the part of the child's PATH after the directory of
 // claude.
 const systemPath = "/usr/bin:/bin:/usr/sbin:/sbin"
@@ -411,7 +417,8 @@ const systemPath = "/usr/bin:/bin:/usr/sbin:/sbin"
 // (claude may be a Node script run through /usr/bin/env node, which nvm
 // keeps beside it; a GUI application gets only a minimal PATH) followed
 // by /usr/bin:/bin:/usr/sbin:/sbin. That directory is left out when
-// claudePath is not absolute or the directory holds a ":". Nothing else:
+// claudePath is not absolute or the directory holds a ":". And
+// MCP_CONNECTION_NONBLOCKING=false (mcpBlocking). Nothing else:
 // no CLAUDE* or ANTHROPIC* variable of a surrounding session, no
 // MALACHI_* (the socket goes on the command line).
 func ChildEnv(parent []string, claudePath string) []string {
@@ -458,11 +465,11 @@ func childEnv(parent []string, claudePath string, more map[string]bool) []string
 			p = dir + ":" + systemPath
 		}
 	}
-	out := make([]string, 0, len(kept)+1)
+	out := make([]string, 0, len(kept)+2)
 	for k, v := range kept {
 		out = append(out, k+"="+v)
 	}
-	out = append(out, "PATH="+p)
+	out = append(out, "PATH="+p, mcpBlocking)
 	slices.Sort(out)
 	return out
 }

@@ -483,6 +483,13 @@ extension Assistant {
     static let childEnvKeys: Set<[UInt8]> = Set(
         ["HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "SHELL"].map { Array($0.utf8) })
 
+    /// mcpBlocking: makes Claude Code connect its MCP servers before the
+    /// init event and the first turn: Claude Code 2.1.178 starts them in
+    /// the background by default, init reports the bridge "pending" with
+    /// no tool, and the model, offered no tool, writes its calls out as
+    /// text.
+    static let mcpBlocking = "MCP_CONNECTION_NONBLOCKING=false"
+
     /// systemPath: the part of the child's PATH after the directory of
     /// claude.
     static let systemPath = "/usr/bin:/bin:/usr/sbin:/sbin"
@@ -495,7 +502,8 @@ extension Assistant {
     /// /usr/bin/env node, which nvm keeps beside it; a GUI application gets
     /// only a minimal PATH) followed by /usr/bin:/bin:/usr/sbin:/sbin. That
     /// directory is left out when `claudePath` is not absolute or the
-    /// directory holds a ":". Nothing else: no CLAUDE* or ANTHROPIC*
+    /// directory holds a ":". And MCP_CONNECTION_NONBLOCKING=false
+    /// (`mcpBlocking`). Nothing else: no CLAUDE* or ANTHROPIC*
     /// variable of a surrounding session, no MALACHI_* (the socket goes on
     /// the command line).
     public static func childEnv(_ parent: [String], claudePath: String) -> [String] {
@@ -543,6 +551,7 @@ extension Assistant {
         }
         var out = kept.map { String(decoding: $0.key, as: UTF8.self) + "=" + $0.value }
         out.append("PATH=" + path)
+        out.append(mcpBlocking)
         return out.sorted { Array($0.utf8).lexicographicallyPrecedes(Array($1.utf8)) }
     }
 

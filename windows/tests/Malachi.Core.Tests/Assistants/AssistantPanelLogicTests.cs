@@ -512,6 +512,7 @@ public sealed class AssistantPanelLogicTests
             "ANTHROPIC_BASE_URL=https://proxy.example",
             @"MALACHI_SOCKET=C:\Users\u\AppData\Local\Temp\s.sock",
             "MALACHI_MCP_ALLOW_SEND=1",
+            "MCP_CONNECTION_NONBLOCKING=true",
             @"NODE_OPTIONS=--require C:\evil.js",
             @"HOME=C:\Users\u",
             "USER=u",
@@ -542,6 +543,7 @@ public sealed class AssistantPanelLogicTests
                 "LC_ALL=",
                 "LC_CTYPE=UTF-8",
                 @"LOCALAPPDATA=C:\Users\u\AppData\Local",
+                "MCP_CONNECTION_NONBLOCKING=false",
                 "NUMBER_OF_PROCESSORS=8",
                 "OS=Windows_NT",
                 @"PATH=C:\Users\u\.local\bin;" + SystemPath,
@@ -583,38 +585,38 @@ public sealed class AssistantPanelLogicTests
     [InlineData(@"C:\odd;dir\claude.exe", SystemPath)]
     public void ChildEnvPath(string claude, string path)
     {
-        Assert.Equal(["PATH=" + path], Assistant.ChildEnv([], claude));
+        Assert.Equal(["MCP_CONNECTION_NONBLOCKING=false", "PATH=" + path], Assistant.ChildEnv([], claude));
     }
 
     public static TheoryData<string, string[], string[]> SystemRootCases() => new()
     {
         {
             "another SystemRoot", [@"SystemRoot=D:\Win"],
-            [@"PATH=D:\Win\System32;D:\Win;D:\Win\System32\Wbem;D:\Win\System32\WindowsPowerShell\v1.0", @"SystemRoot=D:\Win"]
+            ["MCP_CONNECTION_NONBLOCKING=false", @"PATH=D:\Win\System32;D:\Win;D:\Win\System32\Wbem;D:\Win\System32\WindowsPowerShell\v1.0", @"SystemRoot=D:\Win"]
         },
         {
             "the key in another case", [@"SYSTEMROOT=D:\Win"],
-            [@"PATH=D:\Win\System32;D:\Win;D:\Win\System32\Wbem;D:\Win\System32\WindowsPowerShell\v1.0", @"SystemRoot=D:\Win"]
+            ["MCP_CONNECTION_NONBLOCKING=false", @"PATH=D:\Win\System32;D:\Win;D:\Win\System32\Wbem;D:\Win\System32\WindowsPowerShell\v1.0", @"SystemRoot=D:\Win"]
         },
         {
             "the last entry wins", [@"SystemRoot=A:\x", @"systemroot=B:\y"],
-            [@"PATH=B:\y\System32;B:\y;B:\y\System32\Wbem;B:\y\System32\WindowsPowerShell\v1.0", @"SystemRoot=B:\y"]
+            ["MCP_CONNECTION_NONBLOCKING=false", @"PATH=B:\y\System32;B:\y;B:\y\System32\Wbem;B:\y\System32\WindowsPowerShell\v1.0", @"SystemRoot=B:\y"]
         },
         {
             "a drive root", [@"SystemRoot=C:\"],
-            [@"PATH=C:\System32;C:\;C:\System32\Wbem;C:\System32\WindowsPowerShell\v1.0", @"SystemRoot=C:\"]
+            ["MCP_CONNECTION_NONBLOCKING=false", @"PATH=C:\System32;C:\;C:\System32\Wbem;C:\System32\WindowsPowerShell\v1.0", @"SystemRoot=C:\"]
         },
         // Unusable: C:\Windows, and the variable passes as it is.
-        { "a lower-case drive", [@"SystemRoot=d:\win"], ["PATH=" + SystemPath, @"SystemRoot=d:\win"] },
-        { "a trailing separator", [@"SystemRoot=D:\Win\"], ["PATH=" + SystemPath, @"SystemRoot=D:\Win\"] },
-        { "slashes", ["SystemRoot=D:/Win"], ["PATH=" + SystemPath, "SystemRoot=D:/Win"] },
-        { "a semicolon", [@"SystemRoot=D:\Win;dows"], ["PATH=" + SystemPath, @"SystemRoot=D:\Win;dows"] },
-        { "UNC", [@"SystemRoot=\\server\Windows"], ["PATH=" + SystemPath, @"SystemRoot=\\server\Windows"] },
-        { "relative", [@"SystemRoot=Windows"], ["PATH=" + SystemPath, @"SystemRoot=Windows"] },
-        { "empty", ["SystemRoot="], ["PATH=" + SystemPath, "SystemRoot="] },
-        { "none", [], ["PATH=" + SystemPath] },
+        { "a lower-case drive", [@"SystemRoot=d:\win"], ["MCP_CONNECTION_NONBLOCKING=false", "PATH=" + SystemPath, @"SystemRoot=d:\win"] },
+        { "a trailing separator", [@"SystemRoot=D:\Win\"], ["MCP_CONNECTION_NONBLOCKING=false", "PATH=" + SystemPath, @"SystemRoot=D:\Win\"] },
+        { "slashes", ["SystemRoot=D:/Win"], ["MCP_CONNECTION_NONBLOCKING=false", "PATH=" + SystemPath, "SystemRoot=D:/Win"] },
+        { "a semicolon", [@"SystemRoot=D:\Win;dows"], ["MCP_CONNECTION_NONBLOCKING=false", "PATH=" + SystemPath, @"SystemRoot=D:\Win;dows"] },
+        { "UNC", [@"SystemRoot=\\server\Windows"], ["MCP_CONNECTION_NONBLOCKING=false", "PATH=" + SystemPath, @"SystemRoot=\\server\Windows"] },
+        { "relative", [@"SystemRoot=Windows"], ["MCP_CONNECTION_NONBLOCKING=false", "PATH=" + SystemPath, @"SystemRoot=Windows"] },
+        { "empty", ["SystemRoot="], ["MCP_CONNECTION_NONBLOCKING=false", "PATH=" + SystemPath, "SystemRoot="] },
+        { "none", [], ["MCP_CONNECTION_NONBLOCKING=false", "PATH=" + SystemPath] },
         // windir is kept but not read.
-        { "only windir", [@"windir=D:\Win"], ["PATH=" + SystemPath, @"windir=D:\Win"] },
+        { "only windir", [@"windir=D:\Win"], ["MCP_CONNECTION_NONBLOCKING=false", "PATH=" + SystemPath, @"windir=D:\Win"] },
     };
 
     [Theory]
