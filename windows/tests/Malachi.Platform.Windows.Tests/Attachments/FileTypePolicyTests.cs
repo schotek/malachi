@@ -40,6 +40,7 @@ public sealed class FileTypePolicyTests
     [InlineData("setup.exe.", true)]
     [InlineData("notes.one", true)]
     [InlineData("orders.accdb", true)]
+    [InlineData("open.settingcontent-ms", true)]
     [InlineData("", false)]
     [InlineData(null, false)]
     public void IsDangerous(string? name, bool want)
@@ -59,7 +60,6 @@ public sealed class FileTypePolicyTests
     [InlineData(".rdp", false)]
     [InlineData(".search-ms", false)]
     [InlineData(".searchconnector-ms", false)]
-    [InlineData(".settingcontent-ms", false)]
     [InlineData(".appinstaller", false)]
     [InlineData(".msix", false)]
     [InlineData(".xll", false)]
@@ -74,6 +74,16 @@ public sealed class FileTypePolicyTests
     public void TheShellsOwnVerdict(string? extension, bool want)
     {
         Assert.Equal(want, FileTypePolicy.IsDangerousToTheShell(extension));
+    }
+
+    // The shell's verdict on .settingcontent-ms changed with an update of
+    // Windows 11 26100 (missed when measured, named by 26100.9711 and by the
+    // CI runner's image): DangerousTypes keeps it never opened either way.
+    [Fact]
+    public void SettingContentIsDangerousWhateverTheShellSays()
+    {
+        Assert.Contains("settingcontent-ms", DangerousTypes.Extensions);
+        Assert.True(new FileTypePolicy(_ => false).IsDangerous("open.settingcontent-ms", null));
     }
 
     [Theory]

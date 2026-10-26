@@ -13,7 +13,8 @@
 // .msix, .xll, .jar, .py and .sh, and also .one, .onepkg, .contact, .wab
 // and Access's formats since 2007 (.accdb and the rest, measured with
 // Office installed, while the older .mdb, .mde, .mda, .ade and .adp are
-// named), all of which DangerousTypes lists.
+// named), all of which DangerousTypes lists. The shell's verdict follows
+// Windows updates: 26100.9711 names .settingcontent-ms too.
 
 using System;
 using Malachi.Core.Platform;

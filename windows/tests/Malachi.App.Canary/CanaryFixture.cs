@@ -250,9 +250,13 @@ public sealed class CanaryFixture : IAsyncLifetime
         Add("board-card", "wait", "board-card-size", ms: 300);
 
         // The chat bubble rendering HTML (the conversation's chat layout,
-        // the same CardWebView): the same run as the board card's.
+        // the same CardWebView): the same run as the board card's. Its
+        // document clips to the column (ViewerDocument.ChatFitCss), and the
+        // active document's boxes are all absolute (which the sanitiser never
+        // lets through), so a block in the flow gives the column their height:
+        // without it no box is hit and no click reaches a link.
         Add("chat-bubble", "load", "chat-bubble-passive", passive, ms: 2500);
-        Add("chat-bubble", "load", "chat-bubble-hover", active, ms: 200);
+        Add("chat-bubble", "load", "chat-bubble-hover", "<div style='height:440px'></div>" + active, ms: 200);
         Add("chat-bubble", "hover", target: "hover", ms: 1200);
         Add("chat-bubble", "click", "chat-bubble-nav", target: "pinglink");
         steps.Add(new HostStep { View = "chat-bubble", Op = "await", Phase = "chat-bubble-nav", Target = HostEvent.Kinds.Link, Ms = LinkLimit, InPhase = true });

@@ -641,6 +641,7 @@ public sealed class AssistantPanelLogicTests
         var got = Assistant.ChildEnvironment(parent, @"C:\Program Files\Claude\claude.exe");
         Assert.Equal(
             [
+                new KeyValuePair<string, string>("MCP_CONNECTION_NONBLOCKING", "false"),
                 new KeyValuePair<string, string>("PATH", @"C:\Program Files\Claude;D:\Win\System32;D:\Win;D:\Win\System32\Wbem;D:\Win\System32\WindowsPowerShell\v1.0"),
                 new KeyValuePair<string, string>("SystemRoot", @"D:\Win"),
                 new KeyValuePair<string, string>("USERNAME", "u"),

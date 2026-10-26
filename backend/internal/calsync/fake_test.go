@@ -24,6 +24,7 @@ type fakeClock struct {
 	mu     sync.Mutex
 	now    time.Time
 	timers []*fakeTimer
+	armed  int // timers set so far
 }
 
 type fakeTimer struct {
@@ -45,6 +46,7 @@ func (c *fakeClock) AfterFunc(d time.Duration, f func()) func() bool {
 	defer c.mu.Unlock()
 	t := &fakeTimer{at: c.now.Add(d), f: f}
 	c.timers = append(c.timers, t)
+	c.armed++
 	return func() bool {
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -54,8 +56,16 @@ func (c *fakeClock) AfterFunc(d time.Duration, f func()) func() bool {
 	}
 }
 
-// Advance moves the time and runs the timers that came due, in order.
-func (c *fakeClock) Advance(d time.Duration) {
+// Armed is the number of timers set so far.
+func (c *fakeClock) Armed() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.armed
+}
+
+// Advance moves the time and runs the timers that came due, in order;
+// returns how many ran.
+func (c *fakeClock) Advance(d time.Duration) int {
 	c.mu.Lock()
 	c.now = c.now.Add(d)
 	var due []*fakeTimer
@@ -76,6 +86,7 @@ func (c *fakeClock) Advance(d time.Duration) {
 	for _, t := range due {
 		t.f()
 	}
+	return len(due)
 }
 
 // fakeProvider is a calendar source in memory.
@@ -382,7 +393,17 @@ func (h *harness) advanceUntil(what string, d, max time.Duration, cond func() bo
 		if cond() {
 			return
 		}
-		h.clock.Advance(d)
+		armed := h.clock.Armed()
+		if h.clock.Advance(d) > 0 {
+			// What the timers woke works in real time: let it go back to
+			// sleep (a new timer) before the next step, or a slow pass (a
+			// loaded machine, SQLite on Windows) sees the clock run past
+			// max under it.
+			settle := time.Now().Add(500 * time.Millisecond)
+			for h.clock.Armed() == armed && time.Now().Before(settle) {
+				time.Sleep(time.Millisecond)
+			}
+		}
 		moved += d
 	}
 }
