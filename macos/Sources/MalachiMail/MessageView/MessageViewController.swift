@@ -133,12 +133,22 @@ final class MessageViewController: NSViewController {
     /// it follows the message's last line; a longer body is squeezed to
     /// the room there is and scrolls, the button then at the bottom. Below
     /// the button nothing but `bodySpacer` takes the rest.
+    ///
+    /// Both fits are upper bounds only, and what grows the body to them is
+    /// `bodySpacer` wanting no height (`spacerPriority`): nothing ever asks
+    /// for more height than the page has. An equality with the document's
+    /// height (or 100 000 points while it is not known) was unsatisfiable
+    /// for every long body and pulled on the window's size at all times;
+    /// the main window crashed in a layout loop soon after it came in
+    /// (AppKit's "more Layout Window passes than there are views",
+    /// 2026-10-26, not reproduced).
     private var textFit: NSLayoutConstraint?
     private var htmlFit: NSLayoutConstraint?
     private let bodySpacer = NSView()
-    /// Below the window's hold on its size (`windowSizeStayPut`, 500), or
-    /// a long body would grow the window; above the body's hugging (250).
-    private static let fitPriority = NSLayoutConstraint.Priority(450)
+    /// Below the rows' hugging (250): at 260 the headers' stack stretched
+    /// before the spacer gave up its height. The fits (999) cap the body.
+    private static let spacerPriority = NSLayoutConstraint.Priority(240)
+    private static let fitPriority = NSLayoutConstraint.Priority(999)
     private static let fillHeight: CGFloat = 100_000
     private let loadingPage = NSView()
     private let loadingSpinner = Spinner(size: 32)
@@ -249,12 +259,12 @@ final class MessageViewController: NSViewController {
         // Auto Layout would otherwise take height from the spacer below
         // zero to give the body more.
         bodySpacer.heightAnchor.constraint(greaterThanOrEqualToConstant: 0).isActive = true
-        // Above the body's own compression resistance and hugging, below
-        // every other row's and the window's: the headers and the bars
-        // keep their height, the window its size.
-        let textFit = bodyContainer.heightAnchor.constraint(equalTo: textClamp.heightAnchor)
+        let noSpace = bodySpacer.heightAnchor.constraint(equalToConstant: 0)
+        noSpace.priority = Self.spacerPriority
+        noSpace.isActive = true
+        let textFit = bodyContainer.heightAnchor.constraint(lessThanOrEqualTo: textClamp.heightAnchor)
         textFit.priority = Self.fitPriority
-        let htmlFit = bodyContainer.heightAnchor.constraint(equalToConstant: Self.fillHeight)
+        let htmlFit = bodyContainer.heightAnchor.constraint(lessThanOrEqualToConstant: Self.fillHeight)
         htmlFit.priority = Self.fitPriority
         self.textFit = textFit
         self.htmlFit = htmlFit
