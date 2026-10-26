@@ -440,6 +440,11 @@ func attachInvitationHeads(ctx context.Context, q querier, heads map[string]Mess
 // packages move it with SetInvitationClock.
 var invitationNow = time.Now
 
+// InvitationNow is the time the outdated rule judges by: time.Now unless a
+// test moved it with SetInvitationClock. Every caller that hands a "now" to
+// the invitation listings takes it from here.
+func InvitationNow() time.Time { return invitationNow() }
+
 // SetInvitationClock replaces the clock the message listings judge whether
 // an invitation's event has ended with (nil = time.Now) and returns the
 // function that puts the previous one back. For tests, which must not

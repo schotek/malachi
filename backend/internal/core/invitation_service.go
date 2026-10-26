@@ -646,7 +646,7 @@ func (b *Backend) invitationCard(ctx context.Context, a store.Account, m store.M
 	case err != nil:
 		return nil, nil, nil, api.NewError(api.CodeStorageError, "%v", err)
 	}
-	now := time.Now()
+	now := store.InvitationNow()
 	var sum api.InvitationSummary
 	if m.Invitation != nil {
 		sum = *m.Invitation
@@ -1105,7 +1105,7 @@ func (s *invitationService) List(ctx context.Context, p api.InvitationListParams
 		}
 		q.AccountIDs = append(q.AccountIDs, string(id))
 	}
-	rows, err := b.store.ListInvitations(ctx, q, time.Now())
+	rows, err := b.store.ListInvitations(ctx, q, store.InvitationNow())
 	if err != nil {
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
 	}

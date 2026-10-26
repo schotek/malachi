@@ -312,7 +312,7 @@ func (b *Backend) unansweredInvitations(ctx context.Context) (int, error) {
 		}
 	}
 	invs, err := b.store.ListInvitations(ctx, store.InvitationQuery{ExcludeAccountIDs: off,
-		State: api.InvitationUnanswered, Limit: api.MaxInvitationList}, time.Now())
+		State: api.InvitationUnanswered, Limit: api.MaxInvitationList}, store.InvitationNow())
 	if err != nil {
 		return 0, api.NewError(api.CodeStorageError, "%v", err)
 	}

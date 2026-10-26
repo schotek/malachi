@@ -326,14 +326,19 @@ public final class QuickReplyController {
         threads[k] = st
         changed()
 
+        // Each closure reads the host from the controller again instead of
+        // capturing the one above: a non-Sendable host captured by `start`
+        // and again by its Task is "sending" to Swift 6.3 (Xcode 26.6).
         let start: @MainActor () -> Void = { [weak self] in
+            guard let host = self?.host else { return }
             var params = DraftCreateParams(accountId: acc, mode: mode.composeMode, messageId: id)
             if !comment {
                 let line = host.attribution(mode: mode, id: id)
                 params.attribution = line.isEmpty ? nil : line
             }
             let p = params
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
+                guard let host = self?.host else { return }
                 let err = await Self.deliver(host, p, text: text)
                 host.post {
                     self?.finish(k, text: text, comment: comment, error: err)

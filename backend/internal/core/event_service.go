@@ -578,7 +578,7 @@ func (b *Backend) tentativeInvitations(ctx context.Context, v calendarView, only
 		}
 	}
 	invs, err := b.store.ListInvitations(ctx, store.InvitationQuery{ExcludeAccountIDs: off,
-		State: api.InvitationUnanswered, Limit: api.MaxInvitationList}, time.Now())
+		State: api.InvitationUnanswered, Limit: api.MaxInvitationList}, store.InvitationNow())
 	if err != nil {
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
 	}
