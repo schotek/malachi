@@ -1,3 +1,44 @@
+Version 0.1.1
+~~~~~~~~~~~~~
+Released: 2026-10-26
+
+Notes:
+ * Malachi Mail now also runs on Windows 11 and macOS, with a native
+   window on each. It is still an early version: keep a second mail
+   program for anything that matters.
+
+Features:
+ * Gmail and Google Workspace accounts, through GNOME Online Accounts or
+   a sign-in in the browser; Microsoft 365 can sign in in the browser too.
+ * Conversations: the message list can be grouped by conversation, and a
+   conversation is shown as cards on a timeline or as a chat, with your
+   own replies from Sent and unsent drafts in place.
+ * A quick reply under a message or a chat, without opening a window.
+ * Search of the stored mail, as you type, in a folder, an account or
+   all accounts.
+ * Several messages can be selected and archived, moved, deleted, marked
+   or forwarded together; messages and folders have context menus.
+ * Recipients are shown as removable badges while you write.
+ * Plain text that looks like Markdown is pasted as formatted text.
+ * Newsletters and mailing lists are recognised and can be unsubscribed
+   from with one click where the sender allows it.
+ * Jira issues can be followed as conversations: comments, status changes
+   and replies from Malachi Mail, and Jira notification mail can be hidden.
+ * A calendar for Microsoft 365 and CalDAV servers, with invitations
+   answered from the message and reminders.
+ * The Board sorts conversations that wait for you, wait for others or are
+   just for your information, with reminders, Done and archive.
+ * eWay-CRM: messages can be saved to the CRM with links to contacts,
+   companies, deals and projects, and saved conversations followed.
+ * An assistant (Claude Code or ChatGPT, run on your own account) can
+   summarise mail, rewrite what you write, turn your words into a search,
+   suggest replies and sort the Board; a profile tells it about you.
+ * An MCP bridge lets AI agents read your mail and write drafts; changing
+   or sending mail needs your explicit permission.
+ * Mail can be stored compressed, and attachments of older mail left on
+   the server or never stored at all.
+ * A server certificate can be trusted explicitly by its fingerprint.
+
 Version 0.1.0
 ~~~~~~~~~~~~~
 Released: 2026-09-06
