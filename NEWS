@@ -1,3 +1,12 @@
+Version 0.1.2
+~~~~~~~~~~~~~
+Released: 2026-10-26
+
+Bugfixes:
+ * The macOS app builds again with Xcode 26.6.
+ * Fixed tests of meeting invitations that depended on the date they ran
+   on.
+
 Version 0.1.1
 ~~~~~~~~~~~~~
 Released: 2026-10-26
