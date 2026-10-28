@@ -9,11 +9,21 @@
 # waited for. macOS and Linux; the Windows commands are in the document.
 #
 #   scripts/screenshots/stack.sh start en|cs [DIR]   (re)starts everything
+#   scripts/screenshots/stack.sh assistant en|cs [DIR]  prepares the assistant's scenes
 #   scripts/screenshots/stack.sh stop [DIR]          stops it
 #
+# `assistant` is run after `start` for the assistant's scenes
+# (docs/screenshots.md §2.1): it writes the sample user's profile for the
+# assistant (assistant.profileSet: a text, the gender, a note per account)
+# and turns the board's assistant preference on with the mail and the Jira
+# account as the triage accounts (board.setPreferences), which the clients
+# do themselves on the user's consent; the client's own consent keys are
+# the platform's business. It is idempotent.
+#
 # DIR (default /tmp/malachi-shots) gets bin/ (the Go binaries, built
-# here), data/ (the daemon's config, store and mail, wiped by every
-# start) and the logs. The socket is MALACHI_SHOTS_SOCKET (default
+# here: the daemon, the sample servers, the RPC tool, the MCP bridge and
+# the demo claude of backend/cmd/malachi-devclaude), data/ (the daemon's
+# config, store and mail, wiped by every start) and the logs. The socket is MALACHI_SHOTS_SOCKET (default
 # DIR/rpc.sock; AF_UNIX paths are short, so DIR must be). The ports are
 # SHOTS_IMAP_PORT, SHOTS_SMTP_PORT, SHOTS_CONTROL_PORT, SHOTS_JIRA_PORT and
 # SHOTS_EWAY_PORT (11143, 11025, 11080, 11090, 11095). Everything binds to
@@ -23,9 +33,9 @@ set -eu
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 CMD=${1:-}
 case "$CMD" in
-  start) LANG_=${2:-}; DIR=${3:-/tmp/malachi-shots} ;;
+  start|assistant) LANG_=${2:-}; DIR=${3:-/tmp/malachi-shots} ;;
   stop) DIR=${2:-/tmp/malachi-shots} ;;
-  *) echo "usage: stack.sh start en|cs [DIR] | stack.sh stop [DIR]" >&2; exit 2 ;;
+  *) echo "usage: stack.sh start en|cs [DIR] | stack.sh assistant en|cs [DIR] | stack.sh stop [DIR]" >&2; exit 2 ;;
 esac
 SOCK=${MALACHI_SHOTS_SOCKET:-$DIR/rpc.sock}
 IMAP=${SHOTS_IMAP_PORT:-11143}
@@ -51,17 +61,59 @@ fi
 
 case "$LANG_" in
   en|cs) ;;
-  *) echo "stack.sh start: the language is en or cs" >&2; exit 2 ;;
+  *) echo "stack.sh $CMD: the language is en or cs" >&2; exit 2 ;;
 esac
+
+# The sample user's profile for the assistant and the board's assistant
+# preference, over a running stack. The texts are the sample world's (the
+# user of samples/en.json and cs.json) and nothing else's; python3 only
+# assembles the JSON.
+if [ "$CMD" = assistant ]; then
+  [ -S "$SOCK" ] || { echo "stack.sh assistant: no stack at $SOCK; run stack.sh start $LANG_ first" >&2; exit 1; }
+  RPC="$DIR/bin/malachi-rpc"
+  "$RPC" --socket "$SOCK" account.list '{}' > "$DIR/accounts.json"
+  "$RPC" --socket "$SOCK" board.preferences '{}' > "$DIR/board-prefs.json"
+  python3 - "$LANG_" "$DIR" <<'PY' > "$DIR/assistant-params.json"
+import json, sys
+lang, d = sys.argv[1], sys.argv[2]
+accounts = json.load(open(d + "/accounts.json"))["accounts"]
+mail = next(a["id"] for a in accounts if a["config"].get("kind", "imap") in ("imap", "graph"))
+jira = next((a["id"] for a in accounts if a["config"].get("kind") == "jira"), None)
+if lang == "cs":
+    text = ("Mám na starosti obchod a projekty v Kovar Engineering, rodinné firmě na ocelové konstrukce: "
+            "regály, mezipatra a dopravníky pro sklady a dílny. Píšu stručně a přátelsky. "
+            "Zákazníkům vykám, kolegům tykám.")
+    notes = {mail: "Kolegům se podepisuj jen Jana, zákazníkům Jana Dvořáková.",
+             jira: "Komentáře krátké a věcné; Martinovi a Tomášovi tykej."}
+else:
+    text = ("I run the sales and project side of Kovar Engineering, a family steel-construction firm: "
+            "racking, mezzanines and conveyors for warehouses and workshops. I write briefly and in a friendly tone. "
+            "Customers get a formal register, colleagues their first names.")
+    notes = {mail: "Sign as Jana (first name only) to colleagues and as Jana Dvořáková to customers.",
+             jira: "Comments short and factual; Martin and Tomáš by their first names."}
+profile = {"text": text, "gender": "feminine",
+           "accounts": [{"accountId": k, "note": v} for k, v in notes.items() if k]}
+prefs = json.load(open(d + "/board-prefs.json"))["preferences"]
+prefs["assistant"] = True
+prefs["triageAccounts"] = [a for a in (mail, jira) if a]
+print(json.dumps({"profile": profile, "preferences": prefs}, ensure_ascii=False))
+PY
+  python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))["profile"], ensure_ascii=False))' "$DIR/assistant-params.json"     | "$RPC" --socket "$SOCK" assistant.profileSet - > /dev/null
+  python3 -c 'import json,sys; print(json.dumps({"preferences": json.load(open(sys.argv[1]))["preferences"]}, ensure_ascii=False))' "$DIR/assistant-params.json"     | "$RPC" --socket "$SOCK" board.setPreferences - > /dev/null
+  rm -f "$DIR/accounts.json" "$DIR/board-prefs.json" "$DIR/assistant-params.json"
+  echo "stack: the assistant's profile ($LANG_) is set and the board's assistant preference is on (mail and Jira triaged)"
+  exit 0
+fi
 
 stop_stack
 mkdir -p "$DIR/bin" "$(dirname "$SOCK")"
 rm -rf "$DIR/data"
 mkdir -p "$DIR/data"
 
-# The daemon, the sample servers and the RPC tool, from this tree (the Go
-# build cache makes a repeat a no-op).
-for bin in malachid malachi-devmail malachi-rpc; do
+# The daemon, the sample servers, the RPC tool, the MCP bridge and the demo
+# claude (the assistant's scenes), from this tree (the Go build cache makes
+# a repeat a no-op).
+for bin in malachid malachi-devmail malachi-rpc malachi-mcp malachi-devclaude; do
   (cd "$ROOT/backend" && go build -o "$DIR/bin/$bin" "./cmd/$bin")
 done
 
