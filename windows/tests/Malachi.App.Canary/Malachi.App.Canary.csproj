@@ -21,7 +21,12 @@ MALACHI_CANARY=1 (CanaryFixture.OnCiRunner).
     <!-- The host is built (ProjectReference below) but not referenced: it is
          a self-contained WinUI executable, started as a process. -->
     <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
+    <!-- The host's architecture: the solution platform's, or, built as Any
+         CPU (build.ps1 test builds this project so), the machine's: the
+         solution maps the host to the machine's platform, so an ARM64
+         machine has only a win-arm64 host. -->
     <MalachiCanaryHostRid Condition="'$(Platform)' == 'ARM64'">win-arm64</MalachiCanaryHostRid>
+    <MalachiCanaryHostRid Condition="'$(MalachiCanaryHostRid)' == '' and '$(Platform)' != 'x64' and '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">win-arm64</MalachiCanaryHostRid>
     <MalachiCanaryHostRid Condition="'$(MalachiCanaryHostRid)' == ''">win-x64</MalachiCanaryHostRid>
   </PropertyGroup>
   <ItemGroup>
