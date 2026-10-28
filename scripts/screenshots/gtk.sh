@@ -89,7 +89,7 @@ fi
 run main "group=on;chat=off;folder=inbox;row=DevConf;shot=$OUT/inbox.png;row=$NAB;chat=on;shot=$OUT/chat.png;\
 chat=off;row=$Q4;shot=$OUT/invitation.png;row=Design Weekly;shot=$OUT/newsletter.png;\
 folder=Web;row=WEB-1;shot=$OUT/jira.png;board:list:select;shot=$OUT/board-list.png;\
-board:columns;shot=$OUT/board-columns.png;calendar:week;shot=$OUT/calendar-week.png;\
+board:columns:select;shot=$OUT/board-columns.png;calendar:week;shot=$OUT/calendar-week.png;\
 mail;folder=inbox;row=DevConf;compose-open;shot=$OUT/compose.png;quit"
 run crm "group=off;chat=off;folder=sent;row=$NAB;shot=$OUT/crm-saved.png;\
 folder=inbox;row=$REQ;crm-save;shot=$OUT/crm-dialog.png;quit"
