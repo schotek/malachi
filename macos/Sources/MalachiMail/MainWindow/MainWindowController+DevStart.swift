@@ -71,6 +71,11 @@ import MalachiCore
 //   own message, for an issue's event (no bar), in the Outbox (no bar) and
 //   with nothing selected (`DevelopmentQuickReplyMessage`).
 //   `crm-dialog` and `eway-wizard`: MainWindowController+DevStartCRM.swift.
+//   The assistant's scenes (`assistant-unread`, `assistant=`, `assistant-say=`,
+//   `board-select=`, `triage`, `suggest-reply`, `compose-new=`,
+//   `compose-rewrite=`, `reply`, `compose-write=`, `search-own=`, `prefs-ai`)
+//   and `wait=<seconds>`, which makes the next step wait that long instead
+//   of the interval: MainWindowController+DevStartAssistant.swift.
 //   Each prints
 //   `LAYOUT:` lines and a `LAYOUT: shot <step> window <n>` line naming
 //   the window worth a screenshot (`DevelopmentCalendar`); the
@@ -120,21 +125,26 @@ extension MainWindowController {
         }
         let interval = env["MALACHI_START_INTERVAL"].flatMap(Double.init) ?? 3
         let steps = spec.split(separator: ";").map(String.init)
+        // Each step runs `interval` seconds after the one before it, or as
+        // long as a `wait=<seconds>` step before it asks (a triage run, an
+        // answer that takes longer than the interval).
+        let starts = DevelopmentStart.schedule(steps, interval: interval)
         // Started from a terminal behind other windows, the app would nap
         // and its timers run late.
         let activity = ProcessInfo.processInfo.beginActivity(options: .userInitiated, reason: "MALACHI_START")
-        DispatchQueue.main.asyncAfter(deadline: .now() + interval * Double(steps.count) + 2) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + (starts.last ?? 0) + interval + 2) {
             ProcessInfo.processInfo.endActivity(activity)
         }
         for (i, step) in steps.enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + interval * Double(i) + 1) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + starts[i] + 1) { [weak self] in
                 self?.developmentStep(step)
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + interval * Double(i) + 2.5) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + starts[i] + 2.5) { [weak self] in
                 self?.developmentDump("step \(i) \(step)")
             }
         }
     }
+
 
     /// "1600x900": the window's size.
     private func developmentResize(_ size: String) {
@@ -188,20 +198,40 @@ extension MainWindowController {
     /// image of this process's own window, which needs no screen-recording
     /// permission. The frame's shadow is left out.
     private func developmentShot(_ path: String) {
-        // The frontmost visible window of this app, brought to the front
-        // first: a run from a script loses the front to whatever the
-        // person does meanwhile, and an inactive window is drawn grey.
+        // The window of the scene, brought to the front first: Settings
+        // while it is open, else the newest compose window, else the main
+        // window. Which window is in front is not reliable: a run from a
+        // script loses the front to whatever the person does meanwhile,
+        // and an inactive application's windows reorder as it activates;
+        // an inactive window is drawn grey.
         NSApp.activate(ignoringOtherApps: true)
-        let windows = NSApp.orderedWindows.filter { $0.isVisible && !$0.isMiniaturized && $0.contentView != nil }
+        let windows = NSApp.windows.filter { $0.isVisible && !$0.isMiniaturized && $0.contentView != nil }
         developmentPrint("MALACHI_START shot: windows " + windows.map { "'\($0.title)'" }.joined(separator: ", "))
-        guard var target = windows.first ?? window else {
+        let settings = windows.first { $0.windowController is PreferencesWindowController }
+        let compose = windows.filter { $0.windowController is ComposeWindowController }.max { $0.windowNumber < $1.windowNumber }
+        guard var target = settings ?? compose ?? window else {
             developmentPrint("MALACHI_START shot: no window")
             return
         }
         if let parent = target.sheetParent {
             target = parent
         }
-        target.makeKeyAndOrderFront(nil)
+        // A popover's window is a child of the window it points at: the
+        // parent is the picture, the popover drawn over it.
+        while let parent = target.parent {
+            target = parent
+        }
+        // A transient popover (a child window) goes when its window is
+        // made key again: such a window is only ordered front.
+        if target.childWindows?.isEmpty == false {
+            target.orderFrontRegardless()
+        } else {
+            target.makeKeyAndOrderFront(nil)
+        }
+        developmentPrint(String(format: "MALACHI_START shot: target '%@' frame %@ screen %@ scale %.1f visible %d occluded %d key %d",
+                                target.title, NSStringFromRect(target.frame), target.screen.map { NSStringFromRect($0.frame) } ?? "none",
+                                target.backingScaleFactor, target.isVisible ? 1 : 0, target.occlusionState.contains(.visible) ? 0 : 1,
+                                target.isKeyWindow ? 1 : 0))
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             self.developmentCapture(target, to: path)
         }
@@ -209,8 +239,9 @@ extension MainWindowController {
 
     private func developmentCapture(_ target: NSWindow, to path: String) {
         // One window at a time (the only capture that needs no
-        // screen-recording permission); a sheet on the window is captured
-        // on its own and drawn over the window at its place on the screen.
+        // screen-recording permission); a sheet on the window and its
+        // child windows (a popover) are captured on their own and drawn
+        // over the window at their places on the screen.
         let imager: DevelopmentWindowImager = DevelopmentWindowServerImager()
         func capture(_ w: NSWindow) -> CGImage? {
             let image = imager.image(ofWindow: CGWindowID(w.windowNumber))
@@ -220,9 +251,17 @@ extension MainWindowController {
             developmentPrint("MALACHI_START shot: the window server gave no image")
             return
         }
-        if let sheet = target.attachedSheet, let top = capture(sheet) {
+        var overlays: [(CGImage, NSRect)] = []
+        var union = target.frame
+        let children = NSApp.windows.filter { $0.parent === target && $0 !== target.attachedSheet }
+        for w in [target.attachedSheet].compactMap({ $0 }) + children where w.isVisible && w.contentView != nil {
+            if let top = capture(w) {
+                overlays.append((top, w.frame))
+                union = union.union(w.frame)
+            }
+        }
+        if !overlays.isEmpty {
             let scale = CGFloat(image.width) / target.frame.width
-            let union = target.frame.union(sheet.frame)
             if let ctx = CGContext(
                 data: nil, width: Int(union.width * scale), height: Int(union.height * scale), bitsPerComponent: 8, bytesPerRow: 0,
                 space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
@@ -232,7 +271,9 @@ extension MainWindowController {
                                              width: CGFloat(img.width), height: CGFloat(img.height)))
                 }
                 place(image, target.frame)
-                place(top, sheet.frame)
+                for (top, frame) in overlays {
+                    place(top, frame)
+                }
                 if let composed = ctx.makeImage() {
                     image = composed
                 }
@@ -299,6 +340,9 @@ extension MainWindowController {
             return
         }
         if DevelopmentCRM.step(step, in: self) {
+            return
+        }
+        if DevelopmentAssistant.step(step, in: self) {
             return
         }
         if step.hasPrefix("size=") {

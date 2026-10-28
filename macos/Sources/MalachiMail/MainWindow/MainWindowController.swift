@@ -396,6 +396,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
+    /// DEVELOPMENT AID (MALACHI_START `search-own`): the words put into
+    /// the search field and converted, as the field's menu item does.
+    func developmentSearchInOwnWords(_ words: String) {
+        toolbarDelegate.developmentSetSearch(words)
+        searchInOwnWords(words)
+    }
+
+    /// DEVELOPMENT AID (MALACHI_START `search-clear`): the field emptied
+    /// and the search ended, as emptying the field does.
+    func developmentClearSearch() {
+        toolbarDelegate.developmentSetSearch("")
+        onSearchText?("")
+    }
+
     /// Ends a search in the user's own words under way (the application
     /// quits); the typed words go back into the field.
     func cancelSearchInOwnWords() {

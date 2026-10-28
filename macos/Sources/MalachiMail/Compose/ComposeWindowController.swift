@@ -59,6 +59,12 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, Toast
     /// on first use, and the popover while it is shown.
     private var rewrite: ComposeRewriteController?
     private var rewritePopover: NSPopover?
+    /// DEVELOPMENT AID (MALACHI_START `compose-rewrite`): the open rewrite
+    /// popover's view controller, nil while none shows.
+    var developmentRewrite: ComposeRewriteViewController? {
+        guard let p = rewritePopover, p.isShown else { return nil }
+        return p.contentViewController as? ComposeRewriteViewController
+    }
     /// The assistant's bar: its one-shot request, made on first use.
     private var writingRequest: AssistantRequest?
     /// The Assistant button was clicked and the popover is on its way

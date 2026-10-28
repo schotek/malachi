@@ -540,6 +540,17 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         }
     }
 
+    /// DEVELOPMENT AID (MALACHI_START `search-own`): the field unfolded
+    /// with the words in it, as typed.
+    func developmentSetSearch(_ words: String) {
+        searchField?.stringValue = words
+        if words.isEmpty {
+            scheduleSearchCollapse()
+        } else {
+            expandSearch(focus: false)
+        }
+    }
+
     /// The magnifier's "Search in Your Own Words".
     @objc private func searchInOwnWords(_ sender: Any?) {
         guard ownWords, !converting, let field = searchField else { return }
