@@ -1,0 +1,244 @@
+{
+  "panel": {
+    "unread": "**Čeká na vaši odpověď**\n- **Tomáš Holub – Prezentace pro představenstvo: slajdy do středy.** Představenstvo chce v pátek případ Acme jako první bod; Tomáš žádá deset minut slajdů, čísla a rizika, do středy večer. Označila jste si to hvězdičkou.\n- **Eva Králová – Poptávka: vestavba do nového studia.** Nová zákaznice na doporučení Acme: ocelové mezipatro, zábradlí a schodiště do bývalé dílny 220 m² v Karlíně; prosí o návštěvu místa příští týden, v úterý nebo ve středu odpoledne.\n- **Tomáš Holub – Porada k plánu na Q4.** Pozvánka na čtvrtek 10:00 do zasedačky 2: projekt Acme, nábor do montážního týmu a licence CAD; máte vzít stav nabídek.\n\n**Pro informaci**\n- **Martin Beneš – Nový notebook je připravený.** Nastavený s poštou, VPN a CADem, soubory zkopírované; čeká u Martina na stole, deset minut na přenesení zbytku.\n\n**Hromadná pošta**\n- **Design Weekly #212** – typografie na desktopu, s odkazem na odhlášení.",
+    "summarize": [
+      {
+        "match": ["Nabídka na rozšíření skladu"],
+        "text": "**Petr Svoboda (Acme Logistics)** rozšiřuje halu B asi o 600 m² a před šesti dny požádal o nabídku na regály a dopravník mezi oběma halami, **do čtvrtka**, protože v pátek zasedá jejich představenstvo.\n\nSouhlasila jste se čtvrtkem dopoledne, prodlouženou záruku jste dala na samostatný řádek a zeptala se, jestli dopravník potřebuje pásovou část pro malé zásilky (asi o 12 % víc). Pan Svoboda pás potvrdil, přiložil výkres dispozice (Hala-B-dispozice.pdf) a požádal o zahrnutí **osvětlení nad regály**, které jejich elektrikář chce ve stejném projektu. Přidala jste ho jako třetí část, kterou nacení váš partner pro elektro z výkresu, a slíbila **kompletní nabídku v pátek do poledne**.\n\n**Zůstává otevřené:** nabídka samotná, termín pátek do poledne."
+      }
+    ],
+    "tasks": [
+      {
+        "match": ["Nabídka na rozšíření skladu"],
+        "text": "**Úkoly**\n- **Vy:** poslat Acme kompletní nabídku na rozšíření haly B: regály, dopravník s válečkovou částí a pásem pro malé zásilky a osvětlení nad regály jako třetí část. **Do pátku do poledne**, jak jste slíbila v poslední odpovědi.\n- **Vy:** nechat prodlouženou záruku na samostatném řádku, aby se o ní pan Svoboda mohl rozhodnout zvlášť.\n- **Partner pro elektro:** nacenit osvětlení z přiloženého výkresu (Hala-B-dispozice.pdf).\n- **Petr Svoboda (Acme):** na jeho straně nic nezůstává otevřené; výkres poslal a pásovou část potvrdil.\n\n**Termíny**\n- **Čtvrtek** – původní prosba pana Svobody („Mohla byste ji poslat do čtvrtka?“), protože v pátek zasedá představenstvo Acme.\n- **Pátek do poledne** – váš slib kompletní nabídky."
+      }
+    ],
+    "draftReply": [
+      {
+        "match": ["Nabídka na rozšíření skladu"],
+        "body": "Dobrý den, pane Svobodo,\n\nděkuji za výkres. Pásová část je v nabídce a osvětlení nad regály jsem přidala jako třetí část; náš partner pro elektro ho právě naceňuje z výkresu.\n\nK prodloužené záruce jeden dotaz: mám nacenit 24, nebo 36 měsíců? Dám ji každopádně na samostatný řádek.\n\nKompletní nabídku budete mít v pátek do poledne.\n\nS pozdravem\nJana Dvořáková",
+        "text": "Koncept je připravený: děkuje panu Svobodovi za výkres, potvrzuje pásovou část a osvětlení jako třetí část, ptá se, jestli má být prodloužená záruka na 24, nebo 36 měsíců, a slibuje kompletní nabídku v pátek do poledne. Před odesláním si ho otevřete a zkontrolujte; nic se neodeslalo."
+      }
+    ],
+    "draftDone": "Koncept je připravený; říká: %s. Před odesláním si ho otevřete a zkontrolujte; nic se neodeslalo.",
+    "ask": "Přečetla jsem ji. Zpráva je od odesílatele uvedeného výše, žádá to, co stojí v jejím textu, a nic v ní nemění nic ve vaší schránce. Řekněte si o shrnutí, úkoly a termíny nebo odpověď a připravím to.",
+    "free": "Umím shrnout vybranou poštu, vypsat z ní úkoly a termíny, navrhnout odpověď nebo roztřídit nepřečtené zprávy složky. Vyberte rychlou akci nahoře, nebo se zeptejte na vybranou zprávu.",
+    "unavailable": "Teď nemohu vaši poštu číst: nástroje Malachi Mail nejsou v tomto rozhovoru k dispozici."
+  },
+  "triage": {
+    "done": "Třídění hotovo: %d případů opatřeno poznámkou.",
+    "why": {
+      "hot": "Potřebuje vaši pozornost hned.",
+      "you": "Někdo čeká na vaši odpověď.",
+      "them": "Psala jste naposled a čekáte na odpověď.",
+      "info": "Pro informaci; nic se po vás nechce."
+    },
+    "cases": [
+      {
+        "match": ["Prezentace pro představenstvo: slajdy do středy"],
+        "title": "Slajdy k případu Acme pro představenstvo do středy večer",
+        "summary": "Tomáš chce případ Acme jako první bod páteční porady představenstva a žádá vás o deset minut slajdů, čísla a rizika, do středy večer.",
+        "why": "Tomáš čeká na slajdy, termín je středa večer a zprávu jste si označila hvězdičkou.",
+        "tasks": ["Připravit deset minut slajdů k případu Acme: čísla a rizika", "Poslat slajdy Tomášovi do středy večer"],
+        "due": {"quote": "Mohla bys mít slajdy hotové do středy večer?", "weekday": "wednesday", "hour": 18}
+      },
+      {
+        "match": ["Nabídka na rozšíření skladu"],
+        "title": "Kompletní nabídka na halu B pro Acme do pátku do poledne",
+        "summary": "Petr Svoboda (Acme Logistics) požádal o nabídku na regály a dopravník pro rozšíření haly B; po dvou kolech zahrnuje pásovou část pro malé zásilky a osvětlení nad regály a kompletní nabídku jste slíbila v pátek do poledne.",
+        "why": "Odpověděla jste naposled; pan Svoboda čeká na nabídku slíbenou na pátek do poledne.",
+        "tasks": ["Dokončit nabídku: regály, dopravník s pásovou částí, osvětlení jako třetí část, prodloužená záruka na samostatném řádku", "Nechat partnera pro elektro nacenit osvětlení z Hala-B-dispozice.pdf", "Poslat kompletní nabídku panu Svobodovi do pátku do poledne"],
+        "due": {"quote": "Kompletní nabídku budete mít v pátek do poledne.", "weekday": "friday", "hour": 12, "mine": true},
+        "commitments": [
+          {"quote": "Kompletní nabídku budete mít v pátek do poledne.", "text": "Poslat Acme kompletní nabídku do pátku do poledne", "weekday": "friday", "hour": 12},
+          {"quote": "Prodlouženou záruku dám na samostatný řádek, abyste se o ní mohli rozhodnout nezávisle na zbytku.", "text": "Dát prodlouženou záruku na samostatný řádek nabídky"}
+        ]
+      },
+      {
+        "match": ["Poptávka: vestavba do nového studia"],
+        "title": "Návštěva místa pro vestavbu Bluebird Studia příští týden",
+        "summary": "Eva Králová (Bluebird Studio) na doporučení Acme stěhuje studio do bývalé dílny 220 m² v Karlíně a potřebuje ocelové mezipatro, zábradlí a schodiště; prosí o návštěvu místa příští týden, v úterý nebo ve středu odpoledne.",
+        "why": "Nová zákaznice čeká, až navrhnete den návštěvy místa.",
+        "tasks": ["Odpovědět s termínem návštěvy místa (úterý nebo středa odpoledne)", "Po návštěvě připravit nabídku: mezipatro, zábradlí, schodiště"]
+      },
+      {
+        "match": ["Zářijové faktury ke schválení"],
+        "title": "Schválit zářijové dodavatelské faktury do středy",
+        "summary": "Lucie poslala dvanáct zářijových dodavatelských faktur, celkem 486 210 Kč, dvě z nich od Steelworks Ostrava na projekt Acme, a žádá o schválení do středy, aby byly zaplacené před splatností.",
+        "why": "Lucie čeká na vaše schválení před splatností faktur.",
+        "tasks": ["Zkontrolovat dvě faktury od Steelworks Ostrava proti aktuálnímu ceníku", "Schválit faktury a dát Lucii vědět do středy"],
+        "due": {"quote": "Mohla bys je schválit do středy, abychom je zaplatili před splatností?", "weekday": "wednesday", "hour": 17}
+      },
+      {
+        "match": ["Odstávka serverů v sobotu"],
+        "state": "info",
+        "title": "Servery mimo provoz v sobotu 8:00–11:00",
+        "summary": "Martin oznamuje, že souborový a poštovní server budou v sobotu od 8:00 asi do 11:00 mimo provoz kvůli výměně disků; nepojede ani VPN.",
+        "why": "Jste jen v kopii; nic se po vás nechce.",
+        "tasks": ["Uložit si v pátek, co budete potřebovat"]
+      },
+      {
+        "match": ["Týmový oběd v pátek"],
+        "title": "Týmový oběd v pátek 12:30 u Da Pietra",
+        "summary": "Martin navrhl týmový oběd v pátek; Lucie souhlasila a chtěla, aby někdo zamluvil stůl; domluvila jste 12:30 u Da Pietra a slíbila zamluvit stůl pro čtyři.",
+        "why": "Odpověděla jste naposled; ostatní mají jen do čtvrtka říct, jestli berou hosta.",
+        "tasks": ["Zamluvit stůl pro čtyři u Da Pietra na pátek 12:30"],
+        "commitments": [
+          {"quote": "zamluvím stůl pro čtyři.", "text": "Zamluvit stůl pro čtyři u Da Pietra na pátek 12:30", "weekday": "friday", "hour": 12}
+        ]
+      },
+      {
+        "match": ["Texty webu, druhý návrh"],
+        "title": "Texty webu: čeká se na třetí návrh od Copywrite",
+        "summary": "Ondřej Vlk poslal druhý návrh textů webu; poslala jste mu dvě opravy (firma je od roku 1996, mezipatra si zaslouží vlastní odstavec) a otevírací dobu dílny pro kontaktní stránku.",
+        "why": "Ondřej vám dluží další návrh; na vás nic nečeká.",
+        "tasks": ["Zkontrolovat třetí návrh, až přijde, hlavně čísla na úvodní stránce (WEB-1)"]
+      },
+      {
+        "match": ["Mohli byste potvrdit termín instalace"],
+        "title": "Acme má potvrdit začátek instalace v hale A 10. listopadu",
+        "summary": "Požádala jste Petra Svobodu o potvrzení, že instalace v hale A může začít 10. listopadu; parta potřebuje do konce týdne vědět, jestli má objednat plošinu.",
+        "why": "Pan Svoboda na vaši otázku zatím neodpověděl.",
+        "tasks": ["Objednat plošinu, jakmile pan Svoboda termín potvrdí", "Připomenout se panu Svobodovi, pokud do pátku neodpoví"],
+        "due": {"quote": "Naše parta potřebuje do konce týdne vědět, jestli má objednat plošinu.", "weekday": "friday", "hour": 17, "mine": true}
+      },
+      {
+        "match": ["DevConf Prague 2026"],
+        "state": "info",
+        "title": "DevConf Prague: váš program na čtvrtek",
+        "summary": "Konference poslala čtyři přednášky, které jste si označila na čtvrtek (9:30, 11:00, 13:30 a 15:00, sály ve druhém patře); registrace začíná v 8:30 a oběd je ve foyer od 12:00 do 13:30.",
+        "why": "Jen pro informaci; odpověď se nečeká."
+      },
+      {
+        "match": ["Díky za včerejšek"],
+        "state": "info",
+        "title": "Tomáš děkuje za prezentaci v Acme",
+        "summary": "Tomáš píše, že prezentace v Acme dopadla opravdu dobře, hlavně technická část, a děkuje, že jste ji dala dohromady v tak krátkém čase.",
+        "why": "Poděkování; na odpověď nic nečeká."
+      },
+      {
+        "match": ["Cestovní výkazy za září"],
+        "title": "Zářijový cestovní výkaz: chybí účtenky za palivo z Ostravy",
+        "summary": "Lucie připomíná, že cestovní výkazy za září mají být do pátku a že ve vašem ještě chybí účtenky za palivo z cesty do Ostravy.",
+        "why": "Lucie čeká na vaše účtenky.",
+        "tasks": ["Doplnit do zářijového cestovního výkazu účtenky za palivo z cesty do Ostravy"],
+        "due": {"quote": "připomínám, že cestovní výkazy za září mají být do pátku.", "weekday": "friday", "hour": 17}
+      },
+      {
+        "match": ["Nový notebook je připravený"],
+        "title": "Nový notebook čeká u Martina na stole",
+        "summary": "Martin nastavil nový notebook s poštou, VPN a CADem a zkopíroval vaše soubory; stačí se u něj stavit na deset minut a přenést zbytek.",
+        "why": "Martin čeká, až si notebook vyzvednete.",
+        "tasks": ["Stavit se u Martina na deset minut a přenést zbytek"]
+      },
+      {
+        "issueKey": "WEB-1",
+        "title": "WEB-1: zkontrolovat čísla na úvodní stránce, než texty půjdou grafikovi",
+        "summary": "Redesign webu je váš; Tomáš píše, že dorazil druhý návrh textů, a žádá vás o kontrolu čísel na úvodní stránce, než to půjde grafikovi. Petr (Acme) by rád krátkou případovou studii projektu v hale A pod Referencemi.",
+        "why": "Tomáš vás v posledním komentáři požádal o kontrolu.",
+        "tasks": ["Zkontrolovat čísla na úvodní stránce ve druhém návrhu od Copywrite", "Poslat Petrovi návrh případové studie, jakmile budou texty"]
+      },
+      {
+        "issueKey": "MOB-1",
+        "title": "MOB-1: oprava ztracených měření je v testování, vydání v pondělí",
+        "summary": "Martin ztracená měření reprodukoval (synchronizace přepsala lokální databázi), oprava je v testování a vydání plánuje na pondělí, než bude parta 10. zase u Acme.",
+        "why": "Nahlásila jste to vy; Martinův poslední komentář odpovídá na vaši otázku.",
+        "tasks": ["Říct partě, že oprava přijde s pondělním vydáním"]
+      },
+      {
+        "issueKey": "ITSD-1",
+        "title": "ITSD-1: vyzkoušet nový profil VPN od Martina",
+        "summary": "Martin poslal nový profil VPN kvůli výpadkům každých dvacet minut a prosí, abyste ho vyzkoušela a dala vědět, jestli pořád vypadává; issue čeká na vaši odpověď.",
+        "why": "Issue čeká na zákazníka, a tím jste vy.",
+        "tasks": ["Nainstalovat nový profil VPN a nahlásit, jestli VPN dál vypadává"]
+      },
+      {
+        "issueKey": "WEB-2",
+        "title": "WEB-2: otevírací doba dílny na kontaktní stránce",
+        "summary": "Vaše vlastní issue: ukázat otevírací dobu dílny (pondělí až pátek 7:00 až 15:30, o svátcích zavřeno) vedle mapy na kontaktní stránce; zatím se jí nikdo neujal.",
+        "why": "Vaše issue, stále To Do, bez aktivity ostatních."
+      },
+      {
+        "issueKey": "MOB-2",
+        "title": "MOB-2: fotky k měření, bez řešitele",
+        "summary": "Váš požadavek, aby parta mohla ke každému změřenému rozponu přiložit fotku a kancelář viděla, co číslo znamená; To Do a bez řešitele.",
+        "why": "Vaše issue, stále bez řešitele.",
+        "tasks": ["Přiřadit issue Martinovi, až bude venku oprava offline režimu"]
+      }
+    ]
+  },
+  "reply": {
+    "done": "Hotovo.",
+    "generic": "Dobrý den,\n\nděkuji za vaši zprávu. [Vaše odpověď]\n\nS pozdravem\nJana Dvořáková",
+    "followUp": "Dobrý den,\n\njen krátce k mé zprávě níže: mohli byste mi dát vědět, až budete mít chvilku?\n\nS pozdravem\nJana Dvořáková",
+    "cases": [
+      {
+        "match": ["Prezentace pro představenstvo: slajdy do středy"],
+        "body": "Ahoj Tomáši,\n\nano, slajdy budou do středy večer: deset minut k případu Acme, nejdřív čísla, pak rizika, nic víc. Pošlu ti je hned, jak budou hotové, ať si je stihneš projít před pátkem.\n\nJana"
+      },
+      {
+        "match": ["Poptávka: vestavba do nového studia"],
+        "body": "Vážená paní Králová,\n\nděkuji za vaši poptávku i za milé doporučení od Acme Logistics. Ocelové mezipatro se zábradlím a schodištěm do bývalé dílny je přesně náš druh práce.\n\nPříští týden mohu přijet v úterý odpoledne, v [čas], do studia v Karlíně. Mohla byste mi předtím poslat adresu a, pokud ho máte, půdorys?\n\nS pozdravem\nJana Dvořáková"
+      },
+      {
+        "match": ["Zářijové faktury ke schválení"],
+        "body": "Ahoj Lucie,\n\nschváleno, kromě těch dvou od Steelworks Ostrava: na druhé je pořád starý ceník, takže si od nich nejdřív vyžádám opravenou fakturu. Zbytek se může zaplatit.\n\nJana"
+      },
+      {
+        "match": ["Nový notebook je připravený"],
+        "body": "Ahoj Martine,\n\ndíky! Stavím se [dnes/zítra] kolem [čas] a přeneseme zbytek.\n\nJana"
+      },
+      {
+        "match": ["Nabídka na rozšíření skladu"],
+        "body": "Dobrý den, pane Svobodo,\n\nděkuji za výkres. Pásová část je v nabídce a osvětlení nad regály jsem přidala jako třetí část; náš partner pro elektro ho právě naceňuje z výkresu.\n\nKompletní nabídku budete mít v pátek do poledne.\n\nS pozdravem\nJana Dvořáková",
+        "followUp": "Dobrý den, pane Svobodo,\n\njen krátce k nabídce na halu B: bude u vás v pátek do poledne, jak jsem slíbila. Kdyby se mezitím na vaší straně něco změnilo, dejte mi prosím vědět a zohledním to.\n\nS pozdravem\nJana Dvořáková"
+      },
+      {
+        "match": ["Mohli byste potvrdit termín instalace"],
+        "body": "",
+        "followUp": "Dobrý den, pane Svobodo,\n\nmohli byste mi potvrdit termín instalace v hale A, 10. listopadu? Naše parta musí do konce týdne objednat plošinu, takže by nám moc pomohlo krátké ano, nebo ne.\n\nS pozdravem\nJana Dvořáková"
+      },
+      {
+        "match": ["Týmový oběd v pátek"],
+        "body": "",
+        "followUp": "Ahoj,\n\nstůl u Da Pietra je zamluvený na pátek 12:30 pro čtyři. Kdyby někdo bral hosta, dejte vědět do čtvrtka a změním to.\n\nJana"
+      },
+      {
+        "match": ["Texty webu, druhý návrh"],
+        "body": "",
+        "followUp": "Ahoj Ondřeji,\n\njen pro jistotu: došly ti moje dvě poznámky a otevírací doba dílny? Dej vědět, až bude třetí návrh.\n\nJana"
+      }
+    ]
+  },
+  "rewrite": {
+    "politer": [
+      {
+        "match": ["mám čas jedině v úterý odpoledne"],
+        "text": "Vážená paní Králová,\n\nděkuji za vaši poptávku i za milé doporučení od Acme Logistics. Příští týden bych se mohla zastavit v úterý odpoledne, ve 14:00, ve vašem novém studiu v Karlíně. Mohla byste mi předtím poslat adresu a, pokud ho máte, půdorys? Pomohlo by mi to se na návštěvu připravit.\n\nS pozdravem\nJana Dvořáková"
+      }
+    ],
+    "shorter": [
+      {
+        "match": ["mám čas jedině v úterý odpoledne"],
+        "text": "Dobrý den,\n\nděkuji za poptávku. Mohu přijet v úterý ve 14:00; pošlete mi prosím předem adresu a půdorys.\n\nJana Dvořáková"
+      }
+    ],
+    "fix": [],
+    "english": []
+  },
+  "write": [
+    {
+      "match": ["Nabídka na rozšíření skladu"],
+      "text": "Dobrý den, pane Svobodo,\n\nděkuji za výkres. Pásová část je v nabídce a osvětlení nad regály jsem přidala jako třetí část; náš partner pro elektro ho právě naceňuje z výkresu.\n\nK prodloužené záruce jeden dotaz: mám nacenit 24, nebo 36 měsíců? Bude každopádně na samostatném řádku.\n\nKompletní nabídku budete mít v pátek do poledne.\n\nS pozdravem\nJana Dvořáková"
+    },
+    {
+      "match": ["Poptávka: vestavba do nového studia"],
+      "text": "Vážená paní Králová,\n\nděkuji za vaši poptávku i za milé doporučení od Acme Logistics. Ocelové mezipatro se zábradlím a schodištěm do bývalé dílny je přesně náš druh práce.\n\nPříští týden mohu přijet v úterý odpoledne; vyhovovalo by vám 14:00? Mohla byste mi předtím poslat adresu a, pokud ho máte, půdorys?\n\nS pozdravem\nJana Dvořáková"
+    }
+  ],
+  "search": [
+    {"words": "pošta od Petra o skladu", "query": "from:petr sklad"},
+    {"words": "nepřečtené faktury od Lucie", "query": "from:luci faktur is:unread"},
+    {"words": "nabídka pro Acme s výkresem", "query": "nabídk acme has:attachment"}
+  ]
+}
