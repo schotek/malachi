@@ -10,17 +10,23 @@ address, field and key anyway.
 Status: draft (2026-10-28). Nothing below is implemented yet; the plan is
 [`plans/update-check.md`](plans/update-check.md).
 
-## 1. Hosts and versioning
+## 1. Host, paths and versioning
 
-| Host | Who calls it | Authentication |
+Everything is served by one host, `https://admin.malachimail.app`, split
+by path:
+
+| Path | Who calls it | Authentication |
 |---|---|---|
-| `https://api.malachimail.app` | the daemon of every installed copy | none; rate limits only |
-| `https://admin.malachimail.app` | the owner in a browser | Cloudflare Access; never called by the app |
+| `/api/v1/…` | the daemon of every installed copy | none; rate limits only (Cloudflare Access bypasses this path) |
+| every other path | the owner in a browser | Cloudflare Access, and the Worker checks the Access token and `Origin` itself; never called by the app |
 
-- Every path starts with a contract version, `/v1/…`. Copies of the app
+- The daemon calls only paths under `/api/`; an answer from any other path
+  (a sign-in page of Access, a redirect) is not an API answer and is
+  treated as a server failure (§2.5).
+- Every API path carries a contract version, `/api/v1/…`. Copies of the app
   stay installed for years, so a path, once published, is answered for as
   long as any supported version calls it. An incompatible change is a new
-  prefix (`/v2/…`), served beside the old one.
+  prefix (`/api/v2/…`), served beside the old one.
 - Requests carry no cookies, no installation or user identifier and no
   query string. The `User-Agent` is `MalachiMail/<version>` (the daemon's
   `main.version`), nothing more.
@@ -34,7 +40,7 @@ Status: draft (2026-10-28). Nothing below is implemented yet; the plan is
   `429` and `503` may carry `Retry-After` (seconds), which the daemon
   honours, capped at one day.
 
-## 2. Updates: `GET /v1/updates`
+## 2. Updates: `GET /api/v1/updates`
 
 Tells the daemon which versions exist and where each package of a version
 is. The daemon only **reports** a newer version; it never installs one
@@ -43,8 +49,8 @@ is. The daemon only **reports** a newer version; it never installs one
 ### 2.1 Request
 
 ```
-GET /v1/updates HTTP/1.1
-Host: api.malachimail.app
+GET /api/v1/updates HTTP/1.1
+Host: admin.malachimail.app
 User-Agent: MalachiMail/0.1.2
 Accept: application/json
 ```
@@ -172,7 +178,7 @@ scheduled check. None of this is shown to the user beyond a line in
 - Fallback order of the daemon: the API, then the GitHub asset, each tried
   once per check.
 
-## 3. Feedback: `POST /v1/feedback` (sketch, not yet scheduled)
+## 3. Feedback: `POST /api/v1/feedback` (sketch, not yet scheduled)
 
 Reserved. The intended shape, so that the server and daemon agree when it
 is built:
@@ -197,5 +203,6 @@ limits; there is no secret in the app to authenticate with.
 
 ## 4. Changelog
 
-- **v1** (draft, 2026-10-28): `GET /v1/updates`; `POST /v1/feedback`
-  reserved.
+- **v1** (draft, 2026-10-28): `GET /api/v1/updates`; `POST /api/v1/feedback`
+  reserved. One host, `admin.malachimail.app`, the API under `/api/`
+  (the owner's decision, 2026-10-28; first drafted as `api.malachimail.app`).

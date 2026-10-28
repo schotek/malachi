@@ -9,7 +9,7 @@ zpětné vazby jsou v soukromém repozitáři `admin-malachi-mail` (jeho
 
 Uživatel může z aplikace poslat připomínku, hlášení chyby nebo návrh
 funkce, aniž by musel mít účet na GitHubu. Formulář je ve všech třech
-klientech stejný, odesílá ho démon na `api.malachimail.app`; uživatel před
+klientech stejný, odesílá ho démon na `admin.malachimail.app/api/v1/feedback`; uživatel před
 odesláním vidí přesně to, co odejde. Druhá cesta je e-mail z vlastního
 účtu. Na GitHub aplikace nikde neodkazuje, ani *Nahlásit problém*
 (rozhodnutí vlastníka 2026-10-28, F14).
@@ -18,7 +18,7 @@ odesláním vidí přesně to, co odejde. Druhá cesta je e-mail z vlastního
 
 | # | Rozhodnutí | Proč |
 |---|---|---|
-| F1 | **Hlavní cesta je formulář přes API** (`POST /v1/feedback`), **e-mail** je odkaz ve formuláři; odkaz na GitHub ve formuláři není. | Funguje i bez nastaveného účtu a bez odhalení adresy; kdo chce odpověď, má e-mail. |
+| F1 | **Hlavní cesta je formulář přes API** (`POST /api/v1/feedback`), **e-mail** je odkaz ve formuláři; odkaz na GitHub ve formuláři není. | Funguje i bez nastaveného účtu a bez odhalení adresy; kdo chce odpověď, má e-mail. |
 | F2 | **Odesílá démon** (`feedback.send`), UI jen sestaví formulář a ukáže výsledek. | Pravidlo 1; jedna implementace HTTP, limitů a čištění. |
 | F3 | **Kde**: GTK hlavní nabídka (☰) — *Poslat zpětnou vazbu…* před *O aplikaci*; macOS menu **Help → Send Feedback…** pod *Malachi Mail Help* a tlačítko v okně About; Windows nabídka **`…`** — *Poslat zpětnou vazbu…* nad *Konec* a tlačítko v Předvolbách → O aplikaci. *Nahlásit problém* v O aplikaci (F14) otevře týž formulář s druhem *Chyba*. | Místa, kde to uživatel na každé platformě hledá; žádné tlačítko v toolbaru ani nevyžádané dotazy. |
 | F4 | **Druh**: *Chyba · Návrh funkce · Jiné* (`bug` / `idea` / `other`), výchozí podle vstupu (z nabídky *Jiné*, z chybového stavu *Chyba*, F12). | Třídění ve schránce; napovídající text podle druhu. |
@@ -54,7 +54,7 @@ Pole `diagnostics`:
   vstupy (`backend/testdata/feedback`: obří text, bidi, neplatné UTF-8,
   nulové bajty, e-mail s `\r\n`, řídicí znaky).
 - HTTP klient jako u aktualizací (`internal/update`): jen `https`
-  na `api.malachimail.app`, bez přesměrování, timeout 30 s, systémová
+  na `admin.malachimail.app/api/`, bez přesměrování, timeout 30 s, systémová
   proxy, tělo odpovědi nejvýš 4 KiB, nic z těla se neloguje.
 - Falešný server `feedback/feedbacktest` (201, 400, 413, 429, 503, výpadek).
 - API, kompatibilní rozšíření protokolu 2, `docs/api.md` §4.20 `feedback`:
@@ -91,7 +91,7 @@ být nasazený dřív než klienti s formulářem.
 ## 7. Pořadí
 
 1. Zásady ochrany osobních údajů na webu (`web/privacy.html`, cs i en).
-2. Server: `POST /v1/feedback` a schránka (soukromý repozitář).
+2. Server: `POST /api/v1/feedback` a schránka (soukromý repozitář).
 3. `services.md` §3 závazně, démon, `docs/api.md`, `docs/security.md`.
 4. Go reference + GTK, `make po`.
 5. macOS port.
