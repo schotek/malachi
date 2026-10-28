@@ -1,8 +1,10 @@
 # Linux (GTK) screenshots — hand-over notes
 
-Taken 2026-10-28 from branch `shots/linux` (based on `main` at
-`49f0a376`). The code commits come first on the branch; this commit
-holds only these pictures and notes. The sets follow docs/screenshots.md
+Taken 2026-10-28 from branch `shots/linux`. The branch is based on
+`main` at `49f0a376` and has `main` merged in at `53fc8814` (fix(ui): the
+sidebar header shows no title, the colour button starts black). The code
+commits come first on the branch; the last commit holds only these
+pictures and notes. The sets follow docs/screenshots.md
 §2 in English (`en/`) and Czech (`cs/`): 11 PNGs in each, lossless and
 unscaled.
 
@@ -123,21 +125,17 @@ I opened all 22 pictures:
 
 ## Differences from §2, and what could not be reproduced
 
-1. **The sidebar's header title reads "Fold…" in English.** This is how
-   the client lays out its header at a 1440 px window: the mode switch,
-   New Message and the menu leave too little room for "Folders". The
-   Czech "Složky" fits. I did not change the client for the picture.
-2. **`crm-dialog.png`**: the search field has the keyboard focus and
+1. **`crm-dialog.png`**: the search field has the keyboard focus and
    shows a text caret (not the mouse pointer), as the dialog opens.
-3. **`compose.png`**: the To field has the focus and shows a text caret.
-4. **`calendar-week.png`**: the built-in calendar samples
+2. **`compose.png`**: the To field has the focus and shows a text caret.
+3. **`calendar-week.png`**: the built-in calendar samples
    (`MALACHI_CALENDAR_SAMPLES`) have English event and calendar names in
    both languages, because the samples are not translated. Everything
    around them is Czech in the Czech set.
-5. **The unread count in the Inbox title changes from scene to scene**
+4. **The unread count in the Inbox title changes from scene to scene**
    (for example 5, 4, 3, 2 of 17). Each scene marks the message it
    selects as read, as a click would.
-6. **The selected case in `board-list.png`** is in *Waiting for Them*,
+5. **The selected case in `board-list.png`** is in *Waiting for Them*,
    below the visible part of the list. The list is not scrolled to it,
    which is the client's own behaviour after a programmatic selection.
    The detail shows the case and its four messages.
@@ -178,5 +176,7 @@ I opened all 22 pictures:
   and without the changes of this branch, on this host with GTK 4.22.
 - `make lint` is green. golangci-lint is not installed, so only `go vet`
   ran.
-- `make po` produced no change: only the `POT-Creation-Date` line
-  differed, and it was reverted.
+- `make po` produced no change, before and after the merge of
+  `53fc8814` (whose `window.ui` references were moved by hand): only the
+  `POT-Creation-Date` line differed, and it was reverted. `po/cs.po` was
+  unchanged, so there is no `chore(po)` commit.
