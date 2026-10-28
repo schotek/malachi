@@ -7,36 +7,47 @@
 <p align="center">A native email client: one Go core with all the logic, a native UI for each platform: Linux, macOS and Windows.</p>
 
 Built because the existing options are either showing their age or do not
-work reliably anymore, and on Linux that is worse than anywhere else.
+work reliably anymore. It started on Linux, where that is worse than
+anywhere else; the same core now drives a native app on macOS and Windows
+as well.
 
-> **Project status: early, usable with care.** Version 0.1.0 reads, writes
-> and sends mail over IMAP/SMTP and Microsoft 365, renders HTML after
-> sanitising it, and keeps mail available offline; Gmail support landed
-> on `main` since, and so have conversation threading, search and an
-> [MCP bridge](#ai-agents-mcp) for AI agents.
+> **Project status: early, usable with care.** Version 0.1.2 runs on
+> Linux, macOS and Windows 11. It reads, writes and sends mail over
+> IMAP/SMTP, Microsoft 365 and Gmail, renders HTML after sanitising it,
+> keeps mail available offline, groups it into conversations, searches
+> it, follows Jira issues, keeps a calendar, sorts what waits for you on
+> a board, and has an [MCP bridge](#ai-agents-mcp) for AI agents.
 >
 > It is young, and a bug in the sync engine can still touch messages on the
 > server. Keep a second mail program for anything that matters.
 
 ## Screenshots
 
+The GTK client on Linux, from before conversations, the calendar and the
+board arrived; the macOS and Windows apps show the same panes with their
+platform's widgets.
+
 |  |  |
 |---|---|
 | [![The main window](docs/screenshots/Malachi01.png)](docs/screenshots/Malachi01.png) | **The main window.** Folders of every account in one sidebar, favourites pinned on top, the message list with its All / Unread / Flagged filter, and the message itself. The bar above the body says the remote images were blocked and offers to load them once or to trust the sender from now on. |
-| [![Adding an account](docs/screenshots/Malachi02.png)](docs/screenshots/Malachi02.png) | **Adding an account.** Accounts already signed in through GNOME Online Accounts are offered without a password; for anything else the assistant looks the server settings up from the address alone. |
+| [![Adding an account](docs/screenshots/Malachi02.png)](docs/screenshots/Malachi02.png) | **Adding an account.** On GNOME, accounts already signed in through GNOME Online Accounts are offered without a password; elsewhere Microsoft 365 signs in in the browser, and for anything else the assistant looks the server settings up from the address alone. |
 | [![Accounts in the preferences](docs/screenshots/Malachi03.png)](docs/screenshots/Malachi03.png) | **Accounts.** Every account can be reordered, paused, edited or removed, and shows what the synchronisation is doing right now. |
 | [![General preferences](docs/screenshots/Malachi04.png)](docs/screenshots/Malachi04.png) | **General preferences.** Launch at login and running in the background, when a message counts as read, desktop notifications with the system new-mail sound, and how often the mail is fetched. |
 | [![Appearance preferences](docs/screenshots/Malachi05.png)](docs/screenshots/Malachi05.png) | **Appearance.** Light, dark or the system's choice; the density of the message list, its preview line and avatars; the font and zoom of the message view. |
 
 ## What works today
 
+On all three platforms unless said otherwise:
+
 - **Accounts.** IMAP/SMTP with a setup assistant that finds the server
-  settings for most providers. Microsoft 365 / Outlook.com and Gmail /
-  Google Workspace through GNOME Online Accounts; without them (macOS,
-  Windows, other desktops) Microsoft 365 and Outlook.com sign in in your browser
-  out of the box, and Gmail uses an app password or a Google client of
-  your own ([OAuth clients](#oauth-clients-for-gmail-and-microsoft-365)).
-  Passwords and tokens live in the system keyring.
+  settings for most providers. Microsoft 365 / Outlook.com sign in in
+  your browser out of the box; Gmail / Google Workspace with an app
+  password or a Google client of your own
+  ([OAuth clients](#oauth-clients-for-gmail-and-microsoft-365)); on GNOME
+  both can also come from GNOME Online Accounts. Passwords and tokens
+  live in the system keyring (Secret Service, the login keychain,
+  Credential Manager). A server with a certificate of its own can be
+  trusted explicitly, by its fingerprint.
 - **Reading offline.** Folders and messages are synchronised into a local
   store within a configurable retention window; new mail arrives as the
   server announces it (IMAP IDLE). Flags, moves and deletions are queued
@@ -49,42 +60,73 @@ work reliably anymore, and on Linux that is worse than anywhere else.
 - **HTML mail, safely.** Bodies are sanitised in the daemon before the UI
   sees them. Remote images stay blocked until you load them or trust the
   sender; the renderer runs with JavaScript off, a strict content policy
-  and no network. Attached messages open read-only in their own window.
-- **Writing.** Formatted text, attachments and inline images. A message
-  that cannot go out right away waits in a local Outbox and is retried; a
-  copy is filed in Sent. Recipients are completed from the system address
-  books (Evolution Data Server) and from people you have written to.
-- **Desktop integration.** `mailto:` links, new-mail notifications with an
-  optional sound, launch at login (through the Background portal), light
-  and dark styles, a message list with unread/flagged filters, a foldable
-  sidebar with favourite folders. In GTK, macOS and WinUI 3, the Inbox has collapsible
-  date sections with flagged messages first; conversations stay together.
+  and no network. Attached messages open read-only in their own window;
+  other attachments open in a preview (GNOME Sushi, Quick Look, a viewer
+  of the app's own on Windows).
+- **Writing.** Formatted text, attachments and inline images; recipients
+  as removable badges; plain text that looks like Markdown is pasted as
+  formatted text. A message that cannot go out right away waits in a
+  local Outbox and is retried; a copy is filed in Sent. Drafts rest in
+  the account's Drafts folder, so another client sees them too.
+  Recipients are completed from the people you have written to, and on
+  GNOME from the system address books as well.
 - **Conversations.** The daemon threads mail by its headers as it
-  arrives; *Group by Conversation* in the preferences turns the message
-  list into one row per conversation, expandable to its messages.
-- **Search.** Ctrl+F searches the mail stored on this computer (the
+  arrives; *Group by Conversation* turns the message list into one row
+  per conversation. A conversation is shown as cards on a timeline or as
+  a chat of bubbles, with your own replies from Sent and your unsent
+  drafts in place, the quoted history folded away, and a quick-reply bar
+  under it so that a short answer needs no window.
+- **Search.** Ctrl+F (⌘F) searches the mail stored on this computer (the
   retention window) in the folder, its account or every account, while
   you type: every word as a prefix, case and diacritics ignored ("priloh"
   finds "Přílohy"), plus `from:`, `to:`, `subject:`, `is:unread`,
   `has:attachment`, dates and `in:` a folder.
-- **Calendar** (in progress). The daemon
-  synchronises the calendars of Microsoft 365 / Outlook.com accounts
+- **Many messages at once.** Several messages can be selected and
+  archived, moved, deleted, marked or forwarded together; messages,
+  folders and accounts have context menus (Move To, Mark All as Read,
+  Empty Trash). The Inbox has collapsible date sections with flagged
+  messages first.
+- **Newsletters.** Mailing lists and newsletters are recognised from
+  their headers and labelled; where the sender supports it, one click
+  unsubscribes (through the daemon, never by opening a link), otherwise
+  the unsubscribe mail is sent for you.
+- **Jira.** A Jira Cloud or Data Center site is an account: its issues
+  are read as conversations (the description, comments, status changes),
+  with Assigned to Me, Watching and Open views in the sidebar, a comment
+  in place of a reply, a status change from the issue card, and the
+  site's notification mail linked to the issue or hidden.
+- **Calendar.** The calendars of Microsoft 365 / Outlook.com accounts
   (when you switch them on) and of CalDAV servers (Nextcloud, iCloud,
-  Fastmail, Radicale and others, as a calendar-only account), keeps them
-  offline, and reads invitations that arrive in any mail account so you
-  can accept, tentatively accept or decline from the message; replies and
+  Fastmail, Radicale and others, as a calendar-only account) are kept
+  offline, shown by day, week, month or as an agenda, with reminders.
+  Invitations that arrive in any mail account can be accepted,
+  tentatively accepted or declined from the message; replies and
   invitations go through the server or, where it does not send them, as
-  invitation mail through the Outbox. A Calendar mode beside Mail and the
-  Board comes to the macOS client first, then to GTK and Windows.
-- **AI agents, on a leash.** An optional MCP bridge lets an agent read and
-  draft mail through the daemon. Read-only unless you say otherwise;
-  marking, moving, deleting and sending each need a separate flag.
-- **Assistant** (experimental). With the MCP bridge registered, the ✦ menu
-  hands the selected message, conversation or folder to Claude Code: with
-  a prepared question in a terminal, or in a panel of the main window that
-  runs your own Claude Code with only the bridge's read and draft tools.
-  Nothing is sent to Claude before you ask, and nothing is sent by mail
-  before you send the draft yourself.
+  invitation mail through the Outbox.
+- **The Board.** A view beside Mail and Calendar that sorts your
+  conversations and Jira issues into Hot, Waiting for You, Waiting for
+  Them and For Your Information from their headers alone, with Done,
+  Remind, Archive and Delete, and a suggested reply edited in place.
+- **eWay-CRM.** A message can be saved to eWay-CRM with links to
+  contacts, companies, deals and projects, and the rest of its
+  conversation follows it.
+- **Desktop integration.** `mailto:` links, new-mail notifications with
+  the system's sound, launch at login, running in the background, light
+  and dark styles, a foldable sidebar with favourite folders.
+- **AI agents, on a leash.** An optional MCP bridge lets an agent read
+  and draft mail, and read the calendar and the board, through the
+  daemon. Read-only unless you say otherwise; marking, moving, deleting,
+  unsubscribing, creating events, sending and annotating the board each
+  need a separate flag.
+- **Assistant** (experimental). With the MCP bridge registered, the ✦
+  menu hands the selected message, conversation or folder to Claude
+  Desktop (macOS and Windows) or Claude Code with a prepared question, or
+  runs your own Claude Code (or ChatGPT, through Codex) in a panel of the
+  main window with only the bridge's read and draft tools: it
+  summarises, finds tasks and deadlines, writes and rewrites replies,
+  turns your words into a search and triages the board. A profile tells
+  it who you are. Nothing is sent to the model before you ask, and
+  nothing is sent by mail before you send the draft yourself.
 - **Czech translation**, and the machinery to add more.
 
 ## Goals
@@ -96,14 +138,15 @@ work reliably anymore, and on Linux that is worse than anywhere else.
   and bringing the client to another platform means writing a UI, not a
   mail client. Portability comes from that boundary, not from conditional
   compilation.
-- **A native UI on every platform, no web technology for the chrome.**
-  GTK 4 / libadwaita on Linux is the primary UI and the template the
-  others mirror feature for feature; the Swift/AppKit UI for macOS and the
-  C#/WinUI 3 UI for Windows mirror it today (see
+- **Native on every platform, no web technology for the chrome.** GTK 4 /
+  libadwaita on Linux, Swift/AppKit on macOS, C#/WinUI 3 on Windows: the
+  same panes and the same behaviour, each with its platform's widgets,
+  conventions and keyring, and one set of translations. The GTK client is
+  the reference the other two mirror feature for feature (see
   [docs/macos-port.md](docs/macos-port.md) and
-  [docs/windows-port.md](docs/windows-port.md)).
-- **Linux first.** GNOME desktop conventions, portals for everything that
-  leaves the sandbox, Flatpak and native packages.
+  [docs/windows-port.md](docs/windows-port.md)). On Linux that means
+  GNOME conventions, portals for everything that leaves the sandbox,
+  Flatpak and native packages.
 - **Lean.** A native toolkit and one small daemon: a mail client should
   not need a browser engine per window or half a gigabyte of memory to
   show an inbox.
@@ -122,24 +165,31 @@ work reliably anymore, and on Linux that is worse than anywhere else.
 ## Architecture
 
 Malachi Mail is two processes. `malachid` is a Go daemon that owns the mail
-store, speaks IMAP and SMTP (and Microsoft Graph for Microsoft 365),
-synchronises, sanitises HTML, manages credentials and threads
-conversations, and searches the store. `malachi` is the GTK 4
-application for Linux: it connects to the daemon over a local unix socket
-and displays what it is given. The macOS and Windows applications do the
-same over the same socket (AF_UNIX on Windows too) and the same contract.
+store, speaks IMAP and SMTP (and Microsoft Graph for Microsoft 365, the
+Jira REST API, CalDAV and eWay-CRM's web service), synchronises, sanitises
+HTML, manages credentials, threads conversations, searches the store and
+keeps the calendar and the board. The applications connect to it over a
+local unix socket (AF_UNIX on Windows too) and display what they are
+given: `malachi`, the GTK 4 application for Linux, the Swift/AppKit app
+for macOS and the C#/WinUI 3 app for Windows, all over the same contract.
 
 ```
 ┌──────────────────┐
 │  malachi (GTK4)  │ ◄─┐
-│  displays, asks  │   │                   ┌────────────────────┐
-└──────────────────┘   │   JSON-RPC 2.0    │  malachid (Go)     │
-                       ├── unix socket ──► │  all the logic     │
-┌──────────────────┐   │                   └─────────┬──────────┘
-│  malachi-mcp     │ ◄─┘                             │
-│  AI agent bridge │                           ┌─────┴───────┐
-└──────────────────┘                           │ SQLite/FTS5 │
-                                               └─────────────┘
+│  Linux           │   │
+└──────────────────┘   │
+┌──────────────────┐   │                   ┌────────────────────┐
+│  Malachi Mail    │ ◄─┤   JSON-RPC 2.0    │  malachid (Go)     │
+│  macOS (AppKit)  │   ├── unix socket ──► │  all the logic     │
+└──────────────────┘   │                   └─────────┬──────────┘
+┌──────────────────┐   │                             │
+│  Malachi Mail    │ ◄─┤                       ┌─────┴───────┐
+│  Windows (WinUI) │   │                       │ SQLite/FTS5 │
+└──────────────────┘   │                       └─────────────┘
+┌──────────────────┐   │
+│  malachi-mcp     │ ◄─┘
+│  AI agent bridge │
+└──────────────────┘
 ```
 
 The boundary between them is deliberately hard: it is a socket, not a
@@ -158,35 +208,37 @@ the threat model in
 
 ## Installing
 
-There is no Flathub listing yet. CI builds a Flatpak bundle for **x86_64**
-and **aarch64** on every push to `main`; pick one up from the run's
-artifacts under [Actions](https://github.com/schotek/malachi/actions)
-(kept 30 days) and install it:
+Only Linux has binaries so far. CI builds them on every version tag, for
+**x86_64** and **aarch64** (`amd64` and `arm64`), attaches them to the
+[GitHub release](https://github.com/schotek/malachi/releases) and keeps
+the same files as the tag's workflow artifacts under
+[Actions](https://github.com/schotek/malachi/actions) for 30 days.
+
+### On Linux
+
+There is no Flathub listing yet. Download the Flatpak bundle for your
+architecture from the release and install it:
 
 ```sh
 flatpak install --user ./malachi-<version>-x86_64.flatpak
 ```
 
-Tagged versions will have their bundles attached to the GitHub release.
-The bundle pulls the GNOME 48 runtime from Flathub. There are no macOS or
-Windows binaries yet; build those clients from source ([macOS](#macos),
-[Windows](#windows)).
-
-Ubuntu does not ship Flatpak any more, so it takes one step first:
+The bundle pulls the GNOME 48 runtime from Flathub. Ubuntu does not ship
+Flatpak any more, so it takes one step first:
 
 ```sh
 sudo apt install flatpak
 flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 ```
 
-### Native packages
+#### Native packages
 
-CI also builds a `.deb` and an `.rpm` for both architectures, from the same
-artifacts page. They link the system GTK 4, libadwaita and WebKitGTK
-instead of carrying a runtime, so they need **libadwaita 1.7 or newer**:
-Ubuntu 26.04 LTS, Debian 14 and Fedora 42, but *not* Ubuntu 24.04 LTS,
-whose libadwaita is 1.5 and which cannot run the message-list filter. On
-24.04 take the Flatpak.
+The release also carries a `.deb` and an `.rpm` for both architectures.
+They link the system GTK 4, libadwaita and WebKitGTK instead of carrying a
+runtime, so they need **libadwaita 1.7 or newer**: Ubuntu 26.04 LTS,
+Debian 14 and Fedora 42, but *not* Ubuntu 24.04 LTS, whose libadwaita is
+1.5 and which cannot run the message-list filter. On 24.04 take the
+Flatpak.
 
 ```sh
 sudo apt install ./malachi_<version>_amd64.deb      # Debian, Ubuntu
@@ -199,6 +251,23 @@ updates itself.
 
 Unlike the Flatpak, these put `malachi-mcp` on `PATH`, which is what an
 [MCP client](#ai-agents-mcp) needs to spawn it.
+
+### On macOS
+
+No disk image is published yet. CI builds a universal DMG on every
+version tag and attaches it to the release only once it is signed with a
+Developer ID and notarised ([docs/releasing.md
+§8](docs/releasing.md#8-macos)), which waits for the project's Apple
+Developer membership. Until then build the app from source
+([macOS](#macos)); it needs macOS 14 or newer.
+
+### On Windows
+
+No binary is published yet: the app folder the build makes is unsigned,
+has no installer, and handing it to others waits for a licence decision
+on the Microsoft components it carries ([LICENSING.md](LICENSING.md)).
+Until then build it from source ([Windows](#windows)); it needs
+Windows 11.
 
 ## Building from source
 
@@ -297,7 +366,7 @@ export `GSETTINGS_SCHEMA_DIR` so the uninstalled binary finds it. Running
 then live in memory and are lost on exit (a warning is logged).
 
 "Launch at Login" asks the Background portal for autostart. Inside a
-Toolbx container the portal cannot identify the application ("no AppId
+container the portal cannot identify the application ("no AppId
 detected") and refuses; test that setting on the host from the installed
 desktop file or in the Flatpak.
 
@@ -527,11 +596,11 @@ Microsoft) instead of the configured one. A seeded account in
 ## AI agents (MCP)
 
 `make build` also produces `build/malachi-mcp`, a **Model Context Protocol**
-server over stdio that gives an AI agent — Claude Code, Zed, Cursor, or any
-other MCP client — a gated view of the mail. It is a second client of the
-daemon, exactly like the desktop UI: the same socket, the same documented
-contract, no mail logic and no credentials of its own. Nothing in the daemon
-changed to make it possible.
+server over stdio that gives an AI agent — Claude Code, Claude Desktop, Zed,
+Cursor, or any other MCP client — a gated view of the mail, the calendar and
+the board. It is a client of the daemon exactly like the desktop apps: the
+same socket, the same documented contract, no mail logic and no credentials
+of its own. Nothing in the daemon changed to make it possible.
 
 The repository's `.mcp.json` registers it for Claude Code, so an agent opened
 in this checkout can work with the mail as soon as `make run-dev` is up. For
@@ -547,16 +616,21 @@ the agent's tool list at all:
 
 | Tier | How to grant | Tools |
 |---|---|---|
-| Read and draft | always on | `list_accounts`, `list_folders`, `list_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `create_draft`, `search_messages`, `list_transitions` |
-| Modify | `-allow-modify`, or `MALACHI_MCP_ALLOW_MODIFY=true` for `.mcp.json` | `mark_messages`, `move_messages`, `delete_messages`, `transition_issue` |
-| Send | `-allow-send`, or `MALACHI_MCP_ALLOW_SEND=true` | `send_message` |
+| Read and draft | always on | `list_accounts`, `list_folders`, `list_messages`, `search_messages`, `read_message`, `get_attachment` (with the text of PDF, DOCX and XLSX attachments), `sync_status`, `trigger_sync`, `list_transitions`, `list_board`, `list_calendars`, `list_events`, `get_event`, `find_free_time`, `list_invitations`, `get_user_profile`, `create_draft` |
+| Modify | `-allow-modify`, or `MALACHI_MCP_ALLOW_MODIFY=true` for `.mcp.json` | `mark_messages`, `move_messages`, `delete_messages`, `transition_issue`, `unsubscribe`, `create_event` |
+| Send | `-allow-send`, or `MALACHI_MCP_ALLOW_SEND=true` | `send_message`; with it `unsubscribe` may send the unsubscribe mail and `create_event` may invite attendees |
+| Triage | `-allow-triage`, or `MALACHI_MCP_ALLOW_TRIAGE=true` | `list_triage_queue`, `annotate_case`, `add_commitment` and the prompt `triage_board`: notes on the board's cases (a title, a summary, tasks, a deadline with its quote), never a state you set yourself |
 
-Drafting needs no flag because a draft is inert: it stays in the local store,
-is never synchronised to the server, and goes out only when you send it
-yourself or when `send_message` is explicitly allowed. The bridge refuses to
-run as root and authenticates every connection with the daemon's per-run
-key, only after the daemon has proved that it holds the key; the protocol
-version is checked in the same handshake.
+Drafting needs no flag because a draft is inert: it rests in the local
+store and, after 30 seconds, as a copy in the account's Drafts folder,
+where you find it in Malachi Mail and in any other client, and it goes out
+only when you send it yourself or when `send_message` is explicitly
+allowed. A profile you write in *Preferences → AI → About Me* reaches the
+agent through `get_user_profile`, and the agent may propose a note for it
+(`propose_profile_note`), which you accept or dismiss in the app. The
+bridge refuses to run as root and authenticates every connection with the
+daemon's per-run key, only after the daemon has proved that it holds the
+key; the protocol version is checked in the same handshake.
 
 Tools, arguments, limits and the threat model: [docs/mcp.md](docs/mcp.md).
 
@@ -594,19 +668,31 @@ with no tool and no mail of its own: the ✦ button of the compose window
 rewrites the selection, or your own text above the quoted message (*More
 Polite*, *Shorter*, *Fix Mistakes*, *Translate to English* or your own
 instruction), and puts the answer in its place or below it only when you
-say so; the ✦ button beside the search field (or Alt+Enter in it) turns
-what you typed ("invoices from Jana in March") into a search. Only the
-passage or the typed words go to Claude.
+say so; the bar under the editor writes a reply, the introduction of a
+forward or a new message from an optional instruction of yours, shown as
+a preview first; the ✦ button beside the search field (or Alt+Enter in
+it) turns what you typed ("invoices from Jana in March") into a search.
+Only the passage or the typed words go to Claude.
+
+On the Board, *✦ Triage* has the same Claude Code annotate the cases (a
+title, a summary, tasks, a deadline with its quote, a promise you made)
+through the bridge's triage tools, by hand or on a schedule, and *✦
+Suggest a Reply* drafts one that you edit on the board; both have a
+consent of their own, read the stored mail of the chosen accounts, and
+can set no state, remind or Done. In the Calendar the panel offers *What
+is on today* and *Find a free slot*. *Preferences → AI → About Me* holds a
+profile the assistant reads before it writes in your name: what to know
+about you, the gender you write in, and a note per account.
 
 GTK, macOS and Windows also offer **ChatGPT (Codex, experimental)** in
 *Preferences → AI → In-app provider*. Select *In App*, connect with
 *Continue with ChatGPT*, and accept the separate OpenAI disclosure. It uses
 your ChatGPT plan through a native Codex executable and the same restricted
-mail tools. GTK/macOS also support their Board triage and suggested replies,
-with separate Board consent and model selection. The native GTK build uses
-Secret Service, macOS uses Keychain and Windows uses Credential Manager;
-this provider is unavailable in the current Flatpak build. Setup, validation
-status and native checks are in
+mail tools. All three clients also use it for the Board's triage and
+suggested replies, with a separate Board consent and model selection. The
+native GTK build uses Secret Service, macOS uses Keychain and Windows uses
+Credential Manager; this provider is unavailable in the current Flatpak
+build. Setup, validation status and native checks are in
 [docs/chatgpt-integration.md](docs/chatgpt-integration.md#12-gtk-and-macos-implementation-and-validation-hand-off).
 
 Claude Desktop for Linux is a preview the project does not support: it is
@@ -618,13 +704,13 @@ it is safe: [docs/mcp.md](docs/mcp.md#hand-off-from-the-app-the-assistant-menu),
 
 | Provider | Status |
 |---|---|
-| Generic IMAP/SMTP with password | ✅ reading and sending |
-| Microsoft 365 / Outlook.com via GNOME Online Accounts (Microsoft Graph) | ✅ reading and sending; sign in under Settings → Online Accounts first |
-| Gmail / Google Workspace via GNOME Online Accounts (IMAP/SMTP with XOAUTH2) | ✅ reading and sending (on `main`, not in 0.1.0); sign in under Settings → Online Accounts first. All Mail is the archive target and is not downloaded |
-| Microsoft 365 / Outlook.com without GNOME Online Accounts (Microsoft Graph, the daemon's own sign-in) | ✅ reading and sending (on `main`, not in 0.1.0); you sign in in the browser with the shipped client. Organisations that restrict consent approve the app once, see [OAuth clients](#oauth-clients-for-gmail-and-microsoft-365) |
-| Gmail / Google Workspace without GNOME Online Accounts (IMAP/SMTP with XOAUTH2, the daemon's own sign-in) | ✅ reading and sending (on `main`, not in 0.1.0); you sign in in the browser. Needs an OAuth client id and secret in `config.toml` |
-| Gmail with an app password | ✅ as the fallback when no sign-in is available (accounts with 2-Step Verification; on `main`, not in 0.1.0) |
-| Other OAuth2 providers | ✗ not implemented |
+| Generic IMAP/SMTP with password | ✅ reading and sending; a server's own certificate can be pinned by its fingerprint |
+| Microsoft 365 / Outlook.com (Microsoft Graph) | ✅ reading and sending, and the calendar. Sign in in the browser with the client Malachi Mail ships (an organisation that restricts consent approves the app once, see [OAuth clients](#oauth-clients-for-gmail-and-microsoft-365)), or on GNOME under Settings → Online Accounts |
+| Gmail / Google Workspace (IMAP/SMTP with XOAUTH2) | ✅ reading and sending. On GNOME under Settings → Online Accounts; elsewhere with an app password (accounts with 2-Step Verification) or the browser sign-in with an OAuth client of your own in `config.toml`. All Mail is the archive target and is not downloaded |
+| Jira Cloud and Jira Data Center | ✅ issues as conversations, comments, status changes, the site's notification mail; Cloud with an API token, Data Center with a personal access token |
+| CalDAV (Nextcloud, iCloud, Fastmail, Radicale and others) | ✅ a calendar-only account: events, invitations, reminders |
+| eWay-CRM | ✅ saving messages and their conversations to the CRM |
+| Other OAuth2 mail providers | ✗ not implemented |
 
 ## Contributing
 

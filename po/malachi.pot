@@ -8032,16 +8032,27 @@ msgstr ""
 msgid ""
 "Malachi Mail is a desktop email client for Linux, built with GTK 4 and "
 "libadwaita. It keeps mail available offline, renders HTML messages only "
-"after sanitising them, and separates the user interface from the mail engine "
-"so that the engine can be reused."
+"after sanitising them, and separates the user interface from the mail "
+"engine, which also drives the native Malachi Mail apps for macOS and Windows."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.metainfo.xml.in:17
+#: data/io.github.schotek.Malachi.metainfo.xml.in:18
 msgid ""
-"This is an early version. Mail can be read, written, sent and searched, but "
-"keep a second mail program for anything that matters."
+"Mail is read, written, sent and searched, grouped into conversations and "
+"shown as cards on a timeline or as a chat. Jira issues are followed as "
+"conversations, a calendar keeps Microsoft 365 and CalDAV calendars and "
+"answers invitations from the message, and the Board sorts what waits for "
+"you, what waits for others and what is just for your information. An "
+"optional bridge lets AI agents read the mail and write drafts, and nothing "
+"more without your permission."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.metainfo.xml.in:30
+#: data/io.github.schotek.Malachi.metainfo.xml.in:27
+msgid ""
+"This is an early version: keep a second mail program for anything that "
+"matters."
+msgstr ""
+
+#: data/io.github.schotek.Malachi.metainfo.xml.in:40
 msgid "Malachi Mail contributors"
 msgstr ""

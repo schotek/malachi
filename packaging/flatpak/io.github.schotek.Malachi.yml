@@ -4,7 +4,8 @@
 #   scripts/flatpak-vendor.sh   (once per dependency change; needs network)
 #   make flatpak                (flatpak-builder --user --install-deps-from=flathub …)
 # `make flatpak` runs the vendor script for you. CI does the same on every
-# push to main, for x86_64 and aarch64 (.github/workflows/flatpak.yml).
+# version tag, for x86_64 and aarch64 (.github/workflows/flatpak.yml), and
+# attaches the bundles to the tag's GitHub release.
 #
 # Runtime version: GNOME 48 matches the GTK 4.18 / libadwaita 1.7 / GLib 2.84
 # stack the project is developed against in the Fedora 42 Toolbx, and the
