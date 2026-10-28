@@ -327,11 +327,18 @@ above does (`start en|cs`) and runs the app through the two scripts of
 §3 (`shots en|cs OUTDIR`, with `MALACHI_START_SIZE=1440x900` — the
 visible frame, so the picture is 2880×1800 px at 200 % — and
 `MALACHI_START_INTERVAL=4`); the first run begins with `folder=inbox`,
-as the Linux set does. The `shot=` step writes the PNG itself: the
-window brought to the front, its extended frame bounds copied from the
-screen (Mica, the WebView2s and a `ContentDialog` as the user sees
-them), or rendered by `PrintWindow` when it could not take the
-foreground, which the step's line on stderr says.
+as the Linux set does. The window stands in the top left corner of the
+work area, not in its centre: an unactivated Windows draws its
+watermark above the bottom right of the screen, over a window there;
+the compose window is moved to the same corner for its picture, since
+the translucent border line under a window's top edge would otherwise
+show the main window's text. The `shot=` step writes the PNG itself
+once the reading pane's web view has loaded and the eWay-CRM dialog's
+lookup has answered: the window brought to the front, its extended
+frame bounds intersected with its client area copied from the screen
+(Mica, the WebView2s and a `ContentDialog` as the user sees them), or
+rendered by `PrintWindow` when it could not take the foreground, which
+the step's line on stderr says.
 
 ## 7. The hand-over
 
