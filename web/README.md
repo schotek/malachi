@@ -31,11 +31,59 @@ script gets.
 | Under the hood | `under-the-hood.html` | `cs/under-the-hood.html` |
 | Download | `download.html` | `cs/download.html` |
 | What's new | `news.html` | `cs/news.html` |
-| Not found | `404.html` (for a server that serves it for a missing path) | |
+| Not found | `404.html` (served for any missing path, so its own links are root-absolute) | |
 
-All links are relative, so the site works at the root of a domain as well
-as under a path. Where and how it is published is not decided yet; nothing
-in the repository deploys it.
+The pages link each other relatively, so they work from a file server
+and from `file://` as well as at the root of a domain; only `404.html`
+uses root-absolute links, since it is served at whatever path was
+missing.
+
+## Publishing
+
+The site is <https://malachimail.app>, a Cloudflare Worker with static
+assets (`wrangler.jsonc`): the files of this directory, except what
+`.assetsignore` names. `_headers` sets the security headers (a content
+security policy that allows only the site's own files) and a day's
+caching for `assets/`; `_redirects` serves `/` and `/cs/` as their
+`index.html`, because `html_handling` is `none` so that the `.html`
+links are served as named, without a redirect to an extensionless
+address.
+
+The Worker has four custom domains, `malachimail.app`,
+`www.malachimail.app`, `malachimail.org` and `www.malachimail.org`, and
+a script of a few lines, `worker/index.js`, that runs before the assets
+(`run_worker_first`): a request for one of the other three names gets a
+301 to the same path on `https://malachimail.app`, everything else is
+served from the assets. Plain http on `malachimail.app` is redirected by
+the zone's *Always Use HTTPS*. There is no workers.dev address and no
+preview URL. `wrangler deploy` replaces the Worker's custom domains with
+the list in `wrangler.jsonc`, so a domain is added there, not in the
+dashboard; routes added in the dashboard stay, with a warning.
+
+It is deployed by hand, never by CI. Once, the domain's zone has to be
+active in the Cloudflare account (a domain bought through Cloudflare
+Registrar is; one from another registrar needs Cloudflare's nameservers),
+and wrangler signs in in the browser:
+
+```sh
+cd web
+npx wrangler@4.150.0 login
+```
+
+Then every deploy, from `web/` with the tree as it should go out:
+
+```sh
+npx wrangler@4.150.0 deploy
+```
+
+A deploy attaches the custom domains it does not have yet (Cloudflare
+makes their DNS records and certificates; both zones have to be in the
+account). `npx wrangler@4.150.0 deploy --dry-run` checks the
+configuration without uploading, and `npx wrangler@4.150.0 dev` serves
+the site locally the way the Worker does, headers and 404 included; it
+presents every request as `malachimail.app`, so the redirects of the
+other names are not seen there. wrangler keeps its state in
+`.wrangler/`, which git ignores.
 
 ## Preview
 

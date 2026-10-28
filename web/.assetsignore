@@ -1,0 +1,7 @@
+# Files of web/ that are not part of the site (wrangler.jsonc "assets").
+wrangler.jsonc
+README.md
+.assetsignore
+worker
+.wrangler
+node_modules

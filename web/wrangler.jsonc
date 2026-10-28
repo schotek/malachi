@@ -1,0 +1,38 @@
+// The website as a Cloudflare Worker: the static files of this directory
+// at https://malachimail.app, and worker/index.js in front of them, which
+// sends the site's other names (www, malachimail.org) there with a 301.
+// Deployed by hand (web/README.md, "Publishing"):
+//   cd web && npx wrangler@4.150.0 deploy
+{
+  "name": "malachimail-web",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    // This directory is the site; .assetsignore keeps this file, the
+    // README, the Worker's own script and wrangler's files out of it.
+    "directory": ".",
+    "binding": "ASSETS",
+    // The script sees every request first, so that a request for a page
+    // on another name is redirected rather than served (each request
+    // counts as a Worker invocation).
+    "run_worker_first": true,
+    // A missing path gets 404.html with the status 404.
+    "not_found_handling": "404-page",
+    // The pages link each other as "features.html"; serve them as they
+    // are named, without redirecting to an extensionless URL.
+    "html_handling": "none"
+  },
+  // Custom domains: Cloudflare makes their DNS records and certificates.
+  // wrangler deploy replaces the Worker's custom domains with this list,
+  // so one added in the dashboard alone is gone after the next deploy.
+  "routes": [
+    { "pattern": "malachimail.app", "custom_domain": true },
+    { "pattern": "www.malachimail.app", "custom_domain": true },
+    { "pattern": "malachimail.org", "custom_domain": true },
+    { "pattern": "www.malachimail.org", "custom_domain": true }
+  ],
+  // Only the custom domains: no address on workers.dev and no preview
+  // URLs for versions.
+  "workers_dev": false,
+  "preview_urls": false
+}

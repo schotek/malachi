@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Download – Malachi Mail</title>
-<meta name="description" content="Download Malachi Mail 0.1.2 for Linux as a Flatpak, .deb or .rpm, and build the macOS and Windows apps from source.">
+<meta name="description" content="Download Malachi Mail 0.1.2 for Linux as a Flatpak, .deb or .rpm, for macOS as a signed, notarised disk image and for Windows as an installer.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Download – Malachi Mail">
-<meta property="og:description" content="Download Malachi Mail 0.1.2 for Linux as a Flatpak, .deb or .rpm, and build the macOS and Windows apps from source.">
+<meta property="og:description" content="Download Malachi Mail 0.1.2 for Linux as a Flatpak, .deb or .rpm, for macOS as a signed, notarised disk image and for Windows as an installer.">
 <meta property="og:locale" content="en_GB">
 <meta name="twitter:card" content="summary">
 <meta name="theme-color" content="#0b3260">
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/style.css?v=4">
 <script src="assets/platform.js"></script>
 <link rel="icon" href="assets/icon-32.png" sizes="32x32">
 <link rel="icon" href="assets/icon-64.png" sizes="64x64">
@@ -63,7 +63,7 @@
   <div class="wrap">
     <div class="eyebrow">Download</div>
     <h1>Download</h1>
-    <p class="lead">The current version is <strong>0.1.2</strong>, released on 26 October 2026. Only Linux has binaries so far; the macOS and Windows apps are built from source until they are signed.</p>
+    <p class="lead">The current version is <strong>0.1.2</strong>, released on 26 October 2026. Linux, macOS and Windows have ready-made downloads.</p>
   </div>
 </div>
 
@@ -80,23 +80,28 @@
           <li><a href="https://github.com/schotek/malachi/releases/download/v0.1.2/malachi_0.1.2-1_amd64.deb">.deb, amd64</a> · <a href="https://github.com/schotek/malachi/releases/download/v0.1.2/malachi_0.1.2-1_arm64.deb">arm64</a></li>
           <li><a href="https://github.com/schotek/malachi/releases/download/v0.1.2/malachi-0.1.2-1.fc42.x86_64.rpm">.rpm, x86_64</a> · <a href="https://github.com/schotek/malachi/releases/download/v0.1.2/malachi-0.1.2-1.fc42.aarch64.rpm">aarch64</a></li>
         </ul>
-        <p class="muted small">Every version's files stay on the <a href="https://github.com/schotek/malachi/releases">releases page</a>.</p>
+        <p class="muted small">Which package to take is <a href="#flatpak">below</a>.</p>
       </div>
       <div class="card" id="macos" data-yours="Your platform">
         <div class="bar mac" aria-hidden="true"><i></i><i></i><i></i></div>
-        <span class="status soon">From source</span>
+        <span class="status ready">Ready</span>
         <h3>macOS</h3>
-        <p>macOS 14 or newer, Apple silicon and Intel. The app is built with Swift and AppKit and brings the engine with it.</p>
-        <p class="muted small">A universal disk image is built on every version tag and will be published once it is signed with a Developer ID and notarised, which waits for the project's Apple Developer membership. Until then, build it from source in a few minutes.</p>
-        <p><a class="btn" href="https://github.com/schotek/malachi#macos">Build on macOS</a></p>
+        <p>macOS 14 or newer, Apple silicon and Intel.</p>
+        <ul>
+          <li><a href="https://github.com/schotek/malachi/releases/download/v0.1.2/Malachi-Mail-0.1.2-universal.dmg">Disk image, universal</a> · 83 MB</li>
+        </ul>
+        <p class="muted small">Signed and notarised by Apple: it opens without a warning.</p>
       </div>
       <div class="card" id="windows" data-yours="Your platform">
         <div class="bar winui" aria-hidden="true">— ▢ ✕</div>
-        <span class="status soon">From source</span>
+        <span class="status ready">Ready</span>
         <h3>Windows</h3>
-        <p>Windows 11, x64 and ARM64. The app is built with C# and WinUI 3 and brings the engine with it.</p>
-        <p class="muted small">The app folder the build makes is unsigned and has no installer yet; handing it to others waits for a licence decision on the Microsoft components it carries. Until then, build it from source.</p>
-        <p><a class="btn" href="https://github.com/schotek/malachi#windows">Build on Windows</a></p>
+        <p>Windows 11, x64 and ARM64.</p>
+        <ul>
+          <li><a href="https://github.com/schotek/malachi/releases/download/v0.1.2/Malachi-Mail-0.1.2-x64-Setup.exe">Installer, x64</a> · 72 MB</li>
+          <li><a href="https://github.com/schotek/malachi/releases/download/v0.1.2/Malachi-Mail-0.1.2-arm64-Setup.exe">Installer, ARM64</a> · 68 MB</li>
+        </ul>
+        <p class="muted small">No administrator rights needed. Not signed yet, so SmartScreen warns once: <a href="#windows-setup">what to do</a>.</p>
       </div>
     </div>
   </div>
@@ -117,6 +122,28 @@ flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flat
 <pre><code>sudo apt install ./malachi_0.1.2-1_amd64.deb      # Debian, Ubuntu
 sudo dnf install ./malachi-0.1.2-1.fc42.x86_64.rpm   # Fedora</code></pre>
     <p>There is no apt or dnf repository, so a package installed this way is not updated by <code>apt upgrade</code> or <code>dnf upgrade</code>. Unlike the Flatpak, these put <code>malachi-mcp</code> on <code>PATH</code>, which is what an MCP client needs to start it.</p>
+
+    <h2 id="windows-setup">Windows</h2>
+    <p>Take the installer for your processor: x64 for most PCs, ARM64 for Windows on Arm (Snapdragon and similar). It installs Malachi Mail into your user account, without administrator rights, and adds it to the Start menu; uninstall it in Settings → Apps. The installer is not signed yet, so the first time SmartScreen says it protected your PC: choose <em>More info</em> and <em>Run anyway</em>.</p>
+
+    <h2 id="checksums">Checksums</h2>
+    <p>The SHA-256 of every file of 0.1.2. Every version's files stay on the <a href="https://github.com/schotek/malachi/releases">releases page</a>.</p>
+    <div class="sums">
+      <table>
+        <thead><tr><th>File</th><th>SHA-256</th></tr></thead>
+        <tbody>
+        <tr><td>malachi-0.1.2-x86_64.flatpak</td><td><code>ef4da8ccc674b1b15de5d273cdf76dcb614cfcf0cb48b5478fd3115b7cf624a5</code></td></tr>
+        <tr><td>malachi-0.1.2-aarch64.flatpak</td><td><code>63d2f41d3b47ba98619dea83de76ec5bcfa7fd4f39e9a03a02d24e62fdf9d2cf</code></td></tr>
+        <tr><td>malachi_0.1.2-1_amd64.deb</td><td><code>547219b9fd366c5238ab74f3fe836af7d098950ec84ee0e5b0f114076cd3826e</code></td></tr>
+        <tr><td>malachi_0.1.2-1_arm64.deb</td><td><code>ae546219308a2dfa3b21ff1fe1f12bdc0ee46285dda7c172648a218dc9b662f6</code></td></tr>
+        <tr><td>malachi-0.1.2-1.fc42.x86_64.rpm</td><td><code>2afd32e0f9f5af107d3f55f24ab9997959a49c3ddf11fa984f203b0c91ddb312</code></td></tr>
+        <tr><td>malachi-0.1.2-1.fc42.aarch64.rpm</td><td><code>2a912d4455872d6a4c7a023663f6b6505f3c2ff1d2dfbc4ad768a4597230d226</code></td></tr>
+        <tr><td>Malachi-Mail-0.1.2-universal.dmg</td><td><code>77e2701d9c772fbf396159b541f61e343328cf438052bd5fdaab8c6469b9dbe9</code></td></tr>
+        <tr><td>Malachi-Mail-0.1.2-x64-Setup.exe</td><td><code>fcb902e0a417887e779be8ae710ee80fe1713f2259361493525c2dfc4b6a78fe</code></td></tr>
+        <tr><td>Malachi-Mail-0.1.2-arm64-Setup.exe</td><td><code>babae97367a8ed4ce42fd9a920d852d679f92a22b1c8015630ec08d2cc606c47</code></td></tr>
+        </tbody>
+      </table>
+    </div>
 
     <h2 id="data">Where your data goes</h2>
     <p>Mail, settings and the local store live in the platform's application-data directory: <code>~/.local/share/malachi</code> on Linux (inside the Flatpak's sandbox for the Flatpak), <code>~/Library/Application Support/Malachi Mail</code> on macOS, <code>%LOCALAPPDATA%\Malachi Mail</code> on Windows. Passwords are in the system keyring. Nothing is sent anywhere but your own servers.</p>

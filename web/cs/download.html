@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Stažení – Malachi Mail</title>
-<meta name="description" content="Stáhněte Malachi Mail 0.1.2 pro Linux jako Flatpak, .deb nebo .rpm a sestavte aplikace pro macOS a Windows ze zdrojových kódů.">
+<meta name="description" content="Stáhněte Malachi Mail 0.1.2 pro Linux jako Flatpak, .deb nebo .rpm, pro macOS jako podepsaný, notarizovaný obraz disku a pro Windows jako instalátor.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Stažení – Malachi Mail">
-<meta property="og:description" content="Stáhněte Malachi Mail 0.1.2 pro Linux jako Flatpak, .deb nebo .rpm a sestavte aplikace pro macOS a Windows ze zdrojových kódů.">
+<meta property="og:description" content="Stáhněte Malachi Mail 0.1.2 pro Linux jako Flatpak, .deb nebo .rpm, pro macOS jako podepsaný, notarizovaný obraz disku a pro Windows jako instalátor.">
 <meta property="og:locale" content="cs_CZ">
 <meta name="twitter:card" content="summary">
 <meta name="theme-color" content="#0b3260">
-<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="../assets/style.css?v=4">
 <script src="../assets/platform.js"></script>
 <link rel="icon" href="../assets/icon-32.png" sizes="32x32">
 <link rel="icon" href="../assets/icon-64.png" sizes="64x64">
@@ -63,7 +63,7 @@
   <div class="wrap">
     <div class="eyebrow">Stažení</div>
     <h1>Stažení</h1>
-    <p class="lead">Aktuální verze je <strong>0.1.2</strong>, vydaná 26. října 2026. Binárky má zatím jen Linux; aplikace pro macOS a Windows se stavějí ze zdrojů, dokud nebudou podepsané.</p>
+    <p class="lead">Aktuální verze je <strong>0.1.2</strong>, vydaná 26. října 2026. Linux, macOS i Windows mají hotové soubory ke stažení.</p>
   </div>
 </div>
 
@@ -80,23 +80,28 @@
           <li><a href="https://github.com/schotek/malachi/releases/download/v0.1.2/malachi_0.1.2-1_amd64.deb">.deb, amd64</a> · <a href="https://github.com/schotek/malachi/releases/download/v0.1.2/malachi_0.1.2-1_arm64.deb">arm64</a></li>
           <li><a href="https://github.com/schotek/malachi/releases/download/v0.1.2/malachi-0.1.2-1.fc42.x86_64.rpm">.rpm, x86_64</a> · <a href="https://github.com/schotek/malachi/releases/download/v0.1.2/malachi-0.1.2-1.fc42.aarch64.rpm">aarch64</a></li>
         </ul>
-        <p class="muted small">Soubory každé verze zůstávají na <a href="https://github.com/schotek/malachi/releases">stránce vydání</a>.</p>
+        <p class="muted small">Který balíček vybrat, je <a href="#flatpak">níže</a>.</p>
       </div>
       <div class="card" id="macos" data-yours="Vaše platforma">
         <div class="bar mac" aria-hidden="true"><i></i><i></i><i></i></div>
-        <span class="status soon">Ze zdrojů</span>
+        <span class="status ready">K dispozici</span>
         <h3>macOS</h3>
-        <p>macOS 14 nebo novější, Apple silicon i Intel. Aplikace je napsaná ve Swiftu a AppKitu a jádro nese s sebou.</p>
-        <p class="muted small">Univerzální obraz disku se staví na každém tagu verze a zveřejní se, až bude podepsaný Developer ID a notarizovaný, což čeká na členství projektu v Apple Developer Programu. Do té doby ho sestavíte ze zdrojů za pár minut.</p>
-        <p><a class="btn" href="https://github.com/schotek/malachi#macos">Sestavit na macOS</a></p>
+        <p>macOS 14 nebo novější, Apple silicon i Intel.</p>
+        <ul>
+          <li><a href="https://github.com/schotek/malachi/releases/download/v0.1.2/Malachi-Mail-0.1.2-universal.dmg">Obraz disku, univerzální</a> · 83 MB</li>
+        </ul>
+        <p class="muted small">Podepsaný a notarizovaný Applem: otevře se bez varování.</p>
       </div>
       <div class="card" id="windows" data-yours="Vaše platforma">
         <div class="bar winui" aria-hidden="true">— ▢ ✕</div>
-        <span class="status soon">Ze zdrojů</span>
+        <span class="status ready">K dispozici</span>
         <h3>Windows</h3>
-        <p>Windows 11, x64 i ARM64. Aplikace je napsaná v C# a WinUI 3 a jádro nese s sebou.</p>
-        <p class="muted small">Adresář aplikace, který sestavení vytvoří, je nepodepsaný a bez instalátoru; jeho předávání dál čeká na licenční rozhodnutí o komponentách Microsoftu, které nese. Do té doby ho sestavíte ze zdrojů.</p>
-        <p><a class="btn" href="https://github.com/schotek/malachi#windows">Sestavit na Windows</a></p>
+        <p>Windows 11, x64 i ARM64.</p>
+        <ul>
+          <li><a href="https://github.com/schotek/malachi/releases/download/v0.1.2/Malachi-Mail-0.1.2-x64-Setup.exe">Instalátor, x64</a> · 72 MB</li>
+          <li><a href="https://github.com/schotek/malachi/releases/download/v0.1.2/Malachi-Mail-0.1.2-arm64-Setup.exe">Instalátor, ARM64</a> · 68 MB</li>
+        </ul>
+        <p class="muted small">Bez práv správce. Zatím nepodepsaný, takže SmartScreen jednou varuje: <a href="#windows-setup">co udělat</a>.</p>
       </div>
     </div>
   </div>
@@ -117,6 +122,28 @@ flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flat
 <pre><code>sudo apt install ./malachi_0.1.2-1_amd64.deb      # Debian, Ubuntu
 sudo dnf install ./malachi-0.1.2-1.fc42.x86_64.rpm   # Fedora</code></pre>
     <p>Repozitář pro apt ani dnf neexistuje, takže takto nainstalovaný balíček <code>apt upgrade</code> ani <code>dnf upgrade</code> neaktualizuje. Na rozdíl od Flatpaku dají tyto balíčky <code>malachi-mcp</code> na <code>PATH</code>, což klient MCP potřebuje, aby ho spustil.</p>
+
+    <h2 id="windows-setup">Windows</h2>
+    <p>Vezměte instalátor pro svůj procesor: x64 pro většinu počítačů, ARM64 pro Windows na Arm (Snapdragon a podobné). Nainstaluje Malachi Mail do vašeho uživatelského účtu bez práv správce a přidá ho do nabídky Start; odinstalujete ho v Nastavení → Aplikace. Instalátor zatím není podepsaný, takže poprvé SmartScreen hlásí, že ochránil váš počítač: zvolte <em>Další informace</em> a <em>Přesto spustit</em>.</p>
+
+    <h2 id="checksums">Kontrolní součty</h2>
+    <p>SHA-256 každého souboru verze 0.1.2. Soubory každé verze zůstávají na <a href="https://github.com/schotek/malachi/releases">stránce vydání</a>.</p>
+    <div class="sums">
+      <table>
+        <thead><tr><th>Soubor</th><th>SHA-256</th></tr></thead>
+        <tbody>
+        <tr><td>malachi-0.1.2-x86_64.flatpak</td><td><code>ef4da8ccc674b1b15de5d273cdf76dcb614cfcf0cb48b5478fd3115b7cf624a5</code></td></tr>
+        <tr><td>malachi-0.1.2-aarch64.flatpak</td><td><code>63d2f41d3b47ba98619dea83de76ec5bcfa7fd4f39e9a03a02d24e62fdf9d2cf</code></td></tr>
+        <tr><td>malachi_0.1.2-1_amd64.deb</td><td><code>547219b9fd366c5238ab74f3fe836af7d098950ec84ee0e5b0f114076cd3826e</code></td></tr>
+        <tr><td>malachi_0.1.2-1_arm64.deb</td><td><code>ae546219308a2dfa3b21ff1fe1f12bdc0ee46285dda7c172648a218dc9b662f6</code></td></tr>
+        <tr><td>malachi-0.1.2-1.fc42.x86_64.rpm</td><td><code>2afd32e0f9f5af107d3f55f24ab9997959a49c3ddf11fa984f203b0c91ddb312</code></td></tr>
+        <tr><td>malachi-0.1.2-1.fc42.aarch64.rpm</td><td><code>2a912d4455872d6a4c7a023663f6b6505f3c2ff1d2dfbc4ad768a4597230d226</code></td></tr>
+        <tr><td>Malachi-Mail-0.1.2-universal.dmg</td><td><code>77e2701d9c772fbf396159b541f61e343328cf438052bd5fdaab8c6469b9dbe9</code></td></tr>
+        <tr><td>Malachi-Mail-0.1.2-x64-Setup.exe</td><td><code>fcb902e0a417887e779be8ae710ee80fe1713f2259361493525c2dfc4b6a78fe</code></td></tr>
+        <tr><td>Malachi-Mail-0.1.2-arm64-Setup.exe</td><td><code>babae97367a8ed4ce42fd9a920d852d679f92a22b1c8015630ec08d2cc606c47</code></td></tr>
+        </tbody>
+      </table>
+    </div>
 
     <h2 id="data">Kde leží vaše data</h2>
     <p>Pošta, nastavení a místní úložiště leží v adresáři aplikačních dat platformy: <code>~/.local/share/malachi</code> na Linuxu (u Flatpaku v jeho sandboxu), <code>~/Library/Application Support/Malachi Mail</code> na macOS, <code>%LOCALAPPDATA%\Malachi Mail</code> na Windows. Hesla jsou v systémové klíčence. Nikam jinam než na vaše servery se nic neposílá.</p>

@@ -1,0 +1,6 @@
+# The directory addresses serve their index page (wrangler.jsonc keeps
+# html_handling "none", so the .html links the pages use are served as
+# named, without a redirect).
+/ /index.html 200
+/cs/ /cs/index.html 200
+/cs /cs/ 301

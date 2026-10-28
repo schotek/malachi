@@ -1,0 +1,11 @@
+# Response headers for the whole site (Cloudflare Workers static assets).
+# The pages load only their own stylesheet, scripts, pictures and icons;
+# inline style attributes are used for small layout tweaks.
+/*
+  Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
+
+/assets/*
+  Cache-Control: public, max-age=86400

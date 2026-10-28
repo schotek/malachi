@@ -423,7 +423,10 @@ table.compare thead .hl { color: var(--accent); }
 .dl .card .muted { color: var(--muted); }
 .dl .card ul { margin: .4rem 0 .9rem; padding-left: 1.2rem; }
 .dl .card li { margin: .3rem 0; }
-.dl .card .btn { align-self: flex-start; margin-top: auto; }
+.dl .card > p:last-child { margin: auto 0 0; padding-top: .3rem; }
+.sums { overflow-x: auto; }
+.sums td:first-child { font-weight: 600; }
+.sums code { font-size: .82rem; word-break: break-all; }
 .status { display: inline-block; font-size: .74rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; border-radius: 999px; padding: .2rem .7rem; margin-bottom: .5rem; align-self: flex-start; }
 .status.ready { background: #dcf5e6; color: #146b35; }
 .status.soon { background: #fdeccb; color: #7a4e07; }
