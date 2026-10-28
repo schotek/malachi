@@ -22,6 +22,8 @@
 #            (Ctrl+C quits it and the daemon it started)
 #   lint     dotnet format --verify-no-changes and the conventions tests
 #   package  app, then build\windows\Malachi-Mail-<version>-<arch>.zip
+#   installer app, then build\windows\Malachi-Mail-<version>-<arch>-Setup.exe and the
+#            zip beside it (installer\build-installer.ps1; Inno Setup 6)
 #   clean    remove build\windows
 #
 # Options: -Configuration Debug|Release, -Arch x64|arm64 (default: this
@@ -37,7 +39,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('version', 'go', 'build', 'icons', 'app', 'test', 'run', 'lint', 'package', 'clean')]
+    [ValidateSet('version', 'go', 'build', 'icons', 'app', 'test', 'run', 'lint', 'package', 'installer', 'clean')]
     [string] $Target = 'app',
     [ValidateSet('', 'Debug', 'Release')]
     [string] $Configuration = '',
@@ -80,7 +82,7 @@ if ($Arch -eq 'arm64') {
     $Platform = 'ARM64'
 }
 if (-not $Configuration) {
-    if (@('app', 'run', 'package') -contains $Target) {
+    if (@('app', 'run', 'package', 'installer') -contains $Target) {
         $Configuration = 'Release'
     } else {
         $Configuration = 'Debug'
@@ -352,7 +354,9 @@ function Test-AppFolder {
     # fails (Malachi.App.csproj, MalachiInsightsResource).
     $expected = @('MalachiMail.exe', 'MalachiMail.pri', 'malachid.exe', 'malachi-mcp.exe', 'malachi-credentials.exe',
         'Microsoft.WindowsAppRuntime.Insights.Resource.dll', 'Assets\Malachi.ico',
-        'LICENSE.txt', 'LICENSE-backend.txt', 'LICENSING.md', 'THIRD-PARTY-NOTICES.md')
+        'LICENSE.txt', 'LICENSE-backend.txt', 'LICENSING.md', 'THIRD-PARTY-NOTICES.md',
+        'Microsoft-notices\README.txt', 'Microsoft-notices\Microsoft.WindowsAppSDK\license.txt',
+        'Microsoft-notices\Microsoft.Web.WebView2\LICENSE.txt')
     foreach ($language in (Get-Languages)) {
         $expected += "locale\$language.po"
     }
@@ -447,6 +451,16 @@ function Invoke-AppBuild {
     Copy-Item -LiteralPath (Join-Path $Root 'backend\LICENSE') -Destination (Join-Path $AppDir 'LICENSE-backend.txt')
     Copy-Item -LiteralPath (Join-Path $Root 'LICENSING.md') -Destination $AppDir
     Copy-Item -LiteralPath (Join-Path $Root 'THIRD-PARTY-NOTICES.md') -Destination $AppDir
+    # The licences of the NuGet packages in the folder, the Windows App SDK
+    # and WebView2 among them (LICENSING.md, the GPLv3 section 7 permission).
+    $assets = @()
+    foreach ($project in 'Malachi.App', 'Malachi.Credentials') {
+        $file = Join-Path $Artifacts "obj\$project\project.assets.json"
+        if (Test-Path -LiteralPath $file) {
+            $assets += $file
+        }
+    }
+    & (Join-Path $Here 'scripts\copy-notices.ps1') -AssetsFile $assets -Destination (Join-Path $AppDir 'Microsoft-notices') -Arch $Arch
     Test-AppFolder
     if ($Arch -eq $HostArch) {
         Copy-DevBinary (Join-Path $AppDir 'malachi-credentials.exe')
@@ -525,6 +539,13 @@ function Invoke-Package {
     Write-Host "packaged $zip"
 }
 
+# The installer and the portable zip of a release (docs/windows-port.md
+# section 17). Unsigned until there is a code-signing certificate.
+function Invoke-Installer {
+    Invoke-AppBuild
+    & (Join-Path $Here 'installer\build-installer.ps1') -AppDir $AppDir -Version $V.Full -Arch $Arch -OutDir $WinBuild
+}
+
 try {
     switch ($Target) {
         'version' {
@@ -539,6 +560,7 @@ try {
         'run' { Invoke-Run }
         'lint' { Invoke-Lint }
         'package' { Invoke-Package }
+        'installer' { Invoke-Installer }
         'clean' {
             if (Test-Path -LiteralPath $WinBuild) {
                 Remove-Item -LiteralPath $WinBuild -Recurse -Force
