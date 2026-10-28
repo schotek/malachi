@@ -370,7 +370,11 @@ must not read or write the user's (the UI tests set
 `io.github.schotek.Malachi.UiTests.<guid>`): only that name itself or it
 followed by a dot and ASCII letters, digits, `.`, `_` or `-` is taken, and
 any other value is ignored with a line in the log, so that a mistyped one
-never writes into another program's key. `MALACHI_DAEMON`,
+never writes into another program's key. `MALACHI_LANGUAGES` stands in
+for the Windows display languages in such an instance (BCP 47 tags most
+preferred first, `en-GB` or `cs-CZ;en`; the first is also the regional
+format of the dates), since changing the real ones means a sign-out;
+unset, the app follows the display languages as always. `MALACHI_DAEMON`,
 `MALACHI_SOCKET`, `MALACHI_KEYRING`, `MALACHI_KEYRING_HELPER` and
 `MALACHI_LOCALE_DIR` work as on macOS. A
 socket path may have at most 107 bytes (AF_UNIX on Windows); the app
