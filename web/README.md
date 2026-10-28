@@ -12,10 +12,11 @@ pages share `assets/style.css` and work from a plain file server or
 | Features | `features.html` | `cs/features.html` |
 | Download | `download.html` | `cs/download.html` |
 | What's new | `news.html` | `cs/news.html` |
-| Not found | `404.html` (GitHub Pages serves it for a missing path) | |
+| Not found | `404.html` (for a server that serves it for a missing path) | |
 
 All links are relative, so the site works at the root of a domain as well
-as under a path such as `https://schotek.github.io/malachi/`.
+as under a path. Where and how it is published is not decided yet; nothing
+in the repository deploys it.
 
 ## Preview
 
@@ -24,13 +25,6 @@ python3 -m http.server -d web 8765
 ```
 
 and open <http://localhost:8765/>.
-
-## Publishing
-
-`.github/workflows/pages.yml` uploads this directory to GitHub Pages on
-every push to `main` that touches it. Pages has to be switched on once in
-the repository settings (*Settings → Pages → Source: GitHub Actions*); a
-custom domain goes in the same place and needs a `CNAME` file here.
 
 ## Keeping it current
 
