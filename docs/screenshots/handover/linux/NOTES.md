@@ -60,15 +60,18 @@ for each language. It runs the client twice with `MALACHI_GTK_START`
 group=on;chat=off;folder=inbox;row=DevConf;shot=…/inbox.png;row=Quotation;chat=on;shot=…/chat.png;
 chat=off;row=Q4 planning;shot=…/invitation.png;row=Design Weekly;shot=…/newsletter.png;
 folder=Web;row=WEB-1;shot=…/jira.png;board:list:select;shot=…/board-list.png;
-board:columns;shot=…/board-columns.png;calendar:week;shot=…/calendar-week.png;
+board:columns:select;shot=…/board-columns.png;calendar:week;shot=…/calendar-week.png;
 mail;folder=inbox;row=DevConf;compose-open;shot=…/compose.png;quit
 
 group=off;chat=off;folder=sent;row=Quotation;shot=…/crm-saved.png;
 folder=inbox;row=Request for a quote;crm-save;shot=…/crm-dialog.png;quit
 ```
 
-- These are the two runs of §3, with one addition: `folder=inbox` at the
-  start of the first run. In Czech the three subjects were `Nabídka`,
+- These are the two runs of §3, with two changes: `folder=inbox` at the
+  start of the first run, and `board:columns:select` in place of
+  `board:columns`. Without `:select`, the Columns style once came up with
+  the first case selected instead of the quotation thread, a matter of
+  timing; `:select` picks the same case again by the same rule. In Czech the three subjects were `Nabídka`,
   `Porada` and `Poptávka`.
 - Each `shot=` prints `MALACHI_GTK_START shot <path>`. The script waits
   1 s, then `scripts/screenshots/xwd2png.py` takes `xwd -root`, crops it
@@ -120,53 +123,59 @@ I opened all 22 pictures:
 
 ## Differences from §2, and what could not be reproduced
 
-1. **`chat.png` (en and cs) shows the start of the chat, not its end.**
-   The fourth bubble is cut off at the bottom, with the quick-reply bar
-   under it.
-   - The client does scroll to the end: tracing showed the vertical
-     adjustment at its end (value 519, page 721, upper 1240) when the
-     shot was taken.
-   - But the window under Xvfb is not redrawn after that last scroll.
-     With `GSK_RENDERER=cairo` the picture stays at the top; with `ngl`
-     it stays at an earlier, shorter end.
-   - Queuing an allocation after the scroll did not help. I did not find
-     the cause and left the client's scrolling code as it was.
-   - It may be a redraw issue of GTK 4.22 under Xvfb, or a bug that a
-     real display hides with later frames. Worth checking in XQuartz.
-2. **The sidebar's header title reads "Fold…" in English.** This is how
+1. **The sidebar's header title reads "Fold…" in English.** This is how
    the client lays out its header at a 1440 px window: the mode switch,
    New Message and the menu leave too little room for "Folders". The
    Czech "Složky" fits. I did not change the client for the picture.
-3. **`crm-dialog.png`**: the search field has the keyboard focus and
+2. **`crm-dialog.png`**: the search field has the keyboard focus and
    shows a text caret (not the mouse pointer), as the dialog opens.
-4. **`compose.png`**: the To field has the focus and shows a text caret.
-5. **`calendar-week.png`**: the built-in calendar samples
+3. **`compose.png`**: the To field has the focus and shows a text caret.
+4. **`calendar-week.png`**: the built-in calendar samples
    (`MALACHI_CALENDAR_SAMPLES`) have English event and calendar names in
    both languages, because the samples are not translated. Everything
    around them is Czech in the Czech set.
-6. **The unread count in the Inbox title changes from scene to scene**
+5. **The unread count in the Inbox title changes from scene to scene**
    (for example 5, 4, 3, 2 of 17). Each scene marks the message it
    selects as read, as a click would.
-7. **The selected case in `board-list.png`** is in *Waiting for Them*,
+6. **The selected case in `board-list.png`** is in *Waiting for Them*,
    below the visible part of the list. The list is not scrolled to it,
    which is the client's own behaviour after a programmatic selection.
    The detail shows the case and its four messages.
 
 ## Found and fixed on the way
 
-The board's conversation block came up empty for a case selected before
-its conversation was in the cache. GtkStack leaves a page that is hidden
-during loading and does not return to it. This is fixed in
-`fix(ui): the board's conversation shows its cards after loading`, with
-a check in `TestBoardGTKSmoke`.
+- The chat did not show its end when it opened.
+  - The client scrolls to the end from the adjustment's "changed",
+    which GtkViewport emits during its own allocation. The allocation
+    that the new value queues is dropped there, so the rows stay drawn
+    at the old position until something else lays them out.
+  - A pointer or caret on a real display hides this; under Xvfb it
+    stays. Tracing showed the adjustment at its end while the picture
+    stayed at the top.
+  - Fixed in `fix(ui): the chat shows its end when it opens`: both
+    programmatic scrolls of the chat now lay the viewport out again from
+    idle.
+  - I could not reproduce it in `TestConversationChatGTKSmoke` (it
+    passes without the fix), so the fix has no test of its own. It was
+    verified on the pictures.
+- The board's conversation block came up empty for a case selected before
+  its conversation was in the cache. GtkStack leaves a page that is
+  hidden during loading and does not return to it. This is fixed in
+  `fix(ui): the board's conversation shows its cards after loading`,
+  with a check in `TestBoardGTKSmoke`.
 
 ## Verification (§6 of the task)
 
 - `make BUILD_DIR=build/linux build` on the host is green. `gtk.sh make
   build` could not run, because there is no container engine here.
 - `go test ./internal/window/...` under Xvfb is green.
-  `MALACHI_GTK_SMOKE=1 TestBoardGTKSmoke` is green with and without
-  `MALACHI_GTK_CARDS_SMOKE=1`.
+- The GTK smoke tests of the areas touched (`TestConversationChatGTKSmoke`,
+  `TestQuickReplyMessageGTKSmoke`, `TestBodyFitGTKSmoke`,
+  `TestBoardGTKSmoke` and `TestTodayCalendarStripGTKSmoke`) pass one by
+  one, with and without `MALACHI_GTK_CARDS_SMOKE=1`.
+- All `GTKSmoke` tests in one process crash with SIGSEGV in
+  `gtk_window_present`, at a different test each time. This happens with
+  and without the changes of this branch, on this host with GTK 4.22.
 - `make lint` is green. golangci-lint is not installed, so only `go vet`
   ran.
 - `make po` produced no change: only the `POT-Creation-Date` line
