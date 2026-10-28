@@ -63,16 +63,12 @@ function Usage {
 }
 
 function Stop-Stack {
-    # The cmd.exe launchers of the pids file, then the servers themselves:
-    # every malachid and malachi-devmail that runs from DIR\bin.
-    if (Test-Path -LiteralPath $Pids) {
-        foreach ($line in [System.IO.File]::ReadAllLines($Pids)) {
-            if ($line -match '^\d+$') {
-                try { Stop-Process -Id ([int]$line) -Force -ErrorAction Stop } catch {}
-            }
-        }
-        Remove-Item -LiteralPath $Pids -Force
-    }
+    # The servers themselves, every malachid and malachi-devmail that runs
+    # from DIR\bin (never a pid from a file: a launcher's pid may have been
+    # given to another program since), then their cmd.exe launchers, then a
+    # wait until the IMAP port is free: a server left behind would keep the
+    # port, the next serve would fail to bind, and the daemon would sync
+    # the old server's flags.
     $inside = (Join-Path $Dir 'bin') + '\'
     foreach ($p in Get-Process -Name 'malachid', 'malachi-devmail' -ErrorAction SilentlyContinue) {
         $path = $null
@@ -81,7 +77,21 @@ function Stop-Stack {
             try { Stop-Process -Id $p.Id -Force -ErrorAction Stop } catch {}
         }
     }
-    Start-Sleep -Milliseconds 1500
+    $launcher = Join-Path $Dir 'run-'
+    foreach ($c in Get-CimInstance Win32_Process -Filter "Name = 'cmd.exe'" -ErrorAction SilentlyContinue) {
+        if ($c.CommandLine -and $c.CommandLine.IndexOf($launcher, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            try { Stop-Process -Id $c.ProcessId -Force -ErrorAction Stop } catch {}
+        }
+    }
+    if (Test-Path -LiteralPath $Pids) { Remove-Item -LiteralPath $Pids -Force }
+    for ($i = 0; $i -lt 40; $i++) {
+        if (-not (Get-NetTCPConnection -LocalPort $Imap -State Listen -ErrorAction SilentlyContinue)) { break }
+        Start-Sleep -Milliseconds 250
+    }
+    if (Get-NetTCPConnection -LocalPort $Imap -State Listen -ErrorAction SilentlyContinue) {
+        throw "stack: something still listens on port $Imap"
+    }
+    Start-Sleep -Milliseconds 500
 }
 
 function Get-Go {
@@ -172,7 +182,16 @@ switch ($Command) {
         $env:MALACHI_DEVMAIL_KEYRING = Join-Path $data 'keyring.json'
         Start-Hidden 'devmail' $devmail @('serve', '-lang', $Lang, '-imap-port', $Imap, '-smtp-port', $Smtp, '-control-port', $Control,
             '-jira-port', $Jira, '-eway-port', $Eway) (Join-Path $Dir 'devmail.out') (Join-Path $Dir 'devmail.err') | Out-Null
-        Start-Sleep -Seconds 1
+        # The new server, and no other, listens: its process owns the port.
+        $owner = $null
+        for ($i = 0; $i -lt 40 -and -not $owner; $i++) {
+            Start-Sleep -Milliseconds 250
+            $owner = (Get-NetTCPConnection -LocalPort $Imap -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess
+        }
+        $server = if ($owner) { Get-Process -Id $owner -ErrorAction SilentlyContinue } else { $null }
+        if (-not $server -or $server.Name -ne 'malachi-devmail' -or -not $server.Path.StartsWith((Join-Path $Dir 'bin') + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "stack: malachi-devmail did not take port $Imap; see $Dir\devmail.err"
+        }
 
         # The daemon's keyring is the sample servers' JSON file (the helper
         # protocol of internal/auth/helper), its zone a fixed one so that
