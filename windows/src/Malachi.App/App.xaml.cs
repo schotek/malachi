@@ -234,6 +234,8 @@ public partial class App : Application
         }
         Program.AppLaunched(this);
         s.Connection.Start();
+        // The MALACHI_START development aid (MainWindow.DevStart.cs): nothing without the variable.
+        main.ApplyDevelopmentStart();
         if (pendingQuit is { } reason)
         {
             _ = quit.QuitAsync(reason);

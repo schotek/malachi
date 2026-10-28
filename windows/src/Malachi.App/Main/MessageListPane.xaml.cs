@@ -767,6 +767,19 @@ public sealed partial class MessageListPane : UserControl
         }
     }
 
+    /// <summary>
+    /// Scrolls the row of <paramref name="key"/> into view without touching
+    /// the selection or the keyboard (the row= step of MainWindow.DevStart.cs,
+    /// after the controller's Select).
+    /// </summary>
+    internal void ScrollTo(ListKey key)
+    {
+        if (Rows.FirstOrDefault(r => r.Key == key) is { } row)
+        {
+            MessageList.ScrollIntoView(row);
+        }
+    }
+
     // search.go selectFirstResult (MessageListViewController.focus): the
     // row is selected, shown and given the keyboard.
     private void FocusRow(ListKey key)

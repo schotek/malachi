@@ -57,3 +57,27 @@ SetWindowLongPtr
 EnableWindow
 GetForegroundWindow
 IsWindowVisible
+// The MALACHI_START development aid (Shell/WindowCapture.cs): the window
+// to the front through the thread that has the input, its visible frame,
+// and its pixels from the screen or through PrintWindow into a DIB.
+AttachThreadInput
+GetWindowThreadProcessId
+BringWindowToTop
+DwmGetWindowAttribute
+DWMWINDOWATTRIBUTE
+GetWindowRect
+GetClientRect
+ClientToScreen
+GetDC
+ReleaseDC
+CreateCompatibleDC
+DeleteDC
+CreateDIBSection
+BITMAPINFO
+DIB_USAGE
+SelectObject
+DeleteObject
+BitBlt
+ROP_CODE
+PrintWindow
+GdiFlush
