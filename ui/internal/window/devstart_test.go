@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/board"
 	"github.com/schotek/malachi/ui/internal/calendar"
 )
 
@@ -41,6 +43,87 @@ func TestParseDevStart(t *testing.T) {
 	}
 	if s, err := parseDevStart(""); err != nil || len(s) != 0 {
 		t.Errorf("empty script: %v %v", s, err)
+	}
+}
+
+func TestParseDevStartScenes(t *testing.T) {
+	steps, err := parseDevStart("group=on;chat=off;folder=Web;row=Q4 planning;board:list:select;board:columns;compose-open;crm-save;shot=/tmp/a b.png;quit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []devStep{
+		{Kind: devGroup, On: true},
+		{Kind: devChat},
+		{Kind: devFolder, Text: "Web"},
+		{Kind: devRow, Text: "Q4 planning"},
+		{Kind: devBoardStyle, Style: board.StyleList, Select: true},
+		{Kind: devBoardStyle, Style: board.StyleColumns},
+		{Kind: devComposeOpen},
+		{Kind: devCrmSave},
+		{Kind: devShot, Text: "/tmp/a b.png"},
+		{Kind: devQuit},
+	}
+	if len(steps) != len(want) {
+		t.Fatalf("%d steps, want %d: %+v", len(steps), len(want), steps)
+	}
+	for i, w := range want {
+		got := steps[i]
+		got.Name = ""
+		if got != w {
+			t.Errorf("step %d (%s) = %+v, want %+v", i, steps[i].Name, got, w)
+		}
+	}
+	for _, bad := range []string{"group=yes", "chat=", "row=", "folder= ", "shot=", "board:grid", "board:list:pick", "board:list:select:x", "board:"} {
+		if _, err := parseDevStart("mail;" + bad); err == nil {
+			t.Errorf("%q parsed", bad)
+		}
+	}
+}
+
+func TestDevFindFolder(t *testing.T) {
+	accounts := []api.Account{{ID: "mail"}, {ID: "jira"}}
+	folders := map[api.AccountID][]api.Folder{
+		"jira": {{ID: "w", AccountID: "jira", Name: "Web"}},
+		"mail": {{ID: "i", AccountID: "mail", Name: "INBOX"}, {ID: "s", AccountID: "mail", Name: "Sent"}, {ID: "x", AccountID: "mail", Name: "Webinars"}},
+	}
+	for text, want := range map[string]api.FolderID{"inbox": "i", "sent": "s", "Web": "x", "web": "x"} {
+		if f, ok := devFindFolder(accounts, folders, text); !ok || f.ID != want {
+			t.Errorf("folder %q = %+v %v, want %s", text, f, ok, want)
+		}
+	}
+	if f, ok := devFindFolder(accounts[1:], folders, "Web"); !ok || f.ID != "w" {
+		t.Errorf("folder Web of jira = %+v %v", f, ok)
+	}
+	if _, ok := devFindFolder(accounts, folders, "Trash"); ok {
+		t.Error("Trash found")
+	}
+}
+
+func TestDevFindRow(t *testing.T) {
+	rows := []listRow{
+		{Message: api.MessageSummary{Subject: "Design Weekly #212"}},
+		{Message: api.MessageSummary{Subject: "Re: Quotation for the warehouse extension"}},
+		{Message: api.MessageSummary{Subject: "Quotation for the warehouse extension"}},
+	}
+	for text, want := range map[string]int{"quotation": 1, "DESIGN weekly": 0, "Nabídka": -1} {
+		if got := devFindRow(rows, text); got != want {
+			t.Errorf("row %q = %d, want %d", text, got, want)
+		}
+	}
+}
+
+func TestDevRichestCase(t *testing.T) {
+	cases := []board.Case{
+		{ID: "a", Messages: []board.CaseMessage{{Text: "short"}}},
+		{ID: "b", Messages: []board.CaseMessage{{Text: "a longer one"}, {Text: "and more"}}},
+		{ID: "c", Messages: []board.CaseMessage{{Text: "twenty characters!!"}}},
+		{ID: "d"},
+	}
+	if got := devRichestCase(cases); got != "b" {
+		t.Errorf("richest %q, want b", got)
+	}
+	if got := devRichestCase(nil); got != "" {
+		t.Errorf("richest of none %q", got)
 	}
 }
 
