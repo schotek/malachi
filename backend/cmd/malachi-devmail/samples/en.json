@@ -1,0 +1,192 @@
+{
+  "lang": "en",
+  "company": "Kovar Engineering",
+  "attribution": "On %s, %s wrote:",
+  "dateFormat": "2 Jan 2006 at 15:04",
+  "me": {"name": "Jana Dvořáková", "email": "jana.dvorakova@example.test", "company": "Kovar Engineering"},
+  "people": {
+    "tomas": {"name": "Tomáš Holub", "email": "tomas.holub@example.test", "company": "Kovar Engineering"},
+    "lucie": {"name": "Lucie Marková", "email": "lucie.markova@example.test", "company": "Kovar Engineering"},
+    "martin": {"name": "Martin Beneš", "email": "martin.benes@example.test", "company": "Kovar Engineering"},
+    "petr": {"name": "Petr Svoboda", "email": "petr.svoboda@acme.test", "company": "Acme Logistics"},
+    "eva": {"name": "Eva Králová", "email": "eva.kralova@bluebird.test", "company": "Bluebird Studio"},
+    "ondrej": {"name": "Ondřej Vlk", "email": "ondrej@copywrite.test", "company": "Copywrite"},
+    "karel": {"name": "Karel Novotný", "email": "karel.novotny@golang-cz.test"},
+    "design": {"name": "Design Weekly", "email": "news@designweekly.test"},
+    "shop": {"name": "Northwind Shop", "email": "orders@northwind-shop.test"},
+    "conf": {"name": "DevConf Prague", "email": "programme@devconf-prague.test"},
+    "lottery": {"name": "Prize Office", "email": "win@prizes-today.test"},
+    "list": {"name": "golang-cz", "email": "golang-cz@lists.golang-cz.test"}
+  },
+  "messages": [
+    {"id": "q1", "from": "petr", "to": ["me"], "when": "-6d 09:12", "subject": "Quotation for the warehouse extension", "html": true, "sign": true, "flags": ["seen"],
+     "text": "Hello Jana,\n\nwe are extending hall B by about 600 m² and would like a quotation for the racking and the conveyor between the two halls. Could you send it by Thursday? The board meets on Friday.\n\nThe layout is roughly the one we discussed in September; I will send the current drawing as soon as our architect returns it.\n\nBest regards,\nPetr"},
+    {"id": "q2", "folder": "Sent", "from": "me", "to": ["petr"], "when": "-6d 11:40", "subject": "Re: Quotation for the warehouse extension", "inReplyTo": "q1", "quote": true, "sign": true, "flags": ["seen"],
+     "text": "Hello Petr,\n\nThursday morning is fine. I will put the extended warranty on a separate line, so that you can decide on it apart from the rest.\n\nOne question: do you want the conveyor with the roller section only, or with the belt for the small parcels as well? The belt adds about 12 % to the price.\n\nKind regards,\nJana"},
+    {"id": "q3", "from": "petr", "to": ["me"], "when": "-3d 16:05", "subject": "Re: Quotation for the warehouse extension", "inReplyTo": "q2", "html": true, "quote": true, "sign": true, "flags": ["seen"],
+     "attachments": [{"name": "Hall-B-layout.pdf", "kind": "pdf", "kb": 180, "text": "Hall B extension - layout\nScale 1:200\nRacking rows R1-R6, conveyor C1\nAcme Logistics, drawing 2026-10-21"}],
+     "text": "Hello Jana,\n\nthe drawing is attached. The belt section yes, please, the small parcels are most of what goes through there.\n\nCould you also include the lighting above the racking? Our electrician says it has to be in the same project.\n\nThanks,\nPetr"},
+    {"id": "q4", "folder": "Sent", "from": "me", "to": ["petr"], "when": "-2d 08:50", "subject": "Re: Quotation for the warehouse extension", "inReplyTo": "q3", "quote": true, "sign": true, "flags": ["seen"],
+     "text": "Hello Petr,\n\nyes, I will add the lighting as a third section; our electrical partner can quote it from the drawing. You will have the complete quotation on Friday by noon.\n\nKind regards,\nJana"},
+    {"id": "inv1", "from": "tomas", "to": ["me"], "cc": ["lucie", "martin"], "when": "-1d 15:20", "subject": "Q4 planning meeting", "html": true,
+     "invite": {"summary": "Q4 planning meeting", "location": "Meeting room 2", "when": "+3d 10:00", "hours": 1.5, "organizer": "tomas", "attendees": ["me", "lucie", "martin"]},
+     "text": "Hi all,\n\nlet's go through the Q4 plan on Thursday: the Acme project, hiring for the assembly team and the budget for the new CAD licences. Jana, please bring the state of the quotations.\n\nTomáš"},
+    {"id": "news1", "from": "design", "to": ["me"], "when": "-5h", "subject": "Design Weekly #212: typography on the desktop", "html": true, "remoteImage": true,
+     "list": {"id": "Design Weekly <weekly.designweekly.test>", "unsubscribe": "https://designweekly.test/unsubscribe/7f3a9c, mailto:unsubscribe@designweekly.test?subject=unsubscribe", "oneClick": true},
+     "text": "This week in Design Weekly:\n\n- Why system fonts are winning again: a look at the typography of GNOME, macOS and Windows 11.\n- Dark mode done properly: contrast, elevation and the colour of shadows.\n- Interview: designing a mail client that stays out of the way.\n\nRead the issue on the web or forward it to a friend."},
+    {"id": "eva1", "from": "eva", "to": ["me"], "when": "-2h", "subject": "Request for a quote: interior fit-out of the new studio", "html": true, "sign": true,
+     "text": "Dear Ms Dvořáková,\n\nwe found you through Acme Logistics, who recommended you warmly. We are moving our studio to a former workshop in Karlín (about 220 m²) and need the steel mezzanine, the railing and the stairs.\n\nWould you be able to visit the site next week? We are flexible on Tuesday and Wednesday afternoon.\n\nWith kind regards,\nEva Králová"},
+    {"id": "fin1", "from": "lucie", "to": ["me"], "when": "-1d 09:30", "subject": "September invoices for approval", "html": true, "sign": true, "flags": ["seen"],
+     "attachments": [{"name": "Invoices-2026-09.pdf", "kind": "pdf", "kb": 320, "text": "Kovar Engineering - supplier invoices, September 2026\n12 invoices, total 486 210 CZK\nApproval sheet"}, {"name": "invoices-september.csv", "kind": "text", "text": "invoice,supplier,amount,due\n2026-0912,Steelworks Ostrava,184200,2026-10-15\n2026-0913,Elektro Novák,42800,2026-10-20\n2026-0917,Hilti,19650,2026-10-10"}],
+     "text": "Hi Jana,\n\nthe September supplier invoices are attached for approval: twelve of them, 486 210 CZK in total. Two of them (Steelworks Ostrava) are for the Acme project, the rest is the workshop.\n\nCould you approve them by Wednesday, so that we pay them before the due dates?\n\nThanks,\nLucie"},
+    {"id": "fin1d", "folder": "Drafts", "from": "me", "to": ["lucie"], "when": "-1d 10:05", "subject": "Re: September invoices for approval", "inReplyTo": "fin1", "flags": ["draft", "seen"],
+     "text": "Hi Lucie,\n\napproved, except the two from Steelworks: the second one has the old price list, I will ask them for a corrected"},
+    {"id": "it1", "from": "martin", "to": ["tomas"], "cc": ["me", "lucie"], "when": "-8h", "subject": "Server maintenance on Saturday", "flags": ["seen"],
+     "text": "Hi,\n\nthe file server and the mail server will be down on Saturday from 8:00 to about 11:00 for the disk upgrade. Save anything you need on Friday; the VPN will not work either.\n\nMartin"},
+    {"id": "boss1", "from": "tomas", "to": ["me"], "when": "-3h", "subject": "Board presentation: slides by Wednesday", "flags": ["flagged"],
+     "text": "Jana,\n\nthe board wants the Acme case as the first point on Friday. Could you have the slides ready by Wednesday evening? Ten minutes, the numbers and the risks, nothing more.\n\nT."},
+    {"id": "shop1", "from": "shop", "to": ["me"], "when": "-26h", "subject": "Your order #48213 has shipped", "html": true, "remoteImage": true, "automated": true, "flags": ["seen"],
+     "table": [["Item", "Qty", "Price"], ["Laser distance meter Leica D2", "1", "3 290 CZK"], ["Marking spray, white", "6", "594 CZK"], ["Shipping", "", "129 CZK"]],
+     "text": "Hello,\n\nyour order #48213 has left our warehouse and should arrive on Thursday. The parcel number is DPD 0152 3390 7781.\n\nThank you for shopping with Northwind."},
+    {"id": "lunch1", "from": "martin", "to": ["me", "tomas", "lucie"], "when": "-2d 11:02", "subject": "Team lunch on Friday?", "flags": ["seen"],
+     "text": "Hi all,\n\nshall we do a team lunch on Friday? I was thinking the Italian place on the square, around half past twelve.\n\nMartin"},
+    {"id": "lunch2", "from": "lucie", "to": ["martin"], "cc": ["me", "tomas"], "when": "-2d 11:30", "subject": "Re: Team lunch on Friday?", "inReplyTo": "lunch1", "quote": true, "flags": ["seen"],
+     "text": "Friday works for me. The Italian place is fine, but they are usually full on Fridays, somebody should book.\n\nLucie"},
+    {"id": "lunch3", "folder": "Sent", "from": "me", "to": ["martin"], "cc": ["tomas", "lucie"], "when": "-2d 11:45", "subject": "Re: Team lunch on Friday?", "inReplyTo": "lunch2", "quote": true, "flags": ["seen"],
+     "text": "12:30 at Da Pietro, I will book a table for four. If anybody brings a guest, say so by Thursday.\n\nJana"},
+    {"id": "copy1", "from": "ondrej", "to": ["me"], "when": "-4d 14:10", "subject": "Website copy, second draft", "html": true, "sign": true, "flags": ["seen"],
+     "attachments": [{"name": "Website-copy-v2.pdf", "kind": "pdf", "kb": 96, "text": "Kovar Engineering - website copy, draft 2\nHome, Services, References, Contact\nCopywrite, October 2026"}],
+     "text": "Hi Jana,\n\nthe second draft of the website copy is attached. I shortened the home page as you asked and moved the references under the services, so that each service has its own two or three.\n\nThe contact page still needs the opening hours of the workshop.\n\nOndřej"},
+    {"id": "copy2", "folder": "Sent", "from": "me", "to": ["ondrej"], "when": "-4d 17:20", "subject": "Re: Website copy, second draft", "inReplyTo": "copy1", "quote": true, "sign": true, "flags": ["seen"],
+     "text": "Hi Ondřej,\n\nthis reads much better, thank you. Two remarks:\n\n- On the home page, \"family firm since 1994\" should be 1996, that is when the workshop opened.\n- Under services, the mezzanines deserve their own paragraph; they are a third of our work now.\n\nThe workshop hours are 7:00 to 15:30, Monday to Friday.\n\nJana"},
+    {"id": "junk1", "folder": "Junk", "from": "lottery", "to": ["me"], "when": "-3d 04:12", "subject": "You have been selected for a prize!", "html": true,
+     "text": "Congratulations! Your address has been selected in our weekly draw. Click the link below within 24 hours to claim your reward."},
+    {"id": "trash1", "folder": "Trash", "from": "martin", "to": ["me"], "when": "-12d 10:00", "subject": "Password reset for the VPN", "flags": ["seen"],
+     "text": "Hi Jana,\n\nI reset your VPN password as you asked; the new one is in the usual place. Change it after the first login.\n\nMartin"},
+    {"id": "arch1", "folder": "Archive", "from": "petr", "to": ["me"], "when": "-20d 13:15", "subject": "Contract signed", "html": true, "sign": true, "flags": ["seen"],
+     "text": "Hello Jana,\n\nthe contract for the hall A racking is signed on our side; the scan is in the shared folder. Thank you for the patience with our legal department.\n\nPetr"},
+    {"id": "ask1", "folder": "Sent", "from": "me", "to": ["petr"], "when": "-1d 13:00", "subject": "Could you confirm the installation date?", "sign": true, "flags": ["seen"],
+     "text": "Hello Petr,\n\ncould you confirm that the installation in hall A can start on 10 November? Our crew needs to know by the end of this week whether to book the lift.\n\nKind regards,\nJana"},
+    {"id": "conf1", "from": "conf", "to": ["me"], "when": "-7h", "subject": "DevConf Prague 2026: your programme for Thursday", "html": true, "flags": ["seen"],
+     "table": [["Time", "Talk", "Room"], ["9:30", "Native desktop apps in 2026: who still writes them", "A1"], ["11:00", "One engine, three windows: sharing logic across GTK, AppKit and WinUI", "A1"], ["13:30", "Treating e-mail as hostile input", "B2"], ["15:00", "Local-first: search, sync and storage without a server of your own", "A1"]],
+     "text": "Hello Jana,\n\nthank you for registering for DevConf Prague. Here is the programme you marked for Thursday; the rooms are on the second floor, registration opens at 8:30.\n\nLunch is served in the foyer between 12:00 and 13:30. The slides will be published on the conference website a week after the event.\n\nSee you on Thursday,\nthe DevConf team"},
+    {"id": "list1", "from": "karel", "to": ["list"], "when": "-9h", "subject": "[golang-cz] November meetup: talks wanted", "flags": ["seen"],
+     "list": {"id": "golang-cz.lists.golang-cz.test", "unsubscribe": "mailto:golang-cz-leave@lists.golang-cz.test", "post": "golang-cz@lists.golang-cz.test"},
+     "text": "Hi all,\n\nthe November meetup is on the 19th at the usual place. We have one talk so far (generics in practice); two more would be great, lightning talks welcome.\n\nReply here or to me directly.\n\nKarel"},
+    {"id": "thanks1", "from": "tomas", "to": ["me"], "when": "-9d 18:40", "subject": "Thanks for yesterday", "flags": ["seen"],
+     "text": "Jana, the presentation at Acme went really well, the technical part especially. Thanks for pulling it together on such short notice.\n\nT."},
+    {"id": "exp1", "from": "lucie", "to": ["me"], "when": "-10d 08:15", "subject": "Expense reports for September", "flags": ["seen"],
+     "text": "Hi Jana,\n\na reminder that the September expense reports are due on Friday. Yours is still missing the fuel receipts from the Ostrava trip.\n\nLucie"},
+    {"id": "it2", "from": "martin", "to": ["me"], "when": "-30m", "subject": "Your new laptop is ready",
+     "text": "Hi Jana,\n\nthe new laptop is set up and waiting at my desk: mail, VPN and the CAD are installed, your files are copied. Drop by whenever you have ten minutes and we will move the rest.\n\nMartin"}
+  ],
+  "eway": {
+    "companies": {
+      "acme": {
+        "fileAs": "Acme Logistics",
+        "email": "info@acme.test",
+        "domain": "acme.test"
+      },
+      "bluebird": {
+        "fileAs": "Bluebird Studio",
+        "email": "hello@bluebird.test",
+        "domain": "bluebird.test"
+      },
+      "copywrite": {
+        "fileAs": "Copywrite",
+        "email": "studio@copywrite.test",
+        "domain": "copywrite.test"
+      }
+    },
+    "contacts": {
+      "petr": {
+        "fileAs": "Svoboda, Petr",
+        "person": "petr",
+        "company": "acme"
+      },
+      "eva": {
+        "fileAs": "Králová, Eva",
+        "person": "eva",
+        "company": "bluebird"
+      },
+      "ondrej": {
+        "fileAs": "Vlk, Ondřej",
+        "person": "ondrej",
+        "company": "copywrite"
+      }
+    },
+    "deals": {
+      "warehouse": {
+        "fileAs": "Acme: warehouse extension, hall B",
+        "company": "acme"
+      },
+      "studio": {
+        "fileAs": "Bluebird: studio fit-out in Karlín",
+        "company": "bluebird"
+      }
+    },
+    "projects": {
+      "hallA": {
+        "fileAs": "Acme: hall A racking",
+        "company": "acme",
+        "completed": true
+      },
+      "web": {
+        "fileAs": "Website 2026",
+        "company": "copywrite"
+      }
+    },
+    "saved": [
+      {
+        "message": "q4",
+        "link": [
+          "contact:petr",
+          "company:acme"
+        ],
+        "superior": "deal:warehouse"
+      }
+    ]
+  },
+  "jira": {
+    "users": {
+      "tomas": {"id": "712020:aa11-tomas", "name": "Tomáš Holub", "email": "tomas.holub@example.test"},
+      "martin": {"id": "712020:bb22-martin", "name": "Martin Beneš", "email": "martin.benes@example.test"}
+    },
+    "issues": [
+      {"id": "web-redesign", "space": "WEB", "summary": "Redesign of the company website", "status": "In Progress", "assignee": "me", "reporter": "tomas", "created": "-21d 09:00", "watching": true,
+       "description": "<p>The current website is from 2019 and does not work well on phones. The new one should present the three services (racking, mezzanines, conveyors) with references under each, and the contact page should carry the workshop hours.</p><p>Copy comes from Copywrite (Ondřej Vlk), photos from the hall A installation.</p>",
+       "comments": [
+         {"author": "petr", "when": "-15d 10:20", "html": "<p>Would it be possible to add a short case study of the hall A project? Our marketing would be happy to review it.</p>"},
+         {"author": "me", "when": "-14d 16:45", "html": "<p>Yes, planned under References; I will send you the draft once the copy is in.</p>"},
+         {"author": "tomas", "when": "-2d 12:10", "html": "<p>The second draft of the copy arrived; Jana, please check the home page numbers before it goes to the designer.</p>"}
+       ],
+       "history": [{"when": "-18d 11:00", "by": "me", "status": "In Progress"}]},
+      {"id": "web-hours", "space": "WEB", "summary": "Contact page: show the workshop opening hours", "status": "To Do", "assignee": "me", "reporter": "me", "created": "-4d 17:30",
+       "description": "<p>Monday to Friday 7:00 to 15:30; closed on public holidays. Show them next to the map.</p>"},
+      {"id": "mob-offline", "space": "MOB", "summary": "Field app: measurements lost without a signal", "status": "In Progress", "assignee": "martin", "reporter": "me", "created": "-9d 08:40", "watching": true,
+       "description": "<p>When the crew measures a hall without a mobile signal, the app loses the measurements on the next sync instead of keeping them. Happened twice at Acme hall B.</p><p>Expected: measurements are stored locally and uploaded when the signal returns.</p>",
+       "comments": [
+         {"author": "martin", "when": "-6d 09:05", "html": "<p>Reproduced: the sync overwrites the local database with the server copy when the server is reachable again. Fix in progress.</p>"},
+         {"author": "me", "when": "-5d 13:30", "html": "<p>Thanks. Can it be in the next release? The crew is at Acme again on the 10th.</p>"},
+         {"author": "martin", "when": "-1d 17:50", "html": "<p>Yes, the fix is in testing; release planned for Monday.</p>"}
+       ],
+       "history": [{"when": "-6d 09:00", "by": "martin", "status": "In Progress"}]},
+      {"id": "itsd-vpn", "space": "ITSD", "summary": "VPN disconnects every 20 minutes", "status": "Waiting for customer", "assignee": "martin", "reporter": "me", "created": "-13d 14:00", "watching": true,
+       "description": "<p>Since the router update the VPN drops every twenty minutes or so, usually in the middle of a CAD session. Home office, Vodafone connection.</p>",
+       "comments": [
+         {"author": "martin", "when": "-12d 09:15", "html": "<p>Please try the new profile I sent you and tell me if it still drops.</p>"}
+       ],
+       "history": [{"when": "-12d 09:16", "by": "martin", "status": "Waiting for customer"}]},
+      {"id": "itsd-laptop", "space": "ITSD", "summary": "New laptop for Jana Dvořáková", "status": "Done", "assignee": "martin", "reporter": "tomas", "created": "-16d 10:30",
+       "description": "<p>Replace the 2021 laptop; CAD needs more memory. Same model as the design team.</p>",
+       "comments": [{"author": "martin", "when": "-30m", "html": "<p>Delivered and set up; waiting at my desk.</p>"}],
+       "history": [{"when": "-10d 15:00", "by": "martin", "status": "In Progress"}, {"when": "-30m", "by": "martin", "status": "Done"}]},
+      {"id": "mob-photos", "space": "MOB", "summary": "Attach photos to a measurement", "status": "To Do", "assignee": "", "reporter": "me", "created": "-3d 11:20",
+       "description": "<p>The crew wants to attach a photo to each measured span, so that the office sees what the number means.</p>"},
+      {"id": "web-photos", "space": "WEB", "summary": "Photos of the hall A installation for the references", "status": "Done", "assignee": "petr", "reporter": "me", "created": "-11d 09:50",
+       "description": "<p>Ten to fifteen photos of the finished racking in hall A, with Acme's permission to publish them.</p>",
+       "comments": [{"author": "petr", "when": "-7d 15:40", "html": "<p>Fourteen photos are in the shared folder, publishing approved by our marketing.</p>"}],
+       "history": [{"when": "-7d 15:41", "by": "petr", "status": "Done"}]}
+    ]
+  }
+}

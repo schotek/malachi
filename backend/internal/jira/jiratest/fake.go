@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -231,8 +232,29 @@ type Request struct {
 // Done (10001) and Waiting for customer (10002).
 func New(t testing.TB, mode Mode) *Server {
 	t.Helper()
+	f := newServer(mode, nil)
+	f.t = t
+	t.Cleanup(f.Close)
+	t.Cleanup(func() {
+		if f.mediaAuthLeaks > 0 {
+			t.Errorf("the media host got an Authorization header %d times", f.mediaAuthLeaks)
+		}
+	})
+	return f
+}
+
+// NewStandalone starts a site of the mode for a program that is not a
+// test (cmd/malachi-devmail): it listens on ln, a loopback listener, and
+// Site is ln's http URL, so that a client sent there directly routes as
+// the site (the gateway and media hosts have no route). A builder given
+// a bad name panics instead of failing a test. Close stops it.
+func NewStandalone(mode Mode, ln net.Listener) *Server {
+	return newServer(mode, ln)
+}
+
+func newServer(mode Mode, ln net.Listener) *Server {
 	f := &Server{
-		t: t, mode: mode, CloudID: CloudID, Login: Login, Token: Token,
+		mode: mode, CloudID: CloudID, Login: Login, Token: Token,
 		Now: time.Now, users: map[string]*User{}, issues: map[string]*Issue{},
 		keySeq: map[string]int{}, seq: 20000, siteFiles: map[string]siteFile{},
 	}
@@ -259,18 +281,40 @@ func New(t testing.TB, mode Mode) *Server {
 		{ID: "10001", Name: "Done", Category: "done"},
 		{ID: "10002", Name: "Waiting for customer", Category: "indeterminate"},
 	}
-	f.srv = httptest.NewServer(http.HandlerFunc(f.handle))
-	t.Cleanup(f.srv.Close)
+	if ln != nil {
+		f.srv = httptest.NewUnstartedServer(http.HandlerFunc(f.handle))
+		f.srv.Listener = ln
+		f.srv.Start()
+		f.Site, _ = url.Parse(f.srv.URL)
+	} else {
+		f.srv = httptest.NewServer(http.HandlerFunc(f.handle))
+	}
 	f.media = httptest.NewServer(http.HandlerFunc(f.handleMedia))
-	t.Cleanup(f.media.Close)
 	f.offSite = httptest.NewServer(http.HandlerFunc(f.handleOffSite))
-	t.Cleanup(f.offSite.Close)
-	t.Cleanup(func() {
-		if f.mediaAuthLeaks > 0 {
-			t.Errorf("the media host got an Authorization header %d times", f.mediaAuthLeaks)
-		}
-	})
 	return f
+}
+
+// Close stops the site, the media host and the off-site host.
+func (f *Server) Close() {
+	f.srv.Close()
+	f.media.Close()
+	f.offSite.Close()
+}
+
+// IssueStatus is the issue's status id.
+func (f *Server) IssueStatus(id string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.mustIssue(id).Status
+}
+
+// fatalf fails the test the site belongs to, or panics outside one.
+func (f *Server) fatalf(format string, args ...any) {
+	if f.t != nil {
+		f.fatalf(format, args...)
+		return
+	}
+	panic(fmt.Sprintf(format, args...))
 }
 
 // Builders.
@@ -302,7 +346,7 @@ func (f *Server) AddIssue(spaceKey, summary string, edit ...func(*Issue)) *Issue
 	defer f.mu.Unlock()
 	p := f.projectLocked(spaceKey)
 	if p == nil {
-		f.t.Fatalf("fake jira: no space %s", spaceKey)
+		f.fatalf("fake jira: no space %s", spaceKey)
 	}
 	f.keySeq[p.Key]++
 	now := f.Now()
@@ -338,7 +382,7 @@ func (f *Server) touchLocked(is *Issue, now time.Time) {
 func (f *Server) mustIssue(id string) *Issue {
 	is, ok := f.issues[id]
 	if !ok {
-		f.t.Fatalf("fake jira: no issue %s", id)
+		f.fatalf("fake jira: no issue %s", id)
 	}
 	return is
 }
@@ -436,7 +480,7 @@ func (f *Server) EditComment(issueID, commentID, html string) {
 			return
 		}
 	}
-	f.t.Fatalf("fake jira: no comment %s on issue %s", commentID, issueID)
+	f.fatalf("fake jira: no comment %s on issue %s", commentID, issueID)
 }
 
 // DeleteComment removes a comment; the issue's updated time moves.
@@ -451,7 +495,7 @@ func (f *Server) DeleteComment(issueID, commentID string) {
 			return
 		}
 	}
-	f.t.Fatalf("fake jira: no comment %s on issue %s", commentID, issueID)
+	f.fatalf("fake jira: no comment %s on issue %s", commentID, issueID)
 }
 
 // SetWatching starts or stops the token's user watching the issue. As on
