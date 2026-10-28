@@ -186,10 +186,14 @@ switch ($Command) {
         $owner = $null
         for ($i = 0; $i -lt 40 -and -not $owner; $i++) {
             Start-Sleep -Milliseconds 250
-            $owner = (Get-NetTCPConnection -LocalPort $Imap -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess
+            $listener = Get-NetTCPConnection -LocalPort $Imap -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($listener) { $owner = $listener.OwningProcess }
         }
         $server = if ($owner) { Get-Process -Id $owner -ErrorAction SilentlyContinue } else { $null }
-        if (-not $server -or $server.Name -ne 'malachi-devmail' -or -not $server.Path.StartsWith((Join-Path $Dir 'bin') + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+        $serverPath = $null
+        if ($server) { try { $serverPath = $server.Path } catch {} }
+        if (-not $server -or $server.Name -ne 'malachi-devmail' -or -not $serverPath -or
+            -not $serverPath.StartsWith((Join-Path $Dir 'bin') + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
             throw "stack: malachi-devmail did not take port $Imap; see $Dir\devmail.err"
         }
 
