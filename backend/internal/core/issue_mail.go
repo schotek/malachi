@@ -157,6 +157,7 @@ func (im *issueMail) init() {
 // afterMailStored is the Stored hook of the mail syncers (IMAP, Graph).
 func (b *Backend) afterMailStored(ctx context.Context, accountID, messageID string, pol ingest.Policy) {
 	b.storedUnder(ctx, messageID, pol)
+	b.boardKnownTouch()
 	b.noteIssueMail(ctx, accountID, messageID)
 	b.noteInvitation(ctx, accountID, messageID)
 	b.noteCrmFollow(ctx, accountID, messageID)

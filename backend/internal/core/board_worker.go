@@ -5,6 +5,8 @@ package core
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -43,6 +45,15 @@ var (
 	// senders of its sent folders) and the user's known correspondents are
 	// used before they are read again.
 	boardIdentityTTL = time.Hour
+	// boardKnownRefresh is how soon after a read the known correspondents
+	// are read again once mail was stored (a copy in Sent makes someone
+	// known): often enough for a fresh account, whose Sent folder arrives
+	// after its Inbox, and rarely enough for a busy one.
+	boardKnownRefresh = 30 * time.Second
+	// metaBoardKnown keeps a fingerprint of the known correspondents the
+	// cases were last judged over, so that a new process notices a set
+	// that changed while no process ran (or while the old one cached it).
+	metaBoardKnown = "board.known"
 	// boardOwnAddresses is how many senders of the sent folders count as
 	// the user's.
 	boardOwnAddresses = 10
@@ -87,11 +98,12 @@ type boardState struct {
 	// The user's known correspondents across the enabled mail accounts
 	// (knownKey: their ids), read at knownAt; knownGen counts the reads so
 	// that the identities built over an older set are built again.
-	knownMu  sync.Mutex
-	known    []string
-	knownKey string
-	knownAt  time.Time
-	knownGen int
+	knownMu    sync.Mutex
+	knownStale bool // mail was stored since knownAt: read again after boardKnownRefresh
+	known      []string
+	knownKey   string
+	knownAt    time.Time
+	knownGen   int
 
 	// The own texts derived from the HTML of the user's messages
 	// (board_owntext.go).
@@ -407,19 +419,62 @@ func (b *Backend) boardKnown(ctx context.Context, list []store.Account) (known [
 	now := b.boardNow()
 	bs.knownMu.Lock()
 	defer bs.knownMu.Unlock()
-	if !bs.knownAt.IsZero() && bs.knownKey == key && now.Sub(bs.knownAt) < boardIdentityTTL {
-		return bs.known, bs.knownGen, nil, nil
+	if !bs.knownAt.IsZero() && bs.knownKey == key {
+		age := now.Sub(bs.knownAt)
+		if age < boardIdentityTTL && !(bs.knownStale && age >= boardKnownRefresh) {
+			return bs.known, bs.knownGen, nil, nil
+		}
 	}
 	known, err = b.store.BoardKnownCorrespondents(ctx, ids, board.MaxKnownCorrespondents)
 	if err != nil {
 		return nil, 0, nil, err
 	}
+	fp := addressesFingerprint(known)
 	if bs.knownGen > 0 {
 		changed = addressesDiff(bs.known, known)
+	} else {
+		// The first read of this process: the cases were judged over the
+		// set an earlier process read and cached. When the fingerprint it
+		// left differs, the cases from everyone known now are judged
+		// again (someone who stopped being known cannot be named; that
+		// rare direction waits for the next change).
+		stored, _, err := b.store.GetMeta(ctx, metaBoardKnown)
+		if err != nil {
+			return nil, 0, nil, err
+		}
+		if stored != fp {
+			changed = known
+		}
 	}
-	bs.known, bs.knownKey, bs.knownAt = known, key, now
+	if len(changed) > 0 || bs.knownGen == 0 {
+		if err := b.store.SetMeta(ctx, metaBoardKnown, fp); err != nil {
+			return nil, 0, nil, err
+		}
+	}
+	bs.known, bs.knownKey, bs.knownAt, bs.knownStale = known, key, now, false
 	bs.knownGen++
 	return bs.known, bs.knownGen, changed, nil
+}
+
+// boardKnownTouch is told that mail was stored (a copy in Sent may have
+// made someone known): the known correspondents are read again at the
+// first pass boardKnownRefresh after their last read.
+func (b *Backend) boardKnownTouch() {
+	b.board.knownMu.Lock()
+	b.board.knownStale = true
+	b.board.knownMu.Unlock()
+}
+
+// addressesFingerprint is a hash of the sorted addresses.
+func addressesFingerprint(addrs []string) string {
+	sorted := append([]string(nil), addrs...)
+	sort.Strings(sorted)
+	h := sha256.New()
+	for _, a := range sorted {
+		h.Write([]byte(strings.ToLower(strings.TrimSpace(a))))
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // addressesDiff lists the addresses in one of two lists but not in the
