@@ -843,7 +843,8 @@ own `serviceUrl`). Rules, checked by `account.add`, `account.update` and
   one must be valid); `name` is required (a client offers the last path
   segment of `serviceUrl`).
 - `serviceUrl`: `https` only (`http` is invalidArgument, whose message
-  says so), no user info; query and fragment dropped; a trailing
+  says so), except on a loopback host (`localhost`, `127.0.0.0/8`, `::1`),
+  where `http` is accepted for a development instance; no user info; query and fragment dropped; a trailing
   `/API.svc` (with anything after it) or `/InsecureAPI.svc` cut off; host
   lower case; no trailing slash; ≤ 2048 bytes. The account's realm is the
   lower-case host[:port] + path of `serviceUrl`, so it may share its
