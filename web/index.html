@@ -12,6 +12,8 @@
 <meta name="twitter:card" content="summary">
 <meta name="theme-color" content="#0b3260">
 <link rel="stylesheet" href="assets/style.css">
+<script src="assets/platform.js"></script>
+<script src="assets/lightbox.js" defer></script>
 <link rel="icon" href="assets/icon-32.png" sizes="32x32">
 <link rel="icon" href="assets/icon-64.png" sizes="64x64">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
@@ -48,6 +50,8 @@
     <a class="brand" href="index.html"><img src="assets/icon-64.png" alt="" width="32" height="32">Malachi Mail</a>
     <nav aria-label="Main">
       <a href="features.html">Features</a>
+      <a href="assistant.html">Assistant</a>
+      <a href="under-the-hood.html">Under the hood</a>
       <a href="download.html">Download</a>
       <a href="news.html">What's new</a>
       <a class="lang" href="cs/index.html" lang="cs" hreflang="cs">Česky</a>
@@ -62,77 +66,26 @@
     <div class="copy">
       <a class="pill" href="news.html"><span class="dot"></span>0.1.2 is out · Linux, macOS and Windows</a>
       <h1>Your mail. Native on every desktop. Nobody in between.</h1>
-      <p class="lead">One engine written in Go, three windows built with each platform's own toolkit, no cloud account and no servers of ours. Conversations, a calendar, Jira, a board of what waits for you, and an AI assistant that runs on your own account, only when you ask.</p>
+      <p class="lead">A fast, native mail app for Linux, macOS and Windows. Your mail stays on your computer, with no account at us and no servers of ours in between. Conversations, a calendar, Jira, a board of what waits for you, and an AI assistant on your own account, only when you ask.</p>
       <div class="buttons">
-        <a class="btn primary" href="download.html">Download 0.1.2</a>
+        <a class="btn primary" href="download.html" data-download>Download 0.1.2</a>
         <a class="btn" href="features.html">See what it does <svg class="icon"><use href="#i-arrow"/></svg></a>
       </div>
       <ul class="chips">
-        <li>GTK 4 on Linux</li>
-        <li>AppKit on macOS</li>
-        <li>WinUI 3 on Windows 11</li>
-        <li class="gold">Open source, AGPL and GPL</li>
+        <li>Linux</li>
+        <li>macOS</li>
+        <li>Windows 11</li>
+        <li class="gold">Free and open source</li>
       </ul>
     </div>
     <figure class="frame">
-      <div class="chrome"><i></i><i></i><i></i><span>Inbox · Malachi Mail</span></div>
-      <img src="assets/screenshots/01.webp" alt="The main window of Malachi Mail on Linux: the folder sidebar, the message list and an open message with the remote-images bar" width="1600" height="973" fetchpriority="high">
+      <a class="shot" href="assets/screenshots/macos/en/inbox.webp" data-solo><img class="macos" src="assets/screenshots/macos/en/inbox.webp" alt="The main window of Malachi Mail on macOS: the folder sidebar with a mail and a Jira account, the message list grouped by conversation and an open message" width="1600" height="1000" fetchpriority="high"></a>
+      <a class="shot" href="assets/screenshots/linux/en/inbox.webp" data-solo><img class="linux" src="assets/screenshots/linux/en/inbox.webp" alt="The main window of Malachi Mail on Linux: the folder sidebar with a mail and a Jira account, the message list grouped by conversation and an open message" width="1600" height="1000" loading="lazy"></a>
+      <a class="shot" href="assets/screenshots/windows/en/inbox.webp" data-solo><img class="windows" src="assets/screenshots/windows/en/inbox.webp" alt="The main window of Malachi Mail on Windows: the folder sidebar with a mail and a Jira account, the message list grouped by conversation and an open message" width="1600" height="1000" loading="lazy"></a>
     </figure>
   </div>
 </div>
 
-<section>
-  <div class="wrap">
-    <div class="section-head">
-      <div class="eyebrow">Three windows, one engine</div>
-      <h2>Native on every desktop</h2>
-      <p>Not a web page in a frame. Each client is written in its platform's own language and toolkit, with its keyring, notifications and conventions, and all three are driven by the same mail engine: the same behaviour, the same security decisions, one set of translations.</p>
-    </div>
-    <div class="windows" aria-hidden="true">
-      <div class="win">
-        <div class="bar gnome"></div>
-        <div class="body"><div><span class="l a"></span><span class="l s"></span><span class="l m"></span><span class="l s"></span></div><div><span class="l m"></span><span class="l"></span><span class="l m"></span><span class="l s"></span><span class="l"></span></div><div><span class="l s"></span><div class="box"></div></div></div>
-        <div class="cap"><b>Linux</b><span>GTK 4 · libadwaita</span></div>
-      </div>
-      <div class="win">
-        <div class="bar mac"><i></i><i></i><i></i></div>
-        <div class="body"><div><span class="l a"></span><span class="l s"></span><span class="l m"></span><span class="l s"></span></div><div><span class="l m"></span><span class="l"></span><span class="l m"></span><span class="l s"></span><span class="l"></span></div><div><span class="l s"></span><div class="box"></div></div></div>
-        <div class="cap"><b>macOS</b><span>Swift · AppKit</span></div>
-      </div>
-      <div class="win">
-        <div class="bar winui">— ▢ ✕</div>
-        <div class="body"><div><span class="l a"></span><span class="l s"></span><span class="l m"></span><span class="l s"></span></div><div><span class="l m"></span><span class="l"></span><span class="l m"></span><span class="l s"></span><span class="l"></span></div><div><span class="l s"></span><div class="box"></div></div></div>
-        <div class="cap"><b>Windows 11</b><span>C# · WinUI 3</span></div>
-      </div>
-    </div>
-    <div class="engine" aria-hidden="true"><span><svg class="icon"><use href="#i-layers"/></svg><code>malachid</code> · one engine in Go, the same on all three</span></div>
-  </div>
-</section>
-
-<section class="tight">
-  <div class="wrap">
-    <div class="pillars">
-      <div class="pillar">
-        <div class="num">01</div>
-        <div class="ic"><svg class="icon"><use href="#i-cloud-off"/></svg></div>
-        <h3>Yours</h3>
-        <p>No account with us, no servers of ours between you and your mail server, no subscription, no telemetry. Mail is stored on your computer and searched there, offline. It leaves only for the server it came from, or for an AI model you chose and consented to.</p>
-      </div>
-      <div class="pillar">
-        <div class="num">02</div>
-        <div class="ic"><svg class="icon"><use href="#i-feather"/></svg></div>
-        <h3>Lean</h3>
-        <p>No bundled browser. The engine is one Go process, the window is the platform's toolkit, and the system's web view draws only the message body, with JavaScript off and no network. Stored mail is compressed, and the attachments of older mail can stay on the server, or never be stored at all.</p>
-      </div>
-      <div class="pillar">
-        <div class="num">03</div>
-        <div class="ic"><svg class="icon"><use href="#i-shield"/></svg></div>
-        <h3>Built for hostile mail</h3>
-        <p>Every message is sanitised in the engine before a window sees it. Remote images stay blocked until you say so, the renderer has no network, passwords never leave the system keyring, and every parser is tested against deliberately broken mail.</p>
-      </div>
-    </div>
-  </div>
-</section>
 
 <section class="soft">
   <div class="wrap">
@@ -199,9 +152,8 @@
       <div class="feat">
         <div class="ic"><svg class="icon"><use href="#i-globe"/></svg></div>
         <div>
-          <h3>Microsoft 365 through Microsoft Graph</h3>
-          <p>Not IMAP, not EWS: the API Microsoft keeps. It works where basic authentication is off, signs in in your browser with the client the app ships, and the calendar comes with the same sign-in.</p>
-          <p>Microsoft is retiring Exchange Web Services for Exchange Online from October 2026; clients built on it are still catching up.</p>
+          <h3>Microsoft 365 and Outlook.com</h3>
+          <p>Sign in in your browser, no app passwords, mail and calendar together, and it works where your company has switched the old ways of signing in off.</p>
         </div>
       </div>
       <div class="feat">
@@ -233,75 +185,171 @@
         </div>
       </div>
       <div class="feat">
-        <div class="ic"><svg class="icon"><use href="#i-lock"/></svg></div>
-        <div>
-          <h3>Security your IT will read</h3>
-          <p>Passwords only in the system keyring. A server's certificate can be pinned by its fingerprint; there is no <em>ignore certificate</em>. The window and the engine authenticate each other. The core is AGPL, also available under a commercial licence.</p>
-        </div>
-      </div>
-      <div class="feat">
         <div class="ic"><svg class="icon"><use href="#i-user"/></svg></div>
         <div>
           <h3>Writes as you, per account</h3>
           <p>A profile tells the assistant who you are and how you write, with a note per account: a different signature and tone for the company address than for the private one.</p>
         </div>
       </div>
-      <div class="feat">
-        <div class="ic"><svg class="icon"><use href="#i-plug"/></svg></div>
-        <div>
-          <h3>An MCP bridge for your agents</h3>
-          <p>Claude Code, Claude Desktop, Cursor, Zed or any MCP client gets a gated view of the mail, the calendar and the board. Mail content is fenced as data, never as instructions, and attachments arrive as text.</p>
-          <div class="mock-sw" style="margin-top:.9rem" aria-hidden="true">
-            <div class="r"><span class="t on"></span><b>Read and draft</b><span>always</span></div>
-            <div class="r"><span class="t"></span><b>Modify</b><span>-allow-modify</span></div>
-            <div class="r"><span class="t"></span><b>Send</b><span>-allow-send</span></div>
-            <div class="r"><span class="t"></span><b>Triage the board</b><span>-allow-triage</span></div>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </section>
 
-<section>
-  <div class="wrap">
-    <div class="section-head">
-      <div class="eyebrow">Light on the machine</div>
-      <h2>A mail client should not cost more than the mail</h2>
-    </div>
-    <div class="stats">
-      <div class="stat"><div class="big">0</div><b>bundled browsers</b><p>The window is GTK, AppKit or WinUI. The system's own web view draws the message body, and only while a message is open.</p></div>
-      <div class="stat"><div class="big">1</div><b>Go process</b><p>The whole mail engine, from IMAP to the search index, is a single native program with no runtime to carry.</p></div>
-      <div class="stat"><div class="big">zstd</div><b>compressed store</b><p>Stored mail is compressed transparently. Preferences show the space used.</p></div>
-      <div class="stat"><div class="big">30 / ∞ / 0</div><b>days of attachments</b><p>Keep attachments offline for 30 days, for ever, or never: older ones stay on the server until you open them.</p></div>
-    </div>
-  </div>
-</section>
 
 <section class="tight">
   <div class="wrap">
     <div class="section-head">
       <div class="eyebrow">Screenshots</div>
       <h2>A look around</h2>
-      <p>The GTK client on Linux, from before conversations, the calendar and the board arrived. The macOS and Windows apps show the same panes with their platform's widgets.</p>
+      <p>The same eleven scenes on each desktop, taken over a sample mailbox with a Jira account and an eWay-CRM connection; pick the platform.</p>
     </div>
-    <div class="strip">
-      <figure>
-        <img src="assets/screenshots/02.webp" alt="Adding an account" width="1600" height="1067" loading="lazy">
-        <figcaption><b>Adding an account.</b> On GNOME, accounts already signed in through Online Accounts are offered without a password; elsewhere Microsoft 365 signs in in the browser, and for anything else the assistant looks the server settings up from the address alone.</figcaption>
-      </figure>
-      <figure>
-        <img src="assets/screenshots/03.webp" alt="Accounts in the preferences" width="1600" height="1067" loading="lazy">
-        <figcaption><b>Accounts.</b> Every account can be reordered, paused, edited or removed, and shows what the synchronisation is doing right now.</figcaption>
-      </figure>
-      <figure>
-        <img src="assets/screenshots/04.webp" alt="General preferences" width="1600" height="1067" loading="lazy">
-        <figcaption><b>General preferences.</b> Launch at login and running in the background, when a message counts as read, desktop notifications with the system new-mail sound, and how often the mail is fetched.</figcaption>
-      </figure>
-      <figure>
-        <img src="assets/screenshots/05.webp" alt="Appearance preferences" width="1600" height="1067" loading="lazy">
-        <figcaption><b>Appearance.</b> Light, dark or the system's choice; the density of the message list, its preview line and avatars; the font and zoom of the message view.</figcaption>
-      </figure>
+    <div class="gallery">
+      <input type="radio" name="platform" id="g-macos" checked>
+      <input type="radio" name="platform" id="g-linux">
+      <input type="radio" name="platform" id="g-windows">
+      <div class="platforms">
+        <label for="g-macos">macOS</label>
+        <label for="g-linux">Linux</label>
+        <label for="g-windows">Windows</label>
+      </div>
+      <div class="strip set macos">
+        <figure>
+          <a class="shot" href="assets/screenshots/macos/en/inbox.webp"><img src="assets/screenshots/macos/en/inbox.webp" alt="The inbox of Malachi Mail on macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>The inbox.</b> Every account's folders in one sidebar, the list grouped by conversation, and the message itself, HTML tables included, rendered without scripts or remote images.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/macos/en/chat.webp"><img src="assets/screenshots/macos/en/chat.webp" alt="A conversation shown as a chat on macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>A conversation as a chat.</b> The thread as bubbles, yours on the right, with the quick-reply bar under it; the timeline layout is one click away.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/macos/en/invitation.webp"><img src="assets/screenshots/macos/en/invitation.webp" alt="A calendar invitation in the mail on macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>An invitation.</b> The card above the message checks the time against your calendars and answers with one click.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/macos/en/newsletter.webp"><img src="assets/screenshots/macos/en/newsletter.webp" alt="A newsletter with the bulk-mail bar on macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Bulk mail.</b> Newsletters, mailing lists and automated mail carry a label, and the bar above the message offers to unsubscribe.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/macos/en/board-list.webp"><img src="assets/screenshots/macos/en/board-list.webp" alt="The board as a list on macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>The board.</b> What is hot, what waits for you and what waits for them, worked out from the mail itself; the detail says why a case is there.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/macos/en/board-columns.webp"><img src="assets/screenshots/macos/en/board-columns.webp" alt="The board as columns on macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>The board as columns.</b> The same cases in four columns, the detail in a panel at the side.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/macos/en/calendar-week.webp"><img src="assets/screenshots/macos/en/calendar-week.webp" alt="The calendar's week view on macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>The calendar.</b> Microsoft 365 and CalDAV calendars in one week view, with the unanswered invitations in the sidebar.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/macos/en/jira.webp"><img src="assets/screenshots/macos/en/jira.webp" alt="A Jira issue read as a conversation on macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>A Jira account.</b> Issues read like mail: the card with the status, the comments and events as a conversation, and a comment is written as a reply.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/macos/en/crm-saved.webp"><img src="assets/screenshots/macos/en/crm-saved.webp" alt="A reply saved in eWay-CRM on macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Saved in eWay-CRM.</b> The reply filed with its contact, company and deal; the bar above the message links to them.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/macos/en/crm-dialog.webp"><img src="assets/screenshots/macos/en/crm-dialog.webp" alt="The Save to eWay-CRM dialog on macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Save to eWay-CRM.</b> The suggestions come from the message: the contact, the company by the sender's domain and the deal as the superior item.</figcaption>
+        </figure>
+        <figure class="tall">
+          <a class="shot" href="assets/screenshots/macos/en/compose.webp"><img src="assets/screenshots/macos/en/compose.webp" alt="The New Message window on macOS" width="1520" height="1280" loading="lazy"></a>
+          <figcaption><b>A new message.</b> Formatted text, attachments and pictures in the text; a reply carries the original beneath your own words.</figcaption>
+        </figure>
+      </div>
+      <div class="strip set linux">
+        <figure>
+          <a class="shot" href="assets/screenshots/linux/en/inbox.webp"><img src="assets/screenshots/linux/en/inbox.webp" alt="The inbox of Malachi Mail on Linux" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>The inbox.</b> Every account's folders in one sidebar, the list grouped by conversation, and the message itself, HTML tables included, rendered without scripts or remote images.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/linux/en/chat.webp"><img src="assets/screenshots/linux/en/chat.webp" alt="A conversation shown as a chat on Linux" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>A conversation as a chat.</b> The thread as bubbles, yours on the right, with the quick-reply bar under it; the timeline layout is one click away.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/linux/en/invitation.webp"><img src="assets/screenshots/linux/en/invitation.webp" alt="A calendar invitation in the mail on Linux" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>An invitation.</b> The card above the message checks the time against your calendars and answers with one click.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/linux/en/newsletter.webp"><img src="assets/screenshots/linux/en/newsletter.webp" alt="A newsletter with the bulk-mail bar on Linux" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Bulk mail.</b> Newsletters, mailing lists and automated mail carry a label, and the bar above the message offers to unsubscribe.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/linux/en/board-list.webp"><img src="assets/screenshots/linux/en/board-list.webp" alt="The board as a list on Linux" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>The board.</b> What is hot, what waits for you and what waits for them, worked out from the mail itself; the detail says why a case is there.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/linux/en/board-columns.webp"><img src="assets/screenshots/linux/en/board-columns.webp" alt="The board as columns on Linux" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>The board as columns.</b> The same cases in four columns, the detail in a panel at the side.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/linux/en/calendar-week.webp"><img src="assets/screenshots/linux/en/calendar-week.webp" alt="The calendar's week view on Linux" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>The calendar.</b> Microsoft 365 and CalDAV calendars in one week view, with the unanswered invitations in the sidebar.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/linux/en/jira.webp"><img src="assets/screenshots/linux/en/jira.webp" alt="A Jira issue read as a conversation on Linux" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>A Jira account.</b> Issues read like mail: the card with the status, the comments and events as a conversation, and a comment is written as a reply.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/linux/en/crm-saved.webp"><img src="assets/screenshots/linux/en/crm-saved.webp" alt="A reply saved in eWay-CRM on Linux" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Saved in eWay-CRM.</b> The reply filed with its contact, company and deal; the bar above the message links to them.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/linux/en/crm-dialog.webp"><img src="assets/screenshots/linux/en/crm-dialog.webp" alt="The Save to eWay-CRM dialog on Linux" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Save to eWay-CRM.</b> The suggestions come from the message: the contact, the company by the sender's domain and the deal as the superior item.</figcaption>
+        </figure>
+        <figure class="tall">
+          <a class="shot" href="assets/screenshots/linux/en/compose.webp"><img src="assets/screenshots/linux/en/compose.webp" alt="The New Message window on Linux" width="1520" height="1280" loading="lazy"></a>
+          <figcaption><b>A new message.</b> Formatted text, attachments and pictures in the text; a reply carries the original beneath your own words.</figcaption>
+        </figure>
+      </div>
+      <div class="strip set windows">
+        <figure>
+          <a class="shot" href="assets/screenshots/windows/en/inbox.webp"><img src="assets/screenshots/windows/en/inbox.webp" alt="The inbox of Malachi Mail on Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>The inbox.</b> Every account's folders in one sidebar, the list grouped by conversation, and the message itself, HTML tables included, rendered without scripts or remote images.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/windows/en/chat.webp"><img src="assets/screenshots/windows/en/chat.webp" alt="A conversation shown as a chat on Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>A conversation as a chat.</b> The thread as bubbles, yours on the right, with the quick-reply bar under it; the timeline layout is one click away.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/windows/en/invitation.webp"><img src="assets/screenshots/windows/en/invitation.webp" alt="A calendar invitation in the mail on Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>An invitation.</b> The card above the message checks the time against your calendars and answers with one click.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/windows/en/newsletter.webp"><img src="assets/screenshots/windows/en/newsletter.webp" alt="A newsletter with the bulk-mail bar on Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Bulk mail.</b> Newsletters, mailing lists and automated mail carry a label, and the bar above the message offers to unsubscribe.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/windows/en/board-list.webp"><img src="assets/screenshots/windows/en/board-list.webp" alt="The board as a list on Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>The board.</b> What is hot, what waits for you and what waits for them, worked out from the mail itself; the detail says why a case is there.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/windows/en/board-columns.webp"><img src="assets/screenshots/windows/en/board-columns.webp" alt="The board as columns on Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>The board as columns.</b> The same cases in four columns, the detail in a panel at the side.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/windows/en/calendar-week.webp"><img src="assets/screenshots/windows/en/calendar-week.webp" alt="The calendar's week view on Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>The calendar.</b> Microsoft 365 and CalDAV calendars in one week view, with the unanswered invitations in the sidebar.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/windows/en/jira.webp"><img src="assets/screenshots/windows/en/jira.webp" alt="A Jira issue read as a conversation on Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>A Jira account.</b> Issues read like mail: the card with the status, the comments and events as a conversation, and a comment is written as a reply.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/windows/en/crm-saved.webp"><img src="assets/screenshots/windows/en/crm-saved.webp" alt="A reply saved in eWay-CRM on Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Saved in eWay-CRM.</b> The reply filed with its contact, company and deal; the bar above the message links to them.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="assets/screenshots/windows/en/crm-dialog.webp"><img src="assets/screenshots/windows/en/crm-dialog.webp" alt="The Save to eWay-CRM dialog on Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Save to eWay-CRM.</b> The suggestions come from the message: the contact, the company by the sender's domain and the deal as the superior item.</figcaption>
+        </figure>
+        <figure class="tall">
+          <a class="shot" href="assets/screenshots/windows/en/compose.webp"><img src="assets/screenshots/windows/en/compose.webp" alt="The New Message window on Windows" width="1494" height="1267" loading="lazy"></a>
+          <figcaption><b>A new message.</b> Formatted text, attachments and pictures in the text; a reply carries the original beneath your own words.</figcaption>
+        </figure>
+      </div>
     </div>
     <p class="hint">Scroll sideways for more <svg class="icon"><use href="#i-arrow"/></svg></p>
   </div>
@@ -320,14 +368,14 @@
         <p>The assistant runs your own Claude Code or ChatGPT (through Codex), signed in as you. The first question asks whether mail may be sent to the model; the Board's triage has a consent of its own. Nothing is sent by mail before you send the draft yourself.</p>
       </div>
       <div class="pillar">
-        <div class="ic"><svg class="icon"><use href="#i-plug"/></svg></div>
-        <h3>Tools decided at start, not by the model</h3>
-        <p>What an agent may do is fixed when the MCP bridge starts. A tool outside the granted tier is not registered at all, so it does not even appear in the agent's list. Reading and drafts are always allowed; modifying, sending and triage are separate flags.</p>
+        <div class="ic"><svg class="icon"><use href="#i-search"/></svg></div>
+        <h3>It reads what you point at</h3>
+        <p>A summary, the tasks and deadlines, a drafted reply, the triage of the board: always of the mail you chose, never your whole mailbox, and never before you ask.</p>
       </div>
       <div class="pillar">
         <div class="ic"><svg class="icon"><use href="#i-shield"/></svg></div>
-        <h3>Mail is data, not instructions</h3>
-        <p>Everything that comes from a message, a calendar or an issue is fenced with a one-time marker before the model sees it, and the bridge tells the model so. The assistant can annotate the board, but cannot set a state, a reminder or Done, archive, or delete a draft.</p>
+        <h3>You stay in charge</h3>
+        <p>A draft is a draft until you send it. The assistant may leave notes on the board, but cannot mark anything done, move or delete your mail, or change a setting. <a href="assistant.html">How the assistant works, and what is sent when.</a></p>
       </div>
     </div>
   </div>
@@ -346,12 +394,12 @@
         </thead>
         <tbody>
           <tr><td>Native window</td><td class="hl"><span class="yes">Linux, macOS, Windows</span></td><td>Its own toolkit, the same everywhere</td><td>A web app on every platform; no Linux</td><td>macOS only</td><td>Web or Electron; no Linux</td></tr>
-          <tr><td>Microsoft 365</td><td class="hl"><span class="yes">Microsoft Graph</span></td><td>EWS, added recently</td><td>Graph</td><td>EWS</td><td>Through the vendor's cloud</td></tr>
+          <tr><td>Microsoft 365</td><td class="hl"><span class="yes">Mail and calendar, browser sign-in</span></td><td>Mail, added recently</td><td>Yes</td><td>Mail</td><td>Through the vendor's cloud</td></tr>
           <tr><td>AI</td><td class="hl"><span class="yes">Your own Claude or ChatGPT account, with consent</span></td><td>None built in</td><td>Copilot, paid separately</td><td>Apple Intelligence</td><td>The vendor's AI, in the subscription</td></tr>
           <tr><td>Jira, CRM, a board</td><td class="hl"><span class="yes">Built in</span></td><td>Add-ons</td><td>Add-ins</td><td><span class="no">No</span></td><td>Split inbox at most</td></tr>
           <tr><td>Mail passes through the vendor's servers</td><td class="hl"><span class="yes">Never</span></td><td>No</td><td>Microsoft's</td><td>No</td><td>Yes</td></tr>
           <tr><td>Subscription</td><td class="hl"><span class="yes">None</span></td><td>None</td><td>Microsoft 365</td><td>None</td><td>Yes</td></tr>
-          <tr><td>Source</td><td class="hl"><span class="yes">Open, AGPL and GPL</span></td><td>Open, MPL</td><td>Closed</td><td>Closed</td><td>Closed</td></tr>
+          <tr><td>Source</td><td class="hl"><span class="yes">Open source</span></td><td>Open source</td><td>Closed</td><td>Closed</td><td>Closed</td></tr>
         </tbody>
       </table>
     </div>
@@ -383,7 +431,7 @@
     <h2>On your own mail, on your own computer</h2>
     <p class="muted">Flatpak, .deb and .rpm for Linux; macOS and Windows from source.</p>
     <div class="buttons">
-      <a class="btn primary" href="download.html">Download 0.1.2</a>
+      <a class="btn primary" href="download.html" data-download>Download 0.1.2</a>
       <a class="btn" href="features.html">All features</a>
     </div>
   </div>
@@ -401,11 +449,21 @@
     <ul>
       <li><a href="download.html">Download</a></li>
       <li><a href="news.html">What's new</a></li>
+      <li><a href="under-the-hood.html">Under the hood</a></li>
       <li><a href="https://github.com/schotek/malachi">Source code</a></li>
       <li><a href="https://github.com/schotek/malachi/issues">Report a problem</a></li>
     </ul>
   </div>
 </footer>
 
+<dialog class="lightbox" aria-label="Screenshot">
+  <figure>
+    <img alt="">
+    <figcaption></figcaption>
+  </figure>
+  <button type="button" class="lb-prev" aria-label="Previous picture" hidden><svg class="icon"><use href="#i-arrow"/></svg></button>
+  <button type="button" class="lb-next" aria-label="Next picture" hidden><svg class="icon"><use href="#i-arrow"/></svg></button>
+  <button type="button" class="lb-close" aria-label="Close">×</button>
+</dialog>
 </body>
 </html>

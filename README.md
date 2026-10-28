@@ -23,17 +23,19 @@ as well.
 
 ## Screenshots
 
-The GTK client on Linux, from before conversations, the calendar and the
-board arrived; the macOS and Windows apps show the same panes with their
-platform's widgets.
+Taken over the sample mailbox of `docs/screenshots.md` (a mail account,
+a Jira account and an eWay-CRM connection), the same scene on each
+desktop; the full sets in English and Czech are on the website
+(`web/assets/screenshots/`).
 
-|  |  |
-|---|---|
-| [![The main window](docs/screenshots/Malachi01.png)](docs/screenshots/Malachi01.png) | **The main window.** Folders of every account in one sidebar, favourites pinned on top, the message list with its All / Unread / Flagged filter, and the message itself. The bar above the body says the remote images were blocked and offers to load them once or to trust the sender from now on. |
-| [![Adding an account](docs/screenshots/Malachi02.png)](docs/screenshots/Malachi02.png) | **Adding an account.** On GNOME, accounts already signed in through GNOME Online Accounts are offered without a password; elsewhere Microsoft 365 signs in in the browser, and for anything else the assistant looks the server settings up from the address alone. |
-| [![Accounts in the preferences](docs/screenshots/Malachi03.png)](docs/screenshots/Malachi03.png) | **Accounts.** Every account can be reordered, paused, edited or removed, and shows what the synchronisation is doing right now. |
-| [![General preferences](docs/screenshots/Malachi04.png)](docs/screenshots/Malachi04.png) | **General preferences.** Launch at login and running in the background, when a message counts as read, desktop notifications with the system new-mail sound, and how often the mail is fetched. |
-| [![Appearance preferences](docs/screenshots/Malachi05.png)](docs/screenshots/Malachi05.png) | **Appearance.** Light, dark or the system's choice; the density of the message list, its preview line and avatars; the font and zoom of the message view. |
+|  | macOS | Linux | Windows |
+|---|---|---|---|
+| **The inbox.** Every account's folders in one sidebar, the list grouped by conversation, and the message itself, rendered without scripts or remote images. | [![macOS](web/assets/screenshots/macos/en/inbox.webp)](web/assets/screenshots/macos/en/inbox.webp) | [![Linux](web/assets/screenshots/linux/en/inbox.webp)](web/assets/screenshots/linux/en/inbox.webp) | [![Windows](web/assets/screenshots/windows/en/inbox.webp)](web/assets/screenshots/windows/en/inbox.webp) |
+| **A conversation as a chat.** The thread as bubbles, yours on the right, with the quick-reply bar under it. | [![macOS](web/assets/screenshots/macos/en/chat.webp)](web/assets/screenshots/macos/en/chat.webp) | [![Linux](web/assets/screenshots/linux/en/chat.webp)](web/assets/screenshots/linux/en/chat.webp) | [![Windows](web/assets/screenshots/windows/en/chat.webp)](web/assets/screenshots/windows/en/chat.webp) |
+| **The board.** What is hot, what waits for you and what waits for them, worked out from the mail itself; the detail says why a case is there. | [![macOS](web/assets/screenshots/macos/en/board-list.webp)](web/assets/screenshots/macos/en/board-list.webp) | [![Linux](web/assets/screenshots/linux/en/board-list.webp)](web/assets/screenshots/linux/en/board-list.webp) | [![Windows](web/assets/screenshots/windows/en/board-list.webp)](web/assets/screenshots/windows/en/board-list.webp) |
+| **The calendar.** Microsoft 365 and CalDAV calendars in one week view, the unanswered invitations in the sidebar. | [![macOS](web/assets/screenshots/macos/en/calendar-week.webp)](web/assets/screenshots/macos/en/calendar-week.webp) | [![Linux](web/assets/screenshots/linux/en/calendar-week.webp)](web/assets/screenshots/linux/en/calendar-week.webp) | [![Windows](web/assets/screenshots/windows/en/calendar-week.webp)](web/assets/screenshots/windows/en/calendar-week.webp) |
+| **A Jira account.** Issues read like mail: the card with the status, the comments and events as a conversation; a comment is written as a reply. | [![macOS](web/assets/screenshots/macos/en/jira.webp)](web/assets/screenshots/macos/en/jira.webp) | [![Linux](web/assets/screenshots/linux/en/jira.webp)](web/assets/screenshots/linux/en/jira.webp) | [![Windows](web/assets/screenshots/windows/en/jira.webp)](web/assets/screenshots/windows/en/jira.webp) |
+| **Saved in eWay-CRM.** The reply filed with its contact, company and deal; the bar above the message links to them. | [![macOS](web/assets/screenshots/macos/en/crm-saved.webp)](web/assets/screenshots/macos/en/crm-saved.webp) | [![Linux](web/assets/screenshots/linux/en/crm-saved.webp)](web/assets/screenshots/linux/en/crm-saved.webp) | [![Windows](web/assets/screenshots/windows/en/crm-saved.webp)](web/assets/screenshots/windows/en/crm-saved.webp) |
 
 ## What works today
 

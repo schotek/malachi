@@ -12,6 +12,8 @@
 <meta name="twitter:card" content="summary">
 <meta name="theme-color" content="#0b3260">
 <link rel="stylesheet" href="../assets/style.css">
+<script src="../assets/platform.js"></script>
+<script src="../assets/lightbox.js" defer></script>
 <link rel="icon" href="../assets/icon-32.png" sizes="32x32">
 <link rel="icon" href="../assets/icon-64.png" sizes="64x64">
 <link rel="apple-touch-icon" href="../assets/icon-192.png">
@@ -48,6 +50,8 @@
     <a class="brand" href="index.html"><img src="../assets/icon-64.png" alt="" width="32" height="32">Malachi Mail</a>
     <nav aria-label="Hlavní">
       <a href="features.html">Funkce</a>
+      <a href="assistant.html">Asistent</a>
+      <a href="under-the-hood.html">Pod kapotou</a>
       <a href="download.html">Stažení</a>
       <a href="news.html">Novinky</a>
       <a class="lang" href="../index.html" lang="en" hreflang="en">English</a>
@@ -62,77 +66,26 @@
     <div class="copy">
       <a class="pill" href="news.html"><span class="dot"></span>Vyšla 0.1.2 · Linux, macOS a Windows</a>
       <h1>Vaše pošta. Nativně na každém počítači. Nikdo mezi vámi.</h1>
-      <p class="lead">Jedno jádro napsané v Go, tři okna postavená z vlastních prvků každé platformy, žádný účet u nás a žádné naše servery. Konverzace, kalendář, Jira, nástěnka toho, co na vás čeká, a asistent s AI, který běží na vašem vlastním účtu, jen když ho oslovíte.</p>
+      <p class="lead">Rychlý nativní poštovní klient pro Linux, macOS a Windows. Pošta zůstává na vašem počítači, bez účtu u nás a bez našich serverů mezi vámi. Konverzace, kalendář, Jira, nástěnka toho, co na vás čeká, a asistent s AI na vašem vlastním účtu, jen když ho oslovíte.</p>
       <div class="buttons">
-        <a class="btn primary" href="download.html">Stáhnout 0.1.2</a>
+        <a class="btn primary" href="download.html" data-download>Stáhnout 0.1.2</a>
         <a class="btn" href="features.html">Co všechno umí <svg class="icon"><use href="#i-arrow"/></svg></a>
       </div>
       <ul class="chips">
-        <li>GTK 4 na Linuxu</li>
-        <li>AppKit na macOS</li>
-        <li>WinUI 3 na Windows 11</li>
-        <li class="gold">Open source, AGPL a GPL</li>
+        <li>Linux</li>
+        <li>macOS</li>
+        <li>Windows 11</li>
+        <li class="gold">Zdarma a open source</li>
       </ul>
     </div>
     <figure class="frame">
-      <div class="chrome"><i></i><i></i><i></i><span>Doručená pošta · Malachi Mail</span></div>
-      <img src="../assets/screenshots/01.webp" alt="Hlavní okno Malachi Mail na Linuxu: postranní panel se složkami, seznam zpráv a otevřená zpráva s pruhem o blokovaných obrázcích" width="1600" height="973" fetchpriority="high">
+      <a class="shot" href="../assets/screenshots/macos/cs/inbox.webp" data-solo><img class="macos" src="../assets/screenshots/macos/cs/inbox.webp" alt="Hlavní okno Malachi Mail na macOS: postranní panel s poštovním účtem a účtem Jira, seznam zpráv seskupený podle konverzací a otevřená zpráva" width="1600" height="1000" fetchpriority="high"></a>
+      <a class="shot" href="../assets/screenshots/linux/cs/inbox.webp" data-solo><img class="linux" src="../assets/screenshots/linux/cs/inbox.webp" alt="Hlavní okno Malachi Mail na Linuxu: postranní panel s poštovním účtem a účtem Jira, seznam zpráv seskupený podle konverzací a otevřená zpráva" width="1600" height="1000" loading="lazy"></a>
+      <a class="shot" href="../assets/screenshots/windows/cs/inbox.webp" data-solo><img class="windows" src="../assets/screenshots/windows/cs/inbox.webp" alt="Hlavní okno Malachi Mail na Windows: postranní panel s poštovním účtem a účtem Jira, seznam zpráv seskupený podle konverzací a otevřená zpráva" width="1600" height="1000" loading="lazy"></a>
     </figure>
   </div>
 </div>
 
-<section>
-  <div class="wrap">
-    <div class="section-head">
-      <div class="eyebrow">Tři okna, jedno jádro</div>
-      <h2>Nativní na každém počítači</h2>
-      <p>Žádná webová stránka v rámečku. Každý klient je napsaný v jazyce a toolkitu své platformy, s její klíčenkou, oznámeními a zvyklostmi, a všechny tři pohání totéž poštovní jádro: stejné chování, stejná bezpečnostní rozhodnutí, jedna sada překladů.</p>
-    </div>
-    <div class="windows" aria-hidden="true">
-      <div class="win">
-        <div class="bar gnome"></div>
-        <div class="body"><div><span class="l a"></span><span class="l s"></span><span class="l m"></span><span class="l s"></span></div><div><span class="l m"></span><span class="l"></span><span class="l m"></span><span class="l s"></span><span class="l"></span></div><div><span class="l s"></span><div class="box"></div></div></div>
-        <div class="cap"><b>Linux</b><span>GTK 4 · libadwaita</span></div>
-      </div>
-      <div class="win">
-        <div class="bar mac"><i></i><i></i><i></i></div>
-        <div class="body"><div><span class="l a"></span><span class="l s"></span><span class="l m"></span><span class="l s"></span></div><div><span class="l m"></span><span class="l"></span><span class="l m"></span><span class="l s"></span><span class="l"></span></div><div><span class="l s"></span><div class="box"></div></div></div>
-        <div class="cap"><b>macOS</b><span>Swift · AppKit</span></div>
-      </div>
-      <div class="win">
-        <div class="bar winui">— ▢ ✕</div>
-        <div class="body"><div><span class="l a"></span><span class="l s"></span><span class="l m"></span><span class="l s"></span></div><div><span class="l m"></span><span class="l"></span><span class="l m"></span><span class="l s"></span><span class="l"></span></div><div><span class="l s"></span><div class="box"></div></div></div>
-        <div class="cap"><b>Windows 11</b><span>C# · WinUI 3</span></div>
-      </div>
-    </div>
-    <div class="engine" aria-hidden="true"><span><svg class="icon"><use href="#i-layers"/></svg><code>malachid</code> · jedno jádro v Go, stejné na všech třech</span></div>
-  </div>
-</section>
-
-<section class="tight">
-  <div class="wrap">
-    <div class="pillars">
-      <div class="pillar">
-        <div class="num">01</div>
-        <div class="ic"><svg class="icon"><use href="#i-cloud-off"/></svg></div>
-        <h3>Vaše</h3>
-        <p>Žádný účet u nás, žádné naše servery mezi vámi a vaším poštovním serverem, žádné předplatné, žádná telemetrie. Pošta leží na vašem počítači a tam se i prohledává, offline. Odchází jen na server, ze kterého přišla, nebo k modelu AI, který jste si vybrali a odsouhlasili.</p>
-      </div>
-      <div class="pillar">
-        <div class="num">02</div>
-        <div class="ic"><svg class="icon"><use href="#i-feather"/></svg></div>
-        <h3>Nenáročné</h3>
-        <p>Žádný přibalený prohlížeč. Jádro je jeden proces v Go, okno je z prvků platformy a systémový webový pohled kreslí jen tělo zprávy, bez JavaScriptu a bez sítě. Uložená pošta je komprimovaná a přílohy starší pošty mohou zůstat na serveru, nebo se neukládat vůbec.</p>
-      </div>
-      <div class="pillar">
-        <div class="num">03</div>
-        <div class="ic"><svg class="icon"><use href="#i-shield"/></svg></div>
-        <h3>Stavěné na nepřátelskou poštu</h3>
-        <p>Každá zpráva projde sanitizací v jádru dřív, než ji okno uvidí. Vzdálené obrázky zůstávají blokované, dokud nerozhodnete jinak, vykreslování nemá síť, hesla nikdy neopustí systémovou klíčenku a každý parser je testovaný na záměrně poškozené poště.</p>
-      </div>
-    </div>
-  </div>
-</section>
 
 <section class="soft">
   <div class="wrap">
@@ -199,9 +152,8 @@
       <div class="feat">
         <div class="ic"><svg class="icon"><use href="#i-globe"/></svg></div>
         <div>
-          <h3>Microsoft 365 přes Microsoft Graph</h3>
-          <p>Ne IMAP, ne EWS: rozhraní, které Microsoft rozvíjí. Funguje tam, kde je základní ověřování vypnuté, přihlašuje se v prohlížeči s klientem, který aplikace nese, a kalendář přijde s týmž přihlášením.</p>
-          <p>Microsoft od října 2026 vypíná Exchange Web Services pro Exchange Online; klienti stavění na nich to teprve dohánějí.</p>
+          <h3>Microsoft 365 a Outlook.com</h3>
+          <p>Přihlášení v prohlížeči, žádná hesla aplikací, pošta a kalendář společně, a funguje i tam, kde firma vypnula staré způsoby přihlašování.</p>
         </div>
       </div>
       <div class="feat">
@@ -233,75 +185,171 @@
         </div>
       </div>
       <div class="feat">
-        <div class="ic"><svg class="icon"><use href="#i-lock"/></svg></div>
-        <div>
-          <h3>Bezpečnost, kterou si vaše IT přečte</h3>
-          <p>Hesla jen v systémové klíčence. Certifikát serveru jde připnout podle otisku; žádné <em>ignorovat certifikát</em> neexistuje. Okno a jádro se navzájem ověřují. Jádro je pod AGPL a je k dispozici i s komerční licencí.</p>
-        </div>
-      </div>
-      <div class="feat">
         <div class="ic"><svg class="icon"><use href="#i-user"/></svg></div>
         <div>
           <h3>Píše jako vy, podle účtu</h3>
           <p>Profil řekne asistentovi, kdo jste a jak píšete, s doplňkem pro každý účet: jiný podpis a tón pro firemní adresu než pro soukromou.</p>
         </div>
       </div>
-      <div class="feat">
-        <div class="ic"><svg class="icon"><use href="#i-plug"/></svg></div>
-        <div>
-          <h3>Most MCP pro vaše agenty</h3>
-          <p>Claude Code, Claude Desktop, Cursor, Zed nebo kterýkoli klient MCP dostane odstupňovaný pohled na poštu, kalendář a nástěnku. Obsah pošty je ohrazený jako data, nikdy jako instrukce, a přílohy přijdou jako text.</p>
-          <div class="mock-sw" style="margin-top:.9rem" aria-hidden="true">
-            <div class="r"><span class="t on"></span><b>Čtení a koncepty</b><span>vždy</span></div>
-            <div class="r"><span class="t"></span><b>Změny</b><span>-allow-modify</span></div>
-            <div class="r"><span class="t"></span><b>Odesílání</b><span>-allow-send</span></div>
-            <div class="r"><span class="t"></span><b>Třídění nástěnky</b><span>-allow-triage</span></div>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </section>
 
-<section>
-  <div class="wrap">
-    <div class="section-head">
-      <div class="eyebrow">Šetrné k počítači</div>
-      <h2>Poštovní klient nemá stát víc než pošta sama</h2>
-    </div>
-    <div class="stats">
-      <div class="stat"><div class="big">0</div><b>přibalených prohlížečů</b><p>Okno je GTK, AppKit nebo WinUI. Tělo zprávy kreslí systémový webový pohled, a jen dokud je zpráva otevřená.</p></div>
-      <div class="stat"><div class="big">1</div><b>proces v Go</b><p>Celé poštovní jádro, od IMAP po index hledání, je jediný nativní program bez runtimu, který by nesl s sebou.</p></div>
-      <div class="stat"><div class="big">zstd</div><b>komprimované úložiště</b><p>Uložená pošta se komprimuje, aniž byste to poznali. Předvolby ukazují obsazené místo.</p></div>
-      <div class="stat"><div class="big">30 / ∞ / 0</div><b>dní příloh</b><p>Přílohy offline 30 dní, napořád, nebo nikdy: starší zůstanou na serveru, dokud je neotevřete.</p></div>
-    </div>
-  </div>
-</section>
 
 <section class="tight">
   <div class="wrap">
     <div class="section-head">
       <div class="eyebrow">Snímky obrazovky</div>
       <h2>Na první pohled</h2>
-      <p>Klient GTK na Linuxu z doby před konverzacemi, kalendářem a nástěnkou. Aplikace pro macOS a Windows ukazují tytéž panely s prvky své platformy.</p>
+      <p>Týchž jedenáct scén na každém desktopu, nad vzorovou schránkou s účtem Jira a napojením na eWay-CRM; vyberte platformu.</p>
     </div>
-    <div class="strip">
-      <figure>
-        <img src="../assets/screenshots/02.webp" alt="Přidání účtu" width="1600" height="1067" loading="lazy">
-        <figcaption><b>Přidání účtu.</b> Na GNOME se účty už přihlášené v Účtech online nabídnou bez hesla; jinde se Microsoft 365 přihlásí v prohlížeči a u všeho ostatního průvodce najde nastavení serveru jen z adresy.</figcaption>
-      </figure>
-      <figure>
-        <img src="../assets/screenshots/03.webp" alt="Účty v předvolbách" width="1600" height="1067" loading="lazy">
-        <figcaption><b>Účty.</b> Každý účet jde přeřadit, pozastavit, upravit nebo odebrat a ukazuje, co právě dělá synchronizace.</figcaption>
-      </figure>
-      <figure>
-        <img src="../assets/screenshots/04.webp" alt="Obecné předvolby" width="1600" height="1067" loading="lazy">
-        <figcaption><b>Obecné předvolby.</b> Spuštění po přihlášení a běh na pozadí, kdy se zpráva počítá za přečtenou, oznámení se systémovým zvukem nové pošty a jak často se pošta stahuje.</figcaption>
-      </figure>
-      <figure>
-        <img src="../assets/screenshots/05.webp" alt="Předvolby vzhledu" width="1600" height="1067" loading="lazy">
-        <figcaption><b>Vzhled.</b> Světlý, tmavý nebo podle systému; hustota seznamu zpráv, řádek náhledu a avatary; písmo a zvětšení zobrazení zprávy.</figcaption>
-      </figure>
+    <div class="gallery">
+      <input type="radio" name="platform" id="g-macos" checked>
+      <input type="radio" name="platform" id="g-linux">
+      <input type="radio" name="platform" id="g-windows">
+      <div class="platforms">
+        <label for="g-macos">macOS</label>
+        <label for="g-linux">Linux</label>
+        <label for="g-windows">Windows</label>
+      </div>
+      <div class="strip set macos">
+        <figure>
+          <a class="shot" href="../assets/screenshots/macos/cs/inbox.webp"><img src="../assets/screenshots/macos/cs/inbox.webp" alt="Doručená pošta v Malachi Mail na macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Doručená pošta.</b> Složky všech účtů v jednom postranním panelu, seznam seskupený podle konverzací a samotná zpráva, i s HTML tabulkou, vykreslená bez skriptů a vzdálených obrázků.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/macos/cs/chat.webp"><img src="../assets/screenshots/macos/cs/chat.webp" alt="Konverzace zobrazená jako chat na macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Konverzace jako chat.</b> Vlákno jako bubliny, vaše vpravo, pod ním řádek rychlé odpovědi; časová osa je jedno klepnutí vedle.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/macos/cs/invitation.webp"><img src="../assets/screenshots/macos/cs/invitation.webp" alt="Pozvánka do kalendáře v poště na macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Pozvánka.</b> Karta nad zprávou porovná termín s vašimi kalendáři a odpoví jedním klepnutím.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/macos/cs/newsletter.webp"><img src="../assets/screenshots/macos/cs/newsletter.webp" alt="Newsletter s pruhem hromadné pošty na macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Hromadná pošta.</b> Newslettery, konference a automatické zprávy mají štítek a pruh nad zprávou nabídne odhlášení.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/macos/cs/board-list.webp"><img src="../assets/screenshots/macos/cs/board-list.webp" alt="Nástěnka jako seznam na macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Nástěnka.</b> Co hoří, co čeká na vás a co na ně, odvozené z pošty samotné; detail řekne, proč tam případ je.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/macos/cs/board-columns.webp"><img src="../assets/screenshots/macos/cs/board-columns.webp" alt="Nástěnka ve sloupcích na macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Nástěnka ve sloupcích.</b> Tytéž případy ve čtyřech sloupcích, detail ve vysouvacím panelu.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/macos/cs/calendar-week.webp"><img src="../assets/screenshots/macos/cs/calendar-week.webp" alt="Týdenní pohled kalendáře na macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Kalendář.</b> Kalendáře Microsoft 365 a CalDAV v jednom týdenním pohledu, nezodpovězené pozvánky v postranním panelu.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/macos/cs/jira.webp"><img src="../assets/screenshots/macos/cs/jira.webp" alt="Issue z Jiry čtené jako konverzace na macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Účet Jira.</b> Issues se čtou jako pošta: karta se stavem, komentáře a události jako konverzace; komentář napíšete jako odpověď.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/macos/cs/crm-saved.webp"><img src="../assets/screenshots/macos/cs/crm-saved.webp" alt="Odpověď uložená v eWay-CRM na macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Uloženo v eWay-CRM.</b> Odpověď založená ke kontaktu, firmě a obchodu; pruh nad zprávou na ně odkazuje.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/macos/cs/crm-dialog.webp"><img src="../assets/screenshots/macos/cs/crm-dialog.webp" alt="Dialog Uložit do eWay-CRM na macOS" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Uložit do eWay-CRM.</b> Návrhy plynou ze zprávy: kontakt, firma podle domény odesílatele a obchod jako nadřazená položka.</figcaption>
+        </figure>
+        <figure class="tall">
+          <a class="shot" href="../assets/screenshots/macos/cs/compose.webp"><img src="../assets/screenshots/macos/cs/compose.webp" alt="Okno Nová zpráva na macOS" width="1520" height="1280" loading="lazy"></a>
+          <figcaption><b>Nová zpráva.</b> Formátovaný text, přílohy a obrázky v textu; odpověď nese originál pod vaším textem.</figcaption>
+        </figure>
+      </div>
+      <div class="strip set linux">
+        <figure>
+          <a class="shot" href="../assets/screenshots/linux/cs/inbox.webp"><img src="../assets/screenshots/linux/cs/inbox.webp" alt="Doručená pošta v Malachi Mail na Linuxu" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Doručená pošta.</b> Složky všech účtů v jednom postranním panelu, seznam seskupený podle konverzací a samotná zpráva, i s HTML tabulkou, vykreslená bez skriptů a vzdálených obrázků.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/linux/cs/chat.webp"><img src="../assets/screenshots/linux/cs/chat.webp" alt="Konverzace zobrazená jako chat na Linuxu" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Konverzace jako chat.</b> Vlákno jako bubliny, vaše vpravo, pod ním řádek rychlé odpovědi; časová osa je jedno klepnutí vedle.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/linux/cs/invitation.webp"><img src="../assets/screenshots/linux/cs/invitation.webp" alt="Pozvánka do kalendáře v poště na Linuxu" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Pozvánka.</b> Karta nad zprávou porovná termín s vašimi kalendáři a odpoví jedním klepnutím.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/linux/cs/newsletter.webp"><img src="../assets/screenshots/linux/cs/newsletter.webp" alt="Newsletter s pruhem hromadné pošty na Linuxu" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Hromadná pošta.</b> Newslettery, konference a automatické zprávy mají štítek a pruh nad zprávou nabídne odhlášení.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/linux/cs/board-list.webp"><img src="../assets/screenshots/linux/cs/board-list.webp" alt="Nástěnka jako seznam na Linuxu" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Nástěnka.</b> Co hoří, co čeká na vás a co na ně, odvozené z pošty samotné; detail řekne, proč tam případ je.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/linux/cs/board-columns.webp"><img src="../assets/screenshots/linux/cs/board-columns.webp" alt="Nástěnka ve sloupcích na Linuxu" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Nástěnka ve sloupcích.</b> Tytéž případy ve čtyřech sloupcích, detail ve vysouvacím panelu.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/linux/cs/calendar-week.webp"><img src="../assets/screenshots/linux/cs/calendar-week.webp" alt="Týdenní pohled kalendáře na Linuxu" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Kalendář.</b> Kalendáře Microsoft 365 a CalDAV v jednom týdenním pohledu, nezodpovězené pozvánky v postranním panelu.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/linux/cs/jira.webp"><img src="../assets/screenshots/linux/cs/jira.webp" alt="Issue z Jiry čtené jako konverzace na Linuxu" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Účet Jira.</b> Issues se čtou jako pošta: karta se stavem, komentáře a události jako konverzace; komentář napíšete jako odpověď.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/linux/cs/crm-saved.webp"><img src="../assets/screenshots/linux/cs/crm-saved.webp" alt="Odpověď uložená v eWay-CRM na Linuxu" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Uloženo v eWay-CRM.</b> Odpověď založená ke kontaktu, firmě a obchodu; pruh nad zprávou na ně odkazuje.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/linux/cs/crm-dialog.webp"><img src="../assets/screenshots/linux/cs/crm-dialog.webp" alt="Dialog Uložit do eWay-CRM na Linuxu" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Uložit do eWay-CRM.</b> Návrhy plynou ze zprávy: kontakt, firma podle domény odesílatele a obchod jako nadřazená položka.</figcaption>
+        </figure>
+        <figure class="tall">
+          <a class="shot" href="../assets/screenshots/linux/cs/compose.webp"><img src="../assets/screenshots/linux/cs/compose.webp" alt="Okno Nová zpráva na Linuxu" width="1520" height="1280" loading="lazy"></a>
+          <figcaption><b>Nová zpráva.</b> Formátovaný text, přílohy a obrázky v textu; odpověď nese originál pod vaším textem.</figcaption>
+        </figure>
+      </div>
+      <div class="strip set windows">
+        <figure>
+          <a class="shot" href="../assets/screenshots/windows/cs/inbox.webp"><img src="../assets/screenshots/windows/cs/inbox.webp" alt="Doručená pošta v Malachi Mail na Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Doručená pošta.</b> Složky všech účtů v jednom postranním panelu, seznam seskupený podle konverzací a samotná zpráva, i s HTML tabulkou, vykreslená bez skriptů a vzdálených obrázků.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/windows/cs/chat.webp"><img src="../assets/screenshots/windows/cs/chat.webp" alt="Konverzace zobrazená jako chat na Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Konverzace jako chat.</b> Vlákno jako bubliny, vaše vpravo, pod ním řádek rychlé odpovědi; časová osa je jedno klepnutí vedle.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/windows/cs/invitation.webp"><img src="../assets/screenshots/windows/cs/invitation.webp" alt="Pozvánka do kalendáře v poště na Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Pozvánka.</b> Karta nad zprávou porovná termín s vašimi kalendáři a odpoví jedním klepnutím.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/windows/cs/newsletter.webp"><img src="../assets/screenshots/windows/cs/newsletter.webp" alt="Newsletter s pruhem hromadné pošty na Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Hromadná pošta.</b> Newslettery, konference a automatické zprávy mají štítek a pruh nad zprávou nabídne odhlášení.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/windows/cs/board-list.webp"><img src="../assets/screenshots/windows/cs/board-list.webp" alt="Nástěnka jako seznam na Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Nástěnka.</b> Co hoří, co čeká na vás a co na ně, odvozené z pošty samotné; detail řekne, proč tam případ je.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/windows/cs/board-columns.webp"><img src="../assets/screenshots/windows/cs/board-columns.webp" alt="Nástěnka ve sloupcích na Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Nástěnka ve sloupcích.</b> Tytéž případy ve čtyřech sloupcích, detail ve vysouvacím panelu.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/windows/cs/calendar-week.webp"><img src="../assets/screenshots/windows/cs/calendar-week.webp" alt="Týdenní pohled kalendáře na Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Kalendář.</b> Kalendáře Microsoft 365 a CalDAV v jednom týdenním pohledu, nezodpovězené pozvánky v postranním panelu.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/windows/cs/jira.webp"><img src="../assets/screenshots/windows/cs/jira.webp" alt="Issue z Jiry čtené jako konverzace na Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Účet Jira.</b> Issues se čtou jako pošta: karta se stavem, komentáře a události jako konverzace; komentář napíšete jako odpověď.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/windows/cs/crm-saved.webp"><img src="../assets/screenshots/windows/cs/crm-saved.webp" alt="Odpověď uložená v eWay-CRM na Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Uloženo v eWay-CRM.</b> Odpověď založená ke kontaktu, firmě a obchodu; pruh nad zprávou na ně odkazuje.</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="../assets/screenshots/windows/cs/crm-dialog.webp"><img src="../assets/screenshots/windows/cs/crm-dialog.webp" alt="Dialog Uložit do eWay-CRM na Windows" width="1600" height="1000" loading="lazy"></a>
+          <figcaption><b>Uložit do eWay-CRM.</b> Návrhy plynou ze zprávy: kontakt, firma podle domény odesílatele a obchod jako nadřazená položka.</figcaption>
+        </figure>
+        <figure class="tall">
+          <a class="shot" href="../assets/screenshots/windows/cs/compose.webp"><img src="../assets/screenshots/windows/cs/compose.webp" alt="Okno Nová zpráva na Windows" width="1494" height="1267" loading="lazy"></a>
+          <figcaption><b>Nová zpráva.</b> Formátovaný text, přílohy a obrázky v textu; odpověď nese originál pod vaším textem.</figcaption>
+        </figure>
+      </div>
     </div>
     <p class="hint">Další snímky jsou vpravo <svg class="icon"><use href="#i-arrow"/></svg></p>
   </div>
@@ -320,14 +368,14 @@
         <p>Asistent spouští váš vlastní Claude Code nebo ChatGPT (přes Codex), přihlášený jako vy. První otázka se zeptá, jestli smí pošta k modelu; třídění nástěnky má souhlas vlastní. Mailem nic neodejde, dokud koncept sami neodešlete.</p>
       </div>
       <div class="pillar">
-        <div class="ic"><svg class="icon"><use href="#i-plug"/></svg></div>
-        <h3>Nástroje rozhoduje start, ne model</h3>
-        <p>Co agent smí, je dané při spuštění mostu MCP. Nástroj mimo povolenou úroveň se vůbec nezaregistruje, takže se v seznamu agenta ani neobjeví. Čtení a koncepty jsou vždy povolené; změny, odesílání a třídění jsou samostatné přepínače.</p>
+        <div class="ic"><svg class="icon"><use href="#i-search"/></svg></div>
+        <h3>Čte, na co ukážete</h3>
+        <p>Shrnutí, úkoly a termíny, návrh odpovědi, třídění nástěnky: vždy z pošty, kterou jste vybrali, nikdy z celé schránky a nikdy dřív, než se zeptáte.</p>
       </div>
       <div class="pillar">
         <div class="ic"><svg class="icon"><use href="#i-shield"/></svg></div>
-        <h3>Pošta jsou data, ne instrukce</h3>
-        <p>Vše, co přijde ze zprávy, z kalendáře nebo z issue, je před modelem ohrazené jednorázovou značkou a most mu to řekne. Asistent smí nástěnku komentovat, ale nemůže nastavit stav, připomenutí ani Hotovo, archivovat, ani smazat koncept.</p>
+        <h3>Rozhodujete vy</h3>
+        <p>Koncept je koncept, dokud ho neodešlete. Asistent smí nechat poznámky na nástěnce, ale nic neoznačí jako hotové, poštu nepřesune ani nesmaže a nastavení nezmění. <a href="assistant.html">Jak asistent pracuje a co se kdy posílá.</a></p>
       </div>
     </div>
   </div>
@@ -346,12 +394,12 @@
         </thead>
         <tbody>
           <tr><td>Nativní okno</td><td class="hl"><span class="yes">Linux, macOS, Windows</span></td><td>Vlastní toolkit, všude stejný</td><td>Webová aplikace na všech platformách; bez Linuxu</td><td>Jen macOS</td><td>Web nebo Electron; bez Linuxu</td></tr>
-          <tr><td>Microsoft 365</td><td class="hl"><span class="yes">Microsoft Graph</span></td><td>EWS, přidané nedávno</td><td>Graph</td><td>EWS</td><td>Přes cloud výrobce</td></tr>
+          <tr><td>Microsoft 365</td><td class="hl"><span class="yes">Pošta i kalendář, přihlášení v prohlížeči</span></td><td>Pošta, přidané nedávno</td><td>Ano</td><td>Pošta</td><td>Přes cloud výrobce</td></tr>
           <tr><td>AI</td><td class="hl"><span class="yes">Váš vlastní účet Claude nebo ChatGPT, se souhlasem</span></td><td>Žádná vestavěná</td><td>Copilot za příplatek</td><td>Apple Intelligence</td><td>AI výrobce v předplatném</td></tr>
           <tr><td>Jira, CRM, nástěnka</td><td class="hl"><span class="yes">Vestavěné</span></td><td>Doplňky</td><td>Doplňky</td><td><span class="no">Ne</span></td><td>Nejvýš rozdělená doručená pošta</td></tr>
           <tr><td>Pošta prochází servery výrobce</td><td class="hl"><span class="yes">Nikdy</span></td><td>Ne</td><td>Microsoftu</td><td>Ne</td><td>Ano</td></tr>
           <tr><td>Předplatné</td><td class="hl"><span class="yes">Žádné</span></td><td>Žádné</td><td>Microsoft 365</td><td>Žádné</td><td>Ano</td></tr>
-          <tr><td>Zdrojové kódy</td><td class="hl"><span class="yes">Otevřené, AGPL a GPL</span></td><td>Otevřené, MPL</td><td>Uzavřené</td><td>Uzavřené</td><td>Uzavřené</td></tr>
+          <tr><td>Zdrojové kódy</td><td class="hl"><span class="yes">Otevřené</span></td><td>Otevřené</td><td>Uzavřené</td><td>Uzavřené</td><td>Uzavřené</td></tr>
         </tbody>
       </table>
     </div>
@@ -383,7 +431,7 @@
     <h2>Na vlastní poště, na vlastním počítači</h2>
     <p class="muted">Flatpak, .deb a .rpm pro Linux; macOS a Windows ze zdrojů.</p>
     <div class="buttons">
-      <a class="btn primary" href="download.html">Stáhnout 0.1.2</a>
+      <a class="btn primary" href="download.html" data-download>Stáhnout 0.1.2</a>
       <a class="btn" href="features.html">Všechny funkce</a>
     </div>
   </div>
@@ -401,11 +449,21 @@
     <ul>
       <li><a href="download.html">Stažení</a></li>
       <li><a href="news.html">Novinky</a></li>
+      <li><a href="under-the-hood.html">Pod kapotou</a></li>
       <li><a href="https://github.com/schotek/malachi">Zdrojové kódy</a></li>
       <li><a href="https://github.com/schotek/malachi/issues">Nahlásit problém</a></li>
     </ul>
   </div>
 </footer>
 
+<dialog class="lightbox" aria-label="Snímek obrazovky">
+  <figure>
+    <img alt="">
+    <figcaption></figcaption>
+  </figure>
+  <button type="button" class="lb-prev" aria-label="Předchozí snímek" hidden><svg class="icon"><use href="#i-arrow"/></svg></button>
+  <button type="button" class="lb-next" aria-label="Další snímek" hidden><svg class="icon"><use href="#i-arrow"/></svg></button>
+  <button type="button" class="lb-close" aria-label="Zavřít">×</button>
+</dialog>
 </body>
 </html>

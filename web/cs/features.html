@@ -48,6 +48,8 @@
     <a class="brand" href="index.html"><img src="../assets/icon-64.png" alt="" width="32" height="32">Malachi Mail</a>
     <nav aria-label="Hlavní">
       <a href="features.html" aria-current="page">Funkce</a>
+      <a href="assistant.html">Asistent</a>
+      <a href="under-the-hood.html">Pod kapotou</a>
       <a href="download.html">Stažení</a>
       <a href="news.html">Novinky</a>
       <a class="lang" href="../features.html" lang="en" hreflang="en">English</a>
@@ -130,23 +132,10 @@
     <p>Zprávu jde uložit do eWay-CRM s vazbami na kontakty, firmy, obchody a projekty, z kteréhokoli poštovního účtu, a zbytek její konverzace ji následuje sám. Připojení se nastavuje v Předvolbách → Integrace; heslo jde do klíčenky a relace zůstává na vašem počítači.</p>
 
     <h2 id="assistant"><svg class="icon"><use href="#i-sparkle"/></svg>Asistent</h2>
-    <p>Nepovinný a experimentální. S registrovaným mostem MCP předá tlačítko ✦ vybranou zprávu, konverzaci nebo složku do Claude Desktop (macOS a Windows) nebo Claude Code s připravenou otázkou, nebo spustí váš vlastní Claude Code (či ChatGPT přes Codex) v panelu hlavního okna jen s nástroji mostu pro čtení a koncepty. Shrne, najde úkoly a termíny, napíše a přepíše odpověď (zdvořileji, stručněji, opravenou, přeloženou nebo podle vlastního pokynu), udělá z vašich slov hledání, třídí nástěnku a navrhuje na ní odpovědi a v kalendáři řekne, co vás dnes čeká, nebo najde volný termín.</p>
-    <p>Profil v Předvolbách → AI → O mně mu řekne, kdo jste, v jakém rodě píšete a doplněk ke každému účtu. K modelu nic neodejde, dokud se nezeptáte, první otázka požádá o souhlas a mailem nic neodejde, dokud koncept sami neodešlete.</p>
+    <p>Nepovinný a experimentální. Tlačítko ✦ předá vybranou zprávu, konverzaci nebo složku do Claude Desktop (macOS a Windows) nebo Claude Code s připravenou otázkou, nebo spustí váš vlastní Claude Code (či ChatGPT přes Codex) v panelu hlavního okna jen s nástroji mostu pro čtení a koncepty. Shrne, najde úkoly a termíny, napíše a přepíše odpověď, udělá z vašich slov hledání, třídí nástěnku a navrhuje na ní odpovědi. K modelu nic neodejde, dokud se nezeptáte, a mailem nic, dokud koncept sami neodešlete. <a href="assistant.html">Jak asistent pracuje a co se kdy posílá.</a></p>
 
     <h2 id="mcp"><svg class="icon"><use href="#i-plug"/></svg>Agenti s AI: most MCP</h2>
-    <p><code>malachi-mcp</code> je server protokolu Model Context Protocol přes stdio, který dá agentovi (Claude Code, Claude Desktop, Zed, Cursor nebo kterémukoli jinému klientu MCP) odstupňovaný pohled na poštu, kalendář a nástěnku. Je to klient jádra přesně jako desktopové aplikace, bez vlastní poštovní logiky a bez vlastních přihlašovacích údajů. Co agent smí, je rozhodnuté při spuštění serveru, ne modelem; nástroj mimo povolenou úroveň se nikdy nezaregistruje.</p>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Úroveň</th><th>Jak se povolí</th><th>Co přidá</th></tr></thead>
-        <tbody>
-          <tr><td>Čtení a koncepty</td><td>vždy zapnuto</td><td>účty, složky, zprávy, hledání, přílohy (i s textem PDF, DOCX a XLSX), synchronizace, přechody v Jiře, nástěnka, kalendáře, události, volný čas, pozvánky, profil uživatele a koncepty (odpověď, odpověď všem, přeposlání, nová zpráva, komentář v Jiře)</td></tr>
-          <tr><td>Změny</td><td><code>-allow-modify</code></td><td>označování, přesouvání a mazání zpráv, změna stavu issue, odhlášení, vytvoření události</td></tr>
-          <tr><td>Odesílání</td><td><code>-allow-send</code></td><td>odeslání zprávy; s ním smí odhlášení poslat odhlašovací mail a událost pozvat účastníky</td></tr>
-          <tr><td>Třídění</td><td><code>-allow-triage</code></td><td>poznámky k případům nástěnky (titulek, shrnutí, úkoly, termín s citací, závazek), nikdy stav, který si nastavujete sami</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p>Koncept je nečinný: leží v místním úložišti a po 30 sekundách ve složce Koncepty účtu a odejde, jen když ho odešlete. Vše, co přijde z pošty, je před modelem ohrazené jako data. Celý model hrozeb je sepsaný v <a href="https://github.com/schotek/malachi/blob/main/docs/security.md">bezpečnostních poznámkách projektu</a>.</p>
+    <p><code>malachi-mcp</code> je server Model Context Protocolu přes stdio, který dá agentovi (Claude Code, Claude Desktop, Zed, Cursor nebo jiný klient MCP) hlídaný přístup k poště, kalendáři a nástěnce v úrovních, které zvolíte při jeho spuštění: čtení a koncepty vždy, změny, odesílání a třídění jen po povolení. Koncept odejde, až ho odešlete, a všechno z pošty je před modelem ohrazené jako data. <a href="assistant.html#agents">Úrovně a pravidla.</a></p>
 
     <h2 id="desktop"><svg class="icon"><use href="#i-window"/></svg>Integrace s plochou</h2>
     <p>Odkazy <code>mailto:</code>, oznámení nové pošty se systémovým zvukem, spuštění po přihlášení, běh na pozadí (na Windows s ikonou v oznamovací oblasti), světlý a tmavý vzhled, sbalitelný postranní panel s oblíbenými složkami a zvyklosti platformy pro klávesy, menu a dialogy. Čeština a mechanismus pro další jazyky.</p>
@@ -161,6 +150,7 @@
     </ul>
 
     <h2 id="platforms"><svg class="icon"><use href="#i-globe"/></svg>Tři klienti</h2>
+    <p>Jak tři okna sdílejí jedno jádro a co kde běží: <a href="under-the-hood.html">Pod kapotou</a>.</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th></th><th>Linux</th><th>macOS</th><th>Windows</th></tr></thead>
@@ -201,6 +191,7 @@
     <ul>
       <li><a href="download.html">Stažení</a></li>
       <li><a href="news.html">Novinky</a></li>
+      <li><a href="under-the-hood.html">Pod kapotou</a></li>
       <li><a href="https://github.com/schotek/malachi">Zdrojové kódy</a></li>
       <li><a href="https://github.com/schotek/malachi/issues">Nahlásit problém</a></li>
     </ul>

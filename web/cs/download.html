@@ -12,6 +12,7 @@
 <meta name="twitter:card" content="summary">
 <meta name="theme-color" content="#0b3260">
 <link rel="stylesheet" href="../assets/style.css">
+<script src="../assets/platform.js"></script>
 <link rel="icon" href="../assets/icon-32.png" sizes="32x32">
 <link rel="icon" href="../assets/icon-64.png" sizes="64x64">
 <link rel="apple-touch-icon" href="../assets/icon-192.png">
@@ -48,6 +49,8 @@
     <a class="brand" href="index.html"><img src="../assets/icon-64.png" alt="" width="32" height="32">Malachi Mail</a>
     <nav aria-label="Hlavní">
       <a href="features.html">Funkce</a>
+      <a href="assistant.html">Asistent</a>
+      <a href="under-the-hood.html">Pod kapotou</a>
       <a href="download.html" aria-current="page">Stažení</a>
       <a href="news.html">Novinky</a>
       <a class="lang" href="../download.html" lang="en" hreflang="en">English</a>
@@ -67,7 +70,7 @@
 <section>
   <div class="wrap">
     <div class="dl">
-      <div class="card">
+      <div class="card" id="linux" data-yours="Vaše platforma">
         <div class="bar gnome" aria-hidden="true"></div>
         <span class="status ready">K dispozici</span>
         <h3>Linux</h3>
@@ -79,16 +82,16 @@
         </ul>
         <p class="muted small">Soubory každé verze zůstávají na <a href="https://github.com/schotek/malachi/releases">stránce vydání</a>.</p>
       </div>
-      <div class="card">
+      <div class="card" id="macos" data-yours="Vaše platforma">
         <div class="bar mac" aria-hidden="true"><i></i><i></i><i></i></div>
-        <div class="bar winui" aria-hidden="true">— ▢ ✕</div>
         <span class="status soon">Ze zdrojů</span>
         <h3>macOS</h3>
         <p>macOS 14 nebo novější, Apple silicon i Intel. Aplikace je napsaná ve Swiftu a AppKitu a jádro nese s sebou.</p>
         <p class="muted small">Univerzální obraz disku se staví na každém tagu verze a zveřejní se, až bude podepsaný Developer ID a notarizovaný, což čeká na členství projektu v Apple Developer Programu. Do té doby ho sestavíte ze zdrojů za pár minut.</p>
         <p><a class="btn" href="https://github.com/schotek/malachi#macos">Sestavit na macOS</a></p>
       </div>
-      <div class="card">
+      <div class="card" id="windows" data-yours="Vaše platforma">
+        <div class="bar winui" aria-hidden="true">— ▢ ✕</div>
         <span class="status soon">Ze zdrojů</span>
         <h3>Windows</h3>
         <p>Windows 11, x64 i ARM64. Aplikace je napsaná v C# a WinUI 3 a jádro nese s sebou.</p>
@@ -138,6 +141,7 @@ sudo dnf install ./malachi-0.1.2-1.fc42.x86_64.rpm   # Fedora</code></pre>
     <ul>
       <li><a href="download.html">Stažení</a></li>
       <li><a href="news.html">Novinky</a></li>
+      <li><a href="under-the-hood.html">Pod kapotou</a></li>
       <li><a href="https://github.com/schotek/malachi">Zdrojové kódy</a></li>
       <li><a href="https://github.com/schotek/malachi/issues">Nahlásit problém</a></li>
     </ul>

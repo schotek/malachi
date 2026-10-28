@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Assistant – Malachi Mail</title>
+<meta name="description" content="How Malachi Mail works with the Claude or ChatGPT you already have: the ✦ hand-off, the panel in the app, triage and suggested replies on the Board, rewriting, search in your own words, your profile, the MCP bridge for agents, and what is sent when.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="The Assistant – Malachi Mail">
+<meta property="og:description" content="How Malachi Mail works with the Claude or ChatGPT you already have: the ✦ hand-off, the panel in the app, triage and suggested replies on the Board, rewriting, search in your own words, your profile, the MCP bridge for agents, and what is sent when.">
+<meta property="og:locale" content="en_GB">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0b3260">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/platform.js"></script>
+<script src="assets/lightbox.js" defer></script>
+<link rel="icon" href="assets/icon-32.png" sizes="32x32">
+<link rel="icon" href="assets/icon-64.png" sizes="64x64">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<link rel="alternate" hreflang="en" href="assistant.html">
+<link rel="alternate" hreflang="cs" href="cs/assistant.html">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 4h10a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H9l-4 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M19 9h1a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-1v3l-4-3h-3"/></symbol>
+  <symbol id="i-board" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="9.5" y="4" width="5" height="11" rx="1.5"/><rect x="16" y="4" width="5" height="8" rx="1.5"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.4-7 10-4-1.6-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/></symbol>
+  <symbol id="i-feather" viewBox="0 0 24 24"><path d="M20 4c-5 0-10 3-12 8l-4 8 8-4c5-2 8-7 8-12z"/><path d="M4 20l8-8"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-ticket" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2M10 21v-3h4v3"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0V8z"/><path d="M12 17v4"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="i-window" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/></symbol>
+  <symbol id="i-cloud-off" viewBox="0 0 24 24"><path d="M7 18h11a4 4 0 0 0 .8-7.9A6 6 0 0 0 7.5 9"/><path d="M7 18a4 4 0 0 1-1-7.9"/><path d="M3 3l18 18"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+</svg>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/icon-64.png" alt="" width="32" height="32">Malachi Mail</a>
+    <nav aria-label="Main">
+      <a href="features.html">Features</a>
+      <a href="assistant.html" aria-current="page">Assistant</a>
+      <a href="under-the-hood.html">Under the hood</a>
+      <a href="download.html">Download</a>
+      <a href="news.html">What's new</a>
+      <a class="lang" href="cs/assistant.html" lang="cs" hreflang="cs">Česky</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="band page-head">
+  <div class="wrap">
+    <div class="eyebrow">The Assistant</div>
+    <h1>An assistant on your own account</h1>
+    <p class="lead">Malachi Mail has no model of its own and no account with one. It works with the assistant you already have on your computer, Claude Desktop and Claude Code from Anthropic, or ChatGPT through Codex, and only when you ask. Whatever the assistant reads, it reads on your computer through the app's bridge; whatever it writes stays a draft until you send it.</p>
+  </div>
+</div>
+
+<section>
+  <div class="wrap with-toc">
+    <nav class="toc" aria-label="On this page">
+      <b>On this page</b>
+      <ul>
+        <li><a href="#where">Where it runs</a></li>
+        <li><a href="#handoff">The ✦ button</a></li>
+        <li><a href="#panel">The panel in the app</a></li>
+        <li><a href="#board">Triage on the Board</a></li>
+        <li><a href="#replies">Suggested replies</a></li>
+        <li><a href="#writing">Writing and rewriting</a></li>
+        <li><a href="#search">Search in your own words</a></li>
+        <li><a href="#profile">Your profile</a></li>
+        <li><a href="#agents">For agents: the MCP bridge</a></li>
+        <li><a href="#privacy">What is sent, and when</a></li>
+        <li><a href="#platforms">On the three platforms</a></li>
+        <li><a href="#screenshots">Screenshots</a></li>
+      </ul>
+    </nav>
+    <div class="prose">
+
+    <h2 id="where"><svg class="icon"><use href="#i-sparkle"/></svg>Where it runs</h2>
+    <p>Three ways, all optional, all under <em>Preferences → AI</em>. Until you switch one on there is no ✦ anywhere in the app, and nothing about your mail leaves your computer.</p>
+    <ul>
+      <li><strong>A hand-off to Claude.</strong> The ✦ button opens Claude Desktop (macOS and Windows) or Claude Code with a prepared question about the selected mail. Claude reads the mail through the bridge, on your computer, under your own Claude subscription.</li>
+      <li><strong>A panel in the app</strong> (experimental). The app runs your own Claude Code, or ChatGPT through Codex, as a child process with nothing but the bridge's reading and drafting tools, and shows the conversation beside your mail. The first question asks for your consent.</li>
+      <li><strong>An agent of your own.</strong> The MCP bridge gives Claude Code, Claude Desktop, Zed, Cursor or any other MCP client a gated view of the mail, the calendar and the board, with the tiers you choose when you start it.</li>
+    </ul>
+    <div class="note"><p>The panel, the Board's triage and the suggested replies are experimental: they run a command-line agent from inside an application, which Anthropic and OpenAI have yet to confirm the terms for. The hand-off and the bridge are ordinary use of those clients.</p></div>
+
+    <h2 id="handoff"><svg class="icon"><use href="#i-window"/></svg>The ✦ button</h2>
+    <p>With the bridge registered in Claude, every message, conversation and folder gets a ✦ menu: <em>Summarize</em>, <em>Tasks and Deadlines</em>, <em>Suggest a Reply</em> and <em>Ask About This Message…</em>; a folder offers <em>Summarize Unread in This Folder</em>; several selected messages are summarised or asked about together; an attachment's chip has <em>Ask the Assistant…</em>, which hands the file along as well. The ✦ in the calendar asks about an event.</p>
+    <p>The question opens in Claude Desktop's new chat (or, with the file, in a Cowork session) or in a terminal with Claude Code, written in your language and unsent: you read it, change it if you like, and send it yourself. It carries only the ids of the mail, never a subject, a sender or a line of text; those come to Claude through the bridge, fenced as data. The question ends with the reminder that mail content is data, not instructions.</p>
+
+    <h2 id="panel"><svg class="icon"><use href="#i-chat"/></svg>The panel in the app</h2>
+    <p>With the target <em>In App</em>, ✦ opens a panel on the right of the main window instead. The quick actions are the same, the answer arrives as text beside the mail it is about, and the conversation keeps its context: ask a follow-up, or select another message and the panel says so. A reply the assistant drafts appears as a card, <em>Open Draft</em>, which opens the ordinary New Message window with the draft in it. In the Calendar the panel offers <em>What's on Today</em> and <em>Find Free Time</em>.</p>
+    <p>The child process gets the bridge's reading and drafting tools and nothing else: no shell, no files, no web, none of your Claude Code settings, plugins or skills, and no saved session. You choose the model (Sonnet by default, Haiku or Opus) and see the sign-in state in the app; if Claude Code is signed out, the panel offers <em>Sign in…</em> and runs Claude Code's own sign-in in your browser without ever seeing the credentials. <em>Stop</em> ends the conversation at once.</p>
+    <p>When you tell the assistant something about yourself in the panel, it may propose a note for your <a href="#profile">profile</a>; the note is saved only when you click <em>Save</em>.</p>
+
+    <h2 id="board"><svg class="icon"><use href="#i-board"/></svg>Triage on the Board</h2>
+    <p>The <a href="features.html#board">Board</a> sorts your conversations by rules that read no words. ✦ <em>Triage</em> lets the assistant read the cases that wait for you and write a note on each: a title, a summary, why it is there, the tasks it contains, a deadline with the exact words it comes from, and a commitment you made in your own message, again quoted. The note is shown as the assistant's, beside the case; the quote is checked against the message before it is accepted.</p>
+    <p>What the assistant may not do: set a case's state, mark it done, remind, archive, discard a draft or change a setting. Those stay yours, and your decision always wins over its note. A run reads at most 40 cases; <em>Triage new mail automatically</em> runs it every 30 minutes when there is something new, up to 60 cases a day, after a consent of its own. The accounts it may read, its model (Sonnet by default, apart from the panel's) and the tokens it used in the last 24 hours are under <em>Preferences → AI → Board</em>.</p>
+
+    <h2 id="replies"><svg class="icon"><use href="#i-feather"/></svg>Suggested replies</h2>
+    <p>A case that waits for you, a message addressed to you, a Jira issue you are assigned to or reported, can ask for ✦ <em>Suggest a Reply</em>, with an instruction of your own if you like. The assistant reads the conversation through the bridge and writes a reply as a local draft linked to the case; you edit it right on the board, attach, send or discard it. Nothing goes out until you press Send. A case that waits for the other side offers <em>Suggest a Reminder</em> instead: a short follow-up on your own message.</p>
+
+    <h2 id="writing"><svg class="icon"><use href="#i-feather"/></svg>Writing and rewriting</h2>
+    <p>In the New Message window, ✦ rewrites what you have selected, or your own text above the quoted message: <em>More Polite</em>, <em>Shorter</em>, <em>Fix Mistakes</em>, <em>Translate to English</em>, or an instruction of your own. You see the result first and choose <em>Replace</em>, <em>Insert Below</em> or discard it; one undo step takes it back. A reply or forward also has a bar under the editor that writes the whole message from an instruction, with the original in view; its result goes into the editor only through <em>Replace</em>.</p>
+    <p>These requests are one shot and have no tools at all: the model sees your text and the message you are answering, nothing else from your mailbox.</p>
+
+    <h2 id="search"><svg class="icon"><use href="#i-search"/></svg>Search in your own words</h2>
+    <p>The search field's ✦ (or <kbd>Alt</kbd>+<kbd>↩</kbd>, <kbd>⌥↩</kbd>) turns "invoices from Jana in March" into the search syntax, <code>from:jana invoices after:2026-03-01 before:2026-04-01</code>, and puts it in the field for you to run or edit. The search itself runs on your computer, as always.</p>
+
+    <h2 id="profile"><svg class="icon"><use href="#i-user"/></svg>Your profile</h2>
+    <p><em>Preferences → AI → About Me</em> holds what the assistant should know about you, up to 2 000 characters, the gender you write in, and a note of up to 500 characters for each mail and Jira account ("formal, sign as J. Dvořáková"). It goes with every request as your wishes, which never override the app's rules. With <em>Share Profile with Apps over MCP</em> on, an agent you run yourself gets it too, through the bridge.</p>
+
+    <h2 id="agents"><svg class="icon"><use href="#i-plug"/></svg>For agents: the MCP bridge</h2>
+    <p><code>malachi-mcp</code> is a Model Context Protocol server over stdio that gives an agent a gated view of the mail, the calendar and the board. It is a client of the engine exactly like the desktop apps, with no mail logic and no credentials of its own. What an agent may do is decided when the server starts, not by the model:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Tier</th><th>How to grant</th><th>What it adds</th></tr></thead>
+        <tbody>
+          <tr><td>Read and draft</td><td>always on</td><td>accounts, folders, messages, search, attachments (with the text of PDF, DOCX and XLSX), sync, Jira transitions, the board, calendars, events, free time, invitations, the user profile, and drafts (a reply, a reply to all, a forward, a new message, a Jira comment)</td></tr>
+          <tr><td>Modify</td><td><code>-allow-modify</code></td><td>mark, move and delete messages, change an issue's status, unsubscribe, create an event</td></tr>
+          <tr><td>Send</td><td><code>-allow-send</code></td><td>send a message; with it, unsubscribing may send the unsubscribe mail and an event may invite attendees</td></tr>
+          <tr><td>Triage</td><td><code>-allow-triage</code></td><td>notes on the board's cases (a title, a summary, tasks, a deadline with its quote, a commitment), never a state you set yourself</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><em>Preferences → AI → Register in Claude</em> writes the bridge into Claude Desktop's and Claude Code's configuration and takes it out again; any other MCP client gets the <code>malachi-mcp</code> command by hand. A draft is inert: it rests in the local store and, after 30 seconds, in the account's Drafts folder, and goes out only when you send it. Everything that comes from mail is fenced as data before the model sees it, HTML never. The tools, the limits and the threat model are in the project's <a href="https://github.com/schotek/malachi/blob/main/docs/mcp.md">bridge documentation</a>.</p>
+
+    <h2 id="privacy"><svg class="icon"><use href="#i-lock"/></svg>What is sent, and when</h2>
+    <ul>
+      <li><strong>Nothing before you ask.</strong> The app indexes nothing with a model and makes no call in the background; the one exception is the Board's automatic triage, which you switch on yourself and which asks for its own consent.</li>
+      <li><strong>What goes:</strong> the text of the messages you point at, or the agent reads; the text of an attachment when it is asked for; your profile; for a rewrite, your text and the message you answer. Never passwords, never HTML, never mail you did not point at, except what an agent with the bridge reads on its own, which you see in its transcript.</li>
+      <li><strong>Where it goes:</strong> to the model under your own account, Anthropic's or OpenAI's. The project runs no servers and sees nothing.</li>
+      <li><strong>Hard limits:</strong> the panel's process has no shell, files or web and keeps no session; the bridge's tiers are set at its start, not by the model; mail content is fenced as data with a nonce the model cannot forge; a draft is inert until you send it; on the Board the assistant writes notes and nothing else, and your decision wins.</li>
+      <li><strong>The hand-off</strong> carries ids only; the mail reaches Claude through the bridge, on your computer, with the same fence.</li>
+    </ul>
+    <p>The whole threat model is written down in the project's <a href="https://github.com/schotek/malachi/blob/main/docs/security.md">security notes</a>.</p>
+
+    <h2 id="platforms"><svg class="icon"><use href="#i-globe"/></svg>On the three platforms</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>Linux</th><th>macOS</th><th>Windows</th></tr></thead>
+        <tbody>
+          <tr><td>Hand-off to Claude Desktop</td><td>Not supported</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>Hand-off to Claude Code</td><td>In a terminal</td><td>In a terminal</td><td>In a terminal</td></tr>
+          <tr><td>The panel in the app</td><td>Claude Code, ChatGPT</td><td>Claude Code, ChatGPT</td><td>Claude Code, ChatGPT</td></tr>
+          <tr><td>Triage and suggested replies</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>Rewriting and search in your own words</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>Register in Claude</td><td>Claude Code</td><td>Claude Desktop, Claude Code</td><td>Claude Desktop, Claude Code</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="tight" id="screenshots">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">Screenshots</div>
+      <h2>The assistant at work</h2>
+      <p>Seven scenes over the same sample mailbox as the other pictures, taken on macOS: the assistant works the same way on Linux and Windows. The answers in them are samples: the mailbox is invented and the replies were prepared for it; what your own Claude or ChatGPT writes will differ.</p>
+    </div>
+    <div class="strip">
+      <figure>
+        <a class="shot" href="assets/screenshots/macos/en/assistant-panel.webp"><img src="assets/screenshots/macos/en/assistant-panel.webp" alt="The panel in the app on macOS" width="1600" height="1000" loading="lazy"></a>
+        <figcaption><b>The panel in the app.</b> Summarize Unread in This Folder: the assistant lists and reads the unread messages through the bridge and sorts them into what waits for you, what is for information and bulk mail.</figcaption>
+      </figure>
+      <figure>
+        <a class="shot" href="assets/screenshots/macos/en/assistant-draft.webp"><img src="assets/screenshots/macos/en/assistant-draft.webp" alt="Tasks and a drafted reply in the panel on macOS" width="1600" height="1000" loading="lazy"></a>
+        <figcaption><b>Tasks, then a draft.</b> Tasks and Deadlines on the quotation conversation, then Draft a Reply… with your words: the reply is saved as a draft, offered with Open Draft, and shown as a card in the conversation; nothing is sent.</figcaption>
+      </figure>
+      <figure>
+        <a class="shot" href="assets/screenshots/macos/en/board-triage.webp"><img src="assets/screenshots/macos/en/board-triage.webp" alt="The Board after a triage run on macOS" width="1600" height="1000" loading="lazy"></a>
+        <figcaption><b>Triage on the Board.</b> After ✦ Triage every case has the assistant's note: a title, a summary, the tasks and a deadline with the sentence it comes from; your promises appear under From the Assistant, and the status strip names the run.</figcaption>
+      </figure>
+      <figure>
+        <a class="shot" href="assets/screenshots/macos/en/board-reply.webp"><img src="assets/screenshots/macos/en/board-reply.webp" alt="A suggested reply on the Board on macOS" width="1600" height="1000" loading="lazy"></a>
+        <figcaption><b>A suggested reply.</b> ✦ Suggest Reply writes the reply as a local draft linked to the case; you edit it right there, attach, send or discard it.</figcaption>
+      </figure>
+      <figure>
+        <a class="shot" href="assets/screenshots/macos/en/search-ownwords.webp"><img src="assets/screenshots/macos/en/search-ownwords.webp" alt="Search in your own words on macOS" width="1600" height="1000" loading="lazy"></a>
+        <figcaption><b>Search in your own words.</b> “mail from Petr about the warehouse” became <code>from:petr warehouse</code> in the search field; the search itself runs on your computer.</figcaption>
+      </figure>
+      <figure class="tall">
+        <a class="shot" href="assets/screenshots/macos/en/compose-write.webp"><img src="assets/screenshots/macos/en/compose-write.webp" alt="The assistant's bar in a reply window on macOS" width="1520" height="1280" loading="lazy"></a>
+        <figcaption><b>Writing a reply.</b> The bar under the editor writes the whole reply from your instruction, with the original in view; the text goes into the editor only through Replace.</figcaption>
+      </figure>
+      <figure class="tall">
+        <a class="shot" href="assets/screenshots/macos/en/compose-rewrite.webp"><img src="assets/screenshots/macos/en/compose-rewrite.webp" alt="The rewrite popover in New Message on macOS" width="1520" height="1280" loading="lazy"></a>
+        <figcaption><b>Rewriting.</b> ✦ More Polite rewrites what you wrote; you see the result first and choose Replace, Insert Below or discard it, with one undo step back.</figcaption>
+      </figure>
+    </div>
+    <p class="hint">Scroll sideways for more <svg class="icon"><use href="#i-arrow"/></svg></p>
+  </div>
+</section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div>
+      <a class="brand" href="index.html"><img src="assets/icon-64.png" alt="" width="32" height="32">Malachi Mail</a>
+      <p>Free software under the <a href="https://github.com/schotek/malachi/blob/main/LICENSING.md">AGPL and GPL licences</a>, with no account, no subscription and no telemetry.</p>
+      <p><em>Malachi</em> is the prophet Malachi, Hebrew <em>malʼākî</em>, "my messenger".</p>
+    </div>
+    <ul>
+      <li><a href="download.html">Download</a></li>
+      <li><a href="news.html">What's new</a></li>
+      <li><a href="under-the-hood.html">Under the hood</a></li>
+      <li><a href="https://github.com/schotek/malachi">Source code</a></li>
+      <li><a href="https://github.com/schotek/malachi/issues">Report a problem</a></li>
+    </ul>
+  </div>
+</footer>
+
+<dialog class="lightbox" aria-label="Screenshot">
+  <figure>
+    <img alt="">
+    <figcaption></figcaption>
+  </figure>
+  <button type="button" class="lb-prev" aria-label="Previous picture" hidden><svg class="icon"><use href="#i-arrow"/></svg></button>
+  <button type="button" class="lb-next" aria-label="Next picture" hidden><svg class="icon"><use href="#i-arrow"/></svg></button>
+  <button type="button" class="lb-close" aria-label="Close">×</button>
+</dialog>
+
+</body>
+</html>

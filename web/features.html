@@ -48,6 +48,8 @@
     <a class="brand" href="index.html"><img src="assets/icon-64.png" alt="" width="32" height="32">Malachi Mail</a>
     <nav aria-label="Main">
       <a href="features.html" aria-current="page">Features</a>
+      <a href="assistant.html">Assistant</a>
+      <a href="under-the-hood.html">Under the hood</a>
       <a href="download.html">Download</a>
       <a href="news.html">What's new</a>
       <a class="lang" href="cs/features.html" lang="cs" hreflang="cs">Česky</a>
@@ -130,23 +132,10 @@
     <p>A message can be saved to eWay-CRM with links to contacts, companies, deals and projects, from any mail account, and the rest of its conversation follows it automatically. The connection is set up under Preferences → Integrations; the password goes to the keyring and the session stays on your computer.</p>
 
     <h2 id="assistant"><svg class="icon"><use href="#i-sparkle"/></svg>The Assistant</h2>
-    <p>Optional and experimental. With the MCP bridge registered, the ✦ button hands the selected message, conversation or folder to Claude Desktop (macOS and Windows) or Claude Code with a prepared question, or runs your own Claude Code (or ChatGPT, through Codex) in a panel of the main window with only the bridge's reading and drafting tools. It summarises, finds tasks and deadlines, writes and rewrites replies (more polite, shorter, fixed, translated, or by your own instruction), turns your words into a search, triages the Board and suggests replies on it, and in the Calendar tells you what is on today or finds a free slot.</p>
-    <p>A profile under Preferences → AI → About Me tells it who you are, the gender you write in and a note per account. Nothing is sent to the model before you ask, the first question asks for your consent, and nothing is sent by mail before you send the draft yourself.</p>
+    <p>Optional and experimental. The ✦ button hands the selected message, conversation or folder to Claude Desktop (macOS and Windows) or Claude Code with a prepared question, or runs your own Claude Code (or ChatGPT, through Codex) in a panel of the main window with only the bridge's reading and drafting tools. It summarises, finds tasks and deadlines, writes and rewrites replies, turns your words into a search, triages the Board and suggests replies on it. Nothing is sent to the model before you ask, and nothing by mail before you send the draft yourself. <a href="assistant.html">How the assistant works, and what is sent when.</a></p>
 
     <h2 id="mcp"><svg class="icon"><use href="#i-plug"/></svg>AI agents: the MCP bridge</h2>
-    <p><code>malachi-mcp</code> is a Model Context Protocol server over stdio that gives an agent (Claude Code, Claude Desktop, Zed, Cursor or any other MCP client) a gated view of the mail, the calendar and the board. It is a client of the engine exactly like the desktop apps, with no mail logic and no credentials of its own. What an agent may do is decided when the server starts, not by the model; a tool outside the granted tier is never registered.</p>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Tier</th><th>How to grant</th><th>What it adds</th></tr></thead>
-        <tbody>
-          <tr><td>Read and draft</td><td>always on</td><td>accounts, folders, messages, search, attachments (with the text of PDF, DOCX and XLSX), sync, Jira transitions, the board, calendars, events, free time, invitations, the user profile, and drafts (a reply, a reply to all, a forward, a new message, a Jira comment)</td></tr>
-          <tr><td>Modify</td><td><code>-allow-modify</code></td><td>mark, move and delete messages, change an issue's status, unsubscribe, create an event</td></tr>
-          <tr><td>Send</td><td><code>-allow-send</code></td><td>send a message; with it, unsubscribing may send the unsubscribe mail and an event may invite attendees</td></tr>
-          <tr><td>Triage</td><td><code>-allow-triage</code></td><td>notes on the board's cases (a title, a summary, tasks, a deadline with its quote, a commitment), never a state you set yourself</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p>A draft is inert: it rests in the local store and, after 30 seconds, in the account's Drafts folder, and goes out only when you send it. Everything that comes from mail is fenced as data before the model sees it. The whole threat model is written down in the project's <a href="https://github.com/schotek/malachi/blob/main/docs/security.md">security notes</a>.</p>
+    <p><code>malachi-mcp</code> is a Model Context Protocol server over stdio that gives an agent (Claude Code, Claude Desktop, Zed, Cursor or any other MCP client) a gated view of the mail, the calendar and the board, in tiers you choose when it starts: reading and drafts always, modifying, sending and triage only when granted. A draft goes out only when you send it, and everything that comes from mail is fenced as data before the model sees it. <a href="assistant.html#agents">The tiers and the rules.</a></p>
 
     <h2 id="desktop"><svg class="icon"><use href="#i-window"/></svg>Desktop integration</h2>
     <p><code>mailto:</code> links, new-mail notifications with the system's sound, launch at login, running in the background (with a tray icon on Windows), light and dark styles, a foldable sidebar with favourite folders, and the platform's conventions for shortcuts, menus and dialogs. Czech translation, and the machinery to add more languages.</p>
@@ -161,6 +150,7 @@
     </ul>
 
     <h2 id="platforms"><svg class="icon"><use href="#i-globe"/></svg>The three clients</h2>
+    <p>How the three windows share one engine, and what runs where: <a href="under-the-hood.html">Under the hood</a>.</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th></th><th>Linux</th><th>macOS</th><th>Windows</th></tr></thead>
@@ -201,6 +191,7 @@
     <ul>
       <li><a href="download.html">Download</a></li>
       <li><a href="news.html">What's new</a></li>
+      <li><a href="under-the-hood.html">Under the hood</a></li>
       <li><a href="https://github.com/schotek/malachi">Source code</a></li>
       <li><a href="https://github.com/schotek/malachi/issues">Report a problem</a></li>
     </ul>

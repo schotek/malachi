@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Asistent – Malachi Mail</title>
+<meta name="description" content="Jak Malachi Mail pracuje s Claude nebo ChatGPT, které už máte: předání tlačítkem ✦, panel v aplikaci, třídění a návrhy odpovědí na nástěnce, přepisování, hledání vlastními slovy, váš profil, most MCP pro agenty a co se kdy posílá.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Asistent – Malachi Mail">
+<meta property="og:description" content="Jak Malachi Mail pracuje s Claude nebo ChatGPT, které už máte: předání tlačítkem ✦, panel v aplikaci, třídění a návrhy odpovědí na nástěnce, přepisování, hledání vlastními slovy, váš profil, most MCP pro agenty a co se kdy posílá.">
+<meta property="og:locale" content="cs_CZ">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0b3260">
+<link rel="stylesheet" href="../assets/style.css">
+<script src="../assets/platform.js"></script>
+<script src="../assets/lightbox.js" defer></script>
+<link rel="icon" href="../assets/icon-32.png" sizes="32x32">
+<link rel="icon" href="../assets/icon-64.png" sizes="64x64">
+<link rel="apple-touch-icon" href="../assets/icon-192.png">
+<link rel="alternate" hreflang="en" href="../assistant.html">
+<link rel="alternate" hreflang="cs" href="assistant.html">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 4h10a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H9l-4 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M19 9h1a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-1v3l-4-3h-3"/></symbol>
+  <symbol id="i-board" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="9.5" y="4" width="5" height="11" rx="1.5"/><rect x="16" y="4" width="5" height="8" rx="1.5"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.4-7 10-4-1.6-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/></symbol>
+  <symbol id="i-feather" viewBox="0 0 24 24"><path d="M20 4c-5 0-10 3-12 8l-4 8 8-4c5-2 8-7 8-12z"/><path d="M4 20l8-8"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-ticket" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2M10 21v-3h4v3"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0V8z"/><path d="M12 17v4"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="i-window" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/></symbol>
+  <symbol id="i-cloud-off" viewBox="0 0 24 24"><path d="M7 18h11a4 4 0 0 0 .8-7.9A6 6 0 0 0 7.5 9"/><path d="M7 18a4 4 0 0 1-1-7.9"/><path d="M3 3l18 18"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+</svg>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="../assets/icon-64.png" alt="" width="32" height="32">Malachi Mail</a>
+    <nav aria-label="Hlavní">
+      <a href="features.html">Funkce</a>
+      <a href="assistant.html" aria-current="page">Asistent</a>
+      <a href="under-the-hood.html">Pod kapotou</a>
+      <a href="download.html">Stažení</a>
+      <a href="news.html">Novinky</a>
+      <a class="lang" href="../assistant.html" lang="en" hreflang="en">English</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="band page-head">
+  <div class="wrap">
+    <div class="eyebrow">Asistent</div>
+    <h1>Asistent na vašem vlastním účtu</h1>
+    <p class="lead">Malachi Mail nemá vlastní model ani účet u žádného. Pracuje s asistentem, který už na počítači máte, Claude Desktop a Claude Code od Anthropicu nebo ChatGPT přes Codex, a jen když ho oslovíte. Co asistent čte, čte na vašem počítači přes most aplikace; co napíše, zůstane konceptem, dokud ho sami neodešlete.</p>
+  </div>
+</div>
+
+<section>
+  <div class="wrap with-toc">
+    <nav class="toc" aria-label="Na této stránce">
+      <b>Na této stránce</b>
+      <ul>
+        <li><a href="#where">Kde běží</a></li>
+        <li><a href="#handoff">Tlačítko ✦</a></li>
+        <li><a href="#panel">Panel v aplikaci</a></li>
+        <li><a href="#board">Třídění nástěnky</a></li>
+        <li><a href="#replies">Návrhy odpovědí</a></li>
+        <li><a href="#writing">Psaní a přepisování</a></li>
+        <li><a href="#search">Hledání vlastními slovy</a></li>
+        <li><a href="#profile">Váš profil</a></li>
+        <li><a href="#agents">Pro agenty: most MCP</a></li>
+        <li><a href="#privacy">Co se posílá a kdy</a></li>
+        <li><a href="#platforms">Na třech platformách</a></li>
+        <li><a href="#screenshots">Snímky obrazovky</a></li>
+      </ul>
+    </nav>
+    <div class="prose">
+
+    <h2 id="where"><svg class="icon"><use href="#i-sparkle"/></svg>Kde běží</h2>
+    <p>Tři cesty, všechny nepovinné, všechny v <em>Předvolbách → AI</em>. Dokud některou nezapnete, není v aplikaci nikde žádné ✦ a z počítače o vaší poště nic neodchází.</p>
+    <ul>
+      <li><strong>Předání do Claude.</strong> Tlačítko ✦ otevře Claude Desktop (macOS a Windows) nebo Claude Code s připravenou otázkou k vybrané poště. Claude si poštu přečte přes most, na vašem počítači, pod vaším vlastním předplatným Claude.</li>
+      <li><strong>Panel v aplikaci</strong> (experimentální). Aplikace spustí váš vlastní Claude Code, nebo ChatGPT přes Codex, jako podřízený proces jen s nástroji mostu pro čtení a koncepty a ukáže rozhovor vedle pošty. První otázka požádá o souhlas.</li>
+      <li><strong>Vlastní agent.</strong> Most MCP dá Claude Code, Claude Desktop, Zedu, Cursoru nebo jinému klientovi MCP hlídaný přístup k poště, kalendáři a nástěnce v úrovních, které zvolíte při jeho spuštění.</li>
+    </ul>
+    <div class="note"><p>Panel, třídění nástěnky a návrhy odpovědí jsou experimentální: spouštějí agenta pro příkazovou řádku z aplikace, pro což Anthropic ani OpenAI zatím nepotvrdily podmínky. Předání a most jsou běžné použití těchto klientů.</p></div>
+
+    <h2 id="handoff"><svg class="icon"><use href="#i-window"/></svg>Tlačítko ✦</h2>
+    <p>S mostem registrovaným v Claude má každá zpráva, konverzace i složka nabídku ✦: <em>Shrnout</em>, <em>Úkoly a termíny</em>, <em>Navrhnout odpověď</em> a <em>Zeptat se na tuto zprávu…</em>; složka nabídne <em>Shrnout nepřečtené ve složce</em>; víc vybraných zpráv se shrne nebo zeptá najednou; čip přílohy má <em>Zeptat se asistenta…</em> a soubor předá s sebou. ✦ v kalendáři se ptá na událost.</p>
+    <p>Otázka se otevře v novém chatu Claude Desktop (se souborem v relaci Cowork) nebo v terminálu s Claude Code, ve vašem jazyce a neodeslaná: přečtete si ji, případně upravíte a odešlete sami. Nese jen id pošty, nikdy předmět, odesílatele ani řádek textu; ty se ke Claude dostanou přes most, ohrazené jako data. Otázka končí připomínkou, že obsah pošty jsou data, ne pokyny.</p>
+
+    <h2 id="panel"><svg class="icon"><use href="#i-chat"/></svg>Panel v aplikaci</h2>
+    <p>S cílem <em>V aplikaci</em> otevře ✦ místo toho panel vpravo v hlavním okně. Rychlé akce jsou stejné, odpověď přijde jako text vedle pošty, které se týká, a rozhovor drží souvislost: zeptáte se dál, nebo vyberete jinou zprávu a panel to řekne. Odpověď, kterou asistent napíše, se objeví jako karta <em>Otevřít koncept</em>, která otevře obyčejné okno Nová zpráva s konceptem. V kalendáři panel nabízí <em>Co mě dnes čeká</em> a <em>Najít volný termín</em>.</p>
+    <p>Podřízený proces dostane nástroje mostu pro čtení a koncepty a nic víc: žádný shell, soubory ani web, nic z vašeho nastavení Claude Code, pluginů ani dovedností a žádnou uloženou relaci. Model si zvolíte (výchozí Sonnet, dále Haiku nebo Opus) a stav přihlášení vidíte v aplikaci; když je Claude Code odhlášený, panel nabídne <em>Přihlásit se…</em> a spustí vlastní přihlášení Claude Code v prohlížeči, aniž by přihlašovací údaje kdy viděl. <em>Stop</em> rozhovor hned ukončí.</p>
+    <p>Když asistentovi v panelu řeknete něco o sobě, může navrhnout poznámku do vašeho <a href="#profile">profilu</a>; uloží se, až klepnete na <em>Uložit</em>.</p>
+
+    <h2 id="board"><svg class="icon"><use href="#i-board"/></svg>Třídění nástěnky</h2>
+    <p><a href="features.html#board">Nástěnka</a> řadí vaše konverzace pravidly, která nečtou žádná slova. ✦ <em>Třídit</em> nechá asistenta přečíst případy, které na vás čekají, a ke každému napsat poznámku: titulek, shrnutí, proč tam je, úkoly, které obsahuje, termín s přesnými slovy, ze kterých plyne, a závazek, který jste dali ve vlastní zprávě, opět citovaný. Poznámka je u případu označená jako asistentova; citace se před přijetím ověří proti zprávě.</p>
+    <p>Co asistent nesmí: nastavit stav případu, označit ho jako hotový, připomenout, archivovat, zahodit koncept ani změnit nastavení. To zůstává vám a vaše rozhodnutí vždy vyhrává nad jeho poznámkou. Jeden běh přečte nejvýš 40 případů; <em>Automaticky třídit novou poštu</em> ho spouští každých 30 minut, když je něco nového, nejvýš 60 případů denně, po vlastním souhlasu. Účty, které smí číst, jeho model (výchozí Sonnet, nezávisle na panelu) a tokeny spotřebované za posledních 24 hodin jsou v <em>Předvolbách → AI → Nástěnka</em>.</p>
+
+    <h2 id="replies"><svg class="icon"><use href="#i-feather"/></svg>Návrhy odpovědí</h2>
+    <p>Případ, který čeká na vás, zpráva adresovaná vám, issue z Jiry, které řešíte nebo jste založili, umí ✦ <em>Navrhnout odpověď</em>, případně s vaším pokynem. Asistent si přečte konverzaci přes most a napíše odpověď jako místní koncept propojený s případem; upravíte ji rovnou na nástěnce, přiložíte, odešlete nebo zahodíte. Nic neodejde, dokud nestisknete Odeslat. Případ, který čeká na druhou stranu, nabídne místo toho <em>Navrhnout připomenutí</em>: krátké připomenutí vlastní zprávy.</p>
+
+    <h2 id="writing"><svg class="icon"><use href="#i-feather"/></svg>Psaní a přepisování</h2>
+    <p>V okně Nová zpráva ✦ přepíše, co máte vybrané, nebo váš vlastní text nad citovanou zprávou: <em>Zdvořileji</em>, <em>Stručněji</em>, <em>Opravit chyby</em>, <em>Přeložit do angličtiny</em>, nebo podle vlastního pokynu. Výsledek nejdřív vidíte a zvolíte <em>Nahradit</em>, <em>Vložit pod</em> nebo ho zahodíte; jeden krok zpět ho vrátí. Odpověď a přeposlání mají navíc pod editorem pruh, který napíše celou zprávu z pokynu s originálem na očích; jeho výsledek jde do editoru jen přes <em>Nahradit</em>.</p>
+    <p>Tyto požadavky jsou jednorázové a bez jakýchkoli nástrojů: model vidí váš text a zprávu, na kterou odpovídáte, nic dalšího z vaší schránky.</p>
+
+    <h2 id="search"><svg class="icon"><use href="#i-search"/></svg>Hledání vlastními slovy</h2>
+    <p>✦ v poli hledání (nebo <kbd>Alt</kbd>+<kbd>↩</kbd>, <kbd>⌥↩</kbd>) udělá z „faktury od Jany v březnu“ syntaxi hledání, <code>from:jana faktury after:2026-03-01 before:2026-04-01</code>, a vloží ji do pole, abyste ji spustili nebo upravili. Samotné hledání běží na vašem počítači jako vždy.</p>
+
+    <h2 id="profile"><svg class="icon"><use href="#i-user"/></svg>Váš profil</h2>
+    <p><em>Předvolby → AI → O mně</em> nesou, co má asistent o vás vědět, nejvýš 2 000 znaků, rod, ve kterém píšete, a doplněk nejvýš 500 znaků ke každému poštovnímu účtu a účtu Jira („formálně, podpis J. Dvořáková“). Jde s každým požadavkem jako vaše přání, které nikdy nepřebíjí pravidla aplikace. Se zapnutým <em>Posílat profil i aplikacím přes MCP</em> ho přes most dostane i agent, kterého spouštíte sami.</p>
+
+    <h2 id="agents"><svg class="icon"><use href="#i-plug"/></svg>Pro agenty: most MCP</h2>
+    <p><code>malachi-mcp</code> je server Model Context Protocolu přes stdio, který dá agentovi hlídaný přístup k poště, kalendáři a nástěnce. Je to klient jádra úplně jako desktopové aplikace, bez vlastní logiky pošty a bez vlastních přihlašovacích údajů. Co agent smí, se rozhoduje při spuštění serveru, ne modelem:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Úroveň</th><th>Jak povolit</th><th>Co přidá</th></tr></thead>
+        <tbody>
+          <tr><td>Čtení a koncepty</td><td>vždy</td><td>účty, složky, zprávy, hledání, přílohy (i s textem PDF, DOCX a XLSX), synchronizace, přechody Jira, nástěnka, kalendáře, události, volný čas, pozvánky, profil uživatele a koncepty (odpověď, odpověď všem, přeposlání, nová zpráva, komentář Jira)</td></tr>
+          <tr><td>Změny</td><td><code>-allow-modify</code></td><td>označit, přesunout a smazat zprávy, změnit stav issue, odhlásit odběr, vytvořit událost</td></tr>
+          <tr><td>Odesílání</td><td><code>-allow-send</code></td><td>odeslat zprávu; s ním smí odhlášení poslat odhlašovací mail a událost pozvat účastníky</td></tr>
+          <tr><td>Třídění</td><td><code>-allow-triage</code></td><td>poznámky k případům nástěnky (titulek, shrnutí, úkoly, termín s citací, závazek), nikdy stav, který nastavujete sami</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><em>Předvolby → AI → Registrovat v Claude</em> zapíše most do konfigurace Claude Desktop a Claude Code a zase ho odebere; jiný klient MCP dostane příkaz <code>malachi-mcp</code> ručně. Koncept je nečinný: leží v místním úložišti a po 30 sekundách ve složce Koncepty účtu a odejde, až ho odešlete. Všechno, co pochází z pošty, je před modelem ohrazené jako data, HTML nikdy. Nástroje, limity a model hrozeb jsou v <a href="https://github.com/schotek/malachi/blob/main/docs/mcp.md">dokumentaci mostu</a>.</p>
+
+    <h2 id="privacy"><svg class="icon"><use href="#i-lock"/></svg>Co se posílá a kdy</h2>
+    <ul>
+      <li><strong>Nic, dokud se nezeptáte.</strong> Aplikace modelem nic neindexuje a na pozadí nic nevolá; jedinou výjimkou je automatické třídění nástěnky, které zapínáte sami a které žádá o vlastní souhlas.</li>
+      <li><strong>Co odchází:</strong> text zpráv, na které ukážete nebo které agent čte; text přílohy, když si o ni řekne; váš profil; při přepisu váš text a zpráva, na kterou odpovídáte. Nikdy hesla, nikdy HTML, nikdy pošta, na kterou jste neukázali, kromě toho, co si agent s mostem přečte sám a co vidíte v jeho přepisu.</li>
+      <li><strong>Kam odchází:</strong> k modelu pod vaším vlastním účtem, u Anthropicu nebo OpenAI. Projekt neprovozuje žádné servery a nic nevidí.</li>
+      <li><strong>Pevné meze:</strong> proces panelu nemá shell, soubory ani web a nedrží relaci; úrovně mostu se nastavují při jeho startu, ne modelem; obsah pošty je ohrazený jako data s nonce, kterou model nepodvrhne; koncept je nečinný, dokud ho neodešlete; na nástěnce asistent píše poznámky a nic jiného a vaše rozhodnutí vyhrává.</li>
+      <li><strong>Předání</strong> nese jen id; pošta se ke Claude dostane přes most, na vašem počítači, s touž ohradou.</li>
+    </ul>
+    <p>Celý model hrozeb je sepsaný v <a href="https://github.com/schotek/malachi/blob/main/docs/security.md">bezpečnostních poznámkách</a> projektu.</p>
+
+    <h2 id="platforms"><svg class="icon"><use href="#i-globe"/></svg>Na třech platformách</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>Linux</th><th>macOS</th><th>Windows</th></tr></thead>
+        <tbody>
+          <tr><td>Předání do Claude Desktop</td><td>Nepodporováno</td><td>Ano</td><td>Ano</td></tr>
+          <tr><td>Předání do Claude Code</td><td>V terminálu</td><td>V terminálu</td><td>V terminálu</td></tr>
+          <tr><td>Panel v aplikaci</td><td>Claude Code, ChatGPT</td><td>Claude Code, ChatGPT</td><td>Claude Code, ChatGPT</td></tr>
+          <tr><td>Třídění a návrhy odpovědí</td><td>Ano</td><td>Ano</td><td>Ano</td></tr>
+          <tr><td>Přepisování a hledání vlastními slovy</td><td>Ano</td><td>Ano</td><td>Ano</td></tr>
+          <tr><td>Registrovat v Claude</td><td>Claude Code</td><td>Claude Desktop, Claude Code</td><td>Claude Desktop, Claude Code</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="tight" id="screenshots">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">Snímky obrazovky</div>
+      <h2>Asistent při práci</h2>
+      <p>Sedm scén nad stejnou vzorovou schránkou jako ostatní obrázky, nafocených na macOS: na Linuxu a Windows asistent funguje úplně stejně. Odpovědi na nich jsou ukázkové: schránka je vymyšlená a odpovědi byly připravené pro ni; co napíše váš vlastní Claude nebo ChatGPT, bude jiné.</p>
+    </div>
+    <div class="strip">
+      <figure>
+        <a class="shot" href="../assets/screenshots/macos/cs/assistant-panel.webp"><img src="../assets/screenshots/macos/cs/assistant-panel.webp" alt="Panel v aplikaci na macOS" width="1600" height="1000" loading="lazy"></a>
+        <figcaption><b>Panel v aplikaci.</b> Shrnout nepřečtené ve složce: asistent si přes most vypíše a přečte nepřečtené zprávy a roztřídí je na to, co čeká na vás, co je pro informaci a hromadnou poštu.</figcaption>
+      </figure>
+      <figure>
+        <a class="shot" href="../assets/screenshots/macos/cs/assistant-draft.webp"><img src="../assets/screenshots/macos/cs/assistant-draft.webp" alt="Úkoly a navržená odpověď v panelu na macOS" width="1600" height="1000" loading="lazy"></a>
+        <figcaption><b>Úkoly a pak koncept.</b> Úkoly a termíny nad konverzací o nabídce a potom Navrhnout odpověď… s vašimi slovy: odpověď se uloží jako koncept, panel nabídne Otevřít koncept a konverzace ji ukáže jako kartu; nic se neodesílá.</figcaption>
+      </figure>
+      <figure>
+        <a class="shot" href="../assets/screenshots/macos/cs/board-triage.webp"><img src="../assets/screenshots/macos/cs/board-triage.webp" alt="Nástěnka po běhu třídění na macOS" width="1600" height="1000" loading="lazy"></a>
+        <figcaption><b>Třídění nástěnky.</b> Po ✦ Třídit má každý případ poznámku asistenta: titulek, shrnutí, úkoly a termín s větou, ze které pochází; vaše sliby jsou pod Od asistenta a stavový pruh jmenuje běh.</figcaption>
+      </figure>
+      <figure>
+        <a class="shot" href="../assets/screenshots/macos/cs/board-reply.webp"><img src="../assets/screenshots/macos/cs/board-reply.webp" alt="Návrh odpovědi na nástěnce na macOS" width="1600" height="1000" loading="lazy"></a>
+        <figcaption><b>Návrh odpovědi.</b> ✦ Navrhnout odpověď napíše odpověď jako místní koncept propojený s případem; upravíte ji přímo tam, přiložíte, odešlete nebo zahodíte.</figcaption>
+      </figure>
+      <figure>
+        <a class="shot" href="../assets/screenshots/macos/cs/search-ownwords.webp"><img src="../assets/screenshots/macos/cs/search-ownwords.webp" alt="Hledání vlastními slovy na macOS" width="1600" height="1000" loading="lazy"></a>
+        <figcaption><b>Hledání vlastními slovy.</b> Z „pošta od Petra o skladu“ se v poli hledání stalo <code>from:petr sklad</code>; hledání samo běží na vašem počítači.</figcaption>
+      </figure>
+      <figure class="tall">
+        <a class="shot" href="../assets/screenshots/macos/cs/compose-write.webp"><img src="../assets/screenshots/macos/cs/compose-write.webp" alt="Pruh asistenta v okně odpovědi na macOS" width="1520" height="1280" loading="lazy"></a>
+        <figcaption><b>Napsat odpověď.</b> Pruh pod editorem napíše celou odpověď z vašeho pokynu, s originálem na očích; do editoru jde text jen přes Nahradit.</figcaption>
+      </figure>
+      <figure class="tall">
+        <a class="shot" href="../assets/screenshots/macos/cs/compose-rewrite.webp"><img src="../assets/screenshots/macos/cs/compose-rewrite.webp" alt="Přepis v okně Nová zpráva na macOS" width="1520" height="1280" loading="lazy"></a>
+        <figcaption><b>Přepisování.</b> ✦ Zdvořileji přepíše, co jste napsali; výsledek vidíte napřed a zvolíte Nahradit, Vložit pod nebo ho zahodíte, s jedním krokem zpět.</figcaption>
+      </figure>
+    </div>
+    <p class="hint">Další obrázky vpravo <svg class="icon"><use href="#i-arrow"/></svg></p>
+  </div>
+</section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div>
+      <a class="brand" href="index.html"><img src="../assets/icon-64.png" alt="" width="32" height="32">Malachi Mail</a>
+      <p>Svobodný software pod <a href="https://github.com/schotek/malachi/blob/main/LICENSING.md">licencemi AGPL a GPL</a>, bez účtu, bez předplatného a bez telemetrie.</p>
+      <p><em>Malachi</em> je prorok Malachiáš, hebrejsky <em>malʼākî</em>, „můj posel“.</p>
+    </div>
+    <ul>
+      <li><a href="download.html">Stažení</a></li>
+      <li><a href="news.html">Novinky</a></li>
+      <li><a href="under-the-hood.html">Pod kapotou</a></li>
+      <li><a href="https://github.com/schotek/malachi">Zdrojové kódy</a></li>
+      <li><a href="https://github.com/schotek/malachi/issues">Nahlásit problém</a></li>
+    </ul>
+  </div>
+</footer>
+
+<dialog class="lightbox" aria-label="Snímek obrazovky">
+  <figure>
+    <img alt="">
+    <figcaption></figcaption>
+  </figure>
+  <button type="button" class="lb-prev" aria-label="Předchozí obrázek" hidden><svg class="icon"><use href="#i-arrow"/></svg></button>
+  <button type="button" class="lb-next" aria-label="Další obrázek" hidden><svg class="icon"><use href="#i-arrow"/></svg></button>
+  <button type="button" class="lb-close" aria-label="Zavřít">×</button>
+</dialog>
+
+</body>
+</html>

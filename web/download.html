@@ -12,6 +12,7 @@
 <meta name="twitter:card" content="summary">
 <meta name="theme-color" content="#0b3260">
 <link rel="stylesheet" href="assets/style.css">
+<script src="assets/platform.js"></script>
 <link rel="icon" href="assets/icon-32.png" sizes="32x32">
 <link rel="icon" href="assets/icon-64.png" sizes="64x64">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
@@ -48,6 +49,8 @@
     <a class="brand" href="index.html"><img src="assets/icon-64.png" alt="" width="32" height="32">Malachi Mail</a>
     <nav aria-label="Main">
       <a href="features.html">Features</a>
+      <a href="assistant.html">Assistant</a>
+      <a href="under-the-hood.html">Under the hood</a>
       <a href="download.html" aria-current="page">Download</a>
       <a href="news.html">What's new</a>
       <a class="lang" href="cs/download.html" lang="cs" hreflang="cs">Česky</a>
@@ -67,7 +70,7 @@
 <section>
   <div class="wrap">
     <div class="dl">
-      <div class="card">
+      <div class="card" id="linux" data-yours="Your platform">
         <div class="bar gnome" aria-hidden="true"></div>
         <span class="status ready">Ready</span>
         <h3>Linux</h3>
@@ -79,16 +82,16 @@
         </ul>
         <p class="muted small">Every version's files stay on the <a href="https://github.com/schotek/malachi/releases">releases page</a>.</p>
       </div>
-      <div class="card">
+      <div class="card" id="macos" data-yours="Your platform">
         <div class="bar mac" aria-hidden="true"><i></i><i></i><i></i></div>
-        <div class="bar winui" aria-hidden="true">— ▢ ✕</div>
         <span class="status soon">From source</span>
         <h3>macOS</h3>
         <p>macOS 14 or newer, Apple silicon and Intel. The app is built with Swift and AppKit and brings the engine with it.</p>
         <p class="muted small">A universal disk image is built on every version tag and will be published once it is signed with a Developer ID and notarised, which waits for the project's Apple Developer membership. Until then, build it from source in a few minutes.</p>
         <p><a class="btn" href="https://github.com/schotek/malachi#macos">Build on macOS</a></p>
       </div>
-      <div class="card">
+      <div class="card" id="windows" data-yours="Your platform">
+        <div class="bar winui" aria-hidden="true">— ▢ ✕</div>
         <span class="status soon">From source</span>
         <h3>Windows</h3>
         <p>Windows 11, x64 and ARM64. The app is built with C# and WinUI 3 and brings the engine with it.</p>
@@ -138,6 +141,7 @@ sudo dnf install ./malachi-0.1.2-1.fc42.x86_64.rpm   # Fedora</code></pre>
     <ul>
       <li><a href="download.html">Download</a></li>
       <li><a href="news.html">What's new</a></li>
+      <li><a href="under-the-hood.html">Under the hood</a></li>
       <li><a href="https://github.com/schotek/malachi">Source code</a></li>
       <li><a href="https://github.com/schotek/malachi/issues">Report a problem</a></li>
     </ul>
