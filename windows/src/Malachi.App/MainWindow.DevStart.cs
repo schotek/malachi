@@ -274,12 +274,13 @@ public sealed partial class MainWindow
             }
         }
         var how = WindowCapture.BringToFront(target);
-        if (ReferenceEquals(target, this) && Root.XamlRoot is { } root
-            && FocusManager.GetFocusedElement(root) is Control focused && focused.FocusState is FocusState.Keyboard or FocusState.Programmatic)
+        if (ReferenceEquals(target, this) && Root.XamlRoot is { } root && FocusManager.GetFocusedElement(root) is Control focused)
         {
-            // The focus ring XAML draws when the last input was a key (or the
-            // input state came along with the foreground) is not part of the
-            // picture: the same element, focused as a pointer would.
+            // The focus ring XAML draws around the focused control when the
+            // last input it saw was a key is not part of the picture: the
+            // control stops drawing the system focus visual (a pointer click
+            // would not show one either), and is focused as a pointer would.
+            focused.UseSystemFocusVisuals = false;
             focused.Focus(FocusState.Pointer);
         }
         // The activation's redraw, and a dialog's or a web view's last frame.
