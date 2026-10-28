@@ -38,6 +38,18 @@ import (
 // page), prefs-ai (Preferences on the AI page, About You on top), crm-dialog (the Save to eWay-CRM dialog over invented
 // suggestions, no daemon), eway-wizard (the eWay-CRM account assistant;
 // Next asks the daemon), size=WxH, quit.
+//
+// The scene steps of docs/screenshots.md §3, with the macOS names and
+// meaning: group=on|off and chat=on|off (the two settings), folder=<text>
+// (the first folder, in the sidebar's account order, whose server name
+// contains the text, as a click in the sidebar), row=<text> (the first
+// row of the list whose subject contains the text, case-insensitively, as
+// a click), board:list, board:columns, board:today (the Board in that
+// style; ":select" after it selects the case with the most conversation
+// text), compose-open (app.compose), crm-save (win.crm-save over the
+// selected message) and shot=<path>: a line "MALACHI_GTK_START shot
+// <path>" on stderr that a driver answers with the X server's image of
+// the window (scripts/screenshots/gtk.sh).
 
 const (
 	devStartEnv         = "MALACHI_GTK_START"
@@ -64,7 +76,20 @@ const (
 	devEwayWizard
 	devSize
 	devQuit
+	devGroup
+	devChat
+	devFolder
+	devRow
+	devBoardStyle
+	devComposeOpen
+	devCrmSave
+	devShot
 )
+
+// devBusy counts the steps still at work after they returned (the
+// conversations board:<style>:select waits for); the next step waits for
+// it to drop to 0. Main loop only.
+var devBusy int
 
 // devStep is one parsed step; Name is how it was written.
 type devStep struct {
@@ -72,6 +97,12 @@ type devStep struct {
 	Name          string
 	View          calendar.View
 	Width, Height int
+	// On is group= and chat=; Text is folder=, row= and shot=.
+	On   bool
+	Text string
+	// Style and Select are board:<style>[:select].
+	Style  board.Style
+	Select bool
 }
 
 // parseDevStart parses a MALACHI_GTK_START script; empty steps are
@@ -128,6 +159,41 @@ func parseDevStart(script string) ([]devStep, error) {
 			st.Kind, st.Width, st.Height = devSize, w, h
 		case name == "quit":
 			st.Kind = devQuit
+		case strings.HasPrefix(name, "group="), strings.HasPrefix(name, "chat="):
+			key, val, _ := strings.Cut(name, "=")
+			if val != "on" && val != "off" {
+				return nil, fmt.Errorf("step %q: want %s=on or %s=off", name, key, key)
+			}
+			st.Kind, st.On = devGroup, val == "on"
+			if key == "chat" {
+				st.Kind = devChat
+			}
+		case strings.HasPrefix(name, "folder="), strings.HasPrefix(name, "row="), strings.HasPrefix(name, "shot="):
+			key, val, _ := strings.Cut(name, "=")
+			val = strings.TrimSpace(val)
+			if val == "" {
+				return nil, fmt.Errorf("step %q: want %s=<text>", name, key)
+			}
+			st.Text = val
+			switch key {
+			case "folder":
+				st.Kind = devFolder
+			case "row":
+				st.Kind = devRow
+			default:
+				st.Kind = devShot
+			}
+		case strings.HasPrefix(name, "board:"):
+			parts := strings.Split(strings.TrimPrefix(name, "board:"), ":")
+			s := board.ParseStyle(parts[0])
+			if s.Nick() != parts[0] || len(parts) > 2 || (len(parts) == 2 && parts[1] != "select") {
+				return nil, fmt.Errorf("step %q: want board:list|columns|today[:select]", name)
+			}
+			st.Kind, st.Style, st.Select = devBoardStyle, s, len(parts) == 2
+		case name == "compose-open":
+			st.Kind = devComposeOpen
+		case name == "crm-save":
+			st.Kind = devCrmSave
 		default:
 			return nil, fmt.Errorf("unknown step %q", name)
 		}
@@ -176,6 +242,17 @@ func (w *Window) startDevelopmentScript() {
 				return
 			}
 			glib.TimeoutAdd(uint(interval/time.Millisecond), func() bool {
+				if devBusy > 0 {
+					// A full interval again once the work is done.
+					glib.TimeoutAdd(100, func() bool {
+						if devBusy > 0 {
+							return true
+						}
+						next(i)
+						return false
+					})
+					return false
+				}
 				w.runDevStep(i+1, steps[i])
 				next(i + 1)
 				return false
@@ -252,6 +329,30 @@ func (w *Window) runDevStep(n int, st devStep) {
 		if app := w.Application(); app != nil {
 			app.Quit()
 		}
+		return
+	case devGroup:
+		w.settings.SetGroupByConversation(st.On)
+	case devChat:
+		w.settings.SetConversationChatLayout(st.On)
+	case devFolder:
+		w.devSelectFolder(st.Text)
+	case devRow:
+		w.devSelectRow(st.Text)
+	case devBoardStyle:
+		w.devBoard(st.Style, st.Select)
+	case devComposeOpen:
+		if app := w.Application(); app != nil {
+			app.ActivateAction("compose", nil)
+		}
+	case devCrmSave:
+		if a := w.LookupAction(crmActionSave); a != nil && a.Enabled() {
+			a.Activate(nil)
+		} else {
+			developmentPrint("MALACHI_GTK_START crm-save: the action is off")
+		}
+	case devShot:
+		// Answered from outside once the step has been drawn.
+		glib.IdleAdd(func() { developmentPrint("MALACHI_GTK_START shot %s", st.Text) })
 		return
 	}
 	// After the step has been laid out.
@@ -367,4 +468,137 @@ func (w *Window) modeMinLine() string {
 		}
 	}
 	return out
+}
+
+// devFindFolder is the first folder, accounts in the sidebar's order,
+// whose server name contains text, case-insensitively.
+func devFindFolder(accounts []api.Account, folders map[api.AccountID][]api.Folder, text string) (api.Folder, bool) {
+	needle := strings.ToLower(text)
+	for _, a := range accounts {
+		for _, f := range folders[a.ID] {
+			if strings.Contains(strings.ToLower(f.Name), needle) {
+				return f, true
+			}
+		}
+	}
+	return api.Folder{}, false
+}
+
+// devFindRow is the index of the first list row whose subject contains
+// text, case-insensitively; -1 without one.
+func devFindRow(rows []listRow, text string) int {
+	needle := strings.ToLower(text)
+	for i, r := range rows {
+		if strings.Contains(strings.ToLower(r.Message.Subject), needle) {
+			return i
+		}
+	}
+	return -1
+}
+
+// devRichestCase is the case whose loaded conversation has the most text
+// (the first of equals); "" without cases.
+func devRichestCase(cases []board.Case) board.CaseID {
+	var best board.CaseID
+	most := -1
+	for _, c := range cases {
+		n := 0
+		for _, m := range c.Messages {
+			n += len(m.Text)
+		}
+		if n > most {
+			best, most = c.ID, n
+		}
+	}
+	return best
+}
+
+// devSelectFolder is folder=: the folder shown as a click in the sidebar
+// would.
+func (w *Window) devSelectFolder(text string) {
+	f, ok := devFindFolder(w.model.accounts, w.model.folders, text)
+	if !ok {
+		developmentPrint("MALACHI_GTK_START folder: no folder with %q", text)
+		return
+	}
+	w.setMode(board.ModeMail)
+	k := folderKey{Account: f.AccountID, Folder: f.ID}
+	if r := w.folderRows[rowKey{folderKey: k}]; r != nil {
+		// The sidebar's row-selected handler takes it from here.
+		w.folderList.SelectRow(&r.ListBoxRow)
+	} else {
+		w.selectFolder(k)
+	}
+	developmentPrint("MALACHI_GTK_START folder: selected %q", f.Name)
+}
+
+// devSelectRow is row=: the row selected as a click would.
+func (w *Window) devSelectRow(text string) {
+	rows := make([]listRow, 0, w.model.rowCount())
+	for i := 0; i < w.model.rowCount(); i++ {
+		if r, ok := w.model.rowAt(i); ok {
+			rows = append(rows, r)
+		}
+	}
+	i := devFindRow(rows, text)
+	if i < 0 {
+		developmentPrint("MALACHI_GTK_START row: no row with %q among %d", text, len(rows))
+		return
+	}
+	r := w.rows[rows[i].Key]
+	if r == nil {
+		developmentPrint("MALACHI_GTK_START row: %q has no widget", rows[i].Message.Subject)
+		return
+	}
+	w.selectOnly(r.ListBoxRow)
+	developmentPrint("MALACHI_GTK_START row: selected %q", rows[i].Message.Subject)
+}
+
+// devBoard is board:<style>[:select]: the Board in the style, as the
+// style switch would, and with select the case with the most
+// conversation text, once every conversation has loaded (or after 10 s).
+func (w *Window) devBoard(s board.Style, sel bool) {
+	w.setMode(board.ModeBoard)
+	p := w.boardPage
+	if p == nil {
+		developmentPrint("MALACHI_GTK_START board: no board")
+		return
+	}
+	p.styleSwitch.SetActiveName(styleNick(s))
+	if !sel {
+		return
+	}
+	// The board may not have its cases yet (the page was just built):
+	// every round asks for the conversations not asked for so far.
+	asked := map[board.CaseID]bool{}
+	start := time.Now()
+	devBusy++
+	glib.TimeoutAdd(250, func() bool {
+		cases := p.src.Snapshot().Cases
+		waiting := len(cases) == 0
+		for _, c := range cases {
+			if c.MessagesLoaded || c.MessagesFailed {
+				continue
+			}
+			waiting = true
+			if !asked[c.ID] {
+				asked[c.ID] = true
+				p.src.LoadMessages(c.ID)
+			}
+		}
+		if waiting && time.Since(start) < 10*time.Second {
+			return true
+		}
+		loaded := 0
+		for _, c := range cases {
+			if c.MessagesLoaded {
+				loaded++
+			}
+		}
+		id := devRichestCase(cases)
+		p.ctl.Select(id)
+		devBusy--
+		developmentPrint("MALACHI_GTK_START board: selected %s of %d (%d conversations loaded)", id, len(cases), loaded)
+		return false
+	})
 }
