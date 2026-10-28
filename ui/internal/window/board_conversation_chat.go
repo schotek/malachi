@@ -238,6 +238,13 @@ func (c *boardChat) apply(d *board.Detail) {
 	}
 	c.visible = true
 	c.stack.SetVisible(true)
+	// GtkStack leaves a page that is hidden (the cards' column while the
+	// conversation loads) for another and does not come back to it.
+	if c.shown {
+		c.stack.SetVisibleChildName(boardChatPage)
+	} else {
+		c.stack.SetVisibleChildName(boardChatCards)
+	}
 	chatExpandedScope(&c.expanded, &c.expandedScope, string(d.ID))
 	if d.AccountID != c.account {
 		c.entries = map[api.MessageID]*loadedMessage{}
