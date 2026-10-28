@@ -87,6 +87,8 @@ type conversationChat struct {
 	scroll       convChatScroll
 	last         *convAnchor
 	settingValue bool
+	// relayoutQueued: setTop's idle layout of the viewport is pending.
+	relayoutQueued bool
 	// columnWidth is the column's inner width the rows were last sized
 	// for (followSize; 0 before the first allocation), compact whether the
 	// bubbles show the short date (convChatCompactDates).
@@ -645,9 +647,28 @@ func (cv *conversationChat) scrollToEnd() {
 	if math.Abs(top-adj.Value()) < 0.5 {
 		return
 	}
+	cv.setTop(top)
+}
+
+// setTop moves the viewport's top to top without counting it as the
+// user's scroll. Its callers run inside the viewport's allocation (the
+// adjustment's "changed"), where the allocation the new value queues is
+// dropped and the rows stay drawn at the old one until something else
+// lays them out; the viewport is laid out again once that is over.
+func (cv *conversationChat) setTop(top float64) {
 	cv.settingValue = true
-	adj.SetValue(top)
+	cv.scroller.VAdjustment().SetValue(top)
 	cv.settingValue = false
+	if cv.relayoutQueued {
+		return
+	}
+	cv.relayoutQueued = true
+	glib.IdleAdd(func() {
+		cv.relayoutQueued = false
+		if c := cv.scroller.Child(); c != nil {
+			gtk.BaseWidget(c).QueueAllocate()
+		}
+	})
 }
 
 // spanOf is w's stretch of the document; false while w is not in the
@@ -696,9 +717,7 @@ func (cv *conversationChat) restore(a *convAnchor) {
 	if math.Abs(top-adj.Value()) < 0.5 {
 		return
 	}
-	cv.settingValue = true
-	adj.SetValue(top)
-	cv.settingValue = false
+	cv.setTop(top)
 }
 
 // pageBy scrolls one page down (or up) for Space (Shift+Space) in the list
