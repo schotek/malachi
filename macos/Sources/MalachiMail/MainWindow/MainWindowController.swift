@@ -154,6 +154,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     /// the app installs it.
     var mailFocusFallback: (@MainActor () -> Void)?
 
+    /// DEVELOPMENT AID: the list controller, for the `row=` step of
+    /// `MALACHI_START` (MainWindowController+DevStart.swift); set by
+    /// Integration, used by nothing else.
+    var developmentList: ListController?
+    /// DEVELOPMENT AID: the mailbox controller, for the `folder=` step.
+    var developmentMailbox: MailboxController?
+
     private let toolbarDelegate: MainToolbar
     /// The toolbar's Assistant menu (ui/internal/assistant), with Summarize
     /// Unread in This Folder.

@@ -82,6 +82,8 @@ final class Integration {
         }
 
         list = ListController(mailbox: mailbox, settings: state.settings)
+        mainWindow.developmentList = list
+        mainWindow.developmentMailbox = mailbox
         listView = MessageListViewController(
             list: list, mailbox: mailbox, connection: state.connection, settings: state.settings)
         cache = MessageCache(client: state.client, toast: mainToast)
