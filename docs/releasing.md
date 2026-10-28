@@ -202,13 +202,20 @@ job is skipped and the release gets no Windows zips.
 
 Those zips are **not** release artefacts, which is why the variable is
 not set. A release's Windows assets are built by hand on a Windows
-machine, from a worktree at the tag, with `build.ps1 installer` (or, for a
-tag older than the installer, `windows\installer\build-installer.ps1`
-over that tag's app folder; [windows/README.md](../windows/README.md#installer)),
-for **x64** and **arm64**, and uploaded with
-`gh release upload v<version> build\windows\Malachi-Mail-<version>-*`:
-`Malachi-Mail-<version>-<arch>-Setup.exe` (Inno Setup, per user) and
-`Malachi-Mail-<version>-<arch>.zip`. The first was 0.1.2. The licence
+machine, from a clean checkout of the tag, after the release exists on
+GitHub (step 6 of §3 and the tag's CI):
+
+```sh
+git checkout v0.1.3
+make windows-installer      # x64 and arm64: build, then gh release upload v0.1.3
+```
+
+That uploads `Malachi-Mail-<version>-<arch>-Setup.exe` (Inno Setup, per
+user) and `Malachi-Mail-<version>-<arch>.zip` for **x64** and **arm64**
+(`windows\build.ps1 release` without make; prerequisites, `NO_UPLOAD=1`
+and `CLOBBER=1` in [windows/README.md](../windows/README.md#installer)).
+A tag older than the target (0.1.2) used
+`windows\installer\build-installer.ps1` over that tag's app folder. The first was 0.1.2. The licence
 permission for Microsoft's components is in [LICENSING.md](../LICENSING.md)
 (2026-10-28). Still open
 ([windows-port.md §17](windows-port.md#17-before-a-public-release)):

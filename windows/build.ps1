@@ -24,11 +24,15 @@
 #   package  app, then build\windows\Malachi-Mail-<version>-<arch>.zip
 #   installer app, then build\windows\Malachi-Mail-<version>-<arch>-Setup.exe and the
 #            zip beside it (installer\build-installer.ps1; Inno Setup 6)
+#   release  installer for x64 and for arm64, then gh release upload v<version> of the
+#            four files; only from a clean checkout of a release tag, and only to a
+#            release that exists (make windows-installer)
 #   clean    remove build\windows
 #
 # Options: -Configuration Debug|Release, -Arch x64|arm64 (default: this
 # machine's), -Version (default: git describe), -BuildDir (default: build\ in
-# the repository).
+# the repository); for release -NoUpload (build only) and -Clobber
+# (replace files the release already has).
 #
 # It runs on Windows PowerShell 5.1 and on PowerShell 7: no ternaries, ?? or
 # &&; files are read and written through .NET as UTF-8 without BOM, never
@@ -39,14 +43,16 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('version', 'go', 'build', 'icons', 'app', 'test', 'run', 'lint', 'package', 'installer', 'clean')]
+    [ValidateSet('version', 'go', 'build', 'icons', 'app', 'test', 'run', 'lint', 'package', 'installer', 'release', 'clean')]
     [string] $Target = 'app',
     [ValidateSet('', 'Debug', 'Release')]
     [string] $Configuration = '',
     [ValidateSet('', 'x64', 'arm64')]
     [string] $Arch = '',
     [string] $Version = '',
-    [string] $BuildDir = ''
+    [string] $BuildDir = '',
+    [switch] $NoUpload,
+    [switch] $Clobber
 )
 
 $ErrorActionPreference = 'Stop'
@@ -82,7 +88,7 @@ if ($Arch -eq 'arm64') {
     $Platform = 'ARM64'
 }
 if (-not $Configuration) {
-    if (@('app', 'run', 'package', 'installer') -contains $Target) {
+    if (@('app', 'run', 'package', 'installer', 'release') -contains $Target) {
         $Configuration = 'Release'
     } else {
         $Configuration = 'Debug'
@@ -546,6 +552,68 @@ function Invoke-Installer {
     & (Join-Path $Here 'installer\build-installer.ps1') -AppDir $AppDir -Version $V.Full -Arch $Arch -OutDir $WinBuild
 }
 
+function Get-Gh {
+    return Get-Tool 'gh' 'GH' (Join-Path $env:ProgramFiles 'GitHub CLI\gh.exe') 'install the GitHub CLI (winget install GitHub.cli) and run gh auth login'
+}
+
+# The Windows assets of a release: the installer and the zip for both
+# architectures, uploaded to the GitHub release of the version's tag
+# (docs/releasing.md section 7). The checks come first, so that a wrong
+# version or a missing sign-in fails before the builds' quarter of an hour:
+# the version must be a bare release (a clean checkout of the tag, which
+# git describe gives as 0.1.3; never 0.1.3-2-gabc1234 or -dirty), and the
+# release must already exist, published or draft; this never creates or
+# edits one. Nothing is replaced unless -Clobber.
+function Invoke-Release {
+    $tag = "v$($V.Full)"
+    $gh = $null
+    if (-not $NoUpload) {
+        if ($V.Full -notmatch '^\d+\.\d+\.\d+$') {
+            throw ("version $($V.Full) is not a release: check out the tag (git checkout v<version>) " +
+                'on a clean tree, or build without uploading (-NoUpload, make windows-installer NO_UPLOAD=1)')
+        }
+        $gh = Get-Gh
+        Invoke-Native $gh @('auth', 'status')
+        # No quotes in the arguments: Windows PowerShell 5.1 passes
+        # embedded quotes to a native command mangled.
+        try {
+            Invoke-Native $gh @('release', 'view', $tag, '--json', 'tagName,isDraft', '--jq', '.tagName,.isDraft') $Root
+        } catch {
+            throw ("GitHub has no release $tag (or gh cannot read it): push the tag and create the release " +
+                'first (a tag build of CI creates a draft); this target only adds files')
+        }
+    }
+    $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $files = @()
+    foreach ($arch in 'x64', 'arm64') {
+        # A process per architecture: the script's state ($Arch, $AppDir,
+        # $Platform) is fixed at its start.
+        Invoke-Native $powershell @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath, 'installer',
+            '-Arch', $arch, '-Configuration', $Configuration, '-Version', $V.Full, '-BuildDir', $BuildDir)
+        $files += Join-Path $WinBuild ('Malachi-Mail-{0}-{1}-Setup.exe' -f $V.Full, $arch)
+        $files += Join-Path $WinBuild ('Malachi-Mail-{0}-{1}.zip' -f $V.Full, $arch)
+    }
+    foreach ($file in $files) {
+        if (-not (Test-Path -LiteralPath $file)) {
+            throw "$file was not built"
+        }
+    }
+    if ($NoUpload) {
+        Write-Host "built $($files.Count) files for $tag in $WinBuild; not uploaded (-NoUpload)"
+        return
+    }
+    $arguments = @('release', 'upload', $tag) + $files
+    if ($Clobber) {
+        $arguments += '--clobber'
+    }
+    Invoke-Native $gh $arguments $Root
+    Write-Host "uploaded to ${tag}:"
+    foreach ($file in $files) {
+        $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLowerInvariant()
+        Write-Host ('  {0}  {1}' -f $hash, [System.IO.Path]::GetFileName($file))
+    }
+}
+
 try {
     switch ($Target) {
         'version' {
@@ -561,6 +629,7 @@ try {
         'lint' { Invoke-Lint }
         'package' { Invoke-Package }
         'installer' { Invoke-Installer }
+        'release' { Invoke-Release }
         'clean' {
             if (Test-Path -LiteralPath $WinBuild) {
                 Remove-Item -LiteralPath $WinBuild -Recurse -Force

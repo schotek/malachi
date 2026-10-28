@@ -4776,8 +4776,10 @@ daemon's graceful stop), recorded in §10 and §11.
 The client is complete as a mail client. Since 0.1.2 (2026-10-28) it is
 distributed: the release carries an installer and a portable zip for x64
 and for ARM64 (`Malachi-Mail-<version>-<arch>-Setup.exe`,
-`Malachi-Mail-<version>-<arch>.zip`), built on a Windows machine with
-`build.ps1 installer`, never by CI.
+`Malachi-Mail-<version>-<arch>.zip`), built on a Windows machine from a
+clean checkout of the tag with `make windows-installer` (`build.ps1
+release`: both architectures, then `gh release upload` to the existing
+release), never by CI.
 
 - **Licence.** Settled: `LICENSING.md` carries the GPLv3 §7 additional
   permission for the Microsoft platform components (the Windows App SDK,

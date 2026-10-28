@@ -94,7 +94,7 @@ UI_TAGS     := -tags nosound
 $(warning gsound not found via pkg-config; building the UI without notification sound (install gsound-devel))
 endif
 
-.PHONY: all build backend mcp ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run deb rpm macos macos-dmg macos-notarize macos-go run-macos test-macos run-gtk run-gtk-live windows run-windows test-windows help FORCE
+.PHONY: all build backend mcp ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run deb rpm macos macos-dmg macos-notarize macos-go run-macos test-macos run-gtk run-gtk-live windows run-windows test-windows windows-installer help FORCE
 
 all: build
 
@@ -358,6 +358,7 @@ endif
 ## windows: build the Windows app build/windows/<arch>/Malachi Mail with malachid, malachi-mcp and malachi-credentials inside (Windows only)
 ## run-windows: build the Windows app and run it from the terminal until its window closes (Windows only)
 ## test-windows: run the tests of the Windows client (Windows only)
+## windows-installer: build the Windows installers and zips for x64 and arm64 and upload them to the GitHub release of the checked-out tag; NO_UPLOAD=1 only builds, CLOBBER=1 replaces existing files (Windows only)
 ifeq ($(OS),Windows_NT)
 WINDOWS_PS  := powershell.exe -NoProfile -ExecutionPolicy Bypass -File windows/build.ps1
 
@@ -369,8 +370,15 @@ run-windows: backend mcp
 
 test-windows: backend mcp
 	$(WINDOWS_PS) test -Version "$(VERSION)" -BuildDir "$(CURDIR)/$(BUILD_DIR)"
+
+# Both architectures and the upload are build.ps1's release target; it
+# checks the version (a clean checkout of the tag) and the release before
+# it builds anything.
+windows-installer:
+	$(WINDOWS_PS) release -Version "$(VERSION)" -BuildDir "$(CURDIR)/$(BUILD_DIR)" \
+		$(if $(filter 1,$(NO_UPLOAD)),-NoUpload) $(if $(filter 1,$(CLOBBER)),-Clobber)
 else
-windows run-windows test-windows:
+windows run-windows test-windows windows-installer:
 	@echo "$@ needs Windows (this is $(UNAME_S)); see windows/README.md" >&2; exit 1
 endif
 

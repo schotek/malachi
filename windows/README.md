@@ -76,8 +76,11 @@ as a comment after the XML declaration; JSON and Markdown carry none).
   root Makefile's recipes.
 - GNU make, optional: `winget install ezwinports.make` (4.4). Everything
   works without it through `windows\build.ps1`.
-- Inno Setup 6.4 or newer, only for the `installer` target:
-  `winget install JRSoftware.InnoSetup` (`ISCC` names another `ISCC.exe`).
+- Inno Setup 6.4 or newer, only for the `installer` and `release` targets:
+  `winget install JRSoftware.InnoSetup` (`ISCC` names another `ISCC.exe`);
+  for `release` also the GitHub CLI (`winget install GitHub.cli`, then
+  `gh auth login`; `GH` names another `gh.exe`). A terminal opened before
+  winget installed them does not find them; open a new one.
 - Windows PowerShell 5.1, which every Windows has (`build.ps1` runs on
   PowerShell 7 as well).
 
@@ -131,6 +134,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 <target> [
 | `lint` | `dotnet format --verify-no-changes` and the conventions tests |
 | `package` | `app`, then `build\windows\Malachi-Mail-<version>-<arch>.zip` (unsigned) |
 | `installer` | `app`, then `build\windows\Malachi-Mail-<version>-<arch>-Setup.exe` and the portable `Malachi-Mail-<version>-<arch>.zip` beside it (`installer\build-installer.ps1`, Inno Setup 6; unsigned; see [Installer](#installer)) |
+| `release` | `installer` for x64 and arm64, then `gh release upload v<version>` of the four files (`make windows-installer`; `-NoUpload`, `-Clobber`; see [Installer](#installer)) |
 | `clean` | removes `build\windows\` |
 
 Options: `-Configuration Debug|Release`, `-Arch x64|arm64` (default: this
@@ -213,8 +217,29 @@ docs/windows-port.md §17) and keeps the mail data
 Credential Manager. Silent: `Setup.exe /VERYSILENT` and `unins000.exe
 /VERYSILENT`.
 
-A release of an older tag runs the script directly with that tag's app
-folder (built from a worktree at the tag, so the version is exact) and
+The Windows assets of a release, both architectures at once, from a clean
+checkout of the release tag on a Windows machine (an x64 or ARM64 one with
+the MSVC tools for both, Inno Setup and the GitHub CLI signed in with
+`gh auth login`):
+
+```sh
+git checkout v0.1.3
+make windows-installer          # builds x64 and arm64, uploads the four files to release v0.1.3
+make windows-installer NO_UPLOAD=1   # builds only (any clean version)
+make windows-installer CLOBBER=1     # replaces files the release already has
+```
+
+Without make: `windows\build.ps1 release [-NoUpload] [-Clobber]`. It checks
+first, before the builds' quarter of an hour, that the version is a bare
+release (`0.1.3`, not `0.1.3-2-gabc1234` or `-dirty`), that gh is signed in
+and that GitHub has the release `v0.1.3` (published or draft; it never
+creates or edits a release, only adds files, and replaces none without
+`CLOBBER=1`). It prints the SHA-256 of what it uploaded. The release notes
+are written by hand (`NEWS`); say there that the installers are unsigned.
+The build always runs on Windows by hand, never in CI.
+
+A release of a tag older than the installer (0.1.2) runs the script
+directly with that tag's app folder (built from a worktree at the tag, so the version is exact) and
 the current `LICENSING.md`:
 
 ```powershell
