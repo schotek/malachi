@@ -317,6 +317,22 @@ display's native scale (150 % gives 2160×1350 px, 100 % gives 1440×900 px)
 with the window still 1440×900 logical, and the scale in the notes. The
 light theme, the default accent colour, Mica as the app has it.
 
+As built (2026-10-28, branch `shots/windows`): the port of
+`MALACHI_START` into `Malachi.App` (`MainWindow.DevStart.cs`, the parser
+in Core's `DevelopmentStart` with tests; `docs/windows-port.md` §12), the
+language override `MALACHI_LANGUAGES` (`docs/windows-port.md` §9: the
+tags, and the first one as the regional format) and
+`scripts/screenshots/windows.ps1`, which starts the world as the block
+above does (`start en|cs`) and runs the app through the two scripts of
+§3 (`shots en|cs OUTDIR`, with `MALACHI_START_SIZE=1440x900` — the
+visible frame, so the picture is 2880×1800 px at 200 % — and
+`MALACHI_START_INTERVAL=4`); the first run begins with `folder=inbox`,
+as the Linux set does. The `shot=` step writes the PNG itself: the
+window brought to the front, its extended frame bounds copied from the
+screen (Mica, the WebView2s and a `ContentDialog` as the user sees
+them), or rendered by `PrintWindow` when it could not take the
+foreground, which the step's line on stderr says.
+
 ## 7. The hand-over
 
 One branch per platform from `main` (at or after the commit that added
