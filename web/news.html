@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What's new – Malachi Mail</title>
+<meta name="description" content="Release notes of every version of Malachi Mail.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="What's new – Malachi Mail">
+<meta property="og:description" content="Release notes of every version of Malachi Mail.">
+<meta property="og:locale" content="en_GB">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0b3260">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="assets/icon-32.png" sizes="32x32">
+<link rel="icon" href="assets/icon-64.png" sizes="64x64">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<link rel="alternate" hreflang="en" href="news.html">
+<link rel="alternate" hreflang="cs" href="cs/news.html">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/icon-64.png" alt="" width="32" height="32">Malachi Mail</a>
+    <nav aria-label="Main">
+      <a href="features.html">Features</a>
+      <a href="download.html">Download</a>
+      <a href="news.html" aria-current="page">What's new</a>
+      <a class="lang" href="cs/news.html" lang="cs" hreflang="cs">Česky</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="band page-head">
+  <div class="wrap">
+    <div class="eyebrow">What's new</div>
+    <h1>What's new</h1>
+    <p class="lead">Every version, newest first. The same notes appear in the software centres on Linux.</p>
+  </div>
+</div>
+
+<section>
+  <div class="wrap prose">
+
+    <article class="release" id="v0.1.2">
+      <h2>Version 0.1.2 <span class="date">26 October 2026</span></h2>
+      <h3>Bugfixes</h3>
+      <ul>
+        <li>The macOS app builds again with Xcode 26.6.</li>
+        <li>Fixed tests of meeting invitations that depended on the date they ran on.</li>
+      </ul>
+    </article>
+
+    <article class="release" id="v0.1.1">
+      <h2>Version 0.1.1 <span class="date">26 October 2026</span></h2>
+      <h3>Notes</h3>
+      <ul>
+        <li>Malachi Mail now also runs on Windows 11 and macOS, with a native window on each. It is still an early version: keep a second mail program for anything that matters.</li>
+      </ul>
+      <h3>Features</h3>
+      <ul>
+        <li>Gmail and Google Workspace accounts, through GNOME Online Accounts or a sign-in in the browser; Microsoft 365 can sign in in the browser too.</li>
+        <li>Conversations: the message list can be grouped by conversation, and a conversation is shown as cards on a timeline or as a chat, with your own replies from Sent and unsent drafts in place.</li>
+        <li>A quick reply under a message or a chat, without opening a window.</li>
+        <li>Search of the stored mail, as you type, in a folder, an account or all accounts.</li>
+        <li>Several messages can be selected and archived, moved, deleted, marked or forwarded together; messages and folders have context menus.</li>
+        <li>Recipients are shown as removable badges while you write.</li>
+        <li>Plain text that looks like Markdown is pasted as formatted text.</li>
+        <li>Newsletters and mailing lists are recognised and can be unsubscribed from with one click where the sender allows it.</li>
+        <li>Jira issues can be followed as conversations: comments, status changes and replies from Malachi Mail, and Jira notification mail can be hidden.</li>
+        <li>A calendar for Microsoft 365 and CalDAV servers, with invitations answered from the message and reminders.</li>
+        <li>The Board sorts conversations that wait for you, wait for others or are just for your information, with reminders, Done and archive.</li>
+        <li>eWay-CRM: messages can be saved to the CRM with links to contacts, companies, deals and projects, and saved conversations followed.</li>
+        <li>An assistant (Claude Code or ChatGPT, run on your own account) can summarise mail, rewrite what you write, turn your words into a search, suggest replies and sort the Board; a profile tells it about you.</li>
+        <li>An MCP bridge lets AI agents read your mail and write drafts; changing or sending mail needs your explicit permission.</li>
+        <li>Mail can be stored compressed, and attachments of older mail left on the server or never stored at all.</li>
+        <li>A server certificate can be trusted explicitly by its fingerprint.</li>
+      </ul>
+    </article>
+
+    <article class="release" id="v0.1.0">
+      <h2>Version 0.1.0 <span class="date">6 September 2026</span></h2>
+      <h3>Notes</h3>
+      <ul>
+        <li>First tagged release. Mail can be read, written and sent, but this is still an early version: keep a second mail program for anything that matters.</li>
+      </ul>
+      <h3>Features</h3>
+      <ul>
+        <li>IMAP accounts with a setup assistant that finds the server settings for most providers; passwords are kept in the system keyring.</li>
+        <li>Mail is synchronised for offline reading, with new messages arriving as the server announces them.</li>
+        <li>Writing and sending, with formatted text, attachments and inline images. A message that cannot be sent right away waits in the outbox and is retried; a copy is filed in Sent.</li>
+        <li>Microsoft 365 and Outlook.com accounts through GNOME Online Accounts, with no separate sign-in.</li>
+        <li>HTML mail is cleaned before it is shown, and remote images stay blocked until you ask for them or trust the sender. Attached messages open in a window of their own.</li>
+        <li>Attachments can be opened, saved one by one or saved all at once.</li>
+        <li>The message list can be narrowed to unread or flagged messages.</li>
+        <li>The folder sidebar can be folded, and folders pinned to Favourites.</li>
+        <li>Recipients are completed from the system address books and from the people you have written to before.</li>
+        <li>Czech translation.</li>
+      </ul>
+      <h3>Known gaps at the time</h3>
+      <ul>
+        <li>Search and conversation threading were not available yet.</li>
+        <li>Gmail accounts were not supported yet.</li>
+      </ul>
+    </article>
+
+    <p class="small muted">The files of every version, including the old ones, stay on the <a href="https://github.com/schotek/malachi/releases">releases page</a>; the current one is on <a href="download.html">Download</a>.</p>
+  </div>
+</section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div>
+      <a class="brand" href="index.html"><img src="assets/icon-64.png" alt="" width="32" height="32">Malachi Mail</a>
+      <p>Free software under the <a href="https://github.com/schotek/malachi/blob/main/LICENSING.md">AGPL and GPL licences</a>, with no account, no subscription and no telemetry.</p>
+      <p><em>Malachi</em> is the prophet Malachi, Hebrew <em>malʼākî</em>, "my messenger".</p>
+    </div>
+    <ul>
+      <li><a href="download.html">Download</a></li>
+      <li><a href="news.html">What's new</a></li>
+      <li><a href="https://github.com/schotek/malachi">Source code</a></li>
+      <li><a href="https://github.com/schotek/malachi/issues">Report a problem</a></li>
+    </ul>
+  </div>
+</footer>
+
+</body>
+</html>

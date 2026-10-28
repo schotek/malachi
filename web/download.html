@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Download – Malachi Mail</title>
+<meta name="description" content="Download Malachi Mail 0.1.2 for Linux as a Flatpak, .deb or .rpm, and build the macOS and Windows apps from source.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Download – Malachi Mail">
+<meta property="og:description" content="Download Malachi Mail 0.1.2 for Linux as a Flatpak, .deb or .rpm, and build the macOS and Windows apps from source.">
+<meta property="og:locale" content="en_GB">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0b3260">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="assets/icon-32.png" sizes="32x32">
+<link rel="icon" href="assets/icon-64.png" sizes="64x64">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<link rel="alternate" hreflang="en" href="download.html">
+<link rel="alternate" hreflang="cs" href="cs/download.html">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 4h10a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H9l-4 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M19 9h1a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-1v3l-4-3h-3"/></symbol>
+  <symbol id="i-board" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="9.5" y="4" width="5" height="11" rx="1.5"/><rect x="16" y="4" width="5" height="8" rx="1.5"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.4-7 10-4-1.6-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/></symbol>
+  <symbol id="i-feather" viewBox="0 0 24 24"><path d="M20 4c-5 0-10 3-12 8l-4 8 8-4c5-2 8-7 8-12z"/><path d="M4 20l8-8"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-ticket" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2M10 21v-3h4v3"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0V8z"/><path d="M12 17v4"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="i-window" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/></symbol>
+  <symbol id="i-cloud-off" viewBox="0 0 24 24"><path d="M7 18h11a4 4 0 0 0 .8-7.9A6 6 0 0 0 7.5 9"/><path d="M7 18a4 4 0 0 1-1-7.9"/><path d="M3 3l18 18"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+</svg>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/icon-64.png" alt="" width="32" height="32">Malachi Mail</a>
+    <nav aria-label="Main">
+      <a href="features.html">Features</a>
+      <a href="download.html" aria-current="page">Download</a>
+      <a href="news.html">What's new</a>
+      <a class="lang" href="cs/download.html" lang="cs" hreflang="cs">Česky</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="band page-head">
+  <div class="wrap">
+    <div class="eyebrow">Download</div>
+    <h1>Download</h1>
+    <p class="lead">The current version is <strong>0.1.2</strong>, released on 26 October 2026. Only Linux has binaries so far; the macOS and Windows apps are built from source until they are signed.</p>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <div class="dl">
+      <div class="card">
+        <div class="bar gnome" aria-hidden="true"></div>
+        <span class="status ready">Ready</span>
+        <h3>Linux</h3>
+        <p>x86_64 and aarch64. Flatpak, or a native package for a distribution with libadwaita 1.7 or newer.</p>
+        <ul>
+          <li><a href="https://github.com/schotek/malachi/releases/download/v0.1.2/malachi-0.1.2-x86_64.flatpak">Flatpak, x86_64</a> · <a href="https://github.com/schotek/malachi/releases/download/v0.1.2/malachi-0.1.2-aarch64.flatpak">aarch64</a></li>
+          <li><a href="https://github.com/schotek/malachi/releases/download/v0.1.2/malachi_0.1.2-1_amd64.deb">.deb, amd64</a> · <a href="https://github.com/schotek/malachi/releases/download/v0.1.2/malachi_0.1.2-1_arm64.deb">arm64</a></li>
+          <li><a href="https://github.com/schotek/malachi/releases/download/v0.1.2/malachi-0.1.2-1.fc42.x86_64.rpm">.rpm, x86_64</a> · <a href="https://github.com/schotek/malachi/releases/download/v0.1.2/malachi-0.1.2-1.fc42.aarch64.rpm">aarch64</a></li>
+        </ul>
+        <p class="muted small">Every version's files stay on the <a href="https://github.com/schotek/malachi/releases">releases page</a>.</p>
+      </div>
+      <div class="card">
+        <div class="bar mac" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="bar winui" aria-hidden="true">— ▢ ✕</div>
+        <span class="status soon">From source</span>
+        <h3>macOS</h3>
+        <p>macOS 14 or newer, Apple silicon and Intel. The app is built with Swift and AppKit and brings the engine with it.</p>
+        <p class="muted small">A universal disk image is built on every version tag and will be published once it is signed with a Developer ID and notarised, which waits for the project's Apple Developer membership. Until then, build it from source in a few minutes.</p>
+        <p><a class="btn" href="https://github.com/schotek/malachi#macos">Build on macOS</a></p>
+      </div>
+      <div class="card">
+        <span class="status soon">From source</span>
+        <h3>Windows</h3>
+        <p>Windows 11, x64 and ARM64. The app is built with C# and WinUI 3 and brings the engine with it.</p>
+        <p class="muted small">The app folder the build makes is unsigned and has no installer yet; handing it to others waits for a licence decision on the Microsoft components it carries. Until then, build it from source.</p>
+        <p><a class="btn" href="https://github.com/schotek/malachi#windows">Build on Windows</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap prose">
+    <h2 id="flatpak">Flatpak</h2>
+    <p>There is no Flathub listing yet. Download the bundle for your architecture and install it; it pulls the GNOME 48 runtime from Flathub.</p>
+<pre><code>flatpak install --user ./malachi-0.1.2-x86_64.flatpak</code></pre>
+    <p>Ubuntu does not ship Flatpak any more, so it takes one step first:</p>
+<pre><code>sudo apt install flatpak
+flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo</code></pre>
+    <p>The Flatpak is the build that updates itself: install a newer bundle over it and the data stays. The ChatGPT provider of the assistant is not available in the Flatpak build.</p>
+
+    <h2 id="packages">.deb and .rpm</h2>
+    <p>The native packages link the system GTK 4, libadwaita and WebKitGTK instead of carrying a runtime, so they need <strong>libadwaita 1.7 or newer</strong>: Ubuntu 26.04 LTS, Debian 14 and Fedora 42, but <em>not</em> Ubuntu 24.04 LTS, whose libadwaita is 1.5. On 24.04 take the Flatpak.</p>
+<pre><code>sudo apt install ./malachi_0.1.2-1_amd64.deb      # Debian, Ubuntu
+sudo dnf install ./malachi-0.1.2-1.fc42.x86_64.rpm   # Fedora</code></pre>
+    <p>There is no apt or dnf repository, so a package installed this way is not updated by <code>apt upgrade</code> or <code>dnf upgrade</code>. Unlike the Flatpak, these put <code>malachi-mcp</code> on <code>PATH</code>, which is what an MCP client needs to start it.</p>
+
+    <h2 id="data">Where your data goes</h2>
+    <p>Mail, settings and the local store live in the platform's application-data directory: <code>~/.local/share/malachi</code> on Linux (inside the Flatpak's sandbox for the Flatpak), <code>~/Library/Application Support/Malachi Mail</code> on macOS, <code>%LOCALAPPDATA%\Malachi Mail</code> on Windows. Passwords are in the system keyring. Nothing is sent anywhere but your own servers.</p>
+
+    <h2 id="source">From source</h2>
+    <p>The repository builds on all three platforms: Go 1.25 and GTK 4.18 for the Linux client, Xcode's Swift 6 toolchain on macOS 14, the .NET 10 SDK on Windows 11. The steps for each platform are in the <a href="https://github.com/schotek/malachi#building-from-source">build instructions</a>.</p>
+
+    <div class="note">
+      <p><strong>Early version.</strong> 0.1.2 reads, writes and sends mail on real accounts every day, but it is still an early version. Keep a second mail program for anything that matters, and read <a href="news.html">what's new</a> before updating.</p>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div>
+      <a class="brand" href="index.html"><img src="assets/icon-64.png" alt="" width="32" height="32">Malachi Mail</a>
+      <p>Free software under the <a href="https://github.com/schotek/malachi/blob/main/LICENSING.md">AGPL and GPL licences</a>, with no account, no subscription and no telemetry.</p>
+      <p><em>Malachi</em> is the prophet Malachi, Hebrew <em>malʼākî</em>, "my messenger".</p>
+    </div>
+    <ul>
+      <li><a href="download.html">Download</a></li>
+      <li><a href="news.html">What's new</a></li>
+      <li><a href="https://github.com/schotek/malachi">Source code</a></li>
+      <li><a href="https://github.com/schotek/malachi/issues">Report a problem</a></li>
+    </ul>
+  </div>
+</footer>
+
+</body>
+</html>

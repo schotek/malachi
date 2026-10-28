@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Features – Malachi Mail</title>
+<meta name="description" content="What Malachi Mail does today on Linux, macOS and Windows: accounts, offline reading, safe HTML, conversations, search, Jira, calendar, the Board, eWay-CRM, the assistant and the MCP bridge.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Features – Malachi Mail">
+<meta property="og:description" content="What Malachi Mail does today on Linux, macOS and Windows: accounts, offline reading, safe HTML, conversations, search, Jira, calendar, the Board, eWay-CRM, the assistant and the MCP bridge.">
+<meta property="og:locale" content="en_GB">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0b3260">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="assets/icon-32.png" sizes="32x32">
+<link rel="icon" href="assets/icon-64.png" sizes="64x64">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<link rel="alternate" hreflang="en" href="features.html">
+<link rel="alternate" hreflang="cs" href="cs/features.html">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 4h10a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H9l-4 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M19 9h1a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-1v3l-4-3h-3"/></symbol>
+  <symbol id="i-board" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="9.5" y="4" width="5" height="11" rx="1.5"/><rect x="16" y="4" width="5" height="8" rx="1.5"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.4-7 10-4-1.6-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/></symbol>
+  <symbol id="i-feather" viewBox="0 0 24 24"><path d="M20 4c-5 0-10 3-12 8l-4 8 8-4c5-2 8-7 8-12z"/><path d="M4 20l8-8"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-ticket" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2M10 21v-3h4v3"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0V8z"/><path d="M12 17v4"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="i-window" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/></symbol>
+  <symbol id="i-cloud-off" viewBox="0 0 24 24"><path d="M7 18h11a4 4 0 0 0 .8-7.9A6 6 0 0 0 7.5 9"/><path d="M7 18a4 4 0 0 1-1-7.9"/><path d="M3 3l18 18"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+</svg>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/icon-64.png" alt="" width="32" height="32">Malachi Mail</a>
+    <nav aria-label="Main">
+      <a href="features.html" aria-current="page">Features</a>
+      <a href="download.html">Download</a>
+      <a href="news.html">What's new</a>
+      <a class="lang" href="cs/features.html" lang="cs" hreflang="cs">Česky</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="band page-head">
+  <div class="wrap">
+    <div class="eyebrow">Features</div>
+    <h1>What works today</h1>
+    <p class="lead">Version 0.1.2, on all three platforms unless said otherwise. The GTK client on Linux is the reference; the macOS and Windows apps mirror it feature for feature with their platform's widgets.</p>
+  </div>
+</div>
+
+<section>
+  <div class="wrap with-toc">
+    <nav class="toc" aria-label="On this page">
+      <b>On this page</b>
+      <ul>
+        <li><a href="#accounts">Accounts</a></li>
+        <li><a href="#reading">Reading offline</a></li>
+        <li><a href="#html">HTML mail</a></li>
+        <li><a href="#writing">Writing</a></li>
+        <li><a href="#conversations">Conversations</a></li>
+        <li><a href="#search">Search</a></li>
+        <li><a href="#many">Many at once</a></li>
+        <li><a href="#newsletters">Newsletters</a></li>
+        <li><a href="#jira">Jira</a></li>
+        <li><a href="#calendar">Calendar</a></li>
+        <li><a href="#board">The Board</a></li>
+        <li><a href="#crm">eWay-CRM</a></li>
+        <li><a href="#assistant">The Assistant</a></li>
+        <li><a href="#mcp">MCP bridge</a></li>
+        <li><a href="#desktop">Desktop</a></li>
+        <li><a href="#security">Security and privacy</a></li>
+        <li><a href="#platforms">The three clients</a></li>
+        <li><a href="#not-yet">Not yet</a></li>
+      </ul>
+    </nav>
+    <div class="prose">
+
+    <h2 id="accounts"><svg class="icon"><use href="#i-mail"/></svg>Accounts</h2>
+    <p>IMAP and SMTP with a setup assistant that finds the server settings for most providers from the address alone. Microsoft 365 and Outlook.com sign in in your browser out of the box, through Microsoft Graph. Gmail and Google Workspace sign in with an app password or with a Google OAuth client of your own. On GNOME, both can also come from GNOME Online Accounts, with no separate sign-in.</p>
+    <p>Passwords and tokens live in the system keyring: Secret Service on Linux, the login keychain on macOS, Credential Manager on Windows. A server with a certificate of its own can be trusted explicitly, by its fingerprint, after you have seen it; there is no general <em>ignore certificate</em>.</p>
+
+    <h2 id="reading"><svg class="icon"><use href="#i-cloud-off"/></svg>Reading, offline</h2>
+    <p>Folders and messages are synchronised into a local store within a configurable retention window, and new mail arrives as the server announces it (IMAP IDLE, Graph polling). Flags, moves and deletions are queued locally and pushed back, so the client works on a train.</p>
+    <p>To save disk space the stored mail is kept compressed, and the large attachments of older messages can stay on the server until you open them. With <em>Never Store Attachments</em> none is stored but the pictures a message shows: an attachment you open is downloaded into memory and is gone when you quit. Drafts and signed or encrypted mail always stay whole.</p>
+
+    <h2 id="html"><svg class="icon"><use href="#i-shield"/></svg>HTML mail, safely</h2>
+    <p>Message bodies are sanitised in the engine before any window sees them; raw HTML never crosses the engine's boundary. Remote images stay blocked until you load them once or trust the sender; the renderer runs with JavaScript off, a strict content security policy and no network at all. Attached messages open read-only in their own window. Other attachments open in a preview (GNOME Sushi, Quick Look, a viewer of the app's own on Windows) and carry the system's quarantine mark when saved.</p>
+
+    <h2 id="writing"><svg class="icon"><use href="#i-feather"/></svg>Writing</h2>
+    <p>Formatted text, attachments and inline images. Recipients are completed from the people you have written to, and on GNOME from the system address books too, and become removable badges. Plain text that looks like Markdown is pasted as formatted text. A message that cannot go out right away waits in a local Outbox and is retried; a copy is filed in Sent. Drafts rest in the account's Drafts folder, so another client sees them as well.</p>
+
+    <h2 id="conversations"><svg class="icon"><use href="#i-chat"/></svg>Conversations</h2>
+    <p>The engine threads mail by its headers as it arrives; <em>Group by Conversation</em> turns the message list into one row per conversation. A conversation is shown as cards on a timeline or as a chat of bubbles, your own replies from Sent and your unsent drafts in place, the quoted history folded away. A quick-reply bar under a message or a chat answers without opening a window; <em>Open in a Window</em> takes what you typed with it.</p>
+
+    <h2 id="search"><svg class="icon"><use href="#i-search"/></svg>Search</h2>
+    <p><kbd>Ctrl</kbd>+<kbd>F</kbd> (<kbd>⌘F</kbd>) searches the mail stored on this computer in the folder, its account or every account, while you type: every word as a prefix, case and diacritics ignored ("priloh" finds "Přílohy"), plus <code>from:</code>, <code>to:</code>, <code>subject:</code>, <code>is:unread</code>, <code>has:attachment</code>, dates and <code>in:</code> a folder. With the assistant, <em>Search in your own words</em> turns "invoices from Jana in March" into that query.</p>
+
+    <h2 id="many"><svg class="icon"><use href="#i-layers"/></svg>Many messages at once</h2>
+    <p>Several messages can be selected and archived, moved, deleted, marked or forwarded together (each as an attached <code>.eml</code>). Messages, folders and accounts have context menus: Move To, Mark All as Read, Empty Trash. The Inbox has collapsible date sections with flagged messages first.</p>
+
+    <h2 id="newsletters"><svg class="icon"><use href="#i-list"/></svg>Newsletters</h2>
+    <p>Mailing lists and newsletters are recognised from their headers and labelled in the list. Where the sender supports one-click unsubscribing, one click does it, through the engine and only after the sender's DKIM signature has been verified, never by opening a link; otherwise the unsubscribe mail is sent for you.</p>
+
+    <h2 id="jira"><svg class="icon"><use href="#i-ticket"/></svg>Jira</h2>
+    <p>A Jira Cloud or Data Center site is an account. Its issues are read as conversations: the description, the comments, the status and assignee changes. The sidebar has the chosen projects and the views Assigned to Me, Watching and Open. A comment takes the place of a reply, a status change is made from the issue card, and the site's notification mail in your mail accounts is linked to the issue or hidden. Jira Cloud signs in with an API token, Data Center with a personal access token.</p>
+
+    <h2 id="calendar"><svg class="icon"><use href="#i-calendar"/></svg>Calendar</h2>
+    <p>The calendars of Microsoft 365 and Outlook.com accounts (when you switch them on) and of CalDAV servers (Nextcloud, iCloud, Fastmail, Radicale and others, as a calendar-only account) are kept offline and shown by day, week, month or as an agenda, with reminders. Invitations that arrive in any mail account can be accepted, tentatively accepted or declined from the message; replies and invitations go through the server or, where it does not send them, as invitation mail through the Outbox. <em>Find a free slot</em> looks across your calendars.</p>
+
+    <h2 id="board"><svg class="icon"><use href="#i-board"/></svg>The Board</h2>
+    <p>A view beside Mail and Calendar that sorts your conversations and Jira issues into <strong>Hot</strong>, <strong>Waiting for You</strong>, <strong>Waiting for Them</strong> and <strong>For Your Information</strong>. The rules read only headers, the structure of a message and where it is filed, never its words; your own decision always wins over them. A case has Done, Remind (later today, tomorrow, next week), Archive and Delete, and a suggested reply from the assistant is edited right on the board. Archiving a conversation in Mail marks its case done, and a new answer brings it back.</p>
+
+    <h2 id="crm"><svg class="icon"><use href="#i-building"/></svg>eWay-CRM</h2>
+    <p>A message can be saved to eWay-CRM with links to contacts, companies, deals and projects, from any mail account, and the rest of its conversation follows it automatically. The connection is set up under Preferences → Integrations; the password goes to the keyring and the session stays on your computer.</p>
+
+    <h2 id="assistant"><svg class="icon"><use href="#i-sparkle"/></svg>The Assistant</h2>
+    <p>Optional and experimental. With the MCP bridge registered, the ✦ button hands the selected message, conversation or folder to Claude Desktop (macOS and Windows) or Claude Code with a prepared question, or runs your own Claude Code (or ChatGPT, through Codex) in a panel of the main window with only the bridge's reading and drafting tools. It summarises, finds tasks and deadlines, writes and rewrites replies (more polite, shorter, fixed, translated, or by your own instruction), turns your words into a search, triages the Board and suggests replies on it, and in the Calendar tells you what is on today or finds a free slot.</p>
+    <p>A profile under Preferences → AI → About Me tells it who you are, the gender you write in and a note per account. Nothing is sent to the model before you ask, the first question asks for your consent, and nothing is sent by mail before you send the draft yourself.</p>
+
+    <h2 id="mcp"><svg class="icon"><use href="#i-plug"/></svg>AI agents: the MCP bridge</h2>
+    <p><code>malachi-mcp</code> is a Model Context Protocol server over stdio that gives an agent (Claude Code, Claude Desktop, Zed, Cursor or any other MCP client) a gated view of the mail, the calendar and the board. It is a client of the engine exactly like the desktop apps, with no mail logic and no credentials of its own. What an agent may do is decided when the server starts, not by the model; a tool outside the granted tier is never registered.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Tier</th><th>How to grant</th><th>What it adds</th></tr></thead>
+        <tbody>
+          <tr><td>Read and draft</td><td>always on</td><td>accounts, folders, messages, search, attachments (with the text of PDF, DOCX and XLSX), sync, Jira transitions, the board, calendars, events, free time, invitations, the user profile, and drafts (a reply, a reply to all, a forward, a new message, a Jira comment)</td></tr>
+          <tr><td>Modify</td><td><code>-allow-modify</code></td><td>mark, move and delete messages, change an issue's status, unsubscribe, create an event</td></tr>
+          <tr><td>Send</td><td><code>-allow-send</code></td><td>send a message; with it, unsubscribing may send the unsubscribe mail and an event may invite attendees</td></tr>
+          <tr><td>Triage</td><td><code>-allow-triage</code></td><td>notes on the board's cases (a title, a summary, tasks, a deadline with its quote, a commitment), never a state you set yourself</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>A draft is inert: it rests in the local store and, after 30 seconds, in the account's Drafts folder, and goes out only when you send it. Everything that comes from mail is fenced as data before the model sees it. The whole threat model is written down in the project's <a href="https://github.com/schotek/malachi/blob/main/docs/security.md">security notes</a>.</p>
+
+    <h2 id="desktop"><svg class="icon"><use href="#i-window"/></svg>Desktop integration</h2>
+    <p><code>mailto:</code> links, new-mail notifications with the system's sound, launch at login, running in the background (with a tray icon on Windows), light and dark styles, a foldable sidebar with favourite folders, and the platform's conventions for shortcuts, menus and dialogs. Czech translation, and the machinery to add more languages.</p>
+
+    <h2 id="security"><svg class="icon"><use href="#i-lock"/></svg>Security and privacy</h2>
+    <ul>
+      <li>Mail is treated as hostile input: every parser and renderer is tested against deliberately broken messages and documents.</li>
+      <li>The window and the engine are two processes; each connection is authenticated with a key the engine generates at every start.</li>
+      <li>Passwords and tokens never leave the system keyring; the engine's logs never contain them.</li>
+      <li>No telemetry, no crash reporting, no update checks that phone home. The engine talks to your mail servers, your Jira, your CalDAV server, your CRM, and to nothing else unless you turn an assistant on.</li>
+      <li>The core is AGPL-3.0 and also available under a commercial licence; the clients are GPL-3.0-or-later.</li>
+    </ul>
+
+    <h2 id="platforms"><svg class="icon"><use href="#i-globe"/></svg>The three clients</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>Linux</th><th>macOS</th><th>Windows</th></tr></thead>
+        <tbody>
+          <tr><td>Toolkit</td><td>GTK 4, libadwaita</td><td>Swift, AppKit</td><td>C#, WinUI 3</td></tr>
+          <tr><td>Needs</td><td>libadwaita 1.7, or the Flatpak</td><td>macOS 14</td><td>Windows 11</td></tr>
+          <tr><td>Keyring</td><td>Secret Service</td><td>Login keychain</td><td>Credential Manager</td></tr>
+          <tr><td>Message body</td><td>WebKitGTK</td><td>WKWebView</td><td>WebView2</td></tr>
+          <tr><td>Attachment preview</td><td>GNOME Sushi</td><td>Quick Look</td><td>Built-in viewer</td></tr>
+          <tr><td>Online Accounts</td><td>GNOME Online Accounts</td><td>Browser sign-in</td><td>Browser sign-in</td></tr>
+          <tr><td>Claude Desktop hand-off</td><td>Not supported</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>Binaries</td><td>Flatpak, .deb, .rpm</td><td>From source for now</td><td>From source for now</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 id="not-yet"><svg class="icon"><use href="#i-list"/></svg>Not yet</h2>
+    <ul>
+      <li>PGP and S/MIME.</li>
+      <li>Message filters and rules; a unified inbox.</li>
+      <li>Google Calendar; other OAuth2 mail providers.</li>
+      <li>Signed macOS and Windows builds; an installer for Windows.</li>
+      <li>A mobile app, and there are no plans for one.</li>
+    </ul>
+
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div>
+      <a class="brand" href="index.html"><img src="assets/icon-64.png" alt="" width="32" height="32">Malachi Mail</a>
+      <p>Free software under the <a href="https://github.com/schotek/malachi/blob/main/LICENSING.md">AGPL and GPL licences</a>, with no account, no subscription and no telemetry.</p>
+      <p><em>Malachi</em> is the prophet Malachi, Hebrew <em>malʼākî</em>, "my messenger".</p>
+    </div>
+    <ul>
+      <li><a href="download.html">Download</a></li>
+      <li><a href="news.html">What's new</a></li>
+      <li><a href="https://github.com/schotek/malachi">Source code</a></li>
+      <li><a href="https://github.com/schotek/malachi/issues">Report a problem</a></li>
+    </ul>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Funkce – Malachi Mail</title>
+<meta name="description" content="Co Malachi Mail dnes umí na Linuxu, macOS a Windows: účty, čtení offline, bezpečné HTML, konverzace, hledání, Jira, kalendář, nástěnka, eWay-CRM, asistent a most MCP.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Funkce – Malachi Mail">
+<meta property="og:description" content="Co Malachi Mail dnes umí na Linuxu, macOS a Windows: účty, čtení offline, bezpečné HTML, konverzace, hledání, Jira, kalendář, nástěnka, eWay-CRM, asistent a most MCP.">
+<meta property="og:locale" content="cs_CZ">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0b3260">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="../assets/icon-32.png" sizes="32x32">
+<link rel="icon" href="../assets/icon-64.png" sizes="64x64">
+<link rel="apple-touch-icon" href="../assets/icon-192.png">
+<link rel="alternate" hreflang="en" href="../features.html">
+<link rel="alternate" hreflang="cs" href="features.html">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 4h10a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H9l-4 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M19 9h1a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-1v3l-4-3h-3"/></symbol>
+  <symbol id="i-board" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="9.5" y="4" width="5" height="11" rx="1.5"/><rect x="16" y="4" width="5" height="8" rx="1.5"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.4-7 10-4-1.6-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/></symbol>
+  <symbol id="i-feather" viewBox="0 0 24 24"><path d="M20 4c-5 0-10 3-12 8l-4 8 8-4c5-2 8-7 8-12z"/><path d="M4 20l8-8"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-ticket" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2M10 21v-3h4v3"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0V8z"/><path d="M12 17v4"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="i-window" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/></symbol>
+  <symbol id="i-cloud-off" viewBox="0 0 24 24"><path d="M7 18h11a4 4 0 0 0 .8-7.9A6 6 0 0 0 7.5 9"/><path d="M7 18a4 4 0 0 1-1-7.9"/><path d="M3 3l18 18"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+</svg>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="../assets/icon-64.png" alt="" width="32" height="32">Malachi Mail</a>
+    <nav aria-label="Hlavní">
+      <a href="features.html" aria-current="page">Funkce</a>
+      <a href="download.html">Stažení</a>
+      <a href="news.html">Novinky</a>
+      <a class="lang" href="../features.html" lang="en" hreflang="en">English</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="band page-head">
+  <div class="wrap">
+    <div class="eyebrow">Funkce</div>
+    <h1>Co dnes funguje</h1>
+    <p class="lead">Verze 0.1.2, na všech třech platformách, pokud není řečeno jinak. Klient GTK na Linuxu je reference; aplikace pro macOS a Windows ho zrcadlí funkci po funkci s prvky své platformy.</p>
+  </div>
+</div>
+
+<section>
+  <div class="wrap with-toc">
+    <nav class="toc" aria-label="Na této stránce">
+      <b>Na této stránce</b>
+      <ul>
+        <li><a href="#accounts">Účty</a></li>
+        <li><a href="#reading">Čtení offline</a></li>
+        <li><a href="#html">HTML pošta</a></li>
+        <li><a href="#writing">Psaní</a></li>
+        <li><a href="#conversations">Konverzace</a></li>
+        <li><a href="#search">Hledání</a></li>
+        <li><a href="#many">Víc zpráv najednou</a></li>
+        <li><a href="#newsletters">Newslettery</a></li>
+        <li><a href="#jira">Jira</a></li>
+        <li><a href="#calendar">Kalendář</a></li>
+        <li><a href="#board">Nástěnka</a></li>
+        <li><a href="#crm">eWay-CRM</a></li>
+        <li><a href="#assistant">Asistent</a></li>
+        <li><a href="#mcp">Most MCP</a></li>
+        <li><a href="#desktop">Plocha</a></li>
+        <li><a href="#security">Bezpečnost a soukromí</a></li>
+        <li><a href="#platforms">Tři klienti</a></li>
+        <li><a href="#not-yet">Zatím ne</a></li>
+      </ul>
+    </nav>
+    <div class="prose">
+
+    <h2 id="accounts"><svg class="icon"><use href="#i-mail"/></svg>Účty</h2>
+    <p>IMAP a SMTP s průvodcem, který u většiny poskytovatelů najde nastavení serveru jen z adresy. Microsoft 365 a Outlook.com se přihlásí v prohlížeči bez jakékoli přípravy, přes Microsoft Graph. Gmail a Google Workspace se přihlásí heslem aplikace nebo vlastním klientem OAuth od Googlu. Na GNOME může obojí přijít i z Účtů online, bez dalšího přihlášení.</p>
+    <p>Hesla a tokeny leží v systémové klíčence: Secret Service na Linuxu, přihlašovací klíčenka na macOS, Správce pověření na Windows. Serveru s vlastním certifikátem jde dát důvěru výslovně, podle otisku, až když ho uvidíte; obecné <em>ignorovat certifikát</em> neexistuje.</p>
+
+    <h2 id="reading"><svg class="icon"><use href="#i-cloud-off"/></svg>Čtení offline</h2>
+    <p>Složky a zprávy se synchronizují do místního úložiště v nastavitelném okně retence a nová pošta přichází, jakmile ji server ohlásí (IMAP IDLE, dotazování Graphu). Příznaky, přesuny a mazání se řadí do fronty a odesílají zpět, takže klient funguje i ve vlaku.</p>
+    <p>Kvůli místu na disku se uložená pošta drží komprimovaná a velké přílohy starších zpráv mohou zůstat na serveru, dokud je neotevřete. S volbou <em>Nikdy neukládat přílohy</em> se neukládá nic kromě obrázků, které zpráva ukazuje: otevřená příloha se stáhne do paměti a s ukončením aplikace zmizí. Koncepty a podepsaná či šifrovaná pošta zůstávají vždy celé.</p>
+
+    <h2 id="html"><svg class="icon"><use href="#i-shield"/></svg>HTML pošta bezpečně</h2>
+    <p>Těla zpráv projdou sanitizací v jádru dřív, než je jakékoli okno uvidí; surové HTML hranici jádra nikdy nepřekročí. Vzdálené obrázky zůstávají blokované, dokud je jednou nenačtete nebo odesílateli nedáte důvěru; vykreslování běží bez JavaScriptu, s přísnou politikou obsahu a úplně bez sítě. Přiložené zprávy se otevírají jen pro čtení ve vlastním okně. Ostatní přílohy se otevřou v náhledu (GNOME Sushi, Quick Look, vlastní prohlížeč na Windows) a při uložení nesou systémovou značku karantény.</p>
+
+    <h2 id="writing"><svg class="icon"><use href="#i-feather"/></svg>Psaní</h2>
+    <p>Formátovaný text, přílohy a vložené obrázky. Příjemci se doplňují z lidí, kterým jste už psali, na GNOME i ze systémových adresářů, a mění se v odstranitelné kapsle. Prostý text, který vypadá jako Markdown, se vloží jako formátovaný. Zpráva, která nejde odeslat hned, počká v místní odchozí poště a zkouší se znovu; kopie se založí do Odeslaných. Koncepty leží ve složce Koncepty účtu, takže je vidí i jiný klient.</p>
+
+    <h2 id="conversations"><svg class="icon"><use href="#i-chat"/></svg>Konverzace</h2>
+    <p>Jádro skládá vlákna z hlaviček hned při příjmu; <em>Seskupovat podle konverzací</em> udělá ze seznamu zpráv jeden řádek na konverzaci. Konverzace se ukáže jako karty na časové ose nebo jako chat z bublin, s vašimi odpověďmi z Odeslaných a neodeslanými koncepty na jejich místě a se sbalenou citovanou historií. Řádek rychlé odpovědi pod zprávou nebo chatem odpoví bez otevírání okna; <em>Otevřít v okně</em> si napsaný text vezme s sebou.</p>
+
+    <h2 id="search"><svg class="icon"><use href="#i-search"/></svg>Hledání</h2>
+    <p><kbd>Ctrl</kbd>+<kbd>F</kbd> (<kbd>⌘F</kbd>) prohledává poštu uloženou v tomto počítači ve složce, v jejím účtu nebo ve všech účtech, už při psaní: každé slovo jako začátek, bez ohledu na velikost písmen a diakritiku („priloh“ najde „Přílohy“), plus <code>from:</code>, <code>to:</code>, <code>subject:</code>, <code>is:unread</code>, <code>has:attachment</code>, data a <code>in:</code> složka. S asistentem udělá <em>Hledat vlastními slovy</em> z „faktury od Jany v březnu“ přesně takový dotaz.</p>
+
+    <h2 id="many"><svg class="icon"><use href="#i-layers"/></svg>Víc zpráv najednou</h2>
+    <p>Víc zpráv jde vybrat a společně archivovat, přesunout, smazat, označit nebo přeposlat (každou jako přiložený <code>.eml</code>). Zprávy, složky a účty mají kontextová menu: Přesunout do, Označit vše jako přečtené, Vysypat koš. Doručená pošta má sbalitelné sekce podle data a zprávy s hvězdičkou první.</p>
+
+    <h2 id="newsletters"><svg class="icon"><use href="#i-list"/></svg>Newslettery</h2>
+    <p>Konference a newslettery se poznají z hlaviček a v seznamu dostanou štítek. Kde odesílatel podporuje odhlášení jedním klikem, stačí jeden klik, přes jádro a až po ověření podpisu DKIM odesílatele, nikdy otevřením odkazu; jinak se odhlašovací mail pošle za vás.</p>
+
+    <h2 id="jira"><svg class="icon"><use href="#i-ticket"/></svg>Jira</h2>
+    <p>Jira Cloud nebo Data Center je účet. Issues se čtou jako konverzace: popis, komentáře, změny stavu a řešitele. Postranní panel má vybrané projekty a pohledy Přiřazené mně, Sleduji a Otevřené. Komentář nahrazuje odpověď, stav se mění z karty issue a notifikační maily site ve vašich poštovních účtech se k issue propojí nebo skryjí. Jira Cloud se přihlašuje API tokenem, Data Center osobním přístupovým tokenem.</p>
+
+    <h2 id="calendar"><svg class="icon"><use href="#i-calendar"/></svg>Kalendář</h2>
+    <p>Kalendáře účtů Microsoft 365 a Outlook.com (když je zapnete) a serverů CalDAV (Nextcloud, iCloud, Fastmail, Radicale a další, jako účet jen pro kalendář) se drží offline a ukazují po dnech, týdnech, měsících nebo jako agenda, s upozorněními. Pozvánky, které přijdou do kteréhokoli poštovního účtu, jde přijmout, přijmout nezávazně nebo odmítnout ze zprávy; odpovědi a pozvánky jdou přes server, nebo tam, kde je neposílá, jako mail s pozvánkou přes odchozí poštu. <em>Najít volný termín</em> hledá napříč vašimi kalendáři.</p>
+
+    <h2 id="board"><svg class="icon"><use href="#i-board"/></svg>Nástěnka</h2>
+    <p>Pohled vedle Pošty a Kalendáře, který třídí vaše konverzace a issues z Jiry na <strong>Hoří</strong>, <strong>Čeká na vás</strong>, <strong>Čeká na ně</strong> a <strong>Pro informaci</strong>. Pravidla čtou jen hlavičky, strukturu zprávy a složku, kde leží, nikdy její slova; vaše rozhodnutí má nad nimi vždy přednost. Případ má Hotovo, Připomenout (později dnes, zítra, příští týden), Archivovat a Smazat a návrh odpovědi od asistenta se upravuje přímo na nástěnce. Archivace konverzace v Poště označí případ jako hotový a nová odpověď ho vrátí.</p>
+
+    <h2 id="crm"><svg class="icon"><use href="#i-building"/></svg>eWay-CRM</h2>
+    <p>Zprávu jde uložit do eWay-CRM s vazbami na kontakty, firmy, obchody a projekty, z kteréhokoli poštovního účtu, a zbytek její konverzace ji následuje sám. Připojení se nastavuje v Předvolbách → Integrace; heslo jde do klíčenky a relace zůstává na vašem počítači.</p>
+
+    <h2 id="assistant"><svg class="icon"><use href="#i-sparkle"/></svg>Asistent</h2>
+    <p>Nepovinný a experimentální. S registrovaným mostem MCP předá tlačítko ✦ vybranou zprávu, konverzaci nebo složku do Claude Desktop (macOS a Windows) nebo Claude Code s připravenou otázkou, nebo spustí váš vlastní Claude Code (či ChatGPT přes Codex) v panelu hlavního okna jen s nástroji mostu pro čtení a koncepty. Shrne, najde úkoly a termíny, napíše a přepíše odpověď (zdvořileji, stručněji, opravenou, přeloženou nebo podle vlastního pokynu), udělá z vašich slov hledání, třídí nástěnku a navrhuje na ní odpovědi a v kalendáři řekne, co vás dnes čeká, nebo najde volný termín.</p>
+    <p>Profil v Předvolbách → AI → O mně mu řekne, kdo jste, v jakém rodě píšete a doplněk ke každému účtu. K modelu nic neodejde, dokud se nezeptáte, první otázka požádá o souhlas a mailem nic neodejde, dokud koncept sami neodešlete.</p>
+
+    <h2 id="mcp"><svg class="icon"><use href="#i-plug"/></svg>Agenti s AI: most MCP</h2>
+    <p><code>malachi-mcp</code> je server protokolu Model Context Protocol přes stdio, který dá agentovi (Claude Code, Claude Desktop, Zed, Cursor nebo kterémukoli jinému klientu MCP) odstupňovaný pohled na poštu, kalendář a nástěnku. Je to klient jádra přesně jako desktopové aplikace, bez vlastní poštovní logiky a bez vlastních přihlašovacích údajů. Co agent smí, je rozhodnuté při spuštění serveru, ne modelem; nástroj mimo povolenou úroveň se nikdy nezaregistruje.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Úroveň</th><th>Jak se povolí</th><th>Co přidá</th></tr></thead>
+        <tbody>
+          <tr><td>Čtení a koncepty</td><td>vždy zapnuto</td><td>účty, složky, zprávy, hledání, přílohy (i s textem PDF, DOCX a XLSX), synchronizace, přechody v Jiře, nástěnka, kalendáře, události, volný čas, pozvánky, profil uživatele a koncepty (odpověď, odpověď všem, přeposlání, nová zpráva, komentář v Jiře)</td></tr>
+          <tr><td>Změny</td><td><code>-allow-modify</code></td><td>označování, přesouvání a mazání zpráv, změna stavu issue, odhlášení, vytvoření události</td></tr>
+          <tr><td>Odesílání</td><td><code>-allow-send</code></td><td>odeslání zprávy; s ním smí odhlášení poslat odhlašovací mail a událost pozvat účastníky</td></tr>
+          <tr><td>Třídění</td><td><code>-allow-triage</code></td><td>poznámky k případům nástěnky (titulek, shrnutí, úkoly, termín s citací, závazek), nikdy stav, který si nastavujete sami</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Koncept je nečinný: leží v místním úložišti a po 30 sekundách ve složce Koncepty účtu a odejde, jen když ho odešlete. Vše, co přijde z pošty, je před modelem ohrazené jako data. Celý model hrozeb je sepsaný v <a href="https://github.com/schotek/malachi/blob/main/docs/security.md">bezpečnostních poznámkách projektu</a>.</p>
+
+    <h2 id="desktop"><svg class="icon"><use href="#i-window"/></svg>Integrace s plochou</h2>
+    <p>Odkazy <code>mailto:</code>, oznámení nové pošty se systémovým zvukem, spuštění po přihlášení, běh na pozadí (na Windows s ikonou v oznamovací oblasti), světlý a tmavý vzhled, sbalitelný postranní panel s oblíbenými složkami a zvyklosti platformy pro klávesy, menu a dialogy. Čeština a mechanismus pro další jazyky.</p>
+
+    <h2 id="security"><svg class="icon"><use href="#i-lock"/></svg>Bezpečnost a soukromí</h2>
+    <ul>
+      <li>Pošta je nepřátelský vstup: každý parser a renderer je testovaný na záměrně poškozených zprávách a dokumentech.</li>
+      <li>Okno a jádro jsou dva procesy; každé spojení se ověřuje klíčem, který jádro vygeneruje při každém startu.</li>
+      <li>Hesla a tokeny systémovou klíčenku nikdy neopustí; logy jádra je nikdy neobsahují.</li>
+      <li>Žádná telemetrie, žádné hlášení pádů, žádná kontrola aktualizací, která by někam volala. Jádro mluví s vašimi poštovními servery, vaší Jirou, vaším serverem CalDAV, vaším CRM a s ničím jiným, dokud nezapnete asistenta.</li>
+      <li>Jádro je pod AGPL-3.0 a je k dispozici i s komerční licencí; klienti jsou pod GPL-3.0-or-later.</li>
+    </ul>
+
+    <h2 id="platforms"><svg class="icon"><use href="#i-globe"/></svg>Tři klienti</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>Linux</th><th>macOS</th><th>Windows</th></tr></thead>
+        <tbody>
+          <tr><td>Toolkit</td><td>GTK 4, libadwaita</td><td>Swift, AppKit</td><td>C#, WinUI 3</td></tr>
+          <tr><td>Vyžaduje</td><td>libadwaita 1.7, nebo Flatpak</td><td>macOS 14</td><td>Windows 11</td></tr>
+          <tr><td>Klíčenka</td><td>Secret Service</td><td>Přihlašovací klíčenka</td><td>Správce pověření</td></tr>
+          <tr><td>Tělo zprávy</td><td>WebKitGTK</td><td>WKWebView</td><td>WebView2</td></tr>
+          <tr><td>Náhled příloh</td><td>GNOME Sushi</td><td>Quick Look</td><td>Vestavěný prohlížeč</td></tr>
+          <tr><td>Účty online</td><td>Účty online GNOME</td><td>Přihlášení v prohlížeči</td><td>Přihlášení v prohlížeči</td></tr>
+          <tr><td>Předání do Claude Desktop</td><td>Nepodporováno</td><td>Ano</td><td>Ano</td></tr>
+          <tr><td>Binárky</td><td>Flatpak, .deb, .rpm</td><td>Zatím ze zdrojů</td><td>Zatím ze zdrojů</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 id="not-yet"><svg class="icon"><use href="#i-list"/></svg>Zatím ne</h2>
+    <ul>
+      <li>PGP a S/MIME.</li>
+      <li>Filtry a pravidla zpráv; společná doručená pošta.</li>
+      <li>Google Kalendář; další poskytovatelé pošty s OAuth2.</li>
+      <li>Podepsané sestavení pro macOS a Windows; instalátor pro Windows.</li>
+      <li>Mobilní aplikace, a ani se neplánuje.</li>
+    </ul>
+
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div>
+      <a class="brand" href="index.html"><img src="../assets/icon-64.png" alt="" width="32" height="32">Malachi Mail</a>
+      <p>Svobodný software pod <a href="https://github.com/schotek/malachi/blob/main/LICENSING.md">licencemi AGPL a GPL</a>, bez účtu, bez předplatného a bez telemetrie.</p>
+      <p><em>Malachi</em> je prorok Malachiáš, hebrejsky <em>malʼākî</em>, „můj posel“.</p>
+    </div>
+    <ul>
+      <li><a href="download.html">Stažení</a></li>
+      <li><a href="news.html">Novinky</a></li>
+      <li><a href="https://github.com/schotek/malachi">Zdrojové kódy</a></li>
+      <li><a href="https://github.com/schotek/malachi/issues">Nahlásit problém</a></li>
+    </ul>
+  </div>
+</footer>
+
+</body>
+</html>
