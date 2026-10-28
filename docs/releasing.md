@@ -200,29 +200,39 @@ tag has none yet, **only when the repository variable
 `WINDOWS_RELEASE_ZIPS` is `true`**; without it the workflow's `release`
 job is skipped and the release gets no Windows zips.
 
-Those zips are **not** release artefacts yet, which is why the variable is
-not set. Before a Windows build is published with a release
+Those zips are **not** release artefacts, which is why the variable is
+not set. A release's Windows assets are built by hand on a Windows
+machine, from a clean checkout of the tag, after the release exists on
+GitHub (step 6 of §3 and the tag's CI):
+
+```sh
+git checkout v0.1.3
+make windows-installer      # x64 and arm64: build, then gh release upload v0.1.3
+```
+
+That uploads `Malachi-Mail-<version>-<arch>-Setup.exe` (Inno Setup, per
+user) and `Malachi-Mail-<version>-<arch>.zip` for **x64** and **arm64**
+(`windows\build.ps1 release` without make; prerequisites, `NO_UPLOAD=1`
+and `CLOBBER=1` in [windows/README.md](../windows/README.md#installer)).
+A tag older than the target (0.1.2) used
+`windows\installer\build-installer.ps1` over that tag's app folder. The first was 0.1.2. The licence
+permission for Microsoft's components is in [LICENSING.md](../LICENSING.md)
+(2026-10-28). Still open
 ([windows-port.md §17](windows-port.md#17-before-a-public-release)):
 
-- **The licence.** The folder carries Microsoft's Windows App SDK and
-  WebView2 components, which are not under the GPL; distributing it
-  needs the additional permission [LICENSING.md](../LICENSING.md)
-  describes, which the owner decides after a legal check.
-- **Code signing** of the four executables (and of an installer):
+- **Code signing** of the four executables and of the installer:
   unsigned, SmartScreen warns on every machine that downloads them. The
   owner decides how (SignPath Foundation, an OV certificate, signing as an
   organisation).
-- **An installer and updates**: Velopack (per user, updates from GitHub
-  Releases) and a winget manifest, the update stopping the daemon
-  gracefully first, the uninstall removing what the app registered in
-  HKCU.
+- **Updates** (Velopack or a check against GitHub Releases, the update
+  stopping the daemon gracefully first) and a winget manifest.
 
-Once the licence permission is in `LICENSING.md` and the workflow signs
-the executables, the owner sets the variable, in the repository's *Settings →
+Once the workflow signs the executables, the owner may set the variable, in the repository's *Settings →
 Secrets and variables → Actions → Variables* or with
 `gh variable set WINDOWS_RELEASE_ZIPS --body true`, and the next tag's
 release carries the zips (`gh variable delete WINDOWS_RELEASE_ZIPS` stops
-it again). The arm64 zip is cross-built and has not run anywhere.
+it again). CI's arm64 zip is cross-built; the release's are built and
+tried by hand as above.
 
 Release notes stay in `NEWS` for every platform; the AppStream metainfo
 it feeds is Linux's.
@@ -391,7 +401,9 @@ also asks for notices in a binary distribution: the other Go modules of
 `emersion` mail libraries, `klauspost/compress`, `godbus/dbus`,
 `BurntSushi/toml`) and of the GTK interface (gotk4 and its bindings,
 `KarpelesLab/weak`, `go4.org/unsafe/assume-no-moving-gc`), both also
-built on the Go standard library, and the .NET runtime, Windows Community
-Toolkit and the other NuGet packages in the Windows app folder (which
-also waits for the decision in [LICENSING.md](../LICENSING.md)). The
+built on the Go standard library. The NuGet packages of the Windows app
+folder (the .NET runtime, the Windows App SDK, WebView2, the Windows
+Community Toolkit and the rest) are covered apart: `build.ps1 app`
+copies their licence and notice files into the folder's
+`Microsoft-notices\` (`windows/scripts/copy-notices.ps1`). The
 macOS client itself links only Apple's system frameworks.

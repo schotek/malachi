@@ -4773,34 +4773,63 @@ daemon's graceful stop), recorded in §10 and §11.
 
 ## 17. Before a public release
 
-The client is complete as a mail client; what it lacks is distribution.
-Today `make windows` gives a self-contained, unsigned folder that needs
-nothing installed but the WebView2 runtime Windows 11 comes with, and
-`build.ps1 package` zips it. Open, in the order a first public binary
-needs them:
+The client is complete as a mail client. Since 0.1.2 (2026-10-28) it is
+distributed: the release carries an installer and a portable zip for x64
+and for ARM64 (`Malachi-Mail-<version>-<arch>-Setup.exe`,
+`Malachi-Mail-<version>-<arch>.zip`), built on a Windows machine from a
+clean checkout of the tag with `make windows-installer` (`build.ps1
+release`: both architectures, then `gh release upload` to the existing
+release), never by CI.
 
-- **Licence.** The Windows App SDK and WebView2 packages, which the app
-  folder carries, are under Microsoft's terms, not the GPL. Distributing
-  the built client needs an explicit GPLv3 §7 additional permission for
-  those Microsoft platform components in `LICENSING.md`. That is the
-  owner's decision, after a legal check, and comes before the first public
-  binary; development and the source are unaffected.
-- **Code signing.** The owner's decision (SignPath Foundation, an OV
+- **Licence.** Settled: `LICENSING.md` carries the GPLv3 §7 additional
+  permission for the Microsoft platform components (the Windows App SDK,
+  the WebView2 SDK, the Visual C++ runtime), decided by the owner on
+  2026-10-28, and the app folder carries the licence and notice files of
+  every NuGet package in it (`Microsoft-notices\`, `scripts\copy-notices.ps1`,
+  read from the restore's `project.assets.json`). The 0.1.2 tag predates
+  the permission; its installers were built from the tag with the
+  `LICENSING.md` of `main` staged in (`installer\build-installer.ps1
+  -Licensing`).
+- **Code signing.** Open, the owner's decision (SignPath Foundation, an OV
   certificate, or signing as an organisation; Azure Artifact Signing is not
-  open to individuals in the EU). Until then SmartScreen warns about the
-  unsigned executables.
-- **Installer.** Velopack (per user, updates from GitHub Releases) and a
-  winget manifest; an update stops the daemon gracefully first and must
-  cope with a `malachi-mcp.exe` that Claude Desktop or Claude Code still
-  runs (§1: it can be renamed, not replaced), and an
-  uninstall removes what the app registered in HKCU (the `mailto:`
-  registration, for which `MailtoRegistration.Unregister` exists, the Run
-  value and the notification registration).
-- **ARM64.** `build.ps1 app -Arch arm64` cross-builds the app, the
-  daemon and the bridge; the keyring helper links only where the MSVC
-  ARM64 build tools are installed, which the development machine lacks,
-  so no ARM64 app folder has been assembled and none has run. It needs a
-  build with those tools and a run on real ARM64 hardware.
+  open to individuals in the EU). The executables and the installers are
+  unsigned: SmartScreen warns when the installer is downloaded and run
+  (*More info → Run anyway*).
+- **Installer.** Inno Setup 6 (`windows\installer\MalachiMail.iss`), not
+  Velopack, for now: Velopack needs its SDK called first in `Main`
+  (`VelopackApp.Build().Run()`), which the 0.1.2 tag lacks, and installs
+  into `%LOCALAPPDATA%\<id>\current`. Inno Setup needs nothing in the app,
+  builds both architectures from one script and installs for the current
+  user without administrator rights into `%LOCALAPPDATA%\Programs\Malachi
+  Mail`, with a Start menu shortcut and the uninstall entry in Settings →
+  Apps (HKCU, `AppId` `io.github.schotek.Malachi`, so both architectures
+  are one installation). It writes nothing else: the `mailto:` and Run
+  registrations stay the app's own. Before installing over a running copy
+  or uninstalling it asks the user to quit the app (it finds the app, the
+  daemon and the keyring helper by their path through WMI); Restart
+  Manager closes a `malachi-mcp.exe` that Claude Desktop or Claude Code
+  runs from the folder. The uninstaller removes, only where they point
+  into its folder, the `mailto:` registration (the keys of
+  `MailtoRegistration`), the Run value with its StartupApproved twin, the
+  notification registration of the unpackaged app (the CLSID of the
+  activator, the AppUserModelId `{guid}` entry, the entry named after the
+  executable's path and the notification platform's backup), and the
+  shell's traces (NotifyIconSettings, the Start tile's properties, the
+  MUI cache, the jump list data); the mail data, the preferences and the
+  stored passwords stay. Checked on ARM64 hardware (2026-10-28): HKCU
+  before installing and after uninstalling differ by nothing of Malachi
+  Mail, except that Windows may write the jump list value again after the
+  uninstaller, and Inno Setup leaves its own temporary copy of the
+  uninstaller (`%TEMP%\is-*-uninstall.tmp`, 4 MB). Still open: updates
+  (Velopack, or a check against GitHub Releases, with the daemon stopped
+  gracefully first and `malachi-mcp.exe` renamed rather than replaced,
+  §1) and a winget manifest.
+- **ARM64.** Done for 0.1.2: built with the MSVC ARM64 tools of Visual
+  Studio 2026 on an ARM64 machine (Windows 11 26300 under Parallels), the
+  installer installed, the app ran natively with its daemon over
+  temporary data, quit and uninstalled. The x64 installer went through
+  the same on that machine under x64 emulation; neither has run on x64
+  hardware.
 - **The UI smoke tests on CI.** `.github/workflows/windows.yml` (§13)
   runs on the hosted runner (first run 2026-09-28: the client built,
   tested and zipped for both architectures, the ARM64 helper linked with
@@ -4822,10 +4851,9 @@ comments.
 
 The Board, where the client trailed the daemon's API until 2026-10-06, is
 ported (§11.8); what is open is the owner's own check with a real Claude
-Code and a real Codex (triage and a suggested reply), an inline reply over
-a real linked draft, and, as for the rest of the client, ARM64 on real
-hardware (above). The Board adds nothing to the licence, signing or
-installer items.
+Code and a real Codex (triage and a suggested reply) and an inline reply
+over a real linked draft. The Board adds nothing to the licence, signing
+or installer items.
 
 The Calendar, where the client trailed the daemon's API until 2026-10-16,
 is ported (§11.9) and built, `build.ps1 app` publishes it, and its Core,
@@ -4833,5 +4861,4 @@ conventions and calendar UI smoke tests pass; the owner has tried it with
 his real accounts (Microsoft 365 through Graph, Nextcloud through CalDAV)
 and his findings are fixed. Open: a full `build.ps1 test` run, the hatch in
 the dark theme and at display scales other than 100 %, touch and pen
-double taps, declined and cancelled blocks on screen (§11.9 lists them);
-ARM64 as for the rest of the client (above).
+double taps, declined and cancelled blocks on screen (§11.9 lists them).

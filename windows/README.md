@@ -50,9 +50,10 @@ yet](#not-on-windows-not-yet).
 Licence: GPL-3.0-or-later (everything outside `backend/`; `malachid.exe` and
 `malachi-mcp.exe` in the app folder are AGPL-3.0-only, LICENSING.md). The
 built app folder also carries Microsoft's Windows App SDK and WebView2
-components, which are under Microsoft's terms: distributing it waits for
-the owner's decision on a GPLv3 §7 permission for them (LICENSING.md,
-docs/windows-port.md §17). Every source file starts with the SPDX header:
+components, which are under Microsoft's terms; the client is distributed
+together with them under the GPLv3 §7 additional permission in
+LICENSING.md, and their licence and notice files are in the folder's
+`Microsoft-notices\` (docs/windows-port.md §17). Every source file starts with the SPDX header:
 C# files are checked by the compiler (IDE0073 against
 `file_header_template` in `windows/.editorconfig`), every other type by
 `Malachi.Conventions.Tests`, in its own comment syntax (XML files carry it
@@ -75,6 +76,11 @@ as a comment after the XML declaration; JSON and Markdown carry none).
   root Makefile's recipes.
 - GNU make, optional: `winget install ezwinports.make` (4.4). Everything
   works without it through `windows\build.ps1`.
+- Inno Setup 6.4 or newer, only for the `installer` and `release` targets:
+  `winget install JRSoftware.InnoSetup` (`ISCC` names another `ISCC.exe`);
+  for `release` also the GitHub CLI (`winget install GitHub.cli`, then
+  `gh auth login`; `GH` names another `gh.exe`). A terminal opened before
+  winget installed them does not find them; open a new one.
 - Windows PowerShell 5.1, which every Windows has (`build.ps1` runs on
   PowerShell 7 as well).
 
@@ -126,7 +132,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 <target> [
 | `test` | every test project, `.trx` reports in `build\windows\TestResults\` (Debug); the UI smoke tests drive the app folder `app` assembled and are skipped without it (docs/windows-port.md §12) |
 | `run` | `app` for this machine, then `MalachiMail.exe` in this terminal until it quits (Ctrl+C quits it and the daemon it started) |
 | `lint` | `dotnet format --verify-no-changes` and the conventions tests |
-| `package` | `app`, then `build\windows\Malachi-Mail-<version>-<arch>.zip` (unsigned; not a release yet, docs/releasing.md) |
+| `package` | `app`, then `build\windows\Malachi-Mail-<version>-<arch>.zip` (unsigned) |
+| `installer` | `app`, then `build\windows\Malachi-Mail-<version>-<arch>-Setup.exe` and the portable `Malachi-Mail-<version>-<arch>.zip` beside it (`installer\build-installer.ps1`, Inno Setup 6; unsigned; see [Installer](#installer)) |
+| `release` | `installer` for x64 and arm64, then `gh release upload v<version>` of the four files (`make windows-installer`; `-NoUpload`, `-Clobber`; see [Installer](#installer)) |
 | `clean` | removes `build\windows\` |
 
 Options: `-Configuration Debug|Release`, `-Arch x64|arm64` (default: this
@@ -175,8 +183,79 @@ unpacked from the Runtime package's framework MSIX by the build
 (docs/windows-port.md §10: without it notifications cannot register).
 
 ARM64: `build.ps1 app -Arch arm64` cross-builds on an x64 machine; the
-keyring helper needs the MSVC ARM64 build tools for it. The ARM64 app has
-not been run on real hardware yet.
+keyring helper needs the MSVC ARM64 build tools for it. On an ARM64
+machine both architectures build natively or cross (MSVC tools for x64
+and ARM64); the 0.1.2 app folders were built and run that way.
+
+### Installer
+
+`build.ps1 installer -Arch x64|arm64` builds the app folder and then
+`installer\build-installer.ps1`, which copies it into
+`build\windows\stage-<arch>\Malachi Mail\`, checks the licences there
+(the GPLv3 §7 permission in `LICENSING.md`, `Microsoft-notices\`), runs
+Inno Setup on `installer\MalachiMail.iss` and zips the staged folder:
+
+```
+build\windows\Malachi-Mail-<version>-<arch>-Setup.exe
+build\windows\Malachi-Mail-<version>-<arch>.zip
+```
+
+The installer is per user and needs no administrator rights: it installs
+into `%LOCALAPPDATA%\Programs\Malachi Mail`, adds *Malachi Mail* to the
+Start menu and the uninstall entry to Settings → Apps, and offers to start
+the app at the end. It does not register `mailto:` or launch at login;
+those stay the app's own (Preferences). Installing over an older version
+replaces the folder (the app must not run; Restart Manager closes a
+`malachi-mcp.exe` that Claude runs). The x64 and the ARM64 installer are
+one installation (`AppId` `io.github.schotek.Malachi`), so one replaces
+the other. The uninstaller removes the folder, the shortcut and what the
+app registered for its folder (`mailto:`, Run, the notification
+registration and the shell's caches of the executable,
+docs/windows-port.md §17) and keeps the mail data
+(`%LOCALAPPDATA%\Malachi Mail`), the preferences
+(`HKCU\Software\io.github.schotek.Malachi`) and the passwords in
+Credential Manager. Silent: `Setup.exe /VERYSILENT` and `unins000.exe
+/VERYSILENT`.
+
+The Windows assets of a release, both architectures at once, from a clean
+checkout of the release tag on a Windows machine (an x64 or ARM64 one with
+the MSVC tools for both, Inno Setup and the GitHub CLI signed in with
+`gh auth login`):
+
+```sh
+git checkout v0.1.3
+make windows-installer          # builds x64 and arm64, uploads the four files to release v0.1.3
+make windows-installer NO_UPLOAD=1   # builds only (any clean version)
+make windows-installer CLOBBER=1     # replaces files the release already has
+```
+
+Without make: `windows\build.ps1 release [-NoUpload] [-Clobber]`. It checks
+first, before the builds' quarter of an hour, that the version is a bare
+release (`0.1.3`, not `0.1.3-2-gabc1234` or `-dirty`), that gh is signed in
+and that GitHub has the release `v0.1.3` (published or draft; it never
+creates or edits a release, only adds files, and replaces none without
+`CLOBBER=1`). It prints the SHA-256 of what it uploaded. The release notes
+are written by hand (`NEWS`); say there that the installers are unsigned.
+The build always runs on Windows by hand, never in CI.
+
+A release of a tag older than the installer (0.1.2) runs the script
+directly with that tag's app folder (built from a worktree at the tag, so the version is exact) and
+the current `LICENSING.md`:
+
+```powershell
+git worktree add --detach C:\src\m012 v0.1.2
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\src\m012\windows\build.ps1 app -Arch arm64
+powershell -NoProfile -ExecutionPolicy Bypass -File windows\installer\build-installer.ps1 `
+    -AppDir "C:\src\m012\build\windows\arm64\Malachi Mail" -Version 0.1.2 -Arch arm64 `
+    -AssetsFile C:\src\m012\build\windows\artifacts\obj\Malachi.App\project.assets.json,C:\src\m012\build\windows\artifacts\obj\Malachi.Credentials\project.assets.json `
+    -Licensing LICENSING.md -OutDir build\windows\release
+```
+
+Nothing is signed: there is no code-signing certificate yet, so
+SmartScreen warns about the downloaded installer (*More info → Run
+anyway*). To try an installer from an agent's shell inside Claude Desktop,
+start it outside Claude's process tree (Troubleshooting): run from there,
+Inno Setup's files land in Claude's package store.
 
 ## Layout
 
@@ -551,10 +630,11 @@ features, not deviations.
   only. The GTK UI also searches the system address books through
   Evolution Data Server; there is no equivalent here and the daemon
   degrades silently.
-- **Distribution**: the app folder is unsigned and has no installer or
-  updater; ARM64 has not run on real hardware; the Microsoft components'
-  licence permission is the owner's decision; CI builds the zips for both
-  architectures as run artefacts, not release assets ([docs/windows-port.md §17](../docs/windows-port.md#17-before-a-public-release),
+- **Distribution**: the installers and executables are unsigned
+  (SmartScreen warns), and there are no updates: a new version is
+  installed over the old one with its installer. No winget manifest yet.
+  CI builds zips as run artefacts only; release assets are built by hand
+  ([Installer](#installer), [docs/windows-port.md §17](../docs/windows-port.md#17-before-a-public-release),
   [docs/releasing.md](../docs/releasing.md)).
 
 ## Troubleshooting
