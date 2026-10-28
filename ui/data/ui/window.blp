@@ -85,6 +85,11 @@ Adw.ApplicationWindow main_window {
         child: Adw.ToolbarView {
           [top]
           Adw.HeaderBar {
+            // No title: "Folders" does not fit beside the mode switch, New
+            // Message and the menu at the sidebar's width in English and
+            // showed as "Fold…"; the macOS and Windows sidebars have none.
+            show-title: false;
+
             // The window's three modes, Mail, Board and Calendar
             // (window/board.go): icons only, tooltips set from Go
             // (board.Mail / BoardName / CalendarName, so this file needs no

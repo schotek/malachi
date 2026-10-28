@@ -13,6 +13,7 @@ import (
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
+	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
@@ -887,6 +888,11 @@ func (p *Pane) wireToolbar() {
 		p.editor.Exec("RemoveFormat", "")
 		p.editor.Exec("Unlink", "")
 	})
+	// Black, as the editor's text: GtkColorDialogButton starts on a red of
+	// its own (0.75, 0.25, 0.25) and nothing else sets it. Before the
+	// notification below, so the editor is not told.
+	black := gdk.NewRGBA(0, 0, 0, 1)
+	p.colorButton.SetRGBA(&black)
 	p.colorButton.NotifyProperty("rgba", func() {
 		p.editor.Exec("ForeColor", p.colorButton.RGBA().String())
 	})
