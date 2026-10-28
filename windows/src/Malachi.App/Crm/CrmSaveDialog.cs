@@ -56,6 +56,9 @@ internal sealed partial class CrmSaveDialog : ContentDialog
     private string listed = "";
     private bool syncing;
 
+    /// <summary>DEVELOPMENT AID (MALACHI_START's shot): crm.lookup has answered, the suggestions or the failure are shown.</summary>
+    internal bool DevelopmentLookupDone => session.Phase != CrmDialogSession.SessionPhase.Loading;
+
     /// <summary>The dialog of <paramref name="session"/>.</summary>
     public CrmSaveDialog(CrmDialogSession session)
     {

@@ -4368,21 +4368,29 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   steps separated by `;` that the main window runs once it shows,
   `MALACHI_START_INTERVAL` seconds apart (default 3), after
   `MALACHI_START_SIZE` (`WxH`, the visible frame in effective pixels,
-  centred in the work area) was applied. The steps, with the macOS names
+  in the top left corner of the work area, away from the overlays
+  Windows draws above the bottom right of the screen) was applied. The
+  steps, with the macOS names
   and meaning: `mail`, `board`, `board:list|columns|today[:select]`
   (`:select` loads every listed case's conversation and selects the one
   with the most text), `calendar`, `calendar:day|week|month|agenda`,
   `group=on|off` and `chat=on|off` (the two settings), `folder=<text>`
   (the first folder, accounts in the sidebar's order, whose server name
   contains the text, as a click in the sidebar; then the list is waited
-  for), `row=<text>` (the first row whose subject contains the text,
-  case-insensitively, as a click, scrolled into view), `compose-open`,
+  for, and a listing that failed is asked for again as Try Again does),
+  `row=<text>` (the first row whose subject contains the text,
+  case-insensitively, as a click, scrolled into view; a conversation's
+  members are waited for and asked for again after a failure),
+  `compose-open`,
   `crm-save` (Save to eWay-CRM… over the selection, the dialog left
-  open), `shot=<path>` (the compose window when one is open, else the
-  main window, brought to the front and written as a PNG of its visible
-  frame at the screen's scale: the pixels from the screen, or rendered by
-  `PrintWindow` with `PW_RENDERFULLCONTENT` when the window could not be
-  made the foreground one; `Shell/WindowCapture.cs`), `size=WxH` and
+  open), `shot=<path>` (the compose window when one is open, moved to
+  the same corner first, else the main window, after the reading pane's
+  web view has loaded and the eWay-CRM dialog's lookup has answered;
+  brought to the front and written as a PNG of its visible frame
+  intersected with its client area at the screen's scale: the pixels
+  from the screen, or rendered by `PrintWindow` with
+  `PW_RENDERFULLCONTENT` when the window could not be made the
+  foreground one; `Shell/WindowCapture.cs`), `size=WxH` and
   `quit` (an open dialog closed first). The parser and the finders are
   Core's `Presentation/DevelopmentStart.cs` with
   `DevelopmentStartTests` (the port of `devstart_test.go`); the steps act

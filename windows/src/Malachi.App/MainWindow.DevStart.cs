@@ -30,6 +30,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Malachi.App.Crm;
 using Malachi.App.Shell;
 using Malachi.Core.Api;
 using Malachi.Core.Boards;
@@ -191,7 +192,23 @@ public sealed partial class MainWindow
         var shown = false;
         if (DevelopmentList is { } list)
         {
-            shown = await DevelopmentWaitAsync(() => list.Rows.Count > 0 && list.Rows.All(r => r.Message.FolderId == folder.Id), TimeSpan.FromSeconds(20));
+            var deadline = DateTime.UtcNow + DevelopmentWait;
+            while (true)
+            {
+                shown = await DevelopmentWaitAsync(
+                    () => mailbox.Model.ListErr is not null || (list.Rows.Count > 0 && list.Rows.All(r => r.Message.FolderId == folder.Id)),
+                    TimeSpan.FromSeconds(20));
+                if (mailbox.Model.ListErr is { } err && DateTime.UtcNow < deadline)
+                {
+                    // A listing that failed (on a slow machine message.list has
+                    // run out of its 5 s) is asked for again, as Try Again does.
+                    DevelopmentPrint($"MALACHI_START folder: the list failed ({err.Message}); trying again");
+                    list.Retry();
+                    continue;
+                }
+                shown = shown && mailbox.Model.ListErr is null;
+                break;
+            }
         }
         DevelopmentPrint($"MALACHI_START folder: selected '{folder.Name}' (listed {shown})");
     }
@@ -217,6 +234,33 @@ public sealed partial class MainWindow
         list.Select(row.Key);
         ListPane.ScrollTo(row.Key);
         DevelopmentPrint($"MALACHI_START row: selected '{row.Message.Subject}'");
+        if (row.Key.Thread is { } tid)
+        {
+            // A conversation row: its members (thread.get) are what the
+            // reading pane shows; a fetch that failed (on a slow machine it
+            // has run out of its 5 s) is asked for again, as the list does
+            // when the row is expanded, and the toast of the failure is
+            // given time to go.
+            var deadline = DateTime.UtcNow + DevelopmentWait;
+            var retried = false;
+            while (true)
+            {
+                var done = false;
+                var failed = false;
+                list.EnsureMembers(tid, () => done = true, () => failed = true);
+                await DevelopmentWaitAsync(() => done || failed, TimeSpan.FromSeconds(20));
+                if (!failed || DateTime.UtcNow >= deadline)
+                {
+                    break;
+                }
+                DevelopmentPrint("MALACHI_START row: the conversation failed to load; trying again");
+                retried = true;
+            }
+            if (retried)
+            {
+                await Task.Delay(5000);
+            }
+        }
     }
 
     // `board`, `board:<style>`, `board:<style>:select`: the Board in that
@@ -264,31 +308,74 @@ public sealed partial class MainWindow
     private async Task DevelopmentShotAsync(string path)
     {
         var target = state.Windows.Windows.FirstOrDefault(w => w.Kind == WindowKind.Compose && w.Window.AppWindow.IsVisible)?.Window ?? (Window)this;
-        if (ReferenceEquals(target, this) && mode == Board.Mode.Mail && Reader is Reader.MessageView pane)
+        if (ReferenceEquals(target, this))
         {
-            // The reading pane's HTML body: a cold WebView2 shows it seconds later.
-            var shown = await DevelopmentWaitAsync(() => pane.DevelopmentBodyShown, TimeSpan.FromSeconds(20));
-            if (!shown)
+            if (mode == Board.Mode.Mail && Reader is Reader.MessageView pane)
             {
-                DevelopmentPrint("MALACHI_START shot: the reading pane's body is still loading");
+                // The reading pane's HTML body: a cold WebView2 shows it seconds later.
+                var shown = await DevelopmentWaitAsync(() => pane.DevelopmentBodyShown, TimeSpan.FromSeconds(20));
+                if (!shown)
+                {
+                    DevelopmentPrint("MALACHI_START shot: the reading pane's body is still loading");
+                }
+            }
+            if (Root.XamlRoot is { } xamlRoot
+                && VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot).Select(p => p.Child).OfType<CrmSaveDialog>().FirstOrDefault() is { } crmDialog)
+            {
+                // The Save to eWay-CRM dialog (crm-save): its suggestions, not its spinner.
+                var answered = await DevelopmentWaitAsync(() => crmDialog.DevelopmentLookupDone);
+                if (!answered)
+                {
+                    DevelopmentPrint("MALACHI_START shot: the eWay-CRM dialog is still looking up");
+                }
             }
         }
+        else
+        {
+            // The same corner of the work area as the main window (DevelopmentResize):
+            // the one-pixel border line under a window's top edge is translucent, and
+            // with the main window behind it the compose window's would show that
+            // window's text; at the screen's edge there is nothing behind it.
+            var area = DisplayArea.GetFromWindowId(target.AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+            target.AppWindow.Move(new PointInt32(area.X, area.Y));
+        }
         var how = WindowCapture.BringToFront(target);
-        if (ReferenceEquals(target, this) && Root.XamlRoot is { } root && FocusManager.GetFocusedElement(root) is Control focused)
+        // The activation's redraw; XAML gives the focus back to the control
+        // that had it, which may come after the activation.
+        await Task.Delay(300);
+        var focusNote = "";
+        if (ReferenceEquals(target, this) && Root.XamlRoot is { } root)
         {
             // The focus ring XAML draws around the focused control when the
             // last input it saw was a key is not part of the picture: the
             // control stops drawing the system focus visual (a pointer click
             // would not show one either), and is focused as a pointer would.
-            focused.UseSystemFocusVisuals = false;
-            focused.Focus(FocusState.Pointer);
+            // The focus can move once more after the activation, so this is
+            // done until the focused control reports pointer focus.
+            for (var i = 0; i < 4; i++)
+            {
+                if (FocusManager.GetFocusedElement(root) is not Control focused)
+                {
+                    focusNote = "nothing focused";
+                    break;
+                }
+                focused.UseSystemFocusVisuals = false;
+                if (focused.FocusState != FocusState.Keyboard && focused.FocusState != FocusState.Programmatic)
+                {
+                    focusNote = $"{focused.GetType().Name} {focused.FocusState}";
+                    break;
+                }
+                focused.Focus(FocusState.Pointer);
+                focusNote = $"{focused.GetType().Name} refocused";
+                await Task.Delay(150);
+            }
         }
-        // The activation's redraw, and a dialog's or a web view's last frame.
-        await Task.Delay(800);
+        // The focus change's redraw, and a dialog's or a web view's last frame.
+        await Task.Delay(500);
         try
         {
             var line = await WindowCapture.SavePngAsync(target, path, fromScreen: how != WindowCapture.Behind);
-            DevelopmentPrint($"MALACHI_START shot: {line} of '{target.Title}' -> {path}; front {how}; {WindowCapture.Rectangles(target)}");
+            DevelopmentPrint($"MALACHI_START shot: {line} of '{target.Title}' -> {path}; front {how}; focus {focusNote}; {WindowCapture.Rectangles(target)}");
         }
         catch (Exception e) when (e is not OutOfMemoryException)
         {
@@ -298,24 +385,24 @@ public sealed partial class MainWindow
 
     // `size=WxH` and MALACHI_START_SIZE: the window's visible frame (the
     // extended frame bounds, without the invisible resize borders) in
-    // effective pixels, centred in the work area; the window's own rectangle
-    // is that much larger.
+    // effective pixels, in the top left corner of the work area; the
+    // window's own rectangle is that much larger. The corner, not the
+    // centre: Windows draws its own overlays (the activation watermark)
+    // above the bottom right of the screen, and a centred window of this
+    // size reaches under them.
     private void DevelopmentResize(int width, int height)
     {
         var scale = Scale();
         var size = new SizeInt32((int)Math.Round(width * scale), (int)Math.Round(height * scale));
         var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
-        AppWindow.MoveAndResize(new RectInt32(
-            area.X + Math.Max(0, (area.Width - size.Width) / 2), area.Y + Math.Max(0, (area.Height - size.Height) / 2), size.Width, size.Height));
+        AppWindow.MoveAndResize(new RectInt32(area.X, area.Y, size.Width, size.Height));
         // The borders Windows adds around the visible frame.
         var frame = WindowCapture.FrameSize(this);
         var dw = size.Width - frame.Width;
         var dh = size.Height - frame.Height;
         if (dw != 0 || dh != 0)
         {
-            AppWindow.MoveAndResize(new RectInt32(
-                area.X + Math.Max(0, (area.Width - size.Width - dw) / 2), area.Y + Math.Max(0, (area.Height - size.Height - dh) / 2),
-                size.Width + dw, size.Height + dh));
+            AppWindow.MoveAndResize(new RectInt32(area.X, area.Y, size.Width + dw, size.Height + dh));
             frame = WindowCapture.FrameSize(this);
         }
         DevelopmentPrint($"MALACHI_START resize {width}x{height}: frame {frame.Width}x{frame.Height} px, window {AppWindow.Size.Width}x{AppWindow.Size.Height} px at {AppWindow.Position.X},{AppWindow.Position.Y} (scale {scale})");
