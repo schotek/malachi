@@ -1369,6 +1369,21 @@ language (matched by base language, English always available);
 Windows-only strings stay English (`// Windows-only string`, `<!--
 Windows-only string -->`); nothing enters `po/POTFILES`.
 
+A desktop app has no per-app language on Windows, and changing the
+display languages means a sign-out, so an isolated instance (the
+screenshots of `docs/screenshots.md`, a test) may set them with the
+Windows-only development variable `MALACHI_LANGUAGES`
+(`Malachi.Core/I18n/EnvironmentPreferredLanguages.cs`, read by
+`AppState.Create` before `WindowsPreferredLanguages`, documented like
+`MALACHI_SETTINGS_KEY`): BCP 47 tags most preferred first, separated by
+`;`, `,` or white space (`en-GB`, `cs-CZ;en`), each once, a tag Windows
+does not know still counting for the catalogue. The first tag is also the
+regional format: `CultureInfo.CurrentCulture` and the default of every
+thread, which the dates, the first day of the week and the calendar read,
+as `LANG` is for the GTK client and `AppleLocale` beside `AppleLanguages`
+for the macOS one. Unset or empty, nothing changes; the log says what was
+taken.
+
 The strings check (`Malachi.Conventions.Tests/Strings`, the counterpart of
 `macos/scripts/check-strings.py`): Roslyn (`Microsoft.CodeAnalysis.CSharp`)
 over `windows/src/**/*.cs` and an XML reader over `windows/src/**/*.xaml`
