@@ -660,6 +660,13 @@ public sealed partial class MessageView : UserControl
     private void OnMessagePageSizeChanged(object sender, SizeChangedEventArgs e) =>
         HeaderScroller.MaxHeight = Math.Max(0, Math.Floor(e.NewSize.Height * HeaderShare));
 
+    /// <summary>
+    /// The body on display is drawn: the text, or an HTML body whose web
+    /// view has finished loading (the <c>shot=</c> step of
+    /// MainWindow.DevStart.cs waits for it; a cold WebView2 takes seconds).
+    /// </summary>
+    internal bool DevelopmentBodyShown => web is null || !web.IsLoading;
+
     // htmlView: made on first use, so a plain-text mailbox never starts a
     // web process; one per view, reused.
     private MessageWebView EnsureWeb()

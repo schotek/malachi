@@ -4361,6 +4361,40 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   banner's).
 - The Go side on Windows: `go vet ./...` and `go test ./...` of `backend/`
   green (§14), the helper's real round trip with `malachi-credentials.exe`.
+- **`MALACHI_START`**, the development aid of the screenshots
+  (`docs/screenshots.md` §3, §6), the port of the macOS client's variable
+  of that name (`MainWindowController+DevStart.swift`) and of GTK's
+  `MALACHI_GTK_START` (`ui/internal/window/devstart.go`): a script of
+  steps separated by `;` that the main window runs once it shows,
+  `MALACHI_START_INTERVAL` seconds apart (default 3), after
+  `MALACHI_START_SIZE` (`WxH`, the visible frame in effective pixels,
+  centred in the work area) was applied. The steps, with the macOS names
+  and meaning: `mail`, `board`, `board:list|columns|today[:select]`
+  (`:select` loads every listed case's conversation and selects the one
+  with the most text), `calendar`, `calendar:day|week|month|agenda`,
+  `group=on|off` and `chat=on|off` (the two settings), `folder=<text>`
+  (the first folder, accounts in the sidebar's order, whose server name
+  contains the text, as a click in the sidebar; then the list is waited
+  for), `row=<text>` (the first row whose subject contains the text,
+  case-insensitively, as a click, scrolled into view), `compose-open`,
+  `crm-save` (Save to eWay-CRM… over the selection, the dialog left
+  open), `shot=<path>` (the compose window when one is open, else the
+  main window, brought to the front and written as a PNG of its visible
+  frame at the screen's scale: the pixels from the screen, or rendered by
+  `PrintWindow` with `PW_RENDERFULLCONTENT` when the window could not be
+  made the foreground one; `Shell/WindowCapture.cs`), `size=WxH` and
+  `quit` (an open dialog closed first). The parser and the finders are
+  Core's `Presentation/DevelopmentStart.cs` with
+  `DevelopmentStartTests` (the port of `devstart_test.go`); the steps act
+  in `MainWindow.DevStart.cs` through the list and the mailbox the window
+  gets from its Integration (macOS `developmentList`,
+  `developmentMailbox`). What a step did goes to stderr
+  (`MALACHI_START step <n> <name>`, `MALACHI_START row: selected '…'`).
+  Nothing of it runs without the variable, nothing of it is translated,
+  and it is for an isolated instance only (`MALACHI_DATA_DIR`,
+  `MALACHI_SOCKET`, `MALACHI_SETTINGS_KEY`, `MALACHI_LANGUAGES`, the
+  samples), never over the real store; `scripts/screenshots/windows.ps1`
+  starts the sample world and runs the two scripts of the scenes.
 
 ## 13. Build and CI
 

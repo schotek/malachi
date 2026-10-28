@@ -804,6 +804,30 @@ samples cannot show them), a full `build.ps1 test` run (the failures left
 in `Malachi.Platform.Windows.Tests` are environmental and predate the
 port) and ARM64 on real hardware.
 
+### Screenshots
+
+`MALACHI_START` (read once, at start; the macOS client's variable of
+that name, GTK's `MALACHI_GTK_START`) is a script of steps the main
+window runs once it shows, `MALACHI_START_INTERVAL` seconds apart, for
+the screenshots of [docs/screenshots.md](../docs/screenshots.md): the
+modes and their styles and views (`mail`, `board:list:select`,
+`board:columns`, `calendar:week`), the two conversation settings
+(`group=on`, `chat=off`), a folder by its server name and a row by its
+subject (`folder=inbox`, `row=DevConf`), `compose-open`, `crm-save`,
+`size=WxH` and `shot=<path>`, which writes the window (the compose window
+when one is open) as a PNG of its visible frame at the screen's scale,
+and `quit`. The steps are listed in
+[docs/windows-port.md §12](../docs/windows-port.md#12-tests).
+`scripts\screenshots\windows.ps1 start en|cs` starts the sample world
+(`malachi-devmail`, the daemon over a throwaway directory under `%TEMP%`,
+the three accounts) and `windows.ps1 shots en|cs OUTDIR` runs the
+published app through the scenes with `MALACHI_DAEMON=none`, the stack's
+socket, its own `MALACHI_DATA_DIR`, the preferences key
+`io.github.schotek.Malachi.shots` (deleted afterwards),
+`MALACHI_CALENDAR_SAMPLES=1` and `MALACHI_LANGUAGES`; the app must stay
+in front while it runs. A development aid, not a feature: nothing of it
+runs without the variable, and never over the real store.
+
 ### Inbox date sections (native verification pending)
 
 The Inbox now mirrors the GTK/macOS collapsible sections: Flagged first,
