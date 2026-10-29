@@ -22,6 +22,11 @@
     // are named, without redirecting to an extensionless URL.
     "html_handling": "none"
   },
+  // Release packages at /dl/<tag>/<file> (worker/index.js; README.md,
+  // "Packages"). The bucket is made once by hand before the first deploy
+  // that has this binding:
+  //   npx wrangler@4.150.0 r2 bucket create malachi-downloads
+  "r2_buckets": [{ "binding": "DOWNLOADS", "bucket_name": "malachi-downloads" }],
   // Custom domains: Cloudflare makes their DNS records and certificates.
   // wrangler deploy replaces the Worker's custom domains with this list,
   // so one added in the dashboard alone is gone after the next deploy.

@@ -85,6 +85,44 @@ presents every request as `malachimail.app`, so the redirects of the
 other names are not seen there. wrangler keeps its state in
 `.wrangler/`, which git ignores.
 
+## Packages
+
+`/dl/<tag>/<file>`, for example
+`https://malachimail.app/dl/v0.1.4/Malachi-Mail-0.1.4-universal.dmg`,
+serves a release package from the R2 bucket `malachi-downloads` (binding
+`DOWNLOADS` in `wrangler.jsonc`): the place for the packages when they
+are not on GitHub. The installers are too large for the static assets (a
+file there may have at most 25 MiB). The update manifest may point at
+`malachimail.app` as well as `github.com` (`docs/services.md` §2.3), so
+the daemon needs no change for it.
+
+The path is a tag and a plain file name, and the object key is the same
+`<tag>/<file>`; anything else under `/dl/` is the site's 404. GET and
+HEAD only, with the object's ETag (`If-None-Match` gives 304), one byte
+range (a broken download resumes; several ranges are ignored, a range
+past the end is 416), `Content-Disposition: attachment` and a year's
+`immutable` caching, so a file under a tag is never replaced: a fixed
+package is a new version. Never a redirect.
+
+Once, before the first deploy with the binding:
+
+```sh
+npx wrangler@4.150.0 r2 bucket create malachi-downloads
+```
+
+Every release, for each package:
+
+```sh
+npx wrangler@4.150.0 r2 object put malachi-downloads/v0.1.4/Malachi-Mail-0.1.4-universal.dmg --file Malachi-Mail-0.1.4-universal.dmg --remote
+```
+
+A file too large for `wrangler r2 object put` goes through the
+dashboard or an S3 client instead. The URL, SHA-256
+(`shasum -a 256`) and size (`stat -f %z`) then go into the release in
+the admin (`admin.malachimail.app`, the package form of the release).
+Locally, `npx wrangler@4.150.0 dev` serves `/dl/` from a local bucket
+that `r2 object put … --local` fills.
+
 ## Preview
 
 ```sh
@@ -98,7 +136,8 @@ and open <http://localhost:8765/>.
 - A new version: update the version, date and asset names on both
   download pages and add the release to both news pages from `NEWS`.
   The links point at `https://github.com/schotek/malachi/releases/download/<tag>/<asset>`,
-  so the release has to be published, not a draft, for them to work.
+  so the release has to be published, not a draft, for them to work
+  (or at `https://malachimail.app/dl/<tag>/<asset>`, "Packages").
 - Screenshots: `assets/screenshots/<platform>/<language>/<scene>.webp`
   are the PNGs taken over the sample world as `docs/screenshots.md`
   describes (one set per platform and language), the main window scaled
