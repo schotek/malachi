@@ -74,6 +74,9 @@ public static class VirtualKey
     /// <summary>'W'.</summary>
     public const int W = 0x57;
 
+    /// <summary>'Z'.</summary>
+    public const int Z = 0x5A;
+
     /// <summary>VK_F3.</summary>
     public const int F3 = 0x72;
 

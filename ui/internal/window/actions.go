@@ -17,6 +17,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/settings"
+	undoKind "github.com/schotek/malachi/ui/internal/undo"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -351,7 +352,12 @@ func (w *Window) trashIDs(parent gtk.Widgetter, ids []api.MessageID, subject str
 		}, func() {
 			restore()
 			undo()
-		}, func() { w.withdrawNotifications(idsOf(list)) })
+		}, func() {
+			w.withdrawNotifications(idsOf(list))
+			if hasTrash {
+				w.recordUndo(undoKind.Trash, trash.ID, moving)
+			}
+		})
 	})
 }
 
@@ -402,7 +408,7 @@ func (w *Window) archive(id api.MessageID) { w.archiveIDs([]api.MessageID{id}) }
 
 // archiveIDs moves messages to the account's Archive folder.
 func (w *Window) archiveIDs(ids []api.MessageID) {
-	w.moveIDsToRole(ids, api.RoleArchive, func(n int) string {
+	w.moveIDsToRole(ids, api.RoleArchive, undoKind.Archive, func(n int) string {
 		if n == 1 {
 			return i18n.T("Archiving the message")
 		}
@@ -426,7 +432,8 @@ func (w *Window) junkFrom(parent gtk.Widgetter, id api.MessageID) {
 
 // junkIDs moves messages to the account's Junk folder after a confirmation
 // shown over parent. Unlike Trash the question is always asked: the move
-// feeds the server's spam filter and is not undone by moving back.
+// feeds the server's spam filter, which Undo (moving back) does not take
+// back.
 func (w *Window) junkIDs(parent gtk.Widgetter, ids []api.MessageID, subject string) {
 	list := w.summaries(ids)
 	if len(list) == 0 {
@@ -442,7 +449,7 @@ func (w *Window) junkIDs(parent gtk.Widgetter, ids []api.MessageID, subject stri
 		heading = fmt.Sprintf(i18n.N("Mark %d message as junk?", "Mark %d messages as junk?", n), n)
 	}
 	widget.ConfirmDestructive(parent, heading, subject, i18n.T("Mark as _Junk"), func() {
-		w.moveIDsToRole(idsOf(list), api.RoleJunk, func(n int) string {
+		w.moveIDsToRole(idsOf(list), api.RoleJunk, undoKind.Junk, func(n int) string {
 			if n == 1 {
 				return i18n.T("Marking the message as junk")
 			}
@@ -457,7 +464,7 @@ func (w *Window) junkIDs(parent gtk.Widgetter, ids []api.MessageID, subject stri
 // no such folder. The rows go at once and come back on failure; the
 // folder counts follow the messages to the target (trackMoves). Success
 // withdraws their desktop notifications.
-func (w *Window) moveIDsToRole(ids []api.MessageID, role api.FolderRole, what func(n int) string, missing string) {
+func (w *Window) moveIDsToRole(ids []api.MessageID, role api.FolderRole, kind undoKind.Kind, what func(n int) string, missing string) {
 	list := w.movable(ids)
 	if len(list) == 0 {
 		return
@@ -467,13 +474,13 @@ func (w *Window) moveIDsToRole(ids []api.MessageID, role api.FolderRole, what fu
 		w.Toast(missing)
 		return
 	}
-	w.moveListTo(list, target.ID, what)
+	w.moveListTo(list, target.ID, kind, what)
 }
 
 // moveIDsTo moves messages to another folder of their account (Move To
 // in a message's context menu), as moveIDsToRole does.
 func (w *Window) moveIDsTo(ids []api.MessageID, target api.FolderID) {
-	w.moveListTo(w.movable(ids), target, func(n int) string { return contextmenu.MovingText(i18n.Tr, n) })
+	w.moveListTo(w.movable(ids), target, undoKind.Move, func(n int) string { return contextmenu.MovingText(i18n.Tr, n) })
 }
 
 // movable are the summaries of ids a move takes: not the outbox's
@@ -489,8 +496,11 @@ func (w *Window) movable(ids []api.MessageID) []api.MessageSummary {
 }
 
 // moveListTo is the move itself: the rows go at once and come back on
-// failure, the counts follow, the windows of the messages close.
-func (w *Window) moveListTo(list []api.MessageSummary, target api.FolderID, what func(n int) string) {
+// failure, the counts follow, the windows of the messages close. Once the
+// daemon took it, Undo can take it back as kind (undo.go), unless the
+// target is a folder the daemon does not keep (Gmail's All Mail drops the
+// rows).
+func (w *Window) moveListTo(list []api.MessageSummary, target api.FolderID, kind undoKind.Kind, what func(n int) string) {
 	// The messages already in the target stay where they are.
 	list = slices.DeleteFunc(slices.Clone(list), func(s api.MessageSummary) bool { return s.FolderID == target })
 	if len(list) == 0 {
@@ -507,7 +517,12 @@ func (w *Window) moveListTo(list []api.MessageSummary, target api.FolderID, what
 	}, func() {
 		restore()
 		undo()
-	}, func() { w.withdrawNotifications(idsOf(list)) })
+	}, func() {
+		w.withdrawNotifications(idsOf(list))
+		if !w.folderUnsynced(folderKey{Account: acc, Folder: target}) {
+			w.recordUndo(kind, target, list)
+		}
+	})
 }
 
 // scheduleMarkRead arms the mark-as-read timer for the newly selected

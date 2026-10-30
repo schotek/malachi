@@ -16,8 +16,9 @@
 // share), selection.go (the selection of several rows: selectedKeys,
 // selectedRows, restrictSelection, showSelectionPage, selectionState,
 // selectedIDs, selectionSubject, flagTargetOf, restoreSelection; Core's
-// Selections/Selection.cs is ui/internal/selection) and
-// conversation_draft.go (onDraftsChanged).
+// Selections/Selection.cs is ui/internal/selection),
+// conversation_draft.go (onDraftsChanged) and undo.go (afterUndo's
+// reload, takeUndoReselect).
 //
 // The file keeps Swift's name: like MailboxController+List.swift it holds
 // ListController, the second half of the one GTK window object, and
@@ -56,6 +57,7 @@ using Malachi.Core.Model;
 using Malachi.Core.Selections;
 using Malachi.Core.Settings;
 using Malachi.Core.Text;
+using Malachi.Core.Undos;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -107,6 +109,9 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     private MessageId? markReadId;
     private SettingsChangeToken? settingsToken;
     private bool closed;
+
+    // What the next first page selects after an Undo (undo.go undoReselect).
+    private IReadOnlyList<Undo.Moved>? undoReselect;
 
     /// <summary>
     /// Installs the list half into <paramref name="mailbox"/>'s hooks and
@@ -461,7 +466,44 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
             }
             Model.SetMessages(res.Messages, res.Page);
             Reconcile(SelectionHint.Keep);
+            TakeUndoReselect();
         });
+    }
+
+    /// <summary>
+    /// After an Undo (window/undo.go <c>afterUndo</c>): the selected folder
+    /// is listed again (<see cref="LoadMessages"/>) and, once its first page
+    /// arrived, the rows of the messages in <paramref name="back"/> are
+    /// selected (<see cref="TakeUndoReselect"/>).
+    /// </summary>
+    public void ReloadSelecting(IReadOnlyList<Undo.Moved> back)
+    {
+        ArgumentNullException.ThrowIfNull(back);
+        Scope.VerifyAccess();
+        undoReselect = back;
+        LoadMessages();
+    }
+
+    // window/undo.go takeUndoReselect: once, when a first page of the list
+    // arrived after ReloadSelecting, the rows of the messages Undo brought
+    // back to the folder (a message's row, or its conversation's;
+    // Undo.ReselectKeys) are selected, and the view follows (the rows'
+    // apply syncs its selection to SelectedKeys).
+    private void TakeUndoReselect()
+    {
+        var back = undoReselect;
+        undoReselect = null;
+        if (back is not { Count: > 0 })
+        {
+            return;
+        }
+        var keys = Undo.ReselectKeys(back, k => RowFor(k) is not null);
+        if (keys.Count == 0)
+        {
+            return;
+        }
+        SelectKeys(keys);
+        RowsChanged?.Invoke(this, new RowsUpdate(Rows, SelectionHint.Keep));
     }
 
     /// <summary>
@@ -523,6 +565,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
             SyncRows();
             FetchExpandedMembers();
             AnnounceSelectedMembers();
+            TakeUndoReselect();
         });
     }
 

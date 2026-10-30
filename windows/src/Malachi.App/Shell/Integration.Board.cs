@@ -26,11 +26,17 @@
 // after the user moved on (left Mail for the board again, selected another
 // case, clicked Show in Mail again) does nothing, not even its toast.
 //
+// The board's Archive and Delete are on the window's Undo history with
+// Mail's moves (ActionsController.RecordBoardUndo; GTK window/undo.go
+// recordBoardUndo): their toast's Undo button and Ctrl+Z take them back
+// through BoardController.UndoArchive.
+//
 // The board remembers its style and account filter: every change of the
 // style writes board-last-style, every change of the account filter
 // board-account-filter (BoardController reads them back as it shows).
 
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Malachi.App.Boards;
 using Malachi.Core.Api;
@@ -40,6 +46,7 @@ using Malachi.Core.Controllers;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
 using Malachi.Core.Transport;
+using Malachi.Core.Undos;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 
@@ -148,12 +155,29 @@ public sealed partial class Integration
             lastStyle: () => settings.BoardLastStyle,
             savedAccount: () => settings.BoardAccountFilter);
         BoardController.Changed += (_, changes) => RememberBoardView(changes);
+        // The board's Archive and Delete join Mail's moves on the window's
+        // Undo history (window/undo.go recordBoardUndo): the toast's button
+        // and Ctrl+Z take them back through the board, which moves the
+        // messages back and puts the case back on the board.
+        BoardController.ArchiveDone += (_, outcome) => Actions.RecordBoardUndo(outcome);
+        Actions.UndoBoard = UndoBoardMove;
         var hub = state.Notifications;
         tokens.Add(hub.AddBoardChanged(n => StartedBoardSource?.BoardChanged(n)));
         tokens.Add(hub.AddAccountsChanged(() => StartedBoardSource?.AccountsChanged()));
         tokens.Add(hub.AddConnectionState(s =>
             StartedBoardSource?.ConnectionChanged(s is ConnectionState.Connected or ConnectionState.InfoFailed)));
     }
+
+    // undo.go runUndo's board half: Controller.UndoArchive of the entry's
+    // case, its messages and kind (the toast's text is not used again).
+    private void UndoBoardMove(Undo.Entry e) => BoardController.UndoArchive(new Board.ArchiveOutcome
+    {
+        Case = e.Case,
+        Account = e.Account,
+        Moved = [.. e.Moves.Select(m => new BoardMoved { MessageId = m.MessageId, FromFolderId = m.FromFolderId })],
+        Text = Undo.Done(e),
+        Trash = e.Kind == Undo.Kind.BoardTrash,
+    });
 
     // The style and the account filter, for the next show and the next
     // launch (window/board.go rememberViewState). The filter is written only

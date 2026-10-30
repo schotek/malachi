@@ -2889,3 +2889,22 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   (`BoardMember.Mine`), `board.commit` and `board.trash` keep the meaning
   "in a folder of role `sent`/`outbox`". No API shape change
   ([api.md](api.md) §4.13).
+- Undo of moves of mail (2026-10-30): **decided**, Undo is the client's.
+  Move to Trash, Archive, Junk, Move To and the board's Archive and Delete
+  push what they moved (each message and the folder it came from) on a
+  stack of the session, newest first, at most 20 entries, once the daemon
+  took the move; a toast with Undo (and its shortcut) shows for 8 s, and
+  Ctrl+Z (⌘Z on macOS) takes back the newest entry for as long as it is on
+  the stack. Taking back is `message.move` of each message to its folder,
+  one call per folder, since a moved message keeps its `id` (IMAP rows are
+  reused, Graph uses immutable ids); a board entry also puts the case back
+  (`board.setDone {done:false}`). No daemon change and no new method: the
+  daemon keeps no history of what the user meant, the stack lives in memory
+  and ends with the application, as in other mail clients. Never on the
+  stack: an expunge from Trash, a cancelled send, a move to a folder the
+  daemon does not keep (Gmail's All Mail); Empty Trash and Empty Junk drop
+  the entries into the folder. Undoing Junk only moves the messages back;
+  it does not train the server's filter the other way. The rules and texts
+  are the Go reference `ui/internal/undo`; the board's Undo uses its
+  grouping (`board.UndoArchive`). The shortcut is lifted while a text field
+  or an editor has the keyboard, which keeps its own Ctrl+Z.

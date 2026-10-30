@@ -4,12 +4,14 @@
 // The part of macos/Sources/MalachiCore/Controllers/MailboxController+List.swift
 // (ListController) that ActionsController.swift uses (applyFlags,
 // removeRows); GTK: ui/internal/window/actions.go and messages.go
-// (model.applyFlags with refreshRows, removeRows, removeMessageRow). See
+// (model.applyFlags with refreshRows, removeRows, removeMessageRow) and
+// undo.go (afterUndo's loadMessages, takeUndoReselect). See
 // IActionsMailbox for why the actions name the members they use.
 
 using System;
 using System.Collections.Generic;
 using Malachi.Core.Api;
+using Malachi.Core.Undos;
 
 namespace Malachi.Core.Controllers;
 
@@ -34,4 +36,14 @@ public interface IActionsList
     /// nothing.
     /// </summary>
     Action RemoveRows(IReadOnlyList<MessageId> ids);
+
+    /// <summary>
+    /// After an Undo (window/undo.go <c>afterUndo</c> and
+    /// <c>takeUndoReselect</c>): lists the selected folder again and, once
+    /// its first page arrived, selects the rows of the messages in
+    /// <paramref name="back"/> (a message's row, or its conversation's;
+    /// <see cref="Undo.ReselectKeys"/>); none of them listed, the selection
+    /// stays as the reload leaves it.
+    /// </summary>
+    void ReloadSelecting(IReadOnlyList<Undo.Moved> back);
 }

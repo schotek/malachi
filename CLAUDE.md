@@ -1138,6 +1138,35 @@ app`/`test`/`lint` (`ComposeBodyLayoutTests`, `AssistantWriteTests`,
 (`DevmailTests` odpověď bez otázky, `BoardSmokeTests`, mřížka
 `ComposePane.xaml` má o řádky víc) a ruční průchod.
 
+Zpět u přesunů pošty (2026-10-30, všechny tři klienty, necommitnuté;
+rozhodnutí vlastníka přes AskUserQuestion, `docs/architecture.md` §7).
+Koš, Archivovat, Nevyžádaná, Přesunout do a Archivovat/Smazat na nástěnce
+zapíšou po úspěchu u démona přesun (zpráva + složka, odkud přišla) do
+zásobníku relace (nejvýš 20, jen v paměti) a ukážou na 8 s toast
+s tlačítkem „Zpět (Ctrl+Z)“ (macOS „⌘Z“); Ctrl+Z / ⌘Z vrátí nejnovější
+přesun i po zmizení toastu, v Poště i na Nástěnce, ne v Kalendáři, nikdy
+s klávesnicí v textovém poli či editoru (ty si nechají vlastní Zpět). Vrácení
+= `message.move` zpět po zdrojových složkách (přesunutá zpráva si nechává
+`id`), nástěnka navíc `board.setDone {done:false}`; pak počty složek
+a v zobrazené zdrojové složce nové načtení s výběrem vrácených řádků.
+Nezapíše se vymazání z Koše, zrušené odeslání ani přesun do
+nesynchronizované složky; Vysypat koš/nevyžádanou zahodí přesuny do ní.
+Démon ani API beze změny. Reference `ui/internal/undo` (`Stack`, `Record`,
+`FromBoard`, `Calls`, `Reselect`, texty; `board.UndoArchive` ho používá),
+GTK `window/undo.go` (`win.undo` `<Control>z` v `MessageAccels`, brána
+`undoAccelAllowed` + `focusTakesTypingHere` s inline odpovědí nástěnky),
+macOS `MalachiCore/Undo`, `ActionsController+Undo.swift`, sdílený
+`Shared/UndoToast.swift` v `ToastPresenter`, okno `MainWindow` (NSWindow
+odpovídá na `undo:` dřív než controller), Windows `Malachi.Core/Undos`
+(`Undo.History`), `ActionsController.Undo.cs`, toast s tlačítkem
+(`ToastButton`), `ShortcutCommand.Undo`; InfoBar `ArchiveBar` nástěnky
+zrušený. 7 nových msgid i česky. Ověřeno: Go testy `undo` a `board`;
+GTK v kontejneru `gtk.sh make build`, celé `test-ui`, `make po`, `make lint`;
+macOS `swift build` bez varování, celé `swift test` (1935),
+`check-strings.py`. Čeká: test démonu Koš a hned zpět (IMAP, Graph),
+smoke GTK s toastem a Ctrl+Z, Windows (napsané bez `dotnet`) `build.ps1
+app`/`test`/`lint` a UI smoke, ručně ve všech třech nad kopií dat.
+
 Kontextová menu u zpráv a složek (2026-10-14, všechny tři klienty,
 commit `bcaf8b0`; rozhodnutí vlastníka přes AskUserQuestion). Pravý klik
 (v GTK i dlouhý stisk a Shift+F10 / klávesa Menu, na macOS Control-klik)

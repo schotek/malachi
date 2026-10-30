@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-25 20:35+0000\n"
+"POT-Creation-Date: 2026-10-30 06:41+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1604,11 +1604,11 @@ msgid "Mark as _Unread"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:68 ui/internal/board/text.go:351
-#: ui/internal/window/actions.go:63
+#: ui/internal/window/actions.go:64
 msgid "Unstar"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:70 ui/internal/window/actions.go:66
+#: ui/internal/contextmenu/text.go:70 ui/internal/window/actions.go:67
 #: ui/data/ui/message_window.ui:74 ui/data/ui/window.ui:515
 msgid "Star"
 msgstr ""
@@ -2246,7 +2246,7 @@ msgstr ""
 
 #: ui/internal/jira/transitions.go:98
 #: ui/internal/window/conversation_card.go:173 ui/internal/window/folders.go:89
-#: ui/internal/window/messages.go:266
+#: ui/internal/window/messages.go:267
 msgid "Loading…"
 msgstr ""
 
@@ -3436,7 +3436,7 @@ msgstr ""
 msgid "Marked as done. No message was in the inbox."
 msgstr ""
 
-#: ui/internal/board/text.go:898
+#: ui/internal/board/text.go:898 ui/internal/undo/text.go:21
 #, c-format
 msgid "Archived %d message."
 msgid_plural "Archived %d messages."
@@ -3445,7 +3445,7 @@ msgstr[1] ""
 
 #. TRANSLATORS: the button of a toast that takes back what was just
 #. done (an archive).
-#: ui/internal/board/text.go:905
+#: ui/internal/board/text.go:905 ui/internal/undo/text.go:45
 msgid "Undo"
 msgstr ""
 
@@ -3464,18 +3464,18 @@ msgstr ""
 msgid "Marked as done. No received message was left to delete."
 msgstr ""
 
-#: ui/internal/board/text.go:926
+#: ui/internal/board/text.go:926 ui/internal/undo/text.go:35
 #, c-format
 msgid "Moved %d message to Trash."
 msgid_plural "Moved %d messages to Trash."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/board/text.go:933 ui/internal/window/actions.go:42
+#: ui/internal/board/text.go:933 ui/internal/window/actions.go:43
 msgid "Move to Trash?"
 msgstr ""
 
-#: ui/internal/board/text.go:933 ui/internal/window/actions.go:47
+#: ui/internal/board/text.go:933 ui/internal/window/actions.go:48
 msgid "Move to _Trash"
 msgstr ""
 
@@ -3507,7 +3507,7 @@ msgstr ""
 msgid "Changing the promise"
 msgstr ""
 
-#: ui/internal/board/text.go:1012 ui/internal/window/actions.go:270
+#: ui/internal/board/text.go:1012 ui/internal/window/actions.go:271
 msgid "Removing the star"
 msgstr ""
 
@@ -6135,104 +6135,104 @@ msgid "Saving the account order"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of messages of a conversation.
-#: ui/internal/window/actions.go:45
+#: ui/internal/window/actions.go:46
 #, c-format
 msgid "Move %d message to Trash?"
 msgid_plural "Move %d messages to Trash?"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:208
+#: ui/internal/window/actions.go:209
 msgid "Marking the message as read"
 msgstr ""
 
-#: ui/internal/window/actions.go:210
+#: ui/internal/window/actions.go:211
 #, c-format
 msgid "Marking %d message as read"
 msgid_plural "Marking %d messages as read"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:212
+#: ui/internal/window/actions.go:213
 msgid "Marking the message as unread"
 msgstr ""
 
-#: ui/internal/window/actions.go:214
+#: ui/internal/window/actions.go:215
 #, c-format
 msgid "Marking %d message as unread"
 msgid_plural "Marking %d messages as unread"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:266
+#: ui/internal/window/actions.go:267
 msgid "Starring the message"
 msgstr ""
 
-#: ui/internal/window/actions.go:268
+#: ui/internal/window/actions.go:269
 #, c-format
 msgid "Starring %d message"
 msgid_plural "Starring %d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:272
+#: ui/internal/window/actions.go:273
 #, c-format
 msgid "Removing the star from %d message"
 msgid_plural "Removing the star from %d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:345
+#: ui/internal/window/actions.go:346
 msgid "Moving the message to Trash"
 msgstr ""
 
-#: ui/internal/window/actions.go:347
+#: ui/internal/window/actions.go:348
 #, c-format
 msgid "Moving %d message to Trash"
 msgid_plural "Moving %d messages to Trash"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:407
+#: ui/internal/window/actions.go:413
 msgid "Archiving the message"
 msgstr ""
 
-#: ui/internal/window/actions.go:409
+#: ui/internal/window/actions.go:415
 #, c-format
 msgid "Archiving %d message"
 msgid_plural "Archiving %d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:410
+#: ui/internal/window/actions.go:416
 msgid "This account has no archive folder"
 msgstr ""
 
-#: ui/internal/window/actions.go:436 ui/internal/window/actions.go:450
+#: ui/internal/window/actions.go:443 ui/internal/window/actions.go:457
 msgid "This account has no junk folder"
 msgstr ""
 
-#: ui/internal/window/actions.go:439
+#: ui/internal/window/actions.go:446
 msgid "Mark as junk?"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of messages of a conversation.
-#: ui/internal/window/actions.go:442
+#: ui/internal/window/actions.go:449
 #, c-format
 msgid "Mark %d message as junk?"
 msgid_plural "Mark %d messages as junk?"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:444
+#: ui/internal/window/actions.go:451
 msgid "Mark as _Junk"
 msgstr ""
 
-#: ui/internal/window/actions.go:447
+#: ui/internal/window/actions.go:454
 msgid "Marking the message as junk"
 msgstr ""
 
-#: ui/internal/window/actions.go:449
+#: ui/internal/window/actions.go:456
 #, c-format
 msgid "Marking %d message as junk"
 msgid_plural "Marking %d messages as junk"
@@ -6544,58 +6544,58 @@ msgstr ""
 msgid "Downloading…"
 msgstr ""
 
-#: ui/internal/window/messages.go:88 ui/internal/window/messages.go:264
+#: ui/internal/window/messages.go:88 ui/internal/window/messages.go:265
 #: ui/internal/window/threads.go:46
 msgid "Loading messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:177 ui/internal/window/threads.go:82
+#: ui/internal/window/messages.go:178 ui/internal/window/threads.go:83
 msgid "Loading more messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:256
+#: ui/internal/window/messages.go:257
 msgid "Select a folder"
 msgstr ""
 
-#: ui/internal/window/messages.go:257
+#: ui/internal/window/messages.go:258
 msgid "Choose a folder in the sidebar to see its messages."
 msgstr ""
 
-#: ui/internal/window/messages.go:259
+#: ui/internal/window/messages.go:260
 msgid "Not Synchronised"
 msgstr ""
 
-#: ui/internal/window/messages.go:260
+#: ui/internal/window/messages.go:261
 msgid ""
 "Messages moved here are archived on the server; the folder itself is not "
 "downloaded."
 msgstr ""
 
-#: ui/internal/window/messages.go:263
+#: ui/internal/window/messages.go:264
 msgid "Messages Unavailable"
 msgstr ""
 
-#: ui/internal/window/messages.go:268
+#: ui/internal/window/messages.go:269
 msgid "No Unread Messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:269
+#: ui/internal/window/messages.go:270
 msgid "Everything in this folder has been read."
 msgstr ""
 
-#: ui/internal/window/messages.go:271
+#: ui/internal/window/messages.go:272
 msgid "No Flagged Messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:272
+#: ui/internal/window/messages.go:273
 msgid "No message in this folder carries a flag."
 msgstr ""
 
-#: ui/internal/window/messages.go:274
+#: ui/internal/window/messages.go:275
 msgid "No Messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:275
+#: ui/internal/window/messages.go:276
 msgid "This folder is empty."
 msgstr ""
 
@@ -6780,48 +6780,48 @@ msgid_plural "%d pictures of this message are on the server only"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/search.go:258
+#: ui/internal/window/search.go:268
 msgid "Loading more results"
 msgstr ""
 
-#: ui/internal/window/search.go:310 ui/internal/window/search_ownwords.go:154
+#: ui/internal/window/search.go:320 ui/internal/window/search_ownwords.go:154
 #: ui/data/ui/window.ui:271
 msgid "Search Mail"
 msgstr ""
 
-#: ui/internal/window/search.go:314
+#: ui/internal/window/search.go:324
 msgid "Search Failed"
 msgstr ""
 
-#: ui/internal/window/search.go:315
+#: ui/internal/window/search.go:325
 msgid "Searching"
 msgstr ""
 
-#: ui/internal/window/search.go:317
+#: ui/internal/window/search.go:327
 msgid "Searching…"
 msgstr ""
 
-#: ui/internal/window/search.go:319
+#: ui/internal/window/search.go:329
 msgid "No Results"
 msgstr ""
 
 #. TRANSLATORS: tooltip of the Folder search scope; %s is a folder.
-#: ui/internal/window/search.go:342
+#: ui/internal/window/search.go:352
 #, c-format
 msgid "Search in %s"
 msgstr ""
 
-#: ui/internal/window/search.go:344
+#: ui/internal/window/search.go:354
 msgid "Select a folder to search in it"
 msgstr ""
 
 #. TRANSLATORS: tooltip of the Account search scope; %s is an account.
-#: ui/internal/window/search.go:348
+#: ui/internal/window/search.go:358
 #, c-format
 msgid "Search every folder of %s except Trash and Junk"
 msgstr ""
 
-#: ui/internal/window/search.go:352
+#: ui/internal/window/search.go:362
 msgid "Search every account except Trash and Junk"
 msgstr ""
 
@@ -7058,19 +7058,19 @@ msgstr ""
 msgid "%s needs attention"
 msgstr ""
 
-#: ui/internal/window/threads.go:184
+#: ui/internal/window/threads.go:185
 msgid "Loading the conversation"
 msgstr ""
 
-#: ui/internal/window/window.go:1025
+#: ui/internal/window/window.go:1035
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:1097 ui/data/ui/window.ui:254
+#: ui/internal/window/window.go:1107 ui/data/ui/window.ui:254
 msgid "Search"
 msgstr ""
 
-#: ui/internal/window/window.go:1103 ui/data/ui/window.ui:224
+#: ui/internal/window/window.go:1113 ui/data/ui/window.ui:224
 msgid "Messages"
 msgstr ""
 
@@ -7101,6 +7101,60 @@ msgstr ""
 #: ui/internal/window/preferences_calendar.go:649
 #: ui/data/ui/account_wizard.ui:198 ui/data/ui/account_wizard.ui:255
 msgid "_Forget"
+msgstr ""
+
+#. TRANSLATORS: the toast after messages went to the Junk folder;
+#. its button takes it back.
+#: ui/internal/undo/text.go:25
+#, c-format
+msgid "Moved %d message to Junk."
+msgid_plural "Moved %d messages to Junk."
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: the toast after Move To; %d is the number of
+#. messages, %s the name of the folder they went to.
+#: ui/internal/undo/text.go:30
+#, c-format
+msgid "Moved %d message to “%s”."
+msgid_plural "Moved %d messages to “%s”."
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: the toast after Move To, when the folder has no name.
+#: ui/internal/undo/text.go:33
+#, c-format
+msgid "Moved %d message."
+msgid_plural "Moved %d messages."
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: the button of the toast after a message was moved (to
+#. Trash, the archive, another folder); it moves it back. %s is the
+#. keyboard shortcut that does the same, like Ctrl+Z.
+#: ui/internal/undo/text.go:50
+#, c-format
+msgid "Undo (%s)"
+msgstr ""
+
+#. TRANSLATORS: the toast after Undo moved messages back to where they
+#. were.
+#: ui/internal/undo/text.go:58
+#, c-format
+msgid "Moved %d message back."
+msgid_plural "Moved %d messages back."
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: Undo (Ctrl+Z) of a move to Trash or another folder
+#. failed.
+#: ui/internal/undo/text.go:65
+msgid "Could not move the messages back."
+msgstr ""
+
+#. TRANSLATORS: Ctrl+Z when no move of mail is left to take back.
+#: ui/internal/undo/text.go:71
+msgid "Nothing to undo."
 msgstr ""
 
 #: ui/data/ui/account_wizard.ui:10 ui/data/ui/account_wizard.ui:21

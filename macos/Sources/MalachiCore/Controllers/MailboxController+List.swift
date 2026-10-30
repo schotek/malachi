@@ -174,6 +174,9 @@ public final class ListController {
     /// Show in Mail (`reveal`, MailboxController+Reveal): the message to
     /// select once its folder's first page is listed.
     var pendingReveal: PendingReveal?
+    /// What the next first page of the folder on display selects after an
+    /// Undo (`relistAfterUndo`; window.go `undoReselect`).
+    private var undoReselect: [Undo.Moved] = []
 
     /// Installs the list half into `mailbox`'s hooks and publishes the
     /// initial state (the folder the mailbox has selected, if any, is
@@ -212,6 +215,7 @@ public final class ListController {
         failureWaiters = [:]
         refetchAfter = []
         pendingReveal = nil
+        undoReselect = []
     }
 
     // MARK: Loading
@@ -290,7 +294,7 @@ public final class ListController {
                 self.showListState()
             case .success(let res):
                 self.mailbox.model.setMessages(res.messages, page: res.page)
-                self.reconcile(.keep)
+                self.reconcile(.keep, announce: self.takeUndoReselect())
             }
         }
     }
@@ -335,7 +339,7 @@ public final class ListController {
                 self.showListState()
             case .success(let res):
                 self.mailbox.model.setThreads(res.threads, page: res.page)
-                self.syncRows()
+                self.reconcile(.keep, announce: self.takeUndoReselect())
                 self.fetchExpandedMembers()
                 self.announceSelectedMembers()
             }
@@ -570,11 +574,13 @@ public final class ListController {
     /// (threads.go `reconcileRows`, messages.go `rebuildMessageRows`). The
     /// index of the selected row is read off the rows as they were before
     /// the model moved on, as the GTK code reads it off the widgets.
-    func reconcile(_ hint: SelectionHint) {
+    /// `announce` tells the views of the selection even when its keys did
+    /// not change (an Undo set them, `takeUndoReselect`).
+    func reconcile(_ hint: SelectionHint, announce: Bool = false) {
         let prev = selectedKeys
         let prevIdx = prev.first.flatMap { k in rows.firstIndex { $0.key == k } } ?? -1
         rows = currentRows()
-        var changed = false
+        var changed = announce
         if !prev.isEmpty {
             if hint == .clear {
                 selectedKeys = []
@@ -1198,5 +1204,45 @@ public final class ListController {
             loadMessages()
         }
         onOutboxRefreshed?(acc)
+    }
+}
+
+// MARK: Undo
+
+extension ListController {
+    /// Lists the folder on display again after an Undo took messages back
+    /// (ActionsController+Undo `afterUndo`), selecting the rows of `back`,
+    /// the messages that came back to it, once its first page arrives
+    /// (window.go `afterUndo`, `takeUndoReselect`).
+    public func relistAfterUndo(_ back: [Undo.Moved]) {
+        undoReselect = back
+        loadMessages()
+    }
+
+    /// The rows of the messages Undo brought back to the folder just listed
+    /// again (a message's row, or its conversation's), made the selection,
+    /// once; called when a first page of the list is in the model, before
+    /// its rows are published. True when the selection was set.
+    func takeUndoReselect() -> Bool {
+        let back = undoReselect
+        undoReselect = []
+        guard !back.isEmpty else { return false }
+        let m = mailbox.model
+        var keys: [ListKey] = []
+        for b in back {
+            let candidates = [
+                ListKey(message: b.messageId),
+                ListKey(thread: b.threadId, message: b.messageId),
+                b.threadId.map { ListKey(thread: $0) },
+            ].compactMap { $0 }
+            if let k = candidates.first(where: { m.rowIndexOf($0) >= 0 }), !keys.contains(k) {
+                keys.append(k)
+            }
+        }
+        guard !keys.isEmpty else { return false }
+        // In list order, as a selection is (`select(keys:)`).
+        keys.sort { m.rowIndexOf($0) < m.rowIndexOf($1) }
+        selectedKeys = keys
+        return true
     }
 }

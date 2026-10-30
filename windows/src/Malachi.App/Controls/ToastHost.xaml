@@ -9,7 +9,9 @@ message_window.blp, compose.blp). A capsule at the bottom centre of what
 it covers: 42 px high, 24 px above the bottom, at most the width less 24,
 text padded by 18, one line cut with an ellipsis and the whole text as its
 tooltip, a fade of 0.2 s. Only the capsule takes the pointer; a click
-dismisses it. Place it last in the grid cell it covers, spanning it.
+dismisses it. A toast with a button (window/undo.go's Undo (Ctrl+Z) after a
+move, Adw.Toast's button-label) shows it after the text; its click dismisses
+the toast and runs it. Place it last in the grid cell it covers, spanning it.
 -->
 <UserControl
     x:Class="Malachi.App.Controls.ToastHost"
@@ -36,13 +38,30 @@ dismisses it. Place it last in the grid cell it covers, spanning it.
             <Border.OpacityTransition>
                 <ScalarTransition Duration="0:0:0.2" />
             </Border.OpacityTransition>
-            <TextBlock
-                x:Name="Label"
-                VerticalAlignment="Center"
-                MaxLines="1"
-                Style="{StaticResource BodyLabelStyle}"
-                TextTrimming="CharacterEllipsis"
-                TextWrapping="NoWrap" />
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    x:Name="Label"
+                    VerticalAlignment="Center"
+                    MaxLines="1"
+                    Style="{StaticResource BodyLabelStyle}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="NoWrap" />
+                <Button
+                    x:Name="ActionButton"
+                    Grid.Column="1"
+                    Height="30"
+                    Margin="0,0,-12,0"
+                    Padding="10,0,10,0"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="ToastButton"
+                    Click="OnActionButtonClick"
+                    CornerRadius="15"
+                    Visibility="Collapsed" />
+            </Grid>
         </Border>
     </Grid>
 </UserControl>

@@ -9,7 +9,8 @@
 // message_window.go; compose.blp's compose.send and compose.save; the
 // window.close of the Escape shortcut controllers; accounts_reorder.go's
 // Ctrl+Up/Down; the primary menu's F10, GtkWindow's own key; the
-// calendar's keys.go ShowCalendarKey and New Event), plus the Windows keys
+// calendar's keys.go ShowCalendarKey and New Event; win.undo of
+// window/undo.go), plus the Windows keys
 // for Reply, Reply All and Forward (macOS's reply:, replyAll:, forward:).
 
 namespace Malachi.Core.Presentation;
@@ -50,6 +51,14 @@ public enum ShortcutCommand
 
     /// <summary>Opens the primary menu (window.blp's MenuButton with primary: true, F10).</summary>
     MainMenu,
+
+    /// <summary>
+    /// Undo of the newest move of mail (win.undo, Ctrl+Z; window/undo.go
+    /// undoLast): the main window in Mail and Board, never while a text
+    /// input or an editor has the keyboard, whose own Ctrl+Z takes back
+    /// typing.
+    /// </summary>
+    Undo,
 
     /// <summary>Reply (Ctrl+R with ctrl-r = reply).</summary>
     Reply,

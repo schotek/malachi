@@ -42,6 +42,7 @@ public sealed class WindowCommands
             [ShortcutCommand.ShowCalendar] = ShowCalendar,
             [ShortcutCommand.NewEvent] = NewEvent,
             [ShortcutCommand.MainMenu] = MainMenu,
+            [ShortcutCommand.Undo] = Undo,
             [ShortcutCommand.Reply] = Reply,
             [ShortcutCommand.ReplyAll] = ReplyAll,
             [ShortcutCommand.Forward] = Forward,
@@ -116,6 +117,12 @@ public sealed class WindowCommands
 
     /// <summary>The main window's primary menu (F10), while its button is shown.</summary>
     public AppCommand MainMenu { get; } = new(nameof(MainMenu));
+
+    /// <summary>
+    /// win.undo (Ctrl+Z; window/undo.go undoLast): takes back the newest
+    /// move of mail. The main window's, gated to Mail and Board.
+    /// </summary>
+    public AppCommand Undo { get; } = new(nameof(Undo));
 
     /// <summary>Reply (Ctrl+R).</summary>
     public AppCommand Reply { get; } = new(nameof(Reply));

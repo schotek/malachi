@@ -117,6 +117,9 @@ public sealed partial class MainWindow : Window
     /// <summary>The toast overlay over the message pane (window.go Toast).</summary>
     public IToasts Toasts => ToastsHost;
 
+    /// <summary>The same overlay for the toasts with a button (window/undo.go: Undo of a move).</summary>
+    public IActionToasts ActionToasts => ToastsHost;
+
     /// <summary>The title bar's search box (window.blp search_entry); the list's search follows it (MainWindow.Panes.cs).</summary>
     public Microsoft.UI.Xaml.Controls.AutoSuggestBox Search => SearchBox;
 

@@ -9,13 +9,17 @@
 // (docs/windows-port.md §7.4): the WinUI overlay (Malachi.App ToastHost)
 // draws Current and animates its changes. One toast at a time, the rest
 // queued in order; 0 seconds keeps a toast until the next one replaces it,
-// and a toast without a timeout gives way to the next one at once. Swift's
+// and a toast without a timeout gives way to the next one at once. A toast
+// may have a button (window/undo.go's Undo after a move): a click on it
+// dismisses the toast and then runs it (Adw.Toast's button-clicked), and
+// the toast can be taken away by whoever showed it (Dismiss). Swift's
 // DispatchWorkItem is a timer on the injected TimeProvider, whose tick is
 // posted to the synchronization context the presenter was made on (the UI
 // thread); without one it runs where it fires (tests on a fake clock).
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 
 namespace Malachi.Core.Presentation;
@@ -60,12 +64,27 @@ public sealed class ToastPresenter : IDisposable
     public void Show(string text, int seconds = DefaultSeconds)
     {
         ArgumentNullException.ThrowIfNull(text);
-        var toast = new Toast(text, Math.Max(seconds, 0));
+        Show(new Toast(text, seconds));
+    }
+
+    /// <summary>
+    /// Shows <paramref name="toast"/> as <see cref="Show(string, int)"/>
+    /// does, with its button if it has one, and returns the toast queued
+    /// (its seconds at least 0), for <see cref="Dismiss"/>.
+    /// </summary>
+    public Toast Show(Toast toast)
+    {
+        ArgumentNullException.ThrowIfNull(toast);
+        ArgumentNullException.ThrowIfNull(toast.Text);
+        if (toast.Seconds < 0)
+        {
+            toast = toast with { Seconds = 0 };
+        }
         if (Current is { Seconds: 0 })
         {
             // A toast without a timeout gives way to the next one at once.
             Present(toast);
-            return;
+            return toast;
         }
         if (Current is null)
         {
@@ -75,6 +94,47 @@ public sealed class ToastPresenter : IDisposable
         {
             waiting.Enqueue(toast);
         }
+        return toast;
+    }
+
+    /// <summary>
+    /// Takes <paramref name="toast"/> (the very instance <see cref="Show(Toast)"/>
+    /// returned) away: the current one as <see cref="DismissCurrent"/> does,
+    /// a waiting one out of the queue; one already gone is left alone.
+    /// </summary>
+    public void Dismiss(Toast toast)
+    {
+        ArgumentNullException.ThrowIfNull(toast);
+        if (ReferenceEquals(Current, toast))
+        {
+            DismissCurrent();
+            return;
+        }
+        if (!waiting.Any(t => ReferenceEquals(t, toast)))
+        {
+            return;
+        }
+        var kept = waiting.Where(t => !ReferenceEquals(t, toast)).ToList();
+        waiting.Clear();
+        foreach (var t in kept)
+        {
+            waiting.Enqueue(t);
+        }
+    }
+
+    /// <summary>
+    /// A click on the current toast's button: the toast goes (the next
+    /// queued one follows), then the button's action runs; nothing without
+    /// a toast with a button.
+    /// </summary>
+    public void ClickButton()
+    {
+        if (Current?.Button is not { } button)
+        {
+            return;
+        }
+        DismissCurrent();
+        button.Clicked();
     }
 
     /// <summary>Hides the current toast now (a click on it) and shows the next queued one, if any.</summary>

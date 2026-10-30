@@ -55,6 +55,9 @@ public sealed partial class Integration : IDisposable
         List = new ListController(Mailbox, state.Settings, logger: logs.CreateLogger<ListController>());
         Cache = new MessageCache(state.Client, mainToast, logs.CreateLogger<MessageCache>());
         Actions = new ActionsController(Mailbox, List, Cache, state.Settings, mainToast, logs.CreateLogger<ActionsController>());
+        // The toast of a move with its Undo button (window/undo.go), over
+        // the main window whatever window is active, as the actions' toasts.
+        Actions.ActionToasts = mainWindow.ActionToasts;
         Compose = new ComposeController(state.Client, state.Settings, logger: logs.CreateLogger<ComposeController>());
         // The Change Status menus of every view (window.go w.issues): their
         // toasts over the main window.

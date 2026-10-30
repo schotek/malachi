@@ -14,7 +14,8 @@
 // drafts.go (openDraft), assistant_panel.go (openSavedDraft, findDraft),
 // selection.go (cancelSends, forwardMessages, openSelection) and
 // conversation_draft.go (editThreadDraft, discardThreadDraft; a Windows
-// addition ahead of Swift).
+// addition ahead of Swift); the recording of the moves Undo takes back is
+// undo.go's (ActionsController.Undo.cs).
 //
 // The per-message actions of the main window and the message windows,
 // minus the widgets: an optimistic change in the model and the rows,
@@ -55,6 +56,7 @@ using Malachi.Core.Selections;
 using Malachi.Core.Settings;
 using Malachi.Core.Text;
 using Malachi.Core.Transport;
+using Malachi.Core.Undos;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -467,7 +469,7 @@ public sealed partial class ActionsController
         FolderKey? target = trash is null ? null : new FolderKey(acc, trash.Id);
         var undoMoves = TrackMoves([.. msgs.Where(s => trash is null || s.FolderId != trash.Id)], target);
         var undoExpunged = TrackMoves([.. msgs.Where(s => trash is not null && s.FolderId == trash.Id)], null);
-        void Undo()
+        void Revert()
         {
             undoExpunged();
             undoMoves();
@@ -483,9 +485,18 @@ public sealed partial class ActionsController
             onError: _ =>
             {
                 restore();
-                Undo();
+                Revert();
             },
-            onOk: _ => Mailbox.WithdrawNotifications(ids));
+            onOk: _ =>
+            {
+                Mailbox.WithdrawNotifications(ids);
+                // Undo takes back the move to Trash (ActionsController.Undo.cs);
+                // a message expunged from Trash is gone for good.
+                if (trash is not null)
+                {
+                    RecordUndo(Undo.Kind.Trash, trash.Id, msgs);
+                }
+            });
     }
 
     /// <summary>
@@ -611,7 +622,7 @@ public sealed partial class ActionsController
             toast(missing);
             return;
         }
-        MoveList(msgs, target.Id, what);
+        MoveList(msgs, target.Id, UndoKindOf(role), what);
     }
 
     /// <summary>
@@ -626,7 +637,7 @@ public sealed partial class ActionsController
     {
         ArgumentNullException.ThrowIfNull(ids);
         Mailbox.Scope.VerifyAccess();
-        MoveList(Movable(ids), folder, ContextMenu.MovingText);
+        MoveList(Movable(ids), folder, Undo.Kind.Move, ContextMenu.MovingText);
     }
 
     // actions.go movable: the known ones of ids a move takes, not the
@@ -637,8 +648,10 @@ public sealed partial class ActionsController
     // actions.go moveListTo: the move itself. The messages are of one
     // account (a conversation row's members, a selection), possibly of
     // several of its folders (a search); the ones already in the target stay
-    // where they are.
-    private void MoveList(List<MessageSummary> all, FolderId target, Func<int, string> what)
+    // where they are. Once the daemon took it, Undo can take it back as
+    // kind (ActionsController.Undo.cs), unless the target is a folder the
+    // daemon does not keep (Gmail's All Mail drops the rows).
+    private void MoveList(List<MessageSummary> all, FolderId target, Undo.Kind kind, Func<int, string> what)
     {
         List<MessageSummary> msgs = [.. all.Where(s => s.FolderId != target)];
         if (msgs.Count == 0)
@@ -662,7 +675,14 @@ public sealed partial class ActionsController
                 restore();
                 undo();
             },
-            onOk: _ => Mailbox.WithdrawNotifications(moving));
+            onOk: _ =>
+            {
+                Mailbox.WithdrawNotifications(moving);
+                if (Mailbox.Model.Folder(new FolderKey(acc, target)) is not { Synced: false })
+                {
+                    RecordUndo(kind, target, msgs);
+                }
+            });
     }
 
     // Folders (context_menus.go)
@@ -697,7 +717,11 @@ public sealed partial class ActionsController
         var junk = f.Role == FolderRole.Junk;
         var q = ContextMenu.EmptyQuestion(junk, f.Total);
         Ask(parent, q.Heading, q.Body, q.Confirm, () =>
-            Call(API.FolderEmpty, new FolderEmptyParams { AccountId = k.Account, FolderId = k.Folder }, ContextMenu.EmptyingText(junk)));
+        {
+            // The moves into the folder cannot be taken back any more.
+            UndoHistory.ForgetFolder(k.Account, k.Folder);
+            Call(API.FolderEmpty, new FolderEmptyParams { AccountId = k.Account, FolderId = k.Folder }, ContextMenu.EmptyingText(junk));
+        });
     }
 
     // Outbox

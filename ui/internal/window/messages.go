@@ -95,6 +95,7 @@ func (w *Window) loadMessages() {
 			w.model.setMessages(res.Messages, res.Page)
 			w.rebuildMessageRows()
 			w.showListState()
+			w.takeUndoReselect()
 		})
 	}()
 }

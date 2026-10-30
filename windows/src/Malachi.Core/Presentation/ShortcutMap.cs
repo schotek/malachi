@@ -5,7 +5,7 @@
 // windows/README.md), over GTK's accelerators: ui/main.go addActions
 // (app.compose Ctrl+N, app.preferences Ctrl+comma, app.quit Ctrl+Q, in
 // every window), window.go MessageAccels (win.* of the main window:
-// Delete, a, j, u, s, Ctrl+R, Ctrl+F), message_window.go messageShortcuts
+// Delete, a, j, u, s, Ctrl+R, Ctrl+F, Ctrl+Z), message_window.go messageShortcuts
 // (msg.*: Delete, a, j, u, s), the Escape shortcut controllers of
 // message_window.blp, embedded_window.blp and compose.blp, compose.blp's
 // compose.send (Ctrl+Return) and compose.save (Ctrl+S),
@@ -21,7 +21,9 @@
 // besides Escape, and Ctrl+Shift+N is the calendar's New Event (its
 // Primary+Alt+N, Shift standing for Alt as in Cal.Press). The single keys
 // (Delete, A, J, U, S) do nothing while a text input has the focus, where
-// they type (GTK setTypingAccels); the compose editor counts as one, and
+// they type (GTK setTypingAccels), and neither does Undo's Ctrl+Z (undo.go
+// undoAccelAllowed: a text input takes back its own typing); the compose
+// editor counts as one, and
 // keeps Escape for its bridge (the bridge closes the window through its own
 // message, as in GTK and macOS).
 
@@ -72,6 +74,10 @@ public static class ShortcutMap
         // command's gate (Board.Allows) keeps it to Mail and the Calendar,
         // and a Ctrl chord, so no text input lifts it either.
         (KeyChord.CtrlShift(VirtualKey.N), ShortcutCommand.NewEvent),
+        // Undo of the newest move of mail (window/undo.go win.undo): its
+        // gate keeps it to Mail and Board; Resolve lifts it while a text
+        // input or an editor has the keyboard.
+        (KeyChord.Ctrl(VirtualKey.Z), ShortcutCommand.Undo),
     ];
 
     private static readonly (KeyChord Chord, ShortcutCommand Command)[] Close =
@@ -154,6 +160,11 @@ public static class ShortcutMap
             }
             if (chord.IsBare && context.TextInputFocused && IsSingleKey(command))
             {
+                return null;
+            }
+            if (command == ShortcutCommand.Undo && (context.TextInputFocused || context.EditorFocused))
+            {
+                // The text input's own Ctrl+Z (undo.go undoAccelAllowed).
                 return null;
             }
             if (command == ShortcutCommand.CloseWindow && chord.Key == VirtualKey.Escape && context.EditorFocused)

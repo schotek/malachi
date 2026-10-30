@@ -151,6 +151,28 @@ final class Integration {
         sidebar.onEmptyFolder = { [weak self] k in
             self?.actions.emptyFolder(k, parent: self?.mainWindow?.window)
         }
+        // Undo of moves (ActionsController+Undo): the toast with its button
+        // over the main window's content (Mail or Board), ⌘Z through the
+        // window's Edit ▸ Undo, never in the Calendar.
+        actions.showUndoToast = { [weak self] text, button, undo in
+            guard let toasts = self?.mainWindow?.toasts else {
+                self?.mainToast(text)
+                return
+            }
+            toasts.showUndo(text, button: button, onUndo: undo)
+        }
+        actions.dismissUndoToast = { [weak self] in
+            self?.mainWindow?.toasts.dismissUndo()
+        }
+        if let window = mainWindow?.window as? MainWindow {
+            window.mailUndoState = { [weak self] in
+                guard let self, let mode = self.mainWindow?.mode, mode != .calendar else { return nil }
+                return self.actions.canUndo
+            }
+            window.onMailUndo = { [weak self] in
+                self?.actions.undoLast()
+            }
+        }
     }
 
     /// The assistant panel follows the list's selection, after the reader

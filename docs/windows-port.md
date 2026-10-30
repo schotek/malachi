@@ -4096,6 +4096,35 @@ message whose pictures arrive late, and the spinner of a slow body
 (centred in the whole area). The UI smoke `DevmailTests` and
 `ConversationChatSmokeTests` (`QuotedRow`) must stay green.
 
+### 11.14 Undo of moves of mail (2026-10-30)
+
+Port of `ui/internal/undo` (`docs/architecture.md` §7) and of GTK's
+`window/undo.go`, written on a Mac without `dotnet`. Core
+`Undos/Undo.cs` (`Undo.Kind`, `Moved`, `Entry`, `History` — Go's `Stack`,
+renamed for CA1711 — `Record`, `FromBoard`, `Calls`, `Reselect`,
+`ReselectKeys`) and `UndoText.cs`; `ActionsController.Undo.cs` records Trash
+(not an expunge), Archive, Junk and Move To once the daemon took them (not
+into an unsynced folder), shows the 8 s toast with "Undo (Ctrl+Z)" through
+`IActionToasts`, runs `UndoLast` (`message.move` per source folder, then
+`IActionsMailbox.LoadFolders` and `IActionsList.ReloadSelecting`, whose
+first page selects the rows that came back), and takes the board's Archive
+and Delete through `RecordBoardUndo` / `UndoBoard` (`BoardController.UndoArchive`).
+`Board.UndoArchive` uses `Undo.Calls`. Empty Trash/Junk forgets the moves
+into the folder. `Toast` has an optional `ToastButton`; `ToastHost` shows it
+after the text (automation id `ToastButton`) and the board's `ArchiveBar`
+InfoBar is gone. Ctrl+Z is `ShortcutCommand.Undo` of the main window, in
+Mail and Board, lifted while a text input or an editor has the keyboard.
+Tests: `UndoTests`, `ActionsControllerUndoTests`, `ShortcutMapTests`
+(`CtrlZUndoesAMoveOfTheMainWindowOutsideTextInputs`), `ToastPresenterTests`.
+Guessed WinUI behaviour: a root accelerator set to `Handled = false` while
+a TextBox has the focus leaves its own undo to it; Ctrl+Z in a focused
+reading WebView2 is swallowed and runs Undo, in the board's inline editor
+not; the toast button's `Tapped` does not also dismiss the capsule. Open:
+`build.ps1 app`/`test`/`lint`, a `DevmailTests` smoke (Delete → toast →
+Ctrl+Z → the message back and selected; the board's Archive → Ctrl+Z;
+Ctrl+Z in the search box stays text undo), and by hand the toast in light,
+dark and a narrow window, keyboard focus on its button and Narrator.
+
 ## 12. Tests
 
 `make test-windows` (`build.ps1 test`) runs six test projects, 5,944

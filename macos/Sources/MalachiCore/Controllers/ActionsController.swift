@@ -64,7 +64,19 @@ public final class ActionsController {
     /// showing it follows (outbox.go `showOutboxState`).
     public var onOutboxStateChanged: (@MainActor (MessageID) -> Void)?
 
-    private let toast: @MainActor (String) -> Void
+    /// Shows the toast of a move with its Undo button (`ActionsController+Undo`):
+    /// the text, the button's label and what the button does. Without one
+    /// no toast shows and only ⌘Z takes the move back.
+    public var showUndoToast: (@MainActor (_ text: String, _ button: String, _ undo: @escaping @MainActor () -> Void) -> Void)?
+    /// Takes the toast of the last move away (an Undo began).
+    public var dismissUndoToast: (@MainActor () -> Void)?
+    /// Takes back the board's Archive or Delete (`BoardController.undoArchive`:
+    /// the messages back to their folders and the case back on the board).
+    public var undoBoard: (@MainActor (Board.ArchiveOutcome) -> Void)?
+    /// The session's moves of mail Undo takes back (window.go `undo`).
+    var undoStack = Undo.Stack()
+
+    let toast: @MainActor (String) -> Void
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "actions")
     /// The messages a draft.create or draft.open is being prepared for
     /// (compose_open.go `composing`): a second click while it runs does
@@ -351,6 +363,10 @@ public final class ActionsController {
             undo()
         }, onOK: { [weak self] _ in
             self?.mailbox.withdrawNotifications(ids)
+            // The moves to Trash can be taken back; an expunge cannot.
+            if let trash {
+                self?.recordUndo(.trash, target: trash.id, msgs)
+            }
         })
     }
 
@@ -392,7 +408,7 @@ public final class ActionsController {
     /// Moves messages to the account's Archive folder (actions.go
     /// `archiveIDs`).
     public func archive(_ ids: [MessageID]) {
-        moveToRole(ids, .archive, missing: L10n.T("This account has no archive folder")) { n in
+        moveToRole(ids, .archive, kind: .archive, missing: L10n.T("This account has no archive folder")) { n in
             n == 1
                 ? L10n.T("Archiving the message")
                 : L10n.N("Archiving %d message", "Archiving %d messages", n)
@@ -408,8 +424,8 @@ public final class ActionsController {
 
     /// Moves messages to the account's Junk folder after a confirmation
     /// shown over `parent` (actions.go `junkIDs`). Unlike Trash the question
-    /// is always asked: the move feeds the server's spam filter and is not
-    /// undone by moving back.
+    /// is always asked: the move feeds the server's spam filter, which Undo
+    /// (moving back) does not take back.
     public func junk(_ ids: [MessageID], subject: String, parent: AnyObject? = nil) {
         let msgs = summaries(ids)
         guard let first = msgs.first else { return }
@@ -425,7 +441,7 @@ public final class ActionsController {
         }
         let ids = msgs.map(\.id)
         ask(parent, heading: heading, body: subject, label: L10n.T("Mark as _Junk")) { [weak self] in
-            self?.moveToRole(ids, .junk, missing: missing) { n in
+            self?.moveToRole(ids, .junk, kind: .junk, missing: missing) { n in
                 n == 1
                     ? L10n.T("Marking the message as junk")
                     : L10n.N("Marking %d message as junk", "Marking %d messages as junk", n)
@@ -441,22 +457,22 @@ public final class ActionsController {
     /// messages to the target (`trackMoves`), and success withdraws their
     /// desktop notifications. Outbox messages are left out (the daemon
     /// refuses moves on them), and a message already in the target folder
-    /// is a no-op.
-    func moveToRole(_ ids: [MessageID], _ role: FolderRole, missing: String, what: (Int) -> String) {
+    /// is a no-op. Undo takes the move back as `kind`.
+    func moveToRole(_ ids: [MessageID], _ role: FolderRole, kind: Undo.Kind, missing: String, what: (Int) -> String) {
         let msgs = movable(ids)
         guard let first = msgs.first else { return }
         guard let target = mailbox.model.folderByRole(first.accountId, role) else {
             toast(missing)
             return
         }
-        move(msgs, to: target.id, what: what)
+        move(msgs, to: target.id, kind: kind, what: what)
     }
 
     /// Moves messages to another folder of their account (Move To in a
     /// message's context menu; actions.go `moveIDsTo`), as `moveToRole`
     /// does.
     public func moveTo(_ ids: [MessageID], folder: FolderID) {
-        move(movable(ids), to: folder, what: ContextMenu.movingText)
+        move(movable(ids), to: folder, kind: .move, what: ContextMenu.movingText)
     }
 
     /// The summaries of `ids` a move takes: not the outbox's (accelerators
@@ -466,8 +482,10 @@ public final class ActionsController {
     }
 
     /// The move itself (actions.go `moveListTo`): the rows go at once and
-    /// come back on failure, the counts follow, the windows close.
-    private func move(_ msgs: [MessageSummary], to target: FolderID, what: (Int) -> String) {
+    /// come back on failure, the counts follow, the windows close. Once the
+    /// daemon took it, Undo can take it back as `kind`, unless the target is
+    /// a folder the daemon does not keep (Gmail's All Mail drops the rows).
+    private func move(_ msgs: [MessageSummary], to target: FolderID, kind: Undo.Kind, what: (Int) -> String) {
         // The messages already in the target stay where they are.
         let msgs = msgs.filter { $0.folderId != target }
         guard let first = msgs.first else { return }
@@ -484,7 +502,11 @@ public final class ActionsController {
                 restore()
                 undo()
             }, onOK: { [weak self] _ in
-                self?.mailbox.withdrawNotifications(moving)
+                guard let self else { return }
+                self.mailbox.withdrawNotifications(moving)
+                if self.mailbox.model.folder(FolderKey(account: acc, folder: target))?.synced != false {
+                    self.recordUndo(kind, target: target, msgs)
+                }
             }
         )
     }
@@ -507,6 +529,8 @@ public final class ActionsController {
         let junk = f.role == .junk
         let q = ContextMenu.emptyQuestion(junk: junk, count: f.total)
         ask(parent, heading: q.heading, body: q.body, label: q.confirm) { [weak self] in
+            // The moves into the folder cannot be taken back any more.
+            self?.undoStack.forgetFolder(k.account, k.folder)
             self?.call(API.FolderEmpty.self, FolderEmptyParams(accountId: k.account, folderId: k.folder),
                        what: ContextMenu.emptyingText(junk: junk))
         }
@@ -1174,7 +1198,7 @@ public final class ActionsController {
     /// `onError` (which reverts the optimistic change); on success `onOK`
     /// runs with the result. Either callback may be nil. Nothing runs once
     /// the mailbox closed.
-    private func call<M: RPCMethod>(
+    func call<M: RPCMethod>(
         _ method: M.Type, _ params: M.Params, what: String, timeout: Duration? = nil,
         onError: (@MainActor (any Error) -> Void)? = nil, onOK: (@MainActor (M.Result) -> Void)? = nil
     ) {

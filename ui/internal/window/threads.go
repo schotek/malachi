@@ -53,6 +53,7 @@ func (w *Window) loadThreadPage(k folderKey, gen uint64) {
 			w.model.setThreads(res.Threads, res.Page)
 			w.syncRows()
 			w.fetchExpandedMembers()
+			w.takeUndoReselect()
 		})
 	}()
 }

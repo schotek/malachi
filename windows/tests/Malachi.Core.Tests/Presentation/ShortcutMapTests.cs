@@ -6,7 +6,8 @@
 // message_window.go, the Escape controllers, compose.blp,
 // accounts_reorder.go) and macOS's command-r table (MainMenu.swift) and
 // bareKeyActions (Actions.swift), with the calendar's New Event
-// (Ctrl+Shift+N, keys.go's Primary+Alt+N).
+// (Ctrl+Shift+N, keys.go's Primary+Alt+N) and Undo of a move (Ctrl+Z,
+// window/undo.go win.undo).
 
 using System;
 using System.Linq;
@@ -134,6 +135,32 @@ public sealed class ShortcutMapTests
         // Ctrl+N stays New Message; Ctrl+Alt+N is no key.
         Assert.Equal(C.NewMessage, Resolve(KeyChord.Ctrl(K.N)));
         Assert.Null(Resolve(new KeyChord(K.N, KeyModifiers.Control | KeyModifiers.Alt)));
+        foreach (var window in Enum.GetValues<WindowKind>().Where(w => w != WindowKind.Main))
+        {
+            Assert.Null(ShortcutMap.Resolve(chord, new ShortcutContext(window)));
+            Assert.DoesNotContain(chord, ShortcutMap.Chords(window));
+        }
+    }
+
+    /// <summary>
+    /// Ctrl+Z is the main window's Undo of the newest move of mail
+    /// (window/undo.go win.undo); a text input or an editor keeps it for its
+    /// own typing (undo.go undoAccelAllowed; the command's gate keeps it out
+    /// of the Calendar).
+    /// </summary>
+    [Fact]
+    public void CtrlZUndoesAMoveOfTheMainWindowOutsideTextInputs()
+    {
+        var chord = KeyChord.Ctrl(K.Z);
+        Assert.Equal(C.Undo, Resolve(chord));
+        Assert.Equal(C.Undo, Resolve(chord, Main with { CtrlR = CtrlR.Refresh }));
+        Assert.Null(Resolve(chord, Main with { TextInputFocused = true }));
+        Assert.Null(Resolve(chord, Main with { EditorFocused = true }));
+        Assert.Null(Resolve(chord, Main with { TextInputFocused = true, EditorFocused = true }));
+        Assert.False(ShortcutMap.IsSingleKey(C.Undo));
+        Assert.False(ShortcutMap.IsBrowserKey(chord));
+        Assert.Contains(chord, ShortcutMap.Chords(WindowKind.Main));
+        Assert.Equal("Ctrl+Z", chord.ToString());
         foreach (var window in Enum.GetValues<WindowKind>().Where(w => w != WindowKind.Main))
         {
             Assert.Null(ShortcutMap.Resolve(chord, new ShortcutContext(window)));

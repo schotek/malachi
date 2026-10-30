@@ -260,6 +260,10 @@ public sealed partial class MainWindow
         // New Event: Mail and the Calendar (its handler is
         // MainWindow.Calendar.cs's NewEvent).
         Commands.NewEvent.Gate = () => Board.Allows(Board.Command.NewEvent, mode);
+        // Undo of a move of mail (Ctrl+Z; window/undo.go undoAccelAllowed):
+        // Mail and Board, never the Calendar. Its handler is the actions'
+        // (MainWindow.Panes.cs).
+        Commands.Undo.Gate = () => mode != Board.Mode.Calendar;
         // F10: the sidebar's primary menu in Mail, the page's "…" in Board
         // and Calendar.
         Commands.MainMenu.Handler = () =>

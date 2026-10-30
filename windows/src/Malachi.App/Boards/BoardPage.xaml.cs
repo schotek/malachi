@@ -17,7 +17,10 @@
 // Back to Board, Remind…'s presets); Escape goes where Board.EscapeFor
 // says: an open popup closes by itself, the keyboard in the reply editor or
 // its recipient fields goes to the state pill, else the panel closes. What
-// Archive did shows with Undo (BoardController.ArchiveDone). One view per style, made
+// Archive and Delete did shows as the window's toast with Undo, on the
+// window's Undo history with Mail's moves (Integration.Board.cs,
+// ActionsController.RecordBoardUndo; GTK window/undo.go), so Ctrl+Z takes
+// it back too. One view per style, made
 // on first use and kept, so a style shown again finds its scroll position.
 // The one detail view lives beside the List's list while the List has room
 // for it, in the sliding panel otherwise. Every text is the view model's.
@@ -56,14 +59,6 @@ public sealed partial class BoardPage : UserControl
     private ContentControl detailHost;
     private IReadOnlyList<Board.AccountItem> shownAccounts = [];
     private bool syncing;
-
-    // What Archive did last, while its Undo is offered, and the bar's timer.
-    private Board.ArchiveOutcome? archived;
-    private Microsoft.UI.Dispatching.DispatcherQueueTimer? archiveTimer;
-
-    // How long Archive's Undo is offered (Windows: longer than a toast, as
-    // it has a button to reach).
-    private static readonly TimeSpan ArchiveUndoTime = TimeSpan.FromSeconds(8);
 
     /// <summary>An empty page; <see cref="Attach"/> connects it.</summary>
     public BoardPage()
@@ -127,8 +122,6 @@ public sealed partial class BoardPage : UserControl
         CommandBinding.Bind(MenuQuit, commands.Quit);
         detail.Attach(boardActions);
         boardActions.Controller.Changed += (_, changes) => Apply(changes);
-        boardActions.Controller.ArchiveDone += (_, outcome) => ShowArchived(outcome);
-        ArchiveUndoButton.Content = Board.Text.Undo;
         ShowStyle(boardActions.Controller.State.Style);
         ApplyAll();
     }
@@ -431,51 +424,6 @@ public sealed partial class BoardPage : UserControl
     }
 
     private void OnContentSizeChanged(object sender, SizeChangedEventArgs e) => Panel.Fit(e.NewSize.Width);
-
-    // Archive's Undo
-
-    // What Archive did, with Undo, until the time is up or another archive
-    // replaces it.
-    private void ShowArchived(Board.ArchiveOutcome outcome)
-    {
-        archived = outcome;
-        ArchiveBar.Message = outcome.Text;
-        ArchiveUndoButton.Content = outcome.UndoLabel;
-        ArchiveBar.IsOpen = true;
-        archiveTimer?.Stop();
-        var timer = DispatcherQueue.CreateTimer();
-        timer.Interval = ArchiveUndoTime;
-        timer.IsRepeating = false;
-        timer.Tick += (t, _) =>
-        {
-            t.Stop();
-            if (ReferenceEquals(archiveTimer, t))
-            {
-                archiveTimer = null;
-                ArchiveBar.IsOpen = false;
-            }
-        };
-        archiveTimer = timer;
-        timer.Start();
-    }
-
-    // The messages back to their folders, the case back on the board.
-    private void OnArchiveUndoClick(object sender, RoutedEventArgs e)
-    {
-        var outcome = archived;
-        ArchiveBar.IsOpen = false;
-        if (outcome is not null && Controller is { } controller)
-        {
-            controller.UndoArchive(outcome);
-        }
-    }
-
-    private void OnArchiveBarClosed(InfoBar sender, InfoBarClosedEventArgs args)
-    {
-        archived = null;
-        archiveTimer?.Stop();
-        archiveTimer = null;
-    }
 
     // The page's keys
 

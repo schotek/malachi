@@ -185,7 +185,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         // under the unified toolbar (its section then holds only its own
         // items, and the window title moves to the list section as in
         // Mail); the split view controller insets the other panes itself.
-        let w = NSWindow(
+        let w = MainWindow(
             contentRect: NSRect(origin: .zero, size: Self.defaultSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false

@@ -64,10 +64,20 @@ func (w *Window) setTypingAccels(on bool) {
 }
 
 // installMessageAccels installs (on) or lifts the shortcuts without a
-// modifier (MessageAccels); applyMessageAccels is the only caller, so the
-// gate (the mode and the typing state) is always applied together.
-func (w *Window) installMessageAccels(on bool) {
+// modifier (MessageAccels), and Undo's Ctrl+Z by undoOn (undo.go
+// undoAccelAllowed: a text field keeps it for its own typing);
+// applyMessageAccels is the only caller, so the gate (the mode and the
+// typing state) is always applied together.
+func (w *Window) installMessageAccels(on, undoOn bool) {
 	for action, accel := range MessageAccels {
+		if action == "win.undo" {
+			if undoOn {
+				w.app.SetAccelsForAction(action, []string{accel})
+			} else {
+				w.app.SetAccelsForAction(action, nil)
+			}
+			continue
+		}
 		if strings.HasPrefix(accel, "<") {
 			continue
 		}

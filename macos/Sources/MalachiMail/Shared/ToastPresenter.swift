@@ -11,6 +11,10 @@ import MalachiCore
 ///
 /// Install it over a container with `install(over:)`; it sizes itself to
 /// the container and stays on top of later subviews.
+///
+/// It also holds the toast of a move with its Undo button (`UndoToast`,
+/// `showUndo`), which goes wherever the presenter goes (Mail, Board): the
+/// two never show together, each takes the other away.
 @MainActor
 final class ToastPresenter: NSView, Toasts {
     static let defaultSeconds = 5
@@ -24,10 +28,8 @@ final class ToastPresenter: NSView, Toasts {
     }
 
     private var queue: [Toast] = []
-    /// Called whenever a toast comes into sight (shown, or replacing the
-    /// one shown): the board page takes its Undo capsule away then, so the
-    /// two never overlap, whoever asked for the toast.
-    var onShow: (() -> Void)?
+    /// The toast of the last move, with Undo.
+    private let undoToast = UndoToast()
     private var current: Toast?
     private var dismissal: DispatchWorkItem?
 
@@ -70,6 +72,14 @@ final class ToastPresenter: NSView, Toasts {
 
         let click = NSClickGestureRecognizer(target: self, action: #selector(capsuleClicked(_:)))
         capsule.addGestureRecognizer(click)
+
+        addSubview(undoToast)
+        NSLayoutConstraint.activate([
+            undoToast.topAnchor.constraint(equalTo: topAnchor),
+            undoToast.bottomAnchor.constraint(equalTo: bottomAnchor),
+            undoToast.leadingAnchor.constraint(equalTo: leadingAnchor),
+            undoToast.trailingAnchor.constraint(equalTo: trailingAnchor),
+        ])
     }
 
     @available(*, unavailable)
@@ -111,8 +121,11 @@ final class ToastPresenter: NSView, Toasts {
         ])
     }
 
-    // Only the capsule takes clicks; the rest is transparent to the mouse.
+    // Only the capsules take clicks; the rest is transparent to the mouse.
     override func hitTest(_ point: NSPoint) -> NSView? {
+        if let hit = undoToast.hitTest(convert(point, from: superview)) {
+            return hit
+        }
         guard !capsule.isHidden, capsule.alphaValue > 0 else { return nil }
         let inCapsule = capsule.frame.contains(convert(point, from: superview))
         return inCapsule ? capsule : nil
@@ -149,10 +162,23 @@ final class ToastPresenter: NSView, Toasts {
         }
     }
 
+    /// Shows `text` with the button `button` that calls `onUndo` (the toast
+    /// of a move, `UndoToast.seconds`), in place of the toast shown and of
+    /// the last move's.
+    func showUndo(_ text: String, button: String, onUndo: @escaping @MainActor () -> Void) {
+        dismissCurrent()
+        undoToast.show(text, undo: button, onUndo: onUndo)
+    }
+
+    /// Takes the toast of the last move away (an Undo began).
+    func dismissUndo() {
+        undoToast.dismiss()
+    }
+
     // MARK: Internals
 
     private func present(_ toast: Toast) {
-        onShow?()
+        undoToast.dismiss()
         current = toast
         label.stringValue = toast.text
         capsule.toolTip = toast.text
@@ -161,7 +187,7 @@ final class ToastPresenter: NSView, Toasts {
     }
 
     private func replaceCurrent(with toast: Toast) {
-        onShow?()
+        undoToast.dismiss()
         dismissal?.cancel()
         dismissal = nil
         current = toast

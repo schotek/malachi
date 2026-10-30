@@ -4,15 +4,17 @@
 import AppKit
 import MalachiCore
 
-/// What Archive did, with Undo (`Board.ArchiveOutcome`: its `text` and
-/// `undoLabel`; the button calls `onUndo`), as a capsule at the bottom of
-/// the board page, where the window's toasts show (`ToastPresenter`, which
-/// has no button): Liquid Glass from macOS 26, a dark HUD before. It stays
-/// `seconds` (an Adw.Toast with a button), a click on Undo ends it, and the
-/// page takes it away when another toast comes. Only the capsule takes
-/// clicks. Every text is set through `stringValue`.
+/// The toast of a move with its Undo button (ActionsController+Undo: Move
+/// to Trash, Archive, Junk, Move To, the board's Archive and Delete; the
+/// button calls `onUndo`), as a capsule at the bottom of the view the
+/// window's toasts cover. `ToastPresenter` holds it and moves it with
+/// itself (Mail, Board): its own capsule has no button. Liquid Glass from
+/// macOS 26, a dark HUD before. It stays `seconds` (an Adw.Toast with a
+/// button), a click on Undo ends it, and the presenter takes it away when
+/// another toast comes (and the other toast when this one comes). Only the
+/// capsule takes clicks. Every text is set through `stringValue`.
 @MainActor
-final class BoardUndoToast: NSView {
+final class UndoToast: NSView {
     static let seconds = 8
     private static let height = ToastPresenter.capsuleHeight
 

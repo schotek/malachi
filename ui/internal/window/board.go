@@ -330,7 +330,7 @@ func (w *Window) setMode(m board.Mode) {
 // stands; called by setMode and by setTypingAccels (search.go) wherever
 // typingAllowsAccels changes.
 func (w *Window) applyMessageAccels() {
-	w.installMessageAccels(messageAccelsAllowed(w.mode, w.typingAllowsAccels))
+	w.installMessageAccels(messageAccelsAllowed(w.mode, w.typingAllowsAccels), undoAccelAllowed(w.mode, w.typingAllowsAccels))
 }
 
 // messageAccelsAllowed is applyMessageAccels' decision, pure and tested
@@ -482,20 +482,12 @@ func (p *boardPage) cachedTriageView() (boardtriage.View, bool) {
 	return p.triageView, true
 }
 
-// boardArchived is the controller's OnArchived: what Archive did, as a
-// toast with Undo (ArchiveOutcome.UndoLabel), which moves the messages back
-// and puts the case back on the board (Controller.UndoArchive).
+// boardArchived is the controller's OnArchived: what Archive or Delete
+// did, pushed on the window's Undo stack with a toast whose button (and
+// Ctrl+Z) moves the messages back and puts the case back on the board
+// (undo.go recordBoardUndo, runUndo; Controller.UndoArchive).
 func (w *Window) boardArchived(o board.ArchiveOutcome) {
-	t := widget.PlainToast(o.Text)
-	if o.UndoLabel != "" {
-		t.SetButtonLabel(o.UndoLabel)
-		t.ConnectButtonClicked(func() {
-			if p := w.boardPage; p != nil && !p.replyClosed {
-				p.ctl.UndoArchive(o)
-			}
-		})
-	}
-	w.toasts.AddToast(t)
+	w.recordBoardUndo(o)
 }
 
 // boardMessagesGate is the board's source with LoadMessages held back while

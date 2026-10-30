@@ -319,6 +319,8 @@ func (w *Window) emptyFolder(k folderKey) {
 	junk := f.Role == api.RoleJunk
 	q := contextmenu.EmptyQuestion(i18n.Tr, junk, f.Total)
 	widget.ConfirmDestructive(w, q.Heading, q.Body, q.Confirm, func() {
+		// The moves into the folder cannot be taken back any more.
+		w.undo.ForgetFolder(k.Account, k.Folder)
 		w.call(contextmenu.EmptyingText(i18n.Tr, junk), api.MethodFolderEmpty,
 			api.FolderEmptyParams{AccountID: k.Account, FolderID: k.Folder}, nil)
 	})

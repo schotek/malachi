@@ -5,7 +5,9 @@
 // macos/Sources/MalachiMail/Shared/ToastPresenter.swift and Adw.ToastOverlay
 // (window.go Toast and ToastFor), which macOS leaves untested in AppKit:
 // one toast at a time, the rest in order, 5 s by default, 0 kept until
-// replaced, a click dismisses. The timeouts run on a fake clock.
+// replaced, a click dismisses; a toast's button (window/undo.go's Undo)
+// dismisses it and then runs, and whoever showed a toast can take it away.
+// The timeouts run on a fake clock.
 
 using System;
 using System.Collections.Generic;
@@ -98,6 +100,50 @@ public sealed class ToastPresenterTests
         // Dismissing nothing does nothing.
         toasts.DismissCurrent();
         Assert.Equal(4, shown.Count);
+    }
+
+    [Fact]
+    public void AButtonsClickDismissesThenRuns()
+    {
+        var (toasts, shown) = Make();
+        var clicked = new List<string?>();
+        var undo = toasts.Show(new Toast("Moved", 8, new ToastButton("Undo (Ctrl+Z)", () => clicked.Add(toasts.Current?.Text))));
+        toasts.Show("next");
+        Assert.Equal("Undo (Ctrl+Z)", toasts.Current?.Button?.Label);
+        toasts.ClickButton();
+        // The toast went first: the button ran with the next one shown.
+        Assert.Equal(["next"], clicked);
+        Assert.Equal(["Moved/8", "-", "next/5"], shown);
+        // A toast without a button has no click.
+        toasts.ClickButton();
+        Assert.Equal("next", toasts.Current?.Text);
+        Assert.Single(clicked);
+        Assert.Equal(new Toast("Moved", 8, undo.Button), undo);
+    }
+
+    [Fact]
+    public void DismissTakesAwayTheShownOrAWaitingToast()
+    {
+        var (toasts, shown) = Make();
+        var first = toasts.Show(new Toast("one", 5));
+        var second = toasts.Show(new Toast("two", 5));
+        toasts.Show("three");
+        toasts.Dismiss(second);
+        Assert.Equal(1, toasts.Waiting);
+        toasts.Dismiss(first);
+        Assert.Equal("three", toasts.Current?.Text);
+        // One already gone, or an equal copy, is left alone.
+        toasts.Dismiss(first);
+        toasts.Dismiss(new Toast("three", 5));
+        Assert.Equal("three", toasts.Current?.Text);
+        Assert.Equal(["one/5", "-", "three/5"], shown);
+        // Negative seconds come back as the 0 shown, the instance to dismiss.
+        var sticky = toasts.Show(new Toast("x", -1));
+        Assert.Equal(0, sticky.Seconds);
+        clock.Advance(TimeSpan.FromSeconds(5));
+        Assert.Equal("x", toasts.Current?.Text);
+        toasts.Dismiss(sticky);
+        Assert.Null(toasts.Current);
     }
 
     [Fact]

@@ -36,6 +36,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/signin"
 	"github.com/schotek/malachi/ui/internal/sound"
+	"github.com/schotek/malachi/ui/internal/undo"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -279,6 +280,13 @@ type Window struct {
 	// combined with the mode (board.Allows CommandMessageAction) by
 	// applyMessageAccels.
 	typingAllowsAccels bool
+
+	// undo is the session's moves of mail Undo takes back (undo.go);
+	// undoToast the toast of the newest, undoReselect what the next list
+	// of the folder on display selects after an Undo.
+	undo         undo.Stack
+	undoToast    *adw.Toast
+	undoReselect []undo.Moved
 
 	// boardPage is the board's own page (board.go), built once on first use
 	// (ensureBoard): the first switch to Board, or at launch when the
@@ -877,6 +885,7 @@ var MessageAccels = map[string]string{
 	"win.toggle-flag": "s",
 	"win.refresh":     "<Control>r",
 	"win.search":      "<Control>f",
+	"win.undo":        "<Control>z",
 }
 
 // registerActions adds the win.* actions. All but refresh start disabled;
@@ -902,6 +911,7 @@ func (w *Window) registerActions() {
 	w.addAction("show-board", true, func() { w.setMode(board.ModeBoard) })
 	w.addAction("show-calendar", true, func() { w.setMode(board.ModeCalendar) })
 	w.addAction("search", true, w.startSearch)
+	w.addAction("undo", true, w.undoLast)
 	w.addAction("trash", false, forRows(func(rows []listRow, ids []api.MessageID) { w.trashIDs(w, ids, selectionSubject(rows)) }))
 	w.addAction("archive", false, forRows(func(_ []listRow, ids []api.MessageID) { w.archiveIDs(ids) }))
 	w.addAction("junk", false, forRows(func(rows []listRow, ids []api.MessageID) { w.junkIDs(w, ids, selectionSubject(rows)) }))

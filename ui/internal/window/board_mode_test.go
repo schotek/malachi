@@ -32,6 +32,25 @@ func TestMessageAccelsAllowed(t *testing.T) {
 	}
 }
 
+func TestUndoAccelAllowed(t *testing.T) {
+	cases := []struct {
+		mode         board.Mode
+		typingAllows bool
+		want         bool
+	}{
+		{board.ModeMail, true, true},
+		{board.ModeMail, false, false},
+		{board.ModeBoard, true, true},
+		{board.ModeBoard, false, false},
+		{board.ModeCalendar, true, false},
+	}
+	for _, c := range cases {
+		if got := undoAccelAllowed(c.mode, c.typingAllows); got != c.want {
+			t.Errorf("undoAccelAllowed(%v, %v) = %v, want %v", c.mode, c.typingAllows, got, c.want)
+		}
+	}
+}
+
 func TestBoardStatusText(t *testing.T) {
 	cases := []struct {
 		name             string

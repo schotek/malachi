@@ -98,6 +98,8 @@ public sealed partial class MainWindow
     {
         list = integration.List;
         new SelectionActions(integration.Actions, integration.List, () => this).Install(Commands);
+        // Ctrl+Z: the newest move of mail back (window/undo.go undoLast).
+        Commands.Undo.Handler = integration.Actions.UndoLast;
         SidebarPane.Attach(integration.Mailbox, integration.Actions, Commands);
         ListPane.Attach(integration.List, integration.Sync, integration.Actions, Commands);
         MessageCommands.Attach(Commands);

@@ -181,29 +181,6 @@ selected case outside text fields (Board.KeyFor), and Escape in two steps
                 AutomationProperties.AutomationId="BoardEmpty"
                 Visibility="Collapsed" />
             <boards:BoardDetailPanel x:Name="Panel" />
-            <!--
-                What Archive did, with Undo (Board.ArchiveOutcome; GTK's toast
-                with a button): an InfoBar where the window's toasts show, as
-                the toast has no button on Windows.
-            -->
-            <InfoBar
-                x:Name="ArchiveBar"
-                MaxWidth="560"
-                Margin="12,0,12,24"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Bottom"
-                AutomationProperties.AutomationId="BoardArchived"
-                Closed="OnArchiveBarClosed"
-                IsClosable="True"
-                IsOpen="False"
-                Severity="Informational">
-                <InfoBar.ActionButton>
-                    <Button
-                        x:Name="ArchiveUndoButton"
-                        AutomationProperties.AutomationId="BoardArchiveUndo"
-                        Click="OnArchiveUndoClick" />
-                </InfoBar.ActionButton>
-            </InfoBar>
         </Grid>
 
         <!-- The window's toasts while the board shows (MainWindow.Mode.cs moves them here). -->

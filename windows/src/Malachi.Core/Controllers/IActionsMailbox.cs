@@ -4,9 +4,9 @@
 // The part of macos/Sources/MalachiCore/Controllers/MailboxController.swift
 // that ActionsController.swift uses (model, perform, adjustCounts,
 // moveCounts, noteOutboxCancelled, noteOutboxCancelFailed, onOutboxChanged,
-// withdrawNotifications); GTK: the Window fields and methods actions.go and
-// outbox.go reach (model, client, updateFolderRow, outboxCancelled,
-// onOutboxChanged, withdrawNotifications).
+// withdrawNotifications); GTK: the Window fields and methods actions.go,
+// outbox.go and undo.go reach (model, client, updateFolderRow,
+// outboxCancelled, onOutboxChanged, withdrawNotifications, loadFolders).
 //
 // Swift's ActionsController holds the MailboxController itself. The C#
 // controllers of the main window are written side by side, so the actions
@@ -71,6 +71,14 @@ public interface IActionsMailbox
     /// folders are reloaded and the views showing the outbox refreshed.
     /// </summary>
     void OnOutboxChanged(AccountId acc);
+
+    /// <summary>
+    /// Runs folder.list for <paramref name="acc"/> and rebuilds the sidebar
+    /// from the answer (folders.go <c>loadFolders</c>), for the counts
+    /// after an Undo (window/undo.go <c>afterUndo</c>); <paramref name="gen"/>
+    /// guards the reply (<see cref="MailModel.FoldersGen"/>).
+    /// </summary>
+    void LoadFolders(AccountId acc, ulong gen);
 
     /// <summary>
     /// The messages were read, moved or trashed here: their desktop
