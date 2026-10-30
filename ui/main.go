@@ -204,7 +204,14 @@ func main() {
 		sup.Stop()
 	})
 
-	newMessage = addActions(app, rpc, log, func() *settings.Store { return prefs }, func() *window.Assistant { return assist }, show, func() *compose.Manager { return mgr }, func() calendardata.DataSource { return calendarOf(mainWin)() }, openNotified, func() { requestExit(app.Quit) }, func() *window.Window { return mainWin })
+	newMessage = addActions(app, rpc, log, func() *settings.Store { return prefs }, func() *window.Assistant { return assist }, show, func() *compose.Manager { return mgr }, func() calendardata.DataSource { return calendarOf(mainWin)() }, openNotified, func() {
+		// A changed contact form asks first; Board's replies settle after.
+		window.ConfirmContactsQuit(func(ok bool) {
+			if ok {
+				requestExit(app.Quit)
+			}
+		})
+	}, func() *window.Window { return mainWin })
 	// The calendar's notifications (window/calendar_alerts.go): a click
 	// that started the application presents the main window first.
 	addCalendarActions(app, func() *window.Window {

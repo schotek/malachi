@@ -94,6 +94,8 @@ type ContactsWindow struct {
 	unlisten func()
 	// closing: the window closes without asking (after Discard).
 	closing bool
+	// quitAsking: Quit's DiscardQuestion is up (ConfirmContactsQuit).
+	quitAsking bool
 }
 
 // OpenContacts presents the Contacts window, building it the first time.
