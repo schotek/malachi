@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -215,6 +216,9 @@ func (p *cardDAVContacts) Sync(ctx context.Context, book contactsync.StoredBook,
 	if st.CTag != "" && st.CTag == book.CTag && (book.SyncToken != "" || !st.SupportsSync) && len(known) > 0 {
 		return contactsync.SyncState{Token: book.SyncToken, CTag: st.CTag}, nil
 	}
+	// A pass fetches at most as many cards as a book keeps: a server that
+	// keeps naming new hrefs does not keep the pass going.
+	room := api.MaxContactsPerBook
 	fetch := func(res []caldav.Resource, full bool) error {
 		var hrefs []string
 		for _, r := range res {
@@ -228,7 +232,10 @@ func (p *cardDAVContacts) Sync(ctx context.Context, book contactsync.StoredBook,
 				sink.Seen(r.Href)
 				continue
 			}
-			hrefs = append(hrefs, r.Href)
+			if room > 0 {
+				room--
+				hrefs = append(hrefs, r.Href)
+			}
 		}
 		if len(hrefs) == 0 {
 			return nil
@@ -596,6 +603,12 @@ func (p *graphContacts) Update(ctx context.Context, _ contactsync.StoredBook, st
 	if err != nil {
 		return contactsync.Card{}, err
 	}
+	if stored.RawKind == store.ContactRawGraph {
+		if cur, perr := graph.ParseContact(stored.Raw); perr == nil {
+			keepEmailNames(&bf, cur.Emails)
+			keepEmailNames(&af, cur.Emails)
+		}
+	}
 	patch, err := graph.ContactPatch(bf, af)
 	if err != nil {
 		return contactsync.Card{}, err
@@ -613,6 +626,20 @@ func (p *graphContacts) Update(ctx context.Context, _ contactsync.StoredBook, st
 
 func (p *graphContacts) Delete(ctx context.Context, _ contactsync.StoredBook, stored contactsync.StoredContact) error {
 	return p.mapError(p.client.DeleteContact(ctx, stored.RemoteID, stored.ETag))
+}
+
+// keepEmailNames gives each address of f the name the stored contact has
+// for it (the model has no per-address name): a changed list sent whole
+// keeps the names of the addresses that stay.
+func keepEmailNames(f *graph.ContactFields, stored []graph.ContactEmail) {
+	for i, e := range f.Emails {
+		for _, s := range stored {
+			if strings.EqualFold(s.Address, e.Address) {
+				f.Emails[i].Name = s.Name
+				break
+			}
+		}
+	}
 }
 
 // graphToVCard maps Graph's fields onto the model: title and generation

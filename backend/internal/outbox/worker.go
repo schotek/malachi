@@ -83,6 +83,10 @@ type Deps struct {
 	// the account's SyncState with the new pendingOutbox and failedOutbox
 	// counts.
 	Changed func(accountID string)
+	// Collected is called after a delivered mail's recipients went to the
+	// collected addresses (the recent address book); core sends
+	// notify.contactsChanged. nil = nobody.
+	Collected func()
 
 	Log *slog.Logger
 	// Now and Backoff are the clock and the retry schedule; tests inject
@@ -360,6 +364,10 @@ func (w *Worker) recordRecipients(ctx context.Context, e store.OutboxEntry) {
 	addrs = append(append(append(addrs, msg.To...), msg.CC...), msg.BCC...)
 	if err := w.deps.Store.TouchCollectedAddresses(ctx, addrs, w.deps.Now()); err != nil {
 		w.log.Warn("record recipients for completion", "err", err)
+		return
+	}
+	if len(addrs) > 0 && w.deps.Collected != nil {
+		w.deps.Collected()
 	}
 }
 

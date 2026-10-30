@@ -4790,7 +4790,12 @@ Which addresses have a contact: the address chip's *Show Contact* and
   changed)
 
 `revision` must be the cached one (`contact.get`): another one is
-contactConflict at once, with the server's current version. A Microsoft
+contactConflict at once, with the server's current version. The card is
+compared with the one `contact.get` shows, and only the difference is
+written: items past the list caps and the cut tail of a name or web
+address longer than its cap were never shown and stay on the server as
+they are (as do the vCard lines and Graph fields the card does not
+model, and a Microsoft address's own name). A Microsoft
 contact holds at most 3 e-mail addresses, one postal address each of
 `work`, `home` and other (any other label), one web address, and phones
 as business, home and one mobile (other labels become business phones);
@@ -4941,7 +4946,8 @@ again. A client that does not know it ignores it.
 `notify.contactsChanged` is sent to every client when the books or
 contacts of an account changed (§4.19): a pass that changed something,
 an own write, a book added or removed, `addressBook.set`, contacts
-switched off. Without `bookIds` any book of the account changed;
+switched off, and (without `accountId`) a delivered mail whose
+recipients went to the recent book. Without `bookIds` any book of the account changed;
 without `accountId` the recent book. Gathered within 250 ms. A client
 that does not know it ignores it.
 

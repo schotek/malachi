@@ -473,3 +473,51 @@ func TestContactSearchMergesSyncedBooks(t *testing.T) {
 		t.Fatalf("recent update: %v", err)
 	}
 }
+
+// A card with more items or longer names than contact.get shows: an
+// update of another field leaves what the client never saw on the server
+// (vcard.Patch gets only the shown part as before), and the card the
+// client sends back unchanged passes the API's limits.
+func TestContactUpdateKeepsWhatWasNotShown(t *testing.T) {
+	srv := caldavtest.New(t, caldavtest.Nextcloud)
+	book := srv.AddressBookHref("contacts")
+	var extra []string
+	for i := range api.MaxContactAddresses + 5 {
+		extra = append(extra, "ADR;TYPE=HOME:;;Street "+strings.Repeat("x", 3)+string(rune('a'+i))+";City;;;")
+	}
+	for i := range api.MaxContactEmails + 3 {
+		extra = append(extra, "EMAIL:m"+strings.Repeat("0", 2)+string(rune('a'+i%26))+string(rune('a'+i/26))+"@example.org")
+	}
+	long := strings.Repeat("Ž", api.MaxContactNameBytes) // 2 bytes a rune: over the cap
+	extra = append(extra, "NICKNAME:"+long)
+	srv.PutCard(book, "many.vcf", vcf("M1", "Many Items", "", extra...))
+	h := newContactsHarness(t, srv, srv.ServerURL())
+	ab := h.b.AddressBooks()
+	books := h.books(t)
+	l, err := ab.ListContacts(h.ctx, api.ContactListParams{BookID: books[0].ID})
+	if err != nil || l.Total != 1 {
+		t.Fatalf("list %+v %v", l, err)
+	}
+	got, err := ab.GetContact(h.ctx, api.ContactGetParams{ContactID: l.Contacts[0].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := got.Contact
+	if len(c.Addresses) != api.MaxContactAddresses || len(c.Emails) != api.MaxContactEmails || len(c.Nickname) > api.MaxContactNameBytes {
+		t.Fatalf("shown %d addresses, %d emails, nickname %d bytes", len(c.Addresses), len(c.Emails), len(c.Nickname))
+	}
+	c.Title = "Boss"
+	if _, err := ab.UpdateContact(h.ctx, api.ContactUpdateParams{ContactID: c.ID, Revision: c.Revision, Card: c}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	data, _, _ := srv.Card(book + "many.vcf")
+	if n := strings.Count(string(data), "\nADR"); n != api.MaxContactAddresses+5 {
+		t.Errorf("%d addresses on the server after the update:\n%s", n, data)
+	}
+	if n := strings.Count(string(data), "\nEMAIL"); n != api.MaxContactEmails+3 {
+		t.Errorf("%d e-mails on the server after the update", n)
+	}
+	if !strings.Contains(string(data), "NICKNAME:"+long) || !strings.Contains(string(data), "TITLE:Boss") {
+		t.Errorf("nickname or title:\n%s", data)
+	}
+}

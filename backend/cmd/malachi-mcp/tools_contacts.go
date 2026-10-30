@@ -137,7 +137,7 @@ func (b *bridge) getContact(ctx context.Context, _ *mcp.CallToolRequest, in getC
 		return toolError(err), nil, nil
 	}
 	c := res.Contact
-	head := fmt.Sprintf("contact %s in book %s revision=%s readOnly=%v", oneLine(string(c.ID)), oneLine(string(c.BookID)), oneLine(c.Revision), c.ReadOnly)
+	head := fmt.Sprintf("contact %s in book %s revision=%s readOnly=%v", oneLine(string(c.ID)), oneLine(string(c.BookID)), revisionText(c.Revision), c.ReadOnly)
 	if c.Birthday != nil {
 		if c.Birthday.Year > 0 {
 			head += fmt.Sprintf(" birthday=%04d-%02d-%02d", c.Birthday.Year, c.Birthday.Month, c.Birthday.Day)
@@ -181,6 +181,22 @@ func (b *bridge) getContact(ctx context.Context, _ *mcp.CallToolRequest, in getC
 		}
 	}
 	return textResult(head + "\n" + fenced(newNonce(), strings.TrimSuffix(f.String(), "\n"))), nil, nil
+}
+
+// revisionText is a contact's revision for a line outside the fence: the
+// server chose it (a CardDAV ETag, a Graph change key), so only a short
+// token of plain characters is shown as it is, anything else as "other".
+func revisionText(r string) string {
+	if r == "" || len(r) > 64 {
+		return "other"
+	}
+	for _, ch := range r {
+		ok := ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || strings.ContainsRune(`"-_.:/=+`, ch)
+		if !ok {
+			return "other"
+		}
+	}
+	return r
 }
 
 func nonEmpty(parts ...string) []string {
@@ -291,7 +307,7 @@ func (b *bridge) createContact(ctx context.Context, _ *mcp.CallToolRequest, in c
 	if err != nil {
 		return toolError(err), nil, nil
 	}
-	return textResult(fmt.Sprintf("created contact %s in book %s revision=%s", oneLine(string(res.ContactID)), oneLine(string(book)), oneLine(res.Revision))), nil, nil
+	return textResult(fmt.Sprintf("created contact %s in book %s revision=%s", oneLine(string(res.ContactID)), oneLine(string(book)), revisionText(res.Revision))), nil, nil
 }
 
 func (b *bridge) updateContact(ctx context.Context, _ *mcp.CallToolRequest, in updateContactIn) (*mcp.CallToolResult, any, error) {
@@ -320,5 +336,5 @@ func (b *bridge) updateContact(ctx context.Context, _ *mcp.CallToolRequest, in u
 	if err != nil {
 		return toolError(err), nil, nil
 	}
-	return textResult(fmt.Sprintf("updated contact %s revision=%s", oneLine(string(card.ID)), oneLine(res.Revision))), nil, nil
+	return textResult(fmt.Sprintf("updated contact %s revision=%s", oneLine(string(card.ID)), revisionText(res.Revision))), nil, nil
 }

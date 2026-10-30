@@ -337,5 +337,8 @@ func (b *Backend) backfillCollectedAddresses(ctx context.Context) error {
 		return err
 	}
 	b.log.Info("collected addresses backfilled from sent mail", "messages", messages)
+	if messages > 0 {
+		b.collectedChanged()
+	}
 	return nil
 }

@@ -398,6 +398,7 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		FilesSentCopyFor: func(a store.Account) bool { return serverFilesSentCopy(a.Config) },
 		Trigger:          trigger,
 		Changed:          b.outboxChanged,
+		Collected:        b.collectedChanged,
 		Log:              log,
 	})
 	graphOutbox := outbox.NewSupervisor(outbox.SupervisorDeps{
@@ -409,6 +410,7 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		FilesSentCopyFor: func(store.Account) bool { return true },
 		Trigger:          trigger,
 		Changed:          b.outboxChanged,
+		Collected:        b.collectedChanged,
 		Log:              log,
 	})
 	// An issue tracker's outbox holds comments, which the jira supervisor

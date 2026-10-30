@@ -81,6 +81,10 @@ func (b *Backend) contactsChanged(accountID string, bookIDs ...string) {
 	}
 }
 
+// collectedChanged is notify.contactsChanged for the recent book: the
+// outbox recorded a delivered mail's recipients.
+func (b *Backend) collectedChanged() { b.contactsChanged("") }
+
 func (b *Backend) flushContactsChanged() {
 	cn := &b.cn
 	cn.mu.Lock()
@@ -475,9 +479,47 @@ func shownCard(card *vcard.Card) *vcard.Card {
 	return c
 }
 
-// apiCard is the API form of a card (the API's caps on the lists).
-func apiCard(card *vcard.Card, id api.ContactID, bookID api.AddressBookID, readOnly bool, revision string) api.ContactCard {
+// apiShownCard is shownCard within the API's caps: at most
+// MaxContactEmails, …Phones, …Addresses and …URLs items, the name parts,
+// display name and nickname within MaxContactNameBytes and a web address
+// within MaxContactFieldBytes. It is exactly what contact.get shows, so
+// contact.update compares the client's card with it: an item or a tail
+// the client never saw is not in the edit and stays on the server as it
+// is, and a field it sends back unchanged passes checkContactCard.
+func apiShownCard(card *vcard.Card) *vcard.Card {
 	c := shownCard(card)
+	name := func(s string) string { return capUTF8(s, api.MaxContactNameBytes) }
+	c.Name = vcard.Name{Given: name(c.Name.Given), Family: name(c.Name.Family), Middle: name(c.Name.Middle),
+		Prefix: name(c.Name.Prefix), Suffix: name(c.Name.Suffix)}
+	c.DisplayName, c.Nickname = name(c.DisplayName), name(c.Nickname)
+	c.Emails = c.Emails[:min(len(c.Emails), api.MaxContactEmails)]
+	c.Phones = c.Phones[:min(len(c.Phones), api.MaxContactPhones)]
+	c.Addresses = c.Addresses[:min(len(c.Addresses), api.MaxContactAddresses)]
+	urls := make([]vcard.URL, 0, min(len(c.URLs), api.MaxContactURLs))
+	for _, u := range c.URLs[:min(len(c.URLs), api.MaxContactURLs)] {
+		u.URL = capUTF8(u.URL, api.MaxContactFieldBytes)
+		urls = append(urls, u)
+	}
+	c.URLs = urls
+	return c
+}
+
+// capUTF8 cuts s to at most n bytes on a rune boundary, trailing space
+// trimmed (as vcard.Clean leaves a value).
+func capUTF8(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	s = s[:n]
+	for len(s) > 0 && !utf8.ValidString(s) {
+		s = s[:len(s)-1]
+	}
+	return strings.TrimSpace(s)
+}
+
+// apiCard is the API form of a card (apiShownCard).
+func apiCard(card *vcard.Card, id api.ContactID, bookID api.AddressBookID, readOnly bool, revision string) api.ContactCard {
+	c := apiShownCard(card)
 	out := api.ContactCard{
 		ID: id, BookID: bookID, ReadOnly: readOnly, Revision: revision,
 		Name:        api.ContactName{Given: c.Name.Given, Family: c.Name.Family, Middle: c.Name.Middle, Prefix: c.Name.Prefix, Suffix: c.Name.Suffix},
@@ -485,25 +527,17 @@ func apiCard(card *vcard.Card, id api.ContactID, bookID api.AddressBookID, readO
 		Emails: []api.ContactEmail{}, Phones: []api.ContactPhone{}, Addresses: []api.ContactAddress{}, URLs: []api.ContactURL{},
 	}
 	for _, e := range c.Emails {
-		if len(out.Emails) < api.MaxContactEmails {
-			out.Emails = append(out.Emails, api.ContactEmail{Label: api.ContactLabel(e.Label), Address: e.Address})
-		}
+		out.Emails = append(out.Emails, api.ContactEmail{Label: api.ContactLabel(e.Label), Address: e.Address})
 	}
 	for _, p := range c.Phones {
-		if len(out.Phones) < api.MaxContactPhones {
-			out.Phones = append(out.Phones, api.ContactPhone{Label: api.ContactLabel(p.Label), Number: p.Number})
-		}
+		out.Phones = append(out.Phones, api.ContactPhone{Label: api.ContactLabel(p.Label), Number: p.Number})
 	}
 	for _, a := range c.Addresses {
-		if len(out.Addresses) < api.MaxContactAddresses {
-			out.Addresses = append(out.Addresses, api.ContactAddress{Label: api.ContactLabel(a.Label), Street: a.Street,
-				City: a.City, Region: a.Region, Postcode: a.Postcode, Country: a.Country})
-		}
+		out.Addresses = append(out.Addresses, api.ContactAddress{Label: api.ContactLabel(a.Label), Street: a.Street,
+			City: a.City, Region: a.Region, Postcode: a.Postcode, Country: a.Country})
 	}
 	for _, u := range c.URLs {
-		if len(out.URLs) < api.MaxContactURLs {
-			out.URLs = append(out.URLs, api.ContactURL{Label: api.ContactLabel(u.Label), URL: u.URL})
-		}
+		out.URLs = append(out.URLs, api.ContactURL{Label: api.ContactLabel(u.Label), URL: u.URL})
 	}
 	if !c.Birthday.IsZero() {
 		out.Birthday = &api.ContactBirthday{Year: c.Birthday.Year, Month: c.Birthday.Month, Day: c.Birthday.Day}
@@ -876,7 +910,9 @@ func (s *addressBookService) UpdateContact(ctx context.Context, p api.ContactUpd
 	if err != nil {
 		return nil, api.NewError(api.CodeStorageError, "the stored contact cannot be read")
 	}
-	before = shownCard(before)
+	// What the client was shown: anything beyond it is not part of the
+	// edit (vcard.Patch leaves lines before does not name alone).
+	before = apiShownCard(before)
 	got, err := prov.Update(ctx, bk, stored, before, after)
 	var ce *contactsync.ConflictError
 	switch {

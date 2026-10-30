@@ -132,7 +132,7 @@ func TestGraphContactsEndToEnd(t *testing.T) {
 	defer cancel()
 	fake := newGraphContactsFake(t)
 	fake.put(map[string]any{"id": "C1", "displayName": "Ada Lovelace", "givenName": "Ada", "surname": "Lovelace",
-		"emailAddresses": []any{map[string]any{"address": "ada@example.org"}}, "mobilePhone": "+420 777",
+		"emailAddresses": []any{map[string]any{"name": "Ada (work)", "address": "ada@example.org"}}, "mobilePhone": "+420 777",
 		"businessHomePage": "https://example.org", "birthday": "1604-12-10T11:59:00Z", "unknownField": "x"})
 	b := newTestBackend(t, config.Default())
 	b.Keyring = newMemKeyring()
@@ -205,6 +205,21 @@ func TestGraphContactsEndToEnd(t *testing.T) {
 	fake.mu.Lock()
 	if len(fake.patches) != 1 || len(fake.patches[0]) != 1 || fake.patches[0]["jobTitle"] != "Countess" {
 		t.Errorf("patch %+v", fake.patches)
+	}
+	fake.mu.Unlock()
+	// A changed address list is sent whole: the address that stays keeps
+	// its name.
+	c.Emails = append(c.Emails, api.ContactEmail{Address: "ada@home.example"})
+	up, err = ab.UpdateContact(ctx, api.ContactUpdateParams{ContactID: c.ID, Revision: up.Revision, Card: c})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake.mu.Lock()
+	if n := len(fake.patches); n != 2 || len(fake.patches[1]) != 1 {
+		t.Fatalf("patch %+v", fake.patches)
+	}
+	if es, _ := fake.patches[1]["emailAddresses"].([]any); len(es) != 2 || es[0].(map[string]any)["name"] != "Ada (work)" {
+		t.Errorf("emails patch %+v", fake.patches[1])
 	}
 	fake.mu.Unlock()
 	// Changed on the server meanwhile: conflict with its version.
