@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-30 18:30+0100\n"
+"POT-Creation-Date: 2026-10-30 18:35+0100\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -1430,7 +1430,7 @@ msgid "The sender's server refused the request."
 msgstr "Server odesílatele žádost odmítl."
 
 #: ui/internal/compose/pane.go:224 ui/internal/compose/pane.go:1059
-#: ui/internal/jira/settings.go:123 ui/internal/contacts/form.go:455
+#: ui/internal/jira/settings.go:123 ui/internal/contacts/form.go:459
 #: ui/internal/window/assistant_panel.go:204
 #: ui/internal/window/event_editor_popovers.go:36
 msgid "Remove"
@@ -2182,7 +2182,7 @@ msgid "Jira Account"
 msgstr "Účet Jira"
 
 #: ui/internal/jira/settings.go:85 ui/internal/crm/text.go:428
-#: ui/internal/calendar/caldav.go:369 ui/data/ui/account_wizard.ui:145
+#: ui/internal/calendar/caldav.go:379 ui/data/ui/account_wizard.ui:145
 msgid "Account Name"
 msgstr "Název účtu"
 
@@ -2760,7 +2760,7 @@ msgstr ""
 msgid "User Name"
 msgstr "Uživatelské jméno"
 
-#: ui/internal/crm/text.go:430 ui/internal/calendar/caldav.go:367
+#: ui/internal/crm/text.go:430 ui/internal/calendar/caldav.go:377
 #: ui/data/ui/account_wizard.ui:94
 msgid "Password"
 msgstr "Heslo"
@@ -5913,55 +5913,66 @@ msgctxt "mail account"
 msgid "None"
 msgstr "Žádný"
 
-#: ui/internal/calendar/caldav.go:352
+#: ui/internal/calendar/caldav.go:362
 msgid "Add CalDAV Calendar"
 msgstr "Přidat kalendář CalDAV"
 
-#: ui/internal/calendar/caldav.go:356
+#: ui/internal/calendar/caldav.go:366
 msgid ""
 "Nextcloud, Fastmail, iCloud, Radicale and other servers that speak CalDAV."
 msgstr ""
 "Nextcloud, Fastmail, iCloud, Radicale a další servery, které umí CalDAV."
 
-#: ui/internal/calendar/caldav.go:363
+#: ui/internal/calendar/caldav.go:373
 msgid "Server Address"
 msgstr "Adresa serveru"
 
-#: ui/internal/calendar/caldav.go:365
+#: ui/internal/calendar/caldav.go:375
 msgid "Username"
 msgstr "Uživatelské jméno"
 
-#: ui/internal/calendar/caldav.go:388
+#: ui/internal/calendar/caldav.go:398
 msgid ""
 "The password goes to the system keyring. Malachi Mail never shows it again."
 msgstr ""
 "Heslo se uloží do systémové klíčenky. Malachi Mail ho už nikdy neukáže."
 
-#: ui/internal/calendar/caldav.go:392
+#: ui/internal/calendar/caldav.go:402
 msgid "Discover Calendars"
 msgstr "Zjistit kalendáře"
 
-#: ui/internal/calendar/caldav.go:398
+#: ui/internal/calendar/caldav.go:408
 msgid "Looking for calendars…"
 msgstr "Hledají se kalendáře…"
 
-#: ui/internal/calendar/caldav.go:400
+#: ui/internal/calendar/caldav.go:410
 msgid "Adding the account…"
 msgstr "Přidává se účet…"
 
 #. TRANSLATORS: how a CalDAV server was found: a DNS record.
-#: ui/internal/calendar/caldav.go:412
+#: ui/internal/calendar/caldav.go:422
 msgid "a DNS SRV record"
 msgstr "záznam DNS SRV"
 
 #. TRANSLATORS: how a CalDAV server was found: at the address typed.
-#: ui/internal/calendar/caldav.go:415
+#: ui/internal/calendar/caldav.go:425
 msgid "the address you entered"
 msgstr "zadanou adresu"
 
+#. TRANSLATORS: the Add CalDAV sheet's status for a server with
+#. address books and no calendar: how it was found and how many
+#. address books it has.
+#: ui/internal/calendar/caldav.go:443
+#, c-format
+msgid "Found through %s · %d address book"
+msgid_plural "Found through %s · %d address books"
+msgstr[0] "Nalezeno přes %s · %d adresář"
+msgstr[1] "Nalezeno přes %s · %d adresáře"
+msgstr[2] "Nalezeno přes %s · %d adresářů"
+
 #. TRANSLATORS: the Add CalDAV sheet's status: how the server was found
 #. and how many calendars it has.
-#: ui/internal/calendar/caldav.go:431
+#: ui/internal/calendar/caldav.go:447
 #, c-format
 msgid "Found through %s · %d calendar"
 msgid_plural "Found through %s · %d calendars"
@@ -5969,77 +5980,77 @@ msgstr[0] "Nalezeno přes %s · %d kalendář"
 msgstr[1] "Nalezeno přes %s · %d kalendáře"
 msgstr[2] "Nalezeno přes %s · %d kalendářů"
 
-#: ui/internal/calendar/caldav.go:441
+#: ui/internal/calendar/caldav.go:457
 #, c-format
 msgid "The calendars are at %s."
 msgstr "Kalendáře jsou na adrese %s."
 
-#: ui/internal/calendar/caldav.go:445
+#: ui/internal/calendar/caldav.go:461
 msgid "Certificate"
 msgstr "Certifikát"
 
-#: ui/internal/calendar/caldav.go:452 ui/internal/calendarctl/account.go:476
+#: ui/internal/calendar/caldav.go:468 ui/internal/calendarctl/account.go:476
 msgid "Trusted by you"
 msgstr "Důvěřujete mu"
 
 #. TRANSLATORS: the certificate row of the Add CalDAV sheet; %s is
 #. the certificate's issuer.
-#: ui/internal/calendar/caldav.go:457
+#: ui/internal/calendar/caldav.go:473
 #, c-format
 msgid "Verified (%s)"
 msgstr "Ověřený (%s)"
 
-#: ui/internal/calendar/caldav.go:459 ui/internal/calendarctl/account.go:480
+#: ui/internal/calendar/caldav.go:475 ui/internal/calendarctl/account.go:480
 msgid "Verified"
 msgstr "Ověřený"
 
-#: ui/internal/calendar/caldav.go:461 ui/internal/calendarctl/account.go:478
+#: ui/internal/calendar/caldav.go:477 ui/internal/calendarctl/account.go:478
 msgid "Not encrypted (local server)"
 msgstr "Nešifrováno (místní server)"
 
-#: ui/internal/calendar/caldav.go:467
+#: ui/internal/calendar/caldav.go:483
 msgid "Trust Certificate…"
 msgstr "Důvěřovat certifikátu…"
 
-#: ui/internal/calendar/caldav.go:470 ui/internal/contacts/text.go:407
+#: ui/internal/calendar/caldav.go:486 ui/internal/contacts/text.go:407
 msgid "Calendars"
 msgstr "Kalendáře"
 
-#: ui/internal/calendar/caldav.go:480
+#: ui/internal/calendar/caldav.go:496
 msgid "Not shown in Mail; in Calendar with the CALDAV capsule."
 msgstr "V Poště se nezobrazuje; v Kalendáři s kapslí CALDAV."
 
 #. TRANSLATORS: the Add CalDAV sheet's button that adds the account.
-#: ui/internal/calendar/caldav.go:486
+#: ui/internal/calendar/caldav.go:502
 msgctxt "caldav"
 msgid "Add"
 msgstr "Přidat"
 
-#: ui/internal/calendar/caldav.go:496
+#: ui/internal/calendar/caldav.go:512
 msgid "The server did not accept the username or password."
 msgstr "Server nepřijal uživatelské jméno nebo heslo."
 
-#: ui/internal/calendar/caldav.go:498
+#: ui/internal/calendar/caldav.go:514
 msgid "The server’s certificate is not trusted."
 msgstr "Certifikát serveru není důvěryhodný."
 
-#: ui/internal/calendar/caldav.go:500
+#: ui/internal/calendar/caldav.go:516
 msgid "The server could not be reached."
 msgstr "Server není dostupný."
 
-#: ui/internal/calendar/caldav.go:502
+#: ui/internal/calendar/caldav.go:518
 msgid "The server answered, but it is not a CalDAV server."
 msgstr "Server odpověděl, ale není to server CalDAV."
 
-#: ui/internal/calendar/caldav.go:504
+#: ui/internal/calendar/caldav.go:520
 msgid "This is not a server address Malachi Mail can use."
 msgstr "Toto není adresa serveru, kterou Malachi Mail umí použít."
 
-#: ui/internal/calendar/caldav.go:506
+#: ui/internal/calendar/caldav.go:522
 msgid "The password could not be stored in the system keyring."
 msgstr "Heslo se nepodařilo uložit do systémové klíčenky."
 
-#: ui/internal/calendar/caldav.go:508
+#: ui/internal/calendar/caldav.go:524
 msgid "The calendars could not be found."
 msgstr "Kalendáře se nepodařilo najít."
 
@@ -6503,134 +6514,155 @@ msgstr "poznámka"
 
 #. TRANSLATORS: the contact form's button that adds an e-mail
 #. address row.
-#: ui/internal/contacts/form.go:444
+#: ui/internal/contacts/form.go:448
 msgid "Add Email"
 msgstr "Přidat e-mail"
 
-#: ui/internal/contacts/form.go:446
+#: ui/internal/contacts/form.go:450
 msgid "Add Phone"
 msgstr "Přidat telefon"
 
-#: ui/internal/contacts/form.go:448
+#: ui/internal/contacts/form.go:452
 msgid "Add Address"
 msgstr "Přidat adresu"
 
-#: ui/internal/contacts/form.go:450
+#: ui/internal/contacts/form.go:454
 msgid "Add Website"
 msgstr "Přidat web"
 
-#: ui/internal/contacts/form.go:458
+#: ui/internal/contacts/form.go:462
 msgid "Add Birthday"
 msgstr "Přidat narozeniny"
 
 #. TRANSLATORS: placeholders of the contact form's fields.
-#: ui/internal/contacts/form.go:465
+#: ui/internal/contacts/form.go:469
 msgid "First Name"
 msgstr "Jméno"
 
-#: ui/internal/contacts/form.go:467
+#: ui/internal/contacts/form.go:471
 msgid "Last Name"
 msgstr "Příjmení"
 
-#: ui/internal/contacts/form.go:469
+#: ui/internal/contacts/form.go:473
 msgid "Middle Name"
 msgstr "Prostřední jméno"
 
 #. TRANSLATORS: a title before a name, such as "Ing." or "Dr.".
-#: ui/internal/contacts/form.go:472
+#: ui/internal/contacts/form.go:476
 msgid "Prefix"
 msgstr "Titul před jménem"
 
 #. TRANSLATORS: a title after a name, such as "Ph.D." or "Jr.".
-#: ui/internal/contacts/form.go:475
+#: ui/internal/contacts/form.go:479
 msgid "Suffix"
 msgstr "Titul za jménem"
 
-#: ui/internal/contacts/form.go:477
+#: ui/internal/contacts/form.go:481
 msgid "Nickname"
 msgstr "Přezdívka"
 
-#: ui/internal/contacts/form.go:479
+#: ui/internal/contacts/form.go:483
 msgid "Company"
 msgstr "Firma"
 
-#: ui/internal/contacts/form.go:481
+#: ui/internal/contacts/form.go:485
 msgid "Job Title"
 msgstr "Funkce"
 
-#: ui/internal/contacts/form.go:483
+#: ui/internal/contacts/form.go:487
 msgid "Email"
 msgstr "E-mail"
 
-#: ui/internal/contacts/form.go:485
+#: ui/internal/contacts/form.go:489
 msgid "Phone"
 msgstr "Telefon"
 
-#: ui/internal/contacts/form.go:487
+#: ui/internal/contacts/form.go:491
 msgid "Website"
 msgstr "Web"
 
-#: ui/internal/contacts/form.go:489
+#: ui/internal/contacts/form.go:493
 msgid "Birthday"
 msgstr "Narozeniny"
 
-#: ui/internal/contacts/form.go:491
+#: ui/internal/contacts/form.go:495
 msgid "Note"
 msgstr "Poznámka"
 
-#: ui/internal/contacts/form.go:512
+#: ui/internal/contacts/form.go:516
 msgid "Street"
 msgstr "Ulice"
 
-#: ui/internal/contacts/form.go:514
+#: ui/internal/contacts/form.go:518
 msgid "Postal Code"
 msgstr "PSČ"
 
-#: ui/internal/contacts/form.go:516
+#: ui/internal/contacts/form.go:520
 msgid "City"
 msgstr "Město"
 
 #. TRANSLATORS: a part of a postal address: state, province or
 #. region.
-#: ui/internal/contacts/form.go:520
+#: ui/internal/contacts/form.go:524
 msgid "Region"
 msgstr "Kraj"
 
-#: ui/internal/contacts/form.go:522
+#: ui/internal/contacts/form.go:526
 msgid "Country"
 msgstr "Země"
 
 #. TRANSLATORS: the label of the choice where a new contact is saved.
-#: ui/internal/contacts/form.go:528
+#: ui/internal/contacts/form.go:532
 msgid "Address Book"
 msgstr "Adresář"
 
 #. TRANSLATORS: the label of a new contact's name in Add to Contacts.
-#: ui/internal/contacts/form.go:534
+#: ui/internal/contacts/form.go:538
 msgid "Name"
 msgstr "Jméno"
 
-#: ui/internal/contacts/form.go:559
+#: ui/internal/contacts/form.go:563
 msgid "Enter a name, a company or an email address."
 msgstr "Zadejte jméno, firmu nebo e-mailovou adresu."
 
-#: ui/internal/contacts/form.go:561
+#: ui/internal/contacts/form.go:565
 msgid "This text is too long."
 msgstr "Text je příliš dlouhý."
 
 #. TRANSLATORS: %s is what the user typed as an e-mail address.
-#: ui/internal/contacts/form.go:580
+#: ui/internal/contacts/form.go:584
 #, c-format
 msgid "%s is not a valid email address."
 msgstr "%s není platná e-mailová adresa."
 
-#: ui/internal/contacts/form.go:605
+#: ui/internal/contacts/form.go:609
 msgid "A website must be an address starting with http:// or https://."
 msgstr "Web musí být adresa začínající http:// nebo https://."
 
-#: ui/internal/contacts/form.go:611
+#: ui/internal/contacts/form.go:615
 msgid "Enter a valid date."
 msgstr "Zadejte platné datum."
+
+#. TRANSLATORS: Microsoft 365 is a brand.
+#: ui/internal/contacts/form.go:644
+#, c-format
+msgid "A Microsoft 365 contact has at most %d email address."
+msgid_plural "A Microsoft 365 contact has at most %d email addresses."
+msgstr[0] "Kontakt Microsoft 365 může mít nejvýš %d e-mailovou adresu."
+msgstr[1] "Kontakt Microsoft 365 může mít nejvýš %d e-mailové adresy."
+msgstr[2] "Kontakt Microsoft 365 může mít nejvýš %d e-mailových adres."
+
+#: ui/internal/contacts/form.go:659
+msgid "A Microsoft 365 contact has one work, one home and one other address."
+msgstr "Kontakt Microsoft 365 má jednu pracovní, jednu domácí a jednu jinou adresu."
+
+#: ui/internal/contacts/form.go:669
+msgid "A Microsoft 365 contact has only one website."
+msgstr "Kontakt Microsoft 365 může mít jen jeden web."
+
+#: ui/internal/contacts/form.go:719
+msgid "The server did not accept the marked detail. Correct it and try again."
+msgstr "Server označený údaj nepřijal. Opravte ho a zkuste to znovu."
 
 #. TRANSLATORS: put between the names of a conversation's participants ("Alice, Bob").
 #: ui/internal/widget/format.go:62
