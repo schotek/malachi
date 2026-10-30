@@ -66,6 +66,11 @@ const (
 	// is not an item of that CRM account, or the saved message's item is
 	// gone from the CRM (crm.remove).
 	CodeCrmItemNotFound ErrorCode = 1109
+	// CodeContactNotFound: no stored contact with that id (deleted, its
+	// book gone or its account's contacts switched off).
+	CodeContactNotFound ErrorCode = 1110
+	// CodeAddressBookNotFound: no address book with that id.
+	CodeAddressBookNotFound ErrorCode = 1111
 
 	// 1200–1299: authentication.
 	CodeAuthRequired ErrorCode = 1200 // credentials missing or token expired; see notify.authRequired
@@ -81,6 +86,9 @@ const (
 	// CodeCrmSignInUnsupported: the CRM instance cannot be signed in to by
 	// this version; Error.Data is a CrmSignInUnsupportedData.
 	CodeCrmSignInUnsupported ErrorCode = 1205
+	// CodeContactsConsentRequired: the account's sign-in does not allow
+	// contacts access; Error.Data is a ContactsConsentRequiredData.
+	CodeContactsConsentRequired ErrorCode = 1206
 
 	// 1300–1399: network and remote servers.
 	CodeOffline      ErrorCode = 1300
@@ -101,6 +109,9 @@ const (
 	// item the daemon cannot find (someone's private item, or one saved
 	// without a Message-ID).
 	CodeCrmDuplicate ErrorCode = 1307
+	// CodeContactConflict: the contact changed on the server since the
+	// revision the write names; Error.Data is a ContactConflictData.
+	CodeContactConflict ErrorCode = 1308
 
 	// 1400–1499: local storage.
 	CodeStorageError    ErrorCode = 1400
@@ -133,6 +144,10 @@ const (
 	// what the daemon expands or edits; the event shows its first instance
 	// only and may be edited with scope all only.
 	CodeRecurrenceUnsupported ErrorCode = 1508
+	// CodeAddressBookReadOnly: the address book (or the contact) cannot be
+	// changed by the user: the recent book, a server's read-only
+	// collection or folder.
+	CodeAddressBookReadOnly ErrorCode = 1509
 )
 
 // String returns the stable symbolic name of the code.
@@ -167,12 +182,15 @@ var codeNames = map[ErrorCode]string{
 	CodeCalendarNotFound:        "calendarNotFound",
 	CodeEventNotFound:           "eventNotFound",
 	CodeCrmItemNotFound:         "crmItemNotFound",
+	CodeContactNotFound:         "contactNotFound",
+	CodeAddressBookNotFound:     "addressBookNotFound",
 	CodeAuthRequired:            "authRequired",
 	CodeAuthFailed:              "authFailed",
 	CodeKeyringError:            "keyringError",
 	CodeOAuthClientMissing:      "oauthClientMissing",
 	CodeCalendarConsentRequired: "calendarConsentRequired",
 	CodeCrmSignInUnsupported:    "crmSignInUnsupported",
+	CodeContactsConsentRequired: "contactsConsentRequired",
 	CodeOffline:                 "offline",
 	CodeNetworkError:            "networkError",
 	CodeServerError:             "serverError",
@@ -181,6 +199,7 @@ var codeNames = map[ErrorCode]string{
 	CodeMessageGone:             "messageGone",
 	CodeEventGone:               "eventGone",
 	CodeCrmDuplicate:            "crmDuplicate",
+	CodeContactConflict:         "contactConflict",
 	CodeStorageError:            "storageError",
 	CodeMigrationFailed:         "migrationFailed",
 	CodeMalformedMessage:        "malformedMessage",
@@ -192,6 +211,7 @@ var codeNames = map[ErrorCode]string{
 	CodeQuoteNotFound:           "quoteNotFound",
 	CodeMalformedCalendar:       "malformedCalendar",
 	CodeRecurrenceUnsupported:   "recurrenceUnsupported",
+	CodeAddressBookReadOnly:     "addressBookReadOnly",
 }
 
 // Error is the JSON-RPC error object. It implements the Go error interface so

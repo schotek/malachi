@@ -209,8 +209,9 @@ const (
 	// assignee changes are its messages. JiraConfig says where and how;
 	// the token is Credentials.Password.
 	AccountJira AccountKind = "jira"
-	// AccountCalDAV is a calendar-only account on a CalDAV server
-	// (CalDAVConfig; the password is Credentials.Password). It has no
+	// AccountCalDAV is a calendar (and address book, CalDAVConfig.Contacts)
+	// account on a CalDAV/CardDAV server (CalDAVConfig; the password is
+	// Credentials.Password). It has no
 	// mail: folder.list answers no folders, message methods
 	// invalidArgument, and clients never show it in Mail.
 	AccountCalDAV AccountKind = "caldav"
@@ -241,6 +242,9 @@ const (
 type GraphConfig struct {
 	Source       GraphSource `json:"source"`
 	GOAAccountID string      `json:"goaAccountId,omitempty"`
+	// Contacts is the contacts part of the account (docs/api.md §4.19);
+	// nil = contacts sync off.
+	Contacts *ContactsConfig `json:"contacts,omitempty"`
 }
 
 // JiraDeployment says which kind of Jira site a JiraConfig names.
@@ -421,7 +425,7 @@ const (
 	CapabilityTransition AccountCapability = "transition"
 	// CapabilityCalendar: the account can have calendars (graph, caldav);
 	// it does not change with consent or sync state. A caldav account has
-	// exactly this one.
+	// this one, and CapabilityContacts when it has address books.
 	CapabilityCalendar AccountCapability = "calendar"
 	// CapabilityCrm: messages of mail accounts can be saved to this
 	// account (crm.*, docs/api.md §4.17). An eway account has exactly this
@@ -598,6 +602,9 @@ type AccountOAuthStartParams struct {
 	// Calendars.ReadWrite and Calendars.Read.Shared); only a sign-in made
 	// for the calendar sets it.
 	Calendar bool `json:"calendar,omitempty"`
+	// Contacts also asks for the contacts scope (Microsoft
+	// Contacts.ReadWrite); only a sign-in made for the contacts sets it.
+	Contacts bool `json:"contacts,omitempty"`
 }
 
 // AccountOAuthStartResult: the UI opens AuthURL in the user's browser; the
@@ -2117,6 +2124,8 @@ type Contact struct {
 	// Book is the display name of the address book the contact came from;
 	// empty for a collected address.
 	Book string `json:"book,omitempty"`
+	// ContactID names the contact of a "contacts" suggestion (contact.get).
+	ContactID ContactID `json:"contactId,omitempty"`
 }
 
 const (
@@ -2131,6 +2140,9 @@ type ContactSearchParams struct {
 	// Limit caps the result; 0 means DefaultContactLimit, more than
 	// MaxContactLimit is clamped.
 	Limit int `json:"limit,omitempty"`
+	// Scope says which synchronised address books are read; "" =
+	// ContactScopeAccount.
+	Scope ContactSearchScope `json:"scope,omitempty"`
 }
 
 type ContactSearchResult struct {

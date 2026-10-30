@@ -339,6 +339,11 @@ type CalDAVConfig struct {
 	// with attendees answer invitationsUnavailable.
 	MailAccountID AccountID        `json:"mailAccountId,omitempty"`
 	Scheduling    CalDAVScheduling `json:"scheduling,omitempty"` // "" = auto
+	// AddressBookHomeSetURL is the CardDAV addressbook-home-set (from
+	// account.listCalDAVCalendars); Contacts synchronises its address
+	// books (docs/api.md §4.19). Default false.
+	AddressBookHomeSetURL string `json:"addressBookHomeSetUrl,omitempty"`
+	Contacts              bool   `json:"contacts,omitempty"`
 }
 
 // CalendarConfig is the calendar part of a graph or caldav account.
@@ -400,6 +405,12 @@ type AccountDiscoverCalDAVResult struct {
 	FoundVia         CalDAVFoundVia   `json:"foundVia"`
 	NeedsCredentials bool             `json:"needsCredentials"`
 	Certificate      *CertificateInfo `json:"certificate,omitempty"`
+	// Calendars and AddressBooks say what the anonymous discovery saw:
+	// CalDAV (calendar-access) and CardDAV (addressbook). A server that
+	// authenticates before it answers sets neither; the signed-in
+	// account.listCalDAVCalendars decides then.
+	Calendars    bool `json:"calendars,omitempty"`
+	AddressBooks bool `json:"addressBooks,omitempty"`
 }
 
 // AccountListCalDAVCalendarsParams: with AccountID and no password the
@@ -418,6 +429,11 @@ type AccountListCalDAVCalendarsResult struct {
 	Addresses  []string         `json:"addresses"`
 	Scheduling CalDAVScheduling `json:"scheduling"` // server or client
 	Calendars  []CalDAVCalendar `json:"calendars"`  // ≤ MaxCalendarsPerAccount
+	// AddressBookHomeSetURL and AddressBooks: the principal's CardDAV
+	// addressbook-home-set and its collections (≤
+	// MaxAddressBooksPerAccount); empty when the server has none.
+	AddressBookHomeSetURL string               `json:"addressBookHomeSetUrl,omitempty"`
+	AddressBooks          []CardDAVAddressBook `json:"addressBooks"`
 }
 
 // ---------------------------------------------------------------------------

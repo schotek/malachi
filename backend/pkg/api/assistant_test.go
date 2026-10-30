@@ -10,19 +10,20 @@ import (
 	"time"
 )
 
-// assistantMethods end AllMethods, after the CRM's; their notification
-// ends AllNotifications.
+// assistantMethods follow the CRM's in AllMethods; only the address
+// books' (contacts_book_test.go) come after them, and likewise their
+// notification.
 var assistantMethods = []string{"assistant.profileGet", "assistant.profileSet", "assistant.profilePropose", "assistant.profileResolve"}
 
 func TestAssistantMethodsOrder(t *testing.T) {
-	n := len(AllMethods)
-	if !reflect.DeepEqual(AllMethods[n-len(assistantMethods):], assistantMethods) {
-		t.Fatalf("AllMethods does not end with the assistant profile methods: %v", AllMethods[n-len(assistantMethods):])
+	n := len(AllMethods) - len(contactsBookMethods)
+	if !reflect.DeepEqual(AllMethods[n-len(assistantMethods):n], assistantMethods) {
+		t.Fatalf("AllMethods does not end with the assistant profile methods: %v", AllMethods[n-len(assistantMethods):n])
 	}
 	if AllMethods[n-len(assistantMethods)-1] != MethodCrmRemove {
 		t.Fatal("the assistant profile methods do not follow the CRM's")
 	}
-	if AllNotifications[len(AllNotifications)-1] != NotifyAssistantProfileChanged {
+	if AllNotifications[len(AllNotifications)-2] != NotifyAssistantProfileChanged {
 		t.Fatalf("AllNotifications: %v", AllNotifications)
 	}
 }

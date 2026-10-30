@@ -229,12 +229,15 @@ can read the key file.
 | 1107 | calendarNotFound | no calendar with that id (removed, its account gone or its sync switched off) |
 | 1108 | eventNotFound | no stored event with that id, or `recurrenceId` names no occurrence of it |
 | 1109 | crmItemNotFound | a CRM item named in `crm.save` (`link`, `superior`) is not an item of that CRM account, or for `crm.remove` the message is not saved there (§4.17) |
+| 1110 | contactNotFound | no stored contact with that id (deleted, its address book gone or its account's contacts switched off; §4.19) |
+| 1111 | addressBookNotFound | no address book with that id (§4.19) |
 | 1200 | authRequired | user interaction needed; a `notify.authRequired` was/will be sent |
 | 1201 | authFailed | server rejected credentials |
 | 1202 | keyringError | secret service unavailable |
 | 1203 | oauthClientMissing | the backend's own sign-in needs an OAuth client id for the provider and none is configured (§4.1) |
 | 1204 | calendarConsentRequired | the account's sign-in does not allow calendar access (Microsoft scope missing, consent withdrawn, GOA calendar disabled); `data` = `{ "accountId", "signIn": bool }` — `signIn` true when `account.oauthStart` with `calendar: true` can fix it (source `daemon`), false for GOA (the desktop's Online Accounts settings) |
 | 1205 | crmSignInUnsupported | the CRM instance cannot be signed in to by this version: `data` = `{ "reason": "microsoft" \| "plan" }` — `microsoft`: it signs in through Microsoft Entra; `plan`: its plan has no API access (§4.17) |
+| 1206 | contactsConsentRequired | the account's sign-in does not allow contacts access (Microsoft scope `Contacts.ReadWrite` missing, consent withdrawn, GOA contacts disabled); `data` = `{ "accountId", "signIn": bool }` — `signIn` true when `account.oauthStart` with `contacts: true` can fix it (source `daemon`), false for GOA (§4.19) |
 | 1300 | offline | daemon is in offline mode |
 | 1301 | networkError | connection failed |
 | 1302 | serverError | IMAP/SMTP server returned an error |
@@ -243,6 +246,7 @@ can read the key file.
 | 1305 | messageGone | the mail server no longer has the message (another client deleted or moved it); the next sync removes the local copy |
 | 1306 | eventGone | the server no longer has the event (deleted or moved elsewhere); the next pass removes the local copy |
 | 1307 | crmDuplicate | the CRM refused the message as a duplicate of an item the daemon cannot find (one saved privately by someone else, or without a Message-ID; §4.17) |
+| 1308 | contactConflict | `contact.update` or `contact.delete` named a `revision` that is not the server's current one (CardDAV `412` on `If-Match`, a changed Graph `changeKey`); `data` = `{ "server": ContactCard }` with the server's version (§4.19) |
 | 1400 | storageError | SQLite failure |
 | 1401 | migrationFailed | store schema could not be upgraded |
 | 1500 | malformedMessage | MIME unparsable even leniently |
@@ -254,11 +258,13 @@ can read the key file.
 | 1506 | quoteNotFound | `board.annotate` or `board.commit` quoted text the daemon did not find verbatim where it must be; `data` = `{ "field": "due" \| "commitment" }` (§4.13) |
 | 1507 | malformedCalendar | an iCalendar object or a server's calendar answer could not be read even leniently; the data is withheld |
 | 1508 | recurrenceUnsupported | the event's recurrence rule is outside what the daemon expands or edits; the event shows its first instance only and may be edited with scope `all` only |
+| 1509 | addressBookReadOnly | the address book or contact cannot be changed by the user: the recent book, a server's read-only collection or folder (§4.19) |
 
 `offline`, `networkError`, `serverError`, `serverTimeout`, `tlsError` (with
 `TLSErrorData` for CalDAV endpoints too), `authRequired`, `authFailed` and
 `keyringError` keep their meanings for the calendar methods (§4.14–§4.16).
-They keep them for the CRM methods (§4.17) too, where `serverError` is
+They keep them for the CRM methods (§4.17) and the address-book methods
+(§4.19) too, where `serverError` is
 also any answer of the CRM other than success (only its return code is
 in `message`, never the CRM's own text).
 
@@ -651,7 +657,9 @@ ServerConfig { "host": "imap.example.org", "port": 993, "security": "tls|starttl
 OAuth2Config { "source": "goa|daemon" (opt), "goaAccountId": "account_1788683507_0" (with source goa),
                "provider": "google|office365|custom", "clientId" (opt), "tenantId" (opt),
                "authUrl" (opt), "tokenUrl" (opt), "scopes": [] (opt) }
-GraphConfig  { "source": "goa|daemon", "goaAccountId": "account_1788512854_0" (with source goa) }
+GraphConfig  { "source": "goa|daemon", "goaAccountId": "account_1788512854_0" (with source goa),
+               "contacts": ContactsConfig (opt) }   // §4.19; absent = contacts sync off
+ContactsConfig { "sync": bool }                     // synchronise the contact folders (default false)
 JiraConfig {
   "siteUrl": "https://acme.atlassian.net", "deployment": "cloud|datacenter",
   "cloudId": "UUID" (opt; cloud only), "login": "me@example.org" (cloud only),
@@ -673,7 +681,9 @@ CalDAVConfig {
   "username": "jana",
   "certificateSha256": "64 hex digits" (opt),                // the pin, as ServerConfig
   "mailAccountId": "acc_2" (opt),     // the mail account invitations and replies leave from (client scheduling)
-  "scheduling": "auto|server|client" (opt, default auto)
+  "scheduling": "auto|server|client" (opt, default auto),
+  "addressBookHomeSetUrl": "https://…/addressbooks/users/jana/" (opt),  // from account.listCalDAVCalendars
+  "contacts": bool (opt, default false)  // synchronise the CardDAV address books (§4.19)
 }
 EwayConfig {
   "serviceUrl": "https://hosting.eway-crm.com/company",      // normalised (account.detectEway)
@@ -809,6 +819,15 @@ keyring keeps it). Rules, checked by `account.add`, `account.update` and
   mail from `mailAccountId`.
 - `calendar` only on `graph` and `caldav` accounts (`invalidArgument`
   elsewhere); `disabledCalendars` ≤ 200 entries of ≤ 2048 bytes.
+- `contacts: true` makes the account an address-book source (§4.19);
+  `addressBookHomeSetUrl` follows the same origin rules as the calendar
+  home set. An account may have address books without calendars: the
+  CardDAV server need not be a CalDAV server. `account.update` that
+  switches `contacts` (or `graph.contacts.sync`) off, or changes
+  `serverUrl`/`username`, deletes the cached contacts of the account; a
+  Graph account whose sign-in lacks `Contacts.ReadWrite` answers
+  `contactsConsentRequired` from the contact methods (no error from
+  `account.update`).
 - The `SyncState` of a `caldav` account (`account.list`, `sync.status`,
   `notify.syncState`) is its calendar state mapped onto the mail
   statuses; a Graph account's `SyncState` stays the mail's and its
@@ -873,11 +892,14 @@ derives it from `kind`:
 | `transition` | the status of its issues can be changed (`issue.transitions`, `issue.transition`, §4.12) |
 | `calendar` | the account can have calendars (§4.14); it does not change with consent or sync state |
 | `crm` | messages of mail accounts can be saved to the account (§4.17) |
+| `contacts` | the account can have address books (§4.19): a `graph` account, a `caldav` account with `caldav.contacts`; it does not change with consent or sync state |
 
 `imap` and `graph` accounts have `["compose", "reply", "replyAll",
 "forward", "move", "delete"]`, a `graph` account `"calendar"` too; a
 `jira` account `["comment", "forward", "transition"]`; a `caldav` account
-exactly `["calendar"]`; an `eway` account exactly `["crm"]`.
+`["calendar"]`, plus `"contacts"` with `caldav.contacts`; an `eway`
+account exactly `["crm"]`. A `graph` account has `"contacts"` too
+(address books, §4.19).
 Flags (`message.flag`) are always allowed, and so is `message.delete` of
 an account's outbox messages (cancelling a queued send or comment). Archiving and
 marking as junk still depend on folders with those roles, which a `jira`
@@ -1279,7 +1301,7 @@ token, which must carry `email_verified: true`; Microsoft: Graph `/me`'s
 page and closes the listener.
 
 - params: `{ "config": AccountConfig (opt), "accountId": "acc_1" (opt), "browserPage": OAuthBrowserPage (opt),
-  "calendar": bool (opt) }` — exactly one of `config` and `accountId`
+  "calendar": bool (opt), "contacts": bool (opt) }` — exactly one of `config` and `accountId`
 - result: `{ "sessionId": "s_…", "authUrl": "https://accounts.google.com/…", "expiresAt": "2026-09-25T10:10:00Z" }`
 - errors: invalidArgument (neither or both of `config`/`accountId`, a
   config that is not source `daemon` or fails `account.add` validation,
@@ -1314,6 +1336,11 @@ asks for the calendar scopes, Microsoft `Calendars.ReadWrite` and
 a sign-in without them leaves the account's calendar in state
 `consentRequired` and its mail running. Users who do not want the
 calendar never see a new consent screen.
+
+`contacts: true` (only a sign-in made for the contacts sets it: the
+Contacts switch, or a `contactsConsentRequired` with `signIn: true`)
+likewise asks for Microsoft `Contacts.ReadWrite` (§4.19); a grant without
+it leaves the account's mail and calendar running.
 
 #### `account.oauthWait`
 Waits for a session to finish.
@@ -1412,10 +1439,17 @@ Nothing is stored and nothing is authenticated.
 
 - params: `{ "url": "cloud.example.org", "certificateSha256": "64 hex digits" (opt) }` — a host or a full URL; `https` assumed
 - result: `{ "serverUrl": "https://cloud.example.org/remote.php/dav", "foundVia": "wellKnown|srv|url",
-  "needsCredentials": true, "certificate": CertificateInfo (opt) }`
+  "needsCredentials": true, "certificate": CertificateInfo (opt),
+  "calendars": bool (opt), "addressBooks": bool (opt) }`
 - errors: invalidArgument (not a usable URL), networkError, tlsError
   (with `TLSErrorData`: the certificate-trust flow), serverTimeout,
   serverError (the server answered but is not CalDAV)
+
+`calendars` and `addressBooks` say what the anonymous `OPTIONS` showed
+(`calendar-access`, `addressbook` in `DAV`); a server that authenticates
+before it answers sets neither, and `account.listCalDAVCalendars` decides.
+Discovery also follows `/.well-known/carddav` and SRV `_carddavs._tcp`
+(§4.19); a server with CardDAV and no CalDAV counts.
 
 `certificate` describes the certificate the server presented when it was
 verified (its `issuer` for a "Verified" row). `serverUrl` may name
@@ -1437,7 +1471,8 @@ account settings choose from. Nothing is stored.
 - params: `{ "accountId" (opt), "config": AccountConfig, "credentials": { "password": "…" (opt) } }`
 - result: `{ "principalUrl": "…", "homeSetUrl": "…", "displayName": "Jana" (opt),
   "addresses": ["jana@example.org"], "scheduling": "server|client",
-  "calendars": [CalDAVCalendar] }`
+  "calendars": [CalDAVCalendar],
+  "addressBookHomeSetUrl": "…" (opt), "addressBooks": [CardDAVAddressBook] }`
 - errors: invalidArgument (`config` not of kind `caldav`, its
   connection fields fail the rules above, or `accountId` names an
   account of another realm), authRequired (no password and no
@@ -1448,7 +1483,13 @@ account settings choose from. Nothing is stored.
 CalDAVCalendar { "href": "/remote.php/dav/calendars/jana/personal/", "name": "Personal",
                  "color": "#0082c9" (opt), "access": "owner|write|read",
                  "isDefault": true (opt) }        // the server's schedule-default-calendar-URL
+CardDAVAddressBook { "href": "/remote.php/dav/addressbooks/users/jana/contacts/", "name": "Contacts",
+                     "readOnly": true (opt) }
 ```
+
+`addressBooks` are the collections of the principal's
+`addressbook-home-set` (at most 200, `api.MaxAddressBooksPerAccount`;
+`[]` when there is none).
 
 `addresses` are the `mailto:` values of the principal's
 `calendar-user-address-set` (a client offers the first as `email`).
@@ -2931,15 +2972,24 @@ read from Evolution Data Server over D-Bus; on Microsoft 365 that includes
 the organisation directory and recent people). `name` and `book` are
 untrusted display text.
 
+A third source is the address books the daemon synchronises
+(`"source": "contacts"`, §4.19): `book` is the book's name and
+`contactId` names the contact (`contact.get`). Which books are read is
+`scope`: `account` (the default) the books of the sending account and
+the recent book, `all` every visible book of every enabled account.
+Hidden books (`addressBook.set`) are never read.
+
 ```jsonc
 Contact { "name": "Alice Example" (opt), "address": "alice@example.org",
-          "source": "sent" | "addressBook", "book": "Contacts" (opt) }
+          "source": "sent" | "addressBook" | "contacts", "book": "Contacts" (opt),
+          "contactId": "p_…" (opt; source contacts) }
 ```
 
 #### `contact.search`
-- params: `{ "accountId", "query", "limit": 10 (opt, max 50) }`
+- params: `{ "accountId", "query", "limit": 10 (opt, max 50), "scope": "account|all" (opt, default account) }`
 - result: `{ "contacts": [Contact] }` — best match first; the same address
-  from both sources is one entry, reported as the address book's
+  from several sources is one entry, reported as a synchronised book's
+  (`contacts`), else the system address book's
 - errors: invalidArgument (empty query, over 256 bytes, control
   characters), accountNotFound, storageError
 
@@ -4595,6 +4645,142 @@ Accepting appends the proposal's text — or `text`, the user's edit of
 it — to the profile's text (or the account's note) as a new line.
 Dismissing drops it. Either way `notify.assistantProfileChanged` follows.
 
+### 4.19 addressBook and contact
+
+The address books of connected services and their contacts: Microsoft
+Graph contact folders of a `graph` account with `graph.contacts.sync`,
+CardDAV collections of a `caldav` account with `caldav.contacts`, and the
+virtual book of recently used addresses (`id` `"recent"`, the collected
+addresses of §4.11, read only). The design is
+`docs/plans/address-book.md`. The daemon keeps a cache of the server's
+books (the server is the authority: switching contacts off, changing
+the server or user, or removing the account deletes it); only
+`visible` is the user's. A pass runs at the account's start, every
+15 minutes, on `addressBook.list` when the last pass is older than a
+minute, and right after an own write. Writes go to the server first
+(online only, no offline queue) and change the cache only after the
+server accepted them; offline is `offline`. Every string of a book or
+contact is untrusted display text, cleaned by the daemon (control,
+bidi and invisible characters removed) and shown as plain text; no HTML,
+photo or URL of a contact is ever fetched. The daemon logs counts and
+ids only.
+
+```jsonc
+AddressBook    { "id": "b_…" | "recent", "accountId": "acc_1" (opt; absent for recent),
+                 "name": "Contacts", "kind": "graph|carddav|recent",
+                 "readOnly": bool, "searchOnly": bool (opt), "visible": bool,
+                 "count": 120, "lastSyncAt": Time (opt) }
+ContactSummary { "id": "p_…", "bookId": "b_…", "displayName": "Jana Nováková",
+                 "sortKey": "nováková jana", "section": "N",
+                 "org": "Acme" (opt), "email": "jana@example.org" (opt) }
+ContactCard    { "id", "bookId", "readOnly": bool,
+                 "revision": "…",              // CardDAV ETag or Graph changeKey, opaque
+                 "name": { "given", "family", "middle", "prefix", "suffix" },   // each (opt)
+                 "displayName", "nickname" (opt), "org" (opt), "title" (opt),
+                 "emails":    [{ "label" (opt), "address" }],
+                 "phones":    [{ "label" (opt), "number" }],
+                 "addresses": [{ "label" (opt), "street", "city", "region", "postcode", "country" }],   // each (opt)
+                 "urls":      [{ "label" (opt), "url" }],
+                 "birthday":  { "year" (opt), "month", "day" } (opt),
+                 "note" (opt) }
+```
+
+`kind` is an open enum: an unknown value is a read-only book of an
+unknown source. `searchOnly` books (none in this version) are not listed
+whole, only searched. `count` is the number of stored contacts.
+`sortKey` orders the list (family name first when known; a client
+compares it with its own collation); `section` is its index letter,
+upper case, or `#`. A label is `home`, `work`, `other`, and for phones
+`mobile`, `fax`, `pager`, `main`; any other value is the server's own
+label (display text, ≤ 64 bytes); absent = none. A client opens only
+`http`/`https` URLs, through its "Open this link?"; a phone number is
+only copied. As input (`contact.create`, `contact.update`) `id`,
+`bookId`, `readOnly` and `revision` of the card are ignored.
+
+Limits (`api.*`): `MaxVCardBytes` 1 MiB (one vCard), `MaxVCardProperties`
+500, `MaxContactNameBytes` 256 (each name part, `displayName`,
+`nickname`), `MaxContactFieldBytes` 1024 (`org`, `title`, every other
+string), `MaxContactLabelBytes` 64, `MaxContactNoteBytes` 32 KiB,
+`MaxContactEmails` 50, `MaxContactPhones` 50, `MaxContactAddresses` 20,
+`MaxContactURLs` 20, `MaxContactListLimit` 500 (default 100),
+`MaxContactLookupAddresses` 200, `MaxAddressBooksPerAccount` 200,
+`MaxContactsPerBook` 50 000. An input over a limit is invalidArgument; a
+server's contact over a limit is truncated, a vCard over 1 MiB skipped.
+
+An **update is a patch**: the daemon changes only the properties the
+card changed and sends every other line of the stored vCard back
+byte for byte (groups, `X-…` properties, photos, unknown properties); on
+Graph it `PATCH`es the changed fields only. A new card uses the vCard
+version the book uses.
+
+#### `addressBook.list`
+- params: `{ "accountId": "acc_1" (opt) }` — absent: every account with
+  the `contacts` capability whose contacts are on, and the recent book
+- result: `{ "books": [AddressBook] }` — per account in `account.list`
+  order, server order within it, the recent book last
+- errors: accountNotFound, contactsConsentRequired (the account's books
+  cannot be read; with `accountId` only, otherwise the account is left
+  out), storageError
+
+#### `addressBook.set`
+The user's choice of one book; nothing goes to the server.
+
+- params: `{ "bookId", "visible": bool }`
+- result: `{ "book": AddressBook }`
+- errors: addressBookNotFound, storageError
+
+Followed by `notify.contactsChanged` naming the book.
+
+#### `contact.list`
+- params: `{ "bookId": "b_…" | "recent" | "all", "query": "…" (opt), "offset": 0 (opt), "limit": 100 (opt, max 500) }`
+- result: `{ "contacts": [ContactSummary], "total": 120 }` — by `sortKey`;
+  `total` counts every match
+- errors: invalidArgument (`query` over 256 bytes or with control
+  characters, a negative `offset`), addressBookNotFound, storageError
+
+`all` lists every visible book. `query` matches words of the name, the
+organisation and the addresses (prefixes, as `search.query`).
+
+#### `contact.get`
+- params: `{ "contactId" }`
+- result: `{ "contact": ContactCard }`
+- errors: contactNotFound, storageError
+
+#### `contact.lookup`
+Which addresses have a contact: the address chip's *Show Contact* and
+*Add to Contacts…*.
+
+- params: `{ "addresses": ["jana@example.org"] }` — at most 200
+- result: `{ "known": { "jana@example.org": "p_…" } }` — addresses
+  normalised (lower case); unknown addresses are absent; only visible
+  books, never the recent book; the exact address only, never a name
+- errors: invalidArgument (over 200 addresses), storageError
+
+#### `contact.create`
+- params: `{ "bookId", "card": ContactCard }`
+- result: `{ "contactId": "p_…", "revision": "…" }`
+- errors: invalidArgument (a limit; no name, organisation or address at
+  all), addressBookNotFound, addressBookReadOnly,
+  contactsConsentRequired, offline, networkError, tlsError,
+  serverTimeout, serverError, authRequired, authFailed
+
+#### `contact.update`
+- params: `{ "contactId", "revision", "card": ContactCard }`
+- result: `{ "revision": "…" }`
+- errors: as `contact.create`, plus contactNotFound and
+  contactConflict (`data.server` is the server's version, now also in
+  the cache; a client offers Reload and keeps the fields the user
+  changed)
+
+#### `contact.delete`
+- params: `{ "contactId", "revision" }`
+- result: `{}`
+- errors: as `contact.update`
+
+Every write is followed by `notify.contactsChanged` naming the book.
+A contact the server no longer has is removed from the cache and
+answers contactNotFound.
+
 ## 5. Notifications
 
 | Method | params |
@@ -4611,6 +4797,7 @@ Dismissing drops it. Either way `notify.assistantProfileChanged` follows.
 | `notify.eventAlert` | `{ "alert": EventAlert }` |
 | `notify.invitationsChanged` | `{ "accountIds": ["acc_1"] (opt) }` |
 | `notify.assistantProfileChanged` | `{}` |
+| `notify.contactsChanged` | `{ "accountId" (opt; absent for the recent book), "bookIds": ["b_1"] (opt) }` |
 
 Notifications are sent only to connections that completed the handshake
 (§1.4).
@@ -4724,6 +4911,13 @@ included, when the assistant profile or its pending proposals changed
 `assistant.profileResolve`, or an account removed with its note or
 proposals. It carries no payload; clients run `assistant.profileGet`
 again. A client that does not know it ignores it.
+
+`notify.contactsChanged` is sent to every client when the books or
+contacts of an account changed (§4.19): a pass that changed something,
+an own write, a book added or removed, `addressBook.set`, contacts
+switched off. Without `bookIds` any book of the account changed;
+without `accountId` the recent book. Gathered within 250 ms. A client
+that does not know it ignores it.
 
 `notify.syncState` is sent immediately on every change of `status`,
 `folderId`, `error`, `lastSync`, `pendingOutbox` or `failedOutbox`, and for
@@ -5119,3 +5313,17 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   `assistant.profilePropose`, `assistant.profileResolve` and the
   notification `notify.assistantProfileChanged`. No new error codes;
   `ProtocolVersion` stays 2.
+- **2** (2026-10-30, compatible addition: address books and contacts,
+  §4.19): new methods `addressBook.list`, `addressBook.set`,
+  `contact.list`, `contact.get`, `contact.lookup`, `contact.create`,
+  `contact.update`, `contact.delete` and the notification
+  `notify.contactsChanged` (all `notImplemented` until implemented);
+  capability `contacts`; `GraphConfig.contacts`,
+  `CalDAVConfig.addressBookHomeSetUrl` and `contacts`;
+  `account.oauthStart` `contacts`; `account.discoverCalDAV` `calendars`
+  and `addressBooks`; `account.listCalDAVCalendars`
+  `addressBookHomeSetUrl` and `addressBooks`; `contact.search` source
+  `contacts`, `Contact.contactId` and param `scope`; error codes 1110
+  `contactNotFound`, 1111 `addressBookNotFound`, 1206
+  `contactsConsentRequired`, 1308 `contactConflict`, 1509
+  `addressBookReadOnly`. `ProtocolVersion` stays 2.

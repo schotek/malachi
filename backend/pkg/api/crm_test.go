@@ -15,7 +15,7 @@ import (
 var crmMethods = []string{"account.detectEway", "crm.lookup", "crm.search", "crm.save", "crm.remove"}
 
 func TestCrmMethodsOrder(t *testing.T) {
-	n := len(AllMethods) - len(assistantMethods)
+	n := len(AllMethods) - len(assistantMethods) - len(contactsBookMethods)
 	if !reflect.DeepEqual(AllMethods[n-len(crmMethods):n], crmMethods) {
 		t.Fatalf("AllMethods does not end with the CRM methods: %v", AllMethods[n-len(crmMethods):n])
 	}
