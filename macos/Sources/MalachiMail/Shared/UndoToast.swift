@@ -55,9 +55,16 @@ final class UndoToast: NSView {
         label.maximumNumberOfLines = 1
         label.isSelectable = false
         label.translatesAutoresizingMaskIntoConstraints = false
-        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        button.bezelStyle = .push
+        // Above the capsule's hugging (nothing else sizes it, and an equal
+        // priority let Auto Layout squeeze the text away) but below the
+        // required cap of the capsule's width, so a long text truncates.
+        label.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        // A borderless button in the accent colour: the capsule is the
+        // toast's only background.
+        button.isBordered = false
         button.controlSize = .regular
+        button.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        button.contentTintColor = .controlAccentColor
         button.target = self
         button.action = #selector(undoClicked(_:))
         button.translatesAutoresizingMaskIntoConstraints = false
@@ -77,7 +84,7 @@ final class UndoToast: NSView {
             label.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 18),
             label.centerYAnchor.constraint(equalTo: content.centerYAnchor),
             button.leadingAnchor.constraint(equalTo: label.trailingAnchor, constant: 12),
-            content.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: 8),
+            content.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: 18),
             button.centerYAnchor.constraint(equalTo: content.centerYAnchor),
         ])
     }
