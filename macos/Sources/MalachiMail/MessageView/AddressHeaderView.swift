@@ -104,6 +104,9 @@ final class AddressHeaderView: NSView {
         }
         self.account = account
         lists = [from, to ?? [], cc ?? []]
+        // Show Contact or Add to Contacts… for every address of the
+        // header, asked once per message (W2).
+        AppContacts.shared?.ask(id.rawValue, addresses: lists.flatMap { $0.map(\.address) })
         render()
     }
 
@@ -135,6 +138,8 @@ final class AddressHeaderView: NSView {
     private func chip(_ a: Address) -> NSView {
         let chip = AddressChipView(address: a)
         let account = account
+        chip.contactsKey = message?.rawValue ?? ""
+        chip.account = account
         chip.onCopy = { [weak self] in self?.onCopy?(a) }
         chip.onWrite = { [weak self] in self?.onWrite?(a, account) }
         return chip
@@ -280,6 +285,10 @@ final class AddressChipView: PillButton {
 
     var onCopy: (@MainActor () -> Void)?
     var onWrite: (@MainActor () -> Void)?
+    /// The message the chip belongs to (the contacts lookup's key) and its
+    /// account (Add to Contacts…' default book).
+    var contactsKey = ""
+    var account: AccountID?
 
     init(address: Address) {
         self.address = address
@@ -331,8 +340,36 @@ final class AddressChipView: PillButton {
         write.target = self
         write.isEnabled = !addr.isEmpty
         menu.addItem(write)
+        addContactsItem(to: menu, address: addr)
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: isFlipped ? bounds.height + 4 : -4), in: self)
         refreshHover()
+    }
+
+    /// Show Contact for an address a visible book has exactly (never by
+    /// name), else Add to Contacts… when a book can take it
+    /// (`ContactBook.chipItemFor`); nothing before the lookup answered.
+    private func addContactsItem(to menu: NSMenu, address addr: String) {
+        guard let contacts = AppContacts.shared, !addr.isEmpty else { return }
+        let (kind, id) = contacts.chipItem(contactsKey, address: addr)
+        let title = ContactBook.chipItemText(kind)
+        guard !title.isEmpty else { return }
+        menu.addItem(.separator())
+        let action = kind == .show ? #selector(showContactItem(_:)) : #selector(addContactItem(_:))
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        item.image = NSImage(systemSymbolName: "person.crop.circle", accessibilityDescription: nil)
+        item.representedObject = id?.rawValue
+        menu.addItem(item)
+    }
+
+    @objc private func showContactItem(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String else { return }
+        AppContacts.shared?.showContact(ContactID(rawValue: raw), address: address.address)
+    }
+
+    @objc private func addContactItem(_ sender: Any?) {
+        guard let contacts = AppContacts.shared else { return }
+        AddToContactsPopover.show(address: address, account: account, contacts: contacts, relativeTo: self)
     }
 
     @objc private func copyItem(_ sender: Any?) {

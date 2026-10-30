@@ -363,6 +363,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
+    /// Puts `text` into the toolbar's search field without searching (the
+    /// caller searches): Show Mail of the Contacts window.
+    func setSearchField(_ text: String) {
+        toolbarDelegate.setSearchText(text)
+    }
+
     // MARK: Search in your own words
 
     /// "Search in Your Own Words" with the field's `words`: the field shows

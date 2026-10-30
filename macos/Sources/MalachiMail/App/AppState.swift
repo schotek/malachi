@@ -105,6 +105,10 @@ final class AppState {
     /// removal runs for, shared by every window's `CRMController`
     /// (Integration+CRM wires it).
     let crm = CRMState()
+    /// The address books (Integration+Contacts): the Contacts window, the
+    /// address chips' Show Contact / Add to Contacts…, the suggestions'
+    /// scope.
+    private(set) var contacts: AppContacts!
     /// The user's profile for the assistant (docs/api.md §4.18): every
     /// prompt carries it, Settings → AI → About You edits it, the panel's
     /// proposal cards resolve through it. Read when the connection comes
@@ -179,6 +183,7 @@ final class AppState {
         wireBoardTriage()
         wireProfile()
         EventEditorManager.shared.state = self
+        contacts = AppContacts(state: self)
     }
 
     var selectedProvider: (any AssistantProvider)? { settings.assistantProvider == .chatgpt ? codex : nil }
@@ -390,6 +395,7 @@ final class NotificationHub {
     private var draftsChanged = HandlerList<DraftsChangedNotification>()
     private var calendarNotification = HandlerList<CalendarNotification>()
     private var assistantProfileChanged = HandlerList<Void>()
+    private var contactsChanged = HandlerList<ContactsChangedNotification>()
     private var connection = HandlerList<ConnectionController.ConnectionState>()
 
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "notify")
@@ -444,6 +450,12 @@ final class NotificationHub {
         assistantProfileChanged.add { _ in f() }
     }
 
+    /// notify.contactsChanged: the Contacts window, the address chips'
+    /// lookup and Settings → Contacts load again (`AppContacts`).
+    func addContactsChanged(_ f: @escaping @MainActor (ContactsChangedNotification) -> Void) -> Token {
+        contactsChanged.add(f)
+    }
+
     /// The calendar's notifications (notify.calendarChanged,
     /// notify.calendarState, notify.eventAlert, notify.invitationsChanged),
     /// decoded next to `DaemonNotification` (`CalendarNotification`).
@@ -466,6 +478,10 @@ final class NotificationHub {
             return
         }
         do {
+            if let c = try ContactsChangedNotification.decode(raw) {
+                contactsChanged.fire(c)
+                return
+            }
             if let c = try CalendarNotification(raw) {
                 calendarNotification.fire(c)
                 return

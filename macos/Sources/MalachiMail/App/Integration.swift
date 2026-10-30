@@ -124,6 +124,7 @@ final class Integration {
         wireConversation()
         wireBoard()
         wireCRM()
+        wireContacts()
     }
 
     /// window.go 337-360 and 411-433: the toolbar and menu act on the
@@ -524,6 +525,7 @@ final class Integration {
             confirmTrust: Integration.confirmTrust(state.alerts)
         )
         c.aiPane.configureProfile(state.profile)
+        c.contactsPane.configure(state.contacts)
         return c
     }
 

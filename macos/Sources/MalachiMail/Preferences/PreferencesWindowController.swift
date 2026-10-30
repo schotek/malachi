@@ -6,14 +6,14 @@ import MalachiCore
 
 /// The settings window (preferences.blp `preferences_dialog`): a
 /// toolbar-style tab view with the Accounts, Integrations, General,
-/// Calendar (docs/calendar.md §5.8), Appearance and AI pages, 600 pt wide, titled "Settings" as macOS calls it. One instance
+/// Calendar (docs/calendar.md §5.8), Contacts, Appearance and AI pages, 600 pt wide, titled "Settings" as macOS calls it. One instance
 /// at a time; `show` brings it to the front. There is no search (deviation
 /// D9).
 @MainActor
 final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
     /// The pages, in the order of the tabs.
     enum Page: Int {
-        case accounts, integrations, general, calendar, appearance, ai
+        case accounts, integrations, general, calendar, contacts, appearance, ai
     }
 
     private static var shared: PreferencesWindowController?
@@ -26,6 +26,9 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
     let integrationsPane: IntegrationsPaneViewController
     let generalPane = GeneralPaneViewController()
     let calendarPane: CalendarPaneViewController
+    /// Settings → Contacts (docs/plans/address-book.md W3), bound to the
+    /// application's address books by `Integration.showPreferences`.
+    let contactsPane = ContactsPaneViewController()
     let appearancePane = AppearancePaneViewController()
     let aiPane = AIPaneViewController()
     let settings: Settings
@@ -123,6 +126,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
             (integrationsPane, Integrations.texts().title, "puzzlepiece.extension"),
             (generalPane, L10n.T("General"), "gearshape"),
             (calendarPane, Cal.Prefs.tabTitle, "calendar"),
+            (contactsPane, ContactBook.windowTitle, "person.text.rectangle"),
             (appearancePane, L10n.T("Appearance"), "paintpalette"),
             (aiPane, L10n.T("AI"), "sparkles"),
         ]
@@ -192,6 +196,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
         integrationsPane.closed = true
         generalPane.closed = true
         calendarPane.closed = true
+        contactsPane.closed = true
         appearancePane.closed = true
         aiPane.closed = true
         if PreferencesWindowController.shared === self {

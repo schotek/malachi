@@ -383,13 +383,14 @@ public final class SyncController {
     /// `calendar` also asks for the calendar scopes (the Calendar's "Sign
     /// In…", docs/calendar.md D15).
     public func requestSignInURL(
-        client: RPCClient, accountId: AccountID, fallbackURL: String?, calendar: Bool = false
+        client: RPCClient, accountId: AccountID, fallbackURL: String?, calendar: Bool = false, contacts: Bool = false
     ) async -> SignInURL {
         var url = ""
         var failure: (any Error)?
         do {
             url = try await client.call(
-                API.AccountOAuthStart.self, AccountOAuthStartParams(accountId: accountId, browserPage: browserPage(), calendar: calendar ? true : nil),
+                API.AccountOAuthStart.self, AccountOAuthStartParams(
+                    accountId: accountId, browserPage: browserPage(), calendar: calendar ? true : nil, contacts: contacts ? true : nil),
                 timeout: RPCTimeouts.oauthStart
             ).authUrl
         } catch {

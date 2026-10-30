@@ -71,6 +71,9 @@ import MalachiCore
 //   own message, for an issue's event (no bar), in the Outbox (no bar) and
 //   with nothing selected (`DevelopmentQuickReplyMessage`).
 //   `crm-dialog` and `eway-wizard`: MainWindowController+DevStartCRM.swift.
+//   `contacts`, `contacts:edit`, `contacts:new`, `contacts:narrow`, `contacts:add` and
+//   `prefs-contacts` (with MALACHI_CONTACTS_SAMPLES=1):
+//   MainWindowController+DevStartContacts.swift.
 //   The assistant's scenes (`assistant-unread`, `assistant=`, `assistant-say=`,
 //   `board-select=`, `triage`, `suggest-reply`, `compose-new=`,
 //   `compose-rewrite=`, `reply`, `compose-write=`, `search-own=`, `prefs-ai`)
@@ -199,8 +202,8 @@ extension MainWindowController {
     /// permission. The frame's shadow is left out.
     private func developmentShot(_ path: String) {
         // The window of the scene, brought to the front first: Settings
-        // while it is open, else the newest compose window, else the main
-        // window. Which window is in front is not reliable: a run from a
+        // while it is open, else the newest compose window, else the
+        // Contacts window, else the main window. Which window is in front is not reliable: a run from a
         // script loses the front to whatever the person does meanwhile,
         // and an inactive application's windows reorder as it activates;
         // an inactive window is drawn grey.
@@ -209,7 +212,8 @@ extension MainWindowController {
         developmentPrint("MALACHI_START shot: windows " + windows.map { "'\($0.title)'" }.joined(separator: ", "))
         let settings = windows.first { $0.windowController is PreferencesWindowController }
         let compose = windows.filter { $0.windowController is ComposeWindowController }.max { $0.windowNumber < $1.windowNumber }
-        guard var target = settings ?? compose ?? window else {
+        let contacts = windows.first { $0.windowController is ContactsWindowController }
+        guard var target = settings ?? compose ?? contacts ?? window else {
             developmentPrint("MALACHI_START shot: no window")
             return
         }
@@ -340,6 +344,9 @@ extension MainWindowController {
             return
         }
         if DevelopmentCRM.step(step, in: self) {
+            return
+        }
+        if DevelopmentContacts.step(step, in: self) {
             return
         }
         if DevelopmentAssistant.step(step, in: self) {

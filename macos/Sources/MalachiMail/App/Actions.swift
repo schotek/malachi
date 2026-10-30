@@ -23,6 +23,8 @@ import MalachiCore
     @objc optional func newMessage(_ sender: Any?)
     @objc optional func addAccount(_ sender: Any?)
     @objc optional func showPreferences(_ sender: Any?)
+    /// Window ▸ Contacts (no shortcut, docs/plans/address-book.md §8).
+    @objc optional func showContacts(_ sender: Any?)
     @objc optional func showAbout(_ sender: Any?)
     @objc optional func openHelp(_ sender: Any?)
 
@@ -117,6 +119,7 @@ enum Action {
     static let findMessages = #selector(MalachiActions.findMessages(_:))
     static let addAccount = #selector(MalachiActions.addAccount(_:))
     static let showPreferences = #selector(MalachiActions.showPreferences(_:))
+    static let showContacts = #selector(MalachiActions.showContacts(_:))
     static let showAbout = #selector(MalachiActions.showAbout(_:))
     static let openHelp = #selector(MalachiActions.openHelp(_:))
 

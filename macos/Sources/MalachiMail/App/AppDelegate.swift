@@ -288,6 +288,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state?.hooks.openPreferences?()
     }
 
+    /// Window ▸ Contacts: the one Contacts window to the front.
+    @objc func showContacts(_ sender: Any?) {
+        state?.contacts.showWindow()
+    }
+
     @objc func showAbout(_ sender: Any?) {
         // Built in code from fixed text, never from mail: the one place an
         // attributed string is made by hand. macOS-only strings.
@@ -361,6 +366,7 @@ extension AppDelegate: NSUserInterfaceValidations {
         case Action.addAccount:
             return (item.tag == AddAccountTag.jira ? state?.hooks.addJiraAccount : state?.hooks.addAccount) != nil
         case Action.showPreferences: return state?.hooks.openPreferences != nil
+        case Action.showContacts: return state != nil
         case Action.setUpAssistant: return state?.hooks.openAISettings != nil
         case Action.setWindowMode:
             // Checked: the main window's mode.

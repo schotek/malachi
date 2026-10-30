@@ -648,7 +648,7 @@ private final class ViewerWebView: WKWebView {
             return
         }
         // WebKit's items were not found by their identifiers: our own.
-        menu.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "")) // macOS-only string
+        menu.addItem(NSMenuItem(title: L10n.T("Copy"), action: #selector(NSText.copy(_:)), keyEquivalent: ""))
         if let href = hoveredHref, !href.isEmpty {
             let link = NSMenuItem(title: "Copy Link", action: #selector(copyLink(_:)), keyEquivalent: "") // macOS-only string
             link.target = self
