@@ -325,6 +325,18 @@ final class ContactsWindowController: NSWindowController, NSWindowDelegate, NSTo
         }
     }
 
+    /// The quit's question (`AppContacts.confirmQuit`): only with a
+    /// changed form; the window comes forward first so the sheet shows
+    /// on the form it is about.
+    func confirmQuit() async -> Bool {
+        guard detail.dirty else { return true }
+        showWindow(nil)
+        window?.makeKeyAndOrderFront(nil)
+        guard await ask(ContactBook.discardQuestion) else { return false }
+        detail.cancelEdit()
+        return true
+    }
+
     /// A question of the detail controller: Delete as a destructive alert,
     /// the conflict with Reload as its default.
     private func ask(_ q: ContactBook.Question) async -> Bool {

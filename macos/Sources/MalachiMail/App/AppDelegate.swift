@@ -133,7 +133,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// (`BoardReplyEditorHost.finishAll`, bounded): one that could not be
     /// saved or sent asks before quitting, as text the user typed must not
     /// go silently, and Cancel keeps the application running with nothing
-    /// else stopped. Then the attachments written for opening go, as
+    /// else stopped. A changed contact form asks next, in the Contacts
+    /// window ("Discard Changes?"). Then the attachments written for opening go, as
     /// ui/main.go's shutdown removes them before it stops the daemon, so a
     /// quit that never completes (a force quit or a logout that gives up
     /// during the wait) leaves none behind; `applicationWillTerminate`
@@ -164,6 +165,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     sender.reply(toApplicationShouldTerminate: false)
                     return
                 }
+            }
+            // A changed contact form asks, its window in front; Cancel
+            // keeps the application and the form, as above.
+            if await !state.contacts.confirmQuit() {
+                quitting = false
+                sender.reply(toApplicationShouldTerminate: false)
+                return
             }
             shutDownSession()
             // The board's triage: no new run, and one under way ends with

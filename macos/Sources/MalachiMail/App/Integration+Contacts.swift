@@ -131,6 +131,16 @@ final class AppContacts {
         return w
     }
 
+    /// Quitting with a changed contact form open (GTK
+    /// `ConfirmContactsQuit`, Windows `QuitSteps.ContactForm`): the
+    /// Contacts window comes forward and asks "Discard Changes?"; true
+    /// when the quit may go on (no window, no changes, or Discard, which
+    /// closes the form unsaved), false when the user kept the form.
+    func confirmQuit() async -> Bool {
+        guard let w = window else { return true }
+        return await w.confirmQuit()
+    }
+
     /// Show Contact of a chip: the window searching the address, the
     /// contact selected once the list has it.
     func showContact(_ id: ContactID, address: String) {
