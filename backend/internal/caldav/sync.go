@@ -219,14 +219,34 @@ type Object struct {
 // server that refuses the report (400, 403, 405, 415, 422, 501) is asked
 // with a GET per object instead.
 func (c *Client) Multiget(ctx context.Context, collection string, hrefs []string) ([]Object, error) {
+	return c.multiget(ctx, collection, hrefs, calendarObjects)
+}
+
+// objectKind is what a multiget fetches: calendar objects or vCards.
+type objectKind struct {
+	name  string
+	batch int
+	body  func(hrefs []string) []byte
+	// data is the object of a response and whether it was over the cap.
+	data func(p *Props) ([]byte, bool)
+	get  func(c *Client, ctx context.Context, href string) (Object, error)
+}
+
+var calendarObjects = objectKind{
+	name: "multiget", batch: MultigetBatch, body: multigetBody,
+	data: func(p *Props) ([]byte, bool) { return p.CalendarData, p.DataTooLarge },
+	get:  (*Client).Get,
+}
+
+func (c *Client) multiget(ctx context.Context, collection string, hrefs []string, kind objectKind) ([]Object, error) {
 	u, err := c.URL(collection)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]Object, 0, len(hrefs))
 	useGet := false
-	for start := 0; start < len(hrefs); start += MultigetBatch {
-		batch := hrefs[start:min(start+MultigetBatch, len(hrefs))]
+	for start := 0; start < len(hrefs); start += kind.batch {
+		batch := hrefs[start:min(start+kind.batch, len(hrefs))]
 		norm := make([]string, len(batch))
 		for i, h := range batch {
 			if norm[i] = NormaliseHref(h); norm[i] == "" {
@@ -234,7 +254,7 @@ func (c *Client) Multiget(ctx context.Context, collection string, hrefs []string
 			}
 		}
 		if !useGet {
-			objs, err := c.multigetBatch(ctx, u, norm)
+			objs, err := c.multigetBatch(ctx, u, norm, kind)
 			if err == nil {
 				out = append(out, objs...)
 				continue
@@ -242,11 +262,11 @@ func (c *Client) Multiget(ctx context.Context, collection string, hrefs []string
 			if !refused(err) {
 				return nil, err
 			}
-			c.log.Debug("caldav: multiget refused, fetching objects one by one")
+			c.log.Debug("caldav: " + kind.name + " refused, fetching objects one by one")
 			useGet = true
 		}
 		for _, h := range norm {
-			o, err := c.getOrGone(ctx, h)
+			o, err := c.getOrGone(ctx, h, kind)
 			if err != nil {
 				return nil, err
 			}
@@ -256,8 +276,8 @@ func (c *Client) Multiget(ctx context.Context, collection string, hrefs []string
 	return out, nil
 }
 
-func (c *Client) multigetBatch(ctx context.Context, u *url.URL, hrefs []string) ([]Object, error) {
-	ms, err := c.report(ctx, u, "1", multigetBody(hrefs))
+func (c *Client) multigetBatch(ctx context.Context, u *url.URL, hrefs []string, kind objectKind) ([]Object, error) {
+	ms, err := c.report(ctx, u, "1", kind.body(hrefs))
 	if err != nil {
 		return nil, err
 	}
@@ -271,19 +291,24 @@ func (c *Client) multigetBatch(ctx context.Context, u *url.URL, hrefs []string) 
 	out := make([]Object, 0, len(hrefs))
 	for _, h := range hrefs {
 		r := got[h]
+		var data []byte
+		tooLarge := false
+		if r != nil {
+			data, tooLarge = kind.data(&r.Props)
+		}
 		switch {
 		case r == nil, r.Status == http.StatusNotFound, r.Status == http.StatusGone:
 			out = append(out, Object{Href: h, Status: http.StatusNotFound})
-		case r.Props.DataTooLarge:
+		case tooLarge:
 			out = append(out, Object{Href: h, ETag: r.Props.ETag, Status: http.StatusOK, TooLarge: true})
-		case r.Props.CalendarData == nil || r.Props.ETag == "":
-			o, err := c.getOrGone(ctx, h)
+		case data == nil || r.Props.ETag == "":
+			o, err := c.getOrGone(ctx, h, kind)
 			if err != nil {
 				return nil, err
 			}
 			out = append(out, o)
 		default:
-			out = append(out, Object{Href: h, ETag: r.Props.ETag, Data: r.Props.CalendarData, Status: http.StatusOK})
+			out = append(out, Object{Href: h, ETag: r.Props.ETag, Data: data, Status: http.StatusOK})
 		}
 	}
 	return out, nil
@@ -291,8 +316,8 @@ func (c *Client) multigetBatch(ctx context.Context, u *url.URL, hrefs []string) 
 
 // getOrGone is Get with a 404/410 turned into Status 404 and an object
 // over the limit into TooLarge.
-func (c *Client) getOrGone(ctx context.Context, href string) (Object, error) {
-	o, err := c.Get(ctx, href)
+func (c *Client) getOrGone(ctx context.Context, href string, kind objectKind) (Object, error) {
+	o, err := kind.get(c, ctx, href)
 	switch {
 	case err == nil:
 		return o, nil

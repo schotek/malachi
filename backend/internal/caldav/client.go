@@ -551,6 +551,8 @@ type Capabilities struct {
 	// (calendar-auto-schedule).
 	CalendarAccess bool
 	AutoSchedule   bool
+	// AddressBook: RFC 6352 CardDAV (the "addressbook" class).
+	AddressBook bool
 	// Status of the OPTIONS answer (200, or 401 for a server that
 	// advertises before authentication).
 	Status int
@@ -588,6 +590,8 @@ func parseDAVHeader(h http.Header, status int) Capabilities {
 				caps.CalendarAccess = true
 			case "calendar-auto-schedule":
 				caps.AutoSchedule = true
+			case "addressbook":
+				caps.AddressBook = true
 			}
 		}
 	}

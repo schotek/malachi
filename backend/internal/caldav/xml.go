@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -17,28 +18,33 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
-// XML namespaces of WebDAV, CalDAV and the two vendor extensions every
-// server speaks.
+// XML namespaces of WebDAV, CalDAV, CardDAV and the two vendor
+// extensions every server speaks.
 const (
-	NSDAV    = "DAV:"
-	NSCalDAV = "urn:ietf:params:xml:ns:caldav"
-	NSCS     = "http://calendarserver.org/ns/" // getctag
-	NSApple  = "http://apple.com/ns/ical/"     // calendar-color
+	NSDAV     = "DAV:"
+	NSCalDAV  = "urn:ietf:params:xml:ns:caldav"
+	NSCardDAV = "urn:ietf:params:xml:ns:carddav"
+	NSCS      = "http://calendarserver.org/ns/" // getctag
+	NSApple   = "http://apple.com/ns/ical/"     // calendar-color
 )
 
 // Limits on an XML answer (hostile input, docs/calendar.md §3.5).
 const (
 	MaxXMLDepth    = 32
 	MaxXMLElements = 200_000
-	// maxNodeText bounds the text of one element (a calendar-data
-	// element holds one object): over it the element is marked too large
-	// and its text dropped.
-	maxNodeText = api.MaxICSBytes + 64<<10
+	// MaxCardBytes bounds one vCard (an address-data element or a GET of
+	// a card), docs/plans/address-book.md §4.2.
+	MaxCardBytes = 1 << 20
+	// maxNodeText bounds the text of one element (a calendar-data or
+	// address-data element holds one object): over it the element is
+	// marked too large and its text dropped.
+	maxNodeText = max(api.MaxICSBytes, MaxCardBytes) + 64<<10
 	// Caps of the strings kept from a property.
 	maxHrefBytes   = 2048
 	maxETagBytes   = 256
 	maxTokenBytes  = 2048
 	maxNameBytes   = 256
+	maxDescBytes   = 1024
 	maxTZBytes     = 256 << 10
 	maxAddrEntries = 32
 	maxListEntries = 64
@@ -66,6 +72,11 @@ var (
 	PropCalendarData          = xml.Name{Space: NSCalDAV, Local: "calendar-data"}
 	PropGetCTag               = xml.Name{Space: NSCS, Local: "getctag"}
 	PropCalendarColor         = xml.Name{Space: NSApple, Local: "calendar-color"}
+	// CardDAV (RFC 6352).
+	PropAddressbookHomeSet     = xml.Name{Space: NSCardDAV, Local: "addressbook-home-set"}
+	PropAddressbookDescription = xml.Name{Space: NSCardDAV, Local: "addressbook-description"}
+	PropSupportedAddressData   = xml.Name{Space: NSCardDAV, Local: "supported-address-data"}
+	PropAddressData            = xml.Name{Space: NSCardDAV, Local: "address-data"}
 )
 
 // Resource types.
@@ -75,6 +86,7 @@ var (
 	TypeCalendar      = xml.Name{Space: NSCalDAV, Local: "calendar"}
 	TypeScheduleInbox = xml.Name{Space: NSCalDAV, Local: "schedule-inbox"}
 	TypeScheduleOut   = xml.Name{Space: NSCalDAV, Local: "schedule-outbox"}
+	TypeAddressBook   = xml.Name{Space: NSCardDAV, Local: "addressbook"}
 )
 
 // Reports.
@@ -82,6 +94,8 @@ var (
 	ReportSyncCollection   = xml.Name{Space: NSDAV, Local: "sync-collection"}
 	ReportCalendarQuery    = xml.Name{Space: NSCalDAV, Local: "calendar-query"}
 	ReportCalendarMultiget = xml.Name{Space: NSCalDAV, Local: "calendar-multiget"}
+	ReportAddressbookQuery = xml.Name{Space: NSCardDAV, Local: "addressbook-query"}
+	ReportAddressbookMulti = xml.Name{Space: NSCardDAV, Local: "addressbook-multiget"}
 )
 
 // node is one element of a parsed answer.
@@ -226,9 +240,21 @@ type Props struct {
 	// DataTooLarge when it exceeded the limit (and was dropped).
 	CalendarData []byte
 	DataTooLarge bool
+	// AddressData is the vCard of an addressbook-multiget answer;
+	// AddressDataTooLarge when it exceeded MaxCardBytes (and was dropped).
+	AddressData         []byte
+	AddressDataTooLarge bool
+	// Description is addressbook-description, cleaned.
+	Description string
+	// AddressDataVersions are the vCard versions ("3.0", "4.0") of
+	// supported-address-data's text/vcard entries; AddressDataSet tells
+	// an absent property from an empty one.
+	AddressDataVersions []string
+	AddressDataSet      bool
 
 	CurrentUserPrincipal       string
 	CalendarHomeSet            []string
+	AddressbookHomeSet         []string
 	CalendarUserAddresses      []string // mailto: values and URLs, as given (cleaned)
 	ScheduleInboxURL           string
 	ScheduleOutboxURL          string
@@ -411,6 +437,20 @@ func readProps(p *node, base *url.URL, props *Props) {
 			} else {
 				props.CalendarData = []byte(k.str())
 			}
+		case PropAddressData:
+			if k.tooBig || k.textLen > MaxCardBytes {
+				props.AddressDataTooLarge = true
+				props.AddressData = nil
+			} else {
+				props.AddressData = []byte(k.str())
+			}
+		case PropAddressbookDescription:
+			props.Description = cleanText(k.str(), maxDescBytes)
+		case PropSupportedAddressData:
+			props.AddressDataSet = true
+			props.AddressDataVersions = k.vcardVersions()
+		case PropAddressbookHomeSet:
+			props.AddressbookHomeSet = hrefList(k, base)
 		case PropCurrentUserPrincipal:
 			props.CurrentUserPrincipal = firstHref(k, base)
 		case PropCalendarHomeSet:
@@ -538,6 +578,34 @@ func (n *node) compNames() []string {
 		}
 	}
 	return out
+}
+
+// vcardVersions reads the version attributes of supported-address-data's
+// address-data-type children whose content-type is text/vcard (or left
+// out), deduplicated; a version is digits and dots, ≤ 8 bytes.
+func (n *node) vcardVersions() []string {
+	out := []string{}
+	for _, c := range n.children(xml.Name{Space: NSCardDAV, Local: "address-data-type"}) {
+		ct := strings.ToLower(strings.TrimSpace(c.attr("content-type")))
+		if ct != "" && ct != "text/vcard" {
+			continue
+		}
+		v := strings.TrimSpace(c.attr("version"))
+		if v == "" || len(v) > 8 || !isVersion(v) || slices.Contains(out, v) || len(out) >= maxListEntries {
+			continue
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+func isVersion(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; !(c >= '0' && c <= '9' || c == '.') {
+			return false
+		}
+	}
+	return true
 }
 
 // attr is the value of the unqualified attribute local, "" when absent.
@@ -673,9 +741,9 @@ func capBytes(s string, max int) string {
 
 // --- request bodies ---------------------------------------------------------
 
-var prefixes = map[string]string{NSDAV: "d", NSCalDAV: "c", NSCS: "cs", NSApple: "ic"}
+var prefixes = map[string]string{NSDAV: "d", NSCalDAV: "c", NSCardDAV: "card", NSCS: "cs", NSApple: "ic"}
 
-const nsDecl = ` xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:cs="http://calendarserver.org/ns/" xmlns:ic="http://apple.com/ns/ical/"`
+const nsDecl = ` xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:card="urn:ietf:params:xml:ns:carddav" xmlns:cs="http://calendarserver.org/ns/" xmlns:ic="http://apple.com/ns/ical/"`
 
 func qname(n xml.Name) string { return prefixes[n.Space] + ":" + n.Local }
 
@@ -734,5 +802,18 @@ func syncCollectionBody(token string) []byte {
 	b.WriteString("<d:sync-token>" + escapeText(token) + "</d:sync-token><d:sync-level>1</d:sync-level>")
 	propList(&b, []xml.Name{PropGetETag})
 	b.WriteString("</d:sync-collection>")
+	return []byte(b.String())
+}
+
+// addressbookMultigetBody asks for the ETags and vCards of hrefs (RFC 6352
+// §8.7).
+func addressbookMultigetBody(hrefs []string) []byte {
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0" encoding="utf-8"?><card:addressbook-multiget` + nsDecl + `>`)
+	propList(&b, []xml.Name{PropGetETag, PropAddressData})
+	for _, h := range hrefs {
+		b.WriteString("<d:href>" + escapeText(h) + "</d:href>")
+	}
+	b.WriteString("</card:addressbook-multiget>")
 	return []byte(b.String())
 }

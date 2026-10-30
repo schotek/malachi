@@ -18,6 +18,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/schotek/malachi/backend/internal/transport"
@@ -29,7 +30,41 @@ const (
 	DiscoverRequestTimeout = 8 * time.Second
 	DiscoverLookupTimeout  = 5 * time.Second
 	WellKnownPath          = "/.well-known/caldav"
+	WellKnownCardDAVPath   = "/.well-known/carddav"
 )
+
+// Service is the protocol a discovery looks for.
+type Service int
+
+const (
+	// ServiceCalDAV: /.well-known/caldav, SRV _caldavs._tcp, the class
+	// calendar-access.
+	ServiceCalDAV Service = iota
+	// ServiceCardDAV: /.well-known/carddav, SRV _carddavs._tcp, the class
+	// addressbook (RFC 6352 §11, RFC 6764).
+	ServiceCardDAV
+)
+
+func (s Service) wellKnownPath() string {
+	if s == ServiceCardDAV {
+		return WellKnownCardDAVPath
+	}
+	return WellKnownPath
+}
+
+func (s Service) srvName() string {
+	if s == ServiceCardDAV {
+		return "carddavs"
+	}
+	return "caldavs"
+}
+
+func (s Service) notFound() error {
+	if s == ServiceCardDAV {
+		return errNotCardDAV
+	}
+	return errNotCalDAV
+}
 
 // Resolver is the DNS of discovery: SRV and TXT, as net.Resolver has them
 // (internal/discover's Resolver plus TXT); tests substitute a map.
@@ -66,6 +101,17 @@ type Discoverer struct {
 // invalidArgument, tlsError (the first, with TLSErrorData), serverError
 // (something answered, nothing is CalDAV), networkError, serverTimeout.
 func (d *Discoverer) Discover(ctx context.Context, raw string) (api.AccountDiscoverCalDAVResult, error) {
+	return d.DiscoverService(ctx, raw, ServiceCalDAV)
+}
+
+// DiscoverService is Discover for svc: ServiceCalDAV is Discover itself;
+// ServiceCardDAV asks /.well-known/carddav, then DNS SRV _carddavs._tcp
+// with a TXT path, then the URL, and takes a candidate whose OPTIONS
+// advertises addressbook (calendar-access is not needed), or that
+// answers 401 with no DAV header at all. The result may name another
+// host of the provider (iCloud's contacts host, Fastmail's carddav host):
+// whether the password may go there is the caller's decision.
+func (d *Discoverer) DiscoverService(ctx context.Context, raw string, svc Service) (api.AccountDiscoverCalDAVResult, error) {
 	u, err := parseServerURL(raw)
 	if err != nil {
 		return api.AccountDiscoverCalDAVResult{}, err
@@ -75,7 +121,7 @@ func (d *Discoverer) Discover(ctx context.Context, raw string) (api.AccountDisco
 	}
 	var fail failures
 	try := func(cand *url.URL, via api.CalDAVFoundVia) (api.AccountDiscoverCalDAVResult, bool) {
-		res, err := d.probe(ctx, cand)
+		res, err := d.probe(ctx, cand, svc)
 		if err != nil {
 			fail.add(err)
 			return api.AccountDiscoverCalDAVResult{}, false
@@ -84,7 +130,7 @@ func (d *Discoverer) Discover(ctx context.Context, raw string) (api.AccountDisco
 		return res, true
 	}
 	if u.Path == "" || u.Path == "/" {
-		if cand, err := d.wellKnown(ctx, u); err != nil {
+		if cand, err := d.wellKnown(ctx, u, svc); err != nil {
 			fail.add(err)
 		} else if cand != nil {
 			if res, ok := try(cand, api.CalDAVFoundWellKnown); ok {
@@ -92,7 +138,7 @@ func (d *Discoverer) Discover(ctx context.Context, raw string) (api.AccountDisco
 			}
 		}
 		if ctx.Err() == nil {
-			if cand := d.srv(ctx, u.Hostname()); cand != nil {
+			if cand := d.srv(ctx, u.Hostname(), svc); cand != nil {
 				if res, ok := try(cand, api.CalDAVFoundSRV); ok {
 					return res, nil
 				}
@@ -107,7 +153,57 @@ func (d *Discoverer) Discover(ctx context.Context, raw string) (api.AccountDisco
 			return res, nil
 		}
 	}
-	return api.AccountDiscoverCalDAVResult{}, fail.err(ctx)
+	return api.AccountDiscoverCalDAVResult{}, fail.err(ctx, svc)
+}
+
+// Discovery is what DiscoverAll found: either service may be missing
+// (nil) with its error.
+type Discovery struct {
+	CalDAV     *api.AccountDiscoverCalDAVResult
+	CardDAV    *api.AccountDiscoverCalDAVResult
+	CalDAVErr  error
+	CardDAVErr error
+}
+
+// DiscoverAll runs the CalDAV and the CardDAV discovery of raw side by
+// side. A server offering both (Nextcloud, Radicale) is found twice,
+// usually at the same URL; a provider with a contacts host of its own is
+// found at two URLs. Only when neither is found is the result an error:
+// a tlsError of either first, then "not a server of that kind", then the
+// CalDAV error.
+func (d *Discoverer) DiscoverAll(ctx context.Context, raw string) (Discovery, error) {
+	if _, err := parseServerURL(raw); err != nil {
+		return Discovery{}, err
+	}
+	if d.Log == nil {
+		d.Log = slog.New(slog.DiscardHandler)
+	}
+	var (
+		out Discovery
+		wg  sync.WaitGroup
+	)
+	wg.Go(func() {
+		if r, err := d.DiscoverService(ctx, raw, ServiceCalDAV); err == nil {
+			out.CalDAV = &r
+		} else {
+			out.CalDAVErr = err
+		}
+	})
+	wg.Go(func() {
+		if r, err := d.DiscoverService(ctx, raw, ServiceCardDAV); err == nil {
+			out.CardDAV = &r
+		} else {
+			out.CardDAVErr = err
+		}
+	})
+	wg.Wait()
+	if out.CalDAV == nil && out.CardDAV == nil {
+		var f failures
+		f.add(out.CalDAVErr)
+		f.add(out.CardDAVErr)
+		return out, f.err(ctx, ServiceCalDAV)
+	}
+	return out, nil
 }
 
 // failures keeps the most telling error of discovery.
@@ -118,14 +214,14 @@ func (f *failures) add(err error) {
 	switch {
 	case ae.Code == api.CodeTLSError && f.tls == nil:
 		f.tls = ae
-	case errors.Is(err, errNotCalDAV) && f.notCalDAV == nil:
+	case (errors.Is(err, errNotCalDAV) || errors.Is(err, errNotCardDAV)) && f.notCalDAV == nil:
 		f.notCalDAV = ae
 	case f.other == nil:
 		f.other = ae
 	}
 }
 
-func (f *failures) err(ctx context.Context) error {
+func (f *failures) err(ctx context.Context, svc Service) error {
 	switch {
 	case ctx.Err() != nil:
 		return ToAPIError(ctx.Err())
@@ -136,10 +232,16 @@ func (f *failures) err(ctx context.Context) error {
 	case f.other != nil:
 		return f.other
 	}
+	if svc == ServiceCardDAV {
+		return api.NewError(api.CodeServerError, "caldav: no CardDAV server found")
+	}
 	return api.NewError(api.CodeServerError, "caldav: no CalDAV server found")
 }
 
-var errNotCalDAV = errors.New("caldav: the server does not offer CalDAV (no calendar-access)")
+var (
+	errNotCalDAV  = errors.New("caldav: the server does not offer CalDAV (no calendar-access)")
+	errNotCardDAV = errors.New("caldav: the server does not offer CardDAV (no addressbook)")
+)
 
 // client is an anonymous client for u's origin.
 func (d *Discoverer) client(u *url.URL) (*Client, error) {
@@ -156,12 +258,12 @@ func (d *Discoverer) client(u *url.URL) (*Client, error) {
 	return NewClient(Options{ServerURL: o.String(), HTTP: d.HTTP, CertificateSHA256: pin, Timeout: t, Log: d.Log, UserAgent: d.UserAgent})
 }
 
-// wellKnown asks u's /.well-known/caldav and follows its redirects
+// wellKnown asks u's /.well-known/caldav (or carddav) and follows its redirects
 // (anonymous, at most MaxRedirects, https or loopback http, any origin).
 // The candidate is where the chain ends when it ended in a redirect; nil
 // when the server has no well-known redirect.
-func (d *Discoverer) wellKnown(ctx context.Context, u *url.URL) (*url.URL, error) {
-	cur := &url.URL{Scheme: u.Scheme, Host: u.Host, Path: WellKnownPath}
+func (d *Discoverer) wellKnown(ctx context.Context, u *url.URL, svc Service) (*url.URL, error) {
+	cur := &url.URL{Scheme: u.Scheme, Host: u.Host, Path: svc.wellKnownPath()}
 	redirected := false
 	for hop := 0; hop <= MaxRedirects; hop++ {
 		c, err := d.client(cur)
@@ -208,8 +310,8 @@ func (d *Discoverer) wellKnown(ctx context.Context, u *url.URL) (*url.URL, error
 
 func isTLS(err error) bool { return ToAPIError(err).Code == api.CodeTLSError }
 
-// srv looks up _caldavs._tcp.<host> and its TXT path.
-func (d *Discoverer) srv(ctx context.Context, host string) *url.URL {
+// srv looks up _caldavs._tcp.<host> (or _carddavs) and its TXT path.
+func (d *Discoverer) srv(ctx context.Context, host string, svc Service) *url.URL {
 	if net.ParseIP(host) != nil || transport.IsLoopbackHost(host) {
 		return nil
 	}
@@ -219,7 +321,7 @@ func (d *Discoverer) srv(ctx context.Context, host string) *url.URL {
 	}
 	lctx, cancel := context.WithTimeout(ctx, DiscoverLookupTimeout)
 	defer cancel()
-	_, addrs, err := r.LookupSRV(lctx, "caldavs", "tcp", host)
+	_, addrs, err := r.LookupSRV(lctx, svc.srvName(), "tcp", host)
 	if err != nil {
 		d.Log.Debug("caldav srv lookup", "err", err)
 		return nil
@@ -237,7 +339,7 @@ func (d *Discoverer) srv(ctx context.Context, host string) *url.URL {
 		return nil
 	}
 	p := "/"
-	if txts, err := r.LookupTXT(lctx, "_caldavs._tcp."+host); err == nil {
+	if txts, err := r.LookupTXT(lctx, "_"+svc.srvName()+"._tcp."+host); err == nil {
 		for _, t := range txts {
 			if v, ok := strings.CutPrefix(strings.TrimSpace(t), "path="); ok {
 				if cp := cleanPath(v); cp != "" {
@@ -273,9 +375,10 @@ func cleanPath(p string) string {
 	return p
 }
 
-// probe sends OPTIONS to cand anonymously; calendar-access in DAV (on a
-// 2xx or a 401), or a 401 with no DAV header at all, makes it the server.
-func (d *Discoverer) probe(ctx context.Context, cand *url.URL) (api.AccountDiscoverCalDAVResult, error) {
+// probe sends OPTIONS to cand anonymously; calendar-access (CardDAV:
+// addressbook) in DAV (on a 2xx or a 401), or a 401 with no DAV header at
+// all, makes it the server.
+func (d *Discoverer) probe(ctx context.Context, cand *url.URL, svc Service) (api.AccountDiscoverCalDAVResult, error) {
 	c, err := d.client(cand)
 	if err != nil {
 		return api.AccountDiscoverCalDAVResult{}, err
@@ -302,8 +405,12 @@ func (d *Discoverer) probe(ctx context.Context, cand *url.URL) (api.AccountDisco
 	// password. A 401 whose DAV header lacks calendar-access, and a 2xx
 	// without it, are not CalDAV.
 	saysNothing := caps.Status == http.StatusUnauthorized && len(caps.DAV) == 0
-	if !caps.CalendarAccess && !saysNothing {
-		return api.AccountDiscoverCalDAVResult{}, errNotCalDAV
+	offers := caps.CalendarAccess
+	if svc == ServiceCardDAV {
+		offers = caps.AddressBook
+	}
+	if !offers && !saysNothing {
+		return api.AccountDiscoverCalDAVResult{}, svc.notFound()
 	}
 	s, err := NormaliseServerURL(target.String())
 	if err != nil {
@@ -313,6 +420,8 @@ func (d *Discoverer) probe(ctx context.Context, cand *url.URL) (api.AccountDisco
 		ServerURL:        s,
 		NeedsCredentials: true,
 		Certificate:      certificateInfo(c.PeerCertificate()),
+		Calendars:        caps.CalendarAccess,
+		AddressBooks:     caps.AddressBook,
 	}, nil
 }
 

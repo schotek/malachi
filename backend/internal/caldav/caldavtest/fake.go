@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Package caldavtest is an in-memory CalDAV server for tests: those of
+// Package caldavtest is an in-memory CalDAV and CardDAV server for tests: those of
 // internal/caldav (client, discovery, provider) and of packages that drive
 // a CalDAV account end to end (calsync, core). It is an http.RoundTripper
 // (HTTPClient) that serves a few logical hosts and refuses every other
@@ -16,32 +16,48 @@
 // ETags, a ctag and sync tokens; every change through the builders or a
 // client bumps them.
 //
+// CardDAV (knob CardDAV, on by default): address books under an address
+// book home set, the DAV class addressbook, addressbook-home-set on the
+// principal, REPORT addressbook-multiget and sync-collection, GET, PUT
+// (text/vcard only, 415 otherwise) and DELETE of .vcf cards with the same
+// ETag preconditions, /.well-known/carddav and SRV _carddavs._tcp. A
+// profile may serve CardDAV on a host of its own (CardHost).
+//
 // Profiles (New) mimic real servers:
 //
 //   - Nextcloud: cloud.example.test, /remote.php/dav, .well-known on the
 //     same host, scheduling on, sync-collection, a VTODO-only list and a
-//     read-only shared calendar.
+//     read-only shared calendar; CardDAV on the same principal with a
+//     Contacts book and a read-only shared one.
 //   - ICloud: the user types icloud.test, whose .well-known redirects to
 //     another host (caldav.icloud.test); no ETag on PUT; colours with
 //     alpha (#RRGGBBAA); anonymous OPTIONS is 401 with the DAV header.
+//     CardDAV is on contacts.icloud.test (.well-known/carddav of
+//     icloud.test leads there), and the CalDAV principal names that
+//     host's address book home set.
 //   - Fastmail: fastmail.test has no .well-known; SRV _caldavs._tcp names
-//     caldav.fastmail.test with TXT path=/dav/.
+//     caldav.fastmail.test with TXT path=/dav/, SRV _carddavs._tcp
+//     carddav.fastmail.test with the same path.
 //   - Radicale: radicale.example.test, found by the URL itself; no
-//     sync-collection, no server scheduling, no inbox.
+//     sync-collection, no server scheduling, no inbox; one home holding
+//     calendars and an address book without supported-address-data.
 //   - Hostile: hostile.test, laid out like Nextcloud under /dav, whose
-//     .well-known redirects to EvilHost; hostile answers are queued with
+//     .well-known (caldav and carddav) redirects to EvilHost; hostile answers are queued with
 //     FailNext (the helpers HugeMultistatus, DeepMultistatus,
 //     Garbage207, WrongContentType, RedirectTo, FixtureAnswer) and the
 //     knobs Delay and UnauthorizedAfter.
 //
-// Builders and inspection (all hold the lock): AddCalendar, RemoveCalendar, PutObject,
+// Builders and inspection (all hold the lock): AddCalendar, RemoveCalendar,
+// AddAddressBook, PutCard, RemoveCard, Card, Cards, AddressBookState, PutObject,
 // RemoveObject, Object, Objects, CalendarState, ExpireSyncTokens, Set
 // (knobs: Scheduling, SyncCollection, Multiget, TimeRange, ETagOnPut,
 // DAVOnUnauthorized, OptionsNeedAuth, DAV, Delay, UnauthorizedAfter,
 // SyncLimit, Password),
 // FailNext, Requests, ResetRequests, AuthLeaks, EvilRequests;
 // addresses: ServerURL, TypedURL, PrincipalURL, HomeSetURL,
-// CalendarHref, DefaultCalendarHref; Resolver for discovery; Fixture
+// CalendarHref, DefaultCalendarHref, CardHost, CardServerURL,
+// CardTypedURL, CardPrincipalURL, AddressBookHomeURL, AddressBookHref;
+// Resolver for discovery; Fixture
 // reads backend/testdata/caldav. Test data is fictional (the user Jana
 // Dvořáková, jana@example.test).
 package caldavtest
@@ -89,14 +105,19 @@ const (
 	FastmailDomain  = "fastmail.test"
 	FastmailHost    = "caldav.fastmail.test"
 	RadicaleHost    = "radicale.example.test"
-	HostileHost     = "hostile.test"
+	// ICloudContactsHost and FastmailCardHost serve CardDAV for their
+	// profiles.
+	ICloudContactsHost = "contacts.icloud.test"
+	FastmailCardHost   = "carddav.fastmail.test"
+	HostileHost        = "hostile.test"
 	// EvilHost is another origin a hostile server points at; it counts
 	// every request and every Authorization header it receives
 	// (EvilRequests, AuthLeaks), which a client must never send it.
 	EvilHost = "evil.test"
 )
 
-// Calendar is a collection of the fake.
+// Calendar is a collection of the fake: a calendar, or an address book
+// (AddressBook set).
 type Calendar struct {
 	Href       string
 	Name       string
@@ -104,7 +125,13 @@ type Calendar struct {
 	Components []string // nil = VEVENT
 	ReadOnly   bool
 	Timezone   string
+	// AddressBook marks an address book; Description and Versions are
+	// its (Versions nil = 3.0 and 4.0, empty = no supported-address-data).
+	AddressBook bool
+	Description string
+	Versions    []string
 
+	host     string
 	index    int
 	ctag     int
 	seq      int
@@ -128,6 +155,16 @@ type CalendarOptions struct {
 	Timezone   string
 }
 
+// AddressBookOptions configures AddAddressBook.
+type AddressBookOptions struct {
+	Name        string
+	Description string
+	ReadOnly    bool
+	// Versions of supported-address-data: nil = 3.0 and 4.0, an empty
+	// non-nil slice = the property is absent.
+	Versions []string
+}
+
 // Request is one request the fake received.
 type Request struct {
 	Method string
@@ -140,7 +177,8 @@ type Request struct {
 	// carried the right credentials.
 	HasAuthorization bool
 	Authorized       bool
-	// MultigetHrefs is the number of hrefs of a calendar-multiget.
+	// MultigetHrefs is the number of hrefs of a calendar- or
+	// addressbook-multiget.
 	MultigetHrefs int
 }
 
@@ -190,6 +228,9 @@ type Server struct {
 	SyncLimit int
 	// Password is the one the server accepts.
 	Password string
+	// CardDAV serves address books (the DAV class addressbook, the home
+	// set, the collections); off, the server is CalDAV only.
+	CardDAV bool
 
 	scheme      string
 	host        string // the server's host
@@ -203,8 +244,15 @@ type Server struct {
 	displayName string
 	wellKnown   map[string]string // host → Location of its .well-known (absolute)
 	extraHosts  map[string]bool   // hosts that answer (404 except .well-known)
-	calendars   []*Calendar
+	calendars   []*Calendar       // calendars and address books
 	defaultCal  string
+	// CardDAV layout: cardHost == host when it is the same server.
+	cardHost      string
+	cardTypedHost string
+	cardRoot      string
+	cardPrincipal string
+	bookHome      string
+	wellKnownCard map[string]string // host → Location of its .well-known/carddav
 
 	requests  []Request
 	failures  []Failure
@@ -218,8 +266,8 @@ type Server struct {
 func New(t testing.TB, p Profile) *Server {
 	s := &Server{
 		t: t, profile: p, scheme: "https", Password: Password,
-		Multiget: true, TimeRange: true, ETagOnPut: true, SyncCollection: true, Scheduling: true,
-		wellKnown: map[string]string{}, extraHosts: map[string]bool{},
+		Multiget: true, TimeRange: true, ETagOnPut: true, SyncCollection: true, Scheduling: true, CardDAV: true,
+		wellKnown: map[string]string{}, extraHosts: map[string]bool{}, wellKnownCard: map[string]string{},
 		displayName: "Jana Dvořáková",
 		resolver:    &Resolver{SRV: map[string][]*net.SRV{}, TXT: map[string][]string{}},
 	}
@@ -241,6 +289,10 @@ func New(t testing.TB, p Profile) *Server {
 		s.defaultCal = s.addCalendar("personal", CalendarOptions{Name: "Personal", Color: "#0082c9", Components: []string{"VEVENT", "VTODO"}})
 		s.addCalendar("tasks", CalendarOptions{Name: "Tasks", Components: []string{"VTODO"}})
 		s.addCalendar("team-shared_by_petr", CalendarOptions{Name: "Team", Color: "#E9322D", ReadOnly: true})
+		s.sameCardHost(s.root + "/addressbooks/users/jana/")
+		s.wellKnownCard[s.host] = s.wellKnown[s.host]
+		s.addAddressBook("contacts", AddressBookOptions{Name: "Contacts", Description: "Kontakty Jany"})
+		s.addAddressBook("team-shared_by_petr", AddressBookOptions{Name: "Team contacts", ReadOnly: true, Versions: []string{"3.0"}})
 	case ICloud:
 		s.host, s.typedHost, s.root = ICloudHost, ICloudTypedHost, ""
 		s.principal = "/123456789/principal/"
@@ -255,6 +307,11 @@ func New(t testing.TB, p Profile) *Server {
 		s.defaultCal = s.addCalendar("home", CalendarOptions{Name: "Home", Color: "#FF2968FF"})
 		s.addCalendar("work", CalendarOptions{Name: "Work", Color: "#1BADF8FF"})
 		s.addCalendar("reminders", CalendarOptions{Name: "Reminders", Components: []string{"VTODO"}})
+		s.cardHost, s.cardTypedHost, s.cardRoot = ICloudContactsHost, ICloudTypedHost, ""
+		s.cardPrincipal = s.principal
+		s.bookHome = "/123456789/carddavhome/"
+		s.wellKnownCard[ICloudTypedHost] = "https://" + ICloudContactsHost + "/"
+		s.addAddressBook("card", AddressBookOptions{})
 	case Fastmail:
 		s.host, s.typedHost, s.root = FastmailHost, FastmailDomain, "/dav"
 		s.principal = "/dav/principals/user/jana@fastmail.test/"
@@ -266,6 +323,12 @@ func New(t testing.TB, p Profile) *Server {
 		s.resolver.SRV["_caldavs._tcp."+FastmailDomain] = []*net.SRV{{Target: FastmailHost + ".", Port: 443, Priority: 0, Weight: 1}}
 		s.resolver.TXT["_caldavs._tcp."+FastmailDomain] = []string{"path=/dav/"}
 		s.defaultCal = s.addCalendar("8f6a5e2c-1d1b-4bb2-9c55-2f0a7d1e6b10", CalendarOptions{Name: "Calendar", Color: "#3a429c"})
+		s.cardHost, s.cardTypedHost, s.cardRoot = FastmailCardHost, FastmailDomain, "/dav"
+		s.cardPrincipal = s.principal
+		s.bookHome = "/dav/addressbooks/user/jana@fastmail.test/"
+		s.resolver.SRV["_carddavs._tcp."+FastmailDomain] = []*net.SRV{{Target: FastmailCardHost + ".", Port: 443, Priority: 0, Weight: 1}}
+		s.resolver.TXT["_carddavs._tcp."+FastmailDomain] = []string{"path=/dav/"}
+		s.addAddressBook("Default", AddressBookOptions{Name: "Personal"})
 	case Radicale:
 		s.host, s.typedHost, s.root = RadicaleHost, RadicaleHost, ""
 		s.principal = "/jana/"
@@ -274,16 +337,46 @@ func New(t testing.TB, p Profile) *Server {
 		s.SyncCollection = false
 		s.Scheduling = false
 		s.addCalendar("calendar.ics", CalendarOptions{Name: "Calendar"})
+		s.sameCardHost(s.home)
+		s.addAddressBook("contacts", AddressBookOptions{Name: "Contacts", Versions: []string{}})
 	default:
 		t.Fatalf("caldavtest: unknown profile %q", p)
 	}
+	if p == Hostile {
+		s.wellKnownCard[s.host] = "https://" + EvilHost + "/dav/"
+	}
 	return s
+}
+
+// sameCardHost serves CardDAV from the CalDAV server, its principal
+// naming bookHome.
+func (s *Server) sameCardHost(bookHome string) {
+	s.cardHost, s.cardTypedHost, s.cardRoot, s.cardPrincipal = s.host, s.typedHost, s.root, s.principal
+	s.bookHome = bookHome
+}
+
+func (s *Server) addAddressBook(segment string, o AddressBookOptions) string {
+	c := &Calendar{
+		Href: s.bookHome + segment + "/", Name: o.Name, Description: o.Description, ReadOnly: o.ReadOnly,
+		AddressBook: true, Versions: o.Versions, host: s.cardHost, index: len(s.calendars) + 1,
+		objects: map[string]*object{}, removed: map[string]int{}, seq: 1, ctag: 1,
+	}
+	s.calendars = append(s.calendars, c)
+	return c.Href
+}
+
+// AddAddressBook adds an address book named segment under the address
+// book home set and returns its href.
+func (s *Server) AddAddressBook(segment string, o AddressBookOptions) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.addAddressBook(segment, o)
 }
 
 func (s *Server) addCalendar(segment string, o CalendarOptions) string {
 	c := &Calendar{
 		Href: s.home + segment + "/", Name: o.Name, Color: o.Color, Components: o.Components,
-		ReadOnly: o.ReadOnly, Timezone: o.Timezone, index: len(s.calendars) + 1,
+		ReadOnly: o.ReadOnly, Timezone: o.Timezone, host: s.host, index: len(s.calendars) + 1,
 		objects: map[string]*object{}, removed: map[string]int{}, seq: 1, ctag: 1,
 	}
 	s.calendars = append(s.calendars, c)
@@ -327,6 +420,23 @@ func (s *Server) DefaultCalendarHref() string { return s.defaultCal }
 
 // Host is the server's host.
 func (s *Server) Host() string { return s.host }
+
+// CardHost is the host serving CardDAV (Host when it is the same server).
+func (s *Server) CardHost() string { return s.cardHost }
+
+// CardServerURL is the URL CardDAV discovery should find.
+func (s *Server) CardServerURL() string { return s.scheme + "://" + s.cardHost + s.cardRoot }
+
+// CardTypedURL is what a user types to find the address books.
+func (s *Server) CardTypedURL() string { return s.cardTypedHost }
+
+// CardPrincipalURL and AddressBookHomeURL are absolute URLs on CardHost.
+func (s *Server) CardPrincipalURL() string   { return s.scheme + "://" + s.cardHost + s.cardPrincipal }
+func (s *Server) AddressBookHomeURL() string { return s.scheme + "://" + s.cardHost + s.bookHome }
+
+// AddressBookHref is the href of the address book whose last segment is
+// segment.
+func (s *Server) AddressBookHref(segment string) string { return s.bookHome + segment + "/" }
 
 // Set changes knobs under the lock.
 func (s *Server) Set(f func(*Server)) {
@@ -442,7 +552,7 @@ func (s *Server) PutObject(calendar, name string, data []byte) (href, etag strin
 	defer s.mu.Unlock()
 	c := s.calendar(calendar)
 	if c == nil {
-		s.t.Fatalf("caldavtest: no calendar %s", calendar)
+		s.t.Fatalf("caldavtest: no collection %s", calendar)
 	}
 	href = c.Href + name
 	return href, c.put(href, data)
@@ -486,6 +596,24 @@ func (s *Server) Objects(calendar string) []string {
 	sort.Strings(out)
 	return out
 }
+
+// PutCard stores data as <book><name> (a change by another client) and
+// returns the card's href and ETag.
+func (s *Server) PutCard(book, name string, data []byte) (href, etag string) {
+	return s.PutObject(book, name, data)
+}
+
+// RemoveCard deletes the card href (another client).
+func (s *Server) RemoveCard(href string) bool { return s.RemoveObject(href) }
+
+// Card is the stored card href.
+func (s *Server) Card(href string) (data []byte, etag string, ok bool) { return s.Object(href) }
+
+// Cards are the hrefs of an address book's cards, sorted.
+func (s *Server) Cards(book string) []string { return s.Objects(book) }
+
+// AddressBookState is an address book's ctag and current sync token.
+func (s *Server) AddressBookState(book string) (ctag, syncToken string) { return s.CalendarState(book) }
 
 // CalendarState is a calendar's ctag and current sync token.
 func (s *Server) CalendarState(calendar string) (ctag, syncToken string) {
@@ -563,7 +691,7 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) knownHost(h string) bool {
-	return h == s.host || h == EvilHost || s.extraHosts[h]
+	return h == s.host || h == s.cardHost || h == EvilHost || s.extraHosts[h]
 }
 
 // serve answers one request.
@@ -599,7 +727,7 @@ func (s *Server) serve(w *recorder, req *http.Request, host string) {
 	if req.Method == "REPORT" {
 		rec.MultigetHrefs = bytes.Count(body, []byte("<d:href>"))
 	}
-	if host != s.host && authz != "" {
+	if host != s.host && host != s.cardHost && authz != "" {
 		s.leaks++
 	}
 	if host == EvilHost {
@@ -611,8 +739,15 @@ func (s *Server) serve(w *recorder, req *http.Request, host string) {
 		w.fail(f)
 		return
 	}
-	if req.URL.Path == "/.well-known/caldav" {
-		if loc, ok := s.wellKnown[host]; ok {
+	if req.URL.Path == "/.well-known/caldav" || req.URL.Path == "/.well-known/carddav" {
+		m := s.wellKnown
+		if req.URL.Path == "/.well-known/carddav" {
+			m = s.wellKnownCard
+			if !s.CardDAV {
+				m = nil
+			}
+		}
+		if loc, ok := m[host]; ok {
 			w.header.Set("Location", loc)
 			w.status = http.StatusMovedPermanently
 			return
@@ -623,13 +758,13 @@ func (s *Server) serve(w *recorder, req *http.Request, host string) {
 	switch host {
 	case EvilHost:
 		if req.Method == http.MethodOptions {
-			w.header.Set("DAV", "1, 2, 3, calendar-access")
+			w.header.Set("DAV", "1, 2, 3, calendar-access, addressbook")
 			w.status = http.StatusOK
 			return
 		}
 		w.unauthorized()
 		return
-	case s.host:
+	case s.host, s.cardHost:
 	default:
 		// A host of the profile that is only a web site.
 		if req.Method == http.MethodOptions {
@@ -642,7 +777,7 @@ func (s *Server) serve(w *recorder, req *http.Request, host string) {
 	}
 
 	if req.Method == http.MethodOptions {
-		s.options(w, rec.Authorized)
+		s.options(w, rec.Authorized, host)
 		return
 	}
 	if !rec.Authorized {
@@ -661,15 +796,15 @@ func (s *Server) serve(w *recorder, req *http.Request, host string) {
 	}
 	switch req.Method {
 	case "PROPFIND":
-		s.propfind(w, p, rec.Depth, body)
+		s.propfind(w, host, p, rec.Depth, body)
 	case "REPORT":
-		s.report(w, p, body)
+		s.report(w, host, p, body)
 	case http.MethodGet:
-		s.get(w, p)
+		s.get(w, host, p)
 	case http.MethodPut:
-		s.put(w, p, req.Header, body)
+		s.put(w, host, p, req.Header, body)
 	case http.MethodDelete:
-		s.delete(w, p, req.Header)
+		s.delete(w, host, p, req.Header)
 	default:
 		w.status = http.StatusMethodNotAllowed
 	}
@@ -693,10 +828,16 @@ func (s *Server) takeFailure(method, path, host string) (Failure, bool) {
 	return Failure{}, false
 }
 
-func (s *Server) options(w *recorder, authorized bool) {
+func (s *Server) options(w *recorder, authorized bool, host string) {
 	dav := "1, 2, 3, access-control, extended-mkcol, calendar-access"
 	if s.Scheduling {
 		dav += ", calendar-auto-schedule"
+	}
+	if host != s.host {
+		dav = "1, 2, 3, access-control, extended-mkcol"
+	}
+	if s.CardDAV && host == s.cardHost {
+		dav += ", addressbook"
 	}
 	if s.DAV != "" {
 		dav = s.DAV

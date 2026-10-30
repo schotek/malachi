@@ -17,15 +17,16 @@ import (
 )
 
 const (
-	nsDAV    = "DAV:"
-	nsCalDAV = "urn:ietf:params:xml:ns:caldav"
-	nsCS     = "http://calendarserver.org/ns/"
-	nsApple  = "http://apple.com/ns/ical/"
+	nsDAV     = "DAV:"
+	nsCalDAV  = "urn:ietf:params:xml:ns:caldav"
+	nsCardDAV = "urn:ietf:params:xml:ns:carddav"
+	nsCS      = "http://calendarserver.org/ns/"
+	nsApple   = "http://apple.com/ns/ical/"
 )
 
-var prefix = map[string]string{nsDAV: "d", nsCalDAV: "c", nsCS: "cs", nsApple: "ic"}
+var prefix = map[string]string{nsDAV: "d", nsCalDAV: "c", nsCardDAV: "card", nsCS: "cs", nsApple: "ic"}
 
-const msOpen = `<?xml version="1.0" encoding="utf-8"?><d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:cs="http://calendarserver.org/ns/" xmlns:ic="http://apple.com/ns/ical/">`
+const msOpen = `<?xml version="1.0" encoding="utf-8"?><d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:card="urn:ietf:params:xml:ns:carddav" xmlns:cs="http://calendarserver.org/ns/" xmlns:ic="http://apple.com/ns/ical/">`
 
 func esc(s string) string {
 	var b bytes.Buffer
@@ -56,37 +57,75 @@ const (
 	kOutbox
 	kCalendar
 	kObject
+	kBookHome
+	kAddressBook
 )
 
 func trimSlash(p string) string { return strings.TrimSuffix(p, "/") }
 
-func (s *Server) kindOf(p string) (int, *Calendar) {
+// kindOf is what path p is on host: the CalDAV paths on the server's host,
+// the CardDAV paths on the card host (both when they are the same).
+func (s *Server) kindOf(host, p string) (int, *Calendar) {
 	k := 0
 	tp := trimSlash(p)
-	if tp == trimSlash(s.root) {
-		k |= kRoot
+	if host == s.host {
+		if tp == trimSlash(s.root) {
+			k |= kRoot
+		}
+		if tp == trimSlash(s.principal) {
+			k |= kPrincipal
+		}
+		if tp == trimSlash(s.home) {
+			k |= kHome
+		}
+		if s.inbox != "" && tp == trimSlash(s.inbox) {
+			k |= kInbox
+		}
+		if s.outbox != "" && tp == trimSlash(s.outbox) {
+			k |= kOutbox
+		}
 	}
-	if tp == trimSlash(s.principal) {
-		k |= kPrincipal
+	if host == s.cardHost && s.CardDAV {
+		if tp == trimSlash(s.cardRoot) {
+			k |= kRoot
+		}
+		if tp == trimSlash(s.cardPrincipal) {
+			k |= kPrincipal
+		}
+		if tp == trimSlash(s.bookHome) {
+			k |= kBookHome
+		}
 	}
-	if tp == trimSlash(s.home) {
-		k |= kHome
-	}
-	if s.inbox != "" && tp == trimSlash(s.inbox) {
-		k |= kInbox
-	}
-	if s.outbox != "" && tp == trimSlash(s.outbox) {
-		k |= kOutbox
-	}
-	if c := s.calendar(p); c != nil {
+	if c := s.collection(host, p); c != nil {
+		if c.AddressBook {
+			return k | kAddressBook, c
+		}
 		return k | kCalendar, c
 	}
-	if c := s.calendarOf(p); c != nil {
+	if c := s.collectionOf(host, p); c != nil {
 		if _, ok := c.objects[p]; ok {
 			return k | kObject, c
 		}
 	}
 	return k, nil
+}
+
+// collection is the calendar or address book href served by host.
+func (s *Server) collection(host, href string) *Calendar {
+	c := s.calendar(href)
+	if c == nil || c.host != host || (c.AddressBook && !s.CardDAV) {
+		return nil
+	}
+	return c
+}
+
+// collectionOf is the collection served by host holding the object href.
+func (s *Server) collectionOf(host, href string) *Calendar {
+	c := s.calendarOf(href)
+	if c == nil || c.host != host || (c.AddressBook && !s.CardDAV) {
+		return nil
+	}
+	return c
 }
 
 // canonical is the href the fake reports for a path of kind k.
@@ -99,7 +138,7 @@ func canonical(p string, k int) string {
 
 // prop is the value of property n on path p, ok false when the resource
 // does not have it.
-func (s *Server) prop(p string, k int, c *Calendar, n xml.Name) (string, bool) {
+func (s *Server) prop(host, p string, k int, c *Calendar, n xml.Name) (string, bool) {
 	switch n {
 	case xml.Name{Space: nsDAV, Local: "resourcetype"}:
 		var b strings.Builder
@@ -112,6 +151,9 @@ func (s *Server) prop(p string, k int, c *Calendar, n xml.Name) (string, bool) {
 		if k&kCalendar != 0 {
 			b.WriteString("<c:calendar/>")
 		}
+		if k&kAddressBook != 0 {
+			b.WriteString("<card:addressbook/>")
+		}
 		if k&kInbox != 0 {
 			b.WriteString("<c:schedule-inbox/>")
 		}
@@ -120,20 +162,32 @@ func (s *Server) prop(p string, k int, c *Calendar, n xml.Name) (string, bool) {
 		}
 		return b.String(), true
 	case xml.Name{Space: nsDAV, Local: "current-user-principal"}:
+		if host != s.host {
+			return hrefXML(s.cardPrincipal), true
+		}
 		return hrefXML(s.principal), true
 	case xml.Name{Space: nsDAV, Local: "displayname"}:
 		switch {
-		case k&kCalendar != 0:
+		case k&(kCalendar|kAddressBook) != 0:
 			return esc(c.Name), c.Name != ""
 		case k&kPrincipal != 0:
 			return esc(s.displayName), true
 		}
 	case xml.Name{Space: nsCalDAV, Local: "calendar-home-set"}:
-		if k&kPrincipal != 0 {
+		if k&kPrincipal != 0 && host == s.host {
 			return hrefXML(s.home), true
 		}
+	case xml.Name{Space: nsCardDAV, Local: "addressbook-home-set"}:
+		switch {
+		case k&kPrincipal == 0 || !s.CardDAV:
+		case host == s.cardHost:
+			return hrefXML(s.bookHome), true
+		default:
+			// The CalDAV principal names the contacts host (iCloud).
+			return "<d:href>" + esc(s.scheme+"://"+s.cardHost) + escPath(s.bookHome) + "</d:href>", true
+		}
 	case xml.Name{Space: nsCalDAV, Local: "calendar-user-address-set"}:
-		if k&kPrincipal != 0 {
+		if k&kPrincipal != 0 && host == s.host {
 			var b strings.Builder
 			for _, a := range s.addresses {
 				if strings.HasPrefix(a, "mailto:") {
@@ -192,23 +246,59 @@ func (s *Server) prop(p string, k int, c *Calendar, n xml.Name) (string, bool) {
 			return b, true
 		}
 	}
+	if k&kAddressBook != 0 {
+		switch n {
+		case xml.Name{Space: nsCardDAV, Local: "addressbook-description"}:
+			return esc(c.Description), c.Description != ""
+		case xml.Name{Space: nsDAV, Local: "current-user-privilege-set"}:
+			b := "<d:privilege><d:read/></d:privilege>"
+			if !c.ReadOnly {
+				b += "<d:privilege><d:write/></d:privilege><d:privilege><d:bind/></d:privilege><d:privilege><d:unbind/></d:privilege>"
+			}
+			return b, true
+		case xml.Name{Space: nsCS, Local: "getctag"}:
+			return esc(c.ctagValue()), true
+		case xml.Name{Space: nsDAV, Local: "sync-token"}:
+			return esc(c.token(c.seq)), s.SyncCollection
+		case xml.Name{Space: nsDAV, Local: "supported-report-set"}:
+			b := "<d:supported-report><d:report><card:addressbook-multiget/></d:report></d:supported-report>" +
+				"<d:supported-report><d:report><card:addressbook-query/></d:report></d:supported-report>"
+			if s.SyncCollection {
+				b += "<d:supported-report><d:report><d:sync-collection/></d:report></d:supported-report>"
+			}
+			return b, true
+		case xml.Name{Space: nsCardDAV, Local: "supported-address-data"}:
+			vs := c.Versions
+			if vs == nil {
+				vs = []string{"3.0", "4.0"}
+			}
+			var b strings.Builder
+			for _, v := range vs {
+				b.WriteString(`<card:address-data-type content-type="text/vcard" version="` + esc(v) + `"/>`)
+			}
+			return b.String(), len(vs) > 0
+		}
+	}
 	if k&kObject != 0 {
 		o := c.objects[p]
 		switch n {
 		case xml.Name{Space: nsDAV, Local: "getetag"}:
 			return esc(o.etag), true
 		case xml.Name{Space: nsDAV, Local: "getcontenttype"}:
+			if c.AddressBook {
+				return "text/vcard; charset=utf-8", true
+			}
 			return "text/calendar; charset=utf-8; component=vevent", true
 		}
 	}
 	return "", false
 }
 
-func (s *Server) response(b *strings.Builder, p string, k int, c *Calendar, props []xml.Name) {
+func (s *Server) response(b *strings.Builder, host, p string, k int, c *Calendar, props []xml.Name) {
 	b.WriteString("<d:response>" + hrefXML(canonical(p, k)))
 	var ok, missing strings.Builder
 	for _, n := range props {
-		if v, has := s.prop(p, k, c, n); has {
+		if v, has := s.prop(host, p, k, c, n); has {
 			ok.WriteString(tag(n, v))
 		} else {
 			missing.WriteString(tag(n, ""))
@@ -287,7 +377,7 @@ var defaultProps = []xml.Name{
 	{Space: nsDAV, Local: "getetag"}, {Space: nsCS, Local: "getctag"},
 }
 
-func (s *Server) propfind(w *recorder, p, depth string, body []byte) {
+func (s *Server) propfind(w *recorder, host, p, depth string, body []byte) {
 	req, ok := parseBody(body)
 	if !ok {
 		w.status = http.StatusBadRequest
@@ -297,34 +387,37 @@ func (s *Server) propfind(w *recorder, p, depth string, body []byte) {
 	if len(props) == 0 {
 		props = defaultProps
 	}
-	k, c := s.kindOf(p)
+	k, c := s.kindOf(host, p)
 	if k == 0 {
 		w.status = http.StatusNotFound
 		return
 	}
 	var b strings.Builder
 	b.WriteString(msOpen)
-	s.response(&b, p, k, c, props)
+	s.response(&b, host, p, k, c, props)
 	if depth == "1" {
 		switch {
-		case k&kCalendar != 0:
-			hrefs := make([]string, 0, len(c.objects))
-			for h := range c.objects {
-				hrefs = append(hrefs, h)
+		case k&(kCalendar|kAddressBook) != 0:
+			for _, h := range sortedHrefs(c) {
+				s.response(&b, host, h, kObject, c, props)
 			}
-			sort.Strings(hrefs)
-			for _, h := range hrefs {
-				s.response(&b, h, kObject, c, props)
-			}
-		case k&kHome != 0:
+		case k&(kHome|kBookHome) != 0:
+			// The collections directly under the home(s) this host serves.
 			for _, cal := range s.calendars {
-				s.response(&b, cal.Href, kCalendar, cal, props)
+				if s.collection(host, cal.Href) == nil || trimSlash(cal.Href[:strings.LastIndex(trimSlash(cal.Href), "/")+1]) != trimSlash(p) {
+					continue
+				}
+				kind := kCalendar
+				if cal.AddressBook {
+					kind = kAddressBook
+				}
+				s.response(&b, host, cal.Href, kind, cal, props)
 			}
-			if s.inbox != "" {
-				s.response(&b, s.inbox, kInbox, nil, props)
+			if k&kHome != 0 && s.inbox != "" {
+				s.response(&b, host, s.inbox, kInbox, nil, props)
 			}
-			if s.outbox != "" {
-				s.response(&b, s.outbox, kOutbox, nil, props)
+			if k&kHome != 0 && s.outbox != "" {
+				s.response(&b, host, s.outbox, kOutbox, nil, props)
 			}
 		}
 	}
@@ -332,20 +425,44 @@ func (s *Server) propfind(w *recorder, p, depth string, body []byte) {
 	w.xml(http.StatusMultiStatus, b.String())
 }
 
-func (s *Server) report(w *recorder, p string, body []byte) {
+func (s *Server) report(w *recorder, host, p string, body []byte) {
 	req, ok := parseBody(body)
 	if !ok {
 		w.status = http.StatusBadRequest
 		return
 	}
-	c := s.calendar(p)
+	c := s.collection(host, p)
 	if c == nil {
 		w.status = http.StatusNotFound
 		return
 	}
+	calendarReport := req.root.Space == nsCalDAV
+	if calendarReport == c.AddressBook && req.root.Space != nsDAV {
+		w.davError(http.StatusForbidden, "supported-report")
+		return
+	}
 	switch req.root {
 	case xml.Name{Space: nsDAV, Local: "sync-collection"}:
-		s.syncCollection(w, c, req.syncToken)
+		s.syncCollection(w, host, c, req.syncToken)
+	case xml.Name{Space: nsCardDAV, Local: "addressbook-multiget"}:
+		if !s.Multiget {
+			w.status = http.StatusNotImplemented
+			return
+		}
+		var b strings.Builder
+		b.WriteString(msOpen)
+		for _, h := range req.hrefs {
+			o := c.objects[h]
+			if o == nil {
+				b.WriteString("<d:response>" + hrefXML(h) + "<d:status>HTTP/1.1 404 Not Found</d:status></d:response>")
+				continue
+			}
+			b.WriteString("<d:response>" + hrefXML(h) + "<d:propstat><d:prop><d:getetag>" + esc(o.etag) +
+				"</d:getetag><card:address-data>" + esc(string(o.data)) +
+				"</card:address-data></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>")
+		}
+		b.WriteString("</d:multistatus>")
+		w.xml(http.StatusMultiStatus, b.String())
 	case xml.Name{Space: nsCalDAV, Local: "calendar-query"}:
 		if !s.TimeRange && req.start != "" {
 			w.davError(http.StatusForbidden, "supported-filter")
@@ -359,7 +476,7 @@ func (s *Server) report(w *recorder, p string, body []byte) {
 			if req.start != "" && !overlaps(c.objects[h].data, from, to) {
 				continue
 			}
-			s.response(&b, h, kObject, c, []xml.Name{{Space: nsDAV, Local: "getetag"}})
+			s.response(&b, host, h, kObject, c, []xml.Name{{Space: nsDAV, Local: "getetag"}})
 		}
 		b.WriteString("</d:multistatus>")
 		w.xml(http.StatusMultiStatus, b.String())
@@ -396,7 +513,7 @@ func sortedHrefs(c *Calendar) []string {
 	return out
 }
 
-func (s *Server) syncCollection(w *recorder, c *Calendar, token string) {
+func (s *Server) syncCollection(w *recorder, host string, c *Calendar, token string) {
 	if !s.SyncCollection {
 		w.davError(http.StatusForbidden, "supported-report")
 		return
@@ -443,7 +560,7 @@ func (s *Server) syncCollection(w *recorder, c *Calendar, token string) {
 			b.WriteString("<d:response>" + hrefXML(ch.href) + "<d:status>HTTP/1.1 404 Not Found</d:status></d:response>")
 			continue
 		}
-		s.response(&b, ch.href, kObject, c, []xml.Name{{Space: nsDAV, Local: "getetag"}})
+		s.response(&b, host, ch.href, kObject, c, []xml.Name{{Space: nsDAV, Local: "getetag"}})
 	}
 	if truncated {
 		b.WriteString("<d:response>" + hrefXML(c.Href) + "<d:status>HTTP/1.1 507 Insufficient Storage</d:status></d:response>")
@@ -452,20 +569,23 @@ func (s *Server) syncCollection(w *recorder, c *Calendar, token string) {
 	w.xml(http.StatusMultiStatus, b.String())
 }
 
-func (s *Server) get(w *recorder, p string) {
-	c := s.calendarOf(p)
+func (s *Server) get(w *recorder, host, p string) {
+	c := s.collectionOf(host, p)
 	if c == nil || c.objects[p] == nil {
 		w.status = http.StatusNotFound
 		return
 	}
 	o := c.objects[p]
 	w.header.Set("Content-Type", "text/calendar; charset=utf-8")
+	if c.AddressBook {
+		w.header.Set("Content-Type", "text/vcard; charset=utf-8")
+	}
 	w.header.Set("ETag", o.etag)
 	w.buf.Write(o.data)
 }
 
-func (s *Server) put(w *recorder, p string, h http.Header, body []byte) {
-	c := s.calendarOf(p)
+func (s *Server) put(w *recorder, host, p string, h http.Header, body []byte) {
+	c := s.collectionOf(host, p)
 	if c == nil {
 		w.status = http.StatusConflict
 		return
@@ -474,7 +594,14 @@ func (s *Server) put(w *recorder, p string, h http.Header, body []byte) {
 		w.davError(http.StatusForbidden, "need-privileges")
 		return
 	}
-	if !bytes.Contains(body, []byte("BEGIN:VCALENDAR")) {
+	switch {
+	case c.AddressBook && !strings.HasPrefix(strings.ToLower(h.Get("Content-Type")), "text/vcard"):
+		w.davError(http.StatusUnsupportedMediaType, "supported-address-data")
+		return
+	case c.AddressBook && !bytes.Contains(body, []byte("BEGIN:VCARD")):
+		w.davError(http.StatusBadRequest, "valid-address-data")
+		return
+	case !c.AddressBook && !bytes.Contains(body, []byte("BEGIN:VCALENDAR")):
 		w.status = http.StatusBadRequest
 		return
 	}
@@ -498,8 +625,8 @@ func (s *Server) put(w *recorder, p string, h http.Header, body []byte) {
 	}
 }
 
-func (s *Server) delete(w *recorder, p string, h http.Header) {
-	c := s.calendarOf(p)
+func (s *Server) delete(w *recorder, host, p string, h http.Header) {
+	c := s.collectionOf(host, p)
 	if c == nil || c.objects[p] == nil {
 		w.status = http.StatusNotFound
 		return
