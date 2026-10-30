@@ -66,7 +66,8 @@ private final class Scratch {
         #expect(s.boardLastMode == .mail)
         #expect(s.boardAccountFilter == "")
         #expect(s.calendarView == .week)
-        #expect(Settings.Key.allCases.count == 43)
+        #expect(s.contactsSuggestScope == .account)
+        #expect(Settings.Key.allCases.count == 44)
         let providerDefaults = Settings.registrationDefaults()
         #expect(providerDefaults[Settings.Key.assistantProvider.rawValue] as? String == "claude")
         #expect(providerDefaults[Settings.Key.assistantCodexPath.rawValue] as? String == "")
@@ -264,6 +265,19 @@ private final class Scratch {
         s.calendarView = .month
         #expect(scratch.defaults.string(forKey: "calendar-view") == "month")
         s.calendarView = .week
+        // Recipient Suggestions: the gschema's ContactsSuggestScope nicks in
+        // the order of ContactBook.scopes; anything else is account and is
+        // never written.
+        #expect(ContactBook.scopes.map(\.rawValue) == ["account", "all"])
+        s.contactsSuggestScope = ContactSearchScope("folder")
+        #expect(scratch.defaults.string(forKey: "contacts-suggest-scope") == "account", "the registered default")
+        #expect(s.contactsSuggestScope == .account)
+        s.contactsSuggestScope = .all
+        #expect(scratch.defaults.string(forKey: "contacts-suggest-scope") == "all")
+        #expect(s.contactsSuggestScope == .all)
+        scratch.defaults.set("weird", forKey: "contacts-suggest-scope")
+        #expect(s.contactsSuggestScope == .account)
+        s.contactsSuggestScope = .account
         // The account filter: any string, kept as is.
         s.boardAccountFilter = "acc_7"
         #expect(scratch.defaults.string(forKey: "board-account-filter") == "acc_7")

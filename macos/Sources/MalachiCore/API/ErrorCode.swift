@@ -60,6 +60,11 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     /// A CRM item named in crm.save (link, superior) is not an item of that
     /// CRM account, or for crm.remove the saved message's item is gone.
     public static let crmItemNotFound: ErrorCode = 1109
+    /// No stored contact with that id (deleted, its book gone or its
+    /// account's contacts switched off).
+    public static let contactNotFound: ErrorCode = 1110
+    /// No address book with that id.
+    public static let addressBookNotFound: ErrorCode = 1111
 
     // 1200–1299: authentication.
     /// Credentials missing or token expired; see notify.authRequired.
@@ -77,6 +82,9 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     /// The CRM instance cannot be signed in to by this version; `data` is
     /// `CrmSignInUnsupportedData` (`RPCError.crmSignInUnsupported`).
     public static let crmSignInUnsupported: ErrorCode = 1205
+    /// The account's sign-in does not allow contacts access; `data` is
+    /// `ContactsConsentRequiredData` (`RPCError.contactsConsentRequired`).
+    public static let contactsConsentRequired: ErrorCode = 1206
 
     // 1300–1399: network and remote servers.
     public static let offline: ErrorCode = 1300
@@ -93,6 +101,9 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     /// The CRM refused the message as a duplicate of an item the daemon
     /// cannot find.
     public static let crmDuplicate: ErrorCode = 1307
+    /// The contact changed on the server since the revision the write
+    /// names; `data` is `ContactConflictData` (`RPCError.contactConflict`).
+    public static let contactConflict: ErrorCode = 1308
 
     // 1400–1499: local storage.
     public static let storageError: ErrorCode = 1400
@@ -123,6 +134,9 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     /// edits; the event shows its first instance only and may be edited with
     /// scope `all` only.
     public static let recurrenceUnsupported: ErrorCode = 1508
+    /// The address book or contact cannot be changed by the user: the
+    /// recent book, a server's read-only collection or folder.
+    public static let addressBookReadOnly: ErrorCode = 1509
 
     /// The stable symbolic name (api.ErrorCode.String): `"attachmentTooBig"`,
     /// or `"unknown(1234)"` for a code this client does not know.
@@ -139,13 +153,14 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .notImplemented, .invalidArgument, .conflict, .cancelled, .unavailable, .unauthenticated,
         .readOnly, .invitationsUnavailable,
         .accountNotFound, .folderNotFound, .messageNotFound, .threadNotFound, .draftNotFound, .attachmentNotFound,
-        .caseNotFound, .calendarNotFound, .eventNotFound, .crmItemNotFound,
+        .caseNotFound, .calendarNotFound, .eventNotFound, .crmItemNotFound, .contactNotFound, .addressBookNotFound,
         .authRequired, .authFailed, .keyringError, .oauthClientMissing, .calendarConsentRequired,
-        .crmSignInUnsupported,
+        .crmSignInUnsupported, .contactsConsentRequired,
         .offline, .networkError, .serverError, .tlsError, .serverTimeout, .messageGone, .eventGone, .crmDuplicate,
+        .contactConflict,
         .storageError, .migrationFailed,
         .malformedMessage, .sanitizeFailed, .attachmentTooBig, .partNotFound, .partNotDownloaded,
-        .unsubscribeFailed, .quoteNotFound, .malformedCalendar, .recurrenceUnsupported,
+        .unsubscribeFailed, .quoteNotFound, .malformedCalendar, .recurrenceUnsupported, .addressBookReadOnly,
     ]
 
     private static let names: [ErrorCode: String] = [
@@ -172,12 +187,15 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .calendarNotFound: "calendarNotFound",
         .eventNotFound: "eventNotFound",
         .crmItemNotFound: "crmItemNotFound",
+        .contactNotFound: "contactNotFound",
+        .addressBookNotFound: "addressBookNotFound",
         .authRequired: "authRequired",
         .authFailed: "authFailed",
         .keyringError: "keyringError",
         .oauthClientMissing: "oauthClientMissing",
         .calendarConsentRequired: "calendarConsentRequired",
         .crmSignInUnsupported: "crmSignInUnsupported",
+        .contactsConsentRequired: "contactsConsentRequired",
         .offline: "offline",
         .networkError: "networkError",
         .serverError: "serverError",
@@ -186,6 +204,7 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .messageGone: "messageGone",
         .eventGone: "eventGone",
         .crmDuplicate: "crmDuplicate",
+        .contactConflict: "contactConflict",
         .storageError: "storageError",
         .migrationFailed: "migrationFailed",
         .malformedMessage: "malformedMessage",
@@ -197,6 +216,7 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .quoteNotFound: "quoteNotFound",
         .malformedCalendar: "malformedCalendar",
         .recurrenceUnsupported: "recurrenceUnsupported",
+        .addressBookReadOnly: "addressBookReadOnly",
     ]
 }
 

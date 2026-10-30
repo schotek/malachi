@@ -81,17 +81,25 @@ public func index(atScalarOffset offset: Int, in text: String) -> String.Index {
     return scalars.index(scalars.startIndex, offsetBy: offset, limitedBy: scalars.endIndex) ?? scalars.endIndex
 }
 
-/// compose.suggestionIcon: the GTK icon name for a suggestion's source.
+/// compose.suggestionIcon: the GTK icon name for a suggestion's source; a
+/// synchronised address book (`.contacts`) has the system book's icon.
 public func suggestionIcon(_ source: ContactSource) -> String {
-    if source == .addressBook {
+    if source == .addressBook || source == .contacts {
         return "x-office-address-book-symbolic"
     }
     return "document-open-recent-symbolic"
 }
 
 /// compose.suggestionTooltip: where a suggestion comes from: the address
-/// book's own name when it has one.
-public func suggestionTooltip(_ contact: Contact) -> String {
+/// book's own name when it has one; a synchronised book with its account
+/// (`ContactBook.suggestionTooltip`: "Contacts · Microsoft 365
+/// (jana@example.org)", `account` is `ContactBook.accountLabel` of the
+/// account the book belongs to, "" when unknown).
+public func suggestionTooltip(_ contact: Contact, account: String = "") -> String {
+    if contact.source == .contacts {
+        return ContactBook.suggestionTooltip(book: ContactBook.clean(contact.book ?? "", max: API.Limits.maxContactFieldBytes),
+                                             account: account)
+    }
     if contact.source == .addressBook {
         if let book = contact.book, !book.isEmpty {
             return book

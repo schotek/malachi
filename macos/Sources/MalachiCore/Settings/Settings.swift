@@ -94,6 +94,11 @@ public final class Settings {
         /// agenda; default week); written whenever the view changes
         /// (`CalendarController.setView`).
         case calendarView = "calendar-view"
+        /// Which address books complete the recipients of a new message
+        /// (Settings → Contacts → Recipient Suggestions):
+        /// `ContactSearchScope`'s values, `account` (default) or `all`;
+        /// passed as contact.search's `scope`.
+        case contactsSuggestScope = "contacts-suggest-scope"
         /// macOS only: what ⌘R does (Settings → General → Keyboard).
         case commandR = "command-r"
         /// macOS only: the size of the window text (`Typo`, Settings →
@@ -181,6 +186,7 @@ public final class Settings {
             Key.boardLastMode.rawValue: Board.Mode.mail.nick,
             Key.boardAccountFilter.rawValue: "",
             Key.calendarView.rawValue: Cal.defaultView.nick,
+            Key.contactsSuggestScope.rawValue: ContactSearchScope.account.rawValue,
             Key.commandR.rawValue: CommandR.reply.rawValue,
             Key.uiTextSize.rawValue: TextSize.larger.rawValue,
         ]
@@ -473,6 +479,20 @@ public final class Settings {
     public var calendarView: Cal.View {
         get { Cal.parseView(string(.calendarView)).0 }
         set { set(.calendarView, newValue.nick) }
+    }
+
+    /// settings.Store.ContactsSuggestScope: Recipient Suggestions' scope;
+    /// an unknown or empty stored value is `.account`, the default. A value
+    /// outside `ContactBook.scopes` is not written.
+    public var contactsSuggestScope: ContactSearchScope {
+        get {
+            let v = ContactSearchScope(string(.contactsSuggestScope))
+            return ContactBook.scopes.contains(v) ? v : ContactBook.scopes[0]
+        }
+        set {
+            guard ContactBook.scopes.contains(newValue), string(.contactsSuggestScope) != newValue.rawValue else { return }
+            set(.contactsSuggestScope, newValue.rawValue)
+        }
     }
 
     /// The board's saved account filter: the daemon's account id, "" for

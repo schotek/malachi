@@ -1269,19 +1269,20 @@ import Testing
         (1005, "unauthenticated"), (1006, "readOnly"), (1007, "invitationsUnavailable"),
         (1100, "accountNotFound"), (1101, "folderNotFound"), (1102, "messageNotFound"), (1103, "threadNotFound"),
         (1104, "draftNotFound"), (1105, "attachmentNotFound"), (1106, "caseNotFound"),
-        (1107, "calendarNotFound"), (1108, "eventNotFound"), (1109, "crmItemNotFound"),
+        (1107, "calendarNotFound"), (1108, "eventNotFound"), (1109, "crmItemNotFound"), (1110, "contactNotFound"),
+        (1111, "addressBookNotFound"),
         (1200, "authRequired"), (1201, "authFailed"), (1202, "keyringError"), (1203, "oauthClientMissing"),
-        (1204, "calendarConsentRequired"), (1205, "crmSignInUnsupported"),
+        (1204, "calendarConsentRequired"), (1205, "crmSignInUnsupported"), (1206, "contactsConsentRequired"),
         (1300, "offline"), (1301, "networkError"), (1302, "serverError"), (1303, "tlsError"), (1304, "serverTimeout"),
-        (1305, "messageGone"), (1306, "eventGone"), (1307, "crmDuplicate"),
+        (1305, "messageGone"), (1306, "eventGone"), (1307, "crmDuplicate"), (1308, "contactConflict"),
         (1400, "storageError"), (1401, "migrationFailed"),
         (1500, "malformedMessage"), (1501, "sanitizeFailed"), (1502, "attachmentTooBig"), (1503, "partNotFound"),
         (1504, "partNotDownloaded"), (1505, "unsubscribeFailed"), (1506, "quoteNotFound"),
-        (1507, "malformedCalendar"), (1508, "recurrenceUnsupported"),
+        (1507, "malformedCalendar"), (1508, "recurrenceUnsupported"), (1509, "addressBookReadOnly"),
     ]
 
     @Test func errorCodesAreNamed() {
-        #expect(ErrorCode.all.count == 48 && Set(ErrorCode.all).count == 48)
+        #expect(ErrorCode.all.count == 53 && Set(ErrorCode.all).count == 53)
         #expect(ErrorCode.all.map(\.rawValue) == Self.goCodes.map { $0.0 })
         #expect(ErrorCode.all.map(\.name) == Self.goCodes.map { $0.1 })
         for code in ErrorCode.all {
@@ -1384,11 +1385,14 @@ import Testing
         "account.detectEway",
         "crm.lookup", "crm.search", "crm.save", "crm.remove",
         "assistant.profileGet", "assistant.profileSet", "assistant.profilePropose", "assistant.profileResolve",
+        "addressBook.list", "addressBook.set",
+        "contact.list", "contact.get", "contact.lookup",
+        "contact.create", "contact.update", "contact.delete",
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 105)
-        #expect(Set(API.allMethods).count == 105, "no duplicates")
+        #expect(API.allMethods.count == 113)
+        #expect(Set(API.allMethods).count == 113, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)
@@ -1397,6 +1401,7 @@ import Testing
             "notify.boardChanged", "notify.draftsChanged",
             "notify.calendarChanged", "notify.calendarState", "notify.eventAlert", "notify.invitationsChanged",
             "notify.assistantProfileChanged",
+            "notify.contactsChanged",
         ])
         #expect(API.AccountDetectSite.name == "account.detectSite" && API.AccountListSpaces.name == "account.listSpaces")
         #expect(API.IssueTransitions.name == "issue.transitions" && API.IssueTransition.name == "issue.transition")

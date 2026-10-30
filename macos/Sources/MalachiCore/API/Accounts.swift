@@ -112,10 +112,14 @@ public struct OAuth2Config: Codable, Sendable, Equatable {
 public struct GraphConfig: Codable, Sendable, Equatable {
     public var source: GraphSource
     public var goaAccountId: String?
+    /// The contacts part of the account (docs/api.md §4.19); nil =
+    /// contacts sync off.
+    public var contacts: ContactsConfig?
 
-    public init(source: GraphSource, goaAccountId: String? = nil) {
+    public init(source: GraphSource, goaAccountId: String? = nil, contacts: ContactsConfig? = nil) {
         self.source = source
         self.goaAccountId = goaAccountId
+        self.contacts = contacts
     }
 }
 
@@ -394,15 +398,19 @@ public struct AccountOAuthStartParams: Codable, Sendable, Equatable {
     /// Also asks for the calendar scopes (Microsoft Calendars.ReadWrite and
     /// Calendars.Read.Shared); only a sign-in made for the calendar sets it.
     public var calendar: Bool?
+    /// Also asks for the contacts scope (Microsoft Contacts.ReadWrite);
+    /// only a sign-in made for the contacts sets it (docs/api.md §4.19).
+    public var contacts: Bool?
 
     public init(
         accountId: AccountID? = nil, config: AccountConfig? = nil, browserPage: OAuthBrowserPage? = nil,
-        calendar: Bool? = nil
+        calendar: Bool? = nil, contacts: Bool? = nil
     ) {
         self.accountId = accountId
         self.config = config
         self.browserPage = browserPage
         self.calendar = calendar
+        self.contacts = contacts
     }
 }
 
