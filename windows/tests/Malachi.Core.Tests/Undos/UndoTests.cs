@@ -25,11 +25,11 @@ public sealed class UndoTests
         {
             AccountId = account,
             FolderId = folder,
-            ThreadId = thread is null ? null : new ThreadId(thread),
+            ThreadId = thread is null ? (ThreadId?)null : new ThreadId(thread),
         };
 
     private static Undo.Moved M(string id, string from, string? thread = null) =>
-        new(id, from, thread is null ? null : new ThreadId(thread));
+        new(id, from, thread is null ? (ThreadId?)null : new ThreadId(thread));
 
     [Fact]
     public void Record()
