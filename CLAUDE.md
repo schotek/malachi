@@ -1138,7 +1138,7 @@ app`/`test`/`lint` (`ComposeBodyLayoutTests`, `AssistantWriteTests`,
 (`DevmailTests` odpověď bez otázky, `BoardSmokeTests`, mřížka
 `ComposePane.xaml` má o řádky víc) a ruční průchod.
 
-Zpět u přesunů pošty (2026-10-30, všechny tři klienty, necommitnuté;
+Zpět u přesunů pošty (2026-10-30, všechny tři klienty, sloučeno do `main`;
 rozhodnutí vlastníka přes AskUserQuestion, `docs/architecture.md` §7).
 Koš, Archivovat, Nevyžádaná, Přesunout do a Archivovat/Smazat na nástěnce
 zapíšou po úspěchu u démona přesun (zpráva + složka, odkud přišla) do
@@ -1162,10 +1162,14 @@ odpovídá na `undo:` dřív než controller), Windows `Malachi.Core/Undos`
 (`ToastButton`), `ShortcutCommand.Undo`; InfoBar `ArchiveBar` nástěnky
 zrušený. 7 nových msgid i česky. Ověřeno: Go testy `undo` a `board`;
 GTK v kontejneru `gtk.sh make build`, celé `test-ui`, `make po`, `make lint`;
-macOS `swift build` bez varování, celé `swift test` (1935),
-`check-strings.py`. Čeká: test démonu Koš a hned zpět (IMAP, Graph),
-smoke GTK s toastem a Ctrl+Z, Windows (napsané bez `dotnet`) `build.ps1
-app`/`test`/`lint` a UI smoke, ručně ve všech třech nad kopií dat.
+macOS `swift build` a celé `swift test` (1935), `check-strings.py`; Windows
+agent na ARM64 `build.ps1 app`/`lint` a testy Undo zelené, průchod přes
+UI Automation nad devmailem (smoke
+`DevmailTests.CtrlZAndTheToastsButtonTakeBackAMoveToTrash` napsaný,
+nespuštěný); vlastník ověřil všechny tři
+klienty 2026-10-30. Toast zůstává i nad řádkem rychlé odpovědi (rozhodnutí
+vlastníka); se vzorovými daty nástěnky (`MALACHI_BOARD_SAMPLES`) Zpět není.
+Nespuštěný zůstal test démonu Koš a hned zpět (IMAP, Graph).
 
 Kontextová menu u zpráv a složek (2026-10-14, všechny tři klienty,
 commit `bcaf8b0`; rozhodnutí vlastníka přes AskUserQuestion). Pravý klik
