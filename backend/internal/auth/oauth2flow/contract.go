@@ -90,7 +90,8 @@ type Grant struct {
 	IDToken      string
 	Email        string
 	// Scope is the "scope" of the token response, cleaned (the requested
-	// set when the response named none); HasCalendarScope reads it.
+	// set when the response named none); HasCalendarScope and
+	// HasContactsScope read it.
 	Scope string
 }
 
@@ -122,6 +123,14 @@ type StartRequest struct {
 	// is invalidArgument. A pending session of the same Key is reused
 	// only with the same Calendar.
 	Calendar bool
+	// Contacts also asks for the provider's contacts scopes
+	// (docs/plans/address-book.md A15; Microsoft Contacts.ReadWrite).
+	// It combines with Calendar: a sign-in that turns the contacts on
+	// for an account whose calendar is granted asks for both, so the new
+	// grant keeps the calendar. A provider without them (Google, for now)
+	// is invalidArgument. A pending session of the same Key is reused
+	// only with the same Contacts.
+	Contacts bool
 	// OnComplete, when set, runs once on success from the session's
 	// goroutine, before waiters are released. An error fails the session
 	// with it (an *api.Error keeps its code, anything else is
@@ -254,6 +263,16 @@ func (t *TokenSource) CalendarConsent(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	return HasCalendarScope(s), nil
+}
+
+// ContactsConsent reports whether the stored sign-in allows contacts
+// access (HasContactsScope of GrantedScope).
+func (t *TokenSource) ContactsConsent(ctx context.Context) (bool, error) {
+	s, err := t.impl.grantedScope(ctx)
+	if err != nil {
+		return false, err
+	}
+	return HasContactsScope(s), nil
 }
 
 // Invalidate drops the cached access token (a server refused it).

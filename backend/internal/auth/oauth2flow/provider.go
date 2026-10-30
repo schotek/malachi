@@ -97,10 +97,13 @@ func authParams(p Provider, loginHint string) []oauth2.AuthCodeOption {
 
 // oauthConfig assembles the library configuration. Public clients send
 // client_id (and client_secret only when set) in the request body.
-func oauthConfig(p Provider, c Client, ep Endpoints, redirectURL string, calendar bool) *oauth2.Config {
+func oauthConfig(p Provider, c Client, ep Endpoints, redirectURL string, calendar, contacts bool) *oauth2.Config {
 	scopes := append([]string(nil), providerScopes[p]...)
 	if calendar {
 		scopes = append(scopes, calendarScopes[p]...)
+	}
+	if contacts {
+		scopes = append(scopes, contactsScopes[p]...)
 	}
 	return &oauth2.Config{
 		ClientID:     c.ID,

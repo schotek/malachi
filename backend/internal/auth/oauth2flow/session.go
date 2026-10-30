@@ -77,6 +77,7 @@ type session struct {
 	clientID   string
 	tenant     string
 	calendar   bool // asked for the calendar scopes too
+	contacts   bool // asked for the contacts scopes too
 	cfg        *oauth2.Config
 	verifier   string
 	state      string
@@ -151,6 +152,9 @@ func (m *manager) start(req StartRequest) (string, string, time.Time, error) {
 	if req.Calendar && !SupportsCalendar(req.Provider) {
 		return "", "", time.Time{}, api.NewError(api.CodeInvalidArgument, "no calendar access for OAuth2 provider %q", string(req.Provider))
 	}
+	if req.Contacts && !SupportsContacts(req.Provider) {
+		return "", "", time.Time{}, api.NewError(api.CodeInvalidArgument, "no contacts access for OAuth2 provider %q", string(req.Provider))
+	}
 	if req.Client.ID == "" {
 		return "", "", time.Time{}, api.NewError(api.CodeOAuthClientMissing, "no OAuth client id for provider %q", string(req.Provider))
 	}
@@ -166,7 +170,7 @@ func (m *manager) start(req StartRequest) (string, string, time.Time, error) {
 	if req.Key != "" {
 		if s := m.pendingByKeyLocked(req.Key); s != nil {
 			if s.provider == req.Provider && s.clientID == req.Client.ID && s.tenant == req.Client.Tenant &&
-				s.calendar == req.Calendar && normalizeAddress(s.expect) == normalizeAddress(req.ExpectEmail) {
+				s.calendar == req.Calendar && s.contacts == req.Contacts && normalizeAddress(s.expect) == normalizeAddress(req.ExpectEmail) {
 				if page != (PageTexts{}) {
 					s.page = page
 				}
@@ -208,7 +212,7 @@ func (m *manager) start(req StartRequest) (string, string, time.Time, error) {
 		ln.Close()
 		return "", "", time.Time{}, api.NewError(api.CodeInternalError, "unusable redirect address %q", redirect)
 	}
-	cfg := oauthConfig(req.Provider, req.Client, ep, redirect, req.Calendar)
+	cfg := oauthConfig(req.Provider, req.Client, ep, redirect, req.Calendar, req.Contacts)
 	verifier := oauth2.GenerateVerifier()
 	opts := append([]oauth2.AuthCodeOption{oauth2.S256ChallengeOption(verifier)}, authParams(req.Provider, req.LoginHint)...)
 
@@ -219,6 +223,7 @@ func (m *manager) start(req StartRequest) (string, string, time.Time, error) {
 		clientID:   req.Client.ID,
 		tenant:     req.Client.Tenant,
 		calendar:   req.Calendar,
+		contacts:   req.Contacts,
 		cfg:        cfg,
 		verifier:   verifier,
 		state:      state,
@@ -254,7 +259,7 @@ func (m *manager) start(req StartRequest) (string, string, time.Time, error) {
 	s.timer = time.AfterFunc(m.ttl, func() { m.onTimer(s) })
 
 	m.log.Info("sign-in session started", "session", s.id, "provider", string(s.provider), "key", s.key,
-		"calendar", s.calendar, "listener", ln.Addr().String())
+		"calendar", s.calendar, "contacts", s.contacts, "listener", ln.Addr().String())
 	return s.id, s.authURL, s.expires, nil
 }
 
