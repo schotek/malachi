@@ -41,6 +41,14 @@ func TestParseDevStart(t *testing.T) {
 	if err != nil || len(crmSteps) != 2 || crmSteps[0].Kind != devCrmDialog || crmSteps[1].Kind != devEwayWizard {
 		t.Errorf("crm steps %+v %v", crmSteps, err)
 	}
+	contactSteps, err := parseDevStart("contacts;contacts:edit;prefs-contacts")
+	if err != nil || len(contactSteps) != 3 || contactSteps[0].Kind != devContacts ||
+		contactSteps[1].Kind != devContactsEdit || contactSteps[2].Kind != devPrefsContacts {
+		t.Errorf("contacts steps %+v %v", contactSteps, err)
+	}
+	if _, err := parseDevStart("contacts:new"); err == nil {
+		t.Error("contacts:new parsed")
+	}
 	if s, err := parseDevStart(""); err != nil || len(s) != 0 {
 		t.Errorf("empty script: %v %v", s, err)
 	}

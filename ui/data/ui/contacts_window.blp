@@ -1,0 +1,264 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// The Contacts window (docs/plans/address-book.md W1, W6): address books |
+// contacts | the contact, two nested Adw.NavigationSplitViews that fold at
+// 900 and 600 sp like the main window (contacts.GTKBreakpoints). One
+// instance for the application, opened by app.contacts from the main
+// menu, without a shortcut. Every text is set from Go
+// (ui/internal/contacts), so this file has no msgid of its own. Object IDs
+// are looked up from ui/internal/window/contacts_window.go; keep them in
+// sync.
+Adw.Window contacts_window {
+  default-width: 1060;
+  default-height: 700;
+  width-request: 360;
+  height-request: 294;
+
+  Adw.Breakpoint {
+    condition ("max-width: 900sp")
+
+    setters {
+      outer_split.collapsed: true;
+    }
+  }
+
+  Adw.Breakpoint {
+    condition ("max-width: 600sp")
+
+    setters {
+      outer_split.collapsed: true;
+      inner_split.collapsed: true;
+    }
+  }
+
+  content: Adw.ToastOverlay toasts {
+    child: Adw.NavigationSplitView outer_split {
+      min-sidebar-width: 200;
+      max-sidebar-width: 300;
+      sidebar-width-fraction: 0.22;
+
+      sidebar: Adw.NavigationPage books_page {
+        tag: "books";
+
+        child: Adw.ToolbarView {
+          [top]
+          Adw.HeaderBar {
+            [end]
+            Button new_button {
+              icon-name: "list-add-symbolic";
+            }
+          }
+
+          content: ScrolledWindow {
+            hscrollbar-policy: never;
+
+            child: ListBox book_list {
+              styles [
+                "navigation-sidebar",
+              ]
+            };
+          };
+        };
+      };
+
+      content: Adw.NavigationPage contacts_page {
+        tag: "contacts";
+
+        child: Adw.NavigationSplitView inner_split {
+          min-sidebar-width: 260;
+          max-sidebar-width: 380;
+          sidebar-width-fraction: 0.38;
+
+          sidebar: Adw.NavigationPage list_page {
+            tag: "list";
+
+            child: Adw.ToolbarView {
+              [top]
+              Adw.HeaderBar {
+                title-widget: Adw.WindowTitle list_title {};
+
+                [end]
+                ToggleButton search_button {
+                  icon-name: "system-search-symbolic";
+                  active: bind search_bar.search-mode-enabled bidirectional;
+                }
+              }
+
+              [top]
+              SearchBar search_bar {
+                child: SearchEntry search_entry {
+                  hexpand: true;
+                };
+              }
+
+              // A banner per Microsoft account whose contacts wait for the
+              // consent (contactsConsentRequired), built from Go.
+              [top]
+              Box banners {
+                orientation: vertical;
+              }
+
+              content: Stack list_stack {
+                StackPage {
+                  name: "list";
+
+                  child: ScrolledWindow list_scroller {
+                    hscrollbar-policy: never;
+
+                    child: ListBox contact_list {
+                      styles [
+                        "navigation-sidebar",
+                      ]
+                    };
+                  };
+                }
+
+                StackPage {
+                  name: "empty";
+
+                  child: Adw.StatusPage list_empty {
+                    icon-name: "x-office-address-book-symbolic";
+
+                    styles [
+                      "compact",
+                    ]
+                  };
+                }
+
+                StackPage {
+                  name: "loading";
+
+                  child: Adw.Spinner {
+                    halign: center;
+                    valign: center;
+                    width-request: 32;
+                    height-request: 32;
+                  };
+                }
+              };
+
+              [bottom]
+              Label status_label {
+                xalign: 0;
+                ellipsize: end;
+                margin-start: 12;
+                margin-end: 12;
+                margin-top: 6;
+                margin-bottom: 6;
+
+                styles [
+                  "dim-label",
+                  "caption",
+                ]
+              }
+            };
+          };
+
+          content: Adw.NavigationPage detail_page {
+            tag: "detail";
+
+            child: Adw.ToolbarView {
+              [top]
+              Adw.HeaderBar detail_header {
+                show-title: false;
+
+                [start]
+                Button cancel_button {
+                  visible: false;
+                }
+
+                [end]
+                Button done_button {
+                  visible: false;
+
+                  styles [
+                    "suggested-action",
+                  ]
+                }
+
+                [end]
+                Button edit_button {
+                  visible: false;
+                }
+              }
+
+              content: Stack detail_stack {
+                StackPage {
+                  name: "empty";
+
+                  child: Adw.StatusPage detail_empty {
+                    icon-name: "avatar-default-symbolic";
+
+                    child: Button open_prefs_button {
+                      halign: center;
+                      visible: false;
+
+                      styles [
+                        "pill",
+                      ]
+                    };
+                  };
+                }
+
+                StackPage {
+                  name: "loading";
+
+                  child: Adw.Spinner {
+                    halign: center;
+                    valign: center;
+                    width-request: 32;
+                    height-request: 32;
+                  };
+                }
+
+                StackPage {
+                  name: "detail";
+
+                  child: ScrolledWindow {
+                    hscrollbar-policy: never;
+
+                    child: Adw.Clamp {
+                      maximum-size: 640;
+                      margin-start: 12;
+                      margin-end: 12;
+                      margin-top: 18;
+                      margin-bottom: 18;
+
+                      child: Box detail_box {
+                        orientation: vertical;
+                        spacing: 18;
+                      };
+                    };
+                  };
+                }
+
+                StackPage {
+                  name: "form";
+
+                  child: ScrolledWindow form_scroller {
+                    hscrollbar-policy: never;
+
+                    child: Adw.Clamp {
+                      maximum-size: 640;
+                      margin-start: 12;
+                      margin-end: 12;
+                      margin-top: 18;
+                      margin-bottom: 18;
+
+                      child: Box form_box {
+                        orientation: vertical;
+                        spacing: 18;
+                      };
+                    };
+                  };
+                }
+              };
+            };
+          };
+        };
+      };
+    };
+  };
+}

@@ -35,7 +35,10 @@ import (
 // event-editor (New Event with today's defaults), event-editor:edit (Edit
 // of the first occurrence), caldav-dialog, prefs-calendar (Preferences on
 // the Calendar page), prefs-integrations (Preferences on the Integrations
-// page), prefs-ai (Preferences on the AI page, About You on top), crm-dialog (the Save to eWay-CRM dialog over invented
+// page), prefs-ai (Preferences on the AI page, About You on top),
+// contacts (the Contacts window), contacts:edit (the window with the
+// first listed contact's form open), prefs-contacts (Preferences on the
+// Contacts page), crm-dialog (the Save to eWay-CRM dialog over invented
 // suggestions, no daemon), eway-wizard (the eWay-CRM account assistant;
 // Next asks the daemon), size=WxH, quit.
 //
@@ -72,6 +75,9 @@ const (
 	devPrefsCalendar
 	devPrefsIntegrations
 	devPrefsAI
+	devContacts
+	devContactsEdit
+	devPrefsContacts
 	devCrmDialog
 	devEwayWizard
 	devSize
@@ -142,6 +148,12 @@ func parseDevStart(script string) ([]devStep, error) {
 			st.Kind = devPrefsIntegrations
 		case name == "prefs-ai":
 			st.Kind = devPrefsAI
+		case name == "contacts":
+			st.Kind = devContacts
+		case name == "contacts:edit":
+			st.Kind = devContactsEdit
+		case name == "prefs-contacts":
+			st.Kind = devPrefsContacts
 		case name == "crm-dialog":
 			st.Kind = devCrmDialog
 		case name == "eway-wizard":
@@ -318,6 +330,14 @@ func (w *Window) runDevStep(n int, st devStep) {
 	case devPrefsAI:
 		d := NewPreferences(w.settings, w.client, w.assist, w.log, w.calendarSource)
 		d.SetVisiblePageName("ai")
+		d.Present(w)
+	case devContacts:
+		w.OpenContacts()
+	case devContactsEdit:
+		w.devEditFirstContact()
+	case devPrefsContacts:
+		d := NewPreferences(w.settings, w.client, w.assist, w.log, w.calendarSource)
+		d.SetVisiblePageName("contacts")
 		d.Present(w)
 	case devCrmDialog:
 		w.showCrmSample()
@@ -599,6 +619,39 @@ func (w *Window) devBoard(s board.Style, sel bool) {
 		p.ctl.Select(id)
 		devBusy--
 		developmentPrint("MALACHI_GTK_START board: selected %s of %d (%d conversations loaded)", id, len(cases), loaded)
+		return false
+	})
+}
+
+// devEditFirstContact opens the Contacts window, selects the first listed
+// contact once the list is there and opens its form once its card is
+// (contacts:edit); the next step waits for it.
+func (w *Window) devEditFirstContact() {
+	cw := w.OpenContacts()
+	devBusy++
+	deadline := time.Now().Add(10 * time.Second)
+	selected := false
+	glib.TimeoutAdd(100, func() bool {
+		if cw.closed || time.Now().After(deadline) {
+			developmentPrint("LAYOUT: contacts:edit gave up")
+			devBusy--
+			return false
+		}
+		if !selected {
+			for _, c := range cw.ctl.Contacts() {
+				cw.ctl.Select(c.ID)
+				selected = true
+				break
+			}
+			return true
+		}
+		if !cw.contact.CanEdit() {
+			return true
+		}
+		cw.contact.BeginEdit()
+		cw.inner.SetShowContent(true)
+		glib.IdleAdd(w.devPrintToplevels)
+		devBusy--
 		return false
 	})
 }

@@ -204,7 +204,7 @@ func main() {
 		sup.Stop()
 	})
 
-	newMessage = addActions(app, rpc, log, func() *settings.Store { return prefs }, func() *window.Assistant { return assist }, show, func() *compose.Manager { return mgr }, func() calendardata.DataSource { return calendarOf(mainWin)() }, openNotified, func() { requestExit(app.Quit) })
+	newMessage = addActions(app, rpc, log, func() *settings.Store { return prefs }, func() *window.Assistant { return assist }, show, func() *compose.Manager { return mgr }, func() calendardata.DataSource { return calendarOf(mainWin)() }, openNotified, func() { requestExit(app.Quit) }, func() *window.Window { return mainWin })
 	// The calendar's notifications (window/calendar_alerts.go): a click
 	// that started the application presents the main window first.
 	addCalendarActions(app, func() *window.Window {
@@ -240,7 +240,7 @@ func addUninstalledIconPath() {
 // settings store and the Assistant state, which exist only after startup
 // has run; show presents the main window. It returns app.compose, which
 // follows the accounts that write mail.
-func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, store func() *settings.Store, assist func() *window.Assistant, show func(), composer func() *compose.Manager, cal func() calendardata.DataSource, openNotified func(api.AccountID, api.MessageID), requestQuit func()) *gio.SimpleAction {
+func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, store func() *settings.Store, assist func() *window.Assistant, show func(), composer func() *compose.Manager, cal func() calendardata.DataSource, openNotified func(api.AccountID, api.MessageID), requestQuit func(), mainWindow func() *window.Window) *gio.SimpleAction {
 	newMessage := gio.NewSimpleAction("compose", nil)
 	newMessage.ConnectActivate(func(*glib.Variant) { composer().Open(compose.Params{}) })
 	app.AddAction(newMessage)
@@ -280,6 +280,16 @@ func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, stor
 		d.Present(app.ActiveWindow())
 	})
 	app.AddAction(about)
+
+	// app.contacts opens the Contacts window (window.OpenContacts) from the
+	// main menu; no shortcut (docs/plans/address-book.md §8).
+	contactsAction := gio.NewSimpleAction("contacts", nil)
+	contactsAction.ConnectActivate(func(*glib.Variant) {
+		if w := mainWindow(); w != nil {
+			w.OpenContacts()
+		}
+	})
+	app.AddAction(contactsAction)
 
 	prefs := gio.NewSimpleAction("preferences", nil)
 	prefs.ConnectActivate(func(*glib.Variant) {

@@ -14,11 +14,11 @@ import (
 
 // showContact opens the Contacts window on a contact (Show Contact).
 func (w *Window) showContact(id api.ContactID) {
-	_ = id
+	w.OpenContacts().ShowContact(id)
 }
 
 // newContactFrom opens the Contacts window with the form of a new
 // contact prefilled (Add to Contacts' More Details…).
 func (w *Window) newContactFrom(f *contacts.Form) {
-	_ = f
+	w.OpenContacts().NewContactFrom(f)
 }
