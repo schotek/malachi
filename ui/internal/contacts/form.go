@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -71,7 +72,10 @@ type Form struct {
 	Original api.ContactCard
 	// IsNew: Done creates (contact.create in Book).
 	IsNew bool
-	base  Form0
+	// Kind is the kind of Book (the controller sets it before Validate):
+	// a Microsoft book has Graph's limits (GraphMaxEmails).
+	Kind api.AddressBookKind
+	base Form0
 }
 
 // Form0 is the comparable snapshot of a form's fields (what Changed
@@ -613,7 +617,106 @@ func (f *Form) Validate(tr Translator) []Problem {
 	if len(c.Note) > api.MaxContactNoteBytes {
 		out = append(out, Problem{Key: KeyNote, Index: -1, Text: long})
 	}
+	if f.Kind == api.AddressBookKindGraph {
+		out = append(out, f.graphProblems(tr)...)
+	}
 	return out
+}
+
+// Graph's limits of a Microsoft contact (docs/api.md contact.update): at
+// most GraphMaxEmails e-mail addresses, one postal address each of work,
+// home and other (any other label is other), one website.
+const GraphMaxEmails = 3
+
+// graphProblems are the rows a Microsoft contact cannot hold; Index is
+// the row of the form (empty rows are not counted, as Card leaves them
+// out).
+func (f *Form) graphProblems(tr Translator) []Problem {
+	var out []Problem
+	n := 0
+	for i, r := range f.Emails {
+		if strings.TrimSpace(r.Value) == "" {
+			continue
+		}
+		if n++; n == GraphMaxEmails+1 {
+			out = append(out, Problem{Key: KeyEmails, Index: i, Text: fmt.Sprintf(tr.N(
+				// TRANSLATORS: Microsoft 365 is a brand.
+				"A Microsoft 365 contact has at most %d email address.",
+				"A Microsoft 365 contact has at most %d email addresses.", GraphMaxEmails), GraphMaxEmails)})
+		}
+	}
+	slots := map[api.ContactLabel]bool{}
+	for i, a := range f.Addresses {
+		if emptyAddress(trimAddress(a)) {
+			continue
+		}
+		slot := api.ContactLabelOther
+		if a.Label == api.ContactLabelWork || a.Label == api.ContactLabelHome {
+			slot = a.Label
+		}
+		if slots[slot] {
+			out = append(out, Problem{Key: KeyAddresses, Index: i,
+				Text: tr.T("A Microsoft 365 contact has one work, one home and one other address.")})
+		}
+		slots[slot] = true
+	}
+	n = 0
+	for i, r := range f.URLs {
+		if strings.TrimSpace(r.Value) == "" {
+			continue
+		}
+		if n++; n == 2 {
+			out = append(out, Problem{Key: KeyURLs, Index: i, Text: tr.T("A Microsoft 365 contact has only one website.")})
+		}
+	}
+	return out
+}
+
+// ProblemOf reads the field of a refused card from the daemon's
+// invalidArgument: its message starts with the field's path
+// ("card.emails[2].address: …", docs/api.md contact.create). The problem
+// marks that field of the form (Index -1 for a whole list or a field
+// without rows) with RefusedText; false when the error is another or
+// names no field the form has (the caller then says ErrorText).
+func ProblemOf(e *api.Error, tr Translator) (Problem, bool) {
+	if e == nil || e.Code != api.CodeInvalidArgument {
+		return Problem{}, false
+	}
+	path, _, ok := strings.Cut(e.Message, ":")
+	path, ok2 := strings.CutPrefix(strings.TrimSpace(path), "card.")
+	if !ok || !ok2 {
+		return Problem{}, false
+	}
+	head, _, _ := strings.Cut(path, ".")
+	index := -1
+	if name, rest, ok := strings.Cut(head, "["); ok {
+		n, err := strconv.Atoi(strings.TrimSuffix(rest, "]"))
+		if err != nil || n < 0 || !strings.HasSuffix(rest, "]") {
+			return Problem{}, false
+		}
+		head, index = name, n
+	}
+	keys := map[string]FieldKey{
+		"emails": KeyEmails, "phones": KeyPhones, "addresses": KeyAddresses, "urls": KeyURLs,
+		"nickname": KeyNickname, "org": KeyOrg, "title": KeyTitle, "note": KeyNote,
+		"birthday": KeyBirthday, "displayName": KeyGiven,
+	}
+	key, ok := keys[head]
+	if head == "name" {
+		parts := map[string]FieldKey{"given": KeyGiven, "family": KeyFamily, "middle": KeyMiddle,
+			"prefix": KeyPrefix, "suffix": KeySuffix}
+		_, part, _ := strings.Cut(path, ".")
+		key, ok = parts[part]
+	}
+	if !ok {
+		return Problem{}, false
+	}
+	return Problem{Key: key, Index: index, Text: RefusedText(tr)}, true
+}
+
+// RefusedText is the sentence over the field the server refused.
+func RefusedText(tr Translator) string {
+	return tr.T("The server did not accept the marked detail. Correct it and try again.")
 }
 
 // ValidEmail reports a bare e-mail address (no name, no angle brackets),

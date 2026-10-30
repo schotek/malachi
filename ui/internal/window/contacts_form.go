@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
+	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/diamondburned/gotk4/pkg/pango"
 
@@ -78,7 +79,7 @@ func (cw *ContactsWindow) renderProblems() {
 	}
 	for _, p := range cw.contact.Problems() {
 		lines = append(lines, p.Text)
-		if w, ok := cf.fields[problemKey(p.Key, p.Index)]; ok {
+		for _, w := range cf.marked(p) {
 			gtk.BaseWidget(w).AddCSSClass("error")
 		}
 	}
@@ -91,6 +92,25 @@ func (cw *ContactsWindow) renderProblems() {
 		cf.problems.Append(lb)
 	}
 	cf.problems.SetVisible(len(lines) > 0)
+}
+
+// marked are the widgets of a problem: its field, or every row of a list
+// the problem names as a whole (a refused list, Index -1).
+func (cf *contactForm) marked(p contacts.Problem) []gtk.Widgetter {
+	if w, ok := cf.fields[problemKey(p.Key, p.Index)]; ok {
+		return []gtk.Widgetter{w}
+	}
+	if p.Index >= 0 {
+		return nil
+	}
+	var out []gtk.Widgetter
+	prefix := fmt.Sprintf("%d:", p.Key)
+	for k, w := range cf.fields {
+		if strings.HasPrefix(k, prefix) {
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 func (cw *ContactsWindow) buildForm(f *contacts.Form, focus string) {
@@ -299,9 +319,7 @@ func (cw *ContactsWindow) addressRows(cf *contactForm) *gtk.Box {
 			idx := i
 			part := func(p contacts.AddressPart, v *string) *gtk.Entry {
 				e := gtk.NewEntry()
-				// A street of several lines shows on one; it is written
-				// back only when the user edits it.
-				e.SetText(strings.ReplaceAll(*v, "\n", ", "))
+				e.SetText(*v)
 				e.SetPlaceholderText(contacts.AddressPlaceholder(p, tr))
 				e.SetHExpand(true)
 				e.ConnectChanged(func() { *v = e.Text() })
@@ -309,7 +327,7 @@ func (cw *ContactsWindow) addressRows(cf *contactForm) *gtk.Box {
 			}
 			top := gtk.NewBox(gtk.OrientationHorizontal, 6)
 			top.Append(labelPicker(contacts.FieldAddress, &a.Label))
-			street := part(contacts.PartStreet, &a.Street)
+			street := streetField(&a.Street)
 			top.Append(street)
 			top.Append(removeButton(func() {
 				f.RemoveRow(contacts.FieldAddress, idx)
@@ -343,6 +361,31 @@ func (cw *ContactsWindow) addressRows(cf *contactForm) *gtk.Box {
 	}
 	box.Append(cw.addButton(cf, contacts.FieldAddress, contacts.KeyAddresses))
 	return box
+}
+
+// streetField is the street of a postal address: a text view, so that a
+// street of several lines keeps them (Enter adds a line). A text view has
+// no placeholder; the street's own placeholder stands as its tooltip and
+// accessible name.
+func streetField(street *string) *gtk.Frame {
+	tv := gtk.NewTextView()
+	tv.SetWrapMode(gtk.WrapWordChar)
+	tv.SetAcceptsTab(false)
+	tv.SetTopMargin(6)
+	tv.SetBottomMargin(6)
+	tv.SetLeftMargin(8)
+	tv.SetRightMargin(8)
+	tv.SetHExpand(true)
+	name := contacts.AddressPlaceholder(contacts.PartStreet, i18n.Tr)
+	tv.SetTooltipText(name)
+	tv.UpdateProperty([]gtk.AccessibleProperty{gtk.AccessiblePropertyLabel}, []glib.Value{*glib.NewValue(name)})
+	buf := tv.Buffer()
+	buf.SetText(*street)
+	buf.ConnectChanged(func() { *street = buf.Text(buf.StartIter(), buf.EndIter(), false) })
+	frame := gtk.NewFrame("")
+	frame.SetChild(tv)
+	frame.SetHExpand(true)
+	return frame
 }
 
 // birthdayRow is Add Birthday, or the day, the month and the optional

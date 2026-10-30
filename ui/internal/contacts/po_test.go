@@ -117,6 +117,14 @@ func exercise(tr Translator) {
 	f.URLs = []LabelledValue{{Value: "javascript:x"}}
 	f.Birthday = &api.ContactBirthday{}
 	f.Validate(tr)
+	NewForm("b").Validate(tr)
+	g := NewForm("b")
+	g.Kind = api.AddressBookKindGraph
+	g.Emails = []LabelledValue{{Value: "a@b.cz"}, {Value: "c@b.cz"}, {Value: "d@b.cz"}, {Value: "e@b.cz"}}
+	g.Addresses = []api.ContactAddress{{City: "A"}, {City: "B"}}
+	g.URLs = []LabelledValue{{Value: "a.cz"}, {Value: "b.cz"}}
+	g.Validate(tr)
+	ProblemOf(&api.Error{Code: api.CodeInvalidArgument, Message: "card.org: over"}, tr)
 	NewAddFromChip(api.Address{Name: "A B", Address: "a@b.cz"}, "", nil, nil, tr)
 	accs := []api.Account{{ID: "a", Config: api.AccountConfig{Email: "x@y.cz", Kind: api.AccountGraph}}}
 	AccountLabel(&accs[0], tr)

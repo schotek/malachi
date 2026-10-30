@@ -206,3 +206,71 @@ func TestAddFromChip(t *testing.T) {
 		t.Fatal("bad address")
 	}
 }
+
+// A Microsoft book holds at most 3 e-mail addresses, one address per
+// slot (other and custom labels share one) and one website; the problem
+// names the first row over, counting only filled rows. Other books do
+// not have these limits.
+func TestValidateGraphLimits(t *testing.T) {
+	f := NewForm("b")
+	f.Given = "Jana"
+	f.Emails = []LabelledValue{{Value: "a@b.cz"}, {Value: ""}, {Value: "c@b.cz"}, {Value: "d@b.cz"}, {Value: "e@b.cz"}}
+	f.Addresses = []api.ContactAddress{{Label: api.ContactLabelWork, City: "A"}, {Label: "custom", City: "B"},
+		{City: "C"}, {Label: api.ContactLabelHome, City: "D"}}
+	f.URLs = []LabelledValue{{Value: "a.cz"}, {Value: "b.cz"}}
+	if p := f.Validate(en{}); len(p) != 0 {
+		t.Errorf("CardDAV book: %+v", p)
+	}
+	f.Kind = api.AddressBookKindGraph
+	got := map[FieldKey]int{}
+	for _, p := range f.Validate(en{}) {
+		if _, dup := got[p.Key]; dup {
+			t.Errorf("two problems of %d", p.Key)
+		}
+		got[p.Key] = p.Index
+	}
+	want := map[FieldKey]int{KeyEmails: 4, KeyAddresses: 2, KeyURLs: 1}
+	if len(got) != len(want) {
+		t.Fatalf("problems %v", got)
+	}
+	for k, i := range want {
+		if got[k] != i {
+			t.Errorf("key %d at row %d, want %d", k, got[k], i)
+		}
+	}
+	f.Emails, f.Addresses, f.URLs = f.Emails[:4], f.Addresses[:2], f.URLs[:1]
+	if p := f.Validate(en{}); len(p) != 0 {
+		t.Errorf("within the limits: %+v", p)
+	}
+}
+
+// ProblemOf reads the field from the daemon's message; anything it
+// cannot read is no problem (the sentence is said instead).
+func TestProblemOf(t *testing.T) {
+	inv := func(m string) *api.Error { return &api.Error{Code: api.CodeInvalidArgument, Message: m} }
+	for _, c := range []struct {
+		msg   string
+		key   FieldKey
+		index int
+	}{
+		{"card.emails[2].address: not an e-mail address", KeyEmails, 2},
+		{"card.emails: a Microsoft contact has at most 3 e-mail addresses", KeyEmails, -1},
+		{"card.addresses[1]: a Microsoft contact has one work address", KeyAddresses, 1},
+		{"card.phones[0].label: over 64 bytes", KeyPhones, 0},
+		{"card.name.family: over 256 bytes", KeyFamily, -1},
+		{"card.urls: a Microsoft contact has one web address", KeyURLs, -1},
+		{"card.note: not UTF-8", KeyNote, -1},
+	} {
+		p, ok := ProblemOf(inv(c.msg), en{})
+		if !ok || p.Key != c.key || p.Index != c.index || p.Text != RefusedText(en{}) {
+			t.Errorf("%q: %+v %v", c.msg, p, ok)
+		}
+	}
+	for _, e := range []*api.Error{nil, {Code: api.CodeOffline, Message: "card.org: x"}, inv("bookId: unknown"),
+		inv("card.colour: x"), inv("card.emails[x].address: y"), inv("card.emails[-1]: y"), inv("card.emails[2: y"),
+		inv("card.name.nick: y"), inv("no colon")} {
+		if p, ok := ProblemOf(e, en{}); ok {
+			t.Errorf("%+v read as %+v", e, p)
+		}
+	}
+}

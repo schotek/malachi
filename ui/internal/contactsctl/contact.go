@@ -248,6 +248,9 @@ func (c *ContactController) Save() {
 	if f == nil || c.saving {
 		return
 	}
+	if b, _ := c.account(f.Book); b.ID != "" {
+		f.Kind = b.Kind
+	}
 	c.problems = f.Validate(c.Opts.Tr)
 	if len(c.problems) > 0 {
 		c.changed()
@@ -269,7 +272,7 @@ func (c *ContactController) Save() {
 			}
 			c.saving = false
 			if e != nil {
-				c.err = c.Opts.ErrorMessage(e, acc, "")
+				c.refused(e, acc)
 				c.changed()
 				return
 			}
@@ -304,10 +307,21 @@ func (c *ContactController) Save() {
 	c.changed()
 }
 
+// refused takes a failed save's error: a card the daemon refused for one
+// field marks that field (contacts.ProblemOf), anything else is the
+// sentence.
+func (c *ContactController) refused(e *api.Error, acc string) {
+	if p, ok := contacts.ProblemOf(e, c.Opts.Tr); ok {
+		c.err, c.problems = "", []contacts.Problem{p}
+		return
+	}
+	c.err = c.Opts.ErrorMessage(e, acc, "")
+}
+
 // saveFailed keeps the form: a conflict asks for Reload, anything else
 // shows its sentence.
 func (c *ContactController) saveFailed(f *contacts.Form, e *api.Error, acc string) {
-	c.err = c.Opts.ErrorMessage(e, acc, "")
+	c.refused(e, acc)
 	if e.Code != api.CodeContactConflict {
 		c.changed()
 		return

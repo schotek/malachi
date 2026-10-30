@@ -284,3 +284,24 @@ func TestContactFollowsChanges(t *testing.T) {
 		t.Fatal("reloaded under the form")
 	}
 }
+
+// A card of a Microsoft book is checked against Graph's limits before
+// anything is sent; a field the daemon refuses is marked, not said.
+func TestContactGraphLimitsAndRefusedField(t *testing.T) {
+	c, d, l, _ := contactSetup(t, janaCard())
+	c.BeginEdit()
+	c.Form().URLs = []contacts.LabelledValue{{Value: "a.cz"}, {Value: "b.cz"}}
+	c.Save()
+	l.run()
+	if d.count(api.MethodContactUpdate) != 0 || len(c.Problems()) != 1 || c.Problems()[0].Key != contacts.KeyURLs {
+		t.Fatalf("graph limits: calls %d problems %+v", d.count(api.MethodContactUpdate), c.Problems())
+	}
+	c.Form().URLs = c.Form().URLs[:1]
+	d.fail(api.MethodContactUpdate, &api.Error{Code: api.CodeInvalidArgument, Message: "card.phones[0].number: empty"})
+	c.Save()
+	l.run()
+	p := c.Problems()
+	if !c.Editing() || c.Error() != "" || len(p) != 1 || p[0].Key != contacts.KeyPhones || p[0].Index != 0 {
+		t.Errorf("refused field: editing %v err %q problems %+v", c.Editing(), c.Error(), p)
+	}
+}

@@ -98,12 +98,35 @@ func TestContactsWindowGTKSmoke(t *testing.T) {
 		t.Error("no Edit for a writable contact")
 	}
 
+	// A street of two lines keeps them in the form.
+	jc := *cw.contact.Card()
+	jc.Addresses[0].Street = "Dlouhá 12\nDvůr vlevo"
+	if err := contactsSamples.Call(t.Context(), api.MethodContactUpdate,
+		api.ContactUpdateParams{ContactID: jc.ID, Revision: jc.Revision, Card: jc}, nil); err != nil {
+		t.Fatal(err)
+	}
+	flush()
+
 	// Edit and save.
 	cw.editButton.Emit("clicked")
 	flush()
 	if cw.detailStack.VisibleChildName() != "form" || !cw.doneButton.IsVisible() {
 		t.Fatal("no form")
 	}
+	if cw.contact.Dirty() || cw.contact.Form().Addresses[0].Street != "Dlouhá 12\nDvůr vlevo" {
+		t.Errorf("street in the form: dirty %v %q", cw.contact.Dirty(), cw.contact.Form().Addresses[0].Street)
+	}
+	if n := len(cw.form.marked(contacts.Problem{Key: contacts.KeyEmails, Index: -1})); n != 2 {
+		t.Errorf("a refused list marks %d rows, want 2", n)
+	}
+	// A Microsoft book takes one website: Done says so and sends nothing.
+	cw.contact.Form().URLs = append(cw.contact.Form().URLs, contacts.LabelledValue{Value: "druhy.example.cz"})
+	cw.doneButton.Emit("clicked")
+	flush()
+	if !cw.contact.Editing() || len(cw.contact.Problems()) != 1 || cw.form.problems.FirstChild() == nil {
+		t.Fatalf("graph limit: editing %v problems %+v", cw.contact.Editing(), cw.contact.Problems())
+	}
+	cw.contact.Form().URLs = cw.contact.Form().URLs[:1]
 	cw.contact.Form().Nickname = "Janička"
 	cw.doneButton.Emit("clicked")
 	flush()
