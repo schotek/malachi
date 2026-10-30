@@ -374,6 +374,32 @@ Adw.PreferencesDialog preferences_dialog {
     }
   }
 
+  // Preferences → Contacts (docs/plans/address-book.md W3,
+  // window/preferences_contacts.go bindContacts over
+  // contactsctl.PreferencesController): every text is ui/internal/contacts',
+  // set in Go. One group per account with the contacts capability is added
+  // from Go before the empty state and Recipient Suggestions.
+  Adw.PreferencesPage contacts_page {
+    name: "contacts";
+    icon-name: "x-office-address-book-symbolic";
+
+    // contacts.NoContactAccounts without such an account.
+    Adw.PreferencesGroup contacts_empty_group {
+      visible: false;
+
+      Adw.ActionRow contacts_empty_row {
+        use-markup: false;
+
+        styles [
+          "dim-label",
+        ]
+      }
+    }
+
+    // contacts-suggest-scope: one check row per contacts.Scopes.
+    Adw.PreferencesGroup contacts_suggest_group {}
+  }
+
   Adw.PreferencesPage appearance_page {
     name: "appearance";
     title: _("Appearance");

@@ -278,8 +278,9 @@ func (w *Wizard) BeginAdd() bool {
 }
 
 // AddParams are account.add's params: the configuration with the
-// deselected calendars disabled and the server's default (when
-// selected) as the default calendar.
+// deselected calendars disabled, the server's default (when selected) as
+// the default calendar and, when the listing found address books, the
+// contacts on with their home set.
 func (w *Wizard) AddParams() api.AccountAddParams {
 	cfg := w.config()
 	cal := &api.CalendarConfig{Sync: true}
@@ -294,6 +295,11 @@ func (w *Wizard) AddParams() api.AccountAddParams {
 		}
 	}
 	cfg.Calendar = cal
+	if w.Listed != nil && len(w.Listed.AddressBooks) > 0 {
+		// The server's address books come with the account: its contacts
+		// are on, the books chosen in Preferences → Contacts.
+		cfg.CalDAV.AddressBookHomeSetURL, cfg.CalDAV.Contacts = w.Listed.AddressBookHomeSetURL, true
+	}
 	return api.AccountAddParams{Config: cfg, Credentials: api.Credentials{Password: w.Password}}
 }
 

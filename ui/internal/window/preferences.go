@@ -50,6 +50,7 @@ type PreferencesDialog struct {
 	assist       *Assistant
 	cal          func() calendardata.DataSource // the main window's calendar source (Preferences → Calendar, G16); may be nil or return nil
 	calendarPage *calendarPrefs                 // the Calendar page while open (preferences_calendar.go)
+	contactsPage *contactsPrefs                 // the Contacts page while open (preferences_contacts.go)
 
 	// The account rows: mailList on Accounts, integrationList on
 	// Integrations (accounts_page.go); allAccounts is the last
@@ -275,6 +276,7 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		d.bindAccounts(c),
 		d.bindIntegrations(c),
 		d.bindCalendar(b, c),
+		d.bindContacts(b, c, s),
 		d.bindMCP(), d.bindProfile(b, c),
 		d.bindAssistant(s),
 		d.bindBoardTriage(s, c),

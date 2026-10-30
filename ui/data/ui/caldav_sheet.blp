@@ -222,6 +222,32 @@ Adw.Dialog caldav_sheet {
             }
           }
 
+          // "Address Books" and the server's CardDAV collections, without
+          // checkboxes: which are shown is chosen in Preferences → Contacts.
+          Box caldav_books_box {
+            orientation: vertical;
+            spacing: 6;
+            visible: false;
+
+            Label caldav_books_heading {
+              use-markup: false;
+              xalign: 0;
+
+              styles [
+                "heading",
+              ]
+            }
+
+            ListBox caldav_books {
+              selection-mode: none;
+              margin-top: 6;
+
+              styles [
+                "boxed-list",
+              ]
+            }
+          }
+
           ListBox caldav_mail_list {
             selection-mode: none;
             visible: false;

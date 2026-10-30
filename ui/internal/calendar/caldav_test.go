@@ -97,6 +97,15 @@ func TestWizardFlow(t *testing.T) {
 		ap.Credentials.Password != "secret" {
 		t.Errorf("AddParams %+v %+v %+v", ap.Config, ap.Config.CalDAV, ap.Config.Calendar)
 	}
+	if ap.Config.CalDAV.Contacts || ap.Config.CalDAV.AddressBookHomeSetURL != "" {
+		t.Errorf("contacts on without address books: %+v", ap.Config.CalDAV)
+	}
+	w.Listed.AddressBookHomeSetURL = "https://dav.example.net/ab/"
+	w.Listed.AddressBooks = []api.CardDAVAddressBook{{Href: "/ab/family/", Name: "Family"}}
+	if c := w.AddParams().Config.CalDAV; !c.Contacts || c.AddressBookHomeSetURL != "https://dav.example.net/ab/" {
+		t.Errorf("address books found, contacts not on: %+v", c)
+	}
+	w.Listed.AddressBookHomeSetURL, w.Listed.AddressBooks = "", nil
 	w.AddDone("", &api.Error{Code: api.CodeAuthFailed})
 	if w.Phase != WizardListed || WizardErrorText(w, en{}) != "The server did not accept the username or password." {
 		t.Errorf("after a failed add %+v", w)

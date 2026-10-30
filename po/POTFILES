@@ -111,4 +111,6 @@ ui/internal/window/date_groups.go
 ui/internal/window/calendar_detail.go
 ui/internal/window/event_editor_popovers.go
 ui/internal/window/preferences_calendar.go
+ui/internal/window/contacts_consent.go
+ui/internal/window/contacts_detail.go
 ui/internal/undo/text.go

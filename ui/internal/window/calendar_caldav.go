@@ -17,11 +17,13 @@ import (
 	"github.com/schotek/malachi/ui/internal/calendar"
 	"github.com/schotek/malachi/ui/internal/calendarctl"
 	"github.com/schotek/malachi/ui/internal/certtrust"
+	"github.com/schotek/malachi/ui/internal/contacts"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
-// The Add CalDAV Calendar sheet (docs/calendar.md §5.9, §6.5 G17;
+// The Add Calendar and Contacts (CalDAV/CardDAV) sheet (docs/calendar.md
+// §5.9, §6.5 G17, docs/plans/address-book.md A8;
 // caldav_sheet.blp) over calendarctl.CalDAVWizardController, the port of
 // CalDAVSheetController.swift and CalDAVBannerView.swift: an Adw.Dialog
 // of 560×560 with Account Name, Server Address, Username and Password (the
@@ -29,7 +31,10 @@ import (
 // back), Discover Calendars, the error as a card as wide as the fields,
 // the Certificate row with Trust Certificate… (the account assistant's
 // confirmation with the fingerprint), the found calendars with checkboxes
-// under the found line, the mail account for invitations, the footer
+// under the found line, the found address books (plain rows: which are
+// shown is chosen in Preferences → Contacts; calendar.Wizard.AddParams
+// turns the contacts on when there are any), the mail account for
+// invitations, the footer
 // note, Cancel / Add. The rules are the controller's; this file only
 // shows them. Everything from the server is plain text.
 
@@ -45,7 +50,9 @@ type caldavSheet struct {
 	serverChanged, calendarsHeading, found       *gtk.Label
 	footer                                       *gtk.Label
 	spinner                                      *gtk.Spinner
-	errorBox, calendarsBox                       *gtk.Box
+	errorBox, calendarsBox, booksBox             *gtk.Box
+	booksHeading                                 *gtk.Label
+	books                                        *gtk.ListBox
 	certificateList, calendars, mailList, fields *gtk.ListBox
 	certificate                                  *adw.ActionRow
 	mail                                         *adw.ComboRow
@@ -58,6 +65,7 @@ type caldavSheet struct {
 	shownCalendars []calendarctl.ListedCalendar
 	checks         []*gtk.CheckButton
 	shownMail      []calendarctl.MailAccount
+	shownBooks     []api.CardDAVAddressBook
 	mailBuilt      bool
 }
 
@@ -118,6 +126,9 @@ func (s *caldavSheet) bind(b *gtk.Builder) {
 	s.calendarsBox = get("caldav_calendars_box").(*gtk.Box)
 	s.certificateList = get("caldav_certificate_list").(*gtk.ListBox)
 	s.calendars = get("caldav_calendars").(*gtk.ListBox)
+	s.booksBox = get("caldav_books_box").(*gtk.Box)
+	s.booksHeading = get("caldav_books_heading").(*gtk.Label)
+	s.books = get("caldav_books").(*gtk.ListBox)
 	s.mailList = get("caldav_mail_list").(*gtk.ListBox)
 	s.fields = get("caldav_fields").(*gtk.ListBox)
 	s.certificate = get("caldav_certificate").(*adw.ActionRow)
@@ -129,7 +140,7 @@ func (s *caldavSheet) bind(b *gtk.Builder) {
 // texts sets the fixed texts (ui/internal/calendar/caldav.go).
 func (s *caldavSheet) texts() {
 	tr := i18n.Tr
-	s.dialog.SetTitle(calendar.CalDAVTitle(tr))
+	s.dialog.SetTitle(contacts.WizardTitle(tr))
 	s.subtitle.SetText(calendar.CalDAVSubtitle(tr))
 	s.name.SetTitle(calendar.CalDAVField(calendar.CalDAVName, tr))
 	s.server.SetTitle(calendar.CalDAVField(calendar.CalDAVServer, tr))
@@ -140,7 +151,8 @@ func (s *caldavSheet) texts() {
 	s.discover.SetLabel(calendar.DiscoverButton(tr))
 	s.certificate.SetTitle(calendar.CertificateLabel(tr))
 	s.trust.SetLabel(calendar.TrustButton(tr))
-	s.calendarsHeading.SetText(calendar.CalendarsHeading(tr))
+	s.calendarsHeading.SetText(contacts.CalendarsHeading(tr))
+	s.booksHeading.SetText(contacts.AddressBooksHeading(tr))
 	s.mail.SetTitle(calendar.MailAccountSetting(tr))
 	s.footer.SetText(calendar.CalDAVFooter(tr))
 	s.cancel.SetLabel(calendar.Cancel(tr))
@@ -249,6 +261,7 @@ func (s *caldavSheet) render() {
 	s.calendarsBox.SetVisible(w.Listed != nil)
 	s.found.SetText(calendar.FoundLine(w, tr))
 	s.renderCalendars(w.Phase == calendar.WizardListed)
+	s.renderBooks(w)
 
 	s.mailList.SetVisible(w.ShowsMailAccount())
 	s.renderMail(w)
@@ -276,6 +289,37 @@ func (s *caldavSheet) renderCalendars(enabled bool) {
 	for i, c := range listed {
 		s.checks[i].SetActive(c.Selected)
 		s.checks[i].SetSensitive(enabled)
+	}
+}
+
+// renderBooks lists the found address books when they changed.
+func (s *caldavSheet) renderBooks(w *calendar.Wizard) {
+	var books []api.CardDAVAddressBook
+	if w.Listed != nil {
+		books = w.Listed.AddressBooks
+	}
+	s.booksBox.SetVisible(len(books) > 0)
+	if slices.Equal(books, s.shownBooks) {
+		return
+	}
+	s.shownBooks = slices.Clone(books)
+	s.books.RemoveAll()
+	tr := i18n.Tr
+	for _, b := range books {
+		row := adw.NewActionRow()
+		row.SetUseMarkup(false)
+		name := contacts.Clean(b.Name, api.MaxContactFieldBytes)
+		if name == "" {
+			name = contacts.WindowTitle(tr)
+		}
+		row.SetTitle(name) // the server's text
+		if b.ReadOnly {
+			l := gtk.NewLabel(contacts.ReadOnly(tr))
+			l.SetUseMarkup(false)
+			l.AddCSSClass("dim-label")
+			row.AddSuffix(l)
+		}
+		s.books.Append(row)
 	}
 }
 
