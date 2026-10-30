@@ -170,7 +170,26 @@ public struct ContactConflictData: Codable, Sendable, Equatable {
     }
 }
 
+/// api.ContactFieldData: `error.data` of an `invalidArgument` from
+/// contact.create and contact.update naming the refused field of the card
+/// as a path relative to it ("emails[2].address", "name.given",
+/// "addresses[0]", "emails"); the message is not for display.
+public struct ContactFieldData: Codable, Sendable, Equatable {
+    public var field: String
+
+    public init(field: String) {
+        self.field = field
+    }
+}
+
 extension RPCError {
+    /// The refused field of an `invalidArgument`; nil for any other code
+    /// or data of another shape.
+    public var contactField: ContactFieldData? {
+        guard code == .invalidArgument else { return nil }
+        return contactsData(ContactFieldData.self)
+    }
+
     /// The data of a `contactsConsentRequired` error; nil for any other
     /// code or data of another shape.
     public var contactsConsentRequired: ContactsConsentRequiredData? {

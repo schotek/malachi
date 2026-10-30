@@ -177,6 +177,13 @@ public enum ContactBook {
         L10n.C("contacts", "Add")
     }
 
+    /// contacts.ContactAdded: confirms Add of the Add to Contacts popover.
+    public static var contactAdded: String {
+        // TRANSLATORS: a short confirmation after Add to Contacts saved the
+        // new contact.
+        L10n.T("Contact added")
+    }
+
     /// contacts.MoreDetails.
     public static var moreDetails: String { L10n.T("More Details…") }
 
@@ -243,6 +250,22 @@ public enum ContactBook {
             // TRANSLATORS: the button that loads the server's new version of a contact into the form.
             confirm: L10n.T("Reload"))
     }
+
+    /// contacts.DiscardQuestion: asked before a form with changes is left
+    /// (another contact or book selected, New Contact, the window closed).
+    public static var discardQuestion: Question {
+        Question(
+            heading: L10n.T("Discard Changes?"),
+            body: L10n.T("The changes to this contact have not been saved."),
+            // TRANSLATORS: the button that drops the unsaved changes of a
+            // contact.
+            confirm: L10n.T("Discard"),
+            destructive: true)
+    }
+
+    /// contacts.Copied: the toast after Copy (and after a phone number was
+    /// copied).
+    public static var copied: String { L10n.T("Copied to Clipboard") }
 
     /// contacts.ConsentBanner: a Microsoft account's sign-in lacks
     /// contacts access; `account` is its address.

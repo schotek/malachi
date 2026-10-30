@@ -422,6 +422,23 @@ private final class Questions {
         #expect(!c.editing && c.error == "")
     }
 
+    /// contact_test.go TestContactGraphLimitsAndRefusedField: a card of a
+    /// Microsoft book is checked against Graph's limits before anything is
+    /// sent; a field the daemon refuses is marked, not said.
+    @Test func graphLimitsAndRefusedField() async throws {
+        let (c, d, _, _, _) = try await setup(janaCard())
+        c.beginEdit()
+        c.updateForm { $0.urls = ["a.cz", "b.cz"].map { ContactBook.LabelledValue(value: $0) } }
+        c.save()
+        try await settle(c.options)
+        #expect(d.count(API.ContactUpdate.name) == 0 && c.problems.count == 1 && c.problems.first?.key == .urls)
+        c.updateForm { $0.urls = Array($0.urls.prefix(1)) }
+        d.fail(API.ContactUpdate.name, RPCError(code: .invalidArgument, message: "x", data: .object(["field": .string("phones[0].number")])))
+        c.save()
+        try await settle(c.options)
+        #expect(c.editing && c.error == "" && c.problems.count == 1 && c.problems.first?.key == .phones && c.problems.first?.index == 0)
+    }
+
     @Test func conflictReloadKeepsTheUsersFields() async throws {
         let (c, d, _, qs, _) = try await setup(janaCard())
         var server = janaCard()

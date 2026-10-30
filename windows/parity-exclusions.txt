@@ -211,3 +211,13 @@ A website must be an address starting with http:// or https://.	contacts: Window
 Enter a valid date.	contacts: Windows port pending (K5)
 Which address books complete recipients	gschema: a key's summary or description, for dconf editors, not the UI
 The address books of the account the message is written from (with the recently used addresses), or every address book; the scope of contact.search.	gschema: a key's summary or description, for dconf editors, not the UI
+Found through %s · %d address book	contacts: Windows port pending (K5)
+Contact added	contacts: Windows port pending (K5)
+Discard Changes?	contacts: Windows port pending (K5)
+The changes to this contact have not been saved.	contacts: Windows port pending (K5)
+Copied to Clipboard	contacts: Windows port pending (K5)
+A Microsoft 365 contact has at most %d email address.	contacts: Windows port pending (K5)
+A Microsoft 365 contact has one work, one home and one other address.	contacts: Windows port pending (K5)
+A Microsoft 365 contact has only one website.	contacts: Windows port pending (K5)
+The server did not accept the marked detail. Correct it and try again.	contacts: Windows port pending (K5)
+_Contacts	contacts: Windows port pending (K5)

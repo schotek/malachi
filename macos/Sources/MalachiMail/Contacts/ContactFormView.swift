@@ -134,8 +134,10 @@ final class ContactFormView: NSView, NSTextFieldDelegate, NSTextViewDelegate {
         return l
     }
 
-    private func textField(_ key: String, _ value: String, placeholder: String, write: @escaping (String) -> Edit) -> NSTextField {
-        let f = NSTextField(string: value)
+    private func textField(
+        _ key: String, _ value: String, placeholder: String, growing: Bool = false, write: @escaping (String) -> Edit
+    ) -> NSTextField {
+        let f = growing ? GrowingTextField(string: value) : NSTextField(string: value)
         f.placeholderString = placeholder
         f.font = Typo.body
         f.lineBreakMode = .byTruncatingTail
@@ -298,7 +300,8 @@ final class ContactFormView: NSView, NSTextFieldDelegate, NSTextViewDelegate {
     private func addressFields(_ i: Int) -> NSView {
         let a = form.addresses[i]
         func field(_ part: ContactBook.AddressPart, _ path: WritableKeyPath<ContactAddress, String>) -> NSTextField {
-            textField(Self.key(.addresses, i, "\(part)"), a[keyPath: path], placeholder: ContactBook.addressPlaceholder(part)) { v in
+            textField(Self.key(.addresses, i, "\(part)"), a[keyPath: path], placeholder: ContactBook.addressPlaceholder(part),
+                      growing: part == .street) { v in
                 { f in
                     if f.addresses.indices.contains(i) {
                         f.addresses[i][keyPath: path] = v
@@ -306,6 +309,7 @@ final class ContactFormView: NSView, NSTextFieldDelegate, NSTextViewDelegate {
                 }
             }
         }
+        // A street may have several lines (⌥↩ starts one).
         let street = field(.street, \.street)
         let postcode = field(.postcode, \.postcode)
         postcode.widthAnchor.constraint(equalToConstant: 90).isActive = true
@@ -500,6 +504,7 @@ final class ContactFormView: NSView, NSTextFieldDelegate, NSTextViewDelegate {
     // MARK: Edits
 
     func controlTextDidChange(_ obj: Foundation.Notification) {
+        (obj.object as? GrowingTextField)?.invalidateIntrinsicContentSize()
         guard let f = obj.object as? NSTextField, let key = f.identifier?.rawValue, let write = writers[key] else { return }
         onEdit?(write(f.stringValue))
     }
@@ -577,5 +582,44 @@ final class ContactFormView: NSView, NSTextFieldDelegate, NSTextViewDelegate {
 
     @objc private func delete(_ sender: Any?) {
         onDelete?()
+    }
+}
+
+/// A text field that wraps and grows with its lines (a street of several
+/// lines); ⌥↩ inserts a line break as in any AppKit text field.
+@MainActor
+final class GrowingTextField: NSTextField {
+    convenience init(string: String) {
+        self.init(frame: .zero)
+        stringValue = string
+        usesSingleLineMode = false
+        cell?.wraps = true
+        cell?.isScrollable = false
+        lineBreakMode = .byWordWrapping
+        isEditable = true
+        isBezeled = true
+    }
+
+    override var intrinsicContentSize: NSSize {
+        guard let cell, bounds.width > 0 else { return super.intrinsicContentSize }
+        var frame = bounds
+        frame.size.height = .greatestFiniteMagnitude
+        // While editing, the field editor holds the text being typed.
+        let text = currentEditor()?.string ?? stringValue
+        let measure = cell.copy() as? NSCell ?? cell
+        measure.stringValue = text.isEmpty ? " " : text
+        return NSSize(width: NSView.noIntrinsicMetric, height: ceil(measure.cellSize(forBounds: frame).height))
+    }
+
+    private var measuredWidth: CGFloat = 0
+
+    override func layout() {
+        super.layout()
+        // The height follows the width it wraps at; only a new width
+        // measures again (else every pass would ask for another).
+        if bounds.width != measuredWidth {
+            measuredWidth = bounds.width
+            invalidateIntrinsicContentSize()
+        }
     }
 }

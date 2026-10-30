@@ -271,7 +271,7 @@ public actor SampleContactsCaller: ContactsCaller {
             displayName: "Jana Nováková", org: "Stavby Novák s.r.o.", title: "Vedoucí nákupu",
             emails: [ContactEmail(label: .work, address: "jana.novakova@example.cz"), ContactEmail(label: .home, address: "jana@example.org")],
             phones: [ContactPhone(label: .mobile, number: "+420 601 234 567")],
-            addresses: [ContactAddress(label: .work, street: "Dlouhá 12", city: "Praha 1", postcode: "110 00")],
+            addresses: [ContactAddress(label: .work, street: "Dlouhá 12\nBudova B", city: "Praha 1", postcode: "110 00")],
             urls: [ContactURL(label: .work, url: "stavbynovak.example.cz")],
             birthday: ContactBirthday(month: 3, day: 14), note: "Volat po 10. hodině."))
         return out

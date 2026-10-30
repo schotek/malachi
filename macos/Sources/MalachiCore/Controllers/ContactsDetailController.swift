@@ -228,7 +228,12 @@ public final class ContactsDetailController {
 
     /// Done: the form validated, then created or updated on the server.
     public func save() {
-        guard let f = form, !saving else { return }
+        guard var f = form, !saving else { return }
+        // A Microsoft book's limits are checked before anything is sent.
+        if let b = account(f.book).book {
+            f.kind = b.kind
+            form = f
+        }
         problems = f.validate()
         if !problems.isEmpty {
             changed()
@@ -253,7 +258,7 @@ public final class ContactsDetailController {
                 self.saving = false
                 switch r {
                 case .failure(let e):
-                    self.error = self.options.errorMessage(e, account: acc)
+                    self.refused(e, account: acc)
                     self.changed()
                 case .success(let res):
                     var cur = self.formGen == token ? self.form ?? f : f
@@ -290,10 +295,21 @@ public final class ContactsDetailController {
         changed()
     }
 
+    /// contactsctl.refused: a card the daemon refused for one field marks
+    /// that field (`ContactBook.problemOf`), anything else is the sentence.
+    private func refused(_ e: any Error, account acc: String) {
+        if let p = ContactBook.problemOf(e) {
+            error = ""
+            problems = [p]
+            return
+        }
+        error = options.errorMessage(e, account: acc)
+    }
+
     /// Keeps the form: a conflict asks for Reload, anything else shows its
     /// sentence.
     private func saveFailed(_ e: any Error, account acc: String, original: ContactID, token: Int) {
-        error = options.errorMessage(e, account: acc)
+        refused(e, account: acc)
         guard ContactsOptions.asRPCError(e).code == .contactConflict else {
             changed()
             return

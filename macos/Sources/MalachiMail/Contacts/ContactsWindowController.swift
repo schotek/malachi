@@ -306,8 +306,8 @@ final class ContactsWindowController: NSWindowController, NSWindowDelegate, NSTo
         }
     }
 
-    /// Runs `go` when no unsaved form is in the way, else after "Unsaved
-    /// changes" answered with Discard (the form closes unsaved).
+    /// Runs `go` when no unsaved form is in the way, else after "Discard
+    /// Changes?" answered with Discard (the form closes unsaved).
     func confirmLeaving(_ go: @escaping @MainActor () -> Void, cancelled: (@MainActor () -> Void)? = nil) {
         guard detail.dirty else {
             go()
@@ -315,9 +315,7 @@ final class ContactsWindowController: NSWindowController, NSWindowDelegate, NSTo
         }
         Task { @MainActor [weak self] in
             guard let self else { return }
-            let discard = await self.contacts.state.alerts.confirmDestructive(
-                on: self.window, heading: L10n.T("Unsaved changes"), body: L10n.T("If you don’t save, your changes are lost."),
-                confirmLabel: L10n.T("Discard"))
+            let discard = await self.ask(ContactBook.discardQuestion)
             if discard {
                 self.detail.cancelEdit()
                 go()

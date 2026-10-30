@@ -70,6 +70,9 @@ extension ContactBook {
         public internal(set) var original = ContactCard()
         /// Done creates (contact.create in `book`).
         public internal(set) var isNew = false
+        /// The kind of `book` (the controller sets it before `validate`): a
+        /// Microsoft book has Graph's limits (`graphMaxEmails`).
+        public var kind: AddressBookKind = ""
         private var base: Snapshot
 
         private init(book: AddressBookID?, isNew: Bool) {
@@ -391,6 +394,43 @@ extension ContactBook {
             if c.note.utf8.count > API.Limits.maxContactNoteBytes {
                 out.append(Problem(key: .note, text: long))
             }
+            if kind == .graph {
+                out += graphProblems()
+            }
+            return out
+        }
+
+        /// contacts.Form.graphProblems: the rows a Microsoft contact cannot
+        /// hold; `index` is the row of the form (empty rows are not
+        /// counted, as `card` leaves them out).
+        func graphProblems() -> [Problem] {
+            var out: [Problem] = []
+            var n = 0
+            for (i, r) in emails.enumerated() where !trimSpace(r.value).isEmpty {
+                n += 1
+                if n == graphMaxEmails + 1 {
+                    out.append(Problem(key: .emails, index: i, text: L10n.N(
+                        // TRANSLATORS: Microsoft 365 is a brand.
+                        "A Microsoft 365 contact has at most %d email address.",
+                        "A Microsoft 365 contact has at most %d email addresses.", graphMaxEmails, graphMaxEmails)))
+                }
+            }
+            var slots = Set<ContactLabel>()
+            for (i, a) in addresses.enumerated() where !Form.emptyAddress(Form.trimAddress(a)) {
+                let slot: ContactLabel = a.label == .work || a.label == .home ? a.label : .other
+                if slots.contains(slot) {
+                    out.append(Problem(key: .addresses, index: i,
+                                       text: L10n.T("A Microsoft 365 contact has one work, one home and one other address.")))
+                }
+                slots.insert(slot)
+            }
+            n = 0
+            for (i, r) in urls.enumerated() where !trimSpace(r.value).isEmpty {
+                n += 1
+                if n == 2 {
+                    out.append(Problem(key: .urls, index: i, text: L10n.T("A Microsoft 365 contact has only one website.")))
+                }
+            }
             return out
         }
     }
@@ -525,6 +565,47 @@ extension ContactBook {
             self.index = index
             self.text = text
         }
+    }
+
+    /// contacts.GraphMaxEmails: Graph's limit of a Microsoft contact's
+    /// e-mail addresses (one postal address each of work, home and other,
+    /// one website).
+    public static let graphMaxEmails = 3
+
+    /// contacts.ProblemOf: the field of a refused card from the daemon's
+    /// `invalidArgument` (`ContactFieldData`, a path in the card such as
+    /// "emails[2].address", "name.given" or "emails"), marked with
+    /// `refusedText` (index nil for a whole list or a field without rows);
+    /// nil for another error, no field or one the form does not have. The
+    /// message is never read.
+    public static func problemOf(_ error: (any Error)?) -> Problem? {
+        guard let path = (error as? RPCError)?.contactField?.field, !path.isEmpty else { return nil }
+        var head = path.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
+        var index: Int?
+        if let open = head.firstIndex(of: "[") {
+            let rest = head[head.index(after: open)...]
+            guard rest.hasSuffix("]"), let n = Int(rest.dropLast()), n >= 0 else { return nil }
+            head = String(head[..<open])
+            index = n
+        }
+        let keys: [String: FieldKey] = [
+            "emails": .emails, "phones": .phones, "addresses": .addresses, "urls": .urls,
+            "nickname": .nickname, "org": .org, "title": .title, "note": .note,
+            "birthday": .birthday, "displayName": .given,
+        ]
+        var key = keys[head]
+        if head == "name" {
+            let parts: [String: FieldKey] = ["given": .given, "family": .family, "middle": .middle, "prefix": .prefix, "suffix": .suffix]
+            let part = path.split(separator: ".", maxSplits: 1).dropFirst().first.map(String.init) ?? ""
+            key = parts[part]
+        }
+        guard let key else { return nil }
+        return Problem(key: key, index: index, text: refusedText)
+    }
+
+    /// contacts.RefusedText: the sentence over the field the server refused.
+    public static var refusedText: String {
+        L10n.T("The server did not accept the marked detail. Correct it and try again.")
     }
 
     /// contacts.ValidEmail: a bare e-mail address (no name, no angle

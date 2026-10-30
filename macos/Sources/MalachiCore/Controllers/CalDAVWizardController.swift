@@ -131,12 +131,6 @@ public final class CalDAVWizardController {
         changed()
     }
 
-    /// Sync Contacts of the Address Books section.
-    public func setContacts(_ on: Bool) {
-        wizard.setContacts(on)
-        changed()
-    }
-
     public func setMailAccount(_ id: AccountID?) {
         mailAccountChosen = true
         wizard.setMailAccount(id)

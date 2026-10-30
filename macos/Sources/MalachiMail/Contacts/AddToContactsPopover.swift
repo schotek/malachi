@@ -206,6 +206,7 @@ final class AddToContactsPopover: NSViewController, NSPopoverDelegate, NSTextFie
         contacts.lookup.invalidate()
         contacts.refresh()
         popover.close()
+        contacts.state.toasts.show(ContactBook.contactAdded)
     }
 
     @objc private func moreDetails(_ sender: Any?) {

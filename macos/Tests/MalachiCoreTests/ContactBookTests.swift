@@ -335,6 +335,57 @@ private let english = ContactBook.englishStrftime
         #expect(f.validate().isEmpty, "an address alone is enough")
     }
 
+    /// form_test.go TestValidateGraphLimits: a Microsoft book holds at most
+    /// 3 e-mail addresses, one address per slot (other and custom labels
+    /// share one) and one website; the problem names the first row over,
+    /// counting only filled rows. Other books do not have these limits.
+    @Test func validateGraphLimits() {
+        var f = ContactBook.Form.new(book: "b")
+        f.given = "Jana"
+        f.emails = ["a@b.cz", "", "c@b.cz", "d@b.cz", "e@b.cz"].map { ContactBook.LabelledValue(value: $0) }
+        f.addresses = [ContactAddress(label: .work, city: "A"), ContactAddress(label: "custom", city: "B"),
+                       ContactAddress(city: "C"), ContactAddress(label: .home, city: "D")]
+        f.urls = ["a.cz", "b.cz"].map { ContactBook.LabelledValue(value: $0) }
+        #expect(f.validate().isEmpty, "a CardDAV book")
+        f.kind = .graph
+        var got: [ContactBook.FieldKey: Int?] = [:]
+        for p in f.validate() {
+            #expect(got[p.key] == nil, "two problems of \(p.key)")
+            got[p.key] = p.index
+        }
+        #expect(got == [.emails: 4, .addresses: 2, .urls: 1])
+        f.emails = Array(f.emails.prefix(4))
+        f.addresses = Array(f.addresses.prefix(2))
+        f.urls = Array(f.urls.prefix(1))
+        #expect(f.validate().isEmpty, "within the limits")
+    }
+
+    /// form_test.go TestProblemOf: the field from the error's data; the
+    /// message is never read, and anything it cannot read is no problem.
+    @Test func problemOf() {
+        func inv(_ field: String) -> RPCError {
+            RPCError(code: .invalidArgument, message: "card.org: misleading", data: .object(["field": .string(field)]))
+        }
+        let cases: [(String, ContactBook.FieldKey, Int?)] = [
+            ("emails[2].address", .emails, 2), ("emails", .emails, nil), ("addresses[1]", .addresses, 1),
+            ("phones[0].label", .phones, 0), ("name.family", .family, nil), ("urls", .urls, nil), ("note", .note, nil),
+            ("title", .title, nil),
+        ]
+        for (field, key, index) in cases {
+            let p = ContactBook.problemOf(inv(field))
+            #expect(p?.key == key && p?.index == index && p?.text == ContactBook.refusedText, "\(field)")
+        }
+        let bad: [(any Error)?] = [
+            nil, RPCError(code: .invalidArgument, message: "card.org: no data"),
+            RPCError(code: .offline, message: "x", data: .object(["field": .string("org")])),
+            RPCError(code: .invalidArgument, message: "x", data: .string("org")),
+            inv(""), inv("card.org"), inv("colour"), inv("emails[x].address"), inv("emails[-1]"), inv("emails[2"), inv("name.nick"),
+        ]
+        for e in bad {
+            #expect(ContactBook.problemOf(e) == nil)
+        }
+    }
+
     @Test func rebaseKeepsTheUsersChanges() {
         var f = ContactBook.Form.edit(contactBookCard())
         f.title = "Ředitelka"

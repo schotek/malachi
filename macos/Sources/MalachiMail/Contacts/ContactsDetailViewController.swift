@@ -217,6 +217,7 @@ final class ContactsDetailViewController: NSViewController {
             guard !text.isEmpty else { return }
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
+            w.toast(ContactBook.copied)
         case .edit:
             w.detail.beginEdit()
             form?.focus(ContactFormView.key(.given, nil))
