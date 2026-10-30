@@ -1,0 +1,18 @@
+BEGIN:VCARD
+VERSION:4.0
+PRODID:-//Sabre//Sabre VObject 4.5.4//EN
+UID:urn:uuid:6f1b9a42-1111-4222-8333-944455556666
+FN:Petr Dvořák
+N:Dvořák;Petr;;;
+ORG:Firma;Oddělení
+EMAIL;TYPE=work;PREF=1:petr@firma.example
+EMAIL;TYPE=home:petr@doma.example
+TEL;VALUE=uri;TYPE="cell,voice":tel:+420-601-222-333
+TEL;TYPE=fax,work:+420 222 999 888
+ADR;TYPE=home;LABEL="Na Příkopě 1\nPraha":;;Na Příkopě 1;Praha;;110 00;CZ
+URL;TYPE=work:https://firma.example
+BDAY:--0229
+NOTE:4.0 karta
+REV:20260901T100000Z
+X-NEXTCLOUD-CUSTOM;X-PARAM=a:b
+END:VCARD

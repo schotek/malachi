@@ -1,0 +1,15 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:First
+AGENT:BEGIN:VCARD
+BEGIN:VCARD
+FN:Nested
+EMAIL:nested@example.org
+END:VCARD
+EMAIL:first@example.org
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Second
+EMAIL:second@example.org
+END:VCARD

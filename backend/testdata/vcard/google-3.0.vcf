@@ -1,0 +1,19 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:John Smith
+N:Smith;John;;;
+EMAIL;TYPE=INTERNET;TYPE=HOME:john@gmail.example
+EMAIL;TYPE=INTERNET;TYPE=WORK:john.smith@corp.example
+TEL;TYPE=CELL:(555) 123-4567
+TEL;TYPE=WORK:+1 555 765 4321
+ADR;TYPE=WORK:;;1600 Amphitheatre Pkwy;Mountain View;CA;94043;USA
+ORG:Corp Inc.
+TITLE:Engineer
+BDAY:1980-07-04
+item1.URL:http\://john.example.com
+item1.X-ABLabel:blog
+item2.TEL:+1 555 000 1111
+item2.X-ABLabel:Pager
+NOTE:Met at the conference.
+CATEGORIES:myContacts,Friends
+END:VCARD
