@@ -756,6 +756,30 @@ public sealed partial class ContactsWindow : Window
         }
     }
 
+    /// <summary>
+    /// Quit's step (QuitSteps.ContactForm): with an unsaved form the window
+    /// comes to the front and asks "Discard Changes?"; Discard closes the
+    /// form unsaved (true, the Quit goes on), Cancel keeps it (false, the
+    /// Quit is abandoned). Without one, true at once.
+    /// </summary>
+    internal async Task<bool> ConfirmQuitAsync()
+    {
+        if (closed || !detail.Dirty)
+        {
+            return true;
+        }
+        WindowPresenter.Present(this);
+        if (!await AskAsync(ContactsText.DiscardQuestion))
+        {
+            return false;
+        }
+        if (!closed)
+        {
+            detail.CancelEdit();
+        }
+        return true;
+    }
+
     // A question of the window or the detail controller: Delete and Discard
     // as destructive dialogs with Cancel the default, the conflict with
     // Reload the default.

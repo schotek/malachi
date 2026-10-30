@@ -24,9 +24,8 @@
 // the open one and the view edits it through
 // ContactsDetailController.UpdateForm. Problem.Index is null where Go has
 // -1. A street of several lines keeps its line breaks (only its ends are
-// trimmed). ProblemOf reads the daemon's data.field
-// (ContactFieldData, docs/api.md §4.19) first and Go's message path only
-// when the data is absent.
+// trimmed). ProblemOf reads only the daemon's data.field
+// (ContactFieldData, docs/api.md §4.19), never the message.
 
 using System;
 using System.Collections.Generic;
@@ -737,35 +736,21 @@ public static partial class ContactBook
     /// contacts.ProblemOf: the field of a card the daemon refused, from its
     /// invalidArgument: the path of <c>data.field</c>
     /// (<see cref="ContactFieldData"/>, relative to the card:
-    /// "emails[2].address", "name.given", "emails"), else the path the
-    /// message starts with ("card.emails[2].address: …"). The problem marks
-    /// that field (null index for a whole list or a field without rows) with
-    /// <see cref="RefusedText"/>; null when the error is another or names no
-    /// field the form has (the caller then says <see cref="ContactsText.ErrorText"/>).
+    /// "emails[2].address", "name.given", "emails"; docs/api.md §4.19). The
+    /// problem marks that field (null index for a whole list or a field
+    /// without rows) with <see cref="RefusedText"/>; null when the error is
+    /// another, has no field or names one the form does not have (the caller
+    /// then says <see cref="ContactsText.ErrorText"/>). The message is never
+    /// read.
     /// </summary>
     public static Problem? ProblemOf(Exception? error) => ProblemOf(RpcErrorText.DaemonError(error));
 
     /// <summary><see cref="ProblemOf(Exception?)"/> of the daemon's error object.</summary>
     public static Problem? ProblemOf(RpcError? e)
     {
-        if (e is null || e.Code != ErrorCode.InvalidArgument)
+        if (e is null || e.Code != ErrorCode.InvalidArgument || FieldOf(e) is not { Length: > 0 } path)
         {
             return null;
-        }
-        string path;
-        if (FieldOf(e) is { Length: > 0 } field)
-        {
-            path = field.StartsWith("card.", StringComparison.Ordinal) ? field["card.".Length..] : field;
-        }
-        else
-        {
-            var colon = e.Message.IndexOf(':', StringComparison.Ordinal);
-            var head0 = colon < 0 ? "" : TrimSpace(e.Message[..colon]);
-            if (colon < 0 || !head0.StartsWith("card.", StringComparison.Ordinal))
-            {
-                return null;
-            }
-            path = head0["card.".Length..];
         }
         var dot = path.IndexOf('.', StringComparison.Ordinal);
         var head = dot < 0 ? path : path[..dot];

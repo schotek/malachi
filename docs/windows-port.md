@@ -4172,9 +4172,16 @@ Tests: Core `ContactsControllerTests.SignInAsksForTheContactsScope`,
 `ShortcutMapTests.TheContactsWindowSearchesAndClosesWithCtrlWButNeverEscape`,
 `SuggestionsControllerTests.ASynchronisedBooksTooltipNamesTheBookAccountOnlyForItsRows`;
 UI smoke `ContactsSmokeTests` over the samples (`ContactsSmokeFixture`).
-Not done: Quit does not ask before an unsaved contact form goes; the
-detail's phone numbers are copied only (no dialling, as macOS); dark theme,
-other display scales, touch, Narrator over the form and ARM64 by hand.
+Quit asks an unsaved contact form "Discard Changes?" right after the
+board's replies (`QuitSteps.ContactForm`, `AppContacts.ConfirmQuitAsync`;
+a contact is written only to its server, so nothing is kept for later):
+Cancel abandons the Quit, a session end does not ask
+(`QuitSequenceTests.AnUnsavedContactFormAsksAfterTheBoardAndItsCancelAbandonsTheQuit`).
+The detail's card of rows takes its brushes from a style with
+`ThemeResource` (`ContactsDetailCard`), so it follows the window's
+`color-scheme`. Not done: the detail's phone numbers are copied only (no
+dialling, as macOS); below about 400 DIP the `TitleBar` hides the search
+box; other display scales, touch, Narrator over the form and x64 by hand.
 
 ## 12. Tests
 

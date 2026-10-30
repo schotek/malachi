@@ -545,7 +545,7 @@ public sealed class ContactsControllerTests
         await h.SettleAsync();
         Assert.Equal(0, h.Daemon.Count(API.ContactUpdate.Name));
         Assert.Equal(ContactBook.FieldKey.Urls, Assert.Single(c.Problems).Key);
-        h.Daemon.Fail(API.ContactUpdate.Name, new RpcError { Code = ErrorCode.InvalidArgument, Message = "card.phones[0].number: empty" });
+        h.Daemon.Fail(API.ContactUpdate.Name, Err(ErrorCode.InvalidArgument, new ContactFieldData { Field = "phones[0].number" }));
         await h.Run(() =>
         {
             c.UpdateForm(f => f.Urls = [.. f.Urls.Take(1)]);

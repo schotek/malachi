@@ -204,6 +204,66 @@ public sealed class QuitSequenceTests
         Assert.Equal(["replies", "replies", "save", "exit"], log);
     }
 
+    /// <summary>
+    /// The Contacts window's unsaved form asks after the board's replies and
+    /// before the drafts: Cancel abandons the Quit (the board shows its
+    /// replies again), Discard goes on.
+    /// </summary>
+    [Fact]
+    public async Task AnUnsavedContactFormAsksAfterTheBoardAndItsCancelAbandonsTheQuit()
+    {
+        var log = new List<string>();
+        var discard = false;
+        var quit = new QuitSequence(new QuitSteps
+        {
+            BoardReplies = () =>
+            {
+                log.Add("replies");
+                return Task.FromResult(true);
+            },
+            ContactForm = () =>
+            {
+                log.Add("contact");
+                return Task.FromResult(discard);
+            },
+            SaveDrafts = () =>
+            {
+                log.Add("save");
+                return Task.FromResult<IReadOnlyList<IComposeWindowHandle>>([]);
+            },
+            Abandoned = () => log.Add("abandoned"),
+            Exit = () => log.Add("exit"),
+        });
+        Assert.False(await quit.QuitAsync());
+        Assert.False(quit.IsQuitting);
+        Assert.Equal(["replies", "contact", "abandoned"], log);
+        discard = true;
+        Assert.True(await quit.QuitAsync());
+        Assert.Equal(["replies", "contact", "abandoned", "replies", "contact", "save", "exit"], log);
+    }
+
+    [Fact]
+    public async Task ASessionEndDoesNotWaitForTheContactFormsQuestion()
+    {
+        var question = new TaskCompletionSource<bool>();
+        var log = new List<string>();
+        var quit = new QuitSequence(new QuitSteps
+        {
+            ContactForm = () => question.Task,
+            SaveDrafts = () =>
+            {
+                log.Add("save");
+                return Task.FromResult<IReadOnlyList<IComposeWindowHandle>>([]);
+            },
+            Exit = () => log.Add("exit"),
+        });
+        var user = quit.QuitAsync();
+        Assert.True(await quit.QuitAsync(QuitReason.SessionEnd));
+        question.SetResult(true);
+        Assert.True(await user);
+        Assert.Equal(["exit"], log);
+    }
+
     [Fact]
     public async Task ASessionEndDoesNotWaitForTheBoardsQuestion()
     {

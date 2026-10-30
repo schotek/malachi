@@ -24,6 +24,15 @@ public sealed record QuitSteps
     public Func<Task<bool>>? BoardReplies { get; init; }
 
     /// <summary>
+    /// After the board's replies: the Contacts window's unsaved form asks
+    /// "Discard Changes?" (ContactsText.DiscardQuestion; a contact is written
+    /// only to its server, so nothing can be saved for later); true goes on
+    /// with the form discarded, false (Cancel) abandons the Quit. Never at a
+    /// session end.
+    /// </summary>
+    public Func<Task<bool>>? ContactForm { get; init; }
+
+    /// <summary>
     /// A session end's settle of the board's inline replies, without a
     /// question: what can be saved is saved while the connection stands,
     /// and nothing waits for the user. The sequence waits for it at most

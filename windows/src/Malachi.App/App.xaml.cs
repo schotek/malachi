@@ -184,6 +184,8 @@ public partial class App : Application
                 SettleBoardReplies = main.SettleBoardRepliesAsync,
                 // A Quit the user abandoned: the board shows its replies again.
                 Abandoned = main.QuitAbandoned,
+                // The Contacts window's unsaved form: Discard or Cancel the Quit.
+                ContactForm = () => s.Contacts.ConfirmQuitAsync(),
                 // The compose windows save their drafts; an event editor with
                 // changes cannot save without asking (Save sends invitations),
                 // so it is asked its close question with the drafts that failed.

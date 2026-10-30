@@ -107,6 +107,9 @@ public sealed partial class AppContacts : IDisposable
     /// <summary>The open Contacts window, if any.</summary>
     internal ContactsWindow? Window => window;
 
+    /// <summary>Quit's step: the Contacts window's unsaved form asks first (false: Cancel, the Quit is abandoned).</summary>
+    public Task<bool> ConfirmQuitAsync() => window?.ConfirmQuitAsync() ?? Task.FromResult(true);
+
     /// <summary>Lists the accounts and the books again (the chips choose between Show Contact and Add to Contacts… from them).</summary>
     public void Refresh() => _ = RefreshAsync();
 

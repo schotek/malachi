@@ -6,7 +6,8 @@
 // the open directory, then terminate); GTK: ui/main.go (ConnectShutdown:
 // sweep, rpc.Close, sup.Stop). The Windows addition of docs/windows-port.md
 // §0 comes first: the board's inline replies settle (and may ask whether
-// to quit without one), then Quit saves the dirty drafts of every compose window
+// to quit without one), the Contacts window's unsaved form asks whether to
+// discard it, then Quit saves the dirty drafts of every compose window
 // (ComposeController.SaveForQuitAsync) and asks the close question only of
 // the windows whose save failed; a Cancel there abandons the Quit, as a
 // Cancel of the same question abandons a window's close. After that
@@ -116,6 +117,20 @@ public sealed partial class QuitSequence
             if (phase != Phase.Saving)
             {
                 // A session end overtook the board's question.
+                return await Stop();
+            }
+            if (steps.ContactForm is { } form && !await form())
+            {
+                if (phase == Phase.Saving)
+                {
+                    LogContactFormKept(logger);
+                    return Abandon();
+                }
+                return await Stop();
+            }
+            if (phase != Phase.Saving)
+            {
+                // A session end overtook the contact form's question.
                 return await Stop();
             }
             IReadOnlyList<IComposeWindowHandle> failed = steps.SaveDrafts is { } save ? await save() : [];
@@ -248,6 +263,9 @@ public sealed partial class QuitSequence
 
     [LoggerMessage(Level = LogLevel.Information, Message = "quit abandoned: a reply on the board stays")]
     private static partial void LogBoardRepliesKept(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "quit abandoned: a contact's form stays open")]
+    private static partial void LogContactFormKept(ILogger logger);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "quit abandoned: a compose window stays open")]
     private static partial void LogAbandoned(ILogger logger);

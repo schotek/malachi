@@ -208,52 +208,53 @@ public sealed class ContactBookFormTests
     }
 
     /// <summary>
-    /// form_test.go TestProblemOf: the field from the daemon's message, or
-    /// from its data.field (docs/api.md §4.19); anything it cannot read is no
-    /// problem (the sentence is said instead).
+    /// form_test.go TestProblemOf: the field from the error's data.field
+    /// (docs/api.md §4.19); the message is never read (here it names another
+    /// field), and anything it cannot read is no problem (the sentence is said
+    /// instead).
     /// </summary>
     [Theory]
-    [InlineData("card.emails[2].address: not an e-mail address", Key.Emails, 2)]
-    [InlineData("card.emails: a Microsoft contact has at most 3 e-mail addresses", Key.Emails, null)]
-    [InlineData("card.addresses[1]: a Microsoft contact has one work address", Key.Addresses, 1)]
-    [InlineData("card.phones[0].label: over 64 bytes", Key.Phones, 0)]
-    [InlineData("card.name.family: over 256 bytes", Key.Family, null)]
-    [InlineData("card.urls: a Microsoft contact has one web address", Key.Urls, null)]
-    [InlineData("card.note: not UTF-8", Key.Note, null)]
-    public void ProblemOfMessage(string message, Key key, int? index)
-    {
-        var p = ContactBook.ProblemOf(new RpcError { Code = ErrorCode.InvalidArgument, Message = message });
-        Assert.Equal(new ContactBook.Problem(key, index, ContactBook.RefusedText), p);
-        Assert.Equal("The server did not accept the marked detail. Correct it and try again.", ContactBook.RefusedText);
-    }
-
-    [Theory]
     [InlineData("emails[2].address", Key.Emails, 2)]
-    [InlineData("name.given", Key.Given, null)]
-    [InlineData("addresses[0]", Key.Addresses, 0)]
     [InlineData("emails", Key.Emails, null)]
-    [InlineData("card.urls[1].url", Key.Urls, 1)]
+    [InlineData("addresses[1]", Key.Addresses, 1)]
+    [InlineData("phones[0].label", Key.Phones, 0)]
+    [InlineData("name.family", Key.Family, null)]
+    [InlineData("name.given", Key.Given, null)]
+    [InlineData("urls", Key.Urls, null)]
+    [InlineData("note", Key.Note, null)]
+    [InlineData("title", Key.Title, null)]
     public void ProblemOfData(string field, Key key, int? index)
     {
-        var data = JsonSerializer.SerializeToElement(new ContactFieldData { Field = field }, ApiJsonContext.Wire.ContactFieldData);
-        var e = new RpcException(new RpcError { Code = ErrorCode.InvalidArgument, Message = "not for display", Data = data });
+        var e = new RpcException(Inv(field));
         Assert.Equal(new ContactBook.Problem(key, index, ContactBook.RefusedText), ContactBook.ProblemOf(e));
+        Assert.Equal("The server did not accept the marked detail. Correct it and try again.", ContactBook.RefusedText);
     }
 
     [Fact]
     public void ProblemOfNothing()
     {
-        static RpcError Inv(string m) => new() { Code = ErrorCode.InvalidArgument, Message = m };
         foreach (var e in new[]
         {
-            null, new RpcError { Code = ErrorCode.Offline, Message = "card.org: x" }, Inv("bookId: unknown"), Inv("card.colour: x"),
-            Inv("card.emails[x].address: y"), Inv("card.emails[-1]: y"), Inv("card.emails[2: y"), Inv("card.name.nick: y"), Inv("no colon"),
+            null,
+            new RpcError { Code = ErrorCode.InvalidArgument, Message = "card.org: no data" },
+            new RpcError { Code = ErrorCode.Offline, Data = JsonSerializer.SerializeToElement(new ContactFieldData { Field = "org" }, ApiJsonContext.Wire.ContactFieldData) },
+            new RpcError { Code = ErrorCode.InvalidArgument, Data = JsonSerializer.SerializeToElement("org") },
+            Inv(""), Inv("card.org"), Inv("colour"), Inv("emails[x].address"), Inv("emails[-1]"), Inv("emails[2"), Inv("name.nick"),
         })
         {
             Assert.Null(ContactBook.ProblemOf(e));
         }
         Assert.Null(ContactBook.ProblemOf((System.Exception?)null));
     }
+
+    // An invalidArgument naming field in its data, with a message that
+    // names another (never read).
+    private static RpcError Inv(string field) => new()
+    {
+        Code = ErrorCode.InvalidArgument,
+        Message = "card.org: misleading",
+        Data = JsonSerializer.SerializeToElement(new ContactFieldData { Field = field }, ApiJsonContext.Wire.ContactFieldData),
+    };
 
     /// <summary>A street of several lines keeps its line breaks in the form and the card; only its ends are trimmed.</summary>
     [Fact]
