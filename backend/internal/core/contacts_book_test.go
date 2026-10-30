@@ -6,6 +6,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -395,6 +396,15 @@ func TestContactCardValidation(t *testing.T) {
 		_, err := checkContactCard(c)
 		if errCode(t, err) != api.CodeInvalidArgument || !strings.Contains(err.Error(), strings.SplitN(want, ":", 2)[0]) {
 			t.Errorf("%s: %v", want, err)
+			continue
+		}
+		path := strings.TrimPrefix(strings.Fields(strings.SplitN(want, ":", 2)[0])[0], "card.")
+		var e *api.Error
+		if path == "card" {
+			continue // no single field to mark
+		}
+		if !errors.As(err, &e) || e.Data != (api.ContactFieldData{Field: path}) {
+			t.Errorf("%s: data %#v, want field %q", want, e.Data, path)
 		}
 	}
 	// A birthday without a year may be 29 February.

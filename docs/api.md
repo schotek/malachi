@@ -4799,7 +4799,11 @@ model, and a Microsoft address's own name). A Microsoft
 contact holds at most 3 e-mail addresses, one postal address each of
 `work`, `home` and other (any other label), one web address, and phones
 as business, home and one mobile (other labels become business phones);
-more is invalidArgument naming the field. A birthday without a year is
+more is invalidArgument naming the field. Every invalidArgument that
+refuses one field of the card carries `data` = `{ "field": path }`, the
+path relative to the card (`emails[2].address`, `name.given`,
+`addresses[0]`, `emails` for the whole list); clients mark that field
+and never parse `message`. A birthday without a year is
 stored on Graph with the year 1604 and read back without one.
 
 #### `contact.delete`

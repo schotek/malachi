@@ -698,7 +698,7 @@ func vcardToGraph(card *vcard.Card) (graph.ContactFields, error) {
 		PersonalNotes: c.Note,
 	}
 	if len(c.Emails) > graph.MaxContactEmails {
-		return f, api.NewError(api.CodeInvalidArgument, "card.emails: a Microsoft contact has at most %d e-mail addresses", graph.MaxContactEmails)
+		return f, cardFieldError("emails", "a Microsoft contact has at most %d e-mail addresses", graph.MaxContactEmails)
 	}
 	for _, e := range c.Emails {
 		f.Emails = append(f.Emails, graph.ContactEmail{Address: e.Address})
@@ -714,7 +714,7 @@ func vcardToGraph(card *vcard.Card) (graph.ContactFields, error) {
 		}
 	}
 	if len(f.HomePhones) > graph.MaxContactPhones || len(f.BusinessPhones) > graph.MaxContactPhones {
-		return f, api.NewError(api.CodeInvalidArgument, "card.phones: a Microsoft contact has at most %d numbers of a kind", graph.MaxContactPhones)
+		return f, cardFieldError("phones", "a Microsoft contact has at most %d numbers of a kind", graph.MaxContactPhones)
 	}
 	set := map[string]bool{}
 	for i, a := range c.Addresses {
@@ -725,7 +725,7 @@ func vcardToGraph(card *vcard.Card) (graph.ContactFields, error) {
 			slot = a.Label
 		}
 		if set[slot] {
-			return f, api.NewError(api.CodeInvalidArgument, "card.addresses[%d]: a Microsoft contact has one %s address", i, slot)
+			return f, cardFieldError(fmt.Sprintf("addresses[%d]", i), "a Microsoft contact has one %s address", slot)
 		}
 		set[slot] = true
 		switch slot {
@@ -742,7 +742,7 @@ func vcardToGraph(card *vcard.Card) (graph.ContactFields, error) {
 	case 1:
 		f.BusinessHomePage = c.URLs[0].URL
 	default:
-		return f, api.NewError(api.CodeInvalidArgument, "card.urls: a Microsoft contact has one web address")
+		return f, cardFieldError("urls", "a Microsoft contact has one web address")
 	}
 	if b := c.Birthday; !b.IsZero() {
 		y := b.Year

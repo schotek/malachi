@@ -632,12 +632,20 @@ func (s *addressBookService) Lookup(ctx context.Context, p api.ContactLookupPara
 
 // --- contact.create, contact.update, contact.delete --------------------------------
 
+// cardFieldError is invalidArgument refusing one field of a card, with the
+// field's path in Error.Data (api.ContactFieldData) and in the message.
+func cardFieldError(field, format string, args ...any) *api.Error {
+	e := api.NewError(api.CodeInvalidArgument, "card.%s: %s", field, fmt.Sprintf(format, args...))
+	e.Data = api.ContactFieldData{Field: field}
+	return e
+}
+
 // checkContactCard validates a card of contact.create or contact.update
 // against the API's limits and turns it into the model; every failure is
 // invalidArgument naming the field (card.emails[2].address).
 func checkContactCard(c api.ContactCard) (*vcard.Card, error) {
 	bad := func(field, format string, args ...any) error {
-		return api.NewError(api.CodeInvalidArgument, "card.%s: %s", field, fmt.Sprintf(format, args...))
+		return cardFieldError(field, format, args...)
 	}
 	text := func(field, v string, max int) error {
 		switch {

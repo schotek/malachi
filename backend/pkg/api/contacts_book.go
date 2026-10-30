@@ -136,6 +136,15 @@ type ContactsConsentRequiredData struct {
 
 // ContactConflictData is Error.Data of contactConflict: the server's
 // current version of the contact, as contact.get returns it.
+// ContactFieldData is the Error.Data of an invalidArgument from
+// contact.create and contact.update that names the refused field of the
+// card as a path relative to it: "emails[2].address", "name.given",
+// "addresses[0]", "emails" (the whole list). Clients mark that field;
+// the message is not for display.
+type ContactFieldData struct {
+	Field string `json:"field"`
+}
+
 type ContactConflictData struct {
 	Server ContactCard `json:"server"`
 }
