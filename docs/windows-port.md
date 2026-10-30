@@ -186,7 +186,7 @@ windows/
     Malachi.FakeBridge/         a scripted malachi-mcp for the MCP registration tests
     Malachi.Platform.Windows.Tests/
     Malachi.Credentials.Tests/
-    Malachi.Conventions.Tests/  msgid and gschema coverage, the strings check, SPDX headers
+    Malachi.Conventions.Tests/  msgid and gschema coverage, the strings check, SPDX headers, theme brushes
     Malachi.App.Canary/         the network canary (§12) over the WebView2 layer
     Malachi.App.Canary.Host/    its WinUI host, compiling src/Malachi.App/WebViews
     Malachi.App.UiTests/        UI smoke tests over the published app (UI Automation), devmail opt-in
@@ -277,6 +277,15 @@ source. "Mirror" means what it means in [macos-port.md §3](macos-port.md#3-the-
 - **Platform code.** Only in `Malachi.Platform.Windows` and `Malachi.App`;
   P/Invoke and COM through CsWin32 (`NativeMethods.txt`), never hand-written
   where CsWin32 can generate it.
+- **Theme colours in code.** An element built in C# takes its colours from
+  a style whose setters are `{ThemeResource …}` (`Resources/Surfaces.xaml`
+  for cards, fills, icons and destructive menu items,
+  `Resources/Typography.xaml` for dim, critical and caution text, or a
+  view's own `Resources`), never a brush read from
+  `Application.Current.Resources`: that brush has Windows' theme, not the
+  colour scheme the window root's `RequestedTheme` carries, so a dark window
+  kept a light card under white text and nothing followed a change.
+  `ThemeBrushTests` in `Malachi.Conventions.Tests` rejects such a lookup.
 
 ### 3.2 Handing over a port
 

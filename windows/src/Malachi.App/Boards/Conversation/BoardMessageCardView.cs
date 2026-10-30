@@ -115,7 +115,7 @@ public sealed partial class BoardMessageCardView : UserControl
         whenLabel.MaxLines = 1;
         whenLabel.TextWrapping = TextWrapping.NoWrap;
         whenLabel.VerticalAlignment = VerticalAlignment.Center;
-        SetSecondary(whenLabel);
+        whenLabel.Style = (Style)Application.Current.Resources["DimCaptionLabelStyle"];
 
         var head = new Grid { ColumnSpacing = 8, Margin = new Thickness(PadH, PadV, PadH, 4) };
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -150,7 +150,7 @@ public sealed partial class BoardMessageCardView : UserControl
         frame.Child = column;
         frame.BorderThickness = new Thickness(1);
         frame.CornerRadius = new CornerRadius(10);
-        frame.BorderBrush = Brush("CardStrokeColorDefaultBrush");
+        frame.Style = (Style)Application.Current.Resources["CardBorderStyle"];
         Content = frame;
         Show(message);
         ShowText();
@@ -296,16 +296,12 @@ public sealed partial class BoardMessageCardView : UserControl
         ReleaseWebView();
     }
 
-    private static Brush Brush(string key) => (Brush)Application.Current.Resources[key];
-
-    private static void SetSecondary(TextBlock t) => t.Foreground = Brush("TextFillColorSecondaryBrush");
-
     private void Show(CoreBoard.MessageCard m)
     {
         message = m;
         fromLabel.Text = m.From;
         whenLabel.Text = m.When;
-        frame.Background = Brush(m.Mine ? "CardBackgroundFillColorSecondaryBrush" : "CardBackgroundFillColorDefaultBrush");
+        frame.Style = (Style)Application.Current.Resources[m.Mine ? "SecondaryCardBorderStyle" : "CardBorderStyle"];
         // A group named after the sender.
         AutomationProperties.SetName(this, m.From);
     }

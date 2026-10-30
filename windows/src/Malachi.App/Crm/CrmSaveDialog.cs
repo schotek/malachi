@@ -289,12 +289,11 @@ internal sealed partial class CrmSaveDialog : ContentDialog
         var t = new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
-            Style = (Style)Application.Current.Resources[critical ? "CaptionLabelStyle" : "DimCaptionLabelStyle"],
+            Style = (Style)Application.Current.Resources[critical ? "CriticalCaptionLabelStyle" : "DimCaptionLabelStyle"],
             Visibility = Visibility.Visible,
         };
         if (critical)
         {
-            t.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
             t.Visibility = Visibility.Collapsed;
         }
         if (automationId.Length > 0)

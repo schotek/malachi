@@ -86,8 +86,8 @@ public sealed partial class BoardSuggestReplyControl : UserControl
         }
         NoteText.Text = v.Note;
         NoteText.Visibility = v.Note.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        NoteText.Foreground = (Brush)Application.Current.Resources[
-            v.NoteIsFailure ? "SystemFillColorCriticalBrush" : "TextFillColorSecondaryBrush"];
+        NoteText.Style = (Style)Application.Current.Resources[
+            v.NoteIsFailure ? "CriticalCaptionLabelStyle" : "DimCaptionLabelStyle"];
     }
 
     private void OnSuggestClick(object sender, RoutedEventArgs e) => Ask();

@@ -283,12 +283,9 @@ public sealed partial class InvitationCardView : UserControl
                     Text = line,
                     TextWrapping = TextWrapping.Wrap,
                     IsTextSelectionEnabled = true,
-                    Style = (Style)Application.Current.Resources["DimCaptionLabelStyle"],
+                    Style = (Style)Application.Current.Resources[
+                        warning is not null && line == warning ? "CautionCaptionLabelStyle" : "DimCaptionLabelStyle"],
                 };
-                if (warning is not null && line == warning)
-                {
-                    label.Foreground = (Brush)Application.Current.Resources["SystemFillColorCautionBrush"];
-                }
                 stack.Children.Add(label);
             }
         }

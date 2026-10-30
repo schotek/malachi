@@ -278,8 +278,7 @@ public sealed partial class BoardTodayCalendarStrip : UserControl
                 Text = Cal.NothingToday,
                 MinHeight = RowHeight,
                 Padding = new Thickness(4, 4, 4, 4),
-                Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-                Style = (Style)Application.Current.Resources["BodyLabelStyle"],
+                Style = (Style)Application.Current.Resources["DimLabelStyle"],
             });
             return;
         }
@@ -295,7 +294,6 @@ public sealed partial class BoardTodayCalendarStrip : UserControl
     private Grid MakeRow(Cal.TodayRow row, Cal.Snapshot snapshot)
     {
         var o = row.Occurrence;
-        var secondary = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
         var line = new Grid { ColumnSpacing = 8 };
         line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(TimeWidth) });
         line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -307,12 +305,10 @@ public sealed partial class BoardTodayCalendarStrip : UserControl
             Text = row.Time,
             VerticalAlignment = VerticalAlignment.Center,
             MaxLines = 1,
+            TextWrapping = TextWrapping.NoWrap,
             TextTrimming = TextTrimming.CharacterEllipsis,
+            Style = (Style)Application.Current.Resources[row.TookPlace ? "DimLabelStyle" : "BodyLabelStyle"],
         };
-        if (row.TookPlace)
-        {
-            time.Foreground = secondary;
-        }
         line.Children.Add(time);
 
         var unanswered = row.State == Cal.BlockState.Unanswered;
@@ -339,12 +335,10 @@ public sealed partial class BoardTodayCalendarStrip : UserControl
             Text = row.Title,
             VerticalAlignment = VerticalAlignment.Center,
             MaxLines = 1,
+            TextWrapping = TextWrapping.NoWrap,
             TextTrimming = TextTrimming.CharacterEllipsis,
+            Style = (Style)Application.Current.Resources[row.TookPlace ? "DimLabelStyle" : "BodyLabelStyle"],
         };
-        if (row.TookPlace)
-        {
-            title.Foreground = secondary;
-        }
         titleLine.Children.Add(title);
         if (row.Respond && o.Invitation is not null)
         {
@@ -378,7 +372,7 @@ public sealed partial class BoardTodayCalendarStrip : UserControl
         FrameworkElement? end = null;
         if (row.TookPlace)
         {
-            end = Trailing(Cal.TookPlace, secondary);
+            end = Trailing(Cal.TookPlace);
         }
         else if (row.Respond && o.Invitation is { } invitation)
         {
@@ -395,7 +389,7 @@ public sealed partial class BoardTodayCalendarStrip : UserControl
         }
         else if (row.Place.Length > 0)
         {
-            end = Trailing(row.Place, secondary);
+            end = Trailing(row.Place);
         }
         if (end is not null)
         {
@@ -405,7 +399,7 @@ public sealed partial class BoardTodayCalendarStrip : UserControl
         return r;
     }
 
-    private static TextBlock Trailing(string text, Brush brush) => new()
+    private static TextBlock Trailing(string text) => new()
     {
         Text = text,
         MaxWidth = 220,
@@ -413,8 +407,7 @@ public sealed partial class BoardTodayCalendarStrip : UserControl
         MaxLines = 1,
         TextTrimming = TextTrimming.CharacterEllipsis,
         TextAlignment = TextAlignment.Right,
-        Foreground = brush,
-        Style = (Style)Application.Current.Resources["CaptionLabelStyle"],
+        Style = (Style)Application.Current.Resources["DimCaptionLabelStyle"],
     };
 
     // A row's click: the Calendar's Day view of its day with its event.
