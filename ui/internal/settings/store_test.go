@@ -8,8 +8,10 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/calendar"
+	"github.com/schotek/malachi/ui/internal/contacts"
 )
 
 func TestMemoryDefaults(t *testing.T) {
@@ -426,5 +428,28 @@ func TestCalendarView(t *testing.T) {
 	s.SetBoardStartMode(BoardStartCalendar)
 	if got := s.BoardStartMode(); got != BoardStartCalendar {
 		t.Errorf("BoardStartMode = %q, want calendar", got)
+	}
+}
+
+func TestContactsSuggestScope(t *testing.T) {
+	s := NewMemory()
+	if got := s.ContactsSuggestScope(); got != string(api.ContactScopeAccount) {
+		t.Errorf("ContactsSuggestScope default = %q, want account", got)
+	}
+	if len(ContactsSuggestScopes) != len(contacts.Scopes) {
+		t.Fatalf("ContactsSuggestScopes = %v, contacts.Scopes = %v", ContactsSuggestScopes, contacts.Scopes)
+	}
+	for i, v := range contacts.Scopes {
+		if ContactsSuggestScopes[i] != string(v) {
+			t.Errorf("ContactsSuggestScopes[%d] = %q, want %q", i, ContactsSuggestScopes[i], v)
+		}
+	}
+	s.SetContactsSuggestScope("folder")
+	if got := s.ContactsSuggestScope(); got != "account" {
+		t.Errorf("invalid scope accepted: %q", got)
+	}
+	s.SetContactsSuggestScope("all")
+	if got := s.ContactsSuggestScope(); got != "all" {
+		t.Errorf("ContactsSuggestScope = %q, want all", got)
 	}
 }

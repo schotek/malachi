@@ -62,6 +62,10 @@ ui/internal/calendar/preferences.go
 ui/internal/calendar/caldav.go
 ui/internal/calendar/keys.go
 ui/internal/calendarctl/account.go
+ui/internal/contacts/text.go
+ui/internal/contacts/detail.go
+ui/internal/contacts/model.go
+ui/internal/contacts/form.go
 ui/internal/settingspanel/settingspanel.go
 ui/internal/widget/consent.go
 ui/internal/widget/format.go

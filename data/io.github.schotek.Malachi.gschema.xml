@@ -65,6 +65,11 @@
     <value nick="agenda" value="3"/>
   </enum>
 
+  <enum id="io.github.schotek.Malachi.ContactsSuggestScope">
+    <value nick="account" value="0"/>
+    <value nick="all" value="1"/>
+  </enum>
+
   <schema id="io.github.schotek.Malachi" path="/io/github/schotek/Malachi/">
     <!-- Window geometry -->
     <key name="window-width" type="i">
@@ -296,6 +301,11 @@
       <default>'week'</default>
       <summary>The view the Calendar was shown in last</summary>
       <description>Day, Week, Month or Agenda, written whenever the user changes the Calendar's view; applied when the Calendar shows.</description>
+    </key>
+    <key name="contacts-suggest-scope" enum="io.github.schotek.Malachi.ContactsSuggestScope">
+      <default>'account'</default>
+      <summary>Which address books complete recipients</summary>
+      <description>The address books of the account the message is written from (with the recently used addresses), or every address book; the scope of contact.search.</description>
     </key>
   </schema>
 </schemalist>

@@ -140,6 +140,17 @@ var CalendarViews = []string{"day", "week", "month", "agenda"}
 // CalendarViewDefault is calendar-view's default in the gschema.
 const CalendarViewDefault = "week"
 
+// KeyContactsSuggestScope is which address books complete the recipients
+// of a new message (Preferences → Contacts → Recipient Suggestions): a nick
+// of the gschema's ContactsSuggestScope enum, the values of
+// api.ContactSearchScope ("account", "all"), passed as contact.search's
+// scope.
+const KeyContactsSuggestScope = "contacts-suggest-scope"
+
+// ContactsSuggestScopes are contacts-suggest-scope's values in the order of
+// the gschema's enum (contacts.Scopes' order); the first is the default.
+var ContactsSuggestScopes = []string{"account", "all"}
+
 // ColorScheme is the nick of the ColorScheme enum in the gschema.
 type ColorScheme string
 
@@ -282,6 +293,8 @@ var defaults = map[string]any{
 	KeyBoardTriageModel:   string(assistant.Sonnet),
 
 	KeyCalendarView: CalendarViewDefault,
+
+	KeyContactsSuggestScope: "account",
 }
 
 // Store reads and writes preferences. All methods must be called from the
@@ -599,6 +612,31 @@ func (s *Store) SetCalendarView(v string) {
 		if v == n {
 			if s.str(KeyCalendarView) != v {
 				s.set(KeyCalendarView, v)
+			}
+			return
+		}
+	}
+}
+
+// ContactsSuggestScope is contacts-suggest-scope's nick; an unknown or
+// empty stored value is "account", the default.
+func (s *Store) ContactsSuggestScope() string {
+	v := s.str(KeyContactsSuggestScope)
+	for _, n := range ContactsSuggestScopes {
+		if v == n {
+			return v
+		}
+	}
+	return ContactsSuggestScopes[0]
+}
+
+// SetContactsSuggestScope writes a nick only when it changed; a value
+// outside the enum is ignored.
+func (s *Store) SetContactsSuggestScope(v string) {
+	for _, n := range ContactsSuggestScopes {
+		if v == n {
+			if s.str(KeyContactsSuggestScope) != v {
+				s.set(KeyContactsSuggestScope, v)
 			}
 			return
 		}
