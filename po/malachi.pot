@@ -1329,7 +1329,8 @@ msgid "The sender's server refused the request."
 msgstr ""
 
 #: ui/internal/compose/pane.go:224 ui/internal/compose/pane.go:1059
-#: ui/internal/jira/settings.go:123 ui/internal/window/assistant_panel.go:204
+#: ui/internal/jira/settings.go:123 ui/internal/contacts/form.go:455
+#: ui/internal/window/assistant_panel.go:204
 #: ui/internal/window/event_editor_popovers.go:36
 msgid "Remove"
 msgstr ""
@@ -1540,7 +1541,7 @@ msgstr ""
 
 #. TRANSLATORS: tooltip of a recipient suggestion that came from a
 #. system address book whose name is unknown.
-#: ui/internal/compose/suggest.go:300
+#: ui/internal/compose/suggest.go:300 ui/internal/contacts/text.go:208
 msgid "Address book"
 msgstr ""
 
@@ -1564,7 +1565,8 @@ msgid "Open in New Window"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:52 ui/internal/conversation/drafts.go:108
-#: ui/internal/calendar/detail.go:256 ui/data/ui/window.ui:589
+#: ui/internal/calendar/detail.go:256 ui/internal/contacts/text.go:131
+#: ui/data/ui/window.ui:589
 msgid "Edit"
 msgstr ""
 
@@ -3249,7 +3251,9 @@ msgstr ""
 
 #. TRANSLATORS: a name and a short badge after it, such as "Work
 #. (IMAP)" or "Offer (Reminded)".
-#: ui/internal/board/text.go:634
+#. TRANSLATORS: an address book with its account, e.g. "Contacts
+#. (jana@example.org)"; also a brand with an address.
+#: ui/internal/board/text.go:634 ui/internal/contacts/model.go:96
 #, c-format
 msgid "%s (%s)"
 msgstr ""
@@ -3258,7 +3262,10 @@ msgstr ""
 #. party and the date, such as "Jana Nováková · 2 Oct 2026 14:05".
 #. TRANSLATORS: two parts of one line of the calendar, e.g. "Work ·
 #. Calendar" (account and calendar) or "10:00–11:30 · Room B".
+#. TRANSLATORS: two parts of one line, e.g. "All Contacts · 412" or
+#. "Contacts · Microsoft 365" (address book and account).
 #: ui/internal/board/text.go:646 ui/internal/calendar/text.go:354
+#: ui/internal/contacts/text.go:98
 #, c-format
 msgid "%s · %s"
 msgstr ""
@@ -3456,7 +3463,7 @@ msgstr ""
 #. TRANSLATORS: a button and menu item of the board: the case's received
 #. messages go to the trash and the case is done.
 #: ui/internal/board/text.go:917 ui/internal/calendar/detail.go:272
-#: ui/internal/calendar/detail.go:313
+#: ui/internal/calendar/detail.go:313 ui/internal/contacts/text.go:146
 msgid "Delete"
 msgstr ""
 
@@ -4059,7 +4066,7 @@ msgstr ""
 
 #. TRANSLATORS: the shortcuts window: the key that shows the mail in the
 #. main window.
-#: ui/internal/board/keys.go:72
+#: ui/internal/board/keys.go:72 ui/internal/contacts/text.go:121
 msgid "Show Mail"
 msgstr ""
 
@@ -4270,13 +4277,17 @@ msgid "%A %-d %B"
 msgstr ""
 
 #. TRANSLATORS: strftime format for a day and month, e.g. "14 October".
-#: ui/internal/calendar/text.go:272
+#. TRANSLATORS: strftime format of a birthday without a year, e.g.
+#. "14 March".
+#: ui/internal/calendar/text.go:272 ui/internal/contacts/detail.go:232
 #, no-c-format
 msgid "%-d %B"
 msgstr ""
 
 #. TRANSLATORS: strftime format for a date, e.g. "14 October 2026".
-#: ui/internal/calendar/text.go:279
+#. TRANSLATORS: strftime format of a birthday with its year, e.g. "14
+#. March 1980".
+#: ui/internal/calendar/text.go:279 ui/internal/contacts/detail.go:238
 #, no-c-format
 msgid "%-d %B %Y"
 msgstr ""
@@ -4883,7 +4894,7 @@ msgstr[1] ""
 msgid "Save and Send Invitations"
 msgstr ""
 
-#: ui/internal/calendar/editor.go:245
+#: ui/internal/calendar/editor.go:245 ui/internal/contacts/text.go:140
 msgid "Cancel"
 msgstr ""
 
@@ -5722,7 +5733,7 @@ msgstr ""
 msgid "Trust Certificate…"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:464
+#: ui/internal/calendar/caldav.go:464 ui/internal/contacts/text.go:384
 msgid "Calendars"
 msgstr ""
 
@@ -5784,6 +5795,545 @@ msgstr ""
 
 #: ui/internal/calendar/keys.go:166
 msgid "Select Next Event"
+msgstr ""
+
+#. TRANSLATORS: the Contacts window (address books of the user's
+#. accounts), its menu item and its Preferences page.
+#: ui/internal/contacts/text.go:50
+msgid "Contacts"
+msgstr ""
+
+#. TRANSLATORS: the Contacts window's sidebar row that lists the
+#. contacts of every address book.
+#: ui/internal/contacts/text.go:57
+msgid "All Contacts"
+msgstr ""
+
+#. TRANSLATORS: the Contacts window's address book of the addresses the
+#. user has written to (read only).
+#: ui/internal/contacts/text.go:64
+msgid "Recently Used"
+msgstr ""
+
+#. TRANSLATORS: the Contacts window's sidebar heading of the address
+#. book kept on this computer (Recently Used).
+#: ui/internal/contacts/text.go:72
+msgid "On This Computer"
+msgstr ""
+
+#: ui/internal/contacts/text.go:76
+msgid "Search Contacts"
+msgstr ""
+
+#: ui/internal/contacts/text.go:80
+msgid "New Contact"
+msgstr ""
+
+#: ui/internal/contacts/text.go:84
+#, c-format
+msgid "%d contact"
+msgid_plural "%d contacts"
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: the number of recently used e-mail addresses.
+#: ui/internal/contacts/text.go:90
+#, c-format
+msgid "%d address"
+msgid_plural "%d addresses"
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: the Contacts window's status bar; %s is a relative time
+#. such as "3 minutes ago".
+#: ui/internal/contacts/text.go:106
+#, c-format
+msgid "Contacts synchronized %s"
+msgstr ""
+
+#. TRANSLATORS: the contact detail's button that writes a new message to
+#. the contact.
+#: ui/internal/contacts/text.go:117
+msgid "Write Email"
+msgstr ""
+
+#. TRANSLATORS: the contact detail's button that copies the whole
+#. contact as plain text.
+#: ui/internal/contacts/text.go:127
+msgid "Copy"
+msgstr ""
+
+#. TRANSLATORS: the contact form's button that saves the contact.
+#: ui/internal/contacts/text.go:136
+msgctxt "contacts"
+msgid "Done"
+msgstr ""
+
+#: ui/internal/contacts/text.go:143
+msgid "Delete Contact…"
+msgstr ""
+
+#. TRANSLATORS: a capsule beside a contact whose address book cannot be
+#. changed.
+#: ui/internal/contacts/text.go:152
+msgid "Read Only"
+msgstr ""
+
+#. TRANSLATORS: a contact without any name.
+#: ui/internal/contacts/text.go:158
+msgid "No Name"
+msgstr ""
+
+#. TRANSLATORS: the contact detail's footer; the first %s is the
+#. address book's name, the second the account it belongs to.
+#: ui/internal/contacts/text.go:166
+#, c-format
+msgid "Address book %s · %s"
+msgstr ""
+
+#: ui/internal/contacts/text.go:174
+msgid "Show Contact"
+msgstr ""
+
+#: ui/internal/contacts/text.go:177
+msgid "Add to Contacts…"
+msgstr ""
+
+#. TRANSLATORS: the Add to Contacts popover's button that saves the
+#. new contact.
+#: ui/internal/contacts/text.go:186
+msgctxt "contacts"
+msgid "Add"
+msgstr ""
+
+#: ui/internal/contacts/text.go:190
+msgid "More Details…"
+msgstr ""
+
+#. TRANSLATORS: under the name of a new contact taken from a message's
+#. header: the sender wrote it, so it may be false.
+#: ui/internal/contacts/text.go:197
+msgid "The sender wrote this name — check it."
+msgstr ""
+
+#. TRANSLATORS: the question before a contact is deleted; %s is its
+#. name.
+#: ui/internal/contacts/text.go:235
+#, c-format
+msgid "Delete contact %s?"
+msgstr ""
+
+#. TRANSLATORS: %s is the account, e.g. "Microsoft 365
+#. (jana@example.org)".
+#: ui/internal/contacts/text.go:238
+#, c-format
+msgid ""
+"The contact will also be deleted on the server %s and on every device that "
+"synchronizes it."
+msgstr ""
+
+#: ui/internal/contacts/text.go:248
+msgid "The contact changed meanwhile"
+msgstr ""
+
+#: ui/internal/contacts/text.go:249
+msgid ""
+"Someone changed the contact on another device. Load the new version; the "
+"details you changed stay in the form."
+msgstr ""
+
+#. TRANSLATORS: the button that loads the server's new version of a
+#. contact into the form.
+#: ui/internal/contacts/text.go:252
+msgid "Reload"
+msgstr ""
+
+#: ui/internal/contacts/text.go:259
+#, c-format
+msgid "Microsoft needs your permission to access the contacts of %s."
+msgstr ""
+
+#. TRANSLATORS: the button that signs in again to give Microsoft's
+#. permission to the contacts.
+#: ui/internal/contacts/text.go:267
+msgid "Allow…"
+msgstr ""
+
+#: ui/internal/contacts/text.go:273
+msgid "Allow contacts access in the desktop’s Online Accounts settings."
+msgstr ""
+
+#: ui/internal/contacts/text.go:298
+msgid "No Address Books"
+msgstr ""
+
+#: ui/internal/contacts/text.go:299
+msgid ""
+"Turn on contacts from Microsoft 365 or a CardDAV server in Preferences. "
+"Until then, here are the addresses you have written to."
+msgstr ""
+
+#: ui/internal/contacts/text.go:301
+msgid "No Contacts"
+msgstr ""
+
+#: ui/internal/contacts/text.go:303
+msgid "No Contacts Found"
+msgstr ""
+
+#: ui/internal/contacts/text.go:303
+msgid "Try another name, company or address."
+msgstr ""
+
+#: ui/internal/contacts/text.go:305
+msgid "No Contact Selected"
+msgstr ""
+
+#: ui/internal/contacts/text.go:311
+msgid "Open Preferences…"
+msgstr ""
+
+#: ui/internal/contacts/text.go:320
+msgid "The contact no longer exists."
+msgstr ""
+
+#: ui/internal/contacts/text.go:322
+msgid "The address book no longer exists."
+msgstr ""
+
+#: ui/internal/contacts/text.go:324
+msgid "This address book cannot be changed."
+msgstr ""
+
+#: ui/internal/contacts/text.go:331
+msgid "Microsoft needs your permission to access these contacts."
+msgstr ""
+
+#: ui/internal/contacts/text.go:333
+msgid "Contacts cannot be changed while offline."
+msgstr ""
+
+#: ui/internal/contacts/text.go:335
+msgid "The contact could not be saved. Check its details."
+msgstr ""
+
+#: ui/internal/contacts/text.go:345
+msgid "Sync Contacts"
+msgstr ""
+
+#: ui/internal/contacts/text.go:350
+msgid "Edit the server, password and certificate on the Calendar page."
+msgstr ""
+
+#. TRANSLATORS: the Preferences group that decides which address books
+#. complete the recipients of a new message.
+#: ui/internal/contacts/text.go:357
+msgid "Recipient Suggestions"
+msgstr ""
+
+#: ui/internal/contacts/text.go:363
+msgid "All Address Books"
+msgstr ""
+
+#: ui/internal/contacts/text.go:365
+msgid "Address Books of the Account You Write From"
+msgstr ""
+
+#: ui/internal/contacts/text.go:374
+msgid ""
+"Add a Microsoft 365 account or a CardDAV server to see its contacts here."
+msgstr ""
+
+#. TRANSLATORS: the heading of the address books a CardDAV server has.
+#: ui/internal/contacts/text.go:380
+msgid "Address Books"
+msgstr ""
+
+#: ui/internal/contacts/text.go:388
+msgid "Add Calendar and Contacts (CalDAV/CardDAV)"
+msgstr ""
+
+#. TRANSLATORS: the contact form's label choice for an e-mail address,
+#. phone or address without a label.
+#: ui/internal/contacts/detail.go:61
+msgid "No Label"
+msgstr ""
+
+#. TRANSLATORS: the label of a work e-mail address in the
+#. contact form (lower case, like the other labels).
+#: ui/internal/contacts/detail.go:79
+msgctxt "email label"
+msgid "work"
+msgstr ""
+
+#. TRANSLATORS: the label of a personal e-mail address.
+#: ui/internal/contacts/detail.go:82
+msgctxt "email label"
+msgid "home"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:84
+msgctxt "email label"
+msgid "other"
+msgstr ""
+
+#. TRANSLATORS: the label of a postal address at work.
+#: ui/internal/contacts/detail.go:91
+msgctxt "address label"
+msgid "work"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:93
+msgctxt "address label"
+msgid "home"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:95
+msgctxt "address label"
+msgid "other"
+msgstr ""
+
+#. TRANSLATORS: the label of a work website in the contact form.
+#: ui/internal/contacts/detail.go:100
+msgctxt "url label"
+msgid "work"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:102
+msgctxt "url label"
+msgid "home"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:104
+msgctxt "url label"
+msgid "other"
+msgstr ""
+
+#. TRANSLATORS: the label of a mobile phone number.
+#: ui/internal/contacts/detail.go:111
+msgctxt "phone label"
+msgid "mobile"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:113
+msgctxt "phone label"
+msgid "work"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:115
+msgctxt "phone label"
+msgid "home"
+msgstr ""
+
+#. TRANSLATORS: the label of a company's main phone number.
+#: ui/internal/contacts/detail.go:118
+msgctxt "phone label"
+msgid "main"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:120
+msgctxt "phone label"
+msgid "fax"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:122
+msgctxt "phone label"
+msgid "pager"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:124
+msgctxt "phone label"
+msgid "other"
+msgstr ""
+
+#. TRANSLATORS: a row label of the contact detail (lower case).
+#: ui/internal/contacts/detail.go:138
+msgid "work email"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:140
+msgid "home email"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:142
+msgid "other email"
+msgstr ""
+
+#. TRANSLATORS: a row label of the contact detail: an e-mail address
+#. without a label.
+#: ui/internal/contacts/detail.go:146
+msgid "email"
+msgstr ""
+
+#. TRANSLATORS: a row label of the contact detail: a phone
+#. number without a label.
+#: ui/internal/contacts/detail.go:151
+msgid "phone"
+msgstr ""
+
+#. TRANSLATORS: a row label of the contact detail: a postal
+#. address without a label.
+#: ui/internal/contacts/detail.go:158
+msgid "address"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:164
+msgid "work website"
+msgstr ""
+
+#: ui/internal/contacts/detail.go:166
+msgid "home website"
+msgstr ""
+
+#. TRANSLATORS: a row label of the contact detail: a web address.
+#: ui/internal/contacts/detail.go:169
+msgid "website"
+msgstr ""
+
+#. TRANSLATORS: a row label of the contact detail.
+#: ui/internal/contacts/detail.go:412
+msgid "birthday"
+msgstr ""
+
+#. TRANSLATORS: a row label of the contact detail.
+#: ui/internal/contacts/detail.go:422
+msgid "nickname"
+msgstr ""
+
+#. TRANSLATORS: a row label of the contact detail.
+#: ui/internal/contacts/detail.go:426
+msgid "note"
+msgstr ""
+
+#. TRANSLATORS: the contact form's button that adds an e-mail
+#. address row.
+#: ui/internal/contacts/form.go:444
+msgid "Add Email"
+msgstr ""
+
+#: ui/internal/contacts/form.go:446
+msgid "Add Phone"
+msgstr ""
+
+#: ui/internal/contacts/form.go:448
+msgid "Add Address"
+msgstr ""
+
+#: ui/internal/contacts/form.go:450
+msgid "Add Website"
+msgstr ""
+
+#: ui/internal/contacts/form.go:458
+msgid "Add Birthday"
+msgstr ""
+
+#. TRANSLATORS: placeholders of the contact form's fields.
+#: ui/internal/contacts/form.go:465
+msgid "First Name"
+msgstr ""
+
+#: ui/internal/contacts/form.go:467
+msgid "Last Name"
+msgstr ""
+
+#: ui/internal/contacts/form.go:469
+msgid "Middle Name"
+msgstr ""
+
+#. TRANSLATORS: a title before a name, such as "Ing." or "Dr.".
+#: ui/internal/contacts/form.go:472
+msgid "Prefix"
+msgstr ""
+
+#. TRANSLATORS: a title after a name, such as "Ph.D." or "Jr.".
+#: ui/internal/contacts/form.go:475
+msgid "Suffix"
+msgstr ""
+
+#: ui/internal/contacts/form.go:477
+msgid "Nickname"
+msgstr ""
+
+#: ui/internal/contacts/form.go:479
+msgid "Company"
+msgstr ""
+
+#: ui/internal/contacts/form.go:481
+msgid "Job Title"
+msgstr ""
+
+#: ui/internal/contacts/form.go:483
+msgid "Email"
+msgstr ""
+
+#: ui/internal/contacts/form.go:485
+msgid "Phone"
+msgstr ""
+
+#: ui/internal/contacts/form.go:487
+msgid "Website"
+msgstr ""
+
+#: ui/internal/contacts/form.go:489
+msgid "Birthday"
+msgstr ""
+
+#: ui/internal/contacts/form.go:491
+msgid "Note"
+msgstr ""
+
+#: ui/internal/contacts/form.go:512
+msgid "Street"
+msgstr ""
+
+#: ui/internal/contacts/form.go:514
+msgid "Postal Code"
+msgstr ""
+
+#: ui/internal/contacts/form.go:516
+msgid "City"
+msgstr ""
+
+#. TRANSLATORS: a part of a postal address: state, province or
+#. region.
+#: ui/internal/contacts/form.go:520
+msgid "Region"
+msgstr ""
+
+#: ui/internal/contacts/form.go:522
+msgid "Country"
+msgstr ""
+
+#. TRANSLATORS: the label of the choice where a new contact is saved.
+#: ui/internal/contacts/form.go:528
+msgid "Address Book"
+msgstr ""
+
+#. TRANSLATORS: the label of a new contact's name in Add to Contacts.
+#: ui/internal/contacts/form.go:534
+msgid "Name"
+msgstr ""
+
+#: ui/internal/contacts/form.go:559
+msgid "Enter a name, a company or an email address."
+msgstr ""
+
+#: ui/internal/contacts/form.go:561
+msgid "This text is too long."
+msgstr ""
+
+#. TRANSLATORS: %s is what the user typed as an e-mail address.
+#: ui/internal/contacts/form.go:580
+#, c-format
+msgid "%s is not a valid email address."
+msgstr ""
+
+#: ui/internal/contacts/form.go:605
+msgid "A website must be an address starting with http:// or https://."
+msgstr ""
+
+#: ui/internal/contacts/form.go:611
+msgid "Enter a valid date."
 msgstr ""
 
 #. TRANSLATORS: put between the names of a conversation's participants ("Alice, Bob").
@@ -8060,6 +8610,16 @@ msgstr ""
 msgid ""
 "Day, Week, Month or Agenda, written whenever the user changes the Calendar's "
 "view; applied when the Calendar shows."
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:307
+msgid "Which address books complete recipients"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:308
+msgid ""
+"The address books of the account the message is written from (with the "
+"recently used addresses), or every address book; the scope of contact.search."
 msgstr ""
 
 #: data/io.github.schotek.Malachi.desktop.in:3

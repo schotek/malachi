@@ -1429,7 +1429,8 @@ msgid "The sender's server refused the request."
 msgstr "Server odesílatele žádost odmítl."
 
 #: ui/internal/compose/pane.go:224 ui/internal/compose/pane.go:1059
-#: ui/internal/jira/settings.go:123 ui/internal/window/assistant_panel.go:204
+#: ui/internal/jira/settings.go:123 ui/internal/contacts/form.go:455
+#: ui/internal/window/assistant_panel.go:204
 #: ui/internal/window/event_editor_popovers.go:36
 msgid "Remove"
 msgstr "Odebrat"
@@ -1643,7 +1644,7 @@ msgstr "Sbaleno"
 
 #. TRANSLATORS: tooltip of a recipient suggestion that came from a
 #. system address book whose name is unknown.
-#: ui/internal/compose/suggest.go:300
+#: ui/internal/compose/suggest.go:300 ui/internal/contacts/text.go:208
 msgid "Address book"
 msgstr "Adresář"
 
@@ -1668,7 +1669,8 @@ msgid "Open in New Window"
 msgstr "Otevřít v novém okně"
 
 #: ui/internal/contextmenu/text.go:52 ui/internal/conversation/drafts.go:108
-#: ui/internal/calendar/detail.go:256 ui/data/ui/window.ui:589
+#: ui/internal/calendar/detail.go:256 ui/internal/contacts/text.go:131
+#: ui/data/ui/window.ui:589
 msgid "Edit"
 msgstr "Upravit"
 
@@ -3416,7 +3418,9 @@ msgstr "Nový kontakt"
 
 #. TRANSLATORS: a name and a short badge after it, such as "Work
 #. (IMAP)" or "Offer (Reminded)".
-#: ui/internal/board/text.go:634
+#. TRANSLATORS: an address book with its account, e.g. "Contacts
+#. (jana@example.org)"; also a brand with an address.
+#: ui/internal/board/text.go:634 ui/internal/contacts/model.go:96
 #, c-format
 msgid "%s (%s)"
 msgstr "%s (%s)"
@@ -3425,7 +3429,10 @@ msgstr "%s (%s)"
 #. party and the date, such as "Jana Nováková · 2 Oct 2026 14:05".
 #. TRANSLATORS: two parts of one line of the calendar, e.g. "Work ·
 #. Calendar" (account and calendar) or "10:00–11:30 · Room B".
+#. TRANSLATORS: two parts of one line, e.g. "All Contacts · 412" or
+#. "Contacts · Microsoft 365" (address book and account).
 #: ui/internal/board/text.go:646 ui/internal/calendar/text.go:354
+#: ui/internal/contacts/text.go:98
 #, c-format
 msgid "%s · %s"
 msgstr "%s · %s"
@@ -3631,7 +3638,7 @@ msgstr "Archivaci se nepodařilo vrátit."
 #. TRANSLATORS: a button and menu item of the board: the case's received
 #. messages go to the trash and the case is done.
 #: ui/internal/board/text.go:917 ui/internal/calendar/detail.go:272
-#: ui/internal/calendar/detail.go:313
+#: ui/internal/calendar/detail.go:313 ui/internal/contacts/text.go:146
 msgid "Delete"
 msgstr "Smazat"
 
@@ -4273,7 +4280,7 @@ msgstr "%s, %s"
 
 #. TRANSLATORS: the shortcuts window: the key that shows the mail in the
 #. main window.
-#: ui/internal/board/keys.go:72
+#: ui/internal/board/keys.go:72 ui/internal/contacts/text.go:121
 msgid "Show Mail"
 msgstr "Zobrazit poštu"
 
@@ -4493,13 +4500,17 @@ msgid "%A %-d %B"
 msgstr "%A %-d. %B"
 
 #. TRANSLATORS: strftime format for a day and month, e.g. "14 October".
-#: ui/internal/calendar/text.go:272
+#. TRANSLATORS: strftime format of a birthday without a year, e.g.
+#. "14 March".
+#: ui/internal/calendar/text.go:272 ui/internal/contacts/detail.go:232
 #, no-c-format
 msgid "%-d %B"
 msgstr "%-d. %B"
 
 #. TRANSLATORS: strftime format for a date, e.g. "14 October 2026".
-#: ui/internal/calendar/text.go:279
+#. TRANSLATORS: strftime format of a birthday with its year, e.g. "14
+#. March 1980".
+#: ui/internal/calendar/text.go:279 ui/internal/contacts/detail.go:238
 #, no-c-format
 msgid "%-d %B %Y"
 msgstr "%-d. %B %Y"
@@ -5125,7 +5136,7 @@ msgstr[2] "Událost může mít nejvýš %d upozornění."
 msgid "Save and Send Invitations"
 msgstr "Uložit a odeslat pozvánky"
 
-#: ui/internal/calendar/editor.go:245
+#: ui/internal/calendar/editor.go:245 ui/internal/contacts/text.go:140
 msgid "Cancel"
 msgstr "Zrušit"
 
@@ -5986,7 +5997,7 @@ msgstr "Nešifrováno (místní server)"
 msgid "Trust Certificate…"
 msgstr "Důvěřovat certifikátu…"
 
-#: ui/internal/calendar/caldav.go:464
+#: ui/internal/calendar/caldav.go:464 ui/internal/contacts/text.go:384
 msgid "Calendars"
 msgstr "Kalendáře"
 
@@ -6049,6 +6060,555 @@ msgstr "Vybrat předchozí událost"
 #: ui/internal/calendar/keys.go:166
 msgid "Select Next Event"
 msgstr "Vybrat další událost"
+
+#. TRANSLATORS: the Contacts window (address books of the user's
+#. accounts), its menu item and its Preferences page.
+#: ui/internal/contacts/text.go:50
+msgid "Contacts"
+msgstr "Kontakty"
+
+#. TRANSLATORS: the Contacts window's sidebar row that lists the
+#. contacts of every address book.
+#: ui/internal/contacts/text.go:57
+msgid "All Contacts"
+msgstr "Všechny kontakty"
+
+#. TRANSLATORS: the Contacts window's address book of the addresses the
+#. user has written to (read only).
+#: ui/internal/contacts/text.go:64
+msgid "Recently Used"
+msgstr "Nedávno použité"
+
+#. TRANSLATORS: the Contacts window's sidebar heading of the address
+#. book kept on this computer (Recently Used).
+#: ui/internal/contacts/text.go:72
+msgid "On This Computer"
+msgstr "Na tomto počítači"
+
+#: ui/internal/contacts/text.go:76
+msgid "Search Contacts"
+msgstr "Hledat v kontaktech"
+
+#: ui/internal/contacts/text.go:80
+msgid "New Contact"
+msgstr "Nový kontakt"
+
+#: ui/internal/contacts/text.go:84
+#, c-format
+msgid "%d contact"
+msgid_plural "%d contacts"
+msgstr[0] "%d kontakt"
+msgstr[1] "%d kontakty"
+msgstr[2] "%d kontaktů"
+
+#. TRANSLATORS: the number of recently used e-mail addresses.
+#: ui/internal/contacts/text.go:90
+#, c-format
+msgid "%d address"
+msgid_plural "%d addresses"
+msgstr[0] "%d adresa"
+msgstr[1] "%d adresy"
+msgstr[2] "%d adres"
+
+#. TRANSLATORS: the Contacts window's status bar; %s is a relative time
+#. such as "3 minutes ago".
+#: ui/internal/contacts/text.go:106
+#, c-format
+msgid "Contacts synchronized %s"
+msgstr "Kontakty synchronizovány %s"
+
+#. TRANSLATORS: the contact detail's button that writes a new message to
+#. the contact.
+#: ui/internal/contacts/text.go:117
+msgid "Write Email"
+msgstr "Napsat e-mail"
+
+#. TRANSLATORS: the contact detail's button that copies the whole
+#. contact as plain text.
+#: ui/internal/contacts/text.go:127
+msgid "Copy"
+msgstr "Kopírovat"
+
+#. TRANSLATORS: the contact form's button that saves the contact.
+#: ui/internal/contacts/text.go:136
+msgctxt "contacts"
+msgid "Done"
+msgstr "Hotovo"
+
+#: ui/internal/contacts/text.go:143
+msgid "Delete Contact…"
+msgstr "Smazat kontakt…"
+
+#. TRANSLATORS: a capsule beside a contact whose address book cannot be
+#. changed.
+#: ui/internal/contacts/text.go:152
+msgid "Read Only"
+msgstr "Jen pro čtení"
+
+#. TRANSLATORS: a contact without any name.
+#: ui/internal/contacts/text.go:158
+msgid "No Name"
+msgstr "Beze jména"
+
+#. TRANSLATORS: the contact detail's footer; the first %s is the
+#. address book's name, the second the account it belongs to.
+#: ui/internal/contacts/text.go:166
+#, c-format
+msgid "Address book %s · %s"
+msgstr "Adresář %s · %s"
+
+#: ui/internal/contacts/text.go:174
+msgid "Show Contact"
+msgstr "Zobrazit kontakt"
+
+#: ui/internal/contacts/text.go:177
+msgid "Add to Contacts…"
+msgstr "Přidat do kontaktů…"
+
+#. TRANSLATORS: the Add to Contacts popover's button that saves the
+#. new contact.
+#: ui/internal/contacts/text.go:186
+msgctxt "contacts"
+msgid "Add"
+msgstr "Přidat"
+
+#: ui/internal/contacts/text.go:190
+msgid "More Details…"
+msgstr "Další údaje…"
+
+#. TRANSLATORS: under the name of a new contact taken from a message's
+#. header: the sender wrote it, so it may be false.
+#: ui/internal/contacts/text.go:197
+msgid "The sender wrote this name — check it."
+msgstr "Jméno napsal odesílatel — zkontrolujte ho."
+
+#. TRANSLATORS: the question before a contact is deleted; %s is its
+#. name.
+#: ui/internal/contacts/text.go:235
+#, c-format
+msgid "Delete contact %s?"
+msgstr "Smazat kontakt %s?"
+
+#. TRANSLATORS: %s is the account, e.g. "Microsoft 365
+#. (jana@example.org)".
+#: ui/internal/contacts/text.go:238
+#, c-format
+msgid ""
+"The contact will also be deleted on the server %s and on every device that "
+"synchronizes it."
+msgstr ""
+"Kontakt se smaže i na serveru %s a ve všech zařízeních, která ho "
+"synchronizují."
+
+#: ui/internal/contacts/text.go:248
+msgid "The contact changed meanwhile"
+msgstr "Kontakt se mezitím změnil"
+
+#: ui/internal/contacts/text.go:249
+msgid ""
+"Someone changed the contact on another device. Load the new version; the "
+"details you changed stay in the form."
+msgstr ""
+"Někdo kontakt upravil v jiném zařízení. Načtěte novou verzi; údaje, které "
+"jste změnili, zůstanou ve formuláři."
+
+#. TRANSLATORS: the button that loads the server's new version of a
+#. contact into the form.
+#: ui/internal/contacts/text.go:252
+msgid "Reload"
+msgstr "Načíst znovu"
+
+#: ui/internal/contacts/text.go:259
+#, c-format
+msgid "Microsoft needs your permission to access the contacts of %s."
+msgstr "Microsoft potřebuje váš souhlas s přístupem ke kontaktům účtu %s."
+
+#. TRANSLATORS: the button that signs in again to give Microsoft's
+#. permission to the contacts.
+#: ui/internal/contacts/text.go:267
+msgid "Allow…"
+msgstr "Povolit…"
+
+#: ui/internal/contacts/text.go:273
+msgid "Allow contacts access in the desktop’s Online Accounts settings."
+msgstr "Přístup ke kontaktům povolte v nastavení Online účty svého prostředí."
+
+#: ui/internal/contacts/text.go:298
+msgid "No Address Books"
+msgstr "Žádné adresáře"
+
+#: ui/internal/contacts/text.go:299
+msgid ""
+"Turn on contacts from Microsoft 365 or a CardDAV server in Preferences. "
+"Until then, here are the addresses you have written to."
+msgstr ""
+"Kontakty z Microsoft 365 nebo serveru CardDAV zapnete v Předvolbách. Do té "
+"doby tu jsou adresy, kterým jste psali."
+
+#: ui/internal/contacts/text.go:301
+msgid "No Contacts"
+msgstr "Žádné kontakty"
+
+#: ui/internal/contacts/text.go:303
+msgid "No Contacts Found"
+msgstr "Nenalezeny žádné kontakty"
+
+#: ui/internal/contacts/text.go:303
+msgid "Try another name, company or address."
+msgstr "Zkuste jiné jméno, firmu nebo adresu."
+
+#: ui/internal/contacts/text.go:305
+msgid "No Contact Selected"
+msgstr "Není vybraný žádný kontakt"
+
+#: ui/internal/contacts/text.go:311
+msgid "Open Preferences…"
+msgstr "Otevřít Předvolby…"
+
+#: ui/internal/contacts/text.go:320
+msgid "The contact no longer exists."
+msgstr "Kontakt už neexistuje."
+
+#: ui/internal/contacts/text.go:322
+msgid "The address book no longer exists."
+msgstr "Adresář už neexistuje."
+
+#: ui/internal/contacts/text.go:324
+msgid "This address book cannot be changed."
+msgstr "Tento adresář nelze měnit."
+
+#: ui/internal/contacts/text.go:331
+msgid "Microsoft needs your permission to access these contacts."
+msgstr "Microsoft potřebuje váš souhlas s přístupem k těmto kontaktům."
+
+#: ui/internal/contacts/text.go:333
+msgid "Contacts cannot be changed while offline."
+msgstr "Kontakty nelze měnit bez připojení."
+
+#: ui/internal/contacts/text.go:335
+msgid "The contact could not be saved. Check its details."
+msgstr "Kontakt se nepodařilo uložit. Zkontrolujte jeho údaje."
+
+#: ui/internal/contacts/text.go:345
+msgid "Sync Contacts"
+msgstr "Synchronizovat kontakty"
+
+#: ui/internal/contacts/text.go:350
+msgid "Edit the server, password and certificate on the Calendar page."
+msgstr "Server, heslo a certifikát upravíte na stránce Kalendář."
+
+#. TRANSLATORS: the Preferences group that decides which address books
+#. complete the recipients of a new message.
+#: ui/internal/contacts/text.go:357
+msgid "Recipient Suggestions"
+msgstr "Doplňování příjemců"
+
+#: ui/internal/contacts/text.go:363
+msgid "All Address Books"
+msgstr "Všechny adresáře"
+
+#: ui/internal/contacts/text.go:365
+msgid "Address Books of the Account You Write From"
+msgstr "Adresáře účtu, ze kterého píšete"
+
+#: ui/internal/contacts/text.go:374
+msgid ""
+"Add a Microsoft 365 account or a CardDAV server to see its contacts here."
+msgstr ""
+"Přidejte účet Microsoft 365 nebo server CardDAV a jeho kontakty se ukážou "
+"tady."
+
+#. TRANSLATORS: the heading of the address books a CardDAV server has.
+#: ui/internal/contacts/text.go:380
+msgid "Address Books"
+msgstr "Adresáře"
+
+#: ui/internal/contacts/text.go:388
+msgid "Add Calendar and Contacts (CalDAV/CardDAV)"
+msgstr "Přidat kalendář a kontakty (CalDAV/CardDAV)"
+
+#. TRANSLATORS: the contact form's label choice for an e-mail address,
+#. phone or address without a label.
+#: ui/internal/contacts/detail.go:61
+msgid "No Label"
+msgstr "Bez štítku"
+
+#. TRANSLATORS: the label of a work e-mail address in the
+#. contact form (lower case, like the other labels).
+#: ui/internal/contacts/detail.go:79
+msgctxt "email label"
+msgid "work"
+msgstr "pracovní"
+
+#. TRANSLATORS: the label of a personal e-mail address.
+#: ui/internal/contacts/detail.go:82
+msgctxt "email label"
+msgid "home"
+msgstr "soukromý"
+
+#: ui/internal/contacts/detail.go:84
+msgctxt "email label"
+msgid "other"
+msgstr "jiný"
+
+#. TRANSLATORS: the label of a postal address at work.
+#: ui/internal/contacts/detail.go:91
+msgctxt "address label"
+msgid "work"
+msgstr "práce"
+
+#: ui/internal/contacts/detail.go:93
+msgctxt "address label"
+msgid "home"
+msgstr "domov"
+
+#: ui/internal/contacts/detail.go:95
+msgctxt "address label"
+msgid "other"
+msgstr "jiná"
+
+#. TRANSLATORS: the label of a work website in the contact form.
+#: ui/internal/contacts/detail.go:100
+msgctxt "url label"
+msgid "work"
+msgstr "pracovní"
+
+#: ui/internal/contacts/detail.go:102
+msgctxt "url label"
+msgid "home"
+msgstr "soukromý"
+
+#: ui/internal/contacts/detail.go:104
+msgctxt "url label"
+msgid "other"
+msgstr "jiný"
+
+#. TRANSLATORS: the label of a mobile phone number.
+#: ui/internal/contacts/detail.go:111
+msgctxt "phone label"
+msgid "mobile"
+msgstr "mobil"
+
+#: ui/internal/contacts/detail.go:113
+msgctxt "phone label"
+msgid "work"
+msgstr "práce"
+
+#: ui/internal/contacts/detail.go:115
+msgctxt "phone label"
+msgid "home"
+msgstr "domů"
+
+#. TRANSLATORS: the label of a company's main phone number.
+#: ui/internal/contacts/detail.go:118
+msgctxt "phone label"
+msgid "main"
+msgstr "hlavní"
+
+#: ui/internal/contacts/detail.go:120
+msgctxt "phone label"
+msgid "fax"
+msgstr "fax"
+
+#: ui/internal/contacts/detail.go:122
+msgctxt "phone label"
+msgid "pager"
+msgstr "pager"
+
+#: ui/internal/contacts/detail.go:124
+msgctxt "phone label"
+msgid "other"
+msgstr "jiný"
+
+#. TRANSLATORS: a row label of the contact detail (lower case).
+#: ui/internal/contacts/detail.go:138
+msgid "work email"
+msgstr "pracovní e-mail"
+
+#: ui/internal/contacts/detail.go:140
+msgid "home email"
+msgstr "soukromý e-mail"
+
+#: ui/internal/contacts/detail.go:142
+msgid "other email"
+msgstr "jiný e-mail"
+
+#. TRANSLATORS: a row label of the contact detail: an e-mail address
+#. without a label.
+#: ui/internal/contacts/detail.go:146
+msgid "email"
+msgstr "e-mail"
+
+#. TRANSLATORS: a row label of the contact detail: a phone
+#. number without a label.
+#: ui/internal/contacts/detail.go:151
+msgid "phone"
+msgstr "telefon"
+
+#. TRANSLATORS: a row label of the contact detail: a postal
+#. address without a label.
+#: ui/internal/contacts/detail.go:158
+msgid "address"
+msgstr "adresa"
+
+#: ui/internal/contacts/detail.go:164
+msgid "work website"
+msgstr "pracovní web"
+
+#: ui/internal/contacts/detail.go:166
+msgid "home website"
+msgstr "soukromý web"
+
+#. TRANSLATORS: a row label of the contact detail: a web address.
+#: ui/internal/contacts/detail.go:169
+msgid "website"
+msgstr "web"
+
+#. TRANSLATORS: a row label of the contact detail.
+#: ui/internal/contacts/detail.go:412
+msgid "birthday"
+msgstr "narozeniny"
+
+#. TRANSLATORS: a row label of the contact detail.
+#: ui/internal/contacts/detail.go:422
+msgid "nickname"
+msgstr "přezdívka"
+
+#. TRANSLATORS: a row label of the contact detail.
+#: ui/internal/contacts/detail.go:426
+msgid "note"
+msgstr "poznámka"
+
+#. TRANSLATORS: the contact form's button that adds an e-mail
+#. address row.
+#: ui/internal/contacts/form.go:444
+msgid "Add Email"
+msgstr "Přidat e-mail"
+
+#: ui/internal/contacts/form.go:446
+msgid "Add Phone"
+msgstr "Přidat telefon"
+
+#: ui/internal/contacts/form.go:448
+msgid "Add Address"
+msgstr "Přidat adresu"
+
+#: ui/internal/contacts/form.go:450
+msgid "Add Website"
+msgstr "Přidat web"
+
+#: ui/internal/contacts/form.go:458
+msgid "Add Birthday"
+msgstr "Přidat narozeniny"
+
+#. TRANSLATORS: placeholders of the contact form's fields.
+#: ui/internal/contacts/form.go:465
+msgid "First Name"
+msgstr "Jméno"
+
+#: ui/internal/contacts/form.go:467
+msgid "Last Name"
+msgstr "Příjmení"
+
+#: ui/internal/contacts/form.go:469
+msgid "Middle Name"
+msgstr "Prostřední jméno"
+
+#. TRANSLATORS: a title before a name, such as "Ing." or "Dr.".
+#: ui/internal/contacts/form.go:472
+msgid "Prefix"
+msgstr "Titul před jménem"
+
+#. TRANSLATORS: a title after a name, such as "Ph.D." or "Jr.".
+#: ui/internal/contacts/form.go:475
+msgid "Suffix"
+msgstr "Titul za jménem"
+
+#: ui/internal/contacts/form.go:477
+msgid "Nickname"
+msgstr "Přezdívka"
+
+#: ui/internal/contacts/form.go:479
+msgid "Company"
+msgstr "Firma"
+
+#: ui/internal/contacts/form.go:481
+msgid "Job Title"
+msgstr "Funkce"
+
+#: ui/internal/contacts/form.go:483
+msgid "Email"
+msgstr "E-mail"
+
+#: ui/internal/contacts/form.go:485
+msgid "Phone"
+msgstr "Telefon"
+
+#: ui/internal/contacts/form.go:487
+msgid "Website"
+msgstr "Web"
+
+#: ui/internal/contacts/form.go:489
+msgid "Birthday"
+msgstr "Narozeniny"
+
+#: ui/internal/contacts/form.go:491
+msgid "Note"
+msgstr "Poznámka"
+
+#: ui/internal/contacts/form.go:512
+msgid "Street"
+msgstr "Ulice"
+
+#: ui/internal/contacts/form.go:514
+msgid "Postal Code"
+msgstr "PSČ"
+
+#: ui/internal/contacts/form.go:516
+msgid "City"
+msgstr "Město"
+
+#. TRANSLATORS: a part of a postal address: state, province or
+#. region.
+#: ui/internal/contacts/form.go:520
+msgid "Region"
+msgstr "Kraj"
+
+#: ui/internal/contacts/form.go:522
+msgid "Country"
+msgstr "Země"
+
+#. TRANSLATORS: the label of the choice where a new contact is saved.
+#: ui/internal/contacts/form.go:528
+msgid "Address Book"
+msgstr "Adresář"
+
+#. TRANSLATORS: the label of a new contact's name in Add to Contacts.
+#: ui/internal/contacts/form.go:534
+msgid "Name"
+msgstr "Jméno"
+
+#: ui/internal/contacts/form.go:559
+msgid "Enter a name, a company or an email address."
+msgstr "Zadejte jméno, firmu nebo e-mailovou adresu."
+
+#: ui/internal/contacts/form.go:561
+msgid "This text is too long."
+msgstr "Text je příliš dlouhý."
+
+#. TRANSLATORS: %s is what the user typed as an e-mail address.
+#: ui/internal/contacts/form.go:580
+#, c-format
+msgid "%s is not a valid email address."
+msgstr "%s není platná e-mailová adresa."
+
+#: ui/internal/contacts/form.go:605
+msgid "A website must be an address starting with http:// or https://."
+msgstr "Web musí být adresa začínající http:// nebo https://."
+
+#: ui/internal/contacts/form.go:611
+msgid "Enter a valid date."
+msgstr "Zadejte platné datum."
 
 #. TRANSLATORS: put between the names of a conversation's participants ("Alice, Bob").
 #: ui/internal/widget/format.go:62
@@ -8410,6 +8970,18 @@ msgid ""
 msgstr ""
 "Den, Týden, Měsíc nebo Agenda; zapisuje se při každé změně zobrazení "
 "Kalendáře a použije se, když se Kalendář zobrazí."
+
+#: data/io.github.schotek.Malachi.gschema.xml:307
+msgid "Which address books complete recipients"
+msgstr "Které adresáře doplňují příjemce"
+
+#: data/io.github.schotek.Malachi.gschema.xml:308
+msgid ""
+"The address books of the account the message is written from (with the "
+"recently used addresses), or every address book; the scope of contact.search."
+msgstr ""
+"Adresáře účtu, ze kterého se zpráva píše (s nedávno použitými adresami), "
+"nebo všechny adresáře; rozsah contact.search."
 
 #: data/io.github.schotek.Malachi.desktop.in:3
 msgid "Email Client"

@@ -1435,6 +1435,9 @@ import Testing
         // for the daemon's refresh (up to 30 s).
         #expect(API.IssueTransitions.timeout == .seconds(45) && RPCTimeouts.transitions == .seconds(45))
         #expect(API.IssueTransition.timeout == .seconds(45) && RPCTimeouts.transition == .seconds(45))
+        // A contact is written to the server first (contactsctl WriteTimeout).
+        #expect(API.ContactCreate.timeout == .seconds(60) && API.ContactUpdate.timeout == .seconds(60))
+        #expect(API.ContactDelete.timeout == .seconds(60))
         let special: Set<String> = ["system.info", "system.hello", "system.authenticate", "message.body",
                                     "message.part", "attachment.get", "message.embedded", "draft.create", "draft.open",
                                     "account.add", "account.update", "account.discover", "account.test",
@@ -1444,7 +1447,8 @@ import Testing
                                     "account.discoverCalDAV", "account.listCalDAVCalendars", "calendar.freeBusy",
                                     "calendar.findFreeTime", "event.create", "event.update", "event.delete",
                                     "event.respond", "invitation.respond",
-                                    "account.detectEway", "crm.lookup", "crm.search", "crm.save", "crm.remove"]
+                                    "account.detectEway", "crm.lookup", "crm.search", "crm.save", "crm.remove",
+                                    "contact.create", "contact.update", "contact.delete"]
         for m in API.methods where !special.contains(m.name) {
             #expect(m.timeout == RPCTimeouts.default, "\(m.name) should use the default timeout")
         }
