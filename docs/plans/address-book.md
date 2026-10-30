@@ -161,7 +161,7 @@ do `po/POTFILES`), macOS a Windows je berou s klíčem = msgid.
 
 ## 6. Wireframy
 
-Čísla v oranžových kolečkách odkazují na poznámky pod obrázkem. Texty
+Čísla v oranžových kolečkách odkazují na poznámky pod obrázkem (legenda je součástí každého SVG). Texty
 jsou česky tak, jak by je ukázal `cs.po`; msgid budou anglické. Jména,
 adresy a čísla jsou smyšlené.
 
