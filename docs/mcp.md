@@ -101,8 +101,8 @@ registered at all, so it never appears in the client's tool list.
 
 | Tier | Flag | Tools |
 |---|---|---|
-| read and draft | always | `list_accounts`, `list_folders`, `list_messages`, `search_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `list_transitions`, `list_board`, `create_draft`, `get_user_profile`, and the calendar tools `list_calendars`, `list_events`, `get_event`, `find_free_time`, `list_invitations` (not under `-reply-only` or `-triage-run`) |
-| modify | `-allow-modify` | `mark_messages`, `move_messages`, `delete_messages`, `transition_issue`, `unsubscribe`, `create_event` (attendees also need `-allow-send`) |
+| read and draft | always | `list_accounts`, `list_folders`, `list_messages`, `search_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `list_transitions`, `list_board`, `create_draft`, `get_user_profile`, the calendar tools `list_calendars`, `list_events`, `get_event`, `find_free_time`, `list_invitations` and the contacts tools `search_contacts`, `get_contact` (neither under `-reply-only` or `-triage-run`) |
+| modify | `-allow-modify` | `mark_messages`, `move_messages`, `delete_messages`, `transition_issue`, `unsubscribe`, `create_event` (attendees also need `-allow-send`), `create_contact`, `update_contact` |
 | send | `-allow-send` | `send_message` |
 | triage | `-allow-triage` | `list_triage_queue`, `annotate_case`, `add_commitment` (and the prompt `triage_board`) |
 | profile proposals | the user shares the profile, or `-in-app` | `propose_profile_note` (never under `-reply-only` or `-triage-run`; see [The user's profile](#the-users-profile-get_user_profile-propose_profile_note)) |
@@ -540,6 +540,40 @@ never given out (host and provider only), as with other links.
   D9](calendar.md)). The tool is annotated like `send_message`
   (destructive, open world) because it can reach other people. Update,
   delete and answering are not offered.
+
+### Contacts (`search_contacts`, `get_contact`, `create_contact`, `update_contact`)
+
+The contacts tools read and write the address books the daemon
+synchronises (Microsoft 365 contact folders, CardDAV collections) through
+`addressBook.list` and `contact.*` ([api.md §4.19](api.md)). The two read
+tools are registered as the calendar's (never under `-reply-only` or
+`-triage-run`); `create_contact` and `update_contact` need
+`-allow-modify`. **There is no delete**: a contact is deleted only by the
+user in Malachi Mail. Every string of a contact or book (names,
+organisations, addresses, labels, notes, book names) comes from a server
+or another person: it is cleaned and sits inside the fence; ids,
+revisions, kinds and counts stay outside, matched by row number or id.
+
+- `search_contacts`: optional `query` (words of the name, organisation or
+  address, each a prefix; empty lists every contact in name order),
+  `limit` (1 to 100, default 25). The address books first (id, account,
+  kind, read-only, visible, count; names in the fence), then a row per
+  contact (contact id, book id; name, organisation and first e-mail in the
+  fence). The recent book is not listed.
+- `get_contact`: `contactId`. Revision, read-only and birthday outside the
+  fence; names, organisation, job title, e-mails, phones, postal and web
+  addresses with their labels and the note (**cut at 4 KiB**) inside.
+- `create_contact` (`-allow-modify`): optional `bookId` (default the first
+  writable visible book), `displayName`, `givenName`, `familyName`,
+  `organisation`, `jobTitle`, `note`, `emails` (`address`, `label`),
+  `phones` (`number`, `label`). The contact goes to the user's server at
+  once (server first, online only).
+- `update_contact` (`-allow-modify`): `contactId` and the fields to
+  change, as `create_contact`'s; a string field given empty clears it,
+  `emails` and `phones` given replace the lists, every other property of
+  the card stays as the server has it (the daemon patches). The bridge
+  reads the contact and sends its revision: a change made elsewhere since
+  is `contactConflict` and nothing is written.
 
 ### The user's profile (`get_user_profile`, `propose_profile_note`)
 

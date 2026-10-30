@@ -113,6 +113,14 @@ type fakeBackend struct {
 	invitationCalls  []api.InvitationListParams
 	eventCreateCalls []api.EventCreateParams
 
+	// Contacts (tools_contacts_test.go): the canned books and cards and
+	// what the contact methods were asked.
+	books          []api.AddressBook
+	contactCards   map[api.ContactID]api.ContactCard
+	contactLists   []api.ContactListParams
+	contactCreates []api.ContactCreateParams
+	contactUpdates []api.ContactUpdateParams
+
 	searchResults []api.SearchResult // what every search.query answers
 	searchCalls   []api.SearchQueryParams
 }
