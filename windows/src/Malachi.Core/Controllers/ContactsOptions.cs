@@ -148,6 +148,41 @@ public sealed partial class ContactsOptions
         return Data(e, ApiJsonContext.Wire.ContactsConsentRequiredData) is { AccountId.Value.Length: > 0 } d ? d : null;
     }
 
+    /// <summary>
+    /// Allow… of a consent banner or row (macOS
+    /// <c>SyncController.requestSignInURL(contacts: true)</c>, GTK
+    /// contacts_consent.go): <c>account.oauthStart</c> with the account and
+    /// <c>contacts: true</c>, so that the grant asks for the contacts scope;
+    /// the daemon finishes the sign-in by itself and its
+    /// notify.accountsChanged lists the books again. Only an https page is
+    /// handed out; a failure is the usual sentence of a failed call.
+    /// </summary>
+    public async Task<SignInUrl> RequestSignInUrlAsync(AccountId account, CancellationToken cancellationToken = default)
+    {
+        string url;
+        try
+        {
+            var parameters = new AccountOAuthStartParams { AccountId = account, BrowserPage = Wizard.OAuth.BrowserPage(), Contacts = true };
+            url = (await Caller.CallAsync(API.AccountOAuthStart, parameters, Platform.RpcTimeouts.OAuthStart, cancellationToken)).AuthUrl;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+#pragma warning disable CA1031 // Every failure of the start is its sentence, as SyncController's.
+        catch (Exception e)
+#pragma warning restore CA1031
+        {
+            var code = AsRpcError(e).Code.Value;
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                LogCallFailed(logger, API.AccountOAuthStart.Name, code);
+            }
+            return new SignInUrl.Failed(RpcErrorText.Text(I18n.L10n.T("Starting the sign-in"), e));
+        }
+        return Wizard.OAuth.IsBrowserUrl(url) ? new SignInUrl.Open(url) : new SignInUrl.Failed(Wizard.OAuth.RefusedBrowserUrlText());
+    }
+
     /// <summary>The error's code; null for a success.</summary>
     public static ErrorCode? Code<T>(Outcome<T> outcome) => outcome.Error is { } e ? AsRpcError(e).Code : null;
 

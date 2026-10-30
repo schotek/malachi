@@ -88,6 +88,7 @@ public sealed partial class AppState : IDisposable
         InitializeBoard();
         InitializeProfile();
         InitializeCalendar();
+        InitializeContacts();
     }
 
     /// <summary>The app's log.</summary>
@@ -304,6 +305,7 @@ public sealed partial class AppState : IDisposable
         CloseProfile();
         CloseBoard();
         CloseCalendar();
+        CloseContacts();
         Windows.Dispose();
         Notifications.Dispose();
         Connection.Dispose();

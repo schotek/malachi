@@ -121,6 +121,14 @@ public sealed partial class SuggestionsController : IDisposable
     /// </summary>
     public Func<ContactSearchScope>? Scope { get; set; }
 
+    /// <summary>
+    /// The account label a synchronised book's suggestion names in its
+    /// tooltip ("Contacts · Microsoft 365 (…)"; macOS
+    /// RecipientSuggestionsController: the sending account while the scope is
+    /// the account's books, else ""); null names none, as GTK.
+    /// </summary>
+    public Func<string>? BookAccount { get; set; }
+
     /// <summary>What the popup shows, in order (suggest.go <c>contacts</c>).</summary>
     public IReadOnlyList<Contact> Contacts { get; private set; } = [];
 
@@ -337,7 +345,8 @@ public sealed partial class SuggestionsController : IDisposable
             return;
         }
         Contacts = contacts;
-        Rows = [.. contacts.Select(c => SuggestionRow.For(c))];
+        var account = BookAccount?.Invoke() ?? "";
+        Rows = [.. contacts.Select(c => SuggestionRow.For(c, c.Source == ContactSource.Contacts ? account : ""))];
         SelectedIndex = 0;
         IsVisible = true;
         Raise(Changed);

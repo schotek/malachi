@@ -87,6 +87,9 @@ public sealed class WindowCommands
     /// <summary>Add CalDAV Calendar… (macOS addCalDAVAccount:, docs/calendar.md §5.8): the Add CalDAV Calendar window.</summary>
     public AppCommand AddCalDAVCalendar { get; } = new(nameof(AddCalDAVCalendar));
 
+    /// <summary>app.contacts: the Contacts window (the "…" menus, no key; contacts_window.go).</summary>
+    public AppCommand Contacts { get; } = new(nameof(Contacts));
+
     /// <summary>app.about.</summary>
     public AppCommand About { get; } = new(nameof(About));
 
@@ -207,7 +210,7 @@ public sealed class WindowCommands
     /// <summary>Every command, for re-validating them all (a hook was wired).</summary>
     public IEnumerable<AppCommand> All =>
     [
-        .. byShortcut.Values, AddAccount, AddJiraAccount, AddCalDAVCalendar, About, MarkRead, LoadImages, TrustSender, ChangeStatus
+        .. byShortcut.Values, AddAccount, AddJiraAccount, AddCalDAVCalendar, Contacts, About, MarkRead, LoadImages, TrustSender, ChangeStatus
     ];
 
     /// <summary>Re-validates every command.</summary>

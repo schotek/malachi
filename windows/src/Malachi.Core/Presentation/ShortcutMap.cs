@@ -86,6 +86,16 @@ public static class ShortcutMap
         (KeyChord.Ctrl(VirtualKey.W), ShortcutCommand.CloseWindow),
     ];
 
+    // The Contacts window: its search (contacts_window.go installShortcuts'
+    // Ctrl+F, and Ctrl+E as in the main window) and Ctrl+W; Escape stays
+    // with the search box and the form, which it would drop unasked.
+    private static readonly (KeyChord Chord, ShortcutCommand Command)[] Contacts =
+    [
+        (KeyChord.Ctrl(VirtualKey.F), ShortcutCommand.Search),
+        (KeyChord.Ctrl(VirtualKey.E), ShortcutCommand.Search),
+        (KeyChord.Ctrl(VirtualKey.W), ShortcutCommand.CloseWindow),
+    ];
+
     private static readonly (KeyChord Chord, ShortcutCommand Command)[] Compose =
     [
         (KeyChord.Ctrl(VirtualKey.Enter), ShortcutCommand.Send),
@@ -214,6 +224,7 @@ public static class ShortcutMap
             WindowKind.Compose => Compose.Concat(Close),
             WindowKind.Preferences => Reorder.Concat(Close),
             WindowKind.Wizard => Close,
+            WindowKind.Contacts => Contacts,
             // The attachment previewer closes as Sushi and Quick Look do.
             WindowKind.Other => Close,
             _ => [],

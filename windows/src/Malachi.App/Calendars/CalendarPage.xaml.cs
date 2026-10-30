@@ -143,6 +143,7 @@ public sealed partial class CalendarPage : UserControl
         CommandBinding.Bind(MenuBoard, commands.ShowBoard);
         CommandBinding.Bind(MenuCalendar, commands.ShowCalendar);
         CommandBinding.Bind(MenuNewEvent, commands.NewEvent);
+        CommandBinding.Bind(MenuContacts, commands.Contacts);
         CommandBinding.Bind(MenuAddAccount, commands.AddAccount);
         CommandBinding.Bind(MenuPreferences, commands.Preferences);
         CommandBinding.Bind(MenuQuit, commands.Quit);

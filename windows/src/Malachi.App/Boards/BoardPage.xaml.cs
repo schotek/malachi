@@ -117,6 +117,7 @@ public sealed partial class BoardPage : UserControl
         CommandBinding.Bind(MenuMail, commands.ShowMail);
         CommandBinding.Bind(MenuBoard, commands.ShowBoard);
         CommandBinding.Bind(MenuCalendar, commands.ShowCalendar);
+        CommandBinding.Bind(MenuContacts, commands.Contacts);
         CommandBinding.Bind(MenuAddAccount, commands.AddAccount);
         CommandBinding.Bind(MenuPreferences, commands.Preferences);
         CommandBinding.Bind(MenuQuit, commands.Quit);

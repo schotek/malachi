@@ -51,6 +51,26 @@ public sealed class ContactsControllerTests
 
     private static string[] Titles(ContactsListController w) => [.. w.Rows.Select(r => r.IsHeading ? "[" + r.Heading + "]" : r.Title)];
 
+    // Windows-only: Allow…'s account.oauthStart asks for the contacts scope
+    // and hands out an https page only.
+    [Fact]
+    public async Task SignInAsksForTheContactsScope()
+    {
+        using var h = new H();
+        h.Daemon.Answer("account.oauthStart", new AccountOAuthStartResult { SessionId = "s1", AuthUrl = "https://login.example.com/authorize?x=1", ExpiresAt = DateTimeOffset.UnixEpoch });
+        var open = Assert.IsType<SignInUrl.Open>(await h.Options.RequestSignInUrlAsync(new AccountId("acc_work"), TestContext.Current.CancellationToken));
+        Assert.Equal("https://login.example.com/authorize?x=1", open.Url);
+        var p = h.Daemon.Last(API.AccountOAuthStart);
+        Assert.Equal(new AccountId("acc_work"), p.AccountId);
+        Assert.True(p.Contacts);
+        Assert.Null(p.Calendar);
+
+        h.Daemon.Answer("account.oauthStart", new AccountOAuthStartResult { SessionId = "s2", AuthUrl = "http://login.example.com/", ExpiresAt = DateTimeOffset.UnixEpoch });
+        Assert.IsType<SignInUrl.Failed>(await h.Options.RequestSignInUrlAsync(new AccountId("acc_work"), TestContext.Current.CancellationToken));
+        h.Daemon.Fail("account.oauthStart", Err(ErrorCode.Unavailable));
+        Assert.IsType<SignInUrl.Failed>(await h.Options.RequestSignInUrlAsync(new AccountId("acc_work"), TestContext.Current.CancellationToken));
+    }
+
     // window_test.go
 
     [Fact]

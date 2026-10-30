@@ -12,7 +12,12 @@
 // from Core's AddressHeader rows and AttachmentChips, their clicks sent to
 // the MessageActionRouter (an address's New Message), the AttachmentOpener
 // and previewer, and the registry (an attached message's window). Every text
-// is set through a Text property; no markup is ever parsed.
+// is set through a Text property; no markup is ever parsed. An address
+// chip's menu ends with the contacts item (docs/plans/address-book.md W2;
+// GTK contacts_chips.go, macOS AddressHeaderView): Show Contact when a
+// visible book has the address exactly, else Add to Contacts… (its flyout,
+// Contacts/AddToContactsFlyout.cs); the row's addresses are looked up once
+// when its chips are built, and the menu is built anew each time it opens.
 //
 // Windows differences (MessageView): the chips are split buttons (the click
 // previews, the arrow's menu has View, Open, Save As…), a chip GTK makes
@@ -23,12 +28,14 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Malachi.App.Attachments;
 using Malachi.App.Localization;
 using Malachi.App.Resources;
 using Malachi.Core.Api;
+using Malachi.Core.Contacts;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
 using Malachi.Core.Presentation;
@@ -96,9 +103,13 @@ internal sealed partial class MessageChips
             focusBody();
         }
         box.Children.Clear();
+        // contact.lookup for the row's addresses, once (the chips' Show
+        // Contact or Add to Contacts…, W2).
+        var key = LookupKey(row);
+        services.State.Contacts.Lookup.Ask(key, row.Chips.Select(c => c.Email));
         foreach (var chip in row.Chips)
         {
-            box.Children.Add(AddressButton(chip));
+            box.Children.Add(AddressButton(chip, key));
         }
         if (row.More > 0)
         {
@@ -180,7 +191,7 @@ internal sealed partial class MessageChips
 
     // addresses.go chip: the name on a pill, the whole address as its
     // tooltip; a click opens the menu, built the first time it opens.
-    private Button AddressButton(AddressChip chip)
+    private Button AddressButton(AddressChip chip, string key)
     {
         var button = new Button
         {
@@ -195,10 +206,9 @@ internal sealed partial class MessageChips
         var menu = new MenuFlyout { Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft };
         menu.Opening += (_, _) =>
         {
-            if (menu.Items.Count == 0)
-            {
-                FillAddressMenu(menu, chip);
-            }
+            // Built anew each time: the contacts item follows contact.lookup.
+            menu.Items.Clear();
+            FillAddressMenu(menu, chip, key, button);
         };
         button.Flyout = menu;
         return button;
@@ -206,7 +216,7 @@ internal sealed partial class MessageChips
 
     // addresses.go addressMenu: the name and the address on top, as text,
     // then Copy Address and New Message.
-    private void FillAddressMenu(MenuFlyout menu, AddressChip chip)
+    private void FillAddressMenu(MenuFlyout menu, AddressChip chip, string key, Button button)
     {
         if (chip.MenuName.Length > 0)
         {
@@ -228,7 +238,59 @@ internal sealed partial class MessageChips
         write.Click += (_, _) => services.Router.NewMessage(chip.Address, chip.Account);
         menu.Items.Add(copy);
         menu.Items.Add(write);
+        FillContactsItem(menu, chip, key, button);
     }
+
+    // contacts_chips.go: the contacts item of an address chip's menu, Show
+    // Contact for an address a visible book has exactly (contact.lookup,
+    // never by name), else Add to Contacts… when some book can take one;
+    // nothing before the lookup answered (asked again here after a failure).
+    private void FillContactsItem(MenuFlyout menu, AddressChip chip, string key, Button button)
+    {
+        if (!chip.CanAct)
+        {
+            return;
+        }
+        var contacts = services.State.Contacts;
+        contacts.Lookup.Ask(key, [chip.Email]);
+        var (kind, id) = contacts.Lookup.Item(key, chip.Email, contacts.Books);
+        if (kind == ContactBook.ChipItem.None)
+        {
+            return;
+        }
+        var item = new MenuFlyoutItem { Text = ContactBook.ChipItemText(kind) };
+        if (kind == ContactBook.ChipItem.Show && id is { } contact)
+        {
+            AutomationProperties.SetAutomationId(item, "MenuShowContact");
+            item.Click += (_, _) => contacts.ShowContact(contact, chip.Email);
+        }
+        else
+        {
+            AutomationProperties.SetAutomationId(item, "MenuAddToContacts");
+            item.Click += (_, _) =>
+            {
+                // After the menu has closed, under the chip it came from.
+                var window = hostWindow();
+                owner.DispatcherQueue.TryEnqueue(() => Contacts.AddToContactsFlyout.Show(
+                    contacts, chip.Address, chip.Account, button, new WindowToasts(services, window)));
+            };
+        }
+        menu.Items.Add(new MenuFlyoutSeparator());
+        menu.Items.Add(item);
+    }
+
+    // A toast in the window the chip is in.
+    private sealed class WindowToasts(ReaderServices services, Window? window) : Shell.IToasts
+    {
+        public void Show(string text) => services.ToastIn(window, text);
+
+        public void Show(string text, int seconds) => services.ToastIn(window, text);
+    }
+
+    // The key of a row's lookup: its account and addresses, the same for the
+    // same header (contact.lookup is asked once per key).
+    private static string LookupKey(AddressRow row) =>
+        string.Join('\n', row.Chips.Select(c => c.Account.Value + "|" + c.Email));
 
     // The chip's Copy Address: the bare address on the clipboard, and a
     // toast that says so. The clipboard is the system's: while another

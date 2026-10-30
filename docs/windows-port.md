@@ -4125,6 +4125,57 @@ Ctrl+Z → the message back and selected; the board's Archive → Ctrl+Z;
 Ctrl+Z in the search box stays text undo), and by hand the toast in light,
 dark and a narrow window, keyboard focus on its button and Narrator.
 
+### 11.15 Address books (contacts, 2026-10-30)
+
+Port of the macOS client's contacts (`54b1c939`, `da76637b`) with GTK's
+`window/contacts_*.go`, `preferences_contacts.go` and `calendar_caldav.go`
+as the reference of behaviour (`docs/plans/address-book.md` W1–W6, K5). Core
+(`fcb35d82`): `Contacts/` (`ContactBook`, `ContactsText`), the controllers
+`ContactsListController`, `ContactsDetailController`,
+`ContactsLookupController`, `ContactsPreferencesController` over
+`ContactsOptions` (`RpcContactsCaller`, or `ContactsSampleCaller` with
+`MALACHI_CONTACTS_SAMPLES=1`), and since the App port
+`ContactsOptions.RequestSignInUrlAsync` (Allow…: `account.oauthStart` with
+`contacts: true`), `SuggestionsController.BookAccount` (the sending account
+in a synchronised book's tooltip) and `WindowKind.Contacts` (Ctrl+F, Ctrl+E,
+Ctrl+W; never Escape).
+
+App (`Malachi.App.Contacts`): `AppContacts` (one for the application, made
+by `AppState.Contacts.cs`: the options, the chips' lookup, the books and
+accounts as last listed, notify.contactsChanged and accountsChanged — the
+samples' `Notified` too — to the window, the lookup and Preferences; Write
+Email, Show Mail, Allow…, the suggestions' scope); `ContactsWindow` (+
+`.Detail.cs`, `.Form.cs`): one window, opened by the `Contacts` command
+(`WindowCommands.Contacts`, `AppHooks.OpenContacts`) from the `…` menus of
+Mail's sidebar (`MenuContacts`), the Board (`BoardMenuContacts`) and the
+Calendar (`CalendarMenuContacts`), from a chip's Show Contact and from Add to
+Contacts' More Details…; the sidebar of books (disabled items for the
+headings with their kind capsules), the grouped `ListView` of the list
+(`ContactRowItem`, `ContactsListGroup`; flat while searching; the next page
+near its end), consent `InfoBar`s, the `CommandBar`, the card and the form
+built in code (every text a `TextBlock.Text`; the street and the note
+`AcceptsReturn`; problems marked in the critical colour and listed in the
+detail's `InfoBar`), the row's context menu, the status line on a 30 s
+timer, folding by `ContactBook.FoldFor(width, GtkBreakpoints)`, Discard
+Changes? before an unsaved form is left (another contact or book, New
+Contact, back, Ctrl+W, the close button); `AddToContactsFlyout`;
+`MainWindow.ShowMailSearch` (Show Mail: Mail, the scope All Accounts, the
+query in the box). `MessageChips` ends an address chip's menu with Show
+Contact or Add to Contacts…; `ComposePane` and the event editor's attendees
+call `AppContacts.WireSuggestions`. `Preferences/ContactsPreferencesPage`
+after Calendar (`ContactsPage`). `CalDAVWizardWindow` is titled with
+`ContactsText.WizardTitle`, lists the address books under Address Books
+(`CalDAVAddressBooks`) and hides the calendars' list for a server without
+any. `ToastHost`'s text has the automation id `ToastText`.
+
+Tests: Core `ContactsControllerTests.SignInAsksForTheContactsScope`,
+`ShortcutMapTests.TheContactsWindowSearchesAndClosesWithCtrlWButNeverEscape`,
+`SuggestionsControllerTests.ASynchronisedBooksTooltipNamesTheBookAccountOnlyForItsRows`;
+UI smoke `ContactsSmokeTests` over the samples (`ContactsSmokeFixture`).
+Not done: Quit does not ask before an unsaved contact form goes; the
+detail's phone numbers are copied only (no dialling, as macOS); dark theme,
+other display scales, touch, Narrator over the form and ARM64 by hand.
+
 ## 12. Tests
 
 `make test-windows` (`build.ps1 test`) runs six test projects, 5,944

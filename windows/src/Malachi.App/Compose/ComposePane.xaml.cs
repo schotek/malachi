@@ -867,6 +867,8 @@ public sealed partial class ComposePane : UserControl, IComposeForm
                 // are no part of what is completed.
                 () => (row.Pending, Suggest.ScalarOffset(row.Pending.Length, row.Pending)),
                 logger: state.Logs.CreateLogger<SuggestionsController>());
+            // contacts-suggest-scope and the book's account in the tooltip.
+            state.Contacts.WireSuggestions(controller, () => CallAccount);
             var s = new RecipientSuggestions(row, controller);
             suggestions.Add(s);
             // The value changed (a badge, typed text: the draft is dirty), and

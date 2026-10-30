@@ -45,6 +45,7 @@ the toast and runs it. Place it last in the grid cell it covers, spanning it.
                 </Grid.ColumnDefinitions>
                 <TextBlock
                     x:Name="Label"
+                    AutomationProperties.AutomationId="ToastText"
                     VerticalAlignment="Center"
                     MaxLines="1"
                     Style="{StaticResource BodyLabelStyle}"

@@ -1,0 +1,403 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Contacts/ContactsWindowController.swift,
+ContactsSidebarViewController.swift, ContactsListViewController.swift and
+ContactsDetailViewController.swift; GTK: ui/data/ui/contacts_window.blp
+(docs/plans/address-book.md W1, W4–W6). One window for the application, on
+Mica: the title bar with the icon, "Contacts" and the search box (W6, Ctrl+E
+and Ctrl+F); below it three columns as the main window's panes: the sidebar
+of address books (account headings with their kind capsules, Recently Used
+under On This Computer), the list of the selected book (letter sections, flat
+while searching; Microsoft's consent as InfoBars over it; its empty state)
+with New Contact, and the detail: a CommandBar (Write Email, Show Mail, Copy,
+Edit, Delete Contact…; Done and Cancel while the form is open) over the
+contact's card or its form, the error as an InfoBar, the empty state with
+Open Preferences…. The status bar is across the bottom. Below 900 and 600
+effective pixels the window folds as the main window does (ContactBook
+GtkBreakpoints): the sidebar first (the title bar's pane button shows it),
+then the detail covers the list (its back button returns). Every text of a
+book or a contact is a TextBlock's Text, never markup.
+-->
+<Window
+    x:Class="Malachi.App.Contacts.ContactsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:contacts="using:Malachi.App.Contacts"
+    xmlns:controls="using:Malachi.App.Controls"
+    xmlns:main="using:Malachi.App.Main"
+    xmlns:res="using:Malachi.App.Resources">
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+    <Grid x:Name="Root" AutomationProperties.AutomationId="ContactsWindow">
+        <Grid.Resources>
+            <!-- The detail's card of rows, built in code: its brushes follow
+            the window's theme (color-scheme), which a lookup in the
+            application's resources would not. -->
+            <Style x:Key="ContactsDetailCard" TargetType="StackPanel">
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+            </Style>
+        </Grid.Resources>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Where Mica is not available the window paints itself. -->
+        <Border
+            x:Name="SolidBackground"
+            Grid.RowSpan="3"
+            Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+            Visibility="Collapsed" />
+
+        <TitleBar
+            x:Name="Header"
+            Grid.Row="0"
+            AutomationProperties.AutomationId="ContactsHeader"
+            BackRequested="OnBackRequested"
+            IsBackButtonVisible="False"
+            IsPaneToggleButtonVisible="False"
+            IsTabStop="False"
+            PaneToggleRequested="OnPaneToggleRequested">
+            <TitleBar.IconSource>
+                <ImageIconSource ImageSource="ms-appx:///Assets/Malachi.ico" />
+            </TitleBar.IconSource>
+            <AutoSuggestBox
+                x:Name="SearchBox"
+                MinWidth="120"
+                MaxWidth="360"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Center"
+                AutomationProperties.AutomationId="ContactsSearch"
+                TextChanged="OnSearchTextChanged">
+                <AutoSuggestBox.QueryIcon>
+                    <FontIcon FontSize="12" Glyph="{x:Bind res:Icons.Glyph('edit-find')}" />
+                </AutoSuggestBox.QueryIcon>
+            </AutoSuggestBox>
+        </TitleBar>
+
+        <Grid x:Name="Columns" Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="SidebarColumn" Width="240" />
+                <ColumnDefinition x:Name="ListColumn" Width="300" />
+                <ColumnDefinition x:Name="DetailColumn" Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- The sidebar of address books (built in code: headings and rows). -->
+            <ListView
+                x:Name="BookList"
+                Grid.Column="0"
+                Padding="0,4,0,8"
+                AutomationProperties.AutomationId="ContactsBooks"
+                SelectionChanged="OnBookSelectionChanged"
+                SelectionMode="Single">
+                <ListView.Resources>
+                    <!-- The headings are disabled items: no selection, no keyboard stop, but not dimmed. -->
+                    <x:Double x:Key="ListViewItemDisabledThemeOpacity">1</x:Double>
+                </ListView.Resources>
+                <ListView.ItemContainerStyle>
+                    <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                        <Setter Property="MinHeight" Value="0" />
+                        <Setter Property="Padding" Value="10,0,10,0" />
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    </Style>
+                </ListView.ItemContainerStyle>
+            </ListView>
+
+            <!-- The list of the selected book, on the content layer. -->
+            <Grid
+                x:Name="ListPane"
+                Grid.Column="1"
+                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1,0,1,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid Padding="12,6,6,6" ColumnSpacing="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        x:Name="ListTitle"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="ContactsListTitle"
+                        Style="{StaticResource DimLabelStyle}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap" />
+                    <Button
+                        x:Name="NewButton"
+                        Grid.Column="1"
+                        Width="36"
+                        Height="32"
+                        Padding="0"
+                        AutomationProperties.AutomationId="ContactsNew"
+                        Click="OnNewClick"
+                        IsEnabled="False"
+                        Style="{StaticResource SubtleButtonStyle}">
+                        <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('list-add')}" />
+                    </Button>
+                </Grid>
+                <!-- Microsoft's consent, one InfoBar per account (W5 b). -->
+                <StackPanel
+                    x:Name="ConsentBars"
+                    Grid.Row="1"
+                    Margin="8,0,8,4"
+                    Spacing="4" />
+                <ListView
+                    x:Name="ContactList"
+                    Grid.Row="2"
+                    Padding="0,0,0,8"
+                    AutomationProperties.AutomationId="ContactsList"
+                    ContainerContentChanging="OnContainerContentChanging"
+                    ContextRequested="OnListContextRequested"
+                    SelectionChanged="OnContactSelectionChanged"
+                    SelectionMode="Single">
+                    <ListView.ItemContainerStyle>
+                        <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                            <Setter Property="MinHeight" Value="0" />
+                            <Setter Property="Padding" Value="10,0,10,0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="contacts:ContactRowItem">
+                            <Grid
+                                Height="48"
+                                Background="Transparent"
+                                ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <main:Avatar
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    Size="32"
+                                    Text="{x:Bind Title}" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock
+                                        MaxLines="1"
+                                        Style="{StaticResource BodyLabelStyle}"
+                                        Text="{x:Bind Title}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="NoWrap" />
+                                    <TextBlock
+                                        MaxLines="1"
+                                        Style="{StaticResource DimCaptionLabelStyle}"
+                                        Text="{x:Bind Detail}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="NoWrap"
+                                        Visibility="{x:Bind res:Bind.VisibleIfText(Detail)}" />
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                    <ListView.GroupStyle>
+                        <GroupStyle HidesIfEmpty="True">
+                            <GroupStyle.HeaderTemplate>
+                                <DataTemplate x:DataType="contacts:ContactsListGroup">
+                                    <TextBlock
+                                        AutomationProperties.HeadingLevel="Level2"
+                                        Style="{StaticResource HeadingLabelStyle}"
+                                        Text="{x:Bind Key}" />
+                                </DataTemplate>
+                            </GroupStyle.HeaderTemplate>
+                        </GroupStyle>
+                    </ListView.GroupStyle>
+                </ListView>
+                <StackPanel
+                    x:Name="ListEmpty"
+                    Grid.Row="2"
+                    Margin="16"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="ContactsListEmpty"
+                    Spacing="4"
+                    Visibility="Collapsed">
+                    <TextBlock
+                        x:Name="ListEmptyTitle"
+                        HorizontalAlignment="Center"
+                        Style="{StaticResource HeadingLabelStyle}"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        x:Name="ListEmptyBody"
+                        HorizontalAlignment="Center"
+                        Style="{StaticResource DimLabelStyle}"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+
+            <!-- The detail: its commands, the error, the card or the form, the empty state. -->
+            <Grid x:Name="DetailPane" Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <CommandBar
+                    x:Name="Commands"
+                    HorizontalAlignment="Stretch"
+                    AutomationProperties.AutomationId="ContactsCommands"
+                    DefaultLabelPosition="Right"
+                    IsDynamicOverflowEnabled="True">
+                    <!-- Narrow, Delete goes to the overflow first, then Copy,
+                    Show Mail and Write Email; Edit, Done and Cancel stay. -->
+                    <AppBarButton
+                        x:Name="WriteEmailButton"
+                        AutomationProperties.AutomationId="ContactsWriteEmail"
+                        Click="OnWriteEmailClick"
+                        DynamicOverflowOrder="4"
+                        Icon="{x:Bind res:Icons.Create('mail-message-new', 16)}" />
+                    <AppBarButton
+                        x:Name="ShowMailButton"
+                        AutomationProperties.AutomationId="ContactsShowMail"
+                        Click="OnShowMailClick"
+                        DynamicOverflowOrder="3"
+                        Icon="{x:Bind res:Icons.Create('mail-inbox', 16)}" />
+                    <AppBarButton
+                        x:Name="CopyButton"
+                        AutomationProperties.AutomationId="ContactsCopy"
+                        Click="OnCopyClick"
+                        DynamicOverflowOrder="2"
+                        Icon="{x:Bind res:Icons.Create('edit-copy', 16)}" />
+                    <AppBarSeparator x:Name="EditSeparator" />
+                    <AppBarButton
+                        x:Name="EditButton"
+                        AutomationProperties.AutomationId="ContactsEdit"
+                        Click="OnEditClick"
+                        Icon="{x:Bind res:Icons.Create('document-edit', 16)}" />
+                    <AppBarButton
+                        x:Name="SaveButton"
+                        AutomationProperties.AutomationId="ContactsSave"
+                        Click="OnSaveClick"
+                        Icon="{x:Bind res:Icons.Create('emblem-ok', 16)}" />
+                    <AppBarButton
+                        x:Name="CancelButton"
+                        AutomationProperties.AutomationId="ContactsCancel"
+                        Click="OnCancelClick"
+                        Icon="{x:Bind res:Icons.Create('window-close', 16)}" />
+                    <AppBarButton
+                        x:Name="DeleteButton"
+                        AutomationProperties.AutomationId="ContactsDelete"
+                        Click="OnDeleteClick"
+                        DynamicOverflowOrder="1"
+                        Icon="{x:Bind res:Icons.Create('user-trash', 16)}" />
+                </CommandBar>
+                <InfoBar
+                    x:Name="ErrorBar"
+                    Grid.Row="1"
+                    Margin="12,0,12,4"
+                    AutomationProperties.AutomationId="ContactsError"
+                    IsClosable="False"
+                    IsOpen="False"
+                    Severity="Warning" />
+                <ScrollViewer
+                    x:Name="DetailScroller"
+                    Grid.Row="2"
+                    AutomationProperties.AutomationId="ContactsDetail"
+                    HorizontalScrollBarVisibility="Disabled"
+                    HorizontalScrollMode="Disabled"
+                    IsTabStop="False"
+                    VerticalScrollBarVisibility="Auto">
+                    <!-- A Grid between the ScrollViewer and the clamped column: a ScrollViewer centres a child with a MaxWidth of its own off to the side. -->
+                    <Grid>
+                        <StackPanel
+                            x:Name="DetailHost"
+                            MaxWidth="640"
+                            Padding="20,8,20,20"
+                            Spacing="14" />
+                    </Grid>
+                </ScrollViewer>
+                <StackPanel
+                    x:Name="DetailEmpty"
+                    Grid.Row="0"
+                    Grid.RowSpan="3"
+                    Margin="24"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="ContactsDetailEmpty"
+                    Spacing="6"
+                    Visibility="Collapsed">
+                    <FontIcon
+                        HorizontalAlignment="Center"
+                        AutomationProperties.AccessibilityView="Raw"
+                        FontSize="40"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        Glyph="{x:Bind res:Icons.Glyph('x-office-address-book')}" />
+                    <TextBlock
+                        x:Name="DetailEmptyTitle"
+                        HorizontalAlignment="Center"
+                        Style="{StaticResource HeadingLabelStyle}"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        x:Name="DetailEmptyBody"
+                        MaxWidth="360"
+                        HorizontalAlignment="Center"
+                        Style="{StaticResource DimLabelStyle}"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap" />
+                    <Button
+                        x:Name="OpenPreferencesButton"
+                        Margin="0,6,0,0"
+                        HorizontalAlignment="Center"
+                        AutomationProperties.AutomationId="ContactsOpenPreferences"
+                        Click="OnOpenPreferencesClick"
+                        Visibility="Collapsed" />
+                </StackPanel>
+                <ProgressRing
+                    x:Name="Busy"
+                    Grid.Row="2"
+                    Width="24"
+                    Height="24"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    IsActive="False"
+                    Visibility="Collapsed" />
+            </Grid>
+        </Grid>
+
+        <!-- The status bar across the bottom (W1 ⑦). -->
+        <Grid
+            Grid.Row="2"
+            Height="28"
+            Padding="12,0,12,0"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="0,1,0,0"
+            ColumnSpacing="6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <FontIcon
+                x:Name="StatusIcon"
+                VerticalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                FontSize="12"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Glyph="{x:Bind res:Icons.Glyph('view-refresh')}" />
+            <TextBlock
+                x:Name="StatusText"
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                AutomationProperties.AutomationId="ContactsStatus"
+                AutomationProperties.LiveSetting="Polite"
+                Style="{StaticResource DimCaptionLabelStyle}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
+        </Grid>
+
+        <controls:ToastHost x:Name="ToastsHost" Grid.Row="1" />
+    </Grid>
+</Window>

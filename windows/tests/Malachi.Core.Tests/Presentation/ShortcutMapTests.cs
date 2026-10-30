@@ -255,6 +255,18 @@ public sealed class ShortcutMapTests
     }
 
     [Fact]
+    public void TheContactsWindowSearchesAndClosesWithCtrlWButNeverEscape()
+    {
+        var contacts = new ShortcutContext(WindowKind.Contacts);
+        Assert.Equal(C.Search, Resolve(KeyChord.Ctrl(K.E), contacts));
+        Assert.Equal(C.Search, Resolve(KeyChord.Ctrl(K.F), contacts));
+        Assert.Equal(C.CloseWindow, Resolve(KeyChord.Ctrl(K.W), contacts));
+        Assert.Null(Resolve(KeyChord.Bare(K.Escape), contacts));
+        Assert.Null(Resolve(KeyChord.Bare(K.Delete), contacts));
+        Assert.Equal(C.NewMessage, Resolve(KeyChord.Ctrl(K.N), contacts));
+    }
+
+    [Fact]
     public void TheChordsOfAWindowAreEveryKeyThatResolvesThere()
     {
         foreach (var window in Enum.GetValues<WindowKind>())

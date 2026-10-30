@@ -13,7 +13,8 @@
 // at once, and the AI page asks the bridge whenever it comes up; the
 // Calendar page (after General, as on macOS) binds this window's calendar
 // source at once, as macOS attaches it, and draws it again whenever it
-// comes up. On the
+// comes up; the Contacts page (after Calendar) lists the accounts and the
+// books whenever it comes up. On the
 // General page Windows decides some things (the Run value and the
 // default mail app): the page reads them again whenever it comes up and
 // whenever the window is activated (after a visit to Settings). The
@@ -65,6 +66,7 @@ public sealed partial class PreferencesWindow : Window
     private readonly IntegrationsPage integrations;
     private readonly GeneralPage general;
     private readonly CalendarPreferencesPage calendar;
+    private readonly ContactsPreferencesPage contactsPage;
     private readonly AppearancePage appearance;
     private readonly AiPage ai;
 
@@ -91,6 +93,7 @@ public sealed partial class PreferencesWindow : Window
         integrations = new IntegrationsPage(state, this, ToastsHost);
         general = new GeneralPage(state, bindings, ToastsHost);
         calendar = new CalendarPreferencesPage(state, this, ToastsHost);
+        contactsPage = new ContactsPreferencesPage(state, this, ToastsHost);
         appearance = new AppearancePage(state, bindings);
         ai = new AiPage(state, bindings, ToastsHost, () => this);
 
@@ -118,6 +121,7 @@ public sealed partial class PreferencesWindow : Window
             integrations.Close();
             general.Close();
             calendar.Close();
+            contactsPage.Close();
             ai.Close();
         };
         // The calendar page works over this window's calendar source from
@@ -150,6 +154,9 @@ public sealed partial class PreferencesWindow : Window
     /// Calendars…, AppState.ShowCalendarPreferences).
     /// </summary>
     public void ShowCalendar() => Navigation.SelectedItem = CalendarItem;
+
+    /// <summary>Shows the Contacts page (the Contacts window's No Address Books, Open Preferences…).</summary>
+    public void ShowContacts() => Navigation.SelectedItem = ContactsItem;
 
     /// <summary>
     /// Opens the Preferences, or brings the open window to the front
@@ -241,6 +248,7 @@ public sealed partial class PreferencesWindow : Window
             "integrations" => integrations,
             "general" => general,
             "calendar" => calendar,
+            "contacts" => contactsPage,
             "appearance" => appearance,
             "ai" => ai,
             _ => accounts,
@@ -257,6 +265,10 @@ public sealed partial class PreferencesWindow : Window
         else if (ReferenceEquals(page, calendar))
         {
             calendar.Refresh();
+        }
+        else if (ReferenceEquals(page, contactsPage))
+        {
+            contactsPage.Refresh();
         }
         else if (ReferenceEquals(page, ai))
         {

@@ -24,6 +24,14 @@
 // sections and sidebars over it follow), and the window closes. Nothing
 // here logs a field: the password goes from its box to the controller only
 // and is cleared once the account is added.
+//
+// Since the address books (docs/plans/address-book.md W3 ⑤; GTK
+// calendar_caldav.go renderBooks, macOS da76637b): the window is titled
+// "Add Calendar and Contacts (CalDAV/CardDAV)", the found address books
+// are plain rows under Address Books ("Read Only" beside a book that cannot
+// be changed), the calendars' heading and list hide for a server with
+// address books only, and Add is offered once the listing has a selected
+// calendar or any address book (Core's CanAdd).
 
 using System;
 using System.Collections.Generic;
@@ -32,6 +40,7 @@ using Malachi.App.Preferences;
 using Malachi.App.Shell;
 using Malachi.Core.Api;
 using Malachi.Core.Calendars;
+using Malachi.Core.Contacts;
 using Malachi.Core.Controllers;
 using Malachi.Core.Presentation;
 using Malachi.Core.Text;
@@ -65,6 +74,7 @@ public sealed partial class CalDAVWizardWindow : Window
     private IReadOnlyList<CalDAVWizardController.ListedCalendar> shownCalendars = [];
     private readonly List<CalendarRowView> calendarRows = [];
     private IReadOnlyList<CalDAVWizardController.MailAccount> shownMailAccounts = [];
+    private IReadOnlyList<CardDAVAddressBook> shownBooks = [];
 
     // The widgets are being set from the controller: their events are not the user's.
     private bool applying;
@@ -79,13 +89,13 @@ public sealed partial class CalDAVWizardWindow : Window
         InitializeComponent();
         wizard = new CalDAVWizardController(source);
 
-        Title = Cal.CalDAVWizard.Title;
+        Title = ContactsText.WizardTitle;
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(Header);
-        Header.Title = Cal.CalDAVWizard.Title;
+        Header.Title = ContactsText.WizardTitle;
         // The window keeps the sheet's name (Alt+Tab, UIA) after the title
         // bar names it (AccountWizardWindow).
-        Header.Loaded += (_, _) => Title = Cal.CalDAVWizard.Title;
+        Header.Loaded += (_, _) => Title = ContactsText.WizardTitle;
         var icon = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "Malachi.ico");
         if (System.IO.File.Exists(icon))
         {
@@ -156,7 +166,7 @@ public sealed partial class CalDAVWizardWindow : Window
     // The texts and the rows that never change.
     private void Build()
     {
-        TitleText.Text = Cal.CalDAVWizard.Title;
+        TitleText.Text = ContactsText.WizardTitle;
         SubtitleText.Text = Cal.CalDAVWizard.Subtitle;
         Label(NameRow, NameBox, Field.Name);
         Label(ServerRow, ServerBox, Field.Server);
@@ -167,8 +177,10 @@ public sealed partial class CalDAVWizardWindow : Window
         DiscoverButton.Content = Cal.CalDAVWizard.DiscoverButton;
         CertificateRow.Header = Cal.CalDAVWizard.CertificateLabel;
         TrustButton.Content = Cal.CalDAVWizard.TrustButton;
-        CalendarsHeading.Text = Cal.CalDAVWizard.CalendarsHeading;
-        AutomationProperties.SetName(CalendarsBox, Cal.CalDAVWizard.CalendarsHeading);
+        CalendarsHeading.Text = ContactsText.CalendarsHeading;
+        AutomationProperties.SetName(CalendarsBox, ContactsText.CalendarsHeading);
+        BooksHeading.Text = ContactsText.AddressBooksHeading;
+        AutomationProperties.SetName(BooksBox, ContactsText.AddressBooksHeading);
         MailAccountRow.Header = Cal.Prefs.MailAccountSetting;
         AutomationProperties.SetName(MailAccountBox, Cal.Prefs.MailAccountSetting);
         FooterText.Text = Cal.CalDAVWizard.Footer;
@@ -232,6 +244,7 @@ public sealed partial class CalDAVWizardWindow : Window
             CertificateRow.Visibility = cert.Length == 0 && !offer ? Visibility.Collapsed : Visibility.Visible;
 
             RenderCalendars(w);
+            RenderBooks(w);
             RenderMailAccounts(w);
 
             AddButton.IsEnabled = w.CanAdd;
@@ -274,6 +287,10 @@ public sealed partial class CalDAVWizardWindow : Window
     {
         var listed = wizard.ListedCalendars;
         CalendarsGroup.Visibility = w.Listed is null ? Visibility.Collapsed : Visibility.Visible;
+        // A server with only address books shows no empty calendar list.
+        var hasCalendars = w.Listed is { Calendars.Count: > 0 };
+        CalendarsHeading.Visibility = hasCalendars ? Visibility.Visible : Visibility.Collapsed;
+        CalendarsBox.Visibility = hasCalendars ? Visibility.Visible : Visibility.Collapsed;
         FoundText.Text = w.FoundLine;
         FoundText.Visibility = w.FoundLine.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         if (calendarRows.Count != listed.Count || !listed.Select(c => c.Href).SequenceEqual(shownCalendars.Select(c => c.Href)))
@@ -300,6 +317,34 @@ public sealed partial class CalDAVWizardWindow : Window
             calendarRows[i].Update(c.Name, c.Color, c.Note);
             calendarRows[i].Box.IsChecked = c.Selected;
             calendarRows[i].Box.IsEnabled = usable;
+        }
+    }
+
+    // renderBooks: the found address books, plain rows (their names are the
+    // server's text) with Read Only where they cannot be changed; built
+    // again only when they changed. Which are shown is chosen in
+    // Preferences → Contacts afterwards.
+    private void RenderBooks(Cal.CalDAVWizard w)
+    {
+        IReadOnlyList<CardDAVAddressBook> books = w.Listed?.AddressBooks ?? [];
+        BooksGroup.Visibility = books.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (books.SequenceEqual(shownBooks))
+        {
+            return;
+        }
+        shownBooks = books;
+        BooksList.Children.Clear();
+        for (var i = 0; i < books.Count; i++)
+        {
+            var b = books[i];
+            var name = ContactBook.Clean(b.Name, API.Limits.MaxContactFieldBytes);
+            var card = new CommunityToolkit.WinUI.Controls.SettingsCard { Header = name.Length == 0 ? ContactsText.WindowTitle : name };
+            AutomationProperties.SetAutomationId(card, "CalDAVAddressBook:" + i.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            if (b.IsReadOnly)
+            {
+                card.Content = new TextBlock { Text = ContactsText.ReadOnly, Style = (Style)Application.Current.Resources["DimCaptionLabelStyle"] };
+            }
+            BooksList.Children.Add(card);
         }
     }
 

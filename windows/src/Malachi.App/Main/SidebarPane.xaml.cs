@@ -97,6 +97,7 @@ public sealed partial class SidebarPane : UserControl
         };
         CommandBinding.Bind(NewMessageButton, commands.NewMessage);
         CommandBinding.Bind(MenuNewMessage, commands.NewMessage);
+        CommandBinding.Bind(MenuContacts, commands.Contacts);
         CommandBinding.Bind(MenuAddAccount, commands.AddAccount);
         CommandBinding.Bind(MenuAddJiraAccount, commands.AddJiraAccount);
         CommandBinding.Bind(MenuAddCalDAVCalendar, commands.AddCalDAVCalendar);

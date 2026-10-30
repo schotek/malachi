@@ -12,6 +12,8 @@ names (Accounts: system-users, Integrations: application-x-addon,
 General: preferences-system, Appearance: applications-graphics, AI:
 applications-science), with the Calendar page after General as macOS has
 it (x-office-calendar, the Calendar mode's icon; docs/calendar.md §5.8),
+the Contacts page right after it (x-office-address-book;
+docs/plans/address-book.md W3),
 and the
 visible page with the toast overlay over it. There is no search field
 (windows/README.md, as macOS) and no Settings item of the NavigationView's
@@ -107,6 +109,15 @@ then.
                     Tag="calendar">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="{x:Bind res:Icons.Glyph('x-office-calendar')}" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    x:Name="ContactsItem"
+                    AutomationProperties.AutomationId="ContactsPage"
+                    Content="{l:T Msgid='Contacts'}"
+                    Tag="contacts">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="{x:Bind res:Icons.Glyph('x-office-address-book')}" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem

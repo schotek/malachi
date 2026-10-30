@@ -110,6 +110,12 @@ over it all (ToastLayer). The page's keys: CalendarController.HandleKey.
                             KeyboardAcceleratorTextOverride="Ctrl+Shift+N"
                             Text="{l:T Msgid='New Event'}" />
                         <MenuFlyoutSeparator />
+                        <!-- The Contacts window (window.blp primary_menu app.contacts), without a key. -->
+                        <MenuFlyoutItem
+                            x:Name="MenuContacts"
+                            AutomationProperties.AutomationId="CalendarMenuContacts"
+                            l:MnemonicLabel.Text="{l:T Msgid='_Contacts'}" />
+                        <MenuFlyoutSeparator />
                         <MenuFlyoutItem x:Name="MenuAddAccount" l:MnemonicLabel.Text="{l:T Msgid='_Add Account…'}" />
                         <!-- Windows-only string: the key name beside the item. -->
                         <MenuFlyoutItem

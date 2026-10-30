@@ -29,6 +29,13 @@ public enum WindowKind
     Wizard,
 
     /// <summary>
+    /// The Contacts window (contacts_window.blp): the application's keys,
+    /// Ctrl+F and Ctrl+E to its search (W6) and Ctrl+W to close it; never
+    /// Escape, which belongs to the search box and the contact's form.
+    /// </summary>
+    Contacts,
+
+    /// <summary>
     /// Any other window (the attachment previewer): the application's keys,
     /// and Escape and Ctrl+W close it (Sushi's and Quick Look's Escape).
     /// </summary>
