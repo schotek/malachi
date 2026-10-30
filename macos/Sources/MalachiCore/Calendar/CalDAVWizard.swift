@@ -49,6 +49,10 @@ extension Cal {
         public private(set) var listed: AccountListCalDAVCalendarsResult?
         /// The hrefs to synchronise.
         public private(set) var selected: [String: Bool] = [:]
+        /// Synchronise the server's address books (Swift-first: the CardDAV
+        /// part of the wizard, docs/plans/address-book.md A8); on when the
+        /// listing found some.
+        public private(set) var contacts = false
         /// The mail account invitations leave from (client scheduling).
         public private(set) var mailAccount: AccountID?
         /// The certificate the user trusted ("" none).
@@ -207,6 +211,7 @@ extension Cal {
             for c in res.calendars {
                 selected[c.href] = true
             }
+            contacts = !res.addressBooks.isEmpty
             if Cal.trimSpace(name).isEmpty {
                 let n = Cal.cleanLine(res.displayName)
                 if !n.isEmpty {
@@ -225,13 +230,24 @@ extension Cal {
 
         public mutating func setMailAccount(_ id: AccountID?) { mailAccount = id }
 
+        /// The server's address books (`account.listCalDAVCalendars`); empty
+        /// before the listing or for a server without CardDAV.
+        public var addressBooks: [CardDAVAddressBook] { listed?.addressBooks ?? [] }
+
+        /// Sync Contacts of the Address Books section; nothing without books.
+        public mutating func setContacts(_ on: Bool) {
+            guard phase == .listed, !addressBooks.isEmpty else { return }
+            contacts = on
+        }
+
         /// The mail-account popup: the server leaves invitations to us.
         public var showsMailAccount: Bool { listed?.scheduling == .client }
 
-        /// Add enabled: listed, a calendar selected.
+        /// Add enabled: listed, a calendar selected or the address books
+        /// on (a server with address books only can be added too).
         public var canAdd: Bool {
             guard phase == .listed, let l = listed else { return false }
-            return l.calendars.contains { isSelected($0.href) }
+            return l.calendars.contains { isSelected($0.href) } || (contacts && !l.addressBooks.isEmpty)
         }
 
         @discardableResult
@@ -255,6 +271,10 @@ extension Cal {
                 }
             }
             cfg.calendar = cal
+            if contacts, let l = listed, !l.addressBooks.isEmpty {
+                cfg.caldav?.contacts = true
+                cfg.caldav?.addressBookHomeSetUrl = l.addressBookHomeSetUrl
+            }
             return AccountAddParams(config: cfg, credentials: Credentials(password: password))
         }
 

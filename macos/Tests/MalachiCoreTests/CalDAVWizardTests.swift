@@ -83,6 +83,40 @@ private func err(_ code: ErrorCode) -> RPCError { RPCError(code: code, message: 
         #expect(w.phase == .added && w.accountId == "acc_new" && w.password == "")
     }
 
+    /// Swift-first: the CardDAV part (docs/plans/address-book.md A8, W3).
+    @Test func addressBooks() {
+        var w = W(mailAccount: nil)
+        w.edit(name: "", server: "cloud.example.org", username: "jana", password: "pw")
+        w.beginDiscover()
+        w.discoverDone(found("https://cloud.example.org/dav", .wellKnown), error: nil)
+        var l = listed()
+        l.addressBookHomeSetUrl = "https://cloud.example.org/ab/"
+        l.addressBooks = [CardDAVAddressBook(href: "/ab/personal/", name: "Personal"), CardDAVAddressBook(href: "/ab/family/", name: "Family")]
+        w.listDone(l, error: nil)
+        #expect(w.contacts && w.addressBooks.count == 2)
+        var p = w.addParams.config.caldav
+        #expect(p?.contacts == true && p?.addressBookHomeSetUrl == "https://cloud.example.org/ab/")
+        w.setContacts(false)
+        p = w.addParams.config.caldav
+        #expect(p?.contacts == false && p?.addressBookHomeSetUrl == nil && w.canAdd)
+        // Address books only: Add needs them on.
+        for c in ["/c/personal/", "/c/work/", "/c/holidays/"] {
+            w.toggle(c, false)
+        }
+        #expect(!w.canAdd)
+        w.setContacts(true)
+        #expect(w.canAdd && w.beginAdd())
+
+        // A server without address books: no contacts, nothing to switch.
+        var v = W(mailAccount: nil)
+        v.edit(name: "", server: "cloud.example.org", username: "jana", password: "pw")
+        v.beginDiscover()
+        v.discoverDone(found("https://cloud.example.org/dav", .wellKnown), error: nil)
+        v.listDone(listed(), error: nil)
+        v.setContacts(true)
+        #expect(!v.contacts && v.addParams.config.caldav?.contacts == false)
+    }
+
     @Test func editsAndErrors() {
         var w = W(mailAccount: nil)
         w.edit(name: "Home", server: "cloud.example.org", username: "jana", password: "pw")

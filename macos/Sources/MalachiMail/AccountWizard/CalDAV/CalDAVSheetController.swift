@@ -35,6 +35,12 @@ final class CalDAVSheetController: NSWindowController, NSTextFieldDelegate {
     let banner = CalDAVBannerView()
     private let serverChanged = PrefsWrappingLabel("", size: 12, color: .secondaryLabelColor)
     private let calendarsGroup = PreferencesGroupView(title: Cal.CalDAVWizard.calendarsHeading, description: "")
+    /// The server's address books (docs/plans/address-book.md W3 ⑤): Sync
+    /// Contacts and the books found; which of them show is chosen in
+    /// Settings → Contacts once the account is there.
+    private let addressBooksGroup = PreferencesGroupView(title: ContactBook.addressBooksHeading)
+    private let contactsSwitch = NSSwitch()
+    private var shownAddressBooks: [String] = []
     private let certificateGroup = PreferencesGroupView()
     private let certificateLabel = NSTextField(labelWithString: "")
     private let trustButton = NSButton(title: Cal.CalDAVWizard.trustButton, target: nil, action: nil)
@@ -75,7 +81,7 @@ final class CalDAVSheetController: NSWindowController, NSTextFieldDelegate {
             styleMask: [.titled, .fullSizeContentView],
             backing: .buffered, defer: false
         )
-        window.title = Cal.CalDAVWizard.title
+        window.title = ContactBook.wizardTitle
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
@@ -120,7 +126,7 @@ final class CalDAVSheetController: NSWindowController, NSTextFieldDelegate {
         icon.contentTintColor = .controlAccentColor
         icon.imageScaling = .scaleNone
         icon.setContentHuggingPriority(.required, for: .horizontal)
-        let title = NSTextField(labelWithString: Cal.CalDAVWizard.title)
+        let title = NSTextField(labelWithString: ContactBook.wizardTitle)
         title.font = .systemFont(ofSize: 17, weight: .bold)
         let subtitle = PrefsWrappingLabel(Cal.CalDAVWizard.subtitle, size: 12, color: .secondaryLabelColor)
         let titles = prefsColumn(spacing: 2)
@@ -189,7 +195,11 @@ final class CalDAVSheetController: NSWindowController, NSTextFieldDelegate {
         let footer = PrefsWrappingLabel(Cal.CalDAVWizard.footer, size: 11, color: .secondaryLabelColor)
 
         let column = prefsColumn(spacing: 14, insets: NSEdgeInsets(top: 28, left: 24, bottom: 16, right: 24))
-        for v in [header, fields, discoverRow, banner, serverChanged, certificateGroup, calendarsGroup, mailGroup, footer] as [NSView] {
+        contactsSwitch.target = self
+        contactsSwitch.action = #selector(contactsToggled(_:))
+        contactsSwitch.setAccessibilityLabel(ContactBook.syncContacts)
+        addressBooksGroup.isHidden = true
+        for v in [header, fields, discoverRow, banner, serverChanged, certificateGroup, calendarsGroup, addressBooksGroup, mailGroup, footer] as [NSView] {
             prefsAddFilling(v, to: column)
         }
         column.setCustomSpacing(20, after: header)
@@ -269,6 +279,21 @@ final class CalDAVSheetController: NSWindowController, NSTextFieldDelegate {
         shownCalendars = listed
         setChecks(in: calendarsGroup, listed.map(\.selected), enabled: w.phase == .listed)
 
+        let books = wizard.listedAddressBooks
+        addressBooksGroup.isHidden = books.isEmpty
+        if books != shownAddressBooks {
+            shownAddressBooks = books
+            var rows: [NSView] = [PreferenceRowView(title: ContactBook.syncContacts, trailing: contactsSwitch)]
+            for name in books {
+                let icon = NSImageView(image: NSImage(systemSymbolName: "book.closed", accessibilityDescription: nil) ?? NSImage())
+                icon.contentTintColor = .secondaryLabelColor
+                rows.append(PreferenceRowView(title: name, prefix: icon))
+            }
+            addressBooksGroup.setRows(rows)
+        }
+        contactsSwitch.state = w.contacts ? .on : .off
+        contactsSwitch.isEnabled = w.phase == .listed
+
         mailGroup.isHidden = !w.showsMailAccount
         let accounts = wizard.mailAccounts
         if accounts != shownMailAccounts || mailPopup.numberOfItems == 0 {
@@ -296,6 +321,10 @@ final class CalDAVSheetController: NSWindowController, NSTextFieldDelegate {
     }
 
     // MARK: Actions
+
+    @objc private func contactsToggled(_ sender: NSSwitch) {
+        wizard.setContacts(sender.state == .on)
+    }
 
     private func sync() {
         wizard.edit(
