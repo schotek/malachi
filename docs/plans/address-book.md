@@ -1,7 +1,7 @@
 # Adresáře (kontakty z připojených služeb) — návrh ke schválení
 
-Stav: návrh 2026-10-30, větev `claude/keen-bohr-rrjhm3`. Nic z toho není
-implementované. Wireframy jsou v [`address-book/`](address-book/) (W1–W6),
+Stav: schváleno vlastníkem 2026-10-30 (odpovědi v §8), větev
+`claude/keen-bohr-rrjhm3`; implementace začíná. Wireframy jsou v [`address-book/`](address-book/) (W1–W6),
 macOS je primární platforma a kreslí se celý, GTK a Windows jen tam,
 kde se liší.
 
@@ -19,10 +19,11 @@ jen odkazuje.
 
 Malachi Mail dostane **okno Kontakty**, které ukazuje adresáře
 připojených služeb (Microsoft 365 / Outlook.com, CardDAV — Nextcloud,
-iCloud, Seznam, Fastmail… — a eWay-CRM) a nedávno použité adresy; tytéž
-kontakty doplňují příjemce v okně Nová zpráva a u adresy v hlavičce
-zprávy je *Zobrazit kontakt*. Ve 2. etapě se kontakty dají vytvářet,
-upravovat a mazat, a to přímo na serveru služby.
+iCloud, Seznam, Fastmail…) a nedávno použité adresy; tytéž kontakty
+doplňují příjemce v okně Nová zpráva a u adresy v hlavičce zprávy je
+*Zobrazit kontakt* nebo *Přidat do kontaktů…*. Už v 1. etapě se
+kontakty dají vytvářet, upravovat a mazat, a to přímo na serveru
+služby. eWay-CRM přijde ve 2. etapě.
 
 **Žádný přesah do systému** (zadání vlastníka): aplikace na macOS
 nečte ani nepíše Kontakty macOS (`CNContactStore`, žádný souhlas TCC),
@@ -53,22 +54,22 @@ Nic z UI kontaktů zatím neexistuje; `contact.search` čte jen
 
 | # | Rozhodnutí | Proč |
 |---|---|---|
-| A1 | **Zdroje v 1. etapě:** (a) Microsoft 365 / Outlook.com přes Graph jako volba poštovního účtu `kind: graph` (`contacts.sync`, výchozí vypnuto, stejně jako `calendar.sync`); (b) CardDAV na stávajícím účtu `kind: caldav`, který dostane druhou capability `contacts` (stejný server, heslo a pravidla originu; adresář jde přidat i k serveru bez kalendáře); (c) eWay-CRM jako adresář **jen pro čtení** (kontakty CRM s e-mailem); (d) *Nedávno použité* (`collected_addresses`) jako virtuální adresář jen pro čtení. | Pokrývá všechny služby, které aplikace umí připojit, a každý zdroj stojí na kódu, který už je. |
-| A2 | **Později (3. etapa):** Google Contacts (CardDAV s tokenem GOA na Linuxu, jinde jen s vlastním klientem OAuth uživatele, vestavěný klient Google dál není), fotky, skupiny, import a export vCard, přesun mezi adresáři. **Mimo rozsah:** Jira (uživatelé nejsou kontakty), adresář organizace (GAL), systémové adresáře (§1). | Studie §„Proč Google až ve 3. etapě“ platí beze změny. |
+| A1 | **Zdroje v 1. etapě:** (a) Microsoft 365 / Outlook.com přes Graph jako volba poštovního účtu `kind: graph` (`contacts.sync`, výchozí vypnuto, stejně jako `calendar.sync`); (b) CardDAV na stávajícím účtu `kind: caldav`, který dostane druhou capability `contacts` (stejný server, heslo a pravidla originu; adresář jde přidat i k serveru bez kalendáře); (c) *Nedávno použité* (`collected_addresses`) jako virtuální adresář jen pro čtení. | Pokrývá všechny služby, které aplikace umí připojit, a každý zdroj stojí na kódu, který už je. |
+| A2 | **2. etapa:** eWay-CRM (A10). **Později (3. etapa):** Google Contacts (CardDAV s tokenem GOA na Linuxu, jinde jen s vlastním klientem OAuth uživatele, vestavěný klient Google dál není), fotky, skupiny, import a export vCard, přesun mezi adresáři. **Mimo rozsah:** Jira (uživatelé nejsou kontakty), adresář organizace (GAL), systémové adresáře (§1). | Studie §„Proč Google až ve 3. etapě“ platí beze změny. |
 | A3 | **Samostatné okno Kontakty**, jedna instance pro aplikaci, ne čtvrtý režim hlavního okna. | Třísegmentový přepínač režimu (134 pt) už na macOS vyplňuje sekci sidebaru (240 pt, minimum 200); čtvrtý segment se nevejde a stál by 15–20 míst na klienta (lišta stavu, panel asistenta, toasty, `board.Allows`). Okno odpovídá Thunderbirdu i Mail + Kontakty na macOS. |
 | A4 | **Démon drží cache serveru** jako u kalendáře: server je autorita, vypnutí synchronizace, změna serveru či uživatele a odebrání účtu cache smaže; autoritativní jsou jen volby uživatele (které adresáře). Synchronizace při startu účtu, každých 15 minut, při otevření okna Kontakty a hned po vlastním zápisu. | Stejný model jako `cal_*`; žádná nová třída dat k zálohování. |
-| A5 | **Zápis rovnou na server (2. etapa), bez fronty offline:** `contact.create/update/delete` volá server a teprve po úspěchu změní cache; offline = chyba a formulář zůstane otevřený s textem. Konflikt (CardDAV `412` na `If-Match`, u Graphu změněný `changeKey`) = chyba `contactConflict` s verzí serveru; UI nabídne *Načíst znovu* (úprava se ukáže nad novou verzí, pole, která uživatel změnil, zůstanou jeho). | Totéž jako zápisy kalendáře (server-first, D-rozhodnutí kalendáře). Odpadá operační log, slučování po vlastnostech a „kopie (konflikt)“ ze studie — největší a nejrizikovější kus její 2. etapy. Kontakty se upravují zřídka a vždy s uživatelem u okna. |
+| A5 | **Zápis rovnou na server (už v 1. etapě), bez fronty offline:** `contact.create/update/delete` volá server a teprve po úspěchu změní cache; offline = chyba a formulář zůstane otevřený s textem. Konflikt (CardDAV `412` na `If-Match`, u Graphu změněný `changeKey`) = chyba `contactConflict` s verzí serveru; UI nabídne *Načíst znovu* (úprava se ukáže nad novou verzí, pole, která uživatel změnil, zůstanou jeho). | Totéž jako zápisy kalendáře (server-first, D-rozhodnutí kalendáře). Odpadá operační log, slučování po vlastnostech a „kopie (konflikt)“ ze studie — největší a nejrizikovější kus její 2. etapy. Kontakty se upravují zřídka a vždy s uživatelem u okna. |
 | A6 | **Úprava je záplata:** démon změní jen upravené vlastnosti; ostatní řádky vCard (skupiny `item1.`, `X-…`, fotka, neznámé vlastnosti) vrátí serveru bajt po bajtu, u Graphu `PATCH` jen změněných polí. Nová karta ve verzi, kterou adresář používá (iCloud 3.0). | Hlavní riziko ztráty dat jiných aplikací (studie, Rizika). |
 | A7 | **Vlastní parser vCard** `internal/vcard` (3.0, 4.0, čte 2.1) s limity a korpusem `backend/testdata/vcard`, fuzz round-tripu, ne `go-vcard`. | Stejná volba jako `internal/caldav` a parser iCalendar (vlastní kvůli limitům a chybám); `go-vcard` je mladý a 4 → 3 neumí. |
 | A8 | **CardDAV jako rozšíření `internal/caldav`**, ne nový balíček: `addressbook-home-set`, namespace `urn:ietf:params:xml:ns:carddav`, `addressbook-multiget`, `/.well-known/carddav` a SRV `_carddavs._tcp`, token `addressbook` v hlavičce `DAV`. Průvodce *Kalendář CalDAV* v Integracích se přejmenuje na **Kalendář a kontakty (CalDAV/CardDAV)** a po zjištění nabídne obojí. iCloud a Fastmail mají CardDAV na jiném hostu té domény, `calDAVOrigin` je už pouští. | Jedna implementace protokolu, jeden průvodce, jedno heslo. |
-| A9 | **Synchronizační engine `internal/contactsync`** zrcadlí `calsync` (vlastní malé rozhraní `Provider{AddressBooks, Sync(book, sink)}` + v 2. etapě `Create/Update/Delete`), ne sdílené rozhraní. | `calsync.Provider` je typovaný na kalendář (okna, výskyty, odpovědi); zrcadlo je menší než abstrakce. |
-| A10 | **eWay-CRM jen hledáním (1. etapa):** adresář eWay v okně Kontakty nevypisuje celý obsah CRM, ukáže pole hledání a výsledky z `SearchByName` (od 2 znaků, nejvýš 50, s časovým limitem); do doplňování příjemců jde až od 2. etapy, pokud se v etapě 0 ukáže, že API umí změny od data (pak synchronizace jako ostatní). | eWay nemá syncer (eway.md D21) a CRM bývá velké; hledání je hotové a nic neukládá. |
+| A9 | **Synchronizační engine `internal/contactsync`** zrcadlí `calsync` (vlastní malé rozhraní `Provider{AddressBooks, Sync(book, sink)}` + `Create/Update/Delete`), ne sdílené rozhraní. | `calsync.Provider` je typovaný na kalendář (okna, výskyty, odpovědi); zrcadlo je menší než abstrakce. |
+| A10 | **eWay-CRM ve 2. etapě, jen hledáním:** adresář eWay v okně Kontakty nevypisuje celý obsah CRM, ukáže pole hledání a výsledky z `SearchByName` (od 2 znaků, nejvýš 50, s časovým limitem); do doplňování příjemců jde, až když se ukáže, že API umí změny od data (pak synchronizace jako ostatní). | eWay nemá syncer (eway.md D21) a CRM bývá velké; hledání je hotové a nic neukládá. |
 | A11 | **Doplňování příjemců** (`contact.search`): nový zdroj `"source": "contacts"` s názvem adresáře; výchozí rozsah = adresáře účtu odesílatele + Nedávno použité (jako dnes EDS), volitelně všechny adresáře (předvolba). Na GTK se knihy EDS účtu, jehož kontakty synchronizuje démon, přeskočí. | Studie W6; žádné dvojité řádky. |
-| A12 | **Zobrazit kontakt** v menu čipu adresy (přesná shoda adresy, nikdy jména); ve 2. etapě u neznámé adresy *Přidat do kontaktů…* s předvyplněným, vybraným jménem (jméno z `From` je text útočníka). Nic se neuloží samo. | Studie W5, bezpečnost. |
+| A12 | **Zobrazit kontakt** v menu čipu adresy (přesná shoda adresy, nikdy jména); u neznámé adresy *Přidat do kontaktů…* s předvyplněným, vybraným jménem (jméno z `From` je text útočníka). Nic se neuloží samo. | Studie W5, bezpečnost. |
 | A13 | **Detail kontaktu je jen text:** jméno, firma a funkce, e-maily, telefony, adresy, narozeniny, weby, poznámka; všechno přes `stringValue` / `SetUseMarkup(false)` / `TextBlock.Text`, weby jen `http(s)` přes „Otevřít tento odkaz?“, telefon jen ke zkopírování. Avatar = iniciály jako jinde v aplikaci, fotky až ve 3. etapě a nikdy z URL. | Pravidlo 3; vCard je nepřátelský vstup. |
 | A14 | **Akce v detailu:** *Napsat e-mail* (u více adres výběr), *Zobrazit poštu* (hlavní okno, režim Pošta, hledání `from:adresa` ve všech účtech — `search.query` beze změny), *Kopírovat* (vizitka jako text). | Užitek kontaktů v poštovním klientu je hlavně cesta k poště. |
-| A15 | **Souhlas Microsoftu:** scope `Contacts.ReadWrite` se žádá už v 1. etapě, jen při zapnutí kontaktů u účtu (jako `calendar: true` v `account.oauthStart`); vlastník ho jednou přidá do registrace v Entra. GOA: nový příznak `ContactsDisabled` respektovaný jako `CalendarDisabled`. | Dvojí souhlas (Read, pak ReadWrite) by uživatele i správce organizace obtěžoval dvakrát. |
-| A16 | **MCP most:** `search_contacts`, `get_contact` jen čtení (ohrada s nonce, `clean()`), ve 2. etapě `create_contact`/`update_contact` za `--allow-modify`; mazání přes MCP ne. | Studie, MCP most. |
+| A15 | **Souhlas Microsoftu:** scope `Contacts.ReadWrite` (zápis je v 1. etapě), jen při zapnutí kontaktů u účtu (jako `calendar: true` v `account.oauthStart`); vlastník ho jednou přidá do registrace v Entra. GOA: nový příznak `ContactsDisabled` respektovaný jako `CalendarDisabled`. | Dvojí souhlas (Read, pak ReadWrite) by uživatele i správce organizace obtěžoval dvakrát. |
+| A16 | **MCP most:** `search_contacts`, `get_contact` jen čtení (ohrada s nonce, `clean()`), `create_contact`/`update_contact` za `--allow-modify`; mazání přes MCP ne. | Studie, MCP most. |
 
 ## 4. Démon (`backend/`)
 
@@ -115,7 +116,6 @@ contact.list       { bookId | "all", query (opt), offset, limit } → { contacts
 contact.get        { contactId }                               → ContactCard
 contact.lookup     { addresses: [..] }                         → { known: { address: contactId } }
 contact.search     + "source": "contacts", + "book"; param "scope": "account"|"all"
-// 2. etapa
 contact.create     { bookId, card }                            → { contactId, revision }
 contact.update     { contactId, revision, card }               → { revision }
 contact.delete     { contactId, revision }
@@ -124,8 +124,8 @@ notify.contactsChanged { accountId, bookIds }
 
 1110 contactNotFound · 1111 addressBookNotFound
 1206 contactsConsentRequired   (data = { accountId, signIn }, jako 1204)
-1308 contactConflict           (data = { server: ContactCard })   // 2. etapa
-1509 addressBookReadOnly                                           // 2. etapa
+1308 contactConflict           (data = { server: ContactCard })
+1509 addressBookReadOnly
 ```
 
 `account.oauthStart` dostane `contacts: true` (jako `calendar`),
@@ -152,9 +152,9 @@ do `po/POTFILES`), macOS a Windows je berou s klíčem = msgid.
 
 | Vrstva | Go reference / GTK | macOS | Windows |
 |---|---|---|---|
-| Čistá logika | `ui/internal/contacts` (sekce podle písmen ze `sortKey`, řádky detailu a jejich popisky, akce, texty, pravidla dostupnosti, validace formuláře ve 2. etapě), `ui/internal/contactsctl` (kontroler okna a předvoleb nad `board.Caller`) | `MalachiCore/Contacts`, `Controllers/Contacts*` | `Malachi.Core/Contacts` (jmenný prostor `Contacts`, třída `ContactsText`) a `Controllers/Contacts*` |
+| Čistá logika | `ui/internal/contacts` (sekce podle písmen ze `sortKey`, řádky detailu a jejich popisky, akce, texty, pravidla dostupnosti, validace formuláře), `ui/internal/contactsctl` (kontroler okna a předvoleb nad `board.Caller`) | `MalachiCore/Contacts`, `Controllers/Contacts*` | `Malachi.Core/Contacts` (jmenný prostor `Contacts`, třída `ContactsText`) a `Controllers/Contacts*` |
 | Okno | `contacts_window.blp`, `Adw.NavigationSplitView` dvakrát vnořený, `Gtk.ListView` se sekcemi | `ContactsWindowController`, `NSSplitViewController` 3 sloupce, unified toolbar s hledáním | `ContactsWindow` (WinUI), hledání v titulkové liště, `CommandBar` nad detailem |
-| Vstup | `app.contacts` Ctrl+Shift+B, nabídka hlavního menu | menu Okno ▸ Kontakty ⌥⌘B (volnost ověřit v `MainMenu.swift`) | nabídka `…` ▸ Kontakty, Ctrl+Shift+B |
+| Vstup (bez zkratky) | `app.contacts`, položka hlavní nabídky | menu Okno ▸ Kontakty | nabídka `…` ▸ Kontakty |
 | Čip adresy | `addresses.go` `addr.contact` | `AddressChipView.showMenu` `onContact` | `MessageChips.FillAddressMenu` |
 | Doplňování | `compose/suggest.go` ikona a tooltip zdroje | `Suggest.swift` | `Suggest.cs`, `SuggestionRow` |
 | Předvolby | nová stránka Kontakty za Kalendářem (`preferences_contacts.go`) | `ContactsPaneViewController` za Kalendářem | `ContactsPreferencesPage` za Kalendářem |
@@ -177,11 +177,11 @@ adresy a čísla jsou smyšlené.
 
 ![W3](address-book/w3-macos-preferences.svg)
 
-### W4 macOS — úprava, přidání z čipu, mazání a konflikt (2. etapa)
+### W4 macOS — úprava, přidání z čipu, mazání a konflikt
 
 ![W4](address-book/w4-macos-edit.svg)
 
-### W5 macOS — stavy (prázdno, souhlas, eWay jen hledáním, úzké okno)
+### W5 macOS — stavy (prázdno, souhlas, eWay ve 2. etapě, úzké okno)
 
 ![W5](address-book/w5-macos-states.svg)
 
@@ -196,34 +196,35 @@ po úkolech, conventional commits, push na pracovní větev.
 
 | Úkol | Obsah | Ověření |
 |---|---|---|
-| **K0** příprava | rozhodnutí §8; `internal/vcard` s korpusem (Apple, Google, Nextcloud, Fastmail, export Outlooku, patologické karty) a fuzz; ověřit Graph `If-Match` u `PATCH` kontaktu, eWay „změny od data“, `ContactsDisabled` v GOA | Go testy, fuzz |
-| **K1** démon, čtení | migrace 0023, CardDAV v `caldav` + `caldavtest`, Graph kontakty, `contactsync`, metody a notifikace, `contact.search`, eWay hledání, `docs/api.md` §4.19 (`TestDocsCoverAllMethods`), `architecture.md` §7, `security.md`, MCP čtení | `go vet`, `go test ./...`, nezávislá revize |
-| **K2** Go reference | `ui/internal/contacts`, `contactsctl`, msgid v `po/POTFILES`, testy | `go test` čistých balíčků |
-| **K3** macOS, čtení | port K2 + okno, menu, čip, doplňování, Předvolby, průvodce; vývojové kroky `MALACHI_START=contacts`, `contacts:detail`, `prefs-contacts` | `swift build`, `swift test`, `check-strings.py`, měření debug binárkou; **brána B1 vlastníka** nad kopií dat |
-| **K4** GTK, čtení | okno, čip, doplňování, Předvolby, průvodce; `MALACHI_GTK_START=contacts` | kontejner: `gtk.sh make build`, `test-ui`, smoke, `make po`, `make lint`; **brána B2** v XQuartz |
-| **K5** Windows, čtení | port macOS; exclusions bez řádků „contacts“ | napsané podle okolního kódu, sestavení a smoke dělá Windows agent po předávce (`windows.yml` se nepoužívá); **brána B3** |
-| **K6–K9** 2. etapa | `contact.create/update/delete` (záplata vCard, `PATCH` Graphu), `contactConflict`, W4 ve všech třech klientech, MCP zápis | totéž po klientech, brány B4–B6 |
-| **K10** překlady | `make po` lokálně, kontrola `cs.po` a obrazovek ve všech třech klientech s vlastníkem | podle zadání: „na lokálních instalacích ověříme překlady“ |
+| **K0** příprava | `internal/vcard` (parser, serializér, `Patch`) s korpusem (Apple, Google, Nextcloud, Fastmail, export Outlooku, patologické karty) a fuzz round-tripu; ověřit Graph `If-Match` u `PATCH` kontaktu a `ContactsDisabled` v GOA | Go testy, fuzz |
+| **K1** démon | migrace 0023, CardDAV v `caldav` + `caldavtest`, Graph kontakty, `contactsync`, všechny metody §4.3 včetně zápisu a `contactConflict`, `contact.search`, `docs/api.md` §4.19 (`TestDocsCoverAllMethods`), `architecture.md` §7, `security.md`, MCP (čtení i zápis za `--allow-modify`) | `go vet`, `go test ./...`, nezávislá revize |
+| **K2** Go reference | `ui/internal/contacts` (seznam, detail, formulář a validace, texty), `contactsctl` (okno, úprava, přidání z čipu, předvolby), msgid v `po/POTFILES`, testy | `go test` čistých balíčků |
+| **K3** macOS | port K2 + okno (W1, W4, W5), menu Okno, čip (W2), doplňování, Předvolby a průvodce (W3); vývojové kroky `MALACHI_START=contacts`, `contacts:edit`, `prefs-contacts` | `swift build`, `swift test`, `check-strings.py`, měření debug binárkou; **brána B1 vlastníka** nad kopií dat |
+| **K4** GTK | totéž v GTK (W6); `MALACHI_GTK_START=contacts` | linuxový agent vlastníka: `gtk.sh make build`, `test-ui`, smoke, `make po`, `make lint`; **brána B2** |
+| **K5** Windows | port macOS; exclusions bez řádků „contacts“ | **dělá Windows agent vlastníka** přes remote control (zadání a předávka odsud), včetně sestavení, testů, lintu a smoke; **brána B3** |
+| **K6** překlady | `make po` lokálně, kontrola `cs.po` a obrazovek ve všech třech klientech s vlastníkem | „na lokálních instalacích ověříme překlady“ |
+| **E2** 2. etapa | eWay-CRM jen hledáním (A10), totéž pořadí klientů | samostatné brány |
 
-Odhad: 1. etapa zhruba 9–12 tisíc řádků včetně testů (studie počítala
-11–15 tisíc; ubyl nový protokolový klient, okno průvodce a stránka
-kopírují kalendář), 2. etapa 4–6 tisíc (studie 6–9 tisíc; ubyla fronta
-offline a slučování).
+Odhad 1. etapy (čtení i zápis): zhruba 13–18 tisíc řádků včetně testů
+(studie počítala 17–24 tisíc; ubyl nový protokolový klient, fronta
+offline se slučováním, okno průvodce a stránka kopírují kalendář).
 
-## 8. Otázky pro vlastníka
+## 8. Odpovědi vlastníka (2026-10-30)
 
-1. **Samostatné okno** (A3), nebo přesto čtvrtý režim hlavního okna?
-2. **eWay-CRM** v 1. etapě jen hledáním v okně (A10), nebo ho vynechat
-   úplně do 2. etapy?
-3. **Zápis jen online** (A5) — offline úpravy kontaktů nebudou; souhlas?
-4. **Rozsah 1. etapy** jen čtení, nebo rovnou i úpravy (pak K6–K9
-   splynou s K1–K5 a brány se zdvojí)?
-5. **Zkratky** ⌥⌘B (macOS) a Ctrl+Shift+B (GTK, Windows, jako
-   Thunderbird)?
-6. **Microsoft `Contacts.ReadWrite`** už v 1. etapě (A15) — vlastník ho
-   přidá do registrace v Entra.
+1. **Samostatné okno** Kontakty, ne čtvrtý režim (A3).
+2. **eWay-CRM až ve 2. etapě** (A10).
+3. **1. etapa rovnou čtení i úpravy.**
+4. **Zápis jen online**, jako kalendář (A5).
+5. **Bez klávesové zkratky**, jen položky menu.
+6. **`Contacts.ReadWrite`** hned (A15); vlastník ho přidá do registrace
+   v Entra.
+7. Wireframy schválené, začít implementaci. Windows část dělá Windows
+   agent vlastníka (remote control), GTK sestavení a testy linuxový agent
+   vlastníka.
 
 ## 9. Historie
 
 - 2026-10-30 první návrh (na základě studie z 30. 9. a průzkumu kódu po
   kalendáři a eWay-CRM).
+- 2026-10-30 vlastník: odpovědi v §8, wireframy upravené (eWay ve
+  2. etapě, úpravy v 1. etapě, bez zkratky), začíná implementace.
