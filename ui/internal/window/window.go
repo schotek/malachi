@@ -183,6 +183,10 @@ type Window struct {
 	// issues is the controller of the Change Status menus of Jira issues
 	// (issue_actions.go), shared by the pane and the message windows.
 	issues *issueActions
+	// chipContacts is the address chips' contacts item (contacts_chips.go),
+	// shared by the pane, the conversation cards and the message windows;
+	// made on first use.
+	chipContacts *chipContacts
 
 	outerSplit *adw.NavigationSplitView
 	innerSplit *adw.NavigationSplitView

@@ -97,6 +97,18 @@ func TestSuggestionIconAndTooltip(t *testing.T) {
 	if suggestionTooltip(book) != "Contacts" || suggestionTooltip(unnamed) == "" || suggestionTooltip(sent) == "" || suggestionTooltip(unnamed) == suggestionTooltip(sent) {
 		t.Errorf("tooltips: %q %q %q", suggestionTooltip(book), suggestionTooltip(unnamed), suggestionTooltip(sent))
 	}
+	// A synchronised book (contact.search source "contacts") shows as a
+	// book, its name cleaned of bidi controls.
+	synced := api.Contact{Source: api.ContactSourceContacts, Book: "Rodina‮"}
+	if suggestionIcon(synced) != suggestionIcon(book) {
+		t.Error("a synchronised book has not the book icon")
+	}
+	if got := suggestionTooltip(synced); got != "Rodina" {
+		t.Errorf("synchronised tooltip %q", got)
+	}
+	if got := suggestionTooltip(api.Contact{Source: api.ContactSourceContacts}); got != suggestionTooltip(unnamed) {
+		t.Errorf("unnamed synchronised tooltip %q", got)
+	}
 }
 
 func TestSplitAddressRanges(t *testing.T) {

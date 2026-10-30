@@ -51,6 +51,16 @@ func NewManager(app *adw.Application, c *client.Client, log *slog.Logger, s *set
 	return &Manager{app: app, client: c, settings: s, log: log.With("component", "compose")}
 }
 
+// suggestScope is which address books complete the recipients
+// (Preferences → Contacts → Recipient Suggestions); "" without settings,
+// which the daemon reads as the account's books.
+func (m *Manager) suggestScope() api.ContactSearchScope {
+	if m == nil || m.settings == nil {
+		return ""
+	}
+	return api.ContactSearchScope(m.settings.ContactsSuggestScope())
+}
+
 // Open shows a new compose window prefilled from p.
 func (m *Manager) Open(p Params) *Window {
 	if !m.fetched {

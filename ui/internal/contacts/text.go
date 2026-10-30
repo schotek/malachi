@@ -186,6 +186,13 @@ func Add(tr Translator) string {
 	return tr.C("contacts", "Add")
 }
 
+// ContactAdded confirms Add of the Add to Contacts popover.
+func ContactAdded(tr Translator) string {
+	// TRANSLATORS: a short confirmation after Add to Contacts saved the
+	// new contact.
+	return tr.T("Contact added")
+}
+
 // MoreDetails opens the full form from the Add to Contacts popover.
 func MoreDetails(tr Translator) string { return tr.T("More Details…") }
 
@@ -252,6 +259,22 @@ func ConflictQuestion(tr Translator) Question {
 		Confirm: tr.T("Reload"),
 	}
 }
+
+// DiscardQuestion is asked before a form with changes is left: another
+// contact or book selected, New Contact, the window closed.
+func DiscardQuestion(tr Translator) Question {
+	return Question{
+		Heading: tr.T("Discard Changes?"),
+		Body:    tr.T("The changes to this contact have not been saved."),
+		// TRANSLATORS: the button that drops the unsaved changes of a
+		// contact.
+		Confirm:     tr.T("Discard"),
+		Destructive: true,
+	}
+}
+
+// Copied is the toast after Copy (and after a phone number was copied).
+func Copied(tr Translator) string { return tr.T("Copied to Clipboard") }
 
 // ConsentBanner says that a Microsoft account's sign-in lacks contacts
 // access (contactsConsentRequired); account is its address.

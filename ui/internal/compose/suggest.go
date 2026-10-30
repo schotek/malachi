@@ -13,6 +13,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/pango"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/contacts"
 	"github.com/schotek/malachi/ui/internal/i18n"
 )
 
@@ -133,10 +134,11 @@ func (s *suggestions) search(token string) {
 		return
 	}
 	account := s.w.account().ID
+	scope := s.w.m.suggestScope()
 	s.w.rpc(func() (any, error) {
 		var res api.ContactSearchResult
 		err := s.w.m.client.Call(s.w.ctx(), api.MethodContactSearch,
-			api.ContactSearchParams{AccountID: account, Query: token, Limit: suggestLimit}, &res)
+			api.ContactSearchParams{AccountID: account, Query: token, Limit: suggestLimit, Scope: scope}, &res)
 		return res, err
 	}, func(v any, err error) {
 		if gen != s.gen {
@@ -280,17 +282,23 @@ func suggestionRow(c api.Contact) *gtk.ListBoxRow {
 	return row
 }
 
-// suggestionIcon names the icon for a suggestion's source.
+// suggestionIcon names the icon for a suggestion's source: an address
+// book (a system one or one the daemon synchronises), else a recently
+// used address.
 func suggestionIcon(c api.Contact) string {
-	if c.Source == api.ContactSourceAddressBook {
+	if c.Source == api.ContactSourceAddressBook || c.Source == api.ContactSourceContacts {
 		return "x-office-address-book-symbolic"
 	}
 	return "document-open-recent-symbolic"
 }
 
 // suggestionTooltip says where a suggestion comes from: the address
-// book's own name when it has one.
+// book's own name when it has one. A suggestion carries no account, so a
+// synchronised book is named alone (contacts.SuggestionTooltip).
 func suggestionTooltip(c api.Contact) string {
+	if c.Source == api.ContactSourceContacts {
+		return contacts.SuggestionTooltip(contacts.Clean(c.Book, api.MaxContactFieldBytes), "", i18n.Tr)
+	}
 	if c.Source == api.ContactSourceAddressBook {
 		if c.Book != "" {
 			return c.Book
