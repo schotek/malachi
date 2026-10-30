@@ -53,4 +53,19 @@ resources, so they follow the colour scheme.
     <Style x:Key="DimLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
     </Style>
+
+    <!-- .error on body text: a failure in the critical colour. -->
+    <Style x:Key="CriticalLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+    </Style>
+
+    <!-- .caption.error: a problem under a field, a failed note. -->
+    <Style x:Key="CriticalCaptionLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+    </Style>
+
+    <!-- .caption.warning: a warning line, an unsaved reply. -->
+    <Style x:Key="CautionCaptionLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
+    </Style>
 </ResourceDictionary>

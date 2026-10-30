@@ -87,8 +87,7 @@ public sealed partial class MainWindow
         button.Content = content;
         button.Click += OnTriageClick;
 
-        triageStripText.Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"];
-        triageStripText.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+        triageStripText.Style = (Style)Application.Current.Resources["DimCaptionLabelStyle"];
         AutomationProperties.SetLiveSetting(triageStripText, AutomationLiveSetting.Polite);
         var strip = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Padding = new Thickness(12, 4, 12, 4) };
         strip.Children.Add(triageStripRing);

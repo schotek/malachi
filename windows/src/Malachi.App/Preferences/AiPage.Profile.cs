@@ -493,8 +493,7 @@ public sealed partial class AiPage
             Padding = new Thickness(16, 12, 16, 12),
             CornerRadius = new CornerRadius(4),
             BorderThickness = new Thickness(1),
-            Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
-            BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+            Style = PageStyle("CardBorderStyle"),
         };
         AutomationProperties.SetAutomationId(card, "ProfileProposal_" + id);
         return card;

@@ -227,8 +227,8 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         top.Children.Add(chatToggle);
         top.Children.Add(showButton);
 
+        hover.Style = (Style)Application.Current.Resources["DimCaptionLabelStyle"];
         hover.FontSize = 12;
-        hover.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
         hover.MaxLines = 1;
         hover.TextWrapping = TextWrapping.NoWrap;
         hover.TextTrimming = TextTrimming.CharacterEllipsis;
@@ -672,7 +672,7 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
             Text = s.Note,
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
-            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            Style = (Style)Application.Current.Resources["DimLabelStyle"],
         };
         row.Children.Add(note);
         statusPanel.Children.Add(row);

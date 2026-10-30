@@ -516,7 +516,7 @@ public sealed partial class AssistantPanel : UserControl
                 Margin = new Thickness(28, 0, 0, 0),
                 Padding = new Thickness(10, 6, 10, 6),
                 CornerRadius = new CornerRadius(8),
-                Background = (Brush)Application.Current.Resources["SubtleFillColorSecondaryBrush"],
+                Style = (Style)Application.Current.Resources["SubtleFillBorderStyle"],
             };
         }
 
@@ -565,7 +565,7 @@ public sealed partial class AssistantPanel : UserControl
 
         public ActivityRow()
         {
-            check.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+            check.Style = (Style)Application.Current.Resources["DimIconStyle"];
             box.Children.Add(spinner);
             box.Children.Add(check);
             box.Children.Add(label);
@@ -615,8 +615,7 @@ public sealed partial class AssistantPanel : UserControl
                 Padding = new Thickness(12, 8, 12, 8),
                 CornerRadius = new CornerRadius(8),
                 BorderThickness = new Thickness(1),
-                Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
-                BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+                Style = (Style)Application.Current.Resources["CardBorderStyle"],
             };
         }
 
@@ -657,8 +656,7 @@ public sealed partial class AssistantPanel : UserControl
                 Padding = new Thickness(12, 8, 12, 8),
                 CornerRadius = new CornerRadius(8),
                 BorderThickness = new Thickness(1),
-                Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
-                BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+                Style = (Style)Application.Current.Resources["CardBorderStyle"],
             };
         }
 
@@ -689,7 +687,7 @@ public sealed partial class AssistantPanel : UserControl
 
         public LineRow(Action retry, Action<ErrorOffer> offer)
         {
-            icon.Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
+            icon.Style = (Style)Application.Current.Resources["CriticalIconStyle"];
             button.Click += (_, _) => retry();
             other.Click += (_, _) => offer(offered);
             buttons.Children.Add(other);
@@ -712,7 +710,7 @@ public sealed partial class AssistantPanel : UserControl
             {
                 case ErrorContent e:
                     label.Text = e.Text;
-                    label.Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
+                    label.Style = (Style)Application.Current.Resources["CriticalLabelStyle"];
                     icon.Visibility = Visibility.Visible;
                     offered = e.Offer;
                     other.Content = OfferLabel(e.Offer);
@@ -722,7 +720,7 @@ public sealed partial class AssistantPanel : UserControl
                     break;
                 case NoteContent n:
                     label.Text = n.Text;
-                    label.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+                    label.Style = (Style)Application.Current.Resources["DimLabelStyle"];
                     icon.Visibility = Visibility.Collapsed;
                     buttons.Visibility = Visibility.Collapsed;
                     break;

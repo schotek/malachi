@@ -5,7 +5,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 The application object and its resources: the WinUI controls' styles,
 the app's text styles (Resources/Typography.xaml), the pills of an
-issue-tracker account (Resources/Pills.xaml), the board's colours
+issue-tracker account (Resources/Pills.xaml), the surfaces and status
+colours of elements built in code (Resources/Surfaces.xaml), the board's colours
 (Boards/BoardStyles.xaml) and the calendar's (Calendars/CalendarStyles.xaml).
 -->
 <Application
@@ -18,6 +19,7 @@ issue-tracker account (Resources/Pills.xaml), the board's colours
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
                 <ResourceDictionary Source="ms-appx:///Resources/Typography.xaml" />
                 <ResourceDictionary Source="ms-appx:///Resources/Pills.xaml" />
+                <ResourceDictionary Source="ms-appx:///Resources/Surfaces.xaml" />
                 <ResourceDictionary Source="ms-appx:///Boards/BoardStyles.xaml" />
                 <ResourceDictionary Source="ms-appx:///Calendars/CalendarStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>

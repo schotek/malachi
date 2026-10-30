@@ -83,7 +83,7 @@ public sealed partial class CrmBarView : UserControl
         {
             Padding = padding,
             CornerRadius = new CornerRadius(4),
-            Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SubtleFillColorSecondaryBrush"],
+            Style = (Style)Application.Current.Resources["SubtleFillBorderStyle"],
             Child = grid,
         };
     }

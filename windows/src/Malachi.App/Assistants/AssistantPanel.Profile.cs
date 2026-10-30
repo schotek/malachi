@@ -144,8 +144,7 @@ public sealed partial class AssistantPanel
                 Padding = new Thickness(12, 8, 12, 8),
                 CornerRadius = new CornerRadius(8),
                 BorderThickness = new Thickness(1),
-                Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
-                BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+                Style = (Style)Application.Current.Resources["CardBorderStyle"],
             };
             AutomationProperties.SetAutomationId(card, "AssistantProposal");
         }
