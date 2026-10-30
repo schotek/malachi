@@ -38,8 +38,9 @@ func TestAccountListCapabilities(t *testing.T) {
 	if err != nil || len(res.Accounts) != 3 {
 		t.Fatalf("list: %+v %v", res, err)
 	}
-	// A Graph account can have calendars (docs/calendar.md D16).
-	wantCaps := [][]api.AccountCapability{api.MailCapabilities, append(slices.Clone(api.MailCapabilities), api.CapabilityCalendar)}
+	// A Graph account can have calendars (docs/calendar.md D16) and
+	// contacts (docs/api.md §4.19).
+	wantCaps := [][]api.AccountCapability{api.MailCapabilities, append(slices.Clone(api.MailCapabilities), api.CapabilityCalendar, api.CapabilityContacts)}
 	for i, a := range res.Accounts[:2] {
 		if !slices.Equal(a.Capabilities, wantCaps[i]) {
 			t.Errorf("%s: capabilities %v", a.Config.Protocol(), a.Capabilities)

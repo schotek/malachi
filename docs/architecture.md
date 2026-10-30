@@ -1640,6 +1640,72 @@ hourly pass in `core.Maintain` catches up (`CrmFollowedThreads`,
 `CrmUnsavedMembers`; 90 days, 50 saves). Nothing of it runs on the sync
 path, and it stops with the account's client.
 
+### 3.10 Address books (contacts of connected services)
+
+The contacts of the services the user connects (design and decisions A1–A16
+in [plans/address-book.md](plans/address-book.md), API
+[api.md §4.19](api.md), security [security.md §4.4](security.md)). Like the
+calendar (§3.8) the daemon keeps a **cache of the server**: the server is
+the authority, and switching contacts off, changing the server or user (or
+the address of a Graph account) and removing the account delete it; only
+`ab_books.visible` is the user's.
+
+**Sources.** A `graph` account with `graph.contacts.sync` (its contact
+folders: the default folder and its children, delta per folder with
+immutable ids), and a `caldav` account with `caldav.contacts` (the
+collections of its CardDAV addressbook-home-set, synchronised with
+`sync-collection` from the stored token, else the members' ETags, and
+fetched with `addressbook-multiget`). A caldav account may have
+calendars, address books or both: its capabilities are `calendar` unless
+its contacts are on and `calendar.sync` is false (a CardDAV-only server:
+the signed-in listing found no calendar home set), and `contacts` with
+`caldav.contacts` (`calsync.CalDAVHasCalendars`). The listing
+(`account.listCalDAVCalendars`, `core.listCalDAV`) reads the principal's
+home sets first and lists the calendars and the address books it names;
+iCloud and Fastmail keep the address books on another host of the same
+site, which `calDAVOrigin` trusts. The recently used addresses
+(`collected_addresses`, §4.11 of the API) are the virtual read-only book
+`recent`.
+
+**Store** (migration 0023): `ab_books` (account, remote id = the CardDAV
+collection URL or the Graph folder id, name, read-only, visible, sync
+token / ctag / delta link, the provider's data version), `ab_contacts`
+(book, remote id = href or Graph id, ETag or changeKey = the revision,
+the raw vCard or Graph JSON, and the derived display name, sort key,
+section letter, organisation and addresses), `ab_emails` (normalised
+address → contact) and the contentless FTS5 `ab_contacts_fts`
+(`store/contacts_books.go`). Never `INSERT OR REPLACE`.
+
+**Engine** `internal/contactsync`: a `Provider` interface (`AddressBooks`,
+`Sync(book, known ETags, sink)`, `Get`, `Create`, `Update`, `Delete`,
+optionally `Versioned`), one syncer per account, run beside the graph and
+caldav kinds' supervisors (`core.withContacts`): a pass at the start,
+every 15 minutes, on `addressBook.list` when the last is older than a
+minute, after `addressBook.set` makes a book visible and after an own
+write; backoff from 30 s to an hour; the account's state (`idle`,
+`offline`, `authRequired`, `consentRequired`, `error`). A pass lists the
+books, synchronises the visible ones and empties the hidden ones (a
+hidden book is not synchronised at all); it never writes to the server.
+The providers (`core/contacts_providers.go`) map both sources onto the
+vCard model of `internal/vcard`; the Graph one shares the account's
+request limiter with the mail and the calendar.
+
+**Writes** (`core/contacts_book.go`) are server-first and online only: the
+provider writes, then the cache takes the server's answer and
+`notify.contactsChanged` (coalesced 250 ms) names the book. An update is a
+patch (`vcard.Patch` of the stored vCard from what the user saw to what
+the user sent, or `graph.ContactPatch` of the changed fields), guarded by
+the revision; a stale revision or the server's 412 / changed `changeKey`
+is `contactConflict` with the server's version, which the cache stores at
+once.
+
+**Recipient completion.** `contact.search` merges the synchronised books
+(visible books of the sending account, or of every account with `scope:
+all`) with the collected addresses and, on Linux, the system address
+books of Evolution Data Server, one row per address reported as the
+synchronised book's when it has it; the EDS books of an account whose
+contacts the daemon synchronises are skipped.
+
 ## 4. Security boundary: HTML
 
 HTML in mail is hostile input. It is sanitised **in the backend**
@@ -2254,7 +2320,9 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   attach ram://` on macOS, a tmpfs mount on Linux: code per platform, a
   volume the user's other processes and the Finder see, and one a crash
   leaves in place).
-- Contacts and recipient completion: **decided** (2026-09-06) — the
+- Contacts and recipient completion: **decided** (2026-09-06; the
+  rejection of own Graph and CardDAV address books below is superseded by
+  the next entry, 2026-10-30) — the
   system address books through Evolution Data Server over D-Bus
   (`internal/contacts/eds`: `Sources5` for the registry,
   `AddressBook10` for the books, `GetContactList` with a
@@ -2275,6 +2343,26 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   is not cached at all, and a Flatpak hole into `~/.cache`). The D-Bus
   interface of EDS is formally private and versioned in its bus names;
   a bump means one constant here and one line in the Flatpak manifest.
+- Contacts from connected services: **decided** (2026-10-30) — the
+  daemon synchronises the address books of Microsoft 365 / Outlook.com
+  through Graph (`graph.contacts.sync`, scope `Contacts.ReadWrite` asked
+  for only by a sign-in made for the contacts) and of CardDAV servers on
+  the `caldav` account (`caldav.contacts`, an extension of
+  `internal/caldav`), as a cache of the server in the store (§3.10), with
+  writes server-first and online only, an update as a patch of the
+  server's card, and the recent addresses as a read-only book
+  ([plans/address-book.md](plans/address-book.md), owner's answers §8).
+  This supersedes the rejection of 2026-09-06: its reasons were the
+  duplication with EDS (it holds on GNOME only, and completion skips the
+  EDS books of an account whose contacts the daemon synchronises), the
+  missing token without GNOME Online Accounts (the daemon has its own
+  sign-in since 2026-09-25) and Microsoft 365 having no CardDAV (Graph
+  covers it). No system address book is read or written outside Linux's
+  existing EDS completion (no `CNContactStore`, no Windows contacts).
+  Rejected: a queue of offline edits with merging by property (the
+  calendar's server-first model is enough for edits made with the user at
+  the window), `go-vcard` (no limits, no 4 → 3), one provider interface
+  shared with the calendar (it is typed on events and windows).
 - RPC socket authentication: **decided** (2026-09-26) — every connection
   proves, in both directions and with HMAC-SHA256 over two fresh nonces,
   knowledge of a key the daemon makes at every start and writes beside

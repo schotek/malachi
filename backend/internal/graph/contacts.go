@@ -791,3 +791,17 @@ func contactsError(err error) error {
 	}
 	return ToAPIError(err)
 }
+
+// ParseContact reads a contact's JSON as the service sends it (and as
+// Contact.Raw keeps it), cleaned as on reading; an unusable id is
+// serverError.
+func ParseContact(raw []byte) (Contact, error) {
+	ct, ok, err := contactOf(json.RawMessage(raw))
+	if err != nil {
+		return Contact{}, err
+	}
+	if !ok {
+		return Contact{}, api.NewError(api.CodeServerError, "graph: contact without a usable id")
+	}
+	return ct, nil
+}

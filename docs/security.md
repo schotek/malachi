@@ -897,6 +897,49 @@ Explicitly not defended: an organiser who controls the invitation's
 shows the address); a server that lies about scheduling and so receives
 or sends invitations twice.
 
+### 4.4 Contacts (vCard, CardDAV, Graph contacts)
+
+The address books ([api.md §4.19](api.md), [architecture.md
+§3.10](architecture.md)) hold what servers and other people wrote: a
+shared CardDAV collection, a contact someone else edited, a vCard a
+server rewrote. It is handled as mail is:
+
+- **Every vCard and Graph contact is hostile input.** `internal/vcard`
+  caps the card (`api.MaxVCardBytes`, 1 MiB; 500 properties; 256 KiB a
+  decoded line; 100 items a list), never panics (a panic of the patcher
+  is `ErrMalformed`), replaces invalid UTF-8 and cleans every string of
+  control, bidi and invisible characters before it reaches the model;
+  fuzz targets and the corpus `testdata/vcard` (with `pathological/`)
+  cover it. Graph contacts are cleaned and capped as Graph events are. A
+  card over the limits is not stored; an e-mail address that is not a
+  plain address is not indexed and not shown.
+- **Nothing is fetched from a contact**: no `PHOTO`, `LOGO`, `SOUND` or
+  `KEY` URL, no `URL` (clients open only `http`/`https` web addresses,
+  through "Open this link?"; a phone number is only copied). Photos come
+  in a later stage and never from a URL.
+- **Text only to the UI.** Names, notes, labels and book names are shown
+  as plain text by every client; the MCP bridge puts them in its fence.
+- **Writes are the user's and patch.** `contact.create/update/delete`
+  go to the server first and change the cache after it accepted them;
+  an update rewrites only the properties the user changed and sends
+  every other line of the stored vCard back byte for byte (A6), guarded
+  by the revision (`If-Match`; on Graph the `changeKey` is compared
+  first): another client's change is `contactConflict`, never
+  overwritten. A synchronisation never writes to the server, so a
+  server's or a bug's empty listing can delete nothing there; deleting a
+  contact is only ever an explicit `contact.delete` (the MCP bridge has
+  none).
+- **Credentials.** The CardDAV side uses the caldav account's password
+  and its origin rules (§4.3): an address book home set on another
+  origin of the server's registrable domain over https (iCloud's and
+  Fastmail's contacts hosts) is trusted, one on another site is left out
+  without a request with the password; the pin applies to the server's
+  own host only. Graph contacts need the `Contacts.ReadWrite` scope,
+  asked for only by a sign-in made for the contacts (A15); without it
+  the account's books are `contactsConsentRequired` and the mail goes on.
+- **Logs.** The daemon logs counts, ids and error codes of contacts,
+  never a name, an address, a note or a card.
+
 ## 5. Signatures and encryption (EFAIL and friends)
 
 Not implemented in phase 1. When PGP/S/MIME arrives:

@@ -724,3 +724,8 @@ func hrefName(href string) string {
 	}
 	return cleanText(seg, maxNameBytes)
 }
+
+// IsNotCalDAV reports the error of ListCalendars (or a discovery) for a
+// server that does not offer CalDAV: a CardDAV-only server's account
+// lists its address books instead.
+func IsNotCalDAV(err error) bool { return errors.Is(err, errNotCalDAV) }

@@ -30,6 +30,7 @@ import (
 	"github.com/schotek/malachi/backend/internal/config"
 	"github.com/schotek/malachi/backend/internal/contacts"
 	"github.com/schotek/malachi/backend/internal/contacts/eds"
+	"github.com/schotek/malachi/backend/internal/contactsync"
 	"github.com/schotek/malachi/backend/internal/discover"
 	"github.com/schotek/malachi/backend/internal/eway"
 	"github.com/schotek/malachi/backend/internal/graph"
@@ -165,6 +166,11 @@ type Backend struct {
 	// supervisor behind Supervisor and the calendar of Graph accounts
 	// beside their mail (graphWithCalendar). calendarEngine returns it.
 	calSync *calsync.Supervisor
+	// contactSync is the address book engine (internal/contactsync),
+	// run beside the graph and caldav kinds' supervisors (withContacts);
+	// cn gathers notify.contactsChanged (contacts_book.go).
+	contactSync *contactsync.Supervisor
+	cn          contactsNotify
 	// graphLimiters are the request limiters of Graph accounts, one per
 	// account shared by its mail syncer, outbox and calendar (D13), under
 	// graphLimMu.
@@ -367,11 +373,19 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		UserAgent: eway.UserAgent(version),
 		Log:       log.With("component", "eway"),
 	})
+	// The address book engine: beside the graph and caldav kinds.
+	b.contactSync = contactsync.New(contactsync.Options{
+		Store:     st,
+		Providers: b.contactsProvider,
+		Changed:   func(accountID string, bookIDs []string) { b.contactsChanged(accountID, bookIDs...) },
+		Log:       log,
+	})
 	b.Supervisor = newKindSupervisor(map[api.AccountKind]SyncSupervisor{
-		api.AccountIMAP:   imapSync,
-		api.AccountGraph:  &graphWithCalendar{mail: graphSync, cal: b.calSync},
+		api.AccountIMAP: imapSync,
+		api.AccountGraph: &withContacts{SyncSupervisor: &graphWithCalendar{mail: graphSync, cal: b.calSync},
+			contacts: b.contactSync},
 		api.AccountJira:   b.jiraSync,
-		api.AccountCalDAV: b.calSync.Mail(),
+		api.AccountCalDAV: &withContacts{SyncSupervisor: b.calSync.Mail(), contacts: b.contactSync, triggers: true},
 		api.AccountEway:   b.ewaySync,
 	})
 	// Through b.Supervisor, not the values above: tests swap it.
@@ -1047,7 +1061,7 @@ func (b *Backend) dropCalendarCache(ctx context.Context, old, next store.Account
 // calendarCacheDropped compares two configurations of an account: all
 // its calendar rows go, or those of the remote ids newly disabled.
 func calendarCacheDropped(old, next api.AccountConfig) (all bool, calendars []string) {
-	had := old.Protocol() == api.AccountCalDAV || (old.Protocol() == api.AccountGraph && old.Calendar != nil && old.Calendar.Sync)
+	had := calsync.CalDAVHasCalendars(old) || (old.Protocol() == api.AccountGraph && old.Calendar != nil && old.Calendar.Sync)
 	if !had {
 		return false, nil
 	}
@@ -1056,7 +1070,7 @@ func calendarCacheDropped(old, next api.AccountConfig) (all bool, calendars []st
 		return true, nil
 	case next.Protocol() == api.AccountGraph && (next.Calendar == nil || !next.Calendar.Sync):
 		return true, nil
-	case next.Protocol() == api.AccountCalDAV && !sameCalDAVLogin(old, next):
+	case next.Protocol() == api.AccountCalDAV && (!sameCalDAVLogin(old, next) || !calsync.CalDAVHasCalendars(next)):
 		return true, nil
 	}
 	var before []string

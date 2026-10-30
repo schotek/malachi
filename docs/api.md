@@ -692,7 +692,7 @@ EwayConfig {
   "followThreads": bool                                      // save later messages of saved conversations (§4.17)
 }
 CalendarConfig {
-  "sync": bool,                       // graph: synchronise the calendars (default false); caldav: always true
+  "sync": bool,                       // graph: synchronise the calendars (default false); caldav: true, false only with caldav.contacts (no calendars)
   "disabledCalendars": ["remote id or href"] (opt),          // ≤ 200; not synchronised
   "defaultCalendar": "remote id or href" (opt),              // new events of this account
   "keepDays": 365 (opt; 30, 90, 180, 365 or 730; 0 = 365),
@@ -897,7 +897,10 @@ derives it from `kind`:
 `imap` and `graph` accounts have `["compose", "reply", "replyAll",
 "forward", "move", "delete"]`, a `graph` account `"calendar"` too; a
 `jira` account `["comment", "forward", "transition"]`; a `caldav` account
-`["calendar"]`, plus `"contacts"` with `caldav.contacts`; an `eway`
+`["calendar"]`, plus `"contacts"` with `caldav.contacts` — or `["contacts"]`
+alone when its contacts are on and `calendar.sync` is false (a
+CardDAV-only server: `account.add` sets it so when the signed-in listing
+finds no calendar home set); an `eway`
 account exactly `["crm"]`. A `graph` account has `"contacts"` too
 (address books, §4.19).
 Flags (`message.flag`) are always allowed, and so is `message.delete` of
@@ -1489,7 +1492,12 @@ CardDAVAddressBook { "href": "/remote.php/dav/addressbooks/users/jana/contacts/"
 
 `addressBooks` are the collections of the principal's
 `addressbook-home-set` (at most 200, `api.MaxAddressBooksPerAccount`;
-`[]` when there is none).
+`[]` when there is none). A home set on another host of the server's site
+over https (iCloud's and Fastmail's contacts hosts) is listed; one on
+another site is left out without a request with the password. A
+CardDAV-only server (no calendar home set) answers `calendars: []`,
+`homeSetUrl` empty and `scheduling` `client`; a server with neither
+calendars nor address books is serverError.
 
 `addresses` are the `mailto:` values of the principal's
 `calendar-user-address-set` (a client offers the first as `email`).
@@ -2977,7 +2985,9 @@ A third source is the address books the daemon synchronises
 `contactId` names the contact (`contact.get`). Which books are read is
 `scope`: `account` (the default) the books of the sending account and
 the recent book, `all` every visible book of every enabled account.
-Hidden books (`addressBook.set`) are never read.
+Hidden books (`addressBook.set`) are never read. The Evolution Data
+Server books of an account whose contacts the daemon synchronises are
+skipped (they would repeat them). Another `scope` is invalidArgument.
 
 ```jsonc
 Contact { "name": "Alice Example" (opt), "address": "alice@example.org",
@@ -4722,8 +4732,15 @@ version the book uses.
   cannot be read; with `accountId` only, otherwise the account is left
   out), storageError
 
+The recent book has `name` `""` (clients name it from its `kind`) and
+`count` the number of collected addresses; its contacts have ids `r_…`
+valid for `contact.get` only (read only, revision `""`).
+
 #### `addressBook.set`
-The user's choice of one book; nothing goes to the server.
+The user's choice of one book; nothing goes to the server. Hiding a book
+deletes its cached contacts at once (a hidden book is not synchronised
+at all); showing it again asks for a pass. The recent book is always
+shown (invalidArgument).
 
 - params: `{ "bookId", "visible": bool }`
 - result: `{ "book": AddressBook }`
@@ -4772,10 +4789,19 @@ Which addresses have a contact: the address chip's *Show Contact* and
   the cache; a client offers Reload and keeps the fields the user
   changed)
 
+`revision` must be the cached one (`contact.get`): another one is
+contactConflict at once, with the server's current version. A Microsoft
+contact holds at most 3 e-mail addresses, one postal address each of
+`work`, `home` and other (any other label), one web address, and phones
+as business, home and one mobile (other labels become business phones);
+more is invalidArgument naming the field. A birthday without a year is
+stored on Graph with the year 1604 and read back without one.
+
 #### `contact.delete`
 - params: `{ "contactId", "revision" }`
 - result: `{}`
-- errors: as `contact.update`
+- errors: as `contact.update` (a contact already gone from the server
+  is deleted from the cache and answers `{}`)
 
 Every write is followed by `notify.contactsChanged` naming the book.
 A contact the server no longer has is removed from the cache and

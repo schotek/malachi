@@ -215,6 +215,7 @@ func (s *accountService) Remove(ctx context.Context, p api.AccountRemoveParams) 
 	s.b.forgetProfileAccount(ctx, string(p.AccountID))
 	s.b.log.Info("account removed", "id", p.AccountID, "deleteLocalData", p.DeleteLocalData)
 	s.b.notifyBoard(false, string(p.AccountID)) // its cases went with it
+	s.b.contactsChanged(string(p.AccountID))    // its address books too
 	s.b.accountsChanged()
 	return &api.AccountRemoveResult{}, nil
 }
@@ -415,6 +416,7 @@ func (s *accountService) Update(ctx context.Context, p api.AccountUpdateParams) 
 	// Cached calendar rows the new configuration no longer covers go
 	// before the engine starts again (D23).
 	s.b.dropCalendarCache(ctx, existing, updated)
+	s.b.dropContactsCache(ctx, existing, updated)
 	if updated.Enabled {
 		s.b.Supervisor.Restart(updated)
 		s.b.Delivery.Restart(updated)

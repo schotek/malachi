@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/schotek/malachi/backend/internal/contacts"
+	"github.com/schotek/malachi/backend/internal/contactsync"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -67,8 +68,19 @@ func (s *contactService) Search(ctx context.Context, p api.ContactSearchParams) 
 	if err != nil {
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
 	}
-	found := s.b.searchAddressBooks(ctx, a, q, bookFetch)
-	return &api.ContactSearchResult{Contacts: mergeContacts(q, collected, found, time.Now(), limit)}, nil
+	switch p.Scope {
+	case "", api.ContactScopeAccount, api.ContactScopeAll:
+	default:
+		return nil, api.NewError(api.CodeInvalidArgument, "scope must be account or all")
+	}
+	synced := s.b.searchSyncedBooks(ctx, a, q, p.Scope, bookFetch)
+	var found []contacts.Contact
+	if !contactsync.HasContacts(a) {
+		// The system address books of an account whose contacts the
+		// daemon synchronises would only repeat them.
+		found = s.b.searchAddressBooks(ctx, a, q, bookFetch)
+	}
+	return &api.ContactSearchResult{Contacts: mergeContactsWith(q, collected, found, synced, time.Now(), limit)}, nil
 }
 
 // searchAddressBooks queries the address books that belong to the account.
@@ -135,6 +147,25 @@ type candidate struct {
 // Names are cleaned like any other untrusted display text — before
 // scoring, so that a control character cannot make a word.
 func mergeContacts(q string, collected []store.CollectedAddress, found []contacts.Contact, now time.Time, limit int) []api.Contact {
+	return mergeContactsWith(q, collected, found, nil, now, limit)
+}
+
+// sourceRank orders the sources a merged address is reported as: a
+// synchronised book, then the system's, then the collected address.
+func sourceRank(s api.ContactSource) int {
+	switch s {
+	case api.ContactSourceContacts:
+		return 2
+	case api.ContactSourceAddressBook:
+		return 1
+	}
+	return 0
+}
+
+// mergeContactsWith is mergeContacts with the synchronised books'
+// candidates (synced, Source contacts) as a third source: an address is
+// reported as the best-ranked source's, its name the contact's.
+func mergeContactsWith(q string, collected []store.CollectedAddress, found []contacts.Contact, synced []api.Contact, now time.Time, limit int) []api.Contact {
 	q = strings.ToLower(strings.TrimSpace(q))
 	byAddr := map[string]*candidate{}
 	var order []string
@@ -150,12 +181,12 @@ func mergeContacts(q string, collected []store.CollectedAddress, found []contact
 			order = append(order, key)
 			return
 		}
-		if cur.Source != c.Source {
+		if cur.Source != c.Source && (cur.Source == api.ContactSourceSent || c.Source == api.ContactSourceSent) {
 			cur.score += bothSourcesBoost
 		}
 		cur.score = max(cur.score, score)
-		if c.Source == api.ContactSourceAddressBook {
-			cur.Source, cur.Book = c.Source, c.Book
+		if sourceRank(c.Source) > sourceRank(cur.Source) {
+			cur.Source, cur.Book, cur.ContactID = c.Source, c.Book, c.ContactID
 			if c.Name != "" {
 				cur.Name = c.Name
 			}
@@ -172,6 +203,11 @@ func mergeContacts(q string, collected []store.CollectedAddress, found []contact
 		name := cleanDisplayName(f.Name)
 		add(api.Contact{Name: name, Address: f.Address, Source: api.ContactSourceAddressBook, Book: cleanDisplayName(f.Book)},
 			matchScore(q, name, f.Address))
+	}
+	for _, c := range synced {
+		name := cleanDisplayName(c.Name)
+		c.Name, c.Book = name, cleanDisplayName(c.Book)
+		add(c, matchScore(q, name, c.Address))
 	}
 	all := make([]*candidate, 0, len(order))
 	for _, k := range order {

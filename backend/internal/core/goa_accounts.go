@@ -252,3 +252,26 @@ func (b *Backend) goaCalendarDisabled(ctx context.Context, goaID string) (bool, 
 	}
 	return false, api.NewError(api.CodeAuthRequired, "the GNOME Online Accounts entry of the account is gone")
 }
+
+// goaContactsDisabled reads the Contacts switch of a GNOME Online Accounts
+// entry (goa.Account.ContactsDisabled), as goaCalendarDisabled reads the
+// Calendar one (docs/plans/address-book.md A15).
+func (b *Backend) goaContactsDisabled(ctx context.Context, goaID string) (bool, error) {
+	if b.GOA == nil {
+		return false, api.NewError(api.CodeUnavailable, "GNOME Online Accounts is not available")
+	}
+	accounts, err := b.GOA.Accounts(ctx)
+	if err != nil {
+		var apiErr *api.Error
+		if errors.As(err, &apiErr) {
+			return false, apiErr
+		}
+		return false, api.NewError(api.CodeServerError, "%v", err)
+	}
+	for _, a := range accounts {
+		if a.ID == goaID {
+			return a.ContactsDisabled, nil
+		}
+	}
+	return false, api.NewError(api.CodeAuthRequired, "the GNOME Online Accounts entry of the account is gone")
+}

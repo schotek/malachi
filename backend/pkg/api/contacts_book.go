@@ -330,9 +330,8 @@ type ContactsChangedNotification struct {
 	BookIDs   []AddressBookID `json:"bookIds,omitempty"`
 }
 
-// AddressBookService is the address-book part of the contract (§4.19).
-// It is not yet part of Backend; the daemon binds it when it implements
-// the methods.
+// AddressBookService is the address-book part of the contract (§4.19),
+// Backend.AddressBooks.
 type AddressBookService interface {
 	ListBooks(ctx context.Context, p AddressBookListParams) (*AddressBookListResult, error)
 	SetBook(ctx context.Context, p AddressBookSetParams) (*AddressBookSetResult, error)

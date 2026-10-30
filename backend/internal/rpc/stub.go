@@ -44,6 +44,36 @@ func (b *StubBackend) Events() api.EventService           { return stubEvents{} 
 func (b *StubBackend) Invitations() api.InvitationService { return stubInvitations{} }
 func (b *StubBackend) Crm() api.CrmService                { return stubCrm{} }
 func (b *StubBackend) Assistant() api.AssistantService    { return stubAssistant{} }
+func (b *StubBackend) AddressBooks() api.AddressBookService {
+	return stubAddressBooks{}
+}
+
+type stubAddressBooks struct{}
+
+func (stubAddressBooks) ListBooks(context.Context, api.AddressBookListParams) (*api.AddressBookListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAddressBooks) SetBook(context.Context, api.AddressBookSetParams) (*api.AddressBookSetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAddressBooks) ListContacts(context.Context, api.ContactListParams) (*api.ContactListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAddressBooks) GetContact(context.Context, api.ContactGetParams) (*api.ContactGetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAddressBooks) Lookup(context.Context, api.ContactLookupParams) (*api.ContactLookupResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAddressBooks) CreateContact(context.Context, api.ContactCreateParams) (*api.ContactCreateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAddressBooks) UpdateContact(context.Context, api.ContactUpdateParams) (*api.ContactUpdateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAddressBooks) DeleteContact(context.Context, api.ContactDeleteParams) (*api.ContactDeleteResult, error) {
+	return nil, api.ErrNotImplemented
+}
 
 type stubAssistant struct{}
 

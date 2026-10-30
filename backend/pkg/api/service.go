@@ -215,6 +215,7 @@ type Backend interface {
 	Invitations() InvitationService
 	Crm() CrmService
 	Assistant() AssistantService
+	AddressBooks() AddressBookService
 }
 
 // Notifier is how backend components push events to connected clients.
@@ -257,4 +258,10 @@ type CalendarNotifier interface {
 	CalendarState(n CalendarStateNotification)
 	EventAlert(n EventAlertNotification)
 	InvitationsChanged(n InvitationsChangedNotification)
+}
+
+// ContactsNotifier is the optional extension of Notifier for
+// notify.contactsChanged (docs/api.md §4.19), asserted like BoardNotifier.
+type ContactsNotifier interface {
+	ContactsChanged(n ContactsChangedNotification)
 }
