@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-30 06:41+0000\n"
+"POT-Creation-Date: 2026-10-30 18:30+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -103,6 +103,7 @@ msgstr ""
 
 #. TRANSLATORS: progressive form for the RPC error text
 #: ui/internal/accountwizard/oauth.go:140 ui/internal/window/sync.go:513
+#: ui/internal/window/contacts_consent.go:32
 msgid "Starting the sign-in"
 msgstr ""
 
@@ -1362,7 +1363,8 @@ msgstr ""
 #: ui/internal/window/calendar_detail.go:899
 #: ui/internal/window/preferences_calendar.go:488
 #: ui/internal/window/preferences_calendar.go:1016
-#: ui/data/ui/account_wizard.ui:401 ui/data/ui/jira_account.ui:25
+#: ui/internal/window/contacts_detail.go:254 ui/data/ui/account_wizard.ui:401
+#: ui/data/ui/jira_account.ui:25
 msgid "_Cancel"
 msgstr ""
 
@@ -1541,13 +1543,13 @@ msgstr ""
 
 #. TRANSLATORS: tooltip of a recipient suggestion that came from a
 #. system address book whose name is unknown.
-#: ui/internal/compose/suggest.go:300 ui/internal/contacts/text.go:208
+#: ui/internal/compose/suggest.go:308 ui/internal/contacts/text.go:215
 msgid "Address book"
 msgstr ""
 
 #. TRANSLATORS: tooltip of a recipient suggestion that is an address
 #. the user has written to before.
-#: ui/internal/compose/suggest.go:304
+#: ui/internal/compose/suggest.go:312
 msgid "Recently used"
 msgstr ""
 
@@ -1596,12 +1598,12 @@ msgid "Forward"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:63 ui/data/ui/message_window.ui:592
-#: ui/data/ui/window.ui:1169
+#: ui/data/ui/window.ui:1173
 msgid "Mark as _Read"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:65 ui/data/ui/message_window.ui:588
-#: ui/data/ui/window.ui:1165
+#: ui/data/ui/window.ui:1169
 msgid "Mark as _Unread"
 msgstr ""
 
@@ -1617,7 +1619,7 @@ msgstr ""
 
 #. TRANSLATORS: menu of the status changes a Jira issue allows.
 #: ui/internal/contextmenu/text.go:72 ui/internal/jira/transitions.go:87
-#: ui/data/ui/message_window.ui:608 ui/data/ui/window.ui:1185
+#: ui/data/ui/message_window.ui:608 ui/data/ui/window.ui:1189
 msgid "Change Status"
 msgstr ""
 
@@ -1635,7 +1637,7 @@ msgid "Move To"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:78 ui/data/ui/message_window.ui:582
-#: ui/data/ui/window.ui:1159
+#: ui/data/ui/window.ui:1163
 msgid "Mark as Junk"
 msgstr ""
 
@@ -1809,7 +1811,7 @@ msgstr ""
 
 #. TRANSLATORS: a field of a Jira issue.
 #: ui/internal/jira/jira.go:267 ui/internal/board/text.go:1075
-#: ui/data/ui/preferences.ui:654
+#: ui/data/ui/preferences.ui:676
 msgid "Status"
 msgstr ""
 
@@ -2060,7 +2062,7 @@ msgid "Jira Account"
 msgstr ""
 
 #: ui/internal/jira/settings.go:85 ui/internal/crm/text.go:428
-#: ui/internal/calendar/caldav.go:363 ui/data/ui/account_wizard.ui:145
+#: ui/internal/calendar/caldav.go:369 ui/data/ui/account_wizard.ui:145
 msgid "Account Name"
 msgstr ""
 
@@ -2513,7 +2515,7 @@ msgstr ""
 
 #: ui/internal/crm/text.go:289 ui/internal/board/view.go:859
 #: ui/internal/widget/message_row.go:371 ui/internal/window/message_view.go:615
-#: ui/internal/window/notify.go:136
+#: ui/internal/window/notify.go:140
 msgid "(No subject)"
 msgstr ""
 
@@ -2616,7 +2618,7 @@ msgstr ""
 msgid "User Name"
 msgstr ""
 
-#: ui/internal/crm/text.go:430 ui/internal/calendar/caldav.go:361
+#: ui/internal/crm/text.go:430 ui/internal/calendar/caldav.go:367
 #: ui/data/ui/account_wizard.ui:94
 msgid "Password"
 msgstr ""
@@ -2660,12 +2662,12 @@ msgid "Back to the timeline: the messages as cards, newest first"
 msgstr ""
 
 #. TRANSLATORS: a switch in Preferences → Message list; on, a message in the chat layout of a conversation shows its formatting (HTML) instead of plain text.
-#: ui/internal/conversation/chat.go:185 ui/data/ui/preferences.ui:461
+#: ui/internal/conversation/chat.go:185 ui/data/ui/preferences.ui:483
 msgid "Render HTML in Chat"
 msgstr ""
 
 #. TRANSLATORS: the subtitle of the "Render HTML in Chat" switch in Preferences → Message list.
-#: ui/internal/conversation/chat.go:192 ui/data/ui/preferences.ui:462
+#: ui/internal/conversation/chat.go:192 ui/data/ui/preferences.ui:484
 msgid ""
 "Messages in the chat layout as they were sent, in a locked web view, instead "
 "of their plain text"
@@ -2677,23 +2679,23 @@ msgid "Show More"
 msgstr ""
 
 #. TRANSLATORS: the title of a group of switches in Preferences → Message list about conversations (grouping, the chat layout).
-#: ui/internal/conversation/chat.go:273 ui/data/ui/preferences.ui:452
+#: ui/internal/conversation/chat.go:273 ui/data/ui/preferences.ui:474
 msgid "Conversations"
 msgstr ""
 
 #. TRANSLATORS: a switch in Preferences → Message list; on, the user's own messages in the chat layout of a conversation show only their first lines until clicked.
-#: ui/internal/conversation/chat.go:281 ui/data/ui/preferences.ui:467
+#: ui/internal/conversation/chat.go:281 ui/data/ui/preferences.ui:489
 msgid "Shorten My Messages in Chat"
 msgstr ""
 
 #. TRANSLATORS: a switch in Preferences → Message list; on, the other party's messages in the chat layout of a conversation show only their first lines until clicked.
-#: ui/internal/conversation/chat.go:288 ui/data/ui/preferences.ui:473
+#: ui/internal/conversation/chat.go:288 ui/data/ui/preferences.ui:495
 msgid "Shorten Others' Messages in Chat"
 msgstr ""
 
 #. TRANSLATORS: the subtitle of the "Shorten My Messages in Chat" and "Shorten Others' Messages in Chat" switches in Preferences → Message list.
-#: ui/internal/conversation/chat.go:296 ui/data/ui/preferences.ui:468
-#: ui/data/ui/preferences.ui:474
+#: ui/internal/conversation/chat.go:296 ui/data/ui/preferences.ui:490
+#: ui/data/ui/preferences.ui:496
 msgid ""
 "About three lines of each message in its bubble; a click shows the whole "
 "message"
@@ -2772,7 +2774,7 @@ msgstr ""
 #. TRANSLATORS: the window's second mode beside Mail: the conversations
 #. that need something, sorted into four states.
 #: ui/internal/board/text.go:65 ui/data/ui/preferences.ui:85
-#: ui/data/ui/preferences.ui:620
+#: ui/data/ui/preferences.ui:642
 msgid "Board"
 msgstr ""
 
@@ -4413,7 +4415,7 @@ msgstr ""
 #. events than room; %d is how many are not shown.
 #. TRANSLATORS: the chip after the first few recipients of a message;
 #. %d is how many more there are. Clicking it lists them all.
-#: ui/internal/calendar/month.go:249 ui/internal/window/addresses.go:221
+#: ui/internal/calendar/month.go:249 ui/internal/window/addresses.go:265
 #, c-format
 msgid "+%d more"
 msgid_plural "+%d more"
@@ -5044,7 +5046,9 @@ msgstr ""
 msgid "If you don’t save, your changes are lost."
 msgstr ""
 
-#: ui/internal/calendar/editor.go:460
+#. TRANSLATORS: the button that drops the unsaved changes of a
+#. contact.
+#: ui/internal/calendar/editor.go:460 ui/internal/contacts/text.go:271
 msgid "Discard"
 msgstr ""
 
@@ -5648,130 +5652,130 @@ msgctxt "mail account"
 msgid "None"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:346
+#: ui/internal/calendar/caldav.go:352
 msgid "Add CalDAV Calendar"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:350
+#: ui/internal/calendar/caldav.go:356
 msgid ""
 "Nextcloud, Fastmail, iCloud, Radicale and other servers that speak CalDAV."
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:357
+#: ui/internal/calendar/caldav.go:363
 msgid "Server Address"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:359
+#: ui/internal/calendar/caldav.go:365
 msgid "Username"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:382
+#: ui/internal/calendar/caldav.go:388
 msgid ""
 "The password goes to the system keyring. Malachi Mail never shows it again."
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:386
+#: ui/internal/calendar/caldav.go:392
 msgid "Discover Calendars"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:392
+#: ui/internal/calendar/caldav.go:398
 msgid "Looking for calendars…"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:394
+#: ui/internal/calendar/caldav.go:400
 msgid "Adding the account…"
 msgstr ""
 
 #. TRANSLATORS: how a CalDAV server was found: a DNS record.
-#: ui/internal/calendar/caldav.go:406
+#: ui/internal/calendar/caldav.go:412
 msgid "a DNS SRV record"
 msgstr ""
 
 #. TRANSLATORS: how a CalDAV server was found: at the address typed.
-#: ui/internal/calendar/caldav.go:409
+#: ui/internal/calendar/caldav.go:415
 msgid "the address you entered"
 msgstr ""
 
 #. TRANSLATORS: the Add CalDAV sheet's status: how the server was found
 #. and how many calendars it has.
-#: ui/internal/calendar/caldav.go:425
+#: ui/internal/calendar/caldav.go:431
 #, c-format
 msgid "Found through %s · %d calendar"
 msgid_plural "Found through %s · %d calendars"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/calendar/caldav.go:435
+#: ui/internal/calendar/caldav.go:441
 #, c-format
 msgid "The calendars are at %s."
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:439
+#: ui/internal/calendar/caldav.go:445
 msgid "Certificate"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:446 ui/internal/calendarctl/account.go:476
+#: ui/internal/calendar/caldav.go:452 ui/internal/calendarctl/account.go:476
 msgid "Trusted by you"
 msgstr ""
 
 #. TRANSLATORS: the certificate row of the Add CalDAV sheet; %s is
 #. the certificate's issuer.
-#: ui/internal/calendar/caldav.go:451
+#: ui/internal/calendar/caldav.go:457
 #, c-format
 msgid "Verified (%s)"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:453 ui/internal/calendarctl/account.go:480
+#: ui/internal/calendar/caldav.go:459 ui/internal/calendarctl/account.go:480
 msgid "Verified"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:455 ui/internal/calendarctl/account.go:478
+#: ui/internal/calendar/caldav.go:461 ui/internal/calendarctl/account.go:478
 msgid "Not encrypted (local server)"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:461
+#: ui/internal/calendar/caldav.go:467
 msgid "Trust Certificate…"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:464 ui/internal/contacts/text.go:384
+#: ui/internal/calendar/caldav.go:470 ui/internal/contacts/text.go:407
 msgid "Calendars"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:474
+#: ui/internal/calendar/caldav.go:480
 msgid "Not shown in Mail; in Calendar with the CALDAV capsule."
 msgstr ""
 
 #. TRANSLATORS: the Add CalDAV sheet's button that adds the account.
-#: ui/internal/calendar/caldav.go:480
+#: ui/internal/calendar/caldav.go:486
 msgctxt "caldav"
 msgid "Add"
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:490
+#: ui/internal/calendar/caldav.go:496
 msgid "The server did not accept the username or password."
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:492
+#: ui/internal/calendar/caldav.go:498
 msgid "The server’s certificate is not trusted."
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:494
+#: ui/internal/calendar/caldav.go:500
 msgid "The server could not be reached."
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:496
+#: ui/internal/calendar/caldav.go:502
 msgid "The server answered, but it is not a CalDAV server."
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:498
+#: ui/internal/calendar/caldav.go:504
 msgid "This is not a server address Malachi Mail can use."
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:500
+#: ui/internal/calendar/caldav.go:506
 msgid "The password could not be stored in the system keyring."
 msgstr ""
 
-#: ui/internal/calendar/caldav.go:502
+#: ui/internal/calendar/caldav.go:508
 msgid "The calendars could not be found."
 msgstr ""
 
@@ -5906,37 +5910,43 @@ msgctxt "contacts"
 msgid "Add"
 msgstr ""
 
-#: ui/internal/contacts/text.go:190
+#. TRANSLATORS: a short confirmation after Add to Contacts saved the
+#. new contact.
+#: ui/internal/contacts/text.go:193
+msgid "Contact added"
+msgstr ""
+
+#: ui/internal/contacts/text.go:197
 msgid "More Details…"
 msgstr ""
 
 #. TRANSLATORS: under the name of a new contact taken from a message's
 #. header: the sender wrote it, so it may be false.
-#: ui/internal/contacts/text.go:197
+#: ui/internal/contacts/text.go:204
 msgid "The sender wrote this name — check it."
 msgstr ""
 
 #. TRANSLATORS: the question before a contact is deleted; %s is its
 #. name.
-#: ui/internal/contacts/text.go:235
+#: ui/internal/contacts/text.go:242
 #, c-format
 msgid "Delete contact %s?"
 msgstr ""
 
 #. TRANSLATORS: %s is the account, e.g. "Microsoft 365
 #. (jana@example.org)".
-#: ui/internal/contacts/text.go:238
+#: ui/internal/contacts/text.go:245
 #, c-format
 msgid ""
 "The contact will also be deleted on the server %s and on every device that "
 "synchronizes it."
 msgstr ""
 
-#: ui/internal/contacts/text.go:248
+#: ui/internal/contacts/text.go:255
 msgid "The contact changed meanwhile"
 msgstr ""
 
-#: ui/internal/contacts/text.go:249
+#: ui/internal/contacts/text.go:256
 msgid ""
 "Someone changed the contact on another device. Load the new version; the "
 "details you changed stay in the form."
@@ -5944,112 +5954,124 @@ msgstr ""
 
 #. TRANSLATORS: the button that loads the server's new version of a
 #. contact into the form.
-#: ui/internal/contacts/text.go:252
+#: ui/internal/contacts/text.go:259
 msgid "Reload"
 msgstr ""
 
-#: ui/internal/contacts/text.go:259
+#: ui/internal/contacts/text.go:267
+msgid "Discard Changes?"
+msgstr ""
+
+#: ui/internal/contacts/text.go:268
+msgid "The changes to this contact have not been saved."
+msgstr ""
+
+#: ui/internal/contacts/text.go:277
+msgid "Copied to Clipboard"
+msgstr ""
+
+#: ui/internal/contacts/text.go:282
 #, c-format
 msgid "Microsoft needs your permission to access the contacts of %s."
 msgstr ""
 
 #. TRANSLATORS: the button that signs in again to give Microsoft's
 #. permission to the contacts.
-#: ui/internal/contacts/text.go:267
+#: ui/internal/contacts/text.go:290
 msgid "Allow…"
 msgstr ""
 
-#: ui/internal/contacts/text.go:273
+#: ui/internal/contacts/text.go:296
 msgid "Allow contacts access in the desktop’s Online Accounts settings."
 msgstr ""
 
-#: ui/internal/contacts/text.go:298
+#: ui/internal/contacts/text.go:321
 msgid "No Address Books"
 msgstr ""
 
-#: ui/internal/contacts/text.go:299
+#: ui/internal/contacts/text.go:322
 msgid ""
 "Turn on contacts from Microsoft 365 or a CardDAV server in Preferences. "
 "Until then, here are the addresses you have written to."
 msgstr ""
 
-#: ui/internal/contacts/text.go:301
+#: ui/internal/contacts/text.go:324
 msgid "No Contacts"
 msgstr ""
 
-#: ui/internal/contacts/text.go:303
+#: ui/internal/contacts/text.go:326
 msgid "No Contacts Found"
 msgstr ""
 
-#: ui/internal/contacts/text.go:303
+#: ui/internal/contacts/text.go:326
 msgid "Try another name, company or address."
 msgstr ""
 
-#: ui/internal/contacts/text.go:305
+#: ui/internal/contacts/text.go:328
 msgid "No Contact Selected"
 msgstr ""
 
-#: ui/internal/contacts/text.go:311
+#: ui/internal/contacts/text.go:334
 msgid "Open Preferences…"
 msgstr ""
 
-#: ui/internal/contacts/text.go:320
+#: ui/internal/contacts/text.go:343
 msgid "The contact no longer exists."
 msgstr ""
 
-#: ui/internal/contacts/text.go:322
+#: ui/internal/contacts/text.go:345
 msgid "The address book no longer exists."
 msgstr ""
 
-#: ui/internal/contacts/text.go:324
+#: ui/internal/contacts/text.go:347
 msgid "This address book cannot be changed."
 msgstr ""
 
-#: ui/internal/contacts/text.go:331
+#: ui/internal/contacts/text.go:354
 msgid "Microsoft needs your permission to access these contacts."
 msgstr ""
 
-#: ui/internal/contacts/text.go:333
+#: ui/internal/contacts/text.go:356
 msgid "Contacts cannot be changed while offline."
 msgstr ""
 
-#: ui/internal/contacts/text.go:335
+#: ui/internal/contacts/text.go:358
 msgid "The contact could not be saved. Check its details."
 msgstr ""
 
-#: ui/internal/contacts/text.go:345
+#: ui/internal/contacts/text.go:368
 msgid "Sync Contacts"
 msgstr ""
 
-#: ui/internal/contacts/text.go:350
+#: ui/internal/contacts/text.go:373
 msgid "Edit the server, password and certificate on the Calendar page."
 msgstr ""
 
 #. TRANSLATORS: the Preferences group that decides which address books
 #. complete the recipients of a new message.
-#: ui/internal/contacts/text.go:357
+#: ui/internal/contacts/text.go:380
 msgid "Recipient Suggestions"
 msgstr ""
 
-#: ui/internal/contacts/text.go:363
+#: ui/internal/contacts/text.go:386
 msgid "All Address Books"
 msgstr ""
 
-#: ui/internal/contacts/text.go:365
+#: ui/internal/contacts/text.go:388
 msgid "Address Books of the Account You Write From"
 msgstr ""
 
-#: ui/internal/contacts/text.go:374
+#: ui/internal/contacts/text.go:397
 msgid ""
 "Add a Microsoft 365 account or a CardDAV server to see its contacts here."
 msgstr ""
 
 #. TRANSLATORS: the heading of the address books a CardDAV server has.
-#: ui/internal/contacts/text.go:380
+#: ui/internal/contacts/text.go:403
 msgid "Address Books"
 msgstr ""
 
-#: ui/internal/contacts/text.go:388
+#: ui/internal/contacts/text.go:411
 msgid "Add Calendar and Contacts (CalDAV/CardDAV)"
 msgstr ""
 
@@ -6789,15 +6811,15 @@ msgid_plural "Marking %d messages as junk"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/addresses.go:150
+#: ui/internal/window/addresses.go:159
 msgid "Address copied"
 msgstr ""
 
-#: ui/internal/window/addresses.go:177
+#: ui/internal/window/addresses.go:220
 msgid "_Copy Address"
 msgstr ""
 
-#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:1137
+#: ui/internal/window/addresses.go:221 ui/data/ui/window.ui:1137
 msgid "_New Message"
 msgstr ""
 
@@ -6950,7 +6972,7 @@ msgstr ""
 
 #: ui/internal/window/conversation_card.go:776 ui/data/ui/embedded_window.ui:61
 #: ui/data/ui/message_window.ui:259 ui/data/ui/message_window.ui:598
-#: ui/data/ui/window.ui:711 ui/data/ui/window.ui:1175
+#: ui/data/ui/window.ui:711 ui/data/ui/window.ui:1179
 msgid "Load _Images"
 msgstr ""
 
@@ -7149,7 +7171,7 @@ msgstr ""
 msgid "This folder is empty."
 msgstr ""
 
-#: ui/internal/window/notify.go:123
+#: ui/internal/window/notify.go:127
 msgid "New message"
 msgstr ""
 
@@ -7195,76 +7217,76 @@ msgstr ""
 msgid "Cancelling the send"
 msgstr ""
 
-#: ui/internal/window/preferences.go:368
+#: ui/internal/window/preferences.go:370
 msgid "Saving mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:397
+#: ui/internal/window/preferences.go:399
 msgid "Loading mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:460
+#: ui/internal/window/preferences.go:462
 msgid "Measuring the disk space"
 msgstr ""
 
-#: ui/internal/window/preferences.go:496
+#: ui/internal/window/preferences.go:498
 msgid "Converting the stored mail in the background"
 msgstr ""
 
-#: ui/internal/window/preferences.go:498
+#: ui/internal/window/preferences.go:500
 msgid "Converting stopped: the disk is full"
 msgstr ""
 
 #. TRANSLATORS: %s is a size such as "1.2 GiB".
-#: ui/internal/window/preferences.go:502
+#: ui/internal/window/preferences.go:504
 #, c-format
 msgid "Compression saves %s"
 msgstr ""
 
 #. TRANSLATORS: %s is a size such as "1.2 GiB".
-#: ui/internal/window/preferences.go:506
+#: ui/internal/window/preferences.go:508
 #, c-format
 msgid "%s of attachments are on the server only"
 msgstr ""
 
-#: ui/internal/window/preferences.go:644
+#: ui/internal/window/preferences.go:646
 msgid "The desktop portal refused to change autostart"
 msgstr ""
 
-#: ui/internal/window/preferences.go:647
+#: ui/internal/window/preferences.go:649
 msgid "Autostart needs xdg-desktop-portal"
 msgstr ""
 
-#: ui/internal/window/preferences.go:650
+#: ui/internal/window/preferences.go:652
 msgid "Autostart was not granted"
 msgstr ""
 
-#: ui/internal/window/preferences.go:685
+#: ui/internal/window/preferences.go:687
 msgid "Not available in the Flatpak build"
 msgstr ""
 
-#: ui/internal/window/preferences.go:691
+#: ui/internal/window/preferences.go:693
 msgid "The MCP bridge (malachi-mcp) was not found"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:738
+#: ui/internal/window/preferences.go:740
 #, c-format
 msgid "The MCP bridge did not answer: %s"
 msgstr ""
 
-#: ui/internal/window/preferences.go:783
+#: ui/internal/window/preferences.go:785
 msgid "No Claude app was found on this computer"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:786
+#: ui/internal/window/preferences.go:788
 #, c-format
 msgid "The MCP bridge could not be registered: %s"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:789
+#: ui/internal/window/preferences.go:791
 #, c-format
 msgid "The MCP bridge could not be unregistered: %s"
 msgstr ""
@@ -7295,6 +7317,7 @@ msgid "Changing the remote content preference"
 msgstr ""
 
 #: ui/internal/window/remote.go:264 ui/internal/window/remote.go:290
+#: ui/internal/window/contacts_detail.go:249
 msgid "Open This Link?"
 msgstr ""
 
@@ -7305,11 +7328,12 @@ msgid "The link is shown as “%s” but leads to %s."
 msgstr ""
 
 #: ui/internal/window/remote.go:270 ui/internal/window/remote.go:296
+#: ui/internal/window/contacts_detail.go:255
 msgid "_Open Link"
 msgstr ""
 
 #. TRANSLATORS: %s is the link's real destination.
-#: ui/internal/window/remote.go:292
+#: ui/internal/window/remote.go:292 ui/internal/window/contacts_detail.go:251
 #, c-format
 msgid "This link leads to %s."
 msgstr ""
@@ -7612,15 +7636,15 @@ msgstr ""
 msgid "Loading the conversation"
 msgstr ""
 
-#: ui/internal/window/window.go:1035
+#: ui/internal/window/window.go:1039
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:1107 ui/data/ui/window.ui:254
+#: ui/internal/window/window.go:1111 ui/data/ui/window.ui:254
 msgid "Search"
 msgstr ""
 
-#: ui/internal/window/window.go:1113 ui/data/ui/window.ui:224
+#: ui/internal/window/window.go:1117 ui/data/ui/window.ui:224
 msgid "Messages"
 msgstr ""
 
@@ -7952,7 +7976,7 @@ msgstr ""
 msgid "Message"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:602 ui/data/ui/window.ui:1179
+#: ui/data/ui/message_window.ui:602 ui/data/ui/window.ui:1183
 msgid "Always Load Images From This _Sender"
 msgstr ""
 
@@ -8018,7 +8042,7 @@ msgstr ""
 msgid "Confirm Before Deleting"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:188 data/io.github.schotek.Malachi.gschema.xml:125
+#: ui/data/ui/preferences.ui:188 data/io.github.schotek.Malachi.gschema.xml:130
 msgid "Ask before moving a message to Trash"
 msgstr ""
 
@@ -8034,7 +8058,7 @@ msgstr ""
 msgid "Play Sound"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:206 data/io.github.schotek.Malachi.gschema.xml:133
+#: ui/data/ui/preferences.ui:206 data/io.github.schotek.Malachi.gschema.xml:138
 msgid "Play the system new-mail sound"
 msgstr ""
 
@@ -8117,105 +8141,105 @@ msgstr ""
 msgid "Disk Space Used"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:393
+#: ui/data/ui/preferences.ui:415
 msgid "Appearance"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:397
+#: ui/data/ui/preferences.ui:419
 msgid "Theme"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:400
+#: ui/data/ui/preferences.ui:422
 msgid "Color Scheme"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:404
+#: ui/data/ui/preferences.ui:426
 msgid "Follow System"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:405
+#: ui/data/ui/preferences.ui:427
 msgid "Light"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:406
+#: ui/data/ui/preferences.ui:428
 msgid "Dark"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:416
+#: ui/data/ui/preferences.ui:438
 msgid "Message List"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:419
+#: ui/data/ui/preferences.ui:441
 msgid "Density"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:423
+#: ui/data/ui/preferences.ui:445
 msgid "Comfortable"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:424
+#: ui/data/ui/preferences.ui:446
 msgid "Compact"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:432
+#: ui/data/ui/preferences.ui:454
 msgid "Show Preview Line"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:438
+#: ui/data/ui/preferences.ui:460
 msgid "Show Avatars"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:444
+#: ui/data/ui/preferences.ui:466
 msgid "Monochrome Avatars"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:445
+#: ui/data/ui/preferences.ui:467
 msgid "Neutral grey instead of a colour per sender"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:455
+#: ui/data/ui/preferences.ui:477
 msgid "Group by Conversation"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:456
+#: ui/data/ui/preferences.ui:478
 msgid "One row per conversation; expand it to see its messages"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:481
+#: ui/data/ui/preferences.ui:503
 msgid "Message View"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:484
+#: ui/data/ui/preferences.ui:506
 msgid "Use Monospace Font for Plain Text"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:489
+#: ui/data/ui/preferences.ui:511
 msgid "Text Zoom"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:490
+#: ui/data/ui/preferences.ui:512
 msgid "Percent"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:508
+#: ui/data/ui/preferences.ui:530
 msgid "AI"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:520
+#: ui/data/ui/preferences.ui:542
 msgid "MCP"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:521
+#: ui/data/ui/preferences.ui:543
 msgid ""
 "Lets AI assistants read your mail and prepare drafts through the Model "
 "Context Protocol."
 msgstr ""
 
-#: ui/data/ui/preferences.ui:524
+#: ui/data/ui/preferences.ui:546
 msgid "Register with Claude"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:525
+#: ui/data/ui/preferences.ui:547
 msgid ""
 "Adds the malachi-mcp bridge to Claude Desktop and Claude Code on this "
 "computer"
@@ -8284,329 +8308,333 @@ msgstr ""
 msgid "_Add Account…"
 msgstr ""
 
-#: ui/data/ui/window.ui:1143
-msgid "_Preferences"
+#: ui/data/ui/window.ui:1141
+msgid "_Contacts"
 msgstr ""
 
 #: ui/data/ui/window.ui:1147
-msgid "_Keyboard Shortcuts"
+msgid "_Preferences"
 msgstr ""
 
 #: ui/data/ui/window.ui:1151
+msgid "_Keyboard Shortcuts"
+msgstr ""
+
+#: ui/data/ui/window.ui:1155
 msgid "_About Malachi Mail"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:72
+#: data/io.github.schotek.Malachi.gschema.xml:77
 msgid "Window width"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:76
+#: data/io.github.schotek.Malachi.gschema.xml:81
 msgid "Window height"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:80
+#: data/io.github.schotek.Malachi.gschema.xml:85
 msgid "Window maximized state"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:84
+#: data/io.github.schotek.Malachi.gschema.xml:89
 msgid "Width of the folder sidebar"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:88
+#: data/io.github.schotek.Malachi.gschema.xml:93
 msgid "Width of the message list pane"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:97
+#: data/io.github.schotek.Malachi.gschema.xml:102
 msgid "Folders whose subfolders are hidden in the sidebar"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:101
+#: data/io.github.schotek.Malachi.gschema.xml:106
 msgid "Accounts whose folders are hidden in the sidebar"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:105
+#: data/io.github.schotek.Malachi.gschema.xml:110
 msgid "Folders pinned to the Favourites section of the sidebar"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:112
+#: data/io.github.schotek.Malachi.gschema.xml:117
 msgid ""
 "Start hidden in the background at login (mirrors the Background portal's "
 "autostart decision)"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:116
+#: data/io.github.schotek.Malachi.gschema.xml:121
 msgid "Closing the main window keeps the application running"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:121
+#: data/io.github.schotek.Malachi.gschema.xml:126
 msgid ""
 "Seconds a message must be shown before it is marked as read; 0 = immediately"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:129
+#: data/io.github.schotek.Malachi.gschema.xml:134
 msgid "Show a desktop notification for new mail"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:139
+#: data/io.github.schotek.Malachi.gschema.xml:144
 msgid "Color scheme"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:140
+#: data/io.github.schotek.Malachi.gschema.xml:145
 msgid "Follow the system preference, or force a light or dark appearance."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:144
+#: data/io.github.schotek.Malachi.gschema.xml:149
 msgid "Message list density"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:148
+#: data/io.github.schotek.Malachi.gschema.xml:153
 msgid "Show a one-line preview under each message in the list"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:152
+#: data/io.github.schotek.Malachi.gschema.xml:157
 msgid "Group the message list by conversation"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:153
+#: data/io.github.schotek.Malachi.gschema.xml:158
 msgid ""
 "Show one row per conversation in the selected folder; expanding it lists the "
 "messages the folder holds."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:157
+#: data/io.github.schotek.Malachi.gschema.xml:162
 msgid "Show conversations as a chat"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:158
+#: data/io.github.schotek.Malachi.gschema.xml:163
 msgid ""
 "Others' messages on the left, yours on the right, oldest first; off shows "
 "the timeline."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:162
+#: data/io.github.schotek.Malachi.gschema.xml:167
 msgid "Render HTML in the chat layout"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:163
+#: data/io.github.schotek.Malachi.gschema.xml:168
 msgid ""
 "In the chat layout of a conversation, show a message's HTML in a locked web "
 "view instead of its plain text; off shows the text."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:167
+#: data/io.github.schotek.Malachi.gschema.xml:172
 msgid "Shorten my messages in the chat layout"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:168
+#: data/io.github.schotek.Malachi.gschema.xml:173
 msgid ""
 "In the chat layout of a conversation, show about three lines of each of the "
 "user's own messages in its bubble; a click shows the whole message."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:172
+#: data/io.github.schotek.Malachi.gschema.xml:177
 msgid "Shorten others' messages in the chat layout"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:173
+#: data/io.github.schotek.Malachi.gschema.xml:178
 msgid ""
 "In the chat layout of a conversation, show about three lines of each message "
 "of the other party in its bubble; a click shows the whole message."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:177
+#: data/io.github.schotek.Malachi.gschema.xml:182
 msgid "Where a search looks"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:178
+#: data/io.github.schotek.Malachi.gschema.xml:183
 msgid ""
 "The selected folder, every folder of its account, or every account; the last "
 "choice made in the search bar."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:182
+#: data/io.github.schotek.Malachi.gschema.xml:187
 msgid "Show sender avatars in the message list"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:186
+#: data/io.github.schotek.Malachi.gschema.xml:191
 msgid "Draw avatars in neutral grey instead of per-sender colours"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:190
+#: data/io.github.schotek.Malachi.gschema.xml:195
 msgid "Use a monospace font for plain-text message bodies"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:195
+#: data/io.github.schotek.Malachi.gschema.xml:200
 msgid "Message body text zoom in percent"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:201
+#: data/io.github.schotek.Malachi.gschema.xml:206
 msgid "Show the Assistant menu that hands mail to Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:202
+#: data/io.github.schotek.Malachi.gschema.xml:207
 msgid ""
 "The menu opens Claude Desktop or Claude Code on this computer with a "
 "prepared question about the selected mail."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:206
+#: data/io.github.schotek.Malachi.gschema.xml:211
 msgid "Where the Assistant menu opens Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:207
+#: data/io.github.schotek.Malachi.gschema.xml:212
 msgid ""
 "Claude Desktop, Claude Code in a terminal, or the panel in the app; the last "
 "choice made in the Assistant menu or in the settings."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:211
+#: data/io.github.schotek.Malachi.gschema.xml:216
 msgid "The model the assistant panel uses"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:212
+#: data/io.github.schotek.Malachi.gschema.xml:217
 msgid "Sonnet, Haiku or Opus, passed to Claude Code."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:216
+#: data/io.github.schotek.Malachi.gschema.xml:221
 msgid "Where Claude Code is"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:217
+#: data/io.github.schotek.Malachi.gschema.xml:222
 msgid ""
 "The claude executable the assistant panel runs; empty looks in the usual "
 "places."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:221
+#: data/io.github.schotek.Malachi.gschema.xml:226
 msgid "The assistant panel may send mail to Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:222
+#: data/io.github.schotek.Malachi.gschema.xml:227
 msgid "Set when the user allowed it the first time."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:227
+#: data/io.github.schotek.Malachi.gschema.xml:232
 msgid "The provider of the assistant in the app"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:228
+#: data/io.github.schotek.Malachi.gschema.xml:233
 msgid "The in-app provider; external Claude hand-off is independent."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:232
+#: data/io.github.schotek.Malachi.gschema.xml:237
 msgid "Where Codex is"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:233
+#: data/io.github.schotek.Malachi.gschema.xml:238
 msgid "The native Codex executable; empty looks in the usual places."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:237
+#: data/io.github.schotek.Malachi.gschema.xml:242
 msgid "The model the ChatGPT provider uses"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:238
-#: data/io.github.schotek.Malachi.gschema.xml:249
+#: data/io.github.schotek.Malachi.gschema.xml:243
+#: data/io.github.schotek.Malachi.gschema.xml:254
 msgid "Empty uses the provider's model default."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:243
+#: data/io.github.schotek.Malachi.gschema.xml:248
 msgid "The accepted ChatGPT mail consent version"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:244
+#: data/io.github.schotek.Malachi.gschema.xml:249
 msgid "Zero means no permission to send mail to OpenAI."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:248
+#: data/io.github.schotek.Malachi.gschema.xml:253
 msgid "The model ChatGPT uses for the board"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:254
+#: data/io.github.schotek.Malachi.gschema.xml:259
 msgid "The accepted OpenAI board consent version"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:255
+#: data/io.github.schotek.Malachi.gschema.xml:260
 msgid "Zero means no permission to send board mail to OpenAI."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:262
+#: data/io.github.schotek.Malachi.gschema.xml:267
 msgid "The style the Board opens in"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:263
+#: data/io.github.schotek.Malachi.gschema.xml:268
 msgid ""
 "Last Used (the style in board-last-style), List, Columns or Today; a changed "
 "choice applies the next time the Board is shown, unless a style was already "
 "picked in this run, which then stays until the app quits."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:267
+#: data/io.github.schotek.Malachi.gschema.xml:272
 msgid "The style the Board was shown in last"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:268
+#: data/io.github.schotek.Malachi.gschema.xml:273
 msgid ""
 "Written whenever the user changes the Board's style; read when board-default-"
 "style is Last Used."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:272
+#: data/io.github.schotek.Malachi.gschema.xml:277
 msgid "What the main window shows at launch"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:273
+#: data/io.github.schotek.Malachi.gschema.xml:278
 msgid ""
 "Mail, the Board, the Calendar, or the mode shown last (board-last-mode). The "
 "Board is replaced by Mail while it is turned off."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:277
+#: data/io.github.schotek.Malachi.gschema.xml:282
 msgid "The mode the main window showed last"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:278
+#: data/io.github.schotek.Malachi.gschema.xml:283
 msgid ""
 "\"mail\", \"board\" or \"calendar\", written whenever the mode switches; "
 "read when board-start-mode is Last."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:282
+#: data/io.github.schotek.Malachi.gschema.xml:287
 msgid "The account the Board is filtered to"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:283
+#: data/io.github.schotek.Malachi.gschema.xml:288
 msgid ""
 "The daemon's account id, written whenever the Board's account filter "
 "changes; empty means every account. Applied when the Board shows while that "
 "account still exists."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:287
+#: data/io.github.schotek.Malachi.gschema.xml:292
 msgid "The Board's triage may send mail to Claude"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:288
+#: data/io.github.schotek.Malachi.gschema.xml:293
 msgid ""
 "Set when the user allowed it the first time, apart from the assistant "
 "panel's consent."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:292
+#: data/io.github.schotek.Malachi.gschema.xml:297
 msgid "The model the Board's triage uses"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:293
+#: data/io.github.schotek.Malachi.gschema.xml:298
 msgid ""
 "Sonnet, Haiku or Opus, passed to Claude Code; apart from the assistant "
 "panel's model."
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:297
+#: data/io.github.schotek.Malachi.gschema.xml:302
 msgid "The view the Calendar was shown in last"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:298
+#: data/io.github.schotek.Malachi.gschema.xml:303
 msgid ""
 "Day, Week, Month or Agenda, written whenever the user changes the Calendar's "
 "view; applied when the Calendar shows."
