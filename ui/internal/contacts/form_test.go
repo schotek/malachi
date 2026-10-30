@@ -244,31 +244,38 @@ func TestValidateGraphLimits(t *testing.T) {
 	}
 }
 
-// ProblemOf reads the field from the daemon's message; anything it
+// ProblemOf reads the field from the error's data (a map, as the client
+// decodes it, or the type); the message is never read, and anything it
 // cannot read is no problem (the sentence is said instead).
 func TestProblemOf(t *testing.T) {
-	inv := func(m string) *api.Error { return &api.Error{Code: api.CodeInvalidArgument, Message: m} }
+	inv := func(field string) *api.Error {
+		return &api.Error{Code: api.CodeInvalidArgument, Message: "card.org: misleading", Data: map[string]any{"field": field}}
+	}
 	for _, c := range []struct {
-		msg   string
+		field string
 		key   FieldKey
 		index int
 	}{
-		{"card.emails[2].address: not an e-mail address", KeyEmails, 2},
-		{"card.emails: a Microsoft contact has at most 3 e-mail addresses", KeyEmails, -1},
-		{"card.addresses[1]: a Microsoft contact has one work address", KeyAddresses, 1},
-		{"card.phones[0].label: over 64 bytes", KeyPhones, 0},
-		{"card.name.family: over 256 bytes", KeyFamily, -1},
-		{"card.urls: a Microsoft contact has one web address", KeyURLs, -1},
-		{"card.note: not UTF-8", KeyNote, -1},
+		{"emails[2].address", KeyEmails, 2},
+		{"emails", KeyEmails, -1},
+		{"addresses[1]", KeyAddresses, 1},
+		{"phones[0].label", KeyPhones, 0},
+		{"name.family", KeyFamily, -1},
+		{"urls", KeyURLs, -1},
+		{"note", KeyNote, -1},
 	} {
-		p, ok := ProblemOf(inv(c.msg), en{})
+		p, ok := ProblemOf(inv(c.field), en{})
 		if !ok || p.Key != c.key || p.Index != c.index || p.Text != RefusedText(en{}) {
-			t.Errorf("%q: %+v %v", c.msg, p, ok)
+			t.Errorf("%q: %+v %v", c.field, p, ok)
 		}
 	}
-	for _, e := range []*api.Error{nil, {Code: api.CodeOffline, Message: "card.org: x"}, inv("bookId: unknown"),
-		inv("card.colour: x"), inv("card.emails[x].address: y"), inv("card.emails[-1]: y"), inv("card.emails[2: y"),
-		inv("card.name.nick: y"), inv("no colon")} {
+	typed := &api.Error{Code: api.CodeInvalidArgument, Data: api.ContactFieldData{Field: "title"}}
+	if p, ok := ProblemOf(typed, en{}); !ok || p.Key != KeyTitle {
+		t.Errorf("typed data: %+v %v", p, ok)
+	}
+	for _, e := range []*api.Error{nil, {Code: api.CodeInvalidArgument, Message: "card.org: no data"},
+		{Code: api.CodeOffline, Data: map[string]any{"field": "org"}}, {Code: api.CodeInvalidArgument, Data: "org"},
+		inv(""), inv("card.org"), inv("colour"), inv("emails[x].address"), inv("emails[-1]"), inv("emails[2"), inv("name.nick")} {
 		if p, ok := ProblemOf(e, en{}); ok {
 			t.Errorf("%+v read as %+v", e, p)
 		}

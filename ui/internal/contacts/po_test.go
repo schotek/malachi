@@ -124,7 +124,7 @@ func exercise(tr Translator) {
 	g.Addresses = []api.ContactAddress{{City: "A"}, {City: "B"}}
 	g.URLs = []LabelledValue{{Value: "a.cz"}, {Value: "b.cz"}}
 	g.Validate(tr)
-	ProblemOf(&api.Error{Code: api.CodeInvalidArgument, Message: "card.org: over"}, tr)
+	ProblemOf(&api.Error{Code: api.CodeInvalidArgument, Data: api.ContactFieldData{Field: "org"}}, tr)
 	NewAddFromChip(api.Address{Name: "A B", Address: "a@b.cz"}, "", nil, nil, tr)
 	accs := []api.Account{{ID: "a", Config: api.AccountConfig{Email: "x@y.cz", Kind: api.AccountGraph}}}
 	AccountLabel(&accs[0], tr)

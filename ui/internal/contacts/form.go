@@ -4,6 +4,7 @@
 package contacts
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/mail"
 	"net/url"
@@ -673,20 +674,23 @@ func (f *Form) graphProblems(tr Translator) []Problem {
 }
 
 // ProblemOf reads the field of a refused card from the daemon's
-// invalidArgument: its message starts with the field's path
-// ("card.emails[2].address: …", docs/api.md contact.create). The problem
-// marks that field of the form (Index -1 for a whole list or a field
-// without rows) with RefusedText; false when the error is another or
-// names no field the form has (the caller then says ErrorText).
+// invalidArgument: its data is api.ContactFieldData naming the field as a
+// path in the card ("emails[2].address", "name.given", "emails"; docs/api.md
+// §4.19). The problem marks that field of the form (Index -1 for a whole
+// list or a field without rows) with RefusedText; false when the error is
+// another, has no field or names one the form does not have (the caller
+// then says ErrorText). The message is never read.
 func ProblemOf(e *api.Error, tr Translator) (Problem, bool) {
-	if e == nil || e.Code != api.CodeInvalidArgument {
+	if e == nil || e.Code != api.CodeInvalidArgument || e.Data == nil {
 		return Problem{}, false
 	}
-	path, _, ok := strings.Cut(e.Message, ":")
-	path, ok2 := strings.CutPrefix(strings.TrimSpace(path), "card.")
-	if !ok || !ok2 {
+	// The client decodes data as a map; a test may pass the type itself.
+	raw, err := json.Marshal(e.Data)
+	var d api.ContactFieldData
+	if err != nil || json.Unmarshal(raw, &d) != nil || d.Field == "" {
 		return Problem{}, false
 	}
+	path := d.Field
 	head, _, _ := strings.Cut(path, ".")
 	index := -1
 	if name, rest, ok := strings.Cut(head, "["); ok {

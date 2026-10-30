@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-30 18:38+0100\n"
+"POT-Creation-Date: 2026-10-30 18:48+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1330,7 +1330,7 @@ msgid "The sender's server refused the request."
 msgstr ""
 
 #: ui/internal/compose/pane.go:224 ui/internal/compose/pane.go:1059
-#: ui/internal/jira/settings.go:123 ui/internal/contacts/form.go:459
+#: ui/internal/jira/settings.go:123 ui/internal/contacts/form.go:460
 #: ui/internal/window/assistant_panel.go:204
 #: ui/internal/window/event_editor_popovers.go:36
 msgid "Remove"
@@ -6239,152 +6239,152 @@ msgstr ""
 
 #. TRANSLATORS: the contact form's button that adds an e-mail
 #. address row.
-#: ui/internal/contacts/form.go:448
+#: ui/internal/contacts/form.go:449
 msgid "Add Email"
 msgstr ""
 
-#: ui/internal/contacts/form.go:450
+#: ui/internal/contacts/form.go:451
 msgid "Add Phone"
 msgstr ""
 
-#: ui/internal/contacts/form.go:452
+#: ui/internal/contacts/form.go:453
 msgid "Add Address"
 msgstr ""
 
-#: ui/internal/contacts/form.go:454
+#: ui/internal/contacts/form.go:455
 msgid "Add Website"
 msgstr ""
 
-#: ui/internal/contacts/form.go:462
+#: ui/internal/contacts/form.go:463
 msgid "Add Birthday"
 msgstr ""
 
 #. TRANSLATORS: placeholders of the contact form's fields.
-#: ui/internal/contacts/form.go:469
+#: ui/internal/contacts/form.go:470
 msgid "First Name"
 msgstr ""
 
-#: ui/internal/contacts/form.go:471
+#: ui/internal/contacts/form.go:472
 msgid "Last Name"
 msgstr ""
 
-#: ui/internal/contacts/form.go:473
+#: ui/internal/contacts/form.go:474
 msgid "Middle Name"
 msgstr ""
 
 #. TRANSLATORS: a title before a name, such as "Ing." or "Dr.".
-#: ui/internal/contacts/form.go:476
+#: ui/internal/contacts/form.go:477
 msgid "Prefix"
 msgstr ""
 
 #. TRANSLATORS: a title after a name, such as "Ph.D." or "Jr.".
-#: ui/internal/contacts/form.go:479
+#: ui/internal/contacts/form.go:480
 msgid "Suffix"
 msgstr ""
 
-#: ui/internal/contacts/form.go:481
+#: ui/internal/contacts/form.go:482
 msgid "Nickname"
 msgstr ""
 
-#: ui/internal/contacts/form.go:483
+#: ui/internal/contacts/form.go:484
 msgid "Company"
 msgstr ""
 
-#: ui/internal/contacts/form.go:485
+#: ui/internal/contacts/form.go:486
 msgid "Job Title"
 msgstr ""
 
-#: ui/internal/contacts/form.go:487
+#: ui/internal/contacts/form.go:488
 msgid "Email"
 msgstr ""
 
-#: ui/internal/contacts/form.go:489
+#: ui/internal/contacts/form.go:490
 msgid "Phone"
 msgstr ""
 
-#: ui/internal/contacts/form.go:491
+#: ui/internal/contacts/form.go:492
 msgid "Website"
 msgstr ""
 
-#: ui/internal/contacts/form.go:493
+#: ui/internal/contacts/form.go:494
 msgid "Birthday"
 msgstr ""
 
-#: ui/internal/contacts/form.go:495
+#: ui/internal/contacts/form.go:496
 msgid "Note"
 msgstr ""
 
-#: ui/internal/contacts/form.go:516
+#: ui/internal/contacts/form.go:517
 msgid "Street"
 msgstr ""
 
-#: ui/internal/contacts/form.go:518
+#: ui/internal/contacts/form.go:519
 msgid "Postal Code"
 msgstr ""
 
-#: ui/internal/contacts/form.go:520
+#: ui/internal/contacts/form.go:521
 msgid "City"
 msgstr ""
 
 #. TRANSLATORS: a part of a postal address: state, province or
 #. region.
-#: ui/internal/contacts/form.go:524
+#: ui/internal/contacts/form.go:525
 msgid "Region"
 msgstr ""
 
-#: ui/internal/contacts/form.go:526
+#: ui/internal/contacts/form.go:527
 msgid "Country"
 msgstr ""
 
 #. TRANSLATORS: the label of the choice where a new contact is saved.
-#: ui/internal/contacts/form.go:532
+#: ui/internal/contacts/form.go:533
 msgid "Address Book"
 msgstr ""
 
 #. TRANSLATORS: the label of a new contact's name in Add to Contacts.
-#: ui/internal/contacts/form.go:538
+#: ui/internal/contacts/form.go:539
 msgid "Name"
 msgstr ""
 
-#: ui/internal/contacts/form.go:563
+#: ui/internal/contacts/form.go:564
 msgid "Enter a name, a company or an email address."
 msgstr ""
 
-#: ui/internal/contacts/form.go:565
+#: ui/internal/contacts/form.go:566
 msgid "This text is too long."
 msgstr ""
 
 #. TRANSLATORS: %s is what the user typed as an e-mail address.
-#: ui/internal/contacts/form.go:584
+#: ui/internal/contacts/form.go:585
 #, c-format
 msgid "%s is not a valid email address."
 msgstr ""
 
-#: ui/internal/contacts/form.go:609
+#: ui/internal/contacts/form.go:610
 msgid "A website must be an address starting with http:// or https://."
 msgstr ""
 
-#: ui/internal/contacts/form.go:615
+#: ui/internal/contacts/form.go:616
 msgid "Enter a valid date."
 msgstr ""
 
 #. TRANSLATORS: Microsoft 365 is a brand.
-#: ui/internal/contacts/form.go:644
+#: ui/internal/contacts/form.go:645
 #, c-format
 msgid "A Microsoft 365 contact has at most %d email address."
 msgid_plural "A Microsoft 365 contact has at most %d email addresses."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/contacts/form.go:659
+#: ui/internal/contacts/form.go:660
 msgid "A Microsoft 365 contact has one work, one home and one other address."
 msgstr ""
 
-#: ui/internal/contacts/form.go:669
+#: ui/internal/contacts/form.go:670
 msgid "A Microsoft 365 contact has only one website."
 msgstr ""
 
-#: ui/internal/contacts/form.go:719
+#: ui/internal/contacts/form.go:723
 msgid "The server did not accept the marked detail. Correct it and try again."
 msgstr ""
 

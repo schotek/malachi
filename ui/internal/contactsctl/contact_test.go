@@ -297,7 +297,8 @@ func TestContactGraphLimitsAndRefusedField(t *testing.T) {
 		t.Fatalf("graph limits: calls %d problems %+v", d.count(api.MethodContactUpdate), c.Problems())
 	}
 	c.Form().URLs = c.Form().URLs[:1]
-	d.fail(api.MethodContactUpdate, &api.Error{Code: api.CodeInvalidArgument, Message: "card.phones[0].number: empty"})
+	d.fail(api.MethodContactUpdate, &api.Error{Code: api.CodeInvalidArgument, Message: "x",
+		Data: map[string]any{"field": "phones[0].number"}})
 	c.Save()
 	l.run()
 	p := c.Problems()
