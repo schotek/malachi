@@ -261,6 +261,10 @@ func (s *caldavSheet) render() {
 	s.calendarsBox.SetVisible(w.Listed != nil)
 	s.found.SetText(calendar.FoundLine(w, tr))
 	s.renderCalendars(w.Phase == calendar.WizardListed)
+	// A server with only address books shows no empty calendar list.
+	hasCalendars := w.Listed != nil && len(w.Listed.Calendars) > 0
+	s.calendarsHeading.SetVisible(hasCalendars)
+	s.calendars.SetVisible(hasCalendars)
 	s.renderBooks(w)
 
 	s.mailList.SetVisible(w.ShowsMailAccount())

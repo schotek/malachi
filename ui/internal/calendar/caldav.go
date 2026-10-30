@@ -255,9 +255,19 @@ func (w *Wizard) ShowsMailAccount() bool {
 	return w.Listed != nil && w.Listed.Scheduling == api.CalDAVSchedulingClient
 }
 
-// CanAdd reports Add enabled: listed, a calendar selected.
+// CanAdd reports Add enabled: listed, a calendar selected or an address
+// book found (a server with only address books is added for its
+// contacts).
 func (w *Wizard) CanAdd() bool {
 	if w.Phase != WizardListed || w.Listed == nil {
+		return false
+	}
+	return len(w.Listed.AddressBooks) > 0 || w.anyCalendar()
+}
+
+// anyCalendar reports a selected calendar.
+func (w *Wizard) anyCalendar() bool {
+	if w.Listed == nil {
 		return false
 	}
 	for _, c := range w.Listed.Calendars {
@@ -283,7 +293,7 @@ func (w *Wizard) BeginAdd() bool {
 // contacts on with their home set.
 func (w *Wizard) AddParams() api.AccountAddParams {
 	cfg := w.config()
-	cal := &api.CalendarConfig{Sync: true}
+	cal := &api.CalendarConfig{Sync: w.anyCalendar()}
 	if w.Listed != nil {
 		for _, c := range w.Listed.Calendars {
 			switch {
@@ -426,6 +436,12 @@ func FoundLine(w *Wizard, tr Translator) string {
 		via = w.Discovered.FoundVia
 	}
 	n := len(w.Listed.Calendars)
+	if b := len(w.Listed.AddressBooks); n == 0 && b > 0 {
+		// TRANSLATORS: the Add CalDAV sheet's status for a server with
+		// address books and no calendar: how it was found and how many
+		// address books it has.
+		return fmt.Sprintf(tr.N("Found through %s · %d address book", "Found through %s · %d address books", b), FoundVia(via, tr), b)
+	}
 	// TRANSLATORS: the Add CalDAV sheet's status: how the server was found
 	// and how many calendars it has.
 	return fmt.Sprintf(tr.N("Found through %s · %d calendar", "Found through %s · %d calendars", n), FoundVia(via, tr), n)

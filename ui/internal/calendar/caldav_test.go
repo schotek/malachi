@@ -229,3 +229,32 @@ func TestWizardTrust(t *testing.T) {
 		}
 	}
 }
+
+// A server with only address books is added for its contacts: Add is on
+// without a calendar and the calendar is not synchronised; without a
+// book and a calendar Add stays off.
+func TestWizardAddsAServerWithOnlyAddressBooks(t *testing.T) {
+	w := NewWizard("")
+	w.Edit("Cloud", "dav.example.net", "jana", "secret")
+	if !w.BeginDiscover() {
+		t.Fatal("no discovery")
+	}
+	w.DiscoverDone(&api.AccountDiscoverCalDAVResult{ServerURL: "https://dav.example.net/"}, nil)
+	w.ListDone(&api.AccountListCalDAVCalendarsResult{PrincipalURL: "https://dav.example.net/p/",
+		AddressBookHomeSetURL: "https://dav.example.net/ab/",
+		AddressBooks:          []api.CardDAVAddressBook{{Href: "/ab/family/", Name: "Family"}}}, nil)
+	if w.Phase != WizardListed || !w.CanAdd() {
+		t.Fatalf("phase %v, can add %v", w.Phase, w.CanAdd())
+	}
+	if got := FoundLine(w, en{}); !strings.HasSuffix(got, "· 1 address book") {
+		t.Errorf("found line %q", got)
+	}
+	ap := w.AddParams()
+	if ap.Config.Calendar == nil || ap.Config.Calendar.Sync || !ap.Config.CalDAV.Contacts {
+		t.Errorf("config %+v %+v", ap.Config.Calendar, ap.Config.CalDAV)
+	}
+	w.Listed.AddressBooks = nil
+	if w.CanAdd() {
+		t.Error("Add without a calendar or an address book")
+	}
+}
