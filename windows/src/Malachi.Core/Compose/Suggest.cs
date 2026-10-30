@@ -15,6 +15,7 @@
 
 using System;
 using Malachi.Core.Api;
+using Malachi.Core.Contacts;
 using Malachi.Core.I18n;
 
 namespace Malachi.Core.Compose;
@@ -114,17 +115,29 @@ public static class Suggest
         return offset <= 0 ? 0 : ScalarText.IndexOf(text, offset);
     }
 
-    /// <summary>compose.suggestionIcon: the GTK icon name for a suggestion's source.</summary>
+    /// <summary>
+    /// compose.suggestionIcon: the GTK icon name for a suggestion's source;
+    /// a synchronised address book (<see cref="ContactSource.Contacts"/>) has
+    /// the system book's icon.
+    /// </summary>
     public static string SuggestionIcon(ContactSource source) =>
-        source == ContactSource.AddressBook ? "x-office-address-book-symbolic" : "document-open-recent-symbolic";
+        source == ContactSource.AddressBook || source == ContactSource.Contacts ? "x-office-address-book-symbolic" : "document-open-recent-symbolic";
 
     /// <summary>
     /// compose.suggestionTooltip: where a suggestion comes from: the address
-    /// book's own name when it has one.
+    /// book's own name when it has one; a synchronised book with its account
+    /// (<see cref="ContactsText.SuggestionTooltip"/>: "Contacts · Microsoft
+    /// 365 (jana@example.org)", <paramref name="account"/> is
+    /// <see cref="ContactBook.AccountLabel"/> of the account the book belongs
+    /// to, "" when unknown, as GTK, whose suggestion carries no account).
     /// </summary>
-    public static string SuggestionTooltip(Contact contact)
+    public static string SuggestionTooltip(Contact contact, string account = "")
     {
         ArgumentNullException.ThrowIfNull(contact);
+        if (contact.Source == ContactSource.Contacts)
+        {
+            return ContactsText.SuggestionTooltip(ContactBook.Clean(contact.Book, API.Limits.MaxContactFieldBytes), account ?? "");
+        }
         if (contact.Source == ContactSource.AddressBook)
         {
             if (!string.IsNullOrEmpty(contact.Book))

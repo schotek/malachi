@@ -15,8 +15,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Malachi.Core.Api;
 using Malachi.Core.Assistants;
 using Malachi.Core.Calendars;
+using Malachi.Core.Contacts;
 using Malachi.Core.Settings;
 using Malachi.Core.Tests.Fixtures;
 using Xunit;
@@ -69,7 +71,7 @@ public sealed class SettingsTests
         Assert.Equal(380, s.MessageListWidth);
         Assert.Equal(Cal.View.Week, s.CalendarView);
         // The shared settings and Windows' ctrl-r.
-        Assert.Equal(47, SettingsStore.Schema.Count);
+        Assert.Equal(48, SettingsStore.Schema.Count);
         Assert.Equal(Enum.GetValues<SettingsKey>().Length, SettingsStore.Schema.Count);
         Assert.Equal(
             SettingsStore.Schema.Select(k => k.Name).Order(StringComparer.Ordinal),
@@ -213,6 +215,34 @@ public sealed class SettingsTests
         var info = SettingsStore.Info(SettingsKey.CalendarView);
         Assert.Equal(("calendar-view", "s", "week"), (info.Name, info.Type, (string)info.Default));
         Assert.Equal(["day", "week", "month", "agenda"], info.Choices);
+    }
+
+    /// <summary>
+    /// Recipient Suggestions: the gschema's ContactsSuggestScope nicks in the
+    /// order of ContactBook.Scopes; anything else is account and is never
+    /// written (Swift SettingsTests).
+    /// </summary>
+    [Fact]
+    public void ContactsSuggestScopeIsAccountOrAll()
+    {
+        var backend = new InMemorySettingsBackend();
+        using var s = new SettingsStore(backend, null);
+        Assert.Equal(["account", "all"], ContactBook.Scopes.Select(x => x.Value));
+        Assert.Equal(ContactSearchScope.Account, s.ContactsSuggestScope.Value);
+        var fired = 0;
+        s.OnChange(SettingsKey.ContactsSuggestScope, () => fired++);
+        s.ContactsSuggestScope = "folder";
+        Assert.False(backend.TryGetString("contacts-suggest-scope", out _));
+        s.ContactsSuggestScope = ContactSearchScope.All;
+        Assert.True(backend.TryGetString("contacts-suggest-scope", out var nick));
+        Assert.Equal("all", nick);
+        Assert.Equal(ContactSearchScope.All, s.ContactsSuggestScope.Value);
+        backend.SetString("contacts-suggest-scope", "weird");
+        Assert.Equal(ContactSearchScope.Account, s.ContactsSuggestScope.Value);
+        Assert.Equal(1, fired);
+        var info = SettingsStore.Info(SettingsKey.ContactsSuggestScope);
+        Assert.Equal(("contacts-suggest-scope", "s", "account"), (info.Name, info.Type, (string)info.Default));
+        Assert.Equal(["account", "all"], info.Choices);
     }
 
     [Fact]

@@ -28,9 +28,11 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
+using Malachi.Core.Api;
 using Malachi.Core.Assistants;
 using Malachi.Core.Boards;
 using Malachi.Core.Calendars;
+using Malachi.Core.Contacts;
 
 namespace Malachi.Core.Settings;
 
@@ -98,6 +100,7 @@ public sealed class SettingsStore : IDisposable
         new(SettingsKey.BoardChatGptModel, "board-triage-chatgpt-model", "s", ""),
         new(SettingsKey.BoardChatGptConsentVersion, "board-triage-chatgpt-consent-version", "i", 0, minimum: 0, maximum: int.MaxValue),
         new(SettingsKey.CalendarView, "calendar-view", "s", "week", choices: Nicks<Cal.View>.All),
+        new(SettingsKey.ContactsSuggestScope, "contacts-suggest-scope", "s", "account", choices: ContactBook.ScopeNicks),
         new(SettingsKey.CtrlR, "ctrl-r", "s", "reply", choices: Nicks<CtrlR>.All, windowsOnly: true),
     ];
 
@@ -489,6 +492,32 @@ public sealed class SettingsStore : IDisposable
     {
         get => GetEnum<Cal.View>(SettingsKey.CalendarView);
         set => SetEnum(SettingsKey.CalendarView, value);
+    }
+
+    // Contacts
+
+    /// <summary>
+    /// Which address books complete the recipients of a new message
+    /// (Preferences → Contacts → Recipient Suggestions), passed as
+    /// <c>contact.search</c>'s scope (settings.Store.ContactsSuggestScope).
+    /// An unknown or empty stored value reads as
+    /// <see cref="ContactSearchScope.Account"/>, the default; a value outside
+    /// <see cref="ContactBook.Scopes"/> is not written.
+    /// </summary>
+    public ContactSearchScope ContactsSuggestScope
+    {
+        get
+        {
+            var v = GetString(SettingsKey.ContactsSuggestScope);
+            return ContactBook.ScopeNicks.Contains(v, StringComparer.Ordinal) ? new ContactSearchScope(v) : ContactBook.Scopes[0];
+        }
+        set
+        {
+            if (ContactBook.ScopeNicks.Contains(value.Value ?? "", StringComparer.Ordinal))
+            {
+                SetString(SettingsKey.ContactsSuggestScope, value.Value);
+            }
+        }
     }
 
     // Sidebar state

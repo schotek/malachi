@@ -135,7 +135,10 @@ public sealed class ApiRoundTripTests
     // The calendar (Calendar.cs): every member named, optional ones present.
 
     private const string CalCalDavConfig =
-        """{"serverUrl":"https://cloud.example.org/remote.php/dav","principalUrl":"https://cloud.example.org/remote.php/dav/principals/users/jana/","homeSetUrl":"https://cloud.example.org/remote.php/dav/calendars/jana/","username":"jana","certificateSha256":"@pin@","mailAccountId":"acc_2","scheduling":"client"}""";
+        """{"serverUrl":"https://cloud.example.org/remote.php/dav","principalUrl":"https://cloud.example.org/remote.php/dav/principals/users/jana/","homeSetUrl":"https://cloud.example.org/remote.php/dav/calendars/jana/","username":"jana","certificateSha256":"@pin@","mailAccountId":"acc_2","scheduling":"client","addressBookHomeSetUrl":"https://cloud.example.org/remote.php/dav/addressbooks/users/jana/","contacts":true}""";
+
+    private const string ContactCardJson =
+        """{"id":"p_1","bookId":"b_1","readOnly":false,"revision":"\"e1\"","name":{"given":"Jana","family":"Nováková"},"displayName":"Jana Nováková","nickname":"Janka","org":"Acme","title":"CTO","emails":[{"label":"work","address":"jana@example.org"}],"phones":[{"label":"mobile","number":"+420 600 000 000"}],"addresses":[{"label":"home","city":"Praha","country":"CZ"}],"urls":[{"url":"https://example.org"}],"birthday":{"month":2,"day":29},"note":"plain text"}""";
 
     private const string CalConfig =
         """{"sync":true,"disabledCalendars":["/remote.php/dav/calendars/jana/old/"],"defaultCalendar":"/remote.php/dav/calendars/jana/personal/","keepDays":365,"showUnanswered":false,"invitationCard":true,"afterAnswer":"archive"}""";
@@ -273,7 +276,7 @@ public sealed class ApiRoundTripTests
         [nameof(SystemInfoResult)] = Case<SystemInfoResult>("""{"version":"0.1.0","protocolVersion":2,"pid":4242,"storePath":"/home/u/.local/share/malachi/store.db"}"""),
         [nameof(ServerConfig)] = Case<ServerConfig>(Server),
         [nameof(OAuth2Config)] = Case<OAuth2Config>(OAuth2),
-        [nameof(GraphConfig)] = Case<GraphConfig>("""{"source":"goa","goaAccountId":"account_1788512854_0"}"""),
+        [nameof(GraphConfig)] = Case<GraphConfig>("""{"source":"goa","goaAccountId":"account_1788512854_0","contacts":{"sync":true}}"""),
         [nameof(AccountConfig)] = Case<AccountConfig>(Config),
         [nameof(Credentials)] = Case<Credentials>("""{"password":"secret","oauthSession":"s_1"}"""),
         [nameof(Account)] = Case<Account>("""{"id":"acc_1","config":@config@,"enabled":true,"state":@state@,"capabilities":["comment","forward","teleport"]}"""),
@@ -292,7 +295,7 @@ public sealed class ApiRoundTripTests
             """{"accounts":[{"provider":"google","email":"me@gmail.com","goaAccountId":"account_2","configured":true,"attentionNeeded":false}]}"""),
         [nameof(OAuthBrowserPage)] = Case<OAuthBrowserPage>(
             """{"successTitle":"Signed in","successText":"You can close this tab.","failureTitle":"Sign-in failed","failureText":"Return to Malachi Mail."}"""),
-        [nameof(AccountOAuthStartParams)] = Case<AccountOAuthStartParams>("""{"accountId":"acc_1","config":@config@,"browserPage":{"successTitle":"Signed in"},"calendar":true}"""),
+        [nameof(AccountOAuthStartParams)] = Case<AccountOAuthStartParams>("""{"accountId":"acc_1","config":@config@,"browserPage":{"successTitle":"Signed in"},"calendar":true,"contacts":true}"""),
         [nameof(AccountOAuthStartResult)] = Case<AccountOAuthStartResult>(
             """{"sessionId":"s_1","authUrl":"https://accounts.google.com/o/oauth2/v2/auth?x=1&y=2","expiresAt":"2026-09-25T10:10:00Z"}"""),
         [nameof(AccountOAuthWaitParams)] = Case<AccountOAuthWaitParams>("""{"sessionId":"s_1"}"""),
@@ -371,9 +374,40 @@ public sealed class ApiRoundTripTests
         [nameof(ConfigSetParams)] = Case<ConfigSetParams>("""{"preferences":{"syncIntervalSeconds":60,"remoteContent":"allow","offlineDays":3650}}"""),
         [nameof(ConfigSetResult)] = Case<ConfigSetResult>("""{"preferences":{"syncIntervalSeconds":300,"remoteContent":"block","offlineDays":30}}"""),
         // Contacts.cs
-        [nameof(Contact)] = Case<Contact>("""{"name":"Alice Example","address":"alice@example.org","source":"addressBook","book":"Contacts"}"""),
-        [nameof(ContactSearchParams)] = Case<ContactSearchParams>("""{"accountId":"acc_1","query":"ali","limit":10}"""),
+        [nameof(Contact)] = Case<Contact>("""{"name":"Alice Example","address":"alice@example.org","source":"contacts","book":"Contacts","contactId":"p_1"}"""),
+        [nameof(ContactSearchParams)] = Case<ContactSearchParams>("""{"accountId":"acc_1","query":"ali","limit":10,"scope":"all"}"""),
         [nameof(ContactSearchResult)] = Case<ContactSearchResult>("""{"contacts":[{"address":"bob@example.org","source":"sent"}]}"""),
+        // ContactsBook.cs (docs/api.md §4.19)
+        [nameof(ContactsConfig)] = Case<ContactsConfig>("""{"sync":true}"""),
+        [nameof(CardDAVAddressBook)] = Case<CardDAVAddressBook>("""{"href":"/ab/family/","name":"Family","readOnly":true}"""),
+        [nameof(ContactsConsentRequiredData)] = Case<ContactsConsentRequiredData>("""{"accountId":"acc_1","signIn":true}"""),
+        [nameof(ContactConflictData)] = Case<ContactConflictData>("""{"server":@contactcard@}"""),
+        [nameof(ContactFieldData)] = Case<ContactFieldData>("""{"field":"emails[2].address"}"""),
+        [nameof(AddressBook)] = Case<AddressBook>("""{"id":"b_1","accountId":"acc_1","name":"Contacts","kind":"graph","readOnly":false,"searchOnly":true,"visible":true,"count":318,"lastSyncAt":"2026-10-30T10:00:00Z"}"""),
+        [nameof(ContactSummary)] = Case<ContactSummary>("""{"id":"p_1","bookId":"b_1","displayName":"Jana Nováková","sortKey":"nováková jana","section":"N","org":"Acme","email":"jana@example.org"}"""),
+        [nameof(ContactName)] = Case<ContactName>("""{"given":"Jana","family":"Nováková","middle":"M","prefix":"Ing.","suffix":"Ph.D."}"""),
+        [nameof(ContactEmail)] = Case<ContactEmail>("""{"label":"work","address":"jana@example.org"}"""),
+        [nameof(ContactPhone)] = Case<ContactPhone>("""{"label":"Kancelář","number":"+420 600 000 000"}"""),
+        [nameof(ContactAddress)] = Case<ContactAddress>("""{"label":"home","street":"Dlouhá 12\nvchod B","city":"Praha","region":"Praha","postcode":"110 00","country":"CZ"}"""),
+        [nameof(ContactUrl)] = Case<ContactUrl>("""{"label":"work","url":"https://example.org"}"""),
+        [nameof(ContactBirthday)] = Case<ContactBirthday>("""{"year":1980,"month":2,"day":29}"""),
+        [nameof(ContactCard)] = Case<ContactCard>(ContactCardJson),
+        [nameof(AddressBookListParams)] = Case<AddressBookListParams>("""{"accountId":"acc_1"}"""),
+        [nameof(AddressBookListResult)] = Case<AddressBookListResult>("""{"books":[{"id":"recent","name":"Recent","kind":"recent","readOnly":true,"visible":true,"count":3}]}"""),
+        [nameof(AddressBookSetParams)] = Case<AddressBookSetParams>("""{"bookId":"b_1","visible":false}"""),
+        [nameof(AddressBookSetResult)] = Case<AddressBookSetResult>("""{"book":{"id":"b_1","name":"Contacts","kind":"carddav","readOnly":false,"visible":false,"count":2}}"""),
+        [nameof(ContactListParams)] = Case<ContactListParams>("""{"bookId":"all","query":"ja","offset":100,"limit":50}"""),
+        [nameof(ContactListResult)] = Case<ContactListResult>("""{"contacts":[{"id":"p_1","bookId":"b_1","displayName":"Jana","sortKey":"jana","section":"J"}],"total":412}"""),
+        [nameof(ContactGetParams)] = Case<ContactGetParams>("""{"contactId":"p_1"}"""),
+        [nameof(ContactGetResult)] = Case<ContactGetResult>("""{"contact":@contactcard@}"""),
+        [nameof(ContactLookupParams)] = Case<ContactLookupParams>("""{"addresses":["jana@example.org","x@example.net"]}"""),
+        [nameof(ContactLookupResult)] = Case<ContactLookupResult>("""{"known":{"jana@example.org":"p_1"}}"""),
+        [nameof(ContactCreateParams)] = Case<ContactCreateParams>("""{"bookId":"b_1","card":@contactcard@}"""),
+        [nameof(ContactCreateResult)] = Case<ContactCreateResult>("""{"contactId":"p_2","revision":"\"e1\""}"""),
+        [nameof(ContactUpdateParams)] = Case<ContactUpdateParams>("""{"contactId":"p_1","revision":"\"e1\"","card":@contactcard@}"""),
+        [nameof(ContactUpdateResult)] = Case<ContactUpdateResult>("""{"revision":"\"e2\""}"""),
+        [nameof(ContactDeleteParams)] = Case<ContactDeleteParams>("""{"contactId":"p_1","revision":"\"e1\""}"""),
+        [nameof(ContactsChangedNotification)] = Case<ContactsChangedNotification>("""{"accountId":"acc_1","bookIds":["b_1"]}"""),
         // Drafts.cs
         [nameof(Malachi.Core.Api.DraftAttachment)] = Case<DraftAttachment>(DraftAttachment),
         [nameof(Malachi.Core.Api.Draft)] = Case<Draft>(Draft),
@@ -532,9 +566,9 @@ public sealed class ApiRoundTripTests
         [nameof(CalendarConfig)] = Case<CalendarConfig>("""@calconfig@"""),
         [nameof(CalDAVCalendar)] = Case<CalDAVCalendar>("""@caldavcalendar@"""),
         [nameof(AccountDiscoverCalDAVParams)] = Case<AccountDiscoverCalDAVParams>("""{"url":"cloud.example.org","certificateSha256":"@pin@"}"""),
-        [nameof(AccountDiscoverCalDAVResult)] = Case<AccountDiscoverCalDAVResult>("""{"serverUrl":"https://cloud.example.org/remote.php/dav","foundVia":"wellKnown","needsCredentials":true,"certificate":@certificate@}"""),
+        [nameof(AccountDiscoverCalDAVResult)] = Case<AccountDiscoverCalDAVResult>("""{"serverUrl":"https://cloud.example.org/remote.php/dav","foundVia":"wellKnown","needsCredentials":true,"certificate":@certificate@,"calendars":true,"addressBooks":true}"""),
         [nameof(AccountListCalDAVCalendarsParams)] = Case<AccountListCalDAVCalendarsParams>("""{"accountId":"acc_1","config":@config@,"credentials":{"password":"p"}}"""),
-        [nameof(AccountListCalDAVCalendarsResult)] = Case<AccountListCalDAVCalendarsResult>("""{"principalUrl":"https://cloud.example.org/remote.php/dav/principals/users/jana/","homeSetUrl":"https://cloud.example.org/remote.php/dav/calendars/jana/","displayName":"Jana","addresses":["jana@example.org"],"scheduling":"server","calendars":[@caldavcalendar@]}"""),
+        [nameof(AccountListCalDAVCalendarsResult)] = Case<AccountListCalDAVCalendarsResult>("""{"principalUrl":"https://cloud.example.org/remote.php/dav/principals/users/jana/","homeSetUrl":"https://cloud.example.org/remote.php/dav/calendars/jana/","displayName":"Jana","addresses":["jana@example.org"],"scheduling":"server","calendars":[@caldavcalendar@],"addressBookHomeSetUrl":"https://cloud.example.org/remote.php/dav/addressbooks/users/jana/","addressBooks":[{"href":"/remote.php/dav/addressbooks/users/jana/contacts/","name":"Contacts","readOnly":true}]}"""),
         [nameof(Calendar)] = Case<Calendar>("""@calcalendar@"""),
         [nameof(CalendarFeatures)] = Case<CalendarFeatures>("""@calfeatures@"""),
         [nameof(CalendarSyncState)] = Case<CalendarSyncState>("""@calsyncstate@"""),
@@ -727,6 +761,21 @@ public sealed class ApiRoundTripTests
             """{"caseId":"@caseid@"}"""),
         ["BoardRunEndParams of a success"] = Case<BoardRunEndParams>("""{"runId":"r_1"}""", """{"runId":"r_1"}"""),
         ["BoardChangedNotification for any account"] = Case<BoardChangedNotification>("{}", """{"accountIds":[]}"""),
+        // The address books: a card with nothing writes its lists as arrays
+        // and its name as {}, as Swift's encoding; no label, a year 0 and
+        // false booleans Go leaves out stay out.
+        ["ContactCard empty"] = Case<ContactCard>(
+            "{}",
+            """{"id":"","bookId":"","readOnly":false,"revision":"","name":{},"displayName":"","emails":[],"phones":[],"addresses":[],"urls":[]}"""),
+        ["ContactEmail without a label"] = Case<ContactEmail>("""{"label":"","address":"a@b.cz"}""", """{"address":"a@b.cz"}"""),
+        ["ContactBirthday without a year"] = Case<ContactBirthday>("""{"year":0,"month":3,"day":14}""", """{"month":3,"day":14}"""),
+        ["AddressBook of the recent book"] = Case<AddressBook>(
+            """{"id":"recent","accountId":"","name":"Recent","kind":"recent","readOnly":true,"searchOnly":false,"visible":true,"count":3}""",
+            """{"id":"recent","name":"Recent","kind":"recent","readOnly":true,"visible":true,"count":3}"""),
+        ["ContactsChangedNotification for any book"] = Case<ContactsChangedNotification>("{}", """{"bookIds":[]}"""),
+        ["CalDAVConfig without contacts"] = Case<CalDAVConfig>(
+            """{"serverUrl":"https://x.example","username":"j","addressBookHomeSetUrl":"","contacts":false}""",
+            """{"serverUrl":"https://x.example","username":"j"}"""),
         ["MessageBodyResult without links"] = Case<MessageBodyResult>(
             """{"messageId":"m","bodyState":"pending","hasHtml":false,"text":"","blocked":@blocked@,"remoteContent":"block","sanitizerVersion":"1"}""",
             """{"messageId":"m","bodyState":"pending","hasHtml":false,"text":"","blocked":@blocked@,"links":[],"remoteContent":"block","sanitizerVersion":"1"}"""),
@@ -973,6 +1022,7 @@ public sealed class ApiRoundTripTests
             ("@boardrun@", BoardRun), ("@boardtriage@", BoardTriage), ("@boardwindows@", BoardWindows),
             ("@boardmoved@", BoardMoved), ("@boardusage@", BoardUsage), ("@boardusagetotal@", BoardUsageTotal),
             ("@boardpreferences@", BoardPreferences), ("@boardqueuemessage@", BoardQueueMessage), ("@boardqueueitem@", BoardQueueItem),
+            ("@contactcard@", ContactCardJson),
             ("@calcaldavconfig@", CalCalDavConfig),
             ("@calconfig@", CalConfig),
             ("@caldavcalendar@", CalDavCalendar),

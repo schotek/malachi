@@ -595,6 +595,40 @@ public static class API
     public static readonly RpcMethod<AssistantProfileResolveParams, AssistantProfileResolveResult> AssistantProfileResolve =
         new("assistant.profileResolve", RpcTimeouts.Default, Wire.AssistantProfileResolveParams, Wire.AssistantProfileResolveResult);
 
+    // Address books and contacts (docs/api.md §4.19; ContactsBook.cs)
+
+    /// <summary><c>addressBook.list</c>: the books (hidden ones too); with an account, its books or contactsConsentRequired.</summary>
+    public static readonly RpcMethod<AddressBookListParams, AddressBookListResult> AddressBookList =
+        new("addressBook.list", RpcTimeouts.Default, Wire.AddressBookListParams, Wire.AddressBookListResult);
+
+    /// <summary><c>addressBook.set</c>: shows or hides a book.</summary>
+    public static readonly RpcMethod<AddressBookSetParams, AddressBookSetResult> AddressBookSet =
+        new("addressBook.set", RpcTimeouts.Default, Wire.AddressBookSetParams, Wire.AddressBookSetResult);
+
+    /// <summary><c>contact.list</c>: a page of a book's (or every visible book's) contacts.</summary>
+    public static readonly RpcMethod<ContactListParams, ContactListResult> ContactList =
+        new("contact.list", RpcTimeouts.Default, Wire.ContactListParams, Wire.ContactListResult);
+
+    /// <summary><c>contact.get</c>: a whole contact with its revision.</summary>
+    public static readonly RpcMethod<ContactGetParams, ContactGetResult> ContactGet =
+        new("contact.get", RpcTimeouts.Default, Wire.ContactGetParams, Wire.ContactGetResult);
+
+    /// <summary><c>contact.lookup</c>: which addresses a visible book has exactly.</summary>
+    public static readonly RpcMethod<ContactLookupParams, ContactLookupResult> ContactLookup =
+        new("contact.lookup", RpcTimeouts.Default, Wire.ContactLookupParams, Wire.ContactLookupResult);
+
+    /// <summary><c>contact.create</c>: written to the server first (contactsctl WriteTimeout).</summary>
+    public static readonly RpcMethod<ContactCreateParams, ContactCreateResult> ContactCreate =
+        new("contact.create", RpcTimeouts.ContactWrite, Wire.ContactCreateParams, Wire.ContactCreateResult);
+
+    /// <summary><c>contact.update</c>: the revision of the last <c>contact.get</c>, else contactConflict.</summary>
+    public static readonly RpcMethod<ContactUpdateParams, ContactUpdateResult> ContactUpdate =
+        new("contact.update", RpcTimeouts.ContactWrite, Wire.ContactUpdateParams, Wire.ContactUpdateResult);
+
+    /// <summary><c>contact.delete</c>: deleting a deleted contact answers <c>{}</c>.</summary>
+    public static readonly RpcMethod<ContactDeleteParams, EmptyResult> ContactDelete =
+        new("contact.delete", RpcTimeouts.ContactWrite, Wire.ContactDeleteParams, Wire.EmptyResult);
+
     // Tables
 
     /// <summary>Every method, in the order of methods.go.</summary>
@@ -633,6 +667,9 @@ public static class API
         AccountDetectEway,
         CrmLookup, CrmSearch, CrmSave, CrmRemove,
         AssistantProfileGet, AssistantProfileSet, AssistantProfilePropose, AssistantProfileResolve,
+        AddressBookList, AddressBookSet,
+        ContactList, ContactGet, ContactLookup,
+        ContactCreate, ContactUpdate, ContactDelete,
     ];
 
     /// <summary>api.AllMethods: every callable method name.</summary>
@@ -676,6 +713,13 @@ public static class API
 
         /// <summary>api.NotifyAssistantProfileChanged: the profile or its proposals changed; no params.</summary>
         public const string AssistantProfileChanged = "notify.assistantProfileChanged";
+
+        /// <summary>
+        /// api.NotifyContactsChanged (<see cref="ContactsChangedNotification"/>):
+        /// the contacts of these books changed; the Contacts window,
+        /// Preferences → Contacts and the address chips' lookup read them again.
+        /// </summary>
+        public const string ContactsChanged = "notify.contactsChanged";
     }
 
     /// <summary>api.AllNotifications: every server-initiated notification name.</summary>
@@ -685,6 +729,7 @@ public static class API
         Notify.BoardChanged, Notify.DraftsChanged,
         Notify.CalendarChanged, Notify.CalendarState, Notify.EventAlert, Notify.InvitationsChanged,
         Notify.AssistantProfileChanged,
+        Notify.ContactsChanged,
     ];
 
     /// <summary>
@@ -938,5 +983,53 @@ public static class API
 
         /// <summary>api.MaxProfileProposals: the pending proposals; the oldest goes.</summary>
         public const int MaxProfileProposals = 20;
+
+        // contacts_book.go (docs/plans/address-book.md §4.2); exceeding an
+        // input limit is invalidArgument.
+
+        /// <summary>api.DefaultContactListLimit: <see cref="ContactListParams.Limit"/> when absent.</summary>
+        public const int DefaultContactListLimit = 100;
+
+        /// <summary>api.MaxContactListLimit: the largest <see cref="ContactListParams.Limit"/>.</summary>
+        public const int MaxContactListLimit = 500;
+
+        /// <summary>api.MaxVCardBytes: one vCard as stored or sent.</summary>
+        public const int MaxVCardBytes = 1 << 20;
+
+        /// <summary>api.MaxVCardProperties: the properties of one vCard.</summary>
+        public const int MaxVCardProperties = 500;
+
+        /// <summary>api.MaxContactLookupAddresses: <see cref="ContactLookupParams.Addresses"/>.</summary>
+        public const int MaxContactLookupAddresses = 200;
+
+        /// <summary>api.MaxAddressBooksPerAccount: the books of one account.</summary>
+        public const int MaxAddressBooksPerAccount = 200;
+
+        /// <summary>api.MaxContactsPerBook: the contacts of one book.</summary>
+        public const int MaxContactsPerBook = 50000;
+
+        /// <summary>api.MaxContactNameBytes: each name part, the display name, the nickname.</summary>
+        public const int MaxContactNameBytes = 256;
+
+        /// <summary>api.MaxContactFieldBytes: a company, title, address, number or URL.</summary>
+        public const int MaxContactFieldBytes = 1024;
+
+        /// <summary>api.MaxContactLabelBytes: a server's own label.</summary>
+        public const int MaxContactLabelBytes = 64;
+
+        /// <summary>api.MaxContactNoteBytes: <see cref="ContactCard.Note"/>.</summary>
+        public const int MaxContactNoteBytes = 32 << 10;
+
+        /// <summary>api.MaxContactEmails: <see cref="ContactCard.Emails"/>.</summary>
+        public const int MaxContactEmails = 50;
+
+        /// <summary>api.MaxContactPhones: <see cref="ContactCard.Phones"/>.</summary>
+        public const int MaxContactPhones = 50;
+
+        /// <summary>api.MaxContactAddresses: <see cref="ContactCard.Addresses"/>.</summary>
+        public const int MaxContactAddresses = 20;
+
+        /// <summary>api.MaxContactURLs: <see cref="ContactCard.Urls"/>.</summary>
+        public const int MaxContactURLs = 20;
     }
 }

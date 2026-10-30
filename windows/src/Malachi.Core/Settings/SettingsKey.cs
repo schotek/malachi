@@ -152,6 +152,9 @@ public enum SettingsKey
     /// <summary><c>calendar-view</c>: <see cref="SettingsStore.CalendarView"/>.</summary>
     CalendarView,
 
+    /// <summary><c>contacts-suggest-scope</c>: <see cref="SettingsStore.ContactsSuggestScope"/>.</summary>
+    ContactsSuggestScope,
+
     /// <summary><c>ctrl-r</c>, Windows only: what Ctrl+R does.</summary>
     CtrlR,
 }

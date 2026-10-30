@@ -508,6 +508,13 @@ public readonly record struct ContactSource(string Value) : IWireEnumeration<Con
     /// <summary>A system address book, read only.</summary>
     public const string AddressBook = "addressBook";
 
+    /// <summary>
+    /// An address book the daemon synchronises (docs/api.md §4.19,
+    /// contacts_book.go); <see cref="Contact.Book"/> names it,
+    /// <see cref="Contact.ContactId"/> is the contact.
+    /// </summary>
+    public const string Contacts = "contacts";
+
     /// <summary>The value of a wire string.</summary>
     public static implicit operator ContactSource(string value) => new(value);
 
@@ -555,7 +562,8 @@ public readonly record struct Capability(string Value) : IWireEnumeration<Capabi
 
     /// <summary>
     /// The account can have calendars (graph, caldav); it does not change with
-    /// consent or sync state. A caldav account has exactly this one.
+    /// consent or sync state. A caldav account has this one, and
+    /// <see cref="Contacts"/> when it has address books.
     /// </summary>
     public const string Calendar = "calendar";
 
@@ -564,6 +572,12 @@ public readonly record struct Capability(string Value) : IWireEnumeration<Capabi
     /// docs/api.md §4.17). An eway account has exactly this one.
     /// </summary>
     public const string Crm = "crm";
+
+    /// <summary>
+    /// The account can have address books (graph, caldav; docs/api.md §4.19,
+    /// contacts_book.go); it does not change with consent or sync state.
+    /// </summary>
+    public const string Contacts = "contacts";
 
     /// <summary>The value of a wire string.</summary>
     public static implicit operator Capability(string value) => new(value);

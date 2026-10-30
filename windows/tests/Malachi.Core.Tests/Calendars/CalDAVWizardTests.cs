@@ -163,6 +163,49 @@ public sealed class CalDAVWizardTests
         { "another error", Err(ErrorCode.NetworkError), "cloud.example.org", false },
     };
 
+    /// <summary>
+    /// caldav_test.go TestWizardAddsAServerWithOnlyAddressBooks: a server with
+    /// only address books is added for its contacts: Add is on without a
+    /// calendar and the calendar is not synchronised; without a book and a
+    /// calendar Add stays off. A listing with books turns the contacts on
+    /// with their home set.
+    /// </summary>
+    [Fact]
+    public void WizardAddsAServerWithOnlyAddressBooks()
+    {
+        var w = new W(null);
+        w.Edit("Cloud", "dav.example.net", "jana", "secret");
+        Assert.True(w.BeginDiscover());
+        w.DiscoverDone(Found("https://dav.example.net/", CalDAVFoundVia.Url), null);
+        w.ListDone(new AccountListCalDAVCalendarsResult
+        {
+            PrincipalUrl = "https://dav.example.net/p/",
+            HomeSetUrl = "",
+            Scheduling = CalDAVScheduling.Server,
+            AddressBookHomeSetUrl = "https://dav.example.net/ab/",
+            AddressBooks = [new CardDAVAddressBook { Href = "/ab/family/", Name = "Family" }],
+        }, null);
+        Assert.Equal(W.WizardPhase.Listed, w.Phase);
+        Assert.True(w.CanAdd);
+        Assert.EndsWith("· 1 address book", w.FoundLine, StringComparison.Ordinal);
+        var ap = w.AddParams;
+        Assert.False(ap.Config.Calendar?.Sync);
+        Assert.True(ap.Config.CalDAV?.ContactsOn);
+        Assert.Equal("https://dav.example.net/ab/", ap.Config.CalDAV?.AddressBookHomeSetUrl);
+        w = new W(null);
+        w.Edit("Cloud", "dav.example.net", "jana", "secret");
+        w.BeginDiscover();
+        w.DiscoverDone(Found("https://dav.example.net/", CalDAVFoundVia.Url), null);
+        w.ListDone(Listed(), null);
+        Assert.True(w.CanAdd); // a calendar is selected
+        Assert.Null(w.AddParams.Config.CalDAV?.Contacts);
+        foreach (var c in Listed().Calendars)
+        {
+            w.Toggle(c.Href, false);
+        }
+        Assert.False(w.CanAdd); // neither a calendar nor an address book
+    }
+
     [Fact]
     public void WizardTrust()
     {

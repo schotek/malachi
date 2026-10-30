@@ -112,6 +112,15 @@ public sealed partial class SuggestionsController : IDisposable
     /// </summary>
     public event EventHandler<Address>? Picked;
 
+    /// <summary>
+    /// Which address books complete the recipients (Preferences → Contacts →
+    /// Recipient Suggestions, <c>SettingsStore.ContactsSuggestScope</c>), read
+    /// for every search and sent as contact.search's scope (compose
+    /// manager.go <c>suggestScope</c>); null leaves it out, which the daemon
+    /// reads as the account's books.
+    /// </summary>
+    public Func<ContactSearchScope>? Scope { get; set; }
+
     /// <summary>What the popup shows, in order (suggest.go <c>contacts</c>).</summary>
     public IReadOnlyList<Contact> Contacts { get; private set; } = [];
 
@@ -293,7 +302,7 @@ public sealed partial class SuggestionsController : IDisposable
     {
         gen++;
         var ticket = gen;
-        var parameters = new ContactSearchParams { AccountId = account(), Query = token, Limit = Suggest.SuggestLimit };
+        var parameters = new ContactSearchParams { AccountId = account(), Query = token, Limit = Suggest.SuggestLimit, Scope = Scope?.Invoke() };
         scope.Perform(client, API.ContactSearch, parameters, outcome =>
         {
             if (ticket != gen || closed)
@@ -328,7 +337,7 @@ public sealed partial class SuggestionsController : IDisposable
             return;
         }
         Contacts = contacts;
-        Rows = [.. contacts.Select(SuggestionRow.For)];
+        Rows = [.. contacts.Select(c => SuggestionRow.For(c))];
         SelectedIndex = 0;
         IsVisible = true;
         Raise(Changed);

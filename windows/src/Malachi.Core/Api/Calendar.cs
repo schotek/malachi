@@ -693,6 +693,21 @@ public sealed record CalDAVConfig
     /// <summary>Null is <see cref="CalDAVScheduling.Auto"/>.</summary>
     [JsonPropertyName("scheduling")]
     public CalDAVScheduling? Scheduling { get; init; }
+
+    /// <summary>The CardDAV addressbook-home-set (from <c>account.listCalDAVCalendars</c>).</summary>
+    [JsonPropertyName("addressBookHomeSetUrl")]
+    public string? AddressBookHomeSetUrl { get; init => field = string.IsNullOrEmpty(value) ? null : value; }
+
+    /// <summary>
+    /// Synchronise the address books of <see cref="AddressBookHomeSetUrl"/>
+    /// (docs/api.md §4.19); false is written as absent.
+    /// </summary>
+    [JsonPropertyName("contacts")]
+    public bool? Contacts { get; init => field = value == true ? true : null; }
+
+    /// <summary>Whether <see cref="Contacts"/> is set.</summary>
+    [JsonIgnore]
+    public bool ContactsOn => Contacts == true;
 }
 
 /// <summary>
@@ -808,6 +823,18 @@ public sealed record AccountDiscoverCalDAVResult
     /// <summary>The certificate the server presented, once verified.</summary>
     [JsonPropertyName("certificate")]
     public CertificateInfo? Certificate { get; init; }
+
+    /// <summary>
+    /// The anonymous discovery saw CalDAV (calendar-access); a server that
+    /// authenticates before it answers sets neither this nor
+    /// <see cref="AddressBooks"/>. False is written as absent.
+    /// </summary>
+    [JsonPropertyName("calendars")]
+    public bool? Calendars { get; init => field = value == true ? true : null; }
+
+    /// <summary>The anonymous discovery saw CardDAV (addressbook); false is written as absent.</summary>
+    [JsonPropertyName("addressBooks")]
+    public bool? AddressBooks { get; init => field = value == true ? true : null; }
 }
 
 /// <summary>
@@ -858,6 +885,15 @@ public sealed record AccountListCalDAVCalendarsResult
     [JsonPropertyName("calendars")]
     [JsonConverter(typeof(NullAsEmptyListConverter<CalDAVCalendar>))]
     public IReadOnlyList<CalDAVCalendar> Calendars { get; init => field = value ?? []; } = [];
+
+    /// <summary>The principal's CardDAV addressbook-home-set; null when the server has none.</summary>
+    [JsonPropertyName("addressBookHomeSetUrl")]
+    public string? AddressBookHomeSetUrl { get; init => field = string.IsNullOrEmpty(value) ? null : value; }
+
+    /// <summary>The home set's address books (at most <see cref="API.Limits.MaxAddressBooksPerAccount"/>); always written.</summary>
+    [JsonPropertyName("addressBooks")]
+    [JsonConverter(typeof(NullAsEmptyListConverter<CardDAVAddressBook>))]
+    public IReadOnlyList<CardDAVAddressBook> AddressBooks { get; init => field = value ?? []; } = [];
 }
 
 // ----------------------------------------------------------------------

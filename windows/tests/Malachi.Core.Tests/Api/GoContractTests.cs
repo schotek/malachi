@@ -25,7 +25,7 @@ public sealed class GoContractTests
         var source = GoContract.ApiSource("methods.go");
         var constants = GoContract.StringConstants(source);
         var goMethods = GoContract.SliceIdentifiers(source, "AllMethods").Select(name => constants[name]).ToArray();
-        Assert.Equal(105, goMethods.Length);
+        Assert.Equal(113, goMethods.Length);
         Assert.Equal(goMethods, API.AllMethods);
         Assert.Equal(goMethods, API.Methods.Select(m => m.Name));
         Assert.Equal(ApiCodingTests.GoMethods, goMethods); // the Swift test's copy is current
@@ -57,6 +57,7 @@ public sealed class GoContractTests
         Assert.Equal(API.Notify.EventAlert, constants["NotifyEventAlert"]);
         Assert.Equal(API.Notify.InvitationsChanged, constants["NotifyInvitationsChanged"]);
         Assert.Equal(API.Notify.AssistantProfileChanged, constants["NotifyAssistantProfileChanged"]);
+        Assert.Equal(API.Notify.ContactsChanged, constants["NotifyContactsChanged"]);
     }
 
     [Fact]
@@ -107,9 +108,9 @@ public sealed class GoContractTests
         { nameof(QuoteForm), "types.go", "QuoteForm" },
         { nameof(SyncStatus), "types.go", "SyncStatus" },
         { nameof(KnownSenderSource), "types.go", "KnownSenderSource*" },
-        { nameof(ContactSource), "types.go", "ContactSource" },
+        { nameof(ContactSource), "types.go+contacts_book.go", "ContactSource" },
         { nameof(StorageConversion), "types.go", "StorageConversion" },
-        { nameof(Capability), "types.go", "AccountCapability" },
+        { nameof(Capability), "types.go+contacts_book.go", "AccountCapability" },
         { nameof(JiraDeployment), "types.go", "JiraDeployment" },
         { nameof(VirtualFolder), "types.go", "VirtualFolder" },
         { nameof(NotificationMailMode), "types.go", "NotificationMailMode" },
@@ -155,6 +156,9 @@ public sealed class GoContractTests
         { nameof(CrmSignInReason), "crm.go", "CrmSignInReason" },
         { nameof(ProfileGender), "assistant.go", "ProfileGender" },
         { nameof(ProfileSource), "assistant.go", "ProfileSource" },
+        { nameof(AddressBookKind), "contacts_book.go", "AddressBookKind" },
+        { nameof(ContactLabel), "contacts_book.go", "ContactLabel" },
+        { nameof(ContactSearchScope), "contacts_book.go", "ContactSearchScope" },
     };
 
     /// <summary>
@@ -199,9 +203,38 @@ public sealed class GoContractTests
         }
     }
 
+    /// <summary>
+    /// The other way round for the address books: contacts_book.go declares
+    /// no string type with constants that the table above leaves out, and
+    /// every struct of it with members has a record (ContactURL is
+    /// ContactUrl); the one without (ContactDeleteResult) is EmptyResult.
+    /// </summary>
+    [Fact]
+    public void EveryEnumAndStructOfContactsBookGoIsMirrored()
+    {
+        var source = GoContract.ApiSource("contacts_book.go");
+        var enums = GoContract.StringTypes(source).Where(t => GoContract.TypedStringConstants(source, t).Count > 0).ToArray();
+        // AddressBookID is an identifier with two well-known values (AddressBookId.Recent, .All).
+        Assert.Equal(["AddressBookID", "AddressBookKind", "ContactLabel", "ContactSearchScope"], enums.Order(StringComparer.Ordinal));
+        Assert.Equal(GoContract.TypedStringConstants(source, "AddressBookID"), [AddressBookId.Recent.Value, AddressBookId.All.Value]);
+        var structs = GoContract.Structs(source);
+        var records = typeof(API).Assembly.GetTypes().Where(t =>
+            t.Namespace == "Malachi.Core.Api" && t.IsClass && t.IsPublic && !t.IsAbstract
+            && t.GetProperty("EqualityContract", BindingFlags.NonPublic | BindingFlags.Instance) is not null)
+            .Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (var name in structs.Where(s => s.Value.Count > 0).Select(s => s.Key))
+        {
+            var record = name == "ContactURL" ? nameof(ContactUrl) : name;
+            Assert.True(records.Contains(record), $"contacts_book.go has a struct {name}, Malachi.Core.Api no record {record}");
+        }
+        Assert.Equal(["ContactDeleteResult"], structs.Where(s => s.Value.Count == 0).Select(s => s.Key));
+        Assert.Equal(15, GoContract.IntConstants(source).Count);
+    }
+
     private static void AssertWireEnum(string type, string file, string goType)
     {
-        var source = GoContract.ApiSource(file);
+        // "types.go+contacts_book.go": a type whose constants two files declare.
+        var source = string.Join('\n', file.Split('+').Select(GoContract.ApiSource));
         var go = goType.EndsWith('*')
             ? GoContract.StringConstants(source).Where(c => c.Key.StartsWith(goType[..^1], StringComparison.Ordinal)).Select(c => c.Value).ToArray()
             : [.. GoContract.TypedStringConstants(source, goType)];
@@ -233,7 +266,7 @@ public sealed class GoContractTests
         // crm.go for the CRM's (docs/eway.md D16) and assistant.go for the
         // assistant profile's (docs/api.md §4.18).
         var go = new Dictionary<string, long>(StringComparer.Ordinal);
-        foreach (var file in new[] { "types.go", "calendar.go", "crm.go", "assistant.go" })
+        foreach (var file in new[] { "types.go", "calendar.go", "crm.go", "assistant.go", "contacts_book.go" })
         {
             foreach (var (name, value) in GoContract.IntConstants(GoContract.ApiSource(file)))
             {
@@ -241,7 +274,7 @@ public sealed class GoContractTests
             }
         }
         var limits = typeof(API.Limits).GetFields(BindingFlags.Public | BindingFlags.Static).Where(f => f.IsLiteral).ToArray();
-        Assert.Equal(76, limits.Length);
+        Assert.Equal(91, limits.Length);
         foreach (var limit in limits)
         {
             // Go spells the identifier "IDs"; C# "Ids".
@@ -334,7 +367,8 @@ public sealed class GoContractTests
     {
         var structs = GoContract.Structs(
             GoContract.ApiSource("types.go"), GoContract.ApiSource("tls.go"), GoContract.ApiSource("errors.go"), GoContract.ApiSource("board.go"),
-            GoContract.ApiSource("calendar.go"), GoContract.ApiSource("crm.go"), GoContract.ApiSource("assistant.go"));
+            GoContract.ApiSource("calendar.go"), GoContract.ApiSource("crm.go"), GoContract.ApiSource("assistant.go"),
+            GoContract.ApiSource("contacts_book.go"));
         var records = typeof(API).Assembly.GetTypes().Where(t =>
             t.Namespace == "Malachi.Core.Api" && t.IsClass && t.IsPublic && !t.IsAbstract
             && t.GetProperty("EqualityContract", BindingFlags.NonPublic | BindingFlags.Instance) is not null
@@ -347,6 +381,7 @@ public sealed class GoContractTests
                 nameof(RpcError) => "Error",
                 nameof(TlsErrorData) => "TLSErrorData",
                 nameof(CalendarEvent) => "Event",
+                nameof(ContactUrl) => "ContactURL",
                 _ => record.Name,
             };
             Assert.True(structs.ContainsKey(goName), $"backend/pkg/api has no struct {goName} for {record.Name}");

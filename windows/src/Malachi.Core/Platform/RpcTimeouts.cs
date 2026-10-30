@@ -98,4 +98,11 @@ public static class RpcTimeouts
     /// to the sender's server (15 s) first (bulk.go <c>unsubscribeTimeout</c>).
     /// </summary>
     public static readonly TimeSpan Unsubscribe = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// <c>contact.create</c>, <c>contact.update</c> and <c>contact.delete</c>:
+    /// the daemon writes to the server first (contactsctl
+    /// <c>WriteTimeout</c>; Swift's descriptors' 60 s).
+    /// </summary>
+    public static readonly TimeSpan ContactWrite = TimeSpan.FromSeconds(60);
 }

@@ -1149,22 +1149,22 @@ public sealed partial class ApiCodingTests
         (1005, "unauthenticated"), (1006, "readOnly"), (1007, "invitationsUnavailable"),
         (1100, "accountNotFound"), (1101, "folderNotFound"), (1102, "messageNotFound"), (1103, "threadNotFound"),
         (1104, "draftNotFound"), (1105, "attachmentNotFound"), (1106, "caseNotFound"), (1107, "calendarNotFound"),
-        (1108, "eventNotFound"), (1109, "crmItemNotFound"),
+        (1108, "eventNotFound"), (1109, "crmItemNotFound"), (1110, "contactNotFound"), (1111, "addressBookNotFound"),
         (1200, "authRequired"), (1201, "authFailed"), (1202, "keyringError"), (1203, "oauthClientMissing"),
-        (1204, "calendarConsentRequired"), (1205, "crmSignInUnsupported"),
+        (1204, "calendarConsentRequired"), (1205, "crmSignInUnsupported"), (1206, "contactsConsentRequired"),
         (1300, "offline"), (1301, "networkError"), (1302, "serverError"), (1303, "tlsError"), (1304, "serverTimeout"),
-        (1305, "messageGone"), (1306, "eventGone"), (1307, "crmDuplicate"),
+        (1305, "messageGone"), (1306, "eventGone"), (1307, "crmDuplicate"), (1308, "contactConflict"),
         (1400, "storageError"), (1401, "migrationFailed"),
         (1500, "malformedMessage"), (1501, "sanitizeFailed"), (1502, "attachmentTooBig"), (1503, "partNotFound"),
         (1504, "partNotDownloaded"), (1505, "unsubscribeFailed"), (1506, "quoteNotFound"), (1507, "malformedCalendar"),
-        (1508, "recurrenceUnsupported"),
+        (1508, "recurrenceUnsupported"), (1509, "addressBookReadOnly"),
     ];
 
     [Fact]
     public void ErrorCodesAreNamed()
     {
-        Assert.Equal(48, ErrorCode.All.Count);
-        Assert.Equal(48, ErrorCode.All.Distinct().Count());
+        Assert.Equal(53, ErrorCode.All.Count);
+        Assert.Equal(53, ErrorCode.All.Distinct().Count());
         Assert.Equal(GoCodes.Select(c => c.Code), ErrorCode.All.Select(c => c.Value));
         Assert.Equal(GoCodes.Select(c => c.Name), ErrorCode.All.Select(c => c.Name));
         foreach (var code in ErrorCode.All)
@@ -1329,13 +1329,16 @@ public sealed partial class ApiCodingTests
         "account.detectEway",
         "crm.lookup", "crm.search", "crm.save", "crm.remove",
         "assistant.profileGet", "assistant.profileSet", "assistant.profilePropose", "assistant.profileResolve",
+        "addressBook.list", "addressBook.set",
+        "contact.list", "contact.get", "contact.lookup",
+        "contact.create", "contact.update", "contact.delete",
     ];
 
     [Fact]
     public void MethodTableMatchesGo()
     {
-        Assert.Equal(105, API.AllMethods.Count);
-        Assert.Equal(105, API.AllMethods.Distinct().Count()); // no duplicates
+        Assert.Equal(113, API.AllMethods.Count);
+        Assert.Equal(113, API.AllMethods.Distinct().Count()); // no duplicates
         Assert.Equal(GoMethods, API.AllMethods);
         Assert.Equal(API.AllMethods.Count, API.Methods.Count);
         Assert.Equal(API.SystemInfoName, API.SystemInfo.Name);
@@ -1343,7 +1346,7 @@ public sealed partial class ApiCodingTests
             [
                 "notify.newMessage", "notify.syncState", "notify.authRequired", "notify.accountsChanged", "notify.messagesChanged", "notify.boardChanged",
                 "notify.draftsChanged", "notify.calendarChanged", "notify.calendarState", "notify.eventAlert", "notify.invitationsChanged",
-                "notify.assistantProfileChanged",
+                "notify.assistantProfileChanged", "notify.contactsChanged",
             ],
             API.AllNotifications);
     }
@@ -1404,6 +1407,10 @@ public sealed partial class ApiCodingTests
         Assert.Equal(TimeSpan.FromSeconds(30), API.CrmSearch.Timeout);
         Assert.Equal(TimeSpan.FromMinutes(15), API.CrmSave.Timeout);
         Assert.Equal(TimeSpan.FromSeconds(30), API.CrmRemove.Timeout);
+        // A contact is written to the server first (contactsctl WriteTimeout).
+        Assert.Equal(TimeSpan.FromSeconds(60), API.ContactCreate.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(60), API.ContactUpdate.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(60), API.ContactDelete.Timeout);
         var special = new HashSet<string>(StringComparer.Ordinal)
         {
             "system.info", "system.hello", "system.authenticate", "message.body",
@@ -1415,6 +1422,7 @@ public sealed partial class ApiCodingTests
             "account.discoverCalDAV", "account.listCalDAVCalendars", "calendar.freeBusy", "calendar.findFreeTime", "event.list",
             "event.create", "event.update", "event.delete", "event.respond", "invitation.respond", "invitation.applyCancel",
             "account.detectEway", "crm.lookup", "crm.search", "crm.save", "crm.remove",
+            "contact.create", "contact.update", "contact.delete",
         };
         foreach (var m in API.Methods.Where(m => !special.Contains(m.Name)))
         {

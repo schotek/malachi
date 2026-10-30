@@ -146,6 +146,11 @@ public static class IconGlyphs
         // The quick-reply bar's Open in a Window (docs/plans/chat-view.md
         // Q2; macOS arrow.up.forward.square): OpenInNewWindow.
         ["window-new"] = G(0xE8A7),
+        // The Contacts window (docs/plans/address-book.md §5; GTK
+        // contacts_detail.go): Copy of the detail, and a website row's
+        // link that opens in the browser (Link).
+        ["edit-copy"] = G(0xE8C8),
+        ["adw-external-link"] = G(0xE71B),
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>Whether <paramref name="gtkName"/> has a glyph of its own.</summary>

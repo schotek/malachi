@@ -3,7 +3,9 @@
 
 // Port of macos/Sources/MalachiCore/API/Contacts.swift; Go:
 // backend/pkg/api/types.go (Contact, ContactSearchParams,
-// ContactSearchResult); contract: docs/api.md §4.11.
+// ContactSearchResult) and contacts_book.go (ContactSourceContacts,
+// ContactSearchScope); contract: docs/api.md §4.11. The address books of
+// connected services (§4.19) are ContactsBook.cs.
 
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
@@ -24,13 +26,17 @@ public sealed record Contact
     [JsonPropertyName("address")]
     public required string Address { get; init; }
 
-    /// <summary>sent or addressBook.</summary>
+    /// <summary>sent, addressBook or contacts.</summary>
     [JsonPropertyName("source")]
     public required ContactSource Source { get; init; }
 
     /// <summary>The address book the contact came from; null for a collected address.</summary>
     [JsonPropertyName("book")]
     public string? Book { get; init; }
+
+    /// <summary>The contact of a <see cref="ContactSource.Contacts"/> suggestion (<c>contact.get</c>); null otherwise.</summary>
+    [JsonPropertyName("contactId")]
+    public ContactId? ContactId { get; init => field = value is { Value.Length: > 0 } ? value : null; }
 }
 
 /// <summary>
@@ -52,6 +58,13 @@ public sealed record ContactSearchParams
     /// <summary>How many suggestions; null is the default.</summary>
     [JsonPropertyName("limit")]
     public int? Limit { get; init; }
+
+    /// <summary>
+    /// Which synchronised address books are read (the setting
+    /// contacts-suggest-scope); null is <see cref="ContactSearchScope.Account"/>.
+    /// </summary>
+    [JsonPropertyName("scope")]
+    public ContactSearchScope? Scope { get; init; }
 }
 
 /// <summary>api.ContactSearchResult: ranked best first.</summary>
