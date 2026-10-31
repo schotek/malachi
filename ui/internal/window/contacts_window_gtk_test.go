@@ -68,6 +68,17 @@ func TestContactsWindowGTKSmoke(t *testing.T) {
 	if got := cw.listStack.VisibleChildName(); got != "list" {
 		t.Errorf("list stack %q", got)
 	}
+	// The sample contacts with a photo show it instead of the initials
+	// (contacts_photos.go; three ready, one fetched like Microsoft 365).
+	photos := 0
+	for _, av := range cw.listAvatars {
+		if av != nil && av.CustomImage() != nil {
+			photos++
+		}
+	}
+	if photos < 3 {
+		t.Errorf("%d list avatars show a photo", photos)
+	}
 	if !cw.status.IsVisible() || cw.status.Text() == "" {
 		t.Error("no status line")
 	}

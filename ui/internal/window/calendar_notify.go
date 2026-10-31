@@ -51,6 +51,10 @@ func (w *Window) modeAccountsChanged() {
 func (w *Window) modeConnectionChanged(connected bool) {
 	w.boardConnectionChanged(connected)
 	w.calendarConnectionChanged(connected)
+	if connected {
+		// The contact photos are asked again of the daemon.
+		w.photoHub().connected()
+	}
 }
 
 // calendarAccountsChanged: the daemon's calendar source lists the accounts

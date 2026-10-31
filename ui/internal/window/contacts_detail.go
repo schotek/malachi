@@ -90,7 +90,7 @@ func (cw *ContactsWindow) buildDetail(card api.ContactCard) {
 	cw.detailPg.SetTitle(d.Title)
 
 	head := gtk.NewBox(gtk.OrientationHorizontal, 14)
-	head.Append(adw.NewAvatar(64, d.Title, true))
+	head.Append(cw.detailAvatar(card, d))
 	texts := gtk.NewBox(gtk.OrientationVertical, 2)
 	texts.SetVAlign(gtk.AlignCenter)
 	texts.SetHExpand(true)

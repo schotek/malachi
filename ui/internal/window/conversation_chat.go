@@ -173,6 +173,10 @@ func newConversationChat(h *conversationHost, b *gtk.Builder) *conversationChat 
 		return false
 	})
 	cv.scroller.AddController(sc)
+	// The senders' photos (contact_photos.go) while the chat shows.
+	h.w.photoHub().addPhotoView("chat", cv.photoAvatars)
+	cv.scroller.ConnectMap(h.w.photosChanged)
+	cv.scroller.ConnectUnmap(h.w.photosChanged)
 	return cv
 }
 
@@ -386,6 +390,7 @@ func (cv *conversationChat) apply(m *conversation.Model) {
 	}
 	cv.order = desired
 	cv.members = members
+	cv.w.photosChanged()
 }
 
 // render shows what the entry lm of the member of row holds (nil: nothing
@@ -543,6 +548,7 @@ func (cv *conversationChat) removeAll() {
 	cv.last = nil
 	cv.layoutTries = 0
 	cv.issue.clear()
+	cv.w.photosChanged()
 }
 
 // Width.

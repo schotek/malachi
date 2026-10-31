@@ -17,6 +17,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/board"
+	"github.com/schotek/malachi/ui/internal/contacts"
 	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/htmlview"
 	"github.com/schotek/malachi/ui/internal/i18n"
@@ -94,6 +95,9 @@ type chatRow struct {
 	// click.
 	row    conversation.ChatRow
 	avatar *adw.Avatar
+	// photo is whose photo the avatar shows instead of the initials
+	// (contact_photos.go), zero for the user's own and a draft.
+	photo  contacts.Avatar
 	clamp  *adw.Clamp
 	bubble *chatBubble
 	max    int
@@ -217,12 +221,14 @@ func (r *chatRow) setMax(max int) {
 // ever drawn as initials).
 func (r *chatRow) showMessage(item conversation.Item, att bubbleAttachments, compact bool) {
 	r.avatar.SetText(item.Sender)
+	r.photo = senderAvatar(item.Message.From, r.right || item.Mine || item.Sent)
 	r.bubble.showMessage(item, att, compact)
 }
 
 // showDraft shows the user's draft card.
 func (r *chatRow) showDraft(card conversation.DraftCard) {
 	r.avatar.SetText(card.Sender)
+	r.photo = contacts.Avatar{}
 	r.bubble.showDraft(card)
 }
 

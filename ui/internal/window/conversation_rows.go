@@ -12,6 +12,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/diamondburned/gotk4/pkg/pango"
 
+	"github.com/schotek/malachi/ui/internal/contacts"
 	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
@@ -115,8 +116,11 @@ type convRow struct {
 	content gtk.Widgetter
 	// card is the card the row holds, nil for an event and the row of the
 	// older members.
-	card         *convCard
-	avatar       *adw.Avatar // nil for a dot
+	card   *convCard
+	avatar *adw.Avatar // nil for a dot
+	// photo is whose photo the avatar shows instead of the initials
+	// (convItemPhoto; contact_photos.go), zero for the user's own.
+	photo        contacts.Avatar
 	above, below *gtk.Box
 }
 

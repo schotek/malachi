@@ -353,6 +353,8 @@ func (w *Window) renderRow(r *widget.MessageRow, row listRow) {
 		r.SetReserveExpander(true)
 	}
 	r.SetMember(row.Member)
+	// A conversation's participants may have changed: its photo follows.
+	w.photosChanged()
 }
 
 // addThreadShortcuts gives a row of the grouped list the tree keys: Left

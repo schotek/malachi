@@ -76,11 +76,19 @@ type ContactsWindow struct {
 	// bookRows and rowIDs are what each row of the sidebar and of the
 	// list stands for ("" a heading); itemsKey, rowsKey and bannersKey
 	// what they were built from.
-	bookRows   []api.AddressBookID
-	rowIDs     []api.ContactID
-	itemsKey   string
-	rowsKey    string
-	bannersKey string
+	bookRows []api.AddressBookID
+	rowIDs   []api.ContactID
+	// listRows are the rows the list shows and listAvatars their avatars
+	// (nil for a heading), detailAv and detailPhoto the detail's
+	// (contacts_photos.go).
+	listRows    []contacts.Row
+	listAvatars []*adw.Avatar
+	detailAv    *adw.Avatar
+	detailPhoto contacts.Avatar
+	detailRef   contactsctl.ContactRef
+	itemsKey    string
+	rowsKey     string
+	bannersKey  string
 	// detailKey is what the detail was built from; form is the form
 	// built into formBox (contacts_form.go).
 	detailKey string
@@ -193,6 +201,7 @@ func newContactsWindow(w *Window) *ContactsWindow {
 	cw.installShortcuts()
 	cw.unlisten = listenContacts(cw.handle)
 	cw.ConnectCloseRequest(cw.onClose)
+	cw.watchPhotos()
 
 	cw.ctl.Start()
 	cw.render()
@@ -243,6 +252,8 @@ func (cw *ContactsWindow) onClose() bool {
 	}
 	cw.closed = true
 	cw.unlisten()
+	cw.main.photoHub().removePhotoView(contactsListPhotos)
+	cw.main.photoHub().removePhotoView(contactsDetailPhotos)
 	cw.ctl.Stop()
 	cw.contact.Stop()
 	if contactsWin == cw {
@@ -433,16 +444,23 @@ func (cw *ContactsWindow) renderList() {
 		cw.rowsKey = k
 		removeListBoxRows(cw.contactList)
 		cw.rowIDs = cw.rowIDs[:0]
+		cw.listAvatars = cw.listAvatars[:0]
 		for _, r := range rows {
 			if r.IsHeading() {
 				cw.contactList.Append(sectionRow(r.Heading))
 				cw.rowIDs = append(cw.rowIDs, "")
+				cw.listAvatars = append(cw.listAvatars, nil)
 				continue
 			}
-			cw.contactList.Append(contactRow(r))
+			row, av := contactRow(r)
+			cw.contactList.Append(row)
 			cw.rowIDs = append(cw.rowIDs, r.Contact.ID)
+			cw.listAvatars = append(cw.listAvatars, av)
 		}
 	}
+	// The same rows (the key), maybe with another photo state.
+	cw.listRows = rows
+	cw.main.photosChanged()
 	cw.selectListRow(cw.ctl.Selected())
 
 	switch {
@@ -490,10 +508,10 @@ func sectionRow(letter string) *gtk.ListBoxRow {
 	return row
 }
 
-// contactRow is a contact of the list: initials, name and company or
-// address.
-func contactRow(r contacts.Row) *gtk.ListBoxRow {
-	av := adw.NewAvatar(32, r.Title, true)
+// contactRow is a contact of the list: initials (or the photo,
+// contacts_photos.go), name and company or address; av is its avatar.
+func contactRow(r contacts.Row) (row *gtk.ListBoxRow, av *adw.Avatar) {
+	av = adw.NewAvatar(32, r.Title, true)
 	title := gtk.NewLabel(r.Title)
 	title.SetUseMarkup(false)
 	title.SetXAlign(0)
@@ -516,9 +534,9 @@ func contactRow(r contacts.Row) *gtk.ListBoxRow {
 	box.SetMarginBottom(3)
 	box.Append(av)
 	box.Append(texts)
-	row := gtk.NewListBoxRow()
+	row = gtk.NewListBoxRow()
 	row.SetChild(box)
-	return row
+	return row, av
 }
 
 func (cw *ContactsWindow) onContactSelected(row *gtk.ListBoxRow) {

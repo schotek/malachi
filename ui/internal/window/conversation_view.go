@@ -190,6 +190,10 @@ func newConversationView(h *conversationHost, b *gtk.Builder) *conversationView 
 	// Shown again (another page of a stack was on top): the cards near
 	// the viewport are looked at anew.
 	cv.scroller.ConnectMap(cv.scheduleLiveUpdate)
+	// The senders' photos (contact_photos.go) while the timeline shows.
+	h.w.photoHub().addPhotoView("timeline", cv.photoAvatars)
+	cv.scroller.ConnectMap(h.w.photosChanged)
+	cv.scroller.ConnectUnmap(h.w.photosChanged)
 	adj := cv.scroller.VAdjustment()
 	adj.ConnectChanged(func() {
 		if !cv.shown {
@@ -784,6 +788,7 @@ func (cv *conversationView) apply(m *conversation.Model) {
 			continue
 		}
 		row.show(rail, it.Sender)
+		row.photo = convItemPhoto(it)
 		if row.card != nil {
 			row.card.setFold(conversation.Foldable(it), cv.foldState[it.Message.ID])
 		}
@@ -835,6 +840,7 @@ func (cv *conversationView) apply(m *conversation.Model) {
 	}
 	cv.items = desired
 	cv.showFoldAll()
+	cv.w.photosChanged()
 }
 
 // replaceRow makes row the row of member id; the one it had before (the
@@ -878,6 +884,7 @@ func (cv *conversationView) removeAll() {
 	cv.drafts = map[api.DraftID]*convDraftCard{}
 	cv.draftRows = map[api.DraftID]*convRow{}
 	cv.items = nil
+	cv.w.photosChanged()
 	cv.pinned, cv.last = nil, nil
 	cv.issue.clear()
 	cv.hover("")
