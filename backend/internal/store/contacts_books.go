@@ -60,6 +60,9 @@ type StoredContact struct {
 	PrimaryEmail string
 	Emails       []ContactEmailRow
 	UpdatedAt    time.Time
+	// PhotoState is read, never written here (ab_photos, 0024):
+	// ContactPhotoReady, ContactPhotoRemote or "" (no photo).
+	PhotoState string
 }
 
 // Raw kinds of ab_contacts.
@@ -354,13 +357,16 @@ func (s *Store) ContactETags(ctx context.Context, bookID string) (map[string]str
 }
 
 const contactColumns = `c.id, c.book_id, c.remote_id, c.etag, c.raw, c.raw_kind, c.display_name, c.sort_key, c.section,
-	c.org, c.primary_email, c.updated_at`
+	c.org, c.primary_email, c.updated_at, ` + photoStateColumn
+
+// contactFrom is ab_contacts c with its photo row p.
+const contactFrom = ` FROM ab_contacts c LEFT JOIN ab_photos p ON p.contact_id = c.id`
 
 func scanContact(r interface{ Scan(...any) error }) (StoredContact, error) {
 	var c StoredContact
 	var updated string
 	if err := r.Scan(&c.ID, &c.BookID, &c.RemoteID, &c.ETag, &c.Raw, &c.RawKind, &c.DisplayName, &c.SortKey, &c.Section,
-		&c.Org, &c.PrimaryEmail, &updated); err != nil {
+		&c.Org, &c.PrimaryEmail, &updated, &c.PhotoState); err != nil {
 		return StoredContact{}, err
 	}
 	c.UpdatedAt = parseStamp(updated)
@@ -370,7 +376,7 @@ func scanContact(r interface{ Scan(...any) error }) (StoredContact, error) {
 // GetContact returns one contact with its addresses; ErrNotFound when
 // there is none.
 func (s *Store) GetContact(ctx context.Context, id string) (StoredContact, error) {
-	c, err := scanContact(s.db.QueryRowContext(ctx, `SELECT `+contactColumns+` FROM ab_contacts c WHERE c.id = ?`, id))
+	c, err := scanContact(s.db.QueryRowContext(ctx, `SELECT `+contactColumns+contactFrom+` WHERE c.id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return StoredContact{}, ErrNotFound
 	}
@@ -428,8 +434,7 @@ func (s *Store) ListContacts(ctx context.Context, q ContactQuery) ([]StoredConta
 		limit = 100
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT c.id, c.book_id, c.remote_id, c.etag, x'', c.raw_kind, c.display_name,
-			c.sort_key, c.section, c.org, c.primary_email, c.updated_at
-		FROM ab_contacts c`+where+` ORDER BY c.sort_key, c.display_name, c.id LIMIT ? OFFSET ?`,
+			c.sort_key, c.section, c.org, c.primary_email, c.updated_at, `+photoStateColumn+contactFrom+where+` ORDER BY c.sort_key, c.display_name, c.id LIMIT ? OFFSET ?`,
 		append(args, limit, max(q.Offset, 0))...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list contacts: %w", err)

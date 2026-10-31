@@ -829,7 +829,7 @@ func TestMigrationChainLocalDrafts(t *testing.T) {
 		t.Fatal(err)
 	}
 	last := migs[len(migs)-1].version
-	if last != 23 { // 0023_contacts
+	if last != 24 { // 0024_contact_photos
 		t.Fatalf("last migration %d", last)
 	}
 	if n := countRows(t, s, `SELECT MAX(version) FROM schema_migrations`); n != last {
