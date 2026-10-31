@@ -88,6 +88,38 @@ public struct ContactSearchScope: WireEnum {
     public static let all: ContactSearchScope = "all"
 }
 
+/// api.ContactPhotoAvailability: what `ContactSummary.photo`,
+/// `ContactCard.photo` and contact.lookup's `photos` say of a contact's
+/// photo; "" (`.none`, the field absent) is no photo. An open enum: an
+/// unknown value is no photo.
+public struct ContactPhotoAvailability: WireEnum {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+
+    /// No photo (Go's "").
+    public static let none = ContactPhotoAvailability(rawValue: "")
+    /// The daemon has the photo; contact.photo returns it at once.
+    public static let ready: ContactPhotoAvailability = "ready"
+    /// A Microsoft 365 contact whose photo, if it has one, has not been
+    /// fetched for its current revision; contact.photo fetches it (and may
+    /// find none).
+    public static let remote: ContactPhotoAvailability = "remote"
+
+    public var isEmpty: Bool { rawValue.isEmpty }
+}
+
+/// api.ContactPhotoState: contact.photo's answer. An open enum: an unknown
+/// value is no photo.
+public struct ContactPhotoState: WireEnum {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+
+    /// `mime` and `data` hold the photo.
+    public static let ready: ContactPhotoState = "ready"
+    /// No photo, or one the daemon refused.
+    public static let none: ContactPhotoState = "none"
+}
+
 // MARK: Coding helpers
 
 extension KeyedDecodingContainer {
@@ -291,10 +323,13 @@ public struct ContactSummary: Codable, Sendable, Equatable {
     public var org: String
     /// The first address; "" none.
     public var email: String
+    /// Whether the contact has a photo (contact.photo); `.none` when it has
+    /// none. Never set in the recent book.
+    public var photo: ContactPhotoAvailability
 
     public init(
         id: ContactID, bookId: AddressBookID, displayName: String = "", sortKey: String = "", section: String = "",
-        org: String = "", email: String = ""
+        org: String = "", email: String = "", photo: ContactPhotoAvailability = .none
     ) {
         self.id = id
         self.bookId = bookId
@@ -303,10 +338,11 @@ public struct ContactSummary: Codable, Sendable, Equatable {
         self.section = section
         self.org = org
         self.email = email
+        self.photo = photo
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, bookId, displayName, sortKey, section, org, email
+        case id, bookId, displayName, sortKey, section, org, email, photo
     }
 
     public init(from decoder: any Decoder) throws {
@@ -318,6 +354,7 @@ public struct ContactSummary: Codable, Sendable, Equatable {
         section = try c.stringOrEmpty(.section)
         org = try c.stringOrEmpty(.org)
         email = try c.stringOrEmpty(.email)
+        photo = try c.decodeIfPresent(ContactPhotoAvailability.self, forKey: .photo) ?? .none
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -329,6 +366,9 @@ public struct ContactSummary: Codable, Sendable, Equatable {
         try c.encode(section, forKey: .section)
         try c.encodeNonEmpty(org, forKey: .org)
         try c.encodeNonEmpty(email, forKey: .email)
+        if !photo.isEmpty {
+            try c.encode(photo, forKey: .photo)
+        }
     }
 }
 
@@ -532,12 +572,15 @@ public struct ContactCard: Codable, Sendable, Equatable {
     @NullAsEmpty public var urls: [ContactURL]
     public var birthday: ContactBirthday?
     public var note: String
+    /// As `ContactSummary.photo`. Ignored as input: contact.update never
+    /// changes a photo, the server keeps it as it is.
+    public var photo: ContactPhotoAvailability
 
     public init(
         id: ContactID = "", bookId: AddressBookID = "", readOnly: Bool = false, revision: String = "",
         name: ContactName = ContactName(), displayName: String = "", nickname: String = "", org: String = "",
         title: String = "", emails: [ContactEmail] = [], phones: [ContactPhone] = [], addresses: [ContactAddress] = [],
-        urls: [ContactURL] = [], birthday: ContactBirthday? = nil, note: String = ""
+        urls: [ContactURL] = [], birthday: ContactBirthday? = nil, note: String = "", photo: ContactPhotoAvailability = .none
     ) {
         self.id = id
         self.bookId = bookId
@@ -554,11 +597,12 @@ public struct ContactCard: Codable, Sendable, Equatable {
         self.urls = urls
         self.birthday = birthday
         self.note = note
+        self.photo = photo
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, bookId, readOnly, revision, name, displayName, nickname, org, title, emails, phones, addresses, urls,
-             birthday, note
+             birthday, note, photo
     }
 
     public init(from decoder: any Decoder) throws {
@@ -578,6 +622,7 @@ public struct ContactCard: Codable, Sendable, Equatable {
         _urls = try c.decode(NullAsEmpty<ContactURL>.self, forKey: .urls)
         birthday = try c.decodeIfPresent(ContactBirthday.self, forKey: .birthday)
         note = try c.stringOrEmpty(.note)
+        photo = try c.decodeIfPresent(ContactPhotoAvailability.self, forKey: .photo) ?? .none
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -597,6 +642,9 @@ public struct ContactCard: Codable, Sendable, Equatable {
         try c.encode(urls, forKey: .urls)
         try c.encodeIfPresent(birthday, forKey: .birthday)
         try c.encodeNonEmpty(note, forKey: .note)
+        if !photo.isEmpty {
+            try c.encode(photo, forKey: .photo)
+        }
     }
 }
 
@@ -682,31 +730,139 @@ public struct ContactGetResult: Codable, Sendable, Equatable {
     }
 }
 
-/// api.ContactLookupParams: at most `maxContactLookupAddresses`.
+/// api.ContactLookupParams: at most `maxContactLookupAddresses`;
+/// `withPhotos` asks for `photos` too (left out when false).
 public struct ContactLookupParams: Codable, Sendable, Equatable {
     public var addresses: [String]
+    public var withPhotos: Bool
 
-    public init(addresses: [String]) {
+    public init(addresses: [String], withPhotos: Bool = false) {
         self.addresses = addresses
+        self.withPhotos = withPhotos
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case addresses, withPhotos
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        addresses = try c.decodeIfPresent([String].self, forKey: .addresses) ?? []
+        withPhotos = try c.decodeIfPresent(Bool.self, forKey: .withPhotos) ?? false
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(addresses, forKey: .addresses)
+        if withPhotos {
+            try c.encode(withPhotos, forKey: .withPhotos)
+        }
+    }
+}
+
+/// api.ContactPhotoRef: the contact whose photo stands for an address.
+public struct ContactPhotoRef: Codable, Sendable, Equatable {
+    public var contactId: ContactID
+    public var state: ContactPhotoAvailability
+
+    public init(contactId: ContactID, state: ContactPhotoAvailability) {
+        self.contactId = contactId
+        self.state = state
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case contactId, state
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        contactId = try c.decodeIfPresent(ContactID.self, forKey: .contactId) ?? ""
+        state = try c.decodeIfPresent(ContactPhotoAvailability.self, forKey: .state) ?? .none
     }
 }
 
 /// api.ContactLookupResult: each address with a contact in a visible book
 /// (normalised, lower case) to that contact; unknown addresses are absent.
+/// `photos` (only with `withPhotos`; absent when empty) maps each address
+/// that a contact of a visible book with a photo (ready or remote) has to
+/// that contact (several: the first visible by sort key).
 public struct ContactLookupResult: Codable, Sendable, Equatable {
     public var known: [String: ContactID]
+    public var photos: [String: ContactPhotoRef]
 
-    public init(known: [String: ContactID] = [:]) {
+    public init(known: [String: ContactID] = [:], photos: [String: ContactPhotoRef] = [:]) {
         self.known = known
+        self.photos = photos
     }
 
     private enum CodingKeys: String, CodingKey {
-        case known
+        case known, photos
     }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         known = try c.decodeIfPresent([String: ContactID].self, forKey: .known) ?? [:]
+        photos = try c.decodeIfPresent([String: ContactPhotoRef].self, forKey: .photos) ?? [:]
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(known, forKey: .known)
+        if !photos.isEmpty {
+            try c.encode(photos, forKey: .photos)
+        }
+    }
+}
+
+/// api.ContactPhotoParams.
+public struct ContactPhotoParams: Codable, Sendable, Equatable {
+    public var contactId: ContactID
+
+    public init(contactId: ContactID) {
+        self.contactId = contactId
+    }
+}
+
+/// api.ContactPhotoResult: a contact's photo. `revision` is the contact's
+/// version the photo was made from (`ContactCard.revision`). `mime` and
+/// `data` (base64 on the wire) are set only when `state` is `.ready`: the
+/// daemon's own JPEG or PNG (`maxContactPhotoBytes`,
+/// `maxContactPhotoPixels`), never the server's bytes.
+public struct ContactPhotoResult: Codable, Sendable, Equatable {
+    public var state: ContactPhotoState
+    /// "" none.
+    public var mime: String
+    /// Empty none.
+    public var data: Data
+    public var revision: String
+
+    public init(state: ContactPhotoState, mime: String = "", data: Data = Data(), revision: String = "") {
+        self.state = state
+        self.mime = mime
+        self.data = data
+        self.revision = revision
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case state, mime, data, revision
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        state = try c.decodeIfPresent(ContactPhotoState.self, forKey: .state) ?? .none
+        mime = try c.stringOrEmpty(.mime)
+        data = try c.decodeIfPresent(Data.self, forKey: .data) ?? Data()
+        revision = try c.stringOrEmpty(.revision)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(state, forKey: .state)
+        try c.encodeNonEmpty(mime, forKey: .mime)
+        if !data.isEmpty {
+            try c.encode(data, forKey: .data)
+        }
+        try c.encode(revision, forKey: .revision)
     }
 }
 
@@ -843,11 +999,22 @@ extension API {
         public static let timeout: Duration = .seconds(60)
     }
 
+    /// A contact's photo; a Microsoft 365 one is downloaded first
+    /// (`contactPhotoTimeout`), so the call is given more
+    /// (contactsctl.PhotoTimeout).
+    public enum ContactPhoto: RPCMethod {
+        public typealias Params = ContactPhotoParams
+        public typealias Result = ContactPhotoResult
+        public static let name = "contact.photo"
+        public static let timeout: Duration = .seconds(20)
+    }
+
     /// The address-book methods, in the order of methods.go.
     static let contactsMethods: [any RPCMethod.Type] = [
         AddressBookList.self, AddressBookSet.self,
         ContactList.self, ContactGet.self, ContactLookup.self,
         ContactCreate.self, ContactUpdate.self, ContactDelete.self,
+        ContactPhoto.self,
     ]
 }
 
@@ -871,4 +1038,11 @@ extension API.Limits {
     public static let maxContactPhones = 50
     public static let maxContactAddresses = 20
     public static let maxContactURLs = 20
+    /// A photo is the daemon's own encoding: JPEG (PNG with transparency),
+    /// a square of at most `maxContactPhotoPixels` a side, at most
+    /// `maxContactPhotoBytes`.
+    public static let maxContactPhotoBytes = 64 << 10
+    public static let maxContactPhotoPixels = 256
+    /// What contact.photo gives a Microsoft 365 download.
+    public static let contactPhotoTimeout: Duration = .seconds(15)
 }

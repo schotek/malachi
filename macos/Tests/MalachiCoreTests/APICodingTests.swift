@@ -1388,11 +1388,12 @@ import Testing
         "addressBook.list", "addressBook.set",
         "contact.list", "contact.get", "contact.lookup",
         "contact.create", "contact.update", "contact.delete",
+        "contact.photo",
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 113)
-        #expect(Set(API.allMethods).count == 113, "no duplicates")
+        #expect(API.allMethods.count == 114)
+        #expect(Set(API.allMethods).count == 114, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)
@@ -1448,7 +1449,7 @@ import Testing
                                     "calendar.findFreeTime", "event.create", "event.update", "event.delete",
                                     "event.respond", "invitation.respond",
                                     "account.detectEway", "crm.lookup", "crm.search", "crm.save", "crm.remove",
-                                    "contact.create", "contact.update", "contact.delete"]
+                                    "contact.create", "contact.update", "contact.delete", "contact.photo"]
         for m in API.methods where !special.contains(m.name) {
             #expect(m.timeout == RPCTimeouts.default, "\(m.name) should use the default timeout")
         }

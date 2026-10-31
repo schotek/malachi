@@ -8,7 +8,10 @@
 // would (sorted by sort key, filtered by name, company and address, paged,
 // written at once). One Microsoft 365 account has two books, a second one
 // waits for Microsoft's consent, a CardDAV server has one, and Recently
-// Used lists a few addresses. Nothing here is anybody's data.
+// Used lists a few addresses. A few contacts have photos (tiny invented
+// 16 px PNGs, a silhouette on a colour): two ready, one remote that
+// contact.photo "downloads", one remote that turns out to have none.
+// Nothing here is anybody's data.
 
 import Foundation
 
@@ -29,6 +32,21 @@ public actor SampleContactsCaller: ContactsCaller {
 
     /// The contact the dev steps open (Jana Nováková).
     public static let jana: ContactID = "p_sample_jana"
+
+    /// The samples' photos: the state the summaries and cards report and
+    /// what contact.photo answers (nil data: none after all).
+    static let photos: [ContactID: (state: ContactPhotoAvailability, png: String?)] = [
+        jana: (.ready, tealPNG),
+        "p_sample_6": (.ready, amberPNG), // Hana Horáková
+        "p_sample_13": (.remote, violetPNG), // Tomáš Svoboda
+        "p_sample_11": (.remote, nil), // Petr Novotný
+    ]
+    private static let tealPNG =
+        "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAANElEQVR42mNQWzSfJMQwEBqe/fgOR4Q1IKvGqmcIaCDZ07SPB9L8gKkaUw8DQdVoemivAQB20NO45Wbv9gAAAABJRU5ErkJggg=="
+    private static let amberPNG =
+        "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAANElEQVR42mN4MFGDJMQwEBr+f7gGR4Q1IKvGqmcIaCDZ07SPB9L8gKkaUw8DQdVoemivAQA4C/IgJvjckQAAAABJRU5ErkJggg=="
+    private static let violetPNG =
+        "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAANElEQVR42mOoijxFEmIYCA1vnv2CI8IakFVj1TMENJDsadrHA2l+wFSNqYeBoGo0PbTXAAB/nfcEmAVRkQAAAABJRU5ErkJggg=="
 
     /// Technical English of the samples' errors (`RPCError.message` is
     /// never shown).
@@ -52,7 +70,10 @@ public actor SampleContactsCaller: ContactsCaller {
             AddressBook(id: Self.personal, accountId: Self.cloud, name: "Personal", kind: .carddav, lastSyncAt: synced),
             AddressBook(id: .recent, name: "", kind: .recent, readOnly: true),
         ]
-        let cards = Self.sampleCards()
+        var cards = Self.sampleCards()
+        for i in cards.indices {
+            cards[i].photo = Self.photos[cards[i].id]?.state ?? .none
+        }
         self.cards = cards
         recent = [
             ("Pavel Novotný", "pavel@example.net"), ("", "info@example.org"), ("Lenka Malá", "lenka.mala@example.com"),
@@ -90,6 +111,8 @@ public actor SampleContactsCaller: ContactsCaller {
             result = ContactGetResult(contact: c)
         case let p as ContactLookupParams:
             result = lookup(p)
+        case let p as ContactPhotoParams:
+            result = try photo(p)
         case let p as ContactCreateParams:
             result = try create(p)
         case let p as ContactUpdateParams:
@@ -149,13 +172,29 @@ public actor SampleContactsCaller: ContactsCaller {
     private func lookup(_ p: ContactLookupParams) -> ContactLookupResult {
         let shown = visibleBooks()
         var known: [String: ContactID] = [:]
+        var photos: [String: ContactPhotoRef] = [:]
         for a in p.addresses {
             let n = a.trimmingCharacters(in: .whitespaces).lowercased()
             if let c = cards.first(where: { c in shown.contains(c.bookId) && c.emails.contains { $0.address.lowercased() == n } }) {
                 known[n] = c.id
+                if p.withPhotos, ContactBook.mayHave(c.photo) {
+                    photos[n] = ContactPhotoRef(contactId: c.id, state: c.photo)
+                }
             }
         }
-        return ContactLookupResult(known: known)
+        return ContactLookupResult(known: known, photos: photos)
+    }
+
+    /// contact.photo: a remote photo becomes ready once "downloaded", or
+    /// none.
+    private func photo(_ p: ContactPhotoParams) throws -> ContactPhotoResult {
+        guard let i = cards.firstIndex(where: { $0.id == p.contactId }) else { throw Self.error(.contactNotFound) }
+        guard let png = Self.photos[p.contactId]?.png, let data = Data(base64Encoded: png) else {
+            cards[i].photo = .none
+            return ContactPhotoResult(state: .none, revision: cards[i].revision)
+        }
+        cards[i].photo = .ready
+        return ContactPhotoResult(state: .ready, mime: "image/png", data: data, revision: cards[i].revision)
     }
 
     private func create(_ p: ContactCreateParams) throws -> ContactCreateResult {
@@ -180,6 +219,8 @@ public actor SampleContactsCaller: ContactsCaller {
         c.id = cards[i].id
         c.bookId = cards[i].bookId
         c.revision = String((Int(cards[i].revision) ?? 1) + 1)
+        // An update never changes the photo.
+        c.photo = cards[i].photo
         cards[i] = c
         return ContactUpdateResult(revision: c.revision)
     }
@@ -211,7 +252,7 @@ public actor SampleContactsCaller: ContactsCaller {
         let section = first.rangeOfCharacter(from: .letters) != nil ? first : "#"
         return ContactSummary(
             id: c.id, bookId: c.bookId, displayName: c.displayName.isEmpty ? ContactBook.composeName(c.name) : c.displayName,
-            sortKey: key, section: section, org: c.org, email: c.emails.first?.address ?? "")
+            sortKey: key, section: section, org: c.org, email: c.emails.first?.address ?? "", photo: c.photo)
     }
 
     private static func sampleAccounts() -> [Account] {

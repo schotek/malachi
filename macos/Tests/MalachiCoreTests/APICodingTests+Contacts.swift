@@ -125,9 +125,38 @@ import Testing
     @Test func methods() {
         #expect(API.contactsMethods.map { $0.name } == [
             "addressBook.list", "addressBook.set", "contact.list", "contact.get", "contact.lookup",
-            "contact.create", "contact.update", "contact.delete",
+            "contact.create", "contact.update", "contact.delete", "contact.photo",
         ])
         #expect(API.ContactCreate.timeout == .seconds(60) && API.ContactList.timeout == RPCTimeouts.default)
         #expect(API.Notify.contactsChanged == "notify.contactsChanged")
+        #expect(API.ContactPhoto.timeout == .seconds(20))
+    }
+
+    @Test func photos() throws {
+        let s = try decode(ContactSummary.self, #"{"id":"p_1","bookId":"b_1","displayName":"Jana","sortKey":"jana","section":"J","photo":"remote"}"#)
+        #expect(s.photo == .remote)
+        #expect(try decode(ContactSummary.self, #"{"id":"p_2","bookId":"b_1"}"#).photo == .none)
+        #expect(try decode(ContactSummary.self, #"{"id":"p_3","bookId":"b_1","photo":"later"}"#).photo.rawValue == "later", "an open enum")
+        #expect(try encodeObject(ContactSummary(id: "p_2", bookId: "b_1"))["photo"] == nil, "omitempty")
+        #expect(try encodeObject(ContactSummary(id: "p_1", bookId: "b_1", photo: .ready))["photo"] as? String == "ready")
+        #expect(try roundTrip(ContactCard(id: "p_1", photo: .ready)).photo == .ready)
+        #expect(try encodeObject(ContactCard(id: "p_1"))["photo"] == nil)
+
+        #expect(try encodeObject(ContactLookupParams(addresses: ["a@b.cz"]))["withPhotos"] == nil)
+        #expect(try encodeObject(ContactLookupParams(addresses: ["a@b.cz"], withPhotos: true))["withPhotos"] as? Bool == true)
+        let lr = try decode(ContactLookupResult.self, #"{"known":{"a@b.cz":"p_1"},"photos":{"a@b.cz":{"contactId":"p_1","state":"ready"}}}"#)
+        #expect(lr.photos["a@b.cz"] == ContactPhotoRef(contactId: "p_1", state: .ready))
+        #expect(try decode(ContactLookupResult.self, #"{"known":{}}"#).photos.isEmpty)
+        #expect(try encodeObject(ContactLookupResult())["photos"] == nil)
+
+        // Go's []byte is base64.
+        let pr = try decode(ContactPhotoResult.self, #"{"state":"ready","mime":"image/jpeg","data":"/9j/","revision":"e1"}"#)
+        #expect(pr.state == .ready && pr.mime == "image/jpeg" && pr.data == Data([0xff, 0xd8, 0xff]) && pr.revision == "e1")
+        let none = try decode(ContactPhotoResult.self, #"{"state":"none","revision":""}"#)
+        #expect(none.state == .none && none.data.isEmpty && none.mime.isEmpty)
+        let enc = try encodeObject(ContactPhotoResult(state: .none))
+        #expect(enc["data"] == nil && enc["mime"] == nil && enc["revision"] as? String == "")
+        #expect(try encodeObject(ContactPhotoParams(contactId: "p_1"))["contactId"] as? String == "p_1")
+        #expect(API.Limits.maxContactPhotoBytes == 65536 && API.Limits.maxContactPhotoPixels == 256)
     }
 }
