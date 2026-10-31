@@ -1,0 +1,7 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:not-an-image
+EMAIL:not-an-image@photo.example
+PHOTO;ENCODING=b;TYPE=PNG:PGh0bWw+PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0PjwvaHRtb
+ D4=
+END:VCARD

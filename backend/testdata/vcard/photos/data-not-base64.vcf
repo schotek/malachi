@@ -1,0 +1,6 @@
+BEGIN:VCARD
+VERSION:4.0
+FN:data-not-base64
+EMAIL:data-not-base64@photo.example
+PHOTO:data:image/png,%89PNG
+END:VCARD

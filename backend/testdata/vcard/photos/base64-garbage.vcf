@@ -1,0 +1,6 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:base64-garbage
+EMAIL:base64-garbage@photo.example
+PHOTO;ENCODING=b;TYPE=JPEG:/9j/4AAQ!!@@##SkZJRgABAQ ÿ€ %%%
+END:VCARD

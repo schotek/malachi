@@ -41,9 +41,9 @@ type doc struct {
 	ver   version
 	card  *Card
 
-	fn, n, nickname, org, title, bday, note, rev, versionLine int
-	emails, phones, addrs, urls                               []int
-	groupLabel                                                map[string]int // lower-case group → its X-ABLabel line
+	fn, n, nickname, org, title, bday, note, rev, versionLine, photo int
+	emails, phones, addrs, urls                                      []int
+	groupLabel                                                       map[string]int // lower-case group → its X-ABLabel line
 }
 
 // Parse reads the first vCard of raw. It fails only when raw is larger
@@ -68,7 +68,7 @@ func parseDoc(raw []byte) (d *doc, err error) {
 		return nil, ErrTooLarge
 	}
 	d = &doc{raw: raw, lines: splitLines(raw), begin: -1, end: -1,
-		fn: -1, n: -1, nickname: -1, org: -1, title: -1, bday: -1, note: -1, rev: -1, versionLine: -1,
+		fn: -1, n: -1, nickname: -1, org: -1, title: -1, bday: -1, note: -1, rev: -1, versionLine: -1, photo: -1,
 		groupLabel: map[string]int{}}
 	d.props = make([]prop, len(d.lines))
 	for i := range d.lines {
@@ -173,6 +173,11 @@ func (d *doc) extract() {
 		case "REV":
 			if d.rev < 0 {
 				d.rev = i
+			}
+		case "PHOTO":
+			if d.photo < 0 {
+				d.photo = i
+				c.Photo, c.PhotoURI = photoOf(p)
 			}
 		case "N":
 			if d.n < 0 {

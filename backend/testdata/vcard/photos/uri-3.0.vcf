@@ -1,0 +1,6 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:uri-3.0
+EMAIL:uri-3.0@photo.example
+PHOTO;VALUE=uri:https://tracker.example/pixel.jpg?u=1
+END:VCARD

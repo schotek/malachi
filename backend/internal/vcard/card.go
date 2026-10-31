@@ -20,7 +20,7 @@ const (
 	// MaxProperties caps the properties of the card (ErrTooManyProperties).
 	MaxProperties = 500
 	// MaxLineBytes caps an unfolded line whose value is decoded; a longer
-	// line (a big PHOTO) is kept by Patch but never decoded.
+	// line is kept by Patch but never decoded. PHOTO has MaxPhotoLineBytes.
 	MaxLineBytes = 256 << 10
 	// MaxItems caps each list of the model (emails, phones, addresses,
 	// URLs); further items are ignored by Parse and kept by Patch.
@@ -105,6 +105,12 @@ type Card struct {
 	URLs        []URL
 	Birthday    Birthday
 	Note        string
+	// Photo is the embedded picture of the first PHOTO, nil when there is
+	// none; PhotoURI: that PHOTO names a picture by a link instead, which
+	// is never fetched (docs/plans/address-book.md F4). Neither is ever
+	// written: Patch copies PHOTO lines byte for byte, Write has none.
+	Photo    *Photo
+	PhotoURI bool
 }
 
 // now is the clock of REV.
@@ -174,6 +180,10 @@ func Clean(c *Card) *Card {
 	}
 	out.Birthday = cleanBirthday(c.Birthday)
 	out.Note = cleanBlock(c.Note, MaxNoteBytes)
+	if c.Photo != nil && len(c.Photo.Data) > 0 {
+		out.Photo = &Photo{MIME: cleanMIME(c.Photo.MIME), Data: c.Photo.Data}
+	}
+	out.PhotoURI = c.PhotoURI && out.Photo == nil
 	return out
 }
 

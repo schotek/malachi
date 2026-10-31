@@ -6,13 +6,15 @@ package vcard
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 )
 
 func seeds(f *testing.F) [][]byte {
 	var out [][]byte
-	for _, file := range corpusFiles(f) {
+	photos, _ := filepath.Glob(filepath.Join("..", "..", "testdata", "vcard", "photos", "*.vcf"))
+	for _, file := range append(corpusFiles(f), photos...) {
 		raw, err := os.ReadFile(file)
 		if err == nil && len(raw) <= 64<<10 {
 			out = append(out, raw)

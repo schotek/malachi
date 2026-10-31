@@ -1,0 +1,6 @@
+BEGIN:VCARD
+VERSION:4.0
+FN:uri-4.0
+EMAIL:uri-4.0@photo.example
+PHOTO;MEDIATYPE=image/jpeg:https://tracker.example/pixel.jpg
+END:VCARD
