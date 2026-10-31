@@ -4,9 +4,13 @@
 package contactsctl
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"os"
 	"slices"
 	"strconv"
@@ -39,6 +43,7 @@ type SampleCaller struct {
 	books    []api.AddressBook
 	cards    map[api.ContactID]*api.ContactCard
 	recent   []api.ContactSummary
+	photos   map[api.ContactID][]byte // a contact's photo (contact.photo)
 	next     int
 	// Notify, when set, gets notify.contactsChanged after a write (on the
 	// caller's goroutine).
@@ -49,7 +54,7 @@ type SampleCaller struct {
 func NewSampleCaller(now time.Time) *SampleCaller {
 	synced := now.Add(-3 * time.Minute)
 	contactsCaps := append(append([]api.AccountCapability(nil), api.MailCapabilities...), api.CapabilityCalendar, api.CapabilityContacts)
-	s := &SampleCaller{cards: map[api.ContactID]*api.ContactCard{}}
+	s := &SampleCaller{cards: map[api.ContactID]*api.ContactCard{}, photos: map[api.ContactID][]byte{}}
 	s.accounts = []api.Account{
 		{ID: "acc_work", Enabled: true, Capabilities: contactsCaps, Config: api.AccountConfig{Name: "Práce", Email: "jana@firma.cz",
 			Kind: api.AccountGraph, Graph: &api.GraphConfig{Contacts: &api.ContactsConfig{Sync: true}}}},
@@ -103,6 +108,25 @@ func NewSampleCaller(now time.Time) *SampleCaller {
 	} {
 		s.add(c)
 	}
+	// Invented photos (plan §9): three ready, one Microsoft 365 photo the
+	// first contact.photo "fetches".
+	for i, p := range []struct {
+		email string
+		state api.ContactPhotoAvailability
+		tint  color.RGBA
+	}{
+		{"jana.novakova@example.cz", api.ContactPhotoReady, color.RGBA{0xe0, 0x6c, 0x4f, 0xff}},
+		{"karel@kucera.example", api.ContactPhotoReady, color.RGBA{0x3d, 0x8b, 0xd6, 0xff}},
+		{"david@dvorak.example", api.ContactPhotoReady, color.RGBA{0x4f, 0xa8, 0x6a, 0xff}},
+		{"marie@example.cz", api.ContactPhotoRemote, color.RGBA{0x9a, 0x5c, 0xc6, 0xff}},
+	} {
+		for _, c := range s.cards {
+			if len(c.Emails) > 0 && c.Emails[0].Address == p.email {
+				c.Photo = p.state
+				s.photos[c.ID] = samplePhoto(p.tint, i)
+			}
+		}
+	}
 	for _, a := range []string{"jan.horak@example.com", "objednavky@eshop.example", "petr.svoboda@example.com"} {
 		s.recent = append(s.recent, api.ContactSummary{ID: api.ContactID("recent:" + a), BookID: api.AddressBookRecent,
 			DisplayName: a, SortKey: a, Section: strings.ToUpper(a[:1]), Email: a})
@@ -140,7 +164,7 @@ func summary(c *api.ContactCard) api.ContactSummary {
 		sec = strings.ToUpper(string(r))
 		break
 	}
-	s := api.ContactSummary{ID: c.ID, BookID: c.BookID, DisplayName: c.DisplayName, SortKey: key, Section: sec, Org: c.Org}
+	s := api.ContactSummary{ID: c.ID, BookID: c.BookID, DisplayName: c.DisplayName, SortKey: key, Section: sec, Org: c.Org, Photo: c.Photo}
 	if len(c.Emails) > 0 {
 		s.Email = c.Emails[0].Address
 	}
@@ -245,19 +269,46 @@ func (s *SampleCaller) answer(method string, raw json.RawMessage) (any, *api.Con
 		var p api.ContactLookupParams
 		_ = json.Unmarshal(raw, &p)
 		known := map[string]api.ContactID{}
+		var photos map[string]api.ContactPhotoRef
 		for _, a := range p.Addresses {
+			n := strings.ToLower(strings.TrimSpace(a))
 			for _, c := range s.cards {
 				if !s.book(c.BookID).Visible {
 					continue
 				}
 				for _, e := range c.Emails {
-					if strings.EqualFold(e.Address, a) {
-						known[a] = c.ID
+					if !strings.EqualFold(e.Address, n) {
+						continue
+					}
+					known[n] = c.ID
+					if p.WithPhotos && c.Photo != "" {
+						if photos == nil {
+							photos = map[string]api.ContactPhotoRef{}
+						}
+						photos[n] = api.ContactPhotoRef{ContactID: c.ID, State: c.Photo}
 					}
 				}
 			}
 		}
-		return api.ContactLookupResult{Known: known}, nil, nil
+		return api.ContactLookupResult{Known: known, Photos: photos}, nil, nil
+	case api.MethodContactPhoto:
+		var p api.ContactPhotoParams
+		_ = json.Unmarshal(raw, &p)
+		c, ok := s.cards[p.ContactID]
+		if !ok {
+			return nil, nil, notFound(p.ContactID)
+		}
+		data, has := s.photos[c.ID]
+		if !has || c.Photo == "" {
+			return api.ContactPhotoResult{State: api.ContactPhotoStateNone, Revision: c.Revision}, nil, nil
+		}
+		var changed *api.ContactsChangedNotification
+		if c.Photo == api.ContactPhotoRemote {
+			// "Fetched" now, as the daemon does from Microsoft 365.
+			c.Photo = api.ContactPhotoReady
+			changed = &api.ContactsChangedNotification{AccountID: s.book(c.BookID).AccountID, BookIDs: []api.AddressBookID{c.BookID}}
+		}
+		return api.ContactPhotoResult{State: api.ContactPhotoStateReady, MIME: "image/jpeg", Data: data, Revision: c.Revision}, changed, nil
 	case api.MethodContactCreate:
 		var p api.ContactCreateParams
 		_ = json.Unmarshal(raw, &p)
@@ -286,6 +337,7 @@ func (s *SampleCaller) answer(method string, raw json.RawMessage) (any, *api.Con
 		n, _ := strconv.Atoi(strings.TrimPrefix(c.Revision, "r"))
 		card := p.Card
 		card.ID, card.BookID, card.ReadOnly, card.Revision = c.ID, c.BookID, c.ReadOnly, fmt.Sprintf("r%d", n+1)
+		card.Photo = c.Photo // contact.update never changes a photo (F1)
 		s.cards[c.ID] = &card
 		return api.ContactUpdateResult{Revision: card.Revision}, &api.ContactsChangedNotification{AccountID: s.book(c.BookID).AccountID, BookIDs: []api.AddressBookID{c.BookID}}, nil
 	case api.MethodContactDelete:
@@ -361,4 +413,30 @@ func (s *SampleCaller) list(p api.ContactListParams) api.ContactListResult {
 	start := min(max(p.Offset, 0), len(match))
 	end := min(start+limit, len(match))
 	return api.ContactListResult{Contacts: match[start:end], Total: len(match)}
+}
+
+// samplePhoto is an invented photo: a JPEG of 96 × 96 px, a head and
+// shoulders in white on tint, shaped by variant; never anyone's picture.
+func samplePhoto(tint color.RGBA, variant int) []byte {
+	const size = 96
+	img := image.NewRGBA(image.Rect(0, 0, size, size))
+	headR := 18 + variant*2
+	for y := range size {
+		for x := range size {
+			// A light gradient over the tint.
+			k := 0.75 + 0.25*float64(y)/size
+			c := color.RGBA{uint8(float64(tint.R) * k), uint8(float64(tint.G) * k), uint8(float64(tint.B) * k), 0xff}
+			dx, dy := x-size/2, y-36
+			sx, sy := x-size/2, y-size-10
+			if dx*dx+dy*dy <= headR*headR || sx*sx/2+sy*sy <= 46*46 {
+				c = color.RGBA{0xf4, 0xf1, 0xec, 0xff}
+			}
+			img.SetRGBA(x, y, c)
+		}
+	}
+	var b bytes.Buffer
+	if err := jpeg.Encode(&b, img, &jpeg.Options{Quality: 85}); err != nil {
+		return nil
+	}
+	return b.Bytes()
 }
