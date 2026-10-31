@@ -1699,6 +1699,22 @@ the revision; a stale revision or the server's 412 / changed `changeKey`
 is `contactConflict` with the server's version, which the cache stores at
 once.
 
+**Photos** (read only, [plans/address-book.md §9](plans/address-book.md),
+migration 0024): `ab_photos` keeps one picture per contact with the
+revision it was made from and a state (`ok`, `none`, `refused`), apart
+from `ab_contacts` so that listings never read a BLOB, cascading from it.
+Every picture is re-encoded by `internal/contactphoto` (limits checked
+before decoding, JPEG/PNG/GIF of the standard library, a centred square
+of at most 256 px as JPEG or PNG within 64 KiB; `golang.org/x/image/draw`
+scales). A CardDAV card's embedded `PHOTO` is read when the engine stores
+the card (and, for cards stored before 0024, by a later pass); a Graph
+contact's photo is not in its delta, so `contact.photo` downloads it on
+demand once per revision (`core/contacts_photo.go`, at most 4 at a time
+per account) and notifies the book. A photo named by a link is never
+fetched. Clients show the photo instead of the initials in the contacts
+window and on mail by the sender's exact address (`contact.lookup`
+`withPhotos`).
+
 **Recipient completion.** `contact.search` merges the synchronised books
 (visible books of the sending account, or of every account with `scope:
 all`) with the collected addresses and, on Linux, the system address

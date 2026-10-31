@@ -915,8 +915,40 @@ server rewrote. It is handled as mail is:
   plain address is not indexed and not shown.
 - **Nothing is fetched from a contact**: no `PHOTO`, `LOGO`, `SOUND` or
   `KEY` URL, no `URL` (clients open only `http`/`https` web addresses,
-  through "Open this link?"; a phone number is only copied). Photos come
-  in a later stage and never from a URL.
+  through "Open this link?"; a phone number is only copied). A photo
+  named by a link would work as a tracking pixel in a shared book: such
+  a contact has no photo.
+- **Photos are a third party's image data** (read only,
+  [address-book.md §9](plans/address-book.md)). Only an embedded vCard
+  `PHOTO` (base64, read leniently, the `PHOTO` line may be as long as the
+  card, 1 MiB) and a Microsoft 365 contact's `photo/$value` (through the
+  account's Graph client and limiter, at most 4 MiB, 15 s, 4 downloads
+  per account; on demand only, once per revision) are read.
+  `internal/contactphoto` checks the size before decoding (at most
+  4 MiB of input, 40 Mpx and 160 MiB decoded, two decodes at a time),
+  tells the format by its bytes and decodes JPEG, PNG and GIF (first
+  frame) with the standard library only (no cgo, no other registered
+  decoder; a declared type that is no image is refused), crops, scales to
+  at most 256 px and encodes anew as JPEG or PNG within 64 KiB: EXIF,
+  GPS, colour profiles and comments never leave the daemon and clients
+  get only the daemon's bytes (`contact.photo`, base64 in JSON). A
+  failure is no photo, stored as refused so it is not tried again for
+  that revision; the log gets the contact id and an error class. The
+  corpus `testdata/vcard/photos` (a 40 000 × 40 000 PNG of a few
+  kilobytes, a 65 000² JPEG header, a truncated JPEG, a GIF of 300
+  frames, a wrong and a non-image type, base64 garbage, `data:` and
+  `https:` photos) and the fuzz targets `FuzzNormalize` and `FuzzParse`
+  cover it. The MCP bridge never returns a photo.
+- **A photo on mail is not authentication.** Clients put a contact's
+  photo on mail from that contact (list, conversation cards, chat
+  bubbles, the header) by the exact `From` address only
+  (`contact.lookup` `withPhotos`), never by a display name, and never on
+  the user's own mail. `From` is not authenticated: a forged `From`
+  shows the real contact's photo, just as it shows the contact's name and
+  initials today, and as Apple Mail and Outlook do. The photo comes only
+  from the user's own address books, never from the mail; tying it to a
+  DKIM verdict is not done (the daemon verifies DKIM only for bulk mail,
+  §7.2). This risk is accepted knowingly (address-book F11).
 - **Text only to the UI.** Names, notes, labels and book names are shown
   as plain text by every client; the MCP bridge puts them in its fence.
 - **Writes are the user's and patch.** `contact.create/update/delete`
