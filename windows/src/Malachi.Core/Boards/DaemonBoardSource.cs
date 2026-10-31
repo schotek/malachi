@@ -669,6 +669,7 @@ public sealed partial class DaemonBoardSource : IBoardSource, IBoardArchiveUndoe
             Id = m.Id,
             Folder = m.FolderId,
             From = Format.DisplayName(m.From),
+            Address = m.From.Email,
             Date = m.Date.ToUniversalTime(),
             Text = m.Text,
             Mine = m.Mine,

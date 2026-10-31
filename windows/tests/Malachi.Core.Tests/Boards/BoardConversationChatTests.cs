@@ -72,7 +72,7 @@ public sealed class BoardConversationChatTests
         var me = F.Ago(1);
         var c = F.Mk("c1", messages:
         [
-            new CaseMessage { Id = new MessageId("m1"), From = "Ann\u200B Example", Date = ann, Text = "hi" },
+            new CaseMessage { Id = new MessageId("m1"), From = "Ann\u200B Example", Address = "ann@example.com", Date = ann, Text = "hi" },
             new CaseMessage { Id = new MessageId("m2"), From = "Me Myself", Date = me, Text = "hello", Mine = true },
         ]);
         var d = Assert.IsType<Detail>(F.View([c]).Detail);
@@ -80,6 +80,12 @@ public sealed class BoardConversationChatTests
         var (theirs, mine) = (d.Messages[0], d.Messages[1]);
         Assert.Equal("Ann Example", theirs.From);
         Assert.Equal("Ann Example", theirs.Sender);
+        Assert.Equal("ann@example.com", theirs.Address);
+        var wire = new Malachi.Core.Api.BoardMessage
+        {
+            Id = new MessageId("m9"), FolderId = new FolderId("f_1"), From = new Malachi.Core.Api.Address { Name = "A", Email = "a@b.cz" }, Date = ann, Mine = false, Text = "",
+        };
+        Assert.Equal("a@b.cz", Malachi.Core.Boards.DaemonBoardSource.Convert(wire).Address);
         Assert.Equal(BText.You, mine.From);
         Assert.Equal("Me Myself", mine.Sender);
         Assert.Equal(ann, theirs.Date);

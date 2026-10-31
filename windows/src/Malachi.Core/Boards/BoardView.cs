@@ -638,6 +638,7 @@ public static partial class Board
                 {
                     Sender = sender,
                     Date = m.Date,
+                    Address = m.Address,
                 };
             }).ToList();
             var messagesNote = c.Messages is not null ? "" : c.MessagesFailed ? Text.MessagesFailed : Text.MessagesLoading;

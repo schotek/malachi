@@ -241,6 +241,13 @@ public static partial class Board
         /// <summary>The sender's name.</summary>
         public required string From { get; init; }
 
+        /// <summary>
+        /// From's address ("" for the samples): the chat bubble's avatar shows
+        /// the photo of the contact with exactly this address (case.go
+        /// CaseMessage.Address; docs/plans/address-book.md F10).
+        /// </summary>
+        public string Address { get; init; } = "";
+
         /// <summary>When it was sent.</summary>
         public required DateTimeOffset Date { get; init; }
 

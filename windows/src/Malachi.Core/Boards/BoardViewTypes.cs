@@ -349,6 +349,14 @@ public static partial class Board
         /// (Go's zero) shows none.
         /// </summary>
         public DateTimeOffset Date { get; init; }
+
+        /// <summary>
+        /// The sender's address ("" for the samples): the chat bubble's
+        /// avatar shows the photo of the contact with exactly this address
+        /// (view.go MessageCard.Address, F10); the user's own messages never
+        /// ask for one.
+        /// </summary>
+        public string Address { get; init; } = "";
     }
 
     /// <summary>The selected case in full. An empty string hides its block.</summary>
