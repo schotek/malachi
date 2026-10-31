@@ -3,7 +3,11 @@
 
 // Port of ui/internal/contactsctl samples.go (SamplesEnv, SamplesOn,
 // SampleCaller, NewSampleCaller, add, summary, answer, listed, count,
-// list); Go-first, no Swift counterpart.
+// list); Go-first, no Swift counterpart. The sample photos (contact.photo,
+// contact.lookup withPhotos, docs/plans/address-book.md §9) are Windows
+// first: three invented 48 px portraits drawn as PNG, two contacts with a
+// ready photo, one with a remote photo the first contact.photo "downloads"
+// and one remote contact that turns out to have none.
 //
 // DEVELOPMENT AID: the invented address books of MALACHI_CONTACTS_SAMPLES=1
 // (like MALACHI_CALENDAR_SAMPLES): an in-memory daemon that answers the
@@ -42,6 +46,7 @@ public sealed class ContactsSampleCaller : IContactsCaller
     private readonly List<AddressBook> books;
     private readonly Dictionary<ContactId, ContactCard> cards = [];
     private readonly List<ContactSummary> recent = [];
+    private readonly Dictionary<ContactId, (ContactPhotoAvailability State, byte[]? Data)> photos = [];
     private int next;
 
     /// <summary>contactsctl.NewSampleCaller: the sample daemon as of <paramref name="now"/>.</summary>
@@ -130,6 +135,20 @@ public sealed class ContactsSampleCaller : IContactsCaller
         {
             Add(c);
         }
+        // The photos: ready (stored), remote with a photo, remote without.
+        foreach (var (address, state, data) in new (string, string, string?)[]
+        {
+            ("jana.novakova@example.cz", ContactPhotoAvailability.Ready, PhotoA),
+            ("david@dvorak.example", ContactPhotoAvailability.Ready, PhotoB),
+            ("marie@example.cz", ContactPhotoAvailability.Remote, PhotoC),
+            ("karel@kucera.example", ContactPhotoAvailability.Remote, null),
+        })
+        {
+            if (cards.Values.FirstOrDefault(c => c.Emails.Any(e => e.Address == address)) is { } c)
+            {
+                photos[c.Id] = (new ContactPhotoAvailability(state), data is null ? null : Convert.FromBase64String(data));
+            }
+        }
         foreach (var a in new[] { "jan.horak@example.com", "objednavky@eshop.example", "petr.svoboda@example.com" })
         {
             recent.Add(new ContactSummary
@@ -143,6 +162,34 @@ public sealed class ContactsSampleCaller : IContactsCaller
             });
         }
     }
+
+    // Invented 48 px portraits (a head and shoulders on a gradient), PNG.
+    private const string PhotoA =
+        "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAIAAADYYG7QAAABp0lEQVR42s3O6SqEYRjG8euAHINj8B0RESIiRESIyJgZxgyz2LNm" +
+        "y5YtjJzC7PvqqzMw9XyZetf77p3pqd/n6/pj9+dXKgh8l6UCf7AsFXi/SlLB9mdJKvB8lKQC93tRKnC9FaWCjdeCVOB8KUgFjueC" +
+        "Jf6CPkt2YH/Ks1UitLA3YXvM8+jUCLxZrD7kGQxrBMYyVu5zVCZrBOo4lu9yJKQagbSPpdssCSOItI/FmywJI4i0j4XrLAkjiLSP" +
+        "+auMeYwawfwF5i4zJIwa0j5mL9IkjCDSPmbO0ySMINI+ps/SJIwg0j6mTlNUpBrqOCZPUgwmaxjLmDhO8RjW8GYxfpRk06lhb2Ls" +
+        "MGmJSoQlOxg9SEgFI/sJqWB4LyEVDO3EpYLBQFwqGPDH2Boam7SwN9Hvi1HpdChRx9HnjZlHSqlm/gK9W1Ez2CnVzByhxxM1ZEmN" +
+        "YPiFbndUn4U1gv4dujYjOiyvEXQe0emKaKlRjaB1io71sJaaBmmdot0ZVlXTGkH1F22OsKo6BKn+otUeUlWHINVftKyFlOpQIyiv" +
+        "0WwLKdUtSHn9Dwgfxxt7YvttAAAAAElFTkSuQmCC";
+
+    private const string PhotoB =
+        "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAIAAADYYG7QAAABo0lEQVR42s3OV05CURSF4TUPR+YAEAEREUVERER9cgY+2WvsNfbe" +
+        "a5zL7SZqOC/ktrN3Ljcn+Z7X+qF9J5QC7SuhFGifHUqB9pFUCrT3pFKgvXUqBdprSinQX1JKgf6cVgr0p4xSoD9mInE/2R7JDvSH" +
+        "Lra/CD/sTeh3WZ6AGtHEmoV+m2UIrRFN9GUYN91UkjUN1HEY1zkSUo1oouzDuMqRcIIo+zAue0g4QZR9GBd5Ek4QZR/GeV4eo0Y0" +
+        "SV/AOOsl4dRQ9mGeFkgYQaR9mCcFEk4QZR/mcR8JJ4iyD/Oon4pWQxyHeVhkkK2hL8M8KPKE17BmYe0PsAXUsDdh7ZUi8R8RxQ6s" +
+        "3ZJSYO0MKgXWdlkpsLbKSoG1OaQU2BsVtnTblB/2Juz1ClVAh0cZcRz22rA8UkpTlvQF7NWqDHZKU5bEEeyVaqhIakRT2Bfs5ZFg" +
+        "EdaIpsA72Eu1AJHXiCb/RziLNT8tqmnwO4WzMOqntUE+p3Dm655aWiOavH7hzNU9xRHk9QtndsxTHEFev3Bmxt1iqBFNrmv8TE+4" +
+        "xRbkvv4FFRNhkh3MnggAAAAASUVORK5CYII=";
+
+    private const string PhotoC =
+        "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAIAAADYYG7QAAABsElEQVR42s3OaSuEYRjF8fN95jNIUpKUpCQpSQopSUpSkpRkyDKy" +
+        "7/uWnWEMZsyMse9k3/I5qPuNerb7unrm6a7f63P+mPo5VwrGv0+VgtGvE6Vg+PNIKRj4iCoFfe8RpaDnLawUdL2GlALPS1ApaH8O" +
+        "KAWtT3u2eJ8rsmUHzY+7bH8RRtibaHrw85jUCLxZNN77GCxrBMYyGu62qSRrBOo46m+9JKQagbSPuptNEkYQaR+11xskjCDSPmqu" +
+        "1kgYQaR9VF+uymPUCPIXqLpYJmHUkPZReb5Ewggi7aPibJGEEUTaR/npAgkjiLSPsuN5KlINdRylR7MMkjWMZZREZ3gsa3izKD6c" +
+        "ZjOpYW+iMDJpi78IW3ZQEJ5QCvJDY0pB3sGoUpAbHFEKcgJDSkH2/iCb2+Uywt5E1l4/lUmHFnUcmf4+eaSU/+QvkLHTK4Od8p/M" +
+        "EdJ93ZZsqREsv5C23WXOxhrB/A6pW50mbK8RTB6R4vUYiVGNYHSK5M0OIzENMjpF0kabrpjWCLq/SFxv1eVAkO4vEtZadDkQpPuL" +
+        "+NVmLQdqBO014lbcWo4Faa9/AVfFNXVFgnXsAAAAAElFTkSuQmCC";
 
     /// <summary>
     /// A write changed the memory: the application hands it on as
@@ -244,7 +291,7 @@ public sealed class ContactsSampleCaller : IContactsCaller
                     var p = Read<ContactGetParams>(raw);
                     if (cards.TryGetValue(p.ContactId, out var c))
                     {
-                        return (new ContactGetResult { Contact = c }, null);
+                        return (new ContactGetResult { Contact = c with { Photo = PhotoOf(c.Id) } }, null);
                     }
                     if (recent.FirstOrDefault(r => r.Id == p.ContactId) is { } r)
                     {
@@ -276,7 +323,53 @@ public sealed class ContactsSampleCaller : IContactsCaller
                             }
                         }
                     }
-                    return (new ContactLookupResult { Known = known }, null);
+                    // withPhotos: the first contact by sort key with a photo of each address.
+                    var withPhotos = new Dictionary<string, ContactPhotoRef>(StringComparer.Ordinal);
+                    if (p.WithPhotos == true)
+                    {
+                        foreach (var a in p.Addresses)
+                        {
+                            var first = cards.Values
+                                .Where(c => Book(c.BookId).Visible && PhotoOf(c.Id) is not null
+                                    && c.Emails.Any(e => string.Equals(e.Address, a, StringComparison.OrdinalIgnoreCase)))
+                                .OrderBy(c => Summary(c).SortKey, StringComparer.Ordinal)
+                                .FirstOrDefault();
+                            if (first is not null && PhotoOf(first.Id) is { } state)
+                            {
+                                withPhotos[a] = new ContactPhotoRef { ContactId = first.Id, State = state };
+                            }
+                        }
+                    }
+                    return (new ContactLookupResult { Known = known, Photos = withPhotos }, null);
+                }
+            case "contact.photo":
+                {
+                    var p = Read<ContactPhotoParams>(raw);
+                    if (!cards.TryGetValue(p.ContactId, out var c))
+                    {
+                        throw NotFound(p.ContactId);
+                    }
+                    if (!photos.TryGetValue(c.Id, out var ph))
+                    {
+                        return (new ContactPhotoResult { State = ContactPhotoState.None, Revision = c.Revision }, null);
+                    }
+                    ContactsChangedNotification? fetched = null;
+                    if (ph.State.Value == ContactPhotoAvailability.Remote)
+                    {
+                        // "Downloaded": ready from now on, or gone for good, as the daemon does.
+                        if (ph.Data is null)
+                        {
+                            photos.Remove(c.Id);
+                        }
+                        else
+                        {
+                            photos[c.Id] = (ContactPhotoAvailability.Ready, ph.Data);
+                        }
+                        fetched = new ContactsChangedNotification { AccountId = Book(c.BookId).AccountId, BookIds = [c.BookId] };
+                    }
+                    return ph.Data is null
+                        ? (new ContactPhotoResult { State = ContactPhotoState.None, Revision = c.Revision }, fetched)
+                        : (new ContactPhotoResult { State = ContactPhotoState.Ready, Mime = "image/png", Data = ph.Data, Revision = c.Revision }, fetched);
                 }
             case "contact.create":
                 {
@@ -328,6 +421,7 @@ public sealed class ContactsSampleCaller : IContactsCaller
                         throw Fail(ErrorCode.AddressBookReadOnly, "read only");
                     }
                     cards.Remove(p.ContactId);
+                    photos.Remove(p.ContactId);
                     return (new EmptyResult(), new ContactsChangedNotification { AccountId = Book(c.BookId).AccountId, BookIds = [c.BookId] });
                 }
         }
@@ -359,7 +453,10 @@ public sealed class ContactsSampleCaller : IContactsCaller
 
     private int Count(AddressBookId id) => id == AddressBookId.Recent ? recent.Count : cards.Values.Count(c => c.BookId == id);
 
-    private static ContactSummary Summary(ContactCard c)
+    // The photo state of a contact; null none.
+    private ContactPhotoAvailability? PhotoOf(ContactId id) => photos.TryGetValue(id, out var ph) ? ph.State : null;
+
+    private ContactSummary Summary(ContactCard c)
     {
         var key = (c.Name.Family + " " + c.Name.Given).ToLowerInvariant().Trim();
         if (key.Length == 0)
@@ -381,6 +478,7 @@ public sealed class ContactsSampleCaller : IContactsCaller
             Section = sec,
             Org = c.Org,
             Email = c.Emails.Count > 0 ? c.Emails[0].Address : null,
+            Photo = PhotoOf(c.Id),
         };
     }
 

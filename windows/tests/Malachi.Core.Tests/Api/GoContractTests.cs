@@ -25,7 +25,7 @@ public sealed class GoContractTests
         var source = GoContract.ApiSource("methods.go");
         var constants = GoContract.StringConstants(source);
         var goMethods = GoContract.SliceIdentifiers(source, "AllMethods").Select(name => constants[name]).ToArray();
-        Assert.Equal(113, goMethods.Length);
+        Assert.Equal(114, goMethods.Length);
         Assert.Equal(goMethods, API.AllMethods);
         Assert.Equal(goMethods, API.Methods.Select(m => m.Name));
         Assert.Equal(ApiCodingTests.GoMethods, goMethods); // the Swift test's copy is current
@@ -159,6 +159,8 @@ public sealed class GoContractTests
         { nameof(AddressBookKind), "contacts_book.go", "AddressBookKind" },
         { nameof(ContactLabel), "contacts_book.go", "ContactLabel" },
         { nameof(ContactSearchScope), "contacts_book.go", "ContactSearchScope" },
+        { nameof(ContactPhotoAvailability), "contacts_book.go", "ContactPhotoAvailability" },
+        { nameof(ContactPhotoState), "contacts_book.go", "ContactPhotoState" },
     };
 
     /// <summary>
@@ -215,7 +217,9 @@ public sealed class GoContractTests
         var source = GoContract.ApiSource("contacts_book.go");
         var enums = GoContract.StringTypes(source).Where(t => GoContract.TypedStringConstants(source, t).Count > 0).ToArray();
         // AddressBookID is an identifier with two well-known values (AddressBookId.Recent, .All).
-        Assert.Equal(["AddressBookID", "AddressBookKind", "ContactLabel", "ContactSearchScope"], enums.Order(StringComparer.Ordinal));
+        Assert.Equal(
+            ["AddressBookID", "AddressBookKind", "ContactLabel", "ContactPhotoAvailability", "ContactPhotoState", "ContactSearchScope"],
+            enums.Order(StringComparer.Ordinal));
         Assert.Equal(GoContract.TypedStringConstants(source, "AddressBookID"), [AddressBookId.Recent.Value, AddressBookId.All.Value]);
         var structs = GoContract.Structs(source);
         var records = typeof(API).Assembly.GetTypes().Where(t =>
@@ -228,7 +232,8 @@ public sealed class GoContractTests
             Assert.True(records.Contains(record), $"contacts_book.go has a struct {name}, Malachi.Core.Api no record {record}");
         }
         Assert.Equal(["ContactDeleteResult"], structs.Where(s => s.Value.Count == 0).Select(s => s.Key));
-        Assert.Equal(15, GoContract.IntConstants(source).Count);
+        Assert.Equal(17, GoContract.IntConstants(source).Count);
+        Assert.Equal(GoContract.Seconds(source, "ContactPhotoTimeout"), TimeSpan.FromSeconds(15));
     }
 
     private static void AssertWireEnum(string type, string file, string goType)
@@ -274,7 +279,7 @@ public sealed class GoContractTests
             }
         }
         var limits = typeof(API.Limits).GetFields(BindingFlags.Public | BindingFlags.Static).Where(f => f.IsLiteral).ToArray();
-        Assert.Equal(91, limits.Length);
+        Assert.Equal(93, limits.Length);
         foreach (var limit in limits)
         {
             // Go spells the identifier "IDs"; C# "Ids".
@@ -337,6 +342,7 @@ public sealed class GoContractTests
         var wizard = GoContract.Source("ui", "internal", "accountwizard", "wizard.go");
         Assert.Equal(GoContract.Seconds(wizard, "discoverTimeout"), RpcTimeouts.Discover);
         Assert.Equal(GoContract.Seconds(wizard, "testTimeout"), RpcTimeouts.Test);
+        Assert.Equal(GoContract.Seconds(GoContract.Source("ui", "internal", "contactsctl", "photos.go"), "PhotoTimeout"), RpcTimeouts.ContactPhoto);
         Assert.Equal(GoContract.Seconds(wizard, "addTimeout"), RpcTimeouts.Save);
         Assert.Equal(GoContract.Seconds(wizard, "oauthStartTimeout"), RpcTimeouts.OAuthStart);
         Assert.Equal(GoContract.Seconds(wizard, "oauthWaitCallTimeout"), RpcTimeouts.OAuthWaitCall);

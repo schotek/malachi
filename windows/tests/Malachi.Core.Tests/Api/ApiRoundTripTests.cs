@@ -138,7 +138,7 @@ public sealed class ApiRoundTripTests
         """{"serverUrl":"https://cloud.example.org/remote.php/dav","principalUrl":"https://cloud.example.org/remote.php/dav/principals/users/jana/","homeSetUrl":"https://cloud.example.org/remote.php/dav/calendars/jana/","username":"jana","certificateSha256":"@pin@","mailAccountId":"acc_2","scheduling":"client","addressBookHomeSetUrl":"https://cloud.example.org/remote.php/dav/addressbooks/users/jana/","contacts":true}""";
 
     private const string ContactCardJson =
-        """{"id":"p_1","bookId":"b_1","readOnly":false,"revision":"\"e1\"","name":{"given":"Jana","family":"Nováková"},"displayName":"Jana Nováková","nickname":"Janka","org":"Acme","title":"CTO","emails":[{"label":"work","address":"jana@example.org"}],"phones":[{"label":"mobile","number":"+420 600 000 000"}],"addresses":[{"label":"home","city":"Praha","country":"CZ"}],"urls":[{"url":"https://example.org"}],"birthday":{"month":2,"day":29},"note":"plain text"}""";
+        """{"id":"p_1","bookId":"b_1","readOnly":false,"revision":"\"e1\"","name":{"given":"Jana","family":"Nováková"},"displayName":"Jana Nováková","nickname":"Janka","org":"Acme","title":"CTO","emails":[{"label":"work","address":"jana@example.org"}],"phones":[{"label":"mobile","number":"+420 600 000 000"}],"addresses":[{"label":"home","city":"Praha","country":"CZ"}],"urls":[{"url":"https://example.org"}],"birthday":{"month":2,"day":29},"note":"plain text","photo":"remote"}""";
 
     private const string CalConfig =
         """{"sync":true,"disabledCalendars":["/remote.php/dav/calendars/jana/old/"],"defaultCalendar":"/remote.php/dav/calendars/jana/personal/","keepDays":365,"showUnanswered":false,"invitationCard":true,"afterAnswer":"archive"}""";
@@ -384,7 +384,7 @@ public sealed class ApiRoundTripTests
         [nameof(ContactConflictData)] = Case<ContactConflictData>("""{"server":@contactcard@}"""),
         [nameof(ContactFieldData)] = Case<ContactFieldData>("""{"field":"emails[2].address"}"""),
         [nameof(AddressBook)] = Case<AddressBook>("""{"id":"b_1","accountId":"acc_1","name":"Contacts","kind":"graph","readOnly":false,"searchOnly":true,"visible":true,"count":318,"lastSyncAt":"2026-10-30T10:00:00Z"}"""),
-        [nameof(ContactSummary)] = Case<ContactSummary>("""{"id":"p_1","bookId":"b_1","displayName":"Jana Nováková","sortKey":"nováková jana","section":"N","org":"Acme","email":"jana@example.org"}"""),
+        [nameof(ContactSummary)] = Case<ContactSummary>("""{"id":"p_1","bookId":"b_1","displayName":"Jana Nováková","sortKey":"nováková jana","section":"N","org":"Acme","email":"jana@example.org","photo":"ready"}"""),
         [nameof(ContactName)] = Case<ContactName>("""{"given":"Jana","family":"Nováková","middle":"M","prefix":"Ing.","suffix":"Ph.D."}"""),
         [nameof(ContactEmail)] = Case<ContactEmail>("""{"label":"work","address":"jana@example.org"}"""),
         [nameof(ContactPhone)] = Case<ContactPhone>("""{"label":"Kancelář","number":"+420 600 000 000"}"""),
@@ -400,8 +400,11 @@ public sealed class ApiRoundTripTests
         [nameof(ContactListResult)] = Case<ContactListResult>("""{"contacts":[{"id":"p_1","bookId":"b_1","displayName":"Jana","sortKey":"jana","section":"J"}],"total":412}"""),
         [nameof(ContactGetParams)] = Case<ContactGetParams>("""{"contactId":"p_1"}"""),
         [nameof(ContactGetResult)] = Case<ContactGetResult>("""{"contact":@contactcard@}"""),
-        [nameof(ContactLookupParams)] = Case<ContactLookupParams>("""{"addresses":["jana@example.org","x@example.net"]}"""),
-        [nameof(ContactLookupResult)] = Case<ContactLookupResult>("""{"known":{"jana@example.org":"p_1"}}"""),
+        [nameof(ContactLookupParams)] = Case<ContactLookupParams>("""{"addresses":["jana@example.org","x@example.net"],"withPhotos":true}"""),
+        [nameof(ContactLookupResult)] = Case<ContactLookupResult>("""{"known":{"jana@example.org":"p_1"},"photos":{"jana@example.org":{"contactId":"p_2","state":"remote"}}}"""),
+        [nameof(ContactPhotoRef)] = Case<ContactPhotoRef>("""{"contactId":"p_1","state":"ready"}"""),
+        [nameof(ContactPhotoParams)] = Case<ContactPhotoParams>("""{"contactId":"p_1"}"""),
+        [nameof(ContactPhotoResult)] = Case<ContactPhotoResult>("""{"state":"ready","mime":"image/png","data":"iVBORw0KGgo=","revision":"\"e1\""}"""),
         [nameof(ContactCreateParams)] = Case<ContactCreateParams>("""{"bookId":"b_1","card":@contactcard@}"""),
         [nameof(ContactCreateResult)] = Case<ContactCreateResult>("""{"contactId":"p_2","revision":"\"e1\""}"""),
         [nameof(ContactUpdateParams)] = Case<ContactUpdateParams>("""{"contactId":"p_1","revision":"\"e1\"","card":@contactcard@}"""),

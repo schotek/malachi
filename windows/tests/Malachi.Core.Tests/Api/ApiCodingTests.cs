@@ -1332,6 +1332,7 @@ public sealed partial class ApiCodingTests
         "addressBook.list", "addressBook.set",
         "contact.list", "contact.get", "contact.lookup",
         "contact.create", "contact.update", "contact.delete",
+        "contact.photo",
     ];
 
     [Fact]
@@ -1422,7 +1423,7 @@ public sealed partial class ApiCodingTests
             "account.discoverCalDAV", "account.listCalDAVCalendars", "calendar.freeBusy", "calendar.findFreeTime", "event.list",
             "event.create", "event.update", "event.delete", "event.respond", "invitation.respond", "invitation.applyCancel",
             "account.detectEway", "crm.lookup", "crm.search", "crm.save", "crm.remove",
-            "contact.create", "contact.update", "contact.delete",
+            "contact.create", "contact.update", "contact.delete", "contact.photo",
         };
         foreach (var m in API.Methods.Where(m => !special.Contains(m.Name)))
         {

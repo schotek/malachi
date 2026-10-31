@@ -105,4 +105,10 @@ public static class RpcTimeouts
     /// <c>WriteTimeout</c>; Swift's descriptors' 60 s).
     /// </summary>
     public static readonly TimeSpan ContactWrite = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// <c>contact.photo</c>: the daemon may download a Microsoft 365 photo
+    /// (api.ContactPhotoTimeout, 15 s) first (contactsctl <c>PhotoTimeout</c>).
+    /// </summary>
+    public static readonly TimeSpan ContactPhoto = TimeSpan.FromSeconds(20);
 }

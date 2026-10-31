@@ -14,7 +14,14 @@
 // again by ContactBook (Malachi.Core.Contacts) and shown as plain text only
 // (TextBlock.Text).
 //
-// Windows: Go's ContactURL is ContactUrl. The members Go leaves out when
+// Contact photos (docs/plans/address-book.md §9, F8): ContactSummary.Photo
+// and ContactCard.Photo say whether a contact has a photo (ready) or may
+// have one (remote, a Microsoft 365 photo not fetched yet);
+// contact.photo returns it (the daemon's own JPEG or PNG, base64 on the wire,
+// a byte array here); contact.lookup with WithPhotos names, by address, the
+// contact whose photo stands for a sender.
+//
+// Windows: Go's ContactURL is ContactUrl, ContactPhotoResult.MIME is Mime. The members Go leaves out when
 // empty (omitempty) are nullable here and read "" as absent, as elsewhere in
 // the mirror; ContactLabel's none is its default value, which a record
 // leaves out (WhenWritingDefault), and ContactBirthday.Year 0 likewise. The
@@ -126,6 +133,48 @@ public readonly record struct ContactLabel : IWireEnumeration<ContactLabel>
 
     /// <summary>The wire string.</summary>
     public override string ToString() => Value;
+}
+
+/// <summary>
+/// api.ContactPhotoAvailability: what <see cref="ContactSummary.Photo"/>,
+/// <see cref="ContactCard.Photo"/> and <see cref="ContactPhotoRef.State"/> say
+/// of a contact's photo; absent (null) is no photo. Open: an unknown value is
+/// no photo.
+/// </summary>
+[JsonConverter(typeof(StringWireValueConverter<ContactPhotoAvailability>))]
+public readonly record struct ContactPhotoAvailability(string Value) : IWireEnumeration<ContactPhotoAvailability>
+{
+    /// <summary>The daemon has the photo; <c>contact.photo</c> returns it at once.</summary>
+    public const string Ready = "ready";
+
+    /// <summary>A Microsoft 365 contact whose photo, if any, is not fetched for its revision yet; <c>contact.photo</c> fetches it.</summary>
+    public const string Remote = "remote";
+
+    /// <summary>The value of a wire string.</summary>
+    public static implicit operator ContactPhotoAvailability(string value) => new(value);
+
+    /// <summary>Whether the contact has, or may have, a photo (ready or remote; contacts.PhotoState.MayHave).</summary>
+    public bool MayHave => Value is Ready or Remote;
+
+    /// <summary>The wire string.</summary>
+    public override string ToString() => Value ?? "";
+}
+
+/// <summary>api.ContactPhotoState: <c>contact.photo</c>'s answer. Open: an unknown value is no photo.</summary>
+[JsonConverter(typeof(StringWireValueConverter<ContactPhotoState>))]
+public readonly record struct ContactPhotoState(string Value) : IWireEnumeration<ContactPhotoState>
+{
+    /// <summary><see cref="ContactPhotoResult.Mime"/> and <see cref="ContactPhotoResult.Data"/> hold the photo.</summary>
+    public const string Ready = "ready";
+
+    /// <summary>No photo, or one the daemon refused.</summary>
+    public const string None = "none";
+
+    /// <summary>The value of a wire string.</summary>
+    public static implicit operator ContactPhotoState(string value) => new(value);
+
+    /// <summary>The wire string.</summary>
+    public override string ToString() => Value ?? "";
 }
 
 /// <summary>api.ContactSearchScope: which address books <c>contact.search</c> reads (the setting contacts-suggest-scope).</summary>
@@ -293,6 +342,10 @@ public sealed record ContactSummary
     /// <summary>The first address; null none.</summary>
     [JsonPropertyName("email")]
     public string? Email { get; init => field = string.IsNullOrEmpty(value) ? null : value; }
+
+    /// <summary>Whether the contact has a photo (<c>contact.photo</c>); null none. Never set in the recent book.</summary>
+    [JsonPropertyName("photo")]
+    public ContactPhotoAvailability? Photo { get; init => field = value is { Value.Length: > 0 } ? value : null; }
 }
 
 /// <summary>api.ContactName: the structured name (vCard N); null parts are none.</summary>
@@ -483,6 +536,10 @@ public sealed record ContactCard
     /// <summary>A plain-text note; null none.</summary>
     [JsonPropertyName("note")]
     public string? Note { get; init => field = string.IsNullOrEmpty(value) ? null : value; }
+
+    /// <summary>As <see cref="ContactSummary.Photo"/>. Ignored as input: <c>contact.update</c> never changes a photo.</summary>
+    [JsonPropertyName("photo")]
+    public ContactPhotoAvailability? Photo { get; init => field = value is { Value.Length: > 0 } ? value : null; }
 }
 
 // ----------------------------------------------------------------------
@@ -587,6 +644,10 @@ public sealed record ContactLookupParams
     [JsonPropertyName("addresses")]
     [JsonConverter(typeof(NullAsEmptyListConverter<string>))]
     public IReadOnlyList<string> Addresses { get; init => field = value ?? []; } = [];
+
+    /// <summary>Asks for <see cref="ContactLookupResult.Photos"/> too; false is written as absent.</summary>
+    [JsonPropertyName("withPhotos")]
+    public bool? WithPhotos { get; init => field = value == true ? true : null; }
 }
 
 /// <summary>
@@ -599,6 +660,65 @@ public sealed record ContactLookupResult
     [JsonPropertyName("known")]
     public IReadOnlyDictionary<string, ContactId> Known { get; init => field = value ?? new Dictionary<string, ContactId>(StringComparer.Ordinal); }
         = new Dictionary<string, ContactId>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Only with <see cref="ContactLookupParams.WithPhotos"/>; null when
+    /// empty: each address a contact of a visible book with a photo (ready
+    /// or remote) has, to that contact (the first by sort key, which may be
+    /// another contact than <see cref="Known"/> names). Never from the
+    /// recent book.
+    /// </summary>
+    [JsonPropertyName("photos")]
+    public IReadOnlyDictionary<string, ContactPhotoRef>? Photos { get; init => field = value is { Count: > 0 } ? value : null; }
+}
+
+/// <summary>api.ContactPhotoRef: the contact whose photo stands for an address.</summary>
+public sealed record ContactPhotoRef
+{
+    /// <summary>The contact.</summary>
+    [JsonPropertyName("contactId")]
+    public required ContactId ContactId { get; init; }
+
+    /// <summary>Ready or remote.</summary>
+    [JsonPropertyName("state")]
+    public required ContactPhotoAvailability State { get; init; }
+}
+
+/// <summary>api.ContactPhotoParams.</summary>
+public sealed record ContactPhotoParams
+{
+    /// <summary>The contact.</summary>
+    [JsonPropertyName("contactId")]
+    public required ContactId ContactId { get; init; }
+}
+
+/// <summary>
+/// api.ContactPhotoResult: a contact's photo. <see cref="Revision"/> is the
+/// contact's version the photo was made from; a client keeps a photo until
+/// a summary or card shows another revision or notify.contactsChanged names
+/// its book. <see cref="Mime"/> and <see cref="Data"/> are set only when
+/// <see cref="State"/> is ready: the daemon's own JPEG or PNG (at most
+/// <see cref="API.Limits.MaxContactPhotoBytes"/>, a square of at most
+/// <see cref="API.Limits.MaxContactPhotoPixels"/>), never the server's bytes.
+/// </summary>
+public sealed record ContactPhotoResult
+{
+    /// <summary>Ready or none.</summary>
+    [JsonPropertyName("state")]
+    public required ContactPhotoState State { get; init; }
+
+    /// <summary>image/jpeg or image/png; null without a photo.</summary>
+    [JsonPropertyName("mime")]
+    public string? Mime { get; init => field = string.IsNullOrEmpty(value) ? null : value; }
+
+    /// <summary>The image; base64 on the wire, null without a photo.</summary>
+    [JsonPropertyName("data")]
+    public byte[]? Data { get; init => field = value is { Length: > 0 } ? value : null; }
+
+    /// <summary>The contact's revision the photo was made from; always written.</summary>
+    [JsonPropertyName("revision")]
+    [JsonConverter(typeof(NullAsEmptyStringConverter))]
+    public string Revision { get; init => field = value ?? ""; } = "";
 }
 
 /// <summary>api.ContactCreateParams.</summary>

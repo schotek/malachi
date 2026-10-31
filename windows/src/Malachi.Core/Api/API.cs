@@ -629,6 +629,10 @@ public static class API
     public static readonly RpcMethod<ContactDeleteParams, EmptyResult> ContactDelete =
         new("contact.delete", RpcTimeouts.ContactWrite, Wire.ContactDeleteParams, Wire.EmptyResult);
 
+    /// <summary><c>contact.photo</c>: a contact's photo; a Microsoft 365 one is downloaded first (contactsctl PhotoTimeout).</summary>
+    public static readonly RpcMethod<ContactPhotoParams, ContactPhotoResult> ContactPhoto =
+        new("contact.photo", RpcTimeouts.ContactPhoto, Wire.ContactPhotoParams, Wire.ContactPhotoResult);
+
     // Tables
 
     /// <summary>Every method, in the order of methods.go.</summary>
@@ -670,6 +674,7 @@ public static class API
         AddressBookList, AddressBookSet,
         ContactList, ContactGet, ContactLookup,
         ContactCreate, ContactUpdate, ContactDelete,
+        ContactPhoto,
     ];
 
     /// <summary>api.AllMethods: every callable method name.</summary>
@@ -1031,5 +1036,11 @@ public static class API
 
         /// <summary>api.MaxContactURLs: <see cref="ContactCard.Urls"/>.</summary>
         public const int MaxContactURLs = 20;
+
+        /// <summary>api.MaxContactPhotoBytes: <see cref="ContactPhotoResult.Data"/>.</summary>
+        public const int MaxContactPhotoBytes = 64 << 10;
+
+        /// <summary>api.MaxContactPhotoPixels: a side of the photo's square.</summary>
+        public const int MaxContactPhotoPixels = 256;
     }
 }
