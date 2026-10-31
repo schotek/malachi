@@ -18,16 +18,16 @@ import (
 // absent = none).
 type photoDaemon struct {
 	*daemon
-	refs map[string]photoRef
+	refs map[string]api.ContactPhotoRef
 	revs map[api.ContactID]string
 }
 
 func newPhotoDaemon() (*photoDaemon, *loop) {
-	d := &photoDaemon{daemon: newDaemon(), refs: map[string]photoRef{}, revs: map[api.ContactID]string{}}
+	d := &photoDaemon{daemon: newDaemon(), refs: map[string]api.ContactPhotoRef{}, revs: map[api.ContactID]string{}}
 	d.on(api.MethodContactLookup, func(raw json.RawMessage) (any, error) {
-		var p lookupPhotosParams
+		var p api.ContactLookupParams
 		_ = json.Unmarshal(raw, &p)
-		r := lookupPhotosResult{Known: map[string]api.ContactID{}, Photos: map[string]photoRef{}}
+		r := api.ContactLookupResult{Known: map[string]api.ContactID{}, Photos: map[string]api.ContactPhotoRef{}}
 		for _, a := range p.Addresses {
 			if ref, ok := d.refs[a]; ok {
 				r.Known[a] = ref.ContactID
@@ -38,14 +38,14 @@ func newPhotoDaemon() (*photoDaemon, *loop) {
 		}
 		return r, nil
 	})
-	d.on(methodContactPhoto, func(raw json.RawMessage) (any, error) {
-		var p photoParams
+	d.on(api.MethodContactPhoto, func(raw json.RawMessage) (any, error) {
+		var p api.ContactPhotoParams
 		_ = json.Unmarshal(raw, &p)
 		rev, ok := d.revs[p.ContactID]
 		if !ok {
-			return photoResult{State: "none"}, nil
+			return api.ContactPhotoResult{State: "none"}, nil
 		}
-		return photoResult{State: "ready", MIME: "image/jpeg", Data: []byte("jpeg:" + string(p.ContactID) + ":" + rev), Revision: rev}, nil
+		return api.ContactPhotoResult{State: "ready", MIME: "image/jpeg", Data: []byte("jpeg:" + string(p.ContactID) + ":" + rev), Revision: rev}, nil
 	})
 	return d, &loop{}
 }
@@ -53,8 +53,8 @@ func newPhotoDaemon() (*photoDaemon, *loop) {
 // photosAsked are the contact ids of contact.photo calls so far.
 func (d *photoDaemon) photosAsked() []api.ContactID {
 	var out []api.ContactID
-	for _, raw := range d.params[methodContactPhoto] {
-		var p photoParams
+	for _, raw := range d.params[api.MethodContactPhoto] {
+		var p api.ContactPhotoParams
 		_ = json.Unmarshal(raw, &p)
 		out = append(out, p.ContactID)
 	}
@@ -70,9 +70,9 @@ func newTestPhotos(d *photoDaemon, l *loop) (*Photos, *[]string) {
 
 func TestPhotosBySender(t *testing.T) {
 	d, l := newPhotoDaemon()
-	d.refs["jana@firma.cz"] = photoRef{ContactID: "p_1", State: "ready"}
-	d.refs["petr@firma.cz"] = photoRef{ContactID: "p_2", State: "remote"}
-	d.refs["eva@firma.cz"] = photoRef{ContactID: "p_3", State: ""} // a contact without a photo
+	d.refs["jana@firma.cz"] = api.ContactPhotoRef{ContactID: "p_1", State: "ready"}
+	d.refs["petr@firma.cz"] = api.ContactPhotoRef{ContactID: "p_2", State: "remote"}
+	d.refs["eva@firma.cz"] = api.ContactPhotoRef{ContactID: "p_3", State: ""} // a contact without a photo
 	d.revs["p_1"] = "e1"
 	p, keys := newTestPhotos(d, l)
 
@@ -82,7 +82,7 @@ func TestPhotosBySender(t *testing.T) {
 		t.Fatal("asked before the debounce")
 	}
 	l.fire()
-	var lp lookupPhotosParams
+	var lp api.ContactLookupParams
 	d.last(api.MethodContactLookup, &lp)
 	if d.count(api.MethodContactLookup) != 1 || !lp.WithPhotos ||
 		!slices.Equal(lp.Addresses, []string{"jana@firma.cz", "petr@firma.cz", "eva@firma.cz", "x@y.cz"}) {
@@ -113,7 +113,7 @@ func TestPhotosBySender(t *testing.T) {
 	// Answers are kept, also the negative ones: nothing is asked again.
 	p.Show("list", nil, []string{"x@y.cz", "eva@firma.cz", "jana@firma.cz"})
 	l.fire()
-	if d.count(api.MethodContactLookup) != 1 || d.count(methodContactPhoto) != 2 {
+	if d.count(api.MethodContactLookup) != 1 || d.count(api.MethodContactPhoto) != 2 {
 		t.Fatal("asked again")
 	}
 }
@@ -132,7 +132,7 @@ func TestPhotosBatches(t *testing.T) {
 		t.Fatalf("batches %d", n)
 	}
 	for _, raw := range d.params[api.MethodContactLookup] {
-		var lp lookupPhotosParams
+		var lp api.ContactLookupParams
 		_ = json.Unmarshal(raw, &lp)
 		if len(lp.Addresses) > api.MaxContactLookupAddresses {
 			t.Fatal("a batch over the limit")
@@ -181,7 +181,7 @@ func TestPhotosByContact(t *testing.T) {
 	// "none" is remembered.
 	p.Show("contacts", []ContactRef{{ID: "p_2", Book: "b_1", State: contacts.PhotoRemote}}, nil)
 	l.run()
-	if d.count(methodContactPhoto) != 2 {
+	if d.count(api.MethodContactPhoto) != 2 {
 		t.Fatal("none asked again")
 	}
 	// The list reports a new state: asked again.
@@ -203,7 +203,7 @@ func TestPhotosConcurrency(t *testing.T) {
 	}
 	p, _ := newTestPhotos(d, l)
 	p.Show("contacts", refs, nil)
-	if n := d.count(methodContactPhoto); n != MaxPhotoFetches {
+	if n := d.count(api.MethodContactPhoto); n != MaxPhotoFetches {
 		t.Fatalf("%d at once", n)
 	}
 	// Nearest first; the next start as the first answers come.
@@ -213,27 +213,27 @@ func TestPhotosConcurrency(t *testing.T) {
 	f := l.queue[0]
 	l.queue = l.queue[1:]
 	f()
-	if n := d.count(methodContactPhoto); n != MaxPhotoFetches+1 {
+	if n := d.count(api.MethodContactPhoto); n != MaxPhotoFetches+1 {
 		t.Fatalf("after one answer %d", n)
 	}
 	// What scrolled away is not asked.
 	p.Show("contacts", refs[:6], nil)
 	l.run()
-	if n := d.count(methodContactPhoto); n != 6 {
+	if n := d.count(api.MethodContactPhoto); n != 6 {
 		t.Fatalf("asked %d", n)
 	}
 }
 
 func TestPhotosChanged(t *testing.T) {
 	d, l := newPhotoDaemon()
-	d.refs["jana@firma.cz"] = photoRef{ContactID: "p_1", State: "ready"}
+	d.refs["jana@firma.cz"] = api.ContactPhotoRef{ContactID: "p_1", State: "ready"}
 	d.revs["p_1"] = "e1"
 	d.revs["p_9"] = "e1"
 	p, keys := newTestPhotos(d, l)
 	p.Show("list", nil, []string{"jana@firma.cz", "x@y.cz"})
 	p.Show("contacts", []ContactRef{{ID: "p_9", Book: "b_2", State: contacts.PhotoReady}}, nil)
 	l.fire()
-	if d.count(methodContactPhoto) != 2 {
+	if d.count(api.MethodContactPhoto) != 2 {
 		t.Fatal("setup")
 	}
 	*keys = nil
@@ -241,20 +241,20 @@ func TestPhotosChanged(t *testing.T) {
 	// The recent book only: nothing.
 	p.Changed(api.ContactsChangedNotification{BookIDs: []api.AddressBookID{api.AddressBookRecent}})
 	l.fire()
-	if d.count(api.MethodContactLookup) != 1 || d.count(methodContactPhoto) != 2 {
+	if d.count(api.MethodContactLookup) != 1 || d.count(api.MethodContactPhoto) != 2 {
 		t.Fatal("the recent book changed something")
 	}
 
 	// Book b_1 changed: senders (book unknown) and negatives are asked
 	// again, p_9 of b_2 is not; the photo stays shown meanwhile.
-	d.refs["x@y.cz"] = photoRef{ContactID: "p_5", State: "ready"}
+	d.refs["x@y.cz"] = api.ContactPhotoRef{ContactID: "p_5", State: "ready"}
 	d.revs["p_5"] = "e1"
 	p.Changed(api.ContactsChangedNotification{AccountID: "acc_m", BookIDs: []api.AddressBookID{"b_1"}})
 	if _, ok := p.ForSender("jana@firma.cz"); !ok {
 		t.Fatal("the photo went away before the new answer")
 	}
 	l.fire()
-	var lp lookupPhotosParams
+	var lp api.ContactLookupParams
 	d.last(api.MethodContactLookup, &lp)
 	if !slices.Equal(lp.Addresses, []string{"jana@firma.cz", "x@y.cz"}) {
 		t.Fatalf("asked again %v", lp.Addresses)
@@ -311,18 +311,18 @@ func TestPhotosFailures(t *testing.T) {
 	if d.count(api.MethodContactLookup) != 1 {
 		t.Fatal("a failed lookup repeated")
 	}
-	d.fail(methodContactPhoto, &api.Error{Code: api.CodeUnavailable})
+	d.fail(api.MethodContactPhoto, &api.Error{Code: api.CodeUnavailable})
 	p.Show("contacts", []ContactRef{{ID: "p_1", Book: "b_1", State: contacts.PhotoRemote}}, nil)
 	l.run()
 	p.Show("contacts", []ContactRef{{ID: "p_1", Book: "b_1", State: contacts.PhotoRemote}}, nil)
 	l.run()
-	if d.count(methodContactPhoto) != 1 {
+	if d.count(api.MethodContactPhoto) != 1 {
 		t.Fatal("a failed photo repeated")
 	}
 	// A change asks again.
 	p.Changed(api.ContactsChangedNotification{})
 	l.fire()
-	if d.count(api.MethodContactLookup) != 2 || d.count(methodContactPhoto) != 2 {
+	if d.count(api.MethodContactLookup) != 2 || d.count(api.MethodContactPhoto) != 2 {
 		t.Fatal("not asked after a change")
 	}
 }
@@ -369,17 +369,17 @@ func TestPhotosLRU(t *testing.T) {
 	for i := range MaxPhotos + 20 {
 		all = append(all, ref(1000+i))
 	}
-	n := d.count(methodContactPhoto)
+	n := d.count(api.MethodContactPhoto)
 	p.Show("contacts", all, nil)
 	l.run()
-	if got := d.count(methodContactPhoto) - n; got != MaxPhotos {
+	if got := d.count(api.MethodContactPhoto) - n; got != MaxPhotos {
 		t.Fatalf("fetched %d", got)
 	}
 }
 
 func TestPhotosOwnAndReset(t *testing.T) {
 	d, l := newPhotoDaemon()
-	d.refs["jana@firma.cz"] = photoRef{ContactID: "p_1", State: "ready"}
+	d.refs["jana@firma.cz"] = api.ContactPhotoRef{ContactID: "p_1", State: "ready"}
 	d.revs["p_1"] = "e1"
 	p, _ := newTestPhotos(d, l)
 	// The user's own message never asks (its avatar has no Sender).

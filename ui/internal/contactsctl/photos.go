@@ -309,16 +309,16 @@ func (p *Photos) flush() {
 			p.asking[a] = true
 		}
 		gen := p.gen
-		call(p.Opts, api.MethodContactLookup, lookupPhotosParams{Addresses: part, WithPhotos: true}, 0,
-			func(r *lookupPhotosResult, e *api.Error) { p.answered(gen, part, r, e) })
+		call(p.Opts, api.MethodContactLookup, api.ContactLookupParams{Addresses: part, WithPhotos: true}, 0,
+			func(r *api.ContactLookupResult, e *api.Error) { p.answered(gen, part, r, e) })
 	}
 }
 
-func (p *Photos) answered(gen int, asked []string, r *lookupPhotosResult, e *api.Error) {
+func (p *Photos) answered(gen int, asked []string, r *api.ContactLookupResult, e *api.Error) {
 	if gen != p.gen {
 		return
 	}
-	got := map[string]photoRef{}
+	got := map[string]api.ContactPhotoRef{}
 	if r != nil {
 		for a, ref := range r.Photos {
 			got[contacts.NormalAddress(a)] = ref
@@ -419,8 +419,8 @@ func (p *Photos) pump() {
 func (p *Photos) fetch(id api.ContactID) {
 	p.fetching[id] = true
 	gen := p.gen
-	call(p.Opts, methodContactPhoto, photoParams{ContactID: id}, PhotoTimeout,
-		func(r *photoResult, e *api.Error) {
+	call(p.Opts, api.MethodContactPhoto, api.ContactPhotoParams{ContactID: id}, PhotoTimeout,
+		func(r *api.ContactPhotoResult, e *api.Error) {
 			delete(p.fetching, id)
 			if gen == p.gen {
 				p.fetched(id, r, e)
@@ -429,7 +429,7 @@ func (p *Photos) fetch(id api.ContactID) {
 		})
 }
 
-func (p *Photos) fetched(id api.ContactID, r *photoResult, e *api.Error) {
+func (p *Photos) fetched(id api.ContactID, r *api.ContactPhotoResult, e *api.Error) {
 	delete(p.stale, id)
 	old, had := p.cache[id]
 	switch {
