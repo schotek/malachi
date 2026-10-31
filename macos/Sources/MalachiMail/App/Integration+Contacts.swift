@@ -23,6 +23,9 @@ final class AppContacts {
     let samples = SampleContactsCaller.requested
     let options: ContactsOptions
     let lookup: ContactsLookupController
+    /// The contact photos of every avatar of the application
+    /// (`ContactsPhotosController` and the views' decoded images).
+    let photos: ContactPhotoViews
 
     /// addressBook.list and account.list as last answered.
     private(set) var books: [AddressBook] = []
@@ -37,6 +40,8 @@ final class AppContacts {
     var signInURL: (@MainActor (AccountID) async -> SyncController.SignInURL)?
 
     private var tokens: [NotificationHub.Token] = []
+    /// The connection as last reported (nil before the first report).
+    private var wasConnected: Bool?
     private var refreshGen = 0
     private var window: ContactsWindowController?
 
@@ -46,14 +51,22 @@ final class AppContacts {
         options = ContactsOptions(
             caller: caller, format: ContactBook.strftime(locale: .current), rpcText: { what, error in rpcErrorText(what, error) })
         lookup = ContactsLookupController(options: options)
+        photos = ContactPhotoViews(options: options)
         Self.shared = self
         tokens = [
             state.notifications.addContactsChanged { [weak self] n in self?.contactsChanged(n) },
             state.notifications.addAccountsChanged { [weak self] in self?.refresh() },
             state.notifications.addConnectionState { [weak self] s in
-                if AppState.isConnected(s) {
-                    self?.refresh()
+                guard let self else { return }
+                let connected = AppState.isConnected(s)
+                if connected {
+                    self.refresh()
+                    if self.wasConnected == false && !self.samples {
+                        // A daemon that started again knows other photos.
+                        self.photos.reset()
+                    }
                 }
+                self.wasConnected = connected
             },
         ]
         if samples {
@@ -84,6 +97,7 @@ final class AppContacts {
 
     private func contactsChanged(_ n: ContactsChangedNotification) {
         lookup.invalidate()
+        photos.changed(n)
         refresh()
         window?.handle(n)
     }

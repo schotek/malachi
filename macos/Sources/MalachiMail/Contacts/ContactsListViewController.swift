@@ -46,6 +46,10 @@ final class ContactsListViewController: NSViewController, NSTableViewDataSource,
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
+        scroll.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(clipBoundsChanged(_:)), name: NSView.boundsDidChangeNotification, object: scroll.contentView
+        )
         banners.spacing = 0
         for v in [banners, scroll, empty] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
@@ -76,6 +80,7 @@ final class ContactsListViewController: NSViewController, NSTableViewDataSource,
         if new != rows {
             rows = new
             table.reloadData()
+            reportPhotos()
         }
         showSelection(c.selected)
         if c.consent != shownConsent {
@@ -89,6 +94,46 @@ final class ContactsListViewController: NSViewController, NSTableViewDataSource,
         empty.title = title
         empty.descriptionText = body
         scroll.isHidden = e != .none
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        reportPhotos()
+    }
+
+    override func viewDidDisappear() {
+        super.viewDidDisappear()
+        AppContacts.shared?.photos.show(Self.photoView)
+    }
+
+    @objc private func clipBoundsChanged(_ note: Foundation.Notification) {
+        reportPhotos()
+    }
+
+    /// The photos' name of the list (`ContactsPhotosController.show`).
+    static let photoView = "contacts"
+
+    /// Tells the photos which contacts the list shows: the visible rows
+    /// and a screen above and below (`ContactBook.nearRows`), nearest
+    /// first.
+    private func reportPhotos() {
+        guard let photos = AppContacts.shared?.photos else { return }
+        let visible = table.rows(in: scroll.contentView.documentVisibleRect)
+        guard visible.location != NSNotFound, visible.length > 0, !scroll.isHidden else {
+            photos.show(Self.photoView)
+            return
+        }
+        let near = ContactBook.nearRows(first: visible.location, last: visible.location + visible.length - 1, count: rows.count)
+        var refs: [ContactsPhotosController.ContactRef] = []
+        let first = visible.location..<min(visible.location + visible.length, rows.count)
+        let around = Array(near.from..<near.to).filter { !first.contains($0) }
+        for i in Array(first) + around {
+            // Every contact, also one without a photo: a state that
+            // changed asks again.
+            guard i >= 0, i < rows.count, let c = rows[i].contact else { continue }
+            refs.append(ContactsPhotosController.ContactRef(id: c.id, book: c.bookId, state: c.photo))
+        }
+        photos.show(Self.photoView, refs: refs)
     }
 
     /// Selects the row of `id` (none for nil) without telling the window.
@@ -187,10 +232,12 @@ final class ContactsSectionHeading: NSTableCellView {
 final class ContactsListCell: NSTableCellView {
     static let avatarSize: CGFloat = 32
 
+    let avatar = ContactInitialsView(size: ContactsListCell.avatarSize)
+
     init(row: ContactBook.Row) {
         super.init(frame: .zero)
-        let avatar = ContactInitialsView(size: Self.avatarSize)
         avatar.initials = row.initials
+        avatar.photoSource = ContactBook.avatarOfRow(row, photo: row.contact?.photo ?? ContactPhotoAvailability.none)
         let title = NSTextField(labelWithString: row.title)
         title.font = Typo.bodyMedium
         title.lineBreakMode = .byTruncatingTail
@@ -227,12 +274,32 @@ final class ContactsListCell: NSTableCellView {
     }
 }
 
-/// A contact's avatar: its initials in a grey disc (no photos in stage 1,
-/// A13), as the wireframes draw them.
+/// A contact's avatar: its initials in a grey disc, as the wireframes draw
+/// them, or its photo clipped to the circle when the contact has one and
+/// `AppContacts` has it (F9, `photoSource`).
 @MainActor
-final class ContactInitialsView: NSView {
+final class ContactInitialsView: NSView, ContactPhotoDisplay {
     var initials = "" {
         didSet { if initials != oldValue { needsDisplay = true } }
+    }
+
+    /// Whose photo replaces the initials (`ContactBook.avatarOfRow`,
+    /// `avatarOfDetail`); nil never shows one.
+    var photoSource: ContactBook.Avatar? {
+        didSet {
+            guard photoSource != oldValue else { return }
+            if photoSource?.mayShowPhoto == true {
+                AppContacts.shared?.photos.register(self)
+            }
+            needsDisplay = true
+        }
+    }
+
+    /// Whether the last drawing showed a photo (the dev steps read it).
+    private(set) var showsPhoto = false
+
+    func contactPhotoChanged(_ key: String) {
+        needsDisplay = true
     }
 
     private let size: CGFloat
@@ -255,6 +322,12 @@ final class ContactInitialsView: NSView {
     override var intrinsicContentSize: NSSize { NSSize(width: size, height: size) }
 
     override func draw(_ dirtyRect: NSRect) {
+        if let image = AppContacts.shared?.photos.image(for: photoSource) {
+            showsPhoto = true
+            ContactPhotoDrawing.draw(image, in: bounds)
+            return
+        }
+        showsPhoto = false
         Tint.fg(alpha: 0.1).setFill()
         NSBezierPath(ovalIn: bounds).fill()
         let text = initials.isEmpty ? "?" : initials

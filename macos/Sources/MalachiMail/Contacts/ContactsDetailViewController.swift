@@ -98,6 +98,26 @@ final class ContactsDetailViewController: NSViewController {
         ])
     }
 
+    // MARK: Photo
+
+    /// The photos' name of the card (`ContactsPhotosController.show`).
+    static let photoView = "contacts-detail"
+    private var shownPhoto: ContactsPhotosController.ContactRef?
+
+    /// Tells the photos which contact the card shows (nil: none).
+    private func reportPhoto(_ c: ContactCard?) {
+        let ref = c.map { ContactsPhotosController.ContactRef(id: $0.id, book: $0.bookId, state: $0.photo) }
+        guard ref != shownPhoto else { return }
+        shownPhoto = ref
+        AppContacts.shared?.photos.show(Self.photoView, refs: ref.map { [$0] } ?? [])
+    }
+
+    override func viewDidDisappear() {
+        super.viewDidDisappear()
+        shownPhoto = nil
+        AppContacts.shared?.photos.show(Self.photoView)
+    }
+
     // MARK: Update
 
     func update() {
@@ -114,7 +134,8 @@ final class ContactsDetailViewController: NSViewController {
         if let detail = d.detail, let c = d.card {
             let m = ContactCardView.Model(
                 detail: detail, source: d.sourceLine, canEdit: d.canEdit, readOnly: c.readOnly, error: d.error,
-                deleting: d.deleting)
+                deleting: d.deleting, avatar: ContactBook.avatarOfDetail(c, detail, photo: c.photo))
+            reportPhoto(c)
             if m != shownCard || card == nil {
                 shownCard = m
                 let v = ContactCardView(model: m)
@@ -128,6 +149,7 @@ final class ContactsDetailViewController: NSViewController {
         }
         shownCard = nil
         card = nil
+        reportPhoto(nil)
         if d.loading {
             empty.illustration = .spinner
             empty.title = ""
@@ -259,6 +281,8 @@ final class ContactCardView: NSView {
         var readOnly: Bool
         var error: String
         var deleting: Bool
+        /// The heading's avatar: initials, or the contact's photo (F9).
+        var avatar: ContactBook.Avatar
     }
 
     enum Action {
@@ -295,6 +319,7 @@ final class ContactCardView: NSView {
 
         let avatar = ContactInitialsView(size: Self.avatarSize)
         avatar.initials = d.initials
+        avatar.photoSource = m.avatar
         let name = NSTextField(wrappingLabelWithString: d.title)
         name.font = Typo.title1
         name.isSelectable = true

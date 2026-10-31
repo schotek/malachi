@@ -352,6 +352,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     /// controller's `selectedKey`. A list replaced whole (another folder)
     /// is reloaded without animation.
     private func apply(rows: [ListRow], hint: SelectionHint) {
+        schedulePhotoReport()
         if hint == .clear {
             // Another listing: a page asked for the one before is moot.
             requestedAt = nil
@@ -507,13 +508,72 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     }
 
     private func configure(_ cell: MessageCellView, _ r: ListRow) {
-        cell.configure(r, message: list.rowMessage(r.message), reserveExpander: mailbox.model.grouped, appearance: rowAppearance)
+        cell.configure(r, message: list.rowMessage(r.message), reserveExpander: mailbox.model.grouped, appearance: rowAppearance,
+                       mine: rowIsMine(r))
         let tid = r.key.thread
         cell.onToggle = { [weak self] in
             if let tid {
                 self?.list.toggleThread(tid)
             }
         }
+    }
+
+    // MARK: Contact photos
+
+    /// The photos' name of the list (`ContactsPhotosController.show`).
+    static let photoView = "list"
+    private var photoReportPending = false
+
+    /// A row the user wrote (F10: never a photo): one of a sent, outbox or
+    /// drafts folder, or one whose sender is the account's own address.
+    private func rowIsMine(_ r: ListRow) -> Bool {
+        let m = r.message
+        switch mailbox.model.folderRole(FolderKey(account: m.accountId, folder: m.folderId)) {
+        case .sent, .outbox, .drafts:
+            return true
+        default:
+            break
+        }
+        let own = ContactBook.normalAddress(mailbox.model.account(m.accountId)?.config.email ?? "")
+        let first = r.thread ? r.summary?.participants.first?.address : m.from.first?.address
+        return !own.isEmpty && ContactBook.normalAddress(first ?? "") == own
+    }
+
+    /// Reports the senders near the viewport once the table has laid the
+    /// rows out.
+    private func schedulePhotoReport() {
+        guard !photoReportPending else { return }
+        photoReportPending = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.photoReportPending = false
+            self.reportPhotos()
+        }
+    }
+
+    /// Tells the photos the senders of the visible rows and a screen above
+    /// and below (`ContactBook.nearRows`), visible first; none when the
+    /// list shows no avatars.
+    private func reportPhotos() {
+        guard let photos = AppContacts.shared?.photos else { return }
+        let visible = table.rows(in: scroll.contentView.documentVisibleRect)
+        guard settings.showAvatars, visible.location != NSNotFound, visible.length > 0 else {
+            photos.show(Self.photoView)
+            return
+        }
+        let near = ContactBook.nearRows(first: visible.location, last: visible.location + visible.length - 1, count: keys.count)
+        let first = visible.location..<min(visible.location + visible.length, keys.count)
+        let order = Array(first) + (near.from..<near.to).filter { !first.contains($0) }
+        var senders: [String] = []
+        for i in order {
+            guard let key = keys[i].messageKey, let r = rowsByKey[key], !r.member, !rowIsMine(r) else { continue }
+            let addr = r.thread ? r.summary?.participants.first?.address : list.rowMessage(r.message).from.first?.address
+            let a = ContactBook.avatarOfSender(address: addr ?? "", name: "", mine: false)
+            if !a.sender.isEmpty {
+                senders.append(a.sender)
+            }
+        }
+        photos.show(Self.photoView, senders: senders)
     }
 
     /// The rows' look from the settings; a search result always shows its
@@ -579,6 +639,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     /// The list settings changed (window.go, the settings handlers): every
     /// row is laid out again; the selection stays.
     private func applyAppearance() {
+        schedulePhotoReport()
         appearance = RowAppearance(settings: settings)
         isReselecting = true
         defer { isReselecting = false }
@@ -700,6 +761,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     /// viewport have no edge to reach: `fillPane` asks then, also when the
     /// pane grows.
     @objc private func clipBoundsChanged(_ note: Notification) {
+        schedulePhotoReport()
         let clip = scroll.contentView
         let scrollable = table.bounds.height > clip.bounds.height
         let bottom = scrollable && clip.bounds.maxY >= table.bounds.height - 1

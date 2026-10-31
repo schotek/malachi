@@ -92,9 +92,12 @@ enum AvatarPalette {
 /// monochrome variant (`ui/internal/style` "monochrome-avatars") is a
 /// tinted disc with the initials in the label colour. The accent variant
 /// (the user's own message on the timeline of the conversation view) is a
-/// disc tinted with the accent colour, the initials in that colour.
+/// disc tinted with the accent colour, the initials in that colour. With a
+/// `photoSource` (a sender's contact, F10) the contact's photo, clipped to
+/// the circle, replaces all of that once `AppContacts` has it; monochrome
+/// greys initials only, never a photo.
 @MainActor
-final class AvatarView: NSView {
+final class AvatarView: NSView, ContactPhotoDisplay {
     /// The name the initials and the colour come from; hostile input, only
     /// ever drawn as text.
     var text: String = "" {
@@ -133,6 +136,26 @@ final class AvatarView: NSView {
         }
     }
 
+    /// Whose photo replaces the initials (`ContactBook.avatarOfSender`);
+    /// nil, or an avatar without a sender (the user's own message), never
+    /// shows one.
+    var photoSource: ContactBook.Avatar? {
+        didSet {
+            guard photoSource != oldValue else { return }
+            if photoSource?.mayShowPhoto == true {
+                AppContacts.shared?.photos.register(self)
+            }
+            needsDisplay = true
+        }
+    }
+
+    /// Whether the last drawing showed a photo (the dev steps read it).
+    private(set) var showsPhoto = false
+
+    func contactPhotoChanged(_ key: String) {
+        needsDisplay = true
+    }
+
     private var widthConstraint: NSLayoutConstraint!
     private var heightConstraint: NSLayoutConstraint!
 
@@ -157,6 +180,12 @@ final class AvatarView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        if let image = AppContacts.shared?.photos.image(for: photoSource) {
+            showsPhoto = true
+            ContactPhotoDrawing.draw(image, in: bounds)
+            return
+        }
+        showsPhoto = false
         let circle = NSBezierPath(ovalIn: bounds)
         let foreground: NSColor
         if accent {

@@ -278,6 +278,7 @@ final class ConversationChatViewController: NSViewController {
     /// Puts the rows of `model` (`Conversation.chatRows`) into the stack,
     /// reusing the views of the members, events and drafts shown already.
     private func apply(_ model: Conversation.Model) {
+        reportPhotos(model)
         issueBox.show(model)
         let rows = Conversation.chatRows(model, drafts: controller.drafts)
         let monochrome = state.settings.monochromeAvatars
@@ -323,7 +324,7 @@ final class ConversationChatViewController: NSViewController {
                     let lm = controller.loaded[id]
                     view.bubble.showBody(bubbleBody(lm, item), monospace: monospace(lm))
                 }
-                view.showAvatar(name: item.sender, monochrome: monochrome)
+                view.showAvatar(name: item.sender, monochrome: monochrome, photo: ConversationViewController.photoAvatar(item))
                 view.setColumn(column)
                 desired.append(view)
             case .event:
@@ -717,13 +718,37 @@ final class ConversationChatViewController: NSViewController {
         }
     }
 
+    // MARK: Contact photos
+
+    /// The photos' name of the chat (`ContactsPhotosController.show`).
+    static let photoView = "chat"
+
+    /// Tells the photos the senders of the bubbles on the left, newest
+    /// first (a conversation is short: all of them).
+    private func reportPhotos(_ model: Conversation.Model?) {
+        let senders = (model?.items ?? []).reversed().compactMap { ConversationViewController.photoAvatar($0)?.sender }
+            .filter { !$0.isEmpty }
+        AppContacts.shared?.photos.show(Self.photoView, senders: senders)
+    }
+
+    override func viewDidDisappear() {
+        super.viewDidDisappear()
+        AppContacts.shared?.photos.show(Self.photoView)
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        reportPhotos(controller.model)
+    }
+
     private func applyAvatars() {
         guard let model = controller.model else { return }
         let monochrome = state.settings.monochromeAvatars
         for (id, row) in bubbles {
             let i = model.index(id)
             if i >= 0 {
-                row.showAvatar(name: model.items[i].sender, monochrome: monochrome)
+                row.showAvatar(name: model.items[i].sender, monochrome: monochrome,
+                               photo: ConversationViewController.photoAvatar(model.items[i]))
             }
         }
         for card in controller.drafts {

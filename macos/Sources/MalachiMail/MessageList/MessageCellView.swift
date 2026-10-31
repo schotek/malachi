@@ -121,6 +121,8 @@ final class MessageCellView: NSTableCellView {
     private var reserve = false
     private var member = false
     private var showAvatar = true
+    /// The row is the user's own (F10: its avatar never shows a photo).
+    private var mine = false
     private var avatarSize = RowMetrics.avatarComfortable
     /// The preview's text and its matched words (UTF-16 ranges), redrawn
     /// in the colour the selection asks for (`renderPreview`).
@@ -300,8 +302,9 @@ final class MessageCellView: NSTableCellView {
     /// place so the avatars line up. `message` is what a message row
     /// shows (`ListController.rowMessage`: the summary, or in search the
     /// excerpt and the folder).
-    func configure(_ row: ListRow, message: RowMessage, reserveExpander: Bool, appearance: RowAppearance) {
+    func configure(_ row: ListRow, message: RowMessage, reserveExpander: Bool, appearance: RowAppearance, mine: Bool = false) {
         applyAppearance(appearance)
+        self.mine = mine
         invitation = invitationPill(row.message)
         // A brand and a msgid: nothing from mail.
         let pill = CRM.pillFor(row.message)
@@ -325,6 +328,7 @@ final class MessageCellView: NSTableCellView {
         let sender = m.from.first ?? Address(address: "")
         let name = displayName(sender)
         avatar.text = name
+        avatar.photoSource = ContactBook.avatarOfSender(address: sender.address, name: name, mine: mine)
         from.stringValue = name
         from.toolTip = formatAddress(sender)
         fill(subject: m.subject, snippet: m.snippet, date: m.date, unread: m.unread, flagged: m.flagged, attachments: m.hasAttachments)
@@ -347,6 +351,7 @@ final class MessageCellView: NSTableCellView {
     private func setThread(_ t: RowThread) {
         let first = t.participants.first ?? Address(address: "")
         avatar.text = displayName(first)
+        avatar.photoSource = ContactBook.avatarOfSender(address: first.address, name: avatar.text, mine: mine)
         from.stringValue = formatParticipants(t.participants)
         from.toolTip = t.participants.map(formatAddress).joined(separator: "\n")
         fill(subject: t.subject, snippet: t.snippet, date: t.date, unread: t.unread > 0, flagged: t.flagged, attachments: t.hasAttachments)

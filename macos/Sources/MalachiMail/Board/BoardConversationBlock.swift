@@ -106,7 +106,13 @@ final class BoardConversationBlock: NSView, MessageDisplay {
     /// Same indices as `state.members` and `messages`.
     private(set) var chatRows: [ConversationChatRow] = []
     /// The members of the detail on show, for the bubbles' double click.
-    private var messages: [Board.MessageCard] = []
+    private var messages: [Board.MessageCard] = [] {
+        didSet {
+            if messages != oldValue {
+                reportPhotos()
+            }
+        }
+    }
     /// The chat shows (the setting, read when it changes).
     private(set) var chatShown = false
     /// The bubbles show the short date (`ConversationLayout.chatCompactDates`).
@@ -510,6 +516,7 @@ final class BoardConversationBlock: NSView, MessageDisplay {
         toggle.setChat(on)
         guard on != chatShown else { return }
         chatShown = on
+        reportPhotos()
         if status == nil, account != nil {
             cardsColumn.isHidden = on
             chatColumn.isHidden = !on
@@ -625,7 +632,7 @@ final class BoardConversationBlock: NSView, MessageDisplay {
     /// for the user's own) and date, its text, or with Render HTML in Chat
     /// the HTML its body has (`chatBody`).
     private func renderChatRow(_ row: ConversationChatRow, _ m: Board.MessageCard, at i: Int?) {
-        row.showAvatar(name: m.sender, monochrome: monochrome)
+        row.showAvatar(name: m.sender, monochrome: monochrome, photo: Self.photoAvatar(m))
         row.bubble.showPlain(sender: m.from, date: m.date == .distantPast ? nil : m.date)
         row.bubble.setShortened(shortened(m, at: i))
         row.bubble.showBody(chatBody(m, at: i), monospace: false)
@@ -706,7 +713,7 @@ final class BoardConversationBlock: NSView, MessageDisplay {
     private func applyChatAvatars() {
         for (i, row) in chatRows.enumerated() where messages.indices.contains(i) {
             let m = messages[i]
-            row.showAvatar(name: m.sender, monochrome: monochrome)
+            row.showAvatar(name: m.sender, monochrome: monochrome, photo: Self.photoAvatar(m))
         }
     }
 
@@ -771,6 +778,31 @@ final class BoardConversationBlock: NSView, MessageDisplay {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         liveChanged()
+        reportPhotos()
+    }
+
+    // MARK: Contact photos
+
+    /// The photos' name of this block (a detail of the list and one of
+    /// the panel may both have one).
+    private lazy var photoView = "board-chat-\(UInt(bitPattern: ObjectIdentifier(self).hashValue))"
+
+    /// Whose contact photo replaces a bubble's initials (F10): the sender
+    /// of a message the user did not write.
+    static func photoAvatar(_ m: Board.MessageCard) -> ContactBook.Avatar? {
+        m.mine ? nil : ContactBook.avatarOfSender(address: m.address, name: m.sender, mine: false)
+    }
+
+    /// Tells the photos the senders of the bubbles while the chat shows in
+    /// a window, newest first; nothing otherwise.
+    private func reportPhotos() {
+        guard let photos = AppContacts.shared?.photos else { return }
+        guard chatShown, window != nil else {
+            photos.show(photoView)
+            return
+        }
+        let senders = messages.reversed().compactMap { Self.photoAvatar($0)?.sender }.filter { !$0.isEmpty }
+        photos.show(photoView, senders: senders)
     }
 
     override func viewDidHide() {

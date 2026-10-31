@@ -10,7 +10,8 @@ import MalachiCore
 //
 //   `contacts` opens the Contacts window, selects Jana Nováková and dumps
 //   the window, the three columns, the toolbar, the sidebar's rows, the
-//   list's rows and the card (W1).
+//   list's rows and the card (W1), then, once the photos came, which rows
+//   report a photo, which cells and the card draw one (F9, W7).
 //   `contacts:edit` opens her form (W4), dumps the fields and the buttons,
 //   adds a phone row and dumps again.
 //   `contacts:new` opens New Contact with its address book choice.
@@ -103,7 +104,26 @@ enum DevelopmentContacts {
         if let avatar = all(ContactInitialsView.self, under: detail).first {
             say("LAYOUT: contacts card avatar \(r(avatar)) (wireframe 72)")
         }
-        say("LAYOUT: shot contacts window \(w.window?.windowNumber ?? 0)")
+        later(1.0) {
+            photos(w)
+            say("LAYOUT: shot contacts window \(w.window?.windowNumber ?? 0)")
+        }
+    }
+
+    /// Which rows the list reports with a photo (ready or remote), which
+    /// cells draw one, and the card's avatar.
+    private static func photos(_ w: ContactsWindowController) {
+        let withPhoto = w.list.rows.compactMap { r -> String? in
+            guard let c = r.contact, ContactBook.mayHave(c.photo) else { return nil }
+            return "\(r.title)=\(c.photo.rawValue)"
+        }
+        say("LAYOUT: contacts photos rows \(withPhoto)")
+        let cells = all(ContactsListCell.self, under: w.window?.contentView ?? NSView())
+        let drawn = cells.filter { $0.avatar.showsPhoto }.map { $0.textField?.stringValue ?? "" }
+        say("LAYOUT: contacts photos cells \(cells.count) drawn \(drawn)")
+        if let avatar = all(ContactInitialsView.self, under: w.detailPane.view).first {
+            say("LAYOUT: contacts photos card source \(avatar.photoSource?.contact?.rawValue ?? "-") drawn \(avatar.showsPhoto)")
+        }
     }
 
     private static func edit(_ w: ContactsWindowController) {

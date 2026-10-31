@@ -366,6 +366,7 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
     /// the default says (`Conversation.Folds.state`, conversation_view.go
     /// `apply`), and the Collapse All / Expand All button follows.
     private func apply(_ model: Conversation.Model) {
+        reportPhotos(model)
         issueBox.show(model)
         let display = shownOrder(model)
         let items = display.items
@@ -441,7 +442,7 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
                     }
                 }
             }
-            row.show(rail, name: item.sender, monochrome: monochrome)
+            row.show(rail, name: item.sender, monochrome: monochrome, photo: Self.photoAvatar(item))
             desired.append(row)
         }
         if at == items.count {
@@ -526,6 +527,35 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         rows[id] = row
     }
 
+    // MARK: Contact photos
+
+    /// The photos' name of the timeline (`ContactsPhotosController.show`).
+    static let photoView = "conversation"
+
+    /// Whose contact photo replaces an item's initials (F10): a message's
+    /// first sender, never the user's own message nor a sent card.
+    static func photoAvatar(_ item: Conversation.Item) -> ContactBook.Avatar? {
+        guard item.kind == .message, !item.mine, !item.sent else { return nil }
+        return ContactBook.avatarOfSender(address: item.message?.from.first?.address ?? "", name: item.sender, mine: false)
+    }
+
+    /// Tells the photos the senders of the conversation (a conversation is
+    /// short: all of them), newest first.
+    private func reportPhotos(_ model: Conversation.Model?) {
+        let senders = (model?.items ?? []).reversed().compactMap { Self.photoAvatar($0)?.sender }.filter { !$0.isEmpty }
+        AppContacts.shared?.photos.show(Self.photoView, senders: senders)
+    }
+
+    override func viewDidDisappear() {
+        super.viewDidDisappear()
+        AppContacts.shared?.photos.show(Self.photoView)
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        reportPhotos(controller.model)
+    }
+
     /// The timeline again, as the items are (the avatars' setting
     /// changed).
     private func applyRails() {
@@ -538,7 +568,7 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         let monochrome = state.settings.monochromeAvatars
         for (i, item) in items.enumerated() {
             let row = item.kind == .truncated ? truncatedItem : item.id.flatMap { rows[$0] }
-            row?.show(rails[i < at ? i : i + drafts.count], name: item.sender, monochrome: monochrome)
+            row?.show(rails[i < at ? i : i + drafts.count], name: item.sender, monochrome: monochrome, photo: Self.photoAvatar(item))
         }
         for (j, card) in drafts.enumerated() {
             guard let id = card.draft.id else { continue }
