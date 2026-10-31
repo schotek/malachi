@@ -33,10 +33,12 @@ func TestSamplePhotos(t *testing.T) {
 			ready++
 		case api.ContactPhotoRemote:
 			remote++
-			marie = c.ID
+			if c.DisplayName == "Marie Svobodová" {
+				marie = c.ID
+			}
 		}
 	}
-	if ready != 3 || remote != 1 {
+	if ready != 5 || remote != 2 || marie == "" {
 		t.Fatalf("ready %d remote %d", ready, remote)
 	}
 
@@ -48,6 +50,16 @@ func TestSamplePhotos(t *testing.T) {
 	ref, ok := lk.Photos["jana.novakova@example.cz"]
 	if !ok || ref.State != api.ContactPhotoReady || len(lk.Photos) != 1 || len(lk.Known) != 2 {
 		t.Fatalf("lookup %+v", lk)
+	}
+	// devmail's senders: two ready, one remote, the rest without a contact.
+	var dm api.ContactLookupResult
+	if err := s.Call(ctx, api.MethodContactLookup, api.ContactLookupParams{WithPhotos: true, Addresses: []string{
+		"martin.benes@example.test", "petr.svoboda@acme.test", "tomas.holub@example.test", "lucie.markova@example.test"}}, &dm); err != nil {
+		t.Fatal(err)
+	}
+	if dm.Photos["martin.benes@example.test"].State != api.ContactPhotoReady || dm.Photos["petr.svoboda@acme.test"].State != api.ContactPhotoReady ||
+		dm.Photos["tomas.holub@example.test"].State != api.ContactPhotoRemote || len(dm.Photos) != 3 {
+		t.Fatalf("devmail lookup %+v", dm.Photos)
 	}
 	var ph api.ContactPhotoResult
 	if err := s.Call(ctx, api.MethodContactPhoto, api.ContactPhotoParams{ContactID: ref.ContactID}, &ph); err != nil {

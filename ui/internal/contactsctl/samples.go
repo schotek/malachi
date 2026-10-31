@@ -95,6 +95,11 @@ func NewSampleCaller(now time.Time) *SampleCaller {
 		work("Hana", "Růžičková", "Stavby Nová s.r.o.", "asistentka", "hana@stavby-nova.example.cz", ""),
 		work("Tomáš", "Svoboda", "Pila Svoboda s.r.o.", "", "tomas@svoboda.example", ""),
 		work("Eva", "Veselá", "", "", "eva.vesela@example.cz", ""),
+		// Senders of malachi-devmail's sample mailbox, so their photos show
+		// in Mail over the devmail stack (the same on macOS and Windows).
+		work("Martin", "Beneš", "", "", "martin.benes@example.test", ""),
+		work("Petr", "Svoboda", "Acme", "", "petr.svoboda@acme.test", ""),
+		work("Tomáš", "Holub", "", "", "tomas.holub@example.test", ""),
 		{BookID: "ab_work", Org: "Tiskárna Dvořák", DisplayName: "Tiskárna Dvořák",
 			Emails: []api.ContactEmail{{Label: api.ContactLabelWork, Address: "info@tiskarna.example"}}},
 		{BookID: "ab_family", Name: api.ContactName{Given: "Babička"}, DisplayName: "Babička",
@@ -108,8 +113,8 @@ func NewSampleCaller(now time.Time) *SampleCaller {
 	} {
 		s.add(c)
 	}
-	// Invented photos (plan §9): three ready, one Microsoft 365 photo the
-	// first contact.photo "fetches".
+	// Invented photos (plan §9): five ready, two Microsoft 365 photos the
+	// first contact.photo "fetches"; the last three are devmail's senders.
 	for i, p := range []struct {
 		email string
 		state api.ContactPhotoAvailability
@@ -119,6 +124,9 @@ func NewSampleCaller(now time.Time) *SampleCaller {
 		{"karel@kucera.example", api.ContactPhotoReady, color.RGBA{0x3d, 0x8b, 0xd6, 0xff}},
 		{"david@dvorak.example", api.ContactPhotoReady, color.RGBA{0x4f, 0xa8, 0x6a, 0xff}},
 		{"marie@example.cz", api.ContactPhotoRemote, color.RGBA{0x9a, 0x5c, 0xc6, 0xff}},
+		{"martin.benes@example.test", api.ContactPhotoReady, color.RGBA{0xc9, 0x8a, 0x2e, 0xff}},
+		{"petr.svoboda@acme.test", api.ContactPhotoReady, color.RGBA{0x2e, 0x9c, 0x9c, 0xff}},
+		{"tomas.holub@example.test", api.ContactPhotoRemote, color.RGBA{0x6b, 0x6f, 0xc8, 0xff}},
 	} {
 		for _, c := range s.cards {
 			if len(c.Emails) > 0 && c.Emails[0].Address == p.email {
