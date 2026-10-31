@@ -64,14 +64,22 @@ func NormalizeAddress(s string) string {
 	return s
 }
 
-// StoreCard stores one card of a book (insert or update by remote id) and
-// returns the contact id. A card that cannot be stored is invalidArgument.
+// StoreCard stores one card of a book (insert or update by remote id),
+// with the photo embedded in a vCard, and returns the contact id. A card
+// that cannot be stored is serverError.
 func StoreCard(ctx context.Context, st *store.Store, bookID string, c Card) (string, error) {
 	row, ok := Row(bookID, c)
 	if !ok {
 		return "", api.NewError(api.CodeServerError, "contactsync: the server's contact cannot be stored")
 	}
-	return st.UpsertContact(ctx, row)
+	id, err := st.UpsertContact(ctx, row)
+	if err != nil {
+		return "", err
+	}
+	if _, err := storePhoto(ctx, st, nil, id, c); err != nil {
+		return "", err
+	}
+	return id, nil
 }
 
 // storageError makes an *api.Error of a failure of the store; an

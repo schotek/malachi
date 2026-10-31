@@ -545,7 +545,7 @@ func (s *syncer) syncBook(ctx context.Context, prov Provider, b store.AddressBoo
 	if err != nil {
 		return did, storageError(err)
 	}
-	sk := &sink{ctx: ctx, st: st, book: b, seen: map[string]bool{}}
+	sk := &sink{ctx: ctx, st: st, log: s.log, book: b, seen: map[string]bool{}}
 	res, err := prov.Sync(ctx, b, known, sk)
 	did = did || sk.changed
 	if err != nil {
@@ -570,13 +570,15 @@ func (s *syncer) syncBook(ctx context.Context, prov Provider, b store.AddressBoo
 	}); err != nil && !errors.Is(err, store.ErrNotFound) {
 		return did, storageError(err)
 	}
-	return did, nil
+	photos, err := backfillPhotos(ctx, st, s.log, b.ID)
+	return did || photos, storageError(err)
 }
 
 // sink writes one Sync's changes; its errors are *api.Error.
 type sink struct {
 	ctx     context.Context
 	st      *store.Store
+	log     *slog.Logger
 	book    store.AddressBook
 	seen    map[string]bool
 	changed bool
@@ -596,11 +598,17 @@ func (k *sink) Upsert(c Card) error {
 		return nil
 	}
 	k.count++
-	return storageError(k.st.Paced(k.ctx, func() error {
-		_, err := k.st.UpsertContact(k.ctx, row)
+	var id string
+	if err := k.st.Paced(k.ctx, func() error {
+		var err error
+		id, err = k.st.UpsertContact(k.ctx, row)
 		k.changed = k.changed || err == nil
 		return err
-	}))
+	}); err != nil {
+		return storageError(err)
+	}
+	_, err := storePhoto(k.ctx, k.st, k.log, id, c)
+	return storageError(err)
 }
 
 func (k *sink) Remove(remoteID string) error {
