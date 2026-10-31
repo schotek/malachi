@@ -151,7 +151,10 @@ type CaseMessage struct {
 	ID     api.MessageID
 	Folder api.FolderID
 	From   string
-	Date   time.Time
+	// Address is From's address ("" for the samples): the chat bubble's
+	// avatar shows the photo of the contact with exactly this address.
+	Address string
+	Date    time.Time
 	// Text is plain text, never markup.
 	Text string
 	// Mine: the user wrote it.

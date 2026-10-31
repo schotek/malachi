@@ -52,7 +52,7 @@ func TestChatToggleTexts(t *testing.T) {
 func TestDetailMessagesSenderAndDate(t *testing.T) {
 	ann, me := ago(5), ago(1)
 	c := mk("c1", StateYou, withMessages(
-		CaseMessage{ID: "m1", From: "Ann​ Example", Date: ann, Text: "hi"},
+		CaseMessage{ID: "m1", From: "Ann​ Example", Address: "ann@example.com", Date: ann, Text: "hi"},
 		CaseMessage{ID: "m2", From: "Me Myself", Date: me, Text: "hello", Mine: true},
 	))
 	d := view(casesOf(c)).Detail
@@ -62,6 +62,8 @@ func TestDetailMessagesSenderAndDate(t *testing.T) {
 	eq(t, "their sender", theirs.Sender, "Ann Example")
 	eq(t, "my from", mine.From, You(recorder{}))
 	eq(t, "my sender", mine.Sender, "Me Myself")
+	eq(t, "their address", theirs.Address, "ann@example.com")
+	eq(t, "converted address", convertMessage(api.BoardMessage{From: api.Address{Name: "A", Address: "a@b.cz"}}).Address, "a@b.cz")
 	check(t, theirs.Date.Equal(ann) && mine.Date.Equal(me), "dates %v %v", theirs.Date, mine.Date)
 	check(t, theirs.When != "" && mine.When != "", "the cards' short dates stay")
 	var zero time.Time

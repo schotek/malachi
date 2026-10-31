@@ -982,7 +982,7 @@ func convertCommitment(k api.BoardCommitment) Commitment {
 
 func convertMessage(m api.BoardMessage) CaseMessage {
 	return CaseMessage{
-		ID: m.ID, Folder: m.FolderID, From: displayName(m.From), Date: m.Date.UTC(), Text: m.Text, Mine: m.Mine,
+		ID: m.ID, Folder: m.FolderID, From: displayName(m.From), Address: m.From.Address, Date: m.Date.UTC(), Text: m.Text, Mine: m.Mine,
 		Trimmed: m.Trimmed,
 	}
 }

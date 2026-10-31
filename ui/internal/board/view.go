@@ -231,9 +231,9 @@ type MessageCard struct {
 	When string
 	// Date is the message's date: the chat bubble formats it as the chat
 	// of Mail does (in full, compact in a narrow column).
-	Date time.Time
-	Text string
-	Mine bool
+	Date          time.Time
+	Text, Address string // Address: the sender's (the chat avatar's photo, F10); "" for the samples
+	Mine          bool
 }
 
 // Detail is the selected case in full. An empty string hides its block.
@@ -1035,7 +1035,7 @@ func (ctx viewContext) detail(c Case) Detail {
 		}
 		messages = append(messages, MessageCard{
 			ID: m.ID, From: from, Sender: sender, When: ctx.dates.Date(m.Date, ctx.now), Date: m.Date,
-			Text: CleanBlock(m.Text, capMessage), Mine: m.Mine,
+			Text: CleanBlock(m.Text, capMessage), Mine: m.Mine, Address: m.Address,
 		})
 	}
 	messagesNote := ""
