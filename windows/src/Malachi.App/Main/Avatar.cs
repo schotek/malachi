@@ -13,8 +13,22 @@
 // The palette and the initials are Core's (AvatarPalette). Nothing is
 // fetched; the name is hostile input, only ever set as a TextBlock's text.
 // Decoration: the row's name says who wrote, so a screen reader skips it.
+//
+// Contact photos (docs/plans/address-book.md §9, F9, F10; macOS
+// AvatarView.photoSource and ContactInitialsView, ContactPhotoViews.swift):
+// with a photo source, PhotoSender (a sender's address,
+// ContactBook.AvatarOfSender, "" for the user's own message) or
+// PhotoContact (a contact of the Contacts window with its photo state), the
+// avatar registers with the application's ContactPhotos while it is loaded
+// and visible, and the contact's photo, clipped to the circle, replaces the
+// disc and the initials once decoded. monochrome-avatars and the accent
+// tint apply to initials only, never to a photo.
 
+using Malachi.App.Contacts;
 using Malachi.App.Resources;
+using Malachi.Core.Api;
+using Malachi.Core.Contacts;
+using Malachi.Core.Controllers;
 using Malachi.Core.Presentation;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -46,7 +60,17 @@ public sealed partial class Avatar : UserControl
     public static readonly DependencyProperty AccentProperty = DependencyProperty.Register(
         nameof(Accent), typeof(bool), typeof(Avatar), new PropertyMetadata(false, (d, _) => ((Avatar)d).Redraw()));
 
+    /// <summary>The address whose contact's photo replaces the initials ("" none: the user's own message, no address).</summary>
+    public static readonly DependencyProperty PhotoSenderProperty = DependencyProperty.Register(
+        nameof(PhotoSender), typeof(string), typeof(Avatar), new PropertyMetadata("", (d, _) => ((Avatar)d).PhotoSourceChanged()));
+
     private static readonly Windows.UI.ViewManagement.UISettings SystemColours = new();
+
+    private readonly ImageBrush photoBrush = new() { Stretch = Stretch.UniformToFill };
+    private readonly Ellipse photo = new() { Visibility = Visibility.Collapsed };
+    private ContactsPhotosController.ContactRef? photoContact;
+    private ContactId? shownContact; // whose photo is drawn; null initials
+    private bool loaded;
 
     private readonly Ellipse disc = new();
     private readonly TextBlock initials = new()
@@ -73,13 +97,100 @@ public sealed partial class Avatar : UserControl
         person.FontFamily = Icons.SymbolFont;
         AutomationProperties.SetAccessibilityView(initials, AccessibilityView.Raw);
         AutomationProperties.SetAccessibilityView(person, AccessibilityView.Raw);
+        photo.Fill = photoBrush;
         var root = new Grid();
         root.Children.Add(disc);
         root.Children.Add(initials);
         root.Children.Add(person);
+        root.Children.Add(photo);
         Content = root;
         ActualThemeChanged += (_, _) => Redraw();
+        Loaded += (_, _) =>
+        {
+            loaded = true;
+            ContactPhotos.Current?.Update(this);
+        };
+        Unloaded += (_, _) =>
+        {
+            loaded = false;
+            ContactPhotos.Current?.Remove(this);
+        };
+        RegisterPropertyChangedCallback(VisibilityProperty, (_, _) => PhotoSourceChanged());
         Redraw();
+    }
+
+    /// <summary>The address whose contact's photo replaces the initials (ContactBook.Avatar.Sender); "" none.</summary>
+    public string PhotoSender
+    {
+        get => (string)GetValue(PhotoSenderProperty);
+        set => SetValue(PhotoSenderProperty, value ?? "");
+    }
+
+    /// <summary>The contact (Contacts window) whose photo replaces the initials, with the state its summary or card reports; null none.</summary>
+    /// <remarks>A plain property, set from code (the Contacts window's rows and detail), never from markup.</remarks>
+    public ContactsPhotosController.ContactRef? PhotoContact
+    {
+        get => photoContact;
+        set
+        {
+            if (photoContact != value)
+            {
+                photoContact = value;
+                PhotoSourceChanged();
+            }
+        }
+    }
+
+    /// <summary>Whose photo this avatar may show; null none (a contact without a photo, the user's own message).</summary>
+    internal ContactBook.Avatar? PhotoSource
+    {
+        get
+        {
+            if (photoContact is { } r)
+            {
+                return ContactBook.MayHavePhoto(r.State) && !ContactBook.IsRecent(r.Book, r.Id) ? new ContactBook.Avatar("") { Contact = r.Id } : null;
+            }
+            var sender = PhotoSender;
+            return sender.Length > 0 ? new ContactBook.Avatar("") { Sender = sender } : null;
+        }
+    }
+
+    /// <summary>Loaded, visible and with a source: the photos are asked for it.</summary>
+    internal bool WantsPhoto => loaded && Visibility == Visibility.Visible && PhotoSource is { MayShowPhoto: true };
+
+    /// <summary>Whether the drawn photo is <paramref name="contact"/>'s.</summary>
+    internal bool ShowsPhotoOf(ContactId contact) => shownContact == contact;
+
+    /// <summary>Draws <paramref name="image"/> (the photo of <paramref name="contact"/>) instead of the initials; null the initials.</summary>
+    internal void ShowPhoto(ImageSource? image, ContactId? contact)
+    {
+        if (image is null)
+        {
+            if (shownContact is null && photoBrush.ImageSource is null)
+            {
+                return;
+            }
+            photoBrush.ImageSource = null;
+            shownContact = null;
+        }
+        else
+        {
+            photoBrush.ImageSource = image;
+            shownContact = contact;
+        }
+        Redraw();
+    }
+
+    private void PhotoSourceChanged()
+    {
+        if (ContactPhotos.Current is { } photos)
+        {
+            photos.Update(this);
+        }
+        else
+        {
+            ShowPhoto(null, null);
+        }
     }
 
     /// <summary>The name the colour and the initials come from.</summary>
@@ -148,13 +259,18 @@ public sealed partial class Avatar : UserControl
             disc.Fill = gradient;
             foreground = new SolidColorBrush(Rgb(colours.Foreground));
         }
-        var letters = AvatarPalette.Initials(text);
+        var hasPhoto = photoBrush.ImageSource is not null;
+        photo.Width = size;
+        photo.Height = size;
+        photo.Visibility = hasPhoto ? Visibility.Visible : Visibility.Collapsed;
+        disc.Visibility = hasPhoto ? Visibility.Collapsed : Visibility.Visible;
+        var letters = hasPhoto ? "" : AvatarPalette.Initials(text);
         initials.Text = letters;
         initials.FontSize = AvatarPalette.FontSize(size);
         initials.Foreground = foreground;
         initials.Visibility = letters.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         person.FontSize = AvatarPalette.SymbolSize(size);
         person.Foreground = foreground;
-        person.Visibility = letters.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
+        person.Visibility = letters.Length > 0 || hasPhoto ? Visibility.Collapsed : Visibility.Visible;
     }
 }

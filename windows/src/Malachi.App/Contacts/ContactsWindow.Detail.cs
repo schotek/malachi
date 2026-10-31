@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiMail/Contacts/ContactsDetailViewController.swift
-// (update, the card: the avatar, the name, "Job · Company", the source line,
+// (update, the card: the avatar with the contact's photo (F9), the name, "Job · Company", the source line,
 // Read Only, the rows; Write Email with a menu for several addresses, Show
 // Mail, Copy; the websites through Open This Link?); GTK:
 // ui/internal/window/contacts_detail.go (buildDetail, detailActions,
@@ -146,7 +146,7 @@ public sealed partial class ContactsWindow
     // Read Only) and a row per detail; built again when the card changed.
     private void RenderCard(ContactCard card)
     {
-        var key = card.Id.Value + "|" + card.Revision + "|" + detail.SourceLine;
+        var key = card.Id.Value + "|" + card.Revision + "|" + card.Photo?.Value + "|" + detail.SourceLine;
         if (key == detailKey || detail.Detail is not { } d)
         {
             return;
@@ -158,7 +158,14 @@ public sealed partial class ContactsWindow
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var avatar = new Main.Avatar { Text = d.Title, Size = 64, VerticalAlignment = VerticalAlignment.Center };
+        // The contact's photo instead of the initials (F9; ContactBook.AvatarOfDetail's rule in Avatar.PhotoSource).
+        var avatar = new Main.Avatar
+        {
+            Text = d.Title,
+            Size = 64,
+            VerticalAlignment = VerticalAlignment.Center,
+            PhotoContact = new Core.Controllers.ContactsPhotosController.ContactRef(card.Id, card.BookId, card.Photo),
+        };
         AutomationProperties.SetAccessibilityView(avatar, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
         head.Children.Add(avatar);
         var texts = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };

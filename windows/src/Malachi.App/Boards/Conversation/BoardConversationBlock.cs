@@ -1084,6 +1084,12 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         return row;
     }
 
+    // The address whose contact's photo stands for member m's sender (its
+    // MessageCard.Address, docs/plans/address-book.md F10); "" for the
+    // user's own and the samples.
+    private static string PhotoSenderOf(CoreBoard.MessageCard m) =>
+        Malachi.Core.Contacts.ContactBook.AvatarOfSender(m.Address, m.Sender, m.Mine).Sender;
+
     // The AutomationId of the bubble of member i.
     private static string ChatBubbleId(int i) => "BoardChatBubble:" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
@@ -1097,7 +1103,7 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         row.Bubble.ShowPlain(ChatBubbleId(i), m.From, m.Date);
         var body = ChatBodyOf(m, out var reload);
         row.Bubble.ShowBody(body, monospaceText: false, reloadPictures: reload);
-        row.ShowAvatar(m.Sender, monochrome);
+        row.ShowAvatar(m.Sender, monochrome, PhotoSenderOf(m));
     }
 
     // What member m's bubble shows: the case's text, or, with the preference
@@ -1454,7 +1460,7 @@ public sealed partial class BoardConversationBlock : UserControl, IBoardDetailPa
         {
             if (chatShows.TryGetValue(row, out var m))
             {
-                row.ShowAvatar(m.Sender, monochrome);
+                row.ShowAvatar(m.Sender, monochrome, PhotoSenderOf(m));
             }
         }
     }

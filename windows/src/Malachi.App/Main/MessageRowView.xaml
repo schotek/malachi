@@ -88,6 +88,7 @@ result as bold runs built in code (never markup).
                 <main:Avatar
                     x:Name="AvatarView"
                     Monochrome="{x:Bind Row.Monochrome, Mode=OneWay}"
+                    PhotoSender="{x:Bind Row.AvatarAddress, Mode=OneWay}"
                     Size="{x:Bind Row.AvatarSize, Mode=OneWay}"
                     Text="{x:Bind Row.AvatarText, Mode=OneWay}"
                     Visibility="{x:Bind res:Bind.Visible(Row.AvatarVisible), Mode=OneWay}" />

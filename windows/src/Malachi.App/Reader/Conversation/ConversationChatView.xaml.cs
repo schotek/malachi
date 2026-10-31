@@ -469,7 +469,7 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
                             var lm = ctrl.Loaded.GetValueOrDefault(id);
                             view.Bubble.ShowBody(Core.Model.Conversation.BubbleBodyFor(lm, s.Snippet, HtmlSetting), Monospace(lm), PicturesArrived(id, lm));
                         }
-                        view.ShowAvatar(item.Sender, monochrome);
+                        view.ShowAvatar(item.Sender, monochrome, ConversationRow.PhotoSenderOf(item));
                         view.SetColumnWidth(column);
                         desired.Add(view);
                         break;
@@ -1047,7 +1047,7 @@ internal sealed partial class ConversationChatView : UserControl, IChatWebHost
             var i = m.Index(id);
             if (i >= 0)
             {
-                row.ShowAvatar(m.Items[i].Sender, monochrome);
+                row.ShowAvatar(m.Items[i].Sender, monochrome, ConversationRow.PhotoSenderOf(m.Items[i]));
             }
         }
         foreach (var card in ctrl.Drafts)

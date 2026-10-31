@@ -8,11 +8,13 @@
 // (the name, the company or the address, Core's text, already cleaned) in
 // groups by ContactBook.Row's headings, which the ListView's grouping keeps
 // out of the selection and of the arrow keys; while searching the rows are
-// flat (no headings).
+// flat (no headings). The avatar shows the contact's photo (PhotoRef,
+// docs/plans/address-book.md F9) when the summary reports one.
 
 using System.Collections.Generic;
 using Malachi.Core.Api;
 using Malachi.Core.Contacts;
+using Malachi.Core.Controllers;
 
 namespace Malachi.App.Contacts;
 
@@ -35,6 +37,9 @@ public sealed class ContactRowItem
 
     /// <summary>The name.</summary>
     public string Title { get; }
+
+    /// <summary>The contact with its photo state, for the avatar's photo.</summary>
+    public ContactsPhotosController.ContactRef? PhotoRef => new ContactsPhotosController.ContactRef(Contact.Id, Contact.BookId, Contact.Photo);
 
     /// <summary>The company, else the address ("" none).</summary>
     public string Detail { get; }

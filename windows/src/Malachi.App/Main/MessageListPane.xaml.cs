@@ -349,7 +349,11 @@ public sealed partial class MessageListPane : UserControl
         {
             return;
         }
-        var look = RowAppearance.From(settings, l.SearchActive, mailbox.Model.Grouped);
+        // The user's own rows (Sent, Outbox) never show a contact's photo (F10).
+        var look = RowAppearance.From(settings, l.SearchActive, mailbox.Model.Grouped) with
+        {
+            Own = l.FolderRole == FolderRole.Sent || l.FolderRole == FolderRole.Outbox,
+        };
         calendarStamp = CalendarStamp();
         reselecting = true;
         try

@@ -18,7 +18,11 @@
 // window's search over every account), Allow… (the re-sign-in with the
 // contacts scope, in the browser) and Preferences → Contacts. The window
 // has no keyboard shortcut (the owner's answer 5): the "…" menus' Contacts
-// and the chips' Show Contact open it. Nothing here logs a contact.
+// and the chips' Show Contact open it. The contact photos of the avatars
+// (ContactPhotos, docs/plans/address-book.md §9) are made here too: one
+// ContactsPhotosController for the application, told every
+// notify.contactsChanged and reset when the connection comes (a restarted
+// daemon). Nothing here logs a contact.
 
 using System;
 using System.Collections.Generic;
@@ -71,12 +75,18 @@ public sealed partial class AppContacts : IDisposable
             RpcText = RpcErrorText.Text,
         };
         Lookup = new ContactsLookupController(Options);
+        Photos = new ContactPhotos(Options, state.Dispatcher);
         tokens.Add(state.Notifications.AddContactsChanged(ContactsChanged));
         tokens.Add(state.Notifications.AddAccountsChanged(AccountsChanged));
         tokens.Add(state.Notifications.AddConnectionState(s =>
         {
             if (s is ConnectionState.Connected or ConnectionState.InfoFailed)
             {
+                // A new connection may be a new daemon: its photos anew.
+                if (samples is null)
+                {
+                    Photos.Reset();
+                }
                 Refresh();
             }
         }));
@@ -94,6 +104,9 @@ public sealed partial class AppContacts : IDisposable
 
     /// <summary>The address chips' contact.lookup.</summary>
     public ContactsLookupController Lookup { get; }
+
+    /// <summary>The contact photos of the avatars.</summary>
+    internal ContactPhotos Photos { get; }
 
     /// <summary>The invented address books of MALACHI_CONTACTS_SAMPLES=1.</summary>
     public bool Samples => samples is not null;
@@ -218,6 +231,7 @@ public sealed partial class AppContacts : IDisposable
             t.Dispose();
         }
         tokens.Clear();
+        Photos.Dispose();
     }
 
     private async Task SignInAsync(AccountId account, Window owner, IToasts toasts)
@@ -282,6 +296,7 @@ public sealed partial class AppContacts : IDisposable
     private void ContactsChanged(ContactsChangedNotification n)
     {
         Lookup.Invalidate();
+        Photos.Changed(n);
         Refresh();
         window?.Handle(n);
         Changed?.Invoke(this, API.Notify.ContactsChanged);
