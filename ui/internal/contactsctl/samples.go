@@ -310,13 +310,12 @@ func (s *SampleCaller) answer(method string, raw json.RawMessage) (any, *api.Con
 		if !has || c.Photo == "" {
 			return api.ContactPhotoResult{State: api.ContactPhotoStateNone, Revision: c.Revision}, nil, nil
 		}
-		var changed *api.ContactsChangedNotification
 		if c.Photo == api.ContactPhotoRemote {
-			// "Fetched" now, as the daemon does from Microsoft 365.
+			// "Fetched" now, as the daemon does from Microsoft 365, and
+			// like it without notify.contactsChanged: the answer carries it.
 			c.Photo = api.ContactPhotoReady
-			changed = &api.ContactsChangedNotification{AccountID: s.book(c.BookID).AccountID, BookIDs: []api.AddressBookID{c.BookID}}
 		}
-		return api.ContactPhotoResult{State: api.ContactPhotoStateReady, MIME: "image/jpeg", Data: data, Revision: c.Revision}, changed, nil
+		return api.ContactPhotoResult{State: api.ContactPhotoStateReady, MIME: "image/jpeg", Data: data, Revision: c.Revision}, nil, nil
 	case api.MethodContactCreate:
 		var p api.ContactCreateParams
 		_ = json.Unmarshal(raw, &p)

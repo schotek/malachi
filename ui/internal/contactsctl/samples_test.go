@@ -70,8 +70,9 @@ func TestSamplePhotos(t *testing.T) {
 		t.Fatalf("photo %v %s %+v", err, format, cfg)
 	}
 
-	// The remote one is "fetched" once, with a change notification.
-	if err := s.Call(ctx, api.MethodContactPhoto, api.ContactPhotoParams{ContactID: marie}, &ph); err != nil || ph.State != api.ContactPhotoStateReady || notified != 1 {
+	// The remote one is "fetched", without a change notification (the
+	// daemon sends none either).
+	if err := s.Call(ctx, api.MethodContactPhoto, api.ContactPhotoParams{ContactID: marie}, &ph); err != nil || ph.State != api.ContactPhotoStateReady || notified != 0 {
 		t.Fatalf("remote %v %+v %d", err, ph.State, notified)
 	}
 	// Without a photo: none.
