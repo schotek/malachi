@@ -4671,9 +4671,9 @@ minute, and right after an own write. Writes go to the server first
 (online only, no offline queue) and change the cache only after the
 server accepted them; offline is `offline`. Every string of a book or
 contact is untrusted display text, cleaned by the daemon (control,
-bidi and invisible characters removed) and shown as plain text; no HTML,
-photo or URL of a contact is ever fetched. The daemon logs counts and
-ids only.
+bidi and invisible characters removed) and shown as plain text; no HTML
+or URL of a contact is ever fetched, nor a photo named by a link (see
+*Photos* below). The daemon logs counts and ids only.
 
 ```jsonc
 AddressBook    { "id": "b_…" | "recent", "accountId": "acc_1" (opt; absent for recent),
@@ -4682,7 +4682,8 @@ AddressBook    { "id": "b_…" | "recent", "accountId": "acc_1" (opt; absent for
                  "count": 120, "lastSyncAt": Time (opt) }
 ContactSummary { "id": "p_…", "bookId": "b_…", "displayName": "Jana Nováková",
                  "sortKey": "nováková jana", "section": "N",
-                 "org": "Acme" (opt), "email": "jana@example.org" (opt) }
+                 "org": "Acme" (opt), "email": "jana@example.org" (opt),
+                 "photo": "ready|remote" (opt) }   // absent = no photo
 ContactCard    { "id", "bookId", "readOnly": bool,
                  "revision": "…",              // CardDAV ETag or Graph changeKey, opaque
                  "name": { "given", "family", "middle", "prefix", "suffix" },   // each (opt)
@@ -4692,7 +4693,8 @@ ContactCard    { "id", "bookId", "readOnly": bool,
                  "addresses": [{ "label" (opt), "street", "city", "region", "postcode", "country" }],   // each (opt)
                  "urls":      [{ "label" (opt), "url" }],
                  "birthday":  { "year" (opt), "month", "day" } (opt),
-                 "note" (opt) }
+                 "note" (opt),
+                 "photo": "ready|remote" (opt) }   // as ContactSummary; ignored as input
 ```
 
 `kind` is an open enum: an unknown value is a read-only book of an
@@ -4714,8 +4716,10 @@ string), `MaxContactLabelBytes` 64, `MaxContactNoteBytes` 32 KiB,
 `MaxContactEmails` 50, `MaxContactPhones` 50, `MaxContactAddresses` 20,
 `MaxContactURLs` 20, `MaxContactListLimit` 500 (default 100),
 `MaxContactLookupAddresses` 200, `MaxAddressBooksPerAccount` 200,
-`MaxContactsPerBook` 50 000. An input over a limit is invalidArgument; a
-server's contact over a limit is truncated, a vCard over 1 MiB skipped.
+`MaxContactsPerBook` 50 000, `MaxContactPhotoBytes` 64 KiB and
+`MaxContactPhotoPixels` 256 (a photo), `ContactPhotoTimeout` 15 s. An
+input over a limit is invalidArgument; a server's contact over a limit
+is truncated, a vCard over 1 MiB skipped.
 
 An **update is a patch**: the daemon changes only the properties the
 card changed and sends every other line of the stored vCard back
@@ -4767,11 +4771,24 @@ organisation and the addresses (prefixes, as `search.query`).
 Which addresses have a contact: the address chip's *Show Contact* and
 *Add to Contacts…*.
 
-- params: `{ "addresses": ["jana@example.org"] }` — at most 200
-- result: `{ "known": { "jana@example.org": "p_…" } }` — addresses
-  normalised (lower case); unknown addresses are absent; only visible
-  books, never the recent book; the exact address only, never a name
+- params: `{ "addresses": ["jana@example.org"], "withPhotos": bool (opt) }` — at most 200
+- result: `{ "known": { "jana@example.org": "p_…" },
+  "photos": { "jana@example.org": { "contactId": "p_…", "state": "ready|remote" } } (opt) }`
+  — addresses normalised (lower case); unknown addresses are absent;
+  only visible books, never the recent book; the exact address only,
+  never a name
 - errors: invalidArgument (over 200 addresses), storageError
+
+`photos` comes only with `withPhotos: true` and is absent when empty: an
+address is in it when a contact of a visible book with that address has
+a photo (`ready`) or may have one (`remote`); with several such
+contacts, the first by `sortKey`. That contact may differ from the one
+`known` names (a contact without a photo sorts first). It is how a
+client puts the photo of a sender's contact on mail (one call for the
+addresses shown, in batches of 200): by the exact `From` address only,
+never by name, and never for the user's own mail. The address in `From`
+is not authenticated, so a photo there is no more proof of the sender
+than the name (`docs/security.md` §4.4).
 
 #### `contact.create`
 - params: `{ "bookId", "card": ContactCard }`
@@ -4815,6 +4832,50 @@ stored on Graph with the year 1604 and read back without one.
 Every write is followed by `notify.contactsChanged` naming the book.
 A contact the server no longer has is removed from the cache and
 answers contactNotFound.
+
+#### Photos (read only)
+
+A contact's photo is shown in place of its initials; it cannot be set,
+changed or removed here, and `contact.update` leaves it on the server as
+it is (the vCard's `PHOTO` lines are copied byte for byte; a Graph
+`PATCH` never names it). The daemon never hands a client the server's
+bytes: every picture is checked before it is decoded (at most 4 MiB,
+40 Mpx), decoded as JPEG, PNG or GIF (first frame) only, cropped to its
+centred square, scaled to at most 256 × 256 px and encoded anew as JPEG
+(PNG when it has transparency) within 64 KiB, so no metadata survives.
+A picture that breaks a limit or does not decode is no photo.
+
+- **CardDAV**: the picture embedded in the card (vCard 3.0
+  `PHOTO;ENCODING=b;TYPE=JPEG`, 4.0 `PHOTO:data:image/…;base64,…`) comes
+  with the synchronisation; `photo` is `ready` or absent. A photo named
+  by a link (`PHOTO;VALUE=uri:https://…`) is never fetched: no photo.
+- **Microsoft 365**: Graph's contact data has no photo, so every Graph
+  contact is `remote` until `contact.photo` downloads its photo for the
+  contact's current `revision` (then `ready`, or absent when it has
+  none); a new revision makes it `remote` again. A client asks only for
+  contacts it shows.
+- The recent book never has photos.
+
+#### `contact.photo`
+- params: `{ "contactId" }`
+- result: `{ "state": "ready|none", "mime": "image/jpeg|image/png" (opt),
+  "data": "base64…" (opt), "revision": "…" }` — `mime` and `data` only
+  when `ready`; `revision` is the contact's version the photo was made
+  from (`ContactCard.revision`)
+- errors: contactNotFound, contactsConsentRequired, offline,
+  networkError, serverTimeout (15 s), serverError, authRequired,
+  authFailed, storageError, cancelled
+
+For a `remote` contact the daemon downloads the photo (at most 4
+downloads per account at a time, the account's Graph limits apply;
+concurrent requests for one contact share one download), stores the
+result — the photo, or none, which is remembered and not asked again
+for that revision — and sends `notify.contactsChanged` naming the book,
+so lists show `ready`. A failed download stores nothing and answers the
+error; the contact stays `remote`. A client keeps photos in memory by
+contact id and `revision` and asks again after `notify.contactsChanged`
+for the book shows another `revision` or `photo` state. `state` is an
+open enum: an unknown value is no photo.
 
 ## 5. Notifications
 
@@ -4950,7 +5011,8 @@ again. A client that does not know it ignores it.
 `notify.contactsChanged` is sent to every client when the books or
 contacts of an account changed (§4.19): a pass that changed something,
 an own write, a book added or removed, `addressBook.set`, contacts
-switched off, and (without `accountId`) a delivered mail whose
+switched off, a photo downloaded by `contact.photo` or read from a
+stored card, and (without `accountId`) a delivered mail whose
 recipients went to the recent book. Without `bookIds` any book of the account changed;
 without `accountId` the recent book. Gathered within 250 ms. A client
 that does not know it ignores it.
@@ -5363,3 +5425,8 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   `contactNotFound`, 1111 `addressBookNotFound`, 1206
   `contactsConsentRequired`, 1308 `contactConflict`, 1509
   `addressBookReadOnly`. `ProtocolVersion` stays 2.
+- **2** (2026-10-31, compatible addition: contact photos, read only,
+  §4.19): new method `contact.photo`; `ContactSummary.photo` and
+  `ContactCard.photo`; `contact.lookup` param `withPhotos` and result
+  `photos`; limits `MaxContactPhotoBytes`, `MaxContactPhotoPixels`,
+  `ContactPhotoTimeout`. No new error codes; `ProtocolVersion` stays 2.

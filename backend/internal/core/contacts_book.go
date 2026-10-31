@@ -442,7 +442,8 @@ func (s *addressBookService) ListContacts(ctx context.Context, p api.ContactList
 	out.Total = total
 	for _, c := range rows {
 		out.Contacts = append(out.Contacts, api.ContactSummary{ID: api.ContactID(c.ID), BookID: api.AddressBookID(c.BookID),
-			DisplayName: c.DisplayName, SortKey: c.SortKey, Section: c.Section, Org: c.Org, Email: c.PrimaryEmail})
+			DisplayName: c.DisplayName, SortKey: c.SortKey, Section: c.Section, Org: c.Org, Email: c.PrimaryEmail,
+			Photo: api.ContactPhotoAvailability(c.PhotoState)})
 	}
 	return out, nil
 }
@@ -565,7 +566,9 @@ func (s *addressBookService) GetContact(ctx context.Context, p api.ContactGetPar
 	if err != nil {
 		return nil, api.NewError(api.CodeStorageError, "the stored contact cannot be read")
 	}
-	return &api.ContactGetResult{Contact: apiCard(card, api.ContactID(stored.ID), api.AddressBookID(bk.ID), bk.ReadOnly, stored.ETag)}, nil
+	out := apiCard(card, api.ContactID(stored.ID), api.AddressBookID(bk.ID), bk.ReadOnly, stored.ETag)
+	out.Photo = api.ContactPhotoAvailability(stored.PhotoState)
+	return &api.ContactGetResult{Contact: out}, nil
 }
 
 // recentAddress is the address of a recent-book contact id.
@@ -626,6 +629,18 @@ func (s *addressBookService) Lookup(ctx context.Context, p api.ContactLookupPara
 	}
 	for a, id := range known {
 		out.Known[a] = api.ContactID(id)
+	}
+	if p.WithPhotos {
+		photos, err := b.store.LookupContactPhotos(ctx, addrs, ids)
+		if err != nil {
+			return nil, api.NewError(api.CodeStorageError, "%v", err)
+		}
+		if len(photos) > 0 {
+			out.Photos = make(map[string]api.ContactPhotoRef, len(photos))
+		}
+		for a, m := range photos {
+			out.Photos[a] = api.ContactPhotoRef{ContactID: api.ContactID(m.ContactID), State: api.ContactPhotoAvailability(m.State)}
+		}
 	}
 	return out, nil
 }
@@ -821,7 +836,11 @@ func (b *Backend) conflict(ctx context.Context, bk store.AddressBook, ce *contac
 		b.log.Warn("store the server's contact", "book", bk.ID, "err", err)
 		return e
 	}
-	e.Data = api.ContactConflictData{Server: apiCard(ce.Server.Card, api.ContactID(id), api.AddressBookID(bk.ID), bk.ReadOnly, ce.Server.ETag)}
+	server := apiCard(ce.Server.Card, api.ContactID(id), api.AddressBookID(bk.ID), bk.ReadOnly, ce.Server.ETag)
+	if sc, err := b.store.GetContact(ctx, id); err == nil {
+		server.Photo = api.ContactPhotoAvailability(sc.PhotoState)
+	}
+	e.Data = api.ContactConflictData{Server: server}
 	b.contactsChanged(bk.AccountID, bk.ID)
 	return e
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+	"time"
 )
 
 // contactsBookMethods end AllMethods, after the assistant profile's;
@@ -15,6 +16,7 @@ var contactsBookMethods = []string{
 	"addressBook.list", "addressBook.set",
 	"contact.list", "contact.get", "contact.lookup",
 	"contact.create", "contact.update", "contact.delete",
+	"contact.photo",
 }
 
 func TestContactsBookMethodsOrder(t *testing.T) {
@@ -47,7 +49,8 @@ func TestContactsBookErrorCodes(t *testing.T) {
 }
 
 func TestContactsBookLimits(t *testing.T) {
-	if MaxContactListLimit != 500 || MaxVCardBytes != 1<<20 || MaxContactLookupAddresses != 200 {
+	if MaxContactListLimit != 500 || MaxVCardBytes != 1<<20 || MaxContactLookupAddresses != 200 ||
+		MaxContactPhotoBytes != 64<<10 || MaxContactPhotoPixels != 256 || ContactPhotoTimeout != 15*time.Second {
 		t.Fatal("limits differ from docs/api.md §4.19")
 	}
 }
@@ -81,6 +84,27 @@ func TestContactsBookJSON(t *testing.T) {
 		t.Errorf("empty card %s, want %s", got, want)
 	}
 	roundTrip(t, "lookup", ContactLookupResult{Known: map[string]ContactID{"jana@example.org": "p_1"}})
+	if got, want := roundTrip(t, "lookup photos", ContactLookupResult{Known: map[string]ContactID{},
+		Photos: map[string]ContactPhotoRef{"jana@example.org": {ContactID: "p_1", State: ContactPhotoRemote}}}),
+		`{"known":{},"photos":{"jana@example.org":{"contactId":"p_1","state":"remote"}}}`; got != want {
+		t.Errorf("lookup photos %s, want %s", got, want)
+	}
+	if got, want := roundTrip(t, "lookup params", ContactLookupParams{Addresses: []string{"a@b.c"}, WithPhotos: true}),
+		`{"addresses":["a@b.c"],"withPhotos":true}`; got != want {
+		t.Errorf("lookup params %s, want %s", got, want)
+	}
+	if got, want := roundTrip(t, "photo", ContactPhotoResult{State: ContactPhotoStateReady, MIME: "image/jpeg", Data: []byte{0xff, 0xd8}, Revision: `"e1"`}),
+		`{"state":"ready","mime":"image/jpeg","data":"/9g=","revision":"\"e1\""}`; got != want {
+		t.Errorf("photo %s, want %s", got, want)
+	}
+	if got, want := roundTrip(t, "no photo", ContactPhotoResult{State: ContactPhotoStateNone, Revision: "ck"}),
+		`{"state":"none","revision":"ck"}`; got != want {
+		t.Errorf("no photo %s, want %s", got, want)
+	}
+	if got, want := roundTrip(t, "summary with photo", ContactSummary{ID: "p_1", BookID: "b_1", Photo: ContactPhotoReady}),
+		`{"id":"p_1","bookId":"b_1","displayName":"","sortKey":"","section":"","photo":"ready"}`; got != want {
+		t.Errorf("summary with photo %s, want %s", got, want)
+	}
 	if got, want := roundTrip(t, "changed", ContactsChangedNotification{AccountID: "acc_1", BookIDs: []AddressBookID{"b_1"}}),
 		`{"accountId":"acc_1","bookIds":["b_1"]}`; got != want {
 		t.Errorf("notification %s, want %s", got, want)

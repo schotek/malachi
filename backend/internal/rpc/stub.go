@@ -74,6 +74,9 @@ func (stubAddressBooks) UpdateContact(context.Context, api.ContactUpdateParams) 
 func (stubAddressBooks) DeleteContact(context.Context, api.ContactDeleteParams) (*api.ContactDeleteResult, error) {
 	return nil, api.ErrNotImplemented
 }
+func (stubAddressBooks) Photo(context.Context, api.ContactPhotoParams) (*api.ContactPhotoResult, error) {
+	return nil, api.ErrNotImplemented
+}
 
 type stubAssistant struct{}
 

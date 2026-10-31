@@ -39,6 +39,16 @@ const (
 	MaxContactPhones          = 50
 	MaxContactAddresses       = 20
 	MaxContactURLs            = 20
+
+	// Contact photos (§4.19 contact.photo; docs/plans/address-book.md §9).
+	// A photo is the daemon's own encoding: JPEG (PNG when it has
+	// transparency), a square of at most MaxContactPhotoPixels a side,
+	// at most MaxContactPhotoBytes.
+	MaxContactPhotoBytes  = 64 << 10
+	MaxContactPhotoPixels = 256
+	// ContactPhotoTimeout bounds contact.photo's download of a Microsoft
+	// 365 contact's photo.
+	ContactPhotoTimeout = 15 * time.Second
 )
 
 // ---------------------------------------------------------------------------
@@ -85,6 +95,30 @@ const (
 	ContactLabelFax    ContactLabel = "fax"    // phones
 	ContactLabelPager  ContactLabel = "pager"  // phones
 	ContactLabelMain   ContactLabel = "main"   // phones
+)
+
+// ContactPhotoAvailability is what ContactSummary.Photo, ContactCard.Photo
+// and contact.lookup's photos say of a contact's photo; "" (the field
+// absent) is no photo. Open enum: an unknown value is no photo.
+type ContactPhotoAvailability string
+
+const (
+	// ContactPhotoReady: the daemon has the photo; contact.photo returns
+	// it at once.
+	ContactPhotoReady ContactPhotoAvailability = "ready"
+	// ContactPhotoRemote: a Microsoft 365 contact whose photo, if it has
+	// one, has not been fetched for its current revision; contact.photo
+	// fetches it (and may find none).
+	ContactPhotoRemote ContactPhotoAvailability = "remote"
+)
+
+// ContactPhotoState is contact.photo's answer. Open enum: an unknown
+// value is no photo.
+type ContactPhotoState string
+
+const (
+	ContactPhotoStateReady ContactPhotoState = "ready" // Mime and Data hold the photo
+	ContactPhotoStateNone  ContactPhotoState = "none"  // no photo, or one the daemon refused
 )
 
 // ContactSearchScope is which address books contact.search reads.
@@ -183,6 +217,9 @@ type ContactSummary struct {
 	Section string `json:"section"`
 	Org     string `json:"org,omitempty"`
 	Email   string `json:"email,omitempty"` // the first address
+	// Photo: whether the contact has a photo (contact.photo); absent
+	// when it has none. Never set in the recent book.
+	Photo ContactPhotoAvailability `json:"photo,omitempty"`
 }
 
 // ContactName is the structured name of a contact (vCard N).
@@ -247,6 +284,9 @@ type ContactCard struct {
 	URLs        []ContactURL     `json:"urls"`
 	Birthday    *ContactBirthday `json:"birthday,omitempty"`
 	Note        string           `json:"note,omitempty"`
+	// Photo as ContactSummary.Photo. Ignored as input: contact.update
+	// never changes a photo, the server keeps it as it is.
+	Photo ContactPhotoAvailability `json:"photo,omitempty"`
 }
 
 // ---------------------------------------------------------------------------
@@ -296,12 +336,42 @@ type ContactGetResult struct {
 
 type ContactLookupParams struct {
 	Addresses []string `json:"addresses"` // ≤ MaxContactLookupAddresses
+	// WithPhotos asks for Photos too.
+	WithPhotos bool `json:"withPhotos,omitempty"`
 }
 
 // ContactLookupResult maps each address with a contact in a visible book
 // (normalised, lower case) to that contact; unknown addresses are absent.
 type ContactLookupResult struct {
 	Known map[string]ContactID `json:"known"` // never null
+	// Photos (only with WithPhotos; absent when empty) maps each address
+	// that a contact of a visible book with a photo (ready or remote) has
+	// to that contact: the first by sort key of those contacts, which may
+	// be another contact than Known names. Never from the recent book.
+	Photos map[string]ContactPhotoRef `json:"photos,omitempty"`
+}
+
+// ContactPhotoRef names the contact whose photo stands for an address.
+type ContactPhotoRef struct {
+	ContactID ContactID                `json:"contactId"`
+	State     ContactPhotoAvailability `json:"state"`
+}
+
+type ContactPhotoParams struct {
+	ContactID ContactID `json:"contactId"`
+}
+
+// ContactPhotoResult is a contact's photo. Revision is the contact's
+// version the photo was made from (ContactCard.Revision); a client keeps
+// a photo until a contact's summary or card shows another revision or
+// notify.contactsChanged names its book. Mime and Data (base64 in JSON)
+// are set only when State is ready: the daemon's own JPEG or PNG
+// (MaxContactPhotoBytes, MaxContactPhotoPixels), never the server's bytes.
+type ContactPhotoResult struct {
+	State    ContactPhotoState `json:"state"`
+	MIME     string            `json:"mime,omitempty"`
+	Data     []byte            `json:"data,omitempty"`
+	Revision string            `json:"revision"`
 }
 
 type ContactCreateParams struct {
@@ -350,4 +420,5 @@ type AddressBookService interface {
 	CreateContact(ctx context.Context, p ContactCreateParams) (*ContactCreateResult, error)
 	UpdateContact(ctx context.Context, p ContactUpdateParams) (*ContactUpdateResult, error)
 	DeleteContact(ctx context.Context, p ContactDeleteParams) (*ContactDeleteResult, error)
+	Photo(ctx context.Context, p ContactPhotoParams) (*ContactPhotoResult, error)
 }

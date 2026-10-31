@@ -119,6 +119,7 @@ type fakeBackend struct {
 	contactCards   map[api.ContactID]api.ContactCard
 	contactLists   []api.ContactListParams
 	contactCreates []api.ContactCreateParams
+	contactPhotos  int
 	contactUpdates []api.ContactUpdateParams
 
 	searchResults []api.SearchResult // what every search.query answers

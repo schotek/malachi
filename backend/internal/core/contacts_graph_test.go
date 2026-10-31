@@ -33,10 +33,16 @@ type graphContactsFake struct {
 	removed map[string]int
 	deny    bool
 	patches []map[string]any
+	// photos are the contacts' pictures (id → bytes), photoGets the
+	// downloads answered.
+	photos    map[string][]byte
+	photoGets int
+	photoWait chan struct{} // when set, a download waits for it
 }
 
 func newGraphContactsFake(t *testing.T) *graphContactsFake {
-	f := &graphContactsFake{items: map[string]map[string]any{}, itemSeq: map[string]int{}, removed: map[string]int{}}
+	f := &graphContactsFake{items: map[string]map[string]any{}, itemSeq: map[string]int{}, removed: map[string]int{},
+		photos: map[string][]byte{}}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.handle))
 	t.Cleanup(f.srv.Close)
 	return f
@@ -76,6 +82,21 @@ func (f *graphContactsFake) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	p := strings.TrimPrefix(r.URL.Path, "/")
 	switch {
+	case strings.HasPrefix(p, "me/contacts/") && strings.HasSuffix(p, "/photo/$value"):
+		id := strings.TrimSuffix(strings.TrimPrefix(p, "me/contacts/"), "/photo/$value")
+		f.photoGets++
+		if wait := f.photoWait; wait != nil {
+			f.mu.Unlock()
+			<-wait
+			f.mu.Lock()
+		}
+		data, ok := f.photos[id]
+		if !ok {
+			f.reply(w, 404, map[string]any{"error": map[string]any{"code": "ErrorItemNotFound", "message": "no photo"}})
+			return
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		_, _ = w.Write(data)
 	case p == "me/contactFolders":
 		f.reply(w, 200, map[string]any{"value": []any{}})
 	case p == "me/contacts/delta":

@@ -171,6 +171,9 @@ type Backend struct {
 	// cn gathers notify.contactsChanged (contacts_book.go).
 	contactSync *contactsync.Supervisor
 	cn          contactsNotify
+	// photoFetch bounds and joins the downloads of contact.photo
+	// (contacts_photo.go).
+	photoFetch contactPhotoFetches
 	// graphLimiters are the request limiters of Graph accounts, one per
 	// account shared by its mail syncer, outbox and calendar (D13), under
 	// graphLimMu.

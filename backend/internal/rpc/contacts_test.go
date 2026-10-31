@@ -21,8 +21,8 @@ func TestAddressBookMethodsDispatch(t *testing.T) {
 			methods = append(methods, m)
 		}
 	}
-	if len(methods) != 8 {
-		t.Fatalf("%d address book methods, want 8", len(methods))
+	if len(methods) != 9 { // with contact.photo
+		t.Fatalf("%d address book methods, want 9", len(methods))
 	}
 	ts := startServer(t, nil, nil, nil)
 	pre, preR := dial(t, ts.sock)

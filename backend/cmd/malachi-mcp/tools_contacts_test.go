@@ -36,7 +36,7 @@ func (s fakeAddressBooks) ListContacts(_ context.Context, p api.ContactListParam
 	s.f.contactLists = append(s.f.contactLists, p)
 	out := &api.ContactListResult{Contacts: []api.ContactSummary{}}
 	for _, c := range s.f.contactCards {
-		out.Contacts = append(out.Contacts, api.ContactSummary{ID: c.ID, BookID: c.BookID, DisplayName: c.DisplayName, Org: c.Org, Email: c.Emails[0].Address})
+		out.Contacts = append(out.Contacts, api.ContactSummary{ID: c.ID, BookID: c.BookID, DisplayName: c.DisplayName, Org: c.Org, Email: c.Emails[0].Address, Photo: c.Photo})
 	}
 	out.Total = len(out.Contacts)
 	return out, nil
@@ -178,4 +178,35 @@ func TestRevisionText(t *testing.T) {
 			t.Errorf("revisionText(%q) = %q, want %q", in, got, want)
 		}
 	}
+}
+
+// The bridge returns text only (docs/plans/address-book.md F12): a
+// contact's photo state never reaches a tool's output and no tool asks
+// for the photo itself, even when update_contact sends the card back.
+func TestContactToolsCarryNoPhoto(t *testing.T) {
+	fb := contactFixture()
+	card := fb.contactCards["p_1"]
+	card.Photo = api.ContactPhotoReady
+	fb.contactCards["p_1"] = card
+	h := newHarness(t, fb, true, false)
+	outs := []string{
+		h.ok(t, "search_contacts", map[string]any{"query": "jana"}),
+		h.ok(t, "get_contact", map[string]any{"contactId": "p_1"}),
+		h.ok(t, "update_contact", map[string]any{"contactId": "p_1", "jobTitle": "CEO"}),
+	}
+	for _, out := range outs {
+		mustNotContain(t, out, "photo", "Photo", "ready", "/9j/", "iVBOR", "data:image")
+	}
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
+	if fb.contactPhotos != 0 {
+		t.Errorf("the bridge asked for %d photos", fb.contactPhotos)
+	}
+}
+
+func (s fakeAddressBooks) Photo(context.Context, api.ContactPhotoParams) (*api.ContactPhotoResult, error) {
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+	s.f.contactPhotos++
+	return &api.ContactPhotoResult{State: api.ContactPhotoStateReady, MIME: "image/jpeg", Data: []byte("\xff\xd8\xff photo bytes"), Revision: "r1"}, nil
 }

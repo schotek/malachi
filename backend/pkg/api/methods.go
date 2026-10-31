@@ -166,6 +166,7 @@ const (
 	MethodContactCreate   = "contact.create"
 	MethodContactUpdate   = "contact.update"
 	MethodContactDelete   = "contact.delete"
+	MethodContactPhoto    = "contact.photo"
 )
 
 // Notification names (backend → client, no reply expected).
@@ -227,6 +228,7 @@ var AllMethods = []string{
 	MethodAddressBookList, MethodAddressBookSet,
 	MethodContactList, MethodContactGet, MethodContactLookup,
 	MethodContactCreate, MethodContactUpdate, MethodContactDelete,
+	MethodContactPhoto,
 }
 
 // AllNotifications lists every server-initiated notification.

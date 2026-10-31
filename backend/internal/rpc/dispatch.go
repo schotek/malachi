@@ -157,6 +157,7 @@ func (s *Server) registerAddressBooks(b api.Backend) {
 	s.handlers[api.MethodContactCreate] = wrap(ab.CreateContact)
 	s.handlers[api.MethodContactUpdate] = wrap(ab.UpdateContact)
 	s.handlers[api.MethodContactDelete] = wrap(ab.DeleteContact)
+	s.handlers[api.MethodContactPhoto] = wrap(ab.Photo)
 }
 
 // Server also implements the optional api.ContactsNotifier.
