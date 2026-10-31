@@ -16,6 +16,7 @@ require (
 	github.com/teambition/rrule-go v1.8.2
 	github.com/tetratelabs/wazero v1.12.0
 	github.com/yuin/goldmark v1.8.6
+	golang.org/x/image v0.45.0
 	golang.org/x/net v0.58.0
 	golang.org/x/oauth2 v0.35.0
 	golang.org/x/text v0.41.0
