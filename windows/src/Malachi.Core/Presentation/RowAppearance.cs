@@ -19,6 +19,12 @@ namespace Malachi.Core.Presentation;
 /// <param name="Grouped">The list is grouped by conversation: a plain row keeps the fold arrow's place.</param>
 public readonly record struct RowAppearance(bool Compact, bool ShowPreview, bool ShowAvatars, bool Monochrome, bool Grouped)
 {
+    /// <summary>
+    /// The rows are the user's own (a sent or outbox folder): their avatars
+    /// never show a contact's photo (docs/plans/address-book.md F10).
+    /// </summary>
+    public bool Own { get; init; }
+
     /// <summary>The appearance for <paramref name="settings"/>, a search on or not, the listing grouped or not.</summary>
     public static RowAppearance From(SettingsStore settings, bool searching, bool grouped)
     {

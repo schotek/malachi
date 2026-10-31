@@ -61,6 +61,25 @@ public sealed class MessageRowTests
         Assert.Equal(MessageRow.MarginComfortable, row.MarginTop);
     }
 
+    /// <summary>The avatar's contact photo (docs/plans/address-book.md F10): by the first sender's exact address, never on the user's own rows.</summary>
+    [Fact]
+    public void TheAvatarAsksForTheSendersPhotoButNotOnOwnRows()
+    {
+        var s = Member("m1", null, 1, "Alice") with
+        {
+            From = [new Address { Name = "Alice", Email = " Alice@Example.invalid " }],
+        };
+        Assert.Equal("alice@example.invalid", Row(Plain(s)).AvatarAddress);
+        Assert.Equal("", Row(Plain(s), look: Comfortable with { Own = true }).AvatarAddress);
+        Assert.Equal("", Row(Plain(s with { From = [] })).AvatarAddress);
+        Assert.Equal("", Row(Plain(s with { From = [new Address { Name = "x", Email = "undisclosed" }] })).AvatarAddress);
+        var latest = Member("a2", "t_a", 2, "bob");
+        var summary = Thr("t_a", 3, 1, latest) with { Participants = [new Address { Name = "Bob", Email = "bob@example.invalid" }] };
+        var r = new ListRow { Key = new ListKey(Thread: "t_a"), Thread = true, Message = latest, Summary = summary };
+        Assert.Equal("bob@example.invalid", Row(r).AvatarAddress);
+        Assert.Equal("", Row(r, look: Comfortable with { Own = true }).AvatarAddress);
+    }
+
     [Fact]
     public void TheReviewsHostileHeadersAreShownCleaned()
     {

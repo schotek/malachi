@@ -10,7 +10,8 @@
 // eWay pill (configure's crmPill, CRM.pillFor; docs/eway.md), threads.go (the row a listRow becomes: newMessageRow,
 // syncRows) and widget/highlight.go (the matched words in bold); macOS:
 // MessageList/MessageCellView.swift, which keeps this in AppKit and Windows
-// in Core (docs/windows-port.md §7.4, §11.2).
+// in Core (docs/windows-port.md §7.4, §11.2). The avatar's contact photo
+// (AvatarAddress) is ui/internal/contacts avatar.go AvatarOfSender.
 //
 // One row of the message list, as a view model the WinUI ListView keeps
 // across snapshots: ListController publishes its rows keyed by ListKey, and
@@ -70,6 +71,7 @@ public sealed partial class MessageRow : ObservableObject
     {
         Key = key;
         AvatarText = "";
+        AvatarAddress = "";
         Sender = "";
         SenderTooltip = "";
         Subject = "";
@@ -117,6 +119,16 @@ public sealed partial class MessageRow : ObservableObject
     /// <summary>What the avatar's colour and initials come from: the first sender's (or participant's) display name.</summary>
     [ObservableProperty]
     public partial string AvatarText { get; private set; }
+
+    /// <summary>
+    /// The address whose contact's photo the avatar shows instead of the
+    /// initials (ContactBook.AvatarOfSender, docs/plans/address-book.md
+    /// F10): the first sender's (or participant's), normalised; "" for the
+    /// user's own rows (<see cref="RowAppearance.Own"/>) and a sender
+    /// without an address.
+    /// </summary>
+    [ObservableProperty]
+    public partial string AvatarAddress { get; private set; }
 
     /// <summary>The sender, or a conversation's participants.</summary>
     [ObservableProperty]
@@ -343,6 +355,7 @@ public sealed partial class MessageRow : ObservableObject
             var t = Model.MailModel.SummaryThread(summary, row.Expanded, row.Loading);
             var first = t.Participants.Count > 0 ? t.Participants[0] : new Address { Email = "" };
             AvatarText = Format.DisplayName(first);
+            AvatarAddress = Contacts.ContactBook.AvatarOfSender(first.Email, AvatarText, look.Own).Sender;
             Sender = Format.FormatParticipants(t.Participants);
             SenderTooltip = string.Join("\n", t.Participants.Select(Format.FormatAddress));
             Fill(t.Subject, t.Snippet, t.Date, t.Unread > 0, t.Flagged, t.HasAttachments, now);
@@ -366,6 +379,7 @@ public sealed partial class MessageRow : ObservableObject
             var from = message.From.Count > 0 ? message.From[0] : new Address { Email = "" };
             var name = Format.DisplayName(from);
             AvatarText = name;
+            AvatarAddress = Contacts.ContactBook.AvatarOfSender(from.Email, name, look.Own).Sender;
             Sender = name;
             SenderTooltip = Format.FormatAddress(from);
             Fill(message.Subject, message.Snippet, message.Date, message.Unread, message.Flagged, message.HasAttachments, now);
