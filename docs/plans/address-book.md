@@ -222,9 +222,68 @@ offline se slučováním, okno průvodce a stránka kopírují kalendář).
    agent vlastníka (remote control), GTK sestavení a testy linuxový agent
    vlastníka.
 
-## 9. Historie
+## 9. Fotky kontaktů jen pro čtení (návrh 2026-10-31, ke schválení)
+
+Vlastník (2026-10-31): fotka kontaktu se má ukázat místo avataru
+s iniciálami, zatím jen čtení. Wireframe:
+[`address-book/w7-photos.svg`](address-book/w7-photos.svg).
+
+![W7](address-book/w7-photos.svg)
+
+### 9.1 Rozhodnutí (F1–F10)
+
+| # | Rozhodnutí | Proč |
+|---|---|---|
+| F1 | **Jen čtení:** fotka se ukáže v seznamu a v detailu okna Kontakty místo iniciál. Nastavení, změna ani smazání fotky ne; úprava kontaktu fotku zachová beze změny (záplata vCard i `PATCH` Graphu na ni nesahají už dnes). | Zadání vlastníka; zápis fotky je jiná práce (Graph u osobních účtů fotku zapsat nedovolí). |
+| F2 | **CardDAV:** fotka je vložená v kartě (`PHOTO;ENCODING=b` ve 3.0, `PHOTO:data:image/…;base64,` ve 4.0, Apple `X-ABShowAs` se ignoruje). Přijde se synchronizací, žádný požadavek navíc. `vcard` dnes nedekóduje řádky nad 256 KiB (`MaxLineBytes`); pro `PHOTO` se hranice zvedne na limit karty 1 MiB, ostatní vlastnosti zůstanou na 256 KiB. | Fotka je pro většinu serverů součást karty. |
+| F3 | **Microsoft 365:** `GET /me/contacts/{id}/photo/$value` (u složek `/me/contactFolders/{f}/contacts/{id}/photo/$value`), **líně**: až když kontakt klient ukazuje, jednou na verzi kontaktu (`changeKey`); 404 = bez fotky a zapamatuje se. Sdílený limiter účtu, nejvýš 4 souběžně, strop 4 MiB na odpověď. | Delta fotku nenese; stahovat stovky fotek při každé synchronizaci by plýtvalo limitem Graphu. |
+| F4 | **`PHOTO` jako odkaz** (`PHOTO;VALUE=uri:https://…`, `PHOTO:https://…`) se **nikdy nestáhne**, kontakt má iniciály. | Odkaz ve sdíleném adresáři by fungoval jako sledovací pixel (studie, Bezpečnost). |
+| F5 | **Démon fotku zpracuje:** `image.DecodeConfig` před dekódováním (JPEG, PNG, GIF; nejvýš 40 Mpx a 4 MiB vstupu, jinak odmítnout), dekódování, zmenšení na nejvýš 256 × 256 px, oříznutí na čtverec ze středu a nové kódování do JPEG (kvalita 85; s průhledností PNG). Původní bajty nikdy neopustí démon; nové kódování zahodí EXIF, GPS i barevné profily. Selhání = kontakt bez fotky, do logu jen třída chyby a id. | Obrázek ze serveru je nepřátelský vstup (pravidlo 3); ochrana proti dekompresní bombě; malé jednotné obrázky jsou levné pro cache i UI. |
+| F6 | **Zmenšování:** `golang.org/x/image/draw` (BSD-3, projekt Go jako `x/net` a `x/text`, které jádro už má) s `CatmullRom`; zdůvodnění v commitu. Alternativa bez závislosti: vlastní průměrování ploch (asi 80 řádků, horší kvalita). | Kvalita a ověřený kód; licence vyhovuje (CLAUDE.md, nic silnějšího než MPL/LGPL). |
+| F7 | **Úložiště:** migrace `0024_contact_photos.sql` (0023 už proběhla nad kopiemi vlastníka a needituje se): tabulka `ab_photos` (`contact_id` PK s CASCADE z `ab_contacts`, `revision` = ETag/changeKey, ze které je, `state` `ok`/`none`/`refused`, `mime`, `data` BLOB ≤ 64 KiB). Vlastní tabulka, aby `contact.list` nečetl BLOBy. Cache serveru jako zbytek kontaktů (smaže se s adresářem a účtem). | Odděleně od řádků seznamu; stav `none` zabrání opakovaným dotazům Graphu. |
+| F8 | **API (kompatibilní rozšíření protokolu 2, `docs/api.md` §4.19):** `ContactSummary.photo` a `ContactCard.photo` = `"none"` \| `"ready"` \| `"remote"` (u Graphu ještě nestažená); nová metoda `contact.photo { contactId }` → `{ "mime", "data" (base64), "revision" }` nebo chyba 1110; u `remote` ji démon stáhne (časový limit 15 s), výsledek uloží a pošle `notify.contactsChanged` jen s tím adresářem. Nová chyba ne: odmítnutá fotka je `photo: "none"`. | Klient vidí, kde fotku žádat, a nečeká na Graph u kontaktů bez fotky. |
+| F9 | **Klienti:** jedna komponenta avataru (fotka, jinak iniciály) v seznamu a detailu okna Kontakty; fotky jen pro viditelné řádky (blízké okno jako těla v chatu), cache v paměti nejvýš 200 obrázků, nová fotka po `contactsChanged` s jinou `revision`. Kruhový ořez kreslí UI; žádný text ani přístupné jméno z fotky (jméno je u řádku). GTK `Gtk.Picture` z `Gdk.Texture` z bajtů, macOS `NSImage(data:)` do `NSImageView`, Windows `BitmapImage.SetSourceAsync` z `InMemoryRandomAccessStream`. | Stejné místo jako dnešní iniciály, nic dalšího v rozložení. |
+| F10 | **Mimo tento krok:** fotka odesílatele v seznamu zpráv, konverzaci a chatu (podle adresy přes `contact.lookup`), fotky v MCP mostu (most dál vrací jen text), zápis fotky. | Samostatné rozhodnutí; sahá na víc míst UI. |
+
+### 9.2 Bezpečnost (`docs/security.md` §4.4 doplnit)
+
+- Fotka je data obrázku od třetí strany: limity před dekódováním (F5),
+  dekodéry standardní knihovny Go (bez cgo), nové kódování, do UI jen
+  bajty z démona. Patologický korpus `backend/testdata/vcard/photos/`
+  (40 000 × 40 000 px PNG o pár kilobajtech, zkrácený JPEG, GIF se
+  stovkami snímků, nesmyslný MIME, base64 s mezerami a neplatnými znaky,
+  `PHOTO` s `data:` a s `https:`) a fuzz `FuzzPhoto`.
+- Žádné stažení podle URL z karty (F4); Graph jen přes stávající klient
+  s tokenem na `graph.microsoft.com`.
+- Logy jen počty, id a třídy chyb.
+
+### 9.3 Úkoly a ověření
+
+| Úkol | Obsah | Ověření |
+|---|---|---|
+| **P1** démon | `vcard` (`Card.Photo` = bajty a MIME z vloženého `PHOTO`, `PhotoURI` jen příznak, limit řádku pro `PHOTO`), `internal/contactphoto` (F5, F6, korpus, fuzz), Graph `ContactPhoto`, migrace 0024, store, synchronizace CardDAV uloží fotku, `contact.photo` a `photo` v souhrnech, `docs/api.md`, `security.md`, MCP beze změny (test, že fotku nevrací) | `go vet`, `go test ./...`, fuzz, revize |
+| **P2** Go reference | `ui/internal/contacts` `Avatar` (fotka vs. iniciály, pravidla cache a blízkého okna), `contactsctl` `Photos` (dotazy, cache, invalidace), testy; žádný nový msgid | `go test` |
+| **P3** macOS | port P2 + avatar v `ContactsListViewController` a `ContactsDetailViewController`; krok `MALACHI_START=contacts` se vzorovými fotkami | Mac agent: `swift build`, `swift test`, měření; **brána F-B1 vlastníka** |
+| **P4** GTK | totéž (`contacts_window.go`, `contacts_detail.go`), vzorová data s fotkami, smoke | linuxový agent: build, test, smoke, `make po` beze změny, lint |
+| **P5** Windows | totéž (`Contacts/*`), smoke | Windows agent: `build.ps1 app`/`test`/`lint`, smoke, průchod UIA |
+
+Odhad: démon 800–1 100 řádků včetně testů a korpusu, Go reference
+200–300, každý klient 200–400; celkem asi 1,5–2,5 tisíce řádků.
+
+### 9.4 Otázky pro vlastníka
+
+1. **Zmenšování** přes `golang.org/x/image/draw` (F6), nebo bez nové
+   závislosti vlastním průměrováním?
+2. **Microsoft 365 líně** (F3: fotka až když je kontakt vidět), nebo
+   stáhnout všechny fotky při synchronizaci (víc požadavků, ale fotky
+   i offline)?
+3. **Rozsah** jen okno Kontakty (F9), nebo rovnou i avatar odesílatele
+   v seznamu zpráv a konverzaci (F10)?
+
+## 10. Historie
 
 - 2026-10-30 první návrh (na základě studie z 30. 9. a průzkumu kódu po
   kalendáři a eWay-CRM).
 - 2026-10-30 vlastník: odpovědi v §8, wireframy upravené (eWay ve
   2. etapě, úpravy v 1. etapě, bez zkratky), začíná implementace.
+- 2026-10-31 návrh fotek kontaktů jen pro čtení (§9, W7), ke schválení.
