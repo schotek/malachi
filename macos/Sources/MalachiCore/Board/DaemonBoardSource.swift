@@ -764,7 +764,7 @@ extension DaemonBoardSource {
     static func convert(_ m: BoardMessage) -> Board.CaseMessage {
         Board.CaseMessage(
             id: m.id, folder: m.folderId, from: displayName(m.from), date: m.date, text: m.text, mine: m.mine,
-            trimmed: m.trimmed ?? false)
+            trimmed: m.trimmed ?? false, address: m.from.address)
     }
 
     static func convert(_ r: BoardRun) -> Board.Run {

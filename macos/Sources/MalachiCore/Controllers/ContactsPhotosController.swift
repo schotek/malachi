@@ -394,8 +394,8 @@ public final class ContactsPhotosController {
     private func shownContacts() -> [ContactID] {
         var out: [ContactID] = []
         func add(_ id: ContactID?) {
-            guard let id, !id.rawValue.isEmpty, out.count < Self.maxPhotos, ContactBook.mayHave(states[id] ?? .none),
-                  !out.contains(id) else { return }
+            guard let id, !id.rawValue.isEmpty, out.count < Self.maxPhotos, let state = states[id],
+                  ContactBook.mayHave(state), !out.contains(id) else { return }
             out.append(id)
         }
         for name in views.keys.sorted() {
