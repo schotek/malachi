@@ -10,8 +10,11 @@
 // waits for Microsoft's consent, a CardDAV server has one, and Recently
 // Used lists a few addresses. A few contacts have photos (tiny invented
 // 16 px PNGs, a silhouette on a colour): two ready, one remote that
-// contact.photo "downloads", one remote that turns out to have none.
-// Nothing here is anybody's data.
+// contact.photo "downloads", one remote that turns out to have none. Three
+// more are the senders of the devmail fixtures (Martin Beneš and Petr
+// Svoboda ready, Tomáš Holub remote, "downloaded" once), so the message
+// list shows sender photos next to the samples. Nothing here is anybody's
+// data.
 
 import Foundation
 
@@ -33,6 +36,11 @@ public actor SampleContactsCaller: ContactsCaller {
     /// The contact the dev steps open (Jana Nováková).
     public static let jana: ContactID = "p_sample_jana"
 
+    /// The devmail senders.
+    public static let martin: ContactID = "p_sample_martin"
+    public static let petr: ContactID = "p_sample_petr"
+    public static let tomas: ContactID = "p_sample_tomas"
+
     /// The samples' photos: the state the summaries and cards report and
     /// what contact.photo answers (nil data: none after all).
     static let photos: [ContactID: (state: ContactPhotoAvailability, png: String?)] = [
@@ -40,6 +48,9 @@ public actor SampleContactsCaller: ContactsCaller {
         "p_sample_6": (.ready, amberPNG), // Hana Horáková
         "p_sample_13": (.remote, violetPNG), // Tomáš Svoboda
         "p_sample_11": (.remote, nil), // Petr Novotný
+        martin: (.ready, bluePNG),
+        petr: (.ready, greenPNG),
+        tomas: (.remote, rosePNG),
     ]
     private static let tealPNG =
         "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAANElEQVR42mNQWzSfJMQwEBqe/fgOR4Q1IKvGqmcIaCDZ07SPB9L8gKkaUw8DQdVoemivAQB20NO45Wbv9gAAAABJRU5ErkJggg=="
@@ -47,6 +58,12 @@ public actor SampleContactsCaller: ContactsCaller {
         "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAANElEQVR42mN4MFGDJMQwEBr+f7gGR4Q1IKvGqmcIaCDZ07SPB9L8gKkaUw8DQdVoemivAQA4C/IgJvjckQAAAABJRU5ErkJggg=="
     private static let violetPNG =
         "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAANElEQVR42mOoijxFEmIYCA1vnv2CI8IakFVj1TMENJDsadrHA2l+wFSNqYeBoGo0PbTXAAB/nfcEmAVRkQAAAABJRU5ErkJggg=="
+    private static let bluePNG =
+        "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAANElEQVR42mOQKbxBEmIYCA2P3/2GI8IakFVj1TMENJDsadrHA2l+wFSNqYeBoGo0PbTXAAACmc+k1V/jLAAAAABJRU5ErkJggg=="
+    private static let greenPNG =
+        "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAANElEQVR42mPQ67YjCTEMhIZnX17AEWENyKqx6hkCGkj2NO3jgTQ/YKrG1MNAUDWaHtprAABxGn9Uz/eOJgAAAABJRU5ErkJggg=="
+    private static let rosePNG =
+        "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAANElEQVR42mM4IBNFEmIYCA2/n7yBI8IakFVj1TMENJDsadrHA2l+wFSNqYeBoGo0PbTXAABQtq5MjRdEjQAAAABJRU5ErkJggg=="
 
     /// Technical English of the samples' errors (`RPCError.message` is
     /// never shown).
@@ -315,6 +332,17 @@ public actor SampleContactsCaller: ContactsCaller {
             addresses: [ContactAddress(label: .work, street: "Dlouhá 12\nBudova B", city: "Praha 1", postcode: "110 00")],
             urls: [ContactURL(label: .work, url: "stavbynovak.example.cz")],
             birthday: ContactBirthday(month: 3, day: 14), note: "Volat po 10. hodině."))
+        // The devmail senders (backend/cmd/malachi-devmail/samples).
+        let devmail: [(ContactID, String, String, String, String)] = [
+            (martin, "Martin", "Beneš", "Kovář Engineering", "martin.benes@example.test"),
+            (petr, "Petr", "Svoboda", "Acme Logistics", "petr.svoboda@acme.test"),
+            (tomas, "Tomáš", "Holub", "Kovář Engineering", "tomas.holub@example.test"),
+        ]
+        for (id, given, family, org, email) in devmail {
+            out.append(ContactCard(
+                id: id, bookId: contactsBook, revision: "1", name: ContactName(given: given, family: family),
+                displayName: "\(given) \(family)", org: org, emails: [ContactEmail(label: .work, address: email)]))
+        }
         return out
     }
 }

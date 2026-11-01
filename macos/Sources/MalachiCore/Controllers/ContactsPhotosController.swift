@@ -174,9 +174,7 @@ public final class ContactsPhotosController {
             }
             if let prev = states[r.id], prev != r.state {
                 // The list reports a change the cache may not know of yet.
-                if stale.contains(r.id) || cache[r.id] != nil || none.contains(r.id) {
-                    stale.insert(r.id)
-                }
+                stateChanged(r.id, r.state)
             }
             states[r.id] = r.state
             if ContactBook.mayHave(r.state) && !v.contacts.contains(r.id) {
@@ -352,9 +350,7 @@ public final class ContactsPhotosController {
                       !ContactBook.isRecent(book: "", id: ref.contactId) {
                 next = SenderEntry(contact: ref.contactId, state: ref.state)
                 if let old = states[ref.contactId], old != ref.state {
-                    if stale.contains(ref.contactId) || cache[ref.contactId] != nil || none.contains(ref.contactId) {
-                        stale.insert(ref.contactId)
-                    }
+                    stateChanged(ref.contactId, ref.state)
                 }
                 states[ref.contactId] = ref.state
             }
@@ -497,6 +493,19 @@ public final class ContactsPhotosController {
         onPhoto?(key)
         for f in observers.values {
             f(key)
+        }
+    }
+
+    /// contactsctl.Photos.stateChanged: marks what the cache holds for a
+    /// contact stale when its photo state changed, except remote → ready
+    /// over a photo the cache already has: that is this client's own
+    /// download showing in a list or lookup answer, not a new photo.
+    private func stateChanged(_ id: ContactID, _ state: ContactBook.PhotoState) {
+        if state == .ready && cache[id] != nil && !stale.contains(id) {
+            return
+        }
+        if stale.contains(id) || cache[id] != nil || none.contains(id) {
+            stale.insert(id)
         }
     }
 }

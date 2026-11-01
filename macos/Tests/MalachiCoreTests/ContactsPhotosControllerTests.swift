@@ -476,4 +476,23 @@ private typealias Ref = ContactsPhotosController.ContactRef
         #expect(heard.list == [""], "observers redraw everything")
         token.cancel()
     }
+
+    // A downloaded remote photo that a later listing or lookup reports as
+    // ready is not asked for again: that is this client's own download.
+    @Test func ownDownloadNotAskedAgain() async throws {
+        let d = PhotoDaemon()
+        let t = PhotoTimers()
+        d.setRev("p_1", "e1")
+        d.setRef("ada@example.test", ContactPhotoRef(contactId: "p_1", state: .remote))
+        let (p, _) = newPhotos(d, t)
+        p.show("contacts", refs: [Ref(id: "p_1", book: "b_1", state: .remote)], senders: ["ada@example.test"])
+        try await fire(t, p.options)
+        #expect(d.count(API.ContactPhoto.name) == 1, "asked \(d.photosAsked())")
+        d.setRef("ada@example.test", ContactPhotoRef(contactId: "p_1", state: .ready))
+        p.changed(ContactsChangedNotification(bookIds: ["b_2"]))
+        p.show("contacts", refs: [Ref(id: "p_1", book: "b_1", state: .ready)], senders: ["ada@example.test"])
+        try await fire(t, p.options)
+        #expect(d.count(API.ContactPhoto.name) == 1, "asked again: \(d.photosAsked())")
+        #expect(p.forSender("ada@example.test") != nil, "photo lost")
+    }
 }
