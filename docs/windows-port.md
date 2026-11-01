@@ -4654,10 +4654,11 @@ three runs with all of them, the rebuild loop included, passed
 
 The zips are test builds until §17 is done (no signature, no installer,
 the licence permission for the Microsoft components not yet in
-`LICENSING.md`), so a tag keeps them as the run's artifacts and attaches
-nothing to its release: the `release` job runs only when the repository
-variable `WINDOWS_RELEASE_ZIPS` is `true`, which nothing sets by
-default. The owner sets it (*Settings → Secrets and variables → Actions →
+`LICENSING.md`), so a tag builds and tests them but neither keeps them as
+the run's artifacts (which any signed-in GitHub user could download from
+the public repository) nor attaches them to its release: the upload steps
+and the `release` job run only when the repository variable
+`WINDOWS_RELEASE_ZIPS` is `true`, which nothing sets by default. The owner sets it (*Settings → Secrets and variables → Actions →
 Variables*, or `gh variable set WINDOWS_RELEASE_ZIPS --body true`) once
 the permission is in `LICENSING.md` and the workflow signs the
 executables; [releasing.md §7](releasing.md#7-windows) has what that

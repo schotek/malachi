@@ -369,9 +369,14 @@ kvůli SDK pro Liquid Glass) testuje, staví DMG, s pěti secrets
 `MACOS_*` podepisuje a notarizuje, k release tagu připojí jen
 notarizovaný DMG (`docs/releasing.md` §8). Vydání macOS podepisuje
 a notarizuje jen CI (rozhodnutí vlastníka 2026-11-01), nikdy ručně z Macu;
-nastavení (členství v Apple Developer Program, certifikát Developer ID,
-klíč App Store Connect API a pět secrets `MACOS_*`) zatím chybí, do té
-doby CI podepisuje ad hoc a k vydání DMG nepřipojí. Windows instalátory
+nastavené 2026-11-01 (individuální členství, Developer ID Application
+Vlada Janecek, tým `PG9F7XU6X8`, klíč App Store Connect API s rolí
+Developer, pět secrets `MACOS_*` v repozitáři; první podepsaný
+a notarizovaný běh 41324040230 ověřený `spctl` a `stapler`). Artefakty
+CI (DMG, zipy, balíčky) se nahrávají jen u tagů pro vydání, ruční běh
+macOS drží DMG jeden den, PR žádné (artefakty veřejného repozitáře si
+stáhne kdokoli přihlášený; zipy Windows jen s `WINDOWS_RELEASE_ZIPS`).
+Windows instalátory
 (Inno Setup, x64 a ARM64) staví `make windows-installer` na Windows
 z čistého checkoutu tagu a nahraje je k vydání; zipy z `windows.yml`
 nejsou artefakty vydání (`docs/releasing.md` §7).

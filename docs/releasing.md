@@ -111,9 +111,12 @@ falls back to the `.version` file that `make flatpak` writes.
 
 `.github/workflows/flatpak.yml` builds the Flatpak for **x86_64** and
 **aarch64** on version tags (`vX.Y.Z`; pushes to `main` build nothing), on a manual
-`workflow_dispatch`, and on pull requests that touch the packaging. Each job
-attaches a `malachi-<version>-<arch>.flatpak` bundle as a workflow artifact
-(kept 30 days); installable with
+`workflow_dispatch`, and on pull requests that touch the packaging. On a
+tag each job keeps a `malachi-<version>-<arch>.flatpak` bundle as a workflow
+artifact (30 days) for the release; other runs only build and check it,
+because any signed-in GitHub user can download the artifacts of a public
+repository, and so do the Debian, RPM, Windows and macOS workflows (the
+macOS one also, for a day, on a run by hand). A bundle is installable with
 
 ```bash
 flatpak install --user ./malachi-0.1.0-x86_64.flatpak
@@ -197,8 +200,8 @@ each job does is in [windows-port.md §13](windows-port.md#13-build-and-ci).
 A tag build keeps both zips as the run's artifacts (30 days) and attaches
 them to the tag's release, like the packages above and to a draft when the
 tag has none yet, **only when the repository variable
-`WINDOWS_RELEASE_ZIPS` is `true`**; without it the workflow's `release`
-job is skipped and the release gets no Windows zips.
+`WINDOWS_RELEASE_ZIPS` is `true`**; without it the zips are neither kept
+nor attached, and the release gets no Windows zips.
 
 Those zips are **not** release artefacts, which is why the variable is
 not set. A release's Windows assets are built by hand on a Windows
@@ -288,11 +291,18 @@ codesign --force --sign - --options runtime \
 tags (`vX.Y.Z`), by hand and on pull requests that touch what the
 client is built from: `make test-macos`, then `make macos-dmg`, signed and
 notarised when the repository has the five secrets below and the run is
-not a pull request, otherwise ad hoc. The DMG is the run's artifact; a tag
-attaches it to its release (a draft when the tag has none yet) **only when
-it was notarised**, so an ad-hoc image never reaches a release.
+not a pull request, otherwise ad hoc. A tag keeps the DMG as the run's
+artifact (30 days) and attaches it to its release (a draft when the tag
+has none yet) **only when it was notarised**, so an ad-hoc image never
+reaches a release; a run by hand keeps it for a day, to check the
+signing, and a pull request not at all. macOS releases are signed and
+notarised by CI only, never by hand from a Mac (the owner's decision of
+2026-11-01).
 
-Setting it up, once, by the owner:
+Set up on 2026-11-01 (individual membership, team `PG9F7XU6X8`; the first
+signed and notarised run was
+[41324040230](https://github.com/schotek/malachi/actions/runs/41324040230)).
+Setting it up again, by the owner:
 
 1. **Apple Developer Program** membership (99 USD a year); an individual
    membership signs with the owner's name.
@@ -300,13 +310,17 @@ Setting it up, once, by the owner:
    holder can create: in Xcode, *Settings → Accounts → Manage
    Certificates → + → Developer ID Application*, or on
    developer.apple.com under *Certificates*. Export it with its private
-   key from Keychain Access as a `.p12` with a password.
+   key from Keychain Access as a `.p12` with a password: select it under
+   *My Certificates*, where it unfolds to its key; under *Certificates*
+   the export offers `.cer`, `.pem` and `.p7b` alone.
 3. **An App Store Connect API key** for notarytool: App Store Connect →
    *Users and Access → Integrations → App Store Connect API → Team Keys*,
-   access *Developer*. The `.p8` downloads once; note its Key ID and the
-   Issuer ID above the list.
+   access *Developer*. The first time, *Request Access* asks to agree to
+   Apple's terms (granted at once for the individual membership). The
+   `.p8` downloads once; note its Key ID and the Issuer ID above the list.
 4. **The secrets**, in *Settings → Secrets and variables → Actions →
-   Secrets* or with gh (without `--body` it asks for the value):
+   Secrets* or with gh (without `--body` it asks for the value; type that
+   one in a terminal, where it can ask):
 
    ```bash
    base64 -i DeveloperID.p12 | gh secret set MACOS_CERTIFICATE
@@ -316,7 +330,10 @@ Setting it up, once, by the owner:
    gh secret set MACOS_NOTARY_ISSUER --body ISSUER-UUID
    ```
 
-5. For notarising by hand, the same key stored once in the login keychain:
+5. Afterwards delete the exported `.p12` and `.p8` (a backup belongs in
+   a password manager); the certificate stays in the login keychain.
+6. Only to try notarisation out on a Mac, never for a release, the same
+   key stored once in the login keychain:
    `xcrun notarytool store-credentials malachi --key AuthKey_KEYID.p8
    --key-id KEYID --issuer ISSUER-UUID`, then `NOTARY_PROFILE=malachi`.
 
