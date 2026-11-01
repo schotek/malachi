@@ -152,11 +152,12 @@ func (b *Backend) storedPhoto(ctx context.Context, c store.StoredContact) (*api.
 // makePhoto reads the photo of a contact's current revision and stores
 // it: from its card (vCard), or downloaded (Graph). A missing or refused
 // photo is stored as such; a failed download is the error and nothing is
-// stored. The contact's book is notified after a stored picture or a
-// download.
+// stored. Nothing is notified: the client that asked gets the photo in
+// the answer, and the others see the new state at their next listing
+// (a notification would make every client ask again for every photo of
+// the book on screen).
 func (b *Backend) makePhoto(ctx context.Context, c store.StoredContact, bk store.AddressBook, a store.Account) error {
 	var row store.ContactPhoto
-	downloaded := false
 	switch c.RawKind {
 	case store.ContactRawVCard:
 		card, err := vcard.Parse(c.Raw)
@@ -173,7 +174,6 @@ func (b *Backend) makePhoto(ctx context.Context, c store.StoredContact, bk store
 		if row, err = b.downloadPhoto(ctx, c, bk, a); err != nil {
 			return err
 		}
-		downloaded = true
 	default:
 		row = store.ContactPhoto{ContactID: c.ID, Revision: c.ETag, State: store.PhotoNone}
 	}
@@ -183,9 +183,6 @@ func (b *Backend) makePhoto(ctx context.Context, c store.StoredContact, bk store
 	}
 	if err != nil {
 		return api.NewError(api.CodeStorageError, "%v", err)
-	}
-	if downloaded || row.State == store.PhotoOK {
-		b.contactsChanged(a.ID, bk.ID)
 	}
 	return nil
 }

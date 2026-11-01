@@ -218,8 +218,8 @@ func TestGraphContactPhotos(t *testing.T) {
 	}
 	fake.mu.Unlock()
 
-	// Ada: downloaded, normalised, stored; the book is notified; a second
-	// request does not download again.
+	// Ada: downloaded, normalised, stored; nothing is notified (the asking
+	// client has the photo); a second request does not download again.
 	notes := rec.count()
 	p, err := ab.Photo(ctx, api.ContactPhotoParams{ContactID: got["Ada"].ID})
 	if err != nil {
@@ -230,12 +230,8 @@ func TestGraphContactPhotos(t *testing.T) {
 	if p.Revision != card.Contact.Revision || card.Contact.Photo != api.ContactPhotoReady {
 		t.Errorf("revision %q of %q, card photo %q", p.Revision, card.Contact.Revision, card.Contact.Photo)
 	}
-	waitLong(t, "notify.contactsChanged", func() bool { return rec.count() > notes })
-	rec.mu.Lock()
-	last := rec.evs[len(rec.evs)-1]
-	rec.mu.Unlock()
-	if string(last.AccountID) != id || len(last.BookIDs) != 1 || last.BookIDs[0] != bookID {
-		t.Errorf("notification %+v", last)
+	if n := rec.count(); n != notes {
+		t.Errorf("%d notifications after a photo download", n-notes)
 	}
 	if _, err := ab.Photo(ctx, api.ContactPhotoParams{ContactID: got["Ada"].ID}); err != nil {
 		t.Fatal(err)

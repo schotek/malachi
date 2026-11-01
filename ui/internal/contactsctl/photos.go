@@ -143,7 +143,7 @@ func (p *Photos) Show(view string, refs []ContactRef, senders []string) {
 		}
 		if prev, ok := p.states[r.ID]; ok && prev != r.State {
 			// The list reports a change the cache may not know of yet.
-			p.stale[r.ID] = p.stale[r.ID] || p.cache[r.ID].Contact != "" || p.none[r.ID]
+			p.stateChanged(r.ID, r.State)
 		}
 		p.states[r.ID] = r.State
 		if r.State.MayHave() && !slices.Contains(v.contacts, r.ID) {
@@ -334,7 +334,7 @@ func (p *Photos) answered(gen int, asked []string, r *api.ContactLookupResult, e
 		case ok && contacts.PhotoState(ref.State).MayHave() && ref.ContactID != "" && !contacts.IsRecent("", ref.ContactID):
 			next = senderEntry{contact: ref.ContactID, state: contacts.PhotoState(ref.State)}
 			if old, known := p.states[ref.ContactID]; known && old != next.state {
-				p.stale[ref.ContactID] = p.stale[ref.ContactID] || p.cache[ref.ContactID].Contact != "" || p.none[ref.ContactID]
+				p.stateChanged(ref.ContactID, next.state)
 			}
 			p.states[ref.ContactID] = next.state
 		}
@@ -494,4 +494,15 @@ func (p *Photos) report(key string) {
 	if p.OnPhoto != nil {
 		p.OnPhoto(key)
 	}
+}
+
+// stateChanged marks what the cache holds for a contact stale when its
+// photo state changed, except remote → ready over a photo the cache
+// already has: that is this client's own download showing in a list or
+// lookup answer, not a new photo.
+func (p *Photos) stateChanged(id api.ContactID, state contacts.PhotoState) {
+	if state == contacts.PhotoReady && p.cache[id].Contact != "" && !p.stale[id] {
+		return
+	}
+	p.stale[id] = p.stale[id] || p.cache[id].Contact != "" || p.none[id]
 }

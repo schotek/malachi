@@ -4870,8 +4870,9 @@ For a `remote` contact the daemon downloads the photo (at most 4
 downloads per account at a time, the account's Graph limits apply;
 concurrent requests for one contact share one download), stores the
 result — the photo, or none, which is remembered and not asked again
-for that revision — and sends `notify.contactsChanged` naming the book,
-so lists show `ready`. A failed download stores nothing and answers the
+for that revision — and answers it. No `notify.contactsChanged` follows
+(it would make every client ask again for the book's photos on screen);
+other lists show `ready` at their next listing. A failed download stores nothing and answers the
 error; the contact stays `remote`. A client keeps photos in memory by
 contact id and `revision` and asks again after `notify.contactsChanged`
 for the book shows another `revision` or `photo` state. `state` is an

@@ -399,3 +399,29 @@ func TestPhotosOwnAndReset(t *testing.T) {
 		t.Fatal("not reset")
 	}
 }
+
+// A downloaded remote photo that a later listing or lookup reports as
+// ready is not asked for again: that is this client's own download.
+func TestPhotosOwnDownloadNotAskedAgain(t *testing.T) {
+	d, l := newPhotoDaemon()
+	d.revs["p_1"] = "e1"
+	d.refs["ada@example.test"] = api.ContactPhotoRef{ContactID: "p_1", State: "remote"}
+	p, _ := newTestPhotos(d, l)
+	p.Show("contacts", []ContactRef{{ID: "p_1", Book: "b_1", State: contacts.PhotoRemote}}, []string{"ada@example.test"})
+	l.fire()
+	l.run()
+	if d.count(api.MethodContactPhoto) != 1 {
+		t.Fatalf("asked %v", d.photosAsked())
+	}
+	d.refs["ada@example.test"] = api.ContactPhotoRef{ContactID: "p_1", State: "ready"}
+	p.Changed(api.ContactsChangedNotification{BookIDs: []api.AddressBookID{"b_2"}})
+	p.Show("contacts", []ContactRef{{ID: "p_1", Book: "b_1", State: contacts.PhotoReady}}, []string{"ada@example.test"})
+	l.fire()
+	l.run()
+	if d.count(api.MethodContactPhoto) != 1 {
+		t.Fatalf("asked again: %v", d.photosAsked())
+	}
+	if _, ok := p.ForSender("ada@example.test"); !ok {
+		t.Fatal("photo lost")
+	}
+}
