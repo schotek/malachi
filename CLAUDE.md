@@ -491,6 +491,47 @@ Pořadí prací:
     reference, macOS, GTK i Windows ověřené vlastníkem na obrazovce týž
     den; viz odstavec Profil pro asistenta níže a
     `docs/plans/assistant-profile.md`
+15. Adresáře (kontakty z připojených služeb, úpravy, fotky) — sloučeno
+    z `claude/keen-bohr-rrjhm3` do `main` 2026-11-01; démon, Go reference,
+    macOS, GTK i Windows ověřené vlastníkem a agenty na skutečných
+    strojích; viz odstavec Adresáře níže a `docs/plans/address-book.md`
+
+Adresáře (2026-11-01, všechny tři klienty, sloučeno do `main`; plán,
+rozhodnutí A1–A16 a F1–F12, odpovědi vlastníka a wireframy W1–W7
+v `docs/plans/address-book.md`). Démon synchronizuje kontakty jako cache
+serveru (`internal/contactsync` jako `calsync`): Microsoft 365 přes Graph
+jako volba poštovního účtu (`GraphConfig.contacts.sync`, scope
+`Contacts.ReadWrite` na vyžádání, 1206 `contactsConsentRequired`, GOA
+`ContactsDisabled`) a CardDAV na účtu `kind: caldav` s capability
+`contacts` (vlastní klient v `internal/caldav`, i server jen s adresáři;
+průvodce „Kalendář a kontakty (CalDAV/CardDAV)“); Nedávno použité
+(`recent`) jako virtuální adresář jen pro čtení. Vlastní parser vCard
+`internal/vcard` (záplata mění jen upravené vlastnosti, zbytek bajt po
+bajtu), migrace 0023 (`ab_books`, `ab_contacts`, `ab_emails`, FTS5)
+a 0024 (`ab_photos`). API `docs/api.md` §4.19 (`addressBook.*`,
+`contact.*`, `notify.contactsChanged`, chyby 1110, 1111, 1206, 1308,
+1509; odmítnuté pole v `error.data` `{field}`), `contact.search` se
+zdrojem `contacts` a rozsahem (`contacts-suggest-scope`). Zápis jen
+online a rovnou na server (konflikt 1308 nese verzi serveru, klient ji
+načte a nechá pole uživatele), mazání jen výslovné. Fotky jen pro čtení
+(`internal/contactphoto`: kontrola rozměrů před dekódováním, zmenšení přes
+`golang.org/x/image/draw` v0.45.0 na ≤ 256 px a nové kódování; Graph
+líně, `PHOTO` jako URL nikdy) v okně Kontakty a u odesílatele v poště,
+kde avatar už je (seznam se `show-avatars`, karty konverzace, chat Pošty
+i Nástěnky; vlastní zprávy nikdy), párované jen přesnou adresou;
+`contact.photo` nic nenotifikuje. MCP `search_contacts`, `get_contact`,
+za `--allow-modify` `create_contact`/`update_contact`, nikdy fotky ani
+mazání. Klienti: samostatné okno Kontakty (jedna instance; GTK hlavní
+nabídka, Windows nabídka `…`, macOS Okno ▸ Kontakty a tlačítko
+v toolbaru všech tří režimů, bez zkratky), Zobrazit kontakt / Přidat do
+kontaktů… na čipu adresy, Předvolby → Kontakty za Kalendářem, otázka při
+Konci s rozepsaným kontaktem; reference `ui/internal/contacts`
+a `ui/internal/contactsctl` (vzorová data `MALACHI_CONTACTS_SAMPLES=1`
+s fotkami i na adresy devmailu), porty `MalachiCore/Contacts`
+(`enum ContactBook`, Contacts framework nikdy) a `Malachi.Core/Contacts`.
+Bez přesahu do systému (žádné `CNContactStore`, `Windows.ApplicationModel.Contacts`;
+EDS dál jen pro doplňování na Linuxu). eWay-CRM jako adresář (jen
+hledání) je 2. etapa, Google 3. etapa.
 
 Profil pro asistenta (2026-10-21, všechny tři klienty, sloučeno do `main`;
 plán, rozhodnutí P1–P16, Q1–Q10 a „As built“ v
