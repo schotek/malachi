@@ -367,8 +367,14 @@ a `Resources/MalachiMail.entitlements` (Apple events kvůli restartu
 Claude Desktop); CI `.github/workflows/macos.yml` na `macos-26` (Xcode 26
 kvůli SDK pro Liquid Glass) testuje, staví DMG, s pěti secrets
 `MACOS_*` podepisuje a notarizuje, k release tagu připojí jen
-notarizovaný DMG (`docs/releasing.md` §8; členství v Apple Developer
-Program a secrets zatím chybí, do té doby ad hoc).
+notarizovaný DMG (`docs/releasing.md` §8). Vydání macOS podepisuje
+a notarizuje jen CI (rozhodnutí vlastníka 2026-11-01), nikdy ručně z Macu;
+nastavení (členství v Apple Developer Program, certifikát Developer ID,
+klíč App Store Connect API a pět secrets `MACOS_*`) zatím chybí, do té
+doby CI podepisuje ad hoc a k vydání DMG nepřipojí. Windows instalátory
+(Inno Setup, x64 a ARM64) staví `make windows-installer` na Windows
+z čistého checkoutu tagu a nahraje je k vydání; zipy z `windows.yml`
+nejsou artefakty vydání (`docs/releasing.md` §7).
 Kontributorský popis `docs/macos-port.md`. `make macos` / `macos-dmg` /
 `macos-notarize` / `run-macos` / `test-macos` jsou jen na Darwinu.
 
