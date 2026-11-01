@@ -5,10 +5,9 @@
 #   go      go vet and go test of backend/ on Windows (CGO_ENABLED=0, as the
 #           daemon is built there), which gates the daemon the app carries
 #   client  the solution built for x64 with warnings as errors, the tests,
-#           the lint, and the x64 app folder zipped
-#   arm64   the same solution cross-built for ARM64 and its zip; nothing of
-#           it runs here (docs/windows-port.md §17: ARM64 is run on real
-#           hardware before a release)
+#           the lint, and the x64 installer (Inno Setup)
+#   arm64   the same solution cross-built for ARM64 and its installer;
+#           nothing of it runs here (docs/windows-port.md §17)
 #
 # Every client step is a target of windows/build.ps1 (docs/windows-port.md
 # §13), run as make runs it, so what CI does is what `make windows` and
@@ -20,9 +19,10 @@
 # (the NativeAOT keyring helper links with them) and the WebView2 runtime.
 #
 # pwsh runs the steps and judges a step by the exit status of the last
-# program it ran, so no step runs more than one. Tags and a manual run go
-# through the same jobs; a tag also attaches the zips to its release, once
-# the repository variable WINDOWS_RELEASE_ZIPS says so (the release job).
+# program it ran, so no step runs more than one. Pull requests, tags and a
+# manual run go through the same jobs; only a tag keeps the two installers
+# and attaches them to its release (the release job). They are the only
+# Windows artefacts of a release, built nowhere else (docs/releasing.md §7).
 name: Windows
 
 on:
@@ -81,7 +81,7 @@ jobs:
         # Its minor version, set up at the newest patch release, as the
         # Linux workflows' '1.25'. setup-go's go-version-file would take
         # "go 1.25.0" literally, and the binaries built here go into the
-        # zips, which must carry the patch releases' security fixes.
+        # installers, which must carry the patch releases' security fixes.
         id: go
         run: |
           $minor = [regex]::Match([System.IO.File]::ReadAllText('backend/go.mod'), '(?m)^go (\d+\.\d+)').Groups[1].Value
@@ -249,20 +249,35 @@ jobs:
         working-directory: windows
         run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 lint
 
-      - name: Package
+      - name: Set up Inno Setup
+        # The installer's compiler, unless the image has it: Chocolatey's
+        # package, then ISCC for build-installer.ps1 wherever it went.
+        run: |
+          $iscc = @(Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe", "$env:ProgramFiles\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue)
+          if ($iscc.Count -eq 0) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $iscc = @(Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe", "$env:ProgramFiles\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue)
+          }
+          if ($iscc.Count -eq 0) { throw 'ISCC.exe was not found after installing Inno Setup' }
+          [System.IO.File]::AppendAllText($env:GITHUB_ENV, "ISCC=$($iscc[0].FullName)`n")
+          Write-Output "ISCC $($iscc[0].FullName)"
+
+      - name: Installer
         # The Release app folder (the daemon, the MCP bridge and the
-        # NativeAOT keyring helper inside), checked for completeness and
-        # zipped: build\windows\Malachi-Mail-<version>-x64.zip.
+        # NativeAOT keyring helper inside), checked for completeness, its
+        # licences checked, and its installer:
+        # build\windows\Malachi-Mail-<version>-windows-x64-setup.exe.
         working-directory: windows
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 package -Arch x64
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 installer -Arch x64
 
       - uses: actions/upload-artifact@v4
         # Only for the release (see the release job): any signed-in GitHub
         # user can download the artifacts of a public repository.
-        if: startsWith(github.ref, 'refs/tags/v') && vars.WINDOWS_RELEASE_ZIPS == 'true'
+        if: startsWith(github.ref, 'refs/tags/v')
         with:
           name: malachi-windows-x64
-          path: build/windows/Malachi-Mail-*-x64.zip
+          path: build/windows/Malachi-Mail-*-windows-x64-setup.exe
           if-no-files-found: error
           retention-days: 30
 
@@ -271,7 +286,7 @@ jobs:
     # An x64 runner: the build, the Go cross-compiler and NativeAOT (with the
     # image's MSVC ARM64 build tools) all target ARM64 from x64. Nothing
     # ARM64 is run, so there are no tests here. A job of its own, not steps
-    # after the x64 package (which the build tree allows: every project
+    # after the x64 installer (which the build tree allows: every project
     # built for an architecture has output folders of its own,
     # windows/Directory.Build.props): it runs beside the client job instead
     # of after it, has a NuGet cache of its own, and when the ARM64 link
@@ -322,36 +337,45 @@ jobs:
         working-directory: windows
         run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 build -Arch arm64
 
-      - name: Package
+      - name: Set up Inno Setup
+        # The installer's compiler, unless the image has it: Chocolatey's
+        # package, then ISCC for build-installer.ps1 wherever it went.
+        run: |
+          $iscc = @(Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe", "$env:ProgramFiles\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue)
+          if ($iscc.Count -eq 0) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $iscc = @(Get-ChildItem -Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe", "$env:ProgramFiles\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue)
+          }
+          if ($iscc.Count -eq 0) { throw 'ISCC.exe was not found after installing Inno Setup' }
+          [System.IO.File]::AppendAllText($env:GITHUB_ENV, "ISCC=$($iscc[0].FullName)`n")
+          Write-Output "ISCC $($iscc[0].FullName)"
+
+      - name: Installer
         # malachi-credentials.exe is NativeAOT for ARM64, linked with the
         # image's MSVC ARM64 build tools (Visual Studio 2022's
         # Microsoft.VisualStudio.Component.VC.Tools.ARM64). An image without
         # them fails here with build.ps1's hint; the helper is never
         # published without NativeAOT.
         working-directory: windows
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 package -Arch arm64
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 installer -Arch arm64
 
       - uses: actions/upload-artifact@v4
-        if: startsWith(github.ref, 'refs/tags/v') && vars.WINDOWS_RELEASE_ZIPS == 'true'
+        if: startsWith(github.ref, 'refs/tags/v')
         with:
           name: malachi-windows-arm64
-          path: build/windows/Malachi-Mail-*-arm64.zip
+          path: build/windows/Malachi-Mail-*-windows-arm64-setup.exe
           if-no-files-found: error
           retention-days: 30
 
   release:
-    name: Attach the zips to the release
+    name: Attach the installers to the release
     needs: [go, client, arm64]
-    # Only once the repository variable WINDOWS_RELEASE_ZIPS is 'true'. The
-    # zips carry Microsoft's Windows App SDK and WebView2 components, which
-    # may be distributed only with the GPLv3 §7 permission LICENSING.md does
-    # not have yet, and their executables are unsigned
-    # (docs/windows-port.md §17). Until the owner has settled both and set
-    # the variable (docs/releasing.md §7), a tag builds and tests the zips
-    # but neither keeps them as artifacts (which anyone signed in could
-    # download) nor attaches them to its release, so nothing public can
-    # carry them by an oversight.
-    if: startsWith(github.ref, 'refs/tags/v') && vars.WINDOWS_RELEASE_ZIPS == 'true'
+    # Both installers or none: a tag whose tests, lint or either build
+    # failed attaches nothing. They are unsigned until there is a
+    # code-signing certificate (docs/windows-port.md §17), and the ARM64 one
+    # is cross-built and has not run here.
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -369,5 +393,5 @@ jobs:
           gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
             || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
                  --draft --title "Malachi Mail ${GITHUB_REF_NAME#v}" --notes ''
-          gh release upload "$GITHUB_REF_NAME" ./*.zip \
+          gh release upload "$GITHUB_REF_NAME" ./*-setup.exe \
             --clobber --repo "$GITHUB_REPOSITORY"

@@ -37,6 +37,24 @@ Windows client also gets a numeric file version,
 `MAJOR.MINOR.PATCH.<commits since the tag>`, with the full string as its
 product version.
 
+Every file of a release is named alike (owner's decision of 2026-11-01),
+`Malachi-Mail-<version>-<os>-<arch>[-<detail>].<extension>`, with the
+architectures `x64`, `arm64` or `universal` whatever the format calls them
+inside:
+
+| File | Built by |
+|---|---|
+| `Malachi-Mail-<version>-macos-universal.dmg` | `macos/Makefile` (§8) |
+| `Malachi-Mail-<version>-windows-x64-setup.exe`, `…-windows-arm64-setup.exe` | `windows/installer/MalachiMail.iss` (§7) |
+| `Malachi-Mail-<version>-linux-x64.flatpak`, `…-linux-arm64.flatpak` | `flatpak.yml` (§5) |
+| `Malachi-Mail-<version>-linux-x64.deb`, `…-linux-arm64.deb` | `scripts/build-deb.sh` (§6) |
+| `Malachi-Mail-<version>-linux-x64-fedora42.rpm`, `…-linux-arm64-fedora42.rpm` | `scripts/build-rpm.sh` |
+
+`<version>` is the `git describe` string above, never a format's own
+(dpkg's `0.1.0+3+gabc1234-1`, rpm's `0.1.0^3^gabc1234-1.fc42`); those stay
+inside the packages, whose name stays `malachi`. A thinner build (`ARCHS=`
+on a Mac) names its one architecture instead of `universal`.
+
 ## 2. Release notes
 
 `NEWS` in the repository root is the only place release notes are written.
@@ -112,14 +130,14 @@ falls back to the `.version` file that `make flatpak` writes.
 `.github/workflows/flatpak.yml` builds the Flatpak for **x86_64** and
 **aarch64** on version tags (`vX.Y.Z`; pushes to `main` build nothing), on a manual
 `workflow_dispatch`, and on pull requests that touch the packaging. On a
-tag each job keeps a `malachi-<version>-<arch>.flatpak` bundle as a workflow
+tag each job keeps a `Malachi-Mail-<version>-linux-<arch>.flatpak` bundle as a workflow
 artifact (30 days) for the release; other runs only build and check it,
 because any signed-in GitHub user can download the artifacts of a public
 repository, and so do the Debian, RPM, Windows and macOS workflows (the
 macOS one also, for a day, on a run by hand). A bundle is installable with
 
 ```bash
-flatpak install --user ./malachi-0.1.0-x86_64.flatpak
+flatpak install --user ./Malachi-Mail-0.1.0-linux-x64.flatpak
 ```
 
 The aarch64 job runs on GitHub's native arm64 runner (`ubuntu-24.04-arm`),
@@ -137,7 +155,7 @@ the same triggers, and attaches it to a tag's release beside the bundles.
 `scripts/build-deb.sh` does the work and runs anywhere dpkg-dev does:
 
 ```bash
-make deb          # → build/malachi_<version>_<arch>.deb
+make deb          # → build/Malachi-Mail-<version>-linux-<arch>.deb
 ```
 
 It stages `scripts/build.sh install` with `PREFIX=/usr` and a `DESTDIR`,
@@ -174,51 +192,36 @@ ccache) is cached.
 ## 7. Windows
 
 `windows/build.ps1` builds the Windows client (the root Makefile's
-`make windows` runs its `app` target), and its `package` target makes the
-artefact a release would carry:
+`make windows` runs its `app` target), and its `installer` target makes
+the one artefact a release carries for each architecture, an Inno Setup
+installer (owner's decision of 2026-11-01: no portable zip any more):
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 package            # this machine's architecture
-powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 package -Arch arm64
-# -> build\windows\Malachi-Mail-<version>-<arch>.zip
+powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 installer            # this machine's architecture
+powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 installer -Arch arm64
+# -> build\windows\Malachi-Mail-<version>-windows-<arch>-setup.exe
 ```
 
-`package` runs `app` first: `malachid.exe` and `malachi-mcp.exe` for the
+`installer` runs `app` first: `malachid.exe` and `malachi-mcp.exe` for the
 architecture with `-X main.version`, the app published self-contained in
 Release, `malachi-credentials.exe` with NativeAOT, the translations and the
-licences, checked for completeness, then zipped as one `Malachi Mail\`
-folder with `/` separators, so that every unzip tool reads it. The tree
-must be clean, or the version says `-dirty`, as for the other builds. An
-ARM64 package needs the MSVC ARM64 build tools for the keyring helper;
-nothing ARM64 has run on real hardware yet.
+licences, checked for completeness; then `installer\build-installer.ps1`
+checks the licences of the staged folder and runs Inno Setup (what the
+installer does is in [windows/README.md](../windows/README.md#installer)).
+The tree must be clean, or the version says `-dirty`, which the script
+refuses. An ARM64 installer needs the MSVC ARM64 build tools for the
+keyring helper.
 
 `.github/workflows/windows.yml` does the same in CI: it tests the daemon
-on Windows, builds, tests and lints the Windows client, and zips its app
-folder for **x64** and **arm64**, on version tags (`vX.Y.Z`), by
+on Windows, builds, tests and lints the Windows client, and builds the
+installer for **x64** and **arm64**, on version tags (`vX.Y.Z`), by
 hand and on pull requests that touch what the client is built from; what
 each job does is in [windows-port.md §13](windows-port.md#13-build-and-ci).
-A tag build keeps both zips as the run's artifacts (30 days) and attaches
-them to the tag's release, like the packages above and to a draft when the
-tag has none yet, **only when the repository variable
-`WINDOWS_RELEASE_ZIPS` is `true`**; without it the zips are neither kept
-nor attached, and the release gets no Windows zips.
-
-Those zips are **not** release artefacts, which is why the variable is
-not set. A release's Windows assets are built by hand on a Windows
-machine, from a clean checkout of the tag, after the release exists on
-GitHub (step 6 of §3 and the tag's CI):
-
-```sh
-git checkout v0.1.3
-make windows-installer      # x64 and arm64: build, then gh release upload v0.1.3
-```
-
-That uploads `Malachi-Mail-<version>-<arch>-Setup.exe` (Inno Setup, per
-user) and `Malachi-Mail-<version>-<arch>.zip` for **x64** and **arm64**
-(`windows\build.ps1 release` without make; prerequisites, `NO_UPLOAD=1`
-and `CLOBBER=1` in [windows/README.md](../windows/README.md#installer)).
-A tag older than the target (0.1.2) used
-`windows\installer\build-installer.ps1` over that tag's app folder. The first was 0.1.2. The licence
+**Only a tag** keeps both installers as the run's artifacts (30 days) and
+attaches them to its release, like the packages above and to a draft when
+the tag has none yet; a release's Windows installers are built there and
+nowhere else, never by hand (owner's decision of 2026-11-01). The ARM64
+one is cross-built on the x64 runner and does not run there. The licence
 permission for Microsoft's components is in [LICENSING.md](../LICENSING.md)
 (2026-10-28). Still open
 ([windows-port.md §17](windows-port.md#17-before-a-public-release)):
@@ -226,16 +229,9 @@ permission for Microsoft's components is in [LICENSING.md](../LICENSING.md)
 - **Code signing** of the four executables and of the installer:
   unsigned, SmartScreen warns on every machine that downloads them. The
   owner decides how (SignPath Foundation, an OV certificate, signing as an
-  organisation).
+  organisation); the workflow would then sign in the jobs, as macOS does.
 - **Updates** (Velopack or a check against GitHub Releases, the update
   stopping the daemon gracefully first) and a winget manifest.
-
-Once the workflow signs the executables, the owner may set the variable, in the repository's *Settings →
-Secrets and variables → Actions → Variables* or with
-`gh variable set WINDOWS_RELEASE_ZIPS --body true`, and the next tag's
-release carries the zips (`gh variable delete WINDOWS_RELEASE_ZIPS` stops
-it again). CI's arm64 zip is cross-built; the release's are built and
-tried by hand as above.
 
 Release notes stay in `NEWS` for every platform; the AppStream metainfo
 it feeds is Linux's.
@@ -357,7 +353,7 @@ root carries the copyright notices and licence texts of the third-party
 code in `malachi-mcp` and of what the calendar added to `malachid`, which
 the permissive licences of that code require in a binary distribution. Every package ships it beside `LICENSE`, the
 daemon's licence and `LICENSING.md`: `Contents/Resources` of the macOS
-app (and so the DMG), the Windows app folder (and so its zip, checked by
+app (and so the DMG), the Windows app folder (and so its installer, checked by
 `build.ps1`'s `Test-AppFolder`), and through `scripts/build.sh install`
 `/usr/share/licenses/malachi` in the rpm, `/usr/share/doc/malachi` in
 the deb and `/app/share/licenses/io.github.schotek.Malachi` in the

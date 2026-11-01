@@ -132,9 +132,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 <target> [
 | `test` | every test project, `.trx` reports in `build\windows\TestResults\` (Debug); the UI smoke tests drive the app folder `app` assembled and are skipped without it (docs/windows-port.md §12) |
 | `run` | `app` for this machine, then `MalachiMail.exe` in this terminal until it quits (Ctrl+C quits it and the daemon it started) |
 | `lint` | `dotnet format --verify-no-changes` and the conventions tests |
-| `package` | `app`, then `build\windows\Malachi-Mail-<version>-<arch>.zip` (unsigned) |
-| `installer` | `app`, then `build\windows\Malachi-Mail-<version>-<arch>-Setup.exe` and the portable `Malachi-Mail-<version>-<arch>.zip` beside it (`installer\build-installer.ps1`, Inno Setup 6; unsigned; see [Installer](#installer)) |
-| `release` | `installer` for x64 and arm64, then `gh release upload v<version>` of the four files (`make windows-installer`; `-NoUpload`, `-Clobber`; see [Installer](#installer)) |
+| `installer` | `app`, then `build\windows\Malachi-Mail-<version>-windows-<arch>-setup.exe` (`installer\build-installer.ps1`, Inno Setup 6; unsigned; see [Installer](#installer)) |
 | `clean` | removes `build\windows\` |
 
 Options: `-Configuration Debug|Release`, `-Arch x64|arm64` (default: this
@@ -168,9 +166,9 @@ locked mode.
 
 CI (`.github/workflows/windows.yml`, docs/windows-port.md §13) runs the
 daemon's Go tests on Windows and `build.ps1 build`, `test`, `lint` and
-`package` for x64, and `build` and `package` for ARM64, on the
-`windows-2025` image; the zips and the `.trx` reports are the run's
-artifacts. With `CI=true`, as there, every restore is locked and a stale
+`installer` for x64, and `build` and `installer` for ARM64, on the
+`windows-2025` image; the `.trx` reports are the run's artifacts, the
+installers only on a tag, which attaches them to its release. With `CI=true`, as there, every restore is locked and a stale
 lock file fails the build.
 
 The app folder is self-contained (the .NET runtime and the Windows App SDK
@@ -192,13 +190,14 @@ and ARM64); the 0.1.2 app folders were built and run that way.
 `build.ps1 installer -Arch x64|arm64` builds the app folder and then
 `installer\build-installer.ps1`, which copies it into
 `build\windows\stage-<arch>\Malachi Mail\`, checks the licences there
-(the GPLv3 §7 permission in `LICENSING.md`, `Microsoft-notices\`), runs
-Inno Setup on `installer\MalachiMail.iss` and zips the staged folder:
+(the GPLv3 §7 permission in `LICENSING.md`, `Microsoft-notices\`) and runs
+Inno Setup on `installer\MalachiMail.iss`:
 
 ```
-build\windows\Malachi-Mail-<version>-<arch>-Setup.exe
-build\windows\Malachi-Mail-<version>-<arch>.zip
+build\windows\Malachi-Mail-<version>-windows-<arch>-setup.exe
 ```
+
+There is no portable zip (owner's decision of 2026-11-01).
 
 The installer is per user and needs no administrator rights: it installs
 into `%LOCALAPPDATA%\Programs\Malachi Mail`, adds *Malachi Mail* to the
@@ -217,26 +216,13 @@ docs/windows-port.md §17) and keeps the mail data
 Credential Manager. Silent: `Setup.exe /VERYSILENT` and `unins000.exe
 /VERYSILENT`.
 
-The Windows assets of a release, both architectures at once, from a clean
-checkout of the release tag on a Windows machine (an x64 or ARM64 one with
-the MSVC tools for both, Inno Setup and the GitHub CLI signed in with
-`gh auth login`):
-
-```sh
-git checkout v0.1.3
-make windows-installer          # builds x64 and arm64, uploads the four files to release v0.1.3
-make windows-installer NO_UPLOAD=1   # builds only (any clean version)
-make windows-installer CLOBBER=1     # replaces files the release already has
-```
-
-Without make: `windows\build.ps1 release [-NoUpload] [-Clobber]`. It checks
-first, before the builds' quarter of an hour, that the version is a bare
-release (`0.1.3`, not `0.1.3-2-gabc1234` or `-dirty`), that gh is signed in
-and that GitHub has the release `v0.1.3` (published or draft; it never
-creates or edits a release, only adds files, and replaces none without
-`CLOBBER=1`). It prints the SHA-256 of what it uploaded. The release notes
-are written by hand (`NEWS`); say there that the installers are unsigned.
-The build always runs on Windows by hand, never in CI.
+The installers of a release, both architectures, are built by the tag's
+CI (`.github/workflows/windows.yml`) and attached to its release there,
+never by hand ([releasing.md §7](../docs/releasing.md#7-windows)); the
+ARM64 one is cross-built on the x64 runner. The release notes are written
+by hand (`NEWS`); say there that the installers are unsigned. Building one
+locally (`build.ps1 installer`) needs Inno Setup 6 (`winget install
+JRSoftware.InnoSetup`, or `ISCC` pointing at `ISCC.exe`).
 
 A release of a tag older than the installer (0.1.2) runs the script
 directly with that tag's app folder (built from a worktree at the tag, so the version is exact) and

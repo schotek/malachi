@@ -222,7 +222,7 @@ There is no Flathub listing yet. Download the Flatpak bundle for your
 architecture from the release and install it:
 
 ```sh
-flatpak install --user ./malachi-<version>-x86_64.flatpak
+flatpak install --user ./Malachi-Mail-<version>-linux-x64.flatpak
 ```
 
 The bundle pulls the GNOME 48 runtime from Flathub. Ubuntu does not ship
@@ -243,8 +243,8 @@ Debian 14 and Fedora 42, but *not* Ubuntu 24.04 LTS, whose libadwaita is
 Flatpak.
 
 ```sh
-sudo apt install ./malachi_<version>_amd64.deb      # Debian, Ubuntu
-sudo dnf install ./malachi-<version>-1.x86_64.rpm   # Fedora
+sudo apt install ./Malachi-Mail-<version>-linux-x64.deb            # Debian, Ubuntu
+sudo dnf install ./Malachi-Mail-<version>-linux-x64-fedora42.rpm   # Fedora
 ```
 
 There is no apt or dnf repository, so a package installed this way is not

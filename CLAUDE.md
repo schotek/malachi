@@ -373,13 +373,17 @@ nastavené 2026-11-01 (individuální členství, Developer ID Application
 Vlada Janecek, tým `PG9F7XU6X8`, klíč App Store Connect API s rolí
 Developer, pět secrets `MACOS_*` v repozitáři; první podepsaný
 a notarizovaný běh 41324040230 ověřený `spctl` a `stapler`). Artefakty
-CI (DMG, zipy, balíčky) se nahrávají jen u tagů pro vydání, ruční běh
-macOS drží DMG jeden den, PR žádné (artefakty veřejného repozitáře si
-stáhne kdokoli přihlášený; zipy Windows jen s `WINDOWS_RELEASE_ZIPS`).
-Windows instalátory
-(Inno Setup, x64 a ARM64) staví `make windows-installer` na Windows
-z čistého checkoutu tagu a nahraje je k vydání; zipy z `windows.yml`
-nejsou artefakty vydání (`docs/releasing.md` §7).
+CI (DMG, instalátory, balíčky) se nahrávají jen u tagů pro vydání, ruční
+běh macOS drží DMG jeden den, PR žádné (artefakty veřejného repozitáře si
+stáhne kdokoli přihlášený). Windows instalátory (Inno Setup, x64 a ARM64,
+nepodepsané) staví od 2026-11-01 jen CI u tagu (`windows.yml`, ARM64
+křížově) a připojí je k vydání; zip ani ruční nahrávání už neexistují
+(`build.ps1` nemá `package` ani `release`, Makefile `windows-installer`;
+rozhodnutí vlastníka, `docs/releasing.md` §7). Soubory vydání se jmenují
+`Malachi-Mail-<verze>-<os>-<arch>…` (`macos-universal.dmg`,
+`windows-x64-setup.exe`, `linux-x64.flatpak`, `linux-x64.deb`,
+`linux-x64-fedora42.rpm`; architektury všude `x64`/`arm64`, rozhodnutí
+vlastníka 2026-11-01, `docs/releasing.md` §1).
 Kontributorský popis `docs/macos-port.md`. `make macos` / `macos-dmg` /
 `macos-notarize` / `run-macos` / `test-macos` jsou jen na Darwinu.
 
@@ -419,7 +423,7 @@ požadavek; UI smoke testy (`Malachi.App.UiTests`, UI Automation nad
 publikovanou aplikací s dočasnými daty a falešným keyringem, volitelně
 proti lokálnímu IMAP/SMTP serveru `MALACHI_DEVMAIL`) a ruční průchod celým
 UI. CI `.github/workflows/windows.yml` (Go testy démona na Windows, build,
-testy, lint a zipy x64 a ARM64). Build: `make windows` / `run-windows` / `test-windows` (jen na
+testy, lint a instalátory x64 a ARM64, u tagu do vydání). Build: `make windows` / `run-windows` / `test-windows` (jen na
 Windows, z PowerShellu i Git Bashe) delegují na `windows/build.ps1` (`app`,
 `test`, `lint`, `package`, …); výstup `build\windows\<arch>\Malachi Mail\`
 s `malachid.exe`, `malachi-mcp.exe` a `malachi-credentials.exe`. App spouští

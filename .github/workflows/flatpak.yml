@@ -50,9 +50,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # file: the architecture in the bundle's name, as in every
+          # release file's (docs/releasing.md §1).
           - arch: x86_64
+            file: x64
             runner: ubuntu-24.04
           - arch: aarch64
+            file: arm64
             runner: ubuntu-24.04-arm
 
     steps:
@@ -140,7 +144,7 @@ jobs:
       - name: Bundle
         run: |
           flatpak build-bundle repo \
-            "malachi-${VERSION}-${{ matrix.arch }}.flatpak" \
+            "Malachi-Mail-${VERSION}-linux-${{ matrix.file }}.flatpak" \
             --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
             "$APP_ID"
 
@@ -150,7 +154,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         with:
           name: malachi-${{ matrix.arch }}
-          path: malachi-*.flatpak
+          path: Malachi-Mail-*.flatpak
           if-no-files-found: error
           retention-days: 30
 

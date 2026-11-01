@@ -5,7 +5,7 @@
 # one that attaches the image to a tag's release:
 #
 #   app      the Swift tests, then the universal bundle in
-#            build/Malachi-Mail-<version>-universal.dmg: Swift for arm64 and
+#            build/Malachi-Mail-<version>-macos-universal.dmg: Swift for arm64 and
 #            x86_64, malachid and malachi-mcp for both joined by lipo,
 #            signed with the Developer ID of the repository's secrets and
 #            notarised by Apple; an artifact only of a tag (for the
@@ -179,7 +179,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         with:
           name: malachi-macos-universal
-          path: build/Malachi-Mail-*-universal.dmg
+          path: build/Malachi-Mail-*-macos-universal.dmg
           if-no-files-found: error
           retention-days: ${{ startsWith(github.ref, 'refs/tags/v') && 30 || 1 }}
 

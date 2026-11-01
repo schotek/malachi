@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: 2026 Vladislav Janeček
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Makes the release artefacts of one architecture from an app folder that
-# build.ps1 app assembled: Malachi-Mail-<version>-<arch>-Setup.exe (Inno
-# Setup, MalachiMail.iss) and Malachi-Mail-<version>-<arch>.zip, the same
-# folder to unpack anywhere. build.ps1 installer runs it after app; a
+# Makes the release artefact of one architecture from an app folder that
+# build.ps1 app assembled: Malachi-Mail-<version>-windows-<arch>-setup.exe (Inno
+# Setup, MalachiMail.iss); there is no portable zip. build.ps1 installer
+# runs it after app; a
 # release built from an older tag runs it directly with that tag's app
 # folder:
 #
@@ -139,28 +139,9 @@ if ($licensingText -notmatch 'Additional permission under GPLv3') {
 [System.IO.Directory]::CreateDirectory($OutDir) | Out-Null
 Invoke-Iscc @('/Q', "/DAppVersion=$Version", "/DNumericVersion=$numeric", "/DArch=$Arch",
     "/DSourceDir=$stage", "/DOutputDir=$OutDir", (Join-Path $Here 'MalachiMail.iss'))
-$setup = Join-Path $OutDir ('Malachi-Mail-{0}-{1}-Setup.exe' -f $Version, $Arch)
-
-# The portable zip: one Malachi Mail\ folder, entry by entry with / as the
-# separator (build.ps1 package says why).
-Add-Type -AssemblyName System.IO.Compression
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-$zip = Join-Path $OutDir ('Malachi-Mail-{0}-{1}.zip' -f $Version, $Arch)
-if (Test-Path -LiteralPath $zip) {
-    Remove-Item -LiteralPath $zip -Force
+$setup = Join-Path $OutDir ('Malachi-Mail-{0}-windows-{1}-setup.exe' -f $Version, $Arch)
+if (-not (Test-Path -LiteralPath $setup)) {
+    throw "Inno Setup wrote no $setup"
 }
-$archive = [System.IO.Compression.ZipFile]::Open($zip, [System.IO.Compression.ZipArchiveMode]::Create)
-try {
-    foreach ($file in [System.IO.Directory]::GetFiles($stage, '*', [System.IO.SearchOption]::AllDirectories)) {
-        $relative = $file.Substring($stage.Length).TrimStart('\').Replace('\', '/')
-        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file, "Malachi Mail/$relative",
-            [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
-    }
-} finally {
-    $archive.Dispose()
-}
-
-foreach ($artefact in $setup, $zip) {
-    $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $artefact).Hash.ToLowerInvariant()
-    Write-Host ('{0}  {1}  ({2:N0} bytes)' -f $hash, [System.IO.Path]::GetFileName($artefact), (Get-Item -LiteralPath $artefact).Length)
-}
+$hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $setup).Hash.ToLowerInvariant()
+Write-Host ('{0}  {1}  ({2:N0} bytes)' -f $hash, [System.IO.Path]::GetFileName($setup), (Get-Item -LiteralPath $setup).Length)

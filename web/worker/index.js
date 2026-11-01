@@ -10,7 +10,7 @@
 const CANONICAL = "malachimail.app";
 const ALIASES = new Set(["www.malachimail.app", "malachimail.org", "www.malachimail.org"]);
 
-// /dl/v0.1.4/Malachi-Mail-0.1.4-universal.dmg: a release tag and a plain
+// /dl/v0.1.4/Malachi-Mail-0.1.4-macos-universal.dmg: a release tag and a plain
 // file name, nothing else (no further directories, no dot segments, no
 // escapes). The object key in the bucket is the path after /dl/.
 const PACKAGE_PATH = /^\/dl\/(v\d+\.\d+\.\d+)\/([A-Za-z0-9][A-Za-z0-9._+-]*)$/;

@@ -88,7 +88,7 @@ other names are not seen there. wrangler keeps its state in
 ## Packages
 
 `/dl/<tag>/<file>`, for example
-`https://malachimail.app/dl/v0.1.4/Malachi-Mail-0.1.4-universal.dmg`,
+`https://malachimail.app/dl/v0.1.4/Malachi-Mail-0.1.4-macos-universal.dmg`,
 serves a release package from the R2 bucket `malachi-downloads` (binding
 `DOWNLOADS` in `wrangler.jsonc`): the place for the packages when they
 are not on GitHub. The installers are too large for the static assets (a
@@ -113,7 +113,7 @@ npx wrangler@4.150.0 r2 bucket create malachi-downloads
 Every release, for each package:
 
 ```sh
-npx wrangler@4.150.0 r2 object put malachi-downloads/v0.1.4/Malachi-Mail-0.1.4-universal.dmg --file Malachi-Mail-0.1.4-universal.dmg --remote
+npx wrangler@4.150.0 r2 object put malachi-downloads/v0.1.4/Malachi-Mail-0.1.4-macos-universal.dmg --file Malachi-Mail-0.1.4-macos-universal.dmg --remote
 ```
 
 A file too large for `wrangler r2 object put` goes through the

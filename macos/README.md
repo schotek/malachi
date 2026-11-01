@@ -90,7 +90,7 @@ make run-macos    # runs the bundled executable from the terminal: the app's and
 make test-macos   # generates the catalogues, then swift test (the Czech cases need them)
 open "build/Malachi Mail.app"   # the Finder way: Dock icon, notifications, About panel
 make macos-dmg    # the universal bundle (arm64 and x86_64) in
-                  # build/Malachi-Mail-<version>-universal.dmg beside a link to /Applications
+                  # build/Malachi-Mail-<version>-macos-universal.dmg beside a link to /Applications
 ```
 
 The targets exist on Darwin only; on Linux they print a hint and

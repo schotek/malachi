@@ -13,7 +13,11 @@
 # Run it on the target release (CI: .github/workflows/rpm.yml), with the
 # build dependencies of README "Building from source" installed plus
 # rpm-build:
-#   ./scripts/build-rpm.sh          → build/malachi-<version>-1.<arch>.rpm
+#   ./scripts/build-rpm.sh          → build/Malachi-Mail-<version>-linux-<arch>-<distro>.rpm
+#
+# The file is named as every release file (docs/releasing.md §1): the
+# git describe version, x64/arm64 and the release it is built for
+# (fedora42); the package inside is still malachi with rpm's version.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -37,8 +41,23 @@ done
 # release it follows — the tilde would sort before it and make a development
 # build look older than the tag it came from.
 VERSION="$(cat .version 2>/dev/null || git describe --tags --always --dirty | sed 's/^v//')"
+FILE_VERSION="$VERSION"
 VERSION="${VERSION//-/^}"
 ARCH="$(rpm --eval '%{_arch}')"
+case "$ARCH" in
+    x86_64) FILE_ARCH=x64 ;;
+    aarch64) FILE_ARCH=arm64 ;;
+    *) FILE_ARCH="$ARCH" ;;
+esac
+# %{?dist} is ".fc42" on Fedora 42; the file says fedora42.
+DIST="$(rpm --eval '%{?dist}')"
+DIST="${DIST#.}"
+case "$DIST" in
+    fc*) DIST="-fedora${DIST#fc}" ;;
+    "") ;;
+    *) DIST="-$DIST" ;;
+esac
+FILE="Malachi-Mail-${FILE_VERSION}-linux-${FILE_ARCH}${DIST}.rpm"
 
 rm -rf "$STAGE" "$TOPDIR"
 # The licences and THIRD-PARTY-NOTICES.md go to %{_licensedir}/<package>.
@@ -85,10 +104,10 @@ printf '%s\n' "$SPEC" > "$TOPDIR/SPECS/$PKG.spec"
 rpmbuild -bb \
     --define "_topdir $TOPDIR" \
     --define "_rpmdir $ROOT/build" \
-    --define "_rpmfilename %%{NAME}-%%{VERSION}-%%{RELEASE}.%%{ARCH}.rpm" \
+    --define "_rpmfilename $FILE" \
     "$TOPDIR/SPECS/$PKG.spec"
 
-OUT="$(ls -1 "$ROOT/build/$PKG"-*.rpm | tail -1)"
+OUT="$ROOT/build/$FILE"
 rpm -qip "$OUT"
 rpm -qlp "$OUT"
 rpm -qRp "$OUT"

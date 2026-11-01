@@ -105,7 +105,7 @@ Release {
 }
 
 Package {
-  "url": "https://github.com/schotek/malachi/releases/download/v0.1.3/Malachi-Mail-0.1.3-x64-Setup.exe",
+  "url": "https://github.com/schotek/malachi/releases/download/v0.1.3/Malachi-Mail-0.1.3-windows-x64-setup.exe",
   "sha256": "<64 lowercase hex digits>",
   "size": 75497472                      // bytes
 }
@@ -123,12 +123,14 @@ daemon which one, `plans/update-check.md` §3):
 
 | Channel | Package |
 |---|---|
-| `macos-dmg` | `Malachi-Mail-<v>-universal.dmg` |
-| `windows-setup-x64`, `windows-setup-arm64` | `Malachi-Mail-<v>-<arch>-Setup.exe` |
-| `windows-zip-x64`, `windows-zip-arm64` | `Malachi-Mail-<v>-<arch>.zip` |
-| `linux-deb-amd64`, `linux-deb-arm64` | `malachi_<v>-1_<arch>.deb` |
-| `linux-rpm-x86_64`, `linux-rpm-aarch64` | `malachi-<v>-1.fc42.<arch>.rpm` |
-| `linux-flatpak-x86_64`, `linux-flatpak-aarch64` | `malachi-<v>-<arch>.flatpak` |
+| `macos-dmg` | `Malachi-Mail-<v>-macos-universal.dmg` |
+| `windows-setup-x64`, `windows-setup-arm64` | `Malachi-Mail-<v>-windows-<arch>-setup.exe` |
+| `linux-deb-x64`, `linux-deb-arm64` | `Malachi-Mail-<v>-linux-<arch>.deb` |
+| `linux-rpm-x64`, `linux-rpm-arm64` | `Malachi-Mail-<v>-linux-<arch>-fedora42.rpm` |
+| `linux-flatpak-x64`, `linux-flatpak-arm64` | `Malachi-Mail-<v>-linux-<arch>.flatpak` |
+
+The architectures are `x64` and `arm64` in every channel and file name
+(`releasing.md` §1).
 
 Unknown channels are ignored. Rules the daemon enforces on the payload
 (any violation discards the whole manifest, §2.5):

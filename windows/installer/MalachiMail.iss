@@ -17,7 +17,7 @@
 ;   NumericVersion  the file version, 0.1.2.0
 ;   Arch            x64 or arm64
 ;   SourceDir       the staged app folder
-;   OutputDir       where Malachi-Mail-<version>-<arch>-Setup.exe goes
+;   OutputDir       where Malachi-Mail-<version>-windows-<arch>-setup.exe goes
 
 #ifndef AppVersion
   #error AppVersion is not defined
@@ -68,7 +68,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 #endif
 MinVersion=10.0.22000
 OutputDir={#OutputDir}
-OutputBaseFilename=Malachi-Mail-{#AppVersion}-{#Arch}-Setup
+OutputBaseFilename=Malachi-Mail-{#AppVersion}-windows-{#Arch}-setup
 SetupIconFile={#SourceDir}\Assets\Malachi.ico
 UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName}

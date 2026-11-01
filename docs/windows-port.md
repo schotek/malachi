@@ -44,7 +44,7 @@ except for the Windows CI job of the backend row and what §17 lists.
 | Language, runtime | C# on .NET 10 (LTS), WinUI 3 on the Windows App SDK **2.5.x** (1.8 left servicing on 2026-09-24): the component packages `Microsoft.WindowsAppSDK.WinUI` and `.InteractiveExperiences` instead of the metapackage, which adds ~60 MB of AI libraries a mail client never uses (measured; the notification fix of §10 comes with it) | Built: `windows/Directory.Packages.props` (WinUI 2.3.9, InteractiveExperiences 2.1.9, the 2.5.1 Runtime package downloaded for one DLL), §2, §13 |
 | Windows versions | Windows 11 only (`TargetPlatformMinVersion` 10.0.22000.0) | Built: `Malachi.App.csproj` |
 | Architectures | x64 and ARM64 | Built: `build.ps1 -Arch x64\|arm64`, the solution's two platforms. x64 is built and run here; for ARM64 the app, the daemon and the bridge cross-build (2026-09-28), the NativeAOT keyring helper needs the MSVC ARM64 build tools, and nothing ARM64 has run yet (§17) |
-| Packaging | **Unpackaged, self-contained**, per user. `make windows` assembles a folder like the macOS `.app`; the app registers itself in HKCU. Installer (Velopack + winget), code signing and the licence permission for Microsoft components come before the first public binary (§17). MSIX is out: its AppData virtualisation hides `config.toml` and the store and breaks the Claude registration, the same reason macOS has no App Sandbox | Built: `build.ps1 app` and `package` (a zip of the folder), the HKCU registrations of §10; the installer, signing and the licence permission are §17 |
+| Packaging | **Unpackaged, self-contained**, per user. `make windows` assembles a folder like the macOS `.app`; the app registers itself in HKCU. Installer (Velopack + winget), code signing and the licence permission for Microsoft components come before the first public binary (§17). MSIX is out: its AppData virtualisation hides `config.toml` and the store and breaks the Claude registration, the same reason macOS has no App Sandbox | Built: `build.ps1 app` and `installer` (Inno Setup, per user; no zip since 2026-11-01), the HKCU registrations of §10; signing and updates are §17 |
 | Entry points | `make windows`, `make run-windows`, `make test-windows`, from PowerShell and Git Bash (GNU make 4.4 from winget `ezwinports.make`); `windows/build.ps1` does the work | Built: the root `Makefile`, `windows/build.ps1` (§13), verified from both shells |
 | Stopping the daemon | `CTRL_BREAK_EVENT` through `AttachConsole`/`GenerateConsoleCtrlEvent` (Go maps it to SIGINT; verified clean exit in ~18 ms), `Kill` after 15 s. No backend change; GTK/macOS semantics kept (a daemon left behind by a crashed UI is adopted, never stopped) | Built: `Malachi.Platform.Windows` `Process/` and `Console/`, §5 |
 | Secrets | `malachi-credentials.exe`, the helper keyring over **Windows Credential Manager**, values above the 2560-byte blob limit split into hash-checked chunks | Built: `Malachi.Credentials`, §10 |
@@ -4518,9 +4518,10 @@ copies the catalogues and licences, and assembles
 .NET Framework tool without long-path support: keep the clone path short.
 Version: `git describe` as in the Makefile; `Major.Minor.Patch.Commits` for
 the file version, the full string as `InformationalVersion`. `build.ps1
-package` zips the app folder as `build\windows\Malachi-Mail-<version>-<arch>.zip`
-(entries with `/` separators, so every unzip tool reads them); the zip is
-unsigned and is not a release artefact yet (§17, [releasing.md](releasing.md)).
+installer` builds the app folder and its installer,
+`build\windows\Malachi-Mail-<version>-windows-<arch>-setup.exe` (Inno Setup,
+unsigned; §17, [releasing.md §7](releasing.md#7-windows)); there is no
+portable zip any more (owner's decision of 2026-11-01).
 
 `build.ps1 lint` is `dotnet format --verify-no-changes` over the solution
 and the conventions tests. Warnings are errors in every project
@@ -4546,9 +4547,9 @@ go into the app folder, `.gitattributes`. Its jobs:
 | Job | Steps | Uploads (30 days) |
 |---|---|---|
 | `go` | `go vet ./...` and `go test -count=1 ./...` in `backend/` with `CGO_ENABLED=0` and `GOWORK=off`, as the daemon is built | |
-| `client` | `dotnet restore Malachi.slnx -p:Platform=x64 --locked-mode`; `build.ps1 build -Arch x64` (Debug; every warning is an error through `TreatWarningsAsErrors`); `build.ps1 go`, so that the tests against the real daemon run, as under `make test-windows`; `build.ps1 test`; a job summary of every project's counts and of every skipped test with its reason; `build.ps1 lint`; `build.ps1 package -Arch x64` | `malachi-windows-x64` (the zip), `windows-test-results` (the `.trx` files, also when a test failed) |
-| `arm64` | the locked restore and `build.ps1 build` for ARM64, then `build.ps1 package -Arch arm64`: Go cross-compiles, the app is published for `win-arm64`, the helper is NativeAOT cross-linked with the image's ARM64 tools. Nothing ARM64 runs on the x64 runner, so there are no tests. A job of its own, though one build tree takes both architectures one after the other (every project built for an architecture has output folders of its own, `Directory.Build.props`): it runs beside `client` rather than after it, has its own NuGet cache, and a failed ARM64 link leaves the x64 results apart | `malachi-windows-arm64` |
-| `release` | on a `v*` tag, once the three jobs pass, and only when the repository variable `WINDOWS_RELEASE_ZIPS` is `true`: the zips attached to the tag's release, a draft created when there is none, as the Flatpak, Debian and RPM workflows do. Unset, the job is skipped and the release gets no Windows zips (below) | |
+| `client` | `dotnet restore Malachi.slnx -p:Platform=x64 --locked-mode`; `build.ps1 build -Arch x64` (Debug; every warning is an error through `TreatWarningsAsErrors`); `build.ps1 go`, so that the tests against the real daemon run, as under `make test-windows`; `build.ps1 test`; a job summary of every project's counts and of every skipped test with its reason; `build.ps1 lint`; Inno Setup (Chocolatey when the image lacks it); `build.ps1 installer -Arch x64` | `malachi-windows-x64` (the installer, only on a tag), `windows-test-results` (the `.trx` files, also when a test failed) |
+| `arm64` | the locked restore and `build.ps1 build` for ARM64, then Inno Setup and `build.ps1 installer -Arch arm64`: Go cross-compiles, the app is published for `win-arm64`, the helper is NativeAOT cross-linked with the image's ARM64 tools. Nothing ARM64 runs on the x64 runner, so there are no tests. A job of its own, though one build tree takes both architectures one after the other (every project built for an architecture has output folders of its own, `Directory.Build.props`): it runs beside `client` rather than after it, has its own NuGet cache, and a failed ARM64 link leaves the x64 results apart | `malachi-windows-arm64` (the installer, only on a tag) |
+| `release` | on a `v*` tag, once the three jobs pass: both installers attached to the tag's release, a draft created when there is none, as the Flatpak, Debian, RPM and macOS workflows do; the only place a release's Windows installers are built (below) | |
 
 Every client step is a `build.ps1` target started as make starts it
 (`powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 …`), so CI
@@ -4557,7 +4558,7 @@ last program, so each step runs one. Go is the minor version of
 `backend/go.mod`'s `go` directive at its newest patch release (`go 1.25.0`
 → the newest 1.25.x, as the Linux workflows' `'1.25'`): setup-go's
 `go-version-file` would install 1.25.0 itself, without the security fixes
-the zips must carry. The .NET SDK comes from `windows/global.json` through
+the installers must carry. The .NET SDK comes from `windows/global.json` through
 `setup-dotnet`. The NuGet packages folder is cached per architecture, keyed
 by the lock files and `Directory.Packages.props`; the runner sets `CI=true`,
 which makes every restore locked (`Directory.Build.props`), and the
@@ -4652,17 +4653,12 @@ runs of `build.ps1 test` failed in the canary before these changes;
 three runs with all of them, the rebuild loop included, passed
 (2026-09-28).
 
-The zips are test builds until §17 is done (no signature, no installer,
-the licence permission for the Microsoft components not yet in
-`LICENSING.md`), so a tag builds and tests them but neither keeps them as
-the run's artifacts (which any signed-in GitHub user could download from
-the public repository) nor attaches them to its release: the upload steps
-and the `release` job run only when the repository variable
-`WINDOWS_RELEASE_ZIPS` is `true`, which nothing sets by default. The owner sets it (*Settings → Secrets and variables → Actions →
-Variables*, or `gh variable set WINDOWS_RELEASE_ZIPS --body true`) once
-the permission is in `LICENSING.md` and the workflow signs the
-executables; [releasing.md §7](releasing.md#7-windows) has what that
-means for a release. Every step of the three jobs was run locally in
+Since 2026-11-01 (owner's decision) a tag's run builds the release's
+Windows installers and attaches them, and nothing else does: no zip, no
+upload by hand. Pull requests and runs by hand build the installers too
+but keep them nowhere, as any signed-in GitHub user can download the
+artifacts of a public repository. The installers are unsigned until §17
+settles code signing; the workflow would then sign them in these jobs. Every step of the three jobs was run locally in
 order from a fresh build tree, on Windows 11 x64 with `CI=true` and
 `GITHUB_ACTIONS=true`, before the workflow was committed; the one step
 that could not pass there is the ARM64 helper's NativeAOT link, for want
@@ -4871,12 +4867,11 @@ daemon's graceful stop), recorded in §10 and §11.
 ## 17. Before a public release
 
 The client is complete as a mail client. Since 0.1.2 (2026-10-28) it is
-distributed: the release carries an installer and a portable zip for x64
-and for ARM64 (`Malachi-Mail-<version>-<arch>-Setup.exe`,
-`Malachi-Mail-<version>-<arch>.zip`), built on a Windows machine from a
-clean checkout of the tag with `make windows-installer` (`build.ps1
-release`: both architectures, then `gh release upload` to the existing
-release), never by CI.
+distributed: the release carries an installer for x64 and for ARM64
+(`Malachi-Mail-<version>-windows-<arch>-setup.exe`). Up to 0.1.2 they were built on
+a Windows machine and uploaded by hand beside a portable zip; since
+2026-11-01 (owner's decision) the tag's CI builds them, the ARM64 one
+cross-built, attaches them, and there is no zip (§13).
 
 - **Licence.** Settled: `LICENSING.md` carries the GPLv3 §7 additional
   permission for the Microsoft platform components (the Windows App SDK,
@@ -4929,7 +4924,7 @@ release), never by CI.
   hardware.
 - **The UI smoke tests on CI.** `.github/workflows/windows.yml` (§13)
   runs on the hosted runner (first run 2026-09-28: the client built,
-  tested and zipped for both architectures, the ARM64 helper linked with
+  tested and packaged for both architectures, the ARM64 helper linked with
   the image's MSVC ARM64 tools); whether the UI smoke tests (§12) can
   drive the app in the runner's session is open (the test step runs
   before the app folder exists, so they skip).
