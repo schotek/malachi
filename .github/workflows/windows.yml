@@ -19,9 +19,10 @@
 # (the NativeAOT keyring helper links with them) and the WebView2 runtime.
 #
 # pwsh runs the steps and judges a step by the exit status of the last
-# program it ran, so no step runs more than one. Pull requests, tags and a
-# manual run go through the same jobs; only a tag keeps the two installers
-# and attaches them to its release (the release job). They are the only
+# program it ran, so no step runs more than one. Pull requests and a manual
+# run test, lint and build; a tag only builds the two installers, keeps
+# them and attaches them to its release (the release job), as what it tags
+# was tested before (docs/releasing.md §3). They are the only
 # Windows artefacts of a release, built nowhere else (docs/releasing.md §7).
 name: Windows
 
@@ -66,6 +67,9 @@ concurrency:
 jobs:
   go:
     name: backend (go vet, go test)
+    # Not on a tag, as no test of the client job: a release builds what
+    # pull requests have tested (docs/releasing.md §3).
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     runs-on: windows-2025
     timeout-minutes: 30
     env:
@@ -156,7 +160,9 @@ jobs:
 
       - name: Build
         # Debug, as build.ps1 build; every warning is an error
-        # (TreatWarningsAsErrors in Directory.Build.props).
+        # (TreatWarningsAsErrors in Directory.Build.props). This and the
+        # test steps up to the lint do not run on a tag.
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         working-directory: windows
         run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 build -Arch x64
 
@@ -164,6 +170,7 @@ jobs:
         # As make test-windows does: with build\malachid.exe the tests of
         # the process host, the console and the handshake run against the
         # real daemon instead of skipping.
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         working-directory: windows
         run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 go -Arch x64
 
@@ -174,13 +181,14 @@ jobs:
         # that need a taskbar, symbolic links or the Credential Manager
         # round trip (MALACHI_CREDENTIALS_TEST) skip themselves likewise.
         # The next step lists every skip with its reason.
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         working-directory: windows
         env:
           MALACHI_CANARY: ${{ inputs.canary && '1' || '' }}
         run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 test -Arch x64
 
       - name: Summarise the tests
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && !startsWith(github.ref, 'refs/tags/') }}
         run: |
           $files = @(Get-ChildItem -Path build/windows/TestResults -Filter *.trx -Recurse -ErrorAction SilentlyContinue)
           if ($files.Count -eq 0) {
@@ -237,7 +245,7 @@ jobs:
           $summary | Write-Output
 
       - uses: actions/upload-artifact@v4
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && !startsWith(github.ref, 'refs/tags/') }}
         with:
           name: windows-test-results
           path: build/windows/TestResults/**/*.trx
@@ -246,6 +254,7 @@ jobs:
 
       - name: Lint
         # dotnet format --verify-no-changes and the conventions tests.
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         working-directory: windows
         run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 lint
 
@@ -334,6 +343,9 @@ jobs:
         run: dotnet restore Malachi.slnx -p:Platform=ARM64 --locked-mode
 
       - name: Build
+        # The Debug build checks the warnings; not on a tag, whose installer
+        # step publishes Release itself.
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         working-directory: windows
         run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 build -Arch arm64
 
@@ -370,9 +382,10 @@ jobs:
 
   release:
     name: Attach the installers to the release
-    needs: [go, client, arm64]
-    # Both installers or none: a tag whose tests, lint or either build
-    # failed attaches nothing. They are unsigned until there is a
+    # The go job does not run on a tag, so it is not needed here.
+    needs: [client, arm64]
+    # Both installers or none: a tag whose build of either failed attaches
+    # nothing. They are unsigned until there is a
     # code-signing certificate (docs/windows-port.md §17), and the ARM64 one
     # is cross-built and has not run here.
     if: startsWith(github.ref, 'refs/tags/v')

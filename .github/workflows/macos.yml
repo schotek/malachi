@@ -4,7 +4,7 @@
 # SDK gives the app its macOS 26 design; SDK_VERSION in macos/Makefile), and
 # one that attaches the image to a tag's release:
 #
-#   app      the Swift tests, then the universal bundle in
+#   app      the Swift tests (not on a tag), then the universal bundle in
 #            build/Malachi-Mail-<version>-macos-universal.dmg: Swift for arm64 and
 #            x86_64, malachid and malachi-mcp for both joined by lipo,
 #            signed with the Developer ID of the repository's secrets and
@@ -94,7 +94,10 @@ jobs:
 
       - name: Test
         # The script tests, the string check and swift test with the
-        # generated catalogues, as make test-macos runs them on a Mac.
+        # generated catalogues, as make test-macos runs them on a Mac. Not
+        # on a tag: a release builds, signs and notarises what pull requests
+        # and the Mac before the tag have tested (docs/releasing.md §3).
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         run: make test-macos
 
       - name: Decide on signing

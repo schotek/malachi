@@ -96,6 +96,15 @@ make clean && make build && ./build/malachid --version   # 0.1.0, no -dirty
 git push && git push --tags
 ```
 
+A tag's CI only builds, signs and uploads: it runs no tests and no lint
+(the owner's decision of 2026-11-01, as flaky timing tests on the shared
+runners failed releases), only the checks of the packages themselves
+(installing the `.deb` and `.rpm`, Gatekeeper on the DMG). So what is
+tagged is tested before: step 1 on a Mac covers the daemon and the macOS
+client; a change in `windows/` or `backend/` reaches `main` through a pull
+request, whose `windows.yml` tests it on Windows, or the owner's Windows
+agent runs `build.ps1 test` and `lint` before the tag.
+
 `appstreamcli validate` reports one pedantic complaint,
 `cid-contains-uppercase-letter`, about the `M` in the application ID. The
 ID is fixed (`CLAUDE.md`); ignore it.
