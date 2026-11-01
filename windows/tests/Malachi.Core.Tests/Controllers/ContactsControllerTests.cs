@@ -790,7 +790,7 @@ public sealed class ContactsControllerTests
         Assert.Equal("All Contacts", w.Items[0].Title);
         Assert.DoesNotContain(w.Items, i => i.Title == "Archiv"); // hidden
         Assert.Equal(w.Total, w.Contacts.Count);
-        Assert.Equal(13, w.Total); // the visible books of accounts with contacts on
+        Assert.Equal(16, w.Total); // the visible books of accounts with contacts on (3 of them devmail's senders)
         Assert.Equal([new ContactsConsentNeed("acc_petr", "petr@firma2.cz", true)], w.Consent);
         var detail = await h.Run(() =>
         {

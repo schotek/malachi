@@ -7,7 +7,10 @@
 // contact.lookup withPhotos, docs/plans/address-book.md §9) are Windows
 // first: three invented 48 px portraits drawn as PNG, two contacts with a
 // ready photo, one with a remote photo the first contact.photo "downloads"
-// and one remote contact that turns out to have none.
+// and one remote contact that turns out to have none; the senders of
+// malachi-devmail's sample mailbox (martin.benes@example.test,
+// petr.svoboda@acme.test ready, tomas.holub@example.test remote) are
+// contacts with photos too, so that Mail's avatars show them.
 //
 // DEVELOPMENT AID: the invented address books of MALACHI_CONTACTS_SAMPLES=1
 // (like MALACHI_CALENDAR_SAMPLES): an in-memory daemon that answers the
@@ -106,6 +109,11 @@ public sealed class ContactsSampleCaller : IContactsCaller
             Work("Hana", "Růžičková", "Stavby Nová s.r.o.", "asistentka", "hana@stavby-nova.example.cz", ""),
             Work("Tomáš", "Svoboda", "Pila Svoboda s.r.o.", "", "tomas@svoboda.example", ""),
             Work("Eva", "Veselá", "", "", "eva.vesela@example.cz", ""),
+            // The senders of malachi-devmail's sample mailbox (-lang en), so
+            // that their photos show in Mail too.
+            Work("Martin", "Beneš", "", "", "martin.benes@example.test", ""),
+            Work("Petr", "Svoboda", "Acme", "", "petr.svoboda@acme.test", ""),
+            Work("Tomáš", "Holub", "", "", "tomas.holub@example.test", ""),
             new ContactCard
             {
                 BookId = "ab_work", Org = "Tiskárna Dvořák", DisplayName = "Tiskárna Dvořák",
@@ -142,6 +150,9 @@ public sealed class ContactsSampleCaller : IContactsCaller
             ("david@dvorak.example", ContactPhotoAvailability.Ready, PhotoB),
             ("marie@example.cz", ContactPhotoAvailability.Remote, PhotoC),
             ("karel@kucera.example", ContactPhotoAvailability.Remote, null),
+            ("martin.benes@example.test", ContactPhotoAvailability.Ready, PhotoB),
+            ("petr.svoboda@acme.test", ContactPhotoAvailability.Ready, PhotoA),
+            ("tomas.holub@example.test", ContactPhotoAvailability.Remote, PhotoC),
         })
         {
             if (cards.Values.FirstOrDefault(c => c.Emails.Any(e => e.Address == address)) is { } c)
@@ -197,6 +208,9 @@ public sealed class ContactsSampleCaller : IContactsCaller
     /// answer was made).
     /// </summary>
     public event EventHandler<ContactsChangedNotification>? Notified;
+
+    /// <summary>Windows-only: each contact.photo asked of the samples (on the calling thread), so that a run can count them.</summary>
+    public event EventHandler<ContactId>? PhotoAsked;
 
     /// <summary>contactsctl.SamplesOn: MALACHI_CONTACTS_SAMPLES=1.</summary>
     public static bool SamplesOn => Environment.GetEnvironmentVariable(SamplesEnv) == "1";
@@ -345,6 +359,7 @@ public sealed class ContactsSampleCaller : IContactsCaller
             case "contact.photo":
                 {
                     var p = Read<ContactPhotoParams>(raw);
+                    PhotoAsked?.Invoke(this, p.ContactId);
                     if (!cards.TryGetValue(p.ContactId, out var c))
                     {
                         throw NotFound(p.ContactId);
@@ -353,10 +368,11 @@ public sealed class ContactsSampleCaller : IContactsCaller
                     {
                         return (new ContactPhotoResult { State = ContactPhotoState.None, Revision = c.Revision }, null);
                     }
-                    ContactsChangedNotification? fetched = null;
                     if (ph.State.Value == ContactPhotoAvailability.Remote)
                     {
-                        // "Downloaded": ready from now on, or gone for good, as the daemon does.
+                        // "Downloaded": ready from now on, or gone for good, as
+                        // the daemon does; like the daemon (2f91f2a3), without a
+                        // contactsChanged: the answer carries the photo.
                         if (ph.Data is null)
                         {
                             photos.Remove(c.Id);
@@ -365,11 +381,10 @@ public sealed class ContactsSampleCaller : IContactsCaller
                         {
                             photos[c.Id] = (ContactPhotoAvailability.Ready, ph.Data);
                         }
-                        fetched = new ContactsChangedNotification { AccountId = Book(c.BookId).AccountId, BookIds = [c.BookId] };
                     }
                     return ph.Data is null
-                        ? (new ContactPhotoResult { State = ContactPhotoState.None, Revision = c.Revision }, fetched)
-                        : (new ContactPhotoResult { State = ContactPhotoState.Ready, Mime = "image/png", Data = ph.Data, Revision = c.Revision }, fetched);
+                        ? (new ContactPhotoResult { State = ContactPhotoState.None, Revision = c.Revision }, null)
+                        : (new ContactPhotoResult { State = ContactPhotoState.Ready, Mime = "image/png", Data = ph.Data, Revision = c.Revision }, null);
                 }
             case "contact.create":
                 {
@@ -454,7 +469,7 @@ public sealed class ContactsSampleCaller : IContactsCaller
     private int Count(AddressBookId id) => id == AddressBookId.Recent ? recent.Count : cards.Values.Count(c => c.BookId == id);
 
     // The photo state of a contact; null none.
-    private ContactPhotoAvailability? PhotoOf(ContactId id) => photos.TryGetValue(id, out var ph) ? ph.State : null;
+    private ContactPhotoAvailability? PhotoOf(ContactId id) => photos.TryGetValue(id, out var ph) ? ph.State : (ContactPhotoAvailability?)null;
 
     private ContactSummary Summary(ContactCard c)
     {

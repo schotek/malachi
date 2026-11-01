@@ -120,10 +120,10 @@ public sealed class ContactsPhotosController
                 books[r.Id] = b;
             }
             var state = Norm(r.State);
-            if (states.TryGetValue(r.Id, out var prev) && prev != state && (cache.ContainsKey(r.Id) || none.Contains(r.Id)))
+            if (states.TryGetValue(r.Id, out var prev) && prev != state)
             {
                 // The list reports a change the cache may not know of yet.
-                stale.Add(r.Id);
+                StateChanged(r.Id, state);
             }
             states[r.Id] = state;
             if (ContactBook.MayHavePhoto(state) && !contacts.Contains(r.Id))
@@ -328,10 +328,9 @@ public sealed class ContactsPhotosController
                 && !ContactBook.IsRecent(null, rf.ContactId))
             {
                 next = new SenderEntry(rf.ContactId, rf.State);
-                if (states.TryGetValue(rf.ContactId, out var old) && old != rf.State
-                    && (cache.ContainsKey(rf.ContactId) || none.Contains(rf.ContactId)))
+                if (states.TryGetValue(rf.ContactId, out var old) && old != rf.State)
                 {
-                    stale.Add(rf.ContactId);
+                    StateChanged(rf.ContactId, rf.State);
                 }
                 states[rf.ContactId] = rf.State;
             }
@@ -504,6 +503,22 @@ public sealed class ContactsPhotosController
     }
 
     private void Report(string key) => PhotoChanged?.Invoke(this, key);
+
+    // contactsctl.stateChanged: what the cache holds for a contact is stale
+    // once its photo state changed, except remote → ready over a photo the
+    // cache already has and holds good: that is this client's own download
+    // showing in a list or lookup answer, not a new photo.
+    private void StateChanged(ContactId id, ContactPhotoAvailability? state)
+    {
+        if (state is { Value: ContactPhotoAvailability.Ready } && cache.ContainsKey(id) && !stale.Contains(id))
+        {
+            return;
+        }
+        if (cache.ContainsKey(id) || none.Contains(id))
+        {
+            stale.Add(id);
+        }
+    }
 
     /// <summary>contactsctl.Photo: a contact's photo as the daemon sent it (the daemon's own JPEG or PNG).</summary>
     /// <param name="Contact">The contact.</param>

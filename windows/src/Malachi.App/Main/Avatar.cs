@@ -64,6 +64,10 @@ public sealed partial class Avatar : UserControl
     public static readonly DependencyProperty PhotoSenderProperty = DependencyProperty.Register(
         nameof(PhotoSender), typeof(string), typeof(Avatar), new PropertyMetadata("", (d, _) => ((Avatar)d).PhotoSourceChanged()));
 
+    /// <summary>The contact (Contacts window) whose photo replaces the initials; null none.</summary>
+    public static readonly DependencyProperty PhotoContactProperty = DependencyProperty.Register(
+        nameof(PhotoContact), typeof(object), typeof(Avatar), new PropertyMetadata(null, (d, e) => ((Avatar)d).PhotoContactChanged(e)));
+
     private static readonly Windows.UI.ViewManagement.UISettings SystemColours = new();
 
     private readonly ImageBrush photoBrush = new() { Stretch = Stretch.UniformToFill };
@@ -112,6 +116,12 @@ public sealed partial class Avatar : UserControl
         };
         Unloaded += (_, _) =>
         {
+            // WinUI may raise a moved element's Unloaded after its new
+            // Loaded (a recycled list container): it is still in the tree.
+            if (IsLoaded)
+            {
+                return;
+            }
             loaded = false;
             ContactPhotos.Current?.Remove(this);
         };
@@ -127,17 +137,20 @@ public sealed partial class Avatar : UserControl
     }
 
     /// <summary>The contact (Contacts window) whose photo replaces the initials, with the state its summary or card reports; null none.</summary>
-    /// <remarks>A plain property, set from code (the Contacts window's rows and detail), never from markup.</remarks>
+    /// <remarks>Bound by the Contacts list's row template (ContactRowItem.PhotoRef), set by the detail.</remarks>
     public ContactsPhotosController.ContactRef? PhotoContact
     {
         get => photoContact;
-        set
+        set => SetValue(PhotoContactProperty, value);
+    }
+
+    private void PhotoContactChanged(DependencyPropertyChangedEventArgs e)
+    {
+        ContactsPhotosController.ContactRef? value = e.NewValue is ContactsPhotosController.ContactRef r ? r : null;
+        if (photoContact != value)
         {
-            if (photoContact != value)
-            {
-                photoContact = value;
-                PhotoSourceChanged();
-            }
+            photoContact = value;
+            PhotoSourceChanged();
         }
     }
 

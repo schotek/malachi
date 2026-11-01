@@ -294,6 +294,32 @@ public sealed class ContactsPhotosControllerTests
         Assert.Equal(ContactsPhotosController.MaxPhotos, d.Count(API.ContactPhoto.Name) - n);
     }
 
+    /// <summary>
+    /// photos_test.go TestPhotosOwnDownloadNotAskedAgain: a downloaded remote
+    /// photo that a later listing or lookup reports as ready is not asked
+    /// for again (this client's own download).
+    /// </summary>
+    [Fact]
+    public async Task OwnDownloadNotAskedAgain()
+    {
+        using var h = new PhotoHarness();
+        var d = h.Daemon;
+        d.Revs["p_1"] = "e1";
+        d.Refs["ada@example.test"] = new ContactPhotoRef { ContactId = "p_1", State = ContactPhotoAvailability.Remote };
+        await h.Run(p => p.Show("contacts", [new Ref("p_1", "b_1", ContactPhotoAvailability.Remote)], ["ada@example.test"]));
+        await h.FireAsync();
+        Assert.Equal(["p_1"], d.PhotosAsked());
+        d.Refs["ada@example.test"] = Ready("p_1");
+        await h.Run(p =>
+        {
+            p.Changed(new ContactsChangedNotification { BookIds = ["b_2"] });
+            p.Show("contacts", [new Ref("p_1", "b_1", ContactPhotoAvailability.Ready)], ["ada@example.test"]);
+        });
+        await h.FireAsync();
+        Assert.Equal(["p_1"], d.PhotosAsked()); // not asked again
+        Assert.NotNull(await h.Run(p => p.ForSender("ada@example.test")));
+    }
+
     [Fact]
     public async Task OwnAndReset()
     {
@@ -341,7 +367,7 @@ public sealed class ContactsPhotosControllerTests
         // The remote one: downloaded once, ready from then on.
         ph = await samples.CallAsync(API.ContactPhoto, new ContactPhotoParams { ContactId = marie.Id }, TimeSpan.FromSeconds(1), ct);
         Assert.Equal(ContactPhotoState.Ready, ph.State.Value);
-        Assert.Single(notified);
+        Assert.Empty(notified); // as the daemon: the answer carries the photo, nothing is announced
         list = await samples.CallAsync(API.ContactList, new ContactListParams { BookId = AddressBookId.All }, TimeSpan.FromSeconds(1), ct);
         Assert.Equal(ContactPhotoAvailability.Ready, list.Contacts.Single(c => c.Id == marie.Id).Photo?.Value);
         // A remote one without a photo: none, and no photo from then on.
@@ -359,9 +385,116 @@ public sealed class ContactsPhotosControllerTests
         lookup = await samples.CallAsync(
             API.ContactLookup, new ContactLookupParams { Addresses = ["jana.novakova@example.cz"] }, TimeSpan.FromSeconds(1), ct);
         Assert.Null(lookup.Photos);
+
+        // The senders of malachi-devmail's sample mailbox have photos too:
+        // two ready, one remote.
+        string[] devmail = ["martin.benes@example.test", "petr.svoboda@acme.test", "tomas.holub@example.test"];
+        lookup = await samples.CallAsync(API.ContactLookup, new ContactLookupParams { Addresses = devmail, WithPhotos = true }, TimeSpan.FromSeconds(1), ct);
+        Assert.Equal(
+            [ContactPhotoAvailability.Ready, ContactPhotoAvailability.Ready, ContactPhotoAvailability.Remote],
+            devmail.Select(a => lookup.Photos![a].State.Value));
+        ph = await samples.CallAsync(API.ContactPhoto, new ContactPhotoParams { ContactId = lookup.Photos!["tomas.holub@example.test"].ContactId }, TimeSpan.FromSeconds(1), ct);
+        Assert.Equal(ContactPhotoState.Ready, ph.State.Value);
+    }
+
+    /// <summary>
+    /// The controller over the sample daemon as the app runs it, the list
+    /// read and shown again round after round (any contactsChanged going back
+    /// to the controller): the remote photo is fetched once, even though the
+    /// list then reports it ready (its own download, 2f91f2a3), and a remote
+    /// contact without a photo is asked once.
+    /// </summary>
+    [Fact]
+    public async Task ARemotePhotoOfTheSamplesIsFetchedOnce()
+    {
+        var samples = new ContactsSampleCaller(ContactsHarness.Stamp("2026-10-30T12:00:00Z"));
+        var caller = new CountingCaller(samples);
+        var timers = new List<Action>();
+        using var ui = new TestUIContext();
+        var options = new ContactsOptions(caller, ContactBook.EnglishStrftime) { After = (_, f) => timers.Add(f) };
+        var photos = new ContactsPhotosController(options);
+        var notified = new List<ContactsChangedNotification>();
+        samples.Notified += (_, n) => notified.Add(n);
+        var ct = TestContext.Current.CancellationToken;
+        string[] senders = ["marie@example.cz", "karel@kucera.example", "jana.novakova@example.cz"];
+
+        async Task Round()
+        {
+            var list = await samples.CallAsync(API.ContactList, new ContactListParams { BookId = AddressBookId.All }, TimeSpan.FromSeconds(1), ct);
+            var refs = list.Contacts.Where(c => c.Photo is not null).Select(c => new Ref(c.Id, c.BookId, c.Photo)).ToList();
+            await ui.RunAsync(() => photos.Show("contacts", refs, senders));
+            for (var i = 0; i < 3; i++)
+            {
+                await ui.RunAsync(() =>
+                {
+                    var fs = timers.ToList();
+                    timers.Clear();
+                    fs.ForEach(f => f());
+                });
+                await Quiescence.IdleAsync(ui, options.Pending);
+            }
+            var changes = notified.ToList();
+            notified.Clear();
+            foreach (var n in changes)
+            {
+                await ui.RunAsync(() => photos.Changed(n));
+            }
+        }
+
+        for (var round = 0; round < 5; round++)
+        {
+            await Round();
+        }
+        var marie = caller.PhotosOf("marie@example.cz", samples);
+        var karel = caller.PhotosOf("karel@kucera.example", samples);
+        Assert.Equal(1, marie);
+        Assert.Equal(1, karel);
+        var after = caller.Count(API.ContactPhoto.Name);
+        await Round();
+        await Round();
+        Assert.Equal(after, caller.Count(API.ContactPhoto.Name)); // settled: nothing asked again
+        Assert.NotNull(await ui.RunAsync(() => photos.ForSender("marie@example.cz")));
+        Assert.Null(await ui.RunAsync(() => photos.ForSender("karel@kucera.example")));
     }
 
     private static ContactPhotoRef Ready(string id) => new() { ContactId = id, State = ContactPhotoAvailability.Ready };
+
+    /// <summary>An <see cref="IContactsCaller"/> that counts what it passes on.</summary>
+    private sealed class CountingCaller(IContactsCaller inner) : IContactsCaller
+    {
+        private readonly Lock gate = new();
+        private readonly List<(string Method, JsonElement Params)> calls = [];
+
+        public int Count(string method)
+        {
+            lock (gate)
+            {
+                return calls.Count(c => c.Method == method);
+            }
+        }
+
+        /// <summary>How often contact.photo asked for the contact with <paramref name="address"/>.</summary>
+        public int PhotosOf(string address, ContactsSampleCaller samples)
+        {
+            var id = samples.CallAsync(API.ContactLookup, new ContactLookupParams { Addresses = [address] }, TimeSpan.FromSeconds(1), CancellationToken.None)
+                .GetAwaiter().GetResult().Known[address];
+            lock (gate)
+            {
+                return calls.Count(c => c.Method == API.ContactPhoto.Name && c.Params.Deserialize(API.ContactPhoto.ParamsInfo)!.ContactId == id);
+            }
+        }
+
+        public Task<TResult> CallAsync<TParams, TResult>(
+            RpcMethod<TParams, TResult> method, TParams parameters, TimeSpan timeout, CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(method);
+            lock (gate)
+            {
+                calls.Add((method.Name, JsonSerializer.SerializeToElement(parameters, method.ParamsInfo)));
+            }
+            return inner.CallAsync(method, parameters, timeout, cancellationToken);
+        }
+    }
 
     /// <summary>The UI thread, the photo daemon and the timer of a test.</summary>
     private sealed class PhotoHarness : IDisposable

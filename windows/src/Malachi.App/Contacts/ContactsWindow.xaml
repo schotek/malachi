@@ -181,6 +181,7 @@ book or a contact is a TextBlock's Text, never markup.
                                 <main:Avatar
                                     VerticalAlignment="Center"
                                     AutomationProperties.AccessibilityView="Raw"
+                                    PhotoContact="{x:Bind PhotoRef}"
                                     Size="32"
                                     Text="{x:Bind Title}" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">

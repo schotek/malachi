@@ -65,6 +65,9 @@ public sealed partial class AppContacts : IDisposable
             caller = samples;
             // The samples' writes, as the daemon's notification, on the UI thread.
             samples.Notified += (_, n) => state.Dispatcher.TryEnqueue(() => ContactsChanged(n));
+            // Each photo asked of the samples, so that a run can count them
+            // (every photo once); the ids are the samples' own, invented.
+            samples.PhotoAsked += (_, id) => LogSamplePhoto(logger, id.Value);
         }
         else
         {
@@ -308,6 +311,9 @@ public sealed partial class AppContacts : IDisposable
         window?.HandleAccountsChanged();
         Changed?.Invoke(this, API.Notify.AccountsChanged);
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "contacts samples: contact.photo {Contact}")]
+    private static partial void LogSamplePhoto(ILogger logger, string contact);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "contacts: the books could not be listed ({Kind})")]
     private static partial void LogRefreshFailed(ILogger logger, string kind);

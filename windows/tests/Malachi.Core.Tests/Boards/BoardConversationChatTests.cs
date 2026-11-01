@@ -83,7 +83,12 @@ public sealed class BoardConversationChatTests
         Assert.Equal("ann@example.com", theirs.Address);
         var wire = new Malachi.Core.Api.BoardMessage
         {
-            Id = new MessageId("m9"), FolderId = new FolderId("f_1"), From = new Malachi.Core.Api.Address { Name = "A", Email = "a@b.cz" }, Date = ann, Mine = false, Text = "",
+            Id = new MessageId("m9"),
+            FolderId = new FolderId("f_1"),
+            From = new Malachi.Core.Api.Address { Name = "A", Email = "a@b.cz" },
+            Date = ann,
+            Mine = false,
+            Text = "",
         };
         Assert.Equal("a@b.cz", Malachi.Core.Boards.DaemonBoardSource.Convert(wire).Address);
         Assert.Equal(BText.You, mine.From);

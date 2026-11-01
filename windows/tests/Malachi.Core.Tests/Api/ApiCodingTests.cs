@@ -1338,8 +1338,8 @@ public sealed partial class ApiCodingTests
     [Fact]
     public void MethodTableMatchesGo()
     {
-        Assert.Equal(113, API.AllMethods.Count);
-        Assert.Equal(113, API.AllMethods.Distinct().Count()); // no duplicates
+        Assert.Equal(114, API.AllMethods.Count);
+        Assert.Equal(114, API.AllMethods.Distinct().Count()); // no duplicates
         Assert.Equal(GoMethods, API.AllMethods);
         Assert.Equal(API.AllMethods.Count, API.Methods.Count);
         Assert.Equal(API.SystemInfoName, API.SystemInfo.Name);

@@ -578,11 +578,8 @@ public sealed partial class ContactsWindow : Window
         {
             AutomationProperties.SetAutomationId(args.ItemContainer, "ContactsRow:" + item.Id.Value);
             AutomationProperties.SetName(args.ItemContainer, item.Spoken);
-            // The row's avatar shows the contact's photo (F9): the template's first child.
-            if (args.ItemContainer.ContentTemplateRoot is Panel root && root.Children.Count > 0 && root.Children[0] is Main.Avatar avatar)
-            {
-                avatar.PhotoContact = item.PhotoRef;
-            }
+            // The row's avatar shows the contact's photo (F9) through the
+            // template's binding of PhotoContact to ContactRowItem.PhotoRef.
         }
         if (list.HasMore && args.ItemIndex >= ShownItems().Count() - LoadMoreMargin)
         {
