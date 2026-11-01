@@ -435,6 +435,11 @@ private typealias Ref = ContactsPhotosController.ContactRef
         #expect(p.cache.count == Photos.maxPhotos && p.order.count == Photos.maxPhotos, "kept \(p.cache.count)")
         #expect(p.forContact("p_0") == nil, "the oldest kept")
         #expect(p.forContact("p_249") != nil, "a shown one evicted")
+        // The fetches of one page answer in any order: use the kept photos
+        // in a known order first, so that the least recently used is known.
+        for i in 50..<250 {
+            _ = p.forContact(ContactID("p_\(i)"))
+        }
         // A shown photo is used again: kept over older ones.
         _ = p.forContact("p_50")
         p.show("contacts", refs: [ref(300)])

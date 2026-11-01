@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AppKit
+import MalachiCore
 
 /// Adw.Avatar's colour classes and initials (libadwaita adw-avatar.c and
 /// _avatar.scss), so that a sender gets the same colour and letters as in
