@@ -1,7 +1,7 @@
 # Flatpak builds for x86_64 and aarch64.
 #
-# Every push to main produces two installable bundles as workflow artifacts;
-# a pushed tag additionally attaches them to the GitHub release.
+# A pushed tag attaches two installable bundles to the GitHub release; a
+# pull request only builds them.
 #
 # aarch64 builds on GitHub's native arm64 runner (ubuntu-24.04-arm), which is
 # free for public repositories — no QEMU, so a build takes minutes, not hours.
@@ -145,6 +145,9 @@ jobs:
             "$APP_ID"
 
       - uses: actions/upload-artifact@v4
+        # Only for the release: any signed-in GitHub user can download the
+        # artifacts of a public repository.
+        if: startsWith(github.ref, 'refs/tags/v')
         with:
           name: malachi-${{ matrix.arch }}
           path: malachi-*.flatpak

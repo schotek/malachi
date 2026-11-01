@@ -118,6 +118,9 @@ jobs:
           sudo apt-get remove -y malachi
 
       - uses: actions/upload-artifact@v4
+        # Only for the release: any signed-in GitHub user can download the
+        # artifacts of a public repository.
+        if: startsWith(github.ref, 'refs/tags/v')
         with:
           name: malachi-deb-${{ matrix.arch }}
           path: build/*.deb
