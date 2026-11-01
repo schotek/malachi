@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -55,7 +56,11 @@ func startStack(t *testing.T) *stack {
 	s := &stack{t: t, dir: dir, bin: map[string]string{}, socket: filepath.Join(dir, "rpc.sock")}
 	t.Cleanup(s.stop)
 	for _, name := range []string{"malachid", "malachi-devmail", "malachi-mcp", "malachi-devclaude"} {
+		// Windows runs a program only by its full name, .exe included.
 		out := filepath.Join(dir, name)
+		if runtime.GOOS == "windows" {
+			out += ".exe"
+		}
 		build := exec.Command("go", "build", "-o", out, "../"+name)
 		if b, err := build.CombinedOutput(); err != nil {
 			t.Fatalf("build %s: %v\n%s", name, err, b)

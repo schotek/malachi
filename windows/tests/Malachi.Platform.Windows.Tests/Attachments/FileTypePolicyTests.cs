@@ -55,25 +55,35 @@ public sealed class FileTypePolicyTests
     [InlineData(".txt", false)]
     [InlineData("", false)]
     [InlineData(null, false)]
-    // Missed by the shell, listed by DangerousTypes (measured).
-    [InlineData(".rdp", false)]
-    [InlineData(".search-ms", false)]
-    [InlineData(".searchconnector-ms", false)]
-    [InlineData(".settingcontent-ms", false)]
-    [InlineData(".appinstaller", false)]
-    [InlineData(".msix", false)]
-    [InlineData(".xll", false)]
-    [InlineData(".jar", false)]
-    [InlineData(".one", false)]
-    [InlineData(".onepkg", false)]
-    [InlineData(".contact", false)]
-    [InlineData(".wab", false)]
-    [InlineData(".accdb", false)]
-    [InlineData(".accde", false)]
-    [InlineData(".accdw", false)]
     public void TheShellsOwnVerdict(string? extension, bool want)
     {
         Assert.Equal(want, FileTypePolicy.IsDangerousToTheShell(extension));
+    }
+
+    // Missed by the shell on Windows 11 26100 (measured), which is why
+    // DangerousTypes lists them; a later Windows may call some of them
+    // dangerous itself (the runner's image did .settingcontent-ms in
+    // 2026-11), so only the list is asserted, and the policy that asks both.
+    [Theory]
+    [InlineData("rdp")]
+    [InlineData("search-ms")]
+    [InlineData("searchconnector-ms")]
+    [InlineData("settingcontent-ms")]
+    [InlineData("appinstaller")]
+    [InlineData("msix")]
+    [InlineData("xll")]
+    [InlineData("jar")]
+    [InlineData("one")]
+    [InlineData("onepkg")]
+    [InlineData("contact")]
+    [InlineData("wab")]
+    [InlineData("accdb")]
+    [InlineData("accde")]
+    [InlineData("accdw")]
+    public void WhatTheShellMayMissIsListed(string extension)
+    {
+        Assert.Contains(extension, DangerousTypes.Extensions);
+        Assert.True(new FileTypePolicy().IsDangerous("file." + extension, null));
     }
 
     [Theory]
