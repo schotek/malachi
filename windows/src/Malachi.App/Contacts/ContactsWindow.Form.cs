@@ -24,6 +24,7 @@ using Malachi.Core.Contacts;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using FieldKey = Malachi.Core.Contacts.ContactBook.FieldKey;
@@ -79,12 +80,15 @@ public sealed partial class ContactsWindow
         {
             c.ClearValue(Control.BorderBrushProperty);
         }
-        var critical = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
         foreach (var p in detail.Problems)
         {
             foreach (var c in Marked(p))
             {
-                c.BorderBrush = critical;
+                c.SetBinding(Control.BorderBrushProperty, new Binding
+                {
+                    Source = ProblemBrushSource,
+                    Path = new PropertyPath(nameof(TextBlock.Foreground)),
+                });
             }
         }
     }

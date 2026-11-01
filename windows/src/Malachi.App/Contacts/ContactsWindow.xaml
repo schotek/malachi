@@ -48,6 +48,15 @@ book or a contact is a TextBlock's Text, never markup.
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
+        <!-- The critical colour of the window's theme: the form binds the
+        border of a field with a problem to it, so the mark follows a change
+        of the colour scheme. Never shown. -->
+        <TextBlock
+            x:Name="ProblemBrushSource"
+            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+            Visibility="Collapsed"
+            AutomationProperties.AccessibilityView="Raw" />
+
         <!-- Where Mica is not available the window paints itself. -->
         <Border
             x:Name="SolidBackground"

@@ -139,7 +139,7 @@ internal sealed class AddToContactsFlyout
         };
         panel.Children.Add(bookBox);
 
-        errorText.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
+        errorText.Style = (Style)Application.Current.Resources["CriticalLabelStyle"];
         AutomationProperties.SetAutomationId(errorText, "AddToContactsError");
         AutomationProperties.SetLiveSetting(errorText, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         panel.Children.Add(errorText);
