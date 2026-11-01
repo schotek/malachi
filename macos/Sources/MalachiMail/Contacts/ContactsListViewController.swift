@@ -38,7 +38,8 @@ final class ContactsListViewController: NSViewController, NSTableViewDataSource,
         table.usesAutomaticRowHeights = false
         table.dataSource = self
         table.delegate = self
-        table.floatsGroupRows = true
+        // A floating heading draws a line of its own under the heading's.
+        table.floatsGroupRows = false
         table.backgroundColor = .clear
         table.intercellSpacing = NSSize(width: 0, height: 0)
         table.setAccessibilityLabel(ContactBook.windowTitle)

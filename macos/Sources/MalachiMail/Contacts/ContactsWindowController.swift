@@ -50,6 +50,7 @@ final class ContactsWindowController: NSWindowController, NSWindowDelegate, NSTo
 
     static let sidebarWidth: CGFloat = 240
     static let listWidth: CGFloat = 300
+    static let toolbarDetailSeparator = NSToolbarItem.Identifier("contacts.detailSeparator")
     static let toolbarNew = NSToolbarItem.Identifier("contacts.new")
     static let toolbarSearch = NSToolbarItem.Identifier("contacts.search")
 
@@ -425,7 +426,11 @@ final class ContactsWindowController: NSWindowController, NSWindowDelegate, NSTo
     // MARK: Toolbar
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.toggleSidebar, .sidebarTrackingSeparator, .flexibleSpace, Self.toolbarNew, Self.toolbarSearch]
+        // The second tracking separator follows the list/detail divider, so
+        // that the divider does not run through the toolbar and + and the
+        // search stand over the detail (W1).
+        [.toggleSidebar, .sidebarTrackingSeparator, .flexibleSpace, Self.toolbarDetailSeparator, .flexibleSpace,
+         Self.toolbarNew, Self.toolbarSearch]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -436,6 +441,8 @@ final class ContactsWindowController: NSWindowController, NSWindowDelegate, NSTo
         _ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool
     ) -> NSToolbarItem? {
         switch id {
+        case Self.toolbarDetailSeparator:
+            return NSTrackingSeparatorToolbarItem(identifier: id, splitView: split.splitView, dividerIndex: 1)
         case Self.toolbarNew:
             let item = NSToolbarItem(itemIdentifier: id)
             item.label = ContactBook.newContact
