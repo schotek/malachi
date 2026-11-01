@@ -499,9 +499,9 @@ a real store, since migration 0017 cannot be undone:
   unified toolbar, floating group rows with a second line, 2026-11-01)
   does not show in the plain debug binary at all. Before measuring
   toolbars, dividers or lists, stamp a copy and run that:
-  `cp macos/.build/debug/MalachiMail /tmp/MalachiMail.sdk && vtool
-  -set-build-version macos 14.0 "$(xcrun --show-sdk-version)" -replace
-  -output /tmp/MalachiMail.sdk /tmp/MalachiMail.sdk` (check with `vtool
+  `vtool -set-build-version macos 14.0 "$(xcrun --show-sdk-version)"
+  -replace -output /tmp/MalachiMail.sdk macos/.build/debug/MalachiMail`
+  (as `set_sdk` does, into another file; check it with `vtool
   -show-build`); never stamp the debug binary in place or anything in
   `build/`.
 - **Context menus** (2026-10-14, all three clients at once). What the
