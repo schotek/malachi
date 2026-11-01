@@ -113,6 +113,8 @@ actor FakeDaemon {
     private var handshake: HandshakeMode = .normal
     private var notificationsBeforeHello = 0
     private var notificationWithAuthenticateAnswer: String?
+    /// Accepted sockets, a client's socket probe included when the listener
+    /// reported it before it closed: count handshakes (`hellos`) for dials.
     private(set) var accepted = 0
     /// Every method served, in order; the handshake's lines are not.
     private(set) var calls: [String] = []
@@ -120,6 +122,9 @@ actor FakeDaemon {
     /// connection sent before it was authenticated ("" for a line without
     /// one), and every later system.hello or system.authenticate.
     private(set) var handshakes: [String] = []
+    /// How many handshakes began: one per dial that got through, whatever
+    /// the probes before it.
+    var hellos: Int { handshakes.filter { $0 == API.SystemHello.name }.count }
     /// The method of every line as it arrived, handshake and calls alike.
     private(set) var received: [String] = []
     /// Every key, nonce and proof of this daemon so far, as lowercase hex:

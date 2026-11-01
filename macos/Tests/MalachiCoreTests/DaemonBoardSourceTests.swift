@@ -512,8 +512,13 @@ private final class Harness {
         try await waitUntil { await h.script.listsHeld == 1 }
         await h.script.set(cases: [wireCase("1"), wireCase("2", .hot), wireCase("3", .info)])
         for _ in 0..<3 {
-            h.source.boardChanged()
-            try await waitUntil { await h.clock.pending.count == 1 }
+            // Asked again until it sleeps: the debounce fired last round
+            // clears itself on the main actor after the clock let it go,
+            // and a notification before that is no new debounce.
+            try await waitUntil {
+                h.source.boardChanged()
+                return await h.clock.pending.count == 1
+            }
             await h.clock.fire()
             try await waitUntil { await h.clock.pending.isEmpty }
         }
@@ -950,7 +955,15 @@ private final class Harness {
         #expect(h.source.snapshot.cases.count == 1)
         await h.script.set(cases: [wireCase("1"), wireCase("2", .hot)])
         await h.script.hold(gets: false)
-        try await waitUntil { await h.script.getsHeld == 0 }
+        // The reply came back while the case was gone (Go's h.loop.ran):
+        // released by the fake is not yet received by the source, and a
+        // refresh before it would bring the case back first.
+        try await waitUntil {
+            let held = await h.script.getsHeld
+            let pending = await h.client.pendingCalls
+            return held == 0 && pending == 0
+        }
+        await Task.yield()
         h.source.refresh()
         try await h.idle()
         #expect(h.c("2")?.messages == nil)
