@@ -46,6 +46,34 @@
 <section>
   <div class="wrap prose">
 
+    <article class="release" id="v0.2.0">
+      <h2>Version 0.2.0 <span class="date">1 November 2026</span></h2>
+      <h3>Notes</h3>
+      <ul>
+        <li>The macOS disk image is now signed with a Developer ID and notarised by Apple, so it opens like any downloaded app. The first start after an earlier build asks once for each stored password: choose Always Allow.</li>
+        <li>The Windows installers are still unsigned, so SmartScreen warns once. There is no portable zip for Windows any more.</li>
+        <li>Every file of a release is named alike, with the version, the system and the architecture: Malachi-Mail-0.2.0-windows-x64-setup.exe.</li>
+      </ul>
+      <h3>Features</h3>
+      <ul>
+        <li>Address books: the contacts of Microsoft 365 and of CardDAV servers in a Contacts window, where they can be searched, edited and added, with their photos. A CalDAV server may now offer only address books.</li>
+        <li>An address in a message can be shown as a contact or added to the contacts, and contacts are suggested while you write.</li>
+        <li>Contact photos are shown beside the sender in the message list, conversations, the chat and the Board.</li>
+        <li>Moving mail to the Trash, the archive, Junk or another folder, also from the Board, can be undone with Ctrl+Z (⌘Z on a Mac) or from the message that confirms it.</li>
+        <li>AI agents can search and read contacts through the MCP bridge, and create or change them only with your explicit permission.</li>
+      </ul>
+      <h3>Bugfixes</h3>
+      <ul>
+        <li>A chat opens at its newest message.</li>
+        <li>The conversation of a case on the Board shows its cards as soon as they are loaded.</li>
+        <li>The Board takes new correspondents into account after new mail.</li>
+        <li>eWay-CRM accepts a web service address over http on this computer.</li>
+        <li>The assistant in the app reaches your mail from its first answer.</li>
+        <li>On macOS, the preview of a rewrite shows its answer from the start.</li>
+        <li>On Windows, cards and status colours follow the window's theme.</li>
+      </ul>
+    </article>
+
     <article class="release" id="v0.1.2">
       <h2>Version 0.1.2 <span class="date">26 October 2026</span></h2>
       <h3>Bugfixes</h3>

@@ -62,7 +62,7 @@
   <div class="wrap">
     <div class="eyebrow">Funkce</div>
     <h1>Co dnes funguje</h1>
-    <p class="lead">Verze 0.1.2, na všech třech platformách, pokud není řečeno jinak. Klient GTK na Linuxu je reference; aplikace pro macOS a Windows ho zrcadlí funkci po funkci s prvky své platformy.</p>
+    <p class="lead">Verze 0.2.0, na všech třech platformách, pokud není řečeno jinak. Klient GTK na Linuxu je reference; aplikace pro macOS a Windows ho zrcadlí funkci po funkci s prvky své platformy.</p>
   </div>
 </div>
 
@@ -75,6 +75,7 @@
         <li><a href="#reading">Čtení offline</a></li>
         <li><a href="#html">HTML pošta</a></li>
         <li><a href="#writing">Psaní</a></li>
+        <li><a href="#contacts">Kontakty</a></li>
         <li><a href="#conversations">Konverzace</a></li>
         <li><a href="#search">Hledání</a></li>
         <li><a href="#many">Víc zpráv najednou</a></li>
@@ -105,7 +106,10 @@
     <p>Těla zpráv projdou sanitizací v jádru dřív, než je jakékoli okno uvidí; surové HTML hranici jádra nikdy nepřekročí. Vzdálené obrázky zůstávají blokované, dokud je jednou nenačtete nebo odesílateli nedáte důvěru; vykreslování běží bez JavaScriptu, s přísnou politikou obsahu a úplně bez sítě. Přiložené zprávy se otevírají jen pro čtení ve vlastním okně. Ostatní přílohy se otevřou v náhledu (GNOME Sushi, Quick Look, vlastní prohlížeč na Windows) a při uložení nesou systémovou značku karantény.</p>
 
     <h2 id="writing"><svg class="icon"><use href="#i-feather"/></svg>Psaní</h2>
-    <p>Formátovaný text, přílohy a vložené obrázky. Příjemci se doplňují z lidí, kterým jste už psali, na GNOME i ze systémových adresářů, a mění se v odstranitelné kapsle. Prostý text, který vypadá jako Markdown, se vloží jako formátovaný. Zpráva, která nejde odeslat hned, počká v místní odchozí poště a zkouší se znovu; kopie se založí do Odeslaných. Koncepty leží ve složce Koncepty účtu, takže je vidí i jiný klient.</p>
+    <p>Formátovaný text, přílohy a vložené obrázky. Příjemci se doplňují z lidí, kterým jste už psali, a z vašich kontaktů, na GNOME i ze systémových adresářů, a mění se v odstranitelné kapsle. Prostý text, který vypadá jako Markdown, se vloží jako formátovaný. Zpráva, která nejde odeslat hned, počká v místní odchozí poště a zkouší se znovu; kopie se založí do Odeslaných. Koncepty leží ve složce Koncepty účtu, takže je vidí i jiný klient.</p>
+
+    <h2 id="contacts"><svg class="icon"><use href="#i-user"/></svg>Kontakty</h2>
+    <p>Adresáře účtů Microsoft 365 (když je zapnete) a serverů CardDAV (Nextcloud, iCloud, Fastmail a další, i server jen s adresáři) jsou k dispozici offline v okně Kontakty, kde jde kontakty hledat, upravovat a přidávat, i s fotkami. Adresu ve zprávě lze zobrazit jako kontakt nebo ji do kontaktů přidat a fotka kontaktu se ukáže u odesílatele v seznamu zpráv, v konverzacích i na Nástěnce. Změny jdou rovnou na server; se systémovými kontakty se nic nesdílí.</p>
 
     <h2 id="conversations"><svg class="icon"><use href="#i-chat"/></svg>Konverzace</h2>
     <p>Jádro skládá vlákna z hlaviček hned při příjmu; <em>Seskupovat podle konverzací</em> udělá ze seznamu zpráv jeden řádek na konverzaci. Konverzace se ukáže jako karty na časové ose nebo jako chat z bublin, s vašimi odpověďmi z Odeslaných a neodeslanými koncepty na jejich místě a se sbalenou citovanou historií. Řádek rychlé odpovědi pod zprávou nebo chatem odpoví bez otevírání okna; <em>Otevřít v okně</em> si napsaný text vezme s sebou.</p>
@@ -114,7 +118,7 @@
     <p><kbd>Ctrl</kbd>+<kbd>F</kbd> (<kbd>⌘F</kbd>) prohledává poštu uloženou v tomto počítači ve složce, v jejím účtu nebo ve všech účtech, už při psaní: každé slovo jako začátek, bez ohledu na velikost písmen a diakritiku („priloh“ najde „Přílohy“), plus <code>from:</code>, <code>to:</code>, <code>subject:</code>, <code>is:unread</code>, <code>has:attachment</code>, data a <code>in:</code> složka. S asistentem udělá <em>Hledat vlastními slovy</em> z „faktury od Jany v březnu“ přesně takový dotaz.</p>
 
     <h2 id="many"><svg class="icon"><use href="#i-layers"/></svg>Víc zpráv najednou</h2>
-    <p>Víc zpráv jde vybrat a společně archivovat, přesunout, smazat, označit nebo přeposlat (každou jako přiložený <code>.eml</code>). Zprávy, složky a účty mají kontextová menu: Přesunout do, Označit vše jako přečtené, Vysypat koš. Doručená pošta má sbalitelné sekce podle data a zprávy s hvězdičkou první.</p>
+    <p>Víc zpráv jde vybrat a společně archivovat, přesunout, smazat, označit nebo přeposlat (každou jako přiložený <code>.eml</code>). Zprávy, složky a účty mají kontextová menu: Přesunout do, Označit vše jako přečtené, Vysypat koš. Přesun do Koše, archivu, nevyžádané nebo jiné složky jde vrátit klávesou <kbd>Ctrl</kbd>+<kbd>Z</kbd> (<kbd>⌘Z</kbd>). Doručená pošta má sbalitelné sekce podle data a zprávy s hvězdičkou první.</p>
 
     <h2 id="newsletters"><svg class="icon"><use href="#i-list"/></svg>Newslettery</h2>
     <p>Konference a newslettery se poznají z hlaviček a v seznamu dostanou štítek. Kde odesílatel podporuje odhlášení jedním klikem, stačí jeden klik, přes jádro a až po ověření podpisu DKIM odesílatele, nikdy otevřením odkazu; jinak se odhlašovací mail pošle za vás.</p>

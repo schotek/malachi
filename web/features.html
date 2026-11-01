@@ -62,7 +62,7 @@
   <div class="wrap">
     <div class="eyebrow">Features</div>
     <h1>What works today</h1>
-    <p class="lead">Version 0.1.2, on all three platforms unless said otherwise. The GTK client on Linux is the reference; the macOS and Windows apps mirror it feature for feature with their platform's widgets.</p>
+    <p class="lead">Version 0.2.0, on all three platforms unless said otherwise. The GTK client on Linux is the reference; the macOS and Windows apps mirror it feature for feature with their platform's widgets.</p>
   </div>
 </div>
 
@@ -75,6 +75,7 @@
         <li><a href="#reading">Reading offline</a></li>
         <li><a href="#html">HTML mail</a></li>
         <li><a href="#writing">Writing</a></li>
+        <li><a href="#contacts">Contacts</a></li>
         <li><a href="#conversations">Conversations</a></li>
         <li><a href="#search">Search</a></li>
         <li><a href="#many">Many at once</a></li>
@@ -105,7 +106,10 @@
     <p>Message bodies are sanitised in the engine before any window sees them; raw HTML never crosses the engine's boundary. Remote images stay blocked until you load them once or trust the sender; the renderer runs with JavaScript off, a strict content security policy and no network at all. Attached messages open read-only in their own window. Other attachments open in a preview (GNOME Sushi, Quick Look, a viewer of the app's own on Windows) and carry the system's quarantine mark when saved.</p>
 
     <h2 id="writing"><svg class="icon"><use href="#i-feather"/></svg>Writing</h2>
-    <p>Formatted text, attachments and inline images. Recipients are completed from the people you have written to, and on GNOME from the system address books too, and become removable badges. Plain text that looks like Markdown is pasted as formatted text. A message that cannot go out right away waits in a local Outbox and is retried; a copy is filed in Sent. Drafts rest in the account's Drafts folder, so another client sees them as well.</p>
+    <p>Formatted text, attachments and inline images. Recipients are completed from the people you have written to and from your contacts, and on GNOME from the system address books too, and become removable badges. Plain text that looks like Markdown is pasted as formatted text. A message that cannot go out right away waits in a local Outbox and is retried; a copy is filed in Sent. Drafts rest in the account's Drafts folder, so another client sees them as well.</p>
+
+    <h2 id="contacts"><svg class="icon"><use href="#i-user"/></svg>Contacts</h2>
+    <p>The address books of Microsoft 365 accounts (when you switch them on) and of CardDAV servers (Nextcloud, iCloud, Fastmail and others, also a server with address books alone) are kept offline in a Contacts window, where contacts can be searched, edited and added, with their photos. An address in a message can be shown as a contact or added to them, and a contact's photo appears beside the sender in the message list, conversations and the Board. Changes go straight to the server; nothing is shared with the system's own contacts.</p>
 
     <h2 id="conversations"><svg class="icon"><use href="#i-chat"/></svg>Conversations</h2>
     <p>The engine threads mail by its headers as it arrives; <em>Group by Conversation</em> turns the message list into one row per conversation. A conversation is shown as cards on a timeline or as a chat of bubbles, your own replies from Sent and your unsent drafts in place, the quoted history folded away. A quick-reply bar under a message or a chat answers without opening a window; <em>Open in a Window</em> takes what you typed with it.</p>
@@ -114,7 +118,7 @@
     <p><kbd>Ctrl</kbd>+<kbd>F</kbd> (<kbd>⌘F</kbd>) searches the mail stored on this computer in the folder, its account or every account, while you type: every word as a prefix, case and diacritics ignored ("priloh" finds "Přílohy"), plus <code>from:</code>, <code>to:</code>, <code>subject:</code>, <code>is:unread</code>, <code>has:attachment</code>, dates and <code>in:</code> a folder. With the assistant, <em>Search in your own words</em> turns "invoices from Jana in March" into that query.</p>
 
     <h2 id="many"><svg class="icon"><use href="#i-layers"/></svg>Many messages at once</h2>
-    <p>Several messages can be selected and archived, moved, deleted, marked or forwarded together (each as an attached <code>.eml</code>). Messages, folders and accounts have context menus: Move To, Mark All as Read, Empty Trash. The Inbox has collapsible date sections with flagged messages first.</p>
+    <p>Several messages can be selected and archived, moved, deleted, marked or forwarded together (each as an attached <code>.eml</code>). Messages, folders and accounts have context menus: Move To, Mark All as Read, Empty Trash. A move to the Trash, the archive, Junk or another folder can be undone with <kbd>Ctrl</kbd>+<kbd>Z</kbd> (<kbd>⌘Z</kbd>). The Inbox has collapsible date sections with flagged messages first.</p>
 
     <h2 id="newsletters"><svg class="icon"><use href="#i-list"/></svg>Newsletters</h2>
     <p>Mailing lists and newsletters are recognised from their headers and labelled in the list. Where the sender supports one-click unsubscribing, one click does it, through the engine and only after the sender's DKIM signature has been verified, never by opening a link; otherwise the unsubscribe mail is sent for you.</p>
