@@ -31,6 +31,9 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         /// The Mail/Board switch (`ModeSwitch`), the main window's only.
         static let mode = NSToolbarItem.Identifier("mode")
         static let newMessage = NSToolbarItem.Identifier("newMessage")
+        /// Contacts (Window ▸ Contacts), right after New Message; the
+        /// board's and the Calendar's toolbars have it too (`contactsItem`).
+        static let contacts = NSToolbarItem.Identifier("contacts")
         static let refresh = NSToolbarItem.Identifier("refresh")
         static let filter = NSToolbarItem.Identifier("filter")
         static let search = NSToolbarItem.Identifier("search")
@@ -82,7 +85,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         // (navigational, `BoardToolbar.keepSidebarToggle`).
         ID.mode, .flexibleSpace,
         .sidebarTrackingSeparator, .toggleSidebar,
-        ID.newMessage, ID.filter, ID.refresh, .flexibleSpace,
+        ID.newMessage, ID.contacts, ID.filter, ID.refresh, .flexibleSpace,
         ID.listSeparator,
         ID.reply, ID.replyAll, ID.forward, .flexibleSpace,
         ID.archive, ID.trash, .space, ID.crm, .space, ID.star, ID.assistant, ID.moreActions, ID.search,
@@ -328,6 +331,12 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
             it.toolTip = mn(L10n.T("_New Message")) + " (⌘N)"
             // Ahead of the window title (the folder's name), like Finder's
             // back and forward buttons.
+            it.isNavigational = true
+            return it
+        case ID.contacts:
+            // Navigational like New Message, so it stays beside it ahead of
+            // the title.
+            let it = Self.contactsItem(id)
             it.isNavigational = true
             return it
         case ID.filter:
@@ -633,6 +642,26 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     /// The field lost the keyboard: an empty field folds to the lens.
     func controlTextDidEndEditing(_ obj: Notification) {
         scheduleSearchCollapse()
+    }
+
+    /// The Contacts button of the main window's toolbars in every mode
+    /// (a macOS deviation, macos/README.md; GTK and Windows keep it in
+    /// their menus): opens the one Contacts window through the responder
+    /// chain, as Window ▸ Contacts does (`Action.showContacts`, the
+    /// application delegate validates it). No shortcut. It gives way to
+    /// the overflow menu before the mode's own items.
+    static func contactsItem(_ id: NSToolbarItem.Identifier) -> NSToolbarItem {
+        let label = ContactBook.windowTitle
+        let it = NSToolbarItem(itemIdentifier: id)
+        it.image = Icon.symbol("person.text.rectangle", size: .toolbar, description: label)
+        it.label = label
+        it.paletteLabel = label
+        it.toolTip = label
+        it.isBordered = true
+        it.target = nil
+        it.action = Action.showContacts
+        it.visibilityPriority = .low
+        return it
     }
 
     private func button(_ id: NSToolbarItem.Identifier, image: NSImage, label: String, action: Selector) -> NSToolbarItem {

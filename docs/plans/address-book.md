@@ -154,7 +154,7 @@ do `po/POTFILES`), macOS a Windows je berou s klíčem = msgid.
 |---|---|---|---|
 | Čistá logika | `ui/internal/contacts` (sekce podle písmen ze `sortKey`, řádky detailu a jejich popisky, akce, texty, pravidla dostupnosti, validace formuláře), `ui/internal/contactsctl` (kontroler okna a předvoleb nad `board.Caller`) | `MalachiCore/Contacts`, `Controllers/Contacts*` | `Malachi.Core/Contacts` (jmenný prostor `Contacts`, třída `ContactsText`) a `Controllers/Contacts*` |
 | Okno | `contacts_window.blp`, `Adw.NavigationSplitView` dvakrát vnořený, `Gtk.ListView` se sekcemi | `ContactsWindowController`, `NSSplitViewController` 3 sloupce, unified toolbar s hledáním | `ContactsWindow` (WinUI), hledání v titulkové liště, `CommandBar` nad detailem |
-| Vstup (bez zkratky) | `app.contacts`, položka hlavní nabídky | menu Okno ▸ Kontakty | nabídka `…` ▸ Kontakty |
+| Vstup (bez zkratky) | `app.contacts`, položka hlavní nabídky | menu Okno ▸ Kontakty a tlačítko Kontakty v toolbaru hlavního okna ve všech režimech (`person.text.rectangle`, v Poště vedle Nové zprávy, na Nástěnce za stylem, v Kalendáři před +; odchylka W2, 2026-11-01) | nabídka `…` ▸ Kontakty |
 | Čip adresy | `addresses.go` `addr.contact` | `AddressChipView.showMenu` `onContact` | `MessageChips.FillAddressMenu` |
 | Doplňování | `compose/suggest.go` ikona a tooltip zdroje | `Suggest.swift` | `Suggest.cs`, `SuggestionRow` |
 | Předvolby | nová stránka Kontakty za Kalendářem (`preferences_contacts.go`) | `ContactsPaneViewController` za Kalendářem | `ContactsPreferencesPage` za Kalendářem |
@@ -290,3 +290,6 @@ Odhad: démon 800–1 100 řádků včetně testů a korpusu, Go reference
   2. etapě, úpravy v 1. etapě, bez zkratky), začíná implementace.
 - 2026-10-31 návrh fotek kontaktů jen pro čtení (§9, W7), ke schválení.
 - 2026-10-31 vlastník: odpovědi v §9.4 (x/image/draw, Graph líně, i odesílatel v poště, vývoj v cloudu).
+- 2026-11-01 vlastník: na macOS tlačítko Kontakty v toolbaru vedle Nové
+  zprávy ve všech režimech (Pošta, Nástěnka, Kalendář; bez zkratky, menu
+  Okno ▸ Kontakty zůstává), odchylka W2; GTK a Windows beze změny.

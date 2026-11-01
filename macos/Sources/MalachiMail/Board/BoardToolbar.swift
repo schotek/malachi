@@ -12,16 +12,16 @@ import MalachiCore
 /// - List: the sections follow the List's own split view
 ///   (`BoardListViewController`): the navigation column's (the switch and
 ///   the sidebar toggle) up to AppKit's `.sidebarTrackingSeparator`; the
-///   list's, with the style at its leading edge and the account filter and
-///   Triage at its trailing edge; after a separator on the split view's
+///   list's, with the style and Contacts at its leading edge and the
+///   account filter and Triage at its trailing edge; after a separator on the split view's
 ///   second divider the detail's, with Done, Remind…, Archive at its leading
 ///   edge and Reply (prominent) at its trailing edge. The detail section is
 ///   there only while the detail is beside the list (`inlineDetail`); no
 ///   window title.
 /// - Columns and Today: no split view in the window, so the items flow from
-///   the window's buttons: the switch and the style (both navigational, so
-///   ahead of the title), the title with its subtitle, room, then the
-///   account filter and Triage at the trailing end.
+///   the window's buttons: the switch, the style and Contacts (all
+///   navigational, so ahead of the title), the title with its subtitle,
+///   room, then the account filter and Triage at the trailing end.
 ///
 /// Toolbar identifiers of their own (toolbars that share one share their
 /// configuration); no customisation, nothing saved. A toolbar item belongs
@@ -55,7 +55,7 @@ final class BoardToolbar: NSObject, NSToolbarDelegate, NSMenuDelegate {
 
     /// Columns and Today.
     static let flowItems: [NSToolbarItem.Identifier] = [
-        MainToolbar.ID.mode, ID.boardStyle, .flexibleSpace, ID.boardAccount, ID.boardTriage,
+        MainToolbar.ID.mode, ID.boardStyle, MainToolbar.ID.contacts, .flexibleSpace, ID.boardAccount, ID.boardTriage,
     ]
     /// The List's detail section.
     static let detailItems: [NSToolbarItem.Identifier] = [
@@ -65,7 +65,7 @@ final class BoardToolbar: NSObject, NSToolbarDelegate, NSMenuDelegate {
     static let listItems: [NSToolbarItem.Identifier] = [
         // The toggle after the separator, as in Mail's and the Calendar's.
         MainToolbar.ID.mode, .flexibleSpace, .sidebarTrackingSeparator, .toggleSidebar,
-        ID.boardStyle, .flexibleSpace, ID.boardAccount, ID.boardTriage,
+        ID.boardStyle, MainToolbar.ID.contacts, .flexibleSpace, ID.boardAccount, ID.boardTriage,
     ] + detailItems
 
     /// The colour dot of a state in the Show section.
@@ -317,6 +317,13 @@ final class BoardToolbar: NSObject, NSToolbarDelegate, NSMenuDelegate {
         case ID.boardStyle:
             let it = makeStyleItem(id, navigational: !list)
             it.visibilityPriority = .high
+            return it
+        case MainToolbar.ID.contacts:
+            // Right after the style, where Mail has it after New Message;
+            // in Columns and Today navigational like the style, ahead of
+            // the title.
+            let it = MainToolbar.contactsItem(id)
+            it.isNavigational = !list
             return it
         case ID.boardAccount:
             return makeAccountItem(id)

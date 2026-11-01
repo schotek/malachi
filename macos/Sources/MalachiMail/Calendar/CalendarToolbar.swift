@@ -24,7 +24,7 @@ enum CalendarAction {
 /// Navigational items flow ahead of the title in a unified toolbar, so
 /// Today, ‹ › and the segments are navigational; the mode switch is not
 /// (it sits in the sidebar's section, as in the board's List). The overflow
-/// takes ✦ first, then the search field, then the view's segments.
+/// takes ✦ and Contacts first, then the search field, then the view's segments.
 ///
 /// Today, ‹ ›, the segments and the search act on the controller here;
 /// + goes through the responder chain (`CalendarAction.newEvent`), ✦ calls
@@ -47,7 +47,7 @@ final class CalendarToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate 
         // (134 pt) and the window's buttons fill the sidebar's 240 pt, and
         // the toggle went to the overflow menu there (measured 2026-10-16).
         MainToolbar.ID.mode, .flexibleSpace, .sidebarTrackingSeparator, .toggleSidebar,
-        ID.today, ID.step, ID.view, .flexibleSpace, ID.search, ID.newEvent, ID.assistant,
+        ID.today, ID.step, ID.view, .flexibleSpace, ID.search, MainToolbar.ID.contacts, ID.newEvent, ID.assistant,
     ]
 
     /// The order in which items give way to the overflow menu: ✦, then the
@@ -205,6 +205,8 @@ final class CalendarToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate 
             minimum.isActive = true
             it.visibilityPriority = Self.searchPriority
             return it
+        case MainToolbar.ID.contacts:
+            return MainToolbar.contactsItem(id)
         case ID.newEvent:
             let it = NSToolbarItem(itemIdentifier: id)
             it.image = Icon.symbol("plus", size: .toolbar, description: Cal.Text.newEvent)
