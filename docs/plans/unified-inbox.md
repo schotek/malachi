@@ -258,7 +258,33 @@ Opraveno:
 Vlastník 2026-11-02 ověřil GTK (`make run-gtk`) a macOS (debug binárka nad dvěma
 účty z `malachi-devmail`) na obrazovce.
 
-Zbývá:
-- Windows: oprava odznaku napsaná bez `dotnet` (`FolderRowView.xaml(.cs)`), k
-  sestavení a pohledu spolu se zbytkem Windows ověření výše.
-- Ruční průchod na Windows (bod výše).
+Zbývalo ověření na Windows, viz níže.
+
+### Ověření na Windows (2026-11-02, Windows agent, ARM64)
+
+Prošlo:
+- `build.ps1 app` (Release ARM64 i NativeAOT helper) napoprvé bez chyb a varování;
+  tři místa, na která autor upozornil (collection expressions v podmínce, `with`
+  na `readonly record struct`, `is { IsUnified: true }` na `FolderKey?`), se
+  přeložila beze změny.
+- `build.ps1 test`: 9100 testů, 4 selhání, všechna prostředí a i na čistém `main`:
+  `BridgeRunnerTests.TheEnvironmentAndTheDirectoryAreTheCallers`
+  a `ClaudeCodeProcessTests.EnvironmentAndDirectory` (`PROCESSOR_ARCHITECTURE` na
+  ARM64) a kanárek WebView2 (`NoWindowOpened`,
+  `ActivatedLinksReachTheReaderAndNothingElse`). Zelené mimo jiné `UnifiedTests`,
+  `SelectionTests`, `ContextMenuTests`, `MailboxControllerFoldersTests`,
+  `ActionsControllerTests`, API testy, `SettingsTests`, `CrmRulesTests`; UI smoke
+  bez `MALACHI_DEVMAIL` zelené.
+- `build.ps1 lint`: formát čistý, konvence 28/28 (`GschemaCoverageTests`,
+  `StringsCheckTests`, SPDX).
+- Na obrazovce nad izolovaným démonem se dvěma účty z `malachi-devmail` (vzorová
+  schránka a `-corpus` s pěti `.eml`, `MALACHI_DATA_DIR` a socket v `%TEMP%`,
+  vlastní `MALACHI_SETTINGS_KEY`): Všechny doručené jako první řádek, odznak 10
+  zarovnaný s odznaky složek, seznam „10 nepřečtených z 22“ se jménem účtu na
+  řádcích. Zbytek ručního průchodu (přepínač, akce nad výběrem přes účty, Zpět,
+  odpověď, hledání, kontextové menu) prošel vlastník a schválil ho.
+
+Opraveno:
+- `UnifiedTests` se nepřeložily: vzorky nenastavovaly povinné členy
+  `AccountConfig.Name`/`Email` a `MessageSummary.HasAttachments`/`Size`
+  a podmínka s `null` potřebovala `(AccountKind?)` (commit `57efd704`).
