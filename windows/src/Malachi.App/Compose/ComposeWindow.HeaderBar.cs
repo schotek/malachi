@@ -12,11 +12,15 @@
 // than a few characters (below about 510 px in Czech, of a window whose
 // smallest is 360), the bar turns narrow (Core's HeaderBarFit, from the
 // wide layout's measures): Send shows only its icon, keeping its name and
-// tooltip, and the app icon goes; at 360 px the end buttons still keep the
-// drag strip before the caption buttons. The TitleBar recomputes the parts
+// tooltip, and the app icon goes. Send stands right at the caption buttons
+// (no drag strip, ComposeWindow.xaml); the title is the place to drag the
+// window by. The TitleBar recomputes the parts
 // that take the pointer only when its own size changes, so a change of the
-// end buttons asks it to again.
+// end buttons asks it to again. The room it keeps for the caption buttons
+// is in view pixels only through TitleBarInsets (at 200 % Send stood far
+// from them).
 
+using Malachi.App.Controls;
 using Malachi.Core.Presentation;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -26,10 +30,6 @@ namespace Malachi.App.Compose;
 /// <summary>The header bar of a compose window.</summary>
 public sealed partial class ComposeWindow
 {
-    // The TitleBar's strip kept for dragging after the end buttons
-    // (TitleBarMinDragRegionWidth) when the resource cannot be read.
-    private const double DefaultDragStrip = 48;
-
     // Where the title starts and how wide the end buttons are in the wide
     // layout, measured while the bar is wide.
     private double wideTitleStart;
@@ -45,6 +45,7 @@ public sealed partial class ComposeWindow
         sendPadding = SendButton.Padding;
         sendSpacing = SendContent.Spacing;
         ComposeTitleBar.SizeChanged += (_, _) => FitHeaderBar();
+        TitleBarInsets.Keep(ComposeTitleBar, AppWindow);
     }
 
     // Measures the wide layout while it shows, and turns the bar narrow or
@@ -61,7 +62,7 @@ public sealed partial class ComposeWindow
             wideEndButtons = EndButtons.ActualWidth + EndButtons.Margin.Left + EndButtons.Margin.Right;
         }
         var captions = AppWindow.TitleBar.RightInset / root.RasterizationScale;
-        var narrow = HeaderBarFit.Narrow(ComposeTitleBar.ActualWidth, wideTitleStart, wideEndButtons + DragStrip() + captions);
+        var narrow = HeaderBarFit.Narrow(ComposeTitleBar.ActualWidth, wideTitleStart, wideEndButtons + captions);
         if (narrow == narrowHeader)
         {
             return;
@@ -81,7 +82,4 @@ public sealed partial class ComposeWindow
             }
         });
     }
-
-    private static double DragStrip() =>
-        Application.Current.Resources.TryGetValue("TitleBarMinDragRegionWidth", out var value) && value is double width ? width : DefaultDragStrip;
 }
