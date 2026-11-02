@@ -410,6 +410,8 @@ func newFolderRow(e folderEntry, subtitle string) *folderRow {
 	if e.Folder.Selectable && !e.Unified {
 		star = newStar(e.Starred)
 		row.AddSuffix(star)
+	} else if e.Unified {
+		row.AddSuffix(starSlot())
 	}
 
 	if !e.Folder.Selectable {

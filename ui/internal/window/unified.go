@@ -6,6 +6,8 @@ package window
 import (
 	"strings"
 
+	"github.com/diamondburned/gotk4/pkg/gtk/v4"
+
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/undo"
@@ -22,6 +24,20 @@ import (
 // mailModel.folder returns for the key too, so the title, the counts, the
 // date groups and the idle actions follow without a case of their own. The
 // key is never stored in favourite-folders or collapsed-folders.
+
+// starSlot is the All Inboxes row's stand-in for a folder row's star: the
+// star of a folder row keeps its place while it is transparent, so without
+// the slot the item's badge would stand further right than the folders'.
+// It cannot be pinned, so the slot is never seen, clicked or focused.
+func starSlot() *gtk.Button {
+	b := newStar(false)
+	b.SetOpacity(0)
+	b.SetCanTarget(false)
+	b.SetCanFocus(false)
+	b.SetSensitive(false)
+	b.SetTooltipText("")
+	return b
+}
 
 // isUnifiedKey says whether k is the All Inboxes item's key.
 func isUnifiedKey(k folderKey) bool { return unified.IsKey(k.Account, k.Folder) }
