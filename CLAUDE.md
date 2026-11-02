@@ -311,8 +311,9 @@ virtuálních složkách ani s `in:`), řádek je odliší jen jménem složky
 (`searchOutside`); na Macu zelené Go testy démona, GTK v kontejneru
 (`make build`, celé `test-ui`, `make lint`, `po/` beze změny) i celé
 `swift test` a vlastník hledání ručně ověřil v macOS i GTK nad kopií dat;
-Windows napsané bez `dotnet` — čeká `build.ps1 app`/`test`/`lint`
-a ruční průchod.
+Windows agent na ARM64 `build.ps1 app` a `lint` zelené, `test` po opravě
+vzorku round-trip (`a2a0df2`) bez selhání větve (zbylá jsou prostředí
+a padají i na `main`) — čeká ruční průchod vlastníka.
 GTK: lišta hledání nad seznamem (Ctrl+F, `window/search.go`,
 `search_model.go`, GSettings `search-scope`), hledá při psaní od 2 znaků,
 výsledky ploše se složkou/účtem a tučnými shodami, jednopísmenné zkratky
