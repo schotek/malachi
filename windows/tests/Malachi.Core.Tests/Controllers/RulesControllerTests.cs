@@ -134,6 +134,40 @@ public sealed class RulesControllerTests
     }
 
     [Fact]
+    public async Task AQuickOnAndOffIsDecidedOnWhatTheEarlierFlipLeft()
+    {
+        var (c, daemon) = Standard();
+        await c.ReloadAsync();
+        // r_2 sends mail and is off: turning it on asks the question; the user is slow to answer.
+        daemon.On(API.RulesUpdate.Name, raw => new RulesUpdateResult
+        {
+            Rule = Sample("r_2", "Two", enabled: raw.GetProperty("rule").GetProperty("enabled").GetBoolean(), actions: [Forward]),
+        });
+        var answer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var on = c.SetEnabledAsync("r_2", true, _ => answer.Task);
+        var off = c.SetEnabledAsync("r_2", false, _ => throw new InvalidOperationException("turning off asks nothing"));
+        Assert.False(off.IsCompleted);
+        Assert.Equal(0, daemon.Count(API.RulesUpdate.Name));
+        answer.SetResult(true);
+        Assert.True((await on).Ok);
+        Assert.True((await off).Ok);
+        // On first, then off: the second flip saw the rule on, so it was sent.
+        Assert.Equal(2, daemon.Count(API.RulesUpdate.Name));
+        Assert.False(daemon.Last(API.RulesUpdate).Rule.Enabled);
+        Assert.False(c.Find("r_2")!.Enabled);
+    }
+
+    [Fact]
+    public void AnInvalidArgumentIsNeverTheDaemonsMessage()
+    {
+        var rpc = new RpcException(Error(ErrorCode.InvalidArgument));
+        var text = RulesController.FailureText("Remove Rule", rpc);
+        Assert.Equal("Remove Rule failed", text);
+        Assert.DoesNotContain("fake", text, StringComparison.Ordinal);
+        Assert.Equal("Remove Rule timed out", RulesController.FailureText("Remove Rule", new TimeoutException()));
+    }
+
+    [Fact]
     public async Task AFailedSwitchSaysWhyAndKeepsTheRule()
     {
         var (c, daemon) = Standard();

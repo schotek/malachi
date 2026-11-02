@@ -24,6 +24,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Malachi.App.Shell;
 using Malachi.Core.Api;
+using Malachi.Core.Contacts;
 using Malachi.Core.Controllers;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
@@ -79,9 +80,13 @@ public sealed class AppRules : IDisposable
     /// <summary>The invented rules of MALACHI_RULES_SAMPLES=1.</summary>
     public bool Samples => samples is not null;
 
-    /// <summary>The mail accounts a rule can be for, as the main window's mailbox lists them.</summary>
+    /// <summary>The mail accounts (imap, graph; enabled or not), as the main window's mailbox lists them.</summary>
     public IReadOnlyList<Account> MailAccounts =>
         state.Integration is { } integration ? RuleBook.MailAccounts(integration.Mailbox.Model.Accounts) : [];
+
+    /// <summary>The name of a mail account for a rule's row; "" for an account that is gone.</summary>
+    public string AccountName(AccountId id) =>
+        MailAccounts.FirstOrDefault(a => a.Id == id) is { } account ? ContactBook.AccountName(account) : "";
 
     /// <summary>Add Rule…: the editor of a new rule over <paramref name="owner"/>, for the account the main window shows.</summary>
     public RuleEditorWindow? AddRule(Window? owner) => Edit(owner, RuleBook.NewForm(ShownAccount()), null);
@@ -136,8 +141,18 @@ public sealed class AppRules : IDisposable
         tokens.Clear();
     }
 
-    private RuleEditorWindow? Edit(Window? owner, RuleForm form, Rule? original) =>
-        RuleEditorWindow.Show(state, owner, Caller, form, original, MailAccounts, FoldersOf, saved => Controller.Upsert(saved));
+    // The editor lists the enabled mail accounts, and the rule's own when it is off.
+    private RuleEditorWindow? Edit(Window? owner, RuleForm form, Rule? original)
+    {
+        List<Account> accounts = state.Integration is { } integration
+            ? [.. RuleBook.MailAccounts(integration.Mailbox.Model.Accounts, enabledOnly: true)]
+            : [];
+        if (form.AccountId is { } own && accounts.All(a => a.Id != own) && MailAccounts.FirstOrDefault(a => a.Id == own) is { } off)
+        {
+            accounts.Add(off);
+        }
+        return RuleEditorWindow.Show(state, owner, Caller, form, original, accounts, FoldersOf, saved => Controller.Upsert(saved));
+    }
 
     // The account the main window shows, when it is a mail account a rule can be for.
     private AccountId? ShownAccount()

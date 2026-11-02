@@ -322,6 +322,21 @@ public sealed class RulesTests
     }
 
     [Fact]
+    public void MailAccountsAreTheImapAndGraphOnes()
+    {
+        static Account A(string id, string kind, bool enabled) => new()
+        {
+            Id = id,
+            Enabled = enabled,
+            Config = new AccountConfig { Name = id, Email = id + "@example.test", Kind = new AccountKind(kind) },
+            State = new SyncState { AccountId = id, Status = SyncStatus.Idle },
+        };
+        Account[] all = [A("a", AccountKind.Imap, true), A("b", AccountKind.Graph, false), A("c", AccountKind.Jira, true), A("d", AccountKind.CalDAV, true)];
+        Assert.Equal("a b", string.Join(' ', RuleBook.MailAccounts(all).Select(a => a.Id.Value)));
+        Assert.Equal("a", string.Join(' ', RuleBook.MailAccounts(all, enabledOnly: true).Select(a => a.Id.Value)));
+    }
+
+    [Fact]
     public void SummariesAreSentences()
     {
         var names = new RuleNames(Folder: (_, id) => id.Value == "f_news" ? "News" : "");

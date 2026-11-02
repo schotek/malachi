@@ -166,6 +166,18 @@ public sealed class RuleEditorControllerTests
     }
 
     [Fact]
+    public void ALoneCarriageReturnOfTheTextBoxIsALineFeed()
+    {
+        var e = NewRule(new FakeRulesCaller());
+        e.AddAction(RuleActionKind.AutoReply);
+        e.SetReplyText(0, "Hello\rSee you\r\nMonday");
+        Assert.Equal("Hello\nSee you\nMonday", e.Form.Actions[0].Text);
+        e.SetName("x");
+        e.SetConditionValue(0, "y");
+        Assert.Empty(e.Problems);
+    }
+
+    [Fact]
     public async Task SaveCreatesTheTrimmedRule()
     {
         var daemon = new FakeRulesCaller();

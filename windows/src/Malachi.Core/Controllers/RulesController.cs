@@ -65,6 +65,7 @@ public sealed record RuleResult(RuleResultKind Kind, string Text = "")
 public sealed class RulesController
 {
     private readonly IRulesCaller caller;
+    private readonly Dictionary<string, Task> toggles = [];
     private List<Rule> rules = [];
     private int generation;
 
@@ -86,9 +87,6 @@ public sealed class RulesController
 
     /// <summary>The last failure's sentence of listing ("" none).</summary>
     public string Error { get; private set; } = "";
-
-    /// <summary>The daemon the controller calls.</summary>
-    internal IRulesCaller Caller => caller;
 
     /// <summary>The rule with the id, or null.</summary>
     public Rule? Find(string id) => rules.FirstOrDefault(r => r.Id == id);
@@ -122,7 +120,7 @@ public sealed class RulesController
             {
                 return;
             }
-            Error = RpcErrorText.Text(RulesText.PageTitle, e);
+            Error = FailureText(RulesText.PageTitle, e);
         }
         RaiseChanged();
     }
@@ -135,6 +133,7 @@ public sealed class RulesController
     public void Upsert(Rule saved)
     {
         ArgumentNullException.ThrowIfNull(saved);
+        generation++;
         var i = rules.FindIndex(r => r.Id == saved.Id);
         if (i >= 0)
         {
@@ -153,9 +152,30 @@ public sealed class RulesController
     /// says so (<paramref name="confirm"/> answers it). The views draw the
     /// rule again afterwards, whatever came of it.
     /// </summary>
-    public async Task<RuleResult> SetEnabledAsync(string id, bool on, Func<RuleQuestion, Task<bool>> confirm)
+    public Task<RuleResult> SetEnabledAsync(string id, bool on, Func<RuleQuestion, Task<bool>> confirm)
     {
+        ArgumentNullException.ThrowIfNull(id);
         ArgumentNullException.ThrowIfNull(confirm);
+        // One switch of a rule at a time: the next flip is decided on what the
+        // earlier one left (a quick on and off must not leave the rule on).
+        toggles.TryGetValue(id, out var earlier);
+        var task = SetEnabledAfterAsync(earlier, id, on, confirm);
+        toggles[id] = task;
+        return task;
+    }
+
+    private async Task<RuleResult> SetEnabledAfterAsync(Task? earlier, string id, bool on, Func<RuleQuestion, Task<bool>> confirm)
+    {
+        if (earlier is not null)
+        {
+            // WhenAny never throws; the earlier flip's own caller sees its outcome.
+            await Task.WhenAny(earlier);
+        }
+        return await SetEnabledNowAsync(id, on, confirm);
+    }
+
+    private async Task<RuleResult> SetEnabledNowAsync(string id, bool on, Func<RuleQuestion, Task<bool>> confirm)
+    {
         if (Find(id) is not { } rule)
         {
             return Missing();
@@ -203,6 +223,7 @@ public sealed class RulesController
             return new RuleResult(RuleResultKind.Done);
         }
         var before = rules;
+        generation++;
         rules = [.. order.Select(id => before.First(r => r.Id == id))];
         RaiseChanged();
         try
@@ -238,6 +259,7 @@ public sealed class RulesController
         try
         {
             await caller.CallAsync(API.RulesDelete, new RulesDeleteParams { Id = id }, API.RulesDelete.Timeout, CancellationToken.None);
+            generation++;
             rules.RemoveAll(r => r.Id == id);
             RaiseChanged();
             return new RuleResult(RuleResultKind.Done);
@@ -246,7 +268,7 @@ public sealed class RulesController
         catch (Exception e)
 #pragma warning restore CA1031
         {
-            return await FailedAsync(e, RpcErrorText.Text(RulesText.RemoveRule, e));
+            return await FailedAsync(e, FailureText(RulesText.RemoveRule, e));
         }
     }
 
@@ -300,6 +322,20 @@ public sealed class RulesController
             return RulesText.InvalidText(data);
         }
         return fallback;
+    }
+
+    /// <summary>
+    /// <see cref="RpcErrorText.Text(string, Exception?)"/> for an action that has no sentence of its own
+    /// (<paramref name="what"/> is the action's name), except that an
+    /// invalidArgument is the plain "failed": the generic sentence would add
+    /// the daemon's own message, which no client shows (CLAUDE.md, language).
+    /// </summary>
+    public static string FailureText(string what, Exception? error)
+    {
+        ArgumentNullException.ThrowIfNull(what);
+        return RpcErrorText.DaemonError(error) is { } e && e.Code == ErrorCode.InvalidArgument
+            ? RpcErrorText.Text(what, (RpcError?)null)
+            : RpcErrorText.Text(what, error);
     }
 
     /// <summary>The daemon's <see cref="RuleInvalidData"/> of an invalidArgument; null when it has none.</summary>

@@ -7,7 +7,7 @@
 //
 // The rule as the editor holds it, and what Validate finds in it. Go's Form
 // is a struct that embeds api.RuleInput; here it is a class with the same
-// members and a Clone, as the conventions have it for a form the view edits
+// members, as the conventions have it for a form the view edits
 // (docs/windows-port.md §3.1; ContactBook.Form). Every string in it may come
 // from mail (a prefilled sender, a list id) and is shown as plain text only.
 
@@ -114,17 +114,4 @@ public sealed class RuleForm
 
     /// <summary>No later rule runs on a message this rule matched.</summary>
     public bool Stop { get; set; }
-
-    /// <summary>A copy whose rows can be changed without changing this form.</summary>
-    public RuleForm Clone() => new()
-    {
-        Id = Id,
-        Name = Name,
-        Enabled = Enabled,
-        AccountId = AccountId,
-        Match = Match,
-        Conditions = [.. Conditions],
-        Actions = [.. Actions],
-        Stop = Stop,
-    };
 }

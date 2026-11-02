@@ -28,7 +28,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using Malachi.App.Shell;
 using Malachi.Core.Api;
-using Malachi.Core.Contacts;
 using Malachi.Core.Controllers;
 using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.I18n;
@@ -66,6 +65,7 @@ public sealed partial class RulesPage : UserControl
     private RuleRowView? dragged;
     private int draggedFrom = -1;
 
+    private readonly MailboxController? mailbox;
     private string? selectedId;
     private bool closed;
 
@@ -83,6 +83,12 @@ public sealed partial class RulesPage : UserControl
         EmptyTitleText.Text = RulesText.EmptyTitle;
         EmptyDescriptionText.Text = RulesText.EmptyDescription;
         controller.Changed += OnControllerChanged;
+        // The names of accounts and folders come from the mailbox, which may load after the page.
+        mailbox = state.Integration?.Mailbox;
+        if (mailbox is not null)
+        {
+            mailbox.EntriesChanged += OnControllerChanged;
+        }
         RuleList.AddHandler(PointerPressedEvent, new PointerEventHandler(OnListPointerPressed), handledEventsToo: true);
         // A ListView takes Ctrl+Up and Ctrl+Down for moving its focus before
         // the window's accelerators see them (measured): the list asks first.
@@ -111,6 +117,10 @@ public sealed partial class RulesPage : UserControl
         }
         closed = true;
         controller.Changed -= OnControllerChanged;
+        if (mailbox is not null)
+        {
+            mailbox.EntriesChanged -= OnControllerChanged;
+        }
     }
 
     private void OnControllerChanged(object? sender, EventArgs e) => Apply();
@@ -118,8 +128,7 @@ public sealed partial class RulesPage : UserControl
     // The names a row shows for an account and a folder, as the main window's mailbox knows them.
     private RuleNames Names() => new(Account: AccountName, Folder: FolderName);
 
-    private string AccountName(AccountId id) =>
-        state.Rules.MailAccounts.FirstOrDefault(a => a.Id == id) is { } a ? ContactBook.AccountName(a) : "";
+    private string AccountName(AccountId id) => state.Rules.AccountName(id);
 
     private string FolderName(AccountId account, FolderId folder)
     {

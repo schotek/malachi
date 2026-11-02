@@ -4346,9 +4346,14 @@ account (`AppliesTo`) and messages; it asks, shows Applying rules as a toast
 and then the result (`MainWindow.Rules.cs`). `MALACHI_START` has the steps
 `prefs-rules` and `rules-editor`.
 
-Deviations from the Go reference and from GTK (decisions of this port): a
+Deviations from the Go reference and from GTK (decisions of this port; also in
+`windows/README.md`): `RuleBook.MailAccounts` (imap and graph; the editor lists
+the enabled ones and the rule's own) is Windows' own; a
 change of account in the editor clears the folder of a Move To action and
-removes the action for every account; Try It is enabled only for a form
+removes the action for every account; a failure that has no sentence of its
+own is `RulesController.FailureText` (the generic sentence, never the
+daemon's message); the page draws its rows again when the mailbox's folders
+change, because the names of accounts and folders come from it; Try It is enabled only for a form
 without problems; the folder choices are the account's folders in the
 sidebar's order without the indentation of the Move To submenu; the page
 shows the account and the status as two dim lines, not one.

@@ -537,12 +537,14 @@ public static class RuleBook
     /// <summary>
     /// The mail accounts a rule can be for (docs/api.md §4.21): imap and
     /// graph, never an issue tracker's, a CalDAV or a CRM account, in the
-    /// order given.
+    /// order given; the rules run on the enabled ones, so the editor lists
+    /// those (<paramref name="enabledOnly"/>), while the menus and the names
+    /// of a rule's account go by the kind alone.
     /// </summary>
-    public static IReadOnlyList<Account> MailAccounts(IEnumerable<Account> accounts)
+    public static IReadOnlyList<Account> MailAccounts(IEnumerable<Account> accounts, bool enabledOnly = false)
     {
         ArgumentNullException.ThrowIfNull(accounts);
-        return [.. accounts.Where(a => a.Config.ProtocolKind.Value is AccountKind.Imap or AccountKind.Graph)];
+        return [.. accounts.Where(a => a.Config.ProtocolKind.Value is AccountKind.Imap or AccountKind.Graph && (a.Enabled || !enabledOnly))];
     }
 
     /// <summary>rules.CanApplyIn: Apply Rules… is offered for a folder of a mail account: one that holds messages, not the outbox or the drafts.</summary>

@@ -41,6 +41,7 @@ public sealed class RuleEditorController
 {
     private readonly IRulesCaller caller;
     private readonly Func<AccountId, IReadOnlyList<Folder>> foldersOf;
+    private IReadOnlyList<RuleFormProblem>? problems;
     private FolderId? testFolder;
 
     /// <summary>An editor over <paramref name="form"/>.</summary>
@@ -96,8 +97,12 @@ public sealed class RuleEditorController
     /// <summary>The editor's title.</summary>
     public string Title => RulesText.EditorTitle(Form);
 
-    /// <summary>Every problem of the form, in the order of the editor.</summary>
-    public IReadOnlyList<RuleFormProblem> Problems => RuleBook.Validate(Form);
+    /// <summary>
+    /// Every problem of the form, in the order of the editor; found once per
+    /// edit made through this controller (change <see cref="Form"/> through
+    /// its methods).
+    /// </summary>
+    public IReadOnlyList<RuleFormProblem> Problems => problems ??= RuleBook.Validate(Form);
 
     /// <summary>Save can run: the form has no problem and no call is under way.</summary>
     public bool CanSave => !Saving && Problems.Count == 0;
@@ -340,7 +345,10 @@ public sealed class RuleEditorController
     /// <summary>The text of a Reply Automatically row.</summary>
     public void SetReplyText(int index, string text)
     {
-        UpdateAction(index, RuleActionKind.AutoReply, a => a with { Text = text });
+        // A WinUI text box separates lines with a lone CR; the rule's text has LF
+        // (a lone CR is a control character the daemon refuses).
+        var lines = (text ?? "").Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+        UpdateAction(index, RuleActionKind.AutoReply, a => a with { Text = lines });
     }
 
     /// <summary>
@@ -431,7 +439,7 @@ public sealed class RuleEditorController
 #pragma warning restore CA1031
         {
             TestFailed = true;
-            TestText = RulesController.ErrorText(e, RpcErrorText.Text(RulesText.TestButton, e));
+            TestText = RulesController.ErrorText(e, RulesController.FailureText(RulesText.TestButton, e));
         }
         Testing = false;
         RaiseChanged();
@@ -450,6 +458,7 @@ public sealed class RuleEditorController
     // An edit makes the last failure and the last test result stale.
     private void Edited()
     {
+        problems = null;
         SaveError = "";
         TestText = "";
         TestFailed = false;
