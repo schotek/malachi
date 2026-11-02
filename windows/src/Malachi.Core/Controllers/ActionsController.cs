@@ -612,15 +612,17 @@ public sealed partial class ActionsController
         ArgumentNullException.ThrowIfNull(ids);
         ArgumentNullException.ThrowIfNull(subject);
         Mailbox.Scope.VerifyAccess();
-        var msgs = Summaries(ids);
-        if (msgs.Count == 0)
+        var all = Summaries(ids);
+        if (all.Count == 0)
         {
             return;
         }
         var missing = L10n.T("This account has no junk folder");
-        // Every account the messages are of needs its junk folder (the All
-        // Inboxes list mixes accounts).
-        if (msgs.Any(s => Mailbox.Model.FolderByRole(s.AccountId, FolderRole.Junk) is null))
+        // The All Inboxes list mixes accounts: messages of accounts without
+        // a junk folder are skipped (as macOS and GTK); the toast only when
+        // none has one.
+        List<MessageSummary> msgs = [.. all.Where(s => Mailbox.Model.FolderByRole(s.AccountId, FolderRole.Junk) is not null)];
+        if (msgs.Count == 0)
         {
             toast(missing);
             return;
@@ -661,15 +663,25 @@ public sealed partial class ActionsController
             return;
         }
         // One move per account: the target is each account's own role folder.
-        var action = Unified.Mixed(msgs, s => s.AccountId) ? NextUndoGroup() : 0;
+        // An account without the folder is skipped; the toast says so only
+        // when none of them has it (as macOS and GTK).
+        var moves = new List<(List<MessageSummary> Items, FolderId Target)>();
         foreach (var group in Unified.GroupByAccount(msgs, s => s.AccountId))
         {
-            if (Mailbox.Model.FolderByRole(group.Account, role) is not { } target)
+            if (Mailbox.Model.FolderByRole(group.Account, role) is { } target)
             {
-                toast(missing);
-                continue;
+                moves.Add(([.. group.Items], target.Id));
             }
-            MoveList([.. group.Items], target.Id, UndoKindOf(role), what, action);
+        }
+        if (moves.Count == 0)
+        {
+            toast(missing);
+            return;
+        }
+        var action = moves.Count > 1 ? NextUndoGroup() : 0;
+        foreach (var (items, target) in moves)
+        {
+            MoveList(items, target, UndoKindOf(role), what, action);
         }
     }
 

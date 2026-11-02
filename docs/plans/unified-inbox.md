@@ -221,7 +221,10 @@ macOS ani Windows se tu nepřeložilo** (chybí GTK, Swift, dotnet).
   Přeposlat/Přesunout do/eWay vypnuté u smíšeného výběru, odpověď z účtu řádku,
   hledání z položky, Zkontrolovat poštu z kontextového menu.
 
-Rozdíly mezi klienty k rozhodnutí: Nevyžádaná, když některý účet nemá složku Nevyžádaná —
-macOS ty účty přeskočí, Windows akci odmítne, GTK ji odmítne předem; prázdný seznam
+Nevyžádaná, Archivovat (rozhodnutí vlastníka 2026-11-02): zprávy účtů bez složky
+dané role se ve všech třech klientech přeskočí, otázka počítá jen přesouvané a toast
+„Tento účet nemá složku nevyžádané pošty“ přijde, jen když složku nemá žádný účet.
+
+Zbývající rozdíly k rozhodnutí: prázdný seznam
 říká „Tato složka je prázdná“; odpověď odeslaná do Odeslaných neobnoví počet
 odeslaných u konverzace ve sjednoceném seznamu (`applyNewMessageElsewhere`) v GTK.

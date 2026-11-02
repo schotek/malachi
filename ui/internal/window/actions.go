@@ -455,11 +455,15 @@ func (w *Window) junkIDs(parent gtk.Widgetter, ids []api.MessageID, subject stri
 	if len(list) == 0 {
 		return
 	}
-	for _, g := range accountGroups(list) {
-		if _, ok := w.model.folderByRole(g.Account, api.RoleJunk); !ok {
-			w.Toast(i18n.T("This account has no junk folder"))
-			return
-		}
+	// The All Inboxes list: messages of accounts without a Junk folder are
+	// skipped (as macOS and Windows); the toast only when none has one.
+	list = slices.DeleteFunc(list, func(s api.MessageSummary) bool {
+		_, ok := w.model.folderByRole(s.AccountID, api.RoleJunk)
+		return !ok
+	})
+	if len(list) == 0 {
+		w.Toast(i18n.T("This account has no junk folder"))
+		return
 	}
 	heading := i18n.T("Mark as junk?")
 	if n := len(list); n > 1 {
@@ -487,16 +491,26 @@ func (w *Window) moveIDsToRole(ids []api.MessageID, role api.FolderRole, kind un
 	if len(list) == 0 {
 		return
 	}
-	// The All Inboxes list: one move (and one Undo entry) per account.
-	groups := accountGroups(list)
-	group := w.nextUndoGroup(len(groups))
-	for _, g := range groups {
-		target, ok := w.model.folderByRole(g.Account, role)
-		if !ok {
-			w.Toast(missing)
-			continue
+	// The All Inboxes list: one move (and one Undo entry) per account; an
+	// account without the folder is skipped, the toast says so only when
+	// none of them has it (as macOS and Windows).
+	type move struct {
+		items  []api.MessageSummary
+		target api.FolderID
+	}
+	var moves []move
+	for _, g := range accountGroups(list) {
+		if target, ok := w.model.folderByRole(g.Account, role); ok {
+			moves = append(moves, move{g.Items, target.ID})
 		}
-		w.moveListTo(g.Items, target.ID, kind, what, group)
+	}
+	if len(moves) == 0 {
+		w.Toast(missing)
+		return
+	}
+	group := w.nextUndoGroup(len(moves))
+	for _, m := range moves {
+		w.moveListTo(m.items, m.target, kind, what, group)
 	}
 }
 
