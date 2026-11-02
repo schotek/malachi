@@ -274,3 +274,23 @@ func (m *mailModel) keyThreads(list []api.ThreadSummary) []api.ThreadSummary {
 	}
 	return out
 }
+
+// nextUndoGroup is the group id for the entries of one action that is
+// split into n per-account moves: a new one for several, 0 for one (the
+// entry stands alone). Taking one of the group back takes all
+// (runUndoGroup, undo.Stack.TakeGroup).
+func (w *Window) nextUndoGroup(n int) int {
+	if n < 2 {
+		return 0
+	}
+	w.undoGroup++
+	return w.undoGroup
+}
+
+// runUndoGroup takes e back with the other entries of its group.
+func (w *Window) runUndoGroup(e undo.Entry) {
+	for _, other := range w.undo.TakeGroup(e.Group) {
+		w.runUndo(other)
+	}
+	w.runUndo(e)
+}

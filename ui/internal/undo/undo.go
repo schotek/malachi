@@ -75,6 +75,11 @@ type Entry struct {
 	Moves []Moved
 	// Case is the board's case of a board move (Kind.Board).
 	Case string
+	// Group, when not 0, is shared by the entries of one user action across
+	// accounts (the All Inboxes list moves a selection of several accounts
+	// one entry per account); Undo takes them all back (TakeGroup). 0: the
+	// entry stands alone. Swift: Undo.Entry.group.
+	Group int
 }
 
 // Count is how many messages the entry moved.
@@ -186,6 +191,24 @@ func (s *Stack) Pop() (Entry, bool) {
 	e := s.entries[len(s.entries)-1]
 	s.entries = s.entries[:len(s.entries)-1]
 	return e, true
+}
+
+// TakeGroup takes the other entries of group off the stack (the rest of an
+// action that moved messages of several accounts), in their order; none
+// for group 0.
+func (s *Stack) TakeGroup(group int) []Entry {
+	if group == 0 {
+		return nil
+	}
+	var taken []Entry
+	s.entries = slices.DeleteFunc(s.entries, func(e Entry) bool {
+		if e.Group != group {
+			return false
+		}
+		taken = append(taken, e)
+		return true
+	})
+	return taken
 }
 
 // Peek is the newest move, left on the stack.

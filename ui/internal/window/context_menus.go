@@ -245,7 +245,10 @@ func (w *Window) showFolderMenuAt(anchor *gtk.Widget, idx int, x, y float64) boo
 	var labels contextmenu.Labels
 	switch {
 	case e.Unified:
-		return false // the All Inboxes item has no folder to act on
+		// Only Check for new mail, of every account the item covers (a
+		// sync of all accounts); no folder to act on.
+		groups = [][]contextmenu.Item{{{ID: contextmenu.CheckMail, Enabled: true}}}
+		actions[contextmenu.CheckMail] = func() { w.startSync(api.SyncTriggerParams{}) }
 	case e.Header && e.Favourite:
 		return false
 	case e.Header:

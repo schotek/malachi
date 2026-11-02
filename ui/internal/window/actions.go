@@ -323,6 +323,7 @@ func (w *Window) trashIDs(parent gtk.Widgetter, ids []api.MessageID, subject str
 	}
 	// One question for the whole selection, then one move per account (the
 	// All Inboxes list may hold rows of several).
+	var group int // shared by the per-account moves of this action
 	trashAccount := func(list []api.MessageSummary) {
 		restore := w.removeRows(idsOf(list))
 		for _, s := range list {
@@ -363,12 +364,14 @@ func (w *Window) trashIDs(parent gtk.Widgetter, ids []api.MessageID, subject str
 		}, func() {
 			w.withdrawNotifications(idsOf(list))
 			if hasTrash {
-				w.recordUndo(undoKind.Trash, trash.ID, moving)
+				w.recordUndo(undoKind.Trash, trash.ID, moving, group)
 			}
 		})
 	}
 	confirmTrash(parent, w.settings, len(list), subject, func() {
-		for _, g := range accountGroups(list) {
+		groups := accountGroups(list)
+		group = w.nextUndoGroup(len(groups))
+		for _, g := range groups {
 			trashAccount(g.Items)
 		}
 	})
@@ -485,20 +488,22 @@ func (w *Window) moveIDsToRole(ids []api.MessageID, role api.FolderRole, kind un
 		return
 	}
 	// The All Inboxes list: one move (and one Undo entry) per account.
-	for _, g := range accountGroups(list) {
+	groups := accountGroups(list)
+	group := w.nextUndoGroup(len(groups))
+	for _, g := range groups {
 		target, ok := w.model.folderByRole(g.Account, role)
 		if !ok {
 			w.Toast(missing)
 			continue
 		}
-		w.moveListTo(g.Items, target.ID, kind, what)
+		w.moveListTo(g.Items, target.ID, kind, what, group)
 	}
 }
 
 // moveIDsTo moves messages to another folder of their account (Move To
 // in a message's context menu), as moveIDsToRole does.
 func (w *Window) moveIDsTo(ids []api.MessageID, target api.FolderID) {
-	w.moveListTo(w.movable(ids), target, undoKind.Move, func(n int) string { return contextmenu.MovingText(i18n.Tr, n) })
+	w.moveListTo(w.movable(ids), target, undoKind.Move, func(n int) string { return contextmenu.MovingText(i18n.Tr, n) }, 0)
 }
 
 // movable are the summaries of ids a move takes: not the outbox's
@@ -518,7 +523,7 @@ func (w *Window) movable(ids []api.MessageID) []api.MessageSummary {
 // daemon took it, Undo can take it back as kind (undo.go), unless the
 // target is a folder the daemon does not keep (Gmail's All Mail drops the
 // rows).
-func (w *Window) moveListTo(list []api.MessageSummary, target api.FolderID, kind undoKind.Kind, what func(n int) string) {
+func (w *Window) moveListTo(list []api.MessageSummary, target api.FolderID, kind undoKind.Kind, what func(n int) string, group int) {
 	// The messages already in the target stay where they are.
 	list = slices.DeleteFunc(slices.Clone(list), func(s api.MessageSummary) bool { return s.FolderID == target })
 	if len(list) == 0 || len(accountGroups(list)) > 1 {
@@ -538,7 +543,7 @@ func (w *Window) moveListTo(list []api.MessageSummary, target api.FolderID, kind
 	}, func() {
 		w.withdrawNotifications(idsOf(list))
 		if !w.folderUnsynced(folderKey{Account: acc, Folder: target}) {
-			w.recordUndo(kind, target, list)
+			w.recordUndo(kind, target, list, group)
 		}
 	})
 }

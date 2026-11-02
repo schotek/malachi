@@ -289,6 +289,7 @@ type Window struct {
 	// undoToast the toast of the newest, undoReselect what the next list
 	// of the folder on display selects after an Undo.
 	undo         undo.Stack
+	undoGroup    int // last group id of an action across accounts (nextUndoGroup)
 	undoToast    *adw.Toast
 	undoReselect []undo.Moved
 
