@@ -74,12 +74,12 @@ public sealed class PreviewDocumentTests
     {
         var a = new Attachment { PartId = "2", Filename = " Report Q3.PDF ", ContentType = "application/pdf", Size = 3 << 20, Inline = false };
         var panel = PreviewPanel.For(a, null, "PDF Document");
-        Assert.Equal(new PreviewPanel("Report Q3.PDF", "3.0 MiB", "PDF Document", ".pdf"), panel);
+        Assert.Equal(new PreviewPanel("Report Q3.PDF", "3.1 MB", "PDF Document", ".pdf"), panel);
         // The fetched length wins over the listed size; no type name leaves
         // the claimed type.
-        Assert.Equal(new PreviewPanel("Report Q3.PDF", "2 KiB", "application/pdf", ".pdf"), PreviewPanel.For(a, 2048, " "));
+        Assert.Equal(new PreviewPanel("Report Q3.PDF", "2.0 kB", "application/pdf", ".pdf"), PreviewPanel.For(a, 2048, " "));
         var unnamed = a with { Filename = "", ContentType = "" };
-        Assert.Equal(new PreviewPanel("Attachment", "3.0 MiB", "application/octet-stream", ""), PreviewPanel.For(unnamed, null, null));
+        Assert.Equal(new PreviewPanel("Attachment", "3.1 MB", "application/octet-stream", ""), PreviewPanel.For(unnamed, null, null));
     }
 
     // Only a plain extension reaches the shell's lookup.

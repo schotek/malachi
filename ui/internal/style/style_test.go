@@ -43,8 +43,10 @@ func TestCSS(t *testing.T) {
 		"box.remote-bar",
 		"button.quoted-text { min-height: 0;",
 		"button.fold-all { min-height: 0;",
-		"box.attachment-chip button, button.chip-action { min-height: 0;",
-		"box.attachment-chip menubutton.chip-arrow > button",
+		"box.attachment-tile { background-color: @card_bg_color;",
+		"box.attachment-tile > button.tile-main { min-height: 0;",
+		"button.chip-action { min-height: 0;",
+		"flowbox.attachments-band {",
 		"list.message-list > row { border-radius: 0; margin: 0; }",
 		"list.message-list > row:last-child { border-bottom: none; }",
 		"row.account-row.drop-above", "row.account-row.drop-below", "@accent_bg_color", ".drag-handle"} {

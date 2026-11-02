@@ -7,6 +7,7 @@ package widget
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -114,22 +115,42 @@ func FormatDateTime(t time.Time) string {
 }
 
 // FormatSize renders a byte count for attachment chips and the disk space
-// in the preferences: GiB, MiB, KiB or B (IEC units).
+// in the preferences in decimal units, like Finder and Outlook: B, kB, MB
+// or GB, one decimal below 100 ("41.1 kB", "7.2 MB", "123 kB"), with the
+// translated decimal separator ("41,1 kB" in Czech).
 func FormatSize(n int64) string {
-	switch {
-	case n >= 1<<30:
-		// TRANSLATORS: file size in gibibytes.
-		return fmt.Sprintf(i18n.T("%.1f GiB"), float64(n)/(1<<30))
-	case n >= 1<<20:
-		// TRANSLATORS: file size in mebibytes.
-		return fmt.Sprintf(i18n.T("%.1f MiB"), float64(n)/(1<<20))
-	case n >= 1<<10:
-		// TRANSLATORS: file size in kibibytes.
-		return fmt.Sprintf(i18n.T("%.0f KiB"), float64(n)/(1<<10))
-	default:
+	if n < 1000 {
 		// TRANSLATORS: file size in bytes.
 		return fmt.Sprintf(i18n.T("%d B"), n)
 	}
+	v := float64(n)
+	switch {
+	case n >= 999_500_000:
+		// TRANSLATORS: file size in gigabytes; %s is the number with its
+		// decimal separator, e.g. "1.5".
+		return fmt.Sprintf(i18n.T("%s GB"), sizeNumber(v/1e9))
+	case n >= 999_500:
+		// TRANSLATORS: file size in megabytes; %s is the number with its
+		// decimal separator, e.g. "7.2".
+		return fmt.Sprintf(i18n.T("%s MB"), sizeNumber(v/1e6))
+	default:
+		// TRANSLATORS: file size in kilobytes; %s is the number with its
+		// decimal separator, e.g. "41.1".
+		return fmt.Sprintf(i18n.T("%s kB"), sizeNumber(v/1e3))
+	}
+}
+
+// sizeNumber writes v with one decimal below 100 and none from there, with
+// the translated decimal separator.
+func sizeNumber(v float64) string {
+	prec := 1
+	if v >= 99.95 {
+		prec = 0
+	}
+	s := strconv.FormatFloat(v, 'f', prec, 64)
+	// TRANSLATORS: the decimal separator of numbers such as file sizes
+	// ("41.1 kB"); "," in Czech.
+	return strings.Replace(s, ".", i18n.C("decimal separator", "."), 1)
 }
 
 // Strftime writes t's wall clock (its date and time of day in t's own
@@ -153,4 +174,13 @@ func strftime(t time.Time, format string) string {
 		return t.Format(time.RFC3339)
 	}
 	return dt.Format(format)
+}
+
+// AttachmentSummary is the line over the attachment tiles of a message:
+// how many there are and their total size ("2 attachments · 255 kB").
+func AttachmentSummary(count int, total int64) string {
+	files := fmt.Sprintf(i18n.N("%d attachment", "%d attachments", count), count)
+	// TRANSLATORS: the line over the attachments of a message: the number
+	// of attachments and their total size, e.g. "2 attachments · 255 kB".
+	return fmt.Sprintf(i18n.C("attachment summary", "%s · %s"), files, FormatSize(total))
 }

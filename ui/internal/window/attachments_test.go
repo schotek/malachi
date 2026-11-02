@@ -83,9 +83,9 @@ func TestPartState(t *testing.T) {
 		{"fetched", small, fetched, partLocal, ""},
 		{"fetched, on the server only", remote, fetched, partRemote, onServer},
 		{"at the cap", edge, fetched, partLocal, ""},
-		{"over the cap", huge, fetched, partUnavailable, "Attachments over 16.0 MiB cannot be opened or saved yet."},
-		{"over the cap beats remote", hugeRemote, fetched, partUnavailable, "Attachments over 16.0 MiB cannot be opened or saved yet."},
-		{"over the cap while pending", huge, pending, partUnavailable, "Attachments over 16.0 MiB cannot be opened or saved yet."},
+		{"over the cap", huge, fetched, partUnavailable, "Attachments over 16.8 MB cannot be opened or saved yet."},
+		{"over the cap beats remote", hugeRemote, fetched, partUnavailable, "Attachments over 16.8 MB cannot be opened or saved yet."},
+		{"over the cap while pending", huge, pending, partUnavailable, "Attachments over 16.8 MB cannot be opened or saved yet."},
 		{"unknown body state", small, &api.MessageBodyResult{BodyState: "brandNew"}, partWaiting, ""},
 	}
 	for _, c := range cases {

@@ -55,7 +55,7 @@ public sealed class AttachmentChipTests
         Assert.False(pdf.Nested);
         Assert.Equal("report.pdf", pdf.Tooltip);
         Assert.Equal("More Actions", pdf.ArrowTooltip);
-        Assert.Equal("3.0 MiB", pdf.SizeText);
+        Assert.Equal("3.1 MB", pdf.SizeText);
 
         var exe = chips[1];
         Assert.False(exe.CanOpen);

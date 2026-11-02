@@ -79,9 +79,8 @@ func (k Kind) writeMode() assistant.WriteMode {
 
 // buildWindowParts builds compose_extras.ui and places its parts among the
 // pane's children: the quoted original right under the editor (only with
-// one), the assistant's bar under the attachment chips (hidden until the
-// window shows it). The window layout only, before the status line goes
-// in.
+// one), the assistant's bar under both (hidden until the window shows
+// it). The window layout only, before the status line goes in.
 func (p *Pane) buildWindowParts() {
 	b := data.Builder("compose_extras.ui")
 	p.bar = &barWidgets{
@@ -133,8 +132,10 @@ func (p *Pane) buildWindowParts() {
 		q.view.Load(p.body.QuotedHTML)
 		p.quoted = q
 		p.root.InsertChildAfter(q.section, p.editorSlot)
+		p.root.InsertChildAfter(p.bar.root, q.section)
+		return
 	}
-	p.root.InsertChildAfter(p.bar.root, p.attBox)
+	p.root.InsertChildAfter(p.bar.root, p.editorSlot)
 }
 
 // setExpanded shows or hides the original's view; the draft is unchanged.

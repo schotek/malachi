@@ -4,7 +4,8 @@
 // Port of macos/Sources/MalachiMail/Compose/ComposeAttachments.swift
 // (attachFiles' and insertImage's continuations, importFile,
 // removeAttachment, setAttachments, registerInline) and of the chip of
-// AttachmentChipsView.swift (tailEllipsis, the icon); GTK:
+// AttachmentChipsView.swift (the tile) and AttachmentActions.swift
+// (DraftAttachmentPreview); GTK:
 // ui/internal/compose/compose.go (attachGioFiles, insertImage, importFile,
 // addChip, removeAttachment, setAttachments, registerInline). A
 // presentation class macOS keeps in AppKit (docs/windows-port.md §7.4):
@@ -13,7 +14,7 @@
 // The window (Malachi.App Compose/ComposeWindow) owns it: it hands over
 // what its pickers and the editor's drops produced (paths; an item without
 // one is refused with "Only local files can be attached", as GTK refuses a
-// gio.File without a local path), lists Chips under the editor, answers
+// gio.File without a local path), lists Chips over the formatting bar, answers
 // IComposeForm.Attachments with Attachments, and turns Edited into the
 // draft's MarkDirty, StatusChanged into its status line, ImportFailed into
 // its RefreshStatus and ToastRequested into a toast. The daemon imports and
@@ -25,13 +26,13 @@
 
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.Html;
 using Malachi.Core.I18n;
+using Malachi.Core.Platform;
 using Malachi.Core.Text;
 using Malachi.Core.Transport;
 using Microsoft.Extensions.Logging;
@@ -47,13 +48,6 @@ namespace Malachi.Core.Presentation;
 /// </summary>
 public sealed partial class ComposeAttachmentsController : IDisposable
 {
-    /// <summary>
-    /// How many characters of a file name a chip shows before it cuts the
-    /// end with an ellipsis (compose.go <c>addChip</c>'s max-width-chars,
-    /// AttachmentChipsView.swift <c>nameChars</c>).
-    /// </summary>
-    public const int ChipNameChars = 24;
-
     private readonly List<DraftAttachment> attachments = [];
     private readonly RpcClient client;
     private readonly Func<AccountId> account;
@@ -124,23 +118,6 @@ public sealed partial class ComposeAttachmentsController : IDisposable
         }
         return path.Length >= 5 && path[0] is '\\' or '/' && path[1] is '\\' or '/'
             && path[2] is not ('?' or '.' or '\\' or '/');
-    }
-
-    /// <summary>
-    /// A chip's name: <paramref name="filename"/> cut to
-    /// <see cref="ChipNameChars"/> characters (text elements, so an emoji or
-    /// a combining accent is never split) with a trailing ellipsis (Pango's
-    /// EllipsizeEnd at max-width-chars, Swift <c>tailEllipsis</c>).
-    /// </summary>
-    public static string ChipName(string filename)
-    {
-        ArgumentNullException.ThrowIfNull(filename);
-        var info = new StringInfo(filename);
-        if (info.LengthInTextElements <= ChipNameChars)
-        {
-            return filename;
-        }
-        return info.SubstringByTextElements(0, ChipNameChars - 1) + "\u2026";
     }
 
     /// <summary>
@@ -265,6 +242,67 @@ public sealed partial class ComposeAttachmentsController : IDisposable
             {
                 LogCallFailed(logger, API.AttachmentRemove.Name, outcome.Error!);
             }
+        });
+    }
+
+    /// <summary>
+    /// A click on a tile (AttachmentActions.swift <c>DraftAttachmentPreview</c>):
+    /// the file read back from the daemon's attachment store
+    /// (<c>attachment.get</c>, as far as its 16 MiB cap; past it the toast
+    /// says the attachment is too big) for the app's previewer, which keeps
+    /// it in memory, so nothing is written to disk (where macOS hands Quick
+    /// Look a quarantined file). What <paramref name="policy"/> names a
+    /// program, before the read or by the name and type the daemon served,
+    /// gets its panel only. A draft's file is no message's part: the
+    /// request carries no message, and the previewer offers neither Open
+    /// nor Save As….
+    /// </summary>
+    public void Preview(string id, IFileTypePolicy policy, Action<PreviewRequest> show)
+    {
+        ArgumentNullException.ThrowIfNull(id);
+        ArgumentNullException.ThrowIfNull(policy);
+        ArgumentNullException.ThrowIfNull(show);
+        scope.VerifyAccess();
+        var a = attachments.Find(x => string.Equals(x.Id, id, StringComparison.Ordinal));
+        if (closed || a is null)
+        {
+            return;
+        }
+        var shown = new Attachment
+        {
+            PartId = "",
+            Filename = a.Filename,
+            ContentType = a.ContentType,
+            Size = a.Size,
+            Inline = a.Inline,
+            ContentId = a.ContentId,
+        };
+        if (policy.IsDangerous(a.Filename, a.ContentType))
+        {
+            show(new PreviewRequest(shown, null, null, null, CanOpen: false));
+            return;
+        }
+        var parameters = new AttachmentGetParams { AccountId = account(), AttachmentId = id };
+        scope.Perform(client, API.AttachmentGet, parameters, outcome =>
+        {
+            if (closed)
+            {
+                return;
+            }
+            if (!outcome.TryGetValue(out var res, out var error))
+            {
+                LogCallFailed(logger, API.AttachmentGet.Name, error!);
+                scope.Raise(ToastRequested, this, RpcErrorText.Text(L10n.T("Opening the attachment"), error));
+                return;
+            }
+            var served = shown with
+            {
+                Filename = res.Filename.Length > 0 ? res.Filename : a.Filename,
+                ContentType = res.ContentType,
+            };
+            show(policy.IsDangerous(served.Filename, served.ContentType)
+                ? new PreviewRequest(served, null, null, null, CanOpen: false)
+                : new PreviewRequest(served, null, res.ContentType, res.Data, CanOpen: false));
         });
     }
 

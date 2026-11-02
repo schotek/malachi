@@ -5,7 +5,9 @@
 // message_cc: child-spacing 4, line-spacing 4; message_attachments: 6, 6);
 // macOS: Shared/FlowView.swift. The children in a row, left to right, a
 // new line when the next one does not fit; each line as tall as its
-// tallest child, the children at its top. WinUI has no such panel in the
+// tallest child, the children at its top; a child that is an IWrapBoxFullLine
+// takes a line of its own, as wide as the box (the summary line over the
+// attachment tiles, macOS FlowFullLine). WinUI has no such panel in the
 // box (the toolkit's WrapPanel would be a package of its own), and the
 // chips need nothing more than this.
 
@@ -15,6 +17,13 @@ using Microsoft.UI.Xaml.Controls;
 using Windows.Foundation;
 
 namespace Malachi.App.Reader;
+
+/// <summary>A child of a <see cref="WrapBox"/> that takes a whole line of its own, as wide as the box.</summary>
+#pragma warning disable CA1040 // a marker, as Swift's FlowFullLine
+public interface IWrapBoxFullLine
+#pragma warning restore CA1040
+{
+}
 
 /// <summary>A panel that lays its children out in lines (Adw.WrapBox).</summary>
 public sealed partial class WrapBox : Panel
@@ -47,6 +56,7 @@ public sealed partial class WrapBox : Panel
         var width = availableSize.Width;
         double lineWidth = 0, lineHeight = 0, totalWidth = 0, totalHeight = 0;
         var first = true;
+        var breakNext = false;
         foreach (var child in Children)
         {
             child.Measure(new Size(width, double.PositiveInfinity));
@@ -54,8 +64,13 @@ public sealed partial class WrapBox : Panel
             {
                 continue;
             }
+            var full = child is IWrapBoxFullLine;
             var size = child.DesiredSize;
-            if (!first && lineWidth > 0 && lineWidth + ChildSpacing + size.Width > width)
+            if (full && !double.IsInfinity(width))
+            {
+                size = new Size(width, size.Height);
+            }
+            if (!first && (breakNext || full || (lineWidth > 0 && lineWidth + ChildSpacing + size.Width > width)))
             {
                 totalWidth = Math.Max(totalWidth, lineWidth);
                 totalHeight += lineHeight + LineSpacing;
@@ -65,6 +80,7 @@ public sealed partial class WrapBox : Panel
             lineWidth += (lineWidth > 0 ? ChildSpacing : 0) + size.Width;
             lineHeight = Math.Max(lineHeight, size.Height);
             first = false;
+            breakNext = full;
         }
         totalWidth = Math.Max(totalWidth, lineWidth);
         totalHeight += lineHeight;
@@ -76,6 +92,7 @@ public sealed partial class WrapBox : Panel
     {
         var width = finalSize.Width;
         double x = 0, y = 0, lineHeight = 0;
+        bool started = false, breakNext = false;
         foreach (var child in Children)
         {
             if (child.Visibility == Visibility.Collapsed)
@@ -83,8 +100,9 @@ public sealed partial class WrapBox : Panel
                 child.Arrange(new Rect(0, 0, 0, 0));
                 continue;
             }
-            var size = child.DesiredSize;
-            if (x > 0 && x + ChildSpacing + size.Width > width)
+            var full = child is IWrapBoxFullLine;
+            var size = full ? new Size(width, child.DesiredSize.Height) : child.DesiredSize;
+            if (started && (breakNext || full || (x > 0 && x + ChildSpacing + size.Width > width)))
             {
                 x = 0;
                 y += lineHeight + LineSpacing;
@@ -97,6 +115,8 @@ public sealed partial class WrapBox : Panel
             child.Arrange(new Rect(x, y, Math.Min(size.Width, Math.Max(width - x, 0)), size.Height));
             x += size.Width;
             lineHeight = Math.Max(lineHeight, size.Height);
+            started = true;
+            breakNext = full;
         }
         return finalSize;
     }

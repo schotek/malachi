@@ -137,15 +137,26 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	b.WriteString("popover.recipient-suggestions list { background: none; }\n")
 	b.WriteString("popover.recipient-suggestions row { padding: 4px 10px; }\n")
 	b.WriteString("popover.recipient-suggestions image { -gtk-icon-size: 16px; }\n")
-	// Attachment chips under the message headers: two have to fit side by
-	// side in a narrow pane, so the buttons drop libadwaita's roomy
-	// padding, the labels go down a size and the menu arrow is barely
-	// wider than its icon. The name itself is capped in Go (chipNameChars).
-	b.WriteString("box.attachment-chip button, button.chip-action { min-height: 0; padding: 3px 8px; }\n")
-	b.WriteString("box.attachment-chip image, button.chip-action image { -gtk-icon-size: 14px; }\n")
-	b.WriteString("box.attachment-chip label.chip-name, button.chip-action label { font-size: 90%; }\n")
-	b.WriteString("box.attachment-chip label.chip-size { font-size: 80%; }\n")
-	b.WriteString("box.attachment-chip menubutton.chip-arrow > button { min-width: 16px; padding-left: 2px; padding-right: 2px; }\n")
+	// Attachment tiles (widget.AttachmentTile) under the message headers
+	// and in a compose window: a card with a hairline border, the main
+	// button flat over its whole left part (rounded with the card), the
+	// trailing arrow or ✕ barely wider than its icon. An inert tile (an
+	// event's attachment) has no hover. The summary line over the tiles and
+	// the small buttons beside chips (Save All, the assistant's chips) drop
+	// libadwaita's roomy padding.
+	b.WriteString("box.attachment-tile { background-color: @card_bg_color; border: 1px solid alpha(@window_fg_color, 0.15); border-radius: 6px; }\n")
+	b.WriteString("box.attachment-tile > button.tile-main { min-height: 0; padding: 6px 4px 6px 8px; border-radius: 5px 0 0 5px; }\n")
+	b.WriteString("box.attachment-tile.inert > button.tile-main { background: none; }\n")
+	b.WriteString("box.attachment-tile label.tile-size { font-size: 85%; }\n")
+	b.WriteString("box.attachment-tile > .tile-accessory, box.attachment-tile > menubutton.tile-accessory > button { min-height: 0; min-width: 20px; padding: 2px; margin-right: 4px; }\n")
+	b.WriteString("button.chip-action { min-height: 0; padding: 3px 8px; }\n")
+	b.WriteString("button.chip-action image { -gtk-icon-size: 14px; }\n")
+	b.WriteString("button.chip-action label { font-size: 90%; }\n")
+	b.WriteString("box.attachment-summary button.chip-action { color: alpha(currentColor, 0.7); }\n")
+	b.WriteString("box.attachment-summary button.chip-action label { font-size: 85%; }\n")
+	// The band of a compose window's attachments, between the header
+	// fields and the formatting bar.
+	b.WriteString("flowbox.attachments-band { background-color: alpha(@window_fg_color, 0.05); border-radius: 8px; padding: 8px; }\n")
 	// The assistant panel (window/assistant_panel.go): the context chip is a
 	// pill with its remove button inside it; the user's questions a tinted
 	// bubble, the cards (the draft, the bar "Another message is selected")

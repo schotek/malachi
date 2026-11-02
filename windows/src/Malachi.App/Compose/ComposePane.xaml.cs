@@ -752,7 +752,7 @@ public sealed partial class ComposePane : UserControl, IComposeForm
         CommentHeader.Margin = new Thickness(0, 0, 0, 6);
         FormatBar.Margin = new Thickness(0);
         PlainTextHint.Margin = new Thickness(0, 4, 0, 4);
-        Chips.Margin = new Thickness(0, 6, 0, 0);
+        Chips.Margin = new Thickness(0, 0, 0, 6);
         EditorRow.Height = GridLength.Auto;
         EditorSlot.MinHeight = 0;
         // The window layout's parts: the body stays whole, the board has

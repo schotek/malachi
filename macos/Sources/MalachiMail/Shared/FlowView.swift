@@ -3,10 +3,16 @@
 
 import AppKit
 
+/// A child of a `FlowView` that takes a whole line of its own, as wide as
+/// the view (the summary line over the attachment tiles).
+@MainActor
+protocol FlowFullLine: NSView {}
+
 /// Adw.WrapBox: a horizontal box that wraps its children onto new lines
-/// when they do not fit. Children keep their fitting size; the view's
-/// intrinsic height follows its width, so it works inside a vertical
-/// `NSStackView` (attachment chips under the headers, compose chips).
+/// when they do not fit. Children keep their fitting size, except a
+/// `FlowFullLine`, which spans the width; the view's intrinsic height
+/// follows its width, so it works inside a vertical `NSStackView`
+/// (attachment chips under the headers, compose chips).
 @MainActor
 final class FlowView: NSView {
     /// Space between children on a line (`child-spacing`).
@@ -97,8 +103,12 @@ final class FlowView: NSView {
         var y: CGFloat = 0
         var lineHeight: CGFloat = 0
         for v in visible {
-            let size = v.fittingSize
-            if x > 0, x + size.width > width {
+            let full = v is FlowFullLine
+            var size = v.fittingSize
+            if full {
+                size.width = width
+            }
+            if x > 0, x + size.width > width || full {
                 x = 0
                 y += lineHeight + lineSpacing
                 lineHeight = 0
@@ -106,7 +116,8 @@ final class FlowView: NSView {
             if place {
                 v.frame = NSRect(x: x, y: y, width: size.width, height: size.height)
             }
-            x += size.width + spacing
+            // Whatever follows a full line starts the next one.
+            x = full ? .greatestFiniteMagnitude : x + size.width + spacing
             lineHeight = max(lineHeight, size.height)
         }
         return y + lineHeight
