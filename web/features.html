@@ -62,7 +62,7 @@
   <div class="wrap">
     <div class="eyebrow">Features</div>
     <h1>What works today</h1>
-    <p class="lead">Version 0.2.0, on all three platforms unless said otherwise. The GTK client on Linux is the reference; the macOS and Windows apps mirror it feature for feature with their platform's widgets.</p>
+    <p class="lead">Version 0.2.1, on all three platforms unless said otherwise. The GTK client on Linux is the reference; the macOS and Windows apps mirror it feature for feature with their platform's widgets.</p>
   </div>
 </div>
 
@@ -149,7 +149,7 @@
       <li>Mail is treated as hostile input: every parser and renderer is tested against deliberately broken messages and documents.</li>
       <li>The window and the engine are two processes; each connection is authenticated with a key the engine generates at every start.</li>
       <li>Passwords and tokens never leave the system keyring; the engine's logs never contain them.</li>
-      <li>No telemetry, no crash reporting, no update checks that phone home. The engine talks to your mail servers, your Jira, your CalDAV server, your CRM, and to nothing else unless you turn an assistant on.</li>
+      <li>No telemetry and no crash reporting. Once a day the engine asks malachimail.app whether a newer version is out, sending its version and package type and nothing else; the check can be turned off in Preferences. Otherwise it talks to your mail servers, your Jira, your CalDAV server, your CRM, and to nothing else unless you turn an assistant on.</li>
       <li>The core is AGPL-3.0 and also available under a commercial licence; the clients are GPL-3.0-or-later.</li>
     </ul>
 
