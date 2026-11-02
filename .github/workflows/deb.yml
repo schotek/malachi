@@ -18,17 +18,6 @@ on:
   push:
     # Only release tags (v1.2.3); pushes to main build nothing.
     tags: ['v[0-9]+.[0-9]+.[0-9]+']
-  pull_request:
-    paths:
-      - packaging/debian/**
-      - scripts/build.sh
-      - scripts/build-deb.sh
-      # The licences scripts/build.sh installs.
-      - LICENSE
-      - LICENSING.md
-      - THIRD-PARTY-NOTICES.md
-      - backend/LICENSE
-      - .github/workflows/deb.yml
   workflow_dispatch:
 
 permissions:

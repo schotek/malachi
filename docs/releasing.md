@@ -119,16 +119,13 @@ Flatpak manifest pass `-X main.updateChannel=<channel>` to the daemon;
 A tag's CI only builds, signs and uploads: it runs no tests and no lint
 (the owner's decision of 2026-11-01, as flaky timing tests on the shared
 runners failed releases), only the checks of the packages themselves
-(installing the `.deb` and `.rpm`, Gatekeeper on the DMG). So what is
-tagged is tested before: step 1 on a Mac covers the daemon and the macOS
-client; a change in `windows/` or `backend/` reaches `main` through a pull
-request, whose `windows.yml` tests it on Windows, or the owner's Windows
-agent runs `build.ps1 test` and `lint` before the tag.
-A change in `ui/` (or the daemon, `po/` and `data/` under it) is built and
-tested the same way by `gtk.yml` on a pull request: `make build`, the UI
-tests under Xvfb and `make lint` (not the GTK smoke tests) in a Fedora 42
-container, as `scripts/gtk-container/gtk.sh` runs them on a Mac; it has
-no tag trigger and keeps no artifacts.
+(installing the `.deb` and `.rpm`, Gatekeeper on the DMG). Pull requests
+run no CI either, the CLA check aside (the owner's decision of
+2026-11-02): the owner pulls every pull request and tests it on the
+native platforms, automatically and by hand, before merging it. So what
+is tagged is tested before: step 1 on a Mac covers the daemon and the
+macOS client, the GTK container (`scripts/gtk-container/gtk.sh`) the GTK
+client, and the owner's Windows agent runs `build.ps1 test` and `lint`.
 
 `appstreamcli validate` reports one pedantic complaint,
 `cid-contains-uppercase-letter`, about the `M` in the application ID. The
@@ -162,8 +159,8 @@ falls back to the `.version` file that `make flatpak` writes.
 ## 5. Builds from CI
 
 `.github/workflows/flatpak.yml` builds the Flatpak for **x86_64** and
-**aarch64** on version tags (`vX.Y.Z`; pushes to `main` build nothing), on a manual
-`workflow_dispatch`, and on pull requests that touch the packaging. On a
+**aarch64** on version tags (`vX.Y.Z`; pushes to `main` and pull requests
+build nothing) and on a manual `workflow_dispatch`. On a
 tag each job keeps a `Malachi-Mail-<version>-linux-<arch>.flatpak` bundle as a workflow
 artifact (30 days) for the release; other runs only build and check it,
 because any signed-in GitHub user can download the artifacts of a public
@@ -248,8 +245,8 @@ keyring helper.
 
 `.github/workflows/windows.yml` does the same in CI: it tests the daemon
 on Windows, builds, tests and lints the Windows client, and builds the
-installer for **x64** and **arm64**, on version tags (`vX.Y.Z`), by
-hand and on pull requests that touch what the client is built from; what
+installer for **x64** and **arm64**, on version tags (`vX.Y.Z`) and by
+hand (a tag only builds, see §3); what
 each job does is in [windows-port.md §13](windows-port.md#13-build-and-ci).
 **Only a tag** keeps both installers as the run's artifacts (30 days) and
 attaches them to its release, like the packages above and to a draft when
@@ -318,14 +315,13 @@ codesign --force --sign - --options runtime \
 
 `.github/workflows/macos.yml` does the same in CI on the `macos-26` runner
 (Xcode 26, whose SDK gives the app its macOS 26 design), on version
-tags (`vX.Y.Z`), by hand and on pull requests that touch what the
-client is built from: `make test-macos`, then `make macos-dmg`, signed and
-notarised when the repository has the five secrets below and the run is
-not a pull request, otherwise ad hoc. A tag keeps the DMG as the run's
+tags (`vX.Y.Z`) and by hand: `make test-macos` (not on a tag), then
+`make macos-dmg`, signed and notarised when the repository has the five
+secrets below, otherwise ad hoc. A tag keeps the DMG as the run's
 artifact (30 days) and attaches it to its release (a draft when the tag
 has none yet) **only when it was notarised**, so an ad-hoc image never
 reaches a release; a run by hand keeps it for a day, to check the
-signing, and a pull request not at all. macOS releases are signed and
+signing. macOS releases are signed and
 notarised by CI only, never by hand from a Mac (the owner's decision of
 2026-11-01).
 

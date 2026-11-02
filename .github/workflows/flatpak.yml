@@ -1,7 +1,9 @@
 # Flatpak builds for x86_64 and aarch64.
 #
 # A pushed tag attaches two installable bundles to the GitHub release; a
-# pull request only builds them.
+# run by hand only builds them. Pull requests run nothing: every change is
+# built and tested on the native platforms before it is merged
+# (docs/releasing.md §3).
 #
 # aarch64 builds on GitHub's native arm64 runner (ubuntu-24.04-arm), which is
 # free for public repositories — no QEMU, so a build takes minutes, not hours.
@@ -16,16 +18,6 @@ on:
   push:
     # Only release tags (v1.2.3); pushes to main build nothing.
     tags: ['v[0-9]+.[0-9]+.[0-9]+']
-  pull_request:
-    paths:
-      - packaging/flatpak/**
-      - scripts/**
-      # The licences scripts/build.sh installs.
-      - LICENSE
-      - LICENSING.md
-      - THIRD-PARTY-NOTICES.md
-      - backend/LICENSE
-      - .github/workflows/flatpak.yml
   workflow_dispatch:
 
 permissions:
