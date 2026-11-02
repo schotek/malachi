@@ -2,8 +2,8 @@
 
 Static HTML for the project's website: a presentation of the app, a
 download page, the release notes, in English with a Czech mirror under
-`cs/`. No build step, no external fonts or trackers, and one small
-script; the pages share `assets/style.css` and work from a plain file
+`cs/`. No build step, no external fonts or trackers, and a few small
+scripts; the pages share `assets/style.css` and work from a plain file
 server or `file://`.
 
 `assets/platform.js`, loaded in the head of the presentation and download
@@ -22,6 +22,24 @@ its caption, the previous and next one of the strip it came from, Escape,
 the arrow keys and a click beside it to close. Every screenshot is a link
 to the picture itself (`a.shot`), which is what a browser without the
 script gets.
+
+`assets/report.js` (deferred, every page) turns "Report a problem" in
+the footer (`[data-report]`; on `404.html` a line under the buttons)
+into the page's `<dialog class="report">`: name, e-mail, the
+description, an optional screenshot and a honeypot field `website`. The
+form goes as `multipart/form-data` to
+`https://admin.malachimail.app/api/v1/reports` (the admin's public
+endpoint, which allows only the origin `https://malachimail.app`), with
+the page's language and path; on `localhost` and `127.0.0.1` it goes to
+`http://localhost:8789/api/v1/reports` with Turnstile's test site key.
+Cloudflare Turnstile (`challenges.cloudflare.com`, action `report`) is
+loaded only when the form is opened for the first time, so a page that
+is only read talks to no one but this site. The screenshot is scaled in
+a canvas to at most 2560 px on its longest side and re-encoded as WebP
+(JPEG where the browser cannot), which drops its EXIF; at most 5 MiB.
+The site key in the script (`SITEKEY_PLACEHOLDER`) is filled in from
+the Turnstile widget in the Cloudflare dashboard. Without the script the
+link goes to the GitHub issues.
 
 | Page | English | Czech |
 |---|---|---|
@@ -43,7 +61,10 @@ missing.
 The site is <https://malachimail.app>, a Cloudflare Worker with static
 assets (`wrangler.jsonc`): the files of this directory, except what
 `.assetsignore` names. `_headers` sets the security headers (a content
-security policy that allows only the site's own files) and a day's
+security policy that allows only the site's own files, and for the
+report form Turnstile's script and frame from `challenges.cloudflare.com`,
+the POST to `admin.malachimail.app` and `blob:` pictures for the
+screenshot's preview) and a day's
 caching for `assets/`; `_redirects` serves `/` and `/cs/` as their
 `index.html`, because `html_handling` is `none` so that the `.html`
 links are served as named, without a redirect to an extensionless

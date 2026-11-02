@@ -12,6 +12,7 @@
 <meta name="twitter:card" content="summary">
 <meta name="theme-color" content="#0b3260">
 <link rel="stylesheet" href="assets/style.css?v=4">
+<script src="assets/report.js" defer></script>
 <script src="assets/platform.js"></script>
 <link rel="icon" href="assets/icon-32.png" sizes="32x32">
 <link rel="icon" href="assets/icon-64.png" sizes="64x64">
@@ -170,10 +171,28 @@ sudo dnf install ./Malachi-Mail-0.2.1-linux-x64-fedora42.rpm   # Fedora</code></
       <li><a href="news.html">What's new</a></li>
       <li><a href="under-the-hood.html">Under the hood</a></li>
       <li><a href="https://github.com/schotek/malachi">Source code</a></li>
-      <li><a href="https://github.com/schotek/malachi/issues">Report a problem</a></li>
+      <li><a href="https://github.com/schotek/malachi/issues" data-report>Report a problem</a></li>
     </ul>
   </div>
 </footer>
 
+<dialog class="report" aria-labelledby="report-title">
+  <form>
+    <h2 id="report-title">Report a problem</h2>
+    <label>Name <span>(optional)</span><input name="name" maxlength="100" autocomplete="name"></label>
+    <label>E-mail <span>(optional, for an answer)</span><input name="contact" type="email" maxlength="254" autocomplete="email"></label>
+    <label>What happened? <span>(required)</span><textarea name="text" rows="6" required placeholder="What you did, what you expected and what happened instead; the version of Malachi Mail and your system help too."></textarea></label>
+    <label>Screenshot <span>(optional)</span><input name="screenshot" type="file" accept="image/png,image/jpeg,image/webp"></label>
+    <img class="rp-preview" alt="The chosen screenshot" hidden>
+    <div class="rp-trap" aria-hidden="true"><label>Website <input name="website" tabindex="-1" autocomplete="off"></label></div>
+    <div class="rp-turnstile"></div>
+    <p class="rp-small">What is sent: the fields above, the screenshot made smaller and without its metadata, the language and the address of this page. The report is kept for 12 months. Cloudflare Turnstile protects the form against spam.</p>
+    <p class="rp-status" role="status" aria-live="polite"></p>
+    <div class="buttons">
+      <button type="submit" class="btn primary">Send</button>
+      <button type="button" class="btn rp-close">Close</button>
+    </div>
+  </form>
+</dialog>
 </body>
 </html>

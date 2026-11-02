@@ -355,6 +355,35 @@ dialog.lightbox .lb-prev .icon { transform: scaleX(-1); }
 body:has(dialog.lightbox[open]) { overflow: hidden; }
 @media (max-width: 600px) { dialog.lightbox figure { padding: 0 12px 56px; } dialog.lightbox .lb-prev, dialog.lightbox .lb-next { top: auto; bottom: 10px; transform: none; } }
 
+/* ---------- Report a problem (report.js): a form over the page ---------- */
+dialog.report { position: fixed; inset: 0; width: 100vw; height: 100vh; max-width: none; max-height: none; margin: 0; padding: 16px; border: 0; background: transparent; color: var(--fg); overflow-y: auto; box-sizing: border-box; }
+dialog.report[open] { display: grid; place-items: center; }
+dialog.report::backdrop { background: rgba(6, 22, 41, .8); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+dialog.report form { width: 100%; max-width: 34rem; display: grid; gap: .9rem; padding: clamp(1.1rem, 4vw, 1.8rem); border-radius: var(--r); border: 1px solid var(--line); background: var(--card); box-shadow: var(--shadow-lg); }
+dialog.report h2 { margin: 0; font-size: 1.4rem; }
+dialog.report label { display: block; font-weight: 650; font-size: .95rem; }
+dialog.report label span { font-weight: 400; color: var(--muted); font-size: .85rem; }
+dialog.report input, dialog.report textarea { font: inherit; font-weight: 400; color: var(--fg); background: var(--bg-2); border: 1px solid var(--line-strong); border-radius: 10px; padding: .6rem .75rem; width: 100%; box-sizing: border-box; display: block; margin-top: .3rem; }
+dialog.report textarea { resize: vertical; min-height: 7.5rem; }
+dialog.report input[type=file] { padding: .4rem; font-size: .9rem; color: var(--muted); cursor: pointer; border-style: dashed; }
+dialog.report input[type=file]:hover { border-color: var(--accent); }
+dialog.report input[type=file]::file-selector-button { font: inherit; font-weight: 650; color: var(--accent); background: var(--accent-soft); border: 0; border-radius: 8px; padding: .45rem .9rem; margin-right: .8rem; cursor: pointer; transition: background .15s, color .15s; }
+dialog.report input[type=file]:hover::file-selector-button { background: var(--accent); color: var(--accent-fg); }
+dialog.report input:focus-visible, dialog.report textarea:focus-visible, dialog.report button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+dialog.report .rp-preview { display: block; max-width: 100%; max-height: 10rem; justify-self: start; border-radius: 8px; border: 1px solid var(--line-strong); }
+dialog.report .rp-preview[hidden] { display: none; }
+dialog.report .rp-trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+dialog.report .rp-turnstile:empty { display: none; }
+dialog.report .rp-small { margin: 0; font-size: .82rem; color: var(--muted); }
+dialog.report .rp-status { margin: 0; font-size: .92rem; }
+dialog.report .rp-status:empty { display: none; }
+dialog.report .rp-status.error { color: #b2412f; font-weight: 650; }
+dialog.report .rp-status.ok { color: #157a3d; font-weight: 650; }
+dialog.report button { cursor: pointer; font: inherit; font-weight: 650; }
+dialog.report button:disabled { opacity: .6; cursor: progress; transform: none; }
+@media (prefers-color-scheme: dark) { dialog.report .rp-status.error { color: #ff9a86; } dialog.report .rp-status.ok { color: #6fe0a0; } }
+body:has(dialog.report[open]) { overflow: hidden; }
+
 /* ---------- Compare ---------- */
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--card); box-shadow: var(--shadow); }
 table { border-collapse: collapse; width: 100%; font-size: .95rem; }

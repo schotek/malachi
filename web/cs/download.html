@@ -12,6 +12,7 @@
 <meta name="twitter:card" content="summary">
 <meta name="theme-color" content="#0b3260">
 <link rel="stylesheet" href="../assets/style.css?v=4">
+<script src="../assets/report.js" defer></script>
 <script src="../assets/platform.js"></script>
 <link rel="icon" href="../assets/icon-32.png" sizes="32x32">
 <link rel="icon" href="../assets/icon-64.png" sizes="64x64">
@@ -170,10 +171,28 @@ sudo dnf install ./Malachi-Mail-0.2.1-linux-x64-fedora42.rpm   # Fedora</code></
       <li><a href="news.html">Novinky</a></li>
       <li><a href="under-the-hood.html">Pod kapotou</a></li>
       <li><a href="https://github.com/schotek/malachi">Zdrojové kódy</a></li>
-      <li><a href="https://github.com/schotek/malachi/issues">Nahlásit problém</a></li>
+      <li><a href="https://github.com/schotek/malachi/issues" data-report>Nahlásit problém</a></li>
     </ul>
   </div>
 </footer>
 
+<dialog class="report" aria-labelledby="report-title">
+  <form>
+    <h2 id="report-title">Nahlásit problém</h2>
+    <label>Jméno <span>(nepovinné)</span><input name="name" maxlength="100" autocomplete="name"></label>
+    <label>E-mail <span>(nepovinný, pro odpověď)</span><input name="contact" type="email" maxlength="254" autocomplete="email"></label>
+    <label>Co se stalo? <span>(povinné)</span><textarea name="text" rows="6" required placeholder="Co jste udělali, co jste čekali a co se stalo místo toho; pomůže i verze Malachi Mail a váš systém."></textarea></label>
+    <label>Snímek obrazovky <span>(nepovinný)</span><input name="screenshot" type="file" accept="image/png,image/jpeg,image/webp"></label>
+    <img class="rp-preview" alt="Vybraný snímek obrazovky" hidden>
+    <div class="rp-trap" aria-hidden="true"><label>Web <input name="website" tabindex="-1" autocomplete="off"></label></div>
+    <div class="rp-turnstile"></div>
+    <p class="rp-small">Co se odesílá: pole výše, snímek zmenšený a bez metadat, jazyk a adresa této stránky. Hlášení se uchovává 12 měsíců. Formulář před spamem chrání Cloudflare Turnstile.</p>
+    <p class="rp-status" role="status" aria-live="polite"></p>
+    <div class="buttons">
+      <button type="submit" class="btn primary">Odeslat</button>
+      <button type="button" class="btn rp-close">Zavřít</button>
+    </div>
+  </form>
+</dialog>
 </body>
 </html>
