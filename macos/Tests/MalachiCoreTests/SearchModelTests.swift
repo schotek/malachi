@@ -46,7 +46,7 @@ private func summary(_ id: String, _ acc: String, _ folder: String) -> MessageSu
         var m = searchModel()
         let page = Page(limit: API.Limits.defaultPageLimit)
         let cases: [(Settings.SearchScope, SearchQueryParams, Settings.SearchScope)] = [
-            (.folder, SearchQueryParams(accountId: "a1", folderId: "f_in", query: "faktura", page: page), .folder),
+            (.folder, SearchQueryParams(accountId: "a1", folderId: "f_in", query: "faktura", page: page, withSent: true), .folder),
             (.account, SearchQueryParams(accountId: "a1", query: "faktura", page: page), .account),
             (.all, SearchQueryParams(query: "faktura", page: page), .all),
         ]
@@ -54,6 +54,10 @@ private func summary(_ id: String, _ acc: String, _ folder: String) -> MessageSu
             let got = m.searchRequest("  faktura ", scope: scope)
             #expect(got.params == want && got.effective == effective, "\(scope)")
         }
+        #expect(cases.map(\.1.withSent) == [true, false, false])
+        // Only a folder search carries withSent on the wire.
+        let json = { (p: SearchQueryParams) in String(decoding: try! JSONCoding.encoder().encode(p), as: UTF8.self) }
+        #expect(json(cases[0].1).contains("\"withSent\":true") && !json(cases[1].1).contains("withSent"))
         // Nothing selected: nothing to narrow to.
         m.selected = nil
         let got = m.searchRequest("x", scope: .folder)
@@ -91,7 +95,10 @@ private func summary(_ id: String, _ acc: String, _ folder: String) -> MessageSu
         m.search.effective = .account
         #expect(m.rowMessage(m.messages[0]).origin == "Faktury")
         m.search.effective = .folder
+        m.search.params = SearchQueryParams(accountId: "a1", folderId: "f_x", query: "x", withSent: true)
         #expect(m.rowMessage(m.messages[0]).origin == "" && m.rowMessage(m.messages[0]).originTooltip == "")
+        // Sent mail of the folder's threads lies in another folder.
+        #expect(m.rowMessage(m.messages[2]).origin == "Inbox" && m.rowMessage(m.messages[2]).originTooltip == "INBOX\nWork")
         // One enabled account: no account in the label.
         m.search.effective = .all
         m.accounts[1].enabled = false

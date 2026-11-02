@@ -3037,3 +3037,18 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   rules, texts and the sentinel sidebar key are the Go reference
   `ui/internal/unified` (with `selection` and `contextmenu`); the item is
   never a favourite and cannot be pinned.
+- The user's replies in a folder's search (2026-11-02): **decided**, a
+  search in one folder (`search.query` with `folderId` and `withSent`, the
+  clients' default Folder scope) also finds the user's replies to the
+  folder's conversations, by the rule of `thread.get` `withSent`: matching
+  visible rows of the account's sent folders whose thread has a visible
+  member in the folder, without the copies the folder already has and each
+  `Message-ID` once. Searching Inbox otherwise never showed what one wrote
+  back. A sent folder, the outbox, the views of a `jira` account and a
+  query with `in:` add nothing; the Account and All Accounts scopes are
+  unchanged (they search the sent folders anyway). Results are told apart
+  only by the folder name the clients already show for a row of another
+  folder; ordering, paging and `total` are those of the search. The store
+  shares one predicate (`sentMember`) between `thread.list`, `thread.get`
+  and the search, so the three cannot disagree; no migration, the indexes
+  of 0011 serve. The MCP bridge does not ask for it.

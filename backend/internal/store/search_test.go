@@ -393,3 +393,114 @@ func BenchmarkSearchPrefix(b *testing.B) {
 		}
 	}
 }
+
+// A folder's search with SentOf also finds the user's replies in the sent
+// folders that belong to the folder's threads (sentMember), each
+// Message-ID once, and pages across both.
+func TestSearchSentOf(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	accs := seedAccounts(t, s, 2)
+	acc := accs[0]
+	inbox := seedFolder(t, s, acc, "INBOX", api.RoleInbox)
+	archive := seedFolder(t, s, acc, "Archive", api.RoleArchive)
+	sent := seedFolder(t, s, acc, "Sent", api.RoleSent)
+	sent2 := seedFolder(t, s, acc, "Sent Items", api.RoleSent)
+	msg := func(f Folder, uid uint32, id, inReplyTo, subject string) *Message {
+		m := Message{UID: uid, RFCMessageID: id, InReplyTo: inReplyTo, Subject: subject}
+		if inReplyTo != "" {
+			m.References = []string{inReplyTo}
+		}
+		return seedThread(t, s, f, m)
+	}
+	hide := func(m *Message) {
+		if _, _, err := s.SetMessageHidden(ctx, m.ID, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	a := msg(inbox, 1, "a", "", "plan a")
+	r1 := msg(sent, 2, "r1", "a", "plan r1")
+	r1copy := msg(sent2, 3, "r1", "a", "plan r1") // a second copy of r1: once, the lower id
+	msg(sent, 4, "r2", "a", "plan r2")            // the inbox has its Bcc copy
+	bcc := msg(inbox, 5, "r2", "a", "plan r2")    // a Bcc to oneself
+	noID := msg(sent, 6, "", "a", "plan without id")
+	noID2 := msg(sent, 7, "", "a", "plan without id either")
+	hide(msg(sent, 8, "h", "a", "plan hidden"))
+	msg(sent, 9, "lone", "", "plan lone") // in no thread of the inbox
+	msg(archive, 10, "c", "", "archived")
+	msg(sent, 11, "rc", "c", "plan archived reply") // the archive's thread
+	hidden := msg(inbox, 12, "d", "", "hidden")
+	hide(hidden)
+	msg(sent, 13, "rd", "d", "plan reply to a hidden one")
+	noThread := msg(sent, 14, "rt", "a", "plan without thread")
+	if _, err := s.db.ExecContext(ctx, `UPDATE messages SET thread_id = '' WHERE id = ?`, noThread.ID); err != nil {
+		t.Fatal(err)
+	}
+	// Another account's reply to its own "a".
+	inbox2 := seedFolder(t, s, accs[1], "INBOX", api.RoleInbox)
+	sentB := seedFolder(t, s, accs[1], "Sent", api.RoleSent)
+	msg(inbox2, 1, "a", "", "plan elsewhere")
+	msg(sentB, 2, "rb", "a", "plan other account")
+
+	f := SearchFilter{AccountID: acc, Match: match("plan"), FolderIDs: []string{inbox.ID}}
+	if got := searchSubjects(t, s, f); !slices.Equal(got, []string{"plan r2", "plan a"}) {
+		t.Fatalf("folder alone: %v", got)
+	}
+	f.SentOf = inbox.ID
+	rows, _, total, err := s.SearchMessages(ctx, f, "", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, r := range rows {
+		ids = append(ids, r.ID)
+	}
+	first := min(r1.ID, r1copy.ID)
+	want := []string{noID2.ID, noID.ID, bcc.ID, first, a.ID}
+	if !slices.Equal(ids, want) || total != len(want) {
+		t.Fatalf("with sent: %v (total %d), want %v", ids, total, want)
+	}
+	if rows[1].FolderID != sent.ID || rows[2].FolderID != inbox.ID {
+		t.Errorf("folders: %s, %s", rows[1].FolderID, rows[2].FolderID)
+	}
+
+	// Paging walks the same rows.
+	var paged []string
+	cursor := ""
+	for page := 0; ; page++ {
+		rows, next, total, err := s.SearchMessages(ctx, f, cursor, 2)
+		if err != nil || total != len(want) {
+			t.Fatalf("page %d: total %d, %v", page, total, err)
+		}
+		for _, r := range rows {
+			paged = append(paged, r.ID)
+		}
+		if next == "" {
+			break
+		}
+		if page > 5 {
+			t.Fatal("paging does not end")
+		}
+		cursor = next
+	}
+	if !slices.Equal(paged, want) {
+		t.Fatalf("paged %v, want %v", paged, want)
+	}
+
+	// Without a full-text expression (a filter alone) the rule is the same.
+	f.Match = ""
+	if got := searchSubjects(t, s, f); len(got) != len(want) {
+		t.Errorf("filter alone: %v", got)
+	}
+
+	// SentOf only applies to the one folder it names.
+	f = SearchFilter{AccountID: acc, Match: match("plan"), FolderIDs: []string{archive.ID}, SentOf: inbox.ID}
+	if got := searchSubjects(t, s, f); len(got) != 0 {
+		t.Errorf("mismatched SentOf: %v", got)
+	}
+	f = SearchFilter{AccountID: acc, Match: match("plan"), FolderIDs: []string{archive.ID}, SentOf: archive.ID}
+	if got := searchSubjects(t, s, f); !slices.Equal(got, []string{"plan archived reply"}) {
+		t.Errorf("archive with sent: %v", got)
+	}
+}

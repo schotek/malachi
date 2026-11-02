@@ -219,3 +219,67 @@ func TestSearchBackfillFinishes(t *testing.T) {
 		t.Errorf("after the backfill: %q", got)
 	}
 }
+
+// withSent adds the user's replies in the sent folders to a folder's
+// search, as thread.get withSent adds them to its conversations.
+func TestSearchWithSent(t *testing.T) {
+	b, _ := newSyncBackend(t)
+	ctx := context.Background()
+	acc := seedAccount(t, b, "me@example.invalid")
+	folders := seedFolders(t, b, acc, []store.Folder{
+		{Mailbox: "INBOX", Name: "Inbox", Path: "Inbox", Role: api.RoleInbox, Subscribed: true, Selectable: true},
+		{Mailbox: "Sent", Name: "Sent", Path: "Sent", Role: api.RoleSent, Subscribed: true, Selectable: true},
+		{Mailbox: "view:open", Name: "Open", Path: "Open", Subscribed: true, Selectable: true, Virtual: api.VirtualOpen},
+	})
+	inbox, sent, view := folders["INBOX"], folders["Sent"], folders["view:open"]
+	outbox, err := b.store.OutboxFolder(ctx, acc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	day := func(d int) time.Time { return time.Date(2026, 10, d, 12, 0, 0, 0, time.UTC) }
+	for _, m := range []*store.Message{
+		{FolderID: inbox.ID, UID: 1, Subject: "Rozpočet", RFCMessageID: "a", Date: day(1)},
+		{FolderID: sent.ID, UID: 1, Subject: "Re: Rozpočet", RFCMessageID: "r", InReplyTo: "a", References: []string{"a"}, Date: day(2)},
+		{FolderID: sent.ID, UID: 2, Subject: "Rozpočet jinde", RFCMessageID: "s", Date: day(3)},
+		{FolderID: outbox.ID, UID: 1, Subject: "Re: Rozpočet ve frontě", RFCMessageID: "q", InReplyTo: "a", References: []string{"a"}, Date: day(4)},
+		{FolderID: view.ID, UID: 1, Subject: "Rozpočet", RFCMessageID: "a", Date: day(1)},
+	} {
+		m.AccountID = acc
+		if err := b.store.UpsertMessages(ctx, []*store.Message{m}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sb := &searchBox{b: b}
+	in := func(f store.Folder, q string, withSent bool) api.SearchQueryParams {
+		return api.SearchQueryParams{AccountID: api.AccountID(acc), FolderID: api.FolderID(f.ID), Query: q, WithSent: withSent}
+	}
+	tests := []struct {
+		name string
+		p    api.SearchQueryParams
+		want []string
+	}{
+		{"folder alone", in(inbox, "rozpocet", false), []string{"Rozpočet"}},
+		{"with sent", in(inbox, "rozpocet", true), []string{"Re: Rozpočet", "Rozpočet"}},
+		{"in: turns it off", in(inbox, "rozpocet in:inbox", true), []string{"Rozpočet"}},
+		{"a sent folder", in(sent, "rozpocet", true), []string{"Rozpočet jinde", "Re: Rozpočet"}},
+		{"the outbox", in(outbox, "rozpocet", true), []string{"Re: Rozpočet ve frontě"}},
+		{"a virtual folder", in(view, "rozpocet", true), []string{"Rozpočet"}},
+		{"ignored without a folder", api.SearchQueryParams{AccountID: api.AccountID(acc), Query: "rozpocet", WithSent: true},
+			[]string{"Re: Rozpočet ve frontě", "Rozpočet jinde", "Re: Rozpočet", "Rozpočet"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			res := sb.query(t, tc.p)
+			if got := subjects(res); !slices.Equal(got, tc.want) {
+				t.Errorf("%q", got)
+			}
+			if res.Page.Total != len(tc.want) {
+				t.Errorf("total %d", res.Page.Total)
+			}
+		})
+	}
+	res := sb.query(t, in(inbox, "rozpocet", true))
+	if res.Results[0].Message.FolderID != api.FolderID(sent.ID) || res.Results[1].Message.FolderID != api.FolderID(inbox.ID) {
+		t.Errorf("folders %s, %s", res.Results[0].Message.FolderID, res.Results[1].Message.FolderID)
+	}
+}

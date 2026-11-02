@@ -43,7 +43,7 @@ public sealed partial class MailModel
         }
         return scope switch
         {
-            SearchScope.Folder => (new SearchQueryParams { AccountId = k.Account, FolderId = k.Folder, Query = query, Page = page }, SearchScope.Folder),
+            SearchScope.Folder => (new SearchQueryParams { AccountId = k.Account, FolderId = k.Folder, Query = query, WithSent = true, Page = page }, SearchScope.Folder),
             SearchScope.Account => (new SearchQueryParams { AccountId = k.Account, Query = query, Page = page }, SearchScope.Account),
             _ => (new SearchQueryParams { Query = query, Page = page }, SearchScope.All),
         };
@@ -103,7 +103,8 @@ public sealed partial class MailModel
     }
 
     /// <summary>
-    /// Where a result lies when the search spans more than one folder: the
+    /// Where a result lies when it is not in the searched folder (Folder scope
+    /// also returns sent mail, which has its own folder): the
     /// folder, and its account as well when every account is searched and
     /// there is more than one. The tooltip has the folder's path and the
     /// account (search_model.go <c>searchOrigin</c>).
@@ -111,7 +112,13 @@ public sealed partial class MailModel
     public (string Label, string Tooltip) SearchOrigin(MessageSummary s)
     {
         ArgumentNullException.ThrowIfNull(s);
-        if (Search.Effective == SearchScope.Folder || Folder(new FolderKey(s.AccountId, s.FolderId)) is not { } f)
+        if (Search.Effective == SearchScope.Folder
+            && s.AccountId == Search.Params.AccountId && s.FolderId == Search.Params.FolderId)
+        {
+            // In the searched folder itself; only its sent mail has an origin.
+            return ("", "");
+        }
+        if (Folder(new FolderKey(s.AccountId, s.FolderId)) is not { } f)
         {
             return ("", "");
         }

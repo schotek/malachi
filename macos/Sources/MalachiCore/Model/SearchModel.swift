@@ -91,7 +91,7 @@ extension MailModel {
         }
         switch scope {
         case .folder:
-            return (SearchQueryParams(accountId: k.account, folderId: k.folder, query: query, page: page), .folder)
+            return (SearchQueryParams(accountId: k.account, folderId: k.folder, query: query, page: page, withSent: true), .folder)
         case .account:
             return (SearchQueryParams(accountId: k.account, query: query, page: page), .account)
         case .all:
@@ -151,12 +151,18 @@ extension MailModel {
         return m
     }
 
-    /// Where a result lies when the search spans more than one folder: the
+    /// Where a result lies when the search spans more than one folder (in
+    /// Folder scope only a result from another folder, i.e. sent mail): the
     /// folder, and its account as well when every account is searched and
     /// there is more than one. The tooltip has the folder's path and the
     /// account (search_model.go `searchOrigin`).
     public func searchOrigin(_ s: MessageSummary) -> (label: String, tooltip: String) {
-        guard search.effective != .folder, let f = folder(FolderKey(account: s.accountId, folder: s.folderId)) else {
+        let key = FolderKey(account: s.accountId, folder: s.folderId)
+        if search.effective == .folder,
+           search.params.accountId == s.accountId, search.params.folderId == s.folderId {
+            return ("", "")
+        }
+        guard let f = folder(key) else {
             return ("", "")
         }
         var label = folderTitle(f)
