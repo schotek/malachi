@@ -592,7 +592,7 @@ func (w *Window) onNewMessage(n api.NewMessageNotification) {
 			}
 			if w.model.applyNewMessage(s, w.model.listFilter, sel) {
 				w.syncRows()
-				w.refetchReplies(s.ThreadID)
+				w.refetchReplies(w.model.threadKey(s.AccountID, s.ThreadID))
 			} else {
 				w.loadMessages()
 			}

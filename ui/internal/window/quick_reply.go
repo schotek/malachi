@@ -180,8 +180,8 @@ func (w *Window) updateQuickReply() {
 				// which reports as it shows.
 				return
 			}
-			bar.leaveIfOther(h.ctrl.account, h.ctrl.thread)
-			qr.Show(h.ctrl.account, h.ctrl.thread)
+			bar.leaveIfOther(h.ctrl.account, w.model.rawThread(h.ctrl.thread))
+			qr.Show(h.ctrl.account, w.model.rawThread(h.ctrl.thread))
 			// Without a model (the members are on their way, or thread.get
 			// failed with nothing to build from) the empty model: the bar
 			// hides until the real one, the same thread shown a moment ago

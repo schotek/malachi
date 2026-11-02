@@ -4,6 +4,8 @@
 package window
 
 import (
+	"strings"
+
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/undo"
@@ -224,6 +226,7 @@ func (w *Window) unifiedAfterUndo(e undo.Entry) bool {
 	var back []undo.Moved
 	for _, m := range e.Moves {
 		if unified.Covers(true, e.Account, m.FromFolderID, inboxes) {
+			m.ThreadID = w.model.threadKey(e.Account, m.ThreadID) // the list's key
 			back = append(back, m)
 		}
 	}
@@ -233,4 +236,41 @@ func (w *Window) unifiedAfterUndo(e undo.Entry) bool {
 	w.undoReselect = back
 	w.loadMessages()
 	return true
+}
+
+// threadKey is the key the model holds a conversation under: its thread
+// id, and in the All Inboxes list the account's as well (account, NUL,
+// id), because thread ids are unique only within an account (Graph's are
+// the Exchange conversation id, which two mailboxes of a tenant share).
+// listKey.Thread, tindex, members, memberOf and expanded all use it; the
+// daemon and everything outside the list take rawThread.
+func (m *mailModel) threadKey(account api.AccountID, id api.ThreadID) api.ThreadID {
+	if id == "" || !m.listIsUnified() {
+		return id
+	}
+	return api.ThreadID(string(account) + "\x00" + string(id))
+}
+
+// rawThread is the thread id the daemon knows for a model key.
+func (m *mailModel) rawThread(key api.ThreadID) api.ThreadID {
+	if !m.listIsUnified() {
+		return key
+	}
+	if _, id, ok := strings.Cut(string(key), "\x00"); ok {
+		return api.ThreadID(id)
+	}
+	return key
+}
+
+// keyThreads is list with each conversation's ID turned into its model key.
+func (m *mailModel) keyThreads(list []api.ThreadSummary) []api.ThreadSummary {
+	if !m.listIsUnified() {
+		return list
+	}
+	out := make([]api.ThreadSummary, len(list))
+	for i, t := range list {
+		t.ID = m.threadKey(t.AccountID, t.ID)
+		out[i] = t
+	}
+	return out
 }

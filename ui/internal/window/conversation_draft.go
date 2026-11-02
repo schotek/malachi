@@ -263,7 +263,7 @@ func (w *Window) onDraftsChanged(n api.DraftsChangedNotification) {
 		}
 	}
 	for _, tid := range n.ThreadIDs {
-		want[tid] = true
+		want[m.threadKey(n.AccountID, tid)] = true
 	}
 	for tid := range want {
 		if _, listed := m.tindex[tid]; listed {

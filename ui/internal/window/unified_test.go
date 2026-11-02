@@ -130,11 +130,15 @@ func TestUnifiedConversationIsReadInItsOwnAccountAndFolder(t *testing.T) {
 	m.setThreads([]api.ThreadSummary{
 		{ID: "t1", AccountID: "b", Latest: api.MessageSummary{ID: "m1", AccountID: "b", FolderID: "bin"}, MessageCount: 2},
 	}, api.PageInfo{})
-	if got := m.membersFolder("t1"); got != (folderKey{Account: "b", Folder: "bin"}) {
+	key := m.threadKey("b", "t1")
+	if got := m.membersFolder(key); got != (folderKey{Account: "b", Folder: "bin"}) {
 		t.Errorf("membersFolder = %+v", got)
 	}
+	if m.rawThread(key) != "t1" {
+		t.Errorf("rawThread(%q) = %q", key, m.rawThread(key))
+	}
 	m.listFolder = folderKey{Account: "a", Folder: "ain"}
-	if got := m.membersFolder("t1"); got != m.listFolder {
+	if got := m.membersFolder("t1"); got != m.listFolder || m.threadKey("b", "t1") != "t1" {
 		t.Errorf("folder list: %+v", got)
 	}
 }
@@ -195,5 +199,32 @@ func TestUnifiedActionStateIsMixedAcrossAccounts(t *testing.T) {
 	got := sa.with(selection.CombineAccounts([]selection.Flags{sa.flags(), sb.flags()}, []api.AccountID{"a", "b"}))
 	if !got.mixed || got.move || got.forward {
 		t.Errorf("mixed state %+v", got)
+	}
+}
+
+// Two accounts may hold a conversation under the same thread id (Graph's
+// Exchange conversation id): in the All Inboxes list they are two rows.
+func TestUnifiedSameThreadIDOfTwoAccountsAreTwoConversations(t *testing.T) {
+	m := unifiedModel()
+	m.listFolder = folderKey{Account: unified.Key.Account, Folder: unified.Key.Folder}
+	m.grouped = true
+	mk := func(acc api.AccountID, folder api.FolderID, id api.MessageID) api.ThreadSummary {
+		return api.ThreadSummary{ID: "same", AccountID: acc, MessageCount: 2,
+			Latest: api.MessageSummary{ID: id, AccountID: acc, FolderID: folder, ThreadID: "same"}}
+	}
+	m.setThreads([]api.ThreadSummary{mk("a", "ain", "m1"), mk("b", "bin", "m2")}, api.PageInfo{})
+	if len(m.threads) != 2 || len(m.tindex) != 2 {
+		t.Fatalf("threads %d, index %d", len(m.threads), len(m.tindex))
+	}
+	if m.membersFolder(m.threadKey("a", "same")) != (folderKey{Account: "a", Folder: "ain"}) ||
+		m.membersFolder(m.threadKey("b", "same")) != (folderKey{Account: "b", Folder: "bin"}) {
+		t.Error("each conversation is read in its own account")
+	}
+	// A new message lands in its own account's conversation.
+	s := api.MessageSummary{ID: "m3", AccountID: "b", FolderID: "bin", ThreadID: "same"}
+	m.applyNewMessage(s, api.FilterAll, listKey{})
+	if m.threads[m.tindex[m.threadKey("a", "same")]].MessageCount != 2 ||
+		m.threads[m.tindex[m.threadKey("b", "same")]].MessageCount != 3 {
+		t.Error("the new message went to the wrong conversation")
 	}
 }

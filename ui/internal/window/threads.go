@@ -146,7 +146,7 @@ func (w *Window) fetchMembers(tid api.ThreadID, quiet bool) {
 	mem.fetching = true
 	k := w.model.membersFolder(tid)
 	gen := w.model.listGen
-	params := api.ThreadGetParams{AccountID: k.Account, ThreadID: tid, FolderID: k.Folder, WithSent: true, WithDrafts: true}
+	params := api.ThreadGetParams{AccountID: k.Account, ThreadID: w.model.rawThread(tid), FolderID: k.Folder, WithSent: true, WithDrafts: true}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 		defer cancel()
