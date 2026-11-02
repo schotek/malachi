@@ -1583,21 +1583,21 @@ msgid "Comment"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:57 ui/internal/jira/compose.go:164
-#: ui/internal/board/text.go:374 ui/internal/window/conversation_card.go:293
+#: ui/internal/board/text.go:374 ui/internal/window/conversation_card.go:302
 #: ui/internal/window/quick_reply_bar.go:194 ui/data/ui/message_window.ui:44
 #: ui/data/ui/window.ui:481
 msgid "Reply"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:59
-#: ui/internal/window/conversation_card.go:294
+#: ui/internal/window/conversation_card.go:303
 #: ui/internal/window/quick_reply_bar.go:192 ui/data/ui/message_window.ui:50
 #: ui/data/ui/window.ui:488
 msgid "Reply All"
 msgstr ""
 
 #: ui/internal/contextmenu/text.go:61
-#: ui/internal/window/conversation_card.go:295 ui/data/ui/message_window.ui:56
+#: ui/internal/window/conversation_card.go:304 ui/data/ui/message_window.ui:56
 #: ui/data/ui/window.ui:495
 msgid "Forward"
 msgstr ""
@@ -1683,15 +1683,15 @@ msgstr ""
 msgid "Add to Favourites"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:113 ui/internal/widget/message_row.go:395
+#: ui/internal/contextmenu/text.go:113 ui/internal/widget/message_row.go:441
 #: ui/internal/window/board_conversation.go:488
-#: ui/internal/window/conversation_card.go:473 ui/internal/window/folders.go:65
+#: ui/internal/window/conversation_card.go:482 ui/internal/window/folders.go:65
 msgid "Expand"
 msgstr ""
 
-#: ui/internal/contextmenu/text.go:115 ui/internal/widget/message_row.go:391
+#: ui/internal/contextmenu/text.go:115 ui/internal/widget/message_row.go:437
 #: ui/internal/window/board_conversation.go:491
-#: ui/internal/window/conversation_card.go:471 ui/internal/window/folders.go:62
+#: ui/internal/window/conversation_card.go:480 ui/internal/window/folders.go:62
 msgid "Collapse"
 msgstr ""
 
@@ -2254,7 +2254,7 @@ msgid "Needs fields in Jira"
 msgstr ""
 
 #: ui/internal/jira/transitions.go:98
-#: ui/internal/window/conversation_card.go:173 ui/internal/window/folders.go:89
+#: ui/internal/window/conversation_card.go:178 ui/internal/window/folders.go:89
 #: ui/internal/window/messages.go:267
 msgid "Loading…"
 msgstr ""
@@ -2519,8 +2519,8 @@ msgid "Removed from eWay-CRM"
 msgstr ""
 
 #: ui/internal/crm/text.go:289 ui/internal/board/view.go:859
-#: ui/internal/widget/message_row.go:371 ui/internal/window/message_view.go:618
-#: ui/internal/window/notify.go:140
+#: ui/internal/widget/message_row.go:417 ui/internal/window/message_view.go:625
+#: ui/internal/window/notify.go:145
 msgid "(No subject)"
 msgstr ""
 
@@ -2865,7 +2865,7 @@ msgstr[1] ""
 #. TRANSLATORS: tooltip of the member count of a conversation row.
 #. TRANSLATORS: subtitle of the message list; %d is the number of
 #. messages in the folder.
-#: ui/internal/board/text.go:150 ui/internal/widget/message_row.go:255
+#: ui/internal/board/text.go:150 ui/internal/widget/message_row.go:269
 #: ui/internal/window/folders.go:353
 #, c-format
 msgid "%d message"
@@ -6945,11 +6945,11 @@ msgstr ""
 msgid "Save _All"
 msgstr ""
 
-#: ui/internal/window/attachments.go:375 ui/internal/window/message_view.go:630
+#: ui/internal/window/attachments.go:375 ui/internal/window/message_view.go:637
 msgid "This message is too large to download."
 msgstr ""
 
-#: ui/internal/window/attachments.go:377 ui/internal/window/message_view.go:632
+#: ui/internal/window/attachments.go:377 ui/internal/window/message_view.go:639
 msgid "This message could not be read."
 msgstr ""
 
@@ -7028,54 +7028,54 @@ msgstr ""
 msgid "Preparing the reply"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:562 ui/data/ui/compose_pane.ui:27
+#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:27
 #: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:344
 #: ui/data/ui/window.ui:880
 msgid "From"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:562 ui/data/ui/compose_pane.ui:55
+#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:55
 #: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:370
 #: ui/data/ui/window.ui:906
 msgid "To"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:562 ui/data/ui/compose_pane.ui:101
+#: ui/internal/window/conversation_card.go:571 ui/data/ui/compose_pane.ui:101
 #: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:398
 #: ui/data/ui/window.ui:934
 msgid "Cc"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:737
-#: ui/internal/window/message_view.go:333
+#: ui/internal/window/conversation_card.go:758
+#: ui/internal/window/message_view.go:339
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:776 ui/data/ui/embedded_window.ui:61
+#: ui/internal/window/conversation_card.go:797 ui/data/ui/embedded_window.ui:61
 #: ui/data/ui/message_window.ui:259 ui/data/ui/message_window.ui:598
 #: ui/data/ui/window.ui:718 ui/data/ui/window.ui:1200
 msgid "Load _Images"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:777 ui/data/ui/message_window.ui:265
+#: ui/internal/window/conversation_card.go:798 ui/data/ui/message_window.ui:265
 #: ui/data/ui/window.ui:724
 msgid "Always From This _Sender"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:778 ui/data/ui/message_window.ui:267
+#: ui/internal/window/conversation_card.go:799 ui/data/ui/message_window.ui:267
 #: ui/data/ui/window.ui:726
 msgid "Load remote images now and whenever this sender writes"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:798 ui/data/ui/message_window.ui:296
+#: ui/internal/window/conversation_card.go:819 ui/data/ui/message_window.ui:296
 #: ui/data/ui/window.ui:755
 msgid "_Download Pictures"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:984
-#: ui/internal/window/message_view.go:537
+#: ui/internal/window/conversation_card.go:1005
+#: ui/internal/window/message_view.go:543
 msgid "Loading the message"
 msgstr ""
 
@@ -7190,12 +7190,12 @@ msgstr ""
 msgid "Folders appear after the first synchronisation."
 msgstr ""
 
-#: ui/internal/window/message_view.go:624
-#: ui/internal/window/message_view.go:636
+#: ui/internal/window/message_view.go:631
+#: ui/internal/window/message_view.go:643
 msgid "(Empty message)"
 msgstr ""
 
-#: ui/internal/window/message_view.go:628
+#: ui/internal/window/message_view.go:635
 msgid "Downloading…"
 msgstr ""
 
@@ -7254,7 +7254,7 @@ msgstr ""
 msgid "This folder is empty."
 msgstr ""
 
-#: ui/internal/window/notify.go:127
+#: ui/internal/window/notify.go:132
 msgid "New message"
 msgstr ""
 
@@ -7300,76 +7300,76 @@ msgstr ""
 msgid "Cancelling the send"
 msgstr ""
 
-#: ui/internal/window/preferences.go:370
+#: ui/internal/window/preferences.go:371
 msgid "Saving mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:399
+#: ui/internal/window/preferences.go:400
 msgid "Loading mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:462
+#: ui/internal/window/preferences.go:463
 msgid "Measuring the disk space"
 msgstr ""
 
-#: ui/internal/window/preferences.go:498
+#: ui/internal/window/preferences.go:499
 msgid "Converting the stored mail in the background"
 msgstr ""
 
-#: ui/internal/window/preferences.go:500
+#: ui/internal/window/preferences.go:501
 msgid "Converting stopped: the disk is full"
 msgstr ""
 
 #. TRANSLATORS: %s is a size such as "1.2 GB".
-#: ui/internal/window/preferences.go:504
+#: ui/internal/window/preferences.go:505
 #, c-format
 msgid "Compression saves %s"
 msgstr ""
 
 #. TRANSLATORS: %s is a size such as "1.2 GB".
-#: ui/internal/window/preferences.go:508
+#: ui/internal/window/preferences.go:509
 #, c-format
 msgid "%s of attachments are on the server only"
 msgstr ""
 
-#: ui/internal/window/preferences.go:646
+#: ui/internal/window/preferences.go:647
 msgid "The desktop portal refused to change autostart"
 msgstr ""
 
-#: ui/internal/window/preferences.go:649
+#: ui/internal/window/preferences.go:650
 msgid "Autostart needs xdg-desktop-portal"
 msgstr ""
 
-#: ui/internal/window/preferences.go:652
+#: ui/internal/window/preferences.go:653
 msgid "Autostart was not granted"
 msgstr ""
 
-#: ui/internal/window/preferences.go:687
+#: ui/internal/window/preferences.go:688
 msgid "Not available in the Flatpak build"
 msgstr ""
 
-#: ui/internal/window/preferences.go:693
+#: ui/internal/window/preferences.go:694
 msgid "The MCP bridge (malachi-mcp) was not found"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:740
+#: ui/internal/window/preferences.go:741
 #, c-format
 msgid "The MCP bridge did not answer: %s"
 msgstr ""
 
-#: ui/internal/window/preferences.go:785
+#: ui/internal/window/preferences.go:786
 msgid "No Claude app was found on this computer"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:788
+#: ui/internal/window/preferences.go:789
 #, c-format
 msgid "The MCP bridge could not be registered: %s"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:791
+#: ui/internal/window/preferences.go:792
 #, c-format
 msgid "The MCP bridge could not be unregistered: %s"
 msgstr ""

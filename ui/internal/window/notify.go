@@ -88,6 +88,11 @@ func (w *Window) handleNotification(method string, params json.RawMessage) {
 		if w.assist != nil {
 			w.assist.RefreshProfile()
 		}
+	case api.NotifySignaturesChanged:
+		// Trust changed: the verdicts on display, an open details dialog
+		// (signature.go); Preferences → Security listens itself.
+		w.signaturesChanged()
+		dispatchSignatures()
 	default:
 		w.otherNotification(method, params)
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
+	"github.com/schotek/malachi/ui/internal/signature"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -780,7 +781,16 @@ func summaryThread(t api.ThreadSummary, expanded, loading bool) widget.Thread {
 		Loading:        loading,
 		Draft:          threadDraftBadge(t),
 		Invitation:     calendar.InvitationPillOf(t.Latest),
+		Signature:      threadSignatureIcon(t),
 	}
+}
+
+// threadSignatureIcon is the list icon of a conversation row: its newest
+// member's verdict (the thread has no aggregate of its own; docs/api.md
+// §4.21), none when that member has none or one the list does not show.
+func threadSignatureIcon(t api.ThreadSummary) signature.ListIcon {
+	icon, _ := signature.ListIconFor(t.Latest.Signature, i18n.Tr)
+	return icon
 }
 
 // threadDraftBadge is the Draft badge of a conversation row with the

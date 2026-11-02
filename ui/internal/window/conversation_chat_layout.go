@@ -273,7 +273,7 @@ type bubbleAttachments struct {
 // part of the card shown is no chip (chipAttachments).
 func bubbleAttachmentBadge(s api.MessageSummary, lm *loadedMessage, cardOn bool) bubbleAttachments {
 	if lm != nil && lm.msg != nil {
-		if n := len(chipAttachments(lm.msg.Attachments, lm.body, calendar.InvitationReading(lm.msg, cardOn))); n > 0 {
+		if n := len(chipAttachments(tileAttachments(lm.msg), lm.body, calendar.InvitationReading(lm.msg, cardOn))); n > 0 {
 			return bubbleAttachments{Shown: true, Count: n}
 		}
 		return bubbleAttachments{}
