@@ -46,6 +46,13 @@ func TestParseDevStart(t *testing.T) {
 		contactSteps[1].Kind != devContactsEdit || contactSteps[2].Kind != devPrefsContacts {
 		t.Errorf("contacts steps %+v %v", contactSteps, err)
 	}
+	ruleSteps, err := parseDevStart("prefs-rules;rules-editor")
+	if err != nil || len(ruleSteps) != 2 || ruleSteps[0].Kind != devPrefsRules || ruleSteps[1].Kind != devRulesEditor {
+		t.Errorf("rules steps %+v %v", ruleSteps, err)
+	}
+	if _, err := parseDevStart("rules-editor:new"); err == nil {
+		t.Error("rules-editor:new parsed")
+	}
 	if _, err := parseDevStart("contacts:new"); err == nil {
 		t.Error("contacts:new parsed")
 	}

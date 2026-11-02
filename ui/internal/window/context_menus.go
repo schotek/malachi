@@ -43,6 +43,7 @@ var messageMenuActions = map[contextmenu.ItemID]string{
 	contextmenu.CrmOpen:      "win." + crmActionOpen,
 	contextmenu.CrmEditLinks: "win." + crmActionEditLinks,
 	contextmenu.CrmRemove:    "win." + crmActionRemove,
+	contextmenu.CreateRule:   "win.create-rule",
 }
 
 // menuTriggers are the keys that open a row's menu.
@@ -160,6 +161,12 @@ func (w *Window) showMessageMenu(r *gtk.ListBoxRow, x, y float64) {
 	// eWay-CRM by crm.OfferFor of the selected rows; a conversation's row
 	// offers nothing.
 	s.SetCrm(w.crmOffer(w.crmMainSubjects()))
+	// Create Rule from Message… for one message of a mail account
+	// (rules_menus.go); its action is on exactly when it is offered.
+	s.OfferRule = w.canCreateRule(rows)
+	if a := w.actions["create-rule"]; a != nil {
+		a.SetEnabled(s.OfferRule)
+	}
 	labels := contextmenu.Labels{Comment: st.comment, Flagged: st.flagged, Outbox: st.outbox, Count: st.count}
 	m := gio.NewMenu()
 	for _, g := range contextmenu.MessageItems(s) {
@@ -257,6 +264,8 @@ func (w *Window) showFolderMenuAt(anchor *gtk.Widget, idx int, x, y float64) boo
 		if !ok {
 			f = e.Folder
 		}
+		// Apply Rules… for a folder of a mail account (rules_menus.go).
+		offerRules, rulesOn := w.rulesOfferedFor(e.Account, f)
 		groups = contextmenu.FolderItems(contextmenu.FolderState{
 			Selectable: f.Selectable,
 			Role:       f.Role,
@@ -264,11 +273,14 @@ func (w *Window) showFolderMenuAt(anchor *gtk.Widget, idx int, x, y float64) boo
 			Total:      f.Total,
 			CanDelete:  e.Account.Can(api.CapabilityDelete),
 			Foldable:   e.HasChildren && !e.Favourite,
+			OfferRules: offerRules,
+			Rules:      rulesOn,
 		})
 		labels = contextmenu.Labels{Junk: f.Role == api.RoleJunk, Favourite: e.Starred, Collapsed: e.Collapsed}
 		actions[contextmenu.CheckMail] = func() { w.checkFolder(f) }
 		actions[contextmenu.MarkAllRead] = func() { w.markFolderRead(k) }
 		actions[contextmenu.EmptyFolder] = func() { w.emptyFolder(k) }
+		actions[contextmenu.ApplyRules] = func() { w.applyRules(f) }
 		actions[contextmenu.Favourite] = func() { w.toggleFavourite(k) }
 		actions[contextmenu.Fold] = func() { w.toggleFolder(k) }
 	}

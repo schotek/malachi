@@ -26,6 +26,7 @@ const notificationBodyMax = 200
 // handleNotification runs on the main loop for every server notification.
 func (w *Window) handleNotification(method string, params json.RawMessage) {
 	dispatchContacts(method, params)
+	dispatchRules(method, params)
 	switch method {
 	case api.NotifyNewMessage:
 		var n api.NewMessageNotification
@@ -84,6 +85,9 @@ func (w *Window) handleNotification(method string, params json.RawMessage) {
 	case api.NotifyContactsChanged:
 		// dispatchContacts above: the chips, the Contacts window and
 		// Preferences listen (contacts_notify.go).
+	case api.NotifyRulesChanged:
+		// dispatchRules above: the window's controller (the context
+		// menus) and Preferences → Rules listen (rules_notify.go).
 	case api.NotifyAssistantProfileChanged:
 		if w.assist != nil {
 			w.assist.RefreshProfile()
