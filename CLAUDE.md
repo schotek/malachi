@@ -522,8 +522,8 @@ Pořadí prací:
     2026-11-02, všechny tři klienty ověřené vlastníkem na obrazovce; viz
     odstavec Přílohy jako dlaždice níže
 18. Společná doručená pošta (Všechny doručené) — větev
-    `claude/exciting-ritchie-dy3qqt` 2026-11-02, démon + Go reference otestované,
-    GTK, macOS a Windows napsané bez překladu; viz odstavec níže
+    `claude/exciting-ritchie-dy3qqt` 2026-11-02, démon, GTK, macOS i Windows
+    sestavené, otestované a ověřené vlastníkem na obrazovce; viz odstavec níže
     a `docs/plans/unified-inbox.md`
 
 Všechny doručené (2026-11-02, všechny tři klienty, rozhodnutí vlastníka
@@ -538,7 +538,11 @@ vlastní prefixy kurzoru, bez migrace a nové notifikace). Reference
 Přeposlat více/Přesunout do/eWay u smíšeného výběru vypnuté), `undo.Entry.Group`
 (jedno Zpět pro akci přes účty); vlákna ve sjednoceném seznamu klíčovaná
 (účet, vlákno), protože Graph `conversationId` se mezi schránkami opakuje.
-Čeká překlad a testy na všech třech platformách, `make po` a ruční průchod.
+Ověřeno 2026-11-02: GTK v kontejneru (build, celé `test-ui`, smoke, `make po`,
+`make lint`), macOS (`swift build`, celé `swift test` 2052, `check-strings`),
+Windows ARM64 (`build.ps1 app`/`lint`, `test` 9100 se čtyřmi selháními
+prostředí jako na `main`), vlastník prošel všechny tři nad dvěma účty
+z `malachi-devmail`; podrobnosti v „As built“ plánu.
 
 Přílohy jako dlaždice (2026-11-02, všechny tři klienty, rozhodnutí
 vlastníka podle srovnání s Outlookem). Příloha je dlaždice pevné šířky
