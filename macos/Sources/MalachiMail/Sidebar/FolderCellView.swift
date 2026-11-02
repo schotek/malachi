@@ -128,6 +128,22 @@ final class FolderCellView: NSTableCellView {
         applyStar(animated: false)
     }
 
+    /// Fills the row of the All Inboxes item: the Inbox's icon, its own
+    /// name and the unread count of the inboxes it covers. It has no star:
+    /// it cannot be pinned.
+    func configureUnified(entry: FolderEntry) {
+        icon.image = SidebarIcons.image(roleIcon(Unified.role), pointSize: SidebarMetrics.iconPointSize)
+        title.stringValue = Unified.title
+        title.textColor = .labelColor
+        icon.contentTintColor = nil
+        subtitle.stringValue = ""
+        subtitle.isHidden = true
+        setUnread(entry.badge)
+        star.isHidden = true
+        starPinned = false
+        applyStar(animated: false)
+    }
+
     /// Shows `n` on the badge, hiding it at zero (folders.go `setUnread`).
     func setUnread(_ n: Int) {
         badge.isHidden = n <= 0

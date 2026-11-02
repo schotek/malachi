@@ -84,7 +84,9 @@ extension MailModel {
     public func searchRequest(_ text: String, scope: Settings.SearchScope) -> (params: SearchQueryParams, effective: Settings.SearchScope) {
         let query = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let page = Page(limit: API.Limits.defaultPageLimit)
-        guard let k = selected else {
+        // The All Inboxes item is no folder to narrow to, so it searches
+        // every account like no selection at all.
+        guard let k = selected, !k.isUnified else {
             return (SearchQueryParams(query: query, page: page), .all)
         }
         switch scope {
@@ -130,7 +132,15 @@ extension MailModel {
     /// (search_model.go `rowMessage`).
     public func rowMessage(_ s: MessageSummary) -> RowMessage {
         var m = summaryMessage(s)
-        guard search.active else { return m }
+        guard search.active else {
+            // The All Inboxes list: the row says whose inbox it is (the
+            // account's name, as a search result's origin does).
+            if listIsUnified, let a = account(s.accountId) {
+                m.origin = accountLabel(a)
+                m.originTooltip = m.origin
+            }
+            return m
+        }
         if let hit = search.hits[s.id] {
             m.snippet = hit.snippet
             m.highlights = hit.ranges

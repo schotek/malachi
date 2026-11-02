@@ -103,16 +103,20 @@ public struct ThreadListParams: Codable, Sendable, Equatable {
     public var page: Page
     public var sort: SortOrder?
     public var filter: MessageFilter?
+    /// As `MessageListParams.unified`: the conversations of the inboxes of
+    /// every enabled mail account, `accountId` and `folderId` empty.
+    public var unified: FolderRole?
 
     public init(
         accountId: AccountID, folderId: FolderID, page: Page = Page(), sort: SortOrder? = nil,
-        filter: MessageFilter? = nil
+        filter: MessageFilter? = nil, unified: FolderRole? = nil
     ) {
         self.accountId = accountId
         self.folderId = folderId
         self.page = page
         self.sort = sort
         self.filter = filter
+        self.unified = unified
     }
 }
 
