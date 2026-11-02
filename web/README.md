@@ -171,6 +171,10 @@ and open <http://localhost:8765/>.
   one `<img>` per platform, shown by two lines of the stylesheet per
   platform. The hero shows the inbox of the visitor's platform, macOS
   by default.
+- `assets/` is cached for a day, so a changed `style.css` or script
+  gets a new `?v=` on every page that links it (`style.css?v=5`,
+  `report.js?v=1`); otherwise a returning visitor sees the new pages with
+  the old stylesheet.
 - Icons: `assets/icon-*.png` and `icon-512.webp` are rasterised from
   `docs/malachi_icon.svg`; `favicon.ico` wraps the 32 and 64 px PNGs.
 - The small illustrations (the three windows, the chat, the board, the
