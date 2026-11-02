@@ -85,6 +85,14 @@ public static partial class Undo
         /// </summary>
         public int Id { get; init; }
 
+        /// <summary>
+        /// The action that made the entry, when it made several: an action on
+        /// a selection of the All Inboxes list moves messages of several
+        /// accounts, one entry per account, and Undo takes them all back
+        /// (<see cref="History.TakeGroup"/>). 0 for a move of its own.
+        /// </summary>
+        public int Group { get; init; }
+
         /// <summary>What the move was.</summary>
         public Kind Kind { get; init; }
 
@@ -111,7 +119,7 @@ public static partial class Undo
 
         /// <summary>Whether both are the same entry, the moves compared in order.</summary>
         public bool Equals(Entry? other) =>
-            other is not null && Id == other.Id && Kind == other.Kind && Account == other.Account && Target == other.Target
+            other is not null && Id == other.Id && Group == other.Group && Kind == other.Kind && Account == other.Account && Target == other.Target
             && TargetName == other.TargetName && Moves.SequenceEqual(other.Moves) && Case == other.Case;
 
         /// <inheritdoc/>
@@ -335,6 +343,22 @@ public static partial class Undo
             var e = entries[i];
             entries.RemoveAt(i);
             return e;
+        }
+
+        /// <summary>
+        /// Takes the moves of action <paramref name="group"/> off the history
+        /// (those the one Undo of an action on several accounts takes back
+        /// with it), oldest first; none for group 0.
+        /// </summary>
+        public IReadOnlyList<Entry> TakeGroup(int group)
+        {
+            if (group == 0)
+            {
+                return [];
+            }
+            List<Entry> taken = [.. entries.Where(e => e.Group == group)];
+            entries.RemoveAll(e => e.Group == group);
+            return taken;
         }
 
         /// <summary>Drops the moves of <paramref name="account"/> (removed or paused: its messages are gone from the store).</summary>

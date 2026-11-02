@@ -436,14 +436,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
             LoadThreadPage(key, gen);
             return;
         }
-        var parameters = new MessageListParams
-        {
-            AccountId = key.Account,
-            FolderId = key.Folder,
-            Page = new Page { Limit = API.Limits.DefaultPageLimit },
-            Sort = SortOrder.DateDesc,
-            Filter = Model.ListFilter,
-        };
+        var parameters = MessageParamsOf(key, null);
         Mailbox.Perform(API.MessageList, parameters, outcome =>
         {
             if (gen != Model.ListGen)
@@ -534,14 +527,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     /// </summary>
     private void LoadThreadPage(FolderKey k, ulong gen)
     {
-        var parameters = new ThreadListParams
-        {
-            AccountId = k.Account,
-            FolderId = k.Folder,
-            Page = new Page { Limit = API.Limits.DefaultPageLimit },
-            Sort = SortOrder.DateDesc,
-            Filter = Model.ListFilter,
-        };
+        var parameters = ThreadParamsOf(k, null);
         Mailbox.Perform(API.ThreadList, parameters, outcome =>
         {
             if (gen != Model.ListGen)
@@ -561,13 +547,42 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
                 ShowListState();
                 return;
             }
-            Model.SetThreads(res.Threads, res.Page);
+            // Thread ids are unique within an account only: the All Inboxes
+            // list keys its conversations by (account, thread).
+            Model.SetThreads(k.IsUnified ? [.. res.Threads.Select(ThreadScope.ScopeThread)] : res.Threads, res.Page);
             SyncRows();
             FetchExpandedMembers();
             AnnounceSelectedMembers();
             TakeUndoReselect();
         });
     }
+
+    // message.list of the listed folder, or of the All Inboxes item
+    // (Unified.MessageParams: the role instead of the ids).
+    private MessageListParams MessageParamsOf(FolderKey k, string? cursor) =>
+        k.IsUnified
+            ? Unified.MessageParams(Model.ListFilter, cursor)
+            : new MessageListParams
+            {
+                AccountId = k.Account,
+                FolderId = k.Folder,
+                Page = new Page { Cursor = cursor, Limit = API.Limits.DefaultPageLimit },
+                Sort = SortOrder.DateDesc,
+                Filter = Model.ListFilter,
+            };
+
+    // thread.list likewise (Unified.ThreadParams).
+    private ThreadListParams ThreadParamsOf(FolderKey k, string? cursor) =>
+        k.IsUnified
+            ? Unified.ThreadParams(Model.ListFilter, cursor)
+            : new ThreadListParams
+            {
+                AccountId = k.Account,
+                FolderId = k.Folder,
+                Page = new Page { Cursor = cursor, Limit = API.Limits.DefaultPageLimit },
+                Sort = SortOrder.DateDesc,
+                Filter = Model.ListFilter,
+            };
 
     /// <summary>The Try Again button of the error page.</summary>
     public void Retry() => LoadMessages();
@@ -625,14 +640,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         ShowLoadMore();
         if (Model.Grouped)
         {
-            var threadParams = new ThreadListParams
-            {
-                AccountId = k.Account,
-                FolderId = k.Folder,
-                Page = new Page { Cursor = cursor, Limit = API.Limits.DefaultPageLimit },
-                Sort = SortOrder.DateDesc,
-                Filter = Model.ListFilter,
-            };
+            var threadParams = ThreadParamsOf(k, cursor);
             Mailbox.Perform(API.ThreadList, threadParams, outcome =>
             {
                 if (gen != Model.ListGen)
@@ -647,19 +655,12 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
                     ShowLoadMore();
                     return;
                 }
-                Model.AppendThreads(res.Threads, res.Page);
+                Model.AppendThreads(k.IsUnified ? [.. res.Threads.Select(ThreadScope.ScopeThread)] : res.Threads, res.Page);
                 SyncRows();
             });
             return;
         }
-        var parameters = new MessageListParams
-        {
-            AccountId = k.Account,
-            FolderId = k.Folder,
-            Page = new Page { Cursor = cursor, Limit = API.Limits.DefaultPageLimit },
-            Sort = SortOrder.DateDesc,
-            Filter = Model.ListFilter,
-        };
+        var parameters = MessageParamsOf(k, cursor);
         Mailbox.Perform(API.MessageList, parameters, outcome =>
         {
             if (gen != Model.ListGen)
@@ -787,6 +788,11 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         ListState = s;
         ListStateChanged?.Invoke(this, s);
     }
+
+    // Whether the listed folder k is (or, for the All Inboxes item, covers
+    // the inbox of) account acc.
+    private bool ListIsOfAccount(FolderKey k, AccountId acc) =>
+        k.IsUnified ? Enumerable.Contains(Unified.Accounts(Model.Accounts), acc) : k.Account == acc;
 
     private FolderRole FolderRoleOf(FolderKey? k) => k is { } key ? Model.FolderRole(key) : Api.FolderRole.None;
 
@@ -1079,9 +1085,23 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         {
             return;
         }
+        // The All Inboxes list mixes accounts and folders: a conversation is
+        // read in its row's account and folder (its latest member's), not in
+        // the listed key.
+        var account = k.Account;
+        var folder = k.Folder;
+        if (k.IsUnified)
+        {
+            if (!Model.TIndex.TryGetValue(tid, out var at))
+            {
+                return;
+            }
+            account = Model.Threads[at].AccountId;
+            folder = Model.Threads[at].Latest.FolderId;
+        }
         Model.Members[tid] = mem with { Fetching = true };
         var gen = Model.ListGen;
-        var parameters = new ThreadGetParams { AccountId = k.Account, ThreadId = tid, FolderId = k.Folder, WithSent = true, WithDrafts = true };
+        var parameters = new ThreadGetParams { AccountId = account, ThreadId = k.IsUnified ? ThreadScope.Raw(tid) : tid, FolderId = folder, WithSent = true, WithDrafts = true };
         Mailbox.Perform(API.ThreadGet, parameters, outcome =>
         {
             if (gen != Model.ListGen || !Model.Members.TryGetValue(tid, out var now))
@@ -1108,7 +1128,14 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
                 }
                 return;
             }
-            Model.SetMembers(tid, res.Thread, res.Messages, res.Sent, res.Drafts);
+            if (k.IsUnified)
+            {
+                Model.SetMembers(tid, ThreadScope.ScopeThread(res.Thread), ThreadScope.ScopeMessages(res.Messages), ThreadScope.ScopeMessages(res.Sent), res.Drafts);
+            }
+            else
+            {
+                Model.SetMembers(tid, res.Thread, res.Messages, res.Sent, res.Drafts);
+            }
             SyncRows();
             if (SelectedRows.Any(row => row.Key.Thread == tid))
             {
@@ -1240,11 +1267,12 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     }
 
     /// <summary>
-    /// <see cref="Selection.Restrict"/> over the rows of
+    /// <see cref="Selection.RestrictIn"/> over the rows of
     /// <paramref name="keys"/> (selection.go <c>restrictSelection</c>; Swift
     /// <c>restrict(_:latest:)</c>): the keys within the account of
     /// <paramref name="latest"/>, the row the user added last, in their
-    /// order; a key the list does not show is left out.
+    /// order; a key the list does not show is left out. In the All Inboxes
+    /// list nothing leaves the selection.
     /// </summary>
     public IReadOnlyList<ListKey> Restrict(IReadOnlyList<ListKey> keys, ListKey latest)
     {
@@ -1257,7 +1285,9 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
                 rows.Add((k, r.Message.AccountId));
             }
         }
-        return Selection.Restrict(rows, latest);
+        // The All Inboxes list holds rows of every account and keeps them
+        // all (decision U2); any other list stays within one account.
+        return Selection.RestrictIn(rows, latest, Model.ListIsUnified);
     }
 
     // The selection is keys: SelectedKeys, and SelectedKey when it is one.
@@ -1405,14 +1435,16 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     /// <summary>
     /// Re-evaluates the per-message actions for the selected row (actions.go
     /// <c>refreshMessageActions</c>); several rows combine theirs
-    /// (selection.go <c>selectionState</c>, <see cref="Selection.Combine"/>).
+    /// (selection.go <c>selectionState</c>, <see cref="Selection.CombineAccounts"/>).
     /// </summary>
     public void RefreshActionFlags()
     {
         Scope.VerifyAccess();
         var rows = SelectedRows;
         var f = rows.Count > 1
-            ? Selection.Combine([.. rows.Select(r => ActionRules.MessageActionState(r, Model))])
+            ? Selection.CombineAccounts(
+                [.. rows.Select(r => ActionRules.MessageActionState(r, Model))],
+                [.. rows.Select(r => r.Message.AccountId)])
             : ActionRules.MessageActionState(rows.Count == 1 ? rows[0] : null, Model);
         if (f == ActionFlags)
         {
@@ -1597,8 +1629,10 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         ArgumentNullException.ThrowIfNull(n);
         Scope.VerifyAccess();
         var k = new FolderKey(n.AccountId, n.FolderId);
-        var s = n.Message;
-        if (k != Model.ListFolder || Model.Message(s.Id) is not null)
+        // The All Inboxes list keys conversations by (account, thread).
+        var s = Model.ListIsUnified ? ThreadScope.ScopeMessage(n.Message) : n.Message;
+        // The listed folder, or an inbox the All Inboxes list covers.
+        if (!Model.ListCovers(k) || Model.Message(s.Id) is not null)
         {
             return;
         }
@@ -1653,8 +1687,8 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     {
         ArgumentNullException.ThrowIfNull(n);
         Scope.VerifyAccess();
-        if (!Model.Grouped || Model.Loading || Model.ListFolder is not { } k || k.Account != n.AccountId || k.Folder == n.FolderId
-            || n.Message.ThreadId is not { } tid || !Model.TIndex.ContainsKey(tid)
+        if (!Model.Grouped || Model.Loading || Model.ListFolder is not { } k || !ListIsOfAccount(k, n.AccountId) || k.Folder == n.FolderId
+            || (k.IsUnified ? ThreadScope.ScopeMessage(n.Message) : n.Message).ThreadId is not { } tid || !Model.TIndex.TryGetValue(tid, out var at) || Model.Threads[at].AccountId != n.AccountId
             || Model.FolderRole(new FolderKey(n.AccountId, n.FolderId)) != Api.FolderRole.Sent)
         {
             return;
@@ -1699,7 +1733,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     {
         ArgumentNullException.ThrowIfNull(n);
         Scope.VerifyAccess();
-        if (!Model.Grouped || Model.Loading || Model.ListFolder is not { } k || k.Account != n.AccountId)
+        if (!Model.Grouped || Model.Loading || Model.ListFolder is not { } k || !ListIsOfAccount(k, n.AccountId))
         {
             return;
         }
@@ -1724,7 +1758,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         }
         foreach (var tid in n.ThreadIds)
         {
-            Want(tid);
+            Want(k.IsUnified ? ThreadScope.Scoped(n.AccountId, tid) : tid);
         }
         foreach (var tid in want.Where(Model.TIndex.ContainsKey).ToList())
         {

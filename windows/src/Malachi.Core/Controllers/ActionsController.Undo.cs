@@ -23,6 +23,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Malachi.Core.Api;
 using Malachi.Core.Boards;
 using Malachi.Core.ContextMenus;
@@ -100,19 +101,37 @@ public sealed partial class ActionsController
             toast(Undo.Nothing());
             return;
         }
+        RunUndoGroup(e);
+    }
+
+    // The number of the next action on several accounts' messages (an
+    // entry's Group); its moves are taken back together.
+    private int undoGroups;
+
+    private int NextUndoGroup() => ++undoGroups;
+
+    // An entry of an action that moved messages of several accounts is
+    // taken back with the entries the same action made.
+    private void RunUndoGroup(Undo.Entry e)
+    {
         RunUndo(e);
+        foreach (var other in UndoHistory.TakeGroup(e.Group))
+        {
+            RunUndo(other);
+        }
     }
 
     // actions.go's trashIDs and moveListTo once the daemon took the move
     // (undo.go recordUndo): the move of list (summaries taken before their
     // rows went) to target is pushed and its toast shown; nothing moved,
     // nothing recorded.
-    private void RecordUndo(Undo.Kind kind, FolderId target, IReadOnlyList<MessageSummary> list)
+    private void RecordUndo(Undo.Kind kind, FolderId target, IReadOnlyList<MessageSummary> list, int group = 0)
     {
         if (Undo.Record(kind, target, list) is not { } e)
         {
             return;
         }
+        e = e with { Group = group };
         if (kind == Undo.Kind.Move && Mailbox.Model.Folder(new FolderKey(e.Account, target)) is { } f)
         {
             e = e with { TargetName = f.Name };
@@ -139,7 +158,7 @@ public sealed partial class ActionsController
         {
             if (UndoHistory.Take(id) is { } taken)
             {
-                RunUndo(taken);
+                RunUndoGroup(taken);
             }
         })));
     }
@@ -221,6 +240,18 @@ public sealed partial class ActionsController
     private void AfterUndo(Undo.Entry e)
     {
         Mailbox.LoadFolders(e.Account, Mailbox.Model.FoldersGen);
+        if (Mailbox.Model.Selected is { IsUnified: true } && !Mailbox.Model.Search.Active)
+        {
+            // The All Inboxes list: the account's inbox the messages left or
+            // came back to (unified.Covers).
+            var inboxes = Mailbox.Model.UnifiedInboxes.Where(f => f.AccountId == e.Account).ToList();
+            var returned = inboxes.SelectMany(f => Undo.Reselect(e, e.Account, f.Id)).ToList();
+            if (returned.Count > 0 || inboxes.Any(f => f.Id == e.Target))
+            {
+                List.ReloadSelecting(returned);
+            }
+            return;
+        }
         if (Mailbox.Model.Selected is not { } sel || sel.Account != e.Account || Mailbox.Model.Search.Active)
         {
             return;

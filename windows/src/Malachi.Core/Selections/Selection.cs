@@ -3,7 +3,7 @@
 
 // Port of macos/Sources/MalachiCore/Selection/Selection.swift; GTK:
 // ui/internal/selection/selection.go (MaxOpen, MaxForward, Combine,
-// FlagTarget, Restrict, Reconcile), text.go (SelectedText,
+// CombineAccounts, Mixed, FlagTarget, Restrict, RestrictIn, Reconcile), text.go (SelectedText,
 // CancelSendingQuestion) and ui/internal/window/selection.go
 // (newestFirstIDs, Swift's MailModel.newestFirst).
 //
@@ -139,6 +139,51 @@ public static class Selection
     }
 
     /// <summary>
+    /// selection.CombineAccounts: <see cref="Combine"/> for the rows of a
+    /// list that may hold several accounts (the All Inboxes list,
+    /// <see cref="Unified"/>), <paramref name="accounts"/> being the account
+    /// of each row, index for index. When they are of more than one account
+    /// the selection stays (decision U2) and the actions that run one call
+    /// per account (read, star, Archive, Junk, Trash, Open, the Assistant)
+    /// keep Combine's verdict, while those that need one account are off:
+    /// Forward (one message from one account), Move To (the folder picker is
+    /// one account's folders) and Save to eWay-CRM (one account's messages
+    /// per save); <see cref="ActionFlags.MixedAccounts"/> says so. Rows of
+    /// one account are Combine's.
+    /// </summary>
+    public static ActionFlags CombineAccounts(IReadOnlyList<ActionFlags> rows, IReadOnlyList<AccountId> accounts)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        ArgumentNullException.ThrowIfNull(accounts);
+        var combined = Combine(rows);
+        if (rows.Count < 2 || !MixedIn(accounts))
+        {
+            return combined;
+        }
+        return combined with { MixedAccounts = true, Forward = false, Move = false, Crm = false };
+    }
+
+    /// <summary>selection.Mixed: whether the selected rows belong to more than one account.</summary>
+    public static bool Mixed<TKey>(IReadOnlyList<(TKey Key, AccountId Account)> rows)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        return MixedIn([.. rows.Select(r => r.Account)]);
+    }
+
+    // selection.mixed: more than one distinct account.
+    private static bool MixedIn(IReadOnlyList<AccountId> accounts)
+    {
+        for (var i = 1; i < accounts.Count; i++)
+        {
+            if (accounts[i] != accounts[0])
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
     /// selection.FlagTarget: what the star does to the selected rows: true
     /// stars them, false unstars them (<see cref="ActionFlags.Flagged"/> of
     /// <see cref="Combine"/>: every row starred).
@@ -176,6 +221,20 @@ public static class Selection
             }
         }
         return output;
+    }
+
+    /// <summary>
+    /// selection.RestrictIn: <see cref="Restrict"/> in a list that may or may
+    /// not span accounts: in the All Inboxes list
+    /// (<paramref name="crossAccount"/>, <see cref="Unified"/>) the selection
+    /// may hold rows of every account and nothing leaves it (decision U2);
+    /// in any other list it is <see cref="Restrict"/>.
+    /// </summary>
+    public static IReadOnlyList<TKey> RestrictIn<TKey>(IReadOnlyList<(TKey Key, AccountId Account)> rows, TKey latest, bool crossAccount)
+        where TKey : notnull
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        return crossAccount ? [.. rows.Select(r => r.Key)] : Restrict(rows, latest);
     }
 
     /// <summary>

@@ -44,6 +44,39 @@ public sealed class SelectionTests
         TrustSender = true,
     };
 
+    // ui/internal/selection TestCombineAccounts: rows of several accounts keep
+    // the per-account actions and lose Forward, Move To and Save to eWay-CRM.
+    [Fact]
+    public void CombineAccountsDisablesWhatNeedsOneAccount()
+    {
+        var crm = Mail with { Crm = true };
+        ActionFlags[] rows = [crm, crm, crm];
+        var same = Selection.CombineAccounts(rows, ["a", "a", "a"]);
+        Assert.Equal(Selection.Combine(rows), same);
+        Assert.False(same.MixedAccounts);
+        var got = Selection.CombineAccounts(rows, ["a", "b", "a"]);
+        Assert.Equal(Selection.Combine(rows) with { MixedAccounts = true, Forward = false, Move = false, Crm = false }, got);
+        Assert.True(got.Trash && got.Archive && got.Junk && got.Star && got.MarkUnread && got.Open);
+        // One row is never mixed, whatever the accounts say.
+        var one = Selection.CombineAccounts(rows[..1], ["a", "b"]);
+        Assert.False(one.MixedAccounts);
+        Assert.True(one.Forward && one.Move);
+        Assert.Equal(ActionFlags.None, Selection.CombineAccounts([], []));
+    }
+
+    // TestRestrictIn: the All Inboxes list keeps every row.
+    [Fact]
+    public void RestrictInKeepsEveryRowAcrossAccounts()
+    {
+        (string, AccountId)[] rows = [("1", "a"), ("2", "b"), ("3", "a")];
+        Assert.Equal(Selection.Restrict(rows, "2"), Selection.RestrictIn(rows, "2", false));
+        Assert.Equal(["1", "2", "3"], Selection.RestrictIn(rows, "2", true));
+        Assert.True(Selection.Mixed(rows));
+        Assert.False(Selection.Mixed(rows[..1]));
+        Assert.False(Selection.Mixed([("1", (AccountId)"a"), ("3", (AccountId)"a")]));
+        Assert.False(Selection.Mixed(Array.Empty<(string, AccountId)>()));
+    }
+
     [Fact]
     public void CombineOneRowIsTheRow()
     {

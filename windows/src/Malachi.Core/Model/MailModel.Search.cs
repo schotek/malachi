@@ -27,13 +27,17 @@ public sealed partial class MailModel
     /// The first-page search.query for <paramref name="text"/> in
     /// <paramref name="scope"/>, and the scope it actually covers: without a
     /// selected folder there is nothing to narrow Folder or Account to, so
-    /// every account is searched (search_model.go <c>searchRequest</c>).
+    /// every account is searched, as with the All Inboxes item selected
+    /// (search_model.go <c>searchRequest</c>).
     /// </summary>
     public (SearchQueryParams Params, SearchScope Effective) SearchRequest(string text, SearchScope scope)
     {
         var query = (text ?? "").Trim();
         var page = new Page { Limit = API.Limits.DefaultPageLimit };
-        if (Selected is not { } k)
+        // The All Inboxes item is no folder of one account to narrow to
+        // either: it searches every account, like no selection (the
+        // simplest reading of Folder and Account for a list of all of them).
+        if (Selected is not { } k || k.IsUnified)
         {
             return (new SearchQueryParams { Query = query, Page = page }, SearchScope.All);
         }
@@ -81,6 +85,13 @@ public sealed partial class MailModel
         var m = SummaryMessage(s);
         if (!Search.Active)
         {
+            // The All Inboxes list mixes accounts: each row says whose it is
+            // (just the account's name, as a search result's origin).
+            if (ListIsUnified && Account(s.AccountId) is { } owner)
+            {
+                var name = FolderTree.AccountLabel(owner);
+                return m with { Origin = name, OriginTooltip = name };
+            }
             return m;
         }
         if (Search.Hits.TryGetValue(s.Id, out var hit))

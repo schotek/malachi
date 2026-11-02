@@ -146,7 +146,9 @@ public static class FolderTree
     /// the enabled accounts in list order (<see cref="MailSidebarAccounts"/>:
     /// no calendar-only CalDAV account), each preceded by a header row when
     /// there are at least two of them or a Favourites section above them,
-    /// then the account's folders as a tree. Roots are ordered by (roleRank,
+    /// then the account's folders as a tree. With <paramref name="unifiedInbox"/>
+    /// and at least two mail accounts (<see cref="Unified.Shown"/>) the All
+    /// Inboxes item is the very first row, above the Favourites section. Roots are ordered by (roleRank,
     /// path); the children of a folder follow it, ordered the same way. Depth
     /// comes from <c>parentId</c>; folders whose parent chain is cyclic or
     /// deeper than <see cref="MaxFolderDepth"/> are appended after the tree
@@ -157,15 +159,25 @@ public static class FolderTree
         IReadOnlyList<Account> accounts,
         IReadOnlyDictionary<AccountId, IReadOnlyList<Folder>> folders,
         CollapseState collapsed,
-        FavouriteState favourites)
+        FavouriteState favourites,
+        bool unifiedInbox = false)
     {
+        ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(folders);
         ArgumentNullException.ThrowIfNull(collapsed);
         var enabled = MailSidebarAccounts(accounts);
-        var output = new List<FolderEntry>(FavouriteSection(enabled, folders, favourites));
+        var output = new List<FolderEntry>();
+        // The All Inboxes item comes first, above the Favourites heading,
+        // with at least two mail accounts and its preference on (U3).
+        if (Unified.Shown(accounts, unifiedInbox))
+        {
+            output.Add(new FolderEntry { IsUnified = true, Badge = Unified.Unread(Unified.Inboxes(accounts, folders)) });
+        }
+        var favouriteRows = FavouriteSection(enabled, folders, favourites);
+        output.AddRange(favouriteRows);
         // A single account needs no heading of its own, unless a Favourites
         // section sits above its folders and the two would run into each other.
-        var headers = enabled.Count >= 2 || output.Count > 0;
+        var headers = enabled.Count >= 2 || favouriteRows.Count > 0;
         foreach (var a in enabled)
         {
             // Only a header can fold a whole account away, and headers only
@@ -533,20 +545,30 @@ public static class FolderTree
     public static string FolderCountsText(Folder f)
     {
         ArgumentNullException.ThrowIfNull(f);
-        if (f.Total <= 0)
+        return CountsText(f.Unread, f.Total, f.Role == FolderRole.Outbox);
+    }
+
+    /// <summary>
+    /// <see cref="FolderCountsText"/> over bare numbers: the All Inboxes
+    /// list's subtitle (<see cref="Unified.Unread"/> and
+    /// <see cref="Unified.Total"/> of the inboxes it covers).
+    /// </summary>
+    public static string CountsText(int unread, int total, bool outbox = false)
+    {
+        if (total <= 0)
         {
             return "";
         }
-        if (f.Role == FolderRole.Outbox || f.Unread <= 0)
+        if (outbox || unread <= 0)
         {
             // TRANSLATORS: subtitle of the message list; %d is the number of
             // messages in the folder.
-            return L10n.N("%d message", "%d messages", f.Total);
+            return L10n.N("%d message", "%d messages", total);
         }
         // TRANSLATORS: subtitle of the message list, e.g. "12 unread of 1234";
         // the first %d is the number of unread messages (the plural follows
         // it), the second the number of all messages in the folder.
-        return L10n.N("%d unread of %d", "%d unread of %d", f.Unread, f.Unread, f.Total);
+        return L10n.N("%d unread of %d", "%d unread of %d", unread, unread, total);
     }
 
     /// <summary>

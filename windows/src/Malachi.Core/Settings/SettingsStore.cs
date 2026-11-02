@@ -62,6 +62,7 @@ public sealed class SettingsStore : IDisposable
         new(SettingsKey.CollapsedFolders, "collapsed-folders", "as", Array.Empty<string>()),
         new(SettingsKey.CollapsedAccounts, "collapsed-accounts", "as", Array.Empty<string>()),
         new(SettingsKey.FavouriteFolders, "favourite-folders", "as", Array.Empty<string>()),
+        new(SettingsKey.UnifiedInbox, "unified-inbox", "b", true),
         new(SettingsKey.LaunchAtLogin, "launch-at-login", "b", false),
         new(SettingsKey.RunInBackground, "run-in-background", "b", false),
         new(SettingsKey.MarkReadDelay, "mark-read-delay", "i", 2, minimum: 0, maximum: MarkReadDelayMax),
@@ -257,6 +258,18 @@ public sealed class SettingsStore : IDisposable
     {
         get => GetBoolean(SettingsKey.ShowPreviewLine);
         set => SetBoolean(SettingsKey.ShowPreviewLine, value);
+    }
+
+    /// <summary>
+    /// <c>unified-inbox</c> (Go <c>UnifiedInbox</c>): shows the All Inboxes
+    /// item at the top of the sidebar while there are at least two mail
+    /// accounts (<see cref="Model.Unified.Shown"/>). Never part of the
+    /// favourite or collapsed lists.
+    /// </summary>
+    public bool UnifiedInbox
+    {
+        get => GetBoolean(SettingsKey.UnifiedInbox);
+        set => SetBoolean(SettingsKey.UnifiedInbox, value);
     }
 
     /// <summary>Whether the list shows one row per conversation (thread.list).</summary>

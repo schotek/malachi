@@ -32,6 +32,8 @@ Width of the message list pane	gschema: a key's summary or description, for dcon
 Folders whose subfolders are hidden in the sidebar	gschema: a key's summary or description, for dconf editors, not the UI
 Accounts whose folders are hidden in the sidebar	gschema: a key's summary or description, for dconf editors, not the UI
 Folders pinned to the Favourites section of the sidebar	gschema: a key's summary or description, for dconf editors, not the UI
+Show All Inboxes in the sidebar	gschema: a key's summary or description, for dconf editors, not the UI
+With two or more mail accounts, an item at the top of the sidebar lists the inboxes of all of them together.	gschema: a key's summary or description, for dconf editors, not the UI
 Start hidden in the background at login (mirrors the Background portal's autostart decision)	gschema: a key's summary or description, for dconf editors, not the UI
 Closing the main window keeps the application running	gschema: a key's summary or description, for dconf editors, not the UI
 Seconds a message must be shown before it is marked as read; 0 = immediately	gschema: a key's summary or description, for dconf editors, not the UI

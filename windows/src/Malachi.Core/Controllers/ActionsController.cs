@@ -196,6 +196,21 @@ public sealed partial class ActionsController
     // The known ones of the given messages, in order (actions.go summaries).
     private List<MessageSummary> Summaries(IEnumerable<MessageId> ids) => [.. ids.Select(Summary).OfType<MessageSummary>()];
 
+    // The ids split by their messages' accounts when they belong to more than
+    // one (a selection of the All Inboxes list, decision U2: every message
+    // method takes one account, so the action runs one call per account,
+    // Unified.GroupByAccount); null for the ids of a single account, which
+    // the callers handle as before.
+    private List<List<MessageId>>? SplitByAccount(IReadOnlyList<MessageId> ids)
+    {
+        var known = Summaries(ids);
+        if (!Unified.Mixed(known, s => s.AccountId))
+        {
+            return null;
+        }
+        return [.. Unified.GroupByAccount(known, s => s.AccountId).Select(g => g.Items.Select(s => s.Id).ToList())];
+    }
+
     /// <summary>
     /// Swift <c>actionFlags(for:)</c>: what the per-message buttons and
     /// commands allow for the selected row (actions.go
@@ -237,6 +252,14 @@ public sealed partial class ActionsController
     {
         ArgumentNullException.ThrowIfNull(ids);
         Mailbox.Scope.VerifyAccess();
+        if (SplitByAccount(ids) is { } groups)
+        {
+            foreach (var group in groups)
+            {
+                SetSeen(group, seen);
+            }
+            return;
+        }
         var todo = new List<MessageId>();
         FolderKey? key = null;
         var folderOf = new Dictionary<MessageId, FolderKey>();
@@ -337,6 +360,14 @@ public sealed partial class ActionsController
     {
         ArgumentNullException.ThrowIfNull(ids);
         Mailbox.Scope.VerifyAccess();
+        if (SplitByAccount(ids) is { } groups)
+        {
+            foreach (var group in groups)
+            {
+                SetFlagged(group, on);
+            }
+            return;
+        }
         var todo = new List<MessageId>();
         AccountId? account = null;
         foreach (var id in ids)
@@ -454,8 +485,18 @@ public sealed partial class ActionsController
     // The confirmed half of Trash: the rows go at once, the windows close,
     // the folder counts follow, message.delete runs, a failure puts
     // everything back and success withdraws the desktop notifications.
-    private void MoveToTrash(List<MessageSummary> msgs)
+    private void MoveToTrash(List<MessageSummary> msgs, int undoGroup = 0)
     {
+        // The rows of several accounts (the All Inboxes list): one call each.
+        if (Unified.Mixed(msgs, s => s.AccountId))
+        {
+            var action = NextUndoGroup();
+            foreach (var group in Unified.GroupByAccount(msgs, s => s.AccountId))
+            {
+                MoveToTrash([.. group.Items], action);
+            }
+            return;
+        }
         MessageId[] ids = [.. msgs.Select(s => s.Id)];
         var restore = List.RemoveRows(ids);
         foreach (var s in msgs)
@@ -494,7 +535,7 @@ public sealed partial class ActionsController
                 // a message expunged from Trash is gone for good.
                 if (trash is not null)
                 {
-                    RecordUndo(Undo.Kind.Trash, trash.Id, msgs);
+                    RecordUndo(Undo.Kind.Trash, trash.Id, msgs, undoGroup);
                 }
             });
     }
@@ -577,7 +618,9 @@ public sealed partial class ActionsController
             return;
         }
         var missing = L10n.T("This account has no junk folder");
-        if (Mailbox.Model.FolderByRole(msgs[0].AccountId, FolderRole.Junk) is null)
+        // Every account the messages are of needs its junk folder (the All
+        // Inboxes list mixes accounts).
+        if (msgs.Any(s => Mailbox.Model.FolderByRole(s.AccountId, FolderRole.Junk) is null))
         {
             toast(missing);
             return;
@@ -617,12 +660,17 @@ public sealed partial class ActionsController
         {
             return;
         }
-        if (Mailbox.Model.FolderByRole(msgs[0].AccountId, role) is not { } target)
+        // One move per account: the target is each account's own role folder.
+        var action = Unified.Mixed(msgs, s => s.AccountId) ? NextUndoGroup() : 0;
+        foreach (var group in Unified.GroupByAccount(msgs, s => s.AccountId))
         {
-            toast(missing);
-            return;
+            if (Mailbox.Model.FolderByRole(group.Account, role) is not { } target)
+            {
+                toast(missing);
+                continue;
+            }
+            MoveList([.. group.Items], target.Id, UndoKindOf(role), what, action);
         }
-        MoveList(msgs, target.Id, UndoKindOf(role), what);
     }
 
     /// <summary>
@@ -637,7 +685,12 @@ public sealed partial class ActionsController
     {
         ArgumentNullException.ThrowIfNull(ids);
         Mailbox.Scope.VerifyAccess();
-        MoveList(Movable(ids), folder, Undo.Kind.Move, ContextMenu.MovingText);
+        var movable = Movable(ids);
+        if (Unified.Mixed(movable, s => s.AccountId))
+        {
+            return; // the folder is one account's; Move To is off for a selection of several
+        }
+        MoveList(movable, folder, Undo.Kind.Move, ContextMenu.MovingText);
     }
 
     // actions.go movable: the known ones of ids a move takes, not the
@@ -651,7 +704,7 @@ public sealed partial class ActionsController
     // where they are. Once the daemon took it, Undo can take it back as
     // kind (ActionsController.Undo.cs), unless the target is a folder the
     // daemon does not keep (Gmail's All Mail drops the rows).
-    private void MoveList(List<MessageSummary> all, FolderId target, Undo.Kind kind, Func<int, string> what)
+    private void MoveList(List<MessageSummary> all, FolderId target, Undo.Kind kind, Func<int, string> what, int undoGroup = 0)
     {
         List<MessageSummary> msgs = [.. all.Where(s => s.FolderId != target)];
         if (msgs.Count == 0)
@@ -680,7 +733,7 @@ public sealed partial class ActionsController
                 Mailbox.WithdrawNotifications(moving);
                 if (Mailbox.Model.Folder(new FolderKey(acc, target)) is not { Synced: false })
                 {
-                    RecordUndo(kind, target, msgs);
+                    RecordUndo(kind, target, msgs, undoGroup);
                 }
             });
     }
@@ -1314,9 +1367,9 @@ public sealed partial class ActionsController
     {
         ArgumentNullException.ThrowIfNull(ids);
         Mailbox.Scope.VerifyAccess();
-        if (ids.Count < 2 || forwardingMany || Summary(ids[0]) is not { } s)
+        if (ids.Count < 2 || forwardingMany || Summary(ids[0]) is not { } s || Unified.Mixed(Summaries(ids), x => x.AccountId))
         {
-            return;
+            return; // several accounts' messages are not forwarded in one (the All Inboxes list)
         }
         var from = s.AccountId;
         AccountId? messageAccount = null;
