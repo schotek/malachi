@@ -97,6 +97,9 @@ func main() {
 		// (capabilities.CanComposeNew): a Jira account only comments.
 		mgr.OnAccountsChanged = func() { newMessage.SetEnabled(mgr.CanComposeNew()) }
 		mgr.Assistant = assist
+		// A click on an attachment tile of a compose window previews it
+		// as the tiles of a message do.
+		mgr.PreviewAttachment = window.PreviewDraftAttachment(log)
 		mgr.OnSent = func(text string) {
 			if mainWin != nil {
 				// A short confirmation: the outbox folder and the "sent"

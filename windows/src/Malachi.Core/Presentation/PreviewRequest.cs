@@ -15,11 +15,14 @@ namespace Malachi.Core.Presentation;
 
 /// <summary>An attachment for the previewer.</summary>
 /// <param name="Attachment">What the chip stands for.</param>
-/// <param name="Message">The message it belongs to (Open and Save As… of the previewer act on it).</param>
+/// <param name="Message">
+/// The message it belongs to (Open and Save As… of the previewer act on it);
+/// null for a file of a compose window, which the previewer only shows.
+/// </param>
 /// <param name="ContentType">The type <c>message.part</c> served, null without the bytes.</param>
 /// <param name="Data">The bytes; null shows the panel only (a program: metadata only).</param>
 /// <param name="CanOpen">Whether the previewer offers Open: never for a program or script.</param>
-public sealed record PreviewRequest(Attachment Attachment, MessageSummary Message, string? ContentType, ReadOnlyMemory<byte>? Data, bool CanOpen)
+public sealed record PreviewRequest(Attachment Attachment, MessageSummary? Message, string? ContentType, ReadOnlyMemory<byte>? Data, bool CanOpen)
 {
     /// <summary>The size the panel shows: the bytes when fetched, the listed size otherwise.</summary>
     public long? Size => Data?.Length;

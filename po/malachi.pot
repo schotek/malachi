@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-02 16:26+0000\n"
+"POT-Creation-Date: 2026-11-02 18:21+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,7 +18,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: ui/main.go:286
+#: ui/main.go:289
 msgid "A native mail client for the GNOME desktop."
 msgstr ""
 
@@ -1329,7 +1329,7 @@ msgstr ""
 msgid "The sender's server refused the request."
 msgstr ""
 
-#: ui/internal/compose/pane.go:224 ui/internal/compose/pane.go:1059
+#: ui/internal/compose/pane.go:224 ui/internal/compose/pane.go:1048
 #: ui/internal/jira/settings.go:123 ui/internal/contacts/form.go:460
 #: ui/internal/window/assistant_panel.go:204
 #: ui/internal/window/event_editor_popovers.go:36
@@ -1379,8 +1379,8 @@ msgstr ""
 msgid "_Save Draft"
 msgstr ""
 
-#: ui/internal/compose/pane.go:928 ui/data/ui/compose_pane.ui:289
-#: ui/data/ui/compose_pane.ui:445
+#: ui/internal/compose/pane.go:928 ui/data/ui/compose_pane.ui:306
+#: ui/data/ui/compose_pane.ui:450
 msgid "Paragraph"
 msgstr ""
 
@@ -1398,7 +1398,7 @@ msgstr ""
 msgid "Only local files can be attached"
 msgstr ""
 
-#: ui/internal/compose/pane.go:988 ui/data/ui/compose_pane.ui:382
+#: ui/internal/compose/pane.go:988 ui/data/ui/compose_pane.ui:399
 msgid "Insert Image"
 msgstr ""
 
@@ -1418,6 +1418,10 @@ msgstr ""
 #: ui/internal/compose/pane.go:1027
 #, c-format
 msgid "Attaching %s"
+msgstr ""
+
+#: ui/internal/compose/pane.go:1075 ui/internal/window/attachments.go:574
+msgid "Opening the attachment"
 msgstr ""
 
 #: ui/internal/compose/pane_layout.go:42
@@ -1533,11 +1537,11 @@ msgstr ""
 msgid "To: %s"
 msgstr ""
 
-#: ui/internal/compose/quoted.go:146 ui/internal/window/date_groups.go:96
+#: ui/internal/compose/quoted.go:147 ui/internal/window/date_groups.go:96
 msgid "Expanded"
 msgstr ""
 
-#: ui/internal/compose/quoted.go:149 ui/internal/window/date_groups.go:94
+#: ui/internal/compose/quoted.go:150 ui/internal/window/date_groups.go:94
 msgid "Collapsed"
 msgstr ""
 
@@ -2514,7 +2518,7 @@ msgid "Removed from eWay-CRM"
 msgstr ""
 
 #: ui/internal/crm/text.go:289 ui/internal/board/view.go:859
-#: ui/internal/widget/message_row.go:371 ui/internal/window/message_view.go:615
+#: ui/internal/widget/message_row.go:371 ui/internal/window/message_view.go:618
 #: ui/internal/window/notify.go:140
 msgid "(No subject)"
 msgstr ""
@@ -4283,7 +4287,7 @@ msgid "The calendar cannot be changed while offline."
 msgstr ""
 
 #. TRANSLATORS: strftime format for a time of day, e.g. "15:04".
-#: ui/internal/calendar/text.go:248 ui/internal/widget/format.go:104
+#: ui/internal/calendar/text.go:248 ui/internal/widget/format.go:105
 #, no-c-format
 msgid "%H:%M"
 msgstr ""
@@ -6414,54 +6418,79 @@ msgid "The server did not accept the marked detail. Correct it and try again."
 msgstr ""
 
 #. TRANSLATORS: put between the names of a conversation's participants ("Alice, Bob").
-#: ui/internal/widget/format.go:62
+#: ui/internal/widget/format.go:63
 msgctxt "participant list separator"
 msgid ", "
 msgstr ""
 
 #. TRANSLATORS: strftime format for a date in the current year in
 #. the message list, e.g. "2 Sep".
-#: ui/internal/widget/format.go:91
+#: ui/internal/widget/format.go:92
 #, no-c-format
 msgid "%-d %b"
 msgstr ""
 
 #. TRANSLATORS: strftime format for a date in another year in the
 #. message list, e.g. "2025-09-02".
-#: ui/internal/widget/format.go:96
+#: ui/internal/widget/format.go:97
 #, no-c-format
 msgid "%Y-%m-%d"
 msgstr ""
 
 #. TRANSLATORS: strftime format for a full date and time, e.g.
 #. "Wed, 2 Sep 2026 at 15:04".
-#: ui/internal/widget/format.go:113
+#: ui/internal/widget/format.go:114
 #, no-c-format
 msgid "%a, %-d %b %Y at %H:%M"
 msgstr ""
 
-#. TRANSLATORS: file size in gibibytes.
-#: ui/internal/widget/format.go:122
-#, c-format
-msgid "%.1f GiB"
-msgstr ""
-
-#. TRANSLATORS: file size in mebibytes.
-#: ui/internal/widget/format.go:125
-#, c-format
-msgid "%.1f MiB"
-msgstr ""
-
-#. TRANSLATORS: file size in kibibytes.
-#: ui/internal/widget/format.go:128
-#, c-format
-msgid "%.0f KiB"
-msgstr ""
-
 #. TRANSLATORS: file size in bytes.
-#: ui/internal/widget/format.go:131
+#: ui/internal/widget/format.go:124
 #, c-format
 msgid "%d B"
+msgstr ""
+
+#. TRANSLATORS: file size in gigabytes; %s is the number with its
+#. decimal separator, e.g. "1.5".
+#: ui/internal/widget/format.go:131
+#, c-format
+msgid "%s GB"
+msgstr ""
+
+#. TRANSLATORS: file size in megabytes; %s is the number with its
+#. decimal separator, e.g. "7.2".
+#: ui/internal/widget/format.go:135
+#, c-format
+msgid "%s MB"
+msgstr ""
+
+#. TRANSLATORS: file size in kilobytes; %s is the number with its
+#. decimal separator, e.g. "41.1".
+#: ui/internal/widget/format.go:139
+#, c-format
+msgid "%s kB"
+msgstr ""
+
+#. TRANSLATORS: the decimal separator of numbers such as file sizes
+#. ("41.1 kB"); "," in Czech.
+#: ui/internal/widget/format.go:153
+msgctxt "decimal separator"
+msgid "."
+msgstr ""
+
+#: ui/internal/widget/format.go:182
+#, c-format
+msgid "%d attachment"
+msgid_plural "%d attachments"
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: the line over the attachments of a message: the number
+#. of attachments and their total size, e.g. "2 attachments · 255 kB".
+#: ui/internal/widget/format.go:185
+#, c-format
+msgctxt "attachment summary"
+msgid "%s · %s"
 msgstr ""
 
 #: ui/internal/widget/rpc.go:35
@@ -6883,62 +6912,62 @@ msgstr ""
 msgid "Opening the draft"
 msgstr ""
 
-#: ui/internal/window/attachments.go:105
+#: ui/internal/window/attachments.go:102
 msgid "Files inside an attached message cannot be opened or saved yet."
 msgstr ""
 
-#: ui/internal/window/attachments.go:189 ui/data/ui/message_window.ui:62
+#: ui/internal/window/attachments.go:201 ui/data/ui/message_window.ui:62
 #: ui/data/ui/window.ui:510
 msgid "More Actions"
 msgstr ""
 
-#: ui/internal/window/attachments.go:232 ui/internal/window/attachments.go:516
+#: ui/internal/window/attachments.go:244 ui/internal/window/attachments.go:535
 msgid ""
 "Programs and scripts are not opened directly; save the file and decide "
 "yourself."
 msgstr ""
 
-#: ui/internal/window/attachments.go:247
+#: ui/internal/window/attachments.go:259
 msgid "_View"
 msgstr ""
 
-#: ui/internal/window/attachments.go:249
+#: ui/internal/window/attachments.go:261
 msgid "_Open"
 msgstr ""
 
-#: ui/internal/window/attachments.go:253
+#: ui/internal/window/attachments.go:265
 msgid "Save _As…"
 msgstr ""
 
-#: ui/internal/window/attachments.go:281
+#: ui/internal/window/attachments.go:306
 msgid "Save _All"
 msgstr ""
 
-#: ui/internal/window/attachments.go:344 ui/internal/window/message_view.go:627
+#: ui/internal/window/attachments.go:375 ui/internal/window/message_view.go:630
 msgid "This message is too large to download."
 msgstr ""
 
-#: ui/internal/window/attachments.go:346 ui/internal/window/message_view.go:629
+#: ui/internal/window/attachments.go:377 ui/internal/window/message_view.go:632
 msgid "This message could not be read."
 msgstr ""
 
-#. TRANSLATORS: %s is a size such as "16.0 MiB".
-#: ui/internal/window/attachments.go:350
+#. TRANSLATORS: %s is a size such as "16.8 MB".
+#: ui/internal/window/attachments.go:381
 #, c-format
 msgid "Attachments over %s cannot be opened or saved yet."
 msgstr ""
 
 #. TRANSLATORS: tooltip of the server icon on an attachment; "it" is the attachment.
-#: ui/internal/window/attachments.go:355
+#: ui/internal/window/attachments.go:386
 msgid "On the server only; it is downloaded when you open it"
 msgstr ""
 
-#: ui/internal/window/attachments.go:435
+#: ui/internal/window/attachments.go:466
 msgid "Attachment"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of files written.
-#: ui/internal/window/attachments.go:492
+#: ui/internal/window/attachments.go:511
 #, c-format
 msgid "Saved %d attachment"
 msgid_plural "Saved %d attachments"
@@ -6946,33 +6975,30 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: the first %d is how many failed, the second how many there were.
-#: ui/internal/window/attachments.go:495
+#: ui/internal/window/attachments.go:514
 #, c-format
 msgid "%d of %d attachments could not be saved"
 msgstr ""
 
-#: ui/internal/window/attachments.go:536 ui/internal/window/attachments.go:563
-#: ui/internal/window/attachments.go:576
+#: ui/internal/window/attachments.go:555 ui/internal/window/attachments.go:582
+#: ui/internal/window/attachments.go:601 ui/internal/window/attachments.go:619
+#: ui/internal/window/attachments.go:629
 msgid "The attachment could not be opened"
 msgstr ""
 
-#: ui/internal/window/attachments.go:555
-msgid "Opening the attachment"
-msgstr ""
-
-#: ui/internal/window/attachments.go:588
+#: ui/internal/window/attachments.go:646
 msgid "Save Attachment"
 msgstr ""
 
-#: ui/internal/window/attachments.go:604
+#: ui/internal/window/attachments.go:662
 msgid "Saving the attachment"
 msgstr ""
 
-#: ui/internal/window/attachments.go:620
+#: ui/internal/window/attachments.go:678
 msgid "Save Attachments"
 msgstr ""
 
-#: ui/internal/window/attachments.go:640
+#: ui/internal/window/attachments.go:698
 msgid "Saving the attachments"
 msgstr ""
 
@@ -7019,7 +7045,7 @@ msgid "Cc"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:737
-#: ui/internal/window/message_view.go:330
+#: ui/internal/window/message_view.go:333
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
@@ -7047,7 +7073,7 @@ msgid "_Download Pictures"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:984
-#: ui/internal/window/message_view.go:534
+#: ui/internal/window/message_view.go:537
 msgid "Loading the message"
 msgstr ""
 
@@ -7162,12 +7188,12 @@ msgstr ""
 msgid "Folders appear after the first synchronisation."
 msgstr ""
 
-#: ui/internal/window/message_view.go:621
-#: ui/internal/window/message_view.go:633
+#: ui/internal/window/message_view.go:624
+#: ui/internal/window/message_view.go:636
 msgid "(Empty message)"
 msgstr ""
 
-#: ui/internal/window/message_view.go:625
+#: ui/internal/window/message_view.go:628
 msgid "Downloading…"
 msgstr ""
 
@@ -7292,13 +7318,13 @@ msgstr ""
 msgid "Converting stopped: the disk is full"
 msgstr ""
 
-#. TRANSLATORS: %s is a size such as "1.2 GiB".
+#. TRANSLATORS: %s is a size such as "1.2 GB".
 #: ui/internal/window/preferences.go:504
 #, c-format
 msgid "Compression saves %s"
 msgstr ""
 
-#. TRANSLATORS: %s is a size such as "1.2 GiB".
+#. TRANSLATORS: %s is a size such as "1.2 GB".
 #: ui/internal/window/preferences.go:508
 #, c-format
 msgid "%s of attachments are on the server only"
@@ -8060,79 +8086,79 @@ msgstr ""
 msgid "Subject"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:264
+#: ui/data/ui/compose_pane.ui:281
 msgid "Bold (Ctrl+B)"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:271
+#: ui/data/ui/compose_pane.ui:288
 msgid "Italic (Ctrl+I)"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:278
+#: ui/data/ui/compose_pane.ui:295
 msgid "Underline (Ctrl+U)"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:291
+#: ui/data/ui/compose_pane.ui:308
 msgid "Paragraph Style"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:299
+#: ui/data/ui/compose_pane.ui:316
 msgid "Alignment"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:311
+#: ui/data/ui/compose_pane.ui:328
 msgid "Bulleted List"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:318
+#: ui/data/ui/compose_pane.ui:335
 msgid "Numbered List"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:325
+#: ui/data/ui/compose_pane.ui:342
 msgid "Quote"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:337
+#: ui/data/ui/compose_pane.ui:354
 msgid "Insert Link"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:356
+#: ui/data/ui/compose_pane.ui:373
 msgid "Insert"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:370
+#: ui/data/ui/compose_pane.ui:387
 msgid "Text Colour"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:390
+#: ui/data/ui/compose_pane.ui:407
 msgid "Clear Formatting"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:398
+#: ui/data/ui/compose_pane.ui:415
 msgid "This message will be sent as plain text."
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:450
+#: ui/data/ui/compose_pane.ui:455
 msgid "Heading 1"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:455
+#: ui/data/ui/compose_pane.ui:460
 msgid "Heading 2"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:460
+#: ui/data/ui/compose_pane.ui:465
 msgid "Heading 3"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:467
+#: ui/data/ui/compose_pane.ui:472
 msgid "Left"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:472
+#: ui/data/ui/compose_pane.ui:477
 msgid "Center"
 msgstr ""
 
-#: ui/data/ui/compose_pane.ui:477
+#: ui/data/ui/compose_pane.ui:482
 msgid "Right"
 msgstr ""
 

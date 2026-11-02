@@ -18,6 +18,7 @@ using System.Threading.Tasks;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.Html;
+using Malachi.Core.Platform;
 using Malachi.Core.Presentation;
 using Malachi.Core.Tests.Controllers;
 using Malachi.Core.Tests.Fixtures;
@@ -46,35 +47,14 @@ public sealed class ComposeAttachmentsControllerTests
     public void OnlyFileSystemPathsAreLocal(string? path, bool local) =>
         Assert.Equal(local, ComposeAttachmentsController.IsLocalPath(path));
 
-    [Theory]
-    [InlineData("a.pdf", "a.pdf")]
-    [InlineData("exactly-twenty-four.pdf!", "exactly-twenty-four.pdf!")]
-    [InlineData("twenty-five-characters.pdf", "twenty-five-characters.…")]
-    public void ChipNamesAreCutAtTheEnd(string name, string chip) =>
-        Assert.Equal(chip, ComposeAttachmentsController.ChipName(name));
-
     [Fact]
-    public void AChipNameNeverSplitsACharacter()
-    {
-        // 30 text elements, each an emoji of two UTF-16 units or a letter
-        // with a combining accent.
-        var name = string.Concat(Enumerable.Repeat("\U0001F600e\u0301", 15));
-        var chip = ComposeAttachmentsController.ChipName(name);
-        Assert.EndsWith("\u2026", chip, StringComparison.Ordinal);
-        Assert.Equal(24, new System.Globalization.StringInfo(chip).LengthInTextElements);
-        Assert.StartsWith(chip[..^1], name, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void AChipShowsTheIconTheNameAndTheSize()
+    public void ATileShowsTheNameTheSizeAndTheType()
     {
         var file = ComposeAttachmentChip.For(Att("a1", "quarterly-report-final-version.pdf", 2048, inline: false));
         Assert.Equal("a1", file.Id);
-        Assert.Equal("quarterly-report-final-…", file.Name);
-        Assert.Equal("quarterly-report-final-version.pdf", file.FullName);
-        Assert.Equal(Malachi.Core.Text.Format.FormatSize(2048), file.Size);
-        Assert.Equal("mail-attachment-symbolic", file.Icon);
-        Assert.Equal("image-x-generic-symbolic", ComposeAttachmentChip.For(Att("a2", "p.png", 1, inline: true, cid: "c2")).Icon);
+        Assert.Equal("quarterly-report-final-version.pdf", file.Name);
+        Assert.Equal("2.0 kB", file.Size);
+        Assert.Equal("application/octet-stream", file.ContentType);
     }
 
     [Fact]
@@ -109,6 +89,38 @@ public sealed class ComposeAttachmentsControllerTests
         Assert.Equal(1, h.Failures);
         Assert.Empty(h.Attachments.Attachments);
         Assert.Equal(0, h.Edits);
+    }
+
+    /// <summary>
+    /// A click on a tile reads the file back for the previewer, a program by
+    /// its name only (its bytes are not read), and a failure is a toast.
+    /// </summary>
+    [Fact]
+    public async Task ATileIsPreviewedFromTheStore()
+    {
+        await using var h = await Harness.StartAsync();
+        await h.Run(() => h.Attachments.Set([Att("t1", "a.png", 3, inline: false), Att("t2", "run.exe", 9, inline: false)]));
+        var shown = new List<PreviewRequest>();
+        var policy = new NamePolicy();
+        await h.Run(() => h.Attachments.Preview("t1", policy, shown.Add));
+        await h.IdleAsync();
+        var request = Assert.Single(shown);
+        Assert.Null(request.Message);
+        Assert.False(request.CanOpen);
+        Assert.Equal("image/png", request.ContentType);
+        Assert.Equal([1, 2, 3], request.Data!.Value.ToArray());
+        Assert.Equal("t1", Assert.Single(h.Script.Gets).AttachmentId);
+
+        await h.Run(() => h.Attachments.Preview("t2", policy, shown.Add));
+        Assert.Null(shown[^1].Data);
+        Assert.Equal("run.exe", shown[^1].Attachment.Filename);
+        Assert.Single(h.Script.Gets);
+
+        h.Script.GetError = new RpcError { Code = ErrorCode.AttachmentTooBig, Message = "too big" };
+        await h.Run(() => h.Attachments.Preview("t1", policy, shown.Add));
+        await h.IdleAsync();
+        Assert.Equal(2, shown.Count);
+        Assert.Equal("The attachment is too big", Assert.Single(h.Toasts));
     }
 
     [Fact]
@@ -225,6 +237,13 @@ public sealed class ComposeAttachmentsControllerTests
     private static DraftAttachment Att(string id, string name, long size, bool inline, string? cid = null) =>
         new() { Id = id, Filename = name, ContentType = inline ? "image/png" : "application/octet-stream", Size = size, Inline = inline, ContentId = cid };
 
+    // A program by its extension alone.
+    private sealed class NamePolicy : IFileTypePolicy
+    {
+        public bool IsDangerous(string? fileName, string? contentType) =>
+            fileName?.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
     /// <summary>The attachment calls of a fake daemon.</summary>
     private sealed class Script
     {
@@ -235,6 +254,8 @@ public sealed class ComposeAttachmentsControllerTests
         private HeldAnswer? held;
 
         public RpcError? ImportError { get; set; }
+
+        public RpcError? GetError { get; set; }
 
         public IReadOnlyList<AttachmentImportParams> Imports => Locked(imports);
 
@@ -300,6 +321,10 @@ public sealed class ComposeAttachmentsControllerTests
             {
                 request = JsonCoding.Decode<AttachmentGetParams>(p);
                 gets.Add(request);
+            }
+            if (GetError is { } e)
+            {
+                throw new RpcException(e);
             }
             return JsonCoding.EncodeToString(new AttachmentGetResult
             {

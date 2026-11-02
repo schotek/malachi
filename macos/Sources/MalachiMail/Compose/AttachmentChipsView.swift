@@ -5,29 +5,47 @@ import AppKit
 import MalachiCore
 
 /// The attachment chips of a compose window (compose.blp `attachments_box`,
-/// compose.go `addChip`): a wrapping row of cards, each with the type icon
-/// (a paperclip, or a picture for an inline image), the name, the size and
-/// a remove button. Hidden while there is nothing to show. Names come from
+/// compose.go `addChip`): a shaded band of tiles under the header fields,
+/// each the same tile as under the headers of a message
+/// (`AttachmentTileView`) with the type icon, the name, the size and a
+/// remove button. Hidden while there is nothing to show. Names come from
 /// the backend, sanitised, and are shown as plain text; the whole name is
 /// the tooltip.
 @MainActor
 final class AttachmentChipsView: NSView {
     /// The remove button of a chip (`removeAttachment`).
     var onRemove: (@MainActor (String) -> Void)?
+    /// A click on a chip: Quick Look of the attachment, the tile being the
+    /// view the panel zooms out of. Nil leaves the tiles inert.
+    var onPreview: (@MainActor (DraftAttachment, NSView) -> Void)?
 
-    private let flow = FlowView(spacing: 6, lineSpacing: 6)
+    private let band = NSView()
+    private let flow = FlowView(spacing: 8, lineSpacing: 8)
     private var chips: [String: NSView] = [:]
 
     init() {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        addSubview(flow)
+        wantsLayer = true
+        band.translatesAutoresizingMaskIntoConstraints = false
+        band.wantsLayer = true
+        band.layer?.cornerRadius = 8
+        addSubview(band)
+        band.addSubview(flow)
         NSLayoutConstraint.activate([
-            flow.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            bottomAnchor.constraint(equalTo: flow.bottomAnchor, constant: 6),
-            flow.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            trailingAnchor.constraint(equalTo: flow.trailingAnchor, constant: 12),
+            band.topAnchor.constraint(equalTo: topAnchor, constant: 2),
+            bottomAnchor.constraint(equalTo: band.bottomAnchor, constant: 6),
+            band.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            trailingAnchor.constraint(equalTo: band.trailingAnchor, constant: 12),
+            flow.topAnchor.constraint(equalTo: band.topAnchor, constant: 8),
+            band.bottomAnchor.constraint(equalTo: flow.bottomAnchor, constant: 8),
+            flow.leadingAnchor.constraint(equalTo: band.leadingAnchor, constant: 8),
+            band.trailingAnchor.constraint(equalTo: flow.trailingAnchor, constant: 8),
         ])
+        // The tiles are never squeezed by the editor below them: they
+        // would be cut off at the bottom.
+        setContentCompressionResistancePriority(.required, for: .vertical)
+        flow.setContentCompressionResistancePriority(.required, for: .vertical)
         isHidden = true
     }
 
@@ -36,15 +54,33 @@ final class AttachmentChipsView: NSView {
         fatalError("not used")
     }
 
+    override func updateLayer() {
+        super.updateLayer()
+        band.layer?.backgroundColor = NSColor.quaternarySystemFill.cgColor
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+
     /// The ids shown, in order.
     var ids: [String] {
-        flow.views.compactMap { ($0 as? ChipView)?.attachmentID }
+        flow.views.compactMap { ($0 as? ComposeTileView)?.attachmentID }
     }
 
     /// compose.go `addChip`.
     func add(_ a: DraftAttachment) {
-        let chip = ChipView(attachment: a) { [weak self] id in
+        let chip = ComposeTileView(attachment: a) { [weak self] id in
             self?.onRemove?(id)
+        }
+        if onPreview != nil {
+            chip.onClick = { [weak self, weak chip] in
+                guard let self, let chip else { return }
+                self.onPreview?(a, chip)
+            }
         }
         flow.addView(chip)
         chips[a.id] = chip
@@ -65,62 +101,22 @@ final class AttachmentChipsView: NSView {
     }
 }
 
-/// One chip: a card with the icon, the name (tail-elided at 24 characters),
-/// the size and the ✕.
+/// One attachment of a compose window: the tile with the ✕.
 @MainActor
-private final class ChipView: NSBox {
-    static let nameChars = 24
-
+private final class ComposeTileView: AttachmentTileView {
     let attachmentID: String
     private let remove: @MainActor (String) -> Void
 
     init(attachment a: DraftAttachment, remove: @escaping @MainActor (String) -> Void) {
         attachmentID = a.id
         self.remove = remove
-        super.init(frame: .zero)
-        boxType = .custom
-        titlePosition = .noTitle
-        cornerRadius = 8
-        borderWidth = 1
-        borderColor = Tint.cardBorder
-        fillColor = Tint.cardFill
-        contentViewMargins = .zero
-
-        let icon = NSImageView(image: Icon.image(a.inline ? "image-x-generic" : "mail-attachment", size: .regular))
-        icon.contentTintColor = Tint.secondary
-        icon.setContentHuggingPriority(.required, for: .horizontal)
-
-        let name = NSTextField(labelWithString: Self.tailEllipsis(a.filename, max: Self.nameChars))
-        name.font = Typo.body
-        name.lineBreakMode = .byTruncatingTail
-        name.toolTip = a.filename
-        name.setContentCompressionResistancePriority(.required, for: .horizontal)
-
-        let size = NSTextField(labelWithString: formatSize(a.size))
-        size.font = Typo.caption
-        size.textColor = Tint.secondary
-
-        let close = NSButton(image: Icon.image("window-close", size: .small), target: self, action: #selector(removeClicked(_:)))
-        close.isBordered = false
-        close.imagePosition = .imageOnly
+        let close = NSButton(image: Icon.image("window-close", size: .small), target: nil, action: nil)
         close.toolTip = L10n.T("Remove")
         close.setAccessibilityLabel(L10n.T("Remove"))
-        close.refusesFirstResponder = true
-
-        let row = NSStackView(views: [icon, name, size, close])
-        row.orientation = .horizontal
-        row.spacing = 6
-        row.alignment = .centerY
-        row.edgeInsets = NSEdgeInsets(top: 2, left: 8, bottom: 2, right: 2)
-        row.translatesAutoresizingMaskIntoConstraints = false
-        guard let content = contentView else { return }
-        content.addSubview(row)
-        NSLayoutConstraint.activate([
-            row.topAnchor.constraint(equalTo: content.topAnchor),
-            row.bottomAnchor.constraint(equalTo: content.bottomAnchor),
-            row.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-            row.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-        ])
+        super.init(icon: Self.icon(filename: a.filename, contentType: a.contentType),
+                   name: a.filename, size: formatSize(a.size), accessory: close)
+        close.target = self
+        close.action = #selector(removeClicked(_:))
     }
 
     @available(*, unavailable)
@@ -130,13 +126,5 @@ private final class ChipView: NSBox {
 
     @objc private func removeClicked(_ sender: Any?) {
         remove(attachmentID)
-    }
-
-    /// Cuts `s` to at most `max` characters with a trailing ellipsis
-    /// (Pango's EllipsizeEnd with `max-width-chars`, by characters).
-    static func tailEllipsis(_ s: String, max: Int) -> String {
-        let chars = Array(s)
-        guard max >= 2, chars.count > max else { return s }
-        return String(chars[..<(max - 1)]) + "\u{2026}"
     }
 }

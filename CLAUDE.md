@@ -179,6 +179,13 @@ kontejneru, kde poslouchá démon. Broadway
 po popoverech. Po každé práci `container system stop` (`gtk.sh stop`; oba
 cíle ho volají samy). Zmínky o Toolbxu níže jsou historické;
 `flatpak-builder` a balíčky zůstávají na linuxovém hostiteli.
+CI pro GTK je `.github/workflows/gtk.yml` (od 2026-11-02): pull request,
+který mění `ui/`, `backend/`, `po/`, `data/` a další vstupy buildu, a ruční
+běh postaví v kontejneru `fedora:42` s balíčky Containerfile `make build`,
+pustí testy `ui/` pod Xvfb jako `gtk.sh test-ui` a `make lint` (smoke
+testy GTK ne, v CI zatím padají); tag ani push do
+`main` nic, artefakty žádné. Cache Go a ccache PR obnoví z `main`, kterou
+zapíše jen ruční běh na `main` (`gh workflow run gtk.yml --ref main`).
 
 Ověřené verze (2026-09-02): Go 1.25, GTK 4.18, libadwaita 1.7, GLib 2.84,
 WebKitGTK 2.52 (API 6.0), Blueprint 0.16, SQLite 3.47, gsound 1.0.3
@@ -512,6 +519,30 @@ Pořadí prací:
     strojích; viz odstavec Adresáře níže a `docs/plans/address-book.md`
 16. Kontrola nových verzí (fáze 1) — napsaná 2026-11-02, necommitnutá;
     viz odstavec Kontrola nových verzí níže a `docs/plans/update-check.md`
+17. Přílohy jako dlaždice (podle Outlooku) — větev `feat/attachment-tiles`
+    2026-11-02, všechny tři klienty ověřené vlastníkem na obrazovce; viz
+    odstavec Přílohy jako dlaždice níže
+
+Přílohy jako dlaždice (2026-11-02, všechny tři klienty, rozhodnutí
+vlastníka podle srovnání s Outlookem). Příloha je dlaždice pevné šířky
+(macOS 216 pt, GTK a Windows 280 px kvůli většímu písmu): rámeček, ikona
+typu 32, název zkrácený uprostřed nad velikostí (za ní ikona serveru či
+kolečko), vpravo šipka s nabídkou (i pravý klik) nebo ✕; táž dlaždice
+v panelu, okně zprávy, kartách konverzace a okně Nová zpráva (macOS
+`Shared/AttachmentTileView.swift`, GTK `ui/internal/widget/attachment_tile.go`
+s vlastním `hexpand` vypnutým, jinak ji `Adw.WrapBox` roztáhne, Windows
+`Malachi.App/Attachments/AttachmentTile`). Uložit vše je nenápadné tlačítko
+v souhrnném řádku nad dlaždicemi („2 přílohy · 255 kB“, `widget.AttachmentSummary`;
+macOS `FlowFullLine`, GTK sourozenec před `WrapBox`). V okně Nová zpráva
+jsou přílohy v šedém pásu mezi hlavičkou a lištou formátování (nikdy
+zmáčknuté editorem) a klik ukáže náhled z `attachment.get` (strop 16 MiB,
+nad ním existující „příliš velká“): macOS Quick Look a GTK Sushi přes
+soukromý adresář pro otevírání (GTK háček `compose.Manager.PreviewAttachment`
+= `window.PreviewDraftAttachment`), Windows náhled ve WebView2 jen v paměti
+bez Otevřít a Uložit jako; editor události má dlaždice bez náhledu.
+Velikosti jsou desítkové s přeloženým oddělovačem (`%s kB`/`MB`/`GB`,
+`msgctxt "decimal separator"`, jedno desetinné místo pod 100: „41,1 kB“),
+staré KiB/MiB msgidy jsou pryč. Démon a API beze změny.
 
 Kontrola nových verzí (2026-11-02, všechny tři klienty, necommitnutá;
 plán `docs/plans/update-check.md` s odpověďmi vlastníka Q1–Q6, kontrakt

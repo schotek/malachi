@@ -27,8 +27,8 @@ protocol ComposePaneHost: AnyObject {
 }
 
 /// The content of a compose window (compose.blp, ui/internal/compose/compose.go):
-/// the card of header fields, the formatting bar, the editor, the
-/// attachment chips and the status line, the draft behind them
+/// the card of header fields, the attachment chips, the formatting bar, the
+/// editor and the status line, the draft behind them
 /// (`ComposeDraftController` over `ComposeForm`) and the compose and Format
 /// actions of the menu bar, which reach the pane through the responder
 /// chain (`MalachiActions`). Every string shown from mail data is plain
@@ -50,7 +50,7 @@ protocol ComposePaneHost: AnyObject {
 /// The window layout shows a new reply's or forward's original, as
 /// `draft.create` prepared it, in a read-only panel under the editor
 /// (`ComposeBodyLayout`): its disclosure only hides it, its checkbox decides
-/// whether the draft and the message include it. Below the chips sits the
+/// whether the draft and the message include it. Below it sits the
 /// assistant's bar (`composeAssistantBar`), which the window wires. The
 /// inline layout keeps the body whole: the board's reply is a saved draft.
 @MainActor
@@ -138,7 +138,7 @@ final class ComposePane: NSViewController, NSTextFieldDelegate {
     /// do, `params.accountID` is what From shows, also after the account
     /// list arrives in place of the placeholder.
     private var chosenAccountID: AccountID?
-    /// The attachments listed under the editor (`attachments`).
+    /// The attachments listed over the formatting bar (`attachments`).
     var attachments: [DraftAttachment] = []
     /// The completion of the To, Cc and Bcc rows (`suggest`).
     private(set) var suggestions: [RecipientSuggestionsController] = []
@@ -188,6 +188,12 @@ final class ComposePane: NSViewController, NSTextFieldDelegate {
         view = options.layout == .inline ? buildInlineContent() : buildContent()
         chips.onRemove = { [weak self] id in
             self?.removeAttachment(id)
+        }
+        chips.onPreview = { [weak self] a, tile in
+            guard let self else { return }
+            DraftAttachmentPreview.show(a, accountID: self.account.id, client: self.state.client, source: tile) { [weak self] text in
+                self?.toast(text)
+            }
         }
         // The editor's callbacks first, as in compose.go: `ready` and
         // `state` may follow the load at any time.
@@ -277,9 +283,9 @@ final class ComposePane: NSViewController, NSTextFieldDelegate {
 
     // MARK: Layout
 
-    /// compose.blp `content`: the card, the formatting bar, the plain-text
-    /// hint, the editor, the quoted original, the chips, the assistant's
-    /// bar and the status line, top to bottom.
+    /// compose.blp `content`: the card, the attachment chips, the formatting
+    /// bar, the plain-text hint, the editor, the quoted original, the
+    /// assistant's bar and the status line, top to bottom.
     private func buildContent() -> NSView {
         let editorBox = makeEditorBox()
         editorBox.setContentHuggingPriority(.defaultLow, for: .vertical)
@@ -294,7 +300,7 @@ final class ComposePane: NSViewController, NSTextFieldDelegate {
         root.spacing = 0
         for v in [
             Self.inset(commentHeader.map { $0 as NSView } ?? header, top: 12, left: 12, bottom: 6, right: 12),
-            formatToolbar, plainHintRow, editorBox, makeQuoteSection(), chips, composeAssistantBar, statusRow,
+            chips, formatToolbar, plainHintRow, editorBox, makeQuoteSection(), composeAssistantBar, statusRow,
         ] {
             root.addArrangedSubview(v)
         }
@@ -316,9 +322,9 @@ final class ComposePane: NSViewController, NSTextFieldDelegate {
     }
 
     /// The inline layout: the header without From (or the comment's), the
-    /// formatting bar, the plain-text hint, the sized editor, the chips and
-    /// the footer row `[Attach] status … [Discard] [Send]`, top to bottom,
-    /// as tall as its content (the host scrolls it).
+    /// attachment chips, the formatting bar, the plain-text hint, the sized
+    /// editor and the footer row `[Attach] status … [Discard] [Send]`, top
+    /// to bottom, as tall as its content (the host scrolls it).
     private func buildInlineContent() -> NSView {
         let editorBox = makeEditorBox()
         let height = editorBox.heightAnchor.constraint(equalToConstant: EditorHeight.minimum)
@@ -330,7 +336,7 @@ final class ComposePane: NSViewController, NSTextFieldDelegate {
         root.spacing = 0
         for v in [
             Self.inset(commentHeader.map { $0 as NSView } ?? header, top: 0, left: 0, bottom: 6, right: 0),
-            formatToolbar, plainHintRow, editorBox, chips, footerRow(),
+            chips, formatToolbar, plainHintRow, editorBox, footerRow(),
         ] {
             root.addArrangedSubview(v)
             v.setContentHuggingPriority(.required, for: .vertical)

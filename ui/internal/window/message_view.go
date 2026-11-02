@@ -215,9 +215,12 @@ type messageView struct {
 	// The From, To and Cc chips (addresses.go).
 	addresses *addressHeader
 
-	// The attachment chips (attachments.go) and what is in the box now.
+	// The attachment chips (attachments.go) and what is in the box now;
+	// the summary line over them with its Save All, nil without one.
 	attachments *adw.WrapBox
 	chips       []gtk.Widgetter
+	summary     *gtk.Box
+	saveAll     *gtk.Button
 
 	// What render was last given: the summary and the cache entry, for
 	// redrawing the chips when the cache no longer holds the message

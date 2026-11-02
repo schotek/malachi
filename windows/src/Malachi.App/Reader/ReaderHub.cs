@@ -89,7 +89,7 @@ public sealed class ReaderHub : IDisposable
             Preview = new AttachmentPreview(opener, state),
             Windows = registry,
             FileTypes = policy,
-            Icons = new ChipIcons(new ShellFileTypes()),
+            Icons = ChipIcons.Shared,
             Issues = integration.Issues,
             Bulk = integration.Bulk,
             IssueSite = id => integration.Mailbox.Model.Account(id)?.Config.Jira?.SiteUrl ?? "",

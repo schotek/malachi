@@ -5,36 +5,33 @@ import AppKit
 import MalachiCore
 import UniformTypeIdentifiers
 
-/// One attachment under the headers (attachments.go `buildChip`): a
-/// two-segment control, the first with the type icon, the name and the size
-/// (a click previews the attachment in Quick Look), the second with an
-/// arrow that offers View (an attached message only), Open in the default
-/// application and Save As…; after it, for a part kept on the mail server,
-/// the server symbol with the reason as its tooltip, or a spinner while the
-/// message is being downloaded. The actions close over the attachment they
-/// were built for, so a chip never acts on a message other than its own.
-/// A part out of reach (or while the body is on its way) leaves the chip
-/// disabled with the reason as its tooltip; a part on the server stays
-/// enabled, and its actions download the message first; an attached message
-/// is viewed in its own window on click; an executable is previewed like
-/// any file but keeps Open disabled (docs/security.md §4). After Open the
-/// Assistant's "Ask the Assistant…" (ui/internal/assistant), while the
-/// `assistant-menu` setting is on, hands the file to Claude. Names and types
-/// are server data and are shown as plain text; the name's middle is elided
-/// so the extension stays visible, the whole name is the tooltip.
+/// One attachment under the headers (attachments.go `buildChip`): a tile
+/// (`AttachmentTileView`) with the type icon, the name and the size; a
+/// click previews the attachment in Quick Look, the arrow (and a
+/// right-click) offers View (an attached message only), Open in the default
+/// application and Save As…; after the size, for a part kept on the mail
+/// server, the server symbol with the reason as its tooltip, or a spinner
+/// while the message is being downloaded. The actions close over the
+/// attachment they were built for, so a chip never acts on a message other
+/// than its own. A part out of reach (or while the body is on its way)
+/// leaves the chip disabled with the reason as its tooltip; a part on the
+/// server stays enabled, and its actions download the message first; an
+/// attached message is viewed in its own window on click; an executable is
+/// previewed like any file but keeps Open disabled (docs/security.md §4).
+/// After Open the Assistant's "Ask the Assistant…" (ui/internal/assistant),
+/// while the `assistant-menu` setting is on, hands the file to Claude.
+/// Names and types are server data and are shown as plain text; the
+/// name's middle is elided so the extension stays visible, the whole name
+/// is the tooltip.
 @MainActor
-final class AttachmentChipView: NSView {
-    /// The gap between the control and the server symbol or the spinner.
-    static let indicatorSpacing: CGFloat = 4
-    static let indicatorSize: CGFloat = 16
+final class AttachmentChipView: AttachmentTileView {
+    static let indicatorSize: CGFloat = 14
 
     let attachment: Attachment
     /// What the chip can do with its part (`partState`).
     let state: PartState
     let nested: Bool
     let executable: Bool
-    /// The segments: preview (or view) and the arrow's menu.
-    let control = NSSegmentedControl()
     /// The server symbol or the spinner of a part kept on the server; nil
     /// for any other part.
     private(set) var indicator: NSView?
@@ -66,67 +63,41 @@ final class AttachmentChipView: NSView {
         self.state = state
         nested = attachedMessage(attachment)
         executable = executableAttachment(filename: attachment.filename, contentType: attachment.contentType)
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
 
-        control.translatesAutoresizingMaskIntoConstraints = false
-        control.segmentCount = 2
-        control.segmentStyle = .rounded
-        control.trackingMode = .momentary
-        control.controlSize = .small
-        control.font = Typo.chip
-        control.target = self
-        control.action = #selector(clicked(_:))
-
+        let arrow = NSButton(image: Icon.image("pan-down", size: .small), target: nil, action: nil)
+        arrow.toolTip = L10n.T("More Actions")
+        arrow.setAccessibilityLabel(L10n.T("More Actions"))
         let name = chipName(attachment)
-        var text = Self.middleEllipsis(name, max: chipNameChars)
-        if attachment.size > 0 {
-            text += "  " + formatSize(attachment.size)
-        }
-        control.setImage(Self.icon(for: attachment), forSegment: 0)
-        control.setImageScaling(.scaleProportionallyDown, forSegment: 0)
-        control.setLabel(text, forSegment: 0)
-        control.setImage(Icon.image("pan-down", size: .small), forSegment: 1)
-        control.setImageScaling(.scaleProportionallyDown, forSegment: 1)
-        control.setToolTip(L10n.T("More Actions"), forSegment: 1)
+        let icon = NSWorkspace.shared.icon(for: chipIconType(attachment))
+        super.init(icon: icon, name: name, size: attachment.size > 0 ? formatSize(attachment.size) : "", accessory: arrow)
+        arrow.target = self
+        arrow.action = #selector(arrowClicked(_:))
+        onClick = { [weak self] in self?.primary() }
+        contextMenu = { [weak self] in self?.makeMenu() }
 
         switch (available, nested, executable) {
         case (false, _, _):
-            control.isEnabled = false
-            control.setToolTip(why, forSegment: 0)
-            control.setToolTip(why, forSegment: 1)
-        case (true, true, _):
-            // Rendered by the daemon, read-only: the safest thing to do
-            // with it, whatever it is called.
-            control.setToolTip(name, forSegment: 0)
+            isEnabled = false
+            toolTip = why
+            arrow.toolTip = why
         case (true, false, true):
-            control.setToolTip(L10n.T("Programs and scripts are not opened directly; save the file and decide yourself."), forSegment: 0)
+            toolTip = L10n.T("Programs and scripts are not opened directly; save the file and decide yourself.")
         default:
-            control.setToolTip(name, forSegment: 0)
+            // An attached message is rendered by the daemon, read-only:
+            // the safest thing to do with it, whatever it is called.
+            toolTip = name
         }
-        addSubview(control)
 
-        var constraints = [
-            control.leadingAnchor.constraint(equalTo: leadingAnchor),
-            control.topAnchor.constraint(equalTo: topAnchor),
-            control.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ]
         if state == .remote {
             let mark = downloading ? Self.spinner() : Self.serverSymbol(why)
             mark.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(mark)
-            indicator = mark
-            constraints += [
-                mark.leadingAnchor.constraint(equalTo: control.trailingAnchor, constant: Self.indicatorSpacing),
-                mark.trailingAnchor.constraint(equalTo: trailingAnchor),
-                mark.centerYAnchor.constraint(equalTo: control.centerYAnchor),
+            NSLayoutConstraint.activate([
                 mark.widthAnchor.constraint(equalToConstant: Self.indicatorSize),
                 mark.heightAnchor.constraint(equalToConstant: Self.indicatorSize),
-            ]
-        } else {
-            constraints.append(control.trailingAnchor.constraint(equalTo: trailingAnchor))
+            ])
+            detailRow.addArrangedSubview(mark)
+            indicator = mark
         }
-        NSLayoutConstraint.activate(constraints)
     }
 
     @available(*, unavailable)
@@ -153,13 +124,6 @@ final class AttachmentChipView: NSView {
         return spinner
     }
 
-    /// The type icon: the system's for the claimed (or guessed) type, 14 px.
-    private static func icon(for a: Attachment) -> NSImage {
-        let image = NSWorkspace.shared.icon(for: chipIconType(a))
-        image.size = NSSize(width: 14, height: 14)
-        return image
-    }
-
     /// Elides the middle of `s` to at most `max` characters, keeping the
     /// end (the extension) whole (Pango's EllipsizeMiddle, by characters).
     static func middleEllipsis(_ s: String, max: Int) -> String {
@@ -171,18 +135,12 @@ final class AttachmentChipView: NSView {
         return String(chars[..<head]) + "\u{2026}" + String(chars[(chars.count - tail)...])
     }
 
-    @objc private func clicked(_ sender: Any?) {
-        switch control.selectedSegment {
-        case 0:
-            primary()
-        case 1:
-            showMenu()
-        default:
-            break
-        }
+    @objc private func arrowClicked(_ sender: Any?) {
+        guard let arrow = accessory else { return }
+        makeMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: arrow.bounds.height + 2), in: arrow)
     }
 
-    /// The first segment's click: view an attached message in its own
+    /// The tile's click: view an attached message in its own
     /// window, preview anything else, executables included (Quick Look
     /// never runs them).
     private func primary() {
@@ -193,8 +151,9 @@ final class AttachmentChipView: NSView {
         }
     }
 
-    /// The arrow's menu (attachments.go `chipMenu`).
-    private func showMenu() {
+    /// The menu of the arrow and of a right-click (attachments.go
+    /// `chipMenu`).
+    private func makeMenu() -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
         if nested {
@@ -215,7 +174,7 @@ final class AttachmentChipView: NSView {
         let save = NSMenuItem(title: mn(L10n.T("Save _As…")), action: #selector(saveItem(_:)), keyEquivalent: "")
         save.target = self
         menu.addItem(save)
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: -2), in: control)
+        return menu
     }
 
     @objc private func viewItem(_ sender: Any?) {
@@ -235,24 +194,55 @@ final class AttachmentChipView: NSView {
     }
 }
 
-/// The button after the chips that saves all of them into one folder
-/// (attachments.go `buildSaveAll`): flat, as dense as the chips beside it.
+/// The line over the tiles of two or more attachments that can all be
+/// saved (attachments.go `buildSaveAll`): their number and total size in
+/// a dim caption, and at its end the quiet Save All button that saves all
+/// of them into one folder.
 @MainActor
-final class SaveAllChipView: NSButton {
+final class AttachmentSummaryView: NSView, FlowFullLine {
     var onClick: (@MainActor () -> Void)?
 
-    init() {
+    /// Save All, disabled while one of the message runs.
+    var isEnabled: Bool {
+        get { button.isEnabled }
+        set { button.isEnabled = newValue }
+    }
+
+    private let button = NSButton()
+
+    init(count: Int, total: Int) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        title = mn(L10n.T("Save _All"))
-        image = Icon.image("document-save", size: .small)
-        imagePosition = .imageLeading
-        imageHugsTitle = true
-        isBordered = false
-        controlSize = .small
-        font = Typo.chip
-        target = self
-        action = #selector(clicked(_:))
+
+        let label = NSTextField(labelWithString: attachmentSummary(count: count, total: total))
+        label.font = Typo.caption
+        label.textColor = Tint.secondary
+        label.lineBreakMode = .byTruncatingTail
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        button.title = mn(L10n.T("Save _All"))
+        button.image = Icon.image("document-save", size: .small)
+        button.imagePosition = .imageLeading
+        button.imageHugsTitle = true
+        button.isBordered = false
+        button.controlSize = .small
+        button.font = Typo.caption
+        button.contentTintColor = Tint.secondary
+        button.target = self
+        button.action = #selector(clicked(_:))
+        button.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(label)
+        addSubview(button)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor),
+            label.firstBaselineAnchor.constraint(equalTo: button.firstBaselineAnchor),
+            button.leadingAnchor.constraint(greaterThanOrEqualTo: label.trailingAnchor, constant: 12),
+            button.trailingAnchor.constraint(equalTo: trailingAnchor),
+            button.topAnchor.constraint(equalTo: topAnchor),
+            button.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
     }
 
     @available(*, unavailable)

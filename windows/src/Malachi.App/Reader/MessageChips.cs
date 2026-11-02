@@ -19,9 +19,13 @@
 // Contacts/AddToContactsFlyout.cs); the row's addresses are looked up once
 // when its chips are built, and the menu is built anew each time it opens.
 //
-// Windows differences (MessageView): the chips are split buttons (the click
-// previews, the arrow's menu has View, Open, Save As…), a chip GTK makes
-// insensitive shows its reason in a tooltip on a wrapper, "+N more" takes no
+// The attachments are tiles (Attachments/AttachmentTile, macOS
+// Shared/AttachmentTileView.swift) under a summary line with Save All
+// (AttachmentSummaryLine): the click previews, the arrow and a right-click
+// offer View, Open, Save As…; a tile that cannot be used keeps its reason
+// as a tooltip.
+//
+// Windows differences (MessageView): "+N more" takes no
 // focus on a click but is reached by Tab, Copy Address can fail while
 // another program holds the clipboard and says so, and Save All stays
 // disabled while its run lasts (AttachmentOpener's, by message).
@@ -139,18 +143,25 @@ internal sealed partial class MessageChips
         var (focusAt, how) = FocusedChip(box);
         var old = children.Count;
         SaveAll = null;
+        if (saveAll.Count > 0 && message is { } s)
+        {
+            var line = SummaryLine(s, saveAll, saveAllRemote);
+            SaveAll = (line.SaveAll, s.Id);
+            children.Add(line);
+        }
         var icons = services.Icons.StartBatch();
         foreach (var chip in chips)
         {
-            children.Add(AttachmentButton(chip, icons));
+            children.Add(AttachmentTileOf(chip, icons));
         }
-        if (saveAll.Count > 0 && message is { } s)
+        var next = focusAt >= 0 && old + focusAt < children.Count ? children[old + focusAt] : null;
+        var target = next switch
         {
-            var button = SaveAllButton(s, saveAll, saveAllRemote);
-            SaveAll = (button, s.Id);
-            children.Add(button);
-        }
-        if (focusAt >= 0 && !(old + focusAt < children.Count && children[old + focusAt] is Control next && next.Focus(how)))
+            AttachmentSummaryLine l => l.SaveAll,
+            Control c => c,
+            _ => null,
+        };
+        if (focusAt >= 0 && target?.Focus(how) != true)
         {
             // A disabled chip (on a wrapper) takes no focus, and fewer chips
             // may leave none in its place.
@@ -384,42 +395,44 @@ internal sealed partial class MessageChips
         return (-1, FocusState.Unfocused);
     }
 
-    // One attachment: the click previews it (an attached message opens in
-    // its own window), the arrow offers View, Open and Save As…. The
-    // actions close over the chip, so it never acts on another message; a
-    // chip of a part on the mail server downloads the message first.
-    private FrameworkElement AttachmentButton(AttachmentChip chip, IconLookups<ImageSource>.Batch icons)
+    // One attachment, a tile: the click previews it (an attached message
+    // opens in its own window), the arrow and a right-click offer View,
+    // Open and Save As…. The actions close over the chip, so it never acts
+    // on another message; a chip of a part on the mail server downloads the
+    // message first.
+    private AttachmentTile AttachmentTileOf(AttachmentChip chip, IconLookups<ImageSource>.Batch icons)
     {
-        var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-        var icon = ChipIcons.For(icons, chip.Attachment.Filename);
-        icon.VerticalAlignment = VerticalAlignment.Center;
-        content.Children.Add(icon);
-        content.Children.Add(new TextBlock { Text = chip.Label, Style = Look("ChipNameStyle") });
-        if (chip.SizeText.Length > 0)
-        {
-            content.Children.Add(new TextBlock { Text = chip.SizeText, Style = Look("ChipSizeStyle") });
-        }
+        var tile = new AttachmentTile();
+        var arrow = AttachmentTile.AccessoryButton("pan-down", chip.ArrowTooltip);
+        tile.Set(ChipIcons.For(icons, chip.Attachment.Filename, AttachmentTile.IconSize), chip.Name, chip.SizeText, arrow);
         if (chip.OnServer)
         {
-            content.Children.Add(RemoteIndicator(chip));
+            tile.AddDetail(RemoteIndicator(chip));
         }
-        var button = new SplitButton
-        {
-            Content = content,
-            // The SplitButton's own style is not public: set, not based on.
-            Padding = new Thickness(8, 3, 8, 3),
-            MinHeight = 0,
-            IsEnabled = chip.Available,
-        };
-        AutomationProperties.SetName(button, chip.Name);
+        tile.Available = chip.Available;
         // The reason of a chip that cannot be used is "" until message.body
         // answered: no tooltip, rather than an empty one.
-        var tooltip = chip.Tooltip.Length > 0 ? chip.Tooltip : null;
-        if (tooltip is not null)
+        tile.Tooltip = chip.Tooltip.Length > 0 ? chip.Tooltip : null;
+        arrow.Flyout = AttachmentMenu(chip);
+        tile.ContextMenu = () => AttachmentMenu(chip);
+        tile.Clicked += (_, _) =>
         {
-            AutomationProperties.SetHelpText(button, tooltip);
-        }
+            if (chip.Nested)
+            {
+                OpenAttached(chip);
+            }
+            else
+            {
+                _ = services.Preview.ShowAsync(chip.Attachment, chip.Message, chip.OnServer, hostWindow());
+            }
+        };
+        return tile;
+    }
 
+    // attachments.go chipMenu: View (an attached message), Open, Ask the
+    // Assistant… while it is shown, Save As….
+    private MenuFlyout AttachmentMenu(AttachmentChip chip)
+    {
         var menu = new MenuFlyout { Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft };
         if (chip.Nested)
         {
@@ -456,33 +469,7 @@ internal sealed partial class MessageChips
             ask.IsEnabled = assistant.CanAskFile(chip.Attachment.ContentType);
         };
         menu.Items.Add(save);
-        button.Flyout = menu;
-        button.Click += (_, _) =>
-        {
-            if (chip.Nested)
-            {
-                OpenAttached(chip);
-            }
-            else
-            {
-                _ = services.Preview.ShowAsync(chip.Attachment, chip.Message, chip.OnServer, hostWindow());
-            }
-        };
-        if (chip.Available)
-        {
-            if (tooltip is not null)
-            {
-                ToolTipService.SetToolTip(button, tooltip);
-            }
-            return button;
-        }
-        // A disabled control shows no tooltip: the reason goes on a wrapper.
-        var wrapper = new Border { Child = button, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
-        if (tooltip is not null)
-        {
-            ToolTipService.SetToolTip(wrapper, tooltip);
-        }
-        return wrapper;
+        return menu;
     }
 
     // attachments.go remoteIndicator: after the size of a part on the mail
@@ -516,28 +503,23 @@ internal sealed partial class MessageChips
     private void OpenAttached(AttachmentChip chip) =>
         _ = services.Windows.OpenEmbeddedAsync(chip.Message, chip.Attachment, chip.OnServer, hostWindow());
 
-    // buildSaveAll: flat, as dense as the chips beside it; disabled while
-    // the run lasts, which AttachmentOpener keeps by message, so a button
-    // rebuilt by a re-render, or the same message's in another window, is
-    // disabled too. remote: some are on the mail server only, the message
-    // is downloaded once first.
-    private Button SaveAllButton(MessageSummary s, IReadOnlyList<Attachment> atts, bool remote)
+    // buildSaveAll: the summary line over the tiles, with Save All quiet at
+    // its end; the button is disabled while the run lasts, which
+    // AttachmentOpener keeps by message, so a button rebuilt by a
+    // re-render, or the same message's in another window, is disabled too.
+    // remote: some are on the mail server only, the message is downloaded
+    // once first.
+    private AttachmentSummaryLine SummaryLine(MessageSummary s, IReadOnlyList<Attachment> atts, bool remote)
     {
-        var mnemonic = Mnemonic.Parse(L10n.T("Save _All"));
-        var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-        content.Children.Add(Icons.Create("document-save", Icons.Small));
-        content.Children.Add(new TextBlock { Text = mnemonic.Label, Style = Look("ChipNameStyle") });
-        var button = new Button
+        long total = 0;
+        foreach (var a in atts)
         {
-            Content = content,
-            Style = Look("ChipActionStyle"),
-            AccessKey = mnemonic.AccessKey ?? "",
-            IsEnabled = !services.Attachments.IsSavingAll(s.Id),
-        };
-        AutomationProperties.SetName(button, mnemonic.Label);
-        AutomationProperties.SetAutomationId(button, "SaveAllButton");
-        button.Click += (_, _) => _ = services.Attachments.SaveAllAsync(atts, s, remote, hostWindow());
-        return button;
+            total += Math.Max(a.Size, 0);
+        }
+        var line = new AttachmentSummaryLine(atts.Count, total, Look("SummaryActionStyle"));
+        line.SaveAll.IsEnabled = !services.Attachments.IsSavingAll(s.Id);
+        line.SaveAll.Click += (_, _) => _ = services.Attachments.SaveAllAsync(atts, s, remote, hostWindow());
+        return line;
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "copying an address failed: {Kind} 0x{HResult:X8}")]

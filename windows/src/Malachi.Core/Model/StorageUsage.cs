@@ -37,12 +37,12 @@ public static class StorageUsage
         }
         if (r.SavedBytes > 0)
         {
-            // TRANSLATORS: %s is a size such as "1.2 GiB".
+            // TRANSLATORS: %s is a size such as "1.2 GB".
             lines.Add(L10n.T("Compression saves %s", Format.FormatSize(r.SavedBytes)));
         }
         if (r.RemoteAttachmentBytes > 0)
         {
-            // TRANSLATORS: %s is a size such as "1.2 GiB".
+            // TRANSLATORS: %s is a size such as "1.2 GB".
             lines.Add(L10n.T("%s of attachments are on the server only", Format.FormatSize(r.RemoteAttachmentBytes)));
         }
         return (Format.FormatSize(r.TotalBytes), string.Join('\n', lines));

@@ -103,7 +103,7 @@ public static class AttachmentChips
         }
         if (a.Size > API.Limits.MaxAttachmentDataBytes)
         {
-            // TRANSLATORS: %s is a size such as "16.0 MiB".
+            // TRANSLATORS: %s is a size such as "16.8 MB".
             return (PartState.Unavailable, L10n.T("Attachments over %s cannot be opened or saved yet.", Format.FormatSize(API.Limits.MaxAttachmentDataBytes)));
         }
         if (a.IsRemote || b.BodyState == BodyState.Pending)

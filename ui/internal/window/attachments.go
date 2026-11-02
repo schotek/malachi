@@ -18,7 +18,6 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
-	"github.com/diamondburned/gotk4/pkg/pango"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
@@ -28,11 +27,12 @@ import (
 )
 
 // The attachment chips under the headers of a message (message_attachments
-// in the .blp files): one per attachment with its icon, name and size. A
-// click shows the attachment in the desktop's previewer (Sushi, see
-// ui/internal/preview), the arrow offers Open in the default application,
-// Ask the Assistant… while the Assistant is shown (assistant.go) and
-// Save As…, and Save All appears with two or more. Names and types are
+// in the .blp files): one tile per attachment (widget.AttachmentTile) with
+// its icon, name and size. A click shows the attachment in the desktop's
+// previewer (Sushi, see ui/internal/preview), the arrow (and a right-click)
+// offers Open in the default application, Ask the Assistant… while the
+// Assistant is shown (assistant.go) and Save As…, and with two or more a
+// summary line over the tiles carries Save All. Names and types are
 // server data and are shown as plain text (CLAUDE.md rule 3); programs and
 // scripts are previewed but never opened directly (docs/security.md §4);
 // the content comes through message.part, so a part over
@@ -48,13 +48,6 @@ const partTimeout = 60 * time.Second
 // next open sweeps it: the viewer may still be reading it lazily.
 const openMaxAge = time.Hour
 
-// chipNameChars bounds the file name on a chip. Two chips have to fit
-// side by side in a narrow message pane, and the middle of the name is
-// what gets elided, so the extension survives; the full name is the
-// button's tooltip. The rest of the chip's density is CSS
-// (.attachment-chip in ui/internal/style).
-const chipNameChars = 14
-
 // remoteIconNames is the icon of a part on the mail server only, then the
 // one an icon theme without it shows instead.
 var remoteIconNames = []string{"network-server-symbolic", "folder-remote-symbolic"}
@@ -68,12 +61,15 @@ func (v *messageView) renderAttachments(s api.MessageSummary, lm *loadedMessage)
 	// would let GTK hand the focus to the selectable header labels (see
 	// newMessageView); the focus goes to the chip in its place instead, or
 	// to the body when there is none.
-	if at := v.focusedChip(); at >= 0 {
+	if at := v.focusedChip(); at != -1 {
 		v.parent.SetFocus(nil)
 		defer func() {
-			if at < len(v.chips) {
+			switch {
+			case at == focusSaveAll && v.saveAll != nil:
+				v.saveAll.GrabFocus()
+			case at >= 0 && at < len(v.chips):
 				gtk.BaseWidget(v.chips[at]).GrabFocus()
-			} else {
+			default:
 				v.stack.GrabFocus()
 			}
 		}()
@@ -82,6 +78,7 @@ func (v *messageView) renderAttachments(s api.MessageSummary, lm *loadedMessage)
 		v.attachments.Remove(c)
 	}
 	v.chips = nil
+	v.setSummary(nil)
 	if lm == nil || lm.msg == nil {
 		v.attachments.SetVisible(false)
 		return
@@ -108,9 +105,37 @@ func (v *messageView) renderAttachments(s api.MessageSummary, lm *loadedMessage)
 		v.addChip(v.buildChip(s.AccountID, s.ID, a, st, why, downloading))
 	}
 	if len(atts) >= 2 && allOK {
-		v.addChip(v.buildSaveAll(s.AccountID, s.ID, atts, anyRemote(atts, lm.body)))
+		v.setSummary(v.buildSaveAll(s.AccountID, s.ID, atts, anyRemote(atts, lm.body)))
 	}
 	v.attachments.SetVisible(true)
+}
+
+// focusSaveAll is what focusedChip says when Save All has the focus.
+const focusSaveAll = -2
+
+// setSummary puts the summary line over the chips (w), or removes it
+// (nil). The line is the chip box's sibling right before it: a WrapBox
+// cannot break a line on demand.
+func (v *messageView) setSummary(w *gtk.Box) {
+	if v.summary != nil {
+		if box, ok := v.summary.Parent().(*gtk.Box); ok {
+			box.Remove(v.summary)
+		}
+		v.summary, v.saveAll = nil, nil
+	}
+	if w == nil {
+		return
+	}
+	box, ok := v.attachments.Parent().(*gtk.Box)
+	if !ok {
+		return
+	}
+	if prev := v.attachments.PrevSibling(); prev != nil {
+		box.InsertChildAfter(w, prev)
+	} else {
+		box.Prepend(w)
+	}
+	v.summary = w
 }
 
 // addChip appends a widget to the chip box and remembers it for removal.
@@ -119,14 +144,17 @@ func (v *messageView) addChip(c gtk.Widgetter) {
 	v.chips = append(v.chips, c)
 }
 
-// focusedChip is the position of the chip (or Save All) that holds the
-// focus of the view's window, -1 when none does.
+// focusedChip is the position of the chip that holds the focus of the
+// view's window, focusSaveAll for Save All, -1 when none does.
 func (v *messageView) focusedChip() int {
 	f := v.parent.Focus()
 	if f == nil {
 		return -1
 	}
 	focus := gtk.BaseWidget(f)
+	if v.summary != nil && (focus.Eq(v.summary) || focus.IsAncestor(v.summary)) {
+		return focusSaveAll
+	}
 	if !focus.IsAncestor(v.attachments) {
 		return -1
 	}
@@ -145,8 +173,9 @@ func (v *messageView) say(text string) {
 	}
 }
 
-// buildChip is one attachment: a button (icon, name, size) that previews
-// it, linked to an arrow with the Open / Save As… menu. The actions live in
+// buildChip is one attachment: a tile (icon, name, size) whose click
+// previews it, with an arrow (and a right-click) for the Open / Save As…
+// menu. The actions live in
 // a group on the chip itself and close over the attachment, so a chip never
 // acts on a message other than the one it was built for. A part that
 // cannot be had (partWaiting, partUnavailable) leaves the chip insensitive
@@ -162,38 +191,21 @@ func (v *messageView) buildChip(acc api.AccountID, id api.MessageID, a api.Attac
 	nested := attachedMessage(a)
 	remote := st == partRemote
 
-	icon := gtk.NewImageFromGIcon(gio.ContentTypeGetSymbolicIcon(chipIconType(a)))
-	label := gtk.NewLabel(name)
-	label.SetUseMarkup(false)
-	label.SetEllipsize(pango.EllipsizeMiddle) // keep the extension visible
-	label.SetMaxWidthChars(chipNameChars)
-	label.AddCSSClass("chip-name")
-	inner := gtk.NewBox(gtk.OrientationHorizontal, 4)
-	inner.Append(icon)
-	inner.Append(label)
+	size := ""
 	if a.Size > 0 {
-		size := gtk.NewLabel(widget.FormatSize(a.Size))
-		size.SetUseMarkup(false)
-		size.AddCSSClass("chip-size")
-		size.AddCSSClass("dim-label")
-		inner.Append(size)
+		size = widget.FormatSize(a.Size)
 	}
-	if remote {
-		inner.Append(remoteIndicator(why, downloading))
-	}
-	button := gtk.NewButton()
-	button.SetChild(inner)
 	arrow := gtk.NewMenuButton()
 	arrow.SetIconName("pan-down-symbolic")
 	arrow.SetMenuModel(chipMenu(nested))
 	arrow.SetTooltipText(i18n.T("More Actions"))
-	arrow.AddCSSClass("chip-arrow")
-
-	box := gtk.NewBox(gtk.OrientationHorizontal, 0)
-	box.AddCSSClass("linked")
-	box.AddCSSClass("attachment-chip")
-	box.Append(button)
-	box.Append(arrow)
+	arrow.AddCSSClass("flat")
+	tile := widget.NewAttachmentTile(chipIconType(a), name, size, arrow)
+	if remote {
+		tile.Detail.Append(remoteIndicator(why, downloading))
+	}
+	tile.OnSecondaryClick(func() { arrow.Popup() })
+	box, button := tile.Root, tile.Main
 
 	open := func() { v.openAttachment(acc, id, a, remote) }
 	showPreview := func() { v.previewAttachment(acc, id, a, remote) }
@@ -269,13 +281,26 @@ func remoteIndicator(why string, downloading bool) gtk.Widgetter {
 	return icon
 }
 
-// buildSaveAll is the button after the chips that saves all of them into
-// one folder; remote says that some are on the mail server only. It stays
-// insensitive while a Save All of the message runs (Window.savingAll).
-func (v *messageView) buildSaveAll(acc api.AccountID, id api.MessageID, atts []api.Attachment, remote bool) gtk.Widgetter {
+// buildSaveAll is the summary line over the chips: their number and total
+// size in a dim caption, and at its end the quiet button that saves all of
+// them into one folder; remote says that some are on the mail server only.
+// The button stays insensitive while a Save All of the message runs
+// (Window.savingAll).
+func (v *messageView) buildSaveAll(acc api.AccountID, id api.MessageID, atts []api.Attachment, remote bool) *gtk.Box {
+	var total int64
+	for _, a := range atts {
+		total += max(a.Size, 0)
+	}
+	summary := gtk.NewLabel(widget.AttachmentSummary(len(atts), total))
+	summary.SetUseMarkup(false)
+	summary.SetXAlign(0)
+	summary.SetHExpand(true)
+	summary.AddCSSClass("caption")
+	summary.AddCSSClass("dim-label")
+
 	button := gtk.NewButton()
 	button.AddCSSClass("flat")
-	button.AddCSSClass("chip-action") // as dense as the chips beside it
+	button.AddCSSClass("chip-action")
 	content := gtk.NewBox(gtk.OrientationHorizontal, 4)
 	content.Append(gtk.NewImageFromIconName("document-save-symbolic"))
 	label := gtk.NewLabelWithMnemonic(i18n.T("Save _All"))
@@ -284,7 +309,13 @@ func (v *messageView) buildSaveAll(acc api.AccountID, id api.MessageID, atts []a
 	label.SetMnemonicWidget(button)
 	button.SetSensitive(!v.win.savingAll[id])
 	button.ConnectClicked(func() { v.saveAllAttachments(acc, id, atts, remote, button) })
-	return button
+
+	line := gtk.NewBox(gtk.OrientationHorizontal, 12)
+	line.AddCSSClass("attachment-summary")
+	line.Append(summary)
+	line.Append(button)
+	v.saveAll = button
+	return line
 }
 
 // showsHTML reports whether renderBody puts b in the HTML view.
@@ -346,7 +377,7 @@ func partState(a api.Attachment, b *api.MessageBodyResult) (partAvailability, st
 		return partUnavailable, i18n.T("This message could not be read.")
 	}
 	if a.Size > api.MaxAttachmentDataBytes {
-		// TRANSLATORS: %s is a size such as "16.0 MiB".
+		// TRANSLATORS: %s is a size such as "16.8 MB".
 		return partUnavailable, fmt.Sprintf(i18n.T("Attachments over %s cannot be opened or saved yet."), widget.FormatSize(api.MaxAttachmentDataBytes))
 	}
 	switch {
@@ -438,19 +469,7 @@ func chipName(a api.Attachment) string {
 // chipIconType is the content type the icon is chosen by: the claimed one,
 // or a guess from the file name when the sender said nothing useful.
 func chipIconType(a api.Attachment) string {
-	ct := strings.ToLower(strings.TrimSpace(a.ContentType))
-	if i := strings.IndexByte(ct, ';'); i >= 0 {
-		ct = strings.TrimSpace(ct[:i])
-	}
-	if ct == "" || ct == "application/octet-stream" {
-		if _, guess := gio.ContentTypeGuess(a.Filename, nil); guess != "" {
-			ct = guess
-		}
-	}
-	if ct == "" {
-		ct = "application/octet-stream"
-	}
-	return ct
+	return widget.FileContentType(a.Filename, a.ContentType)
 }
 
 // fileName is the name a fetched part is written under: what message.part
@@ -569,13 +588,52 @@ func (v *messageView) writeAttachment(acc api.AccountID, id api.MessageID, a api
 
 // launchFile hands a written attachment to the default application.
 func (v *messageView) launchFile(path string) {
+	launchOpenFile(v.parent, path, v.win.log, v.say)
+}
+
+// launchOpenFile hands a file written for opening to the default
+// application over parent; a failure is logged and said.
+func launchOpenFile(parent *gtk.Window, path string, log *slog.Logger, say func(string)) {
 	l := gtk.NewFileLauncher(gio.NewFileForPath(path))
-	l.Launch(context.Background(), v.parent, func(r gio.AsyncResulter) {
+	l.Launch(context.Background(), parent, func(r gio.AsyncResulter) {
 		if err := l.LaunchFinish(r); err != nil && !dialogDismissed(err) {
-			v.win.log.Warn("opening an attachment", "err", err)
-			v.say(i18n.T("The attachment could not be opened"))
+			log.Warn("opening an attachment", "err", err)
+			say(i18n.T("The attachment could not be opened"))
 		}
 	})
+}
+
+// PreviewDraftAttachment shows an attachment of a compose window from its
+// bytes (compose.Manager.PreviewAttachment) as a tile of a message shows a
+// part: written to the private directory for opening (writeOpenFile, off
+// the main loop), then in the desktop's previewer, else the default
+// application, never for a program or script. Called on the main loop;
+// say runs on it.
+func PreviewDraftAttachment(log *slog.Logger) func(parent *gtk.Window, name, contentType string, data []byte, say func(string)) {
+	return func(parent *gtk.Window, name, contentType string, data []byte, say func(string)) {
+		exe := executableAttachment(name, contentType)
+		go func() {
+			path, err := writeOpenFile(name, data)
+			if err != nil {
+				log.Warn("writing an attachment for opening", "err", err)
+				glib.IdleAdd(func() { say(i18n.T("The attachment could not be opened")) })
+				return
+			}
+			glib.IdleAdd(func() {
+				preview.Show(gio.NewFileForPath(path).URI(), func(err error) {
+					if err == nil {
+						return
+					}
+					log.Info("previewing an attachment", "err", err)
+					if exe {
+						say(i18n.T("The attachment could not be opened"))
+						return
+					}
+					launchOpenFile(parent, path, log, say)
+				})
+			})
+		}()
+	}
 }
 
 // saveAttachment asks where to put the part (the FileChooser portal under

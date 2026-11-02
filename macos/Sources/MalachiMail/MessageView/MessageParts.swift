@@ -83,7 +83,7 @@ struct ChipFocus {
     /// the one that held it, else to `body` (nil: it stays with the window).
     func restore(to chips: [NSView], else body: NSView?) {
         guard let at, let window else { return }
-        let target = at < chips.count ? ((chips[at] as? AttachmentChipView)?.control ?? chips[at]) : nil
+        let target = at < chips.count ? chips[at] : nil
         if target.map({ window.makeFirstResponder($0) }) != true, let body {
             window.makeFirstResponder(body)
         }
@@ -106,13 +106,15 @@ struct AttachmentChipFactory {
     /// The chip on display for a part, for Quick Look to zoom out of.
     let chipForPart: @MainActor (_ partId: String) -> NSView?
 
-    /// The chips of `plan` for message `s`, Save All last.
+    /// The chips of `plan` for message `s`, the summary line with Save All
+    /// first.
     func views(_ plan: ChipPlan, of s: MessageSummary) -> [NSView] {
         let downloading = cache.showsDownload(s.id)
-        var out = plan.chips.map { chip(s, $0, downloading: downloading) }
+        var out: [NSView] = []
         if plan.saveAll {
             out.append(saveAll(s, plan.chips.map(\.attachment), remote: plan.saveAllRemote))
         }
+        out += plan.chips.map { chip(s, $0, downloading: downloading) }
         return out
     }
 
@@ -144,10 +146,11 @@ struct AttachmentChipFactory {
         return chip
     }
 
-    /// Save All stays disabled while one of the message runs, wherever the
-    /// message is shown (`MessageCache.isSavingAll`).
+    /// The summary line; its Save All stays disabled while one of the
+    /// message runs, wherever the message is shown
+    /// (`MessageCache.isSavingAll`).
     private func saveAll(_ s: MessageSummary, _ atts: [Attachment], remote: Bool) -> NSView {
-        let button = SaveAllChipView()
+        let button = AttachmentSummaryView(count: atts.count, total: atts.reduce(0) { $0 + max($1.size, 0) })
         button.isEnabled = !cache.isSavingAll(s.id)
         let delegate = delegate
         let window = window

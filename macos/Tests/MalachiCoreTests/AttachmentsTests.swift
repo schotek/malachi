@@ -75,9 +75,9 @@ private func part(filename: String) -> MessagePartResult {
             ("remote false", notRemote, fetched, .local, ""),
             ("remote", remote, fetched, .remote, onServer),
             ("at the cap", edge, fetched, .local, ""),
-            ("over the cap", huge, fetched, .unavailable, "Attachments over 16.0 MiB cannot be opened or saved yet."),
-            ("over the cap beats remote", hugeRemote, fetched, .unavailable, "Attachments over 16.0 MiB cannot be opened or saved yet."),
-            ("over the cap while pending", huge, body(.pending), .unavailable, "Attachments over 16.0 MiB cannot be opened or saved yet."),
+            ("over the cap", huge, fetched, .unavailable, "Attachments over 16.8 MB cannot be opened or saved yet."),
+            ("over the cap beats remote", hugeRemote, fetched, .unavailable, "Attachments over 16.8 MB cannot be opened or saved yet."),
+            ("over the cap while pending", huge, body(.pending), .unavailable, "Attachments over 16.8 MB cannot be opened or saved yet."),
             ("an unknown state", small, body("archived"), .waiting, ""),
         ]
         for (name, a, b, state, why) in cases {

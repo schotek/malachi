@@ -10,9 +10,10 @@
 // view: script off, no network, nothing written to disk), titled with the
 // attachment's name, with Open (disabled for a program, which only gets its
 // panel) and Save As…, which act on the attachment through the
-// AttachmentOpener as the chip's menu does. Escape and Ctrl+W close it (the
-// window's CommandRouter), and closing ends its view; the next click on a
-// chip makes a new one.
+// AttachmentOpener as the chip's menu does; a compose window's file
+// (ComposeAttachmentsController.Preview) is shown without either. Escape
+// and Ctrl+W close it (the window's CommandRouter), and closing ends its
+// view; the next click on a chip makes a new one.
 
 using System;
 using Malachi.App.Shell;
@@ -77,6 +78,10 @@ public sealed partial class PreviewWindow : Window
         Title = name;
         WindowTitleBar.Title = name;
         OpenButton.IsEnabled = request.CanOpen;
+        // A compose window's file is no message's part: shown only.
+        var actions = request.Message is null ? Visibility.Collapsed : Visibility.Visible;
+        OpenButton.Visibility = actions;
+        SaveButton.Visibility = actions;
         if (request.Data is { } data)
         {
             View.Show(request.Attachment, request.ContentType, data);
@@ -90,19 +95,19 @@ public sealed partial class PreviewWindow : Window
 
     private void OnOpen(object sender, RoutedEventArgs e)
     {
-        if (shown is { } r && r.CanOpen)
+        if (shown is { Message: { } m } r && r.CanOpen)
         {
             // Fetched for the preview already: the part the daemon served,
             // downloaded again only should the daemon have let go of it.
-            _ = opener.OpenAsync(r.Attachment, r.Message, remote: false, this);
+            _ = opener.OpenAsync(r.Attachment, m, remote: false, this);
         }
     }
 
     private void OnSave(object sender, RoutedEventArgs e)
     {
-        if (shown is { } r)
+        if (shown is { Message: { } m } r)
         {
-            _ = opener.SaveAsAsync(r.Attachment, r.Message, remote: false, this);
+            _ = opener.SaveAsAsync(r.Attachment, m, remote: false, this);
         }
     }
 }

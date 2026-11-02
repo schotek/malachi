@@ -889,7 +889,7 @@ final class MessageViewController: NSViewController {
         }
         defer {
             if let at = focusAt, let window {
-                let target = at < chips.count ? ((chips[at] as? AttachmentChipView)?.control ?? chips[at]) : nil
+                let target = at < chips.count ? chips[at] : nil
                 if target.map({ window.makeFirstResponder($0) }) != true {
                     window.makeFirstResponder(bodyTextView)
                 }
@@ -908,20 +908,20 @@ final class MessageViewController: NSViewController {
             return
         }
         let downloading = mode != .embedded && cache.showsDownload(s.id)
-        var allOK = true
-        for a in atts {
-            var (state, why) = partState(a, lm.body)
+        let states = atts.map { a -> (PartState, String) in
             if mode == .embedded {
                 // The parts of an attached message have no numbers; nothing
                 // can fetch them (message.embedded in docs/api.md).
-                state = .unavailable
-                why = L10n.T("Files inside an attached message cannot be opened or saved yet.")
+                return (.unavailable, L10n.T("Files inside an attached message cannot be opened or saved yet."))
             }
-            allOK = allOK && (state == .local || state == .remote)
-            addChip(buildChip(s, a, state: state, why: why, downloading: downloading))
+            return partState(a, lm.body)
         }
+        let allOK = states.allSatisfy { $0.0 == .local || $0.0 == .remote }
         if atts.count >= 2, allOK {
             addChip(buildSaveAll(s, atts, remote: anyRemote(atts, lm.body)))
+        }
+        for (a, (state, why)) in zip(atts, states) {
+            addChip(buildChip(s, a, state: state, why: why, downloading: downloading))
         }
         header.chipsVisible = true
     }
@@ -976,12 +976,13 @@ final class MessageViewController: NSViewController {
         return chip
     }
 
-    /// The button after the chips that saves all of them into one folder;
-    /// `remote` says that some are on the mail server. It stays disabled
-    /// while a Save All of the message runs, wherever the message is shown
-    /// (attachments.go `buildSaveAll`, `MessageCache.isSavingAll`).
+    /// The summary line over the chips with the button that saves all of
+    /// them into one folder; `remote` says that some are on the mail
+    /// server. The button stays disabled while a Save All of the message
+    /// runs, wherever the message is shown (attachments.go `buildSaveAll`,
+    /// `MessageCache.isSavingAll`).
     private func buildSaveAll(_ s: MessageSummary, _ atts: [Attachment], remote: Bool) -> NSView {
-        let button = SaveAllChipView()
+        let button = AttachmentSummaryView(count: atts.count, total: atts.reduce(0) { $0 + max($1.size, 0) })
         button.isEnabled = !cache.isSavingAll(s.id)
         button.onClick = { [weak self, weak button] in
             guard let self, let delegate = self.delegate else { return }

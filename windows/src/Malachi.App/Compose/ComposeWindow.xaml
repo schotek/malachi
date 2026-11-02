@@ -57,6 +57,9 @@ A compose window, top to bottom as compose.blp:
                 <!-- The title fills the middle from where the TitleBar's own
                      title would start, and is shortened at its end. -->
                 <HorizontalAlignment x:Key="TitleBarContentHorizontalAlignment">Stretch</HorizontalAlignment>
+                <!-- Send stands right at the caption buttons: no drag strip
+                     between them (the title is the place to drag by). -->
+                <x:Double x:Key="TitleBarMinDragRegionWidth">0</x:Double>
             </TitleBar.Resources>
             <TitleBar.IconSource>
                 <ImageIconSource ImageSource="ms-appx:///Assets/Malachi.ico" />
@@ -95,7 +98,6 @@ A compose window, top to bottom as compose.blp:
             <TitleBar.RightHeader>
                 <StackPanel
                     x:Name="EndButtons"
-                    Margin="0,0,4,0"
                     Orientation="Horizontal"
                     Spacing="6">
                     <!-- [end] rewrite_button: the assistant's rewrite (ui/internal/assistant,
