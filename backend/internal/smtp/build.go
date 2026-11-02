@@ -76,11 +76,78 @@ type BuildInput struct {
 
 	Attachments []Attachment
 
+	// Headers are extra header fields (Auto-Submitted, X-Loop of the mail
+	// rules' outgoing actions). A name must be a plain field name that
+	// BuildMessage does not write itself, a value printable ASCII without
+	// line breaks; anything else fails the build (checkHeaders), so no
+	// caller can fold a second field into one.
+	Headers []Header
+
 	// Calendar is an iMIP part (docs/calendar.md D9): the readable body
 	// becomes multipart/alternative[text/plain, (text/html,) text/calendar;
 	// method=…; charset=UTF-8], inside the mixed when there are files.
 	// nil = an ordinary message.
 	Calendar *CalendarPart
+}
+
+// Header is one extra header field of a BuildInput.
+type Header struct {
+	Name, Value string
+}
+
+// reservedHeaders are the fields BuildMessage writes itself (and Bcc,
+// which belongs to the envelope); Headers may not carry them.
+var reservedHeaders = map[string]bool{
+	"from": true, "to": true, "cc": true, "bcc": true, "subject": true, "date": true,
+	"message-id": true, "in-reply-to": true, "references": true, "user-agent": true,
+	"mime-version": true, "sender": true, "reply-to": true, "return-path": true,
+	"received": true,
+}
+
+// maxExtraHeaders bounds BuildInput.Headers.
+const maxExtraHeaders = 16
+
+// checkHeaders validates BuildInput.Headers.
+func checkHeaders(list []Header) error {
+	if len(list) > maxExtraHeaders {
+		return api.NewError(api.CodeInvalidArgument, "too many extra header fields")
+	}
+	for _, f := range list {
+		if !headerName(f.Name) {
+			return api.NewError(api.CodeInvalidArgument, "invalid header field name")
+		}
+		lower := strings.ToLower(f.Name)
+		if reservedHeaders[lower] || strings.HasPrefix(lower, "content-") {
+			return api.NewError(api.CodeInvalidArgument, "header field %s is written by the builder", lower)
+		}
+		if len(f.Value) > maxHeaderBytes || strings.TrimSpace(f.Value) == "" {
+			return api.NewError(api.CodeInvalidArgument, "invalid header field value")
+		}
+		for i := 0; i < len(f.Value); i++ {
+			if c := f.Value[i]; c < 0x20 || c > 0x7e {
+				return api.NewError(api.CodeInvalidArgument, "invalid header field value")
+			}
+		}
+	}
+	return nil
+}
+
+// headerName reports whether s is a plain field name: letters, digits
+// and hyphens, starting with a letter, at most 76 bytes.
+func headerName(s string) bool {
+	if s == "" || len(s) > 76 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
+		case i > 0 && (c >= '0' && c <= '9' || c == '-'):
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // CalendarPart is the text/calendar alternative of an iMIP message.
@@ -257,6 +324,12 @@ func buildHeader(in BuildInput) (mail.Header, error) {
 
 	// MIME-Version is added by the message writer.
 	h.Set("User-Agent", userAgent)
+	if err := checkHeaders(in.Headers); err != nil {
+		return h, err
+	}
+	for _, f := range in.Headers {
+		h.Add(f.Name, f.Value)
+	}
 	return h, nil
 }
 

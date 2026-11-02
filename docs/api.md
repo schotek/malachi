@@ -4990,8 +4990,10 @@ moves, trashes or marks read is not announced as new mail of the inbox.
 Each Message-ID of an account goes through the automatic run once (a
 message moved back into the inbox, also by another client, is left
 alone), and mail whose arrival is older than the day before the rule was
-enabled is never touched, so neither the first sync of an account nor a
-backfill runs rules. The server's own rules (Graph `messageRules`,
+enabled, or than the account's addition, is never touched, so neither
+the first sync of an account nor a backfill runs rules. The automatic
+run sees a message when its body is stored; one whose body is too big
+to download or cannot be parsed is not run through the rules. The server's own rules (Graph `messageRules`,
 Sieve) are neither read nor changed.
 
 ```jsonc
@@ -5038,10 +5040,18 @@ RuleAction    { "kind": "move|markRead|flag|trash|junk|forward|autoReply",
   lies in junk; a rule sends at most `RuleOutgoingPerHour` messages an
   hour, and `autoReply` answers a sender at most once in
   `RuleReplyInterval` (RFC 3834). Each refusal counts in `skipped`.
-  `forward` attaches the whole message as `message/rfc822` to one
-  address (`to`); `autoReply` answers the message's `Reply-To`, else
+  `forward` attaches the whole message as it came from the server to one
+  address (`to`), named after its subject with `.eml` and sent with the
+  media type `application/octet-stream` as `draft.create`'s forward of
+  several messages does (§4.5), under the subject `Fwd: ` and the
+  message's subject, with no text of its own; a message that is not
+  stored whole is downloaded first (`message.download`), one that cannot
+  be or is larger than `MaxOutgoingMessageBytes` counts in `skipped`; `autoReply` answers the message's `Reply-To`, else
   `From`, with `text` (plain text, at most `MaxRuleReplyBytes`) and
-  `subject` (else `Re: ` and the message's subject). Outgoing actions
+  `subject` (else `Re: ` and the message's subject), with `In-Reply-To`
+  and `References` of the message. Both carry `X-Loop` with the
+  account's address, and a message with an `X-Loop` field is never
+  answered or forwarded. The limits are kept per rule. Outgoing actions
   run only automatically, never in `rules.apply`.
 - `problem`: the daemon disabled the rule (`enabled` false): the folder
   of its `move` is gone (`folderGone`), or an outgoing action could not

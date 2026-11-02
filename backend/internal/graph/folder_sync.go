@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"net/url"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -396,8 +397,11 @@ func (s *Syncer) notifyNew(ctx context.Context, f store.Folder, ref store.Messag
 	case api.RoleSent, api.RoleDrafts, api.RoleTrash, api.RoleJunk, api.RoleOutbox:
 		return
 	}
+	// Read after Deps.Stored: a message the mail rules moved out of the
+	// folder or marked read there (docs/api.md §4.21), or one that was
+	// read already, is not new mail.
 	m, err := s.deps.Store.GetMessage(ctx, s.account.ID, ref.ID)
-	if err != nil {
+	if err != nil || m.FolderID != f.ID || slices.Contains(m.Flags, api.FlagSeen) {
 		return
 	}
 	s.deps.Notifier.NewMessage(api.NewMessageNotification{
