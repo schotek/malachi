@@ -20,12 +20,19 @@ type threadService struct{ b *Backend }
 // List pages through the conversations with a member in the folder; every
 // aggregate covers the members in that folder.
 func (s *threadService) List(ctx context.Context, p api.ThreadListParams) (*api.ThreadListResult, error) {
-	if p.AccountID == "" || p.FolderID == "" {
+	if p.Unified != "" {
+		if err := checkUnified(p.Unified, p.AccountID, p.FolderID); err != nil {
+			return nil, err
+		}
+	} else if p.AccountID == "" || p.FolderID == "" {
 		return nil, api.NewError(api.CodeInvalidArgument, "accountId and folderId are required")
 	}
-	a, err := s.b.requireAccount(ctx, string(p.AccountID))
-	if err != nil {
-		return nil, err
+	var a store.Account
+	if p.Unified == "" {
+		var err error
+		if a, err = s.b.requireAccount(ctx, string(p.AccountID)); err != nil {
+			return nil, err
+		}
 	}
 	limit := p.Page.Limit
 	if limit <= 0 {
@@ -49,6 +56,9 @@ func (s *threadService) List(ctx context.Context, p api.ThreadListParams) (*api.
 	case api.FilterAll, api.FilterUnread, api.FilterFlagged:
 	default:
 		return nil, api.NewError(api.CodeInvalidArgument, "filter must be all, unread or flagged")
+	}
+	if p.Unified != "" {
+		return s.unified(ctx, p, limit, sortOrder, listFilter)
 	}
 	items, next, total, err := s.b.store.ListThreads(ctx, a.ID, string(p.FolderID), p.Page.Cursor, limit, sortOrder, listFilter)
 	switch {

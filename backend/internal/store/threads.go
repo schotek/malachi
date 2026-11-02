@@ -320,6 +320,7 @@ type ThreadRow struct {
 
 // threadGroup is one row of the grouped query.
 type threadGroup struct {
+	folder        string // ListThreadsIn only: the folder the group is of
 	id            string
 	count, unread int
 	flagged, att  int
@@ -410,6 +411,140 @@ func (s *Store) ListThreads(ctx context.Context, accountID, folderID, cursor str
 		return nil, "", 0, err
 	}
 	return items, next, total, nil
+}
+
+// ListThreadsIn pages through the conversations of several folders at
+// once (the unified listing, docs/api.md §4.4). A thread is grouped per
+// folder (folder_id, thread_id): a thread id is unique only within its
+// account, and each row aggregates the members in that one folder exactly
+// as ListThreads would, SentCount and DraftCount included. Rows are
+// ordered by the date of the newest member, ties by folder id and then
+// thread id, so the order is total across accounts. The cursor has
+// prefixes of its own ("v" newest first, "V" oldest first): a ListThreads
+// or message cursor is ErrBadCursor here. A ref whose folder the account
+// does not have is skipped; no folder at all is an empty page. Filter,
+// limit and hidden rows as ListThreads; total counts the rows of every
+// folder under the filter.
+func (s *Store) ListThreadsIn(ctx context.Context, folders []FolderRef, cursor string, limit int, sortOrder api.SortOrder, listFilter api.MessageFilter) (items []ThreadRow, next string, total int, err error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	prefix, cmp, err := messageCursorPrefix(sortOrder, "v", "V")
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("list threads: unsupported sort %q", sortOrder)
+	}
+	order := "DESC"
+	if cmp == ">" {
+		order = "ASC"
+	}
+	var cursorStamp, cursorFolder, cursorThread string
+	if cursor != "" {
+		var key string
+		if cursorStamp, key, err = decodeSortCursor(cursor, prefix); err != nil {
+			return nil, "", 0, err
+		}
+		var ok bool
+		if cursorFolder, cursorThread, ok = strings.Cut(key, "\x00"); !ok || cursorFolder == "" || cursorThread == "" {
+			return nil, "", 0, ErrBadCursor
+		}
+	}
+	refs, err := s.existingFolders(ctx, folders)
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("list threads: %w", err)
+	}
+	having := ""
+	switch listFilter {
+	case "", api.FilterAll:
+	case api.FilterUnread:
+		having = ` HAVING SUM(unread) > 0`
+	case api.FilterFlagged:
+		having = ` HAVING MAX(flagged) = 1`
+	default:
+		return nil, "", 0, fmt.Errorf("list threads: unsupported filter %q", listFilter)
+	}
+	if len(refs) == 0 {
+		return []ThreadRow{}, "", 0, nil
+	}
+	ids := refFolderIDs(refs)
+	grouped := threadGroupInQuery(len(ids), having)
+	groupArgs := append(toAny(ids), toAny(ids)...)
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+grouped+`)`, groupArgs...).Scan(&total); err != nil {
+		return nil, "", 0, fmt.Errorf("count threads: %w", err)
+	}
+
+	query := `WITH t AS (` + grouped + `) SELECT folder_id, thread_id, n, unread, flagged, att, latest FROM t`
+	args := append([]any(nil), groupArgs...)
+	if cursor != "" {
+		query += ` WHERE (latest ` + cmp + ` ? OR (latest = ? AND (folder_id ` + cmp + ` ? OR (folder_id = ? AND thread_id ` + cmp + ` ?))))`
+		args = append(args, cursorStamp, cursorStamp, cursorFolder, cursorFolder, cursorThread)
+	}
+	query += ` ORDER BY latest ` + order + `, folder_id ` + order + `, thread_id ` + order + ` LIMIT ?`
+	args = append(args, limit+1)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("list threads: %w", err)
+	}
+	var groups []threadGroup
+	for rows.Next() {
+		var g threadGroup
+		if err := rows.Scan(&g.folder, &g.id, &g.count, &g.unread, &g.flagged, &g.att, &g.latest); err != nil {
+			rows.Close()
+			return nil, "", 0, fmt.Errorf("scan thread: %w", err)
+		}
+		groups = append(groups, g)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, "", 0, fmt.Errorf("list threads: %w", err)
+	}
+	if len(groups) > limit {
+		groups = groups[:limit]
+		last := groups[limit-1]
+		next = encodeSortCursor(prefix, last.latest, last.folder+"\x00"+last.id)
+	}
+
+	// The rows of each folder as ListThreads makes them, then back in the
+	// page's order.
+	accountOf := make(map[string]string, len(refs))
+	for _, r := range refs {
+		accountOf[r.FolderID] = r.AccountID
+	}
+	byFolder := map[string][]threadGroup{}
+	var folderOrder []string
+	for _, g := range groups {
+		if _, ok := byFolder[g.folder]; !ok {
+			folderOrder = append(folderOrder, g.folder)
+		}
+		byFolder[g.folder] = append(byFolder[g.folder], g)
+	}
+	made := map[[2]string]ThreadRow{}
+	for _, fid := range folderOrder {
+		list, err := s.threadRows(ctx, accountOf[fid], fid, byFolder[fid])
+		if err != nil {
+			return nil, "", 0, err
+		}
+		for _, r := range list {
+			made[[2]string{fid, r.ID}] = r
+		}
+	}
+	items = make([]ThreadRow, 0, len(groups))
+	for _, g := range groups {
+		if r, ok := made[[2]string{g.folder, g.id}]; ok {
+			items = append(items, r)
+		}
+	}
+	return items, next, total, nil
+}
+
+// threadGroupInQuery is threadGroupQuery over n folders (their ids are the
+// parameters, given twice) grouped by folder and thread.
+func threadGroupInQuery(n int, having string) string {
+	in := inPlaceholders(n)
+	return `SELECT folder_id, thread_id, COUNT(*) AS n, SUM(unread) AS unread, MAX(flagged) AS flagged,
+			MAX(has_attachments) AS att, MAX(date) AS latest
+		FROM messages WHERE folder_id IN (` + in + `) AND thread_id != ''
+			AND id NOT IN (SELECT id FROM messages WHERE folder_id IN (` + in + `) AND hidden = 1)
+		GROUP BY folder_id, thread_id` + having
 }
 
 // threadGroupQuery aggregates one folder's messages (the parameter, given
