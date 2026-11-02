@@ -309,6 +309,15 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
         actions.mailbox.model.folderRole(FolderKey(account: summary.accountId, folder: summary.folderId))
     }
 
+    // MARK: Signatures (docs/plans/signatures.md §6)
+
+    /// The badge's popover: the verdict of message `s` in detail. The
+    /// confirmation of a key is asked on the badge's window.
+    func showSignature(of s: MessageSummary, relativeTo anchor: NSView) {
+        let summary = cache.loaded(s.id)?.msg?.signature
+        SignatureDetailsPopover.show(s, summary: summary, relativeTo: anchor, state: state, window: anchor.window)
+    }
+
     // MARK: Unsubscribing (window/bulk.go)
 
     /// The bulk strip's button for message `id`: the confirmation first

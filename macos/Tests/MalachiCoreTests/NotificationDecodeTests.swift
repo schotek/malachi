@@ -118,8 +118,12 @@ import Testing
         // notify.updateChanged has no payload; the hub reads it by name
         // (`UpdateController` refreshes), like the profile's.
         let updateSamples: [(String, String)] = [(API.Notify.updateChanged, "{}")]
-        #expect((samples + calendarSamples + profileSamples + contactsSamples + updateSamples).map(\.0) == API.allNotifications)
-        for (method, params) in profileSamples + updateSamples {
+        // notify.signaturesChanged has no payload either; the hub reads it by
+        // name (the messages on display, the details popover and the key
+        // list ask again).
+        let signatureSamples: [(String, String)] = [(API.Notify.signaturesChanged, "{}")]
+        #expect((samples + calendarSamples + profileSamples + contactsSamples + updateSamples + signatureSamples).map(\.0) == API.allNotifications)
+        for (method, params) in profileSamples + updateSamples + signatureSamples {
             #expect(try CalendarNotification(raw(method, params)) == nil)
             #expect(try ContactsChangedNotification.decode(raw(method, params)) == nil)
             #expect(try DaemonNotification(raw(method, params)) == .unknown(method: method))

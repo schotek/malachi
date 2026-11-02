@@ -71,6 +71,8 @@ import MalachiCore
 //   own message, for an issue's event (no bar), in the Outbox (no bar) and
 //   with nothing selected (`DevelopmentQuickReplyMessage`).
 //   `crm-dialog` and `eway-wizard`: MainWindowController+DevStartCRM.swift.
+//   `signature-popover`, `signature-popover:pgp`, `signature-popover:bad`
+//   and `prefs-security`: MainWindowController+DevStartSignature.swift.
 //   `contacts`, `contacts:edit`, `contacts:new`, `contacts:narrow`, `contacts:add` and
 //   `prefs-contacts` (with MALACHI_CONTACTS_SAMPLES=1):
 //   MainWindowController+DevStartContacts.swift.
@@ -347,6 +349,9 @@ extension MainWindowController {
             return
         }
         if DevelopmentContacts.step(step, in: self) {
+            return
+        }
+        if DevelopmentSignature.step(step, in: self) {
             return
         }
         if DevelopmentAssistant.step(step, in: self) {

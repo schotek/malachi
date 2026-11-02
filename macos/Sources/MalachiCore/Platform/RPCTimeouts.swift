@@ -61,4 +61,8 @@ public enum RPCTimeouts {
     /// `update.check`: the daemon gives both requests of one check 70 s
     /// (core/update_service.go `updateCheckLimit`) before it answers.
     public static let updateCheck: Duration = .seconds(75)
+    /// `message.signatureRevocation`: the daemon's whole check (OCSP, then
+    /// the CRL) is allowed 15 s (api.RevocationTimeout); the client waits
+    /// 20 (docs/api.md §4.21).
+    public static let revocation: Duration = .seconds(20)
 }

@@ -71,12 +71,19 @@ public struct MessageSummary: Codable, Sendable, Equatable {
     /// Message-ID) is saved in an enabled CRM account (§4.17); a display
     /// cache, the CRM is the truth.
     @DefaultFalse public var crmSaved: Bool
+    /// The verdict of the message's signature (§4.21): the list's icon.
+    /// Absent without a signature that is the verdict of the whole message
+    /// and while it is pending. In `message.get` the same JSON key carries
+    /// the `SignatureSummary` (`Message.signature`); a `Message`'s summary
+    /// leaves this nil.
+    public var signature: MessageSignature?
 
     public init(
         id: MessageID, accountId: AccountID, folderId: FolderID, threadId: ThreadID? = nil,
         from: [Address], to: [Address]? = nil, subject: String, date: Date, snippet: String,
         flags: [Flag], hasAttachments: Bool, size: Int, outbox: OutboxInfo? = nil, issue: MessageIssue? = nil,
-        bulk: BulkInfo? = nil, invitation: InvitationSummary? = nil, crmSaved: Bool = false
+        bulk: BulkInfo? = nil, invitation: InvitationSummary? = nil, crmSaved: Bool = false,
+        signature: MessageSignature? = nil
     ) {
         self.id = id
         self.accountId = accountId
@@ -95,6 +102,7 @@ public struct MessageSummary: Codable, Sendable, Equatable {
         self.bulk = bulk
         self.invitation = invitation
         self.crmSaved = crmSaved
+        self.signature = signature
     }
 }
 
@@ -223,12 +231,16 @@ public struct Message: Codable, Sendable, Equatable {
     /// The message's record in each CRM account where it is saved
     /// (`message.get`, §4.17); nil when it is saved nowhere.
     public var crm: [CrmRecord]?
+    /// The summary of the signature's verdict (`message.get`,
+    /// `message.download`, §4.21): the header's badge. It takes the place
+    /// of `MessageSummary.signature` on the wire; nil without a verdict.
+    public var signature: SignatureSummary?
 
     public init(
         summary: MessageSummary, cc: [Address]? = nil, bcc: [Address]? = nil, replyTo: [Address]? = nil,
         rfcMessageId: String? = nil, inReplyTo: String? = nil, references: [String]? = nil,
         attachments: [Attachment] = [], headers: [String: String]? = nil, unsubscribe: UnsubscribeOffer? = nil,
-        invitation: InvitationCard? = nil, crm: [CrmRecord]? = nil
+        invitation: InvitationCard? = nil, crm: [CrmRecord]? = nil, signature: SignatureSummary? = nil
     ) {
         self.summary = summary
         self.cc = cc
@@ -242,16 +254,19 @@ public struct Message: Codable, Sendable, Equatable {
         self.unsubscribe = unsubscribe
         self.invitation = invitation
         self.crm = crm
+        self.signature = signature
     }
 
     private enum CodingKeys: String, CodingKey {
         case cc, bcc, replyTo, rfcMessageId, inReplyTo, references, attachments, headers, unsubscribe, invitation, crm
+        case signature
     }
 
     public init(from decoder: any Decoder) throws {
         summary = try MessageSummary(from: decoder)
         // The key holds the card here, not the summary the list carries.
         summary.invitation = nil
+        summary.signature = nil
         let c = try decoder.container(keyedBy: CodingKeys.self)
         cc = try c.decodeIfPresent([Address].self, forKey: .cc)
         bcc = try c.decodeIfPresent([Address].self, forKey: .bcc)
@@ -264,11 +279,13 @@ public struct Message: Codable, Sendable, Equatable {
         unsubscribe = try c.decodeIfPresent(UnsubscribeOffer.self, forKey: .unsubscribe)
         invitation = try c.decodeIfPresent(InvitationCard.self, forKey: .invitation)
         crm = try c.decodeIfPresent([CrmRecord].self, forKey: .crm)
+        signature = try c.decodeIfPresent(SignatureSummary.self, forKey: .signature)
     }
 
     public func encode(to encoder: any Encoder) throws {
         var plain = summary
         plain.invitation = nil
+        plain.signature = nil
         try plain.encode(to: encoder)
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encodeIfPresent(cc, forKey: .cc)
@@ -284,6 +301,7 @@ public struct Message: Codable, Sendable, Equatable {
         if let crm, !crm.isEmpty {
             try c.encode(crm, forKey: .crm)
         }
+        try c.encodeIfPresent(signature, forKey: .signature)
     }
 }
 

@@ -121,6 +121,10 @@ final class AppState {
     /// on notify.updateChanged.
     let updates: UpdateController
     var updateTokens: [NotificationHub.Token] = []
+    /// Signature trust (docs/api.md §4.21): the number every
+    /// notify.signaturesChanged raises, which the details popover and
+    /// Settings → Security follow (Integration+Signatures wires it).
+    let signatures = SignatureState()
     private var boardTriageTokens: [NotificationHub.Token] = []
 
     var hooks = Hooks()
@@ -404,6 +408,7 @@ final class NotificationHub {
     private var calendarNotification = HandlerList<CalendarNotification>()
     private var assistantProfileChanged = HandlerList<Void>()
     private var updateChanged = HandlerList<Void>()
+    private var signaturesChanged = HandlerList<Void>()
     private var contactsChanged = HandlerList<ContactsChangedNotification>()
     private var connection = HandlerList<ConnectionController.ConnectionState>()
 
@@ -465,6 +470,13 @@ final class NotificationHub {
         updateChanged.add { _ in f() }
     }
 
+    /// notify.signaturesChanged: trust changed (a key imported, confirmed
+    /// or removed, a revocation check); the messages on display, an open
+    /// details popover and the key list ask again (`wireSignatures`).
+    func addSignaturesChanged(_ f: @escaping @MainActor () -> Void) -> Token {
+        signaturesChanged.add { _ in f() }
+    }
+
     /// notify.contactsChanged: the Contacts window, the address chips'
     /// lookup and Settings → Contacts load again (`AppContacts`).
     func addContactsChanged(_ f: @escaping @MainActor (ContactsChangedNotification) -> Void) -> Token {
@@ -494,6 +506,10 @@ final class NotificationHub {
         }
         if raw.method == API.Notify.updateChanged {
             updateChanged.fire(())
+            return
+        }
+        if raw.method == API.Notify.signaturesChanged {
+            signaturesChanged.fire(())
             return
         }
         do {

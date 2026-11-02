@@ -79,6 +79,10 @@ final class MessageCellView: NSTableCellView {
     private let from = NSTextField(labelWithString: "")
     private let badge = CountBadgeView(padding: RowMetrics.badgePadding)
     private let attachment = NSImageView()
+    /// The verdict of a signed message beside the paperclip
+    /// (`SignatureView.listIcon`): a shield or a warning for a valid,
+    /// invalid, revoked or mismatching signature; nothing for the rest.
+    private let signatureIcon = NSImageView()
     private let star = NSImageView()
     private let origin = NSTextField(labelWithString: "")
     private let date = NSTextField(labelWithString: "")
@@ -136,6 +140,7 @@ final class MessageCellView: NSTableCellView {
     private var bulkTag = ""
     /// The invitation pill of the row's message (`invitationPill`).
     private var invitation = Cal.InvitationPill.none
+    private var signature: SignatureView.ListIcon?
     private var event = false
     private var statusStyle = Jira.StatusStyle.plain
     private var emphasized = false
@@ -224,11 +229,13 @@ final class MessageCellView: NSTableCellView {
         attachment.contentTintColor = Tint.secondary
         attachment.imageScaling = .scaleNone
         attachment.isHidden = true
+        signatureIcon.imageScaling = .scaleNone
+        signatureIcon.isHidden = true
         star.image = Icon.image("starred", size: .small)
         star.contentTintColor = Tint.accent
         star.imageScaling = .scaleNone
         star.isHidden = true
-        for icon in [attachment, star] {
+        for icon in [attachment, signatureIcon, star] {
             icon.setContentHuggingPriority(.required, for: .horizontal)
             icon.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
@@ -254,7 +261,7 @@ final class MessageCellView: NSTableCellView {
         date.setContentCompressionResistancePriority(.required, for: .horizontal)
         unreadDot.isHidden = true
 
-        let line = NSStackView(views: [from, eventLabel, badge, attachment, star, origin, date, unreadDot])
+        let line = NSStackView(views: [from, eventLabel, badge, attachment, signatureIcon, star, origin, date, unreadDot])
         line.orientation = .horizontal
         line.distribution = .fill
         line.setHuggingPriority(.defaultLow, for: .horizontal)
@@ -306,6 +313,7 @@ final class MessageCellView: NSTableCellView {
         applyAppearance(appearance)
         self.mine = mine
         invitation = invitationPill(row.message)
+        showSignature(SignatureView.listIcon(for: row.message.signature))
         // A brand and a msgid: nothing from mail.
         let pill = CRM.pillFor(row.message)
         crmPill.stringValue = pill?.label ?? ""
@@ -320,6 +328,28 @@ final class MessageCellView: NSTableCellView {
         }
         setMember(row.member)
         applyIssue()
+    }
+
+    /// The verdict's icon (nil: none), with its tooltip; the colour follows
+    /// the selection state (`applyColours`). A verdict's name is a fixed
+    /// text, nothing from the mail.
+    private func showSignature(_ icon: SignatureView.ListIcon?) {
+        signature = icon
+        signatureIcon.isHidden = icon == nil
+        if let icon {
+            signatureIcon.image = SignatureTint.image(icon.icon, description: icon.tooltip)
+            signatureIcon.toolTip = icon.tooltip
+            signatureIcon.setAccessibilityLabel(icon.tooltip)
+        } else {
+            signatureIcon.image = nil
+            signatureIcon.toolTip = nil
+        }
+        applySignatureTint()
+    }
+
+    private func applySignatureTint() {
+        guard let signature else { return }
+        signatureIcon.contentTintColor = emphasized ? .alternateSelectedControlTextColor : SignatureTint.color(signature.severity)
     }
 
     /// Displays a message (message_row.go `SetMessage`). The first sender
@@ -562,6 +592,7 @@ final class MessageCellView: NSTableCellView {
         preview.textColor = secondary
         renderPreview()
         attachment.contentTintColor = secondary
+        applySignatureTint()
         star.contentTintColor = emphasized ? .alternateSelectedControlTextColor : Tint.accent
         unreadDot.color = emphasized ? .alternateSelectedControlTextColor : Tint.accent
         badge.textColor = primary

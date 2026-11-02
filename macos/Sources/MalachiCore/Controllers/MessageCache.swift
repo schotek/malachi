@@ -143,6 +143,20 @@ public final class MessageCache {
         }
     }
 
+    /// notify.signaturesChanged (docs/api.md §5): trust changed, so the
+    /// verdict of a cached message that has one may have; message.get again
+    /// for each, and every view showing one hears of it through `onLoaded`
+    /// (the badge turns). A message without a verdict, or without its
+    /// message.get answer, is left alone: a verdict that appears arrives as
+    /// notify.messagesChanged.
+    public func refreshSignatures() {
+        let ids = cache.entries.filter { $0.value.msg?.signature != nil }.map(\.key)
+            .sorted { $0.rawValue < $1.rawValue }
+        for id in ids {
+            refetch(id) { _ in }
+        }
+    }
+
     // MARK: Fetching
 
     /// Runs message.get and message.body for `s` (each only when the cache

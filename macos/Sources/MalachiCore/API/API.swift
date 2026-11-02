@@ -604,7 +604,7 @@ public enum API {
         BoardArchive.self, BoardTrash.self, BoardUnflag.self, BoardDiscardDraft.self, BoardSetDraft.self, BoardQueue.self, BoardAnnotate.self,
         BoardCommit.self, BoardSetCommitment.self, BoardPreferencesGet.self, BoardSetPreferences.self,
         BoardRunStart.self, BoardRunEnd.self,
-    ] + calendarMethods + crmMethods + assistantProfileMethods + contactsMethods + updateMethods
+    ] + calendarMethods + crmMethods + assistantProfileMethods + contactsMethods + updateMethods + signatureMethods
 
     /// api.AllMethods: every callable method name.
     public static let allMethods: [String] = methods.map { $0.name }
@@ -645,6 +645,11 @@ public enum API {
         /// The update check's status changed; the application's
         /// `UpdateController` asks update.status again.
         public static let updateChanged = "notify.updateChanged"
+        /// Trust changed (a key imported, confirmed or removed, a
+        /// revocation check, other system roots): the application's
+        /// `SignatureState` bumps its generation, so the messages on
+        /// display, an open details popover and the key list ask again.
+        public static let signaturesChanged = "notify.signaturesChanged"
     }
 
     /// api.AllNotifications: every server-initiated notification name.
@@ -655,6 +660,7 @@ public enum API {
         Notify.assistantProfileChanged,
         Notify.contactsChanged,
         Notify.updateChanged,
+        Notify.signaturesChanged,
     ]
 
     /// The limits the daemon enforces (types.go constants), for pre-checks.

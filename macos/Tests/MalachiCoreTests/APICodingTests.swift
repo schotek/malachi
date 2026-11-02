@@ -1279,10 +1279,11 @@ import Testing
         (1500, "malformedMessage"), (1501, "sanitizeFailed"), (1502, "attachmentTooBig"), (1503, "partNotFound"),
         (1504, "partNotDownloaded"), (1505, "unsubscribeFailed"), (1506, "quoteNotFound"),
         (1507, "malformedCalendar"), (1508, "recurrenceUnsupported"), (1509, "addressBookReadOnly"),
+        (1510, "revocationFailed"),
     ]
 
     @Test func errorCodesAreNamed() {
-        #expect(ErrorCode.all.count == 53 && Set(ErrorCode.all).count == 53)
+        #expect(ErrorCode.all.count == 54 && Set(ErrorCode.all).count == 54)
         #expect(ErrorCode.all.map(\.rawValue) == Self.goCodes.map { $0.0 })
         #expect(ErrorCode.all.map(\.name) == Self.goCodes.map { $0.1 })
         for code in ErrorCode.all {
@@ -1390,11 +1391,13 @@ import Testing
         "contact.create", "contact.update", "contact.delete",
         "contact.photo",
         "update.status", "update.check", "update.setPrefs", "update.dismiss", "update.dismissNotice",
+        "message.signature", "message.signatureRevocation",
+        "pgp.keyImport", "pgp.keyVerify", "pgp.keyList", "pgp.keyRemove",
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 119)
-        #expect(Set(API.allMethods).count == 119, "no duplicates")
+        #expect(API.allMethods.count == 125)
+        #expect(Set(API.allMethods).count == 125, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)
@@ -1405,6 +1408,7 @@ import Testing
             "notify.assistantProfileChanged",
             "notify.contactsChanged",
             "notify.updateChanged",
+            "notify.signaturesChanged",
         ])
         #expect(API.AccountDetectSite.name == "account.detectSite" && API.AccountListSpaces.name == "account.listSpaces")
         #expect(API.IssueTransitions.name == "issue.transitions" && API.IssueTransition.name == "issue.transition")
