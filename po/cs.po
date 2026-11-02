@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-02 15:46+0000\n"
+"POT-Creation-Date: 2026-11-02 16:04+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -16,7 +16,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
 
-#: ui/main.go:286
+#: ui/main.go:289
 msgid "A native mail client for the GNOME desktop."
 msgstr "Nativní poštovní klient pro prostředí GNOME."
 
@@ -1429,7 +1429,7 @@ msgstr "Odhlášení"
 msgid "The sender's server refused the request."
 msgstr "Server odesílatele žádost odmítl."
 
-#: ui/internal/compose/pane.go:224 ui/internal/compose/pane.go:1059
+#: ui/internal/compose/pane.go:224 ui/internal/compose/pane.go:1048
 #: ui/internal/jira/settings.go:123 ui/internal/contacts/form.go:460
 #: ui/internal/window/assistant_panel.go:204
 #: ui/internal/window/event_editor_popovers.go:36
@@ -1479,8 +1479,8 @@ msgstr "Za_hodit"
 msgid "_Save Draft"
 msgstr "_Uložit koncept"
 
-#: ui/internal/compose/pane.go:928 ui/data/ui/compose_pane.ui:289
-#: ui/data/ui/compose_pane.ui:445
+#: ui/internal/compose/pane.go:928 ui/data/ui/compose_pane.ui:306
+#: ui/data/ui/compose_pane.ui:450
 msgid "Paragraph"
 msgstr "Odstavec"
 
@@ -1498,7 +1498,7 @@ msgstr "Přiložit soubory"
 msgid "Only local files can be attached"
 msgstr "Přiložit lze jen místní soubory"
 
-#: ui/internal/compose/pane.go:988 ui/data/ui/compose_pane.ui:382
+#: ui/internal/compose/pane.go:988 ui/data/ui/compose_pane.ui:399
 msgid "Insert Image"
 msgstr "Vložit obrázek"
 
@@ -1519,6 +1519,10 @@ msgstr "Přikládá se %s…"
 #, c-format
 msgid "Attaching %s"
 msgstr "Přiložení souboru %s"
+
+#: ui/internal/compose/pane.go:1075 ui/internal/window/attachments.go:565
+msgid "Opening the attachment"
+msgstr "Otevírání přílohy"
 
 #: ui/internal/compose/pane_layout.go:42
 #: ui/internal/window/assistant_panel.go:460
@@ -1636,11 +1640,11 @@ msgstr "Předmět: %s"
 msgid "To: %s"
 msgstr "Komu: %s"
 
-#: ui/internal/compose/quoted.go:146 ui/internal/window/date_groups.go:96
+#: ui/internal/compose/quoted.go:147 ui/internal/window/date_groups.go:96
 msgid "Expanded"
 msgstr "Rozbaleno"
 
-#: ui/internal/compose/quoted.go:149 ui/internal/window/date_groups.go:94
+#: ui/internal/compose/quoted.go:150 ui/internal/window/date_groups.go:94
 msgid "Collapsed"
 msgstr "Sbaleno"
 
@@ -2649,7 +2653,7 @@ msgid "Removed from eWay-CRM"
 msgstr "Odebráno z eWay-CRM"
 
 #: ui/internal/crm/text.go:289 ui/internal/board/view.go:859
-#: ui/internal/widget/message_row.go:371 ui/internal/window/message_view.go:615
+#: ui/internal/widget/message_row.go:371 ui/internal/window/message_view.go:618
 #: ui/internal/window/notify.go:140
 msgid "(No subject)"
 msgstr "(Bez předmětu)"
@@ -7174,63 +7178,63 @@ msgstr "_Nová zpráva"
 msgid "Opening the draft"
 msgstr "Otevření konceptu"
 
-#: ui/internal/window/attachments.go:101
+#: ui/internal/window/attachments.go:98
 msgid "Files inside an attached message cannot be opened or saved yet."
 msgstr "Soubory uvnitř přiložené zprávy zatím nelze otevřít ani uložit."
 
-#: ui/internal/window/attachments.go:185 ui/data/ui/message_window.ui:62
+#: ui/internal/window/attachments.go:197 ui/data/ui/message_window.ui:62
 #: ui/data/ui/window.ui:510
 msgid "More Actions"
 msgstr "Další akce"
 
-#: ui/internal/window/attachments.go:228 ui/internal/window/attachments.go:507
+#: ui/internal/window/attachments.go:240 ui/internal/window/attachments.go:526
 msgid ""
 "Programs and scripts are not opened directly; save the file and decide "
 "yourself."
 msgstr ""
 "Programy a skripty se neotevírají přímo; soubor uložte a rozhodněte se sami."
 
-#: ui/internal/window/attachments.go:243
+#: ui/internal/window/attachments.go:255
 msgid "_View"
 msgstr "_Zobrazit"
 
-#: ui/internal/window/attachments.go:245
+#: ui/internal/window/attachments.go:257
 msgid "_Open"
 msgstr "_Otevřít"
 
-#: ui/internal/window/attachments.go:249
+#: ui/internal/window/attachments.go:261
 msgid "Save _As…"
 msgstr "Uložit _jako…"
 
-#: ui/internal/window/attachments.go:277
+#: ui/internal/window/attachments.go:302
 msgid "Save _All"
 msgstr "Uložit _vše"
 
-#: ui/internal/window/attachments.go:335 ui/internal/window/message_view.go:627
+#: ui/internal/window/attachments.go:366 ui/internal/window/message_view.go:630
 msgid "This message is too large to download."
 msgstr "Tato zpráva je příliš velká ke stažení."
 
-#: ui/internal/window/attachments.go:337 ui/internal/window/message_view.go:629
+#: ui/internal/window/attachments.go:368 ui/internal/window/message_view.go:632
 msgid "This message could not be read."
 msgstr "Tuto zprávu se nepodařilo přečíst."
 
 #. TRANSLATORS: %s is a size such as "16.8 MB".
-#: ui/internal/window/attachments.go:341
+#: ui/internal/window/attachments.go:372
 #, c-format
 msgid "Attachments over %s cannot be opened or saved yet."
 msgstr "Přílohy větší než %s zatím nelze otevřít ani uložit."
 
 #. TRANSLATORS: tooltip of the server icon on an attachment; "it" is the attachment.
-#: ui/internal/window/attachments.go:346
+#: ui/internal/window/attachments.go:377
 msgid "On the server only; it is downloaded when you open it"
 msgstr "Jen na serveru; stáhne se, až ji otevřete"
 
-#: ui/internal/window/attachments.go:426
+#: ui/internal/window/attachments.go:457
 msgid "Attachment"
 msgstr "Příloha"
 
 #. TRANSLATORS: %d is the number of files written.
-#: ui/internal/window/attachments.go:483
+#: ui/internal/window/attachments.go:502
 #, c-format
 msgid "Saved %d attachment"
 msgid_plural "Saved %d attachments"
@@ -7239,33 +7243,30 @@ msgstr[1] "Uloženy %d přílohy"
 msgstr[2] "Uloženo %d příloh"
 
 #. TRANSLATORS: the first %d is how many failed, the second how many there were.
-#: ui/internal/window/attachments.go:486
+#: ui/internal/window/attachments.go:505
 #, c-format
 msgid "%d of %d attachments could not be saved"
 msgstr "%d z %d příloh se nepodařilo uložit"
 
-#: ui/internal/window/attachments.go:527 ui/internal/window/attachments.go:554
-#: ui/internal/window/attachments.go:567
+#: ui/internal/window/attachments.go:546 ui/internal/window/attachments.go:573
+#: ui/internal/window/attachments.go:592 ui/internal/window/attachments.go:610
+#: ui/internal/window/attachments.go:620
 msgid "The attachment could not be opened"
 msgstr "Přílohu se nepodařilo otevřít"
 
-#: ui/internal/window/attachments.go:546
-msgid "Opening the attachment"
-msgstr "Otevírání přílohy"
-
-#: ui/internal/window/attachments.go:579
+#: ui/internal/window/attachments.go:637
 msgid "Save Attachment"
 msgstr "Uložit přílohu"
 
-#: ui/internal/window/attachments.go:595
+#: ui/internal/window/attachments.go:653
 msgid "Saving the attachment"
 msgstr "Ukládání přílohy"
 
-#: ui/internal/window/attachments.go:611
+#: ui/internal/window/attachments.go:669
 msgid "Save Attachments"
 msgstr "Uložit přílohy"
 
-#: ui/internal/window/attachments.go:631
+#: ui/internal/window/attachments.go:689
 msgid "Saving the attachments"
 msgstr "Ukládání příloh"
 
@@ -7312,7 +7313,7 @@ msgid "Cc"
 msgstr "Kopie"
 
 #: ui/internal/window/conversation_card.go:737
-#: ui/internal/window/message_view.go:330
+#: ui/internal/window/message_view.go:333
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
@@ -7342,7 +7343,7 @@ msgid "_Download Pictures"
 msgstr "_Stáhnout obrázky"
 
 #: ui/internal/window/conversation_card.go:984
-#: ui/internal/window/message_view.go:534
+#: ui/internal/window/message_view.go:537
 msgid "Loading the message"
 msgstr "Načtení zprávy"
 
@@ -7459,12 +7460,12 @@ msgstr "Zatím žádné složky"
 msgid "Folders appear after the first synchronisation."
 msgstr "Složky se objeví po první synchronizaci."
 
-#: ui/internal/window/message_view.go:621
-#: ui/internal/window/message_view.go:633
+#: ui/internal/window/message_view.go:624
+#: ui/internal/window/message_view.go:636
 msgid "(Empty message)"
 msgstr "(Prázdná zpráva)"
 
-#: ui/internal/window/message_view.go:625
+#: ui/internal/window/message_view.go:628
 msgid "Downloading…"
 msgstr "Stahuje se…"
 
@@ -8384,79 +8385,79 @@ msgstr "Skrytá kopie"
 msgid "Subject"
 msgstr "Předmět"
 
-#: ui/data/ui/compose_pane.ui:264
+#: ui/data/ui/compose_pane.ui:281
 msgid "Bold (Ctrl+B)"
 msgstr "Tučně (Ctrl+B)"
 
-#: ui/data/ui/compose_pane.ui:271
+#: ui/data/ui/compose_pane.ui:288
 msgid "Italic (Ctrl+I)"
 msgstr "Kurzíva (Ctrl+I)"
 
-#: ui/data/ui/compose_pane.ui:278
+#: ui/data/ui/compose_pane.ui:295
 msgid "Underline (Ctrl+U)"
 msgstr "Podtržení (Ctrl+U)"
 
-#: ui/data/ui/compose_pane.ui:291
+#: ui/data/ui/compose_pane.ui:308
 msgid "Paragraph Style"
 msgstr "Styl odstavce"
 
-#: ui/data/ui/compose_pane.ui:299
+#: ui/data/ui/compose_pane.ui:316
 msgid "Alignment"
 msgstr "Zarovnání"
 
-#: ui/data/ui/compose_pane.ui:311
+#: ui/data/ui/compose_pane.ui:328
 msgid "Bulleted List"
 msgstr "Odrážkový seznam"
 
-#: ui/data/ui/compose_pane.ui:318
+#: ui/data/ui/compose_pane.ui:335
 msgid "Numbered List"
 msgstr "Číslovaný seznam"
 
-#: ui/data/ui/compose_pane.ui:325
+#: ui/data/ui/compose_pane.ui:342
 msgid "Quote"
 msgstr "Citace"
 
-#: ui/data/ui/compose_pane.ui:337
+#: ui/data/ui/compose_pane.ui:354
 msgid "Insert Link"
 msgstr "Vložit odkaz"
 
-#: ui/data/ui/compose_pane.ui:356
+#: ui/data/ui/compose_pane.ui:373
 msgid "Insert"
 msgstr "Vložit"
 
-#: ui/data/ui/compose_pane.ui:370
+#: ui/data/ui/compose_pane.ui:387
 msgid "Text Colour"
 msgstr "Barva textu"
 
-#: ui/data/ui/compose_pane.ui:390
+#: ui/data/ui/compose_pane.ui:407
 msgid "Clear Formatting"
 msgstr "Vymazat formátování"
 
-#: ui/data/ui/compose_pane.ui:398
+#: ui/data/ui/compose_pane.ui:415
 msgid "This message will be sent as plain text."
 msgstr "Tato zpráva bude odeslána jako prostý text."
 
-#: ui/data/ui/compose_pane.ui:450
+#: ui/data/ui/compose_pane.ui:455
 msgid "Heading 1"
 msgstr "Nadpis 1"
 
-#: ui/data/ui/compose_pane.ui:455
+#: ui/data/ui/compose_pane.ui:460
 msgid "Heading 2"
 msgstr "Nadpis 2"
 
-#: ui/data/ui/compose_pane.ui:460
+#: ui/data/ui/compose_pane.ui:465
 msgid "Heading 3"
 msgstr "Nadpis 3"
 
-#: ui/data/ui/compose_pane.ui:467
+#: ui/data/ui/compose_pane.ui:472
 msgid "Left"
 msgstr "Vlevo"
 
-#: ui/data/ui/compose_pane.ui:472
+#: ui/data/ui/compose_pane.ui:477
 msgid "Center"
 msgstr "Na střed"
 
-#: ui/data/ui/compose_pane.ui:477
+#: ui/data/ui/compose_pane.ui:482
 msgid "Right"
 msgstr "Vpravo"
 
