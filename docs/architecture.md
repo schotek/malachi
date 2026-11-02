@@ -1722,6 +1722,44 @@ books of Evolution Data Server, one row per address reported as the
 synchronised book's when it has it; the EDS books of an account whose
 contacts the daemon synchronises are skipped.
 
+### 3.11 Mail rules
+
+Conditions over a message and actions on it, evaluated **locally by the
+daemon** (design and decisions R1–R14 in
+[plans/rules.md](plans/rules.md), API [api.md §4.21](api.md#421-rules),
+security [security.md §7.5](security.md#75-outgoing-actions-of-the-mail-rules)).
+The server's own rules (Graph `messageRules`, Sieve) are neither read
+nor written.
+
+- `internal/rules` is pure: the matcher (NFC and case folding; address
+  fields as `Name <address>` for contains, the bare address otherwise,
+  `domainIs` with subdomains), the plan of the actions in their fixed
+  order over several rules (the first move, junk or trash wins, `stop`
+  ends the evaluation), and the validation of a rule as edited
+  (`RuleInvalidData`). It has a fuzz target and refuses the pathological
+  rules of `backend/testdata/rules`.
+- Store (migration 0025, `store/rules.go`): `rules` (order, input as
+  JSON, `enabled_at`, `problem`, counts), `rule_seen` (account +
+  Message-ID), `rule_replies` and `rule_outgoing` (the limits), pruned
+  hourly; removing an account deletes its rules. No trigger on
+  `messages`.
+- Automatic run (`core/rules_engine.go`): the last step of the mail
+  syncers' Stored hook (`afterMailStored`), only for a message of an
+  enabled `imap`/`graph` account's inbox, each Message-ID once, never
+  when it arrived more than a day before the rule was enabled. The local
+  actions go through `FlagMessages`, `MoveMessages` and `TrashMessages` at
+  once, then `Supervisor.Trigger` and `notify.messagesChanged`;
+  `notify.newMessage` reads the message after the hook and leaves out
+  one that left its folder or is read.
+- Outgoing actions (`core/rules_outgoing.go`): the hook checks the fixed
+  protections and queues the rest; a worker per account reserves the
+  rule's slot in one transaction, builds the message (`Auto-Submitted`,
+  `X-Loop`) and queues it in the outbox like `message.unsubscribe`'s
+  mailto. A message that cannot be queued disables the rule
+  (`sendFailed`), a move to a folder that is gone too (`folderGone`).
+- By hand (`rules.apply`): a folder or a selection, in batches of
+  `MaxMessageIDsPerCall`, local actions only.
+
 ## 4. Security boundary: HTML
 
 HTML in mail is hostile input. It is sanitised **in the backend**
@@ -3012,3 +3050,21 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   are the Go reference `ui/internal/undo`; the board's Undo uses its
   grouping (`board.UndoArchive`). The shortcut is lifted while a text field
   or an editor has the keyboard, which keeps its own Ctrl+Z.
+- Mail rules (2026-11-02): **decided**, evaluated locally by the daemon,
+  not on the server (Graph `messageRules` and Sieve differ in what they
+  can do, Gmail has neither, and the same rule should behave alike on
+  every account). The automatic run sits in the Stored hook so that it
+  acts before the message is announced; it runs only on the inbox and
+  once per Message-ID (`rule_seen`), so a message moved back by the user
+  or by another client is left alone, and never on mail that arrived
+  more than a day before the rule was enabled, so neither the first
+  sync nor a backfill runs rules. Local actions reuse the user's own
+  store paths and operation log (no new kind of operation); outgoing
+  actions are queued per account behind fixed protections (no bulk or
+  automatic mail, no own or no-reply sender, no junk, 20 an hour a rule,
+  a sender answered once in four days) and never run by `rules.apply`.
+  `notify.newMessage` changed with it: it is read after the hook and
+  leaves out a message no longer in its folder or already read, which
+  also stops announcing mail read on another device before it was
+  downloaded. Regex conditions and server-side rules are not in this
+  version.

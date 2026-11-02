@@ -74,6 +74,11 @@ type fakeBackend struct {
 	sends             []api.MessageSendParams
 	triggers          []api.SyncTriggerParams
 	nextDraft         int
+	// rules, ruleCreates and ruleUpdates are the mail rules of
+	// tools_rules_test.go.
+	rules       []api.Rule
+	ruleCreates []api.RulesCreateParams
+	ruleUpdates []api.RulesUpdateParams
 
 	// transitions is what issue.transitions answers for a message, and
 	// transitionCalls what issue.transition was asked (each moves the

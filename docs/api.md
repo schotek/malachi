@@ -5038,10 +5038,18 @@ RuleAction    { "kind": "move|markRead|flag|trash|junk|forward|autoReply",
   lies in junk; a rule sends at most `RuleOutgoingPerHour` messages an
   hour, and `autoReply` answers a sender at most once in
   `RuleReplyInterval` (RFC 3834). Each refusal counts in `skipped`.
-  `forward` attaches the whole message as `message/rfc822` to one
-  address (`to`); `autoReply` answers the message's `Reply-To`, else
+  `forward` attaches the whole message as it came from the server to one
+  address (`to`), named after its subject with `.eml` and sent with the
+  media type `application/octet-stream` as `draft.create`'s forward of
+  several messages does (§4.5), under the subject `Fwd: ` and the
+  message's subject, with no text of its own; a message that is not
+  stored whole is downloaded first (`message.download`), one that cannot
+  be or is larger than `MaxOutgoingMessageBytes` counts in `skipped`; `autoReply` answers the message's `Reply-To`, else
   `From`, with `text` (plain text, at most `MaxRuleReplyBytes`) and
-  `subject` (else `Re: ` and the message's subject). Outgoing actions
+  `subject` (else `Re: ` and the message's subject), with `In-Reply-To`
+  and `References` of the message. Both carry `X-Loop` with the
+  account's address, and a message with an `X-Loop` field is never
+  answered or forwarded. The limits are kept per rule. Outgoing actions
   run only automatically, never in `rules.apply`.
 - `problem`: the daemon disabled the rule (`enabled` false): the folder
   of its `move` is gone (`folderGone`), or an outgoing action could not
