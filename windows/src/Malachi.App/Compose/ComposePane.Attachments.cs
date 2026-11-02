@@ -3,10 +3,11 @@
 
 // Port of macos/Sources/MalachiMail/Compose/ComposeAttachments.swift
 // (attachFiles, insertImage); GTK: ui/internal/compose/pane.go
-// (attachFiles, insertImage, the chips' remove). The compose pane's side
-// of its attachments: the pickers (ComposeFileDialog, owned by the host's
-// window; none while the pane has no host),
-// the chips, and the draft controller's part (an attachment added or
+// (attachFiles, insertImage, the chips' remove) and AttachmentActions.swift
+// (DraftAttachmentPreview: a click on a tile previews the file). The
+// compose pane's side of its attachments: the pickers (ComposeFileDialog,
+// owned by the host's window; none while the pane has no host), the
+// tiles, and the draft controller's part (an attachment added or
 // removed is an edit; a failed import puts the status line back). What is
 // imported, refused, registered for cid: and removed is Core's
 // ComposeAttachmentsController.
@@ -38,6 +39,24 @@ public sealed partial class ComposePane
         attachments.ToastRequested += (_, text) => Toast(text);
         attachments.ImportFailed += (_, _) => draft.RefreshStatus();
         Chips.RemoveRequested += (_, id) => attachments.Remove(id);
+        Chips.PreviewRequested += (_, e) => PreviewAttachment(e.Id);
+    }
+
+    // A click on a tile (DraftAttachmentPreview): the file read back from the
+    // daemon, shown in the reader's previewer; a failure is a toast here.
+    private void PreviewAttachment(string id)
+    {
+        if (state.Integration?.Reader?.Services is not { } services || Gone)
+        {
+            return;
+        }
+        attachments.Preview(id, services.FileTypes, request =>
+        {
+            if (!Gone)
+            {
+                services.Preview.Show(request);
+            }
+        });
     }
 
     /// <summary>compose.attach: the file picker, and what is chosen is attached; not in comment mode.</summary>

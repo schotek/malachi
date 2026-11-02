@@ -4,8 +4,8 @@
 // Port of the layout of the RecipientTokenField of macos/Sources/MalachiMail/
 // Compose/RecipientTokenField.swift (arrange); GTK:
 // ui/internal/compose/recipient_field.go (the wrapping row of badges).
-// ChipWrapPanel does not fit: it lays out at most six chips to a line and
-// every child at its natural width, where here the last child (the typing
+// The attachments' old wrap panel did not fit: it laid out at most six
+// chips to a line and every child at its natural width, where here the last child (the typing
 // box) takes what is left of the last line, or a line of its own when less
 // than a usable width is left. Badges and the box are 4 px apart and the
 // lines too; the panel keeps 3 px above and below so that a row of one line

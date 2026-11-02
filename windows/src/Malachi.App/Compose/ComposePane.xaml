@@ -12,6 +12,8 @@ inline reply, top to bottom:
 - the card of header fields, or in comment mode the card of the issue in
   its place (ComposePane.Comment.cs); margins 12, 12, 12, 6 in the window,
   none but 6 below inline, where the card has no From row;
+- the attachment tiles in their band (hidden while there are none; an
+  Auto row, so the editor never squeezes them);
 - the formatting bar (margins 6 in the window), the plain-text hint
   (hidden while rich text is sent);
 - the editor: filling the rest in the window (at least 100 px), inline as
@@ -22,7 +24,6 @@ inline reply, top to bottom:
   separator, the flat disclosure "Quoted Message", which only hides the
   view, and the checkbox "Include in Reply" / "Include in Forward", then the
   original read-only, 180 px; hidden without one, and inline;
-- the attachment chips (hidden while there are none);
 - in the window the assistant's bar (compose_extras.blp assistant_bar,
   ComposeAssistantBar), which the window shows and wires; hidden inline;
 - in the window the status line (margins 12, 4) under the toast overlay;
@@ -44,8 +45,8 @@ inline reply, top to bottom:
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition x:Name="EditorRow" Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition x:Name="EditorRow" Height="*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -107,17 +108,24 @@ inline reply, top to bottom:
             </Grid>
         </Border>
 
+        <!-- attachments_box: over the formatting bar, never squeezed by the
+             editor (an Auto row). -->
+        <local:AttachmentChipsView
+            x:Name="Chips"
+            Grid.Row="1"
+            Margin="12,2,12,6" />
+
         <!-- format_toolbar -->
         <local:FormatToolbar
             x:Name="FormatBar"
-            Grid.Row="1"
+            Grid.Row="2"
             Margin="6,0,6,0" />
 
         <!-- plain_text_hint: shown instead of the bar while only plain
              text is sent (compose/draft.go richText). -->
         <TextBlock
             x:Name="PlainTextHint"
-            Grid.Row="2"
+            Grid.Row="3"
             Margin="12,4,12,4"
             Style="{StaticResource DimCaptionLabelStyle}"
             Text="{l:T Msgid='This message will be sent as plain text.'}"
@@ -128,7 +136,7 @@ inline reply, top to bottom:
              files dropped on it are attached. -->
         <Border
             x:Name="EditorSlot"
-            Grid.Row="3"
+            Grid.Row="4"
             MinHeight="100"
             Margin="0,4,0,0"
             AllowDrop="True"
@@ -142,7 +150,7 @@ inline reply, top to bottom:
              the slot so the editor does not move, and never hit. -->
         <Border
             x:Name="EditorDropOutline"
-            Grid.Row="3"
+            Grid.Row="4"
             Margin="0,4,0,0"
             BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
             BorderThickness="2"
@@ -153,7 +161,7 @@ inline reply, top to bottom:
              one); its texts are set in code (Assistant.WriteTexts). -->
         <StackPanel
             x:Name="QuoteSection"
-            Grid.Row="4"
+            Grid.Row="5"
             Visibility="Collapsed">
             <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
             <StackPanel
@@ -186,12 +194,6 @@ inline reply, top to bottom:
                 Height="180"
                 Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
         </StackPanel>
-
-        <!-- attachments_box -->
-        <local:AttachmentChipsView
-            x:Name="Chips"
-            Grid.Row="5"
-            Margin="12,6,12,6" />
 
         <!-- assistant_bar: the window shows it while the In App target can
              run, never in comment mode (ComposeWindow.Write.cs). -->

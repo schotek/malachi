@@ -58,16 +58,29 @@ public sealed class FormatTests
 
     [Theory]
     [InlineData(5, "5 B")]
-    [InlineData(2048, "2 KiB")]
-    [InlineData(3 << 20, "3.0 MiB")]
-    [InlineData((1L << 30) - 1, "1024.0 MiB")]
-    [InlineData(1L << 30, "1.0 GiB")]
-    [InlineData((5L << 30) / 2, "2.5 GiB")]
-    [InlineData((5L << 30) + (512L << 20), "5.5 GiB")]
-    [InlineData(300L << 30, "300.0 GiB")]
+    [InlineData(999, "999 B")]
+    [InlineData(1000, "1.0 kB")]
+    [InlineData(42_100, "42.1 kB")]
+    [InlineData(56_320, "56.3 kB")]
+    [InlineData(99_949, "99.9 kB")]
+    [InlineData(99_950, "100 kB")]
+    [InlineData(999_499, "999 kB")]
+    [InlineData(999_500, "1.0 MB")]
+    [InlineData(7_549_747, "7.5 MB")]
+    [InlineData(123_456_789, "123 MB")]
+    [InlineData(999_500_000, "1.0 GB")]
+    [InlineData(5_500_000_000, "5.5 GB")]
+    [InlineData(300_000_000_000, "300 GB")]
     public void FormatSizeTest(long input, string want)
     {
         Assert.Equal(want, Format.FormatSize(input));
+    }
+
+    [Fact]
+    public void AttachmentSummaryTest()
+    {
+        Assert.Equal("2 attachments · 255 kB", Format.AttachmentSummary(2, 254_800));
+        Assert.Equal("1 attachment · 7.8 kB", Format.AttachmentSummary(1, 7_800));
     }
 
     [Fact]
@@ -177,7 +190,7 @@ public sealed class FormatTests
         Assert.Equal("1 Sep", Format.FormatDate(yesterdayInNewYork, now, Posix, newYork));
     }
 
-    // Numbers are Go's in every culture (3.0, not 3,0), names follow the
+    // Numbers are Go's in every culture (3.1, not 3,1, without a catalogue), names follow the
     // culture given, and Go's zero time never throws, whatever the zone.
     [Fact]
     public void CultureAndEdges()
@@ -186,19 +199,20 @@ public sealed class FormatTests
         try
         {
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("cs-CZ");
-            Assert.Equal("3.0 MiB", Format.FormatSize(3 << 20));
-            Assert.Equal("1.5 MiB", Format.FormatSize(3 << 19));
-            Assert.Equal("2.5 GiB", Format.FormatSize((5L << 30) / 2));
+            Assert.Equal("3.1 MB", Format.FormatSize(3 << 20));
+            Assert.Equal("1.6 MB", Format.FormatSize(3 << 19));
+            Assert.Equal("2.7 GB", Format.FormatSize((5L << 30) / 2));
         }
         finally
         {
             CultureInfo.CurrentCulture = saved;
         }
-        Assert.Equal("1023 B", Format.FormatSize(1023));
-        Assert.Equal("1 KiB", Format.FormatSize(1024));
-        Assert.Equal("1024 KiB", Format.FormatSize((1 << 20) - 1));
-        Assert.Equal("1.0 MiB", Format.FormatSize(1 << 20));
-        Assert.Equal("8589934592.0 GiB", Format.FormatSize(long.MaxValue));
+        Assert.Equal("999 B", Format.FormatSize(999));
+        Assert.Equal("1.0 kB", Format.FormatSize(1023));
+        Assert.Equal("1.0 kB", Format.FormatSize(1024));
+        Assert.Equal("1.0 MB", Format.FormatSize((1 << 20) - 1));
+        Assert.Equal("1.0 MB", Format.FormatSize(1 << 20));
+        Assert.Equal("9223372037 GB", Format.FormatSize(long.MaxValue));
         Assert.Equal("-5 B", Format.FormatSize(-5));
 
         var prague = TimeZoneInfo.FindSystemTimeZoneById("Europe/Prague");
