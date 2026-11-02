@@ -231,6 +231,7 @@ can read the key file.
 | 1109 | crmItemNotFound | a CRM item named in `crm.save` (`link`, `superior`) is not an item of that CRM account, or for `crm.remove` the message is not saved there (§4.17) |
 | 1110 | contactNotFound | no stored contact with that id (deleted, its address book gone or its account's contacts switched off; §4.19) |
 | 1111 | addressBookNotFound | no address book with that id (§4.19) |
+| 1112 | ruleNotFound | no mail rule with that id (§4.21) |
 | 1200 | authRequired | user interaction needed; a `notify.authRequired` was/will be sent |
 | 1201 | authFailed | server rejected credentials |
 | 1202 | keyringError | secret service unavailable |
@@ -4978,6 +4979,140 @@ a client asked about a security release.
 - result: `UpdateStatus`
 - errors: invalidArgument (no notice with that `id` in the manifest)
 
+### 4.21 rules
+
+Mail rules (filters; the design is `docs/plans/rules.md`). A rule is
+conditions over a message and actions on it. The daemon evaluates the
+enabled rules **locally**, in their order, on every message it stores in
+the **inbox** of a mail account (`imap`, `graph`; never issue-tracker,
+CalDAV or CRM accounts), before `notify.newMessage`, so a message a rule
+moves, trashes or marks read is not announced as new mail of the inbox.
+Each Message-ID of an account goes through the automatic run once (a
+message moved back into the inbox, also by another client, is left
+alone), and mail whose arrival is older than the day before the rule was
+enabled is never touched, so neither the first sync of an account nor a
+backfill runs rules. The server's own rules (Graph `messageRules`,
+Sieve) are neither read nor changed.
+
+```jsonc
+Rule          { "id": "r_…", "name": "…", "enabled": bool, "accountId": "acc_1" (opt; absent = every mail account),
+                "match": "all|any", "conditions": [RuleCondition], "actions": [RuleAction], "stop": bool,
+                "outgoing": bool, "problem": "folderGone|sendFailed" (opt),
+                "createdAt": Time, "updatedAt": Time,
+                "applied": 12, "lastAppliedAt": Time (opt), "skipped": 0 }
+RuleInput     { "name", "enabled", "accountId" (opt), "match", "conditions", "actions", "stop" }
+RuleCondition { "field": "from|to|cc|toOrCc|subject|body|listId|bulk|hasAttachments",
+                "op": "contains|notContains|is|isNot|startsWith|endsWith|domainIs", "value": "…" }
+RuleAction    { "kind": "move|markRead|flag|trash|junk|forward|autoReply",
+                "folderId" (move), "to" (forward), "subject" (autoReply, opt), "text" (autoReply) }
+```
+
+- **Conditions.** Text comparisons ignore case after NFC normalisation.
+  An address field (`from`, `to`, `cc`, `toOrCc`) compares each address
+  as `Name <address>` for `contains`/`notContains` and the bare address
+  for `is`, `isNot`, `startsWith`, `endsWith`; it holds when any address
+  does, `notContains` and `isNot` when none does; `domainIs` holds when
+  an address's domain is the value or a subdomain of it (address fields
+  only). `body` is the plain text of the message (the text part, else
+  the text of the HTML part), its first `MaxRuleBodyBytes`; a message
+  whose body is not stored yet does not match a `body` condition.
+  `listId` is `BulkInfo.listId`. `bulk` takes `is`/`isNot` with `any` or
+  a `BulkKind`; a message not classified yet is not bulk.
+  `hasAttachments` takes `is` with `true` or `false`. A rule has 1 to
+  `MaxRuleConditions` conditions and `match` combines them.
+- **Actions.** 1 to `MaxRuleActions`, each kind at most once, run in
+  this order whatever their order in the rule: `markRead`, `flag`,
+  `forward`, `autoReply`, then one of `move`, `junk`, `trash` (a rule
+  has at most one of these). `move` needs `accountId` and a selectable
+  folder of that account other than its outbox and drafts. `trash` and
+  `junk` need the account's folder of that role (else the action is
+  skipped). Over several rules the first move, junk or trash wins; later
+  rules still mark and flag. `stop`: no later rule runs on a message
+  this rule matched.
+- **Outgoing actions** (`forward`, `autoReply`; `outgoing` is true) are
+  queued to the account's outbox like any message and carry
+  `Auto-Submitted: auto-forwarded` or `auto-replied`. The daemon never
+  sends one for a message that is bulk, has `Auto-Submitted` other than
+  `no`, comes from one of the user's own addresses, from
+  `mailer-daemon`, `postmaster` or a `noreply`/`no-reply` address, or
+  lies in junk; a rule sends at most `RuleOutgoingPerHour` messages an
+  hour, and `autoReply` answers a sender at most once in
+  `RuleReplyInterval` (RFC 3834). Each refusal counts in `skipped`.
+  `forward` attaches the whole message as `message/rfc822` to one
+  address (`to`); `autoReply` answers the message's `Reply-To`, else
+  `From`, with `text` (plain text, at most `MaxRuleReplyBytes`) and
+  `subject` (else `Re: ` and the message's subject). Outgoing actions
+  run only automatically, never in `rules.apply`.
+- `problem`: the daemon disabled the rule (`enabled` false): the folder
+  of its `move` is gone (`folderGone`), or an outgoing action could not
+  be queued (`sendFailed`). Saving the rule again clears it.
+- Removing an account deletes its rules. Limits: `MaxRules` rules,
+  `name` 1 to `MaxRuleNameBytes` bytes, each `value`, `to` and `subject`
+  at most `MaxRuleValueBytes`; every string without control, bidi or
+  invisible characters. A refused rule is invalidArgument with
+  `error.data` `RuleInvalidData { "field": "name|accountId|conditions|actions|confirmOutgoing", "index": 0 (opt) }`.
+
+#### `rules.list`
+- params: `{}`
+- result: `{ "rules": [Rule] }` (in their order)
+
+#### `rules.create`
+- params: `{ "rule": RuleInput, "confirmOutgoing": bool (opt) }`
+- result: `{ "rule": Rule }` (added at the end)
+- errors: invalidArgument (see above; more than `MaxRules`),
+  accountNotFound, folderNotFound (`move`)
+
+`confirmOutgoing` must be true when the rule is enabled with an outgoing
+action: the client asked the user first (field `confirmOutgoing` in
+`error.data` otherwise).
+
+#### `rules.update`
+- params: `{ "id", "rule": RuleInput, "confirmOutgoing": bool (opt) }`
+- result: `{ "rule": Rule }`
+- errors: ruleNotFound, invalidArgument, accountNotFound, folderNotFound
+
+`confirmOutgoing` must be true when the updated rule is enabled with an
+outgoing action and either was not enabled with one before or the `to`,
+`subject` or `text` of an outgoing action changed. Enabling a rule
+counts from now on: mail stored before is not run through it.
+
+#### `rules.delete`
+- params: `{ "id" }`
+- result: `{}`
+- errors: ruleNotFound
+
+#### `rules.reorder`
+- params: `{ "ids": ["r_…"] }` (every rule's id exactly once)
+- result: `{ "rules": [Rule] }`
+- errors: invalidArgument (an id missing, repeated or unknown)
+
+#### `rules.test`
+- params: `{ "rule": RuleInput, "accountId", "folderId" }`
+- result: `{ "count": 3, "messages": [MessageSummary] }` (the newest
+  `MaxRuleTestMessages`, newest first)
+- errors: invalidArgument, accountNotFound, folderNotFound
+
+Which stored messages of the folder the rule, as edited, matches; the
+rule need not be saved or enabled, its actions are ignored and nothing
+changes.
+
+#### `rules.apply`
+- params: `{ "accountId", "folderId" (opt), "messageIds": ["m_1"] (opt), "ruleIds": ["r_…"] (opt) }`
+  (exactly one of `folderId` and `messageIds`, at most
+  `MaxMessageIDsPerCall` ids)
+- result: `{ "examined": 120, "matched": 14, "changed": 12, "skippedOutgoing": 2 }`
+- errors: invalidArgument, accountNotFound, folderNotFound,
+  messageNotFound, ruleNotFound
+
+Runs rules by hand on stored mail of one account: the folder's stored
+messages of the `offlineDays` window or the given messages, the rules of
+`ruleIds` or else every enabled rule of the account (the account's own
+and those for every account), in order, with `stop`. Only the local
+actions run; outgoing ones count in `skippedOutgoing`. Neither the
+once-per-Message-ID record nor the age limit of the automatic run
+applies. The changes go to the server as the user's own (§4.4) and
+`notify.messagesChanged` follows.
+
 ## 5. Notifications
 
 | Method | params |
@@ -4996,6 +5131,7 @@ a client asked about a security release.
 | `notify.assistantProfileChanged` | `{}` |
 | `notify.contactsChanged` | `{ "accountId" (opt; absent for the recent book), "bookIds": ["b_1"] (opt) }` |
 | `notify.updateChanged` | `{}` |
+| `notify.rulesChanged` | `{}` |
 
 Notifications are sent only to connections that completed the handshake
 (§1.4).
@@ -5124,6 +5260,12 @@ changed (§4.20): a check started or ended, a preference or a dismissal
 changed, or the time of a `later` (`remindAfter`) passed, so a client
 needs no clock of its own to show the banner again. It carries no payload; clients run `update.status` again. A
 client that does not know it ignores it.
+
+`notify.rulesChanged` is sent to every client when a rule was added,
+changed, reordered or deleted, the daemon disabled one (`problem`), or
+the counts of a rule moved (gathered within 1 s). It carries no
+payload; clients run `rules.list` again. A client that does not know it
+ignores it.
 
 `notify.syncState` is sent immediately on every change of `status`,
 `folderId`, `error`, `lastSync`, `pendingOutbox` or `failedOutbox`, and for
@@ -5542,3 +5684,8 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   methods `update.status`, `update.check`, `update.setPrefs`,
   `update.dismiss`, `update.dismissNotice` and the notification
   `notify.updateChanged`. No new error codes; `ProtocolVersion` stays 2.
+- **2** (2026-11-02, compatible addition: mail rules, §4.21): new
+  methods `rules.list`, `rules.create`, `rules.update`, `rules.delete`,
+  `rules.reorder`, `rules.test`, `rules.apply`, the notification
+  `notify.rulesChanged` and the error code 1112 `ruleNotFound`.
+  `ProtocolVersion` stays 2.

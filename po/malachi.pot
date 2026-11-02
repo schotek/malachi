@@ -1333,6 +1333,7 @@ msgstr ""
 #: ui/internal/jira/settings.go:123 ui/internal/contacts/form.go:460
 #: ui/internal/window/assistant_panel.go:204
 #: ui/internal/window/event_editor_popovers.go:36
+#: ui/internal/rules/text.go:180 ui/internal/rules/text.go:269
 msgid "Remove"
 msgstr ""
 
@@ -6372,6 +6373,7 @@ msgstr ""
 
 #. TRANSLATORS: the label of a new contact's name in Add to Contacts.
 #: ui/internal/contacts/form.go:539
+#: ui/internal/rules/text.go:229
 msgid "Name"
 msgstr ""
 
@@ -8897,4 +8899,590 @@ msgstr ""
 
 #: data/io.github.schotek.Malachi.metainfo.xml.in:40
 msgid "Malachi Mail contributors"
+msgstr ""
+
+#. TRANSLATORS: the Preferences page of the mail rules (filters that move,
+#. mark, forward or answer new mail).
+#: ui/internal/rules/text.go:42
+msgid "Rules"
+msgstr ""
+
+#: ui/internal/rules/text.go:47
+msgid "Rules act on new mail in the inbox as it arrives, in the order of this list. Malachi Mail runs them on this computer, only while it is running."
+msgstr ""
+
+#: ui/internal/rules/text.go:52
+msgid "No Rules"
+msgstr ""
+
+#: ui/internal/rules/text.go:57
+msgid "Move, mark or forward new messages automatically. You can also create a rule from a message in its context menu."
+msgstr ""
+
+#: ui/internal/rules/text.go:62
+msgid "Add Rule…"
+msgstr ""
+
+#: ui/internal/rules/text.go:67
+msgid "Edit Rule…"
+msgstr ""
+
+#: ui/internal/rules/text.go:72
+msgid "Remove Rule"
+msgstr ""
+
+#: ui/internal/rules/text.go:77
+msgid "Turn the rule on or off"
+msgstr ""
+
+#: ui/internal/rules/text.go:127
+msgid "Removed account"
+msgstr ""
+
+#: ui/internal/rules/text.go:132
+msgid "All Mail Accounts"
+msgstr ""
+
+#: ui/internal/rules/text.go:141
+msgid "Not used yet"
+msgstr ""
+
+#: ui/internal/rules/text.go:143
+#, c-format
+msgid "Used on %d message, last %s"
+msgid_plural "Used on %d messages, last %s"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/rules/text.go:145
+#, c-format
+msgid "Used on %d message"
+msgid_plural "Used on %d messages"
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: after the status line of a rule: messages it would have
+#. forwarded or answered and did not (bulk mail, an automatic message, the
+#. user's own address, a limit).
+#: ui/internal/rules/text.go:151
+#, c-format
+msgid "%s · %d outgoing message held back"
+msgid_plural "%s · %d outgoing messages held back"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/rules/text.go:160
+msgid "The folder this rule moves messages to no longer exists, so the rule was turned off."
+msgstr ""
+
+#: ui/internal/rules/text.go:162
+msgid "This rule could not send a message, so it was turned off."
+msgstr ""
+
+#: ui/internal/rules/text.go:178
+#, c-format
+msgid "Remove the Rule “%s”?"
+msgstr ""
+
+#: ui/internal/rules/text.go:179
+msgid "Messages it already moved or marked stay as they are."
+msgstr ""
+
+#: ui/internal/rules/text.go:190
+msgid "Send Mail Automatically?"
+msgstr ""
+
+#: ui/internal/rules/text.go:191
+msgid "Turn On"
+msgstr ""
+
+#: ui/internal/rules/text.go:205
+#, c-format
+msgid "This rule forwards every matching message to %s and answers its sender, without asking you. Bulk mail, automatic messages and your own messages are never forwarded or answered."
+msgstr ""
+
+#: ui/internal/rules/text.go:207
+#, c-format
+msgid "This rule forwards every matching message to %s without asking you. Bulk mail, automatic messages and your own messages are never forwarded."
+msgstr ""
+
+#: ui/internal/rules/text.go:209
+msgid "This rule answers the sender of every matching message without asking you, at most once in four days per sender. Bulk mail, automatic messages and your own messages are never answered."
+msgstr ""
+
+#: ui/internal/rules/text.go:221
+msgid "New Rule"
+msgstr ""
+
+#. TRANSLATORS: the title of the editor of a stored mail rule.
+#: ui/internal/rules/text.go:224
+msgid "Edit Rule"
+msgstr ""
+
+#. TRANSLATORS: the label of the account choice of the rule editor.
+#: ui/internal/rules/text.go:236
+msgid "Apply to"
+msgstr ""
+
+#: ui/internal/rules/text.go:241
+msgid "When a new message arrives"
+msgstr ""
+
+#: ui/internal/rules/text.go:247
+msgid "and any of these conditions is met"
+msgstr ""
+
+#: ui/internal/rules/text.go:249
+msgid "and all of these conditions are met"
+msgstr ""
+
+#: ui/internal/rules/text.go:254
+msgid "Do the following"
+msgstr ""
+
+#: ui/internal/rules/text.go:259
+msgid "Add Condition"
+msgstr ""
+
+#: ui/internal/rules/text.go:264
+msgid "Add Action"
+msgstr ""
+
+#: ui/internal/rules/text.go:274
+msgid "Rule is on"
+msgstr ""
+
+#: ui/internal/rules/text.go:279
+msgid "Stop processing more rules"
+msgstr ""
+
+#: ui/internal/rules/text.go:284
+msgid "Rules below this one do not run on a message this rule matched."
+msgstr ""
+
+#: ui/internal/rules/text.go:291
+msgctxt "rule field"
+msgid "From"
+msgstr ""
+
+#: ui/internal/rules/text.go:293
+msgctxt "rule field"
+msgid "To"
+msgstr ""
+
+#: ui/internal/rules/text.go:295
+msgctxt "rule field"
+msgid "Cc"
+msgstr ""
+
+#: ui/internal/rules/text.go:297
+msgctxt "rule field"
+msgid "To or Cc"
+msgstr ""
+
+#: ui/internal/rules/text.go:299
+msgctxt "rule field"
+msgid "Subject"
+msgstr ""
+
+#: ui/internal/rules/text.go:301
+msgctxt "rule field"
+msgid "Message text"
+msgstr ""
+
+#. TRANSLATORS: the List-Id of mailing-list mail.
+#: ui/internal/rules/text.go:304
+msgctxt "rule field"
+msgid "Mailing list ID"
+msgstr ""
+
+#: ui/internal/rules/text.go:306
+msgctxt "rule field"
+msgid "Bulk mail"
+msgstr ""
+
+#: ui/internal/rules/text.go:308
+msgctxt "rule field"
+msgid "Attachments"
+msgstr ""
+
+#. TRANSLATORS: Attachments [are] yes/no in the rule editor.
+#: ui/internal/rules/text.go:318
+msgctxt "rule operator"
+msgid "are"
+msgstr ""
+
+#: ui/internal/rules/text.go:322
+msgctxt "rule operator"
+msgid "contains"
+msgstr ""
+
+#: ui/internal/rules/text.go:324
+msgctxt "rule operator"
+msgid "does not contain"
+msgstr ""
+
+#: ui/internal/rules/text.go:326
+msgctxt "rule operator"
+msgid "is"
+msgstr ""
+
+#: ui/internal/rules/text.go:328
+msgctxt "rule operator"
+msgid "is not"
+msgstr ""
+
+#: ui/internal/rules/text.go:330
+msgctxt "rule operator"
+msgid "begins with"
+msgstr ""
+
+#: ui/internal/rules/text.go:332
+msgctxt "rule operator"
+msgid "ends with"
+msgstr ""
+
+#: ui/internal/rules/text.go:334
+msgctxt "rule operator"
+msgid "is from domain"
+msgstr ""
+
+#: ui/internal/rules/text.go:346
+msgctxt "bulk kind"
+msgid "any kind"
+msgstr ""
+
+#: ui/internal/rules/text.go:348
+msgctxt "bulk kind"
+msgid "newsletter"
+msgstr ""
+
+#: ui/internal/rules/text.go:350
+msgctxt "bulk kind"
+msgid "mailing list"
+msgstr ""
+
+#: ui/internal/rules/text.go:352
+msgctxt "bulk kind"
+msgid "automated message"
+msgstr ""
+
+#: ui/internal/rules/text.go:356
+msgctxt "attachments"
+msgid "none"
+msgstr ""
+
+#: ui/internal/rules/text.go:358
+msgctxt "attachments"
+msgid "present"
+msgstr ""
+
+#: ui/internal/rules/text.go:367
+msgid "example.com"
+msgstr ""
+
+#: ui/internal/rules/text.go:369
+msgid "Name or address"
+msgstr ""
+
+#: ui/internal/rules/text.go:371
+msgid "list.example.com"
+msgstr ""
+
+#: ui/internal/rules/text.go:373
+msgid "Text"
+msgstr ""
+
+#: ui/internal/rules/text.go:380
+msgctxt "rule action"
+msgid "Move to folder"
+msgstr ""
+
+#: ui/internal/rules/text.go:382
+msgctxt "rule action"
+msgid "Mark as read"
+msgstr ""
+
+#: ui/internal/rules/text.go:384
+msgctxt "rule action"
+msgid "Star"
+msgstr ""
+
+#: ui/internal/rules/text.go:386
+msgctxt "rule action"
+msgid "Move to Trash"
+msgstr ""
+
+#: ui/internal/rules/text.go:388
+msgctxt "rule action"
+msgid "Move to Junk"
+msgstr ""
+
+#: ui/internal/rules/text.go:390
+msgctxt "rule action"
+msgid "Forward to"
+msgstr ""
+
+#: ui/internal/rules/text.go:392
+msgctxt "rule action"
+msgid "Reply automatically"
+msgstr ""
+
+#: ui/internal/rules/text.go:400
+msgid "Choose a Folder"
+msgstr ""
+
+#: ui/internal/rules/text.go:405
+msgid "name@example.com"
+msgstr ""
+
+#: ui/internal/rules/text.go:411
+msgid "Subject (Re: and the original subject if empty)"
+msgstr ""
+
+#: ui/internal/rules/text.go:416
+msgid "Reply text"
+msgstr ""
+
+#: ui/internal/rules/text.go:422
+msgid "Each sender gets at most one automatic reply in four days. Bulk mail, automatic messages and your own messages are never answered."
+msgstr ""
+
+#: ui/internal/rules/text.go:424
+msgid "The message is sent whole as an attachment. Bulk mail, automatic messages and your own messages are never forwarded."
+msgstr ""
+
+#: ui/internal/rules/text.go:432 ui/internal/rules/text.go:470
+msgid "Enter a name for the rule."
+msgstr ""
+
+#: ui/internal/rules/text.go:434
+msgid "This is too long."
+msgstr ""
+
+#: ui/internal/rules/text.go:436
+msgid "This contains characters that cannot be used."
+msgstr ""
+
+#: ui/internal/rules/text.go:438
+msgid "Add at least one condition."
+msgstr ""
+
+#: ui/internal/rules/text.go:440
+#, c-format
+msgid "A rule can have at most %d condition."
+msgid_plural "A rule can have at most %d conditions."
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/rules/text.go:442
+msgid "Enter a value."
+msgstr ""
+
+#: ui/internal/rules/text.go:444
+msgid "Choose how to compare."
+msgstr ""
+
+#: ui/internal/rules/text.go:446
+msgid "Add at least one action."
+msgstr ""
+
+#: ui/internal/rules/text.go:448
+#, c-format
+msgid "A rule can have at most %d action."
+msgid_plural "A rule can have at most %d actions."
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/rules/text.go:450
+msgid "This action is already in the rule."
+msgstr ""
+
+#: ui/internal/rules/text.go:452
+msgid "A rule can move a message to only one place."
+msgstr ""
+
+#: ui/internal/rules/text.go:454
+msgid "Choose an account to move messages to one of its folders."
+msgstr ""
+
+#: ui/internal/rules/text.go:456
+msgid "Choose a folder."
+msgstr ""
+
+#: ui/internal/rules/text.go:458
+msgid "Enter one valid email address."
+msgstr ""
+
+#: ui/internal/rules/text.go:460
+msgid "Enter the text of the reply."
+msgstr ""
+
+#: ui/internal/rules/text.go:472
+msgid "The account of this rule no longer exists."
+msgstr ""
+
+#: ui/internal/rules/text.go:474
+msgid "Rules that send mail need your confirmation."
+msgstr ""
+
+#: ui/internal/rules/text.go:476
+msgid "A condition of this rule cannot be used."
+msgstr ""
+
+#: ui/internal/rules/text.go:478
+msgid "An action of this rule cannot be used."
+msgstr ""
+
+#: ui/internal/rules/text.go:480
+msgid "This rule cannot be saved."
+msgstr ""
+
+#: ui/internal/rules/text.go:485
+msgid "This rule no longer exists."
+msgstr ""
+
+#: ui/internal/rules/text.go:491
+msgid "The rule could not be saved."
+msgstr ""
+
+#. TRANSLATORS: a button of the rule editor: shows which stored messages of a
+#. folder the rule would match.
+#: ui/internal/rules/text.go:498
+msgid "Try It"
+msgstr ""
+
+#: ui/internal/rules/text.go:504
+msgid "Try in"
+msgstr ""
+
+#: ui/internal/rules/text.go:510
+msgid "No message in this folder matches."
+msgstr ""
+
+#: ui/internal/rules/text.go:512
+#, c-format
+msgid "%d message in this folder matches."
+msgid_plural "%d messages in this folder match."
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: a condition of a rule in its summary: field, comparison, quoted
+#. value ("From contains “acme”").
+#: ui/internal/rules/text.go:525
+#, c-format
+msgctxt "rule condition"
+msgid "%s %s “%s”"
+msgstr ""
+
+#. TRANSLATORS: a condition with a chosen value ("Bulk mail is newsletter").
+#: ui/internal/rules/text.go:528
+#, c-format
+msgctxt "rule condition"
+msgid "%s %s %s"
+msgstr ""
+
+#. TRANSLATORS: joins the conditions of a rule that all have to hold (with
+#. spaces around it).
+#: ui/internal/rules/text.go:540
+msgctxt "all conditions"
+msgid " and "
+msgstr ""
+
+#. TRANSLATORS: joins the conditions of a rule of which one has to hold (with
+#. spaces around it).
+#: ui/internal/rules/text.go:544
+msgctxt "any condition"
+msgid " or "
+msgstr ""
+
+#: ui/internal/rules/text.go:558
+msgid "move to a missing folder"
+msgstr ""
+
+#: ui/internal/rules/text.go:560
+#, c-format
+msgid "move to “%s”"
+msgstr ""
+
+#: ui/internal/rules/text.go:562
+msgid "mark as read"
+msgstr ""
+
+#: ui/internal/rules/text.go:564
+msgid "star"
+msgstr ""
+
+#: ui/internal/rules/text.go:566
+msgid "move to Trash"
+msgstr ""
+
+#: ui/internal/rules/text.go:568
+msgid "move to Junk"
+msgstr ""
+
+#: ui/internal/rules/text.go:570
+#, c-format
+msgid "forward to %s"
+msgstr ""
+
+#: ui/internal/rules/text.go:572
+msgid "reply automatically"
+msgstr ""
+
+#: ui/internal/rules/text.go:589
+msgid "stop processing more rules"
+msgstr ""
+
+#. TRANSLATORS: joins the actions of a rule in its summary.
+#: ui/internal/rules/text.go:592
+msgctxt "rule actions"
+msgid ", "
+msgstr ""
+
+#. TRANSLATORS: the name of a rule made from a message; %s is the sender's name
+#. or address.
+#: ui/internal/rules/text.go:600
+#, c-format
+msgid "Messages from %s"
+msgstr ""
+
+#: ui/internal/rules/text.go:609
+msgid "Create Rule from Message…"
+msgstr ""
+
+#: ui/internal/rules/text.go:614
+msgid "Apply Rules…"
+msgstr ""
+
+#: ui/internal/rules/text.go:621
+#, c-format
+msgid "Apply Rules to “%s”?"
+msgstr ""
+
+#: ui/internal/rules/text.go:622
+msgid "The rules that are on run on the messages of this folder kept on this computer. Rules do not forward or reply to these messages."
+msgstr ""
+
+#: ui/internal/rules/text.go:623
+msgid "Apply"
+msgstr ""
+
+#: ui/internal/rules/text.go:629
+msgid "Applying rules"
+msgstr ""
+
+#: ui/internal/rules/text.go:635
+msgid "The rules changed no message."
+msgstr ""
+
+#: ui/internal/rules/text.go:637
+#, c-format
+msgid "The rules changed %d message."
+msgid_plural "The rules changed %d messages."
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/rules/text.go:642
+msgid "The rules could not be applied."
 msgstr ""

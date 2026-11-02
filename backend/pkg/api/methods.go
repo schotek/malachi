@@ -174,6 +174,15 @@ const (
 	MethodUpdateSetPrefs      = "update.setPrefs"
 	MethodUpdateDismiss       = "update.dismiss"
 	MethodUpdateDismissNotice = "update.dismissNotice"
+
+	// Mail rules (docs/api.md §4.21).
+	MethodRulesList    = "rules.list"
+	MethodRulesCreate  = "rules.create"
+	MethodRulesUpdate  = "rules.update"
+	MethodRulesDelete  = "rules.delete"
+	MethodRulesReorder = "rules.reorder"
+	MethodRulesTest    = "rules.test"
+	MethodRulesApply   = "rules.apply"
 )
 
 // Notification names (backend → client, no reply expected).
@@ -196,6 +205,8 @@ const (
 	NotifyContactsChanged = "notify.contactsChanged"
 
 	NotifyUpdateChanged = "notify.updateChanged"
+
+	NotifyRulesChanged = "notify.rulesChanged"
 )
 
 // AllMethods lists every callable method. The RPC server uses it to register
@@ -239,6 +250,8 @@ var AllMethods = []string{
 	MethodContactCreate, MethodContactUpdate, MethodContactDelete,
 	MethodContactPhoto,
 	MethodUpdateStatus, MethodUpdateCheck, MethodUpdateSetPrefs, MethodUpdateDismiss, MethodUpdateDismissNotice,
+	MethodRulesList, MethodRulesCreate, MethodRulesUpdate, MethodRulesDelete,
+	MethodRulesReorder, MethodRulesTest, MethodRulesApply,
 }
 
 // AllNotifications lists every server-initiated notification.
@@ -249,4 +262,5 @@ var AllNotifications = []string{
 	NotifyAssistantProfileChanged,
 	NotifyContactsChanged,
 	NotifyUpdateChanged,
+	NotifyRulesChanged,
 }

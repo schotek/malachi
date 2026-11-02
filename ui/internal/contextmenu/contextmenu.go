@@ -59,6 +59,9 @@ const (
 	CrmOpen      ItemID = "crmOpen"
 	CrmEditLinks ItemID = "crmEditLinks"
 	CrmRemove    ItemID = "crmRemove"
+	// CreateRule opens the rule editor prefilled from the message
+	// (ui/internal/rules FromMessage); one message of a mail account.
+	CreateRule ItemID = "createRule"
 )
 
 // The items of the sidebar's menus.
@@ -75,6 +78,9 @@ const (
 	Favourite ItemID = "favourite"
 	// Fold is Expand or Collapse (Labels.Collapsed).
 	Fold ItemID = "fold"
+	// ApplyRules runs the account's rules on the folder (rules.apply)
+	// after rules.ApplyQuestion.
+	ApplyRules ItemID = "applyRules"
 )
 
 // Item is one entry of a menu.
@@ -120,6 +126,10 @@ type MessageState struct {
 	// unless offered, Save is disabled unless Crm, and one saved message
 	// has the saved-state items instead of Save.
 	OfferCrm, Crm, CrmSaved bool
+	// OfferRule: Create Rule from Message… applies (a mail account's
+	// message outside the outbox, drafts and sent mail:
+	// rules.CanCreateFrom); it is offered for one row only.
+	OfferRule bool
 }
 
 // SetCrm fills the eWay-CRM fields from crm.OfferFor of the selected rows.
@@ -128,8 +138,8 @@ func (s *MessageState) SetCrm(o crm.Offer) {
 }
 
 // MessageItems is the message menu in its groups: opening; answering;
-// eWay-CRM; read, star and status; where the message goes; the
-// Assistant. Empty groups are left out. For several rows Open opens each
+// eWay-CRM; read, star and status; where the message goes; Create Rule
+// from Message…; the Assistant. Empty groups are left out. For several rows Open opens each
 // (Labels.Count), Forward forwards them in one message, Save to eWay-CRM
 // saves them together (Labels.Count), and Reply, Reply All, Change Status
 // and the saved-state eWay-CRM items, which are for one message, are not
@@ -182,11 +192,15 @@ func MessageItems(s MessageState) [][]Item {
 	if s.OfferTrash || s.Outbox {
 		move = append(move, Item{Trash, s.Trash})
 	}
+	var rule []Item
+	if s.OfferRule && !several && !s.Outbox && !s.Draft {
+		rule = []Item{{CreateRule, true}}
+	}
 	var assistant []Item
 	if s.Assistant {
 		assistant = []Item{{Assistant, true}}
 	}
-	return groups([]Item{open}, answer, crmItems, mark, move, assistant)
+	return groups([]Item{open}, answer, crmItems, mark, move, rule, assistant)
 }
 
 // FolderState is what the sidebar knows of the folder clicked.
@@ -201,10 +215,14 @@ type FolderState struct {
 	CanDelete bool
 	// Foldable: the folder has subfolders to expand or collapse.
 	Foldable bool
+	// OfferRules: Apply Rules… applies (a mail account's folder that
+	// holds messages, rules.CanApplyIn); Rules: an enabled rule runs on
+	// the account's mail (rules.AppliesToAccount), else it is disabled.
+	OfferRules, Rules bool
 }
 
-// FolderItems is a folder's menu: checking it; marking it read or
-// emptying it; its place in Favourites and its folding. Empty groups are
+// FolderItems is a folder's menu: checking it; marking it read,
+// emptying it or applying the rules to it; its place in Favourites and its folding. Empty groups are
 // left out; nothing at all opens no menu.
 func FolderItems(f FolderState) [][]Item {
 	holds := f.Selectable && f.Role != api.RoleOutbox
@@ -215,6 +233,9 @@ func FolderItems(f FolderState) [][]Item {
 	}
 	if f.Selectable && (f.Role == api.RoleTrash || f.Role == api.RoleJunk) && f.CanDelete {
 		act = append(act, Item{EmptyFolder, f.Total > 0})
+	}
+	if holds && f.OfferRules && f.Role != api.RoleDrafts {
+		act = append(act, Item{ApplyRules, f.Rules && f.Total > 0})
 	}
 	if f.Selectable {
 		place = append(place, Item{Favourite, true})

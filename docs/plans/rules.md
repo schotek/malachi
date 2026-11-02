@@ -20,7 +20,7 @@ Tento plán se v prvním commitu zapíše do repozitáře jako `docs/plans/rules
 | R2 | Automaticky jen pro zprávy ve složce role `inbox` (pravidlo je pro jeden účet nebo pro všechny poštovní účty). Hook se volá i pro Sent, Drafts, Trash, Junk a Outbox, takže role se filtruje v enginu. |
 | R3 | **Nikdy dvakrát a nikdy na starou poštu.** Tabulka `rule_seen (account_id, rfc_message_id)`: každé Message-ID účtu projde automatickými pravidly nejvýš jednou. Ochrání to i před přesunem jiným klientem (delete + nová řádka) a přesunem zpět do Doručené. Zpráva s `internal_date` starším než `rules.enabled_at − 1 den` se přeskočí, takže první synchronizace a backfill pravidla nespouštějí. |
 | R4 | Podmínky: Od, Komu, Kopie, Komu nebo kopie, Předmět, Tělo (prostý text, strop 64 KiB), List-Id, hromadná pošta (druh z `internal/bulk`), má přílohy, účet. Operátory: obsahuje, neobsahuje, je, začíná, končí, doména je. Porovnává se bez ohledu na velikost písmen po NFC normalizaci. Regex v 1. verzi není. Spojení podmínek je *všechny* nebo *kterákoli*. |
-| R5 | Akce: Přesunout do (složka účtu), Označit jako přečtené, Hvězdička, Koš, Nevyžádaná, Přeposlat na adresu, Automaticky odpovědět textem, Zastavit další pravidla. Pravidla se vyhodnocují v pořadí. Zastavení je příznak pravidla. Konflikty řeší pořadí: platí první přesun/koš, další přesuny se ignorují. |
+| R5 | Akce: Přesunout do (složka účtu), Označit jako přečtené, Hvězdička, Koš, Nevyžádaná, Přeposlat na adresu, Automaticky odpovědět textem, Zastavit další pravidla. Pravidla se vyhodnocují v pořadí. Zastavení je příznak pravidla. Akce jednoho pravidla běží v pevném pořadí (přečtené, hvězdička, přeposlat, odpovědět, pak jedno z přesun/nevyžádaná/koš, každý druh nejvýš jednou). Mezi pravidly platí první přesun/koš, další přesuny se ignorují. |
 | R6 | Lokální akce jdou existujícími cestami store (`FlagMessages`, `MoveMessages`, `TrashMessages` v `store/ops.go`, junk = přesun do `FolderByRole(RoleJunk)`) a potom `Supervisor.Trigger` a `messagesChanged`. Žádný nový druh operace. Provádějí se synchronně v hooku, aby zpráva přesunutá do koše nebo označená jako přečtená nevyvolala notifikaci. Úkol T1 musí ověřit, že `notifyNew` čte stav až po hooku, případně ho upravit. |
 | R7 | Odchozí akce se v hooku jen zařadí do fronty. Zpracuje je worker na účet podle vzoru `crm_follow.go` (`crmEnqueue`, `crmFollowWorker`). Zprávu postaví stejně jako `unsubscribeMailto` (`core/unsubscribe.go:405`) přes `EnqueueOutbox`, `Delivery.Wake` a `outboxChanged`. Přeposlání přiloží originál jako `message/rfc822` přes `storedWhole` (`forward_many.go:107`). Když originál není celý na disku, worker ho stáhne cestou `message.download`. |
 | R8 | **Ochrana odchozích akcí (bezpečnost):** nikdy se neodpovídá ani nepřeposílá, když je zpráva `bulk`, má `Auto-Submitted` ≠ `no`, přišla od vlastní adresy (`selfAddresses`, `core/quote.go:67`), od `mailer-daemon`/`postmaster`/`noreply`, leží v Nevyžádané, nebo když pravidlo poslalo víc než 20 zpráv za hodinu. Automatická odpověď jde stejnému odesílateli nejvýš jednou za 4 dny (RFC 3834, tabulka `rule_replies`). Odchozí zprávy nesou `Auto-Submitted: auto-replied` nebo `auto-forwarded` (doplnit `BuildInput.Headers` v `internal/smtp/build.go`). Do `mime/header.go` se kvůli smyčkám přidá `X-Loop`. `docs/security.md` dostane nový oddíl. |
@@ -75,4 +75,12 @@ Každý agent dostane: tento plán, cestu ke vzorovým souborům (Kontakty: `ui/
 
 ## Stav ověření
 
-Nic zatím neimplementováno.
+- **T0 (2026-11-02):** kontrakt `backend/pkg/api/rules.go` (+ `methods.go`,
+  `service.go`, `errors.go` 1112, stub v `rpc/stub.go`, `registerRules`
+  v `rpc/dispatch.go`, zástupný `core/rules_service.go`, který T1
+  nahradí), `docs/api.md` §4.21, §5 a §7; Go reference `ui/internal/rules`
+  (`rules.go` model, validace, předvyplnění; `text.go` všechny texty)
+  a položky `contextmenu` `createRule` a `applyRules`; 125 nových msgid
+  v `po/malachi.pot` a česky v `po/cs.po` zapsané skriptem bez xgettext
+  (`make po` je přerovná a přečísluje). Ověřeno: `go vet`, `go test`
+  `pkg/api`, `rpc`, `ui/internal/rules`, `contextmenu`.

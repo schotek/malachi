@@ -200,6 +200,17 @@ type UpdateService interface {
 	DismissNotice(ctx context.Context, p UpdateDismissNoticeParams) (*UpdateStatus, error)
 }
 
+// RulesService is the mail rules (docs/api.md §4.21).
+type RulesService interface {
+	List(ctx context.Context, p RulesListParams) (*RulesListResult, error)
+	Create(ctx context.Context, p RulesCreateParams) (*RulesCreateResult, error)
+	Update(ctx context.Context, p RulesUpdateParams) (*RulesUpdateResult, error)
+	Delete(ctx context.Context, p RulesDeleteParams) (*RulesDeleteResult, error)
+	Reorder(ctx context.Context, p RulesReorderParams) (*RulesReorderResult, error)
+	Test(ctx context.Context, p RulesTestParams) (*RulesTestResult, error)
+	Apply(ctx context.Context, p RulesApplyParams) (*RulesApplyResult, error)
+}
+
 // Backend is the complete server-side surface. The connection handshake
 // (system.hello, system.authenticate; docs/api.md §1.4) is not part of it:
 // the transport (internal/rpc) answers the handshake before any call of a
@@ -227,6 +238,7 @@ type Backend interface {
 	Assistant() AssistantService
 	AddressBooks() AddressBookService
 	Update() UpdateService
+	Rules() RulesService
 }
 
 // Notifier is how backend components push events to connected clients.
@@ -281,4 +293,10 @@ type ContactsNotifier interface {
 // notify.updateChanged (docs/api.md §4.20), asserted like BoardNotifier.
 type UpdateNotifier interface {
 	UpdateChanged(n UpdateChangedNotification)
+}
+
+// RulesNotifier is the optional extension of Notifier for
+// notify.rulesChanged (docs/api.md §4.21), asserted like BoardNotifier.
+type RulesNotifier interface {
+	RulesChanged(n RulesChangedNotification)
 }
