@@ -153,6 +153,15 @@ final class Integration {
         sidebar.onEmptyFolder = { [weak self] k in
             self?.actions.emptyFolder(k, parent: self?.mainWindow?.window)
         }
+        // Mail rules (AppRules): Apply Rules… of a folder, enabled when an
+        // enabled rule runs on the account's mail.
+        sidebar.onApplyRules = { [weak self] k, name in
+            guard let self else { return }
+            self.state.rules.apply(k, folderName: name, on: self.mainWindow?.window)
+        }
+        sidebar.rulesApply = { [weak self] account in
+            self?.state.rules.controller.applies(to: account) ?? false
+        }
         // Undo of moves (ActionsController+Undo): the toast with its button
         // over the main window's content (Mail or Board), ⌘Z through the
         // window's Edit ▸ Undo, never in the Calendar.
@@ -527,6 +536,7 @@ final class Integration {
         )
         c.aiPane.configureProfile(state.profile)
         c.contactsPane.configure(state.contacts)
+        c.rulesPane.configure(state.rules)
         c.generalPane.configureUpdates(state.updates)
         return c
     }

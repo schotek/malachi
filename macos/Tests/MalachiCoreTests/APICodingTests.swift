@@ -1270,7 +1270,7 @@ import Testing
         (1100, "accountNotFound"), (1101, "folderNotFound"), (1102, "messageNotFound"), (1103, "threadNotFound"),
         (1104, "draftNotFound"), (1105, "attachmentNotFound"), (1106, "caseNotFound"),
         (1107, "calendarNotFound"), (1108, "eventNotFound"), (1109, "crmItemNotFound"), (1110, "contactNotFound"),
-        (1111, "addressBookNotFound"),
+        (1111, "addressBookNotFound"), (1112, "ruleNotFound"),
         (1200, "authRequired"), (1201, "authFailed"), (1202, "keyringError"), (1203, "oauthClientMissing"),
         (1204, "calendarConsentRequired"), (1205, "crmSignInUnsupported"), (1206, "contactsConsentRequired"),
         (1300, "offline"), (1301, "networkError"), (1302, "serverError"), (1303, "tlsError"), (1304, "serverTimeout"),
@@ -1282,7 +1282,7 @@ import Testing
     ]
 
     @Test func errorCodesAreNamed() {
-        #expect(ErrorCode.all.count == 53 && Set(ErrorCode.all).count == 53)
+        #expect(ErrorCode.all.count == 54 && Set(ErrorCode.all).count == 54)
         #expect(ErrorCode.all.map(\.rawValue) == Self.goCodes.map { $0.0 })
         #expect(ErrorCode.all.map(\.name) == Self.goCodes.map { $0.1 })
         for code in ErrorCode.all {
@@ -1390,11 +1390,13 @@ import Testing
         "contact.create", "contact.update", "contact.delete",
         "contact.photo",
         "update.status", "update.check", "update.setPrefs", "update.dismiss", "update.dismissNotice",
+        "rules.list", "rules.create", "rules.update", "rules.delete",
+        "rules.reorder", "rules.test", "rules.apply",
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 119)
-        #expect(Set(API.allMethods).count == 119, "no duplicates")
+        #expect(API.allMethods.count == 126)
+        #expect(Set(API.allMethods).count == 126, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)
@@ -1405,6 +1407,7 @@ import Testing
             "notify.assistantProfileChanged",
             "notify.contactsChanged",
             "notify.updateChanged",
+            "notify.rulesChanged",
         ])
         #expect(API.AccountDetectSite.name == "account.detectSite" && API.AccountListSpaces.name == "account.listSpaces")
         #expect(API.IssueTransitions.name == "issue.transitions" && API.IssueTransition.name == "issue.transition")

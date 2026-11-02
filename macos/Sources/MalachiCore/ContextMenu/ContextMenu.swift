@@ -49,6 +49,9 @@ public enum ContextMenu {
         case crmOpen
         case crmEditLinks
         case crmRemove
+        /// Opens the rule editor prefilled from the message
+        /// (`Rules.fromMessage`); one message of a mail account.
+        case createRule
         // The sidebar's menus.
         /// Synchronises the folder clicked, or the account from its heading.
         case checkMail
@@ -61,6 +64,9 @@ public enum ContextMenu {
         case favourite
         /// Expand or Collapse (`Labels.collapsed`).
         case fold
+        /// Runs the account's rules on the folder (rules.apply) after
+        /// `Rules.applyQuestion`.
+        case applyRules
     }
 
     /// contextmenu.Item.
@@ -102,6 +108,10 @@ public enum ContextMenu {
         /// offered, Save is disabled unless `crm`, and one saved message
         /// has the saved-state items instead of Save.
         public var offerCrm = false, crm = false, crmSaved = false
+        /// Create Rule from Message… applies (a mail account's message
+        /// outside the outbox, drafts and sent mail: `Rules.canCreateFrom`);
+        /// it is offered for one row only.
+        public var offerRule = false
 
         public init() {}
 
@@ -141,7 +151,8 @@ public enum ContextMenu {
     }
 
     /// contextmenu.MessageItems: opening; answering; eWay-CRM; read, star
-    /// and status; where the message goes; the Assistant. Empty groups are
+    /// and status; where the message goes; Create Rule from Message…; the
+    /// Assistant. Empty groups are
     /// left out. For several rows Open opens each, Forward forwards them in
     /// one message, Save to eWay-CRM saves them together, and Reply, Reply
     /// All, Change Status and the saved-state eWay-CRM items are not
@@ -169,8 +180,9 @@ public enum ContextMenu {
         if s.offerMove { move.append(Item(.moveTo, s.move)) }
         if s.offerJunk { move.append(Item(.junk, s.junk)) }
         if s.offerTrash || s.outbox { move.append(Item(.trash, s.trash)) }
+        let rule = s.offerRule && !several && !s.outbox && !s.draft ? [Item(.createRule, true)] : []
         let assistant = s.assistant ? [Item(.assistant, true)] : []
-        return [[open], answer, crmItems, mark, move, assistant].filter { !$0.isEmpty }
+        return [[open], answer, crmItems, mark, move, rule, assistant].filter { !$0.isEmpty }
     }
 
     /// contextmenu.FolderState: what the sidebar knows of the folder
@@ -182,20 +194,28 @@ public enum ContextMenu {
         public var unread = 0, total = 0
         public var canDelete = false
         public var foldable = false
+        /// Apply Rules… applies (a mail account's folder that holds
+        /// messages, `Rules.canApplyIn`); `rules`: an enabled rule runs on
+        /// the account's mail (`Rules.appliesToAccount`), else it is
+        /// disabled.
+        public var offerRules = false, rules = false
 
         public init(selectable: Bool = false, role: FolderRole = .none, unread: Int = 0, total: Int = 0,
-                    canDelete: Bool = false, foldable: Bool = false) {
+                    canDelete: Bool = false, foldable: Bool = false, offerRules: Bool = false, rules: Bool = false) {
             self.selectable = selectable
             self.role = role
             self.unread = unread
             self.total = total
             self.canDelete = canDelete
             self.foldable = foldable
+            self.offerRules = offerRules
+            self.rules = rules
         }
     }
 
-    /// contextmenu.FolderItems: checking it; marking it read or emptying
-    /// it; its place in Favourites and its folding.
+    /// contextmenu.FolderItems: checking it; marking it read, emptying it
+    /// or applying the rules to it; its place in Favourites and its
+    /// folding.
     public static func folderItems(_ f: FolderState) -> [[Item]] {
         let holds = f.selectable && f.role != .outbox
         var check: [Item] = [], act: [Item] = [], place: [Item] = []
@@ -205,6 +225,9 @@ public enum ContextMenu {
         }
         if f.selectable, f.role == .trash || f.role == .junk, f.canDelete {
             act.append(Item(.emptyFolder, f.total > 0))
+        }
+        if holds, f.offerRules, f.role != .drafts {
+            act.append(Item(.applyRules, f.rules && f.total > 0))
         }
         if f.selectable { place.append(Item(.favourite, true)) }
         if f.foldable { place.append(Item(.fold, true)) }

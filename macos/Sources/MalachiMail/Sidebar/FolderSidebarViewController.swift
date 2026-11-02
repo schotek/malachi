@@ -29,6 +29,11 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
     /// (`ActionsController`), installed by the integration.
     var onMarkFolderRead: (@MainActor (FolderKey) -> Void)?
     var onEmptyFolder: (@MainActor (FolderKey) -> Void)?
+    /// Apply Rules… of a folder's context menu (`AppRules.apply` with the
+    /// folder's name), and whether an enabled rule runs on an account's
+    /// mail (`RulesController.applies`), installed by the integration.
+    var onApplyRules: (@MainActor (FolderKey, String) -> Void)?
+    var rulesApply: (@MainActor (AccountID) -> Bool)?
 
     private let outline = FolderOutlineView()
     private let scroll = NSScrollView()
@@ -346,15 +351,19 @@ extension FolderSidebarViewController {
             let k = f.key
             guard let folder = mailbox.model.folder(k) ?? f.entry.folder else { return nil }
             let account = mailbox.model.account(k.account)
+            let mail = account.map(Rules.isMailAccount) ?? false
             groups = ContextMenu.folderItems(ContextMenu.FolderState(
                 selectable: folder.selectable, role: folder.role, unread: folder.unread, total: folder.total,
-                canDelete: account?.can(.delete) ?? false, foldable: !f.fav && outline.isExpandable(f)))
+                canDelete: account?.can(.delete) ?? false, foldable: !f.fav && outline.isExpandable(f),
+                offerRules: mail && onApplyRules != nil && Rules.canApplyIn(folder),
+                rules: rulesApply?(k.account) ?? false))
             labels = ContextMenu.Labels(junk: folder.role == .junk, favourite: f.entry.starred,
                                         collapsed: !outline.isItemExpanded(f))
             run[.checkMail] = { mailbox.triggerSync(folder: folder) }
             run[.markAllRead] = { [weak self] in self?.onMarkFolderRead?(k) }
             run[.emptyFolder] = { [weak self] in self?.onEmptyFolder?(k) }
             run[.favourite] = { mailbox.toggleFavourite(k) }
+            run[.applyRules] = { [weak self] in self?.onApplyRules?(k, folderTitle(folder)) }
             run[.fold] = fold
         default:
             return nil
