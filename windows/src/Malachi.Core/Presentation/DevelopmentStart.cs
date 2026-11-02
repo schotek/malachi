@@ -61,6 +61,12 @@ public enum DevelopmentStepKind
     /// <summary><c>crm-save</c>: Save to eWay-CRM… over the selected message (the dialog stays open).</summary>
     CrmSave,
 
+    /// <summary><c>prefs-rules</c>: Preferences, on the Rules page.</summary>
+    PrefsRules,
+
+    /// <summary><c>rules-editor</c>: the rule editor over a new rule (the editor stays open).</summary>
+    RulesEditor,
+
     /// <summary><c>shot=&lt;path&gt;</c>: the window as a PNG.</summary>
     Shot,
 }
@@ -248,6 +254,10 @@ public static class DevelopmentStart
                 return new DevelopmentStep { Kind = DevelopmentStepKind.ComposeOpen, Name = name };
             case "crm-save":
                 return new DevelopmentStep { Kind = DevelopmentStepKind.CrmSave, Name = name };
+            case "prefs-rules":
+                return new DevelopmentStep { Kind = DevelopmentStepKind.PrefsRules, Name = name };
+            case "rules-editor":
+                return new DevelopmentStep { Kind = DevelopmentStepKind.RulesEditor, Name = name };
         }
         if (name.StartsWith("calendar:", StringComparison.Ordinal))
         {

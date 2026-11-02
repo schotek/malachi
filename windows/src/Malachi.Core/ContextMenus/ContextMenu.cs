@@ -97,6 +97,13 @@ public static partial class ContextMenu
         /// <summary>Remove from eWay-CRM of one saved message, after CrmText.RemoveQuestion ("crmRemove").</summary>
         CrmRemove,
 
+        /// <summary>
+        /// Create Rule from Message…: opens the rule editor prefilled from
+        /// the message (RuleBook.FromMessage); one message of a mail account
+        /// ("createRule").
+        /// </summary>
+        CreateRule,
+
         // The sidebar's menus.
 
         /// <summary>Synchronises the folder clicked, or the whole account from its heading.</summary>
@@ -116,6 +123,12 @@ public static partial class ContextMenu
 
         /// <summary>Expand or Collapse (<see cref="Labels.Collapsed"/>).</summary>
         Fold,
+
+        /// <summary>
+        /// Apply Rules…: runs the account's rules on the folder
+        /// (<c>rules.apply</c>) after RulesText.ApplyQuestion ("applyRules").
+        /// </summary>
+        ApplyRules,
     }
 
     /// <summary>
@@ -142,11 +155,13 @@ public static partial class ContextMenu
         ItemId.CrmOpen => "crmOpen",
         ItemId.CrmEditLinks => "crmEditLinks",
         ItemId.CrmRemove => "crmRemove",
+        ItemId.CreateRule => "createRule",
         ItemId.CheckMail => "checkMail",
         ItemId.MarkAllRead => "markAllRead",
         ItemId.EmptyFolder => "empty",
         ItemId.Favourite => "favourite",
         ItemId.Fold => "fold",
+        ItemId.ApplyRules => "applyRules",
         _ => "",
     };
 
@@ -248,6 +263,13 @@ public static partial class ContextMenu
         /// <summary>CrmOffer.Saved: one saved message has the saved-state items instead of Save.</summary>
         public bool CrmSaved { get; init; }
 
+        /// <summary>
+        /// Create Rule from Message… applies (a mail account's message
+        /// outside the outbox, drafts and sent mail: RuleBook.CanCreateFrom);
+        /// it is offered for one row only.
+        /// </summary>
+        public bool OfferRule { get; init; }
+
         /// <summary>contextmenu.MessageState.SetCrm: this state with the eWay-CRM members of <paramref name="o"/> (CrmRules.OfferFor of the selected rows).</summary>
         public MessageState WithCrm(CrmOffer o) => this with { OfferCrm = o.Shown, Crm = o.Enabled, CrmSaved = o.Saved };
 
@@ -293,7 +315,7 @@ public static partial class ContextMenu
     /// <summary>
     /// contextmenu.MessageItems: the message menu in its groups: opening;
     /// answering; eWay-CRM; read, star and status; where the message goes;
-    /// the Assistant. Empty groups are left out. For several rows Open opens
+    /// Create Rule from Message…; the Assistant. Empty groups are left out. For several rows Open opens
     /// each (<see cref="Labels.Count"/>), Forward forwards them in one
     /// message, Save to eWay-CRM saves them together, and Reply, Reply All,
     /// Change Status and the saved-state eWay-CRM items, which are for one
@@ -358,12 +380,17 @@ public static partial class ContextMenu
         {
             move.Add(new Item(ItemId.Trash, s.Trash));
         }
+        var rule = new List<Item>();
+        if (s.OfferRule && !several && !s.Outbox && !s.Draft)
+        {
+            rule.Add(new Item(ItemId.CreateRule, true));
+        }
         var assistant = new List<Item>();
         if (s.Assistant)
         {
             assistant.Add(new Item(ItemId.Assistant, true));
         }
-        return Groups([open], answer, crm, mark, move, assistant);
+        return Groups([open], answer, crm, mark, move, rule, assistant);
     }
 
     /// <summary>contextmenu.FolderState: what the sidebar knows of the folder clicked.</summary>
@@ -386,11 +413,20 @@ public static partial class ContextMenu
 
         /// <summary>The folder has subfolders to expand or collapse.</summary>
         public bool Foldable { get; init; }
+
+        /// <summary>
+        /// Apply Rules… applies (a mail account's folder that holds
+        /// messages: RuleBook.CanApplyIn).
+        /// </summary>
+        public bool OfferRules { get; init; }
+
+        /// <summary>An enabled rule runs on the account's mail (RuleBook.AppliesToAccount), else Apply Rules… is disabled.</summary>
+        public bool Rules { get; init; }
     }
 
     /// <summary>
-    /// contextmenu.FolderItems: a folder's menu: checking it; marking it read
-    /// or emptying it; its place in Favourites and its folding. Empty groups
+    /// contextmenu.FolderItems: a folder's menu: checking it; marking it read,
+    /// emptying it or applying the rules to it; its place in Favourites and its folding. Empty groups
     /// are left out; nothing at all opens no menu.
     /// </summary>
     public static IReadOnlyList<IReadOnlyList<Item>> FolderItems(FolderState f)
@@ -407,6 +443,10 @@ public static partial class ContextMenu
         if (f.Selectable && (f.Role == FolderRole.Trash || f.Role == FolderRole.Junk) && f.CanDelete)
         {
             act.Add(new Item(ItemId.EmptyFolder, f.Total > 0));
+        }
+        if (holds && f.OfferRules && f.Role != FolderRole.Drafts)
+        {
+            act.Add(new Item(ItemId.ApplyRules, f.Rules && f.Total > 0));
         }
         if (f.Selectable)
         {
