@@ -14,9 +14,9 @@
   var box = dialog.querySelector(".rp-turnstile");
 
   var local = location.hostname === "localhost" || location.hostname === "127.0.0.1";
-  // The owner fills in the site key from the Cloudflare dashboard (Turnstile, widget for malachimail.app).
-  var SITEKEY_PLACEHOLDER = "SITEKEY_PLACEHOLDER";
-  var SITEKEY = local ? "1x00000000000000000000AA" : SITEKEY_PLACEHOLDER;
+  // Site key of the Turnstile widget "Malachi report" (hostname malachimail.app) in the Cloudflare
+  // dashboard; on localhost Cloudflare's test key, which always passes.
+  var SITEKEY = local ? "1x00000000000000000000AA" : "0x4AAAAAAFxBMHDxSS8hmg2T";
   var ENDPOINT = local ? "http://localhost:8789/api/v1/reports" : "https://admin.malachimail.app/api/v1/reports";
   var TURNSTILE = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
   var MAX_SIDE = 2560, MAX_BYTES = 5 * 1024 * 1024, MAX_TEXT = 8000;

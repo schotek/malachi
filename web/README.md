@@ -37,8 +37,9 @@ loaded only when the form is opened for the first time, so a page that
 is only read talks to no one but this site. The screenshot is scaled in
 a canvas to at most 2560 px on its longest side and re-encoded as WebP
 (JPEG where the browser cannot), which drops its EXIF; at most 5 MiB.
-The site key in the script (`SITEKEY_PLACEHOLDER`) is filled in from
-the Turnstile widget in the Cloudflare dashboard. Without the script the
+The site key in the script is the one of the Turnstile widget
+"Malachi report" (hostname `malachimail.app`) in the Cloudflare
+dashboard; its secret key is the admin's `TURNSTILE_SECRET`. Without the script the
 link goes to the GitHub issues.
 
 | Page | English | Czech |
@@ -173,7 +174,7 @@ and open <http://localhost:8765/>.
   by default.
 - `assets/` is cached for a day, so a changed `style.css` or script
   gets a new `?v=` on every page that links it (`style.css?v=5`,
-  `report.js?v=1`); otherwise a returning visitor sees the new pages with
+  `report.js?v=2`); otherwise a returning visitor sees the new pages with
   the old stylesheet.
 - Icons: `assets/icon-*.png` and `icon-512.webp` are rasterised from
   `docs/malachi_icon.svg`; `favicon.ico` wraps the 32 and 64 px PNGs.
