@@ -4196,8 +4196,15 @@ box; other display scales, touch, Narrator over the form and x64 by hand.
 
 Written 2026-11-02 on a Mac without .NET, from the Go reference
 `ui/internal/updates` and the contract `docs/api.md` §4.20 (decisions in
-`docs/plans/update-check.md`); nothing here was compiled. The Windows
-agent builds, tests and lints it; never through `windows.yml`.
+`docs/plans/update-check.md`). The Windows agent built, tested and
+linted it on Windows 11 ARM64 on 2026-11-02 without a change (two
+failures of the whole Core suite, `ClaudeCodeProcessTests.EnvironmentAndDirectory`
+and `BridgeRunnerTests.TheEnvironmentAndTheDirectoryAreTheCallers`, are
+`PROCESSOR_ARCHITECTURE` in the child's environment on ARM64, not this
+branch) and walked it by hand over isolated data against the real
+manifest, and the owner saw it on screen and approved it the same day;
+the security dialog and the notices were not seen on screen
+(the manifest has neither). Never through `windows.yml`.
 
 API: `Api/Update.cs` mirrors `backend/pkg/api/update.go` (`UpdateState`,
 `UpdateFailure`, `UpdateDismissAction`, `UpdateInfo`, `UpdateNotice`,

@@ -180,6 +180,18 @@ vedle mřížky tlačítek).
 - GTK: vlastník nad kopií dat na Fedoře 44 aarch64 (Linux agent sestavil
   `VERSION=0.1.2 UPDATE_CHANNEL=linux-rpm-arm64`); po přesunu pruhu přes
   celé okno „vše ostatní v pořádku“.
-- Windows: napsané bez `dotnet`, nepřeložené; staví a prochází Windows
-  agent (`docs/windows-port.md` §11.16).
+- Windows: Windows agent na Windows 11 ARM64 (`build.ps1 app`, `test`,
+  `lint` beze změny kódu; dvě selhání Core sady,
+  `ClaudeCodeProcessTests.EnvironmentAndDirectory`
+  a `BridgeRunnerTests.TheEnvironmentAndTheDirectoryAreTheCallers`, jsou
+  `PROCESSOR_ARCHITECTURE` v prostředí ARM64, s větví nesouvisí) a ruční
+  průchod nad izolovanými daty s démonem 0.1.2 / `windows-setup-x64`:
+  věta bez účtů, Předvolby → Obecné → Aktualizace se Zkontrolovat nyní,
+  pruh ve třech režimech, *Co je nového* s Markdownem jako text,
+  Později → Zkontrolovat nyní, Přeskočit i po restartu, O aplikaci.
+  Vlastník to viděl na obrazovce a schválil (2026-11-02).
+  Neklikáno: Stáhnout a Další informace (prohlížeč). Neviděno:
+  bezpečnostní dialog a oznámení (manifest je nemá; jen testy Core).
+  Poznámky: UI Automation jmenuje řádek stavu Předvoleb podle tlačítka
+  *Zkontrolovat nyní*; `Title` InfoBaru je prázdný, text je v `Message`.
 

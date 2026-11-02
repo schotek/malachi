@@ -540,8 +540,13 @@ věta na stránce bez účtů. Ověřeno: Go testy démona a reference, GTK
 `swift test`, `make po`; vlastník prošel macOS nad skutečnými daty (pruh,
 Co je nového, Později → Zkontrolovat nyní, bezpečnostní dialog
 s ukončením, Přeskočit, věta bez účtů) a GTK nad kopií dat na Fedoře 44
-(Linux agent), obojí proti skutečnému API. Čeká: Windows nepřeložené
-(`docs/windows-port.md` §11.16).
+(Linux agent), Windows agent na ARM64 sestavil, otestoval (1086 cílených,
+Core sada 8105/8125, dvě selhání jsou prostředí ARM64:
+`PROCESSOR_ARCHITECTURE` v prostředí dětského procesu, s větví nesouvisí),
+zlintoval a prošel ručně nad izolovanými daty, vlastník to na obrazovce
+schválil, vše beze změny kódu;
+všechno proti skutečnému API. Neviděné na obrazovce: bezpečnostní dialog
+a oznámení (manifest je nemá; jen testy Core).
 
 Adresáře (2026-11-01, všechny tři klienty, sloučeno do `main`; plán,
 rozhodnutí A1–A16 a F1–F12, odpovědi vlastníka a wireframy W1–W7
