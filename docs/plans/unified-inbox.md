@@ -181,3 +181,47 @@ Vlastník na reálných systémech (předávka v `docs/plans/unified-inbox.md`):
   i seskupený seznam, nová pošta z obou účtů, výběr přes účty + Koš/Archivovat/Přečtené/
   hvězdička + Zpět, Přesunout do vypnuté u smíšeného výběru, odpověď z účtu řádku,
   hledání z unified.
+
+## As built (2026-11-02) a předávka k ověření
+
+Commity na `claude/exciting-ritchie-dy3qqt`: `c067f24` démon + `docs/api.md`,
+`6bd7543` Go reference (`ui/internal/unified`, `selection`, `contextmenu`, `settings`,
+gschema, `po/`), `e1c1b7d`/`1754379`/`e38cd99` GTK, `b1c6237` macOS, `964f91e` Windows.
+
+Navíc proti plánu (ve všech třech klientech):
+- Vlákna v seskupeném sjednoceném seznamu jsou klíčovaná dvojicí (účet, vlákno):
+  Graph ukládá `conversationId` Exchange jako `thread_id` a dvě schránky jednoho
+  tenantu ho sdílejí. Do `thread.get` jde vždy surové id.
+- Skupiny Zpět (`undo.Entry.Group`, `Stack.TakeGroup`; Swift-first, Go reference
+  a C# port): Koš / Archivovat / Nevyžádaná přes víc účtů je jedna akce, toast i Ctrl+Z
+  ji vrátí celou (toast „Vráceno“ se ukáže za každý účet, vidět je poslední).
+- Kontextové menu položky jen se „Zkontrolovat poštu“ (všechny účty).
+- Uložit do eWay-CRM je u výběru z více účtů vypnuté (`crm.save` bere jeden účet).
+- Hledání spuštěné z položky má rozsah „Všechny účty“ (Složka vypnutá).
+
+Ověřeno zde (Linux): `backend` `go vet ./...`, testy `pkg/api`, `store`, `core`, `rpc`;
+`ui` testy `unified`, `selection`, `contextmenu`, `undo`; `gofmt`. **Nic z GTK okna,
+macOS ani Windows se tu nepřeložilo** (chybí GTK, Swift, dotnet).
+
+Čeká na reálných systémech:
+- GTK (kontejner): `gtk.sh make build`, `go test ./internal/window/...`
+  (`unified_test.go`), `ui/internal/settings`, `make po` (posunuté `#:` odkazy,
+  ručně přidané msgid mají vyjít beze změny), `make lint`.
+- macOS: `swift build`, `swift test` (`UnifiedTests`, `MailboxControllerUnifiedTests`,
+  `SettingsTests` 45, `SelectionTests`, `ContextMenuTests`, `ActionsControllerTests`),
+  `check-strings.py`; řádek bez šipky zarovnaný s hlavičkami účtů.
+- Windows: `build.ps1 app`/`test`/`lint` (`UnifiedTests`, `SettingsTests` 49,
+  `GschemaCoverageTests`, `ApiRoundTripTests`, `GoContractTests`, `CrmRulesTests`);
+  pozor na collection expressions v podmínkách a `with` na `readonly record struct`.
+  `MailFixture` `unified` zatím nepodporuje (macOS ano).
+- Ručně ve všech třech nad kopií dat se dvěma účty (ideálně dva M365 v jednom tenantu):
+  položka jen při ≥ 2 účtech a se zapnutým přepínačem, skrytí při výběru, badge, plochý
+  i seskupený seznam a stránkování, kapsle účtu na řádcích, nová pošta do obou účtů,
+  výběr přes účty + Přečtené/hvězdička/Koš/Archivovat/Nevyžádaná a jedno Zpět,
+  Přeposlat/Přesunout do/eWay vypnuté u smíšeného výběru, odpověď z účtu řádku,
+  hledání z položky, Zkontrolovat poštu z kontextového menu.
+
+Rozdíly mezi klienty k rozhodnutí: Nevyžádaná, když některý účet nemá složku Nevyžádaná —
+macOS ty účty přeskočí, Windows akci odmítne, GTK ji odmítne předem; prázdný seznam
+říká „Tato složka je prázdná“; odpověď odeslaná do Odeslaných neobnoví počet
+odeslaných u konverzace ve sjednoceném seznamu (`applyNewMessageElsewhere`) v GTK.
