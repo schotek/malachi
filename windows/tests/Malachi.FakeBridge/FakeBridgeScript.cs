@@ -79,7 +79,12 @@ public sealed class FakeBridgeScript
         var path = Path.Combine(directory, CallsFileName);
         try
         {
-            return File.ReadAllText(path, Encoding.UTF8).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            // A bridge may be appending right now (FileShare.Read on its
+            // side): File.ReadAllText shares only reading and Windows would
+            // refuse it, so this read lets the writer go on.
+            using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var reader = new StreamReader(file, Encoding.UTF8);
+            return reader.ReadToEnd().Split('\n', StringSplitOptions.RemoveEmptyEntries);
         }
         catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException)
         {
