@@ -28,6 +28,9 @@ final class RulesPaneViewController: PreferencesPaneViewController, NSTableViewD
     /// The rows as last shown.
     private(set) var rows: [Rules.Row] = []
     private var shownBusy: Set<String> = []
+    /// The switches flipped whose call (or question) has not ended: the
+    /// row shows the state asked for meanwhile, the rule's own after.
+    private var flipped: [String: Bool] = [:]
 
     /// The window closed: nothing is taken any more.
     var closed = false {
@@ -88,11 +91,10 @@ final class RulesPaneViewController: PreferencesPaneViewController, NSTableViewD
 
     private func update() {
         guard let c = rules?.controller else { return }
-        let rows = c.rows
-        if rows != self.rows || c.busy != shownBusy {
-            shownBusy = c.busy
-            show(rows)
-        }
+        // Every change redraws: a declined question leaves the rows as they
+        // were, yet the switch the user flipped must show the rule again.
+        shownBusy = c.busy
+        show(c.rows)
         addButton.isEnabled = c.loaded && c.rules.count < API.Limits.maxRules
     }
 
@@ -111,7 +113,7 @@ final class RulesPaneViewController: PreferencesPaneViewController, NSTableViewD
     // MARK: Actions
 
     @objc private func addClicked(_ sender: Any?) {
-        rules?.addRule(account: nil, on: view.window)
+        rules?.addRuleForShownAccount(on: view.window)
     }
 
     private func edit(_ id: String) {
@@ -122,8 +124,12 @@ final class RulesPaneViewController: PreferencesPaneViewController, NSTableViewD
         guard let rules else { return }
         let ask = rules.confirm(on: view.window)
         let toast = toast
-        Task { @MainActor in
-            if let text = await rules.controller.setEnabled(id, on, confirm: ask) {
+        flipped[id] = on
+        Task { @MainActor [weak self] in
+            let text = await rules.controller.setEnabled(id, on, confirm: ask)
+            self?.flipped[id] = nil
+            self?.update()
+            if let text {
                 toast(text)
             }
         }
@@ -220,7 +226,7 @@ final class RulesPaneViewController: PreferencesPaneViewController, NSTableViewD
         let r = rows[row]
         let cell = (tableView.makeView(withIdentifier: RuleRowCell.reuseIdentifier, owner: nil) as? RuleRowCell)
             ?? RuleRowCell(frame: .zero)
-        cell.apply(r, busy: shownBusy.contains(r.id))
+        cell.apply(r, enabled: flipped[r.id] ?? r.enabled, busy: shownBusy.contains(r.id))
         let id = r.id
         cell.onToggle = { [weak self] on in self?.setEnabled(id, on) }
         cell.onEdit = { [weak self] in self?.edit(id) }
@@ -353,8 +359,9 @@ final class RuleRowCell: NSTableCellView {
         fatalError("not used")
     }
 
-    /// Shows the rule's row; `busy` while its switch or removal runs.
-    func apply(_ r: Rules.Row, busy: Bool) {
+    /// Shows the rule's row with its switch at `enabled`; `busy` while its
+    /// switch or removal runs.
+    func apply(_ r: Rules.Row, enabled: Bool, busy: Bool) {
         titleLabel.stringValue = r.title
         titleLabel.toolTip = r.title
         outgoingIcon.isHidden = !r.outgoing
@@ -371,7 +378,7 @@ final class RuleRowCell: NSTableCellView {
         problemLabel.toolTip = r.problem.isEmpty ? nil : r.problem
         problemLabel.isHidden = r.problem.isEmpty
         reverting = true
-        toggle.state = r.enabled ? .on : .off
+        toggle.state = enabled ? .on : .off
         reverting = false
         for c in [toggle, editButton, removeButton] as [NSControl] {
             c.isEnabled = !busy

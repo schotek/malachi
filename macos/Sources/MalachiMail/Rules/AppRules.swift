@@ -21,6 +21,11 @@ final class AppRules {
     private var tokens: [NotificationHub.Token] = []
     /// The open editor sheets, kept alive while they show.
     private var editors: [ObjectIdentifier: RuleEditorWindowController] = [:]
+    /// The account of the folder the main window shows (Add Rule… makes a
+    /// rule for it, rules.NewForm) and the sidebar's folders, fresher than
+    /// the controller's listing; the integration installs both.
+    var currentAccount: (@MainActor () -> AccountID?)?
+    var liveFolders: (@MainActor () -> [AccountID: [Folder]])?
 
     init(state: AppState) {
         self.state = state
@@ -63,12 +68,22 @@ final class AppRules {
 
     /// Add Rule…: a new rule for `account` (nil: every mail account).
     func addRule(account: AccountID?, on window: NSWindow?) {
+        freshen()
         present(RuleEditorController(caller: caller, newFor: account, rules: controller), on: window)
+    }
+
+    /// Add Rule… of Settings → Rules: for the mail account the main window
+    /// shows, else for every mail account.
+    func addRuleForShownAccount(on window: NSWindow?) {
+        let shown = currentAccount?()
+        let account = controller.mailAccounts.contains { $0.id == shown } ? shown : nil
+        addRule(account: account, on: window)
     }
 
     /// Edit Rule… of a listed rule.
     func editRule(_ id: String, on window: NSWindow?) {
         guard let r = controller.rule(id) else { return }
+        freshen()
         present(RuleEditorController(caller: caller, editing: r, rules: controller), on: window)
     }
 
@@ -76,15 +91,25 @@ final class AppRules {
     /// (`Rules.fromMessage`), for its account.
     func createRule(from message: MessageSummary, on window: NSWindow?) {
         let form = Rules.fromMessage(message, accountId: message.accountId)
+        freshen()
         present(RuleEditorController(
             caller: caller, form: form, stored: nil, accounts: controller.accounts, folders: controller.folders), on: window)
     }
 
     /// Whether Create Rule from Message… is offered for `message` (one row
-    /// of a mail account, not in the outbox, drafts or sent mail).
+    /// of a mail account, not in the outbox, drafts or sent mail), once
+    /// the rules and accounts were listed (an older daemon without rules.*
+    /// never lists them).
     func canCreateRule(from message: MessageSummary, role: FolderRole, account: Account?) -> Bool {
-        guard let account, Rules.isMailAccount(account), message.issue == nil else { return false }
-        return Rules.canCreateFrom(role)
+        guard controller.loaded, let account, Rules.isMailAccount(account), message.issue == nil else { return false }
+        return controller.mailAccounts.contains { $0.id == account.id } && Rules.canCreateFrom(role)
+    }
+
+    /// The sidebar's folders into the controller, before an editor opens.
+    private func freshen() {
+        if let live = liveFolders?() {
+            controller.merge(folders: live)
+        }
     }
 
     private func present(_ editor: RuleEditorController, on window: NSWindow?) {
@@ -107,9 +132,15 @@ final class AppRules {
     // MARK: Apply Rules…
 
     /// Apply Rules… of a folder: the question on `window`, the progress
-    /// line and the result as toasts.
+    /// line and the result as toasts over the main window (both on the same
+    /// presenter, so the result always replaces the progress).
     func apply(_ k: FolderKey, folderName: String, on window: NSWindow?) {
-        let toasts = state.toasts
+        let toasts: any Toasts
+        if let main = (state.mainWindow as? MainWindowController)?.toasts {
+            toasts = main
+        } else {
+            toasts = state.toasts
+        }
         let controller = controller
         let ask = confirm(on: window)
         Task { @MainActor in

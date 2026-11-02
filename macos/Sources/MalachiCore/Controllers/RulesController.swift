@@ -97,10 +97,15 @@ public final class RulesController {
         gen += 1
     }
 
-    /// Lists again after notify.rulesChanged and notify.accountsChanged.
+    /// notify.rulesChanged lists the rules alone again (the daemon sends it
+    /// whenever a rule's counts move, so on every message a rule acted on;
+    /// one listing runs at a time and one more follows when another came
+    /// meanwhile); notify.accountsChanged lists everything again.
     public func handle(_ method: String) {
-        if method == API.Notify.rulesChanged || method == API.Notify.accountsChanged {
-            refresh()
+        switch method {
+        case API.Notify.rulesChanged: refreshRules()
+        case API.Notify.accountsChanged: refresh()
+        default: break
         }
     }
 
@@ -108,6 +113,43 @@ public final class RulesController {
     public func refresh() {
         guard !stopped else { return }
         Task { await reload() }
+    }
+
+    /// Lists the rules alone again (rules.list).
+    public func refreshRules() {
+        guard !stopped else { return }
+        if rulesListing {
+            rulesAgain = true
+            return
+        }
+        rulesListing = true
+        pending += 1
+        Task {
+            await reloadRules()
+            pending -= 1
+        }
+    }
+
+    private var rulesListing = false
+    private var rulesAgain = false
+
+    private func reloadRules() async {
+        let caller = caller
+        repeat {
+            rulesAgain = false
+            let my = gen
+            do {
+                let r = try await caller.call(API.RulesList.self, EmptyParams(), timeout: nil)
+                // A full listing started meanwhile brings the rules too.
+                if my == gen, !stopped {
+                    rules = r.rules
+                    observers.notify()
+                }
+            } catch {
+                rulesLog.info("rules.list failed: \(ContactsOptions.asRPCError(error).code.rawValue, privacy: .public)")
+            }
+        } while rulesAgain && !stopped
+        rulesListing = false
     }
 
     /// `refresh`, waited for.
@@ -134,6 +176,20 @@ public final class RulesController {
             observers.notify()
         } catch {
             rulesLog.info("rules.list failed: \(ContactsOptions.asRPCError(error).code.rawValue, privacy: .public)")
+        }
+    }
+
+    /// The folders of the main window's sidebar, fresher than the listing
+    /// here (a folder made since): they replace what was listed for their
+    /// accounts.
+    public func merge(folders live: [AccountID: [Folder]]) {
+        var changed = false
+        for (account, list) in live where !list.isEmpty && folders[account] != list {
+            folders[account] = list
+            changed = true
+        }
+        if changed {
+            observers.notify()
         }
     }
 
@@ -349,15 +405,32 @@ public final class RuleEditorController {
 
     /// The problems of one row ("name", "conditions", "actions" and the
     /// row's index; the index is 0 for the list's own).
-    public func problems(_ field: String, _ index: Int) -> [String] {
+    public func problemTexts(_ field: String, _ index: Int) -> [String] {
         problems.filter { $0.field == field && $0.index == index }.map(Rules.problemText)
     }
 
     /// The folders a Move To action offers (`Rules.moveFolders`) for the
     /// form's account.
     public var moveFolders: [Folder] {
-        guard let a = form.accountId else { return [] }
-        return Rules.moveFolders(folders[a] ?? [])
+        moveTargets.map(\.folder)
+    }
+
+    /// `moveFolders` in the sidebar's order with their depth there
+    /// (`folderTree`, as the context menu's Move To indents them).
+    public var moveTargets: [(folder: Folder, depth: Int)] {
+        guard let id = form.accountId else { return [] }
+        let list = folders[id] ?? []
+        var tree: [(folder: Folder, depth: Int)] = []
+        if let a = accounts.first(where: { $0.id == id }) {
+            tree = folderTree(a, list, CollapseState(), FavouriteState())
+                .filter { !$0.header }
+                .compactMap { e in e.folder.map { (folder: $0, depth: e.depth) } }
+        }
+        if tree.isEmpty {
+            tree = list.map { (folder: $0, depth: 0) }
+        }
+        let offered = Set(Rules.moveFolders(tree.map(\.folder)).map(\.id))
+        return tree.filter { offered.contains($0.folder.id) }
     }
 
     /// The folders Try It can look in: the form's account's, or every mail
@@ -524,8 +597,15 @@ public final class RuleEditorController {
             testText = Rules.testResultText(res.count)
         } catch {
             rulesLog.info("rules.test failed: \(ContactsOptions.asRPCError(error).code.rawValue, privacy: .public)")
-            if let d = ContactsOptions.asRPCError(error).ruleInvalid {
-                testText = Rules.invalidText(d)
+            // The daemon's refusal of the rule as the editor says it, an
+            // invalidArgument without data as a rule it cannot use, anything
+            // else as the usual sentence of a failed action (no network, a
+            // timeout, no backend), never the daemon's message.
+            let e = ContactsOptions.asRPCError(error)
+            if e.code == .invalidArgument {
+                testText = Rules.invalidText(e.ruleInvalid ?? RuleInvalidData(field: ""))
+            } else {
+                testText = rpcErrorText(Rules.testButton, error)
             }
         }
     }

@@ -320,20 +320,25 @@ final class RuleEditorWindowController: NSWindowController, NSTextFieldDelegate,
         }
         stopBox.state = f.stop ? .on : .off
         enabledSwitch.state = f.enabled ? .on : .off
-        show(nameProblem, editor.problems("name", 0))
+        // Validated once per drawing.
+        let problems = editor.problems
+        func texts(_ field: String, _ i: Int) -> [String] {
+            problems.filter { $0.field == field && $0.index == i }.map(Rules.problemText)
+        }
+        show(nameProblem, texts("name", 0))
         for (i, l) in conditionProblems.enumerated() {
-            show(l, editor.problems("conditions", i))
+            show(l, texts("conditions", i))
         }
         for (i, l) in actionProblems.enumerated() {
-            show(l, editor.problems("actions", i))
+            show(l, texts("actions", i))
         }
         // The list's own problems (no row to show them under).
-        show(conditionsProblem, f.conditions.isEmpty ? editor.problems("conditions", 0) : [])
-        show(actionsProblem, f.actions.isEmpty ? editor.problems("actions", 0) : [])
+        show(conditionsProblem, f.conditions.isEmpty ? texts("conditions", 0) : [])
+        show(actionsProblem, f.actions.isEmpty ? texts("actions", 0) : [])
         if let k = editor.testFolder {
             selectTestFolder(k)
         }
-        testButton.isEnabled = editor.testFolder != nil && editor.problems.isEmpty && !editor.testing
+        testButton.isEnabled = editor.testFolder != nil && problems.isEmpty && !editor.testing
         if editor.testing {
             testSpinner.startAnimation(nil)
         } else {
@@ -343,7 +348,7 @@ final class RuleEditorWindowController: NSWindowController, NSTextFieldDelegate,
         testResult.toolTip = editor.testText.isEmpty ? nil : editor.testText
         errorLabel.stringValue = editor.error
         errorLabel.isHidden = editor.error.isEmpty
-        saveButton.isEnabled = editor.canSave
+        saveButton.isEnabled = problems.isEmpty && !editor.saving
         if editor.saving {
             saveSpinner.startAnimation(nil)
         } else {
@@ -490,10 +495,10 @@ final class RuleEditorWindowController: NSWindowController, NSTextFieldDelegate,
                 p.autoenablesItems = false
                 p.addItem(withTitle: Rules.folderPlaceholder)
                 p.lastItem?.representedObject = ""
-                for folder in editor.moveFolders {
-                    p.addItem(withTitle: folderTitle(folder))
-                    p.lastItem?.representedObject = folder.id.rawValue
-                    p.lastItem?.indentationLevel = min(max(folder.path.split(separator: "/").count - 1, 0), 15)
+                for t in editor.moveTargets {
+                    p.addItem(withTitle: folderTitle(t.folder))
+                    p.lastItem?.representedObject = t.folder.id.rawValue
+                    p.lastItem?.indentationLevel = min(max(t.depth, 0), 15)
                 }
                 if let id = a.folderId, let j = p.itemArray.firstIndex(where: { ($0.representedObject as? String) == id.rawValue }) {
                     p.selectItem(at: j)

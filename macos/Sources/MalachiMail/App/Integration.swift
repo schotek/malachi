@@ -162,6 +162,8 @@ final class Integration {
         sidebar.rulesApply = { [weak self] account in
             self?.state.rules.controller.applies(to: account) ?? false
         }
+        state.rules.currentAccount = { [weak self] in self?.mailbox.model.selected?.account }
+        state.rules.liveFolders = { [weak self] in self?.mailbox.model.folders ?? [:] }
         // Undo of moves (ActionsController+Undo): the toast with its button
         // over the main window's content (Mail or Board), ⌘Z through the
         // window's Edit ▸ Undo, never in the Calendar.
