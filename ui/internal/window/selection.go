@@ -179,7 +179,7 @@ func (w *Window) restrictSelection(keys []listKey) []listKey {
 			latest, found = k, true
 		}
 	}
-	kept := selection.Restrict(rows, latest)
+	kept := selection.RestrictIn(rows, latest, w.model.listIsUnified())
 	if len(kept) == len(keys) {
 		return keys
 	}
@@ -215,11 +215,15 @@ func (w *Window) selectionState(on bool) actionState {
 	}
 	states := make([]actionState, len(rows))
 	flags := make([]selection.Flags, len(rows))
+	accounts := make([]api.AccountID, len(rows))
 	for i, r := range rows {
 		states[i] = w.model.messageActionState(r, true)
 		flags[i] = states[i].flags()
+		accounts[i] = r.Message.AccountID
 	}
-	return states[0].with(selection.Combine(flags))
+	// In the All Inboxes list the rows may be of several accounts
+	// (CombineAccounts turns off what needs one).
+	return states[0].with(selection.CombineAccounts(flags, accounts))
 }
 
 // selectedIDs runs fn with the selected rows and every message they stand

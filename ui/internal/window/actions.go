@@ -160,6 +160,9 @@ func (w *Window) markUnread(id api.MessageID) { w.setSeenIDs([]api.MessageID{id}
 // messages are of one account (a selection is), possibly of several of its
 // folders (a search).
 func (w *Window) setSeenIDs(ids []api.MessageID, seen bool) {
+	if w.splitByAccount(ids, func(g []api.MessageID) { w.setSeenIDs(g, seen) }) {
+		return // the All Inboxes list: one call per account
+	}
 	var todo []api.MessageID
 	var k folderKey
 	folderOf := make(map[api.MessageID]folderKey)
@@ -236,6 +239,9 @@ func (w *Window) toggleFlagged(id api.MessageID) {
 // setFlaggedIDs stars or unstars the messages that are not so yet, like
 // setSeenIDs.
 func (w *Window) setFlaggedIDs(ids []api.MessageID, on bool) {
+	if w.splitByAccount(ids, func(g []api.MessageID) { w.setFlaggedIDs(g, on) }) {
+		return
+	}
 	var todo []api.MessageID
 	var acc api.AccountID
 	for _, id := range ids {
@@ -315,7 +321,9 @@ func (w *Window) trashIDs(parent gtk.Widgetter, ids []api.MessageID, subject str
 	} else if len(queued) > 0 {
 		return // a selection is one folder's; outbox rows never mix in
 	}
-	confirmTrash(parent, w.settings, len(list), subject, func() {
+	// One question for the whole selection, then one move per account (the
+	// All Inboxes list may hold rows of several).
+	trashAccount := func(list []api.MessageSummary) {
 		restore := w.removeRows(idsOf(list))
 		for _, s := range list {
 			w.closeMessageWindow(s.ID)
@@ -358,6 +366,11 @@ func (w *Window) trashIDs(parent gtk.Widgetter, ids []api.MessageID, subject str
 				w.recordUndo(undoKind.Trash, trash.ID, moving)
 			}
 		})
+	}
+	confirmTrash(parent, w.settings, len(list), subject, func() {
+		for _, g := range accountGroups(list) {
+			trashAccount(g.Items)
+		}
 	})
 }
 
@@ -439,9 +452,11 @@ func (w *Window) junkIDs(parent gtk.Widgetter, ids []api.MessageID, subject stri
 	if len(list) == 0 {
 		return
 	}
-	if _, ok := w.model.folderByRole(list[0].AccountID, api.RoleJunk); !ok {
-		w.Toast(i18n.T("This account has no junk folder"))
-		return
+	for _, g := range accountGroups(list) {
+		if _, ok := w.model.folderByRole(g.Account, api.RoleJunk); !ok {
+			w.Toast(i18n.T("This account has no junk folder"))
+			return
+		}
 	}
 	heading := i18n.T("Mark as junk?")
 	if n := len(list); n > 1 {
@@ -469,12 +484,15 @@ func (w *Window) moveIDsToRole(ids []api.MessageID, role api.FolderRole, kind un
 	if len(list) == 0 {
 		return
 	}
-	target, ok := w.model.folderByRole(list[0].AccountID, role)
-	if !ok {
-		w.Toast(missing)
-		return
+	// The All Inboxes list: one move (and one Undo entry) per account.
+	for _, g := range accountGroups(list) {
+		target, ok := w.model.folderByRole(g.Account, role)
+		if !ok {
+			w.Toast(missing)
+			continue
+		}
+		w.moveListTo(g.Items, target.ID, kind, what)
 	}
-	w.moveListTo(list, target.ID, kind, what)
 }
 
 // moveIDsTo moves messages to another folder of their account (Move To
@@ -503,8 +521,8 @@ func (w *Window) movable(ids []api.MessageID) []api.MessageSummary {
 func (w *Window) moveListTo(list []api.MessageSummary, target api.FolderID, kind undoKind.Kind, what func(n int) string) {
 	// The messages already in the target stay where they are.
 	list = slices.DeleteFunc(slices.Clone(list), func(s api.MessageSummary) bool { return s.FolderID == target })
-	if len(list) == 0 {
-		return
+	if len(list) == 0 || len(accountGroups(list)) > 1 {
+		return // Move To is off for rows of several accounts (one folder is one account's)
 	}
 	acc := list[0].AccountID
 	restore := w.removeRows(idsOf(list))

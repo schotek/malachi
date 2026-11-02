@@ -61,7 +61,8 @@ func searchReady(text string) bool {
 func (m *mailModel) searchRequest(text string, scope settings.SearchScope) (api.SearchQueryParams, settings.SearchScope) {
 	p := api.SearchQueryParams{Query: strings.TrimSpace(text), Page: api.Page{Limit: api.DefaultPageLimit}}
 	k := m.selected
-	if k == (folderKey{}) {
+	// The All Inboxes item is no folder to narrow to either: every account.
+	if k == (folderKey{}) || isUnifiedKey(k) {
 		scope = settings.SearchAll
 	}
 	switch scope {
@@ -117,6 +118,7 @@ func (m *mailModel) clearSearchResults() {
 func (m *mailModel) rowMessage(s api.MessageSummary) widget.Message {
 	msg := summaryMessage(s)
 	if !m.search.active {
+		msg.Origin, msg.OriginTooltip = m.unifiedOrigin(s)
 		return msg
 	}
 	if h, ok := m.search.hits[s.ID]; ok {

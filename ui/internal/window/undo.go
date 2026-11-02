@@ -155,6 +155,9 @@ func (w *Window) runUndo(e undo.Entry) {
 // back to, selecting those that came back to it (takeUndoReselect).
 func (w *Window) afterUndo(e undo.Entry) {
 	w.loadFolders(e.Account, w.model.foldersGen)
+	if w.unifiedAfterUndo(e) {
+		return
+	}
 	sel := w.model.selected
 	if sel.Account != e.Account || w.model.search.active {
 		return

@@ -242,7 +242,7 @@ func (w *Window) discardThreadDraft(d api.Draft) {
 // flat mode (no row shows a conversation).
 func (w *Window) onDraftsChanged(n api.DraftsChangedNotification) {
 	m := &w.model
-	if !m.grouped || m.loading || m.listFolder.Account != n.AccountID {
+	if !m.grouped || m.loading || (m.listFolder.Account != n.AccountID && !m.listIsUnified()) {
 		return
 	}
 	shown := api.ThreadID("")
