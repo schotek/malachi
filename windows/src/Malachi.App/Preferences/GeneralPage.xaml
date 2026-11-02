@@ -5,7 +5,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 Port of macos/Sources/MalachiMail/Preferences/GeneralPaneViewController.swift;
 GTK: preferences.blp general_page. The Blueprint's groups in its order:
-Startup (launch_at_login, run_in_background), Board (Show the Board,
+Startup (launch_at_login, run_in_background), Updates (the update check's
+switch, status line and Check Now, after Startup as on macOS), Board (Show the Board,
 Board View, Open at Launch) and Keep cases for (a window per state;
 preferences_board.go bindBoard), Reading (mark_read_delay,
 0 to 60 s), Deleting (confirm_delete), Notifications
@@ -88,6 +89,31 @@ button with what Windows opens mailto: links with (windows/README.md).
                             x:Name="RunInBackgroundSwitch"
                             AutomationProperties.AutomationId="RunInBackground"
                             AutomationProperties.Name="{l:T Msgid='Run in Background'}" />
+                    </tk:SettingsCard>
+                </StackPanel>
+
+                <!--
+                    The update check (ui/internal/updates PrefsGroup, PrefsTitle,
+                    PrefsSubtitle, AboutLine, CheckNow; GeneralPage.Updates.cs):
+                    the daemon's switch (update.setPrefs), the status line and
+                    Check Now (update.check). The texts are Core's.
+                -->
+                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        x:Name="UpdatesHeading"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}" />
+                    <tk:SettingsCard x:Name="UpdatesCheckRow">
+                        <ToggleSwitch
+                            x:Name="UpdatesCheckSwitch"
+                            AutomationProperties.AutomationId="UpdatesCheckAutomatically"
+                            Toggled="OnUpdatesCheckToggled" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="UpdatesStatusRow">
+                        <Button
+                            x:Name="UpdatesCheckNowButton"
+                            AutomationProperties.AutomationId="UpdatesCheckNow"
+                            Click="OnUpdatesCheckNowClick" />
                     </tk:SettingsCard>
                 </StackPanel>
 

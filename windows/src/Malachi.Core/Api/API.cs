@@ -633,6 +633,28 @@ public static class API
     public static readonly RpcMethod<ContactPhotoParams, ContactPhotoResult> ContactPhoto =
         new("contact.photo", RpcTimeouts.ContactPhoto, Wire.ContactPhotoParams, Wire.ContactPhotoResult);
 
+    // Update check (docs/api.md §4.20; Update.cs)
+
+    /// <summary><c>update.status</c>: the status, its texts in the locale.</summary>
+    public static readonly RpcMethod<UpdateStatusParams, UpdateStatus> UpdateStatus =
+        new("update.status", RpcTimeouts.Default, Wire.UpdateStatusParams, Wire.UpdateStatus);
+
+    /// <summary><c>update.check</c>: checks now (Check Now); within a minute of the last one returns the status as it is.</summary>
+    public static readonly RpcMethod<UpdateCheckParams, UpdateStatus> UpdateCheck =
+        new("update.check", RpcTimeouts.UpdateCheck, Wire.UpdateCheckParams, Wire.UpdateStatus);
+
+    /// <summary><c>update.setPrefs</c>: turns the daily check on or off.</summary>
+    public static readonly RpcMethod<UpdateSetPrefsParams, UpdateStatus> UpdateSetPrefs =
+        new("update.setPrefs", RpcTimeouts.Default, Wire.UpdateSetPrefsParams, Wire.UpdateStatus);
+
+    /// <summary><c>update.dismiss</c>: skips, puts off or records the question of the offered version.</summary>
+    public static readonly RpcMethod<UpdateDismissParams, UpdateStatus> UpdateDismiss =
+        new("update.dismiss", RpcTimeouts.Default, Wire.UpdateDismissParams, Wire.UpdateStatus);
+
+    /// <summary><c>update.dismissNotice</c>: hides a notice for good.</summary>
+    public static readonly RpcMethod<UpdateDismissNoticeParams, UpdateStatus> UpdateDismissNotice =
+        new("update.dismissNotice", RpcTimeouts.Default, Wire.UpdateDismissNoticeParams, Wire.UpdateStatus);
+
     // Tables
 
     /// <summary>Every method, in the order of methods.go.</summary>
@@ -675,6 +697,7 @@ public static class API
         ContactList, ContactGet, ContactLookup,
         ContactCreate, ContactUpdate, ContactDelete,
         ContactPhoto,
+        UpdateStatus, UpdateCheck, UpdateSetPrefs, UpdateDismiss, UpdateDismissNotice,
     ];
 
     /// <summary>api.AllMethods: every callable method name.</summary>
@@ -725,6 +748,9 @@ public static class API
         /// Preferences → Contacts and the address chips' lookup read them again.
         /// </summary>
         public const string ContactsChanged = "notify.contactsChanged";
+
+        /// <summary>api.NotifyUpdateChanged: the update status changed; no params, clients call <c>update.status</c>.</summary>
+        public const string UpdateChanged = "notify.updateChanged";
     }
 
     /// <summary>api.AllNotifications: every server-initiated notification name.</summary>
@@ -735,6 +761,7 @@ public static class API
         Notify.CalendarChanged, Notify.CalendarState, Notify.EventAlert, Notify.InvitationsChanged,
         Notify.AssistantProfileChanged,
         Notify.ContactsChanged,
+        Notify.UpdateChanged,
     ];
 
     /// <summary>

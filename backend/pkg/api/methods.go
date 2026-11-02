@@ -167,6 +167,13 @@ const (
 	MethodContactUpdate   = "contact.update"
 	MethodContactDelete   = "contact.delete"
 	MethodContactPhoto    = "contact.photo"
+
+	// Update check (docs/api.md §4.20).
+	MethodUpdateStatus        = "update.status"
+	MethodUpdateCheck         = "update.check"
+	MethodUpdateSetPrefs      = "update.setPrefs"
+	MethodUpdateDismiss       = "update.dismiss"
+	MethodUpdateDismissNotice = "update.dismissNotice"
 )
 
 // Notification names (backend → client, no reply expected).
@@ -187,6 +194,8 @@ const (
 	NotifyAssistantProfileChanged = "notify.assistantProfileChanged"
 
 	NotifyContactsChanged = "notify.contactsChanged"
+
+	NotifyUpdateChanged = "notify.updateChanged"
 )
 
 // AllMethods lists every callable method. The RPC server uses it to register
@@ -229,6 +238,7 @@ var AllMethods = []string{
 	MethodContactList, MethodContactGet, MethodContactLookup,
 	MethodContactCreate, MethodContactUpdate, MethodContactDelete,
 	MethodContactPhoto,
+	MethodUpdateStatus, MethodUpdateCheck, MethodUpdateSetPrefs, MethodUpdateDismiss, MethodUpdateDismissNotice,
 }
 
 // AllNotifications lists every server-initiated notification.
@@ -238,4 +248,5 @@ var AllNotifications = []string{
 	NotifyCalendarChanged, NotifyCalendarState, NotifyEventAlert, NotifyInvitationsChanged,
 	NotifyAssistantProfileChanged,
 	NotifyContactsChanged,
+	NotifyUpdateChanged,
 }

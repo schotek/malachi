@@ -501,6 +501,14 @@ gets the sanitiser's output only.
                     Content="{l:T Msgid='Add CalDAV Calendar…'}"
                     CornerRadius="18"
                     Style="{StaticResource SubtleButtonStyle}" />
+                <!-- The update check's first-run note (ui/internal/updates WizardNote), a dim caption under the buttons as on macOS; set in code. -->
+                <TextBlock
+                    x:Name="UpdateNote"
+                    Margin="0,12,0,0"
+                    AutomationProperties.AutomationId="UpdateCheckNote"
+                    Style="{StaticResource DimCaptionLabelStyle}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
             </StackPanel>
 
             <!-- "message": the headers stay put at the top; the body below

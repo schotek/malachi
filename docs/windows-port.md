@@ -4192,6 +4192,78 @@ The detail's card of rows takes its brushes from a style with
 dialling, as macOS); below about 400 DIP the `TitleBar` hides the search
 box; other display scales, touch, Narrator over the form and x64 by hand.
 
+### 11.16 The update check (2026-11-02)
+
+Written 2026-11-02 on a Mac without .NET, from the Go reference
+`ui/internal/updates` and the contract `docs/api.md` §4.20 (decisions in
+`docs/plans/update-check.md`); nothing here was compiled. The Windows
+agent builds, tests and lints it; never through `windows.yml`.
+
+API: `Api/Update.cs` mirrors `backend/pkg/api/update.go` (`UpdateState`,
+`UpdateFailure`, `UpdateDismissAction`, `UpdateInfo`, `UpdateNotice`,
+`UpdateStatus` and the params of the five methods); `update.status`,
+`update.check` (`RpcTimeouts.UpdateCheck`, 75 s: the daemon answers when
+its check ends, 70 s inside), `update.setPrefs`, `update.dismiss`,
+`update.dismissNotice` end `API.Methods` (119); `notify.updateChanged`
+ends `AllNotifications`, decodes as `DaemonNotification.UpdateChanged`
+(no params) and fans out through `NotificationHub.AddUpdateChanged`.
+
+Core: `Updates/UpdateCheck.cs` is `updates.go` one to one (`BannerFor`,
+`PromptFor`, `NotesFor`, `AboutLine`, `CheckNow`, `CanCheckNow`,
+`PrefsGroup`, `PrefsTitle`, `PrefsSubtitle`, `WizardNote`, `OpenableUrl`
+over `Compose.UrlSyntax`), its types `UpdateBanner`, `BannerKind`,
+`BannerAction` (Go's `Action`), `BannerButton`, `UpdatePrompt`,
+`UpdateNotes`; every text is a GTK msgid through `L10n`, none new, none
+excluded. `Controllers/UpdateStatusController.cs` (Windows-first) keeps
+the status for the application: `Refresh` (`update.status` with
+`L10n.Catalogue.Language`), `CheckNow` (`Checking` while it runs),
+`SetEnabled`, `Dismiss`, `DismissNotice`, the security question once per
+version and process (`PendingPrompt`, `BeginPrompt`, `PromptAnswered` →
+`update.dismiss "prompted"`, sent even when the app quits right after);
+a failed call is logged and keeps the status, an older daemon leaves it
+null.
+
+App: `Shell/AppState.Updates.cs` makes the controller and reads the status
+on Connected/InfoFailed and on `notify.updateChanged`; `UpdateLine` is
+`AboutLine` with `Format.FormatDateTime`. The main window's `UpdateBar`
+(an `InfoBar` in a new row of `Root` between the title bar and
+`ModeHost`, so it shows in Mail, Board and Calendar; its buttons in a
+`WrapBox`, the first with `AccentButtonStyle`; Informational, Warning for a
+security release) and the security question in `MainWindow.Updates.cs`
+(asked while the window is shown, else when it is shown next; Download
+opens the package and, with the check box on, calls `AppState.Quit`, the
+menu's Quit with its questions). The dialogs are `AlertService.Updates.cs`
+(`IAlerts.WhatsNewAsync`: Download, More Information, Close, the notes
+as `TextBlock.Text`; `IAlerts.SecurityUpdateAsync`: Download, the default,
+and Cancel, a `CheckBox` checked by default). Preferences → General has
+the group Updates right after Startup (as macOS: `GeneralPage.Updates.cs`,
+the switch `UpdatesCheckSwitch`, the line `UpdatesStatusRow` with
+`UpdatesCheckNowButton`); About has the line under the version
+(`AlertService.UpdateLine`); the No Accounts page has `WizardNote` as a
+dim caption under its buttons (`MessageView.xaml` `UpdateNote`). URLs go
+to the browser only through `UpdateCheck.OpenableUrl` and
+`AppState.OpenUrlAsync`.
+
+Tests: `Updates/UpdateCheckTests` (updates_test.go),
+`Controllers/UpdateStatusControllerTests` (against `FakeDaemon`), and the
+updated `GoContractTests` (119 methods, the three wire enums,
+`EveryEnumAndStructOfUpdateGoIsMirrored`, update.go in
+`EveryRecordHasTheMembersOfItsGoStruct`), `ApiCodingTests` (`GoMethods`,
+the notifications, the timeout of `update.check`), `ApiRoundTripTests`
+(a sample of every update record) and `NotificationDecodeTests`.
+
+The Windows agent: `build.ps1 app`, `test` (the classes above first),
+`lint` (formatting, `StringsCheckTests.EveryTemplateMsgidIsUsedOrExcluded`
+with every msgid of updates.go used, conventions); then by hand against a
+daemon with a test manifest: the banner in all three modes (update,
+security, notice; Download, What's New, Remind Me Later, Skip This
+Version, More Information, Close), the security question once (and not
+again after a restart), Quit after Download with an unsaved draft, the
+preference and Check Now, About's line, the No Accounts note. Guessed
+without a compiler: `InfoBar.Content` with a `WrapBox`, the `Root` row
+shift (nothing reads the rows by number), `ContentDialog` content with a
+`CheckBox`.
+
 ## 12. Tests
 
 `make test-windows` (`build.ps1 test`) runs six test projects, 5,944

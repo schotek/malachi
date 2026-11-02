@@ -7,7 +7,9 @@ document is the public contract the open-source daemon is written and
 tested against. Nothing in it is secret: the daemon's code shows every
 address, field and key anyway.
 
-Status: draft (2026-10-28). Nothing below is implemented yet; the plan is
+Status: §2 is implemented in the daemon (`backend/internal/update`,
+2026-11-02) and tested against the owner's tool's fixtures
+(`backend/testdata/update`); §3 is a sketch. The plan is
 [`plans/update-check.md`](plans/update-check.md).
 
 ## 1. Host, paths and versioning

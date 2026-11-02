@@ -48,6 +48,9 @@ public sealed class ApiRoundTripTests
     private const string Summary =
         """{"id":"m_1","accountId":"acc_1","folderId":"f_outbox","threadId":"t_9","from":[@address@],"to":[{"address":"me@example.org"}],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen","pinned"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"issue":@itemissue@,"bulk":@bulk@,"invitation":@calinvitationsummary@,"crmSaved":true}""";
 
+    private const string UpdateInfoJson =
+        """{"version":"0.1.3","publishedAt":"2026-11-01T19:00:00Z","security":false,"notes":"Fixes.\nMore fixes.","infoUrl":"https://malachimail.app/download.html","url":"https://github.com/schotek/malachi/releases/download/v0.1.3/Malachi-Mail-0.1.3-windows-x64-setup.exe","size":81234567,"skipped":false,"remindAfter":"2026-11-04T19:00:00Z","prompt":false}""";
+
     private const string Bulk = """{"kind":"list","listId":"golang-nuts.googlegroups.com","domain":"googlegroups.com"}""";
 
     private const string Unsubscribe = """{"method":"url","target":"shop.example","url":"https://shop.example/u?x=1","unsubscribedAt":"2026-09-30T12:00:00Z"}""";
@@ -644,6 +647,17 @@ public sealed class ApiRoundTripTests
         [nameof(CalendarStateNotification)] = Case<CalendarStateNotification>("""{"state":@calsyncstate@}"""),
         [nameof(EventAlertNotification)] = Case<EventAlertNotification>("""{"alert":@calalert@}"""),
         [nameof(InvitationsChangedNotification)] = Case<InvitationsChangedNotification>("""{"accountIds":["acc_1"]}"""),
+        // Update.cs
+        [nameof(UpdateInfo)] = Case<UpdateInfo>(UpdateInfoJson),
+        [nameof(UpdateNotice)] = Case<UpdateNotice>("""{"id":"n-2026-11-02","text":"Hello.","url":"https://malachimail.app/news.html"}"""),
+        [nameof(UpdateStatus)] = Case<UpdateStatus>(
+            """{"enabled":true,"channel":"windows-setup-x64","current":"0.1.2","state":"available","checkedAt":"2026-11-02T08:00:00Z","failure":"network","available":"""
+                + UpdateInfoJson + ""","notice":{"id":"n-1","text":"Hello."}}"""),
+        [nameof(UpdateStatusParams)] = Case<UpdateStatusParams>("""{"locale":"cs"}"""),
+        [nameof(UpdateCheckParams)] = Case<UpdateCheckParams>("""{"locale":"cs-CZ"}"""),
+        [nameof(UpdateSetPrefsParams)] = Case<UpdateSetPrefsParams>("""{"enabled":false,"locale":"cs"}"""),
+        [nameof(UpdateDismissParams)] = Case<UpdateDismissParams>("""{"version":"0.1.3","action":"later","locale":"cs"}"""),
+        [nameof(UpdateDismissNoticeParams)] = Case<UpdateDismissNoticeParams>("""{"id":"n-1","locale":"cs"}"""),
     };
 
     // Minimal documents: what the encoding adds to them.

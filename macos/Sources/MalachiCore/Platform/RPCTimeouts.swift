@@ -58,4 +58,7 @@ public enum RPCTimeouts {
     /// allowed 2 minutes (docs/eway.md D16); the daemon has no budget of
     /// its own for the whole call.
     public static let crmSave: Duration = .seconds(900)
+    /// `update.check`: the daemon gives both requests of one check 70 s
+    /// (core/update_service.go `updateCheckLimit`) before it answers.
+    public static let updateCheck: Duration = .seconds(75)
 }

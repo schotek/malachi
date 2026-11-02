@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-30 21:34+0100\n"
+"POT-Creation-Date: 2026-11-02 09:01+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -1672,7 +1672,7 @@ msgstr "Otevřít v novém okně"
 
 #: ui/internal/contextmenu/text.go:52 ui/internal/conversation/drafts.go:108
 #: ui/internal/calendar/detail.go:256 ui/internal/contacts/text.go:131
-#: ui/data/ui/window.ui:589
+#: ui/data/ui/window.ui:592
 msgid "Edit"
 msgstr "Upravit"
 
@@ -1684,30 +1684,30 @@ msgstr "Komentovat"
 #: ui/internal/contextmenu/text.go:57 ui/internal/jira/compose.go:164
 #: ui/internal/board/text.go:374 ui/internal/window/conversation_card.go:293
 #: ui/internal/window/quick_reply_bar.go:194 ui/data/ui/message_window.ui:44
-#: ui/data/ui/window.ui:474
+#: ui/data/ui/window.ui:477
 msgid "Reply"
 msgstr "Odpovědět"
 
 #: ui/internal/contextmenu/text.go:59
 #: ui/internal/window/conversation_card.go:294
 #: ui/internal/window/quick_reply_bar.go:192 ui/data/ui/message_window.ui:50
-#: ui/data/ui/window.ui:481
+#: ui/data/ui/window.ui:484
 msgid "Reply All"
 msgstr "Odpovědět všem"
 
 #: ui/internal/contextmenu/text.go:61
 #: ui/internal/window/conversation_card.go:295 ui/data/ui/message_window.ui:56
-#: ui/data/ui/window.ui:488
+#: ui/data/ui/window.ui:491
 msgid "Forward"
 msgstr "Přeposlat"
 
 #: ui/internal/contextmenu/text.go:63 ui/data/ui/message_window.ui:592
-#: ui/data/ui/window.ui:1173
+#: ui/data/ui/window.ui:1188
 msgid "Mark as _Read"
 msgstr "Označit jako _přečtené"
 
 #: ui/internal/contextmenu/text.go:65 ui/data/ui/message_window.ui:588
-#: ui/data/ui/window.ui:1169
+#: ui/data/ui/window.ui:1184
 msgid "Mark as _Unread"
 msgstr "Označit jako _nepřečtené"
 
@@ -1717,13 +1717,13 @@ msgid "Unstar"
 msgstr "Odebrat hvězdičku"
 
 #: ui/internal/contextmenu/text.go:70 ui/internal/window/actions.go:67
-#: ui/data/ui/message_window.ui:74 ui/data/ui/window.ui:515
+#: ui/data/ui/message_window.ui:74 ui/data/ui/window.ui:518
 msgid "Star"
 msgstr "Přidat hvězdičku"
 
 #. TRANSLATORS: menu of the status changes a Jira issue allows.
 #: ui/internal/contextmenu/text.go:72 ui/internal/jira/transitions.go:87
-#: ui/data/ui/message_window.ui:608 ui/data/ui/window.ui:1189
+#: ui/data/ui/message_window.ui:608 ui/data/ui/window.ui:1204
 msgid "Change Status"
 msgstr "Změnit stav"
 
@@ -1731,7 +1731,7 @@ msgstr "Změnit stav"
 #. archive.
 #: ui/internal/contextmenu/text.go:74 ui/internal/board/text.go:824
 #: ui/internal/calendar/preferences.go:318 ui/data/ui/message_window.ui:132
-#: ui/data/ui/window.ui:575
+#: ui/data/ui/window.ui:578
 msgid "Archive"
 msgstr "Archivovat"
 
@@ -1741,7 +1741,7 @@ msgid "Move To"
 msgstr "Přesunout do"
 
 #: ui/internal/contextmenu/text.go:78 ui/data/ui/message_window.ui:582
-#: ui/data/ui/window.ui:1163
+#: ui/data/ui/window.ui:1178
 msgid "Mark as Junk"
 msgstr "Označit jako nevyžádanou"
 
@@ -1750,12 +1750,12 @@ msgid "Cancel Sending"
 msgstr "Zrušit odeslání"
 
 #: ui/internal/contextmenu/text.go:83 ui/internal/window/outbox.go:242
-#: ui/data/ui/message_window.ui:125 ui/data/ui/window.ui:567
+#: ui/data/ui/message_window.ui:125 ui/data/ui/window.ui:570
 msgid "Move to Trash"
 msgstr "Přesunout do koše"
 
 #: ui/internal/contextmenu/text.go:95 ui/internal/window/status.go:269
-#: ui/data/ui/preferences.ui:217 ui/data/ui/window.ui:247
+#: ui/data/ui/preferences.ui:236 ui/data/ui/window.ui:247
 msgid "Check for New Mail"
 msgstr "Kontrolovat novou poštu"
 
@@ -1925,7 +1925,7 @@ msgstr "Otevřít %s v prohlížeči"
 
 #. TRANSLATORS: a field of a Jira issue.
 #: ui/internal/jira/jira.go:267 ui/internal/board/text.go:1075
-#: ui/data/ui/preferences.ui:676
+#: ui/data/ui/preferences.ui:695
 msgid "Status"
 msgstr "Stav"
 
@@ -2008,7 +2008,7 @@ msgid "The Jira site rejected the token of %s"
 msgstr "Web Jira odmítl token účtu %s"
 
 #. TRANSLATORS: menu item; "Jira" is a product name.
-#: ui/internal/jira/wizard.go:78 ui/data/ui/window.ui:802
+#: ui/internal/jira/wizard.go:78 ui/data/ui/window.ui:805
 msgid "Add _Jira Account…"
 msgstr "Přidat účet _Jira…"
 
@@ -2149,22 +2149,22 @@ msgstr[0] "Vyberte nejvýš %d prostor"
 msgstr[1] "Vyberte nejvýš %d prostory"
 msgstr[2] "Vyberte nejvýš %d prostorů"
 
-#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:252
-#: ui/data/ui/preferences.ui:272
+#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:271
+#: ui/data/ui/preferences.ui:291
 msgid "1 week"
 msgstr "1 týden"
 
-#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:253
-#: ui/data/ui/preferences.ui:273
+#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:272
+#: ui/data/ui/preferences.ui:292
 msgid "1 month"
 msgstr "1 měsíc"
 
-#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:254
-#: ui/data/ui/preferences.ui:274
+#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:273
+#: ui/data/ui/preferences.ui:293
 msgid "3 months"
 msgstr "3 měsíce"
 
-#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:255
+#: ui/internal/jira/wizard.go:277 ui/data/ui/preferences.ui:274
 msgid "1 year"
 msgstr "1 rok"
 
@@ -2806,12 +2806,12 @@ msgid "Back to the timeline: the messages as cards, newest first"
 msgstr "Zpět na časovou osu: zprávy jako karty, nejnovější první"
 
 #. TRANSLATORS: a switch in Preferences → Message list; on, a message in the chat layout of a conversation shows its formatting (HTML) instead of plain text.
-#: ui/internal/conversation/chat.go:185 ui/data/ui/preferences.ui:483
+#: ui/internal/conversation/chat.go:185 ui/data/ui/preferences.ui:502
 msgid "Render HTML in Chat"
 msgstr "V chatu vykreslovat HTML"
 
 #. TRANSLATORS: the subtitle of the "Render HTML in Chat" switch in Preferences → Message list.
-#: ui/internal/conversation/chat.go:192 ui/data/ui/preferences.ui:484
+#: ui/internal/conversation/chat.go:192 ui/data/ui/preferences.ui:503
 msgid ""
 "Messages in the chat layout as they were sent, in a locked web view, instead "
 "of their plain text"
@@ -2825,23 +2825,23 @@ msgid "Show More"
 msgstr "Zobrazit více"
 
 #. TRANSLATORS: the title of a group of switches in Preferences → Message list about conversations (grouping, the chat layout).
-#: ui/internal/conversation/chat.go:273 ui/data/ui/preferences.ui:474
+#: ui/internal/conversation/chat.go:273 ui/data/ui/preferences.ui:493
 msgid "Conversations"
 msgstr "Konverzace"
 
 #. TRANSLATORS: a switch in Preferences → Message list; on, the user's own messages in the chat layout of a conversation show only their first lines until clicked.
-#: ui/internal/conversation/chat.go:281 ui/data/ui/preferences.ui:489
+#: ui/internal/conversation/chat.go:281 ui/data/ui/preferences.ui:508
 msgid "Shorten My Messages in Chat"
 msgstr "Zkracovat moje zprávy v chatu"
 
 #. TRANSLATORS: a switch in Preferences → Message list; on, the other party's messages in the chat layout of a conversation show only their first lines until clicked.
-#: ui/internal/conversation/chat.go:288 ui/data/ui/preferences.ui:495
+#: ui/internal/conversation/chat.go:288 ui/data/ui/preferences.ui:514
 msgid "Shorten Others' Messages in Chat"
 msgstr "Zkracovat cizí zprávy v chatu"
 
 #. TRANSLATORS: the subtitle of the "Shorten My Messages in Chat" and "Shorten Others' Messages in Chat" switches in Preferences → Message list.
-#: ui/internal/conversation/chat.go:296 ui/data/ui/preferences.ui:490
-#: ui/data/ui/preferences.ui:496
+#: ui/internal/conversation/chat.go:296 ui/data/ui/preferences.ui:509
+#: ui/data/ui/preferences.ui:515
 msgid ""
 "About three lines of each message in its bubble; a click shows the whole "
 "message"
@@ -2914,14 +2914,14 @@ msgstr "Otevřít v okně"
 msgid "Forward…"
 msgstr "Přeposlat…"
 
-#: ui/internal/board/text.go:57 ui/data/ui/preferences.ui:213
+#: ui/internal/board/text.go:57 ui/data/ui/preferences.ui:232
 msgid "Mail"
 msgstr "Pošta"
 
 #. TRANSLATORS: the window's second mode beside Mail: the conversations
 #. that need something, sorted into four states.
-#: ui/internal/board/text.go:65 ui/data/ui/preferences.ui:85
-#: ui/data/ui/preferences.ui:642
+#: ui/internal/board/text.go:65 ui/data/ui/preferences.ui:104
+#: ui/data/ui/preferences.ui:661
 msgid "Board"
 msgstr "Nástěnka"
 
@@ -3542,7 +3542,7 @@ msgid "The conversation could not be loaded."
 msgstr "Konverzaci se nepodařilo načíst."
 
 #: ui/internal/board/text.go:766 ui/internal/window/assistant_panel.go:707
-#: ui/internal/window/status.go:324 ui/data/ui/window.ui:443
+#: ui/internal/window/status.go:324 ui/data/ui/window.ui:446
 msgid "Try Again"
 msgstr "Zkusit znovu"
 
@@ -5052,7 +5052,7 @@ msgid "Custom…"
 msgstr "Vlastní…"
 
 #. TRANSLATORS: the editor's Repeat popup: the event does not repeat.
-#: ui/internal/calendar/recurrence.go:336 ui/data/ui/preferences.ui:237
+#: ui/internal/calendar/recurrence.go:336 ui/data/ui/preferences.ui:256
 msgid "Never"
 msgstr "Nikdy"
 
@@ -5139,6 +5139,7 @@ msgid "Save and Send Invitations"
 msgstr "Uložit a odeslat pozvánky"
 
 #: ui/internal/calendar/editor.go:245 ui/internal/contacts/text.go:140
+#: ui/internal/updates/updates.go:195
 msgid "Cancel"
 msgstr "Zrušit"
 
@@ -7138,11 +7139,11 @@ msgstr "Adresa zkopírována"
 msgid "_Copy Address"
 msgstr "_Kopírovat adresu"
 
-#: ui/internal/window/addresses.go:221 ui/data/ui/window.ui:1137
+#: ui/internal/window/addresses.go:221 ui/data/ui/window.ui:1152
 msgid "_New Message"
 msgstr "_Nová zpráva"
 
-#: ui/internal/window/assistant_panel.go:1003
+#: ui/internal/window/assistant_panel.go:1006
 #: ui/internal/window/conversation_draft.go:190 ui/internal/window/drafts.go:77
 msgid "Opening the draft"
 msgstr "Otevření konceptu"
@@ -7152,7 +7153,7 @@ msgid "Files inside an attached message cannot be opened or saved yet."
 msgstr "Soubory uvnitř přiložené zprávy zatím nelze otevřít ani uložit."
 
 #: ui/internal/window/attachments.go:185 ui/data/ui/message_window.ui:62
-#: ui/data/ui/window.ui:503
+#: ui/data/ui/window.ui:506
 msgid "More Actions"
 msgstr "Další akce"
 
@@ -7268,19 +7269,19 @@ msgstr "Příprava odpovědi"
 
 #: ui/internal/window/conversation_card.go:562 ui/data/ui/compose_pane.ui:27
 #: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:344
-#: ui/data/ui/window.ui:861
+#: ui/data/ui/window.ui:876
 msgid "From"
 msgstr "Od"
 
 #: ui/internal/window/conversation_card.go:562 ui/data/ui/compose_pane.ui:55
 #: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:370
-#: ui/data/ui/window.ui:887
+#: ui/data/ui/window.ui:902
 msgid "To"
 msgstr "Komu"
 
 #: ui/internal/window/conversation_card.go:562 ui/data/ui/compose_pane.ui:101
 #: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:398
-#: ui/data/ui/window.ui:915
+#: ui/data/ui/window.ui:930
 msgid "Cc"
 msgstr "Kopie"
 
@@ -7295,22 +7296,22 @@ msgstr ""
 
 #: ui/internal/window/conversation_card.go:776 ui/data/ui/embedded_window.ui:61
 #: ui/data/ui/message_window.ui:259 ui/data/ui/message_window.ui:598
-#: ui/data/ui/window.ui:711 ui/data/ui/window.ui:1179
+#: ui/data/ui/window.ui:714 ui/data/ui/window.ui:1194
 msgid "Load _Images"
 msgstr "Načíst _obrázky"
 
 #: ui/internal/window/conversation_card.go:777 ui/data/ui/message_window.ui:265
-#: ui/data/ui/window.ui:717
+#: ui/data/ui/window.ui:720
 msgid "Always From This _Sender"
 msgstr "Vždy od tohoto _odesílatele"
 
 #: ui/internal/window/conversation_card.go:778 ui/data/ui/message_window.ui:267
-#: ui/data/ui/window.ui:719
+#: ui/data/ui/window.ui:722
 msgid "Load remote images now and whenever this sender writes"
 msgstr "Načíst vzdálené obrázky teď a vždy, když tento odesílatel napíše"
 
 #: ui/internal/window/conversation_card.go:798 ui/data/ui/message_window.ui:296
-#: ui/data/ui/window.ui:748
+#: ui/data/ui/window.ui:751
 msgid "_Download Pictures"
 msgstr "_Stáhnout obrázky"
 
@@ -7408,7 +7409,7 @@ msgstr[0] "%d nepřečtená z %d"
 msgstr[1] "%d nepřečtené z %d"
 msgstr[2] "%d nepřečtených z %d"
 
-#: ui/internal/window/folders.go:427 ui/data/ui/window.ui:781
+#: ui/internal/window/folders.go:427 ui/data/ui/window.ui:784
 msgid "No Accounts"
 msgstr "Žádné účty"
 
@@ -7974,19 +7975,19 @@ msgstr "Účet %s vyžaduje pozornost"
 msgid "Loading the conversation"
 msgstr "Načtení konverzace"
 
-#: ui/internal/window/window.go:1039
+#: ui/internal/window/window.go:1042
 msgid "New mail"
 msgstr "Nová pošta"
 
-#: ui/internal/window/window.go:1111 ui/data/ui/window.ui:254
+#: ui/internal/window/window.go:1114 ui/data/ui/window.ui:254
 msgid "Search"
 msgstr "Hledat"
 
-#: ui/internal/window/window.go:1117 ui/data/ui/window.ui:224
+#: ui/internal/window/window.go:1120 ui/data/ui/window.ui:224
 msgid "Messages"
 msgstr "Zprávy"
 
-#: ui/internal/maildate/groups.go:37 ui/data/ui/window.ui:361
+#: ui/internal/maildate/groups.go:37 ui/data/ui/window.ui:364
 msgid "Flagged"
 msgstr "Označené"
 
@@ -8072,6 +8073,132 @@ msgstr "Zprávy se nepodařilo vrátit."
 #: ui/internal/undo/text.go:71
 msgid "Nothing to undo."
 msgstr "Není co vrátit."
+
+#. TRANSLATORS: %s is a version number such as 0.2.1
+#: ui/internal/updates/updates.go:122
+#, c-format
+msgid "Malachi Mail %s fixes a security problem. Please update."
+msgstr "Malachi Mail %s opravuje bezpečnostní chybu. Aktualizujte prosím."
+
+#: ui/internal/updates/updates.go:127 ui/internal/updates/updates.go:142
+#: ui/internal/updates/updates.go:194 ui/internal/updates/updates.go:229
+msgid "Download"
+msgstr "Stáhnout"
+
+#: ui/internal/updates/updates.go:129 ui/internal/updates/updates.go:145
+msgid "What's New"
+msgstr "Co je nového"
+
+#. TRANSLATORS: %s is a version number such as 0.2.1
+#: ui/internal/updates/updates.go:137 ui/internal/updates/updates.go:271
+#, c-format
+msgid "Malachi Mail %s is available."
+msgstr "Je k dispozici Malachi Mail %s."
+
+#: ui/internal/updates/updates.go:146
+msgid "Remind Me Later"
+msgstr "Připomenout později"
+
+#: ui/internal/updates/updates.go:147
+msgid "Skip This Version"
+msgstr "Přeskočit tuto verzi"
+
+#: ui/internal/updates/updates.go:155 ui/internal/updates/updates.go:230
+msgid "More Information"
+msgstr "Další informace"
+
+#: ui/internal/updates/updates.go:157 ui/internal/updates/updates.go:231
+msgid "Close"
+msgstr "Zavřít"
+
+#: ui/internal/updates/updates.go:190
+msgid "Security Update Available"
+msgstr "K dispozici je bezpečnostní aktualizace"
+
+#. TRANSLATORS: %s is a version number such as 0.2.1
+#: ui/internal/updates/updates.go:192
+#, c-format
+msgid ""
+"Malachi Mail %s fixes a security problem. Download the installer and install "
+"it once Malachi Mail has quit."
+msgstr ""
+"Malachi Mail %s opravuje bezpečnostní chybu. Stáhněte instalátor a "
+"nainstalujte ho, až se Malachi Mail ukončí."
+
+#: ui/internal/updates/updates.go:196
+msgid "Quit Malachi Mail after the download starts"
+msgstr "Po zahájení stahování ukončit Malachi Mail"
+
+#. TRANSLATORS: %s is a version number such as 0.2.1
+#: ui/internal/updates/updates.go:225
+#, c-format
+msgid "What's New in Malachi Mail %s"
+msgstr "Co je nového v Malachi Mail %s"
+
+#. TRANSLATORS: %s is a date
+#: ui/internal/updates/updates.go:227
+#, c-format
+msgid "Released %s"
+msgstr "Vydáno %s"
+
+#: ui/internal/updates/updates.go:263
+msgid "Automatic update checks are off."
+msgstr "Automatická kontrola aktualizací je vypnutá."
+
+#: ui/internal/updates/updates.go:265
+msgid "This build does not check for updates."
+msgstr "Toto sestavení aktualizace nekontroluje."
+
+#: ui/internal/updates/updates.go:267
+msgid "Checking for updates…"
+msgstr "Kontrolují se aktualizace…"
+
+#: ui/internal/updates/updates.go:274
+msgid "Could not check for updates."
+msgstr "Aktualizace se nepodařilo zkontrolovat."
+
+#. TRANSLATORS: %s is the date and time of the last check
+#: ui/internal/updates/updates.go:278
+#, c-format
+msgid "You are using the latest version (checked %s)."
+msgstr "Používáte nejnovější verzi (zkontrolováno %s)."
+
+#: ui/internal/updates/updates.go:280
+msgid "You are using the latest version."
+msgstr "Používáte nejnovější verzi."
+
+#: ui/internal/updates/updates.go:282
+msgid "Not checked for updates yet."
+msgstr "Aktualizace zatím nebyly zkontrolovány."
+
+#
+#: ui/internal/updates/updates.go:286
+msgid "Check Now"
+msgstr "Zkontrolovat nyní"
+
+#: ui/internal/updates/updates.go:296
+msgid "Updates"
+msgstr "Aktualizace"
+
+#: ui/internal/updates/updates.go:298
+msgid "Check for Updates Automatically"
+msgstr "Automaticky kontrolovat aktualizace"
+
+#: ui/internal/updates/updates.go:301
+msgid ""
+"Once a day, Malachi Mail asks its website which versions exist. It sends "
+"only its version number: nothing about you, your mail or your computer."
+msgstr ""
+"Jednou denně se Malachi Mail zeptá svého webu, jaké verze existují. Posílá "
+"jen číslo své verze: nic o vás, vaší poště ani vašem počítači."
+
+#: ui/internal/updates/updates.go:306
+msgid ""
+"Malachi Mail checks once a day whether a new version exists and sends only "
+"its version number. You can turn this off in Preferences."
+msgstr ""
+"Malachi Mail jednou denně zkontroluje, jestli existuje nová verze, a posílá "
+"přitom jen číslo své verze. Vypnout to můžete v Předvolbách."
 
 #: ui/data/ui/account_wizard.ui:10 ui/data/ui/account_wizard.ui:21
 #: ui/data/ui/preferences.ui:23
@@ -8308,7 +8435,7 @@ msgid "Right"
 msgstr "Vpravo"
 
 #: ui/data/ui/conversation_view.ui:157 ui/data/ui/embedded_window.ui:267
-#: ui/data/ui/message_window.ui:509 ui/data/ui/window.ui:1025
+#: ui/data/ui/message_window.ui:509 ui/data/ui/window.ui:1040
 msgctxt "accessibility"
 msgid "Loading the message"
 msgstr "Načítání zprávy"
@@ -8317,11 +8444,11 @@ msgstr "Načítání zprávy"
 msgid "Attached Message"
 msgstr "Přiložená zpráva"
 
-#: ui/data/ui/message_window.ui:38 ui/data/ui/window.ui:465
+#: ui/data/ui/message_window.ui:38 ui/data/ui/window.ui:468
 msgid "Message"
 msgstr "Zpráva"
 
-#: ui/data/ui/message_window.ui:602 ui/data/ui/window.ui:1183
+#: ui/data/ui/message_window.ui:602 ui/data/ui/window.ui:1198
 msgid "Always Load Images From This _Sender"
 msgstr "Vždy načítat obrázky od tohoto _odesílatele"
 
@@ -8365,15 +8492,15 @@ msgstr "Běžet na pozadí"
 msgid "Closing the window keeps Malachi Mail running for notifications"
 msgstr "Zavření okna ponechá Malachi Mail běžet kvůli oznámením"
 
-#: ui/data/ui/preferences.ui:165
+#: ui/data/ui/preferences.ui:184
 msgid "Reading"
 msgstr "Čtení"
 
-#: ui/data/ui/preferences.ui:168
+#: ui/data/ui/preferences.ui:187
 msgid "Mark as Read After"
 msgstr "Označit jako přečtené po"
 
-#: ui/data/ui/preferences.ui:169
+#: ui/data/ui/preferences.ui:188
 msgid ""
 "Seconds a message must be shown before it is marked as read; 0 marks it "
 "immediately"
@@ -8381,83 +8508,83 @@ msgstr ""
 "Počet sekund, po které musí být zpráva zobrazena, než se označí jako "
 "přečtená; 0 označí ihned"
 
-#: ui/data/ui/preferences.ui:184
+#: ui/data/ui/preferences.ui:203
 msgid "Deleting"
 msgstr "Mazání"
 
-#: ui/data/ui/preferences.ui:187
+#: ui/data/ui/preferences.ui:206
 msgid "Confirm Before Deleting"
 msgstr "Potvrdit před smazáním"
 
-#: ui/data/ui/preferences.ui:188 data/io.github.schotek.Malachi.gschema.xml:130
+#: ui/data/ui/preferences.ui:207 data/io.github.schotek.Malachi.gschema.xml:130
 msgid "Ask before moving a message to Trash"
 msgstr "Ptát se před přesunutím zprávy do koše"
 
-#: ui/data/ui/preferences.ui:196
+#: ui/data/ui/preferences.ui:215
 msgid "Notifications"
 msgstr "Oznámení"
 
-#: ui/data/ui/preferences.ui:199
+#: ui/data/ui/preferences.ui:218
 msgid "Show Desktop Notifications"
 msgstr "Zobrazovat oznámení na ploše"
 
-#: ui/data/ui/preferences.ui:205
+#: ui/data/ui/preferences.ui:224
 msgid "Play Sound"
 msgstr "Přehrát zvuk"
 
-#: ui/data/ui/preferences.ui:206 data/io.github.schotek.Malachi.gschema.xml:138
+#: ui/data/ui/preferences.ui:225 data/io.github.schotek.Malachi.gschema.xml:138
 msgid "Play the system new-mail sound"
 msgstr "Přehrát systémový zvuk nové pošty"
 
-#: ui/data/ui/preferences.ui:214
+#: ui/data/ui/preferences.ui:233
 msgid "Stored by the mail daemon."
 msgstr "Ukládá poštovní démon."
 
-#: ui/data/ui/preferences.ui:222
+#: ui/data/ui/preferences.ui:241
 msgid "Manually"
 msgstr "Ručně"
 
-#: ui/data/ui/preferences.ui:223
+#: ui/data/ui/preferences.ui:242
 msgid "Every 5 minutes"
 msgstr "Každých 5 minut"
 
-#: ui/data/ui/preferences.ui:224
+#: ui/data/ui/preferences.ui:243
 msgid "Every 15 minutes"
 msgstr "Každých 15 minut"
 
-#: ui/data/ui/preferences.ui:225
+#: ui/data/ui/preferences.ui:244
 msgid "Every 30 minutes"
 msgstr "Každých 30 minut"
 
-#: ui/data/ui/preferences.ui:233
+#: ui/data/ui/preferences.ui:252
 msgid "Load Remote Images"
 msgstr "Načítat vzdálené obrázky"
 
-#: ui/data/ui/preferences.ui:238
+#: ui/data/ui/preferences.ui:257
 msgid "From Known Senders"
 msgstr "Od známých odesílatelů"
 
-#: ui/data/ui/preferences.ui:239
+#: ui/data/ui/preferences.ui:258
 msgid "Always"
 msgstr "Vždy"
 
-#: ui/data/ui/preferences.ui:247
+#: ui/data/ui/preferences.ui:266
 msgid "Keep Mail Offline For"
 msgstr "Uchovávat poštu offline po dobu"
 
-#: ui/data/ui/preferences.ui:248
+#: ui/data/ui/preferences.ui:267
 msgid "Older messages stay on the server and are not shown"
 msgstr "Starší zprávy zůstávají na serveru a nezobrazují se"
 
-#: ui/data/ui/preferences.ui:256 ui/data/ui/preferences.ui:275
+#: ui/data/ui/preferences.ui:275 ui/data/ui/preferences.ui:294
 msgid "Everything"
 msgstr "Vše"
 
-#: ui/data/ui/preferences.ui:264
+#: ui/data/ui/preferences.ui:283
 msgid "Keep Attachments Offline For"
 msgstr "Uchovávat přílohy offline po dobu"
 
-#: ui/data/ui/preferences.ui:265
+#: ui/data/ui/preferences.ui:284
 msgid ""
 "Large attachments of older messages stay on the server and are downloaded "
 "when you open them"
@@ -8465,121 +8592,121 @@ msgstr ""
 "Velké přílohy starších zpráv zůstávají na serveru a stáhnou se, až je "
 "otevřete"
 
-#: ui/data/ui/preferences.ui:271
+#: ui/data/ui/preferences.ui:290
 msgid "Small Attachments Only"
 msgstr "Jen malé přílohy"
 
-#: ui/data/ui/preferences.ui:283
+#: ui/data/ui/preferences.ui:302
 msgid "Never Store Attachments"
 msgstr "Nikdy neukládat přílohy"
 
-#: ui/data/ui/preferences.ui:284
+#: ui/data/ui/preferences.ui:303
 msgid ""
 "Attachments are downloaded whenever you open them and are gone when you quit"
 msgstr ""
 "Přílohy se stáhnou pokaždé, když je otevřete, a po ukončení aplikace zmizí"
 
-#: ui/data/ui/preferences.ui:290
+#: ui/data/ui/preferences.ui:309
 msgid "Compress Stored Mail"
 msgstr "Komprimovat uloženou poštu"
 
-#: ui/data/ui/preferences.ui:291
+#: ui/data/ui/preferences.ui:310
 msgid "Uses less disk space; stored mail is converted in the background"
 msgstr "Šetří místo na disku; uložená pošta se převede na pozadí"
 
-#: ui/data/ui/preferences.ui:297
+#: ui/data/ui/preferences.ui:316
 msgid "Disk Space Used"
 msgstr "Obsazené místo na disku"
 
-#: ui/data/ui/preferences.ui:415
+#: ui/data/ui/preferences.ui:434
 msgid "Appearance"
 msgstr "Vzhled"
 
-#: ui/data/ui/preferences.ui:419
+#: ui/data/ui/preferences.ui:438
 msgid "Theme"
 msgstr "Motiv"
 
-#: ui/data/ui/preferences.ui:422
+#: ui/data/ui/preferences.ui:441
 msgid "Color Scheme"
 msgstr "Barevné schéma"
 
-#: ui/data/ui/preferences.ui:426
+#: ui/data/ui/preferences.ui:445
 msgid "Follow System"
 msgstr "Podle systému"
 
-#: ui/data/ui/preferences.ui:427
+#: ui/data/ui/preferences.ui:446
 msgid "Light"
 msgstr "Světlé"
 
-#: ui/data/ui/preferences.ui:428
+#: ui/data/ui/preferences.ui:447
 msgid "Dark"
 msgstr "Tmavé"
 
-#: ui/data/ui/preferences.ui:438
+#: ui/data/ui/preferences.ui:457
 msgid "Message List"
 msgstr "Seznam zpráv"
 
-#: ui/data/ui/preferences.ui:441
+#: ui/data/ui/preferences.ui:460
 msgid "Density"
 msgstr "Hustota"
 
-#: ui/data/ui/preferences.ui:445
+#: ui/data/ui/preferences.ui:464
 msgid "Comfortable"
 msgstr "Pohodlná"
 
-#: ui/data/ui/preferences.ui:446
+#: ui/data/ui/preferences.ui:465
 msgid "Compact"
 msgstr "Kompaktní"
 
-#: ui/data/ui/preferences.ui:454
+#: ui/data/ui/preferences.ui:473
 msgid "Show Preview Line"
 msgstr "Zobrazit řádek s náhledem"
 
-#: ui/data/ui/preferences.ui:460
+#: ui/data/ui/preferences.ui:479
 msgid "Show Avatars"
 msgstr "Zobrazit avatary"
 
-#: ui/data/ui/preferences.ui:466
+#: ui/data/ui/preferences.ui:485
 msgid "Monochrome Avatars"
 msgstr "Jednobarevné avatary"
 
-#: ui/data/ui/preferences.ui:467
+#: ui/data/ui/preferences.ui:486
 msgid "Neutral grey instead of a colour per sender"
 msgstr "Neutrální šedá místo barvy pro každého odesílatele"
 
-#: ui/data/ui/preferences.ui:477
+#: ui/data/ui/preferences.ui:496
 msgid "Group by Conversation"
 msgstr "Seskupovat podle konverzací"
 
-#: ui/data/ui/preferences.ui:478
+#: ui/data/ui/preferences.ui:497
 msgid "One row per conversation; expand it to see its messages"
 msgstr "Jeden řádek na konverzaci; po rozbalení zobrazí její zprávy"
 
-#: ui/data/ui/preferences.ui:503
+#: ui/data/ui/preferences.ui:522
 msgid "Message View"
 msgstr "Zobrazení zprávy"
 
-#: ui/data/ui/preferences.ui:506
+#: ui/data/ui/preferences.ui:525
 msgid "Use Monospace Font for Plain Text"
 msgstr "Pro prostý text použít neproporcionální písmo"
 
-#: ui/data/ui/preferences.ui:511
+#: ui/data/ui/preferences.ui:530
 msgid "Text Zoom"
 msgstr "Přiblížení textu"
 
-#: ui/data/ui/preferences.ui:512
+#: ui/data/ui/preferences.ui:531
 msgid "Percent"
 msgstr "Procenta"
 
-#: ui/data/ui/preferences.ui:530
+#: ui/data/ui/preferences.ui:549
 msgid "AI"
 msgstr "AI"
 
-#: ui/data/ui/preferences.ui:542
+#: ui/data/ui/preferences.ui:561
 msgid "MCP"
 msgstr "MCP"
 
-#: ui/data/ui/preferences.ui:543
+#: ui/data/ui/preferences.ui:562
 msgid ""
 "Lets AI assistants read your mail and prepare drafts through the Model "
 "Context Protocol."
@@ -8587,11 +8714,11 @@ msgstr ""
 "Umožňuje asistentům AI číst vaši poštu a připravovat koncepty přes Model "
 "Context Protocol."
 
-#: ui/data/ui/preferences.ui:546
+#: ui/data/ui/preferences.ui:565
 msgid "Register with Claude"
 msgstr "Registrovat v Claude"
 
-#: ui/data/ui/preferences.ui:547
+#: ui/data/ui/preferences.ui:566
 msgid ""
 "Adds the malachi-mcp bridge to Claude Desktop and Claude Code on this "
 "computer"
@@ -8629,51 +8756,51 @@ msgstr "Všechny účty"
 msgid "The mail backend (malachid) is not running."
 msgstr "Poštovní démon (malachid) neběží."
 
-#: ui/data/ui/window.ui:349
+#: ui/data/ui/window.ui:352
 msgid "All"
 msgstr "Vše"
 
-#: ui/data/ui/window.ui:355
+#: ui/data/ui/window.ui:358
 msgid "Unread"
 msgstr "Nepřečtené"
 
-#: ui/data/ui/window.ui:404
+#: ui/data/ui/window.ui:407
 msgid "Load More"
 msgstr "Načíst další"
 
-#: ui/data/ui/window.ui:588
+#: ui/data/ui/window.ui:591
 msgid "This message is a draft"
 msgstr "Tato zpráva je koncept"
 
-#: ui/data/ui/window.ui:769
+#: ui/data/ui/window.ui:772
 msgid "No Message Selected"
 msgstr "Není vybrána žádná zpráva"
 
-#: ui/data/ui/window.ui:770
+#: ui/data/ui/window.ui:773
 msgid "Select a message to read it here."
 msgstr "Vyberte zprávu a přečtěte si ji zde."
 
-#: ui/data/ui/window.ui:782
+#: ui/data/ui/window.ui:785
 msgid "Add a mail account to start reading and sending mail."
 msgstr "Přidejte poštovní účet a začněte číst a posílat poštu."
 
-#: ui/data/ui/window.ui:790
+#: ui/data/ui/window.ui:793
 msgid "_Add Account…"
 msgstr "_Přidat účet…"
 
-#: ui/data/ui/window.ui:1141
+#: ui/data/ui/window.ui:1156
 msgid "_Contacts"
 msgstr "_Kontakty"
 
-#: ui/data/ui/window.ui:1147
+#: ui/data/ui/window.ui:1162
 msgid "_Preferences"
 msgstr "_Předvolby"
 
-#: ui/data/ui/window.ui:1151
+#: ui/data/ui/window.ui:1166
 msgid "_Keyboard Shortcuts"
 msgstr "_Klávesové zkratky"
 
-#: ui/data/ui/window.ui:1155
+#: ui/data/ui/window.ui:1170
 msgid "_About Malachi Mail"
 msgstr "_O aplikaci Malachi Mail"
 

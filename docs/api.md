@@ -4878,6 +4878,103 @@ contact id and `revision` and asks again after `notify.contactsChanged`
 for the book shows another `revision` or `photo` state. `state` is an
 open enum: an unknown value is no photo.
 
+### 4.20 update
+
+The update check (the design is `docs/plans/update-check.md`, the service
+`docs/services.md` §2). Once a day the daemon asks the project's signed
+manifest of versions which exist and offers the newest one for the
+package the build was installed from (its **channel**, `macos-dmg`,
+`windows-setup-x64`, …, set when the package is built). It downloads and
+installs nothing: a client opens the offered package's `url` in the
+browser. The request carries only `User-Agent: MalachiMail/<version>`.
+
+```jsonc
+UpdateStatus { "enabled": bool, "channel": "macos-dmg" (opt), "current": "0.1.2",
+               "state": "disabled|unsupported|idle|checking|upToDate|available|failed",
+               "checkedAt": Time (opt), "failure": "network|server|signature|format" (opt),
+               "available": UpdateInfo (opt), "notice": UpdateNotice (opt) }
+UpdateInfo   { "version": "0.1.3", "publishedAt": Time, "security": bool,
+               "notes": "…", "infoUrl": "https://malachimail.app/…",
+               "url": "https://github.com/…", "size": 81234567,
+               "skipped": bool, "remindAfter": Time (opt), "prompt": bool }
+UpdateNotice { "id": "n-2026-11-02", "text": "…", "url": "https://malachimail.app/…" (opt) }
+```
+
+- `state`: `disabled` (the user turned it off; nothing else is filled
+  in), `unsupported` (no channel or a version that is not a plain
+  `MAJOR.MINOR.PATCH`, such as a development build; the daemon never
+  asks), `idle` (no check finished yet), `checking`, `upToDate`,
+  `available` (`available` is set), `failed` (the last check failed and
+  nothing is offered). `failure` is the class of the last check when it
+  failed, also beside `available`; `checkedAt` is when a check last
+  brought an answer.
+- `available` is the highest release newer than `current`, not
+  withdrawn, with a package for the channel. `security` is true when it
+  or a release it skips over fixes a security problem: then `skipped` is
+  always false, `remindAfter` absent, and `update.dismiss` accepts only
+  `prompted`; the client keeps its banner until the update is installed.
+  `prompt` is true for a security release no client has asked about yet:
+  the client asks once (download the installer, then quit) and calls
+  `update.dismiss` with `prompted`. `skipped`: the user skipped this
+  version; `remindAfter`: the user asked to be reminded later and it has
+  not passed yet. Clients show the banner only when neither applies.
+- `notes` and `notice.text` are in the language of `locale` (the tag,
+  then its language), else English: plain text with `\n`, never markup.
+  The daemon accepted them only if they had no control, format, bidi or
+  invisible character and were in NFC.
+- `notice` is a message of the project to the users of this version; it
+  is absent once `update.dismissNotice` dismissed its `id`.
+- Every method takes `locale` (opt) and returns the `UpdateStatus` after
+  it. Failures of a check are in the status, never an error.
+
+The daemon checks 5–15 minutes after it starts, but not before a day
+(± 2 hours) after its last check, then every day ± 2 hours, and never
+before a server's `Retry-After` (at most a day). It asks the API, then
+the GitHub asset, verifies the Ed25519 signature with the keys compiled
+into it and refuses a manifest older than the last one it accepted or
+more than a day in the future (`docs/services.md` §2.2–§2.5); a refused
+manifest leaves the last accepted one in place.
+
+#### `update.status`
+- params: `{ "locale" (opt) }`
+- result: `UpdateStatus`
+
+#### `update.check`
+Checks now, for *Check Now* in Preferences → General → Updates. The reply
+comes when the check ends, up to 70 s: clients give this call a longer
+timeout (75 s).
+
+- params: `{ "locale" (opt) }`
+- result: `UpdateStatus` after the check
+
+It ends a `later` of the offered version (the user asked to see what
+there is); a skipped version stays skipped. Within a minute of the last
+`update.check` (`api.UpdateCheckInterval`) nothing is asked; the status
+is returned as it is. Disabled or
+unsupported: nothing is asked.
+
+#### `update.setPrefs`
+- params: `{ "enabled": bool (opt), "locale" (opt) }`
+- result: `UpdateStatus`
+
+`enabled` defaults to true. Turned off, the daemon asks nothing, also not
+after its start.
+
+#### `update.dismiss`
+- params: `{ "version", "action": "skip|later|prompted", "locale" (opt) }`
+- result: `UpdateStatus`
+- errors: invalidArgument (`version` is not the offered one, an unknown
+  `action`, `skip` or `later` of a security release)
+
+`skip` hides the version for good (a newer one is offered again),
+`later` for three days (`api.UpdateRemindDelay`), `prompted` records that
+a client asked about a security release.
+
+#### `update.dismissNotice`
+- params: `{ "id", "locale" (opt) }`
+- result: `UpdateStatus`
+- errors: invalidArgument (no notice with that `id` in the manifest)
+
 ## 5. Notifications
 
 | Method | params |
@@ -4895,6 +4992,7 @@ open enum: an unknown value is no photo.
 | `notify.invitationsChanged` | `{ "accountIds": ["acc_1"] (opt) }` |
 | `notify.assistantProfileChanged` | `{}` |
 | `notify.contactsChanged` | `{ "accountId" (opt; absent for the recent book), "bookIds": ["b_1"] (opt) }` |
+| `notify.updateChanged` | `{}` |
 
 Notifications are sent only to connections that completed the handshake
 (§1.4).
@@ -5017,6 +5115,12 @@ stored card, and (without `accountId`) a delivered mail whose
 recipients went to the recent book. Without `bookIds` any book of the account changed;
 without `accountId` the recent book. Gathered within 250 ms. A client
 that does not know it ignores it.
+
+`notify.updateChanged` is sent to every client when the update status
+changed (§4.20): a check started or ended, a preference or a dismissal
+changed, or the time of a `later` (`remindAfter`) passed, so a client
+needs no clock of its own to show the banner again. It carries no payload; clients run `update.status` again. A
+client that does not know it ignores it.
 
 `notify.syncState` is sent immediately on every change of `status`,
 `folderId`, `error`, `lastSync`, `pendingOutbox` or `failedOutbox`, and for
@@ -5431,3 +5535,7 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   `ContactCard.photo`; `contact.lookup` param `withPhotos` and result
   `photos`; limits `MaxContactPhotoBytes`, `MaxContactPhotoPixels`,
   `ContactPhotoTimeout`. No new error codes; `ProtocolVersion` stays 2.
+- **2** (2026-11-02, compatible addition: the update check, §4.20): new
+  methods `update.status`, `update.check`, `update.setPrefs`,
+  `update.dismiss`, `update.dismissNotice` and the notification
+  `notify.updateChanged`. No new error codes; `ProtocolVersion` stays 2.

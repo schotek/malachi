@@ -96,6 +96,26 @@ make clean && make build && ./build/malachid --version   # 0.1.0, no -dirty
 git push && git push --tags
 ```
 
+Once the release's packages are uploaded, the copies already installed are
+told about it through the signed update manifest
+(`docs/plans/update-check.md`, `docs/services.md` §2):
+
+```bash
+# 7. In the administration (https://admin.malachimail.app) prepare the
+#    manifest from the GitHub release, download its payload, sign it on
+#    this machine with the owner's tool (private repository) and upload
+#    the envelope. Then attach the same bytes to the release, the
+#    fallback of daemons that cannot reach the API:
+gh release upload v0.1.0 updates.json
+```
+
+A package that comes later (the Windows installers of a tag whose CI ran
+again) needs the same step once more, with a new `issuedAt`. Only builds
+of the package recipes check for updates: `make macos-dmg`, `build.ps1
+installer`, `scripts/build-deb.sh`, `scripts/build-rpm.sh` and the
+Flatpak manifest pass `-X main.updateChannel=<channel>` to the daemon;
+`make macos` and every development build have none.
+
 A tag's CI only builds, signs and uploads: it runs no tests and no lint
 (the owner's decision of 2026-11-01, as flaky timing tests on the shared
 runners failed releases), only the checks of the packages themselves

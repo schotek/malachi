@@ -490,6 +490,18 @@ namespace Malachi.Core.Api;
 [JsonSerializable(typeof(TlsErrorReason))]
 [JsonSerializable(typeof(CertificateInfo))]
 [JsonSerializable(typeof(TlsErrorData))]
+// Update.cs (its string types too)
+[JsonSerializable(typeof(UpdateState))]
+[JsonSerializable(typeof(UpdateFailure))]
+[JsonSerializable(typeof(UpdateDismissAction))]
+[JsonSerializable(typeof(UpdateInfo))]
+[JsonSerializable(typeof(UpdateNotice))]
+[JsonSerializable(typeof(UpdateStatus))]
+[JsonSerializable(typeof(UpdateStatusParams))]
+[JsonSerializable(typeof(UpdateCheckParams))]
+[JsonSerializable(typeof(UpdateSetPrefsParams))]
+[JsonSerializable(typeof(UpdateDismissParams))]
+[JsonSerializable(typeof(UpdateDismissNoticeParams))]
 public sealed partial class ApiJsonContext : JsonSerializerContext
 {
     /// <summary>The context every wire exchange uses: the contract's options.</summary>

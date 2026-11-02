@@ -14,6 +14,8 @@
 // - 1200×760 and at least 360×294 (window.blp), the size and the
 //   maximised state kept in the gschema keys GTK declares
 //   (window-width, window-height, window-maximized; U10);
+// - the update check's banner under the title bar, in every mode
+//   (MainWindow.Updates.cs);
 // - the three modes, Mail, Board and Calendar (MainWindow.Mode.cs: the
 //   switch in the title bar, the board's and the calendar's pages in place
 //   of the panes; MainWindow.Calendar.cs);
@@ -100,6 +102,8 @@ public sealed partial class MainWindow : Window
         Closed += (_, _) => hook.Dispose();
         InitializePanes();
         InitializeMode();
+        // The update check's banner and question (MainWindow.Updates.cs).
+        InitializeUpdates();
     }
 
     /// <summary>The user asked to close the window (the caption's button, Alt+F4); the app decides.</summary>

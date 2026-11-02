@@ -1,0 +1,16 @@
+{
+  "comment": "TEST ONLY. Public test key for fixtures; it signs nothing real and must never be in UPDATE_PUBLIC_KEYS or the daemon's keys.go.",
+  "keyId": "test-1",
+  "publicKey": "xRSi2CYl2mM6OSmtc5FlzqjIleTKMGC0jVTiBCJ3kYA=",
+  "privateJwk": {
+    "key_ops": [
+      "sign"
+    ],
+    "ext": true,
+    "alg": "Ed25519",
+    "crv": "Ed25519",
+    "d": "EhqmIyMw8OAtrgqW50vllE0KhMgl7BWGSqix5J5sHKY",
+    "x": "xRSi2CYl2mM6OSmtc5FlzqjIleTKMGC0jVTiBCJ3kYA",
+    "kty": "OKP"
+  }
+}

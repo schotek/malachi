@@ -18,6 +18,7 @@
 // GTK's left margin; the list indent and the heading sizes are GTK's.
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using Malachi.Core.Assistants;
 using Microsoft.UI.Text;
@@ -40,14 +41,19 @@ internal static class AnswerRenderer
     /// <paramref name="openLink"/> with its URL (an http or https address,
     /// Assistant.Markdown's only links).
     /// </summary>
-    public static void Render(RichTextBlock view, string markdown, Action<string> openLink)
+    public static void Render(RichTextBlock view, string markdown, Action<string> openLink) =>
+        Render(view, Assistant.Markdown(markdown), openLink);
+
+    /// <summary>Draws <paramref name="blocks"/> (the What's New dialog's notes too).</summary>
+    public static void Render(RichTextBlock view, IReadOnlyList<MarkdownBlock> blocks, Action<string> openLink)
     {
         ArgumentNullException.ThrowIfNull(view);
+        ArgumentNullException.ThrowIfNull(blocks);
         ArgumentNullException.ThrowIfNull(openLink);
         view.Blocks.Clear();
         var baseSize = view.FontSize;
         var mono = (FontFamily)Application.Current.Resources["MonospaceFontFamily"];
-        foreach (var block in Assistant.Markdown(markdown))
+        foreach (var block in blocks)
         {
             var paragraph = new Paragraph { Margin = new Thickness(0, 0, 0, 6) };
             var prefix = "";

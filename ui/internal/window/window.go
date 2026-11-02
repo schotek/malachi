@@ -308,6 +308,8 @@ type Window struct {
 	// window's CRM controls (crm.go, crm_actions.go).
 	crmState *crmState
 	crmMain  *crmControls
+	// updates is the update check's banner and question (updates.go).
+	updates *updateView
 	// RequestClose settles inline drafts before closing the main window.
 	RequestClose         func()
 	boardAutoStartRemove func()
@@ -634,6 +636,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	}
 	w.setupBoardMode()
 	w.setupModeMemory()
+	w.setupUpdates(b)
 	w.wireModeKeys()
 	w.wireTypingGate()
 	w.startDevelopmentScript()

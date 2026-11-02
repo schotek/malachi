@@ -48,6 +48,26 @@ func (b *StubBackend) AddressBooks() api.AddressBookService {
 	return stubAddressBooks{}
 }
 
+func (b *StubBackend) Update() api.UpdateService { return stubUpdate{} }
+
+type stubUpdate struct{}
+
+func (stubUpdate) Status(context.Context, api.UpdateStatusParams) (*api.UpdateStatus, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubUpdate) Check(context.Context, api.UpdateCheckParams) (*api.UpdateStatus, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubUpdate) SetPrefs(context.Context, api.UpdateSetPrefsParams) (*api.UpdateStatus, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubUpdate) Dismiss(context.Context, api.UpdateDismissParams) (*api.UpdateStatus, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubUpdate) DismissNotice(context.Context, api.UpdateDismissNoticeParams) (*api.UpdateStatus, error) {
+	return nil, api.ErrNotImplemented
+}
+
 type stubAddressBooks struct{}
 
 func (stubAddressBooks) ListBooks(context.Context, api.AddressBookListParams) (*api.AddressBookListResult, error) {

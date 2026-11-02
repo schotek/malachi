@@ -604,7 +604,7 @@ public enum API {
         BoardArchive.self, BoardTrash.self, BoardUnflag.self, BoardDiscardDraft.self, BoardSetDraft.self, BoardQueue.self, BoardAnnotate.self,
         BoardCommit.self, BoardSetCommitment.self, BoardPreferencesGet.self, BoardSetPreferences.self,
         BoardRunStart.self, BoardRunEnd.self,
-    ] + calendarMethods + crmMethods + assistantProfileMethods + contactsMethods
+    ] + calendarMethods + crmMethods + assistantProfileMethods + contactsMethods + updateMethods
 
     /// api.AllMethods: every callable method name.
     public static let allMethods: [String] = methods.map { $0.name }
@@ -642,6 +642,9 @@ public enum API {
         /// changed; the Contacts window, Preferences → Contacts and the
         /// address chips' lookup read them again.
         public static let contactsChanged = "notify.contactsChanged"
+        /// The update check's status changed; the application's
+        /// `UpdateController` asks update.status again.
+        public static let updateChanged = "notify.updateChanged"
     }
 
     /// api.AllNotifications: every server-initiated notification name.
@@ -651,6 +654,7 @@ public enum API {
         Notify.calendarChanged, Notify.calendarState, Notify.eventAlert, Notify.invitationsChanged,
         Notify.assistantProfileChanged,
         Notify.contactsChanged,
+        Notify.updateChanged,
     ]
 
     /// The limits the daemon enforces (types.go constants), for pre-checks.

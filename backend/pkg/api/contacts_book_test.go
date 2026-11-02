@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// contactsBookMethods end AllMethods, after the assistant profile's;
-// notify.contactsChanged ends AllNotifications.
+// contactsBookMethods follow the assistant profile's in AllMethods;
+// only the update check's (update_test.go) come after them.
 var contactsBookMethods = []string{
 	"addressBook.list", "addressBook.set",
 	"contact.list", "contact.get", "contact.lookup",
@@ -20,14 +20,14 @@ var contactsBookMethods = []string{
 }
 
 func TestContactsBookMethodsOrder(t *testing.T) {
-	n := len(AllMethods)
-	if !reflect.DeepEqual(AllMethods[n-len(contactsBookMethods):], contactsBookMethods) {
-		t.Fatalf("AllMethods does not end with the address-book methods: %v", AllMethods[n-len(contactsBookMethods):])
+	n := len(AllMethods) - len(updateMethods)
+	if !reflect.DeepEqual(AllMethods[n-len(contactsBookMethods):n], contactsBookMethods) {
+		t.Fatalf("AllMethods does not end with the address-book methods: %v", AllMethods[n-len(contactsBookMethods):n])
 	}
 	if AllMethods[n-len(contactsBookMethods)-1] != MethodAssistantProfileResolve {
 		t.Fatal("the address-book methods do not follow the assistant profile's")
 	}
-	if AllNotifications[len(AllNotifications)-1] != NotifyContactsChanged {
+	if AllNotifications[len(AllNotifications)-2] != NotifyContactsChanged {
 		t.Fatalf("AllNotifications: %v", AllNotifications)
 	}
 }

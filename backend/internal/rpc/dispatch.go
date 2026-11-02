@@ -144,6 +144,7 @@ func (s *Server) registerBackend(b api.Backend) {
 	s.registerCrm(b)
 	s.registerAssistant(b)
 	s.registerAddressBooks(b)
+	s.registerUpdate(b)
 }
 
 // registerAddressBooks binds the address book methods (docs/api.md §4.19).
@@ -165,6 +166,23 @@ var _ api.ContactsNotifier = (*Server)(nil)
 
 func (s *Server) ContactsChanged(n api.ContactsChangedNotification) {
 	s.broadcast(api.NotifyContactsChanged, n)
+}
+
+// registerUpdate binds the update check (docs/api.md §4.20).
+func (s *Server) registerUpdate(b api.Backend) {
+	u := b.Update()
+	s.handlers[api.MethodUpdateStatus] = wrap(u.Status)
+	s.handlers[api.MethodUpdateCheck] = wrap(u.Check)
+	s.handlers[api.MethodUpdateSetPrefs] = wrap(u.SetPrefs)
+	s.handlers[api.MethodUpdateDismiss] = wrap(u.Dismiss)
+	s.handlers[api.MethodUpdateDismissNotice] = wrap(u.DismissNotice)
+}
+
+// Server also implements the optional api.UpdateNotifier.
+var _ api.UpdateNotifier = (*Server)(nil)
+
+func (s *Server) UpdateChanged(n api.UpdateChangedNotification) {
+	s.broadcast(api.NotifyUpdateChanged, n)
 }
 
 // registerAssistant binds the assistant profile methods (docs/api.md

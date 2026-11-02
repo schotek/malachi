@@ -115,6 +115,12 @@ final class AppState {
     /// and on notify.assistantProfileChanged and notify.accountsChanged.
     let profile: ProfileStore
     private var profileTokens: [NotificationHub.Token] = []
+    /// The update check (docs/api.md §4.20, AppState+Updates): the main
+    /// window's banner, Settings → General, the About panel and the
+    /// question of a security release. Read when the connection comes and
+    /// on notify.updateChanged.
+    let updates: UpdateController
+    var updateTokens: [NotificationHub.Token] = []
     private var boardTriageTokens: [NotificationHub.Token] = []
 
     var hooks = Hooks()
@@ -134,6 +140,7 @@ final class AppState {
         notifications.attach(to: connection)
         calendar = AppCalendar(client: client, settings: settings, hub: notifications)
         profile = ProfileStore(client: client)
+        updates = UpdateController(client: client)
         let claudeCode = ClaudeCodeLocator(settings: settings, directory: ClaudeCodeLocator.defaultDirectory)
         self.claudeCode = claudeCode
         let assistant = AssistantController(
@@ -182,6 +189,7 @@ final class AppState {
         Task { @MainActor [weak self] in try? await self?.chatGPT.load() }
         wireBoardTriage()
         wireProfile()
+        wireUpdates()
         EventEditorManager.shared.state = self
         contacts = AppContacts(state: self)
     }
@@ -395,6 +403,7 @@ final class NotificationHub {
     private var draftsChanged = HandlerList<DraftsChangedNotification>()
     private var calendarNotification = HandlerList<CalendarNotification>()
     private var assistantProfileChanged = HandlerList<Void>()
+    private var updateChanged = HandlerList<Void>()
     private var contactsChanged = HandlerList<ContactsChangedNotification>()
     private var connection = HandlerList<ConnectionController.ConnectionState>()
 
@@ -450,6 +459,12 @@ final class NotificationHub {
         assistantProfileChanged.add { _ in f() }
     }
 
+    /// notify.updateChanged: the application's `UpdateController` asks
+    /// update.status again.
+    func addUpdateChanged(_ f: @escaping @MainActor () -> Void) -> Token {
+        updateChanged.add { _ in f() }
+    }
+
     /// notify.contactsChanged: the Contacts window, the address chips'
     /// lookup and Settings → Contacts load again (`AppContacts`).
     func addContactsChanged(_ f: @escaping @MainActor (ContactsChangedNotification) -> Void) -> Token {
@@ -475,6 +490,10 @@ final class NotificationHub {
     private func handle(_ raw: RPCNotification) {
         if raw.method == API.Notify.assistantProfileChanged {
             assistantProfileChanged.fire(())
+            return
+        }
+        if raw.method == API.Notify.updateChanged {
+            updateChanged.fire(())
             return
         }
         do {

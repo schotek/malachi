@@ -115,8 +115,11 @@ import Testing
         // notify.contactsChanged is decoded by `ContactsChangedNotification
         // .decode`; `DaemonNotification` reads it as `.unknown`.
         let contactsSamples: [(String, String)] = [(API.Notify.contactsChanged, #"{"accountId":"acc_1","bookIds":["b_1"]}"#)]
-        #expect((samples + calendarSamples + profileSamples + contactsSamples).map(\.0) == API.allNotifications)
-        for (method, params) in profileSamples {
+        // notify.updateChanged has no payload; the hub reads it by name
+        // (`UpdateController` refreshes), like the profile's.
+        let updateSamples: [(String, String)] = [(API.Notify.updateChanged, "{}")]
+        #expect((samples + calendarSamples + profileSamples + contactsSamples + updateSamples).map(\.0) == API.allNotifications)
+        for (method, params) in profileSamples + updateSamples {
             #expect(try CalendarNotification(raw(method, params)) == nil)
             #expect(try ContactsChangedNotification.decode(raw(method, params)) == nil)
             #expect(try DaemonNotification(raw(method, params)) == .unknown(method: method))

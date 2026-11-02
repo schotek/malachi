@@ -40,6 +40,12 @@ VERSION="$(cat .version 2>/dev/null || git describe --tags --always --dirty | se
 FILE_VERSION="$VERSION"
 VERSION="${VERSION//-/+}-1"
 ARCH="$(dpkg-architecture -qDEB_HOST_ARCH)"
+# The daemon of a .deb checks for updates of this package
+# (docs/services.md §2.3); the Makefile reads UPDATE_CHANNEL.
+case "$ARCH" in
+    amd64) export UPDATE_CHANNEL=linux-deb-x64 ;;
+    arm64) export UPDATE_CHANNEL=linux-deb-arm64 ;;
+esac
 
 rm -rf "$STAGE"
 # The licences and THIRD-PARTY-NOTICES.md go where Debian keeps a package's

@@ -102,6 +102,10 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// The strip above a bulk message (window/bulk.go): the remote-bar tint,
 	// a warm one in the junk folder.
 	b.WriteString("box.bulk-bar.bulk-warning { background-color: alpha(@orange_3, 0.25); }\n")
+	// The update check's banner (window/updates.go): the information look
+	// of Adw.Banner, a warm one for a security release.
+	b.WriteString("box.update-bar { background-color: alpha(@accent_bg_color, 0.12); padding: 6px 12px; }\n")
+	b.WriteString("box.update-bar.update-security { background-color: alpha(@orange_3, 0.25); }\n")
 	// Compose header fields (compose.blp): one line each, so the entries
 	// and the account drop-down lose the height a stand-alone input would
 	// claim and the card supplies the padding the rows no longer have.

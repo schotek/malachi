@@ -25,7 +25,7 @@ public sealed class GoContractTests
         var source = GoContract.ApiSource("methods.go");
         var constants = GoContract.StringConstants(source);
         var goMethods = GoContract.SliceIdentifiers(source, "AllMethods").Select(name => constants[name]).ToArray();
-        Assert.Equal(114, goMethods.Length);
+        Assert.Equal(119, goMethods.Length);
         Assert.Equal(goMethods, API.AllMethods);
         Assert.Equal(goMethods, API.Methods.Select(m => m.Name));
         Assert.Equal(ApiCodingTests.GoMethods, goMethods); // the Swift test's copy is current
@@ -58,6 +58,7 @@ public sealed class GoContractTests
         Assert.Equal(API.Notify.InvitationsChanged, constants["NotifyInvitationsChanged"]);
         Assert.Equal(API.Notify.AssistantProfileChanged, constants["NotifyAssistantProfileChanged"]);
         Assert.Equal(API.Notify.ContactsChanged, constants["NotifyContactsChanged"]);
+        Assert.Equal(API.Notify.UpdateChanged, constants["NotifyUpdateChanged"]);
     }
 
     [Fact]
@@ -161,6 +162,9 @@ public sealed class GoContractTests
         { nameof(ContactSearchScope), "contacts_book.go", "ContactSearchScope" },
         { nameof(ContactPhotoAvailability), "contacts_book.go", "ContactPhotoAvailability" },
         { nameof(ContactPhotoState), "contacts_book.go", "ContactPhotoState" },
+        { nameof(UpdateState), "update.go", "UpdateState" },
+        { nameof(UpdateFailure), "update.go", "UpdateFailure" },
+        { nameof(UpdateDismissAction), "update.go", "UpdateDismissAction" },
     };
 
     /// <summary>
@@ -234,6 +238,33 @@ public sealed class GoContractTests
         Assert.Equal(["ContactDeleteResult"], structs.Where(s => s.Value.Count == 0).Select(s => s.Key));
         Assert.Equal(17, GoContract.IntConstants(source).Count);
         Assert.Equal(GoContract.Seconds(source, "ContactPhotoTimeout"), TimeSpan.FromSeconds(15));
+    }
+
+    /// <summary>
+    /// The other way round for the update check: update.go declares no string
+    /// type with constants that the table above leaves out, and every struct
+    /// of it with members has a record; the one without
+    /// (UpdateChangedNotification, notify.updateChanged has no params) is
+    /// DaemonNotification.UpdateChanged. Its two durations are the daemon's.
+    /// </summary>
+    [Fact]
+    public void EveryEnumAndStructOfUpdateGoIsMirrored()
+    {
+        var source = GoContract.ApiSource("update.go");
+        var enums = GoContract.StringTypes(source).Where(t => GoContract.TypedStringConstants(source, t).Count > 0).ToArray();
+        Assert.Equal(["UpdateDismissAction", "UpdateFailure", "UpdateState"], enums.Order(StringComparer.Ordinal));
+        var structs = GoContract.Structs(source);
+        var records = typeof(API).Assembly.GetTypes().Where(t =>
+            t.Namespace == "Malachi.Core.Api" && t.IsClass && t.IsPublic && !t.IsAbstract
+            && t.GetProperty("EqualityContract", BindingFlags.NonPublic | BindingFlags.Instance) is not null)
+            .Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (var name in structs.Where(s => s.Value.Count > 0).Select(s => s.Key))
+        {
+            Assert.True(records.Contains(name), $"update.go has a struct {name}, Malachi.Core.Api no record {name}");
+        }
+        Assert.Equal(["UpdateChangedNotification"], structs.Where(s => s.Value.Count == 0).Select(s => s.Key));
+        Assert.Contains("const UpdateRemindDelay = 72 * time.Hour", source, StringComparison.Ordinal);
+        Assert.Contains("const UpdateCheckInterval = time.Minute", source, StringComparison.Ordinal);
     }
 
     private static void AssertWireEnum(string type, string file, string goType)
@@ -364,7 +395,7 @@ public sealed class GoContractTests
 
     /// <summary>
     /// Every record of the API layer has exactly the JSON members of its Go
-    /// struct (types.go, tls.go, errors.go, board.go, crm.go, assistant.go), field by field, and a
+    /// struct (types.go, tls.go, errors.go, board.go, crm.go, assistant.go, contacts_book.go, update.go), field by field, and a
     /// Go int64 is a long: the contract's names as backend/pkg/api spells them.
     /// The calendar's (calendar.go) are among them; CalendarEvent is Go's Event.
     /// </summary>
@@ -374,7 +405,7 @@ public sealed class GoContractTests
         var structs = GoContract.Structs(
             GoContract.ApiSource("types.go"), GoContract.ApiSource("tls.go"), GoContract.ApiSource("errors.go"), GoContract.ApiSource("board.go"),
             GoContract.ApiSource("calendar.go"), GoContract.ApiSource("crm.go"), GoContract.ApiSource("assistant.go"),
-            GoContract.ApiSource("contacts_book.go"));
+            GoContract.ApiSource("contacts_book.go"), GoContract.ApiSource("update.go"));
         var records = typeof(API).Assembly.GetTypes().Where(t =>
             t.Namespace == "Malachi.Core.Api" && t.IsClass && t.IsPublic && !t.IsAbstract
             && t.GetProperty("EqualityContract", BindingFlags.NonPublic | BindingFlags.Instance) is not null

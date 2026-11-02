@@ -249,6 +249,11 @@ type Backend struct {
 	// profileMu serialises the writes of the assistant profile and its
 	// proposals (assistant_profile.go).
 	profileMu sync.Mutex
+
+	// Updates configures the update check (update_service.go); main sets
+	// the channel before StartSync, tests the client, keys and clock.
+	Updates UpdateSettings
+	upd     updater
 }
 
 var _ api.Backend = (*Backend)(nil)
@@ -610,8 +615,13 @@ func (b *Backend) StartSync(ctx context.Context) <-chan struct{} {
 	done := make(chan struct{})
 	issueMailDone := b.startIssueMail(ctx)
 	boardDone := b.startBoard(ctx)
+	updatesDone := b.startUpdates(ctx)
 	var wg sync.WaitGroup
-	wg.Add(4)
+	wg.Add(5)
+	go func() {
+		defer wg.Done()
+		<-updatesDone
+	}()
 	go func() {
 		defer wg.Done()
 		<-issueMailDone

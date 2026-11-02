@@ -111,4 +111,10 @@ public static class RpcTimeouts
     /// (api.ContactPhotoTimeout, 15 s) first (contactsctl <c>PhotoTimeout</c>).
     /// </summary>
     public static readonly TimeSpan ContactPhoto = TimeSpan.FromSeconds(20);
+
+    /// <summary>
+    /// <c>update.check</c>: the daemon asks the manifest's API and then the
+    /// GitHub asset within 70 s (core's updateCheckLimit) before it answers.
+    /// </summary>
+    public static readonly TimeSpan UpdateCheck = TimeSpan.FromSeconds(75);
 }

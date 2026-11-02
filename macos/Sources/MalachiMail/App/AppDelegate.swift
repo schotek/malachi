@@ -314,6 +314,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .link: site,
             ]))
         }
+        // The update check's status line (updates.AboutLine), plain text.
+        let line = state.map { Updates.aboutLine($0.updates.status, date: AppState.updateTime) } ?? ""
+        if !line.isEmpty {
+            credits.append(NSAttributedString(string: "\n" + line, attributes: [
+                .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+                .foregroundColor: NSColor.secondaryLabelColor,
+            ]))
+        }
         NSApp.orderFrontStandardAboutPanel(options: [
             .applicationName: MainMenu.appName,
             .applicationVersion: Version.full,

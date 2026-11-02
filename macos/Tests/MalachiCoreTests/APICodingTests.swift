@@ -1389,11 +1389,12 @@ import Testing
         "contact.list", "contact.get", "contact.lookup",
         "contact.create", "contact.update", "contact.delete",
         "contact.photo",
+        "update.status", "update.check", "update.setPrefs", "update.dismiss", "update.dismissNotice",
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 114)
-        #expect(Set(API.allMethods).count == 114, "no duplicates")
+        #expect(API.allMethods.count == 119)
+        #expect(Set(API.allMethods).count == 119, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)
@@ -1403,6 +1404,7 @@ import Testing
             "notify.calendarChanged", "notify.calendarState", "notify.eventAlert", "notify.invitationsChanged",
             "notify.assistantProfileChanged",
             "notify.contactsChanged",
+            "notify.updateChanged",
         ])
         #expect(API.AccountDetectSite.name == "account.detectSite" && API.AccountListSpaces.name == "account.listSpaces")
         #expect(API.IssueTransitions.name == "issue.transitions" && API.IssueTransition.name == "issue.transition")
@@ -1449,7 +1451,8 @@ import Testing
                                     "calendar.findFreeTime", "event.create", "event.update", "event.delete",
                                     "event.respond", "invitation.respond",
                                     "account.detectEway", "crm.lookup", "crm.search", "crm.save", "crm.remove",
-                                    "contact.create", "contact.update", "contact.delete", "contact.photo"]
+                                    "contact.create", "contact.update", "contact.delete", "contact.photo",
+                                    "update.check"]
         for m in API.methods where !special.contains(m.name) {
             #expect(m.timeout == RPCTimeouts.default, "\(m.name) should use the default timeout")
         }

@@ -316,7 +316,13 @@ function Invoke-GoBuild {
         $env:CGO_ENABLED = '0'
         $env:GOWORK = 'off'
         foreach ($command in 'malachid', 'malachi-mcp') {
-            Invoke-Native $go @('build', '-trimpath', '-ldflags', "-X main.version=$($V.Full)",
+            $ldflags = "-X main.version=$($V.Full)"
+            # Only the installer's daemon checks for updates
+            # (docs/plans/update-check.md U5); app and run builds do not.
+            if ($command -eq 'malachid' -and $Target -eq 'installer') {
+                $ldflags = "$ldflags -X main.updateChannel=windows-setup-$Arch"
+            }
+            Invoke-Native $go @('build', '-trimpath', '-ldflags', $ldflags,
                 '-o', (Join-Path $out "$command.exe"), "./cmd/$command") (Join-Path $Root 'backend')
         }
     } finally {

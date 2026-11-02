@@ -49,6 +49,11 @@ case "$ARCH" in
     aarch64) FILE_ARCH=arm64 ;;
     *) FILE_ARCH="$ARCH" ;;
 esac
+# The daemon of an .rpm checks for updates of this package
+# (docs/services.md §2.3); the Makefile reads UPDATE_CHANNEL.
+case "$FILE_ARCH" in
+    x64 | arm64) export UPDATE_CHANNEL="linux-rpm-$FILE_ARCH" ;;
+esac
 # %{?dist} is ".fc42" on Fedora 42; the file says fedora42.
 DIST="$(rpm --eval '%{?dist}')"
 DIST="${DIST#.}"

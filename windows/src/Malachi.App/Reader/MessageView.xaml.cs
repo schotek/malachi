@@ -158,6 +158,8 @@ public sealed partial class MessageView : UserControl
         Reader.Addresses.RowChanged += (_, kind) => FillAddressRow(kind);
         services.Attachments.SavingAllChanged += OnSavingAllChanged;
         InitializeComponent();
+        // The No Accounts page's note on the update check (ui/internal/updates WizardNote).
+        UpdateNote.Text = Malachi.Core.Updates.UpdateCheck.WizardNote();
         UpdateBodyFit();
         chips = new MessageChips(services, this, () => HostWindow, () => FocusBody(), logger);
 

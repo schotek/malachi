@@ -190,6 +190,16 @@ type AssistantService interface {
 	ProfileResolve(ctx context.Context, p AssistantProfileResolveParams) (*AssistantProfileResolveResult, error)
 }
 
+// UpdateService is the update check (docs/api.md §4.20). Every method
+// returns the status after it.
+type UpdateService interface {
+	Status(ctx context.Context, p UpdateStatusParams) (*UpdateStatus, error)
+	Check(ctx context.Context, p UpdateCheckParams) (*UpdateStatus, error)
+	SetPrefs(ctx context.Context, p UpdateSetPrefsParams) (*UpdateStatus, error)
+	Dismiss(ctx context.Context, p UpdateDismissParams) (*UpdateStatus, error)
+	DismissNotice(ctx context.Context, p UpdateDismissNoticeParams) (*UpdateStatus, error)
+}
+
 // Backend is the complete server-side surface. The connection handshake
 // (system.hello, system.authenticate; docs/api.md §1.4) is not part of it:
 // the transport (internal/rpc) answers the handshake before any call of a
@@ -216,6 +226,7 @@ type Backend interface {
 	Crm() CrmService
 	Assistant() AssistantService
 	AddressBooks() AddressBookService
+	Update() UpdateService
 }
 
 // Notifier is how backend components push events to connected clients.
@@ -264,4 +275,10 @@ type CalendarNotifier interface {
 // notify.contactsChanged (docs/api.md §4.19), asserted like BoardNotifier.
 type ContactsNotifier interface {
 	ContactsChanged(n ContactsChangedNotification)
+}
+
+// UpdateNotifier is the optional extension of Notifier for
+// notify.updateChanged (docs/api.md §4.20), asserted like BoardNotifier.
+type UpdateNotifier interface {
+	UpdateChanged(n UpdateChangedNotification)
 }

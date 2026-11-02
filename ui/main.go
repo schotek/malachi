@@ -283,7 +283,13 @@ func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, stor
 		d.SetLicenseType(gtk.LicenseGPL30)
 		d.SetWebsite("https://github.com/schotek/malachi")
 		d.SetIssueURL("https://github.com/schotek/malachi/issues")
-		d.SetComments(i18n.T("A native mail client for the GNOME desktop."))
+		comments := i18n.T("A native mail client for the GNOME desktop.")
+		// The update check's status line (Check Now is in Preferences →
+		// General); the comments are Pango markup, the line is not.
+		if line := window.UpdateAboutLine(); line != "" {
+			comments += "\n\n" + glib.MarkupEscapeText(line)
+		}
+		d.SetComments(comments)
 		d.Present(app.ActiveWindow())
 	})
 	app.AddAction(about)

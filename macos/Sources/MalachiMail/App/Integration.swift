@@ -125,6 +125,7 @@ final class Integration {
         wireBoard()
         wireCRM()
         wireContacts()
+        wireUpdates()
     }
 
     /// window.go 337-360 and 411-433: the toolbar and menu act on the
@@ -526,6 +527,7 @@ final class Integration {
         )
         c.aiPane.configureProfile(state.profile)
         c.contactsPane.configure(state.contacts)
+        c.generalPane.configureUpdates(state.updates)
         return c
     }
 
@@ -557,10 +559,19 @@ final class Integration {
                 title: Cal.Prefs.addCalDAV, target: self, action: #selector(addCalDAVCalendar(_:)))
             caldav.bezelStyle = .rounded
             caldav.controlSize = .large
-            let buttons = NSStackView(views: [button, jira, caldav])
+            // The first run's note about the update check (updates.WizardNote).
+            let note = NSTextField(wrappingLabelWithString: Updates.wizardNote)
+            note.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+            note.textColor = .secondaryLabelColor
+            note.alignment = .center
+            note.isSelectable = false
+            note.preferredMaxLayoutWidth = 360
+            note.widthAnchor.constraint(lessThanOrEqualToConstant: 360).isActive = true
+            let buttons = NSStackView(views: [button, jira, caldav, note])
             buttons.orientation = .vertical
             buttons.alignment = .centerX
             buttons.spacing = 12
+            buttons.setCustomSpacing(20, after: caldav)
             page.statusPage.setChild(buttons)
             mainWindow.install(message: page)
         } else {

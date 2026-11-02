@@ -20,7 +20,8 @@
 // About carries the GTK fields (U8): the name, the icon, the version, the
 // developer, the licence, the website and the issue tracker. GTK's
 // comment ("A native mail client for the GNOME desktop.") names GNOME, so
-// Windows says what macOS says, a Windows-only string.
+// Windows says what macOS says, a Windows-only string. Under the version,
+// the update check's status line (updates.AboutLine; docs/plans/update-check.md).
 
 using System;
 using System.Collections.Generic;
@@ -70,6 +71,9 @@ internal sealed partial class AlertService : IAlerts
         this.openUrl = openUrl;
         this.logger = logger;
     }
+
+    /// <summary>The update check's status line for About (AppState.UpdateLine); none until set.</summary>
+    public Func<string>? UpdateLine { get; set; }
 
     /// <inheritdoc/>
     public bool IsShowing(Window window) => schedulers.TryGetValue(window, out var s) && s.IsBusy;
@@ -298,6 +302,11 @@ internal sealed partial class AlertService : IAlerts
         });
         panel.Children.Add(Centred(L10n.T("Malachi Mail contributors"), "DimLabelStyle"));
         panel.Children.Add(Centred(AppVersion.Full, "CaptionLabelStyle"));
+        // The update check's status line (updates.AboutLine); Check Now is in Preferences → General.
+        if (UpdateLine?.Invoke() is { Length: > 0 } line)
+        {
+            panel.Children.Add(Centred(line, "DimCaptionLabelStyle"));
+        }
         // Windows-only string: GTK's comment names the GNOME desktop.
         panel.Children.Add(Centred("A native mail client.", "BodyLabelStyle"));
         // Windows-only string: Adw.AboutDialog words the licence itself.

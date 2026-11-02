@@ -18,6 +18,13 @@ import MalachiCore
 /// In the Board and Calendar modes a page takes the split view's place
 /// above the bar (`setMode`), and the split view leaves the window
 /// meanwhile.
+///
+/// The update check's banner (`install(banner:)`) spans the window under
+/// the toolbar in every mode, above the split view or the page, which keep
+/// the window's top: while it shows, they get its height as an additional
+/// safe-area inset, so every column starts under it as it starts under the
+/// toolbar (moving them down instead covered the tops of the list and the
+/// reading pane, which inset themselves by the toolbar's safe area).
 @MainActor
 final class MainContentViewController: NSViewController {
     let split: MainSplitViewController
@@ -25,6 +32,12 @@ final class MainContentViewController: NSViewController {
     /// high.
     private let statusSlot = NSView()
     private(set) var statusBar: NSViewController?
+    /// The banner across the top (the update check's), nil until installed.
+    private var banner: NSView?
+    private var bannerShown = false
+    /// The top of the split view or the page shown: the window's top, or
+    /// the banner's bottom while it shows.
+    private var contentTop: NSLayoutConstraint?
 
     init(split: MainSplitViewController) {
         self.split = split
@@ -59,11 +72,74 @@ final class MainContentViewController: NSViewController {
         panes.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(panes, positioned: .below, relativeTo: nil)
         NSLayoutConstraint.activate([
-            panes.topAnchor.constraint(equalTo: view.topAnchor),
             panes.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             panes.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             panes.bottomAnchor.constraint(equalTo: statusSlot.topAnchor),
         ])
+        pinTop()
+    }
+
+    /// Puts `banner` across the top of the content, under the toolbar
+    /// (the safe area), hidden until `showBanner(true)`.
+    func install(banner v: NSView) {
+        _ = view
+        banner?.removeFromSuperview()
+        banner = v
+        v.translatesAutoresizingMaskIntoConstraints = false
+        v.isHidden = !bannerShown
+        view.addSubview(v)
+        NSLayoutConstraint.activate([
+            v.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            v.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            v.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
+        // Only as tall as its content: nothing else bounds the banner's
+        // height, and without this it took the space of the panes below.
+        // Above the split view's own constraints, below the compression
+        // resistance (750) of the text and buttons inside.
+        let fit = v.heightAnchor.constraint(equalToConstant: 0)
+        fit.priority = NSLayoutConstraint.Priority(740)
+        fit.isActive = true
+        pinTop()
+    }
+
+    /// Shows or hides the banner; the content below follows.
+    func showBanner(_ on: Bool) {
+        guard on != bannerShown else { return }
+        bannerShown = on
+        banner?.isHidden = !on
+        view.layoutSubtreeIfNeeded()
+        insetForBanner()
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        insetForBanner() // the banner's height follows the window's width
+    }
+
+    /// Gives the split view and the page the banner's height as an
+    /// additional top safe-area inset (none while it is hidden).
+    private func insetForBanner() {
+        let h = bannerShown ? (banner?.frame.height ?? 0) : 0
+        for v in [split.view, page?.view].compactMap({ $0 }) where v.additionalSafeAreaInsets.top != h {
+            v.additionalSafeAreaInsets = NSEdgeInsets(top: h, left: 0, bottom: 0, right: 0)
+        }
+    }
+
+    /// Ties the top of what the content shows (the page, else the split
+    /// view) to the window's top, under the banner, and gives it the
+    /// banner's inset.
+    private func pinTop() {
+        contentTop?.isActive = false
+        contentTop = nil
+        let shown: NSView? = page?.view ?? (split.view.superview === view ? split.view : nil)
+        guard let shown, shown.superview === view else { return }
+        contentTop = shown.topAnchor.constraint(equalTo: view.topAnchor)
+        contentTop?.isActive = true
+        if let banner, banner.superview === view {
+            view.addSubview(banner, positioned: .above, relativeTo: shown)
+        }
+        insetForBanner()
     }
 
     /// Puts the status bar into its slot (replacing an earlier one).
@@ -135,11 +211,11 @@ final class MainContentViewController: NSViewController {
         v.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(v, positioned: .below, relativeTo: statusSlot)
         NSLayoutConstraint.activate([
-            v.topAnchor.constraint(equalTo: view.topAnchor),
             v.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             v.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             v.bottomAnchor.constraint(equalTo: statusSlot.topAnchor),
         ])
+        pinTop()
     }
 
     // MARK: Responder chain

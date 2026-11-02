@@ -1522,6 +1522,49 @@ everyone with access to that CRM can read it (unless saved as private).
   linked items' names as last read, the times and the privacy flag; it
   goes with either account.
 
+### 7.4 The update check
+
+The daemon asks once a day which versions of Malachi Mail exist
+([services.md §2](services.md), [api.md §4.20](api.md#420-update),
+`docs/plans/update-check.md`). It is the only request the daemon makes
+on its own that is not to a server of one of the user's accounts.
+
+- **What leaves**: a `GET` to `admin.malachimail.app/api/v1/updates`
+  (when that fails, the same file from the latest GitHub release) with
+  `User-Agent: MalachiMail/<version>` and, on the API, the `If-None-Match`
+  of the last answer. No cookie, no identifier, no channel, no query: the
+  server learns that some copy of a version asked, and the address it
+  asked from. A build without a channel (development, a store) never
+  asks; the user turns it off in the preferences and then nothing is
+  asked, also not after a start.
+- **What is trusted**: neither host. The envelope is Ed25519-signed with a
+  key that only the owner holds (never the Worker, never GitHub); the
+  public keys are compiled into the daemon by `keyId`
+  (`internal/update/keys.go`), the test key of `backend/testdata/update`
+  never among them. The signature covers the exact payload bytes and is
+  verified before the payload is parsed; then the payload is checked
+  whole by a strict reader (no duplicate or case-twin keys, integers as
+  integers, no lone surrogates) and against every rule of services.md
+  §2.3, with the owner's tool's own fixtures as tests. Any violation
+  discards the whole manifest and keeps the last accepted one.
+- **Replay**: a manifest older than the last accepted one, or more than a
+  day in the future, is refused, so an attacker with an old signed
+  manifest cannot hide a fix.
+- **Links**: every package URL is `https` on `github.com` or
+  `malachimail.app`, the info and notice links on `malachimail.app`,
+  exactly so (lower-case host, no port, no credentials, no fragment). The
+  daemon downloads and runs nothing; a client opens the URL in the
+  browser, which applies quarantine, Mark of the Web and SmartScreen.
+- **Text**: notes and notices are untrusted plain text; the daemon refuses
+  a manifest whose text has control, format, bidi or invisible characters
+  or is not NFC, and clients show it only as plain text (no markup,
+  `SetUseMarkup(false)`, `stringValue`, `TextBlock.Text`).
+- **The client's request**: the HTTP client follows no redirect from the
+  API (a sign-in page in front of it is a server failure), and from
+  GitHub only to `github.com` and `*.githubusercontent.com` over https;
+  bodies are capped at 256 KiB, a request at 30 s; the log carries the
+  failure class and the rule a manifest broke, never a body.
+
 ## 8. Local storage
 
 - One daemon per store: before it touches the store or the socket, the

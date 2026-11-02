@@ -373,6 +373,12 @@ Adw.ApplicationWindow main_window {
                   revealed: false;
                 }
 
+                // The update check's banner in Mail (window/updates.go): a bar
+                // built in Go, because the banner has up to four buttons;
+                // the Board and the Calendar get one of their own under
+                // their header bars.
+                Adw.Bin update_bar_mail {}
+
                 // Narrows the list to unread or flagged messages. The filter
                 // is applied by the backend (message.list "filter") so the
                 // paging cursor and page.total stay consistent; it is global
@@ -879,6 +885,20 @@ Adw.ApplicationWindow main_window {
                             styles [
                               "flat",
                               "pill",
+                            ]
+                          }
+
+                          // The first-run note of the update check
+                          // (updates.WizardNote, set in window/updates.go).
+                          Label no_accounts_update_note {
+                            wrap: true;
+                            justify: center;
+                            max-width-chars: 48;
+                            margin-top: 12;
+
+                            styles [
+                              "caption",
+                              "dim-label",
                             ]
                           }
                         };

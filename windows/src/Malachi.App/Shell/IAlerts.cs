@@ -6,7 +6,8 @@
 // ConfirmDestructive, compose/draft.go (the close question),
 // widget/consent.go (Send Mail to Claude?, through ConfirmAsync),
 // window/remote.go (Open This Link?), accountwizard/trust.go (Trust This
-// Certificate?), and main.go's app.about. The dialogs go on the window
+// Certificate?), and main.go's app.about; the update check's What's New
+// and security question (ui/internal/updates). The dialogs go on the window
 // that owns the action, or the main window when it is null (Windows has no
 // application-modal alert: a hidden main window is shown first). Heading
 // and body are plain text, often hostile input such as a subject.
@@ -19,6 +20,7 @@ using System.Threading.Tasks;
 using Malachi.Core.Api;
 using Malachi.Core.Calendars;
 using Malachi.Core.Controllers;
+using Malachi.Core.Updates;
 using Malachi.Core.Wizard;
 using Microsoft.UI.Xaml;
 
@@ -89,6 +91,22 @@ public interface IAlerts
 
     /// <summary>About Malachi Mail (app.about).</summary>
     Task ShowAboutAsync(Window? window);
+
+    /// <summary>
+    /// The What's New dialog of the offered version (updates.NotesFor):
+    /// Download (the default, only with a package), More Information (only
+    /// with a page) and Close; the notes as plain text. The button chosen, or
+    /// null for Close.
+    /// </summary>
+    Task<BannerAction?> WhatsNewAsync(Window? window, UpdateNotes notes);
+
+    /// <summary>
+    /// The question of a security release (updates.PromptFor): Download (the
+    /// default) and Cancel, with the check box Quit Malachi Mail after the
+    /// download starts, on by default. Whether Download was chosen, and the
+    /// check box.
+    /// </summary>
+    Task<(bool Download, bool Quit)> SecurityUpdateAsync(Window? window, UpdatePrompt prompt);
 
     /// <summary>
     /// A question of the calendar (docs/calendar.md §5.5, §5.6): the

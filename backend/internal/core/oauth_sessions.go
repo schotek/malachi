@@ -720,6 +720,7 @@ func (b *Backend) Close() {
 		b.stopDraftNotify()
 		b.dl.close(b.log)
 		b.mem.close()
+		b.stopUpdates()
 	})
 }
 

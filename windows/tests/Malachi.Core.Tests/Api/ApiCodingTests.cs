@@ -1333,13 +1333,14 @@ public sealed partial class ApiCodingTests
         "contact.list", "contact.get", "contact.lookup",
         "contact.create", "contact.update", "contact.delete",
         "contact.photo",
+        "update.status", "update.check", "update.setPrefs", "update.dismiss", "update.dismissNotice",
     ];
 
     [Fact]
     public void MethodTableMatchesGo()
     {
-        Assert.Equal(114, API.AllMethods.Count);
-        Assert.Equal(114, API.AllMethods.Distinct().Count()); // no duplicates
+        Assert.Equal(119, API.AllMethods.Count);
+        Assert.Equal(119, API.AllMethods.Distinct().Count()); // no duplicates
         Assert.Equal(GoMethods, API.AllMethods);
         Assert.Equal(API.AllMethods.Count, API.Methods.Count);
         Assert.Equal(API.SystemInfoName, API.SystemInfo.Name);
@@ -1347,7 +1348,7 @@ public sealed partial class ApiCodingTests
             [
                 "notify.newMessage", "notify.syncState", "notify.authRequired", "notify.accountsChanged", "notify.messagesChanged", "notify.boardChanged",
                 "notify.draftsChanged", "notify.calendarChanged", "notify.calendarState", "notify.eventAlert", "notify.invitationsChanged",
-                "notify.assistantProfileChanged", "notify.contactsChanged",
+                "notify.assistantProfileChanged", "notify.contactsChanged", "notify.updateChanged",
             ],
             API.AllNotifications);
     }
@@ -1412,6 +1413,8 @@ public sealed partial class ApiCodingTests
         Assert.Equal(TimeSpan.FromSeconds(60), API.ContactCreate.Timeout);
         Assert.Equal(TimeSpan.FromSeconds(60), API.ContactUpdate.Timeout);
         Assert.Equal(TimeSpan.FromSeconds(60), API.ContactDelete.Timeout);
+        // update.check waits for the daemon's check (70 s inside).
+        Assert.Equal(TimeSpan.FromSeconds(75), API.UpdateCheck.Timeout);
         var special = new HashSet<string>(StringComparer.Ordinal)
         {
             "system.info", "system.hello", "system.authenticate", "message.body",
@@ -1424,6 +1427,7 @@ public sealed partial class ApiCodingTests
             "event.create", "event.update", "event.delete", "event.respond", "invitation.respond", "invitation.applyCancel",
             "account.detectEway", "crm.lookup", "crm.search", "crm.save", "crm.remove",
             "contact.create", "contact.update", "contact.delete", "contact.photo",
+            "update.check",
         };
         foreach (var m in API.Methods.Where(m => !special.Contains(m.Name)))
         {

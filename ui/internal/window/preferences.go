@@ -270,7 +270,7 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		bindChoice(s, settings.KeyColorScheme, d.colorScheme, colorSchemeChoices, s.ColorScheme, s.SetColorScheme),
 		bindChoice(s, settings.KeyDensity, d.density, densityChoices, s.Density, s.SetDensity),
 		d.bindBoard(s),
-		d.bindLaunchAtLogin(s),
+		d.bindLaunchAtLogin(s), d.bindUpdates(b, c),
 		d.bindMail(c, refreshStorage),
 		unbindStorage,
 		d.bindAccounts(c),

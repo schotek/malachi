@@ -1,9 +1,11 @@
 # Upozornění na novou verzi — návrh
 
-Stav: návrh (2026-10-28), nic není napsané. Kontrakt služby je
-[`../services.md`](../services.md) §2; server, administrace a podepisování
-jsou v soukromém repozitáři `admin-malachi-mail` (jeho `docs/plan.md`).
-Otázky Q1–Q6 v §8 čekají na vlastníka.
+Stav: fáze 1 napsaná (2026-11-02, necommitnutá): démon, receptury
+balíčků, Go reference a porty všech tří klientů (stav ověření v §10).
+Kontrakt služby je [`../services.md`](../services.md) §2; server,
+administrace a podepisování jsou v soukromém repozitáři
+`admin-malachi-mail` (jeho `docs/plan.md`). Odpovědi vlastníka na Q1–Q6
+jsou v §8.
 
 ## 1. Co se mění
 
@@ -48,7 +50,7 @@ k vydání a tlačítkem *Stáhnout*, které otevře instalátor v prohlížeči
   (`update.state`: poslední přijatý manifest, `issuedAt`, ETag, čas
   a třída poslední chyby; `update.prefs`: `enabled`, `skipped`,
   `remindAfter`, `noticesSeen`).
-- API, kompatibilní rozšíření protokolu 2, nový oddíl `docs/api.md` §4.19
+- API, kompatibilní rozšíření protokolu 2, nový oddíl `docs/api.md` §4.20
   `update` a notifikace v §5:
   - `update.status {}` → `UpdateStatus { enabled, channel (opt),
     current, state: "disabled|unsupported|idle|checking|upToDate|available|failed",
@@ -116,18 +118,42 @@ manifestu, nastaví karanténu / Mark of the Web jako u příloh a vrátí cestu
 klient nabídne *Otevřít instalátor* (Windows: ukončit aplikaci, zastavit
 démona, spustit Setup.exe). Formát manifestu se kvůli tomu nemění.
 
-## 8. Otázky pro vlastníka
+## 8. Otázky pro vlastníka (zodpovězené 2026-11-02)
 
 - **Q1**: Výchozí stav kontroly zapnuto (s větou v průvodci), nebo opt-in?
+  → **zapnuto**.
 - **Q2**: Jen pruh v okně, nebo i jedna systémová notifikace u bezpečnostního vydání?
-- **Q3**: Má i kanál `windows-zip-*` dostávat upozornění, nebo zip ber jako „ruční“ a bez kontroly?
-- **Q4**: deb a rpm: kontrolovat (dnes se stahují z GitHubu ručně), nebo vynechat s výhledem na repozitář apt/dnf?
-- **Q5**: *Připomenout později* = 3 dny?
-- **Q6**: Pořadí prací: démon + Go reference + GTK → macOS → Windows, jako u ostatních funkcí?
+  → ani jedno: u bezpečnostního vydání se při příjmu **jednou** ukáže modální
+  okno s *Stáhnout* a zaškrtávátkem „Po zahájení stahování ukončit Malachi Mail“
+  (předvybrané); ať uživatel zvolí cokoli, pruh zůstane viditelný až do
+  aktualizace (bez *Připomenout později* i *Přeskočit*). „Jednou“ hlídá démon
+  (`UpdateInfo.prompt`, `update.dismiss prompted`), takže se neptá ani jiné okno
+  či klient.
+- **Q3**: Má i kanál `windows-zip-*` dostávat upozornění? → zip už neexistuje;
+  kanály jsou přesně tabulka `services.md` §2.3.
+- **Q4**: deb a rpm: kontrolovat? → ano (kanály `linux-deb-*`, `linux-rpm-*`).
+- **Q5**: *Připomenout později* = 3 dny? → **ano**; konec odkladu ohlásí démon
+  `notify.updateChanged`, klienti hodiny nepotřebují.
+- **Q6**: Pořadí prací → všechny tři klienty v jedné práci (pravidlo 6).
+
+Upřesnění při implementaci: U14 *Zkontrolovat nyní* je ve všech třech
+klientech v Předvolbách → Obecné → Aktualizace (spolu s řádkem stavu),
+protože standardní okna O aplikaci (Adw.AboutDialog, panel AppKitu) tlačítko
+neunesou; O aplikaci ukazuje jen řádek stavu, kde to jde. Pruh je v hlavním
+okně ve všech režimech (Pošta, Nástěnka, Kalendář). Plán U7 doplňuje, že
+první kontrola po startu není dřív než den (± 2 h) po poslední, takže
+restarty aplikace server nezatěžují. Démon přijme jen text, který je už
+čistý (správce v administraci odmítá totéž), místo aby ho čistil.
+
+Doplněno po prvním běhu vlastníka (2026-11-02): poznámky v *Co je nového*
+se čtou jako Markdown parserem asistenta (nadpisy, odrážky, tučné, kód;
+odkazy jen jako text), *Další informace* otevírá vždy
+`https://malachimail.app/news.html` (`updates.NewsURL`, ne `infoUrl`
+vydání) a ruční *Zkontrolovat nyní* ruší *Připomenout později*.
 
 ## 9. Úkoly
 
-1. Démon: `internal/update`, `updatetest`, testdata, `core/update_service.go`, API, `docs/api.md` §4.19, `docs/security.md`.
+1. Démon: `internal/update`, `updatetest`, testdata, `core/update_service.go`, API, `docs/api.md` §4.20, `docs/security.md`.
 2. Receptury balíčků s `main.updateChannel`, `docs/releasing.md`.
 3. Go reference `ui/internal/updates` + GTK, `make po`.
 4. macOS port.

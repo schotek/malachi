@@ -6,7 +6,8 @@
 // renderMail, mailChanged, bindStorage); GTK:
 // ui/internal/window/preferences.go (NewPreferences' bindings,
 // bindLaunchAtLogin, bindMail, bindStorage) and preferences_board.go
-// (bindBoard; GeneralPage.Board.cs). The UI-only rows are bound
+// (bindBoard; GeneralPage.Board.cs); the update check's group is
+// GeneralPage.Updates.cs. The UI-only rows are bound
 // two-way to the settings; the Mail group is the daemon's, through
 // MailPreferencesController (config.get, config.set), and stays
 // insensitive until the daemon answered. Keep Attachments Offline For,
@@ -79,6 +80,8 @@ public sealed partial class GeneralPage : UserControl
 
         var s = state.Settings;
         bindings.Toggle(RunInBackgroundSwitch, SettingsKey.RunInBackground, () => s.RunInBackground, v => s.RunInBackground = v);
+        // The update check's switch, line and Check Now (GeneralPage.Updates.cs).
+        InitializeUpdatesGroup();
         // preferences_board.go bindBoard: Board View, Open at Launch, Show
         // the Board and the windows of the states.
         InitializeBoardGroup(bindings);
@@ -124,6 +127,7 @@ public sealed partial class GeneralPage : UserControl
     public void Close()
     {
         CloseBoardGroup();
+        CloseUpdatesGroup();
         mail.Close();
         storage.Close();
     }

@@ -883,7 +883,10 @@ func (a *answerView) linkAt(x, y float64) string {
 }
 
 // render draws markdown anew.
-func (a *answerView) render(markdown string) {
+func (a *answerView) render(markdown string) { a.renderBlocks(assistant.Markdown(markdown)) }
+
+// renderBlocks draws blocks anew (the What's New dialog's notes too).
+func (a *answerView) renderBlocks(blocks []assistant.Block) {
 	table := a.buf.TagTable()
 	for _, t := range a.linkTag {
 		table.Remove(t)
@@ -893,7 +896,7 @@ func (a *answerView) render(markdown string) {
 	a.hovered = ""
 	a.buf.SetText("")
 	accent := linkColor()
-	for i, b := range assistant.Markdown(markdown) {
+	for i, b := range blocks {
 		if i > 0 {
 			a.insert("\n")
 		}

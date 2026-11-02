@@ -190,6 +190,13 @@ public abstract record DaemonNotification
     /// <param name="Payload">The account and its books (empty = any).</param>
     public sealed record ContactsChanged(ContactsChangedNotification Payload) : DaemonNotification;
 
+    /// <summary>
+    /// <c>notify.updateChanged</c>: the update status changed (Update.cs); no
+    /// params, the application's <c>UpdateStatusController</c> calls
+    /// <c>update.status</c> again.
+    /// </summary>
+    public sealed record UpdateChanged : DaemonNotification;
+
     /// <summary>A notification of a newer daemon.</summary>
     /// <param name="Method">Its method.</param>
     public sealed record Unknown(string Method) : DaemonNotification;
@@ -239,6 +246,7 @@ public abstract record DaemonNotification
             API.Notify.InvitationsChanged => new InvitationsChanged(OptionalParams(method, parameters, ApiJsonContext.Wire.InvitationsChangedNotification)),
             API.Notify.AssistantProfileChanged => new AssistantProfileChanged(),
             API.Notify.ContactsChanged => new ContactsChanged(OptionalParams(method, parameters, ApiJsonContext.Wire.ContactsChangedNotification)),
+            API.Notify.UpdateChanged => new UpdateChanged(),
             _ => new Unknown(method),
         };
     }

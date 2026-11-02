@@ -92,6 +92,25 @@ Adw.PreferencesDialog preferences_dialog {
       }
     }
 
+    // The update check (window/preferences_updates.go bindUpdates): every
+    // text is ui/internal/updates', set in Go. The switch is the daemon's
+    // update.setPrefs; the row under it shows the status line with Check
+    // Now.
+    Adw.PreferencesGroup update_group {
+      Adw.SwitchRow update_enabled {
+        use-markup: false;
+      }
+
+      Adw.ActionRow update_status {
+        use-markup: false;
+
+        [suffix]
+        Button update_check_now {
+          valign: center;
+        }
+      }
+    }
+
     // The board (ui/internal/board): its texts and the items of the combo
     // rows are set in Go (window/preferences_board.go bindBoard). Show the
     // Board, the windows and the triage's accounts are the daemon's board

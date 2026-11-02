@@ -510,6 +510,32 @@ Pořadí prací:
     z `claude/keen-bohr-rrjhm3` do `main` 2026-11-01; démon, Go reference,
     macOS, GTK i Windows ověřené vlastníkem a agenty na skutečných
     strojích; viz odstavec Adresáře níže a `docs/plans/address-book.md`
+16. Kontrola nových verzí (fáze 1) — napsaná 2026-11-02, necommitnutá;
+    viz odstavec Kontrola nových verzí níže a `docs/plans/update-check.md`
+
+Kontrola nových verzí (2026-11-02, všechny tři klienty, necommitnutá;
+plán `docs/plans/update-check.md` s odpověďmi vlastníka Q1–Q6, kontrakt
+služby `docs/services.md` §2, API `docs/api.md` §4.20, bezpečnost
+`docs/security.md` §7.4). Démon (`internal/update`: přísná čtečka JSON,
+Ed25519 nad přesnými bajty payloadu, klíče natvrdo v `keys.go` podle
+`keyId`, pravidla manifestu, výběr vydání pro kanál, HTTP klient API →
+záloha GitHub; `core/update_service.go`: plán 5–15 min po startu, ne dřív
+než den ± 2 h po poslední kontrole, `Retry-After`, `meta` `update.state`
+a `update.prefs`) testovaný tabulkou nad fixturami správce
+(`backend/testdata/update`, testovací klíč `test-1` nikdy v `keys.go`)
+a živým manifestem 0.2.0. Kanál dává sestavení (`-X main.updateChannel`:
+`make macos-dmg`, `build.ps1 installer`, `build-deb.sh`, `build-rpm.sh`,
+Flatpak), `MALACHI_UPDATE_CHANNEL` přebíjí; `make macos` a vývojové
+buildy nekontrolují. Klienti: reference `ui/internal/updates`, GTK
+`ui/internal/updatesctl` + `window/updates.go`, macOS `MalachiCore/Updates`
++ `UpdateController`, Windows `Malachi.Core/Updates` (`UpdateCheck`)
++ `UpdateStatusController`: pruh ve všech režimech hlavního okna,
+bezpečnostní vydání jednou modálně (Stáhnout + předvybrané ukončení),
+Předvolby → Obecné → Aktualizace se Zkontrolovat nyní, řádek v O aplikaci,
+věta na stránce bez účtů. Ověřeno: Go testy démona a reference, GTK
+`gtk.sh make build` + cílené a smoke testy, macOS `swift build` + filtrované
+`swift test`, `make po`. Čeká: Windows nepřeložené (`docs/windows-port.md`
+§11.16), nic nikdo neviděl na obrazovce, žádný běh proti skutečnému API.
 
 Adresáře (2026-11-01, všechny tři klienty, sloučeno do `main`; plán,
 rozhodnutí A1–A16 a F1–F12, odpovědi vlastníka a wireframy W1–W7
