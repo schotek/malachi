@@ -23,9 +23,9 @@ the arrow keys and a click beside it to close. Every screenshot is a link
 to the picture itself (`a.shot`), which is what a browser without the
 script gets.
 
-`assets/report.js` (deferred, every page) turns "Report a problem" in
-the footer (`[data-report]`; on `404.html` a line under the buttons)
-into the page's `<dialog class="report">`: name, e-mail, the
+`assets/report.js` (deferred, every page) turns "Report a problem with
+the app" in the footer (`[data-report]`; on `404.html` a line under the
+buttons) into the page's `<dialog class="report">`: name, e-mail, the
 description, an optional screenshot and a honeypot field `website`. The
 form goes as `multipart/form-data` to
 `https://admin.malachimail.app/api/v1/reports` (the admin's public

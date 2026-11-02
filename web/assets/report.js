@@ -1,10 +1,11 @@
-/* Malachi Mail website: "Report a problem" in the footer opens the page's
-   <dialog class="report">, a form that goes to the admin's public endpoint
-   (POST /api/v1/reports, multipart). Cloudflare Turnstile is loaded only
-   when the form is first opened; a screenshot is scaled to at most
-   2560 px on its longest side and re-encoded (WebP, else JPEG) in a
-   canvas, which drops its EXIF. Escape and a click beside the form close
-   it. Without this script the link goes to the GitHub issues. */
+/* Malachi Mail website: "Report a problem with the app" in the footer
+   opens the page's <dialog class="report">, a form that goes to the
+   admin's public endpoint (POST /api/v1/reports, multipart). Cloudflare
+   Turnstile is loaded only when the form is first opened; a screenshot
+   is scaled to at most 2560 px on its longest side and re-encoded (WebP,
+   else JPEG) in a canvas, which drops its EXIF. Escape and a click beside
+   the form close it. Without this script the link goes to the GitHub
+   issues. */
 (function () {
   var dialog = document.querySelector("dialog.report");
   if (!dialog || typeof dialog.showModal !== "function" || !window.fetch || !window.FormData) { return; }
