@@ -68,7 +68,8 @@ type invitationCard struct {
 	accept, tentative       *gtk.Button
 	decline                 *adw.SplitButton
 	spinner                 *adw.Spinner
-	stripRow                *gtk.Box
+	stripRow, stripButtons  *gtk.Box
+	proposeInStrip          bool // propose is in stripButtons, not proposeRow
 	stripLabel              *gtk.Label
 	change                  *gtk.MenuButton
 	changeChecks            []*gtk.Image
@@ -144,6 +145,7 @@ func newInvitationCard(w *Window, parent *gtk.Window) *invitationCard {
 		decline:      b.GetObject("invitation_decline").Cast().(*adw.SplitButton),
 		spinner:      b.GetObject("invitation_spinner").Cast().(*adw.Spinner),
 		stripRow:     box("invitation_strip_row"),
+		stripButtons: box("invitation_strip_buttons"),
 		stripLabel:   label("invitation_strip"),
 		change:       b.GetObject("invitation_change").Cast().(*gtk.MenuButton),
 		show:         button("invitation_show"),
@@ -220,13 +222,29 @@ func (c *invitationCard) calendarSource() calendardata.DataSource {
 // cardOnFor is the account's "Show the Invitation Card" switch
 // (calendar.ShowsInvitationCard; an unknown account shows it).
 func (c *invitationCard) cardOnFor(acc api.AccountID) bool {
-	if c.win == nil {
+	return c.win.invitationCardOn(acc)
+}
+
+// invitationCardOn is the "Show the Invitation Card" switch of account acc
+// (calendar.ShowsInvitationCard; an unknown account, or no window, shows
+// it).
+func (w *Window) invitationCardOn(acc api.AccountID) bool {
+	if w == nil {
 		return true
 	}
-	if a, ok := c.win.model.account(acc); ok {
+	if a, ok := w.model.account(acc); ok {
 		return calendar.ShowsInvitationCard(&a)
 	}
 	return calendar.ShowsInvitationCard(nil)
+}
+
+// shownInvitation is the invitation card message m shows (message.get's,
+// with its account's switch; calendar.InvitationReading), nil none.
+func (w *Window) shownInvitation(m *api.Message) *api.InvitationCard {
+	if m == nil {
+		return nil
+	}
+	return calendar.InvitationReading(m, w.invitationCardOn(m.AccountID))
 }
 
 // showMessage shows the card of m (message.get; nil while it has not
@@ -475,10 +493,31 @@ func (c *invitationCard) render() {
 			l.RemoveCSSClass("dim-label")
 		}
 	})
-	c.proposeRow.SetVisible(full && k.ShowsProposeNewTime() && card.Start != nil && card.End != nil)
+	propose := full && k.ShowsProposeNewTime() && card.Start != nil && card.End != nil
+	c.placePropose(propose && strip)
+	c.proposeRow.SetVisible(propose && !strip)
 	c.propose.SetSensitive(!busy)
 
 	setText(c.errLabel, k.Error())
+}
+
+// placePropose moves Propose New Time… to the end of the state strip's
+// buttons (inStrip, a button like its neighbours) or back to its own row
+// (flat, under the answers, which fill theirs).
+func (c *invitationCard) placePropose(inStrip bool) {
+	if inStrip == c.proposeInStrip {
+		return
+	}
+	c.proposeInStrip = inStrip
+	if inStrip {
+		c.proposeRow.Remove(c.propose)
+		c.stripButtons.Append(c.propose)
+		c.propose.RemoveCSSClass("flat")
+	} else {
+		c.stripButtons.Remove(c.propose)
+		c.proposeRow.Append(c.propose)
+		c.propose.AddCSSClass("flat")
+	}
 }
 
 // fillLines fills box with one grey caption per line when lines differ

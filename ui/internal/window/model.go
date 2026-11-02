@@ -6,11 +6,13 @@ package window
 import (
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/bulkmail"
 	"github.com/schotek/malachi/ui/internal/calendar"
 	"github.com/schotek/malachi/ui/internal/capabilities"
+	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/crm"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
@@ -531,7 +533,7 @@ func summaryMessage(s api.MessageSummary) widget.Message {
 	m := widget.Message{
 		From:           s.From,
 		Subject:        s.Subject,
-		Snippet:        s.Snippet,
+		Snippet:        invitationPreview(s, s.Snippet),
 		Date:           s.Date,
 		Unread:         !hasFlag(s.Flags, api.FlagSeen),
 		Flagged:        hasFlag(s.Flags, api.FlagFlagged),
@@ -915,4 +917,26 @@ func roleIcon(r api.FolderRole) string {
 // selfAddress is the account's own address, for Reply All exclusion.
 func selfAddress(a api.Account) api.Address {
 	return api.Address{Name: a.Config.DisplayName, Address: a.Config.Email}
+}
+
+// invitationPreview is the preview line of a list row whose message (a
+// conversation row: its newest member) carries an invitation with a pill:
+// the event's time for an invitation, an update or a cancellation
+// (calendar.SummaryTimeLine), the answer for a reply
+// (conversation.InvitationReplyLine), instead of the body's first words,
+// which a meeting invitation fills with boilerplate; snippet otherwise, and
+// when the summary has no time. Swift: invitationPreview.
+func invitationPreview(s api.MessageSummary, snippet string) string {
+	inv := s.Invitation
+	switch calendar.PillKind(inv) {
+	case calendar.PillNone:
+		return snippet
+	case calendar.PillReply:
+		return conversation.InvitationReplyLine(inv.ReplyResponse, i18n.Tr)
+	}
+	env := calendar.Env{Tr: i18n.Tr, Format: widget.Strftime, Loc: time.Local}
+	if line := calendar.SummaryTimeLine(*inv, env); line != "" {
+		return line
+	}
+	return snippet
 }

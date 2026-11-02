@@ -572,8 +572,13 @@ portu ve `windows/parity-exclusions.txt`. Ověřeno: Go testy démona
 (`core`, `store`, `mime`, `api`, `calendar`), `ui/internal/conversation`,
 `make po` v kontejneru, `swift build` a celé `swift test`,
 `check-strings.py`; vlastník na obrazovce (vlákno, chat, okno zprávy).
-GTK zbývá: čip `.ics`, náhled řádku, karta v bublině, řádek stavu karty;
-Windows totéž (jen `needsBody` je napsané).
+GTK (2026-11-02, vlastník schválil v XQuartz): `chipAttachments(…, card)`
+a `Window.shownInvitation`, `invitationPreview` v `model.go` nad
+`calendar.SummaryTimeLine`, karta v bublině (`chatBubble.showInvitation`,
+`updateFill`), řádek stavu karty svislý s `invitation_strip_buttons`
+a `placePropose`; ověřeno `gtk.sh make build`, `test-ui`, smoke testy
+(pád WebKitu v `TestBodyFitGTKSmoke` je starší, i na čistém commitu),
+`make po`, `make lint`. Windows předán agentovi (jen `NeedsBody` napsané).
 
 Adresáře (2026-11-01, všechny tři klienty, sloučeno do `main`; plán,
 rozhodnutí A1–A16 a F1–F12, odpovědi vlastníka a wireframy W1–W7

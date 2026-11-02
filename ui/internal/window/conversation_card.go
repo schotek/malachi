@@ -823,7 +823,7 @@ func convBar() (*gtk.Box, *gtk.Label, *adw.Spinner) {
 // pane's renderAttachments); nothing until message.get answered.
 func (c *convCard) renderChips(lm *loadedMessage) {
 	if c.mv.attachments == nil {
-		if lm == nil || lm.msg == nil || len(chipAttachments(lm.msg.Attachments, lm.body)) == 0 {
+		if lm == nil || lm.msg == nil || len(chipAttachments(lm.msg.Attachments, lm.body, c.mv.win.shownInvitation(lm.msg))) == 0 {
 			return
 		}
 		box := adw.NewWrapBox()

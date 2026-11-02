@@ -7,6 +7,7 @@ import (
 	"math"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/calendar"
 	"github.com/schotek/malachi/ui/internal/conversation"
 )
 
@@ -267,9 +268,12 @@ type bubbleAttachments struct {
 // not show itself; none when there are no chips. Before that, the pill
 // alone when the summary has HasAttachments; else none. A failed
 // message.get leaves the summary's word.
-func bubbleAttachmentBadge(s api.MessageSummary, lm *loadedMessage) bubbleAttachments {
+//
+// cardOn is the account's "Show the Invitation Card" switch: the calendar
+// part of the card shown is no chip (chipAttachments).
+func bubbleAttachmentBadge(s api.MessageSummary, lm *loadedMessage, cardOn bool) bubbleAttachments {
 	if lm != nil && lm.msg != nil {
-		if n := len(chipAttachments(lm.msg.Attachments, lm.body)); n > 0 {
+		if n := len(chipAttachments(lm.msg.Attachments, lm.body, calendar.InvitationReading(lm.msg, cardOn))); n > 0 {
 			return bubbleAttachments{Shown: true, Count: n}
 		}
 		return bubbleAttachments{}

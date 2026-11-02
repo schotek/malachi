@@ -86,7 +86,11 @@ func (v *messageView) renderAttachments(s api.MessageSummary, lm *loadedMessage)
 		v.attachments.SetVisible(false)
 		return
 	}
-	atts := chipAttachments(lm.msg.Attachments, lm.body)
+	var card *api.InvitationCard
+	if !v.nested {
+		card = v.win.shownInvitation(lm.msg)
+	}
+	atts := chipAttachments(lm.msg.Attachments, lm.body, card)
 	if len(atts) == 0 {
 		v.attachments.SetVisible(false)
 		return
@@ -291,11 +295,16 @@ func showsHTML(b *api.MessageBodyResult) bool {
 // chipAttachments is what gets a chip: every attachment, minus the parts
 // the HTML on display shows inline (the cid: references the sanitiser kept,
 // b.InlineParts). A text-only message, withheld HTML or an unreferenced
-// Content-ID leaves the part listed like any other file.
-func chipAttachments(atts []api.Attachment, b *api.MessageBodyResult) []api.Attachment {
+// Content-ID leaves the part listed like any other file. The calendar part
+// of the invitation card shown (card, calendar.InvitationReading; nil
+// none) gets no chip either: the card is what it says.
+func chipAttachments(atts []api.Attachment, b *api.MessageBodyResult, card *api.InvitationCard) []api.Attachment {
 	html := showsHTML(b)
 	out := make([]api.Attachment, 0, len(atts))
 	for _, a := range atts {
+		if card != nil && card.PartID != "" && a.PartID == card.PartID {
+			continue
+		}
 		if html && a.ContentID != "" && a.PartID != "" && b.InlineParts[a.ContentID] == a.PartID {
 			continue
 		}

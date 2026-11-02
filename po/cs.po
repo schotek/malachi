@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-02 15:26+0000\n"
+"POT-Creation-Date: 2026-11-02 16:26+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -5747,15 +5747,15 @@ msgstr "Nová pozvánka"
 
 #. TRANSLATORS: the action of an invitation's notification that opens
 #. the message.
-#: ui/internal/calendar/notifications.go:114
+#: ui/internal/calendar/notifications.go:122
 msgid "Show"
 msgstr "Zobrazit"
 
-#: ui/internal/calendar/notifications.go:121
+#: ui/internal/calendar/notifications.go:129
 msgid "An event was cancelled"
 msgstr "Událost byla zrušena"
 
-#: ui/internal/calendar/notifications.go:123
+#: ui/internal/calendar/notifications.go:131
 #, c-format
 msgid "%s cancelled the event"
 msgstr "%s zrušil(a) událost"
@@ -7172,63 +7172,63 @@ msgstr "_Nová zpráva"
 msgid "Opening the draft"
 msgstr "Otevření konceptu"
 
-#: ui/internal/window/attachments.go:101
+#: ui/internal/window/attachments.go:105
 msgid "Files inside an attached message cannot be opened or saved yet."
 msgstr "Soubory uvnitř přiložené zprávy zatím nelze otevřít ani uložit."
 
-#: ui/internal/window/attachments.go:185 ui/data/ui/message_window.ui:62
+#: ui/internal/window/attachments.go:189 ui/data/ui/message_window.ui:62
 #: ui/data/ui/window.ui:510
 msgid "More Actions"
 msgstr "Další akce"
 
-#: ui/internal/window/attachments.go:228 ui/internal/window/attachments.go:507
+#: ui/internal/window/attachments.go:232 ui/internal/window/attachments.go:516
 msgid ""
 "Programs and scripts are not opened directly; save the file and decide "
 "yourself."
 msgstr ""
 "Programy a skripty se neotevírají přímo; soubor uložte a rozhodněte se sami."
 
-#: ui/internal/window/attachments.go:243
+#: ui/internal/window/attachments.go:247
 msgid "_View"
 msgstr "_Zobrazit"
 
-#: ui/internal/window/attachments.go:245
+#: ui/internal/window/attachments.go:249
 msgid "_Open"
 msgstr "_Otevřít"
 
-#: ui/internal/window/attachments.go:249
+#: ui/internal/window/attachments.go:253
 msgid "Save _As…"
 msgstr "Uložit _jako…"
 
-#: ui/internal/window/attachments.go:277
+#: ui/internal/window/attachments.go:281
 msgid "Save _All"
 msgstr "Uložit _vše"
 
-#: ui/internal/window/attachments.go:335 ui/internal/window/message_view.go:627
+#: ui/internal/window/attachments.go:344 ui/internal/window/message_view.go:627
 msgid "This message is too large to download."
 msgstr "Tato zpráva je příliš velká ke stažení."
 
-#: ui/internal/window/attachments.go:337 ui/internal/window/message_view.go:629
+#: ui/internal/window/attachments.go:346 ui/internal/window/message_view.go:629
 msgid "This message could not be read."
 msgstr "Tuto zprávu se nepodařilo přečíst."
 
 #. TRANSLATORS: %s is a size such as "16.0 MiB".
-#: ui/internal/window/attachments.go:341
+#: ui/internal/window/attachments.go:350
 #, c-format
 msgid "Attachments over %s cannot be opened or saved yet."
 msgstr "Přílohy větší než %s zatím nelze otevřít ani uložit."
 
 #. TRANSLATORS: tooltip of the server icon on an attachment; "it" is the attachment.
-#: ui/internal/window/attachments.go:346
+#: ui/internal/window/attachments.go:355
 msgid "On the server only; it is downloaded when you open it"
 msgstr "Jen na serveru; stáhne se, až ji otevřete"
 
-#: ui/internal/window/attachments.go:426
+#: ui/internal/window/attachments.go:435
 msgid "Attachment"
 msgstr "Příloha"
 
 #. TRANSLATORS: %d is the number of files written.
-#: ui/internal/window/attachments.go:483
+#: ui/internal/window/attachments.go:492
 #, c-format
 msgid "Saved %d attachment"
 msgid_plural "Saved %d attachments"
@@ -7237,33 +7237,33 @@ msgstr[1] "Uloženy %d přílohy"
 msgstr[2] "Uloženo %d příloh"
 
 #. TRANSLATORS: the first %d is how many failed, the second how many there were.
-#: ui/internal/window/attachments.go:486
+#: ui/internal/window/attachments.go:495
 #, c-format
 msgid "%d of %d attachments could not be saved"
 msgstr "%d z %d příloh se nepodařilo uložit"
 
-#: ui/internal/window/attachments.go:527 ui/internal/window/attachments.go:554
-#: ui/internal/window/attachments.go:567
+#: ui/internal/window/attachments.go:536 ui/internal/window/attachments.go:563
+#: ui/internal/window/attachments.go:576
 msgid "The attachment could not be opened"
 msgstr "Přílohu se nepodařilo otevřít"
 
-#: ui/internal/window/attachments.go:546
+#: ui/internal/window/attachments.go:555
 msgid "Opening the attachment"
 msgstr "Otevírání přílohy"
 
-#: ui/internal/window/attachments.go:579
+#: ui/internal/window/attachments.go:588
 msgid "Save Attachment"
 msgstr "Uložit přílohu"
 
-#: ui/internal/window/attachments.go:595
+#: ui/internal/window/attachments.go:604
 msgid "Saving the attachment"
 msgstr "Ukládání přílohy"
 
-#: ui/internal/window/attachments.go:611
+#: ui/internal/window/attachments.go:620
 msgid "Save Attachments"
 msgstr "Uložit přílohy"
 
-#: ui/internal/window/attachments.go:631
+#: ui/internal/window/attachments.go:640
 msgid "Saving the attachments"
 msgstr "Ukládání příloh"
 

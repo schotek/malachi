@@ -770,7 +770,7 @@ func summaryThread(t api.ThreadSummary, expanded, loading bool) widget.Thread {
 		Tag:            bulkmail.Tag(t.Latest.Bulk, i18n.Tr),
 		Participants:   t.Participants,
 		Subject:        t.Subject,
-		Snippet:        t.Snippet,
+		Snippet:        invitationPreview(t.Latest, t.Snippet),
 		Date:           t.LatestDate,
 		Count:          t.MessageCount,
 		Unread:         t.UnreadCount,
