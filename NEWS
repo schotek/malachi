@@ -1,3 +1,15 @@
+Version 0.2.1
+~~~~~~~~~~~~~
+Released: 2026-11-02
+
+Features:
+ * Malachi Mail checks once a day whether a newer version is available
+   and shows a bar with what is new, a download link, Remind Me Later
+   and Skip This Version; a security release asks once. The check sends
+   the program's version and package to its website, nothing else, and
+   can be turned off in Preferences → General → Updates, where Check Now
+   asks at once.
+
 Version 0.2.0
 ~~~~~~~~~~~~~
 Released: 2026-11-01
