@@ -537,8 +537,11 @@ bezpečnostní vydání jednou modálně (Stáhnout + předvybrané ukončení),
 Předvolby → Obecné → Aktualizace se Zkontrolovat nyní, řádek v O aplikaci,
 věta na stránce bez účtů. Ověřeno: Go testy démona a reference, GTK
 `gtk.sh make build` + cílené a smoke testy, macOS `swift build` + filtrované
-`swift test`, `make po`. Čeká: Windows nepřeložené (`docs/windows-port.md`
-§11.16), nic nikdo neviděl na obrazovce, žádný běh proti skutečnému API.
+`swift test`, `make po`; vlastník prošel macOS nad skutečnými daty (pruh,
+Co je nového, Později → Zkontrolovat nyní, bezpečnostní dialog
+s ukončením, Přeskočit, věta bez účtů) a GTK nad kopií dat na Fedoře 44
+(Linux agent), obojí proti skutečnému API. Čeká: Windows nepřeložené
+(`docs/windows-port.md` §11.16).
 
 Adresáře (2026-11-01, všechny tři klienty, sloučeno do `main`; plán,
 rozhodnutí A1–A16 a F1–F12, odpovědi vlastníka a wireframy W1–W7

@@ -1,6 +1,6 @@
 # Upozornění na novou verzi — návrh
 
-Stav: fáze 1 napsaná (2026-11-02, necommitnutá): démon, receptury
+Stav: fáze 1 na větvi `feat/update-check` (2026-11-02): démon, receptury
 balíčků, Go reference a porty všech tří klientů (stav ověření v §10).
 Kontrakt služby je [`../services.md`](../services.md) §2; server,
 administrace a podepisování jsou v soukromém repozitáři
@@ -167,3 +167,19 @@ vedle mřížky tlačítek).
 4. macOS port.
 5. Windows port (předávka Windows agentovi).
 6. První podepsaný manifest z administrace, ruční ověření nad vydáním 0.1.3.
+
+## 10. Stav ověření (2026-11-02)
+
+- Démon: Go testy nad 69 fixturami správce a živým manifestem 0.2.0,
+  `core` i s `-race`; běh proti skutečnému API a záloze na GitHubu přes
+  `make run-macos` s `VERSION=0.1.2` a `MALACHI_UPDATE_CHANNEL=macos-dmg`.
+- macOS: vlastník nad skutečnými daty prošel pruh, *Co je nového*
+  (Markdown, otevřené nahoře), *Připomenout později* → *Zkontrolovat
+  nyní*, *Další informace*, bezpečnostní dialog s ukončením po stažení,
+  *Přeskočit tuto verzi* a větu na stránce bez účtů; vše funkční.
+- GTK: vlastník nad kopií dat na Fedoře 44 aarch64 (Linux agent sestavil
+  `VERSION=0.1.2 UPDATE_CHANNEL=linux-rpm-arm64`); po přesunu pruhu přes
+  celé okno „vše ostatní v pořádku“.
+- Windows: napsané bez `dotnet`, nepřeložené; staví a prochází Windows
+  agent (`docs/windows-port.md` §11.16).
+
