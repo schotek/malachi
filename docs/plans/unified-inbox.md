@@ -255,8 +255,10 @@ Opraveno:
   bez opravy 234/210; Windows průhledný `Border` 18×18 ve sloupci hvězdičky jen pro
   `SidebarRowKind.Unified`, `FolderRowView.StarSlot`).
 
+Vlastník 2026-11-02 ověřil GTK (`make run-gtk`) a macOS (debug binárka nad dvěma
+účty z `malachi-devmail`) na obrazovce.
+
 Zbývá:
 - Windows: oprava odznaku napsaná bez `dotnet` (`FolderRowView.xaml(.cs)`), k
   sestavení a pohledu spolu se zbytkem Windows ověření výše.
-- Ruční průchod nad kopií dat (bod výše) ve všech třech: tady nešel, shell nemá
-  oprávnění k ovládání ani snímání obrazovky, viděný je jen první snímek okna.
+- Ruční průchod na Windows (bod výše).
