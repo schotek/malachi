@@ -4,6 +4,7 @@
 import AppKit
 import MalachiCore
 import os
+import Quartz
 
 /// One compose window (compose.blp, ui/internal/compose/compose.go): the
 /// toolbar with Attach, the draft menu and Send; the card of header fields;
@@ -133,6 +134,22 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, Toast
     /// editor.GrabFocus: the keyboard back to the page.
     func focusEditor() {
         pane.focusEditor()
+    }
+
+    // An attachment tile's preview (DraftAttachmentPreview): the panel asks
+    // the key window's responder chain for a controller, and a tile is
+    // seldom first responder, so this controller answers for it, as the
+    // main and the message windows do.
+    nonisolated override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool {
+        MainActor.assumeIsolated { AttachmentPreview.shared.accepts }
+    }
+
+    nonisolated override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated { AttachmentPreview.shared.begin(panel) }
+    }
+
+    nonisolated override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated { AttachmentPreview.shared.end(panel) }
     }
 
     // MARK: Assistant

@@ -337,7 +337,7 @@ func partState(a api.Attachment, b *api.MessageBodyResult) (partAvailability, st
 		return partUnavailable, i18n.T("This message could not be read.")
 	}
 	if a.Size > api.MaxAttachmentDataBytes {
-		// TRANSLATORS: %s is a size such as "16.0 MiB".
+		// TRANSLATORS: %s is a size such as "16.8 MB".
 		return partUnavailable, fmt.Sprintf(i18n.T("Attachments over %s cannot be opened or saved yet."), widget.FormatSize(api.MaxAttachmentDataBytes))
 	}
 	switch {

@@ -500,11 +500,11 @@ func storageTexts(r api.SystemStorageResult) (value, details string) {
 		lines = append(lines, i18n.T("Converting stopped: the disk is full"))
 	}
 	if r.SavedBytes > 0 {
-		// TRANSLATORS: %s is a size such as "1.2 GiB".
+		// TRANSLATORS: %s is a size such as "1.2 GB".
 		lines = append(lines, fmt.Sprintf(i18n.T("Compression saves %s"), widget.FormatSize(r.SavedBytes)))
 	}
 	if r.RemoteAttachmentBytes > 0 {
-		// TRANSLATORS: %s is a size such as "1.2 GiB".
+		// TRANSLATORS: %s is a size such as "1.2 GB".
 		lines = append(lines, fmt.Sprintf(i18n.T("%s of attachments are on the server only"), widget.FormatSize(r.RemoteAttachmentBytes)))
 	}
 	return widget.FormatSize(r.TotalBytes), strings.Join(lines, "\n")

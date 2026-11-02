@@ -98,22 +98,37 @@ public func formatDateTime(_ t: Date, locale: Locale = .current, calendar: Calen
 }
 
 /// Renders a byte count for attachment chips and the disk space of the
-/// settings: GiB, MiB, KiB or B (format.go `FormatSize`).
+/// settings in decimal units, like Finder and Outlook: B, kB, MB or GB, one
+/// decimal below 100, with the translated decimal separator
+/// (format.go `FormatSize`).
 public func formatSize(_ n: Int) -> String {
-    if n >= 1 << 30 {
-        // TRANSLATORS: file size in gibibytes.
-        return L10n.T("%.1f GiB", Double(n) / Double(1 << 30))
+    if n < 1000 {
+        // TRANSLATORS: file size in bytes.
+        return L10n.T("%d B", n)
     }
-    if n >= 1 << 20 {
-        // TRANSLATORS: file size in mebibytes.
-        return L10n.T("%.1f MiB", Double(n) / Double(1 << 20))
+    let v = Double(n)
+    if n >= 999_500_000 {
+        // TRANSLATORS: file size in gigabytes; %s is the number with its
+        // decimal separator, e.g. "1.5".
+        return L10n.T("%s GB", sizeNumber(v / 1e9))
     }
-    if n >= 1 << 10 {
-        // TRANSLATORS: file size in kibibytes.
-        return L10n.T("%.0f KiB", Double(n) / Double(1 << 10))
+    if n >= 999_500 {
+        // TRANSLATORS: file size in megabytes; %s is the number with its
+        // decimal separator, e.g. "7.2".
+        return L10n.T("%s MB", sizeNumber(v / 1e6))
     }
-    // TRANSLATORS: file size in bytes.
-    return L10n.T("%d B", n)
+    // TRANSLATORS: file size in kilobytes; %s is the number with its
+    // decimal separator, e.g. "41.1".
+    return L10n.T("%s kB", sizeNumber(v / 1e3))
+}
+
+/// `v` with one decimal below 100 and none from there, with the translated
+/// decimal separator (format.go `sizeNumber`).
+private func sizeNumber(_ v: Double) -> String {
+    let s = String(format: v >= 99.95 ? "%.0f" : "%.1f", v)
+    // TRANSLATORS: the decimal separator of numbers such as file sizes
+    // ("41.1 kB"); "," in Czech.
+    return s.replacingOccurrences(of: ".", with: L10n.C("decimal separator", "."))
 }
 
 /// Formats through `DateFormatter` so month and day names follow the
@@ -123,4 +138,14 @@ private func strftime(_ t: Date, _ format: String, locale: Locale, calendar: Cal
     f.calendar = calendar
     f.timeZone = calendar.timeZone
     return f.string(from: t)
+}
+
+/// The line over the attachment tiles of a message: how many there are and
+/// their total size, "2 attachments · 255 kB" (format.go
+/// `AttachmentSummary`).
+public func attachmentSummary(count: Int, total: Int) -> String {
+    let files = L10n.N("%d attachment", "%d attachments", count)
+    // TRANSLATORS: the line over the attachments of a message: the number
+    // of attachments and their total size, e.g. "2 attachments · 255 kB".
+    return L10n.format(L10n.C("attachment summary", "%s · %s"), [files, formatSize(total)])
 }

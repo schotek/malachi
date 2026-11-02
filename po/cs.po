@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-02 13:49+0100\n"
+"POT-Creation-Date: 2026-11-02 15:46+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -4482,7 +4482,7 @@ msgid "The calendar cannot be changed while offline."
 msgstr "Kalendář nelze měnit v režimu offline."
 
 #. TRANSLATORS: strftime format for a time of day, e.g. "15:04".
-#: ui/internal/calendar/text.go:248 ui/internal/widget/format.go:104
+#: ui/internal/calendar/text.go:248 ui/internal/widget/format.go:105
 #, no-c-format
 msgid "%H:%M"
 msgstr "%H:%M"
@@ -6667,55 +6667,81 @@ msgid "The server did not accept the marked detail. Correct it and try again."
 msgstr "Server označený údaj nepřijal. Opravte ho a zkuste to znovu."
 
 #. TRANSLATORS: put between the names of a conversation's participants ("Alice, Bob").
-#: ui/internal/widget/format.go:62
+#: ui/internal/widget/format.go:63
 msgctxt "participant list separator"
 msgid ", "
 msgstr ", "
 
 #. TRANSLATORS: strftime format for a date in the current year in
 #. the message list, e.g. "2 Sep".
-#: ui/internal/widget/format.go:91
+#: ui/internal/widget/format.go:92
 #, no-c-format
 msgid "%-d %b"
 msgstr "%-d. %-m."
 
 #. TRANSLATORS: strftime format for a date in another year in the
 #. message list, e.g. "2025-09-02".
-#: ui/internal/widget/format.go:96
+#: ui/internal/widget/format.go:97
 #, no-c-format
 msgid "%Y-%m-%d"
 msgstr "%-d. %-m. %Y"
 
 #. TRANSLATORS: strftime format for a full date and time, e.g.
 #. "Wed, 2 Sep 2026 at 15:04".
-#: ui/internal/widget/format.go:113
+#: ui/internal/widget/format.go:114
 #, no-c-format
 msgid "%a, %-d %b %Y at %H:%M"
 msgstr "%a %-d. %-m. %Y v %H:%M"
 
-#. TRANSLATORS: file size in gibibytes.
-#: ui/internal/widget/format.go:122
-#, c-format
-msgid "%.1f GiB"
-msgstr "%.1f GiB"
-
-#. TRANSLATORS: file size in mebibytes.
-#: ui/internal/widget/format.go:125
-#, c-format
-msgid "%.1f MiB"
-msgstr "%.1f MiB"
-
-#. TRANSLATORS: file size in kibibytes.
-#: ui/internal/widget/format.go:128
-#, c-format
-msgid "%.0f KiB"
-msgstr "%.0f KiB"
-
 #. TRANSLATORS: file size in bytes.
-#: ui/internal/widget/format.go:131
+#: ui/internal/widget/format.go:124
 #, c-format
 msgid "%d B"
 msgstr "%d B"
+
+#. TRANSLATORS: file size in gigabytes; %s is the number with its
+#. decimal separator, e.g. "1.5".
+#: ui/internal/widget/format.go:131
+#, c-format
+msgid "%s GB"
+msgstr "%s GB"
+
+#. TRANSLATORS: file size in megabytes; %s is the number with its
+#. decimal separator, e.g. "7.2".
+#: ui/internal/widget/format.go:135
+#, c-format
+msgid "%s MB"
+msgstr "%s MB"
+
+#. TRANSLATORS: file size in kilobytes; %s is the number with its
+#. decimal separator, e.g. "41.1".
+#: ui/internal/widget/format.go:139
+#, c-format
+msgid "%s kB"
+msgstr "%s kB"
+
+#. TRANSLATORS: the decimal separator of numbers such as file sizes
+#. ("41.1 kB"); "," in Czech.
+#: ui/internal/widget/format.go:153
+msgctxt "decimal separator"
+msgid "."
+msgstr ","
+
+#: ui/internal/widget/format.go:182
+#, c-format
+msgid "%d attachment"
+msgid_plural "%d attachments"
+msgstr[0] "%d příloha"
+msgstr[1] "%d přílohy"
+msgstr[2] "%d příloh"
+
+#. TRANSLATORS: the line over the attachments of a message: the number
+#. of attachments and their total size, e.g. "2 attachments · 255 kB".
+#: ui/internal/widget/format.go:185
+#, c-format
+msgctxt "attachment summary"
+msgid "%s · %s"
+msgstr "%s · %s"
 
 #: ui/internal/widget/rpc.go:35
 #, c-format
@@ -7188,7 +7214,7 @@ msgstr "Tato zpráva je příliš velká ke stažení."
 msgid "This message could not be read."
 msgstr "Tuto zprávu se nepodařilo přečíst."
 
-#. TRANSLATORS: %s is a size such as "16.0 MiB".
+#. TRANSLATORS: %s is a size such as "16.8 MB".
 #: ui/internal/window/attachments.go:341
 #, c-format
 msgid "Attachments over %s cannot be opened or saved yet."
@@ -7565,13 +7591,13 @@ msgstr "Uložená pošta se převádí na pozadí"
 msgid "Converting stopped: the disk is full"
 msgstr "Převod se zastavil: disk je plný"
 
-#. TRANSLATORS: %s is a size such as "1.2 GiB".
+#. TRANSLATORS: %s is a size such as "1.2 GB".
 #: ui/internal/window/preferences.go:504
 #, c-format
 msgid "Compression saves %s"
 msgstr "Komprese šetří %s"
 
-#. TRANSLATORS: %s is a size such as "1.2 GiB".
+#. TRANSLATORS: %s is a size such as "1.2 GB".
 #: ui/internal/window/preferences.go:508
 #, c-format
 msgid "%s of attachments are on the server only"
@@ -9231,6 +9257,18 @@ msgstr ""
 #: data/io.github.schotek.Malachi.metainfo.xml.in:40
 msgid "Malachi Mail contributors"
 msgstr "Přispěvatelé Malachi Mail"
+
+#, c-format
+#~ msgid "%.1f GiB"
+#~ msgstr "%.1f GiB"
+
+#, c-format
+#~ msgid "%.1f MiB"
+#~ msgstr "%.1f MiB"
+
+#, c-format
+#~ msgid "%.0f KiB"
+#~ msgstr "%.0f KiB"
 
 #~ msgid ""
 #~ "The address of your eWay-CRM, such as https://hosting.eway-crm.com/company"
