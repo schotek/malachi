@@ -355,7 +355,8 @@ public final class ConversationController {
     /// unless held already (message.body; message.get as well when
     /// `details`, or when the message has attachments, whose chips need
     /// it, or when it is a newsletter or list message, whose strip needs its
-    /// unsubscribe offer, unless it failed for this member before). An event
+    /// unsubscribe offer, or when it carries an invitation, whose card is
+    /// message.get's, unless it failed for this member before). An event
     /// has no body.
     /// The entry is held in `loaded` and announced through `onLoaded`
     /// whenever a half of it arrives. The body is the variant the user
@@ -363,7 +364,7 @@ public final class ConversationController {
     /// (`setQuoted`).
     public func needsBody(_ id: MessageID, details: Bool = false) {
         guard let s = member(id), !readsWithoutBody(s) else { return }
-        let full = (details || s.hasAttachments || Bulk.wantsOffer(s)) && !noGet.contains(id)
+        let full = (details || s.hasAttachments || Bulk.wantsOffer(s) || s.invitation != nil) && !noGet.contains(id)
         let reveal = quoted.isRevealed(id)
         if let lm = loaded[id], lm.quotedShown == reveal, lm.bodySettled, !full || lm.msg != nil {
             return

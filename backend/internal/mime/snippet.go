@@ -9,9 +9,11 @@ import (
 )
 
 // Snippet condenses a plain-text body into a single line of at most
-// maxRunes runes for the message list: quoted lines (starting with '>') are
-// skipped, whitespace runs collapse to one space and control characters are
-// dropped. A non-positive maxRunes yields "".
+// maxRunes runes for the message list: quoted lines (starting with '>') and
+// rules (lines of separator characters only, as "____" or "-----" above a
+// meeting invitation's text) are skipped, whitespace runs collapse to one
+// space and control characters are dropped. A non-positive maxRunes yields
+// "".
 func Snippet(text string, maxRunes int) string {
 	if maxRunes <= 0 {
 		return ""
@@ -21,7 +23,7 @@ func Snippet(text string, maxRunes int) string {
 	pendingSpace := false
 	for line := range strings.SplitSeq(text, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" || line[0] == '>' {
+		if line == "" || line[0] == '>' || isRule(line) {
 			continue
 		}
 		for _, r := range line {
@@ -49,4 +51,19 @@ func Snippet(text string, maxRunes int) string {
 		pendingSpace = n > 0
 	}
 	return b.String()
+}
+
+// isRule reports whether line is made of separator characters only (with
+// spaces between them): underscores, hyphens, dashes, equals signs,
+// asterisks, tildes and box-drawing lines.
+func isRule(line string) bool {
+	for _, r := range line {
+		switch {
+		case isTextSpace(r):
+		case strings.ContainsRune("_-=*~#.", r), r >= '\u2010' && r <= '\u2015', r >= '\u2500' && r <= '\u257F':
+		default:
+			return false
+		}
+	}
+	return true
 }

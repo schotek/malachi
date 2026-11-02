@@ -1004,6 +1004,10 @@ type InvitationSummary struct {
 	AllDay    bool             `json:"allDay,omitempty"`
 	Organizer *Address         `json:"organizer,omitempty"`
 	ReplyFrom *Address         `json:"replyFrom,omitempty"` // reply: the attendee who answered
+	// ReplyResponse is a reply's answer (the attendee's PARTSTAT), so that
+	// a listing (MessageSummary.Invitation) tells it; a card's Response
+	// says the same.
+	ReplyResponse EventResponse `json:"replyResponse,omitempty"`
 	// OwnEvent: the organiser is one of the user's addresses (the user's
 	// own invitation, its Sent copy): a request with it is processed.
 	OwnEvent bool `json:"ownEvent,omitempty"`

@@ -32,8 +32,10 @@ package calendar
 // read (cal_invitations.parser_version, meta calendar.invites.scan). Bump
 // it when FromICS or imip.ParseMessage reads something differently, so
 // that stored invitations are read again. 2: the card of a reply keeps
-// the attendee's answer (InvitationCard.response); 3: ownEvent.
-const ParserVersion = 3
+// the attendee's answer (InvitationCard.response); 3: ownEvent; 4: the
+// message's paperclip (messages.has_attachments) leaves out the calendar
+// part the card shows.
+const ParserVersion = 4
 
 // ExpandVersion is the version of Occurrences; together with
 // recur.Version it makes the meta key calendar.expand, whose change

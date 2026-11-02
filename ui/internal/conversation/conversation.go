@@ -66,8 +66,11 @@ const (
 	// ItemMessage is a message card: a mail message, or the description or
 	// a comment of an issue. Its body is shown in full.
 	ItemMessage ItemKind = iota
-	// ItemEvent is a compact row of an issue's status or assignee changes:
-	// native text only (never a web view), never unread, never marked read.
+	// ItemEvent is a compact row of an issue's status or assignee changes,
+	// or of an answer to an invitation (IsInvitationReply): native text
+	// only (never a web view). An issue's event is never unread and never
+	// marked read; an answer to an invitation keeps its mark and is marked
+	// read like a card.
 	ItemEvent
 	// ItemTruncated is the row on top that says how many older members
 	// are left out (thread.get returns the newest api.MaxThreadMessages).
@@ -84,8 +87,8 @@ type Item struct {
 	// name (else the address) of the first sender that has one, cleaned
 	// for one line (jira.Clean); "" when there is none.
 	Sender string
-	// Unread marks an unread message card; an event and a sent card are
-	// never unread, whatever their flags.
+	// Unread marks an unread message card or answer to an invitation; an
+	// issue's event and a sent card are never unread, whatever their flags.
 	Unread bool
 	// Sent marks a card of the user's reply in a sent folder that the
 	// folder lacks (thread.get's sent): not a member of the folder, so
@@ -340,7 +343,7 @@ func Remove(m Model, id api.MessageID) Model {
 // goes out from a mail account. An event offers none; the other actions
 // (move, trash, archive, junk) are never set here.
 func CardActions(account api.Account, m api.MessageSummary, composeAccount bool) capabilities.Actions {
-	if jira.IsEvent(m.Issue) {
+	if jira.IsEvent(m.Issue) || IsInvitationReply(m) {
 		return capabilities.Actions{}
 	}
 	a := capabilities.Available(capabilities.Situation{
@@ -395,6 +398,9 @@ func memberItem(s api.MessageSummary, account api.Account, tr Translator) (Item,
 		it.EventText = jira.EventText(s.Issue.Changes, tr)
 		return it, true
 	}
+	if IsInvitationReply(s) {
+		return invitationReplyItem(it, tr), true
+	}
 	it.Unread = !hasFlag(s.Flags, api.FlagSeen)
 	if s.Issue != nil {
 		c := jira.IssueCard(s.Issue.IssueInfo, s.Issue, tr)
@@ -440,12 +446,14 @@ func withSent(items []Item, sent, members []api.MessageSummary, cut bool, accoun
 	return append(out, items[i:]...)
 }
 
-// markRead is the newest message card that is neither queued in the
-// outbox nor a sent card when it is unread, else "".
+// markRead is the newest message card (or answer to an invitation) that
+// is neither queued in the outbox nor a sent card when it is unread, else
+// "".
 func markRead(items []Item) api.MessageID {
 	for i := len(items) - 1; i >= 0; i-- {
 		it := items[i]
-		if it.Kind != ItemMessage || it.Message.Outbox != nil || it.Sent {
+		reply := it.Kind == ItemEvent && IsInvitationReply(it.Message)
+		if (it.Kind != ItemMessage && !reply) || it.Message.Outbox != nil || it.Sent {
 			continue
 		}
 		if it.Unread {

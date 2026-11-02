@@ -469,7 +469,7 @@ public sealed partial class ConversationController : IDisposable
         {
             return;
         }
-        var full = (details || s.HasAttachments || BulkReading.WantsOffer(s)) && !noGet.Contains(id);
+        var full = (details || s.HasAttachments || BulkReading.WantsOffer(s) || s.Invitation is not null) && !noGet.Contains(id);
         var reveal = quoted.IsRevealed(id);
         if (loaded.TryGetValue(id, out var held) && held.QuotedShown == reveal && held.BodySettled && (!full || held.Msg is not null))
         {

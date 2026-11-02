@@ -174,7 +174,8 @@ public struct RowThread: Sendable, Equatable {
 /// `summaryThread`).
 public func summaryThread(_ t: ThreadSummary, expanded: Bool, loading: Bool) -> RowThread {
     RowThread(
-        participants: t.participants, subject: t.subject, snippet: t.snippet, date: t.latestDate,
+        participants: t.participants, subject: t.subject, snippet: invitationPreview(t.latest, snippet: t.snippet),
+        date: t.latestDate,
         count: t.messageCount, unread: t.unreadCount, flagged: hasFlag(t.flags, .flagged),
         hasAttachments: t.hasAttachments, expanded: expanded, loading: loading, issue: Jira.threadRowIssue(t),
         tag: Bulk.tag(t.latest.bulk), draft: threadDraftBadge(t)

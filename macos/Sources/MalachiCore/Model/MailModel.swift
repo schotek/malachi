@@ -52,7 +52,7 @@ public struct RowMessage: Sendable, Equatable {
 public func summaryMessage(_ s: MessageSummary) -> RowMessage {
     let issue = Jira.rowIssue(s)
     return RowMessage(
-        from: s.from, subject: s.subject, snippet: s.snippet, date: s.date,
+        from: s.from, subject: s.subject, snippet: invitationPreview(s, snippet: s.snippet), date: s.date,
         unread: issue?.unread ?? !hasFlag(s.flags, .seen), flagged: hasFlag(s.flags, .flagged),
         hasAttachments: s.hasAttachments, issue: issue, tag: Bulk.tag(s.bulk)
     )

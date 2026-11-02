@@ -405,6 +405,26 @@ func TestInvitationCard(t *testing.T) {
 	}
 }
 
+// The card shows the calendar part: the paperclip counts only the other
+// attachments, whether the part is an alternative or an attachment.
+func TestInvitationLeavesThePaperclip(t *testing.T) {
+	x := newInvBox(t)
+	for _, name := range []string{"invite-outlook.eml", "invite-calendar-as-attachment.eml", "invite-google.eml"} {
+		m := x.receive(x.inbox, readMIME(t, name))
+		if len(calendarParts(m.Attachments)) == 0 {
+			t.Fatalf("%s: no calendar part", name)
+		}
+		want := hasOtherAttachment(m.Attachments, x.card(m).PartID)
+		if m.HasAttachments != want {
+			t.Errorf("%s: hasAttachments %v, want %v (%+v)", name, m.HasAttachments, want, m.Attachments)
+		}
+	}
+	atts := []api.Attachment{{PartID: "2", Filename: "invite.ics"}, {PartID: "3", Inline: true, ContentID: "logo"}}
+	if hasOtherAttachment(atts, "2") || !hasOtherAttachment(append(atts, api.Attachment{PartID: "4", Filename: "agenda.pdf"}), "2") {
+		t.Error("hasOtherAttachment")
+	}
+}
+
 // A part over api.MaxICSBytes is an invalid row: the pill says invalid,
 // the card has nothing to answer.
 func TestInvitationOversizedPartIsInvalid(t *testing.T) {
@@ -807,6 +827,10 @@ func TestInvitationReplyCardResponse(t *testing.T) {
 		c := x.card(m)
 		if c == nil || c.Response != ps.want || c.RespondedAt != nil || c.ReplyFrom == nil || c.ReplyFrom.Address != "bo@example.org" || !c.ReplyApplied {
 			t.Errorf("%s: card %+v", ps.partstat, c)
+		}
+		// The listing's summary carries the answer (the conversation's row).
+		if s := x.message(m.ID).Invitation; s == nil || s.ReplyResponse != ps.want {
+			t.Errorf("%s: summary %+v", ps.partstat, s)
 		}
 	}
 	x := newInvBox(t)

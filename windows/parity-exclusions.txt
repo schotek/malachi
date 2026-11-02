@@ -102,3 +102,7 @@ The view the Calendar was shown in last	gschema: a key's summary or description,
 Day, Week, Month or Agenda, written whenever the user changes the Calendar's view; applied when the Calendar shows.	gschema: a key's summary or description, for dconf editors, not the UI
 Which address books complete recipients	gschema: a key's summary or description, for dconf editors, not the UI
 The address books of the account the message is written from (with the recently used addresses), or every address book; the scope of contact.search.	gschema: a key's summary or description, for dconf editors, not the UI
+Invitation accepted	invitation replies as conversation rows: Windows port pending (after the macOS gate)
+Invitation tentatively accepted	invitation replies as conversation rows: Windows port pending (after the macOS gate)
+Invitation declined	invitation replies as conversation rows: Windows port pending (after the macOS gate)
+Replied to the invitation	invitation replies as conversation rows: Windows port pending (after the macOS gate)

@@ -53,6 +53,9 @@ func exercise(tr Translator) {
 	Build(jiraThread(4), members, nil, jiraAccount, tr)
 	FoldAllCollapse.Label(tr)
 	FoldAllExpand.Label(tr)
+	for _, r := range []api.EventResponse{api.ResponseAccepted, api.ResponseTentative, api.ResponseDeclined, ""} {
+		InvitationReplyLine(r, tr)
+	}
 	QuotedTextLabel(false, tr)
 	QuotedTextLabel(true, tr)
 	Drafts([]api.Draft{{ID: "d1", Comment: &api.DraftComment{Visibility: api.CommentInternal}}}, jiraAccount, tr)

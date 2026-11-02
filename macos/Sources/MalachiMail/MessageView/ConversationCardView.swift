@@ -757,7 +757,7 @@ final class ConversationCardView: NSView {
         guard !folded else { return }
         let focus = ChipFocus(chipViews, in: window)
         defer { focus.restore(to: chipViews, else: bodyView) }
-        let plan = ChipPlan(lm?.msg, lm?.body)
+        let plan = ChipPlan(lm?.msg, lm?.body, cardOn: showsInvitationCard(host?.delegate?.account(summary.accountId)))
         if plan.isEmpty {
             chips?.removeAllViews()
             chipViews = []

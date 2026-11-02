@@ -103,6 +103,16 @@ final class ConversationBubbleView: NSView {
     private var widthLimit: NSLayoutConstraint!
     /// The bubble takes its whole width (`widthLimit`'s): its body is HTML.
     private var fullWidth: NSLayoutConstraint!
+    /// The column of the header, the invitation card, the body and the hint.
+    private var columnStack: NSStackView!
+    /// The invitation card of a message with a calendar part
+    /// (`showInvitation`), made on first use; nil for every other bubble.
+    private var invitation: InvitationCardPresenter?
+    /// The bubble shows an invitation card: it takes the column's width.
+    private(set) var showsInvitation = false
+    /// Join Video Call of the invitation card: the URL through the host's
+    /// link confirmation.
+    var onOpenInvitationLink: (@MainActor (String) -> Void)?
 
     /// The chat, for the web view of an HTML body.
     weak var webHost: (any ConversationBubbleWebHost)?
@@ -267,6 +277,7 @@ final class ConversationBubbleView: NSView {
         hintLabel.isHidden = true
 
         let column = NSStackView(views: [header, bodyLabel, htmlSlot, hintLabel])
+        columnStack = column
         column.orientation = .vertical
         column.alignment = .leading
         column.spacing = 6
@@ -538,7 +549,7 @@ final class ConversationBubbleView: NSView {
             htmlBody = b
             htmlText = text
             htmlReload = htmlReload || picturesArrived(before, b)
-            fullWidth.isActive = true
+            updateWidth()
             if live {
                 loadWebView()
             } else {
@@ -574,7 +585,7 @@ final class ConversationBubbleView: NSView {
         htmlBody = nil
         htmlText = ""
         htmlReload = false
-        fullWidth.isActive = false
+        updateWidth()
         frozenHeight.isActive = false
         webHeightReported = false
         webHeight = CGFloat(ConversationLayout.initialWebHeight)
@@ -691,6 +702,51 @@ final class ConversationBubbleView: NSView {
         } else {
             change()
         }
+    }
+
+    // MARK: Invitation
+
+    /// The invitation card of member `s` from message.get (`m`), as the
+    /// timeline's card shows it (`InvitationCardPresenter`): between the
+    /// header and the text, when the account shows invitation cards
+    /// (`cardOn`); an entry let go (`m` nil) keeps the card as it was.
+    func showInvitation(_ s: MessageSummary, _ m: Message?, cardOn: Bool, state: AppState) {
+        if invitation == nil {
+            guard invitationReading(m, cardOn: cardOn) != nil else { return }
+            let p = InvitationCardPresenter(margins: NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0))
+            p.openLink = { [weak self] url in self?.onOpenInvitationLink?(url) }
+            p.onChange = { [weak self] render in
+                guard let self else { return render() }
+                if let host = self.webHost {
+                    host.bubbleHeightChanging {
+                        render()
+                        self.updateWidth()
+                    }
+                } else {
+                    render()
+                    self.updateWidth()
+                }
+            }
+            columnStack.insertArrangedSubview(p.view, at: 1)
+            p.view.widthAnchor.constraint(equalTo: columnStack.widthAnchor, constant: -2 * Self.paddingH).isActive = true
+            invitation = p
+        }
+        invitation?.show(s, m, cardOn: cardOn, state: state)
+        updateWidth()
+    }
+
+    /// The bubble takes the column's width for an HTML body and for an
+    /// invitation card, and hugs its text otherwise.
+    private func updateWidth() {
+        showsInvitation = invitation.map { !$0.view.isHidden } ?? false
+        fullWidth.isActive = rendersHTML || showsInvitation
+    }
+
+    /// The point `p` (the bubble's coordinates) is on the invitation card,
+    /// whose buttons take their clicks themselves.
+    private func onInvitation(_ p: NSPoint) -> Bool {
+        guard let v = invitation?.view, !v.isHidden else { return false }
+        return v.convert(v.bounds, to: self).contains(p)
     }
 
     /// The point `p` (the bubble's coordinates) is on the document of a
@@ -842,10 +898,12 @@ final class ConversationClipPill: NSView {
 
 extension ConversationBubbleView: NSGestureRecognizerDelegate {
     /// The double click reads every click on the bubble but those on the
-    /// document of its live web view (word selection, links): the header
-    /// and the padding still open the window.
+    /// document of its live web view (word selection, links) and on the
+    /// invitation card (its buttons): the header and the padding still open
+    /// the window.
     func gestureRecognizer(_ gestureRecognizer: NSGestureRecognizer, shouldAttemptToRecognizeWith event: NSEvent) -> Bool {
-        !onDocument(convert(event.locationInWindow, from: nil))
+        let p = convert(event.locationInWindow, from: nil)
+        return !onDocument(p) && !onInvitation(p)
     }
 }
 

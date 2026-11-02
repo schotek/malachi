@@ -132,8 +132,10 @@ extension Conversation {
     /// the quoted history): cleaned as a draft card's text is
     /// (`Board.cleanBlock`, at most `draftTextBytes`: line breaks kept, at
     /// most one empty line in a row, control and format characters gone,
-    /// trimmed), so that a message bubble and a draft bubble read alike; ""
-    /// for an empty text. The states of a body (on its way, too large,
+    /// trimmed), so that a message bubble and a draft bubble read alike,
+    /// without rules (lines of separator characters only, as the "____"
+    /// around a meeting invitation's text, `isRule`); "" for an empty text.
+    /// The states of a body (on its way, too large,
     /// unreadable, empty) and the errors of the call are the view's to
     /// show, with the texts of the timeline's cards; until a body is asked
     /// for, the bubble shows the summary's snippet.
@@ -141,7 +143,23 @@ extension Conversation {
         if text.isEmpty {
             return ""
         }
-        return Board.cleanBlock(text, max: draftTextBytes)
+        // NSString's split: "\r\n" is one Character to Swift.
+        let kept = text.components(separatedBy: "\n").filter { line in
+            let t = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            return t.isEmpty || !isRule(t)
+        }
+        return Board.cleanBlock(kept.joined(separator: "\n"), max: draftTextBytes)
+    }
+
+    /// conversation.isRule: whether `line` (trimmed, not empty) is made of
+    /// separator characters only, spaces between them: underscores,
+    /// hyphens, dashes, equals signs, asterisks, tildes, hashes, dots and
+    /// box-drawing lines.
+    static func isRule(_ line: String) -> Bool {
+        line.unicodeScalars.allSatisfy { r in
+            r.properties.isWhitespace || "_-=*~#.".unicodeScalars.contains(r)
+                || (0x2010...0x2015).contains(r.value) || (0x2500...0x257F).contains(r.value)
+        }
     }
 
     /// conversation.ChatToggleLabel: the label of the toggle button above

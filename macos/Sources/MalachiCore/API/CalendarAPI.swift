@@ -1910,6 +1910,8 @@ public struct InvitationSummary: Codable, Sendable, Equatable {
     public var organizer: Address?
     /// A reply: the attendee who answered.
     public var replyFrom: Address?
+    /// A reply: the attendee's answer (the card's `response` says the same).
+    public var replyResponse: EventResponse?
     /// The organiser is one of the account's own addresses: the request is
     /// `processed`, its card has no response path and may carry `eventId`
     /// (Show in Calendar).
@@ -1926,6 +1928,7 @@ public struct InvitationSummary: Codable, Sendable, Equatable {
         allDay: Bool = false,
         organizer: Address? = nil,
         replyFrom: Address? = nil,
+        replyResponse: EventResponse? = nil,
         ownEvent: Bool = false
     ) {
         self.method = method
@@ -1938,6 +1941,7 @@ public struct InvitationSummary: Codable, Sendable, Equatable {
         self.allDay = allDay
         self.organizer = organizer
         self.replyFrom = replyFrom
+        self.replyResponse = replyResponse
         self.ownEvent = ownEvent
     }
 }

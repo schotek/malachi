@@ -5,6 +5,8 @@ package conversation
 
 import (
 	"slices"
+	"strings"
+	"unicode"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/board"
@@ -131,7 +133,9 @@ func ChatScrollTo(rows []ChatRow) int {
 // history): cleaned as a draft card's text is (board.CleanBlock, at most
 // draftTextBytes: line breaks kept, at most one empty line in a row,
 // control and format characters gone, trimmed), so that a message bubble
-// and a draft bubble read alike; "" for an empty text. The states of a
+// and a draft bubble read alike, without rules (lines of separator
+// characters only, as the "____" around a meeting invitation's text,
+// isRule); "" for an empty text. The states of a
 // body (on its way, too large, unreadable, empty) and the errors of the
 // call are the view's to show, with the texts of the timeline's cards;
 // until a body is asked for, the bubble shows the summary's snippet.
@@ -139,7 +143,30 @@ func BubbleText(text string) string {
 	if text == "" {
 		return ""
 	}
-	return board.CleanBlock(text, draftTextBytes)
+	lines := strings.Split(text, "\n")
+	kept := lines[:0]
+	for _, l := range lines {
+		if t := strings.TrimSpace(l); t == "" || !isRule(t) {
+			kept = append(kept, l)
+		}
+	}
+	return board.CleanBlock(strings.Join(kept, "\n"), draftTextBytes)
+}
+
+// isRule reports whether line (trimmed, not empty) is made of separator
+// characters only, spaces between them: underscores, hyphens, dashes,
+// equals signs, asterisks, tildes, hashes, dots and box-drawing lines (the
+// daemon's rule for the snippet, mime.isRule).
+func isRule(line string) bool {
+	for _, r := range line {
+		switch {
+		case unicode.IsSpace(r):
+		case strings.ContainsRune("_-=*~#.", r), r >= '\u2010' && r <= '\u2015', r >= '\u2500' && r <= '\u257F':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // ChatToggleLabel is the label of the toggle button above the conversation

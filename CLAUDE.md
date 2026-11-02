@@ -548,6 +548,33 @@ schválil, vše beze změny kódu;
 všechno proti skutečnému API. Neviděné na obrazovce: bezpečnostní dialog
 a oznámení (manifest je nemá; jen testy Core).
 
+Odpovědi na pozvánky v konverzaci (2026-11-02, větev
+`fix/invitation-replies`; macOS první z pokynu vlastníka a jím ověřený nad
+kopií dat, GTK a Windows následují). Démon: `InvitationSummary.replyResponse`
+(odpověď účastníka i v souhrnu), `messages.has_attachments` bez kalendářové
+části, kterou ukazuje karta (`SetHasAttachments` v hooku pozvánky,
+`calendar.ParserVersion` 4 přečte uložené znovu), náhled bez řádků
+oddělovačů (`mime.isRule`). Reference Go `ui/internal/conversation/
+invitation.go`: odpověď (iTIP REPLY) je `ItemEvent` s jednou větou
+(4 msgid, česky), v časové ose i chatu kompaktní řádek, nepřečtená odpověď
+účastníka se označí jako karta; `BubbleText` vynechá řádky oddělovačů.
+macOS: port (`ConversationInvitation.swift`), čip `.ics` skrytý, když se
+ukazuje karta (`chipAttachments(…, card:)`, `ChipPlan(cardOn:)`; Swift-first),
+náhled řádku seznamu u pozvánky termín, u odpovědi věta
+(`invitationPreview`, Swift-first), karta pozvánky v bublině chatu s textem
+zkráceným (`ConversationBubbleView.showInvitation`), Navrhnout jiný čas… po
+odpovědi v řádku stavu (`InvitationCardView.placePropose`), řádek stavu karty vždy stav nad
+tlačítky a Připojit se k videohovoru na jednom řádku s minimální šířkou
+podle titulku (okno zprávy se měří dřív, než má šířku). Konverzace
+volá `message.get` i pro člena s pozvánkou (`needsBody`, ve všech třech
+klientech: karta jinak závisela na 📎 přílohy `.ics`). 4 msgid jsou do
+portu ve `windows/parity-exclusions.txt`. Ověřeno: Go testy démona
+(`core`, `store`, `mime`, `api`, `calendar`), `ui/internal/conversation`,
+`make po` v kontejneru, `swift build` a celé `swift test`,
+`check-strings.py`; vlastník na obrazovce (vlákno, chat, okno zprávy).
+GTK zbývá: čip `.ics`, náhled řádku, karta v bublině, řádek stavu karty;
+Windows totéž (jen `needsBody` je napsané).
+
 Adresáře (2026-11-01, všechny tři klienty, sloučeno do `main`; plán,
 rozhodnutí A1–A16 a F1–F12, odpovědi vlastníka a wireframy W1–W7
 v `docs/plans/address-book.md`). Démon synchronizuje kontakty jako cache

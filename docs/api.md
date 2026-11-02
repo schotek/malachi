@@ -4275,8 +4275,11 @@ InvitationSummary {
   "title": "Q4 planning", "start": Time (opt), "end": Time (opt),
   "startDate": Date (opt), "allDay": bool (opt),
   "organizer": Address (opt), "replyFrom": Address (opt),  // reply: the attendee who answered
+  "replyResponse": EventResponse (opt), // reply: the attendee's answer (a card's "response" says the same)
   "ownEvent": bool (opt)              // the organiser is one of the user's addresses: a request is processed
 }
+// A message whose calendar part was read has "hasAttachments" without that
+// part: the card shows it (true only for other non-inline attachments).
 
 Message += { "invitation": InvitationCard (opt) }   // message.get, message.download
 InvitationCard = InvitationSummary + {
