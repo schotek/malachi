@@ -228,3 +228,35 @@ dané role se ve všech třech klientech přeskočí, otázka počítá jen pře
 Zbývající rozdíly k rozhodnutí: prázdný seznam
 říká „Tato složka je prázdná“; odpověď odeslaná do Odeslaných neobnoví počet
 odeslaných u konverzace ve sjednoceném seznamu (`applyNewMessageElsewhere`) v GTK.
+
+### Ověření na Macu (2026-11-02, lokální agent)
+
+Prošlo:
+- macOS: `swift build` bez varování v kódu; celé `swift test` 2052/2052 (po opravě
+  testu níže); `check-strings.py` (exit 0, tři varování jsou už na `main`).
+- GTK v kontejneru: `gtk.sh make build`, celé `gtk.sh test-ui` (45 balíčků, mimo jiné
+  `window`, `unified`, `undo`, `selection`, `contextmenu`, `settings`), smoke
+  `MALACHI_GTK_SMOKE=1` 24/24 (`TestBodyFitGTKSmoke` vynechaný: známý starší pád
+  WebKitu, viz CLAUDE.md), `make po` (jen `#:` a datum, msgid i `cs.po` beze změny
+  obsahu), `make lint` (golangci-lint v obrazu není, běží jen `go vet`).
+- Rozložení macOS: stamped debug binárka (SDK 27.0) nad izolovaným démonem se dvěma
+  účty z `malachi-devmail` (vzorová schránka a `-corpus` s pěti `.eml`), nikdy nad
+  ostrými daty: „Všechny doručené“ je první řádek, ikona a text na úrovni textu
+  hlaviček účtů (bez šipky), odznak 10 = 5 + 5 (Nevyžádaná se nepočítá).
+
+Opraveno:
+- GTK se nepřeložilo: `assistant_panel.go` `w.model` → `p.w.model`.
+- macOS `favouritesPersistAndFollowExternalChanges`: harness má dva účty, takže
+  řádek 0 je teď Všechny doručené; indexy posunuté a řádek ověřený.
+- Odznak položky stál o 24 px vpravo od odznaků složek ve všech třech klientech:
+  hvězdička složky drží místo i průhledná, položka ji vynechala. Teď drží prázdné
+  místo místo hvězdičky (macOS `FolderCellView.configureUnified`, neviditelná
+  a vypnutá; GTK `starSlot` v `unified.go`, změřeno v Xvfb: konce odznaků 210/210 px,
+  bez opravy 234/210; Windows průhledný `Border` 18×18 ve sloupci hvězdičky jen pro
+  `SidebarRowKind.Unified`, `FolderRowView.StarSlot`).
+
+Zbývá:
+- Windows: oprava odznaku napsaná bez `dotnet` (`FolderRowView.xaml(.cs)`), k
+  sestavení a pohledu spolu se zbytkem Windows ověření výše.
+- Ruční průchod nad kopií dat (bod výše) ve všech třech: tady nešel, shell nemá
+  oprávnění k ovládání ani snímání obrazovky, viděný je jen první snímek okna.
