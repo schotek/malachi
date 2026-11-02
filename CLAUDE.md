@@ -529,7 +529,10 @@ Flatpak), `MALACHI_UPDATE_CHANNEL` přebíjí; `make macos` a vývojové
 buildy nekontrolují. Klienti: reference `ui/internal/updates`, GTK
 `ui/internal/updatesctl` + `window/updates.go`, macOS `MalachiCore/Updates`
 + `UpdateController`, Windows `Malachi.Core/Updates` (`UpdateCheck`)
-+ `UpdateStatusController`: pruh ve všech režimech hlavního okna,
++ `UpdateStatusController`: pruh ve všech režimech hlavního okna
+(v GTK jeden `update_bar` přes celou šířku nad všemi hlavičkovými
+lištami, svislý s tlačítky v `Adw.WrapBox`; rozhodnutí vlastníka
+2026-11-02),
 bezpečnostní vydání jednou modálně (Stáhnout + předvybrané ukončení),
 Předvolby → Obecné → Aktualizace se Zkontrolovat nyní, řádek v O aplikaci,
 věta na stránce bez účtů. Ověřeno: Go testy démona a reference, GTK

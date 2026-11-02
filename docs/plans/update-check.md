@@ -150,6 +150,14 @@ se čtou jako Markdown parserem asistenta (nadpisy, odrážky, tučné, kód;
 odkazy jen jako text), *Další informace* otevírá vždy
 `https://malachimail.app/news.html` (`updates.NewsURL`, ne `infoUrl`
 vydání) a ruční *Zkontrolovat nyní* ruší *Připomenout později*.
+Z průchodu vlastníka na Linuxu (2026-11-02, rozhodnutí přes
+AskUserQuestion ze tří možností): pruh GTK je jeden přes celou šířku
+okna nad všemi hlavičkovými lištami (`Adw.Bin update_bar` nad
+`mode_stack` ve svislém Boxu obsahu okna), tedy nejblíž kartě macOS;
+ne `Adw.Banner` nad seznamem zpráv ani pod lištami Nástěnky a Kalendáře.
+Uvnitř je svislý: titulek zalamovaný po slovech a pod ním tlačítka
+v `Adw.WrapBox` (v úzkém sloupci se dřív titulek lámal do čtyř řádků
+vedle mřížky tlačítek).
 
 ## 9. Úkoly
 
