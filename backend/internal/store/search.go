@@ -36,6 +36,12 @@ type SearchFilter struct {
 	// the virtual folders (Folder.Virtual) are left out, whose rows are
 	// copies of rows found in the space folders.
 	FolderIDs []string
+	// SentOf, a folder id set only together with AccountID and FolderIDs
+	// == [SentOf], adds the sent members of that folder's threads
+	// (sentMember: the user's replies in the account's sent folders that
+	// the folder lacks), each Message-ID once. The caller sets it only for
+	// a folder in Store.SentScope.
+	SentOf string
 	// ExcludeRoles are folder roles left out (Trash and Junk outside an
 	// explicit folder).
 	ExcludeRoles []api.FolderRole
@@ -153,7 +159,11 @@ func searchScope(f SearchFilter) (from, where string, args []any) {
 		conds = append(conds, `m.account_id IN (SELECT id FROM accounts WHERE enabled = 1)`)
 	}
 	conds = append(conds, `m.hidden = 0`)
-	if len(f.FolderIDs) > 0 {
+	if len(f.FolderIDs) == 1 && f.SentOf == f.FolderIDs[0] && f.AccountID != "" {
+		cond, condArgs := searchSentOf(f.AccountID, f.SentOf)
+		conds = append(conds, cond)
+		args = append(args, condArgs...)
+	} else if len(f.FolderIDs) > 0 {
 		conds = append(conds, `m.folder_id IN (`+placeholders(len(f.FolderIDs))+`)`)
 		for _, id := range f.FolderIDs {
 			args = append(args, id)
@@ -185,6 +195,23 @@ func searchScope(f SearchFilter) (from, where string, args []any) {
 		args = append(args, stamp(f.Before))
 	}
 	return from, ` WHERE ` + strings.Join(conds, ` AND `), args
+}
+
+// searchSentOf is the folder condition of SearchFilter.SentOf: the row is
+// in the folder, or it is a sent member (sentMember) of a thread with a
+// visible member in the folder and no sent member of the thread with the
+// same Message-ID has a lower id (the copies of one sent message in two
+// sent folders count once, as in ThreadSentMessages). An empty thread id
+// never matches.
+func searchSentOf(accountID, folderID string) (string, []any) {
+	cond := `(m.folder_id = ? OR (m.thread_id != '' AND ` + sentMember("m") + `
+		AND EXISTS (SELECT 1 FROM messages fo
+			WHERE fo.folder_id = ? AND fo.thread_id = m.thread_id AND fo.hidden = 0)
+		AND (m.rfc_message_id = '' OR NOT EXISTS (SELECT 1 FROM messages tw
+			WHERE tw.account_id = m.account_id AND tw.rfc_message_id = m.rfc_message_id
+				AND tw.thread_id = m.thread_id AND tw.id < m.id AND tw.hidden = 0
+				AND tw.folder_id IN (SELECT id FROM folders WHERE account_id = ? AND role = '` + string(api.RoleSent) + `')))))`
+	return cond, []any{folderID, accountID, folderID, folderID, accountID}
 }
 
 func placeholders(n int) string {

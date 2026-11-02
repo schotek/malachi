@@ -2703,7 +2703,8 @@ Nothing is stored.
 ### 4.6 search
 
 #### `search.query`
-- params: `{ "accountId" (opt), "folderId" (opt, needs accountId), "query": "…", "page": Page }`
+- params: `{ "accountId" (opt), "folderId" (opt, needs accountId), "query": "…",
+  "withSent": bool (opt), "page": Page }`
 - result: `{ "results": [SearchResult], "page": PageInfo }`
 - errors: invalidArgument (empty or blank `query`, longer than
   `api.MaxSearchQueryBytes` = 1024 bytes, more than `api.MaxSearchTerms` =
@@ -2729,6 +2730,19 @@ views of a `jira` account (§4.2) hold copies of messages of its space
 folders and are searched only when the scope names them (`folderId` or
 `in:`), so a message is found once. A hidden message (§4.1
 `notificationMail`) is never found.
+
+`withSent` (with `folderId`; ignored without it) also finds the user's
+replies to the folder's conversations, by the rule of `thread.get`
+`withSent` (§4.4): the matching visible rows in the account's folders of
+role `sent` whose thread has a visible member in the folder. A sent row
+whose `Message-ID` a visible member of the folder already has (a Bcc to
+oneself, a Gmail label) is left out, the folder's copy is the result; of
+the sent rows sharing a `Message-ID` only the one with the lowest `id` is
+found; a row without a thread id never is. Nothing is added when the
+folder is a sent folder, the outbox or a view of a `jira` account, or when
+the query has an `in:` filter (it names the folders itself). Ordering,
+paging, `page.total` and the excerpt are the same for both kinds of row;
+each result's `message.folderId` says where it lies.
 
 Query syntax (parsed by the backend, compiled to a parameterised FTS5
 expression; nothing typed is ever operator syntax):
@@ -5542,3 +5556,9 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   methods `update.status`, `update.check`, `update.setPrefs`,
   `update.dismiss`, `update.dismissNotice` and the notification
   `notify.updateChanged`. No new error codes; `ProtocolVersion` stays 2.
+- **2** (2026-11-02, compatible addition: the user's replies in a
+  folder's search): `search.query` gained `withSent` (§4.6), which also
+  finds the matching rows of the account's sent folders that belong to
+  the folder's conversations, by the rule of `thread.get` `withSent`. An
+  older daemon ignores it and searches the folder alone. No new error
+  codes; `ProtocolVersion` stays 2.

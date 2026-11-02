@@ -47,7 +47,7 @@ func TestSearchRequest(t *testing.T) {
 		want      api.SearchQueryParams
 		effective settings.SearchScope
 	}{
-		{settings.SearchFolder, api.SearchQueryParams{AccountID: "a1", FolderID: "f_in", Query: "faktura", Page: page}, settings.SearchFolder},
+		{settings.SearchFolder, api.SearchQueryParams{AccountID: "a1", FolderID: "f_in", Query: "faktura", WithSent: true, Page: page}, settings.SearchFolder},
 		{settings.SearchAccount, api.SearchQueryParams{AccountID: "a1", Query: "faktura", Page: page}, settings.SearchAccount},
 		{settings.SearchAll, api.SearchQueryParams{Query: "faktura", Page: page}, settings.SearchAll},
 		{"", api.SearchQueryParams{Query: "faktura", Page: page}, settings.SearchAll},
@@ -105,9 +105,24 @@ func TestSearchResultsAndRows(t *testing.T) {
 	if row := m.rowMessage(m.messages[0]); row.Origin != "Faktury" {
 		t.Errorf("account scope: %q", row.Origin)
 	}
+	// Folder scope: a row of the folder names nothing; a row of another
+	// folder (a reply in Sent that withSent added) names its folder.
 	m.search.effective = settings.SearchFolder
+	m.search.params = api.SearchQueryParams{AccountID: "a1", FolderID: "f_x"}
 	if row := m.rowMessage(m.messages[0]); row.Origin != "" || row.OriginTooltip != "" {
 		t.Errorf("folder scope: %q", row.Origin)
+	}
+	m.search.params.FolderID = "f_in"
+	if row := m.rowMessage(m.messages[0]); row.Origin != "Faktury" || row.OriginTooltip != "Archiv/Faktury\nWork" {
+		t.Errorf("folder scope, another folder: origin %q, tooltip %q", row.Origin, row.OriginTooltip)
+	}
+	if row := m.rowMessage(m.messages[2]); row.Origin != "" {
+		t.Errorf("folder scope, the folder: %q", row.Origin)
+	}
+	// The same folder id in another account is another folder.
+	m.search.params = api.SearchQueryParams{AccountID: "a2", FolderID: "f_x"}
+	if row := m.rowMessage(m.messages[0]); row.Origin != "Faktury" {
+		t.Errorf("folder scope, another account: %q", row.Origin)
 	}
 	// One enabled account: no account in the label.
 	m.search.effective = settings.SearchAll

@@ -81,14 +81,20 @@ func (s *searchService) Query(ctx context.Context, p api.SearchQueryParams) (*ap
 		}
 		f.AccountID, accounts = a.ID, []store.Account{a}
 		if p.FolderID != "" {
-			_, err := s.b.store.GetFolder(ctx, a.ID, string(p.FolderID))
+			folder, err := s.b.store.GetFolder(ctx, a.ID, string(p.FolderID))
 			switch {
 			case errors.Is(err, store.ErrNotFound):
 				return nil, api.NewError(api.CodeFolderNotFound, "unknown folder %q", p.FolderID)
 			case err != nil:
 				return nil, api.NewError(api.CodeStorageError, "%v", err)
 			}
-			f.FolderIDs = []string{string(p.FolderID)}
+			f.FolderIDs = []string{folder.ID}
+			// withSent: the user's replies in the sent folders belong to
+			// the folder's threads (as thread.get withSent); in: names the
+			// folders itself, so it turns this off.
+			if p.WithSent && len(q.In) == 0 && store.HasSentMembers(folder.Role, folder.Virtual) {
+				f.SentOf = folder.ID
+			}
 		}
 	} else {
 		all, err := s.b.store.ListAccounts(ctx)
