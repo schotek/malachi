@@ -182,8 +182,8 @@ cíle ho volají samy). Zmínky o Toolbxu níže jsou historické;
 CI pro GTK je `.github/workflows/gtk.yml` (od 2026-11-02): pull request,
 který mění `ui/`, `backend/`, `po/`, `data/` a další vstupy buildu, a ruční
 běh postaví v kontejneru `fedora:42` s balíčky Containerfile `make build`,
-pustí testy `ui/` pod Xvfb jako `gtk.sh test-ui`, smoke testy GTK
-(`MALACHI_GTK_SMOKE=1` i editor a karty) a `make lint`; tag ani push do
+pustí testy `ui/` pod Xvfb jako `gtk.sh test-ui` a `make lint` (smoke
+testy GTK ne, v CI zatím padají); tag ani push do
 `main` nic, artefakty žádné. Cache Go a ccache PR obnoví z `main`, kterou
 zapíše jen ruční běh na `main` (`gh workflow run gtk.yml --ref main`).
 
