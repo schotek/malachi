@@ -27,6 +27,7 @@ ui/internal/compose/write.go
 ui/internal/compose/suggest.go
 ui/internal/contextmenu/text.go
 ui/internal/selection/text.go
+ui/internal/unified/text.go
 ui/internal/jira/compose.go
 ui/internal/jira/jira.go
 ui/internal/jira/wizard.go

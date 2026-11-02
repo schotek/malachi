@@ -120,6 +120,12 @@ type MessageState struct {
 	// unless offered, Save is disabled unless Crm, and one saved message
 	// has the saved-state items instead of Save.
 	OfferCrm, Crm, CrmSaved bool
+	// MixedAccounts: several rows of more than one account, which only
+	// the All Inboxes list allows (selection.CombineAccounts,
+	// ui/internal/unified). Forward, Move To and Save to eWay-CRM, which
+	// need one account, stay in the menu but are disabled; the other
+	// items act per account.
+	MixedAccounts bool
 }
 
 // SetCrm fills the eWay-CRM fields from crm.OfferFor of the selected rows.
@@ -133,9 +139,13 @@ func (s *MessageState) SetCrm(o crm.Offer) {
 // (Labels.Count), Forward forwards them in one message, Save to eWay-CRM
 // saves them together (Labels.Count), and Reply, Reply All, Change Status
 // and the saved-state eWay-CRM items, which are for one message, are not
-// offered.
+// offered. Several rows of several accounts (MixedAccounts) have Forward,
+// Move To and Save to eWay-CRM disabled.
 func MessageItems(s MessageState) [][]Item {
 	several := s.Count > 1
+	if several && s.MixedAccounts {
+		s.Forward, s.Move, s.Crm = false, false, false
+	}
 	open := Item{ID: OpenMessage, Enabled: !several || s.Open}
 	if s.Draft && !several {
 		open.ID = EditDraft

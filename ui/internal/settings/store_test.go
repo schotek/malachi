@@ -38,6 +38,14 @@ func TestMemoryDefaults(t *testing.T) {
 			s.GroupByConversation(), s.ConversationChatLayout(), s.ConversationChatHTML(),
 			s.ConversationChatTruncateMine(), s.ConversationChatTruncateOthers())
 	}
+	if !s.UnifiedInbox() {
+		t.Error("UnifiedInbox default = false, want true (the gschema's)")
+	}
+	s.SetUnifiedInbox(false)
+	if s.UnifiedInbox() {
+		t.Error("SetUnifiedInbox(false) did not stick")
+	}
+	s.SetUnifiedInbox(true)
 	if s.LaunchAtLogin() || s.RunInBackground() || !s.ConfirmDelete() || !s.DesktopNotifications() || s.NotificationSound() {
 		t.Error("general bool defaults wrong")
 	}

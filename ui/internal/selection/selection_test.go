@@ -184,3 +184,42 @@ func TestCombineCrm(t *testing.T) {
 		t.Errorf("outbox: %+v", c)
 	}
 }
+
+func TestCombineAccounts(t *testing.T) {
+	crm := mail
+	crm.Crm = true
+	rows := []Flags{crm, crm, crm}
+	same := CombineAccounts(rows, []api.AccountID{"a", "a", "a"})
+	if same != Combine(rows) || same.MixedAccounts {
+		t.Errorf("one account is Combine's: %+v", same)
+	}
+	got := CombineAccounts(rows, []api.AccountID{"a", "b", "a"})
+	want := Combine(rows)
+	want.MixedAccounts, want.Forward, want.Move, want.Crm = true, false, false, false
+	if got != want {
+		t.Errorf("mixed: %+v, want %+v", got, want)
+	}
+	if !got.Trash || !got.Archive || !got.Junk || !got.Star || !got.MarkUnread || !got.Open {
+		t.Errorf("the per-account actions stay: %+v", got)
+	}
+	// One row is never mixed, whatever the accounts say.
+	if one := CombineAccounts(rows[:1], []api.AccountID{"a", "b"}); one.MixedAccounts || !one.Forward || !one.Move {
+		t.Errorf("one row: %+v", one)
+	}
+	if none := CombineAccounts(nil, nil); none != (Flags{}) {
+		t.Errorf("none: %+v", none)
+	}
+}
+
+func TestRestrictIn(t *testing.T) {
+	rows := []Row[string]{{"1", "a"}, {"2", "b"}, {"3", "a"}}
+	if got := RestrictIn(rows, "2", false); !slices.Equal(got, Restrict(rows, "2")) {
+		t.Errorf("not cross-account is Restrict: %v", got)
+	}
+	if got := RestrictIn(rows, "2", true); !slices.Equal(got, []string{"1", "2", "3"}) {
+		t.Errorf("cross-account keeps every row: %v", got)
+	}
+	if !Mixed(rows) || Mixed(rows[:1]) || Mixed([]Row[string]{{"1", "a"}, {"3", "a"}}) || Mixed[string](nil) {
+		t.Error("Mixed")
+	}
+}
