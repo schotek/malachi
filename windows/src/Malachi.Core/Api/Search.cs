@@ -27,6 +27,13 @@ public sealed record SearchQueryParams
     [JsonPropertyName("query")]
     public required string Query { get; init; }
 
+    /// <summary>
+    /// With <see cref="FolderId"/>, also the user's sent mail that belongs to
+    /// the folder's conversations; ignored without it, left out when null.
+    /// </summary>
+    [JsonPropertyName("withSent")]
+    public bool? WithSent { get; init; }
+
     /// <summary>Which page of the results.</summary>
     [JsonPropertyName("page")]
     [JsonRequired]

@@ -1916,6 +1916,15 @@ type SearchQueryParams struct {
 	FolderID  FolderID  `json:"folderId,omitempty"`
 	Query     string    `json:"query"`
 	Page      Page      `json:"page"`
+	// WithSent, with FolderID, also returns the matching rows of the
+	// account's folders of role sent whose thread has a visible member in
+	// the folder (the user's replies, as thread.get withSent): not a row
+	// whose Message-ID a visible member of the folder has, and of the sent
+	// rows sharing a Message-ID only the one with the lowest id. Nothing
+	// is added in a sent folder, the outbox or a virtual folder, or when
+	// the query has in: filters. Ignored without FolderID. A compatible
+	// extension of protocol 2: an older daemon ignores it.
+	WithSent bool `json:"withSent,omitempty"`
 }
 
 type SearchResult struct {

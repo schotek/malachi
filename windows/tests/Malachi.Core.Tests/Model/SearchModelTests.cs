@@ -41,7 +41,7 @@ public sealed class SearchModelTests
         var page = new Page { Limit = API.Limits.DefaultPageLimit };
         (SearchScope Scope, SearchQueryParams Want, SearchScope Effective)[] cases =
         [
-            (SearchScope.Folder, new() { AccountId = "a1", FolderId = "f_in", Query = "faktura", Page = page }, SearchScope.Folder),
+            (SearchScope.Folder, new() { AccountId = "a1", FolderId = "f_in", Query = "faktura", WithSent = true, Page = page }, SearchScope.Folder),
             (SearchScope.Account, new() { AccountId = "a1", Query = "faktura", Page = page }, SearchScope.Account),
             (SearchScope.All, new() { Query = "faktura", Page = page }, SearchScope.All),
             // Go's "" scope: anything else is All.
@@ -51,6 +51,7 @@ public sealed class SearchModelTests
         {
             var got = m.SearchRequest("  faktura ", scope);
             Assert.True(got.Params == want && got.Effective == effective, $"{scope}");
+            Assert.Equal(scope == SearchScope.Folder, got.Params.WithSent == true);
         }
         // Nothing selected: nothing to narrow to.
         m.Selected = null;
@@ -98,7 +99,14 @@ public sealed class SearchModelTests
         m.Search.Effective = SearchScope.Account;
         Assert.Equal("Faktury", m.RowMessage(m.Messages[0]).Origin);
         m.Search.Effective = SearchScope.Folder;
+        m.Search.Params = new SearchQueryParams { AccountId = "a1", FolderId = "f_x", Query = "x" };
         Assert.True(m.RowMessage(m.Messages[0]).Origin == "" && m.RowMessage(m.Messages[0]).OriginTooltip == "");
+        // Sent mail of the folder's threads has a folder of its own.
+        Assert.Equal("Inbox", m.RowMessage(m.Messages[2]).Origin);
+        m.Search.Params = new SearchQueryParams { AccountId = "a1", FolderId = "f_in", Query = "x" };
+        Assert.Equal("Faktury", m.RowMessage(m.Messages[0]).Origin);
+        Assert.Equal("Archiv/Faktury\nWork", m.RowMessage(m.Messages[0]).OriginTooltip);
+        Assert.Equal("", m.RowMessage(m.Messages[2]).Origin);
         // One enabled account: no account in the label.
         m.Search.Effective = SearchScope.All;
         m.Accounts = Replace(m.Accounts, 1, a => a with { Enabled = false });

@@ -310,7 +310,7 @@ type ThreadRow struct {
 	Participants   []api.Address // distinct senders, newest first, at most api.MaxThreadParticipants; never nil
 	FolderIDs      []string      // every folder of the account with a member; sorted, never nil
 	// SentCount, in a folder's scope, counts the members in the account's
-	// sent folders the folder lacks (sentScope, ThreadSentMessages); 0
+	// sent folders the folder lacks (SentScope, ThreadSentMessages); 0
 	// account-wide.
 	SentCount int
 	// DraftCount, in a folder's scope, counts the drafts that reply to a
@@ -552,19 +552,30 @@ func threadScope(accountID, threadID, folderID string) (string, []any) {
 // outbox holds the user's queued mail itself), nor does an issue-tracker
 // account (no folder of role sent).
 
+// sentMember is the condition that the row aliased a is a sent member of
+// the folder's threads, but for the thread condition (a.thread_id is one
+// of the folder's threads), which the caller adds: a visible row in a
+// folder of role sent of the account whose Message-ID no visible member of
+// the folder in its thread has. Its parameters are the account id and the
+// folder id. sentMembers, the search (searchScope) and through them
+// thread.get, thread.list and search.query share it.
+func sentMember(a string) string {
+	return a + `.hidden = 0
+		AND ` + a + `.folder_id IN (SELECT id FROM folders WHERE account_id = ? AND role = '` + string(api.RoleSent) + `')
+		AND (` + a + `.rfc_message_id = '' OR NOT EXISTS (SELECT 1 FROM messages fm
+			WHERE fm.folder_id = ? AND fm.thread_id = ` + a + `.thread_id AND fm.rfc_message_id = ` + a + `.rfc_message_id AND fm.hidden = 0))`
+}
+
 // sentMembers is the FROM and WHERE of the sent members of the threads of
 // the account; its parameters are the account id twice and the folder id,
 // and the caller appends its thread condition on s.thread_id.
-const sentMembers = ` FROM messages s
-	WHERE s.account_id = ? AND s.hidden = 0
-		AND s.folder_id IN (SELECT id FROM folders WHERE account_id = ? AND role = '` + string(api.RoleSent) + `')
-		AND (s.rfc_message_id = '' OR NOT EXISTS (SELECT 1 FROM messages f
-			WHERE f.folder_id = ? AND f.thread_id = s.thread_id AND f.rfc_message_id = s.rfc_message_id AND f.hidden = 0))`
+var sentMembers = ` FROM messages s
+	WHERE s.account_id = ? AND ` + sentMember("s")
 
-// sentScope reports whether the folder's threads can have sent members:
+// SentScope reports whether the folder's threads can have sent members:
 // it is not a sent folder, the outbox or a virtual folder. ErrNotFound when
 // the account has no such folder.
-func (s *Store) sentScope(ctx context.Context, accountID, folderID string) (bool, error) {
+func (s *Store) SentScope(ctx context.Context, accountID, folderID string) (bool, error) {
 	var role, virtual string
 	err := s.db.QueryRowContext(ctx, `SELECT role, virtual FROM folders WHERE id = ? AND account_id = ?`, folderID, accountID).Scan(&role, &virtual)
 	switch {
@@ -573,8 +584,14 @@ func (s *Store) sentScope(ctx context.Context, accountID, folderID string) (bool
 	case err != nil:
 		return false, fmt.Errorf("folder role: %w", err)
 	}
-	r := api.FolderRole(role)
-	return r != api.RoleSent && r != api.RoleOutbox && virtual == "", nil
+	return HasSentMembers(api.FolderRole(role), api.VirtualFolder(virtual)), nil
+}
+
+// HasSentMembers is the rule of SentScope for a folder at hand: its
+// threads can have sent members unless it is a sent folder, the outbox or
+// a virtual folder.
+func HasSentMembers(role api.FolderRole, virtual api.VirtualFolder) bool {
+	return role != api.RoleSent && role != api.RoleOutbox && virtual == ""
 }
 
 // ThreadSentMessages lists the sent members of a thread read in folderID
@@ -582,13 +599,13 @@ func (s *Store) sentScope(ctx context.Context, accountID, folderID string) (bool
 // limit are returned, still oldest first. Of the rows sharing a Message-ID
 // the one with the lowest id stands for them. limit <= 0 means
 // api.MaxThreadMessages. Empty (never ErrNotFound) when there is none or
-// the folder has none (sentScope); ErrNotFound when the account has no
+// the folder has none (SentScope); ErrNotFound when the account has no
 // such folder.
 func (s *Store) ThreadSentMessages(ctx context.Context, accountID, threadID, folderID string, limit int) ([]Message, error) {
 	if limit <= 0 {
 		limit = api.MaxThreadMessages
 	}
-	ok, err := s.sentScope(ctx, accountID, folderID)
+	ok, err := s.SentScope(ctx, accountID, folderID)
 	if err != nil || !ok || threadID == "" {
 		return nil, err
 	}
@@ -625,7 +642,7 @@ func (s *Store) ThreadSentMessages(ctx context.Context, accountID, threadID, fol
 // thread.list is within one chunk).
 func (s *Store) sentCounts(ctx context.Context, accountID, folderID string, ids []string) (map[string]int, error) {
 	out := map[string]int{}
-	ok, err := s.sentScope(ctx, accountID, folderID)
+	ok, err := s.SentScope(ctx, accountID, folderID)
 	if err != nil || !ok {
 		return out, err
 	}

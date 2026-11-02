@@ -302,7 +302,18 @@ Vyhledávání: `search.query` jen nad lokálním úložištěm (okno
 `core.Maintain` pod `search.indexed`), `internal/search` = čistý parser
 syntaxe, FTS5 výraz s každou hodnotou v uvozovkách a výřez se zvýrazněním;
 rozsahy složka / účet / všechny povolené účty, koš a nevyžádaná jen jako
-vybraná složka nebo přes `in:`, řazení podle data, `total` do 1000.
+vybraná složka nebo přes `in:`, řazení podle data, `total` do 1000;
+rozsah složky posílá ve všech třech klientech `withSent` (2026-11-02,
+větev `claude/search-sent-mail-lrccj5`, rozhodnutí vlastníka): démon
+přidá vlastní odeslané zprávy z Odeslaných, které patří do vláken složky
+(pravidlo `store.sentMember` jako `sentCount`; ne v Odeslaných, Outboxu,
+virtuálních složkách ani s `in:`), řádek je odliší jen jménem složky
+(`searchOutside`); na Macu zelené Go testy démona, GTK v kontejneru
+(`make build`, celé `test-ui`, `make lint`, `po/` beze změny) i celé
+`swift test` a vlastník hledání ručně ověřil v macOS i GTK nad kopií dat;
+Windows agent na ARM64 `build.ps1 app` a `lint` zelené, `test` po opravě
+vzorku round-trip (`a2a0df2`) bez selhání větve (zbylá jsou prostředí
+a padají i na `main`) a vlastník ho ručně ověřil na Windows.
 GTK: lišta hledání nad seznamem (Ctrl+F, `window/search.go`,
 `search_model.go`, GSettings `search-scope`), hledá při psaní od 2 znaků,
 výsledky ploše se složkou/účtem a tučnými shodami, jednopísmenné zkratky
