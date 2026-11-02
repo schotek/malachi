@@ -112,6 +112,26 @@ func TestMessageItemsSeveral(t *testing.T) {
 	}
 }
 
+// Several rows of several accounts (the All Inboxes list): Forward, Move
+// To and Save to eWay-CRM stay but are disabled; one row is never mixed.
+func TestMessageItemsMixedAccounts(t *testing.T) {
+	s := mail
+	s.Count, s.Open, s.Reply, s.ReplyAll, s.MixedAccounts = 2, true, false, false, true
+	s.OfferCrm, s.Crm = true, true
+	if got := show(MessageItems(s)); got != "open | forward- | crmSave- | markUnread toggleFlag | archive moveTo- junk trash | assistant" {
+		t.Errorf("mixed: %s", got)
+	}
+	s.MixedAccounts = false
+	if got := show(MessageItems(s)); got != "open | forward | crmSave | markUnread toggleFlag | archive moveTo junk trash | assistant" {
+		t.Errorf("one account: %s", got)
+	}
+	one := mail
+	one.MixedAccounts = true
+	if got := show(MessageItems(one)); got != show(MessageItems(mail)) {
+		t.Errorf("one row: %s", got)
+	}
+}
+
 // eWay-CRM (ui/internal/crm OfferFor): Save after the answers, the
 // saved-state items for one saved message, Save with the count for
 // several (saved or not), nothing when not offered.

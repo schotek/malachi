@@ -134,6 +134,7 @@ func (w *Window) showMessageMenu(r *gtk.ListBoxRow, x, y float64) {
 	assistantShown := w.assist != nil && w.assist.shown()
 	s := contextmenu.MessageState{
 		Count:         st.count,
+		MixedAccounts: st.mixed,
 		Open:          st.open,
 		Draft:         w.model.inDrafts(row.Message),
 		Outbox:        st.outbox,
@@ -243,6 +244,11 @@ func (w *Window) showFolderMenuAt(anchor *gtk.Widget, idx int, x, y float64) boo
 	var groups [][]contextmenu.Item
 	var labels contextmenu.Labels
 	switch {
+	case e.Unified:
+		// Only Check for new mail, of every account the item covers (a
+		// sync of all accounts); no folder to act on.
+		groups = [][]contextmenu.Item{{{ID: contextmenu.CheckMail, Enabled: true}}}
+		actions[contextmenu.CheckMail] = func() { w.startSync(api.SyncTriggerParams{}) }
 	case e.Header && e.Favourite:
 		return false
 	case e.Header:

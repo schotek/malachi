@@ -509,7 +509,7 @@ public sealed class ApiRoundTripTests
         [nameof(Malachi.Core.Api.Attachment)] = Case<Attachment>(Attachment),
         [nameof(Malachi.Core.Api.Message)] = Case<Message>(Message),
         [nameof(MessageListParams)] = Case<MessageListParams>(
-            """{"accountId":"acc_1","folderId":"f_inbox","page":@page@,"sort":"dateAsc","filter":"unread","unreadOnly":true}"""),
+            """{"accountId":"acc_1","folderId":"f_inbox","unified":"inbox","page":@page@,"sort":"dateAsc","filter":"unread","unreadOnly":true}"""),
         [nameof(MessageListResult)] = Case<MessageListResult>("""{"messages":[@summary@],"page":@pageinfo@}"""),
         [nameof(MessageGetParams)] = Case<MessageGetParams>("""{"accountId":"acc_1","messageId":"m_1"}"""),
         [nameof(MessageGetResult)] = Case<MessageGetResult>("""{"message":@message@}"""),
@@ -560,7 +560,7 @@ public sealed class ApiRoundTripTests
         [nameof(SyncTriggerParams)] = Case<SyncTriggerParams>("""{"accountId":"acc_1","folderId":"f_inbox","full":true}"""),
         // Threads.cs
         [nameof(ThreadSummary)] = Case<ThreadSummary>(Thread),
-        [nameof(ThreadListParams)] = Case<ThreadListParams>("""{"accountId":"acc_1","folderId":"f_inbox","page":@page@,"sort":"dateDesc","filter":"flagged"}"""),
+        [nameof(ThreadListParams)] = Case<ThreadListParams>("""{"accountId":"acc_1","folderId":"f_inbox","unified":"inbox","page":@page@,"sort":"dateDesc","filter":"flagged"}"""),
         [nameof(ThreadListResult)] = Case<ThreadListResult>("""{"threads":[@thread@],"page":@pageinfo@}"""),
         [nameof(ThreadGetParams)] = Case<ThreadGetParams>("""{"accountId":"acc_1","threadId":"t_9","folderId":"f_inbox","withSent":true,"withDrafts":true}"""),
         [nameof(ThreadGetResult)] = Case<ThreadGetResult>("""{"thread":@thread@,"messages":[@summary@,@summary@],"sent":[@summary@],"drafts":[@draft@]}"""),

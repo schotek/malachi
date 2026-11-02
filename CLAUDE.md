@@ -532,6 +532,28 @@ Pořadí prací:
 17. Přílohy jako dlaždice (podle Outlooku) — větev `feat/attachment-tiles`
     2026-11-02, všechny tři klienty ověřené vlastníkem na obrazovce; viz
     odstavec Přílohy jako dlaždice níže
+18. Společná doručená pošta (Všechny doručené) — větev
+    `claude/exciting-ritchie-dy3qqt` 2026-11-02, démon, GTK, macOS i Windows
+    sestavené, otestované a ověřené vlastníkem na obrazovce; viz odstavec níže
+    a `docs/plans/unified-inbox.md`
+
+Všechny doručené (2026-11-02, všechny tři klienty, rozhodnutí vlastníka
+U1–U4 v `docs/plans/unified-inbox.md`). Položka nahoře v postranním panelu
+nad Oblíbenými, jen při ≥ 2 povolených poštovních účtech (`imap`, `graph`)
+a se zapnutým klíčem `unified-inbox` (Předvolby → Seznam zpráv). Démon:
+`message.list`/`thread.list` s `unified: "inbox"` bez `accountId`/`folderId`
+(`api.UnifiedRoles`, `core/unified.go`, `store.ListMessagesIn`/`ListThreadsIn`,
+vlastní prefixy kurzoru, bez migrace a nové notifikace). Reference
+`ui/internal/unified` (zástupný klíč `@unified:inbox`, `Covers`, `GroupByAccount`),
+`selection.CombineAccounts`/`RestrictIn` (výběr přes účty, akce po účtech,
+Přeposlat více/Přesunout do/eWay u smíšeného výběru vypnuté), `undo.Entry.Group`
+(jedno Zpět pro akci přes účty); vlákna ve sjednoceném seznamu klíčovaná
+(účet, vlákno), protože Graph `conversationId` se mezi schránkami opakuje.
+Ověřeno 2026-11-02: GTK v kontejneru (build, celé `test-ui`, smoke, `make po`,
+`make lint`), macOS (`swift build`, celé `swift test` 2052, `check-strings`),
+Windows ARM64 (`build.ps1 app`/`lint`, `test` 9100 se čtyřmi selháními
+prostředí jako na `main`), vlastník prošel všechny tři nad dvěma účty
+z `malachi-devmail`; podrobnosti v „As built“ plánu.
 
 Přílohy jako dlaždice (2026-11-02, všechny tři klienty, rozhodnutí
 vlastníka podle srovnání s Outlookem). Příloha je dlaždice pevné šířky

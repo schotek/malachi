@@ -109,6 +109,11 @@
       <default>[]</default>
       <summary>Folders pinned to the Favourites section of the sidebar</summary>
     </key>
+    <key name="unified-inbox" type="b">
+      <default>true</default>
+      <summary>Show All Inboxes in the sidebar</summary>
+      <description>With two or more mail accounts, an item at the top of the sidebar lists the inboxes of all of them together.</description>
+    </key>
 
     <!-- General (UI behaviour). Mail options such as the sync interval and
          the remote-content policy are daemon-owned: config.get/config.set. -->

@@ -3,7 +3,8 @@
 
 // Package selection is the message list's selection of several rows, in
 // all three clients: what the window's actions allow for it (Combine),
-// that it stays within one account (Restrict), what it becomes when the
+// that it stays within one account (Restrict) except in the All Inboxes
+// list (RestrictIn, CombineAccounts), what it becomes when the
 // list changes under it (Reconcile), and its texts. One row is the row's
 // own flags, unchanged: everything here is about two or more. A row
 // stands for one message or, folded, for a conversation's members in the
@@ -47,10 +48,17 @@ type Flags struct {
 	// row is saved there (the saved-state items replace Save); never for
 	// several.
 	Crm, CrmSaved bool
+	// MixedAccounts: the rows belong to more than one account, which
+	// only the All Inboxes list allows (ui/internal/unified; decision
+	// U2). Its actions run one call per account; Forward, Move To and
+	// Save to eWay-CRM need one account and are off (CombineAccounts).
+	// Never for one row.
+	MixedAccounts bool
 }
 
 // Combine is what the window's actions allow for rows, the flags of each
-// selected row (one account; a client never passes rows of two). One row
+// selected row (one account; a client never passes rows of two, and the
+// All Inboxes list, which may, uses CombineAccounts). One row
 // is that row's flags; several:
 //   - Mark as Read when any row is unread, Mark as Unread when any is
 //     read; the star stars them all unless every row is starred, which
@@ -101,6 +109,45 @@ func Combine(rows []Flags) Flags {
 	return out
 }
 
+// CombineAccounts is Combine for the rows of a list that may hold
+// several accounts (the All Inboxes list, ui/internal/unified), accounts
+// being the account of each row, index for index. When they are of more
+// than one account the selection stays (decision U2) and the actions
+// that run one call per account (read, star, Archive, Junk, Trash, Open,
+// the Assistant) keep Combine's verdict, while those that need one
+// account are off: Forward (one message from one account), Move To (the
+// folder picker is one account's folders) and Save to eWay-CRM (one
+// account's messages per save); MixedAccounts says so. Rows of one
+// account are Combine's.
+func CombineAccounts(rows []Flags, accounts []api.AccountID) Flags {
+	out := Combine(rows)
+	if len(rows) < 2 || !mixed(accounts) {
+		return out
+	}
+	out.MixedAccounts = true
+	out.Forward, out.Move, out.Crm = false, false, false
+	return out
+}
+
+// mixed: more than one distinct account.
+func mixed(accounts []api.AccountID) bool {
+	for _, a := range accounts[min(1, len(accounts)):] {
+		if a != accounts[0] {
+			return true
+		}
+	}
+	return false
+}
+
+// Mixed says whether the selected rows belong to more than one account.
+func Mixed[K comparable](rows []Row[K]) bool {
+	accounts := make([]api.AccountID, len(rows))
+	for i, r := range rows {
+		accounts[i] = r.Account
+	}
+	return mixed(accounts)
+}
+
 // FlagTarget is what the star does to the selected rows: true stars them,
 // false unstars them (Flags.Flagged of Combine: every row starred).
 func FlagTarget(f Flags) bool { return !f.Flagged }
@@ -129,6 +176,21 @@ func Restrict[K comparable](rows []Row[K], latest K) []K {
 		if !found || r.Account == account {
 			out = append(out, r.Key)
 		}
+	}
+	return out
+}
+
+// RestrictIn is Restrict in a list that may or may not span accounts:
+// in the All Inboxes list (crossAccount, ui/internal/unified) the
+// selection may hold rows of every account and nothing leaves it
+// (decision U2); in any other list it is Restrict.
+func RestrictIn[K comparable](rows []Row[K], latest K, crossAccount bool) []K {
+	if !crossAccount {
+		return Restrict(rows, latest)
+	}
+	out := make([]K, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, r.Key)
 	}
 	return out
 }

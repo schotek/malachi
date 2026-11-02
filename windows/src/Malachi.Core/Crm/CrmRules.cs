@@ -135,7 +135,10 @@ public static class CrmRules
         {
             return default;
         }
-        var enabled = rows.Count <= MaxMessages && rows.All(r => CanSave(r.Account, r.Role, r.LocalDraft));
+        // Rows of several accounts (the All Inboxes list) are not saved in one go
+        // (decision U2): the item stays, disabled.
+        var oneAccount = rows.All(r => r.Account.Id == rows[0].Account.Id);
+        var enabled = oneAccount && rows.Count <= MaxMessages && rows.All(r => CanSave(r.Account, r.Role, r.LocalDraft));
         return new CrmOffer(true, enabled, rows.Count, false);
     }
 

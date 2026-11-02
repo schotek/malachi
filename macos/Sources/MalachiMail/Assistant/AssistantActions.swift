@@ -112,7 +112,8 @@ final class AssistantActions {
     /// in the sidebar and it is not an Outbox (whose messages are not on
     /// the server).
     var canSummarizeUnread: Bool {
-        guard let k = model.selected else { return false }
+        // The All Inboxes item is no single folder.
+        guard let k = model.selected, !k.isUnified else { return false }
         return model.folderRole(k) != .outbox
     }
 

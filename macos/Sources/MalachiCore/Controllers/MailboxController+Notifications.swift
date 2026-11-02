@@ -41,6 +41,13 @@ extension MailboxController {
     /// is viewed or their message is read, moved or deleted.
     public func withdrawViewedNotifications() {
         guard let sel = model.selected, isMainWindowKey?() ?? false else { return }
+        if sel.isUnified {
+            // The All Inboxes list shows every covered inbox.
+            for f in model.unifiedInboxes {
+                withdrawDelivered(notified.removeFolder(FolderKey(account: f.accountId, folder: f.id)))
+            }
+            return
+        }
         withdrawDelivered(notified.removeFolder(sel))
     }
 

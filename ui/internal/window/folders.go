@@ -16,6 +16,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
+	"github.com/schotek/malachi/ui/internal/unified"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -315,6 +316,9 @@ func newHeaderRow(text, badge string, collapsed, foldable bool) (*gtk.ListBoxRow
 // role folder (whatever the server calls it) and for a fixed view of a Jira
 // account (jira.VirtualFolderTitle), the server's name otherwise.
 func folderTitle(f api.Folder) string {
+	if f.ID == unified.KeyFolder {
+		return unified.Title(i18n.Tr)
+	}
 	switch f.Role {
 	case api.RoleInbox:
 		return i18n.C("folder", "Inbox")
@@ -403,9 +407,11 @@ func newFolderRow(e folderEntry, subtitle string) *folderRow {
 	// AddSuffix appends, so the star ends up at the far right, after the
 	// badge. A container that cannot be opened cannot be pinned either.
 	var star *gtk.Button
-	if e.Folder.Selectable {
+	if e.Folder.Selectable && !e.Unified {
 		star = newStar(e.Starred)
 		row.AddSuffix(star)
+	} else if e.Unified {
+		row.AddSuffix(starSlot())
 	}
 
 	if !e.Folder.Selectable {
@@ -526,6 +532,9 @@ func (w *Window) onSyncFinished(prev, cur api.SyncState) {
 	}
 	w.loadFolders(cur.AccountID, w.model.foldersGen)
 	w.verifyNotifications(cur.AccountID)
+	if w.unifiedSyncFinished(cur) {
+		return
+	}
 	sel := w.model.selected
 	if sel.Account != cur.AccountID {
 		return
@@ -565,7 +574,7 @@ func (w *Window) onNewMessage(n api.NewMessageNotification) {
 	if s.FolderID == "" {
 		s.FolderID = n.FolderID
 	}
-	if k == w.model.listFolder {
+	if w.model.listCovers(k) {
 		if _, _, known := w.model.message(s.ID); known {
 			return // delivered twice; the badge was adjusted the first time
 		}
@@ -585,7 +594,7 @@ func (w *Window) onNewMessage(n api.NewMessageNotification) {
 			}
 			if w.model.applyNewMessage(s, w.model.listFilter, sel) {
 				w.syncRows()
-				w.refetchReplies(s.ThreadID)
+				w.refetchReplies(w.model.threadKey(s.AccountID, s.ThreadID))
 			} else {
 				w.loadMessages()
 			}
@@ -599,7 +608,7 @@ func (w *Window) onNewMessage(n api.NewMessageNotification) {
 			}
 			w.showListState()
 		}
-	} else if n.AccountID == w.model.listFolder.Account {
+	} else if n.AccountID == w.model.listFolder.Account && !w.model.listIsUnified() {
 		// A reply the user sent may belong to a listed conversation.
 		w.applyNewMessageElsewhere(s)
 	}

@@ -91,6 +91,9 @@ internal sealed class MailboxControllerHarness : IAsyncDisposable
         var h = new MailboxControllerHarness();
         h.Fixture = new MailFixture(h.fixtureClock);
         script(h.Fixture);
+        // The All Inboxes item is off unless a test turns it on: the tests'
+        // sidebars with two accounts count their rows without it.
+        h.Settings.UnifiedInbox = false;
         prepare?.Invoke(h.Settings);
         await h.Fixture.StartAsync();
         h.Client = new RpcClient(h.Fixture.Path, PortableKeyFilePolicy.Instance);

@@ -209,8 +209,14 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
             isReselecting = false
             return
         }
-        guard let node = dataSource.node(key, fav: fav) ?? dataSource.node(key, fav: !fav) else { return }
-        let row = outline.row(forItem: node)
+        let row: Int
+        if key.isUnified {
+            guard let node = dataSource.unifiedNode else { return }
+            row = outline.row(forItem: node)
+        } else {
+            guard let node = dataSource.node(key, fav: fav) ?? dataSource.node(key, fav: !fav) else { return }
+            row = outline.row(forItem: node)
+        }
         guard row >= 0, outline.selectedRow != row else { return }
         isReselecting = true
         outline.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
@@ -220,6 +226,9 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
     // MARK: NSOutlineViewDelegate
 
     func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
+        if item is UnifiedNode {
+            return true
+        }
         guard let node = item as? FolderNode, let folder = node.entry.folder else { return false }
         return folder.selectable
     }
@@ -238,17 +247,24 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
         switch item {
         case let node as FolderNode:
             return node.subtitle.isEmpty ? SidebarMetrics.rowHeight : SidebarMetrics.subtitleRowHeight
+        case is UnifiedNode:
+            return SidebarMetrics.rowHeight
         default:
             return SidebarMetrics.headerRowHeight
         }
     }
 
     func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
-        item is FolderNode ? FolderRowView() : nil
+        item is FolderNode || item is UnifiedNode ? FolderRowView() : nil
     }
 
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
         switch item {
+        case let node as UnifiedNode:
+            let cell = outline.makeView(withIdentifier: FolderCellView.reuseIdentifier, owner: nil) as? FolderCellView
+                ?? FolderCellView()
+            cell.configureUnified(entry: node.entry)
+            return cell
         case is FavouritesNode:
             let cell = headerCell()
             cell.configure(text: L10n.T("Favourites"))
@@ -282,7 +298,12 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
         let row = outline.selectedRow
         // An emptied selection changes nothing, as the GTK row-selected
         // handler ignores a nil row.
-        guard row >= 0, let node = outline.item(atRow: row) as? FolderNode else { return }
+        guard row >= 0 else { return }
+        if outline.item(atRow: row) is UnifiedNode {
+            mailbox.selectFolder(.unified, fav: false)
+            return
+        }
+        guard let node = outline.item(atRow: row) as? FolderNode else { return }
         mailbox.selectFolder(node.key, fav: node.fav)
     }
 
@@ -336,6 +357,10 @@ extension FolderSidebarViewController {
             }
         }
         switch node {
+        case is UnifiedNode:
+            // Nothing needs a real folder; checking mail covers every account.
+            groups = ContextMenu.accountItems(foldable: false)
+            run[.checkMail] = { mailbox.triggerSyncAllAccounts() }
         case let a as AccountNode:
             let id = a.id
             groups = ContextMenu.accountItems(foldable: outline.isExpandable(a))

@@ -22,8 +22,9 @@ extension ActionsController {
     /// Pushes the move of `list` (summaries taken before their rows went)
     /// to `target` with `kind`, once the daemon took it, and shows its
     /// toast (undo.go `recordUndo`). Nothing moved, nothing recorded.
-    func recordUndo(_ kind: Undo.Kind, target: FolderID, _ list: [MessageSummary]) {
+    func recordUndo(_ kind: Undo.Kind, target: FolderID, _ list: [MessageSummary], group: Int = 0) {
         guard var e = Undo.record(kind, target: target, list) else { return }
+        e.group = group
         if kind == .move, let f = mailbox.model.folder(FolderKey(account: e.account, folder: target)) {
             e.targetName = f.name
         }
@@ -56,6 +57,10 @@ extension ActionsController {
         let id = e.id
         showUndoToast(text, Undo.button(Self.undoShortcut)) { [weak self] in
             guard let self, let e = self.undoStack.take(id) else { return }
+            // A move of several accounts is taken back as one.
+            for other in self.undoStack.takeGroup(e.group) {
+                self.runUndo(other)
+            }
             self.runUndo(e)
         }
     }
@@ -65,6 +70,9 @@ extension ActionsController {
         guard let e = undoStack.pop() else {
             toast(Undo.nothing)
             return
+        }
+        for other in undoStack.takeGroup(e.group) {
+            runUndo(other)
         }
         runUndo(e)
     }
@@ -124,7 +132,24 @@ extension ActionsController {
     /// `ListController.relistAfterUndo`).
     private func afterUndo(_ e: Undo.Entry) {
         mailbox.loadFolders(e.account, mailbox.model.foldersGen)
-        guard let sel = mailbox.model.selected, sel.account == e.account, !mailbox.model.search.active else { return }
+        guard let sel = mailbox.model.selected, !mailbox.model.search.active else { return }
+        if sel.isUnified {
+            // The All Inboxes list: the messages that came back to an
+            // inbox of the entry's account, or a move into one.
+            let inboxes = mailbox.model.unifiedInboxes.filter { $0.accountId == e.account }
+            var back: [Undo.Moved] = []
+            for f in inboxes {
+                for m in Undo.reselect(e, account: e.account, folder: f.id) where !back.contains(where: { $0.messageId == m.messageId }) {
+                    back.append(m)
+                }
+            }
+            if back.isEmpty, !inboxes.contains(where: { $0.id == e.target }) {
+                return
+            }
+            list.relistAfterUndo(back)
+            return
+        }
+        guard sel.account == e.account else { return }
         let back = Undo.reselect(e, account: sel.account, folder: sel.folder)
         if back.isEmpty, sel.folder != e.target {
             return

@@ -64,13 +64,7 @@ func (w *Window) loadMessages() {
 		return
 	}
 
-	params := api.MessageListParams{
-		AccountID: k.Account,
-		FolderID:  k.Folder,
-		Page:      api.Page{Limit: api.DefaultPageLimit},
-		Sort:      api.SortDateDesc,
-		Filter:    w.model.listFilter,
-	}
+	params := w.model.messageListParams(k, "")
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 		defer cancel()
@@ -156,13 +150,7 @@ func (w *Window) loadMore() {
 		return
 	}
 
-	params := api.MessageListParams{
-		AccountID: k.Account,
-		FolderID:  k.Folder,
-		Page:      api.Page{Cursor: m.nextCursor, Limit: api.DefaultPageLimit},
-		Sort:      api.SortDateDesc,
-		Filter:    w.model.listFilter,
-	}
+	params := m.messageListParams(k, m.nextCursor)
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 		defer cancel()

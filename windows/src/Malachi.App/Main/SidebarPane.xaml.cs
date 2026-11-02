@@ -21,7 +21,8 @@
 // on the row clicked and leaves the selection alone: Check for New Mail;
 // Mark All as Read and Empty Trash or Empty Junk (always asked); Add to or
 // Remove from Favourites and Expand or Collapse. An account heading's has
-// Check for New Mail and its folding, the Favourites heading none. A
+// Check for New Mail and its folding, the Favourites heading none; the All
+// Inboxes row's has Check for New Mail, for every account. A
 // right click, Shift+F10 or the Menu key opens it.
 //
 // Windows addition (windows/README.md): Left and Right fold an account
@@ -311,6 +312,13 @@ public sealed partial class SidebarPane : UserControl
                 labels = new ContextMenu.Labels { Collapsed = row.Collapsed };
                 run[ContextMenu.ItemId.CheckMail] = () => m.TriggerSync(acc);
                 run[ContextMenu.ItemId.Fold] = () => ToggleFold(row);
+                break;
+            case SidebarRowKind.Unified:
+                // The All Inboxes item: checking every account is all it
+                // offers (no folder to pin, fold, mark read or empty).
+                groups = ContextMenu.AccountItems(false);
+                labels = new ContextMenu.Labels();
+                run[ContextMenu.ItemId.CheckMail] = m.TriggerSyncAll;
                 break;
             case SidebarRowKind.Folder when row.Folder is { } k && m.Model.Folder(k) is { } f:
                 groups = ContextMenu.FolderItems(new ContextMenu.FolderState

@@ -49,6 +49,10 @@ public final class Settings {
         case collapsedFolders = "collapsed-folders"
         case collapsedAccounts = "collapsed-accounts"
         case favouriteFolders = "favourite-folders"
+        /// The All Inboxes item at the top of the sidebar, while there are
+        /// two or more mail accounts (ui/internal/unified Shown). Never part
+        /// of the three keys above.
+        case unifiedInbox = "unified-inbox"
         /// The Assistant menu (ui/internal/assistant): shown at all, and
         /// the Claude app it opens (Settings → AI → Assistant).
         case assistantMenu = "assistant-menu"
@@ -167,6 +171,7 @@ public final class Settings {
             Key.collapsedFolders.rawValue: [String](),
             Key.collapsedAccounts.rawValue: [String](),
             Key.favouriteFolders.rawValue: [String](),
+            Key.unifiedInbox.rawValue: true,
             Key.assistantMenu.rawValue: true,
             Key.assistantTarget.rawValue: Assistant.Target.desktop.rawValue,
             Key.assistantModel.rawValue: Assistant.Model.sonnet.rawValue,
@@ -375,6 +380,11 @@ public final class Settings {
     }
 
     /// Folders pinned to the Favourites section, encoded like `collapsedFolders`.
+    public var unifiedInbox: Bool {
+        get { bool(.unifiedInbox) }
+        set { set(.unifiedInbox, newValue) }
+    }
+
     public var favouriteFolders: [String] {
         get { stringList(.favouriteFolders) }
         set { set(.favouriteFolders, newValue) }

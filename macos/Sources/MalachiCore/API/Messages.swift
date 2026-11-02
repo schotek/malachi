@@ -296,10 +296,16 @@ public struct MessageListParams: Codable, Sendable, Equatable {
     public var sort: SortOrder?
     public var filter: MessageFilter?
     public var unreadOnly: Bool?
+    /// Instead of `accountId` and `folderId` (both empty, which is what
+    /// Go's zero value reads from `""`), lists the folders of this role of
+    /// every enabled mail account in one page: the unified listing
+    /// (docs/api.md §4.3, `Unified.messageParams`). Only a role of
+    /// `UnifiedRoles` (inbox) is accepted. Left out when nil.
+    public var unified: FolderRole?
 
     public init(
         accountId: AccountID, folderId: FolderID, page: Page = Page(), sort: SortOrder? = nil,
-        filter: MessageFilter? = nil, unreadOnly: Bool? = nil
+        filter: MessageFilter? = nil, unreadOnly: Bool? = nil, unified: FolderRole? = nil
     ) {
         self.accountId = accountId
         self.folderId = folderId
@@ -307,6 +313,7 @@ public struct MessageListParams: Codable, Sendable, Equatable {
         self.sort = sort
         self.filter = filter
         self.unreadOnly = unreadOnly
+        self.unified = unified
     }
 }
 

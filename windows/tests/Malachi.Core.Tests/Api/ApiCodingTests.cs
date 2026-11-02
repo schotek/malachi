@@ -1220,6 +1220,15 @@ public sealed partial class ApiCodingTests
         Assert.Null(Member(list, "sort"));
         Assert.Null(Member(list, "filter"));
         Assert.Null(Member(list, "unreadOnly"));
+        Assert.Null(Member(list, "unified"));
+
+        // The unified listing (the All Inboxes item): the role instead of the ids, which stay empty.
+        var unified = EncodeObject(Malachi.Core.Model.Unified.MessageParams(MessageFilter.Unread, "u1"));
+        Assert.Equal("inbox", unified.GetProperty("unified").GetString());
+        Assert.Equal("", unified.GetProperty("accountId").GetString());
+        Assert.Equal("", unified.GetProperty("folderId").GetString());
+        Assert.Equal("u1", unified.GetProperty("page").GetProperty("cursor").GetString());
+        Assert.Equal("inbox", EncodeObject(Malachi.Core.Model.Unified.ThreadParams(MessageFilter.All, null)).GetProperty("unified").GetString());
 
         var filtered = EncodeObject(new MessageListParams
         {

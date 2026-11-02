@@ -75,11 +75,17 @@ public enum Undo {
         public var moves: [Moved]
         /// The board's case of a board move (`Kind.board`).
         public var caseID: String = ""
+        /// Entries of one user action across accounts (the All Inboxes
+        /// list moves a selection of several accounts one entry per
+        /// account) share a nonzero group; Undo takes them all back. 0:
+        /// the entry stands alone. Swift-first.
+        public var group: Int = 0
 
         public init(
             id: Int = 0, kind: Kind, account: AccountID, target: FolderID? = nil, targetName: String = "",
-            moves: [Moved] = [], caseID: String = ""
+            moves: [Moved] = [], caseID: String = "", group: Int = 0
         ) {
+            self.group = group
             self.id = id
             self.kind = kind
             self.account = account
@@ -184,6 +190,16 @@ public enum Undo {
         /// Takes the newest move off the stack (⌘Z).
         public mutating func pop() -> Entry? {
             entries.popLast()
+        }
+
+        /// Takes the other entries of `group` off the stack (the rest of
+        /// an action that moved messages of several accounts); none for
+        /// group 0.
+        public mutating func takeGroup(_ group: Int) -> [Entry] {
+            guard group != 0 else { return [] }
+            let taken = entries.filter { $0.group == group }
+            entries.removeAll { $0.group == group }
+            return taken
         }
 
         /// The newest move, left on the stack.

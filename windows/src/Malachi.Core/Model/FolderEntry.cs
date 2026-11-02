@@ -44,6 +44,14 @@ public sealed record FolderEntry
     /// </summary>
     public bool Starred { get; init; }
 
+    /// <summary>
+    /// The All Inboxes item (<see cref="Unified"/>): the first row of the
+    /// sidebar, above the Favourites heading, without an account or a
+    /// folder of its own; its <see cref="Badge"/> is the unread count of the
+    /// inboxes it lists. It cannot be pinned or folded.
+    /// </summary>
+    public bool IsUnified { get; init; }
+
     /// <summary>The row can be folded.</summary>
     public bool HasChildren { get; init; }
 
@@ -63,6 +71,6 @@ public sealed record FolderEntry
     /// </summary>
     public int Badge { get; init; }
 
-    /// <summary>The folder this row stands for; null on a header row.</summary>
-    public FolderKey? Key => Account is { } a && Folder is { } f ? new FolderKey(a.Id, f.Id) : null;
+    /// <summary>The folder this row stands for (the All Inboxes row: <see cref="Unified.Key"/>); null on a header row.</summary>
+    public FolderKey? Key => IsUnified ? Unified.Key : Account is { } a && Folder is { } f ? new FolderKey(a.Id, f.Id) : (FolderKey?)null;
 }
