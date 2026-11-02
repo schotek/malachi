@@ -178,6 +178,7 @@ public sealed class NotificationDecodeTests
             (API.Notify.AssistantProfileChanged, "{}"),
             (API.Notify.ContactsChanged, """{"accountId":"acc_1","bookIds":["b_1"]}"""),
             (API.Notify.UpdateChanged, "{}"),
+            (API.Notify.RulesChanged, "{}"),
         ];
         Assert.Equal(API.AllNotifications, samples.Select(s => s.Method));
         foreach (var (method, parameters) in samples)
