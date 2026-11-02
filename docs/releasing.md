@@ -124,6 +124,11 @@ tagged is tested before: step 1 on a Mac covers the daemon and the macOS
 client; a change in `windows/` or `backend/` reaches `main` through a pull
 request, whose `windows.yml` tests it on Windows, or the owner's Windows
 agent runs `build.ps1 test` and `lint` before the tag.
+A change in `ui/` (or the daemon, `po/` and `data/` under it) is built and
+tested the same way by `gtk.yml` on a pull request: `make build`, the UI
+tests under Xvfb and `make lint` (not the GTK smoke tests) in a Fedora 42
+container, as `scripts/gtk-container/gtk.sh` runs them on a Mac; it has
+no tag trigger and keeps no artifacts.
 
 `appstreamcli validate` reports one pedantic complaint,
 `cid-contains-uppercase-letter`, about the `M` in the application ID. The
