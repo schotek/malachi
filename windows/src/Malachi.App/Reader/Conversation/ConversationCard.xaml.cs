@@ -744,11 +744,13 @@ internal sealed partial class ConversationCard : UserControl
     // renderAttachments); nothing until message.get answered.
     private void RenderChips(LoadedMessage? lm)
     {
-        if (Chips.Children.Count == 0 && (lm?.Msg is not { } m || AttachmentChips.ChipAttachments(m.Attachments, lm.Body).Count == 0))
+        var cardOn = InvitationReading.ShowsInvitationCard(pane.Services.AccountOf(s.AccountId));
+        if (Chips.Children.Count == 0 && (lm?.Msg is not { } m || AttachmentChips.ChipAttachments(m.Attachments, lm.Body, InvitationReading.Read(m, cardOn)).Count == 0))
         {
             return;
         }
-        var (list, saveAll) = AttachmentChip.For(s, lm, nestedView: false, pane.Services.FileTypes, downloading: pane.Services.Cache.ShowsDownload(Id));
+        var (list, saveAll) = AttachmentChip.For(
+            s, lm, nestedView: false, pane.Services.FileTypes, downloading: pane.Services.Cache.ShowsDownload(Id), cardOn: cardOn);
         chips.FillAttachments(Chips, list, saveAll, AttachmentChips.AnyRemote(saveAll, lm?.Body), s);
     }
 

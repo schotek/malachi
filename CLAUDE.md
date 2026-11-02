@@ -578,6 +578,49 @@ schválil, vše beze změny kódu;
 všechno proti skutečnému API. Neviděné na obrazovce: bezpečnostní dialog
 a oznámení (manifest je nemá; jen testy Core).
 
+Odpovědi na pozvánky v konverzaci (2026-11-02, větev
+`fix/invitation-replies`; macOS první z pokynu vlastníka a jím ověřený nad
+kopií dat, GTK a Windows následují). Démon: `InvitationSummary.replyResponse`
+(odpověď účastníka i v souhrnu), `messages.has_attachments` bez kalendářové
+části, kterou ukazuje karta (`SetHasAttachments` v hooku pozvánky,
+`calendar.ParserVersion` 4 přečte uložené znovu), náhled bez řádků
+oddělovačů (`mime.isRule`). Reference Go `ui/internal/conversation/
+invitation.go`: odpověď (iTIP REPLY) je `ItemEvent` s jednou větou
+(4 msgid, česky), v časové ose i chatu kompaktní řádek, nepřečtená odpověď
+účastníka se označí jako karta; `BubbleText` vynechá řádky oddělovačů.
+macOS: port (`ConversationInvitation.swift`), čip `.ics` skrytý, když se
+ukazuje karta (`chipAttachments(…, card:)`, `ChipPlan(cardOn:)`; Swift-first),
+náhled řádku seznamu u pozvánky termín, u odpovědi věta
+(`invitationPreview`, Swift-first), karta pozvánky v bublině chatu s textem
+zkráceným (`ConversationBubbleView.showInvitation`), Navrhnout jiný čas… po
+odpovědi v řádku stavu (`InvitationCardView.placePropose`), řádek stavu karty vždy stav nad
+tlačítky a Připojit se k videohovoru na jednom řádku s minimální šířkou
+podle titulku (okno zprávy se měří dřív, než má šířku). Konverzace
+volá `message.get` i pro člena s pozvánkou (`needsBody`, ve všech třech
+klientech: karta jinak závisela na 📎 přílohy `.ics`). Ověřeno: Go testy démona
+(`core`, `store`, `mime`, `api`, `calendar`), `ui/internal/conversation`,
+`make po` v kontejneru, `swift build` a celé `swift test`,
+`check-strings.py`; vlastník na obrazovce (vlákno, chat, okno zprávy).
+GTK (2026-11-02, vlastník schválil v XQuartz): `chipAttachments(…, card)`
+a `Window.shownInvitation`, `invitationPreview` v `model.go` nad
+`calendar.SummaryTimeLine`, karta v bublině (`chatBubble.showInvitation`,
+`updateFill`), řádek stavu karty svislý s `invitation_strip_buttons`
+a `placePropose`; ověřeno `gtk.sh make build`, `test-ui`, smoke testy
+(pád WebKitu v `TestBodyFitGTKSmoke` je starší, i na čistém commitu),
+`make po`, `make lint`. Windows (2026-11-02, vlastník schválil na obrazovce):
+Core `Model/Conversation.Invitation.cs`, `InvitationSummary.ReplyResponse`,
+`AttachmentChips.ChipAttachments(…, card)`, `AttachmentChip.For(…, cardOn)`,
+`ReaderController.InvitationCardOn`, `BubbleAttachmentBadge(…, cardOn)`,
+`InvitationReading.Preview` nad `Cal.SummaryTimeLine`, `BubbleText` bez
+oddělovačů; App karta v bublině (`ConversationBubbleView.ShowInvitation`,
+kliky na kartu bublinu nerozbalí ani neotevřou), `InvitationCardView` se
+svislým `StripRow` a `PlacePropose` (přesun podle `Children.Contains`:
+`FrameworkElement.Parent` je null, dokud karta časové osy není v okně,
+a přepnutí chat → vlákna jinak padalo na 0x800F1000); 4 exclusions pryč.
+Ověřeno `build.ps1 app`, `lint`, `test` (zbylá selhání: kanárek WebView2
+i na čistém `HEAD`, dva testy `PROCESSOR_ARCHITECTURE` na ARM64, časový
+`IsLinear` samostatně zelený).
+
 Adresáře (2026-11-01, všechny tři klienty, sloučeno do `main`; plán,
 rozhodnutí A1–A16 a F1–F12, odpovědi vlastníka a wireframy W1–W7
 v `docs/plans/address-book.md`). Démon synchronizuje kontakty jako cache

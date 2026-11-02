@@ -901,7 +901,8 @@ final class MessageViewController: NSViewController {
             header.chipsVisible = false
             return
         }
-        let atts = chipAttachments(m.attachments, lm.body)
+        let card = mode == .embedded ? nil : invitationReading(m, cardOn: showsInvitationCard(delegate?.account(s.accountId)))
+        let atts = chipAttachments(m.attachments, lm.body, card: card)
         if atts.isEmpty {
             header.chipsVisible = false
             return

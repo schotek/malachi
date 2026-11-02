@@ -237,7 +237,7 @@ public static partial class Conversation
     public static CapabilityActions CardActions(Account? account, MessageSummary m, bool composeAccount)
     {
         ArgumentNullException.ThrowIfNull(m);
-        if (Jira.IsEvent(m.Issue))
+        if (Jira.IsEvent(m.Issue) || IsInvitationReply(m))
         {
             return default;
         }
@@ -293,6 +293,10 @@ public static partial class Conversation
             }
             return it with { Kind = ConversationItemKind.Event, EventLines = lines, EventText = Jira.EventText(s.Issue.Changes) };
         }
+        if (IsInvitationReply(s))
+        {
+            return InvitationReplyItem(it);
+        }
         it = it with { Unread = !s.Flags.Contains(Flag.Seen) };
         if (s.Issue is { } issue)
         {
@@ -334,7 +338,8 @@ public static partial class Conversation
                 output.Add(items[i]);
                 i++;
             }
-            // An event is filtered out above, so the item is a card.
+            // An issue's event is filtered out above, so the item is a card
+            // or the row of the user's answer to an invitation.
             if (MemberItem(s, account) is { } it)
             {
                 output.Add(it with { Sent = true, Unread = false });
@@ -344,14 +349,16 @@ public static partial class Conversation
         return output;
     }
 
-    // markRead: the newest message card that is neither queued in the outbox
-    // nor a sent card when it is unread, else null.
+    // markRead: the newest message card (or answer to an invitation) that is
+    // neither queued in the outbox nor a sent card when it is unread, else
+    // null.
     private static MessageId? MarkRead(List<ConversationItem> items)
     {
         for (var i = items.Count - 1; i >= 0; i--)
         {
             var it = items[i];
-            if (it.Kind != ConversationItemKind.Message || it.Sent || it.Message!.Outbox is not null)
+            var reply = it.Kind == ConversationItemKind.Event && IsInvitationReply(it.Message);
+            if ((it.Kind != ConversationItemKind.Message && !reply) || it.Sent || it.Message!.Outbox is not null)
             {
                 continue;
             }

@@ -15,8 +15,9 @@ line, the conflict strip, the mini day strip; then "Add to:" (a ComboBox
 of the targets, a label when the server chose the calendar, nothing
 without targets) with Accept / Tentative / Decline (its menu has Decline
 Without Reply), the reply note and Propose New Time…. After answering the
-state strip with Change Response and Show in Calendar replaces the
-buttons; the user's own event has its state line with Show in Calendar. A
+state strip on a line of its own, with Change Response, Show in Calendar
+and Propose New Time… under it, replaces the buttons (Join Video Call
+stays on one line); the user's own event has its state line with Show in Calendar. A
 reply message is one line beside its pill, a cancellation says so and
 offers Remove from Calendar. Every string is a TextBlock.Text set from
 code (InvitationCardView.xaml.cs); the card is collapsed for none.
@@ -264,44 +265,50 @@ code (InvitationCardView.xaml.cs); the card is collapsed for none.
                         IsActive="False"
                         Visibility="Collapsed" />
                 </reader:WrapBox>
-                <!-- After answering: the state strip, Change Response, Show in Calendar. -->
-                <Grid x:Name="StripRow" ColumnSpacing="8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <FontIcon
-                        x:Name="CheckIcon"
-                        VerticalAlignment="Center"
-                        AutomationProperties.AccessibilityView="Raw"
-                        FontSize="14"
-                        Foreground="{ThemeResource SystemFillColorSuccessBrush}" />
-                    <TextBlock
-                        x:Name="StripLabel"
-                        Grid.Column="1"
-                        VerticalAlignment="Center"
-                        FontWeight="SemiBold"
-                        IsTextSelectionEnabled="True"
-                        Style="{StaticResource BodyLabelStyle}"
-                        TextWrapping="Wrap" />
-                    <DropDownButton
-                        x:Name="ChangeButton"
-                        Grid.Column="2"
-                        VerticalAlignment="Center"
-                        AutomationProperties.AutomationId="InvitationChangeResponse">
-                        <DropDownButton.Flyout>
-                            <MenuFlyout x:Name="ChangeMenu" Placement="BottomEdgeAlignedRight" />
-                        </DropDownButton.Flyout>
-                    </DropDownButton>
-                    <Button
-                        x:Name="ShowButton"
-                        Grid.Column="3"
-                        VerticalAlignment="Center"
-                        AutomationProperties.AutomationId="InvitationShowInCalendar"
-                        Click="OnShowClick" />
-                </Grid>
+                <!-- After answering: the state strip on a line of its own,
+                     Change Response and Show in Calendar under it (Propose
+                     New Time… joins them from code), so that the state
+                     never wraps into a narrow column beside them. -->
+                <StackPanel x:Name="StripRow" Spacing="6">
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon
+                            x:Name="CheckIcon"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AccessibilityView="Raw"
+                            FontSize="14"
+                            Foreground="{ThemeResource SystemFillColorSuccessBrush}" />
+                        <TextBlock
+                            x:Name="StripLabel"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            FontWeight="SemiBold"
+                            IsTextSelectionEnabled="True"
+                            Style="{StaticResource BodyLabelStyle}"
+                            TextWrapping="Wrap" />
+                    </Grid>
+                    <reader:WrapBox
+                        x:Name="StripButtons"
+                        ChildSpacing="8"
+                        LineSpacing="6">
+                        <DropDownButton
+                            x:Name="ChangeButton"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="InvitationChangeResponse">
+                            <DropDownButton.Flyout>
+                                <MenuFlyout x:Name="ChangeMenu" Placement="BottomEdgeAlignedRight" />
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+                        <Button
+                            x:Name="ShowButton"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="InvitationShowInCalendar"
+                            Click="OnShowClick" />
+                    </reader:WrapBox>
+                </StackPanel>
                 <!-- A cancellation's Remove from Calendar. -->
                 <StackPanel x:Name="CancelRow" Orientation="Horizontal">
                     <Button

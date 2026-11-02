@@ -2257,6 +2257,10 @@ public record InvitationSummary
     [JsonPropertyName("replyFrom")]
     public Address? ReplyFrom { get; init; }
 
+    /// <summary>For a reply: the attendee's answer (a card's response says the same).</summary>
+    [JsonPropertyName("replyResponse")]
+    public EventResponse? ReplyResponse { get; init; }
+
     /// <summary>The organiser is one of the account's own addresses: such a request is processed, with no response path.</summary>
     [JsonPropertyName("ownEvent")]
     public bool? OwnEvent { get; init; }

@@ -708,6 +708,7 @@ private let foldPort = repoRoot.appendingPathComponent("macos/Sources/MalachiCor
 private let quotedPort = repoRoot.appendingPathComponent("macos/Sources/MalachiCore/Model/ConversationQuoted.swift")
 private let draftsPort = repoRoot.appendingPathComponent("macos/Sources/MalachiCore/Model/ConversationDrafts.swift")
 private let chatPort = repoRoot.appendingPathComponent("macos/Sources/MalachiCore/Model/ConversationChat.swift")
+private let invitationPort = repoRoot.appendingPathComponent("macos/Sources/MalachiCore/Model/ConversationInvitation.swift")
 private let replyPort = repoRoot.appendingPathComponent("macos/Sources/MalachiCore/Model/ConversationReply.swift")
 private let haveSources = FileManager.default.fileExists(atPath: template.path)
     && FileManager.default.fileExists(atPath: port.path) && FileManager.default.fileExists(atPath: foldPort.path)
@@ -738,7 +739,7 @@ struct ConversationTranslationTests {
     func portUsesTheTemplatesEntries() throws {
         let pot = try String(contentsOf: template, encoding: .utf8)
         let entries = pot.components(separatedBy: "\n\n").filter { $0.contains("ui/internal/conversation/") }
-        #expect(entries.count == 28, "po/malachi.pot names ui/internal/conversation in \(entries.count) entries")
+        #expect(entries.count == 32, "po/malachi.pot names ui/internal/conversation in \(entries.count) entries")
         let all = entries.joined(separator: "\n\n")
         #expect(all.contains("msgid \"%d earlier message is not shown\"\nmsgid_plural \"%d earlier messages are not shown\""))
         #expect(all.contains("msgid \"Collapse All\"\nmsgstr"))
@@ -795,6 +796,15 @@ struct ConversationTranslationTests {
         }
         for msgid in ["Reply to: %s", "Reply all to: %s"] {
             #expect(all.contains("#, c-format\nmsgid \"\(msgid)\"\nmsgstr"), "\(msgid)")
+        }
+        let invitation = try String(contentsOf: invitationPort, encoding: .utf8)
+        let invitationCalls = Array(invitation.components(separatedBy: "L10n.").dropFirst()).map { $0.prefix(60) }
+        let invitationMsgids = [
+            "Invitation accepted", "Invitation tentatively accepted", "Invitation declined", "Replied to the invitation",
+        ]
+        #expect(invitationCalls.map { String($0.prefix(while: { $0 != ")" })) } == invitationMsgids.map { "T(\"\($0)\"" })
+        for msgid in invitationMsgids {
+            #expect(all.contains("msgid \"\(msgid)\"\nmsgstr"), "\(msgid)")
         }
         let reply = try String(contentsOf: replyPort, encoding: .utf8)
         let replyCalls = Array(reply.components(separatedBy: "L10n.").dropFirst()).map { $0.prefix(100) }

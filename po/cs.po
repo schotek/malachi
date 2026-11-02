@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-11-02 16:04+0000\n"
+"POT-Creation-Date: 2026-11-02 18:21+0000\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -1520,7 +1520,7 @@ msgstr "Přikládá se %s…"
 msgid "Attaching %s"
 msgstr "Přiložení souboru %s"
 
-#: ui/internal/compose/pane.go:1075 ui/internal/window/attachments.go:565
+#: ui/internal/compose/pane.go:1075 ui/internal/window/attachments.go:574
 msgid "Opening the attachment"
 msgstr "Otevírání přílohy"
 
@@ -2788,34 +2788,34 @@ msgid "Malachi Mail connects to eWay-CRM over https only."
 msgstr "Malachi Mail se k eWay-CRM připojuje jen přes https."
 
 #. TRANSLATORS: a toggle button above a conversation in the reading pane, off; a click shows the messages as chat bubbles.
-#: ui/internal/conversation/chat.go:152 ui/internal/board/text.go:804
+#: ui/internal/conversation/chat.go:179 ui/internal/board/text.go:804
 msgid "Show as Chat"
 msgstr "Zobrazit jako chat"
 
 #. TRANSLATORS: the same toggle button above a conversation, on (the messages show as chat bubbles); a click goes back to the conversation as cards.
-#: ui/internal/conversation/chat.go:155 ui/internal/board/text.go:807
+#: ui/internal/conversation/chat.go:182 ui/internal/board/text.go:807
 msgid "Show as Thread"
 msgstr "Zobrazit jako vlákno"
 
 #. TRANSLATORS: the tooltip of the "Show as Chat" toggle above a conversation.
-#: ui/internal/conversation/chat.go:164 ui/internal/board/text.go:817
+#: ui/internal/conversation/chat.go:191 ui/internal/board/text.go:817
 msgid ""
 "Others on the left, your messages on the right; double-click opens the "
 "message"
 msgstr "Ostatní vlevo, vaše zprávy vpravo; dvojklik otevře zprávu"
 
 #. TRANSLATORS: the tooltip of the "Show as Thread" toggle above a conversation shown as chat bubbles.
-#: ui/internal/conversation/chat.go:167
+#: ui/internal/conversation/chat.go:194
 msgid "Back to the timeline: the messages as cards, newest first"
 msgstr "Zpět na časovou osu: zprávy jako karty, nejnovější první"
 
 #. TRANSLATORS: a switch in Preferences → Message list; on, a message in the chat layout of a conversation shows its formatting (HTML) instead of plain text.
-#: ui/internal/conversation/chat.go:185 ui/data/ui/preferences.ui:502
+#: ui/internal/conversation/chat.go:212 ui/data/ui/preferences.ui:502
 msgid "Render HTML in Chat"
 msgstr "V chatu vykreslovat HTML"
 
 #. TRANSLATORS: the subtitle of the "Render HTML in Chat" switch in Preferences → Message list.
-#: ui/internal/conversation/chat.go:192 ui/data/ui/preferences.ui:503
+#: ui/internal/conversation/chat.go:219 ui/data/ui/preferences.ui:503
 msgid ""
 "Messages in the chat layout as they were sent, in a locked web view, instead "
 "of their plain text"
@@ -2824,27 +2824,27 @@ msgstr ""
 "místo prostého textu"
 
 #. TRANSLATORS: the hint under a shortened message in the chat layout of a conversation; a click on the message shows all of it.
-#: ui/internal/conversation/chat.go:265
+#: ui/internal/conversation/chat.go:292
 msgid "Show More"
 msgstr "Zobrazit více"
 
 #. TRANSLATORS: the title of a group of switches in Preferences → Message list about conversations (grouping, the chat layout).
-#: ui/internal/conversation/chat.go:273 ui/data/ui/preferences.ui:493
+#: ui/internal/conversation/chat.go:300 ui/data/ui/preferences.ui:493
 msgid "Conversations"
 msgstr "Konverzace"
 
 #. TRANSLATORS: a switch in Preferences → Message list; on, the user's own messages in the chat layout of a conversation show only their first lines until clicked.
-#: ui/internal/conversation/chat.go:281 ui/data/ui/preferences.ui:508
+#: ui/internal/conversation/chat.go:308 ui/data/ui/preferences.ui:508
 msgid "Shorten My Messages in Chat"
 msgstr "Zkracovat moje zprávy v chatu"
 
 #. TRANSLATORS: a switch in Preferences → Message list; on, the other party's messages in the chat layout of a conversation show only their first lines until clicked.
-#: ui/internal/conversation/chat.go:288 ui/data/ui/preferences.ui:514
+#: ui/internal/conversation/chat.go:315 ui/data/ui/preferences.ui:514
 msgid "Shorten Others' Messages in Chat"
 msgstr "Zkracovat cizí zprávy v chatu"
 
 #. TRANSLATORS: the subtitle of the "Shorten My Messages in Chat" and "Shorten Others' Messages in Chat" switches in Preferences → Message list.
-#: ui/internal/conversation/chat.go:296 ui/data/ui/preferences.ui:509
+#: ui/internal/conversation/chat.go:323 ui/data/ui/preferences.ui:509
 #: ui/data/ui/preferences.ui:515
 msgid ""
 "About three lines of each message in its bubble; a click shows the whole "
@@ -2852,7 +2852,7 @@ msgid ""
 msgstr "Asi tři řádky každé zprávy v bublině; klepnutí ukáže celou zprávu"
 
 #. TRANSLATORS: at the top of a conversation in the reading pane; only its newest messages are shown.
-#: ui/internal/conversation/conversation.go:380
+#: ui/internal/conversation/conversation.go:383
 #, c-format
 msgid "%d earlier message is not shown"
 msgid_plural "%d earlier messages are not shown"
@@ -2875,6 +2875,30 @@ msgstr "Sbalit vše"
 #: ui/internal/conversation/fold.go:159
 msgid "Expand All"
 msgstr "Rozbalit vše"
+
+#. TRANSLATORS: a row of a conversation: someone (named beside it)
+#. accepted the invitation.
+#: ui/internal/conversation/invitation.go:25
+msgid "Invitation accepted"
+msgstr "Pozvánka přijata"
+
+#. TRANSLATORS: a row of a conversation: someone (named beside it)
+#. answered the invitation with Maybe.
+#: ui/internal/conversation/invitation.go:29
+msgid "Invitation tentatively accepted"
+msgstr "Na pozvánku odpovězeno: Možná"
+
+#. TRANSLATORS: a row of a conversation: someone (named beside it)
+#. declined the invitation.
+#: ui/internal/conversation/invitation.go:33
+msgid "Invitation declined"
+msgstr "Pozvánka odmítnuta"
+
+#. TRANSLATORS: a row of a conversation: someone (named beside it)
+#. answered the invitation, the answer none of the usual three.
+#: ui/internal/conversation/invitation.go:37
+msgid "Replied to the invitation"
+msgstr "Na pozvánku odpovězeno"
 
 #. TRANSLATORS: the tooltip of the three-dot button under a message whose quoted earlier messages show; hides them.
 #: ui/internal/conversation/quoted.go:20
@@ -5727,15 +5751,15 @@ msgstr "Nová pozvánka"
 
 #. TRANSLATORS: the action of an invitation's notification that opens
 #. the message.
-#: ui/internal/calendar/notifications.go:114
+#: ui/internal/calendar/notifications.go:122
 msgid "Show"
 msgstr "Zobrazit"
 
-#: ui/internal/calendar/notifications.go:121
+#: ui/internal/calendar/notifications.go:129
 msgid "An event was cancelled"
 msgstr "Událost byla zrušena"
 
-#: ui/internal/calendar/notifications.go:123
+#: ui/internal/calendar/notifications.go:131
 #, c-format
 msgid "%s cancelled the event"
 msgstr "%s zrušil(a) událost"
@@ -7178,63 +7202,63 @@ msgstr "_Nová zpráva"
 msgid "Opening the draft"
 msgstr "Otevření konceptu"
 
-#: ui/internal/window/attachments.go:98
+#: ui/internal/window/attachments.go:102
 msgid "Files inside an attached message cannot be opened or saved yet."
 msgstr "Soubory uvnitř přiložené zprávy zatím nelze otevřít ani uložit."
 
-#: ui/internal/window/attachments.go:197 ui/data/ui/message_window.ui:62
+#: ui/internal/window/attachments.go:201 ui/data/ui/message_window.ui:62
 #: ui/data/ui/window.ui:510
 msgid "More Actions"
 msgstr "Další akce"
 
-#: ui/internal/window/attachments.go:240 ui/internal/window/attachments.go:526
+#: ui/internal/window/attachments.go:244 ui/internal/window/attachments.go:535
 msgid ""
 "Programs and scripts are not opened directly; save the file and decide "
 "yourself."
 msgstr ""
 "Programy a skripty se neotevírají přímo; soubor uložte a rozhodněte se sami."
 
-#: ui/internal/window/attachments.go:255
+#: ui/internal/window/attachments.go:259
 msgid "_View"
 msgstr "_Zobrazit"
 
-#: ui/internal/window/attachments.go:257
+#: ui/internal/window/attachments.go:261
 msgid "_Open"
 msgstr "_Otevřít"
 
-#: ui/internal/window/attachments.go:261
+#: ui/internal/window/attachments.go:265
 msgid "Save _As…"
 msgstr "Uložit _jako…"
 
-#: ui/internal/window/attachments.go:302
+#: ui/internal/window/attachments.go:306
 msgid "Save _All"
 msgstr "Uložit _vše"
 
-#: ui/internal/window/attachments.go:366 ui/internal/window/message_view.go:630
+#: ui/internal/window/attachments.go:375 ui/internal/window/message_view.go:630
 msgid "This message is too large to download."
 msgstr "Tato zpráva je příliš velká ke stažení."
 
-#: ui/internal/window/attachments.go:368 ui/internal/window/message_view.go:632
+#: ui/internal/window/attachments.go:377 ui/internal/window/message_view.go:632
 msgid "This message could not be read."
 msgstr "Tuto zprávu se nepodařilo přečíst."
 
 #. TRANSLATORS: %s is a size such as "16.8 MB".
-#: ui/internal/window/attachments.go:372
+#: ui/internal/window/attachments.go:381
 #, c-format
 msgid "Attachments over %s cannot be opened or saved yet."
 msgstr "Přílohy větší než %s zatím nelze otevřít ani uložit."
 
 #. TRANSLATORS: tooltip of the server icon on an attachment; "it" is the attachment.
-#: ui/internal/window/attachments.go:377
+#: ui/internal/window/attachments.go:386
 msgid "On the server only; it is downloaded when you open it"
 msgstr "Jen na serveru; stáhne se, až ji otevřete"
 
-#: ui/internal/window/attachments.go:457
+#: ui/internal/window/attachments.go:466
 msgid "Attachment"
 msgstr "Příloha"
 
 #. TRANSLATORS: %d is the number of files written.
-#: ui/internal/window/attachments.go:502
+#: ui/internal/window/attachments.go:511
 #, c-format
 msgid "Saved %d attachment"
 msgid_plural "Saved %d attachments"
@@ -7243,30 +7267,30 @@ msgstr[1] "Uloženy %d přílohy"
 msgstr[2] "Uloženo %d příloh"
 
 #. TRANSLATORS: the first %d is how many failed, the second how many there were.
-#: ui/internal/window/attachments.go:505
+#: ui/internal/window/attachments.go:514
 #, c-format
 msgid "%d of %d attachments could not be saved"
 msgstr "%d z %d příloh se nepodařilo uložit"
 
-#: ui/internal/window/attachments.go:546 ui/internal/window/attachments.go:573
-#: ui/internal/window/attachments.go:592 ui/internal/window/attachments.go:610
-#: ui/internal/window/attachments.go:620
+#: ui/internal/window/attachments.go:555 ui/internal/window/attachments.go:582
+#: ui/internal/window/attachments.go:601 ui/internal/window/attachments.go:619
+#: ui/internal/window/attachments.go:629
 msgid "The attachment could not be opened"
 msgstr "Přílohu se nepodařilo otevřít"
 
-#: ui/internal/window/attachments.go:637
+#: ui/internal/window/attachments.go:646
 msgid "Save Attachment"
 msgstr "Uložit přílohu"
 
-#: ui/internal/window/attachments.go:653
+#: ui/internal/window/attachments.go:662
 msgid "Saving the attachment"
 msgstr "Ukládání přílohy"
 
-#: ui/internal/window/attachments.go:669
+#: ui/internal/window/attachments.go:678
 msgid "Save Attachments"
 msgstr "Uložit přílohy"
 
-#: ui/internal/window/attachments.go:689
+#: ui/internal/window/attachments.go:698
 msgid "Saving the attachments"
 msgstr "Ukládání příloh"
 

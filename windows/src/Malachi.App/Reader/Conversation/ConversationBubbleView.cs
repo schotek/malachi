@@ -66,11 +66,19 @@
 // something is cut (TextBlock.IsTextTrimmed, the measured document taller
 // than the preview). A tap anywhere in a shortened bubble asks the chat to
 // expand it (Expand); a double tap still opens the message.
+//
+// A message with an invitation shows the timeline card's invitation card
+// between the header and the text (ShowInvitation, message.get's card when
+// the account shows them; Swift showInvitation, GTK chatBubble
+// .showInvitation): the bubble is then as wide as its row allows, the chat
+// starts its text shortened, and taps on the card (its buttons, its text)
+// neither expand the bubble nor open the message.
 
 using System;
 using System.Linq;
 using Malachi.App.Controls;
 using Malachi.App.Resources;
+using Malachi.App.Shell;
 using Malachi.App.WebViews;
 using Malachi.Core.Api;
 using Malachi.Core.Html;
@@ -128,6 +136,14 @@ internal sealed partial class ConversationBubbleView : UserControl
     private readonly TextBlock showMore;
     private readonly Grid fade;
     private readonly RectangleGeometry htmlClip = new();
+
+    // The column of the header, the invitation card, the body and the hint;
+    // the invitation card of a message with a calendar part
+    // (ShowInvitation), made on first use between the header and the text,
+    // null for every other bubble.
+    private readonly StackPanel column;
+    private InvitationCardView? invitationView;
+    private InvitationCardPresenter? invitation;
 
     // What the header names for automation and the date it shows; a draft's
     // "Draft saved …" in the date's place.
@@ -289,7 +305,7 @@ internal sealed partial class ConversationBubbleView : UserControl
         // scroll inside) goes on to the chat (the card's forwardScroll).
         htmlHost.AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnHtmlWheel), handledEventsToo: true);
 
-        var column = new StackPanel();
+        column = new StackPanel();
         column.Children.Add(header);
         column.Children.Add(bodyLabel);
         column.Children.Add(htmlHost);
@@ -793,6 +809,10 @@ internal sealed partial class ConversationBubbleView : UserControl
     // it); on a draft's it opens the draft, as the double tap does.
     private void OnTapped(object sender, TappedRoutedEventArgs e)
     {
+        if (OnInvitation(e.OriginalSource))
+        {
+            return;
+        }
         if (IsDraft)
         {
             if (Activate is { } open)
@@ -810,12 +830,63 @@ internal sealed partial class ConversationBubbleView : UserControl
         expand();
     }
 
-    // An HTML bubble is as wide as the row allows (MaxWidth, the row's
-    // ConversationLayout.ChatBubbleMax); any other hugs its text.
+    /// <summary>The bubble shows an invitation card (<see cref="ShowInvitation"/>): it is as wide as its row allows.</summary>
+    public bool ShowsInvitation => invitationView is { Visibility: Visibility.Visible };
+
+    /// <summary>
+    /// The invitation card of member <paramref name="s"/> from message.get
+    /// (<paramref name="m"/>), as the timeline's card shows it
+    /// (<see cref="InvitationCardPresenter"/>): between the header and the
+    /// text, when the account shows invitation cards
+    /// (<paramref name="cardOn"/>); an entry let go (<paramref name="m"/>
+    /// null) keeps the card as it was. Join Video Call goes to
+    /// <paramref name="openLink"/>.
+    /// </summary>
+    public void ShowInvitation(
+        MessageSummary s, Message? m, bool cardOn, AppState state, Func<Window?> window, Action<string> openLink)
+    {
+        if (invitation is null)
+        {
+            if (InvitationReading.Read(m, cardOn) is null)
+            {
+                return;
+            }
+            invitationView = new InvitationCardView { Margin = new Thickness(0, 6, 0, 0) };
+            column.Children.Insert(1, invitationView);
+            invitation = new InvitationCardPresenter(invitationView, state, window) { OpenLink = openLink, Changed = ApplyWidth };
+        }
+        invitation.Show(s, m, cardOn);
+        ApplyWidth();
+    }
+
+    /// <summary>The bubble went for good: its invitation card's controller goes.</summary>
+    public void CloseInvitation() => invitation?.Close();
+
+    // Whether source (a tap's original source) is on the invitation card,
+    // whose buttons and text take their presses themselves.
+    private bool OnInvitation(object? source)
+    {
+        if (invitationView is null)
+        {
+            return false;
+        }
+        for (var d = source as DependencyObject; d is not null && d != this; d = VisualTreeHelper.GetParent(d))
+        {
+            if (d == invitationView)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // An HTML bubble, or one with an invitation card, is as wide as the row
+    // allows (MaxWidth, the row's ConversationLayout.ChatBubbleMax); any
+    // other hugs its text.
     private void ApplyWidth()
     {
         var max = MaxWidth;
-        if (RendersHtml && max > 0 && !double.IsInfinity(max))
+        if ((RendersHtml || ShowsInvitation) && max > 0 && !double.IsInfinity(max))
         {
             Width = max;
         }
@@ -993,7 +1064,7 @@ internal sealed partial class ConversationBubbleView : UserControl
     // the release of the second press before it opens a window).
     private void OnDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
-        if (Activate is not { } activate)
+        if (Activate is not { } activate || OnInvitation(e.OriginalSource))
         {
             return;
         }

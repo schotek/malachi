@@ -300,6 +300,13 @@ type chatBubble struct {
 	fade     *gtk.Box
 	onExpand func()
 	moreTick uint
+
+	// The invitation card of a message with a calendar part
+	// (showInvitation), made on first use between the header and the
+	// text; nil for every other bubble.
+	header     *gtk.Box
+	column     *gtk.Box
+	invitation *invitationCard
 }
 
 // newChatBubble is an empty bubble, the user's own (mine) or not.
@@ -388,6 +395,7 @@ func newChatBubble(mine bool) *chatBubble {
 	b.more.SetVisible(false)
 
 	column := gtk.NewBox(gtk.OrientationVertical, 6)
+	b.header, b.column = header, column
 	column.Append(header)
 	column.Append(b.text)
 	column.Append(b.html)
@@ -501,9 +509,7 @@ func (b *chatBubble) loadWeb() {
 		b.applyHeight()
 		b.html.SetVisible(true)
 		b.text.SetVisible(false)
-		if b.fill != nil {
-			b.fill(true)
-		}
+		b.updateFill()
 	}
 	if b.webDoc != b.doc.HTML || b.reload {
 		b.gov.reset()
@@ -577,9 +583,7 @@ func (b *chatBubble) releaseWeb() {
 	b.html.SetVisible(false)
 	b.fade.SetVisible(false)
 	b.text.SetVisible(b.shownAny && b.shownText != "")
-	if b.fill != nil {
-		b.fill(false)
-	}
+	b.updateFill()
 	b.chat.chatGiveWeb(web)
 	b.chat.chatHover("")
 }
@@ -1000,5 +1004,35 @@ func (e *chatCenterRow) setCompact(compact bool) {
 	e.compact = compact
 	if e.event {
 		e.showMeta()
+	}
+}
+
+// showInvitation shows the invitation card of member s from message.get
+// (m) between the header and the text, as the timeline's card does
+// (invitationCard), when its account shows invitation cards; an entry let
+// go (m nil) keeps the card as it was.
+func (b *chatBubble) showInvitation(w *Window, s api.MessageSummary, m *api.Message) {
+	if b.invitation == nil {
+		if w == nil || w.shownInvitation(m) == nil {
+			return
+		}
+		b.invitation = newInvitationCard(w, &w.ApplicationWindow.Window)
+		b.column.InsertChildAfter(b.invitation.widget(), b.header)
+		b.invitation.widget().NotifyProperty("visible", b.updateFill)
+	}
+	b.invitation.showMessage(s, m)
+	b.updateFill()
+}
+
+// showsInvitation reports whether the bubble shows an invitation card.
+func (b *chatBubble) showsInvitation() bool {
+	return b.invitation != nil && b.invitation.widget().Visible()
+}
+
+// updateFill widens the row for a web view and for an invitation card;
+// the bubble hugs its text otherwise.
+func (b *chatBubble) updateFill() {
+	if b.fill != nil {
+		b.fill(b.web != nil || b.showsInvitation())
 	}
 }

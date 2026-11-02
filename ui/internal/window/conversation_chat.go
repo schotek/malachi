@@ -314,10 +314,11 @@ func (cv *conversationChat) apply(m *conversation.Model) {
 				cv.bubbles[id] = row
 			}
 			row.row = r
+			cv.showInvitation(row)
 			cv.shorten(row)
 			row.setMax(bubbleMax)
 			row.setGap(cv.bubbleGap())
-			row.showMessage(r.Item, bubbleAttachmentBadge(r.Item.Message, cv.ctrl.loaded[id]), cv.compact)
+			row.showMessage(r.Item, bubbleAttachmentBadge(r.Item.Message, cv.ctrl.loaded[id], cv.cardOn(r.Item.Message.AccountID)), cv.compact)
 			if !row.bubble.showsText {
 				lm := cv.ctrl.loaded[id]
 				text, placeholder := bubbleBody(lm, r.Item.Message.Snippet)
@@ -406,7 +407,9 @@ func (cv *conversationChat) render(row *chatRow, lm *loadedMessage) {
 		return
 	}
 	item := cv.ctrl.model.Items[i]
-	row.showMessage(item, bubbleAttachmentBadge(item.Message, lm), cv.compact)
+	cv.showInvitation(row)
+	cv.shorten(row)
+	row.showMessage(item, bubbleAttachmentBadge(item.Message, lm, cv.cardOn(item.Message.AccountID)), cv.compact)
 	text, placeholder := bubbleBody(lm, item.Message.Snippet)
 	row.bubble.showBody(text, placeholder, bubbleMonospace(lm, true))
 	cv.renderHTML(row, lm)
@@ -451,7 +454,23 @@ func (cv *conversationChat) shorten(row *chatRow) {
 		chatExpandRow(&cv.expanded, row.row)
 		row.bubble.setShortened(false)
 	}
-	row.bubble.setShortened(chatRowShortened(cv.mineOn, cv.othersOn, &cv.expanded, row.row))
+	// The text of an invitation's bubble (the meeting's boilerplate under
+	// the card) starts shortened: the card says what matters.
+	card := row.bubble.showsInvitation() && !cv.expanded.Is(row.row.Item.Message.ID)
+	row.bubble.setShortened(card || chatRowShortened(cv.mineOn, cv.othersOn, &cv.expanded, row.row))
+}
+
+// showInvitation gives the bubble of row its invitation card
+// (message.get's, when the account shows invitation cards).
+func (cv *conversationChat) showInvitation(row *chatRow) {
+	if row.row.Kind != conversation.ChatBubble {
+		return
+	}
+	var m *api.Message
+	if lm := cv.ctrl.loaded[row.row.Item.Message.ID]; lm != nil {
+		m = lm.msg
+	}
+	row.bubble.showInvitation(cv.w, row.row.Item.Message, m)
 }
 
 // truncChanged follows the preferences conversation-chat-truncate-mine
@@ -809,4 +828,9 @@ func (cv *conversationChat) afterLayout() {
 		cv.scheduleNear()
 		return false
 	})
+}
+
+// cardOn is the "Show the Invitation Card" switch of account acc.
+func (cv *conversationChat) cardOn(acc api.AccountID) bool {
+	return cv.w.invitationCardOn(acc)
 }

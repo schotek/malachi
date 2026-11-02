@@ -344,6 +344,16 @@ func InvitationSummaryOf(inv Invitation, answeredSeq int, cancelled, newer, know
 		_ = json.Unmarshal(inv.Card, &sum) // the card's static fields; a damaged one reads as invalid below
 	}
 	sum.Method = inv.Method
+	sum.ReplyResponse = ""
+	if inv.Method == api.InvitationMethodReply && len(inv.Card) > 0 {
+		// A reply's card keeps the attendee's answer as its response.
+		var reply struct {
+			Response api.EventResponse `json:"response"`
+		}
+		if json.Unmarshal(inv.Card, &reply) == nil {
+			sum.ReplyResponse = reply.Response
+		}
+	}
 	if sum.Title == "" {
 		sum.Title = inv.Title
 	}

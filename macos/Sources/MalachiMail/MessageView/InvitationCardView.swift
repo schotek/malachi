@@ -64,6 +64,11 @@ final class InvitationCardView: NSView {
     private var conflictRow: NSStackView!
     private var actionsRow: NSStackView!
     private var stripRow: NSStackView!
+    /// The state strip's two parts: the check and the state ("Tentative ·
+    /// in calendar …") on a line of its own, its buttons under it, so that
+    /// the state never wraps into a narrow column beside them.
+    private var stripStatus: NSStackView!
+    private var stripButtons: NSStackView!
     private var cancelRow: NSStackView!
     private var column: FillStackView!
 
@@ -140,6 +145,14 @@ final class InvitationCardView: NSView {
         joinButton.action = #selector(joinClicked)
         joinButton.setContentHuggingPriority(.required, for: .horizontal)
         joinButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        // One line, always, as wide as its title: the location beside it
+        // gives way (a window measured before it had its width wrapped or
+        // clipped the title otherwise).
+        joinButton.cell?.wraps = false
+        joinButton.cell?.lineBreakMode = .byClipping
+        joinButton.usesSingleLineMode = true
+        let joinWidth = ceil(joinButton.attributedTitle.size().width) + 4
+        joinButton.widthAnchor.constraint(greaterThanOrEqualToConstant: joinWidth).isActive = true
         locationRow = Self.row([locationLabel, joinButton])
         locationRow.alignment = .firstBaseline
 
@@ -182,7 +195,10 @@ final class InvitationCardView: NSView {
         changeButton.bezelStyle = .push
         changeButton.setContentHuggingPriority(.required, for: .horizontal)
         button(showButton, Cal.showInCalendar, #selector(showClicked))
-        stripRow = Self.row([checkSymbol, stripLabel, changeButton, showButton])
+        stripStatus = Self.row([checkSymbol, stripLabel])
+        stripButtons = Self.row([changeButton, showButton])
+        stripRow = FillStackView(fillingViews: [stripStatus, stripButtons])
+        stripRow.spacing = 6
         button(stateShowButton, Cal.showInCalendar, #selector(showClicked))
         stateRow = Self.row([stateLabel, stateShowButton])
         stateRow.alignment = .firstBaseline
@@ -236,6 +252,23 @@ final class InvitationCardView: NSView {
         let r = Self.row([proposeButton])
         proposeRow = r
         return r
+    }
+
+    /// Moves Propose New Time… to the end of the state strip (`inStrip`,
+    /// as a push button like its neighbours) or back to its own row (small,
+    /// as an accessory).
+    private func placePropose(inStrip: Bool) {
+        guard let proposeRow else { return }
+        let target = inStrip ? stripButtons! : proposeRow
+        guard proposeButton.superview !== target else { return }
+        if let from = proposeButton.superview as? NSStackView {
+            from.removeArrangedSubview(proposeButton)
+        }
+        proposeButton.removeFromSuperview()
+        // Before the row's trailing filler (`row`).
+        target.insertArrangedSubview(proposeButton, at: max(0, target.arrangedSubviews.count - 1))
+        proposeButton.bezelStyle = inStrip ? .push : .accessoryBarAction
+        proposeButton.controlSize = inStrip ? .regular : .small
     }
 
     // MARK: Showing
@@ -357,7 +390,13 @@ final class InvitationCardView: NSView {
             }
         }
         notes.isHidden = notes.arrangedSubviews.isEmpty
-        proposeRow?.isHidden = !(full && c.showsProposeNewTime)
+        // Propose New Time… joins the state strip's buttons once answered
+        // (Change Response, Show in Calendar); before that it has a row of
+        // its own under the answers, which fill theirs.
+        let propose = full && c.showsProposeNewTime
+        placePropose(inStrip: propose && !stripRow.isHidden)
+        proposeRow?.isHidden = !propose || proposeButton.superview !== proposeRow
+        proposeButton.isHidden = !propose
         proposeButton.isEnabled = !c.busy
 
         set(errorLabel, c.error)

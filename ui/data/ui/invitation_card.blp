@@ -214,36 +214,49 @@ Box invitation_card {
       }
     }
 
+    // The state on a line of its own, its buttons under it (Propose New
+    // Time… joins them from Go once answered), so that the state never
+    // wraps into a narrow column beside them.
     Box invitation_strip_row {
-      orientation: horizontal;
-      spacing: 8;
+      orientation: vertical;
+      spacing: 6;
       margin-top: 4;
 
-      Image invitation_check {
-        icon-name: "emblem-ok-symbolic";
+      Box {
+        orientation: horizontal;
+        spacing: 8;
 
-        styles [
-          "success",
-        ]
+        Image invitation_check {
+          icon-name: "emblem-ok-symbolic";
+
+          styles [
+            "success",
+          ]
+        }
+
+        Label invitation_strip {
+          xalign: 0;
+          hexpand: true;
+          wrap: true;
+          selectable: true;
+
+          styles [
+            "heading",
+          ]
+        }
       }
 
-      Label invitation_strip {
-        xalign: 0;
-        hexpand: true;
-        wrap: true;
-        selectable: true;
+      Box invitation_strip_buttons {
+        orientation: horizontal;
+        spacing: 8;
 
-        styles [
-          "heading",
-        ]
-      }
+        MenuButton invitation_change {
+          valign: center;
+        }
 
-      MenuButton invitation_change {
-        valign: center;
-      }
-
-      Button invitation_show {
-        valign: center;
+        Button invitation_show {
+          valign: center;
+        }
       }
     }
 

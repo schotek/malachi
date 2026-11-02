@@ -16,6 +16,7 @@ using System.Linq;
 using Malachi.Core.Api;
 using Malachi.Core.Calendars;
 using Malachi.Core.Model;
+using Malachi.Core.Presentation;
 using Xunit;
 using F = Malachi.Core.Tests.Calendars.CalFixture;
 
@@ -240,5 +241,53 @@ public sealed class InvitationReadingTests
         Assert.Equal("You organise this event.", Cal.StateLine(c));
         Assert.True(Cal.ShowsInCalendar(c));
         Assert.False(Cal.ShowsInCalendar(c with { EventId = null })); // not stored: no Show in Calendar
+    }
+
+    // The row's preview of an invitation is its time, of a reply the
+    // answer; anything else keeps the snippet (Swift previewOfARow).
+    [Fact]
+    public void PreviewOfARow()
+    {
+        var env = F.Env();
+        var c = CardOf(InvitationState.Unanswered);
+        var time = Cal.SummaryTimeLine(c, env);
+        Assert.NotEqual("", time);
+        Assert.Equal(time, InvitationReading.Preview(Summary(c), "____", env));
+        Assert.Equal("Hello", InvitationReading.Preview(Summary(), "Hello", env));
+        Assert.Equal("Hello", InvitationReading.Preview(Summary(c with { Kind = InvitationKind.Other }), "Hello", env));
+        var timeless = c with { Start = null, End = null, StartDate = null, AllDay = false };
+        Assert.Equal("Hello", InvitationReading.Preview(Summary(timeless), "Hello", env));
+        var reply = new InvitationSummary
+        {
+            Method = InvitationMethod.Reply,
+            Kind = InvitationKind.Reply,
+            State = InvitationState.Processed,
+            Title = "",
+            ReplyResponse = EventResponse.Declined,
+        };
+        Assert.Equal("Invitation declined", InvitationReading.Preview(Summary(reply), "", env));
+        Assert.Equal("Invitation declined", MailModel.SummaryMessage(Summary(reply)).Snippet);
+    }
+
+    // The calendar part of the card shown gets no chip; with the account's
+    // switch off (no card) it is a file like any other, and in an attached
+    // message's view too (Swift cardHidesItsPartsChip).
+    [Fact]
+    public void CardHidesItsPartsChip()
+    {
+        var c = CardOf(InvitationState.Unanswered);
+        Attachment[] atts =
+        [
+            new() { PartId = c.PartId, Filename = "invite.ics", ContentType = "text/calendar", Size = 4096, Inline = false },
+            new() { PartId = "9", Filename = "agenda.pdf", ContentType = "application/pdf", Size = 1000, Inline = false },
+        ];
+        var s = Summary(c);
+        var lm = new LoadedMessage { Msg = new Message { Summary = s, Attachments = atts, Invitation = c } };
+        Assert.Equal(["agenda.pdf"], AttachmentChip.For(s, lm, false, null, cardOn: true).Chips.Select(x => x.Attachment.Filename));
+        Assert.Equal(2, AttachmentChip.For(s, lm, false, null, cardOn: false).Chips.Count);
+        Assert.Equal(2, AttachmentChip.For(s, lm, true, null, cardOn: true).Chips.Count);
+        Assert.Equal(["agenda.pdf"], AttachmentChips.ChipAttachments(atts, null, c).Select(a => a.Filename));
+        Assert.Equal(new BubbleAttachments.Count(1), Conversation.BubbleAttachmentBadge(s, lm, cardOn: true));
+        Assert.Equal(new BubbleAttachments.Count(2), Conversation.BubbleAttachmentBadge(s, lm));
     }
 }

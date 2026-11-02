@@ -964,6 +964,28 @@ func (s *Store) MarkBodyState(ctx context.Context, id string, state BodyState) e
 	return nil
 }
 
+// SetHasAttachments sets the paperclip of the message (has_attachments)
+// without touching its content: the invitation hook leaves out the
+// calendar part it shows as a card. A row with the value already is left
+// as it is (no update, no board trigger). ErrNotFound for an unknown id.
+func (s *Store) SetHasAttachments(ctx context.Context, id string, has bool) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE messages SET has_attachments = ?, updated_at = ?
+		WHERE id = ? AND has_attachments != ?`, boolInt(has), nowStamp(), id, boolInt(has))
+	if err != nil {
+		return fmt.Errorf("set has attachments: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		var one int
+		if err := s.db.QueryRowContext(ctx, `SELECT 1 FROM messages WHERE id = ?`, id).Scan(&one); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("set has attachments: %w", err)
+		}
+	}
+	return nil
+}
+
 // ListMessages pages through a folder. The cursor is opaque and bound to
 // the sort order it was issued for: a cursor from the other order (or a
 // malformed one) is ErrBadCursor. It does not encode the filter, so a
