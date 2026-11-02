@@ -4,7 +4,7 @@
 // Port of macos/Sources/MalachiCore/Calendar/CalendarNotificationText.swift;
 // GTK: ui/internal/calendar/notifications.go (SnoozeMinutes, Notification,
 // AlertWhen, AlertNotification, Join, Snooze, InvitationNotification,
-// summaryBody, Show, CancellationNotification).
+// summaryBody, SummaryTimeLine, Show, CancellationNotification).
 //
 // The calendar's notifications: an event's alert (notify.eventAlert) with
 // Join and Snooze, a new invitation with Accept (ResponseAction) and Show,
@@ -144,8 +144,16 @@ public static partial class Cal
 
     // Go's summaryBody: "Q4 planning · Tuesday 14 October 2026 · 10:00–11:30
     // · 1 h 30 min" (an all-day invitation one day long).
-    private static string SummaryBody(InvitationSummary s, Env env)
+    private static string SummaryBody(InvitationSummary s, Env env) => Text.Dots(CleanTitle(s.Title), SummaryTimeLine(s, env));
+
+    /// <summary>
+    /// notifications.go <c>SummaryTimeLine</c>: "Tuesday 14 October 2026 ·
+    /// 10:00–11:30 · 1 h 30 min" of a summary (summaryBody without the
+    /// title); "" without a time.
+    /// </summary>
+    public static string SummaryTimeLine(InvitationSummary s, Env env)
     {
+        ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(env);
         var allDay = s.AllDay == true;
         CalendarDate? endDate = null;
@@ -154,7 +162,7 @@ public static partial class Cal
             endDate = DateOf(AddDays(d, 1, env.Zone), env.Zone);
         }
         var o = BareOccurrence(start: s.Start, end: s.End, startDate: s.StartDate, endDate: endDate, allDay: allDay);
-        return Text.Dots(CleanTitle(s.Title), TimeLine(o, env));
+        return TimeLine(o, env);
     }
 
     /// <summary>notifications.go <c>Show</c>: an invitation's action that opens the message.</summary>

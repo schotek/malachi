@@ -150,6 +150,7 @@ public sealed partial class MessageView : UserControl
             IssueSite = services.IssueSite,
             CanTransition = services.Issues.CanTransition,
             IssueBusy = services.Issues.IsBusy,
+            InvitationCardOn = s => InvitationReading.ShowsInvitationCard(services.AccountOf(s.AccountId)),
         };
         Reader.Toast = text => services.ToastIn(HostWindow, text);
         Reader.PropertyChanged += OnReaderChanged;

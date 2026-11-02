@@ -567,8 +567,7 @@ odpovědi v řádku stavu (`InvitationCardView.placePropose`), řádek stavu kar
 tlačítky a Připojit se k videohovoru na jednom řádku s minimální šířkou
 podle titulku (okno zprávy se měří dřív, než má šířku). Konverzace
 volá `message.get` i pro člena s pozvánkou (`needsBody`, ve všech třech
-klientech: karta jinak závisela na 📎 přílohy `.ics`). 4 msgid jsou do
-portu ve `windows/parity-exclusions.txt`. Ověřeno: Go testy démona
+klientech: karta jinak závisela na 📎 přílohy `.ics`). Ověřeno: Go testy démona
 (`core`, `store`, `mime`, `api`, `calendar`), `ui/internal/conversation`,
 `make po` v kontejneru, `swift build` a celé `swift test`,
 `check-strings.py`; vlastník na obrazovce (vlákno, chat, okno zprávy).
@@ -578,7 +577,19 @@ a `Window.shownInvitation`, `invitationPreview` v `model.go` nad
 `updateFill`), řádek stavu karty svislý s `invitation_strip_buttons`
 a `placePropose`; ověřeno `gtk.sh make build`, `test-ui`, smoke testy
 (pád WebKitu v `TestBodyFitGTKSmoke` je starší, i na čistém commitu),
-`make po`, `make lint`. Windows předán agentovi (jen `NeedsBody` napsané).
+`make po`, `make lint`. Windows (2026-11-02, vlastník schválil na obrazovce):
+Core `Model/Conversation.Invitation.cs`, `InvitationSummary.ReplyResponse`,
+`AttachmentChips.ChipAttachments(…, card)`, `AttachmentChip.For(…, cardOn)`,
+`ReaderController.InvitationCardOn`, `BubbleAttachmentBadge(…, cardOn)`,
+`InvitationReading.Preview` nad `Cal.SummaryTimeLine`, `BubbleText` bez
+oddělovačů; App karta v bublině (`ConversationBubbleView.ShowInvitation`,
+kliky na kartu bublinu nerozbalí ani neotevřou), `InvitationCardView` se
+svislým `StripRow` a `PlacePropose` (přesun podle `Children.Contains`:
+`FrameworkElement.Parent` je null, dokud karta časové osy není v okně,
+a přepnutí chat → vlákna jinak padalo na 0x800F1000); 4 exclusions pryč.
+Ověřeno `build.ps1 app`, `lint`, `test` (zbylá selhání: kanárek WebView2
+i na čistém `HEAD`, dva testy `PROCESSOR_ARCHITECTURE` na ARM64, časový
+`IsLinear` samostatně zelený).
 
 Adresáře (2026-11-01, všechny tři klienty, sloučeno do `main`; plán,
 rozhodnutí A1–A16 a F1–F12, odpovědi vlastníka a wireframy W1–W7

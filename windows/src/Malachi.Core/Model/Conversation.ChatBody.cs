@@ -144,13 +144,15 @@ public static partial class Conversation
     /// itself; none when there are no chips. Before that, the pill alone when
     /// the summary has <see cref="MessageSummary.HasAttachments"/>, so that
     /// the bubble shows it from the first moment; else none. A failed
-    /// message.get leaves the summary's word.
+    /// message.get leaves the summary's word. <paramref name="cardOn"/>: the
+    /// account shows invitation cards, so the calendar part of the card shown
+    /// is no chip.
     /// </summary>
-    public static BubbleAttachments BubbleAttachmentBadge(MessageSummary? summary, LoadedMessage? loaded)
+    public static BubbleAttachments BubbleAttachmentBadge(MessageSummary? summary, LoadedMessage? loaded, bool cardOn = false)
     {
         if (loaded?.Msg is { } m)
         {
-            var n = AttachmentChips.ChipAttachments(m.Attachments, loaded.Body).Count;
+            var n = AttachmentChips.ChipAttachments(m.Attachments, loaded.Body, InvitationReading.Read(m, cardOn)).Count;
             return n > 0 ? new BubbleAttachments.Count(n) : new BubbleAttachments.None();
         }
         return summary?.HasAttachments == true ? new BubbleAttachments.Some() : new BubbleAttachments.None();

@@ -41,6 +41,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using Malachi.Core.Boards;
 using Malachi.Core.I18n;
 
@@ -116,14 +117,41 @@ public static partial class Conversation
     /// (<see cref="Board.CleanBlock"/>, at most <see cref="DraftTextBytes"/>:
     /// line breaks kept, at most one empty line in a row, control and format
     /// characters gone, trimmed), so that a message bubble and a draft bubble
-    /// read alike; "" for an empty text. The states of a body (on its way,
+    /// read alike, without rules (lines of separator characters only, as the
+    /// "____" around a meeting invitation's text); "" for an empty text.
+    /// The states of a body (on its way,
     /// too large, unreadable, empty) and the errors of the call are the
     /// view's to show, with the texts of the timeline's cards
     /// (<see cref="BubbleBodyFor"/>); until a body is asked for, the bubble
     /// shows the summary's snippet.
     /// </summary>
-    public static string BubbleText(string? text) =>
-        string.IsNullOrEmpty(text) ? "" : Board.CleanBlock(text, DraftTextBytes);
+    public static string BubbleText(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return "";
+        }
+        var kept = text.Split('\n').Where(l => l.Trim() is var t && (t.Length == 0 || !IsRule(t)));
+        return Board.CleanBlock(string.Join('\n', kept), DraftTextBytes);
+    }
+
+    // isRule: whether line (trimmed, not empty) is made of separator
+    // characters only, spaces between them: underscores, hyphens, dashes,
+    // equals signs, asterisks, tildes, hashes, dots and box-drawing lines
+    // (the daemon's rule for the snippet, mime.isRule).
+    private static bool IsRule(string line)
+    {
+        foreach (var r in line.EnumerateRunes())
+        {
+            if (Rune.IsWhiteSpace(r) || (r.IsBmp && "_-=*~#.".Contains((char)r.Value, StringComparison.Ordinal))
+                || r.Value is >= 0x2010 and <= 0x2015 or >= 0x2500 and <= 0x257F)
+            {
+                continue;
+            }
+            return false;
+        }
+        return true;
+    }
 
     /// <summary>
     /// conversation.ChatToggleLabel: the label of the toggle button above the

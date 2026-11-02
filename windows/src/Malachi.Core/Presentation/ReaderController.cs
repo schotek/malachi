@@ -167,6 +167,13 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
     /// <summary>Whether a message of the Drafts folder is on display (the pane's draft banner); set by the application.</summary>
     public Func<MessageSummary, bool>? IsDraft { get; set; }
 
+    /// <summary>
+    /// Whether the account of a message shows invitation cards
+    /// (<see cref="InvitationReading.ShowsInvitationCard"/>), so that the calendar part of the card
+    /// shown gets no chip; set by the application, null shows every part.
+    /// </summary>
+    public Func<MessageSummary, bool>? InvitationCardOn { get; set; }
+
     /// <summary>Shows a message in the view's window (a failed image load of an attached message).</summary>
     public Action<string>? Toast { get; set; }
 
@@ -848,7 +855,8 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
     private void RenderAttachments(MessageSummary s, LoadedMessage? lm)
     {
         var nested = Mode == ReaderMode.Embedded;
-        var (chips, saveAll) = AttachmentChip.For(s, lm, nested, policy, downloading: !nested && cache.ShowsDownload(s.Id));
+        var (chips, saveAll) = AttachmentChip.For(
+            s, lm, nested, policy, downloading: !nested && cache.ShowsDownload(s.Id), cardOn: InvitationCardOn?.Invoke(s) ?? false);
         var remote = AttachmentChips.AnyRemote(saveAll, lm?.Body);
         if (!SameChips(Chips, chips) || remote != SaveAllRemote)
         {

@@ -90,7 +90,7 @@ public sealed partial class MailModel
             Tag = BulkMail.Tag(t.Latest.Bulk),
             Participants = t.Participants,
             Subject = t.Subject,
-            Snippet = t.Snippet,
+            Snippet = InvitationReading.Preview(t.Latest, t.Snippet),
             Date = t.LatestDate,
             Count = t.MessageCount,
             Unread = t.UnreadCount,

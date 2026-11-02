@@ -224,7 +224,7 @@ public sealed class ApiRoundTripTests
 
     private const string CalInvitationSummaryMembers =
         """
-        "method":"request","kind":"update","state":"unanswered","title":"Workshop","start":"2026-10-14T08:00:00Z","end":"2026-10-14T08:30:00Z","startDate":"2026-10-14","allDay":true,"organizer":@address@,"replyFrom":@address@,"ownEvent":true
+        "method":"request","kind":"update","state":"unanswered","title":"Workshop","start":"2026-10-14T08:00:00Z","end":"2026-10-14T08:30:00Z","startDate":"2026-10-14","allDay":true,"organizer":@address@,"replyFrom":@address@,"replyResponse":"accepted","ownEvent":true
         """;
 
     private const string CalInvitationSummary =

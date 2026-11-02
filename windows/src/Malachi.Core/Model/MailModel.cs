@@ -169,7 +169,7 @@ public sealed partial class MailModel
         {
             From = s.From,
             Subject = s.Subject,
-            Snippet = s.Snippet,
+            Snippet = InvitationReading.Preview(s, s.Snippet),
             Date = s.Date,
             Unread = issue?.Unread ?? !FolderTree.HasFlag(s.Flags, Flag.Seen),
             Flagged = FolderTree.HasFlag(s.Flags, Flag.Flagged),

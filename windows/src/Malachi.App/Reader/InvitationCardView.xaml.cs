@@ -51,7 +51,10 @@ public sealed partial class InvitationCardView : UserControl
     public InvitationCardView()
     {
         InitializeComponent();
-        JoinButton.Content = Cal.JoinVideoCall;
+        // One line, always, as wide as its title: the location beside it
+        // gives way (its column is Auto, the location's star).
+        JoinButton.Content = new TextBlock { Text = Cal.JoinVideoCall, TextWrapping = TextWrapping.NoWrap, TextTrimming = TextTrimming.None };
+        AutomationProperties.SetName(JoinButton, Cal.JoinVideoCall);
         AddToLabel.Text = Cal.AddTo;
         AutomationProperties.SetName(TargetBox, Cal.AddTo);
         AcceptButton.Content = Cal.ResponseAction(new EventResponse(EventResponse.Accepted));
@@ -174,10 +177,44 @@ public sealed partial class InvitationCardView : UserControl
 
         var note = live ? c.ReplyNote : [];
         Fill(NotesStack, note, card.OrganizerMismatch == true && note.Count > 0 ? note[^1] : null);
-        ProposeRow.Visibility = Visible(full && c.ShowsProposeNewTime);
+        // Propose New Time… joins the state strip's buttons once answered
+        // (Change Response, Show in Calendar); before that it has a row of
+        // its own under the answers, which fill theirs.
+        var propose = full && c.ShowsProposeNewTime;
+        PlacePropose(propose && StripRow.Visibility == Visibility.Visible);
+        ProposeRow.Visibility = Visible(propose && ProposeRow.Children.Contains(ProposeButton));
+        ProposeButton.Visibility = Visible(propose);
         ProposeButton.IsEnabled = !c.Busy;
 
         Set(ErrorLabel, c.Error);
+    }
+
+    // Moves Propose New Time… to the end of the state strip's buttons
+    // (inStrip, a button like its neighbours) or back to its own row (small,
+    // as an accessory).
+    private void PlacePropose(bool inStrip)
+    {
+        // By the panels' children, not FrameworkElement.Parent: a child added
+        // where it already is (or still is elsewhere) throws.
+        Panel target = inStrip ? StripButtons : ProposeRow;
+        Panel from = inStrip ? ProposeRow : StripButtons;
+        if (target.Children.Contains(ProposeButton))
+        {
+            return;
+        }
+        from.Children.Remove(ProposeButton);
+        target.Children.Add(ProposeButton);
+        if (inStrip)
+        {
+            ProposeButton.ClearValue(Control.PaddingProperty);
+            ProposeButton.ClearValue(Control.FontSizeProperty);
+            ProposeButton.VerticalAlignment = VerticalAlignment.Center;
+        }
+        else
+        {
+            ProposeButton.Padding = new Thickness(8, 2, 8, 2);
+            ProposeButton.FontSize = 12;
+        }
     }
 
     // The tile at the start (none for a reply's one line): the column takes
