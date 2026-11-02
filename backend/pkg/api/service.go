@@ -201,16 +201,13 @@ type UpdateService interface {
 }
 
 // SignatureService answers the details of a message's signature and its
-// revocation check (docs/api.md §4.21). It is not in Backend yet: the
-// daemon's change that implements it adds Signatures() to Backend (and to
-// the RPC stub and the bridge's fake) with the handlers.
+// revocation check (docs/api.md §4.21).
 type SignatureService interface {
 	Signature(ctx context.Context, p MessageSignatureParams) (*MessageSignatureResult, error)
 	Revocation(ctx context.Context, p MessageSignatureRevocationParams) (*MessageSignatureResult, error)
 }
 
-// PGPService manages the stored OpenPGP public keys (docs/api.md §4.21);
-// added to Backend as PGP() together with SignatureService.
+// PGPService manages the stored OpenPGP public keys (docs/api.md §4.21).
 type PGPService interface {
 	KeyImport(ctx context.Context, p PGPKeyImportParams) (*PGPKeyImportResult, error)
 	KeyVerify(ctx context.Context, p PGPKeyVerifyParams) (*PGPKeyVerifyResult, error)
@@ -245,6 +242,8 @@ type Backend interface {
 	Assistant() AssistantService
 	AddressBooks() AddressBookService
 	Update() UpdateService
+	Signatures() SignatureService
+	PGP() PGPService
 }
 
 // Notifier is how backend components push events to connected clients.

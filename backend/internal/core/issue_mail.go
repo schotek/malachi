@@ -161,6 +161,7 @@ func (b *Backend) afterMailStored(ctx context.Context, accountID, messageID stri
 	b.noteIssueMail(ctx, accountID, messageID)
 	b.noteInvitation(ctx, accountID, messageID)
 	b.noteCrmFollow(ctx, accountID, messageID)
+	b.noteSignature(accountID, messageID)
 }
 
 // afterIssueStored is the Stored hook of the issue-tracker syncer: the

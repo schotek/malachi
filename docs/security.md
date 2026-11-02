@@ -974,19 +974,124 @@ server rewrote. It is handled as mail is:
 
 ## 5. Signatures and encryption (EFAIL and friends)
 
-Not implemented in phase 1. When PGP/S/MIME arrives:
+Phase 1 (docs/plans/signatures.md, `docs/api.md` §4.21) verifies the
+signatures of incoming mail, S/MIME and OpenPGP/MIME. Nothing is signed,
+decrypted or encrypted, and the daemon holds no secret key; decryption,
+signing and encryption are later phases (the EFAIL rules at the end of
+this section are for them).
 
-- Decrypt/verify only in the backend; the UI sees a verdict and sanitised
-  content.
+**Where and when.** Only the daemon verifies (`internal/signature`,
+`internal/smime`, `internal/pgpsig`); the UI shows a verdict and plain
+text. The Stored hook of the mail syncers only queues a stored message;
+a worker reads the raw file afterwards (`core/signature_worker.go`), so
+verification never runs inside ingest or a write transaction of mail,
+and a hostile signature cannot stall the synchronisation. A verifier
+that panics or hits a limit gives the verdict `error`; the message is
+stored and shown like any other (S17). The verdict is a row of
+`message_signatures` (migration 0025) that goes with its message; the
+stored mail of the offline window is verified by a backfill in
+`core.Maintain`.
+
+**What counts (S4).** Only a signature over the whole message is a
+verdict: the topmost `multipart/signed` or opaque `signed-data`, or one
+of them as the first part of a `multipart/mixed` whose only other part is
+a `text/plain` after it (a list's footer, note `partialFooter`; that text
+is outside the signature and the note says so). A signed part deeper
+down (a forwarded message, an attachment, a signed part beside an
+unsigned HTML part) is no verdict — the 2019 "Johnny, you are fired"
+attacks wrap a genuinely signed part into a message the attacker wrote.
+Several `SignerInfo`s, several OpenPGP signature packets, or a
+`multipart/signed` that is not exactly two parts with a closing boundary
+are never a green verdict (`unsupported` or `invalid/malformed`).
+
+**Exact bytes (S3).** The signed part is cut out of the raw file as it is
+(`signature.Locate`: the bytes between the delimiter lines), never
+rebuilt by the parser, and canonicalised only by turning bare LF into
+CRLF; if that fails, the bytes as stored are tried once more. A server
+that rebuilds MIME (Microsoft Graph, Exchange) breaks clear signatures:
+on Graph accounts a mismatch of a clear signature is
+`unsupported/rebuilt`, never green and never red.
+
+**Identity (S5).** The signer is the certificate's `rfc822Name` (else the
+DN's `emailAddress`) or a user ID of the OpenPGP key, compared with the
+message's only `From` address (NFC, case-insensitive). A message with
+two `From` addresses never matches. A signature that verifies under
+another identity is `mismatch` (yellow), never green; the name shown is
+always the certificate's or key's, never the header's.
+
+**S/MIME trust (S7, S8, S10).** Roots are the system's
+(`x509.SystemCertPool`; the platform verifier on macOS and Windows),
+intermediates only those the message carries, nothing is fetched (no
+AIA chasing). The certificate must be valid when the message *arrived*
+(internal date), never judged by `signingTime`, which the signer
+writes. The leaf must allow e-mail protection (extended key usage
+`emailProtection` or `any`, key usage digital signature or
+non-repudiation). MD5 is invalid; SHA-1 and RSA under 2048 bits are
+`weak`; DSA is `unsupported`. The CMS parser is our own
+(`internal/smime` over `cryptobyte`): BER is normalised to DER with
+depth 32, 32 MiB and 100 000 elements as limits, at most 16
+certificates, repeated signed attributes are malformed (a second
+`messageDigest` cannot be the one checked), and unsigned attributes are
+ignored. The fingerprint of the roots is part of each S/MIME verdict's
+trust key; a change (checked at start and daily) recomputes them. Where
+the system pool cannot list its roots (macOS, Windows) the fingerprint
+names only the platform and such a change is noticed when a verdict is
+next computed.
+
+**Revocation (S9).** Only on the user's click
+(`message.signatureRevocation`): asking the issuer tells it the
+certificate is in use. `internal/revocation` asks OCSP, then the CRL, over
+`http`/`https` to public addresses only (the dial guard and host rules
+of `internal/oneclick`), without redirects or cookies, at most 1 MiB per
+answer and 15 s in all. An OCSP answer counts only when the issuer signed
+it, or a responder certificate the issuer issued with the OCSP-signing
+usage (`x/crypto/ocsp` alone would take any certificate of the issuer);
+a CRL only when the issuer signed it; answers far past their next update
+are refused. A revocation before the arrival makes the verdict
+`revoked`, after it a note. Only the class of a failure is logged.
+
+**OpenPGP keys (S12, §5 of the plan).** Public keys only, from the
+user's own mail and never from the network: the Autocrypt header of new
+mail (only when its `addr` is the message's only `From`, the mail is not
+bulk, list or in Junk/Trash, the key is a single public key whose user
+IDs all name that address — so a sender cannot plant a key that claims
+someone else — and no key is stored for the address yet; a different
+key for a known address is only offered, with the TOFU note
+`keyChanged`), a key attached to a message (imported on the user's
+click), or an import in Preferences. A key found automatically is
+`seen` (`validSeen`, green without the check mark); only the user's
+confirmation of the fingerprint makes it `verified`. Any data holding a
+secret key is refused whole; nothing is "extracted" from it. A key
+imported by the user may claim any user ID: it stays `seen` until the
+user confirms it. Inline OpenPGP signatures are never verified (they do
+not cover attachments or HTML): `unsupported` with `inlinePGP`.
+
+**Display and logs (S1, S16).** Every string from a certificate or key
+(names, addresses, distinguished names, user IDs, protected header
+values) is cleaned of control, format, bidi and invisible characters and
+capped at 256 bytes before it is stored or sent; clients show it as
+plain text only. Nothing of a certificate or key is logged: only the
+verdict class, the kind and message ids. The MCP bridge passes the
+verdict through `clean()` and the fence, and its instructions say that
+`valid` names the sender, not the truth of the content.
+
+**Opaque S/MIME (S14).** `signed-data` is only wrapped, not encrypted:
+the MIME parser unwraps it (as the root, or the first part of a root
+`multipart/mixed`, at most three wrappers deep) and shows the content
+like any message, numbering its parts inside the wrapper. The CMS is
+read without being trusted for that; the verdict is computed separately.
+Data that does not unwrap stays the `smime.p7m` attachment.
+
+**For the later phases (EFAIL).** When decryption arrives:
+
+- Decrypt only in the backend (a helper holds the secret keys); the UI
+  sees a verdict and sanitised content.
 - **EFAIL direct-exfiltration**: never render a message where encrypted
   and unencrypted MIME parts are mixed into one HTML document. Each
   encrypted part is rendered alone, and remote content is *always* blocked
   in decrypted content regardless of the user's `allow` policy.
 - **EFAIL malleability gadgets**: require MDC/AEAD for OpenPGP; refuse to
   show content whose integrity check failed, no "show anyway" button.
-- Signature verdicts are displayed with the signer's *verified* identity, not
-  the `From` header text; a valid signature by the wrong key is shown as a
-  warning, not a checkmark.
 
 ## 6. Credentials
 

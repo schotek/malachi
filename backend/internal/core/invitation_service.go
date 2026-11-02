@@ -241,7 +241,12 @@ func (b *Backend) readInvitation(ctx context.Context, a store.Account, m store.M
 	if parsed {
 		// The card shows the calendar part: the paperclip of the list,
 		// the thread and has:attachment counts only the other files.
-		if err := b.store.SetHasAttachments(ctx, m.ID, hasOtherAttachment(m.Attachments, row.PartID)); err != nil &&
+		// Nor the signature part of a message with a verdict (S15).
+		skip := []string{row.PartID}
+		if m.Signature != nil && m.Signature.PartID != "" {
+			skip = append(skip, m.Signature.PartID)
+		}
+		if err := b.store.SetHasAttachments(ctx, m.ID, hasOtherAttachment(m.Attachments, skip...)); err != nil &&
 			!errors.Is(err, store.ErrNotFound) {
 			return out, err
 		}
@@ -257,9 +262,9 @@ func (b *Backend) readInvitation(ctx context.Context, a store.Account, m store.M
 // hasOtherAttachment reports whether atts has a non-inline attachment
 // besides part partID, the calendar part of the invitation card (the MIME
 // parser's rule of HasAttachments otherwise).
-func hasOtherAttachment(atts []api.Attachment, partID string) bool {
+func hasOtherAttachment(atts []api.Attachment, partIDs ...string) bool {
 	for _, a := range atts {
-		if !a.Inline && a.PartID != partID {
+		if !a.Inline && !slices.Contains(partIDs, a.PartID) {
 			return true
 		}
 	}

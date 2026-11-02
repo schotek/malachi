@@ -521,6 +521,12 @@ Pořadí prací:
 17. Přílohy jako dlaždice (podle Outlooku) — větev `feat/attachment-tiles`
     2026-11-02, všechny tři klienty ověřené vlastníkem na obrazovce; viz
     odstavec Přílohy jako dlaždice níže
+18. Ověřování podpisů (S/MIME, OpenPGP, fáze 1) — větev
+    `claude/keen-planck-bgzc8z` 2026-11-02; démon (migrace 0025, opaque
+    S/MIME rozbalený v parseru, `RulesVersion` "9") s Go testy a fuzz,
+    Go reference `ui/internal/signature`, GTK, macOS a Windows napsané
+    bez překladu; plán, rozhodnutí a „As built“ v `docs/plans/signatures.md`,
+    čeká ověření na skutečných systémech
 
 Přílohy jako dlaždice (2026-11-02, všechny tři klienty, rozhodnutí
 vlastníka podle srovnání s Outlookem). Příloha je dlaždice pevné šířky

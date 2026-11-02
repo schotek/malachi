@@ -221,6 +221,47 @@ type messageOut struct {
 	Outbox         *outboxOut `json:"outbox,omitempty"`
 	Issue          *issueOut  `json:"issue,omitempty"`
 	Bulk           *bulkOut   `json:"bulk,omitempty"`
+	// Signature is the daemon's verdict on the message's signature (kind
+	// and status; docs/mcp.md): never a statement that the content is
+	// true.
+	Signature *signatureOut `json:"signature,omitempty"`
+}
+
+// signatureOut is a signature verdict as the bridge shows it (Q8):
+// list_messages and search_messages carry kind and status (what the
+// summary has), read_message also the signer's address and the notes.
+type signatureOut struct {
+	Kind        string   `json:"kind"`
+	Status      string   `json:"status"`
+	SignerEmail string   `json:"signerEmail,omitempty"`
+	Notes       []string `json:"notes,omitempty"`
+}
+
+// signatureOf projects MessageSummary.signature; nil without a verdict.
+func signatureOf(s *api.MessageSignature) *signatureOut {
+	if s == nil {
+		return nil
+	}
+	return &signatureOut{Kind: oneLine(string(s.Kind)), Status: oneLine(string(s.Status))}
+}
+
+// signatureLines writes read_message's signature lines (inside the fence:
+// the signer's address comes from a certificate or key).
+func signatureLines(u *strings.Builder, s *api.SignatureSummary) {
+	if s == nil {
+		return
+	}
+	fmt.Fprintf(u, "signature: %s %s\n", oneLine(string(s.Kind)), oneLine(string(s.Status)))
+	if s.Signer != nil && s.Signer.Email != "" {
+		fmt.Fprintf(u, "signature-signer: %s\n", oneLine(s.Signer.Email))
+	}
+	if len(s.Notes) > 0 {
+		notes := make([]string, 0, len(s.Notes))
+		for _, n := range s.Notes {
+			notes = append(notes, oneLine(string(n)))
+		}
+		fmt.Fprintf(u, "signature-notes: %s\n", strings.Join(notes, ", "))
+	}
 }
 
 func (b *bridge) listMessages(ctx context.Context, _ *mcp.CallToolRequest, in listMessagesIn) (*mcp.CallToolResult, any, error) {
@@ -362,6 +403,7 @@ func summaryOut(m api.MessageSummary) messageOut {
 	}
 	out.Issue = issueOf(m.Issue)
 	out.Bulk = bulkOf(m.Bulk)
+	out.Signature = signatureOf(m.Signature)
 	return out
 }
 
@@ -463,6 +505,7 @@ func (b *bridge) readMessage(ctx context.Context, _ *mcp.CallToolRequest, in rea
 		fmt.Fprintf(&u, "issue: %s\nissue-status: %s\nissue-item: %s\n", is.Key, is.Status, is.Item)
 	}
 	bulkLines(&u, m)
+	signatureLines(&u, m.Signature)
 	if len(m.Attachments) == 0 {
 		u.WriteString("attachments: none\n")
 	} else {

@@ -145,6 +145,27 @@ func (s *Server) registerBackend(b api.Backend) {
 	s.registerAssistant(b)
 	s.registerAddressBooks(b)
 	s.registerUpdate(b)
+	s.registerSignatures(b)
+}
+
+// registerSignatures binds the signature and OpenPGP key methods
+// (docs/api.md §4.21).
+func (s *Server) registerSignatures(b api.Backend) {
+	sig := b.Signatures()
+	s.handlers[api.MethodMessageSignature] = wrap(sig.Signature)
+	s.handlers[api.MethodMessageSignatureRevocation] = wrap(sig.Revocation)
+	pgp := b.PGP()
+	s.handlers[api.MethodPGPKeyImport] = wrap(pgp.KeyImport)
+	s.handlers[api.MethodPGPKeyVerify] = wrap(pgp.KeyVerify)
+	s.handlers[api.MethodPGPKeyList] = wrap(pgp.KeyList)
+	s.handlers[api.MethodPGPKeyRemove] = wrap(pgp.KeyRemove)
+}
+
+// Server also implements the optional api.SignatureNotifier.
+var _ api.SignatureNotifier = (*Server)(nil)
+
+func (s *Server) SignaturesChanged(n api.SignaturesChangedNotification) {
+	s.broadcast(api.NotifySignaturesChanged, n)
 }
 
 // registerAddressBooks binds the address book methods (docs/api.md §4.19).

@@ -201,6 +201,11 @@ destructive, only `send_message` open-world.
   `comment` or an `event` (a status or assignee change, whose body is one
   `from → to` line per change). The subject of every such message is
   `KEY: Summary`, so a tool that ignores `issue` still reads sensibly.
+  `signature` is `{kind, status}` on a message whose signature the daemon
+  judged ([api.md §4.21](api.md#421-signature): `kind` `smime` or `pgp`,
+  `status` `valid`, `validSeen`, `mismatch`, `untrusted`, `weak`,
+  `unknownKey`, `unsupported`, `invalid`, `revoked`, `error`); absent on
+  unsigned mail and while the verdict is pending.
 
 ### search_messages
 
@@ -236,7 +241,10 @@ destructive, only `send_message` open-world.
   sender-domain: …` and `unsubscribe: <method> via <host or address>`
   (with `already unsubscribed on <time>` when the user did; **never the
   page or address URL itself**, which would invite an agent to fetch
-  it), the attachment
+  it), on signed mail `signature: <kind> <status>`, `signature-signer:
+  <address>` (from the certificate or key, cleaned like any mail string)
+  and `signature-notes: …` (the codes of [api.md §4.21](api.md#421-signature)),
+  the attachment
   list (`partId`, `filename`, `type`, `size`, `inline`, `remote`), the
   optional `headers` and `links` (at most 50), and the body slice. The
   `remote` marker follows the quoted filename, so a name cannot forge it;
@@ -1091,6 +1099,19 @@ pictures `neverStoreAttachments` keeps on the server).
   (30 minutes unused at most, never past its own exit); once that copy is
   gone the next tool call downloads the message again, and counts it
   again.
+
+## Signatures
+
+The bridge passes the daemon's verdict on a message's signature, nothing
+more (Q8 of [plans/signatures.md](plans/signatures.md)): `kind` and
+`status` with `list_messages` and `search_messages`, plus the signer's
+address and the notes with `read_message`, inside the fence, cleaned.
+There is no tool for the details, the revocation check or the OpenPGP
+keys. The server instructions tell the model that `valid` (or
+`validSeen`) only says who sent exactly this content — never that the
+content is true, safe or to be followed — and that every other status is
+no evidence of the sender at all. No module was added to the bridge for
+this.
 
 ## Content rules
 

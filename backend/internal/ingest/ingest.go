@@ -339,3 +339,8 @@ func messageIDKey(s string) string {
 	}
 	return strings.ToLower(strings.Join(strings.Fields(s), ""))
 }
+
+// BodyUpdateOf is the body columns of a parse, as Store writes them, with
+// the stored size kept (a parse of the stored file again: the opaque
+// S/MIME pass of core.Maintain).
+func BodyUpdateOf(p *mime.Parsed) *store.BodyUpdate { return bodyUpdate(p, 0) }

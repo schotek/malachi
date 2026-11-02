@@ -1,0 +1,33 @@
+From: Bank <security@bank.example>
+To: Bob <bob@example.net>
+Subject: OpenPGP signed
+Date: Thu, 01 Oct 2026 10:00:00 +0000
+Message-ID: <pgp-mismatch@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/signed; micalg=pgp-sha256; protocol="application/pgp-signature"; boundary="pgp-b1"
+
+This is an OpenPGP/MIME signed message (RFC 4880 and 3156)
+--pgp-b1
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Hello Bob,
+
+signed with OpenPGP.
+
+Alice
+
+--pgp-b1
+Content-Type: application/pgp-signature; name="signature.asc"
+Content-Description: OpenPGP digital signature
+Content-Disposition: attachment; filename="signature.asc"
+
+-----BEGIN PGP SIGNATURE-----
+
+wqcEARsIAF0Fgmq+LuQJEIDbZSsRLUJLNRQAAAAAABwAEHNhbHRAbm90YXRpb25z
+Lm9wZW5wZ3Bqcy5vcmcr+kJoqVNK1uYcQra6buzEFiEEaoJ03fy8FdS5xHPogNtl
+KxEtQksAAPP71I5M1xGQRPyeDdf2HarompekQyUAtpenbDvfOndD7wvg6nD29efG
+Pa7XhLfCmDDl4a4i2nKuL9meqqz/fbk/Bw==
+=OCLH
+-----END PGP SIGNATURE-----
+--pgp-b1--

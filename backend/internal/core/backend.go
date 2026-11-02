@@ -9,6 +9,7 @@ package core
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -38,6 +39,7 @@ import (
 	"github.com/schotek/malachi/backend/internal/jira"
 	"github.com/schotek/malachi/backend/internal/outbox"
 	"github.com/schotek/malachi/backend/internal/remoteimg"
+	"github.com/schotek/malachi/backend/internal/revocation"
 	"github.com/schotek/malachi/backend/internal/rpc"
 	"github.com/schotek/malachi/backend/internal/sanitize"
 	"github.com/schotek/malachi/backend/internal/smtp"
@@ -73,6 +75,17 @@ type Backend struct {
 	// touch the network.
 	LookupTXT    func(ctx context.Context, domain string) ([]string, error)
 	OneClickPost func(ctx context.Context, rawURL string) error
+
+	// SignatureRoots returns the trusted S/MIME roots and a fingerprint of
+	// them (plan S7); nil = the system's (systemRoots). SignatureNow is the
+	// verifier's clock (nil = time.Now). CheckRevocation asks the
+	// certificate's OCSP responder or CRL (nil = internal/revocation's
+	// strict client). Fields so tests use a test root, a fixed time and a
+	// fake responder; sig is the worker's state (signature_worker.go).
+	SignatureRoots  func() (*x509.CertPool, string)
+	SignatureNow    func() time.Time
+	CheckRevocation func(ctx context.Context, cert, issuer *x509.Certificate) (revocation.Result, error)
+	sig             sigState
 
 	// unsubBusy are the unsubscriptions in flight (account + key), under
 	// unsubMu (unsubscribe.go).
@@ -294,6 +307,7 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 	}
 	b.im.init()
 	b.board.init()
+	b.sig.init()
 	b.DetectJiraSite = func(ctx context.Context, rawURL string) (api.AccountDetectSiteResult, error) {
 		return jira.DetectSite(ctx, b.JiraHTTP, rawURL)
 	}
@@ -616,8 +630,13 @@ func (b *Backend) StartSync(ctx context.Context) <-chan struct{} {
 	issueMailDone := b.startIssueMail(ctx)
 	boardDone := b.startBoard(ctx)
 	updatesDone := b.startUpdates(ctx)
+	sigDone := b.startSignatures(ctx)
 	var wg sync.WaitGroup
-	wg.Add(5)
+	wg.Add(6)
+	go func() {
+		defer wg.Done()
+		<-sigDone
+	}()
 	go func() {
 		defer wg.Done()
 		<-updatesDone
@@ -700,6 +719,13 @@ func (b *Backend) Maintain(ctx context.Context) {
 	}
 	if err := b.backfillInvitations(ctx); err != nil && !isCancelled(err) {
 		b.log.Warn("backfill invitations", "err", err)
+	}
+	// Opaque S/MIME first (S14): what it unwraps is verified after it.
+	if err := b.backfillOpaque(ctx); err != nil && !isCancelled(err) {
+		b.log.Warn("backfill opaque S/MIME", "err", errClass(err))
+	}
+	if err := b.backfillSignatures(ctx); err != nil && !isCancelled(err) {
+		b.log.Warn("backfill signatures", "err", errClass(err))
 	}
 	// The raw maintenance loop runs beside the attachment sweep; Maintain
 	// returns once it has stopped too.

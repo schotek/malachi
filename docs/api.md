@@ -5071,7 +5071,9 @@ PGPKey           { "fingerprint": "…", "userIds": ["…"], "emails": ["…"],
   ignores unknown `notes`, `reason`, `state` and `keySource` values.
 - The identity is the certificate's address (`subjectAltName`
   `rfc822Name`, else `emailAddress` of the subject) or the address of a
-  user ID of the key, compared with `From` (NFC, the domain lower case).
+  user ID of the key, compared with `From` (NFC, case-insensitively: the
+  domain and, as no mail system in use tells them apart, the local part;
+  a message with more than one `From` address never matches).
   `signer` is always from the certificate or key, never from the headers;
   it is present for `valid`, `validSeen`, `mismatch`, `untrusted`, `weak`
   and `revoked`, and may be for the others. `signer.fingerprint` is the
@@ -5104,8 +5106,8 @@ PGPKey           { "fingerprint": "…", "userIds": ["…"], "emails": ["…"],
 - `pgp.keyTrust`: `verified` (the user confirmed the fingerprint),
   `seen` (found or imported, not confirmed), `unknown` (not stored). Keys
   come only from what the user's mail carries: an `Autocrypt` header
-  whose `addr` is `From` of mail that is neither bulk nor junk (stored as
-  `seen`), a key attached to a message (`importable`), or an import in
+  whose `addr` is `From` of mail that is neither bulk nor junk, for a key
+  whose user IDs name that address only (stored as `seen`), a key attached to a message (`importable`), or an import in
   Preferences. There is no web of trust and no key server. `importable`
   is a key of the message that is not stored (an attached key, or an
   Autocrypt key for an address that already has another one); a client
@@ -5117,8 +5119,9 @@ PGPKey           { "fingerprint": "…", "userIds": ["…"], "emails": ["…"],
   16, `userIds` 32, `protectedHeaders` 6). `algorithm` is a
   language-neutral technical description, public key then digest. Nothing
   of a certificate or key is logged.
-- The bridge for AI agents returns only `kind`, `status`, the signer's
-  e-mail and `notes` with a message (`docs/mcp.md`).
+- The bridge for AI agents returns only `kind` and `status` with a listed
+  or found message, and `kind`, `status`, the signer's e-mail and `notes`
+  with a message read (`docs/mcp.md`).
 
 #### `message.signature`
 The details for the dialog of the header's badge.
@@ -5776,7 +5779,9 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   `Message.signature` (`SignatureSummary`); new methods
   `message.signature`, `message.signatureRevocation`, `pgp.keyImport`,
   `pgp.keyVerify`, `pgp.keyList`, `pgp.keyRemove` and the notification
-  `notify.signaturesChanged` (all `notImplemented` until implemented);
+  `notify.signaturesChanged` (implemented by the daemon in the same
+  phase: verdicts after storing, the backfill of stored mail, the
+  revocation check and the key store);
   error code 1510 `revocationFailed`; limits `MaxSignature*`,
   `MaxProtectedHeaders`, `MaxPGP*`, `MaxRevocationResponseBytes`,
   `RevocationTimeout`, `RevocationCheckInterval`. `ProtocolVersion`

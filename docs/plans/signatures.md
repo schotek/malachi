@@ -565,3 +565,368 @@ Klíče OpenPGP, Otisk klíče, Potvrzený / Nepotvrzený, Odvolaný, Propadlý.
 - Dokud démon metody neimplementuje, vracejí `notImplemented` (1000):
   dialog pak ukáže jen to, co nese `Message.signature` (odznak se bez
   verdiktu neukazuje vůbec).
+
+## As built (GTK)
+
+Krok 5 fáze 1, GTK klient (2026-11-02, necommitnuté; napsané na stroji
+bez GTK, gotk4 a blueprint-compileru). Reference `ui/internal/signature`
+je použitá tak, jak je: **žádný nový msgid**, žádný text v Blueprintu,
+nové Go soubory nemají `i18n.T/N/C`, proto nejsou v `po/POTFILES`.
+Ikony `security-{high,medium,low}-symbolic` v Adwaitě jsou (ověřeno
+v tagech 47.0 a 48.0 zrcadla adwaita-icon-theme na GitHubu; Fedora 42 má
+48), záložní SVG z §11.3 tedy není potřeba.
+
+- **Seznam**: `message_row.blp` má `Image signature_icon` mezi sponkou
+  a hvězdičkou; `widget.Message.Signature` a `widget.Thread.Signature`
+  (`signature.ListIcon`) plní `summaryMessage` (`model.go`)
+  a `summaryThread` přes `threadSignatureIcon` (`latest.signature`);
+  `MessageRow.setSignature` přepíná třídu stylu, tooltip je
+  `StatusTitle`; `SignatureIcon()` pro testy.
+- **Odznak** (`window/signature.go`): `signatureBadge` = plochý
+  `GtkButton` (třída `signature-badge`) s ikonou a popiskem
+  (`SetUseMarkup(false)`, zalamovaný), barva třídou na ikoně i popisku.
+  Panel čtení a okno zprávy: `messageView.bindSignatureBadge` ho z Go
+  vloží hned **pod datum** (`InsertChildAfter` v rodiči
+  `message_date`; `window.blp` ani `message_window.blp` se neměnily),
+  jen u pohledu s `invitation_card_slot` — pohled přiložené zprávy ho
+  nemá. `render` volá `renderSignature`. Karta konverzace: odznak je ve
+  `WrapBox` hlavičky za štítky (`convCard.sig`), ukazuje se i sbalený,
+  dvojklik na něm okno neotevírá (`onHeader`). Verdikt je
+  `shownSignature`: `Message.signature` z `message.get`; dokud
+  `message.get` neodpověděl, odznak není (aby věta za chvíli nezměnila
+  text); po selhaném `message.get` jen druh a stav ze souhrnu.
+  `conversationController.needsBody` žádá `message.get` i pro člena se
+  `signature` (jinak by karta neměla podepisujícího). Bublina chatu
+  odznak nemá.
+- **Dialog** `signature_details.blp` + `window/signature_details.go`:
+  `Adw.Dialog` (titul `DialogTitle`, zavírá vlastní tlačítko hlavičky
+  a Escape), hned ukáže shrnutí z odznaku a spinner, pak
+  `message.signature` (selhání, `notImplemented` i `null` nechají
+  shrnutí, jen se zaloguje). Řádky a sekce jako `GtkGrid` (popisek
+  `dim-label`, hodnota vybíratelná, nefokusovatelná, otisky `monospace`),
+  poznámky, výhrada; tlačítka Check Revocation (+ spinner, popisek pod
+  ním; timeout 20 s, `signatureRevocationTimeout`; chyba
+  `RevocationFailedText(RevocationFailureOf(err))` v řádku `error`),
+  Import Key (`ImportParams`, toast `ImportedText` v hlavním okně,
+  chyba `ImportFailedText`), Confirm Key… (`ConfirmKeyQuestion` jako
+  `Adw.AlertDialog` s otiskem monospace v `extra-child`). Tlačítka se
+  nepřestavují (klávesnice zůstává), čekající předá fokus scrolleru.
+  Jeden dialog na hlavní okno (`sigDialogs`).
+- **Předvolby → Zabezpečení** (`window/preferences_security.go`):
+  stránka postavená z Go a přidaná **za AI** (`bindSecurity` v seznamu
+  úklidu `NewPreferences`), ikona `IconPage`, skupina „OpenPGP Keys"
+  s popisem a tlačítkem Import Key… v hlavičce skupiny; řádky
+  `KeyRows` jako vlastní `GtkListBoxRow` (titulek, otisk monospace
+  vybíratelný, původ, pilulka důvěry — `key-verified` zeleně —, pilulka
+  stavu `key-state` červeně, `MenuButton` s akcemi v popoveru), stavový
+  řádek prázdný / chyba načtení. Confirm Key… a Remove Key… se ptají
+  (`askSignatureQuestion`), Remove Confirmation ne; toasty
+  `KeyConfirmedText`/`ConfirmationRemovedText`/`KeyRemovedText`.
+  Import: `Adw.AlertDialog` s `GtkTextView` (monospace, zástupný text
+  `ArmorPlaceholder` jako překryv), _Import aktivní jen s
+  `PastedParams` ok, Choose File… zavře dialog a otevře `GtkFileDialog`
+  s filtrem „OpenPGP keys" (`*.asc`, `*.gpg`, `*.pgp`, `*.key`), čte
+  nejvýš `MaxPGPKeyBytes`+1 B (víc = `ImportFailedText(tooLarge)` bez
+  démona), pak `FileParams`.
+- **Chyby bez věty v referenci** (selhané `pgp.keyVerify`/`keyRemove`):
+  `widget.RPCErrorText(actionWhat(a), err)`, kde `actionWhat` je popisek
+  tlačítka bez mnemoniky a výpustky („Confirm Key failed: …"). Lepší by
+  byl msgid v průběhovém tvaru („Confirming the key"), ale nový msgid by
+  rozbil `StringsCheckTests` Windows; kdyby se přidával, tak do reference
+  a do všech tří klientů najednou.
+- **S15**: `tileAttachments(m)` = `signature.TileAttachments` před
+  `chipAttachments` v panelu, kartách i počtu sponky bubliny chatu.
+- **`notify.signaturesChanged`** (`notify.go`): `signaturesChanged`
+  znovu zavolá `message.get` pro každou zprávu v cache, která verdikt
+  má (nejvýš 64), uloží a ukáže ji všude (`showLoaded`); otevřený
+  dialog znovu `message.signature`; stránka Zabezpečení poslouchá přes
+  `listenSignatures`/`dispatchSignatures` a znovu `pgp.keyList`.
+  Callbacky RPC všude přes `glib.IdleAdd`.
+- CSS (`internal/style/style.go`): `label.issue-pill.key-verified`,
+  `.key-state`, `button.signature-badge`.
+- **Nedělá**: karty konverzace v detailu případu Nástěnky (§6 to chce)
+  odznak nemají — nesdílejí hlavičku s kartou Pošty a `message.get`
+  nevolají (jen `fetchBodyOnly`); doplnit by znamenalo `message.get` na
+  kartu nástěnky (otázka pro vlastníka). Okno přiložené zprávy a bublina
+  chatu záměrně bez odznaku.
+- **Testy**: `window/signature_test.go` (čisté: `shownSignature`,
+  odznak, `fromAddress`, S15 i u sponky bubliny, ikony řádků zprávy
+  a vlákna, `actionWhat`) a `window/signature_gtk_smoke_test.go`
+  (`MALACHI_GTK_SMOKE=1 go test ./internal/window -run 'Signature'`:
+  ikona řádku nad skutečným `message_row.blp`, odznak a jeho barvy,
+  dialog nad vymyšlenými S/MIME a OpenPGP podrobnostmi ze skutečného
+  `signature_details.blp`, stránka Zabezpečení bez démona a s klíči).
+- `po/`: posunuté jen odkazy `#:` šesti souborů z `po/POTFILES`
+  (`widget/message_row.go`, `window/message_view.go`,
+  `conversation_card.go`, `notify.go`, `preferences.go`,
+  `attachments.go`), ručně skriptem podle diffu proti `HEAD`; `make po`
+  má vyjít beze změny.
+- **Ověřeno zde**: `gofmt`, typová kontrola `go/types` s `FakeImportC`
+  nad zdroji gotk4 (balíčky `widget` a `window` včetně testů, bez
+  chyb kromě šumu C konstant), `go test ./internal/signature`.
+- **Čeká v kontejneru Fedora 42**: `scripts/gtk-container/gtk.sh build`
+  (beze změny obrazu), `gtk.sh make build` (Blueprint
+  `signature_details.blp`, překlad), `gtk.sh test-ui`, smoke
+  `gtk.sh sh -c 'cd ui && MALACHI_GTK_SMOKE=1 go test ./internal/window
+  -run Signature -count=1 -v'`, `make po` (beze změny), `make lint`;
+  ručně v XQuartz nad démonem s verdikty (až ho démon bude mít): ikona
+  v seznamu, odznak v panelu, okně zprávy a kartě konverzace, dialog
+  (S/MIME s kontrolou odvolání, OpenPGP s importem a potvrzením),
+  skrytá podpisová dlaždice, Předvolby → Zabezpečení (import vložením
+  i souborem, potvrzení, zrušení, odebrání), obnova po
+  `notify.signaturesChanged`.
+
+## As built (macOS)
+
+Krok 6 fáze 1, macOS klient (2026-11-02, necommitnuté; napsané na stroji
+bez Swiftu, takže nic není přeložené ani spuštěné). Reference
+`ui/internal/signature` je portovaná 1:1, **žádný nový msgid** (klíč =
+GTK msgid, `check-strings.py` 0 missing); texty jen pro macOS jsou tři
+anglické věty selhání (viz níže).
+
+- **MalachiCore**: `API/SignatureAPI.swift` (zrcadlo §4.21: otevřené enumy
+  `SignatureKind/Status/Note/Reason`, `RevocationState/Source`,
+  `PGPKeyTrust/Source`, `RevocationFailure`, `PGPImportFailure`, typy
+  `MessageSignature`, `SignatureSummary`, `SignatureDetails` (Go vložení
+  jako `summary`, ploché kódování jako `Message`), `PGPKey`, params
+  a výsledky, metody `API.MessageSignatureGet/Revocation`, `PGPKey*`,
+  `API.signatureMethods`, limity `API.Limits.maxSignature*`/`maxPGP*`,
+  `RPCError.revocationFailedData`/`pgpImportErrorData`);
+  `ErrorCode.revocationFailed` 1510; `RPCTimeouts.revocation` 20 s;
+  `Notify.signaturesChanged`; `MessageSummary.signature`
+  (`MessageSignature`) a `Message.signature` (`SignatureSummary`, zastiňuje
+  summary pod týmž klíčem). `Signatures/SignatureView.swift` + `SignatureText.swift`
+  = port `signature.go` a `text.go` (`enum SignatureView`, jmenovitě jako
+  na Windows; `statusTitle`, `badge(for:)`, `listIcon(for:)`, `details(...)`,
+  `keyRows`, `tileAttachments`, `pastedParams`/`fileParams`, otázky,
+  `symbolName` = mapování ikon na SF Symbols z §11.3). Kontrolery:
+  `SignatureController` (popover podrobností: `message.signature`, Check
+  Revocation s timeoutem 20 s, Import Key, Confirm Key… s otázkou; do
+  odpovědi daemona ukazuje shrnutí z `Message.signature`, `notImplemented`
+  nechá shrnutí), `PGPKeysController` (Nastavení → Zabezpečení: `pgp.keyList`,
+  import vložením/souborem, Confirm Key…, Remove Confirmation, Remove Key…),
+  `SignatureState` (počítadlo a pozorovatelé `notify.signaturesChanged`),
+  `MessageCache.refreshSignatures` (znovu `message.get` pro zprávy v cache,
+  které verdikt mají; zobrazení se překreslí přes `onLoaded`),
+  `ConversationController.needsBody` žádá `message.get` i pro člena se
+  `signature` (jako GTK, karta bez něj nezná podepisujícího). **S15**:
+  `ChipPlan` volá `SignatureView.tileAttachments` před `chipAttachments`
+  (panel, karty i počet sponky v bublině chatu).
+- **MalachiMail**: `Shared/SignatureBadgeView.swift` (`SignatureTint`:
+  systemGreen/Orange/Red/secondary; borderless `NSButton` s SF Symbolem
+  a větou jako `attributedTitle` jen s fontem, barvou a odstavcem);
+  odznak v `MessageHeaderView` (pod datem; panel čtení a okno zprávy, ne
+  přiložená zpráva) a jako řádek `Slot.signature` v `ConversationCardView`
+  (pod hlavičkou, nad pruhy; není v bublině chatu); ikona vedle sponky
+  v `MessageCellView` (jen stavy z `listIcon`, u sbaleného vlákna
+  `row.message` = nejnovější člen); `MessageView/SignatureDetailsPopover.swift`
+  (`NSPopover` 380 × nejvýš 520, hodnoty prostý vybíratelný text, otisky
+  monospace, tlačítka z modelu; otázka Confirm This Key? jako list
+  s otiskem v `accessoryView`: nová metoda `Alerts.confirmKey`);
+  `MessageActionDelegate.showSignature(of:relativeTo:)`;
+  `Preferences/SecurityPaneViewController.swift` (poslední karta Nastavení,
+  skupina „OpenPGP Keys“, tlačítko Import Key… v záhlaví skupiny, řádek
+  klíče `SecurityKeyRowView`, list `SecurityImportSheet` s textovým polem,
+  Choose File… a čtením nejvýš `maxPGPKeyBytes + 1` B);
+  `App/Integration+Signatures.swift` (notifikace → cache + `SignatureState`;
+  `AppState.addSignaturesChanged`, `AppState.signatures`).
+- **Vývojové kroky** `MALACHI_START`: `signature-popover` (S/MIME s řetězem),
+  `signature-popover:pgp`, `signature-popover:bad`, `prefs-security`
+  (`MainWindowController+DevStartSignature.swift`, bez démona:
+  `SignatureController.seed`).
+- **Odchylky** (řádky v tabulce `macos/README.md`): podrobnosti jako popover,
+  odznak karty jako samostatný řádek (ne ve `WrapBox` hlavičky, rozložení
+  `ConversationHeaderLayout` počítá jen pevné části), sbalená karta odznak
+  neukazuje (obsah karty se při sbalení skrývá celý; GTK ho ukazuje),
+  Zabezpečení jako poslední karta, tři anglické věty selhání
+  (`// macOS-only string`: "The key could not be confirmed.", "…changed.",
+  "…removed.") — reference pro selhané `pgp.keyVerify`/`keyRemove` věty
+  nemá, GTK použilo `RPCErrorText(actionWhat)`. Přidání msgidu by šlo do
+  reference a všech tří klientů najednou (otázka pro vlastníka).
+- **Nedělá**: karty konverzace v detailu případu Nástěnky (§6) odznak nemají
+  (stejně jako GTK; `BoardConversationBlock` nevolá `message.get`).
+- **Testy** (Swift Testing, `swift test`): `SignatureViewTests` (port
+  `signature_test.go` včetně hostilních vstupů), `APICodingSignatureTests`,
+  `SignatureControllerTests` (`SignatureController`, `PGPKeysController`,
+  `SignatureState` proti `FakeDaemon`); upravené `APICodingTests`
+  (125 metod, 54 kódů, nová notifikace), `APICodingTests+Calendar`,
+  `NotificationDecodeTests`.
+- **Čeká na Macu**: `swift build --package-path macos` (hlavně strict
+  concurrency: `SignatureController.run`/`PGPKeysController.run` vrací
+  `@MainActor` closure, vzory `case .x:` nad strukturami, `NSPopover`,
+  `NSGridView`), `swift test --filter 'SignatureView|APICodingSignature|SignatureController|PGPKeys|APICoding|NotificationDecode|ChipPlan|Conversation'`
+  (pak celé), `python3 macos/scripts/check-strings.py` (dnes 0 missing),
+  ruční průchod s démonem s verdikty: ikona v seznamu, odznak v panelu,
+  okně zprávy a kartě, popover (Check Revocation, Import Key, Confirm
+  Key…), skrytá dlaždice podpisu, Nastavení → Security (import vložením
+  i souborem, potvrzení, odebrání), obnova po `notify.signaturesChanged`;
+  `MALACHI_START='signature-popover;signature-popover:pgp;prefs-security;quit'`
+  s `MALACHI_DAEMON=none` a dočasným `MALACHI_DATA_DIR`.
+
+## As built (Windows)
+
+Krok 6 fáze 1, Windows klient (2026-11-02, necommitnuté; napsané na stroji
+bez .NET, takže nic není přeložené ani spuštěné; podrobně a se seznamem
+ručních kontrol `docs/windows-port.md` §11.17). Reference
+`ui/internal/signature` je portovaná 1:1 přímo z Go (macOS port vznikal
+souběžně), **žádný nový msgid** a nic v `windows/parity-exclusions.txt`;
+tři anglické věty selhání (`// Windows-only string`) viz níže.
+
+- **Malachi.Core/Api**: `Signature.cs` (zrcadlo §4.21: jedenáct otevřených
+  enumů, záznamy s `Pgp`/`Smime` místo Go `PGP`/`SMIME`; `SignatureDetails`
+  dědí z `SignatureSummary` jako Go vložení), `MessageSummary.Signature`
+  (`MessageSignature`) a `Message.Signature` (`SignatureSummary`, sdílí klíč
+  `signature` v `MessageConverter`), `API.cs` (6 metod na konci `Methods`,
+  125; `Notify.SignaturesChanged`; 9 limitů, celkem 102),
+  `ErrorCode.RevocationFailed` 1510 (54 kódů), `RpcTimeouts.SignatureRevocation`
+  20 s, `DaemonNotification.SignaturesChanged` a `NotificationHub.AddSignaturesChanged`.
+- **Malachi.Core/Signatures**: `SignatureView` (signature.go), `SignatureText`
+  (text.go), `SignatureTypes` (modely; Go `Details` je `SignatureDetailsView`).
+  Controllery `SignatureDetailsController` (podrobnosti jedné zprávy: začne
+  shrnutím z `message.get`, `notImplemented` ho nechá; Check Revocation s
+  busy tlačítkem a třídou selhání; Import Key; Confirm Key; `Refresh`) a
+  `PgpKeysController` (Předvolby → Zabezpečení). `MessageRow` má
+  `SignatureIcon/-Style/-Tooltip` (u sbaleného vlákna nejnovější člen);
+  `AttachmentChips.ChipAttachments` bere verdikt a skryje podpisovou část
+  (S15; panel, karty i sponka bubliny); `ConversationController.NeedsBody`
+  žádá `message.get` i pro člena s verdiktem; `IconGlyphs`:
+  `security-high/-medium/-low` = jeden štít `U+EA18` (ověřit na Windows 11),
+  rozdíl dělá barva a u `-medium` průhlednost 60 %.
+- **Malachi.App**: `Controls/SignatureGlyph` (štít v barvě verdiktu),
+  sloupec v `MessageRowView`, `Signatures/SignatureBadgeButton` (odznak pod
+  datem v `MessageView`, v hlavičce otevřené `ConversationCard`; ne v bublině
+  chatu ani v okně přiložené zprávy), `SignatureDetailsPresenter` (`Flyout`
+  z kódu; otázka Confirm Key… je `ContentDialog` s otiskem monospace, sezení
+  přežije zavření flyoutu), `ImportKeyDialog`, `Preferences/SecurityPage`
+  (za Kontakty), `Integration` mění `notify.signaturesChanged` v načtení
+  zpráv všech povolených účtů jako `notify.messagesChanged`.
+- **Odchylky** (řádky v `windows/README.md`): flyout místo dialogu/popoveru,
+  jeden glyf štítu, tři anglické věty selhání ("Confirming the key",
+  "Removing the confirmation", "Removing the key" přes `RpcErrorText`),
+  stránka Zabezpečení za Kontakty, sbalená karta konverzace odznak nemá,
+  dokud se neotevře (podepisující přijde s `message.get`).
+- **Nedělá**: karty konverzace v detailu případu Nástěnky odznak nemají
+  (`board.get` verdikt nenese; stejná mezera jako GTK a macOS).
+- **Testy**: `Signatures/SignatureViewTests` (port `signature_test.go`),
+  `Controllers/SignatureControllersTests` (proti `FakeDaemon`),
+  `Presentation/SignatureMessageRowTests`; upravené `GoContractTests` (125
+  metod, 11 enumů, `EveryEnumAndStructOfSignatureGoIsMirrored`, 102 limitů),
+  `ApiCodingTests`, `ApiRoundTripTests` (vzorek každého záznamu, `Message`
+  s `signature`), `NotificationDecodeTests`.
+- **Čeká na Windows agenta**: `build.ps1 app`, `test` (třídy výše, pak
+  `IconGlyphsTests`, `Malachi.Conventions.Tests`, celá sada), `lint`; ruční
+  průchod podle `docs/windows-port.md` §11.17 (ikona v seznamu, odznak v
+  panelu, okně zprávy a kartě, flyout s Check Revocation / Import Key /
+  Confirm Key…, skrytá podpisová dlaždice, Předvolby → Zabezpečení, tmavý a
+  kontrastní motiv, jiná měřítka). Hádané bez překladače: `Flyout` s
+  `FlyoutPresenter` stylem z kódu, `ContentDialog` zůstávající otevřený přes
+  `args.Cancel`, glyf `U+EA18`, `VisualStateManager` na `FontIcon`,
+  `SettingsCard.Description` jako panel, `record SignatureDetails :
+  SignatureSummary` přes source generator.
+
+## As built (daemon)
+
+Kroky 2–4 fáze 1, démon (2026-11-02, necommitnuté). Kontrakt §11.1
+**beze změny tvaru** (žádné pole, metoda ani kód navíc); upřesnění jen
+v textu `docs/api.md` §4.21 (viz „Změny kontraktu“). UI agenti: metody už
+nevracejí `notImplemented`, verdikty přicházejí v souhrnech, v
+`message.get` i po backfillu staré pošty.
+
+- **Napojení**: `api.Backend` += `Signatures()`, `PGP()` (komentář
+  „not in Backend yet“ pryč), `rpc.StubBackend` (+ falešný backend mostu
+  přes vložený stub), `registerSignatures` v `rpc/dispatch.go`, server
+  implementuje `api.SignatureNotifier`; `TestAllMethodsRegistered` zelený.
+- **`internal/mime`** (`opaque.go`): `walk` = Walk s IMAP číslováním,
+  který rozbalí neprůhledný `signed-data` (kořen nebo první část kořenového
+  `multipart/mixed`, i bez `smime-type`, uvnitř znovu, nejvýš 3 obaly;
+  obsah z `smime.ExtractContent`, nic se neověřuje). **Čísla částí uvnitř
+  obalu = číslo obalu + „.“ + číslování vnitřní zprávy** (kořenový obal:
+  text `1.1`, části `1.1.1`, `1.2`, …; obal v mixed totéž), takže projdou
+  `ValidPartID`, `message.part`, `cid:` a `ExtractPart` (používá týž walk).
+  `Parsed.Opaque` (a `Crypto`), obal sám už není příloha; co se nerozbalí,
+  zůstane přílohou `smime.p7m`. `FuzzOpaqueUnwrap`, testy v `opaque_test.go`.
+- **`internal/smime`**: vlastní BER→DER (uzly, hloubka 32, 32 MiB,
+  100 000 prvků; DER projde bajt po bajtu), parser ContentInfo/SignedData
+  nad `cryptobyte` (≤ 16 certifikátů, opakovaný podepsaný atribut =
+  malformed, nepodepsané atributy se ignorují), ověření (RSA PKCS#1 v1.5
+  a PSS s parametry, ECDSA, Ed25519; SHA-2; MD5 → invalid, SHA-1 a RSA
+  < 2048 / P-224 → weak, DSA → unsupported), `keyUsage` = EKU
+  emailProtection/any **a** KU digitalSignature **nebo nonRepudiation**
+  (plán říkal jen digitalSignature), řetěz `x509.Verify` proti předanému
+  poolu v čase příchodu, `selfSigned`/`unknownIssuer`/`expired`/`notYetValid`.
+  `FuzzSignedData`.
+- **`internal/pgpsig`** (go-crypto v1.5.2): ověření odděleného podpisu
+  (jen typ binary/text, právě jeden paket, MD5 poznaný z hlavičky paketu
+  → invalid, DSA/ElGamal → unsupported, klíč podle KeyID i z otisku v6),
+  stav klíče v čase příchodu (odvolání před → revoked, po → revokedAfter;
+  expirace → untrusted/expired nebo expiredSince; **klíč vytvořený po
+  příchodu → untrusted/notYetValid**), `ReadKeys` (tajný klíč kdekoli =
+  `secretKey`, nic se neuloží), `ParseAutocrypt` (právě jedna hlavička,
+  neznámý kritický atribut ji zneplatní), `IsInlineSigned`.
+  `FuzzPGPSignature`, `FuzzAutocrypt`.
+- **`internal/signature`**: `Locate` (S4 nad surovými bajty, vlastní
+  dělení multipart podle RFC 2046 — `mime.Skeleton` proudově přestavuje,
+  pro přesný výřez se nehodí, sdílí se jen pravidla oddělovačů), `Canonical`
+  (LF → CRLF; nesedí-li, zkusí se bajty jak jsou), `ProtectedHeaders`
+  (RFC 9788 `protected-headers="v1"`), `Compose` (pořadí §3), `Check`
+  (celý verdikt + `SignatureDetails` s vyčištěnými řetězci), `Clean`
+  (`board.CleanText` + 256 B), `VerifierVersion` "1". `FuzzSignedSlice`,
+  tabulka nad všemi fixturami (`check_test.go`).
+- **`internal/revocation`** + `revocationtest`: OCSP (POST), pak CRL;
+  pravidla sítě z `internal/oneclick` (`Guard`, `RefusedHost`, proxy jen
+  z prostředí), bez přesměrování, 1 MiB, 15 s; **delegovaný respondér
+  musí mít EKU OCSPSigning a být vydaný vydavatelem** (`x/crypto/ocsp` to
+  sám nekontroluje), odpověď víc než 7 dní po `nextUpdate` se nebere.
+- **Migrace `0025_signatures.sql`**: `message_signatures` (FK na
+  `messages` ON DELETE CASCADE — řádek jde se zprávou kteroukoli cestou
+  mazání, žádný trigger), `smime_revocation`, `pgp_keys` (binární veřejný
+  klíč, vyčištěné user ID a adresy). `store/signatures.go`; souhrny
+  přidává `attachSignaturesTo` vedle CRM příznaku ve všech výpisech.
+- **Core** (`signature_worker.go`, `signature_service.go`): hook `Stored`
+  pošty (`afterMailStored`) jen zařadí (`noteSignature`); worker
+  (startuje se `StartSync`) ověří po uložení, při změně souhrnu pošle
+  `notify.messagesChanged`, vezme Autocrypt (§5), přepočítá `stale`
+  řádky; panika = verdikt `error` (S17), do logu jen třída chyby a id
+  (S16). Jen účty `imap` a `graph`; u `graph` je nesedící čistý podpis
+  `unsupported/rebuilt`. Kořeny: `SignatureRoots` (výchozí
+  `x509.SystemCertPool`, otisk = SHA-256 subjektů; na macOS a Windows pool
+  subjekty nevypíše, otisk tam jmenuje jen platformu), čtení při startu
+  a denně, jiný otisk = S/MIME verdikty přes `trust_key` znovu.
+  `core.Maintain`: `backfillOpaque` (meta `mime.opaqueUnwrapped`
+  `1:<id>`/`1:done`, `SetMessageBody` znovu → FTS a nástěnka přes
+  triggery) a `backfillSignatures` (meta `signature.verified`; kandidáti
+  podle typů v `attachments_json` nebo inline značky na začátku textu).
+  **S15**: `has_attachments` nepočítá podpisovou část ani část pozvánky
+  (obě cesty volají `hasOtherAttachment(…, parts...)`). Nástěnka
+  `RulesVersion` "9" (první start přepočítá případy).
+- **Identita (S5), zpřísněno**: shoda jen s **jedinou** adresou `From`;
+  hlavička se dvěma poli `From` nebo `From` uložený v řádku (obálka
+  serveru), který není adresou hlavičky, = žádná shoda → `mismatch`.
+  Porovnání NFC a **bez ohledu na velikost písmen celé adresy**.
+- **Autocrypt, zpřísněno**: klíč se vezme, jen když všechny jeho user ID
+  jmenují `addr` (jinak by odesílatel podstrčil klíč na cizí adresu
+  a příští podvržená zpráva by byla `validSeen`). Nabídka `importable`
+  (`autocrypt: true`) vzniká, kdykoli zpráva nese Autocrypt pro svůj
+  `From` a klíč není uložený (i u hromadné pošty a v nevyžádané).
+  `keyChanged`: jiný uložený klíč téže adresy viděný dřív (nebo současně)
+  a podpisový klíč není potvrzený.
+- **Most MCP**: `list_messages`/`search_messages` mají `signature {kind,
+  status}` (víc souhrn nenese; `signerEmail` a `notes` by stály
+  `message.get` na řádek), `read_message` ve fenci `signature:`,
+  `signature-signer:`, `signature-notes:`; věta v instrukcích. Žádný
+  nový modul v mostu (`go list -deps` bez go-crypto), `THIRD-PARTY-NOTICES.md`
+  beze změny.
+- **Změny kontraktu (jen text `docs/api.md`)**: porovnání identity
+  case-insensitive a jen s jedinou `From`; most vrací u výpisů jen
+  `kind` a `status`; changelog už neříká „notImplemented“.
+- **Testdata**: `backend/testdata/signatures/make.go` (`go run
+  ./testdata/signatures/make.go` z `backend/`; testovací CA s
+  mezilehlou, klíče PEM, klíče OpenPGP `.asc`, jen pro testy) a
+  39 fixtur `testdata/mime/smime-*.eml`, `pgp-*.eml` (všechny případy §7
+  kromě „nekonečného vnoření“ jako skutečně nekonečného — je to 5000×
+  `30 80`; nic nezávisí na dnešním datu: platnost certifikátů je
+  pevná, čas příchodu dává test).
+- **Nedělá**: chráněné hlavičky jen porovná (S6), nikdy je neukáže místo
+  vnějších; přiložená zpráva verdikt nemá; skutečné vzorky T0 (Outlook,
+  Graph `$value`, Apple Mail, Thunderbird, Proton) neověřené; `board.get`
+  verdikt nenese (karty nástěnky ve všech UI bez odznaku, viz výše).

@@ -50,6 +50,33 @@ func (b *StubBackend) AddressBooks() api.AddressBookService {
 
 func (b *StubBackend) Update() api.UpdateService { return stubUpdate{} }
 
+func (b *StubBackend) Signatures() api.SignatureService { return stubSignatures{} }
+func (b *StubBackend) PGP() api.PGPService              { return stubPGP{} }
+
+type stubSignatures struct{}
+
+func (stubSignatures) Signature(context.Context, api.MessageSignatureParams) (*api.MessageSignatureResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubSignatures) Revocation(context.Context, api.MessageSignatureRevocationParams) (*api.MessageSignatureResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubPGP struct{}
+
+func (stubPGP) KeyImport(context.Context, api.PGPKeyImportParams) (*api.PGPKeyImportResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubPGP) KeyVerify(context.Context, api.PGPKeyVerifyParams) (*api.PGPKeyVerifyResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubPGP) KeyList(context.Context, api.PGPKeyListParams) (*api.PGPKeyListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubPGP) KeyRemove(context.Context, api.PGPKeyRemoveParams) (*api.PGPKeyRemoveResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
 type stubUpdate struct{}
 
 func (stubUpdate) Status(context.Context, api.UpdateStatusParams) (*api.UpdateStatus, error) {
