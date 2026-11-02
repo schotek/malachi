@@ -67,6 +67,8 @@ extension ContextMenu {
             l.junk ? L10n.T("Empty Junk") : L10n.T("Empty Trash")
         case .favourite: l.favourite ? L10n.T("Remove from Favourites") : L10n.T("Add to Favourites")
         case .fold: l.collapsed ? L10n.T("Expand") : L10n.T("Collapse")
+        case .createRule: Rules.createFromMessageLabel
+        case .applyRules: Rules.applyLabel
         }
     }
 

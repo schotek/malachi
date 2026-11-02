@@ -109,6 +109,9 @@ final class AppState {
     /// address chips' Show Contact / Add to Contacts…, the suggestions'
     /// scope.
     private(set) var contacts: AppContacts!
+    /// The mail rules (Integration+Rules): Settings → Rules, the rule
+    /// editor, Create Rule from Message… and the folders' Apply Rules….
+    private(set) var rules: AppRules!
     /// The user's profile for the assistant (docs/api.md §4.18): every
     /// prompt carries it, Settings → AI → About You edits it, the panel's
     /// proposal cards resolve through it. Read when the connection comes
@@ -192,6 +195,7 @@ final class AppState {
         wireUpdates()
         EventEditorManager.shared.state = self
         contacts = AppContacts(state: self)
+        rules = AppRules(state: self)
     }
 
     var selectedProvider: (any AssistantProvider)? { settings.assistantProvider == .chatgpt ? codex : nil }
@@ -404,6 +408,7 @@ final class NotificationHub {
     private var calendarNotification = HandlerList<CalendarNotification>()
     private var assistantProfileChanged = HandlerList<Void>()
     private var updateChanged = HandlerList<Void>()
+    private var rulesChanged = HandlerList<Void>()
     private var contactsChanged = HandlerList<ContactsChangedNotification>()
     private var connection = HandlerList<ConnectionController.ConnectionState>()
 
@@ -465,6 +470,12 @@ final class NotificationHub {
         updateChanged.add { _ in f() }
     }
 
+    /// notify.rulesChanged: the application's `RulesController` lists the
+    /// rules again (`AppRules`).
+    func addRulesChanged(_ f: @escaping @MainActor () -> Void) -> Token {
+        rulesChanged.add { _ in f() }
+    }
+
     /// notify.contactsChanged: the Contacts window, the address chips'
     /// lookup and Settings → Contacts load again (`AppContacts`).
     func addContactsChanged(_ f: @escaping @MainActor (ContactsChangedNotification) -> Void) -> Token {
@@ -494,6 +505,10 @@ final class NotificationHub {
         }
         if raw.method == API.Notify.updateChanged {
             updateChanged.fire(())
+            return
+        }
+        if raw.method == API.Notify.rulesChanged {
+            rulesChanged.fire(())
             return
         }
         do {

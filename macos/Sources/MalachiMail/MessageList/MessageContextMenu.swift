@@ -11,7 +11,9 @@ import MalachiCore
 /// which `MainWindowController` validates and titles as it does in the menu
 /// bar (Comment, Unstar, Cancel Sending, Save N Messages to eWay-CRM…).
 /// Move To lists the account's
-/// folders; Change Status and the Assistant are the menu bar's submenus,
+/// folders; Create Rule from Message… opens the rule editor prefilled from
+/// the message (`AppRules.createRule`); Change Status and the Assistant are
+/// the menu bar's submenus,
 /// made afresh (a menu has one supermenu), each kept alive by its item.
 @MainActor
 enum MessageContextMenu {
@@ -46,6 +48,11 @@ enum MessageContextMenu {
             assistant: state.assistant.shown)
         // eWay-CRM: the rows' shown messages, as the toolbar's button.
         model.setCrm(state.crm.offer(rows.map(\.message), conversations: Set(rows.filter(\.thread).map(\.message.id))))
+        // Mail rules: one row of a mail account outside the outbox, drafts
+        // and sent mail.
+        let role = mailbox.model.folderRole(FolderKey(account: s.accountId, folder: s.folderId))
+        model.offerRule = rows.count == 1
+            && state.rules.canCreateRule(from: s, role: role, account: mailbox.model.account(s.accountId))
         let labels = ContextMenu.Labels(comment: flags.comment, flagged: flags.flagged, outbox: flags.outbox, count: rows.count)
         // The folder all are in (Move To greys it out); none when they
         // differ (a search).
@@ -66,6 +73,10 @@ enum MessageContextMenu {
                     menu.addItem(item)
                 case .changeStatus:
                     menu.addItem(transitions.menuItem())
+                case .createRule:
+                    let rules = state.rules
+                    let window = state.mainWindow?.window
+                    menu.addItem(BoardMenuAction.item(title) { rules?.createRule(from: s, on: window) })
                 case .assistant:
                     let assistant = AssistantMenu(state: state, includesUnread: false, count: rows.count)
                     let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")

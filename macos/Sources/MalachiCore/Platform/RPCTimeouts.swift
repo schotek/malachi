@@ -61,4 +61,10 @@ public enum RPCTimeouts {
     /// `update.check`: the daemon gives both requests of one check 70 s
     /// (core/update_service.go `updateCheckLimit`) before it answers.
     public static let updateCheck: Duration = .seconds(75)
+    /// `rules.test`: reads the folder's stored messages, their bodies too
+    /// for a body condition.
+    public static let rulesTest: Duration = .seconds(30)
+    /// `rules.apply`: a whole folder's stored mail in batches, every change
+    /// queued for the server, before it answers.
+    public static let rulesApply: Duration = .seconds(300)
 }
