@@ -200,6 +200,24 @@ type UpdateService interface {
 	DismissNotice(ctx context.Context, p UpdateDismissNoticeParams) (*UpdateStatus, error)
 }
 
+// SignatureService answers the details of a message's signature and its
+// revocation check (docs/api.md §4.21). It is not in Backend yet: the
+// daemon's change that implements it adds Signatures() to Backend (and to
+// the RPC stub and the bridge's fake) with the handlers.
+type SignatureService interface {
+	Signature(ctx context.Context, p MessageSignatureParams) (*MessageSignatureResult, error)
+	Revocation(ctx context.Context, p MessageSignatureRevocationParams) (*MessageSignatureResult, error)
+}
+
+// PGPService manages the stored OpenPGP public keys (docs/api.md §4.21);
+// added to Backend as PGP() together with SignatureService.
+type PGPService interface {
+	KeyImport(ctx context.Context, p PGPKeyImportParams) (*PGPKeyImportResult, error)
+	KeyVerify(ctx context.Context, p PGPKeyVerifyParams) (*PGPKeyVerifyResult, error)
+	KeyList(ctx context.Context, p PGPKeyListParams) (*PGPKeyListResult, error)
+	KeyRemove(ctx context.Context, p PGPKeyRemoveParams) (*PGPKeyRemoveResult, error)
+}
+
 // Backend is the complete server-side surface. The connection handshake
 // (system.hello, system.authenticate; docs/api.md §1.4) is not part of it:
 // the transport (internal/rpc) answers the handshake before any call of a
@@ -281,4 +299,11 @@ type ContactsNotifier interface {
 // notify.updateChanged (docs/api.md §4.20), asserted like BoardNotifier.
 type UpdateNotifier interface {
 	UpdateChanged(n UpdateChangedNotification)
+}
+
+// SignatureNotifier is the optional extension of Notifier for
+// notify.signaturesChanged (docs/api.md §4.21), asserted like
+// BoardNotifier.
+type SignatureNotifier interface {
+	SignaturesChanged(n SignaturesChangedNotification)
 }

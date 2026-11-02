@@ -16,14 +16,14 @@ import (
 var assistantMethods = []string{"assistant.profileGet", "assistant.profileSet", "assistant.profilePropose", "assistant.profileResolve"}
 
 func TestAssistantMethodsOrder(t *testing.T) {
-	n := len(AllMethods) - len(updateMethods) - len(contactsBookMethods)
+	n := len(AllMethods) - len(signatureMethods) - len(updateMethods) - len(contactsBookMethods)
 	if !reflect.DeepEqual(AllMethods[n-len(assistantMethods):n], assistantMethods) {
 		t.Fatalf("AllMethods does not end with the assistant profile methods: %v", AllMethods[n-len(assistantMethods):n])
 	}
 	if AllMethods[n-len(assistantMethods)-1] != MethodCrmRemove {
 		t.Fatal("the assistant profile methods do not follow the CRM's")
 	}
-	if AllNotifications[len(AllNotifications)-3] != NotifyAssistantProfileChanged {
+	if AllNotifications[len(AllNotifications)-4] != NotifyAssistantProfileChanged {
 		t.Fatalf("AllNotifications: %v", AllNotifications)
 	}
 }

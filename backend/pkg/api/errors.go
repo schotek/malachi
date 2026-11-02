@@ -148,6 +148,11 @@ const (
 	// changed by the user: the recent book, a server's read-only
 	// collection or folder.
 	CodeAddressBookReadOnly ErrorCode = 1509
+	// CodeRevocationFailed: message.signatureRevocation could not get an
+	// answer it trusts from the certificate's OCSP responder or CRL
+	// (§4.21); Error.Data is a RevocationFailedData with the class,
+	// Error.Message is not for display.
+	CodeRevocationFailed ErrorCode = 1510
 )
 
 // String returns the stable symbolic name of the code.
@@ -212,6 +217,7 @@ var codeNames = map[ErrorCode]string{
 	CodeMalformedCalendar:       "malformedCalendar",
 	CodeRecurrenceUnsupported:   "recurrenceUnsupported",
 	CodeAddressBookReadOnly:     "addressBookReadOnly",
+	CodeRevocationFailed:        "revocationFailed",
 }
 
 // Error is the JSON-RPC error object. It implements the Go error interface so

@@ -174,6 +174,14 @@ const (
 	MethodUpdateSetPrefs      = "update.setPrefs"
 	MethodUpdateDismiss       = "update.dismiss"
 	MethodUpdateDismissNotice = "update.dismissNotice"
+
+	// Signatures and OpenPGP keys (docs/api.md §4.21).
+	MethodMessageSignature           = "message.signature"
+	MethodMessageSignatureRevocation = "message.signatureRevocation"
+	MethodPGPKeyImport               = "pgp.keyImport"
+	MethodPGPKeyVerify               = "pgp.keyVerify"
+	MethodPGPKeyList                 = "pgp.keyList"
+	MethodPGPKeyRemove               = "pgp.keyRemove"
 )
 
 // Notification names (backend → client, no reply expected).
@@ -196,6 +204,8 @@ const (
 	NotifyContactsChanged = "notify.contactsChanged"
 
 	NotifyUpdateChanged = "notify.updateChanged"
+
+	NotifySignaturesChanged = "notify.signaturesChanged"
 )
 
 // AllMethods lists every callable method. The RPC server uses it to register
@@ -239,6 +249,8 @@ var AllMethods = []string{
 	MethodContactCreate, MethodContactUpdate, MethodContactDelete,
 	MethodContactPhoto,
 	MethodUpdateStatus, MethodUpdateCheck, MethodUpdateSetPrefs, MethodUpdateDismiss, MethodUpdateDismissNotice,
+	MethodMessageSignature, MethodMessageSignatureRevocation,
+	MethodPGPKeyImport, MethodPGPKeyVerify, MethodPGPKeyList, MethodPGPKeyRemove,
 }
 
 // AllNotifications lists every server-initiated notification.
@@ -249,4 +261,5 @@ var AllNotifications = []string{
 	NotifyAssistantProfileChanged,
 	NotifyContactsChanged,
 	NotifyUpdateChanged,
+	NotifySignaturesChanged,
 }
