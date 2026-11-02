@@ -461,6 +461,10 @@ func (s *Store) DeleteAccount(ctx context.Context, id string, deleteLocalData bo
 	if err := deleteCrmLinksTx(ctx, tx, id); err != nil {
 		return err
 	}
+	// Its mail rules with their ledgers (migration 0025).
+	if err := deleteRulesOfAccountTx(ctx, tx, id); err != nil {
+		return err
+	}
 	// Its address books with their contacts (migration 0023, cascade).
 	if _, err := tx.ExecContext(ctx, `DELETE FROM ab_books WHERE account_id = ?`, id); err != nil {
 		return fmt.Errorf("delete account address books: %w", err)

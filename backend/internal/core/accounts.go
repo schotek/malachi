@@ -216,6 +216,7 @@ func (s *accountService) Remove(ctx context.Context, p api.AccountRemoveParams) 
 	s.b.log.Info("account removed", "id", p.AccountID, "deleteLocalData", p.DeleteLocalData)
 	s.b.notifyBoard(false, string(p.AccountID)) // its cases went with it
 	s.b.contactsChanged(string(p.AccountID))    // its address books too
+	s.b.rulesWritten()                          // its rules too
 	s.b.accountsChanged()
 	return &api.AccountRemoveResult{}, nil
 }
