@@ -11,6 +11,7 @@ import (
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
+	"github.com/diamondburned/gotk4/pkg/pango"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/calendar"
@@ -24,11 +25,11 @@ import (
 // The update check (docs/api.md §4.20, docs/plans/update-check.md): the
 // daemon checks, ui/internal/updates turns its status into texts, and
 // ui/internal/updatesctl keeps the one status of the application. The
-// main window shows the banner in each of its modes (Mail above the
-// message list, beside the account banners; the Board and the Calendar
-// under their header bars, across the page), asks a security release's
-// question once, and the first-run note sits under the No Accounts page's
-// buttons. Preferences → General → Updates is preferences_updates.go.
+// main window shows the banner across its top, above the header bars of
+// every mode and of the No Accounts page (as the macOS card), asks a
+// security release's question once, and the first-run note sits under the
+// No Accounts page's buttons. Preferences → General → Updates is
+// preferences_updates.go.
 //
 // This file has no translatable text and is not in po/POTFILES: every
 // text is ui/internal/updates'.
@@ -71,13 +72,15 @@ type updateView struct {
 	banner updates.Banner
 }
 
-// setupUpdates builds the Mail mode's bar and the first-run note from the
-// window's builder, adds a bar to the Board's and the Calendar's pages
-// once they are built, and follows the store.
+// setupUpdates builds the bar and the first-run note from the window's
+// builder and follows the store. The bar is window.blp's update_bar, across
+// the top of the whole window above the header bars (the owner's choice,
+// 2026-11-02, as the macOS card): one bar serves Mail, the Board, the
+// Calendar and the no-accounts page.
 func (w *Window) setupUpdates(b *gtk.Builder) {
 	v := &updateView{w: w, store: updateStore(w.client, w.log)}
 	w.updates = v
-	if slot, ok := b.GetObject("update_bar_mail").Cast().(*adw.Bin); ok {
+	if slot, ok := b.GetObject("update_bar").Cast().(*adw.Bin); ok {
 		bar := v.newBar()
 		slot.SetChild(bar.root)
 	}
@@ -85,36 +88,10 @@ func (w *Window) setupUpdates(b *gtk.Builder) {
 		note.SetUseMarkup(false)
 		note.SetText(updates.WizardNote(i18n.Tr))
 	}
-	// board_page.blp and calendar_page.blp are built on first use and put
-	// into these bins; their Adw.ToolbarView takes the bar under its
-	// header bar.
-	for _, bin := range []*adw.Bin{w.boardPageBin, w.calendarPageBin} {
-		if bin == nil {
-			continue
-		}
-		bin := bin
-		bin.NotifyProperty("child", func() { v.addToPage(bin) })
-	}
 	v.store.Observe(v.render)
 	// A question waits while the window is hidden (Run in Background).
 	w.NotifyProperty("visible", v.render)
 	v.render()
-}
-
-// addToPage adds a bar under the header bar of the page bin holds.
-func (v *updateView) addToPage(bin *adw.Bin) {
-	root, ok := bin.Child().(*adw.BreakpointBin)
-	if !ok {
-		return
-	}
-	page, ok := root.Child().(*adw.ToolbarView)
-	if !ok {
-		v.w.log.Warn("update banner: the page has no toolbar view")
-		return
-	}
-	bar := v.newBar()
-	page.AddTopBar(bar.root)
-	bar.show(v.banner)
 }
 
 // updatesConnectionChanged: the connection came or went
@@ -266,9 +243,12 @@ func (v *updateView) whatsNew() {
 	d.Present(&v.w.ApplicationWindow.Window)
 }
 
-// updateBar is one banner: the title, which wraps, and the buttons in the
+// updateBar is one banner: the title, which wraps, over the buttons in the
 // banner's order, the first the suggested one. Adw.Banner has room for
-// one button, hence a bar of our own (as remote_bar in window.blp).
+// one button, hence a bar of our own (styled as remote_bar in window.blp).
+// The buttons stand under the title, not beside it: beside a wrapping
+// title the four buttons took their two-column width in the list's column
+// and left the title a few words per line.
 type updateBar struct {
 	root    *gtk.Box
 	title   *gtk.Label
@@ -281,7 +261,7 @@ type updateBar struct {
 
 func (v *updateView) newBar() *updateBar {
 	b := &updateBar{
-		root:    gtk.NewBox(gtk.OrientationHorizontal, 12),
+		root:    gtk.NewBox(gtk.OrientationVertical, 6),
 		title:   gtk.NewLabel(""),
 		buttons: adw.NewWrapBox(),
 	}
@@ -290,12 +270,12 @@ func (v *updateView) newBar() *updateBar {
 	b.root.SetVisible(false)
 	b.title.SetUseMarkup(false)
 	b.title.SetWrap(true)
+	b.title.SetWrapMode(pango.WrapWordChar)
 	b.title.SetXAlign(0)
 	b.title.SetHExpand(true)
 	b.buttons.SetChildSpacing(6)
 	b.buttons.SetLineSpacing(6)
-	b.buttons.SetHAlign(gtk.AlignEnd)
-	b.buttons.SetVAlign(gtk.AlignCenter)
+	b.buttons.SetHAlign(gtk.AlignStart)
 	b.root.Append(b.title)
 	b.root.Append(b.buttons)
 	b.act = func(a updates.Action) { v.act(v.banner, a) }

@@ -88,18 +88,6 @@ func TestUpdateBarGTKSmoke(t *testing.T) {
 	if b.root.HasCSSClass("update-security") {
 		t.Error("the security look stayed")
 	}
-
-	// The Board's and the Calendar's pages take a bar under their header
-	// bar once window.go puts them into their bins.
-	for _, page := range []struct{ file, root string }{{"board_page.ui", "board_page_root"}, {"calendar_page.ui", "calendar_page_root"}} {
-		pv := &updateView{banner: update}
-		bin := adw.NewBin()
-		bin.NotifyProperty("child", func() { pv.addToPage(bin) })
-		bin.SetChild(data.Builder(page.file).GetObject(page.root).Cast().(*adw.BreakpointBin))
-		if len(pv.bars) != 1 || !pv.bars[0].root.IsVisible() || pv.bars[0].root.Parent() == nil {
-			t.Errorf("%s: %d bars", page.file, len(pv.bars))
-		}
-	}
 }
 
 // updateCaller answers every update call with status and records them.
@@ -158,8 +146,8 @@ func TestUpdatePreferencesGTKSmoke(t *testing.T) {
 	adw.Init()
 
 	wb := data.Builder("window.ui")
-	if _, ok := wb.GetObject("update_bar_mail").Cast().(*adw.Bin); !ok {
-		t.Error("window.ui: update_bar_mail is not an Adw.Bin")
+	if _, ok := wb.GetObject("update_bar").Cast().(*adw.Bin); !ok {
+		t.Error("window.ui: update_bar is not an Adw.Bin")
 	}
 	if l, ok := wb.GetObject("no_accounts_update_note").Cast().(*gtk.Label); !ok || l.UseMarkup() {
 		t.Error("window.ui: no_accounts_update_note")
